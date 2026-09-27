@@ -16,8 +16,9 @@ import type { SupabaseClient } from '@supabase/supabase-js';
 import type { Database, Json } from '@/lib/database.types';
 import { behaviorForDomain, effectiveRisk } from '@/lib/ai/family-settings';
 import { getTool } from '@/lib/ai/tools/registry';
-import { readAISettings } from '@/lib/services/ai-settings';
-import { riskToDecision, toolTags, type Capability, type Decision, type TrustRole } from '@/lib/trust/engine';
+import { getTranslations } from '@/lib/i18n/server';
+import { loadAISettingsFor } from '@/lib/services/ai-settings';
+import { riskToDecision, riskTierStance, toolTags, type Capability, type Decision, type TrustRole } from '@/lib/trust/engine';
 import { evaluateTrust, openApprovalRequest } from '@/lib/trust/server';
 
 type DB = SupabaseClient<Database>;
@@ -68,7 +69,19 @@ export type AiGateOutcome =
     };
 
 export async function gateAiAction(supabase: DB, familyId: string, req: AiGateRequest): Promise<AiGateOutcome> {
-  const settings = await readAISettings(supabase, familyId);
+  // Read STRICTLY. Every caller of this gate is Bubaly about to write (chat's
+  // tools, Magic Import, the school desk), so a settings read that failed must
+  // not be answered with the defaults — "Bubaly on" — for a family that
+  // switched it off (SEC-009). Nothing runs, and the reason says the settings
+  // could not be read rather than claiming a switch the family never touched.
+  // No approval is opened either: there is no decision for a parent to make
+  // until the family's own answer can be read.
+  const read = await loadAISettingsFor(supabase, familyId);
+  if (!read.ok) {
+    const t = await getTranslations();
+    return { effect: 'deny', reason: t('aiSettings.readFailedNothingChanged') };
+  }
+  const settings = read.data;
   if (!settings.enabled) {
     // Switched off means switched off: no approval is opened, because there is
     // nothing for a parent to release — the family turned Bubaly's hands off.
@@ -106,10 +119,9 @@ export async function gateAiAction(supabase: DB, familyId: string, req: AiGateRe
 
   // Same rule as the executor's gate: the tier speaks over the generic role
   // matrix, and over a policy that names no domain — where it may only tighten.
-  const fromGenericRule = engineDecision.basis === 'role_default' || engineDecision.basis === 'fallback';
-  const blanketAllow = engineDecision.basis === 'policy' && engineDecision.effect === 'allow' && engineDecision.policyScope === 'broad';
+  const stance = riskTierStance(engineDecision);
   let decision: Decision = engineDecision;
-  if (fromGenericRule || blanketAllow) {
+  if (stance !== 'silent') {
     const risked = riskToDecision({
       risk,
       actor: { kind: 'ai_agent', id: req.actorId, role: req.actorRole },
@@ -118,7 +130,7 @@ export async function gateAiAction(supabase: DB, familyId: string, req: AiGateRe
       behavior: behaviorForDomain(settings, req.domain),
       explicitAllow: false,
     });
-    if (risked && !(engineApprovalId && risked.effect === 'allow') && (fromGenericRule || risked.effect !== 'allow')) {
+    if (risked && !(engineApprovalId && risked.effect === 'allow') && (stance === 'speaks' || risked.effect !== 'allow')) {
       decision = risked;
     }
   }

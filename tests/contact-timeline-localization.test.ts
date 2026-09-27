@@ -48,6 +48,12 @@ vi.mock('@/lib/supabase/server', () => ({ createServer: async () => ({ from: (ta
   };
   return chain;
 } }) }));
+// The AI path now carries the same rate-limit budget as every API route that
+// reaches the model (audit C3-S4-01). The limiter deliberately fails CLOSED,
+// so against this file's stub client it would answer "too many requests" and
+// preempt the behaviour under test. Stubbed the way every other AI-path test
+// here does it; no assertion below is relaxed.
+vi.mock('@/lib/server/ai-rate-limit', () => ({ enforceAIRateLimit: async () => ({ ok: true }) }));
 vi.mock('@/lib/ai/provider', () => ({
   isAIConfigured: async () => true, resolveProvider: async () => ({ model: 'test', complete: h.complete }),
   describeAIError: () => ({ message: 'Provider failure' }),
@@ -189,8 +195,13 @@ describe.each(LOCALES)('Contact timeline in %s', (locale) => {
     click(t('family.copy')); await Promise.resolve();
     html = render(); expect(html).toContain(escaped(t('adminMarketingAssistant.copied')));
     expect(clipboard).toHaveBeenCalledWith('Original provider message');
-    // Slots are the component's two states followed by the real drafter's five.
-    h.slots[4] = null; h.pending = true;
+    // Slots are the component's states followed by the real drafter's five. The
+    // module gained a third state (`actionError`, which reports a failed delete
+    // or log inline instead of silently), so the drafter's message slot moved
+    // from 4 to 5. This index tracks the component by construction — if it
+    // drifts again, this assertion goes quiet rather than red, so check the
+    // count here whenever ContactTimelineModule gains or loses a useState.
+    h.slots[5] = null; h.pending = true;
     html = render(); expect(html).toContain(escaped(t('contactTimeline.writing')));
   });
 

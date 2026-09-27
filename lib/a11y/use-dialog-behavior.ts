@@ -1,8 +1,17 @@
 'use client';
 
-import { useEffect, type RefObject } from 'react';
+import { useEffect, useRef, type RefObject } from 'react';
 
 const FOCUSABLE = 'a[href],button:not([disabled]),textarea:not([disabled]),input:not([disabled]),select:not([disabled]),[tabindex]:not([tabindex="-1"])';
+
+// Dialogs nest: a delete confirmation opens on top of the dialog whose Delete
+// button was pressed. Both listen for keys on `document`, so without a stack one
+// Escape would dismiss both and the inner one's Tab trap would fight the outer
+// one's. Only the top-most open dialog answers keys, and the scroll lock lifts
+// only when the last one holding it closes.
+const openDialogs: symbol[] = [];
+const scrollLocks: symbol[] = [];
+let overflowBeforeLock = '';
 
 /**
  * What `aria-modal="true"` actually promises, as a hook.
@@ -50,10 +59,28 @@ export function useDialogBehavior(
 ): void {
   const { onClose, lockScroll = true } = options;
 
+  // `onClose` is held in a REF and the effect below does not depend on it.
+  //
+  // 92 of the 226 call sites pass an inline `onClose={() => setOpen(false)}` — a
+  // fresh function identity on every render of the component that owns the
+  // dialog's form state. With `onClose` in the dependency array, a single
+  // keystroke re-rendered that component, the deps compared unequal, and React
+  // tore the effect down and set it up again. Both halves move focus: cleanup
+  // restores the trigger BEHIND the dialog, setup focuses the FIRST control in
+  // it. Anything but the first field was untypeable.
+  //
+  // The ref keeps Escape calling the CURRENT handler while the trap itself is
+  // built once per open. Pinned by tests/a-dialog-does-not-steal-the-caret.
+  const onCloseRef = useRef(onClose);
+  onCloseRef.current = onClose;
+
   useEffect(() => {
     if (!open) return;
     const dialog = ref.current;
     if (!dialog) return;
+
+    const token = Symbol('dialog');
+    openDialogs.push(token);
 
     const previouslyFocused = document.activeElement as HTMLElement | null;
 
@@ -62,10 +89,13 @@ export function useDialogBehavior(
     (focusables()[0] ?? dialog).focus();
 
     const onKey = (e: KeyboardEvent) => {
+      // Only the top-most dialog answers keys: one Escape must not dismiss a
+      // confirmation and the dialog underneath it at the same time.
+      if (openDialogs[openDialogs.length - 1] !== token) return;
       if (e.key === 'Escape') {
         // No `onClose` means this dialog is not dismissible. Escape does
         // nothing, and the trap below still holds — which is the point.
-        if (onClose) onClose();
+        onCloseRef.current?.();
         return;
       }
       if (e.key !== 'Tab') return;
@@ -84,14 +114,24 @@ export function useDialogBehavior(
     };
 
     document.addEventListener('keydown', onKey);
-    const previousOverflow = document.body.style.overflow;
-    if (lockScroll) document.body.style.overflow = 'hidden';
-    return () => {
-      document.removeEventListener('keydown', onKey);
+    if (lockScroll) {
       // Restore what was there rather than assuming '': a dialog opened from
       // inside another locked surface must not unlock the page behind both.
-      if (lockScroll) document.body.style.overflow = previousOverflow;
+      if (scrollLocks.length === 0) overflowBeforeLock = document.body.style.overflow;
+      scrollLocks.push(token);
+      document.body.style.overflow = 'hidden';
+    }
+    return () => {
+      const at = openDialogs.lastIndexOf(token);
+      if (at >= 0) openDialogs.splice(at, 1);
+      document.removeEventListener('keydown', onKey);
+      if (lockScroll) {
+        const lockAt = scrollLocks.lastIndexOf(token);
+        if (lockAt >= 0) scrollLocks.splice(lockAt, 1);
+        // The lock lifts only when the last dialog holding it has closed.
+        if (scrollLocks.length === 0) document.body.style.overflow = overflowBeforeLock;
+      }
       previouslyFocused?.focus?.();
     };
-  }, [ref, open, onClose, lockScroll]);
+  }, [ref, open, lockScroll]);
 }

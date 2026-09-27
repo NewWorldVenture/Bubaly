@@ -55,6 +55,9 @@ export const TRAIL_VERBS = {
   send: 'sent',
   rsvp: 'replied to',
   confirm: 'confirmed',
+  // One parent's yes on an approval that needs more than one: recorded, but
+  // nothing was approved yet (lib/family/actions.ts resolveAutomationRun).
+  vote: 'voted on',
 } as const;
 
 /**

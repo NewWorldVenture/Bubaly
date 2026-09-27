@@ -1,3 +1,4 @@
+import { at } from './helpers/source-order';
 import { readFileSync } from 'node:fs';
 import { describe, expect, test } from 'vitest';
 import {
@@ -97,8 +98,8 @@ describe('0261 runtime runner guards (no local PostgreSQL claims)', () => {
 
   test('ownership and empty-database checks precede fixture DDL; cleanup is ownership gated', () => {
     const sql = renderProof(identity, migration, fixture);
-    expect(sql.indexOf('fixture ownership guard failed')).toBeLessThan(sql.indexOf('CREATE TEMP TABLE'));
-    expect(sql.indexOf('requires an empty disposable database')).toBeLessThan(sql.indexOf('CREATE TEMP TABLE'));
+    expect(at(sql, 'fixture ownership guard failed')).toBeLessThan(at(sql, 'CREATE TEMP TABLE'));
+    expect(at(sql, 'requires an empty disposable database')).toBeLessThan(at(sql, 'CREATE TEMP TABLE'));
     expect(sql).toContain('pg_catalog.shobj_description');
     expect(sql).toContain("SET LOCAL lock_timeout = '5s'");
     expect(sql).toMatch(/ROLLBACK;\n$/);
@@ -106,7 +107,7 @@ describe('0261 runtime runner guards (no local PostgreSQL claims)', () => {
     expect(cleanup).toContain('\\gset\n\\if :owned\nDROP DATABASE');
     expect(cleanup).toContain('\\quit 3');
     expect(cleanup).toContain(identity.marker);
-    expect(cleanup.indexOf('pg_catalog.shobj_description')).toBeLessThan(cleanup.indexOf('DROP DATABASE'));
+    expect(at(cleanup, 'pg_catalog.shobj_description')).toBeLessThan(at(cleanup, 'DROP DATABASE'));
   });
 });
 
@@ -165,8 +166,8 @@ test('SQL acceptance uses the real migration and explicit error/catalog assertio
 test('CI runs the real SQL gate after isolated startup, before app credentials, and retains always cleanup', () => {
   const job = workflow.slice(workflow.indexOf('  e2e:\n'));
   const gate = job.indexOf('      - name: Verify home brief kind uniqueness in disposable PostgreSQL\n');
-  expect(gate).toBeGreaterThan(job.indexOf('      - name: Start isolated Supabase\n'));
-  expect(gate).toBeLessThan(job.indexOf('      - name: Export local Supabase credentials\n'));
+  expect(gate).toBeGreaterThan(at(job, '      - name: Start isolated Supabase\n'));
+  expect(gate).toBeLessThan(at(job, '      - name: Export local Supabase credentials\n'));
   const step = job.slice(gate, job.indexOf('\n      - name:', gate + 1));
   expect(step).toContain('run: node scripts/ci-home-brief-kind-runtime.mjs');
   expect(step).toContain("BUBALY_0261_RUNTIME: '1'");

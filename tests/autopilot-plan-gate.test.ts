@@ -47,13 +47,26 @@ vi.mock('@/lib/supabase/auth', () => ({
   requireUserContext: async () => ({
     user: { id: 'user-1', email: 'parent@example.com' },
     memberships: [],
-    active: { familyId: state.activeFamilyId, role: 'parent', member: { id: 'member-1' } },
+    active: {
+      familyId: state.activeFamilyId, role: 'parent', member: { id: 'member-1' },
+      // `ctx.active.family` is the whole `families` row, and the scan now takes
+      // that family's `timezone` so its "today" is the family's rather than the
+      // server's. A zone that is NOT UTC, so a route that quietly fell back to
+      // Greenwich would be visible in the assertion below.
+      family: { id: state.activeFamilyId, timezone: 'America/Los_Angeles' },
+    },
   }),
 }));
 
 vi.mock('@/lib/i18n/server', async () => {
   const { SOURCE_MESSAGES, translate } = await import('@/lib/i18n/messages');
-  return { getTranslations: async () => (key: string) => translate(SOURCE_MESSAGES, key) };
+  const { localeOrDefault } = await import('@/lib/i18n/locales');
+  return {
+    getTranslations: async () => (key: string) => translate(SOURCE_MESSAGES, key),
+    // The on-demand scan words the suggestions it stores for the member who
+    // pressed Rescan, so the route reads the request's locale too.
+    getLocaleContext: async () => ({ locale: localeOrDefault('en-US'), source: 'default', messages: SOURCE_MESSAGES }),
+  };
 });
 
 // The scan itself is covered by tests/autopilot-persistence-boundaries.test.ts.
@@ -105,8 +118,8 @@ beforeEach(() => {
   // for. (An active trial grants Basic, which is still short of Plus, but
   // leaving it out keeps the assertion about one variable.)
   db.seed('families', [
-    { id: FREE, name: 'Free household', trial_ends_at: '2020-01-01T00:00:00.000Z', closed_at: null },
-    { id: PLUS, name: 'Plus household', trial_ends_at: '2020-01-01T00:00:00.000Z', closed_at: null },
+    { id: FREE, name: 'Free household', timezone: 'Europe/Berlin', trial_ends_at: '2020-01-01T00:00:00.000Z', closed_at: null },
+    { id: PLUS, name: 'Plus household', timezone: 'Asia/Tokyo', trial_ends_at: '2020-01-01T00:00:00.000Z', closed_at: null },
   ]);
   db.seed('subscriptions', [{ family_id: PLUS, plan: 'plus', status: 'active' }]);
   state.db = withFailingSubscriptions(db);
@@ -116,6 +129,8 @@ const cronRequest = (secret = 'cron-secret') =>
   new Request('http://localhost/api/cron/autopilot-scan', { headers: { authorization: `Bearer ${secret}` } });
 
 const scannedFamilies = () => scan.run.mock.calls.map((call) => (call as unknown[])[1]);
+/** The zone each scan was handed — it decides whose day the scan answers. */
+const scannedZones = () => scan.run.mock.calls.map((call) => (call as unknown[])[3]);
 
 describe('the Autopilot cron runs only for entitled families', () => {
   it('scans a Family+ household and skips a Free one', async () => {
@@ -123,6 +138,10 @@ describe('the Autopilot cron runs only for entitled families', () => {
     const body = await response.json();
 
     expect(scannedFamilies()).toEqual([PLUS]);
+    // One cron pass over every family is not a reason to scan them all in
+    // Greenwich: each family is scanned in ITS OWN zone, off the row this loop
+    // is already holding.
+    expect(scannedZones()).toEqual(['Asia/Tokyo']);
     expect(body).toMatchObject({ ok: true, families: 2, entitled: 1, skipped: 1, failures: 0 });
   });
 
@@ -166,6 +185,7 @@ describe('the on-demand Autopilot scan runs only for entitled families', () => {
 
     expect(response.status).toBe(200);
     expect(scannedFamilies()).toEqual([PLUS]);
+    expect(scannedZones()).toEqual(['America/Los_Angeles']);
   });
 
   it('answers 503 — not 403 — when the plan cannot be read', async () => {

@@ -80,9 +80,18 @@ describe('saveCapture', () => {
       });
       return b;
     }
-    const client = { from: (table: string) => builder(table) } as unknown as SupabaseBrowser;
+    const rpcs: { fn: string; args: unknown }[] = [];
+    const client = {
+      from: (table: string) => builder(table),
+      rpc: (fn: string, args: unknown) => {
+        rpcs.push({ fn, args });
+        const reply = Promise.resolve({ data: LIST, error: null });
+        return { abortSignal: () => reply };
+      },
+    } as unknown as SupabaseBrowser;
     await saveCapture(client, { ...BASE, kind: 'task', text: 'Pack lunches for tomorrow' });
-    expect(inserts.find((i) => i.table === 'todo_lists')!.payload).toEqual({ family_id: 'fam-1', name: 'To-Do', created_by: 'member-1' });
+    expect(rpcs).toEqual([{ fn: 'ensure_default_todo_list', args: { p_family_id: 'fam-1', p_name: 'To-Do', p_match_name: false, p_created_by: 'member-1' } }]);
+    expect(inserts.find((i) => i.table === 'todo_lists')).toBeUndefined();
     const item = inserts.find((i) => i.table === 'todo_items')!.payload as Record<string, unknown>;
     expect(item).toMatchObject({ list_id: LIST, title: 'Pack lunches for tomorrow', created_by: 'member-1', assigned_to_id: 'member-1' });
   });

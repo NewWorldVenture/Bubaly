@@ -1,3 +1,4 @@
+import { at } from './helpers/source-order';
 // M39 — the "Email an invite" path: a friend gets the referrer's code through
 // the same transport as the member InviteEmail, every send is a timestamp on
 // the invited family's referrals row, and that is what the 10-a-day limit is
@@ -223,7 +224,7 @@ describe('in-product referral prompts (source)', () => {
     expect(block).toContain("console.error('[home] referral card read failed'");
     // Fail closed: the card is only ever assigned inside the else branch of the
     // error check, so an unreadable count can never render a prompt.
-    expect(block.indexOf('referralCard = {')).toBeGreaterThan(block.indexOf('} else {'));
+    expect(at(block, 'referralCard = {')).toBeGreaterThan(at(block, '} else {'));
     expect(block).toContain('(invitesRes.count ?? 0) >= 1');
     expect(block).toContain('config.enabled');
     expect(home).toContain('{referralCard && <ReferralHomeCard give={referralCard.give} get={referralCard.get} />}');
@@ -236,8 +237,10 @@ describe('in-product referral prompts (source)', () => {
     expect(card).toContain('else toastError(res.reason);');
     expectSays(card, 'referralHomeCard.title', 'Know another family?');
     expectSays(card, 'referralHomeCard.cta', 'Get your link');
-    expect(actions).toContain("from('user_preferences')");
-    expect(actions).toContain('[REFERRAL_HOME_CARD_DISMISSED_KEY]: new Date().toISOString()');
+    // Written through mergeNotificationPrefs (SRV-001 l7): only this key changes.
+    expect(actions).toContain('mergeNotificationPrefs(supabase, ctx.user.id,');
+    expect(actions).toContain('const dismissedAt = new Date().toISOString();');
+    expect(actions).toContain('[REFERRAL_HOME_CARD_DISMISSED_KEY]: dismissedAt');
     expect(actions).toContain("console.error('[referrals/home-card] preferences write failed'");
     expectTranslates(actions, 'referralActions.couldNotSaveYourPreference', 'Could not save your preference. Try again.');
   });

@@ -63,7 +63,7 @@ function LevelPicker({
           title={level.hint}
           className={cn(
             'min-h-9 rounded-md px-3 text-sm transition-colors disabled:opacity-60',
-            value === level.value ? 'bg-brand text-white' : 'text-muted hover:bg-surface-2',
+            value === level.value ? 'bg-brand text-white' : 'text-muted hover:bg-elevated',
           )}
         >
           {level.label}
@@ -80,14 +80,23 @@ export function AISettingsPanel({ role }: { role: MemberRole | null | undefined 
 
   const [settings, setSettings] = useState<AISettings | null>(null);
   const [loadError, setLoadError] = useState<string | null>(null);
+  // Set when the load CALL itself failed; translated at render, so the effect
+  // below keeps its empty dependency list. Audit C1-S9-74.
+  const [loadCallFailed, setLoadCallFailed] = useState(false);
   const [saving, setSaving] = useState<string | null>(null);
 
   useEffect(() => {
     let alive = true;
+    // `{ ok: false }` was handled; a REJECTED load (the call itself failing)
+    // set neither state, so the skeleton said "Loading…" forever with nothing
+    // said. Audit C1-S9-74.
     void loadAISettingsAction().then((res) => {
       if (!alive) return;
       if (res.ok) setSettings(res.settings);
       else setLoadError(res.error);
+    }).catch((error: unknown) => {
+      console.error('[ai-settings] load failed', error);
+      if (alive) setLoadCallFailed(true);
     });
     return () => { alive = false; };
   }, []);
@@ -104,10 +113,21 @@ export function AISettingsPanel({ role }: { role: MemberRole | null | undefined 
     const res = await saveAISettingsAction(patch);
     setSaving(null);
     if (res.ok) { setSettings(res.settings); success(t('aiSettings.saved')); }
-    else { toastError(res.error); const reload = await loadAISettingsAction(); if (reload.ok) setSettings(reload.settings); }
+    else {
+      toastError(res.error);
+      const reload = await loadAISettingsAction();
+      if (reload.ok) setSettings(reload.settings);
+      // The reload failed too, so nothing on this page is known any more — and
+      // the optimistic guess is still showing the change the database just
+      // refused. Stop answering rather than keep it: every control here edits
+      // from what the page shows.
+      else setLoadError(reload.error);
+    }
   }, [success, toastError, t]);
 
-  if (loadError) return <Card className="p-4 text-sm text-muted">{loadError}</Card>;
+  if (loadError || loadCallFailed) {
+    return <Card className="p-4 text-sm text-muted">{loadError ?? t('aiActions.couldNotLoadYourBubaly')}</Card>;
+  }
   if (!settings) {
     return (
       <Card className="flex items-center gap-2 p-4 text-sm text-muted">
@@ -136,7 +156,7 @@ export function AISettingsPanel({ role }: { role: MemberRole | null | undefined 
           </Button>
         </div>
         {!settings.enabled && (
-          <p className="mt-3 rounded-lg bg-surface-2 px-3 py-2 text-sm">
+          <p className="mt-3 rounded-lg bg-elevated px-3 py-2 text-sm">
             {t('aiSettings.bubalyIsSwitchedOffItWill')}
           </p>
         )}

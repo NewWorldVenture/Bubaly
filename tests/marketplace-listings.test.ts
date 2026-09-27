@@ -1,9 +1,17 @@
 import { describe, it, expect } from 'vitest';
+import { getMessages, translate } from '@/lib/i18n/messages';
 import {
-  kindHasPrice, formatCents, priceLabel, dollarsToCents,
+  kindHasPrice, formatCents, priceLabel, dollarsToCents, currencyUnit,
   isBrowsable, filterListings, availableCount, canOffer, isOwner, openOffersFor,
   type ListingLike, type OfferLike,
 } from '@/lib/marketplace/listings';
+
+// The REAL en-US catalogue, so a sentence missing from it fails here instead of
+// reaching a family as its key. The listings.* sentences are added by the I18N-003
+// marketplace change and land in lib/i18n/messages/*.json with the orchestrator's
+// catalogue merge: until that merge, the cases that render them are red.
+const t = (key: string, params?: Record<string, string | number>) =>
+  translate(getMessages('en-US'), key, params);
 
 const listing = (over: Partial<ListingLike> = {}): ListingLike => ({
   id: 'l1', kind: 'sell', category: 'toys', status: 'available', price_cents: 500,
@@ -20,19 +28,31 @@ describe('money helpers', () => {
     expect(kindHasPrice('wanted')).toBe(false);
   });
   it('formatCents renders whole vs fractional and clamps junk', () => {
-    expect(formatCents(1200)).toBe('$12');
-    expect(formatCents(1250)).toBe('$12.50');
-    expect(formatCents(-5)).toBe('$0');
-    expect(formatCents(null)).toBe('$0');
-    expect(formatCents(NaN)).toBe('$0');
+    expect(formatCents(1200, 'en-US')).toBe('$12');
+    expect(formatCents(1250, 'en-US')).toBe('$12.50');
+    expect(formatCents(-5, 'en-US')).toBe('$0');
+    expect(formatCents(null, 'en-US')).toBe('$0');
+    expect(formatCents(NaN, 'en-US')).toBe('$0');
   });
   it('priceLabel covers each kind', () => {
-    expect(priceLabel('free', 0)).toBe('Free');
-    expect(priceLabel('borrow', 999)).toBe('');
-    expect(priceLabel('wanted', 999)).toBe('');
-    expect(priceLabel('sell', 1500)).toBe('$15');
-    expect(priceLabel('rent', 500, 'day')).toBe('$5/day');
-    expect(priceLabel('rent', 500, null)).toBe('$5');
+    expect(priceLabel('free', 0, null, 'en-US', t)).toBe('Free');
+    expect(priceLabel('borrow', 999, null, 'en-US', t)).toBe('');
+    expect(priceLabel('wanted', 999, null, 'en-US', t)).toBe('');
+    expect(priceLabel('sell', 1500, null, 'en-US', t)).toBe('$15');
+    expect(priceLabel('rent', 500, 'day', 'en-US', t)).toBe('$5/day');
+    expect(priceLabel('rent', 500, null, 'en-US', t)).toBe('$5');
+  });
+  it('currencyUnit puts a money input’s unit where the reader writes it', () => {
+    // The bid/offer/price boxes read this instead of a literal "$" on the left.
+    expect(currencyUnit('en-US')).toEqual({ symbol: '$', before: true });
+    expect(currencyUnit('de-DE')).toEqual({ symbol: '$', before: false });
+    expect(currencyUnit('fr-FR')).toEqual({ symbol: '$US', before: false });
+    // …and it agrees with the amounts printed around the box.
+    for (const code of ['en-US', 'de-DE', 'fr-FR'] as const) {
+      const { symbol, before } = currencyUnit(code);
+      const printed = formatCents(2500, code);
+      expect(before ? printed.startsWith(symbol) : printed.endsWith(symbol)).toBe(true);
+    }
   });
   it('dollarsToCents parses messy input', () => {
     expect(dollarsToCents('$12.50')).toBe(1250);

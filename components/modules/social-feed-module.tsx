@@ -5,6 +5,7 @@
 // (All/Favorites/Family/Friends/Groups), and a right rail (Your Sources /
 // Activity / Quick Filters). 100% wired to Supabase via the server actions.
 import { useMemo, useState } from 'react';
+import { useDismissOnEscape } from '@/lib/hooks/use-dismiss-on-escape';
 import { useRouter } from 'next/navigation';
 import {
   Plus, Search, MoreHorizontal, Bookmark, Filter, Play, Star, Heart, Video,
@@ -23,6 +24,7 @@ import {
   addByUrlAction,
 } from '@/app/(app)/dashboard/social-feed/actions';
 import { useTranslations } from '@/components/i18n/locale-provider';
+import { useFormat } from '@/components/i18n/use-format';
 
 export type FeedSource = { id: string; platform: string; displayName: string; handle: string | null; accountCount: number; category: string };
 export type FeedItem = {
@@ -31,15 +33,6 @@ export type FeedItem = {
   kind: 'post' | 'video' | 'photo' | 'link'; durationLabel: string | null; category: string;
   verified: boolean; isFavorite: boolean; isRead: boolean; postedAt: string;
 };
-
-function timeAgo(iso: string): string {
-  const s = Math.max(0, (Date.now() - Date.parse(iso)) / 1000);
-  if (s < 60) return 'now';
-  const m = s / 60; if (m < 60) return `${Math.floor(m)}m`;
-  const h = m / 60; if (h < 24) return `${Math.floor(h)}h`;
-  const d = h / 24; if (d < 7) return `${Math.floor(d)}d`;
-  return `${Math.floor(d / 7)}w`;
-}
 
 /** Brand-tinted platform glyph (initial in a tinted ring — no brand SVGs needed). */
 function PlatformGlyph({ platform, size = 'md' }: { platform: string; size?: 'sm' | 'md' }) {
@@ -71,6 +64,8 @@ const QUICK: { key: QuickFilter; label: string; icon: typeof Star }[] = [
 
 export function SocialFeedModule({ sources, items }: { sources: FeedSource[]; items: FeedItem[] }) {
   const tr = useTranslations();
+  // One time-ago, and it follows the reader (lib/utils/format.ts fmtTimeAgo).
+  const { fmtTimeAgo } = useFormat();
   const router = useRouter();
   const { success, error: toastError } = useToast();
   const [tab, setTab] = useState<FeedTab>('all');
@@ -106,8 +101,20 @@ export function SocialFeedModule({ sources, items }: { sources: FeedSource[]; it
 
   async function run(key: string, fn: () => Promise<{ ok: boolean; error?: string }>, ok?: string) {
     setBusy(key);
-    const res = await fn();
-    setBusy(null);
+    // `fn()` can REJECT, not just resolve `{ ok: false }` — a transport failure,
+    // or a server action that throws (requireSocialPermission does). That
+    // rejection skipped `setBusy(null)`, so the control stayed disabled with a
+    // spinner and nothing was said. Every caller in this module goes through
+    // here, so this is the one place it has to be handled.
+    let res: { ok: boolean; error?: string };
+    try {
+      res = await fn();
+    } catch (err) {
+      console.error('[social-feed] action failed', err);
+      res = { ok: false, error: err instanceof Error && err.message ? err.message : undefined };
+    } finally {
+      setBusy(null);
+    }
     if (!res.ok) return toastError(res.error ?? 'Something went wrong');
     if (ok) success(ok);
     router.refresh();
@@ -211,7 +218,14 @@ export function SocialFeedModule({ sources, items }: { sources: FeedSource[]; it
                   onFavorite={() => run(`fav-${item.id}`, () => toggleFavoriteAction({ id: item.id, favorite: !item.isFavorite }))}
                   onOpen={() => {
                     if (item.permalink) window.open(item.permalink, '_blank', 'noopener');
-                    if (!item.isRead) void markReadAction({ id: item.id, read: true }).then(() => router.refresh());
+                    // Degrade quietly (the link already opened) but never silently:
+                    // the refresh shows the server's truth either way, so a refused
+                    // mark-read is a smaller answer — logged, not dropped — and a
+                    // bare `.then()` had let a rejection leave an unread item unread
+                    // with no trace. Audit C1-S9-74.
+                    if (!item.isRead) void markReadAction({ id: item.id, read: true })
+                      .then((res) => { if (!res.ok) console.warn('[social-feed] mark-read refused', res.error); router.refresh(); })
+                      .catch((error: unknown) => console.error('[social-feed] mark read failed', error));
                   }} />
               ))}
             </div>
@@ -256,7 +270,7 @@ export function SocialFeedModule({ sources, items }: { sources: FeedSource[]; it
                     <PlatformGlyph platform={i.platform} size="sm" />
                     <div className="min-w-0 flex-1">
                       <p className="truncate text-sm">{i.authorName}</p>
-                      <p className="truncate text-xs text-muted">{platformLabel(i.platform)} · {timeAgo(i.postedAt)} ago</p>
+                      <p className="truncate text-xs text-muted">{platformLabel(i.platform)} · {fmtTimeAgo(i.postedAt)}</p>
                     </div>
                   </div>
                 ))}
@@ -294,6 +308,8 @@ export function SocialFeedModule({ sources, items }: { sources: FeedSource[]; it
 
 function FeedCard({ item, busy, onFavorite, onOpen }: { item: FeedItem; busy: string | null; onFavorite: () => void; onOpen: () => void }) {
   const tr = useTranslations();
+  // One time-ago, and it follows the reader (lib/utils/format.ts fmtTimeAgo).
+  const { fmtTimeAgo } = useFormat();
   const m = platformMeta(item.platform);
   const media = item.mediaUrls.slice(0, 3);
   const hasVideo = item.kind === 'video';
@@ -306,7 +322,7 @@ function FeedCard({ item, busy, onFavorite, onOpen }: { item: FeedItem; busy: st
             <p className="flex items-center gap-1 text-sm font-semibold">
               {item.authorName}
               {item.verified && <BadgeCheck className="h-3.5 w-3.5 text-sky-500" />}
-              <span className="font-normal text-muted">· {timeAgo(item.postedAt)}</span>
+              <span className="font-normal text-muted">· {fmtTimeAgo(item.postedAt)}</span>
             </p>
             <p className={cn('text-xs', m.tint)}>{m.label}{item.authorHandle ? ` · ${item.authorHandle}` : ''}</p>
           </div>
@@ -355,6 +371,7 @@ function FeedCard({ item, busy, onFavorite, onOpen }: { item: FeedItem; busy: st
 function SourceMenu({ platform, sources, busy, onRemove }: { platform: string; sources: FeedSource[]; busy: string | null; onRemove: (id: string) => void }) {
   const tr = useTranslations();
   const [open, setOpen] = useState(false);
+  useDismissOnEscape(open, () => setOpen(false));
   const own = sources.filter((s) => s.platform === platform);
   return (
     <div className="relative">
@@ -362,6 +379,12 @@ function SourceMenu({ platform, sources, busy, onRemove }: { platform: string; s
         <MoreHorizontal className="h-4 w-4" />
       </button>
       {open && (
+        // `onMouseLeave` is a mouse-only convenience and stays one: it is not a
+        // click handler, so the rule flags the element rather than the gesture.
+        // The KEYBOARD path was missing entirely and is the real fix —
+        // `useDismissOnEscape` above. A pointer that never enters the menu
+        // cannot leave it.
+        // eslint-disable-next-line jsx-a11y/no-static-element-interactions
         <div className="absolute right-0 top-7 z-10 w-44 rounded-xl border border-border bg-surface p-1 shadow-lg" onMouseLeave={() => setOpen(false)}>
           {own.map((s) => (
             <button key={s.id} type="button" disabled={busy === `rm-${s.id}`} onClick={() => { onRemove(s.id); setOpen(false); }}

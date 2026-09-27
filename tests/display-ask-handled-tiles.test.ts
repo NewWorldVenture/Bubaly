@@ -1,7 +1,8 @@
 import { readFileSync } from 'node:fs';
 import { describe, expect, it, vi } from 'vitest';
 import React from 'react';
-import { renderToStaticMarkup } from 'react-dom/server';
+import { renderToStaticMarkup as renderRaw } from 'react-dom/server';
+import { renderTranslated } from './helpers/render-translated';
 
 // AskBubaly (mounted by the ask tile) uses the app router. On the real display
 // that router is there — the shell is client-only (`ssr: false`) and runs in the
@@ -18,6 +19,17 @@ import { DEFAULT_TILES, WIDGET_KEYS, resolveTiles, type Tile } from '@/lib/displ
 import { HANDLED_TILE_ITEMS, type HandledToday } from '@/components/display/handled-today-tile';
 import { normalizeSettings } from '@/lib/display/ambient';
 import { ToastProvider } from '@/components/ui/toast';
+// Rendered under a LocaleProvider, because the component asks for one.
+//
+// `translate` no longer falls back to the en-US catalogue — that fallback was a
+// static import, and it is why en-US shipped to the browser on 406 of 606 pages
+// (PERF-001). It now lives in getMessages, which is where a catalogue belongs.
+// These cases were rendering a client component with NO provider and asserting
+// its English copy, which passed only on that fallback and mounted the
+// component in a way the product never does. Shadowing the import fixes every
+// call site at once and changes no assertion.
+import { withLocale } from './helpers/render-translated';
+const renderToStaticMarkup = (node: Parameters<typeof withLocale>[0]) => renderRaw(withLocale(node));
 
 const page = readFileSync('app/(app)/display/page.tsx', 'utf8');
 
@@ -35,7 +47,7 @@ function base(over: Partial<DisplayData> = {}): DisplayData {
 }
 
 function render(data: DisplayData, tiles: Tile[]) {
-  return renderToStaticMarkup(
+  return renderTranslated(
     React.createElement(ToastProvider, null,
       React.createElement(DisplayShell, {
         initialTiles: tiles,
@@ -102,7 +114,7 @@ describe('the ask tile files a request — it does not act', () => {
     // AskBubaly is the only submit path, and it posts to /api/ai/requests via
     // submitAIRequest. The display adds no second route and no direct write.
     const ask = readFileSync('components/concierge/ask-bubaly.tsx', 'utf8');
-    expect(ask).toContain('submitAIRequest');
+    expect(ask).toContain('submitAIRequest(');
     expect(source).not.toMatch(/fetch\(|supabase|\.insert\(|\.upsert\(/);
   });
 

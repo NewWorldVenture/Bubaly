@@ -6,7 +6,7 @@
 //
 //   1. Per-day framing NEVER understates. A yearly price is divided by 365 and
 //      a monthly price by 30, and the result is rounded UP to the next cent —
-//      "≈ 28¢ a day" is only honest if the family cannot pay less than that.
+//      "≈ $0.28 a day" is only honest if the family cannot pay less than that.
 //      The figures derive from lib/constants/plans.ts at the call site;
 //      nothing here types a dollar amount.
 //   2. The REAL "across Bubaly families" card is a cross-family aggregate from
@@ -24,7 +24,10 @@
 // English, and both public surfaces that render it (/pricing and the in-app
 // upgrade modal) reach it from here.
 
+import FAMILY_PRICES from '@/lib/constants/family-prices.json';
+import type { LocaleCode } from '@/lib/i18n/locales';
 import { formatHandled, meetsHandledFloor } from '@/lib/marketing/format';
+import { formatCents } from '@/lib/wallet/ledger';
 
 export type BillingPeriod = 'monthly' | 'yearly';
 
@@ -42,11 +45,22 @@ export function perDayCents(cents: number, period: BillingPeriod): number {
   return Math.ceil(cents / days);
 }
 
-/** "28¢" under a dollar, "$1" or "$1.05" from a dollar up. */
-export function formatPerDay(cents: number): string {
-  const n = Math.max(0, Math.ceil(cents));
-  if (n < 100) return `${n}¢`;
-  return n % 100 === 0 ? `$${n / 100}` : `$${(n / 100).toFixed(2)}`;
+/**
+ * The currency every plan price is charged in: the Stripe catalogue's, from
+ * lib/constants/family-prices.json. A reader's locale decides the separators
+ * and where the symbol sits; it never converts the amount.
+ */
+export const PLAN_CURRENCY: string = FAMILY_PRICES.currency.toUpperCase();
+
+/**
+ * A per-day figure in the READER's convention: "$0.33" / "$1.05" for en-US,
+ * "0,33 $" / "1,05 $" for de-DE. The locale is required rather than defaulted,
+ * because a default is how a caller silently keeps printing American money to
+ * everyone. It used to be `${n}¢` and `$${…toFixed(2)}` — a symbol typed as text
+ * and a toFixed with no locale at all.
+ */
+export function formatPerDay(cents: number, locale: LocaleCode): string {
+  return formatCents(Math.max(0, Math.ceil(cents)), PLAN_CURRENCY, locale);
 }
 
 export type HandledStatsLike = { handledCompleted: number; handled30d?: number };

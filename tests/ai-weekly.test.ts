@@ -1,13 +1,21 @@
 import { describe, it, expect } from 'vitest';
 import {
-  weekWindow, dayKey, choreCompletionRate, bucketByDay, dayLoad, weekRangeLabel,
+  weekWindow, choreCompletionRate, bucketByDay, dayLoad, weekRangeLabel,
 } from '@/lib/ai/weekly';
+
+// Every day in this module is the FAMILY's day. It used to be UTC's — the
+// window was built from getUTCFullYear/Month/Date and events were bucketed by
+// `starts_at.slice(0, 10)` — so a household in Los Angeles asking for the week
+// ahead at 6pm was told "today" is tomorrow, and every evening event in the
+// Americas appeared on the wrong day. The zone is now required rather than
+// defaulted, because a default is how it was wrong invisibly.
+const LA = 'America/Los_Angeles';
 
 describe('weekWindow', () => {
   const now = new Date('2026-06-20T14:30:00Z'); // a Saturday afternoon
-  const w = weekWindow(now);
+  const w = weekWindow(now, 'UTC');
 
-  it('starts the look-ahead at the beginning of today (UTC)', () => {
+  it('starts the look-ahead at the beginning of today in the zone it was given', () => {
     expect(w.todayKey).toBe('2026-06-20');
     expect(w.aheadStart).toBe('2026-06-20T00:00:00.000Z');
   });
@@ -33,9 +41,35 @@ describe('weekWindow', () => {
   });
 });
 
-describe('dayKey', () => {
-  it('formats a UTC date as YYYY-MM-DD', () => {
-    expect(dayKey(new Date('2026-01-05T23:59:00Z'))).toBe('2026-01-05');
+describe('weekWindow means the family\u2019s day, not the host\u2019s', () => {
+  // 6pm Saturday in Los Angeles is already Sunday in UTC. This is the instant
+  // the old implementation got wrong, and it is the ordinary case: an evening,
+  // which is when somebody plans their week.
+  const saturdayEvening = new Date('2026-06-21T01:00:00Z');
+
+  it('is still Saturday for a family in Los Angeles', () => {
+    expect(weekWindow(saturdayEvening, LA).todayKey).toBe('2026-06-20');
+  });
+
+  it('and Sunday for a family in UTC, from the same instant', () => {
+    expect(weekWindow(saturdayEvening, 'UTC').todayKey).toBe('2026-06-21');
+  });
+
+  it('opens the look-ahead at the family\u2019s midnight', () => {
+    // 2026-06-20T00:00 Pacific is 07:00Z (PDT, UTC-7).
+    expect(weekWindow(saturdayEvening, LA).aheadStart).toBe('2026-06-20T07:00:00.000Z');
+  });
+
+  it('keeps seven days across a spring-forward, rather than seven times 24 hours', () => {
+    // US DST begins Sunday 2026-03-08. A window opened on the 5th spans it.
+    const w = weekWindow(new Date('2026-03-05T20:00:00Z'), LA);
+    expect(w.days).toEqual([
+      '2026-03-05', '2026-03-06', '2026-03-07', '2026-03-08',
+      '2026-03-09', '2026-03-10', '2026-03-11',
+    ]);
+    // The last day ends at a real local midnight (PDT, UTC-7) — not at the
+    // PST-derived instant a fixed 7 x 86,400,000 would have produced.
+    expect(w.aheadEnd).toBe('2026-03-12T06:59:59.999Z');
   });
 });
 
@@ -65,7 +99,7 @@ describe('bucketByDay', () => {
     { starts_at: '2026-06-22T08:00:00Z', title: 'C' },
     { starts_at: '2026-07-01T08:00:00Z', title: 'OutOfRange' },
   ];
-  const buckets = bucketByDay(events, (e) => e.starts_at, days);
+  const buckets = bucketByDay(events, (e) => e.starts_at, days, 'UTC');
 
   it('includes every requested day, even empty ones', () => {
     expect(Object.keys(buckets).sort()).toEqual(days);
@@ -79,8 +113,27 @@ describe('bucketByDay', () => {
     expect(total).toBe(3); // OutOfRange dropped
   });
 
+  it('puts an evening event on the evening\u2019s day, not the next UTC one', () => {
+    // 7pm Pacific on the 20th is 2026-06-21T02:00Z. `.slice(0, 10)` called that
+    // the 21st, which is how every evening commitment in the Americas landed a
+    // day late in the briefing.
+    const b = bucketByDay(
+      [{ starts_at: '2026-06-21T02:00:00Z', title: 'Dinner' }],
+      (e) => e.starts_at, days, LA,
+    );
+    expect(b['2026-06-20'].map((e) => e.title)).toEqual(['Dinner']);
+    expect(b['2026-06-21']).toEqual([]);
+  });
+
+  it('leaves a date-only key alone, because it is already a calendar day', () => {
+    // A `date` column has no instant to convert. Pushing '2026-06-21' through a
+    // zone would shift it to the 20th — the same defect pointed backwards.
+    const b = bucketByDay([{ d: '2026-06-21' }], (x) => x.d, days, LA);
+    expect(b['2026-06-21'].length).toBe(1);
+  });
+
   it('ignores items with a missing date key', () => {
-    const b = bucketByDay([{ d: null }, { d: '2026-06-20T00:00:00Z' }], (x) => x.d, days);
+    const b = bucketByDay([{ d: null }, { d: '2026-06-20T00:00:00Z' }], (x) => x.d, days, 'UTC');
     expect(b['2026-06-20'].length).toBe(1);
   });
 });
@@ -95,9 +148,67 @@ describe('dayLoad', () => {
   });
 });
 
+// The reason this module took a `tz` at all. Its header used to say every date
+// was a UTC day-key "matching the convention used by the daily-briefing route",
+// and that route moved to the family's zone seven weeks later without this one
+// following. These are the two ways a family in Los Angeles saw the difference.
+describe('the week is the family\u2019s week, not Greenwich\u2019s', () => {
+  const LA = 'America/Los_Angeles';
+  // 17:30 on Saturday 20 June in Los Angeles — already Sunday the 21st at
+  // Greenwich, which is the window in which the whole grid slipped a day.
+  const saturdayEvening = new Date('2026-06-21T00:30:00Z');
+
+  it('is still Saturday for the family when Greenwich has rolled over', () => {
+    expect(weekWindow(saturdayEvening, LA).todayKey).toBe('2026-06-20');
+    expect(weekWindow(saturdayEvening, 'UTC').todayKey).toBe('2026-06-21');
+  });
+
+  it('opens the window at the family\u2019s midnight, not at 17:00 the day before', () => {
+    // Midnight on 20 June in Los Angeles is 07:00 UTC.
+    expect(weekWindow(saturdayEvening, LA).aheadStart).toBe('2026-06-20T07:00:00.000Z');
+  });
+
+  it('puts a 21:00 Saturday game under Saturday', () => {
+    const days = ['2026-06-20', '2026-06-21'];
+    // 21:00 Saturday in Los Angeles is 04:00 Sunday at Greenwich.
+    const game = [{ starts_at: '2026-06-21T04:00:00Z', title: 'Soccer' }];
+    expect(bucketByDay(game, (e) => e.starts_at, days, LA)['2026-06-20']).toHaveLength(1);
+    // And this is what it did before, kept as an assertion so the two cannot
+    // quietly become the same answer.
+    expect(bucketByDay(game, (e) => e.starts_at, days, 'UTC')['2026-06-21']).toHaveLength(1);
+  });
+
+  // A seven-day week that crosses a DST boundary still has seven distinct days.
+  // A `+ 86_400_000` step repeats one in a 25-hour week and skips one in a
+  // 23-hour week; advancing the day KEY cannot.
+  it.each([
+    ['spring forward', '2026-03-06T18:00:00Z', '2026-03-06'],
+    ['fall back', '2026-10-30T18:00:00Z', '2026-10-30'],
+  ])('crosses a DST boundary with seven distinct days (%s)', (_label, iso, firstKey) => {
+    const w = weekWindow(new Date(iso), 'America/New_York');
+    expect(w.days[0]).toBe(firstKey);
+    expect(new Set(w.days).size).toBe(7);
+    // Consecutive, by calendar rather than by arithmetic on instants.
+    for (let i = 1; i < w.days.length; i += 1) {
+      const prev = new Date(`${w.days[i - 1]}T00:00:00Z`);
+      prev.setUTCDate(prev.getUTCDate() + 1);
+      expect(w.days[i]).toBe(prev.toISOString().slice(0, 10));
+    }
+  });
+
+  // Non-vacuity floor: every case above compares a zoned answer against a UTC
+  // one, and all of them pass trivially if `tz` is ignored and both collapse.
+  it('the zone changes the answer at all, or none of the above is a test', () => {
+    expect(weekWindow(saturdayEvening, LA).todayKey)
+      .not.toBe(weekWindow(saturdayEvening, 'UTC').todayKey);
+    expect(weekWindow(saturdayEvening, LA).aheadStart)
+      .not.toBe(weekWindow(saturdayEvening, 'UTC').aheadStart);
+  });
+});
+
 describe('weekRangeLabel', () => {
   it('renders a "Mon D – Mon D" range from the window days', () => {
-    const w = weekWindow(new Date('2026-06-20T14:30:00Z'));
+    const w = weekWindow(new Date('2026-06-20T14:30:00Z'), 'UTC');
     expect(weekRangeLabel(w)).toBe('Jun 20 – Jun 26');
   });
 });

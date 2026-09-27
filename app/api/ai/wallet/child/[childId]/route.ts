@@ -1,11 +1,11 @@
 import { NextResponse } from 'next/server';
 import { getTranslations } from '@/lib/i18n/server';
 import { createServer } from '@/lib/supabase/server';
-import { settleAll } from '@/lib/supabase/settle';
+import { settleAll, describeReadError } from '@/lib/supabase/settle';
 import { requireUserContext, effectivePlanLevel } from '@/lib/supabase/auth';
 import { resolveProvider } from '@/lib/ai/provider';
 import { withAiRequest } from '@/lib/ai/observability';
-import { scopeFromUserContext } from '@/lib/services/scope';
+import { scopeFromUserContext, dayKeyInTz, zonedDayBoundsMs } from '@/lib/services/scope';
 import { resolveFamilyPlanLevel } from '@/lib/server/plan';
 import { walletTierForPlanLevel, aiCoachLevel, AI_COACH_DAILY_LIMIT } from '@/lib/wallet/tiers';
 import { balanceFromLedger, bucketBalances, weeksToGoal, type LedgerEntry, type BucketKind } from '@/lib/wallet/ledger';
@@ -30,14 +30,29 @@ export async function POST(_req: Request, { params }: { params: Promise<{ childI
       { status: 429, headers: { 'Retry-After': String(limited.retryAfter) } },
     );
 
+    // Every read below decides either whether this call is allowed or what a
+    // child is told about their own money, so a failed read stops the call
+    // (503) rather than standing in for "no wallet", "no calls today" or "a
+    // balance of zero". Each of those used to be the silent default here.
+    const unavailable = () => NextResponse.json({ error: tr('child.failedToGenerateCoaching') }, { status: 503 });
+
     // Verify the child wallet belongs to this family (RLS also enforces this)
-    const { data: cw } = await supabase
+    // A refused read left the binding null and took the same branch as a row
+    // that genuinely is not there, so the caller was told their own child wallet
+    // does not exist. "Not found" is a claim about their data; it has to come
+    // from an answer, not from the absence of one. Fails closed either way —
+    // this changes WHICH closed answer is given, not whether one is. C1-S9-38.
+    const { data: cw, error: cwError } = await supabase
       .from('child_wallets')
       .select('id, member_id')
       .eq('id', childId)
       .eq('family_id', familyId)
       .eq('is_active', true)
       .maybeSingle();
+    if (cwError) {
+      console.error('[ai/wallet/child] wallet read failed', { familyId, error: describeReadError(cwError) });
+      return NextResponse.json({ error: tr('child.walletDataIsTemporarilyUnavailable') }, { status: 503 });
+    }
     if (!cw) return NextResponse.json({ error: tr('child.childWalletNotFound') }, { status: 404 });
 
     // Tier gate
@@ -49,14 +64,23 @@ export async function POST(_req: Request, { params }: { params: Promise<{ childI
     // Per-day metering (same counter as the family-wide coach)
     const dailyLimit = AI_COACH_DAILY_LIMIT[tier];
     if (Number.isFinite(dailyLimit)) {
-      const startOfDay = new Date(); startOfDay.setHours(0, 0, 0, 0);
-      const { count: usedToday } = await supabase
+      // The family's midnight, not the host's. This bound is the daily AI
+      // quota window: on a UTC host `setHours(0,0,0,0)` rolls over at 17:00 in
+      // California and 11:00 in Sydney, so a household's allowance reset in the
+      // middle of their afternoon and calls made after it were counted against
+      // tomorrow. Same defect and same fix as the kitchen display
+      // (app/(app)/display/page.tsx:122).
+      const startOfDay = new Date(zonedDayBoundsMs(dayKeyInTz(new Date(), ctx.active.family.timezone || 'UTC'), ctx.active.family.timezone || 'UTC').start);
+      const { count: usedToday, error: meterError } = await supabase
         .from('wallet_audit_logs')
         .select('id', { count: 'exact', head: true })
         .eq('family_id', familyId)
         .eq('action', 'ai_coach_call')
         .gte('created_at', startOfDay.toISOString());
-      if ((usedToday ?? 0) >= dailyLimit) {
+      // An unreadable meter is not "none used": that answer lifted the daily
+      // limit, and every call behind it is a paid model call.
+      if (meterError || usedToday === null) { console.error('[ai-wallet-child] usage meter read failed', meterError); return unavailable(); }
+      if (usedToday >= dailyLimit) {
         return NextResponse.json(
           { error: `You've reached today's AI Money Coach limit (${dailyLimit}/day on your plan). Upgrade to Plus for unlimited coaching.` },
           { status: 429 },
@@ -64,7 +88,12 @@ export async function POST(_req: Request, { params }: { params: Promise<{ childI
       }
     }
 
-    const [{ data: member }, { data: walletBuckets }, { data: txns }, { data: goals }] = await settleAll([
+    const [
+      { data: member, error: memberError },
+      { data: walletBuckets, error: bucketsError },
+      { data: txns, error: txnsError },
+      { data: goals, error: goalsError },
+    ] = await settleAll([
       supabase.from('family_members').select('display_name').eq('id', cw.member_id).maybeSingle(),
       supabase.from('wallet_buckets').select('id, kind').eq('child_wallet_id', childId),
       // Money, so a quietly truncated read is a wrong balance, not a short
@@ -72,6 +101,20 @@ export async function POST(_req: Request, { params }: { params: Promise<{ childI
       readAllAsQuery((from, to) => supabase.from('wallet_transactions').select('bucket_id, status, direction, amount_cents, created_at').eq('child_wallet_id', childId).order('id').range(from, to), { max: 2000 }),
       supabase.from('wallet_goals').select('title, saved_cents, target_cents').eq('child_wallet_id', childId).neq('status', 'cancelled').limit(20),
     ]);
+
+    // Same defect as the family-level route: readAllAsQuery reports a truncated
+    // or failed read as `data: null`, and destructuring only `data` turned that
+    // into a $0.00 balance the model then wrote coaching prose about. This is a
+    // child's money — refuse rather than invent a number. Audit C4-S4-02.
+    if (txnsError) {
+      console.error('[ai/wallet/child] transaction read failed or truncated', { childId, error: txnsError });
+      return NextResponse.json({ error: tr('child.couldNotGenerateCoachingRight') }, { status: 502 });
+    }
+    // The other three reads are held to the same standard (see `unavailable`).
+    if (memberError || bucketsError || goalsError) {
+      console.error('[ai-wallet-child] ledger read failed', memberError ?? bucketsError ?? goalsError);
+      return unavailable();
+    }
 
     const bucketKindById = new Map((walletBuckets ?? []).map((b) => [b.id, b.kind as BucketKind]));
     const entries: LedgerEntry[] = (txns ?? []).map((t) => ({

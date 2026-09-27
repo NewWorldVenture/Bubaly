@@ -5,17 +5,18 @@ import { CalendarRange, Plus, Trash2, Pencil, AlertTriangle, Wand2 } from 'lucid
 import { useApp } from '@/components/app/app-context';
 import { useRealtimeQuery } from '@/lib/hooks/use-realtime-query';
 import { createClient } from '@/lib/supabase/client';
+import { describeDbError, wroteNoRows } from '@/lib/supabase/errors';
 import { useToast } from '@/components/ui/toast';
 import { Modal } from '@/components/ui/modal';
 import { Input, Textarea, Field, Select } from '@/components/ui/input';
 import { Button } from '@/components/ui/button';
 import { ErrorState, LoadingBlock, EmptyState } from '@/components/ui/states';
 import { fmtDate } from '@/lib/utils/format';
-import { ITEM_KINDS, DAY_PARTS, dollars, lookup } from '@/lib/vacations/meta';
+import { ITEM_KINDS, DAY_PARTS, dollars as dollarsIn, lookup } from '@/lib/vacations/meta';
 import { dateRange } from '@/lib/vacations/dates';
 import { detectConflicts, type ItemLike } from '@/lib/vacations/conflicts';
 import type { Tables } from '@/lib/database.types';
-import { useTranslations } from '@/components/i18n/locale-provider';
+import { useLocale, useTranslations } from '@/components/i18n/locale-provider';
 
 type Trip = Tables<'vacations'>;
 type Day = Tables<'vacation_itinerary_days'>;
@@ -25,6 +26,9 @@ const blankItem = (day_id: string, day_part: string) => ({ id: '', day_id, day_p
 
 export function TripItinerary({ vacationId }: { vacationId: string }) {
   const t = useTranslations();
+  const locale = useLocale();
+  // Money follows the reader; the currency stays the money's own.
+  const dollars = (cents: number | null | undefined) => dollarsIn(cents, locale.code);
   const { familyId, userId, members } = useApp();
   const { success, error: toastError } = useToast();
 
@@ -68,6 +72,8 @@ export function TripItinerary({ vacationId }: { vacationId: string }) {
     { hasYoungChildren },
   ), [items, dayById, hasYoungChildren]);
 
+  const [saving, setSaving] = useState(false);
+
   const [form, setForm] = useState<ReturnType<typeof blankItem> | null>(null);
   const [busy, setBusy] = useState(false);
 
@@ -80,31 +86,47 @@ export function TripItinerary({ vacationId }: { vacationId: string }) {
     if (toAdd.length === 0) { setBusy(false); return toastError(t('tripItinerary.allDaysAlreadyExist')); }
     const { error } = await createClient().from('vacation_itinerary_days').insert(toAdd);
     setBusy(false);
-    if (error) toastError(error.message); else success(`Added ${toAdd.length} days`);
+    if (error) toastError(describeDbError(error)); else success(t('trips.addedDays', { count: toAdd.length }));
   }
 
   async function saveItem(e: React.FormEvent) {
     e.preventDefault();
-    if (!form?.title.trim()) return toastError(t('tripItinerary.titleRequired'));
-    const row = {
-      day_id: form.day_id || null, kind: form.kind as Item['kind'], day_part: form.day_part as Item['day_part'],
-      title: form.title.trim(), location: form.location.trim() || null,
-      start_time: form.start_time || null, end_time: form.end_time || null,
-      cost_cents: form.cost ? Math.round(parseFloat(form.cost) * 100) : null,
-      booked: form.booked, notes: form.notes.trim() || null,
-    };
-    const { error } = form.id
-      ? await createClient().from('vacation_itinerary_items').update(row).eq('id', form.id)
-      : await createClient().from('vacation_itinerary_items').insert({ ...row, family_id: familyId, vacation_id: vacationId, created_by: userId });
-    if (error) return toastError(error.message);
-    success(form.id ? 'Saved' : 'Added');
-    setForm(null);
+    // A pending button AND a re-entrance guard. The guard is not redundant:
+    // `disabled` covers the click, this covers the ENTER KEY, which submits the
+    // form without touching the button at all.
+    //
+    // preventDefault() stays ABOVE it. Returning before it on the second submit
+    // would hand the form to the browser's own native submission — a full page
+    // navigation — which is worse than the double insert this exists to stop.
+    if (saving) return;
+    setSaving(true);
+    try {
+      if (!form?.title.trim()) return toastError(t('tripItinerary.titleRequired'));
+      const row = {
+        day_id: form.day_id || null, kind: form.kind as Item['kind'], day_part: form.day_part as Item['day_part'],
+        title: form.title.trim(), location: form.location.trim() || null,
+        start_time: form.start_time || null, end_time: form.end_time || null,
+        cost_cents: form.cost ? Math.round(parseFloat(form.cost) * 100) : null,
+        booked: form.booked, notes: form.notes.trim() || null,
+      };
+      // Under RLS a refused row comes back with no error and zero rows, which this used to report as done. Audit C1-S9-84.
+      const { data: saved, error } = form.id
+        ? await createClient().from('vacation_itinerary_items').update(row).eq('id', form.id).select('id')
+        : await createClient().from('vacation_itinerary_items').insert({ ...row, family_id: familyId, vacation_id: vacationId, created_by: userId }).select('id');
+      if (error) return toastError(describeDbError(error));
+      if (wroteNoRows(saved)) return toastError(t('errors.thatChangeWasNotSaved'));
+      success(form.id ? 'Saved' : 'Added');
+      setForm(null);
+    } finally {
+      setSaving(false);
+    }
   }
 
   async function removeItem(id: string) {
     if (!confirm(t('tripItinerary.deleteThisItem'))) return;
-    const { error } = await createClient().from('vacation_itinerary_items').delete().eq('id', id);
-    if (error) toastError(error.message);
+    const { data: removed, error } = await createClient().from('vacation_itinerary_items').delete().eq('id', id).select('id');
+    if (error) toastError(describeDbError(error));
+    else if (wroteNoRows(removed)) toastError(t('errors.thatChangeWasNotSaved'));
   }
 
   function editItem(it: Item) {
@@ -148,7 +170,7 @@ export function TripItinerary({ vacationId }: { vacationId: string }) {
                     <div key={part.value} className="rounded-xl border border-border/60 bg-elevated/30 p-2">
                       <div className="mb-1.5 flex items-center justify-between">
                         <p className="text-xs font-semibold text-muted">{part.emoji} {part.label}</p>
-                        <button onClick={() => setForm(blankItem(day.id, part.value))} className="rounded p-0.5 text-muted hover:text-brand-text"><Plus className="h-3.5 w-3.5" /></button>
+                        <button aria-label={t('a11y.add')} onClick={() => setForm(blankItem(day.id, part.value))} className="rounded p-0.5 text-muted hover:text-brand-text"><Plus className="h-3.5 w-3.5" /></button>
                       </div>
                       <ul className="space-y-1.5">
                         {list.map((it) => (
@@ -156,8 +178,8 @@ export function TripItinerary({ vacationId }: { vacationId: string }) {
                             <div className="flex items-start justify-between gap-1">
                               <span className="flex-1">{lookup(ITEM_KINDS, it.kind).emoji} {it.title}</span>
                               <span className="hidden shrink-0 gap-0.5 group-hover:flex">
-                                <button onClick={() => editItem(it)} className="text-muted hover:text-fg"><Pencil className="h-3 w-3" /></button>
-                                <button onClick={() => removeItem(it.id)} className="text-muted hover:text-danger"><Trash2 className="h-3 w-3" /></button>
+                                <button aria-label={t('a11y.edit')} onClick={() => editItem(it)} className="text-muted hover:text-fg"><Pencil className="h-3 w-3" /></button>
+                                <button aria-label={t('a11y.delete')} onClick={() => removeItem(it.id)} className="text-muted hover:text-danger"><Trash2 className="h-3 w-3" /></button>
                               </span>
                             </div>
                             {(it.start_time || it.location || it.cost_cents != null) && (
@@ -196,7 +218,7 @@ export function TripItinerary({ vacationId }: { vacationId: string }) {
             <Field label={t('tripItinerary.notes')}>{(id) => <Textarea id={id} value={form.notes} onChange={(e) => setForm({ ...form, notes: e.target.value })} rows={2} />}</Field>
             <div className="flex justify-end gap-2 pt-1">
               <Button type="button" variant="ghost" onClick={() => setForm(null)}>{t('tripItinerary.cancel')}</Button>
-              <Button type="submit">{form.id ? 'Save' : 'Add'}</Button>
+              <Button type="submit" loading={saving}>{form.id ? 'Save' : 'Add'}</Button>
             </div>
           </form>
         </Modal>

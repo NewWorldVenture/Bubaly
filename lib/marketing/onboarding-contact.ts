@@ -2,6 +2,7 @@ import 'server-only';
 import type { SupabaseClient } from '@supabase/supabase-js';
 import type { Database } from '@/lib/database.types';
 import { escapeLike } from '@/lib/supabase/escape-like';
+import { wroteNoRows } from '@/lib/supabase/errors';
 
 type DB = SupabaseClient<Database>;
 
@@ -53,14 +54,27 @@ export async function upsertOnboardingContact(admin: DB, p: {
   // RLS is admin-only, and the match decides which row the update below
   // overwrites — so an unescaped `%` here matched an arbitrary stranger's
   // contact and rewrote it with this caller's name, email and family.
+  //
+  // A lookup that did not come back is not "no such contact". Reading it as one
+  // falls through to the INSERT, and crm_contacts has no unique key on email to
+  // refuse the second row — so a failed read forked this person into two
+  // contacts. Only a returned list may say "none"; anything else stops here.
   let existingId: string | null = null;
   if (email) {
-    const { data } = await admin.from('crm_contacts').select('id').ilike('email', escapeLike(email)).limit(1);
-    existingId = data?.[0]?.id ?? null;
+    const { data, error } = await admin.from('crm_contacts').select('id').ilike('email', escapeLike(email)).limit(1);
+    if (error || !Array.isArray(data)) {
+      console.error('[onboarding-contact] contact lookup by email failed', { error: error ?? 'no result list' });
+      return;
+    }
+    existingId = data[0]?.id ?? null;
   }
   if (!existingId && p.familyId) {
-    const { data } = await admin.from('crm_contacts').select('id').eq('family_id', p.familyId).limit(1);
-    existingId = data?.[0]?.id ?? null;
+    const { data, error } = await admin.from('crm_contacts').select('id').eq('family_id', p.familyId).limit(1);
+    if (error || !Array.isArray(data)) {
+      console.error('[onboarding-contact] contact lookup by family failed', { familyId: p.familyId, error: error ?? 'no result list' });
+      return;
+    }
+    existingId = data[0]?.id ?? null;
   }
 
   // Both results are read. This function decides who a CRM contact IS — the
@@ -68,8 +82,10 @@ export async function upsertOnboardingContact(admin: DB, p: {
   // the record saying something other than what the caller just established,
   // with nothing to say so.
   if (existingId) {
-    const { error } = await admin.from('crm_contacts').update(row).eq('id', existingId);
-    if (error) console.error('[onboarding-contact] contact update failed', { contactId: existingId, error });
+    // "A write that did not land" includes one that matched nothing — a
+    // contact deleted since the read. Audit C1-S9-67.
+    const { data: updated, error } = await admin.from('crm_contacts').update(row).eq('id', existingId).select('id');
+    if (error || wroteNoRows(updated)) console.error('[onboarding-contact] contact update failed', { contactId: existingId, error: error ?? 'no rows updated' });
   } else {
     const { error } = await admin.from('crm_contacts').insert({ ...row, created_by: p.userId });
     if (error) console.error('[onboarding-contact] contact insert failed', error);

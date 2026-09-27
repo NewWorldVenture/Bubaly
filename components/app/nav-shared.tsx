@@ -88,7 +88,7 @@ export function NavEntry({ item, variant, locked, onLocked, badge }: {
     : 'flex items-center gap-3 rounded-xl px-3 py-2.5 text-sm font-medium transition xl:px-4 xl:py-3 xl:text-base';
 
   const Badge = badge && badge > 0
-    ? <span className="ml-auto grid h-5 min-w-5 shrink-0 place-items-center rounded-full bg-danger px-1.5 text-[11px] font-bold text-white">{badge > 99 ? '99+' : badge}</span>
+    ? <span className="ml-auto grid h-5 min-w-5 shrink-0 place-items-center rounded-full bg-danger px-1.5 text-[11px] font-bold text-danger-fg">{badge > 99 ? '99+' : badge}</span>
     : null;
 
   if (locked) {
@@ -145,7 +145,7 @@ function ExpandableNavEntry({ item }: { item: NavItem }) {
           onClick={() => setOpen((v) => !v)}
           aria-label={open ? `Collapse ${item.label}` : `Expand ${item.label}`}
           aria-expanded={open}
-          className="grid h-7 w-7 shrink-0 place-items-center rounded-lg text-current/70 transition hover:bg-black/10 dark:hover:bg-white/10"
+          className="grid h-7 w-7 shrink-0 place-items-center rounded-lg opacity-70 transition hover:bg-black/10 dark:hover:bg-white/10"
         >
           <ChevronDown className={cn('h-4 w-4 transition-transform', open ? 'rotate-180' : '')} />
         </button>

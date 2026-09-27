@@ -18,7 +18,7 @@ const classify = (path: string, destination = 'image') => policy.publicResource(
 
 describe('service worker cache admission (M-023)', () => {
   it('retires the contaminated cache and preserves only the new shell and explicit publisher downloads', () => {
-    expect(policy.cache).toBe('bubaly-v5');
+    expect(policy.cache).toBe('bubaly-v6');
     expect(policy.keep).toEqual([policy.cache, LIBRARY_CACHE]);
     expect(sw).toContain('keys.filter((k) => !KEEP.has(k)).map((k) => caches.delete(k))');
   });

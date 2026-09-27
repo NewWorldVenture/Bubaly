@@ -6,23 +6,36 @@ import { createServer } from '@/lib/supabase/server';
 import { PageHeader } from '@/components/app/page-header';
 import { SaveButton } from '@/components/marketplace/save-button';
 import { KIND_LABELS, priceLabel, type ListingKind, type RentPeriod } from '@/lib/marketplace/listings';
-import { getTranslations } from '@/lib/i18n/server';
+import { getLocaleContext, getTranslations } from '@/lib/i18n/server';
+import { ErrorState } from '@/components/ui/states';
 
 export const metadata: Metadata = { title: 'Saved · Marketplace | Bubaly' };
 export const dynamic = 'force-dynamic';
 
 export default async function MarketplaceSavedPage() {
   const t = await getTranslations();
+  // Prices follow the READER's locale — the marketplace helpers require it.
+  const { locale } = await getLocaleContext();
   const ctx = await requireUserContext();
   const sb = await createServer();
 
-  const { data: saves } = await sb
+  // A refused read renders the "nothing saved yet" state to someone whose saved
+  // list is not empty. Audit C1-S9-45.
+  const { data: saves, error: savesError } = await sb
     .from('marketplace_saves')
     .select('id, listing_id, created_at')
     .eq('family_id', ctx.active.familyId)
     .eq('member_id', ctx.active.member.id)
     .order('created_at', { ascending: false })
     .limit(200);
+
+  if (savesError) {
+    return (
+      <div className="space-y-5">
+        <ErrorState message={t('marketplaceSaved.couldNotLoadYourSavedItems')} />
+      </div>
+    );
+  }
 
   const ids = (saves ?? []).map((s) => s.listing_id);
   const { data: listings } = ids.length
@@ -52,7 +65,7 @@ export default async function MarketplaceSavedPage() {
                 <Link href={`/marketplace/item/${l.id}`} className="line-clamp-2 text-sm font-medium hover:text-brand-text">{l.title}</Link>
                 <p className="mt-1 text-xs text-muted">
                   {KIND_LABELS[l.kind as ListingKind] ?? l.kind}
-                  {priceLabel(l.kind as ListingKind, l.price_cents, l.rent_period as RentPeriod | null) && ` · ${priceLabel(l.kind as ListingKind, l.price_cents, l.rent_period as RentPeriod | null)}`}
+                  {priceLabel(l.kind as ListingKind, l.price_cents, l.rent_period as RentPeriod | null, locale.code, t) && ` · ${priceLabel(l.kind as ListingKind, l.price_cents, l.rent_period as RentPeriod | null, locale.code, t)}`}
                   {l.status !== 'available' && ` · ${l.status}`}
                 </p>
               </div>

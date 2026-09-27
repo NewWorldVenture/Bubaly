@@ -3,6 +3,7 @@ import {
   DEFAULT_SERVICE_FEE_CENTS, resolveServiceFeeCents, formatServiceFee, serviceFeeEnabled,
   serviceFeeAddInvoiceItems, serviceFeeApplicationAmount,
 } from '@/lib/stripe/service-fee';
+import { formatCents } from '@/lib/wallet/ledger';
 
 describe('resolveServiceFeeCents', () => {
   it('defaults to $0.90', () => {
@@ -22,9 +23,17 @@ describe('resolveServiceFeeCents', () => {
 });
 
 describe('formatServiceFee', () => {
-  it('formats cents as dollars', () => {
-    expect(formatServiceFee(90)).toBe('$0.90');
-    expect(formatServiceFee(150)).toBe('$1.50');
+  it('formats the fee as money in the reader\'s convention, in the plans\' currency', () => {
+    // Expected text is the shared formatter's output for an explicit locale, in
+    // USD — the catalogue currency the fee is charged in — not a typed literal.
+    for (const locale of ['en-US', 'de-DE'] as const) {
+      expect(formatServiceFee(90, locale)).toBe(formatCents(90, 'USD', locale));
+      expect(formatServiceFee(150, locale)).toBe(formatCents(150, 'USD', locale));
+      expect(formatServiceFee(90.9, locale), 'a fractional cent is truncated').toBe(formatCents(90, 'USD', locale));
+      expect(formatServiceFee(-5, locale), 'a negative fee reads as nothing').toBe(formatCents(0, 'USD', locale));
+    }
+    // The locale is honoured, not ignored: a German reader does not get American money.
+    expect(formatServiceFee(90, 'de-DE')).not.toBe(formatServiceFee(90, 'en-US'));
   });
 });
 

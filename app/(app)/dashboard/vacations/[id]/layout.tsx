@@ -7,6 +7,7 @@ import { TripTabs } from '@/components/vacations/trip-tabs';
 import { VACATION_KINDS, VACATION_STATUSES, lookup } from '@/lib/vacations/meta';
 import { countdownLabel } from '@/lib/vacations/dates';
 import { getTranslations } from '@/lib/i18n/server';
+import { ErrorState } from '@/components/ui/states';
 
 export default async function TripLayout({
   children, params,
@@ -15,7 +16,18 @@ export default async function TripLayout({
   const { id } = await params;
   await requireFeature('/dashboard/vacations');
   const supabase = await createServer();
-  const { data: trip } = await supabase.from('vacations').select('*').eq('id', id).maybeSingle();
+  // `notFound()` is a statement that this trip does not exist, and it is a
+  // LAYOUT — so a refused read 404s every page under the trip at once. Kept for
+  // a trip that really is gone. Audit C1-S9-45.
+  const { data: trip, error: tripError } = await supabase.from('vacations').select('*').eq('id', id).maybeSingle();
+  if (tripError) {
+    console.error('[vacations/layout] trip read failed', { id, error: tripError.message });
+    return (
+      <div className="space-y-5">
+        <ErrorState message={t('vacations.couldNotLoadThisTrip')} />
+      </div>
+    );
+  }
   if (!trip) notFound();
 
   const kind = lookup(VACATION_KINDS, trip.kind);

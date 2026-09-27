@@ -100,7 +100,10 @@ function fresh() { harness.slots = []; harness.cursor = 0; }
 
 beforeEach(() => {
   fresh();
-  harness.load.mockReset().mockResolvedValue(null);
+  // The action's contract is { ok: true, keys } | { ok: false }. This harness stubs
+  // useEffect, so the load is never called here — but a mock in the old bare-null
+  // shape would throw on `read.ok` the day that stops being true.
+  harness.load.mockReset().mockResolvedValue({ ok: true, keys: null });
   harness.save.mockReset().mockResolvedValue({ ok: true });
   harness.toast.mockReset();
   harness.setItem.mockReset();

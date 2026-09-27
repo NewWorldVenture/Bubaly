@@ -6,9 +6,10 @@ import {
   X, ChevronRight, Phone, Wallet, ShieldAlert,
 } from 'lucide-react';
 import { useApp } from '@/components/app/app-context';
+import { isManager } from '@/lib/constants/roles';
 import { useRealtimeQuery } from '@/lib/hooks/use-realtime-query';
 import { createClient } from '@/lib/supabase/client';
-import { describeDbError } from '@/lib/supabase/errors';
+import { describeDbError, wroteNoRows } from '@/lib/supabase/errors';
 import { useToast } from '@/components/ui/toast';
 import { PageHeader } from '@/components/app/page-header';
 import { AiInsight } from '@/components/ai/ai-insight';
@@ -21,9 +22,10 @@ import type { Tables } from '@/lib/database.types';
 import {
   POLICY_TYPES, PREMIUM_FREQUENCIES, policyTypeMeta, frequencyMeta,
   annualPremium, renewalUrgency, upcomingRenewals, premiumByType,
-  insuranceSummary, fmtMoney, type RenewalUrgency,
+  insuranceSummary, fmtMoney as fmtPolicyMoney, type RenewalUrgency,
 } from '@/lib/insurance/policies';
-import { useTranslations } from '@/components/i18n/locale-provider';
+import { useLocale, useTranslations } from '@/components/i18n/locale-provider';
+import type { LocaleCode } from '@/lib/i18n/locales';
 
 type Policy = Tables<'family_insurance_policies'>;
 
@@ -34,13 +36,28 @@ const URGENCY_STYLE: Record<RenewalUrgency, string> = {
   none: 'border-border bg-surface/50 text-muted',
 };
 
-function fmtDate(d: string): string {
-  return new Date(`${d.slice(0, 10)}T00:00:00`).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' });
+// A renewal date is midnight LOCAL on the stored day: reading the bare date as UTC
+// shows the day before to anyone west of Greenwich, which is why the 'T00:00:00' is
+// appended rather than parsed as-is. The locale is the reader's.
+function policyDate(d: string, locale: LocaleCode): string {
+  return new Date(`${d.slice(0, 10)}T00:00:00`)
+    .toLocaleDateString(locale, { month: 'short', day: 'numeric', year: 'numeric' });
 }
 
 export function InsuranceModule() {
   const tr = useTranslations();
-  const { familyId, userId, members } = useApp();
+  const locale = useLocale();
+  // Bound once per component so the twelve call sites below read unchanged. The
+  // amounts are whole dollars, so they go through the policies module's formatter
+  // rather than the cents one in lib/utils/format.ts.
+  const fmtMoney = (n: number | null | undefined) => fmtPolicyMoney(n, locale.code);
+  const fmtDate = (d: string) => policyDate(d, locale.code);
+
+  const { familyId, userId, members, role } = useApp();
+  // 0416 gives this table the manager-gated writes its twin `insurance_policies`
+  // has always had. The controls follow, the way medications-module.tsx does —
+  // a button that renders and then fails is worse than one never offered.
+  const canEdit = isManager(role);
   const { success, error: toastError } = useToast();
 
   const policies = useRealtimeQuery<Policy>({
@@ -58,8 +75,11 @@ export function InsuranceModule() {
 
   async function removePolicy(id: string) {
     if (!confirm(tr('insuranceModule.removeThisPolicy'))) return;
-    const { error } = await createClient().from('family_insurance_policies').update({ is_active: false }).eq('id', id);
+    // Under RLS a refused row comes back with no error and zero rows, which this used to report as done. Audit C1-S9-86.
+    const { data: updated, error } = await createClient().from('family_insurance_policies').update({ is_active: false })
+      .eq('id', id).eq('family_id', familyId).select('id');
     if (error) return toastError(describeDbError(error));
+    if (wroteNoRows(updated)) return toastError(tr('errors.thatChangeWasNotSaved'));
     setSelected(null);
     success(tr('insuranceModule.policyRemoved'));
   }
@@ -74,7 +94,7 @@ export function InsuranceModule() {
       <PageHeader
         title={tr('insurance.insuranceHub')}
         description={tr('insuranceModule.everyHouseholdPolicyInOne')}
-        action={<div className="flex items-center gap-2"><AiInsight kind="insurance" iconOnly /><Button onClick={() => setAddOpen(true)}><Plus className="h-4 w-4" /> {tr('insurance.addPolicy')}</Button></div>}
+        action={<div className="flex items-center gap-2"><AiInsight kind="insurance" iconOnly />{canEdit && <Button onClick={() => setAddOpen(true)}><Plus className="h-4 w-4" /> {tr('insurance.addPolicy')}</Button>}</div>}
       />
 
       {policies.data.length > 0 && (
@@ -191,7 +211,7 @@ export function InsuranceModule() {
           policy={selected}
           coversName={memberName(selected.member_id)}
           onClose={() => setSelected(null)}
-          onRemove={() => removePolicy(selected.id)}
+          onRemove={canEdit ? () => removePolicy(selected.id) : null}
         />
       )}
     </div>
@@ -274,9 +294,16 @@ function PolicyForm({ familyId, userId, members, onClose, onSaved }: {
 }
 
 function PolicyDetail({ policy, coversName, onClose, onRemove }: {
-  policy: Policy; coversName: string | null; onClose: () => void; onRemove: () => void;
+  policy: Policy; coversName: string | null; onClose: () => void; onRemove: (() => void) | null;
 }) {
   const tr = useTranslations();
+  const locale = useLocale();
+  // Bound once per component so the twelve call sites below read unchanged. The
+  // amounts are whole dollars, so they go through the policies module's formatter
+  // rather than the cents one in lib/utils/format.ts.
+  const fmtMoney = (n: number | null | undefined) => fmtPolicyMoney(n, locale.code);
+  const fmtDate = (d: string) => policyDate(d, locale.code);
+
   const meta = policyTypeMeta(policy.policy_type);
   const annual = annualPremium(policy.premium_amount, policy.premium_frequency);
   const u = renewalUrgency(policy.renewal_date);
@@ -338,7 +365,7 @@ function PolicyDetail({ policy, coversName, onClose, onRemove }: {
         {policy.notes && <p className="rounded-xl border border-border bg-surface/40 px-3 py-2 text-sm text-muted">{policy.notes}</p>}
 
         <div className="flex justify-between border-t border-border pt-3">
-          <Button variant="ghost" onClick={onRemove} className="text-rose-400 hover:text-rose-300"><Trash2 className="h-4 w-4" /> {tr('insurance.remove')}</Button>
+          {onRemove && <Button variant="ghost" onClick={onRemove} className="text-rose-400 hover:text-rose-300"><Trash2 className="h-4 w-4" /> {tr('insurance.remove')}</Button>}
           <Button variant="ghost" onClick={onClose}><X className="h-4 w-4" /> {tr('insurance.close')}</Button>
         </div>
       </div>

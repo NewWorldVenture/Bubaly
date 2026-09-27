@@ -25,7 +25,9 @@ import {
   type OpportunityLike, type UrgencyBucket,
 } from '@/lib/opportunities/deadlines';
 import type { Tables, OpportunityStatus } from '@/lib/database.types';
-import { useTranslations } from '@/components/i18n/locale-provider';
+import { useLocale, useTranslations } from '@/components/i18n/locale-provider';
+import { useConfirm } from '@/components/ui/confirm';
+import { safeWebLink } from '@/lib/utils/safe-link';
 
 type Opportunity = Tables<'opportunities'>;
 
@@ -54,7 +56,9 @@ const blank = {
 };
 
 export function SignupsModule() {
+  const locale = useLocale();
   const t = useTranslations();
+  const askConfirm = useConfirm();
   const { familyId, userId, members, role } = useApp();
   const { success, error: toastError } = useToast();
   const canEdit = isManager(role);
@@ -113,7 +117,7 @@ export function SignupsModule() {
     // a refused write returns zero rows and no error. `.select('id')` is what
     // makes the difference visible — without it `data` is null either way.
     const { data: rows, error: err } = form.id
-      ? await sb.from('opportunities').update(fields).eq('id', form.id).select('id')
+      ? await sb.from('opportunities').update(fields).eq('id', form.id).eq('family_id', familyId).select('id')
       : await sb.from('opportunities').insert({ ...fields, family_id: familyId, created_by: userId }).select('id');
     setSaving(false);
     if (err) { toastError(describeDbError(err)); return; }
@@ -124,21 +128,21 @@ export function SignupsModule() {
 
   async function setStatus(o: Opportunity, status: OpportunityStatus) {
     const sb = createClient();
-    const { data: rows, error: err } = await sb.from('opportunities').update({ status }).eq('id', o.id).select('id');
+    const { data: rows, error: err } = await sb.from('opportunities').update({ status }).eq('id', o.id).eq('family_id', familyId).select('id');
     if (err) { toastError(describeDbError(err)); return; }
     if (wroteNoRows(rows)) toastError(t('errors.thatChangeWasNotSaved'));
   }
 
   async function remove(o: Opportunity) {
-    if (!confirm(`Delete "${o.title}"?`)) return;
+    if (!(await askConfirm({ title: t('confirm.deleteNamed', { name: o.title }), body: t('confirm.cannotBeUndone') }))) return;
     const sb = createClient();
-    const { data: rows, error: err } = await sb.from('opportunities').delete().eq('id', o.id).select('id');
+    const { data: rows, error: err } = await sb.from('opportunities').delete().eq('id', o.id).eq('family_id', familyId).select('id');
     if (err) { toastError(describeDbError(err)); return; }
     if (wroteNoRows(rows)) { toastError(t('errors.thatChangeWasNotSaved')); return; }
     success(t('signupsModule.signupDeleted'));
   }
 
-  const fmtDate = (key: string | null) => key ? new Date(`${key}T00:00:00`).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' }) : null;
+  const fmtDate = (key: string | null) => key ? new Date(`${key}T00:00:00`).toLocaleDateString(locale.code, { month: 'short', day: 'numeric', year: 'numeric' }) : null;
   const countdownLabel = (o: Opportunity) => {
     const d = daysToDeadline(o as OpportunityLike, tk);
     if (d == null) return null;
@@ -234,7 +238,7 @@ export function SignupsModule() {
                               {o.member_id && <span className="inline-flex items-center gap-1"><Avatar name={memberName(o.member_id) ?? '?'} size={14} />{memberName(o.member_id)}</span>}
                               {o.deadline && <span className={cn('inline-flex items-center gap-1', missed && 'text-rose-400')}><CalendarClock className="h-3.5 w-3.5" />{t('signups.deadline')} {fmtDate(o.deadline)} · {countdownLabel(o)}</span>}
                               {o.cost != null && <span className="inline-flex items-center gap-0.5"><DollarSign className="h-3.5 w-3.5" />{o.cost}</span>}
-                              {o.url && <a href={o.url} target="_blank" rel="noopener noreferrer" className="inline-flex items-center gap-1 text-brand-text hover:underline"><ExternalLink className="h-3.5 w-3.5" />{t('signups.register')}</a>}
+                              {o.url && <a href={safeWebLink(o.url) ?? undefined} target="_blank" rel="noopener noreferrer" className="inline-flex items-center gap-1 text-brand-text hover:underline"><ExternalLink className="h-3.5 w-3.5" />{t('signups.register')}</a>}
                             </div>
                             {o.notes && <p className="mt-1.5 text-sm text-fg/80">{o.notes}</p>}
                           </div>

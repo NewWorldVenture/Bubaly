@@ -9,7 +9,7 @@ import { getTranslations } from '@/lib/i18n/server';
 import { requireUserContext } from '@/lib/supabase/auth';
 import { createServer } from '@/lib/supabase/server';
 import { isValidJoinCode, normalizeJoinCode } from '@/lib/marketplace/community';
-import { describeActionError } from '@/lib/supabase/errors';
+import { describeActionError, wroteNoRows } from '@/lib/supabase/errors';
 
 const PATH = '/marketplace/community';
 
@@ -82,12 +82,19 @@ export async function unshareListingAction(listingId: string, circleId: string):
   if (!listingId || !circleId) return { ok: false, error: t('actions.invalidShare') };
   const ctx = await requireUserContext();
   const sb = await createServer();
-  const { error } = await sb.from('marketplace_listing_shares')
+  // `shareListingAction` above is deliberately idempotent because a double-share
+  // is harmless; an unshare is not its mirror. Zero rows means the listing is
+  // still visible to that circle while the family has been told it was pulled —
+  // and the thing left on display is one they decided other people should stop
+  // seeing. Audit C1-S9-59.
+  const { data: unshared, error } = await sb.from('marketplace_listing_shares')
     .delete()
     .eq('listing_id', listingId)
     .eq('circle_id', circleId)
-    .eq('family_id', ctx.active.familyId);
+    .eq('family_id', ctx.active.familyId)
+    .select('listing_id');
   if (error) return actionFailure('remove the shared listing', t('community.couldNotRemoveTheSharedListing'), error);
+  if (wroteNoRows(unshared)) return { ok: false, error: t('community.couldNotRemoveTheSharedListing') };
   revalidatePath(PATH);
   return { ok: true };
 }

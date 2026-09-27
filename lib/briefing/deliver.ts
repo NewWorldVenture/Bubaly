@@ -32,6 +32,8 @@ import type { SupabaseClient } from '@supabase/supabase-js';
 import type { ConciergeSnapshot } from '@/lib/concierge/digest';
 import type { Database } from '@/lib/database.types';
 import type { AiActivityRow, CompletedRunRow } from '@/lib/home/today';
+import type { NeedsReader } from '@/lib/home/needs-sources';
+import { SOURCE_MESSAGES, translate } from '@/lib/i18n/messages';
 import { notify } from '@/lib/services/notifications';
 import { readAll } from '@/lib/supabase/read-all';
 import { dayKeyInTz, hourInTz, scopeForSystem, zonedDayBoundsMs, zonedTimeMs } from '@/lib/services/scope';
@@ -40,6 +42,7 @@ import { buildBrief, type Brief } from './build';
 import { readBriefDecisions } from './decisions';
 import { medicationsDueOn, weekdayOf, type MedicationScheduleRow } from './sources';
 import { briefingCalendarWindow } from './calendar-window';
+import { settleAll } from '@/lib/supabase/settle';
 
 type DB = SupabaseClient<Database>;
 
@@ -94,6 +97,25 @@ export function morningBriefBody(brief: Brief): string | null {
 }
 
 /**
+ * Who the morning brief's decision titles are worded for — and the honest answer
+ * is "nobody in particular", which is why this is spelled out rather than
+ * defaulted.
+ *
+ * A money approval's title carries its amount, so it needs a reader's locale.
+ * This runs from a cron: there is no request, so no cookie and no
+ * Accept-Language, and no member or family table stores a language choice yet —
+ * it lives only in the LOCALE_COOKIE (lib/i18n/locales.ts), which a cron never
+ * sees. So the brief a manager is notified with is written in the SOURCE locale,
+ * explicitly: 'en-US' for the amount, the English catalogue for the words. When a
+ * per-member or per-family locale column lands (finalaudit I18N-001), this is the
+ * line that reads it — per recipient, since `notify` fans out to every manager.
+ */
+const MORNING_BRIEF_READER: NeedsReader = {
+  locale: 'en-US',
+  t: (key, params) => translate(SOURCE_MESSAGES, key, params),
+};
+
+/**
  * Compose the brief the cron sends, from the family's rows. Manager view —
  * the recipients are the managers — under a system scope whose clock is the
  * delivery instant.
@@ -108,7 +130,7 @@ export async function readMorningBrief(scope: ServiceScope, target: MorningTarge
   const sinceIso = new Date(bounds.start - 24 * 3600_000).toISOString();
   const todayDow = weekdayOf(dayKey);
 
-  const [events, members, bills, meds, maintenance, warranties, trips, pantry, runs, activity] = await Promise.all([
+  const [events, members, bills, meds, maintenance, warranties, trips, pantry, runs, activity] = await settleAll([
     db.from('calendar_events').select('title, starts_at, ends_at, all_day, location')
       .eq('family_id', familyId).or(briefingCalendarWindow(dayKey, tz, 0, 7)).order('starts_at').limit(100),
     db.from('family_members').select('id, display_name').eq('family_id', familyId).eq('is_active', true),
@@ -143,7 +165,7 @@ export async function readMorningBrief(scope: ServiceScope, target: MorningTarge
     }
   }
 
-  const decisions = await readBriefDecisions(scope);
+  const decisions = await readBriefDecisions(scope, MORNING_BRIEF_READER);
   if (!decisions.ok) return decisions;
 
   const names = new Map((members.data ?? []).map((m) => [m.id, m.display_name]));

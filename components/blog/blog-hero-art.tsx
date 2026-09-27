@@ -66,7 +66,7 @@ export async function BlogHeroArt({ className }: { className?: string }) {
       <g transform="rotate(3 250 205)" filter="url(#bhaSoft)">
         <rect
           x="150" y="120" width="200" height="172" rx="24"
-          className="fill-white dark:fill-[#1B2138] stroke-slate-900/[0.07] dark:stroke-white/12"
+          className="fill-white dark:fill-[#1B2138] stroke-slate-900/[0.07] dark:stroke-white/10"
           strokeWidth="1"
         />
         {/* Thumbnail */}

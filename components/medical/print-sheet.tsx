@@ -2,7 +2,8 @@
 
 import { Printer, X } from 'lucide-react';
 import type { Tables, RecordKind } from '@/lib/database.types';
-import { useTranslations } from '@/components/i18n/locale-provider';
+import { useLocale, useTranslations } from '@/components/i18n/locale-provider';
+import type { LocaleCode } from '@/lib/i18n/locales';
 
 type Provider = Tables<'health_providers'>;
 type Policy = Tables<'insurance_policies'>;
@@ -12,12 +13,12 @@ type Medication = Tables<'medications'>;
 
 const KIND_LABEL: Record<RecordKind, string> = { medical: 'Medical', dental: 'Dental' };
 
-function formatDate(iso: string | null): string {
+const formatDateIn = (locale: LocaleCode) => (iso: string | null): string => {
   if (!iso) return '—';
   const d = new Date(iso);
   if (Number.isNaN(d.getTime())) return '—';
-  return d.toLocaleDateString('en-US', { year: 'numeric', month: 'long', day: 'numeric' });
-}
+  return d.toLocaleDateString(locale, { year: 'numeric', month: 'long', day: 'numeric' });
+};
 
 function ageFrom(birthday: string | null): string {
   if (!birthday) return '';
@@ -61,6 +62,8 @@ function SheetShell({
   onClose: () => void;
   children: React.ReactNode;
 }) {
+  const locale = useLocale();
+  const formatDate = formatDateIn(locale.code);
   const t = useTranslations();
   return (
     <div className="print-sheet fixed inset-0 z-[120] overflow-y-auto bg-white">
@@ -168,6 +171,8 @@ export function CheckInSheet({
   medications: Medication[];
   onClose: () => void;
 }) {
+  const locale = useLocale();
+  const formatDate = formatDateIn(locale.code);
   const t = useTranslations();
   const age = ageFrom(member.birthday);
   const primary = providers.find((p) => p.is_primary) ?? providers[0] ?? null;

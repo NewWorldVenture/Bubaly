@@ -7,6 +7,8 @@
 
 import type { SupabaseClient } from '@supabase/supabase-js';
 import type { Database } from '@/lib/database.types';
+import type { LocaleCode } from '@/lib/i18n/locales';
+import { signalWordsFor } from '@/lib/intelligence/hard-signals';
 import { loadOperatingIndex } from '@/lib/operating-index/server';
 import { loadFamilyContext } from '@/lib/reasoning/context';
 import { reasoningInsights } from '@/lib/reasoning/insights';
@@ -16,16 +18,33 @@ import {
 } from '@/lib/reasoning/engine';
 
 type DB = SupabaseClient<Database>;
+type Translate = (key: string, params?: Record<string, string | number>) => string;
 
 const IMPACT_PRIORITY: Record<string, number> = { high: 90, medium: 60, low: 35 };
 const SIGNAL_HREF = '/dashboard/family-signals';
 
-/** Assemble the six-question reasoning report from the family's live data. */
-export async function loadReasoningReport(sb: DB, familyId: string, now: Date = new Date()): Promise<ReasoningReport> {
+/**
+ * Assemble the six-question reasoning report from the family's live data.
+ *
+ * `tz` is the family's IANA zone. Nothing in THIS file resolves a day key with
+ * it; it is carried because both sources it composes — the operating index and
+ * the family context's snapshot — bound DATE columns with the family's day, and
+ * a loader that defaulted it would hand them Greenwich's.
+ *
+ * `locale` and `t` are whoever the report is FOR, and required. A hard signal is
+ * stored worded for whichever scan last wrote it — the nightly model-refresh
+ * cron writes en-US, a Refresh writes the presser's language — and budget drift
+ * carries money, so each signal is worded again here from its `evidence`
+ * (signalWordsFor). The reasoning page passes its reader; the proactive AI
+ * context slice, whose reader is the model, passes en-US explicitly.
+ */
+export async function loadReasoningReport(
+  sb: DB, familyId: string, tz: string, locale: LocaleCode, t: Translate, now: Date = new Date(),
+): Promise<ReasoningReport> {
   const readErrors: ReasoningReadSource[] = [];
 
   // FOI (orchestrator + ranked suggestions) — the richest single source.
-  const foi = await loadOperatingIndex(sb, familyId, now).catch((err) => {
+  const foi = await loadOperatingIndex(sb, familyId, tz, now).catch((err) => {
     console.error('[reasoning-engine] operating_index read failed', { familyId, err });
     readErrors.push('operating_index');
     return null;
@@ -36,7 +55,7 @@ export async function loadReasoningReport(sb: DB, familyId: string, now: Date = 
   }));
 
   // Graph reasoning insights (R2) — hubs / ripple / coverage.
-  const ctx = await loadFamilyContext(sb, familyId).catch((err) => {
+  const ctx = await loadFamilyContext(sb, familyId, tz).catch((err) => {
     console.error('[reasoning-engine] relationship_graph read failed', { familyId, err });
     readErrors.push('relationship_graph');
     return null;
@@ -47,7 +66,7 @@ export async function loadReasoningReport(sb: DB, familyId: string, now: Date = 
   let signals: ReasoningSignal[] = [];
   try {
     const { data, error } = await sb.from('family_signals')
-      .select('kind, title, detail, score').eq('family_id', familyId).eq('status', 'active')
+      .select('kind, title, detail, score, evidence').eq('family_id', familyId).eq('status', 'active')
       .order('score', { ascending: false }).limit(20);
     // Degrade to no signals (the engine treats missing input as calm), but log a
     // read error — a PostgREST failure returns { data: null, error } without
@@ -57,7 +76,7 @@ export async function loadReasoningReport(sb: DB, familyId: string, now: Date = 
       console.error('[reasoning-engine] family_signals read failed', { familyId, error });
       readErrors.push('family_signals');
     }
-    signals = (data ?? []).map((s) => ({ kind: s.kind, title: s.title, detail: s.detail, score: s.score, href: SIGNAL_HREF }));
+    signals = (data ?? []).map((s) => ({ kind: s.kind, ...signalWordsFor(s, locale, t), score: s.score, href: SIGNAL_HREF }));
   } catch (err) {
     console.error('[reasoning-engine] family_signals read threw', { familyId, err });
     readErrors.push('family_signals');
@@ -73,8 +92,10 @@ export async function loadReasoningReport(sb: DB, familyId: string, now: Date = 
 }
 
 /** Load the report and persist today's snapshot (idempotent per family/day). */
-export async function loadAndSnapshotReasoning(sb: DB, familyId: string, userId: string | null, now: Date = new Date()): Promise<ReasoningReport> {
-  const report = await loadReasoningReport(sb, familyId, now);
+export async function loadAndSnapshotReasoning(
+  sb: DB, familyId: string, userId: string | null, tz: string, locale: LocaleCode, t: Translate, now: Date = new Date(),
+): Promise<ReasoningReport> {
+  const report = await loadReasoningReport(sb, familyId, tz, locale, t, now);
   try {
     // Best-effort persistence — the report is returned regardless — but a
     // PostgREST write failure returns { error } without throwing, so we must
@@ -82,6 +103,12 @@ export async function loadAndSnapshotReasoning(sb: DB, familyId: string, userId:
     // drop every daily snapshot and break "since yesterday" trends with no signal.
     const { error } = await sb.from('reasoning_snapshots').upsert({
       family_id: familyId,
+      // NOT converted here, deliberately: `reasoning_snapshots.as_of_date` is
+      // this upsert's idempotency key, and moving it changes what "already
+      // snapshotted today" means for rows written under the old key. It has its
+      // own entry in the write allowlist of
+      // tests/family-day-not-greenwich-day.test.ts and belongs to that change,
+      // not this one.
       as_of_date: now.toISOString().slice(0, 10),
       all_clear: report.allClear,
       attention_count: report.answers.filter((a) => a.status === 'attention').length,

@@ -10,6 +10,7 @@ import type { AudienceMatch } from '@/lib/marketing/personalization';
 import { summarizeExitIntent, conversionRate, normalizeTrigger } from '@/lib/marketing/exit-intent';
 import { createExitIntentAction, toggleExitIntentAction, deleteExitIntentAction } from './actions';
 import { getTranslations } from '@/lib/i18n/server';
+import { SubmitButton } from '@/components/ui/submit-button';
 
 export async function generateMetadata(): Promise<Metadata> {
   const t = await getTranslations();
@@ -115,7 +116,7 @@ export default async function ExitIntentPage() {
               <option value="false">{t('adminMarketingExitIntent.newVisitorsOnly')}</option>
             </select>
             <input name="minSessions" type="number" min="0" placeholder={t('adminMarketingExitIntent.minSessions')} className={inputCls} />
-            <button type="submit" className={`${btnCls} lg:col-span-2`}>{t('adminMarketingExitIntent.createOffer')}</button>
+            <SubmitButton className={`${btnCls} lg:col-span-2`}>{t('adminMarketingExitIntent.createOffer')}</SubmitButton>
           </div>
         </form>
       </Card>
@@ -142,12 +143,12 @@ export default async function ExitIntentPage() {
                 </div>
                 <div className="flex shrink-0 items-center gap-2">
                   <form action={toggleExitIntentAction.bind(null, o.id, o.status !== 'active')}>
-                    <button type="submit" className="text-muted hover:text-fg" title={o.status === 'active' ? 'Pause' : 'Activate'}>
+                    <SubmitButton className="text-muted hover:text-fg" title={o.status === 'active' ? 'Pause' : 'Activate'}>
                       {o.status === 'active' ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}
-                    </button>
+                    </SubmitButton>
                   </form>
                   <form action={deleteExitIntentAction.bind(null, o.id)}>
-                    <button type="submit" className="text-xs text-muted hover:text-rose-400">✕</button>
+                    <SubmitButton className="text-xs text-muted hover:text-rose-400">✕</SubmitButton>
                   </form>
                 </div>
               </Card>

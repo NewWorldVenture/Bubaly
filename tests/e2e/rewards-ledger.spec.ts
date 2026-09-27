@@ -15,7 +15,10 @@ const sources = Object.fromEntries([
   'lib/offline/cache.ts', 'lib/offline/cache-scope.tsx', 'lib/auth/cache-session.ts', 'lib/auth/session-change.ts',
   'lib/supabase/errors.ts', 'lib/realtime/published-tables.ts', 'lib/constants/roles.ts', 'lib/rewards/points.ts',
   'components/ui/states.tsx', 'components/ui/states-client.tsx', 'components/ui/button.tsx',
-  'components/ui/input.tsx', 'components/ui/modal.tsx', 'components/app/page-header.tsx',
+  'components/ui/input.tsx', 'components/ui/modal.tsx',
+  // rewards-module.tsx asks before a destructive write via useConfirm; the
+  // provider reaches the loader with it, so its source belongs here too.
+  'components/ui/confirm.tsx', 'components/app/page-header.tsx',
   'lib/a11y/use-dialog-behavior.ts',
   'app/(app)/dashboard/rewards/actions.ts',
 ].map(file => [`@/${file.replace(/\.tsx?$/, '')}`, ts.transpileModule(fs.readFileSync(file, 'utf8'), {
@@ -29,7 +32,7 @@ const familyId = 'cccccccc-cccc-4ccc-8ccc-cccccccccccc';
 const childId = 'dddddddd-dddd-4ddd-8ddd-dddddddddddd';
 const parentId = 'eeeeeeee-eeee-4eee-8eee-eeeeeeeeeeee';
 const userId = 'aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa';
-type Table = 'rewards' | 'chore_assignments' | 'reward_redemptions';
+type Table = 'rewards' | 'chore_assignments' | 'reward_redemptions' | 'family_members';
 type Row = Record<string, unknown> & { id: string };
 type Fixture = {
   rows: Record<Table, Row[]>;
@@ -62,11 +65,17 @@ const reward: Row = { id: 'reward-1', family_id: familyId, title: 'Movie night',
 const assignment: Row = { id: 'assignment-1', family_id: familyId, member_id: childId, status: 'approved', points_awarded: 100 };
 const spent: Row = { id: 'spent-1', family_id: familyId, reward_id: reward.id, member_id: childId, reward_title: 'Past reward', cost_points: 100, status: 'fulfilled', created_at: '2026-09-10T00:00:00Z' };
 const requested: Row = { ...spent, id: 'requested-1', reward_title: 'Movie night', status: 'requested' };
+// The action confirms whose points these are against the family's active
+// members before it queues anything (DATA-004), so the fixture carries them.
+const members: Row[] = [
+  { id: childId, family_id: familyId, role: 'child', is_active: true },
+  { id: parentId, family_id: familyId, role: 'parent', is_active: true },
+];
 
 async function fixture(page: Page): Promise<Fixture> {
   const held = new Map<Table, Array<() => Promise<void>>>(), pendingWrites: Array<() => Promise<void>> = [];
   const state: Fixture = {
-    rows: { rewards: [{ ...reward }], chore_assignments: [{ ...assignment }], reward_redemptions: [{ ...spent }] },
+    rows: { rewards: [{ ...reward }], chore_assignments: [{ ...assignment }], reward_redemptions: [{ ...spent }], family_members: members.map(member => ({ ...member })) },
     mode: {}, reads: [], writes: [], holdMutations: false, failMutation: false, denyMutation: false,
     release: async table => { delete state.mode[table]; await Promise.all((held.get(table) ?? []).splice(0).map(release => release())); },
     releaseOne: async table => { const release = held.get(table)?.shift(); if (!release) throw new Error('No held read'); await release(); },
@@ -152,7 +161,7 @@ async function fixture(page: Page): Promise<Fixture> {
       '@/lib/supabase/auth': { requireUserContext: async () => ({ user: session.user, active: { familyId, role, member: app().selfMember } }) },
       '@/lib/i18n/server': { getTranslations: async () => key => messages[key] ?? key },
       'next/cache': { revalidatePath() {} },
-      '@/components/i18n/locale-provider': { useTranslations: () => key => messages[key] ?? key },
+      '@/components/i18n/locale-provider': { useTranslations: () => key => messages[key] ?? key, usePlural: () => (key, count, params) => Object.entries({ ...(params || {}), count }).reduce((s, [k, v]) => s.split('{' + k + '}').join(String(v)), messages[key + '.' + new Intl.PluralRules('en-US').select(count)] ?? messages[key + '.other'] ?? key) },
       '@/components/ui/toast': { useToast: () => ({ success: message => p.toasts.push({ kind: 'success', message }), error: message => p.toasts.push({ kind: 'error', message }) }) },
       '@/components/ui/avatar': { Avatar: () => null }, '@/components/ai/ai-insight': { AiInsight: () => null },
       '@/lib/utils/cn': { cn: (...values) => values.filter(value => typeof value === 'string').join(' ') },
@@ -227,11 +236,12 @@ test('sufficient verified points create one request despite same-turn duplicate 
   await page.evaluate(() => { void window.__rewardsLedger.captured(); void window.__rewardsLedger.captured(); });
   await expect.poll(() => state.writes.length).toBe(1);
   await expect(page.getByRole('button', { name: 'Redeem', exact: true })).toBeDisabled();
-  await state.finishWrites(); await expect.poll(() => state.reads.length).toBeGreaterThan(reads + 1);
+  await state.finishWrites(); await expect.poll(() => new Set(state.reads.slice(reads)).size).toBe(4);
   expect(state.rows.reward_redemptions).toHaveLength(1);
   expect(state.rows.reward_redemptions[0]).toMatchObject({ member_id: childId, reward_title: 'Movie night', cost_points: 100, status: 'requested' });
-  // The action verifies the current reward before the UI reloads both ledgers.
-  expect(new Set(state.reads.slice(reads))).toEqual(new Set(['rewards', 'chore_assignments', 'reward_redemptions']));
+  // The action verifies the current reward and the member whose points these
+  // are before the UI reloads both ledgers.
+  expect(new Set(state.reads.slice(reads))).toEqual(new Set(['rewards', 'family_members', 'chore_assignments', 'reward_redemptions']));
 });
 
 test('manager request, approval and fulfillment use persisted readback and update spendable points', async ({ page }) => {
@@ -261,15 +271,15 @@ test('manager rejects a request and the refreshed history does not spend its poi
 test('catalog create, edit, cancel and confirmed delete reconcile unpublished rows', async ({ page }) => {
   const state = await fixture(page); await mount(page, 'parent'); await ready(page);
   await page.getByRole('button', { name: 'Add reward', exact: true }).click();
-  await page.getByRole('textbox', { name: 'Reward*', exact: true }).fill('Park picnic');
+  await page.getByRole('textbox', { name: 'Reward', exact: true }).fill('Park picnic');
   await page.getByRole('button', { name: 'Cancel', exact: true }).click(); await noWrites(state);
   await page.getByRole('button', { name: 'Add reward', exact: true }).click();
-  await page.getByRole('textbox', { name: 'Reward*', exact: true }).fill('Park picnic');
+  await page.getByRole('textbox', { name: 'Reward', exact: true }).fill('Park picnic');
   await page.getByRole('dialog').getByRole('button', { name: 'Add reward', exact: true }).click();
   await expect(page.getByRole('dialog')).toHaveCount(0); await expect(page.getByText('Park picnic', { exact: true })).toBeVisible();
   const card = page.getByText('Park picnic', { exact: true }).locator('..');
   await card.getByRole('button', { name: 'Edit', exact: true }).click();
-  await page.getByRole('textbox', { name: 'Reward*', exact: true }).fill('Beach picnic');
+  await page.getByRole('textbox', { name: 'Reward', exact: true }).fill('Beach picnic');
   await page.getByRole('button', { name: 'Save changes', exact: true }).click();
   await expect(page.getByText('Beach picnic', { exact: true })).toBeVisible();
   page.once('dialog', dialog => dialog.dismiss());
@@ -288,7 +298,7 @@ for (const operation of ['edit', 'delete'] as const) test(`a policy-refused cata
   const card = page.getByText('Movie night', { exact: true }).locator('..');
   if (operation === 'edit') {
     await card.getByRole('button', { name: 'Edit', exact: true }).click();
-    await page.getByRole('textbox', { name: 'Reward*', exact: true }).fill('Changed reward');
+    await page.getByRole('textbox', { name: 'Reward', exact: true }).fill('Changed reward');
     await page.getByRole('button', { name: 'Save changes', exact: true }).click();
   } else {
     page.once('dialog', dialog => dialog.accept());
@@ -305,23 +315,23 @@ for (const operation of ['edit', 'delete'] as const) test(`a policy-refused cata
 test('a catalog draft survives a failed ledger refresh and retry', async ({ page }) => {
   const state = await fixture(page); await mount(page, 'parent'); await ready(page);
   await page.getByRole('button', { name: 'Add reward', exact: true }).click();
-  await page.getByRole('textbox', { name: 'Reward*', exact: true }).fill('Unfinished reward');
+  await page.getByRole('textbox', { name: 'Reward', exact: true }).fill('Unfinished reward');
   state.mode.chore_assignments = 'fail'; await page.evaluate(() => window.__rewardsLedger.online());
   await expect(page.getByText(/permission to do that/)).toBeVisible(); await noWrites(state);
   delete state.mode.chore_assignments; await page.getByRole('button', { name: 'Try again', exact: true }).click();
-  await expect(page.getByRole('textbox', { name: 'Reward*', exact: true })).toHaveValue('Unfinished reward');
+  await expect(page.getByRole('textbox', { name: 'Reward', exact: true })).toHaveValue('Unfinished reward');
   await page.getByRole('button', { name: 'Cancel', exact: true }).click(); await noWrites(state);
 });
 
 for (const throws of [false, true]) test(`a ${throws ? 'thrown' : 'returned'} mutation failure preserves the draft and permits retry`, async ({ page }) => {
   const state = await fixture(page); await mount(page, 'parent'); await ready(page);
   await page.getByRole('button', { name: 'Add reward', exact: true }).click();
-  await page.getByRole('textbox', { name: 'Reward*', exact: true }).fill('Retry reward');
+  await page.getByRole('textbox', { name: 'Reward', exact: true }).fill('Retry reward');
   state.failMutation = !throws;
   if (throws) await page.evaluate(() => { window.__rewardsLedger.throwMutation = true; });
   await page.getByRole('dialog').getByRole('button', { name: 'Add reward', exact: true }).click();
   await expect.poll(() => page.evaluate(() => window.__rewardsLedger.toasts.some(toast => toast.kind === 'error'))).toBe(true);
-  await expect(page.getByRole('textbox', { name: 'Reward*', exact: true })).toHaveValue('Retry reward');
+  await expect(page.getByRole('textbox', { name: 'Reward', exact: true })).toHaveValue('Retry reward');
   state.failMutation = false;
   await page.getByRole('dialog').getByRole('button', { name: 'Add reward', exact: true }).click();
   await expect(page.getByRole('dialog')).toHaveCount(0);
@@ -332,11 +342,11 @@ for (const throws of [false, true]) test(`a ${throws ? 'thrown' : 'returned'} mu
 test('a pending catalog save blocks duplicate submit and cancel until its confirmed readback', async ({ page }) => {
   const state = await fixture(page); state.holdMutations = true; await mount(page, 'parent'); await ready(page);
   await page.getByRole('button', { name: 'Add reward', exact: true }).click();
-  await page.getByRole('textbox', { name: 'Reward*', exact: true }).fill('One saved reward');
+  await page.getByRole('textbox', { name: 'Reward', exact: true }).fill('One saved reward');
   await page.evaluate(() => { void window.__rewardsLedger.saveHandler(); void window.__rewardsLedger.saveHandler(); });
   await expect.poll(() => state.writes.length).toBe(1);
   await expect(page.getByRole('button', { name: 'Cancel', exact: true })).toBeDisabled();
-  await expect(page.getByRole('textbox', { name: 'Reward*', exact: true })).toBeDisabled();
+  await expect(page.getByRole('textbox', { name: 'Reward', exact: true })).toBeDisabled();
   await page.keyboard.press('Escape');
   await page.getByRole('button', { name: 'Close dialog', exact: true }).click();
   await expect(page.getByRole('dialog')).toBeVisible();
@@ -403,7 +413,7 @@ test('a superseded redemption readback keeps actions locked until the newer read
 test('a confirmed catalog insert with failed readback retires its form once retry commits', async ({ page }) => {
   const state = await fixture(page); await mount(page, 'parent'); await ready(page);
   await page.getByRole('button', { name: 'Add reward', exact: true }).click();
-  await page.getByRole('textbox', { name: 'Reward*', exact: true }).fill('Persisted before readback');
+  await page.getByRole('textbox', { name: 'Reward', exact: true }).fill('Persisted before readback');
   state.mode.rewards = 'fail';
   await page.getByRole('dialog').getByRole('button', { name: 'Add reward', exact: true }).click();
   await expect(page.getByRole('button', { name: 'Try again', exact: true })).toBeVisible();

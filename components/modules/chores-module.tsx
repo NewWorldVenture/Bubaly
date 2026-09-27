@@ -1,6 +1,6 @@
 'use client';
 
-import { useMemo, useState, useRef } from 'react';
+import { useEffect, useMemo, useState, useRef } from 'react';
 import { useRouter } from 'next/navigation';
 import {
   Plus, LayoutTemplate, Trophy, Flame, Gift, Star, MoreVertical,
@@ -8,11 +8,13 @@ import {
 } from 'lucide-react';
 import Link from 'next/link';
 import { useApp } from '@/components/app/app-context';
+import { useDismissOnEscape } from '@/lib/hooks/use-dismiss-on-escape';
+import { dayKeyIn } from '@/lib/time/zoned';
 import { useRealtimeQuery } from '@/lib/hooks/use-realtime-query';
 import { createClient } from '@/lib/supabase/client';
 import { createChoreAction, deleteChoreAssignmentAction, setChoreStatusAction } from '@/app/(app)/dashboard/chores/actions';
-import { newSubmissionId } from '@/lib/utils/submission-id';
-import { describeDbError } from '@/lib/supabase/errors';
+import { newSubmissionId, submissionSettled } from '@/lib/utils/submission-id';
+import { describeDbError, wroteNoRows } from '@/lib/supabase/errors';
 import { useToast } from '@/components/ui/toast';
 import { isManager } from '@/lib/constants/roles';
 import { Avatar } from '@/components/ui/avatar';
@@ -28,11 +30,12 @@ import { requestRedemptionAction } from '@/app/(app)/dashboard/rewards/actions';
 import { formatCents } from '@/lib/wallet/ledger';
 import {
   topEarners, streaksByMember, groupByRecurrence, rewardsProgress, totalFamilyPoints,
-  pointsByMember, dueLabel, choreEmoji, isCompleted, RANK_MEDALS,
+  pointsByMember, dueLabel as dueLabelIn, choreEmoji, isCompleted, RANK_MEDALS,
   type AssignmentLike,
 } from '@/lib/chores/dashboard';
 import type { Tables, Updatable } from '@/lib/database.types';
-import { useTranslations } from '@/components/i18n/locale-provider';
+import { useLocale, useTranslations } from '@/components/i18n/locale-provider';
+import type { LocaleCode } from '@/lib/i18n/locales';
 
 type Chore = Tables<'chores'>;
 type Reward = Tables<'rewards'>;
@@ -53,16 +56,18 @@ const DUE_TONE: Record<string, string> = {
   overdue: 'text-rose-400', today: 'text-amber-400', soon: 'text-amber-300', normal: 'text-muted', none: 'text-muted',
 };
 
-function timeAgo(iso: string | null): string {
+const timeAgoIn = (locale: LocaleCode) => (iso: string | null): string => {
   if (!iso) return '';
   const d = new Date(iso);
   const now = new Date();
   const sameDay = d.toDateString() === now.toDateString();
-  const time = d.toLocaleTimeString('en-US', { hour: 'numeric', minute: '2-digit' });
-  return sameDay ? `Today, ${time}` : `${d.toLocaleDateString('en-US', { month: 'short', day: 'numeric' })}, ${time}`;
-}
+  const time = d.toLocaleTimeString(locale, { hour: 'numeric', minute: '2-digit' });
+  return sameDay ? `Today, ${time}` : `${d.toLocaleDateString(locale, { month: 'short', day: 'numeric' })}, ${time}`;
+};
 
 export function ChoresModule() {
+  const locale = useLocale();
+  const timeAgo = timeAgoIn(locale.code);
   const tr = useTranslations();
   const { familyId, userId, role, members, selfMember } = useApp();
   const router = useRouter();
@@ -77,6 +82,7 @@ export function ChoresModule() {
   const [busy, setBusy] = useState<string | null>(null);
   const [paying, setPaying] = useState<string | null>(null);
   const [menuFor, setMenuFor] = useState<string | null>(null);
+  useDismissOnEscape(menuFor !== null, () => setMenuFor(null));
   const [pointsWindow, setPointsWindow] = useState<'week' | 'month' | 'all'>('week');
 
   const { data, loading, error, refresh } = useRealtimeQuery<Assignment>({
@@ -164,12 +170,16 @@ export function ChoresModule() {
     if (busy) return;
     setBusy(a.id); setMenuFor(null);
     const supabase = createClient();
-    const { error } = await supabase.from('chore_assignments').update({
+    // A non-manager's approval is refused by the 0223 trigger WITH an error;
+    // a row RLS cannot see is refused with none, and zero rows here said
+    // "Approved! +N pts" about points nobody was given. Audit C1-S9-83.
+    const { data: approved, error } = await supabase.from('chore_assignments').update({
       // approved_by is a FK to family_members(id), not auth.users — use the member id.
       status: 'approved', approved_at: new Date().toISOString(), approved_by: selfMemberId, points_awarded: a.chore?.points ?? 0,
-    }).eq('id', a.id);
+    }).eq('id', a.id).select('id');
     setBusy(null);
     if (error) return toastError(describeDbError(error));
+    if (wroteNoRows(approved)) return toastError(tr('errors.thatChangeWasNotSaved'));
     success(`Approved! +${a.chore?.points ?? 0} pts`); void refresh();
   }
 
@@ -207,6 +217,17 @@ export function ChoresModule() {
     success(manager ? 'Reward redeemed!' : 'Redemption requested');
   }
 
+// The open row menu was dismissed by clicking anywhere on the page wrapper —
+  // a mouse-only dismissal. A keyboard user could open the menu and had no way
+  // to close it. The wrapper's onClick stays as the mouse convenience; Escape is
+  // the keyboard's equivalent, and neither is a control worth a tab stop.
+  useEffect(() => {
+    if (!menuFor) return;
+    const onKey = (e: KeyboardEvent) => { if (e.key === 'Escape') setMenuFor(null); };
+    window.addEventListener('keydown', onKey);
+    return () => window.removeEventListener('keydown', onKey);
+  }, [menuFor]);
+
   if (loading) return <SkeletonList count={6} />;
   // The rewards read matters too: it is what the redemption list is priced
   // from, so losing it shows a child nothing to spend their points on.
@@ -222,7 +243,10 @@ export function ChoresModule() {
   ];
 
   return (
-    <div className="module-with-sidebar" onClick={() => menuFor && setMenuFor(null)}>
+    // Layout again — see locator-module: dismissal on a page-wide click handler
+    // forced the menu panel to carry a stopPropagation handler purely to cancel
+    // it. The row menu owns a scrim now, and Escape is the keyboard path.
+    <div className="module-with-sidebar">
       <div className="module-main">
         <div className="module-page">
           <PageHeader
@@ -546,6 +570,16 @@ function ChoreTable({ title, rows, ...p }: { title: string; rows: AssignmentLike
 
 function ChoreRow({ a, memberById, manager, busy, paying, menuFor, setMenuFor, onStatus, onApprove, onPay, onDelete }: { a: Assignment } & RowProps) {
   const tr = useTranslations();
+  // The FAMILY's zone, read here rather than threaded through RowProps because
+  // ChoreRow is the only thing that needs it. `due_at` is a timestamptz, and
+  // the home page buckets the same instant with the family's zone — labelling
+  // it against this device's instead made one chore "Tomorrow" here and
+  // "Today" there for anyone whose phone is not set to the household's zone.
+  // The words and the date format follow the reader.
+  const { family } = useApp();
+  const tz = family?.timezone || 'UTC';
+  const locale = useLocale();
+  const dueLabel = (due: string | null) => dueLabelIn(due, dayKeyIn(new Date(), tz), tz, locale.code, tr);
   const member = memberById.get(a.member_id);
   const due = dueLabel(a.due_at);
   const status = STATUS_META[a.status] ?? STATUS_META.todo;
@@ -600,14 +634,19 @@ function ChoreRow({ a, memberById, manager, busy, paying, menuFor, setMenuFor, o
             <MoreVertical className="h-4 w-4" />
           </button>
           {menuFor === a.id && (
-            <div className="absolute right-0 z-20 mt-1 w-44 overflow-hidden rounded-xl border border-border bg-elevated shadow-lg" onClick={(e) => e.stopPropagation()}>
+            <>
+              {/* Presentational; Escape is the keyboard path. */}
+              {/* eslint-disable-next-line jsx-a11y/click-events-have-key-events, jsx-a11y/no-static-element-interactions */}
+              <div aria-hidden="true" className="fixed inset-0 z-10" onClick={() => setMenuFor(null)} />
+              <div className="absolute right-0 z-20 mt-1 w-44 overflow-hidden rounded-xl border border-border bg-elevated shadow-lg">
               {a.status === 'todo' && <MenuItem onClick={() => onStatus(a, 'in_progress')}><Clock className="h-3.5 w-3.5" /> {tr('chores.startInProgress')}</MenuItem>}
               {!done && a.status !== 'submitted' && <MenuItem onClick={() => onStatus(a, 'submitted')}><CheckCircle2 className="h-3.5 w-3.5" /> {tr('chores.submitForApproval')}</MenuItem>}
               {manager && a.status === 'submitted' && <MenuItem onClick={() => onApprove(a)}><CheckCircle2 className="h-3.5 w-3.5 text-emerald-400" /> {tr('chores.approve')}</MenuItem>}
               {done && a.status !== 'todo' && <MenuItem onClick={() => onStatus(a, 'todo')}><Circle className="h-3.5 w-3.5" /> {tr('chores.reopen')}</MenuItem>}
               {canPay && <MenuItem onClick={() => onPay(a)}><Sparkles className="h-3.5 w-3.5 text-amber-400" /> {paying === a.id ? 'Paying…' : `Pay ${formatCents(a.chore!.cash_cents!)}`}</MenuItem>}
               {manager && <MenuItem danger onClick={() => onDelete(a)}><Trash2 className="h-3.5 w-3.5" /> {tr('chores.delete')}</MenuItem>}
-            </div>
+              </div>
+            </>
           )}
         </div>
       </div>
@@ -656,12 +695,13 @@ function CompletedGrid({ rows, memberById }: { rows: Assignment[]; memberById: M
 }
 
 function CompletedCard({ a, member }: { a: Assignment; member?: Tables<'family_members'> }) {
+  const locale = useLocale();
   return (
     <div className="flex items-center gap-3 rounded-xl border border-border bg-surface/40 px-3 py-2.5">
       <CheckCircle2 className="h-4 w-4 shrink-0 text-emerald-400" />
       <div className="min-w-0 flex-1">
         <div className="truncate text-sm font-medium">{a.chore?.title ?? '—'}</div>
-        <div className="text-[11px] text-muted">{member?.display_name ?? 'Someone'} · {a.approved_at ? new Date(a.approved_at).toLocaleDateString('en-US', { month: 'short', day: 'numeric' }) : 'Done'}</div>
+        <div className="text-[11px] text-muted">{member?.display_name ?? 'Someone'} · {a.approved_at ? new Date(a.approved_at).toLocaleDateString(locale.code, { month: 'short', day: 'numeric' }) : 'Done'}</div>
       </div>
       <span className="flex shrink-0 items-center gap-1 text-xs font-semibold text-amber-400"><Star className="h-3.5 w-3.5 fill-amber-400" /> {a.points_awarded ?? a.chore?.points ?? 0} pts</span>
     </div>
@@ -720,7 +760,9 @@ function NewChoreModal({ familyId, userId, members, prefill, onClose, onSaved }:
   const [loading, setLoading] = useState(false);
   // One id per open modal, so a retry after a failed save is the SAME chore and
   // a second Add (a new modal) is a different one. The modal is mounted only
-  // while `addOpen`, so closing and reopening mints a fresh id.
+  // while `addOpen`, so closing and reopening mints a fresh id. The one failure
+  // that re-mints is `already_saved` (below): the server has said an earlier Add
+  // landed, so this composition is over.
   const submissionId = useRef('');
   if (!submissionId.current) submissionId.current = newSubmissionId();
 
@@ -738,7 +780,7 @@ function NewChoreModal({ familyId, userId, members, prefill, onClose, onSaved }:
     const icon = String(form.get('icon') ?? '').trim() || null;
 
     if (!title) return toastError(tr('choresModule.addAChoreTitle'));
-    if (title.length > 160) return toastError('Title is too long (max 160 characters)');
+    if (title.length > 160) return toastError(tr('validation.titleTooLong', { max: 160 }));
     if (!memberId) return toastError(tr('choresModule.pickWhoThisChoreIs'));
     if (!Number.isFinite(points) || points < 0 || points > 1000) return toastError(tr('choresModule.rewardMustBeBetween0'));
 
@@ -751,7 +793,14 @@ function NewChoreModal({ familyId, userId, members, prefill, onClose, onSaved }:
         title, description, points, priority, recurrence, icon,
         dueAt: due_at, assigneeId: memberId, submissionId: submissionId.current,
       });
-      if (!result.ok) { toastError(result.error); return; }
+      if (!result.ok) {
+        // `already_saved`: an earlier Add of this modal landed as the chore the
+        // message names, and it no longer matches these fields. That save is
+        // settled; a further Add is a new chore, which the message offers.
+        if (submissionSettled(result)) submissionId.current = newSubmissionId();
+        toastError(result.error);
+        return;
+      }
       onSaved();
     } catch (err) {
       toastError(describeDbError(err));

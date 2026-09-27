@@ -39,10 +39,11 @@ import { createHash } from 'node:crypto';
 import type { Tables } from '@/lib/database.types';
 import { isManager } from '@/lib/constants/roles';
 import { FACT_CATEGORY_LABELS, filterFacts, type FactCategory } from '@/lib/memory/facts';
-import { describeDbError } from '@/lib/supabase/errors';
+import { describeDbError, wroteNoRows } from '@/lib/supabase/errors';
 import { readAllPages } from '@/lib/supabase/read-all-pages';
 import { recordActivitySafely } from '../activity';
-import { getAISettings } from '../ai-settings';
+import { getTranslations } from '@/lib/i18n/server';
+import { loadAISettings } from '../ai-settings';
 import { scopeNow } from '../scope';
 import { fail, ok, SERVICE_CODES, type ServiceResult, type ServiceScope } from '../types';
 import { escapeLike } from '@/lib/supabase/escape-like';
@@ -86,6 +87,29 @@ function isCategory(value: unknown): value is FactCategory {
 
 function canManage(scope: ServiceScope): boolean {
   return scope.role === 'system' || scope.role === 'parent' || scope.role === 'adult';
+}
+
+/**
+ * Whether this caller may change or forget one stored fact. A parent or adult
+ * may change any; anyone else only a memory ABOUT them or one THEY WROTE.
+ *
+ * The author half is what makes the create path and the edit path agree. The
+ * Add form files a fact about anyone — its default member is "The family"
+ * (member_id null) — so a rule keyed on `member_id` alone let a teen write a
+ * household fact she could then neither correct, restate nor forget. Keyed on
+ * authorship too, whatever she may write she may also fix, and a household
+ * fact a PARENT wrote is still out of her reach.
+ *
+ * `factForWrite`, `updateFact`'s re-point check, `rememberConfirmed` and
+ * `forgetFact` all ask this one question, and 0385 asks it in RLS for UPDATE and
+ * DELETE: `can_manage_family(family_id) or is_self_member(member_id) or
+ * created_by = auth.uid()`. A caller with no member or no user id never matches
+ * on that branch, as `is_self_member(null)` and a null `auth.uid()` do not.
+ */
+function mayChangeFact(scope: ServiceScope, fact: Pick<FamilyFact, 'member_id' | 'created_by'>): boolean {
+  if (canManage(scope)) return true;
+  if (scope.memberId && fact.member_id === scope.memberId) return true;
+  return Boolean(scope.userId) && fact.created_by === scope.userId;
 }
 
 export function isAiFact(fact: Pick<FamilyFact, 'source'>): boolean {
@@ -151,6 +175,26 @@ export async function rememberFact(scope: ServiceScope, input: RememberInput): P
   if (fromPerson && scope.actorKind === 'ai' && isSensitiveMemory({ category, key, content })) {
     return fail('Medical and account details are only saved when a person enters them directly.', { code: SERVICE_CODES.denied });
   }
+  // And the ROLE rule, which is a different question from the two above: those
+  // ask whether a person was there, this asks whether it is theirs to file.
+  // `updateFact` has always applied it (same predicate, same sentence), and the
+  // create path applied nothing, so a teen could write from the Add button
+  // exactly what the pencil then refused to let her correct — and
+  // `filterVisibleMemories` hides that row from her own recall, so she had
+  // written something she could neither see nor fix.
+  //
+  // What this is, and what it is not. The `medical`/`account` CATEGORY half is
+  // already a database boundary (0264's family_facts_insert), so for it this
+  // line only turns a bare 42501 into the product's sentence. The
+  // SENSITIVE_TERMS half is a product rule enforced HERE ONLY: no policy
+  // mirrors the term list, so an insert sent straight from the browser's
+  // RLS-bound client with "Allergies" in an ordinary category still lands. That
+  // is a known, stated gap (0385's header says why the regex is not translated
+  // into RLS): this keeps the app's own write paths in agreement with each
+  // other, it is not what stops a member who bypasses them.
+  if (!canManage(scope) && isSensitiveMemory({ category, key, content })) {
+    return fail('Only a parent or adult can file a memory as medical or account information.', { code: SERVICE_CODES.denied });
+  }
 
   // Read the deadline once, before either lane, so a malformed one is refused
   // rather than quietly turned into "remember this forever".
@@ -167,8 +211,18 @@ export async function rememberFact(scope: ServiceScope, input: RememberInput): P
   //
   // Checked after the sensitive-content refusals above, which are absolute and
   // need no settings read to say no.
+  //
+  // Read STRICTLY. The forgiving read answered a failed query with the
+  // defaults — memory ON — so one timeout let Bubaly keep what it noticed for
+  // a family that had said not to (SEC-009). What it noticed is refused, as a
+  // retryable failure that says the settings could not be read.
   if (!fromPerson) {
-    const settings = await getAISettings(scope);
+    const read = await loadAISettings(scope);
+    if (!read.ok) {
+      const t = await getTranslations();
+      return fail(t('aiSettings.readFailedNothingRemembered'), { code: SERVICE_CODES.db, retryable: true });
+    }
+    const settings = read.data;
     if (!settings.memoryEnabled) {
       return fail('This family has memory switched off, so Bubaly does not keep what it notices.', { code: SERVICE_CODES.denied });
     }
@@ -268,6 +322,27 @@ async function rememberConfirmed(
   }
 
   if (existing) {
+    // The probe matches by LABEL, not by id, so this branch can land on a row
+    // the caller may not write: `factForWrite` refuses a non-manager any row
+    // that is neither about them nor written by them, and the form's default
+    // member is "The family" (member_id null) — the household facts a parent
+    // entered. Without this the Add button was a way around both `factForWrite`
+    // and `updateFact`: re-type "Emergency contact" and the parent's number is
+    // replaced, no id needed. A household fact the caller wrote herself is
+    // still hers to restate (`mayChangeFact`'s author half).
+    //
+    // It is not only the form. The chat tool (lib/ai/tools/memory.ts) lands
+    // here too, and resolves "no member named" to null, so a child or teen who
+    // asks Bubaly to restate a household fact a parent entered now gets this
+    // sentence where the write used to go through — the pencil's answer, which
+    // is the point.
+    //
+    // Same rule and same sentence as `factForWrite`, so the two agree. 0385
+    // carries it into RLS, because the knowledge module holds its own
+    // RLS-scoped client and never has to come through here at all.
+    if (!mayChangeFact(scope, existing)) {
+      return fail('Only a parent or adult can change a memory about someone else.', { code: SERVICE_CODES.denied });
+    }
     const { data, error } = await scope.db
       .from('family_facts')
       .update({
@@ -650,14 +725,22 @@ export async function resetMemberTraits(scope: ServiceScope, memberId: string): 
   if (!(TRAIT_METADATA_KEY in metadata)) return ok({ cleared: false });
   delete metadata[TRAIT_METADATA_KEY];
 
-  const { error } = await scope.db
+  // Answers `{ cleared: true }` below, and a reset is a privacy control: a
+  // family member asked for what Bubaly inferred about them to be forgotten.
+  // Matching no row left it all in place behind that answer. Audit C1-S9-65.
+  const { data: reset, error } = await scope.db
     .from('family_digital_twin_profiles')
     .update({ metadata: metadata as never, updated_by: scope.userId })
     .eq('family_id', scope.familyId)
-    .eq('member_id', memberId);
+    .eq('member_id', memberId)
+    .select('member_id');
   if (error) {
     console.error('[service:memory] twin trait reset failed', error);
     return fail(describeDbError(error, 'Could not reset that.'), { code: SERVICE_CODES.db });
+  }
+  if (wroteNoRows(reset)) {
+    console.error('[service:memory] twin trait reset matched no row', { familyId: scope.familyId, memberId });
+    return fail('Could not reset that.', { code: SERVICE_CODES.db });
   }
 
   await recordActivitySafely(scope, { action: 'delete', agent: 'memory', title: 'Reset what Bubaly learned about a family member', href: '/dashboard/settings#ai', memberId });
@@ -738,17 +821,22 @@ export async function confirmFact(scope: ServiceScope, suggestionId: string): Pr
     return fail(describeDbError(insertError, 'Could not save that memory.'), { code: SERVICE_CODES.db });
   }
 
-  const { error: updateError } = await scope.db
+  const { data: accepted, error: updateError } = await scope.db
     .from('family_playbook_suggestions')
     .update({ status: 'accepted', fact_id: fact.id })
     .eq('family_id', scope.familyId)
-    .eq('id', suggestionId);
-  if (updateError) {
-    // The fact exists; leaving the card open would let it be confirmed twice.
-    console.error('[service:memory] suggestion accept failed', updateError);
-    const { error: undoError } = await scope.db.from('family_facts').delete().eq('family_id', scope.familyId).eq('id', fact.id);
-    if (undoError) console.error('[service:memory] confirm rollback failed', undoError);
-    return fail(describeDbError(updateError, 'Could not confirm that memory.'), { code: SERVICE_CODES.db });
+    .eq('id', suggestionId)
+    .select('id');
+  // The fact exists; leaving the card open would let it be confirmed twice —
+  // and an accept that matched no row leaves it open exactly as an error does,
+  // so it takes the same path: undo the fact, report the failure. Before, only
+  // the error did, and a no-op accept left a card that would write the same
+  // fact again. Audit C1-S9-65.
+  if (updateError || wroteNoRows(accepted)) {
+    console.error('[service:memory] suggestion accept failed', updateError ?? { suggestionId, error: 'no rows updated' });
+    const { data: undone, error: undoError } = await scope.db.from('family_facts').delete().eq('family_id', scope.familyId).eq('id', fact.id).select('id');
+    if (undoError || wroteNoRows(undone)) console.error('[service:memory] confirm rollback failed', undoError ?? { factId: fact.id, error: 'no rows deleted' });
+    return fail(updateError ? describeDbError(updateError, 'Could not confirm that memory.') : 'Could not confirm that memory.', { code: SERVICE_CODES.db });
   }
 
   await recordActivitySafely(scope, { action: 'confirm', agent: 'memory', title: `Confirmed: ${fact.label} — ${fact.value}`, href: '/dashboard/knowledge', memberId: fact.member_id });
@@ -758,7 +846,7 @@ export async function confirmFact(scope: ServiceScope, suggestionId: string): Pr
 /**
  * Forget one thing. A fact is deleted; an inbox card is dismissed (kept, so
  * the same inference is not re-suggested tomorrow). Members below adult may
- * only forget facts about themselves.
+ * only forget facts about themselves or facts they wrote (`mayChangeFact`).
  */
 export async function forgetFact(
   scope: ServiceScope,
@@ -786,7 +874,7 @@ export async function forgetFact(
 
   const { data: fact, error: readError } = await scope.db
     .from('family_facts')
-    .select('id, label, member_id, notes')
+    .select('id, label, member_id, notes, created_by')
     .eq('family_id', scope.familyId)
     .eq('id', id)
     .maybeSingle();
@@ -795,14 +883,21 @@ export async function forgetFact(
     return fail(describeDbError(readError, 'Could not read that memory.'), { code: SERVICE_CODES.db });
   }
   if (!fact) return fail('That memory could not be found.', { code: SERVICE_CODES.notFound });
-  if (!canManage(scope) && fact.member_id !== scope.memberId) {
+  if (!mayChangeFact(scope, fact)) {
     return fail('Only a parent or adult can forget a memory about someone else.', { code: SERVICE_CODES.denied });
   }
 
-  const { error } = await scope.db.from('family_facts').delete().eq('family_id', scope.familyId).eq('id', id);
+  // "Forgot …" is recorded next, and forgetting is a privacy control. The read
+  // above proved the fact was there, so zero rows is a delete that did not
+  // happen — a policy refusal answers with no error and no rows. Audit C1-S9-65.
+  const { data: forgotten, error } = await scope.db.from('family_facts').delete().eq('family_id', scope.familyId).eq('id', id).select('id');
   if (error) {
     console.error('[service:memory] fact delete failed', error);
     return fail(describeDbError(error, 'Could not forget that.'), { code: SERVICE_CODES.db });
+  }
+  if (wroteNoRows(forgotten)) {
+    console.error('[service:memory] fact delete matched no row', { familyId: scope.familyId, factId: id });
+    return fail('Could not forget that.', { code: SERVICE_CODES.db });
   }
   await recordActivitySafely(scope, { action: 'delete', agent: 'memory', title: `Forgot ${fact.label}`, href: '/dashboard/knowledge', memberId: fact.member_id });
   return ok({ kind: 'fact', label: fact.label });
@@ -859,7 +954,8 @@ export async function clearAiMemory(scope: ServiceScope): Promise<ServiceResult<
  * `medical` and `account` to managers (0264) and nothing else, so on every other
  * category — a preference, a size, a milestone — a CHILD could edit or delete a
  * memory about a sibling straight from the module. Verified against the replayed
- * schema, not inferred: the delete removed one row.
+ * schema, not inferred: the delete removed one row. 0385 closes that in RLS for
+ * UPDATE and DELETE with the rule `mayChangeFact` applies here.
  */
 export type UpdateFactInput = {
   category?: FactCategory | string | null;
@@ -884,7 +980,7 @@ async function factForWrite(scope: ServiceScope, factId: string): Promise<Servic
     return fail(describeDbError(error, 'Could not read that memory.'), { code: SERVICE_CODES.db });
   }
   if (!data) return fail('That memory could not be found.', { code: SERVICE_CODES.notFound });
-  if (!canManage(scope) && data.member_id !== scope.memberId) {
+  if (!mayChangeFact(scope, data)) {
     return fail('Only a parent or adult can change a memory about someone else.', { code: SERVICE_CODES.denied });
   }
   return ok(data);
@@ -920,6 +1016,16 @@ export async function updateFact(
 
   if (Object.keys(patch).length === 0) {
     return fail('There is nothing to change on that memory.', { code: SERVICE_CODES.invalidInput });
+  }
+
+  // `factForWrite` asked whether the row as it IS may be changed; this asks it
+  // of the row as it WILL BE, which is what 0385's WITH CHECK asks. Without it a
+  // member could re-point a memory a parent wrote about her at a sibling or at
+  // the whole family — the service would allow it and the database would
+  // answer with a bare 42501. A fact she wrote herself stays hers wherever it
+  // points, as it would if she forgot it and filed it again.
+  if (patch.member_id !== undefined && !mayChangeFact(scope, { member_id: patch.member_id, created_by: existing.data.created_by })) {
+    return fail('Only a parent or adult can change a memory about someone else.', { code: SERVICE_CODES.denied });
   }
 
   // Moving a fact INTO a sensitive category is a manager's call: 0264 gates

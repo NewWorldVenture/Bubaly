@@ -6,6 +6,7 @@ import { settleAll } from '@/lib/supabase/settle';
 import { createServer } from '@/lib/supabase/server';
 import { isManager } from '@/lib/constants/roles';
 import { ChildAccessManager, type AccessMember } from '@/components/family/child-access-manager';
+import { ErrorState } from '@/components/ui/states';
 import { getTranslations } from '@/lib/i18n/server';
 
 export const metadata: Metadata = { title: 'Kid Logins' };
@@ -20,11 +21,23 @@ export default async function FamilyAccessPage() {
   const supabase = await createServer();
   const familyId = ctx.active.familyId;
 
-  const [{ data: members }, { data: logins }] = await settleAll([
+  const [{ data: members, error: membersError }, { data: logins, error: loginsError }] = await settleAll([
     supabase.from('family_members').select('id, display_name, role, color, user_id')
       .eq('family_id', familyId).eq('is_active', true).order('created_at'),
     supabase.from('child_logins').select('member_id, username').eq('family_id', familyId),
   ]);
+
+  // A dropped child_logins error is not a blank row — it CHANGES WHAT THE PAGE
+  // OFFERS. `usernameByMember` drives the choice below between "reset this
+  // child's PIN" and "give this child a login", so an unread failure makes every
+  // existing login look absent and turns the whole list into create-a-login
+  // prompts for children who already have one. That is a write offered on the
+  // strength of a read that did not happen.
+  const readError = membersError ?? loginsError;
+  if (readError) {
+    console.error('[dashboard/family-access] access read failed', readError);
+    return <ErrorState message={t('familyAccess.couldNotLoadChildLogins')} />;
+  }
 
   const usernameByMember = new Map((logins ?? []).map((l) => [l.member_id, l.username]));
 

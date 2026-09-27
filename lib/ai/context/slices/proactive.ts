@@ -13,10 +13,14 @@ import 'server-only';
 import { fenceUntrusted, sanitizeUntrusted } from '@/lib/ai/safety/untrusted';
 import { gatherSignalsResult, type FamilySignals } from '@/lib/family/signals';
 import { detectLifeEvents, SCHOOL_START_WINDOW_DAYS, type LifeEventSuggestion } from '@/lib/life-events/detect';
+import { getMessages, translate } from '@/lib/i18n/messages';
+import type { LocaleCode } from '@/lib/i18n/locales';
+import { signalWordsFor } from '@/lib/intelligence/hard-signals';
 import { loadReasoningReport } from '@/lib/reasoning/engine-server';
 import { fail, ok, SERVICE_CODES } from '@/lib/services/types';
 import { describeDbError } from '@/lib/supabase/errors';
 import { settle } from '@/lib/supabase/settle';
+import { dayKeyInZone, zonedTimeMs } from '@/lib/schedule/zoned';
 import type { SliceDefinition } from '../policy';
 
 const MAX_ITEMS_PER_ANSWER = 3;
@@ -34,6 +38,20 @@ const MANAGER_ONLY_RE = /\b(budget|bill|bills|spend|spending|money|financ|transa
 function managerOnlyText(...parts: (string | null | undefined)[]): boolean {
   return MANAGER_ONLY_RE.test(parts.filter(Boolean).join(' '));
 }
+
+/**
+ * The words this slice reads a hard signal in: en-US, explicitly. Its reader is
+ * the model, and the filter above is ENGLISH — but a stored signal is worded for
+ * whichever scan last wrote it, and a Refresh stores the presser's language. A
+ * translated budget drift need not contain any word MANAGER_ONLY_RE knows
+ * (Spanish says "presupuesto"), and `kind` cannot catch it either: \bbudget\b
+ * does not match inside "budget_drift". Read as stored it would reach a child's
+ * context. So budget drift is worded again from its `evidence` in en-US
+ * (signalWordsFor) before the filter sees it, in the live signals here and in
+ * the reasoning report.
+ */
+const MODEL_LOCALE: LocaleCode = 'en-US';
+const modelText = (key: string, params?: Record<string, string | number>) => translate(getMessages(MODEL_LOCALE), key, params);
 
 export type ProactiveSliceData = {
   counts: FamilySignals['counts'] | null;
@@ -57,9 +75,9 @@ const TERM_START_RE = /\b(term|semester|school year|first day|back[- ]to[- ]scho
 /** How many transitions reach the prompt; more than this is not proactive, it is noise. */
 const MAX_LIFE_EVENTS = 3;
 
-async function loadSignals(familyId: string): Promise<FamilySignals | null> {
+async function loadSignals(familyId: string, tz: string, now: Date): Promise<FamilySignals | null> {
   try {
-    const result = await gatherSignalsResult(familyId);
+    const result = await gatherSignalsResult(familyId, tz, now);
     if (result.error) {
       console.error('[ai-context:proactive] family signal counts failed', result.error);
       return null;
@@ -80,21 +98,51 @@ export const proactiveSlice: SliceDefinition = {
     // M34: the life-event signals ride along here because "what Bubaly has
     // noticed" is exactly where a coming transition belongs — and because the
     // planner needs it in the same slice a proactive intent already loads.
-    const todayKey = env.now.toISOString().slice(0, 10);
-    const termHorizon = new Date(env.now.getTime() + SCHOOL_START_WINDOW_DAYS * 86_400_000).toISOString().slice(0, 10);
-    const petSince = new Date(env.now.getTime() - 8 * 86_400_000).toISOString().slice(0, 10);
+    // The family's day, and the family's midnight — not Greenwich's of either.
+    //
+    // These three keys were `env.now.toISOString().slice(0, 10)` and were then
+    // pasted into `${key}T00:00:00Z` bounds against TIMESTAMPTZ columns. Both
+    // halves were Greenwich, so they agreed with each other and with nothing
+    // the family lives in: "today" began at 09:00 in Tokyo and at 16:00 the
+    // previous afternoon in Los Angeles.
+    //
+    // Converting only the KEY would have been WORSE than leaving it alone, and
+    // that is the trap this pass has hit four times already: a family day key
+    // with a `Z` stapled to it is Greenwich midnight of the family's day, which
+    // is a third answer, wrong in a new way. So the BOUNDS are resolved through
+    // zonedTimeMs as real instants, and the keys the rows are reduced to (below,
+    // `startKey` and `createdKey`) are resolved in the same zone — otherwise
+    // detectLifeEvents would be subtracting a Greenwich day from a family one.
+    const zone = env.tz;
+    const todayKey = dayKeyInZone(env.now.getTime(), zone) ?? env.now.toISOString().slice(0, 10);
+    /** `key` plus `n` CALENDAR days in `zone`, anchored at noon. */
+    const addDaysInZone = (key: string, n: number): string => {
+      // Noon, because a local day is 23 or 25 hours twice a year: adding
+      // n * 86_400_000 to a local MIDNIGHT lands on the neighbouring date at a
+      // DST transition, and adding it to noon cannot.
+      const noon = zonedTimeMs(key, 12, 0, zone);
+      return dayKeyInZone(noon + n * 86_400_000, zone) ?? key;
+    };
+    const dayStartIso = (key: string) => new Date(zonedTimeMs(key, 0, 0, zone)).toISOString();
+    // Exclusive-end minus a millisecond rather than a written-out 23:59:59, so
+    // the bound is exact and survives a day that has no 23:59 in this zone.
+    const dayEndIso = (key: string) => new Date(zonedTimeMs(addDaysInZone(key, 1), 0, 0, zone) - 1).toISOString();
+    const rowDayKey = (value: unknown) => dayKeyInZone(Date.parse(String(value)), zone) ?? String(value).slice(0, 10);
+
+    const termHorizon = addDaysInZone(todayKey, SCHOOL_START_WINDOW_DAYS);
+    const petSince = addDaysInZone(todayKey, -8);
 
     const [signals, report, liveSignals, autopilot, recommendations, terms, pets, projects, plans] = await Promise.all([
-      loadSignals(scope.familyId),
-      loadReasoningReport(scope.db, scope.familyId, env.now),
-      settle(scope.db.from('family_signals').select('kind, title, detail, score').eq('family_id', scope.familyId).eq('status', 'active').order('score', { ascending: false }).limit(MAX_SIGNALS)),
+      loadSignals(scope.familyId, env.tz, env.now),
+      loadReasoningReport(scope.db, scope.familyId, env.tz, MODEL_LOCALE, modelText, env.now),
+      settle(scope.db.from('family_signals').select('kind, title, detail, score, evidence').eq('family_id', scope.familyId).eq('status', 'active').order('score', { ascending: false }).limit(MAX_SIGNALS)),
       settle(scope.db.from('autopilot_suggestions').select('id, title, detail, urgency, action_label').eq('family_id', scope.familyId).eq('status', 'open').order('urgency', { ascending: false }).limit(MAX_SUGGESTIONS)),
       settle(scope.db.from('family_ai_recommendations').select('id, title, body, priority, category').eq('family_id', scope.familyId).eq('status', 'pending').order('created_at', { ascending: false }).limit(MAX_SUGGESTIONS)),
       // The four life-event reads take settle() like the three above them: this
       // slice loads inside a context build, and a rejected read here would throw
       // out of the whole build rather than degrade one slice.
-      settle(scope.db.from('school_events').select('title, starts_at').eq('family_id', scope.familyId).gte('starts_at', `${todayKey}T00:00:00Z`).lte('starts_at', `${termHorizon}T23:59:59Z`).limit(50)),
-      settle(scope.db.from('pets').select('name, created_at').eq('family_id', scope.familyId).gte('created_at', `${petSince}T00:00:00Z`).limit(20)),
+      settle(scope.db.from('school_events').select('title, starts_at').eq('family_id', scope.familyId).gte('starts_at', dayStartIso(todayKey)).lte('starts_at', dayEndIso(termHorizon)).limit(50)),
+      settle(scope.db.from('pets').select('name, created_at').eq('family_id', scope.familyId).gte('created_at', dayStartIso(petSince)).limit(20)),
       settle(scope.db.from('home_projects').select('title, status').eq('family_id', scope.familyId).in('status', ['idea', 'planning', 'quoting']).limit(20)),
       // ACTIVE only — a completed plan is history, not a live plan, and
       // feeding it to `activePlanKeys` would permanently suppress the annual
@@ -109,8 +157,8 @@ export const proactiveSlice: SliceDefinition = {
 
     const lifeEvents = detectLifeEvents({
       todayKey,
-      termStarts: (terms.data ?? []).filter((e) => TERM_START_RE.test(e.title ?? '')).map((e) => ({ label: e.title, startKey: String(e.starts_at).slice(0, 10) })),
-      pets: (pets.data ?? []).map((p) => ({ name: p.name, createdKey: String(p.created_at).slice(0, 10) })),
+      termStarts: (terms.data ?? []).filter((e) => TERM_START_RE.test(e.title ?? '')).map((e) => ({ label: e.title, startKey: rowDayKey(e.starts_at) })),
+      pets: (pets.data ?? []).map((p) => ({ name: p.name, createdKey: rowDayKey(p.created_at) })),
       homeProjects: (projects.data ?? []).map((p) => ({ title: p.title, status: p.status })),
       activePlanKeys: (plans.data ?? []).map((p) => p.template_key),
     }).slice(0, MAX_LIFE_EVENTS);
@@ -138,7 +186,8 @@ export const proactiveSlice: SliceDefinition = {
         })),
         readErrors: report.readErrors,
       },
-      signals: (liveSignals.data ?? []).filter((s) => keep(s.kind, s.title, s.detail)).map((s) => ({ kind: s.kind, title: s.title, detail: s.detail, score: s.score })),
+      signals: (liveSignals.data ?? []).map((s) => ({ kind: s.kind, ...signalWordsFor(s, MODEL_LOCALE, modelText), score: s.score }))
+        .filter((s) => keep(s.kind, s.title, s.detail)),
       autopilot: (autopilot.data ?? []).filter((s) => keep(s.title, s.detail, s.action_label)).map((s) => ({ id: s.id, title: s.title, detail: s.detail, urgency: s.urgency, actionLabel: s.action_label })),
       recommendations: (recommendations.data ?? []).filter((r) => keep(r.category, r.title, r.body)).map((r) => ({ id: r.id, title: r.title, body: r.body, priority: r.priority, category: r.category })),
       lifeEvents,

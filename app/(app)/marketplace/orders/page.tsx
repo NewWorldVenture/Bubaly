@@ -9,37 +9,44 @@ import type { HandoffStatus, HandoffRole, LocationKind } from '@/lib/marketplace
 import { formatCents } from '@/lib/marketplace/listings';
 import { marketplaceServiceFeeCents, orderFeeBreakdown } from '@/lib/marketplace/fee-policy';
 import { returnStatus, returnLabel } from '@/lib/marketplace/returns';
+import { todayKeyFor } from '@/lib/services/scope';
 import { cn } from '@/lib/utils/cn';
 import { ErrorState } from '@/components/ui/states';
-import { getTranslations } from '@/lib/i18n/server';
+import { getLocaleContext, getTranslations } from '@/lib/i18n/server';
 
 export const metadata: Metadata = { title: 'Orders · Marketplace | Bubaly' };
 export const dynamic = 'force-dynamic';
 
 const RETURN_TONE: Record<string, string> = {
   muted: 'bg-border/60 text-muted',
-  info: 'bg-sky-500/12 text-sky-600 dark:text-sky-400',
+  info: 'bg-sky-500/10 text-sky-600 dark:text-sky-400',
   warn: 'bg-amber-500/15 text-amber-600 dark:text-amber-400',
   danger: 'bg-rose-500/15 text-rose-600 dark:text-rose-400',
-  ok: 'bg-emerald-500/12 text-emerald-600 dark:text-emerald-400',
+  ok: 'bg-emerald-500/10 text-emerald-600 dark:text-emerald-400',
 };
 
 const STATUS_CHIP: Record<string, string> = {
-  requested: 'bg-amber-500/12 text-amber-600 dark:text-amber-400',
-  confirmed: 'bg-sky-500/12 text-sky-600 dark:text-sky-400',
-  active: 'bg-brand/12 text-brand-text',
-  returned: 'bg-violet-500/12 text-violet-600 dark:text-violet-400',
-  completed: 'bg-emerald-500/12 text-emerald-600 dark:text-emerald-400',
+  requested: 'bg-amber-500/10 text-amber-600 dark:text-amber-400',
+  confirmed: 'bg-sky-500/10 text-sky-600 dark:text-sky-400',
+  active: 'bg-brand/10 text-brand-text',
+  returned: 'bg-violet-500/10 text-violet-600 dark:text-violet-400',
+  completed: 'bg-emerald-500/10 text-emerald-600 dark:text-emerald-400',
   cancelled: 'bg-border/60 text-muted',
 };
 
 export default async function MarketplaceOrdersPage() {
   const t = await getTranslations();
+  // Prices follow the READER's locale — the marketplace helpers require it.
+  const { locale } = await getLocaleContext();
   const ctx = await requireUserContext();
   const sb = await createServer();
   const familyId = ctx.active.familyId;
   const selfId = ctx.active.member.id;
   const now = new Date();
+  // "Due today" is the family's day, not the server's. On a UTC host that is 5pm
+  // in California, so this page spent the last seven hours of every day calling
+  // an item due today "Overdue by 1 day".
+  const todayKey = todayKeyFor(ctx, now);
   const dataWarnings: string[] = [];
 
   const { data: orders, error: ordersError } = await sb
@@ -145,8 +152,8 @@ export default async function MarketplaceOrdersPage() {
             const role = o.buyer_member === selfId ? 'buyer' : 'seller';
             const other = role === 'buyer' ? nameOf(o.seller_member) : nameOf(o.buyer_member);
             const fee = o.amount_cents > 0 ? orderFeeBreakdown(o.amount_cents, serviceFeeCents) : null;
-            const retStatus = returnStatus({ kind: o.kind, status: o.status, endsOn: o.ends_on, returnedAt: o.returned_at }, now);
-            const retLabel = retStatus === 'not_applicable' ? null : returnLabel(retStatus, o.ends_on, now);
+            const retStatus = returnStatus({ kind: o.kind, status: o.status, endsOn: o.ends_on, returnedAt: o.returned_at }, todayKey);
+            const retLabel = retStatus === 'not_applicable' ? null : returnLabel(retStatus, o.ends_on, todayKey);
             return (
               <li key={o.id} className="rounded-xl border border-border bg-surface/60 p-4">
                 <div className="flex flex-wrap items-center gap-2">
@@ -157,7 +164,7 @@ export default async function MarketplaceOrdersPage() {
                     </span>
                   )}
                   <p className="min-w-0 flex-1 truncate text-sm font-medium">{titleOf.get(o.listing_id) ?? 'Listing'}</p>
-                  {o.amount_cents > 0 && <span className="text-sm font-semibold text-brand-text">{formatCents(o.amount_cents)}</span>}
+                  {o.amount_cents > 0 && <span className="text-sm font-semibold text-brand-text">{formatCents(o.amount_cents, locale.code)}</span>}
                 </div>
                 <p className="mt-1 text-xs text-muted">
                   {role === 'buyer' ? `You’re getting this from ${other}` : `${other} is getting this from you`} · {o.kind}
@@ -165,14 +172,14 @@ export default async function MarketplaceOrdersPage() {
                 {fee && (
                   <p className="mt-1 text-xs text-muted">
                     {role === 'buyer' ? (
-                      <>{t('orders.youPay')}{' '}<span className="font-semibold text-brand-text">{formatCents(fee.buyerTotalCents)}</span>
+                      <>{t('orders.youPay')}{' '}<span className="font-semibold text-brand-text">{formatCents(fee.buyerTotalCents, locale.code)}</span>
                         {fee.serviceFeeCents > 0 && (
-                          <span> · {formatCents(fee.subtotalCents)} item + {formatCents(fee.serviceFeeCents)} Bubaly service fee</span>
+                          <span> · {t('orders.itemPlusServiceFee', { item: formatCents(fee.subtotalCents, locale.code), fee: formatCents(fee.serviceFeeCents, locale.code) })}</span>
                         )}
                       </>
                     ) : (
-                      <>{t('orders.youReceive')}{' '}<span className="font-semibold text-emerald-600 dark:text-emerald-400">{formatCents(fee.sellerNetCents)}</span>
-                        <span> · Bubaly takes {formatCents(fee.platformReceivesCents)}</span>
+                      <>{t('orders.youReceive')}{' '}<span className="font-semibold text-emerald-600 dark:text-emerald-400">{formatCents(fee.sellerNetCents, locale.code)}</span>
+                        <span> · {t('orders.bubalyTakes', { amount: formatCents(fee.platformReceivesCents, locale.code) })}</span>
                       </>
                     )}
                   </p>

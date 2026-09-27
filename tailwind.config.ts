@@ -22,6 +22,10 @@ const config: Config = {
         surface: 'rgb(var(--surface) / <alpha-value>)',
         elevated: 'rgb(var(--elevated) / <alpha-value>)',
         border: 'rgb(var(--border) / <alpha-value>)',
+        // Form-control boundary, deliberately separate from `border` so it can
+        // clear WCAG 1.4.11's 3:1 without restyling every divider. Used as
+        // `border-input`. See --border-input in app/globals.css (audit C2-B04).
+        input: 'rgb(var(--border-input) / <alpha-value>)',
         fg: 'rgb(var(--fg) / <alpha-value>)',
         muted: 'rgb(var(--muted) / <alpha-value>)',
         brand: {
@@ -34,6 +38,7 @@ const config: Config = {
         success: 'rgb(var(--success) / <alpha-value>)',
         warning: 'rgb(var(--warning) / <alpha-value>)',
         danger: 'rgb(var(--danger) / <alpha-value>)',
+        'danger-fg': 'rgb(var(--danger-fg) / <alpha-value>)',
         info: 'rgb(var(--info) / <alpha-value>)',
       },
       borderRadius: {

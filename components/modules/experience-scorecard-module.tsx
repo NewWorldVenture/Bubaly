@@ -86,13 +86,20 @@ export function ExperienceScorecardModule() {
         <EmptyState
           icon={ClipboardCheck}
           title={t('experienceScorecard.noAuditsYet')}
-          description="Once surfaces are audited, this scorecard grades each one across the six premium dimensions and tracks the trend. Run seed_experience_audits_one_family.sql to populate a baseline."
+          // The previous copy ended "Run seed_experience_audits_one_family.sql to
+          // populate a baseline." — an internal seed-script filename, shown to
+          // every family, in the only state this page can currently reach:
+          // NOTHING in app/ or lib/ writes experience_audits, and the nav entry is
+          // minLevel 0, so every household has this in its sidebar. Whether the
+          // page should ship at all is the owner's call (recorded in
+          // finalaudit.md); a user being told to run a SQL file is not.
+          description={t('experienceScorecard.onceSurfacesAreAuditedThisScorecard')}
         />
       ) : (
         <>
           {/* Overall + weakest dimensions */}
           <div className="grid gap-4 md:grid-cols-3">
-            <div className="rounded-2xl border border-border bg-card p-5">
+            <div className="rounded-2xl border border-border bg-surface/40 p-5">
               <div className="flex items-center gap-2 text-xs font-medium uppercase tracking-wide text-muted"><Gauge className="h-4 w-4" /> {t('experienceScorecard.overall')}</div>
               <div className="mt-2 flex items-end gap-3">
                 <span className="text-4xl font-bold tabular-nums">{card.overall}</span>
@@ -104,7 +111,7 @@ export function ExperienceScorecardModule() {
               <p className="mt-1 text-xs text-muted">{card.auditedSurfaces} {t('experienceScorecard.surfaces')} {card.needsWorkCount} {t('experienceScorecard.belowTheBar')}</p>
             </div>
 
-            <div className="rounded-2xl border border-border bg-card p-5 md:col-span-2">
+            <div className="rounded-2xl border border-border bg-surface/40 p-5 md:col-span-2">
               <div className="text-xs font-medium uppercase tracking-wide text-muted">{t('experienceScorecard.byDimension')}</div>
               <div className="mt-3 space-y-2.5">
                 {card.dimensionAverages.map((d) => (

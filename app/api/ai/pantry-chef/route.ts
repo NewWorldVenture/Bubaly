@@ -6,10 +6,11 @@ import { enforceAIRateLimit } from '@/lib/server/ai-rate-limit';
 import { getAIConfig } from '@/lib/ai/settings';
 import { MAX_FLYER_JSON_BYTES, readBoundedRequestJson } from '@/lib/server/bounded-request-body';
 import { readBoundedResponseJson, readBoundedResponseText } from '@/lib/server/bounded-response-body';
-import { fetchExternal } from '@/lib/server/external-fetch';
+import { fetchWithDeadline } from '@/lib/server/fetch-with-deadline';
 import {
   annotateAllergens, buildPantryChefPrompt, normalizeAllergies, normalizePlanDate, parsePantryRecipes,
 } from '@/lib/meals/pantry-chef';
+import { ensureDefaultGroceryListId } from '@/lib/services/groceries';
 
 // Fridge Chef — snap a photo of the fridge/pantry, get allergy-aware dinner
 // ideas, and push the missing ingredients straight to the shared grocery list.
@@ -83,39 +84,18 @@ export async function POST(req: NextRequest) {
         .slice(0, 40);
       if (names.length === 0) return NextResponse.json({ added: 0 });
 
-      // Get (or create) the family's default grocery list, then append items.
-      const { data: list, error: listError } = await supabase
-        .from('grocery_lists')
-        .select('id')
-        .eq('family_id', familyId)
-        // The OLDEST list is the one most likely to have been archived and
-        // replaced, so an unfiltered lookup files the whole shop where nobody
-        // looks. `grocery_lists` answers "archived" with two columns and only
-        // `archived_at` is ever written — ask both.
-        .eq('is_archived', false)
-        .is('archived_at', null)
-        .order('created_at', { ascending: true })
-        .limit(1)
-        .maybeSingle();
-      if (listError) {
-        console.error('[ai/pantry-chef] grocery list read failed', listError);
+      // The family's default grocery list, found or created as ONE operation
+      // (0443, DATA-007) — the same get-or-create every other writer uses, so a
+      // pantry-chef shop and a quick capture at the same moment cannot give a
+      // family two lists. Both archive columns are asked, inside the helper.
+      const list = await ensureDefaultGroceryListId(supabase, familyId, userId, 'Groceries');
+      if (!list.id) {
+        console.error('[ai/pantry-chef] grocery list get-or-create failed', list.error);
         return NextResponse.json({ error: t('pantryChef.couldNotOpenYourGrocery') }, { status: 500 });
       }
-      let listId = list?.id;
-      if (!listId) {
-        const { data: created, error: createError } = await supabase
-          .from('grocery_lists')
-          .insert({ family_id: familyId, name: 'Groceries', created_by: userId })
-          .select('id')
-          .single();
-        if (createError || !created) {
-          console.error('[ai/pantry-chef] grocery list create failed', createError);
-          return NextResponse.json({ error: t('pantryChef.couldNotCreateYourGrocery') }, { status: 500 });
-        }
-        listId = created.id;
-      }
+      const listId = list.id;
 
-      const rows = names.map((name) => ({ family_id: familyId, list_id: listId!, name, created_by: userId }));
+      const rows = names.map((name) => ({ family_id: familyId, list_id: listId, name, created_by: userId }));
       const { data: inserted, error: insertError } = await supabase.from('grocery_items').insert(rows).select('id');
       if (insertError) {
         console.error('[ai/pantry-chef] grocery insert failed', insertError);
@@ -136,10 +116,22 @@ export async function POST(req: NextRequest) {
     // raw profiles are never returned — only the normalised terms drive the
     // prompt + the allergenConflict flag.
     const service = createServiceClient();
-    const { data: profiles } = await service
+    const { data: profiles, error: profilesError } = await service
       .from('medical_profiles')
       .select('allergies')
       .eq('family_id', familyId);
+    // `?? []` on THIS read is not a degradation, it is the safety filter
+    // switching itself off. `allergies` is both what `buildPantryChefPrompt`
+    // tells the model to avoid and what `annotateAllergens` flags the returned
+    // recipes against, so an empty list means the photo is answered with no
+    // allergy constraint and no allergen warning — and the response says
+    // `allergiesConsidered: 0`, which is exactly what a family with none on
+    // file sees. A household whose child has a peanut allergy would have been
+    // shown peanut recipes, unflagged, and told nothing had gone wrong.
+    if (profilesError) {
+      console.error('[ai/pantry-chef] allergy read failed', profilesError);
+      return NextResponse.json({ error: t('pantryChef.fridgeChefIsUnavailableRight') }, { status: 503 });
+    }
     const allergies = normalizeAllergies(...(profiles ?? []).map((p) => p.allergies as string | null));
 
     const aiConfig = await getAIConfig(service);
@@ -150,7 +142,7 @@ export async function POST(req: NextRequest) {
     const model = aiConfig.model && /^(gpt-|o\d|chatgpt-)/i.test(aiConfig.model) ? aiConfig.model : 'gpt-4o';
 
     const prompt = buildPantryChefPrompt(allergies, new Date());
-    const aiRes = await fetchExternal('https://api.openai.com/v1/chat/completions', {
+    const aiRes = await fetchWithDeadline('https://api.openai.com/v1/chat/completions', {
       method: 'POST',
       headers: { 'content-type': 'application/json', authorization: `Bearer ${apiKey}` },
       body: JSON.stringify({

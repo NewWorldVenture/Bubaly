@@ -15,32 +15,53 @@ import { isOpenCaptureKey, isSaveHotkey, isTypingTarget } from '@/lib/capture/sh
 import { CaptureShortcuts } from '@/components/capture/capture-shortcuts';
 import { useJourney } from '@/lib/analytics/use-journey';
 import { describeDbError } from '@/lib/supabase/errors';
-import { useTranslations } from '@/components/i18n/locale-provider';
+import { useTranslations, useLocale } from '@/components/i18n/locale-provider';
+import { useFormat } from '@/components/i18n/use-format';
+import type { Format } from '@/lib/utils/format';
 
-/** Human "when" label for the live event preview, e.g. "Tomorrow at 3:00 PM". */
-function formatWhen(startsAt: Date, allDay: boolean): string {
+/**
+ * Human "when" label for the live event preview, e.g. "Tomorrow at 3:00 PM".
+ *
+ * Every part of it followed something other than the family: the date and clock
+ * took the BROWSER's locale (`toLocaleDateString(undefined, …)`, I18N-002) and
+ * "Today", "Tomorrow" and the joining " at " were English literals. Now the
+ * formatter and the translator both come from the component.
+ */
+function formatWhen(startsAt: Date, allDay: boolean, fmt: Format, t: Translator): string {
   const today = new Date(); today.setHours(0, 0, 0, 0);
   const day = new Date(startsAt); day.setHours(0, 0, 0, 0);
   const diffDays = Math.round((day.getTime() - today.getTime()) / 86400000);
-  const dayLabel = diffDays === 0 ? 'Today'
-    : diffDays === 1 ? 'Tomorrow'
-    : startsAt.toLocaleDateString(undefined, { weekday: 'long', month: 'short', day: 'numeric' });
+  const dayLabel = diffDays === 0 ? t('calendar.today')
+    : diffDays === 1 ? t('quickCapture.tomorrow')
+    : fmt.fmtDate(startsAt, 'EEEE, MMM d');
   if (allDay) return dayLabel;
-  const time = startsAt.toLocaleTimeString(undefined, { hour: 'numeric', minute: '2-digit' });
-  return `${dayLabel} at ${time}`;
+  return t('quickCapture.dayAtTime', { day: dayLabel, time: fmt.fmtTime(startsAt) });
 }
+
+type Translator = (key: string, params?: Record<string, string | number>) => string;
 
 type CaptureType = 'task' | 'note' | 'event' | 'shopping';
 
-const TYPES: { key: CaptureType; label: string; icon: typeof Plus; placeholder: string }[] = [
-  { key: 'task', label: 'Task', icon: CheckSquare, placeholder: 'e.g. Pack lunches' },
-  { key: 'note', label: 'Note', icon: StickyNote, placeholder: 'Jot something down…' },
-  { key: 'event', label: 'Event', icon: CalendarPlus, placeholder: 'e.g. Dentist at 3pm' },
-  { key: 'shopping', label: 'Shopping', icon: ShoppingCart, placeholder: 'e.g. Milk' },
+// KEYS, not words. This array is built at module scope, long before a request
+// has a locale, so it cannot hold strings — the same reason `lib/marketing/*.ts`
+// holds keys and lets its component resolve them
+// (scripts/i18n-scan.mjs:49-53 says so in as many words). Holding English here
+// is what put "Task / Note / Event / Shopping" and "e.g. Pack lunches" in front
+// of every non-English family on all 354 signed-in pages.
+const TYPES: { key: CaptureType; labelKey: string; icon: typeof Plus; placeholderKey: string }[] = [
+  { key: 'task', labelKey: 'quickCapture.task', icon: CheckSquare, placeholderKey: 'quickCapture.egPackLunches' },
+  { key: 'note', labelKey: 'quickCapture.note', icon: StickyNote, placeholderKey: 'quickCapture.jotSomethingDown' },
+  { key: 'event', labelKey: 'quickCapture.event', icon: CalendarPlus, placeholderKey: 'quickCapture.egDentistAt3pm' },
+  { key: 'shopping', labelKey: 'quickCapture.shopping', icon: ShoppingCart, placeholderKey: 'quickCapture.egMilk' },
 ];
 
 export function QuickCapture() {
   const tr = useTranslations();
+  // The active locale, because lower-casing a translated word is locale-dependent
+  // (Turkish dotless i is the classic case) and this word comes from a catalogue now.
+  const locale = useLocale();
+  // The "when" preview follows the reader, not the browser (I18N-002).
+  const fmt = useFormat();
   const { familyId, userId, selfMember } = useApp();
   const { success, error: toastError } = useToast();
   const [open, setOpen] = useState(false);
@@ -128,8 +149,10 @@ export function QuickCapture() {
       if (!isCurrent()) return;
       let undoUsed = false;
       success(
-        res.count > 1 ? `${res.count} items added` : `${TYPES.find((t) => t.key === type)!.label} saved`,
-        { label: 'Undo', onClick: async () => {
+        res.count > 1
+          ? tr('quickCapture.itemsAdded', { count: res.count })
+          : tr('quickCapture.saved', { label: tr(TYPES.find((t) => t.key === type)!.labelKey) }),
+        { label: tr('quickCapture.undo'), onClick: async () => {
           // This deliberately names the earlier capture, even after a family
           // switch. A consumed toast callback must never dispatch twice.
           if (undoUsed || !res.undo.ids.length) return;
@@ -178,8 +201,8 @@ export function QuickCapture() {
     const { title, dueDate } = parseDueDate(text);
     if (!dueDate) return null;
     const [y, m, d] = dueDate.split('-').map(Number);
-    return { title, when: formatWhen(new Date(y, m - 1, d), true) };
-  }, [type, text]);
+    return { title, when: formatWhen(new Date(y, m - 1, d), true, fmt, tr) };
+  }, [type, text, fmt, tr]);
 
   // Live item-count preview for shopping — "milk, eggs and bread" → 3 items.
   const shoppingItems = useMemo(() => {
@@ -241,7 +264,7 @@ export function QuickCapture() {
                   type === t.key ? 'border-brand bg-brand/10 text-brand-text' : 'border-border text-muted hover:bg-elevated')}
               >
                 <t.icon className="h-5 w-5" />
-                {t.label}
+                {tr(t.labelKey)}
               </button>
             ))}
           </div>
@@ -265,14 +288,14 @@ export function QuickCapture() {
               className="flex w-full items-center gap-1.5 rounded-lg bg-brand/5 px-3 py-2 text-left text-xs text-brand-text transition hover:bg-brand/10"
             >
               <Sparkles className="h-3.5 w-3.5 shrink-0" />
-              <span>{tr('quickCapture.looksLikeA')} <span className="font-semibold">{TYPES.find((t) => t.key === suggested)!.label.toLowerCase()}</span> {tr('quickCapture.tapToSwitch')}</span>
+              <span>{tr('quickCapture.looksLikeA')} <span className="font-semibold">{tr(TYPES.find((t) => t.key === suggested)!.labelKey).toLocaleLowerCase(locale.code)}</span> {tr('quickCapture.tapToSwitch')}</span>
             </button>
           )}
 
-          <Field label={active.label}>
+          <Field label={tr(active.labelKey)}>
             {(id) => type === 'note'
-              ? <Textarea id={id} value={text} onChange={(e) => editDraft(() => setText(e.target.value))} disabled={saving || !!reviewHref} rows={4} placeholder={active.placeholder} autoFocus />
-              : <Input id={id} value={text} onChange={(e) => editDraft(() => setText(e.target.value))} disabled={saving || !!reviewHref} placeholder={active.placeholder} autoFocus />}
+              ? <Textarea id={id} value={text} onChange={(e) => editDraft(() => setText(e.target.value))} disabled={saving || !!reviewHref} rows={4} placeholder={tr(active.placeholderKey)} autoFocus />
+              : <Input id={id} value={text} onChange={(e) => editDraft(() => setText(e.target.value))} disabled={saving || !!reviewHref} placeholder={tr(active.placeholderKey)} autoFocus />}
           </Field>
 
           {type === 'shopping' && shoppingItems && (
@@ -297,7 +320,7 @@ export function QuickCapture() {
             eventPreview?.matched ? (
               <p className="flex items-center gap-1.5 text-xs font-medium text-brand-text">
                 <CalendarClock className="h-3.5 w-3.5" />
-                {formatWhen(eventPreview.startsAt, eventPreview.allDay)}
+                {formatWhen(eventPreview.startsAt, eventPreview.allDay, fmt, tr)}
                 {eventPreview.title && eventPreview.title !== text.trim() && (
                   <span className="text-muted">· “{eventPreview.title}”</span>
                 )}

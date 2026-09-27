@@ -5,7 +5,7 @@ import { MoonStar, Plus, Sparkles, Sunrise, BedDouble, Activity, ListChecks, Pen
 import { useApp } from '@/components/app/app-context';
 import { useRealtimeQuery } from '@/lib/hooks/use-realtime-query';
 import { createClient } from '@/lib/supabase/client';
-import { describeDbError } from '@/lib/supabase/errors';
+import { describeDbError, wroteNoRows } from '@/lib/supabase/errors';
 import { useToast } from '@/components/ui/toast';
 import { PageHeader } from '@/components/app/page-header';
 import { AiInsight } from '@/components/ai/ai-insight';
@@ -19,7 +19,9 @@ import { ageOn } from '@/lib/members/age';
 import {
   SLEEP_SOURCES, durationMinutes, fmtHours, habitCorrelations, recentLogs, recommendedSleepHours, routineStepIdeas, sleepSummary, weeklyProgram, dayDiff,
 } from '@/lib/sleep/coach';
-import { useTranslations } from '@/components/i18n/locale-provider';
+import { useLocale, useTranslations } from '@/components/i18n/locale-provider';
+import type { LocaleCode } from '@/lib/i18n/locales';
+import { useConfirm } from '@/components/ui/confirm';
 
 type Log = Tables<'sleep_logs'>;
 type Routine = Tables<'bedtime_routines'>;
@@ -30,12 +32,16 @@ const localInput = (d: Date) => {
   const p = (n: number) => String(n).padStart(2, '0');
   return `${d.getFullYear()}-${p(d.getMonth() + 1)}-${p(d.getDate())}T${p(d.getHours())}:${p(d.getMinutes())}`;
 };
-const fmtTime = (iso: string) => new Date(iso).toLocaleTimeString('en-US', { hour: 'numeric', minute: '2-digit' });
-const fmtDay = (d: string) => new Date(`${d.slice(0, 10)}T00:00:00`).toLocaleDateString('en-US', { weekday: 'short' });
+const fmtTimeIn = (locale: LocaleCode) => (iso: string) => new Date(iso).toLocaleTimeString(locale, { hour: 'numeric', minute: '2-digit' });
+const fmtDayIn = (locale: LocaleCode) => (d: string) => new Date(`${d.slice(0, 10)}T00:00:00`).toLocaleDateString(locale, { weekday: 'short' });
 const DAYS = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'];
 
 export function SleepModule() {
+  const locale = useLocale();
+  const fmtTime = fmtTimeIn(locale.code);
+  const fmtDay = fmtDayIn(locale.code);
   const t = useTranslations();
+  const askConfirm = useConfirm();
   const { familyId, userId, members, selfMember } = useApp();
   const { success, error: toastError } = useToast();
 
@@ -75,15 +81,21 @@ export function SleepModule() {
   const maxMinutes = Math.max(summary.target.max * 60, ...fortnight.map((l) => l.duration_min), 1);
 
   async function deleteLog(log: Log) {
-    const { error } = await createClient().from('sleep_logs').delete().eq('id', log.id);
+    // RLS filters a DELETE rather than refusing it, so without `.select('id')`
+    // a row this member may not remove returns `error: null` and the module
+    // reports success over a record that is still there.
+    const { data, error } = await createClient().from('sleep_logs').delete()
+      .eq('id', log.id).eq('family_id', familyId).select('id');
     if (error) return toastError(describeDbError(error));
+    if (wroteNoRows(data)) return toastError(t('errors.thatChangeWasNotSaved'));
     success(t('sleepModule.nightRemoved'));
   }
 
   async function archiveRoutine(r: Routine) {
-    if (!confirm(`Retire “${r.name}”?`)) return;
-    const { error } = await createClient().from('bedtime_routines').update({ is_active: false }).eq('id', r.id);
+    if (!(await askConfirm({ title: t('sleep.retireQ', { name: r.name }), body: t('sleep.retireBody'), destructive: false }))) return;
+    const { data: updated, error } = await createClient().from('bedtime_routines').update({ is_active: false }).eq('id', r.id).select('id');
     if (error) return toastError(describeDbError(error));
+    if (wroteNoRows(updated)) return toastError(t('errors.thatChangeWasNotSaved'));
     success(t('sleepModule.routineRetired'));
   }
 
@@ -312,11 +324,12 @@ function RoutineForm({ familyId, userId, memberId, age, routine, onClose, onSave
       steps, days_of_week: days, is_active: true,
     };
     const supabase = createClient();
-    const { error } = routine
-      ? await supabase.from('bedtime_routines').update(payload).eq('id', routine.id)
-      : await supabase.from('bedtime_routines').insert({ family_id: familyId, member_id: memberId, created_by: userId, ...payload });
+    const { data: saved, error } = routine
+      ? await supabase.from('bedtime_routines').update(payload).eq('id', routine.id).select('id')
+      : await supabase.from('bedtime_routines').insert({ family_id: familyId, member_id: memberId, created_by: userId, ...payload }).select('id');
     setLoading(false);
     if (error) return toastError(describeDbError(error));
+    if (wroteNoRows(saved)) return toastError(t('errors.thatChangeWasNotSaved'));
     onSaved();
   }
 

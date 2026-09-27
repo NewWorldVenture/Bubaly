@@ -8,6 +8,7 @@ import { weeksToGoal } from '@/lib/wallet/ledger';
 import { GoalsView, type GoalView, type ChildOption } from '@/components/wallet/goals-view';
 import { ErrorState } from '@/components/ui/states';
 import { getTranslations } from '@/lib/i18n/server';
+import { readAllAsQuery } from '@/lib/supabase/read-all';
 
 export const metadata: Metadata = { title: 'Wallet Goals' };
 
@@ -26,7 +27,16 @@ export default async function WalletGoalsPage() {
     supabase.from('child_wallets').select('id, member_id').eq('family_id', familyId).eq('is_active', true),
     supabase.from('family_members').select('id, display_name').eq('family_id', familyId),
     supabase.from('wallet_buckets').select('id, kind, child_wallet_id').eq('family_id', familyId).eq('kind', 'save'),
-    supabase.from('wallet_transactions').select('child_wallet_id, bucket_id, amount_cents').eq('family_id', familyId).eq('direction', 'credit').eq('status', 'completed').gte('created_at', since),
+    // `readAllAsQuery` rather than a bare select: this total drives the savings
+    // progress a family reads, and PostgREST caps a response at db-max-rows
+    // whatever the client asks for — so an unbounded read of a busy ledger
+    // shows progress computed from part of it. Keeps the { data, error } shape
+    // settleAll expects.
+    readAllAsQuery<{ child_wallet_id: string | null; bucket_id: string | null; amount_cents: number }>(
+      (from, to) => supabase.from('wallet_transactions').select('child_wallet_id, bucket_id, amount_cents')
+        .eq('family_id', familyId).eq('direction', 'credit').eq('status', 'completed')
+        .gte('created_at', since).order('id').range(from, to),
+    ),
   ]);
   if (goalsError) {
     console.error('[wallet-goals] Goals read failed', goalsError);

@@ -5,9 +5,10 @@ import {
   PackageSearch, Plus, Search, MapPin, Trash2, Pencil, Handshake, ArrowRightLeft, ShieldCheck, Boxes, AlertTriangle, Camera, Check, CheckCircle2, ChevronRight, DoorOpen,
 } from 'lucide-react';
 import { useApp } from '@/components/app/app-context';
+import { familyMediaPath } from '@/lib/storage/family-media';
 import { useRealtimeQuery } from '@/lib/hooks/use-realtime-query';
 import { createClient } from '@/lib/supabase/client';
-import { describeDbError } from '@/lib/supabase/errors';
+import { describeDbError, wroteNoRows } from '@/lib/supabase/errors';
 import { useToast } from '@/components/ui/toast';
 import { PageHeader } from '@/components/app/page-header';
 import { AiInsight } from '@/components/ai/ai-insight';
@@ -21,25 +22,35 @@ import {
   LOCATION_KINDS, ITEM_CATEGORIES, ITEM_STATUSES, CONFIRM_REASON, categoryMeta, statusMeta, locationKindMeta, locationLabel, locationTree,
   searchItems, lentOut, warrantyAlerts, valueSummary, inventorySummary, lastConfirmed,
 } from '@/lib/inventory/finder';
-import { useTranslations } from '@/components/i18n/locale-provider';
-import { familyMediaPath } from '@/lib/storage/family-media';
+import { useLocale, useTranslations, usePlural } from '@/components/i18n/locale-provider';
+import type { LocaleCode } from '@/lib/i18n/locales';
+import { formatCents } from '@/lib/wallet/ledger';
+import { useConfirm } from '@/components/ui/confirm';
+import { FamilyMediaImg } from '@/components/media/family-media-img';
 
 type Item = Tables<'inventory_items'>;
 type Location = Tables<'home_locations'>;
 type Move = Tables<'inventory_moves'>;
 
-const money = (cents: number) => `$${(cents / 100).toLocaleString('en-US', { maximumFractionDigits: 0 })}`;
+// inventory_items.value_cents has no currency column and the form takes dollars
+// ("Value ($)"), so the amount is USD. The reader's locale decides where the
+// symbol goes and how the digits group (I18N-003). Replacement values are shown
+// to the whole unit, as they always were here, so the cents are rounded away
+// BEFORE formatting rather than by a second formatter.
+const CURRENCY = 'USD';
+const moneyIn = (locale: LocaleCode) => (cents: number) => formatCents(Math.round(cents / 100) * 100, CURRENCY, locale);
 const todayIso = () => new Date().toISOString().slice(0, 10);
-function fmtDate(d: string): string {
-  return new Date(d.length <= 10 ? `${d}T00:00:00` : d).toLocaleDateString('en-US', { month: 'short', day: 'numeric' });
-}
-function photoUrl(path: string | null): string | null {
-  if (!path) return null;
-  return createClient().storage.from('family-media').getPublicUrl(path).data.publicUrl;
-}
+const fmtDateIn = (locale: LocaleCode) => (d: string): string => {
+  return new Date(d.length <= 10 ? `${d}T00:00:00` : d).toLocaleDateString(locale, { month: 'short', day: 'numeric' });
+};
 
 export function InventoryModule() {
+  const locale = useLocale();
+  const money = moneyIn(locale.code);
+  const fmtDate = fmtDateIn(locale.code);
   const tr = useTranslations();
+  const plural = usePlural();
+  const askConfirm = useConfirm();
   const { familyId, userId, members, selfMember } = useApp();
   const { success, error: toastError } = useToast();
 
@@ -88,17 +99,20 @@ export function InventoryModule() {
   const memberName = (id: string | null) => members.find((m) => m.id === id)?.display_name ?? null;
 
   async function deleteItem(item: Item) {
-    if (!confirm(`Remove ${item.name} from the inventory?`)) return;
-    const { error } = await createClient().from('inventory_items').delete().eq('id', item.id);
+    if (!(await askConfirm({ title: tr('confirm.removeNamed', { name: item.name }), body: tr('confirm.cannotBeUndone') }))) return;
+    // Under RLS a refused row comes back with no error and zero rows, which this used to report as done. Audit C1-S9-80.
+    const { data: removed, error } = await createClient().from('inventory_items').delete().eq('id', item.id).select('id');
     if (error) return toastError(describeDbError(error));
+    if (wroteNoRows(removed)) return toastError(tr('errors.thatChangeWasNotSaved'));
     success(tr('inventoryModule.itemRemoved'));
   }
 
   async function setStatus(item: Item, status: InventoryStatus) {
     const patch: Database['public']['Tables']['inventory_items']['Update'] = { status };
     if (status !== 'lent') { patch.lent_to = null; patch.lent_on = null; }
-    const { error } = await createClient().from('inventory_items').update(patch).eq('id', item.id);
+    const { data: updated, error } = await createClient().from('inventory_items').update(patch).eq('id', item.id).select('id');
     if (error) return toastError(describeDbError(error));
+    if (wroteNoRows(updated)) return toastError(tr('errors.thatChangeWasNotSaved'));
     success(`${item.name}: ${statusMeta(status).label}`);
   }
 
@@ -116,9 +130,10 @@ export function InventoryModule() {
 
   async function deleteLocation(location: Location) {
     const count = itemsIn(location.id);
-    if (!confirm(`Delete “${location.name}”?${count ? ` ${count} item${count === 1 ? '' : 's'} will lose their location.` : ''}`)) return;
-    const { error } = await createClient().from('home_locations').delete().eq('id', location.id);
+    if (!(await askConfirm({ title: tr('confirm.deleteNamed', { name: location.name }), body: count ? tr('inventory.itemsLoseLocation') : tr('confirm.cannotBeUndone') }))) return;
+    const { data: removed2, error } = await createClient().from('home_locations').delete().eq('id', location.id).select('id');
     if (error) return toastError(describeDbError(error));
+    if (wroteNoRows(removed2)) return toastError(tr('errors.thatChangeWasNotSaved'));
     success(tr('inventoryModule.locationDeleted'));
   }
 
@@ -178,12 +193,17 @@ export function InventoryModule() {
         <div className="rounded-2xl border border-border bg-surface/40 p-5">
           <div className="flex items-center gap-2 text-sm font-semibold"><Boxes className="h-4 w-4 text-brand-text" /> {tr('inventory.catalog')}</div>
           <p className="mt-2 text-xl font-bold">{summary.text}</p>
-          <p className="mt-1 text-xs text-muted">{summary.rooms} {tr('inventory.rooms')} {summary.unlocated} {tr('inventory.withoutALocation')}{summary.overdueLoans ? ` · ${summary.overdueLoans} loan${summary.overdueLoans === 1 ? '' : 's'} overdue` : ''}</p>
+          <p className="mt-1 text-xs text-muted">{summary.rooms} {tr('inventory.rooms')} {summary.unlocated} {tr('inventory.withoutALocation')}{summary.overdueLoans ? ` · ${plural('inventory.loansOverdue', summary.overdueLoans)}` : ''}</p>
         </div>
         <div className="rounded-2xl border border-border bg-surface/40 p-5">
           <div className="flex items-center gap-2 text-sm font-semibold"><ShieldCheck className="h-4 w-4 text-brand-text" /> {tr('inventory.replacementValue')}</div>
           <p className="mt-2 text-xl font-bold">{value.valuedItems ? money(value.totalCents) : '—'}</p>
-          <p className="mt-1 text-xs text-muted">{value.valuedItems ? `${value.valuedItems} valued item${value.valuedItems === 1 ? '' : 's'} · top: ${value.byCategory.slice(0, 2).map((c) => `${categoryMeta(c.category).label} ${money(c.cents)}`).join(', ')}` : 'Add values to build an insurance record'}</p>
+          <p className="mt-1 text-xs text-muted">{value.valuedItems
+            ? tr('inventoryModule.valuedItemsTop', {
+              count: value.valuedItems,
+              top: value.byCategory.slice(0, 2).map((c) => `${categoryMeta(c.category).label} ${money(c.cents)}`).join(', '),
+            })
+            : tr('inventoryModule.addValuesForInsurance')}</p>
         </div>
         <div className={cn('rounded-2xl border p-5', loans.some((l) => l.overdue) || warranties.length ? 'border-amber-500/30 bg-amber-500/10' : 'border-border bg-surface/40')}>
           <div className="flex items-center gap-2 text-sm font-semibold"><AlertTriangle className="h-4 w-4 text-amber-300" /> {tr('inventory.needsAttention')}</div>
@@ -245,7 +265,7 @@ export function InventoryModule() {
               <option value="all">{tr('inventory.owned')}</option>
               {ITEM_STATUSES.map((s) => <option key={s.value} value={s.value}>{s.emoji} {s.label}</option>)}
             </Select>
-            <span className="text-xs text-muted">{filtered.length} item{filtered.length === 1 ? '' : 's'}</span>
+            <span className="text-xs text-muted">{plural('inventory.itemCount', filtered.length)}</span>
           </div>
           {items.data.length === 0 ? (
             <EmptyState icon={PackageSearch} title={tr('inventory.nothingCataloguedYet')} description={tr('inventoryModule.startWithTheThingsYou')} action={<Button onClick={() => setItemForm({ open: true, item: null })}><Plus className="h-4 w-4" /> {tr('inventory.addTheFirstItem')}</Button>} />
@@ -254,14 +274,11 @@ export function InventoryModule() {
           ) : (
             <ul className="grid gap-2 md:grid-cols-2">
               {filtered.slice(0, 120).map((item) => {
-                const url = photoUrl(item.photo_path);
                 const confirmed = lastConfirmed(moves.data, item.id);
                 return (
                   <li key={item.id} className="group flex items-center gap-3 rounded-2xl border border-border bg-surface/40 px-3 py-2.5">
-                    {url ? (
-                      // eslint-disable-next-line @next/next/no-img-element -- family-media public URL, sized thumbnail
-                      <img src={url} alt="" className="h-11 w-11 shrink-0 rounded-xl object-cover" />
-                    ) : <span className="grid h-11 w-11 shrink-0 place-items-center rounded-xl bg-brand/10 text-xl">{categoryMeta(item.category).emoji}</span>}
+                    <FamilyMediaImg src={item.photo_path} alt="" className="h-11 w-11 shrink-0 rounded-xl object-cover"
+                      fallback={<span className="grid h-11 w-11 shrink-0 place-items-center rounded-xl bg-brand/10 text-xl">{categoryMeta(item.category).emoji}</span>} />
                     <div className="min-w-0 flex-1">
                       <p className="truncate text-sm font-medium">{item.name}{item.quantity > 1 ? <span className="text-muted"> ×{item.quantity}</span> : null}</p>
                       <p className="truncate text-xs text-muted"><MapPin className="mr-0.5 inline h-3 w-3" />{locationLabel(locations.data, item.location_id)}{item.brand ? ` · ${item.brand}` : ''}{item.value_cents ? ` · ${money(item.value_cents)}` : ''}{memberName(item.owner_member_id) ? ` · ${memberName(item.owner_member_id)}’s` : ''}</p>
@@ -318,7 +335,7 @@ export function InventoryModule() {
           onClose={() => setMoveFor(null)} onSaved={() => { setMoveFor(null); success(tr('inventoryModule.moveLogged')); }} />
       )}
       {lendFor && (
-        <LendForm item={lendFor} onClose={() => setLendFor(null)} onSaved={() => { setLendFor(null); success(`${lendFor.name} marked as lent out`); }} />
+        <LendForm item={lendFor} onClose={() => setLendFor(null)} onSaved={() => { setLendFor(null); success(tr('modules.markedLentOut', { name: lendFor.name })); }} />
       )}
     </div>
   );
@@ -348,7 +365,7 @@ function ItemForm({ familyId, userId, members, locations, item, defaultLocationI
   const [photoPath, setPhotoPath] = useState<string | null>(item?.photo_path ?? null);
 
   async function uploadPhoto(file: File) {
-    if (file.size > 25 * 1024 * 1024) { toastError('Photo is too large (max 25 MB)'); return; }
+    if (file.size > 25 * 1024 * 1024) { toastError(tr('validation.photoTooLarge', { max: 25 })); return; }
     setUploading(true);
     try {
       const path = familyMediaPath(familyId, 'inventory', file.name);
@@ -383,15 +400,15 @@ function ItemForm({ familyId, userId, members, locations, item, defaultLocationI
       notes: String(f.get('notes') ?? '').trim() || null,
     };
     const supabase = createClient();
-    const { error } = item
-      ? await supabase.from('inventory_items').update(payload).eq('id', item.id)
-      : await supabase.from('inventory_items').insert({ family_id: familyId, created_by: userId, ...payload });
+    const { data: saved, error } = item
+      ? await supabase.from('inventory_items').update(payload).eq('id', item.id).select('id')
+      : await supabase.from('inventory_items').insert({ family_id: familyId, created_by: userId, ...payload }).select('id');
     setLoading(false);
     if (error) return toastError(describeDbError(error));
+    if (wroteNoRows(saved)) return toastError(tr('errors.thatChangeWasNotSaved'));
     onSaved(item ? 'Item updated' : 'Item added');
   }
 
-  const url = photoUrl(photoPath);
   return (
     <Modal open title={item ? `Edit · ${item.name}` : 'Add an item'} onClose={onClose}>
       <form onSubmit={onSubmit} className="space-y-4">
@@ -418,10 +435,8 @@ function ItemForm({ familyId, userId, members, locations, item, defaultLocationI
           <Field label={tr('inventory.tags')} hint="Comma-separated">{(id) => <Input id={id} name="tags" defaultValue={item?.tags.join(', ') ?? ''} placeholder={tr('inventory.travelInsured')} />}</Field>
         </div>
         <div className="flex items-center gap-3">
-          {url ? (
-            // eslint-disable-next-line @next/next/no-img-element -- family-media public URL, sized thumbnail
-            <img src={url} alt="" className="h-12 w-12 rounded-xl object-cover" />
-          ) : <span className="grid h-12 w-12 place-items-center rounded-xl bg-brand/10 text-muted"><Camera className="h-5 w-5" /></span>}
+          <FamilyMediaImg src={photoPath} alt="" className="h-12 w-12 rounded-xl object-cover"
+            fallback={<span className="grid h-12 w-12 place-items-center rounded-xl bg-brand/10 text-muted"><Camera className="h-5 w-5" /></span>} />
           <label className="cursor-pointer text-sm text-brand-text">
             {uploading ? 'Uploading…' : photoPath ? 'Replace photo' : 'Add a photo'}
             <input type="file" accept="image/*" className="sr-only" onChange={(e) => { const file = e.target.files?.[0]; if (file) void uploadPhoto(file); }} />
@@ -454,11 +469,12 @@ function LocationForm({ familyId, userId, locations, parent, location, onClose, 
     setLoading(true);
     const payload = { name, kind: String(f.get('kind') ?? 'room') as HomeLocationKind, parent_id: String(f.get('parent_id') ?? '') || null, notes: String(f.get('notes') ?? '').trim() || null };
     const supabase = createClient();
-    const { error } = location
-      ? await supabase.from('home_locations').update(payload).eq('id', location.id)
-      : await supabase.from('home_locations').insert({ family_id: familyId, created_by: userId, ...payload });
+    const { data: saved2, error } = location
+      ? await supabase.from('home_locations').update(payload).eq('id', location.id).select('id')
+      : await supabase.from('home_locations').insert({ family_id: familyId, created_by: userId, ...payload }).select('id');
     setLoading(false);
     if (error) return toastError(describeDbError(error));
+    if (wroteNoRows(saved2)) return toastError(tr('errors.thatChangeWasNotSaved'));
     onSaved(location ? 'Location updated' : parent ? `Added to ${parent.name}` : 'Room added');
   }
 
@@ -493,8 +509,11 @@ function MoveForm({ familyId, userId, memberId, item, locations, onClose, onSave
     const to = String(f.get('to_location_id') ?? '') || null;
     setLoading(true);
     const supabase = createClient();
-    const { error } = await supabase.from('inventory_items').update({ location_id: to, status: item.status === 'lost' ? 'in_place' : item.status }).eq('id', item.id);
+    // The move licenses the history row below. One that matched nothing used to
+    // record a move for an item still where it was. Audit C1-S9-80.
+    const { data: moved, error } = await supabase.from('inventory_items').update({ location_id: to, status: item.status === 'lost' ? 'in_place' : item.status }).eq('id', item.id).select('id');
     if (error) { setLoading(false); return toastError(describeDbError(error)); }
+    if (wroteNoRows(moved)) { setLoading(false); return toastError(tr('errors.thatChangeWasNotSaved')); }
     const { error: moveError } = await supabase.from('inventory_moves').insert({
       family_id: familyId, item_id: item.id, from_location_id: item.location_id, to_location_id: to, moved_by: memberId,
       reason: String(f.get('reason') ?? '').trim() || null, created_by: userId,
@@ -529,9 +548,10 @@ function LendForm({ item, onClose, onSaved }: { item: Item; onClose: () => void;
     const to = String(f.get('lent_to') ?? '').trim();
     if (!to) return toastError(tr('inventoryModule.whoHasIt'));
     setLoading(true);
-    const { error } = await createClient().from('inventory_items').update({ status: 'lent', lent_to: to, lent_on: String(f.get('lent_on') ?? '') || todayIso() }).eq('id', item.id);
+    const { data: lent, error } = await createClient().from('inventory_items').update({ status: 'lent', lent_to: to, lent_on: String(f.get('lent_on') ?? '') || todayIso() }).eq('id', item.id).select('id');
     setLoading(false);
     if (error) return toastError(describeDbError(error));
+    if (wroteNoRows(lent)) return toastError(tr('errors.thatChangeWasNotSaved'));
     onSaved();
   }
 

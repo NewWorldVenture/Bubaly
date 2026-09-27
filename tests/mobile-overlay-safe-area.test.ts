@@ -9,6 +9,12 @@ import fs from 'node:fs';
 // ratchet those properties so a refactor can't quietly break mobile overlays.
 
 const modal = fs.readFileSync('components/ui/modal.tsx', 'utf8');
+// The dialog BEHAVIOUR was extracted to a hook so the full-screen overlays that
+// are deliberately not `<Modal>` (the photo lightbox) share one definition of
+// it. These assertions follow the code rather than being dropped: `modal`
+// carries the layout; the trap and the scroll lock now live in the shared hook
+// composes.
+const scrollLock = fs.readFileSync('lib/hooks/use-lock-body-scroll.ts', 'utf8');
 const shell = fs.readFileSync('components/app/app-shell.tsx', 'utf8');
 
 describe('shared Modal is a mobile-correct bottom sheet (Phase 11)', () => {

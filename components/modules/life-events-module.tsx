@@ -24,7 +24,7 @@ import { useApp } from '@/components/app/app-context';
 import { useRealtimeQuery } from '@/lib/hooks/use-realtime-query';
 import { createClient } from '@/lib/supabase/client';
 import { forgetFactAction, saveFactAction, setFactPinnedAction } from '@/app/(app)/dashboard/knowledge/actions';
-import { describeDbError } from '@/lib/supabase/errors';
+import { describeDbError, wroteNoRows } from '@/lib/supabase/errors';
 import { useToast } from '@/components/ui/toast';
 import { Modal } from '@/components/ui/modal';
 import { Input, Textarea, Field, Select } from '@/components/ui/input';
@@ -37,6 +37,8 @@ import { launchDateFor, type LifeEventSuggestion } from '@/lib/life-events/detec
 import { launchLifeEventAction, setLifeEventStatusAction } from '@/app/(app)/dashboard/life-event-actions';
 import type { Tables } from '@/lib/database.types';
 import { useTranslations } from '@/components/i18n/locale-provider';
+import { useFormat } from '@/components/i18n/use-format';
+import type { Format } from '@/lib/utils/format';
 
 type Fact = Tables<'family_facts'>;
 type Plan = Tables<'life_event_plans'>;
@@ -51,10 +53,10 @@ const ITEM_ICON: Record<string, typeof ListChecks> = {
 };
 // The learned surface focuses on the durable, felt facts (preferences/traditions).
 const LEARNED_CATEGORIES = ['preference', 'about', 'important'] as const;
-const fmtDate = (iso: string | null) => (iso ? new Date(`${iso}T00:00:00`).toLocaleDateString(undefined, { month: 'short', day: 'numeric' }) : '');
+const fmtDateIn = (f: Format) => (iso: string | null) => (iso ? f.fmtDate(`${iso}T00:00:00`, 'MMM d') : '');
 /** The long form, for a date a family is being told rather than scanning — a
  *  move is often a year out, and "March 14" alone does not say which year. */
-const fmtFullDate = (iso: string | null) => (iso ? new Date(`${iso}T00:00:00`).toLocaleDateString(undefined, { month: 'long', day: 'numeric', year: 'numeric' }) : '');
+const fmtFullDateIn = (f: Format) => (iso: string | null) => (iso ? f.fmtDate(`${iso}T00:00:00`, 'MMMM d, yyyy') : '');
 
 export function LifeEventsModule({
   suggestions = [],
@@ -66,6 +68,10 @@ export function LifeEventsModule({
   suggestionsUnavailable?: boolean;
 } = {}) {
   const tr = useTranslations();
+  // Dates follow the reader, not the browser (I18N-002).
+  const fmt = useFormat();
+  const fmtDate = fmtDateIn(fmt);
+  const fmtFullDate = fmtFullDateIn(fmt);
   const { familyId, userId } = useApp();
   const { success, error: toastError } = useToast();
 
@@ -131,8 +137,10 @@ export function LifeEventsModule({
   }
 
   async function toggleItem(it: Item) {
-    const { error } = await createClient().from('life_event_plan_items').update({ is_done: !it.is_done }).eq('id', it.id);
+    // Under RLS a refused row comes back with no error and zero rows, which this used to report as done. Audit C1-S9-86.
+    const { data: updated, error } = await createClient().from('life_event_plan_items').update({ is_done: !it.is_done }).eq('id', it.id).select('id');
     if (error) toastError(describeDbError(error));
+    else if (wroteNoRows(updated)) toastError(tr('errors.thatChangeWasNotSaved'));
   }
   async function setPlanStatus(planId: string, status: 'active' | 'completed' | 'archived') {
     const res = await setLifeEventStatusAction(planId, status);
@@ -256,7 +264,7 @@ export function LifeEventsModule({
             const Icon = TEMPLATE_ICON[t.icon] ?? Sparkles;
             return (
               <button key={t.key} onClick={() => setStartTemplate(t.key)}
-                className="group flex flex-col rounded-2xl border border-border bg-card p-4 text-left transition hover:border-brand/50 hover:bg-brand/[0.03]">
+                className="group flex flex-col rounded-2xl border border-border bg-surface/40 p-4 text-left transition hover:border-brand/50 hover:bg-brand/[0.03]">
                 <div className="flex items-center gap-3">
                   <span className="grid h-10 w-10 place-items-center rounded-xl bg-brand/10 text-brand-text"><Icon className="h-5 w-5" /></span>
                   <span className="font-semibold">{t.title}</span>
@@ -284,7 +292,7 @@ export function LifeEventsModule({
                 <div key={p.id} className="rounded-2xl border border-border bg-surface/40 p-4">
                   <div className="flex items-start justify-between gap-3">
                     <div className="flex items-center gap-3">
-                      <span className="grid h-9 w-9 place-items-center rounded-xl bg-brand/10 text-brand-text"><Icon className="h-4.5 w-4.5" /></span>
+                      <span className="grid h-9 w-9 place-items-center rounded-xl bg-brand/10 text-brand-text"><Icon className="h-[1.125rem] w-[1.125rem]" /></span>
                       <div>
                         <p className="font-semibold">{p.title}{p.status === 'completed' && <span className="ml-2 text-xs text-emerald-400">complete</span>}</p>
                         <p className="text-xs text-muted">{p.event_date ? `Target ${fmtFullDate(p.event_date)}` : 'No date set'} · {done}/{pItems.length} done</p>

@@ -1,9 +1,21 @@
 import { createElement } from 'react';
-import { renderToStaticMarkup } from 'react-dom/server';
+import { renderToStaticMarkup as renderRaw } from 'react-dom/server';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { createInMemorySupabase } from './helpers/in-memory-supabase';
+import { renderTranslated } from './helpers/render-translated';
 import { annualListPriceCents, compareEstimatedTimeValue } from '@/lib/metric/value';
 import { BASIC_ANNUAL_CENTS, BASIC_MONTHLY_CENTS, PLUS_ANNUAL_CENTS, PLUS_MONTHLY_CENTS } from '@/lib/constants/plans';
+// Rendered under a LocaleProvider, because the component asks for one.
+//
+// `translate` no longer falls back to the en-US catalogue — that fallback was a
+// static import, and it is why en-US shipped to the browser on 406 of 606 pages
+// (PERF-001). It now lives in getMessages, which is where a catalogue belongs.
+// These cases were rendering a client component with NO provider and asserting
+// its English copy, which passed only on that fallback and mounted the
+// component in a way the product never does. Shadowing the import fixes every
+// call site at once and changes no assertion.
+import { withLocale } from './helpers/render-translated';
+const renderToStaticMarkup = (node: Parameters<typeof withLocale>[0]) => renderRaw(withLocale(node));
 
 const mocks = vi.hoisted(() => ({ requireUserContext: vi.fn(), createServer: vi.fn() }));
 vi.mock('@/lib/supabase/auth', () => ({ requireUserContext: mocks.requireUserContext }));
@@ -86,7 +98,7 @@ describe('family value read boundary', () => {
 
 describe('estimate presentation', () => {
   it('exposes the run-only basis, editable hourly assumption, list price, and undated exclusions', () => {
-    const html = renderToStaticMarkup(createElement(ValueComparisonSummary, { result: { state: 'available', completedRuns: 2, undatedCompletedRuns: 3, annualListCents: 11988 }, onRetry: vi.fn() }));
+    const html = renderTranslated(createElement(ValueComparisonSummary, { result: { state: 'available', completedRuns: 2, undatedCompletedRuns: 3, annualListCents: 11988 }, onRetry: vi.fn() }));
     expect(html).toContain('2 recorded plan completions in the last 7 days');
     expect(html).toContain('24 modeled minutes');
     expect(html).toContain('type="number"');
@@ -98,7 +110,7 @@ describe('estimate presentation', () => {
     expect(html).toContain('reminders are excluded');
   });
   it('separates a real zero week from unavailable and ineligible results', () => {
-    const render = (result: Parameters<typeof ValueComparisonSummary>[0]['result']) => renderToStaticMarkup(createElement(ValueComparisonSummary, { result, onRetry: vi.fn() }));
+    const render = (result: Parameters<typeof ValueComparisonSummary>[0]['result']) => renderTranslated(createElement(ValueComparisonSummary, { result, onRetry: vi.fn() }));
     expect(render({ state: 'available', completedRuns: 0, undatedCompletedRuns: 0, annualListCents: 11988 })).toContain('$0.00');
     expect(render({ state: 'unavailable' })).toContain('Try again');
     expect(render({ state: 'unavailable' })).not.toContain('$0.00');

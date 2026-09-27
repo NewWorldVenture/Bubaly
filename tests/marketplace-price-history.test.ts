@@ -59,7 +59,7 @@ describe('recent drops + badge', () => {
 
 describe('historyLine', () => {
   it('renders arrows for drops and raises', () => {
-    expect(historyLine(ch(10000, 7500, 'x'))).toBe('$100.00 → $75.00 ↓');
-    expect(historyLine(ch(7500, 8000, 'x'))).toBe('$75.00 → $80.00 ↑');
+    expect(historyLine(ch(10000, 7500, 'x'), 'en-US')).toBe('$100.00 → $75.00 ↓');
+    expect(historyLine(ch(7500, 8000, 'x'), 'en-US')).toBe('$75.00 → $80.00 ↑');
   });
 });

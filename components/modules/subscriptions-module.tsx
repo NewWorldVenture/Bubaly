@@ -5,7 +5,7 @@ import { RefreshCw, Plus, Trash2, AlertTriangle, CheckCircle2 } from 'lucide-rea
 import { useApp } from '@/components/app/app-context';
 import { useRealtimeQuery } from '@/lib/hooks/use-realtime-query';
 import { createClient } from '@/lib/supabase/client';
-import { describeDbError } from '@/lib/supabase/errors';
+import { describeDbError, wroteNoRows } from '@/lib/supabase/errors';
 import { useToast } from '@/components/ui/toast';
 import { Modal } from '@/components/ui/modal';
 import { Input, Textarea, Field, Select } from '@/components/ui/input';
@@ -15,7 +15,7 @@ import { SkeletonList, ErrorState, EmptyState } from '@/components/ui/states';
 import { fmtDate } from '@/lib/utils/format';
 import { SavingsCoachCard } from '@/components/modules/savings-coach-card';
 import { SubscriptionPriceHistoryReview } from '@/components/modules/subscription-price-history-review';
-import { usd } from '@/lib/finance/splits';
+import { usd as usdIn } from '@/lib/finance/splits';
 import {
   CADENCES, SUB_STATUSES, monthlyCostCents, annualCostCents, summarizeSubscriptions, isStale, wastedMonthlyCents, subscriptionUsage,
   type SubLike,
@@ -26,7 +26,7 @@ import {
   candidateAlreadyTracked, subscriptionCandidateDraft, subscriptionReviewContextKey,
   type SubscriptionCandidate, type SubscriptionCandidateResponse, type SubscriptionReviewContext, type TrackedCandidateMatch,
 } from '@/lib/finance/subscription-candidates';
-import { useTranslations } from '@/components/i18n/locale-provider';
+import { useLocale, useTranslations } from '@/components/i18n/locale-provider';
 import { todayInZone } from '@/lib/schedule/zoned';
 
 type Sub = Tables<'subscriptions_tracked'>;
@@ -45,6 +45,9 @@ export function SubscriptionsModule() {
 
 export function SubscriptionsWorkspace({ context, timezone = 'UTC' }: { context: SubscriptionReviewContext; timezone?: string }) {
   const t = useTranslations();
+  // Money follows the reader; the currency stays the money's own.
+  const locale = useLocale();
+  const usd = (cents: number) => usdIn(cents, locale.code);
   const { familyId, userId } = context;
   const { success, error: toastError } = useToast();
 
@@ -52,6 +55,8 @@ export function SubscriptionsWorkspace({ context, timezone = 'UTC' }: { context:
     table: 'subscriptions_tracked', familyId, deps: [familyId],
     fetcher: (sb) => sb.from('subscriptions_tracked').select('*').eq('family_id', familyId).order('status').order('name'),
   });
+
+  const [saving, setSaving] = useState(false);
 
   const [form, setForm] = useState<ReturnType<typeof blank> | null>(null);
   const [candidateDraft, setCandidateDraft] = useState(false);
@@ -63,38 +68,55 @@ export function SubscriptionsWorkspace({ context, timezone = 'UTC' }: { context:
 
   async function save(e: React.FormEvent) {
     e.preventDefault();
-    if (!form || !form.name.trim()) return;
-    const row = {
-      name: form.name.trim(),
-      cost_cents: Math.round(parseFloat(form.cost || '0') * 100),
-      cadence: form.cadence,
-      category: form.category,
-      status: form.status,
-      next_charge: form.next_charge || null,
-      last_used: form.last_used || null,
-      note: form.note.trim() || null,
-    };
-    const supabase = createClient();
-    const { error } = form.id
-      ? await supabase.from('subscriptions_tracked').update(row).eq('id', form.id)
-      : await supabase.from('subscriptions_tracked').insert({ ...row, family_id: familyId, created_by: userId });
-    if (error) return toastError(describeDbError(error));
-    success(form.id ? 'Updated' : 'Added');
-    setForm(null);
+    // A pending button AND a re-entrance guard. The guard is not redundant:
+    // `disabled` covers the click, this covers the ENTER KEY, which submits the
+    // form without touching the button at all.
+    //
+    // preventDefault() stays ABOVE it. Returning before it on the second submit
+    // would hand the form to the browser's own native submission — a full page
+    // navigation — which is worse than the double insert this exists to stop.
+    if (saving) return;
+    setSaving(true);
+    try {
+      if (!form || !form.name.trim()) return;
+      const row = {
+        name: form.name.trim(),
+        cost_cents: Math.round(parseFloat(form.cost || '0') * 100),
+        cadence: form.cadence,
+        category: form.category,
+        status: form.status,
+        next_charge: form.next_charge || null,
+        last_used: form.last_used || null,
+        note: form.note.trim() || null,
+      };
+      const supabase = createClient();
+      // Under RLS a refused row comes back with no error and zero rows, which this used to report as done. Audit C1-S9-81.
+      const { data: saved, error } = form.id
+        ? await supabase.from('subscriptions_tracked').update(row).eq('id', form.id).select('id')
+        : await supabase.from('subscriptions_tracked').insert({ ...row, family_id: familyId, created_by: userId }).select('id');
+      if (error) return toastError(describeDbError(error));
+      if (wroteNoRows(saved)) return toastError(t('errors.thatChangeWasNotSaved'));
+      success(form.id ? 'Updated' : 'Added');
+      setForm(null);
+    } finally {
+      setSaving(false);
+    }
   }
 
   async function markUsed(id: string) {
-    const { error } = await createClient().from('subscriptions_tracked').update({ last_used: todayInZone(timezone) }).eq('id', id);
-    if (error) toastError(describeDbError(error)); else success(t('subscriptionsModule.markedUsedToday'));
+    // Under RLS a refused row comes back with no error and zero rows, which this used to report as done. Audit C1-S9-81.
+    const { data: updated, error } = await createClient().from('subscriptions_tracked').update({ last_used: todayInZone(timezone) }).eq('id', id).select('id');
+    if (error) toastError(describeDbError(error)); else if (wroteNoRows(updated)) toastError(t('errors.thatChangeWasNotSaved')); else success(t('subscriptionsModule.markedUsedToday'));
   }
   async function setStatus(id: string, status: string) {
-    const { error } = await createClient().from('subscriptions_tracked').update({ status }).eq('id', id);
+    const { data: updated2, error } = await createClient().from('subscriptions_tracked').update({ status }).eq('id', id).select('id');
     if (error) toastError(describeDbError(error));
+    else if (wroteNoRows(updated2)) toastError(t('errors.thatChangeWasNotSaved'));
   }
   async function remove(id: string) {
     if (!confirm(t('subscriptionsModule.deleteThisSubscription'))) return;
-    const { error } = await createClient().from('subscriptions_tracked').delete().eq('id', id);
-    if (error) toastError(describeDbError(error)); else success(t('subscriptionsModule.deleted'));
+    const { data: removed, error } = await createClient().from('subscriptions_tracked').delete().eq('id', id).select('id');
+    if (error) toastError(describeDbError(error)); else if (wroteNoRows(removed)) toastError(t('errors.thatChangeWasNotSaved')); else success(t('subscriptionsModule.deleted'));
   }
   function edit(s: Sub, observedCostCents?: number, evidence?: string) {
     setCandidateDraft(false);
@@ -198,7 +220,7 @@ export function SubscriptionsWorkspace({ context, timezone = 'UTC' }: { context:
             <Field label={t('subscriptions.note')}>{(id) => <Textarea id={id} value={form.note} onChange={(e) => setForm({ ...form, note: e.target.value })} />}</Field>
             <div className="flex justify-end gap-2">
               <Button type="button" variant="secondary" onClick={() => setForm(null)}>{t('subscriptions.cancel')}</Button>
-              <Button type="submit">{candidateDraft ? 'Save subscription' : form.id ? 'Save' : 'Add'}</Button>
+              <Button type="submit" loading={saving}>{candidateDraft ? 'Save subscription' : form.id ? 'Save' : 'Add'}</Button>
             </div>
           </form>
         </Modal>

@@ -9,7 +9,7 @@ describe('dashboard agents read boundary', () => {
     expect(page).toContain('type CountResult = { value: number; error: unknown | null };');
     expect(page).toContain('const readError = weekEvents.error ?? mealPlans.error ?? members.error ?? activityRows.error');
     expect(page).toContain('if (readError) {');
-    expect(page).toContain('loadFamilyContext(supabase, familyId, now)');
+    expect(page).toContain('loadFamilyContext(supabase, familyId, tz, now)');
     expect(page).toContain("console.error('[dashboard-agents] reasoning context read failed'");
     expectSays(page, 'agents.couldNotLoadFamilyAssistant', 'Could not load Family Assistant context from Supabase. Refresh and try again.');
     expect(page).toContain('<ErrorState message=');

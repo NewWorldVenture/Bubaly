@@ -1,5 +1,5 @@
 import { NextResponse } from 'next/server';
-import { getTranslations } from '@/lib/i18n/server';
+import { getLocaleContext, getTranslations } from '@/lib/i18n/server';
 import { createServer } from '@/lib/supabase/server';
 import { requireUserContext } from '@/lib/supabase/auth';
 import { resolveFeatureEntitlement } from '@/lib/server/feature-entitlement';
@@ -36,7 +36,18 @@ export async function POST() {
   }
 
   try {
-    const result = await runAutopilotScan(supabase, ctx.active.familyId, ctx.user.id);
+    // The family's zone comes off the context that is already loaded — no
+    // second read, and never the server's zone. `ctx.active.family` is the
+    // `families` row, so `timezone` is the column 0002 defaults to 'UTC'.
+    // And the words are the READER's: the member who pressed Rescan. The scan
+    // stores the suggestions it creates, and sends the urgent ones as a
+    // notification, in the format of the person who asked for them. The screens
+    // do not rely on that: each words a subscription title again for its own
+    // reader from the facts in its payload (autopilotTitleFor).
+    const { locale } = await getLocaleContext();
+    const result = await runAutopilotScan(
+      supabase, ctx.active.familyId, ctx.user.id, ctx.active.family.timezone || 'UTC', locale.code, t,
+    );
     return NextResponse.json(result);
   } catch (err) {
     console.error('Autopilot scan error:', err);

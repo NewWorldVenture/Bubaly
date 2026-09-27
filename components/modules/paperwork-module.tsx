@@ -10,16 +10,17 @@ import {
   AlertTriangle, Clock, Loader2, X, Sparkles, Copy,
 } from 'lucide-react';
 import type { Tables, Json } from '@/lib/database.types';
-import type { PaperworkAction, PaperworkKind } from '@/lib/paperwork/triage';
-import { kindLabel } from '@/lib/paperwork/triage';
+import type { PaperworkAction, PaperworkKind, PaperworkReader } from '@/lib/paperwork/triage';
+import { paperworkActionLine, paperworkKindLabel, paperworkSummary, paperworkSummaryFacts } from '@/lib/paperwork/triage';
 import { isPaperworkExtractionPartial } from '@/lib/paperwork/extraction';
 import {
   addPaperworkAction, materializePaperworkActionAction, setPaperworkStatusAction,
   draftPaperworkReplyAction,
 } from '@/app/(app)/dashboard/paperwork/actions';
 import { useToast } from '@/components/ui/toast';
+import { reportRefusal } from '@/lib/auth/step-up-client';
 import { cn } from '@/lib/utils/cn';
-import { useTranslations } from '@/components/i18n/locale-provider';
+import { useLocale, useTranslations } from '@/components/i18n/locale-provider';
 import { DocumentCapture } from '@/components/capture/document-capture';
 import { useRouter } from 'next/navigation';
 
@@ -63,6 +64,9 @@ function parseActions(j: Json): StoredAction[] {
 
 export function PaperworkModule({ items }: { items: Item[] }) {
   const t = useTranslations();
+  // The row's stored `summary` is an en-US record; the card re-renders it, and
+  // each action's amount, for the member looking at it (I18N-003).
+  const reader: PaperworkReader = { locale: useLocale().code, t };
   const router = useRouter();
   const [filter, setFilter] = useState<(typeof FILTERS)[number]['key']>('needs_action');
   const [composerOpen, setComposerOpen] = useState(false);
@@ -78,7 +82,9 @@ export function PaperworkModule({ items }: { items: Item[] }) {
       const res = await draftPaperworkReplyAction(itemId);
       setBusyKey(null);
       if (res.ok) { setDrafts((d) => ({ ...d, [itemId]: res.draft })); setOpenDraft(itemId); success(t('paperworkModule.aiDraftedAReply')); }
-      else toastError(res.error);
+      // A refusal for the two-step code carries `stepUp`; reportRefusal shows
+      // the sentence and takes the family to the code page, and back here.
+      else reportRefusal(res, toastError);
     });
   };
   const copyDraft = async (text: string) => {
@@ -103,16 +109,34 @@ export function PaperworkModule({ items }: { items: Item[] }) {
   const materialize = (itemId: string, actionIndex: number) => {
     setBusyKey(`${itemId}:${actionIndex}`);
     startTransition(async () => {
-      await materializePaperworkActionAction({ itemId, actionIndex });
-      setBusyKey(null);
+      // These actions THROW on a write that errors, and ANSWER `{ ok: false }`
+      // for a write the database filtered or a stamp-back that did not land,
+      // with `stepUp` when the session needs its two-step code first. Without the catch the
+      // throw skipped `setBusyKey(null)`, so the button span forever while the
+      // reason — often a translated "only a parent can…" — went nowhere; and
+      // without reportRefusal a step-up refusal was a toast with nowhere to go.
+      try {
+        const res = await materializePaperworkActionAction({ itemId, actionIndex });
+        if (!res.ok) reportRefusal(res, toastError);
+      } catch (err) {
+        toastError(err instanceof Error && err.message ? err.message : t('globalError.somethingWentWrong'));
+      } finally {
+        setBusyKey(null);
+      }
     });
   };
 
   const setStatus = (itemId: string, status: 'needs_action' | 'done' | 'archived') => {
     setBusyKey(itemId);
     startTransition(async () => {
-      await setPaperworkStatusAction({ itemId, status });
-      setBusyKey(null);
+      try {
+        const res = await setPaperworkStatusAction({ itemId, status });
+        if (!res.ok) reportRefusal(res, toastError);
+      } catch (err) {
+        toastError(err instanceof Error && err.message ? err.message : t('globalError.somethingWentWrong'));
+      } finally {
+        setBusyKey(null);
+      }
     });
   };
 
@@ -194,7 +218,7 @@ export function PaperworkModule({ items }: { items: Item[] }) {
                   <div className="flex flex-wrap items-center gap-2">
                     <h3 className="text-sm font-bold">{it.title}</h3>
                     <span className="rounded-full bg-white/[0.06] px-2 py-0.5 text-[10px] font-bold uppercase tracking-wide text-muted">
-                      {kindLabel(it.kind as PaperworkKind)}
+                      {paperworkKindLabel(it.kind, reader)}
                     </span>
                     {it.urgency === 'urgent' && it.status === 'needs_action' && (
                       <span className="inline-flex items-center gap-1 rounded-full bg-rose-500/15 px-2 py-0.5 text-[10px] font-bold text-rose-300">
@@ -202,12 +226,17 @@ export function PaperworkModule({ items }: { items: Item[] }) {
                       </span>
                     )}
                     {!partial && it.due_on && (
-                      <span className="inline-flex items-center gap-1 rounded-full bg-amber-500/12 px-2 py-0.5 text-[10px] font-semibold text-amber-300">
-                        <Clock className="h-2.5 w-2.5" /> due {it.due_on}
+                      <span className="inline-flex items-center gap-1 rounded-full bg-amber-500/10 px-2 py-0.5 text-[10px] font-semibold text-amber-300">
+                        <Clock className="h-2.5 w-2.5" /> {t('paperworkTriage.due', { date: it.due_on })}
                       </span>
                     )}
                   </div>
-                  {!partial && it.summary && <p className="mt-1 text-xs text-muted">{it.summary}{it.sender ? ` · from ${it.sender}` : ''}</p>}
+                  {!partial && it.summary && (
+                    <p className="mt-1 text-xs text-muted">
+                      {paperworkSummary(paperworkSummaryFacts(it), reader)}
+                      {it.sender ? ` · ${t('paperworkTriage.from', { sender: it.sender })}` : ''}
+                    </p>
+                  )}
                   {partial && (
                     <div className="mt-2 rounded-xl border border-amber-400/30 bg-amber-500/10 p-3 text-xs text-amber-300">
                       <p role="note">{t('paperwork.partialExtractionWarning')}</p>
@@ -230,7 +259,7 @@ export function PaperworkModule({ items }: { items: Item[] }) {
                         return (
                           <div key={i} className="flex items-center justify-between gap-2 rounded-xl border border-border/60 bg-bg/40 px-3 py-2">
                             <span className={cn('min-w-0 flex-1 truncate text-xs', done ? 'text-muted line-through' : 'text-fg')}>
-                              {a.label}{a.amount != null ? ` · $${a.amount}` : ''}{a.due_on ? ` · by ${a.due_on}` : ''}
+                              {paperworkActionLine(a, reader)}
                             </span>
                             {done ? (
                               <span className="inline-flex shrink-0 items-center gap-1 text-[11px] font-semibold text-emerald-400">
@@ -312,11 +341,21 @@ export function PaperworkModule({ items }: { items: Item[] }) {
 
 function Composer({ onDone }: { onDone: () => void }) {
   const t = useTranslations();
+  const { error: toastError } = useToast();
   const [pending, startTransition] = useTransition();
 
   return (
     <form
-      action={(fd) => startTransition(async () => { await addPaperworkAction(fd); onDone(); })}
+      action={(fd) => startTransition(async () => {
+        // A throw here used to leave the form open with nothing said; a
+        // step-up refusal is answered, not thrown, and goes to the code page.
+        try {
+          const res = await addPaperworkAction(fd);
+          if (!res.ok) { reportRefusal(res, toastError); return; }
+          onDone();
+        }
+        catch (err) { toastError(err instanceof Error && err.message ? err.message : t('globalError.somethingWentWrong')); }
+      })}
       className="mt-4 rounded-2xl border border-brand/30 bg-brand/[0.05] p-4"
     >
       <label htmlFor="pw-text" className="text-xs font-bold uppercase tracking-wide text-muted">

@@ -9,6 +9,7 @@ import { useMemo, useState } from 'react';
 import Link from 'next/link';
 import { Radar, ShieldCheck, Lock, Users, Info, Globe } from 'lucide-react';
 import { useApp } from '@/components/app/app-context';
+import { isManager } from '@/lib/constants/roles';
 import { useRealtimeQuery } from '@/lib/hooks/use-realtime-query';
 import { createClient } from '@/lib/supabase/client';
 import { describeDbError } from '@/lib/supabase/errors';
@@ -38,7 +39,11 @@ export function IntelligenceModule({
   benchmarksPublished?: boolean;
 }) {
   const t = useTranslations();
-  const { familyId, userId } = useApp();
+  const { familyId, userId, role } = useApp();
+  // Joining the network shares the family's (anonymised) data, so it is the
+  // family managers' decision — a minor's toggle is not consent. The database
+  // enforces the same since 0353; other members see the setting read-only.
+  const canConsent = isManager(role);
   const { success, error: toastError } = useToast();
   const [saving, setSaving] = useState(false);
 
@@ -77,7 +82,7 @@ export function IntelligenceModule({
   const toggleScope = (k: ConsentScope) =>
     persist({ enabled: true, scopes: { ...consent.scopes, [k]: !consent.scopes[k] } });
 
-  if (loading) return <div className="rounded-xl border border-border bg-card p-4 text-sm text-muted">{t('intelligence.loadingIntelligencePreferences')}</div>;
+  if (loading) return <div className="rounded-xl border border-border bg-surface/40 p-4 text-sm text-muted">{t('intelligence.loadingIntelligencePreferences')}</div>;
   if (error) return <ErrorState message={t('intelligenceModule.couldNotLoadIntelligencePreferences')} onRetry={refresh} />;
 
   return (
@@ -85,7 +90,7 @@ export function IntelligenceModule({
       <PageHeader title={t('intelligence.intelligenceNetwork')} description={t('intelligenceModule.optInToLearnFrom')} />
 
       {/* Privacy promise */}
-      <div className="rounded-xl border border-border bg-card p-4">
+      <div className="rounded-xl border border-border bg-surface/40 p-4">
         <div className="mb-3 flex items-center gap-2">
           <ShieldCheck className="size-5 text-emerald-400" />
           <h3 className="font-semibold">{t('intelligence.howYourPrivacyIsProtected')}</h3>
@@ -100,7 +105,7 @@ export function IntelligenceModule({
 
       {/* Informed consent: exactly what you'd contribute (coarse, own data, never shared here) */}
       {contribution.length > 0 && (
-        <div className="rounded-xl border border-border bg-card p-4">
+        <div className="rounded-xl border border-border bg-surface/40 p-4">
           <div className="mb-1 flex items-center gap-2">
             <Info className="size-5 text-brand-text" />
             <h3 className="font-semibold">{t('intelligence.whatYoudContribute')}</h3>
@@ -120,24 +125,24 @@ export function IntelligenceModule({
       )}
 
       {/* Master toggle */}
-      <div className="flex items-center justify-between rounded-xl border border-border bg-card p-4">
+      <div className="flex items-center justify-between rounded-xl border border-border bg-surface/40 p-4">
         <div>
           <h3 className="font-semibold">{t('intelligence.joinTheIntelligenceNetwork')}</h3>
           <p className="text-sm text-muted">{contributing ? t('intelligence.contributingStatus') : t('intelligence.privateStatus')}</p>
         </div>
-        <Toggle on={consent.enabled} disabled={saving} onClick={toggleMaster} label={t('intelligence.joinTheNetwork')} />
+        <Toggle on={consent.enabled} disabled={saving || !canConsent} onClick={toggleMaster} label={t('intelligence.joinTheNetwork')} />
       </div>
 
       {/* Scopes */}
       {consent.enabled && (
         <div className="space-y-2">
           {CONSENT_SCOPES.map((s) => (
-            <div key={s.key} className="flex items-center justify-between rounded-xl border border-border bg-card p-4">
+            <div key={s.key} className="flex items-center justify-between rounded-xl border border-border bg-surface/40 p-4">
               <div className="pr-4">
                 <h4 className="text-sm font-semibold">{t(s.labelKey)}</h4>
                 <p className="text-xs text-muted">{t(s.descriptionKey)}</p>
               </div>
-              <Toggle on={consent.scopes[s.key] === true} disabled={saving} onClick={() => toggleScope(s.key)} label={t(s.labelKey)} />
+              <Toggle on={consent.scopes[s.key] === true} disabled={saving || !canConsent} onClick={() => toggleScope(s.key)} label={t(s.labelKey)} />
             </div>
           ))}
         </div>
@@ -145,7 +150,7 @@ export function IntelligenceModule({
 
       {/* Insights (k-anonymity gated; empty until this family's cohort clears the floor) */}
       {contributing && (
-        <div className="rounded-xl border border-border bg-card p-4">
+        <div className="rounded-xl border border-border bg-surface/40 p-4">
           <div className="mb-3 flex items-center gap-2"><Radar className="size-5 text-brand-text" /><h3 className="font-semibold">{t('intelligence.networkInsights')}</h3></div>
           {insights.length === 0 ? (
             <p className="text-sm text-muted">{t('intelligence.noInsightsYet', { floor: K_ANONYMITY_FLOOR })}</p>
@@ -171,7 +176,7 @@ export function IntelligenceModule({
           claiming rows are "published for everyone" while the link 404s is a
           claim with no row behind it. The flag is read server-side. */}
       {benchmarksPublished && (
-        <div className="flex items-start gap-3 rounded-xl border border-border bg-card p-4">
+        <div className="flex items-start gap-3 rounded-xl border border-border bg-surface/40 p-4">
           <Globe className="mt-0.5 size-5 shrink-0 text-brand-text" />
           <div>
             <Link href="/resources/benchmarks" className="text-sm font-semibold underline">{t('intelligence.seePublicBenchmarks')}</Link>

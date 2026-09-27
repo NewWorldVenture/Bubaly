@@ -132,11 +132,11 @@ export async function PlatformBadges() {
 export async function HeroPhoneMockup({ className }: { className?: string }) {
   const t = await getTranslations();
   const schedule = [
-    { time: '8:00 AM', title: t('visualMocks.dentistAppointment'), person: t('visualMocks.emma'), avatar: 3, color: 'bg-rose-400' },
-    { time: '9:30 AM', title: t('visualMocks.dadFlightToChicago'), person: t('visualMocks.mike'), avatar: 0, color: 'bg-blue-400' },
-    { time: '3:00 PM', title: t('visualMocks.jacksonSoccerPractice'), person: t('visualMocks.jackson'), avatar: 1, color: 'bg-emerald-400' },
+    { time: '8:00 AM', title: t('visualMocks.dentistAppointment'), person: 'Emma', avatar: 3, color: 'bg-rose-400' },
+    { time: '9:30 AM', title: t('visualMocks.dadFlightToChicago'), person: 'Mike', avatar: 0, color: 'bg-blue-400' },
+    { time: '3:00 PM', title: t('visualMocks.jacksonSoccerPractice'), person: 'Jackson', avatar: 1, color: 'bg-emerald-400' },
     { time: '5:00 PM', title: t('visualMocks.groceryPickup'), person: 'H-E-B', avatar: 2, color: 'bg-orange-400' },
-    { time: '7:00 PM', title: t('visualMocks.familyDinner'), person: t('visualMocks.theJohnsons'), avatar: 4, color: 'bg-violet-400' },
+    { time: '7:00 PM', title: t('visualMocks.familyDinner'), person: 'The Johnsons', avatar: 4, color: 'bg-violet-400' },
   ];
 
   return (
@@ -673,9 +673,9 @@ async function WebAppScreen() {
 
 async function DeviceArtwork({ device }: { device: DeviceName }) {
   const t = await getTranslations();
-  if (device === 'iPhone' || device === t('visualMocks.android')) {
+  if (device === 'iPhone' || device === 'Android') {
     return (
-      <div className={cn('device-art relative h-32 w-[70px] rounded-[17px] border-[4px] border-[rgb(var(--device-bezel))] bg-black p-1 shadow-2xl sm:h-36 sm:w-[78px]', device === t('visualMocks.android') && 'rounded-[13px]')}>
+      <div className={cn('device-art relative h-32 w-[70px] rounded-[17px] border-[4px] border-[rgb(var(--device-bezel))] bg-black p-1 shadow-2xl sm:h-36 sm:w-[78px]', device === 'Android' && 'rounded-[13px]')}>
         {device === 'iPhone' ? <ScheduleScreen /> : <TasksScreen />}
         <span className={cn('absolute left-1/2 top-1.5 -translate-x-1/2 bg-black', device === 'iPhone' ? 'h-2 w-7 rounded-full' : 'h-2 w-2 rounded-full')} />
       </div>
@@ -690,7 +690,7 @@ async function DeviceArtwork({ device }: { device: DeviceName }) {
     );
   }
 
-  if (device === t('visualMocks.webApp')) {
+  if (device === 'Web App') {
     return (
       <div className="device-art flex h-32 w-full max-w-[160px] flex-col justify-center sm:h-36">
         <div className="h-[92px] rounded-lg border-[4px] border-[rgb(var(--device-bezel))] bg-black p-1 shadow-2xl sm:h-[104px]">

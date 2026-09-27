@@ -8,12 +8,13 @@ import {
   Maximize2, Minimize2, Settings2, Sun, Moon, ArrowRight, Timer as TimerIcon, MonitorCog,
 } from 'lucide-react';
 import { createClient } from '@/lib/supabase/client';
+import { describeDbError } from '@/lib/supabase/errors';
 import { useToast } from '@/components/ui/toast';
 import { Avatar } from '@/components/ui/avatar';
 import { cn } from '@/lib/utils/cn';
 import { displayTimezone } from '@/lib/display/calendar';
 import {
-  ambientTheme, greeting, dayPart, nowAndNext, countdownLabel, normalizeSettings, buildHints,
+  ambientTheme, greeting, dayPart, nowAndNext, countdownLabel as countdownLabelIn, normalizeSettings, buildHints,
   DEFAULT_DISPLAY_SETTINGS, THEME_OPTIONS, IDLE_OPTIONS,
   type DisplaySettings, type ThemeChoice,
 } from '@/lib/display/ambient';
@@ -28,6 +29,7 @@ import { AmbientClock } from './ambient-clock';
 import { DisplayWeatherProvider, WeatherChip, WeatherTile } from './display-weather';
 import { KitchenTimers } from './kitchen-timers';
 import { PhotoFrame } from './photo-frame';
+import { useFamilyMediaUrls } from '@/lib/storage/use-family-media';
 import { HintsTicker } from './hints-ticker';
 import { useLocale, useTranslations } from '@/components/i18n/locale-provider';
 import { WidgetBoundary } from '@/components/ui/widget-boundary';
@@ -208,6 +210,9 @@ function WidgetBody({ widget, size, data, memberById, now, settings }: {
   const tr = useTranslations();
   const locale = useLocale().code;
   const timezone = displayTimezone(data.timezone).timezone;
+  // The Now/Next countdown follows the reader: the clock and weekday from the
+  // locale, "Now" and "in N min" from the catalogue.
+  const countdownLabel = (iso: string, at: Date, tz: string) => countdownLabelIn(iso, at, tz, locale, tr);
   switch (widget) {
     case 'clock': return <AmbientClock clock24={settings.clock24} seconds={settings.seconds} timezone={timezone} />;
     case 'weather': return <WeatherTile size={size} />;
@@ -356,13 +361,14 @@ function Empty({ icon: Icon, text }: { icon: typeof Calendar; text: string }) {
 
 
 function MonthCalendar({ cal }: { cal: DisplayData['calendar'] }) {
+  const locale = useLocale();
   const first = new Date(cal.year, cal.month, 1).getDay();
   const days = new Date(cal.year, cal.month + 1, 0).getDate();
   const cells: (number | null)[] = [...Array(first).fill(null), ...Array.from({ length: days }, (_, i) => i + 1)];
   const eventSet = new Set(cal.eventDays);
   return (
     <div>
-      <p className="mb-2 text-center text-sm font-semibold text-white">{new Date(cal.year, cal.month, 1).toLocaleDateString('en-US', { month: 'long', year: 'numeric' })}</p>
+      <p className="mb-2 text-center text-sm font-semibold text-white">{new Date(cal.year, cal.month, 1).toLocaleDateString(locale.code, { month: 'long', year: 'numeric' })}</p>
       <div className="grid grid-cols-7 gap-1 text-center text-[11px]">
         {['S', 'M', 'T', 'W', 'T', 'F', 'S'].map((d, i) => <span key={i} className="text-white/40">{d}</span>)}
         {cells.map((d, i) => (
@@ -382,6 +388,9 @@ function NowNextStrip({ events, memberById, now, timezone, clock24 }: {
 }) {
   const tr = useTranslations();
   const locale = useLocale().code;
+  // The Now/Next countdown follows the reader: the clock and weekday from the
+  // locale, "Now" and "in N min" from the catalogue.
+  const countdownLabel = (iso: string, at: Date, tz: string) => countdownLabelIn(iso, at, tz, locale, tr);
   const { current, next } = nowAndNext(events, now);
   if (!current && !next) return null;
   const Cell = ({ label, ev, tone }: { label: string; ev: Ev; tone: string }) => {
@@ -515,6 +524,10 @@ export function DisplayShell(props: DisplayShellProps) {
 function OwnedDisplayShell({ initialTiles, initialSettings, data, familyId, userId }: DisplayShellProps) {
   const t = useTranslations();
   const tr = useTranslations();
+  const locale = useLocale();
+  // The Now/Next countdown follows the reader: the clock and weekday from the
+  // locale, "Now" and "in N min" from the catalogue.
+  const countdownLabel = (iso: string, at: Date, tz: string) => countdownLabelIn(iso, at, tz, locale.code, tr);
   const { success, error: toastError } = useToast();
   // Defense in depth: even the props are re-normalized (SSR throws here are
   // uncatchable by widget boundaries, so the shell must be garbage-proof).
@@ -581,7 +594,18 @@ function OwnedDisplayShell({ initialTiles, initialSettings, data, familyId, user
   const part = dayPart(now, timezone);
   // Photo surfaces never come up empty: real family photos win, the curated
   // ambient set stands in until the family uploads some.
-  const ambientPhotos = data.photos.length ? data.photos : [...AMBIENT_FALLBACK_PHOTOS];
+  //
+  // `data.photos` are STORED references. Family photos are signed here with
+  // this display's session (SEC-001) and the signed URL is reused across the
+  // 120-second refresh, so the slideshow is not re-downloaded — or remounted,
+  // since it is keyed by URL — every two minutes. A photo that cannot be signed
+  // is left out rather than shown through its public URL; while the first
+  // signing is in flight the frame shows its gradient, not the stock set, so a
+  // family's photos do not flash in behind someone else's.
+  const media = useFamilyMediaUrls(data.photos);
+  const signedPhotos = data.photos.map((p) => media(p)).filter((u): u is string => typeof u === 'string');
+  const photosPending = data.photos.some((p) => media(p) === undefined);
+  const ambientPhotos = signedPhotos.length ? signedPhotos : photosPending ? [] : [...AMBIENT_FALLBACK_PHOTOS];
   const photoBg = settings.background === 'photos';
 
   // Echo-style bottom hints, recomputed as the clock ticks.
@@ -635,7 +659,7 @@ function OwnedDisplayShell({ initialTiles, initialSettings, data, familyId, user
       const { error } = await supabase.from('display_layouts')
         .upsert({ family_id: familyId, tiles: tiles as never, settings: settings as never, updated_by: userId }, { onConflict: 'family_id' });
       if (!owner.active) return;
-      if (error) { toastError(error.message); return; }
+      if (error) { toastError(describeDbError(error)); return; }
       setPersisted({ tiles, settings });
       success(tr('displayGrid.displaySaved'));
       if (draftRevision.current === revision) setEditing(false);
@@ -670,7 +694,7 @@ function OwnedDisplayShell({ initialTiles, initialSettings, data, familyId, user
       if (!owner.active) return;
       if (error) {
         console.error('[display] setup card dismissal write failed', error);
-        toastError(error.message);
+        toastError(describeDbError(error));
         return;
       }
       setSettings((current) => ({ ...current, setupDismissed: true }));
@@ -819,9 +843,9 @@ function OwnedDisplayShell({ initialTiles, initialSettings, data, familyId, user
                   <div className="flex items-center justify-between">
                     <span className="text-xs font-semibold text-white/60">{t('displayGrid.tile')}</span>
                     <div className="flex gap-1">
-                      <button onClick={() => move(tile.id, -1)} className="rounded p-1 text-white hover:bg-white/10"><ArrowUp className="h-4 w-4" /></button>
-                      <button onClick={() => move(tile.id, 1)} className="rounded p-1 text-white hover:bg-white/10"><ArrowDown className="h-4 w-4" /></button>
-                      <button onClick={() => remove(tile.id)} className="rounded p-1 text-rose-300 hover:bg-white/10"><Trash2 className="h-4 w-4" /></button>
+                      <button aria-label={tr('a11y.moveUp')} onClick={() => move(tile.id, -1)} className="rounded p-1 text-white hover:bg-white/10"><ArrowUp className="h-4 w-4" /></button>
+                      <button aria-label={tr('a11y.moveDown')} onClick={() => move(tile.id, 1)} className="rounded p-1 text-white hover:bg-white/10"><ArrowDown className="h-4 w-4" /></button>
+                      <button aria-label={tr('a11y.delete')} onClick={() => remove(tile.id)} className="rounded p-1 text-rose-300 hover:bg-white/10"><Trash2 className="h-4 w-4" /></button>
                     </div>
                   </div>
                   <div className="space-y-2">

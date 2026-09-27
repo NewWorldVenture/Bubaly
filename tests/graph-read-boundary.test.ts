@@ -11,7 +11,7 @@ const messages = JSON.parse(fs.readFileSync('lib/i18n/messages/en-US.json', 'utf
 describe('Knowledge Graph reasoning read boundary', () => {
   it('shows and retries a failed shared context read without changing GraphModule behavior', () => {
     expect(page).toContain('let reasoning: Awaited<ReturnType<typeof loadFamilyContext>> | null = null;');
-    expect(page).toContain('reasoning = await loadFamilyContext(supabase, ctx.active.familyId);');
+    expect(page).toContain('reasoning = await loadFamilyContext(supabase, ctx.active.familyId, tz);');
     expect(page).toContain("console.error('[dashboard-graph] reasoning context read failed', error);");
     expect(page).toContain('role="alert"');
     expect(page).toContain("graph.couldNotLoadTheGraph");
@@ -20,6 +20,6 @@ describe('Knowledge Graph reasoning read boundary', () => {
     expect(page).toContain("graph.retryGraphSummary");
     expect(messages['graph.retryGraphSummary']).toBe('Retry graph summary');
     expect(page).toContain('<GraphModule />');
-    expect(page).not.toContain('loadFamilyContext(supabase, ctx.active.familyId).catch(() => null)');
+    expect(page).not.toContain('loadFamilyContext(supabase, ctx.active.familyId, tz).catch(() => null)');
   });
 });

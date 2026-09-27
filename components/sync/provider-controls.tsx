@@ -3,6 +3,7 @@
 import { useState } from 'react';
 import { RefreshCw, Unplug, CheckCircle2, AlertTriangle } from 'lucide-react';
 import { useTranslations } from '@/components/i18n/locale-provider';
+import { SubmitButton } from '@/components/ui/submit-button';
 
 type RunResult = { imported: number; exported: number; skipped: number; conflicts: number; error?: string };
 
@@ -48,12 +49,12 @@ export function ProviderControls({ provider }: { provider: string }) {
           <RefreshCw className={`h-4 w-4 ${busy ? 'animate-spin' : ''}`} /> {busy ? 'Syncing…' : 'Sync now'}
         </button>
         <form action={`/api/sync/${provider}/disconnect`} method="post">
-          <button
-            type="submit"
+          <SubmitButton
+            
             className="inline-flex h-10 items-center gap-2 rounded-xl border border-border px-4 text-sm font-medium transition hover:bg-elevated"
           >
             <Unplug className="h-4 w-4" /> {t('providerControls.disconnect')}
-          </button>
+          </SubmitButton>
         </form>
       </div>
 

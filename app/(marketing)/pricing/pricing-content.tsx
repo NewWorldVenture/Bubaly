@@ -18,6 +18,7 @@ import { cn } from '@/lib/utils/cn';
 import { familiesNote } from '@/lib/marketing/format';
 import { HERO_OUTCOMES } from '@/lib/marketing/hero-outcomes';
 import {
+  PLAN_CURRENCY,
   formatPerDay,
   perDayCents,
   valueTier,
@@ -31,7 +32,8 @@ import {
   PLUS_MONTHLY_CENTS,
   PLUS_ANNUAL_CENTS,
 } from '@/lib/constants/plans';
-import { useTranslations } from '@/components/i18n/locale-provider';
+import { useLocale, useTranslations } from '@/components/i18n/locale-provider';
+import { formatCents } from '@/lib/wallet/ledger';
 
 type Period = BillingPeriod;
 
@@ -45,9 +47,6 @@ export type PricingCaseStudy = {
   /** Only an admin can set case_studies.verified_at; the badge renders on nothing else. */
   verified: boolean;
 };
-
-const fmt = (cents: number) =>
-  cents % 100 === 0 ? `$${cents / 100}` : `$${(cents / 100).toFixed(2)}`;
 
 const basicSavings = Math.round((1 - BASIC_ANNUAL_CENTS / (BASIC_MONTHLY_CENTS * 12)) * 100);
 const plusSavings  = Math.round((1 - PLUS_ANNUAL_CENTS  / (PLUS_MONTHLY_CENTS  * 12)) * 100);
@@ -176,7 +175,7 @@ function HowTrialWorks() {
           {TRIAL_STEPS.map((s, i) => (
             <li key={s.title} className="relative flex flex-col rounded-2xl border border-white/10 bg-white/[0.03] p-4">
               <span className="absolute right-3 top-3 text-xs font-black text-white/25">{i + 1}</span>
-              <span className="grid h-10 w-10 place-items-center rounded-xl bg-violet-500/12 ring-1 ring-violet-400/25">{s.icon}</span>
+              <span className="grid h-10 w-10 place-items-center rounded-xl bg-violet-500/10 ring-1 ring-violet-400/25">{s.icon}</span>
               <p className="mt-3 text-sm font-bold">{tr(s.title)}</p>
               <p className="mt-1 text-xs leading-relaxed text-white/65">{tr(s.desc)}</p>
             </li>
@@ -196,7 +195,7 @@ function PlanCard({
   icon: React.ReactNode;
   price: string;
   priceSub: string;
-  /** "≈ 28¢ a day" — rendered UNDER the monthly price, never instead of it; paid tiers only. */
+  /** "≈ $0.33 a day" — rendered UNDER the monthly price, never instead of it; paid tiers only. */
   perDay?: string;
   /** A one-line reassurance under the price block (Family+: cancel or downgrade anytime). */
   footnote?: string;
@@ -230,7 +229,7 @@ function PlanCard({
 
       <div className="mt-5 flex items-end gap-1">
         <span className="text-4xl font-black">{price}</span>
-        {price !== tr('pricingContent.free') && <span className="pb-1.5 text-white/60">/mo</span>}
+        {price !== tr('pricingContent.free') && <span className="pb-1.5 text-white/60">{tr('pricingValue.perMonthSuffix')}</span>}
       </div>
       {/* Under the monthly price, never instead of it — and only on the paid
           tiers, where a per-day figure means something. */}
@@ -450,6 +449,10 @@ export function PricingContent({
   switching?: ReactNode;
 }) {
   const tr = useTranslations();
+  // The family-count grouping and every price follow the visitor's chosen
+  // locale; the currency stays the plan's own.
+  const locale = useLocale();
+  const fmt = (cents: number) => formatCents(cents, PLAN_CURRENCY, locale.code);
   const [period, setPeriod] = useState<Period>('yearly');
   const yearly = period === 'yearly';
   const router = useRouter();
@@ -485,14 +488,18 @@ export function PricingContent({
   }, [router]);
 
   const basicPrice    = yearly ? fmt(Math.round(BASIC_ANNUAL_CENTS / 12)) : fmt(BASIC_MONTHLY_CENTS);
-  const basicPriceSub = yearly ? `billed ${fmt(BASIC_ANNUAL_CENTS)}/yr · save ${basicSavings}%` : 'billed monthly';
+  const basicPriceSub = yearly
+    ? tr('pricingContent.billedPerYearSave', { amount: fmt(BASIC_ANNUAL_CENTS), percent: basicSavings })
+    : tr('pricingContent.billedMonthly');
   const plusPrice     = yearly ? fmt(Math.round(PLUS_ANNUAL_CENTS / 12))  : fmt(PLUS_MONTHLY_CENTS);
-  const plusPriceSub  = yearly ? `billed ${fmt(PLUS_ANNUAL_CENTS)}/yr · save ${plusSavings}%`  : 'billed monthly';
+  const plusPriceSub  = yearly
+    ? tr('pricingContent.billedPerYearSave', { amount: fmt(PLUS_ANNUAL_CENTS), percent: plusSavings })
+    : tr('pricingContent.billedMonthly');
   // Per-day framing (lib/marketing/value.ts): ceil-derived from the same plan
   // constants the price above it uses, so the line can never claim a cheaper
   // day than the family actually pays. Paid tiers only — the trial has no price.
-  const basicPerDay = tr('pricingValue.perDay', { amount: formatPerDay(perDayCents(yearly ? BASIC_ANNUAL_CENTS : BASIC_MONTHLY_CENTS, period)) });
-  const plusPerDay  = tr('pricingValue.perDay', { amount: formatPerDay(perDayCents(yearly ? PLUS_ANNUAL_CENTS : PLUS_MONTHLY_CENTS, period)) });
+  const basicPerDay = tr('pricingValue.perDay', { amount: formatPerDay(perDayCents(yearly ? BASIC_ANNUAL_CENTS : BASIC_MONTHLY_CENTS, period), locale.code) });
+  const plusPerDay  = tr('pricingValue.perDay', { amount: formatPerDay(perDayCents(yearly ? PLUS_ANNUAL_CENTS : PLUS_MONTHLY_CENTS, period), locale.code) });
   // Outcome-first tier copy — label, goal line and what stops landing on the
   // family — from the registry both /pricing and the in-app upgrade modal read.
   const trialCopy = valueTier('trial');
@@ -519,7 +526,7 @@ export function PricingContent({
           </p>
 
           <div className="mt-6 flex justify-center sm:mt-7">
-            <div className="inline-flex max-w-full flex-wrap items-center justify-center gap-1 rounded-full border border-white/12 bg-white/[0.04] p-1 text-sm">
+            <div className="inline-flex max-w-full flex-wrap items-center justify-center gap-1 rounded-full border border-white/10 bg-white/[0.04] p-1 text-sm">
               <button
                 onClick={() => setPeriod('monthly')}
                 className={cn('inline-flex items-center justify-center rounded-full px-5 py-2 font-bold transition coarse:min-h-11 sm:px-6', period === 'monthly' ? 'bg-violet-600 text-brand-fg' : 'text-white/65 hover:text-white')}
@@ -619,7 +626,7 @@ export function PricingContent({
         <FeatureMatrixTable matrix={featureMatrix} />
 
         <TrustStrip
-          familiesNote={familiesNote(tr, familiesCount)}
+          familiesNote={familiesNote(tr, familiesCount, locale.code)}
           privateTitle={tr('trustStrip.privateByDesign')}
           privateBody={tr('trustStrip.familyScopedAccessControls')}
           responsiveTitle={tr('trustStrip.responsiveByDesign')}

@@ -1,22 +1,31 @@
 import { describe, it, expect } from 'vitest';
-import { usdFromCents, parentApprovalToNeed, renewalToNeed, documentExpiryToNeed } from '@/lib/home/needs-sources';
+import { usdFromCents, parentApprovalToNeed, renewalToNeed, documentExpiryToNeed, type NeedsReader } from '@/lib/home/needs-sources';
+import { SOURCE_MESSAGES, translate } from '@/lib/i18n/messages';
+
+/**
+ * An en-US reader through the real English catalogue — the words these titles
+ * assert. The needsSources.* sentences reach en-US with the orchestrated merge of
+ * the home-and-auto i18n asks; until it lands, the titles below print the raw
+ * key and these cases are red, which is the point: no stand-in copy here.
+ */
+const EN: NeedsReader = { locale: 'en-US', t: (key, params) => translate(SOURCE_MESSAGES, key, params) };
 
 describe('usdFromCents', () => {
   it('drops cents for whole dollars, keeps them otherwise', () => {
-    expect(usdFromCents(1200)).toBe('$12');
-    expect(usdFromCents(1250)).toBe('$12.50');
-    expect(usdFromCents(99)).toBe('$0.99');
+    expect(usdFromCents(1200, 'en-US')).toBe('$12');
+    expect(usdFromCents(1250, 'en-US')).toBe('$12.50');
+    expect(usdFromCents(99, 'en-US')).toBe('$0.99');
   });
 });
 
 describe('parentApprovalToNeed', () => {
   it('maps a card purchase with amount to an urgent card', () => {
-    const n = parentApprovalToNeed({ id: 'a1', kind: 'card_spend', amount_cents: 2500, created_at: '2026-06-28T10:00:00Z' });
+    const n = parentApprovalToNeed({ id: 'a1', kind: 'card_spend', amount_cents: 2500, created_at: '2026-06-28T10:00:00Z' }, EN);
     expect(n).toMatchObject({ id: 'approval:a1', kind: 'approval', urgency: 'urgent', href: '/wallet/cards' });
     expect(n.title).toBe('Card purchase to approve · $25');
   });
   it('falls back gracefully for an unknown kind and missing amount', () => {
-    const n = parentApprovalToNeed({ id: 'a2', kind: 'mystery', amount_cents: null, created_at: '2026-06-28T10:00:00Z' });
+    const n = parentApprovalToNeed({ id: 'a2', kind: 'mystery', amount_cents: null, created_at: '2026-06-28T10:00:00Z' }, EN);
     expect(n.title).toBe('Approval to approve');
     expect(n.href).toBe('/wallet');
   });

@@ -31,7 +31,13 @@ const ICONS: Record<SocialPlatform, (p: SocialIconProps) => React.JSX.Element> =
   tiktok: TiktokIcon,
 };
 
-export function SocialLinksForm({ links }: { links: SocialLinks }) {
+/**
+ * `links` is what is STORED for each platform, including a URL the footer will
+ * not publish (an `http://` one typed into the dashboard, say): that field shows
+ * it, marked invalid, because Save replaces the whole row and must not remove
+ * something the operator was never shown.
+ */
+export function SocialLinksForm({ links, revision }: { links: SocialLinks; revision: string }) {
   const t = useTranslations();
   const { success, error: toastError } = useToast();
   const [saving, setSaving] = useState(false);
@@ -39,6 +45,17 @@ export function SocialLinksForm({ links }: { links: SocialLinks }) {
   // What is currently typed, so the preview and the per-field validity below
   // track every keystroke rather than the last saved value.
   const [draft, setDraft] = useState<SocialLinks>(links);
+  // The fingerprint of the value this form was built from, posted back so the
+  // server can refuse to replace anything else. Saving is a whole-object
+  // replace, so a form that is out of date with the row deletes what it cannot
+  // see. Re-seeded from each successful save, so a second save in the same
+  // session is checked against what the first one wrote, not against page load.
+  const [baseRevision, setBaseRevision] = useState(revision);
+  // Set when the server says this form can never save (it was built on a value
+  // that is no longer stored). Every further click would be refused the same
+  // way, so the refusal stays on screen with a way out instead of a toast that
+  // fades and a Save button that keeps failing.
+  const [mustReload, setMustReload] = useState<string | null>(null);
 
   // The footer draws every platform, using a saved URL where there is one and
   // the brand default otherwise — so the preview does too, through the same
@@ -53,11 +70,13 @@ export function SocialLinksForm({ links }: { links: SocialLinks }) {
     const res = await saveSocialLinksAction(formData);
     setSaving(false);
     if (!res.ok) {
+      if (res.mustReload) setMustReload(res.error);
       toastError(res.error);
       return;
     }
     setRejected(res.rejected);
     setDraft(res.saved);
+    setBaseRevision(res.revision);
     if (res.rejected.length) {
       toastError(t('socialLinksForm.savedButRejected', { fields: res.rejected.join(', ') }));
     } else {
@@ -67,6 +86,16 @@ export function SocialLinksForm({ links }: { links: SocialLinks }) {
 
   return (
     <form action={onSubmit} className="space-y-4">
+      <input type="hidden" name="revision" value={baseRevision} />
+      {mustReload && (
+        <div role="alert" className="rounded-xl border border-danger/30 bg-danger/5 p-4">
+          <p className="text-sm text-danger">{mustReload}</p>
+          {/* A plain anchor: a full load reads the row again and re-seeds the form. */}
+          <a href="/admin/settings/social-links" className="mt-2 inline-block text-sm font-medium text-brand-text underline">
+            {t('socialLinksForm.reloadThisPage')}
+          </a>
+        </div>
+      )}
       {SOCIAL_PLATFORMS.map(({ key, label, placeholder }) => {
         const typed = (draft[key] ?? '').trim();
         // Only complain about something actually typed — an empty field is a
@@ -126,8 +155,8 @@ export function SocialLinksForm({ links }: { links: SocialLinks }) {
 
       <button
         type="submit"
-        disabled={saving}
-        className="btn-primary inline-flex items-center gap-2 disabled:opacity-60"
+        disabled={saving || mustReload !== null}
+        className="btn-cta"
       >
         {saving ? <Loader2 className="h-4 w-4 animate-spin" /> : <Save className="h-4 w-4" />}
         {t('socialLinksForm.saveSocialLinks')}

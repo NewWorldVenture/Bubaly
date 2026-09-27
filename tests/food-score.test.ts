@@ -5,6 +5,13 @@ import type { Nutrition } from '@/lib/meals/nutrition';
 const goodNutrition: Nutrition = { calories: 1900, protein_g: 60, carbs_g: 230, fat_g: 65, fiber_g: 30, sugar_g: 40, sodium_mg: 2000 };
 const poorNutrition: Nutrition = { calories: 2600, protein_g: 20, carbs_g: 320, fat_g: 110, fiber_g: 8, sugar_g: 95, sodium_mg: 3800 };
 
+// The score engine words its budget line through the reader's catalogue now, so
+// it takes a locale and a translator. These cases assert the NUMBERS, so an echo
+// translator is enough; what the reader actually sees is asserted in
+// tests/a-german-family-reads-engine-money-in-their-own-format.test.ts.
+const echo = (key: string, params?: Record<string, string | number>) => `${key} ${JSON.stringify(params ?? {})}`;
+const scoreFor = (input: FoodScoreInput) => computeFoodScore(input, 'en-US', echo);
+
 function base(over: Partial<FoodScoreInput> = {}): FoodScoreInput {
   return {
     plannedSlots: 7, totalSlots: 7, distinctDishes: 7,
@@ -29,14 +36,14 @@ describe('nutritionBalanceScore', () => {
 
 describe('computeFoodScore', () => {
   it('scores a great week high with an A grade', () => {
-    const r = computeFoodScore(base());
+    const r = scoreFor(base());
     expect(r.overall).toBeGreaterThan(88);
     expect(r.grade.startsWith('A')).toBe(true);
     expect(r.subScores.length).toBe(6); // no pantry-efficiency sub (nothing expiring)
   });
 
   it('scores a neglected week low', () => {
-    const r = computeFoodScore(base({
+    const r = scoreFor(base({
       plannedSlots: 2, totalSlots: 7, distinctDishes: 1,
       perDayNutrition: poorNutrition,
       pantryExpired: 6, pantryExpiringSoon: 5, plannedUsingExpiring: 0,
@@ -48,7 +55,7 @@ describe('computeFoodScore', () => {
   });
 
   it('only includes sub-scores it has data for', () => {
-    const r = computeFoodScore({
+    const r = scoreFor({
       plannedSlots: 0, totalSlots: 7, distinctDishes: 0,
       perDayNutrition: null, pantryTotal: 0, pantryExpired: 0, pantryExpiringSoon: 0, plannedUsingExpiring: 0,
     });
@@ -57,8 +64,8 @@ describe('computeFoodScore', () => {
   });
 
   it('rewards using up expiring items (pantry efficiency)', () => {
-    const using = computeFoodScore(base({ pantryExpiringSoon: 4, plannedUsingExpiring: 4 }));
-    const notUsing = computeFoodScore(base({ pantryExpiringSoon: 4, plannedUsingExpiring: 0 }));
+    const using = scoreFor(base({ pantryExpiringSoon: 4, plannedUsingExpiring: 4 }));
+    const notUsing = scoreFor(base({ pantryExpiringSoon: 4, plannedUsingExpiring: 0 }));
     const u = using.subScores.find((s) => s.key === 'pantry')!.score;
     const n = notUsing.subScores.find((s) => s.key === 'pantry')!.score;
     expect(u).toBeGreaterThan(n);
@@ -66,8 +73,8 @@ describe('computeFoodScore', () => {
   });
 
   it('penalizes going over budget', () => {
-    const under = computeFoodScore(base({ plannedCostCents: 10000, weeklyBudgetCents: 15000 }));
-    const over = computeFoodScore(base({ plannedCostCents: 22500, weeklyBudgetCents: 15000 }));
+    const under = scoreFor(base({ plannedCostCents: 10000, weeklyBudgetCents: 15000 }));
+    const over = scoreFor(base({ plannedCostCents: 22500, weeklyBudgetCents: 15000 }));
     const uB = under.subScores.find((s) => s.key === 'budget')!.score;
     const oB = over.subScores.find((s) => s.key === 'budget')!.score;
     expect(uB).toBe(100);
@@ -75,12 +82,12 @@ describe('computeFoodScore', () => {
   });
 
   it('surfaces an expired-items coaching tip', () => {
-    const r = computeFoodScore(base({ pantryExpired: 3 }));
+    const r = scoreFor(base({ pantryExpired: 3 }));
     expect(r.coaching.some((t) => t.includes('expired'))).toBe(true);
   });
 
   it('congratulates a clean week', () => {
-    const r = computeFoodScore(base());
+    const r = scoreFor(base());
     expect(r.coaching[0]).toContain('eating well');
   });
 });

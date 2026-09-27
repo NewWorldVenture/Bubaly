@@ -3,11 +3,12 @@
 import { useState } from 'react';
 import { Search, Phone, MessageSquare, ChevronDown, ChevronUp, Play } from 'lucide-react';
 import { cn } from '@/lib/utils/cn';
-import { TRUST_LABELS, TRUST_COLORS, TRUST_ICONS, type TrustLevel } from '@/lib/guardian/trust';
-import { ROUTING_MODE_LABELS, type RoutingMode } from '@/lib/guardian/pipeline';
-import { SCAM_TYPE_LABELS } from '@/lib/guardian/scam';
+import { TRUST_LABEL_KEYS, TRUST_COLORS, TRUST_ICONS, type TrustLevel } from '@/lib/guardian/trust';
+import { ROUTING_MODE_LABEL_KEYS, type RoutingMode } from '@/lib/guardian/pipeline';
+import { SCAM_TYPE_LABEL_KEYS } from '@/lib/guardian/scam';
 import { formatPhone } from '@/lib/guardian/phone';
 import { useTranslations } from '@/components/i18n/locale-provider';
+import { useFormat } from '@/components/i18n/use-format';
 
 type Communication = {
   id: string;
@@ -58,6 +59,9 @@ function formatDuration(secs: number): string {
 
 export function CallHistory({ communications }: { communications: Communication[] }) {
   const t = useTranslations();
+  // The date follows the reader, not the browser: toLocaleDateString() with no
+  // argument takes whatever the machine reports (I18N-002).
+  const { fmtDate } = useFormat();
   const [search, setSearch] = useState('');
   const [filter, setFilter] = useState<'all' | 'calls' | 'sms' | 'scams' | 'blocked'>('all');
   const [expanded, setExpanded] = useState<string | null>(null);
@@ -113,16 +117,22 @@ export function CallHistory({ communications }: { communications: Communication[
       </div>
 
       {/* Grouped list */}
+      {/* Two different facts, and they were told as one. An empty log said "no
+          communications match your filters", which invites the reader to clear a
+          filter that is not the problem — and on a failed read (now caught by the
+          page) it invited them to clear a filter instead of retrying. */}
       {groups.size === 0 ? (
         <div className="rounded-2xl border border-border bg-surface/40 py-12 text-center text-sm text-muted">
-          {t('callHistory.noCommunicationsMatchYourFilter')}
+          {communications.length === 0
+            ? t('callHistory.noCallsOrMessagesYet')
+            : t('callHistory.noCommunicationsMatchYourFilter')}
         </div>
       ) : (
         Array.from(groups.entries()).map(([date, comms]) => (
           <div key={date} className="rounded-2xl border border-border bg-surface/40 overflow-hidden">
             <div className="border-b border-border bg-surface/60 px-4 py-2">
               <p className="text-xs font-semibold text-muted uppercase tracking-wide">
-                {new Date(date).toLocaleDateString([], { weekday: 'long', month: 'long', day: 'numeric' })}
+                {fmtDate(date, 'EEEE, MMMM d')}
               </p>
             </div>
             <div className="divide-y divide-border">
@@ -157,7 +167,7 @@ export function CallHistory({ communications }: { communications: Communication[
                     </div>
                     <div className="shrink-0 text-right">
                       <p className="text-[11px] text-muted">
-                        {new Date(comm.started_at).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
+                        {fmtDate(comm.started_at, 'hh:mm a')}
                       </p>
                       {comm.call_duration_secs != null && (
                         <p className="text-[10px] text-muted">{formatDuration(comm.call_duration_secs)}</p>
@@ -171,10 +181,10 @@ export function CallHistory({ communications }: { communications: Communication[
                     <div className="border-t border-border bg-elevated/50 px-4 py-3 space-y-2.5">
                       <DetailRow label={t('callHistory.type')} value={COMM_LABELS[comm.comm_type] ?? comm.comm_type} />
                       {comm.trust_level_at_time && (
-                        <DetailRow label={t('callHistory.trust')} value={`${TRUST_ICONS[comm.trust_level_at_time]} ${TRUST_LABELS[comm.trust_level_at_time]}`} />
+                        <DetailRow label={t('callHistory.trust')} value={`${TRUST_ICONS[comm.trust_level_at_time]} ${t(TRUST_LABEL_KEYS[comm.trust_level_at_time])}`} />
                       )}
                       {comm.routing_mode_used && (
-                        <DetailRow label={t('callHistory.handling')} value={ROUTING_MODE_LABELS[comm.routing_mode_used]} />
+                        <DetailRow label={t('callHistory.handling')} value={t(ROUTING_MODE_LABEL_KEYS[comm.routing_mode_used])} />
                       )}
                       {comm.ai_decision_reason && (
                         <DetailRow label={t('callHistory.aiReasoning')} value={comm.ai_decision_reason} />
@@ -182,7 +192,10 @@ export function CallHistory({ communications }: { communications: Communication[
                       {comm.scam_detected && (
                         <DetailRow
                           label={t('callHistory.scamType')}
-                          value={`${SCAM_TYPE_LABELS[comm.scam_type ?? ''] ?? comm.scam_type} (${comm.scam_confidence}% confidence)`}
+                          value={t('guardian.scamTypeWithConfidence', {
+                            type: SCAM_TYPE_LABEL_KEYS[comm.scam_type ?? ''] ? t(SCAM_TYPE_LABEL_KEYS[comm.scam_type ?? '']) : (comm.scam_type ?? ''),
+                            confidence: comm.scam_confidence ?? 0,
+                          })}
                           danger
                         />
                       )}

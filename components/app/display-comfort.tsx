@@ -7,7 +7,7 @@ import { useEffect, useState } from 'react';
 import { Check, Type } from 'lucide-react';
 import { useApp } from './app-context';
 import {
-  roleSurface, DENSITY_OPTIONS, DENSITY_LABELS, DENSITY_DESCRIPTIONS, type Density,
+  roleSurface, DENSITY_OPTIONS, DENSITY_LABEL_KEYS, DENSITY_DESCRIPTION_KEYS, type Density,
 } from '@/lib/ui/role-surface';
 import { COMFORT_STORAGE_KEY, COMFORT_CHANGE_EVENT } from './role-density';
 import { cn } from '@/lib/utils/cn';
@@ -39,8 +39,18 @@ export function DisplayComfort() {
   };
 
   const options: { key: Choice; label: string; desc: string }[] = [
-    { key: 'auto', label: 'Auto', desc: `Follow your role — ${DENSITY_LABELS[roleDefault]} for you.` },
-    ...DENSITY_OPTIONS.map((d) => ({ key: d as Choice, label: DENSITY_LABELS[d], desc: DENSITY_DESCRIPTIONS[d] })),
+    {
+      key: 'auto',
+      label: t('displayComfort.auto'),
+      // A template literal, so the scanner only ever saw "Auto" — the English
+      // sentence around it was invisible to the gate and to every translator.
+      desc: t('displayComfort.followYourRole', { density: t(DENSITY_LABEL_KEYS[roleDefault]) }),
+    },
+    ...DENSITY_OPTIONS.map((d) => ({
+      key: d as Choice,
+      label: t(DENSITY_LABEL_KEYS[d]),
+      desc: t(DENSITY_DESCRIPTION_KEYS[d]),
+    })),
   ];
 
   return (

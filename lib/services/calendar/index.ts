@@ -21,10 +21,11 @@ import type { EventCategory, Insertable, RecurrenceFreq, Tables, Updatable } fro
 import { describeDbError } from '@/lib/supabase/errors';
 import { settleAll } from '@/lib/supabase/settle';
 import { recordActivitySafely } from '../activity';
-import { keyedProbe, makeKey, withIdempotency } from '../idempotency';
+import { keyedProbe, makeKey, sameId, sameInstant, withIdempotency, type KeyedCreateOptions } from '../idempotency';
 import { dayKeyInTz, dayKeysBetween, scopeNow, zonedTimeMs } from '../scope';
 import { fail, ok, SERVICE_CODES, type ServiceResult, type ServiceScope } from '../types';
 import { escapeLike } from '@/lib/supabase/escape-like';
+import { getTranslations } from '@/lib/i18n/server';
 
 export type CalendarEvent = Tables<'calendar_events'>;
 
@@ -62,6 +63,31 @@ export type CreateEventInput = {
   recurrenceUntil?: string | null;
 };
 
+/** The columns a create chooses, as its insert writes them. */
+type EventContent = Pick<CalendarEvent,
+  'title' | 'description' | 'location' | 'category' | 'starts_at' | 'ends_at' | 'all_day' | 'recurrence' | 'recurrence_until' | 'assignee_id'>;
+
+/**
+ * `ChangedRetry.drift` for an event: the columns on which the row found under
+ * the key differs from what this create would have written. The three
+ * timestamps are compared as instants, since PostgREST returns a `timestamptz`
+ * in its own text form. Names only — the values are the family's own text.
+ */
+function eventDrift(stored: CalendarEvent, wanted: EventContent): string[] {
+  const drift: string[] = [];
+  if (stored.title !== wanted.title) drift.push('title');
+  if ((stored.description ?? null) !== wanted.description) drift.push('description');
+  if ((stored.location ?? null) !== wanted.location) drift.push('location');
+  if (stored.category !== wanted.category) drift.push('category');
+  if (!sameInstant(stored.starts_at, wanted.starts_at)) drift.push('starts_at');
+  if (!sameInstant(stored.ends_at, wanted.ends_at)) drift.push('ends_at');
+  if (stored.all_day !== wanted.all_day) drift.push('all_day');
+  if (stored.recurrence !== wanted.recurrence) drift.push('recurrence');
+  if (!sameInstant(stored.recurrence_until, wanted.recurrence_until)) drift.push('recurrence_until');
+  if (!sameId(stored.assignee_id, wanted.assignee_id)) drift.push('assignee_id');
+  return drift;
+}
+
 /**
  * Create an event.
  *
@@ -70,7 +96,11 @@ export type CreateEventInput = {
  * `family_members`. Each service resolves this per column against the
  * migration that created the table; the two are not interchangeable.
  */
-export async function createEvent(scope: ServiceScope, input: CreateEventInput): Promise<ServiceResult<CalendarEvent>> {
+export async function createEvent(
+  scope: ServiceScope,
+  input: CreateEventInput,
+  opts: KeyedCreateOptions = {},
+): Promise<ServiceResult<CalendarEvent>> {
   const title = input.title?.trim() ?? '';
   if (!title) return fail('An event needs a title.', { code: SERVICE_CODES.invalidInput });
 
@@ -84,6 +114,19 @@ export async function createEvent(scope: ServiceScope, input: CreateEventInput):
 
   const category = input.category && CATEGORIES.includes(input.category) ? input.category : 'general';
   const recurrence = input.recurrence && RECURRENCES.includes(input.recurrence) ? input.recurrence : 'none';
+  /** The columns this create chooses, as the insert below writes them. */
+  const wanted: EventContent = {
+    title,
+    description: input.description?.trim() || null,
+    location: input.location?.trim() || null,
+    category,
+    starts_at: startsAt,
+    ends_at: endsAt,
+    all_day: input.allDay ?? false,
+    recurrence,
+    recurrence_until: isoOrNull(input.recurrenceUntil),
+    assignee_id: input.assigneeId ?? null,
+  };
 
   return withIdempotency<CalendarEvent>(
     scope,
@@ -94,22 +137,21 @@ export async function createEvent(scope: ServiceScope, input: CreateEventInput):
       // its own row rather than a coincidence, and two retries racing cannot
       // both insert.
       find: keyedProbe(scope, 'calendar_events', 'event'),
+      // The modal's Save, not a plan step (see KeyedCreateOptions): a row found
+      // under the key that differs from `wanted` is refused with copy naming the
+      // event that really was saved, instead of closing the modal over it.
+      changedRetry: opts.rejectChangedRetry ? {
+        drift: (stored) => eventDrift(stored, wanted),
+        message: async (stored) => (await getTranslations())('calendar.alreadySavedAs', { title: stored.title }),
+        id: (stored) => stored.id,
+      } : undefined,
     },
     async (key) => {
       const { data, error } = await scope.db
         .from('calendar_events')
         .insert({
           family_id: scope.familyId,
-          title,
-          description: input.description?.trim() || null,
-          location: input.location?.trim() || null,
-          category,
-          starts_at: startsAt,
-          ends_at: endsAt,
-          all_day: input.allDay ?? false,
-          recurrence,
-          recurrence_until: isoOrNull(input.recurrenceUntil),
-          assignee_id: input.assigneeId ?? null,
+          ...wanted,
           created_by: scope.userId,
           idempotency_key: key,
         })

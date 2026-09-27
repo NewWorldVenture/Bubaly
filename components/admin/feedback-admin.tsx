@@ -6,7 +6,8 @@
 // actions that revalidate the public /feedback board instantly.
 
 import Link from 'next/link';
-import { useMemo, useState, useTransition } from 'react';
+import { feedbackAttachmentPathFromUrl } from '@/lib/storage/feedback-attachment-url';
+import { useId, useMemo, useState, useTransition } from 'react';
 import {
   Loader2, Pin, PinOff, Trash2, Send, ChevronDown, ChevronRight,
   ArrowBigUp, MessageSquare, Search, Github, RefreshCw, Bell, Check, ExternalLink,
@@ -23,18 +24,21 @@ import {
 } from '@/app/(app)/admin/feedback/actions';
 import { useToast } from '@/components/ui/toast';
 import { cn } from '@/lib/utils/cn';
-import { useTranslations } from '@/components/i18n/locale-provider';
+import { useLocale, useTranslations } from '@/components/i18n/locale-provider';
+import type { LocaleCode } from '@/lib/i18n/locales';
 
 export type AdminComment = { id: string; idea_id: string; author_name: string; is_team: boolean; body: string; created_at: string };
 export type AdminNotification = { id: string; kind: string; title: string; body: string | null; url: string | null; is_read: boolean; created_at: string };
 
-function fmt(iso: string) {
-  return new Date(iso).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' });
-}
+const fmtIn = (locale: LocaleCode) => (iso: string) => {
+  return new Date(iso).toLocaleDateString(locale, { month: 'short', day: 'numeric', year: 'numeric' });
+};
 
 export function FeedbackAdmin({ ideas, comments, notifications = [], githubConfigured = false }: {
   ideas: IdeaRow[]; comments: AdminComment[]; notifications?: AdminNotification[]; githubConfigured?: boolean;
 }) {
+  const locale = useLocale();
+  const fmt = fmtIn(locale.code);
   const t = useTranslations();
   const { success, error: toastError } = useToast();
   const [filter, setFilter] = useState<AdminFeedbackFilter>({ status: 'all', category: 'all' });
@@ -215,8 +219,13 @@ function IdeaAdminCard({ idea, comments, expanded, onToggle, onSuccess, onError 
   idea: IdeaRow; comments: AdminComment[]; expanded: boolean; onToggle: () => void;
   onSuccess: (m: string) => void; onError: (m: string) => void;
 }) {
+  const locale = useLocale();
+  const fmt = fmtIn(locale.code);
   const t = useTranslations();
   const [status, setStatus] = useState<FeedbackStatus>((STATUS_META[idea.status as FeedbackStatus] ? idea.status : 'under_review') as FeedbackStatus);
+  // useId, not a literal: this panel renders once per idea row, so a fixed id
+  // would be duplicated across every row on the page.
+  const statusSelectId = useId();
   const [note, setNote] = useState(idea.admin_note ?? '');
   const [reply, setReply] = useState('');
   const [busy, setBusy] = useState<string | null>(null);
@@ -265,7 +274,10 @@ function IdeaAdminCard({ idea, comments, expanded, onToggle, onSuccess, onError 
           <h3 className="mt-1 text-sm font-bold text-fg">{idea.title}</h3>
           {idea.problem && <p className="mt-1 text-xs text-muted"><span className="font-semibold">Problem:</span> {idea.problem}</p>}
           {idea.body && <p className="mt-1 line-clamp-3 text-xs text-muted">{idea.body}</p>}
-          {idea.image_url && (
+          {/* Only this project's own feedback attachment is fetched: a row can be
+              inserted with any image_url, and rendering an arbitrary one makes the
+              admin's browser report to whoever chose it. */}
+          {idea.image_url && feedbackAttachmentPathFromUrl(idea.image_url, process.env.NEXT_PUBLIC_SUPABASE_URL) && (
             // eslint-disable-next-line @next/next/no-img-element
             <img src={idea.image_url} alt="" className="mt-2 max-h-40 rounded-lg border border-border object-cover" referrerPolicy="no-referrer" />
           )}
@@ -307,8 +319,8 @@ function IdeaAdminCard({ idea, comments, expanded, onToggle, onSuccess, onError 
           {/* Status + roadmap note */}
           <div className="grid gap-3 sm:grid-cols-[200px_1fr]">
             <div>
-              <label className="mb-1 block text-xs font-semibold text-muted">{t('feedbackAdmin.roadmapStatus')}</label>
-              <select value={status} onChange={(e) => setStatus(e.target.value as FeedbackStatus)}
+              <label htmlFor={statusSelectId} className="mb-1 block text-xs font-semibold text-muted">{t('feedbackAdmin.roadmapStatus')}</label>
+              <select id={statusSelectId} value={status} onChange={(e) => setStatus(e.target.value as FeedbackStatus)}
                 className="h-9 w-full rounded-lg border border-border bg-bg px-2 text-sm outline-none focus:border-brand">
                 {FILTERABLE_STATUSES.map((s) => <option key={s} value={s}>{STATUS_META[s].label}</option>)}
               </select>

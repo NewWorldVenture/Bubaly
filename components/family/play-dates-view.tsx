@@ -5,6 +5,7 @@ import { Heart, Plus, Trash2, MapPin, Clock, Phone, Users } from 'lucide-react';
 import { useApp } from '@/components/app/app-context';
 import { useRealtimeQuery } from '@/lib/hooks/use-realtime-query';
 import { createClient } from '@/lib/supabase/client';
+import { describeDbError, wroteNoRows } from '@/lib/supabase/errors';
 import { useToast } from '@/components/ui/toast';
 import { PageHeader } from '@/components/app/page-header';
 import { Button } from '@/components/ui/button';
@@ -14,8 +15,8 @@ import { Avatar } from '@/components/ui/avatar';
 import { ErrorState, SkeletonList, EmptyState } from '@/components/ui/states';
 import { cn } from '@/lib/utils/cn';
 import type { Tables } from '@/lib/database.types';
-import { splitPlayDates, PLAY_DATE_STATUS, fmtDateTime } from '@/lib/family/safety';
-import { useTranslations } from '@/components/i18n/locale-provider';
+import { splitPlayDates, PLAY_DATE_STATUS, fmtDateTime as fmtDateTimeIn } from '@/lib/family/safety';
+import { useLocale, useTranslations } from '@/components/i18n/locale-provider';
 
 type PlayDate = Tables<'play_dates'>;
 
@@ -23,6 +24,9 @@ const STATUS_FLOW: Record<string, string> = { planned: 'confirmed', confirmed: '
 
 export function PlayDatesView() {
   const t = useTranslations();
+  // The date and clock follow the reader.
+  const locale = useLocale();
+  const fmtDateTime = (iso: string) => fmtDateTimeIn(iso, locale.code);
   const { familyId, userId, members } = useApp();
   const { success, error: toastError } = useToast();
   const memberById = useMemo(() => new Map(members.map((m) => [m.id, m])), [members]);
@@ -36,13 +40,14 @@ export function PlayDatesView() {
   const [form, setForm] = useState(false);
 
   async function setStatus(pd: PlayDate, status: string) {
-    const { error } = await createClient().from('play_dates').update({ status }).eq('id', pd.id);
-    if (error) toastError(error.message); else success(t('playDatesView.updated'));
+    // Under RLS a refused row comes back with no error and zero rows, which this used to report as done. Audit C1-S9-84.
+    const { data: updated2, error } = await createClient().from('play_dates').update({ status }).eq('id', pd.id).select('id');
+    if (error) toastError(describeDbError(error)); else if (wroteNoRows(updated2)) toastError(t('errors.thatChangeWasNotSaved')); else success(t('playDatesView.updated'));
   }
   async function remove(id: string) {
     if (!confirm(t('playDatesView.deleteThisPlayDate'))) return;
-    const { error } = await createClient().from('play_dates').delete().eq('id', id);
-    if (error) toastError(error.message); else success(t('playDatesView.deleted'));
+    const { data: removed, error } = await createClient().from('play_dates').delete().eq('id', id).select('id');
+    if (error) toastError(describeDbError(error)); else if (wroteNoRows(removed)) toastError(t('errors.thatChangeWasNotSaved')); else success(t('playDatesView.deleted'));
   }
 
   const Card = ({ pd }: { pd: PlayDate }) => {
@@ -123,7 +128,7 @@ function PlayDateModal({ members, familyId, userId, onClose }: { members: Tables
       contact_phone: v.contact_phone.trim() || null, notes: v.notes.trim() || null, created_by: userId,
     });
     setSaving(false);
-    if (error) return toastError(error.message);
+    if (error) return toastError(describeDbError(error));
     success(t('playDatesView.playDateScheduled'));
     onClose();
   }

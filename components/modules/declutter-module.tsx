@@ -5,7 +5,7 @@ import { Sparkle, Plus, Timer, Flame, Check, SkipForward, Trash2, Pencil, Rotate
 import { useApp } from '@/components/app/app-context';
 import { useRealtimeQuery } from '@/lib/hooks/use-realtime-query';
 import { createClient } from '@/lib/supabase/client';
-import { describeDbError } from '@/lib/supabase/errors';
+import { describeDbError, wroteNoRows } from '@/lib/supabase/errors';
 import { useToast } from '@/components/ui/toast';
 import { PageHeader } from '@/components/app/page-header';
 import { AiInsight } from '@/components/ai/ai-insight';
@@ -18,13 +18,15 @@ import type { Tables, DeclutterZoneKind } from '@/lib/database.types';
 import {
   ZONE_KINDS, SCORE_LABELS, zoneKindMeta, zoneHealth, missionsForZone, weeklyPlan, declutterSummary, missionPoints, isoDate, dayDiff,
 } from '@/lib/declutter/missions';
-import { useTranslations } from '@/components/i18n/locale-provider';
+import { useLocale, useTranslations, usePlural } from '@/components/i18n/locale-provider';
+import type { LocaleCode } from '@/lib/i18n/locales';
+import { useConfirm } from '@/components/ui/confirm';
 
 type Zone = Tables<'declutter_zones'>;
 type Mission = Tables<'declutter_missions'>;
 type Session = Tables<'declutter_sessions'>;
 
-const fmtDate = (d: string) => new Date(`${d.slice(0, 10)}T00:00:00`).toLocaleDateString('en-US', { weekday: 'short', month: 'short', day: 'numeric' });
+const fmtDateIn = (locale: LocaleCode) => (d: string) => new Date(`${d.slice(0, 10)}T00:00:00`).toLocaleDateString(locale, { weekday: 'short', month: 'short', day: 'numeric' });
 const HEALTH_STYLE = {
   fresh: 'border-emerald-500/30 bg-emerald-500/10 text-emerald-200',
   due: 'border-amber-500/30 bg-amber-500/10 text-amber-200',
@@ -34,7 +36,11 @@ const HEALTH_STYLE = {
 const HEALTH_LABEL = { fresh: 'Fresh', due: 'Due for a reset', overdue: 'Overdue', never: 'Never reset' } as const;
 
 export function DeclutterModule() {
+  const locale = useLocale();
+  const fmtDate = fmtDateIn(locale.code);
   const tr = useTranslations();
+  const plural = usePlural();
+  const askConfirm = useConfirm();
   const { familyId, userId, members, selfMember } = useApp();
   const { success, error: toastError } = useToast();
 
@@ -65,7 +71,7 @@ export function DeclutterModule() {
   const todayIso = isoDate(today);
   const activeZones = useMemo(() => zones.data.filter((z) => z.is_active), [zones.data]);
   const summary = useMemo(() => declutterSummary(zones.data, missions.data, sessions.data, today), [zones.data, missions.data, sessions.data, today]);
-  const plan = useMemo(() => weeklyPlan(zones.data, missions.data, members.map((m) => m.id), today), [zones.data, missions.data, members, today]);
+  const plan = useMemo(() => weeklyPlan(zones.data, missions.data, members.map((m) => m.id), today, 2, locale.code), [zones.data, missions.data, members, today, locale.code]);
   const nameOf = (id: string | null) => members.find((m) => m.id === id)?.display_name ?? null;
   const zoneOf = (id: string | null) => zones.data.find((z) => z.id === id) ?? null;
 
@@ -86,44 +92,51 @@ export function DeclutterModule() {
     })));
     setPlanning(false);
     if (error) return toastError(describeDbError(error));
-    success(`${plan.length} mission${plan.length === 1 ? '' : 's'} planned for the week`);
+    success(plural('declutter.missionsPlanned', plan.length));
   }
 
   async function skipMission(m: Mission) {
-    const { error } = await createClient().from('declutter_missions').update({ status: 'skipped' }).eq('id', m.id);
+    // Under RLS a refused row comes back with no error and zero rows, which this used to report as done. Audit C1-S9-80.
+    const { data: updated, error } = await createClient().from('declutter_missions').update({ status: 'skipped' }).eq('id', m.id).select('id');
     if (error) return toastError(describeDbError(error));
+    if (wroteNoRows(updated)) return toastError(tr('errors.thatChangeWasNotSaved'));
     success(tr('declutterModule.missionSkipped'));
   }
 
   async function reopenMission(m: Mission) {
-    const { error } = await createClient().from('declutter_missions').update({ status: 'planned', completed_at: null }).eq('id', m.id);
+    const { data: updated2, error } = await createClient().from('declutter_missions').update({ status: 'planned', completed_at: null }).eq('id', m.id).select('id');
     if (error) return toastError(describeDbError(error));
+    if (wroteNoRows(updated2)) return toastError(tr('errors.thatChangeWasNotSaved'));
     success(tr('declutterModule.missionBackOnTheList'));
   }
 
   async function deleteMission(m: Mission) {
-    if (!confirm(`Delete “${m.title}”?`)) return;
-    const { error } = await createClient().from('declutter_missions').delete().eq('id', m.id);
+    if (!(await askConfirm({ title: tr('confirm.deleteNamed', { name: m.title }), body: tr('confirm.cannotBeUndone') }))) return;
+    const { data: removed, error } = await createClient().from('declutter_missions').delete().eq('id', m.id).select('id');
     if (error) return toastError(describeDbError(error));
+    if (wroteNoRows(removed)) return toastError(tr('errors.thatChangeWasNotSaved'));
     success(tr('declutterModule.missionDeleted'));
   }
 
   async function resetZone(z: Zone) {
-    const { error } = await createClient().from('declutter_zones').update({ clutter_score: 1, last_reset_at: new Date().toISOString() }).eq('id', z.id);
+    const { data: updated3, error } = await createClient().from('declutter_zones').update({ clutter_score: 1, last_reset_at: new Date().toISOString() }).eq('id', z.id).select('id');
     if (error) return toastError(describeDbError(error));
-    success(`${z.name} reset to tidy`);
+    if (wroteNoRows(updated3)) return toastError(tr('errors.thatChangeWasNotSaved'));
+    success(tr('modules.zoneResetToTidy', { name: z.name }));
   }
 
   async function bumpScore(z: Zone, delta: 1 | -1) {
     const next = Math.min(5, Math.max(1, z.clutter_score + delta));
     if (next === z.clutter_score) return;
-    const { error } = await createClient().from('declutter_zones').update({ clutter_score: next }).eq('id', z.id);
+    const { data: updated4, error } = await createClient().from('declutter_zones').update({ clutter_score: next }).eq('id', z.id).select('id');
     if (error) return toastError(describeDbError(error));
+    if (wroteNoRows(updated4)) return toastError(tr('errors.thatChangeWasNotSaved'));
   }
 
   async function archiveZone(z: Zone, active: boolean) {
-    const { error } = await createClient().from('declutter_zones').update({ is_active: active }).eq('id', z.id);
+    const { data: updated5, error } = await createClient().from('declutter_zones').update({ is_active: active }).eq('id', z.id).select('id');
     if (error) return toastError(describeDbError(error));
+    if (wroteNoRows(updated5)) return toastError(tr('errors.thatChangeWasNotSaved'));
     success(active ? `${z.name} restored` : `${z.name} archived`);
   }
 
@@ -135,6 +148,7 @@ export function DeclutterModule() {
 
   const MissionRow = ({ m }: { m: Mission }) => {
   const tr = useTranslations();
+  const plural = usePlural();
     const z = zoneOf(m.zone_id);
     const overdue = m.status === 'planned' && m.scheduled_for && m.scheduled_for < todayIso;
     return (
@@ -197,7 +211,7 @@ export function DeclutterModule() {
         </div>
         <div className={cn('rounded-2xl border p-5', summary.streak >= 3 ? 'border-amber-500/30 bg-amber-500/10' : 'border-border bg-surface/40')}>
           <div className="flex items-center gap-2 text-sm font-semibold"><Flame className="h-4 w-4 text-brand-text" /> {tr('declutter.streak')}</div>
-          <p className="mt-2 text-2xl font-bold">{summary.streak}<span className="text-sm font-normal text-muted"> day{summary.streak === 1 ? '' : 's'}</span></p>
+          <p className="mt-2 text-2xl font-bold">{summary.streak}<span className="text-sm font-normal text-muted"> {plural('declutter.dayUnit', summary.streak)}</span></p>
           <p className="mt-1 text-xs text-muted">{summary.streak ? 'A session today keeps it alive' : 'Log a session to start one'}</p>
         </div>
       </div>
@@ -304,7 +318,7 @@ export function DeclutterModule() {
                 {sessions.data.slice(0, 6).map((s) => (
                   <li key={s.id} className="rounded-xl border border-border bg-surface/60 px-3 py-2 text-sm">
                     <p className="font-medium">{s.minutes} min{zoneOf(s.zone_id) ? ` · ${zoneOf(s.zone_id)?.name}` : ''}</p>
-                    <p className="text-xs text-muted">{new Date(s.started_at).toLocaleDateString('en-US', { month: 'short', day: 'numeric' })}{s.member_id ? ` · ${nameOf(s.member_id)}` : ''} · {s.items_removed} {tr('declutter.itemsOut')}{s.missions_done ? ` · ${s.missions_done} mission${s.missions_done === 1 ? '' : 's'}` : ''}</p>
+                    <p className="text-xs text-muted">{new Date(s.started_at).toLocaleDateString(locale.code, { month: 'short', day: 'numeric' })}{s.member_id ? ` · ${nameOf(s.member_id)}` : ''} · {s.items_removed} {tr('declutter.itemsOut')}{s.missions_done ? ` · ${plural('declutter.missionCount', s.missions_done)}` : ''}</p>
                   </li>
                 ))}
               </ul>
@@ -321,7 +335,7 @@ export function DeclutterModule() {
           onClose={() => setMissionForm({ open: false, mission: null })} onSaved={() => { setMissionForm({ open: false, mission: null }); success(tr('declutterModule.missionSaved')); }} />
       )}
       {completing && (
-        <CompleteForm familyId={familyId} userId={userId} mission={completing} memberId={completing.assignee_id ?? selfMember?.id ?? null} onClose={() => setCompleting(null)} onSaved={(pts) => { setCompleting(null); success(`Mission done · +${pts} pts`); }} />
+        <CompleteForm familyId={familyId} userId={userId} mission={completing} memberId={completing.assignee_id ?? selfMember?.id ?? null} onClose={() => setCompleting(null)} onSaved={(pts) => { setCompleting(null); success(tr('modules.missionDonePoints', { points: pts })); }} />
       )}
       {sessionOpen && (
         <SessionForm familyId={familyId} userId={userId} zones={activeZones} members={members} defaultMember={selfMember?.id ?? null} onClose={() => setSessionOpen(false)} onSaved={() => { setSessionOpen(false); success(tr('declutterModule.sessionLogged')); }} />
@@ -347,11 +361,12 @@ function ZoneForm({ familyId, userId, zone, onClose, onSaved }: { familyId: stri
       target_state: String(f.get('target_state') ?? '').trim() || null, notes: String(f.get('notes') ?? '').trim() || null,
     };
     const supabase = createClient();
-    const { error } = zone
-      ? await supabase.from('declutter_zones').update(payload).eq('id', zone.id)
-      : await supabase.from('declutter_zones').insert({ family_id: familyId, created_by: userId, is_active: true, ...payload });
+    const { data: saved, error } = zone
+      ? await supabase.from('declutter_zones').update(payload).eq('id', zone.id).select('id')
+      : await supabase.from('declutter_zones').insert({ family_id: familyId, created_by: userId, is_active: true, ...payload }).select('id');
     setLoading(false);
     if (error) return toastError(describeDbError(error));
+    if (wroteNoRows(saved)) return toastError(tr('errors.thatChangeWasNotSaved'));
     onSaved();
   }
 
@@ -403,11 +418,12 @@ function MissionForm({ familyId, userId, zones, members, mission, zoneId, preset
       notes: String(f.get('notes') ?? '').trim() || null,
     };
     const supabase = createClient();
-    const { error } = mission
-      ? await supabase.from('declutter_missions').update(payload).eq('id', mission.id)
-      : await supabase.from('declutter_missions').insert({ family_id: familyId, created_by: userId, status: 'planned', ...payload });
+    const { data: saved2, error } = mission
+      ? await supabase.from('declutter_missions').update(payload).eq('id', mission.id).select('id')
+      : await supabase.from('declutter_missions').insert({ family_id: familyId, created_by: userId, status: 'planned', ...payload }).select('id');
     setLoading(false);
     if (error) return toastError(describeDbError(error));
+    if (wroteNoRows(saved2)) return toastError(tr('errors.thatChangeWasNotSaved'));
     onSaved();
   }
 
@@ -447,8 +463,11 @@ function CompleteForm({ familyId, userId, mission, memberId, onClose, onSaved }:
     const notes = String(f.get('notes') ?? '').trim() || null;
     setLoading(true);
     const supabase = createClient();
-    const { error } = await supabase.from('declutter_missions').update({ status: 'done', completed_at: new Date().toISOString(), items_removed: items, notes: notes ?? mission.notes }).eq('id', mission.id);
+    // The completion licenses the session below (streaks, minutes). One that
+    // matched nothing used to log a session for a mission still open. Audit C1-S9-80.
+    const { data: completed, error } = await supabase.from('declutter_missions').update({ status: 'done', completed_at: new Date().toISOString(), items_removed: items, notes: notes ?? mission.notes }).eq('id', mission.id).select('id');
     if (error) { setLoading(false); return toastError(describeDbError(error)); }
+    if (wroteNoRows(completed)) { setLoading(false); return toastError(tr('errors.thatChangeWasNotSaved')); }
     // The mission counts as a timed session too, so streaks and minutes add up
     // without a second form. A failed session insert is reported but does not
     // undo the completion — the mission itself is what the family cares about.

@@ -26,16 +26,32 @@ export function SubscribeForm({ source, variant = 'card', className }: Props) {
     setState('busy');
     setMessage('');
     try {
+      // Attribution is the visitor this browser IS: the `bubaly_vid` cookie the
+      // same-origin fetch carries. No id goes in the body — the route binds to
+      // the cookie and refuses a body that names anyone else (SEC-008). This
+      // call only makes sure the cookie exists so the request carries it; a
+      // subscribe never waits on it.
+      getAnonymousId();
       const res = await fetch('/api/blog/subscribe', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ email, source, website, visitorId: getAnonymousId() }),
+        body: JSON.stringify({ email, source, website }),
       });
-      const data = (await res.json().catch(() => ({}))) as { ok?: boolean; already?: boolean; error?: string };
+      const data = (await res.json().catch(() => ({}))) as { ok?: boolean; error?: string };
       if (res.ok && data.ok) {
         setState('done');
         void trackConversion();
-        setMessage(data.already ? 'You’re already on the list — welcome back!' : 'You’re in! New articles will land in your inbox.');
+        // ONE message, because the server now gives one answer. It used to send
+        // back `already`, and this line turned it into "you're already on the
+        // list — welcome back!" — shown to whoever typed the address, who is not
+        // necessarily its owner. That made a public form into a lookup for other
+        // people's email addresses. The welcome-back line still exists; it is
+        // mailed to the address instead (lib/blog/subscribe-notice.ts).
+        //
+        // The sentence has to stay true in all three states — new, already
+        // subscribed, and re-subscribed after opting out — so it says what is
+        // true of every one of them and promises nothing that separates them.
+        setMessage(t('subscribe.thanksThatAddressIsOn'));
         setEmail('');
       } else {
         setState('error');

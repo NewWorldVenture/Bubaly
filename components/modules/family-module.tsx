@@ -11,7 +11,7 @@ import {
 import { useApp } from '@/components/app/app-context';
 import { createClient } from '@/lib/supabase/client';
 import { settleAll } from '@/lib/supabase/settle';
-import { describeDbError } from '@/lib/supabase/errors';
+import { describeDbError, wroteNoRows } from '@/lib/supabase/errors';
 import { useToast } from '@/components/ui/toast';
 import { Modal } from '@/components/ui/modal';
 import { Input, Field, Select } from '@/components/ui/input';
@@ -22,8 +22,10 @@ import { PageHeader } from '@/components/app/page-header';
 import { cn } from '@/lib/utils/cn';
 import { MANAGER_ROLES, type MemberRole } from '@/lib/constants/roles';
 import type { Tables } from '@/lib/database.types';
-import { useTranslations } from '@/components/i18n/locale-provider';
+import { useLocale, useTranslations } from '@/components/i18n/locale-provider';
+import type { LocaleCode } from '@/lib/i18n/locales';
 import { isValidTimezone } from '@/lib/time/zoned';
+import { FamilyMediaImg } from '@/components/media/family-media-img';
 
 type Family = Tables<'families'>;
 type Member = Tables<'family_members'>;
@@ -67,20 +69,20 @@ function inLabel(days: number): string {
   const months = Math.round(days / 30);
   return months <= 1 ? 'in 1 month' : `in ${months} months`;
 }
-function fmtRelDay(iso: string): string {
+const fmtRelDayIn = (locale: LocaleCode) => (iso: string): string => {
   const d = new Date(iso);
   const now = new Date();
   const days = Math.round((new Date(d.getFullYear(), d.getMonth(), d.getDate()).getTime() - new Date(now.getFullYear(), now.getMonth(), now.getDate()).getTime()) / 86_400_000);
   if (days === 0) return 'Today';
   if (days === 1) return 'Tomorrow';
-  return d.toLocaleDateString('en-US', { month: 'short', day: 'numeric' });
-}
-function fmtTime(iso: string): string {
-  return new Date(iso).toLocaleTimeString('en-US', { hour: 'numeric', minute: '2-digit' });
-}
-function fmtDate(iso: string): string {
-  return new Date(iso).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' });
-}
+  return d.toLocaleDateString(locale, { month: 'short', day: 'numeric' });
+};
+const fmtTimeIn = (locale: LocaleCode) => (iso: string): string => {
+  return new Date(iso).toLocaleTimeString(locale, { hour: 'numeric', minute: '2-digit' });
+};
+const fmtDateIn = (locale: LocaleCode) => (iso: string): string => {
+  return new Date(iso).toLocaleDateString(locale, { month: 'short', day: 'numeric', year: 'numeric' });
+};
 function planLabel(level: number): string {
   return level >= 2 ? 'Family+' : level === 1 ? 'Family Basic' : 'Free';
 }
@@ -96,6 +98,10 @@ const ROLE_OPTIONS: MemberRole[] = ['parent', 'adult', 'teen', 'child', 'caregiv
 const MEMBER_COLORS = ['#6366f1', '#ec4899', '#f59e0b', '#10b981', '#3b82f6', '#8b5cf6', '#ef4444', '#14b8a6'];
 
 export function FamilyModule() {
+  const locale = useLocale();
+  const fmtRelDay = fmtRelDayIn(locale.code);
+  const fmtTime = fmtTimeIn(locale.code);
+  const fmtDate = fmtDateIn(locale.code);
   const t = useTranslations();
   const { familyId, userId, role, members, refreshMembers, planLevel } = useApp();
   const { success, error: toastError } = useToast();
@@ -116,6 +122,21 @@ export function FamilyModule() {
   const [editMember, setEditMember] = useState<Member | null>(null);
   const [removeMember, setRemoveMember] = useState<Member | null>(null);
   const [menuId, setMenuId] = useState<string | null>(null);
+
+  // Escape closes the menu.
+  //
+  // Its click-outside scrim is `aria-hidden` with `tabIndex={-1}`, which is the
+  // honest description of a mouse-only dismiss — and which also silences
+  // `click-events-have-key-events` and `no-static-element-interactions`, the two
+  // rules that were pointing at the gap. With the rules quiet and no Escape
+  // path, a keyboard user could open this menu and had no way out of it but to
+  // pick something. Same shape as components/app/ai-orb.tsx:39.
+  useEffect(() => {
+    if (!(menuId !== null)) return;
+    const onKey = (e: KeyboardEvent) => { if (e.key === 'Escape') setMenuId(null); };
+    window.addEventListener('keydown', onKey);
+    return () => window.removeEventListener('keydown', onKey);
+  }, [menuId]);
 
   const load = useCallback(async () => {
     const sb = createClient();
@@ -244,8 +265,9 @@ export function FamilyModule() {
           {/* Cover */}
           <div className="relative h-44 w-full overflow-hidden rounded-2xl sm:h-56">
             {family?.cover_url ? (
-              // eslint-disable-next-line @next/next/no-img-element
-              <img src={family.cover_url} alt={`${famName} cover`} className="h-full w-full object-cover" />
+              // Free text, so it may be an outside image or one of this family's
+              // own photos; the latter is signed like any other (SEC-001).
+              <FamilyMediaImg src={family.cover_url} alt={`${famName} cover`} className="h-full w-full object-cover" />
             ) : (
               <div className="grid h-full w-full place-items-center bg-gradient-to-br from-brand/25 via-violet-600/15 to-blue-900/20 text-muted">
                 <Users className="h-10 w-10" />
@@ -346,8 +368,7 @@ export function FamilyModule() {
                   <Link key={a.id} href="/dashboard/memories" className="group overflow-hidden rounded-xl border border-border bg-surface/40">
                     <div className="h-20 w-full">
                       {a.cover_url ? (
-                        // eslint-disable-next-line @next/next/no-img-element
-                        <img src={a.cover_url} alt={a.name} className="h-full w-full object-cover transition group-hover:scale-[1.03]" />
+                        <FamilyMediaImg src={a.cover_url} alt={a.name} className="h-full w-full object-cover transition group-hover:scale-[1.03]" />
                       ) : <div className="grid h-full w-full place-items-center bg-elevated text-muted"><Sparkles className="h-5 w-5" /></div>}
                     </div>
                     <div className="p-2">
@@ -424,7 +445,7 @@ export function FamilyModule() {
                     <p className="truncate text-sm font-semibold">{m.display_name}</p>
                     <p className="truncate text-xs text-muted">{t('family.turns')} {nb.turning} {inLabel(nb.inDays)}</p>
                   </div>
-                  <span className="shrink-0 text-xs font-semibold text-muted">{nb.date.toLocaleDateString('en-US', { month: 'short', day: 'numeric' })}</span>
+                  <span className="shrink-0 text-xs font-semibold text-muted">{nb.date.toLocaleDateString(locale.code, { month: 'short', day: 'numeric' })}</span>
                 </div>
               ))}
             </div>
@@ -466,9 +487,16 @@ export function FamilyModule() {
             <Button variant="danger" onClick={async () => {
               if (!removeMember) return;
               const sb = createClient();
-              const { error: err } = await sb.from('family_members').update({ is_active: false }).eq('id', removeMember.id);
+              // `family_members` is manager-gated (fm_update, 0211), and RLS FILTERS
+              // an UPDATE rather than refusing it — so a member a non-manager tried
+              // to remove was reported as removed and stayed in the family. The soft
+              // delete makes that worse than a no-op: the row disappears from the
+              // list on screen until the next read puts it back.
+              const { data: rows, error: err } = await sb.from('family_members')
+                .update({ is_active: false }).eq('id', removeMember.id).eq('family_id', familyId).select('id');
               setRemoveMember(null);
               if (err) { toastError(describeDbError(err)); return; }
+              if (wroteNoRows(rows)) { toastError(t('errors.thatChangeWasNotSaved')); return; }
               success(t('familyModule.memberRemoved')); void refreshMembers();
             }}>{t('family.remove')}</Button>
           </div>
@@ -529,15 +557,19 @@ function MemberModal({ familyId, createdBy, member, onClose, onSaved }: {
       display_name: name.trim(), role: mrole,
       birthday: birthday || null, email: email.trim() || null, phone: phone.trim() || null,
     };
-    const { error: err } = member
-      ? await sb.from('family_members').update(payload).eq('id', member.id)
+    // Same manager gate as the removal above: an UPDATE the policy filters comes
+    // back `error: null` with nothing changed. The INSERT needs no readback —
+    // RLS refuses an insert with an error rather than filtering it away.
+    const { data: savedRows, error: err } = member
+      ? await sb.from('family_members').update(payload).eq('id', member.id).eq('family_id', familyId).select('id')
       : await sb.from('family_members').insert({
           ...payload, family_id: familyId, is_active: true,
           color: MEMBER_COLORS[Math.floor(Math.random() * MEMBER_COLORS.length)],
-        });
+        }).select('id');
     setSaving(false);
     if (err) { toastError(describeDbError(err)); return; }
-    success(member ? 'Member updated' : 'Member added');
+    if (wroteNoRows(savedRows)) { toastError(t('errors.thatChangeWasNotSaved')); return; }
+    success(member ? t('familyModule.memberUpdated') : t('familyModule.memberAdded'));
     onSaved();
   }
 

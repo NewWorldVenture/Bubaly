@@ -11,20 +11,21 @@
 // This section is a CLAIM ("Bubaly finished these"), so a failed read is
 // shown as a failure with a way to retry — never as "nothing finished yet".
 import Link from 'next/link';
-import { getTranslations } from '@/lib/i18n/server';
+import { getLocaleContext, getTranslations } from '@/lib/i18n/server';
+import type { LocaleCode } from '@/lib/i18n/locales';
 import { CheckCircle2, ChevronRight, AlertTriangle } from 'lucide-react';
 import type { CompletedItem } from '@/lib/home/today';
 import { sourcesLine } from '@/lib/ai/tool-domains';
 import { ErrorState } from '@/components/ui/states';
 import { cn } from '@/lib/utils/cn';
 
-function whenLabel(iso: string, yesterday: string): string {
+function whenLabel(iso: string, yesterday: string, locale: LocaleCode): string {
   const ms = Date.parse(iso);
   if (!Number.isFinite(ms)) return '';
   const days = Math.floor((Date.now() - ms) / 86_400_000);
-  if (days <= 0) return new Date(ms).toLocaleTimeString('en-US', { hour: 'numeric', minute: '2-digit' });
+  if (days <= 0) return new Date(ms).toLocaleTimeString(locale, { hour: 'numeric', minute: '2-digit' });
   if (days === 1) return yesterday;
-  return new Date(ms).toLocaleDateString('en-US', { month: 'short', day: 'numeric' });
+  return new Date(ms).toLocaleDateString(locale, { month: 'short', day: 'numeric' });
 }
 
 export async function CompletedByBubaly({
@@ -40,6 +41,7 @@ export async function CompletedByBubaly({
   className?: string;
 }) {
   const t = await getTranslations();
+  const { locale } = await getLocaleContext();
   return (
     <section aria-labelledby="completed-by-heading" className={className}>
       <div className="mb-3 flex items-center justify-between gap-3">
@@ -93,7 +95,7 @@ export async function CompletedByBubaly({
                       </p>
                     )}
                   </div>
-                  <span className="shrink-0 text-xs text-muted">{whenLabel(item.at, t('completedByBubaly.yesterday'))}</span>
+                  <span className="shrink-0 text-xs text-muted">{whenLabel(item.at, t('completedByBubaly.yesterday'), locale.code)}</span>
                   <ChevronRight className="h-3.5 w-3.5 shrink-0 text-muted" aria-hidden />
                 </Link>
               </li>

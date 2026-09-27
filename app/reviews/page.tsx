@@ -11,7 +11,10 @@ export const dynamic = 'force-dynamic';
 export default async function ReviewsWallPage() {
   const t = await getTranslations();
   const supabase = createServiceClient();
-  const { data: reviews } = await supabase
+  // `ratingStats` is computed from this list, so a refused read did not just
+  // hide the reviews — it published a rating derived from none of them on the
+  // page whose whole job is social proof. Audit C1-S9-45.
+  const { data: reviews, error: reviewsError } = await supabase
     .from('reviews')
     .select('id, rating, title, body, author_name, reply, submitted_at, status')
     .in('status', PUBLIC_STATUSES)
@@ -19,6 +22,16 @@ export default async function ReviewsWallPage() {
     .order('status', { ascending: false }) // 'featured' before 'approved'
     .order('submitted_at', { ascending: false })
     .limit(200);
+
+  if (reviewsError) {
+    console.error('[reviews] review read failed', { error: reviewsError.message });
+    return (
+      <main className="mx-auto flex min-h-[100dvh] max-w-xl flex-col items-center justify-center gap-3 px-5 py-10 text-center">
+        <h1 className="text-xl font-bold">{t('reviews.weCouldNotLoadReviews')}</h1>
+        <p className="text-sm text-muted">{t('reviews.pleaseRefreshInAMoment')}</p>
+      </main>
+    );
+  }
 
   const rows = reviews ?? [];
   const s = ratingStats(rows.map((r) => r.rating));

@@ -228,13 +228,20 @@ describe('the endpoints refuse before they look anything up', () => {
   const alexa = readFileSync('app/api/assistant/alexa/route.ts', 'utf8');
 
   it('rate limits by IP before touching the token', () => {
-    // Otherwise the endpoint is a way to test guessed tokens at speed.
+    // Not because it stops token guessing — a link token is 32 CSPRNG bytes
+    // stored as a SHA-256, so the keyspace is that defence. Because every
+    // accepted request reads the family and calls a model, and the lookup is
+    // where that starts.
     //
     // Compared at the CALL sites. The first attempt compared the first
     // occurrence of each name, and `resolveAssistantLink` appears first in the
     // import block at the top of the file — so it measured import order and
     // would have failed no matter how the handler was written.
-    const limitIndex = generic.indexOf('rateLimit(`assistant');
+    // Matched on the KEY rather than the function name: the gate moved from the
+    // per-instance `rateLimit` to the durable `enforceRequestRateLimit` and this
+    // went red on a change that made it stronger. What must be true is that the
+    // limit for this route runs before the lookup, whichever limiter enforces it.
+    const limitIndex = generic.search(/[Rr]ate[Ll]imit\([^`]*`assistant:/);
     const lookupIndex = generic.indexOf('await resolveAssistantLink(');
     expect(limitIndex).toBeGreaterThan(-1);
     expect(lookupIndex).toBeGreaterThan(-1);
@@ -247,8 +254,8 @@ describe('the endpoints refuse before they look anything up', () => {
     // because Amazon's signature covers exactly what arrived; re-serialising a
     // parsed envelope changes whitespace and key order and the signature would
     // never verify again.
-    expect(generic).toContain('readBoundedRequestJson');
-    expect(alexa).toContain('readBoundedRequestBytes');
+    expect(generic).toContain('readBoundedRequestJson(');
+    expect(alexa).toContain('readBoundedRequestBytes(');
     for (const source of [generic, alexa]) expect(source).toMatch(/MAX_BODY_BYTES/);
   });
 
@@ -287,7 +294,7 @@ describe('the endpoints refuse before they look anything up', () => {
     // in this direction — a lib that reached for its own service-role client
     // would be usable from anywhere, including a context that had not checked a
     // token first.
-    expect(generic).toContain('createServiceClient');
+    expect(generic).toContain('createServiceClient(');
     expect(service).not.toContain('createServiceClient(');
     // And no family id is ever taken from the request body.
     expect(generic).not.toMatch(/payload\.\s*family/);

@@ -9,18 +9,42 @@ describe('wallet allowance persistence boundaries', () => {
     expect(source).toContain("return actionFailure(rulesError, t('actions.couldNotLoadDueAllowances'))");
   });
 
+  // This assertion used to be the EXACT TEXT of the update, `.select('id').single()`
+  // and all — which pinned the defect rather than the property. The action
+  // advanced the schedule by id alone, with no `.lte('next_run_on', today)`, so
+  // two overlapping runs both matched the row and both credited the same period.
+  // The one-line fix for that would have turned this test red, which is the worst
+  // thing a guard can do: make the fix look like the regression.
+  //
+  // What this file is actually about is persistence — the advance is checked and
+  // rolled back when crediting fails. So it asserts that, in ordered pieces,
+  // without re-pinning a formatting choice. The exclusivity predicate itself is
+  // the subject of tests/allowance-cron-idempotency.test.ts, which now discovers
+  // every site that advances a schedule rather than reading one hardcoded file.
   it('checks the schedule advance and rolls it back when crediting fails', () => {
-    // This pinned the advance as a single blind statement ending `.single()`.
-    // That WAS the bug: with no `.lte('next_run_on', today)` predicate the
-    // update always matched, so two overlapping runs both advanced the rule and
-    // both credited it. The intent — the advance is checked before the credit
-    // and rolled back if the credit fails — is kept and strengthened: it is now
-    // a CLAIM, matching the cron. See
+    // The advance used to be a single blind statement ending `.single()`, and
+    // that WAS the bug: with no `.lte('next_run_on', today)` predicate the update
+    // always matched, so two overlapping runs both advanced the rule and both
+    // credited it. The intent this file is about — the advance is checked before
+    // the credit and rolled back if the credit fails — is kept and strengthened:
+    // the advance is now a CLAIM, matching the cron. See
     // tests/manual-allowance-run-claims-like-the-cron.test.ts.
+    const advance = source.slice(source.indexOf('.update({ next_run_on: next'));
+    expect(advance.slice(0, 400)).toContain(".eq('id', rule.id)");
+    expect(advance.slice(0, 400)).toContain(".eq('family_id', familyId)");
+    expect(advance.slice(0, 400)).toContain('.select(');
     expect(source).toContain(".update({ next_run_on: next, last_run_on: today })");
     expect(source).toContain(".lte('next_run_on', today)");
     expect(source).toContain(".select('id').maybeSingle()");
-    expect(source).toContain("const { error: rollbackError } = await supabase.from('allowance_rules').update({ next_run_on: rule.next_run_on, last_run_on: rule.last_run_on })");
+    // Was pinned as an exact destructure. C1-S9-53 bound the rollback's ROWS as
+    // well as its error — a rollback matching nothing leaves the schedule
+    // advanced, so the child never receives that run — and the literal vanished
+    // while the behaviour got stronger. Re-pointed at the behaviour, plus the
+    // property the rewrite added so it cannot regress silently.
+    expect(source).toContain("update({ next_run_on: rule.next_run_on, last_run_on: rule.last_run_on })");
+    expect(source).toContain('error: rollbackError');
+    expect(source).toContain('wroteNoRows(restored)');
+    expect(source).toContain('a run may be skipped');
     expect(source).toContain("return { ok: false, error: res.error, ranCount, paidCents };");
   });
 

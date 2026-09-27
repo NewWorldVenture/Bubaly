@@ -22,6 +22,7 @@ import { ProviderInfoSheet, CheckInSheet } from '@/components/medical/print-shee
 import { cn } from '@/lib/utils/cn';
 import type { Tables, RecordKind } from '@/lib/database.types';
 import { useTranslations } from '@/components/i18n/locale-provider';
+import { useConfirm } from '@/components/ui/confirm';
 import { wroteNoRows } from '@/lib/supabase/errors';
 
 type Provider = Tables<'health_providers'>;
@@ -41,25 +42,45 @@ const blankProfile = { member_id: '', blood_type: '', allergies: '', conditions:
 
 /** Renders a private Storage image via a short-lived signed URL. */
 function CardImage({ path, label }: { path: string | null; label: string }) {
+  const t = useTranslations();
   const [url, setUrl] = useState<string | null>(null);
+  // A bare `.then()` had no rejection path: a failed signing left an unhandled
+  // rejection and the placeholder on screen forever, which reads exactly like
+  // "this card was never uploaded". For an insurance card those are very
+  // different facts, so a failure says so and is logged.
+  const [failed, setFailed] = useState(false);
   useEffect(() => {
     let active = true;
+    setFailed(false);
     if (!path) { setUrl(null); return; }
     const sb = createClient();
-    getDocumentSignedUrl(sb, path, 600).then(({ url }) => { if (active) setUrl(url); });
+    getDocumentSignedUrl(sb, path, 600).then(
+      ({ url }) => { if (active) setUrl(url); },
+      (err: unknown) => {
+        console.error('[medical-records] card image could not be signed', err);
+        if (active) setFailed(true);
+      },
+    );
     return () => { active = false; };
   }, [path]);
   if (!path) return null;
   return (
     <div className="overflow-hidden rounded-lg border border-border">
-      {/* eslint-disable-next-line @next/next/no-img-element */}
-      {url ? <img src={url} alt={label} className="h-24 w-full object-cover" /> : <div className="grid h-24 w-full place-items-center bg-surface/40 text-xs text-muted">{label}</div>}
+      {url
+        // A short-lived signed URL for a private card photo: next/image would
+        // re-host it through the optimizer, which is exactly what the signed
+        // read exists to avoid. The suppression sits on the <img> it covers;
+        // one line higher it silenced nothing.
+        // eslint-disable-next-line @next/next/no-img-element
+        ? <img src={url} alt={label} className="h-24 w-full object-cover" />
+        : <div className="grid h-24 w-full place-items-center bg-surface/40 text-xs text-muted">{failed ? t('installButton.unavailable') : label}</div>}
     </div>
   );
 }
 
 export function MedicalRecordsModule({ kind }: { kind: RecordKind }) {
   const t = useTranslations();
+  const askConfirm = useConfirm();
   const { familyId, userId, members, selfMember, role } = useApp();
   const { success, error: toastError } = useToast();
   const canEdit = isManager(role);
@@ -136,7 +157,7 @@ export function MedicalRecordsModule({ kind }: { kind: RecordKind }) {
     // update/delete, so it matches nothing and succeeds. `.select('id')` asks
     // for the rows back, which is the only way to tell.
     const { data: rows, error: err } = providerForm.id
-      ? await sb.from('health_providers').update(fields).eq('id', providerForm.id).select('id')
+      ? await sb.from('health_providers').update(fields).eq('id', providerForm.id).eq('family_id', familyId).select('id')
       : await sb.from('health_providers').insert({ ...fields, family_id: familyId, kind, created_by: userId }).select('id');
     setSaving(false);
     if (err) { toastError(`Could not save ${providerWord.toLowerCase()}`); return; }
@@ -145,9 +166,13 @@ export function MedicalRecordsModule({ kind }: { kind: RecordKind }) {
     setProviderForm(null);
   }
 
-  async function deleteProvider(id: string) {
+  async function deleteProvider(p: Provider) {
+    // One tap on a trash icon used to be the whole interaction. The same
+    // surface asks before deleting a medication; a doctor's number is the kind
+    // of thing a family looks up at a walk-in clinic, and there is no undo.
+    if (!(await askConfirm({ title: t('medicalRecords.deleteProviderQ'), body: t('confirm.cannotBeUndone') }))) return;
     const sb = createClient();
-    const { data: rows, error: err } = await sb.from('health_providers').delete().eq('id', id).select('id');
+    const { data: rows, error: err } = await sb.from('health_providers').delete().eq('id', p.id).eq('family_id', familyId).select('id');
     if (err) { toastError(t('medicalRecordsModule.couldNotDelete')); return; }
     if (wroteNoRows(rows)) { toastError(t('errors.thatChangeWasNotSaved')); return; }
     success(t('medicalRecordsModule.deleted'));
@@ -186,7 +211,7 @@ export function MedicalRecordsModule({ kind }: { kind: RecordKind }) {
       notes: policyForm.notes || null,
     };
     const { data: rows, error: err } = policyForm.id
-      ? await sb.from('insurance_policies').update(fields).eq('id', policyForm.id).select('id')
+      ? await sb.from('insurance_policies').update(fields).eq('id', policyForm.id).eq('family_id', familyId).select('id')
       : await sb.from('insurance_policies').insert({ ...fields, family_id: familyId, kind, created_by: userId }).select('id');
     setSaving(false);
     if (err) { toastError(t('medicalRecordsModule.couldNotSaveInsurance')); return; }
@@ -196,8 +221,9 @@ export function MedicalRecordsModule({ kind }: { kind: RecordKind }) {
   }
 
   async function deletePolicy(id: string) {
+    if (!(await askConfirm({ title: t('medicalRecords.deletePolicyQ'), body: t('medicalRecords.deletePolicyBody') }))) return;
     const sb = createClient();
-    const { data: rows, error: err } = await sb.from('insurance_policies').delete().eq('id', id).select('id');
+    const { data: rows, error: err } = await sb.from('insurance_policies').delete().eq('id', id).eq('family_id', familyId).select('id');
     if (err) { toastError(t('medicalRecordsModule.couldNotDelete')); return; }
     if (wroteNoRows(rows)) { toastError(t('errors.thatChangeWasNotSaved')); return; }
     success(t('medicalRecordsModule.deleted'));
@@ -225,9 +251,15 @@ export function MedicalRecordsModule({ kind }: { kind: RecordKind }) {
       notes: profileForm.notes || null,
       updated_by: userId,
     };
-    const { error: err } = await sb.from('medical_profiles').upsert(payload, { onConflict: 'member_id' });
+    // The fifth manager-gated write in this module, and the one the other four
+    // fixes did not reach. An upsert that RLS filters is the UPDATE half
+    // matching nothing, so without a row count this said "Profile saved" over
+    // allergies and emergency contacts that never changed.
+    const { data: rows, error: err } = await sb.from('medical_profiles')
+      .upsert(payload, { onConflict: 'member_id' }).select('id');
     setSaving(false);
     if (err) { toastError(t('medicalRecordsModule.couldNotSaveProfile')); return; }
+    if (wroteNoRows(rows)) { toastError(t('errors.thatChangeWasNotSaved')); return; }
     success(t('medicalRecordsModule.profileSaved'));
     setProfileForm(null);
   }
@@ -261,7 +293,7 @@ export function MedicalRecordsModule({ kind }: { kind: RecordKind }) {
             {canEdit ? (
               <>
                 <Button onClick={() => setCheckInPicker(true)} className="btn-cta"><ClipboardList className="h-4 w-4" /> {t('medicalRecords.atTheDoctor')}</Button>
-                <Button onClick={() => setProviderForm({ ...blankProvider })} className="btn-secondary"><Plus className="h-4 w-4" /> Add {providerWord}</Button>
+                <Button onClick={() => setProviderForm({ ...blankProvider })} variant="secondary"><Plus className="h-4 w-4" /> Add {providerWord}</Button>
               </>
             ) : (
               <span className="inline-flex items-center gap-1.5 rounded-full border border-border px-3 py-1.5 text-xs text-muted"><Lock className="h-3.5 w-3.5" /> {t('medicalRecords.viewOnly')}</span>
@@ -293,8 +325,8 @@ export function MedicalRecordsModule({ kind }: { kind: RecordKind }) {
                       {p.is_primary && <span className="rounded-full bg-emerald-600/20 px-2 py-0.5 text-[10px] font-bold text-emerald-300">PRIMARY</span>}
                       {canEdit && (
                         <>
-                          <button onClick={() => setPolicyForm({ id: p.id, member_id: p.member_id ?? '', insurer: p.insurer, plan_name: p.plan_name ?? '', plan_type: p.plan_type ?? '', policy_number: p.policy_number ?? '', group_number: p.group_number ?? '', rx_bin: p.rx_bin ?? '', rx_pcn: p.rx_pcn ?? '', rx_group: p.rx_group ?? '', customer_service_phone: p.customer_service_phone ?? '', effective_date: p.effective_date ?? '', is_primary: p.is_primary, notes: p.notes ?? '', front_image_path: p.front_image_path ?? '', back_image_path: p.back_image_path ?? '' })} className="text-muted hover:text-fg"><Pencil className="h-3.5 w-3.5" /></button>
-                          <button onClick={() => deletePolicy(p.id)} className="text-muted hover:text-danger"><Trash2 className="h-3.5 w-3.5" /></button>
+                          <button aria-label={t('a11y.edit')} onClick={() => setPolicyForm({ id: p.id, member_id: p.member_id ?? '', insurer: p.insurer, plan_name: p.plan_name ?? '', plan_type: p.plan_type ?? '', policy_number: p.policy_number ?? '', group_number: p.group_number ?? '', rx_bin: p.rx_bin ?? '', rx_pcn: p.rx_pcn ?? '', rx_group: p.rx_group ?? '', customer_service_phone: p.customer_service_phone ?? '', effective_date: p.effective_date ?? '', is_primary: p.is_primary, notes: p.notes ?? '', front_image_path: p.front_image_path ?? '', back_image_path: p.back_image_path ?? '' })} className="text-muted hover:text-fg"><Pencil className="h-3.5 w-3.5" /></button>
+                          <button aria-label={t('a11y.delete')} onClick={() => deletePolicy(p.id)} className="text-muted hover:text-danger"><Trash2 className="h-3.5 w-3.5" /></button>
                         </>
                       )}
                     </div>
@@ -349,8 +381,8 @@ export function MedicalRecordsModule({ kind }: { kind: RecordKind }) {
                       {p.phone && <a href={`tel:${p.phone}`} className="inline-flex items-center gap-1 text-xs text-brand-text"><Phone className="h-3 w-3" />{p.phone}</a>}
                       {canEdit && (
                         <div className="flex items-center gap-1.5">
-                          <button onClick={() => setProviderForm({ id: p.id, member_id: p.member_id ?? '', name: p.name, specialty: p.specialty ?? '', practice_name: p.practice_name ?? '', phone: p.phone ?? '', fax: p.fax ?? '', email: p.email ?? '', address: p.address ?? '', is_primary: p.is_primary, notes: p.notes ?? '' })} className="text-muted hover:text-fg"><Pencil className="h-3.5 w-3.5" /></button>
-                          <button onClick={() => deleteProvider(p.id)} className="text-muted hover:text-danger"><Trash2 className="h-3.5 w-3.5" /></button>
+                          <button aria-label={t('a11y.edit')} onClick={() => setProviderForm({ id: p.id, member_id: p.member_id ?? '', name: p.name, specialty: p.specialty ?? '', practice_name: p.practice_name ?? '', phone: p.phone ?? '', fax: p.fax ?? '', email: p.email ?? '', address: p.address ?? '', is_primary: p.is_primary, notes: p.notes ?? '' })} className="text-muted hover:text-fg"><Pencil className="h-3.5 w-3.5" /></button>
+                          <button aria-label={t('a11y.delete')} onClick={() => deleteProvider(p)} className="text-muted hover:text-danger"><Trash2 className="h-3.5 w-3.5" /></button>
                         </div>
                       )}
                     </div>
@@ -380,7 +412,7 @@ export function MedicalRecordsModule({ kind }: { kind: RecordKind }) {
                       <p className="text-xs text-muted">{m.role}</p>
                     </div>
                   </div>
-                  {canEdit && <button onClick={() => openProfile(m.id)} className="text-muted hover:text-fg"><Pencil className="h-4 w-4" /></button>}
+                  {canEdit && <button aria-label={t('a11y.edit')} onClick={() => openProfile(m.id)} className="text-muted hover:text-fg"><Pencil className="h-4 w-4" /></button>}
                 </div>
                 {prof ? (
                   <dl className="space-y-1 text-xs">

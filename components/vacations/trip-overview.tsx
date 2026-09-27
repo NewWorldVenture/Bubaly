@@ -6,6 +6,8 @@ import { Gauge, Sparkles, RefreshCw, Lightbulb, Wallet, CloudSun, CheckCircle2, 
 import { useApp } from '@/components/app/app-context';
 import { useRealtimeQuery } from '@/lib/hooks/use-realtime-query';
 import { createClient } from '@/lib/supabase/client';
+import { describeDbError, wroteNoRows } from '@/lib/supabase/errors';
+import { settle } from '@/lib/supabase/settle';
 import { useToast } from '@/components/ui/toast';
 import { Button } from '@/components/ui/button';
 import { ErrorState, LoadingBlock } from '@/components/ui/states';
@@ -15,9 +17,9 @@ import { computeReadiness } from '@/lib/vacations/readiness';
 import { summarizeBudget } from '@/lib/vacations/budget';
 import { tripWeatherAdvice, type WeatherDayLike } from '@/lib/vacations/weather';
 import { dateRange, countdownLabel } from '@/lib/vacations/dates';
-import { dollars, RECO_META } from '@/lib/vacations/meta';
+import { dollars as dollarsIn, RECO_META } from '@/lib/vacations/meta';
 import type { Tables } from '@/lib/database.types';
-import { useTranslations } from '@/components/i18n/locale-provider';
+import { useLocale, useTranslations } from '@/components/i18n/locale-provider';
 
 const q = <T,>(table: string, familyId: string, vacationId: string) => ({
   table, familyId, deps: [familyId, vacationId],
@@ -26,6 +28,9 @@ const q = <T,>(table: string, familyId: string, vacationId: string) => ({
 
 export function TripOverview({ vacationId }: { vacationId: string }) {
   const tr = useTranslations();
+  const locale = useLocale();
+  // Money follows the reader; the currency stays the money's own.
+  const dollars = (cents: number | null | undefined) => dollarsIn(cents, locale.code);
   const { familyId } = useApp();
   const { success, error: toastError } = useToast();
 
@@ -106,7 +111,8 @@ export function TripOverview({ vacationId }: { vacationId: string }) {
       const sb = createClient();
       const { data: latest } = await sb.from('vacation_travel_scores').select('score').eq('vacation_id', vacationId).order('computed_at', { ascending: false }).limit(1).maybeSingle();
       if (latest?.score === readiness.score) return;
-      await sb.from('vacation_travel_scores').insert({ family_id: familyId, vacation_id: vacationId, score: readiness.score, breakdown: readiness.factors as never });
+      const { error } = await settle(sb.from('vacation_travel_scores').insert({ family_id: familyId, vacation_id: vacationId, score: readiness.score, breakdown: readiness.factors as never }));
+      if (error) console.error('[trip] readiness snapshot failed', { message: error.message });
     })();
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [readiness.score, loading, trip, familyId, vacationId]);
@@ -126,8 +132,10 @@ export function TripOverview({ vacationId }: { vacationId: string }) {
   }
 
   async function dismissReco(id: string) {
-    const { error } = await createClient().from('vacation_ai_recommendations').update({ status: 'dismissed' }).eq('id', id);
-    if (error) toastError(error.message);
+    // Under RLS a refused row comes back with no error and zero rows, which this used to report as done. Audit C1-S9-84.
+    const { data: updated, error } = await createClient().from('vacation_ai_recommendations').update({ status: 'dismissed' }).eq('id', id).select('id');
+    if (error) toastError(describeDbError(error));
+    else if (wroteNoRows(updated)) toastError(tr('errors.thatChangeWasNotSaved'));
   }
 
   if (loading) return <LoadingBlock />;

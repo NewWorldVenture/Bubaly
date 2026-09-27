@@ -6,9 +6,10 @@ import {
   UtensilsCrossed, Pill, Stethoscope, AlertTriangle, StickyNote, Clock, Heart,
 } from 'lucide-react';
 import { useApp } from '@/components/app/app-context';
+import { isManager } from '@/lib/constants/roles';
 import { useRealtimeQuery } from '@/lib/hooks/use-realtime-query';
 import { createClient } from '@/lib/supabase/client';
-import { describeDbError } from '@/lib/supabase/errors';
+import { describeDbError, wroteNoRows } from '@/lib/supabase/errors';
 import { useToast } from '@/components/ui/toast';
 import { Modal } from '@/components/ui/modal';
 import { Input, Textarea, Field, Select } from '@/components/ui/input';
@@ -19,12 +20,13 @@ import { PageHeader } from '@/components/app/page-header';
 import { AiInsight } from '@/components/ai/ai-insight';
 import { cn } from '@/lib/utils/cn';
 import {
-  sortByRecent, hoursSinceLastContact, isContactOverdue, averageWellbeing,
+  sortByRecent, lastContact, isContactOverdue, averageWellbeing,
   groupByDay, entriesInLastDays, CARE_LOG_TYPE_LABELS,
   type CareEntryLike, type CareLogType,
 } from '@/lib/care/log';
 import type { Tables } from '@/lib/database.types';
-import { useTranslations } from '@/components/i18n/locale-provider';
+import { useLocale, useTranslations } from '@/components/i18n/locale-provider';
+import { useFormat } from '@/components/i18n/use-format';
 
 type CareEntry = Tables<'care_log'>;
 
@@ -51,8 +53,18 @@ function toLocalInput(iso: string): string {
 const blank = { id: '', log_type: 'check_in' as CareLogType, occurred_at: '', wellbeing: '', note: '' };
 
 export function CareModule() {
+  const locale = useLocale();
   const tr = useTranslations();
-  const { familyId, userId, members, selfMember } = useApp();
+  const { fmtTimeAgo } = useFormat();
+  const { familyId, userId, members, selfMember, role } = useApp();
+  // C1-S8-09: an entry belongs to whoever recorded it. Anyone may ADD one — 0032
+  // exists so the whole family can log a check-in — but editing and deleting
+  // are the author's, or a manager's for moderation. The card already shows
+  // "by <name>"; these controls agree with it. This is the UI half: the
+  // branch's `a_record_about_you_is_not_yours_to_rewrite` migration that made
+  // the database say the same was dropped on the merge with main (C1-S9-89)
+  // and is recorded in finalaudit.md for the owner to decide.
+  const mayEdit = (e: CareEntry) => e.logged_by === selfMember?.id || isManager(role);
   const { success, error: toastError } = useToast();
 
   const [recipientId, setRecipientId] = useState<string>(members[0]?.id ?? '');
@@ -82,7 +94,6 @@ export function CareModule() {
     [recipientEntries],
   );
 
-  const hrsSince = hoursSinceLastContact(entryLikes, now);
   const overdue = isContactOverdue(entryLikes, now, 24);
   const avgWellbeing = averageWellbeing(entryLikes);
   const weekCount = entriesInLastDays(entryLikes, now, 7);
@@ -110,12 +121,19 @@ export function CareModule() {
       wellbeing: form.wellbeing ? Number(form.wellbeing) : null,
       note: form.note.trim() || null,
     };
-    const { error: err } = form.id
-      ? await sb.from('care_log').update(fields).eq('id', form.id)
-      : await sb.from('care_log').insert({ ...fields, family_id: familyId, logged_by: selfMember?.id ?? null, created_by: userId });
+    // RLS FILTERS an UPDATE rather than refusing it, so a row the caller may
+    // not rewrite comes back `error: null` with nothing changed. See
+    // tests/a-filtered-delete-is-not-a-deletion.test.ts: the `family_id`
+    // predicate bounds the write to one household and `.select('id')` makes
+    // the empty result an answer. An INSERT needs neither — RLS refuses one
+    // with an error instead of filtering it away.
+    const { data, error: err } = form.id
+      ? await sb.from('care_log').update(fields).eq('id', form.id).eq('family_id', familyId).select('id')
+      : await sb.from('care_log').insert({ ...fields, family_id: familyId, logged_by: selfMember?.id ?? null, created_by: userId }).select('id');
     setSaving(false);
     if (err) { toastError(describeDbError(err)); return; }
-    success(form.id ? 'Entry updated' : 'Care logged');
+    if (wroteNoRows(data)) { toastError(tr('errors.thatChangeWasNotSaved')); return; }
+    success(form.id ? tr('careModule.entryUpdated') : tr('careModule.careLogged'));
     setModalOpen(false);
   }
 
@@ -133,14 +151,27 @@ export function CareModule() {
   async function remove(e: CareEntry) {
     if (!confirm(tr('careModule.deleteThisCareEntry'))) return;
     const sb = createClient();
-    const { error: err } = await sb.from('care_log').delete().eq('id', e.id);
+    // RLS filters a DELETE rather than refusing it, so without `.select('id')`
+    // a row this member may not remove returns `error: null` and the module
+    // reports success over a record that is still there.
+    // 0430 treats care_log as Rule B — a record of medical fact about someone,
+    // which its subject may not erase.
+    const { data, error: err } = await sb.from('care_log').delete()
+      .eq('id', e.id).eq('family_id', familyId).select('id');
     if (err) { toastError(describeDbError(err)); return; }
+    if (wroteNoRows(data)) { toastError(tr('errors.thatChangeWasNotSaved')); return; }
     success(tr('careModule.entryDeleted'));
   }
 
-  const fmtTime = (iso: string) => new Date(iso).toLocaleTimeString('en-US', { hour: 'numeric', minute: '2-digit' });
-  const fmtDay = (key: string) => new Date(`${key}T00:00:00`).toLocaleDateString('en-US', { weekday: 'long', month: 'short', day: 'numeric' });
-  const sinceLabel = hrsSince == null ? 'No contact logged' : hrsSince < 1 ? 'Just now' : hrsSince < 24 ? `${hrsSince}h ago` : `${Math.floor(hrsSince / 24)}d ago`;
+  const fmtTime = (iso: string) => new Date(iso).toLocaleTimeString(locale.code, { hour: 'numeric', minute: '2-digit' });
+  const fmtDay = (key: string) => new Date(`${key}T00:00:00`).toLocaleDateString(locale.code, { weekday: 'long', month: 'short', day: 'numeric' });
+  // An inline ladder built from English literals — the fifth in this codebase, and
+  // invisible to the hardcoded-locale scan because it held no locale to find. The
+  // shared helper reads the timestamp rather than the derived hour count, so
+  // "45m ago" is now possible where this rounded everything under an hour to one
+  // label.
+  const last = lastContact(entryLikes);
+  const sinceLabel = last ? fmtTimeAgo(last.occurred_at, { now }) : tr('care.noContactLogged');
 
   if (loading) return <SkeletonList count={5} />;
   if (error) return <ErrorState message={typeof error === 'string' ? error : 'Failed to load care log'} />;
@@ -244,10 +275,12 @@ export function CareModule() {
                                 {e.note && <div className="text-sm text-fg/80 mt-0.5">{e.note}</div>}
                                 {e.logged_by && <div className="text-xs text-muted mt-0.5">by {memberName(e.logged_by)}</div>}
                               </div>
-                              <div className="flex items-center gap-1 flex-shrink-0 opacity-100 sm:opacity-0 sm:group-hover:opacity-100 focus-visible:opacity-100 coarse:opacity-100 transition">
-                                <button onClick={() => openEdit(e)} aria-label={tr('care.edit')} className="p-1.5 rounded-lg text-muted hover:text-fg hover:bg-elevated"><Pencil className="h-4 w-4" /></button>
-                                <button onClick={() => remove(e)} aria-label={tr('care.delete')} className="p-1.5 rounded-lg text-muted hover:text-rose-400 hover:bg-elevated"><Trash2 className="h-4 w-4" /></button>
-                              </div>
+                              {mayEdit(e) && (
+                                <div className="flex items-center gap-1 flex-shrink-0 opacity-100 sm:opacity-0 sm:group-hover:opacity-100 focus-visible:opacity-100 coarse:opacity-100 transition">
+                                  <button onClick={() => openEdit(e)} aria-label={tr('care.edit')} className="p-1.5 rounded-lg text-muted hover:text-fg hover:bg-elevated"><Pencil className="h-4 w-4" /></button>
+                                  <button onClick={() => remove(e)} aria-label={tr('care.delete')} className="p-1.5 rounded-lg text-muted hover:text-rose-400 hover:bg-elevated"><Trash2 className="h-4 w-4" /></button>
+                                </div>
+                              )}
                             </div>
                           </div>
                         );

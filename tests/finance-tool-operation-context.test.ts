@@ -16,7 +16,7 @@ vi.mock('@/lib/trust/server', () => ({
   evaluateTrust: mocks.evaluateTrust,
   roleOf: (role: string) => role,
 }));
-vi.mock('@/lib/services/ai-settings', () => ({ getAISettings: async () => ({ enabled: true }) }));
+vi.mock('@/lib/services/ai-settings', () => ({ loadAISettings: async () => ({ ok: true, data: { enabled: true } }) }));
 vi.mock('@/lib/ai/family-settings', () => ({
   effectiveRisk: () => 'low',
   behaviorForDomain: () => 'recommend',

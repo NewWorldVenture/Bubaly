@@ -13,7 +13,7 @@ describe('account and device-security action boundaries', () => {
     for (const path of sources) {
       const source = readFileSync(path, 'utf8');
       expect(source).not.toMatch(/return\s*\{[^\n]*error:\s*(?:error|memberError|prefsError)\??\.message/);
-      expect(source).toContain('describeActionError');
+      expect(source).toContain('describeActionError(');
     }
   });
 
@@ -24,8 +24,11 @@ describe('account and device-security action boundaries', () => {
 
     expect(actions).toContain("if (error) return actionFailure('switch active family', t('App.couldNotSwitchActiveFamily'), error);");
     expect(actions).toContain("if (error) return actionFailure('set the default dashboard', t('App.couldNotSetTheDefaultDashboard'), error);");
-    expect(appLock).toContain("if (prefsError) return actionFailure('load App Lock settings', t('appLockActions.couldNotLoadAppLockSettings'), prefsError);");
-    expect(appLock).toContain("if (error) return actionFailure('save App Lock settings', t('appLockActions.couldNotSaveAppLockSettings'), error);");
+    // Both halves now go through mergeNotificationPrefs (SRV-001 l7): a failed
+    // read is still the LOAD sentence and a failed or lost write the SAVE one.
+    expect(appLock).toContain("? actionFailure('load App Lock settings', t('appLockActions.couldNotLoadAppLockSettings'), saved.error)");
+    expect(appLock).toContain(": actionFailure('save App Lock settings', t('appLockActions.couldNotSaveAppLockSettings'), saved.error ?? saved.reason);");
+    expect(appLock).toContain("saved.reason === 'read_failed'");
     expect(profiles).toContain('if (memberError)');
   });
 });

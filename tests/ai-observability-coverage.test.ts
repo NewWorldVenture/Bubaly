@@ -1,3 +1,4 @@
+import { at } from './helpers/source-order';
 // Which AI surfaces leave a record, and which are still silent.
 //
 // §33: "a failure in the chat assistant or the daily brief is invisible after
@@ -164,7 +165,7 @@ describe('§33 the surfaces a family would ask about are observed', () => {
     // And the fallback that drops the narrative sits after it, so the wrapper
     // has already recorded by the time the route decides to answer 200 anyway.
     expect(src.indexOf('recommendations = null; // fall back'))
-      .toBeGreaterThan(src.indexOf('obs.used('));
+      .toBeGreaterThan(at(src, 'obs.used('));
   });
 
   it('the assistant engine observes both transports, and the stream from inside', () => {
@@ -321,14 +322,14 @@ describe('§33 the surfaces a family would ask about are observed', () => {
 
 describe('what is deliberately NOT adopted', () => {
   it('leaves the admin AI-engine connectivity test alone, with a reason', () => {
-    // `app/(app)/admin/ai/actions.ts` authenticates with getUser() + isSuperAdmin()
+    // `app/(app)/admin/ai/actions.ts` authenticates with superAdminGate() (getUser + isSuperAdmin)
     // and never resolves a family at all — it exists to answer "does the
     // configured key work?". There is no `familyId` to build a scope from, and
     // billing a connectivity check to whichever family happens to be first would
     // be worse than not recording it. Same class as /api/ai/gift.
     const src = readFileSync('app/(app)/admin/ai/actions.ts', 'utf8');
     expect(src).not.toContain('withAiRequest(');
-    expect(src).toContain('isSuperAdmin()');
+    expect(src).toContain('superAdminGate()');
     expect(src, 'it has no family context to attribute a row to').not.toContain('requireUserContext');
   });
 
@@ -368,7 +369,13 @@ describe('what is deliberately NOT adopted', () => {
       'app/(app)/admin/ai/actions.ts',
     ];
     for (const file of floor) expect([...SILENT], `${file} is part of the floor`).toContain(file);
-    expect(readFileSync('lib/ai/routing.ts', 'utf8')).toContain('return new OpenAIProvider(');
+    // `new OpenAIProvider(`, not `return new OpenAIProvider(`. The property this
+    // defends is that routing.ts BUILDS a provider and never CALLS one — and the
+    // next line is what actually asserts the second half. The `return ` prefix
+    // was pinning the expression's exact shape, which BH-01 changed to
+    // `return withCompleteRetry(new OpenAIProvider(…))`: still builds one, still
+    // never calls one, so the property survived and only the proxy for it broke.
+    expect(readFileSync('lib/ai/routing.ts', 'utf8')).toContain('new OpenAIProvider(');
     expect(readFileSync('lib/ai/routing.ts', 'utf8')).not.toContain('.complete(');
     // The ceiling can never go below this, so a future tranche that claims to
     // have finished §33 has to reckon with these three by name.

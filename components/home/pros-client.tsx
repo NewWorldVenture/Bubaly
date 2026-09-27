@@ -1,6 +1,8 @@
 'use client';
 
 import { useState, useTransition } from 'react';
+
+import { ActionError, useActionError } from '@/components/ui/action-error';
 import {
   Users, Sparkles, Loader2, Plus, Phone, Mail, Globe, Trash2, Star, ExternalLink, Search,
 } from 'lucide-react';
@@ -15,6 +17,7 @@ import { Input, Select, Textarea } from '@/components/ui/input';
 import { Field } from '@/components/home/field';
 import { EmptyState } from '@/components/ui/states';
 import { useTranslations } from '@/components/i18n/locale-provider';
+import { safeWebLink } from '@/lib/utils/safe-link';
 
 type Contractor = Tables<'home_contractors'>;
 const tradeLabel = (v: string | null) => TRADES.find((t) => t.value === v)?.label ?? v ?? '';
@@ -23,6 +26,7 @@ export function ProsClient({ contractors, initialTrade }: { contractors: Contrac
   const tr = useTranslations();
   const [open, setOpen] = useState(false);
   const [pending, start] = useTransition();
+  const { message: actionError, run } = useActionError();
 
   // AI find-a-pro
   const [trade, setTrade] = useState(initialTrade || 'hvac');
@@ -48,6 +52,7 @@ export function ProsClient({ contractors, initialTrade }: { contractors: Contrac
 
   return (
     <div className="space-y-4">
+      <ActionError message={actionError} />
       <div className="flex flex-wrap items-end justify-between gap-3">
         <div>
           <h1 className="text-xl font-bold tracking-tight sm:text-2xl">{tr('prosClient.findAPro')}</h1>
@@ -99,8 +104,8 @@ export function ProsClient({ contractors, initialTrade }: { contractors: Contrac
               <div className="mt-3 flex flex-wrap gap-2">
                 {c.phone && <a href={`tel:${c.phone}`} className="inline-flex h-8 items-center gap-1.5 rounded-lg bg-brand px-2.5 text-xs font-medium text-brand-fg"><Phone className="h-3.5 w-3.5" />{' '}{tr('prosClient.call')}</a>}
                 {c.email && <a href={`mailto:${c.email}`} className="inline-flex h-8 items-center gap-1.5 rounded-lg border border-border px-2.5 text-xs hover:bg-elevated"><Mail className="h-3.5 w-3.5" />{' '}{tr('prosClient.email')}</a>}
-                {c.website && <a href={c.website} target="_blank" rel="noreferrer" className="inline-flex h-8 items-center gap-1.5 rounded-lg border border-border px-2.5 text-xs hover:bg-elevated"><Globe className="h-3.5 w-3.5" />{' '}{tr('prosClient.site')}</a>}
-                <button onClick={() => start(async () => { await deleteContractorAction(c.id); })} className="ml-auto inline-flex h-8 items-center gap-1 rounded-lg px-2 text-xs text-muted hover:text-danger"><Trash2 className="h-3.5 w-3.5" /></button>
+                {c.website && <a href={safeWebLink(c.website) ?? undefined} target="_blank" rel="noreferrer" className="inline-flex h-8 items-center gap-1.5 rounded-lg border border-border px-2.5 text-xs hover:bg-elevated"><Globe className="h-3.5 w-3.5" />{' '}{tr('prosClient.site')}</a>}
+                <button aria-label={tr('a11y.delete')} onClick={() => start(async () => { await run(() => deleteContractorAction(c.id)); })} className="ml-auto inline-flex h-8 items-center gap-1 rounded-lg px-2 text-xs text-muted hover:text-danger"><Trash2 className="h-3.5 w-3.5" /></button>
               </div>
             </Card>
           ))}
@@ -108,7 +113,7 @@ export function ProsClient({ contractors, initialTrade }: { contractors: Contrac
       )}
 
       <Modal open={open} onClose={() => setOpen(false)} title={tr('prosClient.saveAContractor')}>
-        <form action={(fd) => start(async () => { await saveContractorAction(fd); setOpen(false); })} className="space-y-3">
+        <form action={(fd) => start(async () => { if (await run(() => saveContractorAction(fd))) setOpen(false); })} className="space-y-3">
           <Field label={tr('prosClient.name')}><Input name="name" required placeholder={tr('prosClient.acmeHeatingAir')} /></Field>
           <div className="grid grid-cols-2 gap-3">
             <Field label={tr('prosClient.trade')}>

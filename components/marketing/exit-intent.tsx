@@ -43,7 +43,11 @@ export function ExitIntent() {
   // `aria-modal="true"`. Scroll lock stays with useLockBodyScroll above.
   const dialogRef = useRef<HTMLDivElement>(null);
   const closeOffer = useCallback(() => setOpen(false), []);
-  useDialogBehavior(dialogRef, open, { onClose: closeOffer, lockScroll: false });
+  // `open` alone, not `Boolean(offer) && open`: this banner is ALWAYS mounted
+  // and returns null below, so the hook must not act while there is no offer to
+  // show. main gates it with lockScroll: false for the same reason — a banner
+  // is not a modal and must not freeze the page behind it.
+  useDialogBehavior(dialogRef, Boolean(offer) && open, { onClose: closeOffer, lockScroll: false });
 
   // Resolve once on mount (skip entirely if we've shown one recently).
   useEffect(() => {
@@ -110,17 +114,27 @@ export function ExitIntent() {
   if (!offer || !open) return null;
 
   return (
-    <div className="fixed inset-0 z-[100] flex items-center justify-center bg-black/50 p-4" onClick={() => setOpen(false)}>
+    <div className="fixed inset-0 z-[100] flex items-center justify-center p-4">
+      {/* The scrim is its own element, aria-hidden, exactly as components/ui/
+          modal.tsx writes one. Clicking it dismisses the offer; it is not a tab
+          stop and announces nothing, because the keyboard's equivalent is
+          Escape, which useDialogBehavior handles above.
+
+          It used to be the WRAPPER holding the dialog, which made a mouse-only
+          dismissal out of an element containing the close button and the CTA —
+          scripts/audit-keyboard-operable.mjs reads that as a click target a
+          keyboard cannot operate, and it could only tell it was a dismissal
+          while the file still hand-rolled its own Escape listener. */}
+      <div className="absolute inset-0 bg-black/50" onClick={closeOffer} aria-hidden />
       <div
         ref={dialogRef}
         tabIndex={-1}
         role="dialog"
         aria-modal="true"
         aria-labelledby="exit-intent-title"
-        className="relative w-full max-w-md rounded-2xl bg-bg p-8 text-center shadow-2xl"
-        onClick={(e) => e.stopPropagation()}
+        className="relative z-10 w-full max-w-md rounded-2xl bg-bg p-8 text-center shadow-2xl"
       >
-        <button onClick={() => setOpen(false)} aria-label={t('exitIntent.close')} className="absolute right-3 top-3 text-muted hover:text-fg">
+        <button onClick={closeOffer} aria-label={t('exitIntent.close')} className="absolute right-3 top-3 text-muted hover:text-fg">
           <X className="h-5 w-5" />
         </button>
         <h2 id="exit-intent-title" className="text-2xl font-bold">{offer.headline}</h2>

@@ -13,13 +13,13 @@ import { EmptyState } from '@/components/ui/states';
 import { useToast } from '@/components/ui/toast';
 import { Avatar } from '@/components/ui/avatar';
 import { WalletSubnav } from '@/components/wallet/wallet-subnav';
-import { formatCents } from '@/lib/wallet/ledger';
+import { formatCents as formatCentsIn } from '@/lib/wallet/ledger';
 import {
   portfolioValue, portfolioCost, gainLossCents, gainLossPct, projectGrowth,
   orderAmountCents, type Holding as PortHolding, type PriceMap,
 } from '@/lib/invest/portfolio';
 import { placeInvestOrderAction, decideInvestOrderAction } from '@/app/(app)/wallet/invest/actions';
-import { useTranslations } from '@/components/i18n/locale-provider';
+import { useLocale, useTranslations } from '@/components/i18n/locale-provider';
 
 export type InvestAsset = { id: string; symbol: string; name: string; kind: string; emoji: string; description: string | null; priceCents: number; riskLevel: string };
 export type InvestChild = { id: string; name: string; color: string | null; investCashCents: number };
@@ -29,6 +29,10 @@ export type PendingOrder = { id: string; childName: string; assetEmoji: string; 
 export function InvestView(props: {
   assets: InvestAsset[]; childWallets: InvestChild[]; holdings: Holding[]; pendingOrders: PendingOrder[]; canManage: boolean;
 }) {
+  const locale = useLocale();
+  // Money follows the reader; the currency stays the money's own.
+  const formatCents = (cents: number, currency?: string) =>
+    formatCentsIn(cents, currency, locale.code);
   const tr = useTranslations();
   const { assets, childWallets, holdings, pendingOrders, canManage } = props;
   const router = useRouter();
@@ -68,9 +72,9 @@ export function InvestView(props: {
               <div key={o.id} className="flex items-center justify-between gap-2 rounded-xl border border-border bg-bg/40 p-2.5">
                 <p className="text-sm">{o.childName} wants to <strong>{o.side}</strong> {o.shares} {o.assetEmoji} {o.assetName} <span className="text-muted">({formatCents(o.amountCents)})</span></p>
                 <div className="flex flex-shrink-0 items-center gap-1.5">
-                  <button type="button" disabled={busy === `o-${o.id}`} onClick={() => run(`o-${o.id}`, () => decideInvestOrderAction({ orderId: o.id, approve: true }), 'Approved')}
+                  <button type="button" disabled={busy === `o-${o.id}`} aria-label={tr('a11y.approve')} onClick={() => run(`o-${o.id}`, () => decideInvestOrderAction({ orderId: o.id, approve: true }), 'Approved')}
                     className="inline-flex items-center gap-1 rounded-lg bg-success/15 px-2.5 py-1.5 text-xs font-medium text-success hover:bg-success/25"><Check className="h-3.5 w-3.5" /></button>
-                  <button type="button" disabled={busy === `o-${o.id}`} onClick={() => run(`o-${o.id}`, () => decideInvestOrderAction({ orderId: o.id, approve: false }), 'Rejected')}
+                  <button type="button" disabled={busy === `o-${o.id}`} aria-label={tr('a11y.reject')} onClick={() => run(`o-${o.id}`, () => decideInvestOrderAction({ orderId: o.id, approve: false }), 'Rejected')}
                     className="inline-flex items-center gap-1 rounded-lg border border-border px-2.5 py-1.5 text-xs font-medium text-muted hover:text-danger"><X className="h-3.5 w-3.5" /></button>
                 </div>
               </div>
@@ -100,6 +104,10 @@ function ChildInvest({ child, assets, assetById, prices, holdings, busy, onTrade
   child: InvestChild; assets: InvestAsset[]; assetById: Map<string, InvestAsset>; prices: PriceMap;
   holdings: Holding[]; busy: string | null; onTrade: (assetId: string, side: 'buy' | 'sell', shares: number) => void;
 }) {
+  const locale = useLocale();
+  // Money follows the reader; the currency stays the money's own.
+  const formatCents = (cents: number, currency?: string) =>
+    formatCentsIn(cents, currency, locale.code);
   const tr = useTranslations();
   const { error: toastError } = useToast();
   const portHoldings: PortHolding[] = holdings.map((h) => ({ assetId: h.assetId, shares: h.shares, avgCostCents: h.avgCostCents }));
@@ -211,6 +219,10 @@ function ChildInvest({ child, assets, assetById, prices, holdings, busy, onTrade
 
 // A fun compound-growth teaching tool (not a prediction).
 function GrowthProjector() {
+  const locale = useLocale();
+  // Money follows the reader; the currency stays the money's own.
+  const formatCents = (cents: number, currency?: string) =>
+    formatCentsIn(cents, currency, locale.code);
   const tr = useTranslations();
   const [start, setStart] = useState(50);
   const [monthly, setMonthly] = useState(10);

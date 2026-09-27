@@ -27,6 +27,28 @@
 --
 -- Judged on ROW COUNTS: an UPDATE refused by nothing simply lands, and an
 -- exception-only assertion would report a boundary that is not there.
+--
+-- NEGATIVE CONTROL. Checks 2-7 are refusals, and a refusal on its own names no
+-- rule. 0309 -- which is still the newest migration to touch either table's
+-- policies -- spells its guards as RESTRICTIVE policies with
+-- `can_manage_family(family_id)` in USING, so a child's UPDATE and DELETE are
+-- filtered to ZERO ROWS rather than raising anything. Zero rows is also what a
+-- revoked GRANT, a column-level denial, a row this session cannot SELECT, or a
+-- row that was never seeded would report; and the `insufficient_privilege`
+-- arms catch 42501, which a missing GRANT, a failed JWT and a WITH CHECK
+-- violation all share. The parent block at check 9 is a positive control and a
+-- good one, but it moves the ACTOR and the PREDICATE together, and it never
+-- touches DELETE at all.
+--
+-- So before any refusal is attempted, the SAME child -- same user, same
+-- `authenticated` role, same JWT, same tables, same statements, same policies
+-- -- performs every one of those writes against a second household they really
+-- do manage. Only `can_manage_family(family_id)` differs. If any of them is
+-- refused, this probe says its control failed and names the reason, rather
+-- than crediting a refusal it did not measure to 0309.
+--
+-- And the guard itself is read out of `pg_policies`, not out of the migration
+-- file, so this cannot pass against a rule a later migration replaced.
 \set ON_ERROR_STOP on
 set client_min_messages = warning;
 
@@ -40,14 +62,23 @@ declare
   sched uuid;
   spare_med uuid;
   spare_sched uuid;
+  -- The second household, for the negative control. This same child is a
+  -- 'parent' here, so `can_manage_family` answers TRUE and every write refused
+  -- on `fam` below is one they may really make.
+  ctl_fam uuid := '00000000-0000-4000-8000-0000000ded02';
+  ctl_mid uuid;
+  ctl_med uuid;
+  ctl_sched uuid;
+  why text;
+  r record;
   txt text;
   flag boolean;
   n int;
   failures int := 0;
 begin
-  delete from public.medication_doses where family_id = fam;
-  delete from public.medication_schedules where family_id = fam;
-  delete from public.medications where family_id = fam;
+  delete from public.medication_doses where family_id in (fam, ctl_fam);
+  delete from public.medication_schedules where family_id in (fam, ctl_fam);
+  delete from public.medications where family_id in (fam, ctl_fam);
 
   insert into auth.users (id, email) values
     (parent_uid, 'med-parent@example.com'), (child_uid, 'med-child@example.com')
@@ -76,6 +107,78 @@ begin
   insert into public.medication_schedules (family_id, medication_id, time_of_day, days_of_week, starts_on)
     values (fam, spare_med, '12:00', '{1,2,3}', current_date) returning id into spare_sched;
 
+  -- The control household, and one prescription of its own. Nothing below
+  -- counts or reads these rows: the control DELETES both as its last two steps,
+  -- so `ctl_fam` leaves check 8's read-back and check 9's manager path exactly
+  -- as it found them.
+  --
+  -- The family_members insert is belt-and-braces -- creating a family already
+  -- enrols its creator as a 'parent', and `family_members` is unique on
+  -- (family_id, user_id), so on a normal run this does nothing. What actually
+  -- decides the control is the `can_manage_family(ctl_fam)` assertion below,
+  -- which fires whatever state this household was found in.
+  insert into public.families (id, name, created_by) values (ctl_fam, 'Medications (control)', child_uid)
+  on conflict (id) do nothing;
+  insert into public.family_members (family_id, user_id, display_name, role, is_active) values
+    (ctl_fam, child_uid, 'Grown up elsewhere', 'parent', true)
+  on conflict do nothing;
+  select id into ctl_mid from public.family_members where family_id = ctl_fam and user_id = child_uid;
+  insert into public.medications (family_id, member_id, name, dosage, instructions, is_active, created_by)
+    values (ctl_fam, ctl_mid, 'Loratadine', '10 mg', 'One tablet at night', true, child_uid)
+    returning id into ctl_med;
+  insert into public.medication_schedules (family_id, medication_id, time_of_day, days_of_week, starts_on)
+    values (ctl_fam, ctl_med, '21:00', '{0,1,2,3,4,5,6}', current_date) returning id into ctl_sched;
+
+  -- ── the rule that refuses is the one 0309 wrote ──────────────────
+  -- The negative control below proves a refusal was real, was not a missing
+  -- GRANT and was not a read denial. It still does not name the RULE: anything
+  -- keyed on `can_manage_family(family_id)` refuses exactly these writes and
+  -- would be credited here to 0309. So read the guard out of the CATALOG, not
+  -- out of supabase/migrations -- that is the trap chore-award-amount-check
+  -- fell into, where the live boundary was 0331's rewritten body, not 0305's.
+  --
+  -- Reproduced, not theorised: with all six of 0309's guards dropped and
+  -- 0004's PERMISSIVE update/delete policies re-spelled `can_manage_family`,
+  -- every check below still refused, the negative control still passed, and
+  -- this probe still printed its OK line -- with 0309 gone from the database
+  -- entirely. These eight rows are what turn that back into a red.
+  --
+  -- Pinned by SHAPE, not by name: a rename that keeps the predicate is not a
+  -- boundary change, and failing on one would be noise. What is pinned is
+  -- 0309's mechanism -- RESTRICTIVE (0254's trick: a restrictive policy ANDs
+  -- with the permissive union, so no permissive policy added later can grant
+  -- past it), spelling exactly `can_manage_family(family_id)`, on both tables,
+  -- on all three write commands, and in BOTH halves of UPDATE. Matching the
+  -- predicate exactly rather than with `like '%can_manage_family%'` is
+  -- deliberate, and is the blind spot money-write-boundary-check reproduced:
+  -- `is_family_member(family_id) or can_manage_family(family_id)` contains the
+  -- string while re-opening the write to every member in the family.
+  for r in
+    select want.tbl, want.cmd, want.half
+      from (values
+              ('medications',          'INSERT', 'with check'),
+              ('medications',          'UPDATE', 'using'),
+              ('medications',          'UPDATE', 'with check'),
+              ('medications',          'DELETE', 'using'),
+              ('medication_schedules', 'INSERT', 'with check'),
+              ('medication_schedules', 'UPDATE', 'using'),
+              ('medication_schedules', 'UPDATE', 'with check'),
+              ('medication_schedules', 'DELETE', 'using')
+           ) as want(tbl, cmd, half)
+     where not exists (
+             select 1
+               from pg_policies p
+              where p.schemaname = 'public'
+                and p.tablename  = want.tbl
+                and p.permissive = 'RESTRICTIVE'
+                and p.cmd        = want.cmd
+                and (case when want.half = 'using' then p.qual else p.with_check end)
+                    = 'can_manage_family(family_id)')
+  loop
+    raise exception 'CONTROL FAILED: no RESTRICTIVE % policy on public.% spells can_manage_family(family_id) in its % -- 0309''s guard is not the rule refusing the writes below, so a refusal there cannot be credited to it. Re-read which migration owns this boundary.',
+      r.cmd, r.tbl, r.half;
+  end loop;
+
   -- ── as the child ─────────────────────────────────────────────────────────
   perform set_config('request.jwt.claim.sub', child_uid::text, true);
   set local role authenticated;
@@ -103,6 +206,88 @@ begin
     raise warning 'CONTROL FAILED: a child could not log their own dose (% %)', sqlstate, sqlerrm;
     failures := failures + 1;
   end;
+
+  -- ── NEGATIVE CONTROL ─────────────────────────────────────────────────────
+  -- Prove this session can make these writes AT ALL before reading anything
+  -- into its being refused them. Same statements, same tables, same policies,
+  -- same user -- against `ctl_fam`, where `can_manage_family` is true. Anything
+  -- that failed here would also have refused checks 2-7 and been credited to
+  -- 0309.
+  if current_user <> 'authenticated' then
+    raise exception 'CONTROL FAILED: these writes are running as %, not as authenticated, so RLS is not the thing being measured', current_user;
+  end if;
+  if not public.can_manage_family(ctl_fam) then
+    raise exception 'CONTROL FAILED: this user does not manage the control household, so the writes below are not the same predicate with its answer flipped';
+  end if;
+
+  -- And the rows checks 2-7 aim at are rows this session can SEE. A row a
+  -- child cannot SELECT reports exactly what a row a policy refused to write
+  -- reports: nothing. 0297 left the medication reads open on purpose; if that
+  -- is ever narrowed, this says so instead of letting the refusals below be
+  -- read as 0309's.
+  select count(*) into n from public.medications where id in (med, spare_med);
+  if n <> 2 then
+    raise exception 'CONTROL FAILED: this child can see % of the 2 medications that checks 2-4 and 7 aim at, so a zero row count there would be a read refusal rather than 0309''s write guard', n;
+  end if;
+  select count(*) into n from public.medication_schedules where id in (sched, spare_sched);
+  if n <> 2 then
+    raise exception 'CONTROL FAILED: this child can see % of the 2 dosing schedules that checks 5 and 6 aim at, so a zero row count there would be a read refusal rather than 0309''s write guard', n;
+  end if;
+
+  -- Control for checks 2, 3 and 4 -- all three columns in one statement, so a
+  -- column-level denial on any of them shows up here rather than downstream.
+  why := null;
+  begin
+    update public.medications
+       set dosage = '40 mg', instructions = 'Take as many as you like', is_active = false
+     where id = ctl_med;
+    get diagnostics n = row_count;
+    if n <> 1 then why := format('the UPDATE matched %s row(s)', n); end if;
+  exception when others then why := format('%s %s', sqlstate, sqlerrm);
+  end;
+  if why is not null then
+    raise exception 'CONTROL FAILED: this child was refused an ORDINARY prescription edit -- dosage, instructions and is_active -- in a family they DO manage (%), so a refusal in checks 2-4 would prove nothing about 0309', why;
+  end if;
+
+  -- Control for check 5.
+  why := null;
+  begin
+    update public.medication_schedules set time_of_day = '23:59', days_of_week = '{0}' where id = ctl_sched;
+    get diagnostics n = row_count;
+    if n <> 1 then why := format('the UPDATE matched %s row(s)', n); end if;
+  exception when others then why := format('%s %s', sqlstate, sqlerrm);
+  end;
+  if why is not null then
+    raise exception 'CONTROL FAILED: this child could not move a dosing schedule in a family they DO manage (%), so a refusal in check 5 would prove nothing about 0309', why;
+  end if;
+
+  -- Control for check 6, and it goes BEFORE check 7's: medication_schedules
+  -- cascades on medication_id, so deleting the medication first would take the
+  -- schedule with it and leave this DELETE nothing to match -- a control
+  -- failure this probe would have written itself.
+  why := null;
+  begin
+    delete from public.medication_schedules where id = ctl_sched;
+    get diagnostics n = row_count;
+    if n <> 1 then why := format('the DELETE matched %s row(s)', n); end if;
+  exception when others then why := format('%s %s', sqlstate, sqlerrm);
+  end;
+  if why is not null then
+    raise exception 'CONTROL FAILED: this child could not delete a dosing schedule in a family they DO manage (%), so a refusal in check 6 would prove nothing about 0309', why;
+  end if;
+
+  -- Control for check 7. Nobody else in this probe proves a medications DELETE
+  -- is reachable by anyone: check 9's manager block only updates and inserts.
+  why := null;
+  begin
+    delete from public.medications where id = ctl_med;
+    get diagnostics n = row_count;
+    if n <> 1 then why := format('the DELETE matched %s row(s)', n); end if;
+  exception when others then why := format('%s %s', sqlstate, sqlerrm);
+  end;
+  if why is not null then
+    raise exception 'CONTROL FAILED: this child could not delete a medication record in a family they DO manage (%), so a refusal in check 7 would prove nothing about 0309', why;
+  end if;
 
   -- 2. But not rewrite the dose itself.
   begin
@@ -211,6 +396,6 @@ begin
   if failures > 0 then
     raise exception 'medication-record-boundary: % assertion(s) failed', failures;
   end if;
-  raise notice 'medication-record-boundary: OK — a child may log a dose, and may not rewrite the prescription';
+  raise notice 'medication-record-boundary: OK — a child may log a dose, may make every one of these writes in a household they manage, and may not rewrite this prescription';
 end
 $probe$;

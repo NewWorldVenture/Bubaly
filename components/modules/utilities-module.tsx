@@ -5,7 +5,7 @@ import { Gauge, Plus, Trash2, TrendingUp, TrendingDown, Sparkles, Loader2, Light
 import { useApp } from '@/components/app/app-context';
 import { useRealtimeQuery } from '@/lib/hooks/use-realtime-query';
 import { createClient } from '@/lib/supabase/client';
-import { describeDbError } from '@/lib/supabase/errors';
+import { describeDbError, wroteNoRows } from '@/lib/supabase/errors';
 import { useToast } from '@/components/ui/toast';
 import { Modal } from '@/components/ui/modal';
 import { Input, Textarea, Field, Select } from '@/components/ui/input';
@@ -13,9 +13,9 @@ import { Button } from '@/components/ui/button';
 import { SkeletonList, ErrorState, EmptyState } from '@/components/ui/states';
 import { AiInsight } from '@/components/ai/ai-insight';
 import { fmtDate } from '@/lib/utils/format';
-import { UTILITY_KINDS, utilityLabel, usd, latestByKind, monthlyTotalCents, trendForKind, deltaPct, type BillLike } from '@/lib/home/utilities';
+import { UTILITY_KINDS, utilityLabel, usd as usdIn, latestByKind, monthlyTotalCents, trendForKind, deltaPct, type BillLike } from '@/lib/home/utilities';
 import type { Tables } from '@/lib/database.types';
-import { useTranslations } from '@/components/i18n/locale-provider';
+import { useLocale, useTranslations } from '@/components/i18n/locale-provider';
 
 type Bill = Tables<'utility_bills'>;
 const blank = () => ({ kind: 'electric', provider: '', period_month: new Date().toISOString().slice(0, 7) + '-01', amount: '', usage: '', unit: '', note: '' });
@@ -35,6 +35,9 @@ const SEVERITY_CLS: Record<SavingsFinding['severity'], string> = {
 
 export function UtilitiesModule() {
   const t = useTranslations();
+  // Money follows the reader; the currency stays the money's own.
+  const locale = useLocale();
+  const usd = (cents: number) => usdIn(cents, locale.code);
   const { familyId, userId } = useApp();
   const { success, error: toastError } = useToast();
 
@@ -42,6 +45,8 @@ export function UtilitiesModule() {
     table: 'utility_bills', familyId, deps: [familyId],
     fetcher: (sb) => sb.from('utility_bills').select('*').eq('family_id', familyId).order('period_month', { ascending: false }),
   });
+
+  const [saving, setSaving] = useState(false);
 
   const [form, setForm] = useState<ReturnType<typeof blank> | null>(null);
   const [savings, setSavings] = useState<SavingsResult | null>(null);
@@ -53,20 +58,34 @@ export function UtilitiesModule() {
 
   async function save(e: React.FormEvent) {
     e.preventDefault();
-    if (!form) return;
-    const cents = Math.round(parseFloat(form.amount || '0') * 100);
-    const row = {
-      kind: form.kind, provider: form.provider.trim() || null, period_month: form.period_month,
-      amount_cents: cents, usage: form.usage ? parseFloat(form.usage) : null, unit: form.unit.trim() || null, note: form.note.trim() || null,
-    };
-    const { error } = await createClient().from('utility_bills').insert({ ...row, family_id: familyId, created_by: userId });
-    if (error) return toastError(describeDbError(error));
-    success(t('utilitiesModule.billAdded')); setForm(null);
+    // A pending button AND a re-entrance guard. The guard is not redundant:
+    // `disabled` covers the click, this covers the ENTER KEY, which submits the
+    // form without touching the button at all.
+    //
+    // preventDefault() stays ABOVE it. Returning before it on the second submit
+    // would hand the form to the browser's own native submission — a full page
+    // navigation — which is worse than the double insert this exists to stop.
+    if (saving) return;
+    setSaving(true);
+    try {
+      if (!form) return;
+      const cents = Math.round(parseFloat(form.amount || '0') * 100);
+      const row = {
+        kind: form.kind, provider: form.provider.trim() || null, period_month: form.period_month,
+        amount_cents: cents, usage: form.usage ? parseFloat(form.usage) : null, unit: form.unit.trim() || null, note: form.note.trim() || null,
+      };
+      const { error } = await createClient().from('utility_bills').insert({ ...row, family_id: familyId, created_by: userId });
+      if (error) return toastError(describeDbError(error));
+      success(t('utilitiesModule.billAdded')); setForm(null);
+    } finally {
+      setSaving(false);
+    }
   }
   async function remove(id: string) {
     if (!confirm(t('utilitiesModule.deleteThisBill'))) return;
-    const { error } = await createClient().from('utility_bills').delete().eq('id', id);
-    if (error) toastError(describeDbError(error)); else success(t('utilitiesModule.deleted'));
+    // Under RLS a refused row comes back with no error and zero rows, which this used to report as done. Audit C1-S9-86.
+    const { data: removed, error } = await createClient().from('utility_bills').delete().eq('id', id).select('id');
+    if (error) toastError(describeDbError(error)); else if (wroteNoRows(removed)) toastError(t('errors.thatChangeWasNotSaved')); else success(t('utilitiesModule.deleted'));
   }
   async function analyze() {
     setAnalyzing(true);
@@ -194,7 +213,7 @@ export function UtilitiesModule() {
             <Field label={t('utilities.note')}>{(id) => <Textarea id={id} value={form.note} onChange={(e) => setForm({ ...form, note: e.target.value })} />}</Field>
             <div className="flex justify-end gap-2">
               <Button type="button" variant="secondary" onClick={() => setForm(null)}>{t('utilities.cancel')}</Button>
-              <Button type="submit">Add</Button>
+              <Button type="submit" loading={saving}>Add</Button>
             </div>
           </form>
         </Modal>

@@ -5,6 +5,11 @@
 // category and classifies a given price against it. The page supplies the
 // comps; this is deterministic and fully tested. (Sibling to quick-post's
 // single-point suggestPriceCents — this returns the whole band + a verdict.)
+import type { LocaleCode } from '@/lib/i18n/locales';
+import { formatCents } from './listings';
+
+/** A translator, in the shape `useTranslations()` and `getTranslations()` return. */
+type Translate = (key: string, params?: Record<string, string | number>) => string;
 
 export interface Comp {
   category: string;
@@ -97,10 +102,18 @@ export function isDeal(priceCents: number, band: PriceBand | null): boolean {
   return d === 'great_deal' || d === 'good_deal';
 }
 
-const money = (c: number) => `$${Math.round(c / 100)}`;
-
-/** "Similar items: $20–$45" — the range shown under the verdict. */
-export function bandSummary(band: PriceBand | null): string | null {
+/**
+ * "Similar items: $20–$45" — the range shown under the verdict, as a catalogue
+ * sentence with the two amounts in the READER's notation ("20 $–45 $" in de-DE).
+ *
+ * It used to be `$${Math.round(c / 100)}` inside an English sentence. The band's
+ * edges are whole dollars by construction (priceBand rounds them), so the shared
+ * formatter prints them without cents, exactly as before.
+ */
+export function bandSummary(band: PriceBand | null, locale: LocaleCode, t: Translate): string | null {
   if (!band) return null;
-  return `Similar items: ${money(band.lowCents)}–${money(band.highCents)}`;
+  return t('priceCoach.similarItemsRange', {
+    low: formatCents(band.lowCents, locale),
+    high: formatCents(band.highCents, locale),
+  });
 }

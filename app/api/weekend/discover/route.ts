@@ -10,6 +10,7 @@ import { MAX_SMALL_JSON_BYTES, readBoundedRequestJsonOrEmpty } from '@/lib/serve
 import { fetchPublicCalendarText } from '@/lib/server/public-calendar-fetch';
 import { readBoundedResponseJson } from '@/lib/server/bounded-response-body';
 import { isValidZip, RADIUS_OPTIONS, DEFAULT_RADIUS, DEFAULT_DAYS } from '@/lib/weekend/meta';
+import { describeReadError } from '@/lib/supabase/settle';
 
 export const runtime = 'nodejs';
 
@@ -90,7 +91,17 @@ export async function POST(req: NextRequest) {
   }
 
   // --- Family-curated local feeds (ICS / RSS) ---
-  const { data: feeds } = await supabase.from('weekend_feeds').select('*').eq('family_id', familyId).eq('is_active', true);
+  // This route already has a channel for partial failure — `sourceErrors`, which
+  // every external provider above reports into. The family's OWN curated feeds
+  // were the one source that could fail silently: a refused read left `feeds`
+  // empty, the block below was skipped, and the response came back looking
+  // complete while omitting the only source the family configured themselves.
+  // Reported through the existing mechanism rather than a new one. C1-S9-41.
+  const { data: feeds, error: feedsError } = await supabase.from('weekend_feeds').select('*').eq('family_id', familyId).eq('is_active', true);
+  if (feedsError) {
+    console.error('[weekend/discover] feed read failed', { familyId, error: describeReadError(feedsError) });
+    sourceErrors.feeds = 'Your saved local feeds could not be loaded.';
+  }
   if (feeds && feeds.length) {
     await Promise.allSettled(feeds.map(async (feed) => {
       let status = 'ok'; let count = 0;
@@ -112,7 +123,13 @@ export async function POST(req: NextRequest) {
         console.warn(`Weekend feed ${feed.id} request failed:`, e);
         status = 'Request failed.';
       }
-      await supabase.from('weekend_feeds').update({ last_fetched_at: new Date().toISOString(), last_status: status, last_count: count }).eq('id', feed.id);
+      // Bookkeeping on the feed row: its result was discarded whole, so a
+      // settings page could go on showing a stale "last fetched" forever. Zero
+      // rows is a feed deleted mid-request and stays ordinary; the ERROR is now
+      // logged. Audit C1-S9-62.
+      const { error: statusError } = await supabase.from('weekend_feeds')
+        .update({ last_fetched_at: new Date().toISOString(), last_status: status, last_count: count }).eq('id', feed.id);
+      if (statusError) console.error('[weekend/discover] feed status write failed', { feedId: feed.id, error: statusError.message });
     }));
   }
 
@@ -140,7 +157,9 @@ export async function POST(req: NextRequest) {
     }
   }
 
-  await supabase.from('weekend_searches').insert({ family_id: familyId, zip: zip.trim(), radius_miles: radiusMiles, days: windowDays, result_count: merged.length, last_run_at: new Date().toISOString(), created_by: ctx.user.id });
+  // Its result used to be discarded outright — not even the error bound. Best-effort, so logged rather than raised. Audit C1-S9-76.
+  const { error: weekendSearchesWriteError } = await supabase.from('weekend_searches').insert({ family_id: familyId, zip: zip.trim(), radius_miles: radiusMiles, days: windowDays, result_count: merged.length, last_run_at: new Date().toISOString(), created_by: ctx.user.id });
+  if (weekendSearchesWriteError) console.error('[weekend-discover] weekend_searches insert failed', weekendSearchesWriteError);
 
   return NextResponse.json({ count: merged.length, zip: zip.trim(), radius: radiusMiles, days: windowDays, sources: sourcesUsed, errors: sourceErrors });
 }

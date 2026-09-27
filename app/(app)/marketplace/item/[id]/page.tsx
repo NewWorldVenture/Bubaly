@@ -26,7 +26,8 @@ import {
 } from '@/lib/marketplace/listings';
 import { cn } from '@/lib/utils/cn';
 import { ErrorState } from '@/components/ui/states';
-import { getTranslations } from '@/lib/i18n/server';
+import { getLocaleContext, getTranslations } from '@/lib/i18n/server';
+import { getFormat } from '@/lib/utils/format-server';
 
 export const metadata: Metadata = { title: 'Listing · Marketplace | Bubaly' };
 export const dynamic = 'force-dynamic';
@@ -38,6 +39,10 @@ const KIND_ICON: Record<string, typeof ShoppingBag> = {
 
 export default async function ListingDetailPage({ params }: { params: Promise<{ id: string }> }) {
   const t = await getTranslations();
+  // Prices follow the READER's locale — the marketplace helpers require it.
+  const { locale } = await getLocaleContext();
+  // The price-history date follows the reader, not the browser (I18N-002).
+  const { fmtDate } = await getFormat();
   const { id } = await params;
   const ctx = await requireUserContext();
   const sb = await createServer();
@@ -71,7 +76,7 @@ export default async function ListingDetailPage({ params }: { params: Promise<{ 
   const KindIcon = KIND_ICON[kind] ?? ShoppingBag;
   const isOwner = listing.member_id === selfId;
   const sellerId = listing.member_id ?? '';
-  const price = priceLabel(kind, listing.price_cents, listing.rent_period as RentPeriod | null);
+  const price = priceLabel(kind, listing.price_cents, listing.rent_period as RentPeriod | null, locale.code, t);
 
   // Seller identity + a trust score computed from real activity.
   const { data: members, error: membersError } = await sb.from('family_members').select('id, display_name').eq('family_id', familyId);
@@ -119,7 +124,7 @@ export default async function ListingDetailPage({ params }: { params: Promise<{ 
         id: o.id,
         name: nameOf(o.member_id),
         kindLabel: OFFER_KIND_LABEL[o.kind] ?? 'Offer',
-        amount: o.amount_cents ? formatCents(o.amount_cents) : '',
+        amount: o.amount_cents ? formatCents(o.amount_cents, locale.code) : '',
         message: o.message ?? '',
       }))
     : [];
@@ -157,7 +162,7 @@ export default async function ListingDetailPage({ params }: { params: Promise<{ 
     }));
     const band = priceBand(listing.category, listing.condition, comps);
     dealBadge = dealLabel(assessPrice(listing.price_cents, band));
-    compBand = bandSummary(band);
+    compBand = bandSummary(band, locale.code, t);
   }
 
   // "Make an Offer" negotiation threads (fixed-price sale listings only).
@@ -250,7 +255,7 @@ export default async function ListingDetailPage({ params }: { params: Promise<{ 
               {dealBadge && (
                 <span className={cn('inline-flex items-center gap-1 rounded-full px-2 py-0.5 text-xs font-bold',
                   dealBadge.tone === 'ok' ? 'bg-emerald-500/15 text-emerald-600 dark:text-emerald-400'
-                  : dealBadge.tone === 'good' ? 'bg-sky-500/12 text-sky-600 dark:text-sky-400'
+                  : dealBadge.tone === 'good' ? 'bg-sky-500/10 text-sky-600 dark:text-sky-400'
                   : dealBadge.tone === 'warn' ? 'bg-amber-500/15 text-amber-600 dark:text-amber-400'
                   : 'bg-border/60 text-muted')}
                   title={compBand ?? undefined}>
@@ -266,8 +271,8 @@ export default async function ListingDetailPage({ params }: { params: Promise<{ 
               <ul className="mt-1.5 space-y-0.5">
                 {priceHistory.map((h, i) => (
                   <li key={i} className="flex items-center justify-between gap-3">
-                    <span className={h.newCents < h.oldCents ? 'text-rose-500 dark:text-rose-400' : 'text-muted'}>{historyLine(h)}</span>
-                    <span className="tabular-nums">{new Date(h.changedAt).toLocaleDateString(undefined, { month: 'short', day: 'numeric' })}</span>
+                    <span className={h.newCents < h.oldCents ? 'text-rose-500 dark:text-rose-400' : 'text-muted'}>{historyLine(h, locale.code)}</span>
+                    <span className="tabular-nums">{fmtDate(h.changedAt, 'MMM d')}</span>
                   </li>
                 ))}
               </ul>

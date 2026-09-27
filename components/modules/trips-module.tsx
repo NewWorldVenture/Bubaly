@@ -24,7 +24,8 @@ import {
   TRIP_STATUS_LABELS, TRIP_ITEM_KIND_LABELS, type TripLike, type TripItemLike, type TripItemKind,
 } from '@/lib/trips/planner';
 import type { Tables, TripStatus } from '@/lib/database.types';
-import { useTranslations } from '@/components/i18n/locale-provider';
+import { useLocale, useTranslations } from '@/components/i18n/locale-provider';
+import { useConfirm } from '@/components/ui/confirm';
 
 type Trip = Tables<'trips'>;
 type TripItem = Tables<'trip_items'>;
@@ -52,7 +53,9 @@ const blankTrip = {
 };
 
 export function TripsModule() {
+  const locale = useLocale();
   const tr = useTranslations();
+  const askConfirm = useConfirm();
   const { familyId, userId, members, role } = useApp();
   const { success, error: toastError } = useToast();
   const canEdit = isManager(role);
@@ -122,7 +125,7 @@ export function TripsModule() {
     // a refused write returns zero rows and no error. `.select('id')` is what
     // makes the difference visible — without it `data` is null either way.
     const { data: rows, error: err } = tripForm.id
-      ? await sb.from('trips').update(fields).eq('id', tripForm.id).select('id')
+      ? await sb.from('trips').update(fields).eq('id', tripForm.id).eq('family_id', familyId).select('id')
       : await sb.from('trips').insert({ ...fields, family_id: familyId, created_by: userId }).select('id');
     setSavingTrip(false);
     if (err) { toastError(describeDbError(err)); return; }
@@ -131,9 +134,9 @@ export function TripsModule() {
     setTripModal(false);
   }
   async function removeTrip(t: Trip) {
-    if (!confirm(`Delete "${t.name}" and its checklist?`)) return;
+    if (!(await askConfirm({ title: tr('confirm.deleteNamed', { name: t.name }), body: tr('trips.deleteTripBody') }))) return;
     const sb = createClient();
-    const { data: rows, error: err } = await sb.from('trips').delete().eq('id', t.id).select('id');
+    const { data: rows, error: err } = await sb.from('trips').delete().eq('id', t.id).eq('family_id', familyId).select('id');
     if (err) { toastError(describeDbError(err)); return; }
     if (wroteNoRows(rows)) { toastError(tr('errors.thatChangeWasNotSaved')); return; }
     success(tr('tripsModule.tripDeleted'));
@@ -163,13 +166,13 @@ export function TripsModule() {
   }
   async function toggleItem(it: TripItem) {
     const sb = createClient();
-    const { data: rows, error: err } = await sb.from('trip_items').update({ is_done: !it.is_done }).eq('id', it.id).select('id');
+    const { data: rows, error: err } = await sb.from('trip_items').update({ is_done: !it.is_done }).eq('id', it.id).eq('family_id', familyId).select('id');
     if (err) { toastError(describeDbError(err)); return; }
     if (wroteNoRows(rows)) toastError(tr('errors.thatChangeWasNotSaved'));
   }
   async function removeItem(it: TripItem) {
     const sb = createClient();
-    const { data: rows, error: err } = await sb.from('trip_items').delete().eq('id', it.id).select('id');
+    const { data: rows, error: err } = await sb.from('trip_items').delete().eq('id', it.id).eq('family_id', familyId).select('id');
     if (err) { toastError(describeDbError(err)); return; }
     if (wroteNoRows(rows)) toastError(tr('errors.thatChangeWasNotSaved'));
   }
@@ -177,9 +180,9 @@ export function TripsModule() {
   const fmtRange = (t: Trip) => {
     if (!t.start_date) return 'Dates TBD';
     const opt: Intl.DateTimeFormatOptions = { month: 'short', day: 'numeric' };
-    const s = new Date(`${t.start_date}T00:00:00`).toLocaleDateString('en-US', opt);
+    const s = new Date(`${t.start_date}T00:00:00`).toLocaleDateString(locale.code, opt);
     if (!t.end_date) return s;
-    const e = new Date(`${t.end_date}T00:00:00`).toLocaleDateString('en-US', { ...opt, year: 'numeric' });
+    const e = new Date(`${t.end_date}T00:00:00`).toLocaleDateString(locale.code, { ...opt, year: 'numeric' });
     return `${s} – ${e}`;
   };
 

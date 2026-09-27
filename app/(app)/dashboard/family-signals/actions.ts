@@ -4,11 +4,11 @@
 // EDITABLE: the family can Refresh (recompute from live data), Acknowledge a signal
 // (I've seen it), or Dismiss it (stop surfacing this pattern). Family-scoped via RLS.
 import { revalidatePath } from 'next/cache';
-import { getTranslations } from '@/lib/i18n/server';
+import { getLocaleContext, getTranslations } from '@/lib/i18n/server';
 import { requireUserContext } from '@/lib/supabase/auth';
 import { createServer } from '@/lib/supabase/server';
 import { runSignalDetection } from '@/lib/intelligence/hard-signals-server';
-import { describeActionError } from '@/lib/supabase/errors';
+import { describeActionError, wroteNoRows } from '@/lib/supabase/errors';
 
 type Result<T = undefined> = { ok: true; data?: T } | { ok: false; error: string };
 
@@ -16,7 +16,10 @@ type Result<T = undefined> = { ok: true; data?: T } | { ok: false; error: string
 export async function refreshSignalsAction(): Promise<Result<{ signals: number }>> {
   const ctx = await requireUserContext();
   const supabase = await createServer();
-  const res = await runSignalDetection(supabase, ctx.active.familyId, new Date());
+  // The stored sentence is worded for the person who pressed Refresh.
+  const { locale } = await getLocaleContext();
+  const t = await getTranslations();
+  const res = await runSignalDetection(supabase, ctx.active.familyId, locale.code, t, new Date());
   if (!res.ok) return { ok: false, error: res.error ?? 'Could not refresh signals' };
   revalidatePath('/dashboard/family-signals');
   return { ok: true, data: { signals: res.signals } };
@@ -28,10 +31,13 @@ export async function setSignalStatusAction(id: string, status: 'active' | 'ackn
   if (!id) return { ok: false, error: t('actions.invalidSignal') };
   const ctx = await requireUserContext();
   const supabase = await createServer();
-  const { error } = await supabase.from('family_signals')
+  // Dismissing a signal that stays `active` brings it straight back on the next
+  // refresh, and the family reads that as the app ignoring them. Audit C1-S9-60.
+  const { data: set, error } = await supabase.from('family_signals')
     .update({ status })
-    .eq('id', id).eq('family_id', ctx.active.familyId);
+    .eq('id', id).eq('family_id', ctx.active.familyId).select('id');
   if (error) return { ok: false, error: describeActionError(error, t('actions.couldNotUpdateThatSignal')) };
+  if (wroteNoRows(set)) return { ok: false, error: t('actions.couldNotUpdateThatSignal') };
   revalidatePath('/dashboard/family-signals');
   return { ok: true };
 }

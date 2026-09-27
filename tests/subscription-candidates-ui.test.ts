@@ -5,7 +5,8 @@ import { detectSubscriptionCandidates, subscriptionReviewContextKey, type Subscr
 
 type Effect = { deps?: readonly unknown[]; cleanup?: () => void };
 const mocks = vi.hoisted(() => ({
-  slots: [] as unknown[], cursor: 0, createClient: vi.fn(), insert: vi.fn(), fetch: vi.fn(),
+  slots: [] as unknown[], cursor: 0, createClient: vi.fn(), insert: vi.fn(), selectInserted: vi.fn(), fetch: vi.fn(),
+  toastSuccess: vi.fn(), toastError: vi.fn(),
   key: null as string | null, effects: [] as (() => void)[], cleanups: new Set<() => void>(),
   context: { familyId: 'family-a', userId: 'user-a', selfMember: { id: 'member-a', role: 'parent', is_active: true } },
 }));
@@ -50,7 +51,7 @@ vi.mock('@/components/i18n/locale-provider', async () => {
 vi.mock('@/components/app/app-context', () => ({ useApp: () => mocks.context }));
 vi.mock('@/lib/hooks/use-realtime-query', () => ({ useRealtimeQuery: () => ({ data: [], loading: false, error: null, refresh: vi.fn() }) }));
 vi.mock('@/lib/supabase/client', () => ({ createClient: mocks.createClient }));
-vi.mock('@/components/ui/toast', () => ({ useToast: () => ({ success: vi.fn(), error: vi.fn() }) }));
+vi.mock('@/components/ui/toast', () => ({ useToast: () => ({ success: mocks.toastSuccess, error: mocks.toastError }) }));
 vi.mock('@/components/ai/ai-insight', () => ({ AiInsight: () => null }));
 vi.mock('@/components/modules/savings-coach-card', () => ({ SavingsCoachCard: () => null }));
 
@@ -108,7 +109,12 @@ beforeEach(() => {
   unmount();
   changeContext(context);
   mocks.cursor = 0;
-  mocks.insert.mockReset().mockResolvedValue({ error: null });
+  // The save confirms its write with .select('id') (Audit C1-S9-81), so an
+  // insert resolves through that step with the row it created.
+  mocks.selectInserted.mockReset().mockResolvedValue({ data: [{ id: 'sub-1' }], error: null });
+  mocks.insert.mockReset().mockReturnValue({ select: mocks.selectInserted });
+  mocks.toastSuccess.mockReset();
+  mocks.toastError.mockReset();
   mocks.createClient.mockReset().mockReturnValue({ from: (table: string) => {
     if (table !== 'subscriptions_tracked') throw new Error('Unexpected write target');
     return { insert: mocks.insert };
@@ -152,6 +158,25 @@ describe('reachable subscription candidate review', () => {
     await (form.props.onSubmit as (event: { preventDefault: () => void }) => Promise<void>)({ preventDefault: vi.fn() });
     expect(mocks.insert).toHaveBeenCalledOnce();
     expect(mocks.insert).toHaveBeenCalledWith(expect.objectContaining({ family_id: 'family-a', created_by: 'user-a', name: 'Example Media', cost_cents: 1500, cadence: 'monthly', last_used: null, next_charge: null, note: expect.stringContaining('transactions/txn-0') }));
+    expect(mocks.selectInserted).toHaveBeenCalledWith('id');
+    expect(mocks.toastSuccess).toHaveBeenCalledWith('Added');
+    expect(mocks.toastError).not.toHaveBeenCalled();
+  });
+
+  it('keeps the draft and says so when the save wrote no row (Audit C1-S9-81)', async () => {
+    // Under RLS a refused insert comes back with no error and zero rows; this
+    // used to report "Added" and close the form on a subscription that was
+    // never tracked.
+    mocks.selectInserted.mockResolvedValue({ data: [], error: null });
+    const root = renderWorkspace();
+    (nodes(root).find((node) => node.type === SubscriptionCandidateReview)!.props.onPrefill as (candidate: typeof candidates[number]) => void)(candidates[0]);
+    const draft = renderWorkspace();
+    const form = nodes(draft).find((node) => node.type === 'form')!;
+    await (form.props.onSubmit as (event: { preventDefault: () => void }) => Promise<void>)({ preventDefault: vi.fn() });
+    expect(mocks.insert).toHaveBeenCalledOnce();
+    expect(mocks.toastSuccess).not.toHaveBeenCalled();
+    expect(mocks.toastError).toHaveBeenCalledWith(expect.stringContaining("wasn't saved"));
+    expect(nodes(renderWorkspace()).some((node) => node.type === 'form')).toBe(true);
   });
 
   it('allows discarding a prefilled draft without a write', () => {

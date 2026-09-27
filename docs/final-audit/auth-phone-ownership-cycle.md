@@ -1,5 +1,9 @@
 # Phone OTP ownership
 
+## Status reconciliation — 2026-09-27
+
+This is the retained September 19 evidence record, not a statement that those commits still serve production. Run `35471471192` for `75a1f3c6` is now terminal FAILURE in E2E, with its other three jobs successful. The two failure stages must stay separate: `2a5e7e7a` failed before code entry when the pinned CLI disabled phone signup; after that configuration repair, later failures reached code entry but sent no verification request because the synthetic paste lacked a clipboard event. Claude subsequently repaired that fixture and the pre-hydration phone-entry controls. Exact incoming main `06dd3f7e6d9c0304c9556a4e17c815fa8389a085` passes all four jobs in CI `36320217255` and is verified on the public build endpoint at 15:39:23 UTC. See the current reconciliation in `finalaudit.md` for integrated-source and remaining production-provider limits. All old pending statements below describe their original checkpoint only.
+
 2026-09-19. Baseline published main d9542e256324e99d4e94f816266a35ed2de446b5. AUTH-001 and AUTH-002 remain IN PROGRESS. Existing COMPONENT-8E58E3039ED0 and ROLE-8E58E3039ED0 cover the phone surface. The component moves to IN PROGRESS after direct execution; ROLE remains NOT STARTED because role visibility/access is not fully assessed.
 
 ## Discovery recorded before repair

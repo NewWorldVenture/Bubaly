@@ -6,13 +6,14 @@ import { requireUserContext } from '@/lib/supabase/auth';
 import { createServer } from '@/lib/supabase/server';
 import { computeReward, DIFFICULTY_LABELS, fmtCash, type Difficulty } from '@/lib/chores/logic';
 import { SubmitProofForm } from './submit-form';
-import { getTranslations } from '@/lib/i18n/server';
+import { getLocaleContext, getTranslations } from '@/lib/i18n/server';
 
 export const metadata: Metadata = { title: 'Submit your work' };
 export const dynamic = 'force-dynamic';
 
 export default async function SubmitProofPage({ params }: { params: Promise<{ assignmentId: string }> }) {
   const t = await getTranslations();
+  const { locale } = await getLocaleContext();
   const { assignmentId } = await params;
   const ctx = await requireUserContext();
   const supabase = await createServer();
@@ -46,7 +47,9 @@ export default async function SubmitProofPage({ params }: { params: Promise<{ as
         <div className="mt-3 flex flex-wrap gap-2 text-sm">
           {preview.type !== 'none' && (
             <span className="inline-flex items-center gap-1 rounded-full bg-amber-400/20 px-3 py-1 font-bold text-amber-300">
-              <Star className="h-4 w-4" /> {preview.type === 'cash' ? `up to ${fmtCash(preview.cashCents)}` : `up to ${preview.points} pts`}
+              <Star className="h-4 w-4" /> {preview.type === 'cash'
+                ? t('kidsSubmit.upToAmount', { amount: fmtCash(preview.cashCents, locale.code) })
+                : t('kidsSubmit.upToPoints', { points: preview.points })}
             </span>
           )}
           {chore.est_minutes ? <span className="inline-flex items-center gap-1 rounded-full bg-elevated px-3 py-1 text-muted"><Clock className="h-4 w-4" /> {chore.est_minutes} min</span> : null}

@@ -4,6 +4,11 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { createInMemorySupabase, type InMemorySupabase } from './helpers/in-memory-supabase';
 import { runAutopilotScan } from '@/lib/autopilot/scan';
 
+// The scan STORES suggestion titles, and the subscription ones carry money, so it
+// takes the locale and translator of whoever it writes for. Nothing here asserts
+// wording; an echo translator is enough.
+const echo = (key: string, params?: Record<string, string | number>) => `${key} ${JSON.stringify(params ?? {})}`;
+
 // The accept action (M7) is a server action: it resolves the caller through
 // `requireUserContext`, writes through `createServer`, and speaks through
 // `getTranslations`. Each is mocked to a harness the tests steer; the scan
@@ -13,6 +18,13 @@ const harness = vi.hoisted(() => ({
   db: null as unknown,
   role: 'parent',
   revalidatePath: vi.fn(),
+  // What the family's real approval history supports when a parent accepts.
+  // The accept action re-derives the proposal instead of trusting the row.
+  candidates: [] as unknown[],
+}));
+vi.mock('@/lib/autopilot/policy-scan', async (importOriginal) => ({
+  ...(await importOriginal<typeof import('@/lib/autopilot/policy-scan')>()),
+  loadPolicyCandidates: async () => harness.candidates,
 }));
 vi.mock('next/cache', () => ({ revalidatePath: harness.revalidatePath }));
 vi.mock('@/lib/supabase/auth', () => ({
@@ -117,7 +129,7 @@ describe('autopilot persistence boundaries', () => {
   it('fails closed before any write when a required family read fails', async () => {
     const { client, writes } = failingReadClient('calendar_events');
 
-    await expect(runAutopilotScan(client as never, 'family-1', 'user-1'))
+    await expect(runAutopilotScan(client as never, 'family-1', 'user-1', 'UTC', 'en-US', echo))
       .rejects.toThrow('Autopilot could not read the required family data');
     expect(writes).toEqual([]);
   });
@@ -125,7 +137,7 @@ describe('autopilot persistence boundaries', () => {
   it('removes an auto-created reminder when its suggestion cannot be saved', async () => {
     const { client, writes } = suggestionInsertFailureClient();
 
-    await expect(runAutopilotScan(client as never, 'family-1', 'user-1'))
+    await expect(runAutopilotScan(client as never, 'family-1', 'user-1', 'UTC', 'en-US', echo))
       .rejects.toThrow('Autopilot could not save the suggestion');
     expect(writes).toEqual([
       { table: 'reminders', operation: 'insert' },
@@ -148,7 +160,10 @@ describe('autopilot persistence boundaries', () => {
   it('does not treat list lookup or stale suggestion archival errors as empty state', () => {
     const source = readFileSync(resolve(process.cwd(), 'lib/autopilot/scan.ts'), 'utf8');
 
-    expect(source).toContain('if (lookupError) throw new Error');
+    // The list lookup moved behind ensureDefaultGroceryListId (0443, DATA-007),
+    // which returns a failed read as an error rather than "no list"; the scan
+    // still throws on it rather than carrying on as though the family had none.
+    expect(source).toContain("if (!list.id) throw new Error('Autopilot could not open or create the family shopping list')");
     const history = readFileSync(resolve(process.cwd(), 'lib/autopilot/history.ts'), 'utf8');
     expect(source).toContain('await archiveStaleSuggestions(supabase, familyId, stale, now)');
     expect(history).toContain("throw new Error('Autopilot could not archive stale suggestions')");
@@ -174,6 +189,15 @@ const PROPOSAL = {
   approvals: 4, evidence: 'Approved 4 times since 12 Aug, never rejected', firstApprovedAt: '2026-08-12T10:00:00Z',
 };
 
+const SUPPORTED = {
+  domain: 'scheduling', capability: 'automate', toolName: 'reminders.create',
+  approvals: 4, rejections: 0, corrections: 0, failedCalls: 0, succeededCalls: 4,
+  firstApprovedAt: '2026-08-12T10:00:00Z', lastApprovedAt: '2026-09-01T10:00:00Z',
+  evidence: 'Approved 4 times since 12 Aug, never rejected', confidence: 74,
+  dedupeKey: 'policy:scheduling:automate:reminders.create',
+  title: 'Let Bubaly create reminders without asking', actionLabel: 'Trust Bubaly with this',
+};
+
 function seedSuggestion(db: InMemorySupabase, over: Record<string, unknown> = {}) {
   db.seed('autopilot_suggestions', [{
     id: 'sug-1', family_id: 'family-1', member_id: null, kind: 'policy', status: 'open',
@@ -192,8 +216,34 @@ describe('accepting a learned policy suggestion', () => {
     harness.db = db;
     harness.role = 'parent';
     harness.revalidatePath.mockClear();
+    harness.candidates = [SUPPORTED];
   });
   afterEach(() => vi.restoreAllMocks());
+
+  it('refuses a suggestion the family\'s approval history does not support', async () => {
+    // A member can write autopilot_suggestions directly; a forged "suggestion"
+    // proposing an AI permission, with invented evidence, must not become a
+    // policy just because a parent clicked accept.
+    harness.candidates = [];
+    seedSuggestion(db, { payload: { ...PROPOSAL, domain: 'finances', tool: 'wallet.transfer', evidence: 'Approved 40 times, never rejected' } });
+
+    const res = await acceptPolicySuggestionAction({ suggestionId: 'sug-1' });
+
+    expect(res).toEqual({ ok: false, error: 'That suggestion does not propose a policy.' });
+    expect(db.table('trust_policies')).toEqual([]);
+    expect(db.table('autopilot_suggestions')[0].status).toBe('open');
+  });
+
+  it('writes the policy from the re-derived evidence, not the row', async () => {
+    seedSuggestion(db, { payload: { ...PROPOSAL, approvals: 999, evidence: 'Approved 999 times' } });
+
+    const res = await acceptPolicySuggestionAction({ suggestionId: 'sug-1' });
+
+    expect(res).toEqual({ ok: true });
+    const [policy] = db.table('trust_policies');
+    expect(String(policy.description)).toContain('Approved 4 times since 12 Aug, never rejected');
+    expect((policy.conditions as Record<string, unknown>).approvals).toBe(4);
+  });
 
   it('writes exactly one narrow, tag-scoped trust_policies row and marks the suggestion done', async () => {
     seedSuggestion(db);

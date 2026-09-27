@@ -2,6 +2,7 @@
 
 import Link from 'next/link';
 import { useMemo, useState } from 'react';
+import { openOnKey } from '@/lib/ui/a11y';
 import {
   Users, Plus, Phone, Mail, MapPin, Star, Trash2, Edit2,
   Search, User, Stethoscope, GraduationCap, Trophy, Home,
@@ -12,7 +13,7 @@ import { useApp } from '@/components/app/app-context';
 import { useRealtimeQuery } from '@/lib/hooks/use-realtime-query';
 import { useAction } from '@/lib/hooks/use-action';
 import { createClient } from '@/lib/supabase/client';
-import { describeDbError } from '@/lib/supabase/errors';
+import { describeDbError, wroteNoRows } from '@/lib/supabase/errors';
 import { isValidEmail, isValidPhone } from '@/lib/utils/validation';
 import { useToast } from '@/components/ui/toast';
 import { PageHeader } from '@/components/app/page-header';
@@ -98,8 +99,10 @@ export function ContactsModule() {
 
   function deleteContact(id: string) {
     return run(`delete:${id}`, async () => {
-      const { error: err } = await createClient().from('family_contacts').delete().eq('id', id);
+      // Under RLS a refused row comes back with no error and zero rows, which this used to report as deleted. Audit C1-S9-85.
+      const { data: removed, error: err } = await createClient().from('family_contacts').delete().eq('id', id).select('id');
       if (err) throw err;
+      if (wroteNoRows(removed)) { toastError(t('errors.thatChangeWasNotSaved')); return; }
       success(t('contactsModule.contactDeleted'));
       void refresh();
       if (selected?.id === id) setSelected(null);
@@ -189,17 +192,30 @@ export function ContactsModule() {
                 const isSelected = selected?.id === contact.id;
                 return (
                   <div key={contact.id}
+                    role="button" tabIndex={0}
                     onClick={() => setSelected(isSelected ? null : contact)}
+                    onKeyDown={(e) => openOnKey(e, () => setSelected(isSelected ? null : contact))}
                     className={cn(
                       'flex cursor-pointer items-center gap-4 border-b border-border/50 px-4 py-3 transition last:border-0',
-                      isSelected ? 'bg-brand/8' : 'hover:bg-elevated/30',
+                      isSelected ? 'bg-brand/10' : 'hover:bg-elevated/30',
                     )}>
+                    {/* The row's onClick stays for the mouse. The control is this
+                        button, not role="button" on the row: the row holds a call
+                        button and a mailto link, and role="button" has
+                        presentational children — assistive technology may drop the
+                        semantics of both. It carries aria-expanded because the row
+                        toggles the detail panel rather than navigating, and
+                        stopPropagation because without it the row's handler would
+                        fire second and toggle straight back. */}
+                    <button type="button" aria-expanded={isSelected}
+                      onClick={(e) => { e.stopPropagation(); setSelected(isSelected ? null : contact); }}
+                      className="focus-ring flex min-w-0 flex-1 items-center gap-4 rounded-lg text-left">
                     {/* Avatar */}
                     <div className="relative flex h-11 w-11 flex-shrink-0 items-center justify-center rounded-full text-sm font-bold text-fg"
                       style={{ background: avatarColor(contact.name) }}>
                       {initials(contact.name)}
                       {contact.is_emergency && (
-                        <div className="absolute -right-0.5 -top-0.5 flex h-4 w-4 items-center justify-center rounded-full bg-danger text-[8px] text-white">!</div>
+                        <div className="absolute -right-0.5 -top-0.5 flex h-4 w-4 items-center justify-center rounded-full bg-danger text-[8px] text-danger-fg">!</div>
                       )}
                     </div>
 
@@ -214,6 +230,7 @@ export function ContactsModule() {
                         {contact.organization && <span>· {contact.organization}</span>}
                       </div>
                     </div>
+                    </button>
 
                     {/* Category badge */}
                     <Badge tone={cat.badge as 'neutral'}>{t(cat.labelKey)}</Badge>
@@ -432,10 +449,12 @@ function ContactModal({ contact, familyId, userId, onClose, onSaved }: {
     setLoading(true);
     try {
       const supabase = createClient();
-      const { error } = contact
-        ? await supabase.from('family_contacts').update({ ...payload, updated_at: new Date().toISOString() }).eq('id', contact.id)
-        : await supabase.from('family_contacts').insert({ ...payload, family_id: familyId, created_by: userId });
+      // Under RLS a refused row comes back with no error and zero rows, which this used to report as done. Audit C1-S9-85.
+      const { data: saved, error } = contact
+        ? await supabase.from('family_contacts').update({ ...payload, updated_at: new Date().toISOString() }).eq('id', contact.id).select('id')
+        : await supabase.from('family_contacts').insert({ ...payload, family_id: familyId, created_by: userId }).select('id');
       if (error) { toastError(describeDbError(error)); return; }
+      if (wroteNoRows(saved)) { toastError(t('errors.thatChangeWasNotSaved')); return; }
       success(t(contact ? 'contactsModule.contactUpdated' : 'contactsModule.contactAdded'));
       onSaved();
     } catch (err) {

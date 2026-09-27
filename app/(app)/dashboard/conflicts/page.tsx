@@ -6,19 +6,21 @@ import { settleAll } from '@/lib/supabase/settle';
 import { createServer } from '@/lib/supabase/server';
 import { detectConflicts, quickFixMoveAfter, type TimedEvent } from '@/lib/family/conflicts';
 import { ConflictResolver, type ConflictView } from '@/components/family/conflict-resolver';
-import { getTranslations } from '@/lib/i18n/server';
+import { getLocaleContext, getTranslations } from '@/lib/i18n/server';
+import type { LocaleCode } from '@/lib/i18n/locales';
+import { ErrorState } from '@/components/ui/states';
 
 export const metadata: Metadata = { title: 'AI Conflict Resolution' };
 export const dynamic = 'force-dynamic';
 
-function whenLabel(startsAt: string, endsAt: string | null): string {
+function whenLabel(startsAt: string, endsAt: string | null, locale: LocaleCode): string {
   const s = new Date(startsAt);
-  const start = s.toLocaleString('en-US', { weekday: 'short', month: 'short', day: 'numeric', hour: 'numeric', minute: '2-digit' });
+  const start = s.toLocaleString(locale, { weekday: 'short', month: 'short', day: 'numeric', hour: 'numeric', minute: '2-digit' });
   if (!endsAt) return start;
   const e = new Date(endsAt);
   const sameDay = s.toDateString() === e.toDateString();
-  const end = e.toLocaleTimeString('en-US', { hour: 'numeric', minute: '2-digit' });
-  return sameDay ? `${start} – ${end}` : `${start} → ${e.toLocaleString('en-US', { weekday: 'short', month: 'short', day: 'numeric', hour: 'numeric', minute: '2-digit' })}`;
+  const end = e.toLocaleTimeString(locale, { hour: 'numeric', minute: '2-digit' });
+  return sameDay ? `${start} – ${end}` : `${start} → ${e.toLocaleString(locale, { weekday: 'short', month: 'short', day: 'numeric', hour: 'numeric', minute: '2-digit' })}`;
 }
 
 /** The soonest events to consider, and the most overlaps worth showing at once.
@@ -28,6 +30,8 @@ const MAX_CONFLICTS = 100;
 
 export default async function ConflictsPage() {
   const t = await getTranslations();
+  // A server page: the locale comes from the request, as the translator does.
+  const { locale } = await getLocaleContext();
   const ctx = await requireFeature('/dashboard/conflicts');
   const supabase = await createServer();
   const familyId = ctx.active.familyId;
@@ -35,7 +39,10 @@ export default async function ConflictsPage() {
   const now = new Date();
   const in14 = new Date(now.getTime() + 14 * 24 * 3_600_000);
 
-  const [{ data: events }, { data: members }] = await settleAll([
+  // A failed read here is not "no conflicts". `detectConflicts([])` returns an
+  // empty list, which this page renders as the all-clear — the one answer a
+  // conflict detector must never give when it could not look.
+  const [{ data: events, error: eventsError }, { data: members, error: membersError }] = await settleAll([
     supabase
       .from('calendar_events')
       .select('id, title, starts_at, ends_at, all_day, location, assignee_id')
@@ -48,6 +55,17 @@ export default async function ConflictsPage() {
       .limit(MAX_EVENTS),
     supabase.from('family_members').select('id, display_name').eq('family_id', familyId),
   ]);
+
+  // `settleAll` hands back `{ data: null, error }` on a failed read, so
+  // destructuring `{ data }` alone turns an outage into "no conflicts found" —
+  // on the page whose entire job is finding them. That is the same shape as the
+  // ledger reconciler rendering "everything reconciles" from a truncated read:
+  // an absence presented as an all-clear.
+  const readError = eventsError ?? membersError;
+  if (readError) {
+    console.error('[conflicts] calendar read failed', readError);
+    return <ErrorState message={t('conflicts.couldNotCheckForClashes')} />;
+  }
 
   const nameById = new Map((members ?? []).map((m) => [m.id, m.display_name]));
   const timed: TimedEvent[] = (events ?? []).map((e) => ({
@@ -62,7 +80,7 @@ export default async function ConflictsPage() {
     const ev = (e: TimedEvent) => ({
       id: e.id,
       title: e.title,
-      whenLabel: whenLabel(e.starts_at, e.ends_at),
+      whenLabel: whenLabel(e.starts_at, e.ends_at, locale.code),
       location: e.location ?? null,
       assignee: e.assignee_id ? nameById.get(e.assignee_id) ?? null : null,
     });
@@ -77,7 +95,7 @@ export default async function ConflictsPage() {
             label: qf.label,
             startsAtIso: qf.startsAtIso,
             endsAtIso: qf.endsAtIso,
-            newWhenLabel: whenLabel(qf.startsAtIso, qf.endsAtIso),
+            newWhenLabel: whenLabel(qf.startsAtIso, qf.endsAtIso, locale.code),
           }
         : null,
       aiPayload: {

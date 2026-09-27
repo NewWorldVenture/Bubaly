@@ -43,14 +43,14 @@ import { recordActivity } from '@/lib/services/activity';
 import { makeKey, scopeKey } from '@/lib/services/idempotency';
 import type { ServiceScope } from '@/lib/services/types';
 import { createServiceClient } from '@/lib/supabase/server';
-import { describeActionError, describeDbError } from '@/lib/supabase/errors';
+import { describeActionError, describeDbError, wroteNoRows } from '@/lib/supabase/errors';
 import {
-  HIGH_STAKES_AI_DOMAINS, riskToDecision, toolTags,
+  HIGH_STAKES_AI_DOMAINS, riskToDecision, riskTierStance, toolTags,
   type Capability, type Decision, type TrustRole,
 } from '@/lib/trust/engine';
 import { approvalDedupeKey, evaluateTrust, roleOf } from '@/lib/trust/server';
-import { behaviorForDomain, effectiveRisk } from '@/lib/ai/family-settings';
-import { getAISettings } from '@/lib/services/ai-settings';
+import { behaviorForDomain, DEFAULT_AI_SETTINGS, effectiveRisk } from '@/lib/ai/family-settings';
+import { loadAISettings } from '@/lib/services/ai-settings';
 import { getTranslations } from '@/lib/i18n/server';
 import { getTool } from './registry';
 import type { ToolDefinition, ToolOutcome } from './types';
@@ -274,7 +274,13 @@ async function finalizeCall(
   toolCallId: string,
   patch: { state: 'succeeded' | 'failed'; outputs?: Json | null; error?: string | null; durationMs: number; resource?: { table: string; id: string | null } | null },
 ): Promise<void> {
-  const { error } = await ledger
+  // Never throws — the household write already happened — but a finalize that
+  // is LOST is worse than its old log line said: the row stays `reserved`, and
+  // once stale a retry with the same key takes it over and RE-EXECUTES a write
+  // that already landed (a second calendar event). Zero rows is lost as surely
+  // as an error, so it reaches the same log, which now names that consequence.
+  // Audit C1-S9-66.
+  const { data: finalized, error } = await ledger
     .from('ai_tool_calls')
     .update({
       state: patch.state,
@@ -285,14 +291,21 @@ async function finalizeCall(
       resource_table: patch.resource?.table ?? null,
       resource_id: patch.resource?.id ?? null,
     })
-    .eq('id', toolCallId);
-  if (error) console.error('[tool-exec] could not finalize the tool call ledger row', error);
+    .eq('id', toolCallId)
+    .select('id');
+  if (error || wroteNoRows(finalized)) {
+    console.error('[tool-exec] could not finalize the tool call ledger row; a stale retry may re-execute it', {
+      toolCallId, state: patch.state, error: error ?? 'no rows updated',
+    });
+  }
 }
 
 type Gate =
   | { kind: 'allow' }
   | { kind: 'denied'; reason: string }
-  | { kind: 'pending'; approvalId: string | null; summary: string };
+  | { kind: 'pending'; approvalId: string | null; summary: string }
+  /** The gate could not read what it needs to decide, so nothing runs — and a retry may succeed. */
+  | { kind: 'unverified'; reason: string };
 
 /**
  * Everything between "the arguments are valid" and "the service may run".
@@ -321,13 +334,30 @@ async function gate(
   const title = approvalTitle(tool, input);
   const consequences = tool.consequences?.(input) ?? [];
 
-  // What this household said Bubaly may do (0257). `getAISettings` answers the
-  // cautious defaults rather than failing, so a settings problem can only
-  // tighten the gate, never open it.
-  const settings = await getAISettings(scope);
+  // What this household said Bubaly may do (0257), read STRICTLY. This used to
+  // be the forgiving read, which answers the DEFAULTS (Bubaly on, `execute`)
+  // when the row cannot be read — so for a family that had switched Bubaly
+  // off, a timeout on this one query switched it back on and the write below
+  // went ahead (SEC-009). Bubaly's own write now fails closed: nothing runs,
+  // and the outcome is a retryable error that says why, not a "switched off"
+  // the family never chose.
+  const read = await loadAISettings(scope);
+  const agentWrite = actorKind === 'ai_agent' && !tool.readOnly;
+  if (!read.ok && agentWrite) {
+    const t = await getTranslations();
+    return { kind: 'unverified', reason: t('aiSettings.readFailedNothingChanged') };
+  }
+  // Past this point a failed read is only possible for two callers the switch
+  // does not govern: a READ in a sensitive domain (Settings promises "requests
+  // still answer", and `riskToDecision`'s view rule takes neither tier nor
+  // dial), and a PERSON's own write replayed under an approver's authority
+  // (a member-filed approval). For the second, the family's per-tool tier and
+  // dial are unknown, so it is gated at the registry's own tier and the trust
+  // engine's decision — which is what a family with no overrides gets.
+  const settings = read.ok ? read.data : { familyId: scope.familyId, ...DEFAULT_AI_SETTINGS };
   const risk = effectiveRisk(settings, tool);
   const behavior = behaviorForDomain(settings, tool.domain);
-  if (!settings.enabled && actorKind === 'ai_agent' && !tool.readOnly) {
+  if (!settings.enabled && agentWrite) {
     // Switched off means switched off: no approval is opened, because there is
     // nothing for a parent to release — the family turned Bubaly's hands off.
     return { kind: 'denied', reason: 'Bubaly is switched off for this family in Settings → Bubaly AI.' };
@@ -366,9 +396,8 @@ async function gate(
   // (spend money, submit an order, delete records, share a document) executed
   // with nobody asked. So a blanket allow is re-checked against the tier and
   // may be tightened, never loosened.
-  const fromGenericRule = decision.basis === 'role_default' || decision.basis === 'fallback';
-  const blanketAllow = decision.basis === 'policy' && decision.effect === 'allow' && decision.policyScope === 'broad';
-  if (fromGenericRule || blanketAllow) {
+  const stance = riskTierStance(decision);
+  if (stance !== 'silent') {
     const risked = riskToDecision({
       // The family's own override, floored for money and documents.
       risk,
@@ -384,7 +413,7 @@ async function gate(
     const usable = risked && !(approvalId && risked.effect === 'allow');
     // Over a blanket allow the tier may only tighten: an `allow` from the tier
     // would be no change, and letting it through would rewrite the basis.
-    if (usable && (fromGenericRule || risked!.effect !== 'allow')) decision = risked!;
+    if (usable && (stance === 'speaks' || risked!.effect !== 'allow')) decision = risked!;
   }
 
   if (decision.basis === 'risk_tier') {
@@ -395,8 +424,14 @@ async function gate(
   } else if (approvalId && consequences.length > 0) {
     // The trust bridge opens approvals without knowing what the tool would do;
     // the card (§31) needs the consequences, so they are attached here.
-    const { error } = await (await trustWriter(scope)).from('approval_requests').update({ consequences: consequences as unknown as Json }).eq('id', approvalId).eq('family_id', scope.familyId);
-    if (error) console.error('[tool-exec] could not attach consequences to the approval', error);
+    // Logged on zero rows too: without them the approval card asks a parent to
+    // decide with no statement of what the tool would do. Never raised — the
+    // approval itself exists. Audit C1-S9-66.
+    const { data: attached, error } = await (await trustWriter(scope)).from('approval_requests')
+      .update({ consequences: consequences as unknown as Json }).eq('id', approvalId).eq('family_id', scope.familyId).select('id');
+    if (error || wroteNoRows(attached)) {
+      console.error('[tool-exec] could not attach consequences to the approval', error ?? { approvalId, error: 'no rows updated' });
+    }
   }
 
   if (decision.effect === 'deny') return { kind: 'denied', reason: decision.reason };
@@ -631,6 +666,7 @@ export async function executeTool(
     };
   }
   if (gated.kind === 'denied') return { status: 'denied', reason: gated.reason, toolCallId: null };
+  if (gated.kind === 'unverified') return { status: 'error', error: gated.reason, retryable: true, toolCallId: null };
   if (gated.kind === 'pending') {
     return { status: 'pending_approval', approvalId: gated.approvalId, summary: gated.summary, toolCallId: null };
   }

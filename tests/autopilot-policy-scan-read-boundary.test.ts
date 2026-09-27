@@ -9,6 +9,11 @@ import { createInMemorySupabase, type InMemorySupabase } from './helpers/in-memo
 import { loadPolicyCandidates, runPolicyScan } from '@/lib/autopilot/policy-scan';
 import { runAutopilotScan } from '@/lib/autopilot/scan';
 
+// The scan STORES suggestion titles, and the subscription ones carry money, so it
+// takes the locale and translator of whoever it writes for. Nothing here asserts
+// wording; an echo translator is enough.
+const echo = (key: string, params?: Record<string, string | number>) => `${key} ${JSON.stringify(params ?? {})}`;
+
 type QueryResult = { data: unknown; error: unknown };
 type Write = { table: string; operation: string };
 
@@ -258,7 +263,7 @@ describe('the main Autopilot scan and the policy pass share one table', () => {
     const db = createInMemorySupabase({ uniques: { autopilot_suggestions: [['family_id', 'dedupe_key']] } });
     seedStreak(db, 'family-1', 3);
 
-    const first = await runAutopilotScan(db as never, 'family-1', 'user-1');
+    const first = await runAutopilotScan(db as never, 'family-1', 'user-1', 'UTC', 'en-US', echo);
     expect(first.policyCandidates).toBe(1);
     expect(first.autoExecuted).toBe(0);
     expect(policyRows(db)).toHaveLength(1);
@@ -266,7 +271,7 @@ describe('the main Autopilot scan and the policy pass share one table', () => {
     // The main pass clears OPEN rows whose signal vanished; a policy row is
     // never among its drafts, so without the carve-out this second scan would
     // delete the offer it had just made.
-    const second = await runAutopilotScan(db as never, 'family-1', 'user-1');
+    const second = await runAutopilotScan(db as never, 'family-1', 'user-1', 'UTC', 'en-US', echo);
     expect(second.cleared).toBe(0);
     expect(second.policyCandidates).toBe(1);
     expect(policyRows(db)).toHaveLength(1);

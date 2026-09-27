@@ -3,7 +3,8 @@ import { LayoutGrid } from 'lucide-react';
 import { createServiceClient } from '@/lib/supabase/server';
 import { APP_NAV_GROUPS } from '@/lib/constants/navigation';
 import { SERVICE_DESCRIPTIONS } from '@/lib/services/descriptions';
-import { loadServiceDescriptionOverrides } from '@/lib/services/descriptions-server';
+import { readServiceDescriptionOverrides } from '@/lib/services/descriptions-server';
+import { ErrorState } from '@/components/ui/states';
 import { ServiceDescriptionsEditor, type EditorGroup } from '@/components/admin/service-descriptions-editor';
 import { getTranslations } from '@/lib/i18n/server';
 
@@ -12,7 +13,11 @@ export const dynamic = 'force-dynamic';
 
 export default async function AdminServicesPage() {
   const t = await getTranslations();
-  const overrides = await loadServiceDescriptionOverrides(createServiceClient());
+  // Read strictly. The editor draws a missing override as "using the
+  // default", so an editor over a read that failed would show every custom
+  // blurb as the default and let a Save overwrite one nobody saw (SRV-001 l5).
+  const read = await readServiceDescriptionOverrides(createServiceClient());
+  if (!read.ok) console.error('[admin-services] overrides read failed', read.error);
 
   // Group exactly as the "All Services" catalog, keeping only services that ship
   // with a default (the editable universe), deduped across groups.
@@ -42,7 +47,9 @@ export default async function AdminServicesPage() {
         </div>
       </div>
 
-      <ServiceDescriptionsEditor groups={groups} overrides={overrides} />
+      {read.ok
+        ? <ServiceDescriptionsEditor groups={groups} overrides={read.overrides} />
+        : <ErrorState message={t('adminServices.couldNotLoadTheOverrides')} />}
     </div>
   );
 }

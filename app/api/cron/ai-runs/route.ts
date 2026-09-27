@@ -6,6 +6,7 @@ import { replanPortFor } from '@/lib/ai/planner/replan-port';
 import { runGraph } from '@/lib/ai/runs/executor';
 import { claimRuns, releaseRun } from '@/lib/ai/runs/store';
 import { legacyStatusFor } from '@/lib/ai/runs/states';
+import { wroteNoRows } from '@/lib/supabase/errors';
 
 export const runtime = 'nodejs';
 export const maxDuration = 120;
@@ -61,7 +62,7 @@ export async function GET(req: NextRequest) {
         if (remaining < MIN_SLICE_MS) {
           // Out of tick. Put it back exactly as it was found so the next tick
           // (or an approval decision) picks it up without waiting out the lease.
-          const { error } = await db
+          const { data: requeued, error } = await db
             .from('family_automation_runs')
             .update({
               state: 'ready',
@@ -72,9 +73,14 @@ export async function GET(req: NextRequest) {
             })
             .eq('id', run.id)
             .eq('family_id', run.familyId)
-            .eq('state', 'executing');
+            .eq('state', 'executing')
+            .select('id');
+          // `returned` counted this run whether or not the write failed — and
+          // the `state = 'executing'` guard exists precisely because the run may
+          // have moved on (an approval, a cancel), so zero rows is ordinary. A
+          // run is counted as returned only when it actually was. Audit C1-S9-63.
           if (error) console.error('[cron/ai-runs] failed to return a run to the queue', error);
-          returned += 1;
+          else if (!wroteNoRows(requeued)) returned += 1;
           continue;
         }
 

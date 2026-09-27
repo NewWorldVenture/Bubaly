@@ -82,7 +82,7 @@ describe('bounded raw request bodies', () => {
   it('keeps every form-data route behind the bounded parser', () => {
     for (const file of formDataRouteFiles) {
       const source = readFileSync(file, 'utf8');
-      expect(source, file).toContain('readBoundedRequestFormData');
+      expect(source, file).toContain('readBoundedRequestFormData(');
       expect(source, file).not.toContain('await req.formData()');
     }
   });

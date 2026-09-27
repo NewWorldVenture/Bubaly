@@ -10,8 +10,9 @@ import { isValidPin } from '@/lib/onboarding/pin';
 import { normalizeUsername, isValidUsername, syntheticChildEmail } from '@/lib/onboarding/child-login';
 import { deriveChildPassword } from '@/lib/onboarding/child-password';
 import {
-  evaluateThrottle, registerFailure, clearedState, retryAfterLabel, type ThrottleRow,
+  evaluateThrottle, clearedState, retryAfterLabel, type ThrottleRow,
 } from '@/lib/auth/child-throttle';
+import { recordChildLoginFailure } from '@/lib/auth/child-throttle-store';
 import { clientIp } from '@/lib/server/rate-limit';
 import { enforceRequestRateLimit } from '@/lib/server/request-rate-limit';
 import { createClient as createPasswordClient } from '@supabase/supabase-js';
@@ -109,13 +110,11 @@ export async function childSignInAction(input: { username: string; pin: string }
     return { ok: false, error: `Too many tries. Try again in ${retryAfterLabel(gate.retryAfterSec)}.` };
   }
 
-  const recordFailure = async () => {
-    const next = registerFailure(tRow as ThrottleRow | null, now);
-    const { error } = await admin.from('child_login_throttle').upsert(
-      { username, ...next }, { onConflict: 'username' });
-    if (error) console.error('[child-login] failed-attempt counter write failed', error);
-    return !error;
-  };
+  // Not a blind upsert: `tRow` was read BEFORE the password attempt, so every
+  // guess in flight at this moment would compute its next value from the same
+  // observed row and N parallel guesses would cost ONE failure. The store
+  // writes with that state as a predicate and recounts when it loses.
+  const recordFailure = () => recordChildLoginFailure(admin, username, tRow as ThrottleRow | null, now);
 
   // `eq`, not `ilike`. Both sides are already lowercased by `normalizeUsername`,
   // so the case-insensitive match bought nothing — and it cost the throttle
@@ -169,8 +168,10 @@ export async function childSignInAction(input: { username: string; pin: string }
     }
 
     // Success: wipe the throttle so a genuine kid never carries a stale lock.
-    await admin.from('child_login_throttle').upsert(
+    // Its result used to be discarded outright — not even the error bound. Best-effort, so logged rather than raised. Audit C1-S9-76.
+    const { error: childLoginThrottleWriteError } = await admin.from('child_login_throttle').upsert(
       { username, ...clearedState(now) }, { onConflict: 'username' });
+    if (childLoginThrottleWriteError) console.error('[child-sign-in] child_login_throttle upsert failed', childLoginThrottleWriteError);
     return { ok: true, tokens: { access_token: session.access_token, refresh_token: session.refresh_token } };
   } catch {
     // Provider/configuration failures never expose the derived password or any

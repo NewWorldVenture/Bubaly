@@ -5,7 +5,7 @@ import { Briefcase, Plus, Check, Pencil, Trash2, FileText, Target, Bell, Trendin
 import { useApp } from '@/components/app/app-context';
 import { useRealtimeQuery } from '@/lib/hooks/use-realtime-query';
 import { createClient } from '@/lib/supabase/client';
-import { describeDbError } from '@/lib/supabase/errors';
+import { describeDbError, wroteNoRows } from '@/lib/supabase/errors';
 import { useToast } from '@/components/ui/toast';
 import { PageHeader } from '@/components/app/page-header';
 import { AiInsight } from '@/components/ai/ai-insight';
@@ -16,15 +16,18 @@ import { SkeletonList, ErrorState, EmptyState } from '@/components/ui/states';
 import { cn } from '@/lib/utils/cn';
 import type { Database, Tables, CareerEmploymentType, CareerStatus, CareerWorkMode, JobStage } from '@/lib/database.types';
 import {
-  JOB_STAGES, CAREER_STATUSES, WORK_MODES, EMPLOYMENT_TYPES, OPEN_STAGES, stageMeta, parseKeywords, atsScore, pipelineStats, followUps, salaryFit, careerMap, careerSummary, money, isoDate,
+  JOB_STAGES, CAREER_STATUSES, WORK_MODES, EMPLOYMENT_TYPES, OPEN_STAGES, stageMeta, parseKeywords, atsScore, pipelineStats, followUps, salaryFit, careerMap, careerSummary, money as moneyIn, isoDate,
 } from '@/lib/career/hub';
-import { useTranslations } from '@/components/i18n/locale-provider';
+import { useLocale, useTranslations } from '@/components/i18n/locale-provider';
+import type { LocaleCode } from '@/lib/i18n/locales';
+import { useConfirm } from '@/components/ui/confirm';
+import { safeWebLink } from '@/lib/utils/safe-link';
 
 type Profile = Tables<'career_profiles'>;
 type Application = Tables<'job_applications'>;
 type Resume = Tables<'resume_versions'>;
 
-const fmtDate = (d: string) => new Date(`${d.slice(0, 10)}T00:00:00`).toLocaleDateString('en-US', { month: 'short', day: 'numeric' });
+const fmtDateIn = (locale: LocaleCode) => (d: string) => new Date(`${d.slice(0, 10)}T00:00:00`).toLocaleDateString(locale, { month: 'short', day: 'numeric' });
 const dollarsToCents = (v: FormDataEntryValue | null) => { const raw = String(v ?? '').trim(); if (!raw) return null; const n = Number(raw.replace(/[^0-9.]/g, '')); return Number.isFinite(n) ? Math.round(n * 100) : null; };
 const centsToDollars = (c: number | null | undefined) => (c === null || c === undefined ? '' : String(c / 100));
 const STAGE_STYLE: Record<JobStage, string> = {
@@ -34,7 +37,12 @@ const STAGE_STYLE: Record<JobStage, string> = {
 };
 
 export function CareerModule() {
+  const locale = useLocale();
+  const fmtDate = fmtDateIn(locale.code);
   const tr = useTranslations();
+  const askConfirm = useConfirm();
+  // Money follows the reader; the currency stays the money's own.
+  const money = (cents: number | null | undefined) => moneyIn(cents, locale.code);
   const { familyId, userId, members, selfMember } = useApp();
   const { success, error: toastError } = useToast();
 
@@ -82,44 +90,58 @@ export function CareerModule() {
   async function moveStage(a: Application, stage: JobStage) {
     const patch: Database['public']['Tables']['job_applications']['Update'] = { stage, last_activity_on: isoDate(new Date()) };
     if (stage === 'applied' && !a.applied_on) patch.applied_on = isoDate(new Date());
-    const { error } = await createClient().from('job_applications').update(patch).eq('id', a.id);
+    // Under RLS a refused row comes back with no error and zero rows, which this used to report as done. Audit C1-S9-80.
+    const { data: updated, error } = await createClient().from('job_applications').update(patch).eq('id', a.id).select('id');
     if (error) return toastError(describeDbError(error));
+    if (wroteNoRows(updated)) return toastError(tr('errors.thatChangeWasNotSaved'));
     success(`${a.company}: ${stageMeta(stage).label.toLowerCase()}`);
   }
 
   async function deleteApplication(a: Application) {
-    if (!confirm(`Remove ${a.role_title} at ${a.company}?`)) return;
-    const { error } = await createClient().from('job_applications').delete().eq('id', a.id);
+    if (!(await askConfirm({ title: tr('career.removeApplicationQ', { role: a.role_title, company: a.company }), body: tr('confirm.cannotBeUndone') }))) return;
+    const { data: removed, error } = await createClient().from('job_applications').delete().eq('id', a.id).select('id');
     if (error) return toastError(describeDbError(error));
+    if (wroteNoRows(removed)) return toastError(tr('errors.thatChangeWasNotSaved'));
     success(tr('careerModule.applicationRemoved'));
   }
 
   async function setPrimary(r: Resume) {
     const supabase = createClient();
+    // This one FIRST, confirmed; then clear the others. It used to clear every
+    // primary before setting this one, so a set that matched nothing (refused,
+    // or the resume gone) left the search with NO primary resume while saying
+    // "is now the primary". No unique index forbids two primaries for a moment
+    // (0247), and a failed clear leaves two, which is visible and fixable.
+    // Clearing the others may match zero rows — there often is no other
+    // primary — so that write is not confirmed. Audit C1-S9-80.
+    const { data: made, error } = await supabase.from('resume_versions').update({ is_primary: true }).eq('id', r.id).select('id');
+    if (error) return toastError(describeDbError(error));
+    if (wroteNoRows(made)) return toastError(tr('errors.thatChangeWasNotSaved'));
     const { error: clearError } = await supabase.from('resume_versions').update({ is_primary: false }).eq('profile_id', r.profile_id).neq('id', r.id);
     if (clearError) return toastError(describeDbError(clearError));
-    const { error } = await supabase.from('resume_versions').update({ is_primary: true }).eq('id', r.id);
-    if (error) return toastError(describeDbError(error));
-    success(`${r.title} is now the primary resume`);
+    success(tr('modules.primaryResumeSet', { title: r.title }));
   }
 
   async function deleteResume(r: Resume) {
-    if (!confirm(`Delete “${r.title}”?`)) return;
-    const { error } = await createClient().from('resume_versions').delete().eq('id', r.id);
+    if (!(await askConfirm({ title: tr('confirm.deleteNamed', { name: r.title }), body: tr('confirm.cannotBeUndone') }))) return;
+    const { data: removed2, error } = await createClient().from('resume_versions').delete().eq('id', r.id).select('id');
     if (error) return toastError(describeDbError(error));
+    if (wroteNoRows(removed2)) return toastError(tr('errors.thatChangeWasNotSaved'));
     success(tr('careerModule.resumeDeleted'));
   }
 
   async function archiveProfile(p: Profile, active: boolean) {
-    const { error } = await createClient().from('career_profiles').update({ is_active: active }).eq('id', p.id);
+    const { data: updated2, error } = await createClient().from('career_profiles').update({ is_active: active }).eq('id', p.id).select('id');
     if (error) return toastError(describeDbError(error));
+    if (wroteNoRows(updated2)) return toastError(tr('errors.thatChangeWasNotSaved'));
     success(active ? 'Search reopened' : 'Search archived');
   }
 
   async function deleteProfile(p: Profile) {
-    if (!confirm(`Delete “${p.title}” for ${nameOf(p.member_id)} with every application and resume?`)) return;
-    const { error } = await createClient().from('career_profiles').delete().eq('id', p.id);
+    if (!(await askConfirm({ title: tr('confirm.deleteNamed', { name: p.title }), body: tr('career.deleteProfileBody') }))) return;
+    const { data: removed3, error } = await createClient().from('career_profiles').delete().eq('id', p.id).select('id');
     if (error) return toastError(describeDbError(error));
+    if (wroteNoRows(removed3)) return toastError(tr('errors.thatChangeWasNotSaved'));
     setProfileId('');
     success(tr('careerModule.profileDeleted'));
   }
@@ -149,7 +171,7 @@ export function CareerModule() {
           </div>
           <div className="flex shrink-0 items-center gap-0.5">
             {next && OPEN_STAGES.includes(a.stage) && <Button size="sm" variant="secondary" onClick={() => moveStage(a, next.value)}><ArrowRight className="h-3.5 w-3.5" /> {next.label}</Button>}
-            {a.url && <a href={a.url} target="_blank" rel="noreferrer" aria-label={tr('career.openPosting')} className="rounded-lg p-1.5 text-muted hover:text-fg"><ExternalLink className="h-4 w-4" /></a>}
+            {a.url && <a href={safeWebLink(a.url) ?? undefined} target="_blank" rel="noreferrer" aria-label={tr('career.openPosting')} className="rounded-lg p-1.5 text-muted hover:text-fg"><ExternalLink className="h-4 w-4" /></a>}
             <button onClick={() => setAppForm({ open: true, application: a })} aria-label={`Edit ${a.company}`} className="rounded-lg p-1.5 text-muted hover:text-fg"><Pencil className="h-4 w-4" /></button>
             <button onClick={() => deleteApplication(a)} aria-label={`Delete ${a.company}`} className="rounded-lg p-1.5 text-muted hover:text-rose-400"><Trash2 className="h-4 w-4" /></button>
           </div>
@@ -408,11 +430,12 @@ function ApplicationForm({ familyId, userId, profile, resumes, application, onCl
       resume_id: String(f.get('resume_id') ?? '') || null, excitement: excitement || null, notes: String(f.get('notes') ?? '').trim() || null,
     };
     const supabase = createClient();
-    const { error } = application
-      ? await supabase.from('job_applications').update(payload).eq('id', application.id)
-      : await supabase.from('job_applications').insert({ family_id: familyId, profile_id: profile.id, created_by: userId, ...payload });
+    const { data: saved, error } = application
+      ? await supabase.from('job_applications').update(payload).eq('id', application.id).select('id')
+      : await supabase.from('job_applications').insert({ family_id: familyId, profile_id: profile.id, created_by: userId, ...payload }).select('id');
     setLoading(false);
     if (error) return toastError(describeDbError(error));
+    if (wroteNoRows(saved)) return toastError(tr('errors.thatChangeWasNotSaved'));
     onSaved();
   }
 
@@ -484,11 +507,12 @@ function ResumeForm({ familyId, userId, profile, resume, isFirst, onClose, onSav
       is_primary: resume ? resume.is_primary : isFirst, notes: String(f.get('notes') ?? '').trim() || null,
     };
     const supabase = createClient();
-    const { error } = resume
-      ? await supabase.from('resume_versions').update(payload).eq('id', resume.id)
-      : await supabase.from('resume_versions').insert({ family_id: familyId, profile_id: profile.id, created_by: userId, ...payload });
+    const { data: saved2, error } = resume
+      ? await supabase.from('resume_versions').update(payload).eq('id', resume.id).select('id')
+      : await supabase.from('resume_versions').insert({ family_id: familyId, profile_id: profile.id, created_by: userId, ...payload }).select('id');
     setLoading(false);
     if (error) return toastError(describeDbError(error));
+    if (wroteNoRows(saved2)) return toastError(tr('errors.thatChangeWasNotSaved'));
     onSaved();
   }
 

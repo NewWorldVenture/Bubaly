@@ -99,7 +99,9 @@ export async function POST(req: NextRequest) {
     // model's word: see `lib/briefing/decisions.ts`. A ServiceResult, not a
     // Postgrest response, so it is awaited BESIDE the batch: settleAll
     // substitutes the { data, error } shape for a rejection, which has no `ok`.
-    const decisionsRes = await readBriefDecisions(scope).catch((cause) => {
+    // The decisions go back to THIS reader as the brief's list, so a money
+    // approval's amount and the words around it are in their locale.
+    const decisionsRes = await readBriefDecisions(scope, { locale: locale.code, t: tr }).catch((cause) => {
       console.error('[briefing] decisions read threw', cause);
       return { ok: false as const, error: String(cause) };
     });
@@ -235,7 +237,7 @@ GROCERIES STILL NEEDED (${(groceryItems ?? []).length} items):
 ${(groceryItems ?? []).map(g => `- ${g.name}${g.category ? ` (${g.category})` : ''}`).join('\n') || '- None'}
 
 UPCOMING REMINDERS:
-${(reminders ?? []).map(r => `- ${r.remind_at?.slice(0, 10) ?? 'soon'}: ${r.title}${r.notes ? ': ' + r.notes : ''}`).join('\n') || '- None'}
+${(reminders ?? []).map(r => `- ${r.remind_at ? dayKeyInTz(new Date(r.remind_at), tz) : 'soon'}: ${r.title}${r.notes ? ': ' + r.notes : ''}`).join('\n') || '- None'}
 
 MEAL PLANS THIS WEEK:
 ${(mealPlans ?? []).map(m => {
@@ -480,13 +482,17 @@ ${UNTRUSTED_CONTENT_RULE}
     // response shows — marking the whole unread queue read here would silently
     // swallow notices the family never saw.
     if (brief.alsoToday.length > 0) {
+      // Rows deliberately not checked — reason below. Audit C1-S9-62.
       const { error: markError } = await supabase
         .from('notifications')
         .update({ is_read: true })
         .eq('family_id', familyId)
         .in('id', brief.alsoToday.map(item => item.id));
       // A brief that showed the notices is still a correct brief; failing to
-      // mark them read only means they appear again tomorrow.
+      // mark them read only means they appear again tomorrow. Deliberately NOT
+      // confirmed for the same reason — zero rows means they were already read
+      // or dismissed elsewhere, which is the state being asked for.
+      // Audit C1-S9-62.
       if (markError) console.error('[api/ai/briefing] mark folded notifications read failed', markError);
     }
 

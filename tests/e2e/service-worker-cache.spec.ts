@@ -276,10 +276,11 @@ for (const reply of [
   });
 }
 
-for (const reply of [
+const unsafeCachedReplies: Reply[] = [
   { headers: { 'cache-control': 'private, no-store', 'content-type': 'image/png' } },
   { headers: { 'content-type': 'text/html' } }, { status: 403, headers: { 'content-type': 'image/png' } },
-]) {
+];
+for (const reply of unsafeCachedReplies) {
   test(`rejects unsafe cached resource hits ${JSON.stringify(reply)}`, async ({ page }) => {
     await page.evaluate(async ({ reply, CURRENT }) => {
       await (await caches.open(CURRENT)).put('/icons/icon-192.png', new Response('unsafe-cached-bytes', reply));
@@ -365,15 +366,17 @@ for (const [url, options] of [['/?code=synthetic', { navigate: true }], ['/offli
   });
 }
 
-for (const headers of [{ RSC: '1' }, { 'Next-Router-State-Tree': 'synthetic' }, { 'Next-Action': 'synthetic' }]) {
+const protocolHeaders: Record<string, string>[] = [{ RSC: '1' }, { 'Next-Router-State-Tree': 'synthetic' }, { 'Next-Action': 'synthetic' }];
+for (const headers of protocolHeaders) {
   test(`navigation protocol headers never overwrite the shell ${JSON.stringify(headers)}`, async ({ page }) => {
     await dispatch(page, '/', { navigate: true, headers });
     expect(await cacheHas(page, CURRENT, '/')).toBe(false);
   });
 }
 
-for (const reply of [{ headers: { 'content-type': 'text/x-component' } }, { status: 500 }, { redirected: true },
-  { headers: { 'cache-control': 'private, no-store' } }]) {
+const unsafeNavigationReplies: Reply[] = [{ headers: { 'content-type': 'text/x-component' } }, { status: 500 }, { redirected: true },
+  { headers: { 'cache-control': 'private, no-store' } }];
+for (const reply of unsafeNavigationReplies) {
   test(`unsafe navigation responses do not enter the shell ${JSON.stringify(reply)}`, async ({ page }) => {
     await page.evaluate(reply => { window.__swCache.reply = reply; }, reply);
     await dispatch(page, '/offline', { navigate: true });

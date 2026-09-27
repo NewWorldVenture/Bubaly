@@ -65,7 +65,7 @@ export async function TrustLedger() {
         </dl>
 
         {/* The rows — a vertical list at every width, so it never scrolls sideways */}
-        <ul className="mt-8 divide-y divide-white/8 rounded-2xl border border-white/8">
+        <ul className="mt-8 divide-y divide-white/10 rounded-2xl border border-white/8">
           {TRUST_LEDGER.map((row) => {
             const { icon: Icon, iconColor } = STATUS_STYLE[row.status];
             const evidence = row.evidence ?? [];

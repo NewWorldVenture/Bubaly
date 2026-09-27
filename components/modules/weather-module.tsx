@@ -4,7 +4,8 @@ import { useCallback, useEffect, useMemo, useState } from 'react';
 import { MapPin, Plus, Search, Star, Trash2, LocateFixed, Wind, Droplets, X } from 'lucide-react';
 import { useApp } from '@/components/app/app-context';
 import { createClient } from '@/lib/supabase/client';
-import { describeDbError } from '@/lib/supabase/errors';
+import { settle } from '@/lib/supabase/settle';
+import { describeDbError, wroteNoRows } from '@/lib/supabase/errors';
 import { useToast } from '@/components/ui/toast';
 import { PageHeader } from '@/components/app/page-header';
 import { AiInsight } from '@/components/ai/ai-insight';
@@ -16,7 +17,8 @@ import {
   type Forecast, type GeoResult,
 } from '@/lib/weather/open-meteo';
 import type { Tables } from '@/lib/database.types';
-import { useTranslations } from '@/components/i18n/locale-provider';
+import { useLocale, useTranslations } from '@/components/i18n/locale-provider';
+import type { LocaleCode } from '@/lib/i18n/locales';
 
 type SavedLocation = Tables<'weather_locations'>;
 
@@ -44,19 +46,24 @@ function placeLabel(p: Place): string {
   return [p.name, p.admin1, p.country].filter(Boolean).slice(0, 2).join(', ');
 }
 
-function dayName(date: string, i: number): string {
+const dayNameIn = (locale: LocaleCode) => (date: string, i: number): string => {
   if (i === 0) return 'Today';
   if (i === 1) return 'Tomorrow';
-  return new Date(date + 'T00:00:00').toLocaleDateString('en-US', { weekday: 'short', month: 'short', day: 'numeric' });
-}
+  return new Date(date + 'T00:00:00').toLocaleDateString(locale, { weekday: 'short', month: 'short', day: 'numeric' });
+};
 
 export function WeatherModule() {
+  const locale = useLocale();
+  const dayName = dayNameIn(locale.code);
   const t = useTranslations();
   const { familyId, userId } = useApp();
   const { success, error: toastError } = useToast();
   const supabase = useMemo(() => createClient(), []);
 
   const [saved, setSaved] = useState<SavedLocation[]>([]);
+  /** Set when the saved-cities read itself failed, so an unreadable list is
+   *  never rendered as an empty one. */
+  const [savedError, setSavedError] = useState<string | null>(null);
   const [geo, setGeo] = useState<Place | null>(null);
   const [activeKey, setActiveKey] = useState<string | null>(null);
   const [view, setView] = useState<ViewKey>('5');
@@ -88,7 +95,14 @@ export function WeatherModule() {
     const { data, error } = await supabase.from('weather_locations').select('*').eq('family_id', familyId).order('sort_order').order('created_at');
     // A transient read failure must not wipe the family's saved cities — keep the
     // prior list (don't clobber to []) rather than flashing a false "no cities".
-    if (error) return [];
+    //
+    // And it must not read as "no cities" either. Swallowing the error left a
+    // dead channel and a quiet table indistinguishable: on a first load the
+    // screen said "No location yet — allow location access or add a city" for
+    // a family whose cities were simply unreadable, and the Add button was the
+    // only thing offered. Say which one it is.
+    if (error) { setSavedError(describeDbError(error)); return []; }
+    setSavedError(null);
     setSaved(data ?? []);
     return data ?? [];
   }, [supabase, familyId]);
@@ -158,23 +172,43 @@ export function WeatherModule() {
       sort_order: saved.length,
     }).select('id').single();
     if (err || !data) { toastError(describeDbError(err, t('weatherModule.couldNotAddCity'))); return; }
-    success(`Added ${r.name}`);
+    success(t('modules.addedNamed', { name: r.name }));
     setAdding(false); setQuery(''); setResults([]);
     await loadSaved();
     setActiveKey(`db:${data.id}`);
   }
 
   async function makeDefault(id: string) {
-    await supabase.from('weather_locations').update({ is_default: false }).eq('family_id', familyId);
-    const { error: err } = await supabase.from('weather_locations').update({ is_default: true }).eq('id', id);
+    // "One default city" is enforced HERE and nowhere else — no unique index
+    // backs it. The clear used to be a bare statement, so if it failed and the
+    // set below succeeded the family ended up with TWO defaults, and if it
+    // succeeded while the set failed they ended up with none. Same shape as the
+    // meal-vote ballot: an invariant a comment states and only an unchecked
+    // write keeps.
+    //
+    // Order (Audit C1-S9-83, the career primary's fix in C1-S9-80): it cleared
+    // EVERY city first, so a set that then matched nothing (the city deleted a
+    // moment ago by someone else) left the family with no default at all. The
+    // set goes first and is confirmed; only then are the OTHERS cleared. A
+    // failed clear leaves two defaults, which is visible and fixable; the old
+    // order lost the family's choice. The clear is left unconfirmed on purpose:
+    // with one city there are no others, and zero rows is the ordinary answer.
+    const { data: rows, error: err } = await supabase.from('weather_locations')
+      .update({ is_default: true }).eq('id', id).select('id');
     if (err) return toastError(describeDbError(err));
+    if (!rows?.length) return toastError(t('errors.thatChangeWasNotSaved'));
+    const { error: clearErr } = await settle(
+      supabase.from('weather_locations').update({ is_default: false }).eq('family_id', familyId).neq('id', id));
+    if (clearErr) { toastError(describeDbError(clearErr)); await loadSaved(); return; }
     success(t('weatherModule.defaultCitySet'));
     await loadSaved();
   }
 
   async function removeCity(id: string) {
-    const { error: err } = await supabase.from('weather_locations').delete().eq('id', id);
+    // Under RLS a refused row comes back with no error and zero rows, which this used to report as done. Audit C1-S9-83.
+    const { data: removed, error: err } = await supabase.from('weather_locations').delete().eq('id', id).select('id');
     if (err) return toastError(describeDbError(err));
+    if (wroteNoRows(removed)) return toastError(t('errors.thatChangeWasNotSaved'));
     if (activeKey === `db:${id}`) setActiveKey(geo ? 'geo' : null);
     await loadSaved();
   }
@@ -185,6 +219,16 @@ export function WeatherModule() {
   return (
     <div className="module-page space-y-5">
       <PageHeader title={t('weather.weather')} description={t('weatherModule.liveConditionsAndForecastsFor')} action={<AiInsight kind="weather" />} />
+
+      {/* An unreadable saved-city list is not an empty one. Without this the
+          picker below simply omitted every saved city and the "No location yet"
+          card invited the family to add one they already had. */}
+      {savedError && (
+        <div className="flex items-center justify-between gap-3 rounded-xl border border-danger/30 bg-danger/10 px-4 py-3 text-sm text-danger" role="alert">
+          <span>{savedError}</span>
+          <button onClick={() => { void loadSaved(); }} className="shrink-0 font-semibold underline">{t('states.tryAgain')}</button>
+        </div>
+      )}
 
       {/* Location selector */}
       <div className="flex flex-wrap items-center gap-2">
@@ -216,7 +260,7 @@ export function WeatherModule() {
               <input autoFocus value={query} inputMode="search" enterKeyHint="search" onChange={(e) => setQuery(e.target.value)} placeholder={t('weather.searchForACity')} className="min-w-0 flex-1 bg-transparent text-sm outline-none" />
             </div>
             <Button type="submit" loading={searching}>{t('weather.search')}</Button>
-            <button type="button" onClick={() => { setAdding(false); setQuery(''); setResults([]); }} className="grid h-10 w-10 place-items-center rounded-xl border border-border text-muted hover:bg-elevated"><X className="h-4 w-4" /></button>
+            <button type="button" aria-label={t('a11y.close')} onClick={() => { setAdding(false); setQuery(''); setResults([]); }} className="grid h-10 w-10 place-items-center rounded-xl border border-border text-muted hover:bg-elevated"><X className="h-4 w-4" /></button>
           </form>
           {results.length > 0 && (
             <ul className="mt-3 divide-y divide-border/60">

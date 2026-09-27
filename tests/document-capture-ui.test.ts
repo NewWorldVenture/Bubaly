@@ -4,7 +4,7 @@ import { DocumentCapture } from '@/components/capture/document-capture';
 import { PaperworkModule } from '@/components/modules/paperwork-module';
 import { CameraCapture } from '@/components/ui/camera-capture';
 import { getMessages, translate } from '@/lib/i18n/messages';
-import type { LocaleCode } from '@/lib/i18n/locales';
+import { localeOrDefault, type LocaleCode } from '@/lib/i18n/locales';
 
 const state = vi.hoisted(() => ({ slots: [] as unknown[], cursor: 0, effects: [] as (() => void)[], locale: 'en-US' as LocaleCode, upload: vi.fn(), refresh: vi.fn(), familyId: 'family-1', userId: 'parent-1' }));
 vi.mock('react', async (original) => ({
@@ -25,7 +25,7 @@ vi.mock('react', async (original) => ({
     }
   },
 }));
-vi.mock('@/components/i18n/locale-provider', () => ({ useTranslations: () => (key: string) => translate(getMessages(state.locale), key) }));
+vi.mock('@/components/i18n/locale-provider', () => ({ useTranslations: () => (key: string) => translate(getMessages(state.locale), key), useLocale: () => localeOrDefault(state.locale) }));
 vi.mock('@/lib/capture/document-upload', async (original) => ({ ...await original<typeof import('@/lib/capture/document-upload')>(), uploadCapturedDocument: state.upload }));
 vi.mock('next/navigation', () => ({ useRouter: () => ({ push: vi.fn(), back: vi.fn(), refresh: state.refresh }) }));
 vi.mock('@/components/app/app-context', () => ({ useApp: () => ({ familyId: state.familyId, userId: state.userId, selfMember: { id: 'member-1' } }) }));

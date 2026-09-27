@@ -7,7 +7,7 @@ import type { SupabaseClient } from '@supabase/supabase-js';
 import type { Database, Json, Tables } from '@/lib/database.types';
 import { isAIConfigured, resolveProvider } from '@/lib/ai/provider';
 import { getAIConfig } from '@/lib/ai/settings';
-import { fetchExternal } from '@/lib/server/external-fetch';
+import { fetchWithDeadline } from '@/lib/server/fetch-with-deadline';
 import { readBoundedResponseJson } from '@/lib/server/bounded-response-body';
 import { syncMarketingProviders } from './provider-sync';
 
@@ -17,6 +17,7 @@ export type MarketingPage = Tables<'marketing_pages'>;
 // — this file is server-only. Imported for local use AND re-exported, so every
 // existing `from '@/lib/marketing/platform'` import keeps working unchanged.
 import { PAGE_TYPES, type MarketingPageType } from './page-types';
+import { wroteNoRows } from '@/lib/supabase/errors';
 export { PAGE_TYPES, type MarketingPageType };
 
 const PAGE_TYPE_SET = new Set<string>(PAGE_TYPES.map((item) => item.value));
@@ -258,7 +259,10 @@ async function runRegeneration(supabase: MarketingPlatformDb, job: Tables<'marke
   } catch (error) {
     console.error('[marketing-platform] AI generation degraded to deterministic content', error);
   }
-  const { error: updateError } = await supabase.from('marketing_pages').update({
+  // A page deleted since it was read matched nothing here, and the version
+  // upsert below then failed on its foreign key — still a throw, but blamed on
+  // the wrong write. Reported where it happened. Audit C1-S9-67.
+  const { data: saved, error: updateError } = await supabase.from('marketing_pages').update({
     title: generated.title,
     summary: generated.summary,
     body: generated.body,
@@ -266,8 +270,9 @@ async function runRegeneration(supabase: MarketingPlatformDb, job: Tables<'marke
     seo: safeJson(generated.seo),
     aeo: safeJson(generated.aeo),
     updated_by: null,
-  }).eq('id', page.id);
+  }).eq('id', page.id).select('id');
   if (updateError) throw updateError;
+  if (wroteNoRows(saved)) throw new Error(`Marketing page ${page.id} was not found when saving its regeneration.`);
   const { error: versionError } = await supabase.from('marketing_page_versions').upsert({
     page_id: page.id,
     version: page.version,
@@ -292,6 +297,53 @@ async function runRegeneration(supabase: MarketingPlatformDb, job: Tables<'marke
   return { pageId: page.id, version: page.version, source };
 }
 
+/** The two writers that publish AEO answers for a path, keyed the way each one
+ *  stamps its rows: `runQuestions` below (metadata.source) and
+ *  `deriveArticleAeoQuestions` for blog articles (metadata.seed). */
+export type AeoQuestionSource = 'marketing_platform' | 'blog_aeo_v1';
+
+/**
+ * Take a path's public AEO answers out of the published set.
+ *
+ * `marketing_aeo_questions` rows are world-readable on `status = 'published'`
+ * alone (migration 0228) — the policy does not join back to the page, so a page
+ * that goes dark leaves its generated answers live on /faq's Knowledge Center,
+ * in the category FAQ block of every SIBLING article, and in the FAQPage
+ * structured data submitted to search engines. For a blog article the answer body
+ * literally ends "Read the full guide at /blog/<slug>", i.e. a public answer
+ * citing a 404. Nothing self-heals it: the 0237 regeneration trigger skips rows
+ * with `deleted_at` set, and `runQuestions` refuses a deleted page.
+ *
+ * 'answered' rather than deleted, because that is exactly the status
+ * `runQuestions` (line below) writes for a page that is not published — the
+ * editorial text survives for a later re-publish, it stays visible in the admin
+ * AEO console, and it leaves the public set.
+ *
+ * Only PUBLISHED rows are touched, so an 'opportunity' or 'drafting' row an
+ * admin is still working on keeps its own status.
+ */
+export async function retireAeoQuestionsForPath(
+  supabase: MarketingPlatformDb,
+  sourcePath: string,
+  sources: AeoQuestionSource[],
+): Promise<{ error: { code?: string; message?: string } | null }> {
+  for (const source of sources) {
+    // Deliberately NOT confirmed on rows: a page with no published answers is
+    // the ordinary case, and zero rows retired is then exactly right; a failed
+    // write is still returned to the caller. Audit C1-S9-92 (main's #581).
+    const base = supabase
+      .from('marketing_aeo_questions')
+      .update({ status: 'answered', last_reviewed: new Date().toISOString() })
+      .eq('source_path', sourcePath)
+      .eq('status', 'published');
+    const { error } = await (source === 'marketing_platform'
+      ? base.contains('metadata', { source: 'marketing_platform' })
+      : base.eq('metadata->>seed', 'blog_aeo_v1'));
+    if (error) return { error };
+  }
+  return { error: null };
+}
+
 async function runQuestions(supabase: MarketingPlatformDb, job: Tables<'marketing_generation_jobs'>) {
   if (!job.target_id) throw new Error('Question job is missing target_id.');
   const { data: page, error } = await supabase.from('marketing_pages').select('id, path, title, summary, aeo, status').eq('id', job.target_id).is('deleted_at', null).maybeSingle();
@@ -307,6 +359,8 @@ async function runQuestions(supabase: MarketingPlatformDb, job: Tables<'marketin
     pattern: 'faq', status: page.status === 'published' ? 'published' : 'answered',
     clarity_score: 85, last_reviewed: new Date().toISOString(), metadata: safeJson({ source: 'marketing_platform', page_id: page.id }),
   }));
+  // The ERROR gates the insert; zero rows does not — a first generation has no
+  // prior set. Rows deliberately not checked. Audit C1-S9-67.
   const { error: deleteError } = await supabase.from('marketing_aeo_questions').delete().eq('source_path', page.path).contains('metadata', { source: 'marketing_platform' });
   if (deleteError) throw deleteError;
   if (rows.length) {
@@ -320,7 +374,7 @@ async function openAIEmbeddings(textInputs: string[], configuredKey?: string | n
   const apiKey = configuredKey ?? process.env.OPENAI_API_KEY ?? '';
   if (!apiKey) throw new Error('Embedding provider is not configured. Set OPENAI_API_KEY.');
   const model = process.env.OPENAI_EMBEDDING_MODEL ?? 'text-embedding-3-small';
-  const response = await fetchExternal('https://api.openai.com/v1/embeddings', {
+  const response = await fetchWithDeadline('https://api.openai.com/v1/embeddings', {
     method: 'POST', headers: { 'content-type': 'application/json', authorization: `Bearer ${apiKey}` },
     body: JSON.stringify({ model, input: textInputs.map((input) => input.slice(0, 6_000)) }),
   }, 60_000);
@@ -351,6 +405,9 @@ async function runEmbedding(supabase: MarketingPlatformDb, job: Tables<'marketin
   const missing = chunks.map((content, index) => ({ content, index, hash: hashes[index] })).filter((row) => !reusable.has(row.hash));
   const staleIds = (existingRows ?? []).filter((row) => !currentHashes.has(row.content_hash)).map((row) => row.id);
   if (staleIds.length) {
+    // Rows deliberately not checked: these ids were read just above, so fewer
+    // matching means some were deleted — which keeps them out of retrieval at
+    // least as surely as marking them stale. Audit C1-S9-67.
     const { error: staleError } = await supabase.from('marketing_embeddings').update({ status: 'stale' }).in('id', staleIds);
     if (staleError) throw staleError;
   }

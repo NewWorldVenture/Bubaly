@@ -1,3 +1,4 @@
+import { at } from './helpers/source-order';
 import { readFileSync } from 'node:fs';
 import { describe, expect, it } from 'vitest';
 import {
@@ -14,6 +15,7 @@ import {
   valueTier,
   valueTierForLevel,
 } from '@/lib/marketing/value';
+import { formatCents } from '@/lib/wallet/ledger';
 
 // The pricing page's value arithmetic lives in lib/marketing/value.ts and
 // nowhere else. Every expectation about rounding derives from
@@ -52,11 +54,22 @@ describe('per-day framing never understates', () => {
     expect(perDayCents(Number.NaN, 'yearly')).toBe(0);
   });
 
-  it('formats cents under a dollar and dollars from a dollar up', () => {
-    expect(formatPerDay(perDayCents(BASIC_ANNUAL_CENTS, 'yearly'))).toBe('33¢');
-    expect(formatPerDay(perDayCents(PLUS_MONTHLY_CENTS, 'monthly'))).toBe('$1.01');
-    expect(formatPerDay(100)).toBe('$1');
-    expect(formatPerDay(105)).toBe('$1.05');
+  it('formats a per-day figure as money in the reader\'s convention', () => {
+    // Expected text is the shared formatter's output for an explicit locale, in
+    // the plans' USD — the cents come from the plan constants, not a typed amount.
+    for (const locale of ['en-US', 'de-DE'] as const) {
+      const money = (cents: number) => formatCents(cents, 'USD', locale);
+      expect(formatPerDay(perDayCents(BASIC_ANNUAL_CENTS, 'yearly'), locale)).toBe(money(Math.ceil(BASIC_ANNUAL_CENTS / 365)));
+      expect(formatPerDay(perDayCents(PLUS_MONTHLY_CENTS, 'monthly'), locale)).toBe(money(101));
+      expect(formatPerDay(100, locale)).toBe(money(100));
+      expect(formatPerDay(105, locale)).toBe(money(105));
+      expect(formatPerDay(32.2, locale), 'a fractional cent rounds UP, never down').toBe(money(33));
+      expect(formatPerDay(-5, locale), 'a negative figure reads as nothing').toBe(money(0));
+    }
+    // Under a dollar is money too, in the reader's own format: no "¢", which is
+    // an American spelling Intl does not write, and no American money for a German.
+    expect(formatPerDay(33, 'en-US')).not.toContain('¢');
+    expect(formatPerDay(33, 'de-DE')).not.toBe(formatPerDay(33, 'en-US'));
   });
 });
 
@@ -201,7 +214,7 @@ describe('pricing-content.tsx mounts the block and keeps the toggle intact', () 
     expect(priceRow).toBeGreaterThan(-1);
     expect(perDayLine).toBeGreaterThan(priceRow);
     // The billed-annually sub-line survives underneath it.
-    expect(pricing.indexOf('{priceSub}')).toBeGreaterThan(perDayLine);
+    expect(at(pricing, '{priceSub}')).toBeGreaterThan(perDayLine);
     // Only the two paid cards pass perDay; the trial card does not. The cards
     // are located by their <PlanCard boundaries: every visible name on them is
     // a catalogue key, so there is no English literal to search for.
@@ -255,8 +268,8 @@ describe('pricing-content.tsx mounts the block and keeps the toggle intact', () 
 describe('the in-app upgrade modal reuses the same arithmetic and copy', () => {
   it('derives its per-day lines from lib/marketing/value.ts', () => {
     expect(upgrade).toContain("from '@/lib/marketing/value'");
-    expect(upgrade).toContain("formatPerDay(perDayCents(tier.monthlyCents, 'monthly'))");
-    expect(upgrade).toContain("formatPerDay(perDayCents(tier.annualCents, 'yearly'))");
+    expect(upgrade).toContain("formatPerDay(perDayCents(tier.monthlyCents, 'monthly'), locale.code)");
+    expect(upgrade).toContain("formatPerDay(perDayCents(tier.annualCents, 'yearly'), locale.code)");
   });
 
   it('leads with the tier outcomes and keeps the checklist secondary', () => {

@@ -96,6 +96,8 @@ export async function provisionFamilyEmailLocal(
     if (existing.data?.email_local) return { assigned: false, reason: 'already_assigned', local: existing.data.email_local };
 
     for (const local of candidateLocals(familyName, familyId)) {
+      // Confirmed by READBACK below rather than `.select()` — the check reads
+      // which candidate actually landed. Audit C1-S9-69.
       const { error } = await admin
         .from('family_contact_channels')
         .update({ email_local: local })

@@ -9,7 +9,7 @@ import { CalendarClock, Sparkles, Check, X, Plane, Cake, FileText, GraduationCap
 import { useApp } from '@/components/app/app-context';
 import { useRealtimeQuery } from '@/lib/hooks/use-realtime-query';
 import { createClient } from '@/lib/supabase/client';
-import { describeDbError } from '@/lib/supabase/errors';
+import { describeDbError, wroteNoRows } from '@/lib/supabase/errors';
 import { useToast } from '@/components/ui/toast';
 import { Button } from '@/components/ui/button';
 import { SkeletonList, ErrorState } from '@/components/ui/states';
@@ -18,6 +18,7 @@ import { cn } from '@/lib/utils/cn';
 import { generatePrepPlansAction } from '@/app/(app)/dashboard/prep-plans/prep-actions';
 import type { Tables } from '@/lib/database.types';
 import { useTranslations } from '@/components/i18n/locale-provider';
+import { todayInZone } from '@/lib/schedule/zoned';
 
 type Plan = Tables<'prep_plans'>;
 type Step = Tables<'prep_plan_steps'>;
@@ -32,16 +33,36 @@ const URGENCY_STYLE: Record<string, string> = {
 };
 const URGENCY_LABEL: Record<string, string> = { now: 'Start now', soon: 'Coming up', later: 'On the horizon' };
 
-function daysUntil(dateStr: string): number {
-  const target = new Date(dateStr + 'T00:00:00Z').getTime();
-  const today = new Date(new Date().toISOString().slice(0, 10) + 'T00:00:00Z').getTime();
+/**
+ * Whole calendar days from `todayKey` to `dateStr`, both day KEYS.
+ *
+ * `todayKey` is a parameter because this module CONSUMES a day key that
+ * lib/planning/prep-server.ts now produces in the family's zone, and the two
+ * halves have to mean the same day. It used to derive its own "today" as
+ * `new Date().toISOString().slice(0, 10)` — the day at GREENWICH — and compare
+ * that against `prep_plans.target_date`, a DATE column holding the day on the
+ * family's wall. At 18:30 on a Sunday in Los Angeles a plan targeted at that
+ * very Sunday rendered as "1 days ago"; at 07:00 in Tokyo a plan for today
+ * rendered as "in 1 day" and its open steps looked like they had not started.
+ *
+ * Both anchors are `T00:00:00Z`, which is zone-free calendar arithmetic on two
+ * day keys — not an instant being re-expressed — so the subtraction counts
+ * whole days and is unaffected by any DST transition between them.
+ */
+function daysUntil(dateStr: string, todayKey: string): number {
+  const target = new Date(`${dateStr}T00:00:00Z`).getTime();
+  const today = new Date(`${todayKey}T00:00:00Z`).getTime();
   return Math.round((target - today) / 86_400_000);
 }
 
-export function PlanningModule() {
+export function PlanningModule({ tz }: { tz: string }) {
   const t = useTranslations();
   const { familyId } = useApp();
   const { success, error: toastError } = useToast();
+  // The family's own day, resolved once per render. `lib/schedule/zoned.ts` is
+  // used rather than the identical arithmetic in `lib/services/scope.ts`
+  // because that one imports 'server-only' and this is a client component.
+  const todayKey = todayInZone(tz);
 
   const { data: plans, loading: plansLoading, error: plansError, refresh: refreshPlans } = useRealtimeQuery<Plan>({
     table: 'prep_plans', familyId, deps: [familyId],
@@ -73,13 +94,16 @@ export function PlanningModule() {
 
   async function toggleStep(step: Step) {
     const sb = createClient();
-    const { error } = await sb.from('prep_plan_steps').update({ is_done: !step.is_done }).eq('id', step.id);
+    // Under RLS a refused row comes back with no error and zero rows, which this used to report as done. Audit C1-S9-85.
+    const { data: updated, error } = await sb.from('prep_plan_steps').update({ is_done: !step.is_done }).eq('id', step.id).select('id');
     if (error) toastError(describeDbError(error));
+    else if (wroteNoRows(updated)) toastError(t('errors.thatChangeWasNotSaved'));
   }
   async function dismiss(planId: string) {
     const sb = createClient();
-    const { error } = await sb.from('prep_plans').update({ status: 'dismissed' }).eq('id', planId);
+    const { data: updated2, error } = await sb.from('prep_plans').update({ status: 'dismissed' }).eq('id', planId).select('id');
     if (error) { toastError(describeDbError(error)); return; }
+    if (wroteNoRows(updated2)) { toastError(t('errors.thatChangeWasNotSaved')); return; }
     success(t('planningModule.planDismissed'));
   }
 
@@ -108,9 +132,9 @@ export function PlanningModule() {
             const Icon = KIND_ICON[p.signal_kind] ?? CalendarDays;
             const planSteps = stepsByPlan.get(p.id) ?? [];
             const done = planSteps.filter((s) => s.is_done).length;
-            const d = daysUntil(p.target_date);
+            const d = daysUntil(p.target_date, todayKey);
             return (
-              <div key={p.id} className="rounded-xl border border-border bg-card p-4">
+              <div key={p.id} className="rounded-xl border border-border bg-surface/40 p-4">
                 <div className="flex items-start justify-between gap-3">
                   <div className="flex items-center gap-3">
                     <span className="flex size-9 items-center justify-center rounded-lg bg-muted/10"><Icon className="size-4" /></span>

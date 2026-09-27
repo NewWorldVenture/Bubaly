@@ -6,8 +6,10 @@
 import { revalidatePath } from 'next/cache';
 import { getTranslations } from '@/lib/i18n/server';
 import { requireUserContext } from '@/lib/supabase/auth';
+import { todayKeyFor } from '@/lib/services/scope';
 import { createServer } from '@/lib/supabase/server';
-import { describeDbError } from '@/lib/supabase/errors';
+import { describeDbError, wroteNoRows } from '@/lib/supabase/errors';
+import { todayInZone } from '@/lib/schedule/zoned';
 import type { SubScore } from '@/lib/food/score';
 
 type Result<T = unknown> = { ok: true; data?: T } | { ok: false; error: string };
@@ -56,22 +58,26 @@ export async function updateLeftoverStatusAction(input: { id: string; status: st
   const supabase = await createServer();
   if (!STATUSES.includes(input.status as never)) return { ok: false, error: t('actions.invalidStatus') };
 
-  const { error } = await supabase
+  // Audit C1-S9-49.
+  const { data: updated, error } = await supabase
     .from('leftover_inventory')
     .update({ status: input.status, updated_by: ctx.user.id })
-    .eq('id', input.id).eq('family_id', ctx.active.familyId);
+    .eq('id', input.id).eq('family_id', ctx.active.familyId).select('id');
 
   if (error) return { ok: false, error: describeDbError(error) };
+  if (wroteNoRows(updated)) return { ok: false, error: t('actions.couldNotUpdateThatLeftover') };
   revalidatePath('/dashboard/kitchen');
   return { ok: true };
 }
 
 export async function deleteLeftoverAction(input: { id: string }): Promise<Result> {
+  const t = await getTranslations();
   const ctx = await requireUserContext();
   const supabase = await createServer();
-  const { error } = await supabase
-    .from('leftover_inventory').delete().eq('id', input.id).eq('family_id', ctx.active.familyId);
+  const { data: removed, error } = await supabase
+    .from('leftover_inventory').delete().eq('id', input.id).eq('family_id', ctx.active.familyId).select('id');
   if (error) return { ok: false, error: describeDbError(error) };
+  if (wroteNoRows(removed)) return { ok: false, error: t('actions.couldNotDeleteThatLeftover') };
   revalidatePath('/dashboard/kitchen');
   return { ok: true };
 }
@@ -86,7 +92,19 @@ export async function snapshotFoodScoreAction(input: {
   const ctx = await requireUserContext();
   const supabase = await createServer();
 
-  const today = new Date().toISOString().slice(0, 10);
+  // The day on the family's kitchen wall, not Greenwich's. This read
+  // `new Date().toISOString().slice(0, 10)`, which answers the UTC day, so from
+  // 17:00 local in Los Angeles (and before 10:00 in Sydney, with the sign
+  // reversed) the snapshot landed on a NEIGHBOURING day's key. Because the write
+  // below is an upsert on UNIQUE (family_id, snapshot_date)
+  // (0102_food_os.sql:57), that misdated row occupied the neighbour's slot and
+  // the next save on that day silently overwrote it: two calendar days of a
+  // once-a-day history collapsed into one row, and the UI reported both saves as
+  // saved. The page that COMPUTES this score resolves the same zone with the same
+  // `|| 'UTC'` (kitchen/page.tsx:30-31) through `dayKeyInTz`, and `todayKeyFor`
+  // is `dayKeyInTz` with that fallback written once (scope.ts), so the day the
+  // score was computed for and the day it is filed on compare equal.
+  const today = todayKeyFor(ctx);
   const { error } = await supabase
     .from('family_food_scores')
     .upsert(

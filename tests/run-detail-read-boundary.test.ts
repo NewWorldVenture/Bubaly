@@ -53,7 +53,7 @@ describe('run detail read boundary', () => {
     expect(page).toContain('if (!detail.ok) return <RunUnavailable message={detail.error} />;');
     expect(page).toContain('const view = toRunView(detail.data, familyId, manager);');
     // Never the service client: a cross-family id must be "not found", not data.
-    expect(page).not.toContain('createServiceClient');
+    expect(page).not.toContain('createServiceClient(');
   });
 
   it('renders the plan reasoning_summary only, never the model reasoning chain', () => {

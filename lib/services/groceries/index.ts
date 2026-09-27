@@ -23,11 +23,13 @@
 // the RPC stays in place but nothing calls it.
 import 'server-only';
 import type { PantryLocation, Tables } from '@/lib/database.types';
+import { normalizeName } from '@/lib/groceries/normalize-name';
 import {
   applySubstitutions, collectDietaryConstraints, type Substitution,
 } from '@/lib/meals/substitutions';
 import { expiringSoon, lowStockItems, PANTRY_LOCATIONS } from '@/lib/pantry/logic';
-import { describeDbError } from '@/lib/supabase/errors';
+import { describeActionError, describeDbError, wroteNoRows, isMissingFunctionError } from '@/lib/supabase/errors';
+import { readAllAsQuery } from '@/lib/supabase/read-all';
 import { settleAll } from '@/lib/supabase/settle';
 import { recordActivitySafely } from '../activity';
 import { isDayKey, parseIngredients, type Ingredient } from '../meals';
@@ -40,6 +42,19 @@ export type GroceryItem = Tables<'grocery_items'>;
 
 /** The name a list is created under when the family has none. Matches 0002's column default. */
 export const DEFAULT_GROCERY_LIST_NAME = 'Groceries';
+
+/**
+ * How many `family_facts` rows the dietary read will walk before it calls the
+ * result a prefix and fails closed.
+ *
+ * Generous against what the memory service itself models — "a household has
+ * dozens of facts, not thousands" (lib/services/memory/index.ts) — and still a
+ * number, because the alternative is reading an unbounded table and hoping.
+ * Past it the read reports an error rather than a prefix, and the fail-closed
+ * branch refuses to shop; a family that genuinely holds this many facts gets a
+ * refusal it can report, not a shopping list missing an allergen.
+ */
+const DIETARY_FACT_CEILING = 5_000;
 
 /**
  * "Not archived", asked of BOTH columns that answer it.
@@ -92,38 +107,78 @@ export function categorizeGroceryItem(name: string): string | null {
   return best?.category ?? null;
 }
 
-/** Normalised form used for duplicate detection: case, plural 's' and spacing are not differences. */
-export function normalizeName(name: string): string {
-  return name.trim().toLowerCase().replace(/\s+/g, ' ').replace(/s$/, '');
-}
+/**
+ * Normalised form used for duplicate detection: case, plural 's' and spacing
+ * are not differences.
+ *
+ * The rule itself now lives in `lib/groceries/normalize-name.ts` — this file is
+ * `server-only`, and the competitor importer's resolver has to compare grocery
+ * names under the SAME rule without inheriting that. Re-exported from here so
+ * every caller that already imports it from the service keeps working.
+ */
+export { normalizeName };
 
-export async function ensureDefaultList(scope: ServiceScope): Promise<ServiceResult<{ id: string; created: boolean }>> {
-  const { data: existing, error: lookupError } = await scope.db
+/**
+ * Get-or-create a family's default grocery list, as ONE operation (DATA-007).
+ *
+ * Every writer that files groceries without naming a list comes through here:
+ * this service, the assistant's tools, moment prep and the recipe vote. They
+ * used to read "the oldest open list" and insert one when there was none, with
+ * nothing serialising the two, so two first captures at once gave the family
+ * two "Groceries" lists — and the shopping module opens the oldest, so half of
+ * what was captured sat on a list nobody looks at. 0443's
+ * `ensure_default_grocery_list` holds a per-family advisory lock across the
+ * read and the insert; docs/audit/a-family-gets-one-default-list-check.sql
+ * races two sessions against it and against a lock-less copy.
+ *
+ * A database without 0443 answers PGRST202, and the read-then-insert that ran
+ * before is the fallback: a deploy can precede its migration. Any other error
+ * is returned, never mistaken for "no list".
+ *
+ * Both archive columns, as the service header explains: only `archived_at` is
+ * ever written, so `is_archived` alone calls an archived list open.
+ */
+export async function ensureDefaultGroceryListId(
+  db: ServiceScope['db'],
+  familyId: string,
+  createdBy: string | null,
+  name: string = DEFAULT_GROCERY_LIST_NAME,
+): Promise<{ id: string; error: null } | { id: null; error: unknown }> {
+  const { data, error } = await db.rpc('ensure_default_grocery_list', {
+    p_family_id: familyId, p_name: name, p_created_by: createdBy,
+  });
+  if (!error && typeof data === 'string') return { id: data, error: null };
+  if (error && !isMissingFunctionError(error)) return { id: null, error };
+
+  const { data: existing, error: lookupError } = await db
     .from('grocery_lists')
     .select('id')
-    .eq('family_id', scope.familyId)
+    .eq('family_id', familyId)
     .eq('is_archived', false)
     .is('archived_at', null)
     .order('created_at', { ascending: true })
     .limit(1)
     .maybeSingle();
-  if (lookupError) {
-    console.error('[service:groceries] list lookup failed', lookupError);
-    return fail(describeDbError(lookupError, 'Could not open your shopping list.'), { code: SERVICE_CODES.db });
-  }
-  if (existing?.id) return ok({ id: existing.id, created: false });
+  if (lookupError) return { id: null, error: lookupError };
+  if (existing?.id) return { id: existing.id, error: null };
 
-  const { data, error } = await scope.db
+  const { data: created, error: createError } = await db
     .from('grocery_lists')
     // created_by references auth.users (0002).
-    .insert({ family_id: scope.familyId, name: DEFAULT_GROCERY_LIST_NAME, created_by: scope.userId })
+    .insert({ family_id: familyId, name, created_by: createdBy })
     .select('id')
     .single();
-  if (error || !data) {
-    console.error('[service:groceries] list create failed', error);
-    return fail(describeDbError(error, 'Could not create a shopping list.'), { code: SERVICE_CODES.db });
+  if (createError || !created) return { id: null, error: createError ?? new Error('Grocery list was not created') };
+  return { id: created.id, error: null };
+}
+
+export async function ensureDefaultList(scope: ServiceScope): Promise<ServiceResult<{ id: string }>> {
+  const list = await ensureDefaultGroceryListId(scope.db, scope.familyId, scope.userId);
+  if (list.error || !list.id) {
+    console.error('[service:groceries] default list get-or-create failed', list.error);
+    return fail(describeDbError(list.error as never, 'Could not open your shopping list.'), { code: SERVICE_CODES.db });
   }
-  return ok({ id: data.id, created: true });
+  return ok({ id: list.id });
 }
 
 export type GroceryItemInput = {
@@ -497,16 +552,47 @@ export async function addFromMealPlan(scope: ServiceScope, input: MealPlanGrocer
   // FAIL CLOSED. A read that errors here is not "no allergies"; putting peanut
   // butter on the list because `medical_profiles` was unreachable is exactly
   // the failure this rule exists to prevent.
+  //
+  // Which is why the allergies come through `family_allergies()` (0438) and not
+  // a select. `scope.db` is the CALLER's client, and since 0438 the table's own
+  // SELECT policy is manager-or-self — a child selecting it would get
+  // `{ data: [], error: null }`, the guard below would pass, and the list would
+  // get its peanut butter with nothing having gone wrong anywhere. The RPC
+  // returns (member_id, allergies) for the whole household to any member, and
+  // RAISES for a non-member, so the guard has an error to catch.
+  //
+  // A SHORT read is not "no allergies" either, and that is the harder half.
+  // PostgREST answers an unbounded `select()` with at most `db-max-rows` (1,000
+  // on a default project) and reports nothing — no error for the guard below to
+  // catch. A household whose `family_facts` has outgrown one page would then be
+  // shopped for against a PREFIX of its own allergies, and the allergy row that
+  // fell off the end reads exactly like an allergy the family never recorded.
+  // So page to a real ceiling: `readAll` turns "there are more than `max`" into
+  // an error, which the fail-closed branch already renders. The RPC returns one
+  // row per member and cannot reach the cap, so it stays as it is.
+  // The price is one extra round trip for every household, however small:
+  // `readAll` stops only on an EMPTY page, because a short one is also what the
+  // cap looks like.
   const [profilesRes, factsRes] = await settleAll([
-    scope.db.from('medical_profiles').select('allergies').eq('family_id', scope.familyId),
-    scope.db.from('family_facts').select('category, label, value').eq('family_id', scope.familyId)
-      .in('category', ['medical', 'preference', 'important']),
+    scope.db.rpc('family_allergies', { p_family_id: scope.familyId }),
+    readAllAsQuery<{ category: string | null; label: string | null; value: string | null }>((from, to) =>
+      scope.db.from('family_facts').select('category, label, value').eq('family_id', scope.familyId)
+        .in('category', ['medical', 'preference', 'important'])
+        // Ordered because an unordered paged read can repeat or skip rows —
+        // and because without it, WHICH rows a truncated read returned was
+        // unspecified: the same household could get the allergy on Monday and
+        // miss it on Tuesday after an unrelated row was touched.
+        .order('id').range(from, to), { max: DIETARY_FACT_CEILING }),
   ]);
   const constraintError = profilesRes.error ?? factsRes.error;
   if (constraintError) {
     console.error('[service:groceries] dietary constraint read failed', constraintError);
+    // `describeActionError`, not `describeDbError`: an error it cannot classify
+    // (readAll's "reached the caller's max… raise the max", a raw Postgres
+    // string) is logged above and the family is told the sentence below —
+    // `describeDbError` would hand the raw diagnostic to the page instead.
     return fail(
-      describeDbError(constraintError, 'Could not check the family’s allergies, so nothing was added to the list.'),
+      describeActionError(constraintError, 'Could not check the family’s allergies, so nothing was added to the list.'),
       { code: SERVICE_CODES.db },
     );
   }
@@ -565,8 +651,11 @@ export async function pantryList(
     return fail(describeDbError(error, 'Could not read the pantry.'), { code: SERVICE_CODES.db });
   }
   const all = data ?? [];
-  const now = (scope.now ?? new Date()).getTime();
-  const expiring = expiringSoon(all, input.expiringWithinDays ?? 5, now);
+  // The family's day. `expiringSoon` used to take an instant and compare it to
+  // the host's midnight, so on a UTC server a Californian household was told
+  // after 5pm that tomorrow's food expires today.
+  const todayKey = dayKeyInTz(scope.now ?? new Date(), scope.tz);
+  const expiring = expiringSoon(all, input.expiringWithinDays ?? 5, todayKey);
   const low = lowStockItems(all);
   let items = all;
   if (input.lowOnly) items = low;
@@ -882,6 +971,12 @@ export type ShoppingTripResult = {
    * rather than swallowed.
    */
   clearFailed: { name: string; error: string }[];
+  /**
+   * Lines another put-away claimed first (C1-S9-88). That call owns their
+   * pantry increment; this one did not touch them, so they are neither
+   * updated nor failed here.
+   */
+  alreadyClaimed: string[];
   /** Bought lines removed from the list — one per line that reached the pantry. */
   cleared: number;
 };
@@ -936,13 +1031,50 @@ export async function recordShoppingTrip(
   const pantryUpdated: string[] = [];
   const pantryFailed: { name: string; error: string }[] = [];
   const clearFailed: { name: string; error: string }[] = [];
+  const alreadyClaimed: string[] = [];
   const clearedNames: string[] = [];
   for (const item of items) {
+    // CLAIM THE LINE BEFORE TOUCHING THE PANTRY (Audit C1-S9-88, closing the
+    // race C1-S9-65 recorded). Two put-aways — two phones, or a double tap —
+    // both read this line as bought; each used to increment the pantry and
+    // only then remove the line, so the family owned two of one purchase.
+    // Un-ticking it only where it is STILL ticked is atomic: of two concurrent
+    // claims, the second re-evaluates `is_checked = true` after the first
+    // commits, matches nothing, and leaves the increment to the first.
+    const { data: claimed, error: claimError } = await scope.db
+      .from('grocery_items')
+      .update({ is_checked: false })
+      .eq('family_id', scope.familyId)
+      .eq('id', item.id)
+      .eq('is_checked', true)
+      .select('id');
+    if (claimError) {
+      console.error('[service:groceries] bought line claim failed', claimError);
+      pantryFailed.push({ name: item.name, error: describeDbError(claimError, 'Could not put this away.') });
+      continue;
+    }
+    if (wroteNoRows(claimed)) {
+      alreadyClaimed.push(item.name);
+      continue;
+    }
+
     const { delta, unit } = parsePurchasedQuantity(item.quantity);
     const result = await pantryAdjust(scope, { name: item.name, delta, unit, createIfMissing: true });
     if (!result.ok) {
-      // Never put away, so the line stays checked and the retry is its first
-      // real attempt.
+      // Never put away: hand the line back, ticked, so the retry is its first
+      // real attempt. If that fails the line shows as unbought — a missed
+      // count the family can see, never a double one.
+      const { data: released, error: releaseError } = await scope.db
+        .from('grocery_items')
+        .update({ is_checked: true })
+        .eq('family_id', scope.familyId)
+        .eq('id', item.id)
+        .select('id');
+      if (releaseError || wroteNoRows(released)) {
+        console.error('[service:groceries] claimed line could not be handed back; it now shows as unbought', {
+          familyId: scope.familyId, itemId: item.id, name: item.name, error: releaseError ?? 'no row',
+        });
+      }
       pantryFailed.push({ name: item.name, error: result.error });
       continue;
     }
@@ -950,11 +1082,21 @@ export async function recordShoppingTrip(
 
     // Immediately, and scoped to this row: whatever happens to the rest of the
     // trip, this quantity is now in the pantry and must not be added twice.
-    const { error: clearError } = await scope.db
+    const { data: cleared, error: clearError } = await scope.db
       .from('grocery_items')
       .delete()
       .eq('family_id', scope.familyId)
-      .eq('id', item.id);
+      .eq('id', item.id)
+      .select('id');
+    // This call claimed the line, so no other put-away can have counted it.
+    // Zero rows here means someone removed the line by hand after the claim:
+    // the pantry has it once, and the list no longer does. Worth a log line,
+    // not a failure. Audit C1-S9-65, C1-S9-88.
+    if (!clearError && wroteNoRows(cleared)) {
+      console.error('[service:groceries] claimed line was removed before its clear; counted once', {
+        familyId: scope.familyId, itemId: item.id, name: item.name,
+      });
+    }
     if (clearError) {
       console.error('[service:groceries] bought line clear failed', clearError);
       clearFailed.push({ name: item.name, error: describeDbError(clearError, 'Put away, but still on the list.') });
@@ -988,5 +1130,5 @@ export async function recordShoppingTrip(
     });
   }
 
-  return ok({ listId, pantryUpdated, pantryFailed, clearFailed, cleared: clearedNames.length });
+  return ok({ listId, pantryUpdated, pantryFailed, clearFailed, alreadyClaimed, cleared: clearedNames.length });
 }

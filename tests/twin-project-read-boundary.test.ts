@@ -116,7 +116,15 @@ describe('runTwinProjection read boundary', () => {
     const res = await runTwinProjection(withMember, 'fam-1', null);
 
     expect(res.ok).toBe(false);
-    expect(res.error).toContain('row-level security');
+    // The CALLER gets the written sentence, not the policy's own words. This
+    // used to assert `toContain('row-level security')`, which is the disclosure
+    // rather than the behaviour: a caller learns that the write was refused,
+    // and learns nothing about how the refusal is spelled in the schema.
+    expect(res.error).toMatch(/permission/i);
+    expect(res.error).not.toContain('row-level security');
+    // The raw string still reaches the SERVER LOG, which is the point of
+    // describing rather than swallowing — whoever diagnoses this gets the
+    // detail the user was spared.
     expect(err.mock.calls.map((c) => String(c[0]))).toContain('[twin] graph_entities upsert failed');
   });
 });

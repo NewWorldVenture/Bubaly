@@ -8,7 +8,7 @@ import {
 import { useApp } from '@/components/app/app-context';
 import { useRealtimeQuery } from '@/lib/hooks/use-realtime-query';
 import { createClient } from '@/lib/supabase/client';
-import { describeDbError } from '@/lib/supabase/errors';
+import { describeDbError, wroteNoRows } from '@/lib/supabase/errors';
 import { useToast } from '@/components/ui/toast';
 import { PageHeader } from '@/components/app/page-header';
 import { AiInsight } from '@/components/ai/ai-insight';
@@ -23,7 +23,9 @@ import {
   petAgeLabel, careUrgency, upcomingCare, careSummary, recommendedCare,
   type CareUrgency,
 } from '@/lib/pets/care';
-import { useTranslations } from '@/components/i18n/locale-provider';
+import { useLocale, useTranslations } from '@/components/i18n/locale-provider';
+import type { LocaleCode } from '@/lib/i18n/locales';
+import { useConfirm } from '@/components/ui/confirm';
 import { todayInZone } from '@/lib/schedule/zoned';
 
 type Pet = Tables<'pets'>;
@@ -41,11 +43,13 @@ const URGENCY_STYLE: Record<CareUrgency, string> = {
   ok: 'border-border bg-surface/50 text-muted',
 };
 
-function fmtDate(d: string): string {
-  return new Date(`${d.slice(0, 10)}T00:00:00`).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' });
-}
+const fmtDateIn = (locale: LocaleCode) => (d: string): string => {
+  return new Date(`${d.slice(0, 10)}T00:00:00`).toLocaleDateString(locale, { month: 'short', day: 'numeric', year: 'numeric' });
+};
 
 export function PetsModule() {
+  const locale = useLocale();
+  const fmtDate = fmtDateIn(locale.code);
   const t = useTranslations();
   const { familyId, userId } = useApp();
   const { success, error: toastError } = useToast();
@@ -79,8 +83,10 @@ export function PetsModule() {
 
   async function removePet(id: string) {
     if (!confirm(t('petsModule.removeThisPetAndAll'))) return;
-    const { error } = await createClient().from('pets').update({ is_active: false }).eq('id', id);
+    // Under RLS a refused row comes back with no error and zero rows, which this used to report as done. Audit C1-S9-85.
+    const { data: updated, error } = await createClient().from('pets').update({ is_active: false }).eq('id', id).select('id');
     if (error) return toastError(describeDbError(error));
+    if (wroteNoRows(updated)) return toastError(t('errors.thatChangeWasNotSaved'));
     setSelected(null);
     success(t('petsModule.petRemoved'));
   }
@@ -344,15 +350,20 @@ function CareForm({ familyId, userId, pet, onClose, onSaved }: { familyId: strin
 function PetDetail({ pet, records, onClose, onAddCare, onRemove }: {
   pet: Pet; records: CareRecord[]; onClose: () => void; onAddCare: () => void; onRemove: () => void;
 }) {
+  const locale = useLocale();
+  const fmtDate = fmtDateIn(locale.code);
   const t = useTranslations();
+  const askConfirm = useConfirm();
   const { error: toastError } = useToast();
   const meta = speciesMeta(pet.species);
   const age = petAgeLabel(pet.birthday);
   const sorted = [...records].sort((a, b) => (a.record_date < b.record_date ? 1 : -1));
 
   async function deleteRecord(id: string) {
-    const { error } = await createClient().from('pet_care_records').delete().eq('id', id);
+    if (!(await askConfirm({ title: t('pets.deleteRecordQ'), body: t('confirm.cannotBeUndone') }))) return;
+    const { data: removed, error } = await createClient().from('pet_care_records').delete().eq('id', id).select('id');
     if (error) toastError(describeDbError(error));
+    else if (wroteNoRows(removed)) toastError(t('errors.thatChangeWasNotSaved'));
   }
 
   return (

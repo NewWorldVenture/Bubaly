@@ -6,6 +6,9 @@ import { clientIp, rateLimit } from '@/lib/server/rate-limit';
 import { rateLimitDb } from '@/lib/server/rate-limit-db';
 import { readAll } from '@/lib/supabase/read-all';
 
+/** The most events one feed publishes: the nearest ones win. */
+const FEED_MAX_EVENTS = 2000;
+
 // Public iCalendar feed for a single bubaly calendar.
 //
 //   GET /api/sync/feeds/<feed_token>
@@ -19,6 +22,24 @@ import { readAll } from '@/lib/supabase/read-all';
 //
 // Uses the service client because the request is unauthenticated by design; the
 // token IS the authorization, and we scope strictly to feed_enabled rows.
+//
+// ── NOT REACHABLE YET. Nothing issues a token. ─────────────────────────────
+//
+// No code anywhere writes sync_calendars.feed_token, and nothing sets
+// feed_enabled true. The column is nullable with no DEFAULT (0018),
+// feed_enabled defaults false, and generateFeedToken() in lib/sync/feed-token.ts
+// has no callers — that module is imported by nothing. So the filter below
+// cannot match a row for any family, and every request here is a 404 today.
+//
+// This is written down because the handler reads like a live, hardened public
+// surface and is not one: the reviewer who checks the rate limits and the
+// feed_enabled scoping is auditing a feature that does not exist, and whoever
+// wires the publish flow will reasonably assume the token side is handled. It
+// is not. Issue tokens with generateFeedToken() — 32 CSPRNG bytes — and never
+// the calendar's own uuid, which is already visible to every member.
+//
+// Guarded by tests/a-capability-nothing-can-issue.test.ts, which goes red the
+// moment a writer appears so this note cannot quietly outlive its truth.
 export async function GET(
   _req: NextRequest,
   { params }: { params: Promise<{ token: string }> },
@@ -48,7 +69,20 @@ export async function GET(
     .eq('feed_enabled', true)
     .maybeSingle();
 
-  if (error || !calendar) {
+  // A subscribed calendar app polls this URL for as long as the subscription
+  // lives, and treats what it gets as the truth: an empty calendar deletes every
+  // event it holds, and some clients drop a feed that answers 404. So a read
+  // that FAILED answers 503, uncached, and the client keeps what it has until
+  // the next poll. Only a clean "no such enabled feed" is a 404.
+  const unavailable = () => new NextResponse('Feed temporarily unavailable', {
+    status: 503,
+    headers: { 'Retry-After': '300', 'Cache-Control': 'no-store' },
+  });
+  if (error) {
+    console.error('[sync-feed] calendar read failed', error);
+    return unavailable();
+  }
+  if (!calendar) {
     return new NextResponse('Not found', { status: 404 });
   }
 
@@ -57,7 +91,7 @@ export async function GET(
   // `.limit(2000)` is not a bound — PostgREST caps a response at db-max-rows
   // whatever the client asked for, so a busy calendar published 1,000 events and
   // called that the feed. `id` breaks ties so two pages cannot overlap or skip.
-  const { rows } = await readAll((from, to) => supabase
+  const { rows, error: eventsError } = await readAll((from, to) => supabase
     .from('sync_calendar_events')
     .select('id, uid, title, description, location, starts_at, ends_at, all_day, recurrence_rule, status, updated_at')
     .eq('calendar_id', calendar.id)
@@ -65,7 +99,36 @@ export async function GET(
     .lte('starts_at', horizon)
     .order('starts_at', { ascending: true })
     .order('id')
-    .range(from, to), { max: 2000 });
+    .range(from, to), { max: FEED_MAX_EVENTS });
+  // readAll reports two different things as an error. Reaching the cap returns
+  // exactly FEED_MAX_EVENTS rows — the nearest ones, in order — and that prefix
+  // is a correct feed for a very busy calendar. Anything short of the cap with an
+  // error is a failed read, and publishing it would empty every subscriber's
+  // calendar (cached for 15 minutes at the edge) until the next good poll.
+  // A short feed is not a short calendar — it is a DELETION instruction.
+  //
+  // An ICS subscription is authoritative for the calendar it names: Apple
+  // Calendar, Outlook and Google reconcile their local copy against whatever the
+  // feed returns, so an event absent from a 200 is an event the client removes.
+  // Answering with the rows gathered before a failed page would therefore empty
+  // a family's subscribed calendar on every device that polls it, silently, and
+  // the next successful poll would put them back — an appointment that vanishes
+  // and reappears is worse than one that never loaded.
+  //
+  // 503 with Retry-After is the honest answer: every subscriber keeps the copy
+  // it has. The cron on the other side of this seam
+  // (app/api/cron/calendar-feeds) already checks this same read's error.
+  //
+  // readAll reports two different things as an error, though. Reaching the cap
+  // returns exactly FEED_MAX_EVENTS rows — the nearest ones, in order — and that
+  // prefix is the same feed every poll of a very busy calendar publishes, so it
+  // deletes nothing a subscriber ever had. Only an error short of the cap is a
+  // failed read.
+  if (eventsError && rows.length < FEED_MAX_EVENTS) {
+    console.error('[sync-feed] event read failed; refusing to publish a short feed', { calendarId: calendar.id, error: eventsError });
+    return unavailable();
+  }
+  if (eventsError) console.warn('[sync-feed] feed capped at the nearest events', { calendarId: calendar.id, max: FEED_MAX_EVENTS });
 
   const events: IcsEvent[] = (rows ?? []).map((e) => ({
     uid: e.uid ?? `${e.id}@bubaly.com`,
@@ -93,7 +156,21 @@ export async function GET(
     headers: {
       'Content-Type': 'text/calendar; charset=utf-8',
       'Content-Disposition': `inline; filename="${calendar.id}.ics"`,
-      'Cache-Control': 'public, max-age=900, s-maxage=900',
+      // A shared cache must not hold a family's calendar for longer than it
+      // takes to take the feed away. `lib/sync/feed-token.ts` calls this token
+      // "revocable (rotate the column to revoke)", and the route above says
+      // "Revoke by rotating feed_token or setting feed_enabled = false" — but
+      // an `s-maxage` of 900 meant Vercel's edge, and any proxy between, kept
+      // serving the calendar for a quarter of an hour after the revocation. A
+      // family that revokes because the URL leaked is told it is gone while it
+      // is still being served.
+      //
+      // `max-age` stays at 900: that is the SUBSCRIBER's own copy, and they are
+      // the one who held the token. `s-maxage` drops to 60, which still absorbs
+      // a client polling in a loop — the ICS itself asks for a 60-MINUTE
+      // refresh interval, so nothing legitimate re-fetches inside a minute —
+      // while cutting the revocation window from 15 minutes to one.
+      'Cache-Control': 'public, max-age=900, s-maxage=60',
     },
   });
 }

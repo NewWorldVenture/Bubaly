@@ -6,6 +6,7 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import type { AIProvider } from '@/lib/ai/provider';
 import { classifyIntent, classifyIntentFast, INTENT_KEYS, INTENT_SLICES, type IntentKey } from '@/lib/ai/context/intents';
+import { localDayKeyOf, shiftLocalDay } from '@/lib/time/local-day';
 
 const NOW = new Date('2026-09-05T15:00:00Z');
 
@@ -69,7 +70,22 @@ describe('fast paths', () => {
   it('carries entities from the recognisers', () => {
     const capture = classifyIntentFast('Dentist tomorrow at 3pm', { now: NOW });
     expect(capture?.entities.kind).toBe('event');
-    expect(capture?.entities.startsAt).toMatch(/^2026-09-06T/);
+    // "tomorrow at 3pm" is a claim about the READER's wall clock: the day after
+    // NOW's local day, at 15:00 local. `parseEvent` resolves it with local
+    // calendar-parts arithmetic (lib/capture/parse.ts LOCAL_OPS), and
+    // `intents.ts` serialises that instant with `toISOString()` — correctly, an
+    // instant on the wire. The old literal /^2026-09-06T/ asserted the UTC
+    // RENDERING of that instant, which was a statement about the host, not the
+    // contract: it holds only where NOW (2026-09-05T15:00Z) is still 5 Sept
+    // locally AND 15:00 local on the 6th still falls inside 6 Sept UTC — true
+    // at UTC, UTC-7 and UTC+2, false at UTC+9 (local NOW is already the 6th, so
+    // tomorrow is the 7th) and at UTC-12 (15:00 local on the 6th is 03:00Z on
+    // the 7th). Assert the local day and the local clock instead, which is true
+    // in every zone.
+    const startsAt = capture?.entities.startsAt;
+    expect(localDayKeyOf(startsAt)).toBe(shiftLocalDay(NOW, 1));
+    const at = new Date(startsAt ?? Number.NaN);
+    expect([at.getHours(), at.getMinutes()]).toEqual([15, 0]);
     const nav = classifyIntentFast('open the calendar', { now: NOW });
     expect(nav?.entities.target).toBe('calendar');
     const goal = classifyIntentFast("who's free Saturday?", { now: NOW });
@@ -95,7 +111,7 @@ describe('fast paths', () => {
 });
 
 describe('classifyIntent', () => {
-  const scope = { familyId: 'fam-1', requestId: null, now: NOW };
+  const scope = { familyId: 'fam-1', requestId: null, now: NOW, tz: 'America/Los_Angeles' };
 
   it('never calls the model when a fast path matched', async () => {
     const { provider, calls } = scriptedProvider({ intent: 'other', confidence: 1, entities: [] });
@@ -143,5 +159,61 @@ describe('INTENT_SLICES', () => {
     expect(INTENT_SLICES.find_vendor).toContain('vendors');
     expect(INTENT_SLICES.spending_review).toContain('money');
     expect(INTENT_SLICES.navigate).toEqual(['people']);
+  });
+});
+
+/**
+ * "Dinner tomorrow at 6" is a WALL CLOCK, and resolving it needs to know whose
+ * wall. The fast path does not merely CLASSIFY on the parsed date — it
+ * serialises `startsAt` into the capture's entities, which is what goes on the
+ * calendar — and it resolved that against the HOST's day, because `tz` was not
+ * in `classifyIntent`'s `Pick` of the scope.
+ *
+ * `lib/voice/command-router.ts` has taken an optional `timezone` all along and
+ * carries a long header explaining exactly how to use it. The machinery was
+ * built, documented, and then not reached by the path that needed it.
+ */
+describe('whose tomorrow the assistant means', () => {
+  // 2026-09-05T22:00Z is 3pm on the 5th in Los Angeles, and already the 6th
+  // NOWHERE — but 2026-09-06T02:00Z is 7pm on the 5th in LA and the 6th in UTC.
+  const EVENING_IN_LA = new Date('2026-09-06T02:00:00Z');
+  const LA = 'America/Los_Angeles';
+
+  it('the family is still on the 5th while the host has rolled to the 6th', () => {
+    expect(EVENING_IN_LA.toISOString().slice(0, 10)).toBe('2026-09-06');
+  });
+
+  it('puts "tomorrow at 3pm" on the family\u2019s tomorrow, at the family\u2019s 3pm', () => {
+    const capture = classifyIntentFast('Dentist tomorrow at 3pm', { now: EVENING_IN_LA, timezone: LA });
+    expect(capture?.entities.kind).toBe('event');
+    // The family's tomorrow is the 6th, and 3pm there is 22:00Z.
+    expect(capture?.entities.startsAt).toBe('2026-09-06T22:00:00.000Z');
+  });
+
+  it('a household actually in UTC gets a genuinely different answer', () => {
+    // The contrast stated between two NAMED zones rather than against the
+    // host's, because an assertion about the host is an assertion about
+    // whichever machine runs it — the exact flaw this whole sweep has been
+    // removing, and CI runs this suite under two zones on purpose.
+    //
+    // At 2026-09-06T02:00Z it is the evening of the 5th in Los Angeles and
+    // already the 6th in UTC, so "tomorrow at 3pm" is a different instant AND
+    // a different day for the two households. Both answers are correct; which
+    // one you get is precisely what the zone decides.
+    const la = classifyIntentFast('Dentist tomorrow at 3pm', { now: EVENING_IN_LA, timezone: LA });
+    const utc = classifyIntentFast('Dentist tomorrow at 3pm', { now: EVENING_IN_LA, timezone: 'UTC' });
+    expect(la?.entities.startsAt).toBe('2026-09-06T22:00:00.000Z');
+    expect(utc?.entities.startsAt).toBe('2026-09-07T15:00:00.000Z');
+  });
+
+  it('classifyIntent takes the zone from the scope it was already given', async () => {
+    const { provider } = scriptedProvider({ intent: 'other', confidence: 1, entities: [] });
+    const result = await classifyIntent(
+      { familyId: 'fam-1', requestId: null, now: EVENING_IN_LA, tz: LA },
+      'Dentist tomorrow at 3pm',
+      { provider },
+    );
+    expect(result.source).toBe('fast_path');
+    expect(result.entities.startsAt).toBe('2026-09-06T22:00:00.000Z');
   });
 });

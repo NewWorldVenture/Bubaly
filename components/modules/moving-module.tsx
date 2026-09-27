@@ -5,7 +5,7 @@ import { Truck, Plus, Check, Pencil, Trash2, Package, Wand2, CalendarClock, Wall
 import { useApp } from '@/components/app/app-context';
 import { useRealtimeQuery } from '@/lib/hooks/use-realtime-query';
 import { createClient } from '@/lib/supabase/client';
-import { describeDbError } from '@/lib/supabase/errors';
+import { describeDbError, wroteNoRows } from '@/lib/supabase/errors';
 import { useToast } from '@/components/ui/toast';
 import { PageHeader } from '@/components/app/page-header';
 import { AiInsight } from '@/components/ai/ai-insight';
@@ -19,16 +19,18 @@ import { isMoveDate, moveDateContextKey, type MoveDateResult } from '@/lib/movin
 import type { Tables, MoveBoxStatus, MoveKind, MoveStatus, MoveTaskCategory } from '@/lib/database.types';
 import {
   MOVE_STATUSES, MOVE_KINDS, TASK_CATEGORIES, BOX_STATUSES, BOX_ORDER, categoryMeta, planTasks, timeline, suggestedStatus, budgetHealth, moveSummary,
-  nextBoxNumber, boxesByRoom, findInBoxes, money, isoDate, addDays, dayDiff,
+  nextBoxNumber, boxesByRoom, findInBoxes, money as moneyIn, isoDate, addDays, dayDiff,
 } from '@/lib/moving/planner';
-import { useTranslations } from '@/components/i18n/locale-provider';
+import { useLocale, useTranslations } from '@/components/i18n/locale-provider';
+import type { LocaleCode } from '@/lib/i18n/locales';
+import { useConfirm } from '@/components/ui/confirm';
 
 type Move = Tables<'moves'>;
 type Task = Tables<'move_tasks'>;
 type Box = Tables<'move_boxes'>;
 
-const fmtDate = (d: string) => new Date(`${d.slice(0, 10)}T00:00:00`).toLocaleDateString('en-US', { month: 'short', day: 'numeric' });
-const fmtLong = (d: string) => new Date(`${d.slice(0, 10)}T00:00:00`).toLocaleDateString('en-US', { weekday: 'short', month: 'short', day: 'numeric', year: 'numeric' });
+const fmtDateIn = (locale: LocaleCode) => (d: string) => new Date(`${d.slice(0, 10)}T00:00:00`).toLocaleDateString(locale, { month: 'short', day: 'numeric' });
+const fmtLongIn = (locale: LocaleCode) => (d: string) => new Date(`${d.slice(0, 10)}T00:00:00`).toLocaleDateString(locale, { weekday: 'short', month: 'short', day: 'numeric', year: 'numeric' });
 const statusLabel = (s: MoveStatus) => MOVE_STATUSES.find((x) => x.value === s)?.label ?? s;
 const boxStatusLabel = (s: MoveBoxStatus) => BOX_STATUSES.find((x) => x.value === s)?.label ?? s;
 
@@ -39,7 +41,13 @@ export function MovingModule() {
 }
 
 export function MovingWorkspace() {
+  const locale = useLocale();
+  const fmtDate = fmtDateIn(locale.code);
+  const fmtLong = fmtLongIn(locale.code);
   const tr = useTranslations();
+  const askConfirm = useConfirm();
+  // Money follows the reader; the currency stays the money's own.
+  const money = (cents: number | null | undefined) => moneyIn(cents, locale.code);
   const { familyId, userId, members, selfMember } = useApp();
   const { success, error: toastError } = useToast();
   const context = { familyId, userId, memberId: selfMember?.id ?? null, role: selfMember?.role ?? null, active: selfMember?.is_active === true };
@@ -104,15 +112,18 @@ export function MovingWorkspace() {
   }
 
   async function setTaskStatus(t: Task, status: Task['status']) {
-    const { error } = await createClient().from('move_tasks').update({ status, completed_at: status === 'done' ? new Date().toISOString() : null }).eq('id', t.id);
+    // Under RLS a refused row comes back with no error and zero rows, which this used to report as done. Audit C1-S9-80.
+    const { data: updated, error } = await createClient().from('move_tasks').update({ status, completed_at: status === 'done' ? new Date().toISOString() : null }).eq('id', t.id).select('id');
     if (error) return toastError(describeDbError(error));
+    if (wroteNoRows(updated)) return toastError(tr('errors.thatChangeWasNotSaved'));
     if (status === 'done') success(tr('movingModule.done'));
   }
 
   async function deleteTask(t: Task) {
-    if (!confirm(`Delete “${t.title}”?`)) return;
-    const { error } = await createClient().from('move_tasks').delete().eq('id', t.id);
+    if (!(await askConfirm({ title: tr('confirm.deleteNamed', { name: t.title }), body: tr('confirm.cannotBeUndone') }))) return;
+    const { data: removed, error } = await createClient().from('move_tasks').delete().eq('id', t.id).select('id');
     if (error) return toastError(describeDbError(error));
+    if (wroteNoRows(removed)) return toastError(tr('errors.thatChangeWasNotSaved'));
     success(tr('movingModule.taskDeleted'));
   }
 
@@ -120,28 +131,32 @@ export function MovingWorkspace() {
     const idx = BOX_ORDER.indexOf(b.status);
     const next = BOX_ORDER[Math.min(BOX_ORDER.length - 1, idx + 1)];
     if (next === b.status) return;
-    const { error } = await createClient().from('move_boxes').update({ status: next, packed_by: next === 'packed' ? (selfMember?.id ?? b.packed_by) : b.packed_by }).eq('id', b.id);
+    const { data: updated2, error } = await createClient().from('move_boxes').update({ status: next, packed_by: next === 'packed' ? (selfMember?.id ?? b.packed_by) : b.packed_by }).eq('id', b.id).select('id');
     if (error) return toastError(describeDbError(error));
+    if (wroteNoRows(updated2)) return toastError(tr('errors.thatChangeWasNotSaved'));
   }
 
   async function deleteBox(b: Box) {
-    if (!confirm(`Delete box #${b.box_number} “${b.label}”?`)) return;
-    const { error } = await createClient().from('move_boxes').delete().eq('id', b.id);
+    if (!(await askConfirm({ title: tr('moving.deleteBoxQ', { number: b.box_number, label: b.label }), body: tr('confirm.cannotBeUndone') }))) return;
+    const { data: removed2, error } = await createClient().from('move_boxes').delete().eq('id', b.id).select('id');
     if (error) return toastError(describeDbError(error));
+    if (wroteNoRows(removed2)) return toastError(tr('errors.thatChangeWasNotSaved'));
     success(tr('movingModule.boxDeleted'));
   }
 
   async function setMoveStatus(status: MoveStatus) {
     if (!move) return;
-    const { error } = await createClient().from('moves').update({ status }).eq('id', move.id);
+    const { data: updated3, error } = await createClient().from('moves').update({ status }).eq('id', move.id).select('id');
     if (error) return toastError(describeDbError(error));
+    if (wroteNoRows(updated3)) return toastError(tr('errors.thatChangeWasNotSaved'));
     success(`Move marked ${statusLabel(status).toLowerCase()}`);
   }
 
   async function deleteMove(m: Move) {
-    if (!confirm(`Delete “${m.title}” with all its tasks and boxes? This cannot be undone.`)) return;
-    const { error } = await createClient().from('moves').delete().eq('id', m.id);
+    if (!(await askConfirm({ title: tr('confirm.deleteNamed', { name: m.title }), body: tr('moving.deleteMoveBody') }))) return;
+    const { data: removed3, error } = await createClient().from('moves').delete().eq('id', m.id).select('id');
     if (error) return toastError(describeDbError(error));
+    if (wroteNoRows(removed3)) return toastError(tr('errors.thatChangeWasNotSaved'));
     setMoveId('');
     success(tr('movingModule.moveDeleted'));
   }
@@ -446,6 +461,8 @@ function MoveForm({ familyId, userId, move, onClose, onSaved }: { familyId: stri
 }
 
 function TaskForm({ familyId, userId, move, members, task, onClose, onSaved }: { familyId: string; userId: string; move: Move; members: { id: string; display_name: string }[]; task: Task | null; onClose: () => void; onSaved: () => void }) {
+  const locale = useLocale();
+  const fmtDate = fmtDateIn(locale.code);
   const tr = useTranslations();
   const { error: toastError } = useToast();
   const [loading, setLoading] = useState(false);
@@ -467,11 +484,12 @@ function TaskForm({ familyId, userId, move, members, task, onClose, onSaved }: {
       assignee_id: String(f.get('assignee_id') ?? '') || null, notes: String(f.get('notes') ?? '').trim() || null,
     };
     const supabase = createClient();
-    const { error } = task
-      ? await supabase.from('move_tasks').update(payload).eq('id', task.id)
-      : await supabase.from('move_tasks').insert({ family_id: familyId, move_id: move.id, created_by: userId, status: 'todo', ...payload });
+    const { data: saved, error } = task
+      ? await supabase.from('move_tasks').update(payload).eq('id', task.id).select('id')
+      : await supabase.from('move_tasks').insert({ family_id: familyId, move_id: move.id, created_by: userId, status: 'todo', ...payload }).select('id');
     setLoading(false);
     if (error) return toastError(describeDbError(error));
+    if (wroteNoRows(saved)) return toastError(tr('errors.thatChangeWasNotSaved'));
     onSaved();
   }
 
@@ -517,11 +535,12 @@ function BoxForm({ familyId, userId, move, members, box, nextNumber, defaultPack
       packed_by: String(f.get('packed_by') ?? '') || null, notes: String(f.get('notes') ?? '').trim() || null,
     };
     const supabase = createClient();
-    const { error } = box
-      ? await supabase.from('move_boxes').update(payload).eq('id', box.id)
-      : await supabase.from('move_boxes').insert({ family_id: familyId, move_id: move.id, created_by: userId, ...payload });
+    const { data: savedBox, error } = box
+      ? await supabase.from('move_boxes').update(payload).eq('id', box.id).select('id')
+      : await supabase.from('move_boxes').insert({ family_id: familyId, move_id: move.id, created_by: userId, ...payload }).select('id');
     setLoading(false);
     if (error) return toastError(error.code === '23505' ? `Box #${boxNumber} already exists for this move` : describeDbError(error));
+    if (wroteNoRows(savedBox)) return toastError(tr('errors.thatChangeWasNotSaved'));
     onSaved();
   }
 

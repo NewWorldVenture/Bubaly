@@ -6,6 +6,7 @@ import { useApp } from '@/components/app/app-context';
 import { useRealtimeQuery } from '@/lib/hooks/use-realtime-query';
 import { createClient } from '@/lib/supabase/client';
 import { contributeToGoalAction, createSavingsGoalAction, deleteSavingsGoalAction } from '@/app/(app)/dashboard/billing/actions';
+import { reportRefusal } from '@/lib/auth/step-up-client';
 import { useToast } from '@/components/ui/toast';
 import { PageHeader } from '@/components/app/page-header';
 import { Button } from '@/components/ui/button';
@@ -13,14 +14,18 @@ import { Modal } from '@/components/ui/modal';
 import { Input, Field } from '@/components/ui/input';
 import { SkeletonList, EmptyState, ErrorState } from '@/components/ui/states';
 import type { Tables } from '@/lib/database.types';
-import { usd, pct, fmtDueDate } from '@/lib/finance/hub';
-import { useTranslations } from '@/components/i18n/locale-provider';
+import { usd as usdIn, pct, fmtDueDate as fmtDueDateIn } from '@/lib/finance/hub';
+import { useLocale, useTranslations } from '@/components/i18n/locale-provider';
 
 type Goal = Tables<'savings_goals'>;
 const EMOJIS = ['🎯', '🏖️', '🚗', '🏠', '🎓', '🎁', '💍', '🎄', '💻', '⚽'];
 
 export function SavingsView() {
   const t = useTranslations();
+  // Money and dates follow the reader; the currency stays the money's own.
+  const locale = useLocale();
+  const usd = (amount: number) => usdIn(amount, locale.code);
+  const fmtDueDate = (iso: string) => fmtDueDateIn(iso, locale.code);
   const { familyId, userId } = useApp();
   const { success, error: toastError } = useToast();
 
@@ -39,13 +44,13 @@ export function SavingsView() {
     // each adding the same amount at once both wrote the same figure and one of
     // the contributions vanished. The service applies it under a compare-and-set.
     const res = await contributeToGoalAction(g.id, delta);
-    if (!res.ok) toastError(res.error); else success(t('savingsView.updated'));
+    if (!res.ok) reportRefusal(res, toastError); else success(t('savingsView.updated'));
     setContribute(null);
   }
   async function remove(id: string) {
     if (!confirm(t('savingsView.deleteThisGoal'))) return;
     const res = await deleteSavingsGoalAction(id);
-    if (!res.ok) toastError(res.error); else success(t('savingsView.deleted'));
+    if (!res.ok) reportRefusal(res, toastError); else success(t('savingsView.deleted'));
   }
 
   return (
@@ -112,7 +117,7 @@ function GoalModal({ familyId, userId, onClose }: { familyId: string; userId: st
       emoji: v.emoji,
     });
     setSaving(false);
-    if (!res.ok) return toastError(res.error);
+    if (!res.ok) return reportRefusal(res, toastError);
     success(t('savingsView.goalCreated'));
     onClose();
   }

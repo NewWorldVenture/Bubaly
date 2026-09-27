@@ -30,7 +30,7 @@ type FakeOptions = {
   run?: Partial<RunSnapshot>;
   /** Called for every tool invocation; `attempt` is 1-based per step. */
   tool?: (call: ToolCall, attempt: number, fake: Fake) => ToolOutcome | Promise<ToolOutcome>;
-  approvals?: Record<string, { status: string; editedPayload?: unknown }>;
+  approvals?: Record<string, { status: string; payload?: unknown; editedPayload?: unknown }>;
   scopeError?: string;
   replan?: ExecutorPort['replan'];
   verify?: ExecutorPort['verify'];
@@ -43,7 +43,7 @@ type Fake = {
   steps: StepSnapshot[];
   events: RunEventInput[];
   calls: ToolCall[];
-  approvals: Record<string, { status: string; editedPayload?: unknown }>;
+  approvals: Record<string, { status: string; payload?: unknown; editedPayload?: unknown }>;
   requestStates: string[];
   heartbeats: number;
   now: number;
@@ -143,7 +143,11 @@ function makeFake(options: FakeOptions): Fake {
     },
     async loadApproval(_scope, approvalId) {
       const found = fake.approvals[approvalId];
-      return ok(found ? { id: approvalId, status: found.status, editedPayload: found.editedPayload ?? null } : null);
+      return ok(found ? {
+        id: approvalId, status: found.status,
+        payload: found.payload ?? null, payloadKind: null, planStepIds: null,
+        editedPayload: found.editedPayload ?? null,
+      } : null);
     },
     notifyFamily: options.notify ?? (async () => ok({ created: 2 })),
     verify: options.verify ?? (async () => ok({ verified: true, detail: 'All 1 checks passed.', checks: [] })),
@@ -433,9 +437,17 @@ describe('approvals', () => {
 
   it('honours the payload a manager edited instead of the original input', async () => {
     const fake = makeFake({
-      // The gate was opened on an earlier pass; a manager then chose Edit.
+      // The gate was opened on an earlier pass; a manager then chose Edit. The
+      // approval row carries the ask the card was built from (`payload`), and
+      // the edit is honoured only as re-derived over it.
       steps: [{ id: 's1', description: 'Book at 6pm', approval_required: true, approval_id: 'appr-s1', input_json: { at: '18:00' } }],
-      approvals: { 'appr-s1': { status: 'modified', editedPayload: { at: '19:30' } } },
+      approvals: {
+        'appr-s1': {
+          status: 'modified',
+          payload: { kind: 'plan_steps', step_ids: ['s1'], input: { at: '18:00' } },
+          editedPayload: { at: '19:30' },
+        },
+      },
     });
 
     await runGraphWith(fake.port, RUN_ID, { budgetMs: 60_000 });

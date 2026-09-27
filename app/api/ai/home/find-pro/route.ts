@@ -78,10 +78,12 @@ export async function POST(req: Request) {
   const q = encodeURIComponent(`${tradeLabel} ${job ? job + ' ' : ''}near ${location || 'me'}`);
   const searchUrl = `https://www.google.com/search?q=${q}`;
 
-  await supabase.from('home_ai_logs').insert({
+  // Its result used to be discarded outright — not even the error bound. Best-effort, so logged rather than raised. Audit C1-S9-76.
+  const { error: homeAiLogsWriteError } = await supabase.from('home_ai_logs').insert({
     family_id: ctx.active.familyId, user_id: ctx.user.id, kind: 'find_pro',
     input: { trade, job, location }, output: { text }, created_by: ctx.user.id,
   });
+  if (homeAiLogsWriteError) console.error('[home-find-pro] home_ai_logs insert failed', homeAiLogsWriteError);
 
   return NextResponse.json({ text, searchUrl, tradeLabel });
 }

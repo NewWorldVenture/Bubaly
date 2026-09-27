@@ -6,7 +6,7 @@ import { useApp } from '@/components/app/app-context';
 import { useRealtimeQuery } from '@/lib/hooks/use-realtime-query';
 import { useAction } from '@/lib/hooks/use-action';
 import { createClient } from '@/lib/supabase/client';
-import { describeDbError } from '@/lib/supabase/errors';
+import { describeDbError, wroteNoRows } from '@/lib/supabase/errors';
 import { useToast } from '@/components/ui/toast';
 import { Modal } from '@/components/ui/modal';
 import { Input, Field, Select } from '@/components/ui/input';
@@ -16,11 +16,11 @@ import { Avatar } from '@/components/ui/avatar';
 import { SkeletonList, ErrorState, EmptyState } from '@/components/ui/states';
 import { fmtDate } from '@/lib/utils/format';
 import {
-  usd, splitEvenly, memberBalances, settlementSuggestions, summarizeSplits,
+  usd as usdIn, splitEvenly, memberBalances, settlementSuggestions, summarizeSplits,
   type SplitLike, type ShareLike,
 } from '@/lib/finance/splits';
 import type { Tables } from '@/lib/database.types';
-import { useTranslations } from '@/components/i18n/locale-provider';
+import { useLocale, useTranslations } from '@/components/i18n/locale-provider';
 import { todayInZone } from '@/lib/schedule/zoned';
 
 type SplitRow = Tables<'expense_splits'>;
@@ -31,6 +31,9 @@ const blank = (tz: string) => ({ description: '', amount: '', category: 'Groceri
 
 export function ExpensesModule() {
   const tr = useTranslations();
+  // Money follows the reader; the currency stays the money's own.
+  const locale = useLocale();
+  const usd = (cents: number) => usdIn(cents, locale.code);
   const { familyId, userId, members, family } = useApp();
   const { success, error: toastError } = useToast();
   const { run, isPending } = useAction({ onError: (e) => toastError(describeDbError(e)) });
@@ -72,7 +75,7 @@ export function ExpensesModule() {
     e.preventDefault();
     if (saving) return;
     if (!form || !form.description.trim()) return toastError(tr('expensesModule.addADescription'));
-    if (form.description.trim().length > 120) return toastError('Description is too long (max 120 characters)');
+    if (form.description.trim().length > 120) return toastError(tr('validation.descriptionTooLong', { max: 120 }));
     const parsed = parseFloat(form.amount || '0');
     if (!Number.isFinite(parsed) || parsed <= 0) return toastError(tr('expensesModule.enterAValidAmountGreater'));
     const totalCents = Math.round(parsed * 100);
@@ -104,8 +107,11 @@ export function ExpensesModule() {
         // The delete's result is read, because that sentence is a promise this
         // code could not keep: a refused rollback leaves exactly the split with
         // no shares it says never happens, and said nothing.
-        const { error: rollbackError } = await supabase.from('expense_splits').delete().eq('id', split.id);
+        // A refused rollback is also no error and zero rows, which is the same
+        // orphan and said nothing either. Audit C1-S9-82.
+        const { data: rolledBack, error: rollbackError } = await supabase.from('expense_splits').delete().eq('id', split.id).select('id');
         if (rollbackError) console.error('[expenses] split rollback failed; a split without shares remains', { splitId: split.id, error: rollbackError });
+        else if (wroteNoRows(rolledBack)) console.error('[expenses] split rollback matched no row; a split without shares remains', { splitId: split.id });
         toastError(describeDbError(sErr));
         return;
       }
@@ -120,18 +126,21 @@ export function ExpensesModule() {
 
   function toggleSettled(s: Share) {
     return run(`settle:${s.id}`, async () => {
-      const { error } = await createClient().from('expense_split_shares')
+      // Under RLS a refused row comes back with no error and zero rows. Audit C1-S9-82.
+      const { data: toggled, error } = await createClient().from('expense_split_shares')
         .update({ settled: !s.settled, settled_at: !s.settled ? new Date().toISOString() : null })
-        .eq('id', s.id);
+        .eq('id', s.id).select('id');
       if (error) throw error;
+      if (wroteNoRows(toggled)) toastError(tr('errors.thatChangeWasNotSaved'));
     });
   }
 
   function removeSplit(id: string) {
     if (!confirm(tr('expensesModule.deleteThisExpenseAndIts'))) return;
     return run(`remove:${id}`, async () => {
-      const { error } = await createClient().from('expense_splits').delete().eq('id', id);
+      const { data: removed, error } = await createClient().from('expense_splits').delete().eq('id', id).select('id');
       if (error) throw error;
+      if (wroteNoRows(removed)) { toastError(tr('errors.thatChangeWasNotSaved')); return; }
       success(tr('expensesModule.deleted'));
     });
   }

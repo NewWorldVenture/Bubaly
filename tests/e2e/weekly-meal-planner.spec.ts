@@ -498,7 +498,12 @@ test('grocery readback failure keeps the committed rows but does not claim compl
   await expect.poll(async()=> (await notices(page)).length).toBe(1);
   expect(await notices(page,'success')).toEqual([]);
   expect(await page.evaluate(()=>window.__weeklyMeals.tables.grocery_items.length)).toBe(2);
-  await expect(page.getByText('Fixture read unavailable',{exact:true}).first()).toBeVisible();
+  // The failed read is SHOWN — as the written sentence, not the database's own
+  // words. The fixture's error carries a Postgres code (XX000), and since
+  // 23ff213e a coded error's message is written for whoever maintains the
+  // schema, so describeDbError replaces it rather than passing it to the page.
+  await expect(page.getByText('Could not load data. Please try again.',{exact:true}).first()).toBeVisible();
+  await expect(page.getByText('Fixture read unavailable',{exact:true})).toHaveCount(0);
   await page.evaluate(()=>{window.__weeklyMeals.readErrors.grocery_items=false;});
   await page.getByRole('button',{name:'Try again',exact:true}).click();
   await expect(page.getByText('3 cups',{exact:true}).first()).toBeVisible();

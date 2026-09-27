@@ -3,6 +3,9 @@
 // The change log itself is written by a DB trigger (marketplace_log_price_change).
 // These helpers read that log for the item page: how big the latest drop is,
 // the lowest price in a window, and a plain-language trend line. Fully tested.
+import type { LocaleCode } from '@/lib/i18n/locales';
+import { createFormat } from '@/lib/utils/format';
+import { MARKETPLACE_CURRENCY } from './listings';
 
 export interface PriceChange {
   oldCents: number;
@@ -10,7 +13,9 @@ export interface PriceChange {
   changedAt: string;   // ISO
 }
 
-const money = (c: number) => `$${(c / 100).toFixed(2)}`;
+/** To the cent, as the history panel always showed it, in the READER's notation:
+ *  `$${(c / 100).toFixed(2)}` wrote the symbol as text and had no locale at all. */
+const money = (c: number, locale: LocaleCode) => createFormat(locale).fmtMoney(c, MARKETPLACE_CURRENCY);
 
 /** Whole-percent drop from old→new (0 when it isn't a drop). */
 export function dropPercent(oldCents: number, newCents: number): number {
@@ -61,8 +66,10 @@ export function priceDropBadge(history: PriceChange[], currentCents: number, now
   return pct > 0 ? `Price dropped ${pct}%` : `Price dropped`;
 }
 
-/** One-line human summary for the price-history panel. */
-export function historyLine(c: PriceChange): string {
+/** One-line summary for the price-history panel: two amounts and an arrow, no
+ *  words — so the locale is all it needs, and it is REQUIRED: the item page is
+ *  its only caller and it has a reader. */
+export function historyLine(c: PriceChange, locale: LocaleCode): string {
   const arrow = isDrop(c) ? '↓' : '↑';
-  return `${money(c.oldCents)} → ${money(c.newCents)} ${arrow}`;
+  return `${money(c.oldCents, locale)} → ${money(c.newCents, locale)} ${arrow}`;
 }

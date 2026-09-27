@@ -28,7 +28,15 @@ function makeDb(tables: Record<string, TableSpec>) {
     const call: Call = { table, filters: {} };
     calls.push(call);
     const spec = tables[table] ?? {};
-    const reply = () => ({ data: spec.error ? null : (spec.rows ?? []), error: spec.error ?? null });
+    // `.range()` is inclusive at both ends, and the page that starts past the
+    // last row comes back EMPTY — the only signal a paged read has to stop on.
+    // A fake that ignored the window would hand `readAll` the same page forever.
+    let window: { from: number; to: number } | null = null;
+    const rows = () => {
+      const all = spec.rows ?? [];
+      return window ? all.slice(window.from, window.to + 1) : all;
+    };
+    const reply = () => ({ data: spec.error ? null : rows(), error: spec.error ?? null });
     const one = () => ({ data: spec.error ? null : (spec.rows?.[0] ?? null), error: spec.error ?? null });
     const builder: Record<string, unknown> = {};
     const proxy: unknown = new Proxy(builder, {
@@ -39,13 +47,25 @@ function makeDb(tables: Record<string, TableSpec>) {
           if (['eq', 'neq', 'gte', 'lte', 'gt', 'lt', 'in', 'is', 'ilike', 'not'].includes(prop) && typeof args[0] === 'string') {
             call.filters[`${prop}:${args[0]}`] = args[args.length - 1];
           }
+          if (prop === 'range' && typeof args[0] === 'number' && typeof args[1] === 'number') {
+            window = { from: args[0], to: args[1] };
+          }
           return proxy;
         };
       },
     });
     return proxy;
   };
-  return { db: { from } as unknown as SupabaseClient<Database>, calls };
+  // The food slice reads allergies through `family_allergies()` (0438) rather
+  // than selecting `medical_profiles`, whose SELECT policy is now
+  // manager-or-self. Served from the same spec, and — like `from()` above —
+  // recording the argument rather than filtering on it.
+  const rpc = async (name: string) => {
+    if (name !== 'family_allergies') return { data: null, error: { code: '42883', message: `function ${name} does not exist` } };
+    const rows = tables.medical_profiles?.rows ?? [];
+    return { data: rows.map((row) => ({ member_id: row.member_id, allergies: row.allergies ?? null })), error: null };
+  };
+  return { db: { from, rpc } as unknown as SupabaseClient<Database>, calls };
 }
 
 const NOW = new Date('2026-09-05T03:00:00Z'); // 11 PM Friday Sep 4 in New York / 8 PM in Los Angeles

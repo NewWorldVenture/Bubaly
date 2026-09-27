@@ -10,7 +10,8 @@ import { notificationAction, type NotificationInlineAction } from '@/lib/notific
 import { partitionByPriority } from '@/lib/notifications/priority';
 import { useRealtimeQuery } from '@/lib/hooks/use-realtime-query';
 import { createClient } from '@/lib/supabase/client';
-import { describeDbError } from '@/lib/supabase/errors';
+import { settle } from '@/lib/supabase/settle';
+import { describeDbError, wroteNoRows } from '@/lib/supabase/errors';
 import { useToast } from '@/components/ui/toast';
 import { PageHeader } from '@/components/app/page-header';
 import { AiInsight } from '@/components/ai/ai-insight';
@@ -68,23 +69,42 @@ export function NotificationsModule() {
 
   async function markRead(id: string) {
     const supabase = createClient();
-    await supabase.from('notifications').update({ is_read: true }).eq('id', id);
+    // 0118's notif_update is "own row OR manager", and RLS FILTERS an UPDATE
+    // rather than refusing it — so `error: null` did not mean this notification
+    // was marked read. Logged rather than toasted, deliberately: an unrecorded
+    // read receipt is not worth interrupting someone over. The readback is what
+    // makes the log true.
+    const { data: rows, error } = await settle(supabase.from('notifications')
+      .update({ is_read: true }).eq('id', id).eq('family_id', familyId).select('id'));
+    if (error) console.error('[notifications] mark-read failed', { message: error.message });
+    else if (wroteNoRows(rows)) console.error('[notifications] mark-read changed no row', { id });
     void refresh();
   }
 
   async function markAllRead() {
     setMarkingAll(true);
     const supabase = createClient();
-    await supabase.from('notifications').update({ is_read: true })
-      .eq('family_id', familyId).eq('is_read', false);
+    // Zero rows here is NORMAL — nothing was unread — so this checks the error
+    // only, and is left unconfirmed on purpose. `notifications` is "own row OR
+    // manager", not manager-only. Audit C1-S9-82.
+    const { error } = await settle(supabase.from('notifications').update({ is_read: true })
+      .eq('family_id', familyId).eq('is_read', false));
+    if (error) console.error('[notifications] mark-all-read failed', { message: error.message });
     setMarkingAll(false);
     void refresh();
   }
 
   async function remove(id: string) {
     const supabase = createClient();
-    const { error } = await supabase.from('notifications').delete().eq('id', id);
+    // Family-wide rows (no user_id) are listed to every member but deletable
+    // only by a manager (own row OR can_manage_family). A refused delete is
+    // not an error — it matches nothing — so without the row check the bin
+    // did nothing, said nothing, and the row came back on refresh. The
+    // `family_id` predicate bounds the write to one household
+    // (tests/a-filtered-delete-is-not-a-deletion).
+    const { data: rows, error } = await supabase.from('notifications').delete().eq('id', id).eq('family_id', familyId).select('id');
     if (error) return toastError(describeDbError(error));
+    if (wroteNoRows(rows)) toastError(t('errors.thatChangeWasNotSaved'));
     void refresh();
   }
 

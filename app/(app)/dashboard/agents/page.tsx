@@ -1,4 +1,5 @@
 import type { Metadata } from 'next';
+import { dayKeyInZone } from '@/lib/schedule/zoned';
 import { getTranslations } from '@/lib/i18n/server';
 import Link from 'next/link';
 import { requireUserContext } from '@/lib/supabase/auth';
@@ -21,8 +22,23 @@ const HOUR = 3_600_000;
 /** Count-only query → number (0 on any error, so a missing table never breaks the page). */
 type CountResult = { value: number; error: unknown | null };
 
+/**
+ * TEN of the fifteen reads in this page's batch go through here, and until now
+ * this bare `await q` was what made them unsettled. A Supabase builder rejects
+ * only on a transport failure — DNS, TCP, TLS, a timed-out fetch — and inside
+ * Promise.all one rejection rejects the batch, so a single unreachable table
+ * took the whole page to the error boundary while the four settle()d reads
+ * beside it were written to survive exactly that.
+ *
+ * It is worth naming why no sweep found this: the other unsettled batches in
+ * this repo were spotted by looking for a bare `supabase.from(` inside a
+ * Promise.all. Here the call sites all read `count(supabase.from(...))`, which
+ * looks wrapped, and the thing that fails to settle is one `await` in a helper
+ * three dozen lines away. settle()'s SettledFallback already carries
+ * `count: null`, so it lands in the shape this function returns.
+ */
 async function count(q: PromiseLike<{ count: number | null; error: unknown }>): Promise<CountResult> {
-  const { count: n, error } = await q;
+  const { count: n, error } = await settle(q);
   return { value: n ?? 0, error: error ?? null };
 }
 
@@ -91,7 +107,7 @@ export default async function AgentsPage() {
   // in. Best-effort: a missing graph yields no insights, never an error.
   let reasoning;
   try {
-    reasoning = await loadFamilyContext(supabase, familyId, now);
+    reasoning = await loadFamilyContext(supabase, familyId, tz, now);
   } catch (error) {
     console.error('[dashboard-agents] reasoning context read failed', error);
     return <ReadFailure />;
@@ -101,7 +117,12 @@ export default async function AgentsPage() {
     : [];
 
   const events = weekEvents.data ?? [];
-  const eventsToday = events.filter((e) => e.starts_at.slice(0, 10) === todayKey).length;
+  // `todayKey` is the FAMILY's day (line 52, via dayKeyInTz). `.slice(0, 10)` on
+  // an ISO timestamp is GREENWICH's. Comparing them is the defect this file's own
+  // comment four lines above warns about, written on the other side of the same
+  // expression: a 21:00 Saturday event in Los Angeles keys to Sunday and drops out
+  // of "today", while a 17:00 Friday one keys to Saturday and appears in it.
+  const eventsToday = events.filter((e) => dayKeyInZone(Date.parse(e.starts_at), tz) === todayKey).length;
   const unassignedEvents = events.filter((e) => !e.assignee_id).length;
   const upcomingAppointments = events.filter((e) => e.category === 'appointment').length;
 

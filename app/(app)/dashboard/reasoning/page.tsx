@@ -10,7 +10,7 @@ import { ErrorState } from '@/components/ui/states';
 import { loadAndSnapshotReasoning } from '@/lib/reasoning/engine-server';
 import type { ReasoningQuestionId } from '@/lib/reasoning/engine';
 import { cn } from '@/lib/utils/cn';
-import { getTranslations } from '@/lib/i18n/server';
+import { getLocaleContext, getTranslations } from '@/lib/i18n/server';
 
 export const metadata: Metadata = { title: 'Family Reasoning' };
 export const dynamic = 'force-dynamic';
@@ -32,7 +32,14 @@ export default async function ReasoningPage() {
   const t = await getTranslations();
   const ctx = await requireUserContext();
   const supabase = await createServer();
-  const report = await loadAndSnapshotReasoning(supabase, ctx.active.familyId, ctx.user.id);
+  // The family's zone — the report composes the operating index, which keys
+  // on the family's day.
+  const tz = ctx.active.family.timezone || 'UTC';
+  // And the reader's language: a stored budget-drift signal carries money in
+  // whatever locale its writer had (the nightly cron's is en-US), so the report
+  // words it again for whoever is reading this page.
+  const { locale } = await getLocaleContext();
+  const report = await loadAndSnapshotReasoning(supabase, ctx.active.familyId, ctx.user.id, tz, locale.code, t);
 
   const attention = report.answers.filter((a) => a.status === 'attention').length;
   const hasReadErrors = report.readErrors.length > 0;
@@ -61,7 +68,7 @@ export default async function ReasoningPage() {
             </p>
           )}
           {report.allClear && !hasReadErrors && (
-            <span className="ml-auto inline-flex items-center gap-1 rounded-full bg-emerald-500/12 px-2 py-0.5 text-xs font-medium text-emerald-600 dark:text-emerald-400">
+            <span className="ml-auto inline-flex items-center gap-1 rounded-full bg-emerald-500/10 px-2 py-0.5 text-xs font-medium text-emerald-600 dark:text-emerald-400">
               <Check className="h-3 w-3" /> {t('dashboardReasoning.allClear')}
             </span>
           )}

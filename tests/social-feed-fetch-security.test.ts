@@ -30,7 +30,7 @@ describe('Social Feed unfurl fetch boundary', () => {
 
   it('keeps the Social Feed action on the shared public fetcher', () => {
     const source = readFileSync('app/(app)/dashboard/social-feed/actions.ts', 'utf8');
-    expect(source).toContain('fetchPublicText');
+    expect(source).toContain('fetchPublicText(');
     expect(source).not.toContain('redirect: \'follow\'');
     expect(source).not.toContain('(await res.text()).slice');
   });

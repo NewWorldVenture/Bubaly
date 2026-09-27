@@ -7,6 +7,9 @@ import { runSignalDetection } from '@/lib/intelligence/hard-signals-server';
 import { createInMemorySupabase } from './helpers/in-memory-supabase';
 
 const NOW = new Date('2026-09-09T12:00:00.000Z');
+// Both scans STORE words, so each takes the locale and translator of whoever it
+// writes for. Nothing here asserts wording; an echo translator is enough.
+const echo = (key: string, params?: Record<string, string | number>) => `${key} ${JSON.stringify(params ?? {})}`;
 afterEach(() => { vi.restoreAllMocks(); vi.useRealTimers(); });
 
 describe('signal history survives reconciliation', () => {
@@ -56,11 +59,11 @@ describe('signal history survives reconciliation', () => {
       { id: 'stale', family_id: 'f1', dedupe_key: 'renewal:gone', status: 'open' },
       { id: 'decided', family_id: 'f1', dedupe_key: 'renewal:dismissed', status: 'dismissed' },
     ]);
-    expect((await runAutopilotScan(db, 'f1', 'u1')).cleared).toBe(1);
+    expect((await runAutopilotScan(db, 'f1', 'u1', 'UTC', 'en-US', echo)).cleared).toBe(1);
     expect(db.table('autopilot_suggestions')).toHaveLength(602);
     expect(db.table('autopilot_suggestions').find((row) => row.id === 'stale')).toMatchObject({ status: 'snoozed', expires_at: NOW.toISOString() });
     expect(db.table('autopilot_suggestions').find((row) => row.id === 'decided')?.status).toBe('dismissed');
-    expect((await runAutopilotScan(db, 'f1', 'u1')).cleared).toBe(0);
+    expect((await runAutopilotScan(db, 'f1', 'u1', 'UTC', 'en-US', echo)).cleared).toBe(0);
   });
 
   it.each(['acknowledged', 'dismissed'])('preserves a %s family signal and its decision time on refresh', async (status) => {
@@ -69,13 +72,13 @@ describe('signal history survives reconciliation', () => {
       defaults: { family_signals: { status: 'active' } },
     });
     db.seed('routine_templates', [{ id: 'routine-1', family_id: 'f1', name: 'Bedtime', weekday_mask: 127, is_active: true }]);
-    expect((await runSignalDetection(db, 'f1', NOW)).ok).toBe(true);
+    expect((await runSignalDetection(db, 'f1', 'en-US', echo, NOW)).ok).toBe(true);
     const signal = db.table('family_signals')[0];
     expect(signal.status).toBe('active');
     signal.status = status;
     signal.updated_at = '2026-09-08T10:00:00.000Z';
     const before = { ...signal };
-    expect((await runSignalDetection(db, 'f1', new Date('2026-09-10T12:00:00.000Z'))).ok).toBe(true);
+    expect((await runSignalDetection(db, 'f1', 'en-US', echo, new Date('2026-09-10T12:00:00.000Z'))).ok).toBe(true);
     expect(db.table('family_signals')).toEqual([before]);
   });
 });

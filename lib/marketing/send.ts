@@ -6,7 +6,7 @@ import { getMarketingCustomersWithError, evaluateSegment, type SegmentRules } fr
 import { unsubUrl } from '@/lib/marketing/unsubscribe';
 import { readInChunks } from '@/lib/supabase/chunked-in';
 import { readBoundedResponseText } from '@/lib/server/bounded-response-body';
-import { fetchExternal } from '@/lib/server/external-fetch';
+import { fetchWithDeadline } from '@/lib/server/fetch-with-deadline';
 
 type DB = SupabaseClient<Database>;
 
@@ -114,7 +114,7 @@ export async function sendEmailCampaign(supabase: DB, campaignId: string, appUrl
       tags: [{ name: 'campaign', value: campaignId }],
     }));
 
-    const res = await fetchExternal('https://api.resend.com/emails/batch', {
+    const res = await fetchWithDeadline('https://api.resend.com/emails/batch', {
       method: 'POST',
       headers: { authorization: `Bearer ${process.env.RESEND_API_KEY}`, 'content-type': 'application/json' },
       body: JSON.stringify(payload),

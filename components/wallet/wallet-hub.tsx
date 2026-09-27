@@ -1,6 +1,6 @@
 'use client';
 
-import { useMemo, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import Link from 'next/link';
 import {
   Wallet, Plus, Send, MoreHorizontal, CreditCard, Landmark, PiggyBank, Banknote,
@@ -17,14 +17,16 @@ import { SkeletonList, EmptyState, ErrorState } from '@/components/ui/states';
 import { cn } from '@/lib/utils/cn';
 import type { Tables } from '@/lib/database.types';
 import {
-  walletOverview, fmtUsd, fmtDollars, fmtCount, fmtSignedUsd, txnSignedCents, fmtTxnDate,
+  walletOverview, fmtUsd as fmtUsdIn, fmtDollars as fmtDollarsIn, fmtCount as fmtCountIn,
+  fmtSignedUsd as fmtSignedUsdIn, txnSignedCents, fmtTxnDate as fmtTxnDateIn,
   ACCOUNT_KIND_META, CARD_BRAND_LABEL,
 } from '@/lib/wallet/hub';
 import {
   addAccountAction, addCardAction, addPassAction, addRewardAction, addTransactionAction,
   deleteWalletRowAction,
 } from '@/app/(app)/wallet/hub-actions';
-import { useTranslations } from '@/components/i18n/locale-provider';
+import { useLocale, useTranslations } from '@/components/i18n/locale-provider';
+import { useConfirm } from '@/components/ui/confirm';
 import { todayInZone } from '@/lib/schedule/zoned';
 
 type Account = Tables<'financial_accounts'>;
@@ -47,6 +49,12 @@ type AddKind = 'account' | 'card' | 'pass' | 'reward' | 'transaction' | null;
 
 export function WalletHub() {
   const t = useTranslations();
+  const askConfirm = useConfirm();
+  // Money and counts follow the reader; the currency stays the money's own.
+  const locale = useLocale();
+  const fmtUsd = (cents: number) => fmtUsdIn(cents, locale.code);
+  const fmtDollars = (n: number) => fmtDollarsIn(n, locale.code);
+  const fmtCount = (n: number) => fmtCountIn(n, locale.code);
   const tr = useTranslations();
   const { familyId } = useApp();
   const { success, error: toastError } = useToast();
@@ -78,13 +86,31 @@ export function WalletHub() {
   const [txnSearch, setTxnSearch] = useState('');
   const [moreOpen, setMoreOpen] = useState(false);
 
+  // Escape closes either menu.
+  //
+  // Both click-outside scrims are `aria-hidden`, which is honest about a
+  // mouse-only dismiss and also silences the two jsx-a11y rules that were
+  // pointing at the gap. With the rules quiet and no Escape path, a keyboard
+  // user could open either menu and had no way out but to pick something.
+  // Same shape as components/app/ai-orb.tsx:39.
+  useEffect(() => {
+    if (!addOpen && !moreOpen) return;
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key !== 'Escape') return;
+      setAddOpen(false);
+      setMoreOpen(false);
+    };
+    window.addEventListener('keydown', onKey);
+    return () => window.removeEventListener('keydown', onKey);
+  }, [addOpen, moreOpen]);
+
   const overview = useMemo(
     () => walletOverview(accounts, cards, rewards),
     [accounts, cards, rewards],
   );
 
   async function del(table: string, id: string, label: string) {
-    if (!confirm(`Remove ${label}?`)) return;
+    if (!(await askConfirm({ title: t('confirm.removeNamed', { name: label }), body: t('confirm.cannotBeUndone') }))) return;
     const res = await deleteWalletRowAction({ table, id });
     if (!res.ok) return toastError(res.error ?? 'Could not remove');
     success(t('walletHub.removed'));
@@ -362,6 +388,8 @@ function Row({ children, onDelete }: { children: React.ReactNode; onDelete?: () 
 
 function CardRow({ card, onDelete }: { card: Card; onDelete: () => void }) {
   const tr = useTranslations();
+  const locale = useLocale();
+  const fmtUsd = (cents: number) => fmtUsdIn(cents, locale.code);
   return (
     <div className="group relative flex items-center gap-3 rounded-xl border border-border bg-elevated/40 p-3">
       <span className={cn('grid h-9 w-12 shrink-0 place-items-center rounded-md text-[10px] font-bold text-white', CARD_TINT[card.brand] ?? CARD_TINT.other)}>{CARD_BRAND_LABEL[card.brand] ?? 'CARD'}</span>
@@ -376,6 +404,10 @@ function CardRow({ card, onDelete }: { card: Card; onDelete: () => void }) {
 }
 
 function TransactionList({ txns, onDelete, emptyLabel = 'No transactions yet.' }: { txns: Txn[]; onDelete: (t: Txn) => void; emptyLabel?: string }) {
+  // Money and dates follow the reader; the currency stays the money's own.
+  const locale = useLocale();
+  const fmtSignedUsd = (cents: number) => fmtSignedUsdIn(cents, locale.code);
+  const fmtTxnDate = (iso: string) => fmtTxnDateIn(iso, locale.code);
   if (txns.length === 0) return <p className="py-6 text-center text-sm text-muted">{emptyLabel}</p>;
   return (
     <>

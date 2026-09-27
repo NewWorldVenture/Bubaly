@@ -1,13 +1,10 @@
 // lib/guardian/trust.ts — Family Trust Graph™ trust levels and scoring.
 
-export type TrustLevel =
-  | 'immediate_family'
-  | 'close_family'
-  | 'trusted_friend'
-  | 'known_contact'
-  | 'unknown'
-  | 'suspected_spam'
-  | 'blocked';
+import type { GuardianTrustLevel } from '@/lib/database.types';
+
+// One definition, and it is the column's. `guardian_contacts.trust_level` is a
+// Postgres enum; re-typing its members here let the two drift silently.
+export type TrustLevel = GuardianTrustLevel;
 
 export const TRUST_LEVELS: TrustLevel[] = [
   'immediate_family',
@@ -19,14 +16,18 @@ export const TRUST_LEVELS: TrustLevel[] = [
   'blocked',
 ];
 
-export const TRUST_LABELS: Record<TrustLevel, string> = {
-  immediate_family: 'Immediate Family',
-  close_family: 'Close Family',
-  trusted_friend: 'Trusted Friend',
-  known_contact: 'Known Contact',
-  unknown: 'Unknown',
-  suspected_spam: 'Suspected Spam',
-  blocked: 'Blocked',
+/** Catalogue KEYS, not copy. This module is imported by webhook routes and by
+ *  five client components; only the components have a reader, so the words are
+ *  resolved there. A Dutch family reading why a call was blocked used to get a
+ *  fully translated page with the reason in English. */
+export const TRUST_LABEL_KEYS: Record<TrustLevel, string> = {
+  immediate_family: 'guardian.trustImmediateFamily',
+  close_family: 'guardian.trustCloseFamily',
+  trusted_friend: 'guardian.trustTrustedFriend',
+  known_contact: 'guardian.trustKnownContact',
+  unknown: 'guardian.trustUnknown',
+  suspected_spam: 'guardian.trustSuspectedSpam',
+  blocked: 'guardian.trustBlocked',
 };
 
 export const TRUST_ICONS: Record<TrustLevel, string> = {

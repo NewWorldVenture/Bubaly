@@ -3,10 +3,13 @@
    cache-first for static assets.
 
    PRIVACY INVARIANT (M-023): private pages and images must never be read from
-   or written to Cache Storage. The v5 bump removes images saved by older
+   or written to Cache Storage. The v6 bump removes images saved by older
    workers; explicit request allowlists also exclude late writes from an old
-   worker that finishes after activation. Logout does not clear Cache Storage. */
-const CACHE = 'bubaly-v5';
+   worker that finishes after activation. Logout does not clear Cache Storage.
+   This extends the SEC-001 / Q58 / C1-K-18 optimizer write protection: both
+   reads and writes require known public resources, including optimizer input.
+   The previous v5 worker could still read arbitrary or stale cached entries. */
+const CACHE = 'bubaly-v6';
 /* Episodes a family explicitly downloaded. Separate from the app-shell cache
    and NOT version-bumped, because its contents are theirs rather than ours:
    the activate sweep below used to delete it along with every other unknown

@@ -8,7 +8,7 @@ import {
 import { useApp } from '@/components/app/app-context';
 import { useRealtimeQuery } from '@/lib/hooks/use-realtime-query';
 import { createClient } from '@/lib/supabase/client';
-import { describeDbError } from '@/lib/supabase/errors';
+import { describeDbError, wroteNoRows } from '@/lib/supabase/errors';
 import { useToast } from '@/components/ui/toast';
 import { Modal } from '@/components/ui/modal';
 import { Input, Textarea, Field, Select } from '@/components/ui/input';
@@ -23,7 +23,8 @@ import {
   type HomeworkLike, type DueBucket,
 } from '@/lib/homework/board';
 import type { Tables, HomeworkStatus } from '@/lib/database.types';
-import { useTranslations } from '@/components/i18n/locale-provider';
+import { useLocale, useTranslations } from '@/components/i18n/locale-provider';
+import { useConfirm } from '@/components/ui/confirm';
 
 type Homework = Tables<'homework_assignments'>;
 
@@ -46,7 +47,9 @@ function toLocalInput(iso: string | null): string {
 const blank = { id: '', member_id: '', subject: '', title: '', details: '', due_at: '', status: 'assigned' as HomeworkStatus };
 
 export function HomeworkModule() {
+  const locale = useLocale();
   const t = useTranslations();
+  const askConfirm = useConfirm();
   const { familyId, userId, members, role } = useApp();
   const { success, error: toastError } = useToast();
   void role;
@@ -97,11 +100,13 @@ export function HomeworkModule() {
       status: form.status,
       completed_at: isDone ? new Date().toISOString() : null,
     };
-    const { error: err } = form.id
-      ? await sb.from('homework_assignments').update(fields).eq('id', form.id)
-      : await sb.from('homework_assignments').insert({ ...fields, family_id: familyId, created_by: userId });
+    // Under RLS a refused row comes back with no error and zero rows, which this used to report as done. Audit C1-S9-82.
+    const { data: saved, error: err } = form.id
+      ? await sb.from('homework_assignments').update(fields).eq('id', form.id).select('id')
+      : await sb.from('homework_assignments').insert({ ...fields, family_id: familyId, created_by: userId }).select('id');
     setSaving(false);
     if (err) { toastError(describeDbError(err)); return; }
+    if (wroteNoRows(saved)) { toastError(t('errors.thatChangeWasNotSaved')); return; }
     success(form.id ? 'Homework updated' : 'Homework added');
     setModalOpen(false);
   }
@@ -110,23 +115,25 @@ export function HomeworkModule() {
     const next = NEXT_STATUS[h.status];
     const isDone = next === 'done' || next === 'submitted';
     const sb = createClient();
-    const { error: err } = await sb.from('homework_assignments').update({
+    const { data: updated2, error: err } = await sb.from('homework_assignments').update({
       status: next, completed_at: isDone ? new Date().toISOString() : null,
-    }).eq('id', h.id);
+    }).eq('id', h.id).select('id');
     if (err) toastError(describeDbError(err));
+    else if (wroteNoRows(updated2)) toastError(t('errors.thatChangeWasNotSaved'));
   }
 
   async function remove(h: Homework) {
-    if (!confirm(`Delete "${h.title}"?`)) return;
+    if (!(await askConfirm({ title: t('confirm.deleteNamed', { name: h.title }), body: t('confirm.cannotBeUndone') }))) return;
     const sb = createClient();
-    const { error: err } = await sb.from('homework_assignments').delete().eq('id', h.id);
+    const { data: removed, error: err } = await sb.from('homework_assignments').delete().eq('id', h.id).select('id');
     if (err) { toastError(describeDbError(err)); return; }
+    if (wroteNoRows(removed)) { toastError(t('errors.thatChangeWasNotSaved')); return; }
     success(t('homeworkModule.homeworkDeleted'));
   }
 
   const fmtDue = (iso: string | null) => {
     if (!iso) return null;
-    return new Date(iso).toLocaleString('en-US', { weekday: 'short', month: 'short', day: 'numeric', hour: 'numeric', minute: '2-digit' });
+    return new Date(iso).toLocaleString(locale.code, { weekday: 'short', month: 'short', day: 'numeric', hour: 'numeric', minute: '2-digit' });
   };
 
   if (loading) return <SkeletonList count={5} />;

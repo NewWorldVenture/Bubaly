@@ -62,15 +62,17 @@ import {
 } from '@/lib/concierge/apply';
 import { runSummary } from '@/lib/autonomy/loop';
 import {
-  asRecord, classifyPayload, editableArgsOf, editableFieldsFor, toApprovalCardData, WRITE_BACK_KINDS,
+  asRecord, classifyPayload, editableArgsOf, editableFieldsFor, effectiveArgsOf, toApprovalCardData, WRITE_BACK_KINDS,
   type ApprovalCardData, type ClassifiedPayload,
 } from '@/lib/approvals/card-data';
 import { aiApprovalReminders, type AiApprovalInput } from '@/lib/notifications/approval-reminders';
+import type { NeedsReader } from '@/lib/home/needs-sources';
+import { SOURCE_MESSAGES, translate } from '@/lib/i18n/messages';
 import { makeKey } from '@/lib/services/idempotency';
 import { notify } from '@/lib/services/notifications';
 import { scopeForSystem, scopeNow } from '@/lib/services/scope';
 import { fail, ok, SERVICE_CODES, type ServiceResult, type ServiceScope } from '@/lib/services/types';
-import { describeDbError } from '@/lib/supabase/errors';
+import { describeDbError, wroteNoRows } from '@/lib/supabase/errors';
 import { settleAll } from '@/lib/supabase/settle';
 import { readInChunks } from '@/lib/supabase/chunked-in';
 
@@ -87,7 +89,11 @@ export type { ApprovalCardData, EditableField, ClassifiedPayload } from '@/lib/a
 
 export { classifyPayload, editableFieldsFor } from '@/lib/approvals/card-data';
 
-export type DecideResult = { status: string; executed: boolean; resumedRunId: string | null; summary: string };
+export type DecideResult = {
+  status: string; executed: boolean; resumedRunId: string | null; summary: string;
+  /** For a concierge plan: the write-backs THIS decision materialised. */
+  applied?: WriteBackKind[];
+};
 export type EditResult = { status: 'modified' | 'pending'; resumedRunId: string | null; summary?: string };
 
 /** Card data for one row; `requestedBy` is resolved by the caller so this stays pure. */
@@ -265,14 +271,23 @@ async function flipStatus(
   scope: ServiceScope,
   approvalId: string,
   patch: Database['public']['Tables']['approval_requests']['Update'],
+  expectUpdatedAt?: string | null,
 ): Promise<ServiceResult<boolean>> {
-  const { data, error } = await scope.db
+  // `status = 'pending'` stops two DECIDING votes from both executing. It does
+  // not stop two NON-deciding votes from overwriting each other: neither
+  // changes the status, so both match, and the second write replaces the
+  // `approvals` array the first one just wrote. `expectUpdatedAt` closes that —
+  // the `set_updated_at` trigger bumps the column on every write, so it is a
+  // version token, and a caller that loses the race gets zero rows back and
+  // can re-read rather than silently discard a parent's vote.
+  let q = scope.db
     .from('approval_requests')
     .update(patch)
     .eq('id', approvalId)
     .eq('family_id', scope.familyId)
-    .eq('status', 'pending')
-    .select('id');
+    .eq('status', 'pending');
+  if (expectUpdatedAt) q = q.eq('updated_at', expectUpdatedAt);
+  const { data, error } = await q.select('id');
   if (error) {
     console.error('[service:approvals] failed to record the decision', error);
     return fail(describeDbError(error, 'Bubaly could not record that decision.'), { code: SERVICE_CODES.db, retryable: true });
@@ -281,14 +296,19 @@ async function flipStatus(
 }
 
 async function stampExecution(scope: ServiceScope, approvalId: string, result: string): Promise<void> {
-  const { error } = await scope.db
+  const { data: stamped, error } = await scope.db
     .from('approval_requests')
     .update({ executed_at: new Date(scopeNow(scope).getTime()).toISOString(), execution_result: result.slice(0, 2000) })
     .eq('id', approvalId)
-    .eq('family_id', scope.familyId);
+    .eq('family_id', scope.familyId)
+    .select('id');
   // The action already ran; if this stamp is lost the request looks
-  // un-executed, so make the failure observable rather than silent.
-  if (error) console.error('[service:approvals] execution-result stamp failed', { approvalId, error });
+  // un-executed, so make the failure observable rather than silent — and a
+  // stamp that matched no row is lost just as surely as one that errored.
+  // Audit C1-S9-65.
+  if (error || wroteNoRows(stamped)) {
+    console.error('[service:approvals] execution-result stamp failed', { approvalId, error: error ?? 'no rows updated' });
+  }
 }
 
 // ─── Run linkage ────────────────────────────────────────────────────────────
@@ -470,9 +490,23 @@ export type ConciergePlanRow = {
  * insert logic exists once and a plan can never double-materialise because two
  * surfaces disagreed about what "already applied" means.
  */
+/**
+ * What a materialization did. `failed` holds every kind that was asked for and
+ * is NOT known to exist: a refused insert, or every target when the ledger
+ * could not be read.
+ *
+ * This used to be a bare `WriteBackKind[]`, which gave three outcomes one
+ * shape: an empty list meant "already in place", "the ledger was unreadable"
+ * and "every insert was refused" alike. Every caller read it as the first. The
+ * manual button showed a green "done" tick and disabled itself; an approved
+ * run was stamped executed with the summary "everything was already in place"
+ * over a plan that never reached the calendar. Audit C1-S9-72.
+ */
+export type MaterializeResult = { applied: WriteBackKind[]; failed: WriteBackKind[] };
+
 export async function materializeConciergePlan(
   db: DB, familyId: string, userId: string, plan: ConciergePlanRow, kinds: WriteBackKind[],
-): Promise<WriteBackKind[]> {
+): Promise<MaterializeResult> {
   const doable = new Set(availableWriteBackKinds(plan));
   const targets = kinds.filter((k) => doable.has(k));
 
@@ -485,11 +519,12 @@ export async function materializeConciergePlan(
     // Without the ledger there is no way to know what was already applied, and
     // guessing "nothing" is how a plan lands on the calendar twice.
     console.error('[concierge] could not read the write-back ledger', { planId: plan.id, familyId, error: existingError });
-    return [];
+    return { applied: [], failed: targets };
   }
   const already = new Set((existing ?? []).map((r) => r.action_kind));
 
   const applied: WriteBackKind[] = [];
+  const failed: WriteBackKind[] = [];
   for (const kind of targets) {
     if (already.has(kind)) continue;
     let targetTable = '';
@@ -504,7 +539,7 @@ export async function materializeConciergePlan(
         starts_at: new Date(`${plan.planned_for}T00:00:00.000Z`).toISOString(), all_day: true,
       }).select('id').single();
       // A failed insert is not "applied": claiming it would also skip it on the idempotent re-run.
-      if (evErr) { console.error('[concierge] calendar write-back failed', { planId: plan.id, familyId, error: evErr }); continue; }
+      if (evErr) { console.error('[concierge] calendar write-back failed', { planId: plan.id, familyId, error: evErr }); failed.push(kind); continue; }
       targetTable = 'calendar_events'; targetId = ev?.id ?? null;
     } else if (kind === 'reminder' || kind === 'task') {
       const { data: rem, error: remErr } = await db.from('family_reminders').insert({
@@ -515,7 +550,7 @@ export async function materializeConciergePlan(
         remind_at: reminderLeadAt(plan.planned_for),
         ai_suggested: true,
       }).select('id').single();
-      if (remErr) { console.error('[concierge] reminder write-back failed', { planId: plan.id, familyId, kind, error: remErr }); continue; }
+      if (remErr) { console.error('[concierge] reminder write-back failed', { planId: plan.id, familyId, kind, error: remErr }); failed.push(kind); continue; }
       targetTable = 'family_reminders'; targetId = rem?.id ?? null;
     } else {
       continue;
@@ -531,7 +566,7 @@ export async function materializeConciergePlan(
     if (logErr) console.error('[concierge] concierge_plan_actions log failed', { planId: plan.id, familyId, kind, error: logErr });
     applied.push(kind);
   }
-  return applied;
+  return { applied, failed };
 }
 
 async function runConciergePlan(
@@ -553,17 +588,39 @@ async function runConciergePlan(
   }
   if (!plan) return fail('That plan no longer exists.', { code: SERVICE_CODES.notFound });
 
-  const applied = await materializeConciergePlan(scope.db, scope.familyId, scope.userId, plan, kinds);
+  const { applied, failed } = await materializeConciergePlan(scope.db, scope.familyId, scope.userId, plan, kinds);
+  if (failed.length) {
+    // Not "everything was already in place". The legacy run below is left
+    // `pending` on purpose, so the Autopilot panel still offers the retry —
+    // and the retry is safe, because the ledger skips what did land.
+    // Audit C1-S9-72.
+    return fail('Bubaly could not finish applying that plan. Try again.', { code: SERVICE_CODES.db, retryable: true });
+  }
   const summary = runSummary(plan.title, applied);
 
   // The concierge loop queued a legacy `pending` automation row beside this
   // approval; closing it here is what stops the Autopilot panel showing the
   // plan as waiting after a parent has already said yes.
+  //
+  // Closing it means all three columns. `status = 'executed'` alone left the
+  // row at the 'awaiting_approval' `state` it was inserted with and
+  // `completed_at` null, and those two are what the family's own surfaces read:
+  // the Display's "Handled today" tile filters `state = 'completed'`, and the
+  // 7-day value card on Finances (and on the upgrade paywall) counts
+  // `completed_at` within the window — see lib/metric/completed-plans.ts, which
+  // files an undated row under "excluded, week unknown" for all time. So the
+  // plan this approval just materialised was invisible to both. `approved_at`
+  // is when the parent said yes and is never a stand-in for completion — on
+  // this path the two are one moment, so they are one clock read.
+  //
+  // Rows deliberately not checked: not every approval has such a row, and zero
+  // is the ordinary case for those. Audit C1-S9-65.
+  const now = scopeNow(scope).toISOString();
   const { error: runError } = await scope.db
     .from('family_automation_runs')
     .update({
-      status: 'executed', summary, result: { steps: applied } as unknown as Json,
-      approved_by: scope.userId, approved_at: scopeNow(scope).toISOString(),
+      status: 'executed', state: 'completed', summary, result: { steps: applied } as unknown as Json,
+      approved_by: scope.userId, approved_at: now, completed_at: now,
     })
     .eq('family_id', scope.familyId)
     .eq('status', 'pending')
@@ -574,9 +631,13 @@ async function runConciergePlan(
 }
 
 async function dismissConciergeRun(scope: ServiceScope, row: ApprovalRow): Promise<void> {
+  // As above: zero rows is an approval with no legacy run beside it.
+  // Audit C1-S9-65.
+  // `state` with `status`, as runConciergePlan closes it: a declined run left at
+  // 'awaiting_approval' would sit on "Needs you" (which reads `state`) forever.
   const { error } = await scope.db
     .from('family_automation_runs')
-    .update({ status: 'dismissed' })
+    .update({ status: 'dismissed', state: 'cancelled' })
     .eq('family_id', scope.familyId)
     .eq('status', 'pending')
     .filter('metadata->>approval_id', 'eq', row.id);
@@ -602,9 +663,19 @@ async function dismissConciergeRun(scope: ServiceScope, row: ApprovalRow): Promi
  *
  *   * `memberId`/`userId` become the ASKER's, so every `created_by` and
  *     member-scoped column names the person who wanted the thing. Safe under
- *     RLS: the database client stays the approver's session, and no table the
- *     AI writes carries a `created_by = auth.uid()` predicate (`0004` applies
- *     that only to `families` and `user_preferences`).
+ *     RLS, but no longer because no predicate exists: `0339` gave
+ *     `calendar_events` a restrictive INSERT guard of
+ *     `created_by is null OR created_by = auth.uid() OR
+ *     public.can_manage_family(family_id)`, and `calendar.createEvent` is a
+ *     registered tool this function's scope reaches. The MANAGER branch is what
+ *     keeps this safe: `openForDecision` refuses any decision where
+ *     `!isManager(scope.role)`, and `MANAGER_ROLES` (`parent`/`adult`) is
+ *     exactly `can_manage_family`'s role set, so the approver always satisfies
+ *     it while writing the asker's id. `0272` does the same for `event_rsvps`.
+ *     A future table that pins `created_by` to `auth.uid()` with NO manager
+ *     branch WOULD break this path — that is what got three earlier migrations
+ *     rejected. `0004` still applies a bare pin only to `families` and
+ *     `user_preferences`, neither of which the AI writes.
  *   * `actorKind` becomes `'ai'`, because it IS Bubaly doing the work — a human
  *     released it, they did not type it. That also restores the family activity
  *     line: `recordActivity` returns early for `actorKind === 'member'`, so
@@ -684,7 +755,7 @@ async function performApproved(
       }
       await stampExecution(scope, row.id, done.data.summary);
       await auditDecision(scope, row, 'approved_execution', done.data.summary, { applied: done.data.applied });
-      return ok({ status: decisionLabel, executed: done.data.applied.length > 0, resumedRunId: null, summary: done.data.summary });
+      return ok({ status: decisionLabel, executed: done.data.applied.length > 0, resumedRunId: null, summary: done.data.summary, applied: done.data.applied });
     }
 
     case 'tool': {
@@ -767,11 +838,19 @@ async function performApproved(
  * threshold is met; every vote is audited, only the deciding one executes. A
  * rejection is final on the first vote — one "no" is enough to stop the AI.
  */
+/**
+ * How many times a vote will re-read and re-append after losing a write race.
+ * Two parents is the case this exists for; a third attempt is slack, not a
+ * design for contention.
+ */
+const VOTE_RETRIES = 3;
+
 export async function decide(
   scope: ServiceScope,
   approvalId: string,
   decision: 'approved' | 'rejected',
   note?: string | null,
+  attempt = 0,
 ): Promise<ServiceResult<DecideResult>> {
   if (decision !== 'approved' && decision !== 'rejected') {
     return fail('A decision must be approved or rejected.', { code: SERVICE_CODES.invalidInput });
@@ -811,9 +890,28 @@ export async function decide(
       reviewed_by: memberId,
       review_note: cleanNote,
     };
-  const flipped = await flipStatus(scope, approvalId, patch);
+  // Pin the version on EVERY vote, deciding or not. `status = 'pending'` cannot
+  // tell this write apart from another parent's: it is still true when their
+  // vote has landed and ours was computed before it. A rejection is always
+  // deciding, so guarding only the non-deciding path left the very case that
+  // loses a vote — B's approval lands, C's concurrent rejection replaces
+  // [A, B] with [A, C], and B's yes is gone from the audit trail although
+  // `decide` told B it was recorded.
+  const flipped = await flipStatus(scope, approvalId, patch, row.updated_at);
   if (!flipped.ok) return flipped;
-  if (!flipped.data) return fail('This request was already decided.', { code: SERVICE_CODES.invalidInput });
+  if (!flipped.data) {
+    // Zero rows means either the request was decided while we were deciding,
+    // or another vote landed between our read and our write. Re-reading tells
+    // the two apart and re-appends onto the array that actually won, so a
+    // simultaneous vote is delayed rather than lost.
+    // Retry whatever this vote would have decided: openForDecision re-reads
+    // and says "already decided" on its own if someone truly finished it, so
+    // the retry cannot turn a settled request back into an open one.
+    if (attempt < VOTE_RETRIES) {
+      return decide(scope, approvalId, decision, note, attempt + 1);
+    }
+    return fail('This request was already decided.', { code: SERVICE_CODES.invalidInput });
+  }
 
   await auditDecision(scope, row, decision, cleanNote ?? (
     finalStatus === 'pending'
@@ -861,27 +959,32 @@ export async function decide(
  *
  * `edited_payload` is a column, and `approval_requests_decide` lets any manager
  * write any column on a pending row. So the stored object is re-merged over the
- * original through the same allow-list `editAndApprove` uses and re-validated
- * against the tool's schema: an edit may only change fields the card offered,
- * and only to values the tool would have accepted at edit time. Anything else
- * falls back to the original, which is what the approvers were shown.
+ * original through the allow-list the card offered (`effectiveArgsOf`) and
+ * re-validated against the tool's schema: an edit may only change fields the
+ * card offered, and only to values the tool would have accepted at edit time.
+ * Anything else falls back to the original, which is what the approvers were
+ * shown.
+ *
+ * Three callers depend on this being one derivation: `decide` executes it for
+ * `tool` and `concierge_plan` rows, `editAndApprove` merges the next
+ * approver's edits on top of it, and the card renders its allow-listed half
+ * (`effectiveArgsOf`). When they disagreed, one approver's correction was
+ * shown, run, and then erased by the other.
+ *
+ * The fourth reader is the run executor, which performs `plan_steps` rows and
+ * run-gated `tool` rows: lib/ai/runs/executor.ts `approvedArgsFor` derives
+ * what it runs through the same `effectiveArgsOf`, so a value written to the
+ * column directly cannot reach a tool from that side either. (0389 also
+ * freezes `edited_payload` once the row is decided.) The tool's own
+ * `safeParse` runs inside `executeTool` on that path, so it is not repeated
+ * here.
  */
 function storedEdit(row: ApprovalRow, classified: ClassifiedPayload): Record<string, unknown> | null {
-  const stored = asRecord(row.edited_payload);
-  if (!stored) return null;
-
-  const original = editableArgsOf(classified) ?? {};
-  const allowed = new Set(editableFieldsFor(original).map((f) => f.key));
-  const merged: Record<string, unknown> = { ...original };
-  let changed = false;
-  for (const [key, value] of Object.entries(stored)) {
-    if (!allowed.has(key)) continue;
-    if (typeof value !== 'string' && typeof value !== 'number' && typeof value !== 'boolean') continue;
-    if (merged[key] === value) continue;
-    merged[key] = value;
-    changed = true;
-  }
-  if (!changed) return null;
+  // The allow-listed merge is `effectiveArgsOf` (lib/approvals/card-data.ts),
+  // shared with the card so what a second approver READS and what the deciding
+  // vote RUNS can never be derived by two different rules.
+  const { args: merged, changed } = effectiveArgsOf(classified, row.edited_payload);
+  if (!merged || changed.length === 0) return null;
 
   if (classified.kind === 'tool') {
     const tool = getTool(classified.name);
@@ -908,6 +1011,7 @@ export async function editAndApprove(
   approvalId: string,
   editedPayload: unknown,
   note?: string | null,
+  attempt = 0,
 ): Promise<ServiceResult<EditResult>> {
   const edits = asRecord(editedPayload);
   if (!edits) return fail('The edited details must be an object of fields.', { code: SERVICE_CODES.invalidInput });
@@ -921,10 +1025,21 @@ export async function editAndApprove(
   if (!classified) return fail('Bubaly could not work out what this approval would do, so it cannot be edited.', { code: SERVICE_CODES.invalidInput });
 
   const original = editableArgsOf(classified) ?? {};
+  // Merge over the edit ALREADY RECORDED on this row, not over Bubaly's
+  // original. On a two-parent row the first approver's correction is what the
+  // deciding vote executes (`decide` passes `storedEdit`); re-basing on the
+  // original meant the second approver silently reverted every field they did
+  // not retype — including when they opened Edit and changed nothing — while
+  // both parents were told their changes went through. `storedEdit` is the
+  // re-derived, allow-listed, schema-checked version of that column, so
+  // nothing a manager wrote straight to `edited_payload` is trusted here
+  // either.
+  const base = storedEdit(row, classified) ?? original;
   // Only the fields the card offered may change: an edit is a correction of
-  // what was shown, never a way to smuggle in new arguments.
+  // what was shown, never a way to smuggle in new arguments. The allow-list is
+  // derived from the ORIGINAL, so an earlier edit can never widen it.
   const allowed = new Set(editableFieldsFor(original).map((f) => f.key));
-  const merged: Record<string, unknown> = { ...original };
+  const merged: Record<string, unknown> = { ...base };
   for (const [key, value] of Object.entries(edits)) {
     if (!allowed.has(key)) continue;
     if (typeof value !== 'string' && typeof value !== 'number' && typeof value !== 'boolean') continue;
@@ -955,21 +1070,31 @@ export async function editAndApprove(
     return fail('This one needs two parents to agree. Ask a parent to approve it.', { code: SERVICE_CODES.denied });
   }
   const votes: Vote[] = [...prior, { member_id: memberId, decision: 'approved', note: cleanNote, at: nowIso, role: scope.role ?? null }];
+  // Two deltas, because they answer different questions. `changed` is the
+  // cumulative difference from what Bubaly proposed — what the family is
+  // actually agreeing to. `changedByMe` is this approver's own contribution;
+  // without it the activity line credited one parent with the other's wording.
   const changed = Object.keys(merged).filter((k) => merged[k] !== original[k]);
+  const changedByMe = Object.keys(merged).filter((k) => merged[k] !== base[k]);
 
   // An edit is still one vote. A two-parent rule stays a two-parent rule:
   // record the edited payload and this approval, and wait for the rest.
   const approvedCount = countingApprovals(votes, threshold);
   const required = threshold.required;
   if (approvedCount < required) {
+    // Same race as `decide`: this vote leaves the status pending, so the
+    // version has to be pinned or the other parent's vote is overwritten.
     const held = await flipStatus(scope, approvalId, {
       edited_payload: merged as Json,
       approvals: votes as unknown as Json,
       review_note: cleanNote ?? undefined,
-    });
+    }, row.updated_at);
     if (!held.ok) return held;
-    if (!held.data) return fail('This request was already decided.', { code: SERVICE_CODES.invalidInput });
-    await auditDecision(scope, row, 'modified', cleanNote ?? `Edited ${changed.length ? changed.join(', ') : 'nothing'}; approval ${approvedCount} of ${required} recorded.`, { changed, votes: votes.length, required });
+    if (!held.data) {
+      if (attempt < VOTE_RETRIES) return editAndApprove(scope, approvalId, edits, note, attempt + 1);
+      return fail('This request was already decided.', { code: SERVICE_CODES.invalidInput });
+    }
+    await auditDecision(scope, row, 'modified', cleanNote ?? `Edited ${changedByMe.length ? changedByMe.join(', ') : 'nothing'}; approval ${approvedCount} of ${required} recorded.`, { changed, changedByMe, votes: votes.length, required });
     const remaining = required - approvedCount;
     return ok({
       status: 'pending', resumedRunId: null,
@@ -989,7 +1114,7 @@ export async function editAndApprove(
   if (!flipped.ok) return flipped;
   if (!flipped.data) return fail('This request was already decided.', { code: SERVICE_CODES.invalidInput });
 
-  await auditDecision(scope, row, 'modified', cleanNote ?? `Edited ${changed.length ? changed.join(', ') : 'nothing'} and approved.`, { changed });
+  await auditDecision(scope, row, 'modified', cleanNote ?? `Edited ${changedByMe.length ? changedByMe.join(', ') : 'nothing'} and approved.`, { changed, changedByMe });
 
   const done = await performApproved(scope, row, classified, merged, 'modified');
   if (!done.ok) return done;
@@ -1092,6 +1217,30 @@ async function runIdForPlan(db: DB, familyId: string, planId: string): Promise<s
 // ─── Cron: reminders ────────────────────────────────────────────────────────
 
 /**
+ * Whose words the AI-approval reminders are in — and the honest answer is
+ * "nobody in particular", which is why it is spelled out rather than defaulted.
+ *
+ * `aiApprovalReminders` puts an amount in a title, so it requires a reader. This
+ * runs from a cron: there is no request, so no cookie and no Accept-Language,
+ * and no member or family table stores a language choice yet (finalaudit
+ * I18N-001 — it lives only in LOCALE_COOKIE, which a cron never sees). So the
+ * reminder each manager is sent is written in the SOURCE locale, explicitly:
+ * 'en-US' for the amount, the English catalogue for the words.
+ *
+ * SO THIS SITE IS GROUNDWORK, NOT A CONVERSION: every manager, a German one
+ * included, still reads "Needs your OK: … · $2,768.50" in the bell and in push
+ * (type 'system' is 'now' in lib/notifications/priority.ts, so never the brief).
+ * What changed is that the prose lives in the catalogue and the symbol is no
+ * longer hand-written. When a per-member locale column lands, this is the line
+ * that reads it — per recipient, since the builder already fans out one row per
+ * manager.
+ */
+const AI_APPROVAL_REMINDER_READER: NeedsReader = {
+  locale: 'en-US',
+  t: (key, params) => translate(SOURCE_MESSAGES, key, params),
+};
+
+/**
  * Tell each manager, once, about every AI approval waiting on them.
  *
  * "Once" is enforced twice over: the notify service refuses a second unread
@@ -1129,7 +1278,7 @@ export async function remindPendingApprovals(db: DB, now: Date = new Date()): Pr
       continue;
     }
     const managers = (members ?? []).filter((m) => isManager(m.role)).map((m) => ({ id: m.id, user_id: m.user_id }));
-    const candidates = aiApprovalReminders(approvals, managers, now);
+    const candidates = aiApprovalReminders(approvals, managers, AI_APPROVAL_REMINDER_READER, now);
     if (candidates.length === 0) continue;
 
     // Batched: a dedupe key is a composite string, not a uuid, so a few hundred

@@ -1,6 +1,6 @@
 import type { Metadata } from 'next';
 import { PartialReadBanner } from '@/components/ui/partial-read-banner';
-import { getTranslations } from '@/lib/i18n/server';
+import { getLocaleContext, getTranslations } from '@/lib/i18n/server';
 import { requireUserContext } from '@/lib/supabase/auth';
 import { createServer } from '@/lib/supabase/server';
 import { describeReadError } from '@/lib/supabase/settle';
@@ -8,6 +8,7 @@ import { CalmModule } from '@/components/modules/calm-module';
 import { buildCalmInbox, type CalmItem, type ItemSeverity } from '@/lib/calm/inbox';
 import { loadFamilyContext } from '@/lib/reasoning/context';
 import { reasoningInsights } from '@/lib/reasoning/insights';
+import { autopilotTitleFor } from '@/lib/autopilot/engine';
 
 export const metadata: Metadata = { title: 'Calm | Bubaly' };
 export const dynamic = 'force-dynamic';
@@ -34,16 +35,20 @@ function safe<T>(p: PromiseLike<{ data: T[] | null; error: unknown }>): Promise<
 
 export default async function CalmPage() {
   const t = await getTranslations();
+  const { locale } = await getLocaleContext();
   const ctx = await requireUserContext();
   const familyId = ctx.active.familyId;
   const supabase = await createServer();
   const now = new Date();
+  // The family's zone: the reasoning context's snapshot bounds DATE columns
+  // with a day key, and a day key only means something in a zone.
+  const tz = ctx.active.family.timezone || 'UTC';
   const in24 = new Date(now.getTime() + 24 * 3_600_000).toISOString();
 
   const [agentResult, autopilotResult, foiResult, approvalResult, reminderResult] = await Promise.all([
     safe(supabase.from('agent_activity').select('id, agent, title, detail, href, severity')
       .eq('family_id', familyId).eq('status', 'active').in('severity', ['action', 'attention']).order('created_at', { ascending: false }).limit(100)),
-    safe(supabase.from('autopilot_suggestions').select('id, title, detail, urgency')
+    safe(supabase.from('autopilot_suggestions').select('id, title, detail, urgency, payload')
       .eq('family_id', familyId).eq('status', 'open').limit(100)),
     safe(supabase.from('family_operating_index').select('suggestions')
       .eq('family_id', familyId).order('as_of_date', { ascending: false }).limit(1)),
@@ -53,15 +58,24 @@ export default async function CalmPage() {
       .eq('family_id', familyId).eq('is_done', false).gte('remind_at', now.toISOString()).lte('remind_at', in24).limit(50)),
   ]);
 
+  // The NAME is the family's half of the line and comes from the catalogue; the
+  // Postgres reason is the machine's half and cannot be translated by anything.
+  // They go to the banner as two fields rather than one joined string — see
+  // I18N-006 and components/ui/partial-read-banner.tsx.
+  //
+  // The names also stopped being the SOURCE's names. 'foi' is what the table is
+  // called in this file; it is not a thing a family has ever heard of, and an
+  // acronym nobody can expand is not translatable in any language. Each label is
+  // now what the reader would call the missing thing.
   const readFailures = ([
-    ['agent', agentResult],
-    ['autopilot', autopilotResult],
-    ['foi', foiResult],
-    ['approval', approvalResult],
-    ['reminder', reminderResult],
+    [t('calm.agentActivity'), agentResult],
+    [t('calm.autopilotSuggestions'), autopilotResult],
+    [t('calm.familyOperatingIndex'), foiResult],
+    [t('calm.approvals'), approvalResult],
+    [t('calm.reminders'), reminderResult],
   ] as const)
     .filter(([, res]) => res.error)
-    .map(([label, res]) => `${label}: ${describeReadError(res.error)}`);
+    .map(([label, res]) => ({ label, detail: describeReadError(res.error) }));
   const readError = readFailures.length > 0;
   if (readError) {
     // Degraded, not fatal: every consumer below defaults an absent read to an
@@ -82,9 +96,11 @@ export default async function CalmPage() {
   for (const a of agentRows as { id: string; agent: string; title: string; detail: string | null; href: string | null; severity: string }[]) {
     items.push({ id: `agent:${a.id}`, source: 'agent', title: a.title, detail: a.detail, href: a.href, severity: (a.severity as ItemSeverity) });
   }
-  for (const s of autopilotRows as { id: string; title: string; detail: string | null; urgency: number }[]) {
+  for (const s of autopilotRows as { id: string; title: string; detail: string | null; urgency: number; payload: unknown }[]) {
     const severity: ItemSeverity = s.urgency >= 3 ? 'action' : s.urgency >= 2 ? 'attention' : 'info';
-    items.push({ id: `autopilot:${s.id}`, source: 'autopilot', title: s.title, detail: s.detail, href: '/dashboard/autopilot', severity });
+    // A subscription title carries money, worded by whichever scan inserted it
+    // (usually the cron, in en-US); worded again here for this reader.
+    items.push({ id: `autopilot:${s.id}`, source: 'autopilot', title: autopilotTitleFor(s, locale.code, t), detail: s.detail, href: '/dashboard/autopilot', severity });
   }
   const foiSuggestions = ((foiRows[0]?.suggestions as FoiSuggestion[] | undefined) ?? []);
   for (const g of foiSuggestions) {
@@ -109,7 +125,7 @@ export default async function CalmPage() {
   // loses those rows and keeps everything else.
   let reasoning;
   try {
-    reasoning = await loadFamilyContext(supabase, familyId);
+    reasoning = await loadFamilyContext(supabase, familyId, tz);
   } catch (error) {
     console.warn('[dashboard-calm] reasoning context read failed — inbox without graph insights', error);
     reasoning = null;
@@ -123,7 +139,7 @@ export default async function CalmPage() {
   const inbox = buildCalmInbox(items);
   return (
     <div className="space-y-5">
-      <PartialReadBanner title="Some of your inbox could not be loaded:" failures={readFailures} />
+      <PartialReadBanner title={t('calm.someOfYourInboxCould')} failures={readFailures} />
       <CalmModule inbox={inbox} />
     </div>
   );

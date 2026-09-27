@@ -159,7 +159,7 @@ export default async function BlogPostPage({ params }: Params) {
 
       <div className="mx-auto max-w-7xl px-4 pt-16 sm:px-6 lg:px-8">
         {/* Breadcrumb */}
-        <nav className="mb-6 flex items-center gap-2 text-sm text-white/40">
+        <nav className="mb-6 flex items-center gap-2 text-sm text-white/60">
           <Link href="/blog" className="transition hover:text-white/70">{tr('blog.blog')}</Link>
           <ChevronRight className="h-3.5 w-3.5" />
           <Link href={`/blog?category=${encodeURIComponent(post.category)}`} className="transition hover:text-white/70">
@@ -190,7 +190,7 @@ export default async function BlogPostPage({ params }: Params) {
                   </div>
                 </div>
                 {post.heroImageCredit && (
-                  <figcaption className="mt-2 text-right text-[11px] text-white/30">
+                  <figcaption className="mt-2 text-right text-[11px] text-white/60">
                     Photo: {post.heroImageCredit}
                   </figcaption>
                 )}
@@ -231,7 +231,7 @@ export default async function BlogPostPage({ params }: Params) {
 
             {/* Share */}
             <div className="mt-6 flex items-center gap-3 border-b border-white/8 pb-6">
-              <span className="text-xs font-semibold text-white/40">SHARE</span>
+              <span className="text-xs font-semibold text-white/60">SHARE</span>
               <ShareButtons title={post.title} slug={post.slug} />
             </div>
 
@@ -261,7 +261,7 @@ export default async function BlogPostPage({ params }: Params) {
             )}
 
             {/* Article body */}
-            <div className="prose-family mt-8 space-y-5 pb-10">
+            <div className="mt-8 space-y-5 pb-10">
               {post.body.map((block, i) =>
                 block.type === 'h2' ? (
                   <h2
@@ -327,7 +327,7 @@ export default async function BlogPostPage({ params }: Params) {
                   <User className="h-7 w-7 text-violet-300" />
                 </div>
                 <div>
-                  <p className="text-xs font-semibold uppercase tracking-wider text-white/40">{tr('blog.writtenBy')}</p>
+                  <p className="text-xs font-semibold uppercase tracking-wider text-white/60">{tr('blog.writtenBy')}</p>
                   <p className="mt-1 text-lg font-bold">{post.author}</p>
                   <p className="mt-1 text-sm leading-6 text-white/50">
                     {tr('blog.partOfTheBubalyTeamHelping')}
@@ -338,7 +338,7 @@ export default async function BlogPostPage({ params }: Params) {
 
             {/* Share bottom */}
             <div className="flex items-center gap-3 border-t border-white/8 py-6">
-              <span className="text-xs font-semibold text-white/40">SHARE THIS ARTICLE</span>
+              <span className="text-xs font-semibold text-white/60">SHARE THIS ARTICLE</span>
               <ShareButtons title={post.title} slug={post.slug} />
             </div>
 
@@ -347,20 +347,20 @@ export default async function BlogPostPage({ params }: Params) {
               <div className="grid gap-4 border-t border-white/8 py-8 sm:grid-cols-2">
                 {prev ? (
                   <Link href={`/blog/${prev.slug}`} className="group flex flex-col rounded-2xl border border-white/8 bg-white/[0.03] p-5 transition hover:border-violet-400/20">
-                    <span className="mb-2 flex items-center gap-1 text-xs text-white/40">
+                    <span className="mb-2 flex items-center gap-1 text-xs text-white/60">
                       <ArrowLeft className="h-3.5 w-3.5" /> {tr('blog.previousArticle')}
                     </span>
                     <span className="text-sm font-bold transition group-hover:text-violet-200">{prev.title}</span>
-                    <span className="mt-1 text-xs text-white/40">{fmtDate(prev.date)}</span>
+                    <span className="mt-1 text-xs text-white/60">{fmtDate(prev.date)}</span>
                   </Link>
                 ) : <div />}
                 {next ? (
                   <Link href={`/blog/${next.slug}`} className="group flex flex-col items-end rounded-2xl border border-white/8 bg-white/[0.03] p-5 text-right transition hover:border-violet-400/20">
-                    <span className="mb-2 flex items-center gap-1 text-xs text-white/40">
+                    <span className="mb-2 flex items-center gap-1 text-xs text-white/60">
                       {tr('blog.nextArticle')} <ArrowRight className="h-3.5 w-3.5" />
                     </span>
                     <span className="text-sm font-bold transition group-hover:text-violet-200">{next.title}</span>
-                    <span className="mt-1 text-xs text-white/40">{fmtDate(next.date)}</span>
+                    <span className="mt-1 text-xs text-white/60">{fmtDate(next.date)}</span>
                   </Link>
                 ) : <div />}
               </div>
@@ -385,7 +385,7 @@ export default async function BlogPostPage({ params }: Params) {
                       </div>
                       <div className="min-w-0">
                         <span className="line-clamp-2 text-sm font-semibold leading-snug transition group-hover:text-violet-200">{r.title}</span>
-                        <span className="mt-0.5 flex items-center gap-2 text-[11px] text-white/40">
+                        <span className="mt-0.5 flex items-center gap-2 text-[11px] text-white/60">
                           <span>{fmtDate(r.date)}</span>
                           <span>·</span>
                           <span>{r.readingMinutes} min</span>
@@ -425,7 +425,7 @@ export default async function BlogPostPage({ params }: Params) {
                           )}
                           <div className="min-w-0">
                             <span className="line-clamp-2 text-sm font-semibold leading-snug transition group-hover:text-violet-200">{r.title}</span>
-                            <span className="mt-0.5 flex items-center gap-2 text-[11px] text-white/40">
+                            <span className="mt-0.5 flex items-center gap-2 text-[11px] text-white/60">
                               <span>{fmtDate(r.date)}</span>
                               <span>·</span>
                               <span>{r.readingMinutes} min</span>

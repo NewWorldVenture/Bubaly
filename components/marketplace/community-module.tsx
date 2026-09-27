@@ -20,7 +20,7 @@ import {
 import { KIND_LABELS, CONDITION_LABELS, CATEGORY_LABELS, priceLabel, type ListingKind, type ListingCategory, type ListingCondition, type RentPeriod } from '@/lib/marketplace/listings';
 import { useToast } from '@/components/ui/toast';
 import { cn } from '@/lib/utils/cn';
-import { useTranslations } from '@/components/i18n/locale-provider';
+import { useLocale, useTranslations } from '@/components/i18n/locale-provider';
 
 export function CommunityModule({
   migrated, familyId, circles, members, shares, sharedListings, myListings, readWarnings = [],
@@ -35,6 +35,8 @@ export function CommunityModule({
   readWarnings?: string[];
 }) {
   const t = useTranslations();
+  // Price chips are in the READER's notation — priceLabel requires their locale.
+  const locale = useLocale();
   const { success, error: toastError } = useToast();
   const [selected, setSelected] = useState<string | null>(circles[0]?.id ?? null);
   const [name, setName] = useState('');
@@ -190,7 +192,7 @@ export function CommunityModule({
               <option value="">{t('community.shareOneOfYourListingsInto')}</option>
               {shareable.map((l) => (
                 <option key={l.id} value={l.id}>
-                  {l.title}{l.price_cents ? ` — ${priceLabel(l.kind as ListingKind, l.price_cents, (l.rent_period ?? null) as RentPeriod | null)}` : ''}
+                  {l.title}{l.price_cents ? ` — ${priceLabel(l.kind as ListingKind, l.price_cents, (l.rent_period ?? null) as RentPeriod | null, locale.code, t)}` : ''}
                 </option>
               ))}
             </select>
@@ -216,7 +218,7 @@ export function CommunityModule({
               {feed.map((f) => (
                 <article key={`${f.circleId}-${f.listing.id}`} className="rounded-2xl border border-border bg-surface p-4">
                   <div className="flex flex-wrap items-center gap-1.5">
-                    <span className="rounded-md bg-brand/12 px-1.5 py-0.5 text-[10px] font-semibold uppercase tracking-wide text-brand-text">
+                    <span className="rounded-md bg-brand/10 px-1.5 py-0.5 text-[10px] font-semibold uppercase tracking-wide text-brand-text">
                       {KIND_LABELS[f.listing.kind as ListingKind] ?? f.listing.kind}
                     </span>
                     <span className="rounded-full bg-elevated px-2 py-0.5 text-[10px] font-bold text-muted">
@@ -228,7 +230,7 @@ export function CommunityModule({
                   </div>
                   <p className="mt-1.5 text-sm font-bold leading-snug">{f.listing.title}</p>
                   <p className="mt-0.5 text-sm font-semibold text-brand-text">
-                    {priceLabel(f.listing.kind as ListingKind, f.listing.price_cents ?? 0, (f.listing.rent_period ?? null) as RentPeriod | null) || '—'}
+                    {priceLabel(f.listing.kind as ListingKind, f.listing.price_cents ?? 0, (f.listing.rent_period ?? null) as RentPeriod | null, locale.code, t) || '—'}
                   </p>
                   <div className="mt-2 flex items-center gap-2 border-t border-border/50 pt-2">
                     <p className="min-w-0 flex-1 truncate text-[11px] text-muted">

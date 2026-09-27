@@ -36,7 +36,7 @@ import {
   createEvent, createEvents, deleteEvent, deleteEvents, updateEvent,
   EVENT_CATEGORIES, EVENT_RECURRENCES,
 } from '@/lib/services/calendar';
-import { makeKey } from '@/lib/services/idempotency';
+import { ALREADY_SAVED, makeKey } from '@/lib/services/idempotency';
 import { scopeFromUserContext } from '@/lib/services/scope';
 import { isSubmissionId } from '@/lib/utils/submission-id';
 import { describeActionError } from '@/lib/supabase/errors';
@@ -48,7 +48,13 @@ const PATH = '/dashboard/calendar';
 
 export type CalendarActionResult =
   | { ok: true; id: string }
-  | { ok: false; error: string };
+  /**
+   * `already_saved` (creates only): this submission id already wrote an event,
+   * and that event no longer matches the one just sent — see `KeyedCreateOptions`
+   * in lib/services/idempotency.ts. That Save is settled, so the modal mints a
+   * new id rather than retry it (`submissionSettled`).
+   */
+  | { ok: false; error: string; code?: typeof ALREADY_SAVED };
 
 export type CalendarEventFields = {
   title?: string;
@@ -83,10 +89,25 @@ export type CreateCalendarEventInput = CalendarEventFields & {
  * every machine, so moving the write to the server changes the write path and
  * nothing else.
  *
- * It is deliberately NOT a fix for the wall-clock question underneath — a family
- * in New York typing 2:30pm still gets 14:30Z, and seeing that back as 2:30pm
- * depends on how `toLocalInput` and the grid read it. That is a display change as
- * much as a storage one and does not belong in a commit about write paths.
+ * It is deliberately NOT a fix for the wall-clock question underneath, and the
+ * reason was that seeing 2:30pm back depends on how `toLocalInput` and the grid
+ * read it — a display change as much as a storage one, and not the business of a
+ * commit about write paths.
+ *
+ * That coupling is exactly where the damage turned out to be. The prefill read a
+ * stored instant on the READER's clock while this stamped the box value as UTC,
+ * so the two were not inverses and each Save moved the event by the reader's
+ * offset — compounding, and on synced rows too. Both ends now share the reader's
+ * clock in `lib/time/local-input.ts`, and the calendar modal resolves its box
+ * value there before calling, so what arrives here from that form is already an
+ * absolute instant and falls through the passthrough below untouched.
+ *
+ * The naive branch is therefore for the callers that still send a wall clock —
+ * the assistant's tools by way of `isoOrNull`, and the surfaces that hand these
+ * actions a raw form value — and it keeps storing them where they have always
+ * been stored. Whose clock a typed time should mean when the person typing is not
+ * in the family's zone is still open, because answering it reinterprets rows
+ * already in the column and nothing in a row says which convention wrote it.
  */
 function asStoredInstant(value: string | null | undefined): string | undefined {
   if (value == null) return undefined;
@@ -161,8 +182,16 @@ export async function createCalendarEventAction(input: CreateCalendarEventInput)
       location: asText(input.location) ?? null,
       description: asText(input.description) ?? null,
       assigneeId: input.assigneeId ?? null,
+    }, {
+      // The key is a person's submission id, not a plan step: a changed Save
+      // under it is a change of mind, not the same save (see KeyedCreateOptions).
+      rejectChangedRetry: true,
     });
-    if (!result.ok) return { ok: false, error: result.error };
+    if (!result.ok) {
+      return result.code === ALREADY_SAVED
+        ? { ok: false, error: result.error, code: ALREADY_SAVED }
+        : { ok: false, error: result.error };
+    }
 
     revalidatePath(PATH);
     return { ok: true, id: result.data.id };

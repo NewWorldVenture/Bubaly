@@ -11,6 +11,7 @@ import 'server-only';
 import type { SupabaseClient } from '@supabase/supabase-js';
 import type { Database } from '@/lib/database.types';
 import { hashAssistantToken } from './link-token';
+import { isAdmin } from '@/lib/constants/roles';
 import {
   agendaSpeech, forgettingSpeech, nextSpeech, listSpeech,
   BUBALY_SWITCHED_OFF_SPEECH, CAPTURE_NOT_ALLOWED_SPEECH,
@@ -21,8 +22,9 @@ import type { VoiceRoute } from '@/lib/voice/command-router';
 import { splitItems, parseGroceryItem } from '@/lib/capture/parse';
 import { instantForLocalTime } from '@/lib/time/zoned';
 import { expandEventsInZone } from '@/lib/calendar/recurrence';
-import { readAISettings } from '@/lib/services/ai-settings';
+import { loadAISettingsFor } from '@/lib/services/ai-settings';
 import { settleAll } from '@/lib/supabase/settle';
+import { wroteNoRows } from '@/lib/supabase/errors';
 
 type Client = SupabaseClient<Database>;
 
@@ -67,8 +69,9 @@ export async function resolveAssistantLink(supabase: Client, token: string): Pro
     id: string; family_id: string; user_id: string; provider: string; scopes: string[] | null;
     families: { timezone: string } | { timezone: string }[] | null;
   };
+
   const family = Array.isArray(row.families) ? row.families[0] : row.families;
-  return {
+  const link: AssistantLink = {
     id: row.id,
     family_id: row.family_id,
     user_id: row.user_id,
@@ -76,6 +79,30 @@ export async function resolveAssistantLink(supabase: Client, token: string): Pro
     scopes: row.scopes ?? [],
     timezone: family?.timezone || 'UTC',
   };
+
+  // A key speaks for the parent who minted it, and only while they still
+  // could mint one: an ACTIVE parent of this family (dashboard/assistants,
+  // `isAdmin`). Removing a member only flips family_members.is_active, and
+  // demoting one only changes their role, so without this a parent who has
+  // left — an estranged co-parent — kept a key that reads the family's day
+  // aloud and, with `capture`, files into it (SRV-001 l12). 0419 revokes the
+  // key in the database as well, once it is applied; this holds either way.
+  // A read that fails is null like every other failure here, never "assume
+  // they are still a parent".
+  const { data: owner, error: ownerError } = await supabase
+    .from('family_members')
+    .select('role')
+    .eq('family_id', link.family_id)
+    .eq('user_id', link.user_id)
+    .eq('is_active', true)
+    .maybeSingle();
+  if (ownerError) {
+    console.error('[assistant] link owner lookup failed', ownerError);
+    return null;
+  }
+  if (!owner || !isAdmin((owner as { role: string }).role)) return null;
+
+  return link;
 }
 
 /** The local calendar day in the family's own zone, as YYYY-MM-DD. */
@@ -264,11 +291,14 @@ export async function recordAssistantEvent(
     outcome,
   });
   if (error) console.error('[assistant] event insert failed', error);
-  const { error: touchError } = await supabase
+  // Logged on zero rows too — "last used" is what a parent reads to decide
+  // whether a key is live. Never raised. Audit C1-S9-69.
+  const { data: touched, error: touchError } = await supabase
     .from('assistant_links')
     .update({ last_used_at: new Date().toISOString() })
-    .eq('id', link.id);
-  if (touchError) console.error('[assistant] last-used update failed', touchError);
+    .eq('id', link.id)
+    .select('id');
+  if (touchError || wroteNoRows(touched)) console.error('[assistant] last-used update failed', touchError ?? { linkId: link.id, error: 'no rows updated' });
 }
 
 /**
@@ -338,8 +368,15 @@ export async function answerAssistant(
       // After the link's own scope, not before: the scope is a property of this
       // link and costs no query, and a read-only link deserves the more
       // specific sentence about what IT may do.
-      const settings = await readAISettings(supabase, link.family_id);
-      if (!settings.enabled) {
+      //
+      // Read STRICTLY: a settings read that failed used to answer the defaults
+      // ("Bubaly on"), so a timeout let a switched-off family's speaker write
+      // anyway (SEC-009). A failure throws, and the route answers with its
+      // "something went wrong on my side, so I have not changed anything" —
+      // true, and not a claim that the family switched anything off.
+      const settings = await loadAISettingsFor(supabase, link.family_id);
+      if (!settings.ok) throw new Error(`capture refused: Bubaly settings could not be read (${settings.error})`);
+      if (!settings.data.enabled) {
         return { speech: BUBALY_SWITCHED_OFF_SPEECH, outcome: 'refused', intent: 'capture' };
       }
       const saved = await saveAssistantCapture(supabase, link, intent.route, now);

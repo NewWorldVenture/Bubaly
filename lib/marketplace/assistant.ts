@@ -10,8 +10,12 @@
 //      `marketSystemPrompt` so the model answers with REAL numbers — and any
 //      model failure falls back to tier 1. The contract never changes.
 
+import type { LocaleCode } from '@/lib/i18n/locales';
 import { extractPriceCents, suggestPriceCents, draftListing, type Comparable } from './quick-post';
-import { CATEGORY_LABELS, KIND_LABELS, priceLabel, type ListingCategory, type ListingCondition, type ListingKind, type RentPeriod } from './listings';
+import { CATEGORY_LABELS, KIND_LABELS, formatCents, priceLabel, type ListingCategory, type ListingCondition, type ListingKind, type RentPeriod } from './listings';
+
+/** A translator, in the shape `useTranslations()` and `getTranslations()` return. */
+type Translate = (key: string, params?: Record<string, string | number>) => string;
 
 export interface SnapshotListing {
   id: string;
@@ -86,18 +90,30 @@ export function searchTerms(question: string): string[] {
     .filter((w) => w.length >= 3 && !STOPWORDS.has(w));
 }
 
-const dollars = (cents: number) => `$${cents % 100 === 0 ? cents / 100 : (cents / 100).toFixed(2)}`;
+// ONE READER, TWO ROUTES TO THEM. This used to be one `dollars` helper writing
+// the symbol by hand — `$${cents / 100}` — for both halves of this module.
+// `answerMarketQuestion` is what the FAMILY sees when no model is configured (and
+// whenever one fails), so its amounts take the asker's locale and its sentences
+// come from the catalogue. `marketSystemPrompt` is read by the MODEL — but the
+// model's reply is handed to the same family verbatim, and it is told to quote
+// the snapshot's numbers, so its amounts are written in the asker's notation too.
+// Only its instructions stay in the source language.
 
-function listingLine(l: SnapshotListing): string {
-  const price = priceLabel(l.kind as ListingKind, l.price_cents ?? 0, (l.rent_period ?? null) as RentPeriod | null);
+function listingLine(l: SnapshotListing, locale: LocaleCode, t: Translate): string {
+  const price = priceLabel(l.kind as ListingKind, l.price_cents ?? 0, (l.rent_period ?? null) as RentPeriod | null, locale, t);
   return `“${l.title}” (${KIND_LABELS[l.kind as ListingKind] ?? l.kind}${price ? ` · ${price}` : ''})`;
 }
 
 /**
  * Answer a marketplace question from the live snapshot — deterministic,
  * grounded, always with somewhere to go next.
+ *
+ * `locale` and `t` are the ASKER's and are required: this reply is rendered to a
+ * family member verbatim by components/marketplace/market-assistant.tsx.
  */
-export function answerMarketQuestion(question: string, snapshot: MarketSnapshot): AssistantReply {
+export function answerMarketQuestion(
+  question: string, snapshot: MarketSnapshot, locale: LocaleCode, t: Translate,
+): AssistantReply {
   const intent = routeMarketIntent(question);
   const { listings, offers, selfMemberId } = snapshot;
   const available = listings.filter((l) => l.status === 'available');
@@ -112,9 +128,12 @@ export function answerMarketQuestion(question: string, snapshot: MarketSnapshot)
     const compCount = comps.filter((c) => c.category === draft.category && c.kind === 'sell' && (c.price_cents ?? 0) > 0).length;
     const catLabel = CATEGORY_LABELS[draft.category as ListingCategory] ?? draft.category;
     if (suggestion != null) {
+      const values = { count: compCount, category: catLabel.toLowerCase(), amount: formatCents(suggestion, locale) };
       return {
         intent,
-        reply: `Based on ${compCount} comparable ${catLabel.toLowerCase()} listings on your family board, I'd ask around ${dollars(suggestion)}${draft.condition ? ` for one in ${draft.condition.replace('_', ' ')} condition` : ''}. Post it in one sentence and I'll draft the listing for you.`,
+        reply: draft.condition
+          ? t('marketAssistant.askAroundForCondition', { ...values, condition: draft.condition.replace('_', ' ') })
+          : t('marketAssistant.askAround', values),
         links: [{ href: '/marketplace', label: '⚡ Post in 60 seconds' }, { href: '/marketplace/insights', label: 'See price benchmarks' }],
       };
     }
@@ -137,7 +156,10 @@ export function answerMarketQuestion(question: string, snapshot: MarketSnapshot)
     if (hits.length > 0) {
       return {
         intent,
-        reply: `Found ${hits.length === 1 ? 'one' : hits.length} on the board: ${hits.map(listingLine).join('; ')}.`,
+        reply: t(hits.length === 1 ? 'marketAssistant.foundOneOnTheBoard' : 'marketAssistant.foundOnTheBoard', {
+          count: hits.length,
+          listings: hits.map((l) => listingLine(l, locale, t)).join('; '),
+        }),
         links: hits.map((l) => ({ href: `/marketplace/item/${l.id}`, label: l.title.slice(0, 32) })),
       };
     }
@@ -218,8 +240,16 @@ export function answerMarketQuestion(question: string, snapshot: MarketSnapshot)
  * Compact, grounded system prompt for the key-configured tier. Embeds a digest
  * of the live snapshot so the model answers with REAL numbers, and pins the
  * assistant to marketplace scope with honest-fallback instructions.
+ *
+ * `locale` is the ASKER's and is required. The instructions are English — only
+ * the model reads them — but the medians are not: the model is told to ground
+ * every number in this digest, and app/(app)/marketplace/assistant-actions.ts
+ * returns its reply to the family as written. An en-US "median asking $2,768.50"
+ * here was a German reader's "$2,768.50" there. So the digest's amounts are in
+ * the asker's notation, and the model is told whose locale that is so it answers
+ * in the same language and copies each amount as written.
  */
-export function marketSystemPrompt(snapshot: MarketSnapshot): string {
+export function marketSystemPrompt(snapshot: MarketSnapshot, locale: LocaleCode): string {
   const available = snapshot.listings.filter((l) => l.status === 'available');
   const byCat = new Map<string, { n: number; priced: number[] }>();
   for (const l of available) {
@@ -230,7 +260,7 @@ export function marketSystemPrompt(snapshot: MarketSnapshot): string {
   }
   const catLines = [...byCat.entries()].map(([c, e]) => {
     const med = e.priced.sort((a, b) => a - b)[Math.floor(e.priced.length / 2)];
-    return `- ${c}: ${e.n} live${e.priced.length ? `, median asking ${dollars(med)}` : ''}`;
+    return `- ${c}: ${e.n} live${e.priced.length ? `, median asking ${formatCents(med, locale)}` : ''}`;
   }).join('\n');
   const wanted = available.filter((l) => l.kind === 'wanted').slice(0, 10).map((l) => `- ${l.title}`).join('\n');
 
@@ -238,6 +268,7 @@ export function marketSystemPrompt(snapshot: MarketSnapshot): string {
     'You are the Bubaly Family Marketplace specialist. Answer ONLY marketplace questions (pricing, finding items, selling, demand, fees, safety); politely redirect anything else.',
     'Ground every number in the snapshot below — never invent listings or prices. Keep replies under 80 words, warm and practical.',
     'Fees: family sales carry no commission; an optional admin-enabled service fee is always disclosed on the order.',
+    `The family member is reading in ${locale}: reply in that language, and write every amount exactly as the board below writes it.`,
     '',
     `LIVE BOARD (${available.length} available listings):`,
     catLines || '- (board is empty)',

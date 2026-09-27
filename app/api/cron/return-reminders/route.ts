@@ -2,10 +2,12 @@ import { NextRequest, NextResponse } from 'next/server';
 import { getTranslations } from '@/lib/i18n/server';
 import { createServiceClient } from '@/lib/supabase/server';
 import { hasCronAuthorization } from '@/lib/server/cron-auth';
+import { readAll } from '@/lib/supabase/read-all';
 import { needsDueReminder, needsOverdueAlert, daysUntilDue } from '@/lib/marketplace/returns';
 import { notify } from '@/lib/services/notifications';
-import { systemScopeForFamily } from '@/lib/services/scope';
+import { dayKeyInTz, systemScopeForFamily } from '@/lib/services/scope';
 import type { ServiceScope } from '@/lib/services/types';
+import { readInChunks } from '@/lib/supabase/chunked-in';
 
 export const runtime = 'nodejs';
 export const maxDuration = 120;
@@ -13,7 +15,15 @@ export const maxDuration = 120;
 // Nudges families about borrowed/rented items coming due, and alerts both sides
 // when one goes overdue. Each order gets at most one due-soon nudge and one
 // overdue alert (dedupe stamps on the order). Best-effort notifications.
-const BATCH = 200;
+//
+// The read below is PAGED rather than capped at a batch, because which orders
+// need a nudge is decided in code and not by the query: nothing filters on
+// `ends_on`, so a plain `.limit(200)` filled itself with open borrows due
+// months from now and stopped. PostgREST orders a query with no ORDER BY
+// arbitrarily, so an item due today could fall outside that slice on every run
+// and never be nudged, while the run answered 200. See lib/supabase/read-all.ts
+// for why `.limit()` is not a bound either.
+const MAX_OPEN_ORDERS = 5000;
 
 export async function GET(req: NextRequest) {
   const t = await getTranslations();
@@ -29,12 +39,21 @@ export async function GET(req: NextRequest) {
     // household agreed to hear from Bubaly, and so a re-run of the cron cannot
     // send the same nudge twice before anyone has read the first.
     const scopes = new Map<string, ServiceScope | null>();
+    // Resolved BEFORE the due-date decision, not just before the send, because
+    // the scope is where the family's timezone lives and "is this due today"
+    // cannot be answered without it. This job is cross-family — one query, no
+    // family filter — so a single host day was deciding for every household at
+    // once, and the dedupe stamps are one-shot: a nudge sent against the wrong
+    // day is not early, it is the only nudge that order will ever get.
+    const scopeFor = async (familyId: string): Promise<ServiceScope | null> => {
+      if (!scopes.has(familyId)) scopes.set(familyId, await systemScopeForFamily(admin, familyId));
+      return scopes.get(familyId) ?? null;
+    };
     const notifyFamily = async (
       familyId: string,
       n: { title: string; body: string; relatedType: string; relatedId: string | null },
     ): Promise<boolean> => {
-      if (!scopes.has(familyId)) scopes.set(familyId, await systemScopeForFamily(admin, familyId));
-      const scope = scopes.get(familyId);
+      const scope = await scopeFor(familyId);
       if (!scope) return false;
       const sent = await notify(scope, { recipients: 'family', type: 'system', ...n });
       return sent.ok;
@@ -42,21 +61,35 @@ export async function GET(req: NextRequest) {
     const now = new Date();
     const nowIso = now.toISOString();
 
-    // Open rent/borrow orders with a due date; the partial index backs this.
-    const { data: due, error } = await admin
+    // Open rent/borrow orders with a due date; the partial index backs this,
+    // and soonest-due first means the most urgent order is served first even if
+    // the ceiling is ever reached. `id` breaks ties so a page boundary between
+    // two orders sharing a due date cannot skip or repeat one.
+    const { rows: due, error } = await readAll((from, to) => admin
       .from('marketplace_orders')
       .select('id, family_id, listing_id, buyer_member, kind, status, ends_on, due_reminder_sent_at, overdue_notified_at, returned_at')
       .in('kind', ['rent', 'borrow']).in('status', ['confirmed', 'active'])
       .not('ends_on', 'is', null)
-      .limit(BATCH);
-    if (error) return NextResponse.json({ ok: false, error: t('returnReminders.couldNotLoadOrders') }, { status: 500 });
+      .order('ends_on', { ascending: true })
+      .order('id')
+      .range(from, to), { max: MAX_OPEN_ORDERS });
+    // readAll reports the ceiling as an error rather than returning a prefix, so
+    // an unserved tail fails the run instead of reading as a clean one.
+    if (error) {
+      console.error('Return-reminders order read failed:', error);
+      return NextResponse.json({ ok: false, error: t('returnReminders.couldNotLoadOrders') }, { status: 500 });
+    }
 
     // Titles for friendlier copy. A failed lookup is a failed batch because the
     // job must not acknowledge a partial notification run as healthy.
     const listingIds = [...new Set((due ?? []).map((o) => o.listing_id))];
-    const { data: listings, error: listingError } = listingIds.length
-      ? await admin.from('marketplace_listings').select('id, title').in('id', listingIds)
-      : { data: [], error: null };
+    // Chunked: BATCH is 200, so this could carry 200 UUIDs in one `.in()` —
+    // about 8 KB of query string against a limit chunked-in.ts puts at 8 KB.
+    // On failure this route 502s without stamping any reminder, so the next run
+    // reads the same 200 orders and 502s again: a stall that does not clear.
+    const { data: listings, error: listingError } = await readInChunks<
+      { id: string; title: string }, { message: string }
+    >(listingIds, (chunk) => admin.from('marketplace_listings').select('id, title').in('id', chunk));
     if (listingError) {
       console.error('Return-reminders listing lookup failed:', listingError);
       return NextResponse.json({ ok: false, error: t('returnReminders.couldNotLoadListingTitles') }, { status: 502 });
@@ -72,13 +105,28 @@ export async function GET(req: NextRequest) {
       const title = titleOf.get(o.listing_id) ?? 'a borrowed item';
       const verb = o.kind === 'rent' ? 'rental' : 'borrowed item';
 
-      if (needsOverdueAlert(order, now)) {
-        const late = Math.abs(daysUntilDue(o.ends_on, now) ?? 0);
+      // Without the family's zone there is no honest answer to "is this due
+      // today", so this order is a failure rather than a guess. The send would
+      // have failed on the same missing scope anyway; deciding here only moves
+      // the failure to where the reason is legible.
+      const scope = await scopeFor(o.family_id);
+      if (!scope) {
+        console.error(`Return-reminders scope unavailable for ${o.id}; cannot resolve the family's day.`);
+        failed++;
+        continue;
+      }
+      const todayKey = dayKeyInTz(now, scope.tz);
+
+      if (needsOverdueAlert(order, todayKey)) {
+        const late = Math.abs(daysUntilDue(o.ends_on, todayKey) ?? 0);
         const notified = await notifyFamily(o.family_id, {
           title: `Overdue: "${title}"`,
           body: `This ${verb} was due ${late} day${late === 1 ? '' : 's'} ago. Arrange the return so it doesn't hold anyone up.`,
           relatedType: 'marketplace_orders', relatedId: o.id,
         });
+        // Rows deliberately not checked: the stamp exists so the NEXT run does not
+        // notify again, and on the service role zero rows means the order was
+        // deleted — which no run will sweep. Audit C1-S9-63.
         const { error: stampError } = notified
           ? await admin.from('marketplace_orders').update({ overdue_notified_at: nowIso }).eq('id', o.id)
           : { error: new Error('notification failed') };
@@ -91,13 +139,14 @@ export async function GET(req: NextRequest) {
         continue; // don't also send a due-soon nudge for the same order
       }
 
-      if (needsDueReminder(order, now)) {
-        const d = daysUntilDue(o.ends_on, now) ?? 0;
+      if (needsDueReminder(order, todayKey)) {
+        const d = daysUntilDue(o.ends_on, todayKey) ?? 0;
         const notified = await notifyFamily(o.family_id, {
           title: `Due ${d === 0 ? 'today' : `in ${d} day${d === 1 ? '' : 's'}`}: "${title}"`,
           body: `Time to return this ${verb}. Tap to see the exchange details.`,
           relatedType: 'marketplace_orders', relatedId: o.id,
         });
+        // As above. Audit C1-S9-63.
         const { error: stampError } = notified
           ? await admin.from('marketplace_orders').update({ due_reminder_sent_at: nowIso }).eq('id', o.id)
           : { error: new Error('notification failed') };

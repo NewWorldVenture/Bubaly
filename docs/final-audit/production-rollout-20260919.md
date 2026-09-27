@@ -1,5 +1,9 @@
 # Production rollout — 2026-09-19
 
+## Status reconciliation — 2026-09-27
+
+This is the retained September 19 evidence record, not a statement that those commits still serve production. Run `35471471192` for `75a1f3c6` is now terminal FAILURE in E2E, with its other three jobs successful. The two failure stages must stay separate: `2a5e7e7a` failed before code entry when the pinned CLI disabled phone signup; after that configuration repair, later failures reached code entry but sent no verification request because the synthetic paste lacked a clipboard event. Claude subsequently repaired that fixture and the pre-hydration phone-entry controls. Exact incoming main `06dd3f7e6d9c0304c9556a4e17c815fa8389a085` passes all four jobs in CI `36320217255` and is verified on the public build endpoint at 15:39:23 UTC. See the current reconciliation in `finalaudit.md` for integrated-source and remaining production-provider limits. All old pending statements below describe their original checkpoint only.
+
 The user authorized publishing the current changes to main and production. PR 510 merged at 19:50:26 UTC as `4bee627572be77112b1206f4243841df00f9a181`; its direct parents are prior main `57f22c0b` and audited branch `6353d0d4`. The merge and branch share frozen tree `b039b2c08e994037e65b2677c102b7a338a9bbe5`. No SQL or Supabase configuration changed from prior main.
 
 ## Verified CI follow-up release: 75a1f3c6

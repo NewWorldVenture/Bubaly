@@ -1,12 +1,35 @@
 // lib/i18n/messages.ts — catalogue loading and the translate primitive.
 //
 // en-US is the source of truth: its keys define the contract every other
-// catalogue is checked against (tests/i18n-catalogue-parity.test.ts), and a key
-// missing from a translation falls back to the English string rather than
-// rendering a raw key at a visitor. A missing translation should look like an
-// untranslated product, not a broken one.
+// catalogue is held to, and a key missing from a translation falls back to the
+// English string rather than rendering a raw key at a visitor. A missing
+// translation should look like an untranslated product, not a broken one.
+//
+// THE TEST THAT LINE NAMED DOES NOT EXIST. It said the contract was checked
+// against a file called i18n-catalogue-parity.test.ts, and there has never been
+// one by that name under tests/ — lib/i18n/messages/README.md carried the same
+// dead pointer and has been corrected with it. (Neither file spells that name
+// with its directory any more, because the guard below treats a `tests/…` path
+// as a promise that the file is there.) What exists is
+// tests/i18n-catalogue-integrity.test.ts, which checks entity, escape,
+// placeholder, orphan and script hygiene but asserts nothing about coverage, and
+// tests/an-empty-locale-says-it-is-a-placeholder.test.ts, which is where the key
+// contract and the PLACEHOLDER_LOCALES declaration below are actually enforced.
+// A confident pointer at a test nobody wrote is how four catalogues stayed empty
+// while the code around them said otherwise (I18N-009).
+//
+// That fallback lives in getMessages() below — `{ ...enUS }` with the locale's
+// overlay assigned over it — and NOT in `translate` any more. `translate` moved
+// to lib/i18n/translate.ts, which imports no catalogue, because a client
+// component importing it from here made en-US a live reference in the browser
+// graph: 821.5 KB raw / 245.8 KB gzip on every page, measured on served HTML.
+// It is re-exported here so every existing caller is unchanged, and it is
+// unchanged for them in behaviour too: the map this module hands out is
+// already complete, so `messages[key] ?? SOURCE_MESSAGES[key]` and
+// `messages[key]` cannot differ.
 
 import type { LocaleCode } from '@/lib/i18n/locales';
+import { translate, pluralize as basePluralize, type Messages } from '@/lib/i18n/translate';
 
 import deDE from '@/lib/i18n/messages/de-DE.json';
 import enGB from '@/lib/i18n/messages/en-GB.json';
@@ -23,7 +46,7 @@ import ptPT from '@/lib/i18n/messages/pt-PT.json';
 /** The English catalogue's keys are the contract; every other catalogue is a
  *  partial of it, so a translation can lag without breaking the build. */
 export type MessageKey = keyof typeof enUS;
-export type Messages = Record<string, string>;
+export type { Messages };
 
 const CATALOGUES: Record<LocaleCode, Messages> = {
   'en-US': enUS,
@@ -42,13 +65,45 @@ const CATALOGUES: Record<LocaleCode, Messages> = {
 export const SOURCE_MESSAGES: Messages = enUS;
 
 /**
+ * The locales whose catalogue is still EMPTY, declared rather than discovered.
+ *
+ * Four of the eleven — en-GB, es-MX, es-US, fr-CA — are literally `{}`, three
+ * bytes each, against 13,806 keys in each of the other seven. Merged down the
+ * chain below they come out byte-identical to what they inherit: every value an
+ * en-GB reader sees is en-US's, every value an es-MX reader sees is es-ES's.
+ * Nothing renders a raw key, no page is blank, and a visitor still gets their
+ * own region's dates, numbers and currency through `Intl` — the locale CODE
+ * drives that, not the catalogue. So this is a content gap, not a broken
+ * feature, and it is why these four keep their place in the picker.
+ *
+ * Empty is a legitimate state for an OVERLAY to be in, and filling them with
+ * invented differences would make the product worse rather than more localised.
+ * What was NOT legitimate is that nothing said so — lib/i18n/locales.ts asserted
+ * that "the regional choice carries real meaning: Latin America reads es-MX
+ * rather than Spain's es-ES" about a file containing nothing, and README.md said
+ * the opposite three directories away. The comment has been corrected; this
+ * declaration is what keeps it correct.
+ *
+ * It is checked BOTH WAYS by tests/an-empty-locale-says-it-is-a-placeholder.test.ts:
+ * every locale named here must really be empty, and every locale NOT named here
+ * must really carry the whole English key set. So a catalogue cannot be quietly
+ * shipped empty, and an overlay cannot be filled in without this list being
+ * updated to say it was.
+ */
+export const PLACEHOLDER_LOCALES: readonly LocaleCode[] = ['en-GB', 'es-MX', 'es-US', 'fr-CA'];
+
+/**
  * What each locale falls back through, nearest relative first.
  *
- * Regional catalogues are OVERLAYS: es-MX carries only the keys where Mexican
- * Spanish genuinely differs from Peninsular, and inherits the rest from es-ES.
- * Without this chain an overlay would fall straight to English, so a Mexican
- * visitor would see Spanish for the handful of overridden keys and English for
- * everything else — worse than either language alone.
+ * Regional catalogues are OVERLAYS: es-MX is meant to carry only the keys where
+ * Mexican Spanish genuinely differs from Peninsular, and to inherit the rest
+ * from es-ES. Without this chain an overlay would fall straight to English, so a
+ * Mexican visitor would see Spanish for the handful of overridden keys and
+ * English for everything else — worse than either language alone.
+ *
+ * "The handful" is currently NONE: all four overlays are empty, which
+ * PLACEHOLDER_LOCALES above states and a test holds. The chain is what makes
+ * that harmless rather than invisible.
  *
  * en-US is the root of every chain and is therefore never listed.
  */
@@ -114,21 +169,26 @@ export function getRawMessages(locale: LocaleCode): Messages {
 }
 
 /**
- * Look up `key` and substitute `{name}` placeholders.
- *
- * Interpolation is deliberately dumb — a single pass over `{token}` — because
- * catalogue values are our own content, never visitor input, and anything
- * cleverer (nested expressions, function calls in strings) turns a translation
- * file into an execution surface.
+ * The lookup, re-exported from `lib/i18n/translate.ts` — main's contract, taken
+ * at the merge. It carries no English fallback of its own: every map this
+ * module hands out (`getMessages`) is already English with the locale laid
+ * over it, so a fallback here could only ever fire for a caller that built a
+ * PARTIAL map by hand, and for that caller the bare key is the honest answer.
+ * tests/i18n-locale-resolution.test.ts holds it.
  */
-export function translate(
+export { translate };
+
+/**
+ * The server-side pluraliser, with the same English fallback as `translate`
+ * above and for the same reason: a counted phrase a translation has not reached
+ * yet should read as English, not as `inventory.overdueLoans`.
+ */
+export function pluralize(
   messages: Messages,
+  locale: string,
   key: string,
+  count: number,
   params?: Record<string, string | number>,
 ): string {
-  const template = messages[key] ?? SOURCE_MESSAGES[key] ?? key;
-  if (!params) return template;
-  return template.replace(/\{(\w+)\}/g, (match, token: string) =>
-    Object.prototype.hasOwnProperty.call(params, token) ? String(params[token]) : match,
-  );
+  return basePluralize(messages, locale, key, count, params, SOURCE_MESSAGES);
 }

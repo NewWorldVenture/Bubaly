@@ -1,5 +1,6 @@
 import { createElement } from 'react';
-import { renderToStaticMarkup } from 'react-dom/server';
+import { renderToStaticMarkup as renderRaw } from 'react-dom/server';
+import { renderTranslated } from './helpers/render-translated';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 
 const state = vi.hoisted(() => ({ rows: [] as Record<string, unknown>[] }));
@@ -22,6 +23,17 @@ vi.mock('@/components/app/page-header', () => ({
 }));
 
 import { RidesModule } from '@/components/modules/rides-module';
+// Rendered under a LocaleProvider, because the component asks for one.
+//
+// `translate` no longer falls back to the en-US catalogue — that fallback was a
+// static import, and it is why en-US shipped to the browser on 406 of 606 pages
+// (PERF-001). It now lives in getMessages, which is where a catalogue belongs.
+// These cases were rendering a client component with NO provider and asserting
+// its English copy, which passed only on that fallback and mounted the
+// component in a way the product never does. Shadowing the import fixes every
+// call site at once and changes no assertion.
+import { withLocale } from './helpers/render-translated';
+const renderToStaticMarkup = (node: Parameters<typeof withLocale>[0]) => renderRaw(withLocale(node));
 
 function record(id: string, pickup: string, dropoff: string | null) {
   return {
@@ -36,7 +48,7 @@ beforeEach(() => { state.rows = []; });
 describe('rides screen recorded-time evidence', () => {
   it('feeds stored drop-off times into the rendered conflict warning', () => {
     state.rows = [record('a', '08:00', '09:00'), record('b', '08:30', '09:15')];
-    const html = renderToStaticMarkup(createElement(RidesModule));
+    const html = renderTranslated(createElement(RidesModule));
     expect(html).toContain('2 rides have a driver double-booked');
     expect((html.match(/>Conflict</g) ?? []).length).toBe(2);
     expect(html).toContain('Travel between rides is not assessed');
@@ -44,7 +56,7 @@ describe('rides screen recorded-time evidence', () => {
 
   it('recomputes from changed saved rows without declaring travel feasibility', () => {
     state.rows = [record('a', '08:00', '08:30'), record('b', '08:30', '09:15')];
-    const html = renderToStaticMarkup(createElement(RidesModule));
+    const html = renderTranslated(createElement(RidesModule));
     expect(html).not.toContain('driver double-booked');
     expect(html).not.toContain('>Conflict<');
     expect(html).toContain('Travel between rides is not assessed');
@@ -52,7 +64,7 @@ describe('rides screen recorded-time evidence', () => {
 
   it('displays unknown timing instead of treating a missing end as a clear schedule', () => {
     state.rows = [record('a', '08:00', null), record('b', '08:30', '09:15')];
-    const html = renderToStaticMarkup(createElement(RidesModule));
+    const html = renderTranslated(createElement(RidesModule));
     expect(html).toContain('1 ride has incomplete timing');
     expect(html).toContain('Timing incomplete');
     expect(html).not.toContain('driver double-booked');
@@ -61,7 +73,7 @@ describe('rides screen recorded-time evidence', () => {
 
   it('does not show past ride warnings in the upcoming view', () => {
     state.rows = [{ ...record('past', '08:00', null), ride_date: '2000-01-01' }, record('a', '09:00', '10:00')];
-    const html = renderToStaticMarkup(createElement(RidesModule));
+    const html = renderTranslated(createElement(RidesModule));
     expect(html).not.toContain('Timing incomplete');
     expect(html).not.toContain('Ride past');
   });

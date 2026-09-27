@@ -2,7 +2,8 @@
 // caps at five, this page does not — and, because "nothing needs you" is a
 // claim, fails closed when any source cannot be read.
 import { createElement, type ReactNode } from 'react';
-import { renderToStaticMarkup } from 'react-dom/server';
+import { renderToStaticMarkup as renderRaw } from 'react-dom/server';
+import { renderTranslated } from './helpers/render-translated';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
 const mocks = vi.hoisted(() => ({
@@ -16,7 +17,15 @@ vi.mock('@/lib/i18n/server', async () => {
   // unavailable. Resolve through the real catalogue so the assertions keep
   // checking the words a person sees.
   const { SOURCE_MESSAGES, translate } = await import('@/lib/i18n/messages');
-  return { getTranslations: async () => (key: string, params?: Record<string, string | number>) => translate(SOURCE_MESSAGES, key, params) };
+  const { localeOrDefault } = await import('@/lib/i18n/locales');
+  return {
+    getTranslations: async () => (key: string, params?: Record<string, string | number>) => translate(SOURCE_MESSAGES, key, params),
+    // The page also asks WHICH reader it renders for: a money approval's and a
+    // paperwork payment's amount, and the words around it, follow that reader
+    // (AQ-01 / I18N-003). With no request there is no cookie, so this is the
+    // en-US reader the catalogue above is — "$12", not "12 $".
+    getLocaleContext: async () => ({ locale: localeOrDefault('en-US'), source: 'default' as const, messages: SOURCE_MESSAGES }),
+  };
 });
 vi.mock('@/lib/services/approvals', async (importOriginal) => ({ ...(await importOriginal<object>()), listPending: mocks.listPending }));
 vi.mock('@/lib/services/memory', async (importOriginal) => ({ ...(await importOriginal<object>()), listMemories: mocks.listMemories }));
@@ -25,6 +34,17 @@ vi.mock('next/navigation', () => ({ useRouter: () => ({ push: vi.fn(), refresh: 
 vi.mock('@/components/ui/toast', () => ({ useToast: () => ({ success: vi.fn(), error: vi.fn(), info: vi.fn() }) }));
 
 import NeedsYouPage from '@/app/(app)/dashboard/needs-you/page';
+// Rendered under a LocaleProvider, because the component asks for one.
+//
+// `translate` no longer falls back to the en-US catalogue — that fallback was a
+// static import, and it is why en-US shipped to the browser on 406 of 606 pages
+// (PERF-001). It now lives in getMessages, which is where a catalogue belongs.
+// These cases were rendering a client component with NO provider and asserting
+// its English copy, which passed only on that fallback and mounted the
+// component in a way the product never does. Shadowing the import fixes every
+// call site at once and changes no assertion.
+import { withLocale } from './helpers/render-translated';
+const renderToStaticMarkup = (node: Parameters<typeof withLocale>[0]) => renderRaw(withLocale(node));
 
 type Reply = { data: unknown; count?: number | null; error: unknown };
 type Query = { table: string; filters: { method: string; key: string; value: unknown }[]; options?: { count?: string; head?: boolean } };
@@ -62,6 +82,11 @@ const approval = (id: string, title: string) => ({
   expiresAt: null, runId: null, amountCents: null, canEdit: false,
 });
 
+// Three of these carry money or a due date and are now catalogue sentences
+// (needsSources.toApproveWithAmount, needsSources.dueInDays) around an amount
+// formatted for the reader. They resolve through the REAL en-US catalogue, so
+// until the orchestrated merge of the home-and-auto i18n asks lands they print
+// the raw key and the first case is red — on purpose: no stand-in copy here.
 const TITLES = [
   'Book the plumber for Tuesday', 'Add soccer practice Saturday',
   'Go-to dinner: Taco night', 'Grocery staple: Oat milk',
@@ -100,7 +125,7 @@ function healthyReplies(): Record<string, Reply> {
   };
 }
 
-const render = async () => renderToStaticMarkup(await NeedsYouPage());
+const render = async () => renderTranslated(await NeedsYouPage());
 
 beforeEach(() => {
   vi.resetAllMocks();

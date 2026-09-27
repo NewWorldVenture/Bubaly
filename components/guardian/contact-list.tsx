@@ -1,10 +1,11 @@
 'use client';
 
 import { useState, useRef } from 'react';
+import { useDismissOnEscape } from '@/lib/hooks/use-dismiss-on-escape';
 import { Plus, Search, Pencil, Trash2, Phone, Mail, ChevronDown } from 'lucide-react';
 import { cn } from '@/lib/utils/cn';
 import {
-  TRUST_LEVELS, TRUST_LABELS, TRUST_COLORS, TRUST_BG_COLORS, TRUST_ICONS,
+  TRUST_LEVELS, TRUST_LABEL_KEYS, TRUST_COLORS, TRUST_BG_COLORS, TRUST_ICONS,
   type TrustLevel,
 } from '@/lib/guardian/trust';
 import { upsertContactAction, deleteContactAction, updateContactTrustAction } from '@/app/(app)/guardian/actions';
@@ -122,7 +123,7 @@ export function ContactList({ contacts: initial, members }: { contacts: Contact[
         >
           <option value="all">{tr('contactList.allTrustLevels')}</option>
           {TRUST_LEVELS.map((lvl) => (
-            <option key={lvl} value={lvl}>{TRUST_ICONS[lvl]} {TRUST_LABELS[lvl]}</option>
+            <option key={lvl} value={lvl}>{TRUST_ICONS[lvl]} {tr(TRUST_LABEL_KEYS[lvl])}</option>
           ))}
         </select>
         <button
@@ -141,7 +142,7 @@ export function ContactList({ contacts: initial, members }: { contacts: Contact[
           <div key={lvl} className="rounded-2xl border border-border bg-surface/40 overflow-hidden">
             <div className={cn('flex items-center gap-2 border-b border-border px-4 py-2.5', TRUST_BG_COLORS[lvl])}>
               <span className="text-base">{TRUST_ICONS[lvl]}</span>
-              <span className={cn('text-sm font-semibold', TRUST_COLORS[lvl])}>{TRUST_LABELS[lvl]}</span>
+              <span className={cn('text-sm font-semibold', TRUST_COLORS[lvl])}>{tr(TRUST_LABEL_KEYS[lvl])}</span>
               <span className="ml-auto text-xs text-muted">{group.length}</span>
             </div>
             <div className="divide-y divide-border">
@@ -191,7 +192,9 @@ function ContactRow({
   onDelete: () => void;
   onTrustChange: (t: TrustLevel) => void;
 }) {
+  const tr = useTranslations();
   const [showTrustPicker, setShowTrustPicker] = useState(false);
+  useDismissOnEscape(showTrustPicker, () => setShowTrustPicker(false));
 
   return (
     <div className="flex items-center gap-3 px-4 py-3 hover:bg-surface/60 transition">
@@ -218,12 +221,16 @@ function ContactRow({
           onClick={() => setShowTrustPicker(!showTrustPicker)}
           className={cn('flex items-center gap-1 rounded-full border px-2.5 py-1 text-xs font-medium transition', TRUST_BG_COLORS[c.trust_level], TRUST_COLORS[c.trust_level])}
         >
-          {TRUST_ICONS[c.trust_level]} {TRUST_LABELS[c.trust_level]}
+          {TRUST_ICONS[c.trust_level]} {tr(TRUST_LABEL_KEYS[c.trust_level])}
           <ChevronDown className="h-3 w-3" />
         </button>
         {showTrustPicker && (
           <>
-            <div className="fixed inset-0 z-10" onClick={() => setShowTrustPicker(false)} />
+            {/* Presentational: no content, no name, nothing to focus. It exists so a
+                click anywhere dismisses the menu, and its keyboard equivalent is the
+                Escape handler above — there is nothing here for a keyboard to land on. */}
+            {/* eslint-disable-next-line jsx-a11y/click-events-have-key-events, jsx-a11y/no-static-element-interactions */}
+            <div aria-hidden="true" className="fixed inset-0 z-10" onClick={() => setShowTrustPicker(false)} />
             <div className="absolute right-0 top-full z-20 mt-1 min-w-[180px] rounded-xl border border-border bg-bg shadow-xl py-1">
               {TRUST_LEVELS.map((lvl) => (
                 <button
@@ -232,7 +239,7 @@ function ContactRow({
                   className={cn('flex w-full items-center gap-2 px-3 py-2 text-xs hover:bg-surface transition', c.trust_level === lvl && 'bg-brand/10')}
                 >
                   <span>{TRUST_ICONS[lvl]}</span>
-                  <span className={TRUST_COLORS[lvl]}>{TRUST_LABELS[lvl]}</span>
+                  <span className={TRUST_COLORS[lvl]}>{tr(TRUST_LABEL_KEYS[lvl])}</span>
                 </button>
               ))}
             </div>
@@ -240,8 +247,8 @@ function ContactRow({
         )}
       </div>
       {/* Actions */}
-      <button onClick={onEdit} className="rounded-lg p-1.5 text-muted hover:bg-surface hover:text-fg transition"><Pencil className="h-4 w-4" /></button>
-      <button onClick={onDelete} className="rounded-lg p-1.5 text-muted hover:bg-red-500/10 hover:text-red-400 transition"><Trash2 className="h-4 w-4" /></button>
+      <button aria-label={tr('a11y.edit')} onClick={onEdit} className="rounded-lg p-1.5 text-muted hover:bg-surface hover:text-fg transition"><Pencil className="h-4 w-4" /></button>
+      <button aria-label={tr('a11y.delete')} onClick={onDelete} className="rounded-lg p-1.5 text-muted hover:bg-red-500/10 hover:text-red-400 transition"><Trash2 className="h-4 w-4" /></button>
     </div>
   );
 }
@@ -259,6 +266,10 @@ function ContactModal({
   onSave: (form: { name: string; phone: string; email: string; notes: string; trust_level: TrustLevel; member_id: string }) => void;
   onClose: () => void;
 }) {
+  // This declared `role="dialog" aria-modal="true"` and provided none of what
+  // that promises: no Escape, no focus move-in, no focus trap, no focus
+  // restore. The hook supplies all four, and is the same one the photo
+  // lightbox uses.
   const tr = useTranslations();
   // The markup below declares `aria-modal="true"`. This is what makes that true:
   // focus enters the dialog, Tab cycles inside it, Escape closes, and focus
@@ -276,16 +287,17 @@ function ContactModal({
 
   function set(k: keyof typeof form, v: string) { setForm(p => ({ ...p, [k]: v })); }
 
+
   return (
     <div className="fixed inset-0 z-50 flex items-end justify-center p-4 sm:items-center">
-      <div className="fixed inset-0 bg-black/60 backdrop-blur-sm" onClick={onClose} />
+      <div className="fixed inset-0 bg-black/60 backdrop-blur-sm" onClick={onClose} aria-hidden />
       <div
         ref={dialogRef}
         tabIndex={-1}
         role="dialog"
         aria-modal="true"
         aria-labelledby="contact-editor-title"
-        className="relative z-10 w-full max-w-md rounded-2xl border border-border bg-bg p-5 space-y-4 shadow-2xl"
+        className="relative z-10 w-full max-w-md rounded-2xl border border-border bg-bg p-5 space-y-4 shadow-2xl outline-none"
       >
         <h2 id="contact-editor-title" className="text-lg font-bold">{contact ? 'Edit Contact' : 'Add Contact'}</h2>
         <div className="space-y-3">
@@ -305,7 +317,7 @@ function ContactModal({
                     form.trust_level === lvl ? 'border-brand bg-brand/10 text-brand-text' : 'border-border text-muted hover:border-brand/40',
                   )}
                 >
-                  {TRUST_ICONS[lvl]} {TRUST_LABELS[lvl]}
+                  {TRUST_ICONS[lvl]} {tr(TRUST_LABEL_KEYS[lvl])}
                 </button>
               ))}
             </div>

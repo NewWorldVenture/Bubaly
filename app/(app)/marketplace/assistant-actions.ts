@@ -10,7 +10,7 @@
 // missing key. History is passed through for multi-turn context (LLM tier).
 import { requireUserContext } from '@/lib/supabase/auth';
 import { settleAll } from '@/lib/supabase/settle';
-import { getTranslations } from '@/lib/i18n/server';
+import { getLocaleContext, getTranslations } from '@/lib/i18n/server';
 import { createServer } from '@/lib/supabase/server';
 import {
   answerMarketQuestion, marketSystemPrompt, routeMarketIntent,
@@ -19,6 +19,7 @@ import {
 import { isAIConfigured, resolveProvider, type AIMessage } from '@/lib/ai/provider';
 import { withAiRequest } from '@/lib/ai/observability';
 import { scopeFromUserContext } from '@/lib/services/scope';
+import { enforceAIRateLimit } from '@/lib/server/ai-rate-limit';
 
 export type MarketAssistantResult = {
   ok: true;
@@ -29,6 +30,10 @@ export type MarketAssistantResult = {
 } | { ok: false; error: string };
 
 const MAX_TURNS = 8;
+/** Matches the inbox intake's budget — see app/(app)/dashboard/inbox/actions.ts. */
+const REQUEST_RATE_LIMIT = { limit: 20, windowMs: 60_000 } as const;
+/** Each history turn is caller-supplied; the question beside it is capped at 500. */
+const MAX_TURN_CHARS = 2_000;
 
 export async function askMarketAssistantAction(
   question: string,
@@ -40,6 +45,14 @@ export async function askMarketAssistantAction(
 
   const ctx = await requireUserContext();
   const sb = await createServer();
+
+  // Every one of the 31 API routes that reaches the model is rate-limited, and
+  // so is the inbox intake — the same request, filed as an action. This one was
+  // not, which made it an unmetered door to a paid provider. Audit C3-S4-01.
+  const limited = await enforceAIRateLimit(sb, `ai-requests:${ctx.user.id}`, REQUEST_RATE_LIMIT);
+  // Reuses the inbox intake's existing key rather than inventing one across 11
+  // catalogues — an unresolved key renders as the raw key on screen.
+  if (!limited.ok) return { ok: false, error: t('inboxActions.tooManyRequestsRightNow') };
 
   const [{ data: listings }, { data: offers }] = await settleAll([
     sb.from('marketplace_listings')
@@ -58,7 +71,11 @@ export async function askMarketAssistantAction(
     selfMemberId: ctx.active.member?.id ?? null,
   };
 
-  const grounded = answerMarketQuestion(q, snapshot);
+  // Both replies are shown to the asker verbatim, so both are in their locale:
+  // the grounded reply's amounts and sentences, and the amounts the model is
+  // given to quote (see marketSystemPrompt).
+  const { locale } = await getLocaleContext();
+  const grounded = answerMarketQuestion(q, snapshot, locale.code, t);
 
   // Tier 2 (LLM) — best-effort on top of the same snapshot; the deterministic
   // links still ride along so the UI always has somewhere to go.
@@ -74,11 +91,11 @@ export async function askMarketAssistantAction(
         async (obs) => {
           const provider = await resolveProvider();
           const messages: AIMessage[] = [
-            ...history.slice(-MAX_TURNS).map((m) => ({ role: m.role, content: m.content } as AIMessage)),
+            ...history.slice(-MAX_TURNS).map((m) => ({ role: m.role, content: String(m.content ?? '').slice(0, MAX_TURN_CHARS) } as AIMessage)),
             { role: 'user', content: q },
           ];
           const completion = await provider.complete({
-            system: marketSystemPrompt(snapshot),
+            system: marketSystemPrompt(snapshot, locale.code),
             messages,
             tools: [],
             maxTokens: 400,
@@ -96,7 +113,3 @@ export async function askMarketAssistantAction(
   return { ok: true, reply: grounded.reply, links: grounded.links, source: 'engine' };
 }
 
-/** Cheap intent preview for analytics/suggestion chips (no data access). */
-export async function previewMarketIntentAction(question: string): Promise<string> {
-  return routeMarketIntent(question);
-}

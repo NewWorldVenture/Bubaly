@@ -3,6 +3,7 @@
 import { revalidatePath } from 'next/cache';
 import { getTranslations } from '@/lib/i18n/server';
 import { requireUserContext } from '@/lib/supabase/auth';
+import { getLocaleContext } from '@/lib/i18n/server';
 import { settle } from '@/lib/supabase/settle';
 import { createServer } from '@/lib/supabase/server';
 import {
@@ -11,6 +12,7 @@ import {
 } from '@/lib/twin/simulate';
 import { readAll } from '@/lib/supabase/read-all';
 import { escapeLike } from '@/lib/supabase/escape-like';
+import { wroteNoRows, describeActionError } from '@/lib/supabase/errors';
 
 // Decision Simulator server action (Digital Twin, pillar #2). Assembles the real
 // household context for the proposed decision and runs the pure simulator. All
@@ -37,6 +39,8 @@ function periodStart(period: string, now: Date): string {
 
 export async function simulateDecisionAction(input: SimFormInput): Promise<SimResult> {
   const ctx = await requireUserContext();
+  // The impact copy carries amounts, so it is formatted for whoever asked.
+  const { locale } = await getLocaleContext();
   const familyId = ctx.active.familyId;
   const supabase = await createServer();
 
@@ -59,7 +63,7 @@ export async function simulateDecisionAction(input: SimFormInput): Promise<SimRe
     }));
     return simulateDecision(
       { kind: 'commitment', memberName: input.memberName, title: input.title.trim(), startsAt: input.startsAt, durationMin: input.durationMin, weeks: input.weeks },
-      { memberEvents, budgets: [] },
+      { memberEvents, budgets: [], locale: locale.code },
     );
   }
 
@@ -86,7 +90,7 @@ export async function simulateDecisionAction(input: SimFormInput): Promise<SimRe
   }
   return simulateDecision(
     { kind: 'spend', label: input.label.trim() || input.category, category: input.category, amountCents },
-    { memberEvents: [], budgets },
+    { memberEvents: [], budgets, locale: locale.code },
   );
 }
 
@@ -169,17 +173,20 @@ export async function saveSimulationAction(input: ActivityProjectionInput, resul
     dimensions: result.dimensions as never,
     created_by: ctx.user.id,
   });
-  if (error) return { ok: false, error: error.message };
+  if (error) return { ok: false, error: describeActionError(error) };
   revalidatePath('/dashboard/family-digital-twin');
   return { ok: true };
 }
 
 /** Delete a saved simulation. */
 export async function deleteSimulationAction(id: string): Promise<Result> {
+  const tr = await getTranslations();
   const ctx = await requireUserContext();
   const supabase = await createServer();
-  const { error } = await supabase.from('twin_simulations').delete().eq('id', id).eq('family_id', ctx.active.familyId);
-  if (error) return { ok: false, error: error.message };
+  const { data: deleted, error } = await supabase.from('twin_simulations')
+    .delete().eq('id', id).eq('family_id', ctx.active.familyId).select('id');
+  if (error) return { ok: false, error: describeActionError(error) };
+  if (wroteNoRows(deleted)) return { ok: false, error: tr('actions.couldNotDeleteThatSimulation') };
   revalidatePath('/dashboard/family-digital-twin');
   return { ok: true };
 }

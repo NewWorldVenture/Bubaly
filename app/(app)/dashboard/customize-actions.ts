@@ -8,12 +8,34 @@ import { isManager } from '@/lib/constants/roles';
 import { resolveFamilyPlanLevel } from '@/lib/server/plan';
 import { tierForPlanLevel } from '@/lib/dashboard/registry';
 import { validateLayout } from '@/lib/dashboard/layout';
-import { canCustomizeDashboard, normalizeSettings, type DashSettings } from '@/lib/dashboard/permissions';
+import { canCustomizeDashboard, readDashSettings, type DashSettings } from '@/lib/dashboard/permissions';
+import { describeActionError } from '@/lib/supabase/errors';
 
-async function familyDashSettings(supabase: Awaited<ReturnType<typeof createServer>>, familyId: string): Promise<DashSettings> {
-  const { data } = await supabase.from('family_dashboard_settings')
+/**
+ * The family's dashboard settings, or NULL when they could not be read.
+ *
+ * The null matters. A family with no settings row is legitimately permissive —
+ * `allow_child_customization` DEFAULTs to true (0094) — but PostgREST resolves a
+ * failed read with `{ data: null, error }` too, so dropping the error makes a
+ * statement timeout look exactly like "this family never touched the setting"
+ * and `normalizeSettings(null)` then answers `allowChildCustomization: true`.
+ * That is the parent's "off" switch failing open. Callers must treat null as
+ * unknown and refuse, not as allowed.
+ *
+ * The row→rules mapping is `readDashSettings`, the same function the /dashboard
+ * render uses, so the two readers cannot drift apart. This caller discards the
+ * assumed-closed shape it returns on failure: an action can refuse outright,
+ * which is more honest than acting on an assumption.
+ */
+async function familyDashSettings(supabase: Awaited<ReturnType<typeof createServer>>, familyId: string): Promise<DashSettings | null> {
+  const { data, error } = await supabase.from('family_dashboard_settings')
     .select('allow_child_customization, lock_to_family_default').eq('family_id', familyId).maybeSingle();
-  return normalizeSettings(data ? { allowChildCustomization: data.allow_child_customization, lockToFamilyDefault: data.lock_to_family_default } : null);
+  const read = readDashSettings(data, error);
+  if (read.unknown) {
+    console.error('[customize] family dashboard settings read failed', error);
+    return null;
+  }
+  return read.settings;
 }
 
 type Result = { ok: boolean; error?: string };
@@ -28,7 +50,9 @@ async function userTier(supabase: Awaited<ReturnType<typeof createServer>>, fami
 }
 
 async function logEvent(supabase: Awaited<ReturnType<typeof createServer>>, familyId: string, userId: string, action: string, featureKey?: string | null, metadata: Record<string, unknown> = {}) {
-  await supabase.from('dashboard_layout_events').insert({ family_id: familyId, user_id: userId, action, feature_key: featureKey ?? null, metadata: metadata as never });
+  // Its result used to be discarded outright — not even the error bound. Best-effort, so logged rather than raised. Audit C1-S9-76.
+  const { error: dashboardLayoutEventsWriteError } = await supabase.from('dashboard_layout_events').insert({ family_id: familyId, user_id: userId, action, feature_key: featureKey ?? null, metadata: metadata as never });
+  if (dashboardLayoutEventsWriteError) console.error('[dashboard] dashboard_layout_events insert failed', dashboardLayoutEventsWriteError);
 }
 
 /**
@@ -36,12 +60,17 @@ async function logEvent(supabase: Awaited<ReturnType<typeof createServer>>, fami
  * validated (tier entitlement, dedupe, max count, no fixed/locked injection).
  */
 export async function saveDashboardLayoutAction(input: { featureKeys: string[]; deviceContext?: string }): Promise<Result> {
+  const t = await getTranslations();
   const ctx = await requireUserContext();
   const familyId = ctx.active.familyId;
   const userId = ctx.user.id;
   const supabase = await createServer();
 
   const [tier, settings] = await Promise.all([userTier(supabase, familyId), familyDashSettings(supabase, familyId)]);
+  // Settings unreadable → refuse, and say it is a transient failure. Guessing
+  // here would either grant a permission a parent turned off, or claim a parent
+  // turned something off that we never actually read.
+  if (!settings) return { ok: false, error: t('customizeActions.settingsUnreadable') };
   if (!canCustomizeDashboard(isManager(ctx.active.role), settings)) {
     return { ok: false, error: settings.lockToFamilyDefault ? 'Your family uses a shared dashboard set by a parent.' : 'A parent has turned off dashboard customization for children.' };
   }
@@ -53,7 +82,7 @@ export async function saveDashboardLayoutAction(input: { featureKeys: string[]; 
     { family_id: familyId, user_id: userId, scope: 'user', device_context: device, feature_keys: v.keys, is_active: true, created_by: userId, updated_by: userId, deleted_at: null },
     { onConflict: 'family_id,user_id,device_context' },
   );
-  if (error) return { ok: false, error: error.message };
+  if (error) return { ok: false, error: describeActionError(error) };
 
   await logEvent(supabase, familyId, userId, 'customized', null, { count: v.keys.length });
   revalidatePath('/dashboard');
@@ -68,9 +97,12 @@ export async function resetDashboardLayoutAction(input: { deviceContext?: string
   const supabase = await createServer();
   const device = asDevice(input.deviceContext);
 
+  // Deliberately NOT gated on rows. "Reset my layout" on a dashboard that was
+  // never customised matches nothing, and that IS the success case — the layout
+  // is now the default, which is what was asked for. Audit C1-S9-58.
   const { error } = await supabase.from('dashboard_layouts')
     .delete().eq('family_id', familyId).eq('user_id', userId).eq('scope', 'user').eq('device_context', device);
-  if (error) return { ok: false, error: error.message };
+  if (error) return { ok: false, error: describeActionError(error) };
 
   await logEvent(supabase, familyId, userId, 'reset');
   revalidatePath('/dashboard');
@@ -100,7 +132,7 @@ export async function saveFamilyDefaultLayoutAction(input: { featureKeys: string
     { family_id: familyId, user_id: null, scope: 'family', device_context: device, feature_keys: v.keys, is_active: true, created_by: userId, updated_by: userId, deleted_at: null },
     { onConflict: 'family_id,user_id,device_context' },
   );
-  if (error) return { ok: false, error: error.message };
+  if (error) return { ok: false, error: describeActionError(error) };
 
   await logEvent(supabase, familyId, userId, 'family_default_set', null, { count: v.keys.length });
   revalidatePath('/dashboard');
@@ -130,7 +162,7 @@ export async function saveDashboardSettingsAction(input: { allowChildCustomizati
     { family_id: familyId, allow_child_customization: !!input.allowChildCustomization, lock_to_family_default: !!input.lockToFamilyDefault, updated_by: ctx.user.id },
     { onConflict: 'family_id' },
   );
-  if (error) return { ok: false, error: error.message };
+  if (error) return { ok: false, error: describeActionError(error) };
   await logEvent(supabase, familyId, ctx.user.id, 'settings_changed', null, { ...input });
   revalidatePath('/dashboard');
   return { ok: true };
@@ -143,8 +175,10 @@ export async function resetAllLayoutsAction(): Promise<Result> {
   if (!isManager(ctx.active.role)) return { ok: false, error: t('customizeActions.onlyAParentGuardianCan3') };
   const familyId = ctx.active.familyId;
   const supabase = await createServer();
+  // Same: resetting every member's layout in a family where nobody customised
+  // one matches nothing and has done exactly what it promised. Audit C1-S9-58.
   const { error } = await supabase.from('dashboard_layouts').delete().eq('family_id', familyId).eq('scope', 'user');
-  if (error) return { ok: false, error: error.message };
+  if (error) return { ok: false, error: describeActionError(error) };
   await logEvent(supabase, familyId, ctx.user.id, 'reset_all');
   revalidatePath('/dashboard');
   return { ok: true };

@@ -9,8 +9,7 @@ import { useApp } from '@/components/app/app-context';
 import { useSpeechRecognition } from '@/lib/hooks/use-speech-recognition';
 import { useRealtimeQuery } from '@/lib/hooks/use-realtime-query';
 import { createClient } from '@/lib/supabase/client';
-import { settle } from '@/lib/supabase/settle';
-import { describeDbError } from '@/lib/supabase/errors';
+import { describeDbError, wroteNoRows } from '@/lib/supabase/errors';
 import { useToast } from '@/components/ui/toast';
 import { Button } from '@/components/ui/button';
 import { Textarea } from '@/components/ui/input';
@@ -20,20 +19,14 @@ import { cn } from '@/lib/utils/cn';
 import { CaptureSaveError, saveCapture, undoCapture, tableForKind } from '@/lib/capture/save';
 import { useJourney } from '@/lib/analytics/use-journey';
 import { classifyVoiceCommand, describeRoute } from '@/lib/voice/command-router';
+import { recordVoiceCommand } from '@/lib/voice/history';
 import type { CaptureKind } from '@/lib/capture/parse';
-import type { Tables, Insertable } from '@/lib/database.types';
+import type { Tables } from '@/lib/database.types';
 import { useTranslations } from '@/components/i18n/locale-provider';
+import { useFormat } from '@/components/i18n/use-format';
 
 type VoiceCommand = Tables<'voice_commands'>;
 
-async function recordVoiceHistory(client: ReturnType<typeof createClient>, row: Insertable<'voice_commands'>) {
-  try {
-    const { error } = await settle(client.from('voice_commands').insert(row));
-    if (error) console.error('[voice] history write failed', { message: error.message });
-  } catch (error) {
-    console.error('[voice] history write failed', { message: describeDbError(error) });
-  }
-}
 
 const KIND_META: Record<CaptureKind, { label: string; icon: typeof Mic; cls: string }> = {
   task: { label: 'Task', icon: CheckSquare, cls: 'text-emerald-300 bg-emerald-500/10 border-emerald-500/30' },
@@ -50,17 +43,6 @@ const EXAMPLES = [
 ];
 
 /** Short relative time like "just now", "3m ago", "2h ago", "Jul 4". */
-function ago(iso: string): string {
-  const d = new Date(iso).getTime();
-  const s = Math.round((Date.now() - d) / 1000);
-  if (s < 45) return 'just now';
-  if (s < 3600) return `${Math.round(s / 60)}m ago`;
-  if (s < 86400) return `${Math.round(s / 3600)}h ago`;
-  const days = Math.round(s / 86400);
-  if (days < 7) return `${days}d ago`;
-  return new Date(iso).toLocaleDateString(undefined, { month: 'short', day: 'numeric' });
-}
-
 export function VoiceModule() {
   const { familyId, userId } = useApp();
   return <VoiceCaptureSession key={JSON.stringify([familyId, userId])} />;
@@ -68,6 +50,10 @@ export function VoiceModule() {
 
 function VoiceCaptureSession() {
   const tr = useTranslations();
+  // One time-ago, and it follows the reader. Its tail called
+  // toLocaleDateString(undefined, …) — the BROWSER's locale, not the family's.
+  const { fmtTimeAgo } = useFormat();
+  const fmtTimeAgo7 = (iso: string) => fmtTimeAgo(iso, { absoluteAfterDays: 7 });
   const { familyId, userId, selfMember } = useApp();
   const { success, error: toastError } = useToast();
   const speech = useSpeechRecognition();
@@ -121,15 +107,18 @@ function VoiceCaptureSession() {
     try {
       if (speech.listening) speech.stop();
       journey.start();
-      if (!route.text) { journey.abandon(); toastError("Didn't catch a command — try again."); return; }
+      if (!route.text) { journey.abandon(); toastError(tr('voiceModule.didntCatchACommand')); return; }
       sb = createClient();
       const res = await saveCapture(sb, {
         kind: route.kind, text: route.text, familyId, userId, memberId: selfMember?.id ?? null, isCurrent,
       });
       if (!isCurrent()) return;
       // Log the command to the family's voice history (best-effort — a logging
-      // failure must not lose or delay the thing we just created).
-      void recordVoiceHistory(sb, {
+      // failure must not lose or delay the thing we just created). Best-effort
+      // is not SILENT: `recordVoiceCommand` cannot reject and logs a dropped
+      // row, so a history that stopped recording looks different from a family
+      // that stopped speaking.
+      void recordVoiceCommand(sb, {
         family_id: familyId, member_id: selfMember?.id ?? null, transcript: route.text,
         resolved_kind: route.kind, action_table: tableForKind(route.kind),
         action_count: res.count, status: 'routed', created_by: userId,
@@ -164,12 +153,20 @@ function VoiceCaptureSession() {
         return;
       }
       journey.abandon();
-      // Record the failed attempt so the history is honest.
-      if (sb) void recordVoiceHistory(sb, {
+      // TELL THE USER FIRST. This used to run after the history write, and
+      // supabase-js rejects when the fetch fails — so with the network down,
+      // which is the usual reason a command fails at all, the rejection escaped
+      // this catch and the user was told nothing whatsoever. main reached the
+      // same defect from the other side, making the write non-rejecting; both
+      // halves are kept, because the report should not sit downstream of a call
+      // that fails for the same reason EVEN IF that call is safe today.
+      toastError(describeDbError(err, tr('voiceModule.couldNotRunThatCommand')));
+      // Record the failed attempt so the history is honest. `sb` is guarded:
+      // `createClient()` itself can throw, and this catch also covers that.
+      if (sb) void recordVoiceCommand(sb, {
         family_id: familyId, member_id: selfMember?.id ?? null, transcript: raw,
         resolved_kind: route.kind, status: 'failed', created_by: userId,
       });
-      if (isCurrent()) toastError(describeDbError(err, tr('voiceModule.couldNotRunThatCommand')));
     } finally {
       if (isCurrent()) setRunning(false);
       lifetime.pending = false;
@@ -178,8 +175,13 @@ function VoiceCaptureSession() {
 
   async function remove(c: VoiceCommand) {
     const sb = createClient();
-    const { error: err } = await sb.from('voice_commands').delete().eq('id', c.id);
+    // Family-scoped in the house style, and read back: under RLS a refused row
+    // comes back with no error and zero rows, which this used to report as done.
+    // Audit C1-S9-86.
+    const { data: removed, error: err } = await sb.from('voice_commands').delete()
+      .eq('id', c.id).eq('family_id', familyId).select('id');
     if (err) toastError(describeDbError(err));
+    else if (wroteNoRows(removed)) toastError(tr('errors.thatChangeWasNotSaved'));
   }
 
   return (
@@ -285,7 +287,7 @@ function VoiceCaptureSession() {
                   <div className="min-w-0 flex-1">
                     <p className="truncate text-sm text-fg">{c.transcript}</p>
                     <p className="text-xs text-muted">
-                      {failed ? 'Failed' : describeRoute(kind)}{c.action_count > 1 ? ` · ${c.action_count} items` : ''} · {ago(c.created_at)}
+                      {failed ? 'Failed' : describeRoute(kind)}{c.action_count > 1 ? ` · ${c.action_count} items` : ''} · {fmtTimeAgo7(c.created_at)}
                     </p>
                   </div>
                   <button onClick={() => run(c.transcript)} disabled={running || Boolean(uncertainHref)} aria-label={tr('voice.runAgain')} title={tr('voice.runAgain')}

@@ -30,6 +30,9 @@ export function DashboardQuickActions({ fixed, primaryKeys, available, locked, c
   locked: DashFeature[];         // above-tier features (upgrade discovery)
   canCustomize?: boolean;        // false → child where the family disabled it, or locked-to-default
   canManage?: boolean;           // parent/admin → family controls
+  // The family's saved settings, OMITTED when they could not be read. Without
+  // them there is nothing true to prefill the Family modal with, so no Family
+  // button, and nothing to say about who set the lock, so no "Set by a parent".
   settings?: DashSettings;
 }) {
   const t = useTranslations();
@@ -93,7 +96,7 @@ export function DashboardQuickActions({ fixed, primaryKeys, available, locked, c
         <h2 className="text-sm font-semibold uppercase tracking-wide text-muted">{t('quickActions.quickAccess')}</h2>
         {!editing ? (
           <div className="flex items-center gap-1">
-            {canManage && (
+            {canManage && settings && (
               <button onClick={() => setFamilyOpen(true)} className="flex items-center gap-1 rounded-lg px-2 py-1 text-xs font-medium text-muted hover:bg-elevated hover:text-fg transition">
                 <Users className="h-3.5 w-3.5" /> {t('quickActions.family')}
               </button>
@@ -102,9 +105,9 @@ export function DashboardQuickActions({ fixed, primaryKeys, available, locked, c
               <button onClick={() => setEditing(true)} className="flex items-center gap-1 rounded-lg px-2 py-1 text-xs font-medium text-brand-text hover:bg-brand/10 transition">
                 <Settings2 className="h-3.5 w-3.5" /> {t('quickActions.customize')}
               </button>
-            ) : (
+            ) : settings ? (
               <span className="flex items-center gap-1 text-[11px] text-muted"><Lock className="h-3 w-3" /> {t('quickActions.setByAParent')}</span>
-            )}
+            ) : null}
           </div>
         ) : (
           <div className="flex flex-wrap items-center justify-end gap-1">
@@ -130,7 +133,7 @@ export function DashboardQuickActions({ fixed, primaryKeys, available, locked, c
         {/* Customizable buttons */}
         {tiles.map((f, i) => editing ? (
           <div key={f.key} className="relative flex flex-col items-center gap-1.5 rounded-2xl border border-border bg-surface/40 py-4 text-center">
-            <button onClick={() => remove(i)} aria-label={`Remove ${f.label}`} className="absolute -left-1 -top-1 grid h-5 w-5 place-items-center rounded-full bg-danger text-white shadow"><X className="h-3 w-3" /></button>
+            <button onClick={() => remove(i)} aria-label={`Remove ${f.label}`} className="absolute -left-1 -top-1 grid h-5 w-5 place-items-center rounded-full bg-danger text-danger-fg shadow"><X className="h-3 w-3" /></button>
             <button onClick={() => setPicker({ mode: 'replace', index: i })} className="grid h-9 w-9 place-items-center rounded-xl bg-elevated"><FeatureIcon icon={f.icon} className="h-4 w-4" /></button>
             <span className="text-[11px] font-semibold">{f.label}</span>
             <div className="absolute bottom-1 right-1 flex flex-col">

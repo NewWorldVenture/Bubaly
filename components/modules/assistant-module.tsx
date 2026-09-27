@@ -11,6 +11,7 @@
 // `run` for the outcomes worth a card, then `done`. Reopening a conversation
 // rehydrates its cards from `ai_messages.structured_content`.
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import { useDismissOnEscape } from '@/lib/hooks/use-dismiss-on-escape';
 import {
   CalendarDays, CheckCircle2, Bell, Pill, ListChecks,
   Plus, School, Send, ShoppingCart, Sparkles, UtensilsCrossed,
@@ -23,7 +24,7 @@ import { ResultPane, cardId, type ConversationMessage } from '@/components/assis
 import { ContextRail, type ActivityItem, type GlanceItem, type UpcomingEvent } from '@/components/assistant/context-rail';
 import { createClient } from '@/lib/supabase/client';
 import { settleAll } from '@/lib/supabase/settle';
-import { describeDbError } from '@/lib/supabase/errors';
+import { describeDbError, wroteNoRows } from '@/lib/supabase/errors';
 import { fmtRelative } from '@/lib/utils/format';
 import { cn } from '@/lib/utils/cn';
 import { isManager } from '@/lib/constants/roles';
@@ -109,6 +110,7 @@ export function AssistantModule() {
   const voice = useVoice({ onError: setVoiceError });
   const [micStatus, setMicStatus] = useState<MicStatus>('idle');
   const [showVoiceMenu, setShowVoiceMenu] = useState(false);
+  useDismissOnEscape(showVoiceMenu, () => setShowVoiceMenu(false));
 
   const greeting = () => {
     const h = new Date().getHours();
@@ -254,7 +256,7 @@ export function AssistantModule() {
     if (error) return;
     setConvId(id);
     if (typeof window !== 'undefined') sessionStorage.setItem('assistant-conv-id', id);
-    if (!data || data.length === 0) { setMessages(greeting()); return; }
+    if (wroteNoRows(data)) { setMessages(greeting()); return; }
     setMessages(data.map((m) => {
       const structured = structuredContentFrom(m.structured_content);
       return {
@@ -282,12 +284,19 @@ export function AssistantModule() {
 
   async function deleteConversation(id: string) {
     if (!confirm(t('assistantModule.deleteThisConversation'))) return;
-    const { error } = await createClient().from('ai_conversations').delete().eq('id', id);
+    // 0255 ("ai runtime lockdown") narrows writes on ai_conversations, and RLS
+    // FILTERS a delete rather than refusing it — so without the readback a
+    // removal the policy blocked answered `error: null` and the row was dropped
+    // from the list on screen while staying in the table. `family_id` answers a
+    // different question from the readback: whose conversation it was.
+    const { data: removed, error } = await createClient().from('ai_conversations').delete()
+      .eq('id', id).eq('family_id', family.id).select('id');
     if (error) {
       console.error('[assistant] conversation delete failed', error);
       setConversationsError(describeDbError(error, t('assistantModule.couldNotDeleteThatConversation')));
       return;
     }
+    if (wroteNoRows(removed)) { setConversationsError(t('assistantModule.couldNotDeleteThatConversation')); return; }
     setConversations((prev) => prev.filter((c) => c.id !== id));
     if (id === convId) newChat();
   }
@@ -295,12 +304,14 @@ export function AssistantModule() {
   async function renameConversation(id: string, current: string) {
     const title = window.prompt(t('assistantModule.renameConversation'), current || '')?.trim();
     if (!title || title === current) return;
-    const { error } = await createClient().from('ai_conversations').update({ title: title.slice(0, 80) }).eq('id', id);
+    const { data: renamed, error } = await createClient().from('ai_conversations')
+      .update({ title: title.slice(0, 80) }).eq('id', id).eq('family_id', family.id).select('id');
     if (error) {
       console.error('[assistant] conversation rename failed', error);
       setConversationsError(describeDbError(error, t('assistantModule.couldNotRenameThatConversation')));
       return;
     }
+    if (wroteNoRows(renamed)) { setConversationsError(t('assistantModule.couldNotRenameThatConversation')); return; }
     setConversations((prev) => prev.map((c) => (c.id === id ? { ...c, title } : c)));
   }
 
@@ -568,7 +579,9 @@ export function AssistantModule() {
             </button>
             {showVoiceMenu && (
               <>
-                <div className="fixed inset-0 z-10" onClick={() => setShowVoiceMenu(false)} />
+                {/* Presentational; the keyboard path is Escape, bound above. */}
+                {/* eslint-disable-next-line jsx-a11y/click-events-have-key-events, jsx-a11y/no-static-element-interactions */}
+                <div aria-hidden="true" className="fixed inset-0 z-10" onClick={() => setShowVoiceMenu(false)} />
                 <div className="popover-surface absolute right-0 z-20 mt-2 w-60 p-2">
                   <p className="px-2 py-1.5 text-xs font-semibold text-muted">{t('assistant.assistantVoiceThisDevice')}</p>
                   {VOICE_MODES.map((m) => (

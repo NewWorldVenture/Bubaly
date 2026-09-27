@@ -68,12 +68,19 @@ export const UNSATISFIABLE_STEP_STATES: readonly StepState[] = ['failed', 'cance
  * affordance (§17) — a person retries the two notifications that failed and the
  * same run finishes. `completed` and `cancelled` are one-way doors: re-opening
  * them would let a finished run silently re-execute writes.
+ *
+ * `awaiting_approval → completed` is the concierge plan row
+ * (`trigger_type = 'plan_accepted'`), which never passes through the executor:
+ * the approval and the work happen in ONE server call — executeQueuedRunAction's
+ * direct branch, or `decide()` → runConciergePlan — so the row goes straight
+ * from waiting to done. Leaving the edge out did not stop those writers; it
+ * only made this table describe a lifecycle the code does not have.
  */
 export const RUN_TRANSITIONS: Readonly<Record<RunState, readonly RunState[]>> = {
   queued: ['planning', 'awaiting_context', 'awaiting_approval', 'ready', 'executing', 'blocked', 'failed', 'cancelled'],
   planning: ['awaiting_context', 'awaiting_approval', 'ready', 'executing', 'blocked', 'failed', 'cancelled'],
   awaiting_context: ['planning', 'ready', 'blocked', 'failed', 'cancelled'],
-  awaiting_approval: ['ready', 'executing', 'partially_completed', 'blocked', 'failed', 'cancelled', 'paused'],
+  awaiting_approval: ['ready', 'executing', 'completed', 'partially_completed', 'blocked', 'failed', 'cancelled', 'paused'],
   ready: ['executing', 'awaiting_approval', 'scheduled_followup', 'paused', 'blocked', 'failed', 'cancelled'],
   executing: [
     'ready', 'verifying', 'awaiting_approval', 'awaiting_context', 'scheduled_followup', 'paused',

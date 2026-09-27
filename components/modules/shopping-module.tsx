@@ -16,7 +16,7 @@ import {
 } from '@/app/(app)/dashboard/grocery/actions';
 import { describeGroceryAdd, groceryAddWasNoOp } from '@/lib/groceries/add-summary';
 import { RETAILERS, buildShoppingText, itemSearchUrl, retailerById } from '@/lib/grocery/retailers';
-import { describeDbError } from '@/lib/supabase/errors';
+import { describeDbError, wroteNoRows } from '@/lib/supabase/errors';
 import { useToast } from '@/components/ui/toast';
 import { PageHeader } from '@/components/app/page-header';
 import { AiInsight } from '@/components/ai/ai-insight';
@@ -137,7 +137,7 @@ export function ShoppingModule() {
     e.preventDefault();
     const name = addingText.trim();
     if (!name || !activeListId) return;
-    if (name.length > 120) { toastError('Item name is too long (max 120 characters)'); return; }
+    if (name.length > 120) { toastError(t('validation.itemNameTooLong', { max: 120 })); return; }
     return run('add-item', async () => {
       // Through the service, which skips a name already on this list under
       // `normalizeName` — case, a trailing plural 's' and spacing are not
@@ -185,8 +185,10 @@ export function ShoppingModule() {
 
   function archiveList(id: string) {
     return run(`archive:${id}`, async () => {
-      const { error } = await createClient().from('grocery_lists').update({ archived_at: new Date().toISOString() }).eq('id', id);
+      // Under RLS a refused row comes back with no error and zero rows, which this used to report as archived. Audit C1-S9-83.
+      const { data: archived, error } = await createClient().from('grocery_lists').update({ archived_at: new Date().toISOString() }).eq('id', id).select('id');
       if (error) throw error;
+      if (wroteNoRows(archived)) { toastError(t('errors.thatChangeWasNotSaved')); return; }
       success(t('shoppingModule.listArchived'));
       setActiveListId(lists.find((l) => l.id !== id)?.id ?? null);
       void refreshLists();
@@ -210,7 +212,7 @@ export function ShoppingModule() {
       <div className="flex w-full flex-col lg:w-56 xl:w-64 flex-shrink-0">
         <div className="mb-3 flex items-center justify-between">
           <h2 className="text-sm font-bold">{t('shopping.myLists')}</h2>
-          <button onClick={() => setNewListOpen(true)}
+          <button aria-label={t('a11y.add')} onClick={() => setNewListOpen(true)}
             className="flex h-7 w-7 items-center justify-center rounded-full bg-brand/15 text-brand-text hover:bg-brand/25 transition">
             <Plus className="h-3.5 w-3.5" />
           </button>
@@ -277,7 +279,7 @@ export function ShoppingModule() {
                   <Search className="h-3.5 w-3.5 text-muted" />
                   <input value={search} inputMode="search" enterKeyHint="search" onChange={(e) => setSearch(e.target.value)} placeholder="Search…"
                     className="w-28 bg-transparent text-sm placeholder:text-muted outline-none" />
-                  {search && <button onClick={() => setSearch('')}><X className="h-3.5 w-3.5 text-muted" /></button>}
+                  {search && <button aria-label={t('a11y.clearSearch')} onClick={() => setSearch('')}><X className="h-3.5 w-3.5 text-muted" /></button>}
                 </div>
               </div>
             </div>
@@ -471,7 +473,7 @@ function NewListModal({ familyId, userId, onClose, onCreated }: {
     if (loading) return;
     const trimmed = name.trim();
     if (!trimmed) { toastError(t('shoppingModule.giveYourListAName')); return; }
-    if (trimmed.length > 80) { toastError('List name is too long (max 80 characters)'); return; }
+    if (trimmed.length > 80) { toastError(t('validation.listNameTooLong', { max: 80 })); return; }
     if (!familyId) { toastError(t('shoppingModule.noActiveFamilyReloadAnd')); return; }
     setLoading(true);
     try {
@@ -543,12 +545,14 @@ function EditListModal({ list, onClose, onSaved, onArchive }: {
     if (loading) return;
     const trimmed = name.trim();
     if (!trimmed) { toastError(t('shoppingModule.giveYourListAName')); return; }
-    if (trimmed.length > 80) { toastError('List name is too long (max 80 characters)'); return; }
+    if (trimmed.length > 80) { toastError(t('validation.listNameTooLong', { max: 80 })); return; }
     setLoading(true);
     try {
       const supabase = createClient();
-      const { error } = await supabase.from('grocery_lists').update({ name: trimmed, list_icon: icon }).eq('id', list.id);
+      // Under RLS a refused row comes back with no error and zero rows, which this used to report as done. Audit C1-S9-83.
+      const { data: updated, error } = await supabase.from('grocery_lists').update({ name: trimmed, list_icon: icon }).eq('id', list.id).select('id');
       if (error) { toastError(describeDbError(error)); return; }
+      if (wroteNoRows(updated)) { toastError(t('errors.thatChangeWasNotSaved')); return; }
       onSaved();
     } catch (err) {
       toastError(describeDbError(err));

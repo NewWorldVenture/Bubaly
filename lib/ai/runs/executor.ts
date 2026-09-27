@@ -51,6 +51,9 @@ import {
 } from './store';
 import { parseVerificationSpec, runVerification, type VerificationOutcome } from './verify';
 import { resolveBindings } from './bindings';
+// Pure, and shared with the approval card and `decide()`: what an approved step
+// runs must be derived by the one rule that decided what the approvers saw.
+import { classifyPayload, effectiveArgsOf } from '@/lib/approvals/card-data';
 
 type RunPatch = Database['public']['Tables']['family_automation_runs']['Update'];
 type StepPatch = Database['public']['Tables']['ai_plan_steps']['Update'];
@@ -95,7 +98,48 @@ export type StepSnapshot = Pick<
   | 'risk_level' | 'retry_count' | 'max_retries' | 'result_json' | 'error'
 >;
 
-export type ApprovalSnapshot = { id: string; status: string; editedPayload: unknown };
+/**
+ * An approval row as the executor needs it. `payload`, `payloadKind` and
+ * `planStepIds` are what `classifyPayload` reads — the filed ask the card was
+ * built from. `editedPayload` is the column AS STORED and is never run as-is:
+ * `approvedArgsFor` re-merges it over the ask through the card's allow-list.
+ */
+export type ApprovalSnapshot = {
+  id: string;
+  status: string;
+  payload: unknown;
+  payloadKind: string | null;
+  planStepIds: string[] | null;
+  editedPayload: unknown;
+};
+
+/**
+ * What an approved step may run, derived the way the card derived what it
+ * showed: the filed ask re-merged with the recorded edit through
+ * `effectiveArgsOf`, which admits only the scalar fields the ask itself
+ * carried and only scalar values. Null when nothing usable was edited, so the
+ * step runs its own (bound) input.
+ *
+ * `edited_payload` is a column `approval_requests_decide` (0251) lets any
+ * manager write on a pending row. Running it raw meant a value written to the
+ * column directly — a key the card never offered, a member id, a nested
+ * object — ran with `skipTrust` while the second approver's card showed the
+ * allow-listed version. `decide()` already refuses that through `storedEdit`
+ * for the rows it executes itself; this is the same derivation for the rows
+ * the executor performs.
+ */
+function approvedArgsFor(approval: ApprovalSnapshot | null): Record<string, unknown> | null {
+  if (!approval) return null;
+  const classified = classifyPayload({
+    payload: approval.payload,
+    payload_kind: approval.payloadKind,
+    run_id: null,
+    plan_step_id: null,
+    plan_step_ids: approval.planStepIds,
+  });
+  const effective = effectiveArgsOf(classified, approval.editedPayload);
+  return effective.changed.length > 0 ? effective.args : null;
+}
 
 /** Everything outside the control flow, in one injectable object. */
 export type ExecutorPort = {
@@ -817,7 +861,7 @@ async function runStep(
       });
       return { kind: 'progressed' };
     }
-    approvedPayload = approval.data?.editedPayload ?? null;
+    approvedPayload = approvedArgsFor(approval.data);
     await port.appendEvent(run, {
       eventType: 'approval_decided',
       stepId: step.id,
@@ -1264,7 +1308,7 @@ export function createExecutorPort(db: SupabaseClient<Database>, opts: ExecutorP
     async loadApproval(scope, approvalId) {
       const { data, error } = await db
         .from('approval_requests')
-        .select('id, status, edited_payload')
+        .select('id, status, payload, payload_kind, plan_step_ids, edited_payload')
         .eq('id', approvalId)
         .eq('family_id', scope.familyId)
         .maybeSingle();
@@ -1273,7 +1317,14 @@ export function createExecutorPort(db: SupabaseClient<Database>, opts: ExecutorP
         return fail(describeDbError(error, 'Bubaly could not read that approval.'), { code: SERVICE_CODES.db, retryable: true });
       }
       if (!data) return ok(null);
-      return ok({ id: data.id, status: data.status, editedPayload: data.edited_payload ?? null });
+      return ok({
+        id: data.id,
+        status: data.status,
+        payload: data.payload,
+        payloadKind: data.payload_kind ?? null,
+        planStepIds: data.plan_step_ids ?? null,
+        editedPayload: data.edited_payload ?? null,
+      });
     },
     async notifyFamily(scope, input) {
       const res = await notify(scope, input);

@@ -1,5 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { getTranslations } from '@/lib/i18n/server';
+import type { LocaleCode } from '@/lib/i18n/locales';
+import { getMessages, translate } from '@/lib/i18n/messages';
 import { createServiceClient } from '@/lib/supabase/server';
 import { runTwinProjection } from '@/lib/twin/project-server';
 import { runPrepGeneration } from '@/lib/planning/prep-server';
@@ -10,6 +12,18 @@ import { readAll } from '@/lib/supabase/read-all';
 
 export const runtime = 'nodejs';
 export const maxDuration = 60;
+
+// Signal detection STORES a sentence with money in it (budget drift), and this
+// cron has no reader to word it for: a family's language lives only in the
+// browsing member's cookie, with no column on any family, member or profile row
+// to read here (I18N-001). So it is en-US, said out loud rather than inherited
+// from a request that does not exist. No screen shows these stored words as
+// written: the family-signals page and the reasoning report
+// (lib/reasoning/engine-server.ts) both word budget drift again from its
+// `evidence` for their reader, and the proactive AI context words it in en-US
+// (signalWordsFor in lib/intelligence/hard-signals.ts).
+const SIGNAL_LOCALE: LocaleCode = 'en-US';
+const signalText = (key: string, params?: Record<string, string | number>) => translate(getMessages(SIGNAL_LOCALE), key, params);
 
 // Model-refresh cron — keeps the Household Twin graph + Prep Plans continuously
 // updated for every family WITHOUT anyone opening the app. Reuses the exact same
@@ -25,8 +39,14 @@ export async function GET(req: NextRequest) {
     // `.limit(N)` is not a bound — PostgREST caps a response at db-max-rows
     // whatever the client asked for, so this quietly read 1,000. `max` is the
     // same ceiling, honoured by paging to it. See lib/supabase/read-all.ts.
+    // `timezone` is selected alongside `id` because prep generation needs each
+    // family's OWN day, and this loop is already holding that family's row. A
+    // cron over every family is not a reason to fall back to Greenwich: the
+    // whole point of prep plans is "a trip departing today", and read against
+    // Greenwich's today that trip is filtered out as already gone for every
+    // family west of UTC during their own evening.
     const { rows: families, error } = await readAll((from, to) => supabase
-      .from('families').select('id').order('id').range(from, to), { max: 5000 });
+      .from('families').select('id, timezone').order('id').range(from, to), { max: 5000 });
     if (error) throw error;
 
     // Batch the skip-decision reads into ONE query instead of 2-per-family, so the
@@ -57,10 +77,10 @@ export async function GET(req: NextRequest) {
           continue;
         }
         const twin = await runTwinProjection(supabase, fam.id, null);
-        const prep = await runPrepGeneration(supabase, fam.id, null, now);
+        const prep = await runPrepGeneration(supabase, fam.id, null, fam.timezone || 'UTC', now);
         // R10: keep the hard-signal family intelligence current too. Non-fatal —
         // a signal-detection hiccup must not fail the twin/prep refresh.
-        try { await runSignalDetection(supabase, fam.id, now); } catch (e) { console.error(`Signal detection failed for ${fam.id}:`, e); }
+        try { await runSignalDetection(supabase, fam.id, SIGNAL_LOCALE, signalText, now); } catch (e) { console.error(`Signal detection failed for ${fam.id}:`, e); }
         let ok = twin.ok && prep.ok;
         let dirtyWriteFailed = false;
         // Clear the dirty flag once a refresh succeeds.

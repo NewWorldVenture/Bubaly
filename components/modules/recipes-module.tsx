@@ -1,6 +1,7 @@
 'use client';
 
-import { useMemo, useState } from 'react';
+import { useId, useMemo, useState } from 'react';
+import { labelledGroup, openOnKey } from '@/lib/ui/a11y';
 import {
   ChefHat, Plus, Star, StarOff, Trash2, Edit2, Clock, Users,
   Search, Filter, Sparkles, ShoppingCart, Heart, ExternalLink, Vote,
@@ -11,7 +12,7 @@ import { useRealtimeQuery } from '@/lib/hooks/use-realtime-query';
 import { createClient } from '@/lib/supabase/client';
 import { addGroceryItemsAction } from '@/app/(app)/dashboard/grocery/actions';
 import { describeGroceryAdd, groceryAddWasNoOp } from '@/lib/groceries/add-summary';
-import { describeDbError } from '@/lib/supabase/errors';
+import { describeDbError, wroteNoRows } from '@/lib/supabase/errors';
 import { useToast } from '@/components/ui/toast';
 import { PageHeader } from '@/components/app/page-header';
 import { AiInsight } from '@/components/ai/ai-insight';
@@ -25,6 +26,7 @@ import { fmtDate } from '@/lib/utils/format';
 import { cn } from '@/lib/utils/cn';
 import type { Tables } from '@/lib/database.types';
 import { useTranslations } from '@/components/i18n/locale-provider';
+import { safeWebLink } from '@/lib/utils/safe-link';
 
 type Recipe = Tables<'family_recipes'>;
 
@@ -131,8 +133,10 @@ export function RecipesModule() {
 
   async function toggleFavorite(r: Recipe) {
     const supabase = createClient();
-    const { error } = await supabase.from('family_recipes').update({ is_favorite: !r.is_favorite }).eq('id', r.id);
+    // Under RLS a refused row comes back with no error and zero rows, which this used to report as done. Audit C1-S9-81.
+    const { data: updated, error } = await supabase.from('family_recipes').update({ is_favorite: !r.is_favorite }).eq('id', r.id).select('id');
     if (error) return toastError(describeDbError(error));
+    if (wroteNoRows(updated)) return toastError(tr('errors.thatChangeWasNotSaved'));
     void refresh();
   }
 
@@ -156,19 +160,21 @@ export function RecipesModule() {
 
   async function markMade(r: Recipe) {
     const supabase = createClient();
-    const { error } = await supabase.from('family_recipes').update({
+    const { data: updated2, error } = await supabase.from('family_recipes').update({
       times_made: (r.times_made ?? 0) + 1,
       last_made_at: new Date().toISOString(),
-    }).eq('id', r.id);
+    }).eq('id', r.id).select('id');
     if (error) return toastError(describeDbError(error));
+    if (wroteNoRows(updated2)) return toastError(tr('errors.thatChangeWasNotSaved'));
     success(tr('recipesModule.markedAsMadeToday'));
     void refresh();
   }
 
   async function deleteRecipe(id: string) {
     const supabase = createClient();
-    const { error } = await supabase.from('family_recipes').delete().eq('id', id);
+    const { data: removed, error } = await supabase.from('family_recipes').delete().eq('id', id).select('id');
     if (error) return toastError(describeDbError(error));
+    if (wroteNoRows(removed)) return toastError(tr('errors.thatChangeWasNotSaved'));
     void refresh();
     setViewing(null);
   }
@@ -202,10 +208,19 @@ export function RecipesModule() {
 
   async function addToGrocery(recipe: Recipe) {
     const supabase = createClient();
-    const { data: list } = await supabase
+    const { data: list, error } = await supabase
       .from('grocery_lists').select('id')
       .eq('family_id', familyId).eq('is_archived', false).is('archived_at', null)
       .order('created_at').limit(1).maybeSingle();
+    // A failed read is not "you have no list". Without this the next line offers
+    // to CREATE one — so a family with a perfectly good Groceries list, on a read
+    // that was refused, ends up with a second one and their items split across
+    // both. The difference between "no list" and "could not check" is a write.
+    if (error) {
+      console.error('[recipes] grocery list read failed', error);
+      toastError(tr('recipes.couldNotCheckYourGrocery'));
+      return;
+    }
     if (!list) { setNewListName('Groceries'); setGroceryPrompt(recipe); return; } // offer to create one
     await addItemsToList(recipe, list.id);
   }
@@ -246,7 +261,7 @@ export function RecipesModule() {
               <input value={search} inputMode="search" enterKeyHint="search" onChange={(e) => setSearch(e.target.value)}
                 placeholder={tr('recipes.searchRecipes')}
                 className="w-28 bg-transparent text-sm placeholder:text-muted outline-none sm:w-40" />
-              {search && <button onClick={() => setSearch('')}><X className="h-3.5 w-3.5 text-muted" /></button>}
+              {search && <button aria-label={tr('a11y.clearSearch')} onClick={() => setSearch('')}><X className="h-3.5 w-3.5 text-muted" /></button>}
             </div>
             <button onClick={() => { setTonightOpen(true); setTonightPicks(null); }} className="inline-flex items-center gap-1.5 rounded-xl border border-brand/30 bg-brand/10 px-3 py-2 text-sm font-semibold text-brand-text hover:bg-brand/15"><Sparkles className="h-4 w-4" /> Tonight?</button>
             <a href="/dashboard/recipes/vote" className="inline-flex items-center gap-1.5 rounded-xl border border-border bg-surface/60 px-3 py-2 text-sm font-semibold hover:bg-elevated"><Vote className="h-4 w-4" /> {tr('recipes.vote')}</a>
@@ -306,8 +321,10 @@ export function RecipesModule() {
 
             return (
               <div key={recipe.id}
-                className="group glass-card flex cursor-pointer flex-col overflow-hidden p-0 transition hover:-translate-y-0.5"
-                onClick={() => setViewing(recipe)}>
+                role="button" tabIndex={0}
+                className="group glass-card flex cursor-pointer flex-col overflow-hidden p-0 transition hover:-translate-y-0.5 focus-ring"
+                onClick={() => setViewing(recipe)}
+                onKeyDown={(e) => openOnKey(e, () => setViewing(recipe))}>
                 {/* Photo / placeholder */}
                 <div className="relative aspect-video overflow-hidden rounded-t-2xl bg-gradient-to-br from-elevated to-surface">
                   {recipe.photo_url ? (
@@ -334,8 +351,13 @@ export function RecipesModule() {
                   </button>
                 </div>
 
-                {/* Info */}
-                <div className="flex flex-1 flex-col p-4">
+                {/* The card's onClick stays for the mouse. The control is this
+                    button over the info region: the card also holds the favourite
+                    toggle, and role="button" on the card would have presentational
+                    children, so assistive technology may drop that toggle. Its
+                    accessible name is the recipe name and description. */}
+                <button type="button" onClick={(e) => { e.stopPropagation(); setViewing(recipe); }}
+                  className="focus-ring flex flex-1 flex-col p-4 text-left">
                   <h3 className="mb-1 line-clamp-2 font-semibold leading-tight">{recipe.name}</h3>
                   {recipe.description && <p className="mb-2 line-clamp-2 text-xs text-muted">{recipe.description}</p>}
 
@@ -349,7 +371,7 @@ export function RecipesModule() {
                       <span className="ml-auto text-success">{recipe.times_made}{tr('recipes.made')}</span>
                     )}
                   </div>
-                </div>
+                </button>
               </div>
             );
           })}
@@ -376,11 +398,11 @@ export function RecipesModule() {
                     className="rounded-xl p-2 hover:bg-elevated transition">
                     <Heart className={cn('h-5 w-5', viewing.is_favorite ? 'fill-red-400 text-red-400' : 'text-muted')} />
                   </button>
-                  <button onClick={() => { setEditing(viewing); setViewing(null); }}
+                  <button aria-label={tr('a11y.edit')} onClick={() => { setEditing(viewing); setViewing(null); }}
                     className="rounded-xl p-2 text-muted hover:bg-elevated hover:text-fg transition">
                     <Edit2 className="h-5 w-5" />
                   </button>
-                  <button onClick={() => { if (confirm(tr('recipesModule.deleteThisRecipe'))) deleteRecipe(viewing.id); }}
+                  <button aria-label={tr('a11y.delete')} onClick={() => { if (confirm(tr('recipesModule.deleteThisRecipe'))) deleteRecipe(viewing.id); }}
                     className="rounded-xl p-2 text-muted hover:bg-elevated hover:text-danger transition">
                     <Trash2 className="h-5 w-5" />
                   </button>
@@ -486,7 +508,7 @@ export function RecipesModule() {
             {/* Footer */}
             <div className="flex items-center justify-between pt-2">
               {viewing.source_url && (
-                <a href={viewing.source_url} target="_blank" rel="noreferrer"
+                <a href={safeWebLink(viewing.source_url) ?? undefined} target="_blank" rel="noreferrer"
                   className="flex items-center gap-1 text-sm text-brand-text hover:underline">
                   <ExternalLink className="h-3.5 w-3.5" /> {tr('recipes.viewOriginal')}
                 </a>
@@ -575,6 +597,13 @@ function RecipeFormModal({ recipe, familyId, userId, onClose, onSaved }: {
   const [ingredients, setIngredients] = useState<Ingredient[]>(
     recipe ? (recipe.ingredients as unknown as Ingredient[]) : [{ name: '', quantity: '', unit: '' }]
   );
+  // Section headings over a repeating list of controls, and one over a row of
+  // buttons. All three are <span> named by `labelledGroup`: a <label> is for a
+  // single control, and these name regions.
+  const uid = useId();
+  const ingredientsId = `${uid}ingredients`;
+  const instructionsId = `${uid}instructions`;
+  const flagsId = `${uid}flags`;
   const [instructions, setInstructions] = useState<InstructionStep[]>(
     recipe ? (recipe.instructions as unknown as InstructionStep[]) : [{ step: 1, text: '' }]
   );
@@ -615,11 +644,12 @@ function RecipeFormModal({ recipe, familyId, userId, onClose, onSaved }: {
     if (!payload.name) return toastError(tr('recipesModule.recipeNameIsRequired'));
     setLoading(true);
     const supabase = createClient();
-    const { error } = recipe
-      ? await supabase.from('family_recipes').update(payload as never).eq('id', recipe.id)
-      : await supabase.from('family_recipes').insert({ ...payload, family_id: familyId, created_by: userId } as never);
+    const { data: savedRecipe, error } = recipe
+      ? await supabase.from('family_recipes').update(payload as never).eq('id', recipe.id).select('id')
+      : await supabase.from('family_recipes').insert({ ...payload, family_id: familyId, created_by: userId } as never).select('id');
     setLoading(false);
     if (error) { toastError(describeDbError(error)); return; }
+    if (wroteNoRows(savedRecipe)) { toastError(tr('errors.thatChangeWasNotSaved')); return; }
     success(recipe ? 'Recipe updated' : 'Recipe added');
     onSaved();
   }
@@ -677,16 +707,16 @@ function RecipeFormModal({ recipe, familyId, userId, onClose, onSaved }: {
         {/* Ingredients */}
         <div>
           <div className="mb-2 flex items-center justify-between">
-            <label className="text-sm font-medium">{tr('recipes.ingredients')}</label>
+            <span id={ingredientsId} className="text-sm font-medium">{tr('recipes.ingredients')}</span>
             <button type="button" onClick={addIngredient} className="text-xs text-brand-text hover:underline">{tr('recipes.addIngredient')}</button>
           </div>
-          <div className="space-y-2">
+          <div {...labelledGroup(ingredientsId)} className="space-y-2">
             {ingredients.map((ing, i) => (
               <div key={i} className="flex gap-2">
                 <Input value={ing.quantity} onChange={(e) => updateIngredient(i, 'quantity', e.target.value)} placeholder="2" className="w-16 flex-shrink-0" />
                 <Input value={ing.unit} onChange={(e) => updateIngredient(i, 'unit', e.target.value)} placeholder="cups" className="w-20 flex-shrink-0" />
                 <Input value={ing.name} onChange={(e) => updateIngredient(i, 'name', e.target.value)} placeholder={tr('recipes.ingredientName')} className="flex-1" />
-                <button type="button" onClick={() => removeIngredient(i)} className="rounded-lg p-2 text-muted hover:text-danger"><X className="h-4 w-4" /></button>
+                <button type="button" aria-label={tr('a11y.remove')} onClick={() => removeIngredient(i)} className="rounded-lg p-2 text-muted hover:text-danger"><X className="h-4 w-4" /></button>
               </div>
             ))}
           </div>
@@ -695,10 +725,10 @@ function RecipeFormModal({ recipe, familyId, userId, onClose, onSaved }: {
         {/* Instructions */}
         <div>
           <div className="mb-2 flex items-center justify-between">
-            <label className="text-sm font-medium">{tr('recipes.instructions')}</label>
+            <span id={instructionsId} className="text-sm font-medium">{tr('recipes.instructions')}</span>
             <button type="button" onClick={addStep} className="text-xs text-brand-text hover:underline">{tr('recipes.addStep')}</button>
           </div>
-          <div className="space-y-2">
+          <div {...labelledGroup(instructionsId)} className="space-y-2">
             {instructions.map((step, i) => (
               <div key={i} className="flex gap-3">
                 <div className="flex h-8 w-8 flex-shrink-0 items-center justify-center rounded-full bg-brand text-xs font-bold text-brand-fg">
@@ -706,7 +736,7 @@ function RecipeFormModal({ recipe, familyId, userId, onClose, onSaved }: {
                 </div>
                 <Textarea value={step.text} onChange={(e) => updateStep(i, e.target.value)}
                   placeholder={`Step ${step.step}…`} className="flex-1 min-h-[60px]" />
-                <button type="button" onClick={() => removeStep(i)} className="rounded-lg p-2 text-muted hover:text-danger self-start"><X className="h-4 w-4" /></button>
+                <button type="button" aria-label={tr('a11y.remove')} onClick={() => removeStep(i)} className="rounded-lg p-2 text-muted hover:text-danger self-start"><X className="h-4 w-4" /></button>
               </div>
             ))}
           </div>
@@ -714,8 +744,8 @@ function RecipeFormModal({ recipe, familyId, userId, onClose, onSaved }: {
 
         {/* Allergy flags */}
         <div>
-          <label className="mb-2 block text-sm font-medium">{tr('recipes.dietaryFlags')}</label>
-          <div className="flex flex-wrap gap-2">
+          <span id={flagsId} className="mb-2 block text-sm font-medium">{tr('recipes.dietaryFlags')}</span>
+          <div {...labelledGroup(flagsId)} className="flex flex-wrap gap-2">
             {ALLERGY_FLAGS.map((f) => (
               <button key={f} type="button" onClick={() => toggleFlag(f)}
                 className={cn('rounded-lg border px-2.5 py-1 text-xs font-medium transition',

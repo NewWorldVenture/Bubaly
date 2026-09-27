@@ -9,8 +9,23 @@ import {
 } from '@/lib/autopilot/engine';
 import type { MemberTraits } from '@/lib/autopilot/twin';
 
+// These cases pin the zone to UTC EXPLICITLY. They used to assert against a
+// snapshot with no zone at all, which is not "no zone" — it is whichever one
+// the host happened to be in. Naming UTC keeps every expectation below
+// unchanged and makes the zone a stated premise rather than an accident.
+// tests/autopilot-the-familys-day.test.ts covers the non-UTC zones.
+// The subscription suggestions carry money, so the engine words them through the
+// READER's catalogue and formats them in the reader's locale. These cases assert
+// which sentence, which name and which amount; an echo translator shows all
+// three without depending on the catalogue. What a reader actually sees is in
+// tests/a-german-family-reads-engine-money-in-their-own-format.test.ts.
+const echo = (key: string, params?: Record<string, string | number>) => `${key} ${JSON.stringify(params ?? {})}`;
+const expenses = (s: FamilySnapshot) => expenseSuggestions(s, 'en-US', echo);
+const build = (s: FamilySnapshot, traits?: Map<string, MemberTraits>) => buildSuggestions(s, 'en-US', echo, traits);
+
 const base = (over: Partial<FamilySnapshot> = {}): FamilySnapshot => ({
   today: '2026-06-24',
+  tz: 'UTC',
   renewals: [],
   appointments: [],
   overdueChores: [],
@@ -156,23 +171,26 @@ describe('monthlyCents', () => {
 
 describe('expenseSuggestions', () => {
   it('flags an upcoming charge within 7 days', () => {
-    const out = expenseSuggestions(base({ subscriptions: [
+    const out = expenses(base({ subscriptions: [
       { id: 's1', name: 'Netflix', costCents: 1599, cadence: 'monthly', nextCharge: '2026-06-27', lastUsed: '2026-06-23', status: 'active' },
       { id: 's2', name: 'Far', costCents: 999, cadence: 'monthly', nextCharge: '2026-08-01', lastUsed: null, status: 'active' },
     ] }));
     expect(out).toHaveLength(1);
     expect(out[0].kind).toBe('finance');
+    expect(out[0].title).toContain('autopilotEngine.subscriptionCharge');
     expect(out[0].title).toContain('Netflix');
+    expect(out[0].title).toContain('$15.99');
+    expect(out[0].title).toContain('in 3 days');
     expect(out[0].dedupeKey).toBe('sub-charge:s1:2026-06-27');
   });
   it('flags a stale (unused 60+ days) active subscription', () => {
-    const out = expenseSuggestions(base({ subscriptions: [
+    const out = expenses(base({ subscriptions: [
       { id: 's3', name: 'Gym', costCents: 4000, cadence: 'monthly', nextCharge: null, lastUsed: '2026-01-01', status: 'active' },
     ] }));
     expect(out.some((o) => o.dedupeKey === 'sub-stale:s3')).toBe(true);
   });
   it('ignores canceled subscriptions', () => {
-    expect(expenseSuggestions(base({ subscriptions: [
+    expect(expenses(base({ subscriptions: [
       { id: 's4', name: 'Old', costCents: 500, cadence: 'monthly', nextCharge: '2026-06-25', lastUsed: null, status: 'canceled' },
     ] }))).toHaveLength(0);
   });
@@ -231,8 +249,8 @@ describe('applyMemberTraits (Digital Twin modulation)', () => {
   });
   it('buildSuggestions applies the traits map', () => {
     const snap = base({ overdueChores: [{ id: 'c1', title: 'Trash', dueAt: '2026-06-20', memberId: 'm2' }] });
-    const plain = buildSuggestions(snap);
-    const twinned = buildSuggestions(snap, new Map([['m2', forgetful]]));
+    const plain = build(snap);
+    const twinned = build(snap, new Map([['m2', forgetful]]));
     expect(twinned[0].confidence).toBe(plain[0].confidence + 8);
   });
 });
@@ -275,19 +293,19 @@ describe('buildSuggestions + helpers', () => {
     lingeringGroceries: [{ id: 'g1', name: 'Milk', addedAt: '2026-06-10' }],
   });
   it('aggregates and sorts by urgency then confidence', () => {
-    const all = buildSuggestions(snap);
+    const all = build(snap);
     expect(all.length).toBe(3);
     expect(all[0].urgency).toBeGreaterThanOrEqual(all[all.length - 1].urgency);
   });
   it('partitions by tier', () => {
-    const p = partitionByTier(buildSuggestions(snap));
+    const p = partitionByTier(build(snap));
     expect(p.auto.some((d) => d.kind === 'groceries')).toBe(true);
     expect(p.auto.some((d) => d.kind === 'document')).toBe(true); // 95
     expect(p.approve.some((d) => d.kind === 'chore')).toBe(true);
   });
   it('successProbability drops with more/urgent risks and stays 0-100', () => {
     expect(successProbability([])).toBe(100);
-    const p = successProbability(buildSuggestions(snap));
+    const p = successProbability(build(snap));
     expect(p).toBeLessThan(100);
     expect(p).toBeGreaterThanOrEqual(0);
   });
@@ -343,7 +361,7 @@ describe('momentPrepSuggestions (Friction #4 — fold reversible prep into autop
   });
 
   it('is folded into buildSuggestions', () => {
-    const drafts = buildSuggestions(base({
+    const drafts = build(base({
       today: TODAY,
       events: [{ id: 'e5', title: 'Swim meet', startsAt: soon, endsAt: null, memberId: 'm1', allDay: false, location: 'Aquatic Center' }],
     }));

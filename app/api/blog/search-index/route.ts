@@ -23,6 +23,14 @@ const CACHE_CONTROL = 'public, max-age=0, s-maxage=300, stale-while-revalidate=3
 export async function GET(req: NextRequest) {
   // Generous: this is public, cacheable, and a person who clears the box and
   // retypes should never be refused. It exists to bound a scripted hammer.
+  //
+  // Deliberately the PER-INSTANCE limiter, and the one route where that is the
+  // right answer. The response carries s-maxage=300 with no query string, so a
+  // hammer is answered by the CDN and the origin sees about one request per
+  // five minutes per edge location — the cache is the bound here, and the map
+  // is belt-and-braces. The durable limiter would mean a SERVICE-ROLE client and
+  // a database write on an unauthenticated marketing path, to protect a read
+  // that is already cached. See tests/no-route-gates-on-a-per-instance-limit.
   const limit = rateLimit(`blog-search-index:${clientIp(req.headers)}`, { limit: 60, windowMs: 60_000 });
   if (!limit.ok) {
     return NextResponse.json([], { status: 429, headers: { 'Retry-After': String(limit.retryAfter) } });

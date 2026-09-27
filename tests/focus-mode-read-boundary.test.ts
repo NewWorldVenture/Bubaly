@@ -1,3 +1,4 @@
+import { at } from './helpers/source-order';
 import { describe, expect, it } from 'vitest';
 import { readUiSource } from './helpers/i18n-source';
 import fs from 'node:fs';
@@ -21,6 +22,6 @@ describe('focus mode surfaces a failed read (A-05)', () => {
     expect(src).toContain('loadError ?');
     expect(src).toContain('Couldn’t load your day');
     // Error branch precedes the empty/finished branch (match JSX, not the comment).
-    expect(src.indexOf('loadError ?')).toBeLessThan(src.indexOf('total === 0 || finished ?'));
+    expect(at(src, 'loadError ?')).toBeLessThan(at(src, 'total === 0 || finished ?'));
   });
 });

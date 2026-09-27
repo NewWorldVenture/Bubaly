@@ -4,7 +4,7 @@ import Link from 'next/link';
 import { ArrowLeft } from 'lucide-react';
 import { Card } from '@/components/ui/card';
 import { createServiceClient } from '@/lib/supabase/server';
-import { getSocialLinks } from '@/lib/server/social-links';
+import { readSocialLinksSnapshot } from '@/lib/server/social-links';
 import { SocialLinksForm } from './social-links-form';
 
 export const metadata: Metadata = { title: 'Admin · Social links', robots: { index: false } };
@@ -12,7 +12,11 @@ export const dynamic = 'force-dynamic';
 
 export default async function AdminSocialLinksPage() {
   const t = await getTranslations();
-  const links = await getSocialLinks(createServiceClient());
+  // Not a degrading read. A failed read used to arrive here as `{}`, which the
+  // form below is unable to tell from "nothing is configured" — six blank inputs
+  // and a Save that replaces the whole stored object. So when the read does not
+  // answer, there is no form to save: the operator gets the failure and a reload.
+  const snapshot = await readSocialLinksSnapshot(createServiceClient());
 
   return (
     <div className="module-page">
@@ -30,7 +34,17 @@ export default async function AdminSocialLinksPage() {
       </p>
 
       <Card className="mt-6 max-w-2xl p-5 sm:p-6">
-        <SocialLinksForm links={links} />
+        {snapshot.ok ? (
+          <SocialLinksForm links={snapshot.fields} revision={snapshot.revision} />
+        ) : (
+          <div role="alert">
+            <p className="text-sm text-danger">{t('socialLinks.couldNotLoadSavedLinks')}</p>
+            {/* A plain anchor, not next/link: a full load re-runs the read. */}
+            <a href="/admin/settings/social-links" className="mt-3 inline-block text-sm font-medium text-brand-text underline">
+              {t('socialLinks.reloadThisPage')}
+            </a>
+          </div>
+        )}
       </Card>
     </div>
   );

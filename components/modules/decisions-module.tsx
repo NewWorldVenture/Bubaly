@@ -6,12 +6,12 @@
 // rows when you save. 100% Supabase + realtime.
 import { useMemo, useState } from 'react';
 import {
-  Scale, Plus, Trophy, Check, Trash2, Sparkles, DollarSign, Clock, MapPin, Gauge, Star,
+  Scale, Plus, Trophy, Check, Trash2, Sparkles, Wallet, Clock, MapPin, Gauge, Star,
 } from 'lucide-react';
 import { useApp } from '@/components/app/app-context';
 import { useRealtimeQuery } from '@/lib/hooks/use-realtime-query';
 import { createClient } from '@/lib/supabase/client';
-import { describeDbError } from '@/lib/supabase/errors';
+import { describeDbError, wroteNoRows } from '@/lib/supabase/errors';
 import { useToast } from '@/components/ui/toast';
 import { Modal } from '@/components/ui/modal';
 import { Input, Field, Select } from '@/components/ui/input';
@@ -21,7 +21,8 @@ import { PageHeader } from '@/components/app/page-header';
 import { cn } from '@/lib/utils/cn';
 import { evaluateDecision, type OptionInput, type Criterion } from '@/lib/decisions/engine';
 import type { Tables } from '@/lib/database.types';
-import { useTranslations } from '@/components/i18n/locale-provider';
+import { useLocale, useTranslations } from '@/components/i18n/locale-provider';
+import { formatCents } from '@/lib/wallet/ledger';
 
 type Decision = Tables<'family_decisions'>;
 type Option = Tables<'decision_options'>;
@@ -30,6 +31,12 @@ const num = (v: number | null | undefined): number | undefined => (typeof v === 
 
 export function DecisionsModule() {
   const t = useTranslations();
+  // Every amount on this page is in the reader's format: the breach inside the
+  // engine's rationale, the decision's budget chip and each option's cost. USD,
+  // because family_decisions.budget_cents and decision_options.cost_cents carry
+  // no currency column. The cost sits beside a wallet, not a dollar-sign icon:
+  // the formatted amount already carries its symbol where the locale puts it.
+  const locale = useLocale();
   const { familyId, userId } = useApp();
   const { success, error: toastError } = useToast();
 
@@ -61,8 +68,8 @@ export function DecisionsModule() {
       budgetCents: num(selected.budget_cents),
       maxTravelMinutes: num(selected.max_travel_minutes),
       weights: (selected.weights as Partial<Record<Criterion, number>>) ?? {},
-    });
-  }, [selected, myOptions]);
+    }, locale.code, t);
+  }, [selected, myOptions, locale.code, t]);
 
   const [addDecision, setAddDecision] = useState(false);
   const [addOption, setAddOption] = useState(false);
@@ -71,20 +78,25 @@ export function DecisionsModule() {
     if (!selected || !result) return;
     const sb = createClient();
     const updates = result.ranked.map((r) =>
-      sb.from('decision_options').update({ score: r.score, rationale: r.rationale, feasible: r.feasible }).eq('id', r.id),
+      sb.from('decision_options').update({ score: r.score, rationale: r.rationale, feasible: r.feasible }).eq('id', r.id).select('id'),
     );
     const results = await Promise.all(updates);
     const err = results.find((x) => x.error)?.error;
     if (err) { toastError(describeDbError(err)); return; }
+    // A score refused under RLS is no error and zero rows; "Scores saved" is
+    // withheld unless every option's row moved. Audit C1-S9-83.
+    if (results.some((x) => wroteNoRows(x.data))) { toastError(t('errors.thatChangeWasNotSaved')); return; }
     success(t('decisionsModule.scoresSavedToTheDecision'));
   }
 
   async function choose(optionId: string) {
     if (!selected) return;
     const sb = createClient();
-    const { error } = await sb.from('family_decisions')
-      .update({ decided_option_id: optionId, status: 'decided' }).eq('id', selected.id);
+    // Under RLS a refused row comes back with no error and zero rows, which this used to report as done. Audit C1-S9-83.
+    const { data: updated, error } = await sb.from('family_decisions')
+      .update({ decided_option_id: optionId, status: 'decided' }).eq('id', selected.id).select('id');
     if (error) { toastError(describeDbError(error)); return; }
+    if (wroteNoRows(updated)) { toastError(t('errors.thatChangeWasNotSaved')); return; }
     success(t('decisionsModule.decisionRecorded'));
   }
 
@@ -115,7 +127,7 @@ export function DecisionsModule() {
                 onClick={() => setSelectedId(d.id)}
                 className={cn(
                   'flex w-full items-center justify-between rounded-lg border px-3 py-2.5 text-left text-sm transition',
-                  selected?.id === d.id ? 'border-primary bg-primary/10' : 'border-border hover:bg-muted/5',
+                  selected?.id === d.id ? 'border-brand bg-brand/10' : 'border-border hover:bg-muted/5',
                 )}
               >
                 <span className="truncate">{d.question}</span>
@@ -128,7 +140,7 @@ export function DecisionsModule() {
           <div className="space-y-4 lg:col-span-2">
             {selected && (
               <>
-                <div className="rounded-xl border border-border bg-card p-4">
+                <div className="rounded-xl border border-border bg-surface/40 p-4">
                   <div className="flex items-start justify-between gap-3">
                     <div>
                       <h2 className="text-base font-semibold">{selected.question}</h2>
@@ -138,7 +150,7 @@ export function DecisionsModule() {
                   </div>
                   <div className="mt-3 flex flex-wrap gap-2 text-xs text-muted">
                     {typeof selected.budget_cents === 'number' && (
-                      <span className="rounded-full border border-border px-2 py-0.5">{t('decisions.budget')}{(selected.budget_cents / 100).toFixed(0)}</span>
+                      <span className="rounded-full border border-border px-2 py-0.5">{t('decisions.budgetAmount', { amount: formatCents(selected.budget_cents, 'USD', locale.code) })}</span>
                     )}
                     {typeof selected.max_travel_minutes === 'number' && (
                       <span className="rounded-full border border-border px-2 py-0.5">{t('decisions.travel')} {selected.max_travel_minutes}m</span>
@@ -167,7 +179,7 @@ export function DecisionsModule() {
                         return (
                           <div key={r.id} className={cn(
                             'rounded-xl border p-4',
-                            isWinner ? 'border-amber-400/50 bg-amber-400/5' : r.feasible ? 'border-border bg-card' : 'border-rose-500/30 bg-rose-500/5',
+                            isWinner ? 'border-amber-400/50 bg-amber-400/5' : r.feasible ? 'border-border bg-surface/40' : 'border-rose-500/30 bg-rose-500/5',
                           )}>
                             <div className="flex items-center justify-between gap-3">
                               <div className="flex items-center gap-2">
@@ -179,13 +191,13 @@ export function DecisionsModule() {
                               <div className="flex items-center gap-3">
                                 <span className="text-sm font-semibold tabular-nums">{r.score}</span>
                                 <div className="h-1.5 w-24 overflow-hidden rounded-full bg-muted/10">
-                                  <div className={cn('h-full rounded-full', r.feasible ? 'bg-primary' : 'bg-rose-400')} style={{ width: `${r.score}%` }} />
+                                  <div className={cn('h-full rounded-full', r.feasible ? 'bg-brand' : 'bg-rose-400')} style={{ width: `${r.score}%` }} />
                                 </div>
                               </div>
                             </div>
                             <p className="mt-2 text-xs text-muted">{r.rationale}</p>
                             <div className="mt-2 flex flex-wrap items-center gap-3 text-[11px] text-muted">
-                              {typeof opt.cost_cents === 'number' && <span className="flex items-center gap-1"><DollarSign className="size-3" />{(opt.cost_cents / 100).toFixed(0)}</span>}
+                              {typeof opt.cost_cents === 'number' && <span className="flex items-center gap-1"><Wallet className="size-3" />{formatCents(opt.cost_cents, 'USD', locale.code)}</span>}
                               {typeof opt.time_minutes === 'number' && <span className="flex items-center gap-1"><Clock className="size-3" />{opt.time_minutes}m</span>}
                               {typeof opt.travel_minutes === 'number' && <span className="flex items-center gap-1"><MapPin className="size-3" />{opt.travel_minutes}m</span>}
                               {typeof opt.load_delta === 'number' && <span className="flex items-center gap-1"><Gauge className="size-3" />load {opt.load_delta}</span>}

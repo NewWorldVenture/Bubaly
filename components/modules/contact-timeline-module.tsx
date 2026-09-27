@@ -62,6 +62,10 @@ export function ContactTimelineModule({
 }) {
   const tr = useTranslations();
   const locale = useLocale().code;
+  // Inline rather than a toast: this component is rendered on its own in
+  // tests and does not otherwise depend on <ToastProvider>, and the reason a
+  // delete or a log failed belongs beside the timeline it failed on.
+  const [actionError, setActionError] = useState<string | null>(null);
   const [composerOpen, setComposerOpen] = useState(false);
   const [pending, startTransition] = useTransition();
   const [busyId, setBusyId] = useState<string | null>(null);
@@ -71,9 +75,17 @@ export function ContactTimelineModule({
   const remove = (entryId: string) => {
     const rawId = entryId.replace(/^int-/, '');
     setBusyId(entryId);
+    setActionError(null);
     startTransition(async () => {
-      await deleteInteractionAction({ id: rawId, contactId: contact.id });
-      setBusyId(null);
+      // The action returns void and THROWS on failure; without a catch the
+      // throw skipped `setBusyId(null)` and the row span forever, silently.
+      try {
+        await deleteInteractionAction({ id: rawId, contactId: contact.id });
+      } catch (err) {
+        setActionError(err instanceof Error && err.message ? err.message : tr('globalError.somethingWentWrong'));
+      } finally {
+        setBusyId(null);
+      }
     });
   };
 
@@ -104,7 +116,7 @@ export function ContactTimelineModule({
       {/* Health card */}
       <section className="mt-5 rounded-2xl border border-border bg-surface p-4">
         <div className="flex flex-wrap items-center gap-2">
-          <span className="grid h-9 w-9 place-items-center rounded-xl bg-brand/12 ring-1 ring-brand/25">
+          <span className="grid h-9 w-9 place-items-center rounded-xl bg-brand/10 ring-1 ring-brand/25">
             <HeartPulse className="h-5 w-5 text-brand-text" />
           </span>
           <span className={cn('rounded-full px-2.5 py-1 text-[11px] font-bold uppercase tracking-wide', hs.chip)}>{tr(hs.labelKey)}</span>
@@ -119,10 +131,19 @@ export function ContactTimelineModule({
         <ReconnectDrafter contactId={contact.id} name={contact.name} />
       </section>
 
+      {actionError && (
+        <p role="alert" className="mt-3 rounded-xl border border-danger/30 bg-danger/[0.06] px-3 py-2 text-xs text-danger">
+          {actionError}
+        </p>
+      )}
+
       {/* Composer */}
       {composerOpen && (
         <form
-          action={(fd) => startTransition(async () => { await logInteractionAction(fd); setComposerOpen(false); })}
+          action={(fd) => startTransition(async () => {
+            try { await logInteractionAction(fd); setComposerOpen(false); }
+            catch (err) { setActionError(err instanceof Error && err.message ? err.message : tr('globalError.somethingWentWrong')); }
+          })}
           className="mt-4 rounded-2xl border border-brand/30 bg-brand/[0.05] p-4"
         >
           <input type="hidden" name="contact_id" value={contact.id} />
@@ -173,7 +194,7 @@ export function ContactTimelineModule({
                   <span className="absolute bottom-0 left-[21px] top-9 w-px bg-border" aria-hidden />
                   <span className={cn(
                     'z-10 grid h-9 w-9 shrink-0 place-items-center rounded-xl ring-1',
-                    e.kind === 'birthday' ? 'bg-pink-500/12 ring-pink-400/25' : 'bg-white/[0.04] ring-white/10',
+                    e.kind === 'birthday' ? 'bg-pink-500/10 ring-pink-400/25' : 'bg-white/[0.04] ring-white/10',
                   )}>
                     <Icon className={cn('h-4 w-4', e.kind === 'birthday' ? 'text-pink-400' : 'text-brand-text')} />
                   </span>
@@ -240,7 +261,7 @@ function ReconnectDrafter({ contactId, name }: { contactId: string; name: string
         <button
           onClick={() => draft(tone)}
           disabled={pending}
-          className="inline-flex h-9 items-center gap-1.5 rounded-xl bg-brand/12 px-3 text-xs font-bold text-brand-text ring-1 ring-brand/25 transition hover:bg-brand/20 disabled:opacity-60"
+          className="inline-flex h-9 items-center gap-1.5 rounded-xl bg-brand/10 px-3 text-xs font-bold text-brand-text ring-1 ring-brand/25 transition hover:bg-brand/20 disabled:opacity-60"
         >
           {pending ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Sparkles className="h-3.5 w-3.5" />}
           {tr('contactTimeline.draftAMessageWithAi')}

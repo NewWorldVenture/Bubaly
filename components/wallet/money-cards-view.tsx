@@ -19,7 +19,7 @@ import { useToast } from '@/components/ui/toast';
 import { Avatar } from '@/components/ui/avatar';
 import { cn } from '@/lib/utils/cn';
 import { WalletSubnav } from '@/components/wallet/wallet-subnav';
-import { formatCents } from '@/lib/wallet/ledger';
+import { formatCents as formatCentsIn } from '@/lib/wallet/ledger';
 import {
   SPEND_WINDOWS, BLOCKABLE_CATEGORIES, type SpendWindow,
 } from '@/lib/wallet/card-controls';
@@ -27,7 +27,7 @@ import {
   startConnectOnboardingAction, issueCardAction, setCardFrozenAction, updateCardControlsAction,
 } from '@/app/(app)/money/actions';
 import { CardRevealModal } from '@/components/wallet/card-reveal-modal';
-import { useTranslations } from '@/components/i18n/locale-provider';
+import { useLocale, useTranslations } from '@/components/i18n/locale-provider';
 
 export type CardChild = { id: string; name: string; color: string | null };
 export type IssuedCard = {
@@ -91,12 +91,35 @@ export function MoneyCardsView({
 
   async function issueAllVirtual() {
     setBusy('issue-all');
-    for (const child of childrenWithoutCards) {
-      await issueCardAction({ childWalletId: child.id, type: 'virtual', spendLimitCents: null, spendWindow: 'per_authorization' });
+    // Every result used to be discarded and the toast reported the number
+    // ATTEMPTED as the number issued. What was thrown away includes Trust-Engine
+    // denials and "Finish account setup first" — the product REFUSING, reported
+    // to a parent as success, on a payment instrument — and a THROW part-way
+    // left `setBusy(null)` unreached (the button stuck), skipped the remaining
+    // children, and said nothing. The four other issueCardAction call sites in
+    // this file check res.ok; this one did not. Report what actually happened:
+    // every child is attempted, the count is the number issued, and the first
+    // refusal's reason is what the parent reads. Audit C4-S4-04.
+    const failures: string[] = [];
+    let issued = 0;
+    try {
+      for (const child of childrenWithoutCards) {
+        const res = await issueCardAction({ childWalletId: child.id, type: 'virtual', spendLimitCents: null, spendWindow: 'per_authorization' });
+        if (!res.ok) failures.push(res.error || t('globalError.somethingWentWrong'));
+        else issued += 1;
+      }
+    } catch (err) {
+      failures.push(err instanceof Error && err.message ? err.message : t('globalError.somethingWentWrong'));
+    } finally {
+      setBusy(null);
     }
-    setBusy(null);
-    success(`Issued ${childrenWithoutCards.length} virtual card${childrenWithoutCards.length !== 1 ? 's' : ''}!`);
+    if (issued > 0) success(`Issued ${issued} virtual card${issued !== 1 ? 's' : ''}!`);
+    // Refresh either way: the list is the honest record of what now exists, and
+    // a partial run must not leave the screen showing the pre-run state.
     router.refresh();
+    // Surface the actual reason rather than a count — the reason is what tells
+    // a parent what to do next, and it is the thing that was being discarded.
+    if (failures.length > 0) toastError(failures[0]);
   }
 
   async function toggleFreeze(card: IssuedCard) {
@@ -330,6 +353,10 @@ function CardRow({ card, canManage, busy, expanded, onFreeze, onReveal, onToggle
   card: IssuedCard; canManage: boolean; busy: string | null; expanded: string | null;
   onFreeze: () => void; onReveal: () => void; onToggleControls: () => void; onSaved: () => void;
 }) {
+  const locale = useLocale();
+  // Money follows the reader; the currency stays the money's own.
+  const formatCents = (cents: number, currency?: string) =>
+    formatCentsIn(cents, currency, locale.code);
   const t = useTranslations();
   const tr = useTranslations();
   return (
@@ -405,7 +432,7 @@ function PhysicalCardModal({ child, onClose, onIssued }: {
     });
     setLoading(false);
     if (!res.ok) return toastError(res.error ?? 'Could not order card');
-    success(`Physical card ordered for ${child.name}!`);
+    success(t('wallet.physicalCardOrdered', { name: child.name }));
     onIssued();
   }
 

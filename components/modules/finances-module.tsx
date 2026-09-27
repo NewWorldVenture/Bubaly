@@ -2,6 +2,7 @@
 
 import Link from 'next/link';
 import { useMemo, useState } from 'react';
+import { useDismissOnEscape } from '@/lib/hooks/use-dismiss-on-escape';
 import {
   Plus, Link2, MoreHorizontal, Wallet, PiggyBank, CreditCard, TrendingUp, Landmark,
   ArrowDownToLine, ArrowUpRight, Check, ChevronLeft, ChevronRight, Lightbulb,
@@ -12,6 +13,7 @@ import { useApp } from '@/components/app/app-context';
 import { useRealtimeQuery } from '@/lib/hooks/use-realtime-query';
 import { createClient } from '@/lib/supabase/client';
 import { createTransactionAction } from '@/app/(app)/dashboard/billing/actions';
+import { reportRefusal } from '@/lib/auth/step-up-client';
 import { describeDbError } from '@/lib/supabase/errors';
 import { useToast } from '@/components/ui/toast';
 import { PageHeader } from '@/components/app/page-header';
@@ -23,7 +25,8 @@ import { ErrorState, SkeletonList } from '@/components/ui/states';
 import { Avatar } from '@/components/ui/avatar';
 import { cn } from '@/lib/utils/cn';
 import type { Tables, TransactionType, AccountType } from '@/lib/database.types';
-import { useTranslations } from '@/components/i18n/locale-provider';
+import { useLocale, useTranslations } from '@/components/i18n/locale-provider';
+import type { LocaleCode } from '@/lib/i18n/locales';
 import { todayInZone } from '@/lib/schedule/zoned';
 
 type Account = Tables<'financial_accounts'>;
@@ -63,16 +66,26 @@ const ACCOUNT_TINT: Record<string, string> = {
 
 const CATEGORIES = ['Groceries', 'Dining Out', 'Housing', 'Transportation', 'Utilities', 'Kids', 'Entertainment', 'Shopping', 'Subscriptions', 'Healthcare', 'Insurance', 'Education', 'Income', 'Transfer'];
 
-const usd = (n: number) => new Intl.NumberFormat('en-US', { style: 'currency', currency: 'USD' }).format(n);
-const usd0 = (n: number) => new Intl.NumberFormat('en-US', { style: 'currency', currency: 'USD', maximumFractionDigits: 0 }).format(n);
+const usdIn = (locale: LocaleCode) => (n: number) =>
+  new Intl.NumberFormat(locale, { style: 'currency', currency: 'USD' }).format(n);
+const usd0In = (locale: LocaleCode) => (n: number) =>
+  new Intl.NumberFormat(locale, { style: 'currency', currency: 'USD', maximumFractionDigits: 0 }).format(n);
 const num = (v: unknown) => (typeof v === 'number' ? v : Number(v ?? 0)) || 0;
 function ymd(d: Date) { return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`; }
-function shortDate(s: string) { const [y, m, d] = s.split('-').map(Number); return new Date(y, m - 1, d).toLocaleDateString('en-US', { month: 'short', day: 'numeric' }); }
+const shortDateIn = (locale: LocaleCode) => (s: string) => { const [y, m, d] = s.split('-').map(Number); return new Date(y, m - 1, d).toLocaleDateString(locale, { month: 'short', day: 'numeric' }); };
 
 const MANAGE = '/dashboard/billing?view=manage';
 
 export function FinancesModule() {
   const tr = useTranslations();
+  // Money follows the reader's locale; the currency does not.
+  const locale = useLocale();
+  const shortDate = shortDateIn(locale.code);
+  // Memoised on the locale code, not rebuilt per render: usdIn returns a NEW
+  // function each call, and an unstable identity in a useMemo dependency list
+  // either defeats the memo or leaves a stale closure behind it.
+  const usd = useMemo(() => usdIn(locale.code), [locale.code]);
+  const usd0 = useMemo(() => usd0In(locale.code), [locale.code]);
   const { familyId, userId, members, selfMember } = useApp();
   const { success, error: toastError } = useToast();
   const selfId = selfMember?.id ?? null;
@@ -80,6 +93,7 @@ export function FinancesModule() {
   const [addOpen, setAddOpen] = useState(false);
   const [linkOpen, setLinkOpen] = useState(false);
   const [moreOpen, setMoreOpen] = useState(false);
+  useDismissOnEscape(moreOpen, () => setMoreOpen(false));
   const [calMonth, setCalMonth] = useState(() => { const d = new Date(); return new Date(d.getFullYear(), d.getMonth(), 1); });
 
   const { data: accounts, loading: la, error: accountsError, refresh: refreshAccounts } = useRealtimeQuery<Account>({
@@ -163,7 +177,7 @@ export function FinancesModule() {
     if (spendByCat.length === 0) return 'Add a few transactions to unlock spending insights.';
     const top = spendByCat.find((r) => r.category !== 'Other') ?? spendByCat[0];
     return `Your biggest category this month is ${top.category} at ${usd(top.total)}. Set a budget to stay on track.`;
-  }, [spendByCat]);
+  }, [spendByCat, usd]);
 
   const loading = la || lt || lb || lbi || lg;
   const readError = accountsError || txnsError || budgetsError || billsError || goalsError;
@@ -191,7 +205,9 @@ export function FinancesModule() {
                 <Button variant="outline" size="sm" onClick={() => setMoreOpen((v) => !v)} aria-label={tr('finances.more')}><MoreHorizontal className="h-4 w-4" /> {tr('finances.more')}</Button>
                 {moreOpen && (
                   <>
-                    <div className="fixed inset-0 z-10" onClick={() => setMoreOpen(false)} />
+                    {/* Presentational; the keyboard path is Escape, bound above. */}
+                    {/* eslint-disable-next-line jsx-a11y/click-events-have-key-events, jsx-a11y/no-static-element-interactions */}
+                    <div aria-hidden="true" className="fixed inset-0 z-10" onClick={() => setMoreOpen(false)} />
                     <div className="absolute right-0 z-20 mt-1 w-56 rounded-xl border border-border bg-elevated p-1 shadow-lg">
                       <Link href={MANAGE} className="block rounded-lg px-3 py-2 text-sm hover:bg-surface">{tr('finances.manageBudgetsBillsAmpReports')}</Link>
                       <Link href={MANAGE} className="block rounded-lg px-3 py-2 text-sm hover:bg-surface">{tr('finances.planAmpSubscription')}</Link>
@@ -491,6 +507,7 @@ export function FinancesModule() {
 }
 
 function BillsCalendar({ month, bills, onPrev, onNext }: { month: Date; bills: Bill[]; onPrev: () => void; onNext: () => void }) {
+  const locale = useLocale();
   const tr = useTranslations();
   const y = month.getFullYear(), m = month.getMonth();
   const daysInMonth = new Date(y, m + 1, 0).getDate();
@@ -515,7 +532,7 @@ function BillsCalendar({ month, bills, onPrev, onNext }: { month: Date; bills: B
     <div>
       <div className="mb-2 flex items-center justify-between">
         <button onClick={onPrev} aria-label={tr('finances.previousMonth')} className="rounded p-1 hover:bg-elevated"><ChevronLeft className="h-3.5 w-3.5" /></button>
-        <span className="text-sm font-semibold">{month.toLocaleDateString('en-US', { month: 'long', year: 'numeric' })}</span>
+        <span className="text-sm font-semibold">{month.toLocaleDateString(locale.code, { month: 'long', year: 'numeric' })}</span>
         <button onClick={onNext} aria-label={tr('finances.nextMonth')} className="rounded p-1 hover:bg-elevated"><ChevronRight className="h-3.5 w-3.5" /></button>
       </div>
       <div className="grid grid-cols-7 gap-0.5 text-center">
@@ -561,7 +578,7 @@ function AddTransactionModal({ familyId, userId, selfId, accounts, members, onCl
       memberId: String(f.get('member_id') ?? '') || null,
     });
     setLoading(false);
-    if (!res.ok) return onError(res.error);
+    if (!res.ok) return reportRefusal(res, onError);
     onSaved();
   }
 

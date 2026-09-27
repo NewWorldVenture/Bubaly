@@ -119,6 +119,29 @@ export function isSafeReturnPath(next: string | null | undefined): next is strin
   return true;
 }
 
+/**
+ * The path a guard should bring the session back to: the page AND the query it
+ * was reached with. A page that other code links to with a query — the plan
+ * gate's `/dashboard/billing?upgrade=1&need=…`, the "Manage" link's
+ * `?view=manage` — loses what the family was sent there for if the guard
+ * returns to the bare path after the code is entered.
+ *
+ * `params` is a Next.js page's resolved `searchParams`. The result is still
+ * checked by `stepUpPath`, like any other return path.
+ */
+export function returnPathWith(
+  pathname: string,
+  params: Readonly<Record<string, string | readonly string[] | undefined>>,
+): string {
+  const query = new URLSearchParams();
+  for (const [key, value] of Object.entries(params)) {
+    if (value === undefined) continue;
+    for (const one of typeof value === 'string' ? [value] : value) query.append(key, one);
+  }
+  const qs = query.toString();
+  return qs ? `${pathname}?${qs}` : pathname;
+}
+
 /** Where to send an `aal1` session so it can come back to `returnTo` afterwards. */
 export function stepUpPath(returnTo: string): string {
   const safe = isSafeReturnPath(returnTo) ? returnTo : '/dashboard';

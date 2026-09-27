@@ -31,8 +31,10 @@ export async function reportListingAction(
   if (details && details.length > 1000) return { ok: false, error: t('actions.keepTheDetailsUnder1000') };
 
   // The listing must exist + be reachable; can't report your own.
-  const { data: listing } = await supabase
+  const { data: listing, error: listingReadError } = await supabase
     .from('marketplace_listings').select('id, member_id').eq('id', input.listingId).maybeSingle();
+  // A refused read is not an absence: it used to return the "not found" answer below. Audit C1-S9-75.
+  if (listingReadError) return { ok: false, error: describeActionError(listingReadError, t('actions.couldNotCheckThatRefresh')) };
   if (!listing) return { ok: false, error: t('actions.thatListingNoLongerExists') };
   if (!canReport(listing.member_id, ctx.active.member.id)) {
     return { ok: false, error: t('actions.youCanTReportYour') };

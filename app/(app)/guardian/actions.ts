@@ -3,21 +3,23 @@
 import { requireUserContext } from '@/lib/supabase/auth';
 import { getTranslations } from '@/lib/i18n/server';
 import { createServer, createServiceClient } from '@/lib/supabase/server';
-import { withGuardianTables } from '@/lib/supabase/guardian-tables';
 import { revalidatePath } from 'next/cache';
 import { isManager } from '@/lib/constants/roles';
 import type { TrustLevel } from '@/lib/guardian/trust';
 import type { RoutingMode } from '@/lib/guardian/pipeline';
+import { guardianProfilePayload, type GuardianProfileWrite } from '@/lib/guardian/routing-form';
 import { runLearningForFamily } from '@/lib/guardian/learning-run';
-import { describeActionError } from '@/lib/supabase/errors';
+import { describeActionError, wroteNoRows } from '@/lib/supabase/errors';
+import type { Database, GuardianContext } from '@/lib/database.types';
 
 type ActionResult<T = void> = { ok: true; data?: T } | { ok: false; error: string };
 
-// Guardian settings govern a child's call/message SAFETY screening. RLS on the
-// guardian tables is family-scoped (any member), and children have real logins,
-// so these server actions are the authorization boundary: only a family manager
-// (parent/adult) may change safety config. The failure-only shape is assignable
-// to every ActionResult<T>.
+// Guardian settings govern a child's call/message SAFETY screening, and children
+// have real logins. Only a family manager (parent/adult) may change safety
+// config. These actions check that first; the database checks it too since 0215
+// (routing rules) and 0345 (contacts, member profiles, suggestions), where
+// can_manage_family is the same parent/adult test as isManager. The
+// failure-only shape is assignable to every ActionResult<T>.
 async function guardianForbidden(): Promise<{ ok: false; error: string }> {
   const t = await getTranslations();
   return { ok: false, error: t('actions.onlyAParentOrGuardian') };
@@ -28,15 +30,7 @@ function actionFailure<T = void>(operation: string, message: string, error: unkn
   return { ok: false, error: describeActionError(error, message) };
 }
 
-type GuardianAuditEntry = {
-  family_id: string;
-  actor_user_id: string;
-  actor: string;
-  action: string;
-  entity_type: string;
-  entity_id?: string;
-  detail?: Record<string, unknown>;
-};
+type GuardianAuditEntry = Database['public']['Tables']['guardian_audit_log']['Insert'];
 
 /**
  * Append a Guardian audit event (best-effort). guardian_audit_log is SELECT-only
@@ -48,8 +42,8 @@ type GuardianAuditEntry = {
  */
 async function logGuardianAudit(entry: GuardianAuditEntry): Promise<void> {
   try {
-    const svc = withGuardianTables(createServiceClient());
-    const { error } = await svc.from('guardian_audit_log').insert(entry as never);
+    const svc = createServiceClient();
+    const { error } = await svc.from('guardian_audit_log').insert(entry);
     if (error) console.error('[guardian-audit] write was not logged', error);
   } catch (err) {
     console.error('[guardian-audit] write was not logged', err);
@@ -89,7 +83,6 @@ export async function upsertContactAction(input: {
   const ctx = await requireUserContext();
   if (!isManager(ctx.active.role)) return guardianForbidden();
   const supabase = await createServer();
-  const db = withGuardianTables(supabase);
   const familyId = ctx.active.familyId;
   const userId = ctx.user.id;
 
@@ -107,14 +100,20 @@ export async function upsertContactAction(input: {
 
   let result: { data: { id: string } | null; error: { message: string } | null };
   if (input.id) {
-    result = await (db.from('guardian_contacts') as ReturnType<typeof supabase.from>)
-      .update({ ...payload, created_by: undefined })
+    // Neither `created_by` nor `family_id` is in the Update shape, deliberately:
+    // an edit cannot rewrite who added the contact, and no path can move a
+    // contact between families (the row is already selected by family_id below).
+    // Dropping them here says that in the code rather than passing `undefined`
+    // and hoping.
+    const { created_by: _createdBy, family_id: _familyId, ...editable } = payload;
+    result = await supabase.from('guardian_contacts')
+      .update(editable)
       .eq('id', input.id)
       .eq('family_id', familyId)
       .select('id')
       .single() as typeof result;
   } else {
-    result = await (db.from('guardian_contacts') as ReturnType<typeof supabase.from>)
+    result = await supabase.from('guardian_contacts')
       .insert(payload)
       .select('id')
       .single() as typeof result;
@@ -143,12 +142,16 @@ export async function deleteContactAction(contactId: string): Promise<ActionResu
   const ctx = await requireUserContext();
   if (!isManager(ctx.active.role)) return guardianForbidden();
   const supabase = await createServer();
-  const db = withGuardianTables(supabase);
-  const { error } = await (db.from('guardian_contacts') as ReturnType<typeof supabase.from>)
+  // 0318 makes this table manager-written, and RLS FILTERS a delete rather than
+  // refusing it — so a stale id answered `error: null` and reported the contact
+  // gone. The code gate above already stops a non-manager; this stops a lie.
+  const { data: deleted, error } = await supabase.from('guardian_contacts')
     .delete()
     .eq('id', contactId)
-    .eq('family_id', ctx.active.familyId);
+    .eq('family_id', ctx.active.familyId)
+    .select('id');
   if (error) return actionFailure('delete the Guardian contact', t('guardian.couldNotDeleteTheGuardianContact'), error);
+  if (wroteNoRows(deleted)) return { ok: false, error: t('guardian.couldNotDeleteTheGuardianContact') };
   revalidatePath('/guardian/contacts');
   return { ok: true };
 }
@@ -161,15 +164,19 @@ export async function updateContactTrustAction(
   const ctx = await requireUserContext();
   if (!isManager(ctx.active.role)) return guardianForbidden();
   const supabase = await createServer();
-  const db = withGuardianTables(supabase);
   const familyId = ctx.active.familyId;
 
-  const { error } = await (db.from('guardian_contacts') as ReturnType<typeof supabase.from>)
+  // The audit entry below records the NEW trust level unconditionally, so a
+  // filtered write logged a trust change that never happened — on the one field
+  // that decides whether a caller rings through. Read back before logging.
+  const { data: trusted, error } = await supabase.from('guardian_contacts')
     .update({ trust_level: trustLevel, trust_override: true })
     .eq('id', contactId)
-    .eq('family_id', familyId);
+    .eq('family_id', familyId)
+    .select('id');
 
   if (error) return actionFailure('update contact trust', t('guardian.couldNotUpdateContactTrust'), error);
+  if (wroteNoRows(trusted)) return { ok: false, error: t('guardian.couldNotUpdateContactTrust') };
 
   await logGuardianAudit({
     family_id: familyId,
@@ -188,38 +195,24 @@ export async function updateContactTrustAction(
 
 // ── Member Profile ───────────────────────────────────────────────────────────
 
-export async function upsertMemberProfileAction(input: {
-  member_id: string;
-  ai_persona_name?: string;
-  ai_greeting_template?: string;
-  voicemail_greeting?: string;
-  current_context?: string;
-  default_mode_unknown?: RoutingMode;
-  default_mode_known?: RoutingMode;
-  default_mode_suspected_spam?: RoutingMode;
-  context_overrides?: Record<string, RoutingMode>;
-}): Promise<ActionResult> {
+// The writable set and the payload builder live in lib/guardian/routing-form.ts
+// so the form and this action cannot disagree about which columns exist. They
+// did: the settings form renders an editable row for six trust tiers, this
+// action accepted three, and nothing anywhere wrote default_mode_immediate,
+// default_mode_close or default_mode_trusted — the three the pipeline routes
+// immediate family, close family and trusted friends through.
+export async function upsertMemberProfileAction(
+  input: GuardianProfileWrite,
+): Promise<ActionResult> {
   const t = await getTranslations();
   const ctx = await requireUserContext();
   if (!isManager(ctx.active.role)) return guardianForbidden();
   const supabase = await createServer();
-  const db = withGuardianTables(supabase);
   const familyId = ctx.active.familyId;
 
-  const payload: Record<string, unknown> = {
-    family_id: familyId,
-    member_id: input.member_id,
-  };
-  if (input.ai_persona_name !== undefined) payload.ai_persona_name = input.ai_persona_name;
-  if (input.ai_greeting_template !== undefined) payload.ai_greeting_template = input.ai_greeting_template;
-  if (input.voicemail_greeting !== undefined) payload.voicemail_greeting = input.voicemail_greeting;
-  if (input.current_context !== undefined) payload.current_context = input.current_context;
-  if (input.default_mode_unknown !== undefined) payload.default_mode_unknown = input.default_mode_unknown;
-  if (input.default_mode_known !== undefined) payload.default_mode_known = input.default_mode_known;
-  if (input.default_mode_suspected_spam !== undefined) payload.default_mode_suspected_spam = input.default_mode_suspected_spam;
-  if (input.context_overrides !== undefined) payload.context_overrides = input.context_overrides;
+  const payload = guardianProfilePayload(input, familyId);
 
-  const { error } = await (db.from('guardian_member_profiles') as ReturnType<typeof supabase.from>)
+  const { error } = await supabase.from('guardian_member_profiles')
     .upsert(payload, { onConflict: 'family_id,member_id' });
 
   if (error) return actionFailure('save the Guardian member profile', t('guardian.couldNotSaveTheGuardianMember'), error);
@@ -231,20 +224,27 @@ export async function upsertMemberProfileAction(input: {
 
 export async function updateContextAction(
   memberId: string,
-  context: string,
+  // `current_context` is CHECK-constrained to these six values. Taking the
+  // union here means an unlisted context is a compile error at the call site,
+  // not a 23514 the user sees as "could not update".
+  context: GuardianContext,
 ): Promise<ActionResult> {
   const t = await getTranslations();
   const ctx = await requireUserContext();
   if (!isManager(ctx.active.role)) return guardianForbidden();
   const supabase = await createServer();
-  const db = withGuardianTables(supabase);
 
-  const { error } = await (db.from('guardian_member_profiles') as ReturnType<typeof supabase.from>)
+  const { data: contexted, error } = await supabase.from('guardian_member_profiles')
     .update({ current_context: context })
     .eq('member_id', memberId)
-    .eq('family_id', ctx.active.familyId);
+    .eq('family_id', ctx.active.familyId)
+    .select('member_id');
 
   if (error) return actionFailure('update the Guardian context', t('guardian.couldNotUpdateTheGuardianContext'), error);
+  // `current_context` ("at school", "asleep") is read by the routing pipeline,
+  // so a silent no-op routes calls against a state the parent thought they had
+  // changed.
+  if (wroteNoRows(contexted)) return { ok: false, error: t('guardian.couldNotUpdateTheGuardianContext') };
 
   revalidatePath('/guardian');
   return { ok: true };
@@ -262,7 +262,6 @@ export async function assignGuardianPhoneAction(input: {
   const ctx = await requireUserContext();
   if (!isManager(ctx.active.role)) return guardianForbidden();
   const supabase = await createServer();
-  const db = withGuardianTables(supabase);
   const familyId = ctx.active.familyId;
 
   // Normalize: strip everything but digits/+, coerce to E.164 (assume US if 10 digits).
@@ -281,7 +280,7 @@ export async function assignGuardianPhoneAction(input: {
 
   // Guard against assigning the same Guardian number to two members.
   if (phone) {
-    const { data: clash, error: clashError } = await (db.from('guardian_member_profiles') as ReturnType<typeof supabase.from>)
+    const { data: clash, error: clashError } = await supabase.from('guardian_member_profiles')
       .select('member_id')
       .eq('family_id', familyId)
       .eq('guardian_phone', phone)
@@ -291,12 +290,21 @@ export async function assignGuardianPhoneAction(input: {
     if (clash) return { ok: false, error: t('actions.thatNumberIsAlreadyAssigned') };
   }
 
-  const { error } = await (db.from('guardian_member_profiles') as ReturnType<typeof supabase.from>)
+  const { error } = await supabase.from('guardian_member_profiles')
     .upsert(
       { family_id: familyId, member_id: input.member_id, guardian_phone: phone },
       { onConflict: 'family_id,member_id' },
     );
 
+  // 23505 is the GLOBAL clash that the check above cannot see. That check is
+  // scoped to one family and runs on an RLS-bound client, so another
+  // household's claim on this number is invisible to it by construction —
+  // 0310's unique index is the only thing that sees both families at once.
+  // Surfacing it as "already in use" tells the parent to pick another number
+  // instead of showing them a generic failure for a correctable mistake.
+  if (error && (error.code === '23505' || error.message?.includes('uq_guardian_profiles_phone'))) {
+    return { ok: false, error: t('actions.thatNumberIsAlreadyAssigned') };
+  }
   if (error) return actionFailure('assign the Guardian phone', t('guardian.couldNotAssignTheGuardianPhone'), error);
 
   await logGuardianAudit({
@@ -333,11 +341,10 @@ export async function createRuleAction(input: {
   const ctx = await requireUserContext();
   if (!isManager(ctx.active.role)) return guardianForbidden();
   const supabase = await createServer();
-  const db = withGuardianTables(supabase);
   const familyId = ctx.active.familyId;
   const userId = ctx.user.id;
 
-  const { data, error } = await (db.from('guardian_routing_rules') as ReturnType<typeof supabase.from>)
+  const { data, error } = await supabase.from('guardian_routing_rules')
     .insert({
       family_id: familyId,
       name: input.name,
@@ -383,12 +390,17 @@ export async function toggleRuleAction(ruleId: string, isActive: boolean): Promi
   const ctx = await requireUserContext();
   if (!isManager(ctx.active.role)) return guardianForbidden();
   const supabase = await createServer();
-  const db = withGuardianTables(supabase);
-  const { error } = await (db.from('guardian_routing_rules') as ReturnType<typeof supabase.from>)
+  // RLS FILTERS this write rather than refusing it, so `error: null` did not
+  // mean a row changed — a stale id reported success over nothing at all.
+  // Here it decides whether a screening rule is armed, so "enabled" over a rule
+  // that never changed is a safety claim the product cannot keep.
+  const { data: toggled, error } = await supabase.from('guardian_routing_rules')
     .update({ is_active: isActive })
     .eq('id', ruleId)
-    .eq('family_id', ctx.active.familyId);
+    .eq('family_id', ctx.active.familyId)
+    .select('id');
   if (error) return actionFailure('update the Guardian routing rule', t('guardian.couldNotUpdateTheGuardianRouting'), error);
+  if (wroteNoRows(toggled)) return { ok: false, error: t('guardian.couldNotUpdateTheGuardianRouting') };
   revalidatePath('/guardian/rules');
   return { ok: true };
 }
@@ -398,12 +410,15 @@ export async function deleteRuleAction(ruleId: string): Promise<ActionResult> {
   const ctx = await requireUserContext();
   if (!isManager(ctx.active.role)) return guardianForbidden();
   const supabase = await createServer();
-  const db = withGuardianTables(supabase);
-  const { error } = await (db.from('guardian_routing_rules') as ReturnType<typeof supabase.from>)
+  // RLS FILTERS this write rather than refusing it, so `error: null` did not
+  // mean a row changed — a stale id reported success over nothing at all.
+  const { data: removedRule, error } = await supabase.from('guardian_routing_rules')
     .delete()
     .eq('id', ruleId)
-    .eq('family_id', ctx.active.familyId);
+    .eq('family_id', ctx.active.familyId)
+    .select('id');
   if (error) return actionFailure('delete the Guardian routing rule', t('guardian.couldNotDeleteTheGuardianRouting'), error);
+  if (wroteNoRows(removedRule)) return { ok: false, error: t('guardian.couldNotDeleteTheGuardianRouting') };
   revalidatePath('/guardian/rules');
   return { ok: true };
 }
@@ -417,10 +432,15 @@ export async function deleteRuleAction(ruleId: string): Promise<ActionResult> {
 export async function generateGuardianSuggestionsAction(): Promise<ActionResult<{ created: number }>> {
   const ctx = await requireUserContext();
   if (!isManager(ctx.active.role)) return guardianForbidden();
+  const t = await getTranslations();
   const supabase = await createServer();
-  const result = await runLearningForFamily(supabase, ctx.active.familyId);
-  revalidatePath('/guardian');
-  return { ok: true, data: { created: result.created } };
+  try {
+    const result = await runLearningForFamily(supabase, ctx.active.familyId, { auditClient: createServiceClient() });
+    revalidatePath('/guardian');
+    return { ok: true, data: { created: result.created } };
+  } catch (err) {
+    return actionFailure('run Guardian learning', t('globalError.somethingWentWrong'), err);
+  }
 }
 
 export async function reviewSuggestionAction(
@@ -449,13 +469,39 @@ export async function acknowledgeEscalationAction(escalationId: string): Promise
   const t = await getTranslations();
   const ctx = await requireUserContext();
   if (!isManager(ctx.active.role)) return guardianForbidden();
-  const supabase = await createServer();
-  const db = withGuardianTables(supabase);
-  const { error } = await (db.from('guardian_escalations') as ReturnType<typeof supabase.from>)
+  // guardian_escalations is SELECT-only for family members: escalations are
+  // written by the webhook, and nothing a member's session sends may change
+  // one. This used to update through the parent's own session, which RLS
+  // filtered to zero rows without an error — so it answered "Escalation
+  // acknowledged", the page refreshed, and the red Emergency Alert came back,
+  // every time. The manager check above is the authority; the write itself goes
+  // through the service role, scoped to this family, and must touch the row.
+  // (No `withGuardianTables` cast: the Guardian tables are declared in
+  // lib/database.types.ts on this branch, so the client is typed as it stands.)
+  const failed = () => actionFailure('acknowledge the Guardian escalation', t('guardian.couldNotAcknowledgeTheGuardianEscalation'), new Error('No escalation acknowledged'));
+  const svc = createServiceClient();
+  const { data: acked, error } = await svc.from('guardian_escalations')
     .update({ acknowledged_by: ctx.user.id, acknowledged_at: new Date().toISOString() })
     .eq('id', escalationId)
-    .eq('family_id', ctx.active.familyId);
+    .is('acknowledged_at', null)
+    .eq('family_id', ctx.active.familyId)
+    .select('id');
   if (error) return actionFailure('acknowledge the Guardian escalation', t('guardian.couldNotAcknowledgeTheGuardianEscalation'), error);
+  if (wroteNoRows(acked)) {
+    // Zero rows is success only if someone already acknowledged it; the first
+    // acknowledgement is kept rather than overwritten.
+    const { data: existing, error: readError } = await svc.from('guardian_escalations')
+      .select('acknowledged_at')
+      .eq('id', escalationId)
+      .eq('family_id', ctx.active.familyId)
+      .maybeSingle();
+    if (readError || !(existing as { acknowledged_at?: string | null } | null)?.acknowledged_at) return failed();
+  } else {
+    await logGuardianAudit({
+      family_id: ctx.active.familyId, actor_user_id: ctx.user.id, actor: 'parent',
+      action: 'escalation.acknowledged', entity_type: 'guardian_escalations', entity_id: escalationId,
+    });
+  }
   revalidatePath('/guardian');
   return { ok: true };
 }

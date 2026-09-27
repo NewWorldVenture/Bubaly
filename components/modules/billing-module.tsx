@@ -34,6 +34,7 @@ import {
   createSavingsGoalAction, createTransactionAction, deleteBudgetAction,
   deleteSavingsGoalAction, deleteTransactionAction, setBudgetAction,
 } from '@/app/(app)/dashboard/billing/actions';
+import { reportRefusal } from '@/lib/auth/step-up-client';
 import { useBillingSubscription } from '@/lib/hooks/use-billing-subscription';
 import { SelectedPlanReview } from '@/components/billing/selected-plan-review';
 import { isReviewPlan, parseReviewSelection, type ReviewPlan } from '@/lib/billing/review-selection';
@@ -50,14 +51,18 @@ import { AiInsight } from '@/components/ai/ai-insight';
 import { fmtDate } from '@/lib/utils/format';
 import { isAdmin } from '@/lib/constants/roles';
 import { BASIC_MONTHLY_CENTS, BASIC_ANNUAL_CENTS, PLUS_MONTHLY_CENTS, PLUS_ANNUAL_CENTS } from '@/lib/constants/plans';
+import { PLAN_CURRENCY } from '@/lib/marketing/value';
+import { formatCents } from '@/lib/wallet/ledger';
 import {
   classifyChange, slugToStripePlan, stripePlanFor, annualSavingsPct, canChangeSubscriptionInPlace,
   CHANGE_LABELS, type StripePlan, type BillingInterval, type PlanChange,
 } from '@/lib/billing/plans';
 import { cn } from '@/lib/utils/cn';
 import type { Tables, SubscriptionStatus, AccountType, TransactionType, BudgetPeriod, BillStatus } from '@/lib/database.types';
-import { useTranslations } from '@/components/i18n/locale-provider';
+import { useLocale, useTranslations } from '@/components/i18n/locale-provider';
 import { FamilyDeliveredValue } from '@/components/billing/family-delivered-value';
+import type { LocaleCode } from '@/lib/i18n/locales';
+import { useConfirm } from '@/components/ui/confirm';
 
 type FinancialAccount = Tables<'financial_accounts'>;
 type Transaction = Tables<'transactions'>;
@@ -75,23 +80,26 @@ const STATUS_CONFIG: Record<SubscriptionStatus, { label: string; tone: 'success'
   incomplete_expired: { label: 'Expired', tone: 'danger', icon: <AlertCircle className="h-4 w-4" /> },
   unpaid: { label: 'Unpaid', tone: 'danger', icon: <AlertCircle className="h-4 w-4" /> },
 };
-const PLAN_LABELS: Record<string, { name: string; description: string; price: string }> = {
-  free: { name: 'Bubaly Free', description: 'The default family organizer for up to 5 members.', price: '$0/mo' },
-  basic: { name: 'Family Basic', description: 'Everything a busy household needs — unlimited members, chores, meals, and unlimited AI.', price: `$${(BASIC_MONTHLY_CENTS / 100).toFixed(2)}/mo` },
-  basic_annual: { name: 'Family Basic (Annual)', description: 'The Family Basic plan billed yearly.', price: `$${(BASIC_ANNUAL_CENTS / 100).toFixed(2)}/yr` },
-  plus: { name: 'Family+', description: 'The AI Family Chief of Staff — concierge, briefings, and command center.', price: `$${(PLUS_MONTHLY_CENTS / 100).toFixed(2)}/mo` },
-  plus_annual: { name: 'Family+ (Annual)', description: 'The Family+ plan billed yearly.', price: `$${(PLUS_ANNUAL_CENTS / 100).toFixed(2)}/yr` },
+// No price field. There used to be one, a hand-written `$${…toFixed(2)}/mo` per
+// slug, and nothing ever rendered it: the current-plan card shows name and
+// description only, and every price a family actually sees comes from
+// PlanManager below, formatted for the reader. A dead string that no reader
+// sees has no locale to be given, so it is removed rather than "converted".
+const PLAN_LABELS: Record<string, { name: string; description: string }> = {
+  free: { name: 'Bubaly Free', description: 'The default family organizer for up to 5 members.' },
+  basic: { name: 'Family Basic', description: 'Everything a busy household needs — unlimited members, chores, meals, and unlimited AI.' },
+  basic_annual: { name: 'Family Basic (Annual)', description: 'The Family Basic plan billed yearly.' },
+  plus: { name: 'Family+', description: 'The AI Family Chief of Staff — concierge, briefings, and command center.' },
+  plus_annual: { name: 'Family+ (Annual)', description: 'The Family+ plan billed yearly.' },
   // Legacy slugs map to Basic.
-  family: { name: 'Family Basic', description: 'Everything a busy household needs.', price: `$${(BASIC_MONTHLY_CENTS / 100).toFixed(2)}/mo` },
-  family_annual: { name: 'Family Basic (Annual)', description: 'Family Basic billed yearly.', price: `$${(BASIC_ANNUAL_CENTS / 100).toFixed(2)}/yr` },
+  family: { name: 'Family Basic', description: 'Everything a busy household needs.' },
+  family_annual: { name: 'Family Basic (Annual)', description: 'Family Basic billed yearly.' },
 };
 
 async function openPortal() {
   const res = await fetch('/api/billing/portal', { method: 'POST' });
   const json = await res.json(); if (json.url) window.location.href = json.url;
 }
-
-const fmtUsd = (cents: number) => (cents % 100 === 0 ? `$${cents / 100}` : `$${(cents / 100).toFixed(2)}`);
 
 const TIER_DEFS = [
   {
@@ -112,7 +120,7 @@ const TIER_DEFS = [
  * Upgrade / Downgrade / Switch billing). One tap calls the in-place change-plan
  * flow (prorated) or Checkout when on Free.
  */
-function PlanManager({
+export function PlanManager({
   currentSlug, highlight, pending, onChoose,
 }: {
   currentSlug: string | null;
@@ -121,6 +129,9 @@ function PlanManager({
   onChoose: (plan: StripePlan) => void;
 }) {
   const tr = useTranslations();
+  // Plan prices in the reader's money format; the currency stays the plan's own.
+  const locale = useLocale();
+  const price = (cents: number) => formatCents(cents, PLAN_CURRENCY, locale.code);
   const [interval, setInterval] = useState<BillingInterval>('annual');
   const annual = interval === 'annual';
   const ref = useRef<HTMLDivElement>(null);
@@ -148,7 +159,9 @@ function PlanManager({
           const plan = stripePlanFor(t.level, interval);
           const change: PlanChange = classifyChange(currentSlug, plan);
           const perMonth = annual ? Math.round(t.annualCents / 12) : t.monthlyCents;
-          const sub = annual ? `${fmtUsd(t.annualCents)}/yr · save ${annualSavingsPct(t.level)}%` : 'billed monthly';
+          const sub = annual
+            ? tr('billing.pricePerYearSave', { amount: price(t.annualCents), percent: annualSavingsPct(t.level) })
+            : tr('billing.billedMonthly');
           const isCurrent = change === 'current';
           return (
             <div key={t.name} className={cn('rounded-xl border p-4', t.featured ? 'border-brand/40 bg-brand/5' : 'border-border bg-surface/40', highlight === t.level && 'ring-2 ring-brand ring-offset-2 ring-offset-bg')}>
@@ -156,7 +169,7 @@ function PlanManager({
                 <p className="font-semibold">{t.name}</p>
                 {isCurrent ? <Badge tone="success">{tr('billing.current')}</Badge> : t.featured && <Badge tone="brand">{tr('billing.mostPopular')}</Badge>}
               </div>
-              <p className="mt-1 text-2xl font-bold">{fmtUsd(perMonth)}<span className="text-sm font-normal text-muted">/mo</span></p>
+              <p className="mt-1 text-2xl font-bold">{price(perMonth)}<span className="text-sm font-normal text-muted">{tr('pricingValue.perMonthSuffix')}</span></p>
               <p className="text-xs text-muted">{sub}</p>
               <Button
                 className="mt-3 w-full"
@@ -188,9 +201,11 @@ const TABS = ['Overview', 'Transactions', 'Budgets', 'Bills', 'Savings Goals', '
 type Tab = (typeof TABS)[number];
 
 // ── Helpers ─────────────────────────────────────────────────────────────────
-function fmtCurrency(n: number, showSign = false): string {
+// Takes the locale rather than pinning en-US. Each component that renders money
+// shadows this with a binding of the same name, so the call sites read unchanged.
+function currencyIn(locale: LocaleCode, n: number, showSign = false): string {
   const sign = showSign && n > 0 ? '+' : '';
-  return sign + new Intl.NumberFormat('en-US', { style: 'currency', currency: 'USD' }).format(Math.abs(n));
+  return sign + new Intl.NumberFormat(locale, { style: 'currency', currency: 'USD' }).format(Math.abs(n));
 }
 
 const ACCOUNT_TYPE_COLORS: Record<string, string> = {
@@ -310,14 +325,19 @@ function AddTransactionModal({ open, onClose, familyId, userId, accounts, onDone
     if (!name.trim() || !amount) return;
     setSaving(true);
     const parsedAmount = parseFloat(amount);
-    const finalAmount = type === 'expense' ? -Math.abs(parsedAmount) : Math.abs(parsedAmount);
+    // Amount goes UNSIGNED; the direction lives in `type`. That is what
+    // `createTransaction` enforces (it refuses anything <= 0 outright), what the
+    // wallet action writes, and what this module's own reads already assume —
+    // every rollup below sums `Math.abs(tx.amount)` and prints the sign from
+    // `tx.type`. Negating an expense here refused every expense the form sent.
+    const finalAmount = Math.abs(parsedAmount);
     const supabase = createClient();
     const res = await createTransactionAction({
       name: name.trim(), amount: finalAmount, category, date, type,
       accountId: accountId || null, notes: null,
     });
     setSaving(false);
-    if (!res.ok) return toastError(res.error);
+    if (!res.ok) return reportRefusal(res, toastError);
     success(tr('billingModule.transactionAdded'));
     reset(); onClose(); onDone();
   }
@@ -373,7 +393,7 @@ function AddBudgetModal({ open, onClose, familyId, userId, onDone }: {
     const supabase = createClient();
     const res = await setBudgetAction(category, parseFloat(amount), period);
     setSaving(false);
-    if (!res.ok) return toastError(res.error);
+    if (!res.ok) return reportRefusal(res, toastError);
     success(tr('billingModule.budgetAdded'));
     reset(); onClose(); onDone();
   }
@@ -489,7 +509,7 @@ function AddSavingsGoalModal({ open, onClose, familyId, userId, onDone }: {
       targetDate: targetDate || null, emoji,
     });
     setSaving(false);
-    if (!res.ok) return toastError(res.error);
+    if (!res.ok) return reportRefusal(res, toastError);
     success(tr('billingModule.savingsGoalAdded'));
     reset(); onClose(); onDone();
   }
@@ -512,6 +532,10 @@ function AddSavingsGoalModal({ open, onClose, familyId, userId, onDone }: {
 
 export function BillingModule({ serviceFeeNotice = null }: { serviceFeeNotice?: string | null } = {}) {
   const tr = useTranslations();
+  const askConfirm = useConfirm();
+  // Money follows the reader's locale; the currency does not.
+  const locale = useLocale();
+  const fmtCurrency = (n: number, showSign = false) => currencyIn(locale.code, n, showSign);
   const { familyId, family, userId, role, members } = useApp();
   const admin = isAdmin(role);
   const { success, error: toastError } = useToast();
@@ -877,25 +901,28 @@ export function BillingModule({ serviceFeeNotice = null }: { serviceFeeNotice?: 
 
   // ── CRUD helpers ────────────────────────────────────────────────────────
   async function deleteTransaction(id: string) {
+    if (!(await askConfirm({ title: tr('billing.deleteTransactionQ'), body: tr('confirm.cannotBeUndone') }))) return;
     const res = await deleteTransactionAction(id);
-    if (!res.ok) return toastError(res.error);
+    if (!res.ok) return reportRefusal(res, toastError);
     success(tr('billingModule.transactionRemoved'));
     void refreshTransactions();
   }
 
   async function deleteBudget(id: string) {
+    if (!(await askConfirm({ title: tr('billing.deleteBudgetQ'), body: tr('confirm.cannotBeUndone') }))) return;
     const res = await deleteBudgetAction(id);
-    if (!res.ok) return toastError(res.error);
+    if (!res.ok) return reportRefusal(res, toastError);
     success(tr('billingModule.budgetRemoved'));
     void refreshBudgets();
   }
 
   async function deleteBill(id: string) {
+    if (!(await askConfirm({ title: tr('billing.deleteBillQ'), body: tr('confirm.cannotBeUndone') }))) return;
     const supabase = createClient();
     // A restrictive RLS policy FILTERS an update/delete rather than raising, so
     // a refused write returns zero rows and no error. `.select('id')` is what
     // makes the difference visible — without it `data` is null either way.
-    const { data: rows, error } = await supabase.from('bills').delete().eq('id', id).select('id');
+    const { data: rows, error } = await supabase.from('bills').delete().eq('id', id).eq('family_id', familyId).select('id');
     if (error) return toastError(describeDbError(error));
     if (wroteNoRows(rows)) return toastError(tr('errors.thatChangeWasNotSaved'));
     success(tr('billingModule.billRemoved'));
@@ -904,7 +931,7 @@ export function BillingModule({ serviceFeeNotice = null }: { serviceFeeNotice?: 
 
   async function markBillPaid(id: string) {
     const supabase = createClient();
-    const { data: rows, error } = await supabase.from('bills').update({ status: 'paid' }).eq('id', id).select('id');
+    const { data: rows, error } = await supabase.from('bills').update({ status: 'paid' }).eq('id', id).eq('family_id', familyId).select('id');
     if (error) return toastError(describeDbError(error));
     if (wroteNoRows(rows)) return toastError(tr('errors.thatChangeWasNotSaved'));
     success(tr('billingModule.billMarkedAsPaid'));
@@ -912,15 +939,17 @@ export function BillingModule({ serviceFeeNotice = null }: { serviceFeeNotice?: 
   }
 
   async function deleteGoal(id: string) {
+    if (!(await askConfirm({ title: tr('billing.deleteGoalQ'), body: tr('confirm.cannotBeUndone') }))) return;
     const res = await deleteSavingsGoalAction(id);
-    if (!res.ok) return toastError(res.error);
+    if (!res.ok) return reportRefusal(res, toastError);
     success(tr('billingModule.goalRemoved'));
     void refreshGoals();
   }
 
   async function deleteAccount(id: string) {
+    if (!(await askConfirm({ title: tr('billing.deleteAccountQ'), body: tr('billing.deleteAccountBody') }))) return;
     const supabase = createClient();
-    const { data: rows, error } = await supabase.from('financial_accounts').delete().eq('id', id).select('id');
+    const { data: rows, error } = await supabase.from('financial_accounts').delete().eq('id', id).eq('family_id', familyId).select('id');
     if (error) return toastError(describeDbError(error));
     if (wroteNoRows(rows)) return toastError(tr('errors.thatChangeWasNotSaved'));
     success(tr('billingModule.accountRemoved'));
@@ -1218,7 +1247,7 @@ export function BillingModule({ serviceFeeNotice = null }: { serviceFeeNotice?: 
               <p className={cn('text-sm font-bold shrink-0', tx.type === 'income' ? 'text-emerald-400' : 'text-fg')}>
                 {tx.type === 'income' ? '+' : '-'}{fmtCurrency(Math.abs(tx.amount))}
               </p>
-              <button onClick={() => deleteTransaction(tx.id)} className="p-1.5 rounded-lg text-muted hover:text-red-400 hover:bg-surface/40">
+              <button aria-label={tr('a11y.delete')} onClick={() => deleteTransaction(tx.id)} className="p-1.5 rounded-lg text-muted hover:text-red-400 hover:bg-surface/40">
                 <Trash2 className="h-4 w-4" />
               </button>
             </div>
@@ -1254,7 +1283,7 @@ export function BillingModule({ serviceFeeNotice = null }: { serviceFeeNotice?: 
                     <span className={cn('text-sm font-bold', over ? 'text-red-400' : 'text-muted')}>
                       {fmtCurrency(b.spent)} / {fmtCurrency(b.amount)}
                     </span>
-                    <button onClick={() => deleteBudget(b.id)} className="p-1.5 rounded-lg text-muted hover:text-red-400 hover:bg-surface/40">
+                    <button aria-label={tr('a11y.delete')} onClick={() => deleteBudget(b.id)} className="p-1.5 rounded-lg text-muted hover:text-red-400 hover:bg-surface/40">
                       <Trash2 className="h-4 w-4" />
                     </button>
                   </div>
@@ -1307,7 +1336,7 @@ export function BillingModule({ serviceFeeNotice = null }: { serviceFeeNotice?: 
                     <CheckCircle2 className="h-4 w-4" />
                   </button>
                 )}
-                <button onClick={() => deleteBill(b.id)} className="p-1.5 rounded-lg text-muted hover:text-red-400 hover:bg-surface/40">
+                <button aria-label={tr('a11y.delete')} onClick={() => deleteBill(b.id)} className="p-1.5 rounded-lg text-muted hover:text-red-400 hover:bg-surface/40">
                   <Trash2 className="h-4 w-4" />
                 </button>
               </div>
@@ -1341,7 +1370,7 @@ export function BillingModule({ serviceFeeNotice = null }: { serviceFeeNotice?: 
                       <p className="text-xs text-muted">{pct.toFixed(0)}{tr('billing.saved')}</p>
                     </div>
                   </div>
-                  <button onClick={() => deleteGoal(g.id)} className="p-1.5 rounded-lg text-muted hover:text-red-400 hover:bg-surface/40">
+                  <button aria-label={tr('a11y.delete')} onClick={() => deleteGoal(g.id)} className="p-1.5 rounded-lg text-muted hover:text-red-400 hover:bg-surface/40">
                     <Trash2 className="h-4 w-4" />
                   </button>
                 </div>
@@ -1578,7 +1607,7 @@ export function BillingModule({ serviceFeeNotice = null }: { serviceFeeNotice?: 
                       <p className="text-xs text-muted capitalize">{a.type}{a.last_four ? ` ···${a.last_four}` : ''}</p>
                     </div>
                     <p className="text-sm font-bold shrink-0">{fmtCurrency(a.balance ?? 0)}</p>
-                    <button onClick={() => deleteAccount(a.id)} className="p-1 rounded text-muted opacity-100 sm:opacity-0 sm:group-hover:opacity-100 focus-visible:opacity-100 coarse:opacity-100 hover:text-red-400">
+                    <button aria-label={tr('a11y.delete')} onClick={() => deleteAccount(a.id)} className="p-1 rounded text-muted opacity-100 sm:opacity-0 sm:group-hover:opacity-100 focus-visible:opacity-100 coarse:opacity-100 hover:text-red-400">
                       <Trash2 className="h-3.5 w-3.5" />
                     </button>
                   </div>

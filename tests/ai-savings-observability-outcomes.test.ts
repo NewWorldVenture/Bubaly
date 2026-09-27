@@ -71,6 +71,11 @@ beforeEach(() => {
         select: () => query,
         eq: () => query,
         gte: () => query,
+        // `order` and `range` so `readAllAsQuery` can page the transactions
+        // read (C1-S9-25). `range` is the terminal: it resolves to an EMPTY
+        // page, which is what tells readAll it has reached the end.
+        order: () => query,
+        range: () => Promise.resolve({ data: [], error: null }),
         neq: () => query,
         then: (resolve: (value: { data: unknown[]; error: null }) => unknown) =>
           Promise.resolve({ data: [], error: null }).then(resolve),

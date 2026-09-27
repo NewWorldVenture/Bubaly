@@ -8,6 +8,7 @@ import { Modal } from '@/components/ui/modal';
 import { Input } from '@/components/ui/input';
 import { Button } from '@/components/ui/button';
 import { tallyVotes, winningOption } from '@/lib/recipes/voting';
+import { describeGroceryAdd, groceryAddWasNoOp } from '@/lib/groceries/add-summary';
 import { createMealVote, castBallot, closeMealVote, reopenMealVote, addWinnerToGrocery } from './actions';
 import { useTranslations } from '@/components/i18n/locale-provider';
 
@@ -36,6 +37,18 @@ export function MealVoteClient({ votes, recipes }: { votes: VoteView[]; recipes:
     start(async () => {
       const res = await fn();
       if (res.ok) { if (okMsg) success(okMsg); } else toastError(res.error ?? 'Something went wrong');
+    });
+  }
+
+  // Says what the add actually did, the way the vault's own recipe button does:
+  // a second tap, or a dinner whose staples are already listed, adds nothing and
+  // says so instead of a cheerful "Added" over a list that did not change.
+  function addToGrocery(voteId: string) {
+    start(async () => {
+      const res = await addWinnerToGrocery(voteId);
+      if (!res.ok) toastError(res.error);
+      else if (groceryAddWasNoOp(res)) toastError(describeGroceryAdd(res));
+      else success(describeGroceryAdd(res));
     });
   }
 
@@ -68,7 +81,7 @@ export function MealVoteClient({ votes, recipes }: { votes: VoteView[]; recipes:
                   <div className="flex gap-1.5">
                     {closed ? (
                       <>
-                        <button onClick={() => act(() => addWinnerToGrocery(v.id), 'Added to grocery list')} disabled={pending} className="inline-flex items-center gap-1 rounded-lg border border-border px-2.5 py-1 text-xs hover:bg-elevated"><ShoppingCart className="h-3.5 w-3.5" />{' '}{tr('voteClient.grocery')}</button>
+                        <button onClick={() => addToGrocery(v.id)} disabled={pending} className="inline-flex items-center gap-1 rounded-lg border border-border px-2.5 py-1 text-xs hover:bg-elevated"><ShoppingCart className="h-3.5 w-3.5" />{' '}{tr('voteClient.grocery')}</button>
                         <button onClick={() => act(() => reopenMealVote(v.id))} disabled={pending} className="inline-flex items-center gap-1 rounded-lg border border-border px-2.5 py-1 text-xs hover:bg-elevated"><RotateCcw className="h-3.5 w-3.5" />{' '}{tr('voteClient.reopen')}</button>
                       </>
                     ) : (

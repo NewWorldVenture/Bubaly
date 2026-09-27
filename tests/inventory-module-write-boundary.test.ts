@@ -1,3 +1,4 @@
+import { at } from './helpers/source-order';
 import { describe, expect, it } from 'vitest';
 import { readFileSync } from 'node:fs';
 
@@ -19,11 +20,14 @@ function bodies(fn: string): string[] {
   return out;
 }
 
+// Re-pointed under C1-S9-80 from the exact `const { error } =`: each write
+// now also binds the rows it changed (`{ data: updated, error }`), and reads
+// them. The property is unchanged — the error is bound and surfaced.
 describe('inventory-module writes fail visibly', () => {
   for (const fn of ['deleteItem', 'setStatus', 'deleteLocation', 'confirmHere']) {
     it(`${fn} guards its Supabase result`, () => {
       const b = body(fn);
-      expect(b).toMatch(/const \{ error \} =/);
+      expect(b).toMatch(/const \{ (?:data(?:: \w+)?, )?error \} =/);
       expect(b).toContain('toastError(describeDbError(error))');
     });
   }
@@ -31,13 +35,13 @@ describe('inventory-module writes fail visibly', () => {
     const forms = bodies('onSubmit');
     expect(forms.length).toBe(4);
     for (const b of forms) {
-      expect(b).toMatch(/const \{ error \} =/);
+      expect(b).toMatch(/const \{ (?:data(?:: \w+)?, )?error \} =/);
       expect(b).toContain('toastError(describeDbError(error))');
     }
   });
   it('a move updates the item first and reports a failed history insert', () => {
     const move = bodies('onSubmit').find((b) => b.includes("from('inventory_moves').insert("))!;
-    expect(move.indexOf("from('inventory_items').update(")).toBeLessThan(move.indexOf("from('inventory_moves').insert("));
+    expect(at(move, "from('inventory_items').update(")).toBeLessThan(at(move, "from('inventory_moves').insert("));
     expect(move).toContain('if (moveError) return toastError(describeDbError(moveError));');
   });
   it('"confirm it is here" writes a family-scoped move with from = to and the confirmed reason', () => {

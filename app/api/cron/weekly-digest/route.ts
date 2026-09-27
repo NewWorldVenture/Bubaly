@@ -1,4 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server';
+import { dayKeyInZone } from '@/lib/schedule/zoned';
 import { getTranslations } from '@/lib/i18n/server';
 import { createServiceClient } from '@/lib/supabase/server';
 import { listAllAuthUsers } from '@/lib/server/list-all-auth-users';
@@ -53,18 +54,22 @@ export async function GET(req: NextRequest) {
   // Every household, not the first thousand. An unbounded select is capped at
   // PostgREST's db-max-rows and says nothing, so families past that ceiling
   // would silently never receive a digest.
-  const { rows: families, error: familiesError } = await readAll<{ id: string; name: string }>(
-    (from, to) => supabase.from('families').select('id, name').order('id').range(from, to),
+  const { rows: families, error: familiesError } = await readAll<{ id: string; name: string; timezone: string | null }>(
+    // `timezone` is selected because the digest prints DATES. Without it every
+    // date in this email is Greenwich's, and an email cannot be re-rendered the
+    // way a page can be reloaded.
+    (from, to) => supabase.from('families').select('id, name, timezone').order('id').range(from, to),
   );
   if (familiesError) {
     console.error('Weekly digest family read error:', familiesError);
     return NextResponse.json({ error: t('weeklyDigest.weeklyDigestProcessingFailed') }, { status: 500 });
   }
-  if (!families?.length) return NextResponse.json({ sent: 0 });
+  if (!families?.length) return NextResponse.json({ sent: 0, failed: 0, skipped: 0 });
 
-  // Every auth user, not GoTrue's default first 50: `families` above is read
-  // with readAll, so a truncated recipient map silently drops the digest for
-  // every family whose members sit past the first page.
+  // Every auth user, not GoTrue's default first 50. `listUsers()` with no
+  // arguments is ONE page, and `families` above is read with readAll — so a
+  // truncated recipient map silently drops the digest for every family whose
+  // admin sits past that page, without counting a failure.
   const { users: allAuthUsers, error: authUsersError } = await listAllAuthUsers(supabase);
   if (authUsersError) {
     console.error('Weekly digest user read error:', authUsersError);
@@ -76,10 +81,24 @@ export async function GET(req: NextRequest) {
 
   let sent = 0;
   let failed = 0;
+  // A family nobody could be emailed for is neither a send nor a send failure,
+  // and reporting it as neither is how this route answered 200 while most of
+  // the customer base got nothing. It is NOT a failed run, though — there is
+  // nothing to retry — so it is reported without turning the status into 502.
   let skipped = 0;
+  // Families this run never ATTEMPTED, because the budget ran out. That one is
+  // a failed run: the tail being unserved is precisely what must not look
+  // clean, so it decides the status below.
+  let unserved = 0;
   const startedAt = Date.now();
 
   const digestFor = async (family: (typeof families)[number]) => {
+    // The family's own week. `weekStart`/`weekEnd` stay instants — a rolling
+    // seven days is the right bound for `starts_at`, which IS an instant — but
+    // `plan_date` is a DATE column holding the day on their wall, and the dates
+    // rendered into the email are days too.
+    const tz = family.timezone || 'UTC';
+    const dayIn = (iso: string) => dayKeyInZone(Date.parse(iso), tz) ?? iso.slice(0, 10);
     // An open chore is an ASSIGNMENT that is still todo/in_progress. `chores` is
     // the definition table — it carries neither `status` nor `assignee_id`, so
     // reading those from it errors and skipped every family's digest. Counts,
@@ -91,7 +110,7 @@ export async function GET(req: NextRequest) {
         .eq('family_id', family.id).in('status', ['todo', 'in_progress']),
       supabase.from('meal_plans').select('id', { count: 'exact', head: true })
         .eq('family_id', family.id)
-        .gte('plan_date', weekStart.slice(0, 10)).lte('plan_date', weekEnd.slice(0, 10)),
+        .gte('plan_date', dayIn(weekStart)).lte('plan_date', dayIn(weekEnd)),
       supabase.from('family_members').select('user_id, display_name').eq('family_id', family.id).eq('is_active', true),
     ]);
 
@@ -102,7 +121,7 @@ export async function GET(req: NextRequest) {
       return;
     }
 
-    if (!members?.length) return;
+    if (!members?.length) { skipped++; return; }
 
     const { data: adminMember, error: adminMemberError } = await supabase
       .from('family_members')
@@ -119,9 +138,9 @@ export async function GET(req: NextRequest) {
       return;
     }
 
-    if (!adminMember?.user_id) return;
+    if (!adminMember?.user_id) { skipped++; return; }
     const adminEmail = emailByUserId.get(adminMember.user_id);
-    if (!adminEmail) return;
+    if (!adminEmail) { skipped++; return; }
 
     const { ok } = await sendReactEmail({
       to: adminEmail,
@@ -129,7 +148,7 @@ export async function GET(req: NextRequest) {
       react: React.createElement(WeeklyDigestEmail, {
         familyName: family.name,
         adminName: adminMember.display_name,
-        events: (events ?? []).map((e) => ({ title: e.title, date: e.starts_at.slice(0, 10) })),
+        events: (events ?? []).map((e) => ({ title: e.title, date: dayIn(e.starts_at) })),
         openChores: openChores ?? 0,
         mealsPlanned: mealsPlanned ?? 0,
         memberCount: members?.length ?? 0,
@@ -144,15 +163,20 @@ export async function GET(req: NextRequest) {
 
   for (let i = 0; i < families.length; i += CONCURRENCY) {
     if (Date.now() - startedAt > BUDGET_MS) {
-      skipped = families.length - i;
-      console.error(`[weekly-digest] budget reached with ${skipped} families unserved`);
+      unserved = families.length - i;
+      console.error(`[weekly-digest] budget reached with ${unserved} families unserved`);
       break;
     }
     await Promise.all(families.slice(i, i + CONCURRENCY).map(digestFor));
   }
 
-  // `skipped` counts families this run never attempted. Reporting 200 here would
-  // make an unserved tail indistinguishable from a complete run.
-  const ok = failed === 0 && skipped === 0;
-  return NextResponse.json({ sent, failed, skipped }, { status: ok ? 200 : 502 });
+  // `unserved` counts families this run never attempted. Reporting 200 here
+  // would make an unserved tail indistinguishable from a complete run. A
+  // `skipped` family has no recipient to reach and nothing to retry, so it is
+  // reported but does not make the run a failure.
+  const ok = failed === 0 && unserved === 0;
+  return NextResponse.json(
+    { sent, failed, skipped, ...(unserved > 0 ? { unserved } : {}) },
+    { status: ok ? 200 : 502 },
+  );
 }

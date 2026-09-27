@@ -18,7 +18,7 @@ describe('server action error boundaries', () => {
     for (const path of sources) {
       const source = readFileSync(path, 'utf8');
       expect(source).not.toMatch(/return[^\n]*error:\s*.*(?:error|e|upErr|sourceError|txnErr|wErr)\??\.message/);
-      expect(source).toContain('describeActionError');
+      expect(source).toContain('describeActionError(');
     }
   });
 

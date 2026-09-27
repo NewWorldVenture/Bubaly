@@ -1,17 +1,19 @@
 'use client';
 
 import { useState } from 'react';
+import type { GuardianContext } from '@/lib/database.types';
 import { useRouter } from 'next/navigation';
 import { Shield, Phone, MessageSquare, AlertTriangle, CheckCircle, Clock, TrendingUp, Users, Zap, Sparkles } from 'lucide-react';
 import { cn } from '@/lib/utils/cn';
-import { TRUST_LABELS, TRUST_COLORS, TRUST_ICONS } from '@/lib/guardian/trust';
-import { ROUTING_MODE_LABELS } from '@/lib/guardian/pipeline';
+import { TRUST_LABEL_KEYS, TRUST_COLORS, TRUST_ICONS } from '@/lib/guardian/trust';
+import { ROUTING_MODE_LABEL_KEYS } from '@/lib/guardian/pipeline';
 import { formatPhone } from '@/lib/guardian/phone';
 import { updateContextAction, reviewSuggestionAction, acknowledgeEscalationAction, generateGuardianSuggestionsAction } from '@/app/(app)/guardian/actions';
 import { useToast } from '@/components/ui/toast';
 import type { TrustLevel } from '@/lib/guardian/trust';
 import type { RoutingMode } from '@/lib/guardian/pipeline';
 import { useTranslations } from '@/components/i18n/locale-provider';
+import { useFormat } from '@/components/i18n/use-format';
 
 type Communication = {
   id: string;
@@ -59,11 +61,14 @@ type Props = {
   suggestions: Suggestion[];
   escalations: Escalation[];
   memberProfiles: MemberProfile[];
+  // `null` means the count could not be read — NOT zero. The page renders a
+  // PartialReadBanner saying which read failed, and the tile shows an em dash
+  // rather than a number nobody counted. "0 scams stopped" is a safety claim.
   stats: {
-    totalCalls: number;
-    blockedToday: number;
-    scamsBlocked: number;
-    screened: number;
+    totalCalls: number | null;
+    blockedToday: number | null;
+    scamsBlocked: number | null;
+    screened: number | null;
   };
   isTwilioConfigured: boolean;
 };
@@ -77,7 +82,7 @@ const COMM_ICONS: Record<string, string> = {
   email_inbound: '📧',
 };
 
-const CONTEXT_OPTIONS = [
+const CONTEXT_OPTIONS: { value: GuardianContext; label: string; icon: string }[] = [
   { value: 'normal', label: 'Normal', icon: '🟢' },
   { value: 'driving', label: 'Driving', icon: '🚗' },
   { value: 'meeting', label: 'In a Meeting', icon: '💼' },
@@ -88,45 +93,77 @@ const CONTEXT_OPTIONS = [
 
 export function GuardianDashboard({ recentComms, suggestions, escalations, memberProfiles, stats, isTwilioConfigured }: Props) {
   const t = useTranslations();
+  // The date follows the reader, not the browser: toLocaleDateString() with no
+  // argument takes whatever the machine reports (I18N-002).
+  const { fmtDate } = useFormat();
   const router = useRouter();
   const { success: toastSuccess, error: toastError } = useToast();
   const [contextLoading, setContextLoading] = useState<string | null>(null);
   const [suggestionLoading, setSuggestionLoading] = useState<string | null>(null);
   const [scanning, setScanning] = useState(false);
 
+  // Each of these awaits a server action, and a server action can REJECT — a
+  // dropped connection, or a throw on the server — instead of returning
+  // { ok: false }. Without a catch the reset below the await never ran: the
+  // scan spun forever, a context row or suggestion stayed locked, and nothing
+  // was said.
+  const failed = (err: unknown) => {
+    console.error('[guardian-dashboard] action failed', err);
+    toastError(t('globalError.somethingWentWrong'));
+  };
+
   async function handleScan() {
     setScanning(true);
-    const res = await generateGuardianSuggestionsAction();
-    setScanning(false);
-    if (res.ok) {
-      const n = res.data?.created ?? 0;
-      toastSuccess(n > 0 ? `Found ${n} new suggestion${n === 1 ? '' : 's'}` : 'All caught up — no new suggestions');
-      if (n > 0) router.refresh();
-    } else {
-      toastError(res.error);
+    try {
+      const res = await generateGuardianSuggestionsAction();
+      if (res.ok) {
+        const n = res.data?.created ?? 0;
+        toastSuccess(n > 0 ? `Found ${n} new suggestion${n === 1 ? '' : 's'}` : 'All caught up — no new suggestions');
+        if (n > 0) router.refresh();
+      } else {
+        toastError(res.error);
+      }
+    } catch (err) {
+      failed(err);
+    } finally {
+      setScanning(false);
     }
   }
 
-  async function handleContextChange(memberId: string, context: string) {
+  async function handleContextChange(memberId: string, context: GuardianContext) {
     setContextLoading(memberId);
-    const res = await updateContextAction(memberId, context);
-    setContextLoading(null);
-    if (res.ok) { toastSuccess(`Status updated to ${CONTEXT_OPTIONS.find(c => c.value === context)?.label}`); router.refresh(); }
-    else toastError(res.error);
+    try {
+      const res = await updateContextAction(memberId, context);
+      if (res.ok) { toastSuccess(`Status updated to ${CONTEXT_OPTIONS.find(c => c.value === context)?.label}`); router.refresh(); }
+      else toastError(res.error);
+    } catch (err) {
+      failed(err);
+    } finally {
+      setContextLoading(null);
+    }
   }
 
   async function handleSuggestion(id: string, decision: 'approved' | 'dismissed') {
     setSuggestionLoading(id);
-    const res = await reviewSuggestionAction(id, decision);
-    setSuggestionLoading(null);
-    if (res.ok) { toastSuccess(decision === 'approved' ? 'Applied!' : 'Dismissed'); router.refresh(); }
-    else toastError(res.error);
+    try {
+      const res = await reviewSuggestionAction(id, decision);
+      if (res.ok) { toastSuccess(decision === 'approved' ? 'Applied!' : 'Dismissed'); router.refresh(); }
+      else toastError(res.error);
+    } catch (err) {
+      failed(err);
+    } finally {
+      setSuggestionLoading(null);
+    }
   }
 
   async function handleAcknowledge(id: string) {
-    const res = await acknowledgeEscalationAction(id);
-    if (res.ok) { toastSuccess(t('guardianDashboard.escalationAcknowledged')); router.refresh(); }
-    else toastError(res.error);
+    try {
+      const res = await acknowledgeEscalationAction(id);
+      if (res.ok) { toastSuccess(t('guardianDashboard.escalationAcknowledged')); router.refresh(); }
+      else toastError(res.error);
+    } catch (err) {
+      failed(err);
+    }
   }
 
   const unacknowledgedEscalations = escalations.filter(e => !e.acknowledged_at);
@@ -153,7 +190,7 @@ export function GuardianDashboard({ recentComms, suggestions, escalations, membe
       {unacknowledgedEscalations.length > 0 && (
         <div className="space-y-2">
           {unacknowledgedEscalations.map((esc) => (
-            <div key={esc.id} className="flex items-start gap-3 rounded-2xl border border-red-500/40 bg-red-500/8 p-4">
+            <div key={esc.id} className="flex items-start gap-3 rounded-2xl border border-red-500/40 bg-red-500/10 p-4">
               <AlertTriangle className="mt-0.5 h-5 w-5 shrink-0 text-red-500" />
               <div className="flex-1 min-w-0">
                 <p className="font-semibold text-red-400">
@@ -161,7 +198,7 @@ export function GuardianDashboard({ recentComms, suggestions, escalations, membe
                 </p>
                 <p className="text-sm text-muted mt-0.5">{esc.description}</p>
                 <p className="text-xs text-muted mt-1">
-                  From {formatPhone(esc.caller_number)} · {new Date(esc.escalated_at).toLocaleTimeString()}
+                  From {formatPhone(esc.caller_number)} · {fmtDate(esc.escalated_at, 'pp')}
                 </p>
               </div>
               <button
@@ -183,7 +220,7 @@ export function GuardianDashboard({ recentComms, suggestions, escalations, membe
         ].map((s) => (
           <div key={s.label} className="rounded-2xl border border-border bg-surface/40 p-4">
             <s.icon className={cn('mb-2 h-5 w-5', s.color)} />
-            <p className="text-2xl font-bold">{s.value}</p>
+            <p className="text-2xl font-bold">{s.value ?? '—'}</p>
             <p className="text-xs text-muted mt-0.5">{s.label}</p>
           </div>
         ))}
@@ -249,7 +286,7 @@ export function GuardianDashboard({ recentComms, suggestions, escalations, membe
                   <p className="text-xs text-muted mt-0.5 line-clamp-2">{s.reasoning}</p>
                   {s.proposed_trust_level && (
                     <span className={cn('mt-1 inline-block text-xs font-semibold', TRUST_COLORS[s.proposed_trust_level])}>
-                      → {TRUST_LABELS[s.proposed_trust_level]}
+                      → {t(TRUST_LABEL_KEYS[s.proposed_trust_level])}
                     </span>
                   )}
                 </div>
@@ -295,10 +332,14 @@ export function GuardianDashboard({ recentComms, suggestions, escalations, membe
 }
 
 function CommRow({ comm }: { comm: Communication }) {
+  const t = useTranslations();
+  // The date follows the reader, not the browser: toLocaleDateString() with no
+  // argument takes whatever the machine reports (I18N-002).
+  const { fmtDate } = useFormat();
   const icon = COMM_ICONS[comm.comm_type] ?? '📱';
   const time = new Date(comm.started_at);
   const isToday = new Date().toDateString() === time.toDateString();
-  const timeStr = isToday ? time.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }) : time.toLocaleDateString();
+  const timeStr = isToday ? fmtDate(time, 'hh:mm a') : fmtDate(time, 'P');
 
   return (
     <div className="flex items-start gap-3 px-4 py-3 hover:bg-surface/60 transition">
@@ -316,11 +357,11 @@ function CommRow({ comm }: { comm: Communication }) {
             </span>
           )}
           {comm.scam_detected && (
-            <span className="rounded-full bg-red-500/10 px-1.5 py-0.5 text-[10px] font-semibold text-red-400">SCAM</span>
+            <span className="rounded-full bg-red-500/10 px-1.5 py-0.5 text-[10px] font-semibold text-red-400">{t('guardian.scamBadge')}</span>
           )}
         </div>
         <p className="text-xs text-muted mt-0.5 line-clamp-1">
-          {comm.summary ?? comm.body ?? (comm.routing_mode_used ? ROUTING_MODE_LABELS[comm.routing_mode_used] : 'Handled')}
+          {comm.summary ?? comm.body ?? (comm.routing_mode_used ? t(ROUTING_MODE_LABEL_KEYS[comm.routing_mode_used]) : t('guardian.handled'))}
         </p>
       </div>
       <div className="shrink-0 text-right">

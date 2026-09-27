@@ -5,6 +5,12 @@
 // pure transform of already-fetched rows so the math is unit-tested directly and
 // reused by the client module without duplicating logic.
 
+import { dayKeyIn } from '@/lib/time/zoned';
+import { createFormat } from '@/lib/utils/format';
+import { DEFAULT_LOCALE, type LocaleCode } from '@/lib/i18n/locales';
+
+type Translate = (key: string, params?: Record<string, string | number>) => string;
+
 export type ChoreLike = {
   id: string;
   title: string;
@@ -163,18 +169,50 @@ export function rewardsProgress(
   return { member: leader.member, points: leader.points, cost: target.cost_points, remaining, pct, rewardTitle: target.title };
 }
 
-/** Human due-date label + urgency flag relative to `now`. */
-export function dueLabel(due: string | null, now: Date = new Date()): { label: string; tone: 'overdue' | 'today' | 'soon' | 'normal' | 'none' } {
-  if (!due) return { label: 'No due date', tone: 'none' };
+/**
+ * Human due-date label + urgency flag, in the FAMILY's zone and the READER's
+ * language.
+ *
+ * `chore_assignments.due_at` is a `timestamptz` — an instant — so turning it
+ * into "Today" or "Overdue" needs a zone, and this took the viewer's DEVICE
+ * zone via `setHours(0, 0, 0, 0)`. `lib/home/today.ts:142` buckets THE SAME
+ * `due_at` with `dayKeyInZone(c.due_at, tz)`, and the chore notification
+ * renders it with `timeLabel(c.due_at, tz)` — both the family's zone. So one
+ * chore row was "Tomorrow" on the chores page and "Today" on the home page and
+ * in the notification, for any viewer whose device zone differs from the
+ * household's: a parent travelling, a phone left on UTC, a split household.
+ *
+ * `tz` is taken separately from `todayKey` because both halves need it — the
+ * due instant has to be resolved to a day, and the fallback date has to be
+ * FORMATTED in that zone too, or a chore due late on the 25th prints "Fri Jun
+ * 26" while calling itself the 25th.
+ *
+ * The DATE takes the locale; the four words take a translator the caller
+ * supplies, falling back to English without one — the contract fmtRelative uses
+ * for "Today" and "Tomorrow". Localising only the date would have left a German
+ * family reading "Overdue" beside "Di., 14. Juli". Neither the locale nor the
+ * translator can move the TONE, which drives colour and urgency.
+ */
+export function dueLabel(
+  due: string | null,
+  todayKey: string,
+  tz: string,
+  locale: LocaleCode = DEFAULT_LOCALE,
+  t?: Translate,
+): { label: string; tone: 'overdue' | 'today' | 'soon' | 'normal' | 'none' } {
+  const word = (key: string, english: string) => (t ? t(key) : english);
+  if (!due) return { label: word('todos.noDueDate', 'No due date'), tone: 'none' };
   const d = new Date(due);
-  if (Number.isNaN(d.getTime())) return { label: 'No due date', tone: 'none' };
-  const today = new Date(now); today.setHours(0, 0, 0, 0);
-  const target = new Date(d); target.setHours(0, 0, 0, 0);
-  const diff = Math.round((target.getTime() - today.getTime()) / 86400000);
-  if (diff < 0) return { label: 'Overdue', tone: 'overdue' };
-  if (diff === 0) return { label: 'Today', tone: 'today' };
-  if (diff === 1) return { label: 'Tomorrow', tone: 'soon' };
-  return { label: d.toLocaleDateString('en-US', { weekday: 'short', month: 'short', day: 'numeric' }), tone: 'normal' };
+  if (Number.isNaN(d.getTime())) return { label: word('todos.noDueDate', 'No due date'), tone: 'none' };
+  const targetKey = dayKeyIn(d, tz);
+  const diff = Math.round(
+    (Date.parse(`${targetKey}T00:00:00Z`) - Date.parse(`${todayKey.slice(0, 10)}T00:00:00Z`)) / 86400000,
+  );
+  if (!Number.isFinite(diff)) return { label: word('todos.noDueDate', 'No due date'), tone: 'none' };
+  if (diff < 0) return { label: word('todos.overdue', 'Overdue'), tone: 'overdue' };
+  if (diff === 0) return { label: word('calendar.today', 'Today'), tone: 'today' };
+  if (diff === 1) return { label: word('quickCapture.tomorrow', 'Tomorrow'), tone: 'soon' };
+  return { label: createFormat(locale, undefined, tz).fmtDate(d, 'EEE, MMM d'), tone: 'normal' };
 }
 
 // Keyword → emoji map for chores that don't carry an explicit emoji icon.

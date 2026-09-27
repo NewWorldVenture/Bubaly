@@ -1,4 +1,6 @@
 // Vacation Planner — display metadata for enums. Pure, no deps.
+
+import { DEFAULT_LOCALE, type LocaleCode } from '@/lib/i18n/locales';
 import type {
   VacationKind, VacationStatus, VacItemKind, VacDayPart, VacTransportKind,
   VacLodgingKind, VacBudgetCategory, VacPackCategory, VacDocKind, VacRecoKind,
@@ -120,8 +122,19 @@ export const RECO_META: Record<VacRecoKind, { label: string; emoji: string }> = 
   suggestion: { label: 'Suggestion', emoji: '💡' },
 };
 
-export const dollars = (cents: number | null | undefined): string =>
-  cents == null ? '—' : `$${(cents / 100).toLocaleString('en-US', { minimumFractionDigits: 0, maximumFractionDigits: 0 })}`;
+/**
+ * Whole dollars for the reader.
+ *
+ * The "$" used to be prefixed BY HAND with only the digits localised, which is a
+ * defect a locale swap alone would not fix: handed a European locale that shape
+ * renders "$2.767" — the American symbol position with German separators, a
+ * notation nobody writes. `style: 'currency'` puts the symbol where the locale puts
+ * it. Six modules carried the same line; this is one of them.
+ */
+export const dollars = (cents: number | null | undefined, locale: LocaleCode = DEFAULT_LOCALE): string =>
+  cents == null
+    ? '—'
+    : new Intl.NumberFormat(locale, { style: 'currency', currency: 'USD', minimumFractionDigits: 0, maximumFractionDigits: 0 }).format(cents / 100);
 
 export const lookup = <V extends string>(arr: { value: V; label: string; emoji: string }[], v: V) =>
   arr.find((x) => x.value === v) ?? { value: v, label: v, emoji: '•' };

@@ -6,13 +6,13 @@ import { createServer } from '@/lib/supabase/server';
 import { PageHeader } from '@/components/app/page-header';
 import { ErrorState } from '@/components/ui/states';
 import { whoseTurn, statusLine, type Party, type NegotiationStatus } from '@/lib/marketplace/negotiation';
+import { MARKETPLACE_CURRENCY } from '@/lib/marketplace/listings';
 import { cn } from '@/lib/utils/cn';
-import { getTranslations } from '@/lib/i18n/server';
+import { getLocaleContext, getTranslations } from '@/lib/i18n/server';
+import { getFormat } from '@/lib/utils/format-server';
 
 export const metadata: Metadata = { title: 'Offers · Marketplace | Bubaly' };
 export const dynamic = 'force-dynamic';
-
-const money = (c: number) => `$${(c / 100).toFixed(2)}`;
 
 type Row = {
   id: string; listing_id: string; family_id: string; buyer_member_id: string; buyer_family_id: string;
@@ -23,6 +23,12 @@ type Row = {
  *  whose move it is. The full thread + accept/counter lives on the item page. */
 export default async function NegotiationsInboxPage() {
   const tr = await getTranslations();
+  // Every offer here is the READER's money to read: this was `$${(c / 100).toFixed(2)}`
+  // inside English sentences. The amounts take the request's locale and the
+  // sentences around them are catalogue keys.
+  const { locale } = await getLocaleContext();
+  const { fmtMoney } = await getFormat();
+  const money = (c: number) => fmtMoney(c, MARKETPLACE_CURRENCY);
   const ctx = await requireUserContext();
   const sb = await createServer();
   const familyId = ctx.active.familyId;
@@ -100,9 +106,10 @@ export default async function NegotiationsInboxPage() {
                 <div className="min-w-0 flex-1">
                   <p className="truncate text-sm font-semibold">{t}</p>
                   <p className="mt-0.5 text-xs text-muted">
-                    {role === 'buyer' ? `Your offer to ${counterparty}` : `${counterparty} offered`} · asking {money(ask)}
+                    {tr(role === 'buyer' ? 'marketplaceNegotiations.yourOfferToAsking' : 'marketplaceNegotiations.theyOfferedAsking',
+                      { name: counterparty, amount: money(ask) })}
                   </p>
-                  <p className="mt-0.5 text-xs">{statusLine(neg(row), role)}</p>
+                  <p className="mt-0.5 text-xs">{statusLine(neg(row), role, locale.code, tr)}</p>
                 </div>
                 <div className="text-right">
                   <div className="text-base font-bold tabular-nums text-brand-text">{money(row.agreed_amount_cents ?? row.current_amount_cents)}</div>

@@ -1,16 +1,16 @@
 'use client';
 
-import { useLayoutEffect, useMemo, useState } from 'react';
+import { Fragment, useLayoutEffect, useMemo, useState } from 'react';
 import {
   Heart, Cake, Sparkles, Wine, Star, CalendarDays, Gift, Plus, Pencil, Trash2,
-  ExternalLink, DollarSign, Bell, Wand2, Loader2, SlidersHorizontal, MapPin, Check, ShoppingBag,
+  ExternalLink, Bell, Wand2, Loader2, SlidersHorizontal, MapPin, Check, ShoppingBag,
   CalendarPlus, CalendarCheck,
 } from 'lucide-react';
 import { useApp } from '@/components/app/app-context';
 import { useRealtimeQuery } from '@/lib/hooks/use-realtime-query';
 import { createClient } from '@/lib/supabase/client';
 import { toggleDateOnCalendarAction } from '@/app/(app)/dashboard/relationship/actions';
-import { describeDbError } from '@/lib/supabase/errors';
+import { describeDbError, wroteNoRows } from '@/lib/supabase/errors';
 import { useToast } from '@/components/ui/toast';
 import { Modal } from '@/components/ui/modal';
 import { Input, Textarea, Field, Select } from '@/components/ui/input';
@@ -21,9 +21,15 @@ import { cn } from '@/lib/utils/cn';
 import {
   upcomingDates, formatCountdown, milestoneLabel, type RelDate,
 } from '@/lib/relationship/dates';
+import { dayKeyIn } from '@/lib/time/zoned';
 import { createRelationshipDigestRequestScope, suggestGiftsFromWishlist, summarizeGifts, type WishItemLite, type RelationshipDigest } from '@/lib/relationship/gifts';
 import type { Tables, RelationshipDateKind, RelationshipDateStatus, RelationshipGiftStatus } from '@/lib/database.types';
-import { useTranslations } from '@/components/i18n/locale-provider';
+import { useLocale, useTranslations } from '@/components/i18n/locale-provider';
+import { useFormat } from '@/components/i18n/use-format';
+import { formatCents } from '@/lib/wallet/ledger';
+import type { Format } from '@/lib/utils/format';
+import { useConfirm } from '@/components/ui/confirm';
+import { safeWebLink } from '@/lib/utils/safe-link';
 
 type RDate = Tables<'relationship_dates'>;
 type Gift_ = Tables<'relationship_gift_ideas'>;
@@ -53,12 +59,22 @@ const blankDate = {
   reminderDaysBefore: '14', memberId: '', location: '', notes: '', status: 'upcoming',
 };
 const blankGift = { id: '', title: '', url: '', price: '', occasion: '', forName: '', reason: '', status: 'idea' as RelationshipGiftStatus };
-const fmtDate = (iso: string) => new Date(`${iso}T00:00:00`).toLocaleDateString(undefined, { month: 'long', day: 'numeric', year: 'numeric' });
-const dollars = (cents: number | null) => (cents == null ? null : `$${(cents / 100).toFixed(cents % 100 === 0 ? 0 : 2)}`);
+const fmtDateIn = (f: Format) => (iso: string) => f.fmtDate(`${iso}T00:00:00`, 'MMMM d, yyyy');
+// relationship_gift_ideas.price_cents and relationship_profile.gift_budget_cents
+// have no currency column, the forms take dollars ("Approx. price ($)"), and a
+// wishlist price is dollars too — so the money is USD. The reader's locale decides
+// only where the symbol goes and how the digits group (I18N-003).
+const CURRENCY = 'USD';
 
 export function RelationshipModule() {
   const t = useTranslations();
-  const { familyId, userId, members, selfMember } = useApp();
+  const askConfirm = useConfirm();
+  // Dates follow the reader, not the browser (I18N-002).
+  const fmtDate = fmtDateIn(useFormat());
+  // So does money: the reader's locale places the symbol and groups the digits.
+  const locale = useLocale();
+  const money = (cents: number) => formatCents(cents, CURRENCY, locale.code);
+  const { familyId, userId, members, selfMember, family } = useApp();
   const { success, error: toastError } = useToast();
 
   const { data: dates, loading: dl, error: de } = useRealtimeQuery<RDate>({
@@ -113,13 +129,21 @@ export function RelationshipModule() {
   const giftSummary = useMemo(() => summarizeGifts((gifts ?? []).map((g) => ({ status: g.status, price_cents: g.price_cents }))), [gifts]);
   const visibleGifts = useMemo(() => (gifts ?? []).filter((g) => giftFilter === 'all' || g.status === giftFilter), [gifts, giftFilter]);
 
+  // The FAMILY's day, not this device's — the same answer the server-rendered
+  // home dashboard gives for the same anniversary, and the right one for a
+  // partner reading this from another timezone.
+  const todayKey = useMemo(
+    () => dayKeyIn(new Date(), family?.timezone || 'UTC'),
+    [family?.timezone],
+  );
   const upcoming = useMemo(() => upcomingDates(
     (dates ?? []).map((d): RelDate => ({
       id: d.id, kind: d.kind, title: d.title, eventDate: d.event_date,
       recursAnnually: d.recurs_annually, reminderDaysBefore: d.reminder_days_before, status: d.status,
     })),
+    todayKey,
     { withinDays: 365 },
-  ), [dates]);
+  ), [dates, todayKey]);
 
   const partnerName = profile?.partner_name?.trim()
     || (profile?.partner_member_id ? members.find((m) => m.id === profile.partner_member_id)?.display_name : null)
@@ -158,18 +182,22 @@ export function RelationshipModule() {
       member_id: dateForm.memberId || null, location: dateForm.location.trim() || null,
       notes: dateForm.notes.trim() || null, status: dateForm.status as RelationshipDateStatus,
     };
-    const { error: err } = dateForm.id
-      ? await sb.from('relationship_dates').update(fields).eq('id', dateForm.id)
-      : await sb.from('relationship_dates').insert({ ...fields, family_id: familyId, created_by: userId });
+    // Under RLS a refused row comes back with no error and zero rows, which this used to report as done. Audit C1-S9-81.
+    const { data: saved2, error: err } = dateForm.id
+      ? await sb.from('relationship_dates').update(fields).eq('id', dateForm.id).select('id')
+      : await sb.from('relationship_dates').insert({ ...fields, family_id: familyId, created_by: userId }).select('id');
     setSaving(false);
     if (err) { toastError(describeDbError(err)); return; }
+    if (wroteNoRows(saved2)) { toastError(t('errors.thatChangeWasNotSaved')); return; }
     success(dateForm.id ? 'Date updated' : 'Date added');
     setDateModal(false);
   }
   async function removeDate(d: RDate) {
-    if (!confirm(`Remove "${d.title}"?`)) return;
-    const { error: err } = await createClient().from('relationship_dates').delete().eq('id', d.id);
+    if (!(await askConfirm({ title: t('confirm.removeNamed', { name: d.title }), body: t('confirm.cannotBeUndone') }))) return;
+    // Under RLS a refused row comes back with no error and zero rows, which this used to report as done. Audit C1-S9-81.
+    const { data: removed, error: err } = await createClient().from('relationship_dates').delete().eq('id', d.id).select('id');
     if (err) { toastError(describeDbError(err)); return; }
+    if (wroteNoRows(removed)) { toastError(t('errors.thatChangeWasNotSaved')); return; }
     success(t('relationshipModule.removed'));
   }
   async function toggleCalendar(d: RDate) {
@@ -203,21 +231,24 @@ export function RelationshipModule() {
       reason: giftForm.reason.trim() || null, status: giftForm.status,
     };
     const sb = createClient();
-    const { error: err } = giftForm.id
-      ? await sb.from('relationship_gift_ideas').update(fields).eq('id', giftForm.id)
-      : await sb.from('relationship_gift_ideas').insert({ ...fields, family_id: familyId, created_by: userId, source: 'manual' });
+    const { data: saved3, error: err } = giftForm.id
+      ? await sb.from('relationship_gift_ideas').update(fields).eq('id', giftForm.id).select('id')
+      : await sb.from('relationship_gift_ideas').insert({ ...fields, family_id: familyId, created_by: userId, source: 'manual' }).select('id');
     setSaving(false);
     if (err) { toastError(describeDbError(err)); return; }
+    if (wroteNoRows(saved3)) { toastError(t('errors.thatChangeWasNotSaved')); return; }
     success(giftForm.id ? 'Gift updated' : 'Gift idea saved');
     setGiftModal(false);
   }
   async function setGiftStatus(g: Gift_, status: RelationshipGiftStatus) {
-    const { error: err } = await createClient().from('relationship_gift_ideas').update({ status }).eq('id', g.id);
+    const { data: updated, error: err } = await createClient().from('relationship_gift_ideas').update({ status }).eq('id', g.id).select('id');
     if (err) toastError(describeDbError(err));
+    else if (wroteNoRows(updated)) toastError(t('errors.thatChangeWasNotSaved'));
   }
   async function removeGift(g: Gift_) {
-    const { error: err } = await createClient().from('relationship_gift_ideas').delete().eq('id', g.id);
+    const { data: removed2, error: err } = await createClient().from('relationship_gift_ideas').delete().eq('id', g.id).select('id');
     if (err) { toastError(describeDbError(err)); return; }
+    if (wroteNoRows(removed2)) { toastError(t('errors.thatChangeWasNotSaved')); return; }
     success(t('relationshipModule.removed'));
   }
   async function saveAiGift(idea: { title: string; reason: string; estimatedPrice: string | null }) {
@@ -236,7 +267,7 @@ export function RelationshipModule() {
       price_cents: w.price != null ? Math.round(w.price * 100) : null, source: 'wishlist', wishlist_item_id: w.id, status: 'idea',
     });
     if (err) { toastError(describeDbError(err)); return; }
-    success(`Added “${w.title}” to gift ideas`);
+    success(t('modules.addedToGiftIdeas', { title: w.title }));
   }
 
   // ── Profile ──
@@ -261,11 +292,12 @@ export function RelationshipModule() {
       notes: pForm.notes.trim() || null,
     };
     const sb = createClient();
-    const { error: err } = profile
-      ? await sb.from('relationship_profile').update(fields).eq('id', profile.id)
-      : await sb.from('relationship_profile').insert({ ...fields, family_id: familyId, created_by: userId });
+    const { data: savedProfile, error: err } = profile
+      ? await sb.from('relationship_profile').update(fields).eq('id', profile.id).select('id')
+      : await sb.from('relationship_profile').insert({ ...fields, family_id: familyId, created_by: userId }).select('id');
     setSaving(false);
     if (err) { toastError(describeDbError(err)); return; }
+    if (wroteNoRows(savedProfile)) { toastError(t('errors.thatChangeWasNotSaved')); return; }
     success(t('relationshipModule.preferencesSaved'));
     setProfileModal(false);
   }
@@ -444,7 +476,12 @@ export function RelationshipModule() {
             <div className="mb-3 flex flex-wrap items-center gap-x-4 gap-y-2">
               <p className="text-sm text-muted">
                 <span className="font-semibold text-fg">{giftSummary.open}</span> {t('relationship.toBuy')}
-                {giftSummary.openCents > 0 && <> · <span className="font-semibold text-fg">{dollars(giftSummary.openCents)}</span> {t('relationship.toGo')}</>}
+                {/* The whole phrase is the catalogue's, so a language that puts the
+                    amount after its words can; split on the placeholder so the
+                    amount keeps its emphasis wherever the translation puts it. */}
+                {giftSummary.openCents > 0 && <> · {t('relationship.amountToGo').split(/(\{amount\})/).map((part, i) => (part === '{amount}'
+                  ? <span key={i} className="font-semibold text-fg">{money(giftSummary.openCents)}</span>
+                  : <Fragment key={i}>{part}</Fragment>))}</>}
                 {giftSummary.done > 0 && <> · {giftSummary.done} done</>}
               </p>
               <div className="flex flex-wrap gap-1 sm:ml-auto">
@@ -476,8 +513,10 @@ export function RelationshipModule() {
                 {g.reason && <p className="mt-0.5 text-sm text-muted">{g.reason}</p>}
                 {g.for_name && <p className="mt-0.5 text-xs text-muted">For {g.for_name}{g.occasion ? ` · ${g.occasion}` : ''}</p>}
                 <div className="mt-2 flex flex-wrap items-center gap-x-3 gap-y-1 text-xs text-muted">
-                  {g.price_cents != null && <span className="inline-flex items-center gap-0.5"><DollarSign className="h-3.5 w-3.5" />{dollars(g.price_cents)?.replace('$', '')}</span>}
-                  {g.url && <a href={g.url} target="_blank" rel="noopener noreferrer" className="inline-flex items-center gap-1 text-brand-text hover:underline"><ExternalLink className="h-3.5 w-3.5" /> {t('relationship.view')}</a>}
+                  {/* No dollar-sign icon: the formatted amount carries the symbol,
+                      where the reader's locale puts it. */}
+                  {g.price_cents != null && <span className="inline-flex items-center gap-0.5">{money(g.price_cents)}</span>}
+                  {g.url && <a href={safeWebLink(g.url) ?? undefined} target="_blank" rel="noopener noreferrer" className="inline-flex items-center gap-1 text-brand-text hover:underline"><ExternalLink className="h-3.5 w-3.5" /> {t('relationship.view')}</a>}
                 </div>
                 <div className="mt-3 flex items-center gap-2 border-t border-border pt-3">
                   {g.status === 'purchased' || g.status === 'given'
@@ -626,7 +665,7 @@ export function RelationshipModule() {
                   <div key={c.wishlistItemId} className="flex items-center justify-between gap-3 rounded-xl border border-border bg-surface/50 p-3">
                     <div className="min-w-0">
                       <p className="truncate text-sm font-medium">{c.title}</p>
-                      <p className="text-xs text-muted">{c.priceCents != null ? dollars(c.priceCents) : 'No price'} · {c.priority} priority</p>
+                      <p className="text-xs text-muted">{c.priceCents != null ? money(c.priceCents) : t('relationship.noPrice')} · {c.priority} priority</p>
                     </div>
                     <Button size="sm" variant={already ? 'outline' : 'primary'} disabled={already} onClick={() => addWishGift(w)} className="shrink-0 gap-1">
                       {already ? <><Check className="h-3.5 w-3.5" /> {t('relationship.added')}</> : <><Plus className="h-3.5 w-3.5" /> Add</>}

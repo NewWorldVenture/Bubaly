@@ -14,7 +14,10 @@ const sources = Object.fromEntries([
   'components/app/quick-capture.tsx', 'components/capture/capture-shell.tsx', 'lib/capture/document-link.ts', 'components/app/app-context.tsx', 'components/ui/toast.tsx', 'lib/analytics/use-journey.ts',
   'lib/offline/cache.ts', 'lib/offline/cache-scope.tsx', 'lib/auth/cache-session.ts', 'lib/auth/session-change.ts',
   'lib/supabase/errors.ts', 'lib/realtime/published-tables.ts', 'lib/constants/roles.ts', 'lib/capture/save.ts', 'lib/capture/parse.ts', 'lib/capture/shortcut.ts',
-  'components/i18n/locale-provider.tsx', 'lib/i18n/locales.ts', 'lib/i18n/messages.ts',
+  'components/i18n/locale-provider.tsx', 'lib/i18n/locales.ts', 'lib/i18n/messages.ts', 'lib/i18n/translate.ts',
+  // QuickCapture's preview formats through useFormat, which the loader reaches
+  // from quick-capture.tsx, and useFormat builds the real formatters.
+  'components/i18n/use-format.ts', 'lib/utils/format.ts',
   'components/ui/states.tsx', 'components/ui/states-client.tsx', 'components/ui/button.tsx',
   'components/ui/input.tsx', 'components/ui/modal.tsx', 'components/app/page-header.tsx',
   'lib/a11y/use-dialog-behavior.ts',
@@ -64,8 +67,12 @@ const list: Row = { id: listId, family_id: familyId, name: 'To-Do', archived_at:
 test.use({ timezoneId: 'UTC' });
 
 async function fixture(page: Page, locale: 'en-US' | 'fr-FR' = 'en-US', screen: 'sheet' | 'shell' = 'sheet'): Promise<Fixture> {
-  const catalogue = locale === 'en-US' ? messages : Object.fromEntries(Object.entries(JSON.parse(fs.readFileSync(`lib/i18n/messages/${locale}.json`, 'utf8')))
-    .filter(([key]) => /^(quickCapture\.|captureShell\.|documentLink\.|toast\.|auth\.cache|states\.|modal\.)/.test(key)));
+  // Merged over English, as lib/i18n/messages.ts getMessages() does for the real
+  // provider: the browser provider no longer falls back on its own (that
+  // fallback was the 244 KB English catalogue in every page's JS), so a key the
+  // French catalogue has not reached yet renders in English, not as a raw key.
+  const catalogue = locale === 'en-US' ? messages : { ...messages, ...Object.fromEntries(Object.entries(JSON.parse(fs.readFileSync(`lib/i18n/messages/${locale}.json`, 'utf8')))
+    .filter(([key]) => /^(quickCapture\.|captureShell\.|documentLink\.|toast\.|auth\.cache|states\.|modal\.)/.test(key))) };
   const held = new Map<Table, Array<() => Promise<void>>>(), pendingWrites: Array<() => Promise<void>> = [];
   const state: Fixture = {
     rows: { todo_lists: [{ ...list }], todo_items: [], journey_events: [] },
@@ -84,6 +91,21 @@ async function fixture(page: Page, locale: 'en-US' | 'fr-FR' = 'en-US', screen: 
     if (url.origin === origin) { await route.fulfill({ contentType: 'text/html', body: '<!doctype html><main id="root"></main>' }); return; }
     if (url.origin !== provider) throw new Error(`Unexpected fixture destination: ${url.origin}`);
     if (request.method() === 'OPTIONS') { await route.fulfill({ status: 204, headers }); return; }
+    if (url.pathname.endsWith('/rpc/ensure_default_todo_list')) {
+      // 0443's get-or-create, recorded as the list write it may be: it re-reads
+      // the family's open list under a lock and inserts only when there is none.
+      const args = request.postDataJSON() as Record<string, unknown>;
+      const body = { family_id: args.p_family_id, name: args.p_name, created_by: args.p_created_by };
+      state.writes.push({ table: 'todo_lists', method: 'POST', body, query: 'rpc:ensure_default_todo_list' });
+      const finish = async () => {
+        if (state.failMutation) { await route.fulfill({ status: 400, headers, contentType: 'application/json', body: JSON.stringify({ code: '23514', message: 'Fixture mutation rejected' }) }); return; }
+        let found = state.rows.todo_lists.find(row => row.family_id === body.family_id && row.archived_at === null);
+        if (!found) { found = { id: `10000000-0000-4000-8000-${String(state.writes.length).padStart(12, '0')}`, created_at: new Date().toISOString(), archived_at: null, ...body }; state.rows.todo_lists.push(found); }
+        await route.fulfill({ status: 200, headers, contentType: 'application/json', body: JSON.stringify(found.id) });
+      };
+      if (state.holdMutations) pendingWrites.push(finish); else await finish();
+      return;
+    }
     const table = url.pathname.split('/').at(-1) as Table;
     if (!(table in state.rows)) throw new Error(`Unexpected fixture table: ${table}`);
     if (request.method() === 'GET') {
@@ -144,6 +166,13 @@ async function fixture(page: Page, locale: 'en-US' | 'fr-FR' = 'en-US', screen: 
       '@/components/capture/capture-shortcuts': { CaptureShortcuts: () => null },
       '@/components/ui/avatar': { Avatar: () => null }, '@/components/ai/ai-insight': { AiInsight: () => null },
       '@/lib/utils/cn': { cn: (...values) => values.filter(value => typeof value === 'string').join(' ') },
+      // The real lib/utils/format.ts runs here; date-fns is the one npm module it
+      // imports and the in-page loader has no bundler. Every pattern this fixture
+      // formats ('EEEE, MMM d', 'h:mm a') is mapped to Intl inside that module, so
+      // only these entry points can be reached.
+      'date-fns': { parseISO: value => new Date(value), format: value => new Date(value).toISOString(),
+        isToday: value => value.toDateString() === new Date().toDateString(),
+        isTomorrow: value => { const day = new Date(); day.setDate(day.getDate() + 1); return value.toDateString() === day.toDateString(); } },
     };
     const modules = {};
     function load(id) {
@@ -216,6 +245,9 @@ test('control: successful empty default-list lookup creates a list with member o
   expect(state.rows.todo_lists).toHaveLength(1);
   expect(state.rows.todo_lists[0]).toMatchObject({ family_id: familyId, created_by: parentId });
   expect(state.rows.todo_items[0].list_id).toBe(state.rows.todo_lists[0].id);
+  // DATA-007: the empty lookup creates through the serialised get-or-create,
+  // never a bare insert a second first-capture could race.
+  expect(state.writes.filter(write => write.table === 'todo_lists').map(write => write.query)).toEqual(['rpc:ensure_default_todo_list']);
 });
 
 test('control: returned task error keeps the draft, reports failure and allows deliberate retry', async ({ page }) => {
@@ -378,7 +410,7 @@ test('real French LocaleProvider renders the uncertainty recovery copy and desti
   const state = await fixture(page, 'fr-FR'); state.emptyTaskReceipt = true;
   await page.evaluate(() => window.__quickCaptureAudit.mount());
   const fr = JSON.parse(fs.readFileSync('lib/i18n/messages/fr-FR.json', 'utf8'));
-  await page.getByRole('button', { name: fr['quickCapture.quickCapture'], exact: true }).click(); await page.getByRole('textbox', { name: 'Task', exact: true }).fill('Préparer les sacs');
+  await page.getByRole('button', { name: fr['quickCapture.quickCapture'], exact: true }).click(); await page.getByRole('textbox', { name: fr['quickCapture.task'], exact: true }).fill('Préparer les sacs');
   await page.getByRole('button', { name: fr['quickCapture.save'], exact: true }).click();
   await expect(page.getByRole('alert')).toHaveText(new RegExp(fr['quickCapture.saveUncertain']));
   await expect(page.getByRole('link', { name: fr['quickCapture.reviewCapture'], exact: true })).toHaveAttribute('href', '/dashboard/todos');

@@ -10,7 +10,7 @@ import {
 import { useApp } from '@/components/app/app-context';
 import { useRealtimeQuery } from '@/lib/hooks/use-realtime-query';
 import { createClient } from '@/lib/supabase/client';
-import { describeDbError } from '@/lib/supabase/errors';
+import { describeDbError, wroteNoRows } from '@/lib/supabase/errors';
 import { useToast } from '@/components/ui/toast';
 import { PageHeader } from '@/components/app/page-header';
 import { Button } from '@/components/ui/button';
@@ -55,8 +55,15 @@ export function JournalModule() {
 
   async function remove(id: string) {
     const supabase = createClient();
-    const { error: delErr } = await supabase.from('journal_entries').delete().eq('id', id);
+    // RLS filters a DELETE rather than refusing it, so without `.select('id')`
+    // a row this member may not remove returns `error: null` and the module
+    // reports success over a record that is still there.
+    // 0437: a journal is the one thing nobody else writes, so a blocked delete
+    // here is the expected outcome for anyone but its author.
+    const { data, error: delErr } = await supabase.from('journal_entries').delete()
+      .eq('id', id).eq('family_id', familyId).select('id');
     if (delErr) return toastError(describeDbError(delErr));
+    if (wroteNoRows(data)) return toastError(t('errors.thatChangeWasNotSaved'));
     success(t('journalModule.entryDeleted'));
     void refresh();
   }
@@ -93,8 +100,8 @@ export function JournalModule() {
                     </div>
                   </div>
                   <div className="flex gap-0.5 opacity-0 transition group-hover:opacity-100">
-                    <button onClick={() => setComposer({ entry: e, prompt: e.prompt })} className="rounded-lg p-1.5 text-muted hover:bg-elevated hover:text-fg"><Pencil className="h-3.5 w-3.5" /></button>
-                    <button onClick={() => { if (confirm(t('journalModule.deleteThisEntry'))) remove(e.id); }} className="rounded-lg p-1.5 text-muted hover:bg-elevated hover:text-danger"><Trash2 className="h-3.5 w-3.5" /></button>
+                    <button aria-label={t('a11y.edit')} onClick={() => setComposer({ entry: e, prompt: e.prompt })} className="rounded-lg p-1.5 text-muted hover:bg-elevated hover:text-fg"><Pencil className="h-3.5 w-3.5" /></button>
+                    <button aria-label={t('a11y.delete')} onClick={() => { if (confirm(t('journalModule.deleteThisEntry'))) remove(e.id); }} className="rounded-lg p-1.5 text-muted hover:bg-elevated hover:text-danger"><Trash2 className="h-3.5 w-3.5" /></button>
                   </div>
                 </div>
                 {e.prompt && (
@@ -189,12 +196,20 @@ function EntryModal({ entry, initialPrompt, familyId, userId, memberId, onClose,
     setLoading(true);
     const supabase = createClient();
     const patch = { title, body: finalBody, mood, prompt: initialPrompt };
-    const { error: saveErr } = entry
-      ? await supabase.from('journal_entries').update(patch).eq('id', entry.id)
-      : await supabase.from('journal_entries').insert({ family_id: familyId, member_id: memberId, created_by: userId, ...patch });
+    // RLS FILTERS an UPDATE rather than refusing it, so a row the caller may
+    // not rewrite comes back `error: null` with nothing changed. See
+    // 0437 makes a journal nobody
+    // else's, and tests/a-filtered-delete-is-not-a-deletion.test.ts: the `family_id`
+    // predicate bounds the write to one household and `.select('id')` makes
+    // the empty result an answer. An INSERT needs neither — RLS refuses one
+    // with an error instead of filtering it away.
+    const { data, error: saveErr } = entry
+      ? await supabase.from('journal_entries').update(patch).eq('id', entry.id).eq('family_id', familyId).select('id')
+      : await supabase.from('journal_entries').insert({ family_id: familyId, member_id: memberId, created_by: userId, ...patch }).select('id');
     setLoading(false);
     if (saveErr) return toastError(describeDbError(saveErr));
-    success(entry ? 'Entry saved' : 'Entry added');
+    if (wroteNoRows(data)) return toastError(t('errors.thatChangeWasNotSaved'));
+    success(entry ? t('journalModule.entrySaved') : t('journalModule.entryAdded'));
     onSaved();
   }
 

@@ -7,7 +7,12 @@
 // transparent + editable — each signal carries its evidence and is acknowledged /
 // dismissed by the family (family_signals table).
 
+import type { BudgetPeriod } from '@/lib/database.types';
+import type { LocaleCode } from '@/lib/i18n/locales';
 import { periodWindowStart, type BudgetRow, type ExpenseRow } from '@/lib/operating-index/inputs';
+import { formatCents } from '@/lib/wallet/ledger';
+
+type Translate = (key: string, params?: Record<string, string | number>) => string;
 
 export type SignalKind = 'ignored_reminder' | 'stress_window' | 'chore_conflict' | 'routine_adherence' | 'budget_drift';
 
@@ -209,9 +214,66 @@ export function detectRoutineAdherence(routines: RoutineRow[], completions: Rout
 // ── 5. Budget drift (recurring overspend) ────────────────────────────────────
 const norm = (c: string | null | undefined) => (c ?? '').trim().toLowerCase();
 const round2 = (n: number) => Math.round(n * 100) / 100;
-function money(n: number): string {
-  const v = round2(Math.max(0, n));
-  return v % 1 === 0 ? `$${v.toLocaleString('en-US')}` : `$${v.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
+
+/**
+ * A budget amount (`budgets.amount` and `transactions.amount` are DOLLARS) in the
+ * reader's format. It was `$${v.toLocaleString('en-US')}` — the symbol written by
+ * hand on the American side, digits grouped the American way, for every reader.
+ * Whole dollars still drop the cents, as before; formatCents does exactly that.
+ * USD because neither table carries a currency column.
+ */
+function money(n: number, locale: LocaleCode): string {
+  return formatCents(Math.round(Math.max(0, n) * 100), 'USD', locale);
+}
+
+export type BudgetDriftFacts = { category: string; period: BudgetPeriod; limit: number; spent: number; recurring: boolean };
+
+const PERIODS: readonly BudgetPeriod[] = ['weekly', 'monthly', 'yearly'];
+
+/**
+ * The words of a budget-drift signal, for a reader.
+ *
+ * One catalogue sentence per period rather than the period word dropped into an
+ * English frame: "monthly" inflects in German and French, and "Spent $120 of
+ * your $400 monthly Fun budget" is not fixed by localising the two numbers
+ * inside it. Exported so a surface can re-word a stored signal from its
+ * `evidence` for whoever is reading — the nightly cron has no reader to write for.
+ */
+export function budgetDriftText(facts: BudgetDriftFacts, locale: LocaleCode, t: Translate): { title: string; detail: string } {
+  const values = { spent: money(facts.spent, locale), limit: money(facts.limit, locale), category: facts.category };
+  return {
+    title: t('hardSignals.budgetDriftTitle', { category: facts.category }),
+    detail: t(`hardSignals.${facts.recurring ? 'budgetDriftRecurring' : 'budgetDrift'}.${facts.period}`, values),
+  };
+}
+
+/** The facts back out of a stored signal's `evidence`, or null when they are not all there. */
+export function budgetDriftFacts(evidence: Record<string, unknown> | null | undefined): BudgetDriftFacts | null {
+  const e = evidence ?? {};
+  if (typeof e.category !== 'string' || typeof e.limit !== 'number' || typeof e.spent !== 'number' || typeof e.recurring !== 'boolean') return null;
+  if (!PERIODS.includes(e.period as BudgetPeriod)) return null;
+  return { category: e.category, period: e.period as BudgetPeriod, limit: e.limit, spent: e.spent, recurring: e.recurring };
+}
+
+/**
+ * The words a READER sees for a stored signal. A stored row is worded for
+ * whichever scan last wrote it — the nightly model-refresh cron, which has no
+ * reader and writes en-US, or the member who pressed Refresh — so budget drift,
+ * the one signal that carries money, is worded again from its `evidence` for
+ * whoever is reading. Every other signal, and a drift row whose evidence is
+ * incomplete, keeps its stored words. Used by app/(app)/dashboard/family-signals/
+ * page.tsx and lib/reasoning/engine-server.ts, the two surfaces that show a
+ * signal to the family.
+ */
+export function signalWordsFor(
+  row: { kind: string; title: string; detail: string | null; evidence: unknown },
+  locale: LocaleCode,
+  t: Translate,
+): { title: string; detail: string | null } {
+  const evidence = row.evidence && typeof row.evidence === 'object' && !Array.isArray(row.evidence)
+    ? row.evidence as Record<string, unknown> : null;
+  const facts = row.kind === 'budget_drift' ? budgetDriftFacts(evidence) : null;
+  return facts ? budgetDriftText(facts, locale, t) : { title: row.title, detail: row.detail };
 }
 
 /**
@@ -221,7 +283,7 @@ function money(n: number): string {
  * Complements FOI's overspent-budget count with a transparent, dismissable,
  * evidence-carrying signal the family can act on. Pure + deterministic.
  */
-export function detectBudgetDrift(budgets: BudgetRow[], expenses: ExpenseRow[], now: Date): FamilySignal[] {
+export function detectBudgetDrift(budgets: BudgetRow[], expenses: ExpenseRow[], now: Date, locale: LocaleCode, t: Translate): FamilySignal[] {
   const out: FamilySignal[] = [];
   for (const b of budgets) {
     if (!b.amount || b.amount <= 0) continue;
@@ -249,10 +311,7 @@ export function detectBudgetDrift(budgets: BudgetRow[], expenses: ExpenseRow[], 
     out.push({
       kind: 'budget_drift',
       subjectKey: `budget:${cat}`,
-      title: `Over budget on ${b.category}`,
-      detail: recurring
-        ? `Spent ${money(spentNow)} of your ${money(b.amount)} ${b.period} ${b.category} budget — over two ${b.period} periods running.`
-        : `Spent ${money(spentNow)} of your ${money(b.amount)} ${b.period} ${b.category} budget this period.`,
+      ...budgetDriftText({ category: b.category, period: b.period, limit: b.amount, spent: spentNow, recurring }, locale, t),
       score,
       evidence: {
         category: b.category, period: b.period, limit: round2(b.amount),
@@ -277,13 +336,17 @@ export interface HardSignalInputs {
   expenses?: ExpenseRow[];
 }
 
-/** Run every detector and return the signals ranked by severity (highest first). */
-export function buildHardSignals(inp: HardSignalInputs, now: Date): FamilySignal[] {
+/**
+ * Run every detector and return the signals ranked by severity (highest first).
+ * `locale` and `t` word the one detector that carries money (budget drift) —
+ * required, see lib/intelligence/hard-signals-server.ts for where they come from.
+ */
+export function buildHardSignals(inp: HardSignalInputs, now: Date, locale: LocaleCode, t: Translate): FamilySignal[] {
   return [
     ...detectIgnoredReminders(inp.reminders ?? [], now),
     ...detectStressWindows(inp.events ?? [], inp.conflicts ?? [], inp.overdue ?? [], now),
     ...detectChoreConflicts(inp.chores ?? []),
     ...detectRoutineAdherence(inp.routines ?? [], inp.routineCompletions ?? [], now),
-    ...detectBudgetDrift(inp.budgets ?? [], inp.expenses ?? [], now),
+    ...detectBudgetDrift(inp.budgets ?? [], inp.expenses ?? [], now, locale, t),
   ].sort((a, b) => b.score - a.score);
 }

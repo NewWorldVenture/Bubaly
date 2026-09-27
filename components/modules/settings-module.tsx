@@ -6,7 +6,7 @@ import Link from 'next/link';
 // sets are still rendered, so the icon import is a union.
 import { Users, Mail, Trash2, Plus, Check, Pencil, User, Lock, RefreshCw, Compass, Bot, FileJson, Gift, X } from 'lucide-react';
 import { DEFAULT_REFERRAL_CONFIG, type ReferralConfig } from '@/lib/referrals/core';
-import { fmtMoney } from '@/lib/utils/format';
+import { useFormat } from '@/components/i18n/use-format';
 import { useApp } from '@/components/app/app-context';
 import { createClient } from '@/lib/supabase/client';
 import { describeDbError, wroteNoRows } from '@/lib/supabase/errors';
@@ -69,6 +69,7 @@ const HASH_BY_TAB: Record<SettingsTab, string> = {
 
 export function SettingsModule({ referralConfig }: { referralConfig?: ReferralConfig } = {}) {
   const t = useTranslations();
+  const { fmtMoney } = useFormat();
   const { family, members, role, userId, userEmail, defaultDashboard } = useApp();
   const admin = isAdmin(role);
   const { success, error: toastError } = useToast();
@@ -179,8 +180,14 @@ export function SettingsModule({ referralConfig }: { referralConfig?: ReferralCo
   async function removeMember(memberId: string) {
     if (!confirm(t('settingsModule.removeThisMemberFromThe'))) return;
     const supabase = createClient();
-    const { error } = await supabase.from('family_members').update({ is_active: false }).eq('id', memberId);
+    // See family-module: manager-gated, and RLS filters the UPDATE rather than
+    // refusing it, so a removal a non-manager attempted was reported as done.
+    // The `window.location.reload()` below made that especially convincing — the
+    // member came back, with no message saying why.
+    const { data: updated, error } = await supabase.from('family_members')
+      .update({ is_active: false }).eq('id', memberId).eq('family_id', family.id).select('id');
     if (error) return toastError(describeDbError(error));
+    if (wroteNoRows(updated)) return toastError(t('errors.thatChangeWasNotSaved'));
     success(t('settingsModule.memberRemoved'));
     window.location.reload();
   }
@@ -452,10 +459,18 @@ function EditMemberModal({ member, isSelf, onClose }: {
     const birthday = String(form.get('birthday') ?? '').trim();
     if (!display_name) { toastError(t('settingsModule.nameIsRequired')); return; }
     setSaving(true);
-    const { error } = await createClient().from('family_members')
-      .update({ display_name, role, birthday: birthday || null }).eq('id', member.id);
+    // This form changes a member's ROLE, so it is the sharpest case of the lot:
+    // fm_update (0211) is manager-gated, RLS FILTERS the update rather than
+    // refusing it, and the `window.location.reload()` below then showed the OLD
+    // role right after "Member updated". Scoped by the row's own `family_id`
+    // rather than a threaded prop — the question is whether this row is still in
+    // the family the screen believes it is in.
+    const { data: edited, error } = await createClient().from('family_members')
+      .update({ display_name, role, birthday: birthday || null })
+      .eq('id', member.id).eq('family_id', member.family_id).select('id');
     setSaving(false);
     if (error) return toastError(describeDbError(error));
+    if (wroteNoRows(edited)) return toastError(t('errors.thatChangeWasNotSaved'));
     success(t('settingsModule.memberUpdated'));
     onClose();
     window.location.reload();

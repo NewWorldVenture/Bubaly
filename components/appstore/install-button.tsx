@@ -15,7 +15,11 @@ export function InstallButton({ appId, installed: initial, available = true }: {
   const [pending, start] = useTransition();
   const { success, error: toastError } = useToast();
 
-  if (!available) {
+  // Not installable, and not installed: nothing to press. An app that IS
+  // installed keeps its control whatever its status now says, so a family can
+  // always remove it — an operator moving an app back to coming-soon used to
+  // strand every install behind this label (SRV-001 l8).
+  if (!available && !installed) {
     return <span className="rounded-lg border border-border px-3 py-1.5 text-xs font-semibold text-muted">{t('installButton.unavailable')}</span>;
   }
 

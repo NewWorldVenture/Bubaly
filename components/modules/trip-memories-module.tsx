@@ -5,7 +5,7 @@ import { BookHeart, Plus, Trash2, MapPin, Plane, ImageIcon } from 'lucide-react'
 import { useApp } from '@/components/app/app-context';
 import { useRealtimeQuery } from '@/lib/hooks/use-realtime-query';
 import { createClient } from '@/lib/supabase/client';
-import { describeDbError } from '@/lib/supabase/errors';
+import { describeDbError, wroteNoRows } from '@/lib/supabase/errors';
 import { useToast } from '@/components/ui/toast';
 import { Modal } from '@/components/ui/modal';
 import { Input, Textarea, Field, Select } from '@/components/ui/input';
@@ -100,9 +100,17 @@ export function TripMemoriesModule() {
   async function remove(m: Memory) {
     if (!confirm(t('tripMemoriesModule.deleteThisMemory'))) return;
     const supabase = createClient();
-    if (m.photo_path) await removeFamilyDocument(supabase, m.photo_path);
-    const { error } = await supabase.from('trip_memories').delete().eq('id', m.id);
-    if (error) toastError(describeDbError(error)); else success(t('tripMemoriesModule.deleted'));
+    // The object goes first and its result is READ: deleting the row first
+    // makes a surviving file INVISIBLE — nothing references it, so nobody can
+    // see it, open it or try again — while the screen says it is gone. Audit
+    // C1-S6-01; the same shape adminDeleteDocumentAction already uses.
+    if (m.photo_path) {
+      const { error: storageError } = await removeFamilyDocument(supabase, m.photo_path);
+      if (storageError) return toastError(storageError);
+    }
+    // Under RLS a refused row comes back with no error and zero rows, which this used to report as done. Audit C1-S9-86.
+    const { data: removed, error } = await supabase.from('trip_memories').delete().eq('id', m.id).select('id');
+    if (error) toastError(describeDbError(error)); else if (wroteNoRows(removed)) toastError(t('errors.thatChangeWasNotSaved')); else success(t('tripMemoriesModule.deleted'));
   }
 
   if (loading) return <SkeletonList />;
@@ -173,7 +181,7 @@ export function TripMemoriesModule() {
             <Field label={t('tripMemories.photoOptional')}>
               {(id) => <input id={id} type="file" accept="image/*" onChange={(e) => {
                 const f = e.target.files?.[0] ?? null;
-                if (f && f.size > DOCUMENT_MAX_BYTES) { toastError(`“${f.name}” is too large (max ${DOCUMENT_MAX_MB} MB).`); e.target.value = ''; return; }
+                if (f && f.size > DOCUMENT_MAX_BYTES) { toastError(t('modules.fileTooLargeNamed', { name: f.name, max: DOCUMENT_MAX_MB })); e.target.value = ''; return; }
                 setForm({ ...form, file: f });
               }} className="block w-full text-sm text-muted file:mr-2 file:rounded-lg file:border-0 file:bg-elevated file:px-3 file:py-1.5 file:text-sm" />}
             </Field>

@@ -3,6 +3,7 @@
 import Link from 'next/link';
 import { usePathname, useRouter, useSearchParams } from 'next/navigation';
 import { useEffect, useState, useTransition, useRef, useCallback } from 'react';
+import { useDismissOnEscape } from '@/lib/hooks/use-dismiss-on-escape';
 import { ChevronDown, Check, Gift, Home, Lock, LogOut, Menu, Plus, Search, Settings as SettingsIcon, ShieldCheck, UserCog, X } from 'lucide-react';
 import { Logo, LogoMark } from '@/components/brand/logo';
 import { Avatar } from '@/components/ui/avatar';
@@ -12,6 +13,7 @@ import { tierLabelForLevel } from '@/lib/constants/plans';
 import { DASHBOARD_VIEWS, dashboardLabel, dashboardIcon, isDashboardView, type DashboardView } from '@/lib/constants/dashboards';
 import { cn } from '@/lib/utils/cn';
 import { useTranslations } from '@/components/i18n/locale-provider';
+import { ActionError, useActionError } from '@/components/ui/action-error';
 import { useDialogBehavior } from '@/lib/a11y/use-dialog-behavior';
 import { useApp } from './app-context';
 import { ThemeSwitch } from './theme-switch';
@@ -71,14 +73,18 @@ function FamilySwitcher() {
   const t = useTranslations();
   const { family, families, role, planLevel } = useApp();
   const [open, setOpen] = useState(false);
+  useDismissOnEscape(open, () => setOpen(false));
   const [pending, startTransition] = useTransition();
+  const { message: switchError, run } = useActionError();
 
   function switchTo(familyId: string) {
     setOpen(false);
     if (familyId === family.id) return;
+    // A throw here used to close the menu and do nothing else: no navigation,
+    // no message. Switching household is the one action where "nothing
+    // happened" is indistinguishable from "it worked and this is the new one".
     startTransition(async () => {
-      await setActiveFamilyAction(familyId);
-      window.location.assign('/home');
+      if (await run(() => setActiveFamilyAction(familyId))) window.location.assign('/home');
     });
   }
 
@@ -96,9 +102,14 @@ function FamilySwitcher() {
         </div>
         <ChevronDown className="h-4 w-4 text-muted" />
       </button>
+      <ActionError message={switchError} />
       {open && (
         <>
-          <div className="fixed inset-0 z-10" onClick={() => setOpen(false)} />
+          {/* Presentational: no content, no name, nothing to focus. It exists so a
+              click anywhere dismisses the menu, and its keyboard equivalent is the
+              Escape handler above — there is nothing here for a keyboard to land on. */}
+          {/* eslint-disable-next-line jsx-a11y/click-events-have-key-events, jsx-a11y/no-static-element-interactions */}
+          <div aria-hidden="true" className="fixed inset-0 z-10" onClick={() => setOpen(false)} />
           <div className="absolute left-0 right-0 top-full z-20 mt-1 rounded-xl popover-surface p-1 shadow-glass animate-fade-in">
             {families.map((f) => (
               <button
@@ -129,15 +140,16 @@ function UserMenu() {
   const t = useTranslations();
   const { userEmail, selfMember, isSuperAdmin, role, defaultDashboard, family, families } = useApp();
   const [open, setOpen] = useState(false);
+  useDismissOnEscape(open, () => setOpen(false));
   const [switching, startSwitch] = useTransition();
+  const { message: switchFamilyError, run: runSwitch } = useActionError();
   const name = selfMember?.display_name ?? userEmail ?? 'You';
 
   function switchFamily(familyId: string) {
     setOpen(false);
     if (familyId === family.id) return;
     startSwitch(async () => {
-      await setActiveFamilyAction(familyId);
-      window.location.assign('/home');
+      if (await runSwitch(() => setActiveFamilyAction(familyId))) window.location.assign('/home');
     });
   }
 
@@ -159,7 +171,11 @@ function UserMenu() {
       </button>
       {open && (
         <>
-          <div className="fixed inset-0 z-10" onClick={() => setOpen(false)} />
+          {/* Presentational: no content, no name, nothing to focus. It exists so a
+              click anywhere dismisses the menu, and its keyboard equivalent is the
+              Escape handler above — there is nothing here for a keyboard to land on. */}
+          {/* eslint-disable-next-line jsx-a11y/click-events-have-key-events, jsx-a11y/no-static-element-interactions */}
+          <div aria-hidden="true" className="fixed inset-0 z-10" onClick={() => setOpen(false)} />
           <div className="absolute right-0 top-full z-20 mt-2 w-60 rounded-xl popover-surface p-1 shadow-glass animate-fade-in">
             <div className="px-3 py-2">
               <p className="truncate text-sm font-medium">{name}</p>
@@ -210,6 +226,7 @@ function UserMenu() {
                     {f.familyId === family.id && <Check className="h-4 w-4 text-brand-text" />}
                   </button>
                 ))}
+                <ActionError message={switchFamilyError} />
                 <Link href="/dashboard/settings#families" onClick={() => setOpen(false)} className="flex items-center gap-2 rounded-lg px-3 py-2 text-sm text-muted hover:bg-elevated">
                   <Plus className="h-4 w-4" /> {t('shell.newFamily')}
                 </Link>

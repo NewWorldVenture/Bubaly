@@ -1,9 +1,21 @@
 import { createElement } from 'react';
-import { renderToStaticMarkup } from 'react-dom/server';
+import { renderToStaticMarkup as renderRaw } from 'react-dom/server';
+import { renderTranslated } from './helpers/render-translated';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import type { SubLike } from '@/lib/finance/subscriptions';
 import { usd } from '@/lib/finance/splits';
 import { SubscriptionsModule } from '@/components/modules/subscriptions-module';
+// Rendered under a LocaleProvider, because the component asks for one.
+//
+// `translate` no longer falls back to the en-US catalogue — that fallback was a
+// static import, and it is why en-US shipped to the browser on 406 of 606 pages
+// (PERF-001). It now lives in getMessages, which is where a catalogue belongs.
+// These cases were rendering a client component with NO provider and asserting
+// its English copy, which passed only on that fallback and mounted the
+// component in a way the product never does. Shadowing the import fixes every
+// call site at once and changes no assertion.
+import { withLocale } from './helpers/render-translated';
+const renderToStaticMarkup = (node: Parameters<typeof withLocale>[0]) => renderRaw(withLocale(node));
 
 type Fixture = SubLike & { id: string; name: string; category: string | null; next_charge: string | null };
 const state = vi.hoisted(() => ({ subs: [] as Fixture[], createClient: vi.fn() }));
@@ -41,7 +53,7 @@ afterEach(() => {
 describe('subscription usage presentation', () => {
   it('shows unknown usage with a correction action and no asserted waste or savings', () => {
     state.subs = [sub('No recorded date'), sub('Omitted date', { last_used: undefined }), sub('Blank date', { last_used: '' })];
-    const html = renderToStaticMarkup(createElement(SubscriptionsModule));
+    const html = renderTranslated(createElement(SubscriptionsModule));
     expect(html.match(/usage unknown; Edit to add last use/g)).toHaveLength(3);
     expect(reviewCost(html)).toBe(usd(0));
     expect(html).toContain('title="Mark used today"');
@@ -57,7 +69,7 @@ describe('subscription usage presentation', () => {
       sub('Impossible date', { last_used: '2026-02-30' }),
       sub('Future date', { last_used: '2026-06-25' }),
     ];
-    const html = renderToStaticMarkup(createElement(SubscriptionsModule));
+    const html = renderTranslated(createElement(SubscriptionsModule));
     expect(html.match(/last-use date is invalid; Edit to correct/g)).toHaveLength(2);
     expect(html).toContain('last-use date is in the future; Edit to correct');
     expect(html).not.toContain('last recorded use');
@@ -74,7 +86,7 @@ describe('subscription usage presentation', () => {
       sub('Paused', { status: 'paused', last_used: '2026-01-01' }),
       sub('Canceled', { status: 'canceled', last_used: '2026-01-01' }),
     ];
-    const html = renderToStaticMarkup(createElement(SubscriptionsModule));
+    const html = renderTranslated(createElement(SubscriptionsModule));
     expect(reviewCost(html)).toBe(usd(1500));
     expect(html.match(/review usage<\/span>/g)).toHaveLength(2);
     expect(html.match(/last recorded use/g)).toHaveLength(5);

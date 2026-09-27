@@ -275,27 +275,29 @@ Do not replay referenced seeds or infer empty production tables from this list.
 | 0133 | `0133_onboarding_events.sql` | `onboarding_events` | Onboarding funnel `/dashboard/onboarding-funnel` (super-admin) |
 | 0134 | `0134_model_dirty.sql` | `family_model_dirty` + `mark_model_dirty()` triggers | Event-driven twin/prep refresh (the `model-refresh` cron; also needs `CRON_SECRET`) |
 | 0135 | `0135_network_aggregates.sql` | `network_contributions`, `network_aggregates` | Intelligence Network insights `/dashboard/intelligence` (the `network-aggregate` cron; also needs `CRON_SECRET`) |
-| 0137 | `0137_child_login_throttle.sql` | `child_login_throttle` (per-username brute-force lockout) | Hardens **Kid Logins** (`/kid-login`) — child PIN sign-in is rate-limited/locked after repeated failures. If the table is absent, sign-in still works without this durable throttle; that fallback is not a security clearance. Production control status requires production evidence. |
-| 0138 | `0138_onboarding_imports.sql` | `onboarding_imports` | Records the **value-first onboarding** first-brief moment (T1): the imported calendar's event/conflict/action/time-saved counts + brief summary. Seeds the TTFV metric (T10). Safe before apply: onboarding still works and imported events still land in `calendar_events`; only the durable import record is skipped (best-effort insert) until the table exists. |
-| 0138 ⚠️ | `0138_demo_sessions.sql` | `demo_sessions` (shared "Bubaly Demo" account session + 5-min clock) | Powers the **one-click live demo** (pricing → "Demo Account"): tracks each running demo + its `expires_at` so the top-left countdown and auto-reset work. Self-scoped RLS (a visitor reads only their own session row; all writes go through the service role). **Historical numbering conflict:** this inventory lists `0138` for both demo sessions and onboarding imports; it is not a production execution ledger. Do not work around ledger discrepancies with manual historical SQL, renumbering, or stamping. Related feature dependency: `0161`. If the table is missing, `app-frame` treats the session as "not a demo". Recorded PG16 evidence: idempotent ×2; not production apply evidence. |
+| 01371 | `01371_child_login_throttle.sql` | `child_login_throttle` (per-username brute-force lockout) | Hardens **Kid Logins** (`/kid-login`) — child PIN sign-in is rate-limited/locked after repeated failures. If the table is absent, sign-in still works without this durable throttle; that fallback is not a security clearance. Production control status requires production evidence. |
+| 01381 | `01381_onboarding_imports.sql` | `onboarding_imports` | Records the **value-first onboarding** first-brief moment (T1): the imported calendar's event/conflict/action/time-saved counts + brief summary. Seeds the TTFV metric (T10). Safe before apply: onboarding still works and imported events still land in `calendar_events`; only the durable import record is skipped (best-effort insert) until the table exists. |
+| 01380 | `01380_demo_sessions.sql` | `demo_sessions` (shared "Bubaly Demo" account session + 5-min clock) | Powers the **one-click live demo** (pricing → "Demo Account"): tracks each running demo + its `expires_at` so the top-left countdown and auto-reset work. Self-scoped RLS (a visitor reads only their own session row; all writes go through the service role). **Historical numbering conflict:** this inventory lists `0138` for both demo sessions and onboarding imports; it is not a production execution ledger. Do not work around ledger discrepancies with manual historical SQL, renumbering, or stamping. Related feature dependency: `0161`. If the table is missing, `app-frame` treats the session as "not a demo". Recorded PG16 evidence: idempotent ×2; not production apply evidence. |
 | 0139 | `0139_meal_ideas.sql` | `meal_ideas` (curated dinner catalog, reference data) | Powers the **3 dinner ideas** in the first-run briefing (T2). Reference data, readable by any signed-in user; populated by `seed_meal_ideas.sql` (500 rows). Safe before apply: the briefing simply shows no dinner ideas until the table exists + is seeded (best-effort read). |
 | 0140 | `0140_home_briefs.sql` | `home_briefs` (daily home outcome snapshot) | Powers the **outcome-first home** (T3): when the home would otherwise be empty, it shows readiness + next-best steps + dinner ideas, and persists a daily snapshot (home-side TTFV signal). Family-scoped; seeded by `seed_home_briefs.sql` (500 days). Safe before apply: the outcome still renders live; only the durable snapshot upsert is skipped (best-effort) until the table exists. |
 | 0141 | `0141_daily_insights.sql` | `daily_insights` (the one insight of the day) | Powers the **insight of the day** (T4): the home surfaces one ranked proactive insight above the fold; dismissing sticks and the next-best surfaces. Family-scoped; seeded by `seed_daily_insights.sql` (500 rows). Safe before apply: the home simply shows no insight hero (wrapped in try/catch) until the table exists. |
-| 0142 | `0142_family_signals.sql` | `family_signals` (hard-signal family intelligence) | Powers **Family Intelligence / R10** (`/dashboard/family-signals`): the harder-to-copy behavioral signals (ignored reminders, stress windows, chore friction, routines that don't stick), transparent + editable (acknowledge/dismiss). Recomputed on demand + by the `model-refresh` cron. Family-scoped; seeded by `seed_family_signals.sql` (500 rows). Safe before apply: detection no-ops until the table exists (Refresh returns an error only inside the page). |
+| 01420 | `01420_family_signals.sql` | `family_signals` (hard-signal family intelligence) | Powers **Family Intelligence / R10** (`/dashboard/family-signals`): the harder-to-copy behavioral signals (ignored reminders, stress windows, chore friction, routines that don't stick), transparent + editable (acknowledge/dismiss). Recomputed on demand + by the `model-refresh` cron. Family-scoped; seeded by `seed_family_signals.sql` (500 rows). Safe before apply: detection no-ops until the table exists (Refresh returns an error only inside the page). |
+**Why four of the versions above have five digits.** `01371`, `01380`, `01381` and `01420` are not typos. Four migrations shared a version prefix with an earlier file, and `supabase db push` treats one version as one migration and applies it once — so a trailing digit was appended to make each unique. This table went on naming the ORIGINAL four-digit filenames long after that rename, so all four pointed at files that do not exist. Applying the directory would have worked and hidden it; applying by the filename this table gave you would have failed on every one. `tests/a-document-does-not-name-a-migration-that-is-not-there.test.ts` is the guard that keeps this table and `finalaudit.md` honest about it.
+
 | 0147 | `0147_twin_simulations.sql` | `twin_simulations` (saved Digital Twin projections) | Powers **R8** — the full activity projection on `/dashboard/family-digital-twin` ("if Emma joins travel soccer…" across schedule/travel/cost/family-time/homework/meals/vacation). Projection is a pure no-write what-if; this stores SAVED scenarios. Family-scoped; seeded by `seed_twin_simulations.sql` (500 rows). Safe before apply: projecting still works; only Save/list is disabled until the table exists. |
 | 0148 | `0148_moment_activations.sql` | `moment_activations` (Moments organizing-layer log) | Powers **R12** — the "Right now" life-moment band atop `/dashboard/moments` (Morning/School/Dinner/Weekend/Vacation/Birthday…), logging which moments surfaced + engage/dismiss. Family-scoped; seeded by `seed_moment_activations.sql` (500 rows). Safe before apply: the band is best-effort (wrapped in try/catch), so it just doesn't render until the table exists. |
 | 0149 | `0149_reasoning_snapshots.sql` | `reasoning_snapshots` (unified Family Reasoning Engine log) | Powers **R7** — the one reasoning engine on `/dashboard/reasoning` (Family Reasoning) that answers the six questions every surface consumes (what matters most · forgotten · decide next · auto-complete · who needs help · what next) by composing the FOI orchestrator, graph insights (R2) and hard signals (R10). Stores one snapshot per day so the answers trend. Family-scoped; seeded by `seed_reasoning_snapshots.sql` (500 rows). Safe before apply: the page reasons live; only the daily snapshot upsert is skipped (best-effort try/catch) until the table exists. |
 | 0150 | `0150_marketplace_matches.sql` | `marketplace_matches` (marketplace supply↔demand matches) | Powers the **Marketplace match intelligence** strip on `/dashboard/marketplace/browse`: connects open `wanted` requests to the supply already on the board (`sell`/`free`/`rent`/`borrow`), scored + reasoned, with Got-it / Dismiss (dismissals preserved). Family-scoped; seeded by `seed_marketplace_matches.sql` (500 rows, needs the marketplace itself seeded first). Safe before apply: the strip is best-effort (try/catch), so it just doesn't render until the table exists. |
 | 0151 | `0151_marketplace_v2.sql` | `marketplace_stores`, `marketplace_follows`, `marketplace_saves`, `marketplace_collections`(+`_items`), `marketplace_orders`, `marketplace_reviews`; widens listing kinds with `swap`/`donate` | Powers **Marketplace V2** — the AI-first marketplace home at `/dashboard/marketplace` (hero, action grid, AI Picks, activity feed, Top Creators, Trust Score, Popular Collections, Safety) plus the Saved / Orders / Reviews / Collections / Creators / My Store pages. Family-scoped; seeded by `seed_marketplace_v2.sql` (~1,200 rows; needs `seed_marketplace.sql` first). Safe before apply: every V2 read is best-effort, so the home renders with empty rails and the module still works on the 0120 tables. |
-| 0154 | `0154_marketplace_ownership.sql` | `marketplace_member_id()`; **per-member** RLS on listings/stores/saves/follows/offers/reviews/orders; `marketplace_accept_offer` / `marketplace_decline_offer` / `marketplace_set_listing_status` RPCs; offer→pending trigger; partial unique index `uq_marketplace_offers_open` |
-| 0155 | `0155_wallet_auth_holds.sql` | `wallet_reserve_card_auth()` — atomic per-child sufficient-funds check + `processing` hold keyed by the Stripe authorization id | **Security (audit PAY-1).** Stops concurrent card authorizations from each approving against the same SPEND balance (overspend). **⚠️ Coupled with app code** — `lib/stripe/webhook.ts` calls this RPC on `issuing_authorization.request` and releases the hold on capture/reversal; apply with the deploy that ships it, else authorizations won't reserve. Idempotent; service-role only. PG16-verified: all 172 migrations apply, 2nd concurrent auth declined, capture reconciles the hold with no double-count. | **Security hardening (audit SEC-1/SEC-2/REL-1/RACE-1).** Ties marketplace writes to the acting member (was family-scoped only), moves the offer hand-off + listing status changes into ownership-checked, atomic `SECURITY DEFINER` RPCs, and makes "I'm interested" idempotent. **⚠️ Coupled with app code** — the marketplace module now calls these RPCs and relies on the tightened policies; apply this together with the deploy that ships it, else owner accept/withdraw/complete will error. Idempotent; dedupes any pre-existing duplicate open offers before creating the unique index. PG16-verified: all 152 migrations apply, RLS/RPC/trigger/index behaviors confirmed, `seed_marketplace.sql` still seeds 500 with no dup open offers. |
+| 0154 | `0154_marketplace_ownership.sql` | `marketplace_member_id()`; **per-member** RLS on listings/stores/saves/follows/offers/reviews/orders; `marketplace_accept_offer` / `marketplace_decline_offer` / `marketplace_set_listing_status` RPCs; offer→pending trigger; partial unique index `uq_marketplace_offers_open` | **Security hardening (audit SEC-1/SEC-2/REL-1/RACE-1).** Ties marketplace writes to the acting member (was family-scoped only), moves the offer hand-off + listing status changes into ownership-checked, atomic `SECURITY DEFINER` RPCs, and makes "I'm interested" idempotent. **⚠️ Coupled with app code** — the marketplace module now calls these RPCs and relies on the tightened policies; apply this together with the deploy that ships it, else owner accept/withdraw/complete will error. Idempotent; dedupes any pre-existing duplicate open offers before creating the unique index. PG16-verified: all 152 migrations apply, RLS/RPC/trigger/index behaviors confirmed, `seed_marketplace.sql` still seeds 500 with no dup open offers. |
+| 0155 | `0155_wallet_auth_holds.sql` | `wallet_reserve_card_auth()` — atomic per-child sufficient-funds check + `processing` hold keyed by the Stripe authorization id | **Security (audit PAY-1).** Stops concurrent card authorizations from each approving against the same SPEND balance (overspend). **⚠️ Coupled with app code** — `lib/stripe/webhook.ts` calls this RPC on `issuing_authorization.request` and releases the hold on capture/reversal; apply with the deploy that ships it, else authorizations won't reserve. Idempotent; service-role only. PG16-verified: all 172 migrations apply, 2nd concurrent auth declined, capture reconciles the hold with no double-count. |
 
 | 0156 | `0156_rate_limits.sql` | `rate_limits` table + `rate_limit_hit()` / `rate_limit_prune()` RPCs | **Security (audit AI-2).** Durable, cross-instance fixed-window rate limiting for public model-backed endpoints (`/api/ai/gift`), replacing the per-instance in-memory limiter that a serverless fleet could multiply. Safe before apply: `rateLimitDb` **fails open** (allows) until the RPC exists, and the in-memory limiter still caps each instance. Service-role only; idempotent. PG16-verified (4th hit in a 3/window bucket declined with retry_after). |
 | 0157 | `0157_family_signals_budget_drift.sql` | Widens `family_signals.kind` CHECK with `budget_drift` | Adds the 5th **hard signal** (R10): a budget category over its cap this period (stronger when the prior period was over too), surfaced on `/dashboard/family-signals`. Additive/idempotent — just re-creates the CHECK. Safe before apply: detection skips writing `budget_drift` rows until the constraint allows the value (the other four kinds are unaffected). PG16-verified. |
 | 0158 | `0158_concierge_plan_actions.sql` | `concierge_plan_actions` (concierge deeper write-back audit) | Powers the **AI Concierge deeper write-back**: an accepted plan materializes into real records across surfaces (calendar event · reminder · prep task) via `/dashboard/concierge`, each logged here so the flow is idempotent (never double-applies) + auditable. Family-scoped; seeded by `seed_concierge_plan_actions.sql` (500 rows). Safe before apply: the write-back buttons no-op the audit until the table exists (the underlying calendar/reminder writes still work). |
 | 0159 | `0159_onboarding_progress.sql` | `onboarding_progress` (one durable row per account: onboarding lifecycle + marketing signal) | Powers the **onboarding lifecycle + marketing layer**: makes the previously-invisible "needs setup" cohort (accounts auto-provisioned by `ensureActiveFamily` that skipped the wizard) queryable, drives the `/dashboard/setup` re-onboarding surface + reset flow, and feeds marketing segments first-class columns (value_engaged / source / status / goals / completeness) instead of a JSON blob in `crm_contacts.notes`. Self-scoped RLS (a user reads/writes only their own row; cross-account aggregation is service-role). Lifecycle rows are generated only by real Auth activity; the former synthetic Auth seed is retired. Safe before apply: every write is best-effort and degrades silently (`recordOnboardingProgress` swallows a missing table), so onboarding + the setup page still work — the marketing signal just isn't persisted until applied. PG16-verified (idempotent ×2; cascade, CHECK, unique, trigger, RLS all confirmed). |
 | 0160 | `0160_visitor_consent.sql` | `mkt_consent_events` (append-only, versioned, revocable visitor consent ledger) | **Privacy — visitor intelligence.** Adds the consent layer the tracker lacked: `/api/mkt/track` now records first-party analytics **only with consent** (denied/GPC visitors acknowledged but not profiled), and `/api/mkt/consent` writes granular decisions (necessary/analytics/personalization/marketing_email/marketing_sms). Latest decision per category wins; GPC honored; `necessary` always on. Service-role only (RLS enabled, no policies), keyed by `anonymous_id` + optional `crm_contacts` link. **⚠️ Coupled with app code** — apply with the deploy, else `/api/mkt/track` and `/api/mkt/consent` error on the missing table. Idempotent. PG16-verified: all 177 migrations apply, latest-per-category resolves, bad categories rejected by CHECK. |
-| 0161 | `0161_demo_session_email_gate.sql` | Makes `demo_sessions.expires_at` nullable + adds `email` | Completes the **email-gated live demo**: the app opens behind a blurred email-capture pop-up and the 5-minute countdown doesn't start until the visitor submits it (`expires_at = null` means "provisioned, clock not started"), capturing the address in `email`. **Requires `0138_demo_sessions.sql` first** (it alters that table). Additive/idempotent (`drop not null` is a no-op when already nullable; `add column if not exists`). Safe before apply: without it the email gate can't defer the clock, but the demo account itself still exists. PG16-verified (idempotent ×2, applied on top of 0138). |
+| 0161 | `0161_demo_session_email_gate.sql` | Makes `demo_sessions.expires_at` nullable + adds `email` | Completes the **email-gated live demo**: the app opens behind a blurred email-capture pop-up and the 5-minute countdown doesn't start until the visitor submits it (`expires_at = null` means "provisioned, clock not started"), capturing the address in `email`. **Requires `01380_demo_sessions.sql` first** (it alters that table). Additive/idempotent (`drop not null` is a no-op when already nullable; `add column if not exists`). Safe before apply: without it the email gate can't defer the clock, but the demo account itself still exists. PG16-verified (idempotent ×2, applied on top of 0138). |
 | 0162 | `0162_demo_email_uses.sql` | `demo_email_uses` (one durable row per email that has used a demo) | Enforces **one 5-minute demo per email**: when an email starts a demo it's stamped here with that demo's expiry; once expired, re-entering the same email routes to the `/demo/upgrade` plan-choice page instead of starting a new clock (paid plan → signup → billing). Service-role only (RLS enabled, no policies). Additive/idempotent. Safe before apply: the gate check is wrapped so a missing table simply doesn't gate (every email can still demo) until applied. PG16-verified (idempotent ×2; RLS on, expiry check confirmed). |
 | 0163 | `0163_messages_audio_read_fix.sql` | Widens `family_messages.kind` CHECK (+`'audio'`) + `mark_conversation_read(uuid)` RPC | **Fixes two live Messages bugs.** (1) Voice notes NEVER saved: the recorder inserts `kind='audio'` but the 0014 CHECK didn't allow it — every voice message failed. (2) Read receipts wiped each other: mark-as-read *replaced* `read_by` with just the reader; the RPC appends instead (SECURITY INVOKER — family RLS still governs). Safe before apply: the client falls back to a correct per-row merge for receipts, but **voice notes stay broken until applied**. Additive/idempotent. PG16-verified (idempotent ×2; audio accepted, bogus kind rejected, RPC appends without clobber and is idempotent). |
 
@@ -514,21 +516,273 @@ passed; production application of the atomic `0240-0254` release remains pending
 ## Migrations added since this document's stated baseline (2026-09-12)
 
 The status line at the top of this file is dated **2026-09-05** against main
-`01881fb2`. **60** migration files have landed since, `0255` through
-`0317`, and none of them appear anywhere above. (This read "thirty-one, `0255`
+`01881fb2`. **64** migration files have landed since, `0255` through
+`0321`, and none of them appear anywhere above. (This read "thirty-one, `0255`
 through `0285`" until 2026-09-13, "seventy-one, `0255` through `0295`" until
 2026-09-15, and "forty-five, `0255` through `0302`", "46, `0255` through `0303`"
 and "49, `0255` through `0306`" until 2026-09-16; the range
 keeps growing past the sentence. The count is the number
 of files in that range, which is what `ls supabase/migrations` reports — the
 earlier "seventy-one" did not match its own stated range.)
+
+### `0318`-`0321`, arriving from the audit branch — all unapplied
+
+- **`0318_guardian_safety_config_is_manager_only.sql`** closes **AUTHZ-005**.
+  `guardian_contacts` (per-contact trust levels) and `guardian_member_profiles`
+  (per-band routing modes) carried `FOR ALL TO authenticated USING
+  (is_family_member(family_id))` from `01370`, so the rule deciding who may
+  change a **child's call screening** asked only whether the caller was in the
+  household. `app/(app)/guardian/actions.ts` gates on `isManager` and says in its
+  own header that RLS does not — a PATCH to `/rest/v1/guardian_contacts` never
+  passes through it. Writes now require `can_manage_family()`; reads unchanged.
+- **`0319_social_access_delete_matches_grant.sql`** closes **AUTHZ-003**.
+  `0034` gated INSERT and UPDATE on `social_access_permissions` behind admin but
+  left DELETE at bare membership, and removing an override restores the higher
+  default — so a member pinned to `read_only` could lift their own restriction
+  back to `marketing_manager`, which carries publish and manage-settings on the
+  family's connected accounts.
+- **`0320_audit_logs_says_who_wrote_it.sql`** pins `actor_id = auth.uid()` on the
+  household trail, which previously pinned only `family_id`.
+- **`0321_family_erasure_indexes.sql`** — **do NOT apply as-is**; see its own
+  section above. It adds erasure-path indexes and must go through
+  `docs/audit/family-erasure-indexes-concurrently.sql` in production, because a
+  migration runs in a transaction and `create index concurrently` cannot.
+
+These were numbered `0296`-`0301` on the audit branch and collided six ways with
+main's own `0296`-`0301`; the merge renumbered the three that survived. **Three
+were dropped rather than renumbered, because main had already fixed the same
+subjects and in two cases went further:** `family_credentials` (main's `0296`
+closes the READ half too, which closes **O-02**), sensitive tables including
+`child_logins` (main's `0297`), and `invites` (main's `0298`). A fourth,
+covering `allowance_rules`, was written during the merge and dropped the same
+way — main's `0306` already had it, with *restrictive* policies, which is the
+stronger mechanism.
+
 Nothing here authorizes applying any of them; this section exists so the gap is
 visible rather than inferred from the absence of a row.
+
+### `0322`-`0328`, the write-boundary sweep — all unapplied
+
+Seven more, from the class census that measured **170 tables** carrying a
+role-blind permissive `FOR ALL` write policy. Every one repairs a table where
+the **application** enforces a manager-only rule and the **database** does not —
+and a server action is not a boundary against a JWT holder, because children
+have real logins and a request to `/rest/v1/<table>` never passes through
+`app/`.
+
+- **`0322_wallet_side_tables_are_manager_written.sql`** closes **AUTHZ-007**.
+  `0088` created fourteen wallet tables in one `DO` loop with the same
+  role-blind policy; nine were narrowed one at a time since, and these five were
+  never reached — `babysitter_profiles`, `babysitter_payments`, `gift_links`,
+  `gift_payments`, `compliance_disclosures`. The one that costs a real person
+  money is `gift_payments`: the approval queue lists `status = 'pending'`, so a
+  child flipping a gift to `completed` makes a grandparent's gift **leave the
+  queue uncredited and unannounced**. It mints nothing — `wallet_approve_gift`
+  is `SECURITY DEFINER` and checks the manager predicate.
+- **`0323_safety_records_are_manager_written.sql`** closes **AUTHZ-006**, and
+  this is the one to read. `0318` closed `guardian_contacts` and **it holds**.
+  But `guardian_suggestions` did not, and `guardian_review_suggestion` (0198) is
+  `SECURITY DEFINER`, correctly checks `can_manage_family`, and on approval
+  copies **the suggestion's own fields** into `guardian_contacts`. A child
+  rewrites the pending proposal — including the `title` the parent reads — the
+  parent approves in the product's own UI, and a `suspected_spam` caller becomes
+  `immediate_family`. The child never wrote the forbidden table; they wrote the
+  row telling a privileged function what to write there. Also covers
+  `family_emergency_contacts` and `family_emergency_plans`.
+- **`0324_pay_ids_and_savings_goals_are_manager_written.sql`** closes
+  **AUTHZ-010** and **AUTHZ-009**. `pay_handles` is the one that reaches
+  **outside the family**: `/pay/<handle>` resolves with `createServiceClient()`
+  — RLS off, correctly, since a public payment page cannot carry the visitor's
+  session — reads `child_wallet_id` and redirects to that wallet's newest gift
+  link. A child repointing it sends a grandparent following a Pay ID to a
+  different child's gift link. `wallet_goals` is AUTHZ-006's shape in the money
+  domain: `wallet_fund_goal` reads the goal's own `child_wallet_id` to decide
+  whose Save bucket to debit, so a child's goal aimed at a sibling's wallet
+  drains it on a parent's click.
+- **`0325_dashboard_and_twin_writes_match_the_app.sql`** covers
+  `family_digital_twin_profiles` (what Bubaly "knows" about a person, read by
+  the AI surfaces) and `family_dashboard_settings` (which holds the very flags
+  `canCustomizeDashboard()` consults, so writing it turns the rule off).
+  `dashboard_layouts` gets a **scope-shaped** rule, not a blanket one — a member
+  legitimately writes their own `scope='user'` row; only the family default is
+  manager-only.
+  **One accepted cost, stated rather than hidden:** the autopilot scan's
+  digital-twin trait writes will no-op for a non-manager-triggered scan. They
+  are explicitly best-effort in the code and the nightly cron redoes them on the
+  service client.
+- **`0326_chore_dispute_resolution_is_a_managers_call.sql`** is a **`BEFORE`
+  trigger, not a policy**, following `0222`/`0295` — because raising a dispute
+  has no role gate at all and its rollback paths delete the row on the same
+  client, so INSERT and DELETE must stay open. Only movement into `'resolved'`
+  and writes to the four resolution columns are guarded, **including clearing
+  them**, because the approval path's failure branch clears the same fields.
+- **`0327_autopilot_suggestions_are_not_erasable.sql`** is deliberately
+  **narrow, and the reason is a correction**. This table was recorded as a
+  defect and is not one: the autopilot scan runs on the **caller's own
+  RLS-bound client** behind a gate that is **plan-level, not role-level**, and
+  fires automatically on page open for any member — so a manager-only guard
+  would return 500 from `/dashboard/autopilot` for every child in a Plus family.
+  It therefore closes only what the app never does: DELETE refused for every
+  client role, and `resolved_by` pinned to `auth.uid()` so a child cannot record
+  that a *parent* dismissed a suggestion. **Its header states that the
+  policy-suggestion deputy chain remains open** — RLS cannot distinguish a
+  child's `kind='policy'` row from the one the scan writes, same member, same
+  client, same columns. That fix is an application decision, not a migration.
+- **`0328_wallet_audit_logs_say_who_wrote_them.sql`** applies `0320`'s treatment
+  to the wallet trail, which never got it: a child could insert a wallet audit
+  row naming a **parent** as `actor_user_id`. No UPDATE/DELETE policy exists, so
+  the existing trail could be polluted but not erased.
+
+`SELECT` is untouched on every table in this set, and each read path was named
+before anything was restricted — the wallet pages, the family-emergency page
+(which shows the meeting point to every member on purpose), the Guardian page,
+and the home dashboard, which reads **both** layout scopes for the whole family
+in one query. Each migration has a probe under `docs/audit/` carrying a
+**negative control** that drops only the new guard and requires the escalation
+to succeed again; all were proved red before green.
+
+**Read this next line against production, not against the repository.** These
+seven are files. Until they are applied, the Pay ID redirect, the savings goal
+that drains a sibling, and the Guardian suggestion are **live**. The same
+applies to the audit's own notes: where `finalaudit.md` says a path is
+"defeated by `0322`", that is true of this tree and not yet of production.
 
 The same caution as the rest of this document applies without exception: a
 missing ledger entry does not establish that the schema is absent, and a local
 verification is not production evidence. Production's ledger records only
 `0001-0003`.
+
+### `0329`-`0333`, the census's second tranche — all unapplied
+
+Five more from the same class census, one subject each, none of them renumbering
+anything. All five were **measured on a replayed database before a line of SQL
+was written**, and each carries a probe under `docs/audit/` with a negative
+control that drops only the new guard and requires the escalation to work again.
+
+- **`0329_automation_runs_pin_what_a_member_may_queue.sql`** closes
+  **AUTHZ-012**. `0251` split `0022`'s `FOR ALL` on `family_automation_runs`
+  because, in its own words, "any member could set `status='executed'` on a run
+  they never approved" — and narrowed **UPDATE and DELETE**. `0252` and `0255`
+  then pinned what a member's INSERT may claim, but both pinned the **§10
+  `state` column**; the original `status text NOT NULL DEFAULT 'pending'` from
+  `0022` — which still carries **no CHECK** — was never pinned, and neither were
+  `trigger_type`, `metadata`, `summary`, `approved_by` or `approved_at`. A
+  child's insert therefore landed in the parent's "Pending approvals" list
+  carrying the child's own `summary`, and the "Do it" button stamped whichever
+  `approval_requests` row that row's **own metadata** named. The repair pins
+  **who may INSERT** rather than another column, because `status`'s default is
+  itself a queue value — an insert naming no status at all still lands in the
+  list. Every writer was enumerated first, by bare table name across `app/`,
+  `lib/`, `components/`, `hooks/`, `mobile/` and `scripts/`: **no application
+  path inserts on a member's RLS-bound client**, so plan acceptance by a teen or
+  child is unaffected. The blocker `0251` recorded for exactly this tightening —
+  *"until that app change lands"* — landed in `7a33b9cb`.
+- **`0330_playbook_suggestions_cannot_smuggle_a_sensitive_fact.sql`** closes
+  **AUTHZ-013**, and it is the **confused-deputy pattern for the third time**.
+  `family_playbook_suggestions` carries `0126`'s role-blind `is_family_member`
+  on all four verbs, written through a `format()` loop and never narrowed.
+  `0264` bars a non-manager from writing a `'medical'` or `'account'`
+  `family_facts` row; `confirmFact` is manager-gated and copies the
+  **suggestion's own** category, label, value and evidence into that table, so
+  the parent's session carries the child's fact past the rule. Measured both
+  ways in one rolled-back transaction: the direct insert is **refused (42501)**,
+  the identical fact through the side table **lands**.
+- **`0331_ai_score_is_not_the_childs_to_write.sql`** closes **AUTHZ-014**.
+  `chore_assignments.ai_score` was added by `00430` and has not appeared in a
+  migration since; the table's BEFORE trigger guards the decision `status`
+  (`0223`) and the two award amounts (`0305`) and nothing else, so a child could
+  set the score in the same statement that legitimately moves their own
+  assignment to `done`. `approveSubmissionAction` falls back to
+  `assignment.ai_score`, and for an `ai_cash` chore that scales the payout —
+  written in the **parent's** session, which is how it satisfies `0305`. The
+  repair extends the trigger rather than adding a policy, for the reason `0326`
+  gives: raising the submission is the designed child action, only the number is
+  not theirs.
+- **`0332_a_child_does_not_choose_the_number_bubaly_dials.sql`** closes
+  **AUTHZ-015**, deliberately **before** the exposure becomes real.
+  `concierge_calls` has `0173`'s role-blind policies on all four verbs; all four
+  server actions gate on `isManager`, and `tests/concierge-calls-authz.test.ts`
+  pins that gate as the first executable statement in each. It does not land
+  today only because `app/api/concierge-calls/place/route.ts` has no voice
+  provider and parks every due row as `action_needed`. The day one is
+  integrated, this is a child choosing the number a parent's click dials.
+- **`0333_a_request_says_who_actually_filed_it.sql`** closes **AUTHZ-016**, and
+  is **stated smaller than the brief that found it**. `parent_approvals` is
+  otherwise well pinned — `0251` leaves the decision to managers, `0252` forces
+  the row to be born pending and undecided — but `requested_by` was never
+  pinned, so a child could file a request signed with the parent's uid, a
+  sibling's, or nobody's. **Nothing in the product SELECTs that column**, so no
+  screen shows a parent the wrong name; what is defective is the stored record,
+  which is the AUDIT-002 class. Filing stays open to every member on purpose.
+  The guard is **restrictive rather than a restatement** of
+  `parent_approvals_insert`, because that policy belongs to `0252` and two
+  source-level ratchets read it — recreating it here would leave them describing
+  a policy that is no longer live.
+
+**Verified together, on a database built from nothing:** `docs/audit/pg-bootstrap.sh`
+applied **346 migrations, 0 failed**, and `docs/audit/run-probes.sh` then passed
+**58 of 58** boundary probes against it — the five new ones included. That is
+evidence about this tree. It is **not** evidence about production, which still
+records only `0001-0003`.
+
+### `0335`, `0336`, `0338` — and the two numbers deliberately left empty
+
+A census measured **247 tables** still taking a write from any household member
+(`docs/audit/role-blind-write-census.sh`, which is re-runnable rather than
+quoted) and triaged **41** as suspect because a file that writes them also
+carries an `isManager` gate. Five were then verified one at a time, and the
+outcome matters more than the count:
+
+- **`0335_a_location_says_who_was_actually_there.sql`** (AUTHZ-018).
+  `member_locations` and `location_events` carry `00420`'s single role-blind
+  policy each, while `updateMyLocation`'s own header says *"Strictly self-only
+  — a member can only post their own location"*. Measured as a child: taking a
+  parent off the family map with one UPDATE, filing an `arrived` event in the
+  parent's name at chosen coordinates, and deleting the whole household's live
+  positions in one call (500 rows on the seed family). Sized as a **falsified
+  and erasable safety display, not a privilege escalation**, and the gap is
+  **self-only vs role-blind — NOT manager-only**: `0215` had already hardened
+  `family_places` and its header says *"self-location (member_locations) …
+  intentionally NOT changed"*, so a manager gate here would have contradicted a
+  deliberate decision and broken every child's own location post.
+- **`0336_only_a_manager_adds_edits_or_bins_an_asset.sql`** (AUTHZ-019).
+  `home_assets` carries `0004`'s role-blind four. `components/modules/home-module.tsx`
+  states a manager rule **three times** — the Add button, the per-asset delete
+  button, and `warranty_until` rendered `disabled={!manager}` with Save hidden —
+  and **there is no server action for asset create, update or delete at all**,
+  so the client writes straight through RLS and all three gates are decoration
+  against anyone not using the UI.
+- **`0338_a_care_entry_names_who_actually_logged_it.sql`** (AUTHZ-017), and it
+  is **sharper than `0333`**, which is why the two are worth reading together.
+  Four household ledgers — `care_log`, `behavior_logs`, `screen_time_entries`,
+  `medication_doses` — each carry one `FOR ALL … is_family_member` policy
+  pinning no column, so `logged_by` was the writer's choice. Unlike
+  `parent_approvals.requested_by`, **this one is rendered**:
+  `care-module.tsx:253` draws `by {memberName(e.logged_by)}` under every entry,
+  and a child's entry of type `medication` reading *"Gave Grandma her tablets"*
+  came back as **`by Dad`**. All four stay open to every member — logging is
+  what the product is for — and only the name is pinned. NULL stays accepted on
+  `care_log` because the module writes `selfMember?.id ?? null` and the renderer
+  shows no name for a NULL rather than the wrong one.
+
+**`0334` and `0337` are permanently unused, on purpose.** `wallet_cards` and
+`family_decisions` were on the triage list and are **not defects**:
+`addCardAction` carries no role gate at all, so the application never claimed
+the rule the census inferred, and `family_decisions` has exactly one writer, a
+client module with no manager rule anywhere. A gap in the numbering says *this
+was looked at and refused*; a renumber would have said nothing. CENSUS-002 is
+what happens when a name on a triage list is taken for a verdict.
+
+**The boundary-proof suite is now re-runnable, and was not before.** 36 of the
+60 probes committed everything they seeded, two of them under the same fixed
+family id, so a **second** run of `run-probes.sh` against one database failed
+with `child_logins_member_id_fkey` — a foreign-key error wearing the costume of
+a broken boundary. CI never saw it because the Database job bootstraps a fresh
+container every time. Fixed by de-duplicating the committing probes' ids and
+wrapping the two whose seeds were not idempotent against themselves, and pinned
+by `tests/boundary-probes-are-rerunnable.test.ts`. Proved from nothing: a fresh
+bootstrap of **349 migrations, 0 failed**, then **61 of 61 probes, three runs in
+a row**.
 
 ### Three of them gate features that are already merged and live in the app
 
@@ -1586,3 +1840,1340 @@ than by a buyer. Three assertions failed before, none after, with four controls
 both directions.
 
 Until this is applied, production can put a sold item back on the market.
+
+## Security-relevant migrations awaiting production
+
+Added after this document's inventory stopped being complete, and listed here
+because their value is zero until they are applied:
+
+- **`0406_social_tokens_service_role_only.sql`** (renumbered from `0300`, which
+  `main` took for the entitlement fix above; from `0318`, which `main` took for
+  the guardian safety config; and from `0361`, which `main`'s #579 took for the
+  vote-owner pin — the ten below moved with it each time) — drops the four
+  `can_manage_family` policies `0297` added to `public.social_account_tokens`.
+  `0034` created that table with no policy and a comment saying never to add
+  one; `0297` added them on the stated premise that "every policy was
+  is_family_member", when there were none. Until `0406` is applied, any family
+  manager can `select` the OAuth token rows through PostgREST. The columns hold
+  ciphertext and no code writes the table yet, which bounds the exposure; it
+  does not remove it. Verified locally against a full replay (313 migrations
+  applied, 0 failed) and by `docs/audit/sensitive-role-boundary-check.sql`,
+  which was amended in the same change — it previously asserted the opened
+  state as a requirement. Audit C3-S5-01.
+
+- **`0407_no_truncate_for_the_public_roles.sql`** — revokes `truncate` on every
+  table in `public` from `anon` and `authenticated`, and sets the matching
+  default privilege so a future table does not arrive with it. `truncate` is not
+  filtered by row-level security: a policy that correctly limits which rows a
+  member may `delete` says nothing about a `truncate`, which empties the table
+  for every family at once. No application path uses it. Its assertion lives in
+  `docs/audit/no-truncate-for-public-roles-check.sql` rather than a Vitest file
+  because `tests/migrations-are-additive.test.ts` forbids the bare word in a
+  migration outside a privilege list, which is exactly the rule that makes this
+  one safe to read. Audit C1-S5-04.
+
+- **`0408_household_secrets_are_not_child_readable.sql`** — replaces the single
+  `"Members manage household_info"` policy (`for all using
+  is_family_member(family_id)`) with four that add
+  `and (not is_sensitive or can_manage_family(family_id))` on select, insert,
+  update-using, update-with-check and delete. The binder carries alarm codes and
+  wifi keys behind an `is_sensitive` flag, and `components/modules/binder-module.tsx`
+  masks such a value behind an eye toggle — but the row reached the browser in
+  full, so the mask hid a value the client already held. Measured before the fix:
+  a child read `hunter2-alarm-4417` in the clear. The `with check` half matters
+  independently: without it a child clears the flag, reads the value and sets it
+  back. `docs/audit/household-binder-boundary-check.sql` asserts both, and that a
+  parent still sees the whole binder. Audit C1-S6-06.
+
+- **`0409_marketplace_parties_are_not_editable.sql`** — makes `family_id`,
+  `listing_id` and the party columns of `marketplace_orders` /
+  `marketplace_offers` immutable after insert, via a `BEFORE UPDATE` trigger that
+  fires only when `row_security_active()`, and tightens the two `with check`
+  clauses `0154` left as a bare family test. `0154` tied every marketplace UPDATE
+  to the row owner in its `using` clause only, so the ownership rule governed the
+  row you started from and not the row you produced: measured, the **buyer** on a
+  completed order could set `seller_member` to themselves, and the count that
+  `marketplace/item/[id]/page.tsx:87` and `marketplace/creators/[id]/page.tsx:58`
+  display as a seller's completed-sales record moved with it. Tightening
+  `with check` to match `using` is **not** sufficient and was tried first — the
+  predicate is symmetric, and RLS cannot see the old row. Nothing legitimate
+  loses access: every write to either table in the tree either updates `status`
+  alone or runs as `SECURITY DEFINER` / the service role.
+  `docs/audit/marketplace-ownership-update-check.sql` asserts both refusals and
+  both permitted writes. Audit C1-S6-08.
+
+- **`0410_a_review_belongs_to_whoever_wrote_it.sql`** — scopes the
+  `marketplace_reviews` / `marketplace_saves` / `marketplace_follows` UPDATE
+  policies to the row's owner, and makes the columns around the authorship
+  column immutable. `0154` pinned `reviewer_member` (resp. `member_id`) on INSERT
+  so a trust score could not be forged, and left an UPDATE policy of
+  `is_family_member(family_id)` on both clauses — not scoped to the author at
+  all. Measured: the member a review was *about* rewrote its rating, and `rating`
+  is aggregated by `reviewee_member` on four screens. Nothing in the tree updates
+  any of the three tables, so no behaviour is lost; the policies are scoped
+  rather than dropped because "edit your own review" is what they evidently meant
+  to say. Also replaces `0409`'s table-branching trigger function with
+  `columns_are_immutable()`, which takes its column list from the trigger
+  definition and raises on a column that does not exist rather than silently
+  guarding nothing. `docs/audit/marketplace-review-authorship-check.sql` asserts
+  all of it, including that typo guard. Audit C1-S6-09.
+
+- **`0411_deleting_a_review_is_rewriting_it.sql`** — scopes the DELETE policies
+  on `marketplace_reviews` / `marketplace_offers` / `marketplace_saves` /
+  `marketplace_follows`, which `0154` left family-wide. `0410` stopped a member
+  rewriting another member's review; deleting it achieves the same thing, and on
+  offers it is worse in kind — any member could remove a competing offer on a
+  listing they have nothing to do with. Offers go to the two parties their UPDATE
+  policy already names; saves and follows to the owner, which is a no-op for the
+  two toggle actions that are the only deletes in the tree; reviews to the author
+  **or** a family manager who is not the reviewee, so a parent can still moderate
+  an abusive review without any adult being able to erase one about themselves.
+  `docs/audit/marketplace-delete-authorship-check.sql` asserts both the refusals
+  and the four things that must still work. Audit C1-S6-10.
+
+- ~~`0324_a_social_restriction_is_not_self_service.sql`~~ — **DROPPED on the merge that brought `main`'s 0318–0343 in (Audit C1-S9-89):** `0319_social_access_delete_matches_grant.sql` on `main` creates the identical DELETE policy, scoped `to authenticated`; renumbered after it, this one would have re-created the policy without that scope. The finding below stands and is fixed by `0319`. *Original entry, kept for the record:* gives
+  `social_access_permissions_delete` the predicate its INSERT and UPDATE policies
+  already carry. `social_role_for()` falls back to a default derived from the
+  family role when no explicit row exists, so a row restricting someone *below*
+  that default could be deleted by the person it restricted, who then fell back
+  **up**: measured, an `adult` set to `read_only` deleted their own restriction
+  and became `marketing_manager`, gaining `publish_posts`, `manage_settings` and
+  `connect_accounts` on the family's connected social accounts. Nothing in the
+  tree deletes from this table — `grantAccessAction` upserts behind
+  `requireSocialPermission`, and revocation is a `status` change the UPDATE
+  policy guards — so no behaviour is lost.
+  `docs/audit/social-access-self-service-check.sql` asserts the refusal, the
+  fallback that would have followed it, and that a family admin can still revoke.
+  Audit C1-S6-11.
+
+- ~~`0325_where_a_child_went_is_not_theirs_to_rewrite.sql`~~ — **DROPPED on the merge (Audit C1-S9-89):** superseded by `0335_a_location_says_who_was_actually_there.sql` on `main`, which refuses every attack this entry lists (and `docs/audit/location-trail-boundary-check.sql` still asserts them against it). Stacking both broke `0335`'s own negative control. The one check this entry added and `0335` does not — that a location row's member belongs to the row's family — is recorded as OPEN (LOW) in `finalaudit.md`. *Original entry, kept for the record:* replaces the two
+  `FOR ALL … is_family_member(family_id)` policies `00420` shipped on
+  `location_events` and `member_locations`. `0215` hardened the geofences
+  (`family_places`) against exactly this threat and said so in its header, but it
+  protected the INPUT to the geofence system and left the OUTPUT — the
+  arrival/departure timeline a parent reads — untouched; `location_events` is not
+  mentioned in `0215` at all. It also recorded `member_locations` as
+  "self-location", which `is_family_member` never made it. Measured as a
+  signed-in child against a replayed schema: the child DELETEd their own 02:00
+  "left home" event, moved a **sibling's** live pin, switched a **sibling's**
+  sharing off, re-pointed their own location row at another member, and filed an
+  event in a sibling's name. `00420`'s claim that "location sharing is strictly
+  opt-in (`member_locations.is_sharing`)" is only true after this migration. The
+  fix reuses `public.is_self_member()`, which `0272` added for the identical
+  shape on `event_rsvps`. No UPDATE or DELETE path is granted on
+  `location_events` — nothing in the tree uses one, and this document already
+  records what an unwired policy is worth (`call_logs`).
+  `docs/audit/location-trail-boundary-check.sql` asserts all six refusals plus
+  the four paths that must keep working: the member's own upsert,
+  `setLocationSharing(false)`, `deletePlace()`'s `ON DELETE SET NULL` against a
+  table with no UPDATE policy, and the family-delete cascade. Audit C1-S8-02.
+
+- **`0414_a_health_record_is_written_by_a_parent.sql`** — restrictive manager
+  guards on `immunizations` and `health_visits`, the two health tables `0309`
+  did not reach. `0309` gated the medication tables, named the class ("a class
+  fixed where somebody remembered and left open where nobody did") and listed
+  the neighbours it had checked — `medical_profiles`, `health_providers`,
+  `insurance_policies` — but not these two, which kept `0068`/`0069`'s
+  `FOR ALL … is_family_member`. They render on `/dashboard/medical` directly
+  beneath `MedicalRecordsModule`, so one page carried two boundaries; the
+  free-text `medical_profiles.immunizations` blob was manager-only while the
+  structured ledger `0069` wrote to replace it was not. Measured as a signed-in
+  child: rewrote a sibling's mental-health visit `outcome`, deleted that visit,
+  back-dated a sibling's MMR and cleared `next_due_date`, deleted the
+  vaccination record. Neither module carried a role check either, so this was
+  not even a hidden button — the fix ships the UI half
+  (`canEdit = isManager(role)`) with the migration.
+  Reading stays family-wide (M23 owns per-member read scoping) and
+  `medication_doses` stays open exactly as `0309` left it; the probe asserts
+  both as positive controls, plus `0309`'s own boundary and a manager's full
+  create/edit/delete. `docs/audit/health-record-boundary-check.sql`.
+  Audit C1-S8-03.
+
+- **`0415_a_paperwork_stamp_does_not_rewrite_its_siblings.sql`** — adds
+  `public.paperwork_stamp_action(uuid, int, text, text)`, a `SECURITY INVOKER`
+  function that stamps ONE element of `paperwork_items.actions` and refuses one
+  already stamped. `materializePaperworkActionAction` promised in its own doc
+  comment that "tapping twice never double-creates" and kept it with a
+  read-modify-write over the whole array, so two overlapping taps each erased
+  the other's stamp and the next tap created a second calendar event or
+  reminder. Not a rare interleaving: the module renders one button per action
+  and disables only the busy one, and its single `busyKey` re-enables the first
+  button when the second tap starts. `status` is recomputed from the row rather
+  than from the caller's copy, so a sibling stamp that lands in between counts
+  toward `done`. The function changes no authorization — the probe asserts a
+  child of the family may still stamp and a stranger may not.
+  `docs/audit/paperwork-stamp-concurrency-check.sql` reproduces the OLD
+  semantics beside the new function and fails if they stop reproducing the
+  defect. Audit C1-S8-05.
+
+- **`0416_a_private_journal_is_private.sql`** — self-scoped RLS on
+  `journal_entries`, and manager-gated writes on `family_insurance_policies`.
+  `0087` gave the journal `is_private boolean NOT NULL DEFAULT true` and a single
+  `FOR ALL … is_family_member` policy; `is_private` is referenced nowhere in
+  `app/`, `components/` or `lib/`, so the module's `.eq('member_id', memberId)`
+  was a query filter rather than a boundary. Measured as a signed-in child: read
+  a sibling's entry, rewrote it, deleted it, and wrote one in the sibling's
+  name. SELECT is now self **or** a family manager when `is_private` is false —
+  the owner-or-manager rule `main`'s `0364` landed first for this table and
+  `docs/audit/private-journal-check.sql` pins (a sibling never reads another
+  member's entry; a parent reads only one its owner marked not private). **A
+  private entry is not a parent's window**, and the probe asserts that refusal.
+  `family_insurance_policies` (policy numbers, premiums, agent phones, document
+  paths) was `FOR ALL … is_family_member` while its twin `insurance_policies`
+  had manager-gated writes all along — the third instance of that twin-table
+  pattern after `0309` and `0414`. Reading stays family-wide on both, matching
+  `insurance_policies`. `insurance-module.tsx` had no role check of any kind, so
+  the UI half ships with this migration.
+  `docs/audit/journal-and-policy-boundary-check.sql` asserts six refusals, that
+  a member keeps full control of their OWN journal, that every member still
+  reads the policies, that a parent keeps the pen on them, and that a parent
+  still cannot read a child's journal. Audit C1-S8-07.
+
+- ~~`0329_a_record_about_you_is_not_yours_to_rewrite.sql`~~ — **DROPPED on the merge (Audit C1-S9-89), a POLICY DISAGREEMENT for the owner:** it made `behavior_logs` writes manager-only, matching the screen (`behavior-module.tsx` shows Log/Delete only to managers); `main`'s `0338_a_care_entry_names_who_actually_logged_it.sql` and its probe require that a child CAN log behaviour in their own name. Both cannot hold. `0338` is in the tree; this one and `docs/audit/observation-log-boundary-check.sql` are recoverable from the branch history. See `finalaudit.md`. *Original entry, kept for the record:* two tables whose
+  own column comments separate the subject from the author, and two DIFFERENT
+  fixes, because the reason they differ is in each table's header.
+  `behavior_logs` (`member_id … -- the child`, `logged_by`) is "per-child
+  behavior observations … Powers parenting insights" with `concern` notes and a
+  signed `points` column; measured as a child, it erased a concern logged about
+  them and inserted `points = 99` in their own favour. Manager-gated writes via
+  restrictive guards, `0254`'s mechanism and `0309`'s shape.
+  `care_log` is NOT the manager class and gating it that way would break the
+  feature — `0032` says the log exists "so the whole family can see who last
+  checked in", so family-wide reads and inserts are the intent. It gets the
+  `0410`/`0411` treatment instead: UPDATE and DELETE belong to the author or a
+  manager, and `member_id`/`logged_by` are immutable through the shared
+  `columns_are_immutable()` trigger, so not even a parent may rewrite who
+  recorded what (measured: one could).
+  READS stay family-wide on both — whether a child should see the concerns
+  logged about them is a product decision, and the probe asserts both logs stay
+  readable so changing it has to be deliberate. Both modules' controls ship with
+  the migration. `docs/audit/observation-log-boundary-check.sql`. Audit C1-S8-09.
+
+- **`0418_a_public_bucket_serves_what_you_put_in_it.sql`** — pins
+  `allowed_mime_types` on the public `family-media` bucket. Three of the four
+  public buckets have pinned theirs since creation (`00890`, `0194`, `0197`);
+  `0216` set `public = true` and a size limit and no type list, on the bucket
+  that takes the widest range of uploads (six browser paths, no server-side
+  path), so an `image/svg+xml` or `text/html` upload became a page served from
+  the project's own Supabase domain with no session. This is NOT `F-E03` again:
+  that one is deferred as `LB-009` because signed URLs need a data migration of
+  every stored URL, and an allowlist needs none — the expensive fix was covering
+  a cheap one.
+  **THIS CHANGES UPLOAD BEHAVIOUR IN PRODUCTION**, so the permitted list is
+  stated here in full and is read off the six modules' own `accept` attributes:
+  `image/jpeg|png|webp|gif|avif|heic|heif`, `video/mp4|quicktime|webm`,
+  `application/pdf`, `application/msword`, the two OOXML word/spreadsheet types,
+  `application/vnd.ms-excel`, `text/plain`. HEIC/HEIF are included although no
+  `accept` names them, because `image/*` is what the picker says and an iPhone
+  photo arrives as HEIC. Nothing the product offers is refused, and
+  `tests/a-public-bucket-allows-only-what-the-ui-offers.test.ts` fails if a file
+  picker ever gains a type the bucket would refuse.
+  It does NOT make the bucket private and does NOT touch stored objects.
+  Unlike `0216`'s `on conflict do nothing`, it UPDATEs — the production bucket
+  already exists, so an insert would no-op.
+  `docs/audit/public-bucket-mime-check.sql` asserts the general rule: every
+  public bucket pins a list, and none allows a type a browser executes.
+  Audit C1-S8-10.
+
+### `0339` makes a calendar event name who actually made it — unapplied
+
+`01050_calendar_events_rls_repair.sql` is the whole of this table's policy set,
+and every verb of it is the same sentence — `public.is_family_member(family_id)`
+— which is role-blind **and** identity-blind. So a child member may INSERT an
+event carrying a parent's uid in `created_by`, and, because UPDATE is the same
+sentence, may afterwards rewrite an existing row's author to anyone, or to NULL.
+
+It reaches a screen. `app/(app)/dashboard/workload/page.tsx` is the only select
+list in the tree that names this column, and `lib/workload/balance.ts` scores
+each organized event as 12 minutes of "invisible labour" — so the forgery moves
+a real number attributing real effort to the wrong parent.
+
+**Why this is not `created_by = auth.uid()`**, which three earlier drafts
+carrying the numbers `0339`/`0340`/`0342` all used and were rejected for:
+`lib/services/approvals/index.ts` `scopeForApprovedWork` deliberately runs
+approved work as the **ASKER** while the database session stays the approving
+parent's, so a bare identity pin breaks the approval-replay path it claims to
+protect. This migration instead copies the shape **already shipped and
+test-pinned** by `0272_rsvp_is_first_person.sql` on `event_rsvps`, a table the
+same replay writes:
+
+```
+created_by is null or created_by = auth.uid() or can_manage_family(family_id)
+```
+
+as a **RESTRICTIVE** INSERT policy, so `01050` keeps owning its own policies and
+no future permissive INSERT can grant past this one. The NULL branch is required,
+not tolerated: the ICS paste import and the subscribed-feed sync both write rows
+with no `created_by` key at all on an RLS-applying client, and two of the audit's
+own probes insert without it.
+
+**The UPDATE half is a trigger, not a policy, and its `pg_trigger_depth() = 1`
+guard is load-bearing.** No calendar writer sends `created_by` on UPDATE, so a
+checking policy would refuse a member legitimately editing someone else's event;
+a preserving trigger costs those paths nothing. But an *unconditional* preserve
+also reverts the column's own `ON DELETE SET NULL` referential action, which
+Postgres performs as an ordinary UPDATE. Measured both ways: in autocommit that
+**commits a dangling reference with no error at all**, and inside a transaction
+it raises a foreign key violation. The depth guard lets the constraint through at
+depth 2 while still freezing application UPDATEs at depth 1 — including
+`INSERT … ON CONFLICT DO UPDATE`, which an INSERT `WITH CHECK` never sees and
+which `.upsert()` emits.
+
+**Verified on a database built from nothing:** `docs/audit/verify-pg.sh up`
+applied **350 migrations, 0 failed**, and `docs/audit/run-probes.sh` then passed
+**62 of 62** boundary probes against it, the new
+`a-calendar-event-names-who-made-it-check.sql` included. That probe carries a
+negative control that puts **both** halves of the defect back inside its own
+transaction and fails itself if the forgery does not land or if `ON DELETE SET
+NULL` still fires — so it is a boundary rather than decoration. That is evidence
+about this tree. It is **not** evidence about production, which still records
+only `0001-0003`.
+
+**Known residue, recorded rather than implied.** `0339` closes INSERT and freezes
+the author; it does **not** close DELETE, and the manager branch is unconstrained
+by the roster, so a manager may still name an `auth.users` id outside the family
+— `0272`'s `member_id` shape prevents that for free and this column's
+`auth.users` reference cannot. Both are in the migration's own header.
+
+Until this is applied, any household member can sign a calendar event with
+another member's name, and rewrite or erase the author of one already there.
+
+### `0340` makes an erasure actually erase — unapplied
+
+`0338` froze the attribution columns on four household ledgers with a BEFORE
+UPDATE trigger that **preserves** rather than refuses — correct, because the app
+never sends those columns on UPDATE and a checking policy would block a member
+legitimately editing somebody else's entry. It preserves **unconditionally**,
+and that is the defect.
+
+Five of those columns are `ON DELETE SET NULL`, read from `pg_constraint`
+(`confdeltype = 'n'`) with the **referenced** table included — the first version
+of that query omitted it and misread `care_log.logged_by` as pointing at
+`auth.users` when it points at `family_members`:
+
+| table | column | references |
+|---|---|---|
+| `behavior_logs` | `logged_by` | `auth.users` |
+| `care_log` | `created_by` | `auth.users` |
+| `care_log` | `logged_by` | `family_members` |
+| `medication_doses` | `logged_by` | `auth.users` |
+| `screen_time_entries` | `logged_by` | `auth.users` |
+
+Postgres performs a referential action as an ordinary UPDATE against the
+referencing row, so the trigger fires on it and puts the deleted id straight
+back.
+
+**Two symptoms, and production gets the silent one.** Measured holding schema,
+constraint and trigger fixed and varying nothing but the transaction mode: in
+**autocommit** the revert is silent and a dangling reference is **committed**; in
+a **transaction** the foreign key check fires and the delete is **refused**.
+`admin.auth.admin.deleteUser` issues one DELETE in its own transaction, so a real
+erasure takes the first row — the account goes, the name stays, and nothing
+reports it. The visible error is what a *probe* sees, because every probe here
+rolls back. Recording only the error would have described the instrument.
+
+`pg_trigger_depth() = 1` is an application UPDATE; a referential action arrives
+at depth 2. Guarding the preserve on depth 1 keeps every freeze `0338` shipped —
+its own probe still passes — while letting the constraint do the job it declares.
+
+This also closes **AUTHZ-022**: `logged_by` was assigned unconditionally while
+`created_by` had a presence test, so the function raised `42703` on any table
+lacking `logged_by` while its own `comment on function` called itself shared and
+general. `logged_by` now gets the same test. That changes nothing on the four
+tables `0338` attaches it to — but NOT for the reason the first draft gave. "All four carry both columns" is **false**, measured: all four carry `logged_by`, and only `care_log` carries `created_by`. So `created_by`'s presence test is **load-bearing on three of the four today**, which is why `0338` worked at all, while `logged_by`'s is defensive. It is the
+comment that was wrong, and a function whose comment lies is how AUTHZ-022
+happened. Both repairs are one line on the same function, so they are one
+migration rather than two replacing it in sequence.
+
+**Verified on a database built from nothing:** 350 migrations applied / 0 failed,
+`0340` applied on top, then **63 of 63** boundary probes passed. The identical
+autocommit erasure that left a dangling reference before the repair clears the
+column after it, and an application rewrite of both columns is still refused.
+`docs/audit/an-erasure-actually-erases-check.sql` holds it, and was **shown to
+fail before being trusted**: exit **3** against the unguarded function, exit
+**0** against the repaired one.
+
+**Scope.** `0338` is itself unapplied, so this is a repair before shipping rather
+than after, and no shipped product path reaches the defect today — the three
+`admin.auth.admin.deleteUser` call sites are rollbacks on a just-created child
+user. What is exposed is deletion from the Supabase dashboard or admin API, and
+any future account-deletion or GDPR-erasure feature.
+
+**The one a future edit is most likely to undo:** dropping the depth condition
+makes the preserve unconditional again and silently reopens this. The migration
+and the probe both re-assert it, and both also re-ask whether any trigger issues
+a nested UPDATE against these four tables — because that, not the guard itself,
+is what would make `depth = 1` stop covering every application write.
+
+Until this is applied *together with* `0338`, erasing an account leaves that
+person's name on household ledger rows the care timeline still renders.
+
+### `0341` makes two approvals for one kid both land — unapplied
+
+`0341_two_approvals_for_one_kid_both_land.sql` (CONC-001).
+`applyCompletionRewards` in `lib/chores/server.ts` read `kid_progress`, added
+the XP in TypeScript, and wrote the total back by id — a read-modify-write with
+**neither a lock nor a predicate**:
+
+```
+const progress = await ensureProgress(supabase, opts.familyId, opts.memberId);
+const xp = progress.xp + gainedXp;                      // <- READ
+await supabase.from('kid_progress')
+  .update({ xp, level, current_streak: streak, longest_streak: longest, last_activity: today })
+  .eq('id', progress.id).eq('family_id', opts.familyId);  // <- blind WRITE
+```
+
+Two chores approved for one child at the same moment — two parents, one parent
+with two tabs, or the auto-approve path landing while a parent presses Approve —
+both read `xp=100` and both write `120`. One award is silently lost and the
+child is told 120 twice. `level`, `current_streak` and `longest_streak` come off
+the **same stale read** and go out in the same statement, so all four are lost
+together; that is why this moves all four and not just the XP. A fix that made
+only the XP relative would leave the level decided from a total the row no
+longer holds, and a wrong level looks deliberate.
+
+**This is not the idempotency contract.** The engine's docstring says
+idempotency is the caller's ("call once per approval") and that stays true — it
+is about one approval submitted twice. This is two **different** approvals
+arriving together, which no caller-side rule can prevent and which are both
+supposed to count. The contract is unchanged by this migration.
+
+**Measured, with two real concurrent sessions**, two medium chores (20 XP each)
+approved with two seconds of deliberate overlap, against a replay of 352
+migrations:
+
+```
+-- a child on 100 XP --
+  BLIND  shape — read, then UPDATE by id (the defect)
+    xp=120  level=2  current_streak=2  longest_streak=2
+  LOCKED shape — kid_progress_apply_completion (0341)
+    xp=140  level=2  current_streak=2  longest_streak=2
+
+-- a child on 270 XP, where the lost award is also a lost level-up --
+  BLIND  shape — read, then UPDATE by id (the defect)
+    xp=290  level=2  current_streak=2  longest_streak=2
+  LOCKED shape — kid_progress_apply_completion (0341)
+    xp=310  level=3  current_streak=2  longest_streak=2
+```
+
+Same two sessions, same seconds, same row. The second pair is why "it is only
+XP" is not a fair summary: at 270 the lost award is the level the child was
+shown they had reached. Preserved as
+`docs/audit/two-approvals-for-one-kid-both-land-race.sh` — a race, so
+deliberately outside the `*-check.sql` set `run-probes.sh` globs, the same
+posture as `docs/audit/allowance-double-pay-race.sh`.
+
+**What closes it** is the shape `0317_listing_status_decides_from_a_locked_row`
+used for the listing state machine and `0208_atomic_wallet_goal_funding` uses
+for goal funding: `kid_progress_apply_completion` reads the row `for update`, so
+the values the arithmetic is done from are the values that will be written, and
+the award becomes **relative to the locked row** rather than absolute against a
+snapshot taken before it. `kid_progress_level_for_xp` mirrors `levelForXp`
+because the level has to be recomputed inside that lock.
+
+**The rollback is half the fix, and was the same defect pointing the other
+way.** The engine restores the progress row when the badge work after the award
+fails, and it did that by writing the pre-award values back **absolutely** — so
+a concurrent approval that landed in between was erased by the rollback of an
+unrelated one. `kid_progress_revert_completion` subtracts under the same lock
+and restores the streak columns **only while the row still carries what that
+award wrote**, reporting `streak_restored: false` rather than clobbering a
+streak another approval has since decided.
+
+**It is not a new authorization boundary.** `kid_progress` carries `00430_chore_missions`'s
+single role-blind policy (`is_family_member(family_id)` FOR ALL), so any family
+member could already write this row directly; `SECURITY DEFINER` bypasses RLS,
+so the functions **restate** that policy rather than inventing one. Tightening
+it to managers is a separate decision with its own call sites (auto-approve runs
+as the service role, parent approval as the approving manager). What they do add
+is the cross-family guard the table never had — `kid_progress` is not one of
+`0311_family_scoped_references`'s guarded references, so nothing stopped a row
+naming this family beside another family's member.
+
+**Verified on a database built from nothing:** **352 migrations applied, 0
+failed**, and `0341` re-applies onto that schema unchanged (every statement is
+`create or replace`). `docs/audit/two-approvals-for-one-kid-both-land-check.sql`
+holds the boundary in CI — 16 assertions including the blind shape performed on
+the same row as its own negative control, the `for update` read out of
+`pg_get_functiondef` rather than out of a file (so it cannot pass against a
+definition a later migration replaced), and a reader control proving that check
+can still say no. It was **shown to fail before being trusted**: exit **3**
+against a mutated expectation, exit **0** as written.
+
+In the application, `tests/two-approvals-for-one-kid-both-land.test.ts` drives
+the real `applyCompletionRewards` against a stub that HOLDS the first approval
+open and asserts mid-flight that both approvals reached the database and neither
+had written — so the interleaving is a fact the test establishes rather than a
+coincidence it waits for. Reverting the fix turns it red at `expected 120 to be
+140`.
+
+Until this is applied, the two RPCs do not exist, so **`applyCompletionRewards`
+throws `Could not save chore progress` on every approval** — this migration and
+the application change ship together, which is the one ordering constraint on
+this row.
+
+### `0342` stops a child spending the same dollar twice — unapplied
+
+`0342_a_child_cannot_spend_the_same_dollar_twice.sql` (Q-01, CONC-002).
+`debitSpendBucket` in `lib/wallet/server.ts` was the **last money path in this
+product that wrote the ledger from TypeScript**, and it did it as a read, a
+decision and then a write — two PostgREST round trips with nothing held in
+between:
+
+```
+const { bucketId, available } = await bucketBalanceCents(supabase, …);  // <- READ
+if (!params.requiresApproval && amount > available) return …;           // <- DECIDE
+await supabase.from('wallet_transactions').insert({ … });               // <- WRITE
+```
+
+Two $8 spends arriving together against $10 — one parent with two tabs, two
+parents in the same minute, a double-submitted form — both read `available =
+1000`, both passed the check, and both posted a `completed` debit. The ledger
+ends at **-$6.00 and stays there**, because the wallet ledger is immutable: a
+correction is a new credit, never an edit.
+
+Nothing stood behind that check, and each half was read off the replayed
+database rather than assumed: the only partial unique index on
+`wallet_transactions` is `0316`'s `uq_wallet_txn_chore_payout`, scoped `where
+related_type = 'chore_assignments'`; the only non-internal trigger is
+`trg_wallet_transactions_updated_at`; and the only relevant CHECK is
+`amount_cents >= 0`, which puts the sign in `direction` — so a negative balance
+is perfectly representable.
+
+The **paging** half of that read was already repaired (`bucketBalanceCents` goes
+through `readAll`), and that is a different property. Paging makes a read
+complete; it does not make it a decision. `readAll` issues N requests in N
+snapshots, and by the time the insert is sent the number is a memory.
+
+**What closes it** is `0155_wallet_auth_holds`'s shape, which has held the card
+path since PAY-1 rather than anything new: `wallet_debit_spend_bucket` takes
+`FOR UPDATE` on the child's `spend` bucket — one row, the natural per-child
+mutex — as the first statement after its guards, totals the ledger **inside**
+that lock, refuses, and writes the debit and its `wallet_audit_logs` row in the
+same transaction. This was the one money mutation in the database that did not
+already do that; `wallet_credit_child_ledger`, `wallet_transfer`,
+`wallet_approve_gift`, `wallet_decide_spend`, `wallet_decide_allowance`,
+`wallet_fund_goal` and `wallet_reserve_card_auth` all take their lock first.
+
+It totals `('completed', 'processing')`, exactly as `0155` does, which closes a
+second defect on the same path: `bucketBalanceCents` counts `completed` only, so
+a **live card hold was invisible to an in-app spend** and a child could tap
+their card at a shop for $8 and have an $8 in-app spend approved against the
+same $10 in the same second. `requires_parent_approval` is deliberately **not**
+counted and a held request is deliberately **not** refused on balance — a held
+debit moves nothing and `wallet_decide_spend` re-sums under this same lock
+before it ever posts, so counting it would let a request a parent has not yet
+seen block one they are about to decline.
+
+**Authorization restates the table's own policy rather than inventing one.**
+`SECURITY DEFINER` skips RLS, so the function has to say what RLS said:
+`wallet_transactions` carries `wallet_transactions_mng_insert` and the
+restrictive `wallet_transactions_manager_insert_guard`, both `with check
+(can_manage_family(family_id))`, and `can_manage_family` is role-aware
+(`role in ('parent','adult') and is_active`) — the same set as `isManager`. So
+the opening guard is `wallet_decide_spend`'s own line, character for character.
+**Named rather than quietly decided:** a CHILD filing a spend request is refused
+here, and is refused by that policy today for the same reason, even though
+`requestSpendAction` is written as though a child can ask. Letting a non-manager
+create a held ledger row is a product decision with its own approval and is not
+this migration's to make; what changes is that the refusal now arrives as
+`forbidden` instead of a raw policy error.
+
+**Verified on the audit database** (352 migrations replayed): applied cleanly —
+`CREATE FUNCTION / COMMENT / REVOKE / GRANT` and the verification block's
+`0342 OK` notice — and **re-applies unchanged**, every statement being `create or
+replace` plus idempotent grants. Live grants afterwards are
+`{postgres=X/postgres,authenticated=X/postgres}`: `authenticated` only, matching
+every `0205`/`0208` money RPC, and deliberately **not** `service_role` (the one
+caller is a cookie-bound server action; the webhook keeps
+`wallet_reserve_card_auth` and `debitCardSpend`).
+
+`docs/audit/a-child-cannot-spend-the-same-dollar-twice-check.sql` holds it, and
+was **shown to fail before being trusted**: exit **0** as written, exit **3**
+against a mutated definition with the `for update` removed and the total
+narrowed to `completed` ("an $8 in-app spend was approved while an $8 card hold
+already reserved the money"). Its negative control replays the pre-`0342`
+read-then-insert shape on its own $10 bucket, through the same RLS the old path
+went through — snapshot taken, another spend lands, write issued from the
+snapshot — and **requires** the overdraft to land and the bucket to end at
+**-600 cents**, failing loudly if it does not. It is a single-connection probe
+and says so in its own header: it demonstrates that the decision and the write
+are one statement over the current ledger, not that the lock serializes. The
+two-connection race for the card path is `docs/audit/wallet-concurrency-check.sql`,
+and a spend-path twin of it belongs beside this one.
+
+**Ships with its application change.** `debitSpendBucket` now calls the RPC
+instead of reading and inserting, and the `wallet_audit_logs` write moved out of
+TypeScript into the function so money cannot move without a trail. Until this is
+applied the RPC does not exist, so every spend returns "Could not post that
+wallet debit." — this migration and `lib/wallet/server.ts` go together, which is
+the one ordering constraint on this row. The external signature and return shape
+of `debitSpendBucket` are unchanged, including the exact "Only $X available in
+Spend." sentence, so `app/(app)/wallet/actions.ts` is untouched.
+
+### `0343` makes "only a parent hands out an assistant key" true in the database — unapplied
+
+`0343_only_a_parent_mints_or_revokes_an_assistant_key.sql` (SRV-001 lead `m9`).
+An assistant key is a standing bearer grant over the household: whoever holds
+one can have `POST /api/assistant` read the family's calendar, tasks and
+shopping list aloud and, with the `capture` scope, write events, notes,
+groceries and to-dos back. The app says only a parent may hand one out —
+`canManage` in `app/(app)/dashboard/assistants/actions.ts` is `isAdmin(role)` —
+and `0283`'s own header says the same in words. `0283`'s policies said
+something else: they were written against `can_manage_family()`, which is
+`role in ('parent','adult')` (`0003`), rather than `is_family_admin()`, which
+is the parent-only predicate two definitions further down. And because both of
+the action's writes go through the service-role client, which is `BYPASSRLS`,
+the parent-only rule was a TypeScript `if` on the app's own path while
+`/rest/v1/assistant_links` stayed open to any member's JWT under the weaker
+predicate.
+
+So an **adult** — the one role on which the two predicates disagree — could,
+with their own browser client: mint a live key whose secret only they knew,
+stamped as the parent's; widen the parent's read-only kitchen speaker to one
+that writes; revoke a parent's key and then un-revoke it; or delete it, which
+cascades `assistant_link_events` and erases the "every use is recorded" trail
+the page promises. A child was already refused.
+
+**What closes it** is three `RESTRICTIVE` policies (insert, update, delete) on
+`is_family_admin(family_id)` — `0254`'s mechanism, as reaffirmed by `0306`,
+`0310`, `0322` and `0325` — so no permissive policy, present or added later,
+can grant past them. `SELECT` is deliberately untouched: members are meant to
+see that a speaker is connected. The migration ends with a block that raises if
+the three guards are not in force, rather than "applying" against a table
+still open to an adult.
+
+**Nothing legitimate breaks, and that was checked rather than assumed.** The
+only writers of `assistant_links` in the application are the two in
+`assistants/actions.ts` and the `last_used_at` touch in
+`lib/assistant/service.ts`, and all three run on the service-role client
+(`app/api/assistant/route.ts` builds its client with `createServiceClient()`),
+which bypasses RLS.
+
+**Evidence.** `tests/only-a-parent-mints-or-revokes-an-assistant-key.test.ts`
+replays every `create`/`drop policy` and `grant`/`revoke` on the table across
+the whole corpus and evaluates each request the way Postgres does — grant,
+then any permissive, then every restrictive — with the predicates parsed from
+the migration that defines them. It was **shown to fail before being trusted**:
+with the migration absent it is red (6 of 9), with it present green.
+
+**Two things this entry does not close, named so they are not assumed closed.**
+`0343` ships no `docs/audit/*-check.sql` probe yet, unlike `0340`-`0342`, so a
+production pre-flight cannot tell whether it ran; one is being written. And
+`resolveAssistantLink` (`lib/assistant/service.ts:54-60`) matches on the token
+alone — a key keeps working if the parent who minted it later leaves the family.
+Whether a key belongs to the person or to the household is a product question,
+and it is recorded here rather than decided.
+
+### `0349` keeps one saved copy of a provider recipe per family — unapplied
+
+`0349_one_saved_copy_of_a_provider_recipe_per_family.sql` (SRV-001 lead
+`m31`). "Save to vault" in `app/(app)/dashboard/recipes/discover/actions.ts`
+de-duplicates by probing `(family_id, source_provider, source_recipe_id)`
+before it inserts. `0054` indexed that triple but never made it unique, so the
+probe is a best-effort look: two members tapping Save on the same TheMealDB
+recipe in the same second, or one member on a phone and a laptop, both probe
+empty and both insert, and the vault carries two identical cards from then on.
+A check in a server action is a check a second concurrent request steps
+straight over; only the database can close that window.
+
+**What closes it** is a partial unique index on the triple, `where
+source_recipe_id is not null and source_provider is not null and
+source_provider <> 'bubaly_ai'`. Partial on purpose:
+`app/api/recipes/transform/route.ts` writes several rows sharing `(family_id,
+'bubaly_ai', <vault recipe id>)`, one per AI variant of the same recipe, and a
+blanket index would refuse the second variant. Hand-typed recipes carry no
+source and are outside it too. On a database that already holds a duplicate
+pair the migration names the rows and stops, because collapsing them is a data
+decision: a stale copy may already be a meal-vote option or sit in a meal-plan
+slot.
+
+**Ships with its application half, and each half stands alone.** The action now
+reports a failed vault probe instead of reading it as "not saved yet", and saves
+under a category the vault accepts (`m31`). Until 0349 is applied, the race
+above can still produce a second card.
+
+**Evidence.**
+`docs/audit/a-family-vault-holds-one-saved-copy-of-a-provider-recipe-check.sql`
+runs its negative control first (a member's first save, a save with the recipe
+id flipped, and a second member saving a different recipe all land), then
+requires the second save of the same recipe, the second member's save of it,
+and an UPDATE that repoints a saved row onto it to be refused by
+`uq_family_recipes_source` by name. Without the migration it is red on the
+race assertion ("BOTH saves landed"); with the write grant revoked it is red on
+the control; with the right index under another name it is red on attribution.
+
+### `0352` stops a child clearing the household's money warnings — unapplied
+
+`0352_a_child_cannot_clear_the_households_money_warnings.sql` (SRV-001 lead
+`m26`). `money_timeline_insights` holds the Financial Copilot's advisories and,
+per row, whether the family has acknowledged or dismissed each one. `0168` gave
+all four commands to `is_family_member` (membership, not role), and nothing
+since has narrowed it: `0267` and `0275` list the finance tables by name, and
+this one is not on either list. The row is family-wide by construction
+(`unique (family_id, dedupe_key)`), so one write decides what the whole
+household sees. Replayed on a throwaway Postgres, a member with role `child`
+sent the exact upsert the Dismiss button sends and cleared the `urgent`
+low-balance advisory from the parents' page too, and a `guest` deleted the row
+outright. The page does not step a child up (`needsStepUp` is manager-only), and
+the module has no view of what was dismissed, so a parent could not see or undo
+it.
+
+**What closes it** is `insert`/`update`/`delete` re-created on
+`can_manage_family(family_id)`, plus the three `RESTRICTIVE` manager guards
+`0275` gives the finance group, a sweep of stray permissive write policies by
+their shape, and an end-state assertion that raises. `select` stays on
+`is_family_member`, for `0267`'s stated reason: a member reading the forecast is
+a product decision. `anon` loses its write grant on this one table (`0290`'s
+treatment).
+
+**Ships with its application half, and each half stands alone.** The actions in
+`app/(app)/dashboard/money-timeline/actions.ts` refuse a non-manager with a
+sentence rather than a bare policy error, validate the client's payload against
+`0168`'s own checks, and report a refused write instead of revalidating as if it
+had landed (`m27`). The module shows a child the forecast without the Dismiss
+buttons. Until 0352 is applied, `/rest/v1` still lets a child write.
+
+**Evidence.** Two probes, both run by CI's database job after replaying every
+migration. `docs/audit/a-child-cannot-clear-the-households-money-warnings-check.sql`
+fails with 11 named breaches on the `0168` state and passes after 0352 (applied
+twice). `docs/audit/only-a-parent-or-an-adult-clears-the-households-money-warnings-check.sql`
+runs its negative control first (a parent and an adult making the same writes
+must land) and went red on that control when the write grant was revoked with
+0352 in place.
+
+### `0360` takes a head-out reminder off the calendar with its departure plan — unapplied
+
+`0360_a_head_out_reminder_goes_with_its_departure_plan.sql` (SRV-001 lead
+`m41`). Smart Departure writes a "🚗 Head out for …" calendar event for each
+plan and links it from the plan (`departure_plans.reminder_event_id`); the link
+runs plan → event only. `00981` made `departure_plans.event_id` `ON DELETE
+CASCADE`, so deleting the event a plan was for — the calendar's Delete button,
+the bulk delete, the assistant's delete tool — deletes the plan and leaves its
+reminder on every member's calendar, where the daily notifications run turns it
+into a push and an email for a trip that no longer exists. With the plan gone,
+nothing in Trip Intel can move or remove it.
+
+**What closes it** is an `AFTER DELETE FOR EACH ROW` trigger on
+`departure_plans` that deletes the plan's reminder, fenced by `family_id =
+old.family_id`. It is `SECURITY INVOKER`: on the cascade path it fires as the
+member who deleted the event (measured on the replayed schema), so
+`calendar_events` RLS still decides what it may delete. Neither foreign key
+changes: deleting a reminder by hand still leaves its plan, which a refresh
+repairs.
+
+**Ships on its own.** The application does not call anything 0360 creates.
+The app-side halves of the same audit — a save that validates the plan's limits
+before writing the reminder and takes a just-written reminder back if the plan
+is refused (`m39`), and a Remove that fails closed on a failed read or a
+refused reminder delete (`m40`), both in `app/(app)/dashboard/trip-intel/actions.ts`
+— are live on merge. Until 0360 is applied, deleting the event a plan was for
+still strands its reminder.
+
+**Evidence.** `docs/audit/a-head-out-reminder-goes-with-its-departure-plan-check.sql`
+deletes the event as a signed-in member and requires the plan and its reminder
+gone, a same-titled hand-typed event untouched, the Remove button's order still
+working, and the family fence holding for an owner-level delete. It was **shown
+to fail before being trusted**: without 0360 it is red (the reminder stays), and
+with 0360's family term removed it is red (the other household's event is
+deleted); its own negative controls repeat both inside the transaction.
+`tests/a-head-out-reminder-never-outlives-its-departure-plan.test.ts` covers
+the application halves against a fake that enforces 00981's CHECKs and both
+foreign-key actions.
+
+**Not closed, named so they are not assumed closed.** Reminders already
+stranded in production are not swept — telling one from an event a person typed
+with the same title would be a guess. Notifications already created for one are
+not removed (`notifications.related_id` has no foreign key). And the save in
+`m39` is compensated, not atomic: if the request dies between writing the
+reminder and writing the plan, or the compensating delete also fails (logged,
+and the family is told), the reminder stays. Making it atomic means moving both
+writes into one database function that every save depends on, which cannot ship
+while production cannot take migrations.
+
+### `0381` makes "two parents" mean two parents in the database too — unapplied
+
+`0381_two_parents_means_two_parents_in_the_database_too.sql` (SRV-001 leads
+`m7+m8`). Settings → Trust & Permissions offers "Just one parent or adult",
+"Two parents" and "Every parent and adult", and the whole point of the second
+and third is that ONE person cannot authorise the thing alone. That rule lived
+in TypeScript only — `thresholdOf` / `decide` / `editAndApprove` in
+`lib/services/approvals/index.ts`. The surviving UPDATE policy for a manager on
+`approval_requests`, 0251's `approval_requests_decide`, names no column, so any
+signed-in adult could `PATCH /rest/v1/approval_requests?id=eq.<id>
+{"status":"approved"}` with the browser session and the database said yes: the
+request closed, the second parent could never vote, and `trust_audit_logs` got
+no decision row because `auditDecision` only runs inside `decide()`.
+
+**What closes it**: `approval_votes_satisfy(family, model, required, approvals)`
+mirrors `lib/approvals/threshold.ts` in SQL; a BEFORE UPDATE trigger,
+`approval_requests_decision_is_earned`, refuses a move into `approved` or
+`modified` unless the row's own `approvals` satisfy its `approval_model` and
+`required_approvals`, refuses a vote signed as someone else, and refuses
+removing another decider's vote; `approval_requests_rule_is_immutable` refuses
+changing the model, the threshold or the requester on a pending row. Both
+functions are `revoke all … from public, anon, authenticated` and run only from
+their triggers. Replay-safe (`drop trigger if exists` before `create`).
+
+**Ships on its own.** The application half is live on merge: the approval card
+shows what an earlier approver changed (`approval.alreadyChangedByAnApprover`),
+the concierge panel's Approve and Dismiss route an approval-backed run through
+`decide()` — one decision surface instead of two — and a finished plan is
+stamped `state = 'completed'` with `completed_at`, so it counts in the family's
+week. Until 0381 is applied, a single adult with the browser session can still
+close a two-parent request over `/rest/v1`.
+
+**Evidence.** `docs/audit/two-parents-means-two-parents-check.sql` — its
+negative control runs first (the same adult's vote on a `single` request, and
+their second vote on a `two_parents` request, both LAND), then one adult's flip
+of a two-parent request to `approved`, a vote signed as the other parent, and a
+rewrite of the model on a pending row must each be refused by 0381's named
+trigger. Mutation-tested three ways on private clones of a HEAD template with
+the migration applied: as written (exit 0), the guard loosened (red on a
+refusal), a decoy refusing every write with the guard intact (red on the
+control). `tests/one-adult-cannot-approve-what-the-family-said-needs-two.test.ts`
+covers the service half and the panel's routing.
+
+**Recorded rather than closed.** (1) A `rejected` decision is not final in the
+database: on a `single` row another manager may remove the rejecting vote and
+add their own — before 0381 any manager could flip anything, so this is not a
+regression, but it is not closed. (2) `lib/ai/runs/executor.ts` still runs the
+raw `edited_payload` of `plan_steps` rows with `skipTrust`; the comments now say
+so, and a manager can still PATCH that column on a pending row. (3)
+`executeQueuedRunAction` routes through `decide()` only when the run's own
+`metadata.approval_id` is set, and `family_automation_runs_update` (0251) is
+bare `can_manage_family` with no column pin — an adult can PATCH the metadata to
+drop `approval_id` and then tap "Do it", materialising the plan with no vote
+while the two-parent approval stays pending. The rows it creates are ones an
+adult can already write directly, so the severity is low; recorded under
+SRV-001 as an open lead for a follow-up migration that pins the column.
+
+### `0382` makes a password alone unable to delete the family's budget — unapplied
+
+`0382_a_password_alone_does_not_delete_the_familys_budget.sql` (SRV-001 leads
+`m10+m11`; `O-03` from the database side). Two-step sign-in is an opt-in control
+a family turns on so that a stolen password cannot reach the money. Nine money
+pages send an `aal1` manager to `/auth/step-up`, and that was the whole
+enforcement: no policy anywhere read the JWT's `aal` claim, and the money
+tables' write policies (0275, superseding 0267) are `can_manage_family`, a
+ROLE, which a parent on a password-only session satisfies completely. Someone
+who has the password and not the authenticator holds a valid `aal1` session,
+and the anon key plus that session's JWT reach PostgREST directly — `DELETE
+/rest/v1/budgets?id=eq.<id>` — with no page rendered and no server action run.
+The same hole was open through the browser on `/dashboard/billing`, where
+`deleteBill` / `markBillPaid` / `deleteAccount` wrote straight to PostgREST.
+
+**What closes it**: `session_cleared_step_up()` mirrors `needsStepUp`
+(`lib/auth/mfa.ts`) exactly — true when the session is `aal2`, OR when the user
+has no verified TOTP factor enrolled, so a family that never set up an
+authenticator sees no change — and a RESTRICTIVE insert, update and delete
+guard per money table uses it: `budgets`, `savings_goals`, `bills`, the tables
+written only from the step-up-guarded money area (`transactions` and
+`financial_accounts` are left out for the reasons in the header). Restrictive,
+so it ANDs with whatever permissive policy drift has left and cannot be
+satisfied by adding a broad policy beside it. Replay-safe.
+
+**Ships on its own.** The application half is live on merge: every money
+action in `app/(app)/dashboard/billing/actions.ts` requires `aal2` where the
+money pages already did, the billing page itself sends an `aal1` manager to
+step-up with a return path (`returnPathWith`), and the twelve client call sites
+route a refusal through `reportRefusal` (`lib/auth/step-up-client.ts`), which
+sends the family to the step-up page instead of showing a bare error
+(`actions.moneyNeedsYourCodeAgain`). Until 0382 is applied, a password-only
+session can still reach the money tables over `/rest/v1`.
+
+**Evidence.** `docs/audit/a-password-alone-does-not-delete-the-familys-budget-check.sql`
+— control first (an `aal2` manager, and a manager with no factor enrolled, both
+write), then an `aal1` manager with a verified factor is refused a delete and an
+insert on `budgets` and an update on `savings_goals` and `bills`, and the
+function's grants are read back. Mutation-tested three ways on private clones
+of a HEAD template with the migration applied (as written 0, guard loosened
+red on a refusal, decoy red on the control).
+`tests/a-password-alone-does-not-empty-the-family-finances.test.ts` and
+`tests/require-aal2.test.ts` cover the action and page halves.
+
+### `0383` makes an archived page take its public answers with it — unapplied
+
+`0383_an_archived_page_takes_its_public_answers_with_it.sql` (SRV-001 leads
+`m1` and `m2+m3`). Generated FAQ answers do not live in the page row: they are
+rows in `marketing_aeo_questions`, world-readable on one predicate (0228's
+`status = 'published'`) with no join back to their source page. So when a page
+left the public set — archived, deleted, renamed, or a blog post unpublished —
+its own route went dark but its answers kept rendering: on /faq's Knowledge
+Center tab and in its FAQPage structured data, in every still-live article of
+the same category, and with a body that ends "Read the full guide at
+/blog/<slug>" for a URL that now answers 404. Nothing self-healed it: 0237's
+regeneration trigger is switched off for exactly this case, and the hand-retry
+paths select the page `.is('deleted_at', null)`.
+
+**What closes it**: four AFTER … FOR EACH ROW triggers on `marketing_pages` and
+`blog_posts`, bound to two SECURITY DEFINER functions with a pinned
+`search_path` (`retire_marketing_aeo_on_page_hidden`,
+`retire_marketing_aeo_on_post_unpublished`; EXECUTE revoked from public, anon
+and authenticated), that move the page's PUBLISHED answers to `answered` — the
+status `runQuestions` itself writes for an unpublished page — inside the same
+transaction as the take-down, so there is no window. Only published rows move;
+an `opportunity` or `drafting` row an admin is mid-way through keeps its
+status, and the editorial text survives for a later re-publish. **This
+migration rewrites rows on apply**: answers already orphaned by pages that are
+archived, deleted or unpublished today are moved to `answered` first, and
+re-pointed or blanked `blog_aeo_v1` rows are handled by the same backfill (its
+first cut refused to apply over exactly that drifted data; the probe below
+re-applies it over both shapes).
+
+**Ships on its own.** The application half is live on merge: the take-down
+actions (`archivePlatformPage`, `updatePlatformPage`, `archiveContentAction`,
+`unpublishBlogPostAction`, the legacy bridge's three paths) retire the answers
+themselves, so the fast path is closed before the migration; a brand rule can be
+corrected after it is saved and a retry re-queues the job it was clicked on
+(`m2+m3`). Until 0383 is applied, a take-down that bypasses the actions — the
+cron worker, `scripts/backfill-*.mjs`, the SQL editor — still leaves the answers
+public.
+
+**Evidence.** `docs/audit/an-archived-page-takes-its-public-answers-with-it-check.sql`
+(control first: the super admin and service role can still write every column
+the take-downs write; then archive, delete, rename and unpublish each retire
+exactly their page's published answers and no sibling's; no role may EXECUTE
+the trigger functions) and
+`docs/audit/a-renamed-page-leaves-no-public-answer-behind-check.sql` (a rename
+of a live page retires the old path's answers and no sibling's, and step 3
+re-applies 0383 over re-pointed and blanked rows). Both mutation-tested three
+ways on private clones of a HEAD template with the migration applied.
+`tests/an-archived-page-takes-its-public-answers-with-it.test.ts` covers the
+actions and guards the CI wiring that executes the probes.
+
+### `0384` stores the urgent fallback number the only way it can be used — unapplied
+
+`0384_the_urgent_fallback_number_is_stored_the_only_way_it_can_be_used.sql`
+(SRV-001 leads `m13+m14`). `family_contact_channels.forward_to_phone` is the
+number the family says to call or text when something at their Contact Center
+line is urgent. 0214 created it with the comment "optional human fallback
+(E.164)" and no constraint, and the write path stored whatever was typed —
+while every consumer requires E.164 and none can say so: `sendSmsWithReceipt`
+refuses anything else as `invalid_message` (the urgent text never left the
+server, and the receipt's error is rendered on no screen), and `twimlDial`
+interpolates the value into a `<Dial>` element, so a stored `&` or `<` made the
+TwiML unparseable and the caller heard an application error. The field's own
+placeholder was "+1 555 123 4567" — with spaces — so typing exactly what the UI
+taught produced a fallback number that never once worked.
+
+**What closes it**: the column gets the CHECK its comment already claimed
+(`forward_to_phone is null or forward_to_phone ~ '^\+[1-9][0-9]{7,14}$'`),
+added only if absent. **This migration rewrites rows before it constrains
+them**: every value that is not already E.164 is copied to a new
+`forward_to_phone_legacy` column, then normalized the way
+`lib/contact-center/phone.ts` does it — a `+`-prefixed number with spaces,
+dots, dashes or parentheses becomes its digits behind the `+`; anything else
+becomes NULL. No country code is guessed: a bare ten digits is not read as +1,
+because an Italian or Mexican mobile typed the local way would become a valid
+American number and the urgent text would be delivered to a stranger. Nothing a
+parent typed is destroyed; the legacy column keeps it, and the app never reads
+that column. Replay-safe: `add column if not exists`, the UPDATE matches only
+rows still outside the pattern, the CHECK is added inside a `pg_constraint`
+guard.
+
+**Ships on its own.** The application half is live on merge: the server
+action normalizes through `normalizeFallbackPhone` and refuses with a sentence
+that says the form the number needs (`actions.enterTheFallbackNumberIn`); the
+one-number-per-family provisioning path no longer leaves a second billed number
+behind. There is no client INSERT or UPDATE policy on this table (0214 grants
+SELECT only) and every write goes through the service role, so this is defence
+in depth for the next write path rather than a boundary a client can route
+around today.
+
+**Evidence.** `docs/audit/the-urgent-fallback-number-is-stored-the-only-way-it-can-be-used-check.sql`
+— control first (the service role stores an E.164 number and a NULL, both
+land), then a spaced, a letter-bearing and a `<`-bearing value must each be
+refused by the named constraint, and a legacy row planted before the migration
+is shown normalized with its original kept. Mutation-tested three ways on
+private clones of a HEAD template with the migration applied (as written 0,
+constraint dropped red on a refusal, decoy red on the control).
+`tests/the-urgent-fallback-number-a-parent-types-still-reaches-their-phone.test.ts`
+covers the normalizer and the action, `tests/one-family-keeps-one-number-and-nothing-is-left-billing.test.ts`
+the provisioning path.
+
+### `0385` gives family_facts the member rule the service already applied — unapplied
+
+`0385_a_member_only_rewrites_their_own_memory.sql` (SRV-001 lead `m21`). 0264
+narrowed `family_facts` UPDATE and DELETE by CATEGORY only — `medical` and
+`account` to managers — so on the seven ordinary categories any member of the
+household could rewrite or delete any row, including the household-level facts
+(`member_id` null, the Add form's default "The family") a parent entered for
+everyone. The service (`lib/services/memory/index.ts`) has carried the member
+rule since the knowledge module shipped, but `knowledge-base-module.tsx` and
+`life-events-module.tsx` read `family_facts` from the browser on the caller's
+own RLS-bound client, so the same client could issue the UPDATE directly; and
+`rememberConfirmed` probed by (family_id, ilike label, member_id) and UPDATEd
+whatever it found — re-typing "Emergency contact" into Add replaced the parent's
+number, no id needed.
+
+**What closes it**: `family_facts_update` and `family_facts_delete` are
+re-created with `mayChangeFact`'s rule — `can_manage_family(family_id) OR
+is_self_member(member_id) OR created_by = auth.uid()` — on top of 0264's
+category clause; SELECT and INSERT untouched. `drop policy if exists` before
+`create policy`, so a replay is clean.
+
+**Ships on its own.** The application half is live on merge (`m21`):
+`mayChangeFact` is applied on the create path as well as the pencil,
+`rememberConfirmed`'s label probe refuses a row the caller may not write, and
+Add applies the sensitive-category rule. Until 0385 is applied, a member with
+the browser client can still rewrite a parent's household fact over `/rest/v1`.
+
+**Evidence.** `docs/audit/a-member-only-rewrites-their-own-memory-check.sql` —
+its negative control runs first (the same teen rewrites HER OWN ordinary memory
+with the very statement the refusals use, and it must land), then the teen's
+UPDATE, `created_by` claim, `member_id` re-point and DELETE of the household's
+and her sibling's memories must each be refused, with SELECT shown still open
+to the household. Mutation-tested three ways on private clones: as written
+(exit 0), the policy loosened to 0264's shape (red on a refusal), a decoy
+refusing every write with the guard intact (red on the control).
+`tests/the-add-form-is-not-a-way-around-the-memory-edit-gate.test.ts` covers the
+service half and reads this file's text for the rule it mirrors.
+
+**Not closed, named so it is not assumed closed.** Ownership keys on
+`created_by`, which is set on INSERT only: a manager who corrects a fact a teen
+filed does not take it over, so the teen can still rewrite the corrected value
+(recorded under SRV-001 as a residual). And INSERT stays open on the ordinary
+categories with no uniqueness on (family_id, member_id, label), so a second
+"Emergency contact" row can be filed beside the parent's over `/rest/v1`; the
+app's Add path refuses it, RLS does not.
+
+### `0386` lets a family subscribe to a calendar URL once — unapplied
+
+`0386_a_family_subscribes_to_a_calendar_url_once.sql` (SRV-001 lead `m36`).
+0045 created `calendar_feeds` with `url text not null` and no uniqueness on it.
+`addCalendarFeed` inserted the row, committed it, then tried the first sync;
+when that sync failed (a school calendar behind a login, a timeout, a file over
+1 MiB) the row stayed and the panel kept the URL in the form, so the next press
+inserted a second row for the same URL, and the next a third. Once the URL
+answered, each row imported the same events under its own `feed_id` —
+`uq_calendar_events_feed_uid` (0285) is keyed on (feed_id, external_uid) — so
+every school event sat on the family calendar two or three times.
+
+**What closes it**: `create unique index if not exists
+uq_calendar_feeds_family_url on calendar_feeds (family_id, url)`, the shape
+`weekend_feeds` (0072) and `library_feeds` (0284) already carry. Before building
+it the migration looks for a family that already holds two rows for one URL and
+stops, naming each row with its status and event count, rather than letting
+Postgres's terse error say nothing: collapsing them is a data decision, because
+every duplicate owns its own imported events (`calendar_events.feed_id … on
+delete cascade`, 0045) and a member may have edited the copy that would go.
+
+**Ships on its own.** The application half is live on merge (`m36`):
+`addCalendarFeed` looks for the family's row for the URL first and re-syncs it,
+refuses a normalized URL over 2048 characters before it reaches the index,
+removes a row it created whose first sync failed (and says so when it cannot),
+and catches 23505 from the index by re-reading and syncing the winner's row.
+Until 0386 is applied, two members adding the same calendar in the same moment
+can still both insert.
+
+**Evidence.** `docs/audit/a-family-subscribes-to-a-calendar-url-once-check.sql`
+— its negative control runs first (the same member inserts a URL their family
+does not hold, and updates their own feed's URL to another the family does not
+hold; both must land), then the second insert of a URL the family holds, and an
+UPDATE that would make two rows share one, must each be refused with 23505 by
+`uq_calendar_feeds_family_url` and by nothing else.
+`tests/a-calendar-that-failed-to-add-is-not-a-subscription.test.ts` covers the
+action: a failed first sync leaves no row and is retried against one
+subscription, an already-subscribed URL is re-synced rather than added, the
+loser of a same-moment race syncs the winner's row, a failed lookup adds
+nothing, and an over-long link is refused before anything is saved.
+
+### `0387` puts the publish lock and a trip's document link in the database — unapplied
+
+`0387_a_child_cannot_lift_the_publish_lock_or_link_a_document_they_cannot_read.sql`
+(AUTHZ-011). Three guards, one migration:
+
+- **`social_settings`**: three RESTRICTIVE policies (insert, update, delete) on
+  `social_has_permission(family_id, 'manage_settings')`, the same rule
+  `updateSettingsAction` applies. Until it is applied, any member can turn off
+  `require_approval` (the family's stop on publishing) or delete the row over
+  `/rest/v1`. SELECT stays open because `needsPublishApproval` reads it on the
+  publisher's own client.
+- **`vacation_documents.document_id`**: a SECURITY INVOKER BEFORE trigger. A
+  trip may link a document only if the caller can read it (through
+  `documents_select`) and it belongs to the trip's household. The Trip →
+  Documents form never writes the column and is unaffected.
+- **`documents.family_id`**: a SECURITY DEFINER BEFORE UPDATE OF `family_id`
+  trigger that refuses to move a document to another household while a trip
+  links it. EXECUTE is revoked from public, anon and authenticated.
+
+**Data it changes on apply.** Any `vacation_documents.document_id` that already
+points at another household's document is set to NULL, and a NOTICE reports how
+many. A pointer at a sensitive document of the row's own household is left
+alone: `created_by` is supplied by the client, so a link a child planted cannot
+be told apart from one a parent made.
+
+**Ships on its own.** No application code changes with it. It ends with a DO
+block that raises unless all five guards are in force as described.
+
+**Evidence.**
+`docs/audit/a-child-cannot-lift-the-publish-lock-or-link-a-document-they-cannot-read-check.sql`
+tests each guard behind its own negative control. It passes on a full replay.
+It fails on a replay with the guards dropped, and it fails with only the
+documents trigger dropped. `tests/a-child-cannot-lift-the-publish-lock-or-link-a-document-they-cannot-read.test.ts`
+replays the migration corpus and evaluates the policies and triggers.
+
+**Not closed, named so they are not assumed closed.** An upsert
+(`INSERT … ON CONFLICT DO UPDATE`) into `vacation_documents` that re-sends an
+unchanged sensitive pointer is checked as an INSERT and refused for a caller who
+cannot read the document. No writer upserts this table. `vacation_flights` and
+`vacation_tickets` carry the same `document_id` column with the same FK, and
+this migration does not guard them. Nothing in `app/`, `lib/` or `components/`
+writes either column or follows it today.
+
+### `0389` makes a decision, once made, stay made — unapplied
+
+`0389_a_decision_once_made_stays_made.sql` (SRV-001, the residual the m7+m8
+re-review recorded: "a rejection is not final in the database"). 0381 put the
+approval model into the database — a vote is the voter's own, a move INTO
+approved/modified needs the yeses the row's model asks for, the rule columns
+are frozen — and, deliberately, gated nothing after the decision. That left the
+other direction open: `approval_requests_decide` (0251) is `can_manage_family`
+on USING and WITH CHECK with no status predicate and no column pin, so on a row
+a parent has DECLINED any manager can, with the browser session and one PATCH
+over `/rest/v1`, re-open it (`{"status":"pending","approvals":[]}` — rule A
+permits taking votes away, rule B does not run), or on a `single` /
+`first_available` / `sequential` row approve it outright with their own yes,
+or on a `two_parent` row where the other parent approved swap their own "no"
+for a "yes" and flip. The same door works approved → rejected, expired →
+pending and cancelled → pending. The application never leaves a decided status
+(`openForDecision` refuses with "This request was already decided."; every
+status writer predicates on `status = 'pending'`).
+
+**What closes it**: one BEFORE UPDATE trigger, `approval_requests_decision_is_final`
+(function `approval_decision_is_final`, SECURITY INVOKER, EXECUTE revoked from
+public, anon and authenticated), for callers subject to row-level security:
+rule D — once `status` is anything but `pending`, `status`, `approvals`,
+`edited_payload`, `decided_by` and `decided_at` cannot change; rule E — `payload`,
+the ask the votes are votes on, cannot change for the life of the row. What the
+application still writes to a decided row (`executed_at` / `execution_result`
+from `stampExecution` on both paths and the private-purchase result stamp;
+`consequences`, `request_id`, `payload_kind` attached after filing) is untouched.
+errcode 42501. 0251's policy and 0381's three rules are left exactly as written.
+Replay-safe (`create or replace`, `drop trigger if exists` before `create`).
+
+**Ships on its own.** The application half is live on merge: the run executor
+now derives what it runs through the same `effectiveArgsOf` the approval card
+and `decide()` use (`approvedArgsFor` in `lib/ai/runs/executor.ts`), so a value
+written to `edited_payload` directly cannot reach a tool from that side either.
+Until 0389 is applied, a manager with the browser session can still re-open or
+flip a decided request over `/rest/v1`.
+
+**Evidence.** `docs/audit/two-parents-means-two-parents-check.sql`, extended:
+the re-open of a declined two-parent row, the declined `single` → approved flip
+in one PATCH (passes 0381's A and B; only 0389 refuses), the un-expire, the
+approved → rejected reversal, the post-decision edit and the payload rewrite on
+a pending row are each refused by the named trigger; the execution stamp on a
+DECLINED row and the existing stamps LAND; the negative control drops ONLY
+`approval_requests_decision_is_final` (0381's triggers still in force) and
+requires the flip and the re-open to land. `tests/a-decision-once-made-stays-made.test.ts`
+reads the migration for the exact rule and the probe for its cases.
+
+### `0390` keeps a queued run's gate where the server put it — unapplied
+
+`0390_a_queued_run_keeps_the_gate_it_was_born_with.sql` (SRV-001, the residual
+"an adult can PATCH `family_automation_runs.metadata` to drop `approval_id`").
+When an accepted concierge plan lands on the family's "ask first" dial, the
+action files an approval and a `family_automation_runs` row whose
+`metadata.approval_id` records that a vote stands between the line and the
+calendar. The "Do it" button read that key and branched on it — present →
+`decide()`, absent → materialise the plan directly. `family_automation_runs_update`
+(0251) is `can_manage_family` with no column pin and the table's one trigger is
+`set_updated_at`, so an adult could PATCH the key away and tap "Do it": the plan
+was materialised with no vote while the two-parent approval stayed pending. The
+lead was WIDER than recorded: 0255/0329 also let a manager INSERT a fresh run
+row with no approval at all, so a pin on UPDATE alone could never be the fix.
+
+**What closes it** is in the ACTION, live on merge: `executeQueuedRunAction`
+and `dismissQueuedRunAction` resolve the governing approval from
+`approval_requests` by the plan it names (`payload->>'plan_id'`, which 0389
+freezes) and never from the run's metadata; a run that claims an approval
+Bubaly cannot find, or whose approval is already decided, does nothing and
+says so (three sentences, seven locales). **What this migration does** is keep
+the cache honest for the rows the server wrote: rule F — for RLS-subject
+callers, once `metadata->>'approval_id'` or `metadata->>'plan_id'` is non-null
+it cannot be removed or changed; every other key stays writable. No user
+session updates `metadata` today, so it refuses no live path. Deliberately not
+attempted: refusing `status = 'executed'` while a pending approval names the
+plan, because the approve path closes the run on the deciding parent's own
+session after the flip and a second pending approval for the same plan would
+make that honest close fail. errcode 42501. Replay-safe.
+
+**Evidence.** `docs/audit/automation-runs-pin-what-a-member-may-queue-check.sql`,
+extended: a manager dropping `approval_id` or pointing it elsewhere is refused
+by the named trigger; the same manager adding an unrelated key LANDS; the
+negative control drops ONLY this trigger and requires the scrub to succeed.
+`tests/scrubbing-a-runs-metadata-does-not-skip-the-vote.test.ts` drives the
+action against a run whose metadata was scrubbed and against a row born without
+an approval, and asserts nothing is materialised until the vote passes.
+
+### `0391` gives the document vault's step-up a counterpart in the database — unapplied
+
+`0391_a_password_alone_does_not_open_the_familys_vault.sql` (O-03, the
+document half). Eight document pages ask a parent who enrolled two-step
+verification for their code (`requireAal2(ctx, 'documents', …)`), and until
+now that page guard was the whole enforcement: every policy on the tables
+behind them is a membership or role check, so the same parent's password-only
+(aal1) session could read every stored password, alarm code and tax
+document, and change or delete them, over `/rest/v1`.
+
+**What closes it**: reusing 0382's `session_cleared_step_up()` (no new
+helper), RESTRICTIVE insert, update and delete guards on `family_credentials`,
+`household_info`, `tax_documents` and `paperwork_items`, and a RESTRICTIVE
+select guard on the first three (the step-up on passwords, binder and tax is a
+read gate — the point is not to SEE the secret). Every guard is
+`session_cleared_step_up() or not can_manage_family(family_id)`, the rule the
+page applies: only a parent or adult is ever asked for a code, so a child or
+teen who enrolled an authenticator for their own account is left to the
+table's own policies rather than locked out of pages that never offer them a
+code. The update guard carries the clause on both halves. Replay-safe.
+
+**Ships on its own.** The application half is live on merge: the paperwork
+server actions now ask for the code before touching a row (`paperworkScope`,
+mirroring the money actions), send a refused family to the step-up page, and
+confirm that a status change and the "marked as handled" stamp actually
+landed (a filtered update no longer reports success, and a created calendar
+event whose stamp did not land says so instead of inviting a duplicate).
+
+**Deliberately NOT covered**: `public.documents` and the `documents` storage
+bucket, the table the finding is named after. `/dashboard/home` writes and
+deletes documents rows with no step-up, and a dozen surfaces outside the vault
+(the home dashboard's expiring passports, household search, the chat
+assistant, which signs file URLs) read sensitive rows on a password-only
+session, so a guard would either break them silently or lie ("nothing
+expiring"). Closing it needs three owner decisions, recorded in finalaudit's
+O-03 row: whether enrolled managers are asked for the code at sign-in; what
+the home page may do to vaulted documents; and how to guard stored files
+with no documents row.
+
+**Evidence.** `docs/audit/a-password-alone-does-not-open-the-familys-vault-check.sql`:
+a control that the only thing refusing is the assurance clause; an enrolled
+parent at aal1 reads nothing from the three secret tables and every write on
+the four is refused; the same parent at aal2, and a never-enrolled family,
+read and write; an ENROLLED CHILD at aal1 keeps exactly what the base
+policies allow; the catalogue holds exactly fifteen guards, each carrying the
+role clause, and none on documents; and a negative control that drops the
+guard (or its role half) and requires the refused read to land. The two
+existing credential probes now exclude these guards by what they are
+(restrictive and calling the helper), not by name.
+
+
+### `0419` retires the assistant keys of a parent who leaves the family — unapplied
+
+`0419_a_departed_parent_keeps_no_assistant_key.sql` (SRV-001 l12). An
+assistant key (`assistant_links`) is a standing bearer grant over the
+household: Siri or Alexa, holding its secret, has `/api/assistant` read the
+family's calendar, open tasks and lists aloud and, with the `capture` scope,
+file events, notes, groceries and to-dos. Only a parent can mint one (0343),
+and the key carries that parent's user_id. Removing a member only sets
+`family_members.is_active = false`, and demoting one only changes `role`;
+neither touched the key, and the resolver matched on the token hash and
+`revoked_at` alone. So a co-parent removed from the household kept a working
+key until someone found it on `/dashboard/assistants` (which does not say whose
+key each one is) and pressed Revoke.
+
+**What closes it**: an AFTER UPDATE (`is_active`, `role`, `user_id`,
+`family_id`) OR DELETE trigger on `family_members`. Whenever the old
+(family, user) pair no longer has an active parent row, it stamps
+`revoked_at` on that pair's live keys in that family. SECURITY DEFINER with a
+pinned search_path, because an adult may remove a parent (0211) but is refused
+writes on `assistant_links` by 0343; EXECUTE revoked from the API roles. A
+one-time backfill retires the keys already orphaned the same way; it touches
+only `revoked_at`, and only on keys whose owner is not an active parent of the
+key's family. Replay-safe.
+
+**Ships on its own.** The application half is live on merge:
+`resolveAssistantLink` resolves a key only while its owner is an active parent
+of its family, and a failed membership read refuses. So production is closed
+before this is applied; the migration retires the keys rather than only
+refusing them.
+
+**Evidence.** `docs/audit/a-departed-parent-keeps-no-assistant-key-check.sql`:
+a parent removed by another parent (with that parent's own JWT), a parent
+demoted, and a parent's row deleted each lose their live key; the remover's
+own key, the removed parent's key in another household, an already-retired
+key's stamp, a child's removal and an unchanged re-save are untouched; the
+catalogue carries the trigger for UPDATE and DELETE and a definer function
+the API roles cannot execute; and a negative control that drops only the
+trigger leaves the removed parent's key live. Measured red with the migration
+absent and with a trigger function that does nothing.
+
+### `0420` lets only a released app be installed — unapplied
+
+`0420_only_a_released_app_installs.sql` (SRV-001 l8). `family_apps.status` is
+published, beta, coming_soon or retired, and the App Store page drew no
+Install button for a coming-soon app — that was the whole rule. 0165's install
+policies are `is_family_member(family_id)` and nothing else, so any member,
+a child included, could install an unreleased app through the action or over
+`/rest/v1`, and the card then showed "Unavailable" with nothing to press.
+
+**What closes it**: two RESTRICTIVE policies on `family_app_installs`, for
+INSERT (WITH CHECK) and UPDATE (USING and WITH CHECK), requiring the row's app
+to be published or beta, `to authenticated, anon`. DELETE is deliberately left open, so an
+install whose app later moved back to coming-soon can always be removed.
+Existing rows are untouched. Replay-safe.
+
+**Ships on its own.** The application half is live on merge: `installAppAction`
+reads the app's status (strictly — a failed read refuses) and refuses anything
+but published or beta with a sentence in seven locales, and an installed app
+keeps its Remove control whatever its status now says. In production the
+catalogue is empty (no migration seeds `family_apps`) and `/dashboard/app-store`
+is linked from nowhere, so this is a boundary set before it is needed.
+
+**Evidence.** `docs/audit/only-a-released-app-installs-check.sql`: a member
+installs a published and a beta app; a coming-soon and a retired app are
+refused with 42501 and nothing is written; an install cannot be re-pointed at
+an unreleased app; an install whose app went back to coming-soon can still be
+removed; exactly two restrictive guards and none on delete; negative control:
+with the guards dropped the coming-soon install lands. Measured red without
+the migration (five named failures).
+### `0426`–`0443`, PR #548's block — all unapplied, and four numbers deliberately left empty
+
+PR #548 numbered this block `0318`–`0338`, then `0361`–`0382`, and each time
+`main` landed the same numbers first (its own `0318`–`0360`, then #579's
+`0344`–`0380` and #581's `0381`–`0387`). It now sits at `0426`–`0443`, in the
+range assigned to the PR, in its original order. Fourteen files:
+
+| # | Subject |
+|---|---|
+| `0426_a_policy_should_say_what_it_checks` | Blanket family-member policies restated with the predicate they check — skipped wherever `main` has already replaced the blanket policy |
+| `0428_a_reward_costs_what_the_parent_set` | An economy redemption names a reward and is charged that reward's price; `economy_decide_redemption` (0196) replaced in place |
+| `0429_a_family_cannot_write_its_own_entitlement` | `subscriptions` and `billing_customers` are not the family's to write |
+| `0430_a_health_record_is_not_a_siblings_to_rewrite` | Nine health tables |
+| `0432_a_guardian_number_belongs_to_one_family` | A unique index on the Guardian phone number |
+| `0433_the_terms_of_a_deal_are_fixed_when_it_is_struck` | Marketplace offer/order terms fixed once struck |
+| `0434_a_prescription_is_a_parents_to_write` | Medications |
+| `0435_a_childs_own_record_is_not_theirs_to_rewrite` | `grades` and `screen_time_limits` |
+| `0438_a_diagnosis_is_not_the_familys_to_browse` | `medical_profiles` reads, and `family_allergies()` for the household's allergies |
+| `0439_a_reward_is_paid_for_with_points_that_exist` | A reward-balance trigger on `reward_redemptions` |
+| `0440_a_device_is_buzzed_once_per_notification` | `push_deliveries` |
+| `0441_an_email_event_is_counted_once` | `apply_resend_campaign_counter()` |
+| `0442_a_childs_milestones_are_a_parents_to_mark` | `independence_milestones` |
+| `0443_a_family_gets_one_default_list` | `ensure_default_grocery_list()` / `ensure_default_todo_list()` (DATA-007) |
+
+**Deploy coupling, where it was checked.** `0438` is **coupled with app code**:
+`addFromMealPlan` (`lib/services/groceries`) and the meal service
+(`lib/services/meals`) read allergies through `family_allergies()` with no
+missing-function fallback, so on a schema without `0438` both fail closed
+("Could not read …") — apply it before, or with, the deploy that ships this
+code. `0441` and `0443` are safe before apply: their callers take `PGRST202` as
+"not migrated yet" and use the path that ran before. The other files' deploy
+order is not asserted here.
+
+**`0427`, `0431`, `0436` and `0437` are deliberately empty.** Each was this
+PR's fix for a subject `main` had since closed, and each, laid after `main`'s,
+replaced or widened `main`'s rule. They are recorded rather than renumbered, as
+`0334` and `0337` are:
+
+| Empty | Was | Duplicates | Shown by |
+|---|---|---|---|
+| `0427` | a driving score | `main`'s `0365` | `driving-score-write-boundary-check.sql`: with it, a teen erases the trip they logged |
+| `0431` | safety check-ins | `main`'s `0379` | `locator-write-boundary-check.sql` step 6: with it, a child files a check-in naming no member (and a parent can no longer file one for a child) |
+| `0436` | behaviour-note authorship | `main`'s `0377` | `access-record-write-boundary-check.sql`: with it, a child rewrites a note they logged |
+| `0437` | journals | `main`'s `0364` | `private-journal-check.sql` (main's): 2 failures with it |
+
+**Evidence.** A private PG16 database replayed from empty: 412 migrations
+applied, 0 failed; `docs/audit/run-probes.sh` twice on it, 137 of 137 passed,
+none skipped. Each empty number's file was then put back on a copy of that
+database and the probe named above went red.

@@ -1,5 +1,6 @@
 import { describe, it, expect } from 'vitest';
-import { detectScamFromText, SCAM_TYPE_LABELS, type ScamType } from '@/lib/guardian/scam';
+import { detectScamFromText, SCAM_TYPE_LABEL_KEYS, type ScamType } from '@/lib/guardian/scam';
+import { getMessages } from '@/lib/i18n/messages';
 
 describe('detectScamFromText', () => {
   it('treats an ordinary message as safe', () => {
@@ -75,10 +76,20 @@ describe('detectScamFromText', () => {
     expect(r.confidence).toBeGreaterThanOrEqual(40);
   });
 
-  it('every ScamType has a human label', () => {
+  it('every ScamType has a label in every locale a family can pick', () => {
     const types: ScamType[] = ['robocall', 'warranty_scam', 'irs_scam', 'grandparent_scam',
       'tech_support_scam', 'prize_scam', 'bank_scam', 'social_security_scam', 'medicare_scam',
       'utility_scam', 'charity_scam', 'romance_scam', 'phishing', 'spoofed_number'];
-    for (const t of types) expect(SCAM_TYPE_LABELS[t]).toBeTruthy();
+    // The map holds catalogue keys now, so "has a label" means the key
+    // RESOLVES — in every locale, not only the one the developer reads. A key
+    // that is merely truthy would render as `guardian.scamIrs` on the page.
+    for (const locale of ['en-US', 'de-DE', 'es-ES', 'fr-FR', 'it-IT', 'nl-NL', 'pt-PT'] as const) {
+      const messages = getMessages(locale);
+      for (const t of types) {
+        const key = SCAM_TYPE_LABEL_KEYS[t];
+        expect(key, t).toBeTruthy();
+        expect(messages[key], `${t} in ${locale}`).toBeTruthy();
+      }
+    }
   });
 });

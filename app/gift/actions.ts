@@ -8,6 +8,7 @@ import { clientIp } from '@/lib/server/rate-limit';
 import { enforceRequestRateLimit } from '@/lib/server/request-rate-limit';
 import { notify } from '@/lib/services/notifications';
 import { systemScopeForFamily } from '@/lib/services/scope';
+import { describeActionError } from '@/lib/supabase/errors';
 
 type Result = { ok: boolean; error?: string };
 
@@ -31,18 +32,23 @@ export async function submitGiftPledgeAction(input: {
   const limited = await enforceRequestRateLimit(supabase, `gift:${clientIp(await headers())}`, { limit: 10 });
   if (!limited.ok) return { ok: false, error: t('actions.tooManyGiftAttemptsPlease') };
 
-  const { data: link } = await supabase
+  const { data: link, error: linkReadError } = await supabase
     .from('gift_links')
     .select('id, family_id, child_wallet_id, is_active, occasion')
     .eq('token', token)
     .maybeSingle();
+  // A refused read is not an absence: it used to return the "not found" answer below. Audit C1-S9-75.
+  if (linkReadError) return { ok: false, error: describeActionError(linkReadError, t('actions.couldNotCheckThatRefresh')) };
   if (!link || !link.is_active) return { ok: false, error: t('actions.thisGiftLinkIsNo') };
 
   // Anti-abuse: cap pending pledges per link.
-  const { count } = await supabase
+  const { count, error: countError } = await supabase
     .from('gift_payments').select('id', { count: 'exact', head: true })
     .eq('gift_link_id', link.id).eq('status', 'pending');
-  if ((count ?? 0) >= 25) return { ok: false, error: t('actions.tooManyPendingGiftsOn') };
+  // The cap is the anti-abuse control on a link anyone can open; a count that
+  // could not be read must not read as zero pending gifts.
+  if (countError || count === null) return { ok: false, error: t('actions.couldNotRecordYourGift') };
+  if (count >= 25) return { ok: false, error: t('actions.tooManyPendingGiftsOn') };
 
   const { error } = await supabase.from('gift_payments').insert({
     family_id: link.family_id,

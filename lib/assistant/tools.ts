@@ -9,12 +9,31 @@ import type { ToolSpec } from '@/lib/ai/provider';
 import { buildHomeNeeds } from '@/lib/home/needs-build';
 import { rankNeedsAttention } from '@/lib/home/needs-attention';
 import { detectConflicts, type ConflictEvent } from '@/lib/home/conflicts';
-import type { ParentApprovalRow, RenewalRow, DocumentRow } from '@/lib/home/needs-sources';
+import type { ParentApprovalRow, RenewalRow, DocumentRow, NeedsReader } from '@/lib/home/needs-sources';
+import { SOURCE_MESSAGES, translate } from '@/lib/i18n/messages';
 import { reminderAttention } from '@/lib/dashboard/reminder-attention';
+import { dayKeyInTz, zonedDayBoundsMs } from '@/lib/services/scope';
 import { nextRemindAt } from '@/lib/reminders/details';
 import { escapeLike } from '@/lib/supabase/escape-like';
+import { wroteNoRows } from '@/lib/supabase/errors';
+import { ensureDefaultGroceryListId } from '@/lib/services/groceries';
+import { ensureTodoListId } from '@/lib/services/tasks';
 
 type DB = SupabaseClient<Database>;
+
+/**
+ * The reader of this file's tool results is the MODEL, not a family member: it
+ * reads `{ title, urgency }` and writes the reply the family actually reads, in
+ * their language. So the "needs you" titles it is handed are worded in the
+ * source locale, explicitly — 'en-US' amounts, English catalogue words — the
+ * same rule the hardcoded-locale ratchet records for this file's other
+ * model-read formatter. Not a default: the family-facing callers of
+ * buildHomeNeeds pass their request's locale.
+ */
+const MODEL_READER: NeedsReader = {
+  locale: 'en-US',
+  t: (key, params) => translate(SOURCE_MESSAGES, key, params),
+};
 
 export type AssistantCtx = {
   familyId: string;
@@ -60,29 +79,21 @@ function resolveMember(ctx: AssistantCtx, name: unknown): string | null {
   return partial?.id ?? null;
 }
 
-/** Get-or-create the family's default grocery list. */
+/**
+ * Get-or-create the family's default grocery list — through the one serialised
+ * get-or-create (0443, DATA-007) the rest of the product uses, so two first
+ * captures at once, one from the assistant and one from the app, cannot give a
+ * family two lists. The name stays what the assistant always used.
+ */
 async function ensureGroceryList(supabase: DB, familyId: string, userId: string): Promise<ListResult> {
-  // `grocery_lists` carries two archive columns — `is_archived` (0002) and
-  // `archived_at` (0014) — and only `archived_at` is ever written, by the
-  // shopping module. Asking one of them calls an archived list open and
-  // quietly files the family's groceries where nobody is looking.
-  const { data: existing, error: lookupError } = await supabase.from('grocery_lists').select('id')
-    .eq('family_id', familyId).eq('is_archived', false).is('archived_at', null)
-    .order('created_at', { ascending: true }).limit(1).maybeSingle();
-  if (lookupError) return { id: null, error: lookupError };
-  if (existing?.id) return { id: existing.id };
-  const { data, error: createError } = await supabase.from('grocery_lists').insert({ family_id: familyId, name: 'Groceries', created_by: userId }).select('id').single();
-  return data?.id ? { id: data.id } : { id: null, error: createError ?? new Error('Grocery list was not created') };
+  const list = await ensureDefaultGroceryListId(supabase, familyId, userId, 'Groceries');
+  return list.id ? { id: list.id } : { id: null, error: list.error };
 }
 
 /** Get-or-create the family's default to-do list. `memberId` is a family_members id (0015). */
 async function ensureTodoList(supabase: DB, familyId: string, memberId: string | null): Promise<ListResult> {
-  const { data: existing, error: lookupError } = await supabase.from('todo_lists').select('id')
-    .eq('family_id', familyId).is('archived_at', null).order('created_at', { ascending: true }).limit(1).maybeSingle();
-  if (lookupError) return { id: null, error: lookupError };
-  if (existing?.id) return { id: existing.id };
-  const { data, error: createError } = await supabase.from('todo_lists').insert({ family_id: familyId, name: 'Tasks', created_by: memberId }).select('id').single();
-  return data?.id ? { id: data.id } : { id: null, error: createError ?? new Error('To-do list was not created') };
+  const list = await ensureTodoListId(supabase, familyId, memberId, 'Tasks', false);
+  return list.id ? { id: list.id } : { id: null, error: list.error };
 }
 
 export function buildAssistantTools(supabase: DB, ctx: AssistantCtx): ToolSpec[] {
@@ -146,8 +157,11 @@ export function buildAssistantTools(supabase: DB, ctx: AssistantCtx): ToolSpec[]
         if (memberId) {
           const { error: assignmentError } = await supabase.from('chore_assignments').insert({ family_id: ctx.familyId, chore_id: chore.id, member_id: memberId, due_at: optStr(a.due_at) });
           if (assignmentError) {
-            const { error: rollbackError } = await supabase.from('chores').delete().eq('id', chore.id);
-            if (rollbackError) console.error('[assistant] chore rollback failed:', rollbackError);
+            // A chore this call just created, so zero rows removed is a failed
+            // rollback, not an absence. Logged; the failure is already being
+            // returned. Audit C1-S9-69.
+            const { data: rolledBack, error: rollbackError } = await supabase.from('chores').delete().eq('id', chore.id).select('id');
+            if (rollbackError || wroteNoRows(rolledBack)) console.error('[assistant] chore rollback failed:', rollbackError ?? 'no rows deleted');
             return toolFailure('save the chore assignment', assignmentError);
           }
         }
@@ -255,9 +269,16 @@ export function buildAssistantTools(supabase: DB, ctx: AssistantCtx): ToolSpec[]
         if (lookupError) return toolFailure('find the reminder', lookupError);
         const r = rows?.[0];
         if (!r) return { ok: false, error: `No active reminder matching “${q}”.` };
-        const { error } = await supabase.from('family_reminders')
-          .update({ status: 'completed', completed_at: new Date().toISOString() }).eq('id', r.id);
+        // The assistant SPEAKS the answer — "Completed …" — and a completion that
+        // matched nothing said it over a reminder still active. Worse, the next
+        // occurrence of a recurring reminder is inserted below, so two concurrent
+        // completions each scheduled one: two future reminders for one. The
+        // `status = 'active'` predicate lets exactly one completion win, and
+        // `.select()` is what tells the loser it lost. Audit C1-S9-69.
+        const { data: completed, error } = await supabase.from('family_reminders')
+          .update({ status: 'completed', completed_at: new Date().toISOString() }).eq('id', r.id).eq('status', 'active').select('id');
         if (error) return toolFailure('complete the reminder', error);
+        if (wroteNoRows(completed)) return toolFailure('complete the reminder', 'no rows updated');
         // Recurring → schedule the next occurrence (core columns only, so it's
         // safe regardless of the 0100 detail-columns migration state).
         const next = r.remind_at && r.recurrence !== 'none' ? nextRemindAt(r.remind_at, r.recurrence) : null;
@@ -268,9 +289,11 @@ export function buildAssistantTools(supabase: DB, ctx: AssistantCtx): ToolSpec[]
             member_id: r.member_id, remind_at: next, status: 'active',
           });
           if (nextError) {
-            const { error: rollbackError } = await supabase.from('family_reminders')
-              .update({ status: 'active', completed_at: null }).eq('id', r.id);
-            if (rollbackError) console.error('[assistant] reminder rollback failed:', rollbackError);
+            // Restoring the reminder this call just completed; zero rows is a
+            // failed restore. Logged. Audit C1-S9-69.
+            const { data: restored, error: rollbackError } = await supabase.from('family_reminders')
+              .update({ status: 'active', completed_at: null }).eq('id', r.id).select('id');
+            if (rollbackError || wroteNoRows(restored)) console.error('[assistant] reminder rollback failed:', rollbackError ?? 'no rows updated');
             return toolFailure('schedule the next reminder', nextError);
           }
         }
@@ -297,8 +320,11 @@ export function buildAssistantTools(supabase: DB, ctx: AssistantCtx): ToolSpec[]
         if (lookupError) return toolFailure('find the reminder', lookupError);
         const r = rows?.[0];
         if (!r) return { ok: false, error: `No active reminder matching “${q}”.` };
-        const { error } = await supabase.from('family_reminders').update({ remind_at }).eq('id', r.id);
+        // "Moved … to a new time" is spoken back; zero rows is the same failure.
+        // Audit C1-S9-69.
+        const { data: moved, error } = await supabase.from('family_reminders').update({ remind_at }).eq('id', r.id).select('id');
         if (error) return toolFailure('reschedule the reminder', error);
+        if (wroteNoRows(moved)) return toolFailure('reschedule the reminder', 'no rows updated');
         return { ok: true, summary: `Moved “${r.title}” to a new time.` };
       },
     },
@@ -408,7 +434,17 @@ export function buildAssistantTools(supabase: DB, ctx: AssistantCtx): ToolSpec[]
       input_schema: { type: 'object', properties: {} },
       execute: async () => {
         const now = new Date();
-        const todayEnd = new Date(now); todayEnd.setHours(23, 59, 59, 999);
+        // The FAMILY's day end, not the server's. `setHours(23, 59, 59, 999)`
+        // ends the day in whatever zone this process runs in, which on Vercel
+        // is UTC — so "due today" for a family in Tokyo ran nine hours into
+        // their tomorrow, and for one in Los Angeles stopped seven hours before
+        // their midnight. The bound is used TWICE below (the reminder query and
+        // reminderAttention), and both had to move together: changing one and
+        // not the other is how a day key ends up meaning two things in one
+        // function, which is the defect this replaces.
+        const tz = ctx.tz || 'UTC';
+        const dayEndExclusiveMs = zonedDayBoundsMs(dayKeyInTz(now, tz), tz).end;
+        const todayEnd = new Date(dayEndExclusiveMs - 1);
         const in14 = new Date(now.getTime() + 14 * 86400000).toISOString();
         const in30 = new Date(now.getTime() + 30 * 86400000).toISOString();
         const in45 = new Date(now.getTime() + 45 * 86400000).toISOString();
@@ -424,7 +460,7 @@ export function buildAssistantTools(supabase: DB, ctx: AssistantCtx): ToolSpec[]
         ]);
         const pendingError = [appr, ren, docs, dueRem, convEvents, signoff, grocery, todos].find((result) => result.error)?.error;
         if (pendingError) return toolFailure('load pending decisions', pendingError);
-        const { overdue, dueToday } = reminderAttention((dueRem.data ?? []) as { remind_at: string | null; status: string }[], now);
+        const { overdue, dueToday } = reminderAttention((dueRem.data ?? []) as { remind_at: string | null; status: string }[], now, dayEndExclusiveMs);
         const nameByMember = new Map(ctx.members.map((m) => [m.id, m.display_name]));
         const conflicts = detectConflicts((convEvents.data ?? []) as ConflictEvent[])
           .map((c) => ({ id: c.eventIds[0], assigneeName: nameByMember.get(c.assigneeId) ?? null, count: c.eventIds.length, startsAt: c.startsAt }));
@@ -441,6 +477,7 @@ export function buildAssistantTools(supabase: DB, ctx: AssistantCtx): ToolSpec[]
           lowGrocery: (grocery.count ?? 0) > 0,
           openTodos: todos.count ?? 0,
           now,
+          reader: MODEL_READER,
         }));
         return { ok: true, count: needs.length, items: needs.map((n) => ({ title: n.title, urgency: n.urgency })) };
       },

@@ -1,3 +1,4 @@
+import { DEFAULT_LOCALE, type LocaleCode } from '@/lib/i18n/locales';
 import type { PurchaseAdvice } from './advisor';
 
 type Translate = (key: string, values?: Record<string, string | number>) => string;
@@ -6,10 +7,20 @@ const REASONS = {
   already_purchased: 'beforeYouBuy.someoneHasAlreadyBoughtThis', budget_tight: 'beforeYouBuy.itFitsButWouldLeave',
   no_budget: 'beforeYouBuy.noBudgetCoversThisSo', clear: 'purchaseAdvice.reviewRecords',
 };
-const money = (cents: number) => new Intl.NumberFormat('en-US', { style: 'currency', currency: 'USD' }).format(cents / 100);
+const moneyIn = (locale: LocaleCode) => (cents: number) =>
+  new Intl.NumberFormat(locale, { style: 'currency', currency: 'USD' }).format(cents / 100);
 
 /** The full deterministic answer travels through Ask, not a run's trimmed log. */
-export function purchaseAnswer(text: string, advice: PurchaseAdvice, budgetRestricted: boolean, memoryRestricted: boolean, t: Translate): string {
+export function purchaseAnswer(
+  text: string,
+  advice: PurchaseAdvice,
+  budgetRestricted: boolean,
+  memoryRestricted: boolean,
+  t: Translate,
+  locale: LocaleCode = DEFAULT_LOCALE,
+): string {
+  // The words already came from a translator; only the amounts were pinned.
+  const money = moneyIn(locale);
   const lines = [`${t('beforeYouBuy.beforeYouBuy')}: ${text}`, t(REASONS[advice.reason], { category: advice.budget?.category ?? '' })];
   const section = (title: string, values: string[]) => {
     if (values.length) lines.push('', t(title), ...values.map((value) => `• ${value}`));

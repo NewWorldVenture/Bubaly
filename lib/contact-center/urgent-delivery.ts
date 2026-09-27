@@ -7,6 +7,7 @@ import { getTranslations } from '@/lib/i18n/server';
 import { isTwilioConfigured, sendSmsWithReceipt } from '@/lib/guardian/twilio';
 import { findInboundMessage, inboundProviderRef, recordInboundMessage, type InboundRecord } from './server';
 import { parseRecipientLocal } from './address';
+import { toCallableE164 } from './phone';
 
 type Admin = ReturnType<typeof createServiceClient>;
 type Intake = Parameters<typeof recordInboundMessage>[1];
@@ -191,10 +192,15 @@ export async function attemptUrgentDelivery(admin: Admin, id: string, familyId: 
     const t = await getTranslations();
     const body = t('contactUrgent.smsPrefix', { summary: receipt.inputs.summary });
     if (signal.aborted) return 'failed';
-    const claimed = await transition(admin, receipt, { ...receipt.outputs, phase: 'dispatching', destination: channel.data.forward_to_phone,
+    // Numbers saved before the settings form normalized them ("+1 555 123
+    // 4567") failed the send's E.164 check on every message. Normalize one that
+    // reads as a number; anything else still goes to the send and is rejected
+    // there, visibly, rather than being quietly treated as "no number".
+    const destination = toCallableE164(channel.data.forward_to_phone) ?? channel.data.forward_to_phone;
+    const claimed = await transition(admin, receipt, { ...receipt.outputs, phase: 'dispatching', destination,
       retryAt: null, drain: true }, { state: 'reserved', attempt: receipt.attempt + 1, error: 'contactUrgent.smsUnknown' }, signal);
     if (!claimed) return 'pending';
-    const result = await sendSmsWithReceipt(channel.data.forward_to_phone, body, signal);
+    const result = await sendSmsWithReceipt(destination, body, signal);
     let outputs: Outputs = { ...claimed.outputs, phase: 'unknown', drain: !notificationDone };
     let state: Receipt['state'] = 'reserved', error: string | null = 'contactUrgent.smsUnknown';
     if (result.kind === 'accepted') {

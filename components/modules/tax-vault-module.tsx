@@ -5,7 +5,7 @@ import { FolderLock, Plus, Trash2, Download, FileText } from 'lucide-react';
 import { useApp } from '@/components/app/app-context';
 import { useRealtimeQuery } from '@/lib/hooks/use-realtime-query';
 import { createClient } from '@/lib/supabase/client';
-import { describeDbError } from '@/lib/supabase/errors';
+import { describeDbError, wroteNoRows } from '@/lib/supabase/errors';
 import { useToast } from '@/components/ui/toast';
 import { Modal } from '@/components/ui/modal';
 import { Input, Textarea, Field, Select } from '@/components/ui/input';
@@ -13,12 +13,12 @@ import { Button } from '@/components/ui/button';
 import { SkeletonList, ErrorState, EmptyState } from '@/components/ui/states';
 import { AiInsight } from '@/components/ai/ai-insight';
 import { fmtDate } from '@/lib/utils/format';
-import { usd } from '@/lib/finance/splits';
+import { usd as usdIn } from '@/lib/finance/splits';
 import { TAX_CATEGORIES, taxCategoryLabel, isDeductible, groupByYear, deductibleTotalCents, type TaxDocLike } from '@/lib/finance/tax';
 import { uploadFamilyDocument, getDocumentSignedUrl, removeFamilyDocument } from '@/lib/storage/documents';
 import type { Tables } from '@/lib/database.types';
 import { preOpenWindow } from '@/lib/utils/open-url';
-import { useTranslations } from '@/components/i18n/locale-provider';
+import { useLocale, useTranslations } from '@/components/i18n/locale-provider';
 
 type TaxDoc = Tables<'tax_documents'>;
 
@@ -27,6 +27,9 @@ const blank = () => ({ name: '', tax_year: String(thisYear), category: 'receipt'
 
 export function TaxVaultModule() {
   const t = useTranslations();
+  // Money follows the reader; the currency stays the money's own.
+  const locale = useLocale();
+  const usd = (cents: number) => usdIn(cents, locale.code);
   const { familyId, userId, members } = useApp();
   const { success, error: toastError } = useToast();
   const memberById = useMemo(() => new Map(members.map((m) => [m.id, m])), [members]);
@@ -82,9 +85,17 @@ export function TaxVaultModule() {
   async function remove(d: TaxDoc) {
     if (!confirm(t('taxVaultModule.deleteThisDocument'))) return;
     const supabase = createClient();
-    if (d.storage_path) await removeFamilyDocument(supabase, d.storage_path);
-    const { error } = await supabase.from('tax_documents').delete().eq('id', d.id);
-    if (error) toastError(describeDbError(error)); else success(t('taxVaultModule.deleted'));
+    // The object goes first and its result is READ: deleting the row first
+    // makes a surviving file INVISIBLE — nothing references it, so nobody can
+    // see it, open it or try again — while the screen says it is gone. Audit
+    // C1-S6-01; the same shape adminDeleteDocumentAction already uses.
+    if (d.storage_path) {
+      const { error: storageError } = await removeFamilyDocument(supabase, d.storage_path);
+      if (storageError) return toastError(storageError);
+    }
+    // Under RLS a refused row comes back with no error and zero rows, which this used to report as done. Audit C1-S9-86.
+    const { data: removed, error } = await supabase.from('tax_documents').delete().eq('id', d.id).eq('family_id', familyId).select('id');
+    if (error) toastError(describeDbError(error)); else if (wroteNoRows(removed)) toastError(t('errors.thatChangeWasNotSaved')); else success(t('taxVaultModule.deleted'));
   }
 
   if (loading) return <SkeletonList />;

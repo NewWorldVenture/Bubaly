@@ -41,7 +41,13 @@ const GUARDS = /fetchPublicText|fetchPublicCalendarText|fetchPublicFeed|validate
  * query varies.
  */
 const CONSTANT_HOST: Record<string, string> = {
-  'lib/server/external-fetch.ts': 'a timeout wrapper; every caller passes a literal provider URL',
+  // Renamed on this branch by C3-S5-04: the file sat among real SSRF guards
+  // (public-document-fetch, public-media-fetch, public-calendar-fetch) under a
+  // name that read like one, and it only adds a deadline. The exemption still
+  // holds — every caller passes a literal provider host, and the one computed
+  // caller (app/api/gif/search) builds a constant Giphy URL with an encoded
+  // query — but it has to name the file that exists.
+  'lib/server/fetch-with-deadline.ts': 'a timeout wrapper; every caller passes a literal provider URL',
   'lib/client-fetch.ts': 'a timeout wrapper for same-origin browser calls',
   'lib/recipes/providers/themealdb.ts': 'BASE is a module constant; only the path varies',
   'lib/blog/posts.ts': 'overrides the Supabase client fetch; the URL is the project URL',

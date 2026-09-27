@@ -1,10 +1,12 @@
 'use client';
 
 import { useCallback, useMemo, useState } from 'react';
+import { localDayKey, localDayKeyOf } from '@/lib/time/local-day';
 import { Activity, ChevronRight, Dumbbell, Heart, Plus, Sparkles, Zap, Thermometer, CheckCircle2, Trash2, Target, Loader2 } from 'lucide-react';
 import { useApp } from '@/components/app/app-context';
 import { useRealtimeQuery } from '@/lib/hooks/use-realtime-query';
 import { createClient } from '@/lib/supabase/client';
+import { wroteNoRows } from '@/lib/supabase/errors';
 import { useToast } from '@/components/ui/toast';
 import { Modal } from '@/components/ui/modal';
 import { Input, Field, Select, Textarea } from '@/components/ui/input';
@@ -15,6 +17,7 @@ import { PageHeader } from '@/components/app/page-header';
 import { cn } from '@/lib/utils/cn';
 import type { Tables, MetricType } from '@/lib/database.types';
 import { useLocale, useTranslations } from '@/components/i18n/locale-provider';
+import { useConfirm } from '@/components/ui/confirm';
 
 type HealthMetric = Tables<'health_metrics'>;
 type WorkoutLog = Tables<'workout_logs'>;
@@ -105,6 +108,7 @@ function workoutIcon(activity: string) {
 
 export function HealthModule() {
   const tr = useTranslations();
+  const askConfirm = useConfirm();
   const { code: locale } = useLocale();
   const { familyId, userId, members } = useApp();
   const { success, error: toastError } = useToast();
@@ -267,7 +271,11 @@ export function HealthModule() {
     const activeDaySet = new Set<string>();
     metrics.forEach((m) => {
       if (m.type === 'steps' || m.type === 'active_minutes') {
-        activeDaySet.add(m.recorded_at.slice(0, 10));
+        // The reader's day, not Greenwich's: this counts ACTIVE DAYS and sums
+        // steps per day, so a 17:00 walk in Los Angeles was credited to tomorrow
+        // and could make one day look like two.
+        const k = localDayKeyOf(m.recorded_at);
+        if (k) activeDaySet.add(k);
       }
     });
     return [
@@ -286,14 +294,19 @@ export function HealthModule() {
     for (const m of members) {
       const memberStepDays = new Map<string, number>();
       metrics.filter((met) => met.member_id === m.id && met.type === 'steps').forEach((met) => {
-        const day = met.recorded_at.slice(0, 10);
-        memberStepDays.set(day, (memberStepDays.get(day) || 0) + met.value);
+        const day = localDayKeyOf(met.recorded_at);
+        if (day) memberStepDays.set(day, (memberStepDays.get(day) || 0) + met.value);
       });
       let consecutive = 0;
       for (let i = 0; i < 7; i++) {
         const d = new Date();
         d.setDate(d.getDate() - i);
-        const key = d.toISOString().slice(0, 10);
+        // `setDate` walks LOCAL days, and `memberStepDays` above is now keyed by
+        // the local day too — so keying this with `toISOString()` would look up
+        // Greenwich's key in a local-keyed map and miss, breaking the streak for
+        // every reader with an offset. Half-converting is worse than not
+        // converting: before, both sides were Greenwich and at least agreed.
+        const key = localDayKey(d);
         if ((memberStepDays.get(key) || 0) >= stepGoalFor(m.id)) {
           consecutive++;
         } else break;
@@ -389,6 +402,11 @@ export function HealthModule() {
       value: parseFloat(metricForm.value),
       unit: typeInfo?.unit || null,
       recorded_at: metricForm.recorded_at ? new Date(metricForm.recorded_at).toISOString() : new Date().toISOString(),
+      // 0430: health_metrics was the one table of the nine with no author at
+      // all, so it gained a `created_by`. Its eight siblings here already set
+      // one; without it every metric would arrive unattributed and only the
+      // subject or a manager could ever correct it.
+      created_by: userId,
     });
     setSaving(false);
     if (err) { toastError(tr('healthModule.failedToLogMetric')); return; }
@@ -440,17 +458,35 @@ export function HealthModule() {
     setSymptomForm({ member_id: '', symptom: '', severity: '3', body_area: '', notes: '', started_at: '' });
   }
 
+  // Both of these filtered by `id` alone and branched on `err`. RLS FILTERS an
+  // UPDATE or a DELETE rather than refusing it, so a row the caller may not touch
+  // comes back `error: null` with nothing changed — and 0307 gives symptom_logs
+  // Rule A, where a log about a member may be corrected by THAT member. Its own
+  // revert probe is "a child rewrote a sibling's symptom log", so a filtered write
+  // here is the live outcome rather than the theoretical one, and "Marked
+  // resolved" over an unchanged row is what the person was told.
+  //
+  // `family_id` bounds the write to one household and `.select('id')` makes the
+  // empty result an answer. The two are separate: a readback over an unscoped
+  // predicate reports success for a write that really did land, on another
+  // household's row.
   async function resolveSymptom(s: SymptomLog) {
     const sb = createClient();
-    const { error: err } = await sb.from('symptom_logs').update({ status: 'resolved', ended_at: new Date().toISOString() }).eq('id', s.id);
+    const { data, error: err } = await sb.from('symptom_logs')
+      .update({ status: 'resolved', ended_at: new Date().toISOString() })
+      .eq('id', s.id).eq('family_id', familyId).select('id');
     if (err) { toastError(tr('healthModule.failedToUpdateSymptom')); return; }
+    if (wroteNoRows(data)) { toastError(tr('healthModule.failedToUpdateSymptom')); return; }
     success(tr('healthModule.markedResolved'));
   }
 
   async function deleteSymptom(s: SymptomLog) {
+    if (!(await askConfirm({ title: tr('health.deleteSymptomQ'), body: tr('confirm.cannotBeUndone') }))) return;
     const sb = createClient();
-    const { error: err } = await sb.from('symptom_logs').delete().eq('id', s.id);
+    const { data, error: err } = await sb.from('symptom_logs').delete()
+      .eq('id', s.id).eq('family_id', familyId).select('id');
     if (err) { toastError(tr('healthModule.failedToDeleteSymptom')); return; }
+    if (wroteNoRows(data)) { toastError(tr('healthModule.failedToDeleteSymptom')); return; }
     success(tr('healthModule.symptomRemoved'));
   }
 
@@ -523,7 +559,7 @@ export function HealthModule() {
           action={
             <div className="flex gap-2">
               <Button onClick={() => setMetricOpen(true)} className="btn-cta"><Plus className="h-4 w-4" /> {tr('health.logMetric')}</Button>
-              <Button onClick={() => setWorkoutOpen(true)} className="btn-secondary"><Dumbbell className="h-4 w-4" /> {tr('health.logWorkout')}</Button>
+              <Button onClick={() => setWorkoutOpen(true)} variant="secondary"><Dumbbell className="h-4 w-4" /> {tr('health.logWorkout')}</Button>
             </div>
           }
         />
@@ -699,7 +735,7 @@ export function HealthModule() {
                 <span className="rounded-full bg-rose-500/15 px-2 py-0.5 text-[10px] font-bold text-rose-300">{tr('healthDashboard.activeCount', { count: activeSymptomCount.toLocaleString(locale) })}</span>
               )}
             </div>
-            <Button onClick={() => setSymptomOpen(true)} className="btn-secondary"><Plus className="h-4 w-4" /> {tr('health.logSymptom')}</Button>
+            <Button onClick={() => setSymptomOpen(true)} variant="secondary"><Plus className="h-4 w-4" /> {tr('health.logSymptom')}</Button>
           </div>
           {sortedSymptoms.length === 0 ? (
             <EmptyState icon={Thermometer} title={tr('health.noSymptomsLogged')} description={tr('healthModule.trackIllnessesAndSymptomsOver')} action={<Button onClick={() => setSymptomOpen(true)} className="btn-cta"><Plus className="h-4 w-4" /> {tr('health.logSymptom')}</Button>} />

@@ -10,6 +10,7 @@ import { fmtDate } from '@/lib/utils/format';
 import { createEmailDraft } from '../actions';
 import { SendCampaignButton } from '@/components/admin/send-campaign-button';
 import { getTranslations } from '@/lib/i18n/server';
+import { SubmitButton } from '@/components/ui/submit-button';
 
 export const metadata: Metadata = { title: 'Marketing · Email', robots: { index: false } };
 export const dynamic = 'force-dynamic';
@@ -81,7 +82,7 @@ export default async function EmailPage() {
               {(segments ?? []).map((s) => <option key={s.id} value={s.id}>{s.name}</option>)}
             </select>
             <textarea name="body_html" rows={5} placeholder={t('adminMarketingEmail.emailBodyHtmlOrText')} className="w-full rounded-xl border border-border bg-surface/60 px-3 py-2 text-sm focus-ring" />
-            <button className="w-full rounded-xl bg-brand px-4 py-2.5 font-semibold text-white hover:bg-brand/90">{t('adminMarketingEmail.saveDraft')}</button>
+            <SubmitButton className="w-full rounded-xl bg-brand px-4 py-2.5 font-semibold text-white hover:bg-brand/90">{t('adminMarketingEmail.saveDraft')}</SubmitButton>
           </form>
         </Card>
       </div>
