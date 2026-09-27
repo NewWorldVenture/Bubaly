@@ -1,4 +1,4 @@
--- Bubaly :: 0357 - a member only rewrites their own memory
+-- Bubaly :: 0385 - a member only rewrites their own memory
 --            (family_facts UPDATE and DELETE get the rule the service applies)
 --
 -- ── The defect ──────────────────────────────────────────────────────────────
@@ -110,10 +110,10 @@
 do $$
 begin
   if to_regprocedure('public.is_self_member(uuid)') is null then
-    raise exception '0357: public.is_self_member(uuid) is missing — the self rule has nothing to evaluate';
+    raise exception '0385: public.is_self_member(uuid) is missing — the self rule has nothing to evaluate';
   end if;
   if to_regprocedure('public.can_manage_family(uuid)') is null then
-    raise exception '0357: public.can_manage_family(uuid) is missing — the manager rule has nothing to evaluate';
+    raise exception '0385: public.can_manage_family(uuid) is missing — the manager rule has nothing to evaluate';
   end if;
 end
 $$;
@@ -162,26 +162,26 @@ begin
       and pol.polname = 'family_facts_delete';
 
   if q is null then
-    raise exception '0357: family_facts_update is missing after the create';
+    raise exception '0385: family_facts_update is missing after the create';
   end if;
   if c is null then
-    raise exception '0357: family_facts_update has no WITH CHECK, so member_id could be re-pointed';
+    raise exception '0385: family_facts_update has no WITH CHECK, so member_id could be re-pointed';
   end if;
   if d is null then
-    raise exception '0357: family_facts_delete is missing after the create';
+    raise exception '0385: family_facts_delete is missing after the create';
   end if;
 
   if q not like '%is_self_member%' or c not like '%is_self_member%' or d not like '%is_self_member%' then
-    raise exception '0357: family_facts_update/delete do not carry the self rule on every side';
+    raise exception '0385: family_facts_update/delete do not carry the self rule on every side';
   end if;
   if q not like '%created_by = auth.uid()%' or c not like '%created_by = auth.uid()%' or d not like '%created_by = auth.uid()%' then
-    raise exception '0357: family_facts_update/delete do not carry the author rule on every side — a member could file a fact she then cannot fix';
+    raise exception '0385: family_facts_update/delete do not carry the author rule on every side — a member could file a fact she then cannot fix';
   end if;
   -- 0264's gate must survive this narrowing, not be replaced by it.
   if q not like '%medical%' or c not like '%medical%' or d not like '%medical%' then
-    raise exception '0357: family_facts_update/delete lost 0264 medical/account gate';
+    raise exception '0385: family_facts_update/delete lost 0264 medical/account gate';
   end if;
 
-  raise notice '0357 OK: a parent or adult changes or forgets any memory; everyone else only the ones about themselves or that they wrote — in the database, not only in the service.';
+  raise notice '0385 OK: a parent or adult changes or forgets any memory; everyone else only the ones about themselves or that they wrote — in the database, not only in the service.';
 end
 $$;

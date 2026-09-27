@@ -1,4 +1,4 @@
--- Bubaly :: 0365 - a child cannot lift the publish lock, or link a document
+-- Bubaly :: 0387 - a child cannot lift the publish lock, or link a document
 --                  they cannot read (AUTHZ-011)
 --
 -- Two tables whose write rule lived in TypeScript and nowhere a client cannot
@@ -151,7 +151,7 @@
 -- I can see", so an invisible link would pass as permission. It reads one table,
 -- by id, with a pinned search_path; EXECUTE is revoked from public, anon and
 -- authenticated (a trigger function is never called directly and firing one
--- does not check EXECUTE, 0344:330 / 0355:144). It holds service_role too.
+-- does not check EXECUTE, 0381:330 / 0383:144). It holds service_role too.
 --
 -- ── Pointers written before this migration ─────────────────────────────────
 --
@@ -234,7 +234,7 @@ begin
 end;
 $guard$;
 
--- Never called directly; firing a trigger does not check EXECUTE (0344:330).
+-- Never called directly; firing a trigger does not check EXECUTE (0381:330).
 revoke all on function public.vacation_document_link_guard() from public, anon, authenticated;
 
 do $$
@@ -261,7 +261,7 @@ begin
        );
     get diagnostics cleared = row_count;
     if cleared > 0 then
-      raise notice '0365: cleared % vacation_documents.document_id pointer(s) at another household''s document', cleared;
+      raise notice '0387: cleared % vacation_documents.document_id pointer(s) at another household''s document', cleared;
     end if;
   end if;
 

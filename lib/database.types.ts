@@ -532,7 +532,7 @@ export interface Database {
         { id?: string; kind?: string; title: string; body?: string | null; url?: string | null; related_type?: string | null; related_id?: string | null; meta?: Json; is_read?: boolean },
         Partial<{ kind: string; title: string; body: string | null; url: string | null; is_read: boolean }>
       >;
-      // `forward_to_phone_legacy` is 0356: what that migration replaced when it
+      // `forward_to_phone_legacy` is 0384: what that migration replaced when it
       // normalized or cleared a row's fallback number. Never read by the app.
       family_contact_channels: T<
         { family_id: string; email_local: string | null; phone_number: string | null; phone_number_sid: string | null; provisioning_status: string; ai_concierge_enabled: boolean; ai_greeting: string | null; forward_to_phone: string | null; forward_to_phone_legacy: string | null } & Stamps,

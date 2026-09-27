@@ -101,7 +101,7 @@ function canManage(scope: ServiceScope): boolean {
  * fact a PARENT wrote is still out of her reach.
  *
  * `factForWrite`, `updateFact`'s re-point check, `rememberConfirmed` and
- * `forgetFact` all ask this one question, and 0357 asks it in RLS for UPDATE and
+ * `forgetFact` all ask this one question, and 0385 asks it in RLS for UPDATE and
  * DELETE: `can_manage_family(family_id) or is_self_member(member_id) or
  * created_by = auth.uid()`. A caller with no member or no user id never matches
  * on that branch, as `is_self_member(null)` and a null `auth.uid()` do not.
@@ -189,7 +189,7 @@ export async function rememberFact(scope: ServiceScope, input: RememberInput): P
   // SENSITIVE_TERMS half is a product rule enforced HERE ONLY: no policy
   // mirrors the term list, so an insert sent straight from the browser's
   // RLS-bound client with "Allergies" in an ordinary category still lands. That
-  // is a known, stated gap (0357's header says why the regex is not translated
+  // is a known, stated gap (0385's header says why the regex is not translated
   // into RLS): this keeps the app's own write paths in agreement with each
   // other, it is not what stops a member who bypasses them.
   if (!canManage(scope) && isSensitiveMemory({ category, key, content })) {
@@ -337,7 +337,7 @@ async function rememberConfirmed(
     // sentence where the write used to go through — the pencil's answer, which
     // is the point.
     //
-    // Same rule and same sentence as `factForWrite`, so the two agree. 0357
+    // Same rule and same sentence as `factForWrite`, so the two agree. 0385
     // carries it into RLS, because the knowledge module holds its own
     // RLS-scoped client and never has to come through here at all.
     if (!mayChangeFact(scope, existing)) {
@@ -934,7 +934,7 @@ export async function clearAiMemory(scope: ServiceScope): Promise<ServiceResult<
  * `medical` and `account` to managers (0264) and nothing else, so on every other
  * category — a preference, a size, a milestone — a CHILD could edit or delete a
  * memory about a sibling straight from the module. Verified against the replayed
- * schema, not inferred: the delete removed one row. 0357 closes that in RLS for
+ * schema, not inferred: the delete removed one row. 0385 closes that in RLS for
  * UPDATE and DELETE with the rule `mayChangeFact` applies here.
  */
 export type UpdateFactInput = {
@@ -999,7 +999,7 @@ export async function updateFact(
   }
 
   // `factForWrite` asked whether the row as it IS may be changed; this asks it
-  // of the row as it WILL BE, which is what 0357's WITH CHECK asks. Without it a
+  // of the row as it WILL BE, which is what 0385's WITH CHECK asks. Without it a
   // member could re-point a memory a parent wrote about her at a sibling or at
   // the whole family — the service would allow it and the database would
   // answer with a bare 42501. A fact she wrote herself stays hers wherever it

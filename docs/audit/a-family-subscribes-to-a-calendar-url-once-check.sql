@@ -1,6 +1,6 @@
--- ── A family subscribes to a calendar URL once (0363) ──────────────────────
+-- ── A family subscribes to a calendar URL once (0386) ──────────────────────
 --
--- HOLDS: supabase/migrations/0363_a_family_subscribes_to_a_calendar_url_once.sql
+-- HOLDS: supabase/migrations/0386_a_family_subscribes_to_a_calendar_url_once.sql
 --
 -- `public.calendar_feeds` (0045) had `url text NOT NULL` and nothing unique on
 -- it. `addCalendarFeed` (app/(app)/dashboard/sync/feeds/actions.ts) now looks
@@ -8,7 +8,7 @@
 -- only a look: two members pressing "Add & Sync Now" for the same school
 -- calendar at the same moment both look, both find nothing, both insert, and
 -- every event of that calendar then lands on the family calendar twice, once
--- under each feed_id (uq_calendar_events_feed_uid, 0285, is per feed). 0363
+-- under each feed_id (uq_calendar_events_feed_uid, 0285, is per feed). 0386
 -- adds `uq_calendar_feeds_family_url` on (family_id, url) so the loser of that
 -- race gets 23505, which the action catches, re-reads, and syncs the winner's
 -- row. The vitest that shipped with the fix
@@ -20,16 +20,16 @@
 --
 --   1. INSERT of a URL the family ALREADY subscribes to — the row another
 --      member's add committed first — is refused with 23505, and the refusal
---      names uq_calendar_feeds_family_url (the index 0363 creates), not some
+--      names uq_calendar_feeds_family_url (the index 0386 creates), not some
 --      other key. Nothing is stored: the family still holds exactly one row
 --      for that URL.
 --   2. UPDATE of a feed's url onto a URL the family already holds is refused
 --      the same way. No app path rewrites url today, but the FOR ALL member
 --      policy lets PostgREST do it, and an index that only an INSERT met would
---      be a door left open beside the one 0363 closes.
+--      be a door left open beside the one 0386 closes.
 --   3. `insert … on conflict (family_id, url) do nothing` is a legal statement
 --      and skips the duplicate without an error — the arbiter is inferable,
---      which is 0363's WHY-NOT-PARTIAL claim, measured rather than read. A
+--      which is 0386's WHY-NOT-PARTIAL claim, measured rather than read. A
 --      partial index, or none, makes Postgres answer 42P10.
 --   4. The SAME URL in a DIFFERENT family is a second, legitimate subscription
 --      and lands: two households whose children go to one school each get the
@@ -70,7 +70,7 @@
 --
 -- Everything is inside one transaction and rolled back; a re-run starts clean.
 -- Every UUID below is unique across docs/audit and supabase/migrations
--- (prefix 0363ca1e-…-8363-), because run-probes.sh runs every probe against
+-- (prefix 0386ca1e-…-8363-), because run-probes.sh runs every probe against
 -- one database.
 --
 --   PGHOST=… PGPORT=… PGUSER=… PGDATABASE=bubaly \
@@ -78,19 +78,19 @@
 
 -- The member acting throughout: in the household that already subscribes (FA)
 -- and in a second household of their own (FB).
-\set UA '0363ca1e-0000-4000-8363-000000000001'
+\set UA '0386ca1e-0000-4000-8363-000000000001'
 -- The other member of FA, whose add of the school calendar won the race.
-\set UB '0363ca1e-0000-4000-8363-000000000002'
-\set FA '0363ca1e-0000-4000-8363-000000000011'
-\set FB '0363ca1e-0000-4000-8363-000000000012'
-\set MB '0363ca1e-0000-4000-8363-000000000022'
+\set UB '0386ca1e-0000-4000-8363-000000000002'
+\set FA '0386ca1e-0000-4000-8363-000000000011'
+\set FB '0386ca1e-0000-4000-8363-000000000012'
+\set MB '0386ca1e-0000-4000-8363-000000000022'
 -- The subscription UB's add committed: (FA, school URL).
-\set WIN '0363ca1e-0000-4000-8363-000000000031'
+\set WIN '0386ca1e-0000-4000-8363-000000000031'
 
 begin;
 
-insert into auth.users (id, email) values (:'UA','cal0363-member@example.com')  on conflict do nothing;
-insert into auth.users (id, email) values (:'UB','cal0363-winner@example.com')  on conflict do nothing;
+insert into auth.users (id, email) values (:'UA','cal0386-member@example.com')  on conflict do nothing;
+insert into auth.users (id, email) values (:'UB','cal0386-winner@example.com')  on conflict do nothing;
 insert into public.families (id, name, created_by) values (:'FA','Calendar Once House',:'UA') on conflict do nothing;
 insert into public.families (id, name, created_by) values (:'FB','Calendar Once Second House',:'UA') on conflict do nothing;
 -- on_family_created files the creator as a member already; upsert rather than
@@ -109,7 +109,7 @@ insert into public.family_members (id, family_id, user_id, display_name, role, i
 -- What the race's winner left behind: FA already subscribes to the school
 -- calendar. Seeded as postgres (see the header).
 insert into public.calendar_feeds (id, family_id, name, url, color, created_by)
-  values (:'WIN',:'FA','School','https://school.example.org/0363/calendar.ics','blue',:'UB');
+  values (:'WIN',:'FA','School','https://school.example.org/0386/calendar.ics','blue',:'UB');
 
 do $$
 declare
@@ -117,17 +117,17 @@ declare
   cname text;
   failures text[] := '{}';
   control_ok boolean := true;
-  member_u   constant uuid := '0363ca1e-0000-4000-8363-000000000001';
-  fam_a      constant uuid := '0363ca1e-0000-4000-8363-000000000011';
-  fam_b      constant uuid := '0363ca1e-0000-4000-8363-000000000012';
-  ctl_row    constant uuid := '0363ca1e-0000-4000-8363-000000000032';
-  other_fam_row constant uuid := '0363ca1e-0000-4000-8363-000000000033';
-  dup_row    constant uuid := '0363ca1e-0000-4000-8363-000000000034';
-  upsert_row constant uuid := '0363ca1e-0000-4000-8363-000000000035';
+  member_u   constant uuid := '0386ca1e-0000-4000-8363-000000000001';
+  fam_a      constant uuid := '0386ca1e-0000-4000-8363-000000000011';
+  fam_b      constant uuid := '0386ca1e-0000-4000-8363-000000000012';
+  ctl_row    constant uuid := '0386ca1e-0000-4000-8363-000000000032';
+  other_fam_row constant uuid := '0386ca1e-0000-4000-8363-000000000033';
+  dup_row    constant uuid := '0386ca1e-0000-4000-8363-000000000034';
+  upsert_row constant uuid := '0386ca1e-0000-4000-8363-000000000035';
   -- The URL FA already holds, and two it does not.
-  url_school constant text := 'https://school.example.org/0363/calendar.ics';
-  url_sports constant text := 'https://league.example.org/0363/fixtures.ics';
-  url_choir  constant text := 'https://choir.example.org/0363/rehearsals.ics';
+  url_school constant text := 'https://school.example.org/0386/calendar.ics';
+  url_sports constant text := 'https://league.example.org/0386/fixtures.ics';
+  url_choir  constant text := 'https://choir.example.org/0386/rehearsals.ics';
 begin
   -- ── As a member of FA (same as `set local role authenticated`) ─────────
   perform set_config('role','authenticated', true);
@@ -146,7 +146,7 @@ begin
     end if;
   exception when others then
     control_ok := false;
-    failures := array_append(failures, format('CONTROL FAILED: this member was refused a calendar URL their family does NOT hold (%s: %s), so a refusal below would prove only that something said no — not that 0363''s index did', sqlstate, sqlerrm));
+    failures := array_append(failures, format('CONTROL FAILED: this member was refused a calendar URL their family does NOT hold (%s: %s), so a refusal below would prove only that something said no — not that 0386''s index did', sqlstate, sqlerrm));
   end;
 
   if control_ok then
@@ -248,7 +248,7 @@ begin
             join pg_attribute a on a.attrelid = i.indrelid and a.attnum = k.attnum)
          = array['family_id','url'];
   if n <> 1 then
-    failures := array_append(failures, 'public.uq_calendar_feeds_family_url is not a valid, non-partial unique index over exactly (family_id, url) — apply supabase/migrations/0363_a_family_subscribes_to_a_calendar_url_once.sql');
+    failures := array_append(failures, 'public.uq_calendar_feeds_family_url is not a valid, non-partial unique index over exactly (family_id, url) — apply supabase/migrations/0386_a_family_subscribes_to_a_calendar_url_once.sql');
   end if;
 
   if array_length(failures, 1) is not null then

@@ -1,7 +1,7 @@
--- ── A password alone does not write the family's budget, goals or bills (0345)
+-- ── A password alone does not write the family's budget, goals or bills (0382)
 --
 -- Two-step sign-in is an opt-in control: a parent enrols an authenticator so a
--- stolen password cannot reach the money. Before 0345 that was enforced only
+-- stolen password cannot reach the money. Before 0382 that was enforced only
 -- by nine money PAGES calling requireAal2; the database had no view of the
 -- session's `aal` claim, so an `aal1` session (password, no code) could
 -- `DELETE /rest/v1/budgets?id=eq.<id>` with the anon key and its own JWT, and
@@ -27,10 +27,10 @@
 --   PGHOST=… PGPORT=… PGUSER=… PGDATABASE=bubaly \
 --     psql -v ON_ERROR_STOP=1 -f docs/audit/a-password-alone-does-not-delete-the-familys-budget-check.sql
 
-\set FS '00000000-0000-4000-8000-000000034500'
-\set UE '00000000-0000-4000-8000-000000034501'
-\set UN '00000000-0000-4000-8000-000000034502'
-\set UU '00000000-0000-4000-8000-000000034503'
+\set FS '00000000-0000-4000-8000-000000038200'
+\set UE '00000000-0000-4000-8000-000000038201'
+\set UN '00000000-0000-4000-8000-000000038202'
+\set UU '00000000-0000-4000-8000-000000038203'
 
 begin;
 
@@ -56,10 +56,10 @@ do $$
 declare
   n        int;
   failures text[] := '{}';
-  fam      constant uuid := '00000000-0000-4000-8000-000000034500';
-  enrolled constant uuid := '00000000-0000-4000-8000-000000034501';
-  never    constant uuid := '00000000-0000-4000-8000-000000034502';
-  half     constant uuid := '00000000-0000-4000-8000-000000034503';
+  fam      constant uuid := '00000000-0000-4000-8000-000000038200';
+  enrolled constant uuid := '00000000-0000-4000-8000-000000038201';
+  never    constant uuid := '00000000-0000-4000-8000-000000038202';
+  half     constant uuid := '00000000-0000-4000-8000-000000038203';
   budget   uuid;
   goal     uuid;
   bill     uuid;

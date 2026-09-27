@@ -24,14 +24,14 @@
 // family level (member_id null, which is the form's default "The family"). A
 // member who may not edit that row could replace its value from the create
 // form. That is an authorization rule, so it is mirrored in the database by
-// 0357: an action-only check is not a boundary, since the browser holds an
+// 0385: an action-only check is not a boundary, since the browser holds an
 // RLS-scoped client of its own.
 //
 // Third, the other side of that coin. The create form still lets a teen file a
 // fact about the whole family or a sibling, so a rule keyed on `member_id`
 // alone would refuse her the pencil, the restate and the trash on the row she
 // had just written. The rule is "about me OR written by me" (`mayChangeFact`,
-// and 0357's `created_by = auth.uid()` branch): whatever she may file, she may
+// and 0385's `created_by = auth.uid()` branch): whatever she may file, she may
 // fix — and the household fact a PARENT wrote stays out of her reach.
 //
 // The database half is PROVEN behaviourally by
@@ -224,7 +224,7 @@ describe('what a member files, she can fix', () => {
     const kept = await updateFact(scopeAs('teen', 'teen'), 'about-her', { value: '14', memberId: 'teen' });
     expect(kept.ok, kept.ok ? '' : kept.error).toBe(true);
     // But moving it to the whole family would leave it neither about her nor
-    // written by her: 0357's WITH CHECK refuses that, so the service says so
+    // written by her: 0385's WITH CHECK refuses that, so the service says so
     // first, in the pencil's own words.
     const moved = await updateFact(scopeAs('teen', 'teen'), 'about-her', { memberId: null });
     expect(moved).toMatchObject({ ok: false, code: 'denied' });
@@ -237,14 +237,14 @@ describe('the migration text (static guard only — the behaviour is proven by t
   // This block can only say the migration SAYS the right thing. Whether the
   // policy does it is measured by the probe named below, as `authenticated`,
   // against every migration replayed — see the header of this file.
-  const sql = readFileSync('supabase/migrations/0357_a_member_only_rewrites_their_own_memory.sql', 'utf8');
+  const sql = readFileSync('supabase/migrations/0385_a_member_only_rewrites_their_own_memory.sql', 'utf8');
   const probe = 'docs/audit/a-member-only-rewrites-their-own-memory-check.sql';
 
   /** The body of one `create policy <name> on public.family_facts … ;` statement, comments excluded. */
   const policy = (name: string): string => {
     const code = sql.split('\n').filter((line) => !line.trim().startsWith('--')).join('\n');
     const at = code.indexOf(`create policy ${name} on public.family_facts`);
-    expect(at, `${name} is not created by 0357`).toBeGreaterThanOrEqual(0);
+    expect(at, `${name} is not created by 0385`).toBeGreaterThanOrEqual(0);
     return code.slice(at, code.indexOf(';', at));
   };
   const clause = (body: string, head: 'using' | 'with check'): string => {
@@ -287,6 +287,6 @@ describe('the migration text (static guard only — the behaviour is proven by t
 
   it('has a behavioural probe in the directory CI globs, naming this migration', () => {
     expect(existsSync(probe)).toBe(true);
-    expect(readFileSync(probe, 'utf8')).toContain('HOLDS: supabase/migrations/0357_a_member_only_rewrites_their_own_memory.sql');
+    expect(readFileSync(probe, 'utf8')).toContain('HOLDS: supabase/migrations/0385_a_member_only_rewrites_their_own_memory.sql');
   });
 });

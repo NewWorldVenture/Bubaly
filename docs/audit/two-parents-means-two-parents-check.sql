@@ -1,7 +1,7 @@
--- ── "Two parents" is a rule the database keeps, not only the server action (0344)
+-- ── "Two parents" is a rule the database keeps, not only the server action (0381)
 --
 -- Settings -> Trust & Permissions lets a family put an approval behind "Two
--- parents" (approval_model = 'two_parent'). Until 0344 that rule lived only in
+-- parents" (approval_model = 'two_parent'). Until 0381 that rule lived only in
 -- lib/services/approvals/index.ts `decide()`, while `approval_requests_decide`
 -- (0251:135-137) let any manager write any column of a pending row. So an adult
 -- — the role `decide()` refuses — could PATCH `{"status":"approved"}` straight
@@ -25,25 +25,25 @@
 --      anyone still closes a row;
 --   6. a write to an ALREADY-decided row that is not a decision (the
 --      executed_at stamp stampExecution and the private-purchase result make)
---      still lands — including on a row decided before 0344 with no votes at
+--      still lands — including on a row decided before 0381 with no votes at
 --      all, which is the shape the old Autopilot button minted. The threshold
 --      belongs to the transition, not to every write after it;
 --   7. the threshold helper is not a membership oracle: asked about a family
 --      the caller is not in, it counts nothing; asked by that family's own
 --      parent, the same question answers true. anon cannot call it;
 --   8. the server (service role) is not newly refused a status write;
---   9. NEGATIVE CONTROL: drop ONLY 0344's decision trigger and require the
+--   9. NEGATIVE CONTROL: drop ONLY 0381's decision trigger and require the
 --      adult's bare flip AND the forged-votes flip to succeed again.
 --
 --   PGHOST=… PGPORT=… PGUSER=… PGDATABASE=bubaly \
 --     psql -v ON_ERROR_STOP=1 -f docs/audit/two-parents-means-two-parents-check.sql
 
-\set FT '00000000-0000-4000-8000-000000034400'
-\set UM '00000000-0000-4000-8000-000000034401'
-\set UD '00000000-0000-4000-8000-000000034402'
-\set UN '00000000-0000-4000-8000-000000034403'
-\set FO '00000000-0000-4000-8000-000000034404'
-\set UO '00000000-0000-4000-8000-000000034405'
+\set FT '00000000-0000-4000-8000-000000038100'
+\set UM '00000000-0000-4000-8000-000000038101'
+\set UD '00000000-0000-4000-8000-000000038102'
+\set UN '00000000-0000-4000-8000-000000038103'
+\set FO '00000000-0000-4000-8000-000000038104'
+\set UO '00000000-0000-4000-8000-000000038105'
 
 begin;
 
@@ -76,12 +76,12 @@ declare
   ok        boolean;
   st        text;
   failures  text[] := '{}';
-  fam       constant uuid := '00000000-0000-4000-8000-000000034400';
-  other_fam constant uuid := '00000000-0000-4000-8000-000000034404';
-  mum_u     constant uuid := '00000000-0000-4000-8000-000000034401';
-  dad_u     constant uuid := '00000000-0000-4000-8000-000000034402';
-  nan_u     constant uuid := '00000000-0000-4000-8000-000000034403';
-  other_u   constant uuid := '00000000-0000-4000-8000-000000034405';
+  fam       constant uuid := '00000000-0000-4000-8000-000000038100';
+  other_fam constant uuid := '00000000-0000-4000-8000-000000038104';
+  mum_u     constant uuid := '00000000-0000-4000-8000-000000038101';
+  dad_u     constant uuid := '00000000-0000-4000-8000-000000038102';
+  nan_u     constant uuid := '00000000-0000-4000-8000-000000038103';
+  other_u   constant uuid := '00000000-0000-4000-8000-000000038105';
   mum_m     uuid;
   dad_m     uuid;
   nan_m     uuid;
@@ -92,7 +92,7 @@ declare
   single_r  uuid;   -- a 'single' row one adult may decide
   reject_r  uuid;   -- a two-parent row an adult declines
   server_r  uuid;   -- a row the service role closes
-  legacy    uuid;   -- decided before 0344, with no votes at all
+  legacy    uuid;   -- decided before 0381, with no votes at all
 begin
   select id into mum_m   from public.family_members where family_id = fam and user_id = mum_u;
   select id into dad_m   from public.family_members where family_id = fam and user_id = dad_u;
@@ -115,7 +115,7 @@ begin
   insert into public.approval_requests (family_id, domain, title, requested_by_kind, agent, approval_model, required_approvals)
     values (fam, 'tasks', 'Closed by the server', 'ai', 'Concierge', 'two_parent', 1) returning id into server_r;
   insert into public.approval_requests (family_id, domain, title, requested_by_kind, agent, approval_model, required_approvals, status, decided_at)
-    values (fam, 'scheduling', 'Approved before 0344', 'ai', 'Concierge', 'two_parent', 1, 'approved', now()) returning id into legacy;
+    values (fam, 'scheduling', 'Approved before 0381', 'ai', 'Concierge', 'two_parent', 1, 'approved', now()) returning id into legacy;
 
   -- ── As the ADULT ────────────────────────────────────────────────────────
   perform set_config('role','authenticated', true);
@@ -275,9 +275,9 @@ begin
   begin
     update public.approval_requests set executed_at = now(), execution_result = 'Checked' where id = legacy;
     get diagnostics n = row_count;
-    if n <> 1 then failures := array_append(failures, format('a stamp on a row decided BEFORE 0344 did not land (%s rows)', n)); end if;
+    if n <> 1 then failures := array_append(failures, format('a stamp on a row decided BEFORE 0381 did not land (%s rows)', n)); end if;
   exception when others then
-    failures := array_append(failures, format('a stamp on a row decided before 0344 was refused — the threshold is being re-checked on writes that decide nothing: %s %s', sqlstate, sqlerrm));
+    failures := array_append(failures, format('a stamp on a row decided before 0381 was refused — the threshold is being re-checked on writes that decide nothing: %s %s', sqlstate, sqlerrm));
   end;
 
   -- ── As the OTHER family's parent: the helper does answer its own family ──
@@ -317,7 +317,7 @@ begin
   end if;
 
   -- ── Negative control: prove this probe can SEE the defect ──────────────
-  -- Drop ONLY 0344's decision trigger. The outer rollback restores it.
+  -- Drop ONLY 0381's decision trigger. The outer rollback restores it.
   drop trigger if exists approval_requests_decision_is_earned on public.approval_requests;
 
   perform set_config('role','authenticated', true);
@@ -342,7 +342,7 @@ begin
   if array_length(failures, 1) is not null then
     raise exception E'"Two parents" is not a rule the database keeps:\n  - %', array_to_string(failures, E'\n  - ');
   end if;
-  raise notice 'two-parents-means-two-parents: OK (an adult cannot approve or modify a two-parent row bare, on their own vote, or with forged parent votes; the rule columns are frozen for everyone; a parent votes only for herself and one vote is not two; the second parent''s decide()-shaped write lands; single rows and a "no" still work; stamps on decided rows, including pre-0344 ones, still land; the helper is not an oracle and anon cannot call it; the server is not newly refused; negative control reproduced both flips)';
+  raise notice 'two-parents-means-two-parents: OK (an adult cannot approve or modify a two-parent row bare, on their own vote, or with forged parent votes; the rule columns are frozen for everyone; a parent votes only for herself and one vote is not two; the second parent''s decide()-shaped write lands; single rows and a "no" still work; stamps on decided rows, including pre-0381 ones, still land; the helper is not an oracle and anon cannot call it; the server is not newly refused; negative control reproduced both flips)';
 end $$;
 
 rollback;

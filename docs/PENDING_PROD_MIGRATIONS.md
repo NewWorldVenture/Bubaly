@@ -2231,107 +2231,6 @@ alone — a key keeps working if the parent who minted it later leaves the famil
 Whether a key belongs to the person or to the household is a product question,
 and it is recorded here rather than decided.
 
-### `0344` makes "two parents" mean two parents in the database too — unapplied
-
-`0344_two_parents_means_two_parents_in_the_database_too.sql` (SRV-001 leads
-`m7+m8`). Settings → Trust & Permissions offers "Just one parent or adult",
-"Two parents" and "Every parent and adult", and the whole point of the second
-and third is that ONE person cannot authorise the thing alone. That rule lived
-in TypeScript only — `thresholdOf` / `decide` / `editAndApprove` in
-`lib/services/approvals/index.ts`. The surviving UPDATE policy for a manager on
-`approval_requests`, 0251's `approval_requests_decide`, names no column, so any
-signed-in adult could `PATCH /rest/v1/approval_requests?id=eq.<id>
-{"status":"approved"}` with the browser session and the database said yes: the
-request closed, the second parent could never vote, and `trust_audit_logs` got
-no decision row because `auditDecision` only runs inside `decide()`.
-
-**What closes it**: `approval_votes_satisfy(family, model, required, approvals)`
-mirrors `lib/approvals/threshold.ts` in SQL; a BEFORE UPDATE trigger,
-`approval_requests_decision_is_earned`, refuses a move into `approved` or
-`modified` unless the row's own `approvals` satisfy its `approval_model` and
-`required_approvals`, refuses a vote signed as someone else, and refuses
-removing another decider's vote; `approval_requests_rule_is_immutable` refuses
-changing the model, the threshold or the requester on a pending row. Both
-functions are `revoke all … from public, anon, authenticated` and run only from
-their triggers. Replay-safe (`drop trigger if exists` before `create`).
-
-**Ships on its own.** The application half is live on merge: the approval card
-shows what an earlier approver changed (`approval.alreadyChangedByAnApprover`),
-the concierge panel's Approve and Dismiss route an approval-backed run through
-`decide()` — one decision surface instead of two — and a finished plan is
-stamped `state = 'completed'` with `completed_at`, so it counts in the family's
-week. Until 0344 is applied, a single adult with the browser session can still
-close a two-parent request over `/rest/v1`.
-
-**Evidence.** `docs/audit/two-parents-means-two-parents-check.sql` — its
-negative control runs first (the same adult's vote on a `single` request, and
-their second vote on a `two_parents` request, both LAND), then one adult's flip
-of a two-parent request to `approved`, a vote signed as the other parent, and a
-rewrite of the model on a pending row must each be refused by 0344's named
-trigger. Mutation-tested three ways on private clones of a HEAD template with
-the migration applied: as written (exit 0), the guard loosened (red on a
-refusal), a decoy refusing every write with the guard intact (red on the
-control). `tests/one-adult-cannot-approve-what-the-family-said-needs-two.test.ts`
-covers the service half and the panel's routing.
-
-**Recorded rather than closed.** (1) A `rejected` decision is not final in the
-database: on a `single` row another manager may remove the rejecting vote and
-add their own — before 0344 any manager could flip anything, so this is not a
-regression, but it is not closed. (2) `lib/ai/runs/executor.ts` still runs the
-raw `edited_payload` of `plan_steps` rows with `skipTrust`; the comments now say
-so, and a manager can still PATCH that column on a pending row. (3)
-`executeQueuedRunAction` routes through `decide()` only when the run's own
-`metadata.approval_id` is set, and `family_automation_runs_update` (0251) is
-bare `can_manage_family` with no column pin — an adult can PATCH the metadata to
-drop `approval_id` and then tap "Do it", materialising the plan with no vote
-while the two-parent approval stays pending. The rows it creates are ones an
-adult can already write directly, so the severity is low; recorded under
-SRV-001 as an open lead for a follow-up migration that pins the column.
-
-### `0345` makes a password alone unable to delete the family's budget — unapplied
-
-`0345_a_password_alone_does_not_delete_the_familys_budget.sql` (SRV-001 leads
-`m10+m11`; `O-03` from the database side). Two-step sign-in is an opt-in control
-a family turns on so that a stolen password cannot reach the money. Nine money
-pages send an `aal1` manager to `/auth/step-up`, and that was the whole
-enforcement: no policy anywhere read the JWT's `aal` claim, and the money
-tables' write policies (0275, superseding 0267) are `can_manage_family`, a
-ROLE, which a parent on a password-only session satisfies completely. Someone
-who has the password and not the authenticator holds a valid `aal1` session,
-and the anon key plus that session's JWT reach PostgREST directly — `DELETE
-/rest/v1/budgets?id=eq.<id>` — with no page rendered and no server action run.
-The same hole was open through the browser on `/dashboard/billing`, where
-`deleteBill` / `markBillPaid` / `deleteAccount` wrote straight to PostgREST.
-
-**What closes it**: `session_cleared_step_up()` mirrors `needsStepUp`
-(`lib/auth/mfa.ts`) exactly — true when the session is `aal2`, OR when the user
-has no verified TOTP factor enrolled, so a family that never set up an
-authenticator sees no change — and a RESTRICTIVE insert, update and delete
-guard per money table uses it: `budgets`, `savings_goals`, `bills`, the tables
-written only from the step-up-guarded money area (`transactions` and
-`financial_accounts` are left out for the reasons in the header). Restrictive,
-so it ANDs with whatever permissive policy drift has left and cannot be
-satisfied by adding a broad policy beside it. Replay-safe.
-
-**Ships on its own.** The application half is live on merge: every money
-action in `app/(app)/dashboard/billing/actions.ts` requires `aal2` where the
-money pages already did, the billing page itself sends an `aal1` manager to
-step-up with a return path (`returnPathWith`), and the twelve client call sites
-route a refusal through `reportRefusal` (`lib/auth/step-up-client.ts`), which
-sends the family to the step-up page instead of showing a bare error
-(`actions.moneyNeedsYourCodeAgain`). Until 0345 is applied, a password-only
-session can still reach the money tables over `/rest/v1`.
-
-**Evidence.** `docs/audit/a-password-alone-does-not-delete-the-familys-budget-check.sql`
-— control first (an `aal2` manager, and a manager with no factor enrolled, both
-write), then an `aal1` manager with a verified factor is refused a delete and an
-insert on `budgets` and an update on `savings_goals` and `bills`, and the
-function's grants are read back. Mutation-tested three ways on private clones
-of a HEAD template with the migration applied (as written 0, guard loosened
-red on a refusal, decoy red on the control).
-`tests/a-password-alone-does-not-empty-the-family-finances.test.ts` and
-`tests/require-aal2.test.ts` cover the action and page halves.
-
 ### `0349` keeps one saved copy of a provider recipe per family — unapplied
 
 `0349_one_saved_copy_of_a_provider_recipe_per_family.sql` (SRV-001 lead
@@ -2409,152 +2308,6 @@ runs its negative control first (a parent and an adult making the same writes
 must land) and went red on that control when the write grant was revoked with
 0352 in place.
 
-### `0355` makes an archived page take its public answers with it — unapplied
-
-`0355_an_archived_page_takes_its_public_answers_with_it.sql` (SRV-001 leads
-`m1` and `m2+m3`). Generated FAQ answers do not live in the page row: they are
-rows in `marketing_aeo_questions`, world-readable on one predicate (0228's
-`status = 'published'`) with no join back to their source page. So when a page
-left the public set — archived, deleted, renamed, or a blog post unpublished —
-its own route went dark but its answers kept rendering: on /faq's Knowledge
-Center tab and in its FAQPage structured data, in every still-live article of
-the same category, and with a body that ends "Read the full guide at
-/blog/<slug>" for a URL that now answers 404. Nothing self-healed it: 0237's
-regeneration trigger is switched off for exactly this case, and the hand-retry
-paths select the page `.is('deleted_at', null)`.
-
-**What closes it**: four AFTER … FOR EACH ROW triggers on `marketing_pages` and
-`blog_posts`, bound to two SECURITY DEFINER functions with a pinned
-`search_path` (`retire_marketing_aeo_on_page_hidden`,
-`retire_marketing_aeo_on_post_unpublished`; EXECUTE revoked from public, anon
-and authenticated), that move the page's PUBLISHED answers to `answered` — the
-status `runQuestions` itself writes for an unpublished page — inside the same
-transaction as the take-down, so there is no window. Only published rows move;
-an `opportunity` or `drafting` row an admin is mid-way through keeps its
-status, and the editorial text survives for a later re-publish. **This
-migration rewrites rows on apply**: answers already orphaned by pages that are
-archived, deleted or unpublished today are moved to `answered` first, and
-re-pointed or blanked `blog_aeo_v1` rows are handled by the same backfill (its
-first cut refused to apply over exactly that drifted data; the probe below
-re-applies it over both shapes).
-
-**Ships on its own.** The application half is live on merge: the take-down
-actions (`archivePlatformPage`, `updatePlatformPage`, `archiveContentAction`,
-`unpublishBlogPostAction`, the legacy bridge's three paths) retire the answers
-themselves, so the fast path is closed before the migration; a brand rule can be
-corrected after it is saved and a retry re-queues the job it was clicked on
-(`m2+m3`). Until 0355 is applied, a take-down that bypasses the actions — the
-cron worker, `scripts/backfill-*.mjs`, the SQL editor — still leaves the answers
-public.
-
-**Evidence.** `docs/audit/an-archived-page-takes-its-public-answers-with-it-check.sql`
-(control first: the super admin and service role can still write every column
-the take-downs write; then archive, delete, rename and unpublish each retire
-exactly their page's published answers and no sibling's; no role may EXECUTE
-the trigger functions) and
-`docs/audit/a-renamed-page-leaves-no-public-answer-behind-check.sql` (a rename
-of a live page retires the old path's answers and no sibling's, and step 3
-re-applies 0355 over re-pointed and blanked rows). Both mutation-tested three
-ways on private clones of a HEAD template with the migration applied.
-`tests/an-archived-page-takes-its-public-answers-with-it.test.ts` covers the
-actions and guards the CI wiring that executes the probes.
-
-### `0356` stores the urgent fallback number the only way it can be used — unapplied
-
-`0356_the_urgent_fallback_number_is_stored_the_only_way_it_can_be_used.sql`
-(SRV-001 leads `m13+m14`). `family_contact_channels.forward_to_phone` is the
-number the family says to call or text when something at their Contact Center
-line is urgent. 0214 created it with the comment "optional human fallback
-(E.164)" and no constraint, and the write path stored whatever was typed —
-while every consumer requires E.164 and none can say so: `sendSmsWithReceipt`
-refuses anything else as `invalid_message` (the urgent text never left the
-server, and the receipt's error is rendered on no screen), and `twimlDial`
-interpolates the value into a `<Dial>` element, so a stored `&` or `<` made the
-TwiML unparseable and the caller heard an application error. The field's own
-placeholder was "+1 555 123 4567" — with spaces — so typing exactly what the UI
-taught produced a fallback number that never once worked.
-
-**What closes it**: the column gets the CHECK its comment already claimed
-(`forward_to_phone is null or forward_to_phone ~ '^\+[1-9][0-9]{7,14}$'`),
-added only if absent. **This migration rewrites rows before it constrains
-them**: every value that is not already E.164 is copied to a new
-`forward_to_phone_legacy` column, then normalized the way
-`lib/contact-center/phone.ts` does it — a `+`-prefixed number with spaces,
-dots, dashes or parentheses becomes its digits behind the `+`; anything else
-becomes NULL. No country code is guessed: a bare ten digits is not read as +1,
-because an Italian or Mexican mobile typed the local way would become a valid
-American number and the urgent text would be delivered to a stranger. Nothing a
-parent typed is destroyed; the legacy column keeps it, and the app never reads
-that column. Replay-safe: `add column if not exists`, the UPDATE matches only
-rows still outside the pattern, the CHECK is added inside a `pg_constraint`
-guard.
-
-**Ships on its own.** The application half is live on merge: the server
-action normalizes through `normalizeFallbackPhone` and refuses with a sentence
-that says the form the number needs (`actions.enterTheFallbackNumberIn`); the
-one-number-per-family provisioning path no longer leaves a second billed number
-behind. There is no client INSERT or UPDATE policy on this table (0214 grants
-SELECT only) and every write goes through the service role, so this is defence
-in depth for the next write path rather than a boundary a client can route
-around today.
-
-**Evidence.** `docs/audit/the-urgent-fallback-number-is-stored-the-only-way-it-can-be-used-check.sql`
-— control first (the service role stores an E.164 number and a NULL, both
-land), then a spaced, a letter-bearing and a `<`-bearing value must each be
-refused by the named constraint, and a legacy row planted before the migration
-is shown normalized with its original kept. Mutation-tested three ways on
-private clones of a HEAD template with the migration applied (as written 0,
-constraint dropped red on a refusal, decoy red on the control).
-`tests/the-urgent-fallback-number-a-parent-types-still-reaches-their-phone.test.ts`
-covers the normalizer and the action, `tests/one-family-keeps-one-number-and-nothing-is-left-billing.test.ts`
-the provisioning path.
-
-### `0357` gives family_facts the member rule the service already applied — unapplied
-
-`0357_a_member_only_rewrites_their_own_memory.sql` (SRV-001 lead `m21`). 0264
-narrowed `family_facts` UPDATE and DELETE by CATEGORY only — `medical` and
-`account` to managers — so on the seven ordinary categories any member of the
-household could rewrite or delete any row, including the household-level facts
-(`member_id` null, the Add form's default "The family") a parent entered for
-everyone. The service (`lib/services/memory/index.ts`) has carried the member
-rule since the knowledge module shipped, but `knowledge-base-module.tsx` and
-`life-events-module.tsx` read `family_facts` from the browser on the caller's
-own RLS-bound client, so the same client could issue the UPDATE directly; and
-`rememberConfirmed` probed by (family_id, ilike label, member_id) and UPDATEd
-whatever it found — re-typing "Emergency contact" into Add replaced the parent's
-number, no id needed.
-
-**What closes it**: `family_facts_update` and `family_facts_delete` are
-re-created with `mayChangeFact`'s rule — `can_manage_family(family_id) OR
-is_self_member(member_id) OR created_by = auth.uid()` — on top of 0264's
-category clause; SELECT and INSERT untouched. `drop policy if exists` before
-`create policy`, so a replay is clean.
-
-**Ships on its own.** The application half is live on merge (`m21`):
-`mayChangeFact` is applied on the create path as well as the pencil,
-`rememberConfirmed`'s label probe refuses a row the caller may not write, and
-Add applies the sensitive-category rule. Until 0357 is applied, a member with
-the browser client can still rewrite a parent's household fact over `/rest/v1`.
-
-**Evidence.** `docs/audit/a-member-only-rewrites-their-own-memory-check.sql` —
-its negative control runs first (the same teen rewrites HER OWN ordinary memory
-with the very statement the refusals use, and it must land), then the teen's
-UPDATE, `created_by` claim, `member_id` re-point and DELETE of the household's
-and her sibling's memories must each be refused, with SELECT shown still open
-to the household. Mutation-tested three ways on private clones: as written
-(exit 0), the policy loosened to 0264's shape (red on a refusal), a decoy
-refusing every write with the guard intact (red on the control).
-`tests/the-add-form-is-not-a-way-around-the-memory-edit-gate.test.ts` covers the
-service half and reads this file's text for the rule it mirrors.
-
-**Not closed, named so it is not assumed closed.** Ownership keys on
-`created_by`, which is set on INSERT only: a manager who corrects a fact a teen
-filed does not take it over, so the teen can still rewrite the corrected value
-(recorded under SRV-001 as a residual). And INSERT stays open on the ordinary
-categories with no uniqueness on (family_id, member_id, label), so a second
-"Emergency contact" row can be filed beside the parent's over `/rest/v1`; the
-app's Add path refuses it, RLS does not.
-
 ### `0360` takes a head-out reminder off the calendar with its departure plan — unapplied
 
 `0360_a_head_out_reminder_goes_with_its_departure_plan.sql` (SRV-001 lead
@@ -2604,9 +2357,256 @@ and the family is told), the reminder stays. Making it atomic means moving both
 writes into one database function that every save depends on, which cannot ship
 while production cannot take migrations.
 
-### `0363` lets a family subscribe to a calendar URL once — unapplied
+### `0381` makes "two parents" mean two parents in the database too — unapplied
 
-`0363_a_family_subscribes_to_a_calendar_url_once.sql` (SRV-001 lead `m36`).
+`0381_two_parents_means_two_parents_in_the_database_too.sql` (SRV-001 leads
+`m7+m8`). Settings → Trust & Permissions offers "Just one parent or adult",
+"Two parents" and "Every parent and adult", and the whole point of the second
+and third is that ONE person cannot authorise the thing alone. That rule lived
+in TypeScript only — `thresholdOf` / `decide` / `editAndApprove` in
+`lib/services/approvals/index.ts`. The surviving UPDATE policy for a manager on
+`approval_requests`, 0251's `approval_requests_decide`, names no column, so any
+signed-in adult could `PATCH /rest/v1/approval_requests?id=eq.<id>
+{"status":"approved"}` with the browser session and the database said yes: the
+request closed, the second parent could never vote, and `trust_audit_logs` got
+no decision row because `auditDecision` only runs inside `decide()`.
+
+**What closes it**: `approval_votes_satisfy(family, model, required, approvals)`
+mirrors `lib/approvals/threshold.ts` in SQL; a BEFORE UPDATE trigger,
+`approval_requests_decision_is_earned`, refuses a move into `approved` or
+`modified` unless the row's own `approvals` satisfy its `approval_model` and
+`required_approvals`, refuses a vote signed as someone else, and refuses
+removing another decider's vote; `approval_requests_rule_is_immutable` refuses
+changing the model, the threshold or the requester on a pending row. Both
+functions are `revoke all … from public, anon, authenticated` and run only from
+their triggers. Replay-safe (`drop trigger if exists` before `create`).
+
+**Ships on its own.** The application half is live on merge: the approval card
+shows what an earlier approver changed (`approval.alreadyChangedByAnApprover`),
+the concierge panel's Approve and Dismiss route an approval-backed run through
+`decide()` — one decision surface instead of two — and a finished plan is
+stamped `state = 'completed'` with `completed_at`, so it counts in the family's
+week. Until 0381 is applied, a single adult with the browser session can still
+close a two-parent request over `/rest/v1`.
+
+**Evidence.** `docs/audit/two-parents-means-two-parents-check.sql` — its
+negative control runs first (the same adult's vote on a `single` request, and
+their second vote on a `two_parents` request, both LAND), then one adult's flip
+of a two-parent request to `approved`, a vote signed as the other parent, and a
+rewrite of the model on a pending row must each be refused by 0381's named
+trigger. Mutation-tested three ways on private clones of a HEAD template with
+the migration applied: as written (exit 0), the guard loosened (red on a
+refusal), a decoy refusing every write with the guard intact (red on the
+control). `tests/one-adult-cannot-approve-what-the-family-said-needs-two.test.ts`
+covers the service half and the panel's routing.
+
+**Recorded rather than closed.** (1) A `rejected` decision is not final in the
+database: on a `single` row another manager may remove the rejecting vote and
+add their own — before 0381 any manager could flip anything, so this is not a
+regression, but it is not closed. (2) `lib/ai/runs/executor.ts` still runs the
+raw `edited_payload` of `plan_steps` rows with `skipTrust`; the comments now say
+so, and a manager can still PATCH that column on a pending row. (3)
+`executeQueuedRunAction` routes through `decide()` only when the run's own
+`metadata.approval_id` is set, and `family_automation_runs_update` (0251) is
+bare `can_manage_family` with no column pin — an adult can PATCH the metadata to
+drop `approval_id` and then tap "Do it", materialising the plan with no vote
+while the two-parent approval stays pending. The rows it creates are ones an
+adult can already write directly, so the severity is low; recorded under
+SRV-001 as an open lead for a follow-up migration that pins the column.
+
+### `0382` makes a password alone unable to delete the family's budget — unapplied
+
+`0382_a_password_alone_does_not_delete_the_familys_budget.sql` (SRV-001 leads
+`m10+m11`; `O-03` from the database side). Two-step sign-in is an opt-in control
+a family turns on so that a stolen password cannot reach the money. Nine money
+pages send an `aal1` manager to `/auth/step-up`, and that was the whole
+enforcement: no policy anywhere read the JWT's `aal` claim, and the money
+tables' write policies (0275, superseding 0267) are `can_manage_family`, a
+ROLE, which a parent on a password-only session satisfies completely. Someone
+who has the password and not the authenticator holds a valid `aal1` session,
+and the anon key plus that session's JWT reach PostgREST directly — `DELETE
+/rest/v1/budgets?id=eq.<id>` — with no page rendered and no server action run.
+The same hole was open through the browser on `/dashboard/billing`, where
+`deleteBill` / `markBillPaid` / `deleteAccount` wrote straight to PostgREST.
+
+**What closes it**: `session_cleared_step_up()` mirrors `needsStepUp`
+(`lib/auth/mfa.ts`) exactly — true when the session is `aal2`, OR when the user
+has no verified TOTP factor enrolled, so a family that never set up an
+authenticator sees no change — and a RESTRICTIVE insert, update and delete
+guard per money table uses it: `budgets`, `savings_goals`, `bills`, the tables
+written only from the step-up-guarded money area (`transactions` and
+`financial_accounts` are left out for the reasons in the header). Restrictive,
+so it ANDs with whatever permissive policy drift has left and cannot be
+satisfied by adding a broad policy beside it. Replay-safe.
+
+**Ships on its own.** The application half is live on merge: every money
+action in `app/(app)/dashboard/billing/actions.ts` requires `aal2` where the
+money pages already did, the billing page itself sends an `aal1` manager to
+step-up with a return path (`returnPathWith`), and the twelve client call sites
+route a refusal through `reportRefusal` (`lib/auth/step-up-client.ts`), which
+sends the family to the step-up page instead of showing a bare error
+(`actions.moneyNeedsYourCodeAgain`). Until 0382 is applied, a password-only
+session can still reach the money tables over `/rest/v1`.
+
+**Evidence.** `docs/audit/a-password-alone-does-not-delete-the-familys-budget-check.sql`
+— control first (an `aal2` manager, and a manager with no factor enrolled, both
+write), then an `aal1` manager with a verified factor is refused a delete and an
+insert on `budgets` and an update on `savings_goals` and `bills`, and the
+function's grants are read back. Mutation-tested three ways on private clones
+of a HEAD template with the migration applied (as written 0, guard loosened
+red on a refusal, decoy red on the control).
+`tests/a-password-alone-does-not-empty-the-family-finances.test.ts` and
+`tests/require-aal2.test.ts` cover the action and page halves.
+
+### `0383` makes an archived page take its public answers with it — unapplied
+
+`0383_an_archived_page_takes_its_public_answers_with_it.sql` (SRV-001 leads
+`m1` and `m2+m3`). Generated FAQ answers do not live in the page row: they are
+rows in `marketing_aeo_questions`, world-readable on one predicate (0228's
+`status = 'published'`) with no join back to their source page. So when a page
+left the public set — archived, deleted, renamed, or a blog post unpublished —
+its own route went dark but its answers kept rendering: on /faq's Knowledge
+Center tab and in its FAQPage structured data, in every still-live article of
+the same category, and with a body that ends "Read the full guide at
+/blog/<slug>" for a URL that now answers 404. Nothing self-healed it: 0237's
+regeneration trigger is switched off for exactly this case, and the hand-retry
+paths select the page `.is('deleted_at', null)`.
+
+**What closes it**: four AFTER … FOR EACH ROW triggers on `marketing_pages` and
+`blog_posts`, bound to two SECURITY DEFINER functions with a pinned
+`search_path` (`retire_marketing_aeo_on_page_hidden`,
+`retire_marketing_aeo_on_post_unpublished`; EXECUTE revoked from public, anon
+and authenticated), that move the page's PUBLISHED answers to `answered` — the
+status `runQuestions` itself writes for an unpublished page — inside the same
+transaction as the take-down, so there is no window. Only published rows move;
+an `opportunity` or `drafting` row an admin is mid-way through keeps its
+status, and the editorial text survives for a later re-publish. **This
+migration rewrites rows on apply**: answers already orphaned by pages that are
+archived, deleted or unpublished today are moved to `answered` first, and
+re-pointed or blanked `blog_aeo_v1` rows are handled by the same backfill (its
+first cut refused to apply over exactly that drifted data; the probe below
+re-applies it over both shapes).
+
+**Ships on its own.** The application half is live on merge: the take-down
+actions (`archivePlatformPage`, `updatePlatformPage`, `archiveContentAction`,
+`unpublishBlogPostAction`, the legacy bridge's three paths) retire the answers
+themselves, so the fast path is closed before the migration; a brand rule can be
+corrected after it is saved and a retry re-queues the job it was clicked on
+(`m2+m3`). Until 0383 is applied, a take-down that bypasses the actions — the
+cron worker, `scripts/backfill-*.mjs`, the SQL editor — still leaves the answers
+public.
+
+**Evidence.** `docs/audit/an-archived-page-takes-its-public-answers-with-it-check.sql`
+(control first: the super admin and service role can still write every column
+the take-downs write; then archive, delete, rename and unpublish each retire
+exactly their page's published answers and no sibling's; no role may EXECUTE
+the trigger functions) and
+`docs/audit/a-renamed-page-leaves-no-public-answer-behind-check.sql` (a rename
+of a live page retires the old path's answers and no sibling's, and step 3
+re-applies 0383 over re-pointed and blanked rows). Both mutation-tested three
+ways on private clones of a HEAD template with the migration applied.
+`tests/an-archived-page-takes-its-public-answers-with-it.test.ts` covers the
+actions and guards the CI wiring that executes the probes.
+
+### `0384` stores the urgent fallback number the only way it can be used — unapplied
+
+`0384_the_urgent_fallback_number_is_stored_the_only_way_it_can_be_used.sql`
+(SRV-001 leads `m13+m14`). `family_contact_channels.forward_to_phone` is the
+number the family says to call or text when something at their Contact Center
+line is urgent. 0214 created it with the comment "optional human fallback
+(E.164)" and no constraint, and the write path stored whatever was typed —
+while every consumer requires E.164 and none can say so: `sendSmsWithReceipt`
+refuses anything else as `invalid_message` (the urgent text never left the
+server, and the receipt's error is rendered on no screen), and `twimlDial`
+interpolates the value into a `<Dial>` element, so a stored `&` or `<` made the
+TwiML unparseable and the caller heard an application error. The field's own
+placeholder was "+1 555 123 4567" — with spaces — so typing exactly what the UI
+taught produced a fallback number that never once worked.
+
+**What closes it**: the column gets the CHECK its comment already claimed
+(`forward_to_phone is null or forward_to_phone ~ '^\+[1-9][0-9]{7,14}$'`),
+added only if absent. **This migration rewrites rows before it constrains
+them**: every value that is not already E.164 is copied to a new
+`forward_to_phone_legacy` column, then normalized the way
+`lib/contact-center/phone.ts` does it — a `+`-prefixed number with spaces,
+dots, dashes or parentheses becomes its digits behind the `+`; anything else
+becomes NULL. No country code is guessed: a bare ten digits is not read as +1,
+because an Italian or Mexican mobile typed the local way would become a valid
+American number and the urgent text would be delivered to a stranger. Nothing a
+parent typed is destroyed; the legacy column keeps it, and the app never reads
+that column. Replay-safe: `add column if not exists`, the UPDATE matches only
+rows still outside the pattern, the CHECK is added inside a `pg_constraint`
+guard.
+
+**Ships on its own.** The application half is live on merge: the server
+action normalizes through `normalizeFallbackPhone` and refuses with a sentence
+that says the form the number needs (`actions.enterTheFallbackNumberIn`); the
+one-number-per-family provisioning path no longer leaves a second billed number
+behind. There is no client INSERT or UPDATE policy on this table (0214 grants
+SELECT only) and every write goes through the service role, so this is defence
+in depth for the next write path rather than a boundary a client can route
+around today.
+
+**Evidence.** `docs/audit/the-urgent-fallback-number-is-stored-the-only-way-it-can-be-used-check.sql`
+— control first (the service role stores an E.164 number and a NULL, both
+land), then a spaced, a letter-bearing and a `<`-bearing value must each be
+refused by the named constraint, and a legacy row planted before the migration
+is shown normalized with its original kept. Mutation-tested three ways on
+private clones of a HEAD template with the migration applied (as written 0,
+constraint dropped red on a refusal, decoy red on the control).
+`tests/the-urgent-fallback-number-a-parent-types-still-reaches-their-phone.test.ts`
+covers the normalizer and the action, `tests/one-family-keeps-one-number-and-nothing-is-left-billing.test.ts`
+the provisioning path.
+
+### `0385` gives family_facts the member rule the service already applied — unapplied
+
+`0385_a_member_only_rewrites_their_own_memory.sql` (SRV-001 lead `m21`). 0264
+narrowed `family_facts` UPDATE and DELETE by CATEGORY only — `medical` and
+`account` to managers — so on the seven ordinary categories any member of the
+household could rewrite or delete any row, including the household-level facts
+(`member_id` null, the Add form's default "The family") a parent entered for
+everyone. The service (`lib/services/memory/index.ts`) has carried the member
+rule since the knowledge module shipped, but `knowledge-base-module.tsx` and
+`life-events-module.tsx` read `family_facts` from the browser on the caller's
+own RLS-bound client, so the same client could issue the UPDATE directly; and
+`rememberConfirmed` probed by (family_id, ilike label, member_id) and UPDATEd
+whatever it found — re-typing "Emergency contact" into Add replaced the parent's
+number, no id needed.
+
+**What closes it**: `family_facts_update` and `family_facts_delete` are
+re-created with `mayChangeFact`'s rule — `can_manage_family(family_id) OR
+is_self_member(member_id) OR created_by = auth.uid()` — on top of 0264's
+category clause; SELECT and INSERT untouched. `drop policy if exists` before
+`create policy`, so a replay is clean.
+
+**Ships on its own.** The application half is live on merge (`m21`):
+`mayChangeFact` is applied on the create path as well as the pencil,
+`rememberConfirmed`'s label probe refuses a row the caller may not write, and
+Add applies the sensitive-category rule. Until 0385 is applied, a member with
+the browser client can still rewrite a parent's household fact over `/rest/v1`.
+
+**Evidence.** `docs/audit/a-member-only-rewrites-their-own-memory-check.sql` —
+its negative control runs first (the same teen rewrites HER OWN ordinary memory
+with the very statement the refusals use, and it must land), then the teen's
+UPDATE, `created_by` claim, `member_id` re-point and DELETE of the household's
+and her sibling's memories must each be refused, with SELECT shown still open
+to the household. Mutation-tested three ways on private clones: as written
+(exit 0), the policy loosened to 0264's shape (red on a refusal), a decoy
+refusing every write with the guard intact (red on the control).
+`tests/the-add-form-is-not-a-way-around-the-memory-edit-gate.test.ts` covers the
+service half and reads this file's text for the rule it mirrors.
+
+**Not closed, named so it is not assumed closed.** Ownership keys on
+`created_by`, which is set on INSERT only: a manager who corrects a fact a teen
+filed does not take it over, so the teen can still rewrite the corrected value
+(recorded under SRV-001 as a residual). And INSERT stays open on the ordinary
+categories with no uniqueness on (family_id, member_id, label), so a second
+"Emergency contact" row can be filed beside the parent's over `/rest/v1`; the
+app's Add path refuses it, RLS does not.
+
+### `0386` lets a family subscribe to a calendar URL once — unapplied
+
+`0386_a_family_subscribes_to_a_calendar_url_once.sql` (SRV-001 lead `m36`).
 0045 created `calendar_feeds` with `url text not null` and no uniqueness on it.
 `addCalendarFeed` inserted the row, committed it, then tried the first sync;
 when that sync failed (a school calendar behind a login, a timeout, a file over
@@ -2630,7 +2630,7 @@ delete cascade`, 0045) and a member may have edited the copy that would go.
 refuses a normalized URL over 2048 characters before it reaches the index,
 removes a row it created whose first sync failed (and says so when it cannot),
 and catches 23505 from the index by re-reading and syncing the winner's row.
-Until 0363 is applied, two members adding the same calendar in the same moment
+Until 0386 is applied, two members adding the same calendar in the same moment
 can still both insert.
 
 **Evidence.** `docs/audit/a-family-subscribes-to-a-calendar-url-once-check.sql`
@@ -2645,9 +2645,9 @@ subscription, an already-subscribed URL is re-synced rather than added, the
 loser of a same-moment race syncs the winner's row, a failed lookup adds
 nothing, and an over-long link is refused before anything is saved.
 
-### `0365` puts the publish lock and a trip's document link in the database — unapplied
+### `0387` puts the publish lock and a trip's document link in the database — unapplied
 
-`0365_a_child_cannot_lift_the_publish_lock_or_link_a_document_they_cannot_read.sql`
+`0387_a_child_cannot_lift_the_publish_lock_or_link_a_document_they_cannot_read.sql`
 (AUTHZ-011). Three guards, one migration:
 
 - **`social_settings`**: three RESTRICTIVE policies (insert, update, delete) on

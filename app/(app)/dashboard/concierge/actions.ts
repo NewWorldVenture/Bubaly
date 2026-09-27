@@ -306,7 +306,7 @@ export async function dismissQueuedRunAction(runId: string): Promise<Result> {
   // The decline half of the same rule as the approve half above. When the run
   // is gated by an approval that is still open, "Dismiss" is a "no" on that
   // approval, and it goes through `decide()` exactly as the approval card's
-  // Decline does: the caller's own vote is recorded (0344 refuses any other
+  // Decline does: the caller's own vote is recorded (0381 refuses any other
   // shape), the trust audit gets its decision row, and `decide` closes this run
   // on its `metadata->>approval_id`. Writing `status = 'rejected'` here directly
   // skipped the audit and was a second decision surface.

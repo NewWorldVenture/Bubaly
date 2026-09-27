@@ -289,10 +289,10 @@ describe('a save that renames the page retires the answers filed under its old p
   });
 });
 
-describe('migration 0355 is wired into the CI probe run that executes it (a wiring guard; the SQL is proved by the probes)', () => {
+describe('migration 0383 is wired into the CI probe run that executes it (a wiring guard; the SQL is proved by the probes)', () => {
   // The actions above are the fast path; they are not the guarantee. The cron
   // worker, the backfill scripts and the SQL editor all write these tables
-  // without going through an action, and 0355's triggers are what cover them.
+  // without going through an action, and 0383's triggers are what cover them.
   //
   // Vitest has no Postgres, and a regex over the SQL proves nothing about what it
   // does — the first cut of this file pinned the very WHEN clause whose function
@@ -301,7 +301,7 @@ describe('migration 0355 is wired into the CI probe run that executes it (a wiri
   // (docs/audit/run-probes.sh, globbing docs/audit/*-check.sql) after replaying
   // every migration into pgvector/pgvector:pg16. Between them they execute every
   // take-down shape as the roles that really write, assert what anon can read,
-  // re-apply 0355 over the drifted answers /admin/marketing/aeo can produce, and
+  // re-apply 0383 over the drifted answers /admin/marketing/aeo can produce, and
   // carry negative controls that restore the first cut and go red.
   //
   // What THIS case guards is only that wiring — delete a probe, stop the runner
@@ -324,7 +324,7 @@ describe('migration 0355 is wired into the CI probe run that executes it (a wiri
     // drifted data (by including the migration file itself), and a negative
     // control that restores the first cut's WHEN clause.
     const companion = await read('docs/audit/a-renamed-page-leaves-no-public-answer-behind-check.sql');
-    expect(companion).toContain('\\ir ../../supabase/migrations/0355_an_archived_page_takes_its_public_answers_with_it.sql');
+    expect(companion).toContain('\\ir ../../supabase/migrations/0383_an_archived_page_takes_its_public_answers_with_it.sql');
     expect(companion).toContain('has_function_privilege(\'anon\', \'public.retire_marketing_aeo_on_page_hidden()\', \'EXECUTE\')');
     expect(companion).toMatch(/Negative control/);
     expect(companion).toMatch(/^rollback;\s*$/m);

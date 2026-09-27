@@ -1,4 +1,4 @@
--- Bubaly :: 0356 The urgent fallback number is stored the only way it can be used
+-- Bubaly :: 0384 The urgent fallback number is stored the only way it can be used
 -- ----------------------------------------------------------------------------
 -- `public.family_contact_channels.forward_to_phone` is the number the family
 -- says to call or text when something at their Contact Center line is urgent.
@@ -55,7 +55,7 @@
 alter table public.family_contact_channels
   add column if not exists forward_to_phone_legacy text;
 comment on column public.family_contact_channels.forward_to_phone_legacy is
-  'The forward_to_phone value 0356 replaced when it normalized or cleared the row; null when the row was not changed. Never read by the app.';
+  'The forward_to_phone value 0384 replaced when it normalized or cleared the row; null when the row was not changed. Never read by the app.';
 
 -- 2. Normalize what is already stored, exactly as lib/contact-center/phone.ts
 --    `normalizeFallbackPhone` does: a value that starts with '+' and holds only

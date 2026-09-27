@@ -59,7 +59,7 @@ export function normalizeFallbackPhone(
   const typed = input.trim();
   if (!typed) return { ok: true, value: null };
   // A plus, then digits and the spacing/punctuation people put between them.
-  // Mirrored in supabase/migrations/0356 for the rows written before this.
+  // Mirrored in supabase/migrations/0384 for the rows written before this.
   if (!/^\+[\d\s().-]+$/.test(typed)) return { ok: false };
   const e164 = `+${typed.replace(/\D/g, '')}`;
   return isE164(e164) ? { ok: true, value: e164 } : { ok: false };

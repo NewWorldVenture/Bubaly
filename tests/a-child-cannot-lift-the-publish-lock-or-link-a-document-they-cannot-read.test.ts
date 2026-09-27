@@ -570,7 +570,7 @@ describe('a document a trip links does not leave that trip’s household', () =>
 
   it('a linked document cannot be moved into another household', () => {
     // documents_update (0266) admits a member of both households moving an
-    // ordinary document; before 0365 that left the trip pointing across.
+    // ordinary document; before 0387 that left the trip pointing across.
     expect(documentUpdateAccepted(MOVE, true)).toBe(false);
     // A client that re-sends the whole row with the new household.
     expect(documentUpdateAccepted({ columns: ['title', 'family_id', 'is_favorite'], changesFamily: true }, true)).toBe(false);

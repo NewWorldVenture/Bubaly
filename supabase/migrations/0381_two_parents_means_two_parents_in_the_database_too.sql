@@ -1,4 +1,4 @@
--- Bubaly :: 0344 - two parents means two parents in the database too
+-- Bubaly :: 0381 - two parents means two parents in the database too
 --
 -- Settings -> Trust & Permissions offers three approval models
 -- (components/modules/trust-module.tsx:449-453): "Just one parent or adult",
@@ -243,7 +243,7 @@ end;
 $$;
 
 comment on function public.approval_votes_satisfy(uuid, text, integer, jsonb) is
-  'Does approval_requests.approvals hold enough real, distinct, correctly-roled yeses for this row''s approval_model/required_approvals? Mirrors thresholdFor + countingApprovals in lib/approvals/threshold.ts and lib/services/approvals/index.ts. SECURITY INVOKER: it counts only members the caller can already see (0344).';
+  'Does approval_requests.approvals hold enough real, distinct, correctly-roled yeses for this row''s approval_model/required_approvals? Mirrors thresholdFor + countingApprovals in lib/approvals/threshold.ts and lib/services/approvals/index.ts. SECURITY INVOKER: it counts only members the caller can already see (0381).';
 
 revoke all on function public.approval_votes_satisfy(uuid, text, integer, jsonb) from public, anon;
 grant execute on function public.approval_votes_satisfy(uuid, text, integer, jsonb) to authenticated, service_role;
@@ -278,7 +278,7 @@ begin
   --    adding a vote in their name, and is refused.
   if v_new is distinct from v_old then
     if jsonb_typeof(v_new) <> 'array' then
-      raise exception 'approval votes must be a list (0344)'
+      raise exception 'approval votes must be a list (0381)'
         using errcode = '42501';
     end if;
     if jsonb_typeof(v_old) <> 'array' then
@@ -304,7 +304,7 @@ begin
     );
 
     if v_added > 1 or v_foreign > 0 then
-      raise exception 'a vote on an approval can only be cast by the member it names, one at a time (0344)'
+      raise exception 'a vote on an approval can only be cast by the member it names, one at a time (0381)'
         using errcode = '42501';
     end if;
   end if;
@@ -314,7 +314,7 @@ begin
   --    rule a row was filed under is the one it is decided under.
   if new.status in ('approved', 'modified') and new.status is distinct from old.status then
     if not public.approval_votes_satisfy(old.family_id, old.approval_model, old.required_approvals, v_new) then
-      raise exception 'this approval does not have the yeses its % rule needs yet (0344)',
+      raise exception 'this approval does not have the yeses its % rule needs yet (0381)',
         coalesce(old.approval_model, 'single')
         using errcode = '42501';
     end if;
@@ -325,7 +325,7 @@ end;
 $$;
 
 comment on function public.approval_decision_is_earned() is
-  'BEFORE UPDATE on approval_requests, for callers subject to RLS: an UPDATE may add at most one vote and only in the caller''s own name, and a transition into approved/modified must satisfy approval_votes_satisfy for the row''s own model (0344).';
+  'BEFORE UPDATE on approval_requests, for callers subject to RLS: an UPDATE may add at most one vote and only in the caller''s own name, and a transition into approved/modified must satisfy approval_votes_satisfy for the row''s own model (0381).';
 
 revoke all on function public.approval_decision_is_earned() from public, anon, authenticated;
 
@@ -344,12 +344,12 @@ as $$
 begin
   if new.approval_model is distinct from old.approval_model then
     raise exception
-      'approval_model cannot change after the request is filed (0344): % -> %',
+      'approval_model cannot change after the request is filed (0381): % -> %',
       old.approval_model, new.approval_model;
   end if;
   if new.required_approvals is distinct from old.required_approvals then
     raise exception
-      'required_approvals cannot change after the request is filed (0344): % -> %',
+      'required_approvals cannot change after the request is filed (0381): % -> %',
       old.required_approvals, new.required_approvals;
   end if;
   return new;
@@ -357,7 +357,7 @@ end;
 $$;
 
 comment on function public.approval_rule_is_immutable() is
-  'Pins approval_requests.approval_model and required_approvals for the life of the row. Without it the decision rule in approval_decision_is_earned is one extra PATCH away: set approval_model=''single'', then flip status to approved (0344).';
+  'Pins approval_requests.approval_model and required_approvals for the life of the row. Without it the decision rule in approval_decision_is_earned is one extra PATCH away: set approval_model=''single'', then flip status to approved (0381).';
 
 revoke all on function public.approval_rule_is_immutable() from public, anon, authenticated;
 

@@ -1,5 +1,5 @@
 -- ============================================================
--- Migration 0363: a family subscribes to a calendar URL once
+-- Migration 0386: a family subscribes to a calendar URL once
 --
 -- WHY. 0045 created public.calendar_feeds with `url text NOT NULL` and no
 -- uniqueness on it — its only index is the non-unique idx_calendar_feeds_family.
@@ -74,7 +74,7 @@ begin
 
   if n_groups > 0 then
     raise exception
-      'calendar_feeds already holds % duplicated calendar subscription(s); resolve them before applying 0363:%    %',
+      'calendar_feeds already holds % duplicated calendar subscription(s); resolve them before applying 0386:%    %',
       n_groups, E'\n', blockers
       using hint = 'Keep one row per group (normally the one with last_status = ''ok'' and the most events) and delete the others; their imported events go with them and the kept row re-imports on its next sync. Rows that were never synced (last_synced_at = never, events = 0) are the abandoned first attempts this migration exists to stop. Then re-run this migration.';
   end if;

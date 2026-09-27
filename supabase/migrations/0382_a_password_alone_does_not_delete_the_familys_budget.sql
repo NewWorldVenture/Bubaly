@@ -1,4 +1,4 @@
--- Bubaly :: 0345 - a password alone does not delete the family's budget
+-- Bubaly :: 0382 - a password alone does not delete the family's budget
 --
 -- Two-step sign-in (lib/auth/mfa.ts, lib/auth/require-aal2.ts) is an OPT-IN
 -- control a family turns on so that a stolen password cannot reach the money.

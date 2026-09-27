@@ -23,7 +23,7 @@ const sources = Object.fromEntries([
   'lib/time/local-day.ts',
   'lib/supabase/errors.ts', 'lib/schedule/zoned.ts',
   // budgets-view and savings-view route a refused money write through
-  // reportRefusal, which sends an aal1 session to the step-up page (0345's
+  // reportRefusal, which sends an aal1 session to the step-up page (0382's
   // application half); it reads its path from lib/auth/mfa.
   'lib/auth/step-up-client.ts', 'lib/auth/mfa.ts',
 ].map(file => [`@/${file.replace(/\.tsx?$/, '')}`, ts.transpileModule(fs.readFileSync(file, 'utf8'), {

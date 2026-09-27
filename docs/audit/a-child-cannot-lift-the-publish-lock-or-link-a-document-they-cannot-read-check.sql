@@ -1,14 +1,14 @@
 -- ── AUTHZ-011 A child cannot lift the publish lock, or link a document they
 --    cannot read ──────────────────────────────────────────────────────────────
 --
--- Two guards from `0365_a_child_cannot_lift_the_publish_lock_or_link_a_document_they_cannot_read.sql`, proven
+-- Two guards from `0387_a_child_cannot_lift_the_publish_lock_or_link_a_document_they_cannot_read.sql`, proven
 -- behaviourally, each with its NEGATIVE CONTROL FIRST.
 --
 -- 1. public.social_settings. The app writes it only after
 --    requireSocialPermission(fid, 'manage_settings'); 0034 left INSERT, UPDATE
 --    and DELETE on bare is_family_member(family_id). `require_approval` on this
 --    row is the family's stop on publishing (needsPublishApproval), and a
---    missing row reads as "no approval". 0365 adds three RESTRICTIVE policies
+--    missing row reads as "no approval". 0387 adds three RESTRICTIVE policies
 --    on social_has_permission(family_id, 'manage_settings').
 --
 --    CONTROL: the SAME teen, the SAME row, the SAME statements. First the teen
@@ -38,7 +38,7 @@
 -- 2. public.vacation_documents.document_id. The Trip -> Documents form is open
 --    to every member for its eight form columns and never writes document_id;
 --    the only writer of document_id is linkToVacation, which refuses a foreign
---    family's document and a sensitive one for a non-manager. 0365 adds a
+--    family's document and a sensitive one for a non-manager. 0387 adds a
 --    SECURITY INVOKER BEFORE trigger that asks, as the caller, whether the
 --    document is visible (documents_select) and in the row's family.
 --
@@ -57,7 +57,7 @@
 --
 -- 3. The other direction. documents_update lets a member of two households
 --    move a non-sensitive document between them, which would leave a trip row
---    pointing across households. 0365 adds a SECURITY DEFINER BEFORE UPDATE OF
+--    pointing across households. 0387 adds a SECURITY DEFINER BEFORE UPDATE OF
 --    family_id trigger on documents that refuses the move while a trip in
 --    another household links the document.
 --
@@ -76,15 +76,15 @@
 --   PGHOST=… PGPORT=… PGUSER=… PGDATABASE=bubaly \
 --     psql -v ON_ERROR_STOP=1 -f docs/audit/a-child-cannot-lift-the-publish-lock-or-link-a-document-they-cannot-read-check.sql
 
-\set FA '00000000-0000-4000-8000-000000365a00'
-\set UP '00000000-0000-4000-8000-000000365a01'
-\set UK '00000000-0000-4000-8000-000000365a02'
-\set UT '00000000-0000-4000-8000-000000365a03'
-\set UA '00000000-0000-4000-8000-000000365a04'
-\set US '00000000-0000-4000-8000-000000365a05'
-\set UD '00000000-0000-4000-8000-000000365a06'
-\set FX '00000000-0000-4000-8000-000000365b00'
-\set UX '00000000-0000-4000-8000-000000365b01'
+\set FA '00000000-0000-4000-8000-000000387a00'
+\set UP '00000000-0000-4000-8000-000000387a01'
+\set UK '00000000-0000-4000-8000-000000387a02'
+\set UT '00000000-0000-4000-8000-000000387a03'
+\set UA '00000000-0000-4000-8000-000000387a04'
+\set US '00000000-0000-4000-8000-000000387a05'
+\set UD '00000000-0000-4000-8000-000000387a06'
+\set FX '00000000-0000-4000-8000-000000387b00'
+\set UX '00000000-0000-4000-8000-000000387b01'
 
 begin;
 
@@ -105,16 +105,16 @@ insert into public.families (id, name, created_by) values (:'FX','The Other Hous
 -- upserted rather than assumed, because a seed whose roles are wrong proves
 -- nothing.
 insert into public.family_members (id, family_id, user_id, display_name, role, is_active) values
-  ('00000000-0000-4000-8000-000000365a31',:'FA',:'UP','Parent','parent',true),
-  ('00000000-0000-4000-8000-000000365a32',:'FA',:'UK','Child','child',true),
-  ('00000000-0000-4000-8000-000000365a33',:'FA',:'UT','Teen','teen',true),
-  ('00000000-0000-4000-8000-000000365a34',:'FA',:'UA','Pinned adult','adult',true),
-  ('00000000-0000-4000-8000-000000365a35',:'FA',:'US','Social-manager teen','teen',true),
-  ('00000000-0000-4000-8000-000000365a36',:'FA',:'UD','Adult','adult',true),
+  ('00000000-0000-4000-8000-000000387a31',:'FA',:'UP','Parent','parent',true),
+  ('00000000-0000-4000-8000-000000387a32',:'FA',:'UK','Child','child',true),
+  ('00000000-0000-4000-8000-000000387a33',:'FA',:'UT','Teen','teen',true),
+  ('00000000-0000-4000-8000-000000387a34',:'FA',:'UA','Pinned adult','adult',true),
+  ('00000000-0000-4000-8000-000000387a35',:'FA',:'US','Social-manager teen','teen',true),
+  ('00000000-0000-4000-8000-000000387a36',:'FA',:'UD','Adult','adult',true),
   -- The same child is also a member of the other household, so that household's
   -- ordinary documents are VISIBLE to them — the cross-family refusal below is
   -- then the same-family clause talking, not invisibility.
-  ('00000000-0000-4000-8000-000000365b32',:'FX',:'UK','Child (visiting)','child',true)
+  ('00000000-0000-4000-8000-000000387b32',:'FX',:'UK','Child (visiting)','child',true)
   on conflict (family_id, user_id) do update set role = excluded.role, is_active = true;
 
 -- Social-role overrides a parent set: the adult pinned to read_only, and the
@@ -131,39 +131,39 @@ insert into public.social_settings (family_id, require_approval, signature, crea
 
 -- A trip and four documents.
 insert into public.vacations (id, family_id, title, created_by)
-  values ('00000000-0000-4000-8000-000000365a10',:'FA','Lisbon',:'UP') on conflict do nothing;
+  values ('00000000-0000-4000-8000-000000387a10',:'FA','Lisbon',:'UP') on conflict do nothing;
 insert into public.documents (id, family_id, title, category, storage_path, is_secure, created_by) values
   -- ordinary: every member may see and link it
-  ('00000000-0000-4000-8000-000000365a11',:'FA','Hotel itinerary','Itinerary',
-     '00000000-0000-4000-8000-000000365a00/itinerary.pdf', false, :'UP'),
+  ('00000000-0000-4000-8000-000000387a11',:'FA','Hotel itinerary','Itinerary',
+     '00000000-0000-4000-8000-000000387a00/itinerary.pdf', false, :'UP'),
   -- in the Secure Vault
-  ('00000000-0000-4000-8000-000000365a12',:'FA','Vault deed','general',
-     '00000000-0000-4000-8000-000000365a00/deed.pdf', true, :'UP'),
+  ('00000000-0000-4000-8000-000000387a12',:'FA','Vault deed','general',
+     '00000000-0000-4000-8000-000000387a00/deed.pdf', true, :'UP'),
   -- sensitive by CATEGORY alone (is_secure false), the case 0312 widened
-  ('00000000-0000-4000-8000-000000365a13',:'FA','Parent passport','Passports & IDs',
-     '00000000-0000-4000-8000-000000365a00/passport.pdf', false, :'UP'),
+  ('00000000-0000-4000-8000-000000387a13',:'FA','Parent passport','Passports & IDs',
+     '00000000-0000-4000-8000-000000387a00/passport.pdf', false, :'UP'),
   -- an ordinary document of the OTHER household
-  ('00000000-0000-4000-8000-000000365b11',:'FX','Other house itinerary','Itinerary',
-     '00000000-0000-4000-8000-000000365b00/itinerary.pdf', false, :'UX')
+  ('00000000-0000-4000-8000-000000387b11',:'FX','Other house itinerary','Itinerary',
+     '00000000-0000-4000-8000-000000387b00/itinerary.pdf', false, :'UX')
   on conflict do nothing;
 
 -- The row a PARENT linked to the vault document, through linkToVacation.
 insert into public.vacation_documents (id, family_id, vacation_id, document_id, kind, title, notes, created_by)
-  values ('00000000-0000-4000-8000-000000365a20',:'FA','00000000-0000-4000-8000-000000365a10',
-          '00000000-0000-4000-8000-000000365a12','other','Vault deed','', :'UP');
+  values ('00000000-0000-4000-8000-000000387a20',:'FA','00000000-0000-4000-8000-000000387a10',
+          '00000000-0000-4000-8000-000000387a12','other','Vault deed','', :'UP');
 
 -- ════════════════════════════════════════════════════════════════════════════
 -- 1. social_settings
 -- ════════════════════════════════════════════════════════════════════════════
 do $$
 declare
-  fam   constant uuid := '00000000-0000-4000-8000-000000365a00';
-  up    constant uuid := '00000000-0000-4000-8000-000000365a01';
-  uk    constant uuid := '00000000-0000-4000-8000-000000365a02';
-  ut    constant uuid := '00000000-0000-4000-8000-000000365a03';
-  ua    constant uuid := '00000000-0000-4000-8000-000000365a04';
-  us    constant uuid := '00000000-0000-4000-8000-000000365a05';
-  ud    constant uuid := '00000000-0000-4000-8000-000000365a06';
+  fam   constant uuid := '00000000-0000-4000-8000-000000387a00';
+  up    constant uuid := '00000000-0000-4000-8000-000000387a01';
+  uk    constant uuid := '00000000-0000-4000-8000-000000387a02';
+  ut    constant uuid := '00000000-0000-4000-8000-000000387a03';
+  ua    constant uuid := '00000000-0000-4000-8000-000000387a04';
+  us    constant uuid := '00000000-0000-4000-8000-000000387a05';
+  ud    constant uuid := '00000000-0000-4000-8000-000000387a06';
   n int;
   ok boolean;
   still_locked boolean;
@@ -374,20 +374,20 @@ end $$;
 -- ════════════════════════════════════════════════════════════════════════════
 do $$
 declare
-  fam      constant uuid := '00000000-0000-4000-8000-000000365a00';
-  other    constant uuid := '00000000-0000-4000-8000-000000365b00';
-  up       constant uuid := '00000000-0000-4000-8000-000000365a01';
-  uk       constant uuid := '00000000-0000-4000-8000-000000365a02';
-  trip     constant uuid := '00000000-0000-4000-8000-000000365a10';
-  d_plain  constant uuid := '00000000-0000-4000-8000-000000365a11';
-  d_vault  constant uuid := '00000000-0000-4000-8000-000000365a12';
-  d_pass   constant uuid := '00000000-0000-4000-8000-000000365a13';
-  d_other  constant uuid := '00000000-0000-4000-8000-000000365b11';
-  r_linked constant uuid := '00000000-0000-4000-8000-000000365a20';
-  r_mine   constant uuid := '00000000-0000-4000-8000-000000365a21';
-  r_try    constant uuid := '00000000-0000-4000-8000-000000365a22';
-  r_parent constant uuid := '00000000-0000-4000-8000-000000365a23';
-  r_server constant uuid := '00000000-0000-4000-8000-000000365a24';
+  fam      constant uuid := '00000000-0000-4000-8000-000000387a00';
+  other    constant uuid := '00000000-0000-4000-8000-000000387b00';
+  up       constant uuid := '00000000-0000-4000-8000-000000387a01';
+  uk       constant uuid := '00000000-0000-4000-8000-000000387a02';
+  trip     constant uuid := '00000000-0000-4000-8000-000000387a10';
+  d_plain  constant uuid := '00000000-0000-4000-8000-000000387a11';
+  d_vault  constant uuid := '00000000-0000-4000-8000-000000387a12';
+  d_pass   constant uuid := '00000000-0000-4000-8000-000000387a13';
+  d_other  constant uuid := '00000000-0000-4000-8000-000000387b11';
+  r_linked constant uuid := '00000000-0000-4000-8000-000000387a20';
+  r_mine   constant uuid := '00000000-0000-4000-8000-000000387a21';
+  r_try    constant uuid := '00000000-0000-4000-8000-000000387a22';
+  r_parent constant uuid := '00000000-0000-4000-8000-000000387a23';
+  r_server constant uuid := '00000000-0000-4000-8000-000000387a24';
   n int;
   failures text[] := '{}';
   control_ok boolean := true;
@@ -574,16 +574,16 @@ end $$;
 -- ════════════════════════════════════════════════════════════════════════════
 do $$
 declare
-  fam      constant uuid := '00000000-0000-4000-8000-000000365a00';
-  other    constant uuid := '00000000-0000-4000-8000-000000365b00';
-  up       constant uuid := '00000000-0000-4000-8000-000000365a01';
-  uk       constant uuid := '00000000-0000-4000-8000-000000365a02';
-  trip     constant uuid := '00000000-0000-4000-8000-000000365a10';
-  d_free   constant uuid := '00000000-0000-4000-8000-000000365a14';
-  d_move   constant uuid := '00000000-0000-4000-8000-000000365a15';
-  d_server constant uuid := '00000000-0000-4000-8000-000000365a16';
-  r_move   constant uuid := '00000000-0000-4000-8000-000000365a25';
-  r_server constant uuid := '00000000-0000-4000-8000-000000365a26';
+  fam      constant uuid := '00000000-0000-4000-8000-000000387a00';
+  other    constant uuid := '00000000-0000-4000-8000-000000387b00';
+  up       constant uuid := '00000000-0000-4000-8000-000000387a01';
+  uk       constant uuid := '00000000-0000-4000-8000-000000387a02';
+  trip     constant uuid := '00000000-0000-4000-8000-000000387a10';
+  d_free   constant uuid := '00000000-0000-4000-8000-000000387a14';
+  d_move   constant uuid := '00000000-0000-4000-8000-000000387a15';
+  d_server constant uuid := '00000000-0000-4000-8000-000000387a16';
+  r_move   constant uuid := '00000000-0000-4000-8000-000000387a25';
+  r_server constant uuid := '00000000-0000-4000-8000-000000387a26';
   n int;
   failures text[] := '{}';
   control_ok boolean := true;

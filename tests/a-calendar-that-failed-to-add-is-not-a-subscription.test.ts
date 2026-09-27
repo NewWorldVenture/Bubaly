@@ -345,7 +345,7 @@ describe('a lookup of the family’s calendars that fails', () => {
 });
 
 describe('a link longer than the one-subscription-per-URL index can hold', () => {
-  // uq_calendar_feeds_family_url (0363) is a btree over url; Postgres refuses an
+  // uq_calendar_feeds_family_url (0386) is a btree over url; Postgres refuses an
   // entry over ~2.7 KB with 54000, whose raw message would reach the family.
   const BASE = `${STORED}?token=`;
   const ofLength = (n: number) => BASE + 'a'.repeat(n - BASE.length);

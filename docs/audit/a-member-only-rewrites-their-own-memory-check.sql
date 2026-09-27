@@ -1,8 +1,8 @@
--- ── A member only rewrites their own memory (0357) ──────────────────────────
+-- ── A member only rewrites their own memory (0385) ──────────────────────────
 --
--- HOLDS: supabase/migrations/0357_a_member_only_rewrites_their_own_memory.sql
+-- HOLDS: supabase/migrations/0385_a_member_only_rewrites_their_own_memory.sql
 --
--- Before 0357, `family_facts_update` (0264) narrowed the table by CATEGORY
+-- Before 0385, `family_facts_update` (0264) narrowed the table by CATEGORY
 -- only: on every ordinary category any member of the household could UPDATE
 -- any row. `lib/services/memory/index.ts factForWrite` has always carried a
 -- member rule — keyed on member_id then, on member_id or authorship now
@@ -17,7 +17,7 @@
 -- send `.from('family_facts').update({ value }).eq('id', …)` — and the row the
 -- family reads back when someone asks "who do we call?" (a household-level
 -- "Emergency contact" a parent entered, member_id null) became whatever she
--- typed. 0357 adds `can_manage_family(family_id) or is_self_member(member_id)
+-- typed. 0385 adds `can_manage_family(family_id) or is_self_member(member_id)
 -- or created_by = auth.uid()` to UPDATE's USING and WITH CHECK and to DELETE's
 -- USING, keeping 0264's category gate on both. The author branch is there
 -- because INSERT stays open: a member may file a household or sibling fact,
@@ -35,7 +35,7 @@
 --      wording, not as "anything raised"). The ONE way past that is measured
 --      too (3c): re-pointing it AND writing her own uid into created_by in the
 --      same statement LANDS, because WITH CHECK then passes on the author
---      branch. 0357 accepts that on purpose — `created_by` is not pinned, and
+--      branch. 0385 accepts that on purpose — `created_by` is not pinned, and
 --      the end state (a row she owns, about her sibling) is one she reaches
 --      anyway by forgetting the parent's row (9's control) and filing her own
 --      (6b) — so this file asserts it lands rather than letting claim 3 read
@@ -48,7 +48,7 @@
 --   5. 0264's category gate survived the rewrite of the policy, measured with
 --      WHERE-less statements so the SELECT policy — which carries the same
 --      gate — is never consulted and cannot be the thing that said no;
---   6. what 0357 deliberately left alone is still alone: the teen still SEES
+--   6. what 0385 deliberately left alone is still alone: the teen still SEES
 --      the household's and her sibling's memories, and still INSERTS a
 --      household-level one;
 --   7. a parent AND an adult still can do all of 1–4 (a guard that refuses
@@ -63,19 +63,19 @@
 --  10. the policies' text still names the rule — `is_self_member`,
 --      `created_by = auth.uid()` and 0264's medical/account gate on UPDATE's
 --      USING and WITH CHECK and on DELETE's USING — the same shape check
---      0357's own Verify block makes at migration time, re-made here against
+--      0385's own Verify block makes at migration time, re-made here against
 --      the schema every later migration has been replayed onto.
 --
 -- ── ONE STATEMENT ───────────────────────────────────────────────────────────
 -- Every UPDATE attempt below — the control, every refusal, the managers' — is
--- the SAME SQL TEXT, `q0357_stmt`, run through `EXECUTE … USING`. Only the
+-- the SAME SQL TEXT, `q0385_stmt`, run through `EXECUTE … USING`. Only the
 -- parameters differ: which row, and which member it ends up about. Its SET list
 -- is the union of the two app writers: `rememberConfirmed`'s value, category,
 -- notes, is_pinned, expires_at, and the pencil's label and member_id. So no
 -- attempt can be refused for naming a column the control did not name.
 --
 -- Three attempts step outside that text on purpose, and each says why where it
--- runs: 3c is q0357_stmt's SET list plus `created_by`, the one column the
+-- runs: 3c is q0385_stmt's SET list plus `created_by`, the one column the
 -- control never writes; 4c writes `created_by` alone and so carries its own
 -- control on the row about her first; 5 drops the WHERE clause so that only
 -- the UPDATE policy is consulted.
@@ -89,7 +89,7 @@
 --
 -- ── NEGATIVE CONTROL, and it runs FIRST ─────────────────────────────────────
 -- The same teen runs the same statement against HER OWN ordinary row, keeping
--- it hers (`member_id = her member`). Under 0357 that is exactly the case the
+-- it hers (`member_id = her member`). Under 0385 that is exactly the case the
 -- self rule lets through, and it MUST land — one row. If it does not, the
 -- probe raises "UNPROVEN" before any refusal is read, because every refusal
 -- below would then be a refusal with no attribution:
@@ -112,7 +112,7 @@
 -- the UPDATE policy's answer, not the SELECT policy's.
 --
 -- Each attempt runs in its own subtransaction and is undone after its row
--- count is taken (`pg_temp.q0357_try` raises a private SQLSTATE to roll it
+-- count is taken (`pg_temp.q0385_try` raises a private SQLSTATE to roll it
 -- back), so a breach in one attempt cannot change what the next one measures.
 --
 -- Run against a throwaway instance (docs/audit/verify-pg.sh up):
@@ -120,9 +120,9 @@
 --   PGHOST=/tmp/pgaudit_db PGPORT=54399 PGUSER=postgres PGDATABASE=bubaly \
 --     psql -v ON_ERROR_STOP=1 -f docs/audit/a-member-only-rewrites-their-own-memory-check.sql
 --
--- Without 0357 (0264's policies) this file fails on refusals 1, 2, 3, 3b, 4,
+-- Without 0385 (0264's policies) this file fails on refusals 1, 2, 3, 3b, 4,
 -- 4b, 4c, 5a, both DELETE refusals in 9, and 10, with "a teen REWROTE …" /
--- "RE-POINTED …" / "CLAIMED …" / "FORGOT …"; with 0357's author branch removed
+-- "RE-POINTED …" / "CLAIMED …" / "FORGOT …"; with 0385's author branch removed
 -- it fails on 8 (three times), 5a, 3c and 10; with DELETE alone put back to
 -- 0264 it fails on 9 and 10; with UPDATE revoked from `authenticated` it fails
 -- on the control with "UNPROVEN"; with DELETE revoked, on 9's control with
@@ -130,28 +130,28 @@
 -- created_by, on 4c's control with "UNPROVEN for created_by". Each of those
 -- was run against the replayed schema when this file was last changed.
 
-\set F   '03570357-0357-4357-8357-000000000001'
-\set UP  '03570357-0357-4357-8357-000000000002'
-\set UT  '03570357-0357-4357-8357-000000000003'
-\set US  '03570357-0357-4357-8357-000000000004'
-\set UA  '03570357-0357-4357-8357-000000000005'
-\set MT  '03570357-0357-4357-8357-000000000011'
-\set MS  '03570357-0357-4357-8357-000000000012'
-\set MA  '03570357-0357-4357-8357-000000000013'
-\set RH  '03570357-0357-4357-8357-000000000021'
-\set RS  '03570357-0357-4357-8357-000000000022'
-\set RT  '03570357-0357-4357-8357-000000000023'
-\set RM  '03570357-0357-4357-8357-000000000024'
-\set RA  '03570357-0357-4357-8357-000000000025'
+\set F   '03850385-0385-4357-8357-000000000001'
+\set UP  '03850385-0385-4357-8357-000000000002'
+\set UT  '03850385-0385-4357-8357-000000000003'
+\set US  '03850385-0385-4357-8357-000000000004'
+\set UA  '03850385-0385-4357-8357-000000000005'
+\set MT  '03850385-0385-4357-8357-000000000011'
+\set MS  '03850385-0385-4357-8357-000000000012'
+\set MA  '03850385-0385-4357-8357-000000000013'
+\set RH  '03850385-0385-4357-8357-000000000021'
+\set RS  '03850385-0385-4357-8357-000000000022'
+\set RT  '03850385-0385-4357-8357-000000000023'
+\set RM  '03850385-0385-4357-8357-000000000024'
+\set RA  '03850385-0385-4357-8357-000000000025'
 
 begin;
 
 -- ── Seed, as postgres ───────────────────────────────────────────────────────
 insert into auth.users (id, email) values
-  (:'UP', 'q0357-parent@example.com'),
-  (:'UT', 'q0357-teen@example.com'),
-  (:'US', 'q0357-sibling@example.com'),
-  (:'UA', 'q0357-adult@example.com')
+  (:'UP', 'q0385-parent@example.com'),
+  (:'UT', 'q0385-teen@example.com'),
+  (:'US', 'q0385-sibling@example.com'),
+  (:'UA', 'q0385-adult@example.com')
 on conflict do nothing;
 
 insert into public.families (id, name, created_by)
@@ -184,7 +184,7 @@ insert into public.family_facts (id, family_id, member_id, category, label, valu
 -- $4 category), records the row count or the error, and UNDOES the attempt.
 -- The role switch is made outside the inner block on purpose: a GUC set inside
 -- a subtransaction is reverted when that subtransaction rolls back.
-create function pg_temp.q0357_try(
+create function pg_temp.q0385_try(
   p_actor uuid, p_sql text, p_target uuid, p_dest uuid, p_value text, p_category text,
   out rows_hit int, out err_state text, out err_msg text)
 language plpgsql as $f$
@@ -195,9 +195,9 @@ begin
   begin
     execute p_sql using p_target, p_dest, p_value, p_category;
     get diagnostics rows_hit = row_count;
-    raise exception using errcode = 'P0357', message = 'q0357: undo this attempt';
+    raise exception using errcode = 'P0385', message = 'q0385: undo this attempt';
   exception
-    when sqlstate 'P0357' then null;
+    when sqlstate 'P0385' then null;
     when others then
       rows_hit := null; err_state := sqlstate; err_msg := sqlerrm;
   end;
@@ -209,23 +209,23 @@ $f$;
 
 do $$
 declare
-  fam       constant uuid := '03570357-0357-4357-8357-000000000001';
-  parent_u  constant uuid := '03570357-0357-4357-8357-000000000002';
-  teen_u    constant uuid := '03570357-0357-4357-8357-000000000003';
-  adult_u   constant uuid := '03570357-0357-4357-8357-000000000005';
-  teen_m    constant uuid := '03570357-0357-4357-8357-000000000011';
-  sib_m     constant uuid := '03570357-0357-4357-8357-000000000012';
-  house_row constant uuid := '03570357-0357-4357-8357-000000000021';
-  sib_row   constant uuid := '03570357-0357-4357-8357-000000000022';
-  teen_row  constant uuid := '03570357-0357-4357-8357-000000000023';
-  authored  constant uuid := '03570357-0357-4357-8357-000000000025';
-  planted   constant uuid := '03570357-0357-4357-8357-000000000031';
+  fam       constant uuid := '03850385-0385-4357-8357-000000000001';
+  parent_u  constant uuid := '03850385-0385-4357-8357-000000000002';
+  teen_u    constant uuid := '03850385-0385-4357-8357-000000000003';
+  adult_u   constant uuid := '03850385-0385-4357-8357-000000000005';
+  teen_m    constant uuid := '03850385-0385-4357-8357-000000000011';
+  sib_m     constant uuid := '03850385-0385-4357-8357-000000000012';
+  house_row constant uuid := '03850385-0385-4357-8357-000000000021';
+  sib_row   constant uuid := '03850385-0385-4357-8357-000000000022';
+  teen_row  constant uuid := '03850385-0385-4357-8357-000000000023';
+  authored  constant uuid := '03850385-0385-4357-8357-000000000025';
+  planted   constant uuid := '03850385-0385-4357-8357-000000000031';
 
   -- THE statement. Every UPDATE attempt in this file is this text.
-  q0357_stmt constant text :=
+  q0385_stmt constant text :=
     'update public.family_facts
         set member_id = $2, value = $3, category = $4, label = label,
-            notes = ''q0357: rewritten'', is_pinned = true, expires_at = null
+            notes = ''q0385: rewritten'', is_pinned = true, expires_at = null
       where id = $1';
 
   rls_msg constant text := 'new row violates row-level security policy%"family_facts"%';
@@ -234,7 +234,7 @@ declare
   failures text[] := '{}';
 begin
   -- ══ NEGATIVE CONTROL — the same teen, the same statement, her OWN row ═════
-  select * into r from pg_temp.q0357_try(teen_u, q0357_stmt, teen_row, teen_m,
+  select * into r from pg_temp.q0385_try(teen_u, q0385_stmt, teen_row, teen_m,
     'Aunt Priya — 555 0144 (restated by her)', 'contact');
   if r.err_state is not null or r.rows_hit is distinct from 1 then
     raise exception 'member-memory boundary UNPROVEN: the control — this teen rewriting HER OWN ordinary memory with the very statement the refusals use — did not land (rows=%, %: %). Every refusal below would be unattributed: a missing UPDATE grant, a column revoke, a dead auth.uid() or an unrelated trigger refuses that statement too.',
@@ -249,11 +249,11 @@ begin
   perform set_config('role', 'postgres', true);
   perform set_config('request.jwt.claim.sub', '', true);
   if n <> 2 then
-    raise exception 'member-memory boundary UNPROVEN: this teen sees % of the 2 household/sibling memories. 0357 leaves SELECT open to the household; if that changed on purpose, update this probe — until then a zero-row UPDATE below cannot be told apart from a row she cannot see.', n;
+    raise exception 'member-memory boundary UNPROVEN: this teen sees % of the 2 household/sibling memories. 0385 leaves SELECT open to the household; if that changed on purpose, update this probe — until then a zero-row UPDATE below cannot be told apart from a row she cannot see.', n;
   end if;
 
   -- ══ 1. A teen cannot rewrite the household's memory ═══════════════════════
-  select * into r from pg_temp.q0357_try(teen_u, q0357_stmt, house_row, null,
+  select * into r from pg_temp.q0385_try(teen_u, q0385_stmt, house_row, null,
     'call me instead', 'contact');
   if r.err_state is not null then
     failures := array_append(failures, format('refusal 1 was refused by an ERROR (%s: %s), not by the UPDATE policy''s USING (zero rows) — USING should drop a row that is not hers before any new row is built', r.err_state, r.err_msg));
@@ -262,7 +262,7 @@ begin
   end if;
 
   -- ══ 2. A teen cannot rewrite a sibling's memory ═══════════════════════════
-  select * into r from pg_temp.q0357_try(teen_u, q0357_stmt, sib_row, sib_m,
+  select * into r from pg_temp.q0385_try(teen_u, q0385_stmt, sib_row, sib_m,
     'call me instead', 'contact');
   if r.err_state is not null then
     failures := array_append(failures, format('refusal 2 was refused by an ERROR (%s: %s), not by the UPDATE policy''s USING', r.err_state, r.err_msg));
@@ -273,7 +273,7 @@ begin
   -- ══ 3. A teen cannot push her own row out of her ownership (WITH CHECK) ══
   -- The control's statement, the control's row; only the member it ends up
   -- about is flipped.
-  select * into r from pg_temp.q0357_try(teen_u, q0357_stmt, teen_row, sib_m,
+  select * into r from pg_temp.q0385_try(teen_u, q0385_stmt, teen_row, sib_m,
     'Aunt Priya — 555 0144', 'contact');
   if r.err_state is null then
     failures := array_append(failures, format('a teen RE-POINTED a memory a parent wrote about her at her sibling (%s row) — WITH CHECK does not carry the self rule', r.rows_hit));
@@ -281,7 +281,7 @@ begin
     failures := array_append(failures, format('re-pointing her own memory at a sibling was refused, but not by row-level security (%s: %s)', r.err_state, r.err_msg));
   end if;
 
-  select * into r from pg_temp.q0357_try(teen_u, q0357_stmt, teen_row, null,
+  select * into r from pg_temp.q0385_try(teen_u, q0385_stmt, teen_row, null,
     'Aunt Priya — 555 0144', 'contact');
   if r.err_state is null then
     failures := array_append(failures, format('a teen RE-POINTED a memory a parent wrote about her at the whole family (%s row) — she has turned the parent''s row into a household fact the parents did not file', r.rows_hit));
@@ -292,26 +292,26 @@ begin
   -- 3c: the one way past 3 — the SAME statement with `created_by = <her uid>`
   -- added to its SET list. USING passes on the self branch (the old row is
   -- about her); WITH CHECK passes on the author branch (the new row is hers).
-  -- 3 and 3b hold only because q0357_stmt never writes created_by, so this is
-  -- asserted to LAND: it is what 0357 says it accepts (created_by is not
+  -- 3 and 3b hold only because q0385_stmt never writes created_by, so this is
+  -- asserted to LAND: it is what 0385 says it accepts (created_by is not
   -- pinned; the end state is a forget-and-refile, which 9's control and 6b
   -- prove she may do), and a probe that left it unmeasured would let claim 3
   -- read as "she cannot re-point it" when the policy says "not while it stays
   -- the parent's". If created_by is pinned on purpose later, this fires and
   -- the claim is to be widened — that is a probe out of date, not a breach.
-  select * into r from pg_temp.q0357_try(teen_u,
+  select * into r from pg_temp.q0385_try(teen_u,
     format('update public.family_facts
                set member_id = $2, value = $3, category = $4, label = label,
-                   notes = ''q0357: rewritten'', is_pinned = true, expires_at = null,
+                   notes = ''q0385: rewritten'', is_pinned = true, expires_at = null,
                    created_by = %L
              where id = $1', teen_u),
     teen_row, sib_m, 'Aunt Priya — 555 0144', 'contact');
   if r.err_state is not null or r.rows_hit is distinct from 1 then
-    failures := array_append(failures, format('re-pointing the memory about her at her sibling WHILE taking authorship of it did not land (rows=%s, %s: %s) — 0357 says WITH CHECK passes on the author branch and accepts this as a forget-and-refile; if created_by is now pinned on purpose, widen claim 3 and update this probe', coalesce(r.rows_hit::text, 'none'), coalesce(r.err_state, 'no error'), coalesce(r.err_msg, '-')));
+    failures := array_append(failures, format('re-pointing the memory about her at her sibling WHILE taking authorship of it did not land (rows=%s, %s: %s) — 0385 says WITH CHECK passes on the author branch and accepts this as a forget-and-refile; if created_by is now pinned on purpose, widen claim 3 and update this probe', coalesce(r.rows_hit::text, 'none'), coalesce(r.err_state, 'no error'), coalesce(r.err_msg, '-')));
   end if;
 
   -- ══ 4. A teen cannot CLAIM someone else's memory by making it about her ══
-  select * into r from pg_temp.q0357_try(teen_u, q0357_stmt, house_row, teen_m,
+  select * into r from pg_temp.q0385_try(teen_u, q0385_stmt, house_row, teen_m,
     'call me instead', 'contact');
   if r.err_state is not null then
     failures := array_append(failures, format('claiming the household memory was refused by an ERROR (%s: %s), not by USING', r.err_state, r.err_msg));
@@ -319,7 +319,7 @@ begin
     failures := array_append(failures, format('a teen CLAIMED %s household memory by re-pointing it at herself', r.rows_hit));
   end if;
 
-  select * into r from pg_temp.q0357_try(teen_u, q0357_stmt, sib_row, teen_m,
+  select * into r from pg_temp.q0385_try(teen_u, q0385_stmt, sib_row, teen_m,
     'call me instead', 'contact');
   if r.err_state is not null then
     failures := array_append(failures, format('claiming the sibling''s memory was refused by an ERROR (%s: %s), not by USING', r.err_state, r.err_msg));
@@ -329,13 +329,13 @@ begin
 
   -- 4c: nor by writing her own uid into created_by, which would make the
   -- author branch hand her the row. USING reads the row as it IS, so this is
-  -- the same USING answer as 1, taken on the one column q0357_stmt never
+  -- the same USING answer as 1, taken on the one column q0385_stmt never
   -- writes. That makes it a DIFFERENT statement from the control's, so it has
   -- its own control first: the same write on the row about her must land —
   -- one row — or the zero rows below could be created_by itself refusing
   -- (a column-level grant that stops at created_by, a trigger keyed on it)
-  -- rather than USING. 0357 allows her that re-attribution (see 3c).
-  select * into r from pg_temp.q0357_try(teen_u,
+  -- rather than USING. 0385 allows her that re-attribution (see 3c).
+  select * into r from pg_temp.q0385_try(teen_u,
     'update public.family_facts set created_by = $2 where id = $1', teen_row, teen_u, null, null);
   if r.err_state is not null or r.rows_hit is distinct from 1 then
     raise exception 'member-memory boundary UNPROVEN for created_by: the control — this teen writing her own uid into created_by on the memory about HER — did not land (rows=%, %: %). 4c below would be unattributed: whatever refuses this column refuses it on the household''s row too.%',
@@ -343,7 +343,7 @@ begin
       case when array_length(failures, 1) is not null then ' Failures already collected before it: ' || array_to_string(failures, ' | ') else '' end;
   end if;
 
-  select * into r from pg_temp.q0357_try(teen_u,
+  select * into r from pg_temp.q0385_try(teen_u,
     'update public.family_facts set created_by = $2 where id = $1', house_row, teen_u, null, null);
   if r.err_state is not null then
     failures := array_append(failures, format('claiming the household memory''s authorship was refused by an ERROR (%s: %s), not by USING', r.err_state, r.err_msg));
@@ -351,7 +351,7 @@ begin
     failures := array_append(failures, format('a teen CLAIMED %s household memory by writing her uid into created_by', r.rows_hit));
   end if;
 
-  select * into r from pg_temp.q0357_try(teen_u,
+  select * into r from pg_temp.q0385_try(teen_u,
     'update public.family_facts set created_by = $2 where id = $1', sib_row, teen_u, null, null);
   if r.err_state is not null then
     failures := array_append(failures, format('claiming the sibling''s memory''s authorship was refused by an ERROR (%s: %s), not by USING', r.err_state, r.err_msg));
@@ -368,8 +368,8 @@ begin
   -- 5a (its own control): the sweep reaches exactly her two ordinary rows —
   -- the one about her and the household one she wrote — not the household's
   -- the parent wrote, not her sibling's, and not her own MEDICAL row.
-  select * into r from pg_temp.q0357_try(teen_u,
-    'update public.family_facts set notes = ''q0357: sweep''', null, null, null, null);
+  select * into r from pg_temp.q0385_try(teen_u,
+    'update public.family_facts set notes = ''q0385: sweep''', null, null, null, null);
   if r.err_state is not null then
     failures := array_append(failures, format('the WHERE-less sweep was refused outright (%s: %s), so 5b below proves nothing', r.err_state, r.err_msg));
   elsif r.rows_hit <> 2 then
@@ -377,7 +377,7 @@ begin
   end if;
 
   -- 5b: the same sweep, filing her ordinary row as medical, must fail WITH CHECK.
-  select * into r from pg_temp.q0357_try(teen_u,
+  select * into r from pg_temp.q0385_try(teen_u,
     'update public.family_facts set category = ''medical''', null, null, null, null);
   if r.err_state is null then
     failures := array_append(failures, format('a teen re-filed %s memory as MEDICAL — 0264''s category gate is gone from WITH CHECK', r.rows_hit));
@@ -386,34 +386,34 @@ begin
   end if;
 
   -- ══ 6b. INSERT stays open: a member files a household-level memory ════════
-  select * into r from pg_temp.q0357_try(teen_u,
+  select * into r from pg_temp.q0385_try(teen_u,
     format('insert into public.family_facts (id, family_id, member_id, category, label, value, created_by)
               values ($1, %L, $2, $4, %L, $3, %L)', fam, 'Bin day', teen_u),
     planted, null, 'Thursday', 'other');
   if r.err_state is not null or r.rows_hit <> 1 then
-    failures := array_append(failures, format('a teen can no longer INSERT a household-level memory (rows=%s, %s: %s) — 0357 says INSERT is untouched; if that changed on purpose, update this probe', coalesce(r.rows_hit::text, 'none'), coalesce(r.err_state, 'no error'), coalesce(r.err_msg, '-')));
+    failures := array_append(failures, format('a teen can no longer INSERT a household-level memory (rows=%s, %s: %s) — 0385 says INSERT is untouched; if that changed on purpose, update this probe', coalesce(r.rows_hit::text, 'none'), coalesce(r.err_state, 'no error'), coalesce(r.err_msg, '-')));
   end if;
 
   -- ══ 7. The managers still can ═════════════════════════════════════════════
-  select * into r from pg_temp.q0357_try(parent_u, q0357_stmt, house_row, null,
+  select * into r from pg_temp.q0385_try(parent_u, q0385_stmt, house_row, null,
     'Grandma Ruth — 555 0102', 'contact');
   if r.err_state is not null or r.rows_hit <> 1 then
     failures := array_append(failures, format('a PARENT could not rewrite the household memory (rows=%s, %s: %s) — the guard refuses everyone', coalesce(r.rows_hit::text, 'none'), coalesce(r.err_state, 'no error'), coalesce(r.err_msg, '-')));
   end if;
 
-  select * into r from pg_temp.q0357_try(adult_u, q0357_stmt, sib_row, sib_m,
+  select * into r from pg_temp.q0385_try(adult_u, q0385_stmt, sib_row, sib_m,
     'Coach Dana — 555 0198', 'contact');
   if r.err_state is not null or r.rows_hit <> 1 then
     failures := array_append(failures, format('an ADULT could not rewrite a child''s memory (rows=%s, %s: %s) — can_manage_family covers adults as well as parents', coalesce(r.rows_hit::text, 'none'), coalesce(r.err_state, 'no error'), coalesce(r.err_msg, '-')));
   end if;
 
-  select * into r from pg_temp.q0357_try(parent_u, q0357_stmt, house_row, sib_m,
+  select * into r from pg_temp.q0385_try(parent_u, q0385_stmt, house_row, sib_m,
     'Grandma Ruth — 555 0101', 'contact');
   if r.err_state is not null or r.rows_hit <> 1 then
     failures := array_append(failures, format('a PARENT could not re-point the household memory at a child (rows=%s, %s: %s)', coalesce(r.rows_hit::text, 'none'), coalesce(r.err_state, 'no error'), coalesce(r.err_msg, '-')));
   end if;
 
-  select * into r from pg_temp.q0357_try(parent_u, q0357_stmt, teen_row, sib_m,
+  select * into r from pg_temp.q0385_try(parent_u, q0385_stmt, teen_row, sib_m,
     'Aunt Priya — 555 0144', 'contact');
   if r.err_state is not null or r.rows_hit <> 1 then
     failures := array_append(failures, format('a PARENT could not re-point the teen''s memory at her sibling (rows=%s, %s: %s)', coalesce(r.rows_hit::text, 'none'), coalesce(r.err_state, 'no error'), coalesce(r.err_msg, '-')));
@@ -424,19 +424,19 @@ begin
   -- very thing 6b shows she may still INSERT. The same statement as every
   -- attempt above; without `created_by = auth.uid()` in USING each of these is
   -- zero rows, which is "write, but never fix".
-  select * into r from pg_temp.q0357_try(teen_u, q0357_stmt, authored, null,
+  select * into r from pg_temp.q0385_try(teen_u, q0385_stmt, authored, null,
     'Wednesday', 'other');
   if r.err_state is not null or r.rows_hit is distinct from 1 then
     failures := array_append(failures, format('a teen could not correct the household memory SHE filed (rows=%s, %s: %s) — the author branch is missing, so she can write a fact she can never fix', coalesce(r.rows_hit::text, 'none'), coalesce(r.err_state, 'no error'), coalesce(r.err_msg, '-')));
   end if;
 
-  select * into r from pg_temp.q0357_try(teen_u, q0357_stmt, authored, sib_m,
+  select * into r from pg_temp.q0385_try(teen_u, q0385_stmt, authored, sib_m,
     'Thursday', 'other');
   if r.err_state is not null or r.rows_hit is distinct from 1 then
     failures := array_append(failures, format('a teen could not re-point the memory SHE filed (rows=%s, %s: %s) — she could have forgotten it and filed it again about her sibling, so refusing this is not a boundary', coalesce(r.rows_hit::text, 'none'), coalesce(r.err_state, 'no error'), coalesce(r.err_msg, '-')));
   end if;
 
-  select * into r from pg_temp.q0357_try(teen_u,
+  select * into r from pg_temp.q0385_try(teen_u,
     'delete from public.family_facts where id = $1', authored, null, null, null);
   if r.err_state is not null or r.rows_hit is distinct from 1 then
     failures := array_append(failures, format('a teen could not forget the household memory SHE filed (rows=%s, %s: %s)', coalesce(r.rows_hit::text, 'none'), coalesce(r.err_state, 'no error'), coalesce(r.err_msg, '-')));
@@ -446,7 +446,7 @@ begin
   -- Its own control first: the same teen, the same statement, the row a parent
   -- wrote ABOUT her. It must go — one row — or the refusals below are
   -- unattributed (a revoked DELETE grant or a dead auth.uid() refuses it too).
-  select * into r from pg_temp.q0357_try(teen_u,
+  select * into r from pg_temp.q0385_try(teen_u,
     'delete from public.family_facts where id = $1', teen_row, null, null, null);
   if r.err_state is not null or r.rows_hit is distinct from 1 then
     -- Raising here stops the block, so any UPDATE failures collected above
@@ -458,7 +458,7 @@ begin
 
   -- 6a showed both rows are visible to her, so zero rows here is DELETE's
   -- USING answering, not SELECT's.
-  select * into r from pg_temp.q0357_try(teen_u,
+  select * into r from pg_temp.q0385_try(teen_u,
     'delete from public.family_facts where id = $1', house_row, null, null, null);
   if r.err_state is not null then
     failures := array_append(failures, format('forgetting the household memory was refused by an ERROR (%s: %s), not by DELETE''s USING', r.err_state, r.err_msg));
@@ -466,7 +466,7 @@ begin
     failures := array_append(failures, format('a teen FORGOT %s household-level memory a parent entered (the "Emergency contact")', r.rows_hit));
   end if;
 
-  select * into r from pg_temp.q0357_try(teen_u,
+  select * into r from pg_temp.q0385_try(teen_u,
     'delete from public.family_facts where id = $1', sib_row, null, null, null);
   if r.err_state is not null then
     failures := array_append(failures, format('forgetting the sibling''s memory was refused by an ERROR (%s: %s), not by DELETE''s USING', r.err_state, r.err_msg));
@@ -474,14 +474,14 @@ begin
     failures := array_append(failures, format('a teen FORGOT %s memory about her sibling', r.rows_hit));
   end if;
 
-  select * into r from pg_temp.q0357_try(parent_u,
+  select * into r from pg_temp.q0385_try(parent_u,
     'delete from public.family_facts where id = $1', house_row, null, null, null);
   if r.err_state is not null or r.rows_hit is distinct from 1 then
     failures := array_append(failures, format('a PARENT could not forget the household memory (rows=%s, %s: %s) — the guard refuses everyone', coalesce(r.rows_hit::text, 'none'), coalesce(r.err_state, 'no error'), coalesce(r.err_msg, '-')));
   end if;
 
   -- ══ 10. The policies still NAME the rule ═══════════════════════════════════
-  -- 0357's Verify block asserts this once, at migration time. Every later
+  -- 0385's Verify block asserts this once, at migration time. Every later
   -- migration has since been replayed onto this schema, so ask again: UPDATE's
   -- USING and WITH CHECK and DELETE's USING each carry the self branch, the
   -- author branch and 0264's medical/account gate. The behavioural sections
@@ -499,7 +499,7 @@ begin
       from pg_policy pol
       where pol.polrelid = 'public.family_facts'::regclass and pol.polname = 'family_facts_delete';
     if q is null or c is null or d is null then
-      failures := array_append(failures, format('family_facts_update (USING %s, WITH CHECK %s) or family_facts_delete (USING %s) is missing — 0357 created both with both halves', coalesce(q, 'MISSING'), coalesce(c, 'MISSING'), coalesce(d, 'MISSING')));
+      failures := array_append(failures, format('family_facts_update (USING %s, WITH CHECK %s) or family_facts_delete (USING %s) is missing — 0385 created both with both halves', coalesce(q, 'MISSING'), coalesce(c, 'MISSING'), coalesce(d, 'MISSING')));
     else
       if q not like '%is_self_member(member_id)%' or c not like '%is_self_member(member_id)%' or d not like '%is_self_member(member_id)%' then
         failures := array_append(failures, 'the self branch `is_self_member(member_id)` is gone from one of UPDATE USING / UPDATE WITH CHECK / DELETE USING');
@@ -517,7 +517,7 @@ begin
     raise exception 'member-memory boundary failed: %', array_to_string(failures, ' | ');
   end if;
 
-  raise notice '0357 OK: the same teen CAN rewrite her own memory with the same statement (control), and cannot rewrite, claim or re-point the household''s or her sibling''s; she cannot move a parent''s row about her out of her hands while it stays the parent''s (taking authorship of it in the same statement lands, as 0357 says it does — a forget-and-refile); what she filed herself she can correct, re-point and forget; she cannot forget the household''s or her sibling''s; 0264''s medical gate holds on both sides; she still reads the family''s memory and files a household one; a parent and an adult can do all of it; the policies still name every branch';
+  raise notice '0385 OK: the same teen CAN rewrite her own memory with the same statement (control), and cannot rewrite, claim or re-point the household''s or her sibling''s; she cannot move a parent''s row about her out of her hands while it stays the parent''s (taking authorship of it in the same statement lands, as 0385 says it does — a forget-and-refile); what she filed herself she can correct, re-point and forget; she cannot forget the household''s or her sibling''s; 0264''s medical gate holds on both sides; she still reads the family''s memory and files a household one; a parent and an adult can do all of it; the policies still name every branch';
 end
 $$;
 

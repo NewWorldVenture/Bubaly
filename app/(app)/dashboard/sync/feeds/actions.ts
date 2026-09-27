@@ -19,7 +19,7 @@ type FeedRef = { id: string; family_id: string; url: string; name: string };
 
 /**
  * Longest (normalized) URL a family can subscribe to. uq_calendar_feeds_family_url
- * (0363) is a btree over the url, and a btree entry over ~2.7 KB is refused with
+ * (0386) is a btree over the url, and a btree entry over ~2.7 KB is refused with
  * 54000 — a raw Postgres message the family could do nothing with. A normalized
  * URL is ASCII (URL percent-encodes the rest), so this many characters is this
  * many bytes, well inside the limit; no real calendar link comes near it.
@@ -28,7 +28,7 @@ const MAX_FEED_URL_LENGTH = 2048;
 
 /**
  * The family's existing subscription to this (already normalized) URL, if any.
- * `limit(1)` rather than `maybeSingle()`: until migration 0363 is applied a
+ * `limit(1)` rather than `maybeSingle()`: until migration 0386 is applied a
  * family can still hold duplicates from before this fix, and a lookup that
  * errors on two rows would refuse the very re-add that should reuse one.
  */
@@ -71,7 +71,7 @@ async function findFeedByUrl(
  *     cascade with it); if that removal does not happen the family is told the
  *     calendar WAS saved rather than shown a plain failure that invites
  *     another add;
- *   • the unique index in migration 0363 closes the window between the lookup
+ *   • the unique index in migration 0386 closes the window between the lookup
  *     and the insert, and a 23505 here means another add won that race.
  */
 export async function addCalendarFeed(input: { name: string; url: string; color?: string }): Promise<ActionResult> {

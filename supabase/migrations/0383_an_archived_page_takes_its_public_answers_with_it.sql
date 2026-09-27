@@ -1,4 +1,4 @@
--- Bubaly :: 0355 an archived page takes its public answers with it
+-- Bubaly :: 0383 an archived page takes its public answers with it
 -- ----------------------------------------------------------------------------
 -- Generated FAQ answers do not live in the page row. They are separate rows in
 -- `public.marketing_aeo_questions`, and migration 0228 made them world-readable
@@ -140,7 +140,7 @@ $$;
 
 -- A trigger function is never called directly, and firing a trigger does not
 -- check EXECUTE — so nobody needs the privilege, and PUBLIC's default grant on
--- a SECURITY DEFINER function is taken away (0344:330 is the pattern).
+-- a SECURITY DEFINER function is taken away (0381:330 is the pattern).
 revoke all on function public.retire_marketing_aeo_on_page_hidden() from public, anon, authenticated;
 
 -- Fires only when a LIVE page stops resolving at the path its answers carry:
@@ -237,7 +237,7 @@ begin
      );
   if orphans > 0 then
     raise exception
-      'migration 0355: % published AEO answers still have no publicly resolvable marketing page', orphans;
+      'migration 0383: % published AEO answers still have no publicly resolvable marketing page', orphans;
   end if;
 
   select count(*) into orphans
@@ -252,6 +252,6 @@ begin
      );
   if orphans > 0 then
     raise exception
-      'migration 0355: % published blog AEO answers still point at an unpublished post', orphans;
+      'migration 0383: % published blog AEO answers still point at an unpublished post', orphans;
   end if;
 end $$;

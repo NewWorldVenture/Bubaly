@@ -111,7 +111,7 @@ export async function archivePlatformPage(formData: FormData): Promise<void> {
   // design — so this is the one path where nothing downstream will ever retire
   // the page's generated answers. Do it here, and fail loudly rather than leave
   // the public FAQ answering for a page the admin just took down. (Migration
-  // 0355 makes the same retirement atomic in the database, for writers that
+  // 0383 makes the same retirement atomic in the database, for writers that
   // never come through this action.)
   const { error: retireError } = await retireAeoQuestionsForPath(supabase, data.path, ['marketing_platform']);
   if (retireError) marketingActionFailure("retire the archived page's published answers", retireError);

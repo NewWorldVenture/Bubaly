@@ -226,7 +226,7 @@ describe('the Autopilot panel obeys the family’s approval model', () => {
     expect(rowsIn('family_reminders')).toHaveLength(2);
     expect(approval().status).toBe('approved');
     // Both parents' yeses are on the row, each in its own name — the shape
-    // 0344's trigger requires of a decision.
+    // 0381's trigger requires of a decision.
     expect((approval().approvals as { member_id: string }[]).map((v) => v.member_id)).toEqual([MUM, DAD]);
     expect(rowsIn('family_automation_runs')[0]).toMatchObject({ status: 'executed', state: 'completed' });
     // What the panel is told was applied is what THIS decision applied.
@@ -394,7 +394,7 @@ describe('a second approver decides on what will actually run', () => {
 // is reachable with the signed-in browser session, and `approval_requests_decide`
 // (0251:135-137) gated on `can_manage_family` and named no column, so one PATCH
 // set `status = 'approved'` — and a second way round was to write two parents'
-// votes into `approvals` first. 0344 moves the rule into the database.
+// votes into `approvals` first. 0381 moves the rule into the database.
 //
 // What PROVES it is docs/audit/two-parents-means-two-parents-check.sql: a live
 // probe run against a replayed Postgres (CI's "Boundary probes" step globs
@@ -406,7 +406,7 @@ describe('the threshold is kept by the database, not only by the action', () => 
   const file = (() => {
     const names = readdirSync('supabase/migrations')
       .filter((f) => /_two_parents_means_two_parents_in_the_database_too\.sql$/.test(f));
-    expect(names.length, 'the 0344 approval-threshold migration must exist').toBe(1);
+    expect(names.length, 'the 0381 approval-threshold migration must exist').toBe(1);
     return { name: names[0], sql: readFileSync(`supabase/migrations/${names[0]}`, 'utf8') };
   })();
   // Comments stripped: the header discusses DEFINER, GRANTs and policies in prose.
@@ -414,14 +414,14 @@ describe('the threshold is kept by the database, not only by the action', () => 
   const PROBE = 'docs/audit/two-parents-means-two-parents-check.sql';
 
   it('is proven live by a boundary probe that has been shown to fail', () => {
-    expect(existsSync(PROBE), `${PROBE} is the live proof of 0344`).toBe(true);
+    expect(existsSync(PROBE), `${PROBE} is the live proof of 0381`).toBe(true);
     const probe = readFileSync(PROBE, 'utf8');
     // The negative control: without the trigger the defect must reproduce.
     expect(probe).toContain('drop trigger if exists approval_requests_decision_is_earned on public.approval_requests;');
     // Forged votes are the case a WITH CHECK on the threshold alone let through.
     expect(probe).toContain('wrote both parents');
-    // And a stamp on a row decided before 0344 must still land.
-    expect(probe).toContain('Approved before 0344');
+    // And a stamp on a row decided before 0381 must still land.
+    expect(probe).toContain('Approved before 0381');
   });
 
   it('decides on the TRANSITION, in a trigger that can see OLD — not in a policy that re-checks every later write', () => {
