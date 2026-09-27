@@ -132,7 +132,19 @@ import { scanPaths } from '../scripts/i18n-scan.mjs';
 //
 // So the delta is the 6 named above plus command-center's 3 and calm's banner
 // title. 2,817 − 10 = 2,807.
-const CEILING = 2807;
+//
+// ── RAISED FOR A STRICTER SCANNER: 2,800 -> 2,889 (I18N-002) ────────────────
+//
+// The first legitimate reason, and measured the way this block says to measure
+// it: the tree held fixed, the scanner varied. The scanner now reads a failure
+// message or a toast written as a template literal —
+// `error: \`Blocked by household policy: ${reason}\``, `toastError(\`Upload
+// failed: ${msg}\`)` — which NOT_COPY's backtick rule had hidden. Over this
+// tree the previous scanner counts 2,800 and this one 2,889: eighty-nine
+// messages that were already shipping in English, none of them new. The ceiling
+// is set to the measurement rather than to 2,807 + 89, so the seven strings of
+// slack the surface had banked are banked here too.
+const CEILING = 2889;
 
 describe('the ungated i18n surface does not get worse', () => {
   const findings = scanPaths(['app', 'components']);
@@ -164,5 +176,30 @@ describe('the ungated i18n surface does not get worse', () => {
       CEILING - total,
       `The surface is ${CEILING - total} strings better than the ceiling — lower CEILING to ${total}.`,
     ).toBeLessThan(150);
+  });
+});
+
+describe('the scanner sees a failure message written as a template literal (I18N-002)', () => {
+  it('reports it, with each interpolation shown as a placeholder', async () => {
+    const { writeFileSync, mkdtempSync } = await import('node:fs');
+    const { join } = await import('node:path');
+    const { tmpdir } = await import('node:os');
+    const { scanFile } = await import('../scripts/i18n-scan.mjs');
+    const dir = mkdtempSync(join(tmpdir(), 'i18n-scan-'));
+    const file = join(dir, 'action.ts');
+    writeFileSync(file, [
+      "export async function a(reason: string) {",
+      "  if (reason) return { ok: false, error: `Blocked by household policy: ${reason}` };",
+      "  return { ok: false, error: describeActionError(e, `Could not save ${name}.`) };",
+      "}",
+      "export function B() {",
+      "  const { error: toastError } = useToast();",
+      "  toastError(`Upload failed: ${message}`);",
+      "}",
+    ].join('\n'));
+    const texts = scanFile(file).map((f: { text: string }) => f.text);
+    expect(texts).toContain('Blocked by household policy: …');
+    expect(texts).toContain('Could not save ….');
+    expect(texts).toContain('Upload failed: …');
   });
 });
