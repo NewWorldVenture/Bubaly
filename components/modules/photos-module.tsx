@@ -462,7 +462,7 @@ export function PhotosModule() {
               the keyboard's way out is Escape, which the dialog hook handles. */}
           <div className="absolute inset-0 bg-black/95" onClick={closeLightbox} aria-hidden />
           <div ref={lightboxRef} tabIndex={-1}
-            role="dialog" aria-label={tr('photosModule.photoViewer')}
+            role="dialog" aria-modal="true" aria-label={tr('photosModule.photoViewer')}
             className="relative flex h-full w-full items-center justify-center outline-none">
             {/* Nav */}
             {lightboxIdx > 0 && (

@@ -62,28 +62,23 @@ describe('the preference centre is operable by keyboard', () => {
   });
 
   // Fixing the preference centre surfaced that it was not alone: eleven other
-  // components declare `aria-modal` themselves, and of those only
-  // app/command-bar.tsx calls `.focus()` at all. They are listed rather than
-  // fixed in one sweep — each has bespoke layout, and some (the gates) may
-  // deliberately refuse Escape, so converting them unexamined would be a worse
-  // change than the defect. What this list does is stop the set GROWING, and
-  // make each removal a deliberate act.
+  // components declared `aria-modal` themselves, and at the time only
+  // app/command-bar.tsx called `.focus()` at all. They were LISTED rather than
+  // fixed in one sweep, and the list said "this may only shrink; adding to it
+  // is the finding."
   //
-  // This list may only shrink. Adding to it is the finding.
-  const HAND_ROLLED = [
-    'components/app/account-closed-gate.tsx',
-    'components/app/ai-orb.tsx',
-    'components/app/app-lock-gate.tsx',
-    'components/app/app-shell.tsx',
-    'components/app/blog-launcher.tsx',
-    'components/app/command-bar.tsx',
-    'components/app/trial-paywall-gate.tsx',
-    'components/guardian/contact-list.tsx',
-    'components/guardian/rules-editor.tsx',
-    'components/marketing/exit-intent.tsx',
-    'components/ui/camera-capture.tsx',
-  ];
-
+  // It has now shrunk to nothing, and the rule that replaced it is better than
+  // the list was. `lib/a11y/use-dialog-behavior.ts` was extracted so an overlay
+  // with bespoke layout — a camera viewfinder, a command palette, a full-bleed
+  // photo viewer — can keep its layout and still keep the promise, without
+  // taking Modal's chrome. All eleven now delegate to it.
+  //
+  // So the question is no longer "did you use Modal?" but "does `aria-modal`
+  // mean anything here?", which is a property rather than a membership test and
+  // is asserted in both directions by
+  // tests/aria-modal-means-what-it-says.test.ts. The photo lightbox (F-D01) is
+  // why this matters: it was a full-screen viewer with no dialog role at all,
+  // and converting it to Modal was never possible.
   function declaresAriaModal(): string[] {
     return [...walk(join(ROOT, 'components')), ...walk(join(ROOT, 'app'))]
       .filter((f) => {
@@ -95,20 +90,19 @@ describe('the preference centre is operable by keyboard', () => {
       .sort();
   }
 
-  it('no NEW component hand-rolls aria-modal', () => {
-    const unexpected = declaresAriaModal().filter((f) => !HAND_ROLLED.includes(f));
+  it('every component that hand-rolls aria-modal delegates the behaviour', () => {
+    const empty = declaresAriaModal().filter(
+      (f) => !readFileSync(join(ROOT, f), 'utf8').includes('useDialogBehavior'));
     expect(
-      unexpected,
-      'these declare aria-modal themselves — use components/ui/modal.tsx, which traps focus, '
-      + 'handles Escape and restores focus, rather than promising inertness without providing it',
+      empty,
+      'these declare aria-modal themselves and implement none of it — use components/ui/modal.tsx, '
+      + 'or useDialogBehavior when the layout cannot take Modal\'s chrome',
     ).toEqual([]);
   });
 
-  it('the list shrinks as they are converted, and never lies', () => {
-    // An entry that no longer hand-rolls it is a licence nobody is using — the
-    // same rule tests/read-error-surfaced.test.ts applies to its exemptions.
-    const current = declaresAriaModal();
-    const stale = HAND_ROLLED.filter((f) => !current.includes(f));
-    expect(stale, 'these no longer declare aria-modal; remove them from HAND_ROLLED').toEqual([]);
+  it('there is still a set to check (non-vacuity)', () => {
+    // The list this replaces could go stale silently. A property cannot, unless
+    // the walk stops finding anything — so the walk is asserted too.
+    expect(declaresAriaModal().length).toBeGreaterThan(8);
   });
 });
