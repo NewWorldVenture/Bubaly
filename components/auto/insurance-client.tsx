@@ -115,7 +115,7 @@ export function InsuranceClient({ policies, vehicles }: { policies: Policy[]; ve
                 {p.coverage_summary && <p className="mt-2 text-sm">{p.coverage_summary}</p>}
                 {p.liability_limits && <p className="text-xs text-muted">Liability {p.liability_limits}</p>}
                 <div className="mt-3 flex flex-wrap gap-2">
-                  {p.claims_phone && <a href={`tel:${p.claims_phone}`} className="inline-flex h-9 items-center gap-1.5 rounded-lg bg-danger px-3 text-xs font-medium text-white"><Phone className="h-3.5 w-3.5" />{' '}{t('insuranceClient.fileAClaim')}</a>}
+                  {p.claims_phone && <a href={`tel:${p.claims_phone}`} className="inline-flex h-9 items-center gap-1.5 rounded-lg bg-danger px-3 text-xs font-medium text-danger-fg"><Phone className="h-3.5 w-3.5" />{' '}{t('insuranceClient.fileAClaim')}</a>}
                   {p.roadside_phone && <a href={`tel:${p.roadside_phone}`} className="inline-flex h-9 items-center gap-1.5 rounded-lg border border-border px-3 text-xs font-medium hover:bg-elevated"><Phone className="h-3.5 w-3.5" />{t('insuranceClient.roadside')}</a>}
                   {p.agent_phone && <a href={`tel:${p.agent_phone}`} className="inline-flex h-9 items-center gap-1.5 rounded-lg border border-border px-3 text-xs font-medium hover:bg-elevated"><Phone className="h-3.5 w-3.5" /> {p.agent_name ?? 'Agent'}</a>}
                 </div>

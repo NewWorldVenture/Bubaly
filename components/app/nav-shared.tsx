@@ -88,7 +88,7 @@ export function NavEntry({ item, variant, locked, onLocked, badge }: {
     : 'flex items-center gap-3 rounded-xl px-3 py-2.5 text-sm font-medium transition xl:px-4 xl:py-3 xl:text-base';
 
   const Badge = badge && badge > 0
-    ? <span className="ml-auto grid h-5 min-w-5 shrink-0 place-items-center rounded-full bg-danger px-1.5 text-[11px] font-bold text-white">{badge > 99 ? '99+' : badge}</span>
+    ? <span className="ml-auto grid h-5 min-w-5 shrink-0 place-items-center rounded-full bg-danger px-1.5 text-[11px] font-bold text-danger-fg">{badge > 99 ? '99+' : badge}</span>
     : null;
 
   if (locked) {

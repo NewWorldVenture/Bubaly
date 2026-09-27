@@ -215,7 +215,7 @@ export function ContactsModule() {
                       style={{ background: avatarColor(contact.name) }}>
                       {initials(contact.name)}
                       {contact.is_emergency && (
-                        <div className="absolute -right-0.5 -top-0.5 flex h-4 w-4 items-center justify-center rounded-full bg-danger text-[8px] text-white">!</div>
+                        <div className="absolute -right-0.5 -top-0.5 flex h-4 w-4 items-center justify-center rounded-full bg-danger text-[8px] text-danger-fg">!</div>
                       )}
                     </div>
 

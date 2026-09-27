@@ -309,6 +309,33 @@ describe('Supabase migration filename safety', () => {
     // controlled) and tests/a-notification-for-someone-else-is-written-by-
     // bubaly.test.ts.
     //
+    // 0389_a_decision_once_made_stays_made.sql (SRV-001, the m7+m8 residual)
+    // adds the fourth trigger on approval_requests: once status leaves
+    // 'pending', status, approvals, edited_payload, decided_by and decided_at
+    // are frozen, and payload — the ask the votes are votes on — cannot change
+    // for the life of the row; the execution stamps still land. RLS-subject
+    // callers only, like 0381's rules. Held by docs/audit/two-parents-means-
+    // two-parents-check.sql (the re-open, the declined→approved flip, the
+    // post-decision edit and the payload rewrite refused; the stamps landing).
+    //
+    // 0390_a_queued_run_keeps_the_gate_it_was_born_with.sql (the same residual)
+    // pins family_automation_runs.metadata: once approval_id or plan_id is set
+    // it cannot be removed or changed by an RLS-subject caller. The
+    // load-bearing half is in the concierge action, which now resolves the
+    // governing approval from approval_requests by plan and never from the
+    // run's metadata. Held by docs/audit/automation-runs-pin-what-a-member-
+    // may-queue-check.sql.
+    //
+    // 0391_a_password_alone_does_not_open_the_familys_vault.sql (O-03) gives
+    // the document area's step-up its database counterpart on the four vault
+    // tables written only behind it — family_credentials, household_info,
+    // tax_documents, paperwork_items: RESTRICTIVE guards on
+    // `session_cleared_step_up() or not can_manage_family(family_id)`, the
+    // rule needsStepUp applies (a manager must have cleared the code; anyone
+    // else is left to the table's own policies), with SELECT guarded on the
+    // three secret tables. documents and its bucket stay open. Held by
+    // docs/audit/a-password-alone-does-not-open-the-familys-vault-check.sql.
+    //
     // 0406–0418, less 0412, 0413 and 0417, are the audit branch's (PR #556):
     // ten files, and the FIFTH time that branch's numbers have moved. They sat
     // at 0300/0304–0309, then 0318–0330, then 0361–0370, and main claimed each
@@ -374,6 +401,23 @@ describe('Supabase migration filename safety', () => {
     // an SVG or HTML upload is no longer a page hosted on the project's own
     // Supabase domain (F-E03's cheap half, which the LB-009 deferral was never
     // meant to cover).
+    //
+    // 0419_a_departed_parent_keeps_no_assistant_key.sql (SRV-001 l12) retires
+    // the assistant keys of a parent who leaves the family: an AFTER UPDATE
+    // (is_active, role, user_id, family_id) OR DELETE trigger on family_members
+    // stamps revoked_at on the old (family, user) pair's live keys whenever
+    // that pair no longer has an active parent row, SECURITY DEFINER because
+    // 0343 refuses the remover (possibly an adult) writes on assistant_links,
+    // plus a backfill for keys already orphaned. The application half,
+    // resolveAssistantLink requiring an active parent owner, holds without it.
+    // Held by docs/audit/a-departed-parent-keeps-no-assistant-key-check.sql.
+    //
+    // 0420_only_a_released_app_installs.sql (SRV-001 l8) adds two RESTRICTIVE
+    // policies on family_app_installs, INSERT (WITH CHECK) and UPDATE (USING
+    // and WITH CHECK), that require the app to be published or beta; 0165's install policies were
+    // membership alone, so a member could install a coming-soon or retired app
+    // over /rest/v1. DELETE stays open, so a stranded install can always be
+    // removed. Held by docs/audit/only-a-released-app-installs-check.sql.
     //
     // 0426-0443 are PR #548's block, and it has moved twice. The branch
     // numbered it 0318-0338 against a main that stopped at 0317; main then

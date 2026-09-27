@@ -238,7 +238,9 @@ describe("paperwork's materialize does not answer a refused read with silence (C
     const src = readFileSync('app/(app)/dashboard/paperwork/actions.ts', 'utf8');
     const fn = src.slice(at(src, 'export async function materializePaperworkActionAction('));
     expect(fn).toContain('const { data: item, error: itemError } = await supabase');
+    // The action answers a result union since O-03's step-up gate, so absence
+    // is `{ ok: true }` — still quiet, still after the read error is thrown.
     expect(at(fn, "if (itemError) throw new Error(describeActionError(itemError, tr('actions.couldNotLoadThatDocument')));"))
-      .toBeLessThan(at(fn, 'if (!item) return;'));
+      .toBeLessThan(at(fn, 'if (!item) return { ok: true };'));
   });
 });

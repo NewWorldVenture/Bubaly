@@ -113,7 +113,7 @@ let writes: { table: string; rows: unknown }[];
 
 function makeClient() {
   function from(table: string) {
-    let op: 'select' | 'insert' | 'upsert' = 'select';
+    let op: 'select' | 'insert' | 'upsert' | 'update' = 'select';
     let payload: unknown = null;
     // `.maybeSingle()` answers ONE row, as PostgREST does. The list lookup
     // moved behind lib/services/groceries ensureDefaultGroceryListId (DATA-007),
@@ -130,6 +130,9 @@ function makeClient() {
           const rows = Array.isArray(payload) ? payload : [payload];
           return { data: rows.map((_, i) => ({ id: `item-${i}` })), error: null };
         }
+        // The preferences write is a compare-and-set that asks for its row back
+        // (mergeNotificationPrefs, SRV-001 l7); answer that it landed.
+        if (table === 'user_preferences') return { data: { user_id: 'user-1' }, error: null };
         return { data: null, error: null };
       }
       if (table === 'user_preferences') return prefsRead;
@@ -142,6 +145,7 @@ function makeClient() {
       order: same, limit: same, maybeSingle: () => { oneRow = true; return q; }, single: () => { oneRow = true; return q; }, in: same,
       insert: (rows: unknown) => { op = 'insert'; payload = rows; writes.push({ table, rows }); return q; },
       upsert: (rows: unknown) => { op = 'upsert'; payload = rows; writes.push({ table, rows }); return q; },
+      update: (rows: unknown) => { op = 'update'; payload = rows; writes.push({ table, rows }); return q; },
       then: (resolve: (v: Reply) => unknown, reject: (e: unknown) => unknown) =>
         Promise.resolve(reply()).then(resolve, reject),
     });

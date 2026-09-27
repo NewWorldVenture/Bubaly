@@ -899,7 +899,7 @@ function ReminderModal({ reminder, familyId, userId, members, lists, onClose, on
               {imageUrl
                 ? (
                   <div className="relative"><FamilyMediaImg src={imageUrl} alt={tr('reminders.reminder')} className="h-16 w-16 rounded-lg object-cover" />
-                    <button type="button" onClick={() => setImageUrl('')} aria-label={tr('reminders.removeImage')} className="absolute -right-1.5 -top-1.5 grid h-5 w-5 place-items-center rounded-full bg-danger text-white"><X className="h-3 w-3" /></button>
+                    <button type="button" onClick={() => setImageUrl('')} aria-label={tr('reminders.removeImage')} className="absolute -right-1.5 -top-1.5 grid h-5 w-5 place-items-center rounded-full bg-danger text-danger-fg"><X className="h-3 w-3" /></button>
                   </div>
                 )
                 : <div className="grid h-16 w-16 place-items-center rounded-lg border border-dashed border-border text-muted"><ImageIcon className="h-5 w-5" /></div>}

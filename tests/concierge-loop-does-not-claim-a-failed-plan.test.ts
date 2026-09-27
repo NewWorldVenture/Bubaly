@@ -56,6 +56,12 @@ function userClient(o: Sb, updates: Record<string, unknown>[]) {
       Object.assign(chain, {
         select: () => chain,
         eq: () => chain,
+        // The approve path looks up the approval governing the plan
+        // (governingApprovalFor: filter/order/limit on approval_requests); the
+        // list answer below is empty, so no approval governs these runs.
+        filter: () => chain,
+        order: () => chain,
+        limit: () => chain,
         maybeSingle: () => Promise.resolve(
           table === 'concierge_plans'
             ? { data: o.planError ? null : (o.plan ?? PLAN), error: o.planError ?? null }

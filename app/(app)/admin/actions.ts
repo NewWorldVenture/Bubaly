@@ -3,7 +3,7 @@
 import * as React from 'react';
 import { getTranslations } from '@/lib/i18n/server';
 import { revalidatePath } from 'next/cache';
-import { isSuperAdmin, getUser } from '@/lib/supabase/auth';
+import { getUser, isSuperAdmin } from '@/lib/supabase/auth';
 import { createServiceClient } from '@/lib/supabase/server';
 import { logAudit } from '@/lib/server/audit';
 import { listAllAuthUsers } from '@/lib/server/list-all-auth-users';
@@ -32,7 +32,17 @@ function actionFailure(error: unknown, fallback: string): Result {
 
 async function assertSuperAdmin(): Promise<Result> {
   const t = await getTranslations();
-  if (!(await isSuperAdmin())) return { ok: false, error: t('actions.notAuthorized') };
+  // An answer, not a throw. isSuperAdmin() raises on a transient auth failure,
+  // and awaited here before each action's own try that rejected the action:
+  // the Stripe form's buttons spun until a reload (SRV-001 l6).
+  let allowed: boolean;
+  try {
+    allowed = await isSuperAdmin();
+  } catch (error) {
+    console.error('[admin-action] super-admin check could not complete', error);
+    return { ok: false, error: t('ai.accountContextIsTemporarilyUnavailable') };
+  }
+  if (!allowed) return { ok: false, error: t('actions.notAuthorized') };
   return { ok: true };
 }
 
@@ -364,7 +374,15 @@ export async function saveStripeSettingsAction(input: {
   if (!guard.ok) return guard;
 
   const feeCents = Number.isFinite(input.serviceFeeCents) && input.serviceFeeCents >= 0 ? Math.trunc(input.serviceFeeCents) : 90;
-  const user = await getUser();
+  // The same transient failure can land here, after the gate; answer it the
+  // same way rather than reject (SRV-001 l6). Nothing has been written yet.
+  let userId: string | null;
+  try {
+    userId = (await getUser())?.id ?? null;
+  } catch (error) {
+    console.error('[admin-action] stripe settings actor lookup could not complete', error);
+    return { ok: false, error: t('ai.accountContextIsTemporarilyUnavailable') };
+  }
   const supabase = createServiceClient();
   const clean = (v: string | null) => (v && v.trim() ? v.trim() : null);
 
@@ -382,7 +400,7 @@ export async function saveStripeSettingsAction(input: {
     connect_account_id: clean(input.connectAccountId),
     service_fee_cents: feeCents,
     service_fee_price_id: clean(input.serviceFeePriceId),
-    updated_by: user?.id ?? null,
+    updated_by: userId,
   }, { onConflict: 'id' });
   if (error) return actionFailure(error, t('actions.couldNotSaveStripeSettings'));
 

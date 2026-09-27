@@ -13,6 +13,11 @@ vi.mock('next/navigation', () => ({ useRouter: () => ({ refresh: vi.fn() }) }));
 vi.mock('next/cache', () => ({ revalidatePath: vi.fn() }));
 vi.mock('@/lib/supabase/server', () => ({ createServer: async () => state.db, createServiceClient: () => state.db }));
 vi.mock('@/lib/supabase/auth', () => ({ requireUserContext: async () => ({ user: { id: 'parent-1' }, active: { familyId: 'family-1', member: { id: 'member-1' }, family: { timezone: 'UTC' }, role: 'parent' } }) }));
+// The actions gate on the session's assurance level (0391 / O-03); the in-memory
+// client has no `auth.mfa` to read it from, and an unreadable level fails
+// closed. The partial-extraction refusals under test here are a different
+// answer, so this session is one that already cleared step-up.
+vi.mock('@/lib/auth/require-aal2', () => ({ aal2Verdict: async () => ({ action: 'allow' }) }));
 vi.mock('@/components/ui/toast', () => ({ useToast: () => ({ success: vi.fn(), error: vi.fn() }) }));
 vi.mock('@/components/i18n/locale-provider', () => ({ useTranslations: () => (key: string) => getMessages(state.locale)[key] ?? key, useLocale: () => localeOrDefault(state.locale) }));
 vi.mock('@/lib/i18n/server', () => ({ getTranslations: async () => (key: string) => getMessages(state.locale)[key] ?? key }));

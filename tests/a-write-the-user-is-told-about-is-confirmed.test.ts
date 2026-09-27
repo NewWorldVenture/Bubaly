@@ -497,8 +497,12 @@ describe('an autopilot run is not left queued over work already done (C1-S9-48)'
     // moved into the service is still logged, not raised — the plan is applied
     // by then, and failing would report failure for work that succeeded.
     expect(stripComments(concierge)).not.toContain("from('approval_requests').update(");
-    expect(concierge).toContain("decide(scopeFromUserContext(ctx, sb), meta.approval_id, 'approved')");
-    expect(concierge).toContain("decide(scopeFromUserContext(ctx, sb), meta.approval_id, 'rejected')");
+    // The approval decided is the one approval_requests says governs the plan
+    // (governingApprovalFor, SRV-001 m7+m8), never the id the run's
+    // manager-writable metadata names — so the argument is the looked-up row.
+    expect(concierge).toContain("decide(scopeFromUserContext(ctx, sb), governing.approval.id, 'approved')");
+    expect(concierge).toContain("decide(scopeFromUserContext(ctx, sb), approval.id, 'rejected')");
+    expect(stripComments(concierge)).not.toContain('meta.approval_id, \'approved\'');
     for (const marker of ['could not close the concierge automation run', 'could not dismiss the concierge automation run']) {
       // One-line `if (…) console.error(…)` statements: the guard is the line
       // itself and the two after it, none of which may turn the log into a bail.

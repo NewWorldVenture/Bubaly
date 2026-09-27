@@ -75,8 +75,12 @@ describe('both routes go through it', () => {
   const callback = readFileSync('app/api/google/calendar/callback/route.ts', 'utf8');
   const sync = readFileSync('app/api/google/calendar/sync/route.ts', 'utf8');
 
-  it('the callback encrypts before the upsert and never writes the raw token', () => {
-    expect(at(callback, 'encodeGoogleToken(token)')).toBeLessThan(at(callback, "from('user_preferences')\n      .upsert("));
+  it('the callback encrypts before the write and never writes the raw token', () => {
+    // The write is mergeNotificationPrefs (SRV-001 l7); the only value it is
+    // handed for the token is the encoded one.
+    expect(callback).toContain('mergeNotificationPrefs(');
+    expect(callback).toContain('googleCalendarToken: encodeGoogleToken(token)');
+    expect(callback.match(/googleCalendarToken:/g) ?? []).toHaveLength(1);
     expect(callback).not.toContain('googleCalendarToken: token');
   });
 

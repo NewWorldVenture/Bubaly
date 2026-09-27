@@ -265,7 +265,7 @@ export function CaptureShortcuts({
                   type="button"
                   onClick={() => removeAt(index)}
                   aria-label={t('captureShortcuts.removeNamed', { name: t(s.labelKey) })}
-                  className="absolute -right-1.5 -top-1.5 grid h-5 w-5 place-items-center rounded-full bg-danger text-white shadow"
+                  className="absolute -right-1.5 -top-1.5 grid h-5 w-5 place-items-center rounded-full bg-danger text-danger-fg shadow"
                 >
                   <X className="h-3 w-3" />
                 </button>

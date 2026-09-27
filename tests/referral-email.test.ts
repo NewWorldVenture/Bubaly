@@ -237,8 +237,10 @@ describe('in-product referral prompts (source)', () => {
     expect(card).toContain('else toastError(res.reason);');
     expectSays(card, 'referralHomeCard.title', 'Know another family?');
     expectSays(card, 'referralHomeCard.cta', 'Get your link');
-    expect(actions).toContain("from('user_preferences')");
-    expect(actions).toContain('[REFERRAL_HOME_CARD_DISMISSED_KEY]: new Date().toISOString()');
+    // Written through mergeNotificationPrefs (SRV-001 l7): only this key changes.
+    expect(actions).toContain('mergeNotificationPrefs(supabase, ctx.user.id,');
+    expect(actions).toContain('const dismissedAt = new Date().toISOString();');
+    expect(actions).toContain('[REFERRAL_HOME_CARD_DISMISSED_KEY]: dismissedAt');
     expect(actions).toContain("console.error('[referrals/home-card] preferences write failed'");
     expectTranslates(actions, 'referralActions.couldNotSaveYourPreference', 'Could not save your preference. Try again.');
   });

@@ -2922,6 +2922,212 @@ cannot read the document. No writer upserts this table. `vacation_flights` and
 this migration does not guard them. Nothing in `app/`, `lib/` or `components/`
 writes either column or follows it today.
 
+### `0389` makes a decision, once made, stay made — unapplied
+
+`0389_a_decision_once_made_stays_made.sql` (SRV-001, the residual the m7+m8
+re-review recorded: "a rejection is not final in the database"). 0381 put the
+approval model into the database — a vote is the voter's own, a move INTO
+approved/modified needs the yeses the row's model asks for, the rule columns
+are frozen — and, deliberately, gated nothing after the decision. That left the
+other direction open: `approval_requests_decide` (0251) is `can_manage_family`
+on USING and WITH CHECK with no status predicate and no column pin, so on a row
+a parent has DECLINED any manager can, with the browser session and one PATCH
+over `/rest/v1`, re-open it (`{"status":"pending","approvals":[]}` — rule A
+permits taking votes away, rule B does not run), or on a `single` /
+`first_available` / `sequential` row approve it outright with their own yes,
+or on a `two_parent` row where the other parent approved swap their own "no"
+for a "yes" and flip. The same door works approved → rejected, expired →
+pending and cancelled → pending. The application never leaves a decided status
+(`openForDecision` refuses with "This request was already decided."; every
+status writer predicates on `status = 'pending'`).
+
+**What closes it**: one BEFORE UPDATE trigger, `approval_requests_decision_is_final`
+(function `approval_decision_is_final`, SECURITY INVOKER, EXECUTE revoked from
+public, anon and authenticated), for callers subject to row-level security:
+rule D — once `status` is anything but `pending`, `status`, `approvals`,
+`edited_payload`, `decided_by` and `decided_at` cannot change; rule E — `payload`,
+the ask the votes are votes on, cannot change for the life of the row. What the
+application still writes to a decided row (`executed_at` / `execution_result`
+from `stampExecution` on both paths and the private-purchase result stamp;
+`consequences`, `request_id`, `payload_kind` attached after filing) is untouched.
+errcode 42501. 0251's policy and 0381's three rules are left exactly as written.
+Replay-safe (`create or replace`, `drop trigger if exists` before `create`).
+
+**Ships on its own.** The application half is live on merge: the run executor
+now derives what it runs through the same `effectiveArgsOf` the approval card
+and `decide()` use (`approvedArgsFor` in `lib/ai/runs/executor.ts`), so a value
+written to `edited_payload` directly cannot reach a tool from that side either.
+Until 0389 is applied, a manager with the browser session can still re-open or
+flip a decided request over `/rest/v1`.
+
+**Evidence.** `docs/audit/two-parents-means-two-parents-check.sql`, extended:
+the re-open of a declined two-parent row, the declined `single` → approved flip
+in one PATCH (passes 0381's A and B; only 0389 refuses), the un-expire, the
+approved → rejected reversal, the post-decision edit and the payload rewrite on
+a pending row are each refused by the named trigger; the execution stamp on a
+DECLINED row and the existing stamps LAND; the negative control drops ONLY
+`approval_requests_decision_is_final` (0381's triggers still in force) and
+requires the flip and the re-open to land. `tests/a-decision-once-made-stays-made.test.ts`
+reads the migration for the exact rule and the probe for its cases.
+
+### `0390` keeps a queued run's gate where the server put it — unapplied
+
+`0390_a_queued_run_keeps_the_gate_it_was_born_with.sql` (SRV-001, the residual
+"an adult can PATCH `family_automation_runs.metadata` to drop `approval_id`").
+When an accepted concierge plan lands on the family's "ask first" dial, the
+action files an approval and a `family_automation_runs` row whose
+`metadata.approval_id` records that a vote stands between the line and the
+calendar. The "Do it" button read that key and branched on it — present →
+`decide()`, absent → materialise the plan directly. `family_automation_runs_update`
+(0251) is `can_manage_family` with no column pin and the table's one trigger is
+`set_updated_at`, so an adult could PATCH the key away and tap "Do it": the plan
+was materialised with no vote while the two-parent approval stayed pending. The
+lead was WIDER than recorded: 0255/0329 also let a manager INSERT a fresh run
+row with no approval at all, so a pin on UPDATE alone could never be the fix.
+
+**What closes it** is in the ACTION, live on merge: `executeQueuedRunAction`
+and `dismissQueuedRunAction` resolve the governing approval from
+`approval_requests` by the plan it names (`payload->>'plan_id'`, which 0389
+freezes) and never from the run's metadata; a run that claims an approval
+Bubaly cannot find, or whose approval is already decided, does nothing and
+says so (three sentences, seven locales). **What this migration does** is keep
+the cache honest for the rows the server wrote: rule F — for RLS-subject
+callers, once `metadata->>'approval_id'` or `metadata->>'plan_id'` is non-null
+it cannot be removed or changed; every other key stays writable. No user
+session updates `metadata` today, so it refuses no live path. Deliberately not
+attempted: refusing `status = 'executed'` while a pending approval names the
+plan, because the approve path closes the run on the deciding parent's own
+session after the flip and a second pending approval for the same plan would
+make that honest close fail. errcode 42501. Replay-safe.
+
+**Evidence.** `docs/audit/automation-runs-pin-what-a-member-may-queue-check.sql`,
+extended: a manager dropping `approval_id` or pointing it elsewhere is refused
+by the named trigger; the same manager adding an unrelated key LANDS; the
+negative control drops ONLY this trigger and requires the scrub to succeed.
+`tests/scrubbing-a-runs-metadata-does-not-skip-the-vote.test.ts` drives the
+action against a run whose metadata was scrubbed and against a row born without
+an approval, and asserts nothing is materialised until the vote passes.
+
+### `0391` gives the document vault's step-up a counterpart in the database — unapplied
+
+`0391_a_password_alone_does_not_open_the_familys_vault.sql` (O-03, the
+document half). Eight document pages ask a parent who enrolled two-step
+verification for their code (`requireAal2(ctx, 'documents', …)`), and until
+now that page guard was the whole enforcement: every policy on the tables
+behind them is a membership or role check, so the same parent's password-only
+(aal1) session could read every stored password, alarm code and tax
+document, and change or delete them, over `/rest/v1`.
+
+**What closes it**: reusing 0382's `session_cleared_step_up()` (no new
+helper), RESTRICTIVE insert, update and delete guards on `family_credentials`,
+`household_info`, `tax_documents` and `paperwork_items`, and a RESTRICTIVE
+select guard on the first three (the step-up on passwords, binder and tax is a
+read gate — the point is not to SEE the secret). Every guard is
+`session_cleared_step_up() or not can_manage_family(family_id)`, the rule the
+page applies: only a parent or adult is ever asked for a code, so a child or
+teen who enrolled an authenticator for their own account is left to the
+table's own policies rather than locked out of pages that never offer them a
+code. The update guard carries the clause on both halves. Replay-safe.
+
+**Ships on its own.** The application half is live on merge: the paperwork
+server actions now ask for the code before touching a row (`paperworkScope`,
+mirroring the money actions), send a refused family to the step-up page, and
+confirm that a status change and the "marked as handled" stamp actually
+landed (a filtered update no longer reports success, and a created calendar
+event whose stamp did not land says so instead of inviting a duplicate).
+
+**Deliberately NOT covered**: `public.documents` and the `documents` storage
+bucket, the table the finding is named after. `/dashboard/home` writes and
+deletes documents rows with no step-up, and a dozen surfaces outside the vault
+(the home dashboard's expiring passports, household search, the chat
+assistant, which signs file URLs) read sensitive rows on a password-only
+session, so a guard would either break them silently or lie ("nothing
+expiring"). Closing it needs three owner decisions, recorded in finalaudit's
+O-03 row: whether enrolled managers are asked for the code at sign-in; what
+the home page may do to vaulted documents; and how to guard stored files
+with no documents row.
+
+**Evidence.** `docs/audit/a-password-alone-does-not-open-the-familys-vault-check.sql`:
+a control that the only thing refusing is the assurance clause; an enrolled
+parent at aal1 reads nothing from the three secret tables and every write on
+the four is refused; the same parent at aal2, and a never-enrolled family,
+read and write; an ENROLLED CHILD at aal1 keeps exactly what the base
+policies allow; the catalogue holds exactly fifteen guards, each carrying the
+role clause, and none on documents; and a negative control that drops the
+guard (or its role half) and requires the refused read to land. The two
+existing credential probes now exclude these guards by what they are
+(restrictive and calling the helper), not by name.
+
+
+### `0419` retires the assistant keys of a parent who leaves the family — unapplied
+
+`0419_a_departed_parent_keeps_no_assistant_key.sql` (SRV-001 l12). An
+assistant key (`assistant_links`) is a standing bearer grant over the
+household: Siri or Alexa, holding its secret, has `/api/assistant` read the
+family's calendar, open tasks and lists aloud and, with the `capture` scope,
+file events, notes, groceries and to-dos. Only a parent can mint one (0343),
+and the key carries that parent's user_id. Removing a member only sets
+`family_members.is_active = false`, and demoting one only changes `role`;
+neither touched the key, and the resolver matched on the token hash and
+`revoked_at` alone. So a co-parent removed from the household kept a working
+key until someone found it on `/dashboard/assistants` (which does not say whose
+key each one is) and pressed Revoke.
+
+**What closes it**: an AFTER UPDATE (`is_active`, `role`, `user_id`,
+`family_id`) OR DELETE trigger on `family_members`. Whenever the old
+(family, user) pair no longer has an active parent row, it stamps
+`revoked_at` on that pair's live keys in that family. SECURITY DEFINER with a
+pinned search_path, because an adult may remove a parent (0211) but is refused
+writes on `assistant_links` by 0343; EXECUTE revoked from the API roles. A
+one-time backfill retires the keys already orphaned the same way; it touches
+only `revoked_at`, and only on keys whose owner is not an active parent of the
+key's family. Replay-safe.
+
+**Ships on its own.** The application half is live on merge:
+`resolveAssistantLink` resolves a key only while its owner is an active parent
+of its family, and a failed membership read refuses. So production is closed
+before this is applied; the migration retires the keys rather than only
+refusing them.
+
+**Evidence.** `docs/audit/a-departed-parent-keeps-no-assistant-key-check.sql`:
+a parent removed by another parent (with that parent's own JWT), a parent
+demoted, and a parent's row deleted each lose their live key; the remover's
+own key, the removed parent's key in another household, an already-retired
+key's stamp, a child's removal and an unchanged re-save are untouched; the
+catalogue carries the trigger for UPDATE and DELETE and a definer function
+the API roles cannot execute; and a negative control that drops only the
+trigger leaves the removed parent's key live. Measured red with the migration
+absent and with a trigger function that does nothing.
+
+### `0420` lets only a released app be installed — unapplied
+
+`0420_only_a_released_app_installs.sql` (SRV-001 l8). `family_apps.status` is
+published, beta, coming_soon or retired, and the App Store page drew no
+Install button for a coming-soon app — that was the whole rule. 0165's install
+policies are `is_family_member(family_id)` and nothing else, so any member,
+a child included, could install an unreleased app through the action or over
+`/rest/v1`, and the card then showed "Unavailable" with nothing to press.
+
+**What closes it**: two RESTRICTIVE policies on `family_app_installs`, for
+INSERT (WITH CHECK) and UPDATE (USING and WITH CHECK), requiring the row's app
+to be published or beta, `to authenticated, anon`. DELETE is deliberately left open, so an
+install whose app later moved back to coming-soon can always be removed.
+Existing rows are untouched. Replay-safe.
+
+**Ships on its own.** The application half is live on merge: `installAppAction`
+reads the app's status (strictly — a failed read refuses) and refuses anything
+but published or beta with a sentence in seven locales, and an installed app
+keeps its Remove control whatever its status now says. In production the
+catalogue is empty (no migration seeds `family_apps`) and `/dashboard/app-store`
+is linked from nowhere, so this is a boundary set before it is needed.
+
+**Evidence.** `docs/audit/only-a-released-app-installs-check.sql`: a member
+installs a published and a beta app; a coming-soon and a retired app are
+refused with 42501 and nothing is written; an install cannot be re-pointed at
+an unreleased app; an install whose app went back to coming-soon can still be
+removed; exactly two restrictive guards and none on delete; negative control:
+with the guards dropped the coming-soon install lands. Measured red without
+the migration (five named failures).
 ### `0426`–`0443`, PR #548's block — all unapplied, and four numbers deliberately left empty
 
 PR #548 numbered this block `0318`–`0338`, then `0361`–`0382`, and each time
