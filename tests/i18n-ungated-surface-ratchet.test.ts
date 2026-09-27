@@ -172,7 +172,13 @@ import { scanPaths } from '../scripts/i18n-scan.mjs';
 // now come from the catalogue rather than an English constant in lib/.
 //
 // Then to 2,789 with the moving module's status labels, the same shape.
-const CEILING = 2789;
+//
+// Then to 2,784 as the last five were translated: the social post-permission
+// refusal, the marketplace order-step error (which also stopped echoing the
+// caller's status), the admin feedback and ticket-status messages, and the
+// voice module's route confirmations. Every template finding the scanner can
+// see is now translated; what remains here is ordinary strings.
+const CEILING = 2784;
 
 describe('the ungated i18n surface does not get worse', () => {
   const findings = scanPaths(['app', 'components']);

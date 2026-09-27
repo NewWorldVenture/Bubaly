@@ -31,9 +31,12 @@ function done(): Result {
   return { ok: true };
 }
 
-function fail(op: string, error: unknown): Result {
+// `op` is English for the server log; what the admin reads is `fallbackKey`
+// in their own language (I18N-002).
+async function fail(op: string, error: unknown, fallbackKey: string): Promise<Result> {
   console.error(`[admin-feedback] ${op} failed`, error);
-  return { ok: false, error: describeActionError(error, `Could not ${op}.`) };
+  const t = await getTranslations();
+  return { ok: false, error: describeActionError(error, t(fallbackKey)) };
 }
 
 /** Move an idea through the roadmap and set its public note in one write. */
@@ -47,7 +50,7 @@ export async function updateIdeaAction(input: { ideaId: string; status: string; 
   const { data, error } = await g.supabase.from('feedback_ideas')
     .update({ status: input.status, admin_note: note || null })
     .eq('id', input.ideaId).select('id').maybeSingle();
-  if (error) return fail('update the idea', error);
+  if (error) return fail('update the idea', error, 'adminFeedback.couldNotUpdateIdea');
   if (!data) return { ok: false, error: t('actions.ideaNotFound') };
   return done();
 }
@@ -60,7 +63,7 @@ export async function setIdeaPinnedAction(input: { ideaId: string; pinned: boole
   const { data, error } = await g.supabase.from('feedback_ideas')
     .update({ pinned: !!input.pinned })
     .eq('id', input.ideaId).select('id').maybeSingle();
-  if (error) return fail('pin the idea', error);
+  if (error) return fail('pin the idea', error, 'adminFeedback.couldNotPinIdea');
   if (!data) return { ok: false, error: t('actions.ideaNotFound') };
   return done();
 }
@@ -72,7 +75,7 @@ export async function deleteIdeaAction(input: { ideaId: string }): Promise<Resul
   if (!('supabase' in g)) return g;
   const { data, error } = await g.supabase.from('feedback_ideas')
     .delete().eq('id', input.ideaId).select('id').maybeSingle();
-  if (error) return fail('delete the idea', error);
+  if (error) return fail('delete the idea', error, 'adminFeedback.couldNotDeleteIdea');
   if (!data) return { ok: false, error: t('actions.ideaNotFound') };
   return done();
 }
@@ -97,8 +100,8 @@ export async function syncGithubNowAction(): Promise<{ ok: true; summary: string
     revalidatePath('/feedback');
     return { ok: true, summary: summarizeSync(result) };
   } catch (e) {
-    const f = fail('sync with GitHub', e);
-    return { ok: false, error: 'error' in f ? f.error : 'Could not sync with GitHub.' };
+    const f = await fail('sync with GitHub', e, 'adminFeedback.couldNotSyncGithub');
+    return { ok: false, error: 'error' in f && f.error ? f.error : (await getTranslations())('adminFeedback.couldNotSyncGithub') };
   }
 }
 
@@ -109,7 +112,7 @@ export async function markAdminNotificationsReadAction(ids?: string[]): Promise<
   let q = g.supabase.from('admin_notifications').update({ is_read: true });
   q = ids && ids.length ? q.in('id', ids) : q.eq('is_read', false);
   const { error } = await q;
-  if (error) return fail('update notifications', error);
+  if (error) return fail('update notifications', error, 'adminFeedback.couldNotUpdateNotifications');
   revalidatePath('/admin/feedback');
   return { ok: true };
 }
@@ -128,6 +131,6 @@ export async function postTeamReplyAction(input: { ideaId: string; body: string 
     is_team: true,
     body,
   });
-  if (error) return fail('post the reply', error);
+  if (error) return fail('post the reply', error, 'adminFeedback.couldNotPostReply');
   return done();
 }
