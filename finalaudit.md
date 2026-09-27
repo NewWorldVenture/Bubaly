@@ -46159,6 +46159,23 @@ Adding a family's first task also created a list named "Tasks" in English, in th
 
 ---
 
+### `[CLAUDE-1][MEDIUM][MEDICAL]` C1-S9-126 — medical and dental records spliced an English provider noun into English sentences in every locale
+
+**File/path:** `components/modules/medical-records-module.tsx`; seven catalogues.
+
+**Problem.** `/dashboard/medical` and `/dashboard/dental` built their copy from an English noun ("Doctor" or "Dentist") spliced into English templates:
+- "Add Doctor", "Edit Dentist", "Doctor saved", "Could not save dentist"
+- "No doctors yet", "Add your family's dentists and generate …", "Primary doctor"
+- the empty-insurance body
+
+The page title and description, "Whole Family", "Save Changes", "Add Insurance" and both card-upload toasts were English too. None of it could be translated, because no language builds these phrases the English way.
+
+**Fix.** Each kind has whole-sentence catalogue keys (`medicalRecordsModule.{medical,dental}.*`). The module reads them through `k(name)`.
+
+**Status:** FIXED. Scanner findings drop to 2, both type-alias fragments. Most of these were template literals the scanner cannot see.
+
+---
+
 ## What this pass did NOT establish
 
 - No deployed or hosted verification. Every claim here is from local `tsc`,
