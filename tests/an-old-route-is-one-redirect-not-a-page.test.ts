@@ -30,7 +30,8 @@ function pages(dir: string): string[] {
 describe('old routes are config redirects', () => {
   it('each alias is a permanent redirect in next.config.mjs', async () => {
     const { default: config } = await import('../next.config.mjs');
-    const redirects = await config.redirects();
+    expect(config.redirects, 'next.config.mjs defines redirects()').toBeTypeOf('function');
+    const redirects = await config.redirects!();
     for (const [source, destination] of ALIASES) {
       expect(redirects, source).toContainEqual({ source, destination, permanent: true });
     }
