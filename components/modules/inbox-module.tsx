@@ -383,7 +383,7 @@ export function InboxModule() {
 }
 
 function useCommunicationState<T>(communicationId: string, initialValue: T): [T, (value: React.SetStateAction<T>) => void] {
-  const [values, setValues] = useState(() => new Map<string, T>());
+  const [values, setValues] = useState<Map<string, T>>(() => new Map());
   const value = values.has(communicationId) ? values.get(communicationId)! : initialValue;
   return [value, update => setValues(previous => {
     const before = previous.has(communicationId) ? previous.get(communicationId)! : initialValue;
