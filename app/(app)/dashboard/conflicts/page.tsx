@@ -8,6 +8,7 @@ import { detectConflicts, quickFixMoveAfter, type TimedEvent } from '@/lib/famil
 import { ConflictResolver, type ConflictView } from '@/components/family/conflict-resolver';
 import { getLocaleContext, getTranslations } from '@/lib/i18n/server';
 import type { LocaleCode } from '@/lib/i18n/locales';
+import { ErrorState } from '@/components/ui/states';
 
 export const metadata: Metadata = { title: 'AI Conflict Resolution' };
 export const dynamic = 'force-dynamic';
@@ -38,7 +39,10 @@ export default async function ConflictsPage() {
   const now = new Date();
   const in14 = new Date(now.getTime() + 14 * 24 * 3_600_000);
 
-  const [{ data: events }, { data: members }] = await settleAll([
+  // A failed read here is not "no conflicts". `detectConflicts([])` returns an
+  // empty list, which this page renders as the all-clear — the one answer a
+  // conflict detector must never give when it could not look.
+  const [{ data: events, error: eventsError }, { data: members, error: membersError }] = await settleAll([
     supabase
       .from('calendar_events')
       .select('id, title, starts_at, ends_at, all_day, location, assignee_id')
@@ -51,6 +55,12 @@ export default async function ConflictsPage() {
       .limit(MAX_EVENTS),
     supabase.from('family_members').select('id, display_name').eq('family_id', familyId),
   ]);
+
+  const readError = eventsError ?? membersError;
+  if (readError) {
+    console.error('[conflicts] calendar read failed', readError);
+    return <ErrorState message={t('conflicts.couldNotCheckForClashes')} />;
+  }
 
   const nameById = new Map((members ?? []).map((m) => [m.id, m.display_name]));
   const timed: TimedEvent[] = (events ?? []).map((e) => ({

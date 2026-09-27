@@ -1,6 +1,8 @@
 'use client';
 
 import { useState, useTransition } from 'react';
+
+import { ActionError, useActionError } from '@/components/ui/action-error';
 import { IdCard, Plus, Pencil, Trash2 } from 'lucide-react';
 import { saveLicenseAction, deleteLicenseAction } from '@/app/(app)/dashboard/auto/actions';
 import { renewalStatus } from '@/lib/auto/renewals';
@@ -23,9 +25,11 @@ export function LicensesClient({ licenses, members }: { licenses: License[]; mem
   const [open, setOpen] = useState(false);
   const [editing, setEditing] = useState<License | null>(null);
   const [pending, start] = useTransition();
+  const { message: actionError, run } = useActionError();
 
   return (
     <div className="space-y-4">
+      <ActionError message={actionError} />
       <div className="flex items-center justify-between">
         <h2 className="text-sm font-semibold">{t('licensesClient.driverAposSLicenses')}</h2>
         <Button onClick={() => { setEditing(null); setOpen(true); }}><Plus className="h-4 w-4" /> {t('licensesClient.addLicense')}</Button>
@@ -52,7 +56,7 @@ export function LicensesClient({ licenses, members }: { licenses: License[]; mem
                 </div>
                 <div className="mt-3 flex items-center gap-3 border-t border-border/50 pt-2 text-xs">
                   <button onClick={() => { setEditing(l); setOpen(true); }} className="inline-flex items-center gap-1 text-muted hover:text-fg"><Pencil className="h-3.5 w-3.5" />{' '}{t('licensesClient.edit')}</button>
-                  <button onClick={() => start(async () => { await deleteLicenseAction(l.id); })} className="inline-flex items-center gap-1 text-muted hover:text-danger"><Trash2 className="h-3.5 w-3.5" />{' '}{t('licensesClient.delete')}</button>
+                  <button onClick={() => start(async () => { await run(() => deleteLicenseAction(l.id)); })} className="inline-flex items-center gap-1 text-muted hover:text-danger"><Trash2 className="h-3.5 w-3.5" />{' '}{t('licensesClient.delete')}</button>
                 </div>
               </Card>
             );
@@ -61,7 +65,7 @@ export function LicensesClient({ licenses, members }: { licenses: License[]; mem
       )}
 
       <Modal open={open} onClose={() => setOpen(false)} title={editing ? 'Edit license' : 'Add license'}>
-        <form action={(fd) => start(async () => { await saveLicenseAction(fd); setOpen(false); })} className="space-y-3">
+        <form action={(fd) => start(async () => { if (await run(() => saveLicenseAction(fd))) setOpen(false); })} className="space-y-3">
           {editing && <input type="hidden" name="id" value={editing.id} />}
           <div className="grid grid-cols-2 gap-3">
             <Field label={t('licensesClient.holderName')}><Input name="holder_name" required defaultValue={editing?.holder_name ?? ''} /></Field>

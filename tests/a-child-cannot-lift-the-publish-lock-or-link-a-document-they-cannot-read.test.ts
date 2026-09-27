@@ -194,12 +194,26 @@ function rolesInHelper(fn: string): string[] {
 }
 
 // ── What the database thinks a social role may do ─────────────────────────
+// A role's grant is read from the CASE arm that names it. Three shapes occur in
+// the corpus: `true` (everything), `false`, a `p_permission in (…)` allow-list,
+// and — since 0348 took manage_access away from the admin — the deny-list
+// `p_permission <> '…'`, which is everything BUT the named permissions. An arm
+// in a shape not read here leaves the role out of the matrix, and every check
+// against it then reads as refused: that is how the admin arm's new shape made
+// this file report the database refusing a parent it in fact admits.
+type SocialGrant = 'all' | string[] | { allBut: string[] };
 const SOCIAL_MATRIX = (() => {
   const { text } = lastDefinition('social_has_permission');
-  const matrix = new Map<string, 'all' | string[]>();
-  for (const m of text.matchAll(/when\s+'([a-z_]+)'\s+then\s+(true|false|p_permission\s+in\s*\(([^)]*)\))/gi)) {
-    matrix.set(m[1], m[2].toLowerCase() === 'true' ? 'all' : m[2].toLowerCase() === 'false' ? [] :
-      m[3].split(',').map((p) => p.trim().replace(/^'|'$/g, '')).filter(Boolean));
+  const matrix = new Map<string, SocialGrant>();
+  const list = (raw: string) => raw.split(',').map((p) => p.trim().replace(/^'|'$/g, '')).filter(Boolean);
+  for (const m of text.matchAll(/when\s+'([a-z_]+)'\s+then\s+(true|false|p_permission\s+in\s*\(([^)]*)\)|p_permission\s+(?:<>|!=)\s+'([a-z_]+)'|p_permission\s+not\s+in\s*\(([^)]*)\))/gi)) {
+    const arm = m[2].toLowerCase();
+    matrix.set(m[1],
+      arm === 'true' ? 'all'
+        : arm === 'false' ? []
+          : m[3] !== undefined ? list(m[3])
+            : m[4] !== undefined ? { allBut: [m[4]] }
+              : { allBut: list(m[5]) });
   }
   return matrix;
 })();
@@ -225,7 +239,9 @@ function socialRoleInDb(m: Member): string {
 function dbSocialPermission(m: Member, permission: string): boolean {
   const granted = SOCIAL_MATRIX.get(socialRoleInDb(m));
   if (granted === undefined) return false;
-  return granted === 'all' || granted.includes(permission);
+  if (granted === 'all') return true;
+  if (Array.isArray(granted)) return granted.includes(permission);
+  return !granted.allBut.includes(permission);
 }
 
 function evalSocialPredicate(expr: string, m: Member): boolean {

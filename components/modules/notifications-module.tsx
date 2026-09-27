@@ -11,7 +11,7 @@ import { partitionByPriority } from '@/lib/notifications/priority';
 import { useRealtimeQuery } from '@/lib/hooks/use-realtime-query';
 import { createClient } from '@/lib/supabase/client';
 import { settle } from '@/lib/supabase/settle';
-import { describeDbError } from '@/lib/supabase/errors';
+import { describeDbError, wroteNoRows } from '@/lib/supabase/errors';
 import { useToast } from '@/components/ui/toast';
 import { PageHeader } from '@/components/app/page-header';
 import { AiInsight } from '@/components/ai/ai-insight';
@@ -88,8 +88,13 @@ export function NotificationsModule() {
 
   async function remove(id: string) {
     const supabase = createClient();
-    const { error } = await supabase.from('notifications').delete().eq('id', id);
+    // Family-wide rows (no user_id) are listed to every member but deletable
+    // only by a manager (own row OR can_manage_family). A refused delete is
+    // not an error — it matches nothing — so without the row check the bin
+    // did nothing, said nothing, and the row came back on refresh.
+    const { data: rows, error } = await supabase.from('notifications').delete().eq('id', id).select('id');
     if (error) return toastError(describeDbError(error));
+    if (wroteNoRows(rows)) toastError(t('errors.thatChangeWasNotSaved'));
     void refresh();
   }
 

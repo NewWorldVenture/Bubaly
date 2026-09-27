@@ -80,8 +80,13 @@ export async function updateConciergeAction(input: {
   if (typeof input.enabled === 'boolean') patch.ai_concierge_enabled = input.enabled;
   if (typeof input.greeting === 'string') patch.ai_greeting = input.greeting.trim().slice(0, 500) || null;
   // The fallback number is the one thing on this card that leaves the product: it
-  // is dialled and texted. Store it in the only form the provider accepts, and
-  // tell the parent now instead of dropping every future urgent text in silence.
+  // is dialled and texted from Bubaly's own Twilio account, so it is stored only
+  // in the form the provider accepts, and the parent is told now instead of every
+  // future urgent text being dropped in silence. It used to be stored as typed:
+  // the field's own placeholder format ("+1 555 123 4567") then failed the E.164
+  // check in urgent SMS delivery on every message, and anything else typed here
+  // reached the call's TwiML. `normalizeFallbackPhone` also refuses a number
+  // without its country code rather than guessing +1 — see its header.
   if (input.forwardTo !== undefined) {
     const fallback = normalizeFallbackPhone(input.forwardTo);
     if (!fallback.ok) return { ok: false, error: t('actions.enterTheFallbackNumberIn') };

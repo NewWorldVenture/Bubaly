@@ -30,14 +30,21 @@ export async function POST(_req: Request, { params }: { params: Promise<{ childI
       { status: 429, headers: { 'Retry-After': String(limited.retryAfter) } },
     );
 
+    // Every read below decides either whether this call is allowed or what a
+    // child is told about their own money, so a failed read stops the call
+    // (503) rather than standing in for "no wallet", "no calls today" or "a
+    // balance of zero". Each of those used to be the silent default here.
+    const unavailable = () => NextResponse.json({ error: tr('child.failedToGenerateCoaching') }, { status: 503 });
+
     // Verify the child wallet belongs to this family (RLS also enforces this)
-    const { data: cw } = await supabase
+    const { data: cw, error: walletError } = await supabase
       .from('child_wallets')
       .select('id, member_id')
       .eq('id', childId)
       .eq('family_id', familyId)
       .eq('is_active', true)
       .maybeSingle();
+    if (walletError) { console.error('[ai-wallet-child] wallet read failed', walletError); return unavailable(); }
     if (!cw) return NextResponse.json({ error: tr('child.childWalletNotFound') }, { status: 404 });
 
     // Tier gate
@@ -50,13 +57,16 @@ export async function POST(_req: Request, { params }: { params: Promise<{ childI
     const dailyLimit = AI_COACH_DAILY_LIMIT[tier];
     if (Number.isFinite(dailyLimit)) {
       const startOfDay = new Date(); startOfDay.setHours(0, 0, 0, 0);
-      const { count: usedToday } = await supabase
+      const { count: usedToday, error: meterError } = await supabase
         .from('wallet_audit_logs')
         .select('id', { count: 'exact', head: true })
         .eq('family_id', familyId)
         .eq('action', 'ai_coach_call')
         .gte('created_at', startOfDay.toISOString());
-      if ((usedToday ?? 0) >= dailyLimit) {
+      // An unreadable meter is not "none used": that answer lifted the daily
+      // limit, and every call behind it is a paid model call.
+      if (meterError || usedToday === null) { console.error('[ai-wallet-child] usage meter read failed', meterError); return unavailable(); }
+      if (usedToday >= dailyLimit) {
         return NextResponse.json(
           { error: `You've reached today's AI Money Coach limit (${dailyLimit}/day on your plan). Upgrade to Plus for unlimited coaching.` },
           { status: 429 },
@@ -64,7 +74,12 @@ export async function POST(_req: Request, { params }: { params: Promise<{ childI
       }
     }
 
-    const [{ data: member }, { data: walletBuckets }, { data: txns }, { data: goals }] = await settleAll([
+    const [
+      { data: member, error: memberError },
+      { data: walletBuckets, error: bucketsError },
+      { data: txns, error: txnsError },
+      { data: goals, error: goalsError },
+    ] = await settleAll([
       supabase.from('family_members').select('display_name').eq('id', cw.member_id).maybeSingle(),
       supabase.from('wallet_buckets').select('id, kind').eq('child_wallet_id', childId),
       // Money, so a quietly truncated read is a wrong balance, not a short
@@ -72,6 +87,11 @@ export async function POST(_req: Request, { params }: { params: Promise<{ childI
       readAllAsQuery((from, to) => supabase.from('wallet_transactions').select('bucket_id, status, direction, amount_cents, created_at').eq('child_wallet_id', childId).order('id').range(from, to), { max: 2000 }),
       supabase.from('wallet_goals').select('title, saved_cents, target_cents').eq('child_wallet_id', childId).neq('status', 'cancelled').limit(20),
     ]);
+
+    if (memberError || bucketsError || txnsError || goalsError) {
+      console.error('[ai-wallet-child] ledger read failed', memberError ?? bucketsError ?? txnsError ?? goalsError);
+      return unavailable();
+    }
 
     const bucketKindById = new Map((walletBuckets ?? []).map((b) => [b.id, b.kind as BucketKind]));
     const entries: LedgerEntry[] = (txns ?? []).map((t) => ({

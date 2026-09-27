@@ -64,3 +64,21 @@ export function normalizeFallbackPhone(
   const e164 = `+${typed.replace(/\D/g, '')}`;
   return isE164(e164) ? { ok: true, value: e164 } : { ok: false };
 }
+
+/** A number Bubaly may dial or text on a family's behalf, as E.164, or null.
+ *  Stricter than toE164: only phone punctuation is accepted, because toE164
+ *  keeps the digits of whatever it is given and would make a number out of
+ *  text (a URL, a TwiML fragment, a note with a date in it).
+ *
+ *  This is the READ side, for rows written before `normalizeFallbackPhone`
+ *  guarded the form: the voice route and urgent delivery pass a stored
+ *  value through it so "+1 555 123 4567" is dialled and texted as
+ *  +15551234567. It keeps toE164's ten-digits-means-+1 default, which the
+ *  write side above refuses; 0384 normalizes the stored rows on that same
+ *  no-guess rule and clears the ones it cannot read, so the default here only
+ *  ever applies to a row that predates both. */
+export function toCallableE164(input: string | null | undefined): string | null {
+  const typed = input?.trim() ?? '';
+  if (!typed || !/^[+\d\s().-]+$/.test(typed)) return null;
+  return toE164(typed);
+}

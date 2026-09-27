@@ -8,7 +8,7 @@ import { createServiceClient } from '@/lib/supabase/server';
 import { withGuardianTables } from '@/lib/supabase/guardian-tables';
 import { screeningTurn, summarizeScreening, type ScreeningTurn } from '@/lib/guardian/ai-screen';
 import {
-  wrapTwiml, twimlSay, twimlGather, twimlRecord, twimlHangup,
+  wrapTwiml, twimlSay, twimlGather, twimlRecord, twimlDial, twimlHangup,
   sendSms, validateTwilioSignature,
 } from '@/lib/guardian/twilio';
 import { formatPhone } from '@/lib/guardian/phone';
@@ -190,7 +190,7 @@ export async function POST(req: NextRequest) {
       if (memberPhone) {
         return finish(wrapTwiml(
           twimlSay(responseText || tr('screen.connectingYouNowOneMoment')),
-          `<Dial>${memberPhone}</Dial>`,
+          twimlDial(memberPhone),
         ));
       }
 

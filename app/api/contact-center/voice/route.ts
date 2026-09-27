@@ -12,6 +12,7 @@ import {
 } from '@/lib/guardian/twilio';
 import { readBoundedRequestFormData } from '@/lib/server/bounded-request-body';
 import { resolveFamilyByNumberResult, getOrCreateChannelResult } from '@/lib/contact-center/server';
+import { toCallableE164 } from '@/lib/contact-center/phone';
 
 export const runtime = 'nodejs';
 export const dynamic = 'force-dynamic';
@@ -60,16 +61,28 @@ export async function POST(req: NextRequest) {
   const familyLabel = familyResult.data?.name || 'this family';
 
   // Concierge off → forward to the human fallback if set, else take a message.
-  if (channel?.ai_concierge_enabled === false) {
-    if (channel.forward_to_phone) {
-      return twiml(wrapTwiml(twimlSay(t('voice.pleaseHoldWhileIConnect')), twimlDial(channel.forward_to_phone, to)));
+  // A number saved before the settings form normalized it is still dialled
+  // when it reads as one. A stored value that does not read as a number (a row
+  // from before the form refused text; 0384 clears such rows) is not treated as
+  // "no number": it goes into the <Dial> as it stands, escaped, so the document
+  // still parses and the provider's own refusal of the noun is what fails — and
+  // the message-taking verbs below follow it, because Twilio moves on to the
+  // next verb when a <Dial> cannot connect, so the caller is asked for a message
+  // rather than dropped.
+  let legacyDial: string | null = null;
+  if (channel?.ai_concierge_enabled === false && channel.forward_to_phone) {
+    const forwardTo = toCallableE164(channel.forward_to_phone);
+    if (forwardTo) {
+      return twiml(wrapTwiml(twimlSay(t('voice.pleaseHoldWhileIConnect')), twimlDial(forwardTo, to)));
     }
+    legacyDial = twimlDial(channel.forward_to_phone, to);
   }
 
   const greeting = channel?.ai_greeting
     || `Hello, you've reached ${familyLabel}'s Bubaly assistant. I can take a message and make sure they get it.`;
 
   return twiml(wrapTwiml(
+    ...(legacyDial ? [legacyDial] : []),
     twimlSay(greeting),
     twimlRecord({
       transcribeCallback: `${BASE_URL}/api/contact-center/voice/transcription?familyId=${familyId}`,

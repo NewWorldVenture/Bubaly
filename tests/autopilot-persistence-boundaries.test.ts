@@ -13,6 +13,13 @@ const harness = vi.hoisted(() => ({
   db: null as unknown,
   role: 'parent',
   revalidatePath: vi.fn(),
+  // What the family's real approval history supports when a parent accepts.
+  // The accept action re-derives the proposal instead of trusting the row.
+  candidates: [] as unknown[],
+}));
+vi.mock('@/lib/autopilot/policy-scan', async (importOriginal) => ({
+  ...(await importOriginal<typeof import('@/lib/autopilot/policy-scan')>()),
+  loadPolicyCandidates: async () => harness.candidates,
 }));
 vi.mock('next/cache', () => ({ revalidatePath: harness.revalidatePath }));
 vi.mock('@/lib/supabase/auth', () => ({
@@ -174,6 +181,15 @@ const PROPOSAL = {
   approvals: 4, evidence: 'Approved 4 times since 12 Aug, never rejected', firstApprovedAt: '2026-08-12T10:00:00Z',
 };
 
+const SUPPORTED = {
+  domain: 'scheduling', capability: 'automate', toolName: 'reminders.create',
+  approvals: 4, rejections: 0, corrections: 0, failedCalls: 0, succeededCalls: 4,
+  firstApprovedAt: '2026-08-12T10:00:00Z', lastApprovedAt: '2026-09-01T10:00:00Z',
+  evidence: 'Approved 4 times since 12 Aug, never rejected', confidence: 74,
+  dedupeKey: 'policy:scheduling:automate:reminders.create',
+  title: 'Let Bubaly create reminders without asking', actionLabel: 'Trust Bubaly with this',
+};
+
 function seedSuggestion(db: InMemorySupabase, over: Record<string, unknown> = {}) {
   db.seed('autopilot_suggestions', [{
     id: 'sug-1', family_id: 'family-1', member_id: null, kind: 'policy', status: 'open',
@@ -192,8 +208,34 @@ describe('accepting a learned policy suggestion', () => {
     harness.db = db;
     harness.role = 'parent';
     harness.revalidatePath.mockClear();
+    harness.candidates = [SUPPORTED];
   });
   afterEach(() => vi.restoreAllMocks());
+
+  it('refuses a suggestion the family\'s approval history does not support', async () => {
+    // A member can write autopilot_suggestions directly; a forged "suggestion"
+    // proposing an AI permission, with invented evidence, must not become a
+    // policy just because a parent clicked accept.
+    harness.candidates = [];
+    seedSuggestion(db, { payload: { ...PROPOSAL, domain: 'finances', tool: 'wallet.transfer', evidence: 'Approved 40 times, never rejected' } });
+
+    const res = await acceptPolicySuggestionAction({ suggestionId: 'sug-1' });
+
+    expect(res).toEqual({ ok: false, error: 'That suggestion does not propose a policy.' });
+    expect(db.table('trust_policies')).toEqual([]);
+    expect(db.table('autopilot_suggestions')[0].status).toBe('open');
+  });
+
+  it('writes the policy from the re-derived evidence, not the row', async () => {
+    seedSuggestion(db, { payload: { ...PROPOSAL, approvals: 999, evidence: 'Approved 999 times' } });
+
+    const res = await acceptPolicySuggestionAction({ suggestionId: 'sug-1' });
+
+    expect(res).toEqual({ ok: true });
+    const [policy] = db.table('trust_policies');
+    expect(String(policy.description)).toContain('Approved 4 times since 12 Aug, never rejected');
+    expect((policy.conditions as Record<string, unknown>).approvals).toBe(4);
+  });
 
   it('writes exactly one narrow, tag-scoped trust_policies row and marks the suggestion done', async () => {
     seedSuggestion(db);
