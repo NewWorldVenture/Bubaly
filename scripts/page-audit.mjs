@@ -89,6 +89,10 @@ async function auditOne(context, path) {
     row.status = res?.status() ?? null;
     if (res && res.status() >= 500) row.server = `${res.headers().server ?? '-'}${res.headers()['x-vercel-id'] ? ' vercel' : ''}`;
     row.finalPath = new URL(page.url()).pathname + new URL(page.url()).search;
+    // Many signed-in pages paint a skeleton, then their heading once the
+    // client-side read lands, after the network went idle. Give the heading a
+    // moment before counting it, or the count measures the skeleton.
+    await page.waitForSelector('h1', { timeout: 3_000 }).catch(() => {});
     const probe = await page.evaluate(() => {
       const text = document.body?.innerText ?? '';
       const links = [...document.querySelectorAll('a[href]')].map((a) => a.getAttribute('href'));

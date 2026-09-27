@@ -111,7 +111,7 @@ export function SubscriptionsWorkspace({ context, timezone = 'UTC' }: { context:
   return (
     <div className="space-y-5">
       <div className="flex flex-wrap items-center justify-between gap-3">
-        <h3 className="flex items-center gap-2 text-base font-semibold"><RefreshCw className="h-4 w-4 text-brand-text" /> {t('subscriptions.subscriptionTracking')}</h3>
+        <h1 className="flex items-center gap-2 text-base font-semibold"><RefreshCw className="h-4 w-4 text-brand-text" /> {t('subscriptions.subscriptionTracking')}</h1>
         <div className="flex items-center gap-2">
           <AiInsight kind="subscriptions" />
           <Button onClick={() => { setCandidateDraft(false); setPriceHistoryDraft(null); setForm(blank()); }}><Plus className="h-4 w-4" /> {t('subscriptions.addSubscription')}</Button>

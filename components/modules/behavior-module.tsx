@@ -115,7 +115,7 @@ export function BehaviorModule() {
   return (
     <div className="space-y-5">
       <div className="flex flex-wrap items-center justify-between gap-3">
-        <h3 className="flex items-center gap-2 text-base font-semibold"><Smile className="h-4 w-4 text-brand-text" /> {tr('behavior.behaviorParentingInsights')}</h3>
+        <h1 className="flex items-center gap-2 text-base font-semibold"><Smile className="h-4 w-4 text-brand-text" /> {tr('behavior.behaviorParentingInsights')}</h1>
         <div className="flex items-center gap-2">
           {members.length > 0 && (
             <Select value={memberFilter} onChange={(e) => setMemberFilter(e.target.value)} className="h-9">

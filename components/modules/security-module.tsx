@@ -92,7 +92,7 @@ export function SecurityModule() {
   return (
     <div className="space-y-5">
       <div className="flex flex-wrap items-center justify-between gap-3">
-        <h3 className="flex items-center gap-2 text-base font-semibold"><ShieldAlert className="h-4 w-4 text-brand-text" /> {tr('security.securityAlerts')}</h3>
+        <h1 className="flex items-center gap-2 text-base font-semibold"><ShieldAlert className="h-4 w-4 text-brand-text" /> {tr('security.securityAlerts')}</h1>
         <Button onClick={() => setForm(blank())}><Plus className="h-4 w-4" /> {tr('security.logEvent')}</Button>
       </div>
 

@@ -151,7 +151,7 @@ export function ExpensesModule() {
   return (
     <div className="space-y-5">
       <div className="flex flex-wrap items-center justify-between gap-3">
-        <h3 className="flex items-center gap-2 text-base font-semibold"><Split className="h-4 w-4 text-brand-text" /> {tr('expenses.expenseSplitting')}</h3>
+        <h1 className="flex items-center gap-2 text-base font-semibold"><Split className="h-4 w-4 text-brand-text" /> {tr('expenses.expenseSplitting')}</h1>
         <div className="flex items-center gap-2">
           <AiInsight kind="expenses" />
           <Button onClick={() => setForm(blank(family?.timezone ?? 'UTC'))}><Plus className="h-4 w-4" /> {tr('expenses.splitAnExpense')}</Button>

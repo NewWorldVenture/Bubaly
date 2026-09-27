@@ -61,7 +61,7 @@ export default async function CampaignDetailPage({ params }: { params: Promise<{
         <div className="flex flex-wrap items-start justify-between gap-3">
           <div>
             <div className="flex items-center gap-2">
-              <h1 className="text-xl font-bold">{c.name}</h1>
+              <h2 className="text-xl font-bold">{c.name}</h2>
               <Badge tone="brand" className="capitalize">{c.status}</Badge>
             </div>
             <p className="mt-1 text-sm text-muted capitalize">{c.channel} · {c.type.replace('_', ' ')}</p>
@@ -110,7 +110,7 @@ async function CampaignDetailReadError() {
   return (
     <div className="module-page">
       <div>
-        <h1 className="text-2xl font-bold tracking-tight sm:text-3xl">{t('campaigns.marketingCampaign')}</h1>
+        <h2 className="text-2xl font-bold tracking-tight sm:text-3xl">{t('campaigns.marketingCampaign')}</h2>
         <p className="mt-1 text-sm text-muted">{t('campaigns.reviewCampaignDetailsAudienceAnd')}</p>
       </div>
       <ErrorState message={t('campaigns.couldNotLoadThisMarketing')} />
