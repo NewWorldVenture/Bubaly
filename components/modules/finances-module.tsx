@@ -26,6 +26,7 @@ import { Avatar } from '@/components/ui/avatar';
 import { cn } from '@/lib/utils/cn';
 import type { Tables, TransactionType, AccountType } from '@/lib/database.types';
 import { useLocale, useTranslations } from '@/components/i18n/locale-provider';
+import { categoryLabel } from '@/lib/finance/category-label';
 import type { LocaleCode } from '@/lib/i18n/locales';
 import { todayInZone } from '@/lib/schedule/zoned';
 
@@ -176,7 +177,7 @@ export function FinancesModule() {
   const tip = useMemo(() => {
     if (spendByCat.length === 0) return tr('financesModule.tipAddTransactions');
     const top = spendByCat.find((r) => r.category !== 'Other') ?? spendByCat[0];
-    return tr('financesModule.tipBiggestCategory', { category: top.category, amount: usd(top.total) });
+    return tr('financesModule.tipBiggestCategory', { category: categoryLabel(tr, top.category), amount: usd(top.total) });
   }, [spendByCat, usd, tr]);
 
   const loading = la || lt || lb || lbi || lg;
@@ -185,10 +186,10 @@ export function FinancesModule() {
   if (readError) return <ErrorState message={tr('financesModule.couldNotLoadFinancialData')} onRetry={() => { void refreshAccounts(); void refreshTxns(); void refreshBudgets(); void refreshBills(); void refreshGoals(); }} />;
 
   const STATS = [
-    { label: 'Total Balance', value: usd(totalBalance), sub: netThisMonth >= 0 ? `${usd(Math.abs(netThisMonth))} this month` : `${usd(Math.abs(netThisMonth))} this month`, up: netThisMonth >= 0, icon: Wallet, tint: 'bg-brand text-brand-fg' },
-    { label: 'Income', value: usd(income), sub: 'This month', up: true, icon: ArrowDownToLine, tint: 'bg-green-500 text-white' },
-    { label: 'Expenses', value: usd(expenses), sub: 'This month', up: false, icon: ArrowUpRight, tint: 'bg-rose-500 text-white' },
-    { label: 'Savings', value: usd(savingsBalance), sub: 'Set aside', up: true, icon: PiggyBank, tint: 'bg-blue-500 text-white' },
+    { label: tr('financesModule.stat.totalBalance'), value: usd(totalBalance), sub: tr('financesModule.amountThisMonth', { amount: usd(Math.abs(netThisMonth)) }), up: netThisMonth >= 0, icon: Wallet, tint: 'bg-brand text-brand-fg' },
+    { label: tr('finances.income'), value: usd(income), sub: tr('financesModule.thisMonth'), up: true, icon: ArrowDownToLine, tint: 'bg-green-500 text-white' },
+    { label: tr('financesModule.stat.expenses'), value: usd(expenses), sub: tr('financesModule.thisMonth'), up: false, icon: ArrowUpRight, tint: 'bg-rose-500 text-white' },
+    { label: tr('finances.savings'), value: usd(savingsBalance), sub: tr('financesModule.setAside'), up: true, icon: PiggyBank, tint: 'bg-blue-500 text-white' },
   ];
 
   return (
@@ -291,7 +292,7 @@ export function FinancesModule() {
                   return (
                     <div key={r.category} className="flex items-center gap-2 text-sm">
                       <span className="grid h-6 w-6 shrink-0 place-items-center rounded-md" style={{ backgroundColor: `${meta.color}22`, color: meta.color }}><Icon className="h-3.5 w-3.5" /></span>
-                      <span className="flex-1 truncate text-muted">{r.category}</span>
+                      <span className="flex-1 truncate text-muted">{categoryLabel(tr, r.category)}</span>
                       <span className="font-medium">{usd(r.total)}</span>
                       <span className="w-9 text-right text-[11px] text-muted">{Math.round((r.total / total) * 100)}%</span>
                     </div>
@@ -304,12 +305,12 @@ export function FinancesModule() {
                 <span className="font-medium">{tr('finances.budgetProgress')}</span>
                 <span className="text-muted">{budgetPct}%</span>
               </div>
-              <p className="text-xs text-muted">{usd(expenses)} of {usd(budgetTotal)}</p>
+              <p className="text-xs text-muted">{tr('financesModule.spentOfBudget', { spent: usd(expenses), budget: usd(budgetTotal) })}</p>
               <div className="mt-1.5 h-2 overflow-hidden rounded-full bg-elevated">
                 <div className={cn('h-full rounded-full', budgetPct > 100 ? 'bg-danger' : 'bg-green-500')} style={{ width: `${Math.min(100, budgetPct)}%` }} />
               </div>
               <p className={cn('mt-1 text-xs font-medium', budgetPct > 100 ? 'text-danger' : 'text-green-400')}>
-                {budgetPct > 100 ? 'Over budget' : 'You’re on track! 🎉'}
+                {budgetPct > 100 ? tr('financesModule.overBudget') : tr('financesModule.onTrack')}
               </p>
             </div>
           </div>
@@ -331,7 +332,7 @@ export function FinancesModule() {
                       <span className="grid h-9 w-9 shrink-0 place-items-center rounded-lg" style={{ backgroundColor: `${meta.color}22`, color: meta.color }}><Icon className="h-4 w-4" /></span>
                       <div className="min-w-0 flex-1">
                         <p className="truncate text-sm font-medium">{t.name}</p>
-                        <p className="truncate text-[11px] text-muted">{t.category ?? '—'}</p>
+                        <p className="truncate text-[11px] text-muted">{t.category ? categoryLabel(tr, t.category) : '—'}</p>
                       </div>
                       <span className="shrink-0 text-[11px] text-muted">{shortDate(t.date)}</span>
                       <span className={cn('w-20 shrink-0 text-right text-sm font-semibold', inc ? 'text-green-400' : 'text-fg')}>
@@ -368,7 +369,7 @@ export function FinancesModule() {
                           <span className="grid h-8 w-8 shrink-0 place-items-center rounded-lg" style={{ backgroundColor: `${meta.color}22`, color: meta.color }}><Icon className="h-4 w-4" /></span>
                           <div className="min-w-0 flex-1">
                             <p className="truncate text-sm font-medium">{b.name}</p>
-                            <p className={cn('text-[11px]', b.status === 'overdue' ? 'text-danger' : 'text-muted')}>{b.status === 'overdue' ? 'Overdue · ' : 'Due '}{shortDate(b.due_date)}</p>
+                            <p className={cn('text-[11px]', b.status === 'overdue' ? 'text-danger' : 'text-muted')}>{b.status === 'overdue' ? tr('financesModule.overdueOn', { date: shortDate(b.due_date) }) : tr('financesModule.dueOn', { date: shortDate(b.due_date) })}</p>
                           </div>
                           <span className="shrink-0 text-sm font-semibold">{usd(num(b.amount))}</span>
                         </div>
@@ -536,7 +537,7 @@ function BillsCalendar({ month, bills, onPrev, onNext }: { month: Date; bills: B
         <button onClick={onNext} aria-label={tr('finances.nextMonth')} className="rounded p-1 hover:bg-elevated"><ChevronRight className="h-3.5 w-3.5" /></button>
       </div>
       <div className="grid grid-cols-7 gap-0.5 text-center">
-        {['S', 'M', 'T', 'W', 'T', 'F', 'S'].map((d, i) => <div key={i} className="py-1 text-[10px] font-semibold text-muted">{d}</div>)}
+        {Array.from({ length: 7 }, (_, i) => new Date(2024, 0, 7 + i).toLocaleDateString(locale.code, { weekday: 'narrow' })).map((d, i) => <div key={i} className="py-1 text-[10px] font-semibold text-muted">{d}</div>)}
         {cells.map((d, i) => {
           if (!d) return <div key={i} />;
           const isToday = ymd(new Date(y, m, d)) === todayStr;
@@ -591,7 +592,7 @@ function AddTransactionModal({ familyId, userId, selfId, accounts, members, onCl
           <Field label={tr('finances.type')}>{(id) => <Select id={id} name="type" defaultValue="expense"><option value="expense">{tr('finances.expense')}</option><option value="income">{tr('finances.income')}</option><option value="transfer">{tr('finances.transfer')}</option></Select>}</Field>
         </div>
         <div className="grid grid-cols-2 gap-3">
-          <Field label={tr('finances.category')}>{(id) => <Select id={id} name="category"><option value="">—</option>{CATEGORIES.map((c) => <option key={c} value={c}>{c}</option>)}</Select>}</Field>
+          <Field label={tr('finances.category')}>{(id) => <Select id={id} name="category"><option value="">—</option>{CATEGORIES.map((c) => <option key={c} value={c}>{categoryLabel(tr, c)}</option>)}</Select>}</Field>
           <Field label={tr('finances.date')}>{(id) => <Input id={id} name="date" type="date" defaultValue={todayInZone(family?.timezone ?? 'UTC')} />}</Field>
         </div>
         <div className="grid grid-cols-2 gap-3">

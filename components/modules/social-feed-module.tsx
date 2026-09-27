@@ -46,20 +46,20 @@ function PlatformGlyph({ platform, size = 'md' }: { platform: string; size?: 'sm
   );
 }
 
-const TABS: { key: FeedTab; label: string }[] = [
-  { key: 'all', label: 'All Feeds' },
-  { key: 'favorites', label: 'Favorites' },
-  { key: 'family', label: 'Family' },
-  { key: 'friends', label: 'Friends' },
-  { key: 'groups', label: 'Groups' },
+const TABS: { key: FeedTab; labelKey: string }[] = [
+  { key: 'all', labelKey: 'socialFeedModule.tab.all' },
+  { key: 'favorites', labelKey: 'socialFeedModule.tab.favorites' },
+  { key: 'family', labelKey: 'socialFeedModule.tab.family' },
+  { key: 'friends', labelKey: 'socialFeedModule.tab.friends' },
+  { key: 'groups', labelKey: 'socialFeedModule.tab.groups' },
 ];
 
-const QUICK: { key: QuickFilter; label: string; icon: typeof Star }[] = [
-  { key: 'unread', label: 'Unread', icon: Rss },
-  { key: 'favorites', label: 'Favorites', icon: Heart },
-  { key: 'videos', label: 'Videos', icon: Video },
-  { key: 'photos', label: 'Photos', icon: ImageIcon },
-  { key: 'links', label: 'Links', icon: Link2 },
+const QUICK: { key: QuickFilter; labelKey: string; icon: typeof Star }[] = [
+  { key: 'unread', labelKey: 'socialFeedModule.quick.unread', icon: Rss },
+  { key: 'favorites', labelKey: 'socialFeedModule.quick.favorites', icon: Heart },
+  { key: 'videos', labelKey: 'socialFeedModule.quick.videos', icon: Video },
+  { key: 'photos', labelKey: 'socialFeedModule.quick.photos', icon: ImageIcon },
+  { key: 'links', labelKey: 'socialFeedModule.quick.links', icon: Link2 },
 ];
 
 export function SocialFeedModule({ sources, items }: { sources: FeedSource[]; items: FeedItem[] }) {
@@ -144,7 +144,7 @@ export function SocialFeedModule({ sources, items }: { sources: FeedSource[]; it
       <div className="mt-4 flex flex-wrap justify-center gap-2">
         {PLATFORMS.map((p) => (
           <button key={p.key} type="button" onClick={() => setShowAdd(true)}
-            className="flex flex-col items-center gap-1 rounded-xl p-1.5 hover:bg-elevated" title={tr('itemAction.add', { name: p.label })}>
+            className="flex flex-col items-center gap-1 rounded-xl p-1.5 hover:bg-elevated" title={tr('socialFeedModule.addPlatform', { platform: p.label })}>
             <PlatformGlyph platform={p.key} />
             <span className="text-[10px] text-muted">{p.label}</span>
           </button>
@@ -196,13 +196,13 @@ export function SocialFeedModule({ sources, items }: { sources: FeedSource[]; it
                 <button key={t.key} onClick={() => setTab(t.key)}
                   className={cn('flex-shrink-0 rounded-lg px-3 py-1.5 text-sm font-medium transition',
                     tab === t.key ? 'bg-brand text-white' : 'text-muted hover:bg-elevated hover:text-fg')}>
-                  {t.label}
+                  {tr(t.labelKey)}
                 </button>
               ))}
             </div>
             {quick && (
               <button onClick={() => setQuick(null)} className="inline-flex flex-shrink-0 items-center gap-1 rounded-lg border border-border px-2.5 py-1.5 text-xs text-muted hover:text-fg">
-                <Filter className="h-3.5 w-3.5" /> {QUICK.find((q) => q.key === quick)?.label} <X className="h-3 w-3" />
+                <Filter className="h-3.5 w-3.5" /> {tr(QUICK.find((q) => q.key === quick)?.labelKey ?? 'socialFeedModule.quick.unread')} <X className="h-3 w-3" />
               </button>
             )}
           </div>
@@ -287,7 +287,7 @@ export function SocialFeedModule({ sources, items }: { sources: FeedSource[]; it
                   <button key={q.key} onClick={() => setQuick(on ? null : q.key)}
                     className={cn('inline-flex items-center gap-1.5 rounded-full border px-3 py-1.5 text-xs font-medium transition',
                       on ? 'border-brand bg-brand/10 text-brand-text' : 'border-border text-muted hover:text-fg')}>
-                    <q.icon className="h-3.5 w-3.5" /> {q.label}
+                    <q.icon className="h-3.5 w-3.5" /> {tr(q.labelKey)}
                     <span className={cn('rounded-full px-1.5 text-[10px] font-bold', on ? 'bg-brand/20' : 'bg-elevated')}>{counts[q.key]}</span>
                   </button>
                 );

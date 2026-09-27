@@ -29,28 +29,10 @@ type Provider = Tables<'health_providers'>;
 type Policy = Tables<'insurance_policies'>;
 type Profile = Tables<'medical_profiles'>;
 
-// Catalogue keys, not words: "Add a doctor" and "Add a dentist" are separate
-// sentences in every language, so nothing here is built from a noun.
-const COPY = {
-  medical: {
-    Icon: Stethoscope,
-    title: 'medicalRecords.titleMedical', desc: 'medicalRecords.descMedical',
-    provider: 'medicalRecords.providerMedical', providers: 'medicalRecords.providersMedical',
-    addProvider: 'medicalRecords.addProviderMedical', addProviderPlus: 'medicalRecords.addProviderPlusMedical',
-    editProvider: 'medicalRecords.editProviderMedical', primaryProvider: 'medicalRecords.primaryProviderMedical',
-    noProvidersYet: 'medicalRecords.noProvidersYetMedical', addProvidersHint: 'medicalRecords.addProvidersHintMedical',
-    addInsuranceHint: 'medicalRecords.addInsuranceHintMedical',
-  },
-  dental: {
-    Icon: Smile,
-    title: 'medicalRecords.titleDental', desc: 'medicalRecords.descDental',
-    provider: 'medicalRecords.providerDental', providers: 'medicalRecords.providersDental',
-    addProvider: 'medicalRecords.addProviderDental', addProviderPlus: 'medicalRecords.addProviderPlusDental',
-    editProvider: 'medicalRecords.editProviderDental', primaryProvider: 'medicalRecords.primaryProviderDental',
-    noProvidersYet: 'medicalRecords.noProvidersYetDental', addProvidersHint: 'medicalRecords.addProvidersHintDental',
-    addInsuranceHint: 'medicalRecords.addInsuranceHintDental',
-  },
-} as const satisfies Record<RecordKind, { Icon: typeof Stethoscope } & Record<string, unknown>>;
+// Every line that names the provider ("Add Doctor", "No dentists yet") is a
+// whole sentence per kind in the catalogue, so each language builds its own
+// grammar rather than splicing an English noun into English (audit C1-S9-126).
+const ICON: Record<RecordKind, typeof Stethoscope> = { medical: Stethoscope, dental: Smile };
 
 const WHOLE_FAMILY = '__family__';
 
@@ -102,8 +84,8 @@ export function MedicalRecordsModule({ kind }: { kind: RecordKind }) {
   const { familyId, userId, members, selfMember, role } = useApp();
   const { success, error: toastError } = useToast();
   const canEdit = isManager(role);
-  const copy = COPY[kind];
-  const Icon = copy.Icon;
+  const Icon = ICON[kind];
+  const k = (name: string) => t(`medicalRecordsModule.${kind}.${name}`);
 
   // ── Data ──────────────────────────────────────────────────
   const { data: providers, loading: pLoading, error: pError, refresh: refreshProviders } = useRealtimeQuery<Provider>({
@@ -133,7 +115,7 @@ export function MedicalRecordsModule({ kind }: { kind: RecordKind }) {
   const providerGroups = useMemo(() => {
     const groups: { key: string; label: string; color: string | null; member: Tables<'family_members'> | null; items: Provider[] }[] = [];
     const family = providers.filter((p) => !p.member_id);
-    if (family.length) groups.push({ key: WHOLE_FAMILY, label: t('medicalRecords.wholeFamily'), color: null, member: null, items: family });
+    if (family.length) groups.push({ key: WHOLE_FAMILY, label: t('medicalRecordsModule.wholeFamily'), color: null, member: null, items: family });
     for (const m of members) {
       const items = providers.filter((p) => p.member_id === m.id);
       if (items.length) groups.push({ key: m.id, label: m.display_name, color: m.color, member: m, items });
@@ -179,9 +161,9 @@ export function MedicalRecordsModule({ kind }: { kind: RecordKind }) {
       ? await sb.from('health_providers').update(fields).eq('id', providerForm.id).eq('family_id', familyId).select('id')
       : await sb.from('health_providers').insert({ ...fields, family_id: familyId, kind, created_by: userId }).select('id');
     setSaving(false);
-    if (err) { toastError(kind === 'medical' ? t('medical.couldNotSaveDoctor') : t('medical.couldNotSaveDentist')); return; }
+    if (err) { toastError(k('couldNotSave')); return; }
     if (wroteNoRows(rows)) { toastError(t('errors.thatChangeWasNotSaved')); return; }
-    success(kind === 'medical' ? t('medical.doctorSaved') : t('medical.dentistSaved'));
+    success(k('saved'));
     setProviderForm(null);
   }
 
@@ -203,9 +185,9 @@ export function MedicalRecordsModule({ kind }: { kind: RecordKind }) {
     const sb = createClient();
     const { path, error: err } = await uploadFamilyDocument(sb, { familyId, folder: 'insurance', file });
     setUploading(null);
-    if (err || !path) { toastError(err ?? t('medical.uploadFailed')); return; }
+    if (err || !path) { toastError(err ?? t('medicalRecordsModule.uploadFailed')); return; }
     setPolicyForm((f) => (f ? { ...f, [side === 'front' ? 'front_image_path' : 'back_image_path']: path } : f));
-    success(side === 'front' ? t('medical.frontOfCardUploaded') : t('medical.backOfCardUploaded'));
+    success(side === 'front' ? t('medicalRecordsModule.frontUploaded') : t('medicalRecordsModule.backUploaded'));
   }
 
   async function savePolicy() {
@@ -304,15 +286,15 @@ export function MedicalRecordsModule({ kind }: { kind: RecordKind }) {
   return (
     <div className="space-y-5">
       <PageHeader
-        title={t(copy.title)}
-        description={t(copy.desc)}
+        title={k('title')}
+        description={k('description')}
         action={
           <div className="flex items-center gap-2">
             <AiInsight kind="medical" iconOnly />
             {canEdit ? (
               <>
                 <Button onClick={() => setCheckInPicker(true)} className="btn-cta"><ClipboardList className="h-4 w-4" /> {t('medicalRecords.atTheDoctor')}</Button>
-                <Button onClick={() => setProviderForm({ ...blankProvider })} variant="secondary"><Plus className="h-4 w-4" /> {t(copy.addProvider)}</Button>
+                <Button onClick={() => setProviderForm({ ...blankProvider })} variant="secondary"><Plus className="h-4 w-4" /> {k('add')}</Button>
               </>
             ) : (
               <span className="inline-flex items-center gap-1.5 rounded-full border border-border px-3 py-1.5 text-xs text-muted"><Lock className="h-3.5 w-3.5" /> {t('medicalRecords.viewOnly')}</span>
@@ -328,7 +310,7 @@ export function MedicalRecordsModule({ kind }: { kind: RecordKind }) {
           {canEdit && <button onClick={() => setPolicyForm({ ...blankPolicy })} className="text-xs font-semibold text-brand-text">{t('medicalRecords.addInsurance')}</button>}
         </div>
         {policies.length === 0 ? (
-          <EmptyState icon={ShieldCheck} title={t('medicalRecords.noInsuranceOnFile')} description={canEdit ? t(copy.addInsuranceHint) : t('medicalRecords.noInsuranceAddedYet')} action={canEdit ? <Button onClick={() => setPolicyForm({ ...blankPolicy })} className="btn-cta"><Plus className="h-4 w-4" /> {t('medicalRecords.addInsurance')}</Button> : undefined} />
+          <EmptyState icon={ShieldCheck} title={t('medicalRecords.noInsuranceOnFile')} description={canEdit ? k('noInsuranceBody') : t('medicalRecordsModule.noInsuranceYet')} action={canEdit ? <Button onClick={() => setPolicyForm({ ...blankPolicy })} className="btn-cta"><Plus className="h-4 w-4" /> {t('medicalRecords.addInsurance')}</Button> : undefined} />
         ) : (
           <div className="grid gap-4 sm:grid-cols-2">
             {policies.map((p) => {
@@ -372,11 +354,11 @@ export function MedicalRecordsModule({ kind }: { kind: RecordKind }) {
       {/* ── Providers ─────────────────────────────────────── */}
       <section className="rounded-2xl border border-border bg-surface/40 p-5">
         <div className="mb-4 flex items-center justify-between">
-          <h2 className="flex items-center gap-2 font-semibold"><Icon className="h-4 w-4 text-brand-text" /> {t(copy.providers)}</h2>
-          {canEdit && <button onClick={() => setProviderForm({ ...blankProvider })} className="text-xs font-semibold text-brand-text">{t(copy.addProviderPlus)}</button>}
+          <h2 className="flex items-center gap-2 font-semibold"><Icon className="h-4 w-4 text-brand-text" /> {k('providers')}</h2>
+          {canEdit && <button onClick={() => setProviderForm({ ...blankProvider })} className="text-xs font-semibold text-brand-text">{k('add')}</button>}
         </div>
         {providerGroups.length === 0 ? (
-          <EmptyState icon={Icon} title={t(copy.noProvidersYet)} description={canEdit ? t(copy.addProvidersHint) : t('medicalRecords.noProvidersAddedYet')} action={canEdit ? <Button onClick={() => setProviderForm({ ...blankProvider })} className="btn-cta"><Plus className="h-4 w-4" /> {t(copy.addProvider)}</Button> : undefined} />
+          <EmptyState icon={Icon} title={k('noneYet')} description={canEdit ? k('noneYetBody') : t('medicalRecordsModule.noProvidersYet')} action={canEdit ? <Button onClick={() => setProviderForm({ ...blankProvider })} className="btn-cta"><Plus className="h-4 w-4" /> {k('add')}</Button> : undefined} />
         ) : (
           <div className="space-y-4">
             {providerGroups.map((g) => (
@@ -395,7 +377,7 @@ export function MedicalRecordsModule({ kind }: { kind: RecordKind }) {
                     <div key={p.id} className="flex items-center gap-3 rounded-lg bg-surface/40 p-2.5">
                       <div className="min-w-0 flex-1">
                         <p className="truncate text-sm font-semibold">{p.name}{p.is_primary && <span className="ml-2 text-[10px] font-bold text-emerald-300">PRIMARY</span>}</p>
-                        <p className="truncate text-xs text-muted">{[p.specialty, p.practice_name].filter(Boolean).join(' · ') || t(copy.provider)}</p>
+                        <p className="truncate text-xs text-muted">{[p.specialty, p.practice_name].filter(Boolean).join(' · ') || k('provider')}</p>
                       </div>
                       {p.phone && <a href={`tel:${p.phone}`} className="inline-flex items-center gap-1 text-xs text-brand-text"><Phone className="h-3 w-3" />{p.phone}</a>}
                       {canEdit && (
@@ -450,7 +432,7 @@ export function MedicalRecordsModule({ kind }: { kind: RecordKind }) {
       </section>
 
       {/* ── Provider modal ────────────────────────────────── */}
-      <Modal open={!!providerForm} title={providerForm?.id ? t(copy.editProvider) : t(copy.addProvider)} onClose={() => setProviderForm(null)}>
+      <Modal open={!!providerForm} title={providerForm?.id ? k('edit') : k('add')} onClose={() => setProviderForm(null)}>
         {providerForm && (
           <div className="space-y-3">
             <Field label={t('medicalRecords.belongsTo')}>{(id) => <Select id={id} value={providerForm.member_id} onChange={(e) => setProviderForm({ ...providerForm, member_id: e.target.value })}><option value="">{t('medicalRecords.wholeFamily')}</option>{members.map((m) => <option key={m.id} value={m.id}>{m.display_name}</option>)}</Select>}</Field>
@@ -466,8 +448,8 @@ export function MedicalRecordsModule({ kind }: { kind: RecordKind }) {
             <Field label={t('medicalRecords.email')}>{(id) => <Input id={id} value={providerForm.email} onChange={(e) => setProviderForm({ ...providerForm, email: e.target.value })} placeholder="office@clinic.com" />}</Field>
             <Field label={t('medicalRecords.address')}>{(id) => <Input id={id} value={providerForm.address} onChange={(e) => setProviderForm({ ...providerForm, address: e.target.value })} placeholder={t('medicalRecords.123MainStSuite200')} />}</Field>
             <Field label={t('medicalRecords.notes')}>{(id) => <Textarea id={id} value={providerForm.notes} onChange={(e) => setProviderForm({ ...providerForm, notes: e.target.value })} rows={2} placeholder={t('medicalRecords.hoursParkingPortalLoginEtc')} />}</Field>
-            <label className="flex items-center gap-2 text-sm"><input type="checkbox" checked={providerForm.is_primary} onChange={(e) => setProviderForm({ ...providerForm, is_primary: e.target.checked })} /> {t(copy.primaryProvider)}</label>
-            <Button onClick={saveProvider} disabled={saving || !providerForm.name} loading={saving} className="w-full">{providerForm.id ? t('medicalRecords.saveChanges') : t(copy.addProvider)}</Button>
+            <label className="flex items-center gap-2 text-sm"><input type="checkbox" checked={providerForm.is_primary} onChange={(e) => setProviderForm({ ...providerForm, is_primary: e.target.checked })} /> {k('primary')}</label>
+            <Button onClick={saveProvider} disabled={saving || !providerForm.name} loading={saving} className="w-full">{providerForm.id ? t('medicalRecordsModule.saveChanges') : k('add')}</Button>
           </div>
         )}
       </Modal>
@@ -508,7 +490,7 @@ export function MedicalRecordsModule({ kind }: { kind: RecordKind }) {
               ))}
             </div>
             <label className="flex items-center gap-2 text-sm"><input type="checkbox" checked={policyForm.is_primary} onChange={(e) => setPolicyForm({ ...policyForm, is_primary: e.target.checked })} /> {t('medicalRecords.primaryPlan')}</label>
-            <Button onClick={savePolicy} disabled={saving || !policyForm.insurer} loading={saving} className="w-full">{policyForm.id ? t('medicalRecords.saveChanges') : t('medicalRecords.addInsuranceTitle')}</Button>
+            <Button onClick={savePolicy} disabled={saving || !policyForm.insurer} loading={saving} className="w-full">{policyForm.id ? t('medicalRecordsModule.saveChanges') : t('medicalRecordsModule.addInsurance')}</Button>
           </div>
         )}
       </Modal>

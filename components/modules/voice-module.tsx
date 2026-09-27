@@ -18,7 +18,7 @@ import { PageHeader } from '@/components/app/page-header';
 import { cn } from '@/lib/utils/cn';
 import { CaptureSaveError, saveCapture, undoCapture, tableForKind } from '@/lib/capture/save';
 import { useJourney } from '@/lib/analytics/use-journey';
-import { classifyVoiceCommand, describeRoute } from '@/lib/voice/command-router';
+import { classifyVoiceCommand } from '@/lib/voice/command-router';
 import { recordVoiceCommand } from '@/lib/voice/history';
 import type { CaptureKind } from '@/lib/capture/parse';
 import type { Tables } from '@/lib/database.types';
@@ -28,19 +28,24 @@ import { useFormat } from '@/components/i18n/use-format';
 type VoiceCommand = Tables<'voice_commands'>;
 
 
-const KIND_META: Record<CaptureKind, { label: string; icon: typeof Mic; cls: string }> = {
-  task: { label: 'Task', icon: CheckSquare, cls: 'text-emerald-300 bg-emerald-500/10 border-emerald-500/30' },
-  note: { label: 'Note', icon: StickyNote, cls: 'text-amber-300 bg-amber-500/10 border-amber-500/30' },
-  event: { label: 'Event', icon: CalendarPlus, cls: 'text-blue-300 bg-blue-500/10 border-blue-500/30' },
-  shopping: { label: 'Shopping', icon: ShoppingCart, cls: 'text-violet-300 bg-violet-500/10 border-violet-500/30' },
+const KIND_META: Record<CaptureKind, { labelKey: string; icon: typeof Mic; cls: string }> = {
+  task: { labelKey: 'voiceModule.kind.task', icon: CheckSquare, cls: 'text-emerald-300 bg-emerald-500/10 border-emerald-500/30' },
+  note: { labelKey: 'voiceModule.kind.note', icon: StickyNote, cls: 'text-amber-300 bg-amber-500/10 border-amber-500/30' },
+  event: { labelKey: 'voiceModule.kind.event', icon: CalendarPlus, cls: 'text-blue-300 bg-blue-500/10 border-blue-500/30' },
+  shopping: { labelKey: 'voiceModule.kind.shopping', icon: ShoppingCart, cls: 'text-violet-300 bg-violet-500/10 border-violet-500/30' },
 };
 
+// Example commands stay English on purpose: tapping one fills the box, and the
+// classifier (lib/voice/command-router.ts) only reads English phrasing, so a
+// translated example would be filed as a note. Audit C1-S9-122 (OPEN: the
+// classifier itself is English-only).
 const EXAMPLES = [
   'Remind me to pay the water bill Friday',
   'Add milk and eggs to the shopping list',
   'Schedule dentist tomorrow at 3pm',
   'Note that the garage code is 1234',
 ];
+const routeKey = (kind: CaptureKind) => `voiceModule.route.${kind}`;
 
 /** Short relative time like "just now", "3m ago", "2h ago", "Jul 4". */
 export function VoiceModule() {
@@ -48,21 +53,12 @@ export function VoiceModule() {
   return <VoiceCaptureSession key={JSON.stringify([familyId, userId])} />;
 }
 
-// Route confirmations from the catalogue (I18N-002); describeRoute() in lib/
-// stays the English source for non-screen uses.
-const ROUTE_KEYS: Record<string, string> = {
-  task: 'voiceModule.routeTask', note: 'voiceModule.routeNote',
-  event: 'voiceModule.routeEvent', shopping: 'voiceModule.routeShopping',
-};
-
 function VoiceCaptureSession() {
   const tr = useTranslations();
   // One time-ago, and it follows the reader. Its tail called
   // toLocaleDateString(undefined, …) — the BROWSER's locale, not the family's.
   const { fmtTimeAgo } = useFormat();
   const fmtTimeAgo7 = (iso: string) => fmtTimeAgo(iso, { absoluteAfterDays: 7 });
-  const routeLabel = (kind: string) => (ROUTE_KEYS[kind] ? tr(ROUTE_KEYS[kind]) : kind);
-  const withItems = (route: string, count: number) => (count > 1 ? tr('voiceModule.routeWithItems', { route, count }) : route);
   const { familyId, userId, selfMember } = useApp();
   const { success, error: toastError } = useToast();
   const speech = useSpeechRecognition();
@@ -135,8 +131,8 @@ function VoiceCaptureSession() {
       if (!isCurrent()) return;
       let undoState: 'ready' | 'pending' | 'done' | 'uncertain' = 'ready';
       success(
-        withItems(routeLabel(route.kind), res.count),
-        { label: 'Undo', onClick: async () => {
+        res.count > 1 ? tr('voiceModule.routeWithCount', { route: tr(routeKey(route.kind)), count: res.count }) : tr(routeKey(route.kind)),
+        { label: tr('voiceModule.undo'), onClick: async () => {
           if (undoState !== 'ready') return;
           undoState = 'pending';
           try {
@@ -239,7 +235,7 @@ function VoiceCaptureSession() {
               const Icon = meta.icon;
               return (
                 <span className={cn('inline-flex items-center gap-1.5 rounded-lg border px-2 py-1 text-xs font-medium', meta.cls)}>
-                  <Icon className="h-3.5 w-3.5" /> {meta.label}
+                  <Icon className="h-3.5 w-3.5" /> {tr(meta.labelKey)}
                   <span className="text-muted">· “{preview.text}”</span>
                 </span>
               );
@@ -296,7 +292,7 @@ function VoiceCaptureSession() {
                   <div className="min-w-0 flex-1">
                     <p className="truncate text-sm text-fg">{c.transcript}</p>
                     <p suppressHydrationWarning className="text-xs text-muted">
-                      {failed ? tr('voiceModule.captureFailed') : withItems(routeLabel(kind), c.action_count)} · {fmtTimeAgo7(c.created_at)}
+                      {failed ? tr('voiceModule.failed') : c.action_count > 1 ? tr('voiceModule.routeWithCount', { route: tr(routeKey(kind)), count: c.action_count }) : tr(routeKey(kind))} · {fmtTimeAgo7(c.created_at)}
                     </p>
                   </div>
                   <button onClick={() => run(c.transcript)} disabled={running || Boolean(uncertainHref)} aria-label={tr('voice.runAgain')} title={tr('voice.runAgain')}

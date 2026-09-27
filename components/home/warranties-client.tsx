@@ -17,6 +17,7 @@ import { Input, Select, Textarea } from '@/components/ui/input';
 import { Field } from '@/components/home/field';
 import { EmptyState } from '@/components/ui/states';
 import { useTranslations } from '@/components/i18n/locale-provider';
+import { useFormat } from '@/components/i18n/use-format';
 
 type Warranty = Tables<'home_warranties'>;
 type Asset = Tables<'home_assets'>;
@@ -28,6 +29,7 @@ const TYPE_LABELS: Record<string, string> = {
 export function WarrantiesClient({ warranties, assets }: { warranties: Warranty[]; assets: Asset[] }) {
   const tr = useTranslations();
   const t = useTranslations();
+  const { fmtMoney } = useFormat();
   const [open, setOpen] = useState(false);
   const [editing, setEditing] = useState<Warranty | null>(null);
   const [pending, start] = useTransition();
@@ -84,7 +86,7 @@ export function WarrantiesClient({ warranties, assets }: { warranties: Warranty[
                 <div className="flex flex-wrap gap-1.5 text-xs">
                   <Badge tone="neutral">{TYPE_LABELS[w.warranty_type] ?? w.warranty_type}</Badge>
                   {w.policy_number && <Badge tone="brand">#{w.policy_number}</Badge>}
-                  {w.cost != null && <Badge tone="neutral">${Number(w.cost).toLocaleString()}{w.premium_period && w.premium_period !== 'one_time' ? `/${w.premium_period}` : ''}</Badge>}
+                  {w.cost != null && <Badge tone="neutral">{fmtMoney(Math.round(Number(w.cost) * 100))}{w.premium_period && w.premium_period !== 'one_time' ? `/${w.premium_period}` : ''}</Badge>}
                 </div>
                 {w.coverage && <p className="mt-2 text-sm text-muted">{w.coverage}</p>}
 

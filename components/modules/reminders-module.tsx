@@ -26,11 +26,11 @@ import { SkeletonList, ErrorState, EmptyState } from '@/components/ui/states';
 import { fmtDate, fmtRelative } from '@/lib/utils/format';
 import { cn } from '@/lib/utils/cn';
 import {
-  EARLY_REMINDER_OPTIONS, earlyReminderLabel, parseTags, formatTags, normalizeSubtasks, newSubtask, subtaskProgress, nextRemindAt,
+  EARLY_REMINDER_OPTIONS, parseTags, formatTags, normalizeSubtasks, newSubtask, subtaskProgress, nextRemindAt,
   type Subtask,
 } from '@/lib/reminders/details';
 import type { Tables } from '@/lib/database.types';
-import { useTranslations } from '@/components/i18n/locale-provider';
+import { usePlural, useTranslations } from '@/components/i18n/locale-provider';
 import { visibleReminderTags, withReminderProvenance } from '@/lib/reminders/provenance';
 import { FamilyMediaImg } from '@/components/media/family-media-img';
 import { safeWebLink } from '@/lib/utils/safe-link';
@@ -38,33 +38,31 @@ import { safeWebLink } from '@/lib/utils/safe-link';
 type Reminder = Tables<'family_reminders'>;
 
 const KINDS = [
-  { id: 'time', label: 'Time-based', icon: Clock, color: 'text-brand-text' },
-  { id: 'location', label: 'Location', icon: MapPin, color: 'text-accent' },
-  { id: 'recurring', label: 'Recurring', icon: Repeat, color: 'text-success' },
-  { id: 'medication', label: 'Medication', icon: Pill, color: 'text-danger' },
-  { id: 'bill', label: 'Bill / Payment', icon: CreditCard, color: 'text-warning' },
-  { id: 'school', label: 'School', icon: GraduationCap, color: 'text-purple-400' },
-  { id: 'chore', label: 'Chore', icon: CheckSquare, color: 'text-teal-400' },
+  { id: 'time', labelKey: 'remindersModule.kind.timeBased', icon: Clock, color: 'text-brand-text' },
+  { id: 'location', labelKey: 'remindersModule.kind.location', icon: MapPin, color: 'text-accent' },
+  { id: 'recurring', labelKey: 'remindersModule.kind.recurring', icon: Repeat, color: 'text-success' },
+  { id: 'medication', labelKey: 'remindersModule.kind.medication', icon: Pill, color: 'text-danger' },
+  { id: 'bill', labelKey: 'remindersModule.kind.billPayment', icon: CreditCard, color: 'text-warning' },
+  { id: 'school', labelKey: 'remindersModule.kind.school', icon: GraduationCap, color: 'text-purple-400' },
+  { id: 'chore', labelKey: 'remindersModule.kind.chore', icon: CheckSquare, color: 'text-teal-400' },
 ] as const;
 
 const PRIORITIES = [
-  { id: 'low', label: 'Low', color: 'text-muted', badge: 'neutral' },
-  { id: 'medium', label: 'Medium', color: 'text-warning', badge: 'warning' },
-  { id: 'high', label: 'High', color: 'text-danger', badge: 'danger' },
-  { id: 'urgent', label: 'Urgent', color: 'text-danger', badge: 'danger' },
+  { id: 'low', labelKey: 'remindersModule.priority.low', color: 'text-muted', badge: 'neutral' },
+  { id: 'medium', labelKey: 'remindersModule.priority.medium', color: 'text-warning', badge: 'warning' },
+  { id: 'high', labelKey: 'remindersModule.priority.high', color: 'text-danger', badge: 'danger' },
+  { id: 'urgent', labelKey: 'remindersModule.priority.urgent', color: 'text-danger', badge: 'danger' },
 ] as const;
 
 const RECURRENCES = [
-  { id: 'none', label: 'No repeat' },
-  { id: 'daily', label: 'Every day' },
-  { id: 'weekdays', label: 'Weekdays (Mon–Fri)' },
-  { id: 'weekly', label: 'Every week' },
-  { id: 'biweekly', label: 'Every 2 weeks' },
-  { id: 'monthly', label: 'Every month' },
-  { id: 'yearly', label: 'Every year' },
+  { id: 'none', labelKey: 'remindersModule.repeat.none' },
+  { id: 'daily', labelKey: 'remindersModule.repeat.daily' },
+  { id: 'weekdays', labelKey: 'remindersModule.repeat.weekdays' },
+  { id: 'weekly', labelKey: 'remindersModule.repeat.weekly' },
+  { id: 'biweekly', labelKey: 'remindersModule.repeat.biweekly' },
+  { id: 'monthly', labelKey: 'remindersModule.repeat.monthly' },
+  { id: 'yearly', labelKey: 'remindersModule.repeat.yearly' },
 ] as const;
-
-const DAYS = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'];
 
 function kindMeta(id: string) {
   return KINDS.find((k) => k.id === id) ?? KINDS[0];
@@ -85,16 +83,34 @@ function isOverdue(r: Reminder) {
 }
 
 // ── Quick-add reminder templates (common household reminders) ──
+// Each template holds keys and is worded when shown and again when picked, so
+// the reminder it creates is in the picker's language, not English.
 const AI_SUGGESTIONS = [
-  { title: 'Prescription refill', kind: 'medication', priority: 'high', notes: 'Check the pharmacy portal or call ahead.' },
-  { title: 'Pay monthly bills', kind: 'bill', priority: 'medium', notes: 'Review credit card, utilities, and insurance.' },
-  { title: 'Weekly family sync', kind: 'recurring', priority: 'medium', notes: 'Review the upcoming week together.' },
-  { title: 'School permission slip deadline', kind: 'school', priority: 'high', notes: 'Check your child\'s backpack and school portal.' },
-  { title: 'Morning vitamins', kind: 'medication', priority: 'medium', notes: 'Take with breakfast.' },
-];
+  { id: 'prescriptionRefill', kind: 'medication', priority: 'high' },
+  { id: 'payMonthlyBills', kind: 'bill', priority: 'medium' },
+  { id: 'weeklyFamilySync', kind: 'recurring', priority: 'medium' },
+  { id: 'permissionSlip', kind: 'school', priority: 'high' },
+  { id: 'morningVitamins', kind: 'medication', priority: 'medium' },
+] as const;
+const suggestionTitleKey = (id: string) => `remindersModule.template.${id}.title`;
+const suggestionNotesKey = (id: string) => `remindersModule.template.${id}.notes`;
+
+type Tr = ReturnType<typeof useTranslations>;
+type Plural = ReturnType<typeof usePlural>;
+
+/** The early-reminder lead time in the reader's language (lib/reminders/details.ts holds the minutes). */
+function earlyText(tr: Tr, plural: Plural, minutes: number | null | undefined): string {
+  if (minutes == null) return tr('remindersModule.early.none');
+  if (minutes === 0) return tr('remindersModule.early.atTime');
+  if (minutes % 10080 === 0) return plural('remindersModule.early.weeksBefore', minutes / 10080);
+  if (minutes % 1440 === 0) return plural('remindersModule.early.daysBefore', minutes / 1440);
+  if (minutes % 60 === 0) return plural('remindersModule.early.hoursBefore', minutes / 60);
+  return plural('remindersModule.early.minutesBefore', minutes);
+}
 
 export function RemindersModule() {
   const tr = useTranslations();
+  const plural = usePlural();
   const { familyId, userId, members } = useApp();
   const { success, error: toastError } = useToast();
   const { run, isPending } = useAction({ onError: (e) => toastError(describeDbError(e)) });
@@ -228,7 +244,7 @@ export function RemindersModule() {
       // adds the family filter and a length check this had neither of.
       const result = await snoozeReminderAction(id, mins);
       if (!result.ok) throw new Error(result.error);
-      success(mins < 60 ? tr('reminders.snoozedForMinutes', { count: mins }) : tr('reminders.snoozedForHours', { count: mins / 60 }));
+      success(mins < 60 ? plural('remindersModule.snoozedForMinutes', mins) : plural('remindersModule.snoozedForHours', mins / 60));
       void refresh();
     });
   }
@@ -250,18 +266,18 @@ export function RemindersModule() {
   // plants" adds it once — while adding it again next week is a new composition.
   const quickAddIds = useRef<Record<string, string>>({});
 
-  function quickAdd(suggestion: typeof AI_SUGGESTIONS[0]) {
-    return run(`quickadd:${suggestion.title}`, async () => {
+  function quickAdd(suggestion: (typeof AI_SUGGESTIONS)[number]) {
+    return run(`quickadd:${suggestion.id}`, async () => {
       const result = await createReminderAction({
-        title: suggestion.title,
+        title: tr(suggestionTitleKey(suggestion.id)),
         kind: suggestion.kind,
         priority: suggestion.priority,
-        notes: suggestion.notes,
+        notes: tr(suggestionNotesKey(suggestion.id)),
         aiSuggested: true,
-        submissionId: quickAddIds.current[suggestion.title] ||= newSubmissionId(),
+        submissionId: quickAddIds.current[suggestion.id] ||= newSubmissionId(),
       });
       if (!result.ok) throw new Error(result.error);
-      quickAddIds.current[suggestion.title] = '';
+      quickAddIds.current[suggestion.id] = '';
       success(tr('remindersModule.reminderAddedFromSuggestion'));
       void refresh();
     });
@@ -274,7 +290,7 @@ export function RemindersModule() {
     <div className="module-page">
       <PageHeader
         title={tr('reminders.smartReminders')}
-        description="Never let anything slip through the cracks."
+        description={tr('remindersModule.description')}
         action={
           <div className="flex items-center gap-2">
             <AiInsight kind="reminders" iconOnly />
@@ -289,10 +305,10 @@ export function RemindersModule() {
       {/* Stats */}
       <div className="grid-stats">
         {[
-          { label: 'Active', value: activeCount, icon: Bell, color: 'text-brand-text' },
-          { label: 'Overdue', value: overdue.length, icon: AlertTriangle, color: 'text-danger' },
-          { label: 'Completed', value: reminders.filter((r) => r.status === 'completed').length, icon: Check, color: 'text-success' },
-          { label: 'Total', value: reminders.length, icon: Calendar, color: 'text-muted' },
+          { label: tr('remindersModule.stat.active'), value: activeCount, icon: Bell, color: 'text-brand-text' },
+          { label: tr('remindersModule.stat.overdue'), value: overdue.length, icon: AlertTriangle, color: 'text-danger' },
+          { label: tr('remindersModule.stat.completed'), value: reminders.filter((r) => r.status === 'completed').length, icon: Check, color: 'text-success' },
+          { label: tr('remindersModule.stat.total'), value: reminders.length, icon: Calendar, color: 'text-muted' },
         ].map((s) => (
           <div key={s.label} className="stat-card">
             <s.icon className={cn('h-8 w-8 flex-shrink-0', s.color)} />
@@ -328,14 +344,14 @@ export function RemindersModule() {
             {AI_SUGGESTIONS.map((s) => {
               const kind = kindMeta(s.kind);
               return (
-                <button key={s.title} onClick={() => quickAdd(s)} disabled={isPending(`quickadd:${s.title}`)}
+                <button key={s.id} onClick={() => quickAdd(s)} disabled={isPending(`quickadd:${s.id}`)}
                   className="flex items-start gap-3 rounded-xl border border-border/60 bg-surface/60 p-3 text-left transition hover:bg-elevated/40 hover:border-brand/30 disabled:opacity-50">
                   <kind.icon className={cn('mt-0.5 h-4 w-4 flex-shrink-0', kind.color)} />
                   <div>
-                    <p className="text-sm font-semibold">{s.title}</p>
-                    <p className="text-xs text-muted">{s.notes}</p>
+                    <p className="text-sm font-semibold">{tr(suggestionTitleKey(s.id))}</p>
+                    <p className="text-xs text-muted">{tr(suggestionNotesKey(s.id))}</p>
                   </div>
-                  {isPending(`quickadd:${s.title}`)
+                  {isPending(`quickadd:${s.id}`)
                     ? <Loader2 className="ml-auto h-4 w-4 flex-shrink-0 animate-spin text-brand-text" />
                     : <Plus className="ml-auto h-4 w-4 flex-shrink-0 text-brand-text" />}
                 </button>
@@ -378,7 +394,7 @@ export function RemindersModule() {
           <select value={filterKind} onChange={(e) => setFilterKind(e.target.value)} aria-label={tr('reminders.type')}
             className="rounded-xl border border-border bg-surface/60 px-3 py-2 text-xs text-muted focus:outline-none">
             <option value="all">{tr('reminders.allTypes')}</option>
-            {KINDS.map((k) => <option key={k.id} value={k.id}>{k.label}</option>)}
+            {KINDS.map((k) => <option key={k.id} value={k.id}>{tr(k.labelKey)}</option>)}
           </select>
           {/* List filter */}
           {(lists ?? []).length > 0 && (
@@ -449,7 +465,7 @@ export function RemindersModule() {
                 )}>
                 {/* Complete button */}
                 <button onClick={() => !completed && complete(reminder)} disabled={completed || isPending(`complete:${reminder.id}`)}
-                  aria-label={completed ? 'Completed' : 'Mark complete'}
+                  aria-label={completed ? tr('remindersModule.stat.completed') : tr('remindersModule.markComplete')}
                   className={cn(
                     'mt-0.5 flex h-6 w-6 flex-shrink-0 items-center justify-center rounded-full border-2 transition',
                     completed
@@ -467,7 +483,7 @@ export function RemindersModule() {
                     <p className={cn('text-sm font-semibold', completed && 'line-through text-muted')}>
                       {reminder.title}
                     </p>
-                    <Badge tone={priority.badge as 'neutral'}>{priority.label}</Badge>
+                    <Badge tone={priority.badge as 'neutral'}>{tr(priority.labelKey)}</Badge>
                     {snoozed && <Badge tone="warning">{tr('reminders.snoozed')}</Badge>}
                     {overdue && !completed && <Badge tone="danger">{tr('reminders.overdue')}</Badge>}
                     {reminder.ai_suggested && (
@@ -482,7 +498,7 @@ export function RemindersModule() {
                   <div className="mt-1.5 flex flex-wrap items-center gap-3 text-xs text-muted">
                     <span className={cn('flex items-center gap-1', kind.color)}>
                       <kind.icon className="h-3.5 w-3.5" />
-                      {kind.label}
+                      {tr(kind.labelKey)}
                     </span>
                     {reminder.remind_at && (
                       <span className={cn('flex items-center gap-1', overdue && 'text-danger')}>
@@ -493,7 +509,7 @@ export function RemindersModule() {
                     {reminder.recurrence !== 'none' && (
                       <span className="flex items-center gap-1 text-success">
                         <Repeat className="h-3.5 w-3.5" />
-                        {RECURRENCES.find((r) => r.id === reminder.recurrence)?.label}
+                        {(() => { const r = RECURRENCES.find((x) => x.id === reminder.recurrence); return r ? tr(r.labelKey) : reminder.recurrence; })()}
                       </span>
                     )}
                     {reminder.location_name && (
@@ -512,7 +528,7 @@ export function RemindersModule() {
                     )}
                     {reminder.flagged && <span className="flex items-center gap-1 text-warning"><Flag className="h-3.5 w-3.5" />{tr('reminders.flagged')}</span>}
                     {reminder.early_reminder_minutes != null && (
-                      <span className="flex items-center gap-1"><Bell className="h-3.5 w-3.5" />{earlyReminderLabel(reminder.early_reminder_minutes)}</span>
+                      <span className="flex items-center gap-1"><Bell className="h-3.5 w-3.5" />{earlyText(tr, plural, reminder.early_reminder_minutes)}</span>
                     )}
                     {(() => { const st = normalizeSubtasks(reminder.subtasks); return st.length > 0 ? (
                       <button type="button" onClick={() => setExpanded((cur) => { const n = new Set(cur); n.has(reminder.id) ? n.delete(reminder.id) : n.add(reminder.id); return n; })}
@@ -616,6 +632,7 @@ function ReminderModal({ reminder, familyId, userId, members, lists, onClose, on
   onClose: () => void; onSaved: () => void;
 }) {
   const tr = useTranslations();
+  const plural = usePlural();
   const { success, error: toastError } = useToast();
   const [loading, setLoading] = useState(false);
   const [kind, setKind] = useState(reminder?.kind ?? 'time');
@@ -747,7 +764,7 @@ function ReminderModal({ reminder, familyId, userId, members, lists, onClose, on
                   className={cn('flex items-center gap-2 rounded-xl border px-3 py-2 text-xs transition',
                     kind === k.id ? 'border-brand/60 bg-brand/10' : 'border-border hover:bg-elevated')}>
                   <k.icon className={cn('h-3.5 w-3.5', kind === k.id ? 'text-brand-text' : k.color)} />
-                  {k.label}
+                  {tr(k.labelKey)}
                 </button>
               ))}
             </div>
@@ -759,7 +776,7 @@ function ReminderModal({ reminder, familyId, userId, members, lists, onClose, on
             {(id) => (
               <select id={id} name="priority" defaultValue={reminder?.priority ?? 'medium'}
                 className="w-full rounded-xl border border-border bg-surface/60 px-3 py-2.5 text-sm focus:border-brand/50 focus:outline-none">
-                {PRIORITIES.map((p) => <option key={p.id} value={p.id}>{p.label}</option>)}
+                {PRIORITIES.map((p) => <option key={p.id} value={p.id}>{tr(p.labelKey)}</option>)}
               </select>
             )}
           </Field>
@@ -767,7 +784,7 @@ function ReminderModal({ reminder, familyId, userId, members, lists, onClose, on
             {(id) => (
               <select id={id} value={recurrence} onChange={(e) => setRecurrence(e.target.value)}
                 className="w-full rounded-xl border border-border bg-surface/60 px-3 py-2.5 text-sm focus:border-brand/50 focus:outline-none">
-                {RECURRENCES.map((r) => <option key={r.id} value={r.id}>{r.label}</option>)}
+                {RECURRENCES.map((r) => <option key={r.id} value={r.id}>{tr(r.labelKey)}</option>)}
               </select>
             )}
           </Field>
@@ -831,7 +848,7 @@ function ReminderModal({ reminder, familyId, userId, members, lists, onClose, on
             {(id) => (
               <select id={id} value={earlyMinutes} onChange={(e) => setEarlyMinutes(e.target.value)}
                 className="w-full rounded-xl border border-border bg-surface/60 px-3 py-2.5 text-sm focus:border-brand/50 focus:outline-none">
-                {EARLY_REMINDER_OPTIONS.map((o) => <option key={String(o.minutes)} value={o.minutes ?? ''}>{o.label}</option>)}
+                {EARLY_REMINDER_OPTIONS.map((o) => <option key={String(o.minutes)} value={o.minutes ?? ''}>{earlyText(tr, plural, o.minutes)}</option>)}
               </select>
             )}
           </Field>

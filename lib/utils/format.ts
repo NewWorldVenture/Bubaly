@@ -219,6 +219,11 @@ export type Format = {
  * and in the genuinely zone-less contexts (a cron, an export) where the runtime
  * zone is the best available answer.
  */
+// ES2023's `useGrouping: 'always'` (Node 24, every current browser); the
+// TypeScript lib this repo compiles against still types the option as boolean.
+// Why it is stated at all: see fmtNumber below.
+const GROUP_EVERY_THOUSAND = { useGrouping: 'always' } as unknown as Intl.NumberFormatOptions;
+
 export function createFormat(
   code: LocaleCode = DEFAULT_LOCALE,
   t?: Translator,
@@ -387,9 +392,16 @@ export function createFormat(
     // stays a caller's argument (eight tables carry a `currency` column) while the
     // grouping and decimal separators follow the locale — "12,50 $" is how German
     // writes twelve and a half US dollars, and "$12.50" is not.
+    //
+    // `useGrouping: 'always'` because the server and the browser do not agree on
+    // the default. CLDR gives Italian, Spanish and Portuguese a two-digit minimum
+    // before grouping, and the runtimes ship different data for it: Node draws
+    // 2200 as "2200" in it-IT, Chromium as "2.200", so a server-rendered number
+    // failed hydration (React #418; B8 page audit, /dashboard/social/accounts/connect
+    // in Italian). Stated outright, both group every thousand.
     fmtMoney: (cents: number, currency = 'USD') =>
-      new Intl.NumberFormat(code, { style: 'currency', currency }).format(cents / 100),
-    fmtNumber: (value: number) => new Intl.NumberFormat(code).format(value),
+      new Intl.NumberFormat(code, { style: 'currency', currency, ...GROUP_EVERY_THOUSAND }).format(cents / 100),
+    fmtNumber: (value: number) => new Intl.NumberFormat(code, GROUP_EVERY_THOUSAND).format(value),
   };
 }
 

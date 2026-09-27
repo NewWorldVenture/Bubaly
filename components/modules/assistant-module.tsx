@@ -34,31 +34,34 @@ import type { MicStatus } from '@/lib/voice/mic-flow';
 import { VOICE_MODES } from '@/lib/ai/voice';
 import { parsePrefillQuery } from '@/lib/ai/prefill';
 import { parseAssistantStreamEvent, runStatusCard, structuredContentFrom, type ResultCard } from '@/lib/ai/result-cards';
-import { useTranslations } from '@/components/i18n/locale-provider';
+import { usePlural, useTranslations } from '@/components/i18n/locale-provider';
 
-// Quick-suggestion chips shown above an active conversation.
+// Quick-suggestion chips shown above an active conversation. Each holds a
+// catalogue key: the chip is shown, and sent as the reader's own message, in
+// the reader's language.
 const CHIPS = [
-  [CalendarDays, "What's happening today?"],
-  [UtensilsCrossed, 'Plan dinners for the week'],
-  [Sparkles, 'Add soccer practice every Tuesday'],
-  [ListChecks, 'Create chores for the kids'],
-  [School, 'Summarize our week'],
+  [CalendarDays, 'assistantModule.chip.whatsHappeningToday'],
+  [UtensilsCrossed, 'assistantModule.chip.planDinners'],
+  [Sparkles, 'assistantModule.chip.addSoccerPractice'],
+  [ListChecks, 'assistantModule.chip.createChores'],
+  [School, 'assistantModule.chip.summarizeOurWeek'],
 ] as const;
 
 // "Popular requests" cards on the welcome hero (icon + title + sub + prompt).
-const POPULAR: { icon: React.ComponentType<{ className?: string }>; title: string; sub: string; prompt: string }[] = [
-  { icon: CalendarDays, title: "Today's plan", sub: "what's on our schedule", prompt: "What's on our schedule today?" },
-  { icon: UtensilsCrossed, title: 'Plan dinners', sub: 'for the whole week', prompt: 'Plan dinners for this week' },
-  { icon: ListChecks, title: 'Assign chores', sub: 'to the kids', prompt: 'Create chores for the kids this week' },
-  { icon: ShoppingCart, title: 'Grocery list', sub: 'from our meal plan', prompt: 'Build a grocery list from our meal plan' },
-  { icon: Bell, title: 'Set a reminder', sub: 'so nothing slips', prompt: 'Remind me to order the camp forms' },
+const POPULAR: { icon: React.ComponentType<{ className?: string }>; id: string }[] = [
+  { icon: CalendarDays, id: 'todaysPlan' },
+  { icon: UtensilsCrossed, id: 'planDinners' },
+  { icon: ListChecks, id: 'assignChores' },
+  { icon: ShoppingCart, id: 'groceryList' },
+  { icon: Bell, id: 'setAReminder' },
 ];
+const popularKey = (id: string, part: 'title' | 'sub' | 'prompt') => `assistantModule.popular.${id}.${part}`;
 
 const TRY_ASKING = [
-  { icon: CalendarDays, text: "What's on our schedule today?" },
-  { icon: UtensilsCrossed, text: 'Plan dinners for this week' },
-  { icon: ShoppingCart, text: 'Build a grocery list from our meal plan' },
-  { icon: ListChecks, text: 'What chores are due this week?' },
+  { icon: CalendarDays, textKey: 'assistantModule.popular.todaysPlan.prompt' },
+  { icon: UtensilsCrossed, textKey: 'assistantModule.popular.planDinners.prompt' },
+  { icon: ShoppingCart, textKey: 'assistantModule.popular.groceryList.prompt' },
+  { icon: ListChecks, textKey: 'assistantModule.tryAsking.choresDueThisWeek' },
 ];
 
 type ChatAction = { name: string; ok: boolean; summary: string };
@@ -75,17 +78,20 @@ function newConversationId() {
   });
 }
 
+type Tr = (key: string, params?: Record<string, string | number>) => string;
+type Plural = (key: string, count: number, params?: Record<string, string | number>) => string;
+
 /** One-line label for the outcome chip in the thread that points at the card in the plan pane. */
-export function cardChipLabel(card: ResultCard, t: (key: string, params?: Record<string, string | number>) => string): string {
+export function cardChipLabel(card: ResultCard, t: Tr, plural: Plural): string {
   switch (card.kind) {
-    case 'meal_plan': return card.days.length === 1 ? t('assistantChip.mealPlanOne') : t('assistantChip.mealPlanMany', { n: card.days.length });
-    case 'calendar_conflict': return card.conflicts.length === 0 ? t('assistantChip.noConflicts') : card.conflicts.length === 1 ? t('assistantChip.conflictsOne') : t('assistantChip.conflictsMany', { n: card.conflicts.length });
-    case 'budget_analysis': return t('assistantChip.spending');
-    case 'vacation_prep': return t('assistantChip.tripPrep');
-    case 'task_group': return card.tasks.length === 1 ? t('assistantChip.tasksOne') : t('assistantChip.tasksMany', { n: card.tasks.length });
-    case 'grocery_list': return t('assistantChip.groceryList', { n: card.items.length });
-    case 'readiness': return t('assistantChip.readiness', { n: Math.round(card.score) });
-    case 'approval': return t('assistantChip.needsApproval');
+    case 'meal_plan': return plural('assistantModule.chipLabel.mealPlanDays', card.days.length);
+    case 'calendar_conflict': return card.conflicts.length ? plural('assistantModule.chipLabel.conflicts', card.conflicts.length) : t('assistantModule.chipLabel.noConflicts');
+    case 'budget_analysis': return t('assistantModule.chipLabel.spending');
+    case 'vacation_prep': return t('assistantModule.chipLabel.tripPrep');
+    case 'task_group': return plural('assistantModule.chipLabel.tasks', card.tasks.length);
+    case 'grocery_list': return t('assistantModule.chipLabel.groceryList', { count: card.items.length });
+    case 'readiness': return t('assistantModule.chipLabel.readiness', { score: Math.round(card.score) });
+    case 'approval': return t('assistantModule.chipLabel.needsYourApproval');
     case 'run_status': return card.title;
     default: return card.title;
   }
@@ -99,8 +105,9 @@ export function withRunCards(cards: ResultCard[], runIds: string[]): ResultCard[
 
 export function AssistantModule() {
   const t = useTranslations();
+  const plural = usePlural();
   const { family, selfMember, role } = useApp();
-  const firstName = (selfMember?.display_name || 'there').split(' ')[0];
+  const firstName = (selfMember?.display_name ?? '').trim().split(' ')[0];
   const canDecide = isManager(role);
   const desktop = useDesktop();
 
@@ -114,7 +121,11 @@ export function AssistantModule() {
 
   const greeting = () => {
     const h = new Date().getHours();
-    const content = h < 12 ? t('assistantModule.introMorning', { name: firstName }) : h < 18 ? t('assistantModule.introAfternoon', { name: firstName }) : t('assistantModule.introEvening', { name: firstName });
+    const part = h < 12 ? 'morning' : h < 18 ? 'afternoon' : 'evening';
+    // Without a name the greeting has none, rather than an English "there".
+    const content = firstName
+      ? t(`assistantModule.greeting.${part}`, { name: firstName })
+      : t(`assistantModule.greeting.${part}NoName`);
     return [{ id: 'init', role: 'assistant' as const, content }];
   };
 
@@ -143,10 +154,10 @@ export function AssistantModule() {
 
   // Context rail data
   const [glance, setGlance] = useState<GlanceItem[]>([
-    { icon: CalendarDays, value: '—', label: 'Events today' },
-    { icon: CheckCircle2, value: '—', label: 'Tasks due' },
-    { icon: Bell, value: '—', label: 'Reminders due' },
-    { icon: Pill, value: '—', label: 'Active meds' },
+    { icon: CalendarDays, value: '—', label: t('assistantModule.glance.eventsToday') },
+    { icon: CheckCircle2, value: '—', label: t('assistantModule.glance.tasksDue') },
+    { icon: Bell, value: '—', label: t('assistantModule.glance.remindersDue') },
+    { icon: Pill, value: '—', label: t('assistantModule.glance.activeMeds') },
   ]);
   const [upcoming, setUpcoming] = useState<UpcomingEvent[]>([]);
   const [activity, setActivity] = useState<ActivityItem[]>([]);
@@ -192,10 +203,10 @@ export function AssistantModule() {
     setRailError(null);
     const todayEvts = todayRes.data ?? [];
     setGlance([
-      { icon: CalendarDays, value: String(todayEvts.length), label: 'Events today' },
-      { icon: CheckCircle2, value: String(choresRes.count ?? 0), label: 'Tasks due' },
-      { icon: Bell, value: String(remindersRes.count ?? 0), label: 'Reminders due' },
-      { icon: Pill, value: String(medsRes.count ?? 0), label: 'Active meds' },
+      { icon: CalendarDays, value: String(todayEvts.length), label: t('assistantModule.glance.eventsToday') },
+      { icon: CheckCircle2, value: String(choresRes.count ?? 0), label: t('assistantModule.glance.tasksDue') },
+      { icon: Bell, value: String(remindersRes.count ?? 0), label: t('assistantModule.glance.remindersDue') },
+      { icon: Pill, value: String(medsRes.count ?? 0), label: t('assistantModule.glance.activeMeds') },
     ]);
     setUpcoming(upcomingRes.data ?? []);
     setActivity(todayEvts.slice(0, 3).map((e, i) => ({
@@ -386,7 +397,7 @@ export function AssistantModule() {
       if (finalText.trim() && voice.shouldSpeak()) void voice.speak(finalText);
     } catch (error) {
       console.error('[assistant] request failed', error);
-      patchReply((m) => ({ ...m, content: m.content || 'Something went wrong. Please try again.' }));
+      patchReply((m) => ({ ...m, content: m.content || t('assistantModule.somethingWentWrong') }));
     } finally {
       setLoading(false);
       void loadConversations(); // titles/order update after the turn persists
@@ -417,15 +428,15 @@ export function AssistantModule() {
   const thread = (
     <>
       <div className="mt-4 flex gap-2.5 overflow-x-auto scrollbar-none">
-        {CHIPS.map(([Icon, label]) => (
+        {CHIPS.map(([Icon, key]) => { const label = t(key); return (
           <button
-            key={label} type="button" onClick={() => void send(label)}
+            key={key} type="button" onClick={() => void send(label)}
             className="focus-ring inline-flex h-10 shrink-0 items-center gap-2 rounded-full border border-border bg-surface/40 px-4 text-sm text-fg transition hover:border-brand/40 hover:bg-elevated"
           >
             <Icon className="h-4 w-4 text-brand-text" aria-hidden />
             {label}
           </button>
-        ))}
+        ); })}
       </div>
 
       {threadError && (
@@ -476,7 +487,7 @@ export function AssistantModule() {
                               highlightId === id ? 'border-brand/60 bg-brand/15 text-brand-text' : 'border-brand/30 bg-brand/10 text-brand-text',
                             )}
                           >
-                            <LayoutList className="h-3 w-3" aria-hidden /> {cardChipLabel(card, t)}
+                            <LayoutList className="h-3 w-3" aria-hidden /> {cardChipLabel(card, t, plural)}
                           </button>
                         </li>
                       );
@@ -518,11 +529,11 @@ export function AssistantModule() {
       <div className="mt-6 w-full max-w-3xl">
         <p className="mb-3 text-sm font-bold tracking-wide text-fg/90">{t('assistant.popularRequests')}</p>
         <div className="grid grid-cols-2 gap-3 sm:grid-cols-3 lg:grid-cols-5">
-          {POPULAR.map(({ icon: Icon, title, sub, prompt }) => (
+          {POPULAR.map(({ icon: Icon, id }) => (
             <button
-              key={title}
+              key={id}
               type="button"
-              onClick={() => void send(prompt)}
+              onClick={() => void send(t(popularKey(id, 'prompt')))}
               disabled={loading}
               className="ai-suggest-card group flex items-start gap-2.5 p-3 text-left disabled:opacity-50"
             >
@@ -530,8 +541,8 @@ export function AssistantModule() {
                 <Icon className="h-4 w-4" aria-hidden />
               </span>
               <span className="min-w-0">
-                <span className="block truncate text-sm font-bold text-fg">{title}</span>
-                <span className="block truncate text-xs text-muted">{sub}</span>
+                <span className="block truncate text-sm font-bold text-fg">{t(popularKey(id, 'title'))}</span>
+                <span className="block truncate text-xs text-muted">{t(popularKey(id, 'sub'))}</span>
               </span>
             </button>
           ))}
@@ -646,7 +657,7 @@ export function AssistantModule() {
             glance={glance}
             upcoming={upcoming}
             activity={activity}
-            prompts={TRY_ASKING}
+            prompts={TRY_ASKING.map(({ icon, textKey }) => ({ icon, text: t(textKey) }))}
             loading={railLoading}
             error={railError}
             onRetry={() => void loadRail()}

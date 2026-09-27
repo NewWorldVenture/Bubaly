@@ -60,6 +60,7 @@ import {
 } from '@/lib/billing/plans';
 import { cn } from '@/lib/utils/cn';
 import type { Tables, SubscriptionStatus, AccountType, TransactionType, BudgetPeriod, BillStatus } from '@/lib/database.types';
+import { categoryLabel } from '@/lib/finance/category-label';
 import { useLocale, useTranslations } from '@/components/i18n/locale-provider';
 import { FamilyDeliveredValue } from '@/components/billing/family-delivered-value';
 import type { LocaleCode } from '@/lib/i18n/locales';
@@ -255,19 +256,6 @@ function categoryColor(cat: string): string {
 function memberAge(birthday: string | null): number | null {
   const age = ageOn(birthday, new Date());
   return age !== null && age >= 0 && age < 130 ? age : null;
-}
-
-// The stored category is the English word (it is data, and existing rows hold
-// it); what a reader sees is its label. Audit C1-S9-109.
-const CATEGORY_KEY: Record<string, string> = {
-  Housing: 'housing', Groceries: 'groceries', Dining: 'dining', Transport: 'transport', Utilities: 'utilities',
-  Entertainment: 'entertainment', Health: 'health', Shopping: 'shopping', Subscriptions: 'subscriptions', Insurance: 'insurance',
-  Education: 'education', 'Auto & Gas': 'autoGas', 'Personal Care': 'personalCare', Gifts: 'gifts', Other: 'other',
-};
-/** A known category in the reader's language; a family's own category as they typed it. */
-function categoryLabel(tr: (key: string) => string, category: string | null | undefined): string {
-  const c = category || 'Other';
-  return CATEGORY_KEY[c] ? tr(`billingModule.category.${CATEGORY_KEY[c]}`) : c;
 }
 
 const EXPENSE_CATEGORIES = [

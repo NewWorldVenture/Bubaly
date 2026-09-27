@@ -7,11 +7,13 @@
 import { useState, type ReactNode } from 'react';
 import { cn } from '@/lib/utils/cn';
 import { useTranslations } from '@/components/i18n/locale-provider';
+import { useFormat } from '@/components/i18n/use-format';
 
 export type SeoTab = { id: string; label: string; count?: number; panel: ReactNode };
 
 export function SeoTabs({ tabs }: { tabs: SeoTab[] }) {
   const tr = useTranslations();
+  const { fmtNumber } = useFormat();
   const [active, setActive] = useState(tabs[0]?.id ?? '');
   const current = tabs.find((t) => t.id === active) ?? tabs[0];
 
@@ -36,7 +38,7 @@ export function SeoTabs({ tabs }: { tabs: SeoTab[] }) {
             >
               {t.label}
               {typeof t.count === 'number' && (
-                <span className="ml-1.5 text-xs text-muted">({t.count.toLocaleString()})</span>
+                <span className="ml-1.5 text-xs text-muted">({fmtNumber(t.count)})</span>
               )}
             </button>
           );

@@ -284,7 +284,15 @@ import { scanPaths, scannedFileCount } from '../scripts/i18n-scan.mjs';
 // Both lines above measured their own tree. This tree holds main's translated
 // public, auth and control copy AND the port's page titles and labels, and the
 // one scanner counts 2,208 across it. Banked as the ceiling.
-const CEILING = 2208;
+//
+// Claude-1's C1-S9-114…126 burn-down on top of that integration: 2,349 on
+// main's tree.
+//
+// ── MERGED WITH MAIN THROUGH #598 AND #604: -> 1,922 ────────────────────────
+//
+// The burn-down and the port's translations together, measured once over the
+// merged tree with the one scanner: 1,922. Banked as the ceiling.
+const CEILING = 1922;
 
 describe('the ungated i18n surface does not get worse', () => {
   const findings = scanPaths(['app', 'components']);
