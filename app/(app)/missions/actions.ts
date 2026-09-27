@@ -303,11 +303,27 @@ async function finalizeApproval(
   // rather than Greenwich's.
   const now = new Date();
 
+  // Completion rewards are paid once per ASSIGNMENT, however many times it is
+  // approved. Nothing enforced that: approving the same submission again, or
+  // approving a fresh proof for a chore already approved, re-ran the payout —
+  // measured live, one chore approved three times gave the child 20, 40, 60 XP.
+  // `approved_at` is set only here and cleared only by the rollback below, so
+  // "still null" is exactly "never paid", and the condition makes the first
+  // approval the only one that pays even when two arrive together.
   const { data: approvedAssignment, error: approvalError } = await supabase.from('chore_assignments').update({
     status: 'approved', approved_at: now.toISOString(), approved_by: args.actorId,
     points_awarded: points, cash_awarded_cents: cashCents,
-  }).eq('id', args.assignment.id as string).eq('family_id', args.familyId).select('id').single();
-  if (approvalError || !approvedAssignment) throw new Error('Could not save chore approval');
+  }).eq('id', args.assignment.id as string).eq('family_id', args.familyId).is('approved_at', null).select('id').maybeSingle();
+  if (approvalError) throw new Error('Could not save chore approval');
+  if (!approvedAssignment) {
+    // Already approved and paid. Put the chore back to approved (a new proof
+    // moves it to `submitted`) without paying or re-pricing it.
+    const { data: reapproved, error: reapproveError } = await supabase.from('chore_assignments')
+      .update({ status: 'approved' }).eq('id', args.assignment.id as string).eq('family_id', args.familyId)
+      .not('approved_at', 'is', null).select('id').maybeSingle();
+    if (reapproveError || !reapproved) throw new Error('Could not save chore approval');
+    return;
+  }
 
   try {
     await applyCompletionRewards(supabase, {
@@ -371,7 +387,7 @@ export async function approveSubmissionAction(formData: FormData): Promise<Missi
 
   const score = intVal(formData, 'score') ?? assignment.ai_score ?? 100;
   if (!await setSubmissionStatus(supabase, familyId, submissionId, 'approved')) return failed;
-  const { error: disputeError } = await supabase.from('chore_disputes').update({ status: 'resolved', resolution: 'Approved by parent', resolved_by: ctx.active.member.id, resolved_at: new Date().toISOString() }).eq('submission_id', submissionId).eq('status', 'open').select('id');
+  const { error: disputeError } = await supabase.from('chore_disputes').update({ status: 'resolved', resolution: 'Approved by parent', resolved_by: ctx.active.member.id, resolved_at: new Date().toISOString() }).eq('submission_id', submissionId).eq('family_id', familyId).eq('status', 'open').select('id');
   if (disputeError) {
     await setSubmissionStatus(supabase, familyId, submissionId, submission.status);
     return failed;
@@ -395,7 +411,7 @@ export async function approveSubmissionAction(formData: FormData): Promise<Missi
     // not be is invisible: a family's dispute left closed over a resolution
     // that did not happen. Audit C1-S9-55.
     const { data: reopened, error: disputeRestoreError } = await supabase.from('chore_disputes').update({ status: 'open', resolution: null, resolved_by: null, resolved_at: null })
-      .eq('submission_id', submissionId).eq('status', 'resolved').select('id');
+      .eq('submission_id', submissionId).eq('family_id', familyId).eq('status', 'resolved').select('id');
     if (disputeRestoreError || wroteNoRows(reopened)) {
       console.error('[chore state] dispute rollback failed — a dispute may stay closed', {
         submissionId, error: disputeRestoreError?.message ?? 'no rows updated',
@@ -490,7 +506,9 @@ export async function disputeSubmissionAction(formData: FormData): Promise<Missi
     }
     return failed;
   }
-  await logChoreEvent({ familyId, assignmentId: submission.assignment_id, submissionId, actorId: submission.member_id, action: 'dispute', note: str(formData, 'reason') });
+  // The ACTOR is whoever disputed, not whose chore it is. Logging the assignee
+  // made the ledger agree with the bug rather than record it.
+  await logChoreEvent({ familyId, assignmentId: submission.assignment_id, submissionId, actorId: ctx.active.member.id, action: 'dispute', note: str(formData, 'reason') });
   revalidatePath('/missions');
   revalidatePath('/kids');
   return { ok: true };

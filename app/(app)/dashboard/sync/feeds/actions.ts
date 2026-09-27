@@ -108,9 +108,7 @@ export async function addCalendarFeed(input: { name: string; url: string; color?
       if (!winner.ok || !winner.feed) return { ok: false, error: t('calendarSync.couldNotCheckExistingFeeds') };
       feed = winner.feed;
     } else if (error || !data) {
-      // Classified, not raw: the browser gets a sentence it can act on, never
-      // the database's own message (tests/the-database-does-not-talk-to-the-browser).
-      return { ok: false, error: describeActionError(error, 'Could not save the feed') };
+      return { ok: false, error: describeActionError(error, t('actions.couldNotSaveTheFeed')) };
     } else {
       feed = data;
       createdHere = true;

@@ -84,7 +84,9 @@ test.describe('Guardian autonomous SMS recovery against disposable PostgreSQL an
       const commId = pendingComm.data!.id;
       const notifications = () => admin.from('notifications').select('*').eq('family_id', familyId).eq('related_id', commId).order('id');
 
-      // A child may file an ordinary communication; that never authorizes recovery.
+      // A child cannot write Guardian call history at all (0453: screening is the
+      // parents' decision), and a row that exists without recovery authority is
+      // never recovered.
       const lastManager = await admin.from('family_members').update({ role: 'child' }).eq('id', memberId).eq('family_id', familyId).select('id');
       expect(lastManager.error?.code, 'The installed last-manager guard must remain active').toBe('23514');
       manager = await createOwnedAccount(origin, serviceKey);
@@ -100,12 +102,17 @@ test.describe('Guardian autonomous SMS recovery against disposable PostgreSQL an
       const login = await child.auth.signInWithPassword({ email: account.email, password: account.password });
       expect(!login.error && login.data.user?.id === account.userId, 'Sign in only the owned synthetic child account').toBe(true);
       const untrustedId = randomUUID();
-      const untrusted = await child.from('guardian_communications').insert({
+      const untrustedRow = {
         id: untrustedId, family_id: familyId, member_id: memberId, comm_type: 'sms_inbound', direction: 'inbound',
         from_number: params.From, to_number: params.To, body: 'Unverified member-written message',
         twilio_sms_sid: untrustedSid, status: 'screening',
-      }).select('id');
-      expect(!untrusted.error && untrusted.data?.length === 1, 'Demonstrate the ordinary member communication write').toBe(true);
+      } as const;
+      const childWrite = await child.from('guardian_communications').insert(untrustedRow).select('id');
+      expect(childWrite.error?.code, 'A child cannot write Guardian call history').toBe('42501');
+      // A row written before 0453, or by any path that is not the signed intake,
+      // carries no recovery authority. Seed one so the sweep's refusal is measured.
+      const untrusted = await guardian.from('guardian_communications').insert(untrustedRow).select('id');
+      expect(!untrusted.error && untrusted.data?.length === 1, 'Seed a communication with no recovery authority').toBe(true);
       const captured = pendingReceipts.data![0];
       const forged = await child.from('ai_tool_calls').insert({
         id: randomUUID(), family_id: familyId, tool_name: captured.tool_name, actor_kind: 'system',

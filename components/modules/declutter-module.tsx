@@ -16,7 +16,7 @@ import { SkeletonList, ErrorState, EmptyState } from '@/components/ui/states';
 import { cn } from '@/lib/utils/cn';
 import type { Tables, DeclutterZoneKind } from '@/lib/database.types';
 import {
-  ZONE_KINDS, zoneKindMeta, zoneHealth, missionsForZone, weeklyPlan, declutterSummary, missionPoints, isoDate, dayDiff,
+  ZONE_KINDS, SCORE_LABEL_KEYS, zoneKindMeta, zoneHealth, missionsForZone, weeklyPlan, declutterSummary, missionPoints, isoDate, dayDiff,
 } from '@/lib/declutter/missions';
 import { useLocale, useTranslations, usePlural } from '@/components/i18n/locale-provider';
 import type { LocaleCode } from '@/lib/i18n/locales';
@@ -42,7 +42,6 @@ function templateTitle(tr: Tr, kind: DeclutterZoneKind, title: string): string {
   const i = zoneKindMeta(kind).templates.findIndex((t) => t.title === title);
   return i >= 0 ? tr(`declutterModule.template.${kind}.t${i}`) : title;
 }
-const scoreLabel = (tr: (key: string) => string, n: number) => (n >= 1 && n <= 5 ? tr(`declutterModule.score.s${n}`) : String(n));
 const HEALTH_KEY = { fresh: 'declutterModule.health.fresh', due: 'declutterModule.health.due', overdue: 'declutterModule.health.overdue', never: 'declutterModule.health.never' } as const;
 
 export function DeclutterModule() {
@@ -176,9 +175,9 @@ export function DeclutterModule() {
         {m.status === 'planned' ? (
           <div className="flex shrink-0 items-center gap-1">
             <Button size="sm" onClick={() => setCompleting(m)}><Check className="h-3.5 w-3.5" /> {tr('declutter.done')}</Button>
-            <button onClick={() => skipMission(m)} aria-label={`Skip ${m.title}`} className="rounded-lg p-1.5 text-muted hover:text-fg"><SkipForward className="h-4 w-4" /></button>
-            <button onClick={() => setMissionForm({ open: true, mission: m })} aria-label={`Edit ${m.title}`} className="rounded-lg p-1.5 text-muted hover:text-fg"><Pencil className="h-4 w-4" /></button>
-            <button onClick={() => deleteMission(m)} aria-label={`Delete ${m.title}`} className="rounded-lg p-1.5 text-muted hover:text-rose-400"><Trash2 className="h-4 w-4" /></button>
+            <button onClick={() => skipMission(m)} aria-label={tr('itemAction.skip', { name: m.title })} className="rounded-lg p-1.5 text-muted hover:text-fg"><SkipForward className="h-4 w-4" /></button>
+            <button onClick={() => setMissionForm({ open: true, mission: m })} aria-label={tr('itemAction.edit', { name: m.title })} className="rounded-lg p-1.5 text-muted hover:text-fg"><Pencil className="h-4 w-4" /></button>
+            <button onClick={() => deleteMission(m)} aria-label={tr('itemAction.delete', { name: m.title })} className="rounded-lg p-1.5 text-muted hover:text-rose-400"><Trash2 className="h-4 w-4" /></button>
           </div>
         ) : (
           <button onClick={() => reopenMission(m)} className="shrink-0 text-xs text-muted hover:text-fg">{tr('declutter.reopen')}</button>
@@ -207,7 +206,7 @@ export function DeclutterModule() {
         <div className={cn('rounded-2xl border p-5', summary.avgScore !== null && summary.avgScore >= 3.5 ? 'border-rose-500/30 bg-rose-500/10' : summary.avgScore !== null && summary.avgScore <= 1.5 ? 'border-emerald-500/30 bg-emerald-500/10' : 'border-border bg-surface/40')}>
           <div className="flex items-center gap-2 text-sm font-semibold"><Sparkle className="h-4 w-4 text-brand-text" /> {tr('declutter.homeRightNow')}</div>
           <p className="mt-2 text-lg font-bold">{summary.zones === 0 ? tr('declutterModule.summary.noZones') : summary.avgScore !== null && summary.avgScore <= 1.5 ? tr('declutterModule.summary.greatShape') : plural('declutterModule.summary.zonesDue', summary.dueZones, { avg: summary.avgScore ?? '—' })}</p>
-          <p className="mt-1 text-xs text-muted">{summary.worst ? tr('declutterModule.worstSpot', { name: summary.worst.name, score: scoreLabel(tr, summary.worst.clutter_score) }) : tr('declutterModule.addMessySpots')}</p>
+          <p className="mt-1 text-xs text-muted">{summary.worst ? tr('declutter.worstSpot', { name: summary.worst.name, score: tr(SCORE_LABEL_KEYS[summary.worst.clutter_score]) }) : tr('declutter.addMessySpots')}</p>
         </div>
         <div className="rounded-2xl border border-border bg-surface/40 p-5">
           <div className="flex items-center gap-2 text-sm font-semibold"><CalendarDays className="h-4 w-4 text-brand-text" /> {tr('declutter.thisWeek')}</div>
@@ -252,10 +251,10 @@ export function DeclutterModule() {
                           <span className={cn('rounded-full border px-2 py-0.5 text-[11px]', HEALTH_STYLE[h.health])}>{tr(HEALTH_KEY[h.health])}{h.daysSinceReset !== null ? ` · ${h.daysSinceReset}d` : ''}</span>
                         </div>
                         <div className="mt-2 flex items-center gap-2">
-                          <div className="flex gap-0.5" aria-label={`Clutter ${z.clutter_score} of 5`}>
+                          <div className="flex gap-0.5" aria-label={tr('declutter.clutterScoreOfFive', { score: z.clutter_score })}>
                             {[1, 2, 3, 4, 5].map((n) => <span key={n} className={cn('h-2 w-5 rounded-sm', n <= z.clutter_score ? (z.clutter_score >= 4 ? 'bg-rose-400/80' : z.clutter_score === 3 ? 'bg-amber-400/80' : 'bg-emerald-400/80') : 'bg-border')} />)}
                           </div>
-                          <span className="text-xs text-muted">{scoreLabel(tr, z.clutter_score)}</span>
+                          <span className="text-xs text-muted">{tr(SCORE_LABEL_KEYS[z.clutter_score])}</span>
                           {z.is_active && (
                             <span className="ml-auto flex items-center gap-0.5">
                               <button onClick={() => bumpScore(z, -1)} aria-label={tr('declutter.lessCluttered')} className="rounded p-0.5 text-muted hover:text-fg"><ChevronDown className="h-4 w-4" /></button>
@@ -276,9 +275,9 @@ export function DeclutterModule() {
                       <div className="flex shrink-0 flex-col items-center gap-0.5">
                         {z.is_active ? (
                           <>
-                            <button onClick={() => resetZone(z)} aria-label={`Mark ${z.name} reset`} title={tr('declutter.markResetTidy')} className="rounded-lg p-1.5 text-muted hover:text-emerald-400"><RotateCcw className="h-4 w-4" /></button>
-                            <button onClick={() => setZoneForm({ open: true, zone: z })} aria-label={`Edit ${z.name}`} className="rounded-lg p-1.5 text-muted hover:text-fg"><Pencil className="h-4 w-4" /></button>
-                            <button onClick={() => archiveZone(z, false)} aria-label={`Archive ${z.name}`} className="rounded-lg p-1.5 text-muted hover:text-rose-400"><Archive className="h-4 w-4" /></button>
+                            <button onClick={() => resetZone(z)} aria-label={tr('itemAction.markReset', { name: z.name })} title={tr('declutter.markResetTidy')} className="rounded-lg p-1.5 text-muted hover:text-emerald-400"><RotateCcw className="h-4 w-4" /></button>
+                            <button onClick={() => setZoneForm({ open: true, zone: z })} aria-label={tr('itemAction.edit', { name: z.name })} className="rounded-lg p-1.5 text-muted hover:text-fg"><Pencil className="h-4 w-4" /></button>
+                            <button onClick={() => archiveZone(z, false)} aria-label={tr('itemAction.archive', { name: z.name })} className="rounded-lg p-1.5 text-muted hover:text-rose-400"><Archive className="h-4 w-4" /></button>
                           </>
                         ) : (
                           <button onClick={() => archiveZone(z, true)} className="text-xs text-muted hover:text-fg">{tr('declutter.restore')}</button>
@@ -301,7 +300,10 @@ export function DeclutterModule() {
           {open.length === 0 ? (
             <div className="rounded-2xl border border-brand/20 bg-brand/5 p-5">
               <p className="text-sm font-semibold text-brand-text">{tr('declutter.nothingPlanned')}</p>
-              <p className="mt-1 text-sm text-muted">{activeZones.length ? `“Plan this week” turns your ${activeZones.length} zone${activeZones.length === 1 ? '' : 's'} into ${plan.length || 'a few'} short mission${plan.length === 1 ? '' : 's'}, worst spots first, shared across the family.` : 'Add a zone first, then let the planner spread missions across the week.'}</p>
+              <p className="mt-1 text-sm text-muted">{activeZones.length ? tr('declutter.planTurnsZonesInto', {
+                zones: activeZones.length === 1 ? tr('declutter.oneZone') : tr('declutter.nZones', { n: activeZones.length }),
+                missions: plan.length === 0 ? tr('declutter.aFewShortMissions') : plan.length === 1 ? tr('declutter.oneShortMission') : tr('declutter.nShortMissions', { n: plan.length }),
+              }) : tr('declutter.addZoneFirst')}</p>
               {plan.length > 0 && (
                 <ul className="mt-3 grid gap-1 text-xs text-muted sm:grid-cols-2">
                   {plan.slice(0, 6).map((p) => <li key={`${p.day}-${p.zone.id}`}>{p.dayLabel}: {zoneKindMeta(p.zone.kind).emoji} {templateTitle(tr, p.zone.kind, p.template.title)} <span className="opacity-70">({p.zone.name}{p.assigneeId ? `, ${nameOf(p.assigneeId)}` : ''})</span></li>)}
@@ -391,7 +393,7 @@ function ZoneForm({ familyId, userId, zone, onClose, onSaved }: { familyId: stri
         <div>
           <p className="mb-1.5 text-xs font-medium text-muted">{tr('declutter.howBadIsItRightNow')}</p>
           <div className="flex gap-2" role="radiogroup" aria-label={tr('declutter.clutterScore')}>
-            {[1, 2, 3, 4, 5].map((n) => <button type="button" key={n} role="radio" aria-checked={score === n} onClick={() => setScore(n)} className={cn('flex-1 rounded-xl border px-2 py-2 text-xs coarse:min-h-11', score === n ? 'border-brand bg-brand/15 text-brand-text' : 'border-border text-muted')}>{n}<br />{scoreLabel(tr, n)}</button>)}
+            {[1, 2, 3, 4, 5].map((n) => <button type="button" key={n} role="radio" aria-checked={score === n} onClick={() => setScore(n)} className={cn('flex-1 rounded-xl border px-2 py-2 text-xs coarse:min-h-11', score === n ? 'border-brand bg-brand/15 text-brand-text' : 'border-border text-muted')}>{n}<br />{tr(SCORE_LABEL_KEYS[n])}</button>)}
           </div>
         </div>
         <Field label={tr('declutter.whatDoneLooksLike')}>{(id) => <Input id={id} name="target_state" defaultValue={zone?.target_state ?? ''} placeholder={tr('declutter.onlyTheFruitBowlAndCoffee')} />}</Field>

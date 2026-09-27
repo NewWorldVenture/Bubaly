@@ -245,8 +245,15 @@ begin
   if array_length(still, 1) is not null then
     raise exception 'A-13 UNPROVEN (control leg 2): the revoke statement the chain uses, replayed verbatim on an otherwise identical throwaway function, left EXECUTE with % — so a FALSE below cannot be read as that revoke having taken, and this predicate is not measuring what the probe claims it measures', array_to_string(still, ' and ');
   end if;
+  -- Supabase's default privileges grant EXECUTE on every new function to
+  -- service_role DIRECTLY (pg_default_acl, objtype f), and the harness now does
+  -- the same (TEST-012), so the chain's revoke — which names public, anon and
+  -- authenticated — leaves that direct grant in place. The question this leg
+  -- asks is whether service_role has an AMBIENT route (superuser, owner, or a
+  -- membership) that no grant controls, so the direct grant is taken away first.
+  execute 'revoke all on function public.a13_control_untouched_rpc() from service_role';
   if has_function_privilege('service_role', ctl, 'EXECUTE') then
-    raise exception 'A-13 UNPROVEN (control leg 2): service_role still holds EXECUTE on a function it was never granted, after PUBLIC was revoked — it has an ambient route (superuser, owner, or a membership), so the "service_role CAN execute" check below reads TRUE whether or not the chain grants it';
+    raise exception 'A-13 UNPROVEN (control leg 2): service_role still holds EXECUTE on a function whose grants to it and to PUBLIC were both revoked — it has an ambient route (superuser, owner, or a membership), so the "service_role CAN execute" check below reads TRUE whether or not the chain grants it';
   end if;
 
   begin
@@ -261,7 +268,7 @@ begin
   if has_function_privilege('authenticated', ctl, 'EXECUTE') or has_function_privilege('anon', ctl, 'EXECUTE') then
     raise exception 'A-13 UNPROVEN (control leg 2): granting service_role EXECUTE also handed it to a client role — a client role is a member of service_role';
   end if;
-  raise notice 'A-13 control leg 2 OK: that revoke flips both client roles AND service_role to FALSE on an otherwise identical function, and only the grant gives service_role EXECUTE back';
+  raise notice 'A-13 control leg 2 OK: that revoke flips both client roles to FALSE on an otherwise identical function, service_role has no ambient route once its direct grant is gone, and only the grant gives it EXECUTE back';
 end $$;
 
 do $$

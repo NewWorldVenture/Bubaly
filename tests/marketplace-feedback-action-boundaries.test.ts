@@ -39,6 +39,10 @@ describe('Marketplace and Feedback action boundaries', () => {
     expect(feedback).toContain("error.code !== '23505'");
     expectTranslates(community, 'actions.noCircleFoundWithThat', "No circle found with that code — double-check it");
     expectTranslates(marketplace, 'actions.youAlreadyReviewedThisExchange', "You already reviewed this exchange");
+    // I18N-002: an illegal order step is a stale screen, said in the viewer's
+    // language and without echoing the caller-supplied status.
+    expectTranslates(marketplace, 'marketplace.orderStepNoLongerAvailable', 'This order has moved on since you opened it. Refresh to see its current step.');
+    expect(marketplace).not.toContain('Can’t go from ${');
   });
 
   it('completes the hand-off and order in one authorized transaction', () => {

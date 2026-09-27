@@ -11,7 +11,10 @@ import { KIND_LABELS, priceLabel, type ListingKind, type RentPeriod } from '@/li
 import { ErrorState } from '@/components/ui/states';
 import { getLocaleContext, getTranslations } from '@/lib/i18n/server';
 
-export const metadata: Metadata = { title: 'Following · Marketplace' };
+export async function generateMetadata(): Promise<Metadata> {
+  const t = await getTranslations();
+  return { title: `${t('marketplaceFollowing.following')} · ${t('navLabel.marketplace')}` };
+}
 export const dynamic = 'force-dynamic';
 
 export default async function MarketplaceFollowingPage() {

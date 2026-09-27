@@ -1,6 +1,7 @@
 import { readFileSync, readdirSync } from 'node:fs';
 import { join } from 'node:path';
 import { describe, expect, it } from 'vitest';
+import { hasCronAuthorization } from '@/lib/server/cron-auth';
 import {
   FEATURE_ENV, REQUIRED_ENV, checkFeatureEnv, summarizeHealth, buildHealthReport,
 } from '../lib/health/status';
@@ -101,7 +102,15 @@ describe('health reports the secrets whose absence silently kills a subsystem', 
     expect(crons.length).toBeGreaterThan(0);
     const helper = readFileSync('lib/server/cron-auth.ts', 'utf8');
     // Fail-closed: an unset secret must not become a matchable "Bearer undefined".
-    expect(helper).toContain('!!secret &&');
+    // `bearerMatches` builds the `Bearer ` prefix itself and returns false
+    // before doing so when the secret is absent, so the matchable string is
+    // never constructed at all (SEC-011). The behaviour is asserted by running
+    // it, in tests/shared-secrets-compare-in-constant-time.test.ts.
+    expect(helper).toMatch(/bearerMatches\(|!!secret &&/);
+    expect(hasCronAuthorization(
+      new Request('https://example.test', { headers: { authorization: 'Bearer undefined' } }),
+      undefined,
+    ), 'an unset CRON_SECRET must not be matchable').toBe(false);
     for (const { path } of crons) {
       const route = readFileSync(`app${path}/route.ts`, 'utf8');
       expect(route, `${path} must enforce cron authorization`).toContain('if (!hasCronAuthorization');

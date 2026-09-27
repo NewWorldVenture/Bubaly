@@ -17,7 +17,7 @@ import { PageHeader } from '@/components/app/page-header';
 import { cn } from '@/lib/utils/cn';
 import { generatePrepPlansAction } from '@/app/(app)/dashboard/prep-plans/prep-actions';
 import type { Tables } from '@/lib/database.types';
-import { usePlural, useTranslations } from '@/components/i18n/locale-provider';
+import { useTranslations } from '@/components/i18n/locale-provider';
 import { todayInZone } from '@/lib/schedule/zoned';
 
 type Plan = Tables<'prep_plans'>;
@@ -57,7 +57,6 @@ function daysUntil(dateStr: string, todayKey: string): number {
 
 export function PlanningModule({ tz }: { tz: string }) {
   const t = useTranslations();
-  const plural = usePlural();
   const { familyId } = useApp();
   const { success, error: toastError } = useToast();
   // The family's own day, resolved once per render. `lib/schedule/zoned.ts` is
@@ -89,9 +88,8 @@ export function PlanningModule({ tz }: { tz: string }) {
     const res = await generatePrepPlansAction();
     setGenerating(false);
     if (!res.ok) { toastError(res.error ?? t('planningModule.couldNotGenerate')); return; }
-    const made = res.plans ?? 0;
-    if (made === 0) { toastError(t('planningModule.nothingOnTheHorizonYet')); return; }
-    success(plural('planningModule.plansReady', made));
+    if (res.plans === 0) { toastError(t('planningModule.nothingOnTheHorizonYet')); return; }
+    success(res.plans === 1 ? t('planning.prepPlanReadyOne', { count: res.plans ?? 0 }) : t('planning.prepPlansReadyMany', { count: res.plans ?? 0 }));
   }
 
   async function toggleStep(step: Step) {

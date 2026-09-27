@@ -231,9 +231,9 @@ export function InventoryModule() {
                     <button onClick={() => setLocationFilter(location.id)} className={cn('flex min-h-9 flex-1 items-center gap-2 rounded-lg px-2 text-left text-sm', locationFilter === location.id ? 'bg-brand/15 text-brand-text' : 'hover:bg-elevated')}>
                       <span>{locationKindMeta(location.kind).emoji}</span><span className="truncate">{location.name}</span><span className="ml-auto text-xs text-muted">{itemsIn(location.id)}</span>
                     </button>
-                    <button onClick={() => setLocationForm({ open: true, parent: location, location: null })} aria-label={`Add a container in ${location.name}`} className="rounded p-1 text-muted opacity-0 hover:text-fg group-hover:opacity-100"><Plus className="h-3.5 w-3.5" /></button>
-                    <button onClick={() => setLocationForm({ open: true, parent: null, location })} aria-label={`Edit ${location.name}`} className="rounded p-1 text-muted opacity-0 hover:text-fg group-hover:opacity-100"><Pencil className="h-3.5 w-3.5" /></button>
-                    <button onClick={() => deleteLocation(location)} aria-label={`Delete ${location.name}`} className="rounded p-1 text-muted opacity-0 hover:text-rose-400 group-hover:opacity-100"><Trash2 className="h-3.5 w-3.5" /></button>
+                    <button onClick={() => setLocationForm({ open: true, parent: location, location: null })} aria-label={tr('inventory.addContainerIn', { name: location.name })} className="rounded p-1 text-muted opacity-0 hover:text-fg group-hover:opacity-100"><Plus className="h-3.5 w-3.5" /></button>
+                    <button onClick={() => setLocationForm({ open: true, parent: null, location })} aria-label={tr('itemAction.edit', { name: location.name })} className="rounded p-1 text-muted opacity-0 hover:text-fg group-hover:opacity-100"><Pencil className="h-3.5 w-3.5" /></button>
+                    <button onClick={() => deleteLocation(location)} aria-label={tr('itemAction.delete', { name: location.name })} className="rounded p-1 text-muted opacity-0 hover:text-rose-400 group-hover:opacity-100"><Trash2 className="h-3.5 w-3.5" /></button>
                   </div>
                   {children.length > 0 && (
                     <ul className="ml-4 border-l border-border pl-2">
@@ -242,7 +242,7 @@ export function InventoryModule() {
                           <button onClick={() => setLocationFilter(c.id)} className={cn('flex min-h-8 flex-1 items-center gap-2 rounded-lg px-2 text-left text-xs', locationFilter === c.id ? 'bg-brand/15 text-brand-text' : 'text-muted hover:bg-elevated hover:text-fg')}>
                             <ChevronRight className="h-3 w-3" /><span className="truncate">{c.name}</span><span className="ml-auto">{itemsIn(c.id)}</span>
                           </button>
-                          <button onClick={() => deleteLocation(c)} aria-label={`Delete ${c.name}`} className="rounded p-1 text-muted opacity-0 hover:text-rose-400 group-hover:opacity-100"><Trash2 className="h-3 w-3" /></button>
+                          <button onClick={() => deleteLocation(c)} aria-label={tr('itemAction.delete', { name: c.name })} className="rounded p-1 text-muted opacity-0 hover:text-rose-400 group-hover:opacity-100"><Trash2 className="h-3 w-3" /></button>
                         </li>
                       ))}
                     </ul>
@@ -287,12 +287,12 @@ export function InventoryModule() {
                     </div>
                     <div className="flex items-center gap-0.5 opacity-70 transition group-hover:opacity-100">
                       <button onClick={() => confirmHere(item)} aria-label={`${tr('inventory.confirmItsHere')}: ${item.name}`} title={tr('inventory.confirmItsHere')} className="rounded-lg p-1.5 text-muted hover:text-fg"><CheckCircle2 className="h-4 w-4" /></button>
-                      <button onClick={() => setMoveFor(item)} aria-label={`Move ${item.name}`} title={tr('inventory.movedTo')} className="rounded-lg p-1.5 text-muted hover:text-fg"><ArrowRightLeft className="h-4 w-4" /></button>
+                      <button onClick={() => setMoveFor(item)} aria-label={tr('itemAction.move', { name: item.name })} title={tr('inventory.movedTo')} className="rounded-lg p-1.5 text-muted hover:text-fg"><ArrowRightLeft className="h-4 w-4" /></button>
                       {item.status === 'lent'
-                        ? <button onClick={() => setStatus(item, 'in_place')} aria-label={`${item.name} returned`} title={tr('inventory.returned')} className="rounded-lg p-1.5 text-muted hover:text-fg"><Check className="h-4 w-4" /></button>
-                        : <button onClick={() => setLendFor(item)} aria-label={`Lend ${item.name}`} title={tr('inventory.lendOut')} className="rounded-lg p-1.5 text-muted hover:text-fg"><Handshake className="h-4 w-4" /></button>}
-                      <button onClick={() => setItemForm({ open: true, item })} aria-label={`Edit ${item.name}`} className="rounded-lg p-1.5 text-muted hover:text-fg"><Pencil className="h-4 w-4" /></button>
-                      <button onClick={() => deleteItem(item)} aria-label={`Remove ${item.name}`} className="rounded-lg p-1.5 text-muted hover:text-rose-400"><Trash2 className="h-4 w-4" /></button>
+                        ? <button onClick={() => setStatus(item, 'in_place')} aria-label={tr('itemAction.returned', { name: item.name })} title={tr('inventory.returned')} className="rounded-lg p-1.5 text-muted hover:text-fg"><Check className="h-4 w-4" /></button>
+                        : <button onClick={() => setLendFor(item)} aria-label={tr('itemAction.lend', { name: item.name })} title={tr('inventory.lendOut')} className="rounded-lg p-1.5 text-muted hover:text-fg"><Handshake className="h-4 w-4" /></button>}
+                      <button onClick={() => setItemForm({ open: true, item })} aria-label={tr('itemAction.edit', { name: item.name })} className="rounded-lg p-1.5 text-muted hover:text-fg"><Pencil className="h-4 w-4" /></button>
+                      <button onClick={() => deleteItem(item)} aria-label={tr('itemAction.remove', { name: item.name })} className="rounded-lg p-1.5 text-muted hover:text-rose-400"><Trash2 className="h-4 w-4" /></button>
                     </div>
                   </li>
                 );
@@ -475,11 +475,11 @@ function LocationForm({ familyId, userId, locations, parent, location, onClose, 
     setLoading(false);
     if (error) return toastError(describeDbError(error));
     if (wroteNoRows(saved2)) return toastError(tr('errors.thatChangeWasNotSaved'));
-    onSaved(location ? 'Location updated' : parent ? `Added to ${parent.name}` : 'Room added');
+    onSaved(location ? tr('inventory.locationUpdated') : parent ? tr('inventory.addedTo', { name: parent.name }) : tr('inventory.roomAdded'));
   }
 
   return (
-    <Modal open title={location ? `Edit · ${location.name}` : parent ? `Add a container in ${parent.name}` : 'Add a room or area'} onClose={onClose}>
+    <Modal open title={location ? tr('inventory.editLocation', { name: location.name }) : parent ? tr('inventory.addContainerIn', { name: parent.name }) : tr('inventory.addRoomOrArea')} onClose={onClose}>
       <form onSubmit={onSubmit} className="space-y-4">
         <div className="grid grid-cols-2 gap-3">
           <Field label={tr('inventory.name')} required>{(id) => <Input id={id} name="name" autoFocus defaultValue={location?.name ?? ''} placeholder={parent ? 'Shelf B / Blue tote' : 'Garage'} />}</Field>
@@ -524,7 +524,7 @@ function MoveForm({ familyId, userId, memberId, item, locations, onClose, onSave
   }
 
   return (
-    <Modal open title={`Moved · ${item.name}`} description={`Currently: ${locationLabel(locations, item.location_id)}`} onClose={onClose}>
+    <Modal open title={tr('inventory.movedTitle', { name: item.name })} description={tr('inventory.currentlyAt', { place: locationLabel(locations, item.location_id) })} onClose={onClose}>
       <form onSubmit={onSubmit} className="space-y-4">
         <Field label={tr('inventory.nowIn')}>{(id) => <Select id={id} name="to_location_id" defaultValue={item.location_id ?? ''}><LocationOptions locations={locations} /></Select>}</Field>
         <Field label="Why">{(id) => <Input id={id} name="reason" placeholder={tr('inventory.springCleanBackFromRepair')} />}</Field>
@@ -556,7 +556,7 @@ function LendForm({ item, onClose, onSaved }: { item: Item; onClose: () => void;
   }
 
   return (
-    <Modal open title={`Lend out · ${item.name}`} onClose={onClose}>
+    <Modal open title={tr('inventory.lendOutTitle', { name: item.name })} onClose={onClose}>
       <form onSubmit={onSubmit} className="space-y-4">
         <div className="grid grid-cols-2 gap-3">
           <Field label="To" required>{(id) => <Input id={id} name="lent_to" autoFocus placeholder={tr('inventory.theNguyensNextDoor')} />}</Field>

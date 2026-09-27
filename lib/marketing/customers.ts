@@ -44,8 +44,13 @@ export async function getMarketingCustomersWithError(supabase: DB): Promise<{ cu
     // db-max-rows does not shorten the table — it silently mislabels customers
     // whose rows fell off the end (no subscription found reads as 'free', no
     // members reads as a household of zero, no profile as an unknown owner).
-    readAllAsQuery((from, to) => supabase.from('subscriptions').select('family_id, plan, status, created_at, current_period_end').order('family_id').range(from, to), { max: 2000 }),
-    readAllAsQuery((from, to) => supabase.from('family_members').select('family_id, user_id, role, is_active').order('family_id').order('user_id').range(from, to), { max: 20000 }),
+    // Each sort ends on the primary key. Without a total order a tie split
+    // across a page boundary drops one row and repeats another WITHIN one
+    // sweep — the same mislabelling the comment above describes, from a
+    // different cause. `subscriptions.family_id` is unique only via 0285,
+    // which is pending production, so it cannot be the tiebreaker.
+    readAllAsQuery((from, to) => supabase.from('subscriptions').select('family_id, plan, status, created_at, current_period_end').order('family_id').order('id').range(from, to), { max: 2000 }),
+    readAllAsQuery((from, to) => supabase.from('family_members').select('family_id, user_id, role, is_active').order('family_id').order('user_id').order('id').range(from, to), { max: 20000 }),
     readAllAsQuery((from, to) => supabase.from('profiles').select('id, email').order('id').range(from, to), { max: 20000 }),
   ]);
 

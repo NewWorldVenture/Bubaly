@@ -75,6 +75,8 @@ function userClient(o: Sb, updates: Record<string, unknown>[]) {
           Object.assign(u, {
             eq: () => u,
             select: () => u,
+            // The direct path claims the run with `.select('id').maybeSingle()`.
+            maybeSingle: () => Promise.resolve({ data: (o.updateRows ?? [{ id: 'row' }])[0] ?? null, error: null }),
             then: (res: (v: unknown) => unknown) => Promise.resolve({ data: o.updateRows ?? [{ id: 'row' }], error: null }).then(res),
           });
           return u;
@@ -247,7 +249,10 @@ describe('approving a queued run', () => {
     materializeConciergePlan.mockResolvedValue({ applied: [], failed: ['calendar'] });
     const res = await (await actions()).executeQueuedRunAction('run-1');
     expect(res.ok).toBe(false);
-    expect(updates.filter((u) => u.table === 'family_automation_runs'), 'stamped executed over a failure').toEqual([]);
+    const runWrites = updates.filter((u) => u.table === 'family_automation_runs');
+    expect(runWrites.filter((u) => u.status === 'executed'), 'stamped executed over a failure').toEqual([]);
+    // The claim taken before applying is handed back, so the run is offered again.
+    expect(runWrites.at(-1)).toMatchObject({ status: 'pending', state: 'awaiting_approval' });
   });
 
   it('a plan that landed stamps the run executed', async () => {
@@ -256,6 +261,8 @@ describe('approving a queued run', () => {
     materializeConciergePlan.mockResolvedValue({ applied: ['calendar'], failed: [] });
     const res = await (await actions()).executeQueuedRunAction('run-1');
     expect(res.ok).toBe(true);
-    expect(updates.find((u) => u.table === 'family_automation_runs')).toMatchObject({ status: 'executed' });
+    const runWrites = updates.filter((u) => u.table === 'family_automation_runs');
+    expect(runWrites[0], 'claimed before anything is applied').toMatchObject({ status: 'approved', state: 'executing' });
+    expect(runWrites.at(-1)).toMatchObject({ status: 'executed', state: 'completed' });
   });
 });

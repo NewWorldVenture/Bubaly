@@ -11,7 +11,10 @@ import { ErrorState } from '@/components/ui/states';
 import { getFormat } from '@/lib/utils/format-server';
 import { getTranslations } from '@/lib/i18n/server';
 
-export const metadata: Metadata = { title: 'Family Health' };
+export async function generateMetadata(): Promise<Metadata> {
+  const t = await getTranslations();
+  return { title: t('pageTitle.familyHealth') };
+}
 export const dynamic = 'force-dynamic';
 
 export default async function FamilyHealthPage() {

@@ -61,7 +61,7 @@ export function CardRevealModal({ cardId, childName, onClose }: {
   }, [cardId, tr]);
 
   return (
-    <Modal open title={`${childName}'s card details`} onClose={onClose}>
+    <Modal open title={t('cardReveal.cardDetailsFor', { name: childName })} onClose={onClose}>
       <div className="space-y-4">
         {state === 'loading' && (
           <div className="flex items-center justify-center gap-2 py-10 text-sm text-muted">

@@ -2,6 +2,7 @@
 
 import { revalidatePath } from 'next/cache';
 import { getTranslations } from '@/lib/i18n/server';
+import { householdPolicyBlocked } from '@/lib/trust/messages';
 import { requireUserContext, effectivePlanLevel } from '@/lib/supabase/auth';
 import { dayKeyInTz } from '@/lib/services/scope';
 import { settleAll } from '@/lib/supabase/settle';
@@ -143,7 +144,7 @@ export async function addFundsAction(input: { childWalletId: string; amountCents
     title: `Add funds ${(amount / 100).toFixed(2)}`,
     context: { amountCents: amount }, openApproval: false,
   });
-  if (decision.effect === 'deny') return { ok: false, error: `Blocked by household policy: ${decision.reason}` };
+  if (decision.effect === 'deny') return { ok: false, error: householdPolicyBlocked(t, decision) };
 
   const split = normalizeSplit(rule?.split as Partial<Split> | null);
   const parts = allocate(amount, split);
@@ -231,7 +232,7 @@ export async function payChoreRewardAction(input: { choreAssignmentId: string })
     title: `Pay chore reward ${(amount / 100).toFixed(2)}`,
     context: { amountCents: amount }, openApproval: false,
   });
-  if (decision.effect === 'deny') return { ok: false, error: `Blocked by household policy: ${decision.reason}` };
+  if (decision.effect === 'deny') return { ok: false, error: householdPolicyBlocked(t, decision) };
 
   const res = await creditChildWallet(supabase, {
     familyId, childWalletId: cw.id, amountCents: amount, type: 'chore_reward',
@@ -344,7 +345,7 @@ export async function runDueAllowancesAction(): Promise<Result & { ranCount?: nu
     title: `Run ${rules!.length} due allowance${rules!.length === 1 ? '' : 's'}`,
     context: { amountCents: totalDue }, openApproval: false,
   });
-  if (decision.effect === 'deny') return { ok: false, error: `Blocked by household policy: ${decision.reason}` };
+  if (decision.effect === 'deny') return { ok: false, error: householdPolicyBlocked(t, decision) };
 
   let ranCount = 0;
   let paidCents = 0;
@@ -455,7 +456,7 @@ export async function fundGoalAction(input: { goalId: string; amountCents: numbe
     title: `Fund goal "${goal.title}" ${(amount / 100).toFixed(2)}`,
     context: { amountCents: amount }, openApproval: false,
   });
-  if (decision.effect === 'deny') return { ok: false, error: `Blocked by household policy: ${decision.reason}` };
+  if (decision.effect === 'deny') return { ok: false, error: householdPolicyBlocked(t, decision) };
 
   const result = await fundGoal(supabase, {
     familyId, goalId: input.goalId, amountCents: amount, actorId: ctx.user.id,
@@ -514,7 +515,7 @@ export async function approveGiftAction(input: { giftPaymentId: string }): Promi
     title: `Approve gift ${(gift.amount_cents / 100).toFixed(2)}`,
     context: { amountCents: gift.amount_cents }, openApproval: false,
   });
-  if (decision.effect === 'deny') return { ok: false, error: `Blocked by household policy: ${decision.reason}` };
+  if (decision.effect === 'deny') return { ok: false, error: householdPolicyBlocked(t, decision) };
 
   const res = await approveGift(supabase, familyId, gift.id, ctx.user.id);
   if (!res.ok) return { ok: false, error: res.error };
@@ -528,10 +529,22 @@ export async function dismissGiftAction(input: { giftPaymentId: string }): Promi
   const ctx = await requireUserContext();
   if (!isManager(ctx.active.role)) return { ok: false, error: t('actions.onlyAParentGuardianCan11') };
   const supabase = await createServer();
-  const { data: dismissed, error } = await supabase.from('gift_payments')
-    .update({ status: 'cancelled' }).eq('id', input.giftPaymentId).eq('family_id', ctx.active.familyId).select('id');
+  // Only a PENDING gift can be declined. Unconditionally, declining one that a
+  // second parent (or this parent, from a stale page) had already approved
+  // marked it cancelled while its credit stayed in the child's ledger —
+  // measured: 1 row updated, status "cancelled", 5,000 cents credited.
+  const { data: declined, error } = await supabase.from('gift_payments')
+    .update({ status: 'cancelled' }).eq('id', input.giftPaymentId).eq('family_id', ctx.active.familyId)
+    .eq('status', 'pending').select('id').maybeSingle();
   if (error) return actionFailure(error, t('actions.couldNotDismissThatGift'));
-  if (wroteNoRows(dismissed)) return { ok: false, error: t('actions.couldNotDismissThatGift') };
+  if (!declined) {
+    const { data: gift, error: readError } = await supabase.from('gift_payments')
+      .select('status').eq('id', input.giftPaymentId).eq('family_id', ctx.active.familyId).maybeSingle();
+    if (readError) return actionFailure(readError, t('actions.couldNotDismissThatGift'));
+    if (!gift) return { ok: false, error: t('actions.giftNotFound') };
+    // Declining twice is still declined; anything else was decided the other way.
+    if (gift.status !== 'cancelled') return { ok: false, error: t('actions.thisGiftWasAlreadyApplied') };
+  }
   revalidatePath('/wallet/gift');
   return { ok: true };
 }
@@ -603,7 +616,7 @@ export async function recordBabysitterPaymentAction(input: {
     title: `Record babysitter payment ${(input.amountCents / 100).toFixed(2)}`,
     context: { amountCents: input.amountCents }, openApproval: false,
   });
-  if (decision.effect === 'deny') return { ok: false, error: `Blocked by household policy: ${decision.reason}` };
+  if (decision.effect === 'deny') return { ok: false, error: householdPolicyBlocked(t, decision) };
 
   const { error } = await supabase.from('babysitter_payments').insert({
     family_id: ctx.active.familyId,
@@ -772,7 +785,7 @@ export async function requestSpendAction(input: {
   // Can't request more than is available in Spend.
   const { available, error: balanceError } = await bucketBalanceCents(supabase, { familyId, childWalletId: cw.id, kind: 'spend' });
   if (balanceError) return { ok: false, error: balanceError };
-  if (amount > available) return { ok: false, error: `Only ${(available / 100).toFixed(2)} available in Spend.` };
+  if (amount > available) return { ok: false, error: t('actions.onlyAmountAvailableInSpend', { amount: (available / 100).toFixed(2) }) };
 
   const threshold = rule?.require_approval_over_cents ?? 5000;
   const manager = isManager(ctx.active.role);
@@ -789,7 +802,7 @@ export async function requestSpendAction(input: {
   // request. A role-default "no" just means the child needs a parent's OK — they
   // can always *ask*, which is the whole point of a spend request.
   const explicitlyDenied = decision.effect === 'deny' && (decision.basis === 'deny_grant' || decision.basis === 'policy');
-  if (explicitlyDenied) return { ok: false, error: `Blocked by household policy: ${decision.reason}` };
+  if (explicitlyDenied) return { ok: false, error: householdPolicyBlocked(t, decision) };
 
   // A parent under threshold (and not forced to review by a policy) spends directly.
   const needsApproval = !manager || amount > threshold || decision.effect !== 'allow';
@@ -871,7 +884,7 @@ export async function decideSpendRequestAction(input: {
       title: `Approve spend ${((txn.amount_cents ?? 0) / 100).toFixed(2)}`,
       context: { amountCents: txn.amount_cents ?? 0 }, openApproval: false,
     });
-    if (decision.effect === 'deny') return { ok: false, error: `Blocked by household policy: ${decision.reason}` };
+    if (decision.effect === 'deny') return { ok: false, error: householdPolicyBlocked(t, decision) };
 
   }
   const decision = await decideSpend(supabase, {
@@ -911,7 +924,7 @@ export async function sendMoneyAction(input: {
     title: `Transfer ${(amount / 100).toFixed(2)} between wallets`,
     context: { amountCents: amount }, openApproval: false,
   });
-  if (decision.effect === 'deny') return { ok: false, error: `Blocked by household policy: ${decision.reason}` };
+  if (decision.effect === 'deny') return { ok: false, error: householdPolicyBlocked(t, decision) };
 
   const transfer = await transferWallets(supabase, {
     familyId, fromChildWalletId: input.fromChildWalletId, toChildWalletId: input.toChildWalletId,
@@ -940,9 +953,18 @@ export async function requestAllowanceAction(input: {
   const supabase = await createServer();
 
   const { data: cw, error: walletError } = await supabase
-    .from('child_wallets').select('id').eq('id', input.childWalletId).eq('family_id', familyId).maybeSingle();
+    .from('child_wallets').select('id, member_id').eq('id', input.childWalletId).eq('family_id', familyId).maybeSingle();
   if (walletError) return actionFailure(walletError, t('actions.couldNotLoadThatWallet'));
   if (!cw) return { ok: false, error: t('actions.walletNotFound') };
+
+  // Asking for YOUR allowance is the child's half of this feature; asking for
+  // a sibling's is not. This read filters on `family_id` only, so without the
+  // check any member could raise a request against any child's wallet — and
+  // the parent's queue would show it as that child asking. `requested_by`
+  // recorded the truth all along, which is what made the gap invisible.
+  if (cw.member_id !== ctx.active.member.id && !isManager(ctx.active.role)) {
+    return { ok: false, error: t('actions.notAuthorized') };
+  }
 
   const { error } = await supabase.from('parent_approvals').insert({
     family_id: familyId, kind: 'allowance_request',
@@ -987,7 +1009,7 @@ export async function decideAllowanceRequestAction(input: {
       title: `Approve allowance request ${(amount / 100).toFixed(2)}`,
       context: { amountCents: amount }, openApproval: false,
     });
-    if (decision.effect === 'deny') return { ok: false, error: `Blocked by household policy: ${decision.reason}` };
+    if (decision.effect === 'deny') return { ok: false, error: householdPolicyBlocked(t, decision) };
 
   }
   const decision = await decideAllowance(supabase, {

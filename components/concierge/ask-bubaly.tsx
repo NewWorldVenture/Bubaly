@@ -68,7 +68,7 @@ export function AskBubaly({ variant = 'hero', conversationId = null, entityIds, 
   const handle = useCallback((result: Awaited<ReturnType<typeof submitAIRequest>>) => {
     if (!result.ok) {
       setError(result.status === 429 && result.retryAfter
-        ? `${result.error} Try again in ${result.retryAfter}s.`
+        ? t('concierge.errorTryAgainIn', { error: result.error, s: result.retryAfter })
         : result.error);
       return;
     }

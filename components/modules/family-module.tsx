@@ -25,6 +25,7 @@ import type { Tables } from '@/lib/database.types';
 import { useLocale, usePlural, useTranslations } from '@/components/i18n/locale-provider';
 import type { LocaleCode } from '@/lib/i18n/locales';
 import { isValidTimezone } from '@/lib/time/zoned';
+import { ageOn, nextBirthday } from '@/lib/utils/birthday';
 import { FamilyMediaImg } from '@/components/media/family-media-img';
 
 type Family = Tables<'families'>;
@@ -43,25 +44,8 @@ function roleBadge(role: MemberRole): { labelKey: string; cls: string; icon: typ
   return { labelKey: 'familyModule.badge.kidAccount', cls: 'text-sky-400', icon: Shield };
 }
 function memberAge(birthday: string | null): number | null {
-  if (!birthday) return null;
-  const b = new Date(birthday);
-  if (Number.isNaN(b.getTime())) return null;
-  const now = new Date();
-  let age = now.getFullYear() - b.getFullYear();
-  const m = now.getMonth() - b.getMonth();
-  if (m < 0 || (m === 0 && now.getDate() < b.getDate())) age--;
-  return age >= 0 && age < 130 ? age : null;
-}
-function nextBirthday(birthday: string | null, now: Date): { date: Date; inDays: number; turning: number } | null {
-  if (!birthday) return null;
-  const b = new Date(birthday);
-  if (Number.isNaN(b.getTime())) return null;
-  const today = new Date(now.getFullYear(), now.getMonth(), now.getDate());
-  let next = new Date(now.getFullYear(), b.getMonth(), b.getDate());
-  if (next < today) next = new Date(now.getFullYear() + 1, b.getMonth(), b.getDate());
-  const inDays = Math.round((next.getTime() - today.getTime()) / 86_400_000);
-  const turning = next.getFullYear() - b.getFullYear();
-  return { date: next, inDays, turning };
+  const age = ageOn(birthday, new Date());
+  return age !== null && age >= 0 && age < 130 ? age : null;
 }
 function inLabel(days: number): string {
   if (days === 0) return 'Today';
@@ -269,7 +253,7 @@ export function FamilyModule() {
             {family?.cover_url ? (
               // Free text, so it may be an outside image or one of this family's
               // own photos; the latter is signed like any other (SEC-001).
-              <FamilyMediaImg src={family.cover_url} alt={`${famName} cover`} className="h-full w-full object-cover" />
+              <FamilyMediaImg src={family.cover_url} alt={t('family.coverAlt', { name: famName })} className="h-full w-full object-cover" />
             ) : (
               <div className="grid h-full w-full place-items-center bg-gradient-to-br from-brand/25 via-violet-600/15 to-blue-900/20 text-muted">
                 <Users className="h-10 w-10" />
@@ -289,7 +273,7 @@ export function FamilyModule() {
                   <div key={m.id} className="group relative flex flex-col items-center gap-1.5 rounded-2xl border border-border bg-surface/20 p-4 text-center">
                     {canManage && !isLastManager(m) && (
                       <div className="absolute right-1.5 top-1.5">
-                        <button onClick={() => setMenuId(menuId === m.id ? null : m.id)} aria-label={`Manage ${m.display_name}`} className="grid h-6 w-6 place-items-center rounded-lg text-muted/60 opacity-0 transition hover:bg-elevated group-hover:opacity-100">
+                        <button onClick={() => setMenuId(menuId === m.id ? null : m.id)} aria-label={t('itemAction.manage', { name: m.display_name })} className="grid h-6 w-6 place-items-center rounded-lg text-muted/60 opacity-0 transition hover:bg-elevated group-hover:opacity-100">
                           <MoreHorizontal className="h-4 w-4" />
                         </button>
                         {menuId === m.id && (
@@ -318,7 +302,7 @@ export function FamilyModule() {
           )}
           {activeMembers.length > 12 && (
             <button onClick={() => setShowAllMembers((v) => !v)} className="mt-3 w-full text-center text-sm font-semibold text-brand-text hover:underline">
-              {showAllMembers ? 'Show fewer' : `View all ${activeMembers.length} members`}
+              {showAllMembers ? t('familyModule.showFewer') : t('familyModule.viewAllMembers', { n: activeMembers.length })}
             </button>
           )}
           {canManage && (

@@ -1,5 +1,9 @@
 import { describe, it, expect } from 'vitest';
 import { roleSurface, roleGreeting, focusHeadline, focusChipClasses } from '@/lib/ui/role-surface';
+import { getMessages, translate } from '@/lib/i18n/messages';
+
+const en = (key: string, params?: Record<string, string | number>) => translate(getMessages('en-US'), key, params);
+const fr = (key: string, params?: Record<string, string | number>) => translate(getMessages('fr-FR'), key, params);
 
 describe('roleSurface', () => {
   it('gives parents/adults the full, manageable surface', () => {
@@ -25,27 +29,32 @@ describe('roleSurface', () => {
 
 describe('roleGreeting', () => {
   it('is formal for parents', () => {
-    expect(roleGreeting('parent', 'Jordan', 'morning')).toBe('Good morning, Jordan');
-    expect(roleGreeting('parent', 'Jordan', 'night')).toBe('Good night, Jordan');
+    expect(roleGreeting('parent', 'Jordan', 'morning', en)).toBe('Good morning, Jordan');
+    expect(roleGreeting('parent', 'Jordan', 'night', en)).toBe('Good night, Jordan');
   });
   it('is casual for adults/teens', () => {
-    expect(roleGreeting('teen', 'Liam', 'morning')).toBe('Morning, Liam');
-    expect(roleGreeting('adult', 'Sam', 'evening')).toBe('Evening, Sam');
+    expect(roleGreeting('teen', 'Liam', 'morning', en)).toBe('Morning, Liam');
+    expect(roleGreeting('adult', 'Sam', 'evening', en)).toBe('Evening, Sam');
   });
   it('is playful with emoji for kids', () => {
-    expect(roleGreeting('child', 'Mia', 'morning')).toContain('Good morning, Mia');
-    expect(roleGreeting('child', 'Mia', 'morning')).toContain('☀️');
+    expect(roleGreeting('child', 'Mia', 'morning', en)).toContain('Good morning, Mia');
+    expect(roleGreeting('child', 'Mia', 'morning', en)).toContain('☀️');
+  });
+  it('speaks the family\'s language, name and emoji in its word order', () => {
+    expect(roleGreeting('parent', 'Jordan', 'morning', fr)).toBe('Bonjour Jordan');
+    expect(roleGreeting('adult', '', 'midday', fr)).toBe('Salut la famille');
+    expect(focusHeadline('child', fr)).toBe('C’est parti');
   });
   it('handles a blank name', () => {
-    expect(roleGreeting('adult', '   ', 'morning')).toBe('Morning, there');
+    expect(roleGreeting('adult', '   ', 'morning', en)).toBe('Morning, there');
   });
 });
 
 describe('focusHeadline', () => {
   it('varies by role tone', () => {
-    expect(focusHeadline('parent')).toBe('Focus now');
-    expect(focusHeadline('teen')).toBe('Your focus');
-    expect(focusHeadline('child')).toBe("Let's go");
+    expect(focusHeadline('parent', en)).toBe('Focus now');
+    expect(focusHeadline('teen', en)).toBe('Your focus');
+    expect(focusHeadline('child', en)).toBe("Let's go");
   });
 });
 

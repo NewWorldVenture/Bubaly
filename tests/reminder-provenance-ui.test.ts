@@ -22,7 +22,7 @@ vi.mock('@/lib/supabase/client', () => ({ createClient: state.db }));
 vi.mock('@/app/(app)/dashboard/reminders/actions', () => ({ createReminderAction: vi.fn(), deleteReminderAction: vi.fn(), snoozeReminderAction: vi.fn() }));
 vi.mock('@/components/ui/toast', () => ({ useToast: () => ({ success: state.success, error: state.error }) }));
 vi.mock('@/components/i18n/locale-provider', () => ({
-  useTranslations: () => (key: string) => translate(getMessages('en-US'), key),
+  useTranslations: () => (key: string, params?: Record<string, string | number>) => translate(getMessages('en-US'), key, params),
   usePlural: () => (key: string, count: number) => pluralize(getMessages('en-US'), 'en-US', key, count),
 }));
 vi.mock('@/components/ai/ai-insight', () => ({ AiInsight: () => null }));

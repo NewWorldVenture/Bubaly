@@ -59,7 +59,7 @@ const MANAGER_ONLY_WRITES = [
   'family_ai_settings', 'family_automation_rules', 'family_automation_runs', 'family_credentials',
   'family_currencies', 'family_facts', 'family_insurance_policies',
   'family_members', 'family_places', 'family_wallets', 'financial_accounts',
-  'front_desk_settings', 'guardian_routing_rules', 'health_providers',
+  'front_desk_settings', 'guardian_communications', 'guardian_routing_rules', 'health_providers',
   'health_visits', 'home_assets', 'household_info', 'immunizations', 'insurance_policies',
   'invest_holdings', 'invites', 'medical_profiles', 'medication_schedules',
   'medications', 'money_timeline_insights', 'opportunities', 'renewals', 'rewards', 'rides',

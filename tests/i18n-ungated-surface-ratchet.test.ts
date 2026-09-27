@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { scanPaths } from '../scripts/i18n-scan.mjs';
+import { scanPaths, scannedFileCount } from '../scripts/i18n-scan.mjs';
 
 // `app/` + `components/` is deliberately NOT in GATED_SURFACES, and the reason
 // in scripts/i18n-scan.mjs is a good one: it was gated once on the strength of a
@@ -133,6 +133,95 @@ import { scanPaths } from '../scripts/i18n-scan.mjs';
 // So the delta is the 6 named above plus command-center's 3 and calm's banner
 // title. 2,817 − 10 = 2,807.
 //
+// ── RAISED FOR A STRICTER SCANNER: 2,800 -> 2,889 (I18N-002) ────────────────
+//
+// The first legitimate reason, and measured the way this block says to measure
+// it: the tree held fixed, the scanner varied. The scanner now reads a failure
+// message or a toast written as a template literal —
+// `error: \`Blocked by household policy: ${reason}\``, `toastError(\`Upload
+// failed: ${msg}\`)` — which NOT_COPY's backtick rule had hidden. Over this
+// tree the previous scanner counts 2,800 and this one 2,889: eighty-nine
+// messages that were already shipping in English, none of them new. The ceiling
+// is set to the measurement rather than to 2,807 + 89, so the seven strings of
+// slack the surface had banked are banked here too.
+//
+// Then lowered to 2,878 as eleven of them were translated: the Family Wallet's
+// toasts and its "Only … available in Spend." refusal, which children see. A
+// ceiling that is not lowered when strings are fixed lets them come back free.
+//
+// Lowered again to 2,862 as sixteen module toasts were translated: copied,
+// snoozed, approved, saved, disconnected, a file too large, a pin limit.
+//
+// Lowered to 2,838 as twenty-four more module and trip toasts were translated.
+//
+// Then to 2,825 as the AI daily-limit, sync, weather, social-feed, language,
+// medical and feedback-upload messages were translated (the feedback one is
+// now a generic message that no longer leaks the storage error).
+//
+// Then to 2,812 as the thirteen "Blocked by household policy: …" refusals in
+// the wallet, money and invest actions were translated — reason included: the
+// trust engine's deny paths now carry a catalogue key and code-valued params.
+//
+// Then to 2,809 with the calendar-sync count and the admin campaign-send and
+// lead-score recompute toasts.
+//
+// Then to 2,792 as the Guardian dashboard was localized as a whole: its
+// status contexts, call statuses, stat tiles, heading and both toasts.
+//
+// Then to 2,790 with the care log: its type labels (chips, entries, picker)
+// now come from the catalogue rather than an English constant in lib/.
+//
+// Then to 2,789 with the moving module's status labels, the same shape.
+//
+// Then to 2,784 as the last five were translated: the social post-permission
+// refusal, the marketplace order-step error (which also stopped echoing the
+// caller's status), the admin feedback and ticket-status messages, and the
+// voice module's route confirmations. Every template finding the scanner can
+// see is now translated; what remains here is ordinary strings.
+//
+// Raised 2,784 -> 2,926 for the one legitimate reason (I18N-003): the scanner
+// now also reads a template literal in a copy-carrying attribute (aria-label,
+// title, placeholder, alt, label, description) and one standing alone as a JSX
+// child. Measured with the tree held fixed: the previous scanner counts 2,784 and
+// this one 2,926, 142 attribute templates and no JSX-child ones (the tree's child
+// templates are separators such as ` · ${when}`), every one an existing English
+// string a screen reader or tooltip already shows. The gated surfaces stay at zero.
+//
+// Then lowered to 2,924 as two strings were translated with A11Y-003 and
+// MAIN-F-D06: the contact list's "Unknown" and the notes list's "Untitled".
+// The scanner also now reads a confirm() prompt, template or quoted (I18N-005).
+// Measured with the tree held fixed that adds nothing here: main had already
+// replaced the English prompts with its translated confirm dialog, and every
+// confirm() left in the tree passes a catalogue key.
+//
+// Then 63 of I18N-003's attribute templates ("Edit ${name}", "Move ${x} up",
+// "Approve: ${title}") through 34 shared itemAction.* keys, and the assistant
+// pane's "New conversation" fallback, 2,924 -> 2,860.
+//
+// Then batch 2: 70 context-specific attribute templates (wallet dialog titles,
+// star ratings with a one/many split, inventory, closet, routing placeholders,
+// theme toggle, OTP digits and more), 2,860 -> 2,790.
+// Then the scanner got more precise: it no longer reads TypeScript between two
+// generics (`type A = Tables<'a'>; type B = Tables<'b'>`) as a JSX text node.
+// 125 findings were that, not copy, 2,790 -> 2,665.
+// Then the medical and dental records page and its printed sheets: per-kind
+// catalogue sentences instead of "Add {Doctor}" and "{Dental} Providers",
+// 2,665 -> 2,654.
+// Then the Insurance Hub and Trip Planner: each policy type, frequency, trip
+// status and item kind carries the catalogue key it shows, and the policy
+// detail rows are keys, 2,654 -> 2,645.
+//
+// Then the first batch of sentence templates (two of them confirm prompts
+// this scanner already read), 2,645 -> 2,644.
+//
+// Then sentence-template batch 2, including the English text beside each template
+// (the family dashboard's suggestion buttons, budget messages, auction states),
+// 2,644 -> 2,636.
+//
+// Then sentence-template batch 4 and the English text beside it, 2,636 -> 2,617.
+// Then the page titles (I18N-004): 248 English `metadata.title` strings moved
+// into generateMetadata() and the catalogue, 2,617 -> 2,369.
+// Then the command bar's labels, 2,369 -> 2,368.
 // ── RAISED 2,807 → 2,819, and it is the merge reason again (PR #548, Q68) ────
 //
 // Same method as the paragraph above: one scanner, three trees.
@@ -165,12 +254,45 @@ import { scanPaths } from '../scripts/i18n-scan.mjs';
 // Nothing here is newly-shipped untranslated product copy that main had
 // translated; where the branch touched main's translated surface, main's
 // strings were kept.
+//
+// ── MERGED WITH MAIN AFTER #583 (PORT-001): 2,368 and 2,819 -> 2,327 ─────────
+//
+// The port above stood at 2,368 and main at 2,819, each measured on its own
+// tree with its own scanner. The merged tree, measured with the merged scanner
+// (main's quoted-or-template toast rule in place of the port's separate toast
+// template rule), counts 2,327: lower than either, because each side had
+// translated strings the other still counted.
+// ── MERGED WITH MAIN THROUGH #606: 2,327 -> 2,339 ──────────────────────────
+//
+// Raised, for one reason, by exactly what that reason adds. Main's P-10 review
+// (711b15c3, #585) changed thirteen withAiRequest call sites to record a FIXED
+// English label ("Generate a briefing", "Find a pro", …) in
+// ai_requests.request_text instead of what the person typed, because every
+// active family member can read that table (0250). Its guard holds every call
+// site to a literal, so these cannot become t() calls. They are record labels,
+// not copy: the one screen that renders request_text for them is the
+// English-only super-admin AI Activity page. The tree stood one under the old
+// ceiling, so thirteen new labels move the count by twelve.
+//
 // PR585/598 integration, 2026-09-27: the unchanged current scanner measures
 // 2,650 findings across 593 app/components files with INVARIANT.txt present.
 // Bank the translated public/auth/control copy: tighten by169, do not loosen
 // the gate or compare differently configured scanners.
-// Claude-1's C1-S9-114…126 burn-down on top of that integration: 2,349.
-const CEILING = 2349;
+//
+// ── MERGED WITH MAIN THROUGH #601: -> 2,208 ────────────────────────────────
+//
+// Both lines above measured their own tree. This tree holds main's translated
+// public, auth and control copy AND the port's page titles and labels, and the
+// one scanner counts 2,208 across it. Banked as the ceiling.
+//
+// Claude-1's C1-S9-114…126 burn-down on top of that integration: 2,349 on
+// main's tree.
+//
+// ── MERGED WITH MAIN THROUGH #598 AND #604: -> 1,922 ────────────────────────
+//
+// The burn-down and the port's translations together, measured once over the
+// merged tree with the one scanner: 1,922. Banked as the ceiling.
+const CEILING = 1922;
 
 describe('the ungated i18n surface does not get worse', () => {
   const findings = scanPaths(['app', 'components']);
@@ -178,7 +300,10 @@ describe('the ungated i18n surface does not get worse', () => {
 
   it('scans the surface it claims to (non-vacuity)', () => {
     // A scanner that silently found nothing would satisfy the ceiling forever.
-    expect(findings.length).toBeGreaterThan(400);
+    // Counted as files READ, not files with findings: the latter falls every
+    // time a page is translated (it was > 400; 362 after the page titles), so
+    // it measured progress, not whether the scanner was looking.
+    expect(scannedFileCount(['app', 'components'])).toBeGreaterThan(900);
     expect(total).toBeGreaterThan(1000);
   });
 
@@ -202,5 +327,103 @@ describe('the ungated i18n surface does not get worse', () => {
       CEILING - total,
       `The surface is ${CEILING - total} strings better than the ceiling — lower CEILING to ${total}.`,
     ).toBeLessThan(150);
+  });
+});
+
+describe('the scanner sees a failure message written as a template literal (I18N-002)', () => {
+  it('reports it, with each interpolation shown as a placeholder', async () => {
+    const { writeFileSync, mkdtempSync } = await import('node:fs');
+    const { join } = await import('node:path');
+    const { tmpdir } = await import('node:os');
+    const { scanFile } = await import('../scripts/i18n-scan.mjs');
+    const dir = mkdtempSync(join(tmpdir(), 'i18n-scan-'));
+    const file = join(dir, 'action.ts');
+    writeFileSync(file, [
+      "export async function a(reason: string) {",
+      "  if (reason) return { ok: false, error: `Blocked by household policy: ${reason}` };",
+      "  return { ok: false, error: describeActionError(e, `Could not save ${name}.`) };",
+      "}",
+      "export function B() {",
+      "  const { error: toastError } = useToast();",
+      "  toastError(`Upload failed: ${message}`);",
+      "}",
+    ].join('\n'));
+    const texts = scanFile(file).map((f: { text: string }) => f.text);
+    expect(texts).toContain('Blocked by household policy: …');
+    expect(texts).toContain('Could not save ….');
+    // A toast template is reported whole, holes included (main's toast rule,
+    // which tests the prose and hands back the real string).
+    expect(texts).toContain('Upload failed: ${message}');
+  });
+});
+
+describe('the scanner sees copy written as a template in an attribute or a JSX child (I18N-003)', () => {
+  it('reports the copy shapes and leaves expressions alone', async () => {
+    const { writeFileSync, mkdtempSync } = await import('node:fs');
+    const { join } = await import('node:path');
+    const { tmpdir } = await import('node:os');
+    const { scanFile } = await import('../scripts/i18n-scan.mjs');
+    const dir = mkdtempSync(join(tmpdir(), 'i18n-scan-'));
+    const file = join(dir, 'row.tsx');
+    writeFileSync(file, [
+      'export function Row({ title, n, name, id }: { title: string; n: number; name: string; id: string }) {',
+      '  return (',
+      '    <li className={`row ${id}`} key={`row-${id}`}>',
+      '      <button aria-label={`Approve: ${title}`} title={`${name} — upgrade to unlock`} />',
+      '      <p>{`${n} items left`}</p>',
+      '      <p>{` · ${name}`}</p>',
+      '      <a href={`/items/${id}`}>{name}</a>',
+      '    </li>',
+      '  );',
+      '}',
+    ].join('\n'));
+    const texts = scanFile(file).map((f: { text: string }) => f.text);
+    expect(texts).toContain('Approve: …');
+    expect(texts).toContain('… — upgrade to unlock');
+    expect(texts).toContain('… items left');
+    // A class list, a key, an href and a bare separator are not copy.
+    expect(texts.some((t: string) => /row|items\/|^·/.test(t) && !t.includes('left'))).toBe(false);
+  });
+});
+
+describe('the scanner sees the question asked before a delete (I18N-005)', () => {
+  it('reports a confirm() prompt, template or quoted', async () => {
+    const { writeFileSync, mkdtempSync } = await import('node:fs');
+    const { join } = await import('node:path');
+    const { tmpdir } = await import('node:os');
+    const { scanFile } = await import('../scripts/i18n-scan.mjs');
+    const dir = mkdtempSync(join(tmpdir(), 'i18n-confirm-'));
+    const file = join(dir, 'row.tsx');
+    writeFileSync(file, [
+      'export function Row({ name, on }: { name: string; on: () => void }) {',
+      '  const del = () => { if (confirm(`Remove ${name} from the inventory?`)) on(); };',
+      "  const wipe = () => { if (window.confirm('Delete everything in this list?')) on(); };",
+      '  return <button onClick={() => { del(); wipe(); }} />;',
+      '}',
+    ].join('\n'));
+    const texts = scanFile(file).map((f: { text: string }) => f.text);
+    expect(texts).toContain('Remove … from the inventory?');
+    expect(texts).toContain('Delete everything in this list?');
+  });
+});
+
+describe('the scanner does not count TypeScript as copy', () => {
+  it('ignores a type alias between generics and still reports real text beside it', async () => {
+    const { writeFileSync, mkdtempSync } = await import('node:fs');
+    const { join } = await import('node:path');
+    const { tmpdir } = await import('node:os');
+    const { scanFile } = await import('../scripts/i18n-scan.mjs');
+    const dir = mkdtempSync(join(tmpdir(), 'i18n-types-'));
+    const file = join(dir, 'row.tsx');
+    writeFileSync(file, [
+      "type Tables<T> = { t: T };",
+      "type Member = Tables<'family_members'>; type Plan = Tables<'plans'>;",
+      'export function Row({ m }: { m: Member; p?: Plan }) {',
+      '  return <p>Nothing planned this week</p>;',
+      '}',
+    ].join('\n'));
+    const texts = scanFile(file).map((f: { text: string }) => f.text);
+    expect(texts.some((t: string) => /type Plan/.test(t))).toBe(false);
+    expect(texts).toContain('Nothing planned this week');
   });
 });

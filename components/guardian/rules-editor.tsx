@@ -150,7 +150,7 @@ export function RulesEditor({ rules: initial }: { rules: Rule[] }) {
                   )}
                 </p>
               </div>
-              <button aria-label={tr(expanded === rule.id ? 'a11y.collapse' : 'a11y.expand')}
+              <button aria-label={tr(expanded === rule.id ? 'a11y.collapse' : 'a11y.expand')} aria-expanded={expanded === rule.id}
                 onClick={() => setExpanded(expanded === rule.id ? null : rule.id)}
                 className="rounded-lg p-1.5 text-muted hover:bg-surface transition"
               >
@@ -158,6 +158,8 @@ export function RulesEditor({ rules: initial }: { rules: Rule[] }) {
               </button>
               <button
                 aria-label={tr('a11y.toggle')}
+                role="switch"
+                aria-checked={rule.is_active}
                 onClick={() => handleToggle(rule.id, rule.is_active)}
                 className="text-muted hover:text-fg transition"
               >

@@ -12,7 +12,8 @@ import { Avatar } from '@/components/ui/avatar';
 import { DashboardWeather } from '@/components/dashboard/dashboard-weather';
 import { fmtTime, firstName } from '@/lib/utils/format';
 import { cn } from '@/lib/utils/cn';
-import { getLocaleContext, getPlurals, getTranslations } from '@/lib/i18n/server';
+import { getLocaleContext, getTranslations } from '@/lib/i18n/server';
+import { dayPhase, phaseGreeting } from '@/lib/home/time-of-day';
 import { dayKeyInTz, zonedDayBoundsMs, addDaysToDayKey, weekStartDayKey } from '@/lib/services/scope';
 
 const ACCENT = ['bg-violet-500', 'bg-emerald-500', 'bg-orange-500', 'bg-rose-500', 'bg-blue-500', 'bg-teal-500'];
@@ -68,7 +69,6 @@ function StatCard({ href, label, value, icon: Icon, bg, linkLabel }: {
 
 export async function FamilyDashboard({ ctx }: { ctx: UserContext }) {
   const tr = await getTranslations();
-  const plural = await getPlurals();
   // A SERVER component, so the locale comes from the request rather than from a
   // hook — useLocale() here is a build error, which is how this was caught.
   const { locale } = await getLocaleContext();
@@ -141,30 +141,27 @@ export async function FamilyDashboard({ ctx }: { ctx: UserContext }) {
   const pct = total > 0 ? Math.round((done / total) * 100) : 0;
   const r = 40; const circ = 2 * Math.PI * r;
 
-  // The family's hour, not the server's: the host runs in UTC, so a morning in
-  // California read "Good evening" (audit C1-S9-132).
-  const familyHour = Number(new Intl.DateTimeFormat('en-US', { hour: 'numeric', hourCycle: 'h23', timeZone: ctx.active.family.timezone || 'UTC' }).format(new Date()));
-  const greeting = tr(familyHour < 12 ? 'familyDashboard.goodMorning' : familyHour < 18 ? 'familyDashboard.goodAfternoon' : 'familyDashboard.goodEvening', { name: ctx.active.family.name });
+  const greeting = phaseGreeting(dayPhase(new Date(), ctx.active.family.timezone || 'UTC'), tr);
 
   // Suggestions derived from real family data — never fabricated.
   const suggestions: { icon: typeof Calendar; text: string; cta: string }[] = [];
   if ((openChores ?? 0) > 0) {
-    suggestions.push({ icon: CheckCircle2, text: plural('familyDashboard.suggest.openTasks', openChores ?? 0), cta: tr('familyDashboard.cta.viewTasks') });
+    suggestions.push({ icon: CheckCircle2, text: openChores === 1 ? tr('familyDashboard.openTasksOne') : tr('familyDashboard.openTasksMany', { n: openChores ?? 0 }), cta: tr('familyDashboard.viewTasks') });
   }
   if ((weekPlans?.length ?? 0) > 0 && (groceryItems?.length ?? 0) === 0) {
-    suggestions.push({ icon: ShoppingCart, text: tr('familyDashboard.suggest.emptyGroceries'), cta: tr('familyDashboard.cta.buildList') });
+    suggestions.push({ icon: ShoppingCart, text: tr('familyDashboard.mealsNoGroceries'), cta: tr('familyDashboard.buildList') });
   }
   if ((upcomingEvents?.length ?? 0) > 0) {
-    suggestions.push({ icon: Calendar, text: plural('familyDashboard.suggest.upcomingEvents', upcomingEvents!.length), cta: tr('familyDashboard.cta.viewCalendar') });
+    suggestions.push({ icon: Calendar, text: upcomingEvents!.length === 1 ? tr('familyDashboard.upcomingEventsOne') : tr('familyDashboard.upcomingEventsMany', { n: upcomingEvents!.length }), cta: tr('familyDashboard.viewCalendar') });
   }
   if (birthdayCount > 0) {
-    suggestions.push({ icon: Cake, text: plural('familyDashboard.suggest.birthdays', birthdayCount), cta: tr('familyDashboard.cta.viewMembers') });
+    suggestions.push({ icon: Cake, text: birthdayCount === 1 ? tr('familyDashboard.birthdaysOne') : tr('familyDashboard.birthdaysMany', { n: birthdayCount }), cta: tr('familyDashboard.viewMembers') });
   }
   if ((overdueReminders?.length ?? 0) > 0) {
-    suggestions.push({ icon: Bell, text: plural('familyDashboard.suggest.overdueReminders', overdueReminders!.length), cta: tr('familyDashboard.cta.checkReminders') });
+    suggestions.push({ icon: Bell, text: overdueReminders!.length === 1 ? tr('familyDashboard.overdueRemindersOne') : tr('familyDashboard.overdueRemindersMany', { n: overdueReminders!.length }), cta: tr('familyDashboard.checkReminders') });
   }
   if ((unreadMessages ?? 0) > 0) {
-    suggestions.push({ icon: MessageCircle, text: plural('familyDashboard.suggest.unreadMessages', unreadMessages ?? 0), cta: tr('familyDashboard.cta.openMessages') });
+    suggestions.push({ icon: MessageCircle, text: unreadMessages === 1 ? tr('familyDashboard.unreadMessagesOne') : tr('familyDashboard.unreadMessagesMany', { n: unreadMessages ?? 0 }), cta: tr('familyDashboard.openMessages') });
   }
 
   // Week meal map — just show meal_type per slot (no join needed)
@@ -455,7 +452,7 @@ export async function FamilyDashboard({ ctx }: { ctx: UserContext }) {
                     <div className="min-w-0 flex-1">
                       <p className="truncate text-sm font-medium">{choreTitle}</p>
                       <p className={cn('text-xs', isToday ? 'font-semibold text-orange-400' : 'text-muted')}>
-                        {isToday ? 'Due Today' : daysUntil != null ? `Due in ${daysUntil} days` : 'No due date'}
+                        {isToday ? tr('familyDashboard.dueToday') : daysUntil != null ? (daysUntil === 1 ? tr('familyDashboard.dueInOneDay') : tr('familyDashboard.dueInDays', { n: daysUntil })) : tr('familyDashboard.noDueDate')}
                       </p>
                     </div>
                     {member && (

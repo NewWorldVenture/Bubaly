@@ -1,11 +1,11 @@
 import type { Metadata } from 'next';
+import { getTranslations } from '@/lib/i18n/server';
 import { headers } from 'next/headers';
 import { CallbackCompletion } from '@/components/auth/callback-completion';
 import { resolveAuthSelection } from '@/lib/billing/review-selection';
 import { captureCallbackRequestWitness } from '@/lib/auth/callback-witness-server';
 import { parseCallbackAdmissionWitness } from '@/lib/auth/callback-witness';
 import { isPkceInitiationNonce } from '@/lib/auth/pkce-initiation';
-import { getTranslations } from '@/lib/i18n/server';
 
 // The tab title is copy like any other: it was English in every locale.
 // Audit C1-S9-100.

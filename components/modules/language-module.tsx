@@ -205,7 +205,7 @@ export function LanguageModule() {
             <div className={cn('rounded-2xl border p-5', run >= 7 ? 'border-amber-500/30 bg-amber-500/10' : 'border-border bg-surface/40')}>
               <div className="flex items-center gap-2 text-sm font-semibold"><Flame className="h-4 w-4 text-brand-text" /> {tr('language.streak')}</div>
               <p className="mt-2 text-2xl font-bold">{run}<span className="text-sm font-normal text-muted"> day{run === 1 ? '' : 's'}</span></p>
-              <p className="mt-1 text-xs text-muted">{summary.longestStreak > run ? `Family best: ${summary.longestStreak}` : run ? 'Family best right here' : 'Practise today to start one'}</p>
+              <p className="mt-1 text-xs text-muted">{summary.longestStreak > run ? tr('language.familyBest', { n: summary.longestStreak }) : run ? tr('language.familyBestHere') : tr('language.practiseToStart')}</p>
             </div>
             <div className={cn('rounded-2xl border p-5', deck.due >= 10 ? 'border-amber-500/30 bg-amber-500/10' : 'border-border bg-surface/40')}>
               <div className="flex items-center gap-2 text-sm font-semibold"><Layers className="h-4 w-4 text-brand-text" /> {tr('language.deck')}</div>
@@ -215,7 +215,7 @@ export function LanguageModule() {
             <div className="rounded-2xl border border-border bg-surface/40 p-5">
               <div className="flex items-center gap-2 text-sm font-semibold"><Target className="h-4 w-4 text-brand-text" /> {cefrMeta(goal.current_level).value} → {goal.target_level}</div>
               <p className="mt-2 text-2xl font-bold">{level.pct}%</p>
-              <p className="mt-1 text-xs text-muted">{level.hoursDone}{tr('language.hLogged')}{level.hoursToTarget}{tr('language.hTo')} {goal.target_level}{level.weeksAtGoal ? ` · ${level.weeksAtGoal} weeks at this pace` : ''}</p>
+              <p className="mt-1 text-xs text-muted">{level.hoursDone}{tr('language.hLogged')}{level.hoursToTarget}{tr('language.hTo')} {goal.target_level}{level.weeksAtGoal ? ` · ${level.weeksAtGoal === 1 ? tr('language.weeksAtThisPaceOne') : tr('language.weeksAtThisPaceMany', { n: level.weeksAtGoal })}` : ''}</p>
             </div>
           </div>
 
@@ -235,7 +235,7 @@ export function LanguageModule() {
           </div>
 
           <div className="flex items-center gap-2 border-b border-border" role="tablist">
-            {([['review', `Review (${deck.due})`], ['cards', `Cards (${deck.total})`], ['sessions', `Practice log (${mySessions.length})`]] as const).map(([key, label]) => (
+            {([['review', tr('language.tabReview', { n: deck.due })], ['cards', tr('language.tabCards', { n: deck.total })], ['sessions', tr('language.tabPracticeLog', { n: mySessions.length })]] as const).map(([key, label]) => (
               <button key={key} role="tab" aria-selected={tab === key} onClick={() => setTab(key)} className={cn('-mb-px border-b-2 px-3 py-2 text-sm coarse:min-h-11', tab === key ? 'border-brand text-brand-text' : 'border-transparent text-muted hover:text-fg')}>{label}</button>
             ))}
             {tab === 'cards' && starterDeck(goal.language_code).length > 0 && <Button size="sm" variant="secondary" className="ml-auto mb-1" onClick={addStarterDeck} loading={adding}><Wand2 className="h-3.5 w-3.5" /> {tr('language.starterDeck')}</Button>}
@@ -270,7 +270,7 @@ export function LanguageModule() {
             ) : (
               <div className="rounded-2xl border border-emerald-500/30 bg-emerald-500/10 p-6 text-center">
                 <p className="font-semibold">{tr('language.deckClearForToday')}</p>
-                <p className="mt-1 text-sm text-muted">{deck.total === 0 ? 'Add a starter deck or your own cards to begin.' : `Next cards come due ${myCards.filter((c) => !c.is_suspended && c.due_on > isoDate(today)).sort((a, b) => a.due_on.localeCompare(b.due_on))[0]?.due_on ? fmtDate(myCards.filter((c) => !c.is_suspended && c.due_on > isoDate(today)).sort((a, b) => a.due_on.localeCompare(b.due_on))[0].due_on) : 'when you add more'}.`}</p>
+                <p className="mt-1 text-sm text-muted">{deck.total === 0 ? tr('language.addStarterDeck') : (myCards.filter((c) => !c.is_suspended && c.due_on > isoDate(today)).sort((a, b) => a.due_on.localeCompare(b.due_on))[0]?.due_on ? tr('language.nextCardsDueOn', { date: fmtDate(myCards.filter((c) => !c.is_suspended && c.due_on > isoDate(today)).sort((a, b) => a.due_on.localeCompare(b.due_on))[0].due_on) }) : tr('language.nextCardsWhenMore'))}</p>
                 {reviewedCount > 0 && <Button className="mt-4" onClick={finishReview}><Check className="h-4 w-4" /> Log {reviewedCount} {tr('language.reviewsAsPractice')}</Button>}
                 {deck.total === 0 && starterDeck(goal.language_code).length > 0 && <Button className="mt-4" onClick={addStarterDeck} loading={adding}><Wand2 className="h-4 w-4" /> {tr('language.addThe')} {goal.language_label} {tr('language.starterDeck')}</Button>}
               </div>
@@ -289,8 +289,8 @@ export function LanguageModule() {
                       <p className="text-[11px] text-muted">{c.is_suspended ? 'Suspended' : c.due_on <= isoDate(today) ? 'Due now' : `Due ${fmtDate(c.due_on)}`} · {c.repetitions === 0 && c.lapses === 0 ? 'new' : `${c.interval_days}d interval · ease ${c.ease}`}{c.lapses ? ` · ${c.lapses} lapse${c.lapses === 1 ? '' : 's'}` : ''}</p>
                     </div>
                     <button onClick={() => toggleSuspend(c)} aria-label={c.is_suspended ? 'Resume card' : 'Suspend card'} className="rounded-lg p-1.5 text-muted hover:text-fg">{c.is_suspended ? <PlayCircle className="h-4 w-4" /> : <PauseCircle className="h-4 w-4" />}</button>
-                    <button onClick={() => setCardForm({ open: true, card: c })} aria-label={`Edit ${c.term}`} className="rounded-lg p-1.5 text-muted hover:text-fg"><Pencil className="h-4 w-4" /></button>
-                    <button onClick={() => deleteCard(c)} aria-label={`Delete ${c.term}`} className="rounded-lg p-1.5 text-muted hover:text-rose-400"><Trash2 className="h-4 w-4" /></button>
+                    <button onClick={() => setCardForm({ open: true, card: c })} aria-label={tr('itemAction.edit', { name: c.term })} className="rounded-lg p-1.5 text-muted hover:text-fg"><Pencil className="h-4 w-4" /></button>
+                    <button onClick={() => deleteCard(c)} aria-label={tr('itemAction.delete', { name: c.term })} className="rounded-lg p-1.5 text-muted hover:text-rose-400"><Trash2 className="h-4 w-4" /></button>
                   </li>
                 ))}
               </ul>
