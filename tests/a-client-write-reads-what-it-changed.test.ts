@@ -156,7 +156,7 @@ describe('accepting a quote is one chain that stops where it fails (C1-S9-79)', 
 
   it('success is said only after the link lands, and never after a failed one', () => {
     expect(fn).toContain('if (linkError) return toastError(');
-    expect(at(fn, 'if (wroteNoRows(linked))')).toBeLessThan(at(fn, 'success(`Accepted'));
+    expect(at(fn, 'if (wroteNoRows(linked))')).toBeLessThan(at(fn, "success(tr('projects.acceptedNameAtAmount'"));
   });
 });
 
@@ -200,7 +200,9 @@ describe('a row that licenses the next write is confirmed before it (C1-S9-82)',
     const src = readFileSync('components/modules/photos-module.tsx', 'utf8');
     const fn = between(src, 'async function deletePhoto(', 'async function updateCaption(');
     expect(fn).toContain(".from('family_photos').delete().eq('id', photo.id).select('id')");
-    expect(at(fn, 'if (wroteNoRows(removedRow))')).toBeLessThan(at(fn, ".storage.from('family-media').remove("));
+    // The removal goes through removeFamilyMedia, which also confirms the object
+    // is gone (SEC-015); the ordering this pins is unchanged.
+    expect(at(fn, 'if (wroteNoRows(removedRow))')).toBeLessThan(at(fn, 'removeFamilyMedia(supabase, photo.storage_path)'));
   });
 
   it('routines: a template edit is confirmed before its steps are cleared and replaced', () => {
@@ -259,7 +261,7 @@ describe('access, defaults and undo say only what landed (C1-S9-83)', () => {
     expect(at(settings, 'if (wroteNoRows(edited))')).toBeLessThan(at(settings, "success(t('settingsModule.memberUpdated'))"));
     const connections = readFileSync('components/modules/connections-module.tsx', 'utf8');
     expect(connections).toContain(".delete().eq('family_id', familyId).eq('provider', p.id).select('id')");
-    expect(at(connections, 'if (wroteNoRows(removed))')).toBeLessThan(at(connections, 'success(`${p.name} disconnected`)'));
+    expect(at(connections, 'if (wroteNoRows(removed))')).toBeLessThan(at(connections, "success(t('connections.nameDisconnected'"));
     const chores = readFileSync('components/modules/chores-module.tsx', 'utf8');
     // Translation changes the label, not the readback-before-success boundary.
     expect(at(chores, 'if (wroteNoRows(approved))')).toBeLessThan(at(chores, "success(tr('choresModule.approvedPlusPoints', { points: a.chore?.points ?? 0 }))"));

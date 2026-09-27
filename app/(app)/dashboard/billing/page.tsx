@@ -10,7 +10,10 @@ import { requireAal2 } from '@/lib/auth/require-aal2';
 import { returnPathWith } from '@/lib/auth/mfa';
 import { getLocaleContext, getTranslations } from '@/lib/i18n/server';
 
-export const metadata: Metadata = { title: 'Finances' };
+export async function generateMetadata(): Promise<Metadata> {
+  const t = await getTranslations();
+  return { title: t('navLabel.finances') };
+}
 
 export default async function BillingPage({ searchParams }: { searchParams: Promise<Record<string, string | string[] | undefined>> }) {
   // This is the money area's front door, so it takes the money area's guard.
@@ -36,8 +39,17 @@ export default async function BillingPage({ searchParams }: { searchParams: Prom
   // Default = the family Finances dashboard. The full manager (Transactions /
   // Budgets / Bills / Savings / Reports + plan & subscription) lives at
   // ?view=manage, reachable from the dashboard's "More"/"View all" links.
-  const { view } = params;
-  if (view !== 'manage') {
+  //
+  // The plan gate (requirePlanLevel / requireFeature in lib/supabase/auth.ts)
+  // sends a family here as ?upgrade=1&need=N, and the demo's plan picker as
+  // ?checkout=basic|plus. Both ask for the plan view, and BillingModule is what
+  // reads them (wantsUpgrade, needLevel, checkoutLevel). Neither carried
+  // view=manage, so every gated page (Missions, Rewards, the Home hub, Sports,
+  // the weekly briefing, …) landed a family on their balances with no word
+  // about why they were there or what the feature needs. Page audit B7.
+  const { view, upgrade, checkout } = params;
+  const wantsPlanView = view === 'manage' || upgrade === '1' || typeof checkout === 'string';
+  if (!wantsPlanView) {
     return (
       <Suspense fallback={null}>
         <FinancesModule />

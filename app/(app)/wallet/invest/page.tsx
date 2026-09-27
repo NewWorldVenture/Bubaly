@@ -12,7 +12,10 @@ import { ErrorState } from '@/components/ui/states';
 import { getTranslations } from '@/lib/i18n/server';
 import { readAllAsQuery } from '@/lib/supabase/read-all';
 
-export const metadata: Metadata = { title: 'Wallet Invest' };
+export async function generateMetadata(): Promise<Metadata> {
+  const t = await getTranslations();
+  return { title: t('pageTitle.walletInvest') };
+}
 export const dynamic = 'force-dynamic';
 
 export default async function WalletInvestPage() {
@@ -37,7 +40,7 @@ export default async function WalletInvestPage() {
     // unbounded read shows a portfolio computed from part of the holdings.
     readAllAsQuery<{ child_wallet_id: string; asset_id: string; shares: number; avg_cost_cents: number }>(
       (from, to) => supabase.from('invest_holdings').select('child_wallet_id, asset_id, shares, avg_cost_cents')
-        .eq('family_id', familyId).order('asset_id').range(from, to),
+        .eq('family_id', familyId).order('asset_id').order('id').range(from, to),
     ),
     supabase.from('wallet_buckets').select('id, child_wallet_id, kind').eq('family_id', familyId).eq('kind', 'invest'),
     supabase.from('invest_orders').select('id, child_wallet_id, asset_id, side, shares, amount_cents, status, created_at').eq('family_id', familyId).eq('status', 'pending').order('created_at', { ascending: false }),

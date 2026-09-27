@@ -37,7 +37,7 @@ export function CalendarConflictCardView({ card, compact = false, onAsk, classNa
               {onAsk && !compact && c.titles[0] && (
                 <button
                   type="button"
-                  onClick={() => onAsk(`Move ${c.titles[0]} so it doesn't overlap ${c.when}`)}
+                  onClick={() => onAsk(t('aiCards.moveSoNoOverlap', { title: c.titles[0], when: c.when }))}
                   className="focus-ring coarse:min-h-11 mt-1 rounded-lg px-2 py-1 text-xs font-medium text-brand-text hover:bg-elevated"
                 >
                   Move {c.titles[0]}

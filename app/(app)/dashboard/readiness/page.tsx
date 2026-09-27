@@ -14,7 +14,10 @@ import { ErrorState } from '@/components/ui/states';
 import { getTranslations } from '@/lib/i18n/server';
 import { addDaysToDayKey, dayKeyInTz } from '@/lib/services/scope';
 
-export const metadata: Metadata = { title: 'Family Readiness' };
+export async function generateMetadata(): Promise<Metadata> {
+  const t = await getTranslations();
+  return { title: t('dashboardCommandCenter.familyReadiness') };
+}
 export const dynamic = 'force-dynamic';
 
 const BAND_COLOR = {

@@ -459,9 +459,9 @@ export function LocatorModule() {
                     <p className="truncate text-[11px] text-muted">{p.address ?? `${p.radius_m} m radius`}</p>
                   </div>
                   {canManage && (
-                    <button onClick={() => openEditPlace(p)} aria-label={`Edit ${p.name}`} className="rounded p-1 text-muted opacity-0 transition group-hover:opacity-100 hover:text-fg"><Pencil className="h-3.5 w-3.5" /></button>
+                    <button onClick={() => openEditPlace(p)} aria-label={tr('itemAction.edit', { name: p.name })} className="rounded p-1 text-muted opacity-0 transition group-hover:opacity-100 hover:text-fg"><Pencil className="h-3.5 w-3.5" /></button>
                   )}
-                  <button onClick={() => canManage && toggleGeofence(p)} disabled={!canManage || togglingGeo === p.id} role="switch" aria-checked={p.geofence_enabled} aria-label={`Toggle ${p.name} geofence`}
+                  <button onClick={() => canManage && toggleGeofence(p)} disabled={!canManage || togglingGeo === p.id} role="switch" aria-checked={p.geofence_enabled} aria-label={tr('locator.toggleGeofence', { name: p.name })}
                     className={cn('relative h-6 w-11 shrink-0 rounded-full transition-colors', p.geofence_enabled ? 'bg-emerald-500' : 'bg-elevated', !canManage && 'opacity-60')}>
                     <span className={cn('absolute top-0.5 h-5 w-5 rounded-full bg-white transition-transform', p.geofence_enabled ? 'translate-x-[22px]' : 'translate-x-0.5')} />
                   </button>

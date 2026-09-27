@@ -2,6 +2,7 @@
 // Path convention: {family_id}/{folder}/{timestamp}-{safe filename} — the family_id
 // folder segment is what storage RLS checks via is_family_member(), so every upload
 // must go through buildFamilyPath() to stay inside the caller's own family folder.
+import { removeConfirmed } from '@/lib/storage/confirm-removal';
 import type { SupabaseBrowser } from '@/lib/supabase/types';
 import { describeActionError } from '@/lib/supabase/errors';
 
@@ -46,10 +47,34 @@ export async function getDocumentSignedUrl(
   return { url: data.signedUrl, error: null };
 }
 
+/**
+ * Remove one document object and CONFIRM it is gone.
+ *
+ * SEC-015. Storage reports a delete the policy refused exactly as it reports a
+ * delete of something that was never there: `error: null`, `data: []`. Measured
+ * against the local stack:
+ *
+ *   removed       -> error null, data ['<key>']
+ *   refused       -> error null, data []
+ *   never existed -> error null, data []
+ *
+ * So `error === null` is not evidence the object is gone, and the callers all
+ * deleted the `documents` row next. That matters because
+ * `document_object_is_restricted(name)` — the storage policy that hides a
+ * secure-vault file from a child — works by finding the row. With the row gone
+ * and the object still there, the guard finds nothing, returns false, and every
+ * family member can list and download the file. Proven on the local stack: a
+ * child got `DENIED (Object not found)` with the row present and
+ * `ALLOWED — "THE FAMILY WILL — private"` with the row deleted.
+ *
+ * An empty result is therefore checked rather than trusted: if the object is
+ * still listed, this reports a failure so the caller keeps the row. If it is
+ * genuinely absent — a retry after a partial delete — the caller may proceed,
+ * so a half-finished delete does not strand a row forever.
+ */
 export async function removeFamilyDocument(
   supabase: SupabaseBrowser,
   path: string,
 ): Promise<{ error: string | null }> {
-  const { error } = await supabase.storage.from(BUCKET).remove([path]);
-  return { error: error ? describeActionError(error) : null };
+  return removeConfirmed(supabase.storage.from(BUCKET), path);
 }

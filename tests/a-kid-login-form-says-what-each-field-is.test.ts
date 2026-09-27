@@ -13,13 +13,15 @@ const catalogues = ['en-US', 'de-DE', 'es-ES', 'fr-FR', 'it-IT', 'nl-NL', 'pt-PT
 
 describe('the kid-login form', () => {
   it('names the icon-only create button', () => {
-    expect(src).toMatch(/<Button onClick=\{create\}[^>]*aria-label=\{t\('childAccessManager\.createLogin'\)\}/);
+    expect(src).toMatch(/<Button onClick=\{create\}[^>]*aria-label=\{t\('childAccessManager\.createLoginFor', \{ name: member\.display_name \}\)\}/);
   });
 
   it('labels the username and PIN fields, and the reset field', () => {
-    expect(src).toMatch(/aria-label=\{t\('childAccessManager\.usernameLabel'\)\}/);
-    expect(src).toMatch(/aria-label=\{t\('childAccessManager\.pinLabel'\)\}/);
-    expect(src).toMatch(/placeholder=\{t\('childAccessManager\.newPin'\)\}\s*aria-label=\{t\('childAccessManager\.newPin'\)\}/);
+    // Main's #614 (B7 second pass) fixed the same form with names that say whose
+    // login each control is for; this pins that shape.
+    expect(src).toMatch(/aria-label=\{t\('childAccessManager\.username'\)\}/);
+    expect(src).toMatch(/aria-label=\{t\('childAccessManager\.pin'\)\}/);
+    expect(src).toMatch(/aria-label=\{t\('childAccessManager\.newPinFor', \{ name: member\.display_name \}\)\}/);
   });
 
   it('carries no English literal for the save button or the success toast', () => {
@@ -29,7 +31,7 @@ describe('the kid-login form', () => {
 
   it('has every new string in every full translation', () => {
     for (const [locale, messages] of catalogues) {
-      for (const key of ['usernameLabel', 'pinLabel', 'savePin', 'loginCreatedFor']) {
+      for (const key of ['username', 'pin', 'createLoginFor', 'newPinFor', 'savePinFor', 'loginCreatedFor']) {
         expect(messages[`childAccessManager.${key}`], `${locale} ${key}`).toBeTruthy();
       }
       expect(messages['childAccessManager.loginCreatedFor']).toContain('{name}');

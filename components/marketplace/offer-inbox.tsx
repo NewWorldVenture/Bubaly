@@ -72,7 +72,7 @@ export function OfferInbox({ offers }: { offers: InboxOffer[] }) {
               type="button"
               onClick={() => act(o.id, 'decline')}
               disabled={busy === o.id}
-              aria-label={`Decline ${o.name}'s offer`}
+              aria-label={t('offerInbox.declineOffer', { name: o.name })}
               className="rounded p-1.5 text-muted transition hover:bg-elevated hover:text-amber-400 disabled:opacity-50"
             >
               <X className="h-4 w-4" />

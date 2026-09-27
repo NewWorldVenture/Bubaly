@@ -138,7 +138,7 @@ export function TreasuryView({
                 {goalPct}%
               </div>
             </div>
-            <div className="h-2.5 overflow-hidden rounded-full bg-border/50" {...progressBarA11y(goalPct, `Family savings goals: ${goalPct}% funded`)}>
+            <div className="h-2.5 overflow-hidden rounded-full bg-border/50" {...progressBarA11y(goalPct, tr('treasury.savingsGoalsFunded', { pct: goalPct }))}>
               <div
                 className="h-full rounded-full bg-gradient-to-r from-brand to-brand/70 transition-all"
                 style={{ width: `${goalPct}%` }}
@@ -313,6 +313,7 @@ function TrendChart({ trend }: { trend: { label: string; credits: number; debits
   // Money follows the reader; the currency stays the money's own.
   const formatCents = (cents: number, currency?: string) =>
     formatCentsIn(cents, currency, locale.code);
+  const tr = useTranslations();
   const maxVal = Math.max(...trend.flatMap((t) => [t.credits, t.debits]), 1);
   return (
     <div className="flex h-32 items-end gap-1.5">
@@ -322,12 +323,12 @@ function TrendChart({ trend }: { trend: { label: string; credits: number; debits
             <div
               className="w-full rounded-t bg-emerald-500/30 transition-all"
               style={{ height: `${(t.credits / maxVal) * 80}px` }}
-              title={`In: ${formatCents(t.credits)}`}
+              title={tr('treasury.inAmount', { amount: formatCents(t.credits) })}
             />
             <div
               className="w-full rounded-t bg-rose-500/30 transition-all"
               style={{ height: `${(t.debits / maxVal) * 80}px` }}
-              title={`Out: ${formatCents(t.debits)}`}
+              title={tr('treasury.outAmount', { amount: formatCents(t.debits) })}
             />
           </div>
           <p className="text-[9px] text-muted">{t.label}</p>

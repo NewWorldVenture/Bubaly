@@ -9,7 +9,10 @@ import { ErrorState } from '@/components/ui/states';
 import { isManager } from '@/lib/constants/roles';
 import { getLocaleContext, getTranslations } from '@/lib/i18n/server';
 
-export const metadata: Metadata = { title: 'Financial Copilot' };
+export async function generateMetadata(): Promise<Metadata> {
+  const t = await getTranslations();
+  return { title: t('finances.financialCopilot') };
+}
 export const dynamic = 'force-dynamic';
 
 /**

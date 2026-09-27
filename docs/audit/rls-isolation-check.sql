@@ -616,4 +616,11 @@ begin
   perform set_config('role','postgres', true);
 end $$;
 
+-- The fixture row goes at the END as well as being guarded at the start: the
+-- anchor family is shared, and run-probes.sh reports any probe that leaves it
+-- changed. Reached only when every invariant above held; a failed run stops
+-- earlier and leaves the row, which the insert's `not exists` then reuses.
+delete from public.wallet_transactions
+ where family_id = :'FA' and description = 'A-03 isolation fixture';
+
 select 'A-03 tenant-isolation probe: ALL INVARIANTS PASSED' as result;

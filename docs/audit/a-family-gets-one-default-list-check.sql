@@ -21,6 +21,27 @@
 -- is not the default, and the to-do twin behaves the same.
 
 create extension if not exists dblink;
+-- Installing dblink hands its functions to the client roles on a plain
+-- Postgres; a probe measures the schema and must not leave it wider than it
+-- found it (tests/audit-probes-do-not-rewrite-grants.test.ts). On Supabase the
+-- extension belongs to supabase_admin and the client roles never held it, so
+-- only functions this role owns and a client role can execute are touched.
+do $$
+declare f regprocedure;
+begin
+  for f in
+    select p.oid::regprocedure
+    from pg_proc p
+    join pg_depend d on d.classid = 'pg_proc'::regclass and d.objid = p.oid and d.deptype = 'e'
+    join pg_extension e on e.oid = d.refobjid
+    where e.extname = 'dblink'
+      and p.proowner = (select oid from pg_roles where rolname = current_user)
+      and (has_function_privilege('anon', p.oid, 'execute')
+           or has_function_privilege('authenticated', p.oid, 'execute'))
+  loop
+    execute format('revoke all on function %s from public, anon, authenticated', f);
+  end loop;
+end $$;
 
 -- Re-runnable: the suite is run twice against one database.
 delete from public.grocery_lists  where family_id in ('ab430000-0000-4000-8000-0000000000f1', 'ab430000-0000-4000-8000-0000000000f2', 'ab430000-0000-4000-8000-0000000000f3');

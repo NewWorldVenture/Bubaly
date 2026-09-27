@@ -18,18 +18,25 @@ export function GifPicker({ onPick, onClose }: { onPick: (url: string, title: st
   const boxRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
+    // Clearing the timer stopped a search that had not started; one already in
+    // flight still landed, so typing "ca" then "cat" could show "ca"'s results
+    // under "cat" if its response came back second (MAIN-F-D09). The request is
+    // aborted with the effect, and nothing is set once it is.
+    const controller = new AbortController();
     const t = setTimeout(async () => {
       setState('loading');
       try {
-        const res = await fetch(`/api/gif/search?q=${encodeURIComponent(q)}`);
+        const res = await fetch(`/api/gif/search?q=${encodeURIComponent(q)}`, { signal: controller.signal });
+        if (controller.signal.aborted) return;
         if (res.status === 503) { setState('unconfigured'); return; }
         if (!res.ok) { setState('error'); return; }
         const json = await res.json() as { gifs: Gif[] };
+        if (controller.signal.aborted) return;
         setGifs(json.gifs ?? []);
         setState('ready');
-      } catch { setState('error'); }
+      } catch { if (!controller.signal.aborted) setState('error'); }
     }, q ? 300 : 0);
-    return () => clearTimeout(t);
+    return () => { clearTimeout(t); controller.abort(); };
   }, [q]);
 
   // Close on outside click.

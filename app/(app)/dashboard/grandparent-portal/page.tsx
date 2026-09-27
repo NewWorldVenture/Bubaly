@@ -14,7 +14,10 @@ import { ErrorState } from '@/components/ui/states';
 import { getTranslations } from '@/lib/i18n/server';
 import { FamilyMediaImg } from '@/components/media/family-media-img';
 
-export const metadata: Metadata = { title: 'Grandparent Portal' };
+export async function generateMetadata(): Promise<Metadata> {
+  const t = await getTranslations();
+  return { title: t('navLabel.grandparentPortal') };
+}
 export const dynamic = 'force-dynamic';
 
 type Translate = (key: string, params?: Record<string, string | number>) => string;

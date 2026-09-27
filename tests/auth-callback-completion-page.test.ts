@@ -6,7 +6,7 @@ vi.mock('next/headers', () => ({ headers: async () => new Headers() }));
 // The tab title is translated (C1-S9-100), so the page's metadata is generated.
 vi.mock('@/lib/i18n/server', async () => {
   const { SOURCE_MESSAGES, translate } = await import('@/lib/i18n/messages');
-  return { getTranslations: async () => (key: string) => translate(SOURCE_MESSAGES, key) };
+  return { getTranslations: async () => (key: string, params?: Record<string, string | number>) => translate(SOURCE_MESSAGES, key, params) };
 });
 import CallbackCompletionPage, { generateMetadata } from '@/app/(auth)/auth/complete/page';
 
@@ -19,6 +19,7 @@ describe('direct completion page admission', () => {
   it('awaits Next 15 searchParams and passes one admitted code and internal destination', async () => {
     const tree = await page({ code: 'synthetic-code', next: '/dashboard/meals?week=next', ignored: undefined });
     expect(tree.props).toEqual({ code: 'synthetic-code', next: '/dashboard/meals?week=next', admission: expect.any(String), attempt: null });
+    // The title is translated now; the page still must not be indexed or leak its URL as a referrer.
     expect(await generateMetadata()).toMatchObject({ title: 'Complete sign in', robots: { index: false, follow: false }, referrer: 'no-referrer' });
   });
 

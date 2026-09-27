@@ -12,7 +12,10 @@ import {
 } from '@/components/economy/economy-view';
 import { readAllAsQuery } from '@/lib/supabase/read-all';
 
-export const metadata: Metadata = { title: 'Family Economy' };
+export async function generateMetadata(): Promise<Metadata> {
+  const t = await getTranslations();
+  return { title: t('navLabel.familyEconomy') };
+}
 export const dynamic = 'force-dynamic';
 
 export default async function EconomyPage() {

@@ -26,8 +26,11 @@ declare
                              'text/xml', 'application/xml', 'text/javascript',
                              'application/javascript'];
 begin
+  -- Three: avatars, family-media and marketplace-photos. feedback-attachments
+  -- was the fourth until 0450 made it private (F-E05), which is the point of
+  -- 0450, so the floor follows it rather than the other way round.
   select count(*) into n from storage.buckets where public;
-  if n < 4 then
+  if n < 3 then
     raise exception '0418: only % public bucket(s) found — this probe is not looking at what it claims', n;
   end if;
 

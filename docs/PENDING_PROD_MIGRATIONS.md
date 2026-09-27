@@ -3177,3 +3177,730 @@ replaced or widened `main`'s rule. They are recorded rather than renumbered, as
 applied, 0 failed; `docs/audit/run-probes.sh` twice on it, 137 of 137 passed,
 none skipped. Each empty number's file was then put back on a copy of that
 database and the probe named above went red.
+## Ported from the audit branch — `0447`–`0458`, all unapplied
+
+These twelve were written on `claude/logged-in-pages-supabase-7q6vtf`, whose
+own numbering (`0318`–`0336`) collided with migrations main had already applied
+to its ledger. They are re-applied here one fix at a time, each against main as
+it stands, and numbered after main's highest (`0443`, #583; #583 keeps `0444`
+and `0445` for itself). Every one was checked for an equivalent already on main
+first; where main already covered part of a finding the migration was reduced
+to the remainder, and each entry says so under **On main**. Five were not
+carried at all, because main already carries the same rule:
+
+- The branch's circle fix (the port's `0446`, `marketplace_create_circle`'s
+  search_path reaching `extensions`) is main's `0444`, which arrived with #609
+  while #586 was open and installs the identical function. The port's file is
+  removed; the analysis below is kept under that heading because it is still
+  the explanation of what `0444` fixes.
+
+- The branch's `0329` (SEC-017: gift links, gift payments, Pay-IDs and savings
+  goals were member-writable) — main's `0350` and `0378` had already rebuilt
+  every write policy on those four tables as a manager write. Its probe,
+  `docs/audit/money-decision-rows-check.sql`, is carried and passes against
+  main's policies; it also holds the general rule that no money function reads
+  a row a non-manager can rewrite.
+- The branch's OAuth token store fix (the port's `0393`) is main's `0406`
+  (`social_account_tokens` service-role only); `docs/audit/sensitive-role-boundary-check.sql`
+  holds it, with the port's service-role leg kept.
+- The branch's vault step-up (the port's `0395`) is main's `0391`, which guards
+  the same three secret tables and `paperwork_items`, and asks only a manager
+  for the code, as the app does; `docs/audit/a-password-alone-does-not-open-the-familys-vault-check.sql`
+  holds it.
+- The branch's profile visibility fix (the port's `0404`, PRIV-002) is main's
+  `0426`, which installs the identical `profiles_select_self`;
+  `docs/audit/profile-visibility-ends-with-membership-check.sql` and
+  `tests/profile-visibility.test.ts` now hold `0426`.
+
+**None of these is applied to production**, for the same reason as everything
+from `0318` on (see the top of this file). With main merged in after #583, all
+thirteen replay cleanly on the harness from nothing (441 migrations, none
+failing) and all 173 probes pass there, `plpgsql-bodies-resolve-check.sql`
+included.
+
+**Deploy ordering.** The application on main is correct before and after each
+of these, so none gates a deploy:
+
+| Migration | Needs code? | Before it is applied |
+|---|---|---|
+| `0447` investment approval | no | approving an order raises 42804 (as today) |
+| `0448` single-choice poll | no | a forged extra vote is accepted |
+| `0449` family timezone | no | the app refuses a bad zone; the table does not |
+| `0450` feedback bucket private | yes, in this change; reads both forms | screenshots readable by URL |
+| `0451` chore disputes | no | a sibling can file a dispute in another child's name |
+| `0452` proxy-bid ceiling | yes, in this change; reads both schemas | rivals can read a leader's ceiling |
+| `0453` Guardian call history | no | a member can write a call record |
+| `0454` onboarding claim | the action's own check ships with it | the action refuses; the RPC does not |
+| `0455` concierge backfill | no | runs decided earlier stay on Needs-you |
+| `0456` service-only functions | no | two server functions are callable with the anon key |
+| `0457` auction close | no | no auction closes (as today) |
+| `0458` member login link | no | a manager can write a stranger's login onto a member row |
+
+### The port's `0446`, now main's `0444` — a sharing circle could never be created
+
+*Not carried: main's `0444` installs the identical function. The analysis stands.*
+
+`marketplace_create_circle` is `security definer` and pinned
+`set search_path = public`. Pinning is the correct instinct for a definer
+function — an inherited search_path lets a caller shadow an unqualified object
+and have the definer execute it with elevated rights. But **Supabase installs
+pgcrypto into the `extensions` schema, not `public`**, so this pin excluded the
+one function the body calls:
+
+```
+NOTICE:  marketplace_create_circle -> FAILS:
+         function gen_random_bytes(integer) does not exist (42883)
+```
+
+Measured directly on the schema:
+
+```
+set search_path = public;              select gen_random_bytes(8);  -- ERROR 42883
+set search_path = public, extensions;  select gen_random_bytes(8);  -- \x9f4c...
+```
+
+**This is not a recent regression.** `0176_marketplace_circles.sql:133` declared
+the same bare pin when the function was born, so **no family has ever created a
+sharing circle** — the feature has been dead since it shipped. `0314` then fixed
+a genuine ambiguous-character bug in the code generator (`translate` runs before
+`upper`, so a lowercase `o`/`i` was uppercased back into the character the line
+existed to remove) inside a generator that never reached the point of generating.
+
+The fix pins `public, extensions`, matching the working precedent already in the
+tree: `0238`'s `sync_blog_image_provenance` pins the same pair and calls
+`digest()` happily. **Adding `extensions` does not loosen the pin** — the schema
+holds extension functions, is not writable by `authenticated`, and so cannot be
+used to shadow anything in `public`. `marketplace_join_circle` and
+`marketplace_leave_circle` keep their bare `public` pin, because they call
+nothing from `extensions` and a search_path should name what the body needs and
+no more.
+
+**What this is not:** `invites.token` (`0002_tables.sql:71`) also calls
+`gen_random_bytes`, but as a COLUMN DEFAULT. A default's function references
+resolve to OIDs when the column is declared, so the search_path in force at
+insert time is irrelevant and that call site is sound. Function bodies resolve
+at call time; that is the whole difference, and it is why a grep for the call
+finds two sites and only one of them is broken.
+
+Held by `tests/definer-search-path-pinned.test.ts`, which already asserted that
+every definer function *pins* a search_path — a rule this function passed while
+being broken. It now also asserts that a pinned search_path **reaches what the
+body calls**, resolving each function's effective (last `create or replace`)
+definition so it judges the database as it stands rather than flagging `0176`
+forever. Reverting `0444` turns it red.
+
+Verified end to end against a local stack with all 318 migrations applied:
+
+```
+NOTICE:  created circle 016a65fc-5db8-4909-856b-12c489407a81 with code JRQAKE2C
+```
+
+Until this is applied, production's marketplace circles cannot be created at all.
+
+### `0447` — a parent could reject an investment order and never approve one
+
+`invest_decide_order` has two outcomes and only one of them has ever worked.
+Measured as a manager against a funded wallet and a pending buy:
+
+```
+invest_decide_order(APPROVE) FAILS: column "direction" is of type
+                             wallet_txn_direction but expression is of type text (42804)
+invest_decide_order(REJECT)  -> {"ok": true, "status": "rejected"}
+```
+
+The ledger insert on the approval path writes `direction` from a CASE:
+
+```
+case when v_order.side = 'buy' then 'debit' else 'credit' end,
+```
+
+A bare string literal is of type `unknown` and Postgres coerces it to the target
+enum — which is why `'adjustment'` and `'completed'` on the two lines directly
+above it are fine. **A CASE over two such literals is not `unknown`**: it
+resolves to `text`, and there is no implicit cast from `text` to an enum:
+
+```
+insert into t(direction) values ('debit');                          -- OK
+insert into t(direction) values (case when true then 'debit'
+                                      else 'credit' end);           -- 42804
+```
+
+So `type` and `status` on adjacent lines of the same INSERT are correct and
+`direction` is not, which is the whole reason it survived review: the line reads
+exactly like its neighbours.
+
+**The asymmetry is why nobody noticed.** Rejection returns before that INSERT, so
+it works — a parent can decline a child's investment for ever and the feature
+looks alive. Only approval throws, and it has thrown since `0196` created the
+function. The definition was never replaced, so no child has ever had a buy or
+sell order filled.
+
+`0447` adds the cast and changes nothing else; the rest is `0196`'s text
+verbatim, so it reviews as a one-line diff.
+
+Held by two probes. `docs/audit/invest-order-fill-check.sql` exercises BOTH
+branches — `buy` takes 'debit', `sell` takes 'credit', and a fix casting only one
+would leave half the feature broken while a buy-only probe called it green — and
+asserts on the ledger balance and the shares on the books rather than on the
+returned `{"ok": true}`, which is a claim rather than an outcome.
+`docs/audit/plpgsql-bodies-resolve-check.sql` is the general one: it resolves
+every plpgsql body in `public` (70 functions, trigger bodies checked against each
+relation that fires them) against the live catalogue. That is what found this,
+and it is what would have found the circle bug (`0444`) — a plpgsql function binds its SQL at CALL
+time, so a body can be catastrophically wrong and still install, deploy and pass
+CI cleanly.
+
+Until this is applied, no investment order can be filled in production.
+
+### `0448` — a single-choice poll would take every choice
+
+`family_polls.kind` is `single` or `multi`, and `voting-module.tsx` enforces the
+difference in the browser:
+
+```
+if (poll.kind === 'single' && mine.size > 0) {
+  // Clear the prior selection first; if this fails, do NOT insert or the
+  // single-choice poll ends up with two votes for this member.
+```
+
+The comment is exactly right about the consequence. It was also the only thing
+enforcing it: `family_poll_votes` carries `UNIQUE (option_id, member_id)` — one
+vote per OPTION, correct for a `multi` poll and no rule at all for a `single`
+one — and the table is client-reachable.
+
+**Measured, as a child of the family:**
+
+```
+SINGLE-choice poll: one member cast 3 votes across 3 options
+```
+
+`voterCount` and the result bars read straight from these rows, so the poll
+reports a result the family never gave.
+
+**A trigger, not an index**, because the rule depends on `family_polls.kind` in
+another table and a unique index cannot reach across one. That also changes how
+pre-existing rows are handled, deliberately: `0316` had to REFUSE to apply while
+duplicates existed, because a unique index cannot be created over rows that
+violate it. A trigger governs new writes only, so `0448` installs regardless,
+leaves existing rows untouched, and REPORTS what is already in the data as a
+notice — silently deleting a family's recorded votes is not a migration's
+business either.
+
+It takes `for update` on the poll row, because a trigger that only SELECTs
+before it INSERTs is `0317`'s defect again: two simultaneous votes each read "no
+existing vote" and both land. It fires on UPDATE as well as INSERT, because
+without that arm a member votes once legally and then re-points a second row at
+the same poll — a path the probe confirms is real.
+
+Held by `docs/audit/poll-single-choice-check.sql`, whose six controls are
+load-bearing in both directions: a guard that simply forbade a second vote would
+break MULTI polls, and one keyed on `poll_id` alone would stop a second MEMBER
+voting.
+
+Until this is applied, a single-choice poll can be stuffed in production.
+
+### `0449` — a family timezone had no constraint, and a typo meant Greenwich
+
+`families.timezone` decides which local day a routine belongs to, what "today"
+means, and the day bounds the medication reminder uses.
+`components/modules/family-module.tsx` states the failure above the field:
+`Intl` throws on an unknown zone, every call site catches and degrades to UTC by
+design, so a typo saved silently and left the family on Greenwich time while the
+form said "Family profile updated".
+
+Both application paths refuse a bad zone now. `families` carried **no constraint
+of any kind**, and `families_update` is reachable by any manager's JWT.
+
+**The guard had to accept exactly what `Intl` accepts**, and getting that wrong
+was the real risk here. A guard checking `pg_timezone_names` alone would be
+STRICTER than the application and would reject `CST` and `PST`, which the form
+offers — closing the product rather than the hole. Postgres keeps IANA names and
+legacy abbreviations in two catalogues and `Intl` accepts both:
+
+```
+zone              names  abbrevs  union   Intl
+CST               f      t        yes     accepted
+PST               f      t        yes     accepted
+EST               t      t        yes     accepted
+US/Central        t      f        yes     accepted
+America/Chicago   t      f        yes     accepted
+Etc/GMT+5         t      f        yes     accepted
+UTC / GMT         t      t        yes     accepted
+Amercia/Chicago   f      f        NO      REJECTED
+```
+
+The union agrees with `Intl` on every case measured, so the union is the rule.
+`CST` being accepted is not an oversight — it is a fixed offset with no DST, so a
+family in Chicago choosing it is an hour out for half the year, but `Intl`
+accepts it and the form offers it. Which zones to OFFER is a product question;
+it is not a reason for the table to disagree with the app.
+
+**A trigger, not a CHECK**: a CHECK may only call IMMUTABLE functions, and
+reading `pg_timezone_names` is not immutable — the zone database changes with the
+server's tzdata. Declaring a function IMMUTABLE when it is not survives until a
+`pg_dump`/restore revalidates every CHECK against a differently-versioned
+catalogue.
+
+Held by `docs/audit/family-timezone-exists-check.sql`, whose controls are the
+point: five accepted zones plus `CST` and `PST` are exactly what a names-only
+guard would wrongly reject. With the trigger dropped it reports 4 failures.
+
+Until this is applied, a direct write can still put a family on Greenwich time.
+
+### `0450` — a feedback screenshot was readable by the whole internet
+
+`supabase/migrations/0450_a_feedback_screenshot_is_not_world_readable.sql`
+
+**On main.** Reduced to the bucket flag. Main's `0369` (a public bucket is not a public listing) had already dropped the unscoped read policy described below and installed "Users read their own feedback-attachments" — the owner's folder, for `authenticated`. What it kept was `public = true`, and the public path is the whole remaining hole, so `0450` flips the flag and re-drops the old policy idempotently. The `owner OR is_super_admin()` policy described below is **not** installed: the admin console reads through the service role, so a JWT-level admin read would be access nothing uses. **Deploy order:** none. The code below reads either a stored public URL or a bare path, and signs through the service role, which works on a public bucket too.
+
+`feedback-attachments` was `public = true` **and** carried an unscoped read
+policy:
+
+```
+objects | Feedback attachments are publicly readable | SELECT | (bucket_id = 'feedback-attachments')
+```
+
+So every object was readable twice over — by the public path, which does not
+consult `storage.objects` RLS at all, and by the authenticated path, whose
+policy asked only which bucket the object was in. Writes were already scoped
+correctly (`auth.uid()::text = (storage.foldername(name))[1]`); reads were not
+scoped at all.
+
+These are screenshots taken at the moment something in the product went wrong,
+which is to say screenshots of a real family's calendar, children's names,
+balances or documents. Object names are UUID-based so they are not enumerable,
+and that was the only thing limiting this. An unguessable name is not an access
+control, and a URL leaks the ordinary ways.
+
+Measured against the running stack — the same object, the same path, no
+credentials of any kind:
+
+```
+upload as the service role              -> HTTP 200
+unauthenticated GET, bucket public      -> HTTP 200, 67 bytes
+unauthenticated GET, bucket private     -> HTTP 400, "Bucket not found"
+unauthenticated GET of a signed URL     -> HTTP 200, 67 bytes
+```
+
+**Why this one could be closed when `family-media` (SEC-001) still cannot.**
+Exactly one surface renders these objects: `components/admin/feedback-admin.tsx`,
+behind the super-admin gate, reading through the service role. The public Idea
+Board selected `image_url` and never drew it. So there was no fleet of
+`getPublicUrl` consumers to migrate — only one page to teach to sign, which it
+now does with a 10-minute signed URL.
+
+**Code that ships with it** (in this change, and required for the
+migration to be safe):
+
+- `lib/storage/feedback-attachment-signing.ts` — signs each distinct object once
+  per page render.
+- `app/(app)/admin/feedback/page.tsx` — resolves before rendering.
+- `app/(app)/feedback/page.tsx` — stops selecting `image_url` altogether.
+- `app/(app)/feedback/feedback-attachment-upload.tsx` — records the storage
+  **path**; `getPublicUrl` on a private bucket returns a string that resolves to
+  nothing, and storing one would record a value that looks usable and is not.
+- `lib/storage/feedback-attachments.ts` — `feedbackAttachmentPath` reads either
+  form, so rows written before this migration are **not rewritten** and keep
+  working.
+
+The policy that replaces the blanket one is `owner OR is_super_admin()`. The
+reasoning needed checking first: the Idea Board is deliberately cross-user
+(`feedback_ideas_select` is `auth.uid() IS NOT NULL` — see AUTHZ-006), so a
+reader-scoped policy *would* have broken the product if the board drew these
+images. It does not.
+
+Held by `docs/audit/feedback-attachment-is-not-world-readable-check.sql`, whose
+controls are the point: the uploader must still read their own attachment, or
+the fix has taken it away from them. Flipping the bucket back turns it red on
+the flag; restoring the blanket policy turns it red twice, on the policy and on
+another signed-in user actually reading the row.
+`docs/audit/bucket-visibility-is-declared-check.sql` reported `DECLARATION
+STALE` the moment the flag changed — which is what it was written to do — and
+its declared list now names three buckets, not four.
+
+Until this is applied, every feedback screenshot ever uploaded is readable by
+anyone who obtains its URL.
+
+### `0451` — a chore proof named whose chore it was, and anyone could name it
+
+`supabase/migrations/0451_a_chore_proof_belongs_to_whose_chore_it_is.sql`
+
+**On main.** Reduced to `chore_disputes`. Main's `0375` (chore proof is the submitter's) had already rebuilt every permissive policy on `chore_submissions` on the same own-or-manager rule, so the submissions half below is closed there and not restated. `chore_disputes` was untouched on main and still answered only `is_family_member`. The probe asserts both tables: its submissions legs hold `0375`, its dispute legs hold `0451`.
+
+`chore_submissions` and `chore_disputes` were each governed by one policy:
+
+```
+chore_submissions | chore_submissions_all | ALL | is_family_member(family_id)
+chore_disputes    | chore_disputes_all    | ALL | is_family_member(family_id)
+```
+
+`is_family_member` answers "is this user in the family" and says nothing about
+**which member the row names**. So any member could insert a submission against
+another child's chore assignment, or open a dispute the row attributed to that
+child.
+
+The app layer had the same gap, and it is fixed alongside this migration:
+`submitProofAction` and `disputeSubmissionAction` loaded their row filtered on
+`family_id` only and then wrote `member_id: assignment.member_id` — the
+assignee, not whoever sent the form. A sibling could complete a child's chore
+for them, file a failing photo against it and have the parent's queue reject it
+in their name, or raise a dispute the event log said that child had raised.
+
+**The rule is the row's own member OR a manager**, not managers-only.
+Submitting proof of your own chore *is* the child's half of the product — the
+kids page exists for it — and a parent submitting on a child's behalf is a real
+case that is kept. Same shape `0335` gives `member_locations`.
+
+Restrictive, so it ANDs with the family policy already there; INSERT and UPDATE
+both carry it, because without the UPDATE half a member could insert a correctly
+attributed row and then re-point it.
+
+`0222` already stops a member moving a submission INTO a manager-decision
+status, and deliberately lets members submit (pending) and dispute (disputed).
+This narrows **whose** submissions and disputes they may create; it does not
+touch that.
+
+Held by `docs/audit/chore-proof-ownership-check.sql`. Measured against the
+pre-migration schema:
+
+```
+BREACH: a sibling submitted proof against another child's chore (rows: 1)
+BREACH: a sibling re-attributed an existing submission (rows: 1)
+```
+
+and the control that matters more — making the rule managers-only instead
+reports **"CONTROL FAILED: the assignee was refused their own submission — the
+fix took the kids page away"**.
+
+**Code that ships with it** (in this change): the assignee-or-manager
+check in both actions, the dispute event log corrected to name the actual actor
+rather than the assignee, and the same rule added to two more actions the new
+`tests/a-family-action-says-whose-row-it-is.test.ts` found —
+`requestAllowanceAction` (any member could raise an allowance request against
+any child's wallet) and `requestRedemptionAction` (any member could spend
+another child's tokens, since `memberId` was caller-supplied and only checked to
+be in the family).
+
+Until this is applied, a direct PostgREST call with a child's session can still
+submit and dispute in a sibling's name, even though the product path cannot.
+
+### `0452` — a proxy bid's ceiling was readable by the people bidding against it
+
+`supabase/migrations/0452_a_proxy_bid_ceiling_is_secret.sql`
+
+**On main — deploy order: none, and that is deliberate.** The application reads the reserve facts through `lib/marketplace/reserve-view.ts`, which asks for the two new columns and, only when Postgres says one of those columns does not exist (42703), reads `reserve_cents` instead and derives the same two facts with `reserveMet()`. So the app is correct on a database this has not reached (production today) and on one it has. Held by `tests/a-reserve-read-works-before-and-after-0452.test.ts`.
+
+> **Deploy-coupled, in both directions.** The code on this branch selects
+> `has_reserve` and `reserve_met`, which exist only after 0452; code from before
+> this branch selects `reserve_cents`, which 0452 refuses. Apply 0452 **with**
+> the deploy that carries this code — not before it, not after it. Deploying
+> the code first breaks the auction board and the item page (`42703 column does
+> not exist`); applying the migration first breaks them the other way (`42501
+> permission denied`). Every other surface is unaffected.
+
+`marketplace_place_bid` runs a proxy auction, and 0183's own column comments
+call two values secret:
+
+```
+reserve_cents      bigint,                      -- hidden floor
+highest_max_cents  bigint not null default 0,   -- current leader's hidden proxy max
+```
+
+Nothing hid them. `marketplace_listings` granted table-level SELECT to
+`authenticated`, and the circle read policy lets every family in a sharing
+circle read every listing shared there — so every rival bidder could read both.
+`marketplace_bids_select` let the seller's family read each bidder's `max_cents`.
+
+Measured over PostgREST with three real accounts in one circle:
+
+```
+Alice bids "up to $500"          -> leading, price $10.00
+Bob selects highest_max_cents    -> 50000   (reserve_cents -> 20000)
+seller selects max_cents         -> [50000]
+Bob bids exactly 50000           -> leading: false, current_cents: 50000
+```
+
+Alice still wins — at her **entire** maximum. The engine's "does not beat the
+standing proxy" branch prices a challenger at `least(highest_max_cents, p_max +
+increment)`, so bidding the leader's ceiling exactly sets the price to it. That
+is shill bidding with perfect information; the seller had it by default. A blind
+$300 bid would have left the price at $300.50.
+
+**The fix is column privileges.** Table-level SELECT is revoked from `anon` and
+`authenticated` and re-granted on every column except the secrets; the column
+list is computed inside the migration. The bid engine is SECURITY DEFINER and
+keeps full access; INSERT and UPDATE grants are untouched (a seller still sets a
+reserve); the service role keeps everything. Realtime's `apply_rls` filters each
+column through `has_column_privilege`, so the live bid feed stops carrying
+`max_cents` as well. The UI's two needs — is there a reserve, has it been met —
+become stored generated columns mirroring `reserveMet()`.
+
+**A trap this sets, stated so it is not discovered in production:** a column
+grant does not extend to columns added later. Any future migration that adds a
+column to `marketplace_listings` or `marketplace_bids` must `grant select
+(<column>) … to anon, authenticated`, or every client read naming that column
+fails with `42501`. The migration's self-check and the probe both assert the
+selectable set is exactly "every column minus the secrets", so the omission
+fails CI rather than a user.
+
+Held by `docs/audit/proxy-bid-ceiling-is-secret-check.sql`. Against the
+pre-migration grants it reports four findings, including
+`BREACH: a rival read the leader's proxy ceiling (50000)` and
+`BREACH: the seller read the bidders' maxima (50000)`; withholding `reserve_met`
+as well reports `CONTROL FAILED: … the fix took the reserve badge away`; and
+adding a column without its grant reports
+`REGRESSION: ordinary columns are not selectable`.
+
+**Code that ships with it** (in this change): the item page, the auction
+panel and the auction board read `has_reserve` / `reserve_met` instead of the
+figure — the board had been serialising `reserve_cents` into every viewer's page
+props; `components/modules/marketplace-module.tsx` names its columns instead of
+`select('*')`, which would now fail; `AuctionView` in
+`lib/marketplace/auction.ts` is the client's type, with no `reserveCents`.
+
+Until this is applied, any member of a sharing circle can read the ceiling of
+every auction shared there, and any seller can read every bidder's maximum.
+
+### `0453` — Guardian's screening decisions were anyone's (closes AUTHZ-005)
+
+`supabase/migrations/0453_guardian_screening_is_the_parents_decision.sql`
+
+**On main.** Reduced to `guardian_communications`. Main's `0318` and `0345` had already rebuilt the write policies on `guardian_contacts`, `guardian_member_profiles` and `guardian_suggestions` as manager writes, which closes the six breaches below. They left `guardian_communications` with a permissive INSERT for any member ("Service can insert guardian_communications" checks only `is_family_member`), so a child could still write a call or text record into the history the learning run reads. `0453` guards that table's INSERT, UPDATE and DELETE and nothing else.
+
+Not deploy-coupled: no application code changed with it, and every product
+writer of these tables was already parent-only or the service role.
+
+Guardian screens a family's calls and texts. `guardian_routing_rules` was
+already manager-only, but the tables that actually decide who rings through
+were `FOR ALL is_family_member`: `guardian_contacts` (each caller's trust
+level), `guardian_member_profiles` (each member's handling per trust level, and
+whether screening is on at all) and `guardian_suggestions` (proposals a parent
+approves — `guardian_review_suggestion` applies whatever `proposed_*` the row
+holds at that moment). AUTHZ-005 recorded this from the policy source and asked
+for a reproduction before a repair. Reproduced as a child on the local stack:
+
+```
+BREACH: a child rewrote a pending suggestion before a parent approved it
+BREACH: a child raised a blocked caller to immediate_family
+BREACH: a child added a trusted contact
+BREACH: a child deleted a blocked caller's record
+BREACH: a child deleted a parent's manager-only routing rule by deleting the contact it names (cascade)
+BREACH: a child fabricated a call record, which the learning run reads
+BREACH: a child switched off their own call screening
+```
+
+The cascade is the one the policy source could not show:
+`guardian_routing_rules.condition_contact_id` is `ON DELETE CASCADE`, so a
+member who could delete a contact could delete the manager-only rule attached
+to it without touching the rules table.
+
+**The fix**: RESTRICTIVE manager-only insert/update/delete guards on
+`guardian_contacts`, `guardian_member_profiles`, `guardian_suggestions` and
+`guardian_communications`, in 0217's shape, plus `revoke insert, update, delete
+… from anon`. SELECT untouched — a child still sees the family's contacts.
+Every product writer was already parent-gated (`upsertContactAction`,
+`updateContactTrustAction`, `deleteContactAction`, `upsertMemberProfileAction`,
+`updateContextAction`, `assignGuardianPhoneAction`,
+`generateGuardianSuggestionsAction`) or the service role (the provider webhooks,
+the learning cron).
+
+Held by `docs/audit/guardian-authority-check.sql`: seven findings against the
+pre-migration policies, clean after; making contacts manager-only to READ as
+well reports `CONTROL FAILED: the child cannot see the family's contacts`.
+
+Until this is applied, a child can undo any screening decision a parent made
+about their own calls.
+
+### `0454` — a stranger could onboard into your family as its parent
+
+`supabase/migrations/0454_onboarding_resumes_only_your_own_family.sql`
+
+**Severity: critical.** **Safe in either order** relative to a deploy: the
+code on this branch refuses the takeover by itself, and this migration refuses
+it by itself. Apply it anyway — it also closes the removed-creator variant the
+code check does not.
+
+`onboarding_claim_family` lets an interrupted wizard land on the family it
+already started, by resuming from `onboarding_progress.family_id`. That row is
+the user's own to write (`user_id = auth.uid()`), and nothing constrained its
+`family_id`. The onboarding action then upserts the caller into whatever family
+the claim returns **as a parent, with the service role**. Reproduced with real
+sessions:
+
+```
+fresh account, no family
+upserts its own onboarding_progress: family_id = <victim family>   -> allowed
+onboarding_claim_family -> {"family_id": <victim>, "created": false}
+parent membership upsert                                             -> ok
+in its own session: role in the victim family                        -> parent
+the victim family's password vault                                   -> [{"label":"Home wifi","secret":"the-real-wifi-password"}]
+```
+
+The prerequisite is the family's id. Every family sharing a marketplace circle
+with it can read that from `marketplace_circle_members`; every past member
+already knows it.
+
+`prepareCalendarFamily` has always refused this (`'Family owner changed'`).
+The main onboarding action did not. Three layers now:
+
+1. **The action** (in this change) reads `families.created_by` for a
+   resumed claim and refuses it unless it is the caller, *before* writing the
+   membership. This protects production from the moment the code deploys.
+2. **The function** resumes only a family the caller created and that has no
+   other login member. The second condition also stops a creator removed from
+   their own family re-onboarding back in as a parent — which the code check
+   alone would allow, since they did create it. A progress row that fails the
+   check is replaced by the new family rather than coalesced behind it.
+3. **The row**: clients lose INSERT on `onboarding_progress` and UPDATE on its
+   `family_id` (and `id`, `user_id`, `created_at`); every writer of `family_id`
+   is the service role. `prepareCalendarFamily`'s own update of `source` and
+   `status` keeps its columns.
+
+Held by `docs/audit/onboarding-claim-ownership-check.sql`: five findings
+against the pre-0331 function and grants (the takeover, the removed creator,
+both row writes, a progress row left naming the victim); two when only the
+function is fixed; and revoking the calendar path's columns as well reports
+`CONTROL FAILED: the calendar setup path lost the columns it updates`.
+
+As with 0452, a column grant does not extend to columns added later: a future
+migration adding a column to `onboarding_progress` that clients must update
+needs its own `grant update (<col>)`.
+
+### `0455` — decided concierge runs stayed on "Needs your decision"
+
+`supabase/migrations/0455_decided_concierge_runs_leave_needs_you.sql`
+
+**Data only. Apply with, or after, the deploy that carries DATA-018's code.**
+No schema change and no deploy coupling in either direction. Runs the old code
+decides after 0455 runs would still be stuck, and re-running its `UPDATE` by
+hand is safe and idempotent.
+
+A concierge run queued for approval is written with `status = 'pending'` and
+`state = 'awaiting_approval'`. Approving or dismissing it wrote `status` only,
+so `state` never moved. The Needs-you page lists runs by `state`, and
+`displayRunState` prefers `state` whenever it isn't the default. So every run
+a parent ever decided this way is still listed as waiting on them. On the local
+database, as a parent, after one dismissal and one approval:
+
+```
+Waiting for approval: Dinner [status=dismissed, state=awaiting_approval]
+Dinner planned              [status=executed,  state=awaiting_approval]
+```
+
+The concierge actions now write both columns, claim the run before applying
+it, and hand it back to the queue if applying fails. 0455 moves the rows
+decided before that, using the mapping the code already defines
+(`LEGACY_RUN_STATUS_TO_STATE`: executed → completed, dismissed → cancelled). It
+touches only the contradictory pair: a status that says decided and a state that
+says awaiting approval. No writer produces that pair on purpose. It ends with a
+self-check that raises if any such row remains.
+
+Verified locally: two stuck rows moved (`dismissed → cancelled`,
+`executed → completed`), a genuinely pending control untouched, and a
+second application exits 0.
+
+### `0456` — two server-only functions were callable with the anon key
+
+`supabase/migrations/0456_service_only_functions_are_service_only.sql`
+
+**Severity: high. Safe in either order** relative to a deploy: both app callers
+already use the service client.
+
+`wallet_reserve_card_auth` (0155) places a `processing` debit hold on a child's
+spend bucket. `marketplace_place_bid_unchecked` (0184) is the raw bid engine
+behind the checked `marketplace_place_bid` wrapper. Neither checks its caller,
+because both were meant for the server only. Their migrations revoked EXECUTE
+from `public`, which is how vanilla Postgres is locked down. On Supabase, the
+default privileges grant EXECUTE on every new function **directly** to `anon` and
+`authenticated`, and a revoke from `public` leaves those grants in place. 0221
+found this for `authenticated` on the bid function and revoked that one role;
+`anon` kept it.
+
+Measured on the local Supabase stack with **only the public anon key**:
+
+```
+wallet_reserve_card_auth(<family>, <child wallet>, 2000, …)  -> true   spendable 2000 -> 0
+marketplace_place_bid_unchecked(<listing>, <another family's member>, <that family>, 5000000)
+                                                            -> {"ok":true,"leading":true}
+```
+
+After 0456: both refused with `42501` for anon and for a signed-in member. The
+Issuing webhook's service-role hold still works (2000 → 1500), and a member
+bidding as themselves through the checked wrapper still works.
+
+**After applying, consider auditing production for forged holds and bids:**
+`wallet_transactions` rows with `type = 'card_spend', status = 'processing'`
+whose `stripe_ref` matches no Stripe Issuing authorization, and
+`marketplace_bids` whose bidder family never had a member place them. The
+function records no caller, so neither can be told apart from genuine rows
+from the database alone.
+
+### `0457` — no auction could ever close
+
+`supabase/migrations/0457_an_auction_can_close.sql`
+
+**Severity: high (a feature that has never worked). Safe in either order.**
+
+`marketplace_close_auction` (0185) began with
+`if current_user <> 'service_role' then raise exception 'forbidden'`. Inside a
+SECURITY DEFINER function `current_user` is the owner, so this refused every
+call, including the settlement cron's. Called exactly as
+`app/api/cron/close-auctions` calls it, through the service client, it answered
+`{"code":"P0001","message":"forbidden"}`. The cron logs "settlement failed;
+leaving it retryable" and moves on, so every ended auction has stayed
+`available`: no winner claimed, no order, no notification, and new bids are
+refused as `ended`.
+
+0457 re-creates the function from its live definition with only that line
+changed. It now tests `auth.role()`, which reads the request's JWT, the same
+test the chore and reward guards use. It also revokes the client roles.
+Verified locally: the cron's call now claims the listing for the highest bidder
+and creates a confirmed order, and `anon` gets `42501`.
+
+**Operational note:** the first settlement run after 0457 closes *every*
+auction that ended while the function was dead, up to the cron's batch size per
+run, and notifies each winner and seller, possibly about auctions that ended
+long ago. Review the backlog before applying if that would surprise families:
+`select count(*) from marketplace_listings where sale_format = 'auction' and
+status = 'available' and auction_ends_at < now();`. Also check whether any of
+those auctions' leading bids came through the SEC-024 hole (0456) before
+letting the backlog settle.
+
+### `0458` — any account could link a stranger's login into its own family
+
+`supabase/migrations/0458_only_the_server_links_a_login_to_a_member.sql`
+
+**Severity: high. Safe in either order** relative to a deploy: nothing in the app
+writes `family_members.user_id` from the browser.
+
+`fm_insert` and `fm_update` let a family's parent or adult write every column
+of their own family's member rows, `user_id` included, and every account is the
+parent of the family it made. Writing another user's id onto a member row made
+that user a co-member, and `profiles_select_self` shows co-members' profiles to
+each other. The feedback board shows every idea's `author_id` and every vote's
+`user_id` to any signed-in account, so the ids were there to take.
+
+Measured on the local database as a signed-in parent, before 0458:
+
+```
+insert a member row carrying another user's id         -> succeeded
+update an existing member row to another user's id     -> succeeded
+select from profiles where id = <that user>            -> email, full name, date of birth, phone
+update a co-parent's row to user_id = null             -> succeeded
+```
+
+0458 adds a SECURITY INVOKER trigger that refuses a change to `user_id` when
+the statement runs as `authenticated` or `anon`. The server (service role) and
+the database's own definer functions (`accept_invite`, `handle_new_family`,
+`ensure_family_for_user`) run as other roles and are unaffected. After 0458
+all four are refused with `42501`. Adding, editing and removing members, a new
+family's creator becoming its parent, and the service role linking a child
+login all still work. `docs/audit/member-login-link-check.sql` proves both
+halves (58/58 on the local stack and on the exact CI image, and the migration
+re-applies cleanly onto an existing schema).
+
+**After applying, consider checking production for links planted before it:**
+member rows whose `user_id` has no matching accepted invitation, is not the
+family's `created_by`, and is not a child login the server created. The row
+records no writer, so the database alone cannot tell a planted link from a
+real one; the check narrows the list for a person to review.

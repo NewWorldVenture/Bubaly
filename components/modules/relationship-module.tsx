@@ -337,7 +337,7 @@ export function RelationshipModule() {
     <div>
       <PageHeader
         title={t('relationship.relationshipHelper')}
-        description={`Never miss the moments that matter${partnerName === 'your partner' ? '' : ` with ${partnerName}`} — anniversaries, birthdays, date nights, and gift ideas, with a little AI nudge.`}
+        description={partnerName === 'your partner' ? t('relationship.headerDescription') : t('relationship.headerDescriptionWith', { name: partnerName })}
         action={
           <div className="flex items-center gap-2">
             <Button variant="outline" onClick={openProfile} className="gap-1.5"><SlidersHorizontal className="h-4 w-4" /> {t('relationship.preferences')}</Button>
@@ -468,7 +468,7 @@ export function RelationshipModule() {
         </div>
         {(gifts ?? []).length === 0 ? (
           <EmptyState icon={Gift} title={t('relationship.noGiftIdeasYet')}
-            description={`Jot down ideas as you spot them${profile?.partner_member_id ? `, pull from ${partnerName}’s wishlist,` : ''} or let AI suggest a few.`}
+            description={profile?.partner_member_id ? t('relationship.ideasHintWithPartner', { name: partnerName }) : t('relationship.ideasHint')}
             action={<Button onClick={openNewGift} className="gap-1.5"><Plus className="h-4 w-4" /> {t('relationship.addAGiftIdea')}</Button>} />
         ) : (
           <>
@@ -654,7 +654,7 @@ export function RelationshipModule() {
       </Modal>
 
       {/* From-wishlist modal */}
-      <Modal open={wishModal} onClose={() => setWishModal(false)} title={`Add from ${partnerName}’s wishlist`}>
+      <Modal open={wishModal} onClose={() => setWishModal(false)} title={partnerName === 'your partner' ? t('relationship.addFromYourPartnersWishlist') : t('relationship.addFromWishlistOf', { name: partnerName })}>
         <div className="space-y-2">
           {wishSuggestions.length === 0
             ? <p className="text-sm text-muted">{t('relationship.noAvailableWishlistItemsToAdd')}</p>

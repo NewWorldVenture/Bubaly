@@ -46,8 +46,10 @@ const GATES = [
   // the code, none of them gated by this test.
   'hasCronAuthorization',
   'secretEquals',
+  'bearerMatches',            // a Bearer secret in constant time (lib/server/secret-compare): the Guardian escalation
   'stripe.webhooks', 'constructEvent', 'svix-signature',  // signature-verified webhooks
   'validateTwilioSignature',  // the Twilio callbacks: guardian inbound, screening, contact centre
+  'verifyTwilioRequest',      // the same check through lib/server/twilio-ingress, which no build mode skips
 ];
 
 /**

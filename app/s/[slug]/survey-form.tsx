@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useTransition } from 'react';
+import { useState, useTransition, useId } from 'react';
 import { CheckCircle2, Loader2 } from 'lucide-react';
 import { submitResponseAction } from './actions';
 import { useTranslations } from '@/components/i18n/locale-provider';
@@ -17,6 +17,7 @@ type Props = {
 };
 
 export function SurveyForm(p: Props) {
+  const a11yId = useId();
   const t = useTranslations();
   const [score, setScore] = useState<number | null>(null);
   const [comment, setComment] = useState('');
@@ -76,14 +77,14 @@ export function SurveyForm(p: Props) {
       </div>
 
       <div className="space-y-1">
-        <label className="block text-sm font-medium">{p.followUp || 'Anything you’d like to add?'}</label>
-        <textarea value={comment} onChange={(e) => setComment(e.target.value)} rows={3}
+        <label htmlFor={`${a11yId}-f1`} className="block text-sm font-medium">{p.followUp || 'Anything you’d like to add?'}</label>
+        <textarea id={`${a11yId}-f1`} value={comment} onChange={(e) => setComment(e.target.value)} rows={3}
           className="w-full rounded-xl border border-border bg-surface/60 px-3 py-2 text-sm focus-ring" placeholder={t('sSurveyForm.optional')} />
       </div>
 
       <div className="space-y-1">
-        <label className="block text-sm font-medium">{t('sSurveyForm.emailOptional')}</label>
-        <input value={email} onChange={(e) => setEmail(e.target.value)} type="email"
+        <label htmlFor={`${a11yId}-f2`} className="block text-sm font-medium">{t('sSurveyForm.emailOptional')}</label>
+        <input id={`${a11yId}-f2`} value={email} onChange={(e) => setEmail(e.target.value)} type="email"
           className="h-11 w-full rounded-xl border border-border bg-surface/60 px-3 text-sm focus-ring" placeholder="you@example.com" />
       </div>
 

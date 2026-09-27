@@ -352,7 +352,7 @@ export function RecipesModule() {
                     )}
                   </div>
                   {/* Favorite */}
-                  <button onClick={(e) => { e.stopPropagation(); toggleFavorite(recipe); }}
+                  <button aria-label={tr('iconAction.favorite')} aria-pressed={Boolean(recipe.is_favorite)} onClick={(e) => { e.stopPropagation(); toggleFavorite(recipe); }}
                     className="absolute right-2 top-2 flex h-7 w-7 items-center justify-center rounded-full bg-black/40 text-white transition hover:bg-black/60">
                     <Heart className={cn('h-4 w-4', recipe.is_favorite && 'fill-red-400 text-red-400')} />
                   </button>
@@ -401,7 +401,7 @@ export function RecipesModule() {
                   {viewing.description && <p className="mt-1 text-sm text-muted">{viewing.description}</p>}
                 </div>
                 <div className="flex gap-1">
-                  <button onClick={() => toggleFavorite(viewing)}
+                  <button aria-label={tr('iconAction.favorite')} aria-pressed={Boolean(viewing.is_favorite)} onClick={() => toggleFavorite(viewing)}
                     className="rounded-xl p-2 hover:bg-elevated transition">
                     <Heart className={cn('h-5 w-5', viewing.is_favorite ? 'fill-red-400 text-red-400' : 'text-muted')} />
                   </button>
@@ -742,7 +742,7 @@ function RecipeFormModal({ recipe, familyId, userId, onClose, onSaved }: {
                   {step.step}
                 </div>
                 <Textarea value={step.text} onChange={(e) => updateStep(i, e.target.value)}
-                  placeholder={`Step ${step.step}…`} className="flex-1 min-h-[60px]" />
+                  placeholder={tr('recipes.stepPlaceholder', { n: step.step })} className="flex-1 min-h-[60px]" />
                 <button type="button" aria-label={tr('a11y.remove')} onClick={() => removeStep(i)} className="rounded-lg p-2 text-muted hover:text-danger self-start"><X className="h-4 w-4" /></button>
               </div>
             ))}

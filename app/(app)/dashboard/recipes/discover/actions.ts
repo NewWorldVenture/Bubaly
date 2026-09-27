@@ -109,7 +109,7 @@ export async function saveDiscoveredRecipe(input: { provider: string; sourceReci
       const { data: raced, error: racedError } = await probeVault();
       if (!racedError && raced) return { ok: true, id: raced.id, already: true };
     }
-    return { ok: false, error: describeActionError(error, 'Could not save recipe.') };
+    return { ok: false, error: describeActionError(error, t('actions.couldNotSaveTheRecipe')) };
   }
   revalidatePath('/dashboard/recipes');
   return { ok: true, id: data.id };

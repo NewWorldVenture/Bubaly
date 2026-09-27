@@ -8,7 +8,10 @@ import { ErrorState } from '@/components/ui/states';
 import { PROVIDER_LABELS, type SyncProvider } from '@/lib/sync/capabilities';
 import { getTranslations } from '@/lib/i18n/server';
 
-export const metadata: Metadata = { title: 'Sync conflicts' };
+export async function generateMetadata(): Promise<Metadata> {
+  const t = await getTranslations();
+  return { title: t('pageTitle.syncConflicts') };
+}
 export const dynamic = 'force-dynamic';
 
 const KIND_LABEL: Record<string, string> = {

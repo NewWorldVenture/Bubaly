@@ -57,7 +57,7 @@ function ShareIdeaForm({ userId, onCreated }: { userId: string; onCreated: (idea
     e.preventDefault();
     start(async () => {
       const res = await submitIdeaAction({ title, problem, body, category, impact, audience, kind, imageUrl });
-      if (!res.ok || !res.id) { error(res.error ?? `Could not submit your ${isBug ? 'bug report' : 'idea'}.`); return; }
+      if (!res.ok || !res.id) { error(res.error ?? (isBug ? t('feedback.couldNotSubmitBug') : t('feedback.couldNotSubmitIdea'))); return; }
       onCreated({
         id: res.id, title: title.trim(), problem: problem.trim() || null, body: body.trim() || null,
         category, impact, audience, kind, status: 'under_review', admin_note: null, image_url: imageUrl.trim() || null,
@@ -260,6 +260,7 @@ function StatusControl({ idea, onChanged }: { idea: IdeaRow; onChanged: (status:
   const [pending, start] = useTransition();
   return (
     <select
+      aria-label={t('feedbackFeedbackBoard.setIdeaStatus')}
       value={isFeedbackStatus(idea.status) ? idea.status : 'under_review'}
       disabled={pending}
       onChange={(e) => {
@@ -271,7 +272,6 @@ function StatusControl({ idea, onChanged }: { idea: IdeaRow; onChanged: (status:
         });
       }}
       className="rounded-lg border border-border bg-bg px-2 py-1 text-[11px] font-semibold outline-none focus:border-brand"
-      aria-label={t('feedbackFeedbackBoard.setIdeaStatus')}
     >
       {FILTERABLE_STATUSES.map((s) => <option key={s} value={s}>{STATUS_META[s].label}</option>)}
     </select>

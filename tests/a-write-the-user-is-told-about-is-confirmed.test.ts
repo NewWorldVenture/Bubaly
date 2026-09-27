@@ -706,9 +706,15 @@ describe('a stranded hold and a skipped allowance are reported (C1-S9-53)', () =
   });
 
   it('the gift, babysitter and Pay-ID writes are confirmed', () => {
-    for (const binding of ['dismissed', 'saved', 'archived', 'released']) {
+    for (const binding of ['saved', 'archived', 'released']) {
       expect(walletActions, binding).toContain(`wroteNoRows(${binding})`);
     }
+    // The gift decline is confirmed more strictly: it cancels only a gift that
+    // is still PENDING (a second parent may have approved it, and its credit is
+    // then in the ledger), and a decline that matched nothing reads the gift
+    // back to say which it was — already declined, already applied, or gone.
+    expect(walletActions).toContain(".eq('status', 'pending').select('id').maybeSingle();");
+    expect(walletActions).toContain('if (!declined) {');
     // Releasing a Pay-ID is a privacy action — /pay/<handle> keeps resolving to
     // the child if the delete matched nothing (see C1-S9-31).
     expect(walletActions).toContain('privacy action');

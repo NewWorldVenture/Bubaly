@@ -1,7 +1,7 @@
 'use client';
 
 // Multi-store shopping lists built on existing grocery_lists + grocery_items tables
-import { useEffect, useMemo, useState } from 'react';
+import { useEffect, useMemo, useState, useId } from 'react';
 import {
   ShoppingBag, Plus, Trash2, Check, Search, X, ChevronDown, ChevronUp,
   ShoppingCart, Pencil, Archive, Loader2, Copy, ExternalLink, PackageCheck,
@@ -422,7 +422,7 @@ export function ShoppingModule() {
 
             {/* Quick add */}
             <form onSubmit={addItem} className="flex items-center gap-2">
-              <select value={addingCategory} onChange={(e) => setAddingCategory(e.target.value)}
+              <select aria-label={t('fieldName.category')} value={addingCategory} onChange={(e) => setAddingCategory(e.target.value)}
                 className="rounded-xl border border-border bg-surface/60 px-2 py-2 text-xs text-muted focus:outline-none">
                 {CATEGORIES.map((c) => <option key={c} value={c}>{groceryCategoryLabel(t, c)}</option>)}
               </select>
@@ -465,6 +465,7 @@ function NewListModal({ familyId, userId, onClose, onCreated }: {
   familyId: string; userId: string;
   onClose: () => void; onCreated: (id: string) => void;
 }) {
+  const a11yId = useId();
   const t = useTranslations();
   const { error: toastError } = useToast();
   const [loading, setLoading] = useState(false);
@@ -505,8 +506,8 @@ function NewListModal({ familyId, userId, onClose, onCreated }: {
     <Modal open onClose={onClose} title={t('shopping.newShoppingList')}>
       <form onSubmit={create} className="space-y-4">
         <div>
-          <label className="mb-2 block text-sm font-medium">{t('shopping.quickStartFromStore')}</label>
-          <div className="grid grid-cols-4 gap-2">
+          <span id={`${a11yId}-f1`} className="mb-2 block text-sm font-medium">{t('shopping.quickStartFromStore')}</span>
+          <div role="group" aria-labelledby={`${a11yId}-f1`} className="grid grid-cols-4 gap-2">
             {STORE_PRESETS.map((p) => (
               <button key={p.name} type="button" onClick={() => selectPreset(p)}
                 className={cn('flex flex-col items-center gap-1 rounded-xl border p-2 text-xs transition',

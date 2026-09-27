@@ -168,7 +168,7 @@ function renderAs(code: LocaleCode, node: ReactElement): string {
 const HOUR = 3_600_000;
 const auction = () => ({
   saleFormat: 'auction', status: 'available', startingBidCents: 100000, currentBidCents: 276850,
-  bidCount: 3, reserveCents: null, buyNowCents: 350000,
+  bidCount: 3, hasReserve: false, reserveMet: true, buyNowCents: 350000,
   auctionStartsAt: new Date(Date.now() - 24 * HOUR).toISOString(),
   auctionEndsAt: new Date(Date.now() + 48 * HOUR).toISOString(),
   highestBidderFamilyId: 'fam-other',
@@ -212,7 +212,7 @@ describe('the auction box a bidder watches', () => {
   it('puts the amount inside the sentence, not after an English fragment', () => {
     const ended = createElement(AuctionPanel, {
       listingId: 'l1', isOwner: false, myFamilyId: 'fam-1',
-      initial: { ...auction(), auctionEndsAt: new Date(Date.now() - HOUR).toISOString(), reserveCents: 500000 },
+      initial: { ...auction(), auctionEndsAt: new Date(Date.now() - HOUR).toISOString(), hasReserve: true, reserveMet: false },
       initialBids: [],
     });
     // Ended below the reserve: the whole sentence is one catalogue key.

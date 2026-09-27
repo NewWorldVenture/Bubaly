@@ -48,17 +48,16 @@ function CreateRow({ member }: { member: AccessMember }) {
   }
   return (
     <div className="flex flex-wrap items-center gap-2">
-      <input value={username} onChange={(e) => setUsername(e.target.value)} placeholder="username"
-        aria-label={t('childAccessManager.usernameLabel')}
+      <input value={username} onChange={(e) => setUsername(e.target.value)}
+        aria-label={t('childAccessManager.username')} placeholder={t('childAccessManager.username')}
         autoCapitalize="none" autoCorrect="off" spellCheck={false}
         className="h-9 w-32 rounded-lg border border-border bg-bg px-2.5 text-sm focus-ring" />
-      <input value={pin} onChange={(e) => setPin(normalizePin(e.target.value))} inputMode="numeric" placeholder="PIN"
-        aria-label={t('childAccessManager.pinLabel')}
+      <input value={pin} onChange={(e) => setPin(normalizePin(e.target.value))} inputMode="numeric"
+        aria-label={t('childAccessManager.pin')} placeholder="••••"
         className="h-9 w-20 rounded-lg border border-border bg-bg px-2.5 text-center text-sm tracking-[0.3em] focus-ring" />
-      {/* Icon-only, so it carries its name: the form appears only after "Create
-          login" is pressed, which is why the signed-in axe sweep never saw it
-          (B7 kid-login pass). */}
-      <Button onClick={create} disabled={!valid || busy} className="h-9 px-3 text-xs" aria-label={t('childAccessManager.createLogin')}>
+      {/* Icon-only, so the name is the label: without it a screen reader
+          announced a bare "button" as the step that creates a child's login. */}
+      <Button onClick={create} disabled={!valid || busy} aria-label={t('childAccessManager.createLoginFor', { name: member.display_name })} className="h-9 px-3 text-xs">
         {busy ? <Loader2 className="h-4 w-4 animate-spin" /> : <Check className="h-4 w-4" />}
       </Button>
     </div>
@@ -87,10 +86,10 @@ function ResetRow({ member }: { member: AccessMember }) {
       {open ? (
         <>
           <input value={pin} onChange={(e) => setPin(normalizePin(e.target.value))} inputMode="numeric" placeholder={t('childAccessManager.newPin')}
-            aria-label={t('childAccessManager.newPin')}
+            aria-label={t('childAccessManager.newPinFor', { name: member.display_name })}
             className="h-9 w-24 rounded-lg border border-border bg-bg px-2.5 text-center text-sm tracking-[0.3em] focus-ring" />
-          <Button onClick={reset} disabled={!isValidPin(pin) || busy} className="h-9 px-3 text-xs">
-            {busy ? <Loader2 className="h-4 w-4 animate-spin" /> : t('childAccessManager.savePin')}
+          <Button onClick={reset} disabled={!isValidPin(pin) || busy} aria-label={t('childAccessManager.savePinFor', { name: member.display_name })} className="h-9 px-3 text-xs">
+            {busy ? <Loader2 className="h-4 w-4 animate-spin" /> : t('childAccessManager.save')}
           </Button>
         </>
       ) : (

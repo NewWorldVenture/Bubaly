@@ -33,6 +33,35 @@ describe('the database boundary is actually exercised in CI', () => {
     expect(ci).not.toMatch(/^\s*image:\s*postgres:16\s*$/m);
   });
 
+  it('is no safer than a real Supabase project about who may call a function (TEST-012)', () => {
+    // Supabase grants EXECUTE on every new function straight to anon and
+    // authenticated. Without the same default here, a migration's `revoke ...
+    // from public` closed a function in CI that stayed open on every real
+    // database — wallet_reserve_card_auth was callable with the anon key
+    // (SEC-024) while this harness said it was not.
+    expect(bootstrap).toMatch(/^alter default privileges in schema public grant all on functions to anon, authenticated, service_role;$/m);
+    expect(bootstrap).toMatch(/^alter default privileges in schema public grant all on tables to anon, authenticated, service_role;$/m);
+  });
+
+  it('reads the session the way Supabase does, from either claim setting (TEST-012)', () => {
+    // auth.uid() used to read only `request.jwt.claim.sub`, so a probe that set
+    // `request.jwt.claims` (as PostgREST does) ran as nobody and its CONTROL
+    // refused to pass. And auth.role() defaulted to 'authenticated' where
+    // Supabase returns NULL.
+    for (const claim of ['sub', 'role', 'email']) {
+      expect(bootstrap).toContain(`current_setting('request.jwt.claim.${claim}', true)`);
+      expect(bootstrap).toContain(`current_setting('request.jwt.claims', true), '')::jsonb ->> '${claim}'`);
+    }
+    expect(bootstrap).not.toMatch(/auth\.role\(\)[^;]*'authenticated'\)/);
+  });
+
+  it('has the auth tables the migrations read (TEST-012)', () => {
+    // 0326 reads auth.mfa_factors. Without it the replay failed there and the
+    // bootstrap stopped before the anchor account, so five more probes failed
+    // on a missing family: one missing shim, thirteen red probes.
+    expect(bootstrap).toContain('create table if not exists auth.mfa_factors');
+  });
+
   it('fails the build when a migration does not apply, rather than counting', () => {
     // The harness used to print `migration_fail=N` and exit 0. A replay that
     // reports instead of failing is how the next 0118 ships green.

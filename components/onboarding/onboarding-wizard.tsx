@@ -700,7 +700,7 @@ function MembersPanel({ draft, update }: { draft: OnboardingDraft; update: (p: P
             <input value={name} onChange={(e) => setName(e.target.value)} placeholder={tr('onboardingWizard.nameEGLeo')} className={inputCls}
               onKeyDown={(e) => { if (e.key === 'Enter') { e.preventDefault(); addPerson(); } }} />
             <div className="flex gap-2">
-              <select value={role} onChange={(e) => setRole(e.target.value as MemberRole)} className={cn(inputCls, 'flex-1')}>
+              <select aria-label={tr('fieldName.role')} value={role} onChange={(e) => setRole(e.target.value as MemberRole)} className={cn(inputCls, 'flex-1')}>
                 {LOCAL_MEMBER_ROLES.map((r) => <option key={r} value={r}>{tr(ROLE_COPY[r])}</option>)}
               </select>
               <Button type="button" variant="secondary" onClick={addPerson} disabled={!name.trim()}><Plus className="h-4 w-4" /> {tr('onboardingCopy.add')}</Button>
@@ -711,7 +711,7 @@ function MembersPanel({ draft, update }: { draft: OnboardingDraft; update: (p: P
             <input value={email} onChange={(e) => setEmail(e.target.value)} type="email" placeholder="name@email.com" className={inputCls}
               onKeyDown={(e) => { if (e.key === 'Enter') { e.preventDefault(); addInvite(); } }} />
             <div className="flex gap-2">
-              <select value={inviteRole} onChange={(e) => setInviteRole(e.target.value as MemberRole)} className={cn(inputCls, 'flex-1')}>
+              <select aria-label={tr('fieldName.role')} value={inviteRole} onChange={(e) => setInviteRole(e.target.value as MemberRole)} className={cn(inputCls, 'flex-1')}>
                 {INVITE_ROLES.map((r) => <option key={r} value={r}>{tr(ROLE_COPY[r])}</option>)}
               </select>
               <Button type="button" variant="secondary" onClick={addInvite} disabled={!isLikelyEmail(email.trim())}><Plus className="h-4 w-4" /> {tr('onboardingWizard.invite')}</Button>

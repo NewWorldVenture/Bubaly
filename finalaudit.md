@@ -18269,6 +18269,14 @@ The bucket half is an owner decision between two designs, and neither buys anyth
 
 Either way the order is fixed: every reader moves first (while the bucket is still public, so nothing breaks), and only then a migration sets `family-media` private and adds a member-scoped storage SELECT policy.
 
+*Added 2026-09-27 (PORT-001).* The second design is **implemented and ready**, on the audit branch, as commit `68a5a7a1` on `claude/logged-in-pages-supabase-7q6vtf` (24 files). It contains:
+- a reference parser that reads either a stored public URL or a bare path, so no row is rewritten;
+- a batched server signer and a client hook, with every reader listed above moved onto them;
+- the service-worker exclusion;
+- a deploy-coupled migration that sets the bucket private and adds a member-scoped SELECT policy. It is applied only after the readers are live, which is the order stated here.
+
+It is deliberately **not** in the port (#586): this entry leaves the choice between the two designs to the owner. If the owner picks signed URLs, it re-applies onto main in one step. If the owner picks the media route, its reference parser still applies unchanged.
+
 #### Evidence
 Static source/schema/caller evidence at2a5e7e7a. No private object names or contents were fetched and no provider configuration, SQL or repository application source was changed. Current environment exposes no Supabase credentials; one read-only Vercel GET /v9/projects/bubaly returns404 for the current token, which does not establish all-team inaccessibility. Applied catalog and access verification remain pending.
 
@@ -49088,6 +49096,29 @@ role changes that touch `parent` need `is_family_admin`, in the fm_update
 policy (a trigger comparing OLD/NEW role) and in the module's role options.
 Not changed without that answer.
 
+*Added 2026-09-27 (PORT-001).* Two facts for that answer.
+
+- **What a self-promoted adult can do.** `families_delete` checks
+  `is_family_admin` and nothing else. So an adult who promotes themselves to
+  parent can **delete the whole family**, and the delete cascades to every
+  member, wallet and document. They can also demote, deactivate or delete the
+  parents first. The audit branch measured seven such breaches as an invited
+  adult.
+- **A fix is ready if the answer is "adult is not a co-owner".** It is commit
+  `f20ebbed` on `claude/logged-in-pages-supabase-7q6vtf` (SEC-026):
+  - a SECURITY INVOKER trigger on `family_members`, under which only a parent
+    may make, change or remove a parent's row, unless the family has no active
+    parent;
+  - the family module hiding Edit/Remove on parent cards from non-parents, and
+    offering Parent in the picker only to someone who may make one;
+  - a probe with controls for adults managing non-parents, parents managing
+    parents, a parentless family making one, and a parent's family delete still
+    cascading.
+
+  It is deliberately **not** in the port (#586), because this entry leaves it to
+  the owner. It re-applies onto main in one step, taking the next free
+  migration number.
+
 ## C1-K-46 · LOW · A sibling could make someone's marketplace offer vanish
 
 `marketplace_offers` INSERT and UPDATE were already the offerer's, or the
@@ -49509,6 +49540,100 @@ here rather than half-fixed.
   retryable error state, never an empty ledger"); `trust-sharing-section` and
   `paperwork-module`'s AI draft path check `res.ok`.
 
+## PORT-001 · The logged-in-pages audit branch, re-applied onto main one fix at a time
+
+*Recorded 2026-09-27 by session 01DXw2nu25BjyRfA6Fg3YiMS, on `claude/port-to-main-7q6vtf`. Not counted in the master-ledger totals above, like the C1-K sections.*
+
+**Why a port and not a merge.** `claude/logged-in-pages-supabase-7q6vtf` and `main` grew apart for weeks. Its twenty-four migrations reused versions main had already given to other files, so merged as-is the production workflow would have skipped them as "already applied". Several fixes on each side closed the same hole differently: the branch's `0319` against main's `0335`, its `0320` against main's `0319`, its `0330` against main's `0318`/`0345`. The merge came to 437 conflict hunks. The owner chose to port instead: start from main, re-apply only what main does not already have, one source commit at a time, each with its own verification, and number the migrations after main's highest.
+
+**Method, per commit.**
+- Apply the commit's diff to main's tree with a three-way merge.
+- Where main already fixed the same finding, keep main's version and carry over only the remainder. Each commit message says which half came from where.
+- Renumber any new migration after main's highest, and check it first against main's `0342`–`0388` and the open PRs (#548, #556, #583).
+- Replay it on a Postgres 16 harness built from scratch, run its probes and tests, and typecheck.
+
+**Status with main merged in (after #583): the port is complete.** All 104 of the branch's commits are handled:
+- 86 ported, each naming its source commit and which half came from main.
+- 14 audit-only: their content was audit text, or main already had all of it. One of them, `338f64a6`, is folded into the commit before it, whose port typed the same test the same way.
+- 4 deferred, each for a reason below: SEC-026, SEC-001, PUSH-003 and EMAIL-002.
+
+The merged tree is green:
+- tsc is clean. `next lint` reports no errors and 15 warnings, all from the two jsx-a11y rules main turned on as warnings (`click-events-have-key-events`, `no-static-element-interactions`); `--max-warnings=15` pins that as a ceiling.
+- 21,118 tests in 1,668 files pass, the full suite run once in America/Los_Angeles and once in UTC.
+- The harness replays 441 migrations from nothing with none failing.
+- 173 of 173 probes pass, `plpgsql-bodies-resolve` included.
+
+**Migrations `0447`–`0458`, all unapplied.** Each has an entry in `docs/PENDING_PROD_MIGRATIONS.md` under "Ported from the audit branch", with a deploy-order table. None gates a deploy.
+
+| Now | Was | Finding | On main |
+|---|---|---|---|
+| dropped | `0318` | a sharing circle could never be created (definer search_path missed `extensions`) | main's `0444` (#609, found independently by the B6b page audit as its P-13) installs the identical function, so the port's `0446` is removed |
+| `0447` | `0321` | an investment order could be rejected but never approved (42804) | carried whole |
+| `0448` | `0322` | a single-choice poll took every choice | carried whole; main's vote-owner probe forges its sibling vote in a second poll |
+| `0449` | `0323` | a family timezone typo silently meant Greenwich | carried whole; the probe asks the server which legacy zones it can resolve |
+| dropped | `0324` | stored OAuth tokens answered client reads | main's `0406` (from #556) is the same rule, so it is not carried |
+| `0450` | `0325` | feedback screenshots readable by URL | reduced to the bucket flag; main's `0369` had scoped the read policy |
+| dropped | `0326` | step-up MFA guarded a redirect, not the data | main's `0391` guards the same vaults, asking only a manager for the code as the app does, so it is not carried |
+| `0451` | `0327` | a sibling could file a chore dispute in another child's name | reduced to `chore_disputes`; main's `0375` covers submissions |
+| `0452` | `0328` | a proxy bid's ceiling was readable by rival bidders | carried; the app reads through a fallback so it works before and after |
+| `0453` | `0330` | any member could write Guardian call history | reduced to `guardian_communications`; main's `0318`/`0345` cover the rest |
+| `0454` | `0331` | a stranger could onboard into another family as its parent (critical) | carried whole |
+| `0455` | `0332` | decided concierge runs stayed on Needs-you | backfill only; main's code already writes `state` |
+| `0456` | `0333` | two server-only functions were callable with the anon key | carried; main revoked them from PUBLIC only |
+| `0457` | `0334` | no auction could ever close | carried whole |
+| `0458` | `0335` | any account could link a stranger's login into its own family (SEC-025) | carried whole; nothing on main guarded `family_members.user_id` |
+| dropped | `0336` | a removed member and their old household still saw each other's profiles (PRIV-002) | main's `0426` (from #548) installs the identical policy, so it is not carried; its probe and test now hold `0426` |
+
+The branch's `0329` (SEC-017) is **not** carried, because main's `0350` and `0378` already make those four tables manager writes. Its probe is carried and passes against main.
+
+The branch's `0337` (SEC-026, only a parent makes or changes a parent) is **deferred, not dropped**. Main records exactly this as an owner decision ("an adult can make themselves the family's Admin, or demote the parents": not changed without that answer). That entry now also notes that the escalation reaches `families_delete` and points at the ready fix.
+
+The branch's `0338` with its SEC-001 readers (family media private, via signed URLs) is **deferred** for the same reason. Main records the bucket half as the owner's choice between a same-origin media route and signed URLs, and this implements one of them. The SEC-001 entry now points at the ready implementation.
+
+PUSH-003 (retry a partly failed push only to whoever missed it) and EMAIL-002 (count each email event once) were **left to #548**, which carried both findings under the same IDs, and #548's work is now on main through #583:
+- main's `0440` ("a device is buzzed once per notification") keys receipts per **device**, strictly finer than the branch's per-recipient table, since it also re-sends correctly when one of a user's two devices missed.
+- main's `0441` ("an email event is counted once") is the branch's design, down to the `counter_applied_at` column.
+
+So neither is carried, and there is nothing left to re-apply from `417c5817` or `c5d8aad6`.
+
+**Found by the port itself** (on main, not on the branch):
+- The ported capped-read ratchet found `app/api/ai/invest/route.ts` dropping the error of a capped holdings read. The model was told a portfolio value computed from part of the holdings. It now refuses.
+- The page-boundary ratchet found two `invest_holdings` pagers ordered by `asset_id` alone.
+- The select-naming ratchet found a fourth unnamed `<select>` main had added to the marketing platform page.
+- SEC-023's ratchet found six more raw `error.message` returns in server actions.
+- Three main tests and two main probes were pinning the old behaviour, such as the raw database text as the family-facing message.
+- Harness fidelity (TEST-012): the bootstrap's `auth.uid()`/`auth.role()` stubs now read the JSON claims the way Supabase's do, and new functions get Supabase's default grants. That exposed four probe assumptions, all corrected in the probes.
+- Translating the approval card's expiry label would have broken main's expiry check, which compared that label to `'Expired'`. A German family's card would have kept Approve and Decline live on a request the server refuses. The same commit decides expiry from the timestamp, and the German render test is red with the old comparison restored (TEST-014: the test meant to catch this matched the Tailwind class `disabled:cursor-not-allowed` and could never fail).
+- The I18N-006 guard found seven admin sites and voice capture that main still formatted, or listened, in US English.
+- Measured on main's tree rather than copied from the branch: English sentence templates 111 -> 0, now a zero guard; the regex ratchet 2,790 -> 2,368.
+
+**Deploy safety.** Main deploys the app on merge, while no migration from `0318` on has reached production (F-001).
+- `0452`'s code read two columns only the migration creates, so it would have broken every marketplace read in production. `lib/marketplace/reserve-view.ts` now falls back to the pre-migration column on 42703 only, held by `tests/a-reserve-read-works-before-and-after-0452.test.ts`.
+- Every other ported change was checked for the same dependency.
+
+**Coordination.** Main moved while this was open: #583 (366 commits) landed #548's and #556's migration blocks as `0389`–`0391` and `0406`–`0443`, which took the numbers this port had used. Main was merged in with every conflict resolved hunk by hunk, keeping whichever side was the fuller fix and combining them where each carried something the other lacked (309 hunks in 142 files; the catalogues are the union of both sides, 875 keys both had added counted once). The port's thirteen surviving migrations moved as one block, in order, to `0446`–`0458`, above main's newest and the two numbers #583 keeps. Three were dropped because main now carries the same rule: `0393` is main's `0406`, `0395` is main's `0391`, and `0404` is main's `0426`.
+
+**Main merged in again (after #591–#600).** Main moved 46 commits while CI ran, carrying the page-audit fixes (#591, #594) and the media and cache releases (#592, #595, #599, #600), and no migrations, so `0446`–`0458` stay where they are. 111 files conflicted:
+- 61 were page titles: the port's translated `generateMetadata` against main's static title with the doubled brand removed. The port's side already has no brand and is translated, so it is kept. The two whose text ends in the brand ("Switch to Bubaly", "My Bubaly") go through main's `titleWithoutDoubledBrand`.
+- 32 were accessible names both sides had given the same controls. Main's page-specific keys are kept, so none of them is left unused; the port's `fieldName.*` keys stay in use at 78 other sites.
+- The rest were combined: main's own realtime channel (P-03), `role="switch"` and `suppressHydrationWarning`, with the port's translations and its stale-refresh guard.
+- The automatic merge had dropped three en-US keys that both sides had reworded (`actions.couldNotSaveThatPlace`, `couldNotDeleteThatPlace`, `couldNotUpdateThatGeofence`). They are restored with main's fuller wording in all seven catalogues.
+
+Verified after the merge: tsc clean, lint 0 errors / 15 warnings, 21,277 tests in 1,684 files pass in UTC and in America/Los_Angeles.
+
+**What the merge turned up.** Each is fixed in the merge commit and held by a test:
+- **The concierge approval race was open again** (DATA-018). Main's version applied a never-gated plan first and then compare-and-set the run to executed. A dismissal landing in between left real calendar events behind a run recorded as dismissed. The port's claim is restored inside main's structure: take the run (`pending` to `approved`) before applying anything, hand it back if applying throws or leaves kinds unapplied, and confirm the executed stamp and the release by reading back the rows. `tests/a-decided-run-leaves-the-queue.test.ts` races the two actions, and main's `tests/concierge-loop-does-not-claim-a-failed-plan.test.ts` now asserts the claim and the release.
+- The catalogue union had dropped `actions.couldNotApproveThatRun` as orphaned. The restored claim uses it, so it is back in all seven catalogues.
+- Two paged reads ended on a column that can tie: `app/api/ai/savings/route.ts` (transactions by date) and `lib/network/benchmarks-server.ts`. Both now end on `id` (DATA-015's ratchet).
+- Main's timezone guard still declared ten files the port had moved to family day keys, and the port's guard did not know main's `lib/time/zoned.ts` fallback. Both lists now describe the same three files.
+- Main's `family_allergies` RPC took `food.ts` and `shopping.ts` out of PRIV-001's reach baseline, so both entries came off.
+- The photo lightbox keeps `aria-modal`, which the shared dialog hook makes true. Main's newer rule licenses the attribute by that contract, not by component name. Main's older lightbox test and the component's comment still said otherwise; both now match the rule.
+- Eight ordering assertions written on bare `indexOf` now use `at()`, so a deleted statement fails them.
+
+**Main merged in again (through #609).** Main's #609 added `0444`, the same circle fix as the port's `0446`, found independently by the B6b form pass. The port's file is removed rather than renumbered, as `0393`, `0395` and `0404` were. Its analysis stays in `docs/PENDING_PROD_MIGRATIONS.md` under main's number, and the probes and guard that cited `0446` now cite `0444`. Twelve port migrations remain, `0447`–`0458`, and the next free number is `0459` (`0445` and `0446` stay unused).
+
+**Remaining.** Nothing on the branch is left to port. PR #586 (`claude/port-to-main-7q6vtf` into `main`) carries the result. Two items wait on the owner rather than on work: SEC-026 and SEC-001 are decisions main records as the owner's. PRODUCTION READY stays **NO**: nothing here changes F-001, and `0446`–`0458` join the migrations only a person applies to production.
+
 # Final Regression — 2026-09-20, branch `claude/roadmap-implementation-ld8bon`
 
 The section above is the Codex cycle's, pinned to its own frozen trees, and is
@@ -49628,11 +49753,12 @@ because this audit has no production login and must not create data there.
 | B4 | Every signed-in family route (`/dashboard/*`, `/family`, `/wallet`, `/marketplace`, `/guardian`, `/missions`, `/kids`, …) as a Family+ parent and as a trial parent, local, 1280; the Family+ run also at 390 for the pages a fix touched | session_01KRUgA6hD6QgzmtpSP6TUmP | ✅ done, first pass | 2026-09-27 12:20 |
 | B5 | Every `/admin/*` route as a super administrator, local, 1280; fixed pages also at 390 | session_01KRUgA6hD6QgzmtpSP6TUmP | ✅ done, first pass | 2026-09-27 12:20 |
 | B6 | Interaction pass: every primary control on every signed-in page (submit each form, open each dialog, each tab), not only the render. **B6a** — open every tab, menu, disclosure and dialog opener (`page-audit.mjs --interact`, local only, never a submit or a destructive button). **B6b** — submit each form | session_01KRUgA6hD6QgzmtpSP6TUmP (B6a); session_01TRY21ZKsFrfB3qtoP972A4 (B6b) | ✅ B6a done (278 family routes as a Family+ parent, 1,187 clicks; P-09, P-10 found and fixed); ✅ B6b done, first pass (`page-audit.mjs --submit`: 350 signed-in routes as a Family+ parent and super admin, 155 with forms, ~190 submissions; P-13 to P-18 found and fixed) | 2026-09-27 19:45 |
-| B7 | The same routes as a child and as a teen (role-gated views, `/kid-login` sessions) | session_01KRUgA6hD6QgzmtpSP6TUmP | ✅ done: teen and child email accounts, 278 routes each. The `/kid-login` part is B11 (claimed by another session); before that claim reached this branch, this session had already signed a child in through `/kid-login` with a username and PIN made on `/dashboard/family-access` and render-crawled all 278 routes at 1280 px (all pass bar the by-design 404), and found and fixed P-19 on the way — B11 can take those as its 1280 render pass | 2026-09-27 19:55 |
+| B7 | The same routes as a child and as a teen (role-gated views, `/kid-login` sessions) | session_01KRUgA6hD6QgzmtpSP6TUmP (first pass); session_01DXw2nu25BjyRfA6Fg3YiMS (second pass) | ✅ done: first pass (teen + child accounts in the Family+ household, 278 routes each, 1280 px); second pass (a `/kid-login` PIN child and a teen, 354 signed-in routes each at 1280 and 390, in a household on no plan and then on Family+; P-19 to P-22 fixed, see "B7, second pass" below) | 2026-09-27 19:10 |
 | B8 | The other ten locales (`en-GB`, `de-DE`, `es-ES`, `es-MX`, `es-US`, `fr-CA`, `fr-FR`, `it-IT`, `nl-NL`, `pt-PT`): every public page, and the signed-in pages B4 lists | session_01KRUgA6hD6QgzmtpSP6TUmP | ✅ done (public: 41 pages × 10 locales, production; signed in: 278 family routes × 10 locales, local, 2,780 loads; P-11, P-12 found and fixed) | 2026-09-27 19:30 |
 | B9 | Signed-in pages against production itself (needs an operator-provided test household; this audit has no production login and must not create data there) | — | ⛔ needs an operator | — |
 | B10 | Signed-in pages at 390 px for every route | session_01KRUgA6hD6QgzmtpSP6TUmP | ✅ done (round 2: 278 family + 78 admin + 37 id-based routes) | 2026-09-27 12:55 |
 | B11 | `/kid-login` PIN sessions (B7's remainder): sign in as a child with the family code and PIN, then every route that session can reach — render, controls and forms — local, 1280 and 390 | session_01TRY21ZKsFrfB3qtoP972A4 | 🔄 claimed 2026-09-27 19:40 | — |
+| B12 | Post-release re-crawl of every public page on production (sitemap + the routes it omits), 1280 and 390, after today's merges (#586, #591–#614) reached www.bubaly.com | session_01DXw2nu25BjyRfA6Fg3YiMS | 🔄 claimed 2026-09-27 20:10 | — |
 
 "First pass" is what the crawler measures: the page loads and renders
 without an error, a failing request, a broken layout or a missing heading,
@@ -49860,8 +49986,11 @@ wide-tracked capitals, ran 62 px out of its card — a text overflow no
 element's box shows, found by measuring text ranges. It is now in a
 shrinkable span that may break (`[overflow-wrap:anywhere]`).
 
-**P-19 · Low · The kid-login form had an unnamed button and unlabelled
-fields (B7).** `/dashboard/family-access` shows its "create a login" form only
+**P-19a · Low · The kid-login form had an unnamed button and unlabelled
+fields (B7).** *(Renumbered on merge: main's B7 second pass (#614) used P-19
+for the plan-gate finding below. The same form was fixed on main, independently,
+with names that say whose login each control is for; main's component is the
+one kept, and the test below now pins it.)* `/dashboard/family-access` shows its "create a login" form only
 after *Create login* is pressed, so no page sweep had rendered it: the
 submit was a bare check-mark icon with no accessible name, the username and
 PIN fields were labelled only by English placeholders, the reset form's field
@@ -50008,6 +50137,63 @@ teen should see `/dashboard/trust` and the wallet's activation page at all is a
 product question (both are read-only there, and every write behind them is
 refused by the manager checks recorded in the AUTHZ units); it is left for B6,
 which clicks the controls.
+
+### B7, second pass — a `/kid-login` session, and a household without Family+
+
+*session_01DXw2nu25BjyRfA6Fg3YiMS, claimed on #585 at 14:25Z, run 2026-09-27 17:30–19:10Z.* The first pass (above) used teen and child accounts that sign in with email, in a Family+ household. This pass closes the two gaps it named or implied:
+- a child who signs in the way children do, through `/kid-login` with a username and PIN;
+- a household on no plan, where the plan gate is live.
+
+**Setup.** A local stack from `main` plus #586 (all 0446–0458 migrations applied, Node 24.21, `next build && next start`). The household was seeded with `scripts/seed-personas.mjs`: two parents, a teen with an email login, and a managed child. The child's login was created through the parent's own **Family access → Create login** row, and that child then signed in at `/kid-login`. Id-based routes got seeded rows (a vacation, a contact, a home asset, a run, a listing, a store, a chore assignment, a child wallet).
+
+| Pass | Pages | Flags | What they were |
+| --- | --- | --- | --- |
+| Teen, household on no plan, every signed-in route, 1280 px | 354 | 5 | **P-21** (sync accounts page never settles); four sidebar `Failed to fetch` on a redirect (**P-07**, #585, now on main) |
+| Child via `/kid-login`, household on no plan, every signed-in route, 1280 px | 354 | 3 | **P-21**; two sidebar aborts (**P-07**) |
+| Teen and child, the 27 routes the plan gate had redirected, after the household got Family+ | 27 × 2 | 0 | all render in place (`/parent` is an alias of `/dashboard/family-operations`) |
+| Teen and child, every signed-in route, 390 px, on the build with P-19 to P-22 fixed and the household on Family+ | 354 × 2 | 0 | every route renders with no sideways scroll and no console error; `/dashboard/assistant` (and its alias) and `/dashboard/grocery` had no `<h1>` on this build, which predates **P-06** (#585, now on main), and every other route had exactly one |
+
+Where the teen and the child were sent:
+- all 81 `/admin` routes and `/auth/step-up` go to `/dashboard`, correctly;
+- `/dashboard/family-access` goes to `/home`, correctly;
+- with no plan, 25 (teen) and 26 (child) routes go to the plan gate, which is **P-19**.
+
+Every other route renders the member's view.
+
+**P-19 · Medium · The plan gate landed every family on their balances, not on the plan.** `requirePlanLevel` and `requireFeature` send a family below the needed plan to `/dashboard/billing?upgrade=1&need=N`, and `BillingModule` reads both parameters: it highlights the plan that unlocks the feature and tells anyone but a parent to ask one. But `/dashboard/billing` renders `BillingModule` only for `?view=manage`, which the gate never sent. So Missions, Rewards, the Home hub, Sports, the weekly briefing and the rest landed a Free or Basic family on the Finances dashboard, with balances, "Add Transaction" and "Link Account", and no word about why. It was the same for a parent. Pass L's account of the gate ("a billing upsell") described a screen that was never shown.
+
+Fixed: the page shows the plan view for `?upgrade=1` and for the demo's `?checkout=…`, and the plan card renders first for those. Checked on a local build:
+- a parent lands on "Family+ unlocks the feature you tapped — pick a billing period below";
+- a teen lands on the card ending "Contact your family admin to manage billing."
+
+`tests/a-plan-gate-lands-on-the-plan.test.ts` evaluates the page's own routing condition. It fails 3 of 4 on the previous code.
+
+**P-20 · Low · The plan card ticked features the plan does not include.** Under the subscription card, one fixed English list rendered for every plan. A Free family whose card said "The default family organizer for up to 5 members" saw "Unlimited family members", "All modules" and "Priority support" ticked beside it. Fixed: the grid shows the current tier's own features, the same list the plan picker uses, and nothing on Free. Held by the same test file.
+
+**P-21 · Medium · Opening the sync accounts page started an OAuth flow.** `/dashboard/sync/accounts/google` never settled for the teen or the child. Its "Connect Google" (and "Connect Microsoft") button was a Next `<Link>` to `/api/sync/google/auth`, a route handler that:
+- mints an OAuth state and sets its cookie;
+- clears the calendar-onboarding continuation cookie;
+- redirects to the provider.
+
+`<Link>` prefetches what is on screen, so viewing the page did all of that, and a click went through an RSC fetch that fails cross-origin before falling back to a full navigation. The calendar module already links the same starts with a plain `<a>`.
+
+Fixed with a plain `<a>`. On a local build the page settles and makes no OAuth request on view. `tests/a-link-never-prefetches-a-route-handler.test.ts` derives every route handler's path from `app/**/route.ts` and fails any `<Link>` whose literal `href` is one; its sync-page check fails on the previous code.
+
+**P-22 · Low · The child-login controls were unnamed or English.**
+- **`/dashboard/family-access`, "Create login" row:** it renders only after its button is pressed, so no render crawl reached it. The username and PIN inputs were named only by English placeholders ("username", "PIN"), and the confirm button held nothing but a check-mark icon, so a screen reader announced "button" for the step that creates a child's login.
+- **The reset row:** its "Save" was a literal, and the button lost its name while the spinner replaced it.
+- **`/kid-login`:** the show/hide PIN control said "Show PIN" in English in every household.
+
+Fixed: every input and button in both rows is named from the catalogue. The new keys reuse each locale's existing wording for username, PIN, save and show/hide PIN. On a local build `/kid-login` in German reads "PIN anzeigen", and the reset row reads "New PIN for Maya Rivera" / "Save Maya Rivera's new PIN". `tests/a-kid-login-control-is-named-in-the-familys-language.test.ts` fails 3 of 5 on the previous code.
+
+**Seen, and already the owner's call (PROD-002).** A child's `/kid-login` session opens Tax Vault with every row, and the database lets that session edit and delete them too. `tax_documents` is `FOR ALL is_family_member`, and `0391`'s step-up guard binds only managers (`… or not can_manage_family`). So a parent must present a code to read tax documents that their ten-year-old reads without one.
+
+PROD-002 records `tax_documents` among the surfaces whose member access is the owner's decision. Nothing is changed here; this adds the measurement that a PIN-only child session reaches it.
+
+The neighbouring tables hold:
+- `household_info` keeps its sensitive rows (the alarm code) manager-only;
+- `family_insurance_policies` is member-readable and manager-writable;
+- stored passwords (`family_credentials`) are manager-only, and the child's Passwords page shows none.
 
 ### B6a — the interaction pass (every tab, dialog and button, clicked)
 
