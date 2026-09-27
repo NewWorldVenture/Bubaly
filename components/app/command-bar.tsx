@@ -29,6 +29,7 @@ import { useToast } from '@/components/ui/toast';
 import { describeDbError } from '@/lib/supabase/errors';
 import { saveCapture, undoCapture } from '@/lib/capture/save';
 import { NAV_CATALOG } from '@/lib/constants/navigation';
+import { navLabel } from '@/lib/i18n/nav-label';
 import { MIN_RECORD_QUERY, routeCommand, type CommandRecord, type CommandResult } from '@/lib/command-bar/route';
 import { kindLabelKey } from '@/lib/search/rank';
 import { searchRecordsAction } from '@/app/(app)/dashboard/search/actions';
@@ -39,7 +40,18 @@ import { useLockBodyScroll } from '@/lib/hooks/use-lock-body-scroll';
 import { useTranslations } from '@/components/i18n/locale-provider';
 import { useDialogBehavior } from '@/lib/a11y/use-dialog-behavior';
 
-const NAV_ITEMS = NAV_CATALOG.map((n) => ({ href: n.href, label: n.label }));
+// The router works on English identifiers; what a person reads comes from the
+// catalogue. Nav items are matched on their translated label, so a German
+// family finds the pantry by typing "Vorrat".
+const CAPTURE_KEYS: Record<string, string> = {
+  task: 'voiceModule.routeTask', note: 'voiceModule.routeNote', event: 'voiceModule.routeEvent', shopping: 'voiceModule.routeShopping',
+};
+const INTENT_KEYS: Record<string, string> = {
+  check_availability: 'commandBarIntent.checkAvailability', start_life_event: 'commandBarIntent.startLifeEvent',
+  plan_event: 'commandBarIntent.planEvent', make_decision: 'commandBarIntent.makeDecision',
+  check_readiness: 'commandBarIntent.checkReadiness', plan_move: 'commandBarIntent.planMove',
+  plan_trip: 'commandBarIntent.planEvent', prep_for: 'commandBarIntent.prepFor', plan_meals: 'commandBarIntent.planMeals',
+};
 
 /** The router's results plus the concierge request the bar offers in place of the assistant hand-off. */
 export type CommandBarResult = Exclude<CommandResult, { kind: 'assistant' }> | { kind: 'request'; text: string; label: string };
@@ -69,10 +81,20 @@ export function CommandBar() {
   const [recordsFailed, setRecordsFailed] = useState(false);
   const inputRef = useRef<HTMLInputElement>(null);
 
+  const navItems = useMemo(() => NAV_CATALOG.map((n) => ({ href: n.href, label: navLabel(t, n.label) })), [t]);
   const results = useMemo(
-    () => (open ? toCommandBarResults(routeCommand(query, NAV_ITEMS, new Date(), records)) : []),
-    [open, query, records],
+    () => (open ? toCommandBarResults(routeCommand(query, navItems, new Date(), records)) : []),
+    [open, query, records, navItems],
   );
+  const labelOf = useCallback((r: CommandBarResult): string => {
+    switch (r.kind) {
+      case 'search': return t('commandBar.seeAllResultsFor', { query: r.query });
+      case 'request': return t('commandBar.askBubaly', { query: r.text });
+      case 'capture': return t('commandBar.routeWithText', { route: CAPTURE_KEYS[r.captureKind] ? t(CAPTURE_KEYS[r.captureKind]) : r.captureKind, text: r.text });
+      case 'intent': return INTENT_KEYS[r.intent] ? t(INTENT_KEYS[r.intent]) : r.label;
+      default: return r.label;
+    }
+  }, [t]);
 
   // Household records for the current query. Debounced, and every response is
   // matched against the query that asked for it — a slow fan-out landing after
@@ -164,15 +186,15 @@ export function CommandBar() {
       const res = await saveCapture(createClient(), { kind: r.captureKind, text: r.text, familyId, userId, memberId: selfMember?.id ?? null });
       setOpen(false);
       success(
-        res.count > 1 ? `${res.count} items added` : r.label,
-        { label: 'Undo', onClick: () => { void undoCapture(createClient(), res.undo).then(() => success(t('commandBar.undone'))).catch(() => toastError(t('commandBar.couldNotUndo'))); } },
+        res.count > 1 ? t('commandBar.itemsAdded', { n: res.count }) : labelOf(r),
+        { label: t('commandBar.undoAction'), onClick: () => { void undoCapture(createClient(), res.undo).then(() => success(t('commandBar.undone'))).catch(() => toastError(t('commandBar.couldNotUndo'))); } },
       );
     } catch (err) {
       toastError(describeDbError(err, t('commandBar.couldNotSaveThat')));
     } finally {
       setBusy(false);
     }
-  }, [busy, router, pathname, familyId, userId, selfMember, success, toast, toastError, t]);
+  }, [busy, router, pathname, familyId, userId, selfMember, success, toast, toastError, t, labelOf]);
 
   // Speaking fills the bar rather than firing blind: the same ranked list a
   // typed query produces is shown, so the person still chooses the outcome.
@@ -240,7 +262,7 @@ export function CommandBar() {
                     : r.kind === 'intent' ? Wand2
                       : r.kind === 'record' ? FileSearch
                         : r.kind === 'search' ? Search : ListPlus;
-                const label = r.kind === 'search' ? t('commandBar.seeAllResultsFor', { query: r.query }) : r.label;
+                const label = labelOf(r);
                 return (
                   <li key={`${r.kind}-${i}`}>
                     <button
