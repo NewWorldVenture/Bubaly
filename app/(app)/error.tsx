@@ -5,6 +5,7 @@ import Link from 'next/link';
 import { AlertTriangle, RotateCw, Home } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { useTranslations } from '@/components/i18n/locale-provider';
+import { reloadOnceForChunkFailure } from '@/lib/utils/stale-bundle-reload';
 
 // Error boundary for the authenticated app. Because it lives inside the (app)
 // route group it renders within the app shell (sidebar/nav stay put), so a
@@ -20,6 +21,8 @@ export default function AppError({
   const t = useTranslations();
   useEffect(() => {
     console.error('[Bubaly] app route error:', error);
+    // A chunk that failed to load fails again on reset(); a reload fetches it.
+    reloadOnceForChunkFailure(error);
   }, [error]);
 
   return (

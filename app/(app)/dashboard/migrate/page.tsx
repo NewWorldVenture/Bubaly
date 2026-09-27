@@ -8,8 +8,13 @@ import { competitorByKey } from '@/lib/migrate/competitors';
 import { getFormat } from '@/lib/utils/format-server';
 import { ErrorState } from '@/components/ui/states';
 import { getTranslations } from '@/lib/i18n/server';
+import { titleWithoutDoubledBrand } from '@/lib/marketing/seo';
 
-export const metadata: Metadata = { title: { absolute: 'Switch to Bubaly' } };
+export async function generateMetadata(): Promise<Metadata> {
+  const t = await getTranslations();
+  // "Switch to Bubaly" already ends in the brand the root template appends.
+  return { title: titleWithoutDoubledBrand(t('navLabel.switchToBubaly')) };
+}
 export const dynamic = 'force-dynamic';
 
 export default async function MigratePage() {

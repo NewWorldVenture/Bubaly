@@ -6,7 +6,10 @@ import { getPosts } from '@/lib/social/queries';
 import { PostsList, PostTabs } from '@/components/social/posts-list';
 import { getTranslations } from '@/lib/i18n/server';
 
-export const metadata: Metadata = { title: 'Posts · Social' };
+export async function generateMetadata(): Promise<Metadata> {
+  const t = await getTranslations();
+  return { title: `${t('pageTitle.posts')} · ${t('pageTitle.social')}` };
+}
 export const dynamic = 'force-dynamic';
 
 export default async function SocialPostsPage() {

@@ -17,6 +17,7 @@
 // urgent text would reach a stranger); and a caller to the family line is
 // actually put through.
 
+import { createHmac } from 'node:crypto';
 import { readFileSync } from 'node:fs';
 import { NextRequest } from 'next/server';
 import { beforeAll, beforeEach, afterEach, describe, expect, it, vi } from 'vitest';
@@ -179,9 +180,18 @@ describe('a call to the family line with a legacy fallback value on the row', ()
   it('is put through rather than dropped on a document Twilio cannot parse', async () => {
     Object.assign(db.table('family_contact_channels')[0], { ai_concierge_enabled: false, forward_to_phone: 'Mom & Dad <555-0200>' });
     const { POST } = await import('@/app/api/contact-center/voice/route');
-    const req = new NextRequest(`${ORIGIN}/api/contact-center/voice`, {
-      method: 'POST', headers: { 'content-type': 'application/x-www-form-urlencoded' },
-      body: new URLSearchParams({ To: LINE, From: NEIGHBOUR, CallSid: `CA${'1'.repeat(32)}` }),
+    // Signed as Twilio signs it, with the token stubbed above: the voice route
+    // verifies every request now, not only in production (SEC-015's ingress).
+    const url = `${ORIGIN}/api/contact-center/voice`;
+    const params: Record<string, string> = { To: LINE, From: NEIGHBOUR, CallSid: `CA${'1'.repeat(32)}` };
+    const signed = url + Object.keys(params).sort().map((key) => key + params[key]).join('');
+    const req = new NextRequest(url, {
+      method: 'POST',
+      headers: {
+        'content-type': 'application/x-www-form-urlencoded',
+        'x-twilio-signature': createHmac('sha1', 'test-only-contact-token').update(signed).digest('base64'),
+      },
+      body: new URLSearchParams(params),
     });
     const xml = await (await POST(req)).text();
     expect(xml).toContain('<Dial');

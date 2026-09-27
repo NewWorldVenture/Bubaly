@@ -8,6 +8,7 @@
 import { useEffect } from 'react';
 import { translate } from '@/lib/i18n/translate';
 import { GLOBAL_ERROR_MESSAGES } from '@/lib/i18n/global-error-messages';
+import { reloadOnceForChunkFailure } from '@/lib/utils/stale-bundle-reload';
 
 // Not `useTranslations()`, and not a LocaleProvider of its own either.
 //
@@ -36,6 +37,8 @@ export default function GlobalError({
   const t = (key: string) => translate(GLOBAL_ERROR_MESSAGES, key);
   useEffect(() => {
     console.error('[Bubaly] root error:', error);
+    // A chunk that failed to load fails again on reset(); a reload fetches it.
+    reloadOnceForChunkFailure(error);
   }, [error]);
 
   return (
@@ -94,7 +97,8 @@ export default function GlobalError({
               fontSize: '0.875rem',
               fontWeight: 600,
               color: '#ffffff',
-              background: '#7c5dff',
+              // The brand (--brand), 5.36:1 under white; #7c5dff was 4.31:1.
+              background: '#744be8',
             }}
           >
             {t('globalError.tryAgain')}
@@ -116,7 +120,7 @@ export default function GlobalError({
           </a>
         </div>
         {error.digest && (
-          <p style={{ margin: 0, fontSize: '0.75rem', color: '#6b7688' }}>
+          <p style={{ margin: 0, fontSize: '0.75rem', color: '#7d889b' }}>
             Reference:{' '}
             <code style={{ background: 'rgba(237,240,247,0.08)', borderRadius: 4, padding: '0.1rem 0.35rem' }}>
               {error.digest}

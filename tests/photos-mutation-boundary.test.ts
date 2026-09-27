@@ -20,9 +20,22 @@ describe('photos module mutations surface failures (A-05)', () => {
     // bound and surfaced before storage is touched, which the lines below keep.
     expect(fn).toMatch(/const \{ (?:data(?:: \w+)?, )?error \} = await supabase\.from\('family_photos'\)\.delete\(\)/);
     expect(fn).toContain('if (error) { toastError(describeDbError(error)); return; }');
-    // Row delete + its guard must precede both the storage removal and the success toast.
-    expect(at(fn, '.delete()')).toBeLessThan(at(fn, ".storage.from('family-media').remove"));
+    // Row delete + its guard must precede both the storage removal and the
+    // success toast. The removal is located by what it DOES, not by how it is
+    // spelled: this read `.storage.from('family-media').remove` and broke when
+    // the call moved behind removeFamilyMedia — the ordering it cares about was
+    // unchanged, and the property was still true.
+    const removalAt = Math.min(
+      ...[/\.storage\.from\('family-media'\)\.remove/, /removeFamilyMedia\(/]
+        .map((pattern) => { const m = pattern.exec(fn); return m ? m.index : Number.POSITIVE_INFINITY; }),
+    );
+    expect(removalAt, 'deletePhoto must remove the storage object somehow').toBeLessThan(Number.POSITIVE_INFINITY);
+    expect(at(fn, '.delete()')).toBeLessThan(removalAt);
     expect(at(fn, 'if (error)')).toBeLessThan(at(fn, "success(tr('photosModule.photoDeleted'))"));
+    // SEC-015: and the removal must be checked before success is claimed.
+    expect(removalAt).toBeLessThan(at(fn, "success(tr('photosModule.photoDeleted'))"));
+    expect(fn.slice(removalAt, fn.indexOf("success(tr('photosModule.photoDeleted'))")))
+      .toMatch(/if \(removal\.error\)[\s\S]*return;/);
   });
 
   it('toggleFavorite and updateCaption surface write errors instead of swallowing them', () => {

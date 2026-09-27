@@ -30,6 +30,7 @@ import {
   type DriveTimeEstimate, type DriveTimeFetcher, type DriveTimeRequest,
 } from '@/lib/trips/drive-time';
 import { clockInZone, dayKeyInZone, zonedTimeMs } from '@/lib/schedule/zoned';
+import { mapWithConcurrency } from '@/lib/utils/map-with-concurrency';
 
 export type { DriveTimeEstimate, DriveTimeFetcher, DriveTimeRequest };
 
@@ -204,6 +205,9 @@ function eventWindow(e: ScheduleEventRow, defaultDurationMin: number): Window | 
  * or a throw) simply has no entry, which is what makes `compose` fall back to
  * the category buffer for it.
  */
+/** Simultaneous drive-time lookups. See the note at the call site below. */
+const DRIVE_TIME_CONCURRENCY = 6;
+
 export async function resolveDriveTimes(
   events: ScheduleEventRow[],
   driveTime: DriveTimeFetcher | null | undefined,
@@ -212,8 +216,14 @@ export async function resolveDriveTimes(
   if (!driveTime) return out;
   const fetcher = firstDriveTime(driveTime);
   const located = events.filter((e) => !e.all_day && e.location && e.location.trim() && Number.isFinite(Date.parse(e.starts_at)));
-  const results = await Promise.all(located.map((e) =>
-    fetcher({ eventId: e.id, title: e.title, location: e.location!.trim(), startsAt: e.starts_at })));
+  // Bounded, not `Promise.all(located.map(...))`. That started one request per
+  // located event, all at once, so the width of the fan-out was whatever the
+  // family's calendar happened to be — two hundred events, two hundred
+  // simultaneous calls to an external routing provider (F-F09). Six lanes is
+  // enough to keep the page fast and small enough to stay inside an ordinary
+  // provider's per-second allowance.
+  const results = await mapWithConcurrency(located, DRIVE_TIME_CONCURRENCY, (e) =>
+    fetcher({ eventId: e.id, title: e.title, location: e.location!.trim(), startsAt: e.starts_at }));
   located.forEach((e, i) => { const est = results[i]; if (est) out[e.id] = est; });
   return out;
 }

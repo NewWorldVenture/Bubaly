@@ -12,7 +12,10 @@ import type { Tables } from '@/lib/database.types';
 import { ContactCenterModule } from '@/components/modules/contact-center-module';
 import { ErrorState } from '@/components/ui/states';
 
-export const metadata: Metadata = { title: 'Family Operations Center' };
+export async function generateMetadata(): Promise<Metadata> {
+  const t = await getTranslations();
+  return { title: t('pageTitle.familyOperationsCenter') };
+}
 export const dynamic = 'force-dynamic';
 
 // Family+ only. The central contact identity (@bubaly.com address + dedicated

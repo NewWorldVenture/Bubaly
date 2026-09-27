@@ -9,6 +9,7 @@ import { readFileSync } from 'node:fs';
 import { resolve } from 'node:path';
 import React from 'react';
 import { renderToStaticMarkup as renderRaw } from 'react-dom/server';
+
 import { renderTranslated } from './helpers/render-translated';
 import { describe, expect, it, vi } from 'vitest';
 

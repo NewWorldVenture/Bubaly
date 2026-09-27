@@ -13,7 +13,7 @@ import { useApp } from '@/components/app/app-context';
 import { useRealtimeQuery } from '@/lib/hooks/use-realtime-query';
 import { createClient } from '@/lib/supabase/client';
 import { describeDbError, wroteNoRows } from '@/lib/supabase/errors';
-import { FAMILY_MEDIA_MAX_LABEL, partitionBySize, familyMediaPath } from '@/lib/storage/family-media';
+import { FAMILY_MEDIA_MAX_LABEL, partitionBySize, familyMediaPath, removeFamilyMedia } from '@/lib/storage/family-media';
 import { useFamilyMediaUrls } from '@/lib/storage/use-family-media';
 import { FamilyMediaImg } from '@/components/media/family-media-img';
 import { useToast } from '@/components/ui/toast';
@@ -182,13 +182,13 @@ export function PhotosModule() {
   // `lightboxIdx !== null` is the real open condition, not a literal `true`: the
   // element is only rendered while it is open.
   //
-  // What it deliberately does NOT do is declare aria-modal. The attribute tells
-  // assistive technology the rest of the page is inert, and the rule this
-  // codebase settled on is that only the shared Modal says it — a photo viewer
-  // cannot take that component's chrome (a title bar and a max-w-lg panel over a
-  // full-bleed image), and the grandfathered list of overlays that say it
-  // themselves may only shrink. The behaviour the attribute promises is
-  // implemented here regardless; what is left out is the CLAIM, not the trap.
+  // It declares aria-modal, which tells assistive technology the rest of the
+  // page is inert, and that claim is true only because the hook below makes it
+  // so. The licence is the contract, not a name: a component may say
+  // aria-modal when it takes useDialogBehavior and attaches the ref
+  // (tests/consent-preference-centre-focus.test.ts, hasDialogContract). A photo
+  // viewer cannot take the shared Modal's chrome — a title bar and a max-w-lg
+  // panel over a full-bleed image — so it takes the behaviour instead.
   const lightboxRef = useRef<HTMLDivElement>(null);
   const closeLightbox = useCallback(() => setLightboxIdx(null), []);
   useDialogBehavior(lightboxRef, lightboxIdx !== null, { onClose: closeLightbox });
@@ -233,14 +233,16 @@ export function PhotosModule() {
     if (error) { toastError(describeDbError(error)); return; }
     if (wroteNoRows(removedRow)) { toastError(tr('errors.thatChangeWasNotSaved')); void refreshPhotos(); return; }
     // This module deletes the ROW first, deliberately — the comment above says
-    // why, and that reasoning is left intact. What it did not do was read this
-    // result: a file that survives after its row is gone is invisible, and
-    // "Photo deleted" was said either way. The row really is gone, so this
-    // cannot refuse; it can stop claiming, and say what is actually true.
-    // Audit C1-S6-01.
-    const { error: storageError } = await supabase.storage.from('family-media').remove([photo.storage_path]);
-    if (storageError) {
-      console.error('[photos] storage object survived its deleted row', { path: photo.storage_path }, storageError);
+    // why. What it did not do was read the storage result: a file that survives
+    // after its row is gone is referenced by nothing, and "Photo deleted" was
+    // said either way. The row really is gone, so this cannot refuse; it can
+    // stop claiming. And storage answers a refused delete and a delete of
+    // something absent identically — `error: null`, `data: []` — so the
+    // returned list, read by removeFamilyMedia, is what says the file is gone
+    // (SEC-015). Audit C1-S6-01.
+    const removal = await removeFamilyMedia(supabase, photo.storage_path);
+    if (removal.error) {
+      console.error('[photos] storage object survived its deleted row', { path: photo.storage_path }, removal.error);
       toastError(tr('photosModule.theFileCouldNotBe'));
       void refreshPhotos();
       if (lightboxIdx !== null) setLightboxIdx(null);
@@ -492,7 +494,7 @@ export function PhotosModule() {
               the keyboard's way out is Escape, which the dialog hook handles. */}
           <div className="absolute inset-0 bg-black/95" onClick={closeLightbox} aria-hidden />
           <div ref={lightboxRef} tabIndex={-1}
-            role="dialog" aria-label={tr('photosModule.photoViewer')}
+            role="dialog" aria-modal="true" aria-label={tr('photosModule.photoViewer')}
             className="relative flex h-full w-full items-center justify-center outline-none">
             {/* Nav */}
             {lightboxIdx > 0 && (

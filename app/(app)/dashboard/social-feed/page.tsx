@@ -1,10 +1,14 @@
 import type { Metadata } from 'next';
+import { getTranslations } from '@/lib/i18n/server';
 import { requireUserContext } from '@/lib/supabase/auth';
 import { settleAll } from '@/lib/supabase/settle';
 import { createServer } from '@/lib/supabase/server';
 import { SocialFeedModule, type FeedSource, type FeedItem } from '@/components/modules/social-feed-module';
 
-export const metadata: Metadata = { title: 'Social Feed' };
+export async function generateMetadata(): Promise<Metadata> {
+  const t = await getTranslations();
+  return { title: t('navLabel.socialFeed') };
+}
 export const dynamic = 'force-dynamic';
 
 export default async function SocialFeedPage() {

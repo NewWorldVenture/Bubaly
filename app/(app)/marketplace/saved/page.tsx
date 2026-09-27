@@ -9,7 +9,10 @@ import { KIND_LABELS, priceLabel, type ListingKind, type RentPeriod } from '@/li
 import { getLocaleContext, getTranslations } from '@/lib/i18n/server';
 import { ErrorState } from '@/components/ui/states';
 
-export const metadata: Metadata = { title: 'Saved · Marketplace' };
+export async function generateMetadata(): Promise<Metadata> {
+  const t = await getTranslations();
+  return { title: `${t('aiSettings.saved')} · ${t('navLabel.marketplace')}` };
+}
 export const dynamic = 'force-dynamic';
 
 export default async function MarketplaceSavedPage() {

@@ -1,9 +1,9 @@
 import type { Metadata } from 'next';
+import { getTranslations } from '@/lib/i18n/server';
 import { Suspense } from 'react';
 import { Logo } from '@/components/brand/logo';
 import { JoinInvite } from '@/components/auth/join-invite';
 import { LoadingBlock } from '@/components/ui/states';
-import { getTranslations } from '@/lib/i18n/server';
 
 // The tab title is copy like any other: it was English in every locale.
 // Audit C1-S9-100.

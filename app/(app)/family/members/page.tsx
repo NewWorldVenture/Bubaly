@@ -11,7 +11,10 @@ import { Avatar } from '@/components/ui/avatar';
 import { fmtDate } from '@/lib/utils/format';
 import { getTranslations } from '@/lib/i18n/server';
 
-export const metadata: Metadata = { title: 'Family Members' };
+export async function generateMetadata(): Promise<Metadata> {
+  const t = await getTranslations();
+  return { title: t('navLabel.familyMembers') };
+}
 export const dynamic = 'force-dynamic';
 
 export default async function FamilyMembersPage() {
@@ -45,7 +48,7 @@ export default async function FamilyMembersPage() {
     <div className="space-y-5">
       <PageHeader
         title={t('familyMembers.familyMembers')}
-        description={`Everyone in ${ctx.active.family.name}.`}
+        description={t('familyMembers.everyoneIn', { name: ctx.active.family.name })}
         action={manager ? (
           <Link href="/dashboard/settings#members" className="inline-flex items-center gap-1.5 rounded-xl bg-brand px-3.5 py-2 text-sm font-semibold text-white">
             <Settings className="h-4 w-4" /> {t('familyMembers.manageInvite')}

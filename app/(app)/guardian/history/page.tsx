@@ -7,7 +7,10 @@ import { ErrorState } from '@/components/ui/states';
 import { Clock, ArrowLeft } from 'lucide-react';
 import { getTranslations } from '@/lib/i18n/server';
 
-export const metadata: Metadata = { title: 'Communication History · AI Call Guardian' };
+export async function generateMetadata(): Promise<Metadata> {
+  const t = await getTranslations();
+  return { title: `${t('guardianHistory.communicationHistory')} · ${t('navLabel.aiCallGuardian')}` };
+}
 export const dynamic = 'force-dynamic';
 
 export default async function HistoryPage({
@@ -36,7 +39,12 @@ export default async function HistoryPage({
       { count: 'exact' },
     )
     .eq('family_id', familyId)
+    // `started_at` defaults to now(), which is transaction-start time, so a
+    // batch of calls written together shares it exactly. Paging by it alone has
+    // no total order, and an unrelated edit is enough to move a tied row across
+    // a page boundary — the reader then sees it twice and misses its neighbour.
     .order('started_at', { ascending: false })
+    .order('id', { ascending: false })
     .range(offset, offset + pageSize - 1)]);
 
   const totalPages = Math.ceil((count ?? 0) / pageSize);

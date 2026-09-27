@@ -1,5 +1,5 @@
 import type { SupabaseBrowser } from '@/lib/supabase/types';
-import { describeActionError } from '@/lib/supabase/errors';
+import { removeConfirmed } from '@/lib/storage/confirm-removal';
 
 export const MARKETPLACE_PHOTOS_BUCKET = 'marketplace-photos';
 export const MARKETPLACE_PHOTO_MAX_BYTES = 10 * 1024 * 1024;
@@ -29,8 +29,8 @@ export async function removeMarketplacePhotoPath(
   supabase: SupabaseBrowser,
   path: string,
 ): Promise<{ error: string | null }> {
-  const { error } = await supabase.storage.from(MARKETPLACE_PHOTOS_BUCKET).remove([path]);
-  return { error: error ? describeActionError(error) : null };
+  // SEC-015: `error === null` is not evidence the object is gone.
+  return removeConfirmed(supabase.storage.from(MARKETPLACE_PHOTOS_BUCKET), path);
 }
 
 export async function removeMarketplacePhotoUrl(

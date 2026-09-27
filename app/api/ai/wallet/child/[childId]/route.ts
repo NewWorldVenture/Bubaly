@@ -82,7 +82,7 @@ export async function POST(_req: Request, { params }: { params: Promise<{ childI
       if (meterError || usedToday === null) { console.error('[ai-wallet-child] usage meter read failed', meterError); return unavailable(); }
       if (usedToday >= dailyLimit) {
         return NextResponse.json(
-          { error: `You've reached today's AI Money Coach limit (${dailyLimit}/day on your plan). Upgrade to Plus for unlimited coaching.` },
+          { error: tr('wallet.coachDailyLimitReached', { limit: dailyLimit }) },
           { status: 429 },
         );
       }

@@ -26,6 +26,7 @@ import type { Tables, GradeType } from '@/lib/database.types';
 import { useLocale, useTranslations } from '@/components/i18n/locale-provider';
 import { useFormat } from '@/components/i18n/use-format';
 import type { LocaleCode } from '@/lib/i18n/locales';
+import { parseCalendarDate } from '@/lib/utils/calendar-date';
 
 type SchoolEvent = Tables<'school_events'>;
 type SchoolClass = Tables<'school_classes'>;
@@ -663,7 +664,7 @@ export function SchoolModule() {
                               </span>
                             ) : g.grade ?? '—'}
                           </td>
-                          <td className="px-4 py-3 text-muted">{new Date(g.date).toLocaleDateString(locale.code, { month: 'short', day: 'numeric' })}</td>
+                          <td className="px-4 py-3 text-muted">{parseCalendarDate(g.date)?.toLocaleDateString(locale.code, { month: 'short', day: 'numeric' })}</td>
                         </tr>
                       );
                     })}
@@ -693,7 +694,7 @@ export function SchoolModule() {
                 </div>
               )}
               {todayClasses.length === 0 ? (
-                <EmptyState icon={BookOpen} title={tr('school.noClassesToday')} description={selectedMember ? `No classes scheduled for ${firstName(selectedMember.display_name)} today.` : 'Add classes to see the schedule.'} action={<Button onClick={() => setClassOpen(true)}><Plus className="h-4 w-4" /> {tr('school.addClass')}</Button>} />
+                <EmptyState icon={BookOpen} title={tr('school.noClassesToday')} description={selectedMember ? tr('school.noClassesFor', { name: firstName(selectedMember.display_name) }) : tr('school.addClassesToSee')} action={<Button onClick={() => setClassOpen(true)}><Plus className="h-4 w-4" /> {tr('school.addClass')}</Button>} />
               ) : (
                 <div className="space-y-2.5">
                   {todayClasses.map((c) => (

@@ -5,18 +5,17 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { getTranslations } from '@/lib/i18n/server';
 import { createServiceClient } from '@/lib/supabase/server';
-import { wrapTwiml, twimlSay, twimlHangup, validateTwilioSignature } from '@/lib/guardian/twilio';
+import { wrapTwiml, twimlSay, twimlHangup } from '@/lib/guardian/twilio';
+import { twilioRefusal, verifyTwilioRequest } from '@/lib/server/twilio-ingress';
 import { formatPhone } from '@/lib/guardian/phone';
 import { isValidGuardianEventId } from '@/lib/guardian/callbacks';
 import { claimGuardianVoicemail, finishGuardianVoicemail, guardianVoicemailReceiptId, releaseGuardianVoicemail, requireGuardianVoicemailLease } from '@/lib/guardian/voicemail-intake';
 import { guardianSmsScope, notifyGuardianSms } from '@/lib/guardian/sms-notification';
 import { smsStep } from '@/lib/guardian/sms-deadline';
 import { readBoundedRequestFormData } from '@/lib/server/bounded-request-body';
-import { appBaseUrl } from '@/lib/server/app-url';
 
 export const runtime = 'nodejs';
 
-const BASE_URL = appBaseUrl();
 const MAX_TWILIO_BODY_BYTES = 64 * 1024;
 
 export async function POST(req: NextRequest) {
@@ -28,14 +27,8 @@ export async function POST(req: NextRequest) {
   if (!boundedForm.ok) return new NextResponse(boundedForm.reason === 'too_large' ? 'Payload too large' : 'Invalid callback', { status: boundedForm.reason === 'too_large' ? 413 : 400 });
   const params = Object.fromEntries(boundedForm.value.entries()) as Record<string, string>;
 
-  // Validate Twilio signature (skip in dev) — same guard as the inbound routes.
-  if (process.env.NODE_ENV === 'production') {
-    const sig = req.headers.get('x-twilio-signature') ?? '';
-    const url = `${BASE_URL}${req.nextUrl.pathname}${req.nextUrl.search}`;
-    if (!validateTwilioSignature(sig, url, params)) {
-      return new NextResponse('Unauthorized', { status: 401 });
-    }
-  }
+  const verdict = verifyTwilioRequest(req, params, 'guardian/status/voicemail');
+  if (!verdict.ok) return twilioRefusal(verdict);
 
   const recordingUrl = params.RecordingUrl ?? null;
   const recordingDuration = params.RecordingDuration ? parseInt(params.RecordingDuration, 10) : null;

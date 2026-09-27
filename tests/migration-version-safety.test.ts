@@ -463,8 +463,31 @@ describe('Supabase migration filename safety', () => {
     // those never took a number in this range, and the numbers they held then
     // are main's now. 0444 and 0445 were the rest of this PR's range, unused;
     // 0444 is now the circle search-path fix (pgcrypto lives in `extensions`
-    // on Supabase), so the next free number is 0445.
-    expect(audit.nextVersion).toBe('0445');
+    // on Supabase), and 0445 is free.
+    //
+    // 0447-0458 are the claude/logged-in-pages-supabase-7q6vtf audit branch's,
+    // ported onto main (PORT-001). They were 0318-0336 on that branch and
+    // 0389-0404 on the port until main's #583 took 0389-0391 and 0406-0445;
+    // they moved as one block, in order, above main's newest. Four were
+    // dropped rather than renumbered, because main now carries the same rule:
+    // the port's 0393 (the OAuth token store is service-role only) is main's
+    // 0406, its 0395 (the vaults ask for the second factor) is main's 0391,
+    // its 0404 (a removed member's profile visibility) is main's 0426, which
+    // installs the identical policy, and its 0446 (the circle search_path) is
+    // main's 0444, which installs the identical function. What the twelve
+    // touch:
+    //
+    // 0447 casts the ledger direction in invest_decide_order (every APPROVAL
+    // raised 42804 from 0196 on while rejection worked). 0448 makes a
+    // single-choice poll take one vote. 0449 refuses a family timezone the
+    // server does not know. 0450 makes the feedback-attachments bucket
+    // private. 0451 ties a chore dispute to the child whose chore it is. 0452
+    // hides a proxy bid's ceiling from rival bidders. 0453 makes Guardian call
+    // history a manager's write. 0454 lets onboarding resume only your own
+    // family. 0455 backfills `state` on concierge runs already decided. 0456
+    // takes two server-only functions away from client roles. 0457 lets an
+    // auction close. 0458 lets only the server link a login to a member row.
+    expect(audit.nextVersion).toBe('0459');
   });
 
   it('flags a newly introduced collision instead of silently accepting it', () => {

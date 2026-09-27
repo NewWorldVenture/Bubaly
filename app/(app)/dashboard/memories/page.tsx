@@ -20,7 +20,10 @@ import { getLocaleContext, getTranslations } from '@/lib/i18n/server';
 import type { LocaleCode } from '@/lib/i18n/locales';
 import { FamilyMediaImg } from '@/components/media/family-media-img';
 
-export const metadata: Metadata = { title: 'Memories' };
+export async function generateMetadata(): Promise<Metadata> {
+  const t = await getTranslations();
+  return { title: t('navLabel.memories') };
+}
 export const dynamic = 'force-dynamic';
 
 type TabKey = 'highlights' | 'photos' | 'albums' | 'videos' | 'stories';
@@ -299,7 +302,7 @@ export default async function MemoriesPage({ searchParams }: { searchParams: Pro
               )}
 
               {highlights.length === 0 && collections.length === 0
-                ? <EmptyBlock label={q ? `No memories match “${q}”.` : 'Your family memory lane is empty — add a favorite photo, create an album, or record a milestone.'} />
+                ? <EmptyBlock label={q ? tr('memories.noMemoriesMatch', { q }) : tr('memories.memoryLaneEmpty')} />
                 : <TimelineView />}
             </>
           )}

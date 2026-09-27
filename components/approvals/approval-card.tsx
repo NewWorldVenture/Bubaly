@@ -75,15 +75,15 @@ const formatWhenIn = (locale: LocaleCode) => (iso: string | null | undefined): s
 };
 
 /** "Expires in 2 days" / "Expires in 3h" / "Expired" — the deadline a parent is deciding against. */
-export function formatExpiry(iso: string | null | undefined, now: number = Date.now()): string | null {
+export function formatExpiry(iso: string | null | undefined, t: (key: string, params?: Record<string, string | number>) => string, now: number = Date.now()): string | null {
   if (!iso) return null;
   const ms = Date.parse(iso) - now;
   if (!Number.isFinite(ms)) return null;
-  if (ms <= 0) return 'Expired';
+  if (ms <= 0) return t('approvalCard.expired');
   const hours = ms / 3_600_000;
-  if (hours < 1) return `Expires in ${Math.max(1, Math.round(ms / 60_000))} min`;
-  if (hours < 36) return `Expires in ${Math.round(hours)}h`;
-  return `Expires in ${Math.round(hours / 24)} days`;
+  if (hours < 1) return t('approvalCard.expiresInMin', { n: Math.max(1, Math.round(ms / 60_000)) });
+  if (hours < 36) return t('approvalCard.expiresInHours', { n: Math.round(hours) });
+  return t('approvalCard.expiresInDays', { n: Math.round(hours / 24) });
 }
 
 /** 44px targets on touch (`coarse:min-h-11`), compact on a pointer. */
@@ -160,8 +160,10 @@ export function ApprovalCard({
   const formatWhen = formatWhenIn(locale.code);
   const amount = formatAmount(approval.amountCents, 'USD', locale.code);
   const when = formatWhen(approval.requestedAt);
-  const expiry = formatExpiry(approval.expiresAt);
-  const expired = expiry === 'Expired';
+  const expiry = formatExpiry(approval.expiresAt, t);
+  // Decided from the timestamp, never from the label: the label is translated.
+  const expiresAt = approval.expiresAt ? Date.parse(approval.expiresAt) : NaN;
+  const expired = Number.isFinite(expiresAt) && expiresAt <= Date.now();
   const requester = approval.requestedBy ?? (approval.agent ? 'Bubaly' : null);
   const isAi = requester === 'Bubaly';
   const consequences = approval.consequences.slice(0, compact ? 3 : 8);
@@ -273,7 +275,7 @@ export function ApprovalCard({
             className={ACTION}
             disabled={busy !== null || expired}
             onClick={() => decide('rejected')}
-            aria-label={`Decline: ${approval.title}`}
+            aria-label={t('itemAction.declineTitled', { name: approval.title })}
           >
             {busy === 'declining' ? <Loader2 className="h-3.5 w-3.5 animate-spin" aria-hidden /> : <X className="h-3.5 w-3.5" aria-hidden />}
             {busy === 'declining' ? 'Declining…' : 'Decline'}
@@ -286,7 +288,7 @@ export function ApprovalCard({
               className={ACTION}
               disabled={busy !== null || expired}
               onClick={() => setEditing(true)}
-              aria-label={`Edit: ${approval.title}`}
+              aria-label={t('itemAction.editTitled', { name: approval.title })}
             >
               <Pencil className="h-3.5 w-3.5" aria-hidden /> {t('approval.edit')}
             </Button>
@@ -298,7 +300,7 @@ export function ApprovalCard({
             className={ACTION}
             disabled={busy !== null || expired}
             onClick={() => decide('approved')}
-            aria-label={`Approve: ${approval.title}`}
+            aria-label={t('itemAction.approveTitled', { name: approval.title })}
           >
             {busy === 'approving' ? <Loader2 className="h-3.5 w-3.5 animate-spin" aria-hidden /> : <Check className="h-3.5 w-3.5" aria-hidden />}
             {busy === 'approving' ? 'Approving…' : needsMore ? `Approve (${recorded + 1} of ${threshold})` : 'Approve'}

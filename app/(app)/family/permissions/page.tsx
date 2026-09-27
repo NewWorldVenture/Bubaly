@@ -8,7 +8,10 @@ import { SectionCard, MiniEmpty } from '@/components/family/shell';
 import { getTranslations } from '@/lib/i18n/server';
 import { ErrorState } from '@/components/ui/states';
 
-export const metadata: Metadata = { title: 'Permissions' };
+export async function generateMetadata(): Promise<Metadata> {
+  const t = await getTranslations();
+  return { title: t('admins.permissions') };
+}
 export const dynamic = 'force-dynamic';
 
 export default async function FamilyPermissionsPage() {

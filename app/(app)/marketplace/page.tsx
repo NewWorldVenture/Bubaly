@@ -23,7 +23,10 @@ import { cn } from '@/lib/utils/cn';
 import { getLocaleContext, getTranslations } from '@/lib/i18n/server';
 import { readAllAsQuery } from '@/lib/supabase/read-all';
 
-export const metadata: Metadata = { title: 'Marketplace' };
+export async function generateMetadata(): Promise<Metadata> {
+  const t = await getTranslations();
+  return { title: t('navLabel.marketplace') };
+}
 export const dynamic = 'force-dynamic';
 
 const BASE = '/marketplace';

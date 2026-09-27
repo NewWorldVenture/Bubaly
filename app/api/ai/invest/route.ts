@@ -53,7 +53,7 @@ export async function POST(req: NextRequest) {
         return NextResponse.json({ error: t('invest.failedToGenerateAnExplanation') }, { status: 503 });
       }
       if (count >= dailyLimit) {
-        return NextResponse.json({ error: `You've reached today's Money Mentor limit (${dailyLimit}/day). Upgrade to Plus for unlimited.` }, { status: 429 });
+        return NextResponse.json({ error: t('invest.mentorDailyLimitReached', { limit: dailyLimit }) }, { status: 429 });
       }
     }
 
@@ -95,14 +95,22 @@ export async function POST(req: NextRequest) {
 
     let portfolioValueCents = 0, holdingsCount = 0;
     if (body.childWalletId) {
-      const [{ data: holdings }, { data: assets }] = await settleAll([
+      const [{ data: holdings, error: holdingsError }, { data: assets, error: assetsError }] = await settleAll([
         // Paged: this total is the portfolio value the model is told about.
         readAllAsQuery<{ asset_id: string; shares: number; avg_cost_cents: number }>(
           (from, to) => supabase.from('invest_holdings').select('asset_id, shares, avg_cost_cents')
-            .eq('family_id', familyId).eq('child_wallet_id', body.childWalletId!).order('asset_id').range(from, to),
+            .eq('family_id', familyId).eq('child_wallet_id', body.childWalletId!).order('asset_id').order('id').range(from, to),
         ),
         supabase.from('invest_assets').select('id, price_cents'),
       ]);
+      // The model is told this portfolio's value. A holdings read that failed,
+      // or stopped at readAll's ceiling, would tell it a smaller number than the
+      // child holds, and an unreadable price list would value every holding at
+      // zero. Either is a wrong figure stated with confidence, so stop instead.
+      if (holdingsError || assetsError) {
+        console.error('[ai-invest] portfolio read failed', holdingsError ?? assetsError);
+        return NextResponse.json({ error: t('invest.failedToGenerateAnExplanation') }, { status: 503 });
+      }
       const prices: PriceMap = Object.fromEntries((assets ?? []).map((a) => [a.id, a.price_cents]));
       const hs: Holding[] = (holdings ?? []).map((h) => ({ assetId: h.asset_id, shares: h.shares, avgCostCents: h.avg_cost_cents }));
       portfolioValueCents = portfolioValue(hs, prices);

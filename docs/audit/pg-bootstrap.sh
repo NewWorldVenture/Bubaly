@@ -27,8 +27,52 @@ ANCHOR_FID=${ANCHOR_FID:-00000000-0000-4000-8000-0000000000f1}
 
 echo "== shims =="
 psql -v ON_ERROR_STOP=1 -q <<'SQL'
-create extension if not exists pgcrypto;
 create schema if not exists auth; create schema if not exists storage; create schema if not exists extensions;
+
+-- pgcrypto goes in `extensions`, NOT `public`, because that is where a real
+-- Supabase project puts it:
+--
+--   select e.extname, n.nspname from pg_extension e
+--     join pg_namespace n on n.oid = e.extnamespace;
+--   pgcrypto   | extensions
+--   uuid-ossp  | extensions
+--   vector     | extensions
+--
+-- This line used to read `create extension if not exists pgcrypto;` with no
+-- schema, which lands it in `public` — and that single difference made CI
+-- structurally incapable of catching a whole class of defect.
+--
+-- `marketplace_create_circle` is `security definer` and pinned
+-- `set search_path = public` while calling `gen_random_bytes`. On a real
+-- Supabase project that raises 42883 on every call, and creating a sharing
+-- circle was dead from 0176 until 0446. `docs/audit/circle-join-code-check.sql`
+-- calls that function and asserts it works — the probe was correct, it ran on
+-- every pull request, and it PASSED, because on a CI database with pgcrypto in
+-- `public` the broken function resolves fine. Measured, with the pre-0388
+-- definition restored on a CI-shaped database: probe exit 0.
+--
+-- A guard that cannot fail in the environment it runs in is not a guard. So the
+-- environment is made to match production instead.
+create extension if not exists pgcrypto with schema extensions;
+
+-- And the search_path a real project gives the `postgres` role, for the same
+-- reason. Supabase ships:
+--
+--   select setconfig from pg_db_role_setting s join pg_roles r on r.oid = s.setrole
+--    where r.rolname = 'postgres';
+--   {"search_path=\"$user\", public, extensions"}
+--
+-- Without it, DDL that resolves an extension function at CREATE time — a column
+-- default such as `invites.token default encode(gen_random_bytes(24),'hex')` —
+-- cannot find it once pgcrypto moves out of `public`, and every migration
+-- declaring one would fail here while working on a real project. Matching
+-- production means matching both halves, not only the schema.
+do $$ begin
+  execute 'alter role ' || quote_ident(current_user) || ' set search_path = "$user", public, extensions';
+exception when insufficient_privilege then
+  raise notice 'could not set a role search_path; extension functions may not resolve in DDL';
+end $$;
+set search_path = "$user", public, extensions;
 do $$ begin create role anon nologin; exception when duplicate_object then null; end $$;
 do $$ begin create role authenticated nologin; exception when duplicate_object then null; end $$;
 do $$ begin create role service_role nologin bypassrls; exception when duplicate_object then null; end $$;
@@ -52,12 +96,34 @@ grant usage on schema auth, storage, extensions, public to anon, authenticated, 
 -- database, until 0286 closed it. Setting the defaults up front means a
 -- migration's REVOKE survives, and a missing one is caught.
 alter default privileges in schema public grant all on tables to anon, authenticated, service_role;
+-- And FUNCTIONS, for the same reason (TEST-012). Supabase grants EXECUTE on
+-- every new function directly to anon and authenticated (pg_default_acl,
+-- objtype f), so a migration's `revoke ... from public` leaves both callers in
+-- place on a real project while it closes the function here. Without this line
+-- the harness was safer than production again: wallet_reserve_card_auth and
+-- marketplace_place_bid_unchecked were callable with the anon key on every real
+-- database (SEC-024) and not callable here, so no probe could see it.
+alter default privileges in schema public grant all on functions to anon, authenticated, service_role;
 create table if not exists auth.users (id uuid primary key default gen_random_uuid(), email text, phone text,
   raw_user_meta_data jsonb default '{}', raw_app_meta_data jsonb default '{}', created_at timestamptz default now());
-create or replace function auth.uid() returns uuid language sql stable as $f$ select nullif(current_setting('request.jwt.claim.sub', true),'')::uuid $f$;
-create or replace function auth.role() returns text language sql stable as $f$ select coalesce(nullif(current_setting('request.jwt.claim.role', true),''),'authenticated') $f$;
-create or replace function auth.email() returns text language sql stable as $f$ select nullif(current_setting('request.jwt.claim.email', true),'') $f$;
-create or replace function auth.jwt() returns jsonb language sql stable as $f$ select coalesce(nullif(current_setting('request.jwt.claims', true),'')::jsonb,'{}'::jsonb) $f$;
+-- Supabase's own definitions, copied from a live project (TEST-012). Each reads
+-- the single claim setting OR the JSON claims PostgREST sets. These used to read
+-- only `request.jwt.claim.<x>`, so a probe that set `request.jwt.claims` — the
+-- way PostgREST and the local stack do it — was nobody here, and its CONTROL
+-- refused to pass. And auth.role() defaulted to 'authenticated', where
+-- Supabase returns NULL for a session with no role claim.
+create or replace function auth.uid() returns uuid language sql stable as $f$
+  select coalesce(nullif(current_setting('request.jwt.claim.sub', true), ''),
+                  (nullif(current_setting('request.jwt.claims', true), '')::jsonb ->> 'sub'))::uuid $f$;
+create or replace function auth.role() returns text language sql stable as $f$
+  select coalesce(nullif(current_setting('request.jwt.claim.role', true), ''),
+                  (nullif(current_setting('request.jwt.claims', true), '')::jsonb ->> 'role'))::text $f$;
+create or replace function auth.email() returns text language sql stable as $f$
+  select coalesce(nullif(current_setting('request.jwt.claim.email', true), ''),
+                  (nullif(current_setting('request.jwt.claims', true), '')::jsonb ->> 'email'))::text $f$;
+create or replace function auth.jwt() returns jsonb language sql stable as $f$
+  select coalesce(nullif(current_setting('request.jwt.claim', true), ''),
+                  nullif(current_setting('request.jwt.claims', true), ''))::jsonb $f$;
 -- Supabase ships `auth.mfa_factors`, and without it a step-up policy cannot even
 -- be CREATED: `create policy … not exists (select 1 from auth.mfa_factors …)`
 -- fails at 42P01, because Postgres resolves the relation at CREATE POLICY time.
