@@ -15,13 +15,15 @@
 // bearer credentials (family-media-ref.ts, rule 2), so they are never written to
 // localStorage or the offline row cache, and the same purge that clears the
 // offline cache on sign-out or an identity change clears this map too. An entry
-// also records the purge generation it was signed under, and a signing call
-// that finishes after a purge is discarded rather than stored — so a URL minted
-// for the previous user cannot be handed to the next one, even by a request
-// that was already in flight when they signed out.
+// also records the browser session and purge generation it was signed under.
+// Check cookie ownership synchronously too: a peer can change the session while
+// this document has no auth observer. Neither a cached URL nor a signing call
+// already in flight may cross that boundary. Token renewal within the same
+// session keeps its owner, so the URL remains reusable.
 
-import { useEffect, useMemo, useState } from 'react';
+import { useEffect, useMemo, useState, useSyncExternalStore } from 'react';
 import { createClient } from '@/lib/supabase/client';
+import { captureBrowserSessionSnapshot } from '@/lib/auth/browser-session-storage';
 import { getCacheGeneration, subscribeCacheInvalidation } from '@/lib/offline/cache';
 import { FAMILY_MEDIA_SIGNED_TTL_SECONDS, parseFamilyMediaRef, signFamilyMediaRefs } from './family-media-ref';
 
@@ -32,6 +34,7 @@ type Entry = {
   /** Re-sign in the background from this point, while the old URL still works. */
   refreshAt: number;
   generation: number;
+  owner: string;
 };
 
 const TTL_MS = FAMILY_MEDIA_SIGNED_TTL_SECONDS * 1000;
@@ -42,7 +45,19 @@ const FAILURE_HOLD_MS = 30_000;
 const MAX_ENTRIES = 2000;
 
 const cache = new Map<string, Entry>();
-const inflight = new Map<string, Promise<void>>();
+const inflight = new Map<string, { owner: string; generation: number; work: Promise<void> }>();
+const subscribeHydration = () => () => {};
+const clientHydrated = () => true;
+const serverHydrated = () => false;
+
+/** A cache discriminator only; Storage still authorizes each signing request. */
+function currentOwner(): string | null {
+  try {
+    const session = captureBrowserSessionSnapshot();
+    if (!session?.userId || !session.sessionId) return null;
+    return JSON.stringify([session.storageKey, session.userId, session.sessionId, session.generation]);
+  } catch { return null; }
+}
 
 let subscribed = false;
 function ensurePurgeSubscription() {
@@ -51,9 +66,9 @@ function ensurePurgeSubscription() {
   subscribeCacheInvalidation(() => { cache.clear(); inflight.clear(); });
 }
 
-function current(ref: string): Entry | null {
+function current(ref: string, owner = currentOwner()): Entry | null {
   const entry = cache.get(ref);
-  return entry && entry.generation === getCacheGeneration() ? entry : null;
+  return owner && entry?.owner === owner && entry.generation === getCacheGeneration() ? entry : null;
 }
 
 /**
@@ -65,7 +80,9 @@ export function lookupFamilyMediaUrl(ref: string | null | undefined, now = Date.
   const parsed = parseFamilyMediaRef(ref);
   if (!parsed) return null;
   if (parsed.kind === 'external') return parsed.url;
-  const entry = current(ref as string);
+  const owner = currentOwner();
+  if (!owner) return null;
+  const entry = current(ref as string, owner);
   if (!entry) return undefined;
   if (entry.url === null) return now < entry.validUntil ? null : undefined;
   return now < entry.validUntil ? entry.url : undefined;
@@ -83,6 +100,8 @@ function store(ref: string, entry: Entry) {
 /** Sign whatever in `refs` is missing or due, sharing any request already in flight. */
 export async function ensureFamilyMediaUrls(refs: readonly string[]): Promise<void> {
   ensurePurgeSubscription();
+  const owner = currentOwner();
+  if (!owner) return;
   const generation = getCacheGeneration();
   const started = Date.now();
   const need: string[] = [];
@@ -90,8 +109,8 @@ export async function ensureFamilyMediaUrls(refs: readonly string[]): Promise<vo
   for (const ref of refs) {
     if (parseFamilyMediaRef(ref)?.kind !== 'family-media') continue;
     const pending = inflight.get(ref);
-    if (pending) { waits.push(pending); continue; }
-    const entry = current(ref);
+    if (pending?.owner === owner && pending.generation === generation) { waits.push(pending.work); continue; }
+    const entry = current(ref, owner);
     if (entry && started < entry.refreshAt) continue;
     need.push(ref);
   }
@@ -99,16 +118,16 @@ export async function ensureFamilyMediaUrls(refs: readonly string[]): Promise<vo
     const work = signFamilyMediaRefs(createClient(), need)
       .then((signed) => {
         // Signed for a session that has since ended or changed: discard.
-        if (getCacheGeneration() !== generation) return;
+        if (getCacheGeneration() !== generation || currentOwner() !== owner) return;
         for (const ref of need) {
           const url = signed.get(ref) ?? null;
           store(ref, url
-            ? { url, validUntil: started + TTL_MS - EXPIRY_SKEW_MS, refreshAt: started + TTL_MS - REFRESH_AHEAD_MS, generation }
-            : { url: null, validUntil: started + FAILURE_HOLD_MS, refreshAt: started + FAILURE_HOLD_MS, generation });
+            ? { url, validUntil: started + TTL_MS - EXPIRY_SKEW_MS, refreshAt: started + TTL_MS - REFRESH_AHEAD_MS, generation, owner }
+            : { url: null, validUntil: started + FAILURE_HOLD_MS, refreshAt: started + FAILURE_HOLD_MS, generation, owner });
         }
       })
-      .finally(() => { for (const ref of need) if (inflight.get(ref) === work) inflight.delete(ref); });
-    for (const ref of need) inflight.set(ref, work);
+      .finally(() => { for (const ref of need) if (inflight.get(ref)?.work === work) inflight.delete(ref); });
+    for (const ref of need) inflight.set(ref, { owner, generation, work });
     waits.push(work);
   }
   await Promise.all(waits);
@@ -124,6 +143,10 @@ export function useFamilyMediaUrls(refs: readonly (string | null | undefined)[])
     [refs],
   );
   const [, setTick] = useState(0);
+  // Match the server's private-media placeholder during hydration. A later
+  // client mount can use its cached URL immediately; denied browser owners
+  // still settle to null rather than remaining in a loading state.
+  const hydrated = useSyncExternalStore(subscribeHydration, clientHydrated, serverHydrated);
 
   useEffect(() => {
     ensurePurgeSubscription();
@@ -151,7 +174,9 @@ export function useFamilyMediaUrls(refs: readonly (string | null | undefined)[])
     return () => { alive = false; if (timer) clearTimeout(timer); stop(); };
   }, [key]);
 
-  return (ref) => lookupFamilyMediaUrl(ref);
+  return (ref) => !hydrated && parseFamilyMediaRef(ref)?.kind === 'family-media'
+    ? undefined
+    : lookupFamilyMediaUrl(ref);
 }
 
 /** The single-reference form of useFamilyMediaUrls. */

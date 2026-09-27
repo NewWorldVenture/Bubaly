@@ -1,4 +1,4 @@
-import { beforeEach, describe, expect, it, vi } from 'vitest';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
 /**
  * SEC-001: a family's photos, message attachments and reminder images are read
@@ -34,10 +34,18 @@ function client() {
 }
 
 beforeEach(() => {
+  // A readable browser owner is required before reusing a signed capability.
+  vi.stubEnv('NEXT_PUBLIC_SUPABASE_URL', 'https://abcd.supabase.co');
+  const userId = 'aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa';
+  const token = `fixture.${Buffer.from(JSON.stringify({ sub: userId, session_id: 'bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb' })).toString('base64url')}.signature`;
+  const session = { user: { id: userId }, access_token: token };
+  vi.stubGlobal('document', { cookie: `sb-abcd-auth-token=base64-${Buffer.from(JSON.stringify(session)).toString('base64url')}` });
   createSignedUrls.mockReset();
   from.mockClear();
   __resetFamilyMediaUrlCache();
 });
+
+afterEach(() => { vi.unstubAllGlobals(); vi.unstubAllEnvs(); });
 
 describe('a stored reference is classified before anything renders it', () => {
   it('recognises every shape Storage serves this bucket under, and a bare path', () => {
