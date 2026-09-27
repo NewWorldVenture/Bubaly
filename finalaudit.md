@@ -49987,10 +49987,12 @@ element's box shows, found by measuring text ranges. It is now in a
 shrinkable span that may break (`[overflow-wrap:anywhere]`).
 
 *The kid-login form (found by this session on the same afternoon, first
-numbered P-13, then P-19):* the same defect is **P-22**, found and fixed by the
-B7 second-pass session (`session_01DXw2nu25BjyRfA6Fg3YiMS`) with labels that
-name the child; its fix is the one on `main`, and this session's duplicate was
-dropped when the two met.
+numbered P-13, then P-19, then P-19a as three sessions met):* the same defect
+is **P-22**, found and fixed by the B7 second-pass session
+(`session_01DXw2nu25BjyRfA6Fg3YiMS`) with labels that name the child; its fix
+is the one on `main`, this session's duplicate keys were dropped, and
+`tests/a-kid-login-form-says-what-each-field-is.test.ts` now pins main's
+shape (every control named, every key in all seven catalogues).
 
 **Not defects, recorded with the evidence.**
 - *502s on production.* 32 pages across both production crawls saw one
