@@ -10,7 +10,7 @@ export default async function WalletNotFound() {
       title={t('notFound.thatWalletIsnTHere')}
       description={t('notFound.thisChildWalletMayHave')}
       backHref="/wallet"
-      backLabel="Back to Wallet"
+      backLabel={t('appNotFound.backToWallet')}
     />
   );
 }

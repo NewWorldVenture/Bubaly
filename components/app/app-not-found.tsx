@@ -9,10 +9,10 @@ import { Button } from '@/components/ui/button';
 // as "this one thing is gone", not "the app broke". `backHref` points at the
 // section's own home so the primary action is always one meaningful hop.
 export async function AppNotFound({
-  title = 'We couldn’t find that',
-  description = 'It may have been removed, or the link is out of date. Everything else is right where you left it.',
+  title,
+  description,
   backHref = '/dashboard',
-  backLabel = 'Go to dashboard',
+  backLabel,
 }: {
   title?: string;
   description?: string;
@@ -20,6 +20,11 @@ export async function AppNotFound({
   backLabel?: string;
 }) {
   const t = await getTranslations();
+  // The defaults were English literals, so every not-found state in the app
+  // read English in every language (page audit, signed-in sweep).
+  title ??= t('appNotFound.title');
+  description ??= t('appNotFound.description');
+  backLabel ??= t('notFound.goToDashboard');
   return (
     <div className="flex min-h-[60dvh] flex-col items-center justify-center px-6 text-center">
       <div className="grid h-14 w-14 place-items-center rounded-2xl bg-brand/15 text-brand-text">

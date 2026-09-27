@@ -1,5 +1,4 @@
 import type { Metadata } from 'next';
-import { notFound } from 'next/navigation';
 import { Activity, CheckCircle2, Timer } from 'lucide-react';
 import { requireUserContext, isSuperAdmin } from '@/lib/supabase/auth';
 import { createServer } from '@/lib/supabase/server';
@@ -11,6 +10,7 @@ import {
 } from '@/lib/analytics/journey';
 import { getTranslations } from '@/lib/i18n/server';
 import { readAll } from '@/lib/supabase/read-all';
+import { AppNotFound } from '@/components/app/app-not-found';
 
 export const metadata: Metadata = { title: 'Journey Analytics' };
 export const dynamic = 'force-dynamic';
@@ -19,7 +19,7 @@ export default async function JourneysPage() {
   const t = await getTranslations();
   const ctx = await requireUserContext();
   // Raw product telemetry is an admin-only view.
-  if (!(await isSuperAdmin())) notFound();
+  if (!(await isSuperAdmin())) return <AppNotFound backHref="/dashboard" />;
 
   const supabase = await createServer();
   // `.limit(5000)` was never 5,000 — PostgREST caps at db-max-rows — and this
