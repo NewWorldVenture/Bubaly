@@ -325,7 +325,10 @@ describe('Supabase migration filename safety', () => {
     // 0393_a_feedback_screenshot_is_not_world_readable.sql: ported from the claude/logged-in-pages-supabase-7q6vtf audit branch,
     // where it was 0325 before main claimed that number.
     //
-    expect(audit.nextVersion).toBe('0394');
+    // 0394_the_vaults_ask_for_the_second_factor.sql: ported from the claude/logged-in-pages-supabase-7q6vtf audit branch,
+    // where it was 0326 before main claimed that number.
+    //
+    expect(audit.nextVersion).toBe('0395');
   });
 
   it('flags a newly introduced collision instead of silently accepting it', () => {
