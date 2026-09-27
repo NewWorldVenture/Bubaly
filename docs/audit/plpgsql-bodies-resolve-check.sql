@@ -42,13 +42,17 @@ declare
   checked  int := 0;
 begin
   if not exists (select 1 from pg_available_extensions where name = 'plpgsql_check') then
-    raise notice 'plpgsql-bodies-resolve: SKIP — plpgsql_check is not available on this server';
+    -- run-probes.sh reads a skip as an uppercase SKIPPED on a NOTICE line, and
+    -- this probe runs at client_min_messages = warning, so lift it for the verdict.
+    perform set_config('client_min_messages', 'notice', true);
+    raise notice 'plpgsql-bodies-resolve SKIPPED: plpgsql_check is not available on this server';
     return;
   end if;
   begin
     create extension if not exists plpgsql_check;
   exception when others then
-    raise notice 'plpgsql-bodies-resolve: SKIP — plpgsql_check could not be installed (% %)', sqlstate, sqlerrm;
+    perform set_config('client_min_messages', 'notice', true);
+    raise notice 'plpgsql-bodies-resolve SKIPPED: plpgsql_check could not be installed (% %)', sqlstate, sqlerrm;
     return;
   end;
 
