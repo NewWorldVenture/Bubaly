@@ -307,7 +307,7 @@ export async function draftPaperworkReplyAction(itemId: string): Promise<DraftRe
   // either way, but a persist that matched nothing means it is gone the moment
   // they navigate, and only an ERROR was reaching the log. Audit C1-S9-60.
   const { data: persisted, error: metaError } = await supabase.from('paperwork_items')
-    .update({ meta: meta as never }).eq('id', item.id).select('id');
+    .update({ meta: meta as never }).eq('id', item.id).eq('family_id', ctx.active.familyId).select('id');
   if (metaError || wroteNoRows(persisted)) {
     console.error('[paperwork] draft_reply persist failed', {
       itemId: item.id, error: metaError?.message ?? 'no rows updated',
