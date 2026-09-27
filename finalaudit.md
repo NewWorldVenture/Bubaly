@@ -18269,6 +18269,14 @@ The bucket half is an owner decision between two designs, and neither buys anyth
 
 Either way the order is fixed: every reader moves first (while the bucket is still public, so nothing breaks), and only then a migration sets `family-media` private and adds a member-scoped storage SELECT policy.
 
+*Added 2026-09-27 (PORT-001).* The second design is **implemented and ready**, on the audit branch, as commit `68a5a7a1` on `claude/logged-in-pages-supabase-7q6vtf` (24 files). It contains:
+- a reference parser that reads either a stored public URL or a bare path, so no row is rewritten;
+- a batched server signer and a client hook, with every reader listed above moved onto them;
+- the service-worker exclusion;
+- a deploy-coupled migration that sets the bucket private and adds a member-scoped SELECT policy. It is applied only after the readers are live, which is the order stated here.
+
+It is deliberately **not** in the port (#586): this entry leaves the choice between the two designs to the owner. If the owner picks signed URLs, it re-applies onto main in one step. If the owner picks the media route, its reference parser still applies unchanged.
+
 #### Evidence
 Static source/schema/caller evidence at2a5e7e7a. No private object names or contents were fetched and no provider configuration, SQL or repository application source was changed. Current environment exposes no Supabase credentials; one read-only Vercel GET /v9/projects/bubaly returns404 for the current token, which does not establish all-team inaccessibility. Applied catalog and access verification remain pending.
 
@@ -49088,6 +49096,29 @@ role changes that touch `parent` need `is_family_admin`, in the fm_update
 policy (a trigger comparing OLD/NEW role) and in the module's role options.
 Not changed without that answer.
 
+*Added 2026-09-27 (PORT-001).* Two facts for that answer.
+
+- **What a self-promoted adult can do.** `families_delete` checks
+  `is_family_admin` and nothing else. So an adult who promotes themselves to
+  parent can **delete the whole family**, and the delete cascades to every
+  member, wallet and document. They can also demote, deactivate or delete the
+  parents first. The audit branch measured seven such breaches as an invited
+  adult.
+- **A fix is ready if the answer is "adult is not a co-owner".** It is commit
+  `f20ebbed` on `claude/logged-in-pages-supabase-7q6vtf` (SEC-026):
+  - a SECURITY INVOKER trigger on `family_members`, under which only a parent
+    may make, change or remove a parent's row, unless the family has no active
+    parent;
+  - the family module hiding Edit/Remove on parent cards from non-parents, and
+    offering Parent in the picker only to someone who may make one;
+  - a probe with controls for adults managing non-parents, parents managing
+    parents, a parentless family making one, and a parent's family delete still
+    cascading.
+
+  It is deliberately **not** in the port (#586), because this entry leaves it to
+  the owner. It re-applies onto main in one step, taking the next free
+  migration number.
+
 ## C1-K-46 · LOW · A sibling could make someone's marketplace offer vanish
 
 `marketplace_offers` INSERT and UPDATE were already the offerer's, or the
@@ -49508,6 +49539,100 @@ here rather than half-fixed.
 - `trust-activity-tab` already guards it explicitly ("A failed read renders the
   retryable error state, never an empty ledger"); `trust-sharing-section` and
   `paperwork-module`'s AI draft path check `res.ok`.
+
+## PORT-001 · The logged-in-pages audit branch, re-applied onto main one fix at a time
+
+*Recorded 2026-09-27 by session 01DXw2nu25BjyRfA6Fg3YiMS, on `claude/port-to-main-7q6vtf`. Not counted in the master-ledger totals above, like the C1-K sections.*
+
+**Why a port and not a merge.** `claude/logged-in-pages-supabase-7q6vtf` and `main` grew apart for weeks. Its twenty-four migrations reused versions main had already given to other files, so merged as-is the production workflow would have skipped them as "already applied". Several fixes on each side closed the same hole differently: the branch's `0319` against main's `0335`, its `0320` against main's `0319`, its `0330` against main's `0318`/`0345`. The merge came to 437 conflict hunks. The owner chose to port instead: start from main, re-apply only what main does not already have, one source commit at a time, each with its own verification, and number the migrations after main's highest.
+
+**Method, per commit.**
+- Apply the commit's diff to main's tree with a three-way merge.
+- Where main already fixed the same finding, keep main's version and carry over only the remainder. Each commit message says which half came from where.
+- Renumber any new migration after main's highest, and check it first against main's `0342`–`0388` and the open PRs (#548, #556, #583).
+- Replay it on a Postgres 16 harness built from scratch, run its probes and tests, and typecheck.
+
+**Status with main merged in (after #583): the port is complete.** All 104 of the branch's commits are handled:
+- 86 ported, each naming its source commit and which half came from main.
+- 14 audit-only: their content was audit text, or main already had all of it. One of them, `338f64a6`, is folded into the commit before it, whose port typed the same test the same way.
+- 4 deferred, each for a reason below: SEC-026, SEC-001, PUSH-003 and EMAIL-002.
+
+The merged tree is green:
+- tsc is clean. `next lint` reports no errors and 15 warnings, all from the two jsx-a11y rules main turned on as warnings (`click-events-have-key-events`, `no-static-element-interactions`); `--max-warnings=15` pins that as a ceiling.
+- 21,118 tests in 1,668 files pass, the full suite run once in America/Los_Angeles and once in UTC.
+- The harness replays 441 migrations from nothing with none failing.
+- 173 of 173 probes pass, `plpgsql-bodies-resolve` included.
+
+**Migrations `0447`–`0458`, all unapplied.** Each has an entry in `docs/PENDING_PROD_MIGRATIONS.md` under "Ported from the audit branch", with a deploy-order table. None gates a deploy.
+
+| Now | Was | Finding | On main |
+|---|---|---|---|
+| dropped | `0318` | a sharing circle could never be created (definer search_path missed `extensions`) | main's `0444` (#609, found independently by the B6b page audit as its P-13) installs the identical function, so the port's `0446` is removed |
+| `0447` | `0321` | an investment order could be rejected but never approved (42804) | carried whole |
+| `0448` | `0322` | a single-choice poll took every choice | carried whole; main's vote-owner probe forges its sibling vote in a second poll |
+| `0449` | `0323` | a family timezone typo silently meant Greenwich | carried whole; the probe asks the server which legacy zones it can resolve |
+| dropped | `0324` | stored OAuth tokens answered client reads | main's `0406` (from #556) is the same rule, so it is not carried |
+| `0450` | `0325` | feedback screenshots readable by URL | reduced to the bucket flag; main's `0369` had scoped the read policy |
+| dropped | `0326` | step-up MFA guarded a redirect, not the data | main's `0391` guards the same vaults, asking only a manager for the code as the app does, so it is not carried |
+| `0451` | `0327` | a sibling could file a chore dispute in another child's name | reduced to `chore_disputes`; main's `0375` covers submissions |
+| `0452` | `0328` | a proxy bid's ceiling was readable by rival bidders | carried; the app reads through a fallback so it works before and after |
+| `0453` | `0330` | any member could write Guardian call history | reduced to `guardian_communications`; main's `0318`/`0345` cover the rest |
+| `0454` | `0331` | a stranger could onboard into another family as its parent (critical) | carried whole |
+| `0455` | `0332` | decided concierge runs stayed on Needs-you | backfill only; main's code already writes `state` |
+| `0456` | `0333` | two server-only functions were callable with the anon key | carried; main revoked them from PUBLIC only |
+| `0457` | `0334` | no auction could ever close | carried whole |
+| `0458` | `0335` | any account could link a stranger's login into its own family (SEC-025) | carried whole; nothing on main guarded `family_members.user_id` |
+| dropped | `0336` | a removed member and their old household still saw each other's profiles (PRIV-002) | main's `0426` (from #548) installs the identical policy, so it is not carried; its probe and test now hold `0426` |
+
+The branch's `0329` (SEC-017) is **not** carried, because main's `0350` and `0378` already make those four tables manager writes. Its probe is carried and passes against main.
+
+The branch's `0337` (SEC-026, only a parent makes or changes a parent) is **deferred, not dropped**. Main records exactly this as an owner decision ("an adult can make themselves the family's Admin, or demote the parents": not changed without that answer). That entry now also notes that the escalation reaches `families_delete` and points at the ready fix.
+
+The branch's `0338` with its SEC-001 readers (family media private, via signed URLs) is **deferred** for the same reason. Main records the bucket half as the owner's choice between a same-origin media route and signed URLs, and this implements one of them. The SEC-001 entry now points at the ready implementation.
+
+PUSH-003 (retry a partly failed push only to whoever missed it) and EMAIL-002 (count each email event once) were **left to #548**, which carried both findings under the same IDs, and #548's work is now on main through #583:
+- main's `0440` ("a device is buzzed once per notification") keys receipts per **device**, strictly finer than the branch's per-recipient table, since it also re-sends correctly when one of a user's two devices missed.
+- main's `0441` ("an email event is counted once") is the branch's design, down to the `counter_applied_at` column.
+
+So neither is carried, and there is nothing left to re-apply from `417c5817` or `c5d8aad6`.
+
+**Found by the port itself** (on main, not on the branch):
+- The ported capped-read ratchet found `app/api/ai/invest/route.ts` dropping the error of a capped holdings read. The model was told a portfolio value computed from part of the holdings. It now refuses.
+- The page-boundary ratchet found two `invest_holdings` pagers ordered by `asset_id` alone.
+- The select-naming ratchet found a fourth unnamed `<select>` main had added to the marketing platform page.
+- SEC-023's ratchet found six more raw `error.message` returns in server actions.
+- Three main tests and two main probes were pinning the old behaviour, such as the raw database text as the family-facing message.
+- Harness fidelity (TEST-012): the bootstrap's `auth.uid()`/`auth.role()` stubs now read the JSON claims the way Supabase's do, and new functions get Supabase's default grants. That exposed four probe assumptions, all corrected in the probes.
+- Translating the approval card's expiry label would have broken main's expiry check, which compared that label to `'Expired'`. A German family's card would have kept Approve and Decline live on a request the server refuses. The same commit decides expiry from the timestamp, and the German render test is red with the old comparison restored (TEST-014: the test meant to catch this matched the Tailwind class `disabled:cursor-not-allowed` and could never fail).
+- The I18N-006 guard found seven admin sites and voice capture that main still formatted, or listened, in US English.
+- Measured on main's tree rather than copied from the branch: English sentence templates 111 -> 0, now a zero guard; the regex ratchet 2,790 -> 2,368.
+
+**Deploy safety.** Main deploys the app on merge, while no migration from `0318` on has reached production (F-001).
+- `0452`'s code read two columns only the migration creates, so it would have broken every marketplace read in production. `lib/marketplace/reserve-view.ts` now falls back to the pre-migration column on 42703 only, held by `tests/a-reserve-read-works-before-and-after-0452.test.ts`.
+- Every other ported change was checked for the same dependency.
+
+**Coordination.** Main moved while this was open: #583 (366 commits) landed #548's and #556's migration blocks as `0389`–`0391` and `0406`–`0443`, which took the numbers this port had used. Main was merged in with every conflict resolved hunk by hunk, keeping whichever side was the fuller fix and combining them where each carried something the other lacked (309 hunks in 142 files; the catalogues are the union of both sides, 875 keys both had added counted once). The port's thirteen surviving migrations moved as one block, in order, to `0446`–`0458`, above main's newest and the two numbers #583 keeps. Three were dropped because main now carries the same rule: `0393` is main's `0406`, `0395` is main's `0391`, and `0404` is main's `0426`.
+
+**Main merged in again (after #591–#600).** Main moved 46 commits while CI ran, carrying the page-audit fixes (#591, #594) and the media and cache releases (#592, #595, #599, #600), and no migrations, so `0446`–`0458` stay where they are. 111 files conflicted:
+- 61 were page titles: the port's translated `generateMetadata` against main's static title with the doubled brand removed. The port's side already has no brand and is translated, so it is kept. The two whose text ends in the brand ("Switch to Bubaly", "My Bubaly") go through main's `titleWithoutDoubledBrand`.
+- 32 were accessible names both sides had given the same controls. Main's page-specific keys are kept, so none of them is left unused; the port's `fieldName.*` keys stay in use at 78 other sites.
+- The rest were combined: main's own realtime channel (P-03), `role="switch"` and `suppressHydrationWarning`, with the port's translations and its stale-refresh guard.
+- The automatic merge had dropped three en-US keys that both sides had reworded (`actions.couldNotSaveThatPlace`, `couldNotDeleteThatPlace`, `couldNotUpdateThatGeofence`). They are restored with main's fuller wording in all seven catalogues.
+
+Verified after the merge: tsc clean, lint 0 errors / 15 warnings, 21,277 tests in 1,684 files pass in UTC and in America/Los_Angeles.
+
+**What the merge turned up.** Each is fixed in the merge commit and held by a test:
+- **The concierge approval race was open again** (DATA-018). Main's version applied a never-gated plan first and then compare-and-set the run to executed. A dismissal landing in between left real calendar events behind a run recorded as dismissed. The port's claim is restored inside main's structure: take the run (`pending` to `approved`) before applying anything, hand it back if applying throws or leaves kinds unapplied, and confirm the executed stamp and the release by reading back the rows. `tests/a-decided-run-leaves-the-queue.test.ts` races the two actions, and main's `tests/concierge-loop-does-not-claim-a-failed-plan.test.ts` now asserts the claim and the release.
+- The catalogue union had dropped `actions.couldNotApproveThatRun` as orphaned. The restored claim uses it, so it is back in all seven catalogues.
+- Two paged reads ended on a column that can tie: `app/api/ai/savings/route.ts` (transactions by date) and `lib/network/benchmarks-server.ts`. Both now end on `id` (DATA-015's ratchet).
+- Main's timezone guard still declared ten files the port had moved to family day keys, and the port's guard did not know main's `lib/time/zoned.ts` fallback. Both lists now describe the same three files.
+- Main's `family_allergies` RPC took `food.ts` and `shopping.ts` out of PRIV-001's reach baseline, so both entries came off.
+- The photo lightbox keeps `aria-modal`, which the shared dialog hook makes true. Main's newer rule licenses the attribute by that contract, not by component name. Main's older lightbox test and the component's comment still said otherwise; both now match the rule.
+- Eight ordering assertions written on bare `indexOf` now use `at()`, so a deleted statement fails them.
+
+**Main merged in again (through #609).** Main's #609 added `0444`, the same circle fix as the port's `0446`, found independently by the B6b form pass. The port's file is removed rather than renumbered, as `0393`, `0395` and `0404` were. Its analysis stays in `docs/PENDING_PROD_MIGRATIONS.md` under main's number, and the probes and guard that cited `0446` now cite `0444`. Twelve port migrations remain, `0447`–`0458`, and the next free number is `0459` (`0445` and `0446` stay unused).
+
+**Remaining.** Nothing on the branch is left to port. PR #586 (`claude/port-to-main-7q6vtf` into `main`) carries the result. Two items wait on the owner rather than on work: SEC-026 and SEC-001 are decisions main records as the owner's. PRODUCTION READY stays **NO**: nothing here changes F-001, and `0446`–`0458` join the migrations only a person applies to production.
 
 # Final Regression — 2026-09-20, branch `claude/roadmap-implementation-ld8bon`
 

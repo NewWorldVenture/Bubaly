@@ -9,7 +9,10 @@ import { EmptyState, ErrorState } from '@/components/ui/states';
 import { ReviewCard, type ReviewItem } from './review-card';
 import { getTranslations } from '@/lib/i18n/server';
 
-export const metadata: Metadata = { title: 'Family Missions' };
+export async function generateMetadata(): Promise<Metadata> {
+  const t = await getTranslations();
+  return { title: t('navLabel.familyMissions') };
+}
 export const dynamic = 'force-dynamic';
 
 const REVIEW_STATUSES = ['pending', 'ai_reviewed', 'needs_improvement', 'parent_review', 'disputed'];
@@ -65,7 +68,38 @@ export default async function MissionsPage() {
   const valBySub = new Map((validations ?? []).map((v) => [v.submission_id, v]));
   const disputeBySub = new Map((disputes ?? []).map((d) => [d.submission_id, d]));
 
-  // Build signed URLs for proof media (private bucket).
+  // Signed URLs for proof media (private bucket), in ONE round trip.
+  //
+  // This used to be a loop inside a loop around `await createSignedUrl` — one
+  // request per photo, in series, up to four photos per submission across the
+  // whole queue, so a busy Saturday cost a few hundred sequential round trips
+  // before the page could render (F-F03). This is the parent approval queue,
+  // the page a parent opens most.
+  //
+  // `createSignedUrls` is the batch form and was already used correctly in
+  // app/(app)/admin/marketing/assets/page.tsx; the same shape is used here,
+  // including reading the per-entry `error` so an object that could not be
+  // signed is left out rather than becoming an empty `src`.
+  //
+  // Chunked because the request carries every path in its body: a queue with
+  // hundreds of photos should be a few requests, never one enormous one and
+  // never one per photo.
+  const SIGN_CHUNK = 100;
+  const proofPaths = [...new Set(subs.flatMap((s) => (s.media_paths ?? []).slice(0, 4)))];
+  const signedByPath = new Map<string, string>();
+  for (let i = 0; i < proofPaths.length; i += SIGN_CHUNK) {
+    const chunk = proofPaths.slice(i, i + SIGN_CHUNK);
+    const { data: urls, error: signError } = await supabase.storage
+      .from('chore-proof').createSignedUrls(chunk, 600);
+    if (signError) {
+      // A proof photo that will not load is a missing photo, not a missing
+      // page: the parent still needs the queue, the note and the AI summary.
+      console.error('[missions] proof media could not be signed', signError);
+      break;
+    }
+    for (const u of urls ?? []) if (u.path && u.signedUrl && !u.error) signedByPath.set(u.path, u.signedUrl);
+  }
+
   const items: ReviewItem[] = [];
   for (const s of subs) {
     const chore = choreById.get(s.chore_id ?? '');
@@ -76,20 +110,12 @@ export default async function MissionsPage() {
     // section and no explanation — and this is the one screen whose entire job
     // is evidence review. A parent reviewing a `proof_required` mission would
     // see what looks like a proof-less submission and approve it, releasing
-    // points or real cash.
-    //
-    // The page already KNOWS `media_paths` was non-empty; that is precisely the
-    // information that was being thrown away. Counting what could not be signed
-    // costs nothing and turns a silent gap into a stated one. Audit C1-S9-29.
+    // points or real cash. Counting what could not be signed turns a silent gap
+    // into a stated one. Audit C1-S9-29. (The batch above logs a signing error.)
     const expectedProof = (s.media_paths ?? []).slice(0, 4);
-    const mediaUrls: string[] = [];
-    for (const path of expectedProof) {
-      // The gap is already STATED below (proofUnavailable); the error was the
-      // one thing still dropped. Audit C1-S9-71.
-      const { data, error: signError } = await supabase.storage.from('chore-proof').createSignedUrl(path, 600);
-      if (signError) console.error('[missions] proof signing failed', { submissionId: s.id, error: signError.message });
-      if (data?.signedUrl) mediaUrls.push(data.signedUrl);
-    }
+    const mediaUrls = expectedProof
+      .map((path) => signedByPath.get(path))
+      .filter((url): url is string => !!url);
     const proofUnavailable = expectedProof.length > mediaUrls.length;
     const v = valBySub.get(s.id);
     items.push({

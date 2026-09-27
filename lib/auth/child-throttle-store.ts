@@ -1,87 +1,71 @@
-// lib/auth/child-throttle-store.ts — the PERSISTENCE half of the child sign-in
-// brute-force throttle. `lib/auth/child-throttle.ts` decides policy and stays
-// DB-free so it can be unit-tested; this module owns the read/write, and in
-// particular owns making the failure count survive concurrency.
-//
-// Why a compare-and-set rather than a plain upsert: the count is read before
-// the password attempt and written after it, so every caller in flight at the
-// same moment computes its next value from the SAME observed row. A blind
-// `upsert({ username, fails: observed + 1 })` therefore lets N simultaneous
-// guesses cost ONE failure — the throttle counts rounds of parallel guessing,
-// not guesses. Against a 4-digit PIN (10,000 combinations) and a budget of
-// five, that is the difference between a bound and no bound at all.
-//
-// So the write carries the state it was computed from as a predicate. Zero rows
-// updated means somebody else's attempt landed first — not an error — and we
-// re-read and recompute against what they wrote.
+// lib/auth/child-throttle-store.ts — the child_login_throttle read/write that
+// lib/auth/child-throttle.ts deliberately leaves to the server.
+import 'server-only';
+
 import type { SupabaseClient } from '@supabase/supabase-js';
 import type { Database } from '@/lib/database.types';
-import { registerFailure, type ThrottleRow } from './child-throttle';
-
-/** Contention rounds before giving up. Each round is one lost race. */
-export const THROTTLE_WRITE_RETRIES = 4;
-
-type DB = SupabaseClient<Database>;
-
-async function readRow(db: DB, username: string): Promise<{ row: ThrottleRow | null; failed: boolean }> {
-  const { data, error } = await db.from('child_login_throttle')
-    .select('fails, window_start, locked_until').eq('username', username).maybeSingle();
-  if (error) return { row: null, failed: true };
-  return { row: (data as ThrottleRow | null) ?? null, failed: false };
-}
+import { DEFAULT_POLICY, evaluateThrottle, registerFailure, type ThrottlePolicy, type ThrottleRow } from './child-throttle';
 
 /**
- * Count one failed attempt for `username`, starting from the row the caller
- * already observed. Returns false only when the failure could NOT be recorded —
- * the caller must then refuse the sign-in rather than let an uncounted attempt
- * through, which is what makes losing every race safe.
+ * How many times a reservation may lose its compare-and-set before the attempt
+ * is refused. A real child is never racing themselves; contention on one
+ * username is a burst of guesses, and refusing the losers is the point.
  */
-export async function recordChildLoginFailure(
-  db: DB,
+const RESERVE_ATTEMPTS = 8;
+
+export type AttemptReservation =
+  | { ok: true }
+  | { ok: false; reason: 'locked'; retryAfterSec: number }
+  | { ok: false; reason: 'unavailable'; error: unknown };
+
+/**
+ * Take one of this username's attempts BEFORE its PIN is checked, counting it
+ * as a failure until a sign-in succeeds and clears the row.
+ *
+ * Recording the failure after the check, as sign-in used to, is a
+ * read-modify-write across the password request: every guess in a concurrent
+ * burst read the same count, passed the same gate, and wrote back the same
+ * "one more". Measured on the local stack: 25 concurrent wrong PINs all reached
+ * the password check and left `fails = 1`, and the right PIN placed 21st in
+ * such a burst signed in. The per-username lock is what makes a 4-digit PIN
+ * survivable; the per-IP limit bounds one address, not one child.
+ *
+ * So the gate and the count are one step. The write is conditional on the row
+ * that was read — the same compare-and-set the Resend counter uses — and a
+ * writer that loses re-reads and takes the NEXT slot, which is how the sixth
+ * guess of a burst meets the lock the fifth one set.
+ */
+export async function reserveChildLoginAttempt(
+  admin: SupabaseClient<Database>,
   username: string,
-  observed: ThrottleRow | null,
   now: Date = new Date(),
-): Promise<boolean> {
-  let current = observed;
+  policy: ThrottlePolicy = DEFAULT_POLICY,
+): Promise<AttemptReservation> {
+  for (let attempt = 0; attempt < RESERVE_ATTEMPTS; attempt += 1) {
+    const { data: row, error: readError } = await admin.from('child_login_throttle')
+      .select('fails, window_start, locked_until').eq('username', username).maybeSingle();
+    if (readError) return { ok: false, reason: 'unavailable', error: readError };
 
-  for (let attempt = 0; attempt <= THROTTLE_WRITE_RETRIES; attempt++) {
-    const next = registerFailure(current, now);
+    const current = row as ThrottleRow | null;
+    const gate = evaluateThrottle(current, now);
+    if (gate.locked) return { ok: false, reason: 'locked', retryAfterSec: gate.retryAfterSec };
+    const next = registerFailure(current, now, policy);
 
-    if (current) {
-      // Both columns, not just `fails`: a window rollover can recompute the
-      // same count from a different window, and the predicate has to tell
-      // those apart.
-      const { data, error } = await db.from('child_login_throttle')
-        .update(next)
-        .eq('username', username)
-        .eq('fails', current.fails)
-        .eq('window_start', current.window_start)
-        .select('username');
-      if (error) {
-        console.error('[child-login] failed-attempt counter write failed', error);
-        return false;
-      }
-      if (data && data.length > 0) return true;
-    } else {
-      const { error } = await db.from('child_login_throttle').insert({ username, ...next });
-      if (!error) return true;
-      // 23505: the first attempt for this username raced another first attempt.
-      // Anything else is a real write failure.
-      if (error.code !== '23505') {
-        console.error('[child-login] failed-attempt counter write failed', error);
-        return false;
-      }
+    if (!current) {
+      const { error: insertError } = await admin.from('child_login_throttle').insert({ username, ...next });
+      if (!insertError) return { ok: true };
+      // Another attempt created the row first; its slot is taken, so take the next.
+      if (insertError.code === '23505') continue;
+      return { ok: false, reason: 'unavailable', error: insertError };
     }
 
-    // Lost the race — re-read and count on top of whoever won.
-    const reread = await readRow(db, username);
-    if (reread.failed) {
-      console.error('[child-login] failed-attempt counter re-read failed');
-      return false;
-    }
-    current = reread.row;
+    const guarded = admin.from('child_login_throttle').update(next)
+      .eq('username', username).eq('fails', current.fails).eq('window_start', current.window_start);
+    const { data: claimed, error: claimError } = await (current.locked_until === null
+      ? guarded.is('locked_until', null)
+      : guarded.eq('locked_until', current.locked_until)).select('username').maybeSingle();
+    if (claimError) return { ok: false, reason: 'unavailable', error: claimError };
+    if (claimed) return { ok: true };
   }
-
-  console.error('[child-login] failed-attempt counter gave up after contention', { username });
-  return false;
+  return { ok: false, reason: 'unavailable', error: new Error('child login throttle contention') };
 }

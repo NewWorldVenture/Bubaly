@@ -54,7 +54,7 @@ function authorized(req: NextRequest): boolean {
   // worse than the leak. It is not silent either way: a secret in a URL is
   // written to every access log, proxy log, and Referer along the path, so
   // taking that route says so, once per request, in the operator's own logs.
-  // Removing it is an operator action — see docs. Audit C3-S5-08.
+  // Removing it is an operator action — see docs. Audit C3-S5-08 (F-E06).
   if (!header && query) {
     console.warn('[contact-center] inbound secret arrived in the query string; move the provider to the x-inbound-secret header');
   }

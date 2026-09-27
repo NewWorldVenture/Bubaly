@@ -9,7 +9,10 @@ import { getTranslations } from '@/lib/i18n/server';
 import { createServer } from '@/lib/supabase/server';
 import { scheduleTimezone } from '@/lib/social/schedule-time';
 
-export const metadata: Metadata = { title: 'New post · Studio' };
+export async function generateMetadata(): Promise<Metadata> {
+  const t = await getTranslations();
+  return { title: `${t('adminMarketingSocial.newPost')} · ${t('pageTitle.studio')}` };
+}
 export const dynamic = 'force-dynamic';
 
 export default async function NewContentPage() {

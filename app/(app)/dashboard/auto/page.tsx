@@ -12,7 +12,10 @@ import { EmptyState } from '@/components/ui/states';
 import { fmtDate } from '@/lib/utils/format';
 import { getTranslations } from '@/lib/i18n/server';
 
-export const metadata: Metadata = { title: 'Auto · Overview' };
+export async function generateMetadata(): Promise<Metadata> {
+  const t = await getTranslations();
+  return { title: `${t('displayComfort.auto')} · ${t('billing.overview')}` };
+}
 export const dynamic = 'force-dynamic';
 
 export default async function AutoOverviewPage() {

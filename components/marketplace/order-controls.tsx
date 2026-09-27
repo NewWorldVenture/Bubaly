@@ -94,7 +94,7 @@ export function ReviewForm({ orderId }: { orderId: string }) {
             type="button"
             role="radio"
             aria-checked={rating === n}
-            aria-label={`${n} star${n === 1 ? '' : 's'}`}
+            aria-label={n === 1 ? t('rating.starsOne') : t('rating.starsMany', { n: n })}
             onClick={() => setRating(n)}
             className={cn('rounded p-0.5', n <= rating ? 'text-amber-500' : 'text-muted')}
           >

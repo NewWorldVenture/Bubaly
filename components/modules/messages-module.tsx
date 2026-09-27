@@ -4,7 +4,7 @@ import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import {
   MessageCircle, Plus, Send, Smile, Paperclip, Reply, Pin, Trash2,
   MoreHorizontal, CheckCheck, ArrowLeft, Search, X, Camera, Loader2,
-  Check, Phone, Video, Info, Settings, UserPlus, SlidersHorizontal, Mic,
+  Check, Info, Settings, UserPlus, SlidersHorizontal, Mic,
   Image as ImageIcon, BellOff, Archive, ChevronRight, FileText, Download,
 } from 'lucide-react';
 import { useApp } from '@/components/app/app-context';
@@ -433,11 +433,15 @@ export function MessagesModule() {
       });
       if (insErr) {
         // Roll back the orphaned upload if the message row failed to insert.
-        // Genuine rollback — the row never landed, so a surviving object is
-        // referenced by nothing and the user is already being told this failed.
-        // Named in a log rather than swallowed. Audit C1-S6-01.
-        const { error: rollbackError } = await supabase.storage.from('family-media').remove([stored.path]);
-        if (rollbackError) console.error('[messages] upload rollback left an object behind', { path: stored.path }, rollbackError);
+        // Best-effort: the person is told about the insert failure, which is the
+        // part that concerns them. But `family-media` is a public bucket, so a
+        // rollback that quietly failed leaves an unreferenced object behind —
+        // and a discarded result cannot be distinguished from a refusal
+        // (SEC-015), so it is logged rather than dropped.
+        const rollback = await supabase.storage.from('family-media').remove([stored.path]);
+        if (rollback.error || !rollback.data?.some((object) => object.name === stored.path)) {
+          console.error('[messages] attachment rollback not confirmed', { path: stored.path, error: rollback.error });
+        }
         toastError(describeDbError(insErr));
       }
     } catch (err) {
@@ -735,10 +739,23 @@ export function MessagesModule() {
                 </p>
               </div>
               <AiInsight kind="messages" params={{ conversationId: activeConv.id }} variant="ghost" iconOnly />
-              <button onClick={() => toastError(tr('messagesModule.videoCallingIsnTAvailable'))} aria-label={tr('messages.startVideoCall')}
-                className="rounded-lg p-1.5 text-muted hover:text-fg"><Video className="h-4 w-4" /></button>
-              <button onClick={() => toastError(tr('messagesModule.voiceCallingIsnTAvailable'))} aria-label={tr('messages.startVoiceCall')}
-                className="rounded-lg p-1.5 text-muted hover:text-fg"><Phone className="h-4 w-4" /></button>
+              {/* A "Start video call" and a "Start voice call" button used to sit
+                  here. They rendered unconditionally, were styled exactly like
+                  the working "About this chat" button beside them, carried
+                  affirmative labels, and their only effect was an ERROR toast
+                  saying the feature does not exist (F-F10).
+                  
+                  That is the one place in the signed-in app that advertised a
+                  capability it does not have, and it contradicted a rule this
+                  repo states about itself twice — lib/constants/navigation.ts:
+                  "No 'coming soon' stubs: if a console section isn't built yet,
+                  it isn't listed." The capability-gated surfaces that do it
+                  right read the capability and simply do not offer the control:
+                  /wallet/cards passes caps.issuing and caps.physicalCards down
+                  rather than rendering a button that apologises.
+                  
+                  Removed rather than disabled. A greyed-out control still makes
+                  the promise; the absence of one makes none. */}
               <button onClick={() => setShowAbout(true)} aria-label={tr('messages.aboutThisChat')}
                 className="rounded-lg p-1.5 text-muted hover:text-fg"><Info className="h-4 w-4" /></button>
             </div>
@@ -894,7 +911,7 @@ export function MessagesModule() {
                               className="rounded-full bg-elevated p-1.5 text-muted hover:text-fg transition">
                               <Reply className="h-3.5 w-3.5" />
                             </button>
-                            <button aria-label={tr('a11y.moreActions')} onClick={() => setMsgMenu(msgMenu === msg.id ? null : msg.id)}
+                            <button aria-label={tr('a11y.moreActions')} aria-haspopup="menu" onClick={() => setMsgMenu(msgMenu === msg.id ? null : msg.id)}
                               className="rounded-full bg-elevated p-1.5 text-muted hover:text-fg transition">
                               <MoreHorizontal className="h-3.5 w-3.5" />
                             </button>
@@ -1045,7 +1062,7 @@ export function MessagesModule() {
               <div className="min-w-0">
                 <p className="truncate font-semibold">{activeConv.name ?? 'Direct Message'}</p>
                 <p className="text-xs text-muted">
-                  {activeConv.kind === 'direct' ? 'Direct message' : `Family group • ${memberCount} members`}
+                  {activeConv.kind === 'direct' ? tr('messages.directMessage') : memberCount === 1 ? tr('messages.familyGroupOne') : tr('messages.familyGroupMany', { n: memberCount })}
                 </p>
               </div>
             </div>
@@ -1089,7 +1106,7 @@ export function MessagesModule() {
                       <p className="truncate text-xs text-muted">{ROLE_LABELS[m.role]}</p>
                     </div>
                     {!isSelf && (
-                      <button onClick={() => setNewConvOpen(true)} aria-label={`Message ${m.display_name}`}
+                      <button onClick={() => setNewConvOpen(true)} aria-label={tr('itemAction.message', { name: m.display_name })}
                         className="rounded-lg p-1 text-muted/50 transition hover:text-fg group-hover:text-muted">
                         <MoreHorizontal className="h-4 w-4" />
                       </button>
@@ -1283,7 +1300,7 @@ function NewConversation({ familyId, userId, members, conversations, myName, onC
                 <span key={m.id} className="flex items-center gap-1.5 rounded-full bg-brand/15 py-1 pl-1 pr-2 text-xs font-medium text-brand-text">
                   <Avatar name={m.display_name} color={m.color} size={18} />
                   {firstName(m.display_name)}
-                  <button onClick={() => toggle(m.id)} aria-label={`Remove ${m.display_name}`} className="rounded-full hover:text-fg">
+                  <button onClick={() => toggle(m.id)} aria-label={tr('itemAction.remove', { name: m.display_name })} className="rounded-full hover:text-fg">
                     <X className="h-3 w-3" />
                   </button>
                 </span>
@@ -1421,7 +1438,7 @@ function NewConversation({ familyId, userId, members, conversations, myName, onC
                     <p className="truncate text-sm font-medium">{m.display_name}</p>
                     <p className="truncate text-xs text-muted">{ROLE_LABELS[m.role]}</p>
                   </div>
-                  <button onClick={() => toggle(m.id)} aria-label={`Remove ${m.display_name}`} className="rounded-lg p-1.5 text-muted hover:text-danger">
+                  <button onClick={() => toggle(m.id)} aria-label={tr('itemAction.remove', { name: m.display_name })} className="rounded-lg p-1.5 text-muted hover:text-danger">
                     <X className="h-4 w-4" />
                   </button>
                 </div>

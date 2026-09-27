@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest';
 
 import { DEFAULT_POLICY, evaluateThrottle, registerFailure, type ThrottleRow } from '@/lib/auth/child-throttle';
-import { recordChildLoginFailure } from '@/lib/auth/child-throttle-store';
+import { reserveChildLoginAttempt } from '@/lib/auth/child-throttle-store';
 
 /**
  * Parallel PIN guesses each cost a failure — not one between them.
@@ -26,6 +26,14 @@ import { recordChildLoginFailure } from '@/lib/auth/child-throttle-store';
  *
  * The fix predicates the write on the state it was computed from, so exactly
  * one racer wins a given transition and the losers recount on top of the winner.
+ *
+ * And it takes the attempt BEFORE the PIN is checked (reserveChildLoginAttempt),
+ * gate and count as one step. Counting every guess correctly AFTER the check is
+ * not enough on its own: every guess in a burst still passes the gate before
+ * any of them has written, so all of them reach the password check and the
+ * lock lands after the fact. Measured on the local stack: 25 concurrent wrong
+ * PINs all reached the check, and the right PIN placed 21st signed in. With the
+ * reservation, a burst admits exactly the budget and the rest meet the lock.
  *
  * Measured against the original `upsert(..., { onConflict: 'username' })`, which
  * the fake below still models so the counterfactual is the real one:
@@ -73,11 +81,12 @@ function fakeDb(seed?: Row) {
         const cur = rows.get(key);
         const matches = cur
           && (!('fails' in eqs) || cur.fails === eqs.fails)
-          && (!('window_start' in eqs) || cur.window_start === eqs.window_start);
-        if (!matches) return { data: [], error: null };
+          && (!('window_start' in eqs) || cur.window_start === eqs.window_start)
+          && (!('locked_until' in eqs) || cur.locked_until === eqs.locked_until);
+        if (!matches) return { data: null, error: null };
         updatesApplied++;
         rows.set(key, { ...cur!, ...patch });
-        return { data: [{ username: key }], error: null };
+        return { data: { username: key }, error: null };
       }
       await tick(null);
       return { data: rows.get(key) ?? null, error: null };
@@ -86,6 +95,7 @@ function fakeDb(seed?: Row) {
     const chain: Record<string, unknown> = {
       select: () => chain,
       eq: (col: string, val: unknown) => { eqs[col] = val; return chain; },
+      is: (col: string, val: unknown) => { eqs[col] = val; return chain; },
       maybeSingle: () => run(),
       update: (p: Partial<Row>) => { mode = 'update'; patch = p; return chain; },
       insert: (r: Row) => { mode = 'insert'; inserted = r; eqs.username = r.username; return run(); },
@@ -105,63 +115,69 @@ function fakeDb(seed?: Row) {
 const NOW = new Date('2026-09-19T01:00:00.000Z');
 const USER = 'alice';
 
-/** N guesses that all observed `observed` before any of them wrote. */
-async function parallelFailures(observed: ThrottleRow | null, n: number, seed?: Row) {
+/** N guesses in flight at once, each reserving its attempt before the PIN check. */
+async function parallelGuesses(n: number, seed?: Row) {
   const db = fakeDb(seed);
   const results = await Promise.all(
-    Array.from({ length: n }, () => recordChildLoginFailure(db.client, USER, observed, NOW)),
+    Array.from({ length: n }, () => reserveChildLoginAttempt(db.client, USER, NOW)),
   );
-  return { db, results, row: db.rows.get(USER) ?? null };
+  return { db, results, admitted: results.filter((r) => r.ok).length, row: db.rows.get(USER) ?? null };
 }
 
 describe('parallel child PIN guesses', () => {
-  it('each cost a failure when they start from no row at all', async () => {
-    const { results, row } = await parallelFailures(null, DEFAULT_POLICY.maxFails);
-    expect(results.every(Boolean)).toBe(true);
-    // Five simultaneous guesses are five failures, which is exactly the budget.
+  it('each cost an attempt when they start from no row at all', async () => {
+    const { admitted, row } = await parallelGuesses(DEFAULT_POLICY.maxFails);
+    // Five simultaneous guesses are five attempts, which is exactly the budget.
+    expect(admitted).toBe(DEFAULT_POLICY.maxFails);
     expect(row?.fails).toBe(DEFAULT_POLICY.maxFails);
   });
 
   it('trip the lockout instead of sliding under it', async () => {
-    const { row } = await parallelFailures(null, DEFAULT_POLICY.maxFails);
+    const { row } = await parallelGuesses(DEFAULT_POLICY.maxFails);
     expect(evaluateThrottle(row, NOW).locked).toBe(true);
   });
 
-  it('each cost a failure when they start from an existing count', async () => {
+  it('each cost an attempt when they start from an existing count', async () => {
     const seed: Row = { username: USER, fails: 1, window_start: NOW.toISOString(), locked_until: null };
-    const { row } = await parallelFailures({ ...seed }, 3, seed);
+    const { admitted, row } = await parallelGuesses(3, seed);
+    expect(admitted).toBe(3);
     expect(row?.fails).toBe(4);
   });
 
-  // A wide burst still counts every guess; the retry budget must cover it.
-  it('counts a burst wider than a single contention round', async () => {
-    const { results, row } = await parallelFailures(null, 5);
-    expect(results.every(Boolean)).toBe(true);
-    expect(row?.fails).toBe(5);
+  // The property counting after the check could not give: a burst wider than
+  // the budget reaches the PIN check only as many times as the budget allows.
+  it('admits no more of a wide burst than the budget', async () => {
+    const { results, admitted, row } = await parallelGuesses(25);
+    expect(admitted).toBe(DEFAULT_POLICY.maxFails);
+    expect(results.filter((r) => !r.ok).length).toBe(25 - DEFAULT_POLICY.maxFails);
+    expect(evaluateThrottle(row, NOW).locked).toBe(true);
+  });
+
+  it('turns away a guess that arrives once the lock is set', async () => {
+    const { db } = await parallelGuesses(DEFAULT_POLICY.maxFails);
+    const late = await reserveChildLoginAttempt(db.client, USER, NOW);
+    expect(late).toMatchObject({ ok: false, reason: 'locked' });
   });
 
   // Controls — the sequential path and the policy itself are unchanged.
-  it('still counts an ordinary one-at-a-time failure', async () => {
+  it('still counts an ordinary one-at-a-time attempt', async () => {
     const db = fakeDb();
-    expect(await recordChildLoginFailure(db.client, USER, null, NOW)).toBe(true);
-    const first = db.rows.get(USER)!;
-    expect(first.fails).toBe(1);
-    expect(await recordChildLoginFailure(db.client, USER, first, NOW)).toBe(true);
+    expect(await reserveChildLoginAttempt(db.client, USER, NOW)).toEqual({ ok: true });
+    expect(db.rows.get(USER)?.fails).toBe(1);
+    expect(await reserveChildLoginAttempt(db.client, USER, NOW)).toEqual({ ok: true });
     expect(db.rows.get(USER)?.fails).toBe(2);
   });
 
-  // A control on the shipped code, not part of the calibration above: the blind
-  // counterfactual never re-reads, so this case says nothing about it either way.
-  it('reports failure to the caller when the counter cannot be written', async () => {
+  it('reports the attempt as unavailable when the counter cannot be read', async () => {
     // An uncounted attempt must refuse the sign-in, which is what makes losing
-    // a race safe: the loser either recounts or is turned away.
+    // a race safe: the loser either takes the next slot or is turned away.
     const db = {
       from: () => ({
         select: () => ({ eq: () => ({ maybeSingle: () => Promise.resolve({ data: null, error: { message: 'down' } }) }) }),
         insert: () => Promise.resolve({ error: { code: '08006', message: 'down' } }),
       }),
     } as never;
-    expect(await recordChildLoginFailure(db, USER, null, NOW)).toBe(false);
+    expect(await reserveChildLoginAttempt(db, USER, NOW)).toMatchObject({ ok: false, reason: 'unavailable' });
   });
 
   it('leaves the pure policy alone — the same inputs give the same next state', () => {

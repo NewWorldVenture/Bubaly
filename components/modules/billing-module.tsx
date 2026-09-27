@@ -49,6 +49,7 @@ import { PageHeader } from '@/components/app/page-header';
 import { Avatar } from '@/components/ui/avatar';
 import { AiInsight } from '@/components/ai/ai-insight';
 import { fmtDate } from '@/lib/utils/format';
+import { isInMonth, parseCalendarDate, startOfLocalDay } from '@/lib/utils/calendar-date';
 import { isAdmin } from '@/lib/constants/roles';
 import { BASIC_MONTHLY_CENTS, BASIC_ANNUAL_CENTS, PLUS_MONTHLY_CENTS, PLUS_ANNUAL_CENTS } from '@/lib/constants/plans';
 import { PLAN_CURRENCY } from '@/lib/marketing/value';
@@ -64,6 +65,7 @@ import { useLocale, useTranslations } from '@/components/i18n/locale-provider';
 import { FamilyDeliveredValue } from '@/components/billing/family-delivered-value';
 import type { LocaleCode } from '@/lib/i18n/locales';
 import { useConfirm } from '@/components/ui/confirm';
+import { ageOn } from '@/lib/utils/birthday';
 
 type FinancialAccount = Tables<'financial_accounts'>;
 type Transaction = Tables<'transactions'>;
@@ -252,14 +254,8 @@ function categoryColor(cat: string): string {
 
 /** Age in whole years from an ISO birthday, or null if unknown/invalid. */
 function memberAge(birthday: string | null): number | null {
-  if (!birthday) return null;
-  const b = new Date(birthday);
-  if (Number.isNaN(b.getTime())) return null;
-  const now = new Date();
-  let age = now.getFullYear() - b.getFullYear();
-  const m = now.getMonth() - b.getMonth();
-  if (m < 0 || (m === 0 && now.getDate() < b.getDate())) age--;
-  return age >= 0 && age < 130 ? age : null;
+  const age = ageOn(birthday, new Date());
+  return age !== null && age >= 0 && age < 130 ? age : null;
 }
 
 const EXPENSE_CATEGORIES = [
@@ -762,10 +758,7 @@ export function BillingModule({ serviceFeeNotice = null }: { serviceFeeNotice?: 
   const currentYear = now.getFullYear();
 
   const currentMonthTransactions = useMemo(() =>
-    transactions.filter((tx) => {
-      const d = new Date(tx.date);
-      return d.getMonth() === currentMonth && d.getFullYear() === currentYear;
-    }),
+    transactions.filter((tx) => isInMonth(tx.date, currentYear, currentMonth)),
     [transactions, currentMonth, currentYear],
   );
 
@@ -814,7 +807,11 @@ export function BillingModule({ serviceFeeNotice = null }: { serviceFeeNotice?: 
 
   // Upcoming bills
   const upcomingBills = useMemo(() =>
-    bills.filter((b) => b.status === 'upcoming' || new Date(b.due_date) >= now).slice(0, 5),
+    bills.filter((b) => {
+      if (b.status === 'upcoming') return true;
+      const due = parseCalendarDate(b.due_date);
+      return due !== null && due >= startOfLocalDay(now);  // due today is still upcoming
+    }).slice(0, 5),
     // eslint-disable-next-line react-hooks/exhaustive-deps
     [bills],
   );
@@ -885,7 +882,7 @@ export function BillingModule({ serviceFeeNotice = null }: { serviceFeeNotice?: 
   const lastMonthExpenses = useMemo(() => {
     const d = new Date(currentYear, currentMonth - 1, 1);
     return transactions
-      .filter((tx) => tx.type === 'expense' && new Date(tx.date).getMonth() === d.getMonth() && new Date(tx.date).getFullYear() === d.getFullYear())
+      .filter((tx) => tx.type === 'expense' && isInMonth(tx.date, d.getFullYear(), d.getMonth()))
       .reduce((s, tx) => s + Math.abs(tx.amount), 0);
   }, [transactions, currentMonth, currentYear]);
   const spendDeltaPct = lastMonthExpenses > 0 ? Math.round(((expenses - lastMonthExpenses) / lastMonthExpenses) * 100) : 0;
@@ -898,8 +895,8 @@ export function BillingModule({ serviceFeeNotice = null }: { serviceFeeNotice?: 
     const daysInMonth = new Date(currentYear, currentMonth + 1, 0).getDate();
     const billsByDay: Record<number, Bill[]> = {};
     bills.forEach((b) => {
-      const d = new Date(b.due_date);
-      if (d.getMonth() === currentMonth && d.getFullYear() === currentYear) {
+      const d = parseCalendarDate(b.due_date);
+      if (d && d.getMonth() === currentMonth && d.getFullYear() === currentYear) {
         (billsByDay[d.getDate()] ??= []).push(b);
       }
     });
@@ -913,7 +910,8 @@ export function BillingModule({ serviceFeeNotice = null }: { serviceFeeNotice?: 
   function billDotColor(b: Bill): string {
     if (b.status === 'paid') return 'bg-emerald-500';
     if (b.status === 'overdue') return 'bg-rose-500';
-    return new Date(b.due_date) > now ? 'bg-amber-500' : 'bg-brand';
+    const due = parseCalendarDate(b.due_date);
+    return due !== null && due > now ? 'bg-amber-500' : 'bg-brand';
   }
 
   // ── CRUD helpers ────────────────────────────────────────────────────────
@@ -1077,7 +1075,7 @@ export function BillingModule({ serviceFeeNotice = null }: { serviceFeeNotice?: 
                   <div className={cn('h-full rounded-full transition-all', budgetPct > 100 ? 'bg-rose-500' : 'bg-emerald-500')} style={{ width: `${Math.min(budgetPct, 100)}%` }} />
                 </div>
                 <p className={cn('mt-2 text-xs font-medium', budgetPct > 100 ? 'text-rose-400' : 'text-emerald-400')}>
-                  {budgetPct > 100 ? `Over budget by ${fmtCurrency(expenses - totalMonthlyBudget)}` : "You're on track! 🎉"}
+                  {budgetPct > 100 ? tr('billing.overBudgetBy', { amount: fmtCurrency(expenses - totalMonthlyBudget) }) : tr('billing.onTrack')}
                 </p>
               </>
             ) : (
@@ -1227,12 +1225,12 @@ export function BillingModule({ serviceFeeNotice = null }: { serviceFeeNotice?: 
             <p className="text-sm font-bold">{tr('billing.moneyTip')}</p>
             <p className="text-xs text-muted">
               {lastMonthExpenses === 0
-                ? 'Log a full month of spending to unlock personalized insights.'
+                ? tr('billing.logFullMonth')
                 : spendDeltaPct < 0
-                  ? `You've spent ${Math.abs(spendDeltaPct)}% less this month compared to last month. Great job! 🎉`
+                  ? tr('billing.spentLessPct', { pct: Math.abs(spendDeltaPct) })
                   : spendDeltaPct > 0
-                    ? `You're spending ${spendDeltaPct}% more this month than last. Tap for ways to trim it.`
-                    : 'Your spending is right in line with last month.'}
+                    ? tr('billing.spendingMorePct', { pct: spendDeltaPct })
+                    : tr('billing.spendingInLine')}
             </p>
           </div>
         </div>
@@ -1309,7 +1307,7 @@ export function BillingModule({ serviceFeeNotice = null }: { serviceFeeNotice?: 
                   <div className={cn('h-full rounded-full transition-all', over ? 'bg-red-500' : 'bg-emerald-500')} style={{ width: `${pct}%` }} />
                 </div>
                 <p className={cn('mt-1.5 text-xs', over ? 'text-red-400' : 'text-muted')}>
-                  {over ? `Over budget by ${fmtCurrency(Math.abs(remaining))}` : `${fmtCurrency(remaining)} remaining`}
+                  {over ? tr('billing.overBudgetBy', { amount: fmtCurrency(Math.abs(remaining)) }) : tr('billing.amountRemaining', { amount: fmtCurrency(remaining) })}
                 </p>
               </div>
             );

@@ -31,7 +31,7 @@ export function SuperAdminToggle({ email, isAdmin, locked }: { email: string; is
   function toggle() {
     if (pending) return;
     const next = !on;
-    if (!window.confirm(next ? `Grant super-admin to ${email}?` : `Remove super-admin from ${email}?`)) return;
+    if (!window.confirm(next ? t('superAdminToggle.grantConfirm', { email }) : t('superAdminToggle.removeConfirm', { email }))) return;
     setOn(next); // optimistic
     start(async () => {
       const res = await adminSetSuperAdminAction({ email, makeAdmin: next });
@@ -40,7 +40,7 @@ export function SuperAdminToggle({ email, isAdmin, locked }: { email: string; is
         toastError(res.error ?? 'Could not update super-admin access.');
         return;
       }
-      success(next ? `${email} is now a super-admin` : `Removed super-admin from ${email}`);
+      success(next ? t('superAdminToggle.nowSuperAdmin', { email }) : t('superAdminToggle.removedSuperAdmin', { email }));
       router.refresh();
     });
   }
@@ -51,7 +51,7 @@ export function SuperAdminToggle({ email, isAdmin, locked }: { email: string; is
       onClick={toggle}
       disabled={pending}
       aria-pressed={on}
-      aria-label={`Super-admin for ${email}`}
+      aria-label={t('superAdminToggle.superAdminFor', { email })}
       className={cn('relative h-6 w-10 rounded-full transition disabled:opacity-50', on ? 'bg-brand' : 'bg-border')}
     >
       <span className={cn('absolute top-0.5 h-5 w-5 rounded-full bg-white transition', on ? 'left-[18px]' : 'left-0.5')} />

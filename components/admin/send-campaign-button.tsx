@@ -23,8 +23,8 @@ export function SendCampaignButton({ id, disabled }: { id: string; disabled?: bo
     } catch { /* fall through to confirm without count */ }
 
     const ok = window.confirm(count > 0
-      ? `Send this campaign to ${count} recipient${count === 1 ? '' : 's'}? This cannot be undone.`
-      : 'No eligible recipients were found. Send anyway?');
+      ? (count === 1 ? t('sendCampaignButton.confirmOne') : t('sendCampaignButton.confirmMany', { n: count }))
+      : t('sendCampaignButton.noRecipientsSendAnyway'));
     if (!ok || count === 0) { if (count === 0) toastError(t('sendCampaignButton.noEligibleRecipients')); return; }
 
     setBusy(true);
@@ -34,7 +34,7 @@ export function SendCampaignButton({ id, disabled }: { id: string; disabled?: bo
       });
       const json = await res.json();
       if (!res.ok) { toastError(json.error ?? 'Send failed.'); return; }
-      success(`Sent to ${json.sent} recipient${json.sent === 1 ? '' : 's'}.`);
+      success(json.sent === 1 ? t('sendCampaign.sentToRecipientOne', { count: json.sent }) : t('sendCampaign.sentToRecipientsMany', { count: json.sent ?? 0 }));
       router.refresh();
     } catch {
       toastError(t('sendCampaignButton.networkErrorPleaseTryAgain'));

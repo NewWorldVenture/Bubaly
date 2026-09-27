@@ -15,7 +15,10 @@ import {
 import { cn } from '@/lib/utils/cn';
 import { getTranslations } from '@/lib/i18n/server';
 
-export const metadata: Metadata = { title: 'Selling · Marketplace' };
+export async function generateMetadata(): Promise<Metadata> {
+  const t = await getTranslations();
+  return { title: `${t('marketplaceSelling.selling')} · ${t('navLabel.marketplace')}` };
+}
 export const dynamic = 'force-dynamic';
 
 const CHIP_TONE: Record<AttentionTone, string> = {
@@ -99,8 +102,7 @@ export default async function SellingPage() {
   const signals: (ListingSignals & { photo: string | null; price: number })[] = rows.map((l) => {
     const isAuction = l.sale_format === 'auction';
     const endingSoon = isAuction && auctionStatus({
-      saleFormat: l.sale_format, status: l.status, startingBidCents: 0, currentBidCents: 0, bidCount: l.bid_count ?? 0,
-      reserveCents: null, buyNowCents: null, auctionStartsAt: l.auction_starts_at, auctionEndsAt: l.auction_ends_at,
+      saleFormat: l.sale_format, auctionStartsAt: l.auction_starts_at, auctionEndsAt: l.auction_ends_at,
     }, now) === 'ending_soon';
     return {
       id: l.id, title: l.title, status: l.status, saleFormat: l.sale_format ?? 'fixed',

@@ -85,11 +85,13 @@ describe('the four smaller answers are logged, not escalated', () => {
     },
     {
       file: 'app/(app)/missions/page.tsx',
-      bind: "error: signError } = await supabase.storage.from('chore-proof').createSignedUrl(",
-      log: "if (signError) console.error('[missions] proof signing failed'",
+      // Signed in batches now (F-F03): one createSignedUrls per chunk rather
+      // than one request per photo, so the bind and the log are the batch's.
+      bind: "const { data: urls, error: signError } = await supabase.storage",
+      log: "console.error('[missions] proof media could not be signed', signError);",
       // C1-S9-29's count is what states the gap to the parent; logging must
       // sit beside it, not replace it.
-      keeps: 'if (data?.signedUrl) mediaUrls.push(data.signedUrl);',
+      keeps: 'const proofUnavailable = expectedProof.length > mediaUrls.length;',
     },
     {
       file: 'components/app/app-context.tsx',

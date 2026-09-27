@@ -74,7 +74,7 @@ export async function requestCallAction(input: {
     scheduled_for: input.scheduledFor || null,
     created_by: ctx.user.id,
   }).select('id').single();
-  if (error || !data) return { ok: false, error: describeActionError(error, 'Could not create the call request') };
+  if (error || !data) return { ok: false, error: describeActionError(error, t('actions.couldNotCreateTheCallRequest')) };
 
   await logAudit(supabase, {
     familyId: ctx.active.familyId, actorId: ctx.user.id, action: 'create',

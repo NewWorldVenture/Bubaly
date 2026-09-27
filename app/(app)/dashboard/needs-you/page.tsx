@@ -32,7 +32,10 @@ import { listMemories } from '@/lib/services/memory';
 import { scopeFromUserContext } from '@/lib/services/scope';
 import { settle } from '@/lib/supabase/settle';
 
-export const metadata: Metadata = { title: 'Needs your decision' };
+export async function generateMetadata(): Promise<Metadata> {
+  const t = await getTranslations();
+  return { title: t('needsYou.needsYourDecision') };
+}
 export const dynamic = 'force-dynamic';
 
 export default async function NeedsYouPage() {

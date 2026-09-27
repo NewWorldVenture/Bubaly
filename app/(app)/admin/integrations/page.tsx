@@ -69,15 +69,15 @@ export default async function AdminIntegrationsPage() {
   const googleCalCount = googleCalendarResult.count;
 
   const integrations: Integration[] = [
-    { name: 'Supabase Database', category: 'Core', icon: Database, connected: dbCheck.ok, detail: dbCheck.ok ? `Responding in ${dbCheck.latencyMs}ms` : dbCheck.detail },
-    { name: 'Supabase Storage', category: 'Core', icon: HardDrive, connected: storageCheck.ok, detail: storageCheck.ok ? `Responding in ${storageCheck.latencyMs}ms` : storageCheck.detail },
-    { name: 'Supabase Auth', category: 'Core', icon: KeyRound, connected: authCheck.ok, detail: authCheck.ok ? `Responding in ${authCheck.latencyMs}ms` : authCheck.detail },
-    { name: 'Stripe', category: 'Payments', icon: CreditCard, connected: stripeCheck.ok, detail: stripeCheck.ok ? `Live balance check in ${stripeCheck.latencyMs}ms` : stripeCheck.detail },
+    { name: 'Supabase Database', category: 'Core', icon: Database, connected: dbCheck.ok, detail: dbCheck.ok ? tr('adminIntegrations.respondingInMs', { ms: dbCheck.latencyMs ?? 0 }) : dbCheck.detail },
+    { name: 'Supabase Storage', category: 'Core', icon: HardDrive, connected: storageCheck.ok, detail: storageCheck.ok ? tr('adminIntegrations.respondingInMs', { ms: storageCheck.latencyMs ?? 0 }) : storageCheck.detail },
+    { name: 'Supabase Auth', category: 'Core', icon: KeyRound, connected: authCheck.ok, detail: authCheck.ok ? tr('adminIntegrations.respondingInMs', { ms: authCheck.latencyMs ?? 0 }) : authCheck.detail },
+    { name: 'Stripe', category: 'Payments', icon: CreditCard, connected: stripeCheck.ok, detail: stripeCheck.ok ? tr('adminIntegrations.liveBalanceCheckInMs', { ms: stripeCheck.latencyMs ?? 0 }) : stripeCheck.detail },
     { name: 'Resend', category: 'Email', icon: Mail, connected: emailCheck.ok, detail: emailCheck.detail },
     {
       name: 'Google Calendar', category: 'Productivity', icon: Calendar,
       connected: (googleCalCount ?? 0) > 0,
-      detail: `${googleCalCount ?? 0} member${googleCalCount === 1 ? '' : 's'} connected, across all families`,
+      detail: googleCalCount === 1 ? tr('adminIntegrations.membersConnectedOne') : tr('adminIntegrations.membersConnectedMany', { n: googleCalCount ?? 0 }),
     },
   ];
 

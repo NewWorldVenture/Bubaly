@@ -14,7 +14,10 @@ import { cn } from '@/lib/utils/cn';
 import { ErrorState } from '@/components/ui/states';
 import { getLocaleContext, getTranslations } from '@/lib/i18n/server';
 
-export const metadata: Metadata = { title: 'Orders · Marketplace' };
+export async function generateMetadata(): Promise<Metadata> {
+  const t = await getTranslations();
+  return { title: `${t('marketplaceOrders.orders')} · ${t('navLabel.marketplace')}` };
+}
 export const dynamic = 'force-dynamic';
 
 const RETURN_TONE: Record<string, string> = {
@@ -167,7 +170,7 @@ export default async function MarketplaceOrdersPage() {
                   {o.amount_cents > 0 && <span className="text-sm font-semibold text-brand-text">{formatCents(o.amount_cents, locale.code)}</span>}
                 </div>
                 <p className="mt-1 text-xs text-muted">
-                  {role === 'buyer' ? `You’re getting this from ${other}` : `${other} is getting this from you`} · {o.kind}
+                  {role === 'buyer' ? t('orders.gettingFrom', { name: other }) : t('orders.gettingFromYou', { name: other })} · {o.kind}
                 </p>
                 {fee && (
                   <p className="mt-1 text-xs text-muted">

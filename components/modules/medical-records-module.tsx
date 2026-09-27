@@ -455,7 +455,7 @@ export function MedicalRecordsModule({ kind }: { kind: RecordKind }) {
       </Modal>
 
       {/* ── Insurance modal ───────────────────────────────── */}
-      <Modal open={!!policyForm} title={policyForm?.id ? 'Edit Insurance' : 'Add Insurance'} onClose={() => setPolicyForm(null)} className="sm:max-w-lg">
+      <Modal open={!!policyForm} title={policyForm?.id ? t('medicalRecords.editInsurance') : t('medicalRecords.addInsuranceTitle')} onClose={() => setPolicyForm(null)} className="sm:max-w-lg">
         {policyForm && (
           <div className="space-y-3">
             <Field label={t('medicalRecords.covers')}>{(id) => <Select id={id} value={policyForm.member_id} onChange={(e) => setPolicyForm({ ...policyForm, member_id: e.target.value })}><option value="">{t('medicalRecords.wholeFamily')}</option>{members.map((m) => <option key={m.id} value={m.id}>{m.display_name}</option>)}</Select>}</Field>
@@ -480,10 +480,10 @@ export function MedicalRecordsModule({ kind }: { kind: RecordKind }) {
             <div className="grid grid-cols-2 gap-3">
               {(['front', 'back'] as const).map((side) => (
                 <div key={side}>
-                  <p className="mb-1.5 text-xs font-medium text-muted capitalize">{side} {t('medicalRecords.ofCard')}</p>
-                  <CardImage path={side === 'front' ? policyForm.front_image_path : policyForm.back_image_path} label={`${side} of card`} />
+                  <p className="mb-1.5 text-xs font-medium text-muted">{side === 'front' ? t('medicalRecords.frontOfCard') : t('medicalRecords.backOfCard')}</p>
+                  <CardImage path={side === 'front' ? policyForm.front_image_path : policyForm.back_image_path} label={side === 'front' ? t('medicalRecords.frontOfCard') : t('medicalRecords.backOfCard')} />
                   <label className="mt-2 flex cursor-pointer items-center justify-center gap-2 rounded-lg border border-dashed border-border py-2 text-xs font-semibold text-muted hover:text-fg">
-                    <Camera className="h-4 w-4" /> {uploading === side ? 'Uploading…' : 'Take photo / Upload'}
+                    <Camera className="h-4 w-4" /> {uploading === side ? t('medicalRecords.uploading') : t('medicalRecords.takePhotoOrUpload')}
                     <input type="file" accept="image/*" capture="environment" className="hidden" onChange={(e) => { const f = e.target.files?.[0]; if (f) void uploadCard(side, f); e.target.value = ''; }} />
                   </label>
                 </div>

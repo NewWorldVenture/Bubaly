@@ -138,7 +138,7 @@ export function IndependenceModule({ kids, rows }: { kids: Kid[]; rows: Row[] })
                       <button
                         onClick={() => run(() => skipMilestoneAction(r.id), 'skip-' + r.id, 'Skipped — it won’t be suggested again.')}
                         disabled={pending}
-                        aria-label={`Skip ${r.title}`}
+                        aria-label={t('itemAction.skip', { name: r.title })}
                         className="rounded-lg p-2 text-muted transition hover:text-fg disabled:opacity-50">
                         {busy === 'skip-' + r.id ? <Loader2 className="h-4 w-4 animate-spin" /> : <X className="h-4 w-4" />}
                       </button>
@@ -185,7 +185,7 @@ export function IndependenceModule({ kids, rows }: { kids: Kid[]; rows: Row[] })
             {suggestions.length > 6 && (
               <button onClick={() => setShowAllSuggestions(v => !v)}
                 className="mt-3 flex w-full items-center justify-center gap-1 rounded-lg py-2 text-xs font-semibold text-muted transition hover:text-fg">
-                {showAllSuggestions ? 'Show fewer' : `Show all ${suggestions.length}`}
+                {showAllSuggestions ? t('listToggle.showFewer') : t('listToggle.showAll', { n: suggestions.length })}
                 <ChevronDown className={cn('h-3.5 w-3.5 transition-transform', showAllSuggestions && 'rotate-180')} />
               </button>
             )}

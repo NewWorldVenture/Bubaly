@@ -12,7 +12,10 @@ import { fmtDate } from '@/lib/utils/format';
 import { ErrorState } from '@/components/ui/states';
 import { getTranslations } from '@/lib/i18n/server';
 
-export const metadata: Metadata = { title: 'Stress Prediction' };
+export async function generateMetadata(): Promise<Metadata> {
+  const t = await getTranslations();
+  return { title: t('navLabel.stressPrediction') };
+}
 export const dynamic = 'force-dynamic';
 
 async function ReadFailure() {

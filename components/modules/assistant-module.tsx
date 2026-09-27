@@ -665,7 +665,7 @@ export function AssistantModule() {
           />
         )}
       />
-      <p className="sr-only" aria-live="polite">{planCount > 0 ? `${planCount} results available in the plan pane` : ''}</p>
+      <p className="sr-only" aria-live="polite">{planCount === 1 ? t('assistantModule.planResultsOne') : planCount > 1 ? t('assistantModule.planResultsMany', { n: planCount }) : ''}</p>
     </div>
   );
 }

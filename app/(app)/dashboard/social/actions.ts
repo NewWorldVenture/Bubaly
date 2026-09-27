@@ -138,7 +138,7 @@ export async function createPostAction(formData: FormData): Promise<CreatePostRe
   try {
     await requireSocialPermission(fid, permission);
   } catch {
-    return { ok: false, error: `You do not have permission to ${intent} posts.` };
+    return { ok: false, error: tr(intent === 'publish' ? 'socialSchedule.noPermissionToPublish' : intent === 'schedule' ? 'socialSchedule.noPermissionToSchedule' : 'socialSchedule.noPermissionToDraft') };
   }
 
   const title = String(formData.get('title') ?? '').trim() || null;

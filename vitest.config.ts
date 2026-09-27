@@ -31,7 +31,35 @@ export default defineConfig({
     // `process.env.TZ ?? 'UTC'` rather than a bare 'UTC': CI runs this suite a
     // second time under TZ=America/Los_Angeles, and a hard-coded value here
     // would silently override that and make the DST job prove nothing.
-    env: { TZ: process.env.TZ ?? 'UTC' },
+    // The ONE place a Twilio-facing webhook may skip its signature check.
+    //
+    // lib/server/twilio-ingress.ts refuses an unverifiable callback (503)
+    // rather than waving it through, which is what closes F-E07 for every
+    // preview, staging and self-hosted deployment. Tests post unsigned bodies
+    // to those routes by the dozen, so the bypass has to exist somewhere —
+    // here, named and greppable, rather than as a NODE_ENV check compiled into
+    // the routes themselves. It applies only when TWILIO_AUTH_TOKEN is unset:
+    // a test that stubs a token still goes through real verification, which is
+    // how tests/guardian-*-execution.test.ts exercise the signing path.
+    env: { TZ: process.env.TZ ?? 'UTC', ALLOW_UNSIGNED_TWILIO_WEBHOOKS: '1' },
+
+    // 20s, not vitest's default 5s (F-F05).
+    //
+    // Ninety-six cases across twelve files share one shape: a cold
+    // `await import('@/app/…')` inside a default-timeout test. The first such
+    // import in a worker pays for the whole module graph — route handler,
+    // translation catalogues, Supabase client — and 5,000ms is not reliably
+    // enough for it. Measured here: a marketing-route case timed out at
+    // 5,007ms on its first case and passed in 422ms once the catalogue was
+    // warm, and a full run under CPU contention timed out five unrelated cases
+    // at exactly 5,000ms and passed all of them on a re-run.
+    //
+    // A timeout that fires on load rather than on a hang teaches everyone to
+    // re-run the suite, which is how a real hang gets re-run too. 20s is long
+    // enough that reaching it means something is actually stuck, and short
+    // enough to stay a timeout rather than a wait.
+    testTimeout: 20_000,
+    hookTimeout: 20_000,
   },
   resolve: {
     alias: {

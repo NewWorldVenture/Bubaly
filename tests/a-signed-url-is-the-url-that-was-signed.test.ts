@@ -145,6 +145,8 @@ const SIGNATURE_PATH = [
   'app/api/contact-center/voice/transcription/route.ts',
   'app/api/contact-center/sms/route.ts',
   'lib/contact-center/server.ts',
+  // The shared verifier the Twilio routes delegate to (verifyTwilioRequest).
+  'lib/server/twilio-ingress.ts',
 ];
 
 describe('the signature path has one spelling of the base URL', () => {
@@ -180,7 +182,12 @@ describe('the signature path has one spelling of the base URL', () => {
   it('each of them actually calls appBaseUrl', () => {
     // The other half: absence of NEXT_PUBLIC_APP_URL is not the same as using
     // the shared helper. A file could hardcode a host and pass this otherwise.
-    const missing = SIGNATURE_PATH.filter((f) => !readFileSync(f, 'utf8').includes('appBaseUrl('));
+    // A route that verifies through lib/server/twilio-ingress (verifyTwilioRequest)
+    // takes its base from there, and that module is on this list itself.
+    const missing = SIGNATURE_PATH.filter((f) => {
+      const source = readFileSync(f, 'utf8');
+      return !source.includes('appBaseUrl(') && !source.includes('verifyTwilioRequest(');
+    });
     expect(missing, `no appBaseUrl() call in: ${missing.join(', ')}`).toEqual([]);
   });
 });

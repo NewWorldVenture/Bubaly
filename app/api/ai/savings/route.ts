@@ -61,7 +61,7 @@ export async function POST() {
   const [txnsResult, budgetsResult, billsResult, subsResult] = await settleAll([
     readAllAsQuery<{ amount: number; category: string | null; type: string; date: string }>((from, to) =>
       supabase.from('transactions').select('amount, category, type, date').eq('family_id', familyId)
-        .eq('type', 'expense').gte('date', monthStart).order('date').range(from, to), { max: 20_000 }),
+        .eq('type', 'expense').gte('date', monthStart).order('date').order('id').range(from, to), { max: 20_000 }),
     supabase.from('budgets').select('category, amount, period').eq('family_id', familyId),
     supabase.from('bills').select('name, amount, status').eq('family_id', familyId).neq('status', 'paid'),
     supabase.from('subscriptions_tracked').select('name, cost_cents, cadence, status, last_used').eq('family_id', familyId),

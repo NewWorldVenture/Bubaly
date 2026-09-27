@@ -6,7 +6,10 @@ import { ErrorState } from '@/components/ui/states';
 import { ConciergeCallsModule } from '@/components/modules/concierge-calls-module';
 import type { Tables } from '@/lib/database.types';
 
-export const metadata: Metadata = { title: 'AI Calls' };
+export async function generateMetadata(): Promise<Metadata> {
+  const t = await getTranslations();
+  return { title: t('conciergeCalls.aiCalls') };
+}
 export const dynamic = 'force-dynamic';
 
 /** Outbound concierge calls: the family writes the request, Bubaly writes the

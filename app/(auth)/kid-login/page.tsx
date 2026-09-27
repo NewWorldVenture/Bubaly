@@ -1,6 +1,6 @@
 import type { Metadata } from 'next';
-import { KidLoginForm } from '@/components/auth/kid-login-form';
 import { getTranslations } from '@/lib/i18n/server';
+import { KidLoginForm } from '@/components/auth/kid-login-form';
 
 // noindex/nofollow, matching `/login` and `/signup`. This page was the only
 // sign-in form in the tree that was neither in robots.txt's DISALLOWED_PREFIXES

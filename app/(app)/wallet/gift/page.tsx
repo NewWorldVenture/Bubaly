@@ -9,7 +9,10 @@ import { isManager } from '@/lib/constants/roles';
 import { GiftView, type GiftLinkRow, type PendingGift, type ChildOpt } from '@/components/wallet/gift-view';
 import { PayHandleManager, type PayHandleRow } from '@/components/wallet/pay-handle-manager';
 
-export const metadata: Metadata = { title: 'Wallet Gifts' };
+export async function generateMetadata(): Promise<Metadata> {
+  const t = await getTranslations();
+  return { title: t('pageTitle.walletGifts') };
+}
 
 export default async function WalletGiftPage() {
   const t = await getTranslations();

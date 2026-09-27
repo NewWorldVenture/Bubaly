@@ -10,9 +10,14 @@ import { ErrorState } from '@/components/ui/states';
 import { firstName } from '@/lib/utils/format';
 import { getFormat } from '@/lib/utils/format-server';
 import { getTranslations } from '@/lib/i18n/server';
+import { titleWithoutDoubledBrand } from '@/lib/marketing/seo';
 import { dayKeyInTz, zonedDayBoundsMs } from '@/lib/services/scope';
 
-export const metadata: Metadata = { title: { absolute: 'My Bubaly' } };
+export async function generateMetadata(): Promise<Metadata> {
+  const t = await getTranslations();
+  // "My Bubaly" already ends in the brand the root template appends.
+  return { title: titleWithoutDoubledBrand(t('kids.myBubaly')) };
+}
 export const dynamic = 'force-dynamic';
 
 export default async function KidsPage() {

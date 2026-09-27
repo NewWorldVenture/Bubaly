@@ -8,7 +8,10 @@ import { SubmitProofForm } from './submit-form';
 import { getLocaleContext, getTranslations } from '@/lib/i18n/server';
 import { AppNotFound } from '@/components/app/app-not-found';
 
-export const metadata: Metadata = { title: 'Submit your work' };
+export async function generateMetadata(): Promise<Metadata> {
+  const t = await getTranslations();
+  return { title: t('pageTitle.submitYourWork') };
+}
 export const dynamic = 'force-dynamic';
 
 export default async function SubmitProofPage({ params }: { params: Promise<{ assignmentId: string }> }) {

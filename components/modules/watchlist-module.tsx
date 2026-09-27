@@ -150,7 +150,7 @@ export function WatchlistModule() {
               );
             })}
             {unavailableAudience.map((id, index) => (
-              <button key={id} type="button" aria-pressed={true} aria-label={`Remove unavailable participant ${index + 1} from tonight`}
+              <button key={id} type="button" aria-pressed={true} aria-label={tr('watchlist.removeUnavailableParticipant', { n: index + 1 })}
                 onClick={() => setAudience(audience.filter((selectedId) => selectedId !== id))}
                 className="rounded-full border border-brand bg-brand/15 px-3 py-1 text-xs text-brand-text coarse:min-h-11">
                 {tr('watchlist.unavailableParticipant')} {index + 1}{tr('watchlist.removeFromTonight')}
@@ -182,8 +182,8 @@ export function WatchlistModule() {
           ) : topPicks.length === 0 ? (
             <p className="mt-4 text-sm text-muted">
               {titles.data.some((t) => t.status === 'want' || t.status === 'watching')
-                ? `Nothing fits tonight’s crowd and time${tonight.excluded[0] ? ` — closest: ${tonight.excluded[0].title.title} (${tonight.excluded[0].blockers.join('; ')})` : ''}.`
-                : 'Add a few titles the family wants to watch and the picker takes it from there.'}
+                ? (tonight.excluded[0] ? tr('watchlist.nothingFitsClosest', { title: tonight.excluded[0].title.title, reasons: tonight.excluded[0].blockers.join('; ') }) : tr('watchlist.nothingFits'))
+                : tr('watchlist.addTitlesToStart')}
             </p>
           ) : (
             <ul className="mt-4 space-y-2">
@@ -250,10 +250,10 @@ export function WatchlistModule() {
                   <button onClick={() => castVote(t, 'down')} aria-label={tr('watchlist.thumbsDown')} aria-pressed={mine === 'down'} className={cn('rounded-lg p-1.5 text-xs', mine === 'down' ? 'text-amber-400' : 'text-muted hover:text-fg')}><ThumbsDown className="h-4 w-4" />{counts.down > 0 && <span className="ml-0.5">{counts.down}</span>}</button>
                 </div>
                 <div className="flex items-center gap-0.5 opacity-70 transition group-hover:opacity-100">
-                  {t.status !== 'watched' && <button onClick={() => setWatchedForm(t)} aria-label={`Mark ${t.title} watched`} title={tr('watchlist.watched')} className="rounded-lg p-1.5 text-muted hover:text-fg"><Check className="h-4 w-4" /></button>}
-                  {t.status === 'want' && <button onClick={() => setStatus(t, 'watching')} aria-label={`Start ${t.title}`} title={tr('watchlist.startedWatching')} className="rounded-lg p-1.5 text-muted hover:text-fg"><Tv className="h-4 w-4" /></button>}
-                  <button onClick={() => setForm({ open: true, title: t })} aria-label={`Edit ${t.title}`} className="rounded-lg p-1.5 text-muted hover:text-fg"><Pencil className="h-4 w-4" /></button>
-                  <button onClick={() => deleteTitle(t)} aria-label={`Remove ${t.title}`} className="rounded-lg p-1.5 text-muted hover:text-rose-400"><Trash2 className="h-4 w-4" /></button>
+                  {t.status !== 'watched' && <button onClick={() => setWatchedForm(t)} aria-label={tr('itemAction.markWatched', { name: t.title })} title={tr('watchlist.watched')} className="rounded-lg p-1.5 text-muted hover:text-fg"><Check className="h-4 w-4" /></button>}
+                  {t.status === 'want' && <button onClick={() => setStatus(t, 'watching')} aria-label={tr('itemAction.start', { name: t.title })} title={tr('watchlist.startedWatching')} className="rounded-lg p-1.5 text-muted hover:text-fg"><Tv className="h-4 w-4" /></button>}
+                  <button onClick={() => setForm({ open: true, title: t })} aria-label={tr('itemAction.edit', { name: t.title })} className="rounded-lg p-1.5 text-muted hover:text-fg"><Pencil className="h-4 w-4" /></button>
+                  <button onClick={() => deleteTitle(t)} aria-label={tr('itemAction.remove', { name: t.title })} className="rounded-lg p-1.5 text-muted hover:text-rose-400"><Trash2 className="h-4 w-4" /></button>
                 </div>
               </li>
             );
@@ -385,7 +385,7 @@ function WatchedForm({ familyId, userId, title, members, defaultAudience, onClos
   }
 
   return (
-    <Modal open title={`We watched · ${title.title}`} onClose={onClose}>
+    <Modal open title={tr('watchlist.weWatchedTitle', { name: title.title })} onClose={onClose}>
       <form onSubmit={onSubmit} className="space-y-4">
         <div className="grid grid-cols-2 gap-3">
           <Field label={tr('watchlist.when')}>{(id) => <Input id={id} name="watched_on" type="date" defaultValue={todayIso()} />}</Field>
