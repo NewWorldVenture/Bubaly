@@ -45795,6 +45795,23 @@ Two registers means two answers to "what state is this page in". The second one 
 
 ---
 
+### `[CLAUDE-1][MEDIUM][CHORES]` C1-S9-110 — chores showed English in every locale, and a template wrote English into the family's chore
+
+**File/path:** `components/modules/chores-module.tsx`; seven catalogues.
+
+**Problem.**
+- `/dashboard/chores` (part of the `C1-S9-101` burn-down) showed English in every locale: the status badges, the tab labels, the approval toast, and every "N pts".
+- **The ten chore templates held English copy.** Picking one wrote that English title and description into the family's new chore, so the chore stayed English for everyone who saw it.
+
+**Fix.**
+- Status and tab labels are catalogue keys (`labelKey`).
+- Templates hold `titleKey` and `descriptionKey`. Each is worded when it is shown and again when it is picked, so the chore is created in the picker's language.
+- 33 keys added to seven catalogues.
+
+**Status:** FIXED. Scanner findings for `chores-module` drop from 36 to 3, and those 3 are type-alias fragments.
+
+---
+
 ## What this pass did NOT establish
 
 - No deployed or hosted verification. Every claim here is from local `tsc`,
