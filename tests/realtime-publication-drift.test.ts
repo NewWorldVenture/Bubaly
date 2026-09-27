@@ -186,7 +186,9 @@ describe('no channel is opened for a table that can never fire', () => {
     const hook = readFileSync('lib/hooks/use-realtime-query.ts', 'utf8');
     expect(hook).toContain('realtimeChannelFor(table, familyId)');
     expect(hook).toContain('if (!spec) return;');
-    expect(hook).toContain('.channel(spec.name)');
+    // Through ownChannel since C1-S9-94: the shared name, made this
+    // subscription's own so a second reader of the table cannot collide.
+    expect(hook).toContain('ownChannel(supabase, spec.name)');
     expect(hook).not.toMatch(/\.channel\(`\$\{table\}/);
   });
 });

@@ -9,7 +9,7 @@ import { expect, test, type Page } from '@playwright/test';
 const react = fs.readFileSync(path.join(path.dirname(require.resolve('react/package.json')), 'umd/react.development.js'), 'utf8');
 const reactDom = fs.readFileSync(path.join(path.dirname(require.resolve('react-dom/package.json')), 'umd/react-dom.development.js'), 'utf8');
 const sources = Object.fromEntries([
-  'lib/hooks/use-realtime-query.ts', 'lib/offline/cache.ts',
+  'lib/hooks/use-realtime-query.ts', 'lib/realtime/own-channel.ts', 'lib/offline/cache.ts',
   'lib/offline/cache-scope.tsx', 'lib/auth/cache-session.ts', 'lib/auth/session-change.ts',
   'lib/supabase/errors.ts', 'lib/realtime/published-tables.ts',
 ].map(file => [`@/${file.replace(/\.tsx?$/, '')}`, ts.transpileModule(fs.readFileSync(file, 'utf8'), {
