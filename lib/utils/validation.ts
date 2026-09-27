@@ -28,3 +28,16 @@ export function cleanText(value: string | null | undefined, max = 500): string |
   if (!v) return null;
   return v.slice(0, max);
 }
+
+const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+
+/**
+ * True for the hyphenated uuid shape every row id in this app takes. A route
+ * whose id segment fails this names no row, so it is not-found before any
+ * read: handed to a uuid column, the string makes Postgres refuse the query
+ * (22P02), and a page that rethrows read errors (on purpose — a transient
+ * failure must not 404 a real record) crashed on a mistyped link. Page audit B12.
+ */
+export function isUuid(value: string): boolean {
+  return UUID_RE.test(value);
+}

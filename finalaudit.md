@@ -49758,7 +49758,7 @@ because this audit has no production login and must not create data there.
 | B9 | Signed-in pages against production itself (needs an operator-provided test household; this audit has no production login and must not create data there) | — | ⛔ needs an operator | — |
 | B10 | Signed-in pages at 390 px for every route | session_01KRUgA6hD6QgzmtpSP6TUmP | ✅ done (round 2: 278 family + 78 admin + 37 id-based routes) | 2026-09-27 12:55 |
 | B11 | `/kid-login` PIN sessions (B7's remainder): sign in as a child with the family code and PIN, then every route that session can reach — render, controls and forms — local, 1280 and 390 | session_01TRY21ZKsFrfB3qtoP972A4 | 🔄 claimed 2026-09-27 19:40 | — |
-| B12 | Post-release re-crawl of every public page on production (sitemap + the routes it omits), 1280 and 390, after today's merges (#586, #591–#614) reached www.bubaly.com | session_01DXw2nu25BjyRfA6Fg3YiMS | 🔄 claimed 2026-09-27 20:10 | — |
+| B12 | Post-release re-crawl of every public page on production (sitemap + the routes it omits), 1280 and 390, after today's merges (#586, #591–#614) reached www.bubaly.com | session_01DXw2nu25BjyRfA6Fg3YiMS | ✅ done (1,092 pages × 2 widths on production `1180c77d`; P-23 fixed, see "B12" below) | 2026-09-27 20:40 |
 
 "First pass" is what the crawler measures: the page loads and renders
 without an error, a failing request, a broken layout or a missing heading,
@@ -50181,6 +50181,27 @@ The neighbouring tables hold:
 - `household_info` keeps its sensitive rows (the alarm code) manager-only;
 - `family_insurance_policies` is member-readable and manager-writable;
 - stored passwords (`family_credentials`) are manager-only, and the child's Passwords page shows none.
+
+### B12 — post-release production re-crawl (session_01DXw2nu25BjyRfA6Fg3YiMS)
+
+Production at `1180c77d` (#586, #614 and #615 live; `GET /api/build-info`). `scripts/page-audit.mjs --sitemap` covered the 1,063 sitemap URLs plus the 44 public routes, their id segments filled with a value that names nothing. The pages were crawled signed out at 1280 and 390 px, 2,184 loads in all.
+
+| Width | Pages | Flags | What they were |
+| --- | --- | --- | --- |
+| 1280 px | 1,092 | 20 | 13 deliberate not-found probes (`/…/no-such-page`) answering 404; `/resources/benchmarks` 404 by design; six 502s on a prefetch or `/api/*` call with no `server: Vercel` header (this sandbox's egress, as recorded above); **`/f/no-such-page` HTTP 500 — P-23** |
+| 390 px | 1,092 | 24 | the same 14 intended 404s; P-23; nine egress 502s, one of them on a blog article's document, which answered 200 from Vercel three times on re-check |
+
+Every page had exactly one `<h1>`, except the one article whose load hit the egress 502. No page scrolled sideways, and none rendered a raw catalogue key, `undefined` or `NaN`.
+
+The live B7 fixes were checked on production:
+- `/kid-login` names its show/hide PIN control "PIN anzeigen" in German and "Afficher le code PIN" in French. The locale was set by the `bubaly-locale` cookie, because this sandbox's US egress outranks `Accept-Language` in `lib/i18n/resolve.ts`.
+- One load of `/kid-login` with the `en-US` cookie showed the error boundary. It was not reproduced in 8 further loads, with and without the cookie. Watch.
+
+**P-23 · Medium · A malformed id crashed four pages instead of saying "not found".**
+- **Found:** `/f/no-such-page` answered HTTP 500 with the error boundary on production. A form id is a uuid, and any other string makes Postgres refuse the query (22P02). The page rethrows a read error on purpose, so that a transient failure never 404s a live form, and so a mistyped or truncated form link crashed.
+- **Swept:** probing all 26 signed-in `[id]` routes with a malformed id, as a parent on a local build, found the same crash on three more: `/dashboard/social/posts/[id]`, `/kids/submit/[assignmentId]` and `/marketplace/creators/[id]`. Each rethrows its read error for the same good reason. The other 23 answer not-found or "could not load".
+- **Fixed:** `isUuid` (`lib/utils/validation.ts`) answers not-found for all four before any read, and a real read failure still throws.
+- **Test:** `tests/a-malformed-form-link-is-not-found.test.ts` renders `/f/[id]` against a mocked database: a malformed id is not-found with no query, an absent uuid is not-found, and a read failure still throws. It also holds each signed-in page's check ahead of its first read. It fails 4 of 7 on the previous code.
 
 ### B6a — the interaction pass (every tab, dialog and button, clicked)
 
