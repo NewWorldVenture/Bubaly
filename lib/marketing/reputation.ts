@@ -34,6 +34,27 @@ export function isSyntheticSeedSlug(slug: string | null | undefined): boolean {
   return /^seed-[a-z0-9_]+-\d+$/i.test((slug ?? '').trim());
 }
 
+/**
+ * Free text the database seeder wrote into a settings row, which has no slug to
+ * recognise it by. On 2026-09-27 the public `/reviews/new` page on bubaly.com
+ * greeted every visitor with
+ *
+ *     Important task #1
+ *     Sample reputation settings content generated for testing purposes. Row 1.
+ *
+ * read straight from the `reputation_settings` singleton. The two shapes the
+ * seeder uses are matched exactly, so ordinary copy never trips it.
+ */
+export function isSeederText(value: string | null | undefined): boolean {
+  const text = (value ?? '').trim();
+  return /\bcontent generated for testing purposes\b/i.test(text) || /^important task #\d+$/i.test(text);
+}
+
+/** `value` unless it is empty or seeder text, else `fallback`. */
+export function realTextOr(value: string | null | undefined, fallback: string): string {
+  return value && value.trim() && !isSeederText(value) ? value : fallback;
+}
+
 export interface PublishableLike { is_published: boolean; sort_order?: number; slug?: string | null }
 
 /** Published items only (for the public marketing site), stable-sorted. */

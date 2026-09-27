@@ -52,6 +52,19 @@ const isDynamic = (s) => /^\[.*\]$/.test(s);
 // shapes an error surfaces in with a 200.
 const ERROR_MARKERS = ['Application error', 'This page hit a snag', 'Internal Server Error', 'Unhandled Runtime Error'];
 const PLACEHOLDER_ID = '00000000-0000-4000-8000-000000000000';
+// Text a visitor should never read: the database seeder's placeholders, a
+// value that rendered as `undefined`/`NaN`/`[object Object]`, an unfilled
+// template, and a translation KEY shown in place of its sentence
+// (`pricing.cardTitle` — lowerCamel, a dot, lowerCamel with a capital).
+const PLACEHOLDER_TEXT = [
+  [/content generated for testing purposes/i, 'seeder placeholder text'],
+  [/\bImportant task #\d+\b/, 'seeder placeholder text'],
+  [/\bSeed [A-Z][a-z]+(?: [A-Z][a-z]+)* #\d+/, 'seeder placeholder record'],
+  [/\blorem ipsum\b/i, 'lorem ipsum'],
+  [/\b(?:undefined|NaN)\b|\[object Object\]/, 'a value rendered as undefined/NaN/[object Object]'],
+  [/\{\{\s*\w+\s*\}\}/, 'an unfilled {{template}}'],
+  [/(?<![\w@/.-])[a-z][a-zA-Z]{2,}\.[a-z]+[A-Z][a-zA-Z0-9]*\b(?![\w/-]*\.(?:com|app|io|org))/, 'a raw translation key'],
+];
 
 /** Every page route under app/ as { pattern, group, file }. */
 function routes() {
@@ -126,6 +139,10 @@ async function audit(context, path, kind) {
     result.h1 = await page.locator('h1').count();
     const body = await page.locator('body').innerText().catch(() => '');
     result.markers = ERROR_MARKERS.filter((m) => body.includes(m));
+    for (const [pattern, what] of PLACEHOLDER_TEXT) {
+      const hit = pattern.exec(body);
+      if (hit) result.markers.push(`${what}: "${body.slice(Math.max(0, hit.index - 30), hit.index + hit[0].length + 30).replace(/\s+/g, ' ')}"`);
+    }
     if (kind === 'public') {
       result.links = (await page.$$eval('a[href]', (as) => as.map((a) => a.getAttribute('href')))).map(sameSite).filter(Boolean);
       await page.setViewportSize({ width: 390, height: 844 });
