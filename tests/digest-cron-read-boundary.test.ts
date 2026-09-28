@@ -23,6 +23,8 @@ const state = vi.hoisted(() => ({
   authError: null as null | { message: string },
   sends: [] as string[],
   failSendTo: null as string | null,
+  /** No RESEND_API_KEY: the real sender answers `{ ok: true, skipped: true }`. */
+  noProvider: false,
 }));
 
 vi.mock('@/lib/server/cron-auth', () => ({ hasCronAuthorization: () => true }));
@@ -31,6 +33,7 @@ vi.mock('@/lib/emails/chore-reminder', () => ({ ChoreReminderEmail: () => null }
 vi.mock('@/lib/email', () => ({
   sendReactEmail: async ({ to }: { to: string }) => {
     state.sends.push(to);
+    if (state.noProvider) return { ok: true, skipped: true };
     return { ok: state.failSendTo !== to };
   },
 }));
@@ -86,7 +89,7 @@ beforeEach(() => {
   state.assignments = []; state.families = []; state.users = [];
   state.authPageSize = 50; state.assignmentsError = null;
   state.familiesError = null; state.authError = null;
-  state.sends = []; state.failSendTo = null;
+  state.sends = []; state.failSendTo = null; state.noProvider = false;
 });
 afterEach(() => vi.clearAllMocks());
 
@@ -145,6 +148,16 @@ describe('scheduled digest read boundaries', () => {
     const res = await GET(request());
     expect(res.status).toBe(200);
     expect(await res.json()).toEqual({ sent: 1, failed: 0, skipped: 1 });
+  });
+
+  it('does not count a reminder as sent when no mail provider is configured', async () => {
+    // The sender answers ok and sends nothing when RESEND_API_KEY is unset;
+    // that was counted as a reminder delivered (API-SWEEP-07, #619).
+    seed(2);
+    state.noProvider = true;
+    const res = await GET(request());
+    expect(res.status).toBe(200);
+    expect(await res.json()).toEqual({ sent: 0, failed: 0, skipped: 2 });
   });
 
   it('answers 200 with nothing due', async () => {

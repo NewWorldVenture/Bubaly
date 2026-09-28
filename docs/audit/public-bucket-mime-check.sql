@@ -26,11 +26,13 @@ declare
                              'text/xml', 'application/xml', 'text/javascript',
                              'application/javascript'];
 begin
-  -- Three: avatars, family-media and marketplace-photos. feedback-attachments
-  -- was the fourth until 0450 made it private (F-E05), which is the point of
-  -- 0450, so the floor follows it rather than the other way round.
+  -- Two: avatars and marketplace-photos. feedback-attachments was the fourth
+  -- until 0450 made it private (F-E05), and family-media the third until 0459
+  -- did (SEC-001); each is the point of its migration, so the floor follows
+  -- them rather than the other way round. family-media keeps its type list
+  -- (checked below): 0418's allowlist still decides what may be uploaded.
   select count(*) into n from storage.buckets where public;
-  if n < 3 then
+  if n < 2 then
     raise exception '0418: only % public bucket(s) found — this probe is not looking at what it claims', n;
   end if;
 

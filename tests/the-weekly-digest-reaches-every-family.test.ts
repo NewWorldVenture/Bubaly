@@ -26,6 +26,8 @@ const state = vi.hoisted(() => ({
   memberError: null as null | { message: string },
   sends: [] as string[],
   failSendTo: null as string | null,
+  /** No RESEND_API_KEY: the real sender answers `{ ok: true, skipped: true }`. */
+  noProvider: false,
 }));
 
 vi.mock('@/lib/server/cron-auth', () => ({ hasCronAuthorization: () => true }));
@@ -36,6 +38,7 @@ vi.mock('@/lib/emails/weekly-digest', () => ({ WeeklyDigestEmail: () => null }))
 vi.mock('@/lib/email', () => ({
   sendReactEmail: async ({ to }: { to: string }) => {
     state.sends.push(to);
+    if (state.noProvider) return { ok: true, skipped: true };
     return { ok: state.failSendTo !== to };
   },
 }));
@@ -112,7 +115,7 @@ beforeEach(() => {
   state.families = []; state.members = []; state.users = [];
   state.authPageSize = 50; state.authError = null;
   state.familiesError = null; state.memberError = null;
-  state.sends = []; state.failSendTo = null;
+  state.sends = []; state.failSendTo = null; state.noProvider = false;
 });
 afterEach(() => vi.clearAllMocks());
 
@@ -168,6 +171,18 @@ describe('the weekly digest reaches every family', () => {
     const res = await GET(request());
     expect(res.status).toBe(200);
     expect(await res.json()).toEqual({ sent: 1, failed: 0, skipped: 1 });
+  });
+
+  it('does not count a digest as sent when no mail provider is configured', async () => {
+    // The sender answers ok and sends nothing when RESEND_API_KEY is unset. Run
+    // on a local stack, this cron reported `sent: 13` with no provider at all.
+    // Nothing was delivered and nothing can be retried: counted as skipped, not
+    // sent (API-SWEEP-07, #619).
+    seed(2);
+    state.noProvider = true;
+    const res = await GET(request());
+    expect(res.status).toBe(200);
+    expect(await res.json()).toEqual({ sent: 0, failed: 0, skipped: 2 });
   });
 
   it('still answers 200 with nothing to do', async () => {

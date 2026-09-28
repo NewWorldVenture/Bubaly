@@ -20,6 +20,9 @@ vi.mock('@/lib/supabase/server', () => ({
       maybeSingle: async () => ({ data: { id: 'i', email: 'grandma@example.test', token: 't', role: 'adult', status: 'pending' }, error: null }) };
     return b;
   } }),
+  // The family-wide invite limit is evaluated on the service client (API-SWEEP-08);
+  // the limiter itself is mocked below, so the client is never used here.
+  createServiceClient: () => ({}),
 }));
 vi.mock('@/lib/server/request-rate-limit', () => ({ enforceRequestRateLimit: async () => ({ ok: true }) }));
 

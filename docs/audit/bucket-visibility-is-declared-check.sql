@@ -22,10 +22,11 @@
 --
 -- ── what this probe does and does not assert ───────────────────────────────
 --
--- It does NOT assert that `family-media` should be public. It is public today,
--- the record says so, and closing it needs every consumer moved off
--- `getPublicUrl` onto signed URLs first — flipping the flag alone would blank
--- every photo, avatar, attachment and album cover in the product.
+-- It did NOT assert that `family-media` should be public. It was public until
+-- 0459, and closing it needed every consumer moved off `getPublicUrl` onto
+-- signed URLs first — flipping the flag alone would have blanked every photo,
+-- attachment and album cover in the product. The consumers moved, and 0459
+-- flipped it.
 --
 -- What it asserts is that the set of internet-readable buckets is exactly the
 -- set somebody declared, with a reason. Two things follow. A NEW bucket created
@@ -57,7 +58,12 @@ declare
   --   unauthenticated GET, bucket public   -> HTTP 200, 67 bytes
   --   unauthenticated GET, bucket private  -> HTTP 400, "Bucket not found"
   --   unauthenticated GET of a signed URL  -> HTTP 200, 67 bytes
-  declared text[] := array['avatars', 'marketplace-photos', 'family-media'];
+  --
+  -- `family-media` came off it with 0459 (SEC-001), after every reader had
+  -- moved to `signFamilyMediaRefs`, which signs with the viewer's session and
+  -- never renders a stored URL. Its read control is now the member-scoped
+  -- policy that family-media-answers-to-the-family-check.sql holds.
+  declared text[] := array['avatars', 'marketplace-photos'];
   seen     int := 0;
   failures int := 0;
 begin

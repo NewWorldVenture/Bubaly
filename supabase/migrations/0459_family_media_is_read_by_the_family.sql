@@ -1,0 +1,44 @@
+-- Bubaly :: 0459 - a family's photos are read by the family, not by the link (SEC-001)
+--
+-- `family-media` holds what six features upload: Photos, Create-Memory, Message
+-- attachments (private conversations), Reminder images, Closet and Inventory.
+-- 0216 created it `public = true`, so every object in it was served from
+--
+--   /storage/v1/object/public/family-media/<family id>/<folder>/<name>
+--
+-- to any request at all, with no session. The public path does not consult
+-- storage.objects RLS, so 0216's own "Family members can read their media"
+-- policy governed only the authenticated API; a photo's URL was its only
+-- credential, and URLs leak the ordinary ways (a Referer header, a paste, a
+-- log, a shared screenshot of the address bar), survive the row's deletion and
+-- outlive a member's removal from the family. This is F-E03 / LB-009 / SEC-001.
+--
+-- WHY IT WAS PUBLIC UNTIL NOW. Every consumer rendered the stored URL
+-- directly, so flipping the bucket first would have blanked every image in
+-- the product at once. That is no longer true: every reader now hands its
+-- stored reference to `signFamilyMediaRefs` (lib/storage/family-media-ref.ts),
+-- which signs with the VIEWER's session against the same 0216 policy, never
+-- falls back to the stored URL, and accepts either a stored public URL or a
+-- bare path, so no row needs rewriting. tests/a-family-media-reference-is-
+-- never-rendered-raw.test.ts holds that no component renders a stored value.
+-- The uploaders keep storing what they stored before; it is a reference, not
+-- something any page fetches.
+--
+-- WHAT THIS CHANGES. Only the flag. With the public path closed, 0216's
+-- member-scoped SELECT policy becomes the whole read control: a member of the
+-- family in the path's first segment can sign (and so read) an object, and
+-- nobody else can, including a signed-in member of another family. Writes were
+-- already family-scoped by 0216's INSERT/UPDATE/DELETE policies and 0418's
+-- type allowlist and are untouched. The Grandparent portal's cross-household
+-- reads keep working because the policy asks about the object's family, not
+-- the viewer's active household.
+--
+-- DEPLOY ORDER. Apply only where the signed readers are already deployed. On
+-- production they are (they shipped before this file was written); a database
+-- serving an older build would show broken images, not leaked ones.
+--
+-- Held by docs/audit/family-media-answers-to-the-family-check.sql (the policy,
+-- member and non-member) and docs/audit/bucket-visibility-is-declared-check.sql
+-- (the flag).
+
+update storage.buckets set public = false where id = 'family-media';
