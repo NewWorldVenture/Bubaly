@@ -2,6 +2,7 @@ import type { Metadata } from 'next';
 import { AlertTriangle } from 'lucide-react';
 import { requireUserContext } from '@/lib/supabase/auth';
 import { settleAll } from '@/lib/supabase/settle';
+import { readAllAsQuery } from '@/lib/supabase/read-all';
 import { createServer } from '@/lib/supabase/server';
 import { isManager } from '@/lib/constants/roles';
 import { balanceFromLedger, bucketBalances, normalizeSplit, type LedgerEntry, type BucketKind } from '@/lib/wallet/ledger';
@@ -30,9 +31,22 @@ export default async function ChildWalletPage({ params }: { params: Promise<{ ch
   }
   if (!cw) return <AppNotFound title={tr('notFound.thatWalletIsnTHere')} description={tr('notFound.thisChildWalletMayHave')} backHref="/wallet" backLabel={tr('appNotFound.backToWallet')} />;
 
-  const [{ data: member, error: memberError }, { data: buckets, error: bucketsError }, { data: txns, error: txnsError }, { data: goals, error: goalsError }, { data: rule, error: ruleError }, { data: allChildWallets, error: allChildWalletsError }, { data: members, error: membersError }] = await settleAll([
+  const [{ data: member, error: memberError }, { data: buckets, error: bucketsError }, { data: ledger, error: ledgerError }, { data: txns, error: txnsError }, { data: goals, error: goalsError }, { data: rule, error: ruleError }, { data: allChildWallets, error: allChildWalletsError }, { data: members, error: membersError }] = await settleAll([
     supabase.from('family_members').select('display_name, color').eq('id', cw.member_id).maybeSingle(),
     supabase.from('wallet_buckets').select('id, kind').eq('family_id', familyId).eq('child_wallet_id', cw.id),
+    // The balance is the sum of the WHOLE ledger. It was summed from the
+    // history list below, the newest 200 rows, so past 200 rows a child's total
+    // and buckets were an arbitrary recent slice: a teen with $84 invested was
+    // shown $14. Paged, because PostgREST answers any single read with at most
+    // `db-max-rows`; a ledger past the ceiling fails closed, never short.
+    readAllAsQuery<{ bucket_id: string | null; status: string; direction: 'credit' | 'debit'; amount_cents: number }>(
+      (from, to) => supabase.from('wallet_transactions')
+        .select('bucket_id, status, direction, amount_cents')
+        .eq('family_id', familyId).eq('child_wallet_id', cw.id)
+        .order('id').range(from, to),
+      { max: 50_000 },
+    ),
+    // The history list is the newest 200; it is listed, never summed.
     supabase.from('wallet_transactions')
       .select('id, child_wallet_id, type, status, direction, amount_cents, description, created_at, bucket_id, metadata')
       .eq('family_id', familyId).eq('child_wallet_id', cw.id)
@@ -47,8 +61,8 @@ export default async function ChildWalletPage({ params }: { params: Promise<{ ch
     supabase.from('child_wallets').select('id, member_id, is_active').eq('family_id', familyId).eq('is_active', true),
     supabase.from('family_members').select('id, display_name, color').eq('family_id', familyId),
   ]);
-  if (bucketsError || txnsError || ruleError) {
-    console.error('[wallet-child] Balance reads failed', bucketsError ?? txnsError ?? ruleError);
+  if (bucketsError || ledgerError || txnsError || ruleError) {
+    console.error('[wallet-child] Balance reads failed', bucketsError ?? ledgerError ?? txnsError ?? ruleError);
     return <ErrorState message={tr('children.couldNotLoadThisChild2')} />;
   }
   const dataWarnings: string[] = [];
@@ -58,7 +72,7 @@ export default async function ChildWalletPage({ params }: { params: Promise<{ ch
   if (membersError) { console.error('[wallet-child] Family members read failed', membersError); dataWarnings.push('Family members'); }
 
   const bucketKindById = new Map((buckets ?? []).map((b) => [b.id, b.kind as BucketKind]));
-  const entries: LedgerEntry[] = (txns ?? []).map((t) => ({
+  const entries: LedgerEntry[] = (ledger ?? []).map((t) => ({
     direction: t.direction, amount_cents: t.amount_cents, status: t.status,
     bucket_kind: t.bucket_id ? bucketKindById.get(t.bucket_id) ?? null : null,
   }));
