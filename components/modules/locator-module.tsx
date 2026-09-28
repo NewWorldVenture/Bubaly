@@ -544,7 +544,7 @@ export function LocatorModule() {
             </button>
             <div className="flex items-center gap-2">
               <span className="text-xs text-muted">{tr('locator.radius')}</span>
-              <Input type="number" min={50} step={50} value={placeForm.radius_m} onChange={(e) => setPlaceForm((f) => ({ ...f, radius_m: Number(e.target.value) }))} className="h-9 w-24" />
+              <Input type="number" aria-label={tr('locator.radius')} min={50} step={50} value={placeForm.radius_m} onChange={(e) => setPlaceForm((f) => ({ ...f, radius_m: Number(e.target.value) }))} className="h-9 w-24" />
               <span className="text-xs text-muted">m</span>
             </div>
           </div>

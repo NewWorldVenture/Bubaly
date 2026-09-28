@@ -438,8 +438,8 @@ function ChefModal({ onClose }: { onClose: () => void }) {
             placeholder={tr('kitchenDashboard.askTheChefAnythingEG')}
             className="flex-1 rounded-xl border border-border bg-bg px-3 py-2 text-sm focus-ring"
             onKeyDown={(e) => { if (e.key === 'Enter' && (e.metaKey || e.ctrlKey)) ask(); }} />
-          <Button onClick={() => ask()} loading={loading} className="flex-shrink-0">
-            <Send className="h-4 w-4" />
+          <Button onClick={() => ask()} loading={loading} className="flex-shrink-0" aria-label={tr('a11y.send')}>
+            <Send className="h-4 w-4" aria-hidden />
           </Button>
         </div>
 

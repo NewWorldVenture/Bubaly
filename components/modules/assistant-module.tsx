@@ -565,7 +565,8 @@ export function AssistantModule() {
             <div className="ai-orb h-11 w-11 shrink-0">
               <Sparkles className="h-5 w-5 text-brand-text drop-shadow" aria-hidden />
             </div>
-            <h1 className="text-2xl font-black sm:text-3xl">{t('assistant.familyAi')}</h1>
+            {/* An h2: the route's h1 is the page's (app/(app)/dashboard/assistant/page.tsx), and this module also renders inside the AI orb on other pages. */}
+            <h2 className="text-2xl font-black sm:text-3xl">{t('assistant.familyAi')}</h2>
             <span className="rounded-md bg-brand px-2.5 py-1 text-[10px] font-black tracking-wide text-brand-fg">BETA</span>
           </div>
         ) : (

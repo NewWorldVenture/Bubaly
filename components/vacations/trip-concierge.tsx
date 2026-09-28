@@ -119,7 +119,7 @@ export function TripConcierge({ vacationId }: { vacationId: string }) {
       <form onSubmit={(e) => { e.preventDefault(); send(input); }} className="flex items-center gap-2">
         <input value={input} onChange={(e) => setInput(e.target.value)} placeholder={t('tripConcierge.askYourConcierge')} disabled={busy || loadFailed}
           className="h-11 flex-1 rounded-xl border border-border bg-surface/60 px-4 text-sm focus-ring" />
-        <Button type="submit" size="icon" loading={busy} disabled={!input.trim() || loadFailed}><Send className="h-4 w-4" /></Button>
+        <Button type="submit" size="icon" loading={busy} disabled={!input.trim() || loadFailed} aria-label={t('a11y.send')}><Send className="h-4 w-4" aria-hidden /></Button>
       </form>
     </div>
   );

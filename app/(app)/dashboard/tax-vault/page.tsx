@@ -12,12 +12,5 @@ export async function generateMetadata(): Promise<Metadata> {
 export default async function TaxVaultPage() {
   const ctx = await requireFeature('/dashboard/tax-vault');
   await requireAal2(ctx, 'documents', '/dashboard/tax-vault');
-  const t = await getTranslations();
-  return (
-    <>
-      {/* The module draws no heading of its own; this names the page for assistive technology (MAIN-F-D05). */}
-      <h1 className="sr-only">{t('taxVault.pageTitle')}</h1>
-      <TaxVaultModule />
-    </>
-  );
+  return <TaxVaultModule />;
 }

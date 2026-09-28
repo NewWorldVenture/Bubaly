@@ -469,7 +469,7 @@ export function RemindersModule() {
                   className={cn(
                     'mt-0.5 flex h-6 w-6 flex-shrink-0 items-center justify-center rounded-full border-2 transition',
                     completed
-                      ? 'border-success bg-success text-white'
+                      ? 'border-success bg-success text-success-fg'
                       : 'border-border hover:border-success hover:bg-success/10',
                   )}>
                   {isPending(`complete:${reminder.id}`)
@@ -560,7 +560,7 @@ export function RemindersModule() {
                         return (
                           <button key={s.id} type="button" onClick={() => toggleSubtask(reminder, s.id)} disabled={busy}
                             className="flex w-full items-center gap-2 text-left text-xs disabled:opacity-50">
-                            <span className={cn('grid h-4 w-4 shrink-0 place-items-center rounded-full border', s.done ? 'border-success bg-success text-white' : 'border-border')}>
+                            <span className={cn('grid h-4 w-4 shrink-0 place-items-center rounded-full border', s.done ? 'border-success bg-success text-success-fg' : 'border-border')}>
                               {busy ? <Loader2 className="h-2.5 w-2.5 animate-spin" /> : s.done && <Check className="h-2.5 w-2.5" />}
                             </span>
                             <span className={cn(s.done && 'text-muted line-through')}>{s.title}</span>
@@ -892,7 +892,7 @@ function ReminderModal({ reminder, familyId, userId, members, lists, onClose, on
               {subtasks.map((s) => (
                 <div key={s.id} className="flex items-center gap-2 rounded-lg border border-border bg-surface/40 px-2.5 py-1.5">
                   <button type="button" onClick={() => setSubtasks((cur) => cur.map((x) => x.id === s.id ? { ...x, done: !x.done } : x))}
-                    className={cn('grid h-5 w-5 shrink-0 place-items-center rounded-full border', s.done ? 'border-success bg-success text-white' : 'border-border')} aria-label={tr('reminders.toggleSubtask')}>
+                    className={cn('grid h-5 w-5 shrink-0 place-items-center rounded-full border', s.done ? 'border-success bg-success text-success-fg' : 'border-border')} aria-label={tr('reminders.toggleSubtask')}>
                     {s.done && <Check className="h-3 w-3" />}
                   </button>
                   <span className={cn('flex-1 text-sm', s.done && 'text-muted line-through')}>{s.title}</span>
@@ -903,7 +903,7 @@ function ReminderModal({ reminder, familyId, userId, members, lists, onClose, on
                 <Input id={id} value={subtaskInput} onChange={(e) => setSubtaskInput(e.target.value)}
                   onKeyDown={(e) => { if (e.key === 'Enter') { e.preventDefault(); addSubtask(); } }}
                   placeholder={tr('reminders.addASubtask')} />
-                <Button type="button" variant="outline" onClick={addSubtask}><Plus className="h-4 w-4" /></Button>
+                <Button type="button" variant="outline" onClick={addSubtask} aria-label={tr('reminders.addASubtask')}><Plus className="h-4 w-4" aria-hidden /></Button>
               </div>
             </div>
           )}
