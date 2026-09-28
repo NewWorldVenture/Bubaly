@@ -135,6 +135,12 @@ const nextConfig = {
     });
     return [
       { source: '/(.*)', headers: commonSecurity },
+      // The OAuth callback carries an authorization code in its URL, and the
+      // sign-out form post a sign-out intent. Both routes set `no-referrer` on
+      // their own responses, but the rule above replaced it, so the served policy
+      // was the global one (seen on a production build, 2026-09-28). For the same
+      // key the last matching rule wins, so this restores what the routes ask for.
+      { source: '/auth/:route(callback|signout)', headers: [{ key: 'Referrer-Policy', value: 'no-referrer' }] },
       // Clickjacking protection. DENY everywhere EXCEPT the PUBLIC marketing
       // blog: the logged-in app embeds /blog in a same-origin modal (the in-app
       // "Blog" launcher), which DENY forbids. /blog therefore uses SAMEORIGIN —
