@@ -26,7 +26,12 @@ const attrNames = (attrs: ts.JsxAttributes) =>
 const meaningfulChildren = (children: ts.NodeArray<ts.JsxChild>) =>
   children.filter((c) => !(ts.isJsxText(c) && c.containsOnlyTriviaWhiteSpaces) && !(ts.isJsxExpression(c) && !c.expression));
 
-const isIcon = (n: ts.Node): n is ts.JsxSelfClosingElement => ts.isJsxSelfClosingElement(n) && /^[A-Z]/.test(n.tagName.getText());
+// A component carrying `alt`, `label` or `aria-label` names what wraps it (an
+// image in a link, a stat pill with a text label); it is not a bare icon.
+const NAMING_PROPS = new Set(['alt', 'label', 'aria-label']);
+const isIcon = (n: ts.Node): n is ts.JsxSelfClosingElement =>
+  ts.isJsxSelfClosingElement(n) && /^[A-Z]/.test(n.tagName.getText())
+  && !n.attributes.properties.some((a) => ts.isJsxAttribute(a) && NAMING_PROPS.has(a.name.getText()));
 const unwrap = (e: ts.Expression): ts.Expression => (ts.isParenthesizedExpression(e) ? unwrap(e.expression) : e);
 
 /** The icon a child renders if that is ALL it renders: `<Icon />`, `{on ? <A /> : <B />}`, `{on && <A />}`. */
@@ -59,7 +64,9 @@ export function unnamedIconButtons(file: string, text?: string): Site[] {
   const sf = parse(file, text);
   const out: Site[] = [];
   const visit = (node: ts.Node) => {
-    if (ts.isJsxElement(node) && (node.openingElement.tagName.getText() === 'button' || node.openingElement.tagName.getText() === 'Button')) {
+    // Links as well as buttons: an icon-only back link on the send-money page
+    // had no name, and this looked only at buttons (P-35).
+    if (ts.isJsxElement(node) && ['button', 'Button', 'a', 'Link'].includes(node.openingElement.tagName.getText())) {
       const names = attrNames(node.openingElement.attributes);
       const named = names.some((n) => n === 'aria-label' || n === 'aria-labelledby' || n === 'title' || n === '...') || insideLabel(node);
       const kids = meaningfulChildren(node.children);

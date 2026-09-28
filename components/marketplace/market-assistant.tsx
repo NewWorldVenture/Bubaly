@@ -62,7 +62,9 @@ export function MarketAssistant({ firstName }: { firstName: string }) {
       {turns.length === 0 ? (
         <>
           <p className="mt-1.5 text-xs text-muted">
-            Hi {firstName}{tr('marketAssistant.askMePricesDemandYourListings')}
+            {firstName
+              ? tr('marketAssistant.greetingNamed', { name: firstName })
+              : tr('marketAssistant.greeting')}
           </p>
           <div className="mt-2 space-y-1.5">
             {SUGGESTIONS.map((s) => (
