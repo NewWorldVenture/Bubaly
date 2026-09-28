@@ -126,7 +126,8 @@ beforeEach(() => {
   // The save confirms its write with .select('id') (Audit C1-S9-81), so an
   // update resolves through that step with the row it changed.
   mocks.selectUpdated.mockReset().mockResolvedValue({ data: [{ id: subscription.id }], error: null });
-  // The save filters by id AND family (0460, #627), so the chain takes two `.eq`s.
+  // Chainable: the update is scoped to the row and to the family (0460 made
+  // this a gated write), then confirmed with .select('id').
   mocks.eq.mockReset().mockImplementation(() => ({ eq: mocks.eq, select: mocks.selectUpdated }));
   mocks.toastSuccess.mockReset();
   mocks.toastError.mockReset();
