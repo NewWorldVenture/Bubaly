@@ -4004,3 +4004,25 @@ read, reacts, unreacts and pins.
 
 **After applying:** open a conversation as one member and react to a message.
 The unread badge clears and the reaction shows for the other members.
+
+## `0464` — an invited guest could rewrite the household (ROLE-M03)
+
+`supabase/migrations/0464_a_guest_views_the_household.sql`
+
+**Severity: high (an extended-family invite could delete the family's calendar,
+chores, documents and more). Deploy order: any.** A guest who tries to write now
+gets "You don't have permission …" (42501) instead of a change.
+
+The invite form, `/family/permissions` and the trust engine all describe the
+`guest` role as view-only, but nothing enforced it. Measured on the local stack
+as an active guest: C R U D on `calendar_events`, `chores`, `documents`,
+`grocery_items`, `meals`, `notes` and `reminders`, and C R on
+`chore_assignments`. 0464 adds a BEFORE INSERT/UPDATE/DELETE guard trigger on
+those eight tables that refuses a caller whose role in the row's family is
+`guest`. Reads, the service role and every other role are unaffected.
+`docs/audit/a-guest-views-the-household-check.sql` requires a guest's measured
+access to equal the page's guest row: 8 findings before, 0 after.
+
+**After applying:** as a guest, open the calendar and try to add an event. It
+should be refused with the permission message. As a parent, add and delete one,
+which should succeed.

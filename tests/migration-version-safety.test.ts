@@ -498,7 +498,9 @@ describe('Supabase migration filename safety', () => {
     // 0462 makes a family that cannot see a listing unable to bid on it, buy
     // it, negotiate for it or file an offer against it (DB-RPC-M01). 0463
     // makes a chat read receipt or reaction its reader's own (DB-RPC-M02).
-    expect(audit.nextVersion).toBe('0464');
+    // 0464 makes an invited guest read-only on the eight household resources
+    // /family/permissions shows them as read-only on (ROLE-M03).
+    expect(audit.nextVersion).toBe('0465');
   });
 
   it('flags a newly introduced collision instead of silently accepting it', () => {

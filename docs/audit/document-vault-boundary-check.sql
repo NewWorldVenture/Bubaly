@@ -485,9 +485,20 @@ begin
     from pg_trigger t
    where t.tgrelid = 'public.documents'::regclass
      and not t.tgisinternal
-     and t.tgname not in ('trg_set_updated_at', 'trg_mark_model_dirty', 'trg_documents_linked_trip_stays_home');
+     and t.tgname not in ('trg_set_updated_at', 'trg_mark_model_dirty', 'trg_documents_linked_trip_stays_home',
+                          -- 0464: refuses only a caller whose role in the
+                          -- family is 'guest'; this probe acts as a teen and
+                          -- a parent. Its body is held to that just below.
+                          'trg_documents_not_a_guests');
   if stray is not null then
     raise exception 'ATTRIBUTION UNPROVEN: public.documents carries trigger(s) this probe does not account for (%) — read it, say why it cannot refuse what the checks above refuse, and list it, or the credit to 0266 does not hold', stray;
+  end if;
+  if exists (select 1 from pg_trigger t where t.tgrelid = 'public.documents'::regclass and t.tgname = 'trg_documents_not_a_guests')
+     and exists (select 1 from pg_proc p where p.oid = 'public.household_write_is_not_a_guests()'::regprocedure
+                  and ((select count(*) from regexp_matches(p.prosrc, 'raise exception', 'gi')) <> 1
+                       or p.prosrc !~ 'family_role\(old\.family_id\) = ''guest'''
+                       or p.prosrc !~ 'family_role\(new\.family_id\) = ''guest''')) then
+    raise exception 'ATTRIBUTION UNPROVEN: household_write_is_not_a_guests() (0464) no longer refuses only a guest, so it could be what refused above';
   end if;
 
   -- (iii) And the two that could interfere keep the shape that keeps them
