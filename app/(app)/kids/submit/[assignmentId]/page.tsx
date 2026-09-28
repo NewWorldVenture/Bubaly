@@ -3,7 +3,11 @@ import Link from 'next/link';
 import { ArrowLeft, Clock, Camera, Star } from 'lucide-react';
 import { requireUserContext } from '@/lib/supabase/auth';
 import { createServer } from '@/lib/supabase/server';
-import { computeReward, DIFFICULTY_LABELS, fmtCash, type Difficulty } from '@/lib/chores/logic';
+import { computeReward, fmtCash, type Difficulty } from '@/lib/chores/logic';
+
+// The mission's difficulty in the child's language: the keys the new-mission form
+// already labels it with. DIFFICULTY_LABELS is English, and this page is a child's.
+const DIFFICULTY_KEYS: Record<Difficulty, string> = { easy: 'missionsNew.easy', medium: 'missionsNew.medium', hard: 'missionsNew.hard' };
 import { SubmitProofForm } from './submit-form';
 import { getLocaleContext, getTranslations } from '@/lib/i18n/server';
 import { AppNotFound } from '@/components/app/app-not-found';
@@ -59,14 +63,14 @@ export default async function SubmitProofPage({ params }: { params: Promise<{ as
             </span>
           )}
           {chore.est_minutes ? <span className="inline-flex items-center gap-1 rounded-full bg-elevated px-3 py-1 text-muted"><Clock className="h-4 w-4" /> {chore.est_minutes} min</span> : null}
-          <span className="inline-flex items-center gap-1 rounded-full bg-elevated px-3 py-1 text-muted">{DIFFICULTY_LABELS[(chore.difficulty as Difficulty) ?? 'medium']}</span>
+          <span className="inline-flex items-center gap-1 rounded-full bg-elevated px-3 py-1 text-muted">{t(DIFFICULTY_KEYS[(chore.difficulty as Difficulty) ?? 'medium'])}</span>
         </div>
       </div>
 
       {proofKind !== 'none' ? (
         <div className="flex items-center gap-2 rounded-xl border border-border bg-surface/40 p-3 text-sm text-muted">
           <Camera className="h-5 w-5 text-brand-text" />
-          {proofKind === 'video' ? 'Add a short video to show your work.' : proofKind === 'before_after' ? 'Add before and after photos.' : 'Add a photo to show your work.'}
+          {t(proofKind === 'video' ? 'kidsSubmit.proofHintVideo' : proofKind === 'before_after' ? 'kidsSubmit.proofHintBeforeAfter' : 'kidsSubmit.proofHintPhoto')}
         </div>
       ) : null}
 
