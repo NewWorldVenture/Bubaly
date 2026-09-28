@@ -39,7 +39,18 @@ const AFTER = /\}\s*(?:&nbsp;|\s)?[$€£¥]\s*[`'"]/g;
 /** It has to be money, not a percentage or a raw count. */
 const IS_MONEY = /toLocaleString|NumberFormat|toFixed\(2\)|cents|Cents|amount|price|Price|budget|usd|Usd|USD/;
 
-const strip = (s) => s.replace(/\/\*[\s\S]*?\*\//g, '').replace(/(^|[^:])\/\/.*$/gm, '$1');
+/**
+ * The same defect in JSX TEXT, where no template literal is involved and the two
+ * patterns above cannot see it: `<span>${(cents / 100).toFixed(2)}</span>` or a
+ * quick-amount button reading `${q}` — the "$" is a text node, the braces an
+ * expression. Only a `$` that opens a JSX text run counts (after `>` or at the
+ * start of a line with no backtick on it), so a template placeholder does not.
+ */
+const JSX_BEFORE = /(?:>|^)[ \t]*\$\{/gm;
+/** `<span>$</span>` beside an amount input, and `{'$'}` — a lone symbol node. */
+const JSX_UNIT = />[ \t]*\$[ \t]*<|\{\s*['"]\$['"]\s*\}/g;
+
+const strip = (s) => s.replace(/\/\*[\s\S]*?\*\//g, (c) => c.replace(/[^\n]/g, '')).replace(/(^|[^:])\/\/.*$/gm, '$1');
 
 /** The operator console, and text the model reads. Both en-US by the audit's rule. */
 const isExempt = (file) =>
@@ -51,23 +62,44 @@ const files = () => execSync(
   { encoding: 'utf8' },
 ).split('\n').filter(Boolean);
 
+/** Every hand-written symbol in one file's source. Exported so the shapes can be tested. */
+export function scanSource(file, raw) {
+  const source = strip(raw);
+  const lines = source.split('\n');
+  const lineOf = (index) => source.slice(0, index).split('\n').length;
+  const found = [];
+  const seen = new Set();
+  const add = (index) => {
+    const line = lineOf(index);
+    // One site per LINE: `${lo} – ${hi} $` is one label to fix.
+    if (seen.has(line)) return;
+    seen.add(line);
+    found.push({ file, line });
+  };
+  for (const re of [BEFORE, AFTER]) {
+    for (const m of source.matchAll(re)) {
+      const window = source.slice(Math.max(0, m.index - 160), m.index + 220);
+      if (IS_MONEY.test(window)) add(m.index);
+    }
+  }
+  if (file.endsWith('.tsx')) {
+    for (const m of source.matchAll(JSX_BEFORE)) {
+      // A "$" rendered straight before an expression is a dollar sign whatever
+      // the expression is called (`${q}` on a quick-amount button), so no
+      // neighbourhood test — only the template-literal guard.
+      if (!lines[lineOf(m.index) - 1].includes('`')) add(m.index);
+    }
+    // A lone "$" node is currency by itself.
+    for (const m of source.matchAll(JSX_UNIT)) add(m.index);
+  }
+  return found;
+}
+
 export function findHandWrittenCurrency() {
   const found = [];
   for (const file of files()) {
     if (isExempt(file)) continue;
-    const source = strip(readFileSync(file, 'utf8'));
-    const seen = new Set();
-    for (const re of [BEFORE, AFTER]) {
-      for (const m of source.matchAll(re)) {
-        const window = source.slice(Math.max(0, m.index - 160), m.index + 220);
-        if (!IS_MONEY.test(window)) continue;
-        const line = source.slice(0, m.index).split('\n').length;
-        // One site per LINE: `${lo} – ${hi} $` is one label to fix.
-        if (seen.has(line)) continue;
-        seen.add(line);
-        found.push({ file, line });
-      }
-    }
+    found.push(...scanSource(file, readFileSync(file, 'utf8')));
   }
   return found;
 }

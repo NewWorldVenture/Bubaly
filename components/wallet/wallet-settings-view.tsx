@@ -15,7 +15,8 @@ import { cn } from '@/lib/utils/cn';
 import { formatCents, type Split } from '@/lib/wallet/ledger';
 import { WalletSubnav } from '@/components/wallet/wallet-subnav';
 import { saveWalletRuleAction } from '@/app/(app)/wallet/actions';
-import { useTranslations } from '@/components/i18n/locale-provider';
+import { useLocale, useTranslations } from '@/components/i18n/locale-provider';
+import { currencyUnit } from '@/lib/marketplace/listings';
 
 export type ChildRuleRow = {
   childWalletId: string; name: string; color: string | null;
@@ -54,6 +55,7 @@ export function WalletSettingsView({ rows, canManage }: { rows: ChildRuleRow[]; 
 
 function ChildRuleCard({ row, canManage }: { row: ChildRuleRow; canManage: boolean }) {
   const t = useTranslations();
+  const unit = currencyUnit(useLocale().code);
   const uid = useId();
   const router = useRouter();
   const { success, error: toastError } = useToast();
@@ -148,10 +150,11 @@ function ChildRuleCard({ row, canManage }: { row: ChildRuleRow; canManage: boole
             <div className="text-[11px] text-muted">{t('walletSettings.spendsAboveThisNeedAParent')}</div>
           </div>
           <div className="flex items-center gap-1">
-            <span className="text-xs text-muted">$</span>
+            {unit.before && <span className="text-xs text-muted">{unit.symbol}</span>}
             <input type="number" min={0} step="5" value={threshold} disabled={!canManage} aria-label={t('walletSettings.approvalThreshold')}
               onChange={(e) => setThreshold(e.target.value)}
               className="w-20 rounded-lg border border-border bg-surface px-2 py-1 text-sm font-semibold focus:outline-none focus:ring-2 focus:ring-brand/30 disabled:opacity-60" />
+            {!unit.before && <span className="text-xs text-muted">{unit.symbol}</span>}
           </div>
         </div>
       </div>
