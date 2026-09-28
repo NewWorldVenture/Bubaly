@@ -3,6 +3,7 @@
 // date formatting in the family time zone, chore completion, and the /api/ai
 // JSON transport contract.
 import { describe, expect, it } from 'vitest';
+import { readFileSync } from 'node:fs';
 import { DEFAULT_THEME, THEME_STORAGE_KEY, isThemePreference, nextTheme, resolveTheme } from '@/mobile/src/theme/theme-core';
 import { DEFAULT_THEME as WEB_DEFAULT_THEME, THEME_KEY as WEB_THEME_KEY, resolveTheme as webResolveTheme } from '@/components/theme/theme-core';
 import { SECURE_CHUNK_SIZE, createChunkedStore, splitChunks, type KeyValueStore } from '@/mobile/src/lib/chunked-storage';
@@ -206,7 +207,17 @@ describe('auth helpers', () => {
     expect(friendlyAuthError('Email not confirmed')).toContain('Confirm your email');
     expect(friendlyAuthError('Request rate limit reached')).toContain('Too many attempts');
     expect(friendlyAuthError('Network request failed')).toContain('connection');
-    expect(friendlyAuthError('Weird')).toBe('Weird');
+    // The auth server's own wording is never shown (ROLE-L08); it is logged.
+    expect(friendlyAuthError('Database error querying schema')).toBe('Something went wrong. Please try again.');
     expect(friendlyAuthError(null)).toBe('Something went wrong. Please try again.');
+  });
+});
+
+describe('a mobile sign-in that throws still answers (ROLE-L08)', () => {
+  it('catches a non-AuthError from signInWithPassword', () => {
+    const source = readFileSync('mobile/src/lib/auth.tsx', 'utf8');
+    const signIn = source.slice(source.indexOf('const signIn = useCallback'), source.indexOf('const signOut = useCallback'));
+    expect(signIn).toMatch(/try \{\s*\(\{ error \} = await supabase\.auth\.signInWithPassword\(/);
+    expect(signIn).toMatch(/\} catch \(cause: unknown\) \{/);
   });
 });

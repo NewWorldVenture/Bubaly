@@ -5,7 +5,7 @@ import {
 } from 'lucide-react';
 import { createServer } from '@/lib/supabase/server';
 import { settleAll } from '@/lib/supabase/settle';
-import { isManager, ROLE_LABELS } from '@/lib/constants/roles';
+import { isManager, roleLabel } from '@/lib/constants/roles';
 import { personalDashboardLabel } from '@/lib/constants/dashboards';
 import { roleGreeting, roleSurface } from '@/lib/ui/role-surface';
 import { dayPhase } from '@/lib/home/time-of-day';
@@ -179,7 +179,7 @@ export async function PersonalDashboard({ ctx }: { ctx: UserContext }) {
               {greeting}{showWave && <span> 👋</span>}
             </h1>
             <p className="mt-0.5 text-sm text-muted">
-              {personalDashboardLabel(role)} · <span className="capitalize">{ROLE_LABELS[role]}</span>
+              {personalDashboardLabel(role)} · <span className="capitalize">{roleLabel(tr, role)}</span>
             </p>
           </div>
         </div>

@@ -12,7 +12,7 @@ import { cn } from '@/lib/utils/cn';
 import { useApp } from '@/components/app/app-context';
 import { SignOutButton } from '@/components/auth/sign-out-button';
 import { useTheme } from '@/components/theme/use-theme';
-import { ROLE_LABELS } from '@/lib/constants/roles';
+import { roleLabel } from '@/lib/constants/roles';
 import type { Tables } from '@/lib/database.types';
 import { useTranslations } from '@/components/i18n/locale-provider';
 
@@ -89,7 +89,7 @@ export function ProfileModule({ member, userEmail, stats }: ProfileModuleProps) 
           <p className="text-sm text-muted">{userEmail}</p>
           <p className="mt-1 inline-flex items-center gap-1.5 rounded-full bg-brand/10 px-3 py-0.5 text-xs font-semibold text-brand-text">
             <Users className="h-3 w-3" />
-            {family.name} · {ROLE_LABELS[role]}
+            {family.name} · {roleLabel(t, role)}
           </p>
         </div>
       </div>
