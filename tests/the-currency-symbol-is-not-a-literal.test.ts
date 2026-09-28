@@ -55,9 +55,18 @@
 // they are groundwork, not a conversion (tests/a-money-approval-reminder-is-
 // worded-from-the-catalogue-and-still-stored-in-english.test.ts).
 //
+// THE JSX BLIND SPOT. Until the scanner learned JSX text, it saw only template
+// literals and string concatenation, so thirteen family-facing sites sat outside
+// the count while it read five: `<span>${(cents / 100).toFixed(2)}</span>` on a
+// health visit, a chore-plan badge and a meal's cost; `${q}` on the wallet's
+// quick-amount buttons (six of them); and a lone `<span>$</span>` beside four
+// wallet amount inputs. All thirteen now format through the reader's locale --
+// fmtMoney, the wallet's locale-bound formatCents, or currencyUnit for an input
+// adornment -- and the JSX shapes are pinned by the last case below.
+//
 // `node scripts/audit-hand-written-currency.mjs` lists the five that remain, and
 // none of them is text a family reads:
-//   - app/api/vacations/ai/route.ts:130 — the trip budget in the user message to
+//   - app/api/vacations/ai/route.ts:136 — the trip budget in the user message to
 //     the model (so is :305, in the system prompt, which the scanner does not
 //     count); model-read, out of this row's scope by its own rule;
 //   - lib/purchases/advisor.ts, lib/relationship/gifts.ts and
@@ -71,7 +80,7 @@
 // symbols in without a word, so SITES is the count,
 // not the history, and every unit that lands lowers it.
 import { describe, expect, it } from 'vitest';
-import { findHandWrittenCurrency } from '../scripts/audit-hand-written-currency.mjs';
+import { findHandWrittenCurrency, scanSource } from '../scripts/audit-hand-written-currency.mjs';
 
 const SITES = 5;
 
@@ -126,5 +135,20 @@ describe('a currency symbol written as a literal', () => {
       expect(file, 'admin surfaces are en-US by the audit rule').not.toMatch(/^app\/\(app\)\/admin\/|^components\/admin\//);
       expect(file, 'AI prompt and tool text is read by the model').not.toMatch(/^lib\/ai\/|^app\/api\/ai\//);
     }
+  });
+
+  // The JSX shapes the template-literal patterns cannot see. Each was in the tree
+  // until this pin went in; a regression to any of them must be counted.
+  it('sees a dollar sign written as JSX text', () => {
+    const count = (src: string) => (scanSource('components/x.tsx', src) as unknown[]).length;
+    expect(count('<span>${(v.cost_cents / 100).toFixed(2)}</span>')).toBe(1);
+    expect(count('<button>\n  ${q}\n</button>')).toBe(1);
+    expect(count('<span className="text-muted">$</span>')).toBe(1);
+    expect(count("<b>{'$'}{n}</b>")).toBe(1);
+    // Not money: a template placeholder, and the price-level glyphs.
+    expect(count('const s = `${q} items`;')).toBe(0);
+    expect(count("<option>{'$'.repeat(2)}</option>")).toBe(0);
+    // JSX text is only JSX in a .tsx file.
+    expect((scanSource('lib/x.ts', '<span>$</span>') as unknown[]).length).toBe(0);
   });
 });

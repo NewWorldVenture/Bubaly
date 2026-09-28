@@ -17,6 +17,7 @@ import { fmtDate } from '@/lib/utils/format';
 import { VISIT_KINDS, visitKindMeta, sortByVisitDate, upcomingFollowUps, daysUntilFollowUp, type VisitKind } from '@/lib/health/visits';
 import type { Tables } from '@/lib/database.types';
 import { useTranslations } from '@/components/i18n/locale-provider';
+import { useFormat } from '@/components/i18n/use-format';
 import { todayInZone } from '@/lib/schedule/zoned';
 
 type Visit = Tables<'health_visits'>;
@@ -27,6 +28,7 @@ export function HealthVisitsModule({ defaultKind, title = 'Visits & History', lo
   defaultKind?: VisitKind; title?: string; lockKind?: boolean;
 }) {
   const t = useTranslations();
+  const { fmtMoney } = useFormat();
   const { familyId, userId, members, family, role } = useApp();
   // 0414 makes the database refuse a non-manager write on this table. The
   // controls follow it, the way medications-module.tsx already does — a button
@@ -170,7 +172,7 @@ export function HealthVisitsModule({ defaultKind, title = 'Visits & History', lo
                     <div className="mt-1 flex flex-wrap gap-3 text-xs text-muted">
                       {v.location && <span className="flex items-center gap-1"><MapPin className="h-3 w-3" />{v.location}</span>}
                       {v.follow_up_date && <span className="flex items-center gap-1 text-amber-300"><CalendarClock className="h-3 w-3" />Follow-up {fmtDate(v.follow_up_date)}</span>}
-                      {v.cost_cents != null && <span>${(v.cost_cents / 100).toFixed(2)}</span>}
+                      {v.cost_cents != null && <span>{fmtMoney(v.cost_cents)}</span>}
                     </div>
                   </div>
                   {who && <Avatar name={who.display_name} color={who.color} size={28} />}

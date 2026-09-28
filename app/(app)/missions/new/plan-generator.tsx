@@ -7,9 +7,11 @@ import { Badge } from '@/components/ui/badge';
 import { generatePlanAction, createChoreAction } from '../actions';
 import type { ChorePlanItem } from '@/lib/chores/ai';
 import { useTranslations } from '@/components/i18n/locale-provider';
+import { useFormat } from '@/components/i18n/use-format';
 
 export function PlanGenerator({ members }: { members: { id: string; name: string }[] }) {
   const t = useTranslations();
+  const { fmtMoney } = useFormat();
   const [prompt, setPrompt] = useState('');
   const [items, setItems] = useState<ChorePlanItem[]>([]);
   const [error, setError] = useState<string | null>(null);
@@ -74,7 +76,7 @@ export function PlanGenerator({ members }: { members: { id: string; name: string
                 <div className="flex flex-wrap items-center gap-2">
                   <p className="font-semibold">{item.title}</p>
                   <Badge tone="neutral">{item.difficulty}</Badge>
-                  {item.suggested_cash_cents > 0 ? <Badge tone="brand">${(item.suggested_cash_cents / 100).toFixed(2)}</Badge> : <Badge tone="brand">{item.suggested_points} pts</Badge>}
+                  {item.suggested_cash_cents > 0 ? <Badge tone="brand">{fmtMoney(item.suggested_cash_cents)}</Badge> : <Badge tone="brand">{item.suggested_points} pts</Badge>}
                   {item.safety_level !== 'none' && <Badge tone="danger"><ShieldAlert className="h-3 w-3" /> {item.safety_level === 'parent_required' ? 'Parent' : 'Caution'}</Badge>}
                 </div>
                 <p className="mt-0.5 text-xs text-muted">{item.description}</p>

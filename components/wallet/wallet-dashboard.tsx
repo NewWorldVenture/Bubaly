@@ -593,7 +593,7 @@ function AddFundsModal({ child, onClose }: { child: ChildWalletView; onClose: ()
           {[5, 10, 20, 50].map((q) => (
             <button key={q} type="button" onClick={() => setAmount(String(q))}
               className="rounded-lg border border-border px-3 py-1.5 text-sm hover:border-brand/40 hover:text-brand-text transition">
-              ${q}
+              {formatCents(q * 100)}
             </button>
           ))}
         </div>

@@ -27,6 +27,7 @@ import {
   addLeftoverAction, updateLeftoverStatusAction, deleteLeftoverAction, snapshotFoodScoreAction,
 } from '@/app/(app)/dashboard/kitchen/actions';
 import { useLocale, useTranslations } from '@/components/i18n/locale-provider';
+import { useFormat } from '@/components/i18n/use-format';
 
 export type KitchenData = {
   /**
@@ -391,6 +392,7 @@ const CHEF_PROMPT_KEYS = ['kitchenDashboard.chefPrompt.quickDinners', 'kitchenDa
 
 function ChefModal({ onClose }: { onClose: () => void }) {
   const i18nT = useTranslations();
+  const { fmtMoney } = useFormat();
   const tr = useTranslations();
   const { error: toastError } = useToast();
   const [request, setRequest] = useState('');
@@ -462,7 +464,7 @@ function ChefModal({ onClose }: { onClose: () => void }) {
                       <p className="text-xs text-muted">{m.reason}</p>
                     </div>
                     <div className="flex flex-shrink-0 flex-col items-end gap-0.5">
-                      {m.estCostCents != null && m.estCostCents > 0 && <span className="text-xs font-semibold">${(m.estCostCents / 100).toFixed(0)}</span>}
+                      {m.estCostCents != null && m.estCostCents > 0 && <span className="text-xs font-semibold">{fmtMoney(m.estCostCents)}</span>}
                       <div className="flex gap-1">
                         {m.quick && <span className="rounded bg-emerald-500/15 px-1 text-[9px] font-bold uppercase text-emerald-500">{tr('kitchenDashboard.quick')}</span>}
                         {m.usesExpiring && <span className="rounded bg-amber-500/15 px-1 text-[9px] font-bold uppercase text-amber-500">{tr('kitchenDashboard.usesUp')}</span>}

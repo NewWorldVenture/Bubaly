@@ -10,6 +10,7 @@ import { cn } from '@/lib/utils/cn';
 import { formatCents as formatCentsIn } from '@/lib/wallet/ledger';
 import { sendMoneyAction } from '@/app/(app)/wallet/actions';
 import { useLocale, useTranslations } from '@/components/i18n/locale-provider';
+import { currencyUnit } from '@/lib/marketplace/listings';
 
 export type SendChild = {
   id: string;
@@ -26,6 +27,7 @@ export function SendMoneyView({ wallets, canManage }: { wallets: SendChild[]; ca
   // Money follows the reader; the currency stays the money's own.
   const formatCents = (cents: number, currency?: string) =>
     formatCentsIn(cents, currency, locale.code);
+  const unit = currencyUnit(locale.code);
   const t = useTranslations();
   const router = useRouter();
   const { success, error: toastError } = useToast();
@@ -163,7 +165,8 @@ export function SendMoneyView({ wallets, canManage }: { wallets: SendChild[]; ca
           {/* Amount display */}
           <div className="mb-2 text-center">
             <p className="text-5xl font-black tracking-tight">
-              <span className="text-3xl text-muted">$</span>{amountDisplay}
+              {unit.before && <span className="text-3xl text-muted">{unit.symbol}</span>}{amountDisplay}
+              {!unit.before && <span className="text-3xl text-muted">{' '}{unit.symbol}</span>}
             </p>
             {fromChild.spendBalance > 0 && (
               <p className="mt-1 text-xs text-muted">{formatCents(fromChild.spendBalance)} {t('sendMoney.inSpendBucket')}</p>
@@ -176,7 +179,7 @@ export function SendMoneyView({ wallets, canManage }: { wallets: SendChild[]; ca
               <button key={d} type="button"
                 onClick={() => setAmountDisplay(String(d))}
                 className="rounded-full border border-border px-3 py-1 text-sm font-semibold hover:border-brand hover:text-brand-text transition">
-                ${d}
+                {formatCents(d * 100)}
               </button>
             ))}
           </div>

@@ -428,7 +428,7 @@ function RequestSpendModal({ child, onClose }: { child: Child; onClose: () => vo
           {[5, 10, 20, 50].map((q) => (
             <button key={q} type="button" onClick={() => setAmount(String(q))}
               className="rounded-lg border border-border px-3 py-1.5 text-sm hover:border-brand/40 hover:text-brand-text transition">
-              ${q}
+              {formatCents(q * 100)}
             </button>
           ))}
         </div>
@@ -544,7 +544,7 @@ function AddFundsModal({ child, onClose }: { child: Child; onClose: () => void }
           {[5, 10, 20, 50].map((q) => (
             <button key={q} type="button" onClick={() => setAmount(String(q))}
               className="rounded-lg border border-border px-3 py-1.5 text-sm hover:border-brand/40 hover:text-brand-text transition">
-              ${q}
+              {formatCents(q * 100)}
             </button>
           ))}
         </div>
@@ -561,6 +561,10 @@ function AddFundsModal({ child, onClose }: { child: Child; onClose: () => void }
 
 function RequestAllowanceModal({ child, onClose }: { child: Child; onClose: () => void }) {
   const t = useTranslations();
+  const locale = useLocale();
+  // Money follows the reader; the currency stays the money's own.
+  const formatCents = (cents: number, currency?: string) =>
+    formatCentsIn(cents, currency, locale.code);
   const router = useRouter();
   const { success, error: toastError } = useToast();
   const [loading, setLoading] = useState(false);
@@ -596,7 +600,7 @@ function RequestAllowanceModal({ child, onClose }: { child: Child; onClose: () =
           {[5, 10, 20, 50].map((q) => (
             <button key={q} type="button" onClick={() => setAmount(String(q))}
               className="rounded-lg border border-border px-3 py-1.5 text-sm hover:border-brand/40 hover:text-brand-text transition">
-              ${q}
+              {formatCents(q * 100)}
             </button>
           ))}
         </div>

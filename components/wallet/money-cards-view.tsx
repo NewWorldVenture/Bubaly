@@ -28,6 +28,7 @@ import {
 } from '@/app/(app)/money/actions';
 import { CardRevealModal } from '@/components/wallet/card-reveal-modal';
 import { useLocale, useTranslations } from '@/components/i18n/locale-provider';
+import { currencyUnit } from '@/lib/marketplace/listings';
 
 export type CardChild = { id: string; name: string; color: string | null };
 export type IssuedCard = {
@@ -421,6 +422,7 @@ function PhysicalCardModal({ child, onClose, onIssued }: {
 }) {
   const t = useTranslations();
   const tr = useTranslations();
+  const unit = currencyUnit(useLocale().code);
   const { success, error: toastError } = useToast();
   const [loading, setLoading] = useState(false);
   const [limitDollars, setLimitDollars] = useState('');
@@ -464,9 +466,10 @@ function PhysicalCardModal({ child, onClose, onIssued }: {
         <Field label={tr('moneyCards.dailySpendLimitOptionalLeaveBlank')}>
           {(id) => (
             <div className="flex items-center gap-1.5">
-              <span className="text-muted">$</span>
+              {unit.before && <span className="text-muted">{unit.symbol}</span>}
               <Input id={id} type="number" min="1" step="1" value={limitDollars}
                 onChange={(e) => setLimitDollars(e.target.value)} placeholder={t('moneyCardsView.noLimit')} />
+              {!unit.before && <span className="text-muted">{unit.symbol}</span>}
             </div>
           )}
         </Field>
@@ -491,6 +494,7 @@ function PhysicalCardModal({ child, onClose, onIssued }: {
 function CardControlsEditor({ card, onSaved }: { card: IssuedCard; onSaved: () => void }) {
   const t = useTranslations();
   const tr = useTranslations();
+  const unit = currencyUnit(useLocale().code);
   const { success, error: toastError } = useToast();
   const [limitDollars, setLimitDollars] = useState(card.spendLimitCents != null ? String(card.spendLimitCents / 100) : '');
   const [windowVal, setWindowVal] = useState<SpendWindow>((card.spendWindow as SpendWindow) ?? 'per_authorization');
@@ -522,12 +526,13 @@ function CardControlsEditor({ card, onSaved }: { card: IssuedCard; onSaved: () =
         <label className="block">
           <span className="mb-1 block text-xs font-medium text-muted">{tr('moneyCards.spendLimitBlankNoLimit')}</span>
           <div className="flex items-center gap-1">
-            <span className="text-muted">$</span>
+            {unit.before && <span className="text-muted">{unit.symbol}</span>}
             <input
               type="number" min="0" step="1" inputMode="decimal" value={limitDollars}
               onChange={(e) => setLimitDollars(e.target.value)} placeholder={tr('moneyCards.noLimit')}
               className="h-9 w-full rounded-lg border border-border bg-bg px-2 text-sm focus-ring"
             />
+            {!unit.before && <span className="text-muted">{unit.symbol}</span>}
           </div>
         </label>
         <label className="block">
