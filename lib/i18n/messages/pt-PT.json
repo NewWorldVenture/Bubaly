@@ -3775,6 +3775,7 @@
   "checkout.billingAccountStatusIsTemporarily": "O estado da conta de faturação está temporariamente indisponível.",
   "checkout.couldNotCreateCheckoutSession": "Não foi possível criar a sessão de pagamento",
   "checkout.billingIsNotSetUp": "A faturação ainda não está configurada neste servidor, por isso nada foi alterado.",
+  "checkout.alreadySubscribed": "Já tem um plano. Reveja a alteração na página de faturação para não ser cobrado duas vezes.",
   "checkout.couldNotSaveTheBilling": "Não foi possível guardar a conta de faturação. Tente novamente.",
   "checkout.invalidPlan": "Plano inválido",
   "checkout.onlyAParentCanStart": "Só um progenitor pode iniciar uma subscrição.",

@@ -3774,6 +3774,7 @@
   "checkout.billingAccountStatusIsTemporarily": "Le statut du compte de facturation est temporairement indisponible.",
   "checkout.couldNotCreateCheckoutSession": "Impossible de créer la session de paiement",
   "checkout.billingIsNotSetUp": "La facturation n’est pas encore configurée sur ce serveur, rien n’a donc été modifié.",
+  "checkout.alreadySubscribed": "Vous avez déjà une formule. Vérifiez le changement sur la page de facturation pour ne pas être facturé deux fois.",
   "checkout.couldNotSaveTheBilling": "Impossible d’enregistrer le compte de facturation. Veuillez réessayer.",
   "checkout.invalidPlan": "Formule invalide",
   "checkout.onlyAParentCanStart": "Seul un parent peut démarrer un abonnement.",

@@ -3774,6 +3774,7 @@
   "checkout.billingAccountStatusIsTemporarily": "Der Status des Abrechnungskontos ist vorübergehend nicht verfügbar.",
   "checkout.couldNotCreateCheckoutSession": "Es konnte keine Checkout-Sitzung erstellt werden",
   "checkout.billingIsNotSetUp": "Die Abrechnung ist auf diesem Server noch nicht eingerichtet, daher wurde nichts geändert.",
+  "checkout.alreadySubscribed": "Du hast bereits einen Tarif. Prüfe die Änderung auf der Abrechnungsseite, damit dir nichts doppelt berechnet wird.",
   "checkout.couldNotSaveTheBilling": "Das Abrechnungskonto konnte nicht gespeichert werden. Bitte versuchen Sie es erneut.",
   "checkout.invalidPlan": "Ungültiger Tarif",
   "checkout.onlyAParentCanStart": "Nur ein Elternteil kann ein Abonnement starten.",

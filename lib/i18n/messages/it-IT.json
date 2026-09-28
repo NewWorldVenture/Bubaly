@@ -3774,6 +3774,7 @@
   "checkout.billingAccountStatusIsTemporarily": "Lo stato dell’account di fatturazione non è temporaneamente disponibile.",
   "checkout.couldNotCreateCheckoutSession": "Impossibile creare la sessione di pagamento",
   "checkout.billingIsNotSetUp": "La fatturazione non è ancora configurata su questo server, quindi non è stato modificato nulla.",
+  "checkout.alreadySubscribed": "Hai già un piano. Controlla la modifica nella pagina di fatturazione, così non ti viene addebitato due volte.",
   "checkout.couldNotSaveTheBilling": "Impossibile salvare l’account di fatturazione. Riprova.",
   "checkout.invalidPlan": "Piano non valido",
   "checkout.onlyAParentCanStart": "Solo un genitore può avviare un abbonamento.",

@@ -123,10 +123,29 @@ export async function POST(req: NextRequest) {
   }
 
   // Load member/family context for AI
-  const { data: memberProfile } = await supabase.from('guardian_member_profiles')
-    .select('*')
-    .eq('family_id', sess.family_id)
-    .maybeSingle();
+  // The profile of the member THIS call was for. Profiles are per member
+  // (unique on family_id + member_id), and this read used to ask for the
+  // family's one profile: with two protected members it errored, the error was
+  // dropped, and the AI screened without the member's settings, and a transfer
+  // with no phone to dial went to voicemail. The communication names the member.
+  let calledMemberId: string | null = null;
+  if (sess.communication_id) {
+    const { data: comm, error: commError } = await supabase.from('guardian_communications')
+      .select('member_id').eq('id', sess.communication_id).eq('family_id', sess.family_id).maybeSingle();
+    if (commError) {
+      console.error('[guardian/screen] communication read failed; letting Twilio fall back', { sessionId, error: commError.message });
+      return new NextResponse('', { status: 503 });
+    }
+    calledMemberId = (comm as { member_id?: string | null } | null)?.member_id ?? null;
+  }
+  const profiles = supabase.from('guardian_member_profiles').select('*').eq('family_id', sess.family_id);
+  const { data: profileRows, error: profileError } = await (calledMemberId ? profiles.eq('member_id', calledMemberId) : profiles).limit(2);
+  if (profileError) {
+    console.error('[guardian/screen] member profile read failed; letting Twilio fall back', { sessionId, error: profileError.message });
+    return new NextResponse('', { status: 503 });
+  }
+  // Without a named member, only an unambiguous profile is used.
+  const memberProfile = profileRows?.length === 1 ? profileRows[0] : null;
 
   const { data: memberData } = memberProfile
     ? await supabase.from('family_members').select('display_name, phone').eq('id', (memberProfile as { member_id: string }).member_id).maybeSingle()

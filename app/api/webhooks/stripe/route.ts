@@ -41,11 +41,23 @@ async function persistSubscription(supabase: ReturnType<typeof createServiceClie
   // brand-new paid conversion vs. a routine renewal).
   const [{ data: bc, error: billingCustomerError }, { data: priorSub, error: priorSubscriptionError }] = await settleAll([
     supabase.from('billing_customers').select('id').eq('family_id', familyId).maybeSingle(),
-    supabase.from('subscriptions').select('plan, status').eq('family_id', familyId).maybeSingle(),
+    supabase.from('subscriptions').select('plan, status, provider_ref').eq('family_id', familyId).maybeSingle(),
   ]);
   if (billingCustomerError || priorSubscriptionError) {
     console.error('[stripe webhook] Billing state lookup failed', billingCustomerError ?? priorSubscriptionError);
     throw new Error('Billing state lookup failed');
+  }
+
+  // One row per family, many possible Stripe subscriptions over its life: a
+  // resubscription after a cancellation, or a second subscription started
+  // before checkout refused one (PAY-DOUBLE-001). An event about a subscription
+  // that has ENDED must not overwrite a DIFFERENT subscription the row records
+  // as live, or the family reads as canceled while it is still paying.
+  const LIVE = ['active', 'trialing', 'past_due'];
+  if (priorSub?.provider_ref && priorSub.provider_ref !== sub.id
+    && LIVE.includes(priorSub.status) && !LIVE.includes(sub.status)) {
+    console.warn('[stripe webhook] ignored an ended subscription that is not the family\'s live one', { familyId, ended: sub.id });
+    return;
   }
 
   // `family_id` is deliberately not part of `fields`: it selects the row, and

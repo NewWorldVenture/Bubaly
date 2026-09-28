@@ -30,8 +30,11 @@ async function startCheckout(plan: StripePlan, t: (key: string) => string): Prom
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify({ plan }),
   });
-  const json = (await res.json()) as { url?: string; error?: string };
+  const json = (await res.json()) as { url?: string; error?: string; review?: string };
   if (json.url) return json.url;
+  // Already subscribed: a plan change is reviewed on the billing page and made
+  // in place there, never a second Checkout (the server refuses one).
+  if (res.status === 409 && json.review?.startsWith('/')) return json.review;
   throw new Error(json.error ?? t('upgradeModal.couldNotStartCheckout'));
 }
 

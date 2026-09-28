@@ -47,7 +47,7 @@ const GATES = [
   'hasCronAuthorization',
   'secretEquals',
   'bearerMatches',            // a Bearer secret in constant time (lib/server/secret-compare): the Guardian escalation
-  'constructWebhookEvent', 'constructEvent', 'svix-signature',  // signature-verified webhooks (lib/stripe's keyless verifier, Stripe's own, Resend's)
+  'constructWebhookEvent', 'svix-signature',  // signature-verified webhooks (lib/stripe's keyless verifier, used by both Stripe webhooks; Resend's)
   'validateTwilioSignature',  // the Twilio callbacks: guardian inbound, screening, contact centre
   'verifyTwilioRequest',      // the same check through lib/server/twilio-ingress, which no build mode skips
 ];

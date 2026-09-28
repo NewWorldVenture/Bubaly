@@ -3774,6 +3774,7 @@
   "checkout.billingAccountStatusIsTemporarily": "De status van het factureringsaccount is tijdelijk niet beschikbaar.",
   "checkout.couldNotCreateCheckoutSession": "Kan geen afrekensessie aanmaken",
   "checkout.billingIsNotSetUp": "Facturering is nog niet ingesteld op deze server, dus er is niets gewijzigd.",
+  "checkout.alreadySubscribed": "Je hebt al een abonnement. Bekijk de wijziging op de factuurpagina, zodat je niet dubbel betaalt.",
   "checkout.couldNotSaveTheBilling": "Kan het factureringsaccount niet opslaan. Probeer het opnieuw.",
   "checkout.invalidPlan": "Ongeldig abonnement",
   "checkout.onlyAParentCanStart": "Alleen een ouder kan een abonnement starten.",
