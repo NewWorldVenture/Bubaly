@@ -1445,7 +1445,7 @@ worked; a claim with no commit touching it for six hours may be taken over.
 | **AW-01 / I18N-004** | FIXED | Thirty-two confirmations ask in English regardless of who is reading. confirm(Delete “${m.title}” with all its t… | 3. High Priority |
 | **AU-01** | FIXED | Two shared primitives documented a guarantee they did not hold. components/ui/input.tsx Field described itself a… | 3. High Priority |
 | **AT-01** | FIXED | Five more surfaces reported a refused read as a successful reading of nothing — and on /family/members the empty… | 3. High Priority |
-| **AQ-01 / I18N-003** | FIXED+PASS (literal-symbol sites; 5 out-of-scope held) | Fifty-one money values write the currency symbol as a LITERAL, and that is worse than a hardcoded locale rather… | 3. High Priority |
+| **AQ-01 / I18N-003** | PARTIAL | Fifty-one money values write the currency symbol as a LITERAL, and that is worse than a hardcoded locale rather… | 3. High Priority |
 | **AK-01 / I18N-002** | FIXED | Fourteen dates follow the BROWSER's locale, not the family's Bubaly choice. toLocaleDateString() and toLocaleTim… | 3. High Priority |
 | **Y-01** | FIXED | The photos lightbox was a keyboard trap, and both Guardian editors could not be closed from the keyboard. The li… | 3. High Priority |
 | **X-01** | FIXED | 82 icon-only buttons had no accessible name — a screen-reader or voice-control user hears "button" and cannot te… | 3. High Priority |
@@ -25174,17 +25174,17 @@ The invite toast and two Home widgets remain.
 |---|---|---|
 | F5 / F-001 | Production migrations cannot be applied — the ledger records only `0001–0003` | **BLOCKED — operator** |
 | F-C08 | The forward-release mechanism is pinned to `0240–0254`; the repo is 38 migrations past it | **Code half fixed — re-pinning is now a manifest change; the release itself is still owner/operator** |
-| F-E02 | Step-up MFA is presentational; no policy references `aal`, and guarded pages fetch straight from PostgREST | OPEN |
-| F-E03 | The `family-media` bucket is public; photos and attachments are served with no session | OPEN (known, tracked as LB-009) |
+| F-E02 | Step-up MFA is presentational; no policy references `aal`, and guarded pages fetch straight from PostgREST | PARTIAL — verified in code 2026-09-28 by session_01776xJyhVe8xJQvTGeNfT9T: `session_cleared_step_up()` now guards the budget (0382) and the vault (0391) in RLS; other step-up surfaces still rely on the redirect. Both migrations unapplied in production (PROD-DB-0177) |
+| F-E03 | The `family-media` bucket is public; photos and attachments are served with no session | FIXED in the repo — verified in code 2026-09-28 by session_01776xJyhVe8xJQvTGeNfT9T: `0459` makes `family-media` private (#621); production stays public until the operator applies it (SEC-001, OWNER'S) |
 | F-F01 / F-G13 | A caller-supplied `max` truncates a money read and reports success; reconciliation renders "Everything reconciles" from a prefix | **Fixed** — `readAll` now answers `truncated`, and `failOnMax` turns it into the error the five summing call sites already handle · *Main (C1-S9, merged 2026-09-27):* **RE-SCOPED — half closed.** The helper now reads one row past `max` and errors, and the reconciliation page returns `<ErrorState>` before rendering, so the quoted symptom is unreachable. What remains is the 13 of 59 call sites never migrated, which now render ZERO where they used to render a prefix — see `C4-S4-01`. |
 | F-F02 / F-G14 | F-017's timezone bug still live on server-rendered surfaces, including the kids page | **Partly fixed** — the kids page and every notification's text now use the family's zone; the remaining 17 sites are held by a ratchet that fails on an eighteenth |
-| F-F03 | `/missions` issues up to 240 sequential storage round trips on the parent approval queue | OPEN |
-| F-D01 | The photo lightbox strands keyboard users: no `role="dialog"`, no Escape, no focus trap | OPEN |
-| F-D02 / F-D03 | 55 labels detached from their control; 65 `<select>` with no accessible name | OPEN |
+| F-F03 | `/missions` issues up to 240 sequential storage round trips on the parent approval queue | FIXED — verified in code 2026-09-28 by session_01776xJyhVe8xJQvTGeNfT9T: `app/(app)/missions/page.tsx` signs proofs with the batch `createSignedUrls`, in chunks |
+| F-D01 | The photo lightbox strands keyboard users: no `role="dialog"`, no Escape, no focus trap | FIXED — verified in code 2026-09-28 by session_01776xJyhVe8xJQvTGeNfT9T: the lightbox uses the shared `useDialogBehavior` (Escape, Tab trap, scroll lock, focus restore); Register B MAIN-F-D01 closed |
+| F-D02 / F-D03 | 55 labels detached from their control; 65 `<select>` with no accessible name | FIXED — verified in code 2026-09-28 by session_01776xJyhVe8xJQvTGeNfT9T: `jsx-a11y/label-has-associated-control` is an error in `.eslintrc.json`, and B14's axe crawl found 0 unnamed fields on all 628 signed-in loads; Register B MAIN-F-D02/F-D03 closed |
 | F21 | A child could grant themselves a reward | Half fixed and live, half awaiting the operator |
 | **F-G05** | A scam call could be **transferred** instead of hung up — the screening decision was never checked against its own allowed values | **fixed** |
 | **F-G02** | Every child row on `/wallet/treasury` linked to a route that does not exist | **fixed** |
-| F-G09 | The family password vault's sibling gaps: health/medication records readable **and writable** by a child | OPEN |
+| F-G09 | The family password vault's sibling gaps: health/medication records readable **and writable** by a child | FIXED in the repo — verified in code 2026-09-28 by session_01776xJyhVe8xJQvTGeNfT9T: 0414, 0430, 0434 and 0438 make health records, prescriptions and diagnoses a parent's to write and not a sibling's to read; unapplied in production (PROD-DB-0177) |
 
 | F1, F9, F10, F15, F16, F18, F20 | sitemap dead URLs; whole i18n catalogue per page; seeded records shown as real customer stories; Autopilot running for every family; paid features enforced by a padlock; ungated endpoints; a child clearing the chore board | **all fixed** |
 | F-C01, F-C02, F-C03 | sitemap dated by generation time; 445 non-indexable URLs; the catalogue on every public page | **all fixed and verified in production** — *`F-C03` later REOPENED by `N1`; see Part 0* |
@@ -25269,13 +25269,13 @@ closed.
 | | Finding | Status |
 |---|---|---|
 | F-E01 | The family password vault, open to children, secrets in plaintext | Fixed by `0296`, unapplied |
-| F-E02 | Step-up MFA is a redirect; no policy knows `aal` | OPEN |
-| F-E03 | `family-media` is a public bucket | OPEN |
-| F-E04 | OAuth tokens family-member readable, while `sync_tokens` is service-only | OPEN |
-| F-E05 | `feedback-attachments` is a public bucket | OPEN |
-| F-E06 | The Contact Center secret is accepted in the query string, where it lands in logs | OPEN |
-| F-E07 | Twilio signature verification is off outside production | OPEN |
-| F-E08 | Shared-secret comparisons are not constant time | OPEN |
+| F-E02 | Step-up MFA is a redirect; no policy knows `aal` | PARTIAL — verified in code 2026-09-28 by session_01776xJyhVe8xJQvTGeNfT9T: `session_cleared_step_up()` now guards the budget (0382) and the vault (0391) in RLS; other step-up surfaces still rely on the redirect. Both migrations unapplied in production (PROD-DB-0177) |
+| F-E03 | `family-media` is a public bucket | FIXED in the repo — verified in code 2026-09-28 by session_01776xJyhVe8xJQvTGeNfT9T: `0459` makes `family-media` private (#621); production stays public until the operator applies it (SEC-001, OWNER'S) |
+| F-E04 | OAuth tokens family-member readable, while `sync_tokens` is service-only | FIXED — verified in code 2026-09-28 by session_01776xJyhVe8xJQvTGeNfT9T: the Google token is encrypted before it is stored (`lib/google-token-storage`, `tests/google-calendar-token-is-encrypted.test.ts`, C3-S5-02) |
+| F-E05 | `feedback-attachments` is a public bucket | FIXED in the repo — verified in code 2026-09-28 by session_01776xJyhVe8xJQvTGeNfT9T: `0450_a_feedback_screenshot_is_not_world_readable`; Register B MAIN-F-E05 closed; unapplied in production |
+| F-E06 | The Contact Center secret is accepted in the query string, where it lands in logs | FIXED as far as the repo can — verified in code 2026-09-28 by session_01776xJyhVe8xJQvTGeNfT9T: the query-string secret still works (the provider is configured outside the repo) but logs a warning each time; moving the provider to the `x-inbound-secret` header is the operator's (C3-S5-08) |
+| F-E07 | Twilio signature verification is off outside production | FIXED — verified in code 2026-09-28 by session_01776xJyhVe8xJQvTGeNfT9T: `lib/server/twilio-ingress.ts` verifies whenever the deployment holds the token, whatever NODE_ENV is; only `ALLOW_UNSIGNED_TWILIO_WEBHOOKS=1` skips it; Register B MAIN-F-E07 closed |
+| F-E08 | Shared-secret comparisons are not constant time | FIXED — verified in code 2026-09-28 by session_01776xJyhVe8xJQvTGeNfT9T: `secretEquals` (HMAC digest, constant time) in `lib/server/secret-equals`, used by the Contact Center and the cron gate (C3-S5-08) |
 | F16, F18, F20, F21, F-003, F-006 | authorization drawn on screen rather than in the database | fixed |
 
 ---
@@ -25297,8 +25297,8 @@ parent a blank frame rather than a reason) belongs here too.
   266 KB → 20 KB gzipped, `/` 291 → 45 KB.
 - **F-C04** — `/blog` shipped all 1,048 posts to the browser. Fixed:
   89 → 40 KB gzipped, verified in production.
-- **F-F03** — up to 240 sequential storage round trips on `/missions`. OPEN.
-- **F-F09** — unbounded concurrent fan-out to an external drive-time API. OPEN.
+- **F-F03** — up to 240 sequential storage round trips on `/missions`. FIXED (verified in code 2026-09-28 by session_01776xJyhVe8xJQvTGeNfT9T: batch `createSignedUrls`).
+- **F-F09** — unbounded concurrent fan-out to an external drive-time API. FIXED (verified in code 2026-09-28 by session_01776xJyhVe8xJQvTGeNfT9T: `resolveDriveTimes` runs six lanes through `mapWithConcurrency`).
 - **F-018** — nine family-scoped reads doing sequential scans. Fixed.
 
 ---
