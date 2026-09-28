@@ -8,7 +8,7 @@ import { requireUserContext, effectivePlanLevel } from '@/lib/supabase/auth';
 import { resolveFamilyPlanLevel } from '@/lib/server/plan';
 import { weekWindow, weekRangeLabel, choreCompletionRate, bucketByDay, dayLoad } from '@/lib/ai/weekly';
 import { dayKeyInZone } from '@/lib/schedule/zoned';
-import { resolveProvider, isAIConfigured } from '@/lib/ai/provider';
+import { resolveProvider, isAIConfigured, describeAIError } from '@/lib/ai/provider';
 import { enforceAIRateLimit } from '@/lib/server/ai-rate-limit';
 import { MAX_SMALL_JSON_BYTES, readBoundedRequestJsonOrEmpty } from '@/lib/server/bounded-request-body';
 
@@ -245,6 +245,11 @@ Rules:
     return NextResponse.json({ briefing, generatedAt: new Date().toISOString(), weekKey: w.days[0] });
   } catch (err) {
     console.error('Weekly briefing error:', err);
+    // An engine with no key, no credit or no connection is unavailable, not a
+    // server fault behind a 500 (P-25).
+    if (describeAIError(err).code !== 'unknown') {
+      return NextResponse.json({ error: t('ai.recommendationsAreTemporarilyUnavailable') }, { status: 503 });
+    }
     return NextResponse.json({ error: t('weeklyBriefing.failedToGenerateWeeklyBriefing') }, { status: 500 });
   }
 }

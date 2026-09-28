@@ -7,6 +7,7 @@ import { requireUserContext } from '@/lib/supabase/auth';
 import { createServer } from '@/lib/supabase/server';
 import { requireSocialPermission } from '@/lib/social/access';
 import { describeActionError } from '@/lib/supabase/errors';
+import { refusalError, refusalForError } from '@/lib/actions/refusal';
 import {
   isProviderConfigured, isPlatform, PROVIDERS, type SocialPlatform,
 } from '@/lib/social/capabilities';
@@ -337,7 +338,7 @@ export async function resolveCommentAction(id: string) {
     .eq('family_id', fid)
     .select('id')
     .single();
-  if (error || !data) throw new Error(describeActionError(error, tr('actions.couldNotResolveThatComment')));
+  if (error || !data) throw refusalError(describeActionError(error, tr('actions.couldNotResolveThatComment')), refusalForError(error));
   revalidatePath('/dashboard/social/inbox');
 }
 
@@ -369,7 +370,7 @@ export async function createMediaAction(formData: FormData) {
     family_id: fid, user_id: userId, kind, title, url, alt_text: alt, tags,
     source: url ? 'upload' : 'prompt', status: url ? 'ready' : 'prompt_only', created_by: userId,
   }).select('id').single();
-  if (error || !data) throw new Error(describeActionError(error, tr('actions.couldNotSaveThatMedia')));
+  if (error || !data) throw refusalError(describeActionError(error, tr('actions.couldNotSaveThatMedia')), refusalForError(error));
   revalidatePath('/dashboard/social/media-library');
 }
 
@@ -391,7 +392,7 @@ export async function updateSettingsAction(formData: FormData) {
     { family_id: fid, default_timezone, require_approval, auto_hashtags, signature, ai_tone, default_platforms, updated_by: userId },
     { onConflict: 'family_id' },
   ).select('id').single();
-  if (error || !data) throw new Error(describeActionError(error, tr('actions.couldNotSaveSocialSettings')));
+  if (error || !data) throw refusalError(describeActionError(error, tr('actions.couldNotSaveSocialSettings')), refusalForError(error));
   revalidatePath('/dashboard/social/settings');
 }
 
@@ -411,11 +412,11 @@ export async function grantAccessAction(formData: FormData) {
     .eq('user_id', targetUserId)
     .eq('is_active', true)
     .maybeSingle();
-  if (memberError || !member) throw new Error(describeActionError(memberError, tr('actions.thatUserIsNotAn')));
+  if (memberError || !member) throw refusalError(describeActionError(memberError, tr('actions.thatUserIsNotAn')), refusalForError(memberError));
   const { data, error } = await supabase.from('social_access_permissions').upsert(
     { family_id: fid, user_id: targetUserId, social_role: role as never, granted_by: userId, created_by: userId, status: 'active' },
     { onConflict: 'family_id,user_id' },
   ).select('id').single();
-  if (error || !data) throw new Error(describeActionError(error, tr('actions.couldNotUpdateSocialAccess')));
+  if (error || !data) throw refusalError(describeActionError(error, tr('actions.couldNotUpdateSocialAccess')), refusalForError(error));
   revalidatePath('/dashboard/social/settings');
 }

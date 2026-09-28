@@ -52,6 +52,9 @@
      link). White on this coral is 2.80:1; the page ground is 7.1:1. Asserted in
      tests/brand-contrast-contract.test.ts. */
   --danger-fg: 3 9 15;
+  /* Text on a solid --success fill (approve and activate buttons, done ticks).
+     White on this green is 2.08:1; this is 9.64:1. Asserted with --danger-fg. */
+  --success-fg: 3 9 15;
   --info: 96 165 250;
   --glass: 255 255 255;
   --glass-alpha: 0.04;
@@ -110,6 +113,7 @@
   --warning: 147 106 18;
   --danger: 210 55 55;
   --danger-fg: 255 255 255;
+  --success-fg: 255 255 255;
   --info: 37 99 235;
   --glass: 16 22 40;
   --glass-alpha: 0.03;

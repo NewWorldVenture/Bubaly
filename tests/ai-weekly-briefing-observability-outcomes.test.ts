@@ -27,7 +27,11 @@ vi.mock('@/lib/supabase/auth', () => ({
 vi.mock('@/lib/supabase/server', () => ({ createServer: mocks.createServer }));
 vi.mock('@/lib/server/plan', () => ({ resolveFamilyPlanLevel: async () => 2 }));
 vi.mock('@/lib/server/ai-rate-limit', () => ({ enforceAIRateLimit: mocks.enforceAIRateLimit }));
-vi.mock('@/lib/ai/provider', () => ({ resolveProvider: mocks.resolveProvider, isAIConfigured: async () => true }));
+vi.mock('@/lib/ai/provider', async (importOriginal) => ({
+  describeAIError: (await importOriginal<typeof import('@/lib/ai/provider')>()).describeAIError,
+  resolveProvider: mocks.resolveProvider,
+  isAIConfigured: async () => true,
+}));
 vi.mock('@/lib/services/scope', () => ({ scopeFromUserContext: () => ({}) }));
 vi.mock('@/lib/ai/weekly', () => ({
   weekWindow: () => mocks.week,

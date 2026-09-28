@@ -117,7 +117,7 @@ export default async function SeoPage() {
                         </summary>
                         <form action={saveSeoPage} className="mt-3 grid gap-2 sm:grid-cols-2">
                           <input type="hidden" name="id" value={page.id} />
-                          <input name="path" required defaultValue={page.path} className={inputCls} />
+                          <input name="path" required defaultValue={page.path} aria-label={t('fieldName.path')} className={inputCls} />
                           <input name="title" defaultValue={page.title ?? ''} placeholder={t('seo.seoTitle')} className={inputCls} />
                           <input name="meta_description" defaultValue={page.meta_description ?? ''} placeholder={t('seo.metaDescription')} className={`${inputCls} sm:col-span-2`} />
                           <input name="score" type="number" min="0" max="100" defaultValue={page.score ?? ''} placeholder={t('seo.score0100')} className={inputCls} />
@@ -179,7 +179,7 @@ export default async function SeoPage() {
                                   <summary className="cursor-pointer text-xs text-brand-text">{t('seo.edit')}</summary>
                                   <form action={updateSeoKeyword} className="mt-2 min-w-64 space-y-2">
                                     <input type="hidden" name="id" value={k.id} />
-                                    <input name="keyword" required defaultValue={k.keyword} className={inputCls} />
+                                    <input name="keyword" required defaultValue={k.keyword} aria-label={t('fieldName.keyword')} className={inputCls} />
                                     <select aria-label={t('fieldName.searchIntent')} name="intent" defaultValue={k.intent ?? ''} className={inputCls}><option value="">{t('seo.intent')}</option>{INTENTS.map((intent) => <option key={intent} value={intent}>{intent}</option>)}</select>
                                     <select aria-label={t('fieldName.targetPage')} name="target_path" defaultValue={k.target_path ?? ''} className={inputCls}><option value="">{t('seo.targetPage')}</option>{SITE_PAGES.map((path) => <option key={path} value={path}>{path}</option>)}</select>
                                     <select aria-label={t('fieldName.status')} name="status" defaultValue={k.status} className={inputCls}>{KEYWORD_STATUSES.map((status) => <option key={status} value={status}>{status}</option>)}</select>

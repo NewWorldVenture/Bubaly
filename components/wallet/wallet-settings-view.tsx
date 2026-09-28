@@ -4,7 +4,7 @@
 // Save / Give / Invest, must sum to 100%), gift auto-accept, and the parent
 // approval threshold. Drives how every credit (top-up, allowance, chore, gift)
 // is allocated by `creditChildWallet`.
-import { useState } from 'react';
+import { useId, useState } from 'react';
 import { useRouter } from 'next/navigation';
 import { SlidersHorizontal, ShieldCheck, Gift, Save } from 'lucide-react';
 import { PageHeader } from '@/components/app/page-header';
@@ -22,11 +22,14 @@ export type ChildRuleRow = {
   split: Split; autoAcceptGifts: boolean; requireApprovalOverCents: number;
 };
 
-const BUCKETS: { key: keyof Split; label: string; color: string }[] = [
-  { key: 'spend',  label: 'Spend',  color: 'bg-blue-500' },
-  { key: 'save',   label: 'Save',   color: 'bg-green-500' },
-  { key: 'give',   label: 'Give',   color: 'bg-pink-500' },
-  { key: 'invest', label: 'Invest', color: 'bg-violet-500' },
+// `labelKey`, the same keys the wallet dashboard and child view name the buckets
+// with: the label was English in every household, and it is also the name of
+// the percentage input beside it.
+const BUCKETS: { key: keyof Split; labelKey: string; color: string }[] = [
+  { key: 'spend',  labelKey: 'walletDashboard.spend',         color: 'bg-blue-500' },
+  { key: 'save',   labelKey: 'walletDashboard.bucket.save',   color: 'bg-green-500' },
+  { key: 'give',   labelKey: 'walletDashboard.bucket.give',   color: 'bg-pink-500' },
+  { key: 'invest', labelKey: 'walletDashboard.bucket.invest', color: 'bg-violet-500' },
 ];
 
 export function WalletSettingsView({ rows, canManage }: { rows: ChildRuleRow[]; canManage: boolean }) {
@@ -51,6 +54,7 @@ export function WalletSettingsView({ rows, canManage }: { rows: ChildRuleRow[]; 
 
 function ChildRuleCard({ row, canManage }: { row: ChildRuleRow; canManage: boolean }) {
   const t = useTranslations();
+  const uid = useId();
   const router = useRouter();
   const { success, error: toastError } = useToast();
   const [split, setSplit] = useState<Split>(row.split);
@@ -110,10 +114,10 @@ function ChildRuleCard({ row, canManage }: { row: ChildRuleRow; canManage: boole
             <div key={b.key} className="rounded-xl border border-border bg-bg/40 p-2.5">
               <div className="mb-1 flex items-center gap-1.5">
                 <span className={cn('h-2 w-2 rounded-full', b.color)} />
-                <span className="text-[11px] font-medium text-muted">{b.label}</span>
+                <span id={`${uid}-${b.key}`} className="text-[11px] font-medium text-muted">{t(b.labelKey)}</span>
               </div>
               <div className="flex items-center gap-1">
-                <input type="number" min={0} max={100} value={split[b.key]} disabled={!canManage}
+                <input type="number" min={0} max={100} value={split[b.key]} disabled={!canManage} aria-labelledby={`${uid}-${b.key}`}
                   onChange={(e) => setBucket(b.key, parseInt(e.target.value || '0', 10))}
                   className="w-full rounded-lg border border-border bg-surface px-2 py-1 text-sm font-semibold focus:outline-none focus:ring-2 focus:ring-brand/30 disabled:opacity-60" />
                 <span className="text-xs text-muted">%</span>
@@ -145,7 +149,7 @@ function ChildRuleCard({ row, canManage }: { row: ChildRuleRow; canManage: boole
           </div>
           <div className="flex items-center gap-1">
             <span className="text-xs text-muted">$</span>
-            <input type="number" min={0} step="5" value={threshold} disabled={!canManage}
+            <input type="number" min={0} step="5" value={threshold} disabled={!canManage} aria-label={t('walletSettings.approvalThreshold')}
               onChange={(e) => setThreshold(e.target.value)}
               className="w-20 rounded-lg border border-border bg-surface px-2 py-1 text-sm font-semibold focus:outline-none focus:ring-2 focus:ring-brand/30 disabled:opacity-60" />
           </div>

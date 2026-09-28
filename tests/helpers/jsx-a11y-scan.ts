@@ -59,7 +59,7 @@ export function unnamedIconButtons(file: string, text?: string): Site[] {
   const sf = parse(file, text);
   const out: Site[] = [];
   const visit = (node: ts.Node) => {
-    if (ts.isJsxElement(node) && node.openingElement.tagName.getText() === 'button') {
+    if (ts.isJsxElement(node) && (node.openingElement.tagName.getText() === 'button' || node.openingElement.tagName.getText() === 'Button')) {
       const names = attrNames(node.openingElement.attributes);
       const named = names.some((n) => n === 'aria-label' || n === 'aria-labelledby' || n === 'title' || n === '...') || insideLabel(node);
       const kids = meaningfulChildren(node.children);
@@ -156,6 +156,48 @@ export function unnamedSelects(file: string, text?: string): Site[] {
       const named = names.some((n) => n === 'aria-label' || n === 'aria-labelledby' || n === 'title' || n === '...')
         || insideLabel(node) || (idText !== undefined && htmlFors.has(idText)) || namedByField(node, idText, fieldKind);
       if (!named) out.push({ file, line: sf.getLineAndCharacterOfPosition(node.getStart()).line + 1, what: open.getText().replace(/\s+/g, ' ').slice(0, 80) });
+    }
+    ts.forEachChild(node, visit);
+  };
+  visit(sf);
+  return out;
+}
+
+/**
+ * `<input>` / `<textarea>` (and the house `Input` / `Textarea`) with no name. The
+ * name sources are the ones axe's `label` rule accepts: aria-label(ledby), title,
+ * a wrapping or pointing `<label>`, the house Field wrapper, or a placeholder.
+ * Hidden inputs, inputs out of the accessibility tree and buttons-as-inputs are
+ * not form fields a name is read for.
+ */
+export function unnamedInputs(file: string, text?: string): Site[] {
+  const sf = parse(file, text);
+  const out: Site[] = [];
+  const fieldKind = fieldKindOf(sf);
+  const htmlFors = new Set<string>();
+  const collect = (n: ts.Node) => {
+    if (ts.isJsxAttribute(n) && n.name.getText() === 'htmlFor' && n.initializer) htmlFors.add(n.initializer.getText().replace(/^\{|\}$/g, ''));
+    ts.forEachChild(n, collect);
+  };
+  collect(sf);
+  const visit = (node: ts.Node) => {
+    const open = ts.isJsxElement(node) ? node.openingElement : ts.isJsxSelfClosingElement(node) ? node : null;
+    if (open && /^(input|Input|textarea|Textarea)$/.test(open.tagName.getText())) {
+      const attrs = open.attributes.properties;
+      const names = attrNames(open.attributes);
+      const type = (attrs.find((p) => !ts.isJsxSpreadAttribute(p) && p.name.getText() === 'type') as ts.JsxAttribute | undefined)?.initializer?.getText().replace(/^["'{]|["'}]$/g, '');
+      const id = attrs.find((p) => !ts.isJsxSpreadAttribute(p) && p.name.getText() === 'id') as ts.JsxAttribute | undefined;
+      const idText = id?.initializer?.getText().replace(/^\{|\}$/g, '');
+      const named = names.some((n) => n === 'aria-label' || n === 'aria-labelledby' || n === 'title' || n === 'placeholder' || n === '...')
+        || insideLabel(node) || (idText !== undefined && htmlFors.has(idText)) || namedByField(node, idText, fieldKind);
+      const cls = (attrs.find((p) => !ts.isJsxSpreadAttribute(p) && p.name.getText() === 'className') as ts.JsxAttribute | undefined)?.initializer?.getText() ?? '';
+      // Out of the accessibility tree: `display: none` (Tailwind `hidden`, the
+      // file inputs a visible button opens), or a honeypot hidden on purpose.
+      const unrendered = /(^|[\s'"`])hidden([\s'"`]|$)/.test(cls) || names.includes('aria-hidden')
+        || /tabIndex=\{-1\}/.test(open.getText());
+      if (!named && !unrendered && !/^(hidden|submit|button|reset|image)$/.test(type ?? '')) {
+        out.push({ file, line: sf.getLineAndCharacterOfPosition(node.getStart()).line + 1, what: open.getText().replace(/\s+/g, ' ').slice(0, 80) });
+      }
     }
     ts.forEachChild(node, visit);
   };

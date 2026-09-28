@@ -88,7 +88,7 @@ export default async function AeoPage() {
                     <summary className="cursor-pointer text-xs text-muted hover:text-fg">{t('aeo.editQuestion')}</summary>
                     <form action={updateAeoQuestion} className="mt-3 grid gap-2 sm:grid-cols-2">
                       <input type="hidden" name="id" value={q.id} />
-                      <input name="question" required defaultValue={q.question} className={inputCls} />
+                      <input name="question" required defaultValue={q.question} aria-label={t('fieldName.question')} className={inputCls} />
                       <input name="entity" defaultValue={q.entity ?? ''} placeholder={t('aeo.entity')} className={inputCls} />
                       <textarea name="answer" rows={4} defaultValue={q.answer ?? ''} placeholder={t('aeo.structuredAnswer')} className="w-full rounded-xl border border-border bg-surface/60 px-3 py-2 text-sm focus-ring sm:col-span-2" />
                       <select aria-label={t('fieldName.questionPattern')} name="pattern" defaultValue={q.pattern ?? ''} className={inputCls}><option value="">{t('aeo.pattern')}</option>{PATTERNS.map((pattern) => <option key={pattern} value={pattern}>{pattern.replace(/_/g, ' ')}</option>)}</select>

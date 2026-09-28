@@ -7,7 +7,11 @@ const mocks = vi.hoisted(() => ({
 }));
 vi.mock('@/lib/supabase/auth', () => ({ requireUserContext: mocks.context }));
 vi.mock('@/lib/supabase/server', () => ({ createServer: mocks.server }));
-vi.mock('@/lib/ai/provider', () => ({ resolveProvider: mocks.provider, isAIConfigured: async () => true }));
+vi.mock('@/lib/ai/provider', async (importOriginal) => ({
+  describeAIError: (await importOriginal<typeof import('@/lib/ai/provider')>()).describeAIError,
+  resolveProvider: mocks.provider,
+  isAIConfigured: async () => true,
+}));
 vi.mock('@/lib/server/ai-rate-limit', () => ({ enforceAIRateLimit: mocks.rate }));
 vi.mock('@/lib/server/audit', () => ({ logAudit: mocks.audit }));
 
