@@ -2,7 +2,7 @@ import { readFileSync } from 'node:fs';
 import { describe, expect, it } from 'vitest';
 import { readSavingsAnswer } from '@/components/modules/savings-coach-card';
 
-// P-35 (finalaudit.md, page audit B15). A teen, a caregiver and a guest each
+// P-37 (finalaudit.md, page audit B15). A teen, a caregiver and a guest each
 // pressed "Analyze my finances" on /dashboard/subscriptions. The route refused
 // them with 403 { error: "Family finances are private to the adults…" }, as
 // API-SWEEP-05 made it, and the card showed nothing at all: it read only
