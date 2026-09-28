@@ -21,7 +21,7 @@ vi.mock('@/lib/supabase/server', () => ({
   createServiceClient: () => entitledServiceClient(),
 }));
 vi.mock('@/lib/server/ai-rate-limit', () => ({ enforceAIRateLimit: mocks.enforceAIRateLimit }));
-vi.mock('@/lib/ai/provider', () => ({ resolveProvider: mocks.resolveProvider }));
+vi.mock('@/lib/ai/provider', () => ({ resolveProvider: mocks.resolveProvider, isAIConfigured: async () => true }));
 vi.mock('@/lib/vacations/packing', () => ({ suggestPacking: mocks.suggestPacking }));
 
 import { POST } from '@/app/api/vacations/ai/route';

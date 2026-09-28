@@ -9,7 +9,7 @@ import { beforeEach, describe, expect, it, vi } from 'vitest';
 // - adminResendInviteAction told the super admin the invite was re-sent and
 //   wrote a `resend` row to the admin audit log for a send that did not happen.
 //
-// Found alongside SWEEP-003 (tests/an-email-nobody-sent-is-not-reported-as-sent).
+// Fixed on main by #619 (API-SWEEP-07); this drives both actions through that fix.
 
 const state = vi.hoisted(() => ({
   result: { ok: true, skipped: true } as { ok: boolean; skipped?: boolean },

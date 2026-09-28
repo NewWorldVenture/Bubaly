@@ -5,7 +5,9 @@ import { NextRequest } from 'next/server';
 // provider: /api/cron/weekly-digest answered `sent: 13`. With RESEND_API_KEY
 // unset the sender answers `{ ok: true, skipped: true }` and sends nothing, and
 // most of its callers read only `ok`. The contact form already knew this
-// (C3-S5-05); the others did not.
+// (C3-S5-05); the others did not. Fixed on main by #619 (API-SWEEP-07), found in
+// parallel by another session; tests/an-invite-with-no-mail-provider-is-not-sent
+// is its invite case. This file adds the welcome route and the delivered path.
 //
 // The visible one is the invite. The invite form says "Invite sent" on any 2xx
 // from /api/email/invite, and the route answered `{ sent: true }` for a mail

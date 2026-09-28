@@ -2,7 +2,8 @@ import { NextRequest, NextResponse } from 'next/server';
 import { getTranslations } from '@/lib/i18n/server';
 import { requireUserContext } from '@/lib/supabase/auth';
 import { createServer } from '@/lib/supabase/server';
-import { getStripe } from '@/lib/stripe';
+import { stripeFromKey } from '@/lib/stripe';
+import { getStripeSettings, effectiveSecretKey } from '@/lib/stripe/settings';
 import { isAdmin } from '@/lib/constants/roles';
 import { enforceRequestRateLimit } from '@/lib/server/request-rate-limit';
 
@@ -15,6 +16,12 @@ export async function POST(req: NextRequest) {
     }
     const familyId = ctx.active.familyId;
     const supabase = await createServer();
+    // The same key checkout used: Super Admin → Stripe Setup first, then the
+    // environment. getStripe() read only the environment, so a family that
+    // subscribed with the configured key could not open the portal.
+    const secretKey = effectiveSecretKey(await getStripeSettings());
+    if (!secretKey) return NextResponse.json({ error: t('checkout.billingIsNotSetUp') }, { status: 503 });
+    const stripe = stripeFromKey(secretKey);
 
     const { data, error: billingCustomerError } = await supabase
       .from('billing_customers')
@@ -35,17 +42,6 @@ export async function POST(req: NextRequest) {
       { error: t('portal.tooManyBillingRequestsPlease') },
       { status: 429, headers: { 'Retry-After': String(limited.retryAfter) } },
     );
-
-    // With no Stripe secret key there is no portal to open: billing is
-    // unavailable (503), as when the billing record cannot be read, not a
-    // failure of this request (500).
-    let stripe: ReturnType<typeof getStripe>;
-    try {
-      stripe = getStripe();
-    } catch (error) {
-      console.error('[billing-portal] Stripe is not configured', error);
-      return NextResponse.json({ error: t('portal.billingAccountStatusIsTemporarily') }, { status: 503 });
-    }
 
     // PAY-5: trusted configured base first, not the caller-controlled Origin header.
     const origin = process.env.NEXT_PUBLIC_APP_URL ?? req.headers.get('origin') ?? 'http://localhost:3000';

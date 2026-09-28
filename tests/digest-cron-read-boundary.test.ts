@@ -152,12 +152,12 @@ describe('scheduled digest read boundaries', () => {
 
   it('does not count a reminder as sent when no mail provider is configured', async () => {
     // The sender answers ok and sends nothing when RESEND_API_KEY is unset;
-    // that was counted as a reminder delivered.
+    // that was counted as a reminder delivered (API-SWEEP-07, #619).
     seed(2);
     state.noProvider = true;
     const res = await GET(request());
     expect(res.status).toBe(200);
-    expect(await res.json()).toEqual({ sent: 0, failed: 0, skipped: 0, notEmailed: 2 });
+    expect(await res.json()).toEqual({ sent: 0, failed: 0, skipped: 2 });
   });
 
   it('answers 200 with nothing due', async () => {

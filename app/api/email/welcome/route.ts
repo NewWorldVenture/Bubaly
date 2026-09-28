@@ -30,11 +30,8 @@ export async function POST(req: NextRequest) {
       react: React.createElement(WelcomeEmail, { name }),
     });
     if (!ok) return NextResponse.json({ error: t('welcome.failedToSendWelcomeEmail') }, { status: 502 });
-    // No mail provider configured: nothing was sent, so this does not say it was.
-    if (skipped) {
-      console.error('[welcome] no mail provider is configured: the welcome email was not sent');
-      return NextResponse.json({ error: t('welcome.failedToSendWelcomeEmail') }, { status: 503 });
-    }
+    // No mail provider: nothing was sent, so do not answer `sent: true`.
+    if (skipped) return NextResponse.json({ error: t('welcome.failedToSendWelcomeEmail') }, { status: 503 });
 
     return NextResponse.json({ sent: true });
   } catch (err) {

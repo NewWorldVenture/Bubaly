@@ -84,6 +84,7 @@ export async function sendSubscribeNotice(
       html: subscribeNoticeHtml(outcome, token),
     });
     if (!sent.ok) console.error('[blog-subscribe] notice email was not delivered', { outcome });
+    else if (sent.skipped) console.warn('[blog-subscribe] notice email not sent: no mail provider', { outcome });
   } catch (error) {
     console.error('[blog-subscribe] notice email threw', { outcome, error });
   }

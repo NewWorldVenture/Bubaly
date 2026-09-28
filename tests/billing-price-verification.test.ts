@@ -105,13 +105,19 @@ vi.mock('@/lib/stripe', async () => {
   const stripe = { prices: { retrieve: mocks.retrievePrice }, customers: { create: mocks.createCustomer },
     checkout: { sessions: { create: mocks.createCheckout } }, subscriptions: { retrieve: mocks.retrieveSubscription, update: mocks.updateSubscription },
     webhooks: { constructEvent: mocks.constructEvent } };
-  return { getStripe: () => stripe, stripeFromKey: () => stripe, STRIPE_PLANS: {
+  return { getStripe: () => stripe, stripeFromKey: () => stripe, constructWebhookEvent: mocks.constructEvent, STRIPE_PLANS: {
     basic_monthly: prices.stripePrices.basic_monthly.id, basic_annual: prices.stripePrices.basic_annual.id,
     plus_monthly: prices.stripePrices.plus_monthly.id, plus_annual: prices.stripePrices.plus_annual.id,
     family_monthly: prices.stripePrices.basic_monthly.id, family_annual: prices.stripePrices.basic_annual.id,
   } };
 });
-vi.mock('@/lib/stripe/settings', () => ({ getStripeSettings: async () => ({}), effectiveSecretKey: () => '' }));
+// A configured deployment: the routes resolve their key and signing secret the
+// way lib/stripe/settings does (a missing key is now a 503 before any Stripe call).
+vi.mock('@/lib/stripe/settings', () => ({
+  getStripeSettings: async () => ({}),
+  effectiveSecretKey: () => 'sk_test_fixture',
+  effectiveWebhookSecret: () => process.env.STRIPE_WEBHOOK_SECRET || null,
+}));
 vi.mock('@/lib/stripe/service-fee', () => ({ serviceFeeAddInvoiceItems: () => undefined }));
 vi.mock('@/lib/server/request-rate-limit', () => ({ enforceRequestRateLimit: async () => ({ ok: true }) }));
 vi.mock('@/lib/stripe/webhook', () => ({ recordEvent: mocks.recordEvent, markEventProcessed: mocks.markProcessed, markEventError: mocks.markError }));

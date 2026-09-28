@@ -3,7 +3,7 @@ import { getTranslations } from '@/lib/i18n/server';
 import { createServer } from '@/lib/supabase/server';
 import { refuseUnlessEntitled } from '@/lib/server/route-feature-gate';
 import { requireUserContext } from '@/lib/supabase/auth';
-import { resolveProvider } from '@/lib/ai/provider';
+import { resolveProvider, isAIConfigured } from '@/lib/ai/provider';
 import { withAiRequest } from '@/lib/ai/observability';
 import { scopeFromUserContext } from '@/lib/services/scope';
 import { AI_TOOLS, runAction } from '@/lib/ai/actions';
@@ -134,6 +134,9 @@ export async function POST(req: NextRequest) {
     const refused = await refuseUnlessEntitled(supabase, ctx.active.familyId, ['/dashboard/inbox']);
     if (refused) return refused;
 
+    // No key: say so before any work, rather than let the provider's throw
+    // reach the catch below as a generic failure.
+    if (!(await isAIConfigured())) return NextResponse.json({ error: t('ai.theAiEngineIsnT'), code: 'not_configured' }, { status: 503 });
     const limited = await enforceAIRateLimit(supabase, `ai-import:${userId}`, { limit: 20 });
     if (!limited.ok) {
       return NextResponse.json(

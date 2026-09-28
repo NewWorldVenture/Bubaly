@@ -21,6 +21,15 @@ export function getStripe() {
  * Super Admin → Stripe Setup), falling back to the env-based singleton when no
  * key is provided. Lets the Bubaly Stripe account be configured at runtime.
  */
+/**
+ * Verify and parse a Stripe webhook payload. Signature checking needs only the
+ * endpoint's signing secret, never an API key, so a deployment whose secret key
+ * lives in Super Admin → Stripe Setup (or nowhere yet) can still verify events.
+ */
+export function constructWebhookEvent(body: string, signature: string, secret: string): Stripe.Event {
+  return Stripe.webhooks.constructEvent(body, signature, secret);
+}
+
 export function stripeFromKey(secretKey?: string | null): Stripe {
   const key = secretKey?.trim();
   if (!key) return getStripe();

@@ -92,9 +92,7 @@ export async function sendReferralEmailAction(rawEmail: string): Promise<SendRef
       rewardLabel: config.rewardLabel,
     }),
   });
-  // `skipped` is no mail provider configured: nothing was sent, so the invite
-  // record (and the daily limit it counts toward) is rolled back as for a
-  // failed send.
+  // `skipped` is no mail provider: nothing went out, so the invite is rolled back like a failure.
   if (!ok || skipped) {
     await rollbackReferralEmailInvite(service, { rowId: record.rowId, created: record.created, sentAt });
     return { ok: false, reason: t('referralActions.couldNotSendEmail') };

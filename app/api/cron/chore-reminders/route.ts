@@ -143,7 +143,6 @@ export async function GET(req: NextRequest) {
 
   let sent = 0;
   let failed = 0;
-  let notEmailed = 0;
   // A member with no email on file is neither sent nor failed. Counting it is
   // the difference between "nobody was due" and "nobody could be reached" — and
   // it is not a failed run, because there is nothing here to retry.
@@ -156,16 +155,13 @@ export async function GET(req: NextRequest) {
   const remind = async ({ userId, memberName, familyName, chores }: MemberBucket) => {
     const email = emailByUserId.get(userId);
     if (!email) { skipped++; return; }
-    // `skipped` from the sender means no mail provider is configured: it
-    // answers ok and sends nothing. That is not a delivery, and counting it as
-    // one had this run report members reminded that were not. It is not a
-    // failure either (nothing here can be retried), so it gets its own count.
-    const { ok, skipped: noProvider } = await sendReactEmail({
+    const { ok, skipped: notSent } = await sendReactEmail({
       to: email,
       subject: `${chores.length} chore${chores.length !== 1 ? 's' : ''} coming up this week`,
       react: React.createElement(ChoreReminderEmail, { memberName, familyName, chores }),
     });
-    if (ok && noProvider) notEmailed++;
+    // No provider: sendReactEmail answers ok with `skipped`, and nothing was sent.
+    if (notSent) skipped++;
     else if (ok) sent++;
     else failed++;
   };
@@ -186,7 +182,7 @@ export async function GET(req: NextRequest) {
   // run a failure.
   const ok = failed === 0 && unserved === 0;
   return NextResponse.json(
-    { sent, failed, skipped, ...(notEmailed > 0 ? { notEmailed } : {}), ...(unserved > 0 ? { unserved } : {}) },
+    { sent, failed, skipped, ...(unserved > 0 ? { unserved } : {}) },
     { status: ok ? 200 : 502 },
   );
 }

@@ -454,8 +454,7 @@ export async function adminResendInviteAction(inviteId: string): Promise<Result>
       role: invite.role,
     }),
   });
-  // `skipped` is no mail provider configured: nothing was sent, so this is not
-  // a resend, and the audit log must not record one.
+  // `skipped` is no mail provider: nothing went out, so it is not a resend.
   if (!ok || skipped) return { ok: false, error: t('actions.couldNotSendTheInvite') };
 
   await adminAuditLog({ familyId: invite.family_id, action: 'resend', resource: 'invites', resourceId: inviteId, metadata: { email: invite.email } });

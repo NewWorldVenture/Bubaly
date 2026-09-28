@@ -31,6 +31,9 @@ describe('watchlist-module writes fail visibly', () => {
     const b = body('castVote');
     expect(b).toContain("from('watchlist_votes').delete()");
     expect(b).toContain("from('watchlist_votes').update({ vote })");
-    expect(b).toContain("from('watchlist_votes').insert(");
+    // A first vote is keyed on (title, member), so a vote the screen has not
+    // seen yet is replaced, not refused as a duplicate (P-26).
+    expect(b).toContain("from('watchlist_votes').upsert(");
+    expect(b).toContain("{ onConflict: 'title_id,member_id' }");
   });
 });

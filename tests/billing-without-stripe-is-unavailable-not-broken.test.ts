@@ -9,12 +9,15 @@ import { NextRequest } from 'next/server';
 // catch-all. Checkout built it even before reading the request, so a
 // malformed body was a 500 too.
 //
-// A missing key is the service being unavailable, which these routes already
-// answer as 503 when Stripe's price or the billing record cannot be read; a
-// body that is not a plan is the caller's error, 400, whatever is configured.
-// Changing or cancelling a plan, which read their body first and so answered
-// the sweep's malformed one with 400, turned a well-formed request into the
-// same 500; they are held to the same answer here.
+// A missing key is the service being unavailable (503); a body that is not a
+// plan is the caller's error (400), whatever is configured. Changing or
+// cancelling a plan turned a well-formed request into the same 500.
+//
+// Fixed on main by #619 (API-SWEEP-02), found in parallel by another session's
+// sweep: every billing route now resolves the key Stripe Setup saved, then the
+// environment, and answers "billing is not set up" (503) when neither has one.
+// This file pins that answer for all four routes, and that checkout reads the
+// request before it builds anything.
 
 const state = vi.hoisted(() => ({ stripeBuilt: 0 }));
 
@@ -76,27 +79,27 @@ describe('billing where Stripe is not configured', () => {
     const { POST } = await import('@/app/api/billing/checkout/route');
     const res = await POST(post('/api/billing/checkout', '{"plan":"basic_monthly"}'));
     expect(res.status).toBe(503);
-    expect((await res.json()).error).toBe('checkout.billingAccountStatusIsTemporarily');
+    expect((await res.json()).error).toBe('checkout.billingIsNotSetUp');
   });
 
   it('the billing portal answers 503 "temporarily unavailable", not 500', async () => {
     const { POST } = await import('@/app/api/billing/portal/route');
     const res = await POST(post('/api/billing/portal', '{}'));
     expect(res.status).toBe(503);
-    expect((await res.json()).error).toBe('portal.billingAccountStatusIsTemporarily');
+    expect((await res.json()).error).toBe('checkout.billingIsNotSetUp');
   });
 
   it('changing plan answers 503 "temporarily unavailable", not 500', async () => {
     const { POST } = await import('@/app/api/billing/change-plan/route');
     const res = await POST(post('/api/billing/change-plan', '{"plan":"basic_monthly"}'));
     expect(res.status).toBe(503);
-    expect((await res.json()).error).toBe('changePlan.subscriptionStatusIsTemporarilyUnavailable');
+    expect((await res.json()).error).toBe('checkout.billingIsNotSetUp');
   });
 
   it('cancelling answers 503 "temporarily unavailable", not 500', async () => {
     const { POST } = await import('@/app/api/billing/cancel/route');
     const res = await POST(post('/api/billing/cancel', '{"resume":false}'));
     expect(res.status).toBe(503);
-    expect((await res.json()).error).toBe('cancel.subscriptionStatusIsTemporarilyUnavailable');
+    expect((await res.json()).error).toBe('checkout.billingIsNotSetUp');
   });
 });

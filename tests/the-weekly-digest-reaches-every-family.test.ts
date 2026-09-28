@@ -176,13 +176,13 @@ describe('the weekly digest reaches every family', () => {
   it('does not count a digest as sent when no mail provider is configured', async () => {
     // The sender answers ok and sends nothing when RESEND_API_KEY is unset. Run
     // on a local stack, this cron reported `sent: 13` with no provider at all.
-    // Nothing was delivered and nothing can be retried, so it is neither sent
-    // nor failed, and it is counted as what it is.
+    // Nothing was delivered and nothing can be retried: counted as skipped, not
+    // sent (API-SWEEP-07, #619).
     seed(2);
     state.noProvider = true;
     const res = await GET(request());
     expect(res.status).toBe(200);
-    expect(await res.json()).toEqual({ sent: 0, failed: 0, skipped: 0, notEmailed: 2 });
+    expect(await res.json()).toEqual({ sent: 0, failed: 0, skipped: 2 });
   });
 
   it('still answers 200 with nothing to do', async () => {
