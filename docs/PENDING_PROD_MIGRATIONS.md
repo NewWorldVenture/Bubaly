@@ -3948,3 +3948,59 @@ declares `family-media` internet-readable.
 **After applying:** open a photo, a message attachment and a reminder image as
 a member (they render through signed URLs) and fetch one stored
 `/storage/v1/object/public/family-media/…` URL with no session (it answers 400).
+
+## `0462` — a family that could not see a listing could still buy it (DB-RPC-M01)
+
+`supabase/migrations/0462_a_listing_is_acted_on_only_by_who_can_see_it.sql`
+
+**Severity: high (another family's listing taken off the market). Deploy
+order: any; no application change is needed.** Every caller already maps the
+refusal (`not_found` → "that listing no longer exists").
+
+A marketplace listing is visible to its own family and to the families in a
+circle it is shared into. The three SECURITY DEFINER functions that act on a
+listing never asked that, and the offers INSERT policy checked only the row's
+own family. Measured on the local stack as a parent of a family in no circle
+the listing was shared with, who could SELECT neither listing, given its id:
+
+```
+marketplace_place_bid(auction, …)        -> {"ok": true, "leading": true}
+marketplace_negotiation_offer(sale, …)   -> {"ok": true, …}
+marketplace_buy_now(auction, …)          -> {"ok": true, "order_id": …}   listing 'claimed'
+insert into marketplace_offers (…)       -> INSERT 1                      listing 'pending'
+```
+
+0462 adds `marketplace_listing_visible_to(listing, family)`, which checks it in
+the three functions. It puts `0311`'s same-family reference guard on
+`marketplace_offers`, because an offer is the in-family flow. It also adds a
+restrictive visibility insert policy on questions, saves and collection items.
+`docs/audit/a-listing-is-acted-on-only-by-who-can-see-it-check.sql` shows 15
+findings before and 0 after, with controls that a circle member still bids,
+negotiates, asks, saves and buys, and the seller's own family still files an
+offer.
+
+**After applying:** as a member of a circle, open a shared auction and place a
+bid, which should succeed. Then check production for orders, negotiations,
+bids and offers whose family could not see the listing when the row was
+written. The rows record no visibility at write time, so this narrows the list
+for a person to review rather than proving anything.
+
+## `0463` — a member could rewrite another member's read receipts and reactions (DB-RPC-M02)
+
+`supabase/migrations/0463_a_read_receipt_is_the_readers_own.sql`
+
+**Severity: medium (chat integrity inside a family). Deploy order: any.** The
+product's writers already change only the caller's own entry.
+
+`0367` left `read_by`, `reactions` and `is_pinned` on `family_messages` open to
+every member, because other members legitimately change them, and never said
+whose entry. Measured as a child: one update removed Dad's read receipt and his
+reaction from Mom's message. 0463 adds a trigger on INSERT and on any UPDATE of
+either column that lets only the caller's own id enter or leave `read_by` or
+any emoji's list, and keeps `reactions` an object of arrays. `is_pinned` and the
+service role are unaffected. `docs/audit/a-read-receipt-is-the-readers-own-check.sql`
+shows 6 findings before and 0 after, with controls that the reader still marks
+read, reacts, unreacts and pins.
+
+**After applying:** open a conversation as one member and react to a message.
+The unread badge clears and the reaction shows for the other members.
