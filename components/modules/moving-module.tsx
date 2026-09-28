@@ -448,9 +448,9 @@ function MoveForm({ familyId, userId, move, onClose, onSaved }: { familyId: stri
           <Toggle label={tr('moving.rentingOutTheOldPlace')} value={renting} onChange={setRenting} />
         </div>
         <div className="grid grid-cols-3 gap-3">
-          <Field label={tr('moving.budget')}>{(id) => <Input id={id} name="budget" type="number" min={0} step={50} defaultValue={centsToDollars(move?.budget_cents)} placeholder="5000" />}</Field>
-          <Field label={tr('moving.spentSoFar')}>{(id) => <Input id={id} name="spent" type="number" min={0} step={10} defaultValue={centsToDollars(move?.spent_cents ?? 0)} />}</Field>
-          <Field label={tr('moving.moverQuote')}>{(id) => <Input id={id} name="mover_quote" type="number" min={0} step={50} defaultValue={centsToDollars(move?.mover_quote_cents)} />}</Field>
+          <Field label={tr('moving.budget')}>{(id) => <Input id={id} name="budget" type="number" min={0} step="0.01" defaultValue={centsToDollars(move?.budget_cents)} placeholder="5000" />}</Field>
+          <Field label={tr('moving.spentSoFar')}>{(id) => <Input id={id} name="spent" type="number" min={0} step="0.01" defaultValue={centsToDollars(move?.spent_cents ?? 0)} />}</Field>
+          <Field label={tr('moving.moverQuote')}>{(id) => <Input id={id} name="mover_quote" type="number" min={0} step="0.01" defaultValue={centsToDollars(move?.mover_quote_cents)} />}</Field>
         </div>
         <div className="grid grid-cols-2 gap-3">
           <Field label={tr('moving.movers')}>{(id) => <Input id={id} name="mover_name" defaultValue={move?.mover_name ?? ''} placeholder={tr('moving.twoGuysATruck')} />}</Field>

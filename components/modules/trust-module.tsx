@@ -485,7 +485,7 @@ function PolicyModal({ policy, members, onClose, onSaved }: {
         <div className="rounded-xl border border-border bg-surface/40 p-3">
           <p className="mb-2 text-[11px] font-semibold uppercase tracking-wide text-muted">{tr('trust.conditionsOptional')}</p>
           <div className="grid grid-cols-2 gap-3">
-            <Field label={tr('trust.maxAmount')}>{id => <Input id={id} name="maxAmount" type="number" min="0" step="5" defaultValue={typeof c.maxAmountCents === 'number' ? (c.maxAmountCents / 100).toString() : ''} placeholder="50" />}</Field>
+            <Field label={tr('trust.maxAmount')}>{id => <Input id={id} name="maxAmount" type="number" min="0" step="0.01" defaultValue={typeof c.maxAmountCents === 'number' ? (c.maxAmountCents / 100).toString() : ''} placeholder="50" />}</Field>
             <Field label={tr('trust.minAiConfidence')}>{id => <Input id={id} name="minConfidence" type="number" min="0" max="100" defaultValue={typeof c.minConfidence === 'number' ? Math.round((c.minConfidence as number) * 100).toString() : ''} placeholder="95" />}</Field>
           </div>
           <div className="mt-2 grid grid-cols-2 gap-3">
