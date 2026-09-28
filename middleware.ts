@@ -118,6 +118,7 @@ export async function middleware(req: NextRequest) {
 
   if (!supabaseUrl || !supabaseAnonKey) {
     if (isPublic || bearerApi || !isProtected) return NextResponse.next({ request: req });
+    if (isScriptApiRequest(req, path)) return unauthenticated();
     const url = req.nextUrl.clone();
     url.pathname = '/login';
     url.searchParams.set('redirect', safeInternalRedirect(`${path}${req.nextUrl.search}`, path));
@@ -170,6 +171,7 @@ export async function middleware(req: NextRequest) {
       console.warn('[middleware] auth lookup failed transiently; keeping the session', error);
       return res;
     }
+    if (isScriptApiRequest(req, path)) return withCookies(unauthenticated(), res);
     const url = req.nextUrl.clone();
     url.pathname = '/login';
     url.searchParams.set('redirect', safeInternalRedirect(`${path}${req.nextUrl.search}`, path));
@@ -178,6 +180,30 @@ export async function middleware(req: NextRequest) {
     return withCookies(NextResponse.redirect(url), res);
   }
   return res;
+}
+
+/**
+ * A script's request to a protected API route, from a browser. A redirect to the
+ * sign-in page is no answer for it: fetch follows the 307 and reads the login
+ * HTML as a 200, so `res.ok` is true over a request that did nothing and
+ * `res.json()` throws. 48 client sites read `res.ok` as success, and two handle
+ * a 401 they could never receive. Browsers mark their own requests: a fetch
+ * sends `Sec-Fetch-Mode: cors` / `same-origin`, a page load sends `navigate`
+ * (an OAuth start link is a person, and still goes to /login). A client that
+ * asks for JSON and not HTML is answered the same way. Anything else keeps the
+ * redirect it had.
+ */
+function isScriptApiRequest(req: NextRequest, path: string): boolean {
+  if (!path.startsWith('/api/')) return false;
+  const mode = req.headers.get('sec-fetch-mode');
+  if (mode) return mode !== 'navigate';
+  const accept = req.headers.get('accept') ?? '';
+  return accept.includes('application/json') && !accept.includes('text/html');
+}
+
+/** What a signed-out script gets: a status it can act on, and no English to show. */
+function unauthenticated(): NextResponse {
+  return NextResponse.json({ code: 'unauthenticated' }, { status: 401, headers: { 'cache-control': 'no-store' } });
 }
 
 /** Copy every cookie `source` set onto `target` (redirects start out empty). */

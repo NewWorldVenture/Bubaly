@@ -487,8 +487,10 @@ describe('Supabase migration filename safety', () => {
     // family. 0455 backfills `state` on concierge runs already decided. 0456
     // takes two server-only functions away from client roles. 0457 lets an
     // auction close. 0458 lets only the server link a login to a member row.
-    // 0459 makes the family-media bucket private (SEC-001).
-    expect(audit.nextVersion).toBe('0460');
+    // 0459 is held by #621 (the family-media bucket private, SEC-001), open
+    // when 0460 landed. 0460 makes the family's subscriptions a manager's
+    // write (API-SWEEP-06's write half).
+    expect(audit.nextVersion).toBe('0461');
   });
 
   it('flags a newly introduced collision instead of silently accepting it', () => {

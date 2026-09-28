@@ -99,7 +99,7 @@ export function SubscriptionsWorkspace({ context, timezone = 'UTC' }: { context:
       const supabase = createClient();
       // Under RLS a refused row comes back with no error and zero rows, which this used to report as done. Audit C1-S9-81.
       const { data: saved, error } = form.id
-        ? await supabase.from('subscriptions_tracked').update(row).eq('id', form.id).select('id')
+        ? await supabase.from('subscriptions_tracked').update(row).eq('id', form.id).eq('family_id', familyId).select('id')
         : await supabase.from('subscriptions_tracked').insert({ ...row, family_id: familyId, created_by: userId }).select('id');
       if (error) return toastError(describeDbError(error));
       if (wroteNoRows(saved)) return toastError(t('errors.thatChangeWasNotSaved'));
@@ -112,17 +112,17 @@ export function SubscriptionsWorkspace({ context, timezone = 'UTC' }: { context:
 
   async function markUsed(id: string) {
     // Under RLS a refused row comes back with no error and zero rows, which this used to report as done. Audit C1-S9-81.
-    const { data: updated, error } = await createClient().from('subscriptions_tracked').update({ last_used: todayInZone(timezone) }).eq('id', id).select('id');
+    const { data: updated, error } = await createClient().from('subscriptions_tracked').update({ last_used: todayInZone(timezone) }).eq('id', id).eq('family_id', familyId).select('id');
     if (error) toastError(describeDbError(error)); else if (wroteNoRows(updated)) toastError(t('errors.thatChangeWasNotSaved')); else success(t('subscriptionsModule.markedUsedToday'));
   }
   async function setStatus(id: string, status: string) {
-    const { data: updated2, error } = await createClient().from('subscriptions_tracked').update({ status }).eq('id', id).select('id');
+    const { data: updated2, error } = await createClient().from('subscriptions_tracked').update({ status }).eq('id', id).eq('family_id', familyId).select('id');
     if (error) toastError(describeDbError(error));
     else if (wroteNoRows(updated2)) toastError(t('errors.thatChangeWasNotSaved'));
   }
   async function remove(id: string) {
     if (!confirm(t('subscriptionsModule.deleteThisSubscription'))) return;
-    const { data: removed, error } = await createClient().from('subscriptions_tracked').delete().eq('id', id).select('id');
+    const { data: removed, error } = await createClient().from('subscriptions_tracked').delete().eq('id', id).eq('family_id', familyId).select('id');
     if (error) toastError(describeDbError(error)); else if (wroteNoRows(removed)) toastError(t('errors.thatChangeWasNotSaved')); else success(t('subscriptionsModule.deleted'));
   }
   function edit(s: Sub, observedCostCents?: number, evidence?: string) {

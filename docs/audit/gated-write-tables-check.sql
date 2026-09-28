@@ -97,7 +97,7 @@ declare
     'social_comments', 'social_content_templates', 'social_media_library',
     'social_post_assets', 'social_post_targets', 'social_post_variants',
     'social_posts', 'social_publish_jobs', 'social_publish_results',
-    'social_schedules', 'social_settings', 'subscriptions', 'support_tickets',
+    'social_schedules', 'social_settings', 'subscriptions', 'subscriptions_tracked', 'support_tickets',
     'symptom_logs', 'sync_accounts', 'sync_external_mappings', 'sync_tokens',
     'tax_documents',
     'transactions', 'trip_items', 'trips', 'trust_delegations', 'trust_policies',
