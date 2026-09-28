@@ -1,6 +1,14 @@
 import type { SupabaseClient } from '@supabase/supabase-js';
 import type { Database } from '@/lib/database.types';
 
+
+/** jsonb equality ignores key order; compare canonical forms. */
+function sortKeys(value: unknown): unknown {
+  if (Array.isArray(value)) return value.map(sortKeys);
+  if (value && typeof value === 'object') return Object.fromEntries(Object.entries(value as Record<string, unknown>).sort(([a], [b]) => a.localeCompare(b)).map(([k, v]) => [k, sortKeys(v)]));
+  return value;
+}
+
 export type PushFixtureRow = Record<string, unknown>;
 export const notificationId = (n: number) => `00000000-0000-4000-8000-${String(n).padStart(12, '0')}`;
 
@@ -68,7 +76,10 @@ export function pushDispatchDb(tables: Record<string, PushFixtureRow[]>, options
     let rangeFrom: number | undefined, rangeTo: number | undefined;
     const filters: ((row: PushFixtureRow) => boolean)[] = [];
     const orders: { key: string; ascending: boolean }[] = [];
+    // A filter PostgREST would refuse before running the query (PUSH-004).
+    let refused: { code: string; message: string } | null = null;
     const execute = () => {
+      if (refused) return { data: null, error: refused };
       const operationKey = `${table}:${operation}`;
       const attempt = (attempts.get(operationKey) ?? 0) + 1;
       attempts.set(operationKey, attempt);
@@ -113,7 +124,28 @@ export function pushDispatchDb(tables: Record<string, PushFixtureRow[]>, options
     };
     const query = {
       select: () => query,
-      eq: (key: string, value: unknown) => { filters.push(row => row[key] === value); return query; },
+      // postgrest-js writes `eq.${value}` into the URL, so the server sees TEXT:
+      // an object arrives as "[object Object]". Against a jsonb column the text
+      // is parsed as JSON (and compared as jsonb, key order aside), and text that
+      // is not JSON is refused with 22P02. Comparing by identity here let the
+      // push cursor's compare-and-set pass with an object that production
+      // refuses on every run after the first (PUSH-004).
+      eq: (key: string, value: unknown) => {
+        const text = `${value}`;
+        // An object has no URL form: it arrives as "[object Object]", which a
+        // jsonb column refuses before any row is read.
+        if (value !== null && typeof value === 'object') refused = { code: '22P02', message: 'invalid input syntax for type json' };
+        filters.push(row => {
+          const cell = row[key];
+          if (cell !== null && typeof cell === 'object') {
+            let wanted: unknown;
+            try { wanted = JSON.parse(text); } catch { refused = { code: '22P02', message: 'invalid input syntax for type json' }; return false; }
+            return JSON.stringify(sortKeys(cell)) === JSON.stringify(sortKeys(wanted));
+          }
+          return cell === value || (cell !== null && cell !== undefined && String(cell) === text);
+        });
+        return query;
+      },
       contains: (key: string, value: unknown) => { filters.push(row => contains(row[key], value)); return query; },
       is: (key: string, value: unknown) => { filters.push(row => row[key] === value); return query; },
       in: (key: string, values: unknown[]) => { filters.push(row => values.includes(row[key])); return query; },
