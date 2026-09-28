@@ -643,7 +643,7 @@ function ChoreRow({ a, memberById, manager, busy, paying, menuFor, setMenuFor, o
               {!done && a.status !== 'submitted' && <MenuItem onClick={() => onStatus(a, 'submitted')}><CheckCircle2 className="h-3.5 w-3.5" /> {tr('chores.submitForApproval')}</MenuItem>}
               {manager && a.status === 'submitted' && <MenuItem onClick={() => onApprove(a)}><CheckCircle2 className="h-3.5 w-3.5 text-emerald-400" /> {tr('chores.approve')}</MenuItem>}
               {done && a.status !== 'todo' && <MenuItem onClick={() => onStatus(a, 'todo')}><Circle className="h-3.5 w-3.5" /> {tr('chores.reopen')}</MenuItem>}
-              {canPay && <MenuItem onClick={() => onPay(a)}><Sparkles className="h-3.5 w-3.5 text-amber-400" /> {paying === a.id ? 'Paying…' : `Pay ${formatCents(a.chore!.cash_cents!)}`}</MenuItem>}
+              {canPay && <MenuItem onClick={() => onPay(a)}><Sparkles className="h-3.5 w-3.5 text-amber-400" /> {paying === a.id ? tr('chores.paying') : tr('chores.payAmount', { amount: formatCents(a.chore!.cash_cents!, 'USD', locale.code) })}</MenuItem>}
               {manager && <MenuItem danger onClick={() => onDelete(a)}><Trash2 className="h-3.5 w-3.5" /> {tr('chores.delete')}</MenuItem>}
               </div>
             </>
