@@ -18,6 +18,7 @@ export async function GET(req: NextRequest) {
   // them back to the calendar, which says the connection isn't set up — the
   // same answer the Outlook link beside it gives (/api/sync/[provider]/auth).
   if (!googleClientId() || !googleClientSecret()) {
+    console.error(`Google Calendar connect: ${googleClientId() ? 'GOOGLE_CLIENT_SECRET' : 'GOOGLE_CLIENT_ID'} is not set, so the consent request would be refused.`);
     return NextResponse.redirect(new URL('/dashboard/calendar?gcal=not_configured', req.nextUrl.origin));
   }
 
