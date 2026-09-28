@@ -2,7 +2,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { dispatchPendingPushes } from '@/lib/server/push';
 import { notificationId, pushDispatchDb, type PushFixtureRow } from './helpers/push-dispatch-db';
 
-// PUSH-004. The dispatcher saves a cursor, then claims each later batch with a
+// PUSH-007. The dispatcher saves a cursor, then claims each later batch with a
 // compare-and-set on it: `.eq('value', stored.value)`. postgrest-js puts
 // `eq.${value}` in the URL, so the stored object reached PostgREST as
 // "[object Object]" and was refused (22P02 invalid input syntax for type
