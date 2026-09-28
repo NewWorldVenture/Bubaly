@@ -195,10 +195,17 @@ export async function createMomentReminderAction(input: {
   const remindAt = new Date(input.remindAtISO);
   if (!title) return { ok: false, error: t('momentActions.missingTitle') };
   if (Number.isNaN(remindAt.getTime())) return { ok: false, error: t('momentActions.invalidTime') };
+  // The family is the session's, not the caller's — the rule the grocery add
+  // above already keeps. RLS admits any household the member belongs to, so a
+  // member of two families whose screen still carried the other one's id filed
+  // the reminder there, where it fired on the wrong household's devices, and
+  // the tap still reported success (SRV-C01).
+  const familyId = ctx.active.familyId;
+  if (input.familyId && input.familyId !== familyId) return { ok: false, error: t('actions.couldNotSetThatReminder') };
   const supabase = await createServer();
 
   const { error } = await supabase.from('reminders').insert({
-    family_id: input.familyId,
+    family_id: familyId,
     title,
     remind_at: remindAt.toISOString(),
     related_type: 'calendar_event',

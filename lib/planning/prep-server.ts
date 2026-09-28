@@ -116,8 +116,16 @@ export async function runPrepGeneration(
   // `{ data: null, error }`, so a dropped error reads as "this family has
   // dismissed nothing" and the very next write un-dismisses everything. A
   // generation that cannot see the existing rows does not write.
+  //
+  // Both reads here ask only for THIS run's signals. Plans are never deleted
+  // (one accrues per trip and per expiring document), so reading every plan the
+  // family ever had eventually passed PostgREST's `db-max-rows` and answered a
+  // prefix: a dismissal outside it was re-activated, and a new plan outside it
+  // found no id below and lost its step ladder while the run reported it
+  // generated (SRV-001 census, SRV-C07).
+  const signalIds = [...new Set(plans.map((p) => p.signalId))];
   const { data: existing, error: existingErr } = await sb.from('prep_plans')
-    .select('signal_kind, signal_id, status').eq('family_id', familyId);
+    .select('signal_kind, signal_id, status').eq('family_id', familyId).in('signal_id', signalIds);
   if (existingErr) return { ok: false, error: describeActionError(existingErr), plans: 0 };
   const decided = new Set((existing ?? []).filter((r) => r.status !== 'active').map((r) => `${r.signal_kind}:${r.signal_id}`));
 
@@ -131,11 +139,17 @@ export async function runPrepGeneration(
   const { error: planErr } = await sb.from('prep_plans').upsert(planRows, { onConflict: 'family_id,signal_kind,signal_id' });
   if (planErr) return { ok: false, error: describeActionError(planErr), plans: 0 };
 
-  const { data: idRows, error: readErr } = await sb.from('prep_plans').select('id, signal_kind, signal_id').eq('family_id', familyId);
+  const { data: idRows, error: readErr } = await sb.from('prep_plans').select('id, signal_kind, signal_id')
+    .eq('family_id', familyId).in('signal_id', fresh.map((p) => p.signalId));
   if (readErr) return { ok: false, error: describeActionError(readErr), plans: 0 };
   const idByKey = new Map<string, string>();
   for (const r of idRows ?? []) idByKey.set(`${r.signal_kind}:${r.signal_id}`, r.id);
 
+  // A plan this run just wrote that cannot be found again is not "generated":
+  // it would be a card with an empty checklist. Say so instead.
+  if (fresh.some((p) => !idByKey.has(`${p.kind}:${p.signalId}`))) {
+    return { ok: false, error: 'Bubaly could not finish setting up those plans. Try again.', plans: 0 };
+  }
   const stepRows = fresh.flatMap((p) => {
     const planId = idByKey.get(`${p.kind}:${p.signalId}`);
     if (!planId) return [];

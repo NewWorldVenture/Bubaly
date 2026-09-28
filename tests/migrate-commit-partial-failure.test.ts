@@ -2,9 +2,9 @@
 //
 // commitImport writes five tables in sequence and cannot be one transaction, so
 // a failure in the third write leaves the first two saved. What the family is
-// told at that moment decides whether they run the file again — and events and
-// contacts are de-duplicated on a second pass while tasks, grocery items and
-// notes are not. The old copy was `Events: ${error.message}`: PostgREST's own
+// told at that moment decides whether they run the file again, so it has to say
+// what already landed (every kind is de-duplicated on a second pass, so running
+// it again adds only what is missing). The old copy was `Events: ${error.message}`: PostgREST's own
 // sentence, in English whatever the locale, saying nothing about what had
 // already landed. This pins that every write-failure site reports the counts
 // saved so far through one keyed sentence, and never offers a retry.
@@ -30,7 +30,7 @@ describe('commitImport reports a part-way failure honestly', () => {
     expect(calls).toHaveLength(7);
     const helper = commit.slice(commit.indexOf('const partialFailure'), commit.indexOf('};', commit.indexOf('const partialFailure')));
     expect(helper).toContain(`t('${KEY}', counts)`);
-    // A retry here would import the tasks, grocery items and notes a second time.
+    // The family reads what landed before choosing to run the file again.
     expect(helper).not.toContain('retryable');
   });
 

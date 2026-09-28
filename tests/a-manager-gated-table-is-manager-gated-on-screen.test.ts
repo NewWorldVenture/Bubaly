@@ -58,13 +58,17 @@ const MANAGER_ONLY_WRITES = [
   'child_wallets', 'concierge_calls', 'currency_transactions', 'documents', 'economy_rewards',
   'family_ai_settings', 'family_automation_rules', 'family_automation_runs', 'family_credentials',
   'family_currencies', 'family_facts', 'family_insurance_policies',
-  'family_members', 'family_places', 'family_wallets', 'financial_accounts',
+  'family_members', 'family_places', 'family_stress_predictions', 'family_wallets', 'financial_accounts',
   'front_desk_settings', 'guardian_communications', 'guardian_routing_rules', 'health_providers',
   'health_visits', 'home_assets', 'household_info', 'immunizations', 'insurance_policies',
   'invest_holdings', 'invites', 'medical_profiles', 'medication_schedules',
   'medications', 'money_timeline_insights', 'opportunities', 'renewals', 'rewards', 'rides',
-  'savings_goals', 'screen_time_limits', 'transactions', 'trip_items', 'trips', 'wallet_buckets',
-  'wallet_rules', 'wallet_transactions',
+  'savings_goals', 'screen_time_limits', 'transactions', 'trip_items', 'trips',
+  // AUTHZ-020 (0459): unowned by any feature, so no browser writer today —
+  // listed so the first one to appear must carry a role check.
+  'vacation_activity_logs', 'vacation_activity_tickets', 'vacation_audit_logs',
+  'vacation_checklists', 'vacation_destinations', 'vacation_notifications',
+  'wallet_buckets', 'wallet_rules', 'wallet_transactions',
 ] as const;
 
 /**

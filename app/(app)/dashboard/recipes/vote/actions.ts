@@ -43,7 +43,19 @@ export async function createMealVote(input: {
     recipe_id: o.recipeId || null, label: o.label.trim(), photo_url: o.photoUrl || null,
   }));
   const { error: optErr } = await supabase.from('meal_vote_options').insert(rows);
-  if (optErr) return { ok: false, error: describeActionError(optErr) };
+  if (optErr) {
+    // The vote row already landed, and a vote with no options is an open vote
+    // nobody can vote on — on every member's page — while the form stays open
+    // for a retry that would make a second one. Take it back; the options
+    // insert is one statement, so none of them landed either (SRV-C05). A
+    // withdrawal that does not land is logged: the vote is then still there.
+    const { data: withdrawn, error: withdrawError } = await supabase.from('meal_votes')
+      .delete().eq('id', vote.id).eq('family_id', familyId).select('id');
+    if (withdrawError || wroteNoRows(withdrawn)) {
+      console.error('[meal-vote] a vote whose options were refused could not be withdrawn', { voteId: vote.id, optErr, withdrawError: withdrawError ?? 'no rows deleted' });
+    }
+    return { ok: false, error: describeActionError(optErr) };
+  }
 
   revalidatePath('/dashboard/recipes/vote');
   return { ok: true, id: vote.id };

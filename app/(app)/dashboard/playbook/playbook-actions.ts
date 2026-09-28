@@ -8,7 +8,7 @@
 // family_facts row (the persistent Knowledge Base) and marks it accepted;
 // dismissing hides it. All reads/writes go through the RLS-scoped server client.
 
-import { confirmFact } from '@/lib/services/memory';
+import { confirmFact, forgetFact } from '@/lib/services/memory';
 import { getLocaleContext, getTranslations } from '@/lib/i18n/server';
 import { translate } from '@/lib/i18n/messages';
 import { scopeFromUserContext } from '@/lib/services/scope';
@@ -16,7 +16,7 @@ import { requireUserContext } from '@/lib/supabase/auth';
 import { createServer } from '@/lib/supabase/server';
 import { learnPlaybook, type PlaybookSignal } from '@/lib/playbook/learn';
 import { readAll } from '@/lib/supabase/read-all';
-import { wroteNoRows, describeActionError } from '@/lib/supabase/errors';
+import { describeActionError } from '@/lib/supabase/errors';
 
 type Result = { ok: boolean; error?: string; added?: number };
 
@@ -242,16 +242,14 @@ export async function dismissSuggestionAction(input: { id: string }): Promise<Re
   const ctx = await requireUserContext();
   const id = String(input?.id || '').trim();
   if (!id) return { ok: false, error: tr('playbookActions.missingSuggestion') };
-  const sb = await createServer();
-  // The ACTIVE family's suggestion, read back: RLS filters an update rather
-  // than refusing it, so a dismissal it filtered answered `error: null` and
-  // the card came back on the next refresh as though it had never been
-  // dismissed.
-  // Audit C1-S9-60: the whole point of storing the dismissal is that the
-  // suggestion is not offered again.
-  const { data: dismissed, error } = await sb.from('family_playbook_suggestions').update({ status: 'dismissed' })
-    .eq('id', id).eq('family_id', ctx.active.familyId).select('id');
-  if (error) return { ok: false, error: describeActionError(error) };
-  if (wroteNoRows(dismissed)) return { ok: false, error: tr('playbookActions.missingSuggestion') };
-  return { ok: true };
+  // Through the service, like the accept beside it. This wrote the row itself
+  // with no role check, while accepting the same card needed a parent or adult
+  // and the Needs-you card refused a child both ways — so a child could make a
+  // pattern a parent never saw disappear for good, since a dismissed signature
+  // is never re-offered (SRV-C02). `forgetFact` owns that rule, scopes the
+  // write to the ACTIVE family and reads the row back, so a dismissal RLS
+  // filtered is still "not found" rather than a silent success (C1-S9-60).
+  const scope = scopeFromUserContext(ctx, await createServer());
+  const res = await forgetFact(scope, id, { kind: 'suggestion' });
+  return res.ok ? { ok: true } : { ok: false, error: res.error };
 }

@@ -857,6 +857,11 @@ export async function forgetFact(
   const kind = opts.kind ?? 'fact';
 
   if (kind === 'suggestion') {
+    // A suggestion is one row for the whole household, and a dismissal is
+    // permanent — the playbook refresh never re-offers a dismissed signature.
+    // Accepting one is a manager's call (`confirmFact`), and dismissing it is the
+    // same decision the other way, so it takes the same role (SRV-C02).
+    if (!canManage(scope)) return fail('Only a parent or adult can dismiss what Bubaly noticed.', { code: SERVICE_CODES.denied });
     const { data, error } = await scope.db
       .from('family_playbook_suggestions')
       .update({ status: 'dismissed' })

@@ -74,7 +74,7 @@ declare
     'family_emergency_contacts', 'family_emergency_plans', 'family_facts',
     'family_insurance_policies',
     'family_members', 'family_messages', 'family_places',
-    'family_playbook_suggestions', 'family_poll_votes', 'family_wallets',
+    'family_playbook_suggestions', 'family_poll_votes', 'family_stress_predictions', 'family_wallets',
     'financial_accounts', 'front_desk_settings', 'gift_links', 'gift_payments',
     'grades', 'guardian_communications', 'guardian_contacts', 'guardian_member_profiles',
     'guardian_routing_rules', 'guardian_suggestions', 'health_goals', 'health_metrics',
@@ -101,7 +101,9 @@ declare
     'symptom_logs', 'sync_accounts', 'sync_external_mappings', 'sync_tokens',
     'tax_documents',
     'transactions', 'trip_items', 'trips', 'trust_delegations', 'trust_policies',
-    'trust_scores', 'wallet_buckets', 'wallet_goals', 'wallet_rules',
+    'trust_scores', 'vacation_activity_logs', 'vacation_activity_tickets',
+    'vacation_audit_logs', 'vacation_checklists', 'vacation_destinations',
+    'vacation_notifications', 'wallet_buckets', 'wallet_goals', 'wallet_rules',
     'wallet_transactions', 'watchlist_votes'
   ];
   added   text[];

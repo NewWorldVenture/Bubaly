@@ -1347,7 +1347,6 @@ describe('toggles and dismissals ask what they changed (C1-S9-60)', () => {
     ['signal status', signals, 'export async function setSignalStatusAction', 'set'],
     ['insight status', insights, 'async function setInsightStatus', 'set'],
     ['life-event plan status', lifeEvents, 'export async function setLifeEventStatusAction', 'set'],
-    ['playbook dismissal', playbook, 'export async function dismissSuggestionAction', 'dismissed'],
     ['moment grocery undo', moments, 'export async function removeMomentGroceryAction', 'removed'],
   ];
   for (const [name, src, signature, binding] of cases) {
@@ -1368,6 +1367,24 @@ describe('toggles and dismissals ask what they changed (C1-S9-60)', () => {
         .toBeLessThan(at(afterWrite, 'return { ok: true'));
     });
   }
+
+  // The playbook dismissal no longer writes the row itself: it goes through
+  // `forgetFact`, which also holds the parent-or-adult rule (SRV-C02). The
+  // zero-row answer moved with the write, so it is asserted where it now lives —
+  // the service reads the updated row back and a filtered write is "not found",
+  // never ok — and the action must hand that failure on rather than answer ok.
+  it('playbook dismissal: the service it goes through bails on zero rows before answering ok', () => {
+    const action = stripComments(actionBody(playbook, 'export async function dismissSuggestionAction'));
+    expect(action).toContain("forgetFact(scope, id, { kind: 'suggestion' })");
+    expect(action).toContain('return res.ok ? { ok: true } : { ok: false, error: res.error };');
+    expect(action).not.toContain(".from('family_playbook_suggestions')");
+    const service = readFileSync('lib/services/memory/index.ts', 'utf8');
+    const forget = actionBody(service, 'export async function forgetFact(');
+    const branch = forget.slice(at(forget, "if (kind === 'suggestion')"));
+    const write = at(branch, ".update({ status: 'dismissed' })");
+    expect(branch.slice(write, write + 200)).toContain(".select('label')");
+    expect(at(branch, 'if (!data) return fail(')).toBeLessThan(at(branch, 'return ok('));
+  });
 
   it('deleting a contact interaction throws on zero rows, the same way it throws on error', () => {
     const body = actionBody(contactDetail, 'export async function deleteInteractionAction');

@@ -490,7 +490,11 @@ describe('Supabase migration filename safety', () => {
     // 0459 is held by #621 (the family-media bucket private, SEC-001), open
     // when 0460 landed. 0460 makes the family's subscriptions a manager's
     // write (API-SWEEP-06's write half).
-    expect(audit.nextVersion).toBe('0461');
+    //
+    // 0461 narrows the seven AUTHZ-020 tables still open to any member's
+    // write (family_stress_predictions and six vacation_* side tables no
+    // application file references) to can_manage_family, keeping SELECT.
+    expect(audit.nextVersion).toBe('0462');
   });
 
   it('flags a newly introduced collision instead of silently accepting it', () => {
