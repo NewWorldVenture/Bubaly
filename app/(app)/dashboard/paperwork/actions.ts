@@ -15,6 +15,7 @@ import { scopeFromUserContext } from '@/lib/services/scope';
 import { createReminder } from '@/lib/services/reminders';
 import { fenceUntrustedBlock, UNTRUSTED_CONTENT_RULE } from '@/lib/ai/safety/untrusted';
 import { describeActionError, wroteNoRows } from '@/lib/supabase/errors';
+import { refusalError, refusalForError } from '@/lib/actions/refusal';
 import { isPaperworkExtractionPartial } from '@/lib/paperwork/extraction';
 import { enforceAIRateLimit } from '@/lib/server/ai-rate-limit';
 
@@ -81,7 +82,7 @@ export async function addPaperworkAction(formData: FormData): Promise<PaperworkA
     familyId: ctx.active.familyId, userId: ctx.user.id, text, sender,
   });
   const { error } = await supabase.from('paperwork_items').insert(row);
-  if (error) throw new Error(describeActionError(error, tr('actions.couldNotSaveThatPaperwork')));
+  if (error) throw refusalError(describeActionError(error, tr('actions.couldNotSaveThatPaperwork')), refusalForError(error));
   revalidatePath(PATH);
   return { ok: true };
 }
@@ -109,7 +110,7 @@ export async function materializePaperworkActionAction(input: {
   const { data: item, error: itemError } = await supabase
     .from('paperwork_items').select('*')
     .eq('id', input.itemId).eq('family_id', ctx.active.familyId).maybeSingle();
-  if (itemError) throw new Error(describeActionError(itemError, tr('actions.couldNotLoadThatDocument')));
+  if (itemError) throw refusalError(describeActionError(itemError, tr('actions.couldNotLoadThatDocument')), refusalForError(itemError));
   if (!item) return { ok: true }; // nothing to do — unchanged from the void form
   if (isPaperworkExtractionPartial(item.meta)) throw new Error(tr('paperwork.partialExtractionWarning'));
 
@@ -146,7 +147,7 @@ export async function materializePaperworkActionAction(input: {
       all_day: Boolean(dueOn),
       created_by: ctx.user.id,
     }).select('id').single();
-    if (error) throw new Error(describeActionError(error, tr('actions.couldNotAddThatTo')));
+    if (error) throw refusalError(describeActionError(error, tr('actions.couldNotAddThatTo')), refusalForError(error));
     materializedAs = 'calendar_event';
     materializedId = data?.id ?? null;
   } else {
@@ -334,7 +335,7 @@ export async function setPaperworkStatusAction(input: {
     .update({ status: input.status })
     .eq('id', input.itemId).eq('family_id', ctx.active.familyId)
     .select('id');
-  if (error) throw new Error(describeActionError(error, tr('actions.couldNotUpdateThatPaperwork')));
+  if (error) throw refusalError(describeActionError(error, tr('actions.couldNotUpdateThatPaperwork')), refusalForError(error));
   // No error is not the same as saved: row-level security FILTERS an update it
   // refuses, so the statement matches nothing and succeeds. Ask for the row
   // back and answer a refusal when none changed (lib/supabase/errors.ts).

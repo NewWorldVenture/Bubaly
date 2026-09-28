@@ -50068,7 +50068,7 @@ because this audit has no production login and must not create data there.
 | B8 | The other ten locales (`en-GB`, `de-DE`, `es-ES`, `es-MX`, `es-US`, `fr-CA`, `fr-FR`, `it-IT`, `nl-NL`, `pt-PT`): every public page, and the signed-in pages B4 lists | session_01KRUgA6hD6QgzmtpSP6TUmP | ✅ done (public: 41 pages × 10 locales, production; signed in: 278 family routes × 10 locales, local, 2,780 loads; P-11, P-12 found and fixed) | 2026-09-27 19:30 |
 | B9 | Signed-in pages against production itself (needs an operator-provided test household; this audit has no production login and must not create data there) | — | ⛔ needs an operator | — |
 | B10 | Signed-in pages at 390 px for every route | session_01KRUgA6hD6QgzmtpSP6TUmP | ✅ done (round 2: 278 family + 78 admin + 37 id-based routes) | 2026-09-27 12:55 |
-| B11 | `/kid-login` PIN sessions (B7's remainder): sign in as a child with the family code and PIN, then every route that session can reach — render, controls and forms — local, 1280 and 390 | session_01TRY21ZKsFrfB3qtoP972A4 | 🔄 claimed 2026-09-27 19:40 | — |
+| B11 | `/kid-login` PIN sessions (B7's remainder): sign in as a child with the family code and PIN, then every route that session can reach — render, controls and forms — local, 1280 and 390 | session_01TRY21ZKsFrfB3qtoP972A4 | ✅ done: a PIN child in a Family+ household, 350 signed-in routes rendered (268 reachable), 1,050 clicks on those 268, 106 form submissions on the 93 with forms, 10 direct writes with the session's own token; P-24 to P-26 found and fixed (see "B11" below) | 2026-09-27 23:40 |
 | B12 | Post-release re-crawl of every public page on production (sitemap + the routes it omits), 1280 and 390, after today's merges (#586, #591–#614) reached www.bubaly.com | session_01DXw2nu25BjyRfA6Fg3YiMS | ✅ done (1,092 pages × 2 widths on production `1180c77d`; P-23 fixed, see "B12" below) | 2026-09-27 20:40 |
 | B13 | Every `/admin` route in the ten other locales (B8 covered the family routes only), local, 1280 | session_01KRUgA6hD6QgzmtpSP6TUmP | ✅ done: 78 routes × 10 locales, 780 loads on a build of `d6546c0c`; no route flagged for a defect (the two text flags are the OAuth scope `offline.access` and the feature key `briefing.morning`, both recorded above as by design) | 2026-09-27 21:30 |
 
@@ -50523,6 +50523,48 @@ The live B7 fixes were checked on production:
 - **Fixed:** `isUuid` (`lib/utils/validation.ts`) answers not-found for all four before any read, and a real read failure still throws.
 - **Test:** `tests/a-malformed-form-link-is-not-found.test.ts` renders `/f/[id]` against a mocked database: a malformed id is not-found with no query, an absent uuid is not-found, and a read failure still throws. It also holds each signed-in page's check ahead of its first read. It fails 4 of 7 on the previous code.
 - **Live:** merged in #620 (`f48dca79`). Production served that revision at 22:51Z, and `/f/no-such-page` and `/f/00000000-0000-4000-8000-000000000000` both answer 404 there.
+
+### B11 — a `/kid-login` PIN session: every control and every form
+
+*session_01TRY21ZKsFrfB3qtoP972A4, claimed 19:40Z, run 2026-09-27 22:20–23:40Z.* B7's second pass rendered every route as a PIN child; this batch presses what that child can press.
+
+**Setup.** A local stack from `main` at `25a3a808`, with migrations `0444`–`0458` applied, built with `next build --webpack && next start`. The household is a Family+ parent (also a super admin, as in B6b) with one managed child. The child's login was made through the parent's own **Family access → Create login** row, and the child then signed in at `/kid-login` with username and PIN. The child landed on `/home`.
+
+| Pass | Routes | Result |
+| --- | --- | --- |
+| Render, 1280 px, every signed-in route | 350 | 268 render for the child. All 80 `/admin` routes go to `/dashboard`, and `/dashboard/family-access` goes to `/home`, correctly. `/resources/no-such-page` 404s by design. No page error, no overflow, no smell. |
+| Interaction (`page-audit.mjs --interact`), the 268 | 268, 1,050 clicks | 15 routes flagged. **P-24**: social connect "Add (setup)" fell to a 500 page. **P-25**: relationship and weekly briefing answered a missing AI key with 500. **P-26**: watchlist and poll votes got a 409. The other 11 are the local stack having no AI key: `/api/ai/*` 502/503 "not configured" on `/dashboard`, `/home`, `/family-cfo`, notifications, outcomes, readiness and pros; habits' 400 is "add a habit first", recorded in B6a. |
+| Submit (`page-audit.mjs --submit`), the 268 | 93 with forms, 106 submissions | 85 answered correctly, 10 skipped (no submit button). 5 were "invalid": the filler typed text into money fields on career, concierge, moving and projects, which is a filler gap, not a page defect. 6 errors: **P-24** (licenses, media library), and bills/autopay/due/passwords refusing the child with "You don't have permission to do that. Ask a family admin…". That refusal is correct and readable; offering a child the Add form at all is the existing PROD-002 question. |
+| Direct writes with the child's own session token | 10 | All held. The child cannot repoint their own `child_logins` row at the parent (S-03), promote themselves, rename the parent, read stored passwords, invite a parent, change the plan, rename the family, or read `super_admins`/`app_settings`. The `child_logins` row the child can read holds only ids and the username. |
+
+**P-24 · Medium · A refused save told a family "Minified React error #441".**
+- **Licenses:** as the child, Auto → Licenses → Add license → Add. The action refused, as it should. The form's alert read *"Minified React error #441; visit https://react.dev/errors/441 …"*.
+- **Media library and social connect:** the page fell to "This page hit a snag".
+
+The cause is P-18's, in a wider place. In a production build Next replaces a thrown server action's message with React's redaction text and keeps only its `digest`. `useActionError`, which every inline form in the auto and home modules reports through, showed `err.message` on the premise that it is the action's own translated sentence. It never is in production.
+
+Fixed:
+- `refusalForThrown` (`lib/actions/refusal.ts`) names a refusal from the digest, and reads any redacted message as "Nothing was changed", never React's text. `useActionError` asks it first.
+- The five action files that threw `new Error(describeActionError(…))` (auto, home, paperwork, social, contact interactions) throw `refusalError(…, refusalForError(error))`.
+- `SocialAccessError` carries `ACTION_REFUSED:notAllowed`, so the section boundary draws P-18's "That wasn't saved — Your account can't make that change — Back to the form".
+- `refusalForError(null)` (the `if (error || !data)` case) is "not saved", not "invalid".
+
+Checked on a rebuilt local production build, as the child: the licence form reads "Your account can't make that change."; the media library and social connect pages read "That wasn't saved · Your account can't make that change · Back to the form". `tests/a-refusal-a-form-shows-survives-production.test.ts` has 15 cases, and 4 of its 11 original cases fail on the previous `lib/actions/refusal.ts`.
+
+**P-25 · Low · An AI engine with no key answered 500 on two child routes, and 503 on the rest.** `/api/ai/relationship` and `/api/ai/weekly-briefing` caught "OpenAI API key is not configured" and answered 500 "Something went wrong…". Their sibling routes answer 503 with the engine's state.
+
+Fixed. Main's API-SWEEP-04 (#619, merged while this batch ran) added an `isAIConfigured()` check before the provider call to these two and the other AI routes, guarded by `tests/an-ai-route-says-when-the-engine-is-not-set-up.test.ts` across 31 routes. That closes the missing-key case the child met. This batch keeps its own catch-side half for failures during the call: a key the provider rejects, no credit, no connection (`describeAIError(err).code !== 'unknown'`) now answer 503 "Recommendations are temporarily unavailable" instead of 500. That half is held by `tests/a-refusal-a-form-shows-survives-production.test.ts`. The 18-route list this entry first carried was superseded by API-SWEEP-04 and is withdrawn.
+
+**P-26 · Medium · A second vote before the first one arrived was refused, and the vote did not change.** The watchlist and the family poll decide between insert, update and delete from the votes on screen, which arrive by realtime and can lag a tap. The crawler's second tap inserted again and got a 409; the member saw "That already exists…" and kept their first vote.
+
+Fixed:
+- The watchlist's first vote is an upsert on `(title_id, member_id)`, which the update policy already allows for the member's own row.
+- A single-choice poll clears the member's vote on that poll by poll and member, not by what the screen shows, and a duplicate insert is not reported, because it is the vote asked for.
+- Both re-read their votes after every write.
+
+Checked as the child: two quick taps (thumbs up, then love) leave `love`; Tacos then Pizza on a single-choice poll leaves one vote, Pizza; no error either time. Held by the test file above and by the two existing write-boundary tests, updated to the upsert.
+
+**Not certified here:** production. B9 still needs an operator-provided household, and production has no `CHILD_LOGIN_SECRET` (health reports it missing), so a PIN login cannot be made there at all.
 
 ### B6a — the interaction pass (every tab, dialog and button, clicked)
 

@@ -6,6 +6,7 @@ import { requireUserContext } from '@/lib/supabase/auth';
 import { todayKeyFor } from '@/lib/services/scope';
 import { createServer } from '@/lib/supabase/server';
 import { describeActionError, wroteNoRows } from '@/lib/supabase/errors';
+import { refusalError, refusalForError } from '@/lib/actions/refusal';
 import type { SupabaseClient } from '@supabase/supabase-js';
 import type { Database } from '@/lib/database.types';
 
@@ -56,8 +57,8 @@ async function saveRow(
   const { data, error } = id
     ? await supabase.from(table as 'vehicles').update(row as never).eq('id', id).eq('family_id', familyId).select('id')
     : await supabase.from(table as 'vehicles').insert({ ...row, family_id: familyId, created_by: userId } as never);
-  if (error) throw new Error(describeActionError(error, label));
-  if (id && wroteNoRows(data)) throw new Error(label);
+  if (error) throw refusalError(describeActionError(error, label), refusalForError(error));
+  if (id && wroteNoRows(data)) throw refusalError(label, 'notSaved');
 }
 
 async function softDelete(supabase: Client, table: string, id: string, familyId: string, userId: string, label = 'Could not delete that record.') {
@@ -65,8 +66,8 @@ async function softDelete(supabase: Client, table: string, id: string, familyId:
   // `saveRow` above — and the consequence is sharper, because the caller has
   // already told the family the record is gone.
   const { data, error } = await supabase.from(table as 'vehicles').update({ deleted_at: new Date().toISOString(), updated_by: userId }).eq('id', id).eq('family_id', familyId).select('id');
-  if (error) throw new Error(describeActionError(error, label));
-  if (wroteNoRows(data)) throw new Error(label);
+  if (error) throw refusalError(describeActionError(error, label), refusalForError(error));
+  if (wroteNoRows(data)) throw refusalError(label, 'notSaved');
 }
 
 // ── Vehicles ────────────────────────────────────────────────────────────────
@@ -197,7 +198,7 @@ export async function saveAutoServiceAction(fd: FormData) {
     provider: str(fd, 'provider'), cost: num(fd, 'cost'), mileage, description: str(fd, 'description'),
     next_due_on: str(fd, 'next_due_on'), next_due_mileage: num(fd, 'next_due_mileage'), created_by: userId,
   });
-  if (error) throw new Error(describeActionError(error, t('actions.couldNotSaveThatService')));
+  if (error) throw refusalError(describeActionError(error, t('actions.couldNotSaveThatService')), refusalForError(error));
   // Keep the vehicle odometer fresh — best-effort (the record is already saved),
   // but log a failure so a broken update is observable, not silently ignored.
   if (vehicleId && mileage != null) {
