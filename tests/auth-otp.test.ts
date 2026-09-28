@@ -1,5 +1,6 @@
 import { describe, it, expect } from 'vitest';
-import { normalizeOtp, isValidOtp, isLikelyE164, formatCountdown, providerHint } from '@/lib/auth/otp';
+import { readFileSync } from 'node:fs';
+import { normalizeOtp, isValidOtp, isLikelyE164, formatCountdown, classifyPhoneAuthError } from '@/lib/auth/otp';
 
 describe('normalizeOtp', () => {
   it('keeps digits, caps at 6', () => {
@@ -39,10 +40,38 @@ describe('formatCountdown', () => {
   });
 });
 
-describe('providerHint', () => {
-  it('rewrites provider-disabled errors, passes others through', () => {
-    expect(providerHint('Unsupported phone provider', 'Phone')).toMatch(/isn’t enabled yet/);
-    expect(providerHint('Signups not allowed for otp', 'Phone')).toBe('Signups not allowed for otp');
-    expect(providerHint('Invalid token', 'Phone')).toBe('Invalid token');
+// ROLE-L02: phone sign-in toasted the provider's own English wording (and an
+// English sentence built here) to every reader. The kinds below become
+// catalogue keys in the component; nothing the provider wrote reaches the toast.
+describe('classifyPhoneAuthError', () => {
+  it('reads an unconfigured or failing SMS provider as unavailable', () => {
+    expect(classifyPhoneAuthError(new Error('Unsupported phone provider'))).toBe('provider_unavailable');
+    expect(classifyPhoneAuthError({ code: 'sms_send_failed', message: 'Error sending sms OTP' })).toBe('provider_unavailable');
+    expect(classifyPhoneAuthError({ code: 'phone_provider_disabled', message: 'Phone signups are disabled' })).toBe('provider_unavailable');
+  });
+  it('reads a wrong or stale code as rejected', () => {
+    expect(classifyPhoneAuthError({ code: 'otp_expired', message: 'Token has expired or is invalid' })).toBe('code_rejected');
+    expect(classifyPhoneAuthError(new Error('Token has expired or is invalid'))).toBe('code_rejected');
+  });
+  it('leaves everything else to the login form\'s handling', () => {
+    expect(classifyPhoneAuthError({ code: 'over_request_rate_limit', message: 'Request rate limit reached' })).toBe('other');
+    expect(classifyPhoneAuthError(null)).toBe('other');
+  });
+});
+
+describe('the phone sign-in toast is in the reader\'s language', () => {
+  const source = readFileSync('components/auth/phone-auth.tsx', 'utf8');
+  it('never toasts a provider message directly', () => {
+    expect(source).not.toMatch(/toastError\([^)]*error\.message/);
+    expect(source).not.toContain('providerHint');
+    expect(source.match(/toastError\(describeFailure\(error\)\)/g)).toHaveLength(2);
+  });
+  it('every full catalogue says both sentences', () => {
+    for (const code of ['en-US', 'de-DE', 'es-ES', 'fr-FR', 'it-IT', 'nl-NL', 'pt-PT']) {
+      const messages = JSON.parse(readFileSync(`lib/i18n/messages/${code}.json`, 'utf8')) as Record<string, string>;
+      expect(messages['phoneAuth.phoneSignInIsNotAvailable'], code).toBeTruthy();
+      expect(messages['phoneAuth.thatCodeDidNotWork'], code).toBeTruthy();
+      if (code !== 'en-US') expect(messages['phoneAuth.thatCodeDidNotWork'], code).not.toBe("That code didn’t work. Check it, or send a new one.");
+    }
   });
 });

@@ -10707,6 +10707,8 @@
   "phoneAuth.digitN": "Cifra {n}",
   "phoneAuth.enterAValidPhoneNumber": "Inserisci un numero di telefono valido.",
   "phoneAuth.enterTheCodeWeSentYou": "Inserisci il codice che ti abbiamo inviato",
+  "phoneAuth.phoneSignInIsNotAvailable": "L’accesso con il telefono non è disponibile al momento. Prova un altro modo per accedere.",
+  "phoneAuth.thatCodeDidNotWork": "Quel codice non ha funzionato. Controllalo o inviane uno nuovo.",
   "phoneAuth.resendCodeIn": "Invia di nuovo il codice tra",
   "phoneAuth.useADifferentNumber": "Usa un altro numero",
   "phoneAuth.verificationCode": "Codice di verifica",

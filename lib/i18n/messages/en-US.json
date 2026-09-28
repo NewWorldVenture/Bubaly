@@ -10875,6 +10875,8 @@
   "phoneAuth.digitN": "Digit {n}",
   "phoneAuth.enterAValidPhoneNumber": "Enter a valid phone number.",
   "phoneAuth.enterTheCodeWeSentYou": "Enter the code we sent you",
+  "phoneAuth.phoneSignInIsNotAvailable": "Phone sign-in isn’t available right now. Try another way to sign in.",
+  "phoneAuth.thatCodeDidNotWork": "That code didn’t work. Check it, or send a new one.",
   "phoneAuth.resendCodeIn": "Resend code in",
   "phoneAuth.useADifferentNumber": "Use a different number",
   "phoneAuth.verificationCode": "Verification code",

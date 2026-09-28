@@ -10705,6 +10705,8 @@
   "phoneAuth.digitN": "Ziffer {n}",
   "phoneAuth.enterAValidPhoneNumber": "Geben Sie eine gültige Telefonnummer ein.",
   "phoneAuth.enterTheCodeWeSentYou": "Gib den Code ein, den wir dir geschickt haben",
+  "phoneAuth.phoneSignInIsNotAvailable": "Die Anmeldung per Telefon ist gerade nicht verfügbar. Bitte melden Sie sich auf andere Weise an.",
+  "phoneAuth.thatCodeDidNotWork": "Dieser Code hat nicht funktioniert. Prüfen Sie ihn oder fordern Sie einen neuen an.",
   "phoneAuth.resendCodeIn": "Code erneut senden in",
   "phoneAuth.useADifferentNumber": "Andere Nummer verwenden",
   "phoneAuth.verificationCode": "Bestätigungscode",

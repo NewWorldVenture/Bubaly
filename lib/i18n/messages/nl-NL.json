@@ -10705,6 +10705,8 @@
   "phoneAuth.digitN": "Cijfer {n}",
   "phoneAuth.enterAValidPhoneNumber": "Voer een geldig telefoonnummer in.",
   "phoneAuth.enterTheCodeWeSentYou": "Voer de code in die we je hebben gestuurd",
+  "phoneAuth.phoneSignInIsNotAvailable": "Inloggen met je telefoon is nu niet beschikbaar. Probeer een andere manier om in te loggen.",
+  "phoneAuth.thatCodeDidNotWork": "Die code werkte niet. Controleer hem of stuur een nieuwe.",
   "phoneAuth.resendCodeIn": "Code opnieuw versturen over",
   "phoneAuth.useADifferentNumber": "Een ander nummer gebruiken",
   "phoneAuth.verificationCode": "Verificatiecode",
