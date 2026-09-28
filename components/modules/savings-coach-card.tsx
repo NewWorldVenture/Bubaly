@@ -6,6 +6,26 @@ import { Button } from '@/components/ui/button';
 import { useTranslations } from '@/components/i18n/locale-provider';
 
 type Suggestion = { title: string; detail: string };
+type SavingsAnswer = { summary: string; suggestions: Suggestion[]; error: string | null };
+
+/**
+ * What the card may show for one answer from /api/ai/savings. A refusal (a
+ * teen, a caregiver or a guest: "Family finances are private to the adults")
+ * and an engine that is not set up both answer `{ error }` with no summary, and
+ * the card used to read only `summary` and `suggestions` — so the button's
+ * spinner stopped and nothing appeared (page audit B15, P-37). The route's
+ * message is already in the reader's language; `fallback` is for an answer
+ * that carries none.
+ */
+export function readSavingsAnswer(ok: boolean, body: unknown, fallback: string): SavingsAnswer {
+  const d = (body && typeof body === 'object' ? body : {}) as { summary?: unknown; suggestions?: unknown; error?: unknown };
+  if (!ok) return { summary: '', suggestions: [], error: typeof d.error === 'string' && d.error ? d.error : fallback };
+  return {
+    summary: typeof d.summary === 'string' ? d.summary : '',
+    suggestions: Array.isArray(d.suggestions) ? (d.suggestions as Suggestion[]) : [],
+    error: null,
+  };
+}
 
 /**
  * AI Savings Suggestions card — calls /api/ai/savings (which analyses
@@ -14,16 +34,17 @@ type Suggestion = { title: string; detail: string };
  */
 export function SavingsCoachCard() {
   const t = useTranslations();
-  const [state, setState] = useState<{ loading: boolean; summary: string; suggestions: Suggestion[] } | null>(null);
+  const [state, setState] = useState<({ loading: boolean } & SavingsAnswer) | null>(null);
 
   async function run() {
-    setState({ loading: true, summary: '', suggestions: [] });
+    setState({ loading: true, summary: '', suggestions: [], error: null });
+    const fallback = t('ai.recommendationsAreTemporarilyUnavailable');
     try {
       const res = await fetch('/api/ai/savings', { method: 'POST' });
-      const d = await res.json();
-      setState({ loading: false, summary: d.summary ?? '', suggestions: Array.isArray(d.suggestions) ? d.suggestions : [] });
+      const d = await res.json().catch(() => null);
+      setState({ loading: false, ...readSavingsAnswer(res.ok, d, fallback) });
     } catch {
-      setState({ loading: false, summary: 'Could not generate suggestions right now.', suggestions: [] });
+      setState({ loading: false, summary: '', suggestions: [], error: fallback });
     }
   }
 
@@ -35,6 +56,7 @@ export function SavingsCoachCard() {
       </div>
       {state && !state.loading && (
         <div className="mt-3 space-y-2 text-sm">
+          {state.error && <p role="alert" className="text-danger">{state.error}</p>}
           {state.summary && <p className="text-fg/90">{state.summary}</p>}
           <ul className="space-y-2">
             {state.suggestions.map((s, i) => (
