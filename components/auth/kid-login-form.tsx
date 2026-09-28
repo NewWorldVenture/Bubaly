@@ -121,7 +121,7 @@ export function KidLoginForm() {
       </form>
 
       <p className="mt-5 text-center text-sm text-muted">
-        Grown-up?{' '}
+        {t('kidLogin.grownUp')}{' '}
         <Link href="/login" onClick={retire} className="font-medium text-brand-text hover:underline">{t('kidLogin.signInHere')}</Link>
       </p>
     </div>

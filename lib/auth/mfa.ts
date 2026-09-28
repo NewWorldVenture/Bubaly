@@ -238,3 +238,21 @@ export function classifyMfaError(error: unknown): ClassifiedMfaError {
 
   return { kind, code, message };
 }
+
+/**
+ * Run a `supabase.auth.mfa.*` call so that every failure comes back as
+ * `{ error }`. auth-js answers an AuthError that way but RETHROWS anything
+ * else (`_verify`, `_enroll` and `_unenroll` end in `if (isAuthError(error))
+ * return { data: null, error }; throw error`) — a lock-acquire timeout, for
+ * one. A form that only reads `{ error }` then never reaches its `setBusy(false)`:
+ * the button spins forever and the person is told nothing.
+ */
+export async function settleMfaCall<R extends { error: unknown }>(
+  call: () => Promise<R>,
+): Promise<R | { data: null; error: Error }> {
+  try {
+    return await call();
+  } catch (cause: unknown) {
+    return { data: null, error: cause instanceof Error ? cause : new Error(String(cause)) };
+  }
+}

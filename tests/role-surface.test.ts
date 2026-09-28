@@ -1,6 +1,7 @@
 import { describe, it, expect } from 'vitest';
 import { roleSurface, roleGreeting, focusHeadline, focusChipClasses } from '@/lib/ui/role-surface';
 import { getMessages, translate } from '@/lib/i18n/messages';
+import { isManager, ROLE_ORDER } from '@/lib/constants/roles';
 
 const en = (key: string, params?: Record<string, string | number>) => translate(getMessages('en-US'), key, params);
 const fr = (key: string, params?: Record<string, string | number>) => translate(getMessages('fr-FR'), key, params);
@@ -21,9 +22,15 @@ describe('roleSurface', () => {
   it('guests cannot manage', () => {
     expect(roleSurface('guest').canManage).toBe(false);
   });
-  it('falls back to adult for null/unknown', () => {
-    expect(roleSurface(null)).toEqual(roleSurface('adult'));
-    expect(roleSurface(undefined)).toEqual(roleSurface('adult'));
+  it("falls back to the adult's layout for null/unknown, without its management affordances", () => {
+    expect(roleSurface(null)).toEqual({ ...roleSurface('adult'), canManage: false });
+    expect(roleSurface(undefined)).toEqual({ ...roleSurface('adult'), canManage: false });
+  });
+  it('offers management affordances to exactly the roles the server lets manage', () => {
+    // A caregiver "views only the areas assigned to them" and is refused by
+    // isManager and can_manage_family; the surface said canManage: true.
+    for (const role of ROLE_ORDER) expect(roleSurface(role).canManage, role).toBe(isManager(role));
+    expect(roleSurface('caregiver').canManage).toBe(false);
   });
 });
 

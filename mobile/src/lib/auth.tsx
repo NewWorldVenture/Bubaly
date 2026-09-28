@@ -79,7 +79,14 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   }, [userId, freshFamily, updateFamily]);
 
   const signIn = useCallback(async (email: string, password: string) => {
-    const { error } = await supabase.auth.signInWithPassword({ email: email.trim(), password });
+    // auth-js answers an AuthError as { error } but rethrows anything else,
+    // which left the sign-in button spinning with no message.
+    let error: { code?: string; message: string } | null;
+    try {
+      ({ error } = await supabase.auth.signInWithPassword({ email: email.trim(), password }));
+    } catch (cause: unknown) {
+      error = { message: cause instanceof Error ? cause.message : String(cause) };
+    }
     if (error?.code === 'session_write_blocked') return { error: mobileTranslate(deviceLocale(), 'mobileAssistant.signInRetry') };
     return { error: error ? friendlyAuthError(error.message) : null };
   }, []);

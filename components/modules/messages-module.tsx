@@ -20,7 +20,7 @@ import { Input } from '@/components/ui/input';
 import { GifPicker } from '@/components/messages/gif-picker';
 import { Avatar } from '@/components/ui/avatar';
 import { SkeletonList, EmptyState } from '@/components/ui/states';
-import { ROLE_LABELS } from '@/lib/constants/roles';
+import { roleLabel } from '@/lib/constants/roles';
 import { fmtDate, firstName } from '@/lib/utils/format';
 import { cn } from '@/lib/utils/cn';
 import {
@@ -1103,7 +1103,7 @@ export function MessagesModule() {
                     </div>
                     <div className="min-w-0 flex-1">
                       <p className="truncate text-sm font-medium">{m.display_name}{isSelf && <span className="text-muted"> (You)</span>}</p>
-                      <p className="truncate text-xs text-muted">{ROLE_LABELS[m.role]}</p>
+                      <p className="truncate text-xs text-muted">{roleLabel(tr, m.role)}</p>
                     </div>
                     {!isSelf && (
                       <button onClick={() => setNewConvOpen(true)} aria-label={tr('itemAction.message', { name: m.display_name })}
@@ -1370,7 +1370,7 @@ function NewConversation({ familyId, userId, members, conversations, myName, onC
                       <Avatar name={m.display_name} color={m.color} size={38} />
                       <div className="min-w-0 flex-1">
                         <p className="truncate text-sm font-semibold">{m.display_name}</p>
-                        <p className="truncate text-xs text-muted">{ROLE_LABELS[m.role]}</p>
+                        <p className="truncate text-xs text-muted">{roleLabel(tr, m.role)}</p>
                       </div>
                       <SelectDot on={on} />
                     </button>
@@ -1436,7 +1436,7 @@ function NewConversation({ familyId, userId, members, conversations, myName, onC
                   <Avatar name={m.display_name} color={m.color} size={32} />
                   <div className="min-w-0 flex-1">
                     <p className="truncate text-sm font-medium">{m.display_name}</p>
-                    <p className="truncate text-xs text-muted">{ROLE_LABELS[m.role]}</p>
+                    <p className="truncate text-xs text-muted">{roleLabel(tr, m.role)}</p>
                   </div>
                   <button onClick={() => toggle(m.id)} aria-label={tr('itemAction.remove', { name: m.display_name })} className="rounded-lg p-1.5 text-muted hover:text-danger">
                     <X className="h-4 w-4" />

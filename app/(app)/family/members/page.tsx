@@ -3,7 +3,7 @@ import Link from 'next/link';
 import { UsersRound, Settings, Cake } from 'lucide-react';
 import { requireUserContext } from '@/lib/supabase/auth';
 import { createServer } from '@/lib/supabase/server';
-import { isManager, ROLE_LABELS, type MemberRole } from '@/lib/constants/roles';
+import { isManager, roleLabel, type MemberRole } from '@/lib/constants/roles';
 import { PageHeader } from '@/components/app/page-header';
 import { SectionCard, MiniEmpty } from '@/components/family/shell';
 import { ErrorState } from '@/components/ui/states';
@@ -64,7 +64,7 @@ export default async function FamilyMembersPage() {
                 <Avatar name={m.display_name} color={m.color} size={44} />
                 <div className="min-w-0 flex-1">
                   <p className="truncate text-sm font-semibold">{m.display_name}{m.user_id === ctx.user.id && <span className="ml-1 text-xs text-muted">(you)</span>}</p>
-                  <p className="text-xs text-muted">{ROLE_LABELS[m.role as MemberRole] ?? m.role}</p>
+                  <p className="text-xs text-muted">{roleLabel(t, m.role)}</p>
                   {m.birthday && <p className="mt-0.5 inline-flex items-center gap-1 text-xs text-muted"><Cake className="h-3 w-3" /> {fmtDate(m.birthday, 'MMM d')}</p>}
                 </div>
               </li>

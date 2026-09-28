@@ -29,6 +29,7 @@ import {
   normalizeTotpCode,
   pendingTotpFactors,
   sessionStrength,
+  settleMfaCall,
   verifiedTotpFactors,
   type Assurance,
   type ClassifiedMfaError,
@@ -63,8 +64,8 @@ export function SecurityPanel() {
     let active = true;
     (async () => {
       const [factorsRes, aalRes] = await Promise.all([
-        supabase.auth.mfa.listFactors(),
-        supabase.auth.mfa.getAuthenticatorAssuranceLevel(),
+        settleMfaCall(() => supabase.auth.mfa.listFactors()),
+        settleMfaCall(() => supabase.auth.mfa.getAuthenticatorAssuranceLevel()),
       ]);
       if (!active) return;
       const error = factorsRes.error ?? aalRes.error;
@@ -90,7 +91,7 @@ export function SecurityPanel() {
   /** Drop every unfinished enrolment so a fresh `enroll` cannot hit a name conflict. */
   async function discardPending(factors: MfaFactor[]) {
     for (const f of pendingTotpFactors(factors)) {
-      const { error } = await supabase.auth.mfa.unenroll({ factorId: f.id });
+      const { error } = await settleMfaCall(() => supabase.auth.mfa.unenroll({ factorId: f.id }));
       if (error) return classifyMfaError(error);
     }
     return null;
@@ -102,11 +103,11 @@ export function SecurityPanel() {
     setEnrolError(null);
     const cleanup = await discardPending(snapshot.factors);
     if (cleanup) { setEnrolError(cleanup); setBusy(false); return; }
-    const { data, error } = await supabase.auth.mfa.enroll({
+    const { data, error } = await settleMfaCall(() => supabase.auth.mfa.enroll({
       factorType: 'totp',
       friendlyName: `${FRIENDLY_NAME_PREFIX} ${new Date().toISOString().slice(0, 10)}`,
       issuer: 'Bubaly',
-    });
+    }));
     setBusy(false);
     if (error || !data) {
       console.error('[security-panel] mfa enrol failed', error ?? new Error('empty response'));
@@ -123,7 +124,7 @@ export function SecurityPanel() {
     if (!isValidTotpCode(normalized)) return;
     setBusy(true);
     setEnrolError(null);
-    const { error } = await supabase.auth.mfa.challengeAndVerify({ factorId: enrolment.factorId, code: normalized });
+    const { error } = await settleMfaCall(() => supabase.auth.mfa.challengeAndVerify({ factorId: enrolment.factorId, code: normalized }));
     setBusy(false);
     if (error) {
       setEnrolError(classifyMfaError(error));
@@ -139,7 +140,7 @@ export function SecurityPanel() {
   async function cancelEnrolment() {
     if (!enrolment || busy) return;
     setBusy(true);
-    const { error } = await supabase.auth.mfa.unenroll({ factorId: enrolment.factorId });
+    const { error } = await settleMfaCall(() => supabase.auth.mfa.unenroll({ factorId: enrolment.factorId }));
     setBusy(false);
     // A failed cleanup is not a failed cancel: the pending factor stays listed
     // and the next "Set up" discards it first.
@@ -305,10 +306,10 @@ function RemoveFactorModal({ factor, needsCode, onClose, onRemoved }: {
     setBusy(true);
     setError(null);
     if (needsCode) {
-      const verify = await supabase.auth.mfa.challengeAndVerify({ factorId: factor.id, code: normalized });
+      const verify = await settleMfaCall(() => supabase.auth.mfa.challengeAndVerify({ factorId: factor.id, code: normalized }));
       if (verify.error) { setError(classifyMfaError(verify.error)); setCode(''); setBusy(false); return; }
     }
-    const { error: unenrolError } = await supabase.auth.mfa.unenroll({ factorId: factor.id });
+    const { error: unenrolError } = await settleMfaCall(() => supabase.auth.mfa.unenroll({ factorId: factor.id }));
     setBusy(false);
     if (unenrolError) {
       console.error('[security-panel] mfa unenrol failed', unenrolError);

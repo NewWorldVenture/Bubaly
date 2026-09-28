@@ -5,7 +5,7 @@ import { settleAll, describeReadError, credentialHint } from '@/lib/supabase/set
 import { Card } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
 import { EmptyState, ErrorState } from '@/components/ui/states';
-import { ROLE_LABELS, type MemberRole } from '@/lib/constants/roles';
+import { ROLE_LABEL_KEYS, ROLE_ORDER, roleLabel, type MemberRole } from '@/lib/constants/roles';
 import { PLANS } from '@/lib/constants/plans';
 import { fmtDate } from '@/lib/utils/format';
 import { FilterForm, FilterSelect, FilterSearchInput } from '@/components/admin/filter-bar';
@@ -248,7 +248,7 @@ export default async function AdminUsersPage({ searchParams }: Params) {
                 <FilterSearchInput name="q" defaultValue={sp.q} placeholder={tr('adminUsers.searchUsersByNameEmailOr')} />
                 <FilterSelect name="role" label={tr('adminUsers.role')} defaultValue={roleFilter} options={[
                   { value: '', label: 'All Roles' },
-                  ...Object.entries(ROLE_LABELS).map(([v, label]) => ({ value: v, label })),
+                  ...ROLE_ORDER.map((v) => ({ value: v, label: tr(ROLE_LABEL_KEYS[v]) })),
                 ]} />
                 <FilterSelect name="status" label={tr('adminUsers.status')} defaultValue={statusFilter} options={[
                   { value: '', label: 'All Statuses' },
@@ -294,7 +294,7 @@ export default async function AdminUsersPage({ searchParams }: Params) {
                             <p className="text-xs text-muted">{u.email ?? <span className="italic">{tr('users.noLoginAccount')}</span>}</p>
                           </td>
                           <td className="px-3 py-2.5 text-muted">{u.family ? u.family.name : '—'}</td>
-                          <td className="px-3 py-2.5">{u.role ? <Badge tone="brand">{ROLE_LABELS[u.role]}</Badge> : '—'}</td>
+                          <td className="px-3 py-2.5">{u.role ? <Badge tone="brand">{roleLabel(tr, u.role)}</Badge> : '—'}</td>
                           <td className="px-3 py-2.5 text-muted">{u.plan ? PLANS.find((p) => p.id === u.plan)?.name ?? u.plan : '—'}</td>
                           <td className="px-3 py-2.5">
                             <Badge tone={u.hasAccount ? 'success' : 'neutral'}>{u.hasAccount ? 'Active' : 'No account'}</Badge>
@@ -421,7 +421,7 @@ export default async function AdminUsersPage({ searchParams }: Params) {
                     <tr key={inv.id}>
                       <td className="px-3 py-2.5 font-medium">{inv.email}</td>
                       <td className="px-3 py-2.5 text-muted">{familyById.get(inv.family_id)?.name ?? '—'}</td>
-                      <td className="px-3 py-2.5"><Badge tone="brand">{ROLE_LABELS[inv.role as MemberRole]}</Badge></td>
+                      <td className="px-3 py-2.5"><Badge tone="brand">{roleLabel(tr, inv.role)}</Badge></td>
                       <td className="px-3 py-2.5">
                         <Badge tone={inv.status === 'pending' ? 'warning' : inv.status === 'accepted' ? 'success' : inv.status === 'revoked' ? 'danger' : 'neutral'}>
                           {inv.status}

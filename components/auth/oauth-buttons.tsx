@@ -6,6 +6,8 @@ import { signInWithOwnedOAuth } from '@/lib/auth/pkce-initiation-client';
 import { useToast } from '@/components/ui/toast';
 import { GoogleIcon } from '@/components/auth/google-icon';
 import { useTranslations } from '@/components/i18n/locale-provider';
+import { isRetryableAuthError } from '@/lib/auth/session';
+import { describeDbError } from '@/lib/supabase/errors';
 
 // Shared style for every auth provider button (Google · phone · email) so the
 // sign-in / sign-up screens are visually unified — a solid black pill with a
@@ -54,11 +56,13 @@ export function OAuthButtons({ next }: { next?: string }) {
       busy.current = false;
       setPending(false);
       if (err instanceof Error && err.name === 'AuthSessionInterruptedError') return;
-      const msg = err instanceof Error ? err.message : 'Could not continue with Google';
-      // Surface a clearer hint when the provider isn't enabled in Supabase yet.
+      // In the reader's language, never the provider's: the one case a person
+      // can act on (Google is not switched on here) gets its own sentence, and
+      // anything else is handled the way the email login form handles it.
+      const msg = err instanceof Error ? err.message : '';
       toastError(/provider is not enabled|unsupported provider/i.test(msg)
-        ? "Google sign-in isn't enabled yet. Try email instead."
-        : msg);
+        ? t('oauthButtons.googleSignInIsNotAvailable')
+        : isRetryableAuthError(err) ? t('loginForm.couldNotSignIn') : describeDbError(err, t('loginForm.couldNotSignIn')));
     }
   }
 

@@ -44,7 +44,14 @@ export function JoinInvite() {
       setState({ phase: 'accepting' });
       const { data, error } = await supabase.rpc('accept_invite', { p_token: token });
       if (error || !data) {
-        setState({ phase: 'error', message: error?.message ?? 'This invite is invalid or expired.' });
+        // accept_invite raises two things a person can act on (P0001); they are
+        // said in the reader's language rather than as the database's English.
+        // Anything else never reached the function — a network or server fault.
+        const raised = !error || error.code === 'P0001';
+        const message = !raised ? t('joinInvite.couldNotJoinTryAgain')
+          : /different email/i.test(error?.message ?? '') ? t('joinInvite.inviteIsForADifferentEmail')
+          : t('joinInvite.inviteIsInvalidOrExpired');
+        setState({ phase: 'error', message });
         return;
       }
       setState({ phase: 'done' });

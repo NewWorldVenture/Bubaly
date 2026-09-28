@@ -18,6 +18,7 @@ import {
   classifyMfaError,
   isValidTotpCode,
   normalizeTotpCode,
+  settleMfaCall,
   verifiedTotpFactors,
   type ClassifiedMfaError,
   type MfaFactor,
@@ -65,7 +66,7 @@ export function StepUpForm({ next, serverReadFailed }: { next: string; serverRea
     if (!isValidTotpCode(normalized)) return;
     setBusy(true);
     setError(null);
-    const { error: verifyError } = await createClient().auth.mfa.challengeAndVerify({ factorId: factor.id, code: normalized });
+    const { error: verifyError } = await settleMfaCall(() => createClient().auth.mfa.challengeAndVerify({ factorId: factor.id, code: normalized }));
     if (verifyError) {
       setError(classifyMfaError(verifyError));
       setCode('');
