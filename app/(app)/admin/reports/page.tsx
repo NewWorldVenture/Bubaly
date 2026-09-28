@@ -9,6 +9,7 @@ import { EmptyState, ErrorState } from '@/components/ui/states';
 import { Donut, Bars } from '@/components/admin/charts';
 import { fmtMoney } from '@/lib/utils/format';
 import { planMonthlyCents, planName } from '@/lib/constants/plans';
+import { subscriptionRevenue } from '@/lib/admin/subscription-revenue';
 import { getTranslations, getLocaleContext } from '@/lib/i18n/server';
 import { StrategyMetricTiles } from '@/components/admin/strategy-metric-tiles';
 import { loadStrategyMetrics } from '@/lib/metric/strategy-server';
@@ -131,8 +132,8 @@ export default async function AdminReportsPage() {
     console.warn('[admin-reports] report read failed — rendering degraded', readError);
   }
 
-  const activeSubs = (subscriptions ?? []).filter((s) => s.status === 'active');
-  const mrrCents = activeSubs.reduce((sum, s) => sum + planMonthlyCents(s.plan), 0);
+  // The same revenue /admin/billing reports, from the same definition.
+  const { paying: activeSubs, mrrCents } = subscriptionRevenue(subscriptions ?? []);
   const usedBytes = (docs ?? []).reduce((sum, d) => sum + (d.size_bytes ?? 0), 0);
 
   const familyGrowth = monthBuckets(families ?? [], () => 1, locale);
