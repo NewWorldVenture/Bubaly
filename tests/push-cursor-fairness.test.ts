@@ -180,6 +180,22 @@ describe('two overlapping dispatch runs do not deliver the same batch twice', ()
     expect(f.stamps.length, 'and stamps nothing new as delivered').toBe(stampedBefore);
   });
 
+  // Page audit B15 (finalaudit.md). The guarded write compared the stored JSON
+  // cursor with `.eq('value', cursorObject)`. PostgREST sends that value as
+  // text, "[object Object]", which Postgres cannot read as JSON, so the update
+  // failed with 22P02 and the run threw "Push cursor write failed" before
+  // sending. Every dispatch after a family's first cursor did, on a real
+  // database: the local stack's server log showed it on every notification run.
+  it('delivers on the second run, once a cursor exists, like the first', async () => {
+    const f = fixture([row(1), row(2)]);
+    expect((await dispatchPendingPushes(f.db, { now: NOW, limit: 1 })).result.sent).toBe(1);
+    provider.send.mockClear();
+    const second = await dispatchPendingPushes(f.db, { now: NOW, limit: 1 });
+    expect(second.result.sent, 'the guarded write claims the batch and the batch is sent').toBe(1);
+    expect(provider.send).toHaveBeenCalledTimes(1);
+    expect(f.tables.app_settings[0].value).toEqual(cursor(2));
+  });
+
   it('still refuses to send on an unconfirmed first write, which is not a lost claim', async () => {
     const f = fixture([row(1)]);
     f.emptyWrites.add('app_settings:upsert');

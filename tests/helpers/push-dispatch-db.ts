@@ -68,11 +68,25 @@ export function pushDispatchDb(tables: Record<string, PushFixtureRow[]>, options
     let rangeFrom: number | undefined, rangeTo: number | undefined;
     const filters: ((row: PushFixtureRow) => boolean)[] = [];
     const orders: { key: string; ascending: boolean }[] = [];
+    // PostgREST puts a filter's value in the URL as text (`eq.${value}`), so an
+    // object arrives as "[object Object]", which Postgres cannot read as JSON,
+    // and the whole query fails. Comparing the object by reference here, as this
+    // fixture used to, passed the push cursor's guarded write that failed on
+    // every real database once a cursor existed.
+    let filterError: { code: string; message: string } | undefined;
+    // `column->>field` reads one field of a JSON column as text, as PostgREST does.
+    const field = (row: PushFixtureRow, key: string): unknown => {
+      const [column, path] = key.split('->>');
+      if (path === undefined) return row[column];
+      const inner = (row[column] as Record<string, unknown> | null | undefined)?.[path];
+      return inner == null ? null : String(inner);
+    };
     const execute = () => {
       const operationKey = `${table}:${operation}`;
       const attempt = (attempts.get(operationKey) ?? 0) + 1;
       attempts.set(operationKey, attempt);
       if (missingTables.has(table)) return { data: null, error: { code: 'PGRST205', message: `Could not find the table 'public.${table}' in the schema cache` } };
+      if (filterError) return { data: null, error: filterError };
       if (!(table in tables)) throw new Error(`Unexpected table ${table}`);
       if (thrownFaults.has(operationKey) || thrownFaults.has(`${operationKey}:${attempt}`)) throw new Error('Fixture connection failed');
       if (faults.has(operationKey) || faults.has(`${operationKey}:${attempt}`)) return { data: null, error: { message: 'Fixture database unavailable' } };
@@ -113,7 +127,11 @@ export function pushDispatchDb(tables: Record<string, PushFixtureRow[]>, options
     };
     const query = {
       select: () => query,
-      eq: (key: string, value: unknown) => { filters.push(row => row[key] === value); return query; },
+      eq: (key: string, value: unknown) => {
+        if (value !== null && typeof value === 'object') filterError = { code: '22P02', message: 'invalid input syntax for type json' };
+        filters.push(row => field(row, key) === value);
+        return query;
+      },
       contains: (key: string, value: unknown) => { filters.push(row => contains(row[key], value)); return query; },
       is: (key: string, value: unknown) => { filters.push(row => row[key] === value); return query; },
       in: (key: string, values: unknown[]) => { filters.push(row => values.includes(row[key])); return query; },
