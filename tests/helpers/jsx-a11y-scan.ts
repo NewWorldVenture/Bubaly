@@ -301,6 +301,52 @@ const ONE_SHOT = /if\s*\((\w+)\.current\)\s*return;\s*\1\.current\s*=\s*true;/;
  * overwrite the newer answer (MAIN-F-D09). A setter that runs BEFORE the
  * first await is synchronous and does not count.
  */
+/**
+ * An element that takes `role="button"` (or a real `<button>`) and ALSO
+ * contains another control. A button's children are presentational, so
+ * assistive technology is told to ignore the pin and delete buttons inside the
+ * card; axe reports it as `nested-interactive`. Found on the notes grid card
+ * (P-39), where a merge kept both the card's role and the inner button that
+ * replaced it.
+ */
+export function nestedInteractive(file: string, text?: string): Site[] {
+  const sf = parse(file, text);
+  const out: Site[] = [];
+  const CONTROL_TAGS = new Set(['button', 'Button', 'a', 'Link', 'input', 'select', 'textarea', 'Input', 'Select']);
+  const tagOf = (n: ts.Node) => (ts.isJsxElement(n) ? n.openingElement.tagName.getText() : ts.isJsxSelfClosingElement(n) ? n.tagName.getText() : null);
+  const attrsOf = (n: ts.Node) => (ts.isJsxElement(n) ? n.openingElement.attributes : ts.isJsxSelfClosingElement(n) ? n.attributes : null);
+  const roleButton = (n: ts.Node) => {
+    const attrs = attrsOf(n);
+    return !!attrs?.properties.some((p) => ts.isJsxAttribute(p) && p.name.getText() === 'role'
+      && !!p.initializer && ts.isStringLiteral(p.initializer) && p.initializer.text === 'button');
+  };
+  const containsControl = (root: ts.JsxElement): string | null => {
+    let hit: string | null = null;
+    const walk = (n: ts.Node) => {
+      if (hit) return;
+      const tag = tagOf(n);
+      // A file input hidden with `className="hidden"` (display: none) takes no
+      // focus; a drop zone that opens one is a single control, not two.
+      const attrs = attrsOf(n);
+      const hidden = !!attrs?.properties.some((p) => ts.isJsxAttribute(p) && p.name.getText() === 'className'
+        && !!p.initializer && ts.isStringLiteral(p.initializer) && /(^|\s)hidden(\s|$)/.test(p.initializer.text));
+      if (tag && !hidden && (CONTROL_TAGS.has(tag) || roleButton(n))) { hit = tag; return; }
+      ts.forEachChild(n, walk);
+    };
+    root.children.forEach((c) => walk(c));
+    return hit;
+  };
+  const visit = (node: ts.Node) => {
+    if (ts.isJsxElement(node) && roleButton(node)) {
+      const inner = containsControl(node);
+      if (inner) out.push({ file, line: sf.getLineAndCharacterOfPosition(node.getStart()).line + 1, what: `role="button" around <${inner}>` });
+    }
+    ts.forEachChild(node, visit);
+  };
+  visit(sf);
+  return out;
+}
+
 export function uncancelledAsyncEffects(file: string, text?: string): Site[] {
   const sf = parse(file, text);
   const out: Site[] = [];
