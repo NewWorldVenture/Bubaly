@@ -77,7 +77,7 @@ export function EventDetailModal({ event, members, selfMemberId, familyId, onClo
       // `.then()` left unhandled.
       const { data, error } = await settle(supabase.from('event_rsvps').select('*').eq('event_id', event.id));
       if (!active) return;
-      if (error) { setRsvpError(describeReadError(error)); return; }
+      if (error) { console.error('[event-detail] RSVP read failed', error); setRsvpError(describeReadError(error)); return; }
       setRsvpError(null);
       setRsvps(data ?? []);
     })();
@@ -167,7 +167,7 @@ export function EventDetailModal({ event, members, selfMemberId, familyId, onClo
             );
           })}
           {rsvpError
-            ? <p className="text-sm text-danger">{rsvpError}</p>
+            ? <p role="alert" title={rsvpError} className="text-sm text-danger">{t('eventDetailModal.couldNotLoadRsvps')}</p>
             : rsvps.length === 0 && <p className="text-sm text-muted">{t('eventDetailModal.noRsvpsYetBeTheFirst')}</p>}
         </div>
 
