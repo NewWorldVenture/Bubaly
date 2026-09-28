@@ -1,10 +1,11 @@
 'use client';
 
 // Idea-attachment upload for the feedback form. Pick or drop an image → uploads
-// to the public `feedback-attachments` bucket at {userId}/{unguessable}.{ext} → the
-// returned public URL becomes the idea's image_url. Client-side validation keeps
-// bad files off the bucket; Remove deletes the object we uploaded.
-import { useRef, useState } from 'react';
+// to the private `feedback-attachments` bucket at {userId}/{unguessable}.{ext} →
+// the object's PATH becomes the idea's image_url, and the preview shows it
+// through a short-lived signed URL. Client-side validation keeps bad files off
+// the bucket; Remove deletes the object we uploaded.
+import { useEffect, useRef, useState } from 'react';
 import { ImagePlus, Loader2, X, UploadCloud } from 'lucide-react';
 import { createClient } from '@/lib/supabase/client';
 import { unguessableObjectName } from '@/lib/storage/object-name';
@@ -31,6 +32,19 @@ export function FeedbackAttachmentUpload({
   const [uploading, setUploading] = useState(false);
   const [dragging, setDragging] = useState(false);
   const [ownedPath, setOwnedPath] = useState<string | null>(null);
+  // The stored value is a path in a private bucket (or, for rows written before
+  // 0450, the old public URL); neither is something an <img> can load. Rendering
+  // it raw showed a broken image for every upload. The preview signs it instead.
+  const [previewUrl, setPreviewUrl] = useState<string | null>(null);
+  useEffect(() => {
+    const path = feedbackAttachmentPath(value, process.env.NEXT_PUBLIC_SUPABASE_URL);
+    if (!path) { setPreviewUrl(null); return; }
+    let live = true;
+    void createClient().storage.from(FEEDBACK_ATTACHMENTS_BUCKET).createSignedUrl(path, 30 * 60)
+      .then(({ data }) => { if (live) setPreviewUrl(data?.signedUrl ?? null); })
+      .catch(() => { if (live) setPreviewUrl(null); });
+    return () => { live = false; };
+  }, [value]);
 
   async function handleFile(file: File) {
     if (!OK_TYPES.includes(file.type)) { toastError(t('feedbackAttachmentUpload.pleaseChooseAJpegPng')); return; }
@@ -38,11 +52,11 @@ export function FeedbackAttachmentUpload({
     setUploading(true);
     try {
       const sb = createClient();
-      // This bucket is PUBLICLY READABLE (`for select using (bucket_id =
-      // 'feedback-attachments')`, no scoping), and the first path segment is the
-      // user id, which is not secret. So the object name is the only thing
-      // between a screenshot and the internet — and these screenshots are of the
-      // product, so they carry names, schedules and balances.
+      // The bucket was PUBLICLY READABLE until 0450, and the first path segment
+      // is the user id, which is not secret, so the object name was the only
+      // thing between a screenshot and the internet — and these screenshots are
+      // of the product, so they carry names, schedules and balances. 0450 made it
+      // private; the unguessable name stays, for the rows written before it.
       //
       // It used to be `${Date.now()}-${Math.random().toString(36).slice(2, 8)}`:
       // a clock anyone can narrow plus SIX base36 characters — 31 bits, a 2.2e9
@@ -79,8 +93,14 @@ export function FeedbackAttachmentUpload({
   if (has) {
     return (
       <div className="relative overflow-hidden rounded-xl border border-border">
-        {/* eslint-disable-next-line @next/next/no-img-element */}
-        <img src={value.trim()} alt={t('feedbackFeedbackAttachmentUpload.ideaAttachment')} className="max-h-48 w-full object-cover" />
+        {previewUrl ? (
+          // eslint-disable-next-line @next/next/no-img-element -- a signed, expiring storage URL; next/image would proxy and cache it
+          <img src={previewUrl} alt={t('feedbackFeedbackAttachmentUpload.ideaAttachment')} className="max-h-48 w-full object-cover" />
+        ) : (
+          <div className="flex h-24 items-center justify-center gap-2 text-sm text-muted">
+            <ImagePlus className="h-4 w-4" aria-hidden /> {t('feedbackFeedbackAttachmentUpload.ideaAttachment')}
+          </div>
+        )}
         <button
           type="button" onClick={() => void remove()}
           className="absolute right-2 top-2 inline-flex items-center gap-1 rounded-lg bg-black/60 px-2 py-1 text-xs font-semibold text-white backdrop-blur transition hover:bg-black/80"
