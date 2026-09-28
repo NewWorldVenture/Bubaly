@@ -67,7 +67,7 @@ export function ConciergeModule() {
   const locale = useLocale();
   const fmtDate = fmtDateIn(locale.code);
   const fmtCents = (cents: number | null) => centsIn(locale.code, cents);
-  const { familyId, userId, selfMember, family } = useApp();
+  const { familyId, userId, family } = useApp();
   const { success, error: toastError } = useToast();
   const [activeKind, setActiveKind] = useState<string | null>(null);
   const [messages, setMessages] = useState<ChatMessage[]>([]);
@@ -152,7 +152,6 @@ export function ConciergeModule() {
     void refreshPlans();
   }
 
-  const name = selfMember?.display_name?.split(' ')[0] ?? 'there';
   const activePlans  = plans.filter(p => !['completed', 'cancelled'].includes(p.status));
   const pastPlans    = plans.filter(p => ['completed', 'cancelled'].includes(p.status));
 

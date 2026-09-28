@@ -348,7 +348,9 @@ export async function AiHomeDashboard({ ctx }: { ctx: UserContext }) {
   const needs = topNeeds(homeNeeds, 5);
   const needsHeader = conflictsUnavailable ? t('needsAttention.needsYourAttention') : needsHeadline(summarizeNeeds(homeNeeds));
 
-  const name = me.display_name ?? ctx.user.email?.split('@')[0] ?? 'there';
+  // `||`, not `??`: an empty display name is no name, and "Good afternoon, ."
+  // is what `??` let through. With no name at all the greeting has none.
+  const first = (me.display_name?.trim() || ctx.user.email?.split('@')[0] || '').split(' ')[0];
   const today = buildToday({
     events: (todayEvents ?? []) as TodayEventRow[],
     todos: (todosDueRes.data ?? []) as TodayTodoRow[],
@@ -462,7 +464,7 @@ export async function AiHomeDashboard({ ctx }: { ctx: UserContext }) {
       <div className="flex items-start justify-between">
         <div>
           <p className="text-sm text-muted">{todayLabel(locale.code)}</p>
-          <h1 className="mt-0.5 text-2xl font-bold sm:text-3xl">{phaseGreeting(dayPhase(new Date(), tz), t)}, {name.split(' ')[0]}.</h1>
+          <h1 className="mt-0.5 text-2xl font-bold sm:text-3xl">{phaseGreeting(dayPhase(new Date(), tz), t)}{first ? `, ${first}` : ''}.</h1>
         </div>
         <Link href="/dashboard/assistant" className="flex items-center gap-1.5 rounded-full bg-brand/10 px-3 py-1.5 text-xs font-semibold text-brand-text hover:bg-brand/20 transition">
           <Sparkles className="h-3.5 w-3.5" /> {t('aiHomeDashboard.askAi')}
