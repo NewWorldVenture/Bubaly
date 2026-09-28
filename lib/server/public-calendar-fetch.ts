@@ -1,5 +1,8 @@
 import { lookup } from 'node:dns/promises';
-import { isIP } from 'node:net';
+import { Agent as HttpAgent, request as httpRequest } from 'node:http';
+import { Agent as HttpsAgent, request as httpsRequest } from 'node:https';
+import { isIP, type LookupFunction } from 'node:net';
+import { Readable } from 'node:stream';
 import { normalizeFeedUrl } from '@/lib/calendar/feeds';
 
 export const MAX_CALENDAR_RESPONSE_BYTES = 1_048_576;
@@ -119,6 +122,61 @@ export async function validatePublicCalendarUrl(raw: string, lookupImpl: PublicU
   return normalized;
 }
 
+/**
+ * A fetch whose connection goes to the address it just checked, and only there.
+ *
+ * `validatePublicCalendarUrl` resolves a hostname and refuses private answers,
+ * but a later `fetch(hostname)` resolves it AGAIN: an attacker's DNS can answer
+ * the check with a public address and the connection, with a zero TTL, with an
+ * internal one (DNS rebinding). Here the resolution that is checked is the one
+ * the socket uses: `lookup` hands the connection the validated address, the URL
+ * keeps the hostname for Host and TLS, and no pooled connection or proxy can
+ * route around it. The same pattern as lib/server/public-document-fetch.ts, for
+ * http as well as https (calendar feeds are often plain http).
+ *
+ * `blocked` is the address policy; a test passes its own to reach a loopback
+ * server, and nothing else should.
+ */
+export function pinnedPublicFetch(lookupImpl: PublicUrlLookup = lookupAll, blocked: (address: string) => boolean = blockedIp): typeof fetch {
+  return async (input, init) => {
+    const url = new URL(typeof input === 'string' ? input : input instanceof URL ? input.href : input.url);
+    if (url.protocol !== 'http:' && url.protocol !== 'https:') throw new TypeError('Unsupported protocol');
+    const host = url.hostname.replace(/^\[|\]$/g, '');
+    const family = isIP(host);
+    const addresses = family ? [{ address: host, family }] : await lookupImpl(host);
+    if (!addresses.length || addresses.some((entry) => blocked(entry.address))) throw new TypeError('Address is not public');
+    const pinned = addresses[0];
+    const pin: LookupFunction = (_hostname, options, callback) => {
+      if (options?.all) callback(null, [{ address: pinned.address, family: pinned.family }]);
+      else callback(null, pinned.address, pinned.family);
+    };
+    const secure = url.protocol === 'https:';
+    const agent = secure ? new HttpsAgent({ keepAlive: false, maxCachedSessions: 0 }) : new HttpAgent({ keepAlive: false });
+    const headers: Record<string, string> = { ...(init?.headers as Record<string, string> | undefined), 'Accept-Encoding': 'identity' };
+    return new Promise<Response>((resolve, reject) => {
+      const request = (secure ? httpsRequest : httpRequest)(url, {
+        method: 'GET', agent, lookup: pin, family: pinned.family, headers, signal: init?.signal ?? undefined,
+      }, (res) => {
+        res.once('close', () => agent.destroy());
+        const responseHeaders = new Headers();
+        for (const [name, value] of Object.entries(res.headers)) {
+          if (Array.isArray(value)) value.forEach((item) => responseHeaders.append(name, item));
+          else if (value !== undefined) responseHeaders.set(name, String(value));
+        }
+        const status = res.statusCode ?? 502;
+        try {
+          const body = status === 204 || status === 304 ? null : Readable.toWeb(res) as ReadableStream<Uint8Array>;
+          resolve(new Response(body, { status, headers: responseHeaders }));
+        } catch (error) {
+          res.destroy(); reject(error);
+        }
+      });
+      request.once('error', (error) => { agent.destroy(); reject(error); });
+      request.end();
+    });
+  };
+}
+
 async function readBoundedText(response: Response, maxBytes: number): Promise<string | null> {
   const declared = Number(response.headers.get('content-length') ?? '');
   if (Number.isFinite(declared) && declared > maxBytes) return null;
@@ -162,16 +220,18 @@ export type PublicTextFetchOptions = {
 export async function fetchPublicText(
   raw: string,
   options: PublicTextFetchOptions,
-  fetchImpl: typeof fetch = fetch,
+  fetchImpl?: typeof fetch,
   lookupImpl: PublicUrlLookup = lookupAll,
 ): Promise<PublicTextFetchResult> {
   const label = options.label || 'Public resource';
+  // Every hop connects to the address its own resolution validated.
+  const request = fetchImpl ?? pinnedPublicFetch(lookupImpl);
   let url = await validatePublicCalendarUrl(raw, lookupImpl);
   if (!url) return { ok: false, error: `${label} URL must resolve to a public HTTP(S) host.`, status: 400 };
   try {
     let response: Response | null = null;
     for (let redirect = 0; redirect <= 3; redirect += 1) {
-      response = await fetchImpl(url, {
+      response = await request(url, {
         redirect: 'manual',
         headers: options.headers,
         signal: AbortSignal.timeout(15_000),
@@ -196,7 +256,7 @@ export async function fetchPublicText(
 /** Validates a public URL, limits response memory, and returns calendar text. */
 export async function fetchPublicCalendarText(
   raw: string,
-  fetchImpl: typeof fetch = fetch,
+  fetchImpl?: typeof fetch,
   lookupImpl: PublicUrlLookup = lookupAll,
 ): Promise<CalendarFetchResult> {
   const result = await fetchPublicText(raw, {
