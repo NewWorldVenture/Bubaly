@@ -160,7 +160,9 @@ export async function addFundsAction(input: { childWalletId: string; amountCents
       status: 'completed' as const,
       direction: 'credit' as const,
       amount_cents: parts[k],
-      description: input.description || 'Parent top-up',
+      // Null without one: the row then reads as its type, in each reader's
+      // language. A default written here was English in every household.
+      description: input.description?.trim() || null,
       created_by: userId,
       approved_by: userId,
       metadata: { split },

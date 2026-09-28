@@ -80,8 +80,8 @@ export function SendMoneyView({ wallets, canManage }: { wallets: SendChild[]; ca
     <div className="mx-auto max-w-md">
       {/* Header */}
       <div className="flex items-center gap-3 px-4 py-4">
-        <Link href="/wallet" className="rounded-xl p-2 hover:bg-elevated transition">
-          <ArrowLeft className="h-5 w-5" />
+        <Link href="/wallet" aria-label={t('appNotFound.backToWallet')} className="rounded-xl p-2 hover:bg-elevated transition">
+          <ArrowLeft className="h-5 w-5" aria-hidden="true" />
         </Link>
         <h1 className="text-lg font-bold">{t('sendMoney.sendMoney')}</h1>
       </div>

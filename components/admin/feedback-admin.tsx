@@ -140,7 +140,7 @@ export function FeedbackAdmin({ ideas, comments, notifications = [], githubConfi
                   {n.body && <p className="mt-0.5 whitespace-pre-line text-muted">{n.body}</p>}
                   <p className="mt-0.5 text-[11px] text-muted">{fmt(n.created_at)}</p>
                 </div>
-                {n.url && <Link href={n.url} className="shrink-0 text-brand-text"><ExternalLink className="h-3.5 w-3.5" /></Link>}
+                {n.url && <Link href={n.url} aria-label={`${t('adminNotificationsList.open')}: ${n.title}`} className="shrink-0 text-brand-text"><ExternalLink className="h-3.5 w-3.5" aria-hidden="true" /></Link>}
               </li>
             ))}
           </ul>

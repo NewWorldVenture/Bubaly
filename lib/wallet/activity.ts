@@ -14,6 +14,22 @@ export function txnTypeLabel(type: string): string {
   return TYPE_LABEL[type] ?? type.replace(/_/g, ' ');
 }
 
+/**
+ * The catalogue key for a transaction type or status, for a rendered surface.
+ * `txnTypeLabel` is English and stays for what has no reader whose language we
+ * know (the statement export). A type or status the catalogue does not name
+ * has no key, and the caller falls back to the English label.
+ */
+export function txnTypeKey(type: string): string | null {
+  return type in TYPE_LABEL ? `walletTxn.type.${type}` : null;
+}
+
+const STATUSES = ['pending', 'requires_parent_approval', 'processing', 'completed', 'failed', 'reversed', 'cancelled'];
+
+export function txnStatusKey(status: string): string | null {
+  return STATUSES.includes(status) ? `walletTxn.status.${status}` : null;
+}
+
 export type ActivityTxn = {
   id: string;
   child_wallet_id: string | null;
