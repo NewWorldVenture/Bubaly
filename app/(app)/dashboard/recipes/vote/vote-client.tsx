@@ -157,7 +157,7 @@ function CreateVoteModal({ recipes, onClose }: { recipes: RecipeLite[]; onClose:
     <Modal open onClose={onClose} title={tr('dashboardRecipesVoteVoteClient.newMealVote')}>
       <div className="space-y-4">
         <Input value={title} onChange={(e) => setTitle(e.target.value)} placeholder={tr('dashboardRecipesVoteVoteClient.eGFridayDinner')} />
-        <Input type="date" value={mealDate} onChange={(e) => setMealDate(e.target.value)} />
+        <Input type="date" aria-label={tr('fieldName.date')} value={mealDate} onChange={(e) => setMealDate(e.target.value)} />
         <div>
           <p className="mb-1.5 text-sm font-semibold">{tr('dashboardRecipesVoteVoteClient.optionsFromYourRecipes')}</p>
           <Input value={search} onChange={(e) => setSearch(e.target.value)} placeholder={tr('dashboardRecipesVoteVoteClient.searchYourRecipes')} />

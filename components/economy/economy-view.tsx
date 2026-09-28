@@ -222,7 +222,7 @@ function ManagePanel({ currencies, kids, busy, onCreateCurrency, onAward, onCrea
       <section className="rounded-2xl border border-border bg-surface/40 p-4">
         <h3 className="mb-3 font-semibold">{tr('economy.newCurrency')}</h3>
         <div className="flex flex-wrap gap-2">
-          <input value={cEmoji} onChange={(e) => setCEmoji(e.target.value)} className="h-10 w-14 rounded-lg border border-border bg-bg px-2 text-center text-lg focus-ring" />
+          <input value={cEmoji} onChange={(e) => setCEmoji(e.target.value)} aria-label={tr('fieldName.emoji')} className="h-10 w-14 rounded-lg border border-border bg-bg px-2 text-center text-lg focus-ring" />
           <input value={cName} onChange={(e) => setCName(e.target.value)} placeholder={tr('economy.nameEGStars')} className="h-10 min-w-[140px] flex-1 rounded-lg border border-border bg-bg px-3 text-sm focus-ring" />
           <input value={cUnit} onChange={(e) => setCUnit(e.target.value)} placeholder={tr('economy.unitOptional')} className="h-10 w-32 rounded-lg border border-border bg-bg px-3 text-sm focus-ring" />
           <Button onClick={() => onCreateCurrency(cName, cEmoji, cUnit)} loading={busy === 'new-currency'} disabled={!cName.trim()}><Plus className="mr-1 h-4 w-4" /> Add</Button>
@@ -250,7 +250,7 @@ function ManagePanel({ currencies, kids, busy, onCreateCurrency, onAward, onCrea
         <section className="rounded-2xl border border-border bg-surface/40 p-4">
           <h3 className="mb-3 font-semibold">{tr('economy.newReward')}</h3>
           <div className="flex flex-wrap gap-2">
-            <input value={rEmoji} onChange={(e) => setREmoji(e.target.value)} className="h-10 w-14 rounded-lg border border-border bg-bg px-2 text-center text-lg focus-ring" />
+            <input value={rEmoji} onChange={(e) => setREmoji(e.target.value)} aria-label={tr('fieldName.emoji')} className="h-10 w-14 rounded-lg border border-border bg-bg px-2 text-center text-lg focus-ring" />
             <input value={rTitle} onChange={(e) => setRTitle(e.target.value)} placeholder={tr('economy.rewardEGMovieNightPick')} className="h-10 min-w-[160px] flex-1 rounded-lg border border-border bg-bg px-3 text-sm focus-ring" />
             <input type="number" min="1" value={rCost} onChange={(e) => setRCost(e.target.value)} placeholder={tr('economy.cost')} className="h-10 w-24 rounded-lg border border-border bg-bg px-3 text-sm focus-ring" />
             <select aria-label={tr('fieldName.currency')} value={rCur} onChange={(e) => setRCur(e.target.value)} className="h-10 rounded-lg border border-border bg-bg px-2 text-sm focus-ring">

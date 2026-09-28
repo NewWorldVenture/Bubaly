@@ -162,7 +162,7 @@ export function ContactTimelineModule({
             className="mt-3 h-10 w-full rounded-xl border border-border bg-bg px-3 text-sm text-fg outline-none ring-brand/50 placeholder:text-muted focus:ring-2"
           />
           <div className="mt-2 flex flex-col gap-2 sm:flex-row">
-            <input name="occurred_on" type="date" defaultValue={new Date().toISOString().slice(0, 10)}
+            <input name="occurred_on" type="date" aria-label={tr('fieldName.date')} defaultValue={new Date().toISOString().slice(0, 10)}
               className="h-10 rounded-xl border border-border bg-bg px-3 text-sm text-fg outline-none ring-brand/50 focus:ring-2" />
             <input name="amount" type="number" inputMode="decimal" step="0.01" min="0" placeholder={tr('contactTimeline.giftsOptional')}
               className="h-10 w-36 rounded-xl border border-border bg-bg px-3 text-sm text-fg outline-none ring-brand/50 placeholder:text-muted focus:ring-2" />

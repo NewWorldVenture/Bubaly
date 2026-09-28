@@ -127,7 +127,7 @@ export function SleepModule() {
           return (
             <button key={m.id} role="tab" aria-selected={m.id === memberId} onClick={() => setMemberId(m.id)}
               className={cn('rounded-full border px-3 py-1.5 text-sm transition coarse:min-h-11', m.id === memberId ? 'border-brand bg-brand/15 text-brand-text' : 'border-border bg-surface/40 text-muted hover:text-fg')}>
-              {m.display_name}{a !== null ? <span className="ml-1 text-xs opacity-70">· {recommendedSleepHours(a).min}–{recommendedSleepHours(a).max}h</span> : null}
+              {m.display_name}{a !== null ? <span className="ml-1 text-xs">· {recommendedSleepHours(a).min}–{recommendedSleepHours(a).max}h</span> : null}
             </button>
           );
         })}

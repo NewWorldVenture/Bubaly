@@ -10,12 +10,5 @@ export async function generateMetadata(): Promise<Metadata> {
 
 export default async function TripMemoriesPage() {
   await requireFeature('/dashboard/trip-memories');
-  const t = await getTranslations();
-  return (
-    <>
-      {/* The module draws no heading of its own; this names the page for assistive technology (MAIN-F-D05). */}
-      <h1 className="sr-only">{t('tripMemories.tripMemories')}</h1>
-      <TripMemoriesModule />
-    </>
-  );
+  return <TripMemoriesModule />;
 }

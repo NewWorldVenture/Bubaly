@@ -2,7 +2,6 @@
 
 import Link from 'next/link';
 import { useMemo, useState } from 'react';
-import { openOnKey } from '@/lib/ui/a11y';
 import {
   Users, Plus, Phone, Mail, MapPin, Star, Trash2, Edit2,
   Search, User, Stethoscope, GraduationCap, Trophy, Home,
@@ -51,12 +50,19 @@ function initials(name: string) {
   return name.split(' ').map((w) => w[0]).slice(0, 2).join('').toUpperCase();
 }
 
-const AVATAR_COLORS = [
-  '#7c5dfa', '#f4996e', '#22c55e', '#3b82f6', '#f59e0b',
-  '#ec4899', '#14b8a6', '#ef4444', '#8b5cf6', '#06b6d4',
+// Each background carries the initials colour it passes WCAG AA (4.5:1) with.
+// The initials used the theme's `fg`, which is near-white in the dark theme, and
+// on seven of these backgrounds that measured 1.9–3.3:1. The two purples are a
+// shade darker than they were so that white clears 4.5:1 on them.
+const AVATAR_COLORS: readonly { background: string; color: string }[] = [
+  { background: '#6a4be8', color: '#ffffff' }, { background: '#f4996e', color: '#171c2a' },
+  { background: '#22c55e', color: '#171c2a' }, { background: '#3b82f6', color: '#171c2a' },
+  { background: '#f59e0b', color: '#171c2a' }, { background: '#ec4899', color: '#171c2a' },
+  { background: '#14b8a6', color: '#171c2a' }, { background: '#ef4444', color: '#171c2a' },
+  { background: '#7c3aed', color: '#ffffff' }, { background: '#06b6d4', color: '#171c2a' },
 ];
 
-function avatarColor(name: string) {
+function avatarStyle(name: string) {
   const idx = name.split('').reduce((a, c) => a + c.charCodeAt(0), 0) % AVATAR_COLORS.length;
   return AVATAR_COLORS[idx];
 }
@@ -151,7 +157,7 @@ export function ContactsModule() {
               <button key={c.id} onClick={() => setSelected(c)}
                 className="flex items-center gap-3 rounded-xl border border-danger/20 bg-danger/5 px-3 py-2 text-left hover:bg-danger/10 transition">
                 <div className="flex h-9 w-9 items-center justify-center rounded-full text-sm font-bold text-fg"
-                  style={{ background: avatarColor(c.name) }}>
+                  style={avatarStyle(c.name)}>
                   {initials(c.name)}
                 </div>
                 <div>
@@ -192,18 +198,20 @@ export function ContactsModule() {
                 const isSelected = selected?.id === contact.id;
                 return (
                   <div key={contact.id}
-                    role="button" tabIndex={0}
+                    role="presentation"
                     onClick={() => setSelected(isSelected ? null : contact)}
-                    onKeyDown={(e) => openOnKey(e, () => setSelected(isSelected ? null : contact))}
                     className={cn(
                       'flex cursor-pointer items-center gap-4 border-b border-border/50 px-4 py-3 transition last:border-0',
                       isSelected ? 'bg-brand/10' : 'hover:bg-elevated/30',
                     )}>
-                    {/* The row's onClick stays for the mouse. The control is this
+                    {/* The row's onClick stays for the mouse (the badge and the
+                        chevron sit outside this button). The control is this
                         button, not role="button" on the row: the row holds a call
                         button and a mailto link, and role="button" has
                         presentational children — assistive technology may drop the
-                        semantics of both. It carries aria-expanded because the row
+                        semantics of both. The row had become role="button" again
+                        and a second button had been nested inside this one; axe
+                        reported both as nested-interactive, so both are gone. It carries aria-expanded because the row
                         toggles the detail panel rather than navigating, and
                         stopPropagation because without it the row's handler would
                         fire second and toggle straight back. */}
@@ -212,7 +220,7 @@ export function ContactsModule() {
                       className="focus-ring flex min-w-0 flex-1 items-center gap-4 rounded-lg text-left">
                     {/* Avatar */}
                     <div className="relative flex h-11 w-11 flex-shrink-0 items-center justify-center rounded-full text-sm font-bold text-fg"
-                      style={{ background: avatarColor(contact.name) }}>
+                      style={avatarStyle(contact.name)}>
                       {initials(contact.name)}
                       {contact.is_emergency && (
                         <div className="absolute -right-0.5 -top-0.5 flex h-4 w-4 items-center justify-center rounded-full bg-danger text-[8px] text-danger-fg">!</div>
@@ -222,10 +230,7 @@ export function ContactsModule() {
                     {/* Info */}
                     <div className="flex-1 min-w-0">
                       <div className="flex items-center gap-2">
-                        <p className="truncate font-semibold text-sm">
-                        {/* A real button, so the keyboard can select the contact; its click bubbles to the row (MAIN-F-D06). */}
-                        <button type="button" aria-pressed={isSelected} className="block max-w-full truncate text-left">{contact.name}</button>
-                      </p>
+                        <p className="truncate font-semibold text-sm">{contact.name}</p>
                         {contact.is_emergency && <Badge tone="danger" className="hidden sm:inline-flex">{t('contacts.emergency')}</Badge>}
                       </div>
                       <div className="flex items-center gap-3 text-xs text-muted">
@@ -271,7 +276,7 @@ export function ContactsModule() {
               <div className="mb-5 flex items-start justify-between">
                 <div className="flex items-center gap-3">
                   <div className="flex h-14 w-14 items-center justify-center rounded-2xl text-lg font-bold text-fg"
-                    style={{ background: avatarColor(selected.name) }}>
+                    style={avatarStyle(selected.name)}>
                     {initials(selected.name)}
                   </div>
                   <div>

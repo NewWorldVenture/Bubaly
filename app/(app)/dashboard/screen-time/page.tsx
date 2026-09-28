@@ -10,12 +10,5 @@ export async function generateMetadata(): Promise<Metadata> {
 
 export default async function ScreenTimePage() {
   await requireFeature('/dashboard/screen-time');
-  const t = await getTranslations();
-  return (
-    <>
-      {/* The module draws no heading of its own; this names the page for assistive technology (MAIN-F-D05). */}
-      <h1 className="sr-only">{t('screenTime.pageTitle')}</h1>
-      <ScreenTimeModule />
-    </>
-  );
+  return <ScreenTimeModule />;
 }
