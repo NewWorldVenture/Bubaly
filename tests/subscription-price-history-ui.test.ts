@@ -126,7 +126,8 @@ beforeEach(() => {
   // The save confirms its write with .select('id') (Audit C1-S9-81), so an
   // update resolves through that step with the row it changed.
   mocks.selectUpdated.mockReset().mockResolvedValue({ data: [{ id: subscription.id }], error: null });
-  mocks.eq.mockReset().mockReturnValue({ select: mocks.selectUpdated });
+  // The update is scoped to the row AND the family (0460), so `.eq` chains.
+  mocks.eq.mockReset().mockImplementation(() => ({ eq: mocks.eq, select: mocks.selectUpdated }));
   mocks.toastSuccess.mockReset();
   mocks.toastError.mockReset();
   mocks.update.mockReset().mockReturnValue({ eq: mocks.eq });
@@ -178,6 +179,7 @@ describe('reachable recorded charge history and explicit edit', () => {
     expect(mocks.update).toHaveBeenCalledOnce();
     expect(mocks.update).toHaveBeenCalledWith({ name: 'Example Media', cost_cents: 1750, cadence: 'monthly', category: 'Streaming', status: 'trial', next_charge: '2026-09-15', last_used: null, note: 'Keep this note' });
     expect(mocks.eq).toHaveBeenCalledWith('id', subscription.id);
+    expect(mocks.eq).toHaveBeenCalledWith('family_id', 'family-a');
     expect(mocks.selectUpdated).toHaveBeenCalledWith('id');
     expect(mocks.toastSuccess).toHaveBeenCalledWith('Updated');
     expect(mocks.toastError).not.toHaveBeenCalled();
