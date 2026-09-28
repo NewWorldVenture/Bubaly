@@ -366,7 +366,7 @@ export default async function MarketplaceHomePage() {
       <aside className="min-w-0 space-y-4">
         {/* AI Marketplace Assistant — the real in-rail specialist (backlog #11):
             answers from the live board; upgrades to the configured LLM. */}
-        <MarketAssistant firstName={ctx.active.member.display_name?.split(' ')[0] ?? 'there'} />
+        <MarketAssistant firstName={(ctx.active.member.display_name?.trim() || '').split(' ')[0]} />
 
         {/* Nearby Activity */}
         <section className="rounded-2xl border border-border bg-surface/60 p-4">

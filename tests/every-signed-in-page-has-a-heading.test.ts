@@ -69,4 +69,14 @@ describe('every signed-in page has a heading', () => {
     const bare = pages.filter((p) => !isPureRedirect(readFileSync(p, 'utf8')) && !headed(p) && !layoutsAbove(p).some((l) => headed(l)));
     expect(bare, 'add a visible title as an <h1>, or <h1 className="sr-only"> when the design has none').toEqual([]);
   });
+
+  // The static walk above counts an <h1> anywhere in a page's imports, so a page
+  // whose only <h1> is on a screen it shows in ONE state passes. /wallet/activity
+  // imported the wallet activation screen, which has one; once the wallet was
+  // active the page drew none (P-35, found by axe on an activated wallet).
+  it('a wallet page draws its own <h1> once the wallet is active, not only the activation screen\'s', () => {
+    for (const view of ['components/wallet/activity-view.tsx', 'components/wallet/send-money-view.tsx', 'components/wallet/child-detail-view.tsx']) {
+      expect(readFileSync(view, 'utf8'), view).toMatch(/<h1\b/);
+    }
+  });
 });

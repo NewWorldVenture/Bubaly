@@ -152,7 +152,8 @@ export async function PersonalDashboard({ ctx }: { ctx: UserContext }) {
   // Role-tailored greeting (Friction #8): parents get a formal line, adults a
   // casual one, kids a warm emoji greeting — same treatment as Home, now on the
   // personal dashboard too.
-  const firstName = (me.display_name || 'there').split(' ')[0];
+  // Empty when there is no name: roleGreeting says "there" in the reader's language.
+  const firstName = (me.display_name?.trim() || '').split(' ')[0];
   const greeting = roleGreeting(role, firstName, dayPhase(new Date(), ctx.active.family.timezone || 'UTC'), tr);
   const showWave = roleSurface(role).tone !== 'kid'; // kid greetings already carry an emoji
 

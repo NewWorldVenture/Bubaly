@@ -4,17 +4,14 @@ import { useMemo, useState } from 'react';
 import { Receipt, ArrowDownLeft, ArrowUpRight, Download } from 'lucide-react';
 import { EmptyState } from '@/components/ui/states';
 import { formatCents as formatCentsIn } from '@/lib/wallet/ledger';
-import { txnTypeLabel, signedAmountCents, filterTxns, groupByDay, netCents, toStatementCsv, statementFilename, type ActivityTxn } from '@/lib/wallet/activity';
+import { txnTypeLabel, txnTypeKey, txnStatusKey, signedAmountCents, filterTxns, groupByDay, netCents, toStatementCsv, statementFilename, type ActivityTxn } from '@/lib/wallet/activity';
 import { WalletSubnav } from '@/components/wallet/wallet-subnav';
 import { useLocale, useTranslations } from '@/components/i18n/locale-provider';
 import type { LocaleCode } from '@/lib/i18n/locales';
 
 type Row = ActivityTxn & { childName: string | null };
 
-const TYPES: { value: string; label: string }[] = [
-  { value: '', label: 'All types' },
-  ...['parent_top_up', 'allowance', 'chore_reward', 'gift_received', 'transfer', 'goal_transfer', 'babysitter_payment', 'card_spend', 'card_refund', 'adjustment', 'reversal'].map((v) => ({ value: v, label: txnTypeLabel(v) })),
-];
+const TYPES = ['parent_top_up', 'allowance', 'chore_reward', 'gift_received', 'transfer', 'goal_transfer', 'babysitter_payment', 'card_spend', 'card_refund', 'adjustment', 'reversal'];
 
 const dayLabelIn = (locale: LocaleCode) => (date: string): string => {
   return new Date(date + 'T00:00:00').toLocaleDateString(locale, { weekday: 'short', month: 'short', day: 'numeric', year: 'numeric' });
@@ -27,6 +24,10 @@ export function WalletActivityView({ rows, childOptions }: { rows: Row[]; childO
   const formatCents = (cents: number, currency?: string) =>
     formatCentsIn(cents, currency, locale.code);
   const tr = useTranslations();
+  // Types and statuses in the reader's language; the English label is only the
+  // fallback for a value the catalogue does not name.
+  const typeLabel = (type: string) => { const key = txnTypeKey(type); return key ? tr(key) : txnTypeLabel(type); };
+  const statusLabel = (status: string) => { const key = txnStatusKey(status); return key ? tr(key) : status.replace(/_/g, ' '); };
   const [child, setChild] = useState('');
   const [type, setType] = useState('');
   const [direction, setDirection] = useState('');
@@ -59,14 +60,16 @@ export function WalletActivityView({ rows, childOptions }: { rows: Row[]; childO
     <div>
       <WalletSubnav />
       <div className="mb-4 flex flex-wrap items-center justify-between gap-3">
-        <h2 className="flex items-center gap-2 text-lg font-bold"><Receipt className="h-5 w-5 text-brand-text" /> {tr('activity.activity')}</h2>
+        {/* The page's title: the activated wallet's activity page had no <h1>. */}
+        <h1 className="flex items-center gap-2 text-lg font-bold"><Receipt className="h-5 w-5 text-brand-text" /> {tr('activity.activity')}</h1>
         <div className="flex flex-wrap gap-2">
           <select value={child} onChange={(e) => setChild(e.target.value)} className={selCls} aria-label={tr('activity.child')}>
             <option value="">{tr('activity.allChildren')}</option>
             {childOptions.map((c) => <option key={c.id} value={c.id}>{c.name}</option>)}
           </select>
           <select value={type} onChange={(e) => setType(e.target.value)} className={selCls} aria-label={tr('activity.type')}>
-            {TYPES.map((t) => <option key={t.value} value={t.value}>{t.label}</option>)}
+            <option value="">{tr('walletTxn.allTypes')}</option>
+            {TYPES.map((v) => <option key={v} value={v}>{typeLabel(v)}</option>)}
           </select>
           <select value={direction} onChange={(e) => setDirection(e.target.value)} className={selCls} aria-label={tr('activity.direction')}>
             <option value="">{tr('activity.inAmpOut')}</option>
@@ -107,9 +110,9 @@ export function WalletActivityView({ rows, childOptions }: { rows: Row[]; childO
                         {credit ? <ArrowDownLeft className="h-4 w-4" /> : <ArrowUpRight className="h-4 w-4" />}
                       </div>
                       <div className="min-w-0 flex-1">
-                        <p className="truncate text-sm font-medium">{tx.description || txnTypeLabel(tx.type)}</p>
+                        <p className="truncate text-sm font-medium">{tx.description || typeLabel(tx.type)}</p>
                         <p className="text-xs text-muted">
-                          {txnTypeLabel(tx.type)}{tx.childName ? ` · ${tx.childName}` : ''}{tx.status !== 'completed' ? ` · ${tx.status.replace(/_/g, ' ')}` : ''}
+                          {typeLabel(tx.type)}{tx.childName ? ` · ${tx.childName}` : ''}{tx.status !== 'completed' ? ` · ${statusLabel(tx.status)}` : ''}
                         </p>
                       </div>
                       <p className={`shrink-0 text-sm font-semibold ${credit ? 'text-success' : 'text-danger'}`}>{credit ? '+' : '−'}{formatCents(Math.abs(signed))}</p>

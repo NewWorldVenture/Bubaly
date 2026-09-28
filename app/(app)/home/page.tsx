@@ -267,7 +267,9 @@ export default async function HomePage() {
   // strip, never as a strip that looks all clear.
   const schedulePromise = loadScheduleIntelligence(supabase, { familyId, tz, now, fromMs: dayBounds.start, toMs: dayBounds.end });
   const me = ctx.active.member;
-  const myFirstName = (me.display_name ?? ctx.user.email?.split('@')[0] ?? 'there').split(' ')[0];
+  // Empty when there is no name: roleGreeting then uses the catalogue's own
+  // word for "there", which an English literal here overrode in every language.
+  const myFirstName = (me.display_name?.trim() || ctx.user.email?.split('@')[0] || '').split(' ')[0];
 
   const score = familyScore({
     choresToday: choresToday ?? 0,
