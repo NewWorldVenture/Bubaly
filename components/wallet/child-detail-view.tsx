@@ -23,9 +23,9 @@ import { EmptyState } from '@/components/ui/states';
 import { Avatar } from '@/components/ui/avatar';
 import { cn } from '@/lib/utils/cn';
 import { progressBarA11y } from '@/lib/ui/a11y';
-import { fmtRelative } from '@/lib/utils/format';
+import { useFormat } from '@/components/i18n/use-format';
 import { formatCents as formatCentsIn, goalProgress, type BucketKind, type Split } from '@/lib/wallet/ledger';
-import { txnTypeLabel, signedAmountCents, groupByDay, toStatementCsv, statementFilename, type ActivityTxn } from '@/lib/wallet/activity';
+import { txnTypeLabel, txnTypeKey, signedAmountCents, groupByDay, toStatementCsv, statementFilename, type ActivityTxn } from '@/lib/wallet/activity';
 import { addFundsAction, requestSpendAction, sendMoneyAction, requestAllowanceAction } from '@/app/(app)/wallet/actions';
 import { describeDbError } from '@/lib/supabase/errors';
 import { useLocale, useTranslations } from '@/components/i18n/locale-provider';
@@ -222,7 +222,7 @@ function AICoachCard({ childId }: { childId: string }) {
           )}
         </div>
         <div>
-          <p className="text-sm font-semibold text-brand-text">{loading ? 'Thinking…' : 'Ask AI Money Coach'}</p>
+          <p className="text-sm font-semibold text-brand-text">{loading ? t('childDetail.thinking') : t('childDetail.askAiMoneyCoach')}</p>
           <p className="text-xs text-muted">{t('childDetail.getPersonalisedInsightsForThisWallet')}</p>
         </div>
         {!loading && <ChevronRight className="ml-auto h-4 w-4 text-muted" />}
@@ -325,12 +325,13 @@ const TXN_TYPE_ICON: Record<string, typeof ArrowDownLeft> = {
   reversal: Check,
 };
 
-const TRUST_BASIS_LABEL: Record<string, string> = {
-  role_default: 'Auto',
-  allow_grant: 'Allowed',
-  policy: 'Policy',
-  delegation: 'Delegated',
-  emergency: 'Emergency',
+// The catalogue key for each trust basis a card spend can carry.
+const TRUST_BASIS_KEY: Record<string, string> = {
+  role_default: 'childDetail.trustBasis.roleDefault',
+  allow_grant: 'childDetail.trustBasis.allowGrant',
+  policy: 'childDetail.trustBasis.policy',
+  delegation: 'childDetail.trustBasis.delegation',
+  emergency: 'childDetail.trustBasis.emergency',
 };
 
 function TxnRow({ tx }: { tx: HistoryTxn }) {
@@ -339,6 +340,11 @@ function TxnRow({ tx }: { tx: HistoryTxn }) {
   const formatCents = (cents: number, currency?: string) =>
     formatCentsIn(cents, currency, locale.code);
   const t = useTranslations();
+  // The reader's language and clock, not en-US's: "Today, 11:44 AM" was
+  // English in every household.
+  const { fmtRelative } = useFormat();
+  const typeKey = txnTypeKey(tx.type);
+  const typeLabel = typeKey ? t(typeKey) : txnTypeLabel(tx.type);
   const signed = signedAmountCents(tx);
   const credit = signed >= 0;
   const Icon = TXN_TYPE_ICON[tx.type] ?? (credit ? ArrowDownLeft : ArrowUpRight);
@@ -349,7 +355,7 @@ function TxnRow({ tx }: { tx: HistoryTxn }) {
   const trustBasis = tx.status === 'completed' && tx.type === 'card_spend' && tx.metadata?.trust_basis
     ? String(tx.metadata.trust_basis)
     : null;
-  const trustLabel = trustBasis ? (TRUST_BASIS_LABEL[trustBasis] ?? null) : null;
+  const trustLabel = trustBasis && TRUST_BASIS_KEY[trustBasis] ? t(TRUST_BASIS_KEY[trustBasis]) : null;
 
   return (
     <div className="flex items-center gap-3 px-3 py-2.5">
@@ -361,11 +367,11 @@ function TxnRow({ tx }: { tx: HistoryTxn }) {
       </div>
       <div className="min-w-0 flex-1">
         <p className="truncate text-sm font-medium">
-          {tx.description || txnTypeLabel(tx.type)}
+          {tx.description || typeLabel}
         </p>
         <p suppressHydrationWarning className="flex items-center gap-1 text-[11px] text-muted">
           {meta && <span className={cn('flex items-center gap-0.5', meta.color)}><meta.icon className="h-3 w-3" /> {t(meta.labelKey)} · </span>}
-          {txnTypeLabel(tx.type)} · {fmtRelative(tx.created_at)}
+          {typeLabel} · {fmtRelative(tx.created_at)}
           {isPending && <span className="text-amber-500"> {t('childDetail.pendingApproval')}</span>}
           {trustLabel && <span className="ml-1 rounded bg-border/60 px-1 py-0.5 text-[9px] font-bold uppercase tracking-wide text-muted">{trustLabel}</span>}
         </p>
@@ -404,7 +410,7 @@ function RequestSpendModal({ child, onClose }: { child: Child; onClose: () => vo
     const res = await requestSpendAction({ childWalletId: child.id, amountCents: Math.round(dollars * 100), description: desc.trim() });
     setLoading(false);
     if (!res.ok) return toastError(res.error ?? 'Could not submit request');
-    success(res.pendingApproval ? 'Sent to a parent for approval' : 'Approved — enjoy!');
+    success(res.pendingApproval ? t('childDetailView.sentToAParentForApproval') : t('childDetailView.approvedEnjoy'));
     onClose();
     router.refresh();
   }
@@ -519,7 +525,8 @@ function AddFundsModal({ child, onClose }: { child: Child; onClose: () => void }
     const dollars = Number(amount);
     if (!Number.isFinite(dollars) || dollars <= 0) return toastError(t('childDetailView.enterAnAmountGreaterThan'));
     setLoading(true);
-    const res = await addFundsAction({ childWalletId: child.id, amountCents: Math.round(dollars * 100), description: 'Parent top-up' });
+    // No description: the row reads as its type, in the reader's language.
+    const res = await addFundsAction({ childWalletId: child.id, amountCents: Math.round(dollars * 100) });
     setLoading(false);
     if (!res.ok) return toastError(res.error ?? 'Could not add funds');
     success(t('wallet.addedAmountToChild', { amount: formatCents(Math.round(dollars * 100)), name: child.name }));
@@ -673,7 +680,7 @@ export function ChildDetailView({
             <p className="text-sm font-semibold text-muted">{child.name}{t('childDetail.aposSWallet')}</p>
             <p className="text-4xl font-black tabular-nums">{formatCents(child.total)}</p>
             <p className="mt-0.5 text-xs text-muted">
-              {formatCents(child.buckets.spend ?? 0)} {t('childDetail.spendable')} {formatCents(child.buckets.save ?? 0)} saved
+              {formatCents(child.buckets.spend ?? 0)} {t('childDetail.spendable')} {formatCents(child.buckets.save ?? 0)} {t('childDetail.saved')}
             </p>
           </div>
         </div>
@@ -731,7 +738,7 @@ export function ChildDetailView({
         {/* Target vs actual note */}
         {child.total > 0 && (
           <p className="mt-3 text-center text-[10px] text-muted">
-            Target: {child.split.spend}{t('childDetail.spend')} {child.split.save}{t('childDetail.save')} {child.split.give}{t('childDetail.give')} {child.split.invest}{t('childDetail.invest')}
+            {t('childDetail.targetSplit', { spend: child.split.spend, save: child.split.save, give: child.split.give, invest: child.split.invest })}
           </p>
         )}
       </div>
@@ -782,7 +789,7 @@ export function ChildDetailView({
                 <m.icon className="h-3.5 w-3.5" /> {tr(m.labelKey)}
               </div>
               <p className="mt-1.5 text-lg font-bold">{formatCents(bal)}</p>
-              <p className="mt-0.5 text-[10px] text-muted">Target {targetPct}%</p>
+              <p className="mt-0.5 text-[10px] text-muted">{tr('childDetail.targetPct', { pct: targetPct })}</p>
               <div
                 className="mt-2 h-1.5 overflow-hidden rounded-full bg-border/40"
                 {...progressBarA11y(child.total > 0 ? (bal / child.total) * 100 : 0, tr('childDetail.bucketShareOfBalance', { bucket: tr(m.labelKey) }))}

@@ -354,17 +354,14 @@ export async function dispatchPendingPushes(
   // upserts. Two workers racing that one batch remains possible exactly once per
   // scope, before any cursor exists; after that the guard holds.
   const stamp = new Date().toISOString();
-  if (stored && cursor) {
-    // Compared field by field, on the cursor this run parsed and validated. The
-    // whole-object `.eq('value', stored.value)` this replaces sent the value as
-    // text — PostgREST writes a filter as `eq.${value}`, so "[object Object]" —
-    // which Postgres cannot read as JSON: the update failed with 22P02 and every
-    // run after a scope's first cursor threw before sending anything (B15).
+  if (stored) {
     const { data: claimed, error: claimError } = await supabase.from('app_settings')
       .update({ value: nextCursor, updated_at: stamp })
-      .eq('key', cursorKey)
-      .eq('value->>id', cursor.id)
-      .eq('value->>createdAt', cursor.createdAt)
+      // The stored cursor as JSON TEXT: postgrest-js writes `eq.${value}` into
+      // the URL, so the object itself arrived as "[object Object]" and PostgREST
+      // refused it (22P02). Every run after the first threw here and no push was
+      // ever sent again (PUSH-004). PostgREST compares the text as jsonb.
+      .eq('key', cursorKey).eq('value', JSON.stringify(stored.value))
       .select('key').maybeSingle();
     if (claimError) throw new Error('Push cursor write failed.');
     if (claimed?.key !== cursorKey) {
