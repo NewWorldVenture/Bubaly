@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { randomBytes } from 'node:crypto';
 import { requireUserContext } from '@/lib/supabase/auth';
-import { getGoogleOAuthUrl } from '@/lib/google';
+import { getGoogleOAuthUrl, googleClientId, googleClientSecret } from '@/lib/google';
 
 // Redirects the user to Google's OAuth consent screen (Calendar read scope).
 //
@@ -12,6 +12,14 @@ import { getGoogleOAuthUrl } from '@/lib/google';
 // callback, never from `state`.
 export async function GET(req: NextRequest) {
   await requireUserContext(); // must be signed in; identity comes from the session
+
+  // Without both credentials Google refuses the consent request, and letting
+  // getGoogleOAuthUrl's error escape left the parent on a blank 500 page. Hand
+  // them back to the calendar, which says the connection isn't set up — the
+  // same answer the Outlook link beside it gives (/api/sync/[provider]/auth).
+  if (!googleClientId() || !googleClientSecret()) {
+    return NextResponse.redirect(new URL('/dashboard/calendar?gcal=not_configured', req.nextUrl.origin));
+  }
 
   const state = randomBytes(32).toString('base64url');
   const res = NextResponse.redirect(getGoogleOAuthUrl(state, req.nextUrl.origin));

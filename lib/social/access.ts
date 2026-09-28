@@ -3,6 +3,7 @@
 // the SQL helper public.social_has_permission (migration 0034). Use these in
 // server actions / route handlers BEFORE any privileged write; RLS is the backstop.
 import 'server-only';
+import { REFUSAL_DIGEST_PREFIX } from '@/lib/actions/refusal';
 import { createServer } from '@/lib/supabase/server';
 import { settle, settleAll } from '@/lib/supabase/settle';
 import {
@@ -87,6 +88,10 @@ export async function getSocialAccess(familyId: string): Promise<SocialAccess | 
 }
 
 export class SocialAccessError extends Error {
+  // A member without the permission is refused, not broken: the digest is
+  // what survives a production build, and it turns the section's error page
+  // into "Your account can't make that change" (lib/actions/refusal.ts).
+  readonly digest = `${REFUSAL_DIGEST_PREFIX}notAllowed`;
   constructor(public permission: SocialPermission) {
     super(`Missing social permission: ${permission}`);
     this.name = 'SocialAccessError';

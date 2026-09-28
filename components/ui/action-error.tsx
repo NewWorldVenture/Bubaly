@@ -22,6 +22,7 @@
 import { useCallback, useState } from 'react';
 
 import { useTranslations } from '@/components/i18n/locale-provider';
+import { refusalForThrown } from '@/lib/actions/refusal';
 
 export function useActionError() {
   const t = useTranslations();
@@ -33,9 +34,15 @@ export function useActionError() {
       await action();
       return true;
     } catch (err) {
-      // The action's own message is already translated and specific; the
-      // generic is only for a throw that carries nothing.
-      setMessage(err instanceof Error && err.message ? err.message : t('globalError.somethingWentWrong'));
+      // The action's own message is already translated and specific — where
+      // it survives. A production build replaces a thrown server action's
+      // message with React's "Minified React error #441 …" and keeps only its
+      // digest, so a refusal is read from the digest, and a redacted message
+      // is never shown. The generic is only for a throw that carries nothing.
+      const refusal = refusalForThrown(err, process.env.NODE_ENV === 'production');
+      setMessage(refusal
+        ? t(`actionRefusal.${refusal}`)
+        : err instanceof Error && err.message ? err.message : t('globalError.somethingWentWrong'));
       return false;
     }
   }, [t]);

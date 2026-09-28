@@ -153,19 +153,32 @@ export function VotingModule() {
     // unconfirmed on purpose: un-voting a vote that is already gone, or
     // clearing a prior single-choice vote that is not there, is the ordinary
     // case, and the insert below is what the member sees. Audit C1-S9-81.
-    if (mine.has(optionId)) {
-      const { error: unErr } = await supabase.from('family_poll_votes').delete().eq('option_id', optionId).eq('member_id', meId);
-      if (unErr) toastError(describeDbError(unErr));
-      return;
+    // The votes on screen arrive by realtime and can be a moment behind: a
+    // second tap before the first vote arrived used to insert again and say
+    // "That already exists", and the vote did not change (B11, P-26). So the
+    // list is re-read after every write, a single-choice poll clears by poll
+    // and member rather than by what the screen shows, and a duplicate insert
+    // is the vote the member asked for, already there.
+    try {
+      if (mine.has(optionId)) {
+        const { error: unErr } = await supabase.from('family_poll_votes').delete().eq('option_id', optionId).eq('member_id', meId);
+        if (unErr) toastError(describeDbError(unErr));
+        return;
+      }
+      if (poll.kind === 'single') {
+        // Clear the prior selection first; if this fails, do NOT insert or the
+        // single-choice poll ends up with two votes for this member. None to
+        // clear is the ordinary answer. Audit C1-S9-81.
+        const { error: clearErr } = await supabase.from('family_poll_votes').delete().eq('poll_id', poll.id).eq('member_id', meId);
+        if (clearErr) return toastError(describeDbError(clearErr));
+      }
+      // Unconfirmed like the two deletes above: an insert either inserts or
+      // errors. Audit C1-S9-81.
+      const { error } = await supabase.from('family_poll_votes').insert({ family_id: familyId, poll_id: poll.id, option_id: optionId, member_id: meId });
+      if (error && error.code !== '23505') toastError(describeDbError(error));
+    } finally {
+      void refreshVotes();
     }
-    if (poll.kind === 'single' && mine.size > 0) {
-      // Clear the prior selection first; if this fails, do NOT insert or the
-      // single-choice poll ends up with two votes for this member.
-      const { error: clearErr } = await supabase.from('family_poll_votes').delete().eq('poll_id', poll.id).eq('member_id', meId);
-      if (clearErr) return toastError(describeDbError(clearErr));
-    }
-    const { error } = await supabase.from('family_poll_votes').insert({ family_id: familyId, poll_id: poll.id, option_id: optionId, member_id: meId });
-    if (error) toastError(describeDbError(error));
   }
 
   async function setStatus(id: string, status: string) {

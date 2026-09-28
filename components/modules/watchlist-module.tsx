@@ -89,7 +89,13 @@ export function WatchlistModule() {
       ? existing.vote === vote
         ? await supabase.from('watchlist_votes').delete().eq('id', existing.id).select('id')
         : await supabase.from('watchlist_votes').update({ vote }).eq('id', existing.id).select('id')
-      : await supabase.from('watchlist_votes').insert({ family_id: familyId, title_id: title.id, member_id: myMemberId, vote, created_by: userId }).select('id');
+      // The votes on screen arrive by realtime and can be a moment behind; a
+      // second tap before the first vote arrived inserted again and was
+      // refused as a duplicate, leaving the old vote (B11, P-26). One vote per
+      // member and title is the key, so a vote the screen has not seen yet is
+      // replaced rather than refused.
+      : await supabase.from('watchlist_votes').upsert({ family_id: familyId, title_id: title.id, member_id: myMemberId, vote, created_by: userId }, { onConflict: 'title_id,member_id' }).select('id');
+    void votes.refresh();
     if (error) return toastError(describeDbError(error));
     if (wroteNoRows(voted)) return toastError(tr('errors.thatChangeWasNotSaved'));
   }

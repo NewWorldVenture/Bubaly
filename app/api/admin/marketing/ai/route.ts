@@ -2,7 +2,7 @@ import { NextRequest, NextResponse } from 'next/server';
 import { settleAll } from '@/lib/supabase/settle';
 import { getTranslations } from '@/lib/i18n/server';
 import { requireMarketingAdmin, logMarketingAudit, isMarketingAuthError, marketingRefusalBody } from '@/lib/marketing/admin';
-import { resolveProvider } from '@/lib/ai/provider';
+import { resolveProvider, isAIConfigured } from '@/lib/ai/provider';
 import { getMarketingCustomers, summarizeCustomers } from '@/lib/marketing/customers';
 import { fmtMoney } from '@/lib/utils/format';
 import { enforceAIRateLimit } from '@/lib/server/ai-rate-limit';
@@ -33,6 +33,9 @@ export async function POST(req: NextRequest) {
   const t = await getTranslations();
   try {
     const { supabase, actorId, actorEmail } = await requireMarketingAdmin();
+    // No key: say so before any work, rather than let the provider's throw
+    // reach the catch below as a generic failure.
+    if (!(await isAIConfigured())) return NextResponse.json({ error: t('ai.theAiEngineIsnT'), code: 'not_configured' }, { status: 503 });
     const limited = await enforceAIRateLimit(supabase, `marketing-ai:${actorId}`, { limit: 20 });
     if (!limited.ok) return NextResponse.json(
       { error: t('ai.tooManyMarketingAiRequests') },

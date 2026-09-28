@@ -24,8 +24,6 @@ export async function POST(req: NextRequest) {
     }
     const familyId = ctx.active.familyId;
     const supabase = await createServer();
-    const stripeSettings = await getStripeSettings();
-    const stripe = stripeFromKey(effectiveSecretKey(stripeSettings));
 
     const body = await readBoundedRequestJson(req, MAX_BILLING_REQUEST_BYTES);
     if (!body.ok) {
@@ -38,6 +36,13 @@ export async function POST(req: NextRequest) {
     if (!isStripePlanKey(plan)) return NextResponse.json({ error: t('checkout.invalidPlan') }, { status: 400 });
     const priceId = STRIPE_PLANS[plan];
     if (!priceId) return NextResponse.json({ error: t('checkout.invalidPlan') }, { status: 400 });
+
+    // Super Admin → Stripe Setup first, then the environment. With neither,
+    // stripeFromKey threw and the catch below answered a generic 500.
+    const stripeSettings = await getStripeSettings();
+    const secretKey = effectiveSecretKey(stripeSettings);
+    if (!secretKey) return NextResponse.json({ error: t('checkout.billingIsNotSetUp') }, { status: 503 });
+    const stripe = stripeFromKey(secretKey);
 
     const limited = await enforceRequestRateLimit(supabase, `billing:checkout:${familyId}:${ctx.user.id}`, { limit: 10 });
     if (!limited.ok) return NextResponse.json(
