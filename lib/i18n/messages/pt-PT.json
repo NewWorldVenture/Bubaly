@@ -3902,6 +3902,8 @@
   "chores.completedChores": "Tarefas concluídas",
   "chores.dailyChores": "Tarefas diárias",
   "chores.delete": "Eliminar",
+  "chores.paying": "A pagar…",
+  "chores.payAmount": "Pagar {amount}",
   "chores.description": "Descrição",
   "chores.dueDate": "Data limite",
   "chores.everyDay": "Todos os dias",

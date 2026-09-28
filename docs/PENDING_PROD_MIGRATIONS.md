@@ -4023,6 +4023,8 @@ those eight tables that refuses a caller whose role in the row's family is
 `docs/audit/a-guest-views-the-household-check.sql` requires a guest's measured
 access to equal the page's guest row: 8 findings before, 0 after.
 
+**Related to ROLE-SCOPE-001 (the owner's call on what a guest and a caregiver may see).** 0464 implements only the piece every description agrees on, that a guest does not write. Skip it if the owner decides guests should write.
+
 **After applying:** as a guest, open the calendar and try to add an event. It
 should be refused with the permission message. As a parent, add and delete one,
 which should succeed.

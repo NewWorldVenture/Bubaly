@@ -3901,6 +3901,8 @@
   "chores.completedChores": "Voltooide klusjes",
   "chores.dailyChores": "Dagelijkse klusjes",
   "chores.delete": "Verwijderen",
+  "chores.paying": "Uitbetalen…",
+  "chores.payAmount": "{amount} uitbetalen",
   "chores.description": "Omschrijving",
   "chores.dueDate": "Vervaldatum",
   "chores.everyDay": "Elke dag",

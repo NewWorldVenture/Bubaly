@@ -44,7 +44,7 @@
 -- non-member, whom the permissive policies already refuse. The service role and
 -- a migration or seed (no auth.uid()) are exempt, as everywhere in this series.
 --
--- Deliberately NOT here (recorded as ROLE-M04, the owner's decision): the same
+-- Deliberately NOT here (ROLE-SCOPE-001, recorded by B15 as the owner's call): the same
 -- page shows children, teens and caregivers as read-only on most of these
 -- resources and adults as unable to delete, and the database lets all of them
 -- write (the AUTHZ-011 "consistent-open by design" class — a child adding milk
