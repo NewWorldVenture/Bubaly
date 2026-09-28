@@ -4060,6 +4060,8 @@
   "chores.completedChores": "Completed Chores",
   "chores.dailyChores": "Daily Chores",
   "chores.delete": "Delete",
+  "chores.paying": "Paying…",
+  "chores.payAmount": "Pay {amount}",
   "chores.description": "Description",
   "chores.dueDate": "Due date",
   "chores.everyDay": "Every day",
