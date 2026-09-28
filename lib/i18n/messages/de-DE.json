@@ -3901,6 +3901,8 @@
   "chores.completedChores": "Erledigte Aufgaben",
   "chores.dailyChores": "Tägliche Aufgaben",
   "chores.delete": "Löschen",
+  "chores.paying": "Wird ausgezahlt…",
+  "chores.payAmount": "{amount} auszahlen",
   "chores.description": "Beschreibung",
   "chores.dueDate": "Fälligkeitsdatum",
   "chores.everyDay": "Täglich",
