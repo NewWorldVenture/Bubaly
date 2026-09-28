@@ -162,7 +162,7 @@ export function ProfileModule({ member, userEmail, stats }: ProfileModuleProps) 
             </button>
           </div>
           <Row icon={HelpCircle} label={t('profile.helpSupport')} href="/dashboard/settings#support" />
-          <Row icon={Star} label={t('profile.rateTheApp')} onClick={() => window.open('https://apps.apple.com/', '_blank')} />
+          <Row icon={Star} label={t('profile.rateTheApp')} onClick={() => window.open('https://apps.apple.com/', '_blank', 'noopener,noreferrer')} />
         </Section>
       </div>
 

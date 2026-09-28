@@ -120,7 +120,8 @@ export function ContactsModule() {
   }
 
   function openMaps(address: string) {
-    window.open(`https://maps.google.com?q=${encodeURIComponent(address)}`, '_blank');
+    // noopener: the map tab gets no handle back to this one (window.opener).
+    window.open(`https://maps.google.com?q=${encodeURIComponent(address)}`, '_blank', 'noopener,noreferrer');
   }
 
   if (loading) return <SkeletonList />;
