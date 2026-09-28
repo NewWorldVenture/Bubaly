@@ -140,6 +140,7 @@ describe('a sanitizer returns what it checked (SEC-014)', () => {
       'components/auth/callback-completion.tsx|destination': "safeInternalRedirect(next, '/home') — a second pass over an already-sanitized prop, which is what saved this sink from SEC-014",
       'components/auth/phone-auth.tsx|destination': "safeInternalRedirect(next, '/onboarding') — likewise a second pass",
       'app/api/blog/unsubscribe/route.ts|home': "new URL('/blog', req.nextUrl.origin) — a constant path",
+      'app/api/google/calendar/auth/route.ts|consentUrl': 'getGoogleOAuthUrl(state, origin), the provider authorization URL — deliberately external; bound to a variable so a missing GOOGLE_CLIENT_ID returns to the calendar instead of a 500 (SWEEP-001)',
       'components/app/command-bar.tsx|r.href': 'NAV_CATALOG, the static navigation catalogue',
       'components/app/command-bar.tsx|data.redirect': 'runPagePath(runId) / purchaseApprovalPath(id) — server-built templates with encodeURIComponent, never model text',
       'components/auth/join-invite.tsx|landing': 'resolveLandingPathAction(), a server action',
