@@ -150,7 +150,7 @@ function OfferOpener({ listingId, askCents, onDone, onError }: {
       <div className="flex gap-2">
         <div className="relative flex-1">
           <span className={cn('pointer-events-none absolute top-1/2 -translate-y-1/2 text-muted', unit.unitClass)}>{unit.symbol}</span>
-          <input type="number" inputMode="decimal" min="0" step="0.01" value={amt} onChange={(e) => setAmt(e.target.value)}
+          <input aria-label={tr('fieldName.offerAmount')} type="number" inputMode="decimal" min="0" step="0.01" value={amt} onChange={(e) => setAmt(e.target.value)}
             className={cn('h-11 w-full rounded-xl border border-border bg-bg text-sm outline-none focus:border-brand', unit.padClass)} />
         </div>
         <button onClick={submit} disabled={pending}
@@ -260,7 +260,7 @@ function ThreadView({ thread, viewer, askCents, listingId, onDone, onError }: {
             <div className="flex gap-2">
               <div className="relative flex-1">
                 <span className={cn('pointer-events-none absolute top-1/2 -translate-y-1/2 text-muted', unit.unitClass)}>{unit.symbol}</span>
-                <input type="number" inputMode="decimal" min="0" step="0.01" value={amt} onChange={(e) => setAmt(e.target.value)}
+                <input aria-label={tr('fieldName.counterofferAmount')} type="number" inputMode="decimal" min="0" step="0.01" value={amt} onChange={(e) => setAmt(e.target.value)}
                   className={cn('h-9 w-full rounded-lg border border-border bg-bg text-sm outline-none focus:border-brand', unit.padClass)} />
               </div>
               <button onClick={sendCounter} disabled={pending}

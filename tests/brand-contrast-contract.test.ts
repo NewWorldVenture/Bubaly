@@ -160,3 +160,28 @@ describe('text on a solid danger fill meets WCAG AA', () => {
     expect(offenders, 'use text-danger-fg on bg-danger').toEqual([]);
   });
 });
+
+// The same for a solid success fill: the survey's Activate, the missions queue's
+// Approve and the reminders' done ticks put white on --success, 2.08:1 in the
+// dark theme (axe, /admin/marketing/surveys/[id], 2026-09-27). --success-fg is
+// the foreground for that fill.
+describe('text on a solid success fill meets WCAG AA', () => {
+  const css = readFileSync(resolve('app/globals.css'), 'utf8');
+  for (const [theme, selector] of [['light', '.light {'], ['dark', '.dark {']] as const) {
+    it(`${theme}: --success-fg on --success clears 4.5:1`, () => {
+      const tokens = tokensOf(css, selector);
+      expect(tokens['success-fg'], `--success-fg missing from ${selector}`).toBeDefined();
+      expect(contrast(tokens['success-fg'], tokens.success)).toBeGreaterThanOrEqual(4.5);
+    });
+  }
+
+  it('no solid success fill carries text-white', () => {
+    const offenders: string[] = [];
+    for (const dir of ['app', 'components']) {
+      for (const line of collectSource(dir).split('\n')) {
+        if (/\bbg-success\b(?!\/)/.test(line) && /\btext-white\b(?!\/)/.test(line)) offenders.push(line.trim().slice(0, 140));
+      }
+    }
+    expect(offenders, 'use text-success-fg on bg-success').toEqual([]);
+  });
+});
