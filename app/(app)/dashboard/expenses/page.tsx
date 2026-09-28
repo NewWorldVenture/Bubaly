@@ -12,12 +12,5 @@ export async function generateMetadata(): Promise<Metadata> {
 export default async function ExpensesPage() {
   const ctx = await requireFeature('/dashboard/expenses');
   await requireAal2(ctx, 'money', '/dashboard/expenses');
-  const t = await getTranslations();
-  return (
-    <>
-      {/* The module draws no heading of its own; this names the page for assistive technology (MAIN-F-D05). */}
-      <h1 className="sr-only">{t('expenses.expenseSplitting')}</h1>
-      <ExpensesModule />
-    </>
-  );
+  return <ExpensesModule />;
 }

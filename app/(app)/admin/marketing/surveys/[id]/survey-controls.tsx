@@ -19,7 +19,7 @@ export function SurveyControls({ id, status, publicUrl }: { id: string; status: 
   return (
     <div className="flex flex-wrap items-center gap-2">
       {status !== 'active' && (
-        <button onClick={() => setStatus('active')} disabled={pending} className="inline-flex h-9 items-center gap-1.5 rounded-lg bg-success px-3 text-sm font-medium text-white disabled:opacity-60">
+        <button onClick={() => setStatus('active')} disabled={pending} className="inline-flex h-9 items-center gap-1.5 rounded-lg bg-success px-3 text-sm font-medium text-success-fg disabled:opacity-60">
           {pending ? <Loader2 className="h-4 w-4 animate-spin" /> : <Play className="h-4 w-4" />} {t('adminMarketingSurveysSurveyControls.activate')}
         </button>
       )}

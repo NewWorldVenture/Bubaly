@@ -161,7 +161,7 @@ function ProposeForm({ pending, onSubmit, onCancel }: {
             </button>
           ))}
         </div>
-        <input type="datetime-local" value={customWhen} onChange={(e) => setCustomWhen(e.target.value)}
+        <input type="datetime-local" aria-label={tr('handoff.when')} value={customWhen} onChange={(e) => setCustomWhen(e.target.value)}
           className="mt-1.5 h-9 w-full rounded-lg border border-border bg-bg px-3 text-xs outline-none focus:border-brand" />
       </div>
       <div>

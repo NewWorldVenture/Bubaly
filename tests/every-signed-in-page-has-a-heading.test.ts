@@ -46,6 +46,25 @@ describe('every signed-in page has a heading', () => {
     expect(pages.length).toBeGreaterThan(300);
   });
 
+  // The opposite failure. Main's page audit (P-06) gave eleven single-use
+  // modules a visible <h1> while this guard's fix gave the same eleven pages a
+  // screen-reader <h1>, and both merged: each page read out two page titles. The
+  // assistant's module drew an <h1> once a conversation started, under the
+  // page's own. An integrated axe crawl found them; this holds the shape. A page
+  // that supplies a screen-reader <h1> does so because its module draws none.
+  it('a page\'s screen-reader <h1> is not stacked on a module that draws its own', () => {
+    const stacked: string[] = [];
+    for (const p of pages) {
+      const src = readFileSync(p, 'utf8');
+      if (!/<h1 className="sr-only"/.test(src)) continue;
+      for (const m of src.matchAll(/from '(@\/components[^']+)'/g)) {
+        const file = resolve(m[1], p);
+        if (file && /<h1\b/.test(readFileSync(file, 'utf8'))) stacked.push(`${p} + ${file}`);
+      }
+    }
+    expect(stacked, 'drop the page\'s sr-only <h1>, or make the module\'s heading an <h2>').toEqual([]);
+  });
+
   it('no page renders without an <h1>', () => {
     const bare = pages.filter((p) => !isPureRedirect(readFileSync(p, 'utf8')) && !headed(p) && !layoutsAbove(p).some((l) => headed(l)));
     expect(bare, 'add a visible title as an <h1>, or <h1 className="sr-only"> when the design has none').toEqual([]);
