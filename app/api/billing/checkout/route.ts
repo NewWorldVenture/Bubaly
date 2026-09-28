@@ -3,11 +3,13 @@ import { getTranslations } from '@/lib/i18n/server';
 import { requireUserContext } from '@/lib/supabase/auth';
 import { createServer, createServiceClient } from '@/lib/supabase/server';
 import { stripeFromKey, STRIPE_PLANS } from '@/lib/stripe';
-import { isStripePlanKey, verifyStripePlanPrice } from '@/lib/billing/price-catalog';
+import { canonicalStripePlan, isStripePlanKey, verifyStripePlanPrice } from '@/lib/billing/price-catalog';
 import { rememberStripeCustomer } from '@/lib/billing/customer-ref';
 import { getStripeSettings, effectiveSecretKey } from '@/lib/stripe/settings';
 import { serviceFeeAddInvoiceItems } from '@/lib/stripe/service-fee';
 import { isAdmin } from '@/lib/constants/roles';
+import { canChangeSubscriptionInPlace } from '@/lib/billing/plans';
+import { reviewBillingPath } from '@/lib/billing/review-selection';
 import { enforceRequestRateLimit } from '@/lib/server/request-rate-limit';
 import { readBoundedRequestJson } from '@/lib/server/bounded-request-body';
 
@@ -64,6 +66,32 @@ export async function POST(req: NextRequest) {
     if (existingError) {
       console.error('[billing-checkout] Billing customer read failed', existingError);
       return NextResponse.json({ error: t('checkout.billingAccountStatusIsTemporarily') }, { status: 503 });
+    }
+
+    // Checkout STARTS a subscription. A family that already has a live one
+    // (Basic, tapping a Plus feature in the upgrade modal) got a SECOND
+    // subscription here, billed alongside the first, and the two then
+    // overwrote each other's row in the webhook, so cancelling either could
+    // mark the family canceled while it was still paying for the other. A
+    // plan change belongs to change-plan, which updates the live subscription
+    // in place after the billing review. The local row can trail the webhook
+    // by seconds, so a known Stripe customer is also asked directly.
+    const { data: localSub, error: localSubError } = await supabase
+      .from('subscriptions').select('status, provider_ref').eq('family_id', familyId).maybeSingle();
+    if (localSubError) {
+      console.error('[billing-checkout] Subscription read failed', localSubError);
+      return NextResponse.json({ error: t('checkout.billingAccountStatusIsTemporarily') }, { status: 503 });
+    }
+    let live = canChangeSubscriptionInPlace(localSub);
+    if (!live && existing?.customer_ref) {
+      const listed = await stripe.subscriptions.list({ customer: existing.customer_ref, status: 'all', limit: 20 });
+      live = listed.data.some((sub) => canChangeSubscriptionInPlace({ status: sub.status, provider_ref: sub.id }));
+    }
+    if (live) {
+      return NextResponse.json(
+        { error: t('checkout.alreadySubscribed'), code: 'subscription_exists', review: reviewBillingPath(canonicalStripePlan(plan)) },
+        { status: 409 },
+      );
     }
 
     let customerId = existing?.customer_ref ?? null;

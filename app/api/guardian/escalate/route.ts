@@ -59,6 +59,23 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({ error: tr('escalate.unableToProcessEscalation') }, { status: 500 });
   }
 
+  // Every read the alert depends on happens before anything is sent. A failed
+  // phone lookup used to read as "no phones": nobody was texted or called, and
+  // the escalation was recorded as handled. Failing here, with nothing sent yet,
+  // leaves the claim retryable without sending any alert twice.
+  const userIds = (members ?? [])
+    .map((member) => (member as { user_id: string | null }).user_id)
+    .filter((id): id is string => !!id);
+  let phoneMap = new Map<string, string | null | undefined>();
+  if (isTwilioConfigured() && userIds.length > 0) {
+    const { data: profiles, error: profilesError } = await supabase.from('profiles').select('id, phone').in('id', userIds);
+    if (profilesError) {
+      await markGuardianCallbackError(supabase, callbackId, 'Unable to load member phone numbers for escalation.');
+      return NextResponse.json({ error: tr('escalate.unableToProcessEscalation') }, { status: 500 });
+    }
+    phoneMap = new Map((profiles ?? []).map((p: { id: string; phone?: string | null }) => [p.id, p.phone]));
+  }
+
   const notifiedIds: string[] = [];
   let pushSent = false;
   let smsSent = false;
@@ -96,13 +113,6 @@ export async function POST(req: NextRequest) {
 
   if (isTwilioConfigured() && members?.length) {
     // Get phones from profiles table where it's stored
-    const userIds = (members as { user_id: string | null }[])
-      .map((member) => member.user_id)
-      .filter((id): id is string => !!id);
-    const { data: profiles } = userIds.length > 0
-      ? await supabase.from('profiles').select('id, phone').in('id', userIds)
-      : { data: [] as { id: string; phone: string | null }[] };
-    const phoneMap = new Map((profiles ?? []).map((p: { id: string; phone?: string | null }) => [p.id, p.phone]));
     for (const member of members) {
       const m = member as { id: string; user_id: string | null; display_name: string; role: string };
       // The manager pair this product actually has. `public.member_role` is
