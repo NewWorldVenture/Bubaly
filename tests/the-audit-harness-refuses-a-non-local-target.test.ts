@@ -27,6 +27,7 @@ describe('the audit harness refuses anything but a local stack', () => {
     const run = spawnSync(process.execPath, [file, ...argsFor(file)], {
       env: {
         PATH: process.env.PATH,
+        NODE_ENV: 'test',
         NEXT_PUBLIC_SUPABASE_URL: 'https://example.supabase.co',
         NEXT_PUBLIC_SUPABASE_ANON_KEY: 'not-a-key',
         SUPABASE_SERVICE_ROLE_KEY: 'not-a-key',
