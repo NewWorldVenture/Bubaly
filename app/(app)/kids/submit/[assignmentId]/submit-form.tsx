@@ -51,7 +51,7 @@ export function SubmitProofForm({ assignmentId, proofKind }: { assignmentId: str
           <span className="mb-1 block text-sm font-semibold">{t('kidsSubmitSubmitForm.yourProof')}</span>
           <div className="flex min-h-28 cursor-pointer items-center justify-center gap-2 rounded-2xl border-2 border-dashed border-border bg-surface/40 p-4 text-muted hover:border-brand">
             <Camera className="h-6 w-6" />
-            <span>{t('kidsSubmitSubmitForm.tapToTakeAPhoto')}{proofKind === 'video' || proofKind === 'before_after' ? ' or video' : ''}</span>
+            <span>{t(proofKind === 'video' || proofKind === 'before_after' ? 'kidsSubmitSubmitForm.tapToTakeAPhotoOrVideo' : 'kidsSubmitSubmitForm.tapToTakeAPhoto')}</span>
             <input type="file" name="media" accept={accept} capture="environment" multiple={proofKind === 'before_after'} onChange={onFiles} className="hidden" />
           </div>
         </label>
