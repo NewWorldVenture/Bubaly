@@ -1288,6 +1288,7 @@ worked; a claim with no commit touching it for six hours may be taken over.
 | F21 (a child could grant themselves a reward — the repo half) | session_01KRUgA6hD6QgzmtpSP6TUmP | 🔄 claimed 2026-09-27 22:10 |
 | AQ-01 / I18N-003 (literal currency symbols) | session_01KRUgA6hD6QgzmtpSP6TUmP | 🔄 claimed 2026-09-27 22:10 |
 | SRV-001 (the high-severity server-action candidates) | session_01KRUgA6hD6QgzmtpSP6TUmP | 🔄 claimed 2026-09-27 22:10 |
+| API-SWEEP-06, write half (`subscriptions_tracked` writable by any member, a child included) | session_01TRY21ZKsFrfB3qtoP972A4 | 🔄 claimed 2026-09-28 00:20 |
 
 ## Finding index
 
