@@ -155,12 +155,14 @@ export async function GET(req: NextRequest) {
   const remind = async ({ userId, memberName, familyName, chores }: MemberBucket) => {
     const email = emailByUserId.get(userId);
     if (!email) { skipped++; return; }
-    const { ok } = await sendReactEmail({
+    const { ok, skipped: notSent } = await sendReactEmail({
       to: email,
       subject: `${chores.length} chore${chores.length !== 1 ? 's' : ''} coming up this week`,
       react: React.createElement(ChoreReminderEmail, { memberName, familyName, chores }),
     });
-    if (ok) sent++;
+    // No provider: sendReactEmail answers ok with `skipped`, and nothing was sent.
+    if (notSent) skipped++;
+    else if (ok) sent++;
     else failed++;
   };
 

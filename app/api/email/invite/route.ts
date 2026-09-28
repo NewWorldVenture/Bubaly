@@ -65,7 +65,7 @@ export async function POST(req: NextRequest) {
     const inviterName = ctx.active.member.display_name;
     const familyName = ctx.active.family.name;
 
-    const { ok } = await sendReactEmail({
+    const { ok, skipped } = await sendReactEmail({
       to: invite.email,
       subject: `${inviterName} invited you to join ${familyName} on Bubaly`,
       react: React.createElement(InviteEmail, {
@@ -76,6 +76,8 @@ export async function POST(req: NextRequest) {
       }),
     });
     if (!ok) return NextResponse.json({ error: t('invite.failedToSendInvite') }, { status: 502 });
+    // No mail provider: the invite was not sent, so the inviter must not be told it was.
+    if (skipped) return NextResponse.json({ error: t('invite.failedToSendInvite') }, { status: 503 });
 
     return NextResponse.json({ sent: true });
   } catch (err) {

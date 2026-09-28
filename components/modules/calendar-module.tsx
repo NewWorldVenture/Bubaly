@@ -301,6 +301,7 @@ export function CalendarModule() {
     const params = new URLSearchParams(window.location.search);
     if (params.get('gcal') === 'connected') { success(tr('calendarModule.googleCalendarConnected')); window.history.replaceState({}, '', window.location.pathname); }
     else if (params.get('gcal') === 'error') { toastError(tr('calendarModule.googleCalendarConnectionFailed')); window.history.replaceState({}, '', window.location.pathname); }
+    else if (params.get('gcal') === 'not_configured') { toastError(tr('calendarModule.googleCalendarNotConfigured')); window.history.replaceState({}, '', window.location.pathname); }
     return () => { active = false; };
   }, [success, toastError]); // eslint-disable-line react-hooks/exhaustive-deps
 

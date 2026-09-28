@@ -444,7 +444,7 @@ export async function adminResendInviteAction(inviteId: string): Promise<Result>
     ? (await supabase.from('profiles').select('full_name, email').eq('id', invite.invited_by).maybeSingle()).data
     : null;
 
-  const { ok } = await sendReactEmail({
+  const { ok, skipped } = await sendReactEmail({
     to: invite.email,
     subject: `Reminder: you’re invited to join ${family?.name ?? 'a family'} on Bubaly`,
     react: React.createElement(InviteEmail, {
@@ -454,7 +454,8 @@ export async function adminResendInviteAction(inviteId: string): Promise<Result>
       role: invite.role,
     }),
   });
-  if (!ok) return { ok: false, error: t('actions.couldNotSendTheInvite') };
+  // `skipped` is no mail provider: nothing went out, so it is not a resend.
+  if (!ok || skipped) return { ok: false, error: t('actions.couldNotSendTheInvite') };
 
   await adminAuditLog({ familyId: invite.family_id, action: 'resend', resource: 'invites', resourceId: inviteId, metadata: { email: invite.email } });
   revalidatePath('/admin/users');

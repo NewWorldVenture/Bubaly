@@ -8,7 +8,7 @@ import { requireUserContext, effectivePlanLevel } from '@/lib/supabase/auth';
 import { resolveFamilyPlanLevel } from '@/lib/server/plan';
 import { weekWindow, weekRangeLabel, choreCompletionRate, bucketByDay, dayLoad } from '@/lib/ai/weekly';
 import { dayKeyInZone } from '@/lib/schedule/zoned';
-import { resolveProvider, describeAIError } from '@/lib/ai/provider';
+import { resolveProvider, isAIConfigured, describeAIError } from '@/lib/ai/provider';
 import { enforceAIRateLimit } from '@/lib/server/ai-rate-limit';
 import { MAX_SMALL_JSON_BYTES, readBoundedRequestJsonOrEmpty } from '@/lib/server/bounded-request-body';
 
@@ -29,6 +29,9 @@ export async function POST(req: NextRequest) {
     if ((await effectivePlanLevel(await resolveFamilyPlanLevel(supabase, familyId))) < 2) {
       return NextResponse.json({ error: t('weeklyBriefing.weeklyAiBriefingIsA') }, { status: 402 });
     }
+    // With no key the provider threw "not configured" and the catch below
+    // answered a generic 500; the other AI routes say so with a 503 first.
+    if (!(await isAIConfigured())) return NextResponse.json({ error: t('ai.theAiEngineIsnT'), code: 'not_configured' }, { status: 503 });
     const limited = await enforceAIRateLimit(supabase, `ai-weekly-briefing:${ctx.user.id}`, { limit: 5 });
     if (!limited.ok) return NextResponse.json(
       { error: t('weeklyBriefing.tooManyWeeklyBriefingRequests') },

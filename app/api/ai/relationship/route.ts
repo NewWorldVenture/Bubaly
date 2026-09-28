@@ -3,7 +3,7 @@ import { getTranslations } from '@/lib/i18n/server';
 import { createServer } from '@/lib/supabase/server';
 import { settleAll, describeReadError } from '@/lib/supabase/settle';
 import { requireUserContext } from '@/lib/supabase/auth';
-import { resolveProvider, describeAIError } from '@/lib/ai/provider';
+import { resolveProvider, isAIConfigured, describeAIError } from '@/lib/ai/provider';
 import { withAiRequest } from '@/lib/ai/observability';
 import { scopeFromUserContext, dayKeyInTz, todayKeyFor, zonedDayBoundsMs } from '@/lib/services/scope';
 import { isMissingRelationError } from '@/lib/supabase/errors';
@@ -30,6 +30,9 @@ export async function POST() {
     const ctx = await requireUserContext();
     const familyId = ctx.active.familyId;
     const supabase = await createServer();
+    // With no key the provider threw "not configured" and the catch below
+    // answered a generic 500; the other AI routes say so with a 503 first.
+    if (!(await isAIConfigured())) return NextResponse.json({ error: t('ai.theAiEngineIsnT'), code: 'not_configured' }, { status: 503 });
     const limited = await enforceAIRateLimit(supabase, `ai-relationship:${ctx.user.id}`, { limit: 10 });
     if (!limited.ok) return NextResponse.json(
       { error: t('relationship.tooManyRelationshipHelperRequests') },

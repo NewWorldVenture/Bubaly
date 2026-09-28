@@ -3,7 +3,7 @@ import { getTranslations } from '@/lib/i18n/server';
 import { createServer } from '@/lib/supabase/server';
 import { settleAll } from '@/lib/supabase/settle';
 import { requireUserContext, effectivePlanLevel } from '@/lib/supabase/auth';
-import { resolveProvider } from '@/lib/ai/provider';
+import { resolveProvider, isAIConfigured } from '@/lib/ai/provider';
 import { withAiRequest } from '@/lib/ai/observability';
 import { scopeFromUserContext, dayKeyInTz, zonedDayBoundsMs } from '@/lib/services/scope';
 import { resolveFamilyPlanLevel } from '@/lib/server/plan';
@@ -28,6 +28,9 @@ export async function POST() {
     if (aiCoachLevel(tier) === 'none') {
       return NextResponse.json({ error: tr('wallet.theAiMoneyCoachIs') }, { status: 403 });
     }
+    // With no key the provider threw "not configured" and the catch below
+    // answered a generic 500; the other AI routes say so with a 503 first.
+    if (!(await isAIConfigured())) return NextResponse.json({ error: tr('ai.theAiEngineIsnT'), code: 'not_configured' }, { status: 503 });
     const limited = await enforceAIRateLimit(supabase, `ai-wallet:${ctx.user.id}`, { limit: 10 });
     if (!limited.ok) return NextResponse.json(
       { error: tr('wallet.tooManyAiMoneyCoach') },

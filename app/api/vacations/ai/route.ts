@@ -5,7 +5,7 @@ import { settleAll } from '@/lib/supabase/settle';
 import { createServer } from '@/lib/supabase/server';
 import { refuseUnlessEntitled } from '@/lib/server/route-feature-gate';
 import { enforceAIRateLimit } from '@/lib/server/ai-rate-limit';
-import { resolveProvider } from '@/lib/ai/provider';
+import { resolveProvider, isAIConfigured } from '@/lib/ai/provider';
 import { withAiRequest } from '@/lib/ai/observability';
 import { scopeFromUserContext } from '@/lib/services/scope';
 import { summarizeBudget } from '@/lib/vacations/budget';
@@ -37,6 +37,9 @@ export async function POST(req: NextRequest) {
   // Same resolver, so the two cannot disagree.
   const refused = await refuseUnlessEntitled(supabase, ctx.active.familyId, ['/dashboard/vacations']);
   if (refused) return refused;
+  // No key: say so before any work, rather than let the provider's throw
+  // reach the catch below as a generic failure.
+  if (!(await isAIConfigured())) return NextResponse.json({ error: t('ai.theAiEngineIsnT'), code: 'not_configured' }, { status: 503 });
   const limited = await enforceAIRateLimit(supabase, `ai-vacations:${ctx.user.id}`, { limit: 20 });
   if (!limited.ok) return NextResponse.json(
     { error: t('ai.tooManyTripAiRequests') },
