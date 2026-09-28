@@ -50,8 +50,10 @@ begin
   get diagnostics n = row_count;
   if n <> 0 then raise warning 'BREACH: a member hard-deleted the parent''s message (rows: %)', n; failures := failures + 1; end if;
 
-  -- Controls.
-  update public.family_messages set reactions = '{"👍":["x"]}'::jsonb, read_by = array[uA], is_pinned = true where id = parentMsg;
+  -- Controls. A reacts and marks read as A: since 0463 a member adds or removes
+  -- only their OWN id in reactions and read_by (the product never writes
+  -- anyone else's), so this control reacts as uA rather than as a placeholder.
+  update public.family_messages set reactions = jsonb_build_object('👍', jsonb_build_array(uA::text)), read_by = array[uA], is_pinned = true where id = parentMsg;
   get diagnostics n = row_count;
   if n <> 1 then raise warning 'CONTROL FAILED: a member could not react to / read / pin a message (rows: %)', n; failures := failures + 1; end if;
   insert into public.family_messages (conversation_id, family_id, sender_id, sender_name, content, kind)
