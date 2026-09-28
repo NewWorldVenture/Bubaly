@@ -1461,6 +1461,7 @@ worked; a claim with no commit touching it for six hours may be taken over.
 | API sweep (every `app/api` route, negative paths) | session_01KP9rt5rVQ9jDMpZp2xBy3K | done 2026-09-27 23:45. It duplicated session_01776xJyhVe8xJQvTGeNfT9T's sweep (#619), which landed first, and main's fixes were kept in the merge. Unique here: API-SWEEP-08 |
 | CRON positive run (all 27 cron routes, with the secret, on a local production build) | session_01KP9rt5rVQ9jDMpZp2xBy3K | done 2026-09-28 00:10: all 27 answered 200 over 93 families. It duplicated #619's cron pass, and its unsent-email fix is main's API-SWEEP-07 |
 | API-SWEEP-06, write half (`subscriptions_tracked` writable by any member, a child included) | — (released 2026-09-28 by session_01TRY21ZKsFrfB3qtoP972A4: fixed by 0460) | 🛠 FIXED + PASS locally; production needs the operator's migration step |
+| DB policy pass and DB-RPC pass (every table's policies; every function in `public`); migrations `0462`, `0463` | session_01776xJyhVe8xJQvTGeNfT9T | done 2026-09-28: DB-TBL rows and DB-RPC rows carry their facts; DB-RPC-M01 and -M02 fixed in the repo (`0462`, `0463`, unapplied in production). The per-role and workflow half of each DB-TBL/DB-RPC row is released, claimable |
 
 ## Finding index
 
