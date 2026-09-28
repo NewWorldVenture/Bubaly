@@ -11,6 +11,7 @@ import { EmptyState, ErrorState } from '@/components/ui/states';
 import { Donut, Bars } from '@/components/admin/charts';
 import { fmtMoney, fmtDate } from '@/lib/utils/format';
 import { planMonthlyCents, planName } from '@/lib/constants/plans';
+import { subscriptionRevenue } from '@/lib/admin/subscription-revenue';
 import { getTranslations, getLocaleContext } from '@/lib/i18n/server';
 
 export const metadata: Metadata = { title: 'Admin · Billing', robots: { index: false } };
@@ -62,13 +63,13 @@ export default async function AdminBillingPage() {
   const { count: billingCustomers } = billingCustomersResult;
 
   const rows = subs ?? [];
-  const active = rows.filter((s) => s.status === 'active' || s.status === 'trialing');
-  const mrrCents = active.reduce((sum, s) => sum + planMonthlyCents(s.plan), 0);
-  const pastDue = rows.filter((s) => s.status === 'past_due' || s.status === 'unpaid');
+  // Paying subscriptions only, as /admin/reports counts them: a trial is not
+  // revenue (METRIC-002). Trials are shown on the Active tile, separately.
+  const { paying, trialing, pastDue, mrrCents } = subscriptionRevenue(rows);
 
-  // Plan distribution (active subs) — real.
+  // Plan distribution (paying subs) — real.
   const planBuckets = new Map<string, number>();
-  for (const s of active) planBuckets.set(planName(s.plan), (planBuckets.get(planName(s.plan)) ?? 0) + 1);
+  for (const s of paying) planBuckets.set(planName(s.plan), (planBuckets.get(planName(s.plan)) ?? 0) + 1);
   const planSegments = [...planBuckets.entries()].map(([label, value], i) => ({ label, value, color: PLAN_COLORS[i % PLAN_COLORS.length] }));
 
   // New MRR added over the last 6 months — real, from subscription created_at.
@@ -98,7 +99,7 @@ export default async function AdminBillingPage() {
 
   const stats = [
     { label: 'Est. MRR', value: fmtMoney(mrrCents), icon: DollarSign, tint: 'text-amber-400 bg-amber-500/15' },
-    { label: 'Active Subscriptions', value: active.length.toLocaleString(), icon: CreditCard, tint: 'text-emerald-400 bg-emerald-500/15' },
+    { label: 'Active Subscriptions', value: paying.length.toLocaleString(), hint: `+ ${trialing.length.toLocaleString()} trialing`, icon: CreditCard, tint: 'text-emerald-400 bg-emerald-500/15' },
     { label: 'Billing Customers', value: (billingCustomers ?? 0).toLocaleString(), icon: Users, tint: 'text-violet-400 bg-violet-500/15' },
     { label: 'Past Due / Unpaid', value: pastDue.length.toLocaleString(), icon: AlertCircle, tint: 'text-rose-400 bg-rose-500/15' },
   ];
@@ -117,6 +118,7 @@ export default async function AdminBillingPage() {
             <div>
               <p className="text-xl font-bold leading-none">{s.value}</p>
               <p className="mt-1 text-xs text-muted">{s.label}</p>
+              {'hint' in s && s.hint && <p className="mt-0.5 text-[11px] text-muted">{s.hint}</p>}
             </div>
           </Card>
         ))}
@@ -134,7 +136,7 @@ export default async function AdminBillingPage() {
             <EmptyState icon={CreditCard} title={tr('adminBilling.noActiveSubscriptions')} />
           ) : (
             <div className="flex items-center gap-4">
-              <Donut segments={planSegments} total={active.length} />
+              <Donut segments={planSegments} total={paying.length} />
               <ul className="space-y-1.5 text-xs">
                 {planSegments.map((s) => (
                   <li key={s.label} className="flex items-center gap-2">
