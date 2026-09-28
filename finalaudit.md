@@ -51121,6 +51121,26 @@ Fixed:
   - `/dashboard` and `/home` fall back to the account's email prefix ("Good afternoon, bubaly-personas+parent1."), in English and German, where the dashboard had read "Good afternoon, .";
   - the marketplace assistant says "Hi! Ask me prices…" and "Hallo! Fragen Sie mich…".
 
+### B15 — the adult, the teen, the caregiver and the guest: every control and every form
+
+*session_01TRY21ZKsFrfB3qtoP972A4, claimed 11:10Z (#633), run 2026-09-28 11:10–15:00Z.* B6 pressed everything as a parent, B11 as a PIN child; B7 only rendered a teen. This batch signs in one member of each remaining role, each through `/login` with an email, in the same Family+ household on a local production build of main `2d6bd78f`, with migrations through `0461` applied.
+
+<!-- B15 pass table: completed below when the submission passes finish -->
+
+**What each role reaches.** All four render 350 of 350 signed-in routes with no page error. The adult reaches 272 (every family route, and `/dashboard/family-access`); the teen, caregiver and guest reach the same 270 family routes and are sent from `/dashboard/family-access` to `/home`. Every `/admin` route sends all four to `/dashboard`. The redirect arrives mid-stream, so a crawler can catch the address before it changes. The check that matters: the HTML and the RSC payload of `/admin/users`, fetched as the guest, teen, adult and caregiver, never contain another family's email, while the super admin's copy of the same page does.
+
+**PUSH-004, found independently.** The interaction pass's server log showed "Push dispatch failed: Error: Push cursor write failed" from `/api/notifications/generate` on every run after the first. The cause was the push cursor's compare-and-set: `.eq('value', stored.value)` sent a JSON object as the text `[object Object]`, and Postgres refused it with 22P02, so a family received its first batch of push notifications and none after. This batch had a field-by-field fix ready (`value->>id`, `value->>createdAt`) and confirmed the defect on the real local database. Another session found the same defect and fixed it first as **PUSH-004** (#644, sending the stored cursor as JSON text). Main's fix was kept and this one dropped, so there is one fix. The local reproduction adds a data point for PUSH-004: the old guard answers `22P02 invalid input syntax for type json` against a real PostgREST, and a run holding a stale cursor still loses the claim after the fix.
+
+**P-37 · Medium · "Analyze my finances" was silent when it was refused.** The teen, caregiver and guest each pressed it on `/dashboard/subscriptions`. `/api/ai/savings` correctly refused them with 403 and a translated reason (API-SWEEP-05). The card read only `summary` and `suggestions`, so the spinner stopped and nothing appeared. An engine that is not set up (503) was silent the same way. Fixed: the card shows the route's own message in an alert. It falls back to the catalogue's "temporarily unavailable" rather than an English literal. The answer is read by a pure function, `readSavingsAnswer`. `tests/a-refused-savings-analysis-says-so.test.ts` has 5 cases, all failing on the previous card.
+
+**Seen and not defects.**
+- `/api/ai/*` answered 503 "not configured" on a dozen pages: the local stack has no AI key.
+- The library's `/library/media/<id>` answered 415 for a book whose audio link was a web page (synthetic data from an earlier form pass). The route refuses non-audio, and the player says "That audio could not be played."
+- Social connect's "Add (setup)" answered 500 for the teen, caregiver and guest. That is the refused social permission, which P-24 already turns into "That wasn't saved · Your account can't make that change".
+- A single ChunkLoadError on `/dashboard/weekly-briefing` for the caregiver passed on a re-render.
+
+**Recorded for the owner, not changed:** the adult's self-promotion and the `parent` invite path (added to the SEC-026 owner decision above), and ROLE-SCOPE-001 (guest and caregiver scope, and the permission matrix), both merged in #638.
+
 ### B6a — the interaction pass (every tab, dialog and button, clicked)
 
 `page-audit.mjs --interact` against the local stack, as the Family+ parent, on
