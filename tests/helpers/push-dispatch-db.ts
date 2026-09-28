@@ -76,7 +76,7 @@ export function pushDispatchDb(tables: Record<string, PushFixtureRow[]>, options
     let rangeFrom: number | undefined, rangeTo: number | undefined;
     const filters: ((row: PushFixtureRow) => boolean)[] = [];
     const orders: { key: string; ascending: boolean }[] = [];
-    // A filter PostgREST would refuse before running the query (PUSH-004).
+    // A filter PostgREST would refuse before running the query (PUSH-007).
     let refused: { code: string; message: string } | null = null;
     const execute = () => {
       if (refused) return { data: null, error: refused };
@@ -129,7 +129,7 @@ export function pushDispatchDb(tables: Record<string, PushFixtureRow[]>, options
       // is parsed as JSON (and compared as jsonb, key order aside), and text that
       // is not JSON is refused with 22P02. Comparing by identity here let the
       // push cursor's compare-and-set pass with an object that production
-      // refuses on every run after the first (PUSH-004).
+      // refuses on every run after the first (PUSH-007).
       eq: (key: string, value: unknown) => {
         const text = `${value}`;
         // An object has no URL form: it arrives as "[object Object]", which a

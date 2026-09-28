@@ -49,6 +49,7 @@ export function AppLockSettings() {
       if (error) {
         // Say the read failed. Do NOT claim there is no PIN — the lock may well
         // be on, and offering "Set up PIN" here would overwrite a real one.
+        console.error('[app-lock] settings read failed', error);
         setLoadError(describeReadError(error));
         return;
       }
@@ -123,7 +124,9 @@ export function AppLockSettings() {
         </div>
         <div className="flex shrink-0 flex-col items-end gap-2">
           {loadError ? (
-            <span className="max-w-[16rem] text-right text-xs text-danger">{loadError}</span>
+            // The family reads what happened in their language; the raw error
+            // ("TypeError: Failed to fetch") stays on hover and in the log.
+            <span role="alert" title={loadError} className="max-w-[16rem] text-right text-xs text-danger">{t('appLockSettings.couldNotLoad')}</span>
           ) : config === undefined ? (
             <span className="text-xs text-muted">…</span>
           ) : enabled ? (
