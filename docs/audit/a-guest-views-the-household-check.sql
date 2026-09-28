@@ -7,9 +7,9 @@
 --
 -- This probe measures, for each of the eight resources /family/permissions
 -- shows, what a guest can actually do (C/R/U/D, one row each, as the guest's
--- own session), and requires it to equal what the page shows for the guest
--- row of public.permissions. So the page and the database cannot drift apart
--- for this role again in either direction.
+-- own session), and requires it to be view-only (-R--) and, where the page's
+-- seeded guest row exists, to equal it. So the page and the database cannot
+-- drift apart for this role again in either direction.
 --
 -- Controls: the parent still creates, reads, edits and deletes each resource,
 -- a child still adds a grocery item and a calendar event (0464 narrows the
@@ -121,11 +121,16 @@ begin
             || (case when can_update then 'U' else '-' end) || (case when can_delete then 'D' else '-' end)
           into shown
           from public.permissions where role = 'guest' and resource = t;
-        if shown is null then
-          raise warning 'MISSING: /family/permissions shows no guest row for %', t;
+        -- The rule is view-only (-R--) whether or not the page's rows exist:
+        -- public.permissions is filled by supabase/seed.sql, not a migration, so
+        -- a freshly bootstrapped database (CI) has none. Where the page does
+        -- show a guest row, it must say the same.
+        if got <> '-R--' then
+          raise warning 'BREACH: a guest can % on % (a guest views the household: -R--)', got, t;
           failures := failures + 1;
-        elsif got <> shown then
-          raise warning 'BREACH: a guest can % on % while /family/permissions shows the parent %', got, t, shown;
+        end if;
+        if shown is not null and shown <> got then
+          raise warning 'DRIFT: /family/permissions shows the parent % for a guest on %, and the database enforces %', shown, t, got;
           failures := failures + 1;
         end if;
       end if;
