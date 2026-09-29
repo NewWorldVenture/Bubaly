@@ -10,7 +10,7 @@ import { join } from 'node:path';
 import { describe, expect, it } from 'vitest';
 
 const DIR = 'scripts/api-audit';
-const scripts = [...readdirSync(DIR).filter((f) => f.endsWith('.mjs')).map((f) => join(DIR, f)), 'scripts/page-audit-session.mjs'];
+const scripts = [...readdirSync(DIR).filter((f) => f.endsWith('.mjs')).map((f) => join(DIR, f)), 'scripts/page-audit-session.mjs', 'scripts/workflow-audit.mjs'];
 const reachesOut = (src: string) => /SERVICE_ROLE_KEY|ANON_KEY|createClient\(|fetch\(|--base/.test(src);
 // sweep.mjs takes the sessions file sessions.mjs wrote, and refuses the base
 // URL recorded in it; the others take --base or read the Supabase URL.

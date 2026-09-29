@@ -517,7 +517,7 @@ export function MedicationsModule() {
       {/* Medications list */}
       {visibleMeds.length === 0 ? (
         <EmptyState icon={Pill} title={t('medications.noMedicationsYet')}
-          description={canEdit ? 'Add a medication and set its dosing schedule to start tracking adherence.' : 'No medications have been added for this filter.'}
+          description={canEdit ? t('uiText.addAMedicationAndSetItsDosing') : t('uiText.noMedicationsHaveBeenAddedForThis')}
           action={canEdit && <Button onClick={openNewMed} disabled={!!busy} className="gap-1.5"><Plus className="h-4 w-4" /> {t('medications.addMedication')}</Button>} />
       ) : (
         <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
@@ -592,7 +592,7 @@ export function MedicationsModule() {
       )}
 
       {/* Medication modal */}
-      <Modal open={medModalOpen} onClose={closeMed} title={medForm.id ? 'Edit medication' : 'Add medication'}>
+      <Modal open={medModalOpen} onClose={closeMed} title={medForm.id ? t('dialogTitle.editMedication') : t('dialogTitle.addMedication')}>
         <form onSubmit={saveMed} className="space-y-4">
           <fieldset disabled={!!busy} className="space-y-4">
           <Field label={t('medications.name')} required>

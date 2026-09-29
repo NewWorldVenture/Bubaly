@@ -121,7 +121,7 @@ export function ReviewCard({ item }: { item: ReviewItem }) {
           <input type="hidden" name="submission_id" value={item.submissionId} />
           {item.aiScore != null && <input type="hidden" name="score" value={item.aiScore} />}
           {override && (
-            <input type="number" name={isCash ? 'cash_cents' : 'points'} placeholder={isCash ? 'cents' : 'points'} className={inputCls + ' mr-2'} />
+            <input type="number" name={isCash ? 'cash_cents' : 'points'} placeholder={isCash ? t('uiText.cents') : t('uiText.points')} className={inputCls + ' mr-2'} />
           )}
           <button disabled={pending} className="inline-flex h-9 items-center gap-1 rounded-lg bg-success px-3 text-sm font-medium text-success-fg disabled:opacity-60">
             {pending ? <Loader2 className="h-4 w-4 animate-spin" /> : <Check className="h-4 w-4" />} {t('missionsReviewCard.approve')}

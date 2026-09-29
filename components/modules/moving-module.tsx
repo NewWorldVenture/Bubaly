@@ -427,7 +427,7 @@ function MoveForm({ familyId, userId, move, onClose, onSaved }: { familyId: stri
   );
 
   return (
-    <Modal open title={move ? 'Edit move' : 'Plan a move'} description={tr('movingModule.theDateAndTheFamily')} onClose={onClose}>
+    <Modal open title={move ? tr('dialogTitle.editMove') : tr('dialogTitle.planAMove')} description={tr('movingModule.theDateAndTheFamily')} onClose={onClose}>
       <form onSubmit={onSubmit} className="space-y-4">
         <div className="grid grid-cols-2 gap-3">
           <Field label={tr('moving.move')} required>{(id) => <Input id={id} name="title" defaultValue={move?.title ?? ''} placeholder={tr('moving.moveToMapleStreet')} autoFocus />}</Field>
@@ -436,7 +436,7 @@ function MoveForm({ familyId, userId, move, onClose, onSaved }: { familyId: stri
         {move && <p className="text-xs text-muted">{tr('movingModule.useChangeDateOnThe')}</p>}
         <div className="grid grid-cols-2 gap-3">
           <Field label={tr('moving.from')}>{(id) => <Input id={id} name="from_address" defaultValue={move?.from_address ?? ''} placeholder={tr('moving.12OldRoad')} />}</Field>
-          <Field label="To">{(id) => <Input id={id} name="to_address" defaultValue={move?.to_address ?? ''} placeholder={tr('moving.34MapleStreet')} />}</Field>
+          <Field label={tr('moving.to')}>{(id) => <Input id={id} name="to_address" defaultValue={move?.to_address ?? ''} placeholder={tr('moving.34MapleStreet')} />}</Field>
         </div>
         <div className="grid grid-cols-2 gap-3">
           <Field label={tr('moving.kindOfMove')}>{(id) => <Select id={id} name="move_kind" defaultValue={move?.move_kind ?? 'local'}>{MOVE_KINDS.map((k) => <option key={k.value} value={k.value}>{k.label}</option>)}</Select>}</Field>
@@ -500,7 +500,7 @@ function TaskForm({ familyId, userId, move, members, task, onClose, onSaved }: {
   }
 
   return (
-    <Modal open title={task ? 'Edit task' : 'Add a task'} onClose={onClose}>
+    <Modal open title={task ? tr('dialogTitle.editTask') : tr('dialogTitle.addATask')} onClose={onClose}>
       <form onSubmit={onSubmit} className="space-y-4">
         <Field label={tr('moving.task')} required>{(id) => <Input id={id} name="title" defaultValue={task?.title ?? ''} placeholder={tr('moving.returnTheCableBox')} autoFocus />}</Field>
         <div className="grid grid-cols-2 gap-3">

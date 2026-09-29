@@ -99,7 +99,7 @@ export function RegistrationClient({
       </div>
 
       {/* Registration modal */}
-      <Modal open={regOpen} onClose={() => setRegOpen(false)} title={regEdit ? 'Edit registration' : 'Add registration'}>
+      <Modal open={regOpen} onClose={() => setRegOpen(false)} title={regEdit ? tr('dialogTitle.editRegistration') : tr('dialogTitle.addRegistration')}>
         <form action={(fd) => start(async () => { if (await run(() => saveRegistrationAction(fd))) setRegOpen(false); })} className="space-y-3">
           {regEdit && <input type="hidden" name="id" value={regEdit.id} />}
           <Field label={tr('registrationClient.vehicle')}><Select name="vehicle_id" defaultValue={regEdit?.vehicle_id ?? ''}><option value="">—</option>{vehicles.map((v) => <option key={v.id} value={v.id}>{vehicleLabel(v)}</option>)}</Select></Field>
@@ -118,7 +118,7 @@ export function RegistrationClient({
       </Modal>
 
       {/* Inspection modal */}
-      <Modal open={inspOpen} onClose={() => setInspOpen(false)} title={inspEdit ? 'Edit inspection' : 'Add inspection'}>
+      <Modal open={inspOpen} onClose={() => setInspOpen(false)} title={inspEdit ? tr('dialogTitle.editInspection') : tr('dialogTitle.addInspection')}>
         <form action={(fd) => start(async () => { if (await run(() => saveInspectionAction(fd))) setInspOpen(false); })} className="space-y-3">
           {inspEdit && <input type="hidden" name="id" value={inspEdit.id} />}
           <Field label={tr('registrationClient.vehicle')}><Select name="vehicle_id" defaultValue={inspEdit?.vehicle_id ?? ''}><option value="">—</option>{vehicles.map((v) => <option key={v.id} value={v.id}>{vehicleLabel(v)}</option>)}</Select></Field>

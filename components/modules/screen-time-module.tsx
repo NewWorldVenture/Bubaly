@@ -235,7 +235,7 @@ export function ScreenTimeModule() {
       </div>
 
       {form && (
-        <Modal open onClose={() => setForm(null)} title={form.id ? 'Edit screen time' : 'Log screen time'}>
+        <Modal open onClose={() => setForm(null)} title={form.id ? t('dialogTitle.editScreenTime') : t('dialogTitle.logScreenTime')}>
           <form onSubmit={save} className="space-y-3">
             <Field label={t('screenTime.child')}>
               {(id) => (

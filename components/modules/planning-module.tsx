@@ -158,7 +158,7 @@ export function PlanningModule({ tz }: { tz: string }) {
                         <button
                           onClick={() => toggleStep(s)}
                           className={cn('flex size-5 shrink-0 items-center justify-center rounded border', s.is_done ? 'border-emerald-500 bg-emerald-500/20 text-emerald-300' : 'border-border')}
-                          aria-label={s.is_done ? 'Mark not done' : 'Mark done'}
+                          aria-label={s.is_done ? t('uiText.markNotDone') : t('uiText.markDone')}
                         >
                           {s.is_done && <Check className="size-3.5" />}
                         </button>

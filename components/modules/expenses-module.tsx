@@ -212,7 +212,7 @@ export function ExpensesModule() {
                     onClick={() => toggleSettled(s)}
                     disabled={isPending(`settle:${s.id}`)}
                     className={`inline-flex items-center gap-1 rounded-full px-2 py-0.5 text-xs transition disabled:opacity-60 ${s.settled ? 'bg-success/15 text-success' : 'bg-border/40 text-muted hover:bg-border/70'}`}
-                    title={s.settled ? 'Settled — click to unsettle' : 'Mark settled'}
+                    title={s.settled ? tr('dialogTitle.settledClickToUnsettle') : tr('dialogTitle.markSettled')}
                   >
                     {isPending(`settle:${s.id}`) ? <Loader2 className="h-3 w-3 animate-spin" /> : s.settled && <Check className="h-3 w-3" />} {memberName(s.member_id)} {usd(s.share_cents)}
                   </button>

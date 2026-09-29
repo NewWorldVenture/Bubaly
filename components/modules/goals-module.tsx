@@ -223,7 +223,7 @@ function GoalModal({ goal, familyId, userId, onClose, onSaved }: {
   }
 
   return (
-    <Modal open onClose={onClose} title={goal ? 'Edit goal' : 'New family goal'}>
+    <Modal open onClose={onClose} title={goal ? t('dialogTitle.editGoal') : t('dialogTitle.newFamilyGoal')}>
       <form onSubmit={onSubmit} className="space-y-4">
         <Field label={t('goals.goal')} required>
           {(id) => <Input id={id} name="title" defaultValue={goal?.title ?? ''} placeholder={t('goals.saveForAFamilyVacation')} autoFocus />}

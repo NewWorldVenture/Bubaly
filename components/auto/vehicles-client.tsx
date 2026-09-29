@@ -66,7 +66,7 @@ export function VehiclesClient({ vehicles, members }: { vehicles: Vehicle[]; mem
         </div>
       )}
 
-      <Modal open={open} onClose={() => setOpen(false)} title={editing ? 'Edit vehicle' : 'Add vehicle'}>
+      <Modal open={open} onClose={() => setOpen(false)} title={editing ? tr('dialogTitle.editVehicle') : tr('dialogTitle.addVehicle')}>
         <form action={(fd) => start(async () => { if (await run(() => saveVehicleAction(fd))) setOpen(false); })} className="space-y-3">
           {editing && <input type="hidden" name="id" value={editing.id} />}
           <div className="grid grid-cols-3 gap-3">

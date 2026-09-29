@@ -215,7 +215,7 @@ function EntryModal({ entry, initialPrompt, familyId, userId, memberId, onClose,
   }
 
   return (
-    <Modal open onClose={onClose} title={entry ? 'Edit Entry' : 'New Entry'}>
+    <Modal open onClose={onClose} title={entry ? t('dialogTitle.editEntry') : t('dialogTitle.newEntry')}>
       <form onSubmit={onSubmit} className="space-y-4">
         {initialPrompt && (
           <p className="flex items-start gap-1.5 rounded-xl bg-surface/60 p-3 text-sm italic text-muted">

@@ -1040,7 +1040,7 @@ function NewEventModal({ existing, onClose, onSaved }: {
   }
 
   return (
-    <Modal open title={existing ? 'Edit Event' : 'Add Event'} onClose={onClose}>
+    <Modal open title={existing ? tr('dialogTitle.editEvent') : tr('dialogTitle.addEvent')} onClose={onClose}>
       <form onSubmit={onSubmit} className="space-y-4">
         <Field label={tr('calendar.title')} error={errors.title} required>
           {(id) => <Input id={id} name="title" autoFocus placeholder={tr('calendar.teamDinner')} defaultValue={existing?.title ?? ''} />}

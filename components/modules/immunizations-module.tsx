@@ -190,7 +190,7 @@ export function ImmunizationsModule({ title = 'Immunizations' }: { title?: strin
       )}
 
       {form && (
-        <Modal open onClose={() => setForm(null)} title={form.id ? 'Edit immunization' : 'Add immunization'}>
+        <Modal open onClose={() => setForm(null)} title={form.id ? t('dialogTitle.editImmunization') : t('dialogTitle.addImmunization')}>
           <form onSubmit={save} className="space-y-3">
             <div className="grid grid-cols-2 gap-3">
               <Field label={t('immunizations.vaccine')} required>{(id) => (

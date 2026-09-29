@@ -274,7 +274,7 @@ export function TripsModule() {
                   <ul className="space-y-1.5">
                     {list.map((it) => (
                       <li key={it.id} className="flex items-start gap-2.5 group">
-                        <button onClick={() => toggleItem(it)} aria-label={it.is_done ? 'Mark not done' : 'Mark done'}
+                        <button onClick={() => toggleItem(it)} aria-label={it.is_done ? tr('uiText.markNotDone') : tr('uiText.markDone')}
                           className={cn('mt-0.5 inline-flex h-5 w-5 items-center justify-center rounded border flex-shrink-0 transition',
                             it.is_done ? 'bg-emerald-500 border-emerald-500 text-white' : 'border-border hover:border-emerald-500/50')}>
                           {it.is_done && <Check className="h-3.5 w-3.5" />}
@@ -343,8 +343,8 @@ export function TripsModule() {
       </div>
 
       {visibleTrips.length === 0 ? (
-        <EmptyState icon={Plane} title={showPast ? 'No trips yet' : 'No upcoming trips'}
-          description={canEdit ? 'Plan your next family getaway with packing lists, reservations, and a shared checklist.' : 'No trips are planned yet.'}
+        <EmptyState icon={Plane} title={showPast ? tr('dialogTitle.noTripsYet') : tr('dialogTitle.noUpcomingTrips')}
+          description={canEdit ? tr('uiText.planYourNextFamilyGetawayWithPacking') : tr('uiText.noTripsArePlannedYet')}
           action={canEdit && <Button onClick={openNewTrip} className="gap-1.5"><Plus className="h-4 w-4" /> {tr('trips.newTrip')}</Button>} />
       ) : (
         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
@@ -383,7 +383,7 @@ export function TripsModule() {
       )}
 
       {/* Trip modal */}
-      <Modal open={tripModal} onClose={() => setTripModal(false)} title={tripForm.id ? 'Edit trip' : 'New trip'}>
+      <Modal open={tripModal} onClose={() => setTripModal(false)} title={tripForm.id ? tr('dialogTitle.editTrip') : tr('dialogTitle.newTrip')}>
         <form onSubmit={saveTrip} className="space-y-4">
           <Field label={tr('trips.tripName')} required>
             {(id) => <Input id={id} value={tripForm.name} onChange={(e) => setTripForm((f) => ({ ...f, name: e.target.value }))} placeholder={tr('trips.eGSummerAtTheLake')} autoFocus />}

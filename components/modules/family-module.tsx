@@ -560,7 +560,7 @@ function MemberModal({ familyId, createdBy, member, onClose, onSaved }: {
   }
 
   return (
-    <Modal open title={member ? 'Edit Member' : 'Add Member'} onClose={onClose}>
+    <Modal open title={member ? t('dialogTitle.editMember') : t('dialogTitle.addMember')} onClose={onClose}>
       <form onSubmit={submit} className="space-y-4">
         <Field label={t('family.name')} required>{(id) => <Input id={id} value={name} onChange={(e) => setName(e.target.value)} placeholder={t('family.eGEllaParker')} required />}</Field>
         <Field label={t('family.role')}>{(id) => (

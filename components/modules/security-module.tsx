@@ -173,7 +173,7 @@ export function SecurityModule() {
                   <p className="mt-0.5 text-[11px] text-muted">{fmtDate(ev.occurred_at)}{ev.resolved ? ' · resolved' : ''}</p>
                 </div>
                 <div className="flex shrink-0 items-center gap-2">
-                  <button onClick={() => toggleResolved(ev)} className="text-muted hover:text-fg" title={ev.resolved ? 'Reopen' : 'Resolve'}>{ev.resolved ? <RotateCcw className="h-4 w-4" /> : <Check className="h-4 w-4" />}</button>
+                  <button onClick={() => toggleResolved(ev)} className="text-muted hover:text-fg" title={ev.resolved ? tr('dialogTitle.reopen') : tr('dialogTitle.resolve')}>{ev.resolved ? <RotateCcw className="h-4 w-4" /> : <Check className="h-4 w-4" />}</button>
                   <button onClick={() => remove(ev.id)} className="text-muted hover:text-danger" aria-label={tr('security.delete')}><Trash2 className="h-4 w-4" /></button>
                 </div>
               </div>
