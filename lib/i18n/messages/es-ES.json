@@ -16596,5 +16596,6 @@
   "uiText.noTripsArePlannedYet": "Aún no hay viajes planificados.",
   "uiText.stopListening": "Dejar de escuchar",
   "uiText.startListening": "Empezar a escuchar",
-  "uiText.resume": "Reanudar"
+  "uiText.resume": "Reanudar",
+  "adminMarketingContent.pageOfItems": "Página {page} de {pages} · {count} elementos"
 }
