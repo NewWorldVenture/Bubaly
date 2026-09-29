@@ -10,7 +10,7 @@ import { createServer } from '@/lib/supabase/server';
 import { Avatar } from '@/components/ui/avatar';
 import { FollowButton } from '@/components/marketplace/follow-button';
 import { ListingImage } from '@/components/marketplace/listing-image';
-import { computeTrustScore, ratingSummary, TRUST_BAND_LABELS } from '@/lib/marketplace/trust';
+import { computeTrustScore, ratingSummary, TRUST_BAND_LABEL_KEYS } from '@/lib/marketplace/trust';
 import {
   KIND_LABELS, CATEGORY_LABELS, priceLabel,
   type ListingKind, type ListingCategory, type RentPeriod,
@@ -108,7 +108,7 @@ export default async function StorefrontPage({ params }: { params: Promise<{ id:
 
         {/* Stats row */}
         <div className="mt-4 grid grid-cols-2 gap-3 sm:grid-cols-4">
-          <Stat icon={<ShieldCheck className="h-4 w-4 text-emerald-500" />} value={String(trust.score)} label={TRUST_BAND_LABELS[trust.band]} />
+          <Stat icon={<ShieldCheck className="h-4 w-4 text-emerald-500" />} value={String(trust.score)} label={t(TRUST_BAND_LABEL_KEYS[trust.band])} />
           <Stat icon={<Star className="h-4 w-4 fill-amber-400 text-amber-400" />} value={rs.count > 0 ? rs.avg.toFixed(1) : '—'} label={rs.count > 0 ? `${rs.count} review${rs.count === 1 ? '' : 's'}` : 'No reviews'} />
           <Stat icon={<Users className="h-4 w-4 text-brand-text" />} value={String(followers)} label={`follower${followers === 1 ? '' : 's'}`} />
           <Stat icon={<Package className="h-4 w-4 text-muted" />} value={String(listings.length)} label={t('marketplaceCreators.openListings')} />

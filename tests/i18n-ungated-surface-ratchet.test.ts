@@ -292,7 +292,17 @@ import { scanPaths, scannedFileCount } from '../scripts/i18n-scan.mjs';
 //
 // The burn-down and the port's translations together, measured once over the
 // merged tree with the one scanner: 1,922. Banked as the ceiling.
-const CEILING = 1922;
+//
+// ── NAV-L01: -> 1,772 ────────────────────────────────────────────────────────
+//
+// Main had reached 1,780 since the line above was banked. NAV-L01 renders the
+// Auto, Home and Marketplace menus, the More page and the dashboard names
+// through navLabel and catalogue keys: the eight strings that were copy (the
+// More page's seven descriptions and the Settings navigation intro) leave the
+// count; the menu labels stay in their arrays as the lookup keys navLabel
+// derives from, which the scanner still counts. 1,772, measured with the same
+// scanner. Banked as the ceiling.
+const CEILING = 1772;
 
 describe('the ungated i18n surface does not get worse', () => {
   const findings = scanPaths(['app', 'components']);

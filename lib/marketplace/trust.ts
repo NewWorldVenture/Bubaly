@@ -73,8 +73,9 @@ export function computeTrustScore(input: TrustInput): TrustScore {
   return { score, stars, band, factors };
 }
 
-export const TRUST_BAND_LABELS: Record<TrustBand, string> = {
-  exceptional: 'Exceptional', great: 'Great', good: 'Good', building: 'Building',
+/** Catalogue key for each band; a screen shows `t(TRUST_BAND_LABEL_KEYS[band])`. */
+export const TRUST_BAND_LABEL_KEYS: Record<TrustBand, string> = {
+  exceptional: 'marketplaceTrust.exceptional', great: 'marketplaceTrust.great', good: 'marketplaceTrust.good', building: 'marketplaceTrust.building',
 };
 
 /** Average + count from raw ratings — the "4.9 (28)" chip on cards. */
