@@ -185,7 +185,7 @@ export function LifeEventsModule({
                     {f.notes && <p className="mt-1 text-xs text-muted">{f.notes}</p>}
                   </div>
                   <div className="flex shrink-0 items-center gap-0.5 opacity-0 transition group-hover:opacity-100 focus-within:opacity-100">
-                    <button onClick={() => togglePin(f)} aria-label={f.is_pinned ? 'Unpin' : 'Pin'} className="rounded-lg p-1.5 text-muted hover:text-brand-text">{f.is_pinned ? <PinOff className="h-3.5 w-3.5" /> : <Pin className="h-3.5 w-3.5" />}</button>
+                    <button onClick={() => togglePin(f)} aria-label={f.is_pinned ? tr('dialogTitle.unpin') : tr('dialogTitle.pin')} className="rounded-lg p-1.5 text-muted hover:text-brand-text">{f.is_pinned ? <PinOff className="h-3.5 w-3.5" /> : <Pin className="h-3.5 w-3.5" />}</button>
                     <button onClick={() => setFactModal({ open: true, editing: f })} aria-label={tr('lifeEvents.edit')} className="rounded-lg p-1.5 text-muted hover:text-fg"><Pencil className="h-3.5 w-3.5" /></button>
                     <button onClick={() => removeFact(f)} aria-label={tr('lifeEvents.remove')} className="rounded-lg p-1.5 text-muted hover:text-danger"><Trash2 className="h-3.5 w-3.5" /></button>
                   </div>
@@ -408,7 +408,7 @@ function FactModal({ familyId, userId, editing, onClose, onSaved, onError }: {
     // A person typing here is telling Bubaly, not Bubaly learning — and the
     // row is written with `source: 'user'`, so the old title was the one
     // sentence on this screen the data disagreed with.
-    <Modal open onClose={onClose} title={editing ? 'Edit' : 'Tell Bubaly something'}>
+    <Modal open onClose={onClose} title={editing ? tr('dialogTitle.edit') : tr('dialogTitle.tellBubalySomething')}>
       <form onSubmit={submit} className="space-y-3">
         <Field label={tr('lifeEvents.label')}>{(id) => <Input id={id} value={label} onChange={(e) => setLabel(e.target.value)} placeholder={tr('lifeEvents.fridayTradition')} autoFocus />}</Field>
         <Field label={tr('lifeEvents.value')}>{(id) => <Input id={id} value={value} onChange={(e) => setValue(e.target.value)} placeholder={tr('lifeEvents.pizzaMovieNight')} />}</Field>

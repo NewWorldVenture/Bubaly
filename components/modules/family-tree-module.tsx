@@ -284,7 +284,7 @@ export function FamilyTreeModule() {
 
       {/* Add / Edit modal */}
       {form && (
-        <Modal open onClose={() => { setForm(null); setEditNode(null); }} title={editNode ? 'Edit person' : 'Add to family tree'}>
+        <Modal open onClose={() => { setForm(null); setEditNode(null); }} title={editNode ? t('dialogTitle.editPerson') : t('dialogTitle.addToFamilyTree')}>
           <form onSubmit={editNode ? update : save} className="space-y-3">
             <Field label={t('familyTree.name')} required>
               {(id) => <Input id={id} value={form.name} onChange={(e) => setForm({ ...form, name: e.target.value })} placeholder={t('familyTree.eGGrandmaRose')} required />}

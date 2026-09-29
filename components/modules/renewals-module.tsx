@@ -180,7 +180,7 @@ export function RenewalsModule() {
 
       {(renewals ?? []).length === 0 ? (
         <EmptyState icon={ShieldCheck} title={t('renewals.nothingTrackedYet')}
-          description={canEdit ? 'Add the documents, licenses, and warranties you want to be reminded about before they expire.' : 'No renewals have been added yet.'}
+          description={canEdit ? t('uiText.addTheDocumentsLicensesAndWarrantiesYou') : t('uiText.noRenewalsHaveBeenAddedYet')}
           action={canEdit && <Button onClick={openNew} className="gap-1.5"><Plus className="h-4 w-4" /> {t('renewals.addRenewal')}</Button>} />
       ) : (
         <div className="space-y-6">
@@ -236,7 +236,7 @@ export function RenewalsModule() {
       )}
 
       {/* Modal */}
-      <Modal open={modalOpen} onClose={() => setModalOpen(false)} title={form.id ? 'Edit renewal' : 'Add renewal'}>
+      <Modal open={modalOpen} onClose={() => setModalOpen(false)} title={form.id ? t('dialogTitle.editRenewal') : t('dialogTitle.addRenewal')}>
         <form onSubmit={save} className="space-y-4">
           <Field label={t('renewals.whatExpires')} required>
             {(id) => <Input id={id} value={form.title} onChange={(e) => setForm((f) => ({ ...f, title: e.target.value }))} placeholder={t('renewals.eGPassportMom')} autoFocus />}

@@ -663,7 +663,7 @@ function RecipeFormModal({ recipe, familyId, userId, onClose, onSaved }: {
   }
 
   return (
-    <Modal open onClose={onClose} title={recipe ? 'Edit Recipe' : 'New Recipe'}>
+    <Modal open onClose={onClose} title={recipe ? tr('dialogTitle.editRecipe') : tr('dialogTitle.newRecipe')}>
       <form onSubmit={onSubmit} className="max-h-[75vh] space-y-4 overflow-y-auto pr-1">
         <Field label={tr('recipes.recipeName')} required>
           {(id) => <Input id={id} name="name" defaultValue={recipe?.name ?? ''} placeholder={tr('recipesModule.grandmaSSpaghettiTacoTuesday')} autoFocus />}

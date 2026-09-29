@@ -513,7 +513,7 @@ export function LocatorModule() {
       </aside>
 
       {/* Place modal */}
-      <Modal open={placeModal} onClose={() => setPlaceModal(false)} title={placeForm.id ? 'Edit place' : 'Add place'}>
+      <Modal open={placeModal} onClose={() => setPlaceModal(false)} title={placeForm.id ? tr('dialogTitle.editPlace') : tr('dialogTitle.addPlace')}>
         <form onSubmit={submitPlace} className="space-y-4">
           <div className="grid grid-cols-2 gap-3">
             <Field label={tr('locator.name')} required>

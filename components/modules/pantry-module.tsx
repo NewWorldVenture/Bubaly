@@ -288,7 +288,7 @@ function PantryItemModal({ item, familyId, userId, onClose, onSaved }: {
   }
 
   return (
-    <Modal open onClose={onClose} title={item ? 'Edit item' : 'Add pantry item'}>
+    <Modal open onClose={onClose} title={item ? t('dialogTitle.editItem') : t('dialogTitle.addPantryItem')}>
       <form onSubmit={onSubmit} className="space-y-4">
         <Field label={t('pantry.itemName')} required>
           {(id) => <Input id={id} name="name" defaultValue={item?.name ?? ''} placeholder={t('pantry.oliveOilEggsPaperTowels')} autoFocus />}

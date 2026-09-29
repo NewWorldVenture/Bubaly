@@ -448,7 +448,7 @@ function NoteModal({ note, onClose, onSaved }: {
   const currentColor = NOTE_COLORS.find((c) => c.id === selectedColor) ?? NOTE_COLORS[0];
 
   return (
-    <Modal open onClose={onClose} title={note ? 'Edit Note' : 'New Note'}>
+    <Modal open onClose={onClose} title={note ? t('dialogTitle.editNote') : t('dialogTitle.newNote')}>
       <form onSubmit={onSubmit} className="space-y-4">
         {/* Color picker */}
         <div className="flex items-center gap-2">

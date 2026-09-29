@@ -190,7 +190,7 @@ export function HealthVisitsModule({ defaultKind, title = 'Visits & History', lo
       )}
 
       {form && (
-        <Modal open onClose={() => setForm(null)} title={form.id ? 'Edit visit' : 'Add visit'}>
+        <Modal open onClose={() => setForm(null)} title={form.id ? t('dialogTitle.editVisit') : t('dialogTitle.addVisit')}>
           <form onSubmit={save} className="space-y-3">
             <div className="grid grid-cols-2 gap-3">
               {!lockKind && (

@@ -194,7 +194,7 @@ function SitterModal({ sitter, onClose, onSaved }: {
   }
 
   return (
-    <Modal open title={sitter ? 'Edit Babysitter' : 'Add Babysitter'} onClose={onClose}>
+    <Modal open title={sitter ? tr('dialogTitle.editBabysitter') : tr('dialogTitle.addBabysitter')} onClose={onClose}>
       <form onSubmit={onSubmit} className="space-y-4">
         <Field label={tr('babysitters.name')} required>{(id) => <Input id={id} name="name" autoFocus defaultValue={sitter?.name ?? ''} placeholder={t('babysittersView.jamieRivera')} />}</Field>
         <div className="grid grid-cols-2 gap-3">

@@ -254,7 +254,7 @@ export function PasswordsModule() {
                   <div className="flex items-center gap-2">
                     <span className="w-16 shrink-0 text-[11px] uppercase tracking-wide text-muted">{c.category === 'wifi' ? 'Password' : c.category === 'pin' ? 'Code' : 'Secret'}</span>
                     <code className="min-w-0 flex-1 truncate font-mono text-sm">{isRevealed ? (c.secret || '—') : '•'.repeat(Math.min(Math.max(c.secret.length, 6), 12))}</code>
-                    <button onClick={() => toggleReveal(c.id)} aria-label={isRevealed ? 'Hide' : 'Reveal'} className="grid h-7 w-7 shrink-0 place-items-center rounded-lg text-muted hover:bg-elevated hover:text-fg">
+                    <button onClick={() => toggleReveal(c.id)} aria-label={isRevealed ? t('uiText.hide') : t('uiText.reveal')} className="grid h-7 w-7 shrink-0 place-items-center rounded-lg text-muted hover:bg-elevated hover:text-fg">
                       {isRevealed ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}
                     </button>
                     <button onClick={() => copy(c.secret, t('passwords.secretCopied'))} disabled={!c.secret} aria-label={t('passwords.copySecret')} className="grid h-7 w-7 shrink-0 place-items-center rounded-lg text-muted hover:bg-elevated hover:text-fg disabled:opacity-40">
@@ -276,7 +276,7 @@ export function PasswordsModule() {
       )}
 
       {/* Add / Edit modal */}
-      <Modal open={editOpen} onClose={() => setEditOpen(false)} title={form.id ? 'Edit entry' : 'Add entry'}>
+      <Modal open={editOpen} onClose={() => setEditOpen(false)} title={form.id ? t('dialogTitle.editEntry') : t('dialogTitle.addEntry')}>
         <form onSubmit={submit} className="space-y-4">
           <div className="grid grid-cols-2 gap-3">
             <Field label={t('passwords.category')}>{(id) => (
@@ -293,7 +293,7 @@ export function PasswordsModule() {
             {(id) => (
               <div className="relative">
                 <Input id={id} type={formSecretShown ? 'text' : 'password'} value={form.secret} onChange={(e) => setForm((f) => ({ ...f, secret: e.target.value }))} placeholder="••••••••" autoComplete="off" className="pr-10" />
-                <button type="button" onClick={() => setFormSecretShown((v) => !v)} aria-label={formSecretShown ? 'Hide' : 'Show'} className="absolute right-2 top-1/2 grid h-8 w-8 -translate-y-1/2 place-items-center rounded-lg text-muted hover:text-fg">
+                <button type="button" onClick={() => setFormSecretShown((v) => !v)} aria-label={formSecretShown ? t('uiText.hide') : t('uiText.show')} className="absolute right-2 top-1/2 grid h-8 w-8 -translate-y-1/2 place-items-center rounded-lg text-muted hover:text-fg">
                   {formSecretShown ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}
                 </button>
               </div>

@@ -669,6 +669,7 @@ export function MealsModule() {
 }
 
 function RecipeGrid({ recipes, onToggleFavorite }: { recipes: Recipe[]; onToggleFavorite: (r: Recipe) => void }) {
+  const tr = useTranslations();
   return (
     <div className="grid grid-cols-2 gap-3 sm:grid-cols-3 xl:grid-cols-4">
       {recipes.map((r) => {
@@ -677,7 +678,7 @@ function RecipeGrid({ recipes, onToggleFavorite }: { recipes: Recipe[]; onToggle
           <div key={r.id} className="group overflow-hidden rounded-xl border border-border bg-surface/40 transition hover:bg-elevated/40">
             <div className="relative">
               <MealImg src={r.photo_url} emoji="🍽️" className="h-28 w-full" />
-              <button onClick={() => onToggleFavorite(r)} aria-label={r.is_favorite ? 'Unfavorite' : 'Favorite'}
+              <button onClick={() => onToggleFavorite(r)} aria-label={r.is_favorite ? tr('uiText.unfavorite') : tr('uiText.favorite')}
                 className="absolute right-1.5 top-1.5 grid h-7 w-7 place-items-center rounded-full bg-bg/70 backdrop-blur transition hover:bg-bg">
                 <Heart className={cn('h-3.5 w-3.5', r.is_favorite ? 'fill-danger text-danger' : 'text-muted')} />
               </button>

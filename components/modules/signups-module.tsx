@@ -207,7 +207,7 @@ export function SignupsModule() {
 
       {visible.length === 0 ? (
         <EmptyState icon={CalendarClock} title={t('signups.noSignupsTracked')}
-          description={canEdit ? 'Add camp, school, and activity registrations to track their deadlines.' : 'No signups have been added yet.'}
+          description={canEdit ? t('uiText.addCampSchoolAndActivityRegistrationsTo') : t('uiText.noSignupsHaveBeenAddedYet')}
           action={canEdit && <Button onClick={openNew} className="gap-1.5"><Plus className="h-4 w-4" /> {t('signups.addSignup')}</Button>} />
       ) : (
         <div className="space-y-6">
@@ -263,7 +263,7 @@ export function SignupsModule() {
       )}
 
       {/* Modal */}
-      <Modal open={modalOpen} onClose={() => setModalOpen(false)} title={form.id ? 'Edit signup' : 'Add signup'}>
+      <Modal open={modalOpen} onClose={() => setModalOpen(false)} title={form.id ? t('dialogTitle.editSignup') : t('dialogTitle.addSignup')}>
         <form onSubmit={save} className="space-y-4">
           <Field label={t('signups.whatIsIt')} required>
             {(id) => <Input id={id} value={form.title} onChange={(e) => setForm((f) => ({ ...f, title: e.target.value }))} placeholder={t('signups.eGSummerSoccerCamp')} autoFocus />}

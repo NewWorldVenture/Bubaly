@@ -383,7 +383,7 @@ function ZoneForm({ familyId, userId, zone, onClose, onSaved }: { familyId: stri
   }
 
   return (
-    <Modal open title={zone ? 'Edit zone' : 'Add a zone'} description={tr('declutterModule.aZoneIsOneSpot')} onClose={onClose}>
+    <Modal open title={zone ? tr('dialogTitle.editZone') : tr('dialogTitle.addAZone')} description={tr('declutterModule.aZoneIsOneSpot')} onClose={onClose}>
       <form onSubmit={onSubmit} className="space-y-4">
         <div className="grid grid-cols-2 gap-3">
           <Field label={tr('declutter.name')} required>{(id) => <Input id={id} name="name" defaultValue={zone?.name ?? ''} placeholder={tr('declutter.kitchenCounter')} autoFocus />}</Field>
@@ -441,7 +441,7 @@ function MissionForm({ familyId, userId, zones, members, mission, zoneId, preset
   }
 
   return (
-    <Modal open title={mission ? 'Edit mission' : 'New mission'} description={tr('declutterModule.keepItToOneTimer')} onClose={onClose}>
+    <Modal open title={mission ? tr('dialogTitle.editMission') : tr('dialogTitle.newMission')} description={tr('declutterModule.keepItToOneTimer')} onClose={onClose}>
       <form onSubmit={onSubmit} className="space-y-4">
         <Field label={tr('declutter.zone')}>{(id) => <Select id={id} name="zone_id" value={zone} onChange={(e) => setZone(e.target.value)}><option value="">{tr('declutter.noZone')}</option>{zones.map((z) => <option key={z.id} value={z.id}>{zoneKindMeta(z.kind).emoji} {z.name}{z.room ? ` · ${z.room}` : ''}</option>)}</Select>}</Field>
         <Field label={tr('declutter.mission')} required>{(id) => <Input id={id} name="title" list="mission-ideas" defaultValue={mission?.title ?? preset?.title ?? ''} placeholder={tr('declutter.clearEverythingThatDoesntLiveHere')} autoFocus={!preset} />}</Field>

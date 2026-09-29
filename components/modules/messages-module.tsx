@@ -1308,7 +1308,7 @@ function NewConversation({ familyId, userId, members, conversations, myName, onC
               <input
                 value={search}
                 onChange={(e) => setSearch(e.target.value)}
-                placeholder={selectedMembers.length ? 'Add more…' : 'Search people or groups…'}
+                placeholder={selectedMembers.length ? tr('uiText.addMore') : tr('uiText.searchPeopleOrGroups')}
                 className="min-w-[8rem] flex-1 bg-transparent px-1 py-1 text-sm outline-none placeholder:text-muted"
               />
             </div>

@@ -118,7 +118,7 @@ export function BinderModule() {
       ))}
 
       {form && (
-        <Modal open onClose={() => setForm(null)} title={form.id ? 'Edit entry' : 'Add entry'}>
+        <Modal open onClose={() => setForm(null)} title={form.id ? t('dialogTitle.editEntry') : t('dialogTitle.addEntry')}>
           <form onSubmit={save} className="space-y-3">
             <Field label={t('binder.category')}>{(id) => <Select id={id} value={form.category} onChange={(e) => setForm({ ...form, category: e.target.value })}>{BINDER_CATEGORIES.map((c) => <option key={c} value={c}>{binderCategoryLabel(c)}</option>)}</Select>}</Field>
             <Field label={t('binder.label')}>{(id) => <Input id={id} value={form.label} onChange={(e) => setForm({ ...form, label: e.target.value })} placeholder={t('binder.wiFiPasswordAlarmCode')} />}</Field>
