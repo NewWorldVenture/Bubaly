@@ -6,8 +6,9 @@
 // tiersByHref), and the catalogue says `plus` for /dashboard/home. So a Basic
 // family sees the entry LOCKED, and clicking it opens the upgrade prompt for
 // Family+ (level 2), the same level the segment layout enforces. There is no
-// dead link. `minLevel: 1` still disagrees on paper, but nothing that renders
-// or gates reads it for this route; the Free sidebar shows only minLevel 0.
+// dead link. The nav file said `minLevel: 1`, which nothing that renders or
+// gates reads for this route; on the owner's instruction (2026-09-29) it now
+// says 2, so the declaration agrees with the gate.
 import { describe, expect, it, vi } from 'vitest';
 
 vi.mock('next/navigation', () => ({ usePathname: () => '/dashboard' }));
@@ -27,6 +28,7 @@ function entryFor(planLevel: number) {
 describe('Home & Maintenance in the sidebar, by plan', () => {
   it('is in the sidebar and in the catalogue at Family+', () => {
     expect(item).toBeDefined();
+    expect(item.minLevel).toBe(2);
     expect(tiers[HREF]).toBe('plus');
   });
 

@@ -182,7 +182,7 @@ describe('the app sidebar exports are byte-for-byte what memory.md protects', ()
         /dashboard/homework | Homework | BookOpen | L1
         /dashboard/language | Language Practice | Languages | L0
         /dashboard/signups | Signups | CalendarClock | L1
-        /dashboard/home | Home & Maintenance | House | L1
+        /dashboard/home | Home & Maintenance | House | L2
         /dashboard/inventory | Home Inventory | PackageSearch | L0
         /dashboard/declutter | Declutter Missions | Sparkle | L0
         /dashboard/moving | Move Planner | Truck | L1
@@ -240,7 +240,6 @@ describe('the app sidebar exports are byte-for-byte what memory.md protects', ()
         /dashboard/family-sports | Sports Hub | Trophy | L2
         /dashboard/knowledge | Knowledge Base | Brain | L0
         /dashboard/playbook | Family Playbook | WandSparkles | L0
-        /dashboard/experience | Experience Scorecard | ClipboardCheck | L0
         /dashboard/family-emergency | Emergency Hub | ShieldAlert | L2
         /dashboard/family-stress | Stress Prediction | Gauge | L2
         /dashboard/family-automation | Life Automation | Zap | L2"
@@ -345,8 +344,7 @@ describe('the app sidebar exports are byte-for-byte what memory.md protects', ()
       /referrals
       /dashboard/voice
       /dashboard/knowledge
-      /dashboard/playbook
-      /dashboard/experience"
+      /dashboard/playbook"
     `);
   });
 });
