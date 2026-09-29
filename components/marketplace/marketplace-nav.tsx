@@ -20,6 +20,7 @@ import {
 import { cn } from '@/lib/utils/cn';
 import { SidebarTrustScore } from './sidebar-trust-score';
 import { useTranslations } from '@/components/i18n/locale-provider';
+import { navLabel } from '@/lib/i18n/nav-label';
 
 const BASE = '/marketplace';
 
@@ -87,7 +88,7 @@ function NavList() {
             )}
           >
             <Icon className="h-4 w-4 shrink-0" />
-            <span className="truncate">{it.label}</span>
+            <span className="truncate">{navLabel(t, it.label)}</span>
           </Link>
         );
       })}

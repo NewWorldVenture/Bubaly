@@ -4,6 +4,7 @@ import Link from 'next/link';
 import { usePathname } from 'next/navigation';
 import { cn } from '@/lib/utils/cn';
 import { useTranslations } from '@/components/i18n/locale-provider';
+import { navLabel } from '@/lib/i18n/nav-label';
 
 const ITEMS = [
   { href: '/dashboard/auto', label: 'Overview' },
@@ -33,7 +34,7 @@ export function AutoSubnav() {
               active ? 'bg-brand text-brand-fg' : 'text-muted hover:bg-elevated hover:text-fg',
             )}
           >
-            {item.label}
+            {navLabel(t, item.label)}
           </Link>
         );
       })}
