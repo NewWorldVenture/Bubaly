@@ -229,7 +229,7 @@ export function LanguageModule() {
                 : suggestion.kind === 'tutor' ? <AiInsight kind="language" />
                 : <Button size="sm" variant="secondary" onClick={() => setSessionOpen(true)}><Timer className="h-3.5 w-3.5" /> Log {suggestion.minutes} min</Button>}
               <button onClick={() => setGoalForm({ open: true, goal })} aria-label={tr('language.editGoal')} className="rounded-lg p-1.5 text-muted hover:text-fg"><Pencil className="h-4 w-4" /></button>
-              <button onClick={() => archiveGoal(goal, !goal.is_active)} aria-label={goal.is_active ? 'Archive goal' : 'Reopen goal'} className="rounded-lg p-1.5 text-muted hover:text-fg">{goal.is_active ? <PauseCircle className="h-4 w-4" /> : <PlayCircle className="h-4 w-4" />}</button>
+              <button onClick={() => archiveGoal(goal, !goal.is_active)} aria-label={goal.is_active ? tr('uiText.archiveGoal') : tr('uiText.reopenGoal')} className="rounded-lg p-1.5 text-muted hover:text-fg">{goal.is_active ? <PauseCircle className="h-4 w-4" /> : <PlayCircle className="h-4 w-4" />}</button>
               <button onClick={() => deleteGoal(goal)} aria-label={tr('language.deleteGoal')} className="rounded-lg p-1.5 text-muted hover:text-rose-400"><Trash2 className="h-4 w-4" /></button>
             </div>
           </div>
@@ -288,7 +288,7 @@ export function LanguageModule() {
                       <p className="truncate text-sm"><span className="font-medium">{c.term}</span> <span className="text-muted">— {c.translation}</span></p>
                       <p className="text-[11px] text-muted">{c.is_suspended ? 'Suspended' : c.due_on <= isoDate(today) ? 'Due now' : `Due ${fmtDate(c.due_on)}`} · {c.repetitions === 0 && c.lapses === 0 ? 'new' : `${c.interval_days}d interval · ease ${c.ease}`}{c.lapses ? ` · ${c.lapses} lapse${c.lapses === 1 ? '' : 's'}` : ''}</p>
                     </div>
-                    <button onClick={() => toggleSuspend(c)} aria-label={c.is_suspended ? 'Resume card' : 'Suspend card'} className="rounded-lg p-1.5 text-muted hover:text-fg">{c.is_suspended ? <PlayCircle className="h-4 w-4" /> : <PauseCircle className="h-4 w-4" />}</button>
+                    <button onClick={() => toggleSuspend(c)} aria-label={c.is_suspended ? tr('uiText.resumeCard') : tr('uiText.suspendCard')} className="rounded-lg p-1.5 text-muted hover:text-fg">{c.is_suspended ? <PlayCircle className="h-4 w-4" /> : <PauseCircle className="h-4 w-4" />}</button>
                     <button onClick={() => setCardForm({ open: true, card: c })} aria-label={tr('itemAction.edit', { name: c.term })} className="rounded-lg p-1.5 text-muted hover:text-fg"><Pencil className="h-4 w-4" /></button>
                     <button onClick={() => deleteCard(c)} aria-label={tr('itemAction.delete', { name: c.term })} className="rounded-lg p-1.5 text-muted hover:text-rose-400"><Trash2 className="h-4 w-4" /></button>
                   </li>
@@ -370,7 +370,7 @@ function GoalForm({ familyId, userId, members, goal, defaultMember, onClose, onS
   }
 
   return (
-    <Modal open title={goal ? 'Edit language goal' : 'Start a language'} description="Levels follow the CEFR scale; the hours estimate comes from the usual guided-learning bands." onClose={onClose}>
+    <Modal open title={goal ? tr('dialogTitle.editLanguageGoal') : tr('dialogTitle.startALanguage')} description={tr('dialogTitle.languageLevelsNote')} onClose={onClose}>
       <form onSubmit={onSubmit} className="space-y-4">
         <div className="grid grid-cols-2 gap-3">
           <Field label="Who" required>{(id) => <Select id={id} name="member_id" defaultValue={goal?.member_id ?? defaultMember ?? ''}>{!goal && <option value="">Choose…</option>}{members.map((m) => <option key={m.id} value={m.id}>{m.display_name}</option>)}</Select>}</Field>
@@ -417,7 +417,7 @@ function CardForm({ familyId, userId, goalId, card, onClose, onSaved }: { family
   }
 
   return (
-    <Modal open title={card ? 'Edit card' : 'New card'} onClose={onClose}>
+    <Modal open title={card ? tr('dialogTitle.editCard') : tr('dialogTitle.newCard')} onClose={onClose}>
       <form onSubmit={onSubmit} className="space-y-4">
         <div className="grid grid-cols-2 gap-3">
           <Field label={tr('language.term')} required>{(id) => <Input id={id} name="term" defaultValue={card?.term ?? ''} autoFocus />}</Field>

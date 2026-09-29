@@ -62,7 +62,7 @@ export function RentalsClient({ rentals }: { rentals: Rental[] }) {
         </div>
       )}
 
-      <Modal open={open} onClose={() => setOpen(false)} title={editing ? 'Edit rental' : 'Add rental'}>
+      <Modal open={open} onClose={() => setOpen(false)} title={editing ? t('dialogTitle.editRental') : t('dialogTitle.addRental')}>
         <form action={(fd) => start(async () => { if (await run(() => saveRentalAction(fd))) setOpen(false); })} className="space-y-3">
           {editing && <input type="hidden" name="id" value={editing.id} />}
           <div className="grid grid-cols-2 gap-3">

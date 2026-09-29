@@ -14,6 +14,7 @@ import { useAction } from '@/lib/hooks/use-action';
 import { createClient } from '@/lib/supabase/client';
 import { describeDbError, wroteNoRows } from '@/lib/supabase/errors';
 import { isValidEmail, isValidPhone } from '@/lib/utils/validation';
+import { contactPayload } from '@/lib/contacts/payload';
 import { useToast } from '@/components/ui/toast';
 import { PageHeader } from '@/components/app/page-header';
 import { AiInsight } from '@/components/ai/ai-insight';
@@ -431,22 +432,7 @@ function ContactModal({ contact, familyId, userId, onClose, onSaved }: {
   async function onSubmit(e: React.FormEvent<HTMLFormElement>) {
     e.preventDefault();
     const form = new FormData(e.currentTarget);
-    const g = (key: string) => String(form.get(key) ?? '').trim() || null;
-    const payload = {
-      name: g('name') ?? '',
-      relationship: g('relationship'),
-      category: String(form.get('category') ?? 'other'),
-      phone: g('phone'),
-      phone_alt: g('phone_alt'),
-      email: g('email'),
-      address: g('address'),
-      specialty: g('specialty'),
-      organization: g('organization'),
-      notes: g('notes'),
-      is_emergency: form.get('is_emergency') === 'on',
-      birthday_month: form.get('birthday_month') ? Number(form.get('birthday_month')) : null,
-      birthday_day: form.get('birthday_day') ? Number(form.get('birthday_day')) : null,
-    };
+    const payload = contactPayload(form);
     // ── Validation ──
     if (!payload.name) return toastError(t('contactsModule.nameIsRequired'));
     if (payload.name.length > 120) return toastError(t('contactsModule.nameTooLong', { max: 120 }));

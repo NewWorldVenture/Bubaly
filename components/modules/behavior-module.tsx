@@ -256,7 +256,7 @@ export function BehaviorModule() {
       </div>
 
       {form && (
-        <Modal open onClose={() => setForm(null)} title={form.id ? 'Edit behavior' : 'Log behavior'}>
+        <Modal open onClose={() => setForm(null)} title={form.id ? tr('dialogTitle.editBehavior') : tr('dialogTitle.logBehavior')}>
           <form onSubmit={save} className="space-y-3">
             <Field label={tr('behavior.child')}>
               {(id) => (

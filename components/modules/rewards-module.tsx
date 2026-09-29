@@ -282,7 +282,7 @@ export function RewardsModule() {
       </h2>
       {(rewards ?? []).length === 0 ? (
         <EmptyState icon={Gift} title={t('rewards.noRewardsYet')}
-          description={canManage ? 'Add rewards kids can redeem with the points they earn from chores.' : 'No rewards have been added yet.'}
+          description={canManage ? t('uiText.addRewardsKidsCanRedeemWithThe') : t('uiText.noRewardsHaveBeenAddedYet')}
           action={canManage && <Button onClick={openNew} disabled={busy !== null} className="gap-1.5"><Plus className="h-4 w-4" /> {t('rewards.addReward')}</Button>} />
       ) : (
         <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
@@ -348,7 +348,7 @@ export function RewardsModule() {
       )}
 
       {/* Reward modal */}
-      <Modal open={modalOpen} onClose={closeModal} title={form.id ? 'Edit reward' : 'Add reward'}>
+      <Modal open={modalOpen} onClose={closeModal} title={form.id ? t('dialogTitle.editReward') : t('dialogTitle.addReward')}>
         <form onSubmit={save} className="space-y-4">
           <Field label={t('rewards.reward')} required>
             {(id) => <Input id={id} value={form.title} disabled={saving} onChange={(e) => setForm((f) => ({ ...f, title: e.target.value }))} placeholder={t('rewards.eGMovieNightPick')} autoFocus />}

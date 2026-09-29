@@ -195,7 +195,7 @@ export function SleepModule() {
           <div className="mb-2 flex items-center justify-between">
             <span className="flex items-center gap-2 text-sm font-semibold"><ListChecks className="h-4 w-4 text-brand-text" /> {t('sleep.bedtimeRoutine')}</span>
             <div className="flex items-center gap-1">
-              <button onClick={() => setRoutineOpen(true)} aria-label={routine ? 'Edit routine' : 'Create routine'} className="rounded-lg p-1.5 text-muted hover:text-fg"><Pencil className="h-4 w-4" /></button>
+              <button onClick={() => setRoutineOpen(true)} aria-label={routine ? t('dialogTitle.editRoutine') : t('uiText.createRoutine')} className="rounded-lg p-1.5 text-muted hover:text-fg"><Pencil className="h-4 w-4" /></button>
               {routine && <button onClick={() => archiveRoutine(routine)} aria-label={t('sleep.retireRoutine')} className="rounded-lg p-1.5 text-muted hover:text-rose-400"><Trash2 className="h-4 w-4" /></button>}
             </div>
           </div>
@@ -334,7 +334,7 @@ function RoutineForm({ familyId, userId, memberId, age, routine, onClose, onSave
   }
 
   return (
-    <Modal open title={routine ? 'Edit bedtime routine' : 'Set up a bedtime routine'} onClose={onClose}>
+    <Modal open title={routine ? t('dialogTitle.editBedtimeRoutine') : t('dialogTitle.setUpABedtimeRoutine')} onClose={onClose}>
       <form onSubmit={onSubmit} className="space-y-4">
         <Field label={t('sleep.name')}>{(id) => <Input id={id} name="name" defaultValue={routine?.name ?? 'School-night routine'} />}</Field>
         <div className="grid grid-cols-3 gap-3">

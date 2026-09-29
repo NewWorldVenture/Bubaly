@@ -5,6 +5,7 @@
 import { useState, useTransition } from 'react';
 import { Heart } from 'lucide-react';
 import { toggleSaveAction } from '@/app/(app)/marketplace/actions';
+import { useTranslations } from '@/components/i18n/locale-provider';
 import { useToast } from '@/components/ui/toast';
 import { cn } from '@/lib/utils/cn';
 
@@ -12,6 +13,7 @@ export function SaveButton({ listingId, saved: initial, className }: { listingId
   const [saved, setSaved] = useState(initial);
   const [pending, startTransition] = useTransition();
   const { error: toastError } = useToast();
+  const t = useTranslations();
 
   const toggle = () => {
     if (pending) return;
@@ -28,7 +30,7 @@ export function SaveButton({ listingId, saved: initial, className }: { listingId
       type="button"
       onClick={toggle}
       disabled={pending}
-      aria-label={saved ? 'Remove from saved' : 'Save this listing'}
+      aria-label={saved ? t('uiText.removeFromSaved') : t('uiText.saveThisListing')}
       aria-pressed={saved}
       aria-busy={pending}
       className={cn(

@@ -237,7 +237,7 @@ export function WishlistsModule() {
       )}
 
       {/* Add/edit (own list only) */}
-      <Modal open={modalOpen} onClose={() => setModalOpen(false)} title={form.id ? 'Edit wish' : 'Add a wish'}>
+      <Modal open={modalOpen} onClose={() => setModalOpen(false)} title={form.id ? t('dialogTitle.editWish') : t('dialogTitle.addAWish')}>
         <form onSubmit={save} className="space-y-4">
           <Field label={t('wishlists.whatDoYouWishFor')} required>
             {(id) => <Input id={id} value={form.title} onChange={(e) => setForm((f) => ({ ...f, title: e.target.value }))} placeholder={t('wishlists.eGLegoBotanicalsSet')} autoFocus />}

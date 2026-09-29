@@ -236,7 +236,7 @@ export function HomeworkModule() {
       )}
 
       {/* Modal */}
-      <Modal open={modalOpen} onClose={() => setModalOpen(false)} title={form.id ? 'Edit homework' : 'Add homework'}>
+      <Modal open={modalOpen} onClose={() => setModalOpen(false)} title={form.id ? t('dialogTitle.editHomework') : t('dialogTitle.addHomework')}>
         <form onSubmit={save} className="space-y-4">
           <Field label={t('homework.assignment')} required>
             {(id) => <Input id={id} value={form.title} onChange={(e) => setForm((f) => ({ ...f, title: e.target.value }))} placeholder={t('homework.eGChapter7Problems1')} autoFocus />}

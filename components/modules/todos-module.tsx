@@ -275,7 +275,7 @@ export function TodosModule() {
     return (
       <div className="group flex items-center gap-3 rounded-xl border border-border/70 bg-surface/30 px-3 py-2.5 transition hover:bg-elevated/40">
         <button onClick={() => toggleItem(item)} disabled={busyToggle}
-          aria-label={item.is_done ? 'Mark not done' : 'Mark done'}
+          aria-label={item.is_done ? tr('uiText.markNotDone') : tr('uiText.markDone')}
           className={cn('flex h-5 w-5 shrink-0 items-center justify-center rounded-full border-2 transition disabled:opacity-60',
             item.is_done ? 'border-success bg-success' : 'border-border hover:border-success/60')}>
           {busyToggle ? <Loader2 className="h-3 w-3 animate-spin text-muted" /> : item.is_done && <Check className="h-3 w-3 text-white" />}
@@ -672,7 +672,7 @@ function ItemModal({ familyId, selfId, lists, members, item, onClose, onSaved, o
   }
 
   return (
-    <Modal open onClose={onClose} title={item ? 'Edit Task' : 'New Task'}>
+    <Modal open onClose={onClose} title={item ? tr('dialogTitle.editTask') : tr('dialogTitle.newTask')}>
       <form onSubmit={save} className="space-y-4">
         <Field label={tr('todos.title')} required>
           {(id) => <Input id={id} value={title} onChange={(e) => setTitle(e.target.value)} placeholder={tr('todos.whatNeedsToBeDone')} autoFocus />}

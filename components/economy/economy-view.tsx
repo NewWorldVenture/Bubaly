@@ -121,7 +121,7 @@ export function EconomyView(props: {
       {/* ── Store ── */}
       {tab === 'store' && (
         rewards.length === 0 ? (
-          <EmptyState icon={Store} title={tr('economy.noRewardsYet')} description={canManage ? 'Add rewards in the Manage tab.' : 'Ask a parent to add rewards.'} />
+          <EmptyState icon={Store} title={tr('economy.noRewardsYet')} description={canManage ? t('uiText.addRewardsInTheManageTab') : t('uiText.askAParentToAddRewards')} />
         ) : (
           <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
             {rewards.map((r) => (

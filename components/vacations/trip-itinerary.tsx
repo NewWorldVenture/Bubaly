@@ -199,7 +199,7 @@ export function TripItinerary({ vacationId }: { vacationId: string }) {
       )}
 
       {form && (
-        <Modal open onClose={() => setForm(null)} title={form.id ? 'Edit item' : 'Add itinerary item'}>
+        <Modal open onClose={() => setForm(null)} title={form.id ? t('dialogTitle.editItem') : t('dialogTitle.addItineraryItem')}>
           <form onSubmit={saveItem} className="space-y-3">
             <Field label={t('tripItinerary.title')} required>{(id) => <Input id={id} value={form.title} onChange={(e) => setForm({ ...form, title: e.target.value })} placeholder={t('tripItinerary.magicKingdom')} required />}</Field>
             <div className="grid grid-cols-2 gap-3">

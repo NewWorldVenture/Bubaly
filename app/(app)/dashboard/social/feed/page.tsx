@@ -62,11 +62,11 @@ export default async function FeedPage({ searchParams }: { searchParams: Promise
       {items.length === 0 ? (
         <EmptyState
           icon={connected.length === 0 ? Plug : Newspaper}
-          title={connected.length === 0 ? 'No connected accounts' : 'No feed items yet'}
+          title={connected.length === 0 ? t('uiText.noConnectedAccounts') : t('uiText.noFeedItemsYet')}
           description={
             connected.length === 0
-              ? 'Connect an account to pull a unified feed. Live feed access requires each platform’s API credentials; until then the feed stays honestly empty rather than showing fabricated posts.'
-              : 'Connected accounts have no synced posts yet. Background sync writes real items here once provider credentials are configured.'
+              ? t('uiText.connectAnAccountToPullAUnified')
+              : t('uiText.connectedAccountsHaveNoSyncedPostsYet')
           }
           action={
             connected.length === 0 ? (

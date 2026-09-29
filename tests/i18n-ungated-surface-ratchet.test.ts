@@ -302,7 +302,22 @@ import { scanPaths, scannedFileCount } from '../scripts/i18n-scan.mjs';
 // count; the menu labels stay in their arrays as the lookup keys navLabel
 // derives from, which the scanner still counts. 1,772, measured with the same
 // scanner. Banked as the ceiling.
-const CEILING = 1772;
+//
+// ── I18N-012: RAISED FOR A STRICTER SCANNER, THEN LOWERED: -> 1,784 ──────────
+//
+// The workflow audit opened every module's create dialog and read "Add pantry
+// item" in every locale. The scanner could not see it: PROP_PATTERN reads
+// `title="…"` and never `title={item ? 'Edit item' : 'Add pantry item'}`, the
+// shape nearly every create/edit dialog, empty state and toggle label uses. The
+// scanner now reads both branches of such a ternary on a copy attribute.
+// Measured with the tree held fixed (main at 88de5024): the previous scanner
+// counts 1,772 and this one 1,987 — 215 strings already shipping in English,
+// none of them new. Then 190 of them were translated (123 dialog titles and
+// labels in 52 files, 66 empty states, toggles and placeholders in 30 more),
+// plus the language goal's CEFR note beside one of them. What the ternary
+// rule still sees is the super-admin pages, which stay English by the decision
+// recorded under I18N-006. 1,784, measured with the new scanner. Banked.
+const CEILING = 1784;
 
 describe('the ungated i18n surface does not get worse', () => {
   const findings = scanPaths(['app', 'components']);
@@ -414,6 +429,29 @@ describe('the scanner sees the question asked before a delete (I18N-005)', () =>
     const texts = scanFile(file).map((f: { text: string }) => f.text);
     expect(texts).toContain('Remove … from the inventory?');
     expect(texts).toContain('Delete everything in this list?');
+  });
+});
+
+describe('the scanner sees both branches of a copy attribute written as a ternary (I18N-012)', () => {
+  it('reports each quoted branch and leaves a class list or a key alone', async () => {
+    const { writeFileSync, mkdtempSync } = await import('node:fs');
+    const { join } = await import('node:path');
+    const { tmpdir } = await import('node:os');
+    const { scanFile } = await import('../scripts/i18n-scan.mjs');
+    const dir = mkdtempSync(join(tmpdir(), 'i18n-ternary-'));
+    const file = join(dir, 'form.tsx');
+    writeFileSync(file, [
+      'export function Form({ item, on, t }: { item: { id: string } | null; on: boolean; t: (k: string) => string }) {',
+      '  return (',
+      "    <Modal open title={item ? 'Edit item' : 'Add pantry item'} className={on ? 'is-on' : 'is-off'}>",
+      "      <button title={on ? \"Exit fullscreen\" : \"Fullscreen\"} aria-label={item?.id ? t('a.b') : t('a.c')} />",
+      '    </Modal>',
+      '  );',
+      '}',
+    ].join('\n'));
+    const texts = scanFile(file).map((f: { text: string }) => f.text);
+    expect(texts).toEqual(expect.arrayContaining(['Edit item', 'Add pantry item', 'Exit fullscreen', 'Fullscreen']));
+    expect(texts.some((t: string) => /is-o/.test(t))).toBe(false);
   });
 });
 

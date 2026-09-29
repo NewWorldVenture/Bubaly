@@ -204,8 +204,8 @@ export function RidesModule() {
       </div>
 
       {grouped.length === 0 ? (
-        <EmptyState icon={Car} title={showPast ? 'No rides yet' : 'No upcoming rides'}
-          description={canEdit ? 'Add a ride to coordinate pickups, drop-offs, and drivers across the family.' : 'No rides are scheduled.'}
+        <EmptyState icon={Car} title={showPast ? tr('dialogTitle.noRidesYet') : tr('dialogTitle.noUpcomingRides')}
+          description={canEdit ? tr('uiText.addARideToCoordinatePickupsDrop') : tr('uiText.noRidesAreScheduled')}
           action={canEdit && <Button onClick={openNew} className="gap-1.5"><Plus className="h-4 w-4" /> {t('rides.addRide')}</Button>} />
       ) : (
         <div className="space-y-6">
@@ -273,7 +273,7 @@ export function RidesModule() {
       )}
 
       {/* Ride modal */}
-      <Modal open={modalOpen} onClose={() => setModalOpen(false)} title={form.id ? 'Edit ride' : 'Add ride'}>
+      <Modal open={modalOpen} onClose={() => setModalOpen(false)} title={form.id ? tr('dialogTitle.editRide') : tr('dialogTitle.addRide')}>
         <form onSubmit={save} className="space-y-4">
           <Field label={tr('rides.whatsTheRideFor')} required>
             {(id) => <Input id={id} value={form.title} onChange={(e) => setForm((f) => ({ ...f, title: e.target.value }))} placeholder={t('rides.eGSoccerPracticeDropOff')} autoFocus />}

@@ -750,7 +750,7 @@ function ReminderModal({ reminder, familyId, userId, members, lists, onClose, on
   }
 
   return (
-    <Modal open onClose={onClose} title={reminder ? 'Edit Reminder' : 'New Reminder'}>
+    <Modal open onClose={onClose} title={reminder ? tr('dialogTitle.editReminder') : tr('dialogTitle.newReminder')}>
       <form onSubmit={onSubmit} className="space-y-4">
         <Field label={tr('reminders.title')} required>
           {(id) => <Input id={id} name="title" defaultValue={reminder?.title ?? ''} placeholder={tr('reminders.pickUpPrescriptionPayCreditCard')} autoFocus />}

@@ -138,7 +138,7 @@ export function InsuranceClient({ policies, vehicles }: { policies: Policy[]; ve
 
       <p className="inline-flex items-start gap-1 text-[11px] text-muted"><AlertTriangle className="mt-0.5 h-3 w-3 shrink-0" /> {t('insuranceClient.storedPrivatelyForYourFamilyOnly')}</p>
 
-      <Modal open={open} onClose={() => setOpen(false)} title={editing ? 'Edit policy' : 'Add policy'}>
+      <Modal open={open} onClose={() => setOpen(false)} title={editing ? t('dialogTitle.editPolicy') : t('dialogTitle.addPolicy')}>
         <form action={(fd) => start(async () => { if (await run(() => savePolicyAction(fd))) setOpen(false); })} className="space-y-3">
           {editing && <input type="hidden" name="id" value={editing.id} />}
           <div className="grid grid-cols-2 gap-3">

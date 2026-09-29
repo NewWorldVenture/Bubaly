@@ -383,7 +383,7 @@ export function ShoppingModule() {
                             <div key={item.id}
                               className={cn('group flex items-center gap-3 px-4 py-2.5 hover:bg-elevated/20 transition',
                                 item.is_checked && 'opacity-60')}>
-                              <button onClick={() => toggleItem(item)} disabled={isPending(`toggle:${item.id}`)} aria-label={item.is_checked ? 'Uncheck item' : 'Check item'}
+                              <button onClick={() => toggleItem(item)} disabled={isPending(`toggle:${item.id}`)} aria-label={item.is_checked ? t('uiText.uncheckItem') : t('uiText.checkItem')}
                                 className={cn('flex h-5 w-5 flex-shrink-0 items-center justify-center rounded border-2 transition disabled:opacity-60',
                                   item.is_checked ? 'border-success bg-success' : 'border-border hover:border-success/50')}>
                                 {isPending(`toggle:${item.id}`) ? <Loader2 className="h-3 w-3 animate-spin text-muted" /> : item.is_checked && <Check className="h-3 w-3 text-fg" />}
