@@ -206,7 +206,7 @@ function UserMenu() {
                   className="flex items-center gap-2 rounded-lg px-3 py-2 text-sm hover:bg-elevated"
                 >
                   <Icon className="h-4 w-4 text-muted" />
-                  <span className="flex-1 truncate">{dashboardLabel(view, role)}</span>
+                  <span className="flex-1 truncate">{navLabel(t, dashboardLabel(view, role))}</span>
                   {active && <Check className="h-4 w-4 text-brand-text" />}
                 </Link>
               );
@@ -264,6 +264,7 @@ function UserMenu() {
 /** The two dashboards (personal + family Command Center), rendered role-aware
  *  at the top of the sidebar with view-aware active highlighting. */
 function SidebarDashboardLinks() {
+  const t = useTranslations();
   const { role, defaultDashboard } = useApp();
   const pathname = usePathname();
   const searchParams = useSearchParams();
@@ -286,7 +287,7 @@ function SidebarDashboardLinks() {
             )}
           >
             <Icon className="h-5 w-5 shrink-0" />
-            {dashboardLabel(view, role)}
+            {navLabel(t, dashboardLabel(view, role))}
           </Link>
         );
       })}

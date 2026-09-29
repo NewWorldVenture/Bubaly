@@ -7,6 +7,7 @@ import { createServer } from '@/lib/supabase/server';
 import { settleAll } from '@/lib/supabase/settle';
 import { isManager, roleLabel } from '@/lib/constants/roles';
 import { personalDashboardLabel } from '@/lib/constants/dashboards';
+import { navLabel } from '@/lib/i18n/nav-label';
 import { roleGreeting, roleSurface } from '@/lib/ui/role-surface';
 import { dayPhase } from '@/lib/home/time-of-day';
 import type { UserContext } from '@/lib/supabase/auth';
@@ -179,7 +180,7 @@ export async function PersonalDashboard({ ctx }: { ctx: UserContext }) {
               {greeting}{showWave && <span> 👋</span>}
             </h1>
             <p className="mt-0.5 text-sm text-muted">
-              {personalDashboardLabel(role)} · <span className="capitalize">{roleLabel(tr, role)}</span>
+              {navLabel(tr, personalDashboardLabel(role))} · <span className="capitalize">{roleLabel(tr, role)}</span>
             </p>
           </div>
         </div>

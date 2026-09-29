@@ -248,8 +248,7 @@ export function NavigationChoices() {
             <Compass className="h-4 w-4 text-brand-text" /> {t('navigationChoices.navigationChoices')}
           </h2>
           <p className="mt-1 text-sm text-muted">
-            Choose which destinations appear in your sidebar and the order they show in — down to
-            each group&apos;s sub-pages. Changes save automatically and sync across your devices.
+            {t('navigationChoices.intro')}
           </p>
         </div>
         <Button size="sm" variant="ghost" onClick={reset} disabled={isDefault || saving} title={t('navigationChoices.resetToTheDefaultLayout')}>
