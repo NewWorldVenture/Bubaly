@@ -16597,5 +16597,13 @@
   "uiText.stopListening": "Dejar de escuchar",
   "uiText.startListening": "Empezar a escuchar",
   "uiText.resume": "Reanudar",
-  "adminMarketingContent.pageOfItems": "Página {page} de {pages} · {count} elementos"
+  "adminMarketingContent.pageOfItems": "Página {page} de {pages} · {count} elementos",
+  "tripCountdown.noDatesYet": "Aún sin fechas",
+  "tripCountdown.inDays": "en {count} días",
+  "tripCountdown.tomorrow": "Mañana",
+  "tripCountdown.today": "Hoy",
+  "tripCountdown.startedYesterday": "Empezó ayer",
+  "tripCountdown.daysAgo": "hace {count} días",
+  "tripCountdown.travelersOne": "{count} viajero",
+  "tripCountdown.travelersMany": "{count} viajeros"
 }
