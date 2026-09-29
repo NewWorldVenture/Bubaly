@@ -16596,5 +16596,6 @@
   "uiText.noTripsArePlannedYet": "Er zijn nog geen reizen gepland.",
   "uiText.stopListening": "Stoppen met luisteren",
   "uiText.startListening": "Beginnen met luisteren",
-  "uiText.resume": "Hervatten"
+  "uiText.resume": "Hervatten",
+  "adminMarketingContent.pageOfItems": "Pagina {page} van {pages} · {count} items"
 }

@@ -1,5 +1,6 @@
 import type { Metadata } from 'next';
 import Link from 'next/link';
+import { redirect } from 'next/navigation';
 import { FileText, BookOpen, Send } from 'lucide-react';
 import { createServiceClient } from '@/lib/supabase/server';
 import { settleAll } from '@/lib/supabase/settle';
@@ -11,6 +12,7 @@ import { BLOG_CATEGORIES } from '@/lib/marketing/blog-publish';
 import { createContentItem } from '../actions';
 import { archiveContentAction, updateContentAction, publishContentToBlogAction, unpublishBlogPostAction } from './actions';
 import { getTranslations } from '@/lib/i18n/server';
+import { contentPage } from '@/lib/marketing/content-page';
 import { SubmitButton } from '@/components/ui/submit-button';
 
 export const metadata: Metadata = { title: 'Marketing · Content', robots: { index: false } };
@@ -23,11 +25,15 @@ const STATUSES = ['idea', 'brief', 'drafting', 'review', 'approved', 'published'
 
 type BlogMeta = { slug?: string; category?: string; author?: string; excerpt?: string; featured?: boolean; tags?: string[] };
 
-export default async function ContentPage() {
+export default async function ContentPage({ searchParams }: { searchParams: Promise<{ page?: string }> }) {
   const t = await getTranslations();
   const supabase = createServiceClient();
+  // A page at a time: one unbounded read stopped at PostgREST's 1,000 rows (ADMIN-CONTENT-001).
+  const { page: requested, from, to } = contentPage((await searchParams).page, null);
   const [itemsResult, postsResult] = await settleAll([
-    supabase.from('marketing_content_items').select('*').is('deleted_at', null).order('publish_at', { ascending: true, nullsFirst: false }),
+    supabase.from('marketing_content_items').select('*', { count: 'exact' }).is('deleted_at', null)
+      .order('publish_at', { ascending: true, nullsFirst: false }).order('created_at', { ascending: false }).order('id', { ascending: true })
+      .range(from, to),
     supabase.from('blog_posts').select('slug, title, category, published, published_at').order('published_at', { ascending: false }).limit(20),
   ]);
   const readError = itemsResult.error ?? postsResult.error;
@@ -36,6 +42,10 @@ export default async function ContentPage() {
     return <AdminContentReadError />;
   }
   const { data: items } = itemsResult;
+  const total = itemsResult.count ?? 0;
+  const { pages } = contentPage(String(requested), total);
+  // A page past the end (a bookmark, or the last item archived) is not an empty pipeline.
+  if (requested > pages) redirect(`/admin/marketing/content?page=${pages}`);
   const { data: posts } = postsResult;
 
   return (
@@ -104,6 +114,13 @@ export default async function ContentPage() {
                 );
               })}
             </div>
+          )}
+          {pages > 1 && (
+            <nav aria-label={t('adminMarketingContent.contentPipeline')} className="mt-3 flex items-center justify-between text-sm">
+              {requested > 1 ? <Link href={`/admin/marketing/content?page=${requested - 1}`} className="text-brand-text hover:underline">{t('a11y.previous')}</Link> : <span />}
+              <span className="text-muted">{t('adminMarketingContent.pageOfItems', { page: requested, pages, count: total })}</span>
+              {requested < pages ? <Link href={`/admin/marketing/content?page=${requested + 1}`} className="text-brand-text hover:underline">{t('a11y.next')}</Link> : <span />}
+            </nav>
           )}
         </div>
 
