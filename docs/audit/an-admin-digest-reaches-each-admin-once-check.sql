@@ -7,7 +7,7 @@
 --            anyone: changing a delivery's bytes or key, deleting a delivery,
 --            changing or deleting an occurrence;
 --   rules    freeze stores a plan once and never replaces it; one claim wins;
---            a superseded claim cannot mark or complete; a completion needs a
+--            a superseded claim or a NULL fence cannot mark or complete; a completion needs a
 --            mark; a lease that lapses after the mark makes the row ambiguous;
 --            an ambiguous row is parked at retention minus margin, at claim and
 --            at mark; too little lease left refuses the mark; a success without
@@ -56,6 +56,7 @@ declare
   res   jsonb;
   txt   text;
   refused boolean;
+  rejected boolean;  -- bad input (invalid_parameter_value), not a privilege refusal
   failures int := 0;
   pin   timestamptz := '2026-09-30T12:31:00Z';
 begin
@@ -111,11 +112,19 @@ begin
   if not (res ->> 'claimed')::boolean or (res #>> '{row,fence}')::int <> 1 then raise warning 'first claim: %', res; failures := failures + 1; end if;
   res := public.admin_digest_claim(occ, k1, 'b', 300000, 3, ret, mar);
   if res ->> 'reason' is distinct from 'leased' then raise warning 'a live lease did not refuse: %', res; failures := failures + 1; end if;
+  -- A NULL fence is bad input, never a match; the unmarked-completion check below also proves it wrote no mark.
+  rejected := false;
+  begin perform public.admin_digest_begin_send(occ, k1, null, 150, ret, mar); exception when invalid_parameter_value then rejected := true; end;
+  if not rejected then raise warning 'begin_send accepted a NULL fence'; failures := failures + 1; end if;
   if public.admin_digest_complete(occ, k1, 1, '{"kind":"unknown","reason":"timeout"}', 3) <> 'fenced_out' then
     raise warning 'a completion without a mark was accepted'; failures := failures + 1;
   end if;
   if public.admin_digest_begin_send(occ, k1, 0, 150, ret, mar) ->> 'answer' <> 'fenced_out' then raise warning 'a stale fence marked'; failures := failures + 1; end if;
   if public.admin_digest_begin_send(occ, k1, 1, 150, ret, mar) ->> 'answer' <> 'ok' then raise warning 'the current fence could not mark'; failures := failures + 1; end if;
+  -- The completion below succeeding proves this one wrote nothing.
+  rejected := false;
+  begin perform public.admin_digest_complete(occ, k1, null, '{"kind":"accepted","messageId":"msg-forged"}', 3); exception when invalid_parameter_value then rejected := true; end;
+  if not rejected then raise warning 'complete accepted a NULL fence'; failures := failures + 1; end if;
   if public.admin_digest_complete(occ, k1, 1, '{"kind":"accepted","messageId":""}', 3) <> 'ok' then raise warning 'complete refused'; failures := failures + 1; end if;
   res := public.admin_digest_load(occ);
   if (res -> 'deliveries') @> jsonb_build_array(jsonb_build_object('recipientKey', k1, 'status', 'accepted')) then

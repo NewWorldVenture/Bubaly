@@ -100,6 +100,7 @@ A PostgreSQL `DigestDeliveryStore` must meet all of these. It must also pass `te
 4. **The fence is a counter.** `fence` increments on every successful claim. `complete` also requires the claim's mark: a claim that never marked a send owns no provider answer.
    - `beginSend` and `complete` are each one `UPDATE … WHERE status = 'in_flight' AND fence = $fence RETURNING`.
    - Zero rows means `fenced_out`, and nothing is written.
+   - **A NULL fence never matches.** In SQL, `fence <> NULL` is NULL, and an `IF` on NULL skips its refusal. So 0471 refuses a NULL fence as bad input (`22023`) and compares with `is distinct from`. The adapter sends only a non-negative safe integer. A stale integer such as `0` still reaches the database, which answers `fenced_out`.
    - Owner equality alone is not enough: the same owner can re-claim after its own lease lapsed.
 5. **`beginSend` commits before the provider call.** In one step it:
    - evaluates `decideBeginSend`: fence, remaining lease against the send deadline, and the retention cut-off for ambiguous rows;
@@ -145,7 +146,7 @@ The engine takes a `DigestEmailProvider` whose `send` returns one classified out
 **It is not applied to production.** PROD-DB-0177 blocks every migration there. The shared `docs/PENDING_PROD_MIGRATIONS.md` entry is proposed to the coordinator for reconciliation, not written here.
 
 **Evidence:**
-- **CI.** `docs/audit/an-admin-digest-reaches-each-admin-once-check.sql` runs on the full migration replay: access refusals, freeze-once, the fence, a completion needing a mark, retention parking and frozen identity.
+- **CI.** `docs/audit/an-admin-digest-reaches-each-admin-once-check.sql` runs on the full migration replay: access refusals, freeze-once, the fence (a NULL fence included), a completion needing a mark, retention parking and frozen identity.
 - **Disposable database.** `tests/admin-digest-delivery-postgres.test.ts` needs `DIGEST_DELIVERY_PG=1` and a local cluster; the `docs/audit/verify-pg.sh` harness is the default. It runs:
   - the store contract suite against PostgreSQL;
   - a differential check in which random steps, applied to the TypeScript rules and to the SQL, must agree after every step;

@@ -74,6 +74,20 @@ describe('PostgreSQL adapter: strict mapping (fake transport)', () => {
     await expect(storeAnswering('ok').store.beginSend(OCC, K1, 1, BEGIN)).rejects.toThrow(/malformed/);
   });
 
+  it('a fence that is not a non-negative integer never reaches the database', async () => {
+    for (const fence of [null, undefined, -1, 1.5, Number.NaN, Number.POSITIVE_INFINITY, '1']) {
+      const { store, calls } = storeAnswering({ answer: 'ok', dispatchBy: '2026-09-30T12:35:59.85+00:00' });
+      await expect(store.beginSend(OCC, K1, fence as never, BEGIN)).rejects.toThrow(TypeError);
+      await expect(store.complete(OCC, K1, fence as never, { kind: 'accepted', messageId: 'm' }, 3)).rejects.toThrow(TypeError);
+      expect(calls, String(fence)).toEqual([]);
+    }
+    // Controls: a claim's fence, and a stale 0, go through unchanged for the database to judge.
+    const { store, calls } = storeAnswering('ok');
+    expect(await store.complete(OCC, K1, 7, { kind: 'accepted', messageId: 'm' }, 3)).toBe('ok');
+    expect(await store.complete(OCC, K1, 0, { kind: 'accepted', messageId: 'm' }, 3)).toBe('ok');
+    expect(calls.map((c) => c[1].p_fence)).toEqual([7, 0]);
+  });
+
   it('freeze sends only identity and bytes, never a state', async () => {
     const f = freezePlan(contractPlan({ recipients: [ONE] }), new Date(T0));
     const { store, calls } = storeAnswering({ created: true, occurrence: { ...f.occurrence }, deliveries: [row({ status: 'pending', attempts: 0, fence: 0, leaseOwner: null, leaseExpiresAt: null })] });
@@ -325,6 +339,22 @@ describe.skipIf(!pgFixtureEnabled)('0471 on PostgreSQL (disposable database)', (
       await expect(fx.sql(`update public.admin_digest_occurrences set window_end = window_end + interval '1 day';`)).rejects.toThrow(/never changed or deleted/);
       await expect(fx.sql(`delete from public.admin_digest_occurrences;`)).rejects.toThrow(/never changed or deleted/);
     });
+    it('a NULL fence is refused by begin_send and complete, and writes nothing', async () => {
+      const { store, where } = await setup();
+      const a = await store.claim(OCC, K1, 'a', CLAIM);
+      if (!a.claimed) throw new Error('setup');
+      const rowNow = async () => (await store.load(OCC))!.deliveries[0];
+      await expect(fx.sql(`set role service_role; select public.admin_digest_begin_send('${OCC}', '${K1}', null, 150, 86400000, 3600000);`)).rejects.toThrow(/a fence is required/);
+      expect(await rowNow()).toMatchObject({ status: 'in_flight', fence: 1, sendStartedAt: null, firstSendAt: null });
+      expect(answerOf(await store.beginSend(OCC, K1, a.row.fence, BEGIN))).toBe('ok');
+      const marked = await rowNow();
+      await expect(fx.sql(`set role service_role; select public.admin_digest_complete('${OCC}', '${K1}', null, '{"kind":"accepted","messageId":"msg-forged"}'::jsonb, 4);`)).rejects.toThrow(/a fence is required/);
+      expect(await rowNow()).toEqual(marked);
+      expect(await fx.sql(`select count(*) from public.admin_digest_deliveries where ${where} and provider_message_id is not null;`)).toBe('0');
+      // Control: the claim's own fence still completes.
+      expect(await store.complete(OCC, K1, a.row.fence, { kind: 'accepted', messageId: 'msg-1' }, 4)).toBe('ok');
+    });
+
     it('an insert whose hash, recipient key or idempotency key disagrees with its bytes is refused', async () => {
       const { f } = await setup();
       const d = f.deliveries[0];

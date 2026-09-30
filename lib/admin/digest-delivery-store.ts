@@ -98,6 +98,11 @@ function parseStored(v: unknown): StoredOccurrence {
 }
 
 const ms = (n: number, what: string) => (Number.isSafeInteger(Math.round(n)) && n >= 0 ? Math.round(n) : bad(what));
+/** A fence is a count: a stale one is answered fenced_out by the database; a non-integer (null included) is never sent. */
+const fenceArg = (f: unknown) => {
+  if (typeof f === 'number' && Number.isSafeInteger(f) && f >= 0) return f;
+  throw new TypeError('digest-delivery store: a fence must be a non-negative integer');
+};
 
 export function createPostgresDigestDeliveryStore(rpc: RpcCall): DigestDeliveryStore {
   return {
@@ -137,7 +142,7 @@ export function createPostgresDigestDeliveryStore(rpc: RpcCall): DigestDeliveryS
 
     async beginSend(occurrenceId, recipientKey, fence, policy: BeginSendPolicy) {
       const out = await rpc('admin_digest_begin_send', {
-        p_occurrence_id: occurrenceId, p_recipient_key: recipientKey, p_fence: fence,
+        p_occurrence_id: occurrenceId, p_recipient_key: recipientKey, p_fence: fenceArg(fence),
         p_min_lease_ms: ms(policy.minLeaseRemainingMs, 'minLease'),
         p_retention_ms: ms(policy.providerKeyRetentionMs, 'retention'), p_margin_ms: ms(policy.retentionSafetyMarginMs, 'margin'),
       });
@@ -149,7 +154,7 @@ export function createPostgresDigestDeliveryStore(rpc: RpcCall): DigestDeliveryS
 
     async complete(occurrenceId, recipientKey, fence, result: ProviderSendResult, maxAttempts) {
       const out = await rpc('admin_digest_complete', {
-        p_occurrence_id: occurrenceId, p_recipient_key: recipientKey, p_fence: fence, p_result: result, p_max_attempts: maxAttempts,
+        p_occurrence_id: occurrenceId, p_recipient_key: recipientKey, p_fence: fenceArg(fence), p_result: result, p_max_attempts: maxAttempts,
       });
       return out === 'ok' || out === 'fenced_out' ? out : bad('complete');
     },

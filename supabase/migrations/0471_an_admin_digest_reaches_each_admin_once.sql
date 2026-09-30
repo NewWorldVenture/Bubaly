@@ -327,10 +327,14 @@ begin
      or p_margin_ms < 1 or p_margin_ms >= p_retention_ms or p_retention_ms > 86400000 then
     raise exception 'admin_digest_begin_send: bad lease or retention' using errcode = '22023';
   end if;
+  if p_fence is null then
+    raise exception 'admin_digest_begin_send: a fence is required' using errcode = '22023';
+  end if;
   select * into r from public.admin_digest_deliveries
    where occurrence_id = p_occurrence_id and recipient_key = p_recipient_key
    for update;
-  if not found or r.status <> 'in_flight' or r.fence <> p_fence then
+  -- is distinct from: a NULL can never read as a match, even without the guard above.
+  if not found or r.status <> 'in_flight' or r.fence is distinct from p_fence then
     return jsonb_build_object('answer', 'fenced_out');
   end if;
   v_now := public.admin_digest_now();
@@ -373,11 +377,14 @@ begin
      or v_kind is null or v_kind not in ('accepted', 'rejected', 'payload_conflict', 'in_progress', 'unknown') then
     raise exception 'admin_digest_complete: bad result or attempts' using errcode = '22023';
   end if;
+  if p_fence is null then
+    raise exception 'admin_digest_complete: a fence is required' using errcode = '22023';
+  end if;
   select * into r from public.admin_digest_deliveries
    where occurrence_id = p_occurrence_id and recipient_key = p_recipient_key
    for update;
   -- Fenced, and only after a mark: a claim that never marked a send owns no provider answer.
-  if not found or r.status <> 'in_flight' or r.fence <> p_fence or r.send_started_at is null then
+  if not found or r.status <> 'in_flight' or r.fence is distinct from p_fence or r.send_started_at is null then
     return 'fenced_out';
   end if;
   v_now := public.admin_digest_now();
