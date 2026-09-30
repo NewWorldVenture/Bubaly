@@ -173,11 +173,9 @@ describe('recordBabysitterPaymentAction (ACTION-B0B83B2B1B5A)', () => {
     expect(harness.revalidatePath).not.toHaveBeenCalled();
   });
 
-  it('a Trust answer short of a denial does not stop it', async () => {
-    harness.decision = { effect: 'require_approval', reason: 'Needs a second parent.', basis: 'policy' };
-    expect(await pay()).toEqual({ ok: true });
-    expect(payments()).toHaveLength(1);
-  });
+  // A Trust answer that asks for approval is deliberately not asserted here.
+  // Recording it anyway was the defect in #697 review 5918705774; the source
+  // fix carries its own tests against the real Trust bridge.
 
   it.each(NON_MANAGERS)('refuses a %s before Trust or the database', async (role) => {
     harness.role = role;
