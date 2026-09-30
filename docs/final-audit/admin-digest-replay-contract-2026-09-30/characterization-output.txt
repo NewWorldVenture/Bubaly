@@ -1,0 +1,28 @@
+
+ RUN  v4.1.10 <repo>
+
+ ✓ tests/admin-digest-replay-contract.test.ts > fixture > two recipients (the built-in admin and one super_admins row), and both schedulers name 12:30 UTC
+ ✓ tests/admin-digest-replay-contract.test.ts > admin-digest replay: current main, observed (not endorsed) > refuses every unauthorised call with 401 before touching the database or the provider
+ ✓ tests/admin-digest-replay-contract.test.ts > admin-digest replay: current main, observed (not endorsed) > a quiet day (nothing in the last 24 h) sends nothing, does not look up recipients, and answers 200
+ ✓ tests/admin-digest-replay-contract.test.ts > admin-digest replay: current main, observed (not endorsed) > empty recipients answers 200 with the count and sends nothing — reachable only by replacing the lookup, because the built-in admin is always present
+ ✓ tests/admin-digest-replay-contract.test.ts > admin-digest replay: current main, observed (not endorsed) > a super_admins row that repeats the env allowlist in another case is one recipient, sent once
+ ✓ tests/admin-digest-replay-contract.test.ts > admin-digest replay: current main, observed (not endorsed) > with no RESEND_API_KEY it answers 200 ok with sent 0 and skipped 2, having delivered nothing (the JOB-EF2453D9F633 body)
+ ✓ tests/admin-digest-replay-contract.test.ts > admin-digest replay: current main, observed (not endorsed) > pages past a 1,000-row server cap: 2,345 rows in the window (all tied on created_at and title) are counted exactly, in 4 reads
+ ✓ tests/admin-digest-replay-contract.test.ts > admin-digest replay: current main, observed (not endorsed) > exactly 20,000 rows is a complete read; 20,001 is a truncated one and answers 502 without looking up recipients or sending
+ ✓ tests/admin-digest-replay-contract.test.ts > admin-digest replay: current main, observed (not endorsed) > a failed first page of the notification feed answers 502 and sends nothing
+ ✓ tests/admin-digest-replay-contract.test.ts > admin-digest replay: current main, observed (not endorsed) > a failed THIRD page discards the two good pages: 502, nothing sent
+ ✓ tests/admin-digest-replay-contract.test.ts > admin-digest replay: current main, observed (not endorsed) > a super_admins read that answers an error is swallowed: 200 ok, and only the built-in admin is emailed
+ ✓ tests/admin-digest-replay-contract.test.ts > admin-digest replay: current main, observed (not endorsed) > a super_admins read that throws is swallowed: 200 ok, and only the built-in admin is emailed
+ ✓ tests/admin-digest-replay-contract.test.ts > admin-digest replay: current main, observed (not endorsed) > SEQUENTIAL REPEAT: a second call for the same 12:30 occurrence sends every admin the identical digest again — 4 attempted, 4 accepted, nothing written
+ ✓ tests/admin-digest-replay-contract.test.ts > admin-digest replay: current main, observed (not endorsed) > SEQUENTIAL REPEAT inside the dispatcher window: Vercel at 12:30 and GitHub at 12:33 both send; the second digest re-reports the first one’s rows
+ ✓ tests/admin-digest-replay-contract.test.ts > admin-digest replay: current main, observed (not endorsed) > CONCURRENT: two workers that both finish reading before either sends each email every admin — 4 attempted, 4 accepted
+ ✓ tests/admin-digest-replay-contract.test.ts > admin-digest replay: current main, observed (not endorsed) > ONE RECIPIENT FAILS (refuse) AFTER ANOTHER SUCCEEDS: 502 {sent 1, failed 1}; the retry re-sends to the admin who already had it
+ ✓ tests/admin-digest-replay-contract.test.ts > admin-digest replay: current main, observed (not endorsed) > ONE RECIPIENT FAILS (network-error) AFTER ANOTHER SUCCEEDS: 502 {sent 1, failed 1}; the retry re-sends to the admin who already had it
+ ✓ tests/admin-digest-replay-contract.test.ts > admin-digest replay: current main, observed (not endorsed) > ACCEPTED BEFORE A TIMEOUT: the provider accepts both, the handler reports one failure and 502; the retry gives BOTH admins a second copy
+ ✓ tests/admin-digest-replay-contract.test.ts > admin-digest replay: current main, observed (not endorsed) > PARTIAL DELIVERY STATUS: 502 whenever any recipient fails, 200 only when none does; the body always carries the per-run counts
+
+ Test Files  1 passed (1)
+      Tests  19 passed (19)
+   Start at <elided>
+   Duration <elided>
+
