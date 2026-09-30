@@ -13,8 +13,8 @@
 import { createHash } from 'node:crypto';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import {
-  RESEND_KEY_RETENTION_MS, classifyResendResponse, deliverDigestOccurrence, freezePlan, idempotencyKeyFor,
-  payloadJsonOf, recipientKeyOf, resumeDigestOccurrence,
+  MAX_PAYLOAD_JSON_CHARS, MAX_PROVIDER_MESSAGE_ID_CHARS, RESEND_KEY_RETENTION_MS, classifyResendResponse, decideCompletion,
+  deliverDigestOccurrence, freezePlan, idempotencyKeyFor, payloadJsonOf, recipientKeyOf, resumeDigestOccurrence,
   type EngineConfig, type EngineDeps, type OccurrencePlan,
 } from '@/lib/admin/digest-delivery';
 import { sendEmail } from '@/lib/server/email';
@@ -92,6 +92,57 @@ describe('inputs are checked before anything is stored or sent', () => {
     await expect(deliverDigestOccurrence(plan(), engine('a', { config: { ...CONFIG, ...over } }))).rejects.toThrow(TypeError);
     expect(store.calls).toEqual([]);
     expect(provider.requests).toEqual([]);
+  });
+});
+
+describe('what the engine admits, the store can hold (0471\'s bounds)', () => {
+  const base = plan({ recipients: [ONE] }).payload;
+  const withHtml = (html: string) => plan({ recipients: [ONE], payload: { ...base, html } });
+  const overhead = payloadJsonOf({ from: base.from, to: ONE, subject: base.subject, html: '' }).length;
+
+  it('review counterexample: 300,000 quotes are valid HTML by bytes but not storable; refused before anything is stored or sent', async () => {
+    const { store, provider, engine } = world();
+    await expect(deliverDigestOccurrence(withHtml('"'.repeat(300_000)), engine('a'))).rejects.toThrow(/at most 600000 characters/);
+    expect(store.calls).toEqual([]);
+    expect(provider.requests).toEqual([]);
+  });
+
+  it('the bound is exact, and counted in characters as PostgreSQL counts them', () => {
+    const at = '"'.repeat(100_000) + 'a'.repeat(MAX_PAYLOAD_JSON_CHARS - overhead - 200_000);
+    expect(freezePlan(withHtml(at), new Date(T0)).deliveries[0].payloadJson.length).toBe(MAX_PAYLOAD_JSON_CHARS);
+    expect(() => freezePlan(withHtml(`${at}a`), new Date(T0))).toThrow(/at most 600000 characters/);
+    // An emoji is two UTF-16 units but one PostgreSQL character: the bound follows PostgreSQL. (A control
+    // character is one byte that serializes to six characters, which keeps the HTML under 512 KiB.)
+    const emojis = 50_000;
+    const controls = Math.floor((MAX_PAYLOAD_JSON_CHARS - overhead - emojis) / 6);
+    const fill = MAX_PAYLOAD_JSON_CHARS - overhead - emojis - 6 * controls;
+    const mixed = '\u{1F600}'.repeat(emojis) + '\u0001'.repeat(controls) + 'a'.repeat(fill);
+    const f = freezePlan(withHtml(mixed), new Date(T0));
+    expect(f.deliveries[0].payloadJson.length).toBe(MAX_PAYLOAD_JSON_CHARS + emojis); // UTF-16 units
+    expect(() => freezePlan(withHtml(`${mixed}a`), new Date(T0))).toThrow(/at most 600000 characters/);
+  });
+
+  it('the completion rule itself never records a receipt the store would have to truncate', () => {
+    const row = { ...freezePlan(plan({ recipients: [ONE] }), new Date(T0)).deliveries[0], status: 'in_flight' as const, fence: 1, attempts: 1,
+      leaseOwner: 'a', leaseExpiresAt: '2026-09-30T12:36:00.000Z', sendStartedAt: T0, firstSendAt: T0 };
+    expect(decideCompletion(row, 1, { kind: 'accepted', messageId: 'x'.repeat(MAX_PROVIDER_MESSAGE_ID_CHARS + 1) }, new Date(T0), 5))
+      .toMatchObject({ status: 'unknown', ambiguous: true, providerMessageId: null });
+    expect(decideCompletion(row, 1, { kind: 'accepted', messageId: 'x'.repeat(MAX_PROVIDER_MESSAGE_ID_CHARS) }, new Date(T0), 5))
+      .toMatchObject({ status: 'accepted', providerMessageId: 'x'.repeat(MAX_PROVIDER_MESSAGE_ID_CHARS) });
+  });
+
+  it('a provider id the store could not hold whole is not a receipt: the row stays unknown and the retry is answered from the key', async () => {
+    const { store, engine } = world();
+    let calls = 0;
+    const longId = { send: async () => { calls += 1; return { kind: 'accepted' as const, messageId: 'x'.repeat(MAX_PROVIDER_MESSAGE_ID_CHARS + 1) }; } };
+    const r = await deliverDigestOccurrence(plan({ recipients: [ONE] }), engine('a', { provider: longId }));
+    expect(r.attempts).toEqual([{ recipientKey: K1, fence: 1, result: 'unknown', recorded: 'ok' }]);
+    expect(store.row(OCC, K1)).toMatchObject({ status: 'unknown', ambiguous: true, providerMessageId: null });
+    const atBound = { send: async () => ({ kind: 'accepted' as const, messageId: 'x'.repeat(MAX_PROVIDER_MESSAGE_ID_CHARS) }) };
+    const again = await deliverDigestOccurrence(plan({ recipients: [ONE] }), engine('b', { provider: atBound }));
+    expect(again.complete).toBe(true);
+    expect(store.row(OCC, K1)!.providerMessageId).toHaveLength(MAX_PROVIDER_MESSAGE_ID_CHARS);
+    expect(calls).toBe(1);
   });
 });
 

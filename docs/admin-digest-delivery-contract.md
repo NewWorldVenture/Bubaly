@@ -75,6 +75,14 @@ The engine re-reads its own clock **after** the store answers, in the same synch
 
 **Clock skew.** `dispatchBy` is database time and the engine compares it with the application's clock. Skew between the two must stay well inside both `leaseMs − sendTimeoutMs` and `retentionSafetyMarginMs − sendTimeoutMs`. NTP-level skew does; the defaults are 5 min, 1 h and 15 s.
 
+**Storage bounds: one admitted bound, not two.** 0471 limits `payload_json` to 600,000 and `provider_message_id` to 200 characters, counted as PostgreSQL's `length()` counts them (in code points). The engine applies the same numbers, in the same unit, before anything is stored:
+- `freezePlan` refuses a plan whose stored bytes for any recipient exceed `MAX_PAYLOAD_JSON_CHARS`. The 512 KiB HTML byte bound alone is not enough: 300,000 quote characters are 300,000 bytes but serialize to more than 600,000 characters.
+- A provider id longer than `MAX_PROVIDER_MESSAGE_ID_CHARS` is **not a receipt**, in both `checkResult` and `decideCompletion`. The row stays `unknown` and is retried under the same key, and the id is never truncated.
+- The adapter refuses to send such an id to 0471, whose `left(v_mid, 200)` would truncate it.
+- A test asserts that 0471 declares the same two numbers.
+
+**Residual, needs coordination:** a direct privileged call to `admin_digest_complete` with a longer id would still be truncated by the SQL. Making the SQL refuse it too needs a schema change, which I've put to the coordinator.
+
 **Policy bounds.** `validateConfig` refuses, and 0471's functions refuse again, two policies:
 - a retention longer than the verified 24 hours;
 - a lease of `retention − margin` or more. A worker that dies after its mark holds the row until the lease lapses, so a longer lease would park every such crash instead of retrying it.

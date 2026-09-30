@@ -303,8 +303,8 @@ export function decideCompletion(row: DeliveryRow, fence: number, result: Provid
   const next: DeliveryRow = { ...row, leaseOwner: null, leaseExpiresAt: null, sendStartedAt: null, updatedAt: nowIso };
   switch (result.kind) {
     case 'accepted':
-      // A receipt needs a message id; without one nothing is settled.
-      if (typeof result.messageId !== 'string' || result.messageId.length === 0) {
+      // A receipt needs a message id the store can hold whole; without one nothing is settled.
+      if (!isStorableMessageId(result.messageId)) {
         next.ambiguous = true; next.status = 'unknown'; next.lastError = 'outcome_unknown:unreadable_response';
         break;
       }
@@ -372,6 +372,21 @@ export function idempotencyKeyFor(occurrenceId: string, recipientKey: string): s
 
 /** Fixed key order, so the same payload is always the same bytes. */
 export const payloadJsonOf = (p: DeliveryPayload) => JSON.stringify({ from: p.from, to: p.to, subject: p.subject, html: p.html });
+
+/**
+ * 0471's bounds, in PostgreSQL characters (code points, what `length(text)` counts). The engine
+ * admits nothing the store would refuse: the stored bytes are checked before anything is stored,
+ * and a provider id the store could not hold whole is not a receipt (it is never truncated).
+ */
+export const MAX_PAYLOAD_JSON_CHARS = 600_000;
+export const MAX_PROVIDER_MESSAGE_ID_CHARS = 200;
+export function pgLength(s: string): number {
+  let n = 0;
+  for (const _ of s) n += 1;
+  return n;
+}
+export const isStorableMessageId = (id: unknown): id is string =>
+  typeof id === 'string' && id.length > 0 && pgLength(id) <= MAX_PROVIDER_MESSAGE_ID_CHARS;
 const occurrencePayloadHash = (p: DigestPayload) => sha256(JSON.stringify({ from: p.from, subject: p.subject, html: p.html }));
 
 // ── Validation (before any storage call or send) ────────────────────────────
@@ -438,6 +453,9 @@ export function freezePlan(plan: OccurrencePlan, now: Date): { occurrence: Froze
       providerMessageId: null, lastError: null, updatedAt: nowIso,
     };
   }).sort((a, b) => (a.recipientKey < b.recipientKey ? -1 : 1));
+  for (const d of deliveries) {
+    if (pgLength(d.payloadJson) > MAX_PAYLOAD_JSON_CHARS) planError(`the stored bytes must be at most ${MAX_PAYLOAD_JSON_CHARS} characters (0471's bound)`);
+  }
   return {
     occurrence: {
       occurrenceId: plan.occurrenceId, window: { start: new Date(plan.window.start).toISOString(), end: new Date(plan.window.end).toISOString() },
@@ -646,7 +664,7 @@ const messageIdOf = (r: ProviderSendResult) => (r.kind === 'accepted' ? { messag
 function checkResult(r: ProviderSendResult): ProviderSendResult {
   if (!r || typeof r !== 'object') return { kind: 'unknown', reason: 'unreadable_response' };
   switch (r.kind) {
-    case 'accepted': return typeof r.messageId === 'string' && r.messageId.length > 0 ? r : { kind: 'unknown', reason: 'unreadable_response' };
+    case 'accepted': return isStorableMessageId(r.messageId) ? r : { kind: 'unknown', reason: 'unreadable_response' };
     // A refusal is a 4xx: an adapter that calls a 5xx or a 2xx "rejected" has settled nothing.
     case 'rejected': return Number.isInteger(r.httpStatus) && r.httpStatus >= 400 && r.httpStatus < 500 && typeof r.retryable === 'boolean'
       ? { ...r, code: String(r.code ?? '') } : { kind: 'unknown', reason: 'unreadable_response' };
