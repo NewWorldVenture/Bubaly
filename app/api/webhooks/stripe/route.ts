@@ -21,20 +21,27 @@ async function persistSubscription(supabase: ReturnType<typeof createServiceClie
   const familyId = sub.metadata.family_id;
   if (!familyId) return;
 
-  const item = sub.items.data[0];
-  const priceId = item?.price.id;
-  if (!priceId) throw new Error('Subscription price is missing');
-
-  // Map price → plan slug
-  const plan = catalogPlanForPrice(priceId) ?? (
-    priceId === process.env.STRIPE_PRICE_PLUS_MONTHLY   ? 'plus' :
-    priceId === process.env.STRIPE_PRICE_PLUS_ANNUAL    ? 'plus_annual' :
-    priceId === process.env.STRIPE_PRICE_BASIC_MONTHLY  ? 'basic' :
-    priceId === process.env.STRIPE_PRICE_BASIC_ANNUAL   ? 'basic_annual' :
-    // Legacy price IDs (backward-compat with existing subscriptions)
-    priceId === process.env.STRIPE_PRICE_FAMILY_MONTHLY ? 'basic' :
-    priceId === process.env.STRIPE_PRICE_FAMILY_ANNUAL  ? 'basic_annual' :
-    null);
+  const items = sub.items?.data;
+  if (!Array.isArray(items) || items.length === 0) throw new Error('Subscription price is missing');
+  // A partial list cannot establish that exactly one item grants entitlement.
+  if (sub.items.has_more) throw new Error('Subscription items are incomplete');
+  const recognized = items.map(item => {
+    const priceId = typeof item?.price?.id === 'string' ? item.price.id : null;
+    if (!priceId) throw new Error('Subscription price is missing');
+    // Preserve current, historical and environment-configured price mappings.
+    const plan = catalogPlanForPrice(priceId) ?? (
+      priceId === process.env.STRIPE_PRICE_PLUS_MONTHLY   ? 'plus' :
+      priceId === process.env.STRIPE_PRICE_PLUS_ANNUAL    ? 'plus_annual' :
+      priceId === process.env.STRIPE_PRICE_BASIC_MONTHLY  ? 'basic' :
+      priceId === process.env.STRIPE_PRICE_BASIC_ANNUAL   ? 'basic_annual' :
+      // Legacy price IDs (backward-compat with existing subscriptions)
+      priceId === process.env.STRIPE_PRICE_FAMILY_MONTHLY ? 'basic' :
+      priceId === process.env.STRIPE_PRICE_FAMILY_ANNUAL  ? 'basic_annual' :
+      null);
+    return { item, plan };
+  }).filter(({ plan }) => plan !== null);
+  if (recognized.length > 1) throw new Error('Subscription plan items are ambiguous');
+  const { item, plan } = recognized[0] ?? {};
   if (!plan) throw new Error('Unknown Stripe subscription price');
 
   // Resolve billing_customer_id + the PRIOR subscription state (to detect a
@@ -60,6 +67,13 @@ async function persistSubscription(supabase: ReturnType<typeof createServiceClie
     return;
   }
 
+  // Since Basil, periods belong to items. Persist the SAME item's plan and
+  // period; neither another item's date nor a legacy top-level date is safe.
+  const periodEnd = item.current_period_end;
+  if (!Number.isSafeInteger(periodEnd) || periodEnd <= 0) throw new Error('Subscription item period is invalid');
+  const periodEndDate = new Date(periodEnd * 1000);
+  if (!Number.isFinite(periodEndDate.getTime())) throw new Error('Subscription item period is invalid');
+
   // `family_id` is deliberately not part of `fields`: it selects the row, and
   // the Update type withholds it so no code path can move a subscription
   // between families.
@@ -68,7 +82,7 @@ async function persistSubscription(supabase: ReturnType<typeof createServiceClie
     plan,
     status: sub.status as 'trialing' | 'active' | 'past_due' | 'canceled' | 'incomplete' | 'incomplete_expired' | 'unpaid',
     provider_ref: sub.id,
-    current_period_end: new Date((sub as unknown as { current_period_end: number }).current_period_end * 1000).toISOString(),
+    current_period_end: periodEndDate.toISOString(),
     cancel_at_period_end: sub.cancel_at_period_end ?? false,
     seats: 10,
   };
