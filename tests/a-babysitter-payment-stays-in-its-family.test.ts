@@ -122,6 +122,65 @@ describe('a babysitter payment names only this family’s babysitter and event',
     });
   });
 
+  // The reads above are separate statements from the insert, with the Trust
+  // Engine awaited between them. Here the Trust call itself moves the row to
+  // family-2 after both reads passed — standing in for a concurrent update by a
+  // caller who manages both families (#701 review 5918702743).
+  describe('a reference moved to another family while Trust is awaited', () => {
+    const MOVED = [
+      ['babysitter', 'babysitter_profiles', 'sitter-own'],
+      ['calendar event', 'calendar_events', 'event-own'],
+    ] as const;
+
+    function moveDuringTrust(table: string, id: string) {
+      harness.evaluateTrust.mockImplementationOnce(async () => {
+        (db.table(table).find((row) => row.id === id) as { family_id: string }).family_id = 'family-2';
+        return { decision: { effect: 'allow', reason: 'Allowed.', basis: 'role_default' } };
+      });
+    }
+
+    // KNOWN GAP, kept visible rather than green: the action alone cannot refuse
+    // this, because a second read would only move the window. `it.fails` passes
+    // while the payment is still recorded, and turns red if the action ever
+    // does refuse it on its own, so this is revisited rather than forgotten.
+    // What does refuse it is the database: migration 0472.
+    it.fails.each(MOVED)('without the database guard, the action alone still records a %s moved mid-check', async (_kind, table, id) => {
+      moveDuringTrust(table, id);
+
+      expect(await pay('sitter-own', 'event-own')).toEqual({ ok: false, error: COULD_NOT_RECORD });
+      expect(db.table('babysitter_payments')).toHaveLength(0);
+    });
+
+    // 0472 refuses the write itself: its insert trigger re-reads the parent
+    // FOR SHARE and raises 42501 when the parent is now another family's. This
+    // stands in for that answer, and pins what the action then does with it.
+    it.each(MOVED)('with the database guard, a %s moved mid-check is not recorded, and the refusal is a failure in words', async (_kind, table, id) => {
+      const guardError = { code: '42501', message: `babysitter_payments points at a row in another family`, details: null, hint: null };
+      const from = db.from.bind(db);
+      (db as unknown as { from: (name: string) => unknown }).from = (name: string) => {
+        const builder = from(name) as unknown as Record<string, unknown>;
+        if (name === 'babysitter_payments') {
+          const insert = (builder.insert as (row: Record<string, unknown>) => unknown).bind(builder);
+          builder.insert = (row: Record<string, unknown>) => {
+            const owner = (tbl: string, ref: unknown) => db.table(tbl).find((r) => r.id === ref)?.family_id;
+            const crosses = (row.babysitter_id != null && owner('babysitter_profiles', row.babysitter_id) !== row.family_id)
+              || (row.event_id != null && owner('calendar_events', row.event_id) !== row.family_id);
+            return crosses
+              ? { then: (resolve: (v: unknown) => unknown) => Promise.resolve({ data: null, error: guardError, count: null, status: 403, statusText: 'Forbidden' }).then(resolve) }
+              : insert(row);
+          };
+        }
+        return builder;
+      };
+      moveDuringTrust(table, id);
+
+      expect(await pay('sitter-own', 'event-own')).toEqual({ ok: false, error: describeActionError(guardError, COULD_NOT_RECORD) });
+      expect(db.table('babysitter_payments')).toHaveLength(0);
+      expect(db.table('wallet_audit_logs')).toHaveLength(0);
+      expect(harness.revalidatePath).not.toHaveBeenCalled();
+    });
+  });
+
   describe('still recorded', () => {
     it('this family’s babysitter, with no event', async () => {
       expect(await pay('sitter-own')).toEqual({ ok: true });
