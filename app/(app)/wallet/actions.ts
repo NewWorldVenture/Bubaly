@@ -11,7 +11,7 @@ import { isManager } from '@/lib/constants/roles';
 import { allocate, normalizeSplit, type Split } from '@/lib/wallet/ledger';
 import { approveGift, bucketBalanceCents, creditChildWallet, decideAllowance, decideSpend, debitSpendBucket, fundGoal, transferWallets } from '@/lib/wallet/server';
 import { nextRunDate, rollForward, type Cadence } from '@/lib/wallet/allowance';
-import { walletTierForPlanLevel, walletFeatureEnabled } from '@/lib/wallet/tiers';
+import { walletTierForPlanLevel, walletFeatureEnabled, type WalletTier } from '@/lib/wallet/tiers';
 import { resolveFamilyPlanLevel } from '@/lib/server/plan';
 import { normalizeHandle, handleError } from '@/lib/wallet/pay-handle';
 import { evaluateTrust, roleOf } from '@/lib/trust/server';
@@ -181,9 +181,21 @@ export async function addFundsAction(input: { childWalletId: string; amountCents
   return { ok: true };
 }
 
-/** Resolve the family's wallet tier from its active subscription plan. */
-async function familyWalletTier(supabase: Awaited<ReturnType<typeof createServer>>, familyId: string) {
-  return walletTierForPlanLevel(await effectivePlanLevel(await resolveFamilyPlanLevel(supabase, familyId)));
+/**
+ * Resolve the family's wallet tier from its active subscription plan, or null
+ * when the plan cannot be read. `resolveFamilyPlanLevel` throws on a failed
+ * read, and an action that let it escape never answered: the allowance screen
+ * awaits these actions with its spinner set and only clears it once they
+ * return. The callers refuse in words instead, and a failed read is not taken
+ * for Free or for Basic.
+ */
+async function familyWalletTier(supabase: Awaited<ReturnType<typeof createServer>>, familyId: string): Promise<WalletTier | null> {
+  try {
+    return walletTierForPlanLevel(await effectivePlanLevel(await resolveFamilyPlanLevel(supabase, familyId)));
+  } catch (error) {
+    console.error('[wallet-action] plan read failed:', error);
+    return null;
+  }
 }
 
 /**
@@ -262,6 +274,7 @@ export async function saveAllowanceRuleAction(input: {
   const supabase = await createServer();
 
   const tier = await familyWalletTier(supabase, familyId);
+  if (!tier) return { ok: false, error: t('actions.couldNotSaveThatAllowance') };
   if (!walletFeatureEnabled(tier, 'allowances')) {
     return { ok: false, error: t('actions.automatedAllowancesAreABasic') };
   }
@@ -327,6 +340,7 @@ export async function runDueAllowancesAction(): Promise<Result & { ranCount?: nu
   const supabase = await createServer();
 
   const tier = await familyWalletTier(supabase, familyId);
+  if (!tier) return { ok: false, error: t('actions.couldNotLoadDueAllowances') };
   if (!walletFeatureEnabled(tier, 'allowances')) {
     return { ok: false, error: t('actions.automatedAllowancesAreABasic') };
   }
