@@ -37,8 +37,9 @@ export default defineConfig({
     // rather than waving it through, which is what closes F-E07 for every
     // preview, staging and self-hosted deployment. Tests post unsigned bodies
     // to those routes by the dozen, so the bypass has to exist somewhere —
-    // here, named and greppable, rather than as a NODE_ENV check compiled into
-    // the routes themselves. It applies only when TWILIO_AUTH_TOKEN is unset:
+    // here, named and greppable. The shared gate also requires NODE_ENV=test,
+    // so copying this flag into a deployment cannot admit unsigned callbacks.
+    // It applies only when TWILIO_AUTH_TOKEN is unset:
     // a test that stubs a token still goes through real verification, which is
     // how tests/guardian-*-execution.test.ts exercise the signing path.
     env: { TZ: process.env.TZ ?? 'UTC', ALLOW_UNSIGNED_TWILIO_WEBHOOKS: '1' },

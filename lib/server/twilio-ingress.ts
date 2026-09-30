@@ -13,10 +13,9 @@
 //    detection, notify families and fan out SMS and voice calls. The
 //    environment a build happens to run in is not a security decision. So the
 //    condition is gone: the question asked here is whether this deployment
-//    holds the secret, which is the honest one, and the only way to skip is to
-//    set ALLOW_UNSIGNED_TWILIO_WEBHOOKS=1 on purpose — a named, greppable act
-//    by an operator rather than a property of the build. With no token and no
-//    opt-out the answer is 503, never "come in".
+//    holds the secret. Unsigned fixtures require BOTH NODE_ENV=test and
+//    ALLOW_UNSIGNED_TWILIO_WEBHOOKS=1. A deployed server missing its token
+//    returns 503 even if the fixture flag was accidentally copied into it.
 //
 // 2. Every copy rebuilt the signed URL from `NEXT_PUBLIC_APP_URL`, a constant
 //    an operator has to keep byte-identical to whatever is typed into the
@@ -92,7 +91,9 @@ export function verifyTwilioRequest(
   label: string,
 ): TwilioIngressVerdict {
   if (!twilioSignatureConfigured()) {
-    if (process.env.ALLOW_UNSIGNED_TWILIO_WEBHOOKS === '1') return { ok: true, via: 'unsigned_opt_out' };
+    if (process.env.NODE_ENV === 'test' && process.env.ALLOW_UNSIGNED_TWILIO_WEBHOOKS === '1') {
+      return { ok: true, via: 'unsigned_opt_out' };
+    }
     console.error(`[twilio ingress] ${label}: TWILIO_AUTH_TOKEN is not set, so no callback can be verified. Refusing.`);
     return { ok: false, status: 503, reason: 'not_configured', tried: [] };
   }
