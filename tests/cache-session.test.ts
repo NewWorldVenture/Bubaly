@@ -313,6 +313,7 @@ describe('positive session receipt ownership', () => {
 // and 19). The immediate reread saw consistent, stale A and nothing read again.
 describe('a peer event that outruns its cookie write', () => {
   beforeEach(() => { vi.useFakeTimers({ toFake: ['Date', 'setTimeout', 'clearTimeout'] }); vi.setSystemTime(0); });
+  const reads = () => mocks.getSession.mock.calls.length;
 
   it('rereads after the cookie jar settles and retires A for B', async () => {
     connect(); await settle();
@@ -336,18 +337,53 @@ describe('a peer event that outruns its cookie write', () => {
     expect(getCacheSessionSnapshot()).toMatchObject({ status: 'signed-out', identity: null });
   });
 
-  it('never adopts the event itself: a stale event keeps the current cookie owner', async () => {
-    connect(); await settle();
-    emit('SIGNED_IN', session(B, S2)); await vi.advanceTimersByTimeAsync(1_000);
+  it('never adopts the event itself, and one quiet episode is three reads', async () => {
+    connect(); await settle(); const base = reads();
+    emit('SIGNED_IN', session(B, S2)); await vi.advanceTimersByTimeAsync(60_000);
     expect(getCacheSessionSnapshot()).toMatchObject({ status: 'ready', identity: { userId: A } });
-    expect(mocks.getSession).toHaveBeenCalledTimes(4); // bootstrap, immediate reread, two bounded settle reads
+    expect(reads() - base).toBe(3); // now, +50 ms, +500 ms; then nothing
   });
 
-  it('stops rereading once the observer is disposed', async () => {
+  it('a sustained stream of stale events does not multiply reads, and a real switch is still seen', async () => {
+    connect(); await settle(); const base = reads();
+    // 1,000 stale events, one every 10 ms, while cookies stay A.
+    for (let i = 0; i < 1000; i++) { emit('SIGNED_IN', session(B, S2)); await vi.advanceTimersByTimeAsync(10); }
+    const duringStorm = reads() - base;
+    expect(duringStorm).toBeLessThanOrEqual(12); // was 1,000 before the fix, one per event
+    expect(getCacheSessionSnapshot()).toMatchObject({ status: 'ready', identity: { userId: A } });
+    // The peer's write finally lands; the pending episode sees it.
+    saveCookies(session(B, S2)); mocks.getSession.mockResolvedValue(reply(session(B, S2)));
+    await vi.advanceTimersByTimeAsync(40_000);
+    expect(getCacheSessionSnapshot()).toMatchObject({ status: 'ready', identity: { userId: B } });
+    expect(reads() - base).toBeLessThanOrEqual(duringStorm + 3);
+  });
+
+  it('a read that itself provokes a stale event backs off instead of looping', async () => {
+    connect(); await settle(); const base = reads();
+    mocks.getSession.mockImplementation(async () => { emit('TOKEN_REFRESHED', session(B, S2)); return reply(session()); });
+    emit('SIGNED_IN', session(B, S2));
+    await vi.advanceTimersByTimeAsync(60_000);
+    const inFirstMinute = reads() - base;
+    expect(inFirstMinute).toBeLessThanOrEqual(18); // 2,401 with fixed re-armed timers
+    await vi.advanceTimersByTimeAsync(60_000);
+    expect(reads() - base - inFirstMinute).toBeLessThanOrEqual(6); // at the 30 s ceiling: one episode per ~30 s
+    expect(getCacheSessionSnapshot()).toMatchObject({ status: 'ready', identity: { userId: A } });
+  });
+
+  it('rapid owner changes settle on whoever the cookies finally name', async () => {
+    connect(); await settle(); const base = reads();
+    for (let i = 0; i < 20; i++) { emit('SIGNED_IN', i % 2 ? session() : session(B, S2)); await vi.advanceTimersByTimeAsync(5); }
+    saveCookies(session(B, S2)); mocks.getSession.mockResolvedValue(reply(session(B, S2)));
+    await vi.advanceTimersByTimeAsync(40_000);
+    expect(getCacheSessionSnapshot()).toMatchObject({ status: 'ready', identity: { userId: B } });
+    expect(reads() - base).toBeLessThanOrEqual(6);
+  });
+
+  it('stops rereading once the observer is disposed, including a pending backoff', async () => {
     const stop = connect(); await settle();
-    emit('SIGNED_IN', session(B, S2)); await settle();
-    const calls = mocks.getSession.mock.calls.length;
-    stop(); await vi.advanceTimersByTimeAsync(1_000);
-    expect(mocks.getSession).toHaveBeenCalledTimes(calls);
+    for (let i = 0; i < 100; i++) { emit('SIGNED_IN', session(B, S2)); await vi.advanceTimersByTimeAsync(10); }
+    const calls = reads();
+    stop(); await vi.advanceTimersByTimeAsync(120_000);
+    expect(reads()).toBe(calls);
   });
 });

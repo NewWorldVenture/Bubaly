@@ -24,9 +24,20 @@ const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 // stale evidence, and without another read A's private rows would stay on
 // screen. Reread after the jar has had time to settle; each read is still bound
 // to current cookies, so it cannot adopt the event's session on its own.
-const CROSS_TAB_SETTLE_MS = [50, 500] as const;
+//
+// Conflicting events are coalesced into one episode of at most three reads
+// (now, +50 ms, +500 ms). Events during an episode add no reads. An episode
+// that saw further conflicts opens a backoff window (2 s, doubling to 30 s):
+// conflicts inside it wait for one episode at its end, and one that arrived
+// after the episode's last read guarantees that episode. So a stream of stale
+// events, including one a read itself provokes, cannot multiply reads, and a
+// real switch is still seen. A quiet episode resets the backoff.
+const CROSS_TAB_SETTLE_MS = [0, 50, 500] as const;
+const CONFLICT_BACKOFF_MS = 2_000;
+const CONFLICT_BACKOFF_MAX_MS = 30_000;
+type ConflictEpisode = { timer: ReturnType<typeof setTimeout> | null; active: boolean; dirty: boolean; busy: boolean; backoff: number; notBefore: number };
 let snapshot = INITIAL;
-let connection: { client: ReturnType<typeof createClient>; unsubscribe: () => void; revision: number; read: number; storageRevision: number; initialSuperseded: boolean; reconcilingEvent: boolean; settleTimers: ReturnType<typeof setTimeout>[] } | null = null;
+let connection: { client: ReturnType<typeof createClient>; unsubscribe: () => void; revision: number; read: number; storageRevision: number; initialSuperseded: boolean; conflict: ConflictEpisode } | null = null;
 let pending: Promise<void> | null = null;
 let pendingStartedAt = 0;
 const listeners = new Set<() => void>();
@@ -98,24 +109,49 @@ function ensureConnection() {
   if (connection || typeof window === 'undefined') return;
   try {
     const client = createClient();
-    const current = { client, unsubscribe: () => {}, revision: 0, read: 0, storageRevision: getSessionStorageChangeRevision(), initialSuperseded: false, reconcilingEvent: false, settleTimers: [] as ReturnType<typeof setTimeout>[] };
+    const current = { client, unsubscribe: () => {}, revision: 0, read: 0, storageRevision: getSessionStorageChangeRevision(), initialSuperseded: false, conflict: { timer: null, active: false, dirty: false, busy: false, backoff: 0, notBefore: 0 } as ConflictEpisode };
     connection = current;
-    const settleAfterConflict = () => {
-      for (const timer of current.settleTimers) clearTimeout(timer);
-      current.settleTimers = CROSS_TAB_SETTLE_MS.map(delay => setTimeout(() => {
-        if (connection === current) void refreshCacheSession();
-      }, delay));
+    const episode = current.conflict;
+    const runEpisode = () => {
+      episode.timer = null;
+      episode.active = true;
+      episode.busy = false;
+      let step = 0;
+      const read = () => {
+        if (connection !== current) return;
+        episode.dirty = false;
+        void Promise.resolve().then(() => {
+          if (connection !== current) return;
+          notifySessionStorageChanged({ broadcast: false });
+          return refreshCacheSession();
+        }).catch(() => { /* Lifecycle recovery remains available if a reader fails. */ })
+          .finally(() => {
+            if (connection !== current) return;
+            step += 1;
+            if (step < CROSS_TAB_SETTLE_MS.length) {
+              episode.timer = setTimeout(read, CROSS_TAB_SETTLE_MS[step] - CROSS_TAB_SETTLE_MS[step - 1]);
+              return;
+            }
+            episode.timer = null;
+            episode.active = false;
+            if (!episode.busy && !episode.dirty) { episode.backoff = 0; episode.notBefore = 0; return; }
+            // Conflicts kept arriving: the next episode waits, longer each time.
+            const wait = Math.min(CONFLICT_BACKOFF_MS * 2 ** episode.backoff, CONFLICT_BACKOFF_MAX_MS);
+            episode.backoff += 1;
+            episode.notBefore = Date.now() + wait;
+            if (episode.dirty) episode.timer = setTimeout(runEpisode, wait);
+          });
+      };
+      // Never read inside an SDK callback, which may hold the session lock.
+      read();
     };
     const reconcileCurrentCookies = () => {
-      settleAfterConflict();
-      if (current.reconcilingEvent) return;
-      current.reconcilingEvent = true;
-      void Promise.resolve().then(() => {
-        if (connection !== current) return;
-        notifySessionStorageChanged({ broadcast: false });
-        return refreshCacheSession();
-      }).catch(() => { /* Lifecycle recovery remains available if a reader fails. */ })
-        .finally(() => { current.reconcilingEvent = false; });
+      episode.dirty = true;
+      if (episode.active) { episode.busy = true; return; }
+      if (episode.timer) return;
+      const wait = episode.notBefore - Date.now();
+      if (wait > 0) { episode.timer = setTimeout(runEpisode, wait); return; }
+      runEpisode();
     };
     const { data: { subscription } } = client.auth.onAuthStateChange((event, session) => {
       if (connection !== current) return;
@@ -157,7 +193,7 @@ function ensureConnection() {
       for (const listener of authListeners) listener(event, session?.user?.id ?? null);
     });
     const stopStorageChanges = subscribeSessionStorageChanges(() => { void refreshCacheSession(); });
-    current.unsubscribe = () => { subscription.unsubscribe(); stopStorageChanges(); for (const timer of current.settleTimers) clearTimeout(timer); };
+    current.unsubscribe = () => { subscription.unsubscribe(); stopStorageChanges(); if (episode.timer) clearTimeout(episode.timer); episode.timer = null; };
     void refreshCacheSession();
   } catch {
     connection = null;
