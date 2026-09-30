@@ -51,6 +51,9 @@ function LanguageControl({ className }: ControlProps) {
     setOpen(false);
     if (returnFocus) triggerRef.current?.focus();
   }, []);
+  // Read when a save completes, which can be long after the choice was made.
+  const openRef = useRef(open);
+  useEffect(() => { openRef.current = open; }, [open]);
 
   // Close on Escape and on any click outside — a language menu should never be
   // the thing standing between someone and the page underneath it.
@@ -118,7 +121,12 @@ function LanguageControl({ className }: ControlProps) {
       try {
         const result = await setLocale(code);
         if (result.ok) {
-          close(true);
+          // Return focus to the trigger only while the picker still holds the
+          // interaction: the list is open and focus is in it (or on nothing).
+          // Someone who closed it and moved on to another field keeps their
+          // place.
+          const focused = document.activeElement;
+          close(openRef.current && (!focused || focused === document.body || !!rootRef.current?.contains(focused)));
           // Server components hold the translated markup, so a refresh is what
           // actually repaints the page in the new language.
           router.refresh();
@@ -153,9 +161,12 @@ function LanguageControl({ className }: ControlProps) {
                 aria-selected={isActive}
                 tabIndex={index === focusIndex ? 0 : -1}
                 onFocus={() => setFocusIndex(index)}
-                disabled={pending !== null}
-                onClick={() => void choose(locale.code)}
-                className={`flex w-full items-center gap-3 rounded-xl px-3 py-2.5 text-left transition coarse:min-h-11 focus-ring disabled:opacity-60 ${
+                // While a save is pending the options refuse another choice but
+                // stay focusable: disabling the focused option would drop
+                // keyboard focus to <body>, stranding it if the save fails.
+                aria-disabled={pending !== null || undefined}
+                onClick={() => { if (pending === null) void choose(locale.code); }}
+                className={`flex w-full items-center gap-3 rounded-xl px-3 py-2.5 text-left transition coarse:min-h-11 focus-ring aria-disabled:opacity-60 ${
                   isActive ? 'bg-elevated' : 'hover:bg-elevated'
                 }`}
               >
