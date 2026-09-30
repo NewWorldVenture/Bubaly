@@ -45,7 +45,10 @@ const db = vi.hoisted(() => ({
   /** The identity lookup itself failing (an auth outage), whoever the session is. */
   authError: null as null | { name: string; message: string; status?: number },
   /** A request that never answers unless it is aborted: the slow database of the #705 review. */
-  hold: null as null | 'read' | 'write',
+  hold: null as null | 'read' | 'write' | 'auth',
+  /** A held identity lookup (the SDK's getUser takes no abort signal) answers once this opens. */
+  gate: Promise.resolve(),
+  open: () => {},
   /** Every UPDATE that reached a row: [caller, row id, locale]. */
   writes: [] as [string, string, string | null][],
   checked: [] as string[],
@@ -69,7 +72,7 @@ vi.mock('@/lib/supabase/server', () => ({
       auth: {
         // As the SDK answers: a visitor with no session is an
         // AuthSessionMissingError, and an outage a null user with its own error.
-        getUser: async () => (db.authError ? { data: { user: null }, error: db.authError }
+        getUser: async () => (db.hold === 'auth' && await db.gate, db.authError ? { data: { user: null }, error: db.authError }
           : db.user ? { data: { user: db.user }, error: null }
           : { data: { user: null }, error: { name: 'AuthSessionMissingError', message: 'Auth session missing!', status: 400 } }),
       },
@@ -154,6 +157,7 @@ beforeEach(() => {
   db.user = null;
   db.profiles = new Map([[PARENT, null], [SPOUSE, null], [OUTSIDER, 'it-IT']]);
   db.readError = null; db.writeError = null; db.throwOnConnect = false; db.hold = null; db.authError = null;
+  db.gate = new Promise<void>((r) => { db.open = r; });
   db.writes = [];
   db.checked = CHECKED;
   freshDevice();
@@ -549,6 +553,61 @@ describe('sign-in never waits on a slow language (#705 review 5919831949)', () =
   it('onboarding uses the same bounded sync', () => {
     const onboarding = readFileSync(join(__dirname, '..', 'app/onboarding/actions.ts'), 'utf8');
     expect(onboarding).toContain('await syncLanguageForSignedInUser();');
+  });
+});
+
+describe('the picker\'s save never waits on a slow profile either (#705 comment 5921693652)', () => {
+  const within = async <T>(work: Promise<T>) => {
+    const { LANGUAGE_SYNC_BUDGET_MS } = await import('@/lib/i18n/sync');
+    const started = Date.now();
+    const result = await work;
+    expect(Date.now() - started).toBeLessThan(LANGUAGE_SYNC_BUDGET_MS + 1000);
+    return result;
+  };
+
+  it('a profile write that never answers: the switch finishes, not stored, and the owner\'s retry is kept', async () => {
+    db.profiles.set(PARENT, 'it-IT');
+    db.user = { id: PARENT };
+    db.hold = 'write';
+    expect(await within(setLocale('fr-FR'))).toEqual({ ok: true, stored: false, profile: 'timed-out' });
+    expect(cookie()?.value).toBe('fr-FR');
+    expect(db.jar.get(LOCALE_PENDING_COOKIE)?.value).toBe(`fr-FR@${PARENT}`);
+    expect(db.writes).toEqual([]); // the held request was aborted
+    db.hold = null;
+    expect(await signIn()).toEqual({ kind: 'stored', locale: 'fr-FR' });
+    expect(db.profiles.get(PARENT)).toBe('fr-FR');
+  });
+
+  it('an identity lookup that never answers: the switch finishes, and nobody is handed a pending choice', async () => {
+    db.user = { id: PARENT };
+    db.hold = 'auth';
+    expect(await within(setLocale('fr-FR'))).toEqual({ ok: true, stored: false, profile: 'unverified' });
+    expect(cookie()?.value).toBe('fr-FR');
+    expect(db.jar.has(LOCALE_PENDING_COOKIE)).toBe(false);
+  });
+
+  it('abandoned work never writes, so it cannot overwrite a newer choice', async () => {
+    db.profiles.set(PARENT, 'it-IT');
+    db.user = { id: PARENT };
+    db.hold = 'auth';
+    await within(setLocale('fr-FR')); // abandoned while looking up who is asking
+    db.hold = null;
+    expect(await setLocale('de-DE')).toEqual({ ok: true, stored: true }); // the newer choice
+    db.open(); // the old lookup answers late
+    await new Promise((r) => setTimeout(r, 20));
+    expect(db.profiles.get(PARENT)).toBe('de-DE');
+    expect(db.writes).toEqual([[PARENT, PARENT, 'de-DE']]);
+  });
+
+  it('control: an answering database is not cut short', async () => {
+    db.user = { id: PARENT };
+    expect(await setLocale('fr-FR')).toEqual({ ok: true, stored: true });
+    expect(db.profiles.get(PARENT)).toBe('fr-FR');
+  });
+
+  it('the client cannot choose the budget: the action takes only the code', async () => {
+    const { setLocale: action } = await import('@/lib/i18n/actions');
+    expect(action.length).toBe(1);
   });
 });
 

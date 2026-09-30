@@ -6,6 +6,7 @@ import { cookies } from 'next/headers';
 
 import { isLocaleCode, findLocale, LOCALE_COOKIE, LOCALE_COOKIE_MAX_AGE } from '@/lib/i18n/locales';
 import { encodePendingChoice, LOCALE_PENDING_COOKIE } from '@/lib/i18n/pending-choice';
+import { LANGUAGE_SYNC_BUDGET_MS } from '@/lib/i18n/sync';
 import { createServer } from '@/lib/supabase/server';
 
 /**
@@ -29,14 +30,18 @@ import { createServer } from '@/lib/supabase/server';
  * a cookie. A signed-in member's choice is written to both; a visitor's only to
  * the cookie, and sign-in or onboarding copies it onto the profile.
  *
- * HONEST about the second write. The switch never fails because a database was
- * slow — the cookie has already taken, so the page is in the new language —
- * but the result says whether the profile took too, and if not, why:
+ * HONEST about the second write, and BOUNDED. The picker waits for this action
+ * before it repaints, so the profile gets LANGUAGE_SYNC_BUDGET_MS at most: on
+ * the deadline the request is aborted, the switch finishes with the cookie,
+ * and the result says the profile did not take (#705 comment 5921693652). A
+ * slow or failing database never fails the switch, but the result says whether
+ * the profile took too, and if not, why:
  *
  *   { ok: false }                            not a shipped language; nothing written
  *   { ok: true, stored: true }               cookie and profile
  *   { ok: true, stored: false, profile: 'signed-out' }  a visitor: cookie only, by design
  *   { ok: true, stored: false, profile: 'unverified' }  who is asking could not be looked up
+ *   { ok: true, stored: false, profile: 'timed-out' }   no answer within the budget
  *   { ok: true, stored: false, profile: 'refused' }     the write reached no row
  *   { ok: true, stored: false, profile: 'failed' }      the write errored or threw
  */
@@ -45,7 +50,7 @@ export type LocaleChoice =
   | { ok: true; stored: true }
   | { ok: true; stored: false; profile: ProfileWrite };
 
-type ProfileWrite = 'signed-out' | 'unverified' | 'refused' | 'failed';
+type ProfileWrite = 'signed-out' | 'unverified' | 'timed-out' | 'refused' | 'failed';
 
 export async function setLocale(code: string): Promise<LocaleChoice> {
   if (!isLocaleCode(code)) return { ok: false, stored: false };
@@ -99,35 +104,64 @@ export async function setLocale(code: string): Promise<LocaleChoice> {
  * already in the new language, and the next switch or sign-in writes it again.
  */
 async function storeForSignedInUser(code: string): Promise<{ profile: 'stored' | ProfileWrite; userId: string | null }> {
-  let userId: string | null = null;
-  const result = (profile: 'stored' | ProfileWrite) => ({ profile, userId });
+  // Who is asking is recorded as soon as it is known, so a deadline that
+  // interrupts the write still leaves an OWNED retry, and one that interrupts
+  // the lookup leaves none ('unverified').
+  const who: { userId: string | null } = { userId: null };
+  const controller = new AbortController();
+  let timer: ReturnType<typeof setTimeout> | undefined;
+  const deadline = new Promise<ProfileWrite>((resolve) => {
+    timer = setTimeout(() => {
+      controller.abort();
+      console.error(`[i18n] the language choice was not saved within ${LANGUAGE_SYNC_BUDGET_MS}ms; the switch carries on`);
+      resolve(who.userId ? 'timed-out' : 'unverified');
+    }, LANGUAGE_SYNC_BUDGET_MS);
+  });
+  try {
+    const profile = await Promise.race([storeWithin(code, controller.signal, who), deadline]);
+    return { profile, userId: who.userId };
+  } finally {
+    clearTimeout(timer);
+  }
+}
+
+/**
+ * The write itself. Once `signal` has fired it is abandoned work and never
+ * writes: the lookup it may still be waiting on (getUser takes no signal) is
+ * checked before the update is sent, and the update is aborted in flight, so
+ * a late answer cannot overwrite a newer choice.
+ */
+async function storeWithin(code: string, signal: AbortSignal, who: { userId: string | null }): Promise<'stored' | ProfileWrite> {
   try {
     const supabase = await createServer();
     const { data: { user }, error: authError } = await supabase.auth.getUser();
+    if (signal.aborted) return 'unverified';
     if (!user) {
       // Only a missing session is signed out; any other error is an outage.
-      if (!authError || isSessionMissing(authError)) return result('signed-out');
+      if (!authError || isSessionMissing(authError)) return 'signed-out';
       console.error('[i18n] could not look up who is choosing a language', authError);
-      return result('unverified');
+      return 'unverified';
     }
-    userId = user.id;
+    who.userId = user.id;
     const { data, error } = await supabase
       .from('profiles')
       .update({ locale: code })
       .eq('id', user.id)
-      .select('id');
+      .select('id')
+      .abortSignal(signal);
+    if (signal.aborted) return 'timed-out';
     if (error) {
       console.error('[i18n] could not store the language choice on the profile', error);
-      return result('failed');
+      return 'failed';
     }
     if ((data ?? []).length !== 1) {
       console.error('[i18n] the language choice reached no profile row (refused or missing)');
-      return result('refused');
+      return 'refused';
     }
-    return result('stored');
+    return 'stored';
   } catch (e) {
-    console.error('[i18n] could not store the language choice on the profile', e);
-    return result('failed');
+    if (!signal.aborted) console.error('[i18n] could not store the language choice on the profile', e);
+    return 'failed';
   }
 }
 
