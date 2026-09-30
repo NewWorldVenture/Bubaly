@@ -3,12 +3,12 @@ import path from 'node:path';
 import ts from 'typescript';
 import { expect, test, type BrowserContext, type Page } from '@playwright/test';
 import type { CacheAccessIdentity } from '../../lib/offline/cache-scope';
+import { reactBrowserScripts } from './helpers/react-browser';
 
 // Real React, AppProvider, cache/session boundary, query hook, browser factory,
 // installed SSR cookie adapter and auth/PostgREST SDK. Only HTTP responses are
 // synthetic. Browser restart state remains in memory and contains no real user.
-const react = fs.readFileSync(path.join(path.dirname(require.resolve('react/package.json')), 'umd/react.development.js'), 'utf8');
-const reactDom = fs.readFileSync(path.join(path.dirname(require.resolve('react-dom/package.json')), 'umd/react-dom.development.js'), 'utf8');
+const { react, reactDom } = reactBrowserScripts('development');
 const sdk = fs.readFileSync(path.join(path.dirname(require.resolve('@supabase/supabase-js/package.json')), 'dist/umd/supabase.js'), 'utf8');
 const modules: Record<string, { source: string; imports: Record<string, string> }> = {};
 function sourceFile(filename: string) {

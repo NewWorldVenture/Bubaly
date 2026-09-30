@@ -21,6 +21,8 @@ vi.mock('@/lib/auth/browser-session-storage', () => ({ captureBrowserSessionSnap
 const A = '11111111-1111-4111-8111-111111111111';
 const B = '22222222-2222-4222-8222-222222222222';
 const S1 = '33333333-3333-4333-8333-333333333333';
+const C = '55555555-5555-4555-8555-555555555555';
+const S3 = '66666666-6666-4666-8666-666666666666';
 const S2 = '44444444-4444-4444-8444-444444444444';
 function session(userId = A, sessionId: unknown = S1, sub: unknown = userId): Session {
   return { access_token: `fixture.${Buffer.from(JSON.stringify({ sub, session_id: sessionId })).toString('base64url')}.signature`,
@@ -305,5 +307,208 @@ describe('positive session receipt ownership', () => {
     emit('SIGNED_IN', session()); await settle();
     expect(mocks.getSession).toHaveBeenCalledTimes(2);
     expect(getCacheSessionSnapshot()).toMatchObject({status:'ready',identity:{userId:B},error:null});
+  });
+});
+
+// A peer tab's SDK broadcast reached this tab a few milliseconds before its
+// cookie write was visible here (reproduced in Chromium 141 and 149, React 18
+// and 19). The immediate reread saw consistent, stale A and nothing read again.
+describe('a peer event that outruns its cookie write', () => {
+  beforeEach(() => { vi.useFakeTimers({ toFake: ['Date', 'setTimeout', 'clearTimeout'] }); vi.setSystemTime(0); });
+  const reads = () => mocks.getSession.mock.calls.length;
+
+  it('rereads after the cookie jar settles and retires A for B', async () => {
+    connect(); await settle();
+    const generation = getCacheGeneration();
+    // The event names B while this tab's cookies still read A: A is withheld at
+    // once, B is not adopted from the event, and nothing is purged yet.
+    emit('SIGNED_IN', session(B, S2)); await settle();
+    expect(getCacheSessionSnapshot()).toMatchObject({ status: 'unavailable', identity: { userId: A } });
+    expect(getCacheGeneration()).toBe(generation);
+    // The peer's write becomes visible here.
+    saveCookies(session(B, S2)); mocks.getSession.mockResolvedValue(reply(session(B, S2)));
+    await vi.advanceTimersByTimeAsync(50);
+    expect(getCacheSessionSnapshot()).toMatchObject({ status: 'ready', identity: { userId: B, sessionId: S2 }, error: null });
+    expect(getCacheGeneration()).toBeGreaterThan(generation);
+  });
+
+  it('rereads a sign-out whose cookie removal was not yet visible', async () => {
+    connect(); await settle();
+    emit('SIGNED_OUT', null); await settle();
+    expect(getCacheSessionSnapshot()).toMatchObject({ status: 'ready', identity: { userId: A } });
+    saveCookies(null); mocks.getSession.mockResolvedValue(reply(null));
+    await vi.advanceTimersByTimeAsync(50);
+    expect(getCacheSessionSnapshot()).toMatchObject({ status: 'signed-out', identity: null });
+  });
+
+  it('never adopts the event itself, and one quiet episode is three reads', async () => {
+    connect(); await settle(); const base = reads();
+    emit('SIGNED_IN', session(B, S2)); await vi.advanceTimersByTimeAsync(60_000);
+    expect(getCacheSessionSnapshot()).toMatchObject({ status: 'ready', identity: { userId: A } });
+    expect(reads() - base).toBe(3); // now, +50 ms, +500 ms; then nothing
+  });
+
+  it('a sustained stream of stale events does not multiply reads, and a real switch is still seen', async () => {
+    connect(); await settle(); const base = reads();
+    // 1,000 stale events, one every 10 ms, while cookies stay A.
+    for (let i = 0; i < 1000; i++) { emit('SIGNED_IN', session(B, S2)); await vi.advanceTimersByTimeAsync(10); }
+    const duringStorm = reads() - base;
+    expect(duringStorm).toBeLessThanOrEqual(12); // was 1,000 before the fix, one per event
+    expect(getCacheSessionSnapshot()).toMatchObject({ status: 'ready', identity: { userId: A } });
+    // The peer's write finally lands; the pending episode sees it.
+    saveCookies(session(B, S2)); mocks.getSession.mockResolvedValue(reply(session(B, S2)));
+    await vi.advanceTimersByTimeAsync(40_000);
+    expect(getCacheSessionSnapshot()).toMatchObject({ status: 'ready', identity: { userId: B } });
+    expect(reads() - base).toBeLessThanOrEqual(duringStorm + 3);
+  });
+
+  it('a read that itself provokes a stale event backs off instead of looping', async () => {
+    connect(); await settle(); const base = reads();
+    mocks.getSession.mockImplementation(async () => { emit('TOKEN_REFRESHED', session(B, S2)); return reply(session()); });
+    emit('SIGNED_IN', session(B, S2));
+    await vi.advanceTimersByTimeAsync(60_000);
+    const inFirstMinute = reads() - base;
+    expect(inFirstMinute).toBeLessThanOrEqual(18); // 2,401 with fixed re-armed timers
+    await vi.advanceTimersByTimeAsync(60_000);
+    expect(reads() - base - inFirstMinute).toBeLessThanOrEqual(6); // at the 30 s ceiling: one episode per ~30 s
+    expect(getCacheSessionSnapshot()).toMatchObject({ status: 'ready', identity: { userId: A } });
+  });
+
+  it('rapid owner changes settle on whoever the cookies finally name', async () => {
+    connect(); await settle(); const base = reads();
+    for (let i = 0; i < 20; i++) { emit('SIGNED_IN', i % 2 ? session() : session(B, S2)); await vi.advanceTimersByTimeAsync(5); }
+    saveCookies(session(B, S2)); mocks.getSession.mockResolvedValue(reply(session(B, S2)));
+    await vi.advanceTimersByTimeAsync(40_000);
+    expect(getCacheSessionSnapshot()).toMatchObject({ status: 'ready', identity: { userId: B } });
+    expect(reads() - base).toBeLessThanOrEqual(6);
+  });
+
+  // Integration review of f6c512aa: every reread echoes a stale event while the
+  // observer stays subscribed. Work must stop once cookie-bound state settles.
+  it('a stale event echoed by every reread settles into no further reads and no pending timers', async () => {
+    connect(); await settle();
+    saveCookies(session(B, S2));
+    mocks.getSession.mockImplementation(async () => { emit('SIGNED_IN', session()); return reply(session(B, S2)); });
+    emit('SIGNED_IN', session()); await settle();
+    for (const at of [50, 50, 400, 500]) await vi.advanceTimersByTimeAsync(at);
+    const settled = reads();
+    expect(getCacheSessionSnapshot()).toMatchObject({ status: 'ready', identity: { userId: B } });
+    await vi.advanceTimersByTimeAsync(120_000);
+    expect(reads()).toBe(settled);
+    expect(vi.getTimerCount()).toBe(0);
+    expect(getCacheSessionSnapshot()).toMatchObject({ status: 'ready', identity: { userId: B } });
+  });
+
+  // Integration review of 6bf38f3b: after reads have been echoing stale B for a
+  // while, a genuine sign-in by a third owner must not inherit that cooldown.
+  it('a genuine new owner after a saturated stale stream is withheld at once and adopted from cookies', async () => {
+    connect(); await settle();
+    let echo = true;
+    mocks.getSession.mockImplementation(async () => { if (echo) emit('TOKEN_REFRESHED', session(B, S2)); return reply(session()); });
+    emit('TOKEN_REFRESHED', session(B, S2));
+    await vi.advanceTimersByTimeAsync(33_000);
+    expect(getCacheSessionSnapshot()).toMatchObject({ status: 'ready', identity: { userId: A } });
+    echo = false;
+    const generation = getCacheGeneration();
+    // C signs in elsewhere; this tab's cookies still read A for 20 ms.
+    emit('SIGNED_IN', session(C, S3));
+    expect(getCacheSessionSnapshot().status).not.toBe('ready'); // A's cached UI is no longer authorized
+    expect(getCacheGeneration()).toBe(generation);             // nothing purged on an unbound event
+    await vi.advanceTimersByTimeAsync(20);
+    expect(getCacheSessionSnapshot().status).not.toBe('ready');
+    saveCookies(session(C, S3)); mocks.getSession.mockResolvedValue(reply(session(C, S3)));
+    await vi.advanceTimersByTimeAsync(40);
+    expect(getCacheSessionSnapshot()).toMatchObject({ status: 'ready', identity: { userId: C, sessionId: S3 } });
+    expect(getCacheGeneration()).toBeGreaterThan(generation);
+  });
+
+  it('a stale event naming another owner withholds only until cookies confirm the current one', async () => {
+    connect(); await settle();
+    const generation = getCacheGeneration();
+    emit('SIGNED_IN', session(C, S3)); // stale: cookies stay A throughout
+    expect(getCacheSessionSnapshot().status).not.toBe('ready');
+    await vi.advanceTimersByTimeAsync(1_000);
+    expect(getCacheSessionSnapshot()).toMatchObject({ status: 'ready', identity: { userId: A }, error: null });
+    expect(getCacheGeneration()).toBe(generation);
+    expect(vi.getTimerCount()).toBe(0);
+  });
+
+  it('disposal while a claimed new owner is withheld stops every read and timer', async () => {
+    const stop = connect(); await settle();
+    emit('SIGNED_IN', session(C, S3)); await settle();
+    expect(getCacheSessionSnapshot().status).not.toBe('ready');
+    const calls = reads();
+    stop(); await vi.advanceTimersByTimeAsync(60_000);
+    expect(reads()).toBe(calls);
+    expect(vi.getTimerCount()).toBe(0);
+  });
+
+  it('stops rereading once the observer is disposed, including a pending backoff', async () => {
+    const stop = connect(); await settle();
+    for (let i = 0; i < 100; i++) { emit('SIGNED_IN', session(B, S2)); await vi.advanceTimersByTimeAsync(10); }
+    const calls = reads();
+    stop(); await vi.advanceTimersByTimeAsync(120_000);
+    expect(reads()).toBe(calls);
+  });
+
+  // Integration review of c3abcc86: once cookies change from A to B, a receipt
+  // held from before the change must not authorize A again, whether the
+  // episode's later reads fail or keep returning stale A.
+  it.each([
+    ['fail', () => reply(null, new Error('synthetic read failure'))],
+    ['return stale A', () => reply(session())],
+  ])('when rereads after the cookie change %s, A is never restored', async (_, later) => {
+    connect(); await settle(); const base = reads();
+    const generation = getCacheGeneration();
+    emit('SIGNED_IN', session(B, S2)); await settle(); // the 0 ms read still returns cookie-bound A
+    expect(getCacheSessionSnapshot()).toMatchObject({ status: 'unavailable', identity: { userId: A } });
+    await vi.advanceTimersByTimeAsync(20);
+    saveCookies(session(B, S2)); mocks.getSession.mockImplementation(async () => later());
+    await vi.advanceTimersByTimeAsync(1_000); // the +50 ms and +500 ms reads, then the episode ends
+    expect(getCacheSessionSnapshot().status).toBe('unavailable');
+    expect(getCacheGeneration()).toBe(generation);
+    // Recovery is bounded: a few spaced reads, then quiet until a lifecycle read.
+    await vi.advanceTimersByTimeAsync(10 * 60_000);
+    expect(getCacheSessionSnapshot().status).toBe('unavailable');
+    expect(reads() - base).toBeLessThanOrEqual(1 + 2 * 2 + 2 * 5); // episode, then five spaced reads
+    expect(vi.getTimerCount()).toBe(0);
+    const calls = reads();
+    await vi.advanceTimersByTimeAsync(10 * 60_000);
+    expect(reads()).toBe(calls);
+    // A later read that current cookies bind to B recovers.
+    mocks.getSession.mockResolvedValue(reply(session(B, S2)));
+    await refreshCacheSession({ force: true });
+    expect(getCacheSessionSnapshot()).toMatchObject({ status: 'ready', identity: { userId: B, sessionId: S2 }, error: null });
+    expect(getCacheGeneration()).toBeGreaterThan(generation);
+    expect(vi.getTimerCount()).toBe(0);
+  });
+
+  it('recovers on its own once a spaced reread verifies the owner that cookies name', async () => {
+    connect(); await settle();
+    emit('SIGNED_IN', session(B, S2)); await settle();
+    await vi.advanceTimersByTimeAsync(20);
+    saveCookies(session(B, S2)); mocks.getSession.mockResolvedValue(reply(null, new Error('synthetic read failure')));
+    await vi.advanceTimersByTimeAsync(1_000);
+    expect(getCacheSessionSnapshot().status).toBe('unavailable');
+    const base = reads();
+    mocks.getSession.mockResolvedValue(reply(session(B, S2)));
+    await vi.advanceTimersByTimeAsync(3_000);
+    expect(getCacheSessionSnapshot()).toMatchObject({ status: 'ready', identity: { userId: B, sessionId: S2 }, error: null });
+    expect(reads() - base).toBe(1);
+    await vi.advanceTimersByTimeAsync(120_000);
+    expect(reads() - base).toBe(1);
+    expect(vi.getTimerCount()).toBe(0);
+  });
+
+  it('disposal while recovering from a failed verification stops every read and timer', async () => {
+    const stop = connect(); await settle();
+    emit('SIGNED_IN', session(B, S2)); await settle();
+    await vi.advanceTimersByTimeAsync(20);
+    saveCookies(session(B, S2)); mocks.getSession.mockResolvedValue(reply(null, new Error('synthetic read failure')));
+    await vi.advanceTimersByTimeAsync(1_000);
+    const calls = reads();
+    stop(); await vi.advanceTimersByTimeAsync(10 * 60_000);
+    expect(reads()).toBe(calls);
+    expect(vi.getTimerCount()).toBe(0);
   });
 });
