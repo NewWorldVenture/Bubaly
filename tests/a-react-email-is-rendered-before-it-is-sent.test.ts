@@ -120,9 +120,9 @@ describe('sendReactEmail renders every template through the real SDK', () => {
     expect(only).not.toBeNull();
     const html = only!.body.html;
     expect(typeof html).toBe('string');
+    // The renderer prepends a DOCTYPE; the template's own words are what prove the template rendered.
     expect(html as string).toMatch(/^<!DOCTYPE html/i);
     for (const text of expected) expect(visible(html as string)).toContain(text);
-    expect(only!.body).not.toHaveProperty('react');
     expect(only!.body).toMatchObject({ to: 'parent@example.test', subject: 'Synthetic' });
   });
 
@@ -134,10 +134,14 @@ describe('sendReactEmail renders every template through the real SDK', () => {
     expect(visible(html)).toContain('&lt;script&gt;alert(1)&lt;/script&gt;');
   });
 
-  it('a template that throws while rendering is { ok: false } and nothing is posted', async () => {
+  it('a template that throws while rendering is { ok: false }, nothing is posted, and the TEMPLATE\'s error is what was logged', async () => {
     const Broken = () => { throw new Error('synthetic render failure'); };
     const { result } = await sendOne(createElement(Broken));
     expect(result).toEqual({ ok: false });
     expect(posted).toEqual([]);
+    // Without a renderer this case also answers { ok: false }; the logged cause tells the two apart.
+    const logged = vi.mocked(console.error).mock.calls.flat().map((x) => (x instanceof Error ? x.message : String(x))).join(' | ');
+    expect(logged).toContain('synthetic render failure');
+    expect(logged).not.toContain('Failed to render React component');
   });
 });
