@@ -102,7 +102,7 @@ afterEach(() => {
   }
 });
 
-describe('admin-digest idempotency contract (UNRESOLVED on current main — expected to fail)', () => {
+describe('admin-digest idempotency contract (UNRESOLVED — C1–C5 expected to fail)', () => {
   it('CONTROL (passes): one on-time run delivers exactly one digest to each admin', async () => {
     happen('2026-09-30T08:00:00Z', 'Signup Alpha');
     expect((await runAt('2026-09-30T12:30:00Z')).status).toBe(200);
@@ -172,10 +172,7 @@ describe('admin-digest idempotency contract (UNRESOLVED on current main — expe
     expect(toSecond.filter((a) => a.html.includes('Signup Alpha'))).toHaveLength(1);
   });
 
-  it('C6 a run that could not read its recipient list does not report a clean success', async () => {
-    happen('2026-09-30T08:00:00Z', 'Signup Alpha');
-    state.failSuperAdmins = true;
-    const res = await runAt('2026-09-30T12:30:00Z');
-    expect(res.body.ok).toBe(false);
-  });
+  // C6 (a run that could not read its recipient list does not report a clean success) failed on
+  // main at 231e8140, passes with #685 (desired-contract-output-combined-with-685.txt), and was
+  // promoted to tests/admin-digest-replay-contract.test.ts. C1–C5 remain unmet.
 });
