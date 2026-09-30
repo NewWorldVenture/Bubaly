@@ -42,6 +42,8 @@ const db = vi.hoisted(() => ({
   readError: null as null | { message: string; code: string },
   writeError: null as null | { message: string; code: string },
   throwOnConnect: false,
+  /** The identity lookup itself failing (an auth outage), whoever the session is. */
+  authError: null as null | { name: string; message: string; status?: number },
   /** A request that never answers unless it is aborted: the slow database of the #705 review. */
   hold: null as null | 'read' | 'write',
   /** Every UPDATE that reached a row: [caller, row id, locale]. */
@@ -64,7 +66,13 @@ vi.mock('@/lib/supabase/server', () => ({
   createServer: async () => {
     if (db.throwOnConnect) throw new Error('supabase unreachable');
     return {
-      auth: { getUser: async () => ({ data: { user: db.user }, error: null }) },
+      auth: {
+        // As the SDK answers: a visitor with no session is an
+        // AuthSessionMissingError, and an outage a null user with its own error.
+        getUser: async () => (db.authError ? { data: { user: null }, error: db.authError }
+          : db.user ? { data: { user: db.user }, error: null }
+          : { data: { user: null }, error: { name: 'AuthSessionMissingError', message: 'Auth session missing!', status: 400 } }),
+      },
       from: (table: string) => {
         if (table !== 'profiles') throw new Error(`unexpected table ${table}`);
         const eqs: [string, unknown][] = [];
@@ -145,7 +153,7 @@ const errors = vi.spyOn(console, 'error').mockImplementation(() => {});
 beforeEach(() => {
   db.user = null;
   db.profiles = new Map([[PARENT, null], [SPOUSE, null], [OUTSIDER, 'it-IT']]);
-  db.readError = null; db.writeError = null; db.throwOnConnect = false; db.hold = null;
+  db.readError = null; db.writeError = null; db.throwOnConnect = false; db.hold = null; db.authError = null;
   db.writes = [];
   db.checked = CHECKED;
   freshDevice();
@@ -259,6 +267,8 @@ describe('a database that does not take the write is reported, never hidden and 
     db.throwOnConnect = true;
     expect(await setLocale('nl-NL')).toEqual({ ok: true, stored: false, profile: 'failed' });
     expect(cookie()?.value).toBe('nl-NL');
+    // Nobody was identified, so no pending choice the next account could adopt.
+    expect(db.jar.has(LOCALE_PENDING_COOKIE)).toBe(false);
   });
 });
 
@@ -419,10 +429,86 @@ describe('a plain cookie never overwrites a saved preference (#705 review 591981
     expect(db.jar.has(LOCALE_PENDING_COOKIE)).toBe(false);
   });
 
+  it.each([
+    ['stored', 'it-IT'],
+    ['in-step', 'fr-FR'], // SPOUSE saved fr-FR on another device meanwhile
+  ] as const)('a returning owner\'s pending choice is shown again, not just saved (%s; #705 comment 5921554978)', async (kind, savedMeanwhile) => {
+    db.profiles.set(PARENT, 'it-IT');
+    db.profiles.set(SPOUSE, 'nl-NL');
+    db.user = { id: SPOUSE };
+    db.writeError = { message: 'boom', code: '57014' };
+    await setLocale('fr-FR'); // fr-FR@SPOUSE pending
+    db.writeError = null;
+    db.user = { id: PARENT }; // PARENT signs in on the shared browser, restores it-IT
+    expect(await signIn()).toEqual({ kind: 'restored', locale: 'it-IT' });
+    expect(await renderedIn()).toEqual(['it-IT', 'cookie']);
+    db.profiles.set(SPOUSE, kind === 'stored' ? 'nl-NL' : savedMeanwhile);
+    db.user = { id: SPOUSE }; // SPOUSE comes back
+    expect(await signIn()).toEqual({ kind, locale: 'fr-FR' });
+    expect(db.profiles.get(SPOUSE)).toBe('fr-FR');
+    expect(db.profiles.get(PARENT)).toBe('it-IT');
+    expect(db.jar.has(LOCALE_PENDING_COOKIE)).toBe(false);
+    expect(await renderedIn()).toEqual(['fr-FR', 'cookie']);
+  });
+
+  it('a pending choice that could not be saved yet is still what the owner sees', async () => {
+    db.profiles.set(PARENT, 'it-IT');
+    db.profiles.set(SPOUSE, 'nl-NL');
+    db.jar.set(LOCALE_COOKIE, { value: 'it-IT' });
+    db.jar.set(LOCALE_PENDING_COOKIE, { value: `fr-FR@${SPOUSE}` });
+    db.user = { id: SPOUSE };
+    db.writeError = { message: 'boom', code: '57014' };
+    expect(await signIn()).toEqual({ kind: 'none' });
+    expect(db.jar.get(LOCALE_PENDING_COOKIE)?.value).toBe(`fr-FR@${SPOUSE}`); // kept for a retry
+    expect(await renderedIn()).toEqual(['fr-FR', 'cookie']);
+  });
+
   it('a cookie from before the profile kept a language is adopted when nothing is saved', async () => {
     db.jar.set(LOCALE_COOKIE, { value: 'pt-PT' });
     db.user = { id: PARENT };
     expect(await signIn()).toEqual({ kind: 'stored', locale: 'pt-PT' });
+  });
+});
+
+describe('an identity outage is not a signed-out choice (#705 comment 5921554978)', () => {
+  const outage = { name: 'AuthRetryableFetchError', message: 'Service Unavailable', status: 503 };
+
+  it('the switch still works, but no pending choice anyone could claim is left', async () => {
+    db.user = { id: SPOUSE }; // SPOUSE's session is there; the lookup fails
+    db.authError = outage;
+    expect(await setLocale('de-DE')).toEqual({ ok: true, stored: false, profile: 'unverified' });
+    expect(cookie()?.value).toBe('de-DE');
+    expect(db.jar.has(LOCALE_PENDING_COOKIE)).toBe(false);
+    expect(db.writes).toEqual([]);
+  });
+
+  it('the next account on the browser keeps its saved language', async () => {
+    db.profiles.set(PARENT, 'it-IT');
+    db.user = { id: SPOUSE };
+    db.authError = outage;
+    await setLocale('de-DE');
+    db.authError = null;
+    db.user = { id: PARENT }; // logout, then PARENT logs in
+    expect(await signIn()).toEqual({ kind: 'restored', locale: 'it-IT' });
+    expect(db.profiles.get(PARENT)).toBe('it-IT');
+    expect(db.writes).toEqual([]);
+  });
+
+  it('an older pending choice is not left to outrank the newer one', async () => {
+    db.jar.set(LOCALE_PENDING_COOKIE, { value: 'fr-FR' });
+    db.user = { id: SPOUSE };
+    db.authError = outage;
+    await setLocale('de-DE');
+    expect(db.jar.has(LOCALE_PENDING_COOKIE)).toBe(false);
+  });
+
+  it('control: genuinely signed out still leaves a choice the next sign-in adopts', async () => {
+    db.profiles.set(PARENT, 'it-IT');
+    expect(await setLocale('de-DE')).toEqual({ ok: true, stored: false, profile: 'signed-out' });
+    expect(db.jar.get(LOCALE_PENDING_COOKIE)?.value).toBe('de-DE');
+    db.user = { id: PARENT };
+    expect(await signIn()).toEqual({ kind: 'stored', locale: 'de-DE' });
+    expect(db.profiles.get(PARENT)).toBe('de-DE');
   });
 });
 

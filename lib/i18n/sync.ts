@@ -53,12 +53,16 @@ export function decideLanguageSync(input: {
 }): LanguageSync {
   const cookie = findLocale(input.cookie)?.code ?? null;
   const stored = findLocale(input.stored)?.code ?? null;
-  const pending = input.pending && (input.pending.owner === null || input.pending.owner === input.userId)
-    ? input.pending.locale : null;
+  const pending = claimable(input.pending, input.userId)?.locale ?? null;
   if (pending) return pending === stored ? { kind: 'in-step', locale: pending } : { kind: 'stored', locale: pending };
   if (stored) return cookie === stored ? { kind: 'in-step', locale: stored } : { kind: 'restored', locale: stored };
   if (cookie) return { kind: 'stored', locale: cookie };
   return { kind: 'stored', locale: input.resolved };
+}
+
+/** The pending choice this user may settle: an unowned one, or their own. Someone else's is null. */
+export function claimable(pending: PendingChoice | null | undefined, userId: string | undefined): PendingChoice | null {
+  return pending && (pending.owner === null || pending.owner === userId) ? pending : null;
 }
 
 /**
@@ -116,13 +120,19 @@ async function syncWithin(signal: AbortSignal): Promise<LanguageSync> {
       return { kind: 'none' };
     }
     const pending = decodePendingChoice(jar.get(LOCALE_PENDING_COOKIE)?.value);
+    const visible = findLocale(jar.get(LOCALE_COOKIE)?.value)?.code ?? null;
     const decision = decideLanguageSync({
-      cookie: jar.get(LOCALE_COOKIE)?.value,
+      cookie: visible,
       stored: profile?.locale,
       resolved: locale.code,
       pending,
       userId: user.id,
     });
+    const claimed = claimable(pending, user.id);
+    // The owner's explicit choice is what this device shows, saved yet or not:
+    // another account may have restored its own language onto the shared
+    // browser since (#705 comment 5921554978).
+    if (claimed && visible !== claimed.locale) jar.set(LOCALE_COOKIE, claimed.locale, cookieOptions());
     if (decision.kind === 'stored') {
       // Confirmed, not assumed: the write reads back the row it changed, so a
       // profile RLS refused (or one that does not exist yet) is reported as not
@@ -144,7 +154,7 @@ async function syncWithin(signal: AbortSignal): Promise<LanguageSync> {
     // A pending choice is settled once the profile holds it; one that was
     // another account's is left to them, and one this user has no claim to is
     // never read again for this user either way.
-    if (pending && decision.kind !== 'none' && (pending.owner === null || pending.owner === user.id)) {
+    if (claimed && decision.kind !== 'none') {
       jar.delete(LOCALE_PENDING_COOKIE);
     }
     return decision;
