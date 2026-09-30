@@ -2,15 +2,24 @@
 // Any DigestDeliveryStore must pass it: today the in-memory store; a PostgreSQL
 // adapter later, run against the local stack. Passing it with the in-memory
 // store proves the rules, not database durability or isolation.
+//
+// Time: every lease and retention decision is the STORE's, on the store's
+// clock. `make(clock)` must return a store whose clock follows `clock`; for a
+// database adapter that means the harness pins the database's notion of now
+// (the adapter's SQL reads time through one function the harness can replace).
 import { describe, expect, it } from 'vitest';
 import {
   freezePlan, recipientKeyOf, RESEND_KEY_RETENTION_MS,
-  type ClaimPolicy, type DigestDeliveryStore, type OccurrencePlan,
+  type BeginSendPolicy, type ClaimPolicy, type DigestDeliveryStore, type OccurrencePlan,
 } from '@/lib/admin/digest-delivery';
 import { FakeClock, HOUR, MINUTE } from './digest-delivery-fakes';
 
 export const CONTRACT_POLICY: ClaimPolicy = {
   leaseMs: 5 * MINUTE, maxAttempts: 3, providerKeyRetentionMs: RESEND_KEY_RETENTION_MS, retentionSafetyMarginMs: HOUR,
+};
+
+export const CONTRACT_BEGIN: BeginSendPolicy = {
+  minLeaseRemainingMs: 1_000, providerKeyRetentionMs: RESEND_KEY_RETENTION_MS, retentionSafetyMarginMs: HOUR,
 };
 
 export const contractPlan = (over: Partial<OccurrencePlan> = {}): OccurrencePlan => ({
@@ -102,9 +111,9 @@ export function describeDigestDeliveryStoreContract(label: string, make: (clock:
       clock.advance(5 * MINUTE);
       const b = await store.claim(id, key, 'b', CONTRACT_POLICY);
       if (!a.claimed || !b.claimed) throw new Error('setup');
-      expect(await store.beginSend(id, key, a.row.fence)).toBe('fenced_out');
+      expect(await store.beginSend(id, key, a.row.fence, CONTRACT_BEGIN)).toBe('fenced_out');
       expect(await store.complete(id, key, a.row.fence, { kind: 'accepted', messageId: 'stale' }, 3)).toBe('fenced_out');
-      expect(await store.beginSend(id, key, b.row.fence)).toBe('ok');
+      expect(await store.beginSend(id, key, b.row.fence, CONTRACT_BEGIN)).toBe('ok');
       expect(await store.complete(id, key, b.row.fence, { kind: 'accepted', messageId: 'm-b' }, 3)).toBe('ok');
       expect(await store.complete(id, key, b.row.fence, { kind: 'rejected', httpStatus: 422, code: 'x', retryable: false }, 3)).toBe('fenced_out');
       const row = (await store.load(id))!.deliveries.find((d) => d.recipientKey === key)!;
@@ -115,7 +124,7 @@ export function describeDigestDeliveryStoreContract(label: string, make: (clock:
       const { store, id, key } = await setup();
       const a = await store.claim(id, key, 'a', CONTRACT_POLICY);
       if (!a.claimed) throw new Error('setup');
-      await store.beginSend(id, key, a.row.fence);
+      await store.beginSend(id, key, a.row.fence, CONTRACT_BEGIN);
       await store.complete(id, key, a.row.fence, { kind: 'accepted', messageId: 'm-1' }, 3);
       expect(await store.claim(id, key, 'b', CONTRACT_POLICY)).toEqual({ claimed: false, reason: 'accepted' });
     });
@@ -124,7 +133,7 @@ export function describeDigestDeliveryStoreContract(label: string, make: (clock:
       const { clock, store, id, key } = await setup();
       const a = await store.claim(id, key, 'a', CONTRACT_POLICY);
       if (!a.claimed) throw new Error('setup');
-      await store.beginSend(id, key, a.row.fence);
+      await store.beginSend(id, key, a.row.fence, CONTRACT_BEGIN);
       await store.complete(id, key, a.row.fence, { kind: 'unknown', reason: 'timeout' }, 3);
       clock.advance(23 * HOUR); // 24 h retention − 1 h margin, from the first beginSend
       expect(await store.claim(id, key, 'b', CONTRACT_POLICY)).toEqual({ claimed: false, reason: 'needs_reconciliation' });
@@ -137,10 +146,122 @@ export function describeDigestDeliveryStoreContract(label: string, make: (clock:
       const before = frozen.deliveries.find((d) => d.recipientKey === key)!;
       const a = await store.claim(id, key, 'a', CONTRACT_POLICY);
       if (!a.claimed) throw new Error('setup');
-      await store.beginSend(id, key, a.row.fence);
+      await store.beginSend(id, key, a.row.fence, CONTRACT_BEGIN);
       await store.complete(id, key, a.row.fence, { kind: 'accepted', messageId: 'm-1' }, 3);
       const after = (await store.load(id))!.deliveries.find((d) => d.recipientKey === key)!;
       for (const f of ['recipientKey', 'idempotencyKey', 'payload', 'payloadJson', 'payloadHash', 'occurrenceId'] as const) expect(after[f]).toEqual(before[f]);
+    });
+
+    it('a lease that lapsed after the mark makes the row ambiguous; one that lapsed before it does not', async () => {
+      const { clock, store, id, key } = await setup();
+      const other = recipientKeyOf('admin-two@example.test');
+      const a = await store.claim(id, key, 'a', CONTRACT_POLICY);
+      const b = await store.claim(id, other, 'a', CONTRACT_POLICY);
+      if (!a.claimed || !b.claimed) throw new Error('setup');
+      expect(await store.beginSend(id, key, a.row.fence, CONTRACT_BEGIN)).toBe('ok'); // marked; `other` is not
+      clock.advance(5 * MINUTE);
+      const again = await store.claim(id, key, 'c', CONTRACT_POLICY);
+      const againOther = await store.claim(id, other, 'c', CONTRACT_POLICY);
+      expect(again.claimed && again.row).toMatchObject({ ambiguous: true, fence: 2, attempts: 2, firstSendAt: start });
+      expect(againOther.claimed && againOther.row).toMatchObject({ ambiguous: false, fence: 2, attempts: 2, firstSendAt: null });
+    });
+
+    it('the retention anchor is the FIRST mark; later marks do not move it', async () => {
+      const { clock, store, id, key } = await setup();
+      const a = await store.claim(id, key, 'a', CONTRACT_POLICY);
+      if (!a.claimed) throw new Error('setup');
+      await store.beginSend(id, key, a.row.fence, CONTRACT_BEGIN);
+      await store.complete(id, key, a.row.fence, { kind: 'unknown', reason: 'timeout' }, 3);
+      clock.advance(HOUR);
+      const b = await store.claim(id, key, 'b', CONTRACT_POLICY);
+      if (!b.claimed) throw new Error('setup');
+      await store.beginSend(id, key, b.row.fence, CONTRACT_BEGIN);
+      const row = (await store.load(id))!.deliveries.find((d) => d.recipientKey === key)!;
+      expect(row.firstSendAt).toBe(start);
+    });
+
+    it('a claim at the attempt limit parks the row instead of claiming it', async () => {
+      const { clock, store, id, key } = await setup();
+      for (let i = 0; i < 3; i += 1) { expect((await store.claim(id, key, `w${i}`, CONTRACT_POLICY)).claimed).toBe(true); clock.advance(5 * MINUTE); }
+      expect(await store.claim(id, key, 'w4', CONTRACT_POLICY)).toEqual({ claimed: false, reason: 'exhausted' });
+      expect((await store.load(id))!.deliveries.find((d) => d.recipientKey === key)!.status).toBe('exhausted');
+    });
+
+    it('beginSend is refused when too little lease is left, and parks an ambiguous row that reached the cut-off', async () => {
+      const { clock, store, id, key } = await setup();
+      const a = await store.claim(id, key, 'a', CONTRACT_POLICY);
+      if (!a.claimed) throw new Error('setup');
+      clock.advance(5 * MINUTE - 1_000);
+      expect(await store.beginSend(id, key, a.row.fence, CONTRACT_BEGIN)).toBe('lease_expired');
+      expect((await store.load(id))!.deliveries.find((d) => d.recipientKey === key)!).toMatchObject({ status: 'in_flight', sendStartedAt: null });
+      // An ambiguous row claimed just inside the window, marked just after it:
+      clock.advance(1_000);
+      const b = await store.claim(id, key, 'b', CONTRACT_POLICY);
+      if (!b.claimed) throw new Error('setup');
+      expect(await store.beginSend(id, key, b.row.fence, CONTRACT_BEGIN)).toBe('ok');
+      await store.complete(id, key, b.row.fence, { kind: 'unknown', reason: 'timeout' }, 3);
+      const firstMark = Date.parse((await store.load(id))!.deliveries.find((d) => d.recipientKey === key)!.firstSendAt!);
+      clock.set(new Date(firstMark + 23 * HOUR - 1).toISOString());
+      const c = await store.claim(id, key, 'c', { ...CONTRACT_POLICY, leaseMs: 2 * HOUR });
+      if (!c.claimed) throw new Error('setup');
+      clock.advance(1);
+      expect(await store.beginSend(id, key, c.row.fence, CONTRACT_BEGIN)).toBe('retention_passed');
+      expect((await store.load(id))!.deliveries.find((d) => d.recipientKey === key)!.status).toBe('needs_reconciliation');
+    });
+
+    it('ambiguity is sticky: a later retryable refusal leaves the row unknown and ambiguous', async () => {
+      const { clock, store, id, key } = await setup();
+      const a = await store.claim(id, key, 'a', CONTRACT_POLICY);
+      if (!a.claimed) throw new Error('setup');
+      await store.beginSend(id, key, a.row.fence, CONTRACT_BEGIN);
+      await store.complete(id, key, a.row.fence, { kind: 'unknown', reason: 'timeout' }, 3);
+      clock.advance(MINUTE);
+      const b = await store.claim(id, key, 'b', CONTRACT_POLICY);
+      if (!b.claimed) throw new Error('setup');
+      await store.beginSend(id, key, b.row.fence, CONTRACT_BEGIN);
+      await store.complete(id, key, b.row.fence, { kind: 'rejected', httpStatus: 429, code: 'rate_limit_exceeded', retryable: true }, 3);
+      expect((await store.load(id))!.deliveries.find((d) => d.recipientKey === key)!).toMatchObject({ status: 'unknown', ambiguous: true });
+    });
+
+    it('a conflict is terminal, and the completion that uses the last attempt parks the row', async () => {
+      const { clock, store, id, key } = await setup();
+      const other = recipientKeyOf('admin-two@example.test');
+      const a = await store.claim(id, key, 'a', CONTRACT_POLICY);
+      if (!a.claimed) throw new Error('setup');
+      await store.beginSend(id, key, a.row.fence, CONTRACT_BEGIN);
+      await store.complete(id, key, a.row.fence, { kind: 'payload_conflict' }, 3);
+      expect(await store.claim(id, key, 'b', CONTRACT_POLICY)).toEqual({ claimed: false, reason: 'conflict' });
+      for (let i = 1; i <= 3; i += 1) {
+        const c = await store.claim(id, other, `w${i}`, CONTRACT_POLICY);
+        if (!c.claimed) throw new Error(`claim ${i}`);
+        await store.beginSend(id, other, c.row.fence, CONTRACT_BEGIN);
+        await store.complete(id, other, c.row.fence, { kind: 'unknown', reason: 'network' }, 3);
+        clock.advance(MINUTE);
+      }
+      expect((await store.load(id))!.deliveries.find((d) => d.recipientKey === other)!.status).toBe('needs_reconciliation');
+    });
+
+    it('occurrences are independent: the same recipient in another occurrence is untouched', async () => {
+      const { clock, store, id, key } = await setup();
+      const second = freezePlan(contractPlan({ occurrenceId: 'admin-digest:2026-10-01T12:30:00.000Z' }), clock.now());
+      await store.freeze(second.occurrence, second.deliveries);
+      const a = await store.claim(id, key, 'a', CONTRACT_POLICY);
+      if (!a.claimed) throw new Error('setup');
+      await store.beginSend(id, key, a.row.fence, CONTRACT_BEGIN);
+      await store.complete(id, key, a.row.fence, { kind: 'accepted', messageId: 'm-1' }, 3);
+      const untouched = (await store.load(second.occurrence.occurrenceId))!.deliveries.find((d) => d.recipientKey === key)!;
+      expect(untouched).toMatchObject({ status: 'pending', fence: 0, attempts: 0, providerMessageId: null });
+      const b = await store.claim(second.occurrence.occurrenceId, key, 'b', CONTRACT_POLICY);
+      expect(b.claimed && b.row.fence).toBe(1);
+    });
+
+    it('the completion rule itself refuses an "accepted" without a message id', async () => {
+      const { store, id, key } = await setup();
+      const a = await store.claim(id, key, 'a', CONTRACT_POLICY);
+      if (!a.claimed) throw new Error('setup');
+      await store.beginSend(id, key, a.row.fence, CONTRACT_BEGIN);
+      await store.complete(id, key, a.row.fence, { kind: 'accepted', messageId: '' }, 3);
+      expect((await store.load(id))!.deliveries.find((d) => d.recipientKey === key)!).toMatchObject({ status: 'unknown', ambiguous: true, providerMessageId: null });
     });
 
     it('an unknown occurrence or recipient is not found, not created', async () => {

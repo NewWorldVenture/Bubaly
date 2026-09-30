@@ -27,8 +27,8 @@ The engine does not schedule. The caller (the cron route, later) decides and pas
 |---|---|---|
 | `pending` | Frozen, never claimed | Claim |
 | `in_flight` | Claimed under a lease, fence *n* | `complete`, or lease expiry (below) |
-| `failed` | The provider answered and did not accept; the answer can be retried (429, 401/403) | Claim, any time, same key and bytes |
-| `unknown` | Might have been accepted: timeout, network error, 5xx, 409 `concurrent_idempotent_requests`, 2xx without an id, lost receipt | Claim, same key and bytes, **only while** `now < firstSendAt + retention − margin` |
+| `failed` | The provider answered and did not accept; the answer can be retried (429, 401/403); and **no** earlier attempt was ambiguous | Claim, any time, same key and bytes |
+| `unknown` | Might have been accepted: timeout, network error, 5xx, 409 `concurrent_idempotent_requests`, 2xx without an id, lost receipt; or a retryable refusal after an earlier ambiguous attempt | Claim, same key and bytes, **only while** `now < firstSendAt + retention − margin` |
 | `accepted` | A 2xx **with** a message id | Terminal. Never sent again. |
 | `rejected` | Final refusal (400, 422), nothing possibly accepted before it | Terminal, needs attention |
 | `conflict` | 409 `invalid_idempotent_request`: the key was used for other bytes | Terminal, needs attention. The key is never changed. |
@@ -38,6 +38,13 @@ The engine does not schedule. The caller (the cron route, later) decides and pas
 **Lease expiry.** When a lease expires, the row's `sendStartedAt` mark decides what happened:
 - **Mark present.** The worker may have reached the provider, so the row is `unknown`, ambiguous and sticky.
 - **Mark absent.** It cannot have reached the provider, so the row is retried as not sent.
+
+**The mark is checked at the last moment.** `beginSend` is refused in three cases, and a refused `beginSend` sends nothing:
+- **`lease_expired`:** the lease has no more than the send deadline left, so another worker could claim mid-send.
+- **`retention_passed`:** an ambiguous row reached the cut-off after it was claimed. It is parked.
+- **`fenced_out`:** another claim superseded this one.
+
+Together these stop a worker that stalled after its claim from sending late.
 
 **Keys.** A key is `bubaly/admin-digest/v1/<sha256(occurrenceId)[0,32]>/<sha256(recipient)[0,32]>`:
 - It is a function of occurrence and recipient only.
@@ -52,16 +59,26 @@ A PostgreSQL `DigestDeliveryStore` must meet all of these. It must also pass `te
 
 1. **`freeze` is one transaction.** Insert the occurrence and every delivery row, or nothing. Use `INSERT … ON CONFLICT (occurrence_id) DO NOTHING` on the occurrence and insert deliveries only if that insert won. In the same transaction, return what is stored. A concurrent loser must get the winner's plan, never a mix of the two.
 2. **`claim` is one transaction on one row.** Take `SELECT … FOR UPDATE` on `(occurrence_id, recipient_key)`, evaluate exactly `decideClaim`, write `next`, and commit. A refusal that parks a row (`exhausted`, `needs_reconciliation`) is also written. `READ COMMITTED` plus the row lock is enough; no advisory locks and no `app_settings`.
-3. **The database clock decides.** Lease expiry (`lease_expires_at > now()`), the new lease (`now() + lease`) and the retention cut-off (`first_send_at + retention − margin`) all use the database's `now()`. They never use a timestamp the caller sends. Retention, margin, lease and max attempts are passed as parameters, not hard-coded.
+3. **The database clock decides.** Lease expiry, the new lease and the retention cut-off are all evaluated with the database's clock.
+   - **Which clock:** `clock_timestamp()` read **after** the row lock is taken. `now()` is the transaction's start and can lag behind a lock wait.
+   - **One function:** read it through a single function, e.g. `admin_digest_now()`, so the local test harness can pin it for the contract suite.
+   - **Never the caller's time:** no timestamp the caller sends is used.
+   - **Parameters:** retention, margin, lease, send deadline and max attempts are passed in, not hard-coded. The engine refuses a retention longer than the verified 24 hours.
 4. **The fence is a counter.** `fence` increments on every successful claim.
    - `beginSend` and `complete` are each one `UPDATE … WHERE status = 'in_flight' AND fence = $fence RETURNING`.
    - Zero rows means `fenced_out`, and nothing is written.
    - Owner equality alone is not enough: the same owner can re-claim after its own lease lapsed.
-5. **`beginSend` commits before the provider call.** It sets `send_started_at`, and sets `first_send_at` only if it is null. The adapter returns only after the commit (`synchronous_commit` on, the default).
+5. **`beginSend` commits before the provider call.** In one step it:
+   - evaluates `decideBeginSend`: fence, remaining lease against the send deadline, and the retention cut-off for ambiguous rows;
+   - sets `send_started_at`;
+   - sets `first_send_at` only if it is null.
+
+   A refusal that parks a row (`retention_passed`) is written in that same step. The adapter returns only after the commit (`synchronous_commit` on, the default).
 6. **Frozen means immutable.** `recipient_key`, `idempotency_key`, `payload_json` and `payload_hash` never change after insert. Enforce this with a trigger, not only in code. `idempotency_key` is unique across the table. `payload_hash = sha256(payload_json)` is checked on insert.
-7. **Row invariants are checks.** `status = 'in_flight'` if and only if there is a lease. `status = 'accepted'` if and only if `provider_message_id` is set. `send_started_at` is set only while `in_flight`. `ambiguous` is never reset from true to false.
-8. **Access.** RLS on and no policies. Revoke all from `anon` and `authenticated`. Functions are `security definer`, with `search_path = public` and execute revoked from `public`, `anon` and `authenticated`. Only the service role calls them.
-9. **Errors surface.** Any error or timeout is thrown to the engine, never swallowed as "not found". The engine treats each failure per step: it sends nothing without a durable claim and mark, and reports a lost receipt.
+7. **Every predicate names the occurrence.** Each read and write is keyed by `(occurrence_id, recipient_key)`. The same recipient in two occurrences is two independent rows; the contract suite checks this.
+8. **Row invariants are checks.** `status = 'in_flight'` if and only if there is a lease. `status = 'accepted'` if and only if `provider_message_id` is set. `send_started_at` is set only while `in_flight`. `ambiguous` is never reset from true to false.
+9. **Access.** RLS on and no policies. Revoke all from `anon` and `authenticated`. Functions are `security definer`, with `search_path = public` and execute revoked from `public`, `anon` and `authenticated`. Only the service role calls them.
+10. **Errors surface.** Any error or timeout is thrown to the engine, never swallowed as "not found". The engine treats each failure per step: it sends nothing without a durable claim and mark, and reports a receipt it could not confirm as `receipt_write_unconfirmed`, with the provider's message id.
 
 What the contract suite **cannot** show with the in-memory store: crash durability, isolation under real concurrent transactions, and clock behaviour. Those need the PostgreSQL run in requirement 3 plus a kill-mid-transaction test on the local stack.
 
@@ -132,7 +149,9 @@ create table public.admin_digest_deliveries (
 --   admin_digest_freeze(p_occurrence jsonb, p_deliveries jsonb) returns jsonb
 --   admin_digest_claim(p_occurrence_id text, p_recipient_key text, p_owner text, p_lease_ms int,
 --                      p_max_attempts int, p_retention_ms bigint, p_margin_ms bigint) returns jsonb   -- decideClaim
---   admin_digest_begin_send(p_occurrence_id text, p_recipient_key text, p_fence bigint) returns boolean -- decideBeginSend
+--   admin_digest_begin_send(p_occurrence_id text, p_recipient_key text, p_fence bigint, p_min_lease_ms int,
+--                           p_retention_ms bigint, p_margin_ms bigint) returns text  -- decideBeginSend: ok | fenced_out | lease_expired | retention_passed
+--   admin_digest_now() returns timestamptz  -- clock_timestamp(); the one clock the local test harness pins
 --   admin_digest_complete(p_occurrence_id text, p_recipient_key text, p_fence bigint,
 --                         p_result jsonb, p_max_attempts int) returns boolean                          -- decideCompletion
 ```

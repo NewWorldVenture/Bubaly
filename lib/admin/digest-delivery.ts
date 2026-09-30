@@ -20,7 +20,10 @@
 // - claim     one atomic step per recipient, under a lease, with a fence that
 //             grows on every claim. Two engines never both hold a recipient.
 // - beginSend a fenced mark, written before the provider call, so a crash can
-//             be told apart: no mark means nothing reached the provider.
+//             be told apart: no mark means nothing reached the provider. It is
+//             refused once the lease has too little time left for the send, or
+//             once an ambiguous row is past the retention cut-off, so a worker
+//             that stalled after its claim cannot send late.
 // - complete  the provider's answer, fenced: a worker whose lease was taken over
 //             writes nothing.
 //
@@ -82,7 +85,7 @@ export type FrozenOccurrence = {
 //   pending ──claim──▶ in_flight ──complete──▶ accepted                 (terminal)
 //                        │   ▲                 rejected                 (terminal)
 //                        │   │                 conflict                 (terminal)
-//                        │   └──claim── failed   (a definitive refusal; nothing was accepted)
+//                        │   └──claim── failed   (a definitive refusal, and nothing was ever possibly accepted)
 //                        │   └──claim── unknown  (might have been accepted; ambiguous)
 //                        │
 //                        └─ lease expires: back to pending/failed (no beginSend mark) or unknown (marked)
@@ -198,11 +201,41 @@ export function decideClaim(row: DeliveryRow, now: Date, owner: string, policy: 
   return { claimed: true, next };
 }
 
-/** The beginSend rule: fenced. `null` means the caller's claim is no longer current and it must not send. */
-export function decideBeginSend(row: DeliveryRow, fence: number, now: Date): DeliveryRow | null {
-  if (row.status !== 'in_flight' || row.fence !== fence) return null;
+export type BeginSendPolicy = Pick<ClaimPolicy, 'providerKeyRetentionMs' | 'retentionSafetyMarginMs'> & {
+  /** The send may start only while at least this much lease is left: the engine's send deadline. */
+  minLeaseRemainingMs: number;
+};
+
+export type BeginSendDecision =
+  | { ok: true; next: DeliveryRow }
+  /**
+   * `fenced_out`: another claim superseded this one. `lease_expired`: too little lease left to finish
+   * the send before another worker could claim; the row is left for the next claim. `retention_passed`:
+   * an ambiguous row reached the cut-off after it was claimed; it is parked in `next`.
+   */
+  | { ok: false; reason: 'fenced_out' | 'lease_expired' | 'retention_passed'; next: DeliveryRow | null };
+
+/**
+ * The beginSend rule: fenced, and re-checked at the last moment before the
+ * provider call. A store MUST evaluate it and persist `next` in one atomic
+ * step, with its own clock. Only `ok` permits a send.
+ */
+export function decideBeginSend(row: DeliveryRow, fence: number, now: Date, policy: BeginSendPolicy): BeginSendDecision {
+  if (row.status !== 'in_flight' || row.fence !== fence) return { ok: false, reason: 'fenced_out', next: null };
   const nowIso = now.toISOString();
-  return { ...row, sendStartedAt: nowIso, firstSendAt: row.firstSendAt ?? nowIso, updatedAt: nowIso };
+  if (row.leaseExpiresAt === null || Date.parse(row.leaseExpiresAt) - now.getTime() <= policy.minLeaseRemainingMs) {
+    return { ok: false, reason: 'lease_expired', next: null };
+  }
+  if (row.ambiguous) {
+    const lastSafe = row.firstSendAt === null ? -Infinity : Date.parse(row.firstSendAt) + policy.providerKeyRetentionMs - policy.retentionSafetyMarginMs;
+    if (now.getTime() >= lastSafe) {
+      return {
+        ok: false, reason: 'retention_passed',
+        next: { ...row, status: 'needs_reconciliation', leaseOwner: null, leaseExpiresAt: null, sendStartedAt: null, updatedAt: nowIso },
+      };
+    }
+  }
+  return { ok: true, next: { ...row, sendStartedAt: nowIso, firstSendAt: row.firstSendAt ?? nowIso, updatedAt: nowIso } };
 }
 
 // ── Provider ────────────────────────────────────────────────────────────────
@@ -256,6 +289,11 @@ export function decideCompletion(row: DeliveryRow, fence: number, result: Provid
   const next: DeliveryRow = { ...row, leaseOwner: null, leaseExpiresAt: null, sendStartedAt: null, updatedAt: nowIso };
   switch (result.kind) {
     case 'accepted':
+      // A receipt needs a message id; without one nothing is settled.
+      if (typeof result.messageId !== 'string' || result.messageId.length === 0) {
+        next.ambiguous = true; next.status = 'unknown'; next.lastError = 'outcome_unknown:unreadable_response';
+        break;
+      }
       return { ...next, status: 'accepted', providerMessageId: result.messageId, lastError: null };
     case 'payload_conflict':
       return { ...next, status: 'conflict', lastError: 'provider_payload_conflict' };
@@ -263,7 +301,8 @@ export function decideCompletion(row: DeliveryRow, fence: number, result: Provid
       next.lastError = clip(`provider_rejected:${result.httpStatus}:${result.code}`);
       // A refusal cannot undo an earlier attempt that may have been accepted.
       if (!result.retryable) { next.status = next.ambiguous ? 'needs_reconciliation' : 'rejected'; return next; }
-      next.status = 'failed';
+      // Still retryable, but an earlier attempt may have been accepted: it stays unknown, not "failed".
+      next.status = next.ambiguous ? 'unknown' : 'failed';
       break;
     case 'in_progress':
       next.ambiguous = true; next.status = 'unknown'; next.lastError = 'provider_in_progress';
@@ -291,8 +330,8 @@ export interface DigestDeliveryStore {
   load(occurrenceId: string): Promise<StoredOccurrence | null>;
   /** Apply `decideClaim` atomically. */
   claim(occurrenceId: string, recipientKey: string, owner: string, policy: ClaimPolicy): Promise<{ claimed: true; row: DeliveryRow } | { claimed: false; reason: ClaimRefusal }>;
-  /** Apply `decideBeginSend` atomically. */
-  beginSend(occurrenceId: string, recipientKey: string, fence: number): Promise<'ok' | 'fenced_out'>;
+  /** Apply `decideBeginSend` atomically (persisting `next` when set). */
+  beginSend(occurrenceId: string, recipientKey: string, fence: number, policy: BeginSendPolicy): Promise<'ok' | 'fenced_out' | 'lease_expired' | 'retention_passed'>;
   /** Apply `decideCompletion` atomically. */
   complete(occurrenceId: string, recipientKey: string, fence: number, result: ProviderSendResult, maxAttempts: number): Promise<'ok' | 'fenced_out'>;
 }
@@ -359,6 +398,8 @@ export function validateConfig(c: EngineConfig): void {
   // The last safe retry must reach the provider before it forgets the key.
   if (c.retentionSafetyMarginMs <= c.sendTimeoutMs) planError('retentionSafetyMarginMs must exceed sendTimeoutMs');
   if (c.retentionSafetyMarginMs >= c.providerKeyRetentionMs) planError('retentionSafetyMarginMs must be shorter than the retention window');
+  // Never assume the provider remembers a key longer than its documentation says.
+  if (c.providerKeyRetentionMs > RESEND_KEY_RETENTION_MS) planError('providerKeyRetentionMs cannot exceed the verified 24 h');
 }
 
 /** Frozen form of a validated plan: what `freeze` stores. Pure. */
@@ -401,8 +442,13 @@ export type AttemptReport = {
   recipientKey: string;
   fence: number;
   result: ProviderSendResult['kind'] | 'not_sent';
-  /** Whether the outcome is durable. `receipt_write_failed`: the provider answered but the store did not record it. */
-  recorded: 'ok' | 'fenced_out' | 'receipt_write_failed' | 'not_sent';
+  /**
+   * Whether the outcome is durable. `receipt_write_unconfirmed`: the provider answered but the store
+   * did not confirm the write (it may or may not have committed; the next run finds out).
+   */
+  recorded: 'ok' | 'fenced_out' | 'receipt_write_unconfirmed' | 'not_sent';
+  /** The provider's message id, whenever it accepted, even if the receipt could not be recorded. */
+  messageId?: string;
   detail?: string;
 };
 
@@ -411,7 +457,7 @@ export type OccurrenceReport = {
   /** This call stored the plan. False: a plan was already stored, and IT was used. */
   created: boolean;
   /** The caller's plan differs from the stored one; the stored one was used and the difference is reported, not merged. */
-  planMismatch: null | { recipientsAdded: number; recipientsRemoved: number; payloadChanged: boolean };
+  planMismatch: null | { recipientsAdded: number; recipientsRemoved: number; payloadChanged: boolean; windowChanged: boolean };
   attempts: AttemptReport[];
   refused: { recipientKey: string; reason: ClaimRefusal }[];
   storageErrors: { stage: 'freeze' | 'load' | 'claim' | 'beginSend' | 'complete' | 'final_load'; recipientKey?: string }[];
@@ -467,7 +513,9 @@ function mismatch(wanted: FrozenOccurrence, stored: FrozenOccurrence): Occurrenc
   const recipientsAdded = [...want].filter((k) => !have.has(k)).length;
   const recipientsRemoved = [...have].filter((k) => !want.has(k)).length;
   const payloadChanged = wanted.payloadHash !== stored.payloadHash;
-  return recipientsAdded || recipientsRemoved || payloadChanged ? { recipientsAdded, recipientsRemoved, payloadChanged } : null;
+  const windowChanged = wanted.window.start !== stored.window.start || wanted.window.end !== stored.window.end;
+  return recipientsAdded || recipientsRemoved || payloadChanged || windowChanged
+    ? { recipientsAdded, recipientsRemoved, payloadChanged, windowChanged } : null;
 }
 
 async function run(stored: StoredOccurrence, deps: EngineDeps, report: OccurrenceReport): Promise<OccurrenceReport> {
@@ -493,15 +541,19 @@ async function run(stored: StoredOccurrence, deps: EngineDeps, report: Occurrenc
       report.attempts.push({ recipientKey: key, fence: row.fence, result: 'not_sent', recorded: 'not_sent', detail: 'stored_payload_integrity_failed' });
       continue;
     }
-    let marked: 'ok' | 'fenced_out';
+    let marked: Awaited<ReturnType<DigestDeliveryStore['beginSend']>>;
     try {
-      marked = await store.beginSend(id, key, row.fence);
+      marked = await store.beginSend(id, key, row.fence, {
+        minLeaseRemainingMs: config.sendTimeoutMs,
+        providerKeyRetentionMs: config.providerKeyRetentionMs,
+        retentionSafetyMarginMs: config.retentionSafetyMarginMs,
+      });
     } catch {
       report.storageErrors.push({ stage: 'beginSend', recipientKey: key });
       continue;
     }
     if (marked !== 'ok') {
-      report.attempts.push({ recipientKey: key, fence: row.fence, result: 'not_sent', recorded: 'fenced_out' });
+      report.attempts.push({ recipientKey: key, fence: row.fence, result: 'not_sent', recorded: marked === 'fenced_out' ? 'fenced_out' : 'not_sent', detail: marked });
       continue;
     }
     const result = await sendWithDeadline(deps.provider, row, config.sendTimeoutMs);
@@ -512,10 +564,10 @@ async function run(stored: StoredOccurrence, deps: EngineDeps, report: Occurrenc
       // The provider answered, but nothing durable says so. The row stays in flight
       // with its mark; after the lease it is retried under the same key and bytes.
       report.storageErrors.push({ stage: 'complete', recipientKey: key });
-      report.attempts.push({ recipientKey: key, fence: row.fence, result: result.kind, recorded: 'receipt_write_failed' });
+      report.attempts.push({ recipientKey: key, fence: row.fence, result: result.kind, recorded: 'receipt_write_unconfirmed', ...messageIdOf(result) });
       continue;
     }
-    report.attempts.push({ recipientKey: key, fence: row.fence, result: result.kind, recorded });
+    report.attempts.push({ recipientKey: key, fence: row.fence, result: result.kind, recorded, ...messageIdOf(result) });
   }
   try {
     const final = await store.load(id);
@@ -547,12 +599,16 @@ async function sendWithDeadline(provider: DigestEmailProvider, row: DeliveryRow,
   }
 }
 
+const messageIdOf = (r: ProviderSendResult) => (r.kind === 'accepted' ? { messageId: r.messageId } : {});
+
 /** Only a success WITH a message id is an accepted receipt; anything malformed settles nothing. */
 function checkResult(r: ProviderSendResult): ProviderSendResult {
   if (!r || typeof r !== 'object') return { kind: 'unknown', reason: 'unreadable_response' };
   switch (r.kind) {
     case 'accepted': return typeof r.messageId === 'string' && r.messageId.length > 0 ? r : { kind: 'unknown', reason: 'unreadable_response' };
-    case 'rejected': return Number.isInteger(r.httpStatus) && typeof r.retryable === 'boolean' ? { ...r, code: String(r.code ?? '') } : { kind: 'unknown', reason: 'unreadable_response' };
+    // A refusal is a 4xx: an adapter that calls a 5xx or a 2xx "rejected" has settled nothing.
+    case 'rejected': return Number.isInteger(r.httpStatus) && r.httpStatus >= 400 && r.httpStatus < 500 && typeof r.retryable === 'boolean'
+      ? { ...r, code: String(r.code ?? '') } : { kind: 'unknown', reason: 'unreadable_response' };
     case 'payload_conflict': case 'in_progress': case 'unknown': return r;
     default: return { kind: 'unknown', reason: 'unreadable_response' };
   }

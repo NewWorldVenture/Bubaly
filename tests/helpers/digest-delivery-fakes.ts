@@ -6,11 +6,13 @@
 // RULES and the engine's use of them. It proves nothing about PostgreSQL:
 // durability, isolation and the database clock are the adapter's to meet
 // (docs/admin-digest-delivery-contract.md), and the same contract suite
-// (tests/helpers/digest-delivery-store-contract.ts) must pass against it.
+// (tests/helpers/digest-delivery-store-contract.ts) must pass against it, with
+// the database's clock made to follow the test's clock (for example: the SQL
+// reads time only through one function the local test harness can pin).
 import { createHash } from 'node:crypto';
 import {
   decideBeginSend, decideClaim, decideCompletion,
-  type ClaimPolicy, type ClaimRefusal, type DeliveryRow, type DigestDeliveryStore, type DigestEmailProvider,
+  type BeginSendPolicy, type ClaimPolicy, type ClaimRefusal, type DeliveryRow, type DigestDeliveryStore, type DigestEmailProvider,
   type FrozenOccurrence, type ProviderSendResult, type StoredOccurrence,
 } from '@/lib/admin/digest-delivery';
 
@@ -136,14 +138,16 @@ export class MemoryDigestDeliveryStore implements DigestDeliveryStore {
     return out;
   }
 
-  async beginSend(occurrenceId: string, recipientKey: string, fence: number) {
+  async beginSend(occurrenceId: string, recipientKey: string, fence: number, policy: BeginSendPolicy) {
     await this.hook('beginSend', 'before', recipientKey);
+    // ── critical section ──
     const k = rowKey(occurrenceId, recipientKey);
     const row = this.rows.get(k);
-    const next = row ? decideBeginSend(copy(row), fence, this.clock()) : null;
-    if (next) this.rows.set(k, next);
+    const d = row ? decideBeginSend(copy(row), fence, this.clock(), policy) : { ok: false as const, reason: 'fenced_out' as const, next: null };
+    if (d.next) this.rows.set(k, copy(d.next));
+    // ── end ──
     await this.hook('beginSend', 'after', recipientKey);
-    return next ? 'ok' as const : 'fenced_out' as const;
+    return d.ok ? 'ok' as const : d.reason;
   }
 
   async complete(occurrenceId: string, recipientKey: string, fence: number, result: ProviderSendResult, maxAttempts: number) {

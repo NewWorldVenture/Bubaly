@@ -10,6 +10,7 @@
 // adapter must earn the same properties (docs/admin-digest-delivery-contract.md)
 // and pass tests/helpers/digest-delivery-store-contract.ts against a real
 // database.
+import { createHash } from 'node:crypto';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import {
   RESEND_KEY_RETENTION_MS, classifyResendResponse, deliverDigestOccurrence, freezePlan, idempotencyKeyFor,
@@ -85,6 +86,7 @@ describe('inputs are checked before anything is stored or sent', () => {
     ['a retention margin no longer than the send deadline', { retentionSafetyMarginMs: 150 }],
     ['a margin as long as the retention window', { retentionSafetyMarginMs: RESEND_KEY_RETENTION_MS }],
     ['zero attempts', { maxAttempts: 0 }],
+    ['a retention longer than the provider\'s verified 24 h', { providerKeyRetentionMs: 48 * HOUR }],
   ])('a config with %s is refused', async (_name, over) => {
     const { store, provider, engine } = world();
     await expect(deliverDigestOccurrence(plan(), engine('a', { config: { ...CONFIG, ...over } }))).rejects.toThrow(TypeError);
@@ -256,6 +258,104 @@ describe('concurrent claims and stale leases', () => {
   });
 });
 
+describe('a worker that stalls between its claim and its mark', () => {
+  it('is fenced out if another worker took over: it sends nothing', async () => {
+    const { clock, store, provider, engine } = world();
+    const stalled = deferred();
+    let first = true;
+    store.hooks.push(hookOn('beginSend', 'before', K1, async () => { if (first) { first = false; await stalled.promise; } }));
+    const held = deferred();
+    provider.script = ({ to }) => (to === ONE ? { do: 'hold_at_provider', until: held.promise, then: { do: 'accept' } } : { do: 'accept' });
+    const a = deliverDigestOccurrence(plan({ recipients: [ONE] }), engine('stalled'));
+    await vi.waitFor(() => expect(store.row(OCC, K1)?.status).toBe('in_flight'));
+    clock.advance(5 * MINUTE);
+    const b = deliverDigestOccurrence(plan({ recipients: [ONE] }), engine('takeover'));
+    await vi.waitFor(() => expect(provider.requests).toHaveLength(1)); // B is at the provider, fence 2, in flight
+    stalled.resolve();
+    const ra = await a;
+    expect(ra.attempts).toEqual([{ recipientKey: K1, fence: 1, result: 'not_sent', recorded: 'fenced_out', detail: 'fenced_out' }]);
+    held.resolve();
+    await b;
+    expect(provider.requests).toHaveLength(1);
+    expect(store.row(OCC, K1)).toMatchObject({ status: 'accepted', fence: 2 });
+  });
+
+  it('with no takeover and its lease gone, it still sends nothing; the next run sends once', async () => {
+    const { clock, store, provider, engine } = world();
+    const stalled = deferred();
+    store.hooks.push(hookOn('beginSend', 'before', K1, () => stalled.promise));
+    const a = deliverDigestOccurrence(plan({ recipients: [ONE] }), engine('stalled'));
+    await vi.waitFor(() => expect(store.row(OCC, K1)?.status).toBe('in_flight'));
+    clock.advance(5 * MINUTE);
+    store.hooks = [];
+    stalled.resolve();
+    expect((await a).attempts).toEqual([{ recipientKey: K1, fence: 1, result: 'not_sent', recorded: 'not_sent', detail: 'lease_expired' }]);
+    expect(provider.requests).toEqual([]);
+    const next = await deliverDigestOccurrence(plan({ recipients: [ONE] }), engine('next'));
+    expect(next.complete).toBe(true);
+    expect(provider.requests).toHaveLength(1);
+  });
+
+  it('an ambiguous row claimed just inside the window but marked after the cut-off is parked, not sent', async () => {
+    const { clock, store, provider, engine } = world();
+    const long = { ...CONFIG, leaseMs: 2 * HOUR };
+    provider.script = () => ({ do: 'lose_before_arrival', reason: 'timeout' });
+    await deliverDigestOccurrence(plan({ recipients: [ONE] }), engine('a', { config: long })); // first mark at T0
+    clock.set('2026-10-01T11:30:59.000Z'); // T0 + 23 h − 1 s: the claim is still allowed
+    const stalled = deferred();
+    store.hooks.push(hookOn('beginSend', 'before', K1, () => stalled.promise));
+    const b = deliverDigestOccurrence(plan({ recipients: [ONE] }), engine('b', { config: long }));
+    await vi.waitFor(() => expect(store.row(OCC, K1)?.status).toBe('in_flight'));
+    clock.set('2026-10-01T11:31:00.000Z'); // the cut-off passes while it stalls
+    store.hooks = [];
+    stalled.resolve();
+    expect((await b).attempts).toEqual([{ recipientKey: K1, fence: 2, result: 'not_sent', recorded: 'not_sent', detail: 'retention_passed' }]);
+    expect(provider.requests).toHaveLength(1);
+    expect(store.row(OCC, K1)!.status).toBe('needs_reconciliation');
+  });
+});
+
+describe('attempts are bounded even when no attempt ever completes', () => {
+  it('five claims that each die before the mark: the sixth parks the recipient as exhausted, and nothing was sent', async () => {
+    const { clock, store, provider, engine } = world();
+    store.hooks.push(hookOn('claim', 'after', K1, never));
+    for (let i = 1; i <= CONFIG.maxAttempts; i += 1) {
+      void deliverDigestOccurrence(plan({ recipients: [ONE] }), engine(`dies-${i}`));
+      await vi.waitFor(() => expect(store.row(OCC, K1)?.attempts).toBe(i));
+      clock.advance(5 * MINUTE);
+    }
+    store.hooks = [];
+    const r = await deliverDigestOccurrence(plan({ recipients: [ONE] }), engine('last'));
+    expect(r.refused).toEqual([{ recipientKey: K1, reason: 'exhausted' }]);
+    expect(r.needsAttention).toEqual([{ recipientKey: K1, status: 'exhausted' }]);
+    expect(provider.requests).toEqual([]);
+  });
+});
+
+describe('a stale receipt while the row is in flight under a newer claim', () => {
+  it('is fenced out: it cannot overwrite the newer claim, which then settles on its own', async () => {
+    const { clock, store, provider, engine } = world();
+    const aWire = deferred();
+    const bHeld = deferred();
+    provider.script = ({ n }) => (n === 1
+      ? { do: 'delay_before_arrival', until: aWire.promise, then: { do: 'accept' } }
+      : { do: 'hold_at_provider', until: bHeld.promise, then: { do: 'accept' } });
+    const a = deliverDigestOccurrence(plan({ recipients: [ONE] }), engine('slow', { config: { ...CONFIG, sendTimeoutMs: 60_000 } }));
+    await vi.waitFor(() => expect(provider.requests).toHaveLength(1));
+    clock.advance(5 * MINUTE);
+    const b = deliverDigestOccurrence(plan({ recipients: [ONE] }), engine('fresh', { config: { ...CONFIG, sendTimeoutMs: 60_000 } }));
+    await vi.waitFor(() => expect(provider.requests).toHaveLength(2)); // B holds the key at the provider, row in flight at fence 2
+    aWire.resolve(); // A's request arrives while B's is in progress: 409 concurrent, and A's receipt meets fence 2
+    const ra = await a;
+    expect(ra.attempts).toEqual([{ recipientKey: K1, fence: 1, result: 'in_progress', recorded: 'fenced_out' }]);
+    expect(store.row(OCC, K1)).toMatchObject({ status: 'in_flight', fence: 2 });
+    bHeld.resolve();
+    await b;
+    expect(store.row(OCC, K1)).toMatchObject({ status: 'accepted', fence: 2 });
+    expect(provider.deliveredTo(ONE)).toBe(1);
+  });
+});
+
 // ── Crashes and restarts ───────────────────────────────────────────────────
 
 describe('crashes and restarts from saved state', () => {
@@ -390,13 +490,14 @@ describe('storage failures', () => {
     expect(provider.requests).toHaveLength(1);
   });
 
+  // Failures are injected on the recipient the engine visits FIRST, so "the other still is" is shown, not assumed.
   it('a claim fails (before or after it committed): that recipient is not sent this run; the other still is; a later run completes once', async () => {
     for (const phase of ['before', 'after'] as const) {
       const { clock, store, provider, engine } = world();
-      store.hooks.push(hookOn('claim', phase, K1, fail));
+      store.hooks.push(hookOn('claim', phase, FIRST.key, fail));
       const r = await deliverDigestOccurrence(plan(), engine('a'));
-      expect(r.storageErrors).toEqual([{ stage: 'claim', recipientKey: K1 }]);
-      expect(provider.requests.map((q) => q.to)).toEqual([TWO]);
+      expect(r.storageErrors).toEqual([{ stage: 'claim', recipientKey: FIRST.key }]);
+      expect(provider.requests.map((q) => q.to)).toEqual([SECOND.to]);
       store.hooks = [];
       clock.advance(6 * MINUTE);
       expect((await deliverDigestOccurrence(plan(), engine('b'))).complete).toBe(true);
@@ -407,22 +508,24 @@ describe('storage failures', () => {
   it('the mark fails (before or after it committed): nothing is sent for that recipient this run', async () => {
     for (const phase of ['before', 'after'] as const) {
       const { clock, store, provider, engine } = world();
-      store.hooks.push(hookOn('beginSend', phase, K1, fail));
+      store.hooks.push(hookOn('beginSend', phase, FIRST.key, fail));
       await deliverDigestOccurrence(plan(), engine('a'));
-      expect(provider.requests.map((q) => q.to)).toEqual([TWO]);
+      expect(provider.requests.map((q) => q.to)).toEqual([SECOND.to]);
       store.hooks = [];
       clock.advance(6 * MINUTE);
       expect((await deliverDigestOccurrence(plan(), engine('b'))).complete).toBe(true);
-      expect(store.row(OCC, K1)!.ambiguous).toBe(phase === 'after'); // a committed mark is honestly ambiguous
-      expect(provider.deliveredTo(ONE)).toBe(1);
+      expect(store.row(OCC, FIRST.key)!.ambiguous).toBe(phase === 'after'); // a committed mark is honestly ambiguous
+      expect(provider.deliveredTo(FIRST.to)).toBe(1);
     }
   });
 
-  it('the receipt write fails after the provider accepted: reported as receipt_write_failed, and the retry is answered from the key', async () => {
+  it('the receipt write fails after the provider accepted: reported as unconfirmed with the message id, and the retry is answered from the key', async () => {
     const { clock, store, provider, engine } = world();
     store.hooks.push(hookOn('complete', 'before', K1, fail));
     const r = await deliverDigestOccurrence(plan(), engine('a'));
-    expect(r.attempts.find((x) => x.recipientKey === K1)).toEqual({ recipientKey: K1, fence: 1, result: 'accepted', recorded: 'receipt_write_failed' });
+    expect(r.attempts.find((x) => x.recipientKey === K1)).toEqual({
+      recipientKey: K1, fence: 1, result: 'accepted', recorded: 'receipt_write_unconfirmed', messageId: provider.inbox.find((d) => d.to === ONE)!.messageId,
+    });
     expect(r.complete).toBe(false);
     expect(store.row(OCC, K1)!.status).toBe('in_flight');
     store.hooks = [];
@@ -458,13 +561,21 @@ describe('changed payloads and provider conflicts', () => {
       payload: { ...plan().payload, html: '<p>3 new families (a row committed late).</p>' },
     });
     const r = await deliverDigestOccurrence(changed, engine('b'));
-    expect(r.planMismatch).toEqual({ recipientsAdded: 1, recipientsRemoved: 0, payloadChanged: true });
+    expect(r.planMismatch).toEqual({ recipientsAdded: 1, recipientsRemoved: 0, payloadChanged: true, windowChanged: false });
     const toTwo = provider.requests.filter((q) => q.to === TWO);
     expect(toTwo).toHaveLength(2);
     expect(new Set(toTwo.map((q) => q.payloadJson)).size).toBe(1);
     expect(toTwo[1].payloadJson).toContain('2 new families.');
     expect(provider.requests.some((q) => q.to === 'admin-three@example.test')).toBe(false);
     expect(r.complete).toBe(true);
+  });
+
+  it('a retry that names a different window for the same occurrence is reported, and the stored window stands', async () => {
+    const { engine } = world();
+    await deliverDigestOccurrence(plan(), engine('a'));
+    const r = await deliverDigestOccurrence(plan({ window: { start: '2026-09-29T12:33:00.000Z', end: '2026-09-30T12:33:00.000Z' } }), engine('b'));
+    expect(r.planMismatch).toEqual({ recipientsAdded: 0, recipientsRemoved: 0, payloadChanged: false, windowChanged: true });
+    expect(r.attempts).toEqual([]);
   });
 
   it('409 invalid_idempotent_request: a conflict, parked, never retried and never re-keyed', async () => {
@@ -559,6 +670,59 @@ describe('what the provider said, taken at its word and no further', () => {
     const r = await deliverDigestOccurrence(plan({ recipients: [ONE] }), engine('b'));
     expect(r.attempts[0]).toMatchObject({ result: 'not_sent', detail: 'stored_payload_integrity_failed' });
     expect(provider.requests).toEqual([]);
+  });
+
+  it('an adapter that calls a 5xx "rejected" has settled nothing: the row is unknown, not failed', async () => {
+    const { store, engine } = world();
+    await deliverDigestOccurrence(plan({ recipients: [ONE] }), {
+      ...engine('a'), provider: { send: async () => ({ kind: 'rejected', httpStatus: 503, code: 'x', retryable: true }) },
+    });
+    expect(store.row(OCC, K1)).toMatchObject({ status: 'unknown', ambiguous: true });
+  });
+
+  it('after an ambiguous attempt, a retryable refusal leaves the row unknown (still bounded by retention), not "failed"', async () => {
+    const { clock, store, provider, engine } = world();
+    provider.script = ({ n }) => (n === 1 ? { do: 'lose_before_arrival', reason: 'timeout' } : { do: 'reject', status: 429, code: 'rate_limit_exceeded', retryable: true });
+    await deliverDigestOccurrence(plan({ recipients: [ONE] }), engine('a'));
+    clock.advance(HOUR);
+    await deliverDigestOccurrence(plan({ recipients: [ONE] }), engine('b'));
+    expect(store.row(OCC, K1)).toMatchObject({ status: 'unknown', ambiguous: true });
+    clock.set('2026-10-01T11:31:00.000Z');
+    const r = await deliverDigestOccurrence(plan({ recipients: [ONE] }), engine('c'));
+    expect(r.needsAttention).toEqual([{ recipientKey: K1, status: 'needs_reconciliation' }]);
+    expect(provider.requests).toHaveLength(2);
+  });
+
+  it('a stored key or recipient that no longer matches what was frozen is never sent', async () => {
+    for (const change of ['key', 'recipient'] as const) {
+      const { store, provider, engine } = world();
+      await deliverDigestOccurrence(plan({ recipients: [ONE] }), { ...engine('a'), provider: { send: async () => ({ kind: 'rejected', httpStatus: 429, code: 'x', retryable: true }) } });
+      store.tamper(OCC, K1, (row) => {
+        if (change === 'key') row.idempotencyKey = 'bubaly/admin-digest/v1/rotated';
+        else {
+          row.payload = { ...row.payload, to: 'someone-else@example.test' };
+          row.payloadJson = payloadJsonOf(row.payload);
+          row.payloadHash = createHash('sha256').update(row.payloadJson).digest('hex');
+        }
+      });
+      const r = await deliverDigestOccurrence(plan({ recipients: [ONE] }), engine('b'));
+      expect(r.attempts[0]).toMatchObject({ result: 'not_sent', detail: 'stored_payload_integrity_failed' });
+      expect(provider.requests).toEqual([]);
+    }
+  });
+
+  it('when the final read fails the run is not reported complete, even though it sent', async () => {
+    const { store, provider, engine } = world();
+    store.hooks.push(hookOn('load', 'before', null, fail));
+    const r = await deliverDigestOccurrence(plan(), engine('a'));
+    expect(provider.inbox).toHaveLength(2);
+    expect(r).toMatchObject({ complete: false, statuses: null, storageErrors: [{ stage: 'final_load' }] });
+  });
+
+  it('every accepted attempt carries its message id in the report', async () => {
+    const { provider, engine } = world();
+    const r = await deliverDigestOccurrence(plan(), engine('a'));
+    expect(r.attempts.map((x) => x.messageId).sort()).toEqual(provider.inbox.map((d) => d.messageId).sort());
   });
 
   it.each<[number, unknown, string]>([
