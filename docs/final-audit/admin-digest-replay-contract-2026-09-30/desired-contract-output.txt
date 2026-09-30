@@ -9,9 +9,9 @@
  × docs/final-audit/admin-digest-replay-contract-2026-09-30/tests/desired-contract.test.ts > admin-digest idempotency contract (UNRESOLVED on current main — expected to fail) > C3 a retry after one recipient failed attempts ONLY that recipient
    → expected { 'admin-1': 2, 'admin-2': 2 } to deeply equal { 'admin-1': 1, 'admin-2': 2 }
  × docs/final-audit/admin-digest-replay-contract-2026-09-30/tests/desired-contract.test.ts > admin-digest idempotency contract (UNRESOLVED on current main — expected to fail) > C4 an ambiguous send (accepted, then timed out) is retried under the SAME idempotency key, and nobody else is re-sent
-   → expected null not to be null
+   → expected 'object' to be 'string' // Object.is equality
  × docs/final-audit/admin-digest-replay-contract-2026-09-30/tests/desired-contract.test.ts > admin-digest idempotency contract (UNRESOLVED on current main — expected to fail) > C5 Vercel at 12:30 and GitHub at 12:33: no activity row is reported in two digests
-   → expected [ { …(4) }, { …(4) } ] to have a length of 1 but got 2
+   → expected [ { …(5) }, { …(5) } ] to have a length of 1 but got 2
  × docs/final-audit/admin-digest-replay-contract-2026-09-30/tests/desired-contract.test.ts > admin-digest idempotency contract (UNRESOLVED on current main — expected to fail) > C6 a run that could not read its recipient list does not report a clean success
    → expected true to be false // Object.is equality
 
@@ -30,13 +30,13 @@ AssertionError: expected { 'admin-1': 2, 'admin-2': 2 } to deeply equal { 'admin
 +   "admin-2": 2,
   }
 
- ❯ docs/final-audit/admin-digest-replay-contract-2026-09-30/tests/desired-contract.test.ts:114:24
-    112|     await runAt('2026-09-30T12:30:00Z');
-    113|     await runAt('2026-09-30T12:30:00Z');
-    114|     expect(accepted()).toEqual(once());
+ ❯ docs/final-audit/admin-digest-replay-contract-2026-09-30/tests/desired-contract.test.ts:116:24
+    114|     await runAt('2026-09-30T12:30:00Z');
+    115|     await runAt('2026-09-30T12:30:00Z');
+    116|     expect(accepted()).toEqual(once());
        |                        ^
-    115|   });
-    116|
+    117|   });
+    118|
 
 ⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[1/6]⎯
 
@@ -53,13 +53,13 @@ AssertionError: expected { 'admin-1': 2, 'admin-2': 2 } to deeply equal { 'admin
 +   "admin-2": 2,
   }
 
- ❯ docs/final-audit/admin-digest-replay-contract-2026-09-30/tests/desired-contract.test.ts:123:24
-    121|     state.barrier = { parties: 2, arrived: 0, release: () => release()…
-    122|     await Promise.all([call(), call()]);
-    123|     expect(accepted()).toEqual(once());
+ ❯ docs/final-audit/admin-digest-replay-contract-2026-09-30/tests/desired-contract.test.ts:134:24
+    132|       await Promise.all([call(), call()].map((p) => p.finally(() => re…
+    133|     } finally { clearTimeout(bound); }
+    134|     expect(accepted()).toEqual(once());
        |                        ^
-    124|   });
-    125|
+    135|   });
+    136|
 
 ⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[2/6]⎯
 
@@ -75,30 +75,34 @@ AssertionError: expected { 'admin-1': 2, 'admin-2': 2 } to deeply equal { 'admin
     "admin-2": 2,
   }
 
- ❯ docs/final-audit/admin-digest-replay-contract-2026-09-30/tests/desired-contract.test.ts:132:25
-    130|     state.mode = {};
-    131|     await runAt('2026-09-30T12:30:00Z');
-    132|     expect(attempted()).toEqual({ 'admin-1': 1, 'admin-2': 2 });
+ ❯ docs/final-audit/admin-digest-replay-contract-2026-09-30/tests/desired-contract.test.ts:143:25
+    141|     state.mode = {};
+    142|     await runAt('2026-09-30T12:30:00Z');
+    143|     expect(attempted()).toEqual({ 'admin-1': 1, 'admin-2': 2 });
        |                         ^
-    133|     expect(accepted()).toEqual(once());
-    134|   });
+    144|     expect(accepted()).toEqual(once());
+    145|   });
 
 ⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[3/6]⎯
 
  FAIL  docs/final-audit/admin-digest-replay-contract-2026-09-30/tests/desired-contract.test.ts > admin-digest idempotency contract (UNRESOLVED on current main — expected to fail) > C4 an ambiguous send (accepted, then timed out) is retried under the SAME idempotency key, and nobody else is re-sent
-AssertionError: expected null not to be null
- ❯ docs/final-audit/admin-digest-replay-contract-2026-09-30/tests/desired-contract.test.ts:143:25
-    141|     await runAt('2026-09-30T12:30:00Z');
-    142|     const keys = state.attempts.filter((a) => a.to === SECOND).map((a)…
-    143|     expect(keys[0]).not.toBeNull();
-       |                         ^
-    144|     expect(keys[1]).toBe(keys[0]);
-    145|     expect(attempted()['admin-1']).toBe(1);
+AssertionError: expected 'object' to be 'string' // Object.is equality
+
+Expected: "string"
+Received: "object"
+
+ ❯ docs/final-audit/admin-digest-replay-contract-2026-09-30/tests/desired-contract.test.ts:158:41
+    156|     const [first, retry] = ambiguous;
+    157|     // A real key, the same key, and the same payload, so the provider…
+    158|     expect(typeof first.idempotencyKey).toBe('string');
+       |                                         ^
+    159|     expect(first.idempotencyKey).not.toBe('');
+    160|     expect(retry.idempotencyKey).toBe(first.idempotencyKey);
 
 ⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[4/6]⎯
 
  FAIL  docs/final-audit/admin-digest-replay-contract-2026-09-30/tests/desired-contract.test.ts > admin-digest idempotency contract (UNRESOLVED on current main — expected to fail) > C5 Vercel at 12:30 and GitHub at 12:33: no activity row is reported in two digests
-AssertionError: expected [ { …(4) }, { …(4) } ] to have a length of 1 but got 2
+AssertionError: expected [ { …(5) }, { …(5) } ] to have a length of 1 but got 2
 
 - Expected
 + Received
@@ -106,13 +110,13 @@ AssertionError: expected [ { …(4) }, { …(4) } ] to have a length of 1 but go
 - 1
 + 2
 
- ❯ docs/final-audit/admin-digest-replay-contract-2026-09-30/tests/desired-contract.test.ts:154:69
-    152|     await runAt('2026-09-30T12:33:00Z');
-    153|     const toSecond = state.attempts.filter((a) => a.to === SECOND && a…
-    154|     expect(toSecond.filter((a) => a.html.includes('Signup Alpha'))).to…
+ ❯ docs/final-audit/admin-digest-replay-contract-2026-09-30/tests/desired-contract.test.ts:172:69
+    170|     await runAt('2026-09-30T12:33:00Z');
+    171|     const toSecond = state.attempts.filter((a) => a.to === SECOND && a…
+    172|     expect(toSecond.filter((a) => a.html.includes('Signup Alpha'))).to…
        |                                                                     ^
-    155|   });
-    156|
+    173|   });
+    174|
 
 ⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[5/6]⎯
 
@@ -125,13 +129,13 @@ AssertionError: expected true to be false // Object.is equality
 - false
 + true
 
- ❯ docs/final-audit/admin-digest-replay-contract-2026-09-30/tests/desired-contract.test.ts:161:25
-    159|     state.failSuperAdmins = true;
-    160|     const res = await runAt('2026-09-30T12:30:00Z');
-    161|     expect(res.body.ok).toBe(false);
+ ❯ docs/final-audit/admin-digest-replay-contract-2026-09-30/tests/desired-contract.test.ts:179:25
+    177|     state.failSuperAdmins = true;
+    178|     const res = await runAt('2026-09-30T12:30:00Z');
+    179|     expect(res.body.ok).toBe(false);
        |                         ^
-    162|   });
-    163| });
+    180|   });
+    181| });
 
 ⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[6/6]⎯
 

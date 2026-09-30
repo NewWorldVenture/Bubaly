@@ -54,7 +54,7 @@ The saved outputs are `characterization-output.txt` (19/19 pass) and `desired-co
 
 ## Measurements (current `main`)
 
-"Attempted" counts provider calls. "Accepted" counts messages the provider took, which is what reaches an inbox. Counts are given as admin-1 / admin-2.
+"Attempted" counts calls that reached the fake provider. "Accepted" counts messages the **fake** provider accepted, which is this test's stand-in for delivery; no inbox delivery was demonstrated and no real provider was called. Counts are given as admin-1 / admin-2.
 
 | Scenario | Calls | Status codes | Handler says | Attempted | Accepted | DB writes |
 |---|---|---|---|---|---|---|
@@ -63,7 +63,7 @@ The saved outputs are `characterization-output.txt` (19/19 pass) and `desired-co
 | **Concurrent**: both workers finish reading before either sends | 2 | 200, 200 | `sent 2` each | 2 / 2 | **2 / 2** | 0 |
 | **One recipient refused** after the other succeeded, then a retry | 2 | 502, 200 | `sent 1, failed 1`, then `sent 2` | 2 / 2 | **2** / 1 | 0 |
 | **Network error before acceptance** for one recipient, then a retry | 2 | 502, 200 | as above | 2 / 2 | **2** / 1 | 0 |
-| **Accepted, then the client timed out** for one recipient, then a retry | 2 | 502, 200 | `sent 1, failed 1` (both were delivered) | 2 / 2 | **2 / 2** | 0 |
+| **Accepted, then the client timed out** for one recipient, then a retry | 2 | 502, 200 | `sent 1, failed 1` (the fake provider accepted both) | 2 / 2 | **2 / 2** | 0 |
 | **Partial-delivery status**: none, one or both refused | 3 | 200, 502, 502 | `ok true/false/false`; `sent 2/1/0`; `failed 0/1/2` | 3 / 3 | 2 / 1 | 0 |
 | **Unauthorised**: no header; wrong secret; no `Bearer`; secret unset with `Bearer undefined`, `Bearer ` or the right token | 6 | 401 ×6 | — | 0 | 0 | 0 reads |
 | **Quiet day** (no rows in the last 24 h) | 1 | 200 | `sent 0, total 0` | 0 | 0 | `super_admins` not read |
@@ -86,12 +86,12 @@ The saved outputs are `characterization-output.txt` (19/19 pass) and `desired-co
 | Second call for the same occurrence | Sends again: 2 per admin (**C1**). | Sends nothing: 1 per admin. |
 | Two concurrent calls | Both send: 2 per admin (**C2**). | Exactly one worker holds the claim and sends: 1 per admin. |
 | Retry after a partial failure | Re-sends to everyone, so the admin who had it gets 2 (**C3**). | Retries only recipients without an accepted receipt. |
-| Accepted, then timed out | Reported `failed`; the retry re-sends with no key (**C4**). | Recorded as *unknown*; the retry reuses the same `Idempotency-Key`; others are not re-sent. |
+| Accepted, then timed out | Reported `failed`; the retry re-sends with no key (**C4**). | Recorded as *unknown*; exactly one retry to that recipient, with the same non-empty `Idempotency-Key` and the same request payload; others are not re-sent. |
 | Window between runs | Overlapping or gapped, depending on when the call lands; a row can appear in two digests (**C5**). | Contiguous: `[previous occurrence, this occurrence)`, so each row appears in one digest. |
 | Recipient list unreadable | Swallowed; answers **200 ok** having emailed only the built-in admin (**C6**). | Not a clean success: fail or report degraded, so the scheduler or operator can see it. |
 | Records written | None, before or after a send. | A durable claim per occurrence and a receipt per recipient (see below). |
 
-**C1–C6 fail on current main.** The control case (one on-time run → 1 per admin) passes, so the failures come from the handler, not from the fixture. These are the acceptance tests for a fix: move them into `tests/` unchanged, and do not weaken them.
+**C1–C6 fail on current main.** The control case (one on-time run → 1 per admin) passes, so the failures come from the handler, not from the fixture. These are the acceptance tests for a fix. Move them into `tests/`, adapting imports and fixtures to the fixed route where needed, but keep every behavioural requirement and do not weaken any assertion.
 
 ## What the scheduler needs to meet that contract
 
@@ -105,15 +105,16 @@ The saved outputs are `characterization-output.txt` (19/19 pass) and `desired-co
    - `failed`, for a clean refusal or a network error before acceptance;
    - `unknown`, for a timeout after the request was sent.
    A retry sends only to `pending`, `failed` and `unknown` receipts. This closes C3.
+   The receipt also stores the **rendered payload** (subject and HTML) the first attempt sent, and a retry resends exactly that. A fixed window does **not** freeze its inputs: a row can be committed late inside the window, and a template, a title or a recipient's name can change between attempts. So a retry that re-renders can legitimately differ.
 4. **A stable idempotency key** per `(occurrence, recipient)`, sent as the `Idempotency-Key` header. `sendEmail` has no way to pass one today, so this is a small shared-helper change and not part of this PR. Resend's documented rules (re-checked 2026-09-30):
    - the key is kept for 24 hours;
    - the same key with the same payload returns the original response;
    - the same key with a **different** payload returns 409 `invalid_idempotent_request`;
    - while the first request is still running, the key returns 409 `concurrent_idempotent_requests`.
 
-   A fixed window keeps most retries identical. But a row committed late inside the window changes the digest, so the sender must count 409 `invalid_idempotent_request` under its own key as **already sent**, not as a failure. Otherwise the retry fails until the occurrence is abandoned.
+   With a frozen payload (item 3), a retry under the same key is identical to the original, and the provider can fold it. If a 409 `invalid_idempotent_request` still arrives under the sender's own key (for example, a payload was not frozen), the sender must count it as **already sent**, not as a failure. Otherwise the retry fails until the occurrence is abandoned.
 
-   Resend does not document whether a key is kept for a request it *refused*. If it is, that rule would count a refused send as delivered, so it must be checked on a provider test account first. This closes C4, but only within 24 hours and only while the provider honours the key.
+   Resend does not document whether a key is kept for a request it *refused*. If it is, that rule would count a refused send as accepted, so it must be checked on a provider test account first. This closes C4, but only within 24 hours and only while the provider honours the key.
 5. **Honest status:**
    - an unreadable recipient list is not `200 ok` (C6);
    - `unknown` receipts are reported separately from `failed`.
@@ -131,7 +132,7 @@ A locally tested prototype of 1–2 (an `app_settings` cursor, no migration) and
   - `allSuperAdminEmails` destructures only `data`, so a PostgREST error resolves to "no table rows", and only a thrown error reaches its `catch`.
   - Either way the digest goes to the env/built-in list alone and the run answers **200 ok**.
   - Characterized in two tests, reproduced as C6.
-- **No `RESEND_API_KEY` reports success.** The run answers `200 {ok: true, sent: 0, skipped: 2}` although nothing was delivered. This matches the body recorded in JOB-EF2453D9F633.
+- **No `RESEND_API_KEY` reports success.** The run answers `200 {ok: true, sent: 0, skipped: 2}` although nothing was sent. This matches the body recorded in JOB-EF2453D9F633.
 - **An accepted-then-timed-out send is reported as `failed`.** The 502 invites a retry that duplicates the message for every recipient, not only the ambiguous one.
 - **The empty-recipient branch is unreachable today:** `superAdminEmails()` always contains the built-in admin. The test reaches it only by replacing the lookup.
 - **The paging holds under a server cap:**
@@ -148,6 +149,14 @@ Each change was made to the route in a scratch checkout only, and then reverted.
 | Always answer 200 | 4 failed: both one-recipient-fails cases, accept-then-timeout, partial-delivery status |
 | An in-process "already sent today" set in front of the send | 12 failed, including sequential repeat, repeat in the window, concurrent and both retry cases. The set persists across tests, hence the extra failures. |
 | Read only the first page instead of paging | 3 failed: 2,345-row paging, the 20,000/20,001 ceiling, the page-3 failure |
+
+**Controls on the contract tests themselves** (added after review at `05e86565`). Each was run in a scratch directory or checkout and then removed:
+
+| Check | Result |
+|---|---|
+| **C4 on zero attempts to the ambiguous recipient.** The earlier assertions compared `undefined` with `undefined`. | The earlier assertions **passed** vacuously. The current ones **fail**: they require exactly two attempts, a non-empty string key, equal keys and an identical request payload. A retry with a different payload also fails, and the true contract case passes. |
+| **C2 against a route that takes a claim before any read**, so the loser exits early | The earlier barrier, which needed both callers to reach the recipient read, **hung** until the test timed out. The current bounded barrier also opens when either call settles, or after 1 s, and C2 **passes** with one digest per admin. |
+| C1–C6 on current main after these changes | All 6 still **fail** and the control passes. C4 now fails on the key assertion (`expected 'object' to be 'string'`) after confirming the retry happened, rather than on an absent attempt. |
 
 ## Limitations
 

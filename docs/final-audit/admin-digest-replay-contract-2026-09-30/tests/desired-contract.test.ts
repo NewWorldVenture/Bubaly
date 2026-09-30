@@ -5,8 +5,9 @@
 // This file lives outside `tests/`, so `npm test` does not collect it; run it with
 //   npx vitest run --dir docs/final-audit/admin-digest-replay-contract-2026-09-30
 // The observed failure output is saved next to the README. When a fix lands, these
-// assertions are the acceptance test: move them into tests/ unchanged rather than
-// weakening them.
+// assertions are the acceptance test: move them into tests/, adapting imports and
+// fixtures to the fixed route as needed, but keep every behavioural requirement and
+// do not weaken any assertion.
 //
 // Same boundaries as tests/admin-digest-replay-contract.test.ts: the real handler,
 // cron auth, paging, recipient lookup and sendEmail; a fake database, a fake clock
@@ -14,7 +15,8 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { createInMemorySupabase, type InMemorySupabase } from '../../../../tests/helpers/in-memory-supabase';
 
-type Attempt = { to: string; html: string; idempotencyKey: string | null; accepted: boolean };
+/** `body` is the exact request payload, so a retry can be compared with the original. */
+type Attempt = { to: string; html: string; body: string; idempotencyKey: string | null; accepted: boolean };
 const state = vi.hoisted(() => ({
   db: null as unknown,
   attempts: [] as Attempt[],
@@ -84,7 +86,7 @@ beforeEach(() => {
     if (String(input) !== 'https://api.resend.com/emails') throw new Error('network is disabled in this hermetic test');
     const body = JSON.parse(String(init?.body)) as { to: string; html: string };
     const mode = state.mode[body.to] ?? 'accept';
-    state.attempts.push({ to: body.to, html: body.html, idempotencyKey: new Headers(init?.headers).get('idempotency-key'), accepted: mode !== 'refuse' });
+    state.attempts.push({ to: body.to, html: body.html, body: String(init?.body), idempotencyKey: new Headers(init?.headers).get('idempotency-key'), accepted: mode !== 'refuse' });
     if (mode === 'refuse') return new Response('{}', { status: 422 });
     if (mode === 'accept-then-timeout') throw new DOMException('The operation was aborted due to timeout', 'TimeoutError');
     return new Response('{"id":"msg"}', { status: 200 });
@@ -117,9 +119,18 @@ describe('admin-digest idempotency contract (UNRESOLVED on current main — expe
   it('C2 one occurrence, two concurrent calls: each admin receives exactly one digest', async () => {
     happen('2026-09-30T08:00:00Z', 'Signup Alpha');
     vi.setSystemTime(new Date('2026-09-30T12:30:00Z'));
+    // Bounded synchronisation. On current main both callers reach the recipient read and
+    // are held there until both have read, which forces the race. A correct fix may refuse
+    // the loser EARLIER (a claim before any read), so the gate also opens as soon as either
+    // call settles, and after at most 1 s of real time: an early refusal can never strand
+    // the winner, and the outcome below is the whole requirement.
     let release!: () => void;
-    state.barrier = { parties: 2, arrived: 0, release: () => release(), gate: new Promise<void>((r) => { release = r; }) };
-    await Promise.all([call(), call()]);
+    const gate = new Promise<void>((r) => { release = r; });
+    state.barrier = { parties: 2, arrived: 0, release: () => release(), gate };
+    const bound = setTimeout(() => release(), 1_000);
+    try {
+      await Promise.all([call(), call()].map((p) => p.finally(() => release())));
+    } finally { clearTimeout(bound); }
     expect(accepted()).toEqual(once());
   });
 
@@ -139,9 +150,16 @@ describe('admin-digest idempotency contract (UNRESOLVED on current main — expe
     await runAt('2026-09-30T12:30:00Z');
     state.mode = {};
     await runAt('2026-09-30T12:30:00Z');
-    const keys = state.attempts.filter((a) => a.to === SECOND).map((a) => a.idempotencyKey);
-    expect(keys[0]).not.toBeNull();
-    expect(keys[1]).toBe(keys[0]);
+    // Exactly one retry of the ambiguous send: the original and the retry.
+    const ambiguous = state.attempts.filter((a) => a.to === SECOND);
+    expect(ambiguous).toHaveLength(2);
+    const [first, retry] = ambiguous;
+    // A real key, the same key, and the same payload, so the provider can fold the retry into the original.
+    expect(typeof first.idempotencyKey).toBe('string');
+    expect(first.idempotencyKey).not.toBe('');
+    expect(retry.idempotencyKey).toBe(first.idempotencyKey);
+    expect(retry.body).toBe(first.body);
+    // The admin whose send was accepted cleanly is not sent again.
     expect(attempted()['admin-1']).toBe(1);
   });
 

@@ -83,7 +83,7 @@ async function fakeResend(input: unknown, init?: RequestInit): Promise<Response>
   state.attempts.push({ to: body.to, subject: body.subject, html: body.html, idempotencyKey: headers.get('idempotency-key'), accepted });
   if (mode === 'refuse') return new Response(JSON.stringify({ name: 'validation_error' }), { status: 422 });
   if (mode === 'network-error') throw new TypeError('fetch failed');
-  // Resend accepted it (it WILL be delivered), but the 15 s deadline fired before the answer arrived.
+  // The fake provider accepted it (a real one would go on to deliver it), but the 15 s deadline fired before the answer arrived.
   if (mode === 'accept-then-timeout') throw new DOMException('The operation was aborted due to timeout', 'TimeoutError');
   return new Response(JSON.stringify({ id: `msg_${state.attempts.length}` }), { status: 200 });
 }
@@ -166,7 +166,7 @@ const count = (pick: (a: Attempt) => boolean) => {
 };
 /** Provider calls the handler made, per recipient. */
 const attempted = () => count(() => true);
-/** Messages the provider accepted (what lands in an inbox), per recipient. */
+/** Messages the FAKE provider accepted, per recipient: this test's stand-in for delivery, not demonstrated inbox delivery. */
 const accepted = () => count((a) => a.accepted);
 const each = (n: number) => Object.fromEntries(recipients().map((r) => [alias(r), n]));
 
@@ -392,7 +392,7 @@ describe('admin-digest replay: current main, observed (not endorsed)', () => {
     const first = await runAt('2026-09-30T12:30:00Z');
     expect(first.status).toBe(502);
     expect(first.body).toMatchObject({ ok: false, sent: 1, failed: 1 });
-    expect(accepted()).toEqual(each(1)); // reported "failed", actually delivered
+    expect(accepted()).toEqual(each(1)); // reported "failed", yet the fake provider accepted it
 
     state.mode = {};
     await runAt('2026-09-30T12:30:00Z');
