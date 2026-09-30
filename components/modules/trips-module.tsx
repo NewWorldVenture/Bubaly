@@ -25,7 +25,7 @@ import {
 } from '@/lib/trips/planner';
 import type { Tables, TripStatus } from '@/lib/database.types';
 import { useTranslations } from '@/components/i18n/locale-provider';
-import { useFormat } from '@/components/i18n/use-format';
+import { useFamilyClock, useFormat } from '@/components/i18n/use-format';
 import { useConfirm } from '@/components/ui/confirm';
 
 type Trip = Tables<'trips'>;
@@ -43,11 +43,6 @@ const KIND_ICON: Record<TripItemKind, typeof Luggage> = {
 };
 const KIND_ORDER: TripItemKind[] = ['packing', 'todo', 'reservation', 'document'];
 
-function todayKey(): string {
-  const d = new Date();
-  return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
-}
-
 const blankTrip = {
   id: '', name: '', destination: '', start_date: '', end_date: '',
   status: 'planning' as TripStatus, traveler_ids: [] as string[], notes: '',
@@ -55,6 +50,7 @@ const blankTrip = {
 
 export function TripsModule() {
   const format = useFormat();
+  const clock = useFamilyClock();
   const tr = useTranslations();
   const askConfirm = useConfirm();
   const { familyId, userId, members, role } = useApp();
@@ -84,7 +80,8 @@ export function TripsModule() {
   });
 
   const memberName = (id: string | null) => members.find((m) => m.id === id)?.display_name ?? null;
-  const tk = todayKey();
+  // The FAMILY's today (TIME-003), not the phone's.
+  const tk = clock.todayKey();
 
   const itemsByTrip = useMemo(() => {
     const map = new Map<string, TripItem[]>();

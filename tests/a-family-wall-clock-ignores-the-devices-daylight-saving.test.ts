@@ -26,6 +26,8 @@ import { detectRoutines, materializeRoutine, templateFromSuggestion } from '@/li
 import { wallFromKey, wallMonthStart, wallWeekStart, wallKey } from '@/lib/time/wall-clock';
 import { addDays as addPracticeDays } from '@/lib/language/practice';
 import { sessionStreak, weeklyPlan } from '@/lib/declutter/missions';
+import { streaksByMember } from '@/lib/chores/dashboard';
+import { upcomingRides } from '@/lib/rides/schedule';
 
 const HOST_ZONE = process.env.TZ;
 afterEach(() => { process.env.TZ = HOST_ZONE; });
@@ -266,6 +268,49 @@ describe('a routine seen, saved and applied on the family\'s clock (review 53716
     expect(src).toMatch(/detectRoutines\(events, \{[^}]*\btimeZone\b[^}]*\}\)/);
     expect(src).toContain('templateFromSuggestion(s)');
     expect(src).toMatch(/materializeRoutine\([\s\S]{0,400}?weekStartMonday, 1, timeZone,/);
+  });
+});
+
+describe('rides and chore streaks read the family\'s day (#688 review comments 5920088211, 5920088767)', () => {
+  const member = { id: 'm1', display_name: 'Kid', color: null };
+  const approved = (at: string) => ({ id: at, chore_id: 'c', member_id: 'm1', status: 'approved', approved_at: at, submitted_at: at, points_awarded: 1 }) as never;
+
+  it('a Los Angeles phone keeps a UTC family\'s two-day chore streak alive', () => {
+    onDevice('America/Los_Angeles');
+    const clock = clockFor('UTC');
+    const now = new Date('2026-10-01T02:30:00Z');
+    const rows = [approved('2026-09-29T00:30:00Z'), approved('2026-09-30T00:30:00Z')];
+    expect(streaksByMember([member], rows, clock.todayKey(now), clock.timeZone).map((r) => r.days)).toEqual([2]);
+  });
+
+  it('a UTC phone keeps a Tokyo family\'s two-day chore streak alive', () => {
+    onDevice('UTC');
+    const clock = clockFor('Asia/Tokyo');
+    const now = new Date('2026-09-30T16:30:00Z');
+    const rows = [approved('2026-09-28T16:00:00Z'), approved('2026-09-29T16:00:00Z')];
+    expect(streaksByMember([member], rows, clock.todayKey(now), clock.timeZone).map((r) => r.days)).toEqual([2]);
+  });
+
+  it('upcoming rides are the family\'s today and later, on any phone', () => {
+    const ride = (id: string, ride_date: string) => ({ id, title: id, ride_date, pickup_time: null, dropoff_time: null, driver_id: null, rider_ids: [], status: 'planned' }) as never;
+    const rides = [ride('yesterday', '2026-09-29'), ride('today', '2026-09-30'), ride('tomorrow', '2026-10-01')];
+    // A UTC family at 22:30Z on 30 September, seen from Tokyo (already 1 October there).
+    onDevice('Asia/Tokyo');
+    expect(upcomingRides(rides, clockFor('UTC').todayKey(new Date('2026-09-30T22:30:00Z'))).map((r: { id: string }) => r.id)).toEqual(['today', 'tomorrow']);
+    // A UTC family at 02:30Z on 1 October, seen from Los Angeles (still 30 September there).
+    onDevice('America/Los_Angeles');
+    expect(upcomingRides(rides, clockFor('UTC').todayKey(new Date('2026-10-01T02:30:00Z'))).map((r: { id: string }) => r.id)).toEqual(['tomorrow']);
+  });
+
+  it.each(['rides', 'renewals', 'signups', 'trips'])('%s selects on the family\'s today, with no device todayKey left', (name) => {
+    const src = readFileSync(join(__dirname, '..', `components/modules/${name}-module.tsx`), 'utf8');
+    expect(src).toContain('const tk = clock.todayKey();');
+    expect(src).not.toMatch(/function todayKey\(/);
+  });
+
+  it('the chores sidebar buckets completions in the family\'s zone', () => {
+    const src = readFileSync(join(__dirname, '..', 'components/modules/chores-module.tsx'), 'utf8');
+    expect(src).toContain('streaksByMember(members, asgLike(data), clock.todayKey(), clock.timeZone)');
   });
 });
 

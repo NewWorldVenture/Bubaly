@@ -26,7 +26,7 @@ import {
 } from '@/lib/opportunities/deadlines';
 import type { Tables, OpportunityStatus } from '@/lib/database.types';
 import { useTranslations } from '@/components/i18n/locale-provider';
-import { useFormat } from '@/components/i18n/use-format';
+import { useFamilyClock, useFormat } from '@/components/i18n/use-format';
 import { useConfirm } from '@/components/ui/confirm';
 import { safeWebLink } from '@/lib/utils/safe-link';
 
@@ -46,11 +46,6 @@ const STATUS_STYLES: Record<OpportunityStatus, string> = {
   missed: 'text-rose-300 bg-rose-500/10 border-rose-500/30',
 };
 
-function todayKey(): string {
-  const d = new Date();
-  return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
-}
-
 const blank = {
   id: '', member_id: '', title: '', category: 'camp', url: '', cost: '',
   opens_at: '', deadline: '', status: 'interested' as OpportunityStatus, notes: '',
@@ -58,6 +53,7 @@ const blank = {
 
 export function SignupsModule() {
   const format = useFormat();
+  const clock = useFamilyClock();
   const t = useTranslations();
   const askConfirm = useConfirm();
   const { familyId, userId, members, role } = useApp();
@@ -76,7 +72,8 @@ export function SignupsModule() {
   });
 
   const memberName = (id: string | null) => members.find((m) => m.id === id)?.display_name ?? null;
-  const tk = todayKey();
+  // The FAMILY's today (TIME-003), not the phone's.
+  const tk = clock.todayKey();
 
   const visible = useMemo(() => {
     let list = opps ?? [];

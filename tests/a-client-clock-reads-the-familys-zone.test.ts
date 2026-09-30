@@ -96,6 +96,13 @@ const EXEMPT: Record<string, string> = {
 };
 
 const INSTANT_ONLY = /\/\/ instant: \S/;
+// A `datetime-local` box's default, read on the phone's clock: the disclosed
+// TIME-003 remaining scope (those forms move with their save paths, separately).
+const DEVICE_INPUT = /\/\/ device-input: \S/;
+// `const d = new Date();` and then `d.getDate()` a line or two later: the same
+// device read as `new Date().getDate()`, split across lines where a per-line
+// scan cannot see it (review of #688, rides-module's todayKey).
+const DEVICE_NOW_ALIAS = /(?:const|let)\s+(\w+)\s*=\s*new Date\(\)\s*;/g;
 const FAMILY_ZONE_ARG = /timeZone: (?:clock|familyClock)\.timeZone\b/;
 
 const ROOTS = ['app', 'components', 'lib'];
@@ -126,6 +133,16 @@ function scan(path: string, src: string): string[] {
       if (re.test(code)) hits.push(`${path}:${i + 1} [${name}] ${line.trim()}`);
     }
   });
+  const lines = src.split('\n');
+  for (const decl of src.matchAll(DEVICE_NOW_ALIAS)) {
+    const after = src.slice(decl.index! + decl[0].length, decl.index! + decl[0].length + 400);
+    const use = new RegExp(`\\b${decl[1]}\\.(?:get(?:FullYear|Month|Date|Day|Hours|Minutes)|set(?:Date|Hours))\\(`).exec(after);
+    if (!use) continue;
+    const declLine = src.slice(0, decl.index).split('\n').length;
+    const useLine = src.slice(0, decl.index! + decl[0].length + use.index).split('\n').length;
+    const marked = [declLine, useLine].some((n) => INSTANT_ONLY.test(lines[n - 1]) || DEVICE_INPUT.test(lines[n - 1]));
+    if (!marked) hits.push(`${path}:${useLine} [new Date() alias read in local fields] ${lines[useLine - 1].trim()}`);
+  }
   return hits;
 }
 
@@ -160,6 +177,10 @@ describe('a client component reads the family\'s clock, not the device\'s (TIME-
     for (const line of probe) {
       expect(deviceClockHits([{ path: 'probe.tsx', src: line }]), line).toHaveLength(1);
     }
+    // Split across lines, as rides-module's todayKey() was.
+    const alias = 'function todayKey() {\n  const d = new Date();\n  return `${d.getFullYear()}-${d.getMonth() + 1}`;\n}';
+    expect(deviceClockHits([{ path: 'probe.tsx', src: alias }])).toHaveLength(1);
+    expect(deviceClockHits([{ path: 'probe.tsx', src: alias.replace('new Date();', 'new Date(); // device-input: the form box default') }])).toEqual([]);
     // And what it must NOT flag: numbers, the device zone's name, a formatter
     // that was handed the family's zone, calendar arithmetic on wall dates.
     const clean = [

@@ -260,8 +260,10 @@ function LogForm({ familyId, userId, memberId, existing, onClose, onSaved }: { f
   const t = useTranslations();
   const { error: toastError } = useToast();
   const [loading, setLoading] = useState(false);
-  const defaultBed = useMemo(() => { const d = new Date(); d.setDate(d.getDate() - 1); d.setHours(21, 30, 0, 0); return existing ? new Date(existing.bedtime) : d; }, [existing]);
-  const defaultWake = useMemo(() => { const d = new Date(); d.setHours(7, 0, 0, 0); return existing ? new Date(existing.wake_time) : d; }, [existing]);
+  // The bedtime/wake datetime-local defaults: this form's save path still reads
+  // the device clock (TIME-003 remaining scope).
+  const defaultBed = useMemo(() => { const d = new Date(); d.setDate(d.getDate() - 1); d.setHours(21, 30, 0, 0); return existing ? new Date(existing.bedtime) : d; }, [existing]); // device-input: datetime-local default
+  const defaultWake = useMemo(() => { const d = new Date(); d.setHours(7, 0, 0, 0); return existing ? new Date(existing.wake_time) : d; }, [existing]); // device-input: datetime-local default
 
   async function onSubmit(e: React.FormEvent<HTMLFormElement>) {
     e.preventDefault();

@@ -124,7 +124,7 @@ export function ChoresModule() {
 
   const earners = useMemo(() => topEarners(members, asgLike(windowed)), [members, windowed]);
   const pointsMap = useMemo(() => pointsByMember(asgLike(windowed)), [windowed]);
-  const streaks = useMemo(() => streaksByMember(members, asgLike(data), clock.todayKey()), [members, data, clock]);
+  const streaks = useMemo(() => streaksByMember(members, asgLike(data), clock.todayKey(), clock.timeZone), [members, data, clock]);
   const familyPoints = useMemo(() => totalFamilyPoints(asgLike(windowed)), [windowed]);
   const progress = useMemo(() => rewardsProgress(members, asgLike(data), rewards ?? []), [members, data, rewards]);
 

@@ -156,7 +156,7 @@ export function SchoolModule() {
   const [gradeForm, setGradeForm] = useState({ member_id: '', subject: '', title: '', grade: '', grade_type: 'test' as GradeType, score: '', max_score: '100', date: '' });
 
   const now = useMemo(() => new Date().toISOString(), []);
-  const in14 = useMemo(() => { const d = new Date(); d.setDate(d.getDate() + 14); return d.toISOString(); }, []);
+  const in14 = useMemo(() => { const d = new Date(); d.setDate(d.getDate() + 14); return d.toISOString(); }, []); // instant: an absolute query bound, roughly two weeks from now
   // The FAMILY's weekday (TIME-003), read off its date key.
   const today = useMemo(() => new Date(`${clock.todayKey()}T00:00:00Z`).getUTCDay(), [clock]);
 

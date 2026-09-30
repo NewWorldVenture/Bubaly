@@ -364,12 +364,13 @@ function StartModal({ template, launching, initialDate, onClose, onLaunch }: {
   onClose: () => void; onLaunch: (date: string | null) => void;
 }) {
   const tr = useTranslations();
+  const clock = useFamilyClock();
+  // The family's day, `defaultLeadDays` on (TIME-003). This read Greenwich's
+  // date of the phone's clock, a day off either side of midnight UTC.
   const defaultDate = useMemo(() => {
     if (initialDate) return initialDate;
-    const d = new Date();
-    d.setDate(d.getDate() + template.defaultLeadDays);
-    return d.toISOString().slice(0, 10);
-  }, [template.defaultLeadDays, initialDate]);
+    return clock.wallKey(clock.addDays(clock.wallToday(), template.defaultLeadDays));
+  }, [template.defaultLeadDays, initialDate, clock]);
   const [date, setDate] = useState(defaultDate);
   return (
     <Modal open onClose={onClose} title={tr('itemAction.startTitled', { name: template.title })} description={template.description}>
