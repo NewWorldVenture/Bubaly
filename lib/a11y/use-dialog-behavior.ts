@@ -13,6 +13,52 @@ const openDialogs: symbol[] = [];
 const scrollLocks: symbol[] = [];
 let overflowBeforeLock = '';
 
+// Where focus was before it entered a dialog (MAIN-F-D04). A field inside the
+// dialog with `autoFocus` takes focus while React commits the dialog, BEFORE the
+// effect below runs, so `document.activeElement` there is already inside the
+// dialog. The effect saved that field as "previously focused"; the field was
+// removed on close, and focus fell to <body> (Quick capture and the wallet's
+// dialogs, reproduced 2026-09-30). Recording focus as it moves still holds the
+// trigger when the effect runs.
+const FOCUS_HISTORY = 8;
+const focusHistory: HTMLElement[] = [];
+let trackingFocus = false;
+function trackFocus(): void {
+  if (trackingFocus || typeof document === 'undefined') return;
+  trackingFocus = true;
+  document.addEventListener('focusin', (event) => {
+    const target = event.target as HTMLElement | null;
+    if (!target || typeof target.focus !== 'function') return;
+    const at = focusHistory.indexOf(target);
+    if (at >= 0) focusHistory.splice(at, 1);
+    focusHistory.push(target);
+    if (focusHistory.length > FOCUS_HISTORY) focusHistory.shift();
+  }, true);
+}
+// Installed when the module loads, so the trigger's focus is seen before any
+// dialog opens.
+trackFocus();
+
+/** The most recent focus outside `dialog`, from before focus entered it. */
+function openerFromHistory(dialog: HTMLElement): HTMLElement | null {
+  for (let i = focusHistory.length - 1; i >= 0; i -= 1) {
+    const candidate = focusHistory[i];
+    if (candidate.isConnected && !dialog.contains(candidate)) return candidate;
+  }
+  return null;
+}
+
+/**
+ * The opener went with the content that held it (a deleted row): land on the
+ * page's main landmark, the skip link's target, rather than on <body>.
+ */
+function focusMainLandmark(): void {
+  const main = (document.getElementById?.('main-content') ?? document.querySelector?.('main')) as HTMLElement | null;
+  if (!main) return;
+  if (!main.hasAttribute('tabindex')) main.setAttribute('tabindex', '-1');
+  main.focus({ preventScroll: true });
+}
+
 /**
  * What `aria-modal="true"` actually promises, as a hook.
  *
@@ -35,7 +81,9 @@ let overflowBeforeLock = '';
  *   - Tab and Shift+Tab cycle WITHIN it and cannot escape;
  *   - Escape closes, when the caller supplies `onClose`;
  *   - the background is scroll-locked;
- *   - focus returns to whatever had it, on close.
+ *   - focus returns to whatever had it before the dialog opened (even when a
+ *     field inside took focus with `autoFocus`), or to the main landmark if
+ *     that element is gone.
  *
  * A gate that must not be dismissed (a paywall, a lock screen) passes no
  * `onClose` and keeps the trap without an exit, which is the correct shape for
@@ -82,7 +130,12 @@ export function useDialogBehavior(
     const token = Symbol('dialog');
     openDialogs.push(token);
 
-    const previouslyFocused = document.activeElement as HTMLElement | null;
+    let previouslyFocused = document.activeElement as HTMLElement | null;
+    // `autoFocus` inside the dialog already moved focus: the opener is in the
+    // focus history, not in `document.activeElement`.
+    if (!previouslyFocused || previouslyFocused === document.body || dialog.contains(previouslyFocused)) {
+      previouslyFocused = openerFromHistory(dialog) ?? previouslyFocused;
+    }
 
     const focusables = () => Array.from(dialog.querySelectorAll<HTMLElement>(FOCUSABLE))
       .filter((el) => el.offsetParent !== null || el === dialog);
@@ -131,7 +184,9 @@ export function useDialogBehavior(
         // The lock lifts only when the last dialog holding it has closed.
         if (scrollLocks.length === 0) document.body.style.overflow = overflowBeforeLock;
       }
-      previouslyFocused?.focus?.();
+      if (previouslyFocused && previouslyFocused !== document.body && previouslyFocused.isConnected !== false
+        && !previouslyFocused.closest?.('[inert]')) previouslyFocused?.focus?.();
+      if (document.activeElement !== previouslyFocused || previouslyFocused === document.body) focusMainLandmark();
     };
   }, [ref, open, lockScroll]);
 }
