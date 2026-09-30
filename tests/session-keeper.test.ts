@@ -254,6 +254,19 @@ describe('SessionKeeper identity reconciliation', () => {
     expect(mocks.getSession).toHaveBeenCalledTimes(1);
   });
 
+  it('retries an unchanged verified mismatch on a later lifecycle event if server props never reconciled', async () => {
+    render(); await settle();
+    emit('SIGNED_IN', 'user-b'); await settle();
+    expect(mocks.router.refresh).toHaveBeenCalledTimes(1);
+    // router.refresh has no completion receipt: a failed request leaves the
+    // server userId prop at A while the verified client identity remains B.
+    mocks.getSession.mockResolvedValue(result('user-b'));
+    vi.setSystemTime(30_000);
+    windowTarget.dispatchEvent(new Event('online')); await settle();
+    expect(mocks.router.refresh).toHaveBeenCalledTimes(2);
+    expect(mocks.getSession).toHaveBeenCalledTimes(2);
+  });
+
   it('ignores a stale empty read after a later same-user sign-in event', async () => {
     const pending = deferred<SessionResult>();
     mocks.getSession.mockReturnValue(pending.promise);
