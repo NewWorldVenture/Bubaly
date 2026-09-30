@@ -168,10 +168,15 @@ describe('bounded reconciliation never authorizes an unverified session', () => 
     expect(vi.getTimerCount()).toBe(0);
   });
 
-  it('an older cookie-bound SDK event cannot erase a newer unverified claim', async () => {
+  it('an older cookie-bound read or SDK event cannot erase a newer unverified claim', async () => {
     connect(); await settle();
     emit('SIGNED_IN', session(B, S2)); emit('SIGNED_IN', session(C, S3));
-    saveCookies(session(B, S2)); emit('SIGNED_IN', session(B, S2));
+    // Both claims precede the queued read, but only the latest claim C can
+    // authorize adoption before the settling episode has refuted it.
+    saveCookies(session(B, S2)); mocks.getSession.mockResolvedValue(reply(session(B, S2)));
+    await settle();
+    expect(getCacheSessionSnapshot().status).toBe('unavailable');
+    emit('SIGNED_IN', session(B, S2));
     expect(getCacheSessionSnapshot().status).toBe('unavailable');
     saveCookies(session(C, S3)); mocks.getSession.mockResolvedValue(reply(session(C, S3)));
     emit('SIGNED_IN', session(C, S3));
@@ -197,6 +202,16 @@ describe('bounded reconciliation never authorizes an unverified session', () => 
     expect(mocks.getSession.mock.calls.length - base).toBe(16);
     expect(getCacheSessionSnapshot()).toMatchObject({ status: 'ready', identity: { userId: B, sessionId: S2 } });
     expect(vi.getTimerCount()).toBe(0);
+    // Exhaustion must still remember a later claim after adoption cleared the
+    // earlier hold; an old cookie-bound callback cannot revive B behind C.
+    const scopeB = scope();
+    emit('SIGNED_IN', session(C, S3)); emit('TOKEN_REFRESHED', session(B, S2));
+    expect(getCacheSessionSnapshot().status).toBe('unavailable');
+    expect(isAuthenticatedCacheScopeCurrent(scopeB)).toBe(false);
+    expect(mocks.getSession.mock.calls.length - base).toBe(16);
+    expect(vi.getTimerCount()).toBe(0);
+    saveCookies(session(C, S3)); emit('SIGNED_IN', session(C, S3));
+    expect(getCacheSessionSnapshot()).toMatchObject({ status: 'ready', identity: { userId: C, sessionId: S3 } });
   });
 
   it('exhaustion cannot let a stale event retain A after current cookies become B', async () => {
