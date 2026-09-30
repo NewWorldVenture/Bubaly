@@ -223,7 +223,9 @@ test('same-turn duplicate Google handlers dispatch only one owned initiation', a
   await page.evaluate(async () => { window.__oauthInitiation.release(); await window.__oauthInitiation.settle(); });
   expect.soft(await page.evaluate(() => window.__oauthInitiation.initiations)).toBe(1);
   expect.soft(await page.evaluate(() => window.__oauthInitiation.verifierWrites)).toBe(1);
-  expect.soft(state.authorizations.length).toBe(1);
+  // The provider redirect is a navigation: it reaches the route handler a few
+  // milliseconds after the click handler settles, so wait for it.
+  await expect.poll(() => state.authorizations.length).toBe(1);
   expect(await page.evaluate(() => window.__oauthInitiation.errors)).toEqual([]);
 });
 
@@ -253,7 +255,10 @@ test('a newer tab claims OAuth before either verifier write so releasing the old
   expect.soft(await page.evaluate(() => window.__oauthInitiation.verifierWrites), 'The superseded older tab must not publish a verifier').toBe(0);
 
   await newerPage.evaluate(async () => { window.__oauthInitiation.release(); await window.__oauthInitiation.settle(); });
-  expect.soft(newer.authorizations.length, 'The newest intent alone reaches the provider').toBe(1);
+  await expect.poll(() => newer.authorizations.length, { message: 'The newest intent alone reaches the provider' }).toBe(1);
+  // Checked again once the newer redirect has arrived, so a late navigation
+  // from the superseded tab cannot slip past the first read.
+  expect.soft(older.authorizations.length, 'The superseded older tab must not navigate late either').toBe(0);
   expect.soft(await newerPage.evaluate(() => window.__oauthInitiation.verifierWrites)).toBe(1);
   const cookies: Array<{ name: string; value: string }> = JSON.parse(await newerPage.evaluate(() => window.__oauthInitiation.cookies()));
   const record = parsePkceInitiationRecord(cookies.find(cookie => cookie.name === `${key}-pkce-initiation`)?.value);
