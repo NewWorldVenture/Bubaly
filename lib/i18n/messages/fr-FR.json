@@ -875,6 +875,7 @@
   "adminCredential.secret": "La clé configurée a le bon format (sb_secret_…). Vérifiez si elle appartient à un autre projet ou si elle a été révoquée.",
   "adminCredential.unknown": "La clé configurée ne correspond à aucun format de clé Supabase connu.",
   "adminDigest.notificationFeedUnavailable": "Fil de notifications indisponible.",
+  "adminDigest.recipientsUnavailable": "Liste des destinataires super-administrateurs indisponible.",
   "adminDigest.unauthorized": "Non autorisé",
   "adminFeedback.couldNotDeleteIdea": "Impossible de supprimer l’idée.",
   "adminFeedback.couldNotPinIdea": "Impossible d’épingler l’idée.",

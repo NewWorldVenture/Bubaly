@@ -2,12 +2,12 @@ import fs from 'node:fs';
 import path from 'node:path';
 import ts from 'typescript';
 import { expect, test, type Page } from '@playwright/test';
+import { reactBrowserScripts } from './helpers/react-browser';
 
 // Execute the production component with real React/DOM and browser EventTargets.
 // Only the service-worker boundary is controlled: no Supabase account, Next
 // server, network provider or persistent browser profile is needed for this suite.
-const react = fs.readFileSync(path.join(path.dirname(require.resolve('react/package.json')), 'umd/react.production.min.js'), 'utf8');
-const reactDom = fs.readFileSync(path.join(path.dirname(require.resolve('react-dom/package.json')), 'umd/react-dom.production.min.js'), 'utf8');
+const { react, reactDom } = reactBrowserScripts('production');
 const component = ts.transpileModule(fs.readFileSync('components/pwa/register-sw.tsx', 'utf8'), {
   compilerOptions: { target: ts.ScriptTarget.ES2020, module: ts.ModuleKind.CommonJS, jsx: ts.JsxEmit.React },
 }).outputText;
