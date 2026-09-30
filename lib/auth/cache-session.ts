@@ -447,8 +447,11 @@ function readCacheSession(options: { force?: boolean }, autonomous: boolean): Pr
       }
       if (episode.unverified) {
         const claimed = key === episode.latestClaim;
-        const recovered = episode.exhausted && !autonomous && claimRevision === episode.claimRevision;
-        if (!claimed && !recovered) {
+        // A lifecycle/storage read is not an ownership transition. Even when
+        // no newer event arrived during it, a prior claim may still be ahead
+        // of its cookie write. Exhaustion cannot refute that claim or make an
+        // old cookie-bound receipt authoritative again.
+        if (!claimed) {
           // Still withheld for a claimed new owner; keep what cookies say for
           // when that claim is refuted.
           episode.held = { session: data.session };

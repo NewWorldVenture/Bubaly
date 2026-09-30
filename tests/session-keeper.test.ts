@@ -114,6 +114,25 @@ afterEach(() => {
 });
 
 describe('SessionKeeper identity reconciliation', () => {
+  it.each(['user-b', null])('refreshes once when autonomous cookie verification adopts %s without a storage notice', async (nextUser) => {
+    vi.useFakeTimers();
+    render(); await settle();
+    // The event arrives before its cookies. The immediate read still names A.
+    mocks.authCallback!(nextUser ? 'SIGNED_IN' : 'SIGNED_OUT', nextUser ? session(nextUser) : null);
+    await vi.advanceTimersByTimeAsync(0);
+    expect(mocks.router.refresh).not.toHaveBeenCalled();
+    expect(mocks.getSession).toHaveBeenCalledTimes(2);
+    saveCookies(nextUser); mocks.getSession.mockResolvedValue(result(nextUser));
+    await vi.advanceTimersByTimeAsync(50);
+    expect(mocks.router.refresh).toHaveBeenCalledTimes(1);
+    expect(mocks.getSession).toHaveBeenCalledTimes(3);
+    // The remaining verification read shares the same accepted snapshot and
+    // must not cause a second refresh or an extra notification-triggered read.
+    await vi.advanceTimersByTimeAsync(1_000);
+    expect(mocks.router.refresh).toHaveBeenCalledTimes(1);
+    expect(mocks.getSession).toHaveBeenCalledTimes(4);
+  });
+
   it('reconciles an explicit cookie removal inside the ordinary focus throttle', async () => {
     render(); await settle();
     saveCookies(null); mocks.getSession.mockResolvedValue(result(null));
@@ -216,6 +235,25 @@ describe('SessionKeeper identity reconciliation', () => {
     expect(mocks.getSession).not.toHaveBeenCalled();
   });
 
+  it('coalesces each snapshot/event pair without dropping a later verified change in the same turn', async () => {
+    render(); await settle();
+    emit('SIGNED_IN', 'user-b');
+    expect(mocks.router.refresh).toHaveBeenCalledTimes(1);
+    emit('SIGNED_OUT', null);
+    expect(mocks.router.refresh).toHaveBeenCalledTimes(2);
+    await settle();
+    expect(mocks.router.refresh).toHaveBeenCalledTimes(2);
+    expect(mocks.getSession).toHaveBeenCalledTimes(1);
+  });
+
+  it('preserves a later token refresh when the cache identity has not changed', async () => {
+    render(); await settle();
+    emit('TOKEN_REFRESHED'); await settle();
+    emit('TOKEN_REFRESHED'); await settle();
+    expect(mocks.router.refresh).toHaveBeenCalledTimes(2);
+    expect(mocks.getSession).toHaveBeenCalledTimes(1);
+  });
+
   it('ignores a stale empty read after a later same-user sign-in event', async () => {
     const pending = deferred<SessionResult>();
     mocks.getSession.mockReturnValue(pending.promise);
@@ -298,6 +336,8 @@ describe('SessionKeeper lifecycle and cleanup', () => {
     mocks.getSession.mockReturnValue(pending.promise);
     render();
     windowTarget.dispatchEvent(new Event('focus'));
+    await settle();
+    expect(mocks.getSession).toHaveBeenCalledTimes(1); // genuinely in flight before disposal
     const callback = mocks.authCallback!;
     unmount();
     pending.resolve(result(null));
@@ -308,6 +348,17 @@ describe('SessionKeeper lifecycle and cleanup', () => {
     await settle();
     expect(mocks.unsubscribe).toHaveBeenCalledTimes(1);
     expect(mocks.getSession).toHaveBeenCalledTimes(1);
+    expect(mocks.router.refresh).not.toHaveBeenCalled();
+  });
+
+  it('cancels bootstrap before the SDK call when immediately unmounted', async () => {
+    render();
+    const callback = mocks.authCallback!;
+    unmount();
+    callback('SIGNED_OUT', null);
+    await settle();
+    expect(mocks.unsubscribe).toHaveBeenCalledTimes(1);
+    expect(mocks.getSession).not.toHaveBeenCalled();
     expect(mocks.router.refresh).not.toHaveBeenCalled();
   });
 

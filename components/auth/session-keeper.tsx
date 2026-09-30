@@ -20,7 +20,7 @@
 import { useEffect } from 'react';
 import { useRouter } from 'next/navigation';
 import { isNative } from '@/lib/native/capacitor';
-import { getCacheSessionSnapshot, refreshCacheSession, subscribeCacheAuthEvents } from '@/lib/auth/cache-session';
+import { getCacheSessionSnapshot, refreshCacheSession, subscribeCacheAuthEvents, subscribeCacheSession } from '@/lib/auth/cache-session';
 import { subscribeSessionStorageChanges } from '@/lib/auth/session-change';
 
 /** Don't re-check more than this often; the triggers below can arrive in bursts. */
@@ -34,6 +34,26 @@ export function SessionKeeper({ userId }: { userId: string }) {
     let lastRevive = -Infinity;
     let authRevision = 0;
     let lastRead = 0;
+    let refreshedRevision = -1;
+    let refreshRequested = false;
+    const refreshServerTree = () => {
+      const revision = getCacheSessionSnapshot().revision;
+      if (disposed || (refreshRequested && refreshedRevision === revision)) return;
+      refreshRequested = true;
+      refreshedRevision = revision;
+      router.refresh();
+      // A verified snapshot and its SDK event can arrive in the same turn.
+      // Preserve later TOKEN_REFRESHED/USER_UPDATED events even when the cache
+      // identity itself has not changed. A different verified revision in the
+      // same turn must still refresh: the earlier request used older cookies.
+      void Promise.resolve().then(() => { refreshRequested = false; });
+    };
+    const reconcileVerifiedIdentity = () => {
+      const session = getCacheSessionSnapshot();
+      if (disposed || session.error || session.revision === refreshedRevision
+        || (session.status !== 'ready' && session.status !== 'signed-out')) return;
+      if ((session.identity?.userId ?? null) !== userId) refreshServerTree();
+    };
 
     // `getSession()` reads the stored session and refreshes it when the access
     // token has expired, so this is "make sure we're still current" — never a
@@ -52,9 +72,7 @@ export function SessionKeeper({ userId }: { userId: string }) {
           || (session.status !== 'ready' && session.status !== 'signed-out')) return;
         // Server POST sign-out clears cookies without broadcasting an auth
         // event to other tabs. Reconcile their rendered identity on return.
-        if ((session.identity?.userId ?? null) !== userId) {
-          router.refresh();
-        }
+        reconcileVerifiedIdentity();
       }).catch(() => { /* offline; the next lifecycle event retries */ });
     };
     const revive = () => reconcile();
@@ -69,9 +87,13 @@ export function SessionKeeper({ userId }: { userId: string }) {
       // so the redirect stays in one place instead of being duplicated here.
       if (event === 'TOKEN_REFRESHED' || event === 'SIGNED_OUT' || event === 'USER_UPDATED'
         || ((event === 'SIGNED_IN' || event === 'INITIAL_SESSION') && observedUserId && observedUserId !== userId)) {
-        router.refresh();
+        refreshServerTree();
       }
     });
+    // Autonomous conflict verification can finish after our own lifecycle read
+    // was superseded. Observe only its accepted snapshot; do not issue another
+    // SDK read or a synthetic storage notification outside the shared budget.
+    const stopSnapshots = subscribeCacheSession(reconcileVerifiedIdentity);
     // Cookie changes are explicit user actions, so they bypass foreground
     // throttling and share the store's newly invalidated session read.
     const stopStorageChanges = subscribeSessionStorageChanges(() => reconcile(true));
@@ -107,6 +129,7 @@ export function SessionKeeper({ userId }: { userId: string }) {
     return () => {
       disposed = true;
       unsubscribe();
+      stopSnapshots();
       stopStorageChanges();
       document.removeEventListener('visibilitychange', onVisible);
       window.removeEventListener('focus', revive);
