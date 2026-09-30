@@ -2,12 +2,12 @@ import fs from 'node:fs';
 import path from 'node:path';
 import ts from 'typescript';
 import { expect, test, type Page } from '@playwright/test';
+import { reactBrowserScripts } from './helpers/react-browser';
 
 // Actual password/child-token/signup ownership helpers, OAuthButtons, browser
 // storage and installed SDK. Only provider HTTP and scheduling seams are held.
 // Intercepted OAuth navigation records dispatch without leaving the fixture.
-const react = fs.readFileSync(path.join(path.dirname(require.resolve('react/package.json')), 'umd/react.development.js'), 'utf8');
-const reactDom = fs.readFileSync(path.join(path.dirname(require.resolve('react-dom/package.json')), 'umd/react-dom.development.js'), 'utf8');
+const { react, reactDom } = reactBrowserScripts('development');
 const sdk = fs.readFileSync(path.join(path.dirname(require.resolve('@supabase/supabase-js/package.json')), 'dist/umd/supabase.js'), 'utf8');
 const isolated = new Set(['react', 'lucide-react', '@/lib/utils/cn', '@capacitor/core', '@capacitor/haptics']);
 const modules: Record<string, { source: string; imports: Record<string, string> }> = {};
@@ -209,13 +209,18 @@ for (const kind of ['oauth', 'signup'] as const) for (const first of ['password'
         expect.soft(await signingIn, 'Older password response must refuse adoption after newer initiation reservation').toBe(false);
         expect.soft(await page.evaluate(() => window.__authInitiationOrder.sessionUser()), 'Original A should survive while newer initiation owns pending choice').toBe(users.a);
         await page.evaluate(() => window.__authInitiationOrder.release()); await initiating;
-        expect.soft(kind === 'oauth' ? state.authorizations.length : signupRequests, 'Newer initiation should remain usable').toBe(1);
+        // The OAuth redirect is a navigation: it reaches the route handler a few
+        // milliseconds after the click handler settles, so wait for it.
+        await expect.poll(() => kind === 'oauth' ? state.authorizations.length : signupRequests, { message: 'Newer initiation should remain usable' }).toBe(1);
       } else {
         await page.evaluate(() => window.__authInitiationOrder.release()); await initiating;
         expect.soft(kind === 'oauth' ? state.authorizations.length : signupRequests, 'Older initiation should not dispatch after a newer password decision').toBe(0);
         releasePassword();
         expect.soft(await signingIn, 'Newer password response remains usable').toBe(true);
         expect.soft(await page.evaluate(() => window.__authInitiationOrder.sessionUser())).toBe(users.b);
+        // Checked again once the password round trip is done, so a late
+        // redirect from the older initiation cannot slip past the first read.
+        expect.soft(kind === 'oauth' ? state.authorizations.length : signupRequests, 'Older initiation should not dispatch late either').toBe(0);
       }
     } finally { releasePassword(); await page.evaluate(() => window.__authInitiationOrder.release()).catch(() => {}); }
   });

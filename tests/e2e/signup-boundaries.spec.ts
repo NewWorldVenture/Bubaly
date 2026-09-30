@@ -4,12 +4,12 @@ import { createHash } from 'node:crypto';
 import ts from 'typescript';
 import { expect, test, type Page } from '@playwright/test';
 import { parsePkceInitiationRecord } from '../../lib/auth/pkce-initiation';
+import { reactBrowserScripts } from './helpers/react-browser';
 
 // Actual SignupForm, validation, selection/referral helpers, Locale/Toast providers,
 // production browser factory, installed SSR cookie adapter and auth SDK. Provider
 // HTTP and server-action/navigation boundaries are controlled; no live accounts.
-const react = fs.readFileSync(path.join(path.dirname(require.resolve('react/package.json')), 'umd/react.development.js'), 'utf8');
-const reactDom = fs.readFileSync(path.join(path.dirname(require.resolve('react-dom/package.json')), 'umd/react-dom.development.js'), 'utf8');
+const { react, reactDom } = reactBrowserScripts('development');
 const sdk = fs.readFileSync(path.join(path.dirname(require.resolve('@supabase/supabase-js/package.json')), 'dist/umd/supabase.js'), 'utf8');
 const isolated = new Set(['react', 'lucide-react', 'next/link', 'next/navigation', '@/components/auth/oauth-buttons',
   '@/components/auth/phone-auth', '@/app/(auth)/actions', '@/app/(auth)/signup/actions', '@/lib/utils/cn', '@capacitor/core', '@capacitor/haptics']);
