@@ -105,7 +105,15 @@ The saved outputs are `characterization-output.txt` (19/19 pass) and `desired-co
    - `failed`, for a clean refusal or a network error before acceptance;
    - `unknown`, for a timeout after the request was sent.
    A retry sends only to `pending`, `failed` and `unknown` receipts. This closes C3.
-4. **A stable idempotency key** per `(occurrence, recipient)`, sent as the `Idempotency-Key` header. `sendEmail` has no way to pass one today, so this is a small shared-helper change and not part of this PR. Resend documents 24-hour key retention and a 409 for the same key with different content, so a retry must re-render **identical** content. A fixed window gives that. This closes C4, but only within 24 hours and only while the provider honours the key.
+4. **A stable idempotency key** per `(occurrence, recipient)`, sent as the `Idempotency-Key` header. `sendEmail` has no way to pass one today, so this is a small shared-helper change and not part of this PR. Resend's documented rules (re-checked 2026-09-30):
+   - the key is kept for 24 hours;
+   - the same key with the same payload returns the original response;
+   - the same key with a **different** payload returns 409 `invalid_idempotent_request`;
+   - while the first request is still running, the key returns 409 `concurrent_idempotent_requests`.
+
+   A fixed window keeps most retries identical. But a row committed late inside the window changes the digest, so the sender must count 409 `invalid_idempotent_request` under its own key as **already sent**, not as a failure. Otherwise the retry fails until the occurrence is abandoned.
+
+   Resend does not document whether a key is kept for a request it *refused*. If it is, that rule would count a refused send as delivered, so it must be checked on a provider test account first. This closes C4, but only within 24 hours and only while the provider honours the key.
 5. **Honest status:**
    - an unreadable recipient list is not `200 ok` (C6);
    - `unknown` receipts are reported separately from `failed`.
