@@ -5,12 +5,12 @@ import { expect, test, type Page } from '@playwright/test';
 import type { DisplayData } from '../../components/display/display-grid';
 import type { DisplaySettings } from '../../lib/display/ambient';
 import type { Tile } from '../../lib/display/tiles';
+import { reactBrowserScripts } from './helpers/react-browser';
 
 // Real React, DisplayShell, setup card and layout/settings normalizers execute
 // in Chromium. Only persistence and peripheral device/widget boundaries are
 // controlled; no live account, database, provider or display device is touched.
-const react = fs.readFileSync(path.join(path.dirname(require.resolve('react/package.json')), 'umd/react.production.min.js'), 'utf8');
-const reactDom = fs.readFileSync(path.join(path.dirname(require.resolve('react-dom/package.json')), 'umd/react-dom.production.min.js'), 'utf8');
+const { react, reactDom } = reactBrowserScripts('production');
 const sdk = fs.readFileSync(path.join(path.dirname(require.resolve('@supabase/supabase-js/package.json')), 'dist/umd/supabase.js'), 'utf8');
 // The signed-media hook reads the real browser cookie owner. Keep that import
 // graph executable even though this layout fixture has no photos or session.

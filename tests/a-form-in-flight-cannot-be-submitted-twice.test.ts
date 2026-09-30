@@ -14,6 +14,7 @@
 //    `<button>`, which inside a form IS a submit button by HTML default — so the
 //    defect was there and a scan for the explicit spelling could not see it. Any
 //    of those a developer meant as a non-submit was already submitting.
+import * as ReactDOM from 'react-dom';
 import { readFileSync } from 'node:fs';
 import { execSync } from 'node:child_process';
 import { describe, expect, it } from 'vitest';
@@ -65,23 +66,18 @@ describe('a form in flight cannot be submitted twice', () => {
     expect(source).toContain('aria-busy');
   });
 
-  it('the hook is resolved once at module load, not imported by name', () => {
-    // Not a style choice. package.json declares react-dom ^18.3.1, which has no
-    // useFormStatus — it arrived in React 19. Production works because Next 15
-    // bundles its own React 19 and aliases `react-dom` to it for App Router
-    // code; vitest does not, and resolves the hoisted 18.3.1. A direct
-    // `import { useFormStatus } from 'react-dom'` therefore compiles, ships
-    // correctly, and throws "useFormStatus is not a function" in every test that
-    // renders a form — which is exactly how this was found.
-    //
-    // Resolving once at module load keeps the call unconditional within a build
-    // and degrades to a plain submit where the hook does not exist. Delete this
-    // when the react-dom version split is closed, and not before.
+  it('the hook is imported by name from the react-dom production runs (BD-02)', () => {
+    // It used to be resolved defensively at module load, because package.json
+    // declared react-dom ^18.3.1 (no useFormStatus) while Next bundles React 19
+    // for the App Router, so tests and production rendered different react-doms.
+    // The declared React is now 19, the same major Next ships, so the hook is
+    // imported directly and the tests exercise the real one.
     const source = readFileSync('components/ui/submit-button.tsx', 'utf8');
-    expect(source).not.toMatch(/import \{[^}]*useFormStatus[^}]*\} from 'react-dom'/);
-    expect(source).toMatch(/const formStatus = \(ReactDOM as/);
+    expect(source).toMatch(/import \{[^}]*useFormStatus[^}]*\} from 'react-dom'/);
+    expect(source).not.toContain('ReactDOM as');
     const pkg = JSON.parse(readFileSync('package.json', 'utf8')) as { dependencies: Record<string, string> };
-    expect(pkg.dependencies['react-dom'], 'if react-dom is 19 now, this guard and the shim can go').toMatch(/\^18\./);
+    expect(pkg.dependencies['react-dom']).toMatch(/^\^19\./);
+    expect(typeof (ReactDOM as { useFormStatus?: unknown }).useFormStatus).toBe('function');
   });
 
   it('the scan is not blind', () => {

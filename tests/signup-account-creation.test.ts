@@ -120,7 +120,10 @@ vi.mock('react', async (original) => {
   };
 });
 vi.mock('next/navigation', () => ({ useRouter: () => ({ push: mock.push, refresh: mock.refresh }), useSearchParams: () => mock.query }));
-vi.mock('next/link', () => ({ default: ({ children, ...props }: { children: ReactNode }) => ({ type: 'a', props: { ...props, children }, $$typeof: Symbol.for('react.element') }) }));
+vi.mock('next/link', async () => {
+  const { createElement } = await vi.importActual<typeof import('react')>('react');
+  return { default: ({ children, ...props }: { children: ReactNode }) => createElement('a', props, children) };
+});
 vi.mock('@/components/ui/toast', () => ({ useToast: () => ({ error: mock.toast, success: mock.toast }) }));
 vi.mock('@/components/i18n/locale-provider', async () => {
   const { getMessages } = await import('@/lib/i18n/messages');
