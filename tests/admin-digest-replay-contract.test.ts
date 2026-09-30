@@ -41,7 +41,7 @@ const state = vi.hoisted(() => ({
   writes: [] as { table: string; op: string }[],
   /** Fault injection: the Nth read of a table answers an error, or throws. */
   failRead: null as null | { table: string; call: number; how: 'error' | 'throw' },
-  /** A read barrier: every party must COMPLETE this table's read before any continues. */
+  /** A read barrier: every party must COMPLETE this table's first-page read before any continues. */
   barrier: null as null | { table: string; parties: number; arrived: number; attemptsAtRelease: number | null; release: () => void; gate: Promise<void> },
   /** Replaces the recipient lookup's result (the only way to reach the empty-recipient branch). */
   recipientsOverride: null as string[] | null,
@@ -55,6 +55,10 @@ vi.mock('@/lib/feedback/notify', async (importOriginal) => {
     ...actual,
     allSuperAdminEmails: (...args: Parameters<typeof actual.allSuperAdminEmails>) =>
       (state.recipientsOverride ? Promise.resolve(state.recipientsOverride) : actual.allSuperAdminEmails(...args)),
+    // Since #685 the route reads recipients through the strict reader; the override
+    // answers in its success shape so the empty-recipient branch is still the one exercised.
+    readSuperAdminRecipients: (...args: Parameters<typeof actual.readSuperAdminRecipients>) =>
+      (state.recipientsOverride ? Promise.resolve({ emails: state.recipientsOverride, failure: null }) : actual.readSuperAdminRecipients(...args)),
   };
 });
 
@@ -97,6 +101,11 @@ function clientOver(inner: InMemorySupabase) {
         const original = qb[op].bind(qb);
         qb[op] = (...args: unknown[]) => { state.writes.push({ table, op }); return original(...args); };
       }
+      // Paged reads (readAll) ask for .range(from, to); remember `from` so the barrier can hold
+      // only the FIRST page of each invocation, without pinning how many pages a read takes.
+      let rangeFrom = 0;
+      const originalRange = qb.range.bind(qb);
+      qb.range = (...args: unknown[]) => { rangeFrom = Number(args[0]); return originalRange(...args); };
       const originalThen = qb.then.bind(qb) as (f?: (v: unknown) => unknown, r?: (e: unknown) => unknown) => Promise<unknown>;
       qb.then = ((onFulfilled?: (v: unknown) => unknown, onRejected?: (e: unknown) => unknown) => {
         state.reads[table] = (state.reads[table] ?? 0) + 1;
@@ -108,7 +117,7 @@ function clientOver(inner: InMemorySupabase) {
         }
         const b = state.barrier;
         return originalThen(async (reply) => {
-          if (b && b.table === table) {
+          if (b && b.table === table && rangeFrom === 0) {
             b.arrived += 1;
             if (b.arrived >= b.parties) { b.attemptsAtRelease = state.attempts.length; b.release(); }
             await b.gate;
@@ -309,14 +318,16 @@ describe('admin-digest replay: current main, observed (not endorsed)', () => {
     expect(state.attempts).toHaveLength(0);
   });
 
+  // Until #685 these two answered 200 ok and emailed the built-in admin alone; that
+  // observation is kept, dated, in docs/final-audit/admin-digest-replay-contract-2026-09-30/.
   for (const how of ['error', 'throw'] as const) {
-    it(`a super_admins read that ${how === 'error' ? 'answers an error' : 'throws'} is swallowed: 200 ok, and only the built-in admin is emailed`, async () => {
+    it(`a super_admins read that ${how === 'error' ? 'answers an error' : 'throws'} fails closed (#685): 502, and not one email`, async () => {
       happen('2026-09-30T08:00:00Z', 'Signup Alpha');
       state.failRead = { table: 'super_admins', call: 1, how };
       const res = await runAt('2026-09-30T12:30:00Z');
-      expect(res.status).toBe(200);
-      expect(res.body).toMatchObject({ ok: true, sent: 1, failed: 0, recipients: 1 });
-      expect(attempted()).toEqual({ 'admin-1': 1, 'admin-2': 0 });
+      expect(res.status).toBe(502);
+      expect(res.body).toEqual({ ok: false, error: 'adminDigest.recipientsUnavailable' });
+      expect(attempted()).toEqual({ 'admin-1': 0, 'admin-2': 0 });
     });
   }
 
@@ -355,9 +366,9 @@ describe('admin-digest replay: current main, observed (not endorsed)', () => {
   it('CONCURRENT: two workers that both finish reading before either sends each email every admin — 4 attempted, 4 accepted', async () => {
     happen('2026-09-30T08:00:00Z', 'Signup Alpha');
     vi.setSystemTime(new Date('2026-09-30T12:30:00Z'));
-    barrierOn('super_admins', 2); // the last read before the send fan-out
+    barrierOn('super_admins', 2); // the first page of the last read before the send fan-out
     const [a, b] = await Promise.all([call(), call()]);
-    expect(state.barrier!.arrived).toBe(2);
+    expect(state.barrier!.arrived).toBe(2); // one first page per invocation; later pages are not counted
     expect(state.barrier!.attemptsAtRelease).toBe(0); // neither had sent when both had read
     expect([a.status, b.status]).toEqual([200, 200]);
     expect(await a.json()).toMatchObject({ ok: true, sent: 2 });
@@ -418,5 +429,20 @@ describe('admin-digest replay: current main, observed (not endorsed)', () => {
     // Three runs of one occurrence: 6 attempts, 3 accepted — admin-1 twice, admin-2 once.
     expect(state.attempts).toHaveLength(6);
     expect(accepted()).toEqual({ 'admin-1': 2, 'admin-2': 1 });
+  });
+});
+
+// ── Promoted from the desired contract (docs/final-audit/admin-digest-replay-contract-2026-09-30) ──
+// C6 failed on main at 231e8140 and passes since #685. Only C6 is promoted: C1–C5 (one digest per
+// occurrence, retry only the unaccepted recipient, same key and frozen payload on an ambiguous send,
+// no row in two digests) are still unmet and stay in the evidence folder as failing contract cases.
+describe('admin-digest contract (promoted)', () => {
+  it('C6 a run that could not read its recipient list does not report a clean success', async () => {
+    happen('2026-09-30T08:00:00Z', 'Signup Alpha');
+    state.failRead = { table: 'super_admins', call: 1, how: 'error' };
+    const res = await runAt('2026-09-30T12:30:00Z');
+    expect(res.body.ok).toBe(false);
+    expect(res.status).toBe(502);
+    expect(state.attempts).toHaveLength(0);
   });
 });
