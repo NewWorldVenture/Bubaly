@@ -392,9 +392,15 @@ export async function runDueAllowancesAction(): Promise<Result & { ranCount?: nu
     // A loser is not an error: it means the period is already paid, so `continue`
     // rather than actionFailure. `maybeSingle`, because `single` treats zero rows
     // as a failure and that is exactly the case this now expects.
+    //
+    // `is_active` is claimed too. The read above selected active rules, but a
+    // pause does not move the due date, so a pause that commits between that
+    // read and this update used to be claimed and paid anyway. In the same
+    // statement, the pause and the claim cannot both win: a paused rule matches
+    // nothing and is skipped like one another run claimed.
     const { data: advancedRule, error: advanceError } = await supabase.from('allowance_rules')
       .update({ next_run_on: next, last_run_on: today })
-      .eq('id', rule.id).eq('family_id', familyId).lte('next_run_on', today)
+      .eq('id', rule.id).eq('family_id', familyId).eq('is_active', true).lte('next_run_on', today)
       .select('id').maybeSingle();
     if (advanceError) return actionFailure(advanceError, t('wallet.couldNotUpdateAnAllowanceSchedule'));
     if (!advancedRule) continue; // another run claimed this rule — do not double-pay
