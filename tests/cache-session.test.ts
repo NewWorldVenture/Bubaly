@@ -55,6 +55,53 @@ describe('bounded reconciliation never authorizes an unverified session', () => 
       familyId: 'synthetic', sessionRevision: current.revision, error: null, familyMismatchError: '' };
   };
 
+  it.each(['absent', 'different user', 'new session', 'malformed', 'unreadable'] as const)(
+    'a storage-only change to %s cookies withholds the old scope before the SDK read settles', async kind => {
+      connect(); await settle();
+      const oldScope = scope(), generation = getCacheGeneration();
+      const held = deferred<Reply>(); mocks.getSession.mockReturnValueOnce(held.promise);
+      if (kind === 'unreadable') mocks.cookieSnapshot.mockImplementation(() => { throw new Error('synthetic denied cookie read'); });
+      else saveCookies(kind === 'absent' ? null : kind === 'different user' ? session(B, S2)
+        : kind === 'new session' ? session(A, S2) : { ...session(), access_token: 'malformed' });
+      const events = vi.fn(); disposers.push(subscribeCacheAuthEvents(events));
+      mocks.setRealtimeAuth.mockClear();
+      notifySessionStorageChanged({ broadcast: false });
+      expect(isAuthenticatedCacheScopeCurrent(oldScope)).toBe(false);
+      await settle(); await vi.advanceTimersByTimeAsync(350);
+      expect(mocks.getSession).toHaveBeenCalledTimes(2);
+      expect(getCacheSessionSnapshot()).toMatchObject({ status: 'unavailable', identity: { userId: A, sessionId: S1 } });
+      expect(getCacheGeneration()).toBe(generation);
+      expect(events).not.toHaveBeenCalled(); expect(mocks.setRealtimeAuth).not.toHaveBeenCalled();
+      // A newer agreeing SDK login fences the old read, even if it returns null.
+      saveCookies(session(B, S2)); emit('SIGNED_IN', session(B, S2));
+      const newer = getCacheSessionSnapshot();
+      held.resolve(reply(null)); await settle();
+      expect(getCacheSessionSnapshot()).toBe(newer);
+      expect(newer).toMatchObject({ status: 'ready', identity: { userId: B, sessionId: S2 } });
+      expect(vi.getTimerCount()).toBe(0);
+    },
+  );
+
+  it.each(['unchanged', 'rotated token', 'delayed old notification'] as const)(
+    'a storage-only notification preserves %s scope while the SDK read is held', async kind => {
+      connect(); await settle();
+      const current = kind === 'delayed old notification' ? session(B, S2) : session();
+      if (kind === 'delayed old notification') { saveCookies(current); emit('SIGNED_IN', current); }
+      const oldScope = scope(), before = getCacheSessionSnapshot(), generation = getCacheGeneration();
+      const receipt = kind === 'rotated token' ? { ...current, access_token: current.access_token + '-rotated' } : current;
+      saveCookies(receipt);
+      const held = deferred<Reply>(); mocks.getSession.mockReturnValueOnce(held.promise);
+      notifySessionStorageChanged({ broadcast: false });
+      expect(isAuthenticatedCacheScopeCurrent(oldScope)).toBe(true);
+      await settle(); await vi.advanceTimersByTimeAsync(350);
+      expect(mocks.getSession).toHaveBeenCalledTimes(2);
+      expect(getCacheSessionSnapshot()).toBe(before); expect(getCacheGeneration()).toBe(generation);
+      held.resolve(reply(receipt)); await settle();
+      expect(getCacheSessionSnapshot()).toBe(before); expect(isAuthenticatedCacheScopeCurrent(oldScope)).toBe(true);
+      expect(vi.getTimerCount()).toBe(0);
+    },
+  );
+
   it('withholds a previously refuted peer claim during a held lifecycle read', async () => {
     connect(); await settle();
     emit('SIGNED_IN', session(B, S2)); await vi.advanceTimersByTimeAsync(1_000);
