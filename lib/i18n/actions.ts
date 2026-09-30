@@ -5,6 +5,7 @@
 import { cookies } from 'next/headers';
 
 import { isLocaleCode, findLocale, LOCALE_COOKIE, LOCALE_COOKIE_MAX_AGE } from '@/lib/i18n/locales';
+import { encodePendingChoice, LOCALE_PENDING_COOKIE } from '@/lib/i18n/pending-choice';
 import { createServer } from '@/lib/supabase/server';
 
 /**
@@ -59,8 +60,23 @@ export async function setLocale(code: string): Promise<LocaleChoice> {
   });
 
   // The profile gets the catalogue's spelling: the column's CHECK is exact.
-  const profile = await storeForSignedInUser(findLocale(code)!.code);
-  return profile === 'stored' ? { ok: true, stored: true } : { ok: true, stored: false, profile };
+  const canonical = findLocale(code)!.code;
+  const { profile, userId } = await storeForSignedInUser(canonical);
+  // An explicit choice the profile did not take is remembered as PENDING, with
+  // whose it is, so the next sign-in stores it; a plain cookie alone never
+  // overwrites a saved preference (lib/i18n/pending-choice.ts).
+  if (profile === 'stored') {
+    jar.delete(LOCALE_PENDING_COOKIE);
+    return { ok: true, stored: true };
+  }
+  jar.set(LOCALE_PENDING_COOKIE, encodePendingChoice(canonical, profile === 'signed-out' ? null : userId), {
+    path: '/',
+    maxAge: LOCALE_COOKIE_MAX_AGE,
+    sameSite: 'lax',
+    secure: process.env.NODE_ENV === 'production',
+    httpOnly: true,
+  });
+  return { ok: true, stored: false, profile };
 }
 
 /**
@@ -72,11 +88,14 @@ export async function setLocale(code: string): Promise<LocaleChoice> {
  * A failed or refused write is logged and REPORTED, never thrown: the page is
  * already in the new language, and the next switch or sign-in writes it again.
  */
-async function storeForSignedInUser(code: string): Promise<'stored' | ProfileWrite> {
+async function storeForSignedInUser(code: string): Promise<{ profile: 'stored' | ProfileWrite; userId: string | null }> {
+  let userId: string | null = null;
+  const result = (profile: 'stored' | ProfileWrite) => ({ profile, userId });
   try {
     const supabase = await createServer();
     const { data: { user } } = await supabase.auth.getUser();
-    if (!user) return 'signed-out';
+    if (!user) return result('signed-out');
+    userId = user.id;
     const { data, error } = await supabase
       .from('profiles')
       .update({ locale: code })
@@ -84,15 +103,15 @@ async function storeForSignedInUser(code: string): Promise<'stored' | ProfileWri
       .select('id');
     if (error) {
       console.error('[i18n] could not store the language choice on the profile', error);
-      return 'failed';
+      return result('failed');
     }
     if ((data ?? []).length !== 1) {
       console.error('[i18n] the language choice reached no profile row (refused or missing)');
-      return 'refused';
+      return result('refused');
     }
-    return 'stored';
+    return result('stored');
   } catch (e) {
     console.error('[i18n] could not store the language choice on the profile', e);
-    return 'failed';
+    return result('failed');
   }
 }

@@ -15,6 +15,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
 import { LOCALES, LOCALE_COOKIE, LOCALE_COOKIE_MAX_AGE } from '@/lib/i18n/locales';
 import { at } from './helpers/source-order';
+import { LOCALE_PENDING_COOKIE } from '@/lib/i18n/pending-choice';
 import { resolveLocale } from '@/lib/i18n/resolve';
 
 type Cookie = { value: string; options?: Record<string, unknown> };
@@ -41,6 +42,8 @@ const db = vi.hoisted(() => ({
   readError: null as null | { message: string; code: string },
   writeError: null as null | { message: string; code: string },
   throwOnConnect: false,
+  /** A request that never answers unless it is aborted: the slow database of the #705 review. */
+  hold: null as null | 'read' | 'write',
   /** Every UPDATE that reached a row: [caller, row id, locale]. */
   writes: [] as [string, string, string | null][],
   checked: [] as string[],
@@ -51,10 +54,13 @@ vi.mock('next/headers', () => ({
   cookies: async () => ({
     get: (name: string) => (db.jar.has(name) ? { name, value: db.jar.get(name)!.value } : undefined),
     set: (name: string, value: string, options?: Record<string, unknown>) => { db.jar.set(name, { value, options }); },
+    delete: (name: string) => { db.jar.delete(name); },
   }),
   headers: async () => new Headers(db.headers),
 }));
+vi.mock('@/lib/supabase/auth', () => ({ isSuperAdmin: async () => false, getUserContext: async () => null }));
 vi.mock('@/lib/supabase/server', () => ({
+  createServiceClient: () => { throw new Error('not used here'); },
   createServer: async () => {
     if (db.throwOnConnect) throw new Error('supabase unreachable');
     return {
@@ -71,13 +77,15 @@ vi.mock('@/lib/supabase/server', () => ({
           select: () => ({
             eq: (k: string, v: unknown) => {
               eqs.push([k, v]);
-              return {
-                maybeSingle: async () => {
-                  if (db.readError) return { data: null, error: db.readError };
-                  const id = [...db.profiles.keys()].find((r) => r === v);
-                  return { data: id ? { locale: db.profiles.get(id) ?? null } : null, error: null };
-                },
+              let signal: AbortSignal | undefined;
+              const read = async () => {
+                if (db.hold === 'read') await held(signal);
+                if (db.readError) return { data: null, error: db.readError };
+                const id = [...db.profiles.keys()].find((r) => r === v);
+                return { data: id ? { locale: db.profiles.get(id) ?? null } : null, error: null };
               };
+              const q = { maybeSingle: read, abortSignal: (sg: AbortSignal) => { signal = sg; return q; } };
+              return q;
             },
           }),
           update: (patch: { locale: string | null }) => {
@@ -90,11 +98,16 @@ vi.mock('@/lib/supabase/server', () => ({
               for (const id of rows) { db.profiles.set(id, patch.locale); db.writes.push([db.user!.id, id, patch.locale]); }
               return { data: rows.map((id) => ({ id })), error: null };
             };
+            let signal: AbortSignal | undefined;
+            const write = async () => { if (db.hold === 'write') await held(signal); return run(); };
             return {
               eq: (k: string, v: unknown) => {
                 eqs.push([k, v]);
-                const result = { select: async () => run(), then: (ok: (r: unknown) => void, no?: (e: unknown) => void) => Promise.resolve().then(run).then(ok, no) };
-                return result;
+                const selected = {
+                  then: (ok: (r: unknown) => void, no?: (e: unknown) => void) => write().then(ok, no),
+                  abortSignal: (sg: AbortSignal) => { signal = sg; return write(); },
+                };
+                return { select: () => selected, then: (ok: (r: unknown) => void, no?: (e: unknown) => void) => write().then(ok, no) };
               },
             };
           },
@@ -103,6 +116,13 @@ vi.mock('@/lib/supabase/server', () => ({
     };
   },
 }));
+
+/** Never settles unless aborted; then rejects as the SDK does. */
+function held(signal: AbortSignal | undefined): Promise<never> {
+  return new Promise((_, reject) => {
+    signal?.addEventListener('abort', () => reject(Object.assign(new Error('aborted'), { name: 'AbortError' })));
+  });
+}
 
 async function setLocale(code: string) {
   return (await import('@/lib/i18n/actions')).setLocale(code);
@@ -125,7 +145,7 @@ const errors = vi.spyOn(console, 'error').mockImplementation(() => {});
 beforeEach(() => {
   db.user = null;
   db.profiles = new Map([[PARENT, null], [SPOUSE, null], [OUTSIDER, 'it-IT']]);
-  db.readError = null; db.writeError = null; db.throwOnConnect = false;
+  db.readError = null; db.writeError = null; db.throwOnConnect = false; db.hold = null;
   db.writes = [];
   db.checked = CHECKED;
   freshDevice();
@@ -265,12 +285,14 @@ describe('the language follows the person to a new device', () => {
     expect(db.profiles.get(PARENT)).toBe('fr-CA');
   });
 
-  it('a device choice newer than the stored one wins, and is stored', async () => {
+  it('a choice made signed out, newer than the saved one, replaces it at sign-in', async () => {
     db.profiles.set(PARENT, 'de-DE');
-    db.jar.set(LOCALE_COOKIE, { value: 'es-ES' });
+    await setLocale('es-ES'); // signed out: recorded as pending, no owner
+    expect(cookie()?.value).toBe('es-ES');
     db.user = { id: PARENT };
     expect(await signIn()).toEqual({ kind: 'stored', locale: 'es-ES' });
     expect(db.profiles.get(PARENT)).toBe('es-ES');
+    expect(db.jar.has(LOCALE_PENDING_COOKIE)).toBe(false); // settled
   });
 
   it('neither: the language the visitor was served is stored (geo before Accept-Language)', async () => {
@@ -349,18 +371,116 @@ describe('sign-in is never failed by a language', () => {
   });
 });
 
+describe('a plain cookie never overwrites a saved preference (#705 review 5919814531)', () => {
+  it('a phone\'s stale restored cookie does not undo a newer choice made on the laptop', async () => {
+    db.user = { id: SPOUSE };
+    await setLocale('de-DE'); // the laptop
+    const laptop = db.jar;
+    freshDevice();
+    await signIn(); // the phone restores de-DE
+    const phone = db.jar;
+    expect(phone.get(LOCALE_COOKIE)?.value).toBe('de-DE');
+    db.jar = laptop;
+    expect(await setLocale('fr-FR')).toEqual({ ok: true, stored: true }); // a newer explicit choice
+    db.jar = phone;
+    expect(await signIn()).toEqual({ kind: 'restored', locale: 'fr-FR' }); // the phone signs in again
+    expect(db.profiles.get(SPOUSE)).toBe('fr-FR');
+    expect(phone.get(LOCALE_COOKIE)?.value).toBe('fr-FR');
+  });
+
+  it('on a shared browser, one account\'s language does not become the next account\'s', async () => {
+    db.profiles.set(PARENT, 'it-IT');
+    db.user = { id: SPOUSE };
+    expect(await setLocale('de-DE')).toEqual({ ok: true, stored: true }); // SPOUSE, signed in
+    db.user = { id: PARENT }; // then PARENT signs in on the same browser
+    expect(await signIn()).toEqual({ kind: 'restored', locale: 'it-IT' });
+    expect(db.profiles.get(PARENT)).toBe('it-IT');
+    expect(cookie()?.value).toBe('it-IT');
+  });
+
+  it('a failed save is retried at that account\'s next sign-in, and only theirs', async () => {
+    db.profiles.set(PARENT, 'it-IT');
+    db.profiles.set(SPOUSE, 'nl-NL');
+    db.user = { id: SPOUSE };
+    db.writeError = { message: 'boom', code: '57014' };
+    expect(await setLocale('fr-FR')).toEqual({ ok: true, stored: false, profile: 'failed' });
+    expect(db.jar.get(LOCALE_PENDING_COOKIE)?.value).toBe(`fr-FR@${SPOUSE}`);
+    expect(db.jar.get(LOCALE_PENDING_COOKIE)?.options?.httpOnly).toBe(true);
+    db.writeError = null;
+    // Someone else signing in on this browser ignores SPOUSE's pending choice.
+    db.user = { id: PARENT };
+    expect(await signIn()).toEqual({ kind: 'restored', locale: 'it-IT' });
+    expect(db.profiles.get(PARENT)).toBe('it-IT');
+    expect(db.jar.has(LOCALE_PENDING_COOKIE)).toBe(true);
+    // SPOUSE's own next sign-in stores it.
+    db.user = { id: SPOUSE };
+    expect(await signIn()).toEqual({ kind: 'stored', locale: 'fr-FR' });
+    expect(db.profiles.get(SPOUSE)).toBe('fr-FR');
+    expect(db.jar.has(LOCALE_PENDING_COOKIE)).toBe(false);
+  });
+
+  it('a cookie from before the profile kept a language is adopted when nothing is saved', async () => {
+    db.jar.set(LOCALE_COOKIE, { value: 'pt-PT' });
+    db.user = { id: PARENT };
+    expect(await signIn()).toEqual({ kind: 'stored', locale: 'pt-PT' });
+  });
+});
+
+describe('sign-in never waits on a slow language (#705 review 5919831949)', () => {
+  it.each(['read', 'write'] as const)('a %s that never answers is abandoned within the budget, writing nothing', async (hold) => {
+    db.user = { id: PARENT };
+    db.jar.set(LOCALE_PENDING_COOKIE, { value: 'fr-FR' });
+    db.hold = hold;
+    const { syncLanguageForSignedInUser } = await import('@/lib/i18n/sync');
+    const started = Date.now();
+    expect(await syncLanguageForSignedInUser(50)).toEqual({ kind: 'none' });
+    expect(Date.now() - started).toBeLessThan(1000);
+    await new Promise((r) => setTimeout(r, 20)); // anything left running settles
+    expect(db.profiles.get(PARENT)).toBeNull();
+    expect(db.jar.get(LOCALE_PENDING_COOKIE)?.value).toBe('fr-FR'); // kept for the next try
+    expect(db.writes).toEqual([]);
+  });
+
+  it.each(['read', 'write'] as const)('the real landing step still lands when the language %s hangs', async (hold) => {
+    db.user = { id: PARENT };
+    db.jar.set(LOCALE_PENDING_COOKIE, { value: 'fr-FR' });
+    db.hold = hold;
+    const { resolveLandingPathAction } = await import('@/app/(auth)/actions');
+    const { LANGUAGE_SYNC_BUDGET_MS } = await import('@/lib/i18n/sync');
+    const started = Date.now();
+    expect(await resolveLandingPathAction()).toBe('/home');
+    expect(Date.now() - started).toBeLessThan(LANGUAGE_SYNC_BUDGET_MS + 1000);
+  });
+
+  it('control: an answering database is not cut short', async () => {
+    db.user = { id: PARENT };
+    db.jar.set(LOCALE_PENDING_COOKIE, { value: 'fr-FR' });
+    const { resolveLandingPathAction } = await import('@/app/(auth)/actions');
+    expect(await resolveLandingPathAction()).toBe('/home');
+    expect(db.profiles.get(PARENT)).toBe('fr-FR');
+  });
+
+  it('onboarding uses the same bounded sync', () => {
+    const onboarding = readFileSync(join(__dirname, '..', 'app/onboarding/actions.ts'), 'utf8');
+    expect(onboarding).toContain('await syncLanguageForSignedInUser();');
+  });
+});
+
 describe('the decision, pinned', () => {
   it.each([
     [{ cookie: 'de-DE', stored: null }, { kind: 'stored', locale: 'de-DE' }],
-    [{ cookie: 'de-DE', stored: 'fr-FR' }, { kind: 'stored', locale: 'de-DE' }],
+    [{ cookie: 'de-DE', stored: 'fr-FR' }, { kind: 'restored', locale: 'fr-FR' }],
     [{ cookie: 'de-de', stored: 'de-DE' }, { kind: 'in-step', locale: 'de-DE' }],
     [{ cookie: null, stored: 'fr-FR' }, { kind: 'restored', locale: 'fr-FR' }],
     [{ cookie: 'xx-XX', stored: 'fr-FR' }, { kind: 'restored', locale: 'fr-FR' }],
     [{ cookie: undefined, stored: null }, { kind: 'stored', locale: 'es-US' }],
     [{ cookie: null, stored: 'xx-XX' }, { kind: 'stored', locale: 'es-US' }],
+    [{ cookie: 'de-DE', stored: 'fr-FR', pending: { locale: 'de-DE', owner: null } }, { kind: 'stored', locale: 'de-DE' }],
+    [{ cookie: 'de-DE', stored: 'fr-FR', pending: { locale: 'de-DE', owner: 'u1' } }, { kind: 'stored', locale: 'de-DE' }],
+    [{ cookie: 'de-DE', stored: 'fr-FR', pending: { locale: 'de-DE', owner: 'someone-else' } }, { kind: 'restored', locale: 'fr-FR' }],
   ] as const)('%j -> %j', async (input, expected) => {
     const { decideLanguageSync } = await import('@/lib/i18n/sync');
-    expect(decideLanguageSync({ ...input, resolved: 'es-US' })).toEqual(expected);
+    expect(decideLanguageSync({ ...input, resolved: 'es-US', userId: 'u1' } as never)).toEqual(expected);
   });
 });
 
