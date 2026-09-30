@@ -390,7 +390,7 @@ function ProfileForm({ familyId, userId, members, profile, defaultMember, onClos
         <div className="grid grid-cols-3 gap-3">
           <Field label={tr('career.type')}>{(id) => <Select id={id} name="employment_type" defaultValue={profile?.employment_type ?? 'full_time'}>{EMPLOYMENT_TYPES.map((t) => <option key={t.value} value={t.value}>{t.label}</option>)}</Select>}</Field>
           <Field label={tr('career.workMode')}>{(id) => <Select id={id} name="work_mode" defaultValue={profile?.work_mode ?? 'any'}>{WORK_MODES.map((w) => <option key={w.value} value={w.value}>{w.label}</option>)}</Select>}</Field>
-          <Field label={tr('career.targetPayYrOrHr')}>{(id) => <Input id={id} name="salary_target" type="number" min={0} step="0.01" defaultValue={centsToDollars(profile?.salary_target_cents)} />}</Field>
+          <Field label={tr('career.targetPayYrOrHr')}>{(id) => <Input id={id} name="salary_target" type="number" min={0} step="0.01" inputMode="decimal" defaultValue={centsToDollars(profile?.salary_target_cents)} />}</Field>
         </div>
         <div className="grid grid-cols-2 gap-3">
           <Field label={tr('career.location')}>{(id) => <Input id={id} name="location" defaultValue={profile?.location ?? ''} placeholder={tr('career.austinTx')} />}</Field>
@@ -457,8 +457,8 @@ function ApplicationForm({ familyId, userId, profile, resumes, application, onCl
           <Field label={tr('career.workMode')}>{(id) => <Select id={id} name="work_mode" defaultValue={application?.work_mode ?? ''}><option value="">{tr('career.unknown')}</option><option value="remote">{tr('career.remote')}</option><option value="hybrid">{tr('career.hybrid')}</option><option value="onsite">On-site</option></Select>}</Field>
         </div>
         <div className="grid grid-cols-2 gap-3">
-          <Field label={tr('career.salaryFrom')}>{(id) => <Input id={id} name="salary_min" type="number" min={0} step="0.01" defaultValue={centsToDollars(application?.salary_min_cents)} />}</Field>
-          <Field label={tr('career.salaryTo')}>{(id) => <Input id={id} name="salary_max" type="number" min={0} step="0.01" defaultValue={centsToDollars(application?.salary_max_cents)} />}</Field>
+          <Field label={tr('career.salaryFrom')}>{(id) => <Input id={id} name="salary_min" type="number" min={0} step="0.01" inputMode="decimal" defaultValue={centsToDollars(application?.salary_min_cents)} />}</Field>
+          <Field label={tr('career.salaryTo')}>{(id) => <Input id={id} name="salary_max" type="number" min={0} step="0.01" inputMode="decimal" defaultValue={centsToDollars(application?.salary_max_cents)} />}</Field>
         </div>
         <div className="grid grid-cols-2 gap-3">
           <Field label={tr('career.nextStep')}>{(id) => <Input id={id} name="next_step" defaultValue={application?.next_step ?? ''} placeholder={tr('career.followUpPhoneScreenSendPortfolio')} />}</Field>

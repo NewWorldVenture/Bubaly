@@ -151,7 +151,7 @@ function ChildRuleCard({ row, canManage }: { row: ChildRuleRow; canManage: boole
           </div>
           <div className="flex items-center gap-1">
             {unit.before && <span className="text-xs text-muted">{unit.symbol}</span>}
-            <input type="number" min={0} step="0.01" value={threshold} disabled={!canManage} aria-label={t('walletSettings.approvalThreshold')}
+            <input type="number" min={0} step="0.01" inputMode="decimal" value={threshold} disabled={!canManage} aria-label={t('walletSettings.approvalThreshold')}
               onChange={(e) => setThreshold(e.target.value)}
               className="w-20 rounded-lg border border-border bg-surface px-2 py-1 text-sm font-semibold focus:outline-none focus:ring-2 focus:ring-brand/30 disabled:opacity-60" />
             {!unit.before && <span className="text-xs text-muted">{unit.symbol}</span>}

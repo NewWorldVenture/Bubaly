@@ -51319,7 +51319,7 @@ Fixed:
 - a Trust rule's maximum amount and the wallet's approval threshold of $12 (step 5);
 - a babysitter payment of $60.25 in the field labelled "Or enter exact amount" (step 0.5).
 
-Every one is stored in cents, and every parser already keeps cents (`Math.round(n * 100)`). Fixed: all thirteen take `step="0.01"`. Minutes, a radius in metres, the investment sliders and reward points keep their deliberate increments. `tests/a-money-field-takes-the-exact-amount.test.ts` scans `components/` and `app/` for money-named number inputs and named all thirteen on the previous code.
+Every one is stored in cents, and every parser already keeps cents (`Math.round(n * 100)`). Fixed: all thirteen take `step="0.01"`, and each now asks a phone for the decimal keypad (`inputMode="decimal"`), which the M-006 guard requires of a decimal field. Minutes, a radius in metres, the investment sliders and reward points keep their deliberate increments. `tests/a-money-field-takes-the-exact-amount.test.ts` scans `components/` and `app/` for money-named number inputs and named all thirteen on the previous code.
 
 **Seen and not defects.**
 - `/api/ai/*` answered 503 "not configured" on a dozen pages: the local stack has no AI key.

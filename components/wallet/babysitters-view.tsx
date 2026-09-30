@@ -265,7 +265,7 @@ function PaymentModal({ sitter, onClose, onSaved }: {
             <span className="font-bold">{formatCents(computed)}</span>
           </div>
         )}
-        <Field label={tr('babysitters.orEnterExactAmount')}>{(id) => <Input id={id} name="amount" type="number" min="0" step="0.01" placeholder={rate > 0 ? (computed / 100).toFixed(2) : '60'} />}</Field>
+        <Field label={tr('babysitters.orEnterExactAmount')}>{(id) => <Input id={id} name="amount" type="number" min="0" step="0.01" inputMode="decimal" placeholder={rate > 0 ? (computed / 100).toFixed(2) : '60'} />}</Field>
         <div className="flex justify-end gap-2 pt-1">
           <Button type="button" variant="ghost" onClick={onClose}>{tr('babysitters.cancel')}</Button>
           <Button type="submit" loading={loading}>{loading ? 'Recording…' : 'Record Payment'}</Button>
