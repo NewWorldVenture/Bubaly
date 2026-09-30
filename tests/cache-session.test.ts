@@ -3,6 +3,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { cacheSessionIdentity, getCacheSessionSnapshot, getServerCacheSessionSnapshot, refreshCacheSession, subscribeCacheAuthEvents, subscribeCacheSession } from '@/lib/auth/cache-session';
 import { getCacheGeneration } from '@/lib/offline/cache';
 import { notifySessionStorageChanged } from '@/lib/auth/session-change';
+import { isAuthenticatedCacheScopeCurrent, type AuthenticatedCacheScope } from '@/lib/offline/cache-scope';
 
 type Reply = { data: { session: Session | null }; error: Error | null };
 const mocks = vi.hoisted(() => ({
@@ -510,5 +511,101 @@ describe('a peer event that outruns its cookie write', () => {
     stop(); await vi.advanceTimersByTimeAsync(10 * 60_000);
     expect(reads()).toBe(calls);
     expect(vi.getTimerCount()).toBe(0);
+  });
+
+  // Integration review of f9c1fecb (comments 5918650810, 5918816296): a failed
+  // read keeps authorizing A only while current cookies still carry A, and a
+  // peer owner event is withheld even while another SDK read is outstanding.
+  function scopeOf(snapshot = getCacheSessionSnapshot()): AuthenticatedCacheScope {
+    return { status: 'ready', key: 'synthetic', partition: { userId: snapshot.identity!.userId, sessionId: snapshot.identity!.sessionId, accessIdentity: 'synthetic' },
+      familyId: 'synthetic', sessionRevision: snapshot.revision, error: null, familyMismatchError: '' };
+  }
+  const failures = [
+    ['resolved', () => mocks.getSession.mockResolvedValue(reply(null, new Error('synthetic failure')))],
+    ['thrown', () => mocks.getSession.mockRejectedValue(new Error('synthetic failure'))],
+  ] as const;
+
+  it.each(failures)('a peer owner event during a pending SDK read withholds A when reads fail (%s)', async (_, fail) => {
+    connect(); await settle();
+    const scopeA = scopeOf(); const generation = getCacheGeneration();
+    expect(isAuthenticatedCacheScopeCurrent(scopeA)).toBe(true);
+    const pendingRead = deferred<Reply>();
+    mocks.getSession.mockImplementationOnce(() => pendingRead.promise);
+    const lifecycle = refreshCacheSession({ force: true }); await settle();
+    fail();
+    // External peer event while that read is outstanding; cookies still read A.
+    emit('SIGNED_IN', session(B, S2)); await settle();
+    expect(getCacheSessionSnapshot().status).toBe('unavailable');
+    expect(isAuthenticatedCacheScopeCurrent(scopeA)).toBe(false);
+    expect(getCacheGeneration()).toBe(generation); // nothing purged on an unbound event
+    await vi.advanceTimersByTimeAsync(20);
+    saveCookies(session(B, S2));
+    pendingRead.resolve(reply(null, new Error('synthetic old-read failure')));
+    await lifecycle.catch(() => {}); await settle();
+    for (const at of [1_000, 120_000]) {
+      await vi.advanceTimersByTimeAsync(at);
+      expect(getCacheSessionSnapshot().status).toBe('unavailable');
+      expect(isAuthenticatedCacheScopeCurrent(scopeA)).toBe(false);
+    }
+    expect(reads()).toBeLessThanOrEqual(1 + 1 + 3 + 5); // bootstrap, the lifecycle read, one episode, recovery
+    expect(vi.getTimerCount()).toBe(0);
+    // A later read bound to B's cookie adopts B.
+    mocks.getSession.mockReset().mockResolvedValue(reply(session(B, S2)));
+    await refreshCacheSession({ force: true });
+    expect(getCacheSessionSnapshot()).toMatchObject({ status: 'ready', identity: { userId: B, sessionId: S2 }, error: null });
+    expect(getCacheGeneration()).toBeGreaterThan(generation);
+  });
+
+  it('a peer owner event during a pending read converges on B when the reread agrees', async () => {
+    connect(); await settle();
+    const pendingRead = deferred<Reply>();
+    mocks.getSession.mockImplementationOnce(() => pendingRead.promise);
+    const lifecycle = refreshCacheSession({ force: true }); await settle();
+    emit('SIGNED_IN', session(B, S2)); await settle();
+    expect(getCacheSessionSnapshot().status).toBe('unavailable');
+    await vi.advanceTimersByTimeAsync(20);
+    saveCookies(session(B, S2)); mocks.getSession.mockResolvedValue(reply(session(B, S2)));
+    pendingRead.resolve(reply(session()));
+    await lifecycle; await vi.advanceTimersByTimeAsync(40);
+    expect(getCacheSessionSnapshot()).toMatchObject({ status: 'ready', identity: { userId: B, sessionId: S2 }, error: null });
+    await vi.advanceTimersByTimeAsync(120_000);
+    expect(vi.getTimerCount()).toBe(0);
+  });
+
+  it.each(failures)('a failed reread after the cookies changed withholds A without any SDK event (%s)', async (_, fail) => {
+    connect(); await settle();
+    const scopeA = scopeOf();
+    saveCookies(session(B, S2)); fail();
+    notifySessionStorageChanged({ broadcast: false });
+    await refreshCacheSession().catch(() => {}); await settle();
+    expect(getCacheSessionSnapshot().status).toBe('unavailable');
+    expect(isAuthenticatedCacheScopeCurrent(scopeA)).toBe(false);
+  });
+
+  it.each(failures)('a transient failure with A still in the cookies keeps A (%s)', async (_, fail) => {
+    connect(); await settle();
+    const scopeA = scopeOf();
+    fail();
+    notifySessionStorageChanged({ broadcast: false });
+    await refreshCacheSession().catch(() => {}); await settle();
+    expect(getCacheSessionSnapshot()).toMatchObject({ status: 'ready', identity: { userId: A, sessionId: S1 } });
+    expect(isAuthenticatedCacheScopeCurrent(scopeOf())).toBe(true);
+    expect(getCacheSessionSnapshot().identity).toEqual(scopeA.partition && { userId: scopeA.partition.userId, sessionId: scopeA.partition.sessionId });
+  });
+
+  // Withholding events that arrive during our reads must not turn those reads'
+  // own echoes into new work: a read that provokes a claim with a new token, or
+  // naming a new user, on every call stays one quiet episode.
+  it.each([
+    ['a new token', (i: number) => session(B, `44444444-4444-4444-8444-${String(i).padStart(12, '0')}`)],
+    ['a new user', (i: number) => session(`77777777-7777-4777-8777-${String(i).padStart(12, '0')}`, `88888888-8888-4888-8888-${String(i).padStart(12, '0')}`)],
+  ] as const)('reads that each provoke a claim for %s stay bounded, and A is restored', async (_, claim) => {
+    connect(); await settle(); const base = reads(); let i = 0;
+    mocks.getSession.mockImplementation(async () => { emit('TOKEN_REFRESHED', claim(++i)); return reply(session()); });
+    emit('SIGNED_IN', session(B, S2));
+    await vi.advanceTimersByTimeAsync(12 * 60_000);
+    expect(reads() - base).toBe(3);
+    expect(vi.getTimerCount()).toBe(0);
+    expect(getCacheSessionSnapshot()).toMatchObject({ status: 'ready', identity: { userId: A }, error: null });
   });
 });
