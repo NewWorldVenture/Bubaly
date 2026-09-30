@@ -21,9 +21,13 @@ function appUrl(): string {
 /** The most `super_admins` rows a recipient read accepts; one more is a truncated read. */
 const SUPER_ADMIN_READ_MAX = 1_000;
 
+/**
+ * `failure` is a classification, not a message: the raw cause is kept apart for
+ * the server log only, so nothing a database said can reach a response body.
+ */
 export type SuperAdminRecipients =
-  | { emails: string[]; error: null }
-  | { emails: null; error: string };
+  | { emails: string[]; failure: null }
+  | { emails: null; failure: 'read_failed' | 'truncated'; cause: unknown };
 
 /**
  * Every super-admin email — the code/env allowlist ∪ the super_admins table — or
@@ -38,14 +42,14 @@ export type SuperAdminRecipients =
 export async function readSuperAdminRecipients(admin: Admin): Promise<SuperAdminRecipients> {
   const set = new Set(envSuperAdminEmails());
   try {
-    const { rows, error } = await readAll<{ email: string | null }>((from, to) => admin
+    const { rows, error, truncated } = await readAll<{ email: string | null }>((from, to) => admin
       .from('super_admins').select('email').order('email').range(from, to), { max: SUPER_ADMIN_READ_MAX });
-    if (error) return { emails: null, error: error.message ?? String(error) };
+    if (error) return { emails: null, failure: truncated ? 'truncated' : 'read_failed', cause: error };
     for (const r of rows) if (r.email) set.add(r.email.toLowerCase());
-  } catch (e) {
-    return { emails: null, error: e instanceof Error ? e.message : String(e) };
+  } catch (cause) {
+    return { emails: null, failure: 'read_failed', cause };
   }
-  return { emails: [...set], error: null };
+  return { emails: [...set], failure: null };
 }
 
 /**
@@ -55,8 +59,8 @@ export async function readSuperAdminRecipients(admin: Admin): Promise<SuperAdmin
  */
 export async function allSuperAdminEmails(admin: Admin): Promise<string[]> {
   const read = await readSuperAdminRecipients(admin);
-  if (read.error === null) return read.emails;
-  console.error('[feedback-notify] super_admins read failed; using the env allowlist only', read.error);
+  if (read.failure === null) return read.emails;
+  console.error('[feedback-notify] super_admins read failed; using the env allowlist only', read.failure, read.cause);
   return envSuperAdminEmails();
 }
 

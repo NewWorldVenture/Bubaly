@@ -63,37 +63,36 @@ const sorted = (xs: string[]) => [...xs].sort();
 describe('readSuperAdminRecipients: an empty table is not an error; a failed read is', () => {
   it('a read that answers an error is an error, with no list', async () => {
     state.fail = 'error';
-    expect(await readSuperAdminRecipients(client())).toEqual({ emails: null, error: 'injected: super_admins read failed' });
+    expect(await readSuperAdminRecipients(client())).toMatchObject({ emails: null, failure: 'read_failed', cause: { message: 'injected: super_admins read failed' } });
   });
 
   it('a read that throws is an error, with no list', async () => {
     state.fail = 'throw';
-    expect(await readSuperAdminRecipients(client())).toEqual({ emails: null, error: 'injected: super_admins read threw' });
+    expect(await readSuperAdminRecipients(client())).toMatchObject({ emails: null, failure: 'read_failed', cause: { message: 'injected: super_admins read threw' } });
   });
 
   it('more rows than the ceiling is a truncated read: an error, not a short list', async () => {
     db.seed('super_admins', Array.from({ length: 1_001 }, (_, i) => ({ email: `admin-${String(i).padStart(4, '0')}@example.test` })));
     const read = await readSuperAdminRecipients(client());
-    expect(read.emails).toBeNull();
-    expect(read.error).toMatch(/1000|ceiling|more rows|stopped/i);
+    expect(read).toMatchObject({ emails: null, failure: 'truncated' });
   });
 
   it('exactly the ceiling is a complete read', async () => {
     db.seed('super_admins', Array.from({ length: 1_000 }, (_, i) => ({ email: `admin-${String(i).padStart(4, '0')}@example.test` })));
     const read = await readSuperAdminRecipients(client());
-    expect(read.error).toBeNull();
+    expect(read.failure).toBeNull();
     expect(read.emails).toHaveLength(superAdminEmails().length + 1_000);
   });
 
   it('a successful read with zero rows is the configured allowlist, and no error', async () => {
-    expect(await readSuperAdminRecipients(client())).toEqual({ emails: superAdminEmails(), error: null });
+    expect(await readSuperAdminRecipients(client())).toEqual({ emails: superAdminEmails(), failure: null });
     expect(superAdminEmails()).toContain(ENV_ADMIN);
   });
 
   it('a successful read with rows is the allowlist ∪ the table, lowercased, de-duplicated, blanks skipped', async () => {
     db.seed('super_admins', [{ email: TABLE_ADMIN.toUpperCase() }, { email: ENV_ADMIN.toUpperCase() }, { email: null }, { email: '' }]);
     const read = await readSuperAdminRecipients(client());
-    expect(read.error).toBeNull();
+    expect(read.failure).toBeNull();
     expect(sorted(read.emails!)).toEqual(sorted([...new Set([...superAdminEmails(), TABLE_ADMIN])]));
   });
 });
@@ -102,7 +101,7 @@ describe('allSuperAdminEmails / notifySuperAdmins: alerts stay best-effort, and 
   it('a failed read still returns the allowlist, and logs why', async () => {
     state.fail = 'error';
     expect(await allSuperAdminEmails(client())).toEqual(superAdminEmails());
-    expect(errors).toHaveBeenCalledWith('[feedback-notify] super_admins read failed; using the env allowlist only', 'injected: super_admins read failed');
+    expect(errors).toHaveBeenCalledWith('[feedback-notify] super_admins read failed; using the env allowlist only', 'read_failed', expect.objectContaining({ message: 'injected: super_admins read failed' }));
   });
 
   it('a successful read is unchanged: the allowlist ∪ the table, nothing logged', async () => {

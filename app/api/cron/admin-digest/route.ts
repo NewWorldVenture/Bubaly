@@ -77,8 +77,8 @@ export async function GET(req: NextRequest) {
   // table, and used to answer 200 ok while doing it. An empty table is fine: the
   // allowlist is then the whole list.
   const recipients = await readSuperAdminRecipients(admin);
-  if (recipients.error !== null) {
-    console.error('[admin-digest] super-admin recipient read failed', recipients.error);
+  if (recipients.failure !== null) {
+    console.error('[admin-digest] super-admin recipient read failed', recipients.failure, recipients.cause);
     return NextResponse.json({ ok: false, error: t('adminDigest.recipientsUnavailable') }, { status: 502 });
   }
   const emails = recipients.emails;
