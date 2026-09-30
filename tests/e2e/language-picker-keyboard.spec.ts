@@ -2,6 +2,7 @@ import fs from 'node:fs';
 import path from 'node:path';
 import ts from 'typescript';
 import { expect, test, type Page } from '@playwright/test';
+import { reactBrowserScripts } from './helpers/react-browser';
 
 // C2-B06 (reproduced on main 231e8140 in #679): the language picker declared
 // role="listbox"/"option" and implemented none of the pattern. Opening it left
@@ -11,8 +12,7 @@ import { expect, test, type Page } from '@playwright/test';
 // Actual LanguageBar, locale provider and React in Chromium, operated by
 // keyboard only. The server action that sets the locale cookie, the router and
 // the icon set are the only stand-ins.
-const react = fs.readFileSync(path.join(path.dirname(require.resolve('react/package.json')), 'umd/react.development.js'), 'utf8');
-const reactDom = fs.readFileSync(path.join(path.dirname(require.resolve('react-dom/package.json')), 'umd/react-dom.development.js'), 'utf8');
+const { react, reactDom } = reactBrowserScripts('development');
 const isolated = new Set(['react', 'next/navigation', 'lucide-react', '@/lib/i18n/actions']);
 const modules: Record<string, { source: string; imports: Record<string, string> }> = {};
 function collect(filename: string): string {
