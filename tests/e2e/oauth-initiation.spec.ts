@@ -4,12 +4,12 @@ import { createHash } from 'node:crypto';
 import ts from 'typescript';
 import { expect, test, type Page } from '@playwright/test';
 import { parsePkceInitiationRecord } from '../../lib/auth/pkce-initiation';
+import { reactBrowserScripts } from './helpers/react-browser';
 
 // Actual OAuthButtons, Locale/Toast providers, browser factory, cookie adapter
 // and installed SDK. Only provider HTTP and named scheduling seams are controlled.
 // An intercepted 204 records actual provider navigation without leaving the page.
-const react = fs.readFileSync(path.join(path.dirname(require.resolve('react/package.json')), 'umd/react.development.js'), 'utf8');
-const reactDom = fs.readFileSync(path.join(path.dirname(require.resolve('react-dom/package.json')), 'umd/react-dom.development.js'), 'utf8');
+const { react, reactDom } = reactBrowserScripts('development');
 const sdk = fs.readFileSync(path.join(path.dirname(require.resolve('@supabase/supabase-js/package.json')), 'dist/umd/supabase.js'), 'utf8');
 const isolated = new Set(['react', 'lucide-react', '@/lib/utils/cn', '@capacitor/core', '@capacitor/haptics']);
 const modules: Record<string, { source: string; imports: Record<string, string> }> = {};
