@@ -254,7 +254,8 @@ declare
 begin
   if p_owner is null or length(p_owner) not between 1 and 200 or p_lease_ms is null or p_lease_ms < 1
      or p_max_attempts is null or p_max_attempts < 1 or p_retention_ms is null or p_margin_ms is null
-     or p_margin_ms < 1 or p_margin_ms >= p_retention_ms then
+     or p_margin_ms < 1 or p_margin_ms >= p_retention_ms or p_retention_ms > 86400000
+     or p_lease_ms >= p_retention_ms - p_margin_ms then
     raise exception 'admin_digest_claim: bad owner, lease, attempts or retention' using errcode = '22023';
   end if;
   select * into r from public.admin_digest_deliveries
@@ -323,7 +324,7 @@ declare
   v_now  timestamptz;
 begin
   if p_min_lease_ms is null or p_min_lease_ms < 0 or p_retention_ms is null or p_margin_ms is null
-     or p_margin_ms < 1 or p_margin_ms >= p_retention_ms then
+     or p_margin_ms < 1 or p_margin_ms >= p_retention_ms or p_retention_ms > 86400000 then
     raise exception 'admin_digest_begin_send: bad lease or retention' using errcode = '22023';
   end if;
   select * into r from public.admin_digest_deliveries

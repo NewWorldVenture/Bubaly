@@ -17,6 +17,7 @@ import {
   payloadJsonOf, recipientKeyOf, resumeDigestOccurrence,
   type EngineConfig, type EngineDeps, type OccurrencePlan,
 } from '@/lib/admin/digest-delivery';
+import { sendEmail } from '@/lib/server/email';
 import {
   FakeClock, FakeResendProvider, HOUR, MINUTE, MemoryDigestDeliveryStore, deferred, never, type StoreHook,
 } from './helpers/digest-delivery-fakes';
@@ -41,9 +42,6 @@ const CONFIG: EngineConfig = {
   retentionSafetyMarginMs: HOUR,
 };
 
-/** Resend's own rule for a key, as #692's sendEmail enforces it. */
-const KEY_RULE = /^[\x21-\x7e](?:[\x20-\x7e]{0,254}[\x21-\x7e])?$/;
-
 function world(start = T0) {
   const clock = new FakeClock(start);
   const store = new MemoryDigestDeliveryStore(clock.now);
@@ -59,7 +57,7 @@ const hookOn = (method: string, phase: 'before' | 'after', key: string | null, a
   (m, p, k) => (m === method && p === phase && (key === null || k === key) ? act() : undefined);
 const fail = () => { throw new Error('synthetic storage failure'); };
 
-afterEach(() => { vi.useRealTimers(); });
+afterEach(() => { vi.useRealTimers(); vi.unstubAllGlobals(); vi.unstubAllEnvs(); });
 
 // ── Inputs ─────────────────────────────────────────────────────────────────
 
@@ -87,6 +85,8 @@ describe('inputs are checked before anything is stored or sent', () => {
     ['a margin as long as the retention window', { retentionSafetyMarginMs: RESEND_KEY_RETENTION_MS }],
     ['zero attempts', { maxAttempts: 0 }],
     ['a retention longer than the provider\'s verified 24 h', { providerKeyRetentionMs: 48 * HOUR }],
+    ['a lease that outlasts the retry window, so a worker that dies after its mark could never be retried', { leaseMs: 23 * HOUR }],
+    ['a lease too long to be a date at all', { leaseMs: 1e16 }],
   ])('a config with %s is refused', async (_name, over) => {
     const { store, provider, engine } = world();
     await expect(deliverDigestOccurrence(plan(), engine('a', { config: { ...CONFIG, ...over } }))).rejects.toThrow(TypeError);
@@ -96,12 +96,11 @@ describe('inputs are checked before anything is stored or sent', () => {
 });
 
 describe('keys and bytes', () => {
-  it('each recipient has one stable key: a function of occurrence and recipient only, free of the address, within Resend\'s rule', () => {
+  it('each recipient has one stable key: a function of occurrence and recipient only, free of the address', () => {
     const a = freezePlan(plan(), new Date(T0));
     const b = freezePlan(plan({ payload: { ...plan().payload, html: '<p>other</p>' }, recipients: [TWO.toUpperCase(), ONE] }), new Date('2027-01-01T00:00:00Z'));
     expect(a.deliveries.map((d) => d.idempotencyKey)).toEqual(b.deliveries.map((d) => d.idempotencyKey));
     for (const d of a.deliveries) {
-      expect(d.idempotencyKey).toMatch(KEY_RULE);
       expect(d.idempotencyKey).not.toMatch(/admin-one|admin-two|example/);
       expect(d.idempotencyKey).toBe(idempotencyKeyFor(OCC, d.recipientKey));
     }
@@ -109,11 +108,24 @@ describe('keys and bytes', () => {
     expect(idempotencyKeyFor('admin-digest:2026-10-01T12:30:00.000Z', K1)).not.toBe(idempotencyKeyFor(OCC, K1));
   });
 
-  it('the stored bytes are the body sendEmail would build for the same message (from, to, subject, html; no reply_to)', () => {
-    const d = freezePlan(plan(), new Date(T0)).deliveries[0];
-    const { from, to, subject, html } = d.payload;
-    expect(d.payloadJson).toBe(JSON.stringify({ from, to, subject, html, reply_to: undefined }));
-    expect(d.payloadJson).toBe(payloadJsonOf(d.payload));
+  it('#692\'s real sendEmail takes each key unchanged and posts exactly the stored bytes (fetch stubbed; nothing leaves)', async () => {
+    const posted: { url: string; key: string | null; body: string }[] = [];
+    vi.stubEnv('RESEND_API_KEY', 're_synthetic_not_a_real_key');
+    vi.stubGlobal('fetch', vi.fn(async (url: RequestInfo | URL, init: RequestInit = {}) => {
+      posted.push({ url: String(url), key: new Headers(init.headers).get('idempotency-key'), body: String(init.body) });
+      return new Response(JSON.stringify({ id: 'msg_synthetic' }), { status: 200, headers: { 'content-type': 'application/json' } });
+    }));
+    const { deliveries } = freezePlan(plan(), new Date(T0));
+    for (const d of deliveries) {
+      const { from, to, subject, html } = d.payload;
+      await expect(sendEmail({ from, to, subject, html, idempotencyKey: d.idempotencyKey })).resolves.toEqual({ ok: true });
+      expect(d.payloadJson).toBe(payloadJsonOf(d.payload));
+    }
+    expect(posted).toEqual(deliveries.map((d) => ({ url: 'https://api.resend.com/emails', key: d.idempotencyKey, body: d.payloadJson })));
+    // Control: the same helper refuses a key it would have to alter, so the acceptance above means something.
+    const { from, to, subject, html } = deliveries[0].payload;
+    await expect(sendEmail({ from, to, subject, html, idempotencyKey: `${deliveries[0].idempotencyKey} ` })).rejects.toThrow(TypeError);
+    expect(posted).toHaveLength(deliveries.length);
   });
 });
 
@@ -350,6 +362,31 @@ describe('a mark whose answer arrives late cannot send late (dispatch deadline)'
     expect(s.attempts).toEqual([{ recipientKey: K1, fence: 2, result: 'not_sent', recorded: 'not_sent', detail: 'dispatch_deadline_passed' }]);
     expect(provider.requests).toHaveLength(1);
     expect(provider.inbox).toHaveLength(1);
+  });
+
+  it('queued work that runs after the mark answer cannot spend the admission budget between the check and the call', async () => {
+    // Unrelated JavaScript taking 2.5 s is queued `depth` microtasks behind the mark's answer, at every
+    // depth from 0 to 12. Wherever it lands, it runs before the check (nothing sent) or after the
+    // call (sent inside the window). It never runs between them, so a second copy never arrives.
+    const outcomes = new Set<string>();
+    for (let depth = 0; depth <= 12; depth++) {
+      const { clock, store, provider, engine } = world();
+      provider.script = ({ n }) => (n === 1 ? { do: 'accept_then_lose_answer', reason: 'timeout' } : { do: 'accept' });
+      await deliverDigestOccurrence(plan({ recipients: [ONE] }), engine('a', { config: TIGHT })); // first mark at T0
+      clock.set(new Date(Date.parse(T0) + 24 * HOUR - 2_000).toISOString()); // 0.5 s of budget left at the check
+      store.hooks.push(hookOn('beginSend', 'after', K1, () => {
+        let queued = Promise.resolve();
+        for (let i = 0; i < depth; i++) queued = queued.then(() => undefined);
+        void queued.then(() => { clock.advance(2_500); });
+      }));
+      const r = await deliverDigestOccurrence(plan({ recipients: [ONE] }), engine('b', { config: TIGHT }));
+      expect(provider.inbox, `depth ${depth}`).toHaveLength(1);
+      if (r.attempts[0]?.detail === 'dispatch_deadline_passed') outcomes.add('held before the call');
+      else if (provider.requests.length === 2 && r.attempts[0]?.result === 'accepted') outcomes.add('sent inside the window');
+      else outcomes.add(`unexpected at depth ${depth}: ${JSON.stringify(r.attempts)}`);
+    }
+    // Both sides of the boundary were reached, so the sweep covered the gap it guards.
+    expect([...outcomes].sort()).toEqual(['held before the call', 'sent inside the window']);
   });
 
   it('control: a mark answer that is slow but inside the deadline still sends, once', async () => {

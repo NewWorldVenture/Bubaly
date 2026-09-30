@@ -298,6 +298,15 @@ describe.skipIf(!pgFixtureEnabled)('0471 on PostgreSQL (disposable database)', (
       expect(await fx.sql(`set role service_role; ${CALLS[0]}`)).toBe('');
       expect(await fx.sql(`set role service_role; select public.admin_digest_claim('x', 'y', 'w', 1000, 1, 86400000, 3600000)::text;`)).toBe('{"reason": "not_found", "claimed": false}');
     });
+    it('the functions refuse a policy the engine refuses: retention past the verified 24 h, a lease that outlasts the retry window', async () => {
+      const bad = (stmt: string) => expect(fx.sql(`set role service_role; ${stmt}`)).rejects.toThrow(/bad owner, lease, attempts or retention|bad lease or retention/);
+      await bad(`select public.admin_digest_claim('x', 'y', 'w', 1000, 1, 86400001, 3600000);`);
+      await bad(`select public.admin_digest_begin_send('x', 'y', 1, 0, 86400001, 3600000);`);
+      await bad(`select public.admin_digest_claim('x', 'y', 'w', ${23 * HOUR}, 1, 86400000, 3600000);`);
+      await bad(`select public.admin_digest_claim('x', 'y', 'w', 2147483647, 1, 86400000, 3600000);`); // the largest lease the integer parameter holds
+      // Control: the longest lease that still lapses inside the retry window is accepted.
+      expect(await fx.sql(`set role service_role; select public.admin_digest_claim('x', 'y', 'w', ${23 * HOUR - 1}, 1, 86400000, 3600000)::text;`)).toBe('{"reason": "not_found", "claimed": false}');
+    });
   });
 
   describe('frozen means frozen, in the database itself', () => {

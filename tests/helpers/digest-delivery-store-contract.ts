@@ -287,6 +287,20 @@ export function describeDigestDeliveryStoreContract(label: string, make: (clock:
       expect(await store.beginSend(id, key, b.row.fence, CONTRACT_BEGIN)).toEqual({ ok: true, dispatchBy: new Date(Date.parse(start) + 23 * HOUR).toISOString() });
     });
 
+    it('a row that was only ever refused is not bound by retention: its dispatch deadline is the lease alone, at any age', async () => {
+      const { clock, store, id, key } = await setup();
+      const a = await store.claim(id, key, 'a', CONTRACT_POLICY);
+      if (!a.claimed) throw new Error('setup');
+      expect(answerOf(await store.beginSend(id, key, a.row.fence, CONTRACT_BEGIN))).toBe('ok');
+      await store.complete(id, key, a.row.fence, { kind: 'rejected', httpStatus: 429, code: 'rate_limit_exceeded', retryable: true }, 3);
+      const later = new Date(Date.parse(start) + 30 * HOUR).toISOString(); // long past first mark + retention − margin
+      clock.set(later);
+      const b = await store.claim(id, key, 'b', CONTRACT_POLICY);
+      if (!b.claimed) throw new Error('setup');
+      expect(b.row).toMatchObject({ ambiguous: false, firstSendAt: start });
+      expect(await store.beginSend(id, key, b.row.fence, CONTRACT_BEGIN)).toEqual({ ok: true, dispatchBy: new Date(Date.parse(later) + 5 * MINUTE - 1_000).toISOString() });
+    });
+
     it('an unknown occurrence or recipient is not found, not created', async () => {
       const { store, id } = await setup();
       expect(await store.claim(id, 'f'.repeat(64), 'a', CONTRACT_POLICY)).toEqual({ claimed: false, reason: 'not_found' });

@@ -21,6 +21,27 @@ The engine does not schedule. The caller (the cron route, later) decides and pas
 
 `deliverDigestOccurrence(plan)` stores the plan the first time it sees the occurrence. On every later call the **stored** plan is used. A recomputed plan with a different body or different recipients is reported in `planMismatch` and is never merged or sent. `resumeDigestOccurrence(id)` continues from stored state alone.
 
+### Duties the engine cannot enforce
+
+These came out of an adversarial review of the engine. Each one belongs to the route wiring or to an operator. None is solved here.
+
+- **Normalise recipients before the plan.**
+  - `readSuperAdminRecipients` lowercases table addresses but does not trim them.
+  - `validatePlan` refuses the **whole occurrence** with a `TypeError` for any of these: a duplicate after trimming, an address that is not one plain address, or more than 200 recipients. Nothing is stored or sent.
+  - The route must trim, lowercase and dedupe first. It must also decide whether one bad address refuses the occurrence or is dropped and reported; that is a policy choice. Either way it catches the `TypeError` and answers non-200.
+- **A recipient removed after the freeze is still sent on a retry of that occurrence.**
+  - The stored plan wins, and `planMismatch.recipientsRemoved` reports only a count. A row that was never ambiguous is retried at any age.
+  - Two options: the caller never resumes an old occurrence after an admin is removed, or a later migration adds a fenced `withdraw` step. That step is not in 0471.
+- **Do not rotate `RESEND_API_KEY` while any row is `unknown` inside its window.**
+  - Resend documents 24-hour key retention, but not whether a key is scoped per API key or per team.
+  - If it is per API key, a retry after rotation is a new key, and the provider sends a second copy.
+  - 401/403 are retryable because an operator can fix them. That fix must not be a rotation while ambiguous rows are open.
+- **Reconciliation is manual, and there is no store step for it yet.**
+  - Resend documents no lookup by idempotency key, and an ambiguous row holds no message id. A person checks Resend's logs by recipient, time and subject.
+  - `needs_reconciliation` is terminal, and 0471's triggers keep it that way. Recording the answer needs a later, fenced `reconcile` step.
+- **`sendEmail` answers `{ ok: true, skipped: true }` when no API key is set.** A provider adapter must map that to a retryable refusal, never to `accepted` or `unknown`.
+- **The scheduler prototype's route change must not ship alongside this.** Its key is `admin-digest/<until>/<sha256(raw address)>`; the engine's is `bubaly/admin-digest/v1/<sha256(occurrence)>/<sha256(normalised address)>`. The two never deduplicate each other, so running both inside 24 hours sends twice.
+
 ## 2. Per-recipient states
 
 | Status | Meaning | Next |
@@ -50,9 +71,13 @@ Together these stop a worker that stalled after its claim from sending late.
 - lease expiry minus the send deadline, so the call ends while the lease holds;
 - for an ambiguous row, also no later than the first mark plus retention minus margin, so the request reaches the provider before it can forget the key. A row only ever definitively refused has nothing to duplicate.
 
-The engine re-reads its own clock **after** the store answers, immediately before the call. At or past `dispatchBy` it sends nothing (`dispatch_deadline_passed`), so a mark whose answer arrived late cannot send late. The row keeps its mark and is treated as possibly sent.
+The engine re-reads its own clock **after** the store answers, in the same synchronous step as the provider call: there is no await between the check and the call, so other queued work cannot spend the budget between them. At or past `dispatchBy` it sends nothing (`dispatch_deadline_passed`), so a mark whose answer arrived late cannot send late. The row keeps its mark and is treated as possibly sent.
 
 **Clock skew.** `dispatchBy` is database time and the engine compares it with the application's clock. Skew between the two must stay well inside both `leaseMs − sendTimeoutMs` and `retentionSafetyMarginMs − sendTimeoutMs`. NTP-level skew does; the defaults are 5 min, 1 h and 15 s.
+
+**Policy bounds.** `validateConfig` refuses, and 0471's functions refuse again, two policies:
+- a retention longer than the verified 24 hours;
+- a lease of `retention − margin` or more. A worker that dies after its mark holds the row until the lease lapses, so a longer lease would park every such crash instead of retrying it.
 
 **Keys.** A key is `bubaly/admin-digest/v1/<sha256(occurrenceId)[0,32]>/<sha256(recipient)[0,32]>`:
 - It is a function of occurrence and recipient only.

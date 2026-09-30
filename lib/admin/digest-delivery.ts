@@ -416,6 +416,9 @@ export function validateConfig(c: EngineConfig): void {
   // The last safe retry must reach the provider before it forgets the key.
   if (c.retentionSafetyMarginMs <= c.sendTimeoutMs) planError('retentionSafetyMarginMs must exceed sendTimeoutMs');
   if (c.retentionSafetyMarginMs >= c.providerKeyRetentionMs) planError('retentionSafetyMarginMs must be shorter than the retention window');
+  // A worker that dies after its mark leaves the row locked until its lease lapses. The
+  // lease must lapse inside the retry window, or every such crash parks the row.
+  if (c.leaseMs >= c.providerKeyRetentionMs - c.retentionSafetyMarginMs) planError('leaseMs must be shorter than the retry window (retention minus margin)');
   // Never assume the provider remembers a key longer than its documentation says.
   if (c.providerKeyRetentionMs > RESEND_KEY_RETENTION_MS) planError('providerKeyRetentionMs cannot exceed the verified 24 h');
 }
@@ -574,14 +577,16 @@ async function run(stored: StoredOccurrence, deps: EngineDeps, report: Occurrenc
       report.attempts.push({ recipientKey: key, fence: row.fence, result: 'not_sent', recorded: marked.reason === 'fenced_out' ? 'fenced_out' : 'not_sent', detail: marked.reason });
       continue;
     }
-    // The store's answer may have arrived late. Re-read the time now, after the await and immediately
-    // before the call: past the deadline, the lease may be gone or the provider may forget the key, so
-    // the send does not happen. The row keeps its mark and is treated as possibly sent (the safe side).
-    if (!(deps.now().getTime() < Date.parse(marked.dispatchBy))) {
+    // The store's answer may have arrived late, and other queued work may run before the call. The time
+    // is re-read inside sendWithDeadline, in the same synchronous step as the provider call: past the
+    // deadline, the lease may be gone or the provider may forget the key, so the send does not happen.
+    // The row keeps its mark and is treated as possibly sent (the safe side).
+    const dispatchBy = Date.parse(marked.dispatchBy);
+    const result = await sendWithDeadline(deps.provider, row, config.sendTimeoutMs, () => deps.now().getTime() < dispatchBy);
+    if (result === NOT_DISPATCHED) {
       report.attempts.push({ recipientKey: key, fence: row.fence, result: 'not_sent', recorded: 'not_sent', detail: 'dispatch_deadline_passed' });
       continue;
     }
-    const result = await sendWithDeadline(deps.provider, row, config.sendTimeoutMs);
     let recorded: 'ok' | 'fenced_out';
     try {
       recorded = await store.complete(id, key, row.fence, result, config.maxAttempts);
@@ -607,16 +612,27 @@ async function run(stored: StoredOccurrence, deps: EngineDeps, report: Occurrenc
   return report;
 }
 
-async function sendWithDeadline(provider: DigestEmailProvider, row: DeliveryRow, ms: number): Promise<ProviderSendResult> {
+const NOT_DISPATCHED = Symbol('not_dispatched');
+
+/**
+ * `admitted` and `provider.send` run in one synchronous step, with no await between them, so no
+ * other queued work can spend the admission budget after the check. The deadline starts with the call.
+ */
+async function sendWithDeadline(provider: DigestEmailProvider, row: DeliveryRow, ms: number, admitted: () => boolean): Promise<ProviderSendResult | typeof NOT_DISPATCHED> {
+  if (!admitted()) return NOT_DISPATCHED;
   const controller = new AbortController();
   let timer: ReturnType<typeof setTimeout> | undefined;
   const deadline = new Promise<ProviderSendResult>((resolve) => {
     timer = setTimeout(() => { controller.abort(); resolve({ kind: 'unknown', reason: 'timeout' }); }, ms);
   });
   // A provider that throws, even synchronously, settles nothing: the request may have left.
-  const attempt = Promise.resolve()
-    .then(() => provider.send({ idempotencyKey: row.idempotencyKey, payload: { ...row.payload }, payloadJson: row.payloadJson, signal: controller.signal }))
-    .then(checkResult, (): ProviderSendResult => ({ kind: 'unknown', reason: 'network' }));
+  let sent: Promise<ProviderSendResult>;
+  try {
+    sent = Promise.resolve(provider.send({ idempotencyKey: row.idempotencyKey, payload: { ...row.payload }, payloadJson: row.payloadJson, signal: controller.signal }));
+  } catch {
+    sent = Promise.resolve({ kind: 'unknown', reason: 'network' });
+  }
+  const attempt = sent.then(checkResult, (): ProviderSendResult => ({ kind: 'unknown', reason: 'network' }));
   try {
     return await Promise.race([attempt, deadline]);
   } finally {
