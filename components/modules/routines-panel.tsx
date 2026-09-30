@@ -21,7 +21,7 @@ import { Modal } from '@/components/ui/modal';
 import { Input, Field, Select } from '@/components/ui/input';
 import { cn } from '@/lib/utils/cn';
 import {
-  detectRoutines, materializeRoutine, weekdayMaskLabel, weekdaysInMask,
+  detectRoutines, materializeRoutine, templateFromSuggestion, weekdayMaskLabel, weekdaysInMask,
   hasWeekday, toggleWeekday, minutesToLabel, weekdayLong,
   WEEKDAYS_WEEKDAYS, type RoutineEventInput, type EventCategory,
 } from '@/lib/routines/detect';
@@ -95,9 +95,11 @@ export function RoutinesPanel({ events, weekStartMonday, timeZone, onApplied }: 
   }, [templates, itemsByTemplate]);
 
   const suggestions = useMemo(() => {
-    const found = detectRoutines(events, { minOccurrences: 3, limit: 8 });
+    // Read on the family's clock (TIME-003), the same frame applyTemplate
+    // materializes in, so a saved routine lands where it was seen.
+    const found = detectRoutines(events, { minOccurrences: 3, limit: 8, timeZone });
     return found.filter((s) => !savedKeys.has(`${s.title.toLowerCase().trim()}|${s.weekday}`)).slice(0, 3);
-  }, [events, savedKeys]);
+  }, [events, savedKeys, timeZone]);
 
   function refreshAll() { void refreshTemplates(); void refreshItems(); }
 
@@ -106,14 +108,14 @@ export function RoutinesPanel({ events, weekStartMonday, timeZone, onApplied }: 
     if (!s) return;
     return run(`save:${sig}`, async () => {
       const sb = createClient();
+      const saved = templateFromSuggestion(s);
       const { data: tpl, error } = await sb.from('routine_templates').insert({
         family_id: familyId, name: s.title, icon: CATEGORY_EMOJI[s.category] ?? '🔁',
-        weekday_mask: 1 << s.weekday, source: 'detected', created_by: userId,
+        weekday_mask: saved.weekday_mask, source: 'detected', created_by: userId,
       }).select('id').single();
       if (error || !tpl) throw error ?? new Error('Could not save');
       const { error: e2 } = await sb.from('routine_template_items').insert({
-        template_id: tpl.id, family_id: familyId, title: s.title, category: s.category,
-        start_minutes: s.startMinutes, duration_minutes: s.durationMinutes, assignee_id: s.assigneeId, sort_order: 0,
+        template_id: tpl.id, family_id: familyId, ...saved.items[0], sort_order: 0,
       });
       if (e2) throw e2;
       success(tr('routinesPanel.routineSaved'));

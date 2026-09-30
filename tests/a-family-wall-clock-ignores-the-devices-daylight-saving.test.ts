@@ -22,7 +22,7 @@ import { renderToString } from 'react-dom/server';
 import { FamilyTimeZoneProvider, LocaleProvider } from '@/components/i18n/locale-provider';
 import { useFamilyClock, type FamilyClock } from '@/components/i18n/use-format';
 import { localeOrDefault } from '@/lib/i18n/locales';
-import { materializeRoutine } from '@/lib/routines/detect';
+import { detectRoutines, materializeRoutine, templateFromSuggestion } from '@/lib/routines/detect';
 import { wallFromKey, wallMonthStart, wallWeekStart, wallKey } from '@/lib/time/wall-clock';
 import { addDays as addPracticeDays } from '@/lib/language/practice';
 import { sessionStreak, weeklyPlan } from '@/lib/declutter/missions';
@@ -225,6 +225,47 @@ describe('the calendar grid and the routines applied from it', () => {
       const la = materializeRoutine(template, wallFromKey('2026-03-02'), 1, 'America/Los_Angeles').map((r) => r.starts_at);
       expect(la, device).toEqual(['2026-03-02T10:30:00.000Z', '2026-03-08T10:00:00.000Z']);
     }
+  });
+});
+
+describe('a routine seen, saved and applied on the family\'s clock (review 5371688966)', () => {
+  // detectRoutines -> the template the panel saves (templateFromSuggestion) ->
+  // materializeRoutine, as the routines panel runs them. Detection used to read
+  // the PHONE's weekday and hour while application read the FAMILY's, so on a
+  // phone in another zone a Monday 21:00 routine came back Tuesday 06:00.
+  const PHONES = ['UTC', 'America/Los_Angeles', 'America/Santiago', 'Asia/Tokyo'];
+  const roundTrip = (starts: string[], familyZone: string, applyMonday: string) => {
+    const events = starts.map((starts_at, i) => ({
+      id: `e${i}`, title: 'School run', category: 'school' as const, starts_at, ends_at: null, all_day: false, assignee_id: null,
+    }));
+    const [found] = detectRoutines(events, { timeZone: familyZone });
+    expect(found, 'a routine is detected').toBeDefined();
+    return materializeRoutine(templateFromSuggestion(found), wallFromKey(applyMonday), 1, familyZone).map((r) => r.starts_at);
+  };
+
+  it.each(PHONES)('UTC family, Mondays 21:00 (crosses into Tuesday in Tokyo), on a %s phone', (phone) => {
+    onDevice(phone);
+    expect(roundTrip(['2026-09-07T21:00:00Z', '2026-09-14T21:00:00Z', '2026-09-21T21:00:00Z'], 'UTC', '2026-09-28'))
+      .toEqual(['2026-09-28T21:00:00.000Z']);
+  });
+
+  it.each(PHONES)('Los Angeles family, Mondays 07:30, on a %s phone', (phone) => {
+    onDevice(phone);
+    expect(roundTrip(['2026-09-07T14:30:00Z', '2026-09-14T14:30:00Z', '2026-09-21T14:30:00Z'], 'America/Los_Angeles', '2026-09-28'))
+      .toEqual(['2026-09-28T14:30:00.000Z']);
+  });
+
+  it.each(PHONES)('UTC family, Mondays 15:00 in January, on a %s phone', (phone) => {
+    onDevice(phone);
+    expect(roundTrip(['2026-01-05T15:00:00Z', '2026-01-12T15:00:00Z', '2026-01-19T15:00:00Z'], 'UTC', '2026-01-26'))
+      .toEqual(['2026-01-26T15:00:00.000Z']);
+  });
+
+  it('the panel detects and saves on the family\'s clock, through the shared mapping', () => {
+    const src = readFileSync(join(__dirname, '..', 'components/modules/routines-panel.tsx'), 'utf8');
+    expect(src).toMatch(/detectRoutines\(events, \{[^}]*\btimeZone\b[^}]*\}\)/);
+    expect(src).toContain('templateFromSuggestion(s)');
+    expect(src).toMatch(/materializeRoutine\([\s\S]{0,400}?weekStartMonday, 1, timeZone,/);
   });
 });
 

@@ -8,6 +8,7 @@
 // MATERIALIZE a saved template into concrete calendar_events for a date range.
 
 import { addWallDays, wallDate, wallParts, wallToInstant } from '@/lib/time/wall-clock';
+import { isValidTimezone, localPartsAt } from '@/lib/time/zoned';
 
 export type EventCategory =
   | 'general' | 'school' | 'sports' | 'appointment' | 'medication'
@@ -43,9 +44,9 @@ const WEEKDAY_LONG = ['Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'S
 /** JS getDay() (0=Sun) → app weekday (0=Mon … 6=Sun). */
 export function jsDayToWeekday(jsDay: number): number { return (jsDay + 6) % 7; }
 
-/** ISO week key "YYYY-Www" so occurrences are counted per distinct week. */
-function isoWeekKey(d: Date): string {
-  const t = new Date(Date.UTC(d.getFullYear(), d.getMonth(), d.getDate()));
+/** ISO week key "YYYY-Www" of a calendar date, so occurrences are counted per distinct week. */
+function isoWeekKey(year: number, month: number, dayOfMonth: number): string {
+  const t = new Date(Date.UTC(year, month - 1, dayOfMonth));
   const day = (t.getUTCDay() + 6) % 7;
   t.setUTCDate(t.getUTCDate() - day + 3); // nearest Thursday
   const firstThursday = new Date(Date.UTC(t.getUTCFullYear(), 0, 4));
@@ -71,6 +72,23 @@ export interface DetectOptions {
   minOccurrences?: number;
   /** Cap on how many suggestions to return (most-frequent first). Default 6. */
   limit?: number;
+  /**
+   * The FAMILY's zone (TIME-003). With it, each event's weekday, start time and
+   * week are read on the family's clock: the frame `materializeRoutine(...,
+   * timeZone)` applies a saved routine in, so a routine detected on a phone in
+   * another zone is saved, and applied, at the family's wall-clock time.
+   * Without it (or with an unusable zone), the runtime's clock, as before.
+   */
+  timeZone?: string;
+}
+
+/** The civil date and minute-of-day an instant reads in `timeZone`, or on the runtime's clock. */
+function civilAt(d: Date, timeZone: string | undefined): { year: number; month: number; day: number; minutes: number } {
+  if (timeZone) {
+    const p = localPartsAt(d, timeZone);
+    return { year: p.year, month: p.month, day: p.day, minutes: p.hour * 60 + p.minute };
+  }
+  return { year: d.getFullYear(), month: d.getMonth() + 1, day: d.getDate(), minutes: d.getHours() * 60 + d.getMinutes() };
 }
 
 /**
@@ -82,6 +100,7 @@ export function detectRoutines(events: RoutineEventInput[], opts: DetectOptions 
   const bucket = opts.bucketMinutes ?? 30;
   const minOcc = opts.minOccurrences ?? 3;
   const limit = opts.limit ?? 6;
+  const zone = opts.timeZone && isValidTimezone(opts.timeZone) ? opts.timeZone : undefined;
 
   type Group = {
     title: string; category: EventCategory; weekday: number; startBucket: number;
@@ -94,8 +113,9 @@ export function detectRoutines(events: RoutineEventInput[], opts: DetectOptions 
     if (e.all_day) continue;
     const start = new Date(e.starts_at);
     if (Number.isNaN(start.getTime())) continue;
-    const weekday = jsDayToWeekday(start.getDay());
-    const minutes = start.getHours() * 60 + start.getMinutes();
+    const civil = civilAt(start, zone);
+    const weekday = jsDayToWeekday(new Date(Date.UTC(civil.year, civil.month - 1, civil.day)).getUTCDay());
+    const minutes = civil.minutes;
     const startBucket = Math.round(minutes / bucket) * bucket;
     const key = `${normalizeTitle(e.title)}|${weekday}|${startBucket}`;
 
@@ -104,7 +124,7 @@ export function detectRoutines(events: RoutineEventInput[], opts: DetectOptions 
       g = { title: e.title.trim(), category: e.category, weekday, startBucket, weeks: new Set(), durations: [], assignees: new Map(), lastSeen: 0, titleSamples: new Map() };
       groups.set(key, g);
     }
-    g.weeks.add(isoWeekKey(start));
+    g.weeks.add(isoWeekKey(civil.year, civil.month, civil.day));
     if (e.ends_at) {
       const dur = (new Date(e.ends_at).getTime() - start.getTime()) / 60000;
       if (dur > 0 && dur <= 1440) g.durations.push(Math.round(dur));
@@ -182,18 +202,32 @@ export interface RoutineTemplateForApply {
   }[];
 }
 
+/**
+ * The template a suggestion is saved as: its weekday as a one-day mask and its
+ * start and length as one step. The routines panel stores exactly these fields,
+ * and `materializeRoutine` reads them back, so detection, saving and applying
+ * share one mapping.
+ */
+export function templateFromSuggestion(s: RoutineSuggestion): RoutineTemplateForApply {
+  return {
+    weekday_mask: 1 << s.weekday,
+    items: [{ title: s.title, category: s.category, start_minutes: s.startMinutes, duration_minutes: s.durationMinutes, assignee_id: s.assigneeId }],
+  };
+}
+
 export interface MaterializedEvent {
   title: string; category: EventCategory;
   starts_at: string; ends_at: string; all_day: false;
   assignee_id: string | null;
 }
 
-/** Local Date at a given weekday within the week containing `weekStartMonday`. */
 /** The instant `minutes` past the family's midnight, `days` after a wall-reading Monday. */
 function wallStepToInstant(monday: Date, days: number, minutes: number, timeZone: string): Date {
   const day = wallParts(addWallDays(monday, days));
   return wallToInstant(wallDate(day.year, day.month, day.day, 0, minutes), timeZone);
 }
+
+/** Local Date at a given weekday within the week containing `weekStartMonday`. */
 
 function dateForWeekday(weekStartMonday: Date, weekday: number, minutes: number): Date {
   const d = new Date(weekStartMonday);
@@ -223,14 +257,15 @@ export function materializeRoutine(
   timeZone?: string,
 ): MaterializedEvent[] {
   const days = weekdaysInMask(template.weekday_mask);
+  const zone = timeZone && isValidTimezone(timeZone) ? timeZone : undefined;
   const out: MaterializedEvent[] = [];
   for (let w = 0; w < weeks; w++) {
     const base = new Date(weekStartMonday);
     base.setDate(base.getDate() + w * 7);
     for (const weekday of days) {
       for (const item of template.items) {
-        const start = timeZone
-          ? wallStepToInstant(weekStartMonday, w * 7 + weekday, item.start_minutes, timeZone)
+        const start = zone
+          ? wallStepToInstant(weekStartMonday, w * 7 + weekday, item.start_minutes, zone)
           : dateForWeekday(base, weekday, item.start_minutes);
         const end = new Date(start.getTime() + item.duration_minutes * 60000);
         out.push({
