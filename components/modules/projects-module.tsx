@@ -74,7 +74,7 @@ export function ProjectsModule() {
 
   // The FAMILY's wall clock (TIME-003): the helpers below read local fields,
   // so handing them this makes their "today" the family's day, not the phone's.
-  const today = useMemo(() => clock.wallNow(), [clock]);
+  const today = useMemo(() => clock.calendarToday(), [clock]);
   const summary = useMemo(() => projectsSummary(projects.data, materials.data, quotes.data, today), [projects.data, materials.data, quotes.data, today]);
   const nameOf = (id: string | null) => members.find((m) => m.id === id)?.display_name ?? null;
   const openProject = projects.data.find((p) => p.id === openId) ?? null;

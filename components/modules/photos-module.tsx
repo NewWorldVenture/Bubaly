@@ -65,8 +65,7 @@ export function PhotosModule() {
     if (Number.isNaN(date.getTime())) return '';
     // Today and Tomorrow are the FAMILY's, and so is the clock (TIME-003).
     const day = clock.dayKeyOf(date);
-    const wall = clock.wallToday();
-    const tomorrow = clock.wallKey(new Date(wall.getFullYear(), wall.getMonth(), wall.getDate() + 1));
+    const tomorrow = clock.wallKey(clock.addDays(clock.wallToday(), 1));
     if (day === clock.todayKey() || day === tomorrow) return tr(day === tomorrow ? 'photosModule.tomorrowAt' : 'photosModule.todayAt', {
       time: format.fmtTime(date),
     });

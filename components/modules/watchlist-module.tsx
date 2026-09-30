@@ -64,7 +64,7 @@ export function WatchlistModule() {
 
   // The FAMILY's wall clock (TIME-003): the helpers below read local fields,
   // so handing them this makes their "today" the family's day, not the phone's.
-  const today = useMemo(() => clock.wallNow(), [clock]);
+  const today = useMemo(() => clock.calendarToday(), [clock]);
   const myMemberId = selfMember?.id ?? null;
   const ages = useMemo(() => watchlistAudienceAges(audience, members, today), [members, audience, today]);
   const tonight = useMemo(() => pickTonight(titles.data, votes.data, { audienceIds: audience, audienceAges: ages, availableMinutes: minutes, service }), [titles.data, votes.data, audience, ages, minutes, service]);

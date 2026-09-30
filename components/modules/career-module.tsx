@@ -77,7 +77,7 @@ export function CareerModule() {
 
   // The FAMILY's wall clock (TIME-003): the helpers below read local fields,
   // so handing them this makes their "today" the family's day, not the phone's.
-  const today = useMemo(() => clock.wallNow(), [clock]);
+  const today = useMemo(() => clock.calendarToday(), [clock]);
   const profile = profiles.data.find((p) => p.id === profileId) ?? null;
   const myApps = useMemo(() => apps.data.filter((a) => a.profile_id === profileId), [apps.data, profileId]);
   const myResumes = useMemo(() => resumes.data.filter((r) => r.profile_id === profileId), [resumes.data, profileId]);

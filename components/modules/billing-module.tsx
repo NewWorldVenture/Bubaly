@@ -757,12 +757,13 @@ export function BillingModule({ serviceFeeNotice = null }: { serviceFeeNotice?: 
   // ── Computed values ─────────────────────────────────────────────────────
   const totalBalance = useMemo(() => accounts.reduce((s, a) => s + (a.balance ?? 0), 0), [accounts]);
 
-  // A Date whose local fields read the FAMILY's wall clock (TIME-003), so the
-  // month, the ringed day and the local-midnight comparisons below are all the
-  // family's. Never stored.
-  const wallNow = clock.wallNow();
-  const currentMonth = wallNow.getMonth();
-  const currentYear = wallNow.getFullYear();
+  // The FAMILY's day (TIME-003) as a local calendar date, the convention every
+  // bill due date below is parsed in (local midnight), so the month, the ringed
+  // day and the due-date comparisons are all the family's. A date, not a time:
+  // never stored, never turned into an instant.
+  const familyDay = clock.calendarToday();
+  const currentMonth = familyDay.getMonth();
+  const currentYear = familyDay.getFullYear();
 
   const currentMonthTransactions = useMemo(() =>
     transactions.filter((tx) => isInMonth(tx.date, currentYear, currentMonth)),
@@ -817,7 +818,7 @@ export function BillingModule({ serviceFeeNotice = null }: { serviceFeeNotice?: 
     bills.filter((b) => {
       if (b.status === 'upcoming') return true;
       const due = parseCalendarDate(b.due_date);
-      return due !== null && due >= startOfLocalDay(wallNow);  // due today is still upcoming
+      return due !== null && due >= startOfLocalDay(familyDay);  // due today is still upcoming
     }).slice(0, 5),
     // eslint-disable-next-line react-hooks/exhaustive-deps
     [bills],
@@ -912,13 +913,13 @@ export function BillingModule({ serviceFeeNotice = null }: { serviceFeeNotice?: 
     for (let day = 1; day <= daysInMonth; day++) cells.push({ day, bills: billsByDay[day] ?? [] });
     return cells;
   }, [bills, currentMonth, currentYear]);
-  const todayDate = wallNow.getDate();
+  const todayDate = familyDay.getDate();
 
   function billDotColor(b: Bill): string {
     if (b.status === 'paid') return 'bg-emerald-500';
     if (b.status === 'overdue') return 'bg-rose-500';
     const due = parseCalendarDate(b.due_date);
-    return due !== null && due > wallNow ? 'bg-amber-500' : 'bg-brand';
+    return due !== null && due > familyDay ? 'bg-amber-500' : 'bg-brand';
   }
 
   // ── CRUD helpers ────────────────────────────────────────────────────────

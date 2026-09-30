@@ -58,8 +58,7 @@ export function NextActionsModule() {
   const dayKey = clock.dayKeyOf;
   const today = clock.todayKey();
   // 45-day horizon keeps the list focused on what's actually actionable soon.
-  const wall = clock.wallToday();
-  const horizon = clock.wallKey(new Date(wall.getFullYear(), wall.getMonth(), wall.getDate() + 45));
+  const horizon = clock.wallKey(clock.addDays(clock.wallToday(), 45));
 
   const { data: events, loading: eventsLoading, error: eventsError, refresh: refreshEvents } = useRealtimeQuery<Event>({
     table: 'calendar_events', familyId, deps: [familyId],

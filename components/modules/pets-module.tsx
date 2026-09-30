@@ -68,7 +68,7 @@ export function PetsModule() {
   const [careForPet, setCareForPet] = useState<Pet | null>(null);
 
   const summary = useMemo(
-    () => careSummary(pets.data.length, records.data, clock.wallNow()),
+    () => careSummary(pets.data.length, records.data, clock.calendarToday()),
     [pets.data.length, records.data, clock],
   );
   const upcoming = useMemo(() => upcomingCare(records.data).slice(0, 6), [records.data]);

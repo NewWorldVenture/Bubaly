@@ -42,7 +42,7 @@ const ownerEntries = Object.fromEntries([
 const sources = Object.fromEntries([
   'lib/display/ambient.ts', 'lib/display/tiles.ts', 'lib/display/calendar.ts', 'lib/onboarding/ics-time.ts',
   // The family clock (TIME-003): the real shared formatter and the zone helpers it reads.
-  'components/i18n/use-format.ts', 'lib/utils/format.ts', 'lib/time/zoned.ts', 'lib/time/local-day.ts',
+  'components/i18n/use-format.ts', 'lib/utils/format.ts', 'lib/time/zoned.ts', 'lib/time/local-day.ts', 'lib/time/wall-clock.ts',
   'lib/i18n/locales.ts',
   'components/display/setup-card.tsx', 'components/display/display-grid.tsx',
   'components/display/display-shell-client.tsx',
@@ -172,6 +172,7 @@ test.beforeEach(async ({ page }) => {
         if (id === '@/lib/utils/format') return load('lib/utils/format.ts');
         if (id === '@/lib/time/zoned') return load('lib/time/zoned.ts');
         if (id === '@/lib/time/local-day') return load('lib/time/local-day.ts');
+        if (id === '@/lib/time/wall-clock') return load('lib/time/wall-clock.ts');
         if (Object.prototype.hasOwnProperty.call(requires, id)) return requires[id];
         throw new Error('Unexpected import ' + id);
       };

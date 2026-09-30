@@ -50,9 +50,12 @@ function timeValueToMinutes(v: string): number {
 
 type DraftItem = { title: string; category: EventCategory; start: string; duration: number; assignee_id: string };
 
-export function RoutinesPanel({ events, weekStartMonday, onApplied }: {
+export function RoutinesPanel({ events, weekStartMonday, timeZone, onApplied }: {
   events: RoutineEventInput[];
+  /** A wall reading when `timeZone` is given (the calendar's family week, TIME-003). */
   weekStartMonday: Date;
+  /** The family's zone: the routine's steps land at the family's wall-clock times. */
+  timeZone?: string;
   onApplied: () => void;
 }) {
   const tr = useTranslations();
@@ -133,7 +136,7 @@ export function RoutinesPanel({ events, weekStartMonday, onApplied }: {
     return run(`apply:${t.id}`, async () => {
       const rows = materializeRoutine(
         { weekday_mask: t.weekday_mask, items: its.map((i) => ({ title: i.title, category: i.category, start_minutes: i.start_minutes, duration_minutes: i.duration_minutes, assignee_id: i.assignee_id })) },
-        weekStartMonday, 1,
+        weekStartMonday, 1, timeZone,
       );
       if (rows.length === 0) { toastError(tr('routinesPanel.thisRoutineHasNoActive')); return; }
       // One write, and one composition. Applying this routine to this week twice

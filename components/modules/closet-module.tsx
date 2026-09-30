@@ -103,7 +103,7 @@ export function ClosetModule() {
 
   // The FAMILY's wall clock (TIME-003): the helpers below read local fields,
   // so handing them this makes their "today" the family's day, not the phone's.
-  const today = useMemo(() => clock.wallNow(), [clock]);
+  const today = useMemo(() => clock.calendarToday(), [clock]);
   const tempC = fToC(tempF);
   const memberItems = useMemo(() => items.data.filter((i) => i.member_id === memberId), [items.data, memberId]);
   const memberLogs = useMemo(() => logs.data.filter((l) => l.member_id === memberId), [logs.data, memberId]);

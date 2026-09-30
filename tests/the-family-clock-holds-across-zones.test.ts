@@ -14,7 +14,8 @@ import { FamilyTimeZoneProvider, LocaleProvider } from '@/components/i18n/locale
 import { useFamilyClock, useFormat, useHydrationSafeFormat } from '@/components/i18n/use-format';
 import { localeOrDefault } from '@/lib/i18n/locales';
 import { createFormat } from '@/lib/utils/format';
-import { dayKeyIn, wallClockToInstant } from '@/lib/time/zoned';
+import { dayKeyIn } from '@/lib/time/zoned';
+import { wallDate, wallToInstant } from '@/lib/time/wall-clock';
 import { fromLocalInput, toLocalInput } from '@/lib/time/local-input';
 import { parseDueDateInZone, parseEvent, parseEventInZone } from '@/lib/capture/parse';
 import { buildHeatmap } from '@/lib/calendar/heatmap';
@@ -73,7 +74,7 @@ describe('midnight', () => {
   });
 
   it('a family wall-clock midnight maps back to the right instant', () => {
-    const midnight = wallClockToInstant(new Date(2026, 0, 15), LA);
+    const midnight = wallToInstant(wallDate(2026, 1, 15), LA);
     expect(midnight.toISOString()).toBe('2026-01-15T08:00:00.000Z');
   });
 });

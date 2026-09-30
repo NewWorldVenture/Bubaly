@@ -95,7 +95,7 @@ export function MovingWorkspace() {
 
   // The FAMILY's wall clock (TIME-003): the helpers below read local fields,
   // so handing them this makes their "today" the family's day, not the phone's.
-  const today = useMemo(() => clock.wallNow(), [clock]);
+  const today = useMemo(() => clock.calendarToday(), [clock]);
   const todayIso = isoDate(today);
   const move = moves.data.find((m) => m.id === moveId) ?? null;
   const summary = useMemo(() => (move ? moveSummary(move, tasks.data, boxes.data, today) : null), [move, tasks.data, boxes.data, today]);

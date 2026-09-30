@@ -27,8 +27,8 @@ import { useMemo, useSyncExternalStore } from 'react';
 
 import { useFamilyTimeZone, useLocale, useTranslations } from '@/components/i18n/locale-provider';
 import { createFormat, type Format } from '@/lib/utils/format';
-import { asWallClockIn, dayKeyIn, localPartsAt, wallClockToInstant } from '@/lib/time/zoned';
-import { localDayKey } from '@/lib/time/local-day';
+import { dayKeyIn, localPartsAt } from '@/lib/time/zoned';
+import { addWallDays, wallAt, wallFromKey, wallKey, wallToInstant } from '@/lib/time/wall-clock';
 
 const subscribe = () => () => {};
 const serverTimeZone = () => 'UTC';
@@ -109,13 +109,24 @@ export function useHydrationSafeFormat(): Format {
  *   todayKey()        the family's `YYYY-MM-DD` right now
  *   dayKeyOf(value)   the family's day for an instant; a DATE string as written
  *   hourNow()         the family's wall-clock hour, 0–23
- *   wallNow()         a Date whose LOCAL fields read the family's wall clock —
- *                     for grid arithmetic (`setDate`, `getDay`) only; never store
- *                     it, turn it back with `toInstant`
+ *   wallNow()         the family's wall clock as a WALL READING
+ *                     (lib/time/wall-clock.ts): a Date whose UTC fields read the
+ *                     family's clock, so no device's daylight saving can move it.
+ *                     For grid arithmetic only; never store it, turn it back with
+ *                     `toInstant`
  *   wallToday()       `wallNow()` at the family's midnight
- *   wallOf(value)     an instant as family wall clock
- *   toInstant(wall)   the real instant a wall-clock Date names
- *   wallKey(wall)     the `YYYY-MM-DD` a wall-clock Date reads
+ *   wallOf(value)     an instant as a wall reading
+ *   addDays(wall, n)  a wall reading `n` calendar days on
+ *   toInstant(wall)   the real instant a wall reading names
+ *   wallKey(wall)     the `YYYY-MM-DD` a wall reading shows
+ *   dayStart(n)       the instant the family's day `n` days from today begins
+ *   calendarToday()   the family's day for the DATE-ONLY helpers under lib/
+ *                     (see below) — never a wall reading, never an instant
+ *
+ * Wall readings and `calendarToday()` are different conventions and do not
+ * mix: read a wall reading only with the wall-clock helpers (UTC fields), and
+ * hand `calendarToday()` only to a helper that reads a Date's LOCAL year, month
+ * and day.
  */
 export type FamilyClock = {
   timeZone: string;
@@ -125,8 +136,11 @@ export type FamilyClock = {
   wallNow: (now?: Date) => Date;
   wallToday: (now?: Date) => Date;
   wallOf: (value: string | Date) => Date;
+  addDays: (wall: Date, days: number) => Date;
   toInstant: (wall: Date) => Date;
   wallKey: (wall: Date) => string;
+  dayStart: (daysFromToday?: number, now?: Date) => Date;
+  calendarToday: (now?: Date) => Date;
 };
 
 const DATE_ONLY = /^\d{4}-\d{2}-\d{2}$/;
@@ -137,30 +151,45 @@ export function useFamilyClock(): FamilyClock {
   const timeZone = familyZone ?? readerZone;
   return useMemo<FamilyClock>(() => {
     const instant = (value: string | Date) => (typeof value === 'string' ? new Date(value) : value);
-    // An unparseable value stays unparseable rather than throwing inside Intl:
-    // a bad row renders blank, never takes the surface down.
-    const wallOf = (value: string | Date) => {
-      const d = instant(value);
-      return Number.isNaN(d.getTime()) ? new Date(Number.NaN) : asWallClockIn(d, timeZone);
-    };
-    const wallToday = (now: Date = new Date()) => {
-      const p = localPartsAt(now, timeZone);
-      return new Date(p.year, p.month - 1, p.day);
-    };
+    const todayKey = (now: Date = new Date()) => dayKeyIn(now, timeZone);
+    // A wall reading's midnight is built from the family's day key, not from a
+    // device-local Date: nothing is normalised on the way in, so the family's
+    // midnight is 00:00 even on a morning the phone's own zone skips it.
+    const wallToday = (now: Date = new Date()) => wallFromKey(todayKey(now));
     return {
       timeZone,
-      todayKey: (now = new Date()) => dayKeyIn(now, timeZone),
+      todayKey,
       dayKeyOf: (value) => {
         if (typeof value === 'string' && DATE_ONLY.test(value)) return value;
         const d = instant(value);
         return Number.isNaN(d.getTime()) ? '' : dayKeyIn(d, timeZone);
       },
       hourNow: (now = new Date()) => localPartsAt(now, timeZone).hour,
-      wallNow: (now = new Date()) => asWallClockIn(now, timeZone),
+      wallNow: (now = new Date()) => wallAt(now, timeZone),
       wallToday,
-      wallOf,
-      toInstant: (wall) => wallClockToInstant(wall, timeZone),
-      wallKey: localDayKey,
+      // An unparseable value stays unparseable rather than throwing inside Intl:
+      // a bad row renders blank, never takes the surface down.
+      wallOf: (value) => {
+        const d = instant(value);
+        return Number.isNaN(d.getTime()) ? new Date(Number.NaN) : wallAt(d, timeZone);
+      },
+      addDays: addWallDays,
+      toInstant: (wall) => wallToInstant(wall, timeZone),
+      wallKey,
+      dayStart: (daysFromToday = 0, now) => wallToInstant(addWallDays(wallToday(now), daysFromToday), timeZone),
+      // The DATE-ONLY helpers (lib/language/practice.ts, lib/pets/care.ts, and
+      // their siblings) predate TIME-003 and read a Date's LOCAL year, month and
+      // day — the convention their own `dateOnly('YYYY-MM-DD')` parses every row
+      // date in. So they are handed the family's day in exactly that shape, built
+      // from the day key. It carries a date and no family time: the device's
+      // daylight saving can at most move its unused time of day off midnight (a
+      // Santiago phone's 6 September reads 01:00), never its year, month or day,
+      // and those are all the helpers read. The three that stepped days in 24-hour
+      // blocks now step calendar days, so that holds for their arithmetic too.
+      calendarToday: (now) => {
+        const [y, m, d] = todayKey(now).split('-').map(Number);
+        return new Date(y, m - 1, d);
+      },
     };
   }, [timeZone]);
 }

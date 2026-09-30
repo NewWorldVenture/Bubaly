@@ -82,7 +82,7 @@ export function InventoryModule() {
 
   // The FAMILY's wall clock (TIME-003): the helpers below read local fields,
   // so handing them this makes their "today" the family's day, not the phone's.
-  const today = useMemo(() => clock.wallNow(), [clock]);
+  const today = useMemo(() => clock.calendarToday(), [clock]);
   const owned = useMemo(() => items.data.filter((i) => i.status !== 'disposed'), [items.data]);
   const hits = useMemo(() => searchItems(items.data, locations.data, query), [items.data, locations.data, query]);
   const tree = useMemo(() => locationTree(locations.data), [locations.data]);

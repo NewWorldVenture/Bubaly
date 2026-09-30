@@ -99,7 +99,7 @@ export function FinancesModule() {
   const [linkOpen, setLinkOpen] = useState(false);
   const [moreOpen, setMoreOpen] = useState(false);
   useDismissOnEscape(moreOpen, () => setMoreOpen(false));
-  const [calMonth, setCalMonth] = useState(() => { const d = clock.wallToday(); return new Date(d.getFullYear(), d.getMonth(), 1); });
+  const [calMonth, setCalMonth] = useState(() => { const d = clock.calendarToday(); return new Date(d.getFullYear(), d.getMonth(), 1); });
 
   const { data: accounts, loading: la, error: accountsError, refresh: refreshAccounts } = useRealtimeQuery<Account>({
     table: 'financial_accounts', familyId, deps: [familyId],

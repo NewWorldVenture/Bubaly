@@ -61,9 +61,9 @@ function FocusQueue() {
     try {
       const supabase = createClient();
       // The FAMILY's today, as the two instants that bound it (TIME-003).
-      const wall = clock.wallToday();
-      const dayStart = clock.toInstant(wall);
-      const dayEnd = clock.toInstant(new Date(wall.getFullYear(), wall.getMonth(), wall.getDate() + 1));
+      const now = new Date();
+      const dayStart = clock.dayStart(0, now);
+      const dayEnd = clock.dayStart(1, now);
 
       const { data: member, error: memberErr } = await supabase.from('family_members').select('id').eq('family_id', familyId).eq('user_id', userId).maybeSingle();
       if (!active.current || version !== loadVersion.current) return;

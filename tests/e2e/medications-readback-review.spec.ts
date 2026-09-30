@@ -21,7 +21,7 @@ const sources = Object.fromEntries([
   'lib/time/zoned.ts',
   'components/i18n/locale-provider.tsx', 'lib/i18n/locales.ts', 'lib/i18n/messages.ts', 'lib/i18n/translate.ts',
   // The family clock (TIME-003): the shared formatter and the zone helpers it reads.
-  'components/i18n/use-format.ts', 'lib/time/local-day.ts', 'lib/utils/format.ts',
+  'components/i18n/use-format.ts', 'lib/time/local-day.ts', 'lib/time/wall-clock.ts', 'lib/utils/format.ts',
   'components/ui/states.tsx', 'components/ui/states-client.tsx', 'components/ui/button.tsx',
   'components/ui/input.tsx', 'components/ui/modal.tsx',
   // medications-module.tsx asks before a destructive write via useConfirm; the

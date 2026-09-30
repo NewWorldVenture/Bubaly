@@ -52,9 +52,7 @@ const CONV_TABS: { key: ConvTab; labelKey: string }[] = [
 function timeGroup(iso: string, fmtDate: Format['fmtDate'], clock: FamilyClock): string {
   const day = clock.dayKeyOf(iso);
   if (day === clock.todayKey()) return 'Today';
-  const yesterday = clock.wallToday();
-  yesterday.setDate(yesterday.getDate() - 1);
-  if (day === clock.wallKey(yesterday)) return 'Yesterday';
+  if (day === clock.wallKey(clock.addDays(clock.wallToday(), -1))) return 'Yesterday';
   return fmtDate(iso, 'MMMM d, yyyy');
 }
 

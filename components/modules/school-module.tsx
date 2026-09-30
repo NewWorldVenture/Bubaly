@@ -25,6 +25,7 @@ import { cn } from '@/lib/utils/cn';
 import type { Tables, GradeType } from '@/lib/database.types';
 import { useLocale, useTranslations } from '@/components/i18n/locale-provider';
 import { type FamilyClock, useFamilyClock, useFormat } from '@/components/i18n/use-format';
+import { wallWeekStart } from '@/lib/time/wall-clock';
 import type { Format } from '@/lib/utils/format';
 import type { LocaleCode } from '@/lib/i18n/locales';
 import { parseCalendarDate } from '@/lib/utils/calendar-date';
@@ -317,10 +318,9 @@ export function SchoolModule() {
   // Events this week
   const eventsThisWeek = useMemo(() => {
     // The FAMILY's Monday-to-Sunday week, as instants (TIME-003).
-    const w = clock.wallToday();
-    const daysSinceMon = (w.getDay() + 6) % 7;
-    const start = clock.toInstant(new Date(w.getFullYear(), w.getMonth(), w.getDate() - daysSinceMon));
-    const end = clock.toInstant(new Date(w.getFullYear(), w.getMonth(), w.getDate() - daysSinceMon + 7));
+    const monday = wallWeekStart(clock.wallToday());
+    const start = clock.toInstant(monday);
+    const end = clock.toInstant(clock.addDays(monday, 7));
     return events.filter((e) => { const d = new Date(e.starts_at); return d >= start && d < end; });
   }, [events, clock]);
 

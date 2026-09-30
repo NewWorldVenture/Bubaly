@@ -26,6 +26,7 @@ import { usePlural, useTranslations } from '@/components/i18n/locale-provider';
 import { useFamilyClock, useFormat, type FamilyClock } from '@/components/i18n/use-format';
 import type { Format } from '@/lib/utils/format';
 import { isValidTimezone } from '@/lib/time/zoned';
+import { localDayKey } from '@/lib/time/local-day';
 import { ageOn, nextBirthday } from '@/lib/utils/birthday';
 import { FamilyMediaImg } from '@/components/media/family-media-img';
 
@@ -58,9 +59,8 @@ function inLabel(days: number): string {
 // Today, Tomorrow and every clock are the FAMILY's (TIME-003).
 const fmtRelDayWith = (format: Format, clock: FamilyClock) => (iso: string): string => {
   const day = clock.dayKeyOf(iso);
-  const wall = clock.wallToday();
   if (day === clock.todayKey()) return 'Today';
-  if (day === clock.wallKey(new Date(wall.getFullYear(), wall.getMonth(), wall.getDate() + 1))) return 'Tomorrow';
+  if (day === clock.wallKey(clock.addDays(clock.wallToday(), 1))) return 'Tomorrow';
   return format.fmtDate(iso, 'MMM d');
 };
 function planLabel(level: number): string {
@@ -161,8 +161,9 @@ export function FamilyModule() {
 
   useEffect(() => { void load(); }, [load]);
 
-  // nextBirthday reads local fields: hand it the FAMILY's wall clock (TIME-003).
-  const now = useMemo(() => clock.wallNow(), [clock]);
+  // nextBirthday reads a Date's LOCAL calendar fields: hand it the FAMILY's day
+  // in that convention (TIME-003), and read its answer back the same way.
+  const now = useMemo(() => clock.calendarToday(), [clock]);
   const activeMembers = useMemo(() => members.filter((m) => m.is_active), [members]);
   const memberById = useMemo(() => new Map(members.map((m) => [m.id, m])), [members]);
 
@@ -428,7 +429,7 @@ export function FamilyModule() {
                     <p className="truncate text-sm font-semibold">{m.display_name}</p>
                     <p className="truncate text-xs text-muted">{t('family.turns')} {nb.turning} {inLabel(nb.inDays)}</p>
                   </div>
-                  <span className="shrink-0 text-xs font-semibold text-muted">{format.fmtDate(clock.wallKey(nb.date), 'MMM d')}</span>
+                  <span className="shrink-0 text-xs font-semibold text-muted">{format.fmtDate(localDayKey(nb.date), 'MMM d')}</span>
                 </div>
               ))}
             </div>

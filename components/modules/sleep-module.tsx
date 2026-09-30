@@ -68,7 +68,7 @@ export function SleepModule() {
   const [routineOpen, setRoutineOpen] = useState(false);
   const [checkinOpen, setCheckinOpen] = useState(false);
 
-  const today = useMemo(() => clock.wallNow(), [clock]);
+  const today = useMemo(() => clock.calendarToday(), [clock]);
   const member = members.find((m) => m.id === memberId) ?? null;
   const age = ageOn(member?.birthday, today);
   const routine = routines.data.find((r) => r.member_id === memberId) ?? null;

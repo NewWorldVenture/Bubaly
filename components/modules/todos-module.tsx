@@ -55,10 +55,6 @@ const DONUT = {
   completed: { labelKey: 'todosModule.donut.completed', hex: '#22c55e' },
 };
 
-function ymd(d: Date): string {
-  return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
-}
-
 const dueLabelWith = (fmtDate: Format['fmtDate']) => (due: string, todayStr: string, tomorrowStr: string): string => {
   if (due === todayStr) return 'Today';
   if (due === tomorrowStr) return 'Tomorrow';
@@ -113,9 +109,9 @@ export function TodosModule() {
   // The family's today (TIME-003), stepped by calendar day so a DST change
   // cannot land "tomorrow" on the same date or skip one.
   const wall = clock.wallToday();
-  const todayStr = ymd(wall);
-  const tomorrowStr = ymd(new Date(wall.getFullYear(), wall.getMonth(), wall.getDate() + 1));
-  const weekEndStr = ymd(new Date(wall.getFullYear(), wall.getMonth(), wall.getDate() + 7));
+  const todayStr = clock.wallKey(wall);
+  const tomorrowStr = clock.wallKey(clock.addDays(wall, 1));
+  const weekEndStr = clock.wallKey(clock.addDays(wall, 7));
 
   const active = useMemo(() => items.filter((i) => !i.is_done), [items]);
   const completed = useMemo(() => items.filter((i) => i.is_done), [items]);

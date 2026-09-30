@@ -112,8 +112,7 @@ export function ChoresModule() {
   const windowed = useMemo(() => {
     if (pointsWindow === 'all') return data;
     // From the FAMILY's midnight, N calendar days back (TIME-003).
-    const wall = clock.wallToday();
-    const since = clock.toInstant(new Date(wall.getFullYear(), wall.getMonth(), wall.getDate() - (pointsWindow === 'week' ? 7 : 30)));
+    const since = clock.dayStart(-(pointsWindow === 'week' ? 7 : 30));
     return data.filter((a) => {
       if (!isCompleted(a.status)) return true; // active rows unaffected by the window
       const ts = a.approved_at ?? a.submitted_at;

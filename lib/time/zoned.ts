@@ -224,28 +224,3 @@ export function startOfNextLocalDay(instant: Date, timezone: string): Date {
   }
   return new Date(startOfLocalDay(instant, timezone).getTime() + 24 * 60 * 60 * 1000);
 }
-
-/**
- * The real instant a wall-clock Date from `asWallClockIn` stands for — its
- * inverse, for a CLIENT that did its grid arithmetic in wall-clock fields.
- *
- * A week or month grid is easiest to build with `setDate`/`getDay` on Dates
- * whose local fields ARE the family's calendar (TIME-003). The moment one of
- * those has to become a query bound or a stored value it must be turned back
- * into the instant it names in the family's zone, or a grid read on a phone in
- * another zone fetches the wrong window. A reading the zone skips at
- * spring-forward resolves to the first minute that exists, as
- * `instantForLocalTime` does; an unusable zone keeps the Date as it is.
- */
-export function wallClockToInstant(wall: Date, timezone: string): Date {
-  try {
-    const at = instantForLocalTime(
-      wall.getFullYear(), wall.getMonth() + 1, wall.getDate(),
-      wall.getHours() * 60 + wall.getMinutes(), timezone,
-    );
-    if (at) return new Date(at.getTime() + wall.getSeconds() * 1000 + wall.getMilliseconds());
-  } catch {
-    // fall through
-  }
-  return new Date(wall);
-}

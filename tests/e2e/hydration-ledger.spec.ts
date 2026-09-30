@@ -16,7 +16,7 @@ const sources = Object.fromEntries([
   'lib/supabase/errors.ts', 'lib/realtime/published-tables.ts', 'lib/constants/roles.ts', 'lib/habits/streaks.ts', 'lib/habits/presets.ts', 'lib/members/age.ts',
   'components/i18n/locale-provider.tsx', 'lib/i18n/locales.ts', 'lib/i18n/messages.ts', 'lib/i18n/translate.ts',
   // The family clock (TIME-003): the shared formatter and the zone helpers it reads.
-  'components/i18n/use-format.ts', 'lib/time/local-day.ts', 'lib/utils/format.ts',
+  'components/i18n/use-format.ts', 'lib/time/local-day.ts', 'lib/time/wall-clock.ts', 'lib/utils/format.ts',
   // The provider carries the family zone (TIME-003) and validates it here.
   'lib/time/zoned.ts',
   'components/ui/states.tsx', 'components/ui/states-client.tsx', 'components/ui/button.tsx',

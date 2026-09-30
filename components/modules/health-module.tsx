@@ -58,8 +58,7 @@ type Translator = ReturnType<typeof useTranslations>;
 // The FAMILY's midnight, `daysBack` calendar days ago, as an instant (TIME-003).
 // `setHours(0, 0, 0, 0)` was the phone's midnight.
 function familyDayStart(clock: FamilyClock, daysBack = 0): string {
-  const w = clock.wallToday();
-  return clock.toInstant(new Date(w.getFullYear(), w.getMonth(), w.getDate() - daysBack)).toISOString();
+  return clock.dayStart(-daysBack).toISOString();
 }
 
 function formatDuration(mins: number | null, locale: string, tr: Translator) {
@@ -79,7 +78,7 @@ function formatRelativeTime(iso: string, tr: Translator, format: Format, clock: 
   const w = clock.wallToday();
   const time = format.fmtTime(d);
   if (day === clock.todayKey()) return tr('healthDashboard.todayAt', { time });
-  if (day === clock.wallKey(new Date(w.getFullYear(), w.getMonth(), w.getDate() - 1))) return tr('healthDashboard.yesterdayAt', { time });
+  if (day === clock.wallKey(clock.addDays(w, -1))) return tr('healthDashboard.yesterdayAt', { time });
   return format.fmtDate(d, 'MMM d, h:mm a');
 }
 
@@ -236,7 +235,7 @@ export function HealthModule() {
       const daySteps = metrics
         .filter((m) => m.type === 'steps' && m.recorded_at >= from && m.recorded_at < to)
         .reduce((s, m) => s + m.value, 0);
-      days.push({ day: format.fmtDate(clock.wallKey(new Date(w.getFullYear(), w.getMonth(), w.getDate() - i)), 'EEE'), val: daySteps });
+      days.push({ day: format.fmtDate(clock.wallKey(clock.addDays(w, -i)), 'EEE'), val: daySteps });
     }
     const max = Math.max(...days.map((d) => d.val), 1);
     return days.map((d) => ({ ...d, pct: Math.round((d.val / max) * 100) }));
@@ -295,11 +294,9 @@ export function HealthModule() {
       });
       let consecutive = 0;
       for (let i = 0; i < 7; i++) {
-        const w = clock.wallToday();
-        const d = new Date(w.getFullYear(), w.getMonth(), w.getDate() - i);
         // Both sides are the FAMILY's day keys (TIME-003): the map above is keyed
         // by `clock.dayKeyOf`, and this walks the family's calendar backwards.
-        const key = clock.wallKey(d);
+        const key = clock.wallKey(clock.addDays(clock.wallToday(), -i));
         if ((memberStepDays.get(key) || 0) >= stepGoalFor(m.id)) {
           consecutive++;
         } else break;

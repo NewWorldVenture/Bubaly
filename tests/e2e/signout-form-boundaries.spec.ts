@@ -65,7 +65,7 @@ async function fixture(page: Page, control: Control = 'plain', locale = 'en-US')
       '@/lib/utils/format': { fmtDateTime: value => value },
       // Formatting is not what this fixture is about (TIME-003 moved these
       // components onto useFormat): the same stub, one layer up.
-      '@/components/i18n/use-format': { useFormat: () => new Proxy({}, { get: () => value => String(value ?? '') }), useFamilyClock: () => ({ timeZone: 'UTC', todayKey: () => new Date().toISOString().slice(0, 10), dayKeyOf: value => String(value).slice(0, 10), hourNow: () => new Date().getUTCHours(), wallNow: () => new Date(), wallToday: () => new Date(), wallOf: value => new Date(value), toInstant: wall => wall, wallKey: wall => wall.toISOString().slice(0, 10) }) },
+      '@/components/i18n/use-format': { useFormat: () => new Proxy({}, { get: () => value => String(value ?? '') }), useFamilyClock: () => ({ timeZone: 'UTC', todayKey: () => new Date().toISOString().slice(0, 10), dayKeyOf: value => String(value).slice(0, 10), hourNow: () => new Date().getUTCHours(), wallNow: () => new Date(), wallToday: () => new Date(), wallOf: value => new Date(value), addDays: (wall, n) => new Date(wall.getTime() + n * 86400000), toInstant: wall => wall, wallKey: wall => wall.toISOString().slice(0, 10), dayStart: () => new Date(), calendarToday: () => new Date() }) },
       '@/components/ui/otp-input': { OtpInput: () => null },
       '@/components/auth/mfa-error-copy': { MfaErrorNotice: () => null },
       '@/lib/supabase/client': { createClient: () => ({ auth: {

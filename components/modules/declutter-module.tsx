@@ -79,7 +79,7 @@ export function DeclutterModule() {
 
   // The FAMILY's wall clock (TIME-003): the helpers below read local fields,
   // so handing them this makes their "today" the family's day, not the phone's.
-  const today = useMemo(() => clock.wallNow(), [clock]);
+  const today = useMemo(() => clock.calendarToday(), [clock]);
   const todayIso = isoDate(today);
   const activeZones = useMemo(() => zones.data.filter((z) => z.is_active), [zones.data]);
   const summary = useMemo(() => declutterSummary(zones.data, missions.data, sessions.data, today), [zones.data, missions.data, sessions.data, today]);

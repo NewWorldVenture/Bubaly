@@ -7,6 +7,8 @@
 // same weekday + same time-of-day appearing on multiple distinct weeks), and we
 // MATERIALIZE a saved template into concrete calendar_events for a date range.
 
+import { addWallDays, wallDate, wallParts, wallToInstant } from '@/lib/time/wall-clock';
+
 export type EventCategory =
   | 'general' | 'school' | 'sports' | 'appointment' | 'medication'
   | 'maintenance' | 'birthday' | 'holiday' | 'other';
@@ -187,6 +189,12 @@ export interface MaterializedEvent {
 }
 
 /** Local Date at a given weekday within the week containing `weekStartMonday`. */
+/** The instant `minutes` past the family's midnight, `days` after a wall-reading Monday. */
+function wallStepToInstant(monday: Date, days: number, minutes: number, timeZone: string): Date {
+  const day = wallParts(addWallDays(monday, days));
+  return wallToInstant(wallDate(day.year, day.month, day.day, 0, minutes), timeZone);
+}
+
 function dateForWeekday(weekStartMonday: Date, weekday: number, minutes: number): Date {
   const d = new Date(weekStartMonday);
   d.setHours(0, 0, 0, 0);
@@ -200,11 +208,19 @@ function dateForWeekday(weekStartMonday: Date, weekday: number, minutes: number)
  * at `weekStartMonday` (a Monday, local midnight). Emits one event per
  * (active weekday × item × week). Deterministic; returns Insert-ready rows
  * (caller adds family_id / created_by / recurrence:'none').
+ *
+ * With `timeZone` (TIME-003) the calendar grid it is applied from is the
+ * FAMILY's, so `weekStartMonday` is a wall reading (lib/time/wall-clock.ts) and
+ * every step lands at that family's wall-clock time — "07:30 school run" is
+ * 07:30 at home, on the family's Monday, whatever zone the phone is in. A step
+ * the zone skips at spring-forward moves to the first minute that exists.
+ * Without it, a device-local Monday as before.
  */
 export function materializeRoutine(
   template: RoutineTemplateForApply,
   weekStartMonday: Date,
   weeks = 1,
+  timeZone?: string,
 ): MaterializedEvent[] {
   const days = weekdaysInMask(template.weekday_mask);
   const out: MaterializedEvent[] = [];
@@ -213,7 +229,9 @@ export function materializeRoutine(
     base.setDate(base.getDate() + w * 7);
     for (const weekday of days) {
       for (const item of template.items) {
-        const start = dateForWeekday(base, weekday, item.start_minutes);
+        const start = timeZone
+          ? wallStepToInstant(weekStartMonday, w * 7 + weekday, item.start_minutes, timeZone)
+          : dateForWeekday(base, weekday, item.start_minutes);
         const end = new Date(start.getTime() + item.duration_minutes * 60000);
         out.push({
           title: item.title, category: item.category,

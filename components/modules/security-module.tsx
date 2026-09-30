@@ -64,8 +64,7 @@ export function SecurityModule() {
   const strip = useMemo(() => {
     const days = Array.from({ length: 14 }, (_, i) => {
       // The family's last fourteen days, by calendar day (TIME-003).
-      const t = clock.wallToday();
-      return { key: clock.wallKey(new Date(t.getFullYear(), t.getMonth(), t.getDate() - (13 - i))), count: 0, critical: false };
+      return { key: clock.wallKey(clock.addDays(clock.wallToday(), -(13 - i))), count: 0, critical: false };
     });
     const byKey = new Map(days.map(d => [d.key, d]));
     for (const e of all) {

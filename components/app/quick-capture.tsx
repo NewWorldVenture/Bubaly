@@ -29,8 +29,7 @@ import type { Format } from '@/lib/utils/format';
  */
 function formatWhen(startsAt: Date | string, allDay: boolean, fmt: Format, t: Translator, clock: FamilyClock): string {
   // Today and Tomorrow are the FAMILY's days (TIME-003), compared as date keys.
-  const wall = clock.wallToday();
-  const tomorrow = clock.wallKey(new Date(wall.getFullYear(), wall.getMonth(), wall.getDate() + 1));
+  const tomorrow = clock.wallKey(clock.addDays(clock.wallToday(), 1));
   const day = clock.dayKeyOf(startsAt);
   const dayLabel = day === clock.todayKey() ? t('calendar.today')
     : day === tomorrow ? t('quickCapture.tomorrow')

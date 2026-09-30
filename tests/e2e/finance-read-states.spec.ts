@@ -20,7 +20,7 @@ const sources = Object.fromEntries([
   // these modules for real, so a new value import has to be listed here or it
   // cannot mount — which tests/medications-fixture-module-graph.test.ts catches
   // by walking the import graph rather than waiting for the fixture to fail.
-  'lib/time/local-day.ts',
+  'lib/time/local-day.ts', 'lib/time/wall-clock.ts',
   // The family clock (TIME-003): the shared formatter and the zone helpers it reads.
   'components/i18n/use-format.ts', 'lib/time/zoned.ts', 'lib/utils/format.ts',
   'lib/supabase/errors.ts', 'lib/schedule/zoned.ts',

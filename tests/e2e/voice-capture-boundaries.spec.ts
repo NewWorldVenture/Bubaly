@@ -38,7 +38,7 @@ const SOURCE_FILES = [
   // `date-fns` entry in `mocks` below covers the one npm import it carries.
   'components/i18n/use-format.ts', 'lib/utils/format.ts', 'lib/i18n/locales.ts',
   // The family clock (TIME-003): the shared formatter and the zone helpers it reads.
-  'lib/time/local-day.ts',
+  'lib/time/local-day.ts', 'lib/time/wall-clock.ts',
 ];
 const MOCKED = [
   '@/components/app/app-context', '@/lib/supabase/client', '@/components/ui/toast',

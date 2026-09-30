@@ -178,10 +178,10 @@ export function AssistantModule() {
     if (!family?.id) return;
     const supabase = createClient();
     // The FAMILY's day and fortnight, as instants (TIME-003).
-    const wall = clock.wallToday();
-    const start = clock.toInstant(wall);
-    const end = clock.toInstant(new Date(wall.getFullYear(), wall.getMonth(), wall.getDate() + 1));
-    const in14 = clock.toInstant(new Date(wall.getFullYear(), wall.getMonth(), wall.getDate() + 14));
+    const now = new Date();
+    const start = clock.dayStart(0, now);
+    const end = clock.dayStart(1, now);
+    const in14 = clock.dayStart(14, now);
     setRailLoading(true);
 
     const [todayRes, choresRes, upcomingRes, remindersRes, medsRes] = await settleAll([

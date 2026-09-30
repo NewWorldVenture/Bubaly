@@ -76,7 +76,7 @@ export function LanguageModule() {
 
   // The FAMILY's wall clock (TIME-003): the helpers below read local fields,
   // so handing them this makes their "today" the family's day, not the phone's.
-  const today = useMemo(() => clock.wallNow(), [clock]);
+  const today = useMemo(() => clock.calendarToday(), [clock]);
   const goal = goals.data.find((g) => g.id === goalId) ?? null;
   const myCards = useMemo(() => cards.data.filter((c) => c.goal_id === goalId), [cards.data, goalId]);
   const mySessions = useMemo(() => sessions.data.filter((s) => s.goal_id === goalId), [sessions.data, goalId]);
@@ -92,7 +92,7 @@ export function LanguageModule() {
   const visibleGoals = goals.data.filter((g) => g.is_active || showArchived || g.id === goalId);
 
   async function gradeCard(c: Card, grade: Grade) {
-    const next = sm2(c, grade, clock.wallNow());
+    const next = sm2(c, grade, clock.calendarToday());
     // Under RLS a refused row comes back with no error and zero rows, which this used to report as done. Audit C1-S9-80.
     const { data: updated, error } = await createClient().from('vocab_cards').update(next).eq('id', c.id).select('id');
     if (error) return toastError(describeDbError(error));

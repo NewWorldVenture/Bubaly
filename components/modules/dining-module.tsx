@@ -12,6 +12,7 @@ import { cn } from '@/lib/utils/cn';
 import { toggleFavoriteAction, addRestaurantAction, logVisitAction } from '@/app/(app)/dashboard/dining/actions';
 import { useLocale, useTranslations } from '@/components/i18n/locale-provider';
 import { useFamilyClock, useFormat } from '@/components/i18n/use-format';
+import { wallFromKey } from '@/lib/time/wall-clock';
 import { formatCents } from '@/lib/wallet/ledger';
 
 export type DiningRow = {
@@ -96,7 +97,7 @@ export function DiningModule({ restaurants, visits, stats }: { restaurants: Dini
         name: logForm.name,
         amountCents: Number.isFinite(cents) ? cents : undefined,
         itemCount: logForm.items ? parseInt(logForm.items, 10) : undefined,
-        visitedAt: logForm.when ? clock.toInstant(new Date(logForm.when + 'T19:00:00')).toISOString() : undefined,
+        visitedAt: logForm.when ? clock.toInstant(wallFromKey(logForm.when, 19, 0)).toISOString() : undefined,
       });
       if (!res.ok) { toastError(res.error); return; }
       success(t('diningModule.visitLogged'));
