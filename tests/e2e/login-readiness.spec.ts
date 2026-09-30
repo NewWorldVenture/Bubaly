@@ -4,13 +4,13 @@ import ts from 'typescript';
 import * as React from 'react';
 import { renderToString } from 'react-dom/server';
 import { expect, test, type Page } from '@playwright/test';
+import { reactBrowserScripts } from './helpers/react-browser';
 
 // Actual server-rendered LoginForm and actual React hydration, with a synthetic
 // password-action boundary. The separate password-login-boundaries suite covers
 // the installed SDK and owned-session adoption. No application server or provider.
 const origin = 'https://login-readiness-fixture.invalid';
-const react = fs.readFileSync(path.join(path.dirname(require.resolve('react/package.json')), 'umd/react.development.js'), 'utf8');
-const reactDom = fs.readFileSync(path.join(path.dirname(require.resolve('react-dom/package.json')), 'umd/react-dom.development.js'), 'utf8');
+const { react, reactDom } = reactBrowserScripts('development');
 const isolated = new Set(['react', 'lucide-react', 'next/link', 'next/navigation', '@/components/ui/toast',
   '@/components/i18n/locale-provider', '@/app/(auth)/actions', '@/lib/auth/password-client', '@/lib/utils/cn',
   '@/components/auth/oauth-buttons', '@/components/auth/phone-auth', '@/components/auth/recovery-form']);

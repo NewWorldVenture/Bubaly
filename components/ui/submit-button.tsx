@@ -1,6 +1,6 @@
 'use client';
 
-import * as ReactDOM from 'react-dom';
+import { useFormStatus } from 'react-dom';
 
 /**
  * A submit button that knows its own form is in flight.
@@ -16,19 +16,7 @@ import * as ReactDOM from 'react-dom';
  * the hook returns `pending: false` if called by the component that renders the
  * `<form>` itself. Every submit in the form disables together, which is correct
  * for a form with more than one action — one of them is running.
- *
- * WHY THE HOOK IS RESOLVED DEFENSIVELY. `package.json` declares react-dom
- * ^18.3.1, which has no `useFormStatus` — it arrived in React 19. The app works
- * because Next 15 bundles its own React 19 build and aliases `react-dom` to it
- * for App Router code; vitest does not, and resolves the hoisted 18.3.1. So the
- * same component sees two different react-doms depending on who is rendering it.
- * That split is a finding of its own (the declared dependency does not describe
- * what production runs); until it is closed, this reads the hook once at module
- * load, so the call below is unconditional within any given build and the button
- * degrades to a plain submit where the hook does not exist.
  */
-const formStatus = (ReactDOM as { useFormStatus?: () => { pending: boolean } }).useFormStatus;
-const usePending = formStatus ? () => formStatus().pending : () => false;
 
 export function SubmitButton({
   children,
@@ -39,7 +27,7 @@ export function SubmitButton({
   /** Shown while the form is in flight. Defaults to the button's own label. */
   pendingLabel?: React.ReactNode;
 }) {
-  const pending = usePending();
+  const { pending } = useFormStatus();
   return (
     <button
       {...props}
