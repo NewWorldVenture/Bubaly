@@ -581,7 +581,7 @@ function AddPlanModal({ familyId, userId, onClose, onSaved }: {
             {id => <Input id={id} name="planned_for" type="date" />}
           </Field>
           <Field label={t('concierge.budget')}>
-            {id => <Input id={id} name="budget" type="number" min="0" step="10" placeholder="500" />}
+            {id => <Input id={id} name="budget" type="number" min="0" step="0.01" inputMode="decimal" placeholder="500" />}
           </Field>
         </div>
         <Field label={t('concierge.location')}>

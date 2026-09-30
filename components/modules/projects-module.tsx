@@ -278,8 +278,8 @@ function ProjectForm({ familyId, userId, members, contractors, project, defaultO
           <Field label={tr('projects.owner')}>{(id) => <Select id={id} name="owner_id" defaultValue={project?.owner_id ?? defaultOwner ?? ''}><option value="">{tr('projects.anyone')}</option>{members.map((m) => <option key={m.id} value={m.id}>{m.display_name}</option>)}</Select>}</Field>
         </div>
         <div className="grid grid-cols-2 gap-3">
-          <Field label={tr('projects.budget')}>{(id) => <Input id={id} name="budget" type="number" min={0} step={10} defaultValue={centsToDollars(project?.budget_cents)} placeholder="500" />}</Field>
-          <Field label={tr('projects.labourPaidSoFar')}>{(id) => <Input id={id} name="labor" type="number" min={0} step={10} defaultValue={centsToDollars(project?.labor_cents ?? 0)} />}</Field>
+          <Field label={tr('projects.budget')}>{(id) => <Input id={id} name="budget" type="number" min={0} step="0.01" inputMode="decimal" defaultValue={centsToDollars(project?.budget_cents)} placeholder="500" />}</Field>
+          <Field label={tr('projects.labourPaidSoFar')}>{(id) => <Input id={id} name="labor" type="number" min={0} step="0.01" inputMode="decimal" defaultValue={centsToDollars(project?.labor_cents ?? 0)} />}</Field>
         </div>
         <div className="grid grid-cols-2 gap-3">
           <Field label={tr('projects.start')}>{(id) => <Input id={id} name="target_start" type="date" defaultValue={project?.target_start ?? ''} />}</Field>
@@ -591,7 +591,7 @@ function QuoteForm({ familyId, userId, projectId, contractors, quote, onClose, o
         <Field label={tr('projects.fromYourContractorBook')}>{(id) => <Select id={id} name="contractor_id" value={contractorId} onChange={(e) => setContractorId(e.target.value)}><option value="">{tr('projects.someoneNew')}</option>{contractors.map((c) => <option key={c.id} value={c.id}>{c.is_preferred ? '⭐ ' : ''}{c.name}{c.company ? ` · ${c.company}` : ''}{c.trade ? ` (${c.trade})` : ''}</option>)}</Select>}</Field>
         <Field label={tr('projects.contractorName')} required={!chosen}>{(id) => <Input id={id} name="contractor_name" defaultValue={quote?.contractor_name ?? ''} placeholder={chosen?.name ?? 'Bell Plumbing'} />}</Field>
         <div className="grid grid-cols-3 gap-3">
-          <Field label={tr('projects.amount')}>{(id) => <Input id={id} name="amount" type="number" min={0} step={10} defaultValue={centsToDollars(quote?.amount_cents)} />}</Field>
+          <Field label={tr('projects.amount')}>{(id) => <Input id={id} name="amount" type="number" min={0} step="0.01" inputMode="decimal" defaultValue={centsToDollars(quote?.amount_cents)} />}</Field>
           <Field label={tr('projects.status')}>{(id) => <Select id={id} name="status" defaultValue={quote?.status === 'requested' ? 'received' : (quote?.status ?? 'received')}>{QUOTE_STATUSES.map((s) => <option key={s.value} value={s.value}>{s.label}</option>)}</Select>}</Field>
           <Field label={tr('projects.leadTimeDays')}>{(id) => <Input id={id} name="lead_time_days" type="number" min={0} defaultValue={quote?.lead_time_days ?? ''} />}</Field>
         </div>
