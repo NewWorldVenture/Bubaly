@@ -26,11 +26,13 @@ edit `finalaudit.md`. It refreshes the 15 B14 axe results that #671
 - **Seeded for this run:** one chore and a chore assignment for the child, and one marketplace listing owned by the child.
 - **Already existing:** the child's active store and the child's active wallet.
 
-**Commands.** `commands.txt`. The probes in `probes/` ran from the repository root as temporary copies, which were removed afterwards.
+**Commands.** `commands.txt`. The probes in `probes/` ran from the repository root as temporary copies, which were removed afterwards. They are **archived recipes**, recorded as run; none was rerun for the correction below. Only `b14-fixtures.mjs` enforces a local target (it refuses a Supabase URL that is not `http://127.0.0.1:…`). `b14-signin.mjs`, `b14-verify.mjs`, `b14-overlay-repro.mjs` and `b14-overlay-node.mjs` accept any base URL together with credentials or a storage state; they were pointed at `http://127.0.0.1:3107` by hand, and nothing in them enforces that. Reusing them needs a tested loopback guard that runs before credentials or storage are supplied.
+
+**Freshness (static only).** Application, component, dependency and migration source is unchanged from the measured `231e8140` through `main` at `e43f835a`: the 31 later commits change only `.github/`, `docs/`, `finalaudit.md` and `tests/` (`git diff --name-only 231e8140 e43f835a`). This is a source comparison, not a browser rerun.
 
 ## Results
 
-### axe: 52 loads, 0 violations (`axe-results.jsonl`)
+### axe: 52 unique loads, 0 violations (`axe-results.jsonl`)
 
 | Role | Routes | 1280 px | 390 px |
 |---|---|---|---|
@@ -49,7 +51,7 @@ All 52 loads meet all five of these conditions:
 - the body is not blank;
 - on the five record-bound pages, the seeded record is shown.
 
-**The five record-bound pages**, with what each shows (`seededRecordShown: true` for both roles at both widths):
+**The five record-bound pages**, with what each shows: 20 positive record checks, `seededRecordShown: true` for both roles at both widths (the other 32 loads have no record to check):
 - `/kids/submit/<assignmentId>` shows the chore;
 - `/marketplace/item/<listingId>` shows the listing;
 - `/marketplace/creators/<storeId>` shows the listing;
@@ -63,6 +65,8 @@ All 52 loads meet all five of these conditions:
 **What was checked.** Every overlay that could be opened without changing data, on every route, role and width.
 - **How:** it was focused and opened with **Enter** only.
 - **Recorded:** whether focus moved inside; whether Tab stayed inside a modal; whether **Escape** closed it; and whether focus returned to the trigger.
+- **Totals:** 172 observations. 92 pass every recorded criterion. 44 fail focus return (36 Quick capture, 4 Request, 4 Ask for more allowance). 36 language-picker observations fail initial focus placement.
+- **Route coverage:** Quick capture and Change language were checked on 9 of the 11 family routes. `/dashboard/social/feed` and `/kids/submit/<assignmentId>` have no Quick capture or language-picker observation.
 
 | Overlay (where) | Opened by Enter | Focus inside | Tab trapped (modal) | Escape closes | Focus returns | Loads |
 |---|---|---|---|---|---|---|
@@ -85,11 +89,12 @@ All 52 loads meet all five of these conditions:
   4. Press Escape: the dialog closes.
   5. `document.activeElement` is `<body>`, not the trigger.
 - **The same on the wallet page** with "Request" and "Ask for more allowance".
-- **The trigger is not the reason** (`repro/focus-restore-node-check.jsonl`). It is the **same DOM node** before and after, it is still connected, and it is neither `inert` nor inside `aria-hidden`. So the hook's cleanup `previouslyFocused.focus()` either saved something other than the trigger, or its focus is taken away afterwards.
-- **Related existing ID:** MAIN-F-D04 records that the modal dialogs return focus on close. This is a failure of that behaviour on current `main`. WCAG 2.4.3 (Focus Order).
-- **Reach:**
-  - "Quick capture" is in the app shell, so it affects every signed-in family page, both roles, and both widths.
-  - The two wallet dialogs affect the parent and the child.
+- **Trigger node identity** (`repro/focus-restore-node-check.jsonl`): two checks only, both as the parent at 1280 px (Quick capture on `/home`, Request on the wallet page). In those two, the trigger is the **same DOM node** before and after, still connected, and neither `inert` nor inside `aria-hidden`. Trigger replacement is excluded for those two cases only, not for other roles, widths or triggers.
+- **Cause: not determined here.** The hook's passive capture of focus, with callers whose field takes focus by `autoFocus`, is a plausible mechanism. It was not instrumented in this evidence.
+- **Audit IDs:** the failure is in the shared Modal, COMPONENT-DA7D449CE911 (already IN PROGRESS). The hook LIBRARY-836BF6D8DBFF and the callers COMPONENT-97EAFCA06075 (`components/app/quick-capture.tsx`) and COMPONENT-96ACB1178C63 (`components/wallet/child-detail-view.tsx`) are investigation context. MAIN-F-D04's historical pass covers four named hand-rolled dialogs (Guardian rules editor, contact editor, trial paywall, closed-account gate). None of them was exercised here, so that scoped pass stands. WCAG 2.4.3 (Focus Order).
+- **Observed reach:**
+  - "Quick capture": the 9 family routes where it was checked, both roles, both widths.
+  - The two wallet dialogs: the parent and the child.
 
 **2. C2-B06 still reproduces:** the language picker declares `role="listbox"`/`option` without the listbox keyboard pattern (`components/i18n/language-picker.tsx`).
 - **Reproduction:**
@@ -99,13 +104,13 @@ All 52 loads meet all five of these conditions:
   4. **ArrowDown does nothing.**
   5. The options (rendered before the trigger in the DOM) are reachable only with Shift+Tab.
 - **What works:** Escape closes the listbox and returns focus to the trigger.
-- **Existing ID:** this is the existing finding C2-B06, confirmed on `231e8140`.
+- **Audit IDs:** the component is COMPONENT-F9B18D77DEBF. C2-B06 remains the existing narrative issue, confirmed on `231e8140`. Observed on the 9 family routes where the picker was checked.
 
 axe reports neither defect. axe does not test keyboard operation.
 
 ## Audit IDs this evidence supports
 
-It is evidence for the dimension named, not a status change.
+It is evidence for the dimension named, not a status change: no bulk PASS, and no automatic reopening of MAIN-F-D04.
 
 | ID | Dimension |
 |---|---|
@@ -113,8 +118,10 @@ It is evidence for the dimension named, not a status change.
 | UI-ROUTE-0198, -0219, -0247, -0300, -0302, -0311, -0313, -0327, -0319, -0324, -0344 | axe (0 violations), in-place landing and seeded records, as a parent and a `/kid-login` child, 1280 and 390 px; overlay keyboard results per page |
 | MAIN-F-D02, MAIN-F-D03, MAIN-F-D05 | No unnamed controls; one `<h1>` per page, for these 15 routes (refreshes #671's stale part) |
 | P-27 to P-31 | Their fixes hold on these 15 routes (0 violations; one `<h1>`) |
-| MAIN-F-D04 | **Contradicted** for the shared `Modal`: Escape closes it, but focus is not returned (defect 1) |
-| C2-B06 | **Still reproduces** on current `main` (defect 2) |
+| COMPONENT-DA7D449CE911 | Shared `Modal`: Escape closes it, but focus is not returned (defect 1) |
+| LIBRARY-836BF6D8DBFF, COMPONENT-97EAFCA06075, COMPONENT-96ACB1178C63 | Investigation context for defect 1 (hook, Quick capture, child wallet); statuses unchanged |
+| MAIN-F-D04 | Not exercised: its scoped pass covers four hand-rolled dialogs, none of them tested here |
+| COMPONENT-F9B18D77DEBF, C2-B06 | Language picker: initial focus placement fails; C2-B06 still reproduces on `231e8140` (defect 2) |
 
 ## Coverage gaps (not claimed)
 
@@ -141,3 +148,5 @@ It is evidence for the dimension named, not a status change.
 - Credentials, Playwright storage states and the child's PIN.
 - Raw page text, screenshots, videos and traces.
 - Record ids (replaced with named placeholders) and member display names (`<name>`).
+
+A pattern scan of the 14 files here found no credential patterns. It covers only the patterns scanned; it is not an exhaustive sanitization certification.

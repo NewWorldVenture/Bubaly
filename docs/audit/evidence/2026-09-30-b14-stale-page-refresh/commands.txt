@@ -11,8 +11,13 @@ supabase migration up --local
 npm run build
 npx next start -p 3107 -H 127.0.0.1
 
+# Archived recipes, as run on 2026-09-30; not rerun. Only b14-fixtures.mjs enforces a
+# local target (NEXT_PUBLIC_SUPABASE_URL must be http://127.0.0.1:...). The sign-in,
+# verify and repro probes accept ANY base URL with credentials or a storage state and
+# were pointed at 127.0.0.1:3107 by hand; add and test a loopback guard before reuse.
+
 # Fixtures and personas (local only; credentials to a 0600 file, never printed):
-node probes/b14-fixtures.mjs <placeholder> <familyId> <parent-account.json> <super-admin-email>
+node probes/b14-fixtures.mjs <familyId> <parent-account.json> <super-admin-email>
 node probes/b14-signin.mjs <creds.json> <state-dir> http://127.0.0.1:3107
 
 # axe (the repository script, unchanged), each role at both widths:
