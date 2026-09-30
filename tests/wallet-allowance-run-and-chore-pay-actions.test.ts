@@ -188,9 +188,17 @@ describe('runDueAllowancesAction (ACTION-14F1D3BFB97A)', () => {
     expect(db.table('allowance_rules')).toEqual(before);
   });
 
-  it('a Trust answer short of a denial does not stop the run', async () => {
-    harness.decision = { effect: 'require_approval', reason: 'Needs a second parent.', basis: 'policy' };
-    expect(await runDueAllowancesAction()).toEqual({ ok: true, ranCount: 2, paidCents: 1_500 });
+  // This case used to assert that the run went ahead, which pinned the defect
+  // in #697 review 5918705774. The real bridge's policy and degraded answers
+  // are run in a-money-credit-waits-for-a-trust-allow.test.ts.
+  it('a Trust answer that asks for approval pays nothing and claims nothing', async () => {
+    const needsApproval = { effect: 'require_approval', reason: 'Needs a second parent.', basis: 'policy' };
+    harness.decision = needsApproval;
+    const before = structuredClone(db.table('allowance_rules'));
+
+    expect(await runDueAllowancesAction()).toEqual({ ok: false, error: householdPolicyBlocked(t, needsApproval as never) });
+    expect(ledger()).toHaveLength(0);
+    expect(db.table('allowance_rules')).toEqual(before);
   });
 
   it('a rule another run has just claimed is skipped, not paid twice', async () => {
@@ -347,9 +355,14 @@ describe('payChoreRewardAction (ACTION-DD0EECD42C71)', () => {
     expect(harness.revalidatePath).not.toHaveBeenCalled();
   });
 
-  it('a Trust answer short of a denial does not stop it', async () => {
-    harness.decision = { effect: 'require_approval', reason: 'Needs a second parent.', basis: 'policy' };
-    expect(await pay()).toEqual({ ok: true });
+  // Replaced for the same reason as the run's case above.
+  it('a Trust answer that asks for approval pays nothing', async () => {
+    const needsApproval = { effect: 'require_approval', reason: 'Needs a second parent.', basis: 'policy' };
+    harness.decision = needsApproval;
+
+    expect(await pay()).toEqual({ ok: false, error: householdPolicyBlocked(t, needsApproval as never) });
+    expect(ledger()).toHaveLength(0);
+    expect(harness.revalidatePath).not.toHaveBeenCalled();
   });
 
   describe('paid once', () => {
