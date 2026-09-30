@@ -1,0 +1,22 @@
+{"plan":"free","kind":"page","path":"/dashboard/autopilot","firstStatus":200,"landed":"/dashboard/billing?upgrade=1&need=2","need":"2","ok":true}
+{"plan":"free","kind":"page","path":"/missions","firstStatus":200,"landed":"/dashboard/billing?upgrade=1&need=2","need":"2","ok":true}
+{"plan":"free","kind":"page","path":"/dashboard/home","firstStatus":200,"landed":"/dashboard/billing?upgrade=1&need=2","need":"2","ok":true}
+{"plan":"free","kind":"page","path":"/dashboard/weekend","firstStatus":200,"landed":"/dashboard/billing?upgrade=1&need=1","need":"1","ok":true}
+{"plan":"free","kind":"api","path":"/api/autopilot/scan","status":403,"body":"{\"error\":\"Autopilot scan failed\",\"needLevel\":2}","ok":true}
+{"plan":"free","kind":"api","path":"/api/ai/home/diagnose","status":403,"body":"{\"error\":\"This is part of Family+. Upgrade to switch it on for your family.\",\"code\":\"plan_required\",\"needLevel\":2}","ok":true}
+{"plan":"free","kind":"api","path":"/api/weekend/discover","status":403,"body":"{\"error\":\"This is part of Family Basic. Upgrade to switch it on for your family.\",\"code\":\"plan_required\",\"needLevel\":1}","ok":true}
+{"plan":"basic","kind":"page","path":"/dashboard/autopilot","firstStatus":200,"landed":"/dashboard/billing?upgrade=1&need=2","need":"2","ok":true}
+{"plan":"basic","kind":"page","path":"/missions","firstStatus":200,"landed":"/dashboard/billing?upgrade=1&need=2","need":"2","ok":true}
+{"plan":"basic","kind":"page","path":"/dashboard/home","firstStatus":200,"landed":"/dashboard/billing?upgrade=1&need=2","need":"2","ok":true}
+{"plan":"basic","kind":"page","path":"/dashboard/weekend","firstStatus":200,"landed":"/dashboard/weekend","need":null,"ok":true}
+{"plan":"basic","kind":"api","path":"/api/autopilot/scan","status":403,"body":"{\"error\":\"Autopilot scan failed\",\"needLevel\":2}","ok":true}
+{"plan":"basic","kind":"api","path":"/api/ai/home/diagnose","status":403,"body":"{\"error\":\"This is part of Family+. Upgrade to switch it on for your family.\",\"code\":\"plan_required\",\"needLevel\":2}","ok":true}
+{"plan":"basic","kind":"api","path":"/api/weekend/discover","status":503,"body":"{\"error\":\"No event sources are connected yet. Add a TICKETMASTER_API_KEY / SEATGEEK_CLIENT_ID, or add a local ICS/RSS feed below.\",\"needsConfig\":true}","ok":true}
+{"plan":"plus","kind":"page","path":"/dashboard/autopilot","firstStatus":200,"landed":"/dashboard/autopilot","need":null,"ok":true}
+{"plan":"plus","kind":"page","path":"/missions","firstStatus":200,"landed":"/missions","need":null,"ok":true}
+{"plan":"plus","kind":"page","path":"/dashboard/home","firstStatus":200,"landed":"/dashboard/home","need":null,"ok":true}
+{"plan":"plus","kind":"page","path":"/dashboard/weekend","firstStatus":200,"landed":"/dashboard/weekend","need":null,"ok":true}
+{"plan":"plus","kind":"api","path":"/api/autopilot/scan","status":200,"body":"{\"scanned\":0,\"autoExecuted\":0,\"cleared\":0,\"notified\":0,\"policyCandidates\":0}","ok":true}
+{"plan":"plus","kind":"api","path":"/api/ai/home/diagnose","status":400,"body":"{\"error\":\"Describe the problem first.\"}","ok":true}
+{"plan":"plus","kind":"api","path":"/api/weekend/discover","status":503,"body":"{\"error\":\"No event sources are connected yet. Add a TICKETMASTER_API_KEY / SEATGEEK_CLIENT_ID, or add a local ICS/RSS feed below.\",\"needsConfig\":true}","ok":true}
+ALL OK: true 21/21
