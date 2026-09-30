@@ -170,3 +170,14 @@ Each change was made to the route in a scratch checkout only, and then reverted.
 - **The fake database sorts stably,** so the tie test proves every row is counted across pages. It does not prove that `.order('id')` is needed: a nondeterministic server order is not modelled.
 - **Resend is modelled from its documentation, not called.** Rate limits, bounces and key retention were not measured.
 - **Nothing here touched production.** `finalaudit.md` records `CRON_SECRET` as unset in production, and the latest observed GitHub dispatch exits before dispatching. With the secret unset the route answers 401 to every call, as the unauthorised case shows, so today the digest does not run at all. Once the secret is set, both schedulers fire at 12:30 UTC and the sequential-repeat row above applies every day a GitHub tick lands in the 12:30–12:34 window.
+
+## Addendum (2026-09-30): combined with #685, the recipient fail-closed fix
+
+Everything above is the **dated record at `231e8140`**, before #685; `characterization-output.txt` and `desired-contract-output.txt` are kept unchanged as that record. On the combined source (#685 plus this folder, at #677's reviewed head `e90fa5a2`):
+
+- **Characterization** (`tests/admin-digest-replay-contract.test.ts`, 20/20, saved as `characterization-output-combined-with-685.txt`):
+  - The two `super_admins` read cases (error, throw) are re-pinned from "200 ok, built-in admin only" to **502 `adminDigest.recipientsUnavailable`, zero provider attempts**.
+  - The empty-recipient override now also answers the strict reader the route uses (`readSuperAdminRecipients` → `{ emails: [], failure: null }`), so that case still exercises the empty-recipient branch.
+  - Recipient reads are paged since #685 (a one-row page plus an empty page per call). The concurrency barrier now holds only the **first page of each invocation**, so it no longer pins how many pages a read takes. The replay and concurrency send counts are unchanged: 2 per admin.
+- **Desired contract** (`tests/desired-contract.test.ts`): with #685, C6 passes and C1–C5 still fail (`desired-contract-output-combined-with-685.txt`: 5 failed, 2 passed). **Only C6 is promoted**, into the characterization file. C1–C5 stay here as unmet contract cases: one digest per occurrence; retry only the unaccepted recipient; same key and frozen payload on an ambiguous send; no row in two digests. Run now, this file shows 5 failed and 1 passed (the control).
+- Duplicate delivery is **not** fixed. No live email was sent, and no provider delivery is claimed.

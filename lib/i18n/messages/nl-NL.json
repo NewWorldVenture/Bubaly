@@ -875,6 +875,7 @@
   "adminCredential.secret": "De ingestelde sleutel heeft het juiste formaat (sb_secret_…). Controleer of deze bij een ander project hoort of is ingetrokken.",
   "adminCredential.unknown": "De ingestelde sleutel komt niet overeen met een bekend Supabase-sleutelformaat.",
   "adminDigest.notificationFeedUnavailable": "Meldingenfeed niet beschikbaar.",
+  "adminDigest.recipientsUnavailable": "Ontvangerslijst van superbeheerders niet beschikbaar.",
   "adminDigest.unauthorized": "Niet geautoriseerd",
   "adminFeedback.couldNotDeleteIdea": "Kan het idee niet verwijderen.",
   "adminFeedback.couldNotPinIdea": "Kan het idee niet vastzetten.",

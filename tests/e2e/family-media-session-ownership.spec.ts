@@ -4,13 +4,13 @@ import ts from 'typescript';
 import * as React from 'react';
 import { renderToString } from 'react-dom/server';
 import { expect, test, type BrowserContext, type Page } from '@playwright/test';
+import { reactBrowserScripts } from './helpers/react-browser';
 
 // Real React, media hook, cache-session observer, browser cookie adapter and
 // installed Supabase SDK. Two pages share actual browser cookies. Only auth /
 // Storage HTTP receipts and a synthetic pixel are controlled; no live provider,
 // application server, production account or private image is used.
-const react = fs.readFileSync(path.join(path.dirname(require.resolve('react/package.json')), 'umd/react.development.js'), 'utf8');
-const reactDom = fs.readFileSync(path.join(path.dirname(require.resolve('react-dom/package.json')), 'umd/react-dom.development.js'), 'utf8');
+const { react, reactDom } = reactBrowserScripts('development');
 const sdk = fs.readFileSync(path.join(path.dirname(require.resolve('@supabase/supabase-js/package.json')), 'dist/umd/supabase.js'), 'utf8');
 const modules: Record<string, { source: string; imports: Record<string, string> }> = {};
 function collect(filename: string): string {
@@ -135,7 +135,7 @@ async function load(page: Page, state: State) {
     function ImageView(){const src=media.useFamilyMediaUrl(${JSON.stringify(reference)});return src?React.createElement('img',{id:'private-image',alt:'Synthetic fixture image',src}):React.createElement('output',{id:'no-image'},src===null?'denied':'loading');}
     function Observer(){const s=React.useSyncExternalStore(auth.subscribeCacheSession,auth.getCacheSessionSnapshot,auth.getServerCacheSessionSnapshot);return React.createElement('section',{'data-owner':label(s.identity?.userId),'data-status':s.status},s.status==='ready'?React.createElement(ImageView):React.createElement('output',null,'restoring'));}
     let root=null;
-    p.view=()=>{const item=document.getElementById('root').firstElementChild;return {tag:item?.tagName??null,busy:item?.getAttribute('aria-busy')??null,hasImage:item?.tagName==='IMG',imageDecoded:item?.tagName==='IMG'&&item.complete&&item.naturalWidth===1,srcIsA:item?.tagName==='IMG'&&item.src===${JSON.stringify(signedA)}};};
+    p.view=()=>{const item=[...document.getElementById('root').children].find(element=>!element.matches('link[rel="preload"][as="image"]'))??null;return {tag:item?.tagName??null,busy:item?.getAttribute('aria-busy')??null,hasImage:item?.tagName==='IMG',imageDecoded:item?.tagName==='IMG'&&item.complete&&item.naturalWidth===1,srcIsA:item?.tagName==='IMG'&&item.src===${JSON.stringify(signedA)}};};
     p.hydrate=(markup,reference)=>{document.getElementById('root').innerHTML=markup;root=ReactDOM.hydrateRoot(document.getElementById('root'),React.createElement(Component,{src:reference,alt:'Synthetic SSR image'}),{onRecoverableError:()=>p.recoverable++});};
     p.spa=(reference)=>{ReactDOM.flushSync(()=>root.unmount());root=ReactDOM.createRoot(document.getElementById('root'));ReactDOM.flushSync(()=>root.render(React.createElement(Component,{src:reference,alt:'Synthetic SSR image'})));return p.view();};
     p.mount=()=>{if(root)throw new Error('Already mounted');root=ReactDOM.createRoot(document.getElementById('root'));ReactDOM.flushSync(()=>root.render(React.createElement(Observer)));};
@@ -226,6 +226,13 @@ function serverMarkup(reference: string): string {
   };
   return renderToString(React.createElement(FamilyMediaImg, { src: reference, alt: 'Synthetic SSR image' }));
 }
+// React 19 renders an image preload hint ahead of an eagerly loaded <img>. In
+// the app it is hoisted into <head>, and hydration skips it. Strip only that
+// hint, and only for the image's own URL, before judging the component's markup.
+function componentMarkup(markup: string, src: string): string {
+  const hint = `<link rel="preload" as="image" href="${src}"/>`;
+  return markup.startsWith(hint) ? markup.slice(hint.length) : markup;
+}
 for (const kind of ['valid', 'absent', 'external'] as const) {
   test(`FamilyMediaImg hydrates without markup mismatch for ${kind} ownership`, async ({ page, context }) => {
     expect(typeof document).toBe('undefined');
@@ -245,7 +252,7 @@ for (const kind of ['valid', 'absent', 'external'] as const) {
       expect(state.signingOwners).toEqual(['A']);
     } else if (kind === 'external') {
       await expect.poll(() => page.evaluate(() => window.__familyMediaOwnership.view().imageDecoded)).toBe(true);
-      expect(markup.startsWith('<img')).toBe(true);
+      expect(componentMarkup(markup, src).startsWith('<img')).toBe(true);
       expect(state.signingOwners).toEqual([]);
     } else {
       await page.evaluate(() => window.__familyMediaOwnership.settle());
@@ -253,6 +260,8 @@ for (const kind of ['valid', 'absent', 'external'] as const) {
       expect(state.signingOwners).toEqual([]);
     }
     expect(markup.includes('aria-busy="true"')).toBe(kind !== 'external');
+    // A private reference is never hinted to the browser before it is signed.
+    expect(markup.includes('rel="preload"')).toBe(kind === 'external');
     expect(await page.evaluate(() => window.__familyMediaOwnership.recoverable)).toBe(0);
     expect(state.hydrationWarnings).toBe(0); expect(state.consoleErrors).toBe(0);
     expect(state.pageErrors).toBe(0); expect(state.unexpected).toBe(0);

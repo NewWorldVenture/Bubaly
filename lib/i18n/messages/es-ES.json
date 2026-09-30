@@ -875,6 +875,7 @@
   "adminCredential.secret": "La clave configurada tiene el formato correcto (sb_secret_…). Comprueba si pertenece a otro proyecto o ha sido revocada.",
   "adminCredential.unknown": "La clave configurada no coincide con ningún formato de clave conocido de Supabase.",
   "adminDigest.notificationFeedUnavailable": "Feed de notificaciones no disponible.",
+  "adminDigest.recipientsUnavailable": "Lista de destinatarios superadministradores no disponible.",
   "adminDigest.unauthorized": "No autorizado",
   "adminFeedback.couldNotDeleteIdea": "No se ha podido eliminar la idea.",
   "adminFeedback.couldNotPinIdea": "No se ha podido fijar la idea.",

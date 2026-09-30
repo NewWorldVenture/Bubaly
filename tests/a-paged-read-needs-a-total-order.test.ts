@@ -54,6 +54,7 @@ const UNIQUE_KEYS: Record<string, { columns: string[]; why: string }[]> = {
   network_aggregates: [{ columns: ['scope', 'cohort_key', 'metric', 'value'], why: '0135: `unique (scope, cohort_key, metric, value)`' }],
   network_consent: [{ columns: ['family_id'], why: '0132: `family_id uuid primary key`' }],
   network_contributions: [{ columns: ['family_id'], why: '0135: `family_id uuid primary key`' }],
+  super_admins: [{ columns: ['email'], why: '0008: `email text PRIMARY KEY`' }],
 };
 
 function walk(dir: string, out: string[] = []): string[] {
