@@ -4034,9 +4034,29 @@ which should succeed.
 `supabase/migrations/0466_a_members_language_is_kept_on_their_profile.sql`
 
 **Severity: low (additive: a nullable column, a CHECK and a restrictive policy;
-nobody loses access). Deploy order: any; `0465` is held by #674 and may land
-before or after.** It requires `profiles_update_self` (`0004`/`0118`) and raises
-rather than apply without it.
+nobody loses access). Deploy order: only after the prerequisites below have been
+verified on the database being migrated.** `0465` belongs to #674 and has no
+dependency either way with this one.
+
+**Prerequisites to verify first, read-only, on the target database.** Nothing in
+this repository establishes them for production (its ledger records only
+`0001`-`0003`; see the top of this document). 0466 checks the policy itself and
+raises rather than apply without it.
+
+```sql
+-- 1. The table exists, and has no `locale` column yet (expect no row from the
+--    second query). A column already there was not made by this repository:
+--    stop and have a person look before applying, because 0466 would keep it
+--    and its CHECK would then judge values nobody here wrote.
+select to_regclass('public.profiles');
+select data_type from information_schema.columns
+ where table_schema = 'public' and table_name = 'profiles' and column_name = 'locale';
+-- 2. A member can update their own profile today: expect one row, polcmd 'w',
+--    using_expr (id = auth.uid()).
+select polname, polcmd, pg_get_expr(polqual, polrelid) as using_expr
+  from pg_policy
+ where polrelid = 'public.profiles'::regclass and polname = 'profiles_update_self';
+```
 
 The owner decided to store each member's language (2026-09-29). Until now it
 lived only in the `bubaly-locale` cookie, which a new device does not have and
