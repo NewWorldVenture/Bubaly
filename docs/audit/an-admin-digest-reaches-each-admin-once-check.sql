@@ -114,8 +114,8 @@ begin
   if public.admin_digest_complete(occ, k1, 1, '{"kind":"unknown","reason":"timeout"}', 3) <> 'fenced_out' then
     raise warning 'a completion without a mark was accepted'; failures := failures + 1;
   end if;
-  if public.admin_digest_begin_send(occ, k1, 0, 150, ret, mar) <> 'fenced_out' then raise warning 'a stale fence marked'; failures := failures + 1; end if;
-  if public.admin_digest_begin_send(occ, k1, 1, 150, ret, mar) <> 'ok' then raise warning 'the current fence could not mark'; failures := failures + 1; end if;
+  if public.admin_digest_begin_send(occ, k1, 0, 150, ret, mar) ->> 'answer' <> 'fenced_out' then raise warning 'a stale fence marked'; failures := failures + 1; end if;
+  if public.admin_digest_begin_send(occ, k1, 1, 150, ret, mar) ->> 'answer' <> 'ok' then raise warning 'the current fence could not mark'; failures := failures + 1; end if;
   if public.admin_digest_complete(occ, k1, 1, '{"kind":"accepted","messageId":""}', 3) <> 'ok' then raise warning 'complete refused'; failures := failures + 1; end if;
   res := public.admin_digest_load(occ);
   if (res -> 'deliveries') @> jsonb_build_array(jsonb_build_object('recipientKey', k1, 'status', 'accepted')) then
@@ -129,12 +129,12 @@ begin
 
   -- A lease that lapses after a mark makes the row ambiguous; too little lease refuses the mark.
   res := public.admin_digest_claim(occ, k2, 'a', 300000, 3, ret, mar);
-  if public.admin_digest_begin_send(occ, k2, 1, 150, ret, mar) <> 'ok' then raise warning 'k2 mark'; failures := failures + 1; end if;
+  if public.admin_digest_begin_send(occ, k2, 1, 150, ret, mar) ->> 'answer' <> 'ok' then raise warning 'k2 mark'; failures := failures + 1; end if;
   perform set_config('admin_digest.test_now', (pin + interval '23 hours 5 minutes 1 second')::text, true);
   res := public.admin_digest_claim(occ, k2, 'b', 300000, 3, ret, mar);
   if not (res #>> '{row,ambiguous}')::boolean or (res #>> '{row,fence}')::int <> 2 then raise warning 'a lapsed marked lease was not ambiguous: %', res; failures := failures + 1; end if;
   perform set_config('admin_digest.test_now', (pin + interval '23 hours 10 minutes 0.9 seconds')::text, true);
-  if public.admin_digest_begin_send(occ, k2, 2, 150, ret, mar) <> 'lease_expired' then raise warning 'a nearly lapsed lease still marked'; failures := failures + 1; end if;
+  if public.admin_digest_begin_send(occ, k2, 2, 150, ret, mar) ->> 'answer' <> 'lease_expired' then raise warning 'a nearly lapsed lease still marked'; failures := failures + 1; end if;
   reset role;
 
   -- ── frozen means frozen, for everyone (these are the owner's own writes) ────

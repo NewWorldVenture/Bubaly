@@ -16,7 +16,7 @@ import {
 } from '@/lib/admin/digest-delivery';
 import { createPostgresDigestDeliveryStore, parseDeliveryRow, supabaseRpc, type RpcCall } from '@/lib/admin/digest-delivery-store';
 import { FakeClock, FakeResendProvider, HOUR, MINUTE, MemoryDigestDeliveryStore, deferred, never } from './helpers/digest-delivery-fakes';
-import { contractPlan, describeDigestDeliveryStoreContract } from './helpers/digest-delivery-store-contract';
+import { answerOf, contractPlan, describeDigestDeliveryStoreContract } from './helpers/digest-delivery-store-contract';
 import { createPgFixture, pgFixtureEnabled, psql, type PgFixture } from './helpers/digest-delivery-postgres';
 
 const T0 = '2026-09-30T12:31:00.000Z';
@@ -68,7 +68,10 @@ describe('PostgreSQL adapter: strict mapping (fake transport)', () => {
   it('beginSend and complete accept only their documented answers', async () => {
     await expect(storeAnswering('yes').store.beginSend(OCC, K1, 1, BEGIN)).rejects.toThrow(/malformed/);
     await expect(storeAnswering(null).store.complete(OCC, K1, 1, { kind: 'accepted', messageId: 'm' }, 3)).rejects.toThrow(/malformed/);
-    for (const a of ['ok', 'fenced_out', 'lease_expired', 'retention_passed']) expect(await storeAnswering(a).store.beginSend(OCC, K1, 1, BEGIN)).toBe(a);
+    expect(await storeAnswering({ answer: 'ok', dispatchBy: '2026-09-30T12:35:59.85+00:00' }).store.beginSend(OCC, K1, 1, BEGIN)).toEqual({ ok: true, dispatchBy: '2026-09-30T12:35:59.850Z' });
+    for (const r of ['fenced_out', 'lease_expired', 'retention_passed']) expect(await storeAnswering({ answer: r }).store.beginSend(OCC, K1, 1, BEGIN)).toEqual({ ok: false, reason: r });
+    await expect(storeAnswering({ answer: 'ok' }).store.beginSend(OCC, K1, 1, BEGIN)).rejects.toThrow(/malformed/); // a grant without a deadline
+    await expect(storeAnswering('ok').store.beginSend(OCC, K1, 1, BEGIN)).rejects.toThrow(/malformed/);
   });
 
   it('freeze sends only identity and bytes, never a state', async () => {
@@ -205,7 +208,7 @@ describe.skipIf(!pgFixtureEnabled)('0471 on PostgreSQL (disposable database)', (
       await store.freeze(f.occurrence, f.deliveries);
       const c = await store.claim(OCC, K1, 'w', CLAIM);
       if (!c.claimed) throw new Error('setup');
-      expect(await store.beginSend(OCC, K1, c.row.fence, BEGIN)).toBe('ok');
+      expect(answerOf(await store.beginSend(OCC, K1, c.row.fence, BEGIN))).toBe('ok');
       const dying = psql(fx.db, `set application_name = 'doomed_receipt'; set admin_digest.test_now = '${T0}'; set role service_role; begin;
         select public.admin_digest_complete('${OCC}', '${K1}', 1, '{"kind":"accepted","messageId":"m-lost"}'::jsonb, 4); select pg_sleep(30); commit;`).catch((e: Error) => e);
       await sleepingIn('doomed_receipt'); // the receipt has been written inside the open transaction

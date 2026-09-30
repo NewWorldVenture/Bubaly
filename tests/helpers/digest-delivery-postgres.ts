@@ -58,7 +58,7 @@ const SIGNATURES: Record<string, { returns: 'jsonb' | 'text'; args: Record<strin
   admin_digest_freeze: { returns: 'jsonb', args: { p_occurrence: 'jsonb', p_deliveries: 'jsonb' } },
   admin_digest_load: { returns: 'jsonb', args: { p_occurrence_id: 'text' } },
   admin_digest_claim: { returns: 'jsonb', args: { p_occurrence_id: 'text', p_recipient_key: 'text', p_owner: 'text', p_lease_ms: 'integer', p_max_attempts: 'integer', p_retention_ms: 'bigint', p_margin_ms: 'bigint' } },
-  admin_digest_begin_send: { returns: 'text', args: { p_occurrence_id: 'text', p_recipient_key: 'text', p_fence: 'bigint', p_min_lease_ms: 'integer', p_retention_ms: 'bigint', p_margin_ms: 'bigint' } },
+  admin_digest_begin_send: { returns: 'jsonb', args: { p_occurrence_id: 'text', p_recipient_key: 'text', p_fence: 'bigint', p_min_lease_ms: 'integer', p_retention_ms: 'bigint', p_margin_ms: 'bigint' } },
   admin_digest_complete: { returns: 'text', args: { p_occurrence_id: 'text', p_recipient_key: 'text', p_fence: 'bigint', p_result: 'jsonb', p_max_attempts: 'integer' } },
 };
 

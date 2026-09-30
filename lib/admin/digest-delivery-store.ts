@@ -30,7 +30,7 @@ export function supabaseRpc(client: RpcClient): RpcCall {
 
 const STATUSES: readonly DeliveryStatus[] = ['pending', 'in_flight', 'failed', 'unknown', 'accepted', 'rejected', 'conflict', 'exhausted', 'needs_reconciliation'];
 const REFUSALS: readonly string[] = ['leased', 'not_found', 'accepted', 'rejected', 'conflict', 'exhausted', 'needs_reconciliation'];
-const BEGIN_ANSWERS = ['ok', 'fenced_out', 'lease_expired', 'retention_passed'] as const;
+const BEGIN_REFUSALS = ['fenced_out', 'lease_expired', 'retention_passed'] as const;
 
 function bad(what: string): never { throw new Error(`digest-delivery store: malformed ${what} from the database`); }
 const obj = (v: unknown, what: string) => (v && typeof v === 'object' && !Array.isArray(v) ? v as Record<string, unknown> : bad(what));
@@ -141,7 +141,10 @@ export function createPostgresDigestDeliveryStore(rpc: RpcCall): DigestDeliveryS
         p_min_lease_ms: ms(policy.minLeaseRemainingMs, 'minLease'),
         p_retention_ms: ms(policy.providerKeyRetentionMs, 'retention'), p_margin_ms: ms(policy.retentionSafetyMarginMs, 'margin'),
       });
-      return (BEGIN_ANSWERS as readonly unknown[]).includes(out) ? out as typeof BEGIN_ANSWERS[number] : bad('begin_send');
+      const a = obj(out, 'begin_send');
+      if (a.answer === 'ok') return { ok: true, dispatchBy: iso(a.dispatchBy, 'begin_send.dispatchBy') };
+      return (BEGIN_REFUSALS as readonly unknown[]).includes(a.answer) && a.dispatchBy === undefined
+        ? { ok: false, reason: a.answer as typeof BEGIN_REFUSALS[number] } : bad('begin_send');
     },
 
     async complete(occurrenceId, recipientKey, fence, result: ProviderSendResult, maxAttempts) {

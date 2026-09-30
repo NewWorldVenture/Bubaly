@@ -22,6 +22,9 @@ export const CONTRACT_BEGIN: BeginSendPolicy = {
   minLeaseRemainingMs: 1_000, providerKeyRetentionMs: RESEND_KEY_RETENTION_MS, retentionSafetyMarginMs: HOUR,
 };
 
+/** 'ok' or the refusal, for assertions. */
+export const answerOf = (a: { ok: true } | { ok: false; reason: string }) => (a.ok ? 'ok' : a.reason);
+
 export const contractPlan = (over: Partial<OccurrencePlan> = {}): OccurrencePlan => ({
   occurrenceId: 'admin-digest:2026-09-30T12:30:00.000Z',
   window: { start: '2026-09-29T12:30:00.000Z', end: '2026-09-30T12:30:00.000Z' },
@@ -111,9 +114,9 @@ export function describeDigestDeliveryStoreContract(label: string, make: (clock:
       clock.advance(5 * MINUTE);
       const b = await store.claim(id, key, 'b', CONTRACT_POLICY);
       if (!a.claimed || !b.claimed) throw new Error('setup');
-      expect(await store.beginSend(id, key, a.row.fence, CONTRACT_BEGIN)).toBe('fenced_out');
+      expect(answerOf(await store.beginSend(id, key, a.row.fence, CONTRACT_BEGIN))).toBe('fenced_out');
       expect(await store.complete(id, key, a.row.fence, { kind: 'accepted', messageId: 'stale' }, 3)).toBe('fenced_out');
-      expect(await store.beginSend(id, key, b.row.fence, CONTRACT_BEGIN)).toBe('ok');
+      expect(answerOf(await store.beginSend(id, key, b.row.fence, CONTRACT_BEGIN))).toBe('ok');
       expect(await store.complete(id, key, b.row.fence, { kind: 'accepted', messageId: 'm-b' }, 3)).toBe('ok');
       expect(await store.complete(id, key, b.row.fence, { kind: 'rejected', httpStatus: 422, code: 'x', retryable: false }, 3)).toBe('fenced_out');
       const row = (await store.load(id))!.deliveries.find((d) => d.recipientKey === key)!;
@@ -158,7 +161,7 @@ export function describeDigestDeliveryStoreContract(label: string, make: (clock:
       const a = await store.claim(id, key, 'a', CONTRACT_POLICY);
       const b = await store.claim(id, other, 'a', CONTRACT_POLICY);
       if (!a.claimed || !b.claimed) throw new Error('setup');
-      expect(await store.beginSend(id, key, a.row.fence, CONTRACT_BEGIN)).toBe('ok'); // marked; `other` is not
+      expect(answerOf(await store.beginSend(id, key, a.row.fence, CONTRACT_BEGIN))).toBe('ok'); // marked; `other` is not
       clock.advance(5 * MINUTE);
       const again = await store.claim(id, key, 'c', CONTRACT_POLICY);
       const againOther = await store.claim(id, other, 'c', CONTRACT_POLICY);
@@ -192,20 +195,20 @@ export function describeDigestDeliveryStoreContract(label: string, make: (clock:
       const a = await store.claim(id, key, 'a', CONTRACT_POLICY);
       if (!a.claimed) throw new Error('setup');
       clock.advance(5 * MINUTE - 1_000);
-      expect(await store.beginSend(id, key, a.row.fence, CONTRACT_BEGIN)).toBe('lease_expired');
+      expect(answerOf(await store.beginSend(id, key, a.row.fence, CONTRACT_BEGIN))).toBe('lease_expired');
       expect((await store.load(id))!.deliveries.find((d) => d.recipientKey === key)!).toMatchObject({ status: 'in_flight', sendStartedAt: null });
       // An ambiguous row claimed just inside the window, marked just after it:
       clock.advance(1_000);
       const b = await store.claim(id, key, 'b', CONTRACT_POLICY);
       if (!b.claimed) throw new Error('setup');
-      expect(await store.beginSend(id, key, b.row.fence, CONTRACT_BEGIN)).toBe('ok');
+      expect(answerOf(await store.beginSend(id, key, b.row.fence, CONTRACT_BEGIN))).toBe('ok');
       await store.complete(id, key, b.row.fence, { kind: 'unknown', reason: 'timeout' }, 3);
       const firstMark = Date.parse((await store.load(id))!.deliveries.find((d) => d.recipientKey === key)!.firstSendAt!);
       clock.set(new Date(firstMark + 23 * HOUR - 1).toISOString());
       const c = await store.claim(id, key, 'c', { ...CONTRACT_POLICY, leaseMs: 2 * HOUR });
       if (!c.claimed) throw new Error('setup');
       clock.advance(1);
-      expect(await store.beginSend(id, key, c.row.fence, CONTRACT_BEGIN)).toBe('retention_passed');
+      expect(answerOf(await store.beginSend(id, key, c.row.fence, CONTRACT_BEGIN))).toBe('retention_passed');
       expect((await store.load(id))!.deliveries.find((d) => d.recipientKey === key)!.status).toBe('needs_reconciliation');
     });
 
@@ -270,6 +273,18 @@ export function describeDigestDeliveryStoreContract(label: string, make: (clock:
       if (!a.claimed) throw new Error('setup');
       expect(await store.complete(id, key, a.row.fence, { kind: 'unknown', reason: 'timeout' }, 3)).toBe('fenced_out');
       expect((await store.load(id))!.deliveries.find((d) => d.recipientKey === key)!).toMatchObject({ status: 'in_flight', ambiguous: false, firstSendAt: null });
+    });
+
+    it('a granted mark carries its dispatch deadline: lease minus the send deadline, and for an ambiguous row also first mark plus retention minus margin', async () => {
+      const { clock, store, id, key } = await setup();
+      const a = await store.claim(id, key, 'a', CONTRACT_POLICY);
+      if (!a.claimed) throw new Error('setup');
+      expect(await store.beginSend(id, key, a.row.fence, CONTRACT_BEGIN)).toEqual({ ok: true, dispatchBy: new Date(Date.parse(start) + 5 * MINUTE - 1_000).toISOString() });
+      await store.complete(id, key, a.row.fence, { kind: 'unknown', reason: 'timeout' }, 3);
+      clock.set(new Date(Date.parse(start) + 23 * HOUR - 2 * MINUTE).toISOString()); // retention now binds before the lease
+      const b = await store.claim(id, key, 'b', CONTRACT_POLICY);
+      if (!b.claimed) throw new Error('setup');
+      expect(await store.beginSend(id, key, b.row.fence, CONTRACT_BEGIN)).toEqual({ ok: true, dispatchBy: new Date(Date.parse(start) + 23 * HOUR).toISOString() });
     });
 
     it('an unknown occurrence or recipient is not found, not created', async () => {

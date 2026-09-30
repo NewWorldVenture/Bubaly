@@ -23,7 +23,10 @@
 //             be told apart: no mark means nothing reached the provider. It is
 //             refused once the lease has too little time left for the send, or
 //             once an ambiguous row is past the retention cut-off, so a worker
-//             that stalled after its claim cannot send late.
+//             that stalled after its claim cannot send late. A granted mark
+//             carries a DISPATCH DEADLINE, and the engine re-reads the time
+//             after the store answers and does not send once it has passed: a
+//             mark whose answer arrived late cannot send late either.
 // - complete  the provider's answer, fenced: a worker whose lease was taken over
 //             writes nothing.
 //
@@ -207,7 +210,8 @@ export type BeginSendPolicy = Pick<ClaimPolicy, 'providerKeyRetentionMs' | 'rete
 };
 
 export type BeginSendDecision =
-  | { ok: true; next: DeliveryRow }
+  /** `dispatchBy`: the provider call must START before this instant (see decideBeginSend). */
+  | { ok: true; next: DeliveryRow; dispatchBy: string }
   /**
    * `fenced_out`: another claim superseded this one. `lease_expired`: too little lease left to finish
    * the send before another worker could claim; the row is left for the next claim. `retention_passed`:
@@ -235,7 +239,14 @@ export function decideBeginSend(row: DeliveryRow, fence: number, now: Date, poli
       };
     }
   }
-  return { ok: true, next: { ...row, sendStartedAt: nowIso, firstSendAt: row.firstSendAt ?? nowIso, updatedAt: nowIso } };
+  const next = { ...row, sendStartedAt: nowIso, firstSendAt: row.firstSendAt ?? nowIso, updatedAt: nowIso };
+  // Start the call no later than this, so it ends (within the send deadline) while the lease still
+  // holds; and, when an earlier attempt may have been accepted, so it reaches the provider before it
+  // can forget the key (the margin covers the send itself). A row that was only ever definitively
+  // refused has nothing to duplicate, so only the lease bounds it.
+  const byLease = Date.parse(row.leaseExpiresAt) - policy.minLeaseRemainingMs;
+  const byRetention = row.ambiguous ? Date.parse(next.firstSendAt) + policy.providerKeyRetentionMs - policy.retentionSafetyMarginMs : Infinity;
+  return { ok: true, next, dispatchBy: new Date(Math.min(byLease, byRetention)).toISOString() };
 }
 
 // ── Provider ────────────────────────────────────────────────────────────────
@@ -322,6 +333,10 @@ export function decideCompletion(row: DeliveryRow, fence: number, result: Provid
 
 export type StoredOccurrence = { occurrence: FrozenOccurrence; deliveries: DeliveryRow[] };
 
+export type BeginSendAnswer =
+  | { ok: true; dispatchBy: string }
+  | { ok: false; reason: 'fenced_out' | 'lease_expired' | 'retention_passed' };
+
 /**
  * What a store must provide. Each method is ONE atomic step against durable
  * state, and every lease or retention decision uses the store's clock.
@@ -333,8 +348,8 @@ export interface DigestDeliveryStore {
   load(occurrenceId: string): Promise<StoredOccurrence | null>;
   /** Apply `decideClaim` atomically. */
   claim(occurrenceId: string, recipientKey: string, owner: string, policy: ClaimPolicy): Promise<{ claimed: true; row: DeliveryRow } | { claimed: false; reason: ClaimRefusal }>;
-  /** Apply `decideBeginSend` atomically (persisting `next` when set). */
-  beginSend(occurrenceId: string, recipientKey: string, fence: number, policy: BeginSendPolicy): Promise<'ok' | 'fenced_out' | 'lease_expired' | 'retention_passed'>;
+  /** Apply `decideBeginSend` atomically (persisting `next` when set); a granted mark returns its dispatch deadline. */
+  beginSend(occurrenceId: string, recipientKey: string, fence: number, policy: BeginSendPolicy): Promise<BeginSendAnswer>;
   /** Apply `decideCompletion` atomically. */
   complete(occurrenceId: string, recipientKey: string, fence: number, result: ProviderSendResult, maxAttempts: number): Promise<'ok' | 'fenced_out'>;
 }
@@ -544,7 +559,7 @@ async function run(stored: StoredOccurrence, deps: EngineDeps, report: Occurrenc
       report.attempts.push({ recipientKey: key, fence: row.fence, result: 'not_sent', recorded: 'not_sent', detail: 'stored_payload_integrity_failed' });
       continue;
     }
-    let marked: Awaited<ReturnType<DigestDeliveryStore['beginSend']>>;
+    let marked: BeginSendAnswer;
     try {
       marked = await store.beginSend(id, key, row.fence, {
         minLeaseRemainingMs: config.sendTimeoutMs,
@@ -555,8 +570,15 @@ async function run(stored: StoredOccurrence, deps: EngineDeps, report: Occurrenc
       report.storageErrors.push({ stage: 'beginSend', recipientKey: key });
       continue;
     }
-    if (marked !== 'ok') {
-      report.attempts.push({ recipientKey: key, fence: row.fence, result: 'not_sent', recorded: marked === 'fenced_out' ? 'fenced_out' : 'not_sent', detail: marked });
+    if (!marked.ok) {
+      report.attempts.push({ recipientKey: key, fence: row.fence, result: 'not_sent', recorded: marked.reason === 'fenced_out' ? 'fenced_out' : 'not_sent', detail: marked.reason });
+      continue;
+    }
+    // The store's answer may have arrived late. Re-read the time now, after the await and immediately
+    // before the call: past the deadline, the lease may be gone or the provider may forget the key, so
+    // the send does not happen. The row keeps its mark and is treated as possibly sent (the safe side).
+    if (!(deps.now().getTime() < Date.parse(marked.dispatchBy))) {
+      report.attempts.push({ recipientKey: key, fence: row.fence, result: 'not_sent', recorded: 'not_sent', detail: 'dispatch_deadline_passed' });
       continue;
     }
     const result = await sendWithDeadline(deps.provider, row, config.sendTimeoutMs);

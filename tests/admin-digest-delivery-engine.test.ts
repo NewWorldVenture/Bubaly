@@ -315,6 +315,60 @@ describe('a worker that stalls between its claim and its mark', () => {
   });
 });
 
+describe('a mark whose answer arrives late cannot send late (dispatch deadline)', () => {
+  // 24 h retention, 1.5 s margin, 1 s send deadline, 5 min lease: a valid, deliberately tight config.
+  const TIGHT: EngineConfig = { ...CONFIG, retentionSafetyMarginMs: 1_500, sendTimeoutMs: 1_000 };
+
+  it('the mark commits 2 s before the cut-off but its answer arrives 2.5 s later: nothing is sent', async () => {
+    const { clock, store, provider, engine } = world();
+    provider.script = ({ n }) => (n === 1 ? { do: 'accept_then_lose_answer', reason: 'timeout' } : { do: 'accept' });
+    await deliverDigestOccurrence(plan({ recipients: [ONE] }), engine('a', { config: TIGHT })); // first mark at T0; accepted, answer lost
+    clock.set(new Date(Date.parse(T0) + 24 * HOUR - 2_000).toISOString());
+    store.hooks.push(hookOn('beginSend', 'after', K1, () => { clock.advance(2_500); })); // committed; the answer is slow
+    const r = await deliverDigestOccurrence(plan({ recipients: [ONE] }), engine('b', { config: TIGHT }));
+    expect(r.attempts).toEqual([{ recipientKey: K1, fence: 2, result: 'not_sent', recorded: 'not_sent', detail: 'dispatch_deadline_passed' }]);
+    expect(provider.requests).toHaveLength(1);
+    expect(provider.inbox).toHaveLength(1);
+  });
+
+  it('a mark answer held past the cut-off while a recovery worker parks the row: the stalled worker still sends nothing', async () => {
+    const { clock, store, provider, engine } = world();
+    provider.script = ({ n }) => (n === 1 ? { do: 'accept_then_lose_answer', reason: 'timeout' } : { do: 'accept' });
+    await deliverDigestOccurrence(plan({ recipients: [ONE] }), engine('a')); // first mark at T0
+    clock.set(new Date(Date.parse(T0) + 22 * HOUR).toISOString());
+    const entered = deferred();
+    const release = deferred();
+    store.hooks.push(hookOn('beginSend', 'after', K1, async () => { entered.resolve(); await release.promise; }));
+    const stalled = deliverDigestOccurrence(plan({ recipients: [ONE] }), engine('stalled'));
+    await entered.promise; // the mark is committed; its answer is held
+    store.hooks = [];
+    clock.set(new Date(Date.parse(T0) + 25 * HOUR).toISOString());
+    const recovery = await deliverDigestOccurrence(plan({ recipients: [ONE] }), engine('recovery'));
+    expect(recovery.needsAttention).toEqual([{ recipientKey: K1, status: 'needs_reconciliation' }]);
+    release.resolve();
+    const s = await stalled;
+    expect(s.attempts).toEqual([{ recipientKey: K1, fence: 2, result: 'not_sent', recorded: 'not_sent', detail: 'dispatch_deadline_passed' }]);
+    expect(provider.requests).toHaveLength(1);
+    expect(provider.inbox).toHaveLength(1);
+  });
+
+  it('control: a mark answer that is slow but inside the deadline still sends, once', async () => {
+    const { clock, store, provider, engine } = world();
+    store.hooks.push(hookOn('beginSend', 'after', K1, () => { clock.advance(4 * MINUTE); })); // lease 5 min, send deadline 150 ms
+    const r = await deliverDigestOccurrence(plan({ recipients: [ONE] }), engine('a'));
+    expect(r.complete).toBe(true);
+    expect(provider.inbox).toHaveLength(1);
+  });
+
+  it('control: past the LEASE part of the deadline (not retention) nothing is sent either', async () => {
+    const { clock, store, provider, engine } = world();
+    store.hooks.push(hookOn('beginSend', 'after', K1, () => { clock.advance(5 * MINUTE - 100); })); // 100 ms of lease left < 150 ms send deadline
+    const r = await deliverDigestOccurrence(plan({ recipients: [ONE] }), engine('a'));
+    expect(r.attempts[0]).toMatchObject({ result: 'not_sent', detail: 'dispatch_deadline_passed' });
+    expect(provider.requests).toEqual([]);
+  });
+});
+
 describe('attempts are bounded even when no attempt ever completes', () => {
   it('five claims that each die before the mark: the sixth parks the recipient as exhausted, and nothing was sent', async () => {
     const { clock, store, provider, engine } = world();

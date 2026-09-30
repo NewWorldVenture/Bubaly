@@ -147,7 +147,7 @@ export class MemoryDigestDeliveryStore implements DigestDeliveryStore {
     if (d.next) this.rows.set(k, copy(d.next));
     // ── end ──
     await this.hook('beginSend', 'after', recipientKey);
-    return d.ok ? 'ok' as const : d.reason;
+    return d.ok ? { ok: true as const, dispatchBy: d.dispatchBy } : { ok: false as const, reason: d.reason };
   }
 
   async complete(occurrenceId: string, recipientKey: string, fence: number, result: ProviderSendResult, maxAttempts: number) {

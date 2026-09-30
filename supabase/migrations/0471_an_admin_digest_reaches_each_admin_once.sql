@@ -305,10 +305,14 @@ begin
 end $$;
 
 -- ── beginSend: decideBeginSend, the last check before the provider call ─────
+-- A granted mark answers {"answer":"ok","dispatchBy":…}: the provider call must START before
+-- then (lease minus the send deadline; for an ambiguous row also the first mark plus retention
+-- minus margin), and the engine re-reads its clock after this answer arrives, so a late answer
+-- cannot send late.
 create or replace function public.admin_digest_begin_send(
   p_occurrence_id text, p_recipient_key text, p_fence bigint,
   p_min_lease_ms integer, p_retention_ms bigint, p_margin_ms bigint
-) returns text
+) returns jsonb
 language plpgsql
 volatile
 security definer
@@ -326,23 +330,27 @@ begin
    where occurrence_id = p_occurrence_id and recipient_key = p_recipient_key
    for update;
   if not found or r.status <> 'in_flight' or r.fence <> p_fence then
-    return 'fenced_out';
+    return jsonb_build_object('answer', 'fenced_out');
   end if;
   v_now := public.admin_digest_now();
   if r.lease_expires_at is null or r.lease_expires_at - v_now <= make_interval(secs => p_min_lease_ms / 1000.0) then
-    return 'lease_expired';  -- left for the next claim; nothing is written
+    return jsonb_build_object('answer', 'lease_expired');  -- left for the next claim; nothing is written
   end if;
   if r.ambiguous and (r.first_send_at is null
      or v_now >= r.first_send_at + make_interval(secs => (p_retention_ms - p_margin_ms) / 1000.0)) then
     update public.admin_digest_deliveries set
       status = 'needs_reconciliation', lease_owner = null, lease_expires_at = null, send_started_at = null, updated_at = v_now
      where occurrence_id = p_occurrence_id and recipient_key = p_recipient_key;
-    return 'retention_passed';
+    return jsonb_build_object('answer', 'retention_passed');
   end if;
   update public.admin_digest_deliveries set
     send_started_at = v_now, first_send_at = coalesce(r.first_send_at, v_now), updated_at = v_now
    where occurrence_id = p_occurrence_id and recipient_key = p_recipient_key;
-  return 'ok';
+  -- The retention part binds only an ambiguous row: one only ever refused has nothing to duplicate.
+  return jsonb_build_object('answer', 'ok', 'dispatchBy', case when r.ambiguous then least(
+      r.lease_expires_at - make_interval(secs => p_min_lease_ms / 1000.0),
+      coalesce(r.first_send_at, v_now) + make_interval(secs => (p_retention_ms - p_margin_ms) / 1000.0))
+    else r.lease_expires_at - make_interval(secs => p_min_lease_ms / 1000.0) end);
 end $$;
 
 -- ── complete: decideCompletion, fenced, after a mark; only a message id is a receipt ──
