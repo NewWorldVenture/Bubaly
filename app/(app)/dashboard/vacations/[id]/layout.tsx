@@ -43,10 +43,10 @@ export default async function TripLayout({
           <div>
             <h1 className="flex items-center gap-2 text-2xl font-bold">{kind.emoji} {trip.title}</h1>
             <p className="mt-0.5 text-sm text-muted">
-              {trip.destination ? `${trip.destination} · ` : ''}{countdownLabel(trip.start_date)}
+              {trip.destination ? `${trip.destination} · ` : ''}{countdownLabel(t, trip.start_date)}
             </p>
           </div>
-          {status && <span className={`rounded-full px-3 py-1 text-xs font-medium ${status.tone}`}>{status.label}</span>}
+          {status && <span className={`rounded-full px-3 py-1 text-xs font-medium ${status.tone}`}>{t(`tripStatus.${status.value}`)}</span>}
         </div>
       </div>
       <TripTabs tripId={id} />

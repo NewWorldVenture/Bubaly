@@ -6,6 +6,11 @@ import { suggestPacking } from '@/lib/vacations/packing';
 import { computeReadiness, type ReadinessInput } from '@/lib/vacations/readiness';
 import { detectConflicts, type ItemLike } from '@/lib/vacations/conflicts';
 import { buildICS } from '@/lib/vacations/ics';
+import { getMessages } from '@/lib/i18n/messages';
+import { translate } from '@/lib/i18n/translate';
+
+const en = (key: string, params?: Record<string, string | number>) => translate(getMessages('en-US'), key, params);
+const de = (key: string, params?: Record<string, string | number>) => translate(getMessages('de-DE'), key, params);
 
 const today = new Date('2026-06-23T12:00:00');
 
@@ -14,9 +19,13 @@ describe('dates', () => {
     expect(daysUntil('2026-06-30', today)).toBe(7);
     expect(daysUntil('2026-06-23', today)).toBe(0);
     expect(daysUntil(null, today)).toBeNull();
-    expect(countdownLabel('2026-06-24', today)).toBe('Tomorrow');
-    expect(countdownLabel('2026-06-23', today)).toBe('Today');
-    expect(countdownLabel('2026-06-20', today)).toBe('3 days ago');
+    expect(countdownLabel(en, '2026-06-24', today)).toBe('Tomorrow');
+    expect(countdownLabel(en, '2026-06-23', today)).toBe('Today');
+    expect(countdownLabel(en, '2026-06-20', today)).toBe('3 days ago');
+    expect(countdownLabel(en, '2026-06-30', today)).toBe('in 7 days');
+    // In the reader's language, not English everywhere (LAYOUT-002).
+    expect(countdownLabel(de, '2026-06-30', today)).toBe('in 7 Tagen');
+    expect(countdownLabel(de, null, today)).toBe('Noch keine Daten');
     expect(isActive('2026-06-20', '2026-06-25', today)).toBe(true);
     expect(isActive('2026-07-01', '2026-07-05', today)).toBe(false);
   });

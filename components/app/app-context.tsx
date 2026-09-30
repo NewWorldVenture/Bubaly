@@ -48,6 +48,8 @@ type AppProviderProps = {
   membershipId: string;
   membershipUpdatedAt: string;
   initialMembers: Tables<'family_members'>[];
+  /** The server's roster read failed, so `initialMembers` is empty for no reason: retry from the browser. */
+  rosterReadFailed?: boolean;
   children: React.ReactNode;
 };
 
@@ -69,7 +71,7 @@ export function AppProvider(props: AppProviderProps) {
   );
 }
 
-function AppProviderState({ value, initialMembers, children }: AppProviderProps) {
+function AppProviderState({ value, initialMembers, rosterReadFailed, children }: AppProviderProps) {
   const [members, setMembers] = useState(initialMembers);
 
   const refreshMembers = useCallback(async () => {
@@ -86,6 +88,14 @@ function AppProviderState({ value, initialMembers, children }: AppProviderProps)
     if (error) console.error('[app-context] member roster refresh failed; keeping the current roster', error);
     if (data) setMembers(data);
   }, [value.familyId]);
+
+  // A roster that failed to load on the server is not an empty family. Left as
+  // `[]`, every member picker was empty and `selfMember` was null, which the
+  // modules read as "not an active member" and refused to save — for the whole
+  // session, since nothing else refreshes the roster. Audit LAYOUT-001.
+  useEffect(() => {
+    if (rosterReadFailed) void refreshMembers();
+  }, [rosterReadFailed, refreshMembers]);
 
   // Keep the member roster live across the app.
   useEffect(() => {

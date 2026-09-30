@@ -42,6 +42,10 @@ describe('the marketing header clears the status bar instead of hiding under it'
   it.each([
     ['auth', 'app/(auth)/layout.tsx', 'pt-[calc(1.25rem+var(--safe-top))]'],
     ['kids', 'app/(app)/kids/layout.tsx', 'pt-[calc(1rem+var(--safe-top))]'],
+    // Onboarding was the third, and the one a new family sees first: its
+    // header was unpadded, so a freshly installed PWA opened with the logo
+    // behind the clock. LAYOUT-003.
+    ['onboarding', 'app/onboarding/layout.tsx', 'pt-[calc(1.25rem+var(--safe-top))]'],
   ])('the %s layout header clears the status bar too', (_name, file, padding) => {
     const src = readFileSync(file, 'utf8');
     const line = src.split('\n').find((l) => l.includes('<header')) ?? '';

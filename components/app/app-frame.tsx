@@ -46,7 +46,7 @@ export async function AppFrame({ children }: { children: React.ReactNode }) {
     }),
   ]);
 
-  const [{ data: members }, { data: prefs }, { count: unreadMessages }] = await settleAll([
+  const [{ data: members, error: membersError }, { data: prefs }, { count: unreadMessages }] = await settleAll([
     supabase
       .from('family_members')
       .select('*')
@@ -69,6 +69,7 @@ export async function AppFrame({ children }: { children: React.ReactNode }) {
       .not('read_by', 'cs', `{${ctx.user.id}}`),
   ]);
 
+  if (membersError) console.error('[layout] member roster read failed; the browser will retry', membersError);
   const defaultDashboard = isDashboardView(prefs?.default_dashboard)
     ? prefs.default_dashboard
     : 'personal';
@@ -92,6 +93,7 @@ export async function AppFrame({ children }: { children: React.ReactNode }) {
         unreadMessages: unreadMessages ?? 0,
       }}
       initialMembers={members ?? []}
+      rosterReadFailed={Boolean(membersError)}
     >
       <AppShell>{children}</AppShell>
       <RegisterSW />
