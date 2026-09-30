@@ -4,11 +4,11 @@ import ts from 'typescript';
 import { parseCookieHeader } from '@supabase/ssr';
 import { expect, test, type BrowserContext, type Page } from '@playwright/test';
 import type { SignOutBridge } from '../../lib/auth/signout-bridge';
+import { reactBrowserScripts } from './helpers/react-browser';
 
 // Actual React controls, browser helpers, SSR cookie adapter and installed SDK.
 // HTTP, navigation and the completion page's serialized POST receipt are fixtures.
-const react = fs.readFileSync(path.join(path.dirname(require.resolve('react/package.json')), 'umd/react.development.js'), 'utf8');
-const reactDom = fs.readFileSync(path.join(path.dirname(require.resolve('react-dom/package.json')), 'umd/react-dom.development.js'), 'utf8');
+const { react, reactDom } = reactBrowserScripts('development');
 const sdk = fs.readFileSync(path.join(path.dirname(require.resolve('@supabase/supabase-js/package.json')), 'dist/umd/supabase.js'), 'utf8');
 const modules: Record<string, { source: string; imports: Record<string, string> }> = {};
 const externals = new Set(['react', 'next/navigation', 'next/link', '@/components/i18n/locale-provider', '@/lib/utils/cn']);

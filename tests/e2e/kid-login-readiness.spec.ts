@@ -4,13 +4,13 @@ import ts from 'typescript';
 import * as React from 'react';
 import { renderToString } from 'react-dom/server';
 import { expect, test, type Page } from '@playwright/test';
+import { reactBrowserScripts } from './helpers/react-browser';
 
 // Render the actual child form on the server, then explicitly release its real
 // React hydration. The action/adoption boundary is synthetic: these cases prove
 // readiness and retained input; kid-login-boundaries covers the actual auth SDK.
 const origin = 'https://kid-readiness-fixture.invalid';
-const react = fs.readFileSync(path.join(path.dirname(require.resolve('react/package.json')), 'umd/react.development.js'), 'utf8');
-const reactDom = fs.readFileSync(path.join(path.dirname(require.resolve('react-dom/package.json')), 'umd/react-dom.development.js'), 'utf8');
+const { react, reactDom } = reactBrowserScripts('development');
 const isolated = new Set(['react', 'lucide-react', 'next/link', 'next/navigation', '@/components/ui/toast',
   '@/components/i18n/locale-provider', '@/app/(auth)/actions', '@/lib/auth/password-client', '@/lib/utils/cn']);
 const sources: Record<string, { source: string; imports: Record<string, string> }> = {};

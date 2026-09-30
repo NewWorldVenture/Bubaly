@@ -2,13 +2,13 @@ import fs from 'node:fs';
 import path from 'node:path';
 import ts from 'typescript';
 import { expect, test, type Page, type Route } from '@playwright/test';
+import { reactBrowserScripts } from './helpers/react-browser';
 
 // Corrected DATA-007 regressions; historical characterization is recorded in the cycle doc.
 // Actual QuickCapture, AppProvider/cache boundary, ToastProvider, save/parse helpers
 // and installed Supabase SDK execute with controlled transport. Shortcut content
 // is isolated; no live data or real navigation is performed.
-const react = fs.readFileSync(path.join(path.dirname(require.resolve('react/package.json')), 'umd/react.development.js'), 'utf8');
-const reactDom = fs.readFileSync(path.join(path.dirname(require.resolve('react-dom/package.json')), 'umd/react-dom.development.js'), 'utf8');
+const { react, reactDom } = reactBrowserScripts('development');
 const sdk = fs.readFileSync(path.join(path.dirname(require.resolve('@supabase/supabase-js/package.json')), 'dist/umd/supabase.js'), 'utf8');
 const sources = Object.fromEntries([
   'components/app/quick-capture.tsx', 'components/capture/capture-shell.tsx', 'lib/capture/document-link.ts', 'components/app/app-context.tsx', 'components/ui/toast.tsx', 'lib/analytics/use-journey.ts',

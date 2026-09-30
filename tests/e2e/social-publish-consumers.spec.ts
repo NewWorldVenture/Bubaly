@@ -8,6 +8,9 @@ import { createClient } from '@supabase/supabase-js';
 import { expect, test, type Page } from '@playwright/test';
 import type { CreatePostResult } from '@/app/(app)/dashboard/social/actions';
 import type { ConnectorPublishOutput } from '@/lib/social/connectors';
+import { reactBrowserScripts } from './helpers/react-browser';
+
+const { react, reactDom } = reactBrowserScripts('development');
 
 // Real React Studio/retry/detail consumers, server actions, publish pipeline and
 // installed Supabase/PostgREST execute against persisted in-memory HTTP rows.
@@ -118,7 +121,7 @@ async function fixture(page: Page, locale: 'en-US' | 'fr-FR' = 'en-US') {
     return result;
   });
   await page.exposeFunction('retryActualSocialPost', actions.retryPublishAction);
-  for (const pkg of ['react', 'react-dom']) await page.addScriptTag({ content: fs.readFileSync(path.join(path.dirname(require.resolve(`${pkg}/package.json`)), `umd/${pkg}.development.js`), 'utf8') });
+  for (const content of [react, reactDom]) await page.addScriptTag({ content });
   await page.addScriptTag({ content: `(() => {
     const sources = ${JSON.stringify(sources)}, messages = ${JSON.stringify(catalogue)}, modules = {};
     const p = window.__socialConsumer = { results: [], errors: [] };

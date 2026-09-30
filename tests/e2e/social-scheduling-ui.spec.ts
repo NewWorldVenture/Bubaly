@@ -3,6 +3,9 @@ import path from 'node:path';
 import ts from 'typescript';
 import { expect, test, type Page } from '@playwright/test';
 import type { CreatePostResult } from '@/app/(app)/dashboard/social/actions';
+import { reactBrowserScripts } from './helpers/react-browser';
+
+const { react, reactDom } = reactBrowserScripts('development');
 
 // Actual StudioForm, schedule-time conversion, shared presentation components
 // and LocaleProvider execute in Chromium. createPostAction is an explicit
@@ -45,7 +48,7 @@ async function fixture(page: Page, options: { defaultTimezone?: string; locale?:
   });
   await page.clock.setFixedTime(new Date('2026-01-01T12:00:00.000Z'));
   await page.goto(origin);
-  for (const pkg of ['react', 'react-dom']) await page.addScriptTag({ content: fs.readFileSync(path.join(path.dirname(require.resolve(`${pkg}/package.json`)), `umd/${pkg}.development.js`), 'utf8') });
+  for (const content of [react, reactDom]) await page.addScriptTag({ content });
   await page.addScriptTag({ content: `(() => {
     const sources = ${JSON.stringify(sources)}, messages = ${JSON.stringify(catalogue)}, modules = {};
     const p = window.__socialSchedulingUI = { errors: [], results: [], navigations: [] };

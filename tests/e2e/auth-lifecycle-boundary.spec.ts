@@ -2,11 +2,11 @@ import fs from 'node:fs';
 import path from 'node:path';
 import ts from 'typescript';
 import { expect, test, type Page } from '@playwright/test';
+import { reactBrowserScripts } from './helpers/react-browser';
 
 // Actual React effects, sign-out form handler, offline cache and query hook.
 // Auth/native transports and visual primitives are the fixture boundaries.
-const react = fs.readFileSync(path.join(path.dirname(require.resolve('react/package.json')), 'umd/react.development.js'), 'utf8');
-const reactDom = fs.readFileSync(path.join(path.dirname(require.resolve('react-dom/package.json')), 'umd/react-dom.development.js'), 'utf8');
+const { react, reactDom } = reactBrowserScripts('development');
 const sources = Object.fromEntries([
   'components/auth/session-keeper.tsx', 'components/auth/sign-out-button.tsx', 'components/auth/sign-out-form.tsx',
   'lib/offline/cache.ts', 'lib/hooks/use-realtime-query.ts', 'lib/realtime/own-channel.ts',

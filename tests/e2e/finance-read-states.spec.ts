@@ -2,11 +2,11 @@ import fs from 'node:fs';
 import path from 'node:path';
 import ts from 'typescript';
 import { expect, test } from '@playwright/test';
+import { reactBrowserScripts } from './helpers/react-browser';
 
 // Actual finance views, calculations and shared state/button components in
 // Chromium. The query-result boundary is controlled; no financial writes occur.
-const react = fs.readFileSync(path.join(path.dirname(require.resolve('react/package.json')), 'umd/react.development.js'), 'utf8');
-const reactDom = fs.readFileSync(path.join(path.dirname(require.resolve('react-dom/package.json')), 'umd/react-dom.development.js'), 'utf8');
+const { react, reactDom } = reactBrowserScripts('development');
 const sources = Object.fromEntries([
   'components/finance/budgets-view.tsx', 'components/finance/bills-view.tsx',
   'components/finance/payments-view.tsx', 'components/finance/savings-view.tsx',

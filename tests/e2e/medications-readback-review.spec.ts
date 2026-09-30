@@ -2,6 +2,7 @@ import fs from 'node:fs';
 import path from 'node:path';
 import ts from 'typescript';
 import { expect, test, type Page, type Route } from '@playwright/test';
+import { reactBrowserScripts } from './helpers/react-browser';
 
 // These regressions replace medications-audit-repro.spec.ts after DATA-005
 // was recorded. They verify this bounded UI repair, not production readiness.
@@ -9,8 +10,7 @@ import { expect, test, type Page, type Route } from '@playwright/test';
 // controls execute in Chromium. Installed Supabase/PostgREST performs the reads
 // and writes against an intercepted, persisted fixture. Auth identity, realtime
 // delivery, avatars and AI are controlled; no live database or medical data are used.
-const react = fs.readFileSync(path.join(path.dirname(require.resolve('react/package.json')), 'umd/react.development.js'), 'utf8');
-const reactDom = fs.readFileSync(path.join(path.dirname(require.resolve('react-dom/package.json')), 'umd/react-dom.development.js'), 'utf8');
+const { react, reactDom } = reactBrowserScripts('development');
 const sdk = fs.readFileSync(path.join(path.dirname(require.resolve('@supabase/supabase-js/package.json')), 'dist/umd/supabase.js'), 'utf8');
 const sources = Object.fromEntries([
   'components/modules/medications-module.tsx', 'lib/hooks/use-realtime-query.ts', 'lib/realtime/own-channel.ts',
