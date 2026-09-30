@@ -212,12 +212,22 @@ export async function payChoreRewardAction(input: { choreAssignmentId: string })
 
   const { data: assignment, error: assignmentError } = await supabase
     .from('chore_assignments')
-    .select('id, member_id, family_id, cash_awarded_cents, chores(title, cash_cents)')
+    .select('id, member_id, family_id, status, cash_awarded_cents, chores(title, cash_cents, requires_approval)')
     .eq('id', input.choreAssignmentId).eq('family_id', familyId).maybeSingle();
   if (assignmentError) return actionFailure(assignmentError, t('actions.couldNotLoadThatChore'));
   if (!assignment) return { ok: false, error: t('actions.choreNotFound') };
 
-  const chore = (assignment as unknown as { chores: { title: string; cash_cents: number | null } | null }).chores;
+  const chore = (assignment as unknown as { chores: { title: string; cash_cents: number | null; requires_approval: boolean } | null }).chores;
+  // Only a FINISHED chore is paid: one a parent approved, or one marked done
+  // that never needed approval. The status was not read at all, so a chore
+  // still to do, in progress, waiting for review or rejected was credited just
+  // the same. `done` alone is not enough on a chore that needs approval:
+  // completeChoreAssignment only settles there when `requires_approval` is
+  // false, and 0223 leaves `done` writable by any member. Unknown (the chore
+  // could not be read with it) is not payable either.
+  const payable = assignment.status === 'approved'
+    || (assignment.status === 'done' && chore?.requires_approval === false);
+  if (!payable) return { ok: false, error: t('actions.thatChoreIsNoLonger') };
   const amount = assignment.cash_awarded_cents ?? chore?.cash_cents ?? 0;
   if (amount <= 0) return { ok: false, error: t('actions.thisChoreHasNoCash') };
 
@@ -246,7 +256,15 @@ export async function payChoreRewardAction(input: { choreAssignmentId: string })
     title: `Pay chore reward ${(amount / 100).toFixed(2)}`,
     context: { amountCents: amount }, openApproval: false,
   });
-  if (decision.effect === 'deny') return { ok: false, error: householdPolicyBlocked(t, decision) };
+  // Only an ALLOW pays. This used to stop on 'deny' alone, so the two answers
+  // that mean "not without a person saying yes" were taken as a yes: a
+  // household policy requiring approval (two parents, say), and the bridge's
+  // 'degraded' answer when it could not read the family's rules at all — the
+  // one it gives precisely so a lost rule is asked about rather than assumed.
+  // With `openApproval: false` and no held row there is nothing for anyone to
+  // approve, so the credit simply completed while the trust ledger recorded
+  // require_approval. This path has no approval to wait on; it refuses.
+  if (decision.effect !== 'allow') return { ok: false, error: householdPolicyBlocked(t, decision) };
 
   const res = await creditChildWallet(supabase, {
     familyId, childWalletId: cw.id, amountCents: amount, type: 'chore_reward',
@@ -366,7 +384,9 @@ export async function runDueAllowancesAction(): Promise<Result & { ranCount?: nu
     title: `Run ${rules!.length} due allowance${rules!.length === 1 ? '' : 's'}`,
     context: { amountCents: totalDue }, openApproval: false,
   });
-  if (decision.effect === 'deny') return { ok: false, error: householdPolicyBlocked(t, decision) };
+  // Only an ALLOW runs the batch; see payChoreRewardAction. A policy asking for
+  // approval, or rules that could not be read, pay and claim nothing.
+  if (decision.effect !== 'allow') return { ok: false, error: householdPolicyBlocked(t, decision) };
 
   let ranCount = 0;
   let paidCents = 0;
@@ -637,7 +657,9 @@ export async function recordBabysitterPaymentAction(input: {
     title: `Record babysitter payment ${(input.amountCents / 100).toFixed(2)}`,
     context: { amountCents: input.amountCents }, openApproval: false,
   });
-  if (decision.effect === 'deny') return { ok: false, error: householdPolicyBlocked(t, decision) };
+  // Only an ALLOW records it; see payChoreRewardAction. The row is written as
+  // `completed`, so there is no held state for an approval to settle later.
+  if (decision.effect !== 'allow') return { ok: false, error: householdPolicyBlocked(t, decision) };
 
   const { error } = await supabase.from('babysitter_payments').insert({
     family_id: ctx.active.familyId,
