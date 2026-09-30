@@ -25,19 +25,35 @@ const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 // screen. Reread after the jar has had time to settle; each read is still bound
 // to current cookies, so it cannot adopt the event's session on its own.
 //
-// Conflicting events are coalesced into one episode of at most three reads
-// (now, +50 ms, +500 ms). Events during an episode add no reads. An episode
-// that saw further conflicts opens a backoff window (2 s, doubling to 30 s):
-// conflicts inside it wait for one episode at its end, and one that arrived
-// after the episode's last read guarantees that episode. So a stream of stale
-// events, including one a read itself provokes, cannot multiply reads, and a
-// real switch is still seen. A quiet episode resets the backoff.
+// Conflicting events are claims to verify, never sessions to adopt. A claim is
+// read against cookies in an episode of at most three reads (now, +50 ms,
+// +500 ms) and is refuted only by the episode's last read, never by one inside
+// the cookie-lag window. Then:
+//  - a reread's own echo of a claim current cookies already refuted is ignored,
+//    so settled state stays quiet however often the SDK repeats it;
+//  - a claim not seen before, arriving from outside our reads, starts or
+//    extends an episode at once: a genuine new owner never inherits a cooldown;
+//  - a claim naming a different user stops authorizing the current owner's
+//    cached UI immediately (nothing is purged: the claim may be stale) until a
+//    cookie-bound read adopts that user or the claim is refuted;
+//  - other repeats wait out a backoff (2 s, doubling to 30 s).
 const CROSS_TAB_SETTLE_MS = [0, 50, 500] as const;
 const CONFLICT_BACKOFF_MS = 2_000;
 const CONFLICT_BACKOFF_MAX_MS = 30_000;
-type ConflictEpisode = { timer: ReturnType<typeof setTimeout> | null; active: boolean; dirty: boolean; busy: boolean; backoff: number; notBefore: number };
+const MAX_EPISODE_EXTENSIONS = 3;
+const MAX_REFUTED_CLAIMS = 32;
+const SIGNED_OUT_CLAIM = '(signed out)';
+type ConflictEpisode = {
+  timer: ReturnType<typeof setTimeout> | null; active: boolean; plan: number[]; extensions: number; lastReadAt: number;
+  busy: boolean; backoff: number; notBefore: number;
+  claims: Map<string, number>; refuted: Map<string, string>; hold: Set<string>; held: { session: Session | null } | null;
+};
+const claimKey = (session: Session | null) => session?.access_token ?? SIGNED_OUT_CLAIM;
+function cookieClaimKey(): string | undefined {
+  try { return captureBrowserSessionSnapshot()?.accessToken ?? SIGNED_OUT_CLAIM; } catch { return undefined; }
+}
 let snapshot = INITIAL;
-let connection: { client: ReturnType<typeof createClient>; unsubscribe: () => void; revision: number; read: number; storageRevision: number; initialSuperseded: boolean; conflict: ConflictEpisode } | null = null;
+let connection: { client: ReturnType<typeof createClient>; unsubscribe: () => void; revision: number; read: number; storageRevision: number; initialSuperseded: boolean; reading: number; conflict: ConflictEpisode } | null = null;
 let pending: Promise<void> | null = null;
 let pendingStartedAt = 0;
 const listeners = new Set<() => void>();
@@ -109,48 +125,98 @@ function ensureConnection() {
   if (connection || typeof window === 'undefined') return;
   try {
     const client = createClient();
-    const current = { client, unsubscribe: () => {}, revision: 0, read: 0, storageRevision: getSessionStorageChangeRevision(), initialSuperseded: false, conflict: { timer: null, active: false, dirty: false, busy: false, backoff: 0, notBefore: 0 } as ConflictEpisode };
+    const current = { client, unsubscribe: () => {}, revision: 0, read: 0, storageRevision: getSessionStorageChangeRevision(), initialSuperseded: false, reading: 0, conflict: { timer: null, active: false, plan: [], extensions: 0, lastReadAt: 0, busy: false, backoff: 0, notBefore: 0, claims: new Map(), refuted: new Map(), hold: new Set(), held: null } as ConflictEpisode };
     connection = current;
     const episode = current.conflict;
-    const runEpisode = () => {
+    const read = () => {
+      if (connection !== current) return;
       episode.timer = null;
+      episode.lastReadAt = Date.now();
+      // Never read inside an SDK callback, which may hold the session lock.
+      void Promise.resolve().then(() => {
+        if (connection !== current) return;
+        notifySessionStorageChanged({ broadcast: false });
+        return refreshCacheSession();
+      }).catch(() => { /* Lifecycle recovery remains available if a reader fails. */ })
+        .finally(() => {
+          if (connection !== current) return;
+          const gap = episode.plan.shift();
+          if (gap !== undefined) { episode.timer = setTimeout(read, gap); return; }
+          endEpisode();
+        });
+    };
+    const runEpisode = () => {
       episode.active = true;
       episode.busy = false;
-      let step = 0;
-      const read = () => {
-        if (connection !== current) return;
-        episode.dirty = false;
-        void Promise.resolve().then(() => {
-          if (connection !== current) return;
-          notifySessionStorageChanged({ broadcast: false });
-          return refreshCacheSession();
-        }).catch(() => { /* Lifecycle recovery remains available if a reader fails. */ })
-          .finally(() => {
-            if (connection !== current) return;
-            step += 1;
-            if (step < CROSS_TAB_SETTLE_MS.length) {
-              episode.timer = setTimeout(read, CROSS_TAB_SETTLE_MS[step] - CROSS_TAB_SETTLE_MS[step - 1]);
-              return;
-            }
-            episode.timer = null;
-            episode.active = false;
-            if (!episode.busy && !episode.dirty) { episode.backoff = 0; episode.notBefore = 0; return; }
-            // Conflicts kept arriving: the next episode waits, longer each time.
-            const wait = Math.min(CONFLICT_BACKOFF_MS * 2 ** episode.backoff, CONFLICT_BACKOFF_MAX_MS);
-            episode.backoff += 1;
-            episode.notBefore = Date.now() + wait;
-            if (episode.dirty) episode.timer = setTimeout(runEpisode, wait);
-          });
-      };
-      // Never read inside an SDK callback, which may hold the session lock.
+      episode.extensions = 0;
+      episode.plan = CROSS_TAB_SETTLE_MS.slice(1).map((at, i) => at - CROSS_TAB_SETTLE_MS[i]);
       read();
     };
-    const reconcileCurrentCookies = () => {
-      episode.dirty = true;
-      if (episode.active) { episode.busy = true; return; }
-      if (episode.timer) return;
-      const wait = episode.notBefore - Date.now();
-      if (wait > 0) { episode.timer = setTimeout(runEpisode, wait); return; }
+    const endEpisode = () => {
+      episode.active = false;
+      const final = cookieClaimKey();
+      // The last read verified every claim seen before it started.
+      for (const [key, seen] of episode.claims) {
+        if (seen > episode.lastReadAt) continue;
+        episode.claims.delete(key);
+        if (final === undefined || key === final) continue;
+        episode.refuted.delete(key);
+        episode.refuted.set(key, final);
+        if (episode.refuted.size > MAX_REFUTED_CLAIMS) episode.refuted.delete(episode.refuted.keys().next().value!);
+      }
+      if (episode.hold.size && ![...episode.hold].some(key => episode.claims.has(key))) {
+        // Every claimed new owner was refuted: restore the cookie-bound owner.
+        episode.hold.clear();
+        const held = episode.held;
+        episode.held = null;
+        if (held) { acceptSession(held.session, true); reconcileRealtime(current.client, held.session); }
+        else void refreshCacheSession();
+      }
+      const wait = Math.min(CONFLICT_BACKOFF_MS * 2 ** episode.backoff, CONFLICT_BACKOFF_MAX_MS);
+      if (!episode.busy && !episode.claims.size) { episode.backoff = 0; episode.notBefore = 0; return; }
+      episode.backoff += 1;
+      episode.notBefore = Date.now() + wait;
+      // Unverified claims remain: one more episode, later each time, except a
+      // claimed new owner, which is not left withheld behind a backoff.
+      // Otherwise quiet.
+      const withheld = [...episode.hold].some(key => episode.claims.has(key));
+      if (episode.claims.size) episode.timer = setTimeout(runEpisode, withheld ? CROSS_TAB_SETTLE_MS[1] : wait);
+    };
+    const reconcileCurrentCookies = (session: Session | null) => {
+      const key = claimKey(session);
+      const now = Date.now();
+      const echo = current.reading > 0;
+      const refutedBy = episode.refuted.get(key);
+      const settled = refutedBy !== undefined && refutedBy === cookieClaimKey();
+      // A reread's own echo of a claim that current cookies already refuted.
+      if (echo && settled) return;
+      const fresh = !echo && !episode.claims.has(key) && (!settled || key === SIGNED_OUT_CLAIM);
+      if (fresh && session && !settled && session.user?.id !== snapshot.identity?.userId) {
+        // Someone else may have signed in here. Stop authorizing the current
+        // owner's cached UI now; adopt nobody until cookies name them.
+        episode.hold.add(key);
+        if (snapshot.status === 'ready') publish('unavailable', snapshot.identity, UNAVAILABLE, snapshot.observedUserId);
+      }
+      episode.claims.set(key, now);
+      if (episode.active) {
+        episode.busy = true;
+        if (fresh && episode.timer && episode.extensions < MAX_EPISODE_EXTENSIONS) {
+          // Read again 50 ms and 500 ms after this claim.
+          episode.extensions += 1;
+          clearTimeout(episode.timer);
+          episode.plan = CROSS_TAB_SETTLE_MS.slice(2).map((at, i) => at - CROSS_TAB_SETTLE_MS[i + 1]);
+          episode.timer = setTimeout(read, CROSS_TAB_SETTLE_MS[1]);
+        }
+        return;
+      }
+      if (episode.timer) {
+        if (!fresh) return; // coalesced into the pending episode
+        clearTimeout(episode.timer);
+        episode.timer = null;
+      } else if (!fresh && episode.notBefore > now) {
+        episode.timer = setTimeout(runEpisode, episode.notBefore - now);
+        return;
+      }
       runEpisode();
     };
     const { data: { subscription } } = client.auth.onAuthStateChange((event, session) => {
@@ -168,7 +234,7 @@ function ensureConnection() {
           // Visibility recovery and cross-tab SDK events can carry a session
           // read before a newer login or logout. Do not let that stale event
           // supersede a pending current-cookie read or reach the server tree.
-          reconcileCurrentCookies();
+          reconcileCurrentCookies(session);
           return;
         }
       }
@@ -183,9 +249,15 @@ function ensureConnection() {
           // adapter did not remove B's cookies. Do not forward that event.
           // One queued read per outstanding reconciliation avoids recursion
           // when an SDK callback runs while its session lock is still held.
-          reconcileCurrentCookies();
+          reconcileCurrentCookies(null);
           return;
         }
+      }
+      if (session && episode.hold.size) {
+        // Withheld for a claimed new owner: only that owner's cookie ends it.
+        if (!episode.hold.has(claimKey(session))) { episode.held = { session }; return; }
+        episode.hold.clear();
+        episode.held = null;
       }
       // An INITIAL_SESSION null can follow a transient bootstrap error. Only
       // an explicit sign-out or successful stored-session read proves null.
@@ -256,7 +328,11 @@ export function refreshCacheSession(options: { force?: boolean } = {}): Promise<
     // positive and empty receipts to current cookies before accepting them.
     // Retry that race once, outside an SDK event callback or session lock.
     for (let attempt = 0; attempt < 2; attempt += 1) {
-      const { data, error } = await current.client.auth.getSession();
+      // Events the SDK emits during this read are this read's echoes.
+      current.reading += 1;
+      let result: Awaited<ReturnType<typeof current.client.auth.getSession>>;
+      try { result = await current.client.auth.getSession(); } finally { current.reading -= 1; }
+      const { data, error } = result;
       if (connection !== current || revision !== current.revision || read !== current.read) return;
       current.initialSuperseded = true;
       if (error) { unavailable(); return; }
@@ -267,6 +343,18 @@ export function refreshCacheSession(options: { force?: boolean } = {}): Promise<
         // retain the known identity without authorizing its cached UI to act.
         publish('unavailable', snapshot.identity, UNAVAILABLE, snapshot.observedUserId);
         return;
+      }
+      const episode = current.conflict;
+      if (episode.hold.size) {
+        if (!episode.hold.has(claimKey(data.session))) {
+          // Still withheld for a claimed new owner; keep what cookies say for
+          // when that claim is refuted.
+          episode.held = { session: data.session };
+          if (snapshot.status === 'ready') publish('unavailable', snapshot.identity, UNAVAILABLE, snapshot.observedUserId);
+          return;
+        }
+        episode.hold.clear();
+        episode.held = null;
       }
       acceptSession(data.session, true);
       reconcileRealtime(current.client, data.session);
