@@ -36,16 +36,21 @@ const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 //  - a claim naming a different user stops authorizing the current owner's
 //    cached UI immediately (nothing is purged: the claim may be stale) until a
 //    cookie-bound read adopts that user or the claim is refuted;
+//  - a receipt read before the cookies changed restores nothing: if no read
+//    has verified the owner current cookies name when the episode ends, the
+//    view stays unavailable and up to five spaced single reads (on the backoff
+//    below) retry; after that, lifecycle reads remain the recovery path;
 //  - other repeats wait out a backoff (2 s, doubling to 30 s).
 const CROSS_TAB_SETTLE_MS = [0, 50, 500] as const;
 const CONFLICT_BACKOFF_MS = 2_000;
 const CONFLICT_BACKOFF_MAX_MS = 30_000;
 const MAX_EPISODE_EXTENSIONS = 3;
 const MAX_REFUTED_CLAIMS = 32;
+const MAX_RECOVERY_READS = 5;
 const SIGNED_OUT_CLAIM = '(signed out)';
 type ConflictEpisode = {
   timer: ReturnType<typeof setTimeout> | null; active: boolean; plan: number[]; extensions: number; lastReadAt: number;
-  busy: boolean; backoff: number; notBefore: number;
+  busy: boolean; backoff: number; notBefore: number; recovery: number;
   claims: Map<string, number>; refuted: Map<string, string>; hold: Set<string>; held: { session: Session | null } | null;
 };
 const claimKey = (session: Session | null) => session?.access_token ?? SIGNED_OUT_CLAIM;
@@ -125,7 +130,7 @@ function ensureConnection() {
   if (connection || typeof window === 'undefined') return;
   try {
     const client = createClient();
-    const current = { client, unsubscribe: () => {}, revision: 0, read: 0, storageRevision: getSessionStorageChangeRevision(), initialSuperseded: false, reading: 0, conflict: { timer: null, active: false, plan: [], extensions: 0, lastReadAt: 0, busy: false, backoff: 0, notBefore: 0, claims: new Map(), refuted: new Map(), hold: new Set(), held: null } as ConflictEpisode };
+    const current = { client, unsubscribe: () => {}, revision: 0, read: 0, storageRevision: getSessionStorageChangeRevision(), initialSuperseded: false, reading: 0, conflict: { timer: null, active: false, plan: [], extensions: 0, lastReadAt: 0, busy: false, backoff: 0, notBefore: 0, recovery: 0, claims: new Map(), refuted: new Map(), hold: new Set(), held: null } as ConflictEpisode };
     connection = current;
     const episode = current.conflict;
     const read = () => {
@@ -145,11 +150,11 @@ function ensureConnection() {
           endEpisode();
         });
     };
-    const runEpisode = () => {
+    const runEpisode = (plan: readonly number[] = CROSS_TAB_SETTLE_MS) => {
       episode.active = true;
       episode.busy = false;
       episode.extensions = 0;
-      episode.plan = CROSS_TAB_SETTLE_MS.slice(1).map((at, i) => at - CROSS_TAB_SETTLE_MS[i]);
+      episode.plan = plan.slice(1).map((at, i) => at - plan[i]);
       read();
     };
     const endEpisode = () => {
@@ -165,15 +170,21 @@ function ensureConnection() {
         if (episode.refuted.size > MAX_REFUTED_CLAIMS) episode.refuted.delete(episode.refuted.keys().next().value!);
       }
       if (episode.hold.size && ![...episode.hold].some(key => episode.claims.has(key))) {
-        // Every claimed new owner was refuted: restore the cookie-bound owner.
+        // Every claimed new owner has been read against cookies. A receipt held
+        // from before then restores the view only while current cookies still
+        // carry that exact session; after a change (to a claimed owner whose
+        // reads failed or came back stale, or anyone else) it authorizes nothing.
         episode.hold.clear();
         const held = episode.held;
         episode.held = null;
-        if (held) { acceptSession(held.session, true); reconcileRealtime(current.client, held.session); }
-        else void refreshCacheSession();
+        if (held && final !== undefined && claimKey(held.session) === final) {
+          episode.recovery = 0;
+          acceptSession(held.session, true);
+          reconcileRealtime(current.client, held.session);
+        } else episode.recovery = MAX_RECOVERY_READS;
       }
       const wait = Math.min(CONFLICT_BACKOFF_MS * 2 ** episode.backoff, CONFLICT_BACKOFF_MAX_MS);
-      if (!episode.busy && !episode.claims.size) { episode.backoff = 0; episode.notBefore = 0; return; }
+      if (!episode.busy && !episode.claims.size && !episode.recovery) { episode.backoff = 0; episode.notBefore = 0; return; }
       episode.backoff += 1;
       episode.notBefore = Date.now() + wait;
       // Unverified claims remain: one more episode, later each time, except a
@@ -181,6 +192,11 @@ function ensureConnection() {
       // Otherwise quiet.
       const withheld = [...episode.hold].some(key => episode.claims.has(key));
       if (episode.claims.size) episode.timer = setTimeout(runEpisode, withheld ? CROSS_TAB_SETTLE_MS[1] : wait);
+      else if (episode.recovery) {
+        // Unverified and unavailable: one cookie-bound read per backoff step.
+        episode.recovery -= 1;
+        episode.timer = setTimeout(() => runEpisode([0]), wait);
+      }
     };
     const reconcileCurrentCookies = (session: Session | null) => {
       const key = claimKey(session);
@@ -259,6 +275,7 @@ function ensureConnection() {
         episode.hold.clear();
         episode.held = null;
       }
+      if (session || event === 'SIGNED_OUT') episode.recovery = 0;
       // An INITIAL_SESSION null can follow a transient bootstrap error. Only
       // an explicit sign-out or successful stored-session read proves null.
       acceptSession(session, event === 'SIGNED_OUT');
@@ -356,6 +373,7 @@ export function refreshCacheSession(options: { force?: boolean } = {}): Promise<
         episode.hold.clear();
         episode.held = null;
       }
+      episode.recovery = 0;
       acceptSession(data.session, true);
       reconcileRealtime(current.client, data.session);
       return;
