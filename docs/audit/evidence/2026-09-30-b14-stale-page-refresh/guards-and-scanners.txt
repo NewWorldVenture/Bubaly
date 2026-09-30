@@ -1,0 +1,13 @@
+# main at 231e8140ea8394c2106c37f617b33b5fb5e8e569, this directory present, Node 24.21.0
+
+## Existing B14 guard tests
+npx vitest run tests/a-control-has-a-name.test.ts tests/a-signed-in-control-has-a-name.test.ts tests/every-signed-in-page-has-a-heading.test.ts tests/a-button-holds-no-other-control.test.ts tests/a-dialog-does-not-steal-the-caret.test.ts tests/mobile-overlay-dialog-a11y.test.ts tests/the-app-shell-passes-axe-on-a-phone.test.ts tests/focus-and-boundary-contract.test.ts
+Test Files  8 passed (8)
+Tests  111 passed (111)
+
+## Full unit suite (includes the documentation and tracked-tree scanners)
+npx vitest run
+Test Files  1764 passed (1764)
+Tests  21932 passed (21932)
+
+Lint and typecheck do not cover docs/; no product code changed.

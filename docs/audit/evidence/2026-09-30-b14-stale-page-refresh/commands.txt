@@ -1,0 +1,27 @@
+# Source: main at 231e8140ea8394c2106c37f617b33b5fb5e8e569 (2026-09-30), unmodified.
+# Node 24.21.0; npm ci from the repository lockfile (react 18.3.1, next 16.3.6).
+# Playwright 1.61.0 with its pinned Chromium 149.0.7827.55 (build 1228), installed
+# into a separate local directory: PLAYWRIGHT_BROWSERS_PATH=<dir> npx playwright install chromium
+# @axe-core/playwright 4.12.1 / axe-core 4.12.1.
+
+# Local Supabase stack (Supabase CLI), all 447 migrations through 0464:
+supabase migration up --local
+
+# Production build and server (local environment only):
+npm run build
+npx next start -p 3107 -H 127.0.0.1
+
+# Fixtures and personas (local only; credentials to a 0600 file, never printed):
+node probes/b14-fixtures.mjs <placeholder> <familyId> <parent-account.json> <super-admin-email>
+node probes/b14-signin.mjs <creds.json> <state-dir> http://127.0.0.1:3107
+
+# axe (the repository script, unchanged), each role at both widths:
+PAGE_AUDIT_CHROMIUM=<chromium-1228> node scripts/axe-audit.mjs --base http://127.0.0.1:3107 \
+  --paths <paths-admin.txt|paths-family.txt> --storage <role-state.json> --out <file> --concurrency 2 --width <1280|390>
+
+# Landing, seeded records and overlay keyboard checks, each role at both widths:
+PAGE_AUDIT_CHROMIUM=<chromium-1228> node probes/b14-verify.mjs http://127.0.0.1:3107 <paths> <role-state.json> <width> <out> <expect.json>
+
+# Minimal reproductions:
+PAGE_AUDIT_CHROMIUM=<chromium-1228> node probes/b14-overlay-repro.mjs http://127.0.0.1:3107 <path> <role-state.json> <width> "<trigger name>" [--arrows]
+PAGE_AUDIT_CHROMIUM=<chromium-1228> node probes/b14-overlay-node.mjs  http://127.0.0.1:3107 <path> <role-state.json> <width> "<trigger name>"
