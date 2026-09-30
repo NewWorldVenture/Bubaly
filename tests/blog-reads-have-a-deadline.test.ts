@@ -39,7 +39,7 @@ beforeEach(() => {
 });
 afterEach(() => { vi.restoreAllMocks(); vi.unstubAllEnvs(); vi.unstubAllGlobals(); });
 
-async function outlivesTheStall<T>(read: Promise<T>): Promise<T> {
+async function outlivesTheStall(read: Promise<unknown>): Promise<unknown> {
   let settled = false;
   void read.then(() => { settled = true; }, () => { settled = true; });
   for (let i = 0; i < 20; i += 1) await Promise.resolve();
