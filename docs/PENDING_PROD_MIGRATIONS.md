@@ -4034,8 +4034,43 @@ which should succeed.
 `supabase/migrations/0465_a_child_reads_only_their_own_prescriptions.sql`
 
 **Severity: high (health data. A child could read a parent's or sibling's
-prescriptions, dosage and adherence history). Deploy order: any, after 0309 and
-0434, which are already applied.** Writes don't change.
+prescriptions, dosage and adherence history). Deploy order: only after the
+prerequisites below have been verified on the database being migrated.** Writes
+don't change. The application change needs none of them: it can deploy before
+0465, and it narrows the medicines page and the health coach on its own (see
+"Before and after applying"). What waits for 0465 is the database refusal itself.
+
+**Prerequisites to verify first, read-only, on the target database.** Nothing in
+this repository establishes them for production: its migration ledger records only
+`0001`-`0003` (see the top of this document), and repository or CI runs prove the
+isolated schema they build, not the live one. 0465 checks 1, 3 and 4 itself and
+raises if one fails, so an unmet prerequisite stops it rather than half-applying
+it; checking beforehand finds that out before a deploy window, not during one.
+
+```sql
+-- 1. The three tables exist.
+select to_regclass('public.medications'), to_regclass('public.medication_schedules'),
+       to_regclass('public.medication_doses');
+-- 2. The helpers the new policies call exist.
+select to_regprocedure('public.can_manage_family(uuid)'),
+       to_regprocedure('public.is_family_member(uuid)');
+-- 3. 0309/0434's six write guards exist and are RESTRICTIVE: expect 6 rows,
+--    every polpermissive = false. Fewer means 0309 or 0434 is not live: apply
+--    those first, not 0465.
+select polrelid::regclass as tbl, polname, polpermissive
+  from pg_policy
+ where polname in ('medications_manager_insert_guard', 'medications_manager_update_guard',
+                   'medications_manager_delete_guard', 'medication_schedules_manager_insert_guard',
+                   'medication_schedules_manager_update_guard', 'medication_schedules_manager_delete_guard')
+ order by 1, 2;
+-- 4. Every permissive FOR ALL policy on medication_doses grants plain
+--    membership (both expressions read is_family_member(family_id)); 0465
+--    refuses to split anything else.
+select polname, pg_get_expr(polqual, polrelid) as using_expr,
+       pg_get_expr(polwithcheck, polrelid) as check_expr
+  from pg_policy
+ where polrelid = 'public.medication_doses'::regclass and polcmd = '*' and polpermissive;
+```
 
 The owner decided that parents write and kids see only their own. `medications`
 is now readable by a manager (`can_manage_family`) for every row, and by anyone
