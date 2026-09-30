@@ -14,6 +14,7 @@ import { join } from 'node:path';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
 import { LOCALES, LOCALE_COOKIE, LOCALE_COOKIE_MAX_AGE } from '@/lib/i18n/locales';
+import { at } from './helpers/source-order';
 import { resolveLocale } from '@/lib/i18n/resolve';
 
 type Cookie = { value: string; options?: Record<string, unknown> };
@@ -327,15 +328,24 @@ describe('sign-in is never failed by a language', () => {
     expect(await signIn()).toEqual({ kind: 'none' });
   });
 
+  it('a write that reaches no row (no profile yet, or RLS) -> none, not claimed as stored', async () => {
+    db.user = { id: PARENT };
+    db.profiles.delete(PARENT);
+    db.jar.set(LOCALE_COOKIE, { value: 'fr-FR' });
+    expect(await signIn()).toEqual({ kind: 'none' });
+    expect(db.writes).toEqual([]);
+    expect(errors).toHaveBeenCalled();
+  });
+
   it('the sign-in landing step and onboarding both call it before anything can fail on it', () => {
     const auth = readFileSync(join(__dirname, '..', 'app/(auth)/actions.ts'), 'utf8');
-    const landing = auth.slice(auth.indexOf('export async function resolveLandingPathAction'));
-    expect(landing.slice(0, landing.indexOf('\n}\n'))).toMatch(/^\s*await syncLanguageForSignedInUser\(\);/m);
+    const landing = auth.slice(at(auth, 'export async function resolveLandingPathAction'));
+    expect(landing.slice(0, at(landing, '\n}\n'))).toMatch(/^\s*await syncLanguageForSignedInUser\(\);/m);
     const onboarding = readFileSync(join(__dirname, '..', 'app/onboarding/actions.ts'), 'utf8');
-    const finalize = onboarding.slice(onboarding.indexOf('export async function finalizeOnboardingAction'));
-    const sync = finalize.indexOf('await syncLanguageForSignedInUser();');
-    expect(sync).toBeGreaterThan(finalize.indexOf("onboardingFailure('profile save'"));
-    expect(sync).toBeLessThan(finalize.indexOf('// 2. Resolve the family'));
+    const finalize = onboarding.slice(at(onboarding, 'export async function finalizeOnboardingAction'));
+    const sync = at(finalize, 'await syncLanguageForSignedInUser();');
+    expect(sync).toBeGreaterThan(at(finalize, "onboardingFailure('profile save'"));
+    expect(sync).toBeLessThan(at(finalize, '// 2. Resolve the family'));
   });
 });
 

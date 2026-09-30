@@ -71,9 +71,17 @@ export async function syncLanguageForSignedInUser(): Promise<LanguageSync> {
       resolved: locale.code,
     });
     if (decision.kind === 'stored') {
-      const { error: writeError } = await supabase.from('profiles').update({ locale: decision.locale }).eq('id', user.id);
+      // Confirmed, not assumed: the write reads back the row it changed, so a
+      // profile RLS refused (or one that does not exist yet) is reported as not
+      // stored rather than claimed.
+      const { data: written, error: writeError } = await supabase
+        .from('profiles').update({ locale: decision.locale }).eq('id', user.id).select('id');
       if (writeError) {
         console.error('[i18n] could not store the language on the profile', writeError);
+        return { kind: 'none' };
+      }
+      if ((written ?? []).length !== 1) {
+        console.error('[i18n] the language reached no profile row (refused or missing)');
         return { kind: 'none' };
       }
     } else if (decision.kind === 'restored') {
