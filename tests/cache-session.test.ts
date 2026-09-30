@@ -46,6 +46,201 @@ beforeEach(() => {
   vi.stubEnv('NEXT_PUBLIC_SUPABASE_ANON_KEY', 'synthetic-public-anon');
   vi.stubGlobal('window', new EventTarget()); vi.useFakeTimers({ toFake: ['Date'] }); vi.setSystemTime(0);
 });
+
+describe('bounded reconciliation never authorizes an unverified session', () => {
+  beforeEach(() => { vi.useFakeTimers(); vi.setSystemTime(0); });
+  const scope = (): AuthenticatedCacheScope => {
+    const current = getCacheSessionSnapshot();
+    return { status: 'ready', key: 'synthetic', partition: { userId: current.identity!.userId, sessionId: current.identity!.sessionId, accessIdentity: 'synthetic' },
+      familyId: 'synthetic', sessionRevision: current.revision, error: null, familyMismatchError: '' };
+  };
+
+  it('withholds a previously refuted peer claim during a held lifecycle read', async () => {
+    connect(); await settle();
+    emit('SIGNED_IN', session(B, S2)); await vi.advanceTimersByTimeAsync(1_000);
+    expect(getCacheSessionSnapshot().status).toBe('ready');
+    const oldScope = scope(); const held = deferred<Reply>();
+    mocks.getSession.mockImplementation(() => held.promise);
+    const lifecycle = refreshCacheSession({ force: true }); await settle();
+    emit('SIGNED_IN', session(B, S2)); await settle();
+    const immediatelyCurrent = isAuthenticatedCacheScopeCurrent(oldScope);
+    await vi.advanceTimersByTimeAsync(20); saveCookies(session(B, S2));
+    await vi.advanceTimersByTimeAsync(1_000);
+    const stillCurrent = isAuthenticatedCacheScopeCurrent(oldScope);
+    held.resolve(reply(session(B, S2))); await lifecycle; await settle();
+    expect(immediatelyCurrent).toBe(false); expect(stillCurrent).toBe(false);
+    expect(getCacheSessionSnapshot()).toMatchObject({ status: 'ready', identity: { userId: B, sessionId: S2 } });
+  });
+
+  it('withholds the old cache partition for the same user with a new session', async () => {
+    connect(); await settle(); const oldScope = scope(); const generation = getCacheGeneration();
+    const held = deferred<Reply>(); mocks.getSession.mockImplementation(() => held.promise);
+    const lifecycle = refreshCacheSession({ force: true }); await settle();
+    emit('SIGNED_IN', session(A, S2)); await settle();
+    const immediatelyCurrent = isAuthenticatedCacheScopeCurrent(oldScope);
+    expect(getCacheGeneration()).toBe(generation);
+    await vi.advanceTimersByTimeAsync(20); saveCookies(session(A, S2));
+    await vi.advanceTimersByTimeAsync(1_000);
+    const stillCurrent = isAuthenticatedCacheScopeCurrent(oldScope);
+    held.resolve(reply(session(A, S2))); await lifecycle; await settle();
+    expect(immediatelyCurrent).toBe(false); expect(stillCurrent).toBe(false);
+    expect(getCacheSessionSnapshot()).toMatchObject({ status: 'ready', identity: { userId: A, sessionId: S2 } });
+  });
+
+  it('a rotated cookie token for the unchanged session preserves its scope after a failed read', async () => {
+    connect(); await settle(); const oldScope = scope();
+    saveCookies({ ...session(), access_token: session().access_token + '-rotated' });
+    mocks.getSession.mockRejectedValue(new Error('synthetic outage'));
+    await refreshCacheSession({ force: true });
+    expect(isAuthenticatedCacheScopeCurrent(oldScope)).toBe(true);
+  });
+
+  it.each(['same token', 'rotating token', 'rotating user'] as const)('delayed %s echoes exhaust a finite SDK-call budget, then permit explicit recovery', async kind => {
+    connect(); await settle(); const base = mocks.getSession.mock.calls.length; let sequence = 0;
+    mocks.getSession.mockImplementation(async () => {
+      await new Promise(resolve => setTimeout(resolve, 1));
+      sequence += 1;
+      const claim = kind === 'rotating user' ? session(`77777777-7777-4777-8777-${String(sequence).padStart(12, '0')}`, S2)
+        : kind === 'rotating token' ? { ...session(B, S2), access_token: session(B, S2).access_token + '-' + sequence } : session(B, S2);
+      emit('TOKEN_REFRESHED', claim);
+      return reply(session());
+    });
+    emit('SIGNED_IN', session(B, S2)); await vi.advanceTimersByTimeAsync(12 * 60_000);
+    expect(mocks.getSession.mock.calls.length - base).toBeLessThanOrEqual(16);
+    expect(vi.getTimerCount()).toBe(0);
+    expect(getCacheSessionSnapshot().status).toBe('unavailable');
+    const calls = mocks.getSession.mock.calls.length;
+    await vi.advanceTimersByTimeAsync(12 * 60_000);
+    expect(mocks.getSession).toHaveBeenCalledTimes(calls);
+    mocks.getSession.mockResolvedValue(reply(session()));
+    await refreshCacheSession({ force: true });
+    expect(getCacheSessionSnapshot()).toMatchObject({ status: 'ready', identity: { userId: A, sessionId: S1 } });
+  });
+
+  it('counts stale-receipt retries in the same autonomous budget', async () => {
+    connect(); await settle(); const base = mocks.getSession.mock.calls.length;
+    mocks.getSession.mockImplementation(async () => {
+      await new Promise(resolve => setTimeout(resolve, 1));
+      emit('TOKEN_REFRESHED', session(B, S2)); return reply(session(B, S2));
+    });
+    emit('SIGNED_IN', session(B, S2)); await vi.advanceTimersByTimeAsync(12 * 60_000);
+    expect(mocks.getSession.mock.calls.length - base).toBeLessThanOrEqual(16);
+    expect(vi.getTimerCount()).toBe(0);
+    expect(getCacheSessionSnapshot().status).toBe('unavailable');
+  });
+
+  it('a fresh claim during explicit recovery from exhaustion cannot revive the held owner', async () => {
+    connect(); await settle();
+    mocks.getSession.mockImplementation(async () => {
+      await new Promise(resolve => setTimeout(resolve, 1));
+      emit('TOKEN_REFRESHED', session(B, S2)); return reply(session());
+    });
+    emit('SIGNED_IN', session(B, S2)); await vi.advanceTimersByTimeAsync(12 * 60_000);
+    const held = deferred<Reply>(); mocks.getSession.mockImplementation(() => held.promise);
+    const lifecycle = refreshCacheSession({ force: true }); await settle();
+    emit('SIGNED_IN', session(C, S3)); await settle();
+    held.resolve(reply(session())); await lifecycle; await settle();
+    expect(getCacheSessionSnapshot().status).toBe('unavailable');
+    expect(vi.getTimerCount()).toBe(0);
+    saveCookies(session(C, S3)); mocks.getSession.mockResolvedValue(reply(session(C, S3)));
+    await refreshCacheSession({ force: true });
+    expect(getCacheSessionSnapshot()).toMatchObject({ status: 'ready', identity: { userId: C, sessionId: S3 } });
+  });
+
+  async function exhaustWithDelayedEchoes() {
+    connect(); await settle();
+    mocks.getSession.mockImplementation(async () => {
+      await new Promise(resolve => setTimeout(resolve, 1));
+      emit('TOKEN_REFRESHED', session(B, S2)); return reply(session());
+    });
+    emit('SIGNED_IN', session(B, S2)); await vi.advanceTimersByTimeAsync(12 * 60_000);
+    expect(vi.getTimerCount()).toBe(0);
+    expect(getCacheSessionSnapshot().status).toBe('unavailable');
+  }
+
+  it('the newest owner can complete the same lifecycle read after autonomous exhaustion', async () => {
+    await exhaustWithDelayedEchoes();
+    const held = deferred<Reply>(); mocks.getSession.mockImplementation(() => held.promise);
+    const lifecycle = refreshCacheSession({ force: true }); await settle();
+    emit('SIGNED_IN', session(C, S3)); saveCookies(session(C, S3));
+    held.resolve(reply(session(C, S3))); await lifecycle;
+    expect(getCacheSessionSnapshot()).toMatchObject({ status: 'ready', identity: { userId: C, sessionId: S3 } });
+    expect(vi.getTimerCount()).toBe(0);
+  });
+
+  it('an older cookie-bound SDK event cannot erase a newer unverified claim', async () => {
+    connect(); await settle();
+    emit('SIGNED_IN', session(B, S2)); emit('SIGNED_IN', session(C, S3));
+    saveCookies(session(B, S2)); emit('SIGNED_IN', session(B, S2));
+    expect(getCacheSessionSnapshot().status).toBe('unavailable');
+    saveCookies(session(C, S3)); mocks.getSession.mockResolvedValue(reply(session(C, S3)));
+    emit('SIGNED_IN', session(C, S3));
+    expect(getCacheSessionSnapshot()).toMatchObject({ status: 'ready', identity: { userId: C, sessionId: S3 } });
+  });
+
+  it('the newest cookie-bound SDK event recovers after autonomous exhaustion', async () => {
+    await exhaustWithDelayedEchoes();
+    emit('SIGNED_IN', session(C, S3));
+    saveCookies(session(C, S3)); emit('SIGNED_IN', session(C, S3));
+    expect(getCacheSessionSnapshot()).toMatchObject({ status: 'ready', identity: { userId: C, sessionId: S3 } });
+    expect(vi.getTimerCount()).toBe(0);
+  });
+
+  it('the last budgeted read keeps a verified new owner without scheduling more calls', async () => {
+    connect(); await settle(); const base = mocks.getSession.mock.calls.length; let calls = 0;
+    mocks.getSession.mockImplementation(async () => {
+      await new Promise(resolve => setTimeout(resolve, 1));
+      if (++calls === 16) { saveCookies(session(B, S2)); return reply(session(B, S2)); }
+      emit('TOKEN_REFRESHED', session(B, S2)); return reply(session());
+    });
+    emit('SIGNED_IN', session(B, S2)); await vi.advanceTimersByTimeAsync(12 * 60_000);
+    expect(mocks.getSession.mock.calls.length - base).toBe(16);
+    expect(getCacheSessionSnapshot()).toMatchObject({ status: 'ready', identity: { userId: B, sessionId: S2 } });
+    expect(vi.getTimerCount()).toBe(0);
+  });
+
+  it('exhaustion cannot let a stale event retain A after current cookies become B', async () => {
+    await exhaustWithDelayedEchoes();
+    mocks.getSession.mockResolvedValue(reply(session())); await refreshCacheSession({ force: true });
+    const oldScope = scope(); const calls = mocks.getSession.mock.calls.length;
+    saveCookies(session(B, S2)); emit('SIGNED_IN', session()); await settle();
+    expect(isAuthenticatedCacheScopeCurrent(oldScope)).toBe(false);
+    expect(getCacheSessionSnapshot().status).toBe('unavailable');
+    expect(mocks.getSession).toHaveBeenCalledTimes(calls);
+    expect(vi.getTimerCount()).toBe(0);
+  });
+
+  it('an unverified sign-out withholds A even while its confirming read hangs', async () => {
+    connect(); await settle(); const oldScope = scope(); const generation = getCacheGeneration();
+    const held = deferred<Reply>(); mocks.getSession.mockImplementation(() => held.promise);
+    const lifecycle = refreshCacheSession({ force: true }); await settle();
+    emit('SIGNED_OUT', null); await settle();
+    const immediatelyCurrent = isAuthenticatedCacheScopeCurrent(oldScope);
+    expect(getCacheGeneration()).toBe(generation);
+    await vi.advanceTimersByTimeAsync(20); saveCookies(null);
+    await vi.advanceTimersByTimeAsync(1_000);
+    const stillCurrent = isAuthenticatedCacheScopeCurrent(oldScope);
+    held.resolve(reply(null)); await lifecycle; await settle();
+    expect(immediatelyCurrent).toBe(false); expect(stillCurrent).toBe(false);
+    expect(getCacheSessionSnapshot().status).toBe('signed-out');
+  });
+
+  it('a claim after the final read started is not refuted in the same clock millisecond', async () => {
+    connect(); await settle(); const generation = getCacheGeneration();
+    emit('SIGNED_IN', session(B, S2)); await settle();
+    await vi.advanceTimersByTimeAsync(50);
+    const held = deferred<Reply>(); mocks.getSession.mockImplementationOnce(() => held.promise);
+    await vi.advanceTimersByTimeAsync(450);
+    emit('SIGNED_IN', session(C, S3));
+    held.resolve(reply(session())); await settle();
+    expect(getCacheSessionSnapshot().status).toBe('unavailable');
+    expect(getCacheGeneration()).toBe(generation);
+    await vi.advanceTimersByTimeAsync(20); saveCookies(session(C, S3));
+    mocks.getSession.mockResolvedValue(reply(session(C, S3)));
+    await vi.advanceTimersByTimeAsync(40);
+    expect(getCacheSessionSnapshot()).toMatchObject({ status: 'ready', identity: { userId: C, sessionId: S3 } });
+  });
+});
 afterEach(() => { disposers.splice(0).forEach(stop => stop()); vi.unstubAllGlobals(); vi.unstubAllEnvs(); vi.useRealTimers(); });
 
 describe('cache session identity', () => {
@@ -239,6 +434,7 @@ describe('shared session observer', () => {
     expect(getCacheSessionSnapshot()).toMatchObject({status:'unavailable',identity:null,error:expect.any(String)});
   });
   it('a stale SIGNED_OUT event with B cookies cannot purge B or reach auth listeners', async () => {
+    vi.useFakeTimers(); vi.setSystemTime(0);
     const value = session(B, S2);
     mocks.getSession.mockResolvedValue(reply(value));
     mocks.cookieSnapshot.mockReturnValue({ accessToken: value.access_token });
@@ -248,11 +444,14 @@ describe('shared session observer', () => {
     expect(mocks.getSession).toHaveBeenCalledTimes(1); // Never acquire the SDK lock inside its callback.
     await settle();
     expect(mocks.getSession).toHaveBeenCalledTimes(2);
+    expect(getCacheSessionSnapshot()).toMatchObject({ status: 'unavailable', identity: { userId: B } });
+    await vi.advanceTimersByTimeAsync(1_000);
     expect(getCacheSessionSnapshot()).toMatchObject({ status: 'ready', identity: { userId: B } });
     expect(getCacheGeneration()).toBe(generation);
     expect(events).not.toHaveBeenCalled();
   });
   it('a repeated stale event from the queued read does not recursively schedule SDK reads', async () => {
+    vi.useFakeTimers(); vi.setSystemTime(0);
     const value = session(B, S2);
     mocks.getSession.mockResolvedValue(reply(value));
     mocks.cookieSnapshot.mockReturnValue({ accessToken: value.access_token });
@@ -260,6 +459,11 @@ describe('shared session observer', () => {
     mocks.getSession.mockImplementation(async () => { emit('SIGNED_OUT', null); return reply(null); });
     emit('SIGNED_OUT', null); await settle();
     expect(mocks.getSession).toHaveBeenCalledTimes(2);
+    expect(getCacheSessionSnapshot()).toMatchObject({ status: 'unavailable', identity: { userId: B } });
+    // A contradictory empty receipt cannot keep B authorized. Once a read
+    // actually agrees with B's cookies, the stale sign-out can be refuted.
+    mocks.getSession.mockResolvedValue(reply(value));
+    await vi.advanceTimersByTimeAsync(1_000);
     expect(getCacheSessionSnapshot()).toMatchObject({ status: 'ready', identity: { userId: B } });
     expect(getCacheGeneration()).toBe(generation);
   });
@@ -336,7 +540,7 @@ describe('a peer event that outruns its cookie write', () => {
   it('rereads a sign-out whose cookie removal was not yet visible', async () => {
     connect(); await settle();
     emit('SIGNED_OUT', null); await settle();
-    expect(getCacheSessionSnapshot()).toMatchObject({ status: 'ready', identity: { userId: A } });
+    expect(getCacheSessionSnapshot()).toMatchObject({ status: 'unavailable', identity: { userId: A } });
     saveCookies(null); mocks.getSession.mockResolvedValue(reply(null));
     await vi.advanceTimersByTimeAsync(50);
     expect(getCacheSessionSnapshot()).toMatchObject({ status: 'signed-out', identity: null });
@@ -355,7 +559,9 @@ describe('a peer event that outruns its cookie write', () => {
     for (let i = 0; i < 1000; i++) { emit('SIGNED_IN', session(B, S2)); await vi.advanceTimersByTimeAsync(10); }
     const duringStorm = reads() - base;
     expect(duringStorm).toBeLessThanOrEqual(12); // was 1,000 before the fix, one per event
-    expect(getCacheSessionSnapshot()).toMatchObject({ status: 'ready', identity: { userId: A } });
+    // The last still-unverified B claim must withhold A, even if an earlier
+    // identical claim was refuted. Read scheduling remains bounded below.
+    expect(getCacheSessionSnapshot()).toMatchObject({ status: 'unavailable', identity: { userId: A } });
     // The peer's write finally lands; the pending episode sees it.
     saveCookies(session(B, S2)); mocks.getSession.mockResolvedValue(reply(session(B, S2)));
     await vi.advanceTimersByTimeAsync(40_000);
@@ -363,16 +569,24 @@ describe('a peer event that outruns its cookie write', () => {
     expect(reads() - base).toBeLessThanOrEqual(duringStorm + 3);
   });
 
-  it('a read that itself provokes a stale event backs off instead of looping', async () => {
-    connect(); await settle(); const base = reads();
+  it('a read that itself provokes a stale event stops at the autonomous budget', async () => {
+    connect(); await settle(); const base = reads(); const oldScope = scopeOf();
     mocks.getSession.mockImplementation(async () => { emit('TOKEN_REFRESHED', session(B, S2)); return reply(session()); });
     emit('SIGNED_IN', session(B, S2));
     await vi.advanceTimersByTimeAsync(60_000);
     const inFirstMinute = reads() - base;
-    expect(inFirstMinute).toBeLessThanOrEqual(18); // 2,401 with fixed re-armed timers
+    expect(inFirstMinute).toBe(16);
     await vi.advanceTimersByTimeAsync(60_000);
-    expect(reads() - base - inFirstMinute).toBeLessThanOrEqual(6); // at the 30 s ceiling: one episode per ~30 s
+    expect(reads() - base).toBe(inFirstMinute);
+    expect(vi.getTimerCount()).toBe(0);
+    // Each callback arrived after its read began. It might be a genuine peer
+    // change, so only a later successful read without another claim restores A.
+    expect(getCacheSessionSnapshot()).toMatchObject({ status: 'unavailable', identity: { userId: A } });
+    expect(isAuthenticatedCacheScopeCurrent(oldScope)).toBe(false);
+    mocks.getSession.mockResolvedValue(reply(session()));
+    await refreshCacheSession();
     expect(getCacheSessionSnapshot()).toMatchObject({ status: 'ready', identity: { userId: A } });
+    expect(reads() - base).toBe(17);
   });
 
   it('rapid owner changes settle on whoever the cookies finally name', async () => {
@@ -385,30 +599,40 @@ describe('a peer event that outruns its cookie write', () => {
   });
 
   // Integration review of f6c512aa: every reread echoes a stale event while the
-  // observer stays subscribed. Work must stop once cookie-bound state settles.
-  it('a stale event echoed by every reread settles into no further reads and no pending timers', async () => {
-    connect(); await settle();
+  // observer stays subscribed. Work must stop even if each callback is newer
+  // than its read; recovery still requires a successful cookie-bound receipt.
+  it('a stale event echoed by every reread exhausts into no further reads and no pending timers', async () => {
+    connect(); await settle(); const base = reads(); const oldScope = scopeOf();
     saveCookies(session(B, S2));
     mocks.getSession.mockImplementation(async () => { emit('SIGNED_IN', session()); return reply(session(B, S2)); });
     emit('SIGNED_IN', session()); await settle();
-    for (const at of [50, 50, 400, 500]) await vi.advanceTimersByTimeAsync(at);
+    await vi.advanceTimersByTimeAsync(60_000);
     const settled = reads();
-    expect(getCacheSessionSnapshot()).toMatchObject({ status: 'ready', identity: { userId: B } });
+    expect(settled - base).toBe(16);
+    expect(getCacheSessionSnapshot().status).toBe('unavailable');
+    expect(isAuthenticatedCacheScopeCurrent(oldScope)).toBe(false);
     await vi.advanceTimersByTimeAsync(120_000);
     expect(reads()).toBe(settled);
     expect(vi.getTimerCount()).toBe(0);
+    mocks.getSession.mockResolvedValue(reply(session(B, S2)));
+    await refreshCacheSession();
     expect(getCacheSessionSnapshot()).toMatchObject({ status: 'ready', identity: { userId: B } });
+    expect(reads()).toBe(settled + 1);
   });
 
   // Integration review of 6bf38f3b: after reads have been echoing stale B for a
-  // while, a genuine sign-in by a third owner must not inherit that cooldown.
-  it('a genuine new owner after a saturated stale stream is withheld at once and adopted from cookies', async () => {
-    connect(); await settle();
+  // while, a genuine sign-in by a third owner must still recover through a
+  // lifecycle read after the autonomous budget has been spent.
+  it('a genuine new owner after a saturated stale stream is adopted by a cookie-bound lifecycle read', async () => {
+    connect(); await settle(); const base = reads(); const oldScope = scopeOf();
     let echo = true;
     mocks.getSession.mockImplementation(async () => { if (echo) emit('TOKEN_REFRESHED', session(B, S2)); return reply(session()); });
     emit('TOKEN_REFRESHED', session(B, S2));
     await vi.advanceTimersByTimeAsync(33_000);
-    expect(getCacheSessionSnapshot()).toMatchObject({ status: 'ready', identity: { userId: A } });
+    expect(getCacheSessionSnapshot()).toMatchObject({ status: 'unavailable', identity: { userId: A } });
+    expect(isAuthenticatedCacheScopeCurrent(oldScope)).toBe(false);
+    expect(reads() - base).toBe(16);
+    expect(vi.getTimerCount()).toBe(0);
     echo = false;
     const generation = getCacheGeneration();
     // C signs in elsewhere; this tab's cookies still read A for 20 ms.
@@ -419,8 +643,12 @@ describe('a peer event that outruns its cookie write', () => {
     expect(getCacheSessionSnapshot().status).not.toBe('ready');
     saveCookies(session(C, S3)); mocks.getSession.mockResolvedValue(reply(session(C, S3)));
     await vi.advanceTimersByTimeAsync(40);
+    expect(reads() - base).toBe(16);
+    expect(getCacheSessionSnapshot().status).toBe('unavailable');
+    await refreshCacheSession();
     expect(getCacheSessionSnapshot()).toMatchObject({ status: 'ready', identity: { userId: C, sessionId: S3 } });
     expect(getCacheGeneration()).toBeGreaterThan(generation);
+    expect(reads() - base).toBe(17);
   });
 
   it('a stale event naming another owner withholds only until cookies confirm the current one', async () => {
@@ -593,19 +821,23 @@ describe('a peer event that outruns its cookie write', () => {
     expect(getCacheSessionSnapshot().identity).toEqual(scopeA.partition && { userId: scopeA.partition.userId, sessionId: scopeA.partition.sessionId });
   });
 
-  // Withholding events that arrive during our reads must not turn those reads'
-  // own echoes into new work: a read that provokes a claim with a new token, or
-  // naming a new user, on every call stays one quiet episode.
+  // A read-time callback cannot be distinguished from a genuine later peer
+  // change. It remains unverified, but cannot replenish the autonomous budget.
   it.each([
     ['a new token', (i: number) => session(B, `44444444-4444-4444-8444-${String(i).padStart(12, '0')}`)],
     ['a new user', (i: number) => session(`77777777-7777-4777-8777-${String(i).padStart(12, '0')}`, `88888888-8888-4888-8888-${String(i).padStart(12, '0')}`)],
-  ] as const)('reads that each provoke a claim for %s stay bounded, and A is restored', async (_, claim) => {
-    connect(); await settle(); const base = reads(); let i = 0;
+  ] as const)('reads that each provoke a claim for %s stop, and a later lifecycle read restores A', async (_, claim) => {
+    connect(); await settle(); const base = reads(); const oldScope = scopeOf(); let i = 0;
     mocks.getSession.mockImplementation(async () => { emit('TOKEN_REFRESHED', claim(++i)); return reply(session()); });
     emit('SIGNED_IN', session(B, S2));
     await vi.advanceTimersByTimeAsync(12 * 60_000);
-    expect(reads() - base).toBe(3);
+    expect(reads() - base).toBe(16);
     expect(vi.getTimerCount()).toBe(0);
+    expect(getCacheSessionSnapshot()).toMatchObject({ status: 'unavailable', identity: { userId: A } });
+    expect(isAuthenticatedCacheScopeCurrent(oldScope)).toBe(false);
+    mocks.getSession.mockResolvedValue(reply(session()));
+    await refreshCacheSession();
     expect(getCacheSessionSnapshot()).toMatchObject({ status: 'ready', identity: { userId: A }, error: null });
+    expect(reads() - base).toBe(17);
   });
 });

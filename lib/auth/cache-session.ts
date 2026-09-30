@@ -3,7 +3,7 @@
 import type { AuthChangeEvent, Session } from '@supabase/supabase-js';
 import { createClient } from '@/lib/supabase/client';
 import { clearAllCache } from '@/lib/offline/cache';
-import { getSessionStorageChangeRevision, notifySessionStorageChanged, subscribeSessionStorageChanges } from '@/lib/auth/session-change';
+import { getSessionStorageChangeRevision, subscribeSessionStorageChanges } from '@/lib/auth/session-change';
 import { captureBrowserSessionSnapshot } from '@/lib/auth/browser-session-storage';
 
 export type CacheSessionIdentity = { userId: string; sessionId: string };
@@ -29,8 +29,8 @@ const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 // read against cookies in an episode of at most three reads (now, +50 ms,
 // +500 ms) and is refuted only by the episode's last read, never by one inside
 // the cookie-lag window. Then:
-//  - a reread's own echo of a claim current cookies already refuted is ignored,
-//    so settled state stays quiet however often the SDK repeats it;
+//  - prior refutation and read-time echo classification affect scheduling,
+//    never whether a conflicting session stops authorizing the old cache;
 //  - a claim not seen before, arriving from outside our reads, starts or
 //    extends an episode at once: a genuine new owner never inherits a cooldown;
 //  - a claim naming a different user stops authorizing the current owner's
@@ -51,12 +51,18 @@ const MAX_EPISODE_EXTENSIONS = 3;
 const MAX_REFUTED_CLAIMS = 32;
 const MAX_RECOVERY_READS = 5;
 const MAX_CLAIMED_USERS = 32;
+// A connection may spend at most this many SDK calls on autonomous conflict
+// reconciliation, including retries. SDK echoes cannot replenish the budget.
+// After exhaustion, only an ordinary lifecycle read or a cookie-bound event
+// can recover the view; an unverified claim never re-arms autonomous work.
+const MAX_AUTONOMOUS_READS = 16;
 const SIGNED_OUT_CLAIM = '(signed out)';
 type ConflictEpisode = {
-  timer: ReturnType<typeof setTimeout> | null; active: boolean; plan: number[]; extensions: number; lastReadAt: number;
+  timer: ReturnType<typeof setTimeout> | null; active: boolean; plan: number[]; extensions: number; claimOrder: number; lastReadOrder: number;
   busy: boolean; backoff: number; notBefore: number; recovery: number;
   claims: Map<string, number>; refuted: Map<string, string>; hold: Set<string>; held: { session: Session | null } | null;
   users: Set<string>;
+  remaining: number; exhausted: boolean; claimRevision: number; latestClaim: string | null; unverified: boolean;
 };
 const claimKey = (session: Session | null) => session?.access_token ?? SIGNED_OUT_CLAIM;
 function cookieClaimKey(): string | undefined {
@@ -126,6 +132,18 @@ function unavailable() {
   publish(snapshot.identity && snapshot.status === 'ready' && unchanged ? 'ready' : 'unavailable', snapshot.identity, UNAVAILABLE, snapshot.observedUserId);
 }
 
+function exhaustReconciliation(episode: ConflictEpisode, withhold = true) {
+  if (episode.timer) clearTimeout(episode.timer);
+  episode.timer = null;
+  episode.active = false;
+  episode.plan = [];
+  episode.claims.clear();
+  episode.held = null;
+  episode.recovery = 0;
+  episode.exhausted = true;
+  if (withhold) publish('unavailable', snapshot.identity, UNAVAILABLE, snapshot.observedUserId);
+}
+
 function reconcileRealtime(client: ReturnType<typeof createClient>, session: Session | null) {
   if (!client.realtime) return;
   try {
@@ -145,27 +163,36 @@ function ensureConnection() {
   if (connection || typeof window === 'undefined') return;
   try {
     const client = createClient();
-    const current = { client, unsubscribe: () => {}, revision: 0, read: 0, storageRevision: getSessionStorageChangeRevision(), initialSuperseded: false, reading: 0, conflict: { timer: null, active: false, plan: [], extensions: 0, lastReadAt: 0, busy: false, backoff: 0, notBefore: 0, recovery: 0, claims: new Map(), refuted: new Map(), hold: new Set(), held: null, users: new Set() } as ConflictEpisode };
+    const current = { client, unsubscribe: () => {}, revision: 0, read: 0, storageRevision: getSessionStorageChangeRevision(), initialSuperseded: false, reading: 0, conflict: { timer: null, active: false, plan: [], extensions: 0, claimOrder: 0, lastReadOrder: 0, busy: false, backoff: 0, notBefore: 0, recovery: 0, claims: new Map(), refuted: new Map(), hold: new Set(), held: null, users: new Set(), remaining: MAX_AUTONOMOUS_READS, exhausted: false, claimRevision: 0, latestClaim: null, unverified: false } as ConflictEpisode };
     connection = current;
     const episode = current.conflict;
     const read = () => {
       if (connection !== current) return;
+      if (episode.remaining === 0) {
+        // The final permitted call may already have adopted the claimed owner.
+        // Stop the remaining plan without revoking that verified receipt.
+        exhaustReconciliation(episode, episode.unverified || snapshot.status !== 'ready');
+        return;
+      }
       episode.timer = null;
-      episode.lastReadAt = Date.now();
+      episode.lastReadOrder = episode.claimOrder;
       // Never read inside an SDK callback, which may hold the session lock.
       void Promise.resolve().then(() => {
         if (connection !== current) return;
-        notifySessionStorageChanged({ broadcast: false });
-        return refreshCacheSession();
+        // Invalidate an older receipt directly. A synthetic storage-change
+        // notification would start an unbudgeted read in its subscriber.
+        return readCacheSession({ force: true }, true);
       }).catch(() => { /* Lifecycle recovery remains available if a reader fails. */ })
         .finally(() => {
           if (connection !== current) return;
+          if (episode.exhausted) return;
           const gap = episode.plan.shift();
           if (gap !== undefined) { episode.timer = setTimeout(read, gap); return; }
           endEpisode();
         });
     };
     const runEpisode = (plan: readonly number[] = CROSS_TAB_SETTLE_MS) => {
+      if (episode.exhausted) return;
       episode.active = true;
       episode.busy = false;
       episode.extensions = 0;
@@ -175,9 +202,11 @@ function ensureConnection() {
     const endEpisode = () => {
       episode.active = false;
       const final = cookieClaimKey();
-      // The last read verified every claim seen before it started.
+      // Only claims seen before the last read started can be refuted. Event
+      // order, unlike wall time, distinguishes a claim arriving during that
+      // read even when both happen within the same clock millisecond.
       for (const [key, seen] of episode.claims) {
-        if (seen > episode.lastReadAt) continue;
+        if (seen > episode.lastReadOrder) continue;
         episode.claims.delete(key);
         if (final === undefined || key === final) continue;
         episode.refuted.delete(key);
@@ -194,6 +223,7 @@ function ensureConnection() {
         episode.held = null;
         if (held && final !== undefined && claimKey(held.session) === final) {
           episode.recovery = 0;
+          episode.unverified = false;
           acceptSession(held.session, true);
           reconcileRealtime(current.client, held.session);
         } else episode.recovery = MAX_RECOVERY_READS;
@@ -218,26 +248,34 @@ function ensureConnection() {
       const now = Date.now();
       const echo = current.reading > 0;
       const refutedBy = episode.refuted.get(key);
-      const settled = refutedBy !== undefined && refutedBy === cookieClaimKey();
-      // A reread's own echo of a claim that current cookies already refuted.
-      if (echo && settled) return;
+      const cookieKey = cookieClaimKey();
+      const settled = refutedBy !== undefined && refutedBy === cookieKey;
       // An event during one of our reads may be that read's echo or a genuine
       // peer event; nothing here tells them apart. Withholding costs no reads,
       // so it never waits on that distinction. Reads do: during a read only a
       // user not claimed before counts as new (tokens can rotate without end,
       // this connection's claimed users are capped), so echoes stay bounded.
-      const otherUser = !!session && !settled && session.user?.id !== snapshot.identity?.userId;
+      const identity = cacheSessionIdentity(session);
+      const otherSession = !!session && (!identity || !sameIdentity(identity, snapshot.identity));
+      const changedCookies = !!snapshot.identity && !sameIdentity(tokenIdentity(cookieKey), snapshot.identity);
       const userId = session?.user?.id;
-      const newUser = otherUser && typeof userId === 'string' && !episode.users.has(userId) && episode.users.size < MAX_CLAIMED_USERS;
+      const newUser = otherSession && typeof userId === 'string' && !episode.users.has(userId) && episode.users.size < MAX_CLAIMED_USERS;
       if (newUser) episode.users.add(userId);
       const fresh = (!echo || newUser) && !episode.claims.has(key) && (!settled || key === SIGNED_OUT_CLAIM);
-      if (otherUser) {
-        // Someone else may have signed in here. Stop authorizing the current
+      if (otherSession || changedCookies || session === null) {
+        // Another session may be active here. Stop authorizing the current
         // owner's cached UI now; adopt nobody until cookies name them.
-        episode.hold.add(key);
+        episode.claimRevision += 1;
+        episode.unverified = true;
+        // A stale event for the established owner may reveal that cookies
+        // already name somebody else. Verify that current cookie, rather than
+        // requiring the stale event's owner to return.
+        episode.latestClaim = otherSession || session === null ? key : cookieKey ?? key;
+        if (!episode.exhausted) episode.hold.add(episode.latestClaim);
         if (snapshot.status === 'ready') publish('unavailable', snapshot.identity, UNAVAILABLE, snapshot.observedUserId);
       }
-      episode.claims.set(key, now);
+      if (episode.exhausted) return;
+      episode.claims.set(key, ++episode.claimOrder);
       if (episode.active) {
         episode.busy = true;
         if (fresh && episode.timer && episode.extensions < MAX_EPISODE_EXTENSIONS) {
@@ -293,13 +331,18 @@ function ensureConnection() {
           return;
         }
       }
-      if (session && episode.hold.size) {
+      if (session && episode.unverified) {
         // Withheld for a claimed new owner: only that owner's cookie ends it.
-        if (!episode.hold.has(claimKey(session))) { episode.held = { session }; return; }
+        if (claimKey(session) !== episode.latestClaim) { episode.held = { session }; return; }
         episode.hold.clear();
         episode.held = null;
       }
-      if (session || event === 'SIGNED_OUT') episode.recovery = 0;
+      if (session || event === 'SIGNED_OUT') {
+        episode.recovery = 0;
+        episode.unverified = false;
+        episode.hold.clear();
+        episode.held = null;
+      }
       // An INITIAL_SESSION null can follow a transient bootstrap error. Only
       // an explicit sign-out or successful stored-session read proves null.
       acceptSession(session, event === 'SIGNED_OUT');
@@ -345,6 +388,10 @@ export function subscribeCacheAuthEvents(listener: (event: AuthChangeEvent, user
 
 /** Coalesced SDK read; auth events and connection disposal supersede its result. */
 export function refreshCacheSession(options: { force?: boolean } = {}): Promise<void> {
+  return readCacheSession(options, false);
+}
+
+function readCacheSession(options: { force?: boolean }, autonomous: boolean): Promise<void> {
   if (typeof window === 'undefined') return Promise.resolve();
   if (!connection) {
     ensureConnection();
@@ -363,13 +410,20 @@ export function refreshCacheSession(options: { force?: boolean } = {}): Promise<
   }
   const revision = current.revision;
   const read = ++current.read;
+  const claimRevision = current.conflict.claimRevision;
   pendingStartedAt = Date.now();
   const work = Promise.resolve().then(async () => {
     // Cookie changes in another tab can precede its SDK broadcast. Bind both
     // positive and empty receipts to current cookies before accepting them.
     // Retry that race once, outside an SDK event callback or session lock.
     for (let attempt = 0; attempt < 2; attempt += 1) {
-      // Events the SDK emits during this read are this read's echoes.
+      if (connection !== current || revision !== current.revision || read !== current.read) return;
+      if (autonomous) {
+        if (current.conflict.remaining === 0) { exhaustReconciliation(current.conflict); return; }
+        current.conflict.remaining -= 1;
+      }
+      // Read-time events may be SDK echoes or genuine peer changes; neither
+      // classification is authority to keep the prior cache session usable.
       current.reading += 1;
       let result: Awaited<ReturnType<typeof current.client.auth.getSession>>;
       try { result = await current.client.auth.getSession(); } finally { current.reading -= 1; }
@@ -386,8 +440,15 @@ export function refreshCacheSession(options: { force?: boolean } = {}): Promise<
         return;
       }
       const episode = current.conflict;
-      if (episode.hold.size) {
-        if (!episode.hold.has(claimKey(data.session))) {
+      const key = claimKey(data.session);
+      if (episode.exhausted && claimRevision !== episode.claimRevision && key !== episode.latestClaim) {
+        publish('unavailable', snapshot.identity, UNAVAILABLE, snapshot.observedUserId);
+        return;
+      }
+      if (episode.unverified) {
+        const claimed = key === episode.latestClaim;
+        const recovered = episode.exhausted && !autonomous && claimRevision === episode.claimRevision;
+        if (!claimed && !recovered) {
           // Still withheld for a claimed new owner; keep what cookies say for
           // when that claim is refuted.
           episode.held = { session: data.session };
@@ -397,6 +458,7 @@ export function refreshCacheSession(options: { force?: boolean } = {}): Promise<
         episode.hold.clear();
         episode.held = null;
       }
+      episode.unverified = false;
       episode.recovery = 0;
       acceptSession(data.session, true);
       reconcileRealtime(current.client, data.session);
