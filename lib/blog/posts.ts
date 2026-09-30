@@ -65,6 +65,17 @@ const publicRows = (rows: Row[] | null): Row[] =>
  * `no-store` keeps these reads out of that cache. The blog pages themselves are
  * `force-dynamic`, so nothing there was ever cached and nothing there changes.
  */
+/**
+ * A public navigation waits on these reads, and they carried no deadline: with
+ * the data API stalled, /blog sent no byte for as long as the stall lasted
+ * (measured past 100 s), while pages whose reads are bounded answered in about
+ * 1.5 s. Each read now has a total budget, passed as the query's own abort
+ * signal so the SDK's retry backoff (1 s, 2 s, 4 s on a failed GET) stops with
+ * it; a read that runs out degrades like any other failed read.
+ */
+const BLOG_READ_BUDGET_MS = 4_000;
+const readBudget = () => AbortSignal.timeout(BLOG_READ_BUDGET_MS);
+
 function anonClient() {
   return createClient<Database>(
     process.env.NEXT_PUBLIC_SUPABASE_URL!,
@@ -173,6 +184,8 @@ async function fetchAllPublishedRows<K extends keyof Row>(columns: string): Prom
   // `slug` breaks ties: 717 of the published rows share a `published_at` with
   // another row, and a key that is not a total order lets the boundary between
   // two separately-planned pages move — repeating one row and dropping another.
+  // One budget for every page of the read, not one per page.
+  const signal = readBudget();
   const { rows, error } = await readAll<Pick<Row, K>>(async (from, to) => {
     const page = await anonClient()
       .from('blog_posts')
@@ -181,7 +194,8 @@ async function fetchAllPublishedRows<K extends keyof Row>(columns: string): Prom
       .order('published_at', { ascending: false })
       .order('slug')
       .order('id')
-      .range(from, to);
+      .range(from, to)
+      .abortSignal(signal);
     return { data: (page.data ?? []) as unknown as Pick<Row, K>[], error: page.error };
   });
   if (error) throw error;
@@ -256,7 +270,8 @@ export async function getPostsByCategory(category: BlogCategory): Promise<BlogPo
       .select(CARD_COLUMNS)
       .eq('published', true)
       .eq('category', category)
-      .order('published_at', { ascending: false });
+      .order('published_at', { ascending: false })
+      .abortSignal(readBudget());
     return publicRows(data as unknown as Row[]).map(toPost);
   } catch {
     return [];
@@ -271,6 +286,7 @@ export async function getPost(slug: string): Promise<BlogPost | undefined> {
       .select('*')
       .eq('slug', slug)
       .eq('published', true)
+      .abortSignal(readBudget())
       .maybeSingle();
     return data ? toPost(data) : undefined;
   } catch {
@@ -286,7 +302,8 @@ export async function getFeaturedPost(): Promise<BlogPost | undefined> {
       .eq('published', true)
       .eq('featured', true)
       .order('published_at', { ascending: false })
-      .limit(20);
+      .limit(20)
+      .abortSignal(readBudget());
     const featured = publicRows(data as unknown as Row[])[0];
     if (featured) return toPost(featured);
   } catch {
@@ -305,7 +322,8 @@ export async function getRelatedPosts(slug: string, category: BlogCategory, limi
       .eq('category', category)
       .neq('slug', slug)
       .order('published_at', { ascending: false })
-      .limit(Math.max(limit * 10, 50));
+      .limit(Math.max(limit * 10, 50))
+      .abortSignal(readBudget());
     return publicRows(data as unknown as Row[]).map(toPost).slice(0, limit);
   } catch {
     return [];
@@ -315,6 +333,7 @@ export async function getRelatedPosts(slug: string, category: BlogCategory, limi
 export async function getAdjacentPosts(date: string): Promise<{ prev: BlogPost | null; next: BlogPost | null }> {
   try {
     const client = anonClient();
+    const signal = readBudget();
     const [{ data: older }, { data: newer }] = await settleAll([
       client
         .from('blog_posts')
@@ -322,14 +341,16 @@ export async function getAdjacentPosts(date: string): Promise<{ prev: BlogPost |
         .eq('published', true)
         .lt('published_at', date)
         .order('published_at', { ascending: false })
-        .limit(20),
+        .limit(20)
+        .abortSignal(signal),
       client
         .from('blog_posts')
         .select(CARD_COLUMNS)
         .eq('published', true)
         .gt('published_at', date)
         .order('published_at', { ascending: true })
-        .limit(20),
+        .limit(20)
+        .abortSignal(signal),
     ]);
     const previous = publicRows(older as unknown as Row[])[0];
     const following = publicRows(newer as unknown as Row[])[0];
