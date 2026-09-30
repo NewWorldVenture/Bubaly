@@ -1,0 +1,52 @@
+{
+  "generated_at_utc": "2026-09-30T16:29:26.963256+00:00",
+  "baseline_commit": "231e8140ea8394c2106c37f617b33b5fb5e8e569",
+  "observed_head_commit": "231e8140ea8394c2106c37f617b33b5fb5e8e569",
+  "baseline_ledger_sha256": "eda65ac5521a11a597828fcec1698efc294eb1d11e0bedba32f496881ccac526",
+  "current_ledger_sha256": "b6126cd0e71abacddf90a29cc03b8e9c75dc561d153a808661504556203b4259",
+  "working_ledger_matches_observed_head": false,
+  "hash_scope": "Exact UTF-8 file bytes, including line endings.",
+  "proof": {
+    "checks": {
+      "baseline_14281": true,
+      "current_14300": true,
+      "no_duplicate_ids": true,
+      "all_original_ids_preserved": true,
+      "exact_449_existing_transitions": true,
+      "only_not_started_to_in_progress": true,
+      "exact_19_new_named_rows": true,
+      "new_rows_in_progress": true,
+      "no_new_pass_or_fixed_pass": true,
+      "legacy_nine_statuses_preserved": true,
+      "compiler_alias_not_new_row": true,
+      "canonical671_55_all_overlap670": true,
+      "ui351_plus_existing_route3": true,
+      "all_new_named_exports_verified": true,
+      "final_counts_exact": true
+    },
+    "all_checks_pass": true,
+    "baseline_total": 14281,
+    "baseline_counts": {
+      "IN PROGRESS": 1568,
+      "NOT STARTED": 12361,
+      "PASS": 186,
+      "FIXED + PASS": 157,
+      "BLOCKED": 9
+    },
+    "current_total": 14300,
+    "current_counts": {
+      "IN PROGRESS": 2036,
+      "NOT STARTED": 11912,
+      "PASS": 186,
+      "FIXED + PASS": 157,
+      "BLOCKED": 9
+    },
+    "existing_transition_count": 449,
+    "new_row_count": 19,
+    "missing_original_ids": [],
+    "unexpected_transition_ids": [],
+    "missing_expected_transitions": [],
+    "unexpected_new_ids": []
+  },
+  "scope": "Mapping/count proof only; no probes, production verification or new PASS."
+}
