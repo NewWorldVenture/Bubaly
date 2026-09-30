@@ -4,7 +4,7 @@
 ## Audit Status
 
 - Started: 2026-09-12 (existing Register B); Daniel adopted the complete `Final_Audit.txt` target on 2026-09-30.
-- Last Updated: 2026-09-30 21:40 UTC, Jimmy/Codex frozen containment and hosted-gate checkpoint. #668 merged with a separate open client-cache ownership P1; #704 is the urgent isolated correction, not cleared or deployed. Two further existing rows move to IN PROGRESS for investigated cache-scope and email-renderer behavior; zero PASS credit. Production remains NO.
+- Last Updated: 2026-09-30 21:50 UTC, Jimmy/Codex frozen containment and conditional availability follow-up. #668 merged with a separate open client-cache ownership P1; #704 is the urgent isolated correction, not cleared or deployed. Two further existing rows move to IN PROGRESS for investigated cache-scope and email-renderer behavior; zero PASS credit. Production remains NO.
 - Source: main advanced externally to48d3769c9056253d4136d49a1484618a6fe7c1a4 via #700 at21:28:56. Public HTTP200 at21:37:44.994 confirms served48d3769; its helper remains unchanged. Historical e4c3e6791e4a37ee9a14b9ac9de21969bda19fa3 after #698 was preceded by #702 at55ac59ba and #668 at26d1b258. Public readback confirms e4c3e679 at20:44:28.303 UTC; it still contains cache-session blob08fec96e2117691e2c9f7e68a53da0895115ca41. #704 current candidate4e9b7b1bf1248504debb2d372dd676697b9ec8b0 is separate and not deployed; earlier candidates and failures remain historical. Candidate CI, combined-source tests, served revision and complete workflows remain distinct gates.
 - Total Audit Items: **14,300** in Register B. Session A's **841** overlapping items and the page/finding registers remain separate; do not add their denominators.
 - Not Started: **11,904**.
@@ -88,6 +88,8 @@ Historical #690 moved four existing rows to IN PROGRESS; #703 adds the allowance
 ## 21:40 frozen containment candidate
 
 PR704 now publishes exact4e9b7b1bf1248504debb2d372dd676697b9ec8b0 on main48d3769, treef2e52c2205d1f2cf57309ea8d575086cd01ce1b4. The full current-graph TypeScript check completedPASS, joining119 units,96 browser cases, lint and17 independent probes. Review5372299833 freezes this source/base; unrelated main integrations are paused until exact CI, final source comparison and served-SHA acceptance. No further source edit is planned absent a demonstrated blocker. The21:38 publication/typecheck pending statements below are historical, now superseded by this receipt. Production48d3769 still has the affected helper. Its new mainCI36779702609 is running; production verification36779702646 separately failed52 HTTP401 probes with migration/backfill writes skipped, and preview110107573424 failed57014. No auth incident closure, provider acceptance or new PASS is awarded.
+
+**Conditional availability follow-up, not a new P1.** Comment5920270812 / review5372352226 records that after budget exhaustion with unresolved claim B, a legitimate cookie-first C transition and healthy C receipt can remain unavailable without a separately authoritative superseding transition. This fails CLOSED; it does not restore stale cache authority. Parent explicitly retains frozen4e9b7b1 and its CI. A subsequent recovery design must prove authoritative cookie-first supersession while preserving old-owner rejection, the finite autonomous budget and no unbudgeted notification reads. Do not mark full auth PASS or weaken the current barrier to regain availability.
 
 ## 21:32 cache correction checkpoint - no deployed resolution yet
 
