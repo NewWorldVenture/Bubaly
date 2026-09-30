@@ -34,8 +34,11 @@ const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 //  - a claim not seen before, arriving from outside our reads, starts or
 //    extends an episode at once: a genuine new owner never inherits a cooldown;
 //  - a claim naming a different user stops authorizing the current owner's
-//    cached UI immediately (nothing is purged: the claim may be stale) until a
-//    cookie-bound read adopts that user or the claim is refuted;
+//    cached UI immediately, even when it arrives during one of our reads
+//    (nothing is purged: the claim may be stale), until a cookie-bound read
+//    adopts that user or the claim is refuted;
+//  - a failed read keeps the current owner only while current cookies still
+//    carry that owner's session;
 //  - a receipt read before the cookies changed restores nothing: if no read
 //    has verified the owner current cookies name when the episode ends, the
 //    view stays unavailable and up to five spaced single reads (on the backoff
@@ -47,11 +50,13 @@ const CONFLICT_BACKOFF_MAX_MS = 30_000;
 const MAX_EPISODE_EXTENSIONS = 3;
 const MAX_REFUTED_CLAIMS = 32;
 const MAX_RECOVERY_READS = 5;
+const MAX_CLAIMED_USERS = 32;
 const SIGNED_OUT_CLAIM = '(signed out)';
 type ConflictEpisode = {
   timer: ReturnType<typeof setTimeout> | null; active: boolean; plan: number[]; extensions: number; lastReadAt: number;
   busy: boolean; backoff: number; notBefore: number; recovery: number;
   claims: Map<string, number>; refuted: Map<string, string>; hold: Set<string>; held: { session: Session | null } | null;
+  users: Set<string>;
 };
 const claimKey = (session: Session | null) => session?.access_token ?? SIGNED_OUT_CLAIM;
 function cookieClaimKey(): string | undefined {
@@ -64,21 +69,26 @@ let pendingStartedAt = 0;
 const listeners = new Set<() => void>();
 const authListeners = new Set<(event: AuthChangeEvent, userId: string | null) => void>();
 
-/** Decode only a cache discriminator. This does not validate authorization. */
-export function cacheSessionIdentity(session: Pick<Session, 'access_token' | 'user'> | null): CacheSessionIdentity | null {
-  const userId = session?.user?.id;
-  if (!session || typeof userId !== 'string' || !UUID.test(userId) || typeof session.access_token !== 'string') return null;
+function tokenIdentity(accessToken: unknown): CacheSessionIdentity | null {
+  if (typeof accessToken !== 'string') return null;
   try {
-    const parts = session.access_token.split('.');
+    const parts = accessToken.split('.');
     if (parts.length !== 3 || !parts[1] || parts[1].length > 16_384 || !/^[A-Za-z0-9_-]+$/.test(parts[1])) return null;
     const encoded = parts[1].replace(/-/g, '+').replace(/_/g, '/');
     const claims: unknown = JSON.parse(atob(encoded.padEnd(Math.ceil(encoded.length / 4) * 4, '=')));
     if (!claims || typeof claims !== 'object' || Array.isArray(claims)) return null;
     const { sub, session_id: sessionId } = claims as Record<string, unknown>;
-    if (typeof sub !== 'string' || sub !== userId || !UUID.test(sub)
-      || typeof sessionId !== 'string' || !UUID.test(sessionId)) return null;
+    if (typeof sub !== 'string' || !UUID.test(sub) || typeof sessionId !== 'string' || !UUID.test(sessionId)) return null;
     return { userId: sub, sessionId };
   } catch { return null; }
+}
+
+/** Decode only a cache discriminator. This does not validate authorization. */
+export function cacheSessionIdentity(session: Pick<Session, 'access_token' | 'user'> | null): CacheSessionIdentity | null {
+  const userId = session?.user?.id;
+  if (!session || typeof userId !== 'string' || !UUID.test(userId)) return null;
+  const identity = tokenIdentity(session.access_token);
+  return identity?.userId === userId ? identity : null;
 }
 
 function sameIdentity(a: CacheSessionIdentity | null, b: CacheSessionIdentity | null): boolean {
@@ -107,8 +117,13 @@ function acceptSession(session: Session | null, definitiveNull: boolean) {
 }
 
 function unavailable() {
-  // A failed refresh does not retire an established, unchanged session.
-  publish(snapshot.identity && snapshot.status === 'ready' ? 'ready' : 'unavailable', snapshot.identity, UNAVAILABLE, snapshot.observedUserId);
+  // A failed refresh does not retire an established session that current
+  // cookies still carry. Cookies naming another session, or none, or that
+  // cannot be read are no such evidence: stop authorizing the cached UI.
+  let unchanged = false;
+  try { unchanged = sameIdentity(tokenIdentity(captureBrowserSessionSnapshot()?.accessToken), snapshot.identity); }
+  catch { /* An unreadable jar cannot vouch for the established session. */ }
+  publish(snapshot.identity && snapshot.status === 'ready' && unchanged ? 'ready' : 'unavailable', snapshot.identity, UNAVAILABLE, snapshot.observedUserId);
 }
 
 function reconcileRealtime(client: ReturnType<typeof createClient>, session: Session | null) {
@@ -130,7 +145,7 @@ function ensureConnection() {
   if (connection || typeof window === 'undefined') return;
   try {
     const client = createClient();
-    const current = { client, unsubscribe: () => {}, revision: 0, read: 0, storageRevision: getSessionStorageChangeRevision(), initialSuperseded: false, reading: 0, conflict: { timer: null, active: false, plan: [], extensions: 0, lastReadAt: 0, busy: false, backoff: 0, notBefore: 0, recovery: 0, claims: new Map(), refuted: new Map(), hold: new Set(), held: null } as ConflictEpisode };
+    const current = { client, unsubscribe: () => {}, revision: 0, read: 0, storageRevision: getSessionStorageChangeRevision(), initialSuperseded: false, reading: 0, conflict: { timer: null, active: false, plan: [], extensions: 0, lastReadAt: 0, busy: false, backoff: 0, notBefore: 0, recovery: 0, claims: new Map(), refuted: new Map(), hold: new Set(), held: null, users: new Set() } as ConflictEpisode };
     connection = current;
     const episode = current.conflict;
     const read = () => {
@@ -206,8 +221,17 @@ function ensureConnection() {
       const settled = refutedBy !== undefined && refutedBy === cookieClaimKey();
       // A reread's own echo of a claim that current cookies already refuted.
       if (echo && settled) return;
-      const fresh = !echo && !episode.claims.has(key) && (!settled || key === SIGNED_OUT_CLAIM);
-      if (fresh && session && !settled && session.user?.id !== snapshot.identity?.userId) {
+      // An event during one of our reads may be that read's echo or a genuine
+      // peer event; nothing here tells them apart. Withholding costs no reads,
+      // so it never waits on that distinction. Reads do: during a read only a
+      // user not claimed before counts as new (tokens can rotate without end,
+      // this connection's claimed users are capped), so echoes stay bounded.
+      const otherUser = !!session && !settled && session.user?.id !== snapshot.identity?.userId;
+      const userId = session?.user?.id;
+      const newUser = otherUser && typeof userId === 'string' && !episode.users.has(userId) && episode.users.size < MAX_CLAIMED_USERS;
+      if (newUser) episode.users.add(userId);
+      const fresh = (!echo || newUser) && !episode.claims.has(key) && (!settled || key === SIGNED_OUT_CLAIM);
+      if (otherUser) {
         // Someone else may have signed in here. Stop authorizing the current
         // owner's cached UI now; adopt nobody until cookies name them.
         episode.hold.add(key);
