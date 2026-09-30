@@ -18,8 +18,15 @@ export type CacheSessionSnapshot = {
 const INITIAL: CacheSessionSnapshot = { status: 'restoring', identity: null, observedUserId: null, revision: 0, error: null };
 const UNAVAILABLE = 'Your session is temporarily unavailable. Please try again.';
 const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+// A peer tab's SDK broadcast can arrive a few milliseconds before this tab can
+// see the cookie write it announces (Chromium: the event names B while this
+// tab's cookie jar still reads A). The immediate reread then finds consistent,
+// stale evidence, and without another read A's private rows would stay on
+// screen. Reread after the jar has had time to settle; each read is still bound
+// to current cookies, so it cannot adopt the event's session on its own.
+const CROSS_TAB_SETTLE_MS = [50, 500] as const;
 let snapshot = INITIAL;
-let connection: { client: ReturnType<typeof createClient>; unsubscribe: () => void; revision: number; read: number; storageRevision: number; initialSuperseded: boolean; reconcilingEvent: boolean } | null = null;
+let connection: { client: ReturnType<typeof createClient>; unsubscribe: () => void; revision: number; read: number; storageRevision: number; initialSuperseded: boolean; reconcilingEvent: boolean; settleTimers: ReturnType<typeof setTimeout>[] } | null = null;
 let pending: Promise<void> | null = null;
 let pendingStartedAt = 0;
 const listeners = new Set<() => void>();
@@ -91,9 +98,16 @@ function ensureConnection() {
   if (connection || typeof window === 'undefined') return;
   try {
     const client = createClient();
-    const current = { client, unsubscribe: () => {}, revision: 0, read: 0, storageRevision: getSessionStorageChangeRevision(), initialSuperseded: false, reconcilingEvent: false };
+    const current = { client, unsubscribe: () => {}, revision: 0, read: 0, storageRevision: getSessionStorageChangeRevision(), initialSuperseded: false, reconcilingEvent: false, settleTimers: [] as ReturnType<typeof setTimeout>[] };
     connection = current;
+    const settleAfterConflict = () => {
+      for (const timer of current.settleTimers) clearTimeout(timer);
+      current.settleTimers = CROSS_TAB_SETTLE_MS.map(delay => setTimeout(() => {
+        if (connection === current) void refreshCacheSession();
+      }, delay));
+    };
     const reconcileCurrentCookies = () => {
+      settleAfterConflict();
       if (current.reconcilingEvent) return;
       current.reconcilingEvent = true;
       void Promise.resolve().then(() => {
@@ -143,7 +157,7 @@ function ensureConnection() {
       for (const listener of authListeners) listener(event, session?.user?.id ?? null);
     });
     const stopStorageChanges = subscribeSessionStorageChanges(() => { void refreshCacheSession(); });
-    current.unsubscribe = () => { subscription.unsubscribe(); stopStorageChanges(); };
+    current.unsubscribe = () => { subscription.unsubscribe(); stopStorageChanges(); for (const timer of current.settleTimers) clearTimeout(timer); };
     void refreshCacheSession();
   } catch {
     connection = null;

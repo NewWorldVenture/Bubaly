@@ -307,3 +307,47 @@ describe('positive session receipt ownership', () => {
     expect(getCacheSessionSnapshot()).toMatchObject({status:'ready',identity:{userId:B},error:null});
   });
 });
+
+// A peer tab's SDK broadcast reached this tab a few milliseconds before its
+// cookie write was visible here (reproduced in Chromium 141 and 149, React 18
+// and 19). The immediate reread saw consistent, stale A and nothing read again.
+describe('a peer event that outruns its cookie write', () => {
+  beforeEach(() => { vi.useFakeTimers({ toFake: ['Date', 'setTimeout', 'clearTimeout'] }); vi.setSystemTime(0); });
+
+  it('rereads after the cookie jar settles and retires A for B', async () => {
+    connect(); await settle();
+    const generation = getCacheGeneration();
+    // The event names B while this tab's cookies still read A.
+    emit('SIGNED_IN', session(B, S2)); await settle();
+    expect(getCacheSessionSnapshot()).toMatchObject({ status: 'ready', identity: { userId: A } });
+    // The peer's write becomes visible here.
+    saveCookies(session(B, S2)); mocks.getSession.mockResolvedValue(reply(session(B, S2)));
+    await vi.advanceTimersByTimeAsync(50);
+    expect(getCacheSessionSnapshot()).toMatchObject({ status: 'ready', identity: { userId: B, sessionId: S2 }, error: null });
+    expect(getCacheGeneration()).toBeGreaterThan(generation);
+  });
+
+  it('rereads a sign-out whose cookie removal was not yet visible', async () => {
+    connect(); await settle();
+    emit('SIGNED_OUT', null); await settle();
+    expect(getCacheSessionSnapshot()).toMatchObject({ status: 'ready', identity: { userId: A } });
+    saveCookies(null); mocks.getSession.mockResolvedValue(reply(null));
+    await vi.advanceTimersByTimeAsync(50);
+    expect(getCacheSessionSnapshot()).toMatchObject({ status: 'signed-out', identity: null });
+  });
+
+  it('never adopts the event itself: a stale event keeps the current cookie owner', async () => {
+    connect(); await settle();
+    emit('SIGNED_IN', session(B, S2)); await vi.advanceTimersByTimeAsync(1_000);
+    expect(getCacheSessionSnapshot()).toMatchObject({ status: 'ready', identity: { userId: A } });
+    expect(mocks.getSession).toHaveBeenCalledTimes(4); // bootstrap, immediate reread, two bounded settle reads
+  });
+
+  it('stops rereading once the observer is disposed', async () => {
+    const stop = connect(); await settle();
+    emit('SIGNED_IN', session(B, S2)); await settle();
+    const calls = mocks.getSession.mock.calls.length;
+    stop(); await vi.advanceTimersByTimeAsync(1_000);
+    expect(mocks.getSession).toHaveBeenCalledTimes(calls);
+  });
+});
