@@ -5,10 +5,13 @@ Evidence for the one-off CI failure `[ipad] › overflow.spec.ts › /blog fits 
 It was seen once, in run 36733754435 on `a928852a` (#668). In the 10 E2E runs sampled from
 2026-09-30, there were no other occurrences.
 
-**This directory does not determine the cause of that CI instance.** CI keeps no trace of it: traces are
-recorded on the first retry only, and uploads exclude traces and auth state (unchanged). What is below
-measures where the test's time goes, rules out a CSS or overflow defect, and demonstrates one
-mechanism that fits the failure.
+**This directory does not prove the cause of that CI instance.** CI keeps no trace of it: traces are
+recorded on the first retry only, and uploads exclude traces and auth state (unchanged). What is below:
+- measures where the test's time goes;
+- rules out a CSS or overflow defect;
+- reproduces the exact CI error locally, with the real test, through one mechanism: a stalled data API
+  holding /blog's navigation open;
+- shows the fix on this branch removes that mechanism.
 
 ## What the failure says
 
@@ -78,6 +81,38 @@ mechanism that fits the failure.
    (`readFeatureOverrides`, which has no deadline). That helper is shared with the signed-in app, so it
    is reported here and not changed on this branch.
 4. **Nothing here points to CSS overflow,** and no test timeout was raised.
+
+## Reproducing the CI error, and the fix
+
+**Method.** `probe/signature.sh` runs the real `tests/e2e/overflow.spec.ts` `[ipad] /blog fits every
+width` test with retries 0. It pauses the Supabase gateway before the test starts and resumes it a set
+number of seconds after Playwright launches; the test itself starts about 2–3 s after launch. It
+compares unfixed `main` (`48d3769c`) with this branch, both as production builds against the same
+stack. Results: `measurements/ci-signature.txt`.
+
+| Gateway resumed after | `main` | This branch |
+|---|---|---|
+| 28–29.5 s | passed, in 28.8–30.2 s | passed, in about 9 s (28 s) |
+| 30–32 s | **failed with a 30 s test timeout** (5 of 5) | passed, in 9.1–9.4 s (30 and 32 s) |
+
+**On `main`, the call in flight** when the budget ran out:
+- 31.5 s: `page.setViewportSize: Test timeout of 30000ms exceeded`, which is **CI's exact error**;
+- 30, 31 and 32 s: `page.evaluate` (the frame wait or the width measurement right after a resize);
+- 30.5 s: no call named.
+
+Which call is named depends only on where the 30 s ran out once `goto` returned.
+
+**The fix.** `lib/blog/posts.ts` now bounds every read to 4 s. The budget is passed as the query's own
+abort signal (as `lib/marketing/seo.ts` does), so the SDK's retry backoff ends with it too. Under a full
+stall /blog answers in about 8 s with an empty list, logged. The 8 s is two budgets in sequence:
+`getFeaturedPost` falls back to `getAllPosts` after its own read times out.
+`tests/blog-reads-have-a-deadline.test.ts` covers all seven reads; all 8 of its cases fail against the
+previous source.
+
+**Not changed:**
+- /pricing still waits unboundedly on `lib/server/feature-tiers.ts`, which the signed-in app shares;
+  it is reported, not changed here.
+- No test timeout changed.
 
 ## Limitations
 
