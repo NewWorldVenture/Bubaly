@@ -109,6 +109,22 @@ stall /blog answers in about 8 s with an empty list, logged. The 8 s is two budg
 `tests/blog-reads-have-a-deadline.test.ts` covers all seven reads; all 8 of its cases fail against the
 previous source.
 
+**The search index (review 5372934636).** With a budget, a stalled read became a successful empty index:
+`/api/blog/search-index` answered `200 []` with `s-maxage=300, stale-while-revalidate=3600`, and the
+typeahead said "no articles found" for the rest of the mount.
+- **Route:** it now reads through `readAllPosts`, which reports a failure as `{ ok: false }`. A failed read
+  answers `503` with `Cache-Control: no-store` and `Retry-After: 5`. A genuinely empty blog is still
+  `200 []` and cacheable.
+- **Typeahead:** the unavailable state has its own announced message (`role="status"`, all six base
+  locales). A later interaction may retry, at most 3 attempts per mount and at least 5 s apart
+  (`lib/blog/search-index-loader.ts`).
+- **Measured on the local stack** with the gateway paused: `503`, `no-store`, in 4.0 s. After resuming:
+  `200` with all 1,048 entries and the CDN header.
+- **Regressions**, which fail on the previous head:
+  - `tests/blog-search-index-unavailable.test.ts` (route, real loaders, synthetic stall);
+  - `tests/blog-search-index-loader.test.ts` (retry bounds);
+  - `tests/e2e/blog-search-unavailable.spec.ts` (the real page in Chromium).
+
 **Not changed:**
 - /pricing still waits unboundedly on `lib/server/feature-tiers.ts`, which the signed-in app shares;
   it is reported, not changed here.

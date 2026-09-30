@@ -202,22 +202,34 @@ async function fetchAllPublishedRows<K extends keyof Row>(columns: string): Prom
   return rows;
 }
 
-export async function getAllPosts(): Promise<BlogPost[]> {
+/**
+ * Every published post, or an explicit failure. For a caller that must not
+ * mistake an outage for an empty blog — the search index is cached at the CDN,
+ * so an empty list served on a failed read would be shared as "no articles"
+ * (review 5372934636). Pages that can render without the list use getAllPosts.
+ */
+export async function readAllPosts(): Promise<{ ok: true; posts: BlogPost[] } | { ok: false; error: unknown }> {
   try {
     const rows = await fetchAllPublishedRows<keyof Row>(CARD_COLUMNS);
-    return publicRows(rows as Row[]).map(toPost);
+    return { ok: true, posts: publicRows(rows as Row[]).map(toPost) };
   } catch (error) {
     // `unstable_rethrow` first: Next signals "this route cannot be static" by
     // THROWING out of the fetch, and a catch-all that swallows it would let a
     // route prerender with zero posts and ship that. Only a real read failure
-    // reaches the lines below.
+    // reaches the line below.
     unstable_rethrow(error);
-    // Degrading to an empty blog is deliberate — a DB hiccup must not take the
-    // page down — but doing it SILENTLY is how a broken read stays broken. The
-    // stale-sitemap defect hid behind this catch for six days.
-    console.error('[blog] getAllPosts failed — rendering an empty list', error);
-    return [];
+    return { ok: false, error };
   }
+}
+
+export async function getAllPosts(): Promise<BlogPost[]> {
+  const result = await readAllPosts();
+  if (result.ok) return result.posts;
+  // Degrading to an empty blog is deliberate — a DB hiccup must not take the
+  // page down — but doing it SILENTLY is how a broken read stays broken. The
+  // stale-sitemap defect hid behind this catch for six days.
+  console.error('[blog] getAllPosts failed — rendering an empty list', result.error);
+  return [];
 }
 
 /**
