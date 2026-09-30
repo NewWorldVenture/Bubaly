@@ -4028,3 +4028,31 @@ access to equal the page's guest row: 8 findings before, 0 after.
 **After applying:** as a guest, open the calendar and try to add an event. It
 should be refused with the permission message. As a parent, add and delete one,
 which should succeed.
+
+## `0465` — a child read every family member's prescriptions (F-G09)
+
+`supabase/migrations/0465_a_child_reads_only_their_own_prescriptions.sql`
+
+**Severity: high (health data. A child could read a parent's or sibling's
+prescriptions, dosage and adherence history). Deploy order: any, after 0309 and
+0434, which are already applied.** Writes don't change.
+
+The owner decided that parents write and kids see only their own. `medications`
+is now readable by a manager (`can_manage_family`) for every row, and by anyone
+else only for rows whose `member_id` is their own member row. A row with no
+member ("Whole family") is a manager's to read. `medication_schedules` and
+`medication_doses` follow their medication for reads. Dose writes stay
+member-wide, so a child can still tick their own dose. The migration refuses
+to run, raising an error, if any of the six prescription write guards from
+0309/0434 is missing, or if a permissive read policy would survive and cancel
+out the narrowing.
+
+`docs/audit/a-child-reads-only-their-own-prescriptions-check.sql` runs as real
+sessions inside one transaction: the parent reads all four fixture
+prescriptions, and each child reads only their own. The same probe also confirms
+that immunization and health-visit writes stay a parent's.
+
+**After applying:** sign in as a child who has a prescription. The medicines
+page shows only theirs and says so. The health coach refuses questions about
+another member. As a parent, the whole family's list and the member filter are
+unchanged.

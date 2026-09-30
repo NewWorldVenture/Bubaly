@@ -503,21 +503,29 @@ export function MedicationsModule() {
         </div>
       </div>
 
-      {/* Member filter */}
-      <div className="flex flex-wrap gap-1.5 mb-4 max-h-28 overflow-y-auto">
-        {[{ id: 'all', label: 'All' }, { id: WHOLE_FAMILY, label: 'Whole family' }, ...members.map((m) => ({ id: m.id, label: m.display_name }))].map((opt) => (
-          <button key={opt.id} onClick={() => setMemberFilter(opt.id)}
-            className={cn('px-3 py-1.5 rounded-lg text-sm font-medium transition',
-              memberFilter === opt.id ? 'bg-brand text-white' : 'bg-surface/50 text-muted hover:text-fg border border-border')}>
-            {opt.label}
-          </button>
-        ))}
-      </div>
+      {/* Member filter. A manager reads the whole family's prescriptions and
+          filters them; anyone else reads only the ones naming their own member
+          row (0465), so a filter by sibling or "Whole family" could only ever
+          come up empty. They are told what they are looking at instead, so the
+          shorter list reads as the rule and not as a failed load. */}
+      {canEdit ? (
+        <div className="flex flex-wrap gap-1.5 mb-4 max-h-28 overflow-y-auto">
+          {[{ id: 'all', label: 'All' }, { id: WHOLE_FAMILY, label: 'Whole family' }, ...members.map((m) => ({ id: m.id, label: m.display_name }))].map((opt) => (
+            <button key={opt.id} onClick={() => setMemberFilter(opt.id)}
+              className={cn('px-3 py-1.5 rounded-lg text-sm font-medium transition',
+                memberFilter === opt.id ? 'bg-brand text-white' : 'bg-surface/50 text-muted hover:text-fg border border-border')}>
+              {opt.label}
+            </button>
+          ))}
+        </div>
+      ) : (
+        <p className="text-sm text-muted mb-4">{t('medicationsModule.yourOwnMedicinesOnly')}</p>
+      )}
 
       {/* Medications list */}
       {visibleMeds.length === 0 ? (
         <EmptyState icon={Pill} title={t('medications.noMedicationsYet')}
-          description={canEdit ? t('uiText.addAMedicationAndSetItsDosing') : t('uiText.noMedicationsHaveBeenAddedForThis')}
+          description={canEdit ? t('uiText.addAMedicationAndSetItsDosing') : t('medicationsModule.noMedicinesPrescribedToYou')}
           action={canEdit && <Button onClick={openNewMed} disabled={!!busy} className="gap-1.5"><Plus className="h-4 w-4" /> {t('medications.addMedication')}</Button>} />
       ) : (
         <div className="grid grid-cols-1 md:grid-cols-2 gap-4">

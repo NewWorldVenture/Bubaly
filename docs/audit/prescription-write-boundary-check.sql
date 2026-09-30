@@ -11,9 +11,14 @@
 -- surface and not only a record.
 --
 -- What a member may still do is asserted alongside what they may not: a child
--- still READS the family's medications, and still marks a dose taken or skipped
+-- still READS their OWN prescription (and, since 0465, only their own — the
+-- parent's is not theirs to browse), and still marks a dose taken or skipped
 -- — `medication_doses` is deliberately left member-writable, because the person
 -- taking the medicine is the one who records it.
+--
+-- The medication the child probes is the CHILD's own, so what refuses their
+-- write below is the write guard and not 0465's narrower read: a probe over a
+-- row the child cannot even see would pass without 0434 in place.
 grant usage on schema public to authenticated;
 -- No blanket `grant ... on all tables in schema public` here. The bootstrap's
 -- `alter default privileges` already gives `authenticated` full DML on every
@@ -29,6 +34,7 @@ declare
   child_uid  uuid := 'c2000000-0000-4000-8000-000000000002';
   child_mid  uuid;
   med_id     uuid;
+  parent_med uuid;
   sched_id   uuid;
   blocked    boolean;
   n          int;
@@ -53,8 +59,11 @@ begin
   set local role authenticated;
 
   insert into public.medications (family_id, member_id, name, dosage, instructions, is_active, created_by)
-  values (fam, null, 'Sertraline', '50mg', 'One daily with food', true, parent_uid)
+  values (fam, child_mid, 'Sertraline', '50mg', 'One daily with food', true, parent_uid)
   returning id into med_id;
+  insert into public.medications (family_id, member_id, name, dosage, is_active, created_by)
+  values (fam, null, 'Parent''s own, filed Whole family', '20mg', true, parent_uid)
+  returning id into parent_med;
   insert into public.medication_schedules (family_id, medication_id, time_of_day)
   values (fam, med_id, '08:00') returning id into sched_id;
 
@@ -101,10 +110,15 @@ begin
     raise exception 'a child inserted a medication';
   end if;
 
-  -- 5. READS are unchanged.
-  select count(*) into n from public.medications where family_id = fam;
+  -- 5. READS: their own prescription, and (0465) nothing else — not the
+  --    parent's, which the module's default files as "Whole family".
+  select count(*) into n from public.medications where family_id = fam and id = med_id;
   if n <> 1 then
-    raise exception 'a child can no longer see the family medications (%)', n;
+    raise exception 'a child can no longer see their own prescription (%)', n;
+  end if;
+  select count(*) into n from public.medications where family_id = fam and id = parent_med;
+  if n <> 0 then
+    raise exception 'a child can read a parent''s prescription';
   end if;
 
   -- 6. And a member still records a dose. Manager-only here would break
@@ -132,5 +146,5 @@ begin
     raise exception '% stray permissive write policy(ies) on the prescription tables', n;
   end if;
 
-  raise notice 'OK prescriptions: a child cannot write or delete a medication or its schedule, still reads them, and still records a dose';
+  raise notice 'OK prescriptions: a child cannot write or delete a medication or its schedule, reads only their own, and still records a dose';
 end $$;

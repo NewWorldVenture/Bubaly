@@ -16605,5 +16605,8 @@
   "tripCountdown.startedYesterday": "Commencé hier",
   "tripCountdown.daysAgo": "il y a {count} jours",
   "tripCountdown.travelersOne": "{count} voyageur",
-  "tripCountdown.travelersMany": "{count} voyageurs"
+  "tripCountdown.travelersMany": "{count} voyageurs",
+  "coach.onlyYourOwnHealth": "Vous pouvez interroger le coach sur votre propre santé. Un parent ou un adulte peut poser des questions sur les autres membres de la famille.",
+  "medicationsModule.noMedicinesPrescribedToYou": "Aucun médicament ne vous a été prescrit.",
+  "medicationsModule.yourOwnMedicinesOnly": "Vous voyez les médicaments qui vous sont prescrits. Un parent ou un adulte gère les prescriptions de la famille."
 }

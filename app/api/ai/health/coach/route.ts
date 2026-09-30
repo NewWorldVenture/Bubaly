@@ -1,6 +1,7 @@
 import { NextResponse } from 'next/server';
 import { getTranslations } from '@/lib/i18n/server';
 import { requireUserContext } from '@/lib/supabase/auth';
+import { isManager } from '@/lib/constants/roles';
 import { createServer } from '@/lib/supabase/server';
 import { settleAll } from '@/lib/supabase/settle';
 import { refuseUnlessEntitled } from '@/lib/server/route-feature-gate';
@@ -38,6 +39,17 @@ export async function POST(req: Request) {
   const question = String(body.question ?? '').slice(0, 2000).trim();
   const memberId = typeof body.memberId === 'string' && body.memberId ? body.memberId : null;
   if (!question) return NextResponse.json({ error: t('coach.askAQuestionFirst') }, { status: 400 });
+
+  // Parents write, kids see their own (0438 for the medical profile, 0465 for
+  // prescriptions). For a non-manager asking about SOMEONE ELSE, RLS hands the
+  // reads below `{ data: [], error: null }` rather than an error, so the
+  // grounding check cannot catch it and the model would be told "Active
+  // medications: none on file" about a sibling who takes one — a confident
+  // wrong answer on a health surface. Refuse the question instead. Asking about
+  // yourself, or a general question, is unchanged.
+  if (memberId && !isManager(ctx.active.role) && memberId !== ctx.active.member.id) {
+    return NextResponse.json({ error: t('coach.onlyYourOwnHealth') }, { status: 403 });
+  }
 
   const supabase = await createServer();
   // The page in front of this is feature-gated; this endpoint was not, and it
