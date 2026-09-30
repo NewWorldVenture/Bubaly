@@ -46,6 +46,14 @@ The engine does not schedule. The caller (the cron route, later) decides and pas
 
 Together these stop a worker that stalled after its claim from sending late.
 
+**A granted mark is an admission receipt, `{ ok: true, dispatchBy }`.** The provider call must **start** before `dispatchBy`:
+- lease expiry minus the send deadline, so the call ends while the lease holds;
+- for an ambiguous row, also no later than the first mark plus retention minus margin, so the request reaches the provider before it can forget the key. A row only ever definitively refused has nothing to duplicate.
+
+The engine re-reads its own clock **after** the store answers, immediately before the call. At or past `dispatchBy` it sends nothing (`dispatch_deadline_passed`), so a mark whose answer arrived late cannot send late. The row keeps its mark and is treated as possibly sent.
+
+**Clock skew.** `dispatchBy` is database time and the engine compares it with the application's clock. Skew between the two must stay well inside both `leaseMs − sendTimeoutMs` and `retentionSafetyMarginMs − sendTimeoutMs`. NTP-level skew does; the defaults are 5 min, 1 h and 15 s.
+
 **Keys.** A key is `bubaly/admin-digest/v1/<sha256(occurrenceId)[0,32]>/<sha256(recipient)[0,32]>`:
 - It is a function of occurrence and recipient only.
 - It contains no address.
@@ -71,7 +79,8 @@ A PostgreSQL `DigestDeliveryStore` must meet all of these. It must also pass `te
 5. **`beginSend` commits before the provider call.** In one step it:
    - evaluates `decideBeginSend`: fence, remaining lease against the send deadline, and the retention cut-off for ambiguous rows;
    - sets `send_started_at`;
-   - sets `first_send_at` only if it is null.
+   - sets `first_send_at` only if it is null;
+   - returns the `dispatchBy` deadline, computed from the locked row.
 
    A refusal that parks a row (`retention_passed`) is written in that same step. The adapter returns only after the commit (`synchronous_commit` on, the default).
 6. **Frozen means immutable.** `recipient_key`, `idempotency_key`, `payload_json` and `payload_hash` never change after insert. Enforce this with a trigger, not only in code. `idempotency_key` is unique across the table. `payload_hash = sha256(payload_json)` is checked on insert.
