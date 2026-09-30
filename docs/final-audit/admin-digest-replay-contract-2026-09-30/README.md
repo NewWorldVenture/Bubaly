@@ -107,14 +107,19 @@ The saved outputs are `characterization-output.txt` (19/19 pass) and `desired-co
    A retry sends only to `pending`, `failed` and `unknown` receipts. This closes C3.
    The receipt also stores the **rendered payload** (subject and HTML) the first attempt sent, and a retry resends exactly that. A fixed window does **not** freeze its inputs: a row can be committed late inside the window, and a template, a title or a recipient's name can change between attempts. So a retry that re-renders can legitimately differ.
 4. **A stable idempotency key** per `(occurrence, recipient)`, sent as the `Idempotency-Key` header. `sendEmail` has no way to pass one today, so this is a small shared-helper change and not part of this PR. Resend's documented rules (re-checked 2026-09-30):
+   - the key must be 1–256 characters, otherwise 400 `invalid_idempotency_key`;
    - the key is kept for 24 hours;
-   - the same key with the same payload returns the original response;
+   - the same key with the same payload returns the original response, which carries the email ID, and sends nothing new;
    - the same key with a **different** payload returns 409 `invalid_idempotent_request`;
-   - while the first request is still running, the key returns 409 `concurrent_idempotent_requests`.
+   - while the first request is still running, the key returns 409 `concurrent_idempotent_requests`, which is a distinct, retryable condition.
 
-   With a frozen payload (item 3), a retry under the same key is identical to the original, and the provider can fold it. If a 409 `invalid_idempotent_request` still arrives under the sender's own key (for example, a payload was not frozen), the sender must count it as **already sent**, not as a failure. Otherwise the retry fails until the occurrence is abandoned.
+   Source: https://resend.com/docs/dashboard/emails/idempotency-keys#possible-responses
 
-   Resend does not document whether a key is kept for a request it *refused*. If it is, that rule would count a refused send as accepted, so it must be checked on a provider test account first. This closes C4, but only within 24 hours and only while the provider honours the key.
+   With a frozen payload (item 3), a retry under the same key is identical to the original, and the provider can fold it. Only a success response, which carries an email ID, establishes that the provider accepted a message.
+   - A 409 `invalid_idempotent_request` under the sender's own key is a **payload conflict**, not proof of delivery. It does not establish that the intended frozen message was accepted, so the receipt stays **unresolved** (an error, reported) until it is reconciled against the frozen original request and an actual successful receipt. The sender must neither infer "sent" nor rotate to a fresh key, since a new key would bypass the provider's protection and could send a second copy.
+   - A 409 `concurrent_idempotent_requests` is retried later under the same key.
+
+   Resend does not document whether a key is kept for a request it *refused*, and that was not measured here. This closes C4 only within the 24-hour retention and only while the provider honours the key.
 5. **Honest status:**
    - an unreadable recipient list is not `200 ok` (C6);
    - `unknown` receipts are reported separately from `failed`.
