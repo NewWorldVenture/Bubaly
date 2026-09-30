@@ -139,6 +139,9 @@ describe('recordBabysitterPaymentAction (ACTION-B0B83B2B1B5A)', () => {
   });
 
   it('keeps the calendar event it was for', async () => {
+    // The family's own event: a payment should only ever name one of those.
+    db.seed('calendar_events', [{ id: 'event-7', family_id: FAMILY, title: 'Date night' }]);
+
     expect(await pay({ eventId: 'event-7' })).toEqual({ ok: true });
     expect(payments()[0].event_id).toBe('event-7');
   });
