@@ -868,6 +868,7 @@
   "adminCredential.secret": "The configured key has the right shape (sb_secret_…). Check whether it belongs to a different project or has been revoked.",
   "adminCredential.unknown": "The configured key matches no known Supabase key format.",
   "adminDigest.notificationFeedUnavailable": "Notification feed unavailable.",
+  "adminDigest.recipientsUnavailable": "Super-admin recipient list unavailable.",
   "adminDigest.unauthorized": "Unauthorized",
   "adminFeedback.couldNotDeleteIdea": "Could not delete the idea.",
   "adminFeedback.couldNotPinIdea": "Could not pin the idea.",
