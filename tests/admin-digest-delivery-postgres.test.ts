@@ -9,9 +9,11 @@
 // Synthetic data only. No provider is called: the engine tests use the fake
 // provider that follows Resend's documented key semantics.
 import { execSync } from 'node:child_process';
+import { readFileSync } from 'node:fs';
 import { afterAll, beforeAll, describe, expect, it, vi } from 'vitest';
 import {
-  RESEND_KEY_RETENTION_MS, deliverDigestOccurrence, freezePlan, recipientKeyOf, resumeDigestOccurrence,
+  MAX_PAYLOAD_JSON_CHARS, MAX_PROVIDER_MESSAGE_ID_CHARS, RESEND_KEY_RETENTION_MS, deliverDigestOccurrence, freezePlan,
+  payloadJsonOf, recipientKeyOf, resumeDigestOccurrence,
   type BeginSendPolicy, type ClaimPolicy, type DigestDeliveryStore, type EngineConfig, type ProviderSendResult,
 } from '@/lib/admin/digest-delivery';
 import { createPostgresDigestDeliveryStore, parseDeliveryRow, supabaseRpc, type RpcCall } from '@/lib/admin/digest-delivery-store';
@@ -20,6 +22,7 @@ import { answerOf, contractPlan, describeDigestDeliveryStoreContract } from './h
 import { createPgFixture, pgFixtureEnabled, psql, type PgFixture } from './helpers/digest-delivery-postgres';
 
 const T0 = '2026-09-30T12:31:00.000Z';
+const MIGRATION_0471 = 'supabase/migrations/0471_an_admin_digest_reaches_each_admin_once.sql';
 const OCC = 'admin-digest:2026-09-30T12:30:00.000Z';
 const ONE = 'admin-one@example.test';
 const TWO = 'admin-two@example.test';
@@ -86,6 +89,27 @@ describe('PostgreSQL adapter: strict mapping (fake transport)', () => {
     expect(await store.complete(OCC, K1, 7, { kind: 'accepted', messageId: 'm' }, 3)).toBe('ok');
     expect(await store.complete(OCC, K1, 0, { kind: 'accepted', messageId: 'm' }, 3)).toBe('ok');
     expect(calls.map((c) => c[1].p_fence)).toEqual([7, 0]);
+  });
+
+  it('the bounds the engine enforces are the ones 0471 declares', () => {
+    const sql = readFileSync(MIGRATION_0471, 'utf8');
+    expect(sql).toContain(`check (length(payload_json) between 2 and ${MAX_PAYLOAD_JSON_CHARS})`);
+    expect(sql).toContain(`length(provider_message_id) between 1 and ${MAX_PROVIDER_MESSAGE_ID_CHARS})`);
+  });
+
+  it('an accepted message id the store could not hold whole is never sent to it (0471 would truncate it)', async () => {
+    for (const messageId of ['x'.repeat(MAX_PROVIDER_MESSAGE_ID_CHARS + 1), '\u{1F600}'.repeat(MAX_PROVIDER_MESSAGE_ID_CHARS + 1)]) {
+      const { store, calls } = storeAnswering('ok');
+      await expect(store.complete(OCC, K1, 1, { kind: 'accepted', messageId }, 3)).rejects.toThrow(TypeError);
+      expect(calls).toEqual([]);
+    }
+    // Controls: exactly at the bound, counted in characters as PostgreSQL does (an emoji is one); and an
+    // empty id, which 0471 itself records as unknown, not as a receipt.
+    const { store, calls } = storeAnswering('ok');
+    expect(await store.complete(OCC, K1, 1, { kind: 'accepted', messageId: 'x'.repeat(MAX_PROVIDER_MESSAGE_ID_CHARS) }, 3)).toBe('ok');
+    expect(await store.complete(OCC, K1, 1, { kind: 'accepted', messageId: '\u{1F600}'.repeat(MAX_PROVIDER_MESSAGE_ID_CHARS) }, 3)).toBe('ok');
+    expect(await store.complete(OCC, K1, 1, { kind: 'accepted', messageId: '' }, 3)).toBe('ok');
+    expect(calls).toHaveLength(3);
   });
 
   it('freeze sends only identity and bytes, never a state', async () => {
@@ -321,6 +345,46 @@ describe.skipIf(!pgFixtureEnabled)('0471 on PostgreSQL (disposable database)', (
       // Control: the longest lease that still lapses inside the retry window is accepted.
       expect(await fx.sql(`set role service_role; select public.admin_digest_claim('x', 'y', 'w', ${23 * HOUR - 1}, 1, 86400000, 3600000)::text;`)).toBe('{"reason": "not_found", "claimed": false}');
     });
+  });
+
+  describe('parity with 0471\'s bounds: what the engine admits, PostgreSQL stores', () => {
+    const base = contractPlan({ recipients: [ONE] }).payload;
+    const withHtml = (html: string) => contractPlan({ recipients: [ONE], payload: { ...base, html } });
+    const overhead = payloadJsonOf({ from: base.from, to: ONE, subject: base.subject, html: '' }).length;
+    const occurrences = () => fx.sql('select count(*) from public.admin_digest_occurrences;');
+
+    it('review counterexample: 300,000 quotes are 300,000 bytes of HTML but 600,104 stored characters; refused before anything is stored', async () => {
+      await fx.reset();
+      const plan = withHtml('"'.repeat(300_000));
+      expect(payloadJsonOf({ ...plan.payload, to: ONE }).length).toBeGreaterThan(600_000);
+      expect(() => freezePlan(plan, new Date(T0))).toThrow(TypeError);
+      const store = pgStore(new FakeClock(T0));
+      await expect(deliverDigestOccurrence(plan, { store, provider: new FakeResendProvider(() => new Date(T0)), owner: 'a', config: CONFIG, now: () => new Date(T0) })).rejects.toThrow(TypeError);
+      expect(await occurrences()).toBe('0');
+    });
+
+    it('exactly at the bound, PostgreSQL stores it; one character over, the engine refuses it first', async () => {
+      await fx.reset();
+      const quotes = 100_000; // each serializes to two characters, keeping the HTML under its 512 KiB byte bound
+      const atBound = withHtml('"'.repeat(quotes) + 'a'.repeat(MAX_PAYLOAD_JSON_CHARS - overhead - 2 * quotes));
+      const f = freezePlan(atBound, new Date(T0));
+      expect(f.deliveries[0].payloadJson.length).toBe(MAX_PAYLOAD_JSON_CHARS);
+      const stored = await pgStore(new FakeClock(T0)).freeze(f.occurrence, f.deliveries);
+      expect(stored.created).toBe(true);
+      expect(stored.deliveries[0].payloadJson).toBe(f.deliveries[0].payloadJson);
+      await fx.reset();
+      const over = withHtml('"'.repeat(quotes) + 'a'.repeat(MAX_PAYLOAD_JSON_CHARS - overhead - 2 * quotes + 1));
+      expect(() => freezePlan(over, new Date(T0))).toThrow(/at most 600000 characters/);
+      expect(await occurrences()).toBe('0');
+      // Counted as PostgreSQL counts: an emoji-bearing payload exactly at the bound in characters (but
+      // longer in UTF-16 units) is admitted by the engine AND stored by the database.
+      const emojis = 50_000;
+      const controls = Math.floor((MAX_PAYLOAD_JSON_CHARS - overhead - emojis) / 6);
+      const mixed = withHtml('\u{1F600}'.repeat(emojis) + '\u0001'.repeat(controls) + 'a'.repeat(MAX_PAYLOAD_JSON_CHARS - overhead - emojis - 6 * controls));
+      const g = freezePlan(mixed, new Date(T0));
+      expect((await pgStore(new FakeClock(T0)).freeze(g.occurrence, g.deliveries)).created).toBe(true);
+      expect(await fx.sql(`select length(payload_json) from public.admin_digest_deliveries;`)).toBe(String(MAX_PAYLOAD_JSON_CHARS));
+    }, 60_000);
   });
 
   describe('frozen means frozen, in the database itself', () => {
