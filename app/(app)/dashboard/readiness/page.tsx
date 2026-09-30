@@ -190,7 +190,7 @@ export default async function ReadinessPage() {
             {t('dashboardReadiness.readinessIsNotConfirmedWhileSome')}
           </p>
         )}
-        <ReadinessHorizons cards={horizonCards} overall={overallReadiness(horizonCards)} />
+        <ReadinessHorizons cards={horizonCards} overall={overallReadiness(horizonCards)} t={t} />
       </div>
 
       <div className="grid gap-4 pt-1 lg:grid-cols-3">

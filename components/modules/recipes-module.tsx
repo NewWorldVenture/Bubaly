@@ -1,7 +1,7 @@
 'use client';
 
 import { useId, useMemo, useState } from 'react';
-import { labelledGroup, openOnKey } from '@/lib/ui/a11y';
+import { labelledGroup } from '@/lib/ui/a11y';
 import {
   ChefHat, Plus, Star, StarOff, Trash2, Edit2, Clock, Users,
   Search, Filter, Sparkles, ShoppingCart, Heart, ExternalLink, Vote,
@@ -327,11 +327,12 @@ export function RecipesModule() {
             const totalTime = (recipe.prep_time_mins ?? 0) + (recipe.cook_time_mins ?? 0);
 
             return (
-              <div key={recipe.id}
-                role="button" tabIndex={0}
-                className="group glass-card flex cursor-pointer flex-col overflow-hidden p-0 transition hover:-translate-y-0.5 focus-ring"
-                onClick={() => setViewing(recipe)}
-                onKeyDown={(e) => openOnKey(e, () => setViewing(recipe))}>
+              // The title button inside is the keyboard control; the card keeps
+              // its click for the mouse only. `role="button"` here hid the
+              // favourite button inside it from assistive technology (P-39).
+              <div key={recipe.id} role="presentation"
+                className="group glass-card flex cursor-pointer flex-col overflow-hidden p-0 transition hover:-translate-y-0.5"
+                onClick={() => setViewing(recipe)}>
                 {/* Photo / placeholder */}
                 <div className="relative aspect-video overflow-hidden rounded-t-2xl bg-gradient-to-br from-elevated to-surface">
                   {safeWebLink(recipe.photo_url) ? (
@@ -662,7 +663,7 @@ function RecipeFormModal({ recipe, familyId, userId, onClose, onSaved }: {
   }
 
   return (
-    <Modal open onClose={onClose} title={recipe ? 'Edit Recipe' : 'New Recipe'}>
+    <Modal open onClose={onClose} title={recipe ? tr('dialogTitle.editRecipe') : tr('dialogTitle.newRecipe')}>
       <form onSubmit={onSubmit} className="max-h-[75vh] space-y-4 overflow-y-auto pr-1">
         <Field label={tr('recipes.recipeName')} required>
           {(id) => <Input id={id} name="name" defaultValue={recipe?.name ?? ''} placeholder={tr('recipesModule.grandmaSSpaghettiTacoTuesday')} autoFocus />}

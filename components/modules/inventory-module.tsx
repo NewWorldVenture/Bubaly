@@ -482,7 +482,7 @@ function LocationForm({ familyId, userId, locations, parent, location, onClose, 
     <Modal open title={location ? tr('inventory.editLocation', { name: location.name }) : parent ? tr('inventory.addContainerIn', { name: parent.name }) : tr('inventory.addRoomOrArea')} onClose={onClose}>
       <form onSubmit={onSubmit} className="space-y-4">
         <div className="grid grid-cols-2 gap-3">
-          <Field label={tr('inventory.name')} required>{(id) => <Input id={id} name="name" autoFocus defaultValue={location?.name ?? ''} placeholder={parent ? 'Shelf B / Blue tote' : 'Garage'} />}</Field>
+          <Field label={tr('inventory.name')} required>{(id) => <Input id={id} name="name" autoFocus defaultValue={location?.name ?? ''} placeholder={parent ? tr('uiText.shelfBBlueTote') : tr('uiText.garage')} />}</Field>
           <Field label={tr('inventory.kind')}>{(id) => <Select id={id} name="kind" defaultValue={location?.kind ?? (parent ? 'box' : 'room')}>{LOCATION_KINDS.map((k) => <option key={k.value} value={k.value}>{k.emoji} {k.label}</option>)}</Select>}</Field>
         </div>
         <Field label={tr('inventory.inside')} hint={tr('inventoryModule.leaveEmptyForATop')}>{(id) => <Select id={id} name="parent_id" defaultValue={location?.parent_id ?? parent?.id ?? ''}><option value="">{tr('inventory.topLevel')}</option>{rooms.map((r) => <option key={r.id} value={r.id}>{locationKindMeta(r.kind).emoji} {r.name}</option>)}</Select>}</Field>

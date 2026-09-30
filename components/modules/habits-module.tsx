@@ -472,7 +472,7 @@ function HabitModal({ habit, members, defaultMemberId, onClose, onSave, blocked,
   }
 
   return (
-    <Modal open onClose={onClose} title={habit ? 'Edit Habit' : 'New Habit'}>
+    <Modal open onClose={onClose} title={habit ? tr('dialogTitle.editHabit') : tr('dialogTitle.newHabit')}>
       {readError && <ErrorState message={readError} onRetry={onRetry} />}
       <form onSubmit={onSubmit}>
         <fieldset disabled={blocked} className="space-y-4">

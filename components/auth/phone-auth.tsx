@@ -14,7 +14,9 @@ import { OtpInput } from '@/components/ui/otp-input';
 import { useToast } from '@/components/ui/toast';
 import { createClient } from '@/lib/supabase/client';
 import { isPasswordSessionCurrent, verifySmsWithOwnedSession } from '@/lib/auth/password-client';
-import { normalizeOtp, isValidOtp, isLikelyE164, formatCountdown, providerHint } from '@/lib/auth/otp';
+import { normalizeOtp, isValidOtp, isLikelyE164, formatCountdown, classifyPhoneAuthError } from '@/lib/auth/otp';
+import { isRetryableAuthError } from '@/lib/auth/session';
+import { describeDbError } from '@/lib/supabase/errors';
 import { safeInternalRedirect } from '@/lib/auth/redirect';
 import { useTranslations } from '@/components/i18n/locale-provider';
 
@@ -24,6 +26,15 @@ export function PhoneAuth({ next = '/onboarding', onBack }: { next?: string; onB
   const t = useTranslations();
   const router = useRouter();
   const { error: toastError, success } = useToast();
+  // A failure in the reader's language: the two cases a person can act on get
+  // their own sentence, and anything else is handled the way the email login
+  // form handles an auth error (no provider wording reaches the screen).
+  const describeFailure = (error: unknown): string => {
+    const kind = classifyPhoneAuthError(error);
+    if (kind === 'provider_unavailable') return t('phoneAuth.phoneSignInIsNotAvailable');
+    if (kind === 'code_rejected') return t('phoneAuth.thatCodeDidNotWork');
+    return isRetryableAuthError(error) ? t('loginForm.couldNotSignIn') : describeDbError(error, t('loginForm.couldNotSignIn'));
+  };
   const [phase, setPhase] = useState<'phone' | 'code'>('phone');
   const [phone, setPhone] = useState('');
   const [code, setCode] = useState('');
@@ -138,7 +149,7 @@ export function PhoneAuth({ next = '/onboarding', onBack }: { next?: string; onB
       else { intent.current.phase = 'code'; setPhase('code'); }
       startCountdown();
     } catch (error) {
-      if (current()) toastError(providerHint(error instanceof Error ? error.message : t('loginForm.couldNotSignIn'), 'Phone'));
+      if (current()) toastError(describeFailure(error));
     } finally {
       if (mounted.current && attempt.current === thisAttempt) { busy.current = null; setSending(false); }
     }
@@ -167,7 +178,7 @@ export function PhoneAuth({ next = '/onboarding', onBack }: { next?: string; onB
       if (canCommit() && isPasswordSessionCurrent(data.session)) router.refresh();
     } catch (error) {
       if (canCommit() && !(error instanceof Error && error.name === 'AuthSessionInterruptedError')) {
-        toastError(error instanceof Error ? error.message : t('loginForm.couldNotSignIn'));
+        toastError(describeFailure(error));
       }
     } finally {
       if (canCommit() && busy.current !== 'complete') { busy.current = null; setVerifying(false); }

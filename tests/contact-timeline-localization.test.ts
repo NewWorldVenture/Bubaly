@@ -66,7 +66,7 @@ vi.mock('@/lib/ai/observability', () => ({ withAiRequest: async (_scope: unknown
 const LOCALES: LocaleCode[] = ['en-US', 'de-DE', 'es-ES', 'fr-FR', 'it-IT', 'nl-NL', 'pt-PT'];
 const NOW = new Date('2026-06-15T00:00:00Z');
 const contact = {
-  id: 'contact-1', name: 'Alex', family_id: 'family-1', relationship: null,
+  id: 'contact-1', name: 'Alex', family_id: 'family-1', relationship: '',
   organization: null, specialty: null, birthday_month: 2, birthday_day: 29,
 } as Tables<'family_contacts'>;
 function t(key: string, params?: Record<string, string | number>) { return translate(getMessages(h.locale), key, params); }

@@ -432,7 +432,7 @@ export function RelationshipModule() {
                       <Icon className="h-3 w-3" /> {t(meta.labelKey)}
                     </span>
                     <div className="flex items-center gap-1">
-                      <button onClick={() => toggleCalendar(raw)} aria-label={raw.calendar_event_id ? 'Remove from calendar' : 'Add to calendar'}
+                      <button onClick={() => toggleCalendar(raw)} aria-label={raw.calendar_event_id ? t('uiText.removeFromCalendar') : t('uiText.addToCalendar')}
                         className={cn('rounded p-1 hover:bg-elevated', raw.calendar_event_id ? 'text-emerald-300' : 'text-muted hover:text-fg')}>
                         {raw.calendar_event_id ? <CalendarCheck className="h-3.5 w-3.5" /> : <CalendarPlus className="h-3.5 w-3.5" />}
                       </button>
@@ -535,7 +535,7 @@ export function RelationshipModule() {
       </section>
 
       {/* Date modal */}
-      <Modal open={dateModal} onClose={() => setDateModal(false)} title={dateForm.id ? 'Edit date' : 'Add a date'}>
+      <Modal open={dateModal} onClose={() => setDateModal(false)} title={dateForm.id ? t('dialogTitle.editDate') : t('dialogTitle.addADate')}>
         <form onSubmit={saveDate} className="space-y-4">
           <Field label={t('relationship.type')}>
             {(id) => (
@@ -586,7 +586,7 @@ export function RelationshipModule() {
       </Modal>
 
       {/* Gift modal */}
-      <Modal open={giftModal} onClose={() => setGiftModal(false)} title={giftForm.id ? 'Edit gift idea' : 'Add a gift idea'}>
+      <Modal open={giftModal} onClose={() => setGiftModal(false)} title={giftForm.id ? t('dialogTitle.editGiftIdea') : t('dialogTitle.addAGiftIdea')}>
         <form onSubmit={saveGift} className="space-y-4">
           <Field label={t('relationship.gift')} required>
             {(id) => <Input id={id} value={giftForm.title} onChange={(e) => setGiftForm((f) => ({ ...f, title: e.target.value }))} placeholder={t('relationship.eGWeekendCabinGetaway')} autoFocus />}

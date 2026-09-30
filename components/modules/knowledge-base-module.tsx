@@ -182,7 +182,7 @@ export function KnowledgeBaseModule({ canSeed = false }: { canSeed?: boolean }) 
                       <button onClick={() => copyValue(f)} aria-label={t('knowledgeBase.copyValue')} title={t('knowledgeBase.copy')} className="rounded p-1.5 text-muted hover:bg-elevated hover:text-fg">
                         {copiedId === f.id ? <Check className="h-3.5 w-3.5 text-emerald-300" /> : <Copy className="h-3.5 w-3.5" />}
                       </button>
-                      <button onClick={() => togglePin(f)} aria-label={f.is_pinned ? 'Unpin' : 'Pin'} title={f.is_pinned ? 'Unpin' : 'Pin'} className="rounded p-1.5 text-muted hover:bg-elevated hover:text-brand-text">
+                      <button onClick={() => togglePin(f)} aria-label={f.is_pinned ? t('dialogTitle.unpin') : t('dialogTitle.pin')} title={f.is_pinned ? t('dialogTitle.unpin') : t('dialogTitle.pin')} className="rounded p-1.5 text-muted hover:bg-elevated hover:text-brand-text">
                         {f.is_pinned ? <PinOff className="h-3.5 w-3.5" /> : <Pin className="h-3.5 w-3.5" />}
                       </button>
                       <button onClick={() => openEdit(f)} aria-label={t('knowledgeBase.edit')} className="rounded p-1.5 text-muted hover:bg-elevated hover:text-fg"><Pencil className="h-3.5 w-3.5" /></button>
@@ -197,7 +197,7 @@ export function KnowledgeBaseModule({ canSeed = false }: { canSeed?: boolean }) 
       )}
 
       {/* Add / edit */}
-      <Modal open={modalOpen} onClose={() => setModalOpen(false)} title={form.id ? 'Edit fact' : 'Add a fact'}>
+      <Modal open={modalOpen} onClose={() => setModalOpen(false)} title={form.id ? t('dialogTitle.editFact') : t('dialogTitle.addAFact')}>
         <form onSubmit={save} className="space-y-4">
           <div className="grid grid-cols-2 gap-3">
             <Field label={t('knowledgeBase.about')}>

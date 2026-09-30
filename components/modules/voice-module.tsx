@@ -202,7 +202,7 @@ function VoiceCaptureSession() {
           <button
             onClick={toggleMic}
             disabled={!speech.supported || running || Boolean(uncertainHref)}
-            aria-label={speech.listening ? 'Stop listening' : 'Start listening'}
+            aria-label={speech.listening ? tr('uiText.stopListening') : tr('uiText.startListening')}
             className={cn(
               'grid h-20 w-20 place-items-center rounded-full text-white shadow-glow transition active:scale-95 disabled:opacity-40',
               speech.listening ? 'animate-pulse bg-rose-500 hover:bg-rose-600' : 'bg-brand hover:brightness-110',

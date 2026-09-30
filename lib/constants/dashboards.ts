@@ -31,7 +31,8 @@ export function personalDashboardLabel(role: MemberRole): string {
 
 export const FAMILY_DASHBOARD_LABEL = 'Family Dashboard';
 
-/** Human label for a given view + role (used in the switcher and settings). */
+/** The English name for a given view + role. It is a navigation label: a
+ *  screen shows `navLabel(t, dashboardLabel(view, role))`. */
 export function dashboardLabel(view: DashboardView, role: MemberRole): string {
   return view === 'family' ? FAMILY_DASHBOARD_LABEL : personalDashboardLabel(role);
 }
@@ -41,8 +42,8 @@ export const dashboardIcon: Record<DashboardView, LucideIcon> = {
   family: LayoutDashboard,
 };
 
-/** Short description for the settings selector. */
-export const DASHBOARD_DESCRIPTIONS: Record<DashboardView, string> = {
-  personal: 'Your role-specific view: your day, your tasks, and what needs you.',
-  family: 'The shared Command Center — everyone’s schedule, chores, and meals.',
+/** Catalogue key of the short description for the settings selector. */
+export const DASHBOARD_DESCRIPTION_KEYS: Record<DashboardView, string> = {
+  personal: 'dashboards.personalDescription',
+  family: 'dashboards.familyDescription',
 };

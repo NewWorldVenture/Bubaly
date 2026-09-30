@@ -7,7 +7,7 @@ import { POST as webhook } from '@/app/api/webhooks/stripe/route';
 import { getUserContext, requireUserContext } from '@/lib/supabase/auth';
 
 const mocks = vi.hoisted(() => ({
-  retrievePrice: vi.fn(), createCustomer: vi.fn(), createCheckout: vi.fn(), retrieveSubscription: vi.fn(), updateSubscription: vi.fn(),
+  retrievePrice: vi.fn(), createCustomer: vi.fn(), createCheckout: vi.fn(), retrieveSubscription: vi.fn(), updateSubscription: vi.fn(), listSubscriptions: vi.fn(),
   constructEvent: vi.fn(), recordEvent: vi.fn(), markProcessed: vi.fn(), markError: vi.fn(),
   role: 'parent', trace: [] as string[], writes: [] as { table: string; operation: string; value: unknown; options?: unknown }[],
   rows: {} as Record<string, Record<string, unknown> | null>,
@@ -16,6 +16,7 @@ const mocks = vi.hoisted(() => ({
   errors: {} as Record<string, { message: string }>,
   // `matchedNone`: the sync write succeeds but matches no row (C1-S9-62).
   syncFailure: 'none' as 'none' | 'returned' | 'thrown' | 'matchedNone',
+  secretKey: 'sk_test_fixture' as string | null,
 }));
 vi.mock('@/lib/i18n/server', () => ({ getTranslations: async () => (key: string) => key }));
 vi.mock('@/lib/supabase/auth', () => {
@@ -103,7 +104,7 @@ vi.mock('@/lib/supabase/server', () => {
 vi.mock('@/lib/stripe', async () => {
   const { default: prices } = await import('@/lib/constants/family-prices.json');
   const stripe = { prices: { retrieve: mocks.retrievePrice }, customers: { create: mocks.createCustomer },
-    checkout: { sessions: { create: mocks.createCheckout } }, subscriptions: { retrieve: mocks.retrieveSubscription, update: mocks.updateSubscription },
+    checkout: { sessions: { create: mocks.createCheckout } }, subscriptions: { retrieve: mocks.retrieveSubscription, update: mocks.updateSubscription, list: mocks.listSubscriptions },
     webhooks: { constructEvent: mocks.constructEvent } };
   return { getStripe: () => stripe, stripeFromKey: () => stripe, constructWebhookEvent: mocks.constructEvent, STRIPE_PLANS: {
     basic_monthly: prices.stripePrices.basic_monthly.id, basic_annual: prices.stripePrices.basic_annual.id,
@@ -115,7 +116,7 @@ vi.mock('@/lib/stripe', async () => {
 // way lib/stripe/settings does (a missing key is now a 503 before any Stripe call).
 vi.mock('@/lib/stripe/settings', () => ({
   getStripeSettings: async () => ({}),
-  effectiveSecretKey: () => 'sk_test_fixture',
+  effectiveSecretKey: () => mocks.secretKey,
   effectiveWebhookSecret: () => process.env.STRIPE_WEBHOOK_SECRET || null,
 }));
 vi.mock('@/lib/stripe/service-fee', () => ({ serviceFeeAddInvoiceItems: () => undefined }));
@@ -142,12 +143,13 @@ beforeEach(() => {
   vi.clearAllMocks(); mocks.role = 'parent'; mocks.trace = []; mocks.writes = [];
   mocks.rows = { subscriptions: { plan: 'basic', status: 'active', provider_ref: 'sub-existing', cancel_at_period_end: false }, billing_customers: null, user_preferences: { active_family_id: 'family-a' } };
   mocks.contextState = 'ready'; mocks.memberships = [{ familyId: 'family-a', role: 'parent' }]; mocks.errors = {};
-  mocks.syncFailure = 'none';
+  mocks.syncFailure = 'none'; mocks.secretKey = 'sk_test_fixture';
   mocks.retrievePrice.mockReset().mockImplementation(async (id: string) => { mocks.trace.push('price'); return validPrice(id); });
   mocks.createCustomer.mockReset().mockImplementation(async () => { mocks.trace.push('customer'); return { id: 'cus-fixture' }; });
   mocks.createCheckout.mockReset().mockImplementation(async () => { mocks.trace.push('checkout'); return { id: 'cs-fixture', url: 'https://checkout.example.test' }; });
   mocks.retrieveSubscription.mockReset().mockResolvedValue({ id: 'sub-existing', status: 'active', cancel_at_period_end: false, items: { data: [{ id: 'si-fixture', price: { id: PRICES.stripePrices.basic_monthly.id } }] } });
   mocks.updateSubscription.mockReset().mockImplementation(async () => { mocks.trace.push('subscription-update'); return {}; });
+  mocks.listSubscriptions.mockReset().mockResolvedValue({ data: [] });
   mocks.recordEvent.mockResolvedValue({ outcome: 'claimed', claimToken: 'claim-fixture' });
   vi.spyOn(console, 'error').mockImplementation(() => {});
 });
@@ -212,6 +214,7 @@ describe.each([['checkout', checkout], ['change-plan', changePlan]] as const)('%
 });
 
 it('Checkout uses the verified current annual price before creating a customer', async () => {
+  mocks.rows.subscriptions = { plan: 'free', status: 'active', provider_ref: null };
   expect((await checkout(request('basic_annual'))).status).toBe(200);
   expect(mocks.trace).toEqual(['price', 'customer', 'checkout']);
   expect(mocks.createCheckout).toHaveBeenCalledWith(expect.objectContaining({ line_items: [{ price: PRICES.stripePrices.basic_annual.id, quantity: 1 }] }));
@@ -229,6 +232,7 @@ it('a Free family uses the same verified price when plan change falls back to Ch
   expect(mocks.createCheckout).toHaveBeenCalledWith(expect.objectContaining({ line_items: [{ price: PRICES.stripePrices.plus_annual.id, quantity: 1 }] }));
 });
 it('legacy Family annual Checkout selects Basic annual and is also accepted by change-plan', async () => {
+  mocks.rows.subscriptions = { plan: 'free', status: 'active', provider_ref: null };
   expect((await checkout(request('family_annual'))).status).toBe(200);
   expect(mocks.retrievePrice).toHaveBeenCalledWith(PRICES.stripePrices.basic_annual.id);
   mocks.rows.subscriptions = { plan: 'basic_annual', status: 'active', provider_ref: 'sub-existing' };
@@ -380,10 +384,13 @@ describe('subscription webhook price history', () => {
   const known = Object.entries(PRICES.stripePrices).flatMap(([plan, entry]) => [entry.id, ...entry.previousIds].map(id => ({ id, slug: plan.replace('_monthly', '') })));
   function event(priceId: string) {
     vi.stubEnv('STRIPE_WEBHOOK_SECRET', 'synthetic-webhook-secret');
-    mocks.constructEvent.mockReturnValue({ id: 'evt-fixture', type: 'customer.subscription.updated', data: { object: {
+    const subscription = {
       id: 'sub-fixture', metadata: { family_id: 'family-a' }, customer: 'cus-fixture', items: { data: [{ price: { id: priceId } }] },
       status: 'active', current_period_end: 1_900_000_000, cancel_at_period_end: false,
-    } } });
+    };
+    mocks.constructEvent.mockReturnValue({ id: 'evt-fixture', type: 'customer.subscription.updated', data: { object: subscription } });
+    // The webhook persists the subscription's current state from Stripe (PAY-ORDER-001).
+    mocks.retrieveSubscription.mockResolvedValue(subscription);
     return new NextRequest('https://app.example.test/api/webhooks/stripe', { method: 'POST', body: '{}' });
   }
   it.each(known)('preserves $slug entitlement for current or historical price $id', async ({ id, slug }) => {
@@ -405,5 +412,114 @@ describe('subscription webhook price history', () => {
     expect((await webhook(event('price_unknown'))).status).toBe(500);
     expect(mocks.writes).toEqual([]); expect(mocks.markProcessed).not.toHaveBeenCalled();
     expect(mocks.markError).toHaveBeenCalledTimes(1);
+  });
+});
+
+// PAY-DOUBLE-001: Checkout starts a subscription; it never starts a second one.
+describe('Checkout refuses a family that already has a live subscription', () => {
+  it.each(['active', 'trialing', 'past_due'])('refuses a local %s subscription and sends the parent to the billing review', async status => {
+    mocks.rows.subscriptions = { plan: 'basic', status, provider_ref: 'sub-existing' };
+    const response = await checkout(request('plus_monthly'));
+    expect(response.status).toBe(409);
+    expect(await response.json()).toMatchObject({ code: 'subscription_exists', review: '/dashboard/billing?view=manage&reviewPlan=plus_monthly' });
+    noPaidMutation();
+  });
+
+  it('asks Stripe when the local row has not caught up with a subscription the customer already has', async () => {
+    mocks.rows.subscriptions = { plan: 'free', status: 'active', provider_ref: null };
+    mocks.rows.billing_customers = { customer_ref: 'cus-existing' };
+    mocks.listSubscriptions.mockResolvedValue({ data: [{ id: 'sub-just-paid', status: 'active' }] });
+    const response = await checkout(request('family_annual'));
+    expect(response.status).toBe(409);
+    expect(mocks.listSubscriptions).toHaveBeenCalledWith(expect.objectContaining({ customer: 'cus-existing' }));
+    expect(await response.json()).toMatchObject({ review: '/dashboard/billing?view=manage&reviewPlan=basic_annual' });
+    noPaidMutation();
+  });
+
+  it('starts Checkout for a returning customer whose only subscription ended', async () => {
+    mocks.rows.subscriptions = { plan: 'basic', status: 'canceled', provider_ref: 'sub-old' };
+    mocks.rows.billing_customers = { customer_ref: 'cus-existing' };
+    mocks.listSubscriptions.mockResolvedValue({ data: [{ id: 'sub-old', status: 'canceled' }, { id: 'sub-older', status: 'incomplete_expired' }] });
+    expect((await checkout(request('basic_annual'))).status).toBe(200);
+    expect(mocks.createCheckout).toHaveBeenCalledTimes(1);
+    expect(mocks.createCustomer).not.toHaveBeenCalled();
+  });
+
+  it('answers unavailable, not a new subscription, when the subscription read fails', async () => {
+    mocks.errors.subscriptions = { message: 'private read failure' };
+    expect((await checkout(request('basic_annual'))).status).toBe(503);
+    noPaidMutation();
+  });
+});
+
+describe('an ended subscription does not overwrite a different live one (PAY-DOUBLE-001)', () => {
+  function ended(status: string, id = 'sub-old') {
+    vi.stubEnv('STRIPE_WEBHOOK_SECRET', 'synthetic-webhook-secret');
+    const subscription = {
+      id, metadata: { family_id: 'family-a' }, customer: 'cus-fixture', items: { data: [{ price: { id: PRICES.stripePrices.basic_monthly.id } }] },
+      status, current_period_end: 1_900_000_000, cancel_at_period_end: false,
+    };
+    mocks.constructEvent.mockReturnValue({ id: `evt-${status}`, type: 'customer.subscription.deleted', data: { object: subscription } });
+    mocks.retrieveSubscription.mockResolvedValue(subscription);
+    return new NextRequest('https://app.example.test/api/webhooks/stripe', { method: 'POST', body: '{}' });
+  }
+  it.each(['canceled', 'incomplete_expired', 'unpaid'])('keeps the live row when another subscription reports %s', async status => {
+    // The row records sub-existing as active (the suite default).
+    const response = await webhook(ended(status));
+    expect(response.status).toBe(200);
+    expect(mocks.writes.filter(w => w.table === 'subscriptions')).toEqual([]);
+    expect(mocks.markProcessed).toHaveBeenCalledTimes(1);
+  });
+  it('still records the end of the subscription the row holds', async () => {
+    expect((await webhook(ended('canceled', 'sub-existing'))).status).toBe(200);
+    expect(mocks.writes).toContainEqual(expect.objectContaining({ table: 'subscriptions', operation: 'update', value: expect.objectContaining({ status: 'canceled', provider_ref: 'sub-existing' }) }));
+  });
+});
+
+// PAY-ORDER-001: Stripe does not deliver events in order, and each carries the
+// subscription as it was when that event was created. The webhook writes the
+// subscription's state NOW, read from Stripe, so a stale event cannot land last.
+describe('a subscription event arriving out of order does not undo a newer state (PAY-ORDER-001)', () => {
+  const basic = PRICES.stripePrices.basic_monthly.id;
+  function stale(object: Record<string, unknown>) {
+    vi.stubEnv('STRIPE_WEBHOOK_SECRET', 'synthetic-webhook-secret');
+    mocks.constructEvent.mockReturnValue({ id: 'evt-stale', type: 'customer.subscription.updated', data: { object } });
+    return new NextRequest('https://app.example.test/api/webhooks/stripe', { method: 'POST', body: '{}' });
+  }
+  const sub = (status: string) => ({
+    id: 'sub-existing', metadata: { family_id: 'family-a' }, customer: 'cus-fixture', items: { data: [{ price: { id: basic } }] },
+    status, current_period_end: 1_900_000_000, cancel_at_period_end: false,
+  });
+
+  it('records the canceled state Stripe holds, not the older active payload', async () => {
+    mocks.retrieveSubscription.mockResolvedValue(sub('canceled'));
+    const response = await webhook(stale(sub('active')));
+    expect(response.status).toBe(200);
+    expect(mocks.retrieveSubscription).toHaveBeenCalledWith('sub-existing');
+    const written = mocks.writes.filter(w => w.table === 'subscriptions');
+    expect(written).toContainEqual(expect.objectContaining({ operation: 'update', value: expect.objectContaining({ status: 'canceled' }) }));
+    expect(written).not.toContainEqual(expect.objectContaining({ value: expect.objectContaining({ status: 'active' }) }));
+  });
+
+  it('without a secret key, refuses to write the payload and asks Stripe to retry', async () => {
+    mocks.secretKey = null;
+    const response = await webhook(stale(sub('active')));
+    expect(response.status).toBe(500);
+    expect(mocks.writes).toEqual([]);
+    expect(mocks.markError).toHaveBeenCalledTimes(1);
+    expect(mocks.markProcessed).not.toHaveBeenCalled();
+  });
+
+  it('a failed Stripe read is retried, not written from the payload', async () => {
+    mocks.retrieveSubscription.mockRejectedValue(new Error('stripe unavailable'));
+    expect((await webhook(stale(sub('active')))).status).toBe(500);
+    expect(mocks.writes).toEqual([]);
+  });
+
+  it('does not call Stripe for an event that names no family (control)', async () => {
+    const response = await webhook(stale({ ...sub('active'), metadata: {} }));
+    expect(response.status).toBe(200);
+    expect(mocks.retrieveSubscription).not.toHaveBeenCalled();
+    expect(mocks.writes).toEqual([]);
   });
 });

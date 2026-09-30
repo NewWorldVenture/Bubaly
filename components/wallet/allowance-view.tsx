@@ -106,7 +106,7 @@ export function AllowanceView({ rows, enabled, canManage }: { rows: AllowanceRow
               {canManage && enabled && (
                 <div className="flex items-center gap-1">
                   {r.ruleId && (
-                    <button onClick={() => toggle(r)} className="rounded-lg p-1.5 text-muted hover:bg-elevated hover:text-fg" aria-label={r.isActive ? 'Pause' : 'Resume'}>
+                    <button onClick={() => toggle(r)} className="rounded-lg p-1.5 text-muted hover:bg-elevated hover:text-fg" aria-label={r.isActive ? t('uiText.pause') : t('uiText.resume')}>
                       {r.isActive ? <Pause className="h-4 w-4" /> : <Play className="h-4 w-4" />}
                     </button>
                   )}

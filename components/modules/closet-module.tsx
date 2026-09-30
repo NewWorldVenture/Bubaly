@@ -362,7 +362,7 @@ export function ClosetModule() {
             <ul className="space-y-2">
               {memberOutfits.slice(0, 8).map((o) => (
                 <li key={o.id} className="flex items-center gap-3 rounded-xl border border-border px-3 py-2">
-                  <button onClick={() => toggleFavorite(o)} aria-label={o.is_favorite ? 'Unfavourite' : 'Favourite'} className={cn('shrink-0', o.is_favorite ? 'text-amber-300' : 'text-muted')}><Star className="h-4 w-4" fill={o.is_favorite ? 'currentColor' : 'none'} /></button>
+                  <button onClick={() => toggleFavorite(o)} aria-label={o.is_favorite ? t('uiText.unfavourite') : t('uiText.favourite')} className={cn('shrink-0', o.is_favorite ? 'text-amber-300' : 'text-muted')}><Star className="h-4 w-4" fill={o.is_favorite ? 'currentColor' : 'none'} /></button>
                   <div className="min-w-0 flex-1">
                     <p className="truncate text-sm font-medium">{o.name}</p>
                     <p className="truncate text-xs text-muted">

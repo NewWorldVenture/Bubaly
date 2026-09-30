@@ -328,7 +328,7 @@ function FeedCard({ item, busy, onFavorite, onOpen }: { item: FeedItem; busy: st
           </div>
         </div>
         <div className="flex items-center gap-1">
-          <button type="button" onClick={onFavorite} disabled={busy === `fav-${item.id}`} aria-label={item.isFavorite ? 'Remove bookmark' : 'Bookmark'}
+          <button type="button" onClick={onFavorite} disabled={busy === `fav-${item.id}`} aria-label={item.isFavorite ? tr('uiText.removeBookmark') : tr('uiText.bookmark')}
             className="rounded-lg p-1.5 text-muted hover:bg-elevated hover:text-fg">
             <Bookmark className={cn('h-4 w-4', item.isFavorite && 'fill-brand text-brand-text')} />
           </button>

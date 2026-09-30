@@ -208,7 +208,7 @@ export function SubscriptionsWorkspace({ context, timezone = 'UTC' }: { context:
       </div>
 
       {form && (
-        <Modal open onClose={() => setForm(null)} title={form.id ? 'Edit subscription' : 'Add subscription'}
+        <Modal open onClose={() => setForm(null)} title={form.id ? t('dialogTitle.editSubscription') : t('dialogTitle.addSubscription')}
           description={candidateDraft ? 'This draft comes from recorded expenses. Confirm the name, USD cost, cadence and status, then Save. Usage and the next charge are still unknown.' : priceHistoryDraft ?? undefined}>
           <form onSubmit={save} className="space-y-3">
             <Field label={t('subscriptions.name')}>{(id) => <Input id={id} value={form.name} onChange={(e) => setForm({ ...form, name: e.target.value })} placeholder={t('subscriptions.netflixSpotify')} />}</Field>

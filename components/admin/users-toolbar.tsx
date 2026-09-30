@@ -7,7 +7,7 @@ import { Button } from '@/components/ui/button';
 import { Modal } from '@/components/ui/modal';
 import { Input, Field, Select } from '@/components/ui/input';
 import { useToast } from '@/components/ui/toast';
-import { ROLE_LABELS, INVITABLE_ROLES, type MemberRole } from '@/lib/constants/roles';
+import { ROLE_LABEL_KEYS, INVITABLE_ROLES, type MemberRole } from '@/lib/constants/roles';
 import { adminCreateUserAction, adminCreateFamilyAction } from '@/app/(app)/admin/actions';
 import { useTranslations } from '@/components/i18n/locale-provider';
 
@@ -95,7 +95,7 @@ export function UsersToolbar({ families, exportRows }: {
             <Field label={t('usersToolbar.roleInThatFamily')}>
               {(id) => (
                 <Select id={id} name="role" defaultValue="adult">
-                  {INVITABLE_ROLES.map((r) => <option key={r} value={r}>{ROLE_LABELS[r]}</option>)}
+                  {INVITABLE_ROLES.map((r) => <option key={r} value={r}>{t(ROLE_LABEL_KEYS[r])}</option>)}
                 </Select>
               )}
             </Field>

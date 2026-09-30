@@ -454,6 +454,18 @@ const TEMPLATE_COPY_ATTR_PATTERN = new RegExp(
 const TEMPLATE_JSX_CHILD_PATTERN = new RegExp(String.raw`(?<![$=]\s*)\{\s*` + TEMPLATE_BODY + String.raw`\s*\}`, 'g');
 
 /**
+ * The same copy attributes written as a ternary of two quoted strings (I18N-012):
+ * `title={item ? 'Edit item' : 'Add pantry item'}`. PROP_PATTERN reads only
+ * `title="…"`, so every create/edit dialog title in the modules — some sixty of
+ * them — shipped in English to every locale while this ratchet counted the
+ * surface and did not see one. Both branches are reported. The condition may not
+ * contain a quote or a brace, so a nested call or a translated branch is not
+ * mistaken for copy, and only the copy-carrying attributes are read.
+ */
+const TERNARY_COPY_ATTR_PATTERN =
+  /\b(?:aria-label|title|placeholder|alt|label|description)=\{[^{}'"`]*?\?\s*(['"])((?:(?!\1)[^\\\n])+)\1\s*:\s*(['"])((?:(?!\3)[^\\\n])+)\3\s*\}/g;
+
+/**
  * The question asked before something is deleted (I18N-005). `confirm()` shows
  * its argument verbatim in a native dialog, so `confirm(`Remove ${name} from the
  * inventory?`)` asked a German parent in English, at the one moment the answer
@@ -655,6 +667,7 @@ export function scanFile(file) {
   if (file.endsWith('.tsx')) {
     for (const m of source.matchAll(TEMPLATE_COPY_ATTR_PATTERN)) push(m[2].replace(/\$\{[^}]*\}/g, '…'), m.index ?? 0);
     for (const m of source.matchAll(TEMPLATE_JSX_CHILD_PATTERN)) push(m[1].replace(/\$\{[^}]*\}/g, '…'), m.index ?? 0);
+    for (const m of source.matchAll(TERNARY_COPY_ATTR_PATTERN)) { push(m[2], m.index ?? 0, true); push(m[4], m.index ?? 0, true); }
   }
   for (const m of source.matchAll(CONFIRM_TEMPLATE_PATTERN)) push(m[1].replace(/\$\{[^}]*\}/g, '…'), m.index ?? 0);
   for (const m of source.matchAll(CONFIRM_QUOTED_PATTERN)) push(m[2], m.index ?? 0);

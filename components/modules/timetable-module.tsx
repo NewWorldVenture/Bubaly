@@ -205,7 +205,7 @@ export function TimetableModule() {
       )}
 
       {/* Add / edit class modal */}
-      <Modal open={open} onClose={() => setOpen(false)} title={form.id ? 'Edit class' : 'Add class'}>
+      <Modal open={open} onClose={() => setOpen(false)} title={form.id ? t('dialogTitle.editClass') : t('dialogTitle.addClass')}>
         <form onSubmit={submit} className="space-y-4">
           <div className="grid grid-cols-2 gap-3">
             <Field label={t('timetable.student')} required>

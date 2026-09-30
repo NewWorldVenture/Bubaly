@@ -6,6 +6,7 @@ import {
 import { useEffect, useRef, useState, useTransition } from 'react';
 import { Play, Pause, Bookmark, BookmarkCheck, Download, RefreshCw, Trash2, ExternalLink } from 'lucide-react';
 import { Button } from '@/components/ui/button';
+import { useTranslations } from '@/components/i18n/locale-provider';
 import { useToast } from '@/components/ui/toast';
 import { formatDuration, progressPercent } from '@/lib/library/feed-parse';
 import {
@@ -68,6 +69,7 @@ function saveInBackground(input: Parameters<typeof saveProgressAction>[0], onFai
 
 export function ItemRow({ item }: { item: PlayableItem }) {
   const { success, error } = useToast();
+  const t = useTranslations();
   const audioRef = useRef<HTMLAudioElement | null>(null);
   const lastSaved = useRef(item.positionSeconds);
   // Whether this row's audio was actually played in this visit. See the unmount
@@ -214,7 +216,7 @@ export function ItemRow({ item }: { item: PlayableItem }) {
     <li className="rounded-2xl border border-border bg-surface/40 p-3">
       <div className="flex items-start gap-3">
         {item.mediaUrl && (
-          <Button size="sm" variant="secondary" onClick={toggle} aria-label={playing ? 'Pause' : 'Play'}>
+          <Button size="sm" variant="secondary" onClick={toggle} aria-label={playing ? t('uiText.pause') : t('uiText.play')}>
             {playing ? <Pause className="h-4 w-4" /> : <Play className="h-4 w-4" />}
           </Button>
         )}
@@ -231,12 +233,12 @@ export function ItemRow({ item }: { item: PlayableItem }) {
           )}
         </div>
         <div className="flex shrink-0 items-center gap-1">
-          <Button size="sm" variant="ghost" onClick={toggleSaved} aria-label={saved ? 'Remove from saved' : 'Save'}>
+          <Button size="sm" variant="ghost" onClick={toggleSaved} aria-label={saved ? t('uiText.removeFromSaved') : t('uiText.save')}>
             {saved ? <BookmarkCheck className="h-4 w-4 text-brand-text" /> : <Bookmark className="h-4 w-4" />}
           </Button>
           {item.mediaUrl && (
             <Button size="sm" variant="ghost" onClick={() => void toggleOffline()}
-              aria-label={offline ? 'Remove download' : 'Save for offline'}>
+              aria-label={offline ? t('uiText.removeDownload') : t('uiText.saveForOffline')}>
               <Download className={`h-4 w-4 ${cached ? 'text-success' : ''}`} />
             </Button>
           )}

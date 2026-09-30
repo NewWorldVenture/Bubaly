@@ -113,17 +113,17 @@ function ShareIdeaForm({ userId, onCreated }: { userId: string; onCreated: (idea
       <div>
         <label htmlFor={titleId} className={label}>{t('feedbackFeedbackBoard.title')}</label>
         <input id={titleId} value={title} onChange={(e) => setTitle(e.target.value)} maxLength={120} autoFocus
-          placeholder={isBug ? 'A short summary of what’s broken' : 'A quick, memorable summary'} className={field} />
+          placeholder={isBug ? t('uiText.aShortSummaryOfWhatSBroken') : t('uiText.aQuickMemorableSummary')} className={field} />
       </div>
       <div>
         <label htmlFor={problemId} className={label}>{isBug ? 'What’s wrong? Steps to reproduce' : 'What problem would this solve?'}</label>
         <input id={problemId} value={problem} onChange={(e) => setProblem(e.target.value)} maxLength={2000}
-          placeholder={isBug ? 'When I tap X, Y happens instead of…' : 'Today, I struggle with…'} className={field} />
+          placeholder={isBug ? t('uiText.whenITapXYHappensInstead') : t('uiText.todayIStruggleWith')} className={field} />
       </div>
       <div>
         <label htmlFor={bodyId} className={label}>{isBug ? 'Any other details' : 'Your idea'}</label>
         <textarea id={bodyId} value={body} onChange={(e) => setBody(e.target.value)} maxLength={2000} rows={4}
-          placeholder={isBug ? 'Device, what you expected, anything else that helps us fix it.' : 'Describe how it might work — even a rough sketch helps.'} className={cn(field, 'resize-y')} />
+          placeholder={isBug ? t('uiText.deviceWhatYouExpectedAnythingElseThat') : t('uiText.describeHowItMightWorkEvenA')} className={cn(field, 'resize-y')} />
       </div>
       <div className="grid grid-cols-1 gap-3 sm:grid-cols-3">
         <div>

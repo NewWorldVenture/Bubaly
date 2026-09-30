@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { getTranslations } from '@/lib/i18n/server';
-import { constructWebhookEvent } from '@/lib/stripe';
-import { getStripeSettings, effectiveWebhookSecret } from '@/lib/stripe/settings';
+import { constructWebhookEvent, stripeFromKey } from '@/lib/stripe';
+import { getStripeSettings, effectiveWebhookSecret, effectiveSecretKey, type StripeSettings } from '@/lib/stripe/settings';
 import { createServiceClient } from '@/lib/supabase/server';
 import { settleAll } from '@/lib/supabase/settle';
 import { markReferralConverted, rewardConvertedReferral } from '@/lib/referrals/server';
@@ -41,11 +41,23 @@ async function persistSubscription(supabase: ReturnType<typeof createServiceClie
   // brand-new paid conversion vs. a routine renewal).
   const [{ data: bc, error: billingCustomerError }, { data: priorSub, error: priorSubscriptionError }] = await settleAll([
     supabase.from('billing_customers').select('id').eq('family_id', familyId).maybeSingle(),
-    supabase.from('subscriptions').select('plan, status').eq('family_id', familyId).maybeSingle(),
+    supabase.from('subscriptions').select('plan, status, provider_ref').eq('family_id', familyId).maybeSingle(),
   ]);
   if (billingCustomerError || priorSubscriptionError) {
     console.error('[stripe webhook] Billing state lookup failed', billingCustomerError ?? priorSubscriptionError);
     throw new Error('Billing state lookup failed');
+  }
+
+  // One row per family, many possible Stripe subscriptions over its life: a
+  // resubscription after a cancellation, or a second subscription started
+  // before checkout refused one (PAY-DOUBLE-001). An event about a subscription
+  // that has ENDED must not overwrite a DIFFERENT subscription the row records
+  // as live, or the family reads as canceled while it is still paying.
+  const LIVE = ['active', 'trialing', 'past_due'];
+  if (priorSub?.provider_ref && priorSub.provider_ref !== sub.id
+    && LIVE.includes(priorSub.status) && !LIVE.includes(sub.status)) {
+    console.warn('[stripe webhook] ignored an ended subscription that is not the family\'s live one', { familyId, ended: sub.id });
+    return;
   }
 
   // `family_id` is deliberately not part of `fields`: it selects the row, and
@@ -134,6 +146,23 @@ async function persistSubscription(supabase: ReturnType<typeof createServiceClie
   }
 }
 
+// Stripe does not deliver events in order. An `updated` sent before a
+// `deleted` can arrive after it, and the payload each carries is the
+// subscription as it was when THAT event was created — so writing the payload
+// let the older event land last and bring a canceled subscription back to
+// active (PAY-ORDER-001). The event says only that something changed; what the
+// row records is the subscription's state now, read from Stripe. An event for
+// no Bubaly family is left as it came, since nothing is written for it.
+async function currentSubscription(settings: StripeSettings | null, fromEvent: Stripe.Subscription): Promise<Stripe.Subscription> {
+  if (!fromEvent.metadata?.family_id) return fromEvent;
+  const secretKey = effectiveSecretKey(settings);
+  // Without the key the current state cannot be read, and writing the payload
+  // instead is the bug. Failing here returns 500, so Stripe retries once the
+  // key is configured.
+  if (!secretKey) throw new Error('Stripe secret key is not configured; the subscription\'s current state cannot be read');
+  return stripeFromKey(secretKey).subscriptions.retrieve(fromEvent.id);
+}
+
 export async function POST(req: NextRequest) {
   const t = await getTranslations();
   const boundedBody = await readBoundedRequestText(req, MAX_WEBHOOK_BODY_BYTES);
@@ -145,7 +174,8 @@ export async function POST(req: NextRequest) {
   // secret saved there, and building the client with getStripe() threw when
   // STRIPE_SECRET_KEY was unset, which the catch below reported as a bad
   // signature: every real event refused, and no subscription ever recorded.
-  const webhookSecret = effectiveWebhookSecret(await getStripeSettings()) ?? '';
+  const settings = await getStripeSettings();
+  const webhookSecret = effectiveWebhookSecret(settings) ?? '';
   if (!webhookSecret) return NextResponse.json({ error: t('stripe.webhookNotConfigured') }, { status: 503 });
 
   let event: Stripe.Event;
@@ -182,7 +212,7 @@ export async function POST(req: NextRequest) {
       case 'customer.subscription.created':
       case 'customer.subscription.updated':
       case 'customer.subscription.deleted': {
-        await persistSubscription(supabase, event.data.object as Stripe.Subscription);
+        await persistSubscription(supabase, await currentSubscription(settings, event.data.object as Stripe.Subscription));
         break;
       }
 

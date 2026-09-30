@@ -34,7 +34,7 @@ export async function ReadinessModule({ cards, overall }: { cards: ReadinessCard
   return (
     <div className="space-y-6">
       <PageHeader title={t('readinessModule.lifeReadiness')} description={t('readinessModule.notAnotherListOfData')} />
-      <ReadinessHorizons cards={cards} overall={overall} />
+      <ReadinessHorizons cards={cards} overall={overall} t={t} />
     </div>
   );
 }
@@ -43,7 +43,7 @@ export async function ReadinessModule({ cards, overall }: { cards: ReadinessCard
  *  the headline of the Family Readiness page. It used to sit beneath a second,
  *  larger ring computed from household activity under the same word; that one
  *  is now below, named for what it measures. */
-export function ReadinessHorizons({ cards, overall }: { cards: ReadinessCard[]; overall: { score: number; status: ReadinessStatus } }) {
+export function ReadinessHorizons({ cards, overall, t }: { cards: ReadinessCard[]; overall: { score: number; status: ReadinessStatus }; t: (key: string) => string }) {
   const O = STATUS[overall.status];
   return (
     <div className="space-y-4">
@@ -110,7 +110,7 @@ export function ReadinessHorizons({ cards, overall }: { cards: ReadinessCard[]; 
               <div className="mt-auto pt-3">
                 <HandleItButton
                   request={card.handleIt}
-                  label={card.gaps.length > 0 ? 'Let Bubaly handle it' : 'Anything I am missing?'}
+                  label={card.gaps.length > 0 ? t('uiText.letBubalyHandleIt') : t('uiText.anythingIAmMissing')}
                 />
               </div>
             </div>

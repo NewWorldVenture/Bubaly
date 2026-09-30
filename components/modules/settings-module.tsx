@@ -23,9 +23,9 @@ import { PhoneInput } from '@/components/ui/phone-input';
 import { guessDialCodeFromPhone, extractLocalNumber, COUNTRY_DIAL_CODES } from '@/lib/utils/phone';
 import { Modal } from '@/components/ui/modal';
 import { Input, Field, Select } from '@/components/ui/input';
-import { ROLE_LABELS, isAdmin } from '@/lib/constants/roles';
+import { ROLE_LABEL_KEYS, ROLE_ORDER, isAdmin, roleLabel } from '@/lib/constants/roles';
 import {
-  DASHBOARD_VIEWS, dashboardLabel, dashboardIcon, DASHBOARD_DESCRIPTIONS, type DashboardView,
+  DASHBOARD_VIEWS, dashboardLabel, dashboardIcon, DASHBOARD_DESCRIPTION_KEYS, type DashboardView,
 } from '@/lib/constants/dashboards';
 import { setDefaultDashboardAction, updateMyProfileAction } from '@/app/(app)/actions';
 import { splitFullName } from '@/lib/onboarding/profile';
@@ -38,6 +38,7 @@ import { NavigationChoices } from '@/components/settings/navigation-choices';
 import { InviteForm } from '@/components/family/invite-form';
 import type { Tables } from '@/lib/database.types';
 import type { MemberRole } from '@/lib/database.types';
+import { navLabel } from '@/lib/i18n/nav-label';
 import { useTranslations } from '@/components/i18n/locale-provider';
 
 const SETTINGS_TABS = [
@@ -306,10 +307,10 @@ export function SettingsModule({ referralConfig }: { referralConfig?: ReferralCo
                 </div>
                 <div className="min-w-0">
                   <div className="flex items-center gap-2">
-                    <p className="text-sm font-semibold">{dashboardLabel(view, role)}</p>
+                    <p className="text-sm font-semibold">{navLabel(t, dashboardLabel(view, role))}</p>
                     {selected && <Check className="h-4 w-4 text-brand-text" />}
                   </div>
-                  <p className="mt-0.5 text-xs leading-5 text-muted">{DASHBOARD_DESCRIPTIONS[view]}</p>
+                  <p className="mt-0.5 text-xs leading-5 text-muted">{t(DASHBOARD_DESCRIPTION_KEYS[view])}</p>
                 </div>
               </button>
             );
@@ -353,7 +354,7 @@ export function SettingsModule({ referralConfig }: { referralConfig?: ReferralCo
               <Avatar name={m.display_name} color={m.color} size={36} />
               <div className="min-w-0 flex-1">
                 <p className="truncate text-sm font-medium">{m.display_name}</p>
-                <Badge tone="neutral">{ROLE_LABELS[m.role]}</Badge>
+                <Badge tone="neutral">{roleLabel(t, m.role)}</Badge>
               </div>
               {admin && (
                 <button onClick={() => setEditMember(m)} className="rounded-lg p-2 text-muted hover:text-fg" aria-label={t('settings.editMember')}>
@@ -485,8 +486,8 @@ function EditMemberModal({ member, isSelf, onClose }: {
         <Field label={t('settings.role')}>
           {(id) => (
             <Select id={id} name="role" defaultValue={member.role}>
-              {(Object.keys(ROLE_LABELS) as MemberRole[]).map((r) => (
-                <option key={r} value={r}>{ROLE_LABELS[r]}</option>
+              {ROLE_ORDER.map((r) => (
+                <option key={r} value={r}>{t(ROLE_LABEL_KEYS[r])}</option>
               ))}
             </Select>
           )}

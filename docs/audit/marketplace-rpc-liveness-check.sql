@@ -66,6 +66,20 @@ begin
   insert into public.marketplace_listings (family_id, member_id, title, kind, status, price_cents)
     values (fs, ms, 'Bike', 'sell', 'available', 10000) returning id into lst;
 
+  -- A buyer negotiates on a listing it can SEE: one shared into a circle both
+  -- families are in, which is the only way another family's listing reaches a
+  -- buyer in the product. Until 0462 this fixture skipped the share and still
+  -- passed, because the negotiation functions never asked whether the buyer's
+  -- family could see the listing; they now refuse one it cannot (DB-RPC-M01,
+  -- a-listing-is-acted-on-only-by-who-can-see-it-check.sql).
+  insert into public.marketplace_circles (id, name, join_code, created_by_family, created_by)
+    values ('00000000-0000-4000-8000-00000000e6c1', 'Liveness street', 'MKTLVEAB', fs, us);
+  insert into public.marketplace_circle_members (circle_id, family_id, family_name, role) values
+    ('00000000-0000-4000-8000-00000000e6c1', fs, 'Marketplace Seller', 'owner'),
+    ('00000000-0000-4000-8000-00000000e6c1', fb, 'Marketplace Buyer', 'member');
+  insert into public.marketplace_listing_shares (listing_id, circle_id, family_id)
+    values (lst, '00000000-0000-4000-8000-00000000e6c1', fs);
+
   -- ── become the buyer, and prove it took ─────────────────────────────────
   perform set_config('request.jwt.claim.sub', ub::text, true);
   perform set_config('request.jwt.claims', json_build_object('sub', ub::text)::text, true);

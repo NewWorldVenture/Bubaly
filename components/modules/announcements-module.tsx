@@ -124,7 +124,7 @@ export function AnnouncementsModule() {
         <EmptyState
           icon={Megaphone}
           title={t('announcements.noAnnouncementsYet')}
-          description={admin ? 'Post the first family update — everyone will see it here.' : 'Family updates from your parents will appear here.'}
+          description={admin ? t('uiText.postTheFirstFamilyUpdateEveryoneWill') : t('uiText.familyUpdatesFromYourParentsWillAppear')}
         />
       ) : (
         <ul className="space-y-3">
@@ -148,7 +148,7 @@ export function AnnouncementsModule() {
                   </div>
                   {admin && (
                     <div className="flex shrink-0 gap-1">
-                      <button onClick={() => togglePin(a)} title={a.is_pinned ? 'Unpin' : 'Pin'} className="rounded-lg p-1.5 text-muted hover:bg-elevated hover:text-fg">
+                      <button onClick={() => togglePin(a)} title={a.is_pinned ? t('dialogTitle.unpin') : t('dialogTitle.pin')} className="rounded-lg p-1.5 text-muted hover:bg-elevated hover:text-fg">
                         {a.is_pinned ? <PinOff className="h-4 w-4" /> : <Pin className="h-4 w-4" />}
                       </button>
                       <button onClick={() => remove(a.id)} title={t('announcements.delete')} className="rounded-lg p-1.5 text-muted hover:bg-elevated hover:text-danger">

@@ -49,6 +49,7 @@ export function AppLockSettings() {
       if (error) {
         // Say the read failed. Do NOT claim there is no PIN — the lock may well
         // be on, and offering "Set up PIN" here would overwrite a real one.
+        console.error('[app-lock] settings read failed', error);
         setLoadError(describeReadError(error));
         return;
       }
@@ -61,11 +62,23 @@ export function AppLockSettings() {
 
   // Flip an EXISTING config on/off without re-hashing. Turning off keeps the salt +
   // hash so the user can turn it back on with one tap (the seed-and-opt-in model).
+  // A server action REJECTS when the request never completes (offline, a
+  // deploy mid-flight); only a completed one answers { ok }. Without this the
+  // panel stayed on "saving" with every button disabled and no message.
+  async function save(cfg: AppLockConfig) {
+    try {
+      return await saveAppLockConfig(cfg);
+    } catch (error: unknown) {
+      console.error('[app-lock] save did not complete', error);
+      return { ok: false as const, error: t('appLockActions.couldNotSaveAppLockSettings') };
+    }
+  }
+
   async function setEnabled(value: boolean) {
     if (!config) return;
     const next = { ...config, enabled: value };
     setSaving(true);
-    const res = await saveAppLockConfig(next);
+    const res = await save(next);
     setSaving(false);
     if (!res.ok) { toastError(res.error); return; }
     try {
@@ -74,7 +87,7 @@ export function AppLockSettings() {
       else sessionStorage.removeItem(unlockKey(userId));
     } catch { /* ignore */ }
     setConfig(next);
-    success(value ? 'App Lock is on' : 'App Lock turned off');
+    success(value ? t('appLockSettings.appLockIsOn') : t('appLockSettings.appLockTurnedOff'));
   }
 
   // Re-lock immediately on this device: drop the session unlock flag and reload so
@@ -89,15 +102,25 @@ export function AppLockSettings() {
     // Setting up for the first time turns the lock on; changing an existing PIN
     // keeps its current on/off state (don't silently enable a lock that was off).
     const nextEnabled = hasPin ? enabled : true;
-    const cfg = { ...(await buildAppLockConfig(pin)), enabled: nextEnabled };
-    const res = await saveAppLockConfig(cfg);
+    let cfg: AppLockConfig;
+    try {
+      // Web Crypto is absent on an insecure origin, and a throw here used to
+      // leave the modal on "saving" for good.
+      cfg = { ...(await buildAppLockConfig(pin)), enabled: nextEnabled };
+    } catch (error: unknown) {
+      console.error('[app-lock] PIN could not be hashed', error);
+      setSaving(false);
+      toastError(t('appLockActions.couldNotSaveAppLockSettings'));
+      return;
+    }
+    const res = await save(cfg);
     setSaving(false);
     if (!res.ok) { toastError(res.error); return; }
     // This device is already authenticated — count it as unlocked for this session.
     try { if (nextEnabled) sessionStorage.setItem(unlockKey(userId), '1'); } catch { /* ignore */ }
     setConfig(cfg);
     setModalOpen(false);
-    success(nextEnabled ? 'App Lock is on' : 'PIN updated');
+    success(nextEnabled ? t('appLockSettings.appLockIsOn') : t('appLockSettings.pinUpdated'));
   }
 
   return (
@@ -112,7 +135,7 @@ export function AppLockSettings() {
             <p className="mt-0.5 max-w-md text-xs text-muted">{t('appLockSettings.requireA4DigitPin')}</p>
             {enabled ? (
               <p className="mt-2 inline-flex items-center gap-1 text-xs font-medium text-emerald-400">
-                <ShieldCheck className="h-3.5 w-3.5" /> On
+                <ShieldCheck className="h-3.5 w-3.5" /> {t('appLockSettings.on')}
               </p>
             ) : hasPin ? (
               <p className="mt-2 inline-flex items-center gap-1 text-xs font-medium text-muted">
@@ -123,7 +146,9 @@ export function AppLockSettings() {
         </div>
         <div className="flex shrink-0 flex-col items-end gap-2">
           {loadError ? (
-            <span className="max-w-[16rem] text-right text-xs text-danger">{loadError}</span>
+            // The family reads what happened in their language; the raw error
+            // ("TypeError: Failed to fetch") stays on hover and in the log.
+            <span role="alert" title={loadError} className="max-w-[16rem] text-right text-xs text-danger">{t('appLockSettings.couldNotLoad')}</span>
           ) : config === undefined ? (
             <span className="text-xs text-muted">…</span>
           ) : enabled ? (
@@ -148,7 +173,7 @@ export function AppLockSettings() {
           onClose={() => setModalOpen(false)}
           onConfirm={onSet}
           saving={saving}
-          confirmLabel={hasPin && !enabled ? 'Save PIN' : 'Turn on'}
+          confirmLabel={hasPin && !enabled ? t('appLockSettings.savePin') : t('appLockSettings.turnOn')}
         />
       )}
     </div>
@@ -163,16 +188,16 @@ function SetPinModal({ onClose, onConfirm, saving, confirmLabel }: { onClose: ()
   const [err, setErr] = useState<string | null>(null);
 
   function next(pin: string) {
-    if (!isValidPin(pin)) { setErr('Enter exactly 4 digits'); return; }
+    if (!isValidPin(pin)) { setErr(t('appLockSettings.enterExactly4Digits')); return; }
     if (step === 'enter') { setFirst(pin); setVal(''); setErr(null); setStep('confirm'); return; }
-    if (pin !== first) { setErr('PINs didn’t match — try again'); setVal(''); setStep('enter'); return; }
+    if (pin !== first) { setErr(t('appLockSettings.pinsDidNotMatch')); setVal(''); setStep('enter'); return; }
     onConfirm(pin);
   }
 
   return (
-    <Modal open title={step === 'enter' ? 'Set a 4-digit PIN' : 'Confirm your PIN'} onClose={onClose}>
+    <Modal open title={step === 'enter' ? t('appLockSettings.setA4DigitPin') : t('appLockSettings.confirmYourPin')} onClose={onClose}>
       <div className="flex flex-col items-center gap-5 py-2">
-        <p className="text-sm text-muted">{step === 'enter' ? 'Choose a PIN to lock the app.' : 'Enter it again to confirm.'}</p>
+        <p className="text-sm text-muted">{step === 'enter' ? t('appLockSettings.chooseAPinToLock') : t('appLockSettings.enterItAgainToConfirm')}</p>
         <input
           autoFocus inputMode="numeric" pattern="\d*" maxLength={4} value={val}
           onChange={(e) => { const v = e.target.value.replace(/\D/g, '').slice(0, 4); setVal(v); setErr(null); if (v.length === 4) next(v); }}
@@ -183,7 +208,7 @@ function SetPinModal({ onClose, onConfirm, saving, confirmLabel }: { onClose: ()
         <div className="flex w-full justify-end gap-2">
           <Button type="button" variant="outline" size="sm" onClick={onClose}>{t('appLockSettings.cancel')}</Button>
           <Button type="button" size="sm" loading={saving} disabled={saving || val.length !== 4} onClick={() => next(val)}>
-            {step === 'enter' ? 'Next' : confirmLabel}
+            {step === 'enter' ? t('appLockSettings.next') : confirmLabel}
           </Button>
         </div>
       </div>

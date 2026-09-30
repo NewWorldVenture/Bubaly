@@ -344,7 +344,7 @@ function RoutineEditor({ familyId, userId, members, template, initialItems, onCl
   }
 
   return (
-    <Modal open title={template ? 'Edit routine' : 'New routine'} onClose={onClose}>
+    <Modal open title={template ? tr('dialogTitle.editRoutine') : tr('dialogTitle.newRoutine')} onClose={onClose}>
       <div className="space-y-4">
         <Field label={tr('routines.name')}>
           {(id) => <Input id={id} value={name} onChange={(e) => setName(e.target.value)} placeholder={tr('routines.schoolMorning')} autoFocus />}

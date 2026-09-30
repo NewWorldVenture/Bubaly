@@ -22,7 +22,7 @@ import { Input, Field, Textarea } from '@/components/ui/input';
 import { SkeletonList, EmptyState, ErrorState } from '@/components/ui/states';
 import { fmtRelative } from '@/lib/utils/format';
 import { cn } from '@/lib/utils/cn';
-import { openOnKey, stopAnd } from '@/lib/ui/a11y';
+import { stopAnd } from '@/lib/ui/a11y';
 import { formatInsightsForNote, type NotesInsights } from '@/lib/notes/ai';
 import type { Tables } from '@/lib/database.types';
 import { useTranslations } from '@/components/i18n/locale-provider';
@@ -321,8 +321,11 @@ function NoteGroup({ notes, view, onOpen, onTogglePin, onDelete, onDuplicate }: 
         const checkCount = checklist ? note.body!.split('\n').filter((l) => /^\[x\]/i.test(l.trim())).length : 0;
         const totalCheck = checklist ? note.body!.split('\n').filter((l) => /^\[[ x]\]/i.test(l.trim())).length : 0;
         return (
-          <div key={note.id} role="button" tabIndex={0} onClick={() => onOpen(note)}
-            onKeyDown={(e) => openOnKey(e, () => onOpen(note))}
+          // No role, tabIndex or key handler on the card: the button inside is
+          // the keyboard control, as the comment below says. A merge had kept
+          // both, so the card announced itself as one button and told assistive
+          // technology to ignore the pin and delete buttons inside it (P-39).
+          <div key={note.id} role="presentation" onClick={() => onOpen(note)}
             className={cn(
               'group relative flex min-h-[140px] cursor-pointer flex-col rounded-2xl border-2 p-4 transition hover:-translate-y-0.5 focus-ring',
               color.bg, color.ring,
@@ -445,7 +448,7 @@ function NoteModal({ note, onClose, onSaved }: {
   const currentColor = NOTE_COLORS.find((c) => c.id === selectedColor) ?? NOTE_COLORS[0];
 
   return (
-    <Modal open onClose={onClose} title={note ? 'Edit Note' : 'New Note'}>
+    <Modal open onClose={onClose} title={note ? t('dialogTitle.editNote') : t('dialogTitle.newNote')}>
       <form onSubmit={onSubmit} className="space-y-4">
         {/* Color picker */}
         <div className="flex items-center gap-2">

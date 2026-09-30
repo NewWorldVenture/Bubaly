@@ -9,7 +9,7 @@ import { useEffect, useState } from 'react';
 import { createClient } from '@/lib/supabase/client';
 import { settleAll } from '@/lib/supabase/settle';
 import { useApp } from '@/components/app/app-context';
-import { computeTrustScore, TRUST_BAND_LABELS, type TrustScore } from '@/lib/marketplace/trust';
+import { computeTrustScore, TRUST_BAND_LABEL_KEYS, type TrustScore } from '@/lib/marketplace/trust';
 import { useTranslations } from '@/components/i18n/locale-provider';
 
 export function SidebarTrustScore() {
@@ -18,6 +18,9 @@ export function SidebarTrustScore() {
   const selfId = selfMember?.id ?? null;
   const [trust, setTrust] = useState<TrustScore | null>(null);
   const [listed, setListed] = useState(0);
+  // A failed read is said, not scored: a zero baseline is a real-looking
+  // number the family would take as their standing.
+  const [failed, setFailed] = useState(false);
 
   useEffect(() => {
     if (!selfId) return;
@@ -31,6 +34,12 @@ export function SidebarTrustScore() {
           sb.from('marketplace_listings').select('id', { count: 'exact', head: true }).eq('family_id', familyId).eq('member_id', selfId),
         ]);
         if (!active) return;
+        if (reviews.error || orders.error || listings.error) {
+          console.error('[marketplace] trust score read failed', reviews.error ?? orders.error ?? listings.error);
+          setFailed(true);
+          return;
+        }
+        setFailed(false);
         const ratings = (reviews.data ?? []).map((r) => r.rating as number);
         const completed = (orders.data ?? []).filter(
           (o) => o.status === 'completed' && (o.buyer_member === selfId || o.seller_member === selfId),
@@ -38,13 +47,22 @@ export function SidebarTrustScore() {
         const count = listings.count ?? 0;
         setListed(count);
         setTrust(computeTrustScore({ ratingsReceived: ratings, ordersCompleted: completed, listingsPosted: count }));
-      } catch {
-        if (active) setTrust(computeTrustScore({ ratingsReceived: [], ordersCompleted: 0, listingsPosted: 0 }));
+      } catch (error) {
+        console.error('[marketplace] trust score read threw', error);
+        if (active) setFailed(true);
       }
     })();
     return () => { active = false; };
   }, [familyId, selfId]);
 
+  if (failed) {
+    return (
+      <div className="rounded-xl border border-border bg-surface/60 p-3">
+        <p className="text-xs font-semibold">{tr('sidebarTrustScore.yourTrustScore')}</p>
+        <p role="status" className="mt-1.5 text-[11px] text-muted">{tr('sidebarTrustScore.couldNotLoad')}</p>
+      </div>
+    );
+  }
   const t = trust ?? computeTrustScore({ ratingsReceived: [], ordersCompleted: 0, listingsPosted: 0 });
 
   return (
@@ -55,7 +73,7 @@ export function SidebarTrustScore() {
           {t.stars.toFixed(1)}
         </span>
         <div className="min-w-0">
-          <p className="truncate text-sm font-semibold">{TRUST_BAND_LABELS[t.band]}</p>
+          <p className="truncate text-sm font-semibold">{tr(TRUST_BAND_LABEL_KEYS[t.band])}</p>
           <p className="text-[10px] text-muted">{t.score}/100</p>
         </div>
       </div>
@@ -63,7 +81,9 @@ export function SidebarTrustScore() {
         <div className="h-full rounded-full bg-brand transition-all" style={{ width: `${t.score}%` }} />
       </div>
       <p className="mt-1.5 text-[10px] text-muted">
-        {listed > 0 ? `${listed} item${listed === 1 ? '' : 's'} listed` : 'List an item to start building trust'}
+        {listed === 1 ? tr('sidebarTrustScore.oneItemListed')
+          : listed > 1 ? tr('sidebarTrustScore.itemsListed', { count: listed })
+          : tr('sidebarTrustScore.listAnItem')}
       </p>
     </div>
   );

@@ -124,7 +124,7 @@ export function DevicesModule() {
       ))}
 
       {form && (
-        <Modal open onClose={() => setForm(null)} title={form.id ? 'Edit device' : 'Add device'}>
+        <Modal open onClose={() => setForm(null)} title={form.id ? tr('dialogTitle.editDevice') : tr('dialogTitle.addDevice')}>
           <form onSubmit={save} className="space-y-3">
             <Field label={tr('devices.name')}>{(id) => <Input id={id} value={form.name} onChange={(e) => setForm({ ...form, name: e.target.value })} placeholder={tr('devices.livingRoomLamp')} />}</Field>
             <div className="grid grid-cols-2 gap-3">

@@ -1,4 +1,4 @@
-import { ROLE_LABELS, ROLE_ORDER, type MemberRole } from '@/lib/constants/roles';
+import { ROLE_LABEL_KEYS, ROLE_ORDER, type MemberRole } from '@/lib/constants/roles';
 import { getTranslations } from '@/lib/i18n/server';
 
 const COLORS: Record<MemberRole, string> = {
@@ -40,7 +40,7 @@ export async function RoleDonut({ counts, total }: { counts: Map<MemberRole, num
           return (
             <li key={role} className="flex items-center gap-2">
               <span className="h-2.5 w-2.5 shrink-0 rounded-full" style={{ background: COLORS[role] }} />
-              <span className="flex-1 truncate text-muted">{ROLE_LABELS[role].split(' / ')[0]}</span>
+              <span className="flex-1 truncate text-muted">{t(ROLE_LABEL_KEYS[role]).split(' / ')[0]}</span>
               <span className="font-medium">{count.toLocaleString()} ({pct}%)</span>
             </li>
           );

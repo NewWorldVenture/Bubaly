@@ -18,7 +18,7 @@ import { NegotiationPanel, type Thread } from '@/components/marketplace/negotiat
 import { priceDropBadge, isAtLowest, historyLine, type PriceChange } from '@/lib/marketplace/price-history';
 import { ReportButton } from '@/components/marketplace/report-button';
 import { priceBand, assessPrice, dealLabel, bandSummary, type Comp } from '@/lib/marketplace/price-coach';
-import { computeTrustScore, ratingSummary, TRUST_BAND_LABELS } from '@/lib/marketplace/trust';
+import { computeTrustScore, ratingSummary, TRUST_BAND_LABEL_KEYS } from '@/lib/marketplace/trust';
 import {
   KIND_LABELS, CATEGORY_LABELS, CONDITION_LABELS, priceLabel, formatCents,
   type ListingKind, type ListingCategory, type RentPeriod,
@@ -337,7 +337,7 @@ export default async function ListingDetailPage({ params }: { params: Promise<{ 
                 <div className="inline-flex items-center gap-1 text-sm font-semibold text-fg">
                   <ShieldCheck className="h-4 w-4 text-emerald-500" /> {trust.score}
                 </div>
-                <div className="text-[11px] text-muted">{TRUST_BAND_LABELS[trust.band]}</div>
+                <div className="text-[11px] text-muted">{t(TRUST_BAND_LABEL_KEYS[trust.band])}</div>
               </div>
             </div>
             <div className="mt-2 flex items-center gap-3 text-xs text-muted">

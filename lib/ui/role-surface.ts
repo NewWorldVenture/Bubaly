@@ -22,7 +22,9 @@ export interface RoleSurface {
 const SURFACES: Record<MemberRole, RoleSurface> = {
   parent:    { density: 'comfortable', tone: 'formal', canManage: true,  focusMax: 6 },
   adult:     { density: 'comfortable', tone: 'casual', canManage: true,  focusMax: 6 },
-  caregiver: { density: 'comfortable', tone: 'casual', canManage: true,  focusMax: 5 },
+  // A caregiver sees only the areas assigned to them and is not a manager
+  // (isManager, can_manage_family), so no management affordances either.
+  caregiver: { density: 'comfortable', tone: 'casual', canManage: false, focusMax: 5 },
   teen:      { density: 'cozy',        tone: 'casual', canManage: false, focusMax: 5 },
   child:     { density: 'playful',     tone: 'kid',    canManage: false, focusMax: 4 },
   guest:     { density: 'cozy',        tone: 'casual', canManage: false, focusMax: 4 },
@@ -30,7 +32,10 @@ const SURFACES: Record<MemberRole, RoleSurface> = {
 
 /** The surface config for a role (falls back to `adult` for unknown roles). */
 export function roleSurface(role: MemberRole | null | undefined): RoleSurface {
-  return (role && SURFACES[role]) || SURFACES.adult;
+  const known = role ? SURFACES[role] : undefined;
+  // An unknown role borrows the adult's layout, never its management
+  // affordances: those follow isManager, which answers false for it.
+  return known ?? { ...SURFACES.adult, canManage: false };
 }
 
 /** Personalized greeting line, tone-matched to the reader's role + time of day. */

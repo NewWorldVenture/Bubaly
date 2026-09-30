@@ -44,6 +44,7 @@ export function TrialPaywallGate({ trialEndsAt }: { trialEndsAt?: string | null 
       });
       const json = await res.json().catch(() => ({}));
       if (res.ok && json.url) { window.location.href = json.url as string; return; }
+      if (res.status === 409 && typeof json.review === 'string' && json.review.startsWith('/')) { window.location.href = json.review; return; }
       toastError(json.error || t('trialPaywallGate.couldNotStartCheckoutPlease'));
     } catch {
       toastError(t('trialPaywallGate.couldNotStartCheckoutPlease'));

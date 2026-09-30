@@ -8,7 +8,7 @@ import { useToast } from '@/components/ui/toast';
 import { Modal } from '@/components/ui/modal';
 import { Input, Field, Select } from '@/components/ui/input';
 import { Button } from '@/components/ui/button';
-import { ROLE_LABELS } from '@/lib/constants/roles';
+import { ROLE_LABEL_KEYS, ROLE_ORDER } from '@/lib/constants/roles';
 import { adminRemoveMemberAction, adminUpdateMemberAction } from '@/app/(app)/admin/actions';
 import type { MemberRole } from '@/lib/database.types';
 import { useTranslations } from '@/components/i18n/locale-provider';
@@ -79,7 +79,7 @@ export function MemberRowActions({ memberId, displayName, role }: { memberId: st
             <Field label={t('memberRowActions.role')}>
               {(id) => (
                 <Select id={id} name="role" defaultValue={role}>
-                  {(Object.keys(ROLE_LABELS) as MemberRole[]).map((r) => <option key={r} value={r}>{ROLE_LABELS[r]}</option>)}
+                  {ROLE_ORDER.map((r) => <option key={r} value={r}>{t(ROLE_LABEL_KEYS[r])}</option>)}
                 </Select>
               )}
             </Field>

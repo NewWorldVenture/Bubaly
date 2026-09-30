@@ -374,7 +374,7 @@ function ProfileForm({ familyId, userId, members, profile, defaultMember, onClos
   }
 
   return (
-    <Modal open title={profile ? 'Edit job search' : 'Start a job search'} description={tr('careerModule.oneSearchPerGoalA')} onClose={onClose}>
+    <Modal open title={profile ? tr('dialogTitle.editJobSearch') : tr('dialogTitle.startAJobSearch')} description={tr('careerModule.oneSearchPerGoalA')} onClose={onClose}>
       <form onSubmit={onSubmit} className="space-y-4">
         <div className="grid grid-cols-2 gap-3">
           <Field label="Who" required>{(id) => <Select id={id} name="member_id" defaultValue={profile?.member_id ?? defaultMember ?? ''} disabled={!!profile}>{!profile && <option value="">Choose…</option>}{members.map((m) => <option key={m.id} value={m.id}>{m.display_name}</option>)}</Select>}</Field>
@@ -440,7 +440,7 @@ function ApplicationForm({ familyId, userId, profile, resumes, application, onCl
   }
 
   return (
-    <Modal open title={application ? 'Edit application' : 'Add an application'} onClose={onClose}>
+    <Modal open title={application ? tr('dialogTitle.editApplication') : tr('dialogTitle.addAnApplication')} onClose={onClose}>
       <form onSubmit={onSubmit} className="space-y-4">
         <div className="grid grid-cols-2 gap-3">
           <Field label={tr('career.company')} required>{(id) => <Input id={id} name="company" defaultValue={application?.company ?? ''} autoFocus />}</Field>
@@ -517,7 +517,7 @@ function ResumeForm({ familyId, userId, profile, resume, isFirst, onClose, onSav
   }
 
   return (
-    <Modal open title={resume ? 'Edit resume version' : 'New resume version'} description={tr('careerModule.oneVersionPerTargetRole')} onClose={onClose} className="max-w-3xl">
+    <Modal open title={resume ? tr('dialogTitle.editResumeVersion') : tr('dialogTitle.newResumeVersion')} description={tr('careerModule.oneVersionPerTargetRole')} onClose={onClose} className="max-w-3xl">
       <form onSubmit={onSubmit} className="space-y-4">
         <div className="grid grid-cols-2 gap-3">
           <Field label={tr('career.versionName')} required>{(id) => <Input id={id} name="title" defaultValue={resume?.title ?? ''} placeholder={tr('career.opsManagerLogistics')} autoFocus />}</Field>

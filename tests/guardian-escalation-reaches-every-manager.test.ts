@@ -124,3 +124,40 @@ describe('an emergency escalation reaches every manager, not just the parent', (
     expect(notified()).toEqual(['m-parent']);
   });
 });
+
+describe('a failed phone lookup is retried, not recorded as nobody to call (CALLBACK-71A417C2F077)', () => {
+  it('sends nothing, leaves the claim retryable, and alerts once on the retry', async () => {
+    const real = db;
+    let failProfiles = true;
+    state.db = new Proxy(real, {
+      get(target, prop, receiver) {
+        if (prop !== 'from') return Reflect.get(target, prop, receiver);
+        return (table: string) => {
+          if (table === 'profiles' && failProfiles) {
+            const failing = { select: () => failing, in: async () => ({ data: null, error: { message: 'private read failure', code: '08006' } }) };
+            return failing;
+          }
+          return target.from(table as never);
+        };
+      },
+    });
+
+    const commId = '00000000-0000-4000-8000-000000000a05';
+    const first = await escalate('critical', commId);
+    expect(first.status).toBe(500);
+    expect(twilio.sms).toEqual([]);
+    expect(twilio.calls).toEqual([]);
+    expect(real.table('notifications')).toEqual([]);
+    expect(real.table('guardian_escalations')).toEqual([]);
+    expect((real.table('guardian_callback_events') as { status: string }[]).map((r) => r.status)).toEqual(['error']);
+
+    failProfiles = false;
+    // An errored claim is reclaimed once it is stale (lib/guardian/callbacks.ts).
+    for (const row of real.table('guardian_callback_events') as { received_at?: string }[]) row.received_at = '2000-01-01T00:00:00.000Z';
+    const retry = await escalate('critical', commId);
+    expect(retry.status).toBe(200);
+    expect(twilio.sms.sort()).toEqual([phoneOf('u-parent'), phoneOf('u-adult')].sort());
+    expect(real.table('notifications')).toHaveLength(1);
+    expect(notified()).toEqual(['m-adult', 'm-parent']);
+  });
+});

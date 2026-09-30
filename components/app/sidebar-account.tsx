@@ -8,7 +8,7 @@ import Link from 'next/link';
 import { Avatar } from '@/components/ui/avatar';
 import { useApp } from './app-context';
 import { ThemeSwitch } from './theme-switch';
-import { ROLE_LABELS } from '@/lib/constants/roles';
+import { roleLabel } from '@/lib/constants/roles';
 import { tierLabelForLevel } from '@/lib/constants/plans';
 import { useTranslations } from '@/components/i18n/locale-provider';
 
@@ -19,7 +19,7 @@ export function SidebarAccount() {
   const name = selfMember?.display_name ?? userEmail?.split('@')[0] ?? 'You';
   const roleLine = isSuperAdmin
     ? 'Super Administrator'
-    : `${ROLE_LABELS[role]} · ${tierLabelForLevel(planLevel)}`;
+    : `${roleLabel(t, role)} · ${tierLabelForLevel(planLevel)}`;
 
   return (
     <div className="space-y-3">

@@ -392,7 +392,7 @@ export function MarketplaceModule({
       )}
 
       {/* Post / edit listing */}
-      <Modal open={modalOpen} onClose={closeModal} title={form.id ? 'Edit listing' : 'Post a listing'}>
+      <Modal open={modalOpen} onClose={closeModal} title={form.id ? t('dialogTitle.editListing') : t('dialogTitle.postAListing')}>
         <form onSubmit={save} className="space-y-4">
           <Field label={t('marketplace.whatIsIt')} required>
             {(id) => <Input id={id} value={form.title} onChange={(e) => setForm((f) => ({ ...f, title: e.target.value }))} placeholder={t('marketplaceModule.eGKidsBalanceBike')} autoFocus />}

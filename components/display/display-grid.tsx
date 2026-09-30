@@ -753,7 +753,7 @@ function OwnedDisplayShell({ initialTiles, initialSettings, data, familyId, user
             <WeatherChip />
             <AmbientClock clock24={settings.clock24} seconds={settings.seconds} timezone={timezone} />
             <div className="flex items-center gap-1.5">
-              <button onClick={toggleFullscreen} title={isFull ? 'Exit fullscreen' : 'Fullscreen'}
+              <button onClick={toggleFullscreen} title={isFull ? tr('dialogTitle.exitFullscreen') : tr('dialogTitle.fullscreen')}
                 className="grid h-10 w-10 place-items-center rounded-full bg-white/10 text-white/80 transition hover:bg-white/20">
                 {isFull ? <Minimize2 className="h-4 w-4" /> : <Maximize2 className="h-4 w-4" />}
               </button>

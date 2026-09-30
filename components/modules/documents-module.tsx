@@ -469,7 +469,7 @@ export function DocumentsModule() {
                         <td className="py-3 pr-4 text-xs text-muted tabular-nums">{fmtSize(doc.size_bytes)}</td>
                         <td className="py-3">
                           <div className="flex items-center justify-end gap-1">
-                            <button onClick={() => toggleFavorite(doc)} aria-label={isFav(doc) ? 'Unstar' : 'Star'} className="grid h-7 w-7 place-items-center rounded-lg text-muted/60 hover:bg-elevated">
+                            <button onClick={() => toggleFavorite(doc)} aria-label={isFav(doc) ? tr('uiText.unstar') : tr('uiText.star')} className="grid h-7 w-7 place-items-center rounded-lg text-muted/60 hover:bg-elevated">
                               <Star className={cn('h-4 w-4', isFav(doc) && 'fill-amber-400 text-amber-400')} />
                             </button>
                             <div className="relative">
@@ -501,7 +501,7 @@ export function DocumentsModule() {
                 const meta = fileMeta(doc.title, doc.mime_type);
                 return (
                   <div key={doc.id} className="group relative rounded-2xl border border-border bg-surface/20 p-4">
-                    <button onClick={() => toggleFavorite(doc)} aria-label={isFav(doc) ? 'Unstar' : 'Star'} className="absolute right-2 top-2 grid h-7 w-7 place-items-center rounded-lg text-muted/60 hover:bg-elevated">
+                    <button onClick={() => toggleFavorite(doc)} aria-label={isFav(doc) ? tr('uiText.unstar') : tr('uiText.star')} className="absolute right-2 top-2 grid h-7 w-7 place-items-center rounded-lg text-muted/60 hover:bg-elevated">
                       <Star className={cn('h-4 w-4', isFav(doc) && 'fill-amber-400 text-amber-400')} />
                     </button>
                     <span className={cn('grid h-12 w-12 place-items-center rounded-xl', meta.tint)}><meta.Icon className={cn('h-6 w-6', meta.color)} /></span>
@@ -642,7 +642,7 @@ export function DocumentsModule() {
       <input ref={scanInputRef} type="file" accept="image/*" capture="environment" className="hidden" onChange={(e) => pickFile(e.target.files?.[0] ?? null)} />
 
       {/* Upload modal */}
-      <Modal open={open} title={form.category === '' ? 'New Folder' : 'Upload File'} onClose={() => { setOpen(false); setFile(null); }}>
+      <Modal open={open} title={form.category === '' ? tr('documents.newFolder') : tr('documents.uploadFile')} onClose={() => { setOpen(false); setFile(null); }}>
         <div className="space-y-4">
           <input ref={fileInputRef} type="file" className="hidden" onChange={(e) => { const f = e.target.files?.[0] ?? null; setFile(f); if (f && !form.title) setForm((prev) => ({ ...prev, title: f.name })); }} />
           {/* The only way to choose a file: the real <input> is `hidden`, so without
@@ -681,7 +681,7 @@ export function DocumentsModule() {
             </Select>
           )}</Field>
           <Field label={tr('documents.expiresOptional')} hint={tr('documentsModule.forPassportsInsuranceRegistrationsBubaly')}>{(id) => <Input id={id} type="date" value={form.expires_at} onChange={(e) => setForm((f) => ({ ...f, expires_at: e.target.value }))} />}</Field>
-          <Button onClick={save} disabled={saving || !form.title || !file} loading={saving} className="w-full">{saving ? 'Uploading…' : 'Upload File'}</Button>
+          <Button onClick={save} disabled={saving || !form.title || !file} loading={saving} className="w-full">{saving ? tr('filesHubModule.uploading') : tr('documents.uploadFile')}</Button>
         </div>
       </Modal>
 

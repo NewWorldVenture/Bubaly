@@ -108,7 +108,7 @@ export function WarrantiesClient({ warranties, assets }: { warranties: Warranty[
         </div>
       )}
 
-      <Modal open={open} onClose={() => setOpen(false)} title={editing ? 'Edit warranty' : 'Add warranty'}>
+      <Modal open={open} onClose={() => setOpen(false)} title={editing ? tr('dialogTitle.editWarranty') : tr('dialogTitle.addWarranty')}>
         <form action={submit} className="space-y-3">
           {editing && <input type="hidden" name="id" value={editing.id} />}
           <Field label={t('warrantiesClient.name')}><Input name="name" required defaultValue={editing?.name ?? ''} placeholder={t('warrantiesClient.lgFridgeExtendedWarranty')} /></Field>

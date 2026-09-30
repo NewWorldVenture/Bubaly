@@ -7,7 +7,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { getTranslations } from '@/lib/i18n/server';
 import type Stripe from 'stripe';
-import { getStripe } from '@/lib/stripe';
+import { constructWebhookEvent } from '@/lib/stripe';
 import { createServiceClient } from '@/lib/supabase/server';
 import {
   recordEvent, markEventProcessed, markEventError,
@@ -58,7 +58,11 @@ export async function POST(req: NextRequest) {
 
   let event: Stripe.Event;
   try {
-    event = getStripe().webhooks.constructEvent(body, sig, secret);
+    // Verification needs only the signing secret. getStripe() threw when
+    // STRIPE_SECRET_KEY was unset, and this catch then answered a bad
+    // signature: a missing API key read as forged traffic. The handlers that
+    // do need the key now fail as themselves (500, logged, retried).
+    event = constructWebhookEvent(body, sig, secret);
   } catch {
     return NextResponse.json({ error: t('money.webhookSignatureInvalid') }, { status: 400 });
   }

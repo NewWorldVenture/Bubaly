@@ -481,8 +481,21 @@ begin
     select string_agg(tgname, ', ' order by tgname) into trigger_names
       from pg_trigger
      where tgrelid = 'public.chores'::regclass and not tgisinternal;
-    if trigger_names is distinct from 'trg_chore_price_guard, trg_set_updated_at' then
-      raise warning 'ATTRIBUTION FAILED: public.chores carries the trigger(s) [%], not exactly trg_chore_price_guard and trg_set_updated_at, so a refusal above may not be 0307''s', coalesce(trigger_names, '(none)');
+    -- 0464 adds trg_chores_not_a_guests. It cannot be what refused above: its
+    -- one raise is keyed on the caller's role in the row's family being
+    -- 'guest', and every caller this probe measures is a child, a teen or a
+    -- parent. Its body is held to exactly that below, so a widened copy would
+    -- fail here rather than take 0307's credit.
+    if trigger_names is distinct from 'trg_chore_price_guard, trg_chores_not_a_guests, trg_set_updated_at' then
+      raise warning 'ATTRIBUTION FAILED: public.chores carries the trigger(s) [%], not exactly trg_chore_price_guard, trg_chores_not_a_guests and trg_set_updated_at, so a refusal above may not be 0307''s', coalesce(trigger_names, '(none)');
+      failures := failures + 1;
+    end if;
+    if exists (select 1 from pg_proc p
+                where p.oid = 'public.household_write_is_not_a_guests()'::regprocedure
+                  and ((select count(*) from regexp_matches(p.prosrc, 'raise exception', 'gi')) <> 1
+                       or p.prosrc !~ 'family_role\(old\.family_id\) = ''guest'''
+                       or p.prosrc !~ 'family_role\(new\.family_id\) = ''guest''')) then
+      raise warning 'ATTRIBUTION FAILED: household_write_is_not_a_guests() no longer refuses only a guest, so it could be what refused above';
       failures := failures + 1;
     end if;
     -- tgtype bits: 1 = FOR EACH ROW, 2 = BEFORE, 4 = INSERT, 16 = UPDATE.

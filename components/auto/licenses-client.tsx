@@ -64,7 +64,7 @@ export function LicensesClient({ licenses, members }: { licenses: License[]; mem
         </div>
       )}
 
-      <Modal open={open} onClose={() => setOpen(false)} title={editing ? 'Edit license' : 'Add license'}>
+      <Modal open={open} onClose={() => setOpen(false)} title={editing ? t('dialogTitle.editLicense') : t('dialogTitle.addLicense')}>
         <form action={(fd) => start(async () => { if (await run(() => saveLicenseAction(fd))) setOpen(false); })} className="space-y-3">
           {editing && <input type="hidden" name="id" value={editing.id} />}
           <div className="grid grid-cols-2 gap-3">

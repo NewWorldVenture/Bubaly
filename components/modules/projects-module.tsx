@@ -247,7 +247,7 @@ function ProjectForm({ familyId, userId, members, contractors, project, defaultO
   }
 
   return (
-    <Modal open title={project ? 'Edit project' : 'New project'} description={tr('projectsModule.describeItInASentence')} onClose={onClose}>
+    <Modal open title={project ? tr('dialogTitle.editProject') : tr('dialogTitle.newProject')} description={tr('projectsModule.describeItInASentence')} onClose={onClose}>
       <form onSubmit={onSubmit} className="space-y-4">
         <Field label={tr('projects.project')} required>{(id) => <Input id={id} name="title" value={title} onChange={(e) => setTitle(e.target.value)} placeholder={tr('projects.paintTheKidsRoom')} autoFocus />}</Field>
         <Field label={tr('projects.scopeDescription')}>{(id) => <Textarea id={id} name="description" rows={2} value={description} onChange={(e) => setDescription(e.target.value)} placeholder={tr('projects.twoWallsLightBlueCeilingWhite')} />}</Field>
@@ -528,7 +528,7 @@ function MaterialForm({ familyId, userId, projectId, material, onClose, onSaved 
   }
 
   return (
-    <Modal open title={material ? 'Edit material' : 'Add material'} onClose={onClose}>
+    <Modal open title={material ? tr('dialogTitle.editMaterial') : tr('dialogTitle.addMaterial')} onClose={onClose}>
       <form onSubmit={onSubmit} className="space-y-4">
         <Field label={tr('projects.material')} required>{(id) => <Input id={id} name="name" defaultValue={material?.name ?? ''} placeholder={tr('projects.interiorPaintGallon')} autoFocus />}</Field>
         <div className="grid grid-cols-3 gap-3">
@@ -586,7 +586,7 @@ function QuoteForm({ familyId, userId, projectId, contractors, quote, onClose, o
   }
 
   return (
-    <Modal open title={quote ? 'Edit quote' : 'Log a quote'} description={tr('projectsModule.fromYourContractorBookOr')} onClose={onClose}>
+    <Modal open title={quote ? tr('dialogTitle.editQuote') : tr('dialogTitle.logAQuote')} description={tr('projectsModule.fromYourContractorBookOr')} onClose={onClose}>
       <form onSubmit={onSubmit} className="space-y-4">
         <Field label={tr('projects.fromYourContractorBook')}>{(id) => <Select id={id} name="contractor_id" value={contractorId} onChange={(e) => setContractorId(e.target.value)}><option value="">{tr('projects.someoneNew')}</option>{contractors.map((c) => <option key={c.id} value={c.id}>{c.is_preferred ? '⭐ ' : ''}{c.name}{c.company ? ` · ${c.company}` : ''}{c.trade ? ` (${c.trade})` : ''}</option>)}</Select>}</Field>
         <Field label={tr('projects.contractorName')} required={!chosen}>{(id) => <Input id={id} name="contractor_name" defaultValue={quote?.contractor_name ?? ''} placeholder={chosen?.name ?? 'Bell Plumbing'} />}</Field>

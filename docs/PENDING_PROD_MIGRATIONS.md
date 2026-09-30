@@ -3948,3 +3948,83 @@ declares `family-media` internet-readable.
 **After applying:** open a photo, a message attachment and a reminder image as
 a member (they render through signed URLs) and fetch one stored
 `/storage/v1/object/public/family-media/…` URL with no session (it answers 400).
+
+## `0462` — a family that could not see a listing could still buy it (DB-RPC-M01)
+
+`supabase/migrations/0462_a_listing_is_acted_on_only_by_who_can_see_it.sql`
+
+**Severity: high (another family's listing taken off the market). Deploy
+order: any; no application change is needed.** Every caller already maps the
+refusal (`not_found` → "that listing no longer exists").
+
+A marketplace listing is visible to its own family and to the families in a
+circle it is shared into. The three SECURITY DEFINER functions that act on a
+listing never asked that, and the offers INSERT policy checked only the row's
+own family. Measured on the local stack as a parent of a family in no circle
+the listing was shared with, who could SELECT neither listing, given its id:
+
+```
+marketplace_place_bid(auction, …)        -> {"ok": true, "leading": true}
+marketplace_negotiation_offer(sale, …)   -> {"ok": true, …}
+marketplace_buy_now(auction, …)          -> {"ok": true, "order_id": …}   listing 'claimed'
+insert into marketplace_offers (…)       -> INSERT 1                      listing 'pending'
+```
+
+0462 adds `marketplace_listing_visible_to(listing, family)`, which checks it in
+the three functions. It puts `0311`'s same-family reference guard on
+`marketplace_offers`, because an offer is the in-family flow. It also adds a
+restrictive visibility insert policy on questions, saves and collection items.
+`docs/audit/a-listing-is-acted-on-only-by-who-can-see-it-check.sql` shows 15
+findings before and 0 after, with controls that a circle member still bids,
+negotiates, asks, saves and buys, and the seller's own family still files an
+offer.
+
+**After applying:** as a member of a circle, open a shared auction and place a
+bid, which should succeed. Then check production for orders, negotiations,
+bids and offers whose family could not see the listing when the row was
+written. The rows record no visibility at write time, so this narrows the list
+for a person to review rather than proving anything.
+
+## `0463` — a member could rewrite another member's read receipts and reactions (DB-RPC-M02)
+
+`supabase/migrations/0463_a_read_receipt_is_the_readers_own.sql`
+
+**Severity: medium (chat integrity inside a family). Deploy order: any.** The
+product's writers already change only the caller's own entry.
+
+`0367` left `read_by`, `reactions` and `is_pinned` on `family_messages` open to
+every member, because other members legitimately change them, and never said
+whose entry. Measured as a child: one update removed Dad's read receipt and his
+reaction from Mom's message. 0463 adds a trigger on INSERT and on any UPDATE of
+either column that lets only the caller's own id enter or leave `read_by` or
+any emoji's list, and keeps `reactions` an object of arrays. `is_pinned` and the
+service role are unaffected. `docs/audit/a-read-receipt-is-the-readers-own-check.sql`
+shows 6 findings before and 0 after, with controls that the reader still marks
+read, reacts, unreacts and pins.
+
+**After applying:** open a conversation as one member and react to a message.
+The unread badge clears and the reaction shows for the other members.
+
+## `0464` — an invited guest could rewrite the household (ROLE-M03)
+
+`supabase/migrations/0464_a_guest_views_the_household.sql`
+
+**Severity: high (an extended-family invite could delete the family's calendar,
+chores, documents and more). Deploy order: any.** A guest who tries to write now
+gets "You don't have permission …" (42501) instead of a change.
+
+The invite form, `/family/permissions` and the trust engine all describe the
+`guest` role as view-only, but nothing enforced it. Measured on the local stack
+as an active guest: C R U D on `calendar_events`, `chores`, `documents`,
+`grocery_items`, `meals`, `notes` and `reminders`, and C R on
+`chore_assignments`. 0464 adds a BEFORE INSERT/UPDATE/DELETE guard trigger on
+those eight tables that refuses a caller whose role in the row's family is
+`guest`. Reads, the service role and every other role are unaffected.
+`docs/audit/a-guest-views-the-household-check.sql` requires a guest's measured
+access to equal the page's guest row: 8 findings before, 0 after.
+
+**Related to ROLE-SCOPE-001 (the owner's call on what a guest and a caregiver may see).** 0464 implements only the piece every description agrees on, that a guest does not write. Skip it if the owner decides guests should write.
+
+**After applying:** as a guest, open the calendar and try to add an event. It
+should be refused with the permission message. As a parent, add and delete one,
+which should succeed.

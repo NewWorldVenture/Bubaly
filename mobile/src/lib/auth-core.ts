@@ -8,7 +8,12 @@ export function friendlyAuthError(message: string | null | undefined): string {
   if (m.includes('email not confirmed')) return 'Confirm your email first — check your inbox for the link.';
   if (m.includes('rate limit') || m.includes('too many')) return 'Too many attempts. Wait a minute and try again.';
   if (m.includes('network') || m.includes('fetch')) return 'Can’t reach Bubaly. Check your connection and try again.';
-  return message ?? 'Something went wrong. Please try again.';
+  // Anything else is the auth server's own wording ("Database error querying
+  // schema", "Signups not allowed for otp"): written for whoever runs it, not
+  // for the person signing in. The web forms show their fallback for these too
+  // (describeDbError on a coded error); the text itself goes to the log.
+  console.warn('[auth] unrecognised sign-in error', message);
+  return 'Something went wrong. Please try again.';
 }
 
 export function validateCredentials(email: string, password: string): string | null {
