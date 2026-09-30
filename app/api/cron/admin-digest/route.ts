@@ -8,6 +8,7 @@ import { sendEmail } from '@/lib/server/email';
 import {
   buildAdminDigest, digestSubject, renderAdminDigestHtml, summarizeDigestDelivery, type DigestRow,
 } from '@/lib/admin/digest';
+import { adminDigestEngineEnabled, runAdminDigestEngineForRoute } from '@/lib/admin/digest-engine-route';
 
 export const runtime = 'nodejs';
 export const dynamic = 'force-dynamic';
@@ -24,6 +25,14 @@ export async function GET(req: NextRequest) {
   }
 
   const admin = createServiceClient();
+
+  // The per-recipient delivery engine (one digest per admin per scheduled slot) is OFF unless
+  // ADMIN_DIGEST_DELIVERY_ENGINE=1, and needs migration 0471. docs/admin-digest-route-integration.md.
+  if (adminDigestEngineEnabled()) {
+    const { status, body } = await runAdminDigestEngineForRoute(admin);
+    return NextResponse.json(body, { status });
+  }
+
   const since = new Date(Date.now() - 24 * 60 * 60 * 1000).toISOString();
 
   // The whole 24h window, paged — not `.limit(500)`.
