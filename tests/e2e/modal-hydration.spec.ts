@@ -5,11 +5,11 @@ import * as React from 'react';
 import * as ReactDOM from 'react-dom';
 import { renderToString } from 'react-dom/server';
 import { expect, test } from '@playwright/test';
+import { reactBrowserScripts } from './helpers/react-browser';
 
 // Actual Modal, focus/keyboard/scroll behavior, locale provider and React.
 // Only the document transport is controlled; there is no application server.
-const react = fs.readFileSync(path.join(path.dirname(require.resolve('react/package.json')), 'umd/react.development.js'), 'utf8');
-const reactDom = fs.readFileSync(path.join(path.dirname(require.resolve('react-dom/package.json')), 'umd/react-dom.development.js'), 'utf8');
+const { react, reactDom } = reactBrowserScripts('development');
 const modules: Record<string, { source: string; imports: Record<string, string> }> = {};
 function collect(filename: string): string {
   const file = [filename, `${filename}.ts`, `${filename}.tsx`, path.join(filename, 'index.ts')]

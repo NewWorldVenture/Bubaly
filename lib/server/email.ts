@@ -42,16 +42,50 @@ type SendArgs = {
    * changes the local-part, not the domain.
    */
   from?: string;
+  /**
+   * Optional, caller-supplied idempotency key, sent unchanged as Resend's
+   * `Idempotency-Key` header. A caller that may retry the SAME message passes the
+   * SAME key and the same payload on every attempt, and Resend answers the repeat
+   * with the original result instead of sending again — for 24 hours, and only
+   * while the payload is identical (a different payload under a used key is a 409,
+   * which this helper reports as `{ ok: false }`, not as sent).
+   * https://resend.com/docs/dashboard/emails/idempotency-keys
+   *
+   * This helper never generates a key and never retries. A durable record of what
+   * was sent is still the caller's job; the key alone is not exactly-once.
+   */
+  idempotencyKey?: string;
 };
 
-export async function sendEmail({ to, subject, html, replyTo, from }: SendArgs): Promise<{ ok: boolean; skipped?: boolean }> {
+/**
+ * Resend accepts 1–256 characters. It must also survive as an HTTP header value
+ * UNCHANGED, which rules out control characters (CR/LF would be header
+ * injection), non-ASCII (fetch rejects it) and leading or trailing spaces (fetch
+ * trims them, so the provider would see a different key from the one recorded).
+ */
+const IDEMPOTENCY_KEY = /^[\x21-\x7e](?:[\x20-\x7e]{0,254}[\x21-\x7e])?$/;
+
+function assertIdempotencyKey(key: unknown): asserts key is string {
+  if (typeof key !== 'string' || !IDEMPOTENCY_KEY.test(key)) {
+    throw new TypeError('sendEmail: idempotencyKey must be 1–256 printable ASCII characters, without leading or trailing spaces');
+  }
+}
+
+export async function sendEmail({ to, subject, html, replyTo, from, idempotencyKey }: SendArgs): Promise<{ ok: boolean; skipped?: boolean }> {
+  // Before anything else, so a malformed key is a visible bug in every
+  // environment, and never becomes a provider 400 or a silently changed header.
+  if (idempotencyKey !== undefined) assertIdempotencyKey(idempotencyKey);
   if (!emailEnabled()) {
     console.info(`[email skipped — no RESEND_API_KEY] to=${to} subject="${subject}"`);
     return { ok: true, skipped: true };
   }
   const res = await fetchWithDeadline('https://api.resend.com/emails', {
     method: 'POST',
-    headers: { authorization: `Bearer ${process.env.RESEND_API_KEY}`, 'content-type': 'application/json' },
+    headers: {
+      authorization: `Bearer ${process.env.RESEND_API_KEY}`,
+      'content-type': 'application/json',
+      ...(idempotencyKey !== undefined ? { 'idempotency-key': idempotencyKey } : {}),
+    },
     body: JSON.stringify({ from: from || FROM_EMAIL, to, subject, html, reply_to: replyTo }),
   }, 15_000);
   if (!res.ok) {

@@ -4,6 +4,7 @@ import path from 'node:path';
 import { execFileSync } from 'node:child_process';
 import ts from 'typescript';
 import { expect, test } from '@playwright/test';
+import { reactBrowserScripts } from './helpers/react-browser';
 
 // Actual AccountRow, LocaleProvider, useFormat/createFormat and ToastProvider
 // render on a Node server and hydrate in Chromium. Server actions and native
@@ -132,13 +133,11 @@ for (const { locale, serverZone } of contexts) {
         await page.setContent(`<html><body><div id="root">${serverHtml(locale, serverZone)}</div></body></html>`);
         await expect(page.locator('#summer')).toHaveText(expectedDate(locale, 'UTC', samples.summer));
         await page.evaluate(() => { window.__formatBefore = document.getElementById('root')!.firstElementChild; });
-        for (const [pkg, file] of [
-          ['react', 'umd/react.development.js'], ['react-dom', 'umd/react-dom.development.js'],
-          ['lucide-react', 'dist/umd/lucide-react.min.js'],
-        ]) {
-          await page.addScriptTag({ path: path.join(path.dirname(require.resolve(`${pkg}/package.json`)), file) });
-          if (pkg === 'react') await page.addScriptTag({ content: 'window.react=window.React;' });
-        }
+        const { react, reactDom } = reactBrowserScripts('development');
+        await page.addScriptTag({ content: react });
+        await page.addScriptTag({ content: 'window.react=window.React;' });
+        await page.addScriptTag({ content: reactDom });
+        await page.addScriptTag({ path: path.join(path.dirname(require.resolve('lucide-react/package.json')), 'dist/umd/lucide-react.min.js') });
         await page.addScriptTag({ content: `const React=window.React;
           const external={react:React,'lucide-react':window.LucideReact,
           '@/app/(app)/dashboard/social/actions':{},'@capacitor/core':{},'@capacitor/haptics':{}};

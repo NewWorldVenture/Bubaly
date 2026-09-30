@@ -3,11 +3,11 @@ import path from 'node:path';
 import ts from 'typescript';
 import { expect, test, type Page } from '@playwright/test';
 import type { QueryRefreshConfirmation } from '@/lib/hooks/use-realtime-query';
+import { reactBrowserScripts } from './helpers/react-browser';
 
 // Actual React, query hook and cache invalidation; deterministic asynchronous
 // fetch boundaries isolate commit ordering from provider/network latency.
-const react = fs.readFileSync(path.join(path.dirname(require.resolve('react/package.json')), 'umd/react.development.js'), 'utf8');
-const reactDom = fs.readFileSync(path.join(path.dirname(require.resolve('react-dom/package.json')), 'umd/react-dom.development.js'), 'utf8');
+const { react, reactDom } = reactBrowserScripts('development');
 const sources = Object.fromEntries(['lib/hooks/use-realtime-query.ts', 'lib/offline/cache.ts'].map(file => [
   `@/${file.replace(/\.ts$/, '')}`,
   ts.transpileModule(fs.readFileSync(file, 'utf8'), { compilerOptions: { target: ts.ScriptTarget.ES2020, module: ts.ModuleKind.CommonJS } }).outputText,
