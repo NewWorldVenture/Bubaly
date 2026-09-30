@@ -151,7 +151,7 @@ export function TripOverview({ vacationId }: { vacationId: string }) {
           <ReadinessRing score={readiness.score} />
           <div className="flex-1">
             <h2 className="flex items-center gap-2 text-lg font-semibold"><Gauge className="h-5 w-5 text-brand-text" /> {tr('tripOverview.vacationReadiness')} {lvlLabel}</h2>
-            <p className="text-sm text-muted">{countdownLabel(trip?.start_date)} · {members.length} traveler{members.length === 1 ? '' : 's'}</p>
+            <p className="text-sm text-muted">{countdownLabel(tr, trip?.start_date)} · {tr(members.length === 1 ? 'tripCountdown.travelersOne' : 'tripCountdown.travelersMany', { count: members.length })}</p>
           </div>
         </div>
         <div className="mt-4 grid gap-2 sm:grid-cols-3">

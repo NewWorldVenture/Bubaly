@@ -43,15 +43,24 @@ export function dateRange(start: string, end: string, maxDays = 60): string[] {
   return out;
 }
 
-/** Human countdown label: "in 12 days", "Today", "Started", "5 days ago". */
-export function countdownLabel(startDate: string | null | undefined, today: Date = new Date()): string {
+/**
+ * Human countdown label in the reader's language: "in 12 days", "Today",
+ * "Started yesterday", "5 days ago". It returned English sentences, which the
+ * trip header, the trip list and the overview showed in every locale.
+ * Audit LAYOUT-002.
+ */
+export function countdownLabel(
+  tr: (key: string, params?: Record<string, string | number>) => string,
+  startDate: string | null | undefined,
+  today: Date = new Date(),
+): string {
   const d = daysUntil(startDate, today);
-  if (d === null) return 'No dates yet';
-  if (d > 1) return `in ${d} days`;
-  if (d === 1) return 'Tomorrow';
-  if (d === 0) return 'Today';
-  if (d === -1) return 'Started yesterday';
-  return `${-d} days ago`;
+  if (d === null) return tr('tripCountdown.noDatesYet');
+  if (d > 1) return tr('tripCountdown.inDays', { count: d });
+  if (d === 1) return tr('tripCountdown.tomorrow');
+  if (d === 0) return tr('tripCountdown.today');
+  if (d === -1) return tr('tripCountdown.startedYesterday');
+  return tr('tripCountdown.daysAgo', { count: -d });
 }
 
 /** True when today falls within [start, end] inclusive. */

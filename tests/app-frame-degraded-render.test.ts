@@ -68,10 +68,12 @@ vi.mock('@/lib/server/plan', () => ({
 // Capture what AppFrame hands down, instead of rendering the real shell.
 let captured: Record<string, unknown> | null = null;
 let capturedMembers: unknown = null;
+let capturedRosterFailed: unknown = null;
 vi.mock('@/components/app/app-context', () => ({
-  AppProvider: (props: { value: Record<string, unknown>; initialMembers: unknown; children: unknown }) => {
+  AppProvider: (props: { value: Record<string, unknown>; initialMembers: unknown; rosterReadFailed?: unknown; children: unknown }) => {
     captured = props.value;
     capturedMembers = props.initialMembers;
+    capturedRosterFailed = props.rosterReadFailed;
     return null;
   },
 }));
@@ -86,11 +88,12 @@ async function render(): Promise<void> {
 }
 
 describe('AppFrame survives its reads failing', () => {
-  beforeEach(() => { mode = 'ok'; captured = null; capturedMembers = null; });
+  beforeEach(() => { mode = 'ok'; captured = null; capturedMembers = null; capturedRosterFailed = null; });
 
   it('passes the real values through when everything succeeds', async () => {
     await render();
     expect(captured).toMatchObject({ planLevel: 3, isSuperAdmin: true, unreadMessages: 3 });
+    expect(capturedRosterFailed).toBe(false);
   });
 
   for (const m of ['resolved-error', 'reject'] as const) {
@@ -105,7 +108,25 @@ describe('AppFrame survives its reads failing', () => {
       // And the rest degrade to empty rather than undefined.
       expect(captured!.unreadMessages).toBe(0);
       expect(capturedMembers).toEqual([]);
+      // …but says so, so the provider retries instead of keeping an empty family
+      // (no pickers, no selfMember) for the whole session. LAYOUT-001.
+      expect(capturedRosterFailed).toBe(true);
       expect(captured!.featureTiers).toBeTypeOf('object');
     });
   }
+});
+
+describe('a roster that failed on the server is retried in the browser (LAYOUT-001)', () => {
+  it('the provider refreshes the roster when told the server read failed', async () => {
+    const { readFileSync } = await import('node:fs');
+    const src = readFileSync('components/app/app-context.tsx', 'utf8');
+    expect(src).toMatch(/if \(rosterReadFailed\) void refreshMembers\(\)/);
+  });
+
+  it('every layout that builds its own provider passes the flag', async () => {
+    const { readFileSync } = await import('node:fs');
+    for (const f of ['components/app/app-frame.tsx', 'app/(app)/capture/layout.tsx', 'app/(app)/family/layout.tsx']) {
+      expect(readFileSync(f, 'utf8'), f).toMatch(/rosterReadFailed=\{Boolean\(membersError\)\}/);
+    }
+  });
 });

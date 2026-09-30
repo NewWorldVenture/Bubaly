@@ -16597,5 +16597,13 @@
   "uiText.stopListening": "Stoppen met luisteren",
   "uiText.startListening": "Beginnen met luisteren",
   "uiText.resume": "Hervatten",
-  "adminMarketingContent.pageOfItems": "Pagina {page} van {pages} · {count} items"
+  "adminMarketingContent.pageOfItems": "Pagina {page} van {pages} · {count} items",
+  "tripCountdown.noDatesYet": "Nog geen datums",
+  "tripCountdown.inDays": "over {count} dagen",
+  "tripCountdown.tomorrow": "Morgen",
+  "tripCountdown.today": "Vandaag",
+  "tripCountdown.startedYesterday": "Gisteren begonnen",
+  "tripCountdown.daysAgo": "{count} dagen geleden",
+  "tripCountdown.travelersOne": "{count} reiziger",
+  "tripCountdown.travelersMany": "{count} reizigers"
 }

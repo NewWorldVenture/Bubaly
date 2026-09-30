@@ -9,7 +9,7 @@ export default async function OnboardingLayout({ children }: { children: React.R
   return (
     <ScopedLocaleProvider namespaces="all">
     <div className="flex min-h-dvh flex-col">
-      <header className="flex items-center justify-between px-5 py-5 sm:px-8">
+      <header className="flex items-center justify-between px-5 py-5 pt-[calc(1.25rem+var(--safe-top))] sm:px-8">
         <Logo />
         <ThemeToggle />
       </header>

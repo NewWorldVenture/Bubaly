@@ -140,7 +140,7 @@ export function VacationsList({ openCreate = false }: { openCreate?: boolean }) 
                 <h2 className="mt-1 flex items-center gap-2 text-xl font-bold">{lookup(VACATION_KINDS, current.kind).emoji} {current.title}</h2>
                 <p className="mt-0.5 flex items-center gap-3 text-sm text-muted">
                   {current.destination && <span className="flex items-center gap-1"><MapPin className="h-3.5 w-3.5" /> {current.destination}</span>}
-                  <span className="flex items-center gap-1"><CalendarDays className="h-3.5 w-3.5" /> {countdownLabel(current.start_date)}</span>
+                  <span className="flex items-center gap-1"><CalendarDays className="h-3.5 w-3.5" /> {countdownLabel(tr, current.start_date)}</span>
                 </p>
               </div>
               <ReadinessRing score={latestScore.get(current.id) ?? null} />
@@ -161,7 +161,7 @@ export function VacationsList({ openCreate = false }: { openCreate?: boolean }) 
               <Link key={t.id} href={`/dashboard/vacations/${t.id}/overview`} className="group block rounded-2xl border border-border bg-surface/40 p-4 transition hover:border-brand/40">
                 <div className="flex items-start justify-between gap-2">
                   <span className="text-2xl">{lookup(VACATION_KINDS, t.kind).emoji}</span>
-                  <span className={`rounded-full px-2 py-0.5 text-[10px] font-medium ${(VACATION_STATUSES.find((s) => s.value === t.status))?.tone}`}>{st.label}</span>
+                  <span className={`rounded-full px-2 py-0.5 text-[10px] font-medium ${(VACATION_STATUSES.find((s) => s.value === t.status))?.tone}`}>{tr(`tripStatus.${st.value}`)}</span>
                 </div>
                 <h3 className="mt-2 truncate font-semibold group-hover:text-brand-text">{t.title}</h3>
                 <p className="mt-0.5 truncate text-sm text-muted">{t.destination || lookup(VACATION_KINDS, t.kind).label}</p>
@@ -172,7 +172,7 @@ export function VacationsList({ openCreate = false }: { openCreate?: boolean }) 
                 <div className="mt-2 flex items-center gap-2">
                   <Gauge className="h-3.5 w-3.5 text-muted" />
                   <span className="text-xs text-muted">Readiness {latestScore.get(t.id) ?? '—'}{latestScore.has(t.id) ? '%' : ''}</span>
-                  <span className="ml-auto text-xs font-medium text-brand-text">{countdownLabel(t.start_date)}</span>
+                  <span className="ml-auto text-xs font-medium text-brand-text">{countdownLabel(tr, t.start_date)}</span>
                 </div>
               </Link>
             );

@@ -34,11 +34,12 @@ export default async function CaptureLayout({ children }: { children: React.Reac
     }),
   ]);
 
-  const [{ data: members }, { data: prefs }] = await settleAll([
+  const [{ data: members, error: membersError }, { data: prefs }] = await settleAll([
     supabase.from('family_members').select('*').eq('family_id', ctx.active.familyId).eq('is_active', true).order('created_at'),
     supabase.from('user_preferences').select('default_dashboard').eq('user_id', ctx.user.id).maybeSingle(),
   ]);
 
+  if (membersError) console.error('[layout] member roster read failed; the browser will retry', membersError);
   const defaultDashboard = isDashboardView(prefs?.default_dashboard) ? prefs.default_dashboard : 'personal';
 
   return (
@@ -58,6 +59,7 @@ export default async function CaptureLayout({ children }: { children: React.Reac
         featureTiers,
       }}
       initialMembers={members ?? []}
+      rosterReadFailed={Boolean(membersError)}
     >
       <AppShell>{children}</AppShell>
       <RegisterSW />
