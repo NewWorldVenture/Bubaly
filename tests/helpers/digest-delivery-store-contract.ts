@@ -264,6 +264,14 @@ export function describeDigestDeliveryStoreContract(label: string, make: (clock:
       expect((await store.load(id))!.deliveries.find((d) => d.recipientKey === key)!).toMatchObject({ status: 'unknown', ambiguous: true, providerMessageId: null });
     });
 
+    it('a completion without a mark is refused: a claim that never marked a send owns no provider answer', async () => {
+      const { store, id, key } = await setup();
+      const a = await store.claim(id, key, 'a', CONTRACT_POLICY);
+      if (!a.claimed) throw new Error('setup');
+      expect(await store.complete(id, key, a.row.fence, { kind: 'unknown', reason: 'timeout' }, 3)).toBe('fenced_out');
+      expect((await store.load(id))!.deliveries.find((d) => d.recipientKey === key)!).toMatchObject({ status: 'in_flight', ambiguous: false, firstSendAt: null });
+    });
+
     it('an unknown occurrence or recipient is not found, not created', async () => {
       const { store, id } = await setup();
       expect(await store.claim(id, 'f'.repeat(64), 'a', CONTRACT_POLICY)).toEqual({ claimed: false, reason: 'not_found' });

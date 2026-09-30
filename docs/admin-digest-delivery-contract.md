@@ -2,8 +2,8 @@
 
 Status on 2026-09-30:
 - `lib/admin/digest-delivery.ts` exists, and its tests pass against an in-memory store and a fake provider.
+- **The PostgreSQL store exists, but is not applied to production.** It is migration `0471` plus `lib/admin/digest-delivery-store.ts`, tested on disposable local databases and in CI's replay.
 - **No route uses it.** `/api/cron/admin-digest` still sends the way it did.
-- **Nothing is stored in a database.** No migration exists or is proposed as a file (the proposed schema is §5).
 - Duplicate admin digests are **not** fixed in production.
 
 This document is what the next two pieces must meet: a PostgreSQL store adapter and the route wiring.
@@ -64,7 +64,7 @@ A PostgreSQL `DigestDeliveryStore` must meet all of these. It must also pass `te
    - **One function:** read it through a single function, e.g. `admin_digest_now()`, so the local test harness can pin it for the contract suite.
    - **Never the caller's time:** no timestamp the caller sends is used.
    - **Parameters:** retention, margin, lease, send deadline and max attempts are passed in, not hard-coded. The engine refuses a retention longer than the verified 24 hours.
-4. **The fence is a counter.** `fence` increments on every successful claim.
+4. **The fence is a counter.** `fence` increments on every successful claim. `complete` also requires the claim's mark: a claim that never marked a send owns no provider answer.
    - `beginSend` and `complete` are each one `UPDATE … WHERE status = 'in_flight' AND fence = $fence RETURNING`.
    - Zero rows means `fenced_out`, and nothing is written.
    - Owner equality alone is not enough: the same owner can re-claim after its own lease lapsed.
@@ -104,57 +104,23 @@ The engine takes a `DigestEmailProvider` whose `send` returns one classified out
 
 **Retention.** `RESEND_KEY_RETENTION_MS` is 24 hours, from Resend's documentation re-checked on 2026-09-30. Recommended margin: 1 hour, which must exceed the send deadline plus clock skew. Re-verify before changing provider or value. What Resend does with a key after a refused request is undocumented. The engine never relies on it: a refusal is retried with the same key, and the 24-hour window is anchored on the first send of any kind.
 
-## 5. Proposed schema (proposal only, no migration number)
+## 5. Schema: migration `0471` (reserved by the coordinator on #699)
 
-**No migration will be added** until the coordinator reserves a number. Main ends at `0464`. `0465` and NWV's locale work must be coordinated first. This also cannot reach production before the PROD-DB-0177 migration-ledger remedy.
+`supabase/migrations/0471_an_admin_digest_reaches_each_admin_once.sql` implements §3. Its tables, guard triggers, grants and the five functions (`admin_digest_freeze`, `_load`, `_claim`, `_begin_send`, `_complete`) are the SQL twins of the pure rules. `lib/admin/digest-delivery-store.ts` is the adapter.
 
-```sql
-create table public.admin_digest_occurrences (
-  occurrence_id  text primary key check (occurrence_id ~ '^[\x21-\x7e]([\x20-\x7e]*[\x21-\x7e])?$' and length(occurrence_id) <= 200),
-  window_start   timestamptz not null,
-  window_end     timestamptz not null check (window_end > window_start),
-  recipient_keys text[] not null check (cardinality(recipient_keys) between 1 and 200),
-  payload_hash   text not null check (payload_hash ~ '^[0-9a-f]{64}$'),
-  engine_version integer not null,
-  frozen_at      timestamptz not null default now()
-);
+**It is not applied to production.** PROD-DB-0177 blocks every migration there. The shared `docs/PENDING_PROD_MIGRATIONS.md` entry is proposed to the coordinator for reconciliation, not written here.
 
-create table public.admin_digest_deliveries (
-  occurrence_id       text not null references public.admin_digest_occurrences (occurrence_id) on delete restrict,
-  recipient_key       text not null check (recipient_key ~ '^[0-9a-f]{64}$'),
-  idempotency_key     text not null unique check (length(idempotency_key) between 1 and 256),
-  payload_json        text not null,
-  payload_hash        text not null check (payload_hash ~ '^[0-9a-f]{64}$'),
-  status              text not null check (status in ('pending','in_flight','failed','unknown','accepted','rejected','conflict','exhausted','needs_reconciliation')),
-  attempts            integer not null default 0 check (attempts >= 0),
-  fence               bigint  not null default 0 check (fence >= 0),
-  lease_owner         text,
-  lease_expires_at    timestamptz,
-  send_started_at     timestamptz,
-  first_send_at       timestamptz,
-  ambiguous           boolean not null default false,
-  provider_message_id text,
-  last_error          text check (last_error is null or length(last_error) <= 200),
-  updated_at          timestamptz not null default now(),
-  primary key (occurrence_id, recipient_key),
-  check ((status = 'in_flight') = (lease_owner is not null and lease_expires_at is not null)),
-  check ((status = 'accepted') = (provider_message_id is not null)),
-  check (send_started_at is null or status = 'in_flight'),
-  check (not ambiguous or first_send_at is not null)
-);
--- + trigger: payload_json, payload_hash, idempotency_key, recipient_key, occurrence_id are immutable;
---   payload_hash = encode(sha256(convert_to(payload_json, 'UTF8')), 'hex') on insert; ambiguous never true → false.
--- + RLS on, no policies; revoke all from anon, authenticated.
--- + security-definer functions (execute revoked from public, anon, authenticated), each mirroring one rule:
---   admin_digest_freeze(p_occurrence jsonb, p_deliveries jsonb) returns jsonb
---   admin_digest_claim(p_occurrence_id text, p_recipient_key text, p_owner text, p_lease_ms int,
---                      p_max_attempts int, p_retention_ms bigint, p_margin_ms bigint) returns jsonb   -- decideClaim
---   admin_digest_begin_send(p_occurrence_id text, p_recipient_key text, p_fence bigint, p_min_lease_ms int,
---                           p_retention_ms bigint, p_margin_ms bigint) returns text  -- decideBeginSend: ok | fenced_out | lease_expired | retention_passed
---   admin_digest_now() returns timestamptz  -- clock_timestamp(); the one clock the local test harness pins
---   admin_digest_complete(p_occurrence_id text, p_recipient_key text, p_fence bigint,
---                         p_result jsonb, p_max_attempts int) returns boolean                          -- decideCompletion
-```
+**Evidence:**
+- **CI.** `docs/audit/an-admin-digest-reaches-each-admin-once-check.sql` runs on the full migration replay: access refusals, freeze-once, the fence, a completion needing a mark, retention parking and frozen identity.
+- **Disposable database.** `tests/admin-digest-delivery-postgres.test.ts` needs `DIGEST_DELIVERY_PG=1` and a local cluster; the `docs/audit/verify-pg.sh` harness is the default. It runs:
+  - the store contract suite against PostgreSQL;
+  - a differential check in which random steps, applied to the TypeScript rules and to the SQL, must agree after every step;
+  - 40 concurrent claims from 40 connections;
+  - a clock-after-lock test, with its `now()` counterfactual;
+  - backend death mid-claim and mid-receipt;
+  - an immediate-mode server restart, which needs `DIGEST_DELIVERY_PG_RESTART_CMD`;
+  - two engines at once, and an engine crash then restart;
+  - access and immutability.
 
 ## 6. What is and is not claimed
 
@@ -166,7 +132,15 @@ create table public.admin_digest_deliveries (
   - Stale workers are fenced out.
   - Crashes before the mark are retried as not sent; crashes after it are retried as ambiguous.
   - Storage failures send nothing without a durable claim and mark.
+  - A worker that stalls between its claim and its mark cannot send after its lease, or after the retention cut-off.
+- **Tested on local PostgreSQL 16:**
+  - atomic claims under 40 concurrent connections;
+  - a claim decided on the clock read after its row lock;
+  - no partial state when a backend dies mid-claim or mid-receipt;
+  - a committed receipt surviving an immediate-mode restart;
+  - the SQL rules agreeing with the TypeScript rules step for step;
+  - the access refusals and frozen identity above.
 - **Not claimed:**
   - Exactly-once delivery. The provider's key deduplication, inside its window, is what makes an ambiguous retry harmless.
-  - Anything about PostgreSQL durability or isolation.
-  - Anything about production. It is not wired, and production cron is not running (see the scheduler report).
+  - Any behaviour of the production database. 0471 is not applied there.
+  - Anything about production at all. It is not wired, and production cron is not running (see the scheduler report).

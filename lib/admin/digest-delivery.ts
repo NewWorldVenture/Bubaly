@@ -282,9 +282,12 @@ export function classifyResendResponse(status: number, body: unknown): ProviderS
   return { kind: 'unknown', reason: 'unreadable_response' };
 }
 
-/** The complete rule: fenced. `null` means the caller's claim is no longer current and nothing may be written. */
+/**
+ * The complete rule: fenced, and only after a mark. `null` means nothing may be written: the claim is
+ * no longer current, or it never marked a send (so no provider answer can belong to it).
+ */
 export function decideCompletion(row: DeliveryRow, fence: number, result: ProviderSendResult, now: Date, maxAttempts: number): DeliveryRow | null {
-  if (row.status !== 'in_flight' || row.fence !== fence) return null;
+  if (row.status !== 'in_flight' || row.fence !== fence || row.sendStartedAt === null) return null;
   const nowIso = now.toISOString();
   const next: DeliveryRow = { ...row, leaseOwner: null, leaseExpiresAt: null, sendStartedAt: null, updatedAt: nowIso };
   switch (result.kind) {
