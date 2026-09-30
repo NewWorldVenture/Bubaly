@@ -4,7 +4,8 @@
 
 import { cookies } from 'next/headers';
 
-import { isLocaleCode, LOCALE_COOKIE, LOCALE_COOKIE_MAX_AGE } from '@/lib/i18n/locales';
+import { isLocaleCode, findLocale, LOCALE_COOKIE, LOCALE_COOKIE_MAX_AGE } from '@/lib/i18n/locales';
+import { createServer } from '@/lib/supabase/server';
 
 /**
  * Record an explicit locale choice.
@@ -17,10 +18,38 @@ import { isLocaleCode, LOCALE_COOKIE, LOCALE_COOKIE_MAX_AGE } from '@/lib/i18n/l
  * Not httpOnly — the value is a display preference, not a credential, and the
  * client reads it to keep the picker in sync without a round trip. `lax` keeps
  * it attached to normal top-level navigation while staying off cross-site POSTs.
+ *
+ * TWO places, for two readers. The cookie is for the UI: it is readable on the
+ * very first render, so a chosen language never flashes English first, and it
+ * works for a visitor with no account. The profile row (profiles.locale, 0466)
+ * is the durable copy: it follows the person to a new device at sign-in
+ * (lib/i18n/sync.ts), and it is what Bubaly's outbound messages are to be
+ * written in (finalaudit I18N-001) — those are composed by crons that never see
+ * a cookie. A signed-in member's choice is written to both; a visitor's only to
+ * the cookie, and sign-in or onboarding copies it onto the profile.
+ *
+ * HONEST about the second write. The switch never fails because a database was
+ * slow — the cookie has already taken, so the page is in the new language —
+ * but the result says whether the profile took too, and if not, why:
+ *
+ *   { ok: false }                            not a shipped language; nothing written
+ *   { ok: true, stored: true }               cookie and profile
+ *   { ok: true, stored: false, profile: 'signed-out' }  a visitor: cookie only, by design
+ *   { ok: true, stored: false, profile: 'refused' }     the write reached no row
+ *   { ok: true, stored: false, profile: 'failed' }      the write errored or threw
  */
-export async function setLocale(code: string): Promise<{ ok: boolean }> {
-  if (!isLocaleCode(code)) return { ok: false };
+export type LocaleChoice =
+  | { ok: false; stored: false }
+  | { ok: true; stored: true }
+  | { ok: true; stored: false; profile: ProfileWrite };
 
+type ProfileWrite = 'signed-out' | 'refused' | 'failed';
+
+export async function setLocale(code: string): Promise<LocaleChoice> {
+  if (!isLocaleCode(code)) return { ok: false, stored: false };
+
+  // The cookie is written exactly as it was before the profile existed; its
+  // one reader (getLocaleContext -> resolveLocale) matches case-insensitively.
   const jar = await cookies();
   jar.set(LOCALE_COOKIE, code, {
     path: '/',
@@ -29,5 +58,41 @@ export async function setLocale(code: string): Promise<{ ok: boolean }> {
     secure: process.env.NODE_ENV === 'production',
   });
 
-  return { ok: true };
+  // The profile gets the catalogue's spelling: the column's CHECK is exact.
+  const profile = await storeForSignedInUser(findLocale(code)!.code);
+  return profile === 'stored' ? { ok: true, stored: true } : { ok: true, stored: false, profile };
+}
+
+/**
+ * Write the choice onto the caller's own profile, on the caller's own session:
+ * RLS (profiles_update_self, and 0466's restrictive own-row policy) is what
+ * limits it to their row. A visitor with no session stores nothing and that is
+ * not a failure — the cookie already took.
+ *
+ * A failed or refused write is logged and REPORTED, never thrown: the page is
+ * already in the new language, and the next switch or sign-in writes it again.
+ */
+async function storeForSignedInUser(code: string): Promise<'stored' | ProfileWrite> {
+  try {
+    const supabase = await createServer();
+    const { data: { user } } = await supabase.auth.getUser();
+    if (!user) return 'signed-out';
+    const { data, error } = await supabase
+      .from('profiles')
+      .update({ locale: code })
+      .eq('id', user.id)
+      .select('id');
+    if (error) {
+      console.error('[i18n] could not store the language choice on the profile', error);
+      return 'failed';
+    }
+    if ((data ?? []).length !== 1) {
+      console.error('[i18n] the language choice reached no profile row (refused or missing)');
+      return 'refused';
+    }
+    return 'stored';
+  } catch (e) {
+    console.error('[i18n] could not store the language choice on the profile', e);
+    return 'failed';
+  }
 }

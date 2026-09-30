@@ -14,6 +14,7 @@ import { reserveChildLoginAttempt } from '@/lib/auth/child-throttle-store';
 import { clientIp } from '@/lib/server/rate-limit';
 import { enforceRequestRateLimit } from '@/lib/server/request-rate-limit';
 import { createClient as createPasswordClient } from '@supabase/supabase-js';
+import { syncLanguageForSignedInUser } from '@/lib/i18n/sync';
 
 /** Where a just-signed-in user should land: the admin console for super
  *  admins, the Grandparent Portal for a guest (M28 — the role extended-family
@@ -22,8 +23,15 @@ import { createClient as createPasswordClient } from '@supabase/supabase-js';
  *  honored, and so the role comes from the membership rather than the browser.
  *
  *  Never throws: a context read that fails must not block a sign-in, and /home
- *  is the answer for every role but one. */
+ *  is the answer for every role but one.
+ *
+ *  It is also the one server step every sign-in and every accepted invite
+ *  passes through, so it is where a person's language is put in step: the
+ *  profile learns the language they signed in with, or this device learns the
+ *  language they chose elsewhere (lib/i18n/sync.ts; I18N-001). That sync never
+ *  throws either. */
 export async function resolveLandingPathAction(): Promise<string> {
+  await syncLanguageForSignedInUser();
   if (await isSuperAdmin()) return '/admin';
   try {
     const ctx = await getUserContext();

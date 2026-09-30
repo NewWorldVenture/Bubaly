@@ -17,6 +17,7 @@ import { eventSubjectKey } from '@/lib/marketing/automation-triggers';
 import { upsertOnboardingContact } from '@/lib/marketing/onboarding-contact';
 import { recordOnboardingProgress, getOnboardingProgress } from '@/lib/server/onboarding-progress';
 import { sendReactEmail } from '@/lib/email';
+import { syncLanguageForSignedInUser } from '@/lib/i18n/sync';
 import { WelcomeEmail } from '@/lib/emails/welcome';
 import { InviteEmail } from '@/lib/emails/invite';
 import * as React from 'react';
@@ -397,6 +398,11 @@ export async function finalizeOnboardingAction(input: {
     avatarUrl: profile.avatarUrl || null,
   });
   if (!profileRes.ok) return onboardingFailure('profile save', profileRes.error, 'Could not save your profile.');
+
+  // 1a. Their language, stored (profiles.locale, 0466; I18N-001): the one they
+  //     chose in the picker, or else the one they just read this whole wizard
+  //     in. Best-effort: never a reason to fail onboarding.
+  await syncLanguageForSignedInUser();
 
   // 2. Resolve the family this onboarding writes to. Guard against minting a
   //    SECOND family: the wizard UI is unreachable once you're in a family (the

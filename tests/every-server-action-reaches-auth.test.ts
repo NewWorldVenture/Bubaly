@@ -53,7 +53,6 @@ const PUBLIC_BY_DESIGN: Record<string, string> = {
   'app/gift/actions.ts::submitGiftPledgeAction': 'public gift flow behind an unguessable link, rate-limited, caps pending pledges',
   'app/reviews/new/actions.ts::submitReviewAction': 'public review submission behind an unguessable token',
   'app/s/[slug]/actions.ts::submitResponseAction': 'public survey response behind an unguessable slug',
-  'lib/i18n/actions.ts::setLocale': 'sets the locale cookie; touches no family data',
   // Added by the parallel session's auth work. All five run BEFORE a session
   // exists — that is the point of them — so no `requireUser`-shaped call can
   // appear and this scan cannot credit them. They are not unauthenticated:
