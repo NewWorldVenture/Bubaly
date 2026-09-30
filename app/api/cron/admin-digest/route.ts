@@ -3,7 +3,7 @@ import { getTranslations } from '@/lib/i18n/server';
 import { createServiceClient } from '@/lib/supabase/server';
 import { hasCronAuthorization } from '@/lib/server/cron-auth';
 import { readAll } from '@/lib/supabase/read-all';
-import { allSuperAdminEmails } from '@/lib/feedback/notify';
+import { readSuperAdminRecipients } from '@/lib/feedback/notify';
 import { sendEmail } from '@/lib/server/email';
 import {
   buildAdminDigest, digestSubject, renderAdminDigestHtml, summarizeDigestDelivery, type DigestRow,
@@ -72,7 +72,16 @@ export async function GET(req: NextRequest) {
     return NextResponse.json({ ok: true, sent: 0, total: 0, reason: 'no activity in the last 24h' });
   }
 
-  const emails = await allSuperAdminEmails(admin);
+  // Fail CLOSED on the recipient list. Sending to the env allowlist alone after a
+  // failed super_admins read silently drops every admin who exists only in the
+  // table, and used to answer 200 ok while doing it. An empty table is fine: the
+  // allowlist is then the whole list.
+  const recipients = await readSuperAdminRecipients(admin);
+  if (recipients.error !== null) {
+    console.error('[admin-digest] super-admin recipient read failed', recipients.error);
+    return NextResponse.json({ ok: false, error: t('adminDigest.recipientsUnavailable') }, { status: 502 });
+  }
+  const emails = recipients.emails;
   if (emails.length === 0) {
     return NextResponse.json({ ok: true, sent: 0, total: digest.total, reason: 'no super-admin recipients' });
   }
