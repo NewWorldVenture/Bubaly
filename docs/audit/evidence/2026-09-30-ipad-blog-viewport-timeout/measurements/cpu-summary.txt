@@ -1,0 +1,5 @@
+median/p90/max ms
+ipad            /          n=  8 total 4902/5376/5376   goto 1128/1972/1972 ping 46/620/1588 resize 128/422/754    raf 245/820/1329 long-sum 1134/2047/2047 longest 461/1028/1028 nodes 914
+ipad            /blog      n=  8 total 4147/4292/4292   goto 1268/2041/2041 ping 52/847/1136 resize 211/543/647    raf 156/349/549  long-sum 582/934/934    longest 195/221/221  nodes 785
+ipad            /faq       n=  8 total 2196/2798/2798   goto 829/1058/1058  ping 41/369/842 resize 76/200/340     raf 71/160/585   long-sum 260/608/608    longest 131/486/486  nodes 277
+ipad            /pricing   n=  8 total 3040/3612/3612   goto 826/1394/1394  ping 53/399/997 resize 164/371/418    raf 95/275/363   long-sum 529/798/798    longest 190/325/325  nodes 2036
