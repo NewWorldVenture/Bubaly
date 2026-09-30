@@ -340,16 +340,21 @@ describe.skipIf(!pgFixtureEnabled)('0471 on PostgreSQL (disposable database)', (
       await expect(fx.sql(`delete from public.admin_digest_occurrences;`)).rejects.toThrow(/never changed or deleted/);
     });
     it('a NULL fence is refused by begin_send and complete, and writes nothing', async () => {
-      const { store, where } = await setup();
+      const { clock, store, where } = await setup();
       const a = await store.claim(OCC, K1, 'a', CLAIM);
       if (!a.claimed) throw new Error('setup');
-      const rowNow = async () => (await store.load(OCC))!.deliveries[0];
-      await expect(fx.sql(`set role service_role; select public.admin_digest_begin_send('${OCC}', '${K1}', null, 150, 86400000, 3600000);`)).rejects.toThrow(/a fence is required/);
-      expect(await rowNow()).toMatchObject({ status: 'in_flight', fence: 1, sendStartedAt: null, firstSendAt: null });
+      // Direct calls carry the same pinned clock as the adapter, so the lease is live and the old,
+      // NULL-blind comparison would really have marked or completed: the refusal is what stops it.
+      const asService = (call: string) => fx.sql(`set admin_digest.test_now = '${clock.now().toISOString()}';\nset role service_role;\n${call}`);
+      const rawRow = () => fx.sql(`select row_to_json(d)::text from public.admin_digest_deliveries d where ${where};`);
+      const before = await rawRow();
+      await expect(asService(`select public.admin_digest_begin_send('${OCC}', '${K1}', null, 150, 86400000, 3600000);`)).rejects.toThrow(/a fence is required/);
+      expect(await rawRow()).toBe(before);
+      expect((await store.load(OCC))!.deliveries[0]).toMatchObject({ status: 'in_flight', fence: 1, sendStartedAt: null, firstSendAt: null });
       expect(answerOf(await store.beginSend(OCC, K1, a.row.fence, BEGIN))).toBe('ok');
-      const marked = await rowNow();
-      await expect(fx.sql(`set role service_role; select public.admin_digest_complete('${OCC}', '${K1}', null, '{"kind":"accepted","messageId":"msg-forged"}'::jsonb, 4);`)).rejects.toThrow(/a fence is required/);
-      expect(await rowNow()).toEqual(marked);
+      const marked = await rawRow();
+      await expect(asService(`select public.admin_digest_complete('${OCC}', '${K1}', null, '{"kind":"accepted","messageId":"msg-forged"}'::jsonb, 4);`)).rejects.toThrow(/a fence is required/);
+      expect(await rawRow()).toBe(marked);
       expect(await fx.sql(`select count(*) from public.admin_digest_deliveries where ${where} and provider_message_id is not null;`)).toBe('0');
       // Control: the claim's own fence still completes.
       expect(await store.complete(OCC, K1, a.row.fence, { kind: 'accepted', messageId: 'msg-1' }, 4)).toBe('ok');
