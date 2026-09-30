@@ -398,6 +398,14 @@ function readCacheSession(options: { force?: boolean }, autonomous: boolean): Pr
     return pending ?? Promise.resolve();
   }
   const current = connection;
+  // A storage-only logout can arrive while the SDK holds its session lock.
+  // Withhold an obsolete scope before awaiting (or coalescing with) that read.
+  // Compare stable cookie identity so rotation and delayed notifications keep
+  // the same session usable; this check neither adopts nor refutes a claim.
+  if (snapshot.status === 'ready' && !sameIdentity(tokenIdentity(cookieClaimKey()), snapshot.identity)) {
+    publish('unavailable', snapshot.identity, UNAVAILABLE, snapshot.observedUserId);
+  }
+  if (connection !== current) return Promise.resolve();
   const storageRevision = getSessionStorageChangeRevision();
   const storageChanged = storageRevision !== current.storageRevision;
   // Ordinary lifecycle bursts share a read. Explicit cookie changes must

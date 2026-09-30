@@ -38,7 +38,7 @@ function collect(filename: string): string {
   return id;
 }
 const entries = Object.fromEntries([
-  'lib/supabase/client.ts', 'lib/auth/cache-session.ts', 'lib/auth/session-change.ts', 'lib/hooks/use-realtime-query.ts', 'lib/offline/cache.ts',
+  'lib/auth/browser-signout.ts', 'lib/auth/browser-session-storage.ts', 'lib/supabase/client.ts', 'lib/auth/cache-session.ts', 'lib/auth/session-change.ts', 'lib/hooks/use-realtime-query.ts', 'lib/offline/cache.ts',
   'components/app/app-context.tsx', 'components/i18n/locale-provider.tsx', 'lib/i18n/locales.ts', 'lib/i18n/messages.ts', 'lib/i18n/translate.ts',
 ].map(file => [file, collect(file)]));
 const origin = 'https://auth-cache-partition-fixture.invalid';
@@ -57,7 +57,7 @@ type Row = { id: string };
 type ProviderState = {
   user: string; session: string; rotation: number; rows: Row[]; unavailable: boolean;
   tokenVariant?: 'missing-session' | 'invalid-session' | 'wrong-sub' | 'missing-sub' | 'non-jwt';
-  calls: string[];
+  calls: string[]; holdRefresh?: boolean; refreshHeld?: boolean; releaseRefresh?: () => void;
 };
 type Snapshot = { user: string; role: string; data: Row[]; copied: Row[]; loading: boolean; error: string | null; stale: boolean; instance: number };
 type Probe = {
@@ -72,6 +72,10 @@ type Probe = {
   observedUser: () => string | null; locale: string;
   failWarmRead: () => Promise<void>; reconcile: () => Promise<void>; errors: string[];
   seedLegacy: (access: CacheAccessIdentity) => void;
+  localLogout: () => string; notifyStorageChange: () => void; storageRevision: () => number;
+  cookieAbsent: () => boolean; sessionStatus: () => string;
+  observeSessionReads: () => void; sessionReadsStarted: number; sessionReadsSettled: number;
+  startRotation: () => void; rotationPending: boolean;
 };
 declare global { interface Window { __authPartition: Probe } }
 
@@ -102,6 +106,10 @@ async function install(context: BrowserContext, override: Partial<ProviderState>
     ].join('.');
     const user = { id: state.user, aud: 'authenticated', role: 'authenticated', email: 'fixture@example.invalid', app_metadata: {}, user_metadata: {}, created_at: '2026-09-12T00:00:00Z' };
     if (url.pathname === '/auth/v1/token') {
+      if (state.holdRefresh && url.searchParams.get('grant_type') === 'refresh_token') {
+        state.refreshHeld = true;
+        await new Promise<void>(resolve => { state.releaseRefresh = resolve; });
+      }
       await route.fulfill({ contentType: 'application/json', headers, body: JSON.stringify({ access_token: jwt, refresh_token: `synthetic-refresh-${state.rotation}`, token_type: 'bearer', expires_in: 3600, expires_at: expires, user }) }); return;
     }
     if (url.pathname === '/auth/v1/user') { await route.fulfill({ contentType: 'application/json', headers, body: JSON.stringify(user) }); return; }
@@ -130,6 +138,27 @@ async function load(page: Page) {
     window.addEventListener('unhandledrejection', event => { p.errors.push(String(event.reason)); event.preventDefault(); });
     window.addEventListener('error', event => { p.errors.push(event.message); });
     const originalGetSession = db.auth.getSession.bind(db.auth);
+    p.observeSessionReads = () => {
+      p.sessionReadsStarted = 0; p.sessionReadsSettled = 0;
+      db.auth.getSession = async (...args) => {
+        p.sessionReadsStarted += 1;
+        try { return await originalGetSession(...args); } finally { p.sessionReadsSettled += 1; }
+      };
+    };
+    p.localLogout = () => {
+      const logout = load(entries['lib/auth/browser-signout.ts']);
+      const intent = logout.captureSignOutIntent();
+      if (!intent) throw new Error('Missing synthetic sign-out intent');
+      return logout.signOutBrowserSession(intent, { revoke: false }).status;
+    };
+    p.notifyStorageChange = () => load(entries['lib/auth/session-change.ts']).notifySessionStorageChanged();
+    p.storageRevision = () => load(entries['lib/auth/session-change.ts']).getSessionStorageChangeRevision();
+    p.cookieAbsent = () => load(entries['lib/auth/browser-session-storage.ts']).captureBrowserSessionSnapshot() === null;
+    p.sessionStatus = () => load(entries['lib/auth/cache-session.ts']).getCacheSessionSnapshot().status;
+    p.startRotation = () => {
+      p.rotationPending = true;
+      void p.rotate().catch(() => {}).finally(() => { p.rotationPending = false; });
+    };
     p.signIn = async () => { const { error } = await db.auth.signInWithPassword({ email: 'fixture@example.invalid', password: 'synthetic-password' }); if (error) throw error; };
     p.signOut = async () => { const { error } = await db.auth.signOut({ scope: 'local' }); if (error) throw error; };
     p.rotate = async () => { const { error } = await db.auth.refreshSession(); if (error) throw error; };
@@ -234,6 +263,54 @@ test.use({ trace: 'off', screenshot: 'off', video: 'off' });
 test.afterEach(async ({ page }) => {
   if (await page.evaluate(() => !!window.__authPartition).catch(() => false)) expect(await page.evaluate(() => window.__authPartition.errors)).toEqual([]);
 });
+
+for (const change of ['unchanged session', 'peer logout'] as const) {
+  test(`storage-only ${change} is reconciled while the installed SDK lock is held`, async ({ page, context }, testInfo) => {
+    const state = await install(context);
+    await load(page); await page.evaluate(() => window.__authPartition.signIn());
+    await mount(page); await privateRows(page);
+    await page.getByRole('button', { name: 'Copy rows locally' }).click();
+    await page.getByLabel('Private draft').fill('private A composition');
+    const peer = await context.newPage(); await load(peer);
+    const storageBefore = await page.evaluate(() => {
+      window.__authPartition.observeSessionReads();
+      return window.__authPartition.storageRevision();
+    });
+    state.holdRefresh = true;
+    await page.evaluate(() => window.__authPartition.startRotation());
+    await expect.poll(() => state.refreshHeld).toBe(true);
+    try {
+      if (change === 'peer logout') expect(await peer.evaluate(() => window.__authPartition.localLogout())).toBe('signed-out');
+      else await peer.evaluate(() => window.__authPartition.notifyStorageChange());
+      await expect.poll(() => page.evaluate(() => window.__authPartition.storageRevision())).toBeGreaterThan(storageBefore);
+      await expect.poll(() => page.evaluate(() => window.__authPartition.sessionReadsStarted)).toBeGreaterThan(0);
+      // The held HTTP response keeps the actual SDK lock occupied. Observe the
+      // pending interval, rather than letting SDK retry settlement hide the gap.
+      await page.waitForTimeout(350);
+      const observed = await page.evaluate(() => {
+        const p = window.__authPartition;
+        return {
+          status: p.sessionStatus(), cookieAbsent: p.cookieAbsent(), rotationPending: p.rotationPending,
+          readsStarted: p.sessionReadsStarted, readsSettled: p.sessionReadsSettled,
+          rows: document.querySelector('main')?.textContent?.includes('private-a') === true,
+          copied: p.snapshot()?.copied.some(row => row.id === 'private-a') === true,
+          draft: (document.querySelector('input[aria-label="Private draft"]') as HTMLInputElement | null)?.value === 'private A composition',
+        };
+      });
+      await testInfo.attach('synthetic-pending-session-observation', { body: JSON.stringify({ change, ...observed }), contentType: 'application/json' });
+      expect(observed.rotationPending).toBe(true);
+      expect(observed.readsStarted).toBeGreaterThan(observed.readsSettled);
+      expect(observed.cookieAbsent).toBe(change === 'peer logout');
+      expect(observed.status).toBe(change === 'peer logout' ? 'unavailable' : 'ready');
+      expect({ rows: observed.rows, copied: observed.copied, draft: observed.draft }).toEqual(change === 'peer logout'
+        ? { rows: false, copied: false, draft: false }
+        : { rows: true, copied: true, draft: true });
+    } finally {
+      state.holdRefresh = false;
+      state.releaseRefresh?.();
+    }
+  });
+}
 
 test('same authenticated session restores its offline rows after a browser restart (positive control)', async ({ browser }) => {
   const first = await browser.newContext();
