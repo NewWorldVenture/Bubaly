@@ -102,8 +102,12 @@ beforeEach(() => {
   harness.decision = { effect: 'allow', reason: 'Allowed.', basis: 'role_default' };
   harness.revalidatePath.mockClear();
   harness.evaluateTrust.mockClear();
+  // wallet-a is the caller's own wallet, so every accepted request below is a
+  // request against one's own wallet. wallet-b is another member's. Whether a
+  // child or teen may file a request against a sibling's wallet is policy that
+  // is not settled, and no case here asserts either answer.
   db.seed('child_wallets', [
-    { id: 'wallet-a', family_id: FAMILY, member_id: 'member-a' },
+    { id: 'wallet-a', family_id: FAMILY, member_id: 'member-self' },
     { id: 'wallet-b', family_id: FAMILY, member_id: 'member-b' },
     { id: 'wallet-x', family_id: 'family-2', member_id: 'member-x' },
   ]);
@@ -153,6 +157,12 @@ async function balanceSays() {
   const result = await bucketBalanceCents(db as unknown as Parameters<typeof bucketBalanceCents>[0], { familyId: FAMILY, childWalletId: 'wallet-a', kind: 'spend' });
   expect(result.error).toBeTruthy();
   return result.error;
+}
+
+/** A string with at least one non-space character: `undefined` and `null` fail, not just blanks. */
+function expectNonblankText(value: unknown) {
+  expect(typeof value).toBe('string');
+  expect((value as string).trim()).not.toBe('');
 }
 
 const approvals = () => db.table('parent_approvals');
@@ -205,7 +215,11 @@ describe('requestSpendAction (ACTION-ABA436EAC1FB)', () => {
 
     it('never sends a blank description', async () => {
       expect(await ask({ description: '   ' })).toEqual({ ok: true });
-      expect(String(debitCalls[0].p_description).trim()).not.toBe('');
+      expectNonblankText(debitCalls[0].p_description);
+    });
+
+    it.each([undefined, null, '', '   '])('the nonblank check itself rejects a description of %j', (value) => {
+      expect(() => expectNonblankText(value)).toThrow();
     });
   });
 
