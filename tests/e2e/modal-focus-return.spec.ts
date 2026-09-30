@@ -2,6 +2,7 @@ import fs from 'node:fs';
 import path from 'node:path';
 import ts from 'typescript';
 import { expect, test, type Page } from '@playwright/test';
+import { reactBrowserScripts } from './helpers/react-browser';
 
 // MAIN-F-D04, reproduced 2026-09-30 (#679): Escape closed Quick capture and the
 // child wallet's dialogs, and focus fell to <body> instead of the trigger. Every
@@ -11,8 +12,7 @@ import { expect, test, type Page } from '@playwright/test';
 //
 // Actual Modal, dialog hook, locale provider and React in Chromium, operated by
 // keyboard only. Only the document transport is controlled.
-const react = fs.readFileSync(path.join(path.dirname(require.resolve('react/package.json')), 'umd/react.development.js'), 'utf8');
-const reactDom = fs.readFileSync(path.join(path.dirname(require.resolve('react-dom/package.json')), 'umd/react-dom.development.js'), 'utf8');
+const { react, reactDom } = reactBrowserScripts('development');
 const modules: Record<string, { source: string; imports: Record<string, string> }> = {};
 function collect(filename: string): string {
   const file = [filename, `${filename}.ts`, `${filename}.tsx`, path.join(filename, 'index.ts')]
