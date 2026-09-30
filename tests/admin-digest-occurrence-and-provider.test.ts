@@ -109,6 +109,41 @@ describe('the Resend adapter', () => {
     expect(await answering(200, null, JSON.stringify({ id: 'msg-1', pad: 'x'.repeat(70 * 1024) })).provider.send(request())).toEqual({ kind: 'unknown', reason: 'unreadable_response' });
   });
 
+  describe('an answer the adapter will not read is released, not left open (review P2)', () => {
+    // A native stream that never ends, so nothing but an explicit cancel can release it.
+    const unending = (declaredLength?: number) => {
+      let cancelled = 0;
+      const body = new ReadableStream<Uint8Array>({
+        start(c) { c.enqueue(new TextEncoder().encode('{"id":"msg-1","pad":"')); },
+        pull() { /* never closes */ },
+        cancel() { cancelled += 1; },
+      });
+      const headers = declaredLength === undefined ? undefined : { 'content-length': String(declaredLength) };
+      return { body, headers, cancelled: () => cancelled };
+    };
+    const tick = () => new Promise((r) => setTimeout(r, 0));
+
+    it.each([200, 500])('a %s whose declared length exceeds the bound: unknown, and the body is cancelled once', async (status) => {
+      const u = unending(64 * 1024 + 1);
+      const fetchImpl = vi.fn(async () => new Response(u.body, { status, headers: u.headers })) as unknown as typeof fetch;
+      expect(await createResendDigestProvider({ apiKey: 'k', fetchImpl }).send(request())).toEqual({ kind: 'unknown', reason: status === 200 ? 'unreadable_response' : 'server_error' });
+      await tick();
+      expect(u.cancelled()).toBe(1);
+    });
+
+    it('control: a body that overflows while streaming is cancelled once (by the bounded reader), not twice', async () => {
+      let cancelled = 0;
+      const body = new ReadableStream<Uint8Array>({
+        pull(c) { c.enqueue(new Uint8Array(16 * 1024).fill(0x61)); },
+        cancel() { cancelled += 1; },
+      });
+      const fetchImpl = vi.fn(async () => new Response(body, { status: 200 })) as unknown as typeof fetch;
+      expect(await createResendDigestProvider({ apiKey: 'k', fetchImpl }).send(request())).toEqual({ kind: 'unknown', reason: 'unreadable_response' });
+      await tick();
+      expect(cancelled).toBe(1);
+    });
+  });
+
   it('a network failure or an abort propagates, which the engine records as unknown', async () => {
     const fetchImpl = vi.fn(async () => { throw new TypeError('fetch failed'); }) as unknown as typeof fetch;
     await expect(createResendDigestProvider({ apiKey: 'k', fetchImpl }).send(request())).rejects.toThrow('fetch failed');

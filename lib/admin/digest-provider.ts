@@ -33,6 +33,10 @@ export function createResendDigestProvider(opts: { apiKey: string; fetchImpl?: t
       let body: unknown = null;
       if (bounded.ok) {
         try { body = JSON.parse(bounded.text); } catch { body = null; }
+      } else if (res.body && !res.bodyUsed && !res.body.locked) {
+        // Refused on its declared length, unread: release it now rather than leave the connection to
+        // the garbage collector. Not awaited: cleanup never becomes an unbounded wait.
+        res.body.cancel().catch(() => undefined);
       }
       // An unreadable 2xx has no message id, so it classifies as unknown: never a receipt.
       return classifyResendResponse(res.status, body);
