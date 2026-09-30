@@ -42,7 +42,7 @@ const SELF_MAINTAINING = [
   'format-hydration.spec.ts', 'framework-hydration-replay.spec.ts',
   'inbox-message-ownership.spec.ts',
   'kid-login-boundaries.spec.ts',
-  'kid-login-readiness.spec.ts', 'login-readiness.spec.ts', 'logout-refresh-storage.spec.ts',
+  'kid-login-readiness.spec.ts', 'language-picker-keyboard.spec.ts', 'login-readiness.spec.ts', 'logout-refresh-storage.spec.ts',
   'modal-hydration.spec.ts', 'oauth-initiation.spec.ts', 'password-login-boundaries.spec.ts', 'password-session-ownership.spec.ts',
   'session-storage-reconcile.spec.ts', 'signup-boundaries.spec.ts', 'weekly-meal-planner.spec.ts',
 ];
