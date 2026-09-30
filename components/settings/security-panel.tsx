@@ -20,7 +20,7 @@ import { Button } from '@/components/ui/button';
 import { Modal } from '@/components/ui/modal';
 import { OtpInput } from '@/components/ui/otp-input';
 import { MfaErrorNotice } from '@/components/auth/mfa-error-copy';
-import { fmtDate } from '@/lib/utils/format';
+import { useFormat } from '@/components/i18n/use-format';
 import {
   classifyMfaError,
   hasVerifiedTotp,
@@ -43,6 +43,7 @@ type Enrolment = { factorId: string; qrCode: string; secret: string; uri: string
 const FRIENDLY_NAME_PREFIX = 'Bubaly';
 
 export function SecurityPanel() {
+  const { fmtDate } = useFormat();
   const t = useTranslations();
   const { success } = useToast();
   const supabase = createClient();

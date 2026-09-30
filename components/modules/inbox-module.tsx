@@ -23,9 +23,10 @@ import { PageHeader } from '@/components/app/page-header';
 import { SkeletonList, ErrorState } from '@/components/ui/states';
 import { cn } from '@/lib/utils/cn';
 import type { Tables } from '@/lib/database.types';
-import { useLocale, useTranslations } from '@/components/i18n/locale-provider';
+import { useTranslations } from '@/components/i18n/locale-provider';
 import type { LocaleCode } from '@/lib/i18n/locales';
-import { createFormat } from '@/lib/utils/format';
+import { useFormat } from '@/components/i18n/use-format';
+import type { Format } from '@/lib/utils/format';
 
 type Comm = Tables<'family_communications'> & { contact?: Tables<'family_contacts'> | null };
 type Contact = Tables<'family_contacts'>;
@@ -51,19 +52,19 @@ const CATEGORY_KEYS: Record<string, string> = Object.fromEntries(
 type FilterTab = 'all' | 'unread' | 'call' | 'sms' | 'school' | 'sports' | 'email' | 'archived';
 
 /**
- * Delegates to the shared `fmtTimeAgo` (lib/utils/format.ts).
+ * Delegates to the shared `fmtTimeAgo` (lib/utils/format.ts), bound through
+ * `useFormat()` to the family's zone (TIME-003).
  *
  * It took a locale, which made it LOOK converted — but every rung was an English
  * literal ("3h ago", "Yesterday") and the locale reached only the fallback date. That is the
  * defect the hardcoded-locale scan cannot see, and "it accepts a LocaleCode" is not
  * evidence against it.
  */
-const fmtTimeIn = (locale: LocaleCode) => (iso: string) =>
-  createFormat(locale).fmtTimeAgo(iso, { absoluteAfterDays: 2 });
+const fmtTimeWith = (format: Format) => (iso: string) =>
+  format.fmtTimeAgo(iso, { absoluteAfterDays: 2 });
 
 export function InboxModule() {
-  const locale = useLocale();
-  const fmtTime = fmtTimeIn(locale.code);
+  const fmtTime = fmtTimeWith(useFormat());
   const tr = useTranslations();
   const { familyId, userId } = useApp();
   const { success, error: toastError } = useToast();
@@ -398,8 +399,7 @@ function CommDetail({ comm, familyId, userId, onClose, onArchive, onRefresh }: {
   comm: Comm; familyId: string; userId: string;
   onClose: () => void; onArchive: () => void; onRefresh: () => void;
 }) {
-  const locale = useLocale();
-  const fmtTime = fmtTimeIn(locale.code);
+  const fmtTime = fmtTimeWith(useFormat());
   const tr = useTranslations();
   const { success, error: toastError } = useToast();
   const ch = CHANNELS[comm.channel] ?? CHANNELS.other;

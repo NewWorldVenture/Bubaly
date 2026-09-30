@@ -26,7 +26,7 @@ import {
 } from '@/lib/care/log';
 import type { Tables } from '@/lib/database.types';
 import { useLocale, useTranslations } from '@/components/i18n/locale-provider';
-import { useFormat } from '@/components/i18n/use-format';
+import { useFamilyClock, useFormat } from '@/components/i18n/use-format';
 
 type CareEntry = Tables<'care_log'>;
 
@@ -62,6 +62,8 @@ const CARE_TYPE_KEYS: Record<CareLogType, string> = {
 
 export function CareModule() {
   const locale = useLocale();
+  const clock = useFamilyClock();
+  const format = useFormat();
   const tr = useTranslations();
   const { fmtTimeAgo } = useFormat();
   const typeLabel = (type: string) => (type in CARE_TYPE_KEYS ? tr(CARE_TYPE_KEYS[type as CareLogType]) : type);
@@ -92,7 +94,7 @@ export function CareModule() {
   });
 
   const memberName = (id: string | null) => members.find((m) => m.id === id)?.display_name ?? null;
-  const now = useMemo(() => new Date(), []);
+  const now = useMemo(() => new Date(), []); // instant: overdue and last-7-days compare instants (lib/care/log.ts)
 
   const recipientEntries = useMemo(
     () => (entries ?? []).filter((e) => e.member_id === recipientId),
@@ -106,7 +108,7 @@ export function CareModule() {
   const overdue = isContactOverdue(entryLikes, now, 24);
   const avgWellbeing = averageWellbeing(entryLikes);
   const weekCount = entriesInLastDays(entryLikes, now, 7);
-  const grouped = useMemo(() => groupByDay(recipientEntries), [recipientEntries]);
+  const grouped = useMemo(() => groupByDay(recipientEntries, clock.timeZone), [recipientEntries, clock]);
   const entryById = useMemo(() => new Map(recipientEntries.map((e) => [e.id, e])), [recipientEntries]);
 
   function openNew(type: CareLogType = 'check_in') {
@@ -172,8 +174,9 @@ export function CareModule() {
     success(tr('careModule.entryDeleted'));
   }
 
-  const fmtTime = (iso: string) => new Date(iso).toLocaleTimeString(locale.code, { hour: 'numeric', minute: '2-digit' });
-  const fmtDay = (key: string) => new Date(`${key}T00:00:00`).toLocaleDateString(locale.code, { weekday: 'long', month: 'short', day: 'numeric' });
+  // The family's clock; a day KEY is a date, rendered as written (TIME-003).
+  const fmtTime = (iso: string) => format.fmtTime(iso);
+  const fmtDay = (key: string) => format.fmtDate(key, 'EEEE, MMM d');
   // An inline ladder built from English literals — the fifth in this codebase, and
   // invisible to the hardcoded-locale scan because it held no locale to find. The
   // shared helper reads the timestamp rather than the derived hour count, so

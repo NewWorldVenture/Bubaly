@@ -26,6 +26,8 @@ import { Avatar } from '@/components/ui/avatar';
 import { cn } from '@/lib/utils/cn';
 import type { Tables, TransactionType, AccountType } from '@/lib/database.types';
 import { useLocale, useTranslations } from '@/components/i18n/locale-provider';
+import { useFamilyClock, useFormat } from '@/components/i18n/use-format';
+import type { Format } from '@/lib/utils/format';
 import { categoryLabel } from '@/lib/finance/category-label';
 import type { LocaleCode } from '@/lib/i18n/locales';
 import { todayInZone } from '@/lib/schedule/zoned';
@@ -73,7 +75,8 @@ const usd0In = (locale: LocaleCode) => (n: number) =>
   new Intl.NumberFormat(locale, { style: 'currency', currency: 'USD', maximumFractionDigits: 0 }).format(n);
 const num = (v: unknown) => (typeof v === 'number' ? v : Number(v ?? 0)) || 0;
 function ymd(d: Date) { return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`; }
-const shortDateIn = (locale: LocaleCode) => (s: string) => { const [y, m, d] = s.split('-').map(Number); return new Date(y, m - 1, d).toLocaleDateString(locale, { month: 'short', day: 'numeric' }); };
+// A due DATE, rendered as written by the shared formatter (TIME-003).
+const shortDateWith = (fmtDate: Format['fmtDate']) => (s: string) => fmtDate(s, 'MMM d');
 
 const MANAGE = '/dashboard/billing?view=manage';
 
@@ -81,7 +84,8 @@ export function FinancesModule() {
   const tr = useTranslations();
   // Money follows the reader's locale; the currency does not.
   const locale = useLocale();
-  const shortDate = shortDateIn(locale.code);
+  const shortDate = shortDateWith(useFormat().fmtDate);
+  const clock = useFamilyClock();
   // Memoised on the locale code, not rebuilt per render: usdIn returns a NEW
   // function each call, and an unstable identity in a useMemo dependency list
   // either defeats the memo or leaves a stale closure behind it.
@@ -95,7 +99,7 @@ export function FinancesModule() {
   const [linkOpen, setLinkOpen] = useState(false);
   const [moreOpen, setMoreOpen] = useState(false);
   useDismissOnEscape(moreOpen, () => setMoreOpen(false));
-  const [calMonth, setCalMonth] = useState(() => { const d = new Date(); return new Date(d.getFullYear(), d.getMonth(), 1); });
+  const [calMonth, setCalMonth] = useState(() => { const d = clock.wallToday(); return new Date(d.getFullYear(), d.getMonth(), 1); });
 
   const { data: accounts, loading: la, error: accountsError, refresh: refreshAccounts } = useRealtimeQuery<Account>({
     table: 'financial_accounts', familyId, deps: [familyId],
@@ -120,8 +124,8 @@ export function FinancesModule() {
 
   const memberById = useMemo(() => new Map(members.map((m) => [m.id, m])), [members]);
 
-  const now = new Date();
-  const monthStartStr = ymd(new Date(now.getFullYear(), now.getMonth(), 1));
+  // The FAMILY's month (TIME-003).
+  const monthStartStr = `${clock.todayKey().slice(0, 7)}-01`;
 
   const monthTxns = useMemo(() => txns.filter((t) => t.date >= monthStartStr), [txns, monthStartStr]);
   const income = useMemo(() => monthTxns.filter((t) => t.type === 'income').reduce((s, t) => s + num(t.amount), 0), [monthTxns]);
@@ -508,12 +512,12 @@ export function FinancesModule() {
 }
 
 function BillsCalendar({ month, bills, onPrev, onNext }: { month: Date; bills: Bill[]; onPrev: () => void; onNext: () => void }) {
-  const locale = useLocale();
   const tr = useTranslations();
   const y = month.getFullYear(), m = month.getMonth();
   const daysInMonth = new Date(y, m + 1, 0).getDate();
   const startOffset = (new Date(y, m, 1).getDay());
-  const today = new Date(); const todayStr = ymd(today);
+  const format = useFormat();
+  const todayStr = useFamilyClock().todayKey();
   const statusByDay = useMemo(() => {
     const map = new Map<number, string>();
     for (const b of bills) {
@@ -533,11 +537,11 @@ function BillsCalendar({ month, bills, onPrev, onNext }: { month: Date; bills: B
     <div>
       <div className="mb-2 flex items-center justify-between">
         <button onClick={onPrev} aria-label={tr('finances.previousMonth')} className="rounded p-1 hover:bg-elevated"><ChevronLeft className="h-3.5 w-3.5" /></button>
-        <span className="text-sm font-semibold">{month.toLocaleDateString(locale.code, { month: 'long', year: 'numeric' })}</span>
+        <span className="text-sm font-semibold">{format.fmtDate(`${y}-${String(m + 1).padStart(2, '0')}-01`, 'MMMM yyyy')}</span>
         <button onClick={onNext} aria-label={tr('finances.nextMonth')} className="rounded p-1 hover:bg-elevated"><ChevronRight className="h-3.5 w-3.5" /></button>
       </div>
       <div className="grid grid-cols-7 gap-0.5 text-center">
-        {Array.from({ length: 7 }, (_, i) => new Date(2024, 0, 7 + i).toLocaleDateString(locale.code, { weekday: 'narrow' })).map((d, i) => <div key={i} className="py-1 text-[10px] font-semibold text-muted">{d}</div>)}
+        {Array.from({ length: 7 }, (_, i) => format.fmtDate(`2024-01-${String(7 + i).padStart(2, '0')}`, 'EEEEE')).map((d, i) => <div key={i} className="py-1 text-[10px] font-semibold text-muted">{d}</div>)}
         {cells.map((d, i) => {
           if (!d) return <div key={i} />;
           const isToday = ymd(new Date(y, m, d)) === todayStr;

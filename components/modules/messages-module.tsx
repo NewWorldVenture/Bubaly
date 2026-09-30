@@ -21,7 +21,9 @@ import { GifPicker } from '@/components/messages/gif-picker';
 import { Avatar } from '@/components/ui/avatar';
 import { SkeletonList, EmptyState } from '@/components/ui/states';
 import { roleLabel } from '@/lib/constants/roles';
-import { fmtDate, firstName } from '@/lib/utils/format';
+import { firstName } from '@/lib/utils/format';
+import { useFamilyClock, useFormat, type FamilyClock } from '@/components/i18n/use-format';
+import type { Format } from '@/lib/utils/format';
 import { cn } from '@/lib/utils/cn';
 import {
   convMatchesTab, previewText, shortTime as shortTimeIn, summarizeConversations, type ConvTab,
@@ -45,12 +47,14 @@ const CONV_TABS: { key: ConvTab; labelKey: string }[] = [
   { key: 'announcement', labelKey: 'messagesModule.tab.announcement' },
 ];
 
-function timeGroup(iso: string): string {
-  const d = new Date(iso);
-  const now = new Date();
-  const diff = (now.getTime() - d.getTime()) / 86400000;
-  if (diff < 1) return 'Today';
-  if (diff < 2) return 'Yesterday';
+// Grouped by the FAMILY's calendar day (TIME-003) — "Today" is today where the
+// family is, not the last 24 hours on whatever clock the phone keeps.
+function timeGroup(iso: string, fmtDate: Format['fmtDate'], clock: FamilyClock): string {
+  const day = clock.dayKeyOf(iso);
+  if (day === clock.todayKey()) return 'Today';
+  const yesterday = clock.wallToday();
+  yesterday.setDate(yesterday.getDate() - 1);
+  if (day === clock.wallKey(yesterday)) return 'Yesterday';
   return fmtDate(iso, 'MMMM d, yyyy');
 }
 
@@ -83,6 +87,8 @@ async function createConversation(payload: ConvInsert) {
 }
 
 export function MessagesModule() {
+  const { fmtDate } = useFormat();
+  const clock = useFamilyClock();
   const tr = useTranslations();
   // The date follows the reader and the words come from the catalogue.
   const locale = useLocale();
@@ -563,7 +569,7 @@ export function MessagesModule() {
   const media = useFamilyMediaUrls(messages.map((m) => m.attachment_url));
 
   const grouped = messages.reduce<{ label: string; msgs: Message[] }[]>((acc, msg) => {
-    const label = timeGroup(msg.created_at);
+    const label = timeGroup(msg.created_at, fmtDate, clock);
     const last = acc[acc.length - 1];
     if (!last || last.label !== label) acc.push({ label, msgs: [msg] });
     else last.msgs.push(msg);

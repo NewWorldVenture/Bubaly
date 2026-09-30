@@ -25,7 +25,8 @@ import {
   type RenewalLike, type ExpiryBucket,
 } from '@/lib/renewals/expiry';
 import type { Tables, RenewalStatus } from '@/lib/database.types';
-import { useLocale, useTranslations } from '@/components/i18n/locale-provider';
+import { useTranslations } from '@/components/i18n/locale-provider';
+import { useFormat } from '@/components/i18n/use-format';
 import { useConfirm } from '@/components/ui/confirm';
 import { safeWebLink } from '@/lib/utils/safe-link';
 
@@ -50,7 +51,7 @@ const blank = {
 };
 
 export function RenewalsModule() {
-  const locale = useLocale();
+  const format = useFormat();
   const t = useTranslations();
   const askConfirm = useConfirm();
   const { familyId, userId, members, role } = useApp();
@@ -134,7 +135,8 @@ export function RenewalsModule() {
     success(t('renewalsModule.renewalDeleted'));
   }
 
-  const fmtDate = (key: string) => new Date(`${key}T00:00:00`).toLocaleDateString(locale.code, { month: 'short', day: 'numeric', year: 'numeric' });
+  // A renewal date is a DATE, rendered as written (TIME-003).
+  const fmtDate = (key: string) => format.fmtDate(key, 'MMM d, yyyy');
   const countdown = (r: Renewal) => {
     const d = daysToExpiry(r as RenewalLike, tk);
     if (d < 0) return `${Math.abs(d)}d ago`;

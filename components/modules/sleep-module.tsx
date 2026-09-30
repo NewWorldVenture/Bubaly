@@ -19,27 +19,28 @@ import { ageOn } from '@/lib/members/age';
 import {
   SLEEP_SOURCES, durationMinutes, fmtHours, habitCorrelations, recentLogs, recommendedSleepHours, routineStepIdeas, sleepSummary, weeklyProgram, dayDiff,
 } from '@/lib/sleep/coach';
-import { useLocale, useTranslations } from '@/components/i18n/locale-provider';
-import type { LocaleCode } from '@/lib/i18n/locales';
+import { useTranslations } from '@/components/i18n/locale-provider';
+import { useFamilyClock, useFormat } from '@/components/i18n/use-format';
 import { useConfirm } from '@/components/ui/confirm';
 
 type Log = Tables<'sleep_logs'>;
 type Routine = Tables<'bedtime_routines'>;
 type Checkin = Tables<'sleep_checkins'>;
 
-const todayIso = () => new Date().toISOString().slice(0, 10);
 const localInput = (d: Date) => {
   const p = (n: number) => String(n).padStart(2, '0');
   return `${d.getFullYear()}-${p(d.getMonth() + 1)}-${p(d.getDate())}T${p(d.getHours())}:${p(d.getMinutes())}`;
 };
-const fmtTimeIn = (locale: LocaleCode) => (iso: string) => new Date(iso).toLocaleTimeString(locale, { hour: 'numeric', minute: '2-digit' });
-const fmtDayIn = (locale: LocaleCode) => (d: string) => new Date(`${d.slice(0, 10)}T00:00:00`).toLocaleDateString(locale, { weekday: 'short' });
 const DAYS = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'];
 
 export function SleepModule() {
-  const locale = useLocale();
-  const fmtTime = fmtTimeIn(locale.code);
-  const fmtDay = fmtDayIn(locale.code);
+  // The family's clock and day (TIME-003): a night logged at 23:30 belongs to
+  // the family's date, not Greenwich's or the phone's.
+  const format = useFormat();
+  const fmtTime = (iso: string) => format.fmtTime(iso);
+  const fmtDay = (d: string) => format.fmtDate(d.slice(0, 10), 'EEE');
+  const clock = useFamilyClock();
+  const todayIso = () => clock.todayKey();
   const t = useTranslations();
   const askConfirm = useConfirm();
   const { familyId, userId, members, selfMember } = useApp();
@@ -67,7 +68,7 @@ export function SleepModule() {
   const [routineOpen, setRoutineOpen] = useState(false);
   const [checkinOpen, setCheckinOpen] = useState(false);
 
-  const today = useMemo(() => new Date(), []);
+  const today = useMemo(() => clock.wallNow(), [clock]);
   const member = members.find((m) => m.id === memberId) ?? null;
   const age = ageOn(member?.birthday, today);
   const routine = routines.data.find((r) => r.member_id === memberId) ?? null;
@@ -359,6 +360,7 @@ function RoutineForm({ familyId, userId, memberId, age, routine, onClose, onSave
 }
 
 function CheckinForm({ familyId, userId, memberId, existing, onClose, onSaved }: { familyId: string; userId: string; memberId: string; existing: Checkin | null; onClose: () => void; onSaved: () => void }) {
+  const clock = useFamilyClock();
   const t = useTranslations();
   const { error: toastError } = useToast();
   const [loading, setLoading] = useState(false);
@@ -373,7 +375,7 @@ function CheckinForm({ familyId, userId, memberId, existing, onClose, onSaved }:
     const f = new FormData(e.currentTarget);
     setLoading(true);
     const { error } = await createClient().from('sleep_checkins').upsert({
-      family_id: familyId, member_id: memberId, checkin_date: todayIso(), energy, mood, caffeine_after_2pm: caffeine, screens_in_bed: screens, exercised,
+      family_id: familyId, member_id: memberId, checkin_date: clock.todayKey(), energy, mood, caffeine_after_2pm: caffeine, screens_in_bed: screens, exercised,
       notes: String(f.get('notes') ?? '').trim() || null, created_by: userId,
     }, { onConflict: 'member_id,checkin_date' });
     setLoading(false);

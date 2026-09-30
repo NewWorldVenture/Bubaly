@@ -24,7 +24,8 @@ import {
   TRIP_STATUS_LABELS, TRIP_STATUS_KEYS, TRIP_ITEM_KIND_KEYS, TRIP_ITEM_ADD_KEYS, type TripLike, type TripItemLike, type TripItemKind,
 } from '@/lib/trips/planner';
 import type { Tables, TripStatus } from '@/lib/database.types';
-import { useLocale, useTranslations } from '@/components/i18n/locale-provider';
+import { useTranslations } from '@/components/i18n/locale-provider';
+import { useFormat } from '@/components/i18n/use-format';
 import { useConfirm } from '@/components/ui/confirm';
 
 type Trip = Tables<'trips'>;
@@ -53,7 +54,7 @@ const blankTrip = {
 };
 
 export function TripsModule() {
-  const locale = useLocale();
+  const format = useFormat();
   const tr = useTranslations();
   const askConfirm = useConfirm();
   const { familyId, userId, members, role } = useApp();
@@ -179,10 +180,10 @@ export function TripsModule() {
 
   const fmtRange = (t: Trip) => {
     if (!t.start_date) return 'Dates TBD';
-    const opt: Intl.DateTimeFormatOptions = { month: 'short', day: 'numeric' };
-    const s = new Date(`${t.start_date}T00:00:00`).toLocaleDateString(locale.code, opt);
+    // Trip dates are DATES, rendered as written (TIME-003).
+    const s = format.fmtDate(t.start_date, 'MMM d');
     if (!t.end_date) return s;
-    const e = new Date(`${t.end_date}T00:00:00`).toLocaleDateString(locale.code, { ...opt, year: 'numeric' });
+    const e = format.fmtDate(t.end_date, 'MMM d, yyyy');
     return `${s} – ${e}`;
   };
 

@@ -13,7 +13,6 @@ import { Input, Textarea, Field, Select } from '@/components/ui/input';
 import { Button } from '@/components/ui/button';
 import { Avatar } from '@/components/ui/avatar';
 import { ErrorState, SkeletonList, EmptyState } from '@/components/ui/states';
-import { fmtDate } from '@/lib/utils/format';
 import { VISIT_KINDS, visitKindMeta, sortByVisitDate, upcomingFollowUps, daysUntilFollowUp, type VisitKind } from '@/lib/health/visits';
 import type { Tables } from '@/lib/database.types';
 import { useTranslations } from '@/components/i18n/locale-provider';
@@ -28,7 +27,7 @@ export function HealthVisitsModule({ defaultKind, title = 'Visits & History', lo
   defaultKind?: VisitKind; title?: string; lockKind?: boolean;
 }) {
   const t = useTranslations();
-  const { fmtMoney } = useFormat();
+  const { fmtDate, fmtMoney } = useFormat();
   const { familyId, userId, members, family, role } = useApp();
   // 0414 makes the database refuse a non-manager write on this table. The
   // controls follow it, the way medications-module.tsx already does — a button

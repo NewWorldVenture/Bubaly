@@ -18,6 +18,8 @@ import { cn } from '@/lib/utils/cn';
 import type { Tables } from '@/lib/database.types';
 import { drivingScore, scoreBand, SCORE_TINT, averageScore, fmtDateTime as fmtDateTimeIn } from '@/lib/family/safety';
 import { useLocale, useTranslations } from '@/components/i18n/locale-provider';
+import { fromLocalInput, toLocalInput } from '@/lib/time/local-input';
+import { useFamilyClock } from '@/components/i18n/use-format';
 
 type Trip = Tables<'driving_trips'>;
 
@@ -116,10 +118,12 @@ function Stat({ label, value, tint, icon: Icon }: { label: string; value: string
 }
 
 function TripModal({ members, familyId, userId, onClose }: { members: Tables<'family_members'>[]; familyId: string; userId: string; onClose: () => void }) {
+  // The box reads and writes the family's wall clock (TIME-003).
+  const clock = useFamilyClock();
   const tr = useTranslations();
   const { success, error: toastError } = useToast();
   const [saving, setSaving] = useState(false);
-  const [v, setV] = useState({ member_id: '', label: '', distance_miles: '', max_mph: '', hard_brakes: '0', rapid_accels: '0', phone_use_seconds: '0', started_at: new Date().toISOString().slice(0, 16) });
+  const [v, setV] = useState({ member_id: '', label: '', distance_miles: '', max_mph: '', hard_brakes: '0', rapid_accels: '0', phone_use_seconds: '0', started_at: toLocalInput(new Date().toISOString(), clock.timeZone) });
 
   const num = (x: string) => { const n = parseFloat(x); return Number.isFinite(n) ? n : 0; };
   const preview = drivingScore({ distance_miles: num(v.distance_miles), max_mph: num(v.max_mph), hard_brakes: num(v.hard_brakes), rapid_accels: num(v.rapid_accels), phone_use_seconds: num(v.phone_use_seconds) });
@@ -129,7 +133,7 @@ function TripModal({ members, familyId, userId, onClose }: { members: Tables<'fa
     setSaving(true);
     const { error } = await createClient().from('driving_trips').insert({
       family_id: familyId, member_id: v.member_id || null, label: v.label.trim() || null,
-      started_at: new Date(v.started_at).toISOString(),
+      started_at: fromLocalInput(v.started_at, clock.timeZone) ?? new Date(v.started_at).toISOString(),
       distance_miles: num(v.distance_miles), max_mph: Math.round(num(v.max_mph)),
       hard_brakes: Math.round(num(v.hard_brakes)), rapid_accels: Math.round(num(v.rapid_accels)),
       phone_use_seconds: Math.round(num(v.phone_use_seconds)), score: preview, created_by: userId,

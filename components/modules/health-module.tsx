@@ -1,7 +1,6 @@
 'use client';
 
 import { useCallback, useMemo, useState } from 'react';
-import { localDayKey, localDayKeyOf } from '@/lib/time/local-day';
 import { Activity, ChevronRight, Dumbbell, Heart, Plus, Sparkles, Zap, Thermometer, CheckCircle2, Trash2, Target, Loader2 } from 'lucide-react';
 import { useApp } from '@/components/app/app-context';
 import { useRealtimeQuery } from '@/lib/hooks/use-realtime-query';
@@ -17,6 +16,8 @@ import { PageHeader } from '@/components/app/page-header';
 import { cn } from '@/lib/utils/cn';
 import type { Tables, MetricType } from '@/lib/database.types';
 import { useLocale, useTranslations } from '@/components/i18n/locale-provider';
+import { useFamilyClock, useFormat, type FamilyClock } from '@/components/i18n/use-format';
+import type { Format } from '@/lib/utils/format';
 import { useConfirm } from '@/components/ui/confirm';
 
 type HealthMetric = Tables<'health_metrics'>;
@@ -54,17 +55,11 @@ const METRIC_TYPES: { value: MetricType; label: string; labelKey: string; unit: 
 
 type Translator = ReturnType<typeof useTranslations>;
 
-function todayStart() {
-  const d = new Date();
-  d.setHours(0, 0, 0, 0);
-  return d.toISOString();
-}
-
-function daysAgo(n: number) {
-  const d = new Date();
-  d.setDate(d.getDate() - n);
-  d.setHours(0, 0, 0, 0);
-  return d.toISOString();
+// The FAMILY's midnight, `daysBack` calendar days ago, as an instant (TIME-003).
+// `setHours(0, 0, 0, 0)` was the phone's midnight.
+function familyDayStart(clock: FamilyClock, daysBack = 0): string {
+  const w = clock.wallToday();
+  return clock.toInstant(new Date(w.getFullYear(), w.getMonth(), w.getDate() - daysBack)).toISOString();
 }
 
 function formatDuration(mins: number | null, locale: string, tr: Translator) {
@@ -77,15 +72,15 @@ function formatDuration(mins: number | null, locale: string, tr: Translator) {
     : tr('healthDashboard.durationHours', { hours: h.toLocaleString(locale) });
 }
 
-function formatRelativeTime(iso: string, locale: string, tr: Translator) {
+// Today, Yesterday and the clock are the FAMILY's (TIME-003).
+function formatRelativeTime(iso: string, tr: Translator, format: Format, clock: FamilyClock) {
   const d = new Date(iso);
-  const now = new Date();
-  const diffMs = now.getTime() - d.getTime();
-  const diffDays = Math.floor(diffMs / 86400000);
-  const time = d.toLocaleTimeString(locale, { hour: 'numeric', minute: '2-digit' });
-  if (diffDays === 0) return tr('healthDashboard.todayAt', { time });
-  if (diffDays === 1) return tr('healthDashboard.yesterdayAt', { time });
-  return d.toLocaleString(locale, { month: 'short', day: 'numeric', hour: 'numeric', minute: '2-digit' });
+  const day = clock.dayKeyOf(d);
+  const w = clock.wallToday();
+  const time = format.fmtTime(d);
+  if (day === clock.todayKey()) return tr('healthDashboard.todayAt', { time });
+  if (day === clock.wallKey(new Date(w.getFullYear(), w.getMonth(), w.getDate() - 1))) return tr('healthDashboard.yesterdayAt', { time });
+  return format.fmtDate(d, 'MMM d, h:mm a');
 }
 
 const WORKOUT_ICONS: Record<string, string> = {
@@ -107,6 +102,8 @@ function workoutIcon(activity: string) {
 }
 
 export function HealthModule() {
+  const clock = useFamilyClock();
+  const format = useFormat();
   const tr = useTranslations();
   const askConfirm = useConfirm();
   const { code: locale } = useLocale();
@@ -134,8 +131,8 @@ export function HealthModule() {
   const [coachError, setCoachError] = useState('');
 
   const now = useMemo(() => new Date().toISOString(), []);
-  const weekAgo = useMemo(() => daysAgo(7), []);
-  const todayISO = useMemo(() => todayStart(), []);
+  const weekAgo = useMemo(() => familyDayStart(clock, 7), [clock]);
+  const todayISO = useMemo(() => familyDayStart(clock), [clock]);
 
   // ── Data queries ──────────────────────────────────────────
   const { data: metrics, loading: metricsLoading, error: metricsError, refresh: refreshMetrics } = useRealtimeQuery<HealthMetric>({
@@ -231,20 +228,19 @@ export function HealthModule() {
   // Weekly bars (last 7 days step totals, normalized)
   const weeklyBars = useMemo(() => {
     const days: { day: string; val: number }[] = [];
+    // The FAMILY's last seven days (TIME-003).
+    const w = clock.wallToday();
     for (let i = 6; i >= 0; i--) {
-      const d = new Date();
-      d.setDate(d.getDate() - i);
-      d.setHours(0, 0, 0, 0);
-      const nextD = new Date(d);
-      nextD.setDate(nextD.getDate() + 1);
+      const from = familyDayStart(clock, i);
+      const to = familyDayStart(clock, i - 1);
       const daySteps = metrics
-        .filter((m) => m.type === 'steps' && m.recorded_at >= d.toISOString() && m.recorded_at < nextD.toISOString())
+        .filter((m) => m.type === 'steps' && m.recorded_at >= from && m.recorded_at < to)
         .reduce((s, m) => s + m.value, 0);
-      days.push({ day: d.toLocaleDateString(locale, { weekday: 'short' }), val: daySteps });
+      days.push({ day: format.fmtDate(clock.wallKey(new Date(w.getFullYear(), w.getMonth(), w.getDate() - i)), 'EEE'), val: daySteps });
     }
     const max = Math.max(...days.map((d) => d.val), 1);
     return days.map((d) => ({ ...d, pct: Math.round((d.val / max) * 100) }));
-  }, [metrics, locale]);
+  }, [metrics, clock, format]);
 
   // Member stats (steps, sleep, heart rate for today)
   const memberStats = useMemo(() => {
@@ -274,7 +270,7 @@ export function HealthModule() {
         // The reader's day, not Greenwich's: this counts ACTIVE DAYS and sums
         // steps per day, so a 17:00 walk in Los Angeles was credited to tomorrow
         // and could make one day look like two.
-        const k = localDayKeyOf(m.recorded_at);
+        const k = clock.dayKeyOf(m.recorded_at);
         if (k) activeDaySet.add(k);
       }
     });
@@ -284,7 +280,7 @@ export function HealthModule() {
       { label: tr('healthDashboard.caloriesBurned'), value: totalCals.toLocaleString(locale), sub: tr('healthDashboard.weekTotal'), color: 'text-emerald-300' },
       { label: tr('healthDashboard.activeDays'), value: `${activeDaySet.size.toLocaleString(locale)} / 7`, sub: tr('health.thisWeek'), color: 'text-orange-300' },
     ];
-  }, [metrics, locale, tr, formatSleepHours]);
+  }, [metrics, locale, tr, formatSleepHours, clock]);
 
   // Health insights (derived programmatically)
   const insights = useMemo(() => {
@@ -294,19 +290,16 @@ export function HealthModule() {
     for (const m of members) {
       const memberStepDays = new Map<string, number>();
       metrics.filter((met) => met.member_id === m.id && met.type === 'steps').forEach((met) => {
-        const day = localDayKeyOf(met.recorded_at);
+        const day = clock.dayKeyOf(met.recorded_at);
         if (day) memberStepDays.set(day, (memberStepDays.get(day) || 0) + met.value);
       });
       let consecutive = 0;
       for (let i = 0; i < 7; i++) {
-        const d = new Date();
-        d.setDate(d.getDate() - i);
-        // `setDate` walks LOCAL days, and `memberStepDays` above is now keyed by
-        // the local day too — so keying this with `toISOString()` would look up
-        // Greenwich's key in a local-keyed map and miss, breaking the streak for
-        // every reader with an offset. Half-converting is worse than not
-        // converting: before, both sides were Greenwich and at least agreed.
-        const key = localDayKey(d);
+        const w = clock.wallToday();
+        const d = new Date(w.getFullYear(), w.getMonth(), w.getDate() - i);
+        // Both sides are the FAMILY's day keys (TIME-003): the map above is keyed
+        // by `clock.dayKeyOf`, and this walks the family's calendar backwards.
+        const key = clock.wallKey(d);
         if ((memberStepDays.get(key) || 0) >= stepGoalFor(m.id)) {
           consecutive++;
         } else break;
@@ -321,7 +314,7 @@ export function HealthModule() {
     }
 
     // Sleep improvement check
-    const thisWeekSleep = metrics.filter((m) => m.type === 'sleep_hours' && m.recorded_at >= daysAgo(7));
+    const thisWeekSleep = metrics.filter((m) => m.type === 'sleep_hours' && m.recorded_at >= familyDayStart(clock, 7));
     const avgThisWeek = thisWeekSleep.length > 0 ? thisWeekSleep.reduce((s, m) => s + m.value, 0) / thisWeekSleep.length : 0;
     if (avgThisWeek >= 8) {
       result.push({
@@ -366,7 +359,7 @@ export function HealthModule() {
     }
 
     return result;
-  }, [metrics, todayMetrics, members, appointments, memberById, stepGoalFor, locale, tr, formatSleepHours]);
+  }, [metrics, todayMetrics, members, appointments, memberById, stepGoalFor, locale, tr, formatSleepHours, clock]);
 
   // ── CRUD handlers ──────────────────────────────────────────
   async function saveAppointment() {
@@ -699,7 +692,7 @@ export function HealthModule() {
                       </div>
                       <div className="text-right shrink-0">
                         {w.calories ? <p className="text-sm font-bold text-emerald-300">{w.calories.toLocaleString(locale)} {tr('healthDashboard.unitCalories')}</p> : null}
-                        <p suppressHydrationWarning className="text-xs text-muted">{formatRelativeTime(w.recorded_at, locale, tr)}</p>
+                        <p suppressHydrationWarning className="text-xs text-muted">{formatRelativeTime(w.recorded_at, tr, format, clock)}</p>
                       </div>
                     </div>
                   );
@@ -755,7 +748,7 @@ export function HealthModule() {
                       <p className="truncate text-xs text-muted">
                         {member?.display_name ?? tr('healthDashboard.unknownMember')}
                         {s.body_area ? ` · ${s.body_area}` : ''}
-                        {` · ${tr('healthDashboard.since', { time: formatRelativeTime(s.started_at, locale, tr) })}`}
+                        {` · ${tr('healthDashboard.since', { time: formatRelativeTime(s.started_at, tr, format, clock) })}`}
                         {s.notes ? ` · ${s.notes}` : ''}
                       </p>
                     </div>
@@ -804,8 +797,8 @@ export function HealthModule() {
                   <div key={a.id} className="flex items-start gap-3">
                     <div className={cn('grid h-10 w-10 shrink-0 place-items-center rounded-lg text-center text-fg', ACCENT[i % ACCENT.length])}>
                       <div>
-                        <p className="text-[9px] font-bold uppercase">{d.toLocaleDateString(locale, { month: 'short' })}</p>
-                        <p className="text-sm font-black leading-none">{d.getDate()}</p>
+                        <p className="text-[9px] font-bold uppercase">{format.fmtDate(d, 'MMM')}</p>
+                        <p className="text-sm font-black leading-none">{format.fmtDate(d, 'd')}</p>
                       </div>
                     </div>
                     <div>

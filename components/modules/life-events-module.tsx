@@ -37,6 +37,7 @@ import { launchDateFor, type LifeEventSuggestion } from '@/lib/life-events/detec
 import { launchLifeEventAction, setLifeEventStatusAction } from '@/app/(app)/dashboard/life-event-actions';
 import type { Tables } from '@/lib/database.types';
 import { useTranslations } from '@/components/i18n/locale-provider';
+import { useFamilyClock } from '@/components/i18n/use-format';
 import { useFormat } from '@/components/i18n/use-format';
 import type { Format } from '@/lib/utils/format';
 
@@ -67,6 +68,8 @@ export function LifeEventsModule({
   /** True when the signal read failed — the section says so instead of showing nothing. */
   suggestionsUnavailable?: boolean;
 } = {}) {
+  // The FAMILY's today (TIME-003).
+  const clock = useFamilyClock();
   const tr = useTranslations();
   // Dates follow the reader, not the browser (I18N-002).
   const fmt = useFormat();
@@ -242,7 +245,7 @@ export function LifeEventsModule({
                       variant="secondary"
                       className="self-start"
                       onClick={() => {
-                        setSuggestedDate(launchDateFor(s, new Date().toISOString().slice(0, 10)));
+                        setSuggestedDate(launchDateFor(s, clock.todayKey()));
                         setStartTemplate(s.templateKey);
                       }}
                     >

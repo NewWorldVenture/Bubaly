@@ -20,6 +20,8 @@ const harness = vi.hoisted(() => ({ locale: 'en-US' as string }));
 vi.mock('@/components/i18n/locale-provider', () => ({
   useTranslations: () => (key: string, params?: Record<string, string | number>) => translate(getMessages(harness.locale as LocaleCode), key, params),
   useLocale: () => localeOrDefault(harness.locale),
+  // No family bound: formatters fall back to the reader's zone (TIME-003).
+  useFamilyTimeZone: () => undefined,
 }));
 
 const { CheckInSheet, ProviderInfoSheet } = await import('@/components/medical/print-sheet');

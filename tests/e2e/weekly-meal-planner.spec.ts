@@ -194,7 +194,7 @@ async function fixture(page: Page, options: { familyId?: string; timezone?: stri
       react:React, 'react-dom':ReactDOM, 'lucide-react':window.LucideReact,
       'next/link':{default:({children,...props})=>h('a',props,children)},
       '@/components/app/app-context':{useApp:()=>({familyId:p.familyId,userId:'user-A',family:{id:p.familyId,name:p.familyId,timezone:p.timezone},members:[],selfMember:null,role:'parent',planLevel:2})},
-      '@/components/i18n/locale-provider':{useTranslations:()=>translate,useLocale:()=> ({code:'en-US'})},
+      '@/components/i18n/locale-provider':{useTranslations:()=>translate,useLocale:()=> ({code:'en-US'}),useFamilyTimeZone:()=>undefined},
       '@/components/ui/toast':{useToast:()=>({success:message=>p.notices.push({kind:'success',message}),error:message=>p.notices.push({kind:'error',message})})},
       '@capacitor/core':{Capacitor:{isNativePlatform:()=>false}}, '@capacitor/haptics':{},
       '@/components/ai/ai-insight':{AiInsight:()=>null},

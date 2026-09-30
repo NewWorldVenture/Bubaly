@@ -35,6 +35,7 @@ import {
   removeMomentGroceryAction,
 } from '@/app/(app)/dashboard/moment-actions';
 import { useLocale, useTranslations } from '@/components/i18n/locale-provider';
+import { useFamilyClock } from '@/components/i18n/use-format';
 
 type Event = Tables<'calendar_events'>;
 
@@ -76,7 +77,9 @@ export function MomentsView({ departures, departuresFailed = false, savedTicks, 
   const t = useTranslations();
   // The date follows the reader and the words come from the catalogue.
   const locale = useLocale();
-  const momentWhen = (startsAt: string, allDay: boolean) => momentWhenIn(startsAt, allDay, new Date(), locale.code, t);
+  // The family's clock and Today/Tomorrow (TIME-003).
+  const clock = useFamilyClock();
+  const momentWhen = (startsAt: string, allDay: boolean) => momentWhenIn(startsAt, allDay, new Date(), locale.code, t, clock.timeZone);
   const router = useRouter();
   const { familyId, members } = useApp();
   const { success, error: toastError } = useToast();

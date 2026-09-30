@@ -22,7 +22,7 @@ import {
 } from '@/lib/projects/planner';
 import { compareQuotes as rankQuotes } from '@/lib/services/providers/compare';
 import { useLocale, useTranslations } from '@/components/i18n/locale-provider';
-import type { LocaleCode } from '@/lib/i18n/locales';
+import { useFamilyClock, useFormat } from '@/components/i18n/use-format';
 import { useConfirm } from '@/components/ui/confirm';
 import { safeWebLink } from '@/lib/utils/safe-link';
 
@@ -31,14 +31,15 @@ type Material = Tables<'project_materials'>;
 type Quote = Tables<'project_quotes'>;
 type Contractor = Pick<Tables<'home_contractors'>, 'id' | 'name' | 'company' | 'trade' | 'phone' | 'is_preferred'>;
 
-const fmtDateIn = (locale: LocaleCode) => (d: string) => new Date(`${d.slice(0, 10)}T00:00:00`).toLocaleDateString(locale, { month: 'short', day: 'numeric' });
 const dollarsToCents = (v: FormDataEntryValue | null) => { const raw = String(v ?? '').trim(); if (!raw) return null; const n = Number(raw.replace(/[^0-9.]/g, '')); return Number.isFinite(n) ? Math.round(n * 100) : null; };
 const centsToDollars = (c: number | null | undefined) => (c === null || c === undefined ? '' : String(c / 100));
 const PRIORITY_STYLE: Record<HomeProjectPriority, string> = { high: 'border-rose-500/30 bg-rose-500/10 text-rose-200', medium: 'border-amber-500/30 bg-amber-500/10 text-amber-200', low: 'border-border bg-surface/60 text-muted' };
 
 export function ProjectsModule() {
   const locale = useLocale();
-  const fmtDate = fmtDateIn(locale.code);
+  const { fmtDate: fmt } = useFormat();
+  const fmtDate = (d: string) => fmt(d.slice(0, 10), 'MMM d');
+  const clock = useFamilyClock();
   const tr = useTranslations();
   const askConfirm = useConfirm();
   // Money follows the reader; the currency stays the money's own.
@@ -71,7 +72,9 @@ export function ProjectsModule() {
   const [openId, setOpenId] = useState<string | null>(null);
   const [showDone, setShowDone] = useState(false);
 
-  const today = useMemo(() => new Date(), []);
+  // The FAMILY's wall clock (TIME-003): the helpers below read local fields,
+  // so handing them this makes their "today" the family's day, not the phone's.
+  const today = useMemo(() => clock.wallNow(), [clock]);
   const summary = useMemo(() => projectsSummary(projects.data, materials.data, quotes.data, today), [projects.data, materials.data, quotes.data, today]);
   const nameOf = (id: string | null) => members.find((m) => m.id === id)?.display_name ?? null;
   const openProject = projects.data.find((p) => p.id === openId) ?? null;
@@ -301,7 +304,8 @@ function ProjectDetail({ project, familyId, userId, members, contractors, materi
   onClose: () => void; onEdit: () => void; onStatus: (s: HomeProjectStatus) => void; onDelete: () => void;
 }) {
   const locale = useLocale();
-  const fmtDate = fmtDateIn(locale.code);
+  const { fmtDate: fmt } = useFormat();
+  const fmtDate = (d: string) => fmt(d.slice(0, 10), 'MMM d');
   const tr = useTranslations();
   const askConfirm = useConfirm();
   // Money follows the reader; the currency stays the money's own.
@@ -553,6 +557,7 @@ function MaterialForm({ familyId, userId, projectId, material, onClose, onSaved 
 }
 
 function QuoteForm({ familyId, userId, projectId, contractors, quote, onClose, onSaved }: { familyId: string; userId: string; projectId: string; contractors: Contractor[]; quote: Quote | null; onClose: () => void; onSaved: () => void }) {
+  const clock = useFamilyClock();
   const tr = useTranslations();
   const { error: toastError } = useToast();
   const [loading, setLoading] = useState(false);
@@ -572,7 +577,7 @@ function QuoteForm({ familyId, userId, projectId, contractors, quote, onClose, o
     const payload = {
       contractor_id: contractorId || null, contractor_name: contractorName, amount_cents: amount ?? 0, includes_materials: includesMaterials,
       lead_time_days: String(f.get('lead_time_days') ?? '') ? Math.max(0, Number(f.get('lead_time_days'))) : null, valid_until: String(f.get('valid_until') ?? '') || null,
-      status, received_on: status === 'requested' ? null : (String(f.get('received_on') ?? '') || isoDate(new Date())), notes: String(f.get('notes') ?? '').trim() || null,
+      status, received_on: status === 'requested' ? null : (String(f.get('received_on') ?? '') || clock.todayKey()), notes: String(f.get('notes') ?? '').trim() || null,
     };
     const supabase = createClient();
     // Under RLS a refused row comes back with no error and zero rows, which this used to report as done. Audit C1-S9-79.
@@ -596,7 +601,7 @@ function QuoteForm({ familyId, userId, projectId, contractors, quote, onClose, o
           <Field label={tr('projects.leadTimeDays')}>{(id) => <Input id={id} name="lead_time_days" type="number" min={0} defaultValue={quote?.lead_time_days ?? ''} />}</Field>
         </div>
         <div className="grid grid-cols-2 gap-3">
-          <Field label={tr('projects.receivedOn')}>{(id) => <Input id={id} name="received_on" type="date" defaultValue={quote?.received_on ?? isoDate(new Date())} />}</Field>
+          <Field label={tr('projects.receivedOn')}>{(id) => <Input id={id} name="received_on" type="date" defaultValue={quote?.received_on ?? clock.todayKey()} />}</Field>
           <Field label={tr('projects.validUntil')}>{(id) => <Input id={id} name="valid_until" type="date" defaultValue={quote?.valid_until ?? ''} />}</Field>
         </div>
         <button type="button" aria-pressed={includesMaterials} onClick={() => setIncludesMaterials(!includesMaterials)} className={cn('rounded-full border px-3 py-1.5 text-sm coarse:min-h-11', includesMaterials ? 'border-brand bg-brand/15 text-brand-text' : 'border-border text-muted')}><Package className="mr-1 inline h-3.5 w-3.5" />{tr('projects.includesMaterials')}</button>

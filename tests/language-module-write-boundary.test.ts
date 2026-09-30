@@ -34,7 +34,8 @@ describe('language-module writes fail visibly', () => {
     }
   });
   it('grading a card persists the SM-2 result and the starter deck never inserts an empty batch', () => {
-    expect(bodies('gradeCard')[0]).toContain('const next = sm2(c, grade, new Date())');
+    // The review date is scheduled on the family's calendar (TIME-003).
+    expect(bodies('gradeCard')[0]).toContain('const next = sm2(c, grade, clock.wallNow())');
     expect(bodies('gradeCard')[0]).toContain(".update(next).eq('id', c.id)");
     expect(bodies('addStarterDeck')[0]).toMatch(/if \(!fresh\.length\) return toastError\(/);
   });

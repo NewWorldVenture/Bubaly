@@ -21,6 +21,8 @@ const sources = Object.fromEntries([
   // cannot mount — which tests/medications-fixture-module-graph.test.ts catches
   // by walking the import graph rather than waiting for the fixture to fail.
   'lib/time/local-day.ts',
+  // The family clock (TIME-003): the shared formatter and the zone helpers it reads.
+  'components/i18n/use-format.ts', 'lib/time/zoned.ts', 'lib/utils/format.ts',
   'lib/supabase/errors.ts', 'lib/schedule/zoned.ts',
   // budgets-view and savings-view route a refused money write through
   // reportRefusal, which sends an aal1 session to the step-up page (0382's
@@ -61,6 +63,12 @@ test.beforeEach(async ({ page }) => {
     window.addEventListener('unhandledrejection', e => p.errors.push(String(e.reason)));
     p.set = (table, result) => { state[table] = result; for (const listener of listeners) listener(); };
     const mocks = {
+      // TIME-003: the real lib/utils/format.ts runs here (through useFormat); date-fns
+      // is the one npm module it imports, and every pattern this fixture reaches is
+      // mapped to Intl inside that module, so only these entry points can be hit.
+      'date-fns': { parseISO: value => new Date(value), format: value => new Date(value).toISOString(),
+        isToday: value => value.toDateString() === new Date().toDateString(),
+        isTomorrow: value => { const day = new Date(); day.setDate(day.getDate() + 1); return value.toDateString() === day.toDateString(); } },
       react: React,
       'lucide-react': new Proxy({}, { get: () => () => null }),
       '@/lib/utils/cn': { cn: (...values) => values.filter(v => typeof v === 'string').join(' ') },
@@ -70,7 +78,9 @@ test.beforeEach(async ({ page }) => {
       // Locale record, not a code string: a () => 'en-US' stub type-checks
       // nowhere and fails at locale.code with an unhelpful undefined.
       '@/components/i18n/locale-provider': { useTranslations: () => key => key === 'states.tryAgain' ? 'Try again' : key,
-        useLocale: () => load('@/lib/i18n/locales').localeOrDefault('en-US') },
+        useLocale: () => load('@/lib/i18n/locales').localeOrDefault('en-US'),
+        // No family bound: the shared formatter keeps the reader's zone (TIME-003).
+        useFamilyTimeZone: () => undefined },
       '@/components/ui/toast': { useToast: () => ({ success() {}, error() {} }) },
       '@/components/ui/modal': { Modal: () => { throw new Error('Unexpected form write workflow'); } },
       '@/lib/supabase/client': { createClient: () => { throw new Error('Unexpected financial write'); } },

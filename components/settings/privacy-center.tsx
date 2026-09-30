@@ -23,7 +23,7 @@ import { useToast } from '@/components/ui/toast';
 import { Button } from '@/components/ui/button';
 import { Card } from '@/components/ui/card';
 import { isManager } from '@/lib/constants/roles';
-import { fmtDateTime } from '@/lib/utils/format';
+import { useFormat } from '@/components/i18n/use-format';
 import { sessionStrength, type Assurance } from '@/lib/auth/mfa';
 import { SignOutForm } from '@/components/auth/sign-out-form';
 import { settleAll } from '@/lib/supabase/settle';
@@ -54,6 +54,7 @@ function RetryNotice({ message, onRetry }: { message: string; onRetry: () => voi
 }
 
 export function PrivacyCenter() {
+  const { fmtDateTime } = useFormat();
   const t = useTranslations();
   const { role, members, userEmail } = useApp();
   const { success, error: toastError } = useToast();

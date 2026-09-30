@@ -35,7 +35,8 @@ import {
 } from '@/lib/chores/dashboard';
 import type { Tables, Updatable } from '@/lib/database.types';
 import { useLocale, useTranslations } from '@/components/i18n/locale-provider';
-import type { LocaleCode } from '@/lib/i18n/locales';
+import { useFamilyClock, useFormat, type FamilyClock } from '@/components/i18n/use-format';
+import type { Format } from '@/lib/utils/format';
 
 type Chore = Tables<'chores'>;
 type Reward = Tables<'rewards'>;
@@ -56,18 +57,19 @@ const DUE_TONE: Record<string, string> = {
   overdue: 'text-rose-400', today: 'text-amber-400', soon: 'text-amber-300', normal: 'text-muted', none: 'text-muted',
 };
 
-const timeAgoIn = (locale: LocaleCode) => (iso: string | null): string => {
+// "Today" and the clock are the FAMILY's (TIME-003).
+const timeAgoWith = (format: Format, clock: FamilyClock) => (iso: string | null): string => {
   if (!iso) return '';
   const d = new Date(iso);
-  const now = new Date();
-  const sameDay = d.toDateString() === now.toDateString();
-  const time = d.toLocaleTimeString(locale, { hour: 'numeric', minute: '2-digit' });
-  return sameDay ? `Today, ${time}` : `${d.toLocaleDateString(locale, { month: 'short', day: 'numeric' })}, ${time}`;
+  const sameDay = clock.dayKeyOf(d) === clock.todayKey();
+  const time = format.fmtTime(d);
+  return sameDay ? `Today, ${time}` : `${format.fmtDate(d, 'MMM d')}, ${time}`;
 };
 
 export function ChoresModule() {
-  const locale = useLocale();
-  const timeAgo = timeAgoIn(locale.code);
+  const format = useFormat();
+  const clock = useFamilyClock();
+  const timeAgo = timeAgoWith(format, clock);
   const tr = useTranslations();
   const { familyId, userId, role, members, selfMember } = useApp();
   const router = useRouter();
@@ -109,21 +111,21 @@ export function ChoresModule() {
   // Point-window filter for the leaderboard/points widgets.
   const windowed = useMemo(() => {
     if (pointsWindow === 'all') return data;
-    const since = new Date();
-    since.setHours(0, 0, 0, 0);
-    since.setDate(since.getDate() - (pointsWindow === 'week' ? 7 : 30));
+    // From the FAMILY's midnight, N calendar days back (TIME-003).
+    const wall = clock.wallToday();
+    const since = clock.toInstant(new Date(wall.getFullYear(), wall.getMonth(), wall.getDate() - (pointsWindow === 'week' ? 7 : 30)));
     return data.filter((a) => {
       if (!isCompleted(a.status)) return true; // active rows unaffected by the window
       const ts = a.approved_at ?? a.submitted_at;
       return ts ? new Date(ts) >= since : true;
     });
-  }, [data, pointsWindow]);
+  }, [data, pointsWindow, clock]);
 
   const asgLike = (rows: Assignment[]): AssignmentLike[] => rows.map((a) => ({ ...a, chore: a.chore }));
 
   const earners = useMemo(() => topEarners(members, asgLike(windowed)), [members, windowed]);
   const pointsMap = useMemo(() => pointsByMember(asgLike(windowed)), [windowed]);
-  const streaks = useMemo(() => streaksByMember(members, asgLike(data), new Date().toLocaleDateString('en-CA')), [members, data]);
+  const streaks = useMemo(() => streaksByMember(members, asgLike(data), clock.todayKey()), [members, data, clock]);
   const familyPoints = useMemo(() => totalFamilyPoints(asgLike(windowed)), [windowed]);
   const progress = useMemo(() => rewardsProgress(members, asgLike(data), rewards ?? []), [members, data, rewards]);
 
@@ -696,13 +698,13 @@ function CompletedGrid({ rows, memberById }: { rows: Assignment[]; memberById: M
 
 function CompletedCard({ a, member }: { a: Assignment; member?: Tables<'family_members'> }) {
   const tr = useTranslations();
-  const locale = useLocale();
+  const format = useFormat();
   return (
     <div className="flex items-center gap-3 rounded-xl border border-border bg-surface/40 px-3 py-2.5">
       <CheckCircle2 className="h-4 w-4 shrink-0 text-emerald-400" />
       <div className="min-w-0 flex-1">
         <div className="truncate text-sm font-medium">{a.chore?.title ?? '—'}</div>
-        <div className="text-[11px] text-muted">{member?.display_name ?? 'Someone'} · {a.approved_at ? new Date(a.approved_at).toLocaleDateString(locale.code, { month: 'short', day: 'numeric' }) : 'Done'}</div>
+        <div className="text-[11px] text-muted">{member?.display_name ?? 'Someone'} · {a.approved_at ? format.fmtDate(a.approved_at, 'MMM d') : 'Done'}</div>
       </div>
       <span className="flex shrink-0 items-center gap-1 text-xs font-semibold text-amber-400"><Star className="h-3.5 w-3.5 fill-amber-400" /> {tr('choresModule.nPts', { count: a.points_awarded ?? a.chore?.points ?? 0 })}</span>
     </div>

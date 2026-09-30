@@ -24,7 +24,8 @@ import {
   RIDE_STATUS_LABELS, type RideLike,
 } from '@/lib/rides/schedule';
 import type { Tables, RideStatus } from '@/lib/database.types';
-import { useLocale, useTranslations } from '@/components/i18n/locale-provider';
+import { useTranslations } from '@/components/i18n/locale-provider';
+import { useFormat } from '@/components/i18n/use-format';
 import { useConfirm } from '@/components/ui/confirm';
 
 type Ride = Tables<'rides'>;
@@ -48,7 +49,7 @@ const blankRide = {
 };
 
 export function RidesModule() {
-  const locale = useLocale();
+  const format = useFormat();
   const tr = useTranslations();
   const askConfirm = useConfirm();
   const t = useTranslations();
@@ -150,8 +151,8 @@ export function RidesModule() {
     setForm((f) => ({ ...f, rider_ids: f.rider_ids.includes(id) ? f.rider_ids.filter((x) => x !== id) : [...f.rider_ids, id] }));
   }
 
-  const fmtDay = (key: string) =>
-    new Date(`${key}T00:00:00`).toLocaleDateString(locale.code, { weekday: 'long', month: 'short', day: 'numeric' });
+  // A ride day is a DATE, rendered as written (TIME-003).
+  const fmtDay = (key: string) => format.fmtDate(key, 'EEEE, MMM d');
 
   if (loading) return <SkeletonList count={5} />;
   if (error) return <ErrorState message={typeof error === 'string' ? error : 'Failed to load rides'} />;

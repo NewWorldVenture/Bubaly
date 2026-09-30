@@ -25,7 +25,7 @@ import { ContextRail, type ActivityItem, type GlanceItem, type UpcomingEvent } f
 import { createClient } from '@/lib/supabase/client';
 import { settleAll } from '@/lib/supabase/settle';
 import { describeDbError, wroteNoRows } from '@/lib/supabase/errors';
-import { fmtRelative } from '@/lib/utils/format';
+import { useFamilyClock, useFormat } from '@/components/i18n/use-format';
 import { cn } from '@/lib/utils/cn';
 import { isManager } from '@/lib/constants/roles';
 import { useVoice } from '@/lib/hooks/use-voice';
@@ -104,6 +104,8 @@ export function withRunCards(cards: ResultCard[], runIds: string[]): ResultCard[
 }
 
 export function AssistantModule() {
+  const clock = useFamilyClock();
+  const { fmtRelative } = useFormat();
   const t = useTranslations();
   const plural = usePlural();
   const { family, selfMember, role } = useApp();
@@ -120,7 +122,8 @@ export function AssistantModule() {
   useDismissOnEscape(showVoiceMenu, () => setShowVoiceMenu(false));
 
   const greeting = () => {
-    const h = new Date().getHours();
+    // Good morning by the FAMILY's clock (TIME-003).
+    const h = clock.hourNow();
     const part = h < 12 ? 'morning' : h < 18 ? 'afternoon' : 'evening';
     // Without a name the greeting has none, rather than an English "there".
     const content = firstName
@@ -174,10 +177,11 @@ export function AssistantModule() {
   const loadRail = useCallback(async () => {
     if (!family?.id) return;
     const supabase = createClient();
-    const now = new Date();
-    const start = new Date(now); start.setHours(0, 0, 0, 0);
-    const end = new Date(start); end.setDate(end.getDate() + 1);
-    const in14 = new Date(start); in14.setDate(in14.getDate() + 14);
+    // The FAMILY's day and fortnight, as instants (TIME-003).
+    const wall = clock.wallToday();
+    const start = clock.toInstant(wall);
+    const end = clock.toInstant(new Date(wall.getFullYear(), wall.getMonth(), wall.getDate() + 1));
+    const in14 = clock.toInstant(new Date(wall.getFullYear(), wall.getMonth(), wall.getDate() + 14));
     setRailLoading(true);
 
     const [todayRes, choresRes, upcomingRes, remindersRes, medsRes] = await settleAll([
@@ -215,7 +219,7 @@ export function AssistantModule() {
       time: fmtRelative(e.created_at),
       color: ['text-emerald-400', 'text-orange-400', 'text-violet-400'][i] ?? 'text-violet-400',
     })));
-  }, [family?.id, t]);
+  }, [family?.id, t, clock, fmtRelative]);
 
   useEffect(() => { void loadRail(); }, [loadRail]);
 

@@ -14,7 +14,7 @@ import { createClient } from '@/lib/supabase/client';
 import { settleAll } from '@/lib/supabase/settle';
 import { useToast } from '@/components/ui/toast';
 import { SkeletonList } from '@/components/ui/states';
-import { fmtTime } from '@/lib/utils/format';
+import { useFamilyClock, useFormat } from '@/components/i18n/use-format';
 import { describeDbError } from '@/lib/supabase/errors';
 import {
   completeFocusTodo, createFocusTimer, focusTimerReducer, runFocusAction, submitFocusChore,
@@ -37,6 +37,7 @@ export function FocusModule() {
 }
 
 function FocusQueue() {
+  const { fmtTime } = useFormat();
   const tr = useTranslations();
   const { familyId, userId } = useApp();
   const { success, error: toastError } = useToast();
@@ -50,6 +51,7 @@ function FocusQueue() {
   const active = useRef(false);
   const loadVersion = useRef(0);
 
+  const clock = useFamilyClock();
   const load = useCallback(async () => {
     const version = ++loadVersion.current;
     setItems(null);
@@ -58,9 +60,10 @@ function FocusQueue() {
     setSubmittedCount(0);
     try {
       const supabase = createClient();
-      const now = new Date();
-      const dayStart = new Date(now); dayStart.setHours(0, 0, 0, 0);
-      const dayEnd = new Date(dayStart); dayEnd.setDate(dayEnd.getDate() + 1);
+      // The FAMILY's today, as the two instants that bound it (TIME-003).
+      const wall = clock.wallToday();
+      const dayStart = clock.toInstant(wall);
+      const dayEnd = clock.toInstant(new Date(wall.getFullYear(), wall.getMonth(), wall.getDate() + 1));
 
       const { data: member, error: memberErr } = await supabase.from('family_members').select('id').eq('family_id', familyId).eq('user_id', userId).maybeSingle();
       if (!active.current || version !== loadVersion.current) return;
@@ -110,7 +113,7 @@ function FocusQueue() {
         setItems([]);
       }
     }
-  }, [familyId, userId]);
+  }, [familyId, userId, clock, fmtTime]);
 
   useEffect(() => {
     active.current = true;

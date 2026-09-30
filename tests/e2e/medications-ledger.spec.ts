@@ -20,6 +20,8 @@ const sources = Object.fromEntries([
   // below throws on any module missing from this list, so its imports belong here.
   'lib/time/zoned.ts',
   'components/i18n/locale-provider.tsx', 'lib/i18n/locales.ts', 'lib/i18n/messages.ts', 'lib/i18n/translate.ts',
+  // The family clock (TIME-003): the shared formatter and the zone helpers it reads.
+  'components/i18n/use-format.ts', 'lib/time/local-day.ts', 'lib/utils/format.ts',
   'components/ui/states.tsx', 'components/ui/states-client.tsx', 'components/ui/button.tsx',
   'components/ui/input.tsx', 'components/ui/modal.tsx',
   // medications-module.tsx asks before a destructive write via useConfirm; the
@@ -159,6 +161,12 @@ async function fixture(page: Page, locale: 'en-US' | 'fr-FR' = 'en-US'): Promise
     db.auth.getSession = async () => ({ data: { session }, error: null });
     db.auth.onAuthStateChange = () => ({ data: { subscription: { unsubscribe() {} } } });
     const mocks = {
+      // TIME-003: the real lib/utils/format.ts runs here (through useFormat); date-fns
+      // is the one npm module it imports, and every pattern this fixture reaches is
+      // mapped to Intl inside that module, so only these entry points can be hit.
+      'date-fns': { parseISO: value => new Date(value), format: value => new Date(value).toISOString(),
+        isToday: value => value.toDateString() === new Date().toDateString(),
+        isTomorrow: value => { const day = new Date(); day.setDate(day.getDate() + 1); return value.toDateString() === day.toDateString(); } },
       '@/lib/auth/browser-session-storage': { captureBrowserSessionSnapshot: () => ({ accessToken: session.access_token }) }, react: React, 'react-dom': ReactDOM,
       'lucide-react': new Proxy({}, { get: () => () => null }),
       '@/components/app/app-context': { useApp: app }, '@/lib/supabase/client': { createClient: () => db },

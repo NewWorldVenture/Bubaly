@@ -19,19 +19,19 @@ import type { Tables, CefrLevel, LanguageSessionKind } from '@/lib/database.type
 import {
   CEFR, SESSION_KINDS, LANGUAGES, GRADES, cefrMeta, kindMeta, languageMeta, starterDeck, sm2, dueCards, deckStats, weekProgress, streak, levelEstimate, suggestToday, languageSummary, isoDate, type Grade,
 } from '@/lib/language/practice';
-import { useLocale, useTranslations } from '@/components/i18n/locale-provider';
-import type { LocaleCode } from '@/lib/i18n/locales';
+import { useTranslations } from '@/components/i18n/locale-provider';
+import { useFamilyClock, useFormat } from '@/components/i18n/use-format';
 import { useConfirm } from '@/components/ui/confirm';
 
 type Goal = Tables<'language_goals'>;
 type Session = Tables<'language_sessions'>;
 type Card = Tables<'vocab_cards'>;
 
-const fmtDateIn = (locale: LocaleCode) => (d: string) => new Date(`${d.slice(0, 10)}T00:00:00`).toLocaleDateString(locale, { month: 'short', day: 'numeric' });
 
 export function LanguageModule() {
-  const locale = useLocale();
-  const fmtDate = fmtDateIn(locale.code);
+  const { fmtDate: fmt } = useFormat();
+  const fmtDate = (d: string) => fmt(d.slice(0, 10), 'MMM d');
+  const clock = useFamilyClock();
   const tr = useTranslations();
   const askConfirm = useConfirm();
   const { familyId, userId, members, selfMember } = useApp();
@@ -74,7 +74,9 @@ export function LanguageModule() {
   const [showArchived, setShowArchived] = useState(false);
   const [adding, setAdding] = useState(false);
 
-  const today = useMemo(() => new Date(), []);
+  // The FAMILY's wall clock (TIME-003): the helpers below read local fields,
+  // so handing them this makes their "today" the family's day, not the phone's.
+  const today = useMemo(() => clock.wallNow(), [clock]);
   const goal = goals.data.find((g) => g.id === goalId) ?? null;
   const myCards = useMemo(() => cards.data.filter((c) => c.goal_id === goalId), [cards.data, goalId]);
   const mySessions = useMemo(() => sessions.data.filter((s) => s.goal_id === goalId), [sessions.data, goalId]);
@@ -90,7 +92,7 @@ export function LanguageModule() {
   const visibleGoals = goals.data.filter((g) => g.is_active || showArchived || g.id === goalId);
 
   async function gradeCard(c: Card, grade: Grade) {
-    const next = sm2(c, grade, new Date());
+    const next = sm2(c, grade, clock.wallNow());
     // Under RLS a refused row comes back with no error and zero rows, which this used to report as done. Audit C1-S9-80.
     const { data: updated, error } = await createClient().from('vocab_cards').update(next).eq('id', c.id).select('id');
     if (error) return toastError(describeDbError(error));
@@ -102,7 +104,7 @@ export function LanguageModule() {
   async function finishReview() {
     if (!goal || !reviewedCount) return;
     const minutes = Math.max(1, Math.round(reviewedCount / 4));
-    const { error } = await createClient().from('language_sessions').insert({ family_id: familyId, goal_id: goal.id, member_id: goal.member_id, kind: 'vocab', minutes, topic: `${reviewedCount} cards reviewed`, practiced_on: isoDate(new Date()), created_by: userId });
+    const { error } = await createClient().from('language_sessions').insert({ family_id: familyId, goal_id: goal.id, member_id: goal.member_id, kind: 'vocab', minutes, topic: `${reviewedCount} cards reviewed`, practiced_on: clock.todayKey(), created_by: userId });
     if (error) return toastError(describeDbError(error));
     success(tr('modules.cardsReviewed', { count: reviewedCount, minutes }));
     setReviewedCount(0);
@@ -130,7 +132,7 @@ export function LanguageModule() {
     const fresh = deckCards.filter((c) => !have.has(c.term.toLowerCase()));
     if (!fresh.length) return toastError(tr('languageModule.theStarterDeckIsAlready'));
     setAdding(true);
-    const { error } = await createClient().from('vocab_cards').insert(fresh.map((c) => ({ family_id: familyId, goal_id: goal.id, term: c.term, translation: c.translation, example: c.example ?? null, part_of_speech: c.pos ?? null, tags: ['starter'], due_on: isoDate(new Date()), created_by: userId })));
+    const { error } = await createClient().from('vocab_cards').insert(fresh.map((c) => ({ family_id: familyId, goal_id: goal.id, term: c.term, translation: c.translation, example: c.example ?? null, part_of_speech: c.pos ?? null, tags: ['starter'], due_on: clock.todayKey(), created_by: userId })));
     setAdding(false);
     if (error) return toastError(describeDbError(error));
     success(tr('modules.starterCardsAdded', { count: fresh.length }));
@@ -332,6 +334,7 @@ export function LanguageModule() {
 }
 
 function GoalForm({ familyId, userId, members, goal, defaultMember, onClose, onSaved }: { familyId: string; userId: string; members: { id: string; display_name: string }[]; goal: Goal | null; defaultMember: string | null; onClose: () => void; onSaved: (id: string) => void }) {
+  const clock = useFamilyClock();
   const tr = useTranslations();
   const { error: toastError } = useToast();
   const [loading, setLoading] = useState(false);
@@ -361,7 +364,7 @@ function GoalForm({ familyId, userId, members, goal, defaultMember, onClose, onS
       // New goal: seed the starter deck so the first review is one tap away.
       const deckCards = starterDeck(code);
       if (deckCards.length) {
-        const { error: deckError } = await supabase.from('vocab_cards').insert(deckCards.map((c) => ({ family_id: familyId, goal_id: data.id, term: c.term, translation: c.translation, example: c.example ?? null, part_of_speech: c.pos ?? null, tags: ['starter'], due_on: isoDate(new Date()), created_by: userId })));
+        const { error: deckError } = await supabase.from('vocab_cards').insert(deckCards.map((c) => ({ family_id: familyId, goal_id: data.id, term: c.term, translation: c.translation, example: c.example ?? null, part_of_speech: c.pos ?? null, tags: ['starter'], due_on: clock.todayKey(), created_by: userId })));
         if (deckError) toastError(describeDbError(deckError));
       }
     }
@@ -395,6 +398,7 @@ function GoalForm({ familyId, userId, members, goal, defaultMember, onClose, onS
 
 function CardForm({ familyId, userId, goalId, card, onClose, onSaved }: { familyId: string; userId: string; goalId: string; card: Card | null; onClose: () => void; onSaved: () => void }) {
   const tr = useTranslations();
+  const clock = useFamilyClock();
   const { error: toastError } = useToast();
   const [loading, setLoading] = useState(false);
 
@@ -409,7 +413,7 @@ function CardForm({ familyId, userId, goalId, card, onClose, onSaved }: { family
     const supabase = createClient();
     const { data: saved, error } = card
       ? await supabase.from('vocab_cards').update(payload).eq('id', card.id).select('id')
-      : await supabase.from('vocab_cards').insert({ family_id: familyId, goal_id: goalId, created_by: userId, due_on: isoDate(new Date()), ...payload }).select('id');
+      : await supabase.from('vocab_cards').insert({ family_id: familyId, goal_id: goalId, created_by: userId, due_on: clock.todayKey(), ...payload }).select('id');
     setLoading(false);
     if (error) return toastError(describeDbError(error));
     if (wroteNoRows(saved)) return toastError(tr('errors.thatChangeWasNotSaved'));
@@ -440,6 +444,7 @@ function CardForm({ familyId, userId, goalId, card, onClose, onSaved }: { family
 
 function SessionForm({ familyId, userId, goal, suggested, onClose, onSaved }: { familyId: string; userId: string; goal: Goal; suggested: { kind: LanguageSessionKind; minutes: number } | null; onClose: () => void; onSaved: () => void }) {
   const tr = useTranslations();
+  const clock = useFamilyClock();
   const { error: toastError } = useToast();
   const [loading, setLoading] = useState(false);
 
@@ -452,7 +457,7 @@ function SessionForm({ familyId, userId, goal, suggested, onClose, onSaved }: { 
     const { error } = await createClient().from('language_sessions').insert({
       family_id: familyId, goal_id: goal.id, member_id: goal.member_id, kind: String(f.get('kind') ?? 'vocab') as LanguageSessionKind, minutes,
       score: scoreRaw ? Math.max(0, Math.min(100, Number(scoreRaw))) : null, topic: String(f.get('topic') ?? '').trim() || null,
-      corrections: String(f.get('corrections') ?? '').split('\n').map((c) => c.trim()).filter(Boolean), practiced_on: String(f.get('practiced_on') ?? '') || isoDate(new Date()),
+      corrections: String(f.get('corrections') ?? '').split('\n').map((c) => c.trim()).filter(Boolean), practiced_on: String(f.get('practiced_on') ?? '') || clock.todayKey(),
       notes: String(f.get('notes') ?? '').trim() || null, created_by: userId,
     });
     setLoading(false);
@@ -466,7 +471,7 @@ function SessionForm({ familyId, userId, goal, suggested, onClose, onSaved }: { 
         <div className="grid grid-cols-3 gap-3">
           <Field label={tr('language.what')}>{(id) => <Select id={id} name="kind" defaultValue={suggested?.kind ?? 'vocab'}>{SESSION_KINDS.map((k) => <option key={k.value} value={k.value}>{k.emoji} {k.label}</option>)}</Select>}</Field>
           <Field label={tr('language.minutes')} required>{(id) => <Input id={id} name="minutes" type="number" min={1} max={600} defaultValue={suggested?.minutes ?? 15} autoFocus />}</Field>
-          <Field label={tr('language.when')}>{(id) => <Input id={id} name="practiced_on" type="date" defaultValue={isoDate(new Date())} />}</Field>
+          <Field label={tr('language.when')}>{(id) => <Input id={id} name="practiced_on" type="date" defaultValue={clock.todayKey()} />}</Field>
         </div>
         <div className="grid grid-cols-2 gap-3">
           <Field label={tr('language.topic')}>{(id) => <Input id={id} name="topic" placeholder={tr('language.orderingFoodPastTenseEpisode3')} />}</Field>

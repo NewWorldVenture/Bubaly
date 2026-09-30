@@ -13,7 +13,7 @@ import { Input, Textarea, Field, Select } from '@/components/ui/input';
 import { Button } from '@/components/ui/button';
 import { Avatar } from '@/components/ui/avatar';
 import { ErrorState, SkeletonList, EmptyState } from '@/components/ui/states';
-import { fmtDate } from '@/lib/utils/format';
+import { useFormat } from '@/components/i18n/use-format';
 import { COMMON_VACCINES, sortByDateGiven, dueImmunizations, dueStatus, daysUntilDue } from '@/lib/health/immunizations';
 import type { Tables } from '@/lib/database.types';
 import { useTranslations } from '@/components/i18n/locale-provider';
@@ -29,6 +29,7 @@ const STATUS_STYLE: Record<string, string> = {
 };
 
 export function ImmunizationsModule({ title = 'Immunizations' }: { title?: string }) {
+  const { fmtDate } = useFormat();
   const t = useTranslations();
   const { familyId, userId, members, role } = useApp();
   // 0414 makes the database refuse a non-manager write on this table. The

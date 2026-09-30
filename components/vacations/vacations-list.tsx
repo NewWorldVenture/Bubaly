@@ -13,7 +13,7 @@ import { Modal } from '@/components/ui/modal';
 import { Input, Textarea, Field, Select } from '@/components/ui/input';
 import { Button } from '@/components/ui/button';
 import { LoadingBlock, EmptyState, ErrorState } from '@/components/ui/states';
-import { fmtDate } from '@/lib/utils/format';
+import { useFormat } from '@/components/i18n/use-format';
 import { VACATION_KINDS, VACATION_STATUSES, lookup } from '@/lib/vacations/meta';
 import { countdownLabel, daysUntil, isActive } from '@/lib/vacations/dates';
 import type { Tables } from '@/lib/database.types';
@@ -26,6 +26,7 @@ type Score = Tables<'vacation_travel_scores'>;
 const blank = () => ({ title: '', kind: 'domestic', destination: '', start_date: '', end_date: '', budget: '', description: '', is_international: false });
 
 export function VacationsList({ openCreate = false }: { openCreate?: boolean }) {
+  const { fmtDate } = useFormat();
   const tr = useTranslations();
   const { familyId, userId } = useApp();
   const router = useRouter();

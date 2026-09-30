@@ -22,8 +22,9 @@ import { PageHeader } from '@/components/app/page-header';
 import { cn } from '@/lib/utils/cn';
 import { MANAGER_ROLES, type MemberRole } from '@/lib/constants/roles';
 import type { Tables } from '@/lib/database.types';
-import { useLocale, usePlural, useTranslations } from '@/components/i18n/locale-provider';
-import type { LocaleCode } from '@/lib/i18n/locales';
+import { usePlural, useTranslations } from '@/components/i18n/locale-provider';
+import { useFamilyClock, useFormat, type FamilyClock } from '@/components/i18n/use-format';
+import type { Format } from '@/lib/utils/format';
 import { isValidTimezone } from '@/lib/time/zoned';
 import { ageOn, nextBirthday } from '@/lib/utils/birthday';
 import { FamilyMediaImg } from '@/components/media/family-media-img';
@@ -54,19 +55,13 @@ function inLabel(days: number): string {
   const months = Math.round(days / 30);
   return months <= 1 ? 'in 1 month' : `in ${months} months`;
 }
-const fmtRelDayIn = (locale: LocaleCode) => (iso: string): string => {
-  const d = new Date(iso);
-  const now = new Date();
-  const days = Math.round((new Date(d.getFullYear(), d.getMonth(), d.getDate()).getTime() - new Date(now.getFullYear(), now.getMonth(), now.getDate()).getTime()) / 86_400_000);
-  if (days === 0) return 'Today';
-  if (days === 1) return 'Tomorrow';
-  return d.toLocaleDateString(locale, { month: 'short', day: 'numeric' });
-};
-const fmtTimeIn = (locale: LocaleCode) => (iso: string): string => {
-  return new Date(iso).toLocaleTimeString(locale, { hour: 'numeric', minute: '2-digit' });
-};
-const fmtDateIn = (locale: LocaleCode) => (iso: string): string => {
-  return new Date(iso).toLocaleDateString(locale, { month: 'short', day: 'numeric', year: 'numeric' });
+// Today, Tomorrow and every clock are the FAMILY's (TIME-003).
+const fmtRelDayWith = (format: Format, clock: FamilyClock) => (iso: string): string => {
+  const day = clock.dayKeyOf(iso);
+  const wall = clock.wallToday();
+  if (day === clock.todayKey()) return 'Today';
+  if (day === clock.wallKey(new Date(wall.getFullYear(), wall.getMonth(), wall.getDate() + 1))) return 'Tomorrow';
+  return format.fmtDate(iso, 'MMM d');
 };
 function planLabel(level: number): string {
   return level >= 2 ? 'Family+' : level === 1 ? 'Family Basic' : 'Free';
@@ -83,10 +78,11 @@ const ROLE_OPTIONS: MemberRole[] = ['parent', 'adult', 'teen', 'child', 'caregiv
 const MEMBER_COLORS = ['#6366f1', '#ec4899', '#f59e0b', '#10b981', '#3b82f6', '#8b5cf6', '#ef4444', '#14b8a6'];
 
 export function FamilyModule() {
-  const locale = useLocale();
-  const fmtRelDay = fmtRelDayIn(locale.code);
-  const fmtTime = fmtTimeIn(locale.code);
-  const fmtDate = fmtDateIn(locale.code);
+  const format = useFormat();
+  const clock = useFamilyClock();
+  const fmtRelDay = fmtRelDayWith(format, clock);
+  const fmtTime = (iso: string): string => format.fmtTime(iso);
+  const fmtDate = (iso: string): string => format.fmtDate(iso, 'MMM d, yyyy');
   const t = useTranslations();
   const plural = usePlural();
   const { familyId, userId, role, members, refreshMembers, planLevel } = useApp();
@@ -165,7 +161,8 @@ export function FamilyModule() {
 
   useEffect(() => { void load(); }, [load]);
 
-  const now = useMemo(() => new Date(), []);
+  // nextBirthday reads local fields: hand it the FAMILY's wall clock (TIME-003).
+  const now = useMemo(() => clock.wallNow(), [clock]);
   const activeMembers = useMemo(() => members.filter((m) => m.is_active), [members]);
   const memberById = useMemo(() => new Map(members.map((m) => [m.id, m])), [members]);
 
@@ -431,7 +428,7 @@ export function FamilyModule() {
                     <p className="truncate text-sm font-semibold">{m.display_name}</p>
                     <p className="truncate text-xs text-muted">{t('family.turns')} {nb.turning} {inLabel(nb.inDays)}</p>
                   </div>
-                  <span className="shrink-0 text-xs font-semibold text-muted">{nb.date.toLocaleDateString(locale.code, { month: 'short', day: 'numeric' })}</span>
+                  <span className="shrink-0 text-xs font-semibold text-muted">{format.fmtDate(clock.wallKey(nb.date), 'MMM d')}</span>
                 </div>
               ))}
             </div>

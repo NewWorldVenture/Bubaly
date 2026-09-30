@@ -7,19 +7,19 @@ import { formatCents as formatCentsIn } from '@/lib/wallet/ledger';
 import { txnTypeLabel, txnTypeKey, txnStatusKey, signedAmountCents, filterTxns, groupByDay, netCents, toStatementCsv, statementFilename, type ActivityTxn } from '@/lib/wallet/activity';
 import { WalletSubnav } from '@/components/wallet/wallet-subnav';
 import { useLocale, useTranslations } from '@/components/i18n/locale-provider';
-import type { LocaleCode } from '@/lib/i18n/locales';
+import { useFamilyClock, useFormat } from '@/components/i18n/use-format';
+import type { Format } from '@/lib/utils/format';
 
 type Row = ActivityTxn & { childName: string | null };
 
 const TYPES = ['parent_top_up', 'allowance', 'chore_reward', 'gift_received', 'transfer', 'goal_transfer', 'babysitter_payment', 'card_spend', 'card_refund', 'adjustment', 'reversal'];
 
-const dayLabelIn = (locale: LocaleCode) => (date: string): string => {
-  return new Date(date + 'T00:00:00').toLocaleDateString(locale, { weekday: 'short', month: 'short', day: 'numeric', year: 'numeric' });
-};
+// A ledger day is a DATE, rendered as written (TIME-003).
+const dayLabelWith = (fmtDate: Format['fmtDate']) => (date: string): string => fmtDate(date, 'EEE, MMM d, yyyy');
 
 export function WalletActivityView({ rows, childOptions }: { rows: Row[]; childOptions: { id: string; name: string }[] }) {
   const locale = useLocale();
-  const dayLabel = dayLabelIn(locale.code);
+  const dayLabel = dayLabelWith(useFormat().fmtDate);
   // Money follows the reader; the currency stays the money's own.
   const formatCents = (cents: number, currency?: string) =>
     formatCentsIn(cents, currency, locale.code);
@@ -36,7 +36,8 @@ export function WalletActivityView({ rows, childOptions }: { rows: Row[]; childO
     () => filterTxns(rows, { childWalletId: child || null, type: type || null, direction: (direction || null) as 'credit' | 'debit' | null }),
     [rows, child, type, direction],
   );
-  const groups = useMemo(() => groupByDay(filtered), [filtered]);
+  const familyZone = useFamilyClock().timeZone;
+  const groups = useMemo(() => groupByDay(filtered, familyZone), [filtered, familyZone]);
   const net = useMemo(() => netCents(filtered), [filtered]);
 
   function downloadStatement() {

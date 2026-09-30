@@ -24,7 +24,8 @@ import { AiInsight } from '@/components/ai/ai-insight';
 import { cn } from '@/lib/utils/cn';
 import type { Tables, GradeType } from '@/lib/database.types';
 import { useLocale, useTranslations } from '@/components/i18n/locale-provider';
-import { useFormat } from '@/components/i18n/use-format';
+import { type FamilyClock, useFamilyClock, useFormat } from '@/components/i18n/use-format';
+import type { Format } from '@/lib/utils/format';
 import type { LocaleCode } from '@/lib/i18n/locales';
 import { parseCalendarDate } from '@/lib/utils/calendar-date';
 
@@ -43,7 +44,7 @@ const TAB_LABEL: Record<Tab, string> = {
 const EVENT_TYPES = ['general', 'holiday', 'field_trip', 'parent_meeting', 'exam', 'concert', 'sport', 'graduation', 'assignment', 'announcement'];
 const GRADE_TYPES: GradeType[] = ['test', 'quiz', 'homework', 'project', 'final', 'participation', 'other'];
 /** The weekday a class meets, in the reader's language (0 = Sunday). 2023-01-01 was a Sunday. */
-const weekdayName = (i: number, locale: string) => new Date(2023, 0, 1 + i).toLocaleDateString(locale, { weekday: 'long' });
+const weekdayName = (i: number, fmtDate: Format['fmtDate']) => fmtDate(`2023-01-0${1 + i}`, 'EEEE');
 
 const SUBJECT_ICONS: Record<string, string> = { Math: '📐', English: '📝', Science: '🔬', History: '🏛️', Spanish: '🌎', Art: '🎨', Music: '🎵', PE: '⚽' };
 const SUBJECT_COLORS: Record<string, string> = { Math: 'bg-violet-500', English: 'bg-blue-500', Science: 'bg-emerald-500', History: 'bg-orange-500', Spanish: 'bg-rose-500', Art: 'bg-pink-500', Music: 'bg-amber-500', PE: 'bg-cyan-500' };
@@ -87,14 +88,14 @@ const GRADE_DIST_COLORS = [
   { label: 'F (<60%)', min: 0, color: '#f87171' },
 ];
 
-const fmtDueIn = (locale: LocaleCode) => (iso: string) => {
+// Days until due are counted between the FAMILY's calendar days (TIME-003).
+const dayNumber = (key: string) => Date.UTC(Number(key.slice(0, 4)), Number(key.slice(5, 7)) - 1, Number(key.slice(8, 10))) / 86400000;
+const fmtDueWith = (locale: LocaleCode, format: Format, clock: FamilyClock) => (iso: string) => {
   const d = new Date(iso);
-  const today = new Date();
-  today.setHours(0, 0, 0, 0);
-  const diff = Math.ceil((d.getTime() - today.getTime()) / 86400000);
+  const diff = dayNumber(clock.dayKeyOf(d)) - dayNumber(clock.todayKey());
   // "today" / "tomorrow" / "in 3 days" in the reader's language, not English.
   const rel = new Intl.RelativeTimeFormat(locale, { numeric: 'auto' });
-  const label = d.toLocaleDateString(locale, { month: 'short', day: 'numeric' });
+  const label = format.fmtDate(d, 'MMM d');
   if (diff <= 0) return { label, sub: rel.format(0, 'day'), urgent: true };
   if (diff === 1) return { label, sub: rel.format(1, 'day'), urgent: true };
   return { label, sub: rel.format(diff, 'day'), urgent: false };
@@ -130,7 +131,9 @@ function gpaFromPct(pct: number): number {
 
 export function SchoolModule() {
   const locale = useLocale();
-  const fmtDue = fmtDueIn(locale.code);
+  const format = useFormat();
+  const clock = useFamilyClock();
+  const fmtDue = fmtDueWith(locale.code, format, clock);
   const tr = useTranslations();
   // One time-ago, and it follows the reader (lib/utils/format.ts fmtTimeAgo).
   const { fmtTimeAgo } = useFormat();
@@ -153,7 +156,8 @@ export function SchoolModule() {
 
   const now = useMemo(() => new Date().toISOString(), []);
   const in14 = useMemo(() => { const d = new Date(); d.setDate(d.getDate() + 14); return d.toISOString(); }, []);
-  const today = useMemo(() => new Date().getDay(), []);
+  // The FAMILY's weekday (TIME-003), read off its date key.
+  const today = useMemo(() => new Date(`${clock.todayKey()}T00:00:00Z`).getUTCDay(), [clock]);
 
   // ── Queries ──────────────────────────────────────────────
   const { data: events, loading: eventsLoading, error: eventsError, refresh: refreshEvents } = useRealtimeQuery<SchoolEvent>({
@@ -312,12 +316,13 @@ export function SchoolModule() {
 
   // Events this week
   const eventsThisWeek = useMemo(() => {
-    const start = new Date(); start.setHours(0, 0, 0, 0);
-    const daysSinceMon = (start.getDay() + 6) % 7;
-    start.setDate(start.getDate() - daysSinceMon);
-    const end = new Date(start); end.setDate(end.getDate() + 7);
+    // The FAMILY's Monday-to-Sunday week, as instants (TIME-003).
+    const w = clock.wallToday();
+    const daysSinceMon = (w.getDay() + 6) % 7;
+    const start = clock.toInstant(new Date(w.getFullYear(), w.getMonth(), w.getDate() - daysSinceMon));
+    const end = clock.toInstant(new Date(w.getFullYear(), w.getMonth(), w.getDate() - daysSinceMon + 7));
     return events.filter((e) => { const d = new Date(e.starts_at); return d >= start && d < end; });
-  }, [events]);
+  }, [events, clock]);
 
   // Class schedule for selected member
   const selectedMember = members[scheduleIdx];
@@ -615,7 +620,7 @@ export function SchoolModule() {
                       <span className="text-lg">{SUBJECT_ICONS[c.subject] ?? '📚'}</span>
                       <div className="flex-1">
                         <p className="font-medium">{c.subject}</p>
-                        <p className="text-xs text-muted">{[c.teacher, c.room, c.day_of_week != null ? weekdayName(c.day_of_week, locale.code) : null].filter(Boolean).join(' · ')}</p>
+                        <p className="text-xs text-muted">{[c.teacher, c.room, c.day_of_week != null ? weekdayName(c.day_of_week, format.fmtDate) : null].filter(Boolean).join(' · ')}</p>
                       </div>
                       {member && <Avatar name={member.display_name} color={member.color} size={24} />}
                       {c.time_slot && <span className="text-xs text-muted tabular-nums">{c.time_slot}</span>}
@@ -664,7 +669,7 @@ export function SchoolModule() {
                               </span>
                             ) : g.grade ?? '—'}
                           </td>
-                          <td className="px-4 py-3 text-muted">{parseCalendarDate(g.date)?.toLocaleDateString(locale.code, { month: 'short', day: 'numeric' })}</td>
+                          <td className="px-4 py-3 text-muted">{g.date && parseCalendarDate(g.date) ? format.fmtDate(g.date, 'MMM d') : null}</td>
                         </tr>
                       );
                     })}
@@ -749,11 +754,11 @@ export function SchoolModule() {
                 return (
                   <div key={e.id} className="flex items-start gap-3">
                     <div className={cn('grid h-10 w-10 shrink-0 place-items-center rounded-lg text-center text-fg', ACCENT[i % ACCENT.length])}>
-                      <div><p className="text-[9px] font-bold uppercase">{d.toLocaleDateString(locale.code, { month: 'short' })}</p><p className="text-sm font-black leading-none">{d.getDate()}</p></div>
+                      <div><p className="text-[9px] font-bold uppercase">{format.fmtDate(d, 'MMM')}</p><p className="text-sm font-black leading-none">{format.fmtDate(d, 'd')}</p></div>
                     </div>
                     <div>
                       <p className="text-sm font-semibold">{e.title}</p>
-                      <p className="text-xs text-muted">{d.toLocaleDateString(locale.code, { weekday: 'long', month: 'short', day: 'numeric' })}</p>
+                      <p className="text-xs text-muted">{format.fmtDate(d, 'EEEE, MMM d')}</p>
                       {e.notes && <p className="text-xs text-muted">{e.notes}</p>}
                     </div>
                   </div>
@@ -804,9 +809,9 @@ export function SchoolModule() {
                 return (
                   <div key={e.id} className="flex items-start gap-3">
                     <div className="grid h-10 w-10 shrink-0 place-items-center rounded-lg bg-brand/15 text-center">
-                      <div><p className="text-[9px] font-bold uppercase text-brand-text">{d.toLocaleDateString(locale.code, { month: 'short' })}</p><p className="text-sm font-black text-violet-200 leading-none">{d.getDate()}</p></div>
+                      <div><p className="text-[9px] font-bold uppercase text-brand-text">{format.fmtDate(d, 'MMM')}</p><p className="text-sm font-black text-violet-200 leading-none">{format.fmtDate(d, 'd')}</p></div>
                     </div>
-                    <div><p className="text-sm font-semibold">{e.title}</p><p className="text-xs text-muted">{d.toLocaleDateString(locale.code, { weekday: 'long', month: 'short', day: 'numeric' })}</p></div>
+                    <div><p className="text-sm font-semibold">{e.title}</p><p className="text-xs text-muted">{format.fmtDate(d, 'EEEE, MMM d')}</p></div>
                   </div>
                 );
               })}
@@ -844,7 +849,7 @@ export function SchoolModule() {
           <Field label={tr('school.teacher')}>{(id) => <Input id={id} value={classForm.teacher} onChange={(e) => setClassForm((f) => ({ ...f, teacher: e.target.value }))} placeholder={tr('school.optional')} />}</Field>
           <Field label={tr('school.room')}>{(id) => <Input id={id} value={classForm.room} onChange={(e) => setClassForm((f) => ({ ...f, room: e.target.value }))} placeholder={tr('school.eGRoom203')} />}</Field>
           <Field label={tr('school.time')}>{(id) => <Input id={id} value={classForm.time_slot} onChange={(e) => setClassForm((f) => ({ ...f, time_slot: e.target.value }))} placeholder={tr('school.eG800Am')} />}</Field>
-          <Field label={tr('school.dayOfWeek')}>{(id) => <Select id={id} value={classForm.day_of_week} onChange={(e) => setClassForm((f) => ({ ...f, day_of_week: e.target.value }))}>{[0, 1, 2, 3, 4, 5, 6].map((i) => <option key={i} value={String(i)}>{weekdayName(i, locale.code)}</option>)}</Select>}</Field>
+          <Field label={tr('school.dayOfWeek')}>{(id) => <Select id={id} value={classForm.day_of_week} onChange={(e) => setClassForm((f) => ({ ...f, day_of_week: e.target.value }))}>{[0, 1, 2, 3, 4, 5, 6].map((i) => <option key={i} value={String(i)}>{weekdayName(i, format.fmtDate)}</option>)}</Select>}</Field>
           <Field label={tr('school.school')}>{(id) => <Input id={id} value={classForm.school_name} onChange={(e) => setClassForm((f) => ({ ...f, school_name: e.target.value }))} placeholder={tr('school.optional')} />}</Field>
           <Button className="w-full" onClick={saveClass} disabled={saving || !classForm.member_id || !classForm.subject}>{saving ? 'Saving...' : 'Add Class'}</Button>
         </div>

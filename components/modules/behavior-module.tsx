@@ -15,21 +15,27 @@ import { Button } from '@/components/ui/button';
 import { Avatar } from '@/components/ui/avatar';
 import { ErrorState, SkeletonList, EmptyState } from '@/components/ui/states';
 import { AiInsight } from '@/components/ai/ai-insight';
-import { fmtDate } from '@/lib/utils/format';
+import { useFormat } from '@/components/i18n/use-format';
 import {
   BEHAVIOR_KINDS, BEHAVIOR_CATEGORIES, kindMeta, summarizeMember, trendByWeek, positiveStreakDays,
   type BehaviorLogLike,
 } from '@/lib/behavior/insights';
 import type { Tables } from '@/lib/database.types';
 import { useTranslations } from '@/components/i18n/locale-provider';
+import { fromLocalInput, toLocalInput } from '@/lib/time/local-input';
+import { useFamilyClock } from '@/components/i18n/use-format';
 
 type Log = Tables<'behavior_logs'>;
 
-const blank = () => ({ id: '', member_id: '', kind: 'positive', category: 'responsibility', note: '', points: '1', occurred_at: new Date().toISOString().slice(0, 16) });
+// The `datetime-local` box reads and writes the FAMILY's wall clock (TIME-003);
+// it used to prefill Greenwich's and save the device's.
+const blank = (timeZone: string) => ({ id: '', member_id: '', kind: 'positive', category: 'responsibility', note: '', points: '1', occurred_at: toLocalInput(new Date().toISOString(), timeZone) });
 
 const KIND_ICON = { positive: Smile, concern: Frown, neutral: Minus } as const;
 
 export function BehaviorModule() {
+  const clock = useFamilyClock();
+  const { fmtDate } = useFormat();
   const tr = useTranslations();
   const { familyId, userId, members, role } = useApp();
   // The behavior log is what a parent reviews. 0377 made changing or removing
@@ -95,7 +101,7 @@ export function BehaviorModule() {
         category: form.category.trim() || 'general',
         note: form.note.trim() || null,
         points: Number.isFinite(parseInt(form.points, 10)) ? parseInt(form.points, 10) : 0,
-        occurred_at: new Date(form.occurred_at).toISOString(),
+        occurred_at: fromLocalInput(form.occurred_at, clock.timeZone) ?? new Date(form.occurred_at).toISOString(),
       };
       // RLS FILTERS an UPDATE rather than refusing it, so a row the caller may
       // not rewrite comes back `error: null` with nothing changed. See
@@ -160,7 +166,7 @@ export function BehaviorModule() {
             className="inline-flex h-9 items-center gap-1.5 rounded-xl border border-border bg-surface px-3 text-sm font-semibold text-muted transition hover:text-fg hover:bg-elevated">
             <Award className="h-4 w-4" /> {tr('behavior.independence')}
           </Link>
-          {canEdit && <Button onClick={() => setForm(blank())}><Plus className="h-4 w-4" /> {tr('behavior.logBehavior')}</Button>}
+          {canEdit && <Button onClick={() => setForm(blank(clock.timeZone))}><Plus className="h-4 w-4" /> {tr('behavior.logBehavior')}</Button>}
         </div>
       </div>
 

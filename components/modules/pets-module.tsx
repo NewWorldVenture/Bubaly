@@ -23,8 +23,8 @@ import {
   petAgeLabel, careUrgency, upcomingCare, careSummary, recommendedCare,
   type CareUrgency,
 } from '@/lib/pets/care';
-import { useLocale, useTranslations } from '@/components/i18n/locale-provider';
-import type { LocaleCode } from '@/lib/i18n/locales';
+import { useTranslations } from '@/components/i18n/locale-provider';
+import { useFamilyClock, useFormat } from '@/components/i18n/use-format';
 import { useConfirm } from '@/components/ui/confirm';
 import { todayInZone } from '@/lib/schedule/zoned';
 
@@ -43,13 +43,11 @@ const URGENCY_STYLE: Record<CareUrgency, string> = {
   ok: 'border-border bg-surface/50 text-muted',
 };
 
-const fmtDateIn = (locale: LocaleCode) => (d: string): string => {
-  return new Date(`${d.slice(0, 10)}T00:00:00`).toLocaleDateString(locale, { month: 'short', day: 'numeric', year: 'numeric' });
-};
 
 export function PetsModule() {
-  const locale = useLocale();
-  const fmtDate = fmtDateIn(locale.code);
+  const { fmtDate: fmt } = useFormat();
+  const fmtDate = (d: string) => fmt(d.slice(0, 10), 'MMM d, yyyy');
+  const clock = useFamilyClock();
   const t = useTranslations();
   const { familyId, userId } = useApp();
   const { success, error: toastError } = useToast();
@@ -70,8 +68,8 @@ export function PetsModule() {
   const [careForPet, setCareForPet] = useState<Pet | null>(null);
 
   const summary = useMemo(
-    () => careSummary(pets.data.length, records.data, new Date()),
-    [pets.data.length, records.data],
+    () => careSummary(pets.data.length, records.data, clock.wallNow()),
+    [pets.data.length, records.data, clock],
   );
   const upcoming = useMemo(() => upcomingCare(records.data).slice(0, 6), [records.data]);
 
@@ -350,8 +348,8 @@ function CareForm({ familyId, userId, pet, onClose, onSaved }: { familyId: strin
 function PetDetail({ pet, records, onClose, onAddCare, onRemove }: {
   pet: Pet; records: CareRecord[]; onClose: () => void; onAddCare: () => void; onRemove: () => void;
 }) {
-  const locale = useLocale();
-  const fmtDate = fmtDateIn(locale.code);
+  const { fmtDate: fmt } = useFormat();
+  const fmtDate = (d: string) => fmt(d.slice(0, 10), 'MMM d, yyyy');
   const t = useTranslations();
   const askConfirm = useConfirm();
   const { error: toastError } = useToast();

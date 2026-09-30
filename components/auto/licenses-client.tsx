@@ -6,7 +6,7 @@ import { ActionError, useActionError } from '@/components/ui/action-error';
 import { IdCard, Plus, Pencil, Trash2 } from 'lucide-react';
 import { saveLicenseAction, deleteLicenseAction } from '@/app/(app)/dashboard/auto/actions';
 import { renewalStatus } from '@/lib/auto/renewals';
-import { fmtDate } from '@/lib/utils/format';
+import { useFormat } from '@/components/i18n/use-format';
 import type { Tables } from '@/lib/database.types';
 import { Card } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
@@ -21,6 +21,7 @@ type License = Tables<'driver_licenses'>;
 type Member = { id: string; display_name: string | null };
 
 export function LicensesClient({ licenses, members }: { licenses: License[]; members: Member[] }) {
+  const { fmtDate } = useFormat();
   const t = useTranslations();
   const [open, setOpen] = useState(false);
   const [editing, setEditing] = useState<License | null>(null);

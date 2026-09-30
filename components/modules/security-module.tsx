@@ -11,15 +11,20 @@ import { Modal } from '@/components/ui/modal';
 import { Input, Textarea, Field, Select } from '@/components/ui/input';
 import { Button } from '@/components/ui/button';
 import { ErrorState, SkeletonList, EmptyState } from '@/components/ui/states';
-import { fmtDate } from '@/lib/utils/format';
+import { useFormat } from '@/components/i18n/use-format';
 import { SECURITY_KINDS, SECURITY_SEVERITIES, severityMeta, sortEvents, summarizeSecurity, type EventLike } from '@/lib/home/security';
 import type { Tables } from '@/lib/database.types';
 import { usePlural, useTranslations } from '@/components/i18n/locale-provider';
+import { fromLocalInput, toLocalInput } from '@/lib/time/local-input';
+import { useFamilyClock } from '@/components/i18n/use-format';
 
 type Event = Tables<'home_security_events'>;
-const blank = () => ({ kind: 'alert', severity: 'info', title: '', detail: '', occurred_at: new Date().toISOString().slice(0, 16) });
+// The `datetime-local` box reads and writes the FAMILY's wall clock (TIME-003).
+const blank = (timeZone: string) => ({ kind: 'alert', severity: 'info', title: '', detail: '', occurred_at: toLocalInput(new Date().toISOString(), timeZone) });
 
 export function SecurityModule() {
+  const clock = useFamilyClock();
+  const { fmtDate } = useFormat();
   const tr = useTranslations();
   const plural = usePlural();
   const { familyId, userId } = useApp();
@@ -58,17 +63,18 @@ export function SecurityModule() {
   // 14-day activity strip (today rightmost).
   const strip = useMemo(() => {
     const days = Array.from({ length: 14 }, (_, i) => {
-      const d = new Date(Date.now() - (13 - i) * 86400_000);
-      return { key: d.toISOString().slice(0, 10), count: 0, critical: false };
+      // The family's last fourteen days, by calendar day (TIME-003).
+      const t = clock.wallToday();
+      return { key: clock.wallKey(new Date(t.getFullYear(), t.getMonth(), t.getDate() - (13 - i))), count: 0, critical: false };
     });
     const byKey = new Map(days.map(d => [d.key, d]));
     for (const e of all) {
-      const k = new Date(e.occurred_at).toISOString().slice(0, 10);
+      const k = clock.dayKeyOf(e.occurred_at);
       const d = byKey.get(k);
       if (d) { d.count += 1; if (e.severity === 'critical' && !e.resolved) d.critical = true; }
     }
     return days;
-  }, [all]);
+  }, [all, clock]);
   const stripMax = Math.max(1, ...strip.map(d => d.count));
 
   async function save(e: React.FormEvent) {
@@ -84,7 +90,7 @@ export function SecurityModule() {
     setSaving(true);
     try {
       if (!form || !form.title.trim()) return;
-      const row = { kind: form.kind, severity: form.severity, title: form.title.trim(), detail: form.detail.trim() || null, occurred_at: new Date(form.occurred_at).toISOString() };
+      const row = { kind: form.kind, severity: form.severity, title: form.title.trim(), detail: form.detail.trim() || null, occurred_at: fromLocalInput(form.occurred_at, clock.timeZone) ?? new Date(form.occurred_at).toISOString() };
       const { error } = await createClient().from('home_security_events').insert({ ...row, family_id: familyId, created_by: userId });
       if (error) return toastError(describeDbError(error));
       success(tr('securityModule.logged')); setForm(null);
@@ -111,7 +117,7 @@ export function SecurityModule() {
     <div className="space-y-5">
       <div className="flex flex-wrap items-center justify-between gap-3">
         <h1 className="flex items-center gap-2 text-base font-semibold"><ShieldAlert className="h-4 w-4 text-brand-text" /> {tr('security.securityAlerts')}</h1>
-        <Button onClick={() => setForm(blank())}><Plus className="h-4 w-4" /> {tr('security.logEvent')}</Button>
+        <Button onClick={() => setForm(blank(clock.timeZone))}><Plus className="h-4 w-4" /> {tr('security.logEvent')}</Button>
       </div>
 
       <div className={`flex items-center gap-3 rounded-2xl border p-4 ${stats.allClear ? 'border-success/30 bg-success/5' : 'border-amber-500/30 bg-amber-500/5'}`}>

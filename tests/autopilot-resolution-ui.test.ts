@@ -35,6 +35,8 @@ vi.mock('@/components/i18n/locale-provider', () => ({
   // The rows word a subscription title for the reader (autopilotTitleFor), so
   // they ask for the locale as well as the catalogue.
   useLocale: () => localeOrDefault(state.locale),
+  // No family bound: formatters fall back to the reader's zone (TIME-003).
+  useFamilyTimeZone: () => undefined,
 }));
 vi.mock('next/link', () => ({ default: (props: Record<string, unknown>) => createElement('a', props) }));
 vi.mock('@/components/ui/button', () => ({ Button: ({ loading: _loading, ...props }: Record<string, unknown>) => createElement('button', props) }));

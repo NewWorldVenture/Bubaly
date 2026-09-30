@@ -20,6 +20,8 @@ const messages: Record<string, string> = JSON.parse(fs.readFileSync('lib/i18n/me
 const clientFiles = ['components/social/studio-form.tsx', 'components/social/retry-button.tsx',
   'lib/social/capabilities.ts', 'lib/social/content.ts', 'lib/social/ai-kinds.ts', 'lib/social/schedule-time.ts',
   'components/i18n/locale-provider.tsx', 'lib/i18n/locales.ts', 'lib/i18n/messages.ts', 'lib/i18n/translate.ts',
+  // The family clock (TIME-003): the shared formatter and the zone helpers it reads.
+  'lib/time/zoned.ts',
   'components/social/platform.tsx', 'components/ui/card.tsx', 'components/ui/badge.tsx'];
 const compile = (file: string) => ts.transpileModule(fs.readFileSync(file, 'utf8'), {
   compilerOptions: { target: ts.ScriptTarget.ES2020, module: ts.ModuleKind.CommonJS, jsx: ts.JsxEmit.React, esModuleInterop: true },

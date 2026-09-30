@@ -14,6 +14,8 @@ const clientFiles = [
   'components/social/studio-form.tsx', 'lib/social/schedule-time.ts',
   'lib/social/capabilities.ts', 'lib/social/content.ts', 'lib/social/ai-kinds.ts',
   'components/i18n/locale-provider.tsx', 'lib/i18n/locales.ts', 'lib/i18n/messages.ts', 'lib/i18n/translate.ts',
+  // The family clock (TIME-003): the shared formatter and the zone helpers it reads.
+  'lib/time/zoned.ts',
   'components/social/platform.tsx', 'components/ui/card.tsx', 'components/ui/badge.tsx',
 ];
 const sources = Object.fromEntries(clientFiles.map(file => [`@/${file.replace(/\.tsx?$/, '')}`, ts.transpileModule(fs.readFileSync(file, 'utf8'), {

@@ -1,7 +1,7 @@
 'use client';
 
 import { useCallback, useEffect, useRef, useState } from 'react';
-import { formatDistanceToNow, isToday, isTomorrow, parseISO } from 'date-fns';
+import { formatDistanceToNow, parseISO } from 'date-fns'; // instant: formatDistanceToNow measures a duration between two instants, which no zone changes
 import { de, enUS, es, fr, it, nl, pt } from 'date-fns/locale';
 import {
   Image as ImageIcon, Plus, Upload, X, Star, StarOff, Trash2,
@@ -31,6 +31,7 @@ import { galleryStep } from '@/lib/ui/gallery';
 import { openOnKey } from '@/lib/ui/a11y';
 import type { Tables } from '@/lib/database.types';
 import { useLocale, useTranslations } from '@/components/i18n/locale-provider';
+import { useFamilyClock, useFormat } from '@/components/i18n/use-format';
 
 type Album = Tables<'family_albums'>;
 type Photo = Tables<'family_photos'>;
@@ -55,13 +56,19 @@ export function PhotosModule() {
 
   // Preserve fmtRelative's local Today/Tomorrow/distance semantics and tolerant
   // timestamp parsing while formatting words and clocks in the chosen locale.
+  const clock = useFamilyClock();
+  const format = useFormat();
   function relativeDate(value: string | null | undefined): string {
     if (!value) return '';
     const parsed = parseISO(value);
     const date = Number.isNaN(parsed.getTime()) ? new Date(value) : parsed;
     if (Number.isNaN(date.getTime())) return '';
-    if (isToday(date) || isTomorrow(date)) return tr(isToday(date) ? 'photosModule.todayAt' : 'photosModule.tomorrowAt', {
-      time: new Intl.DateTimeFormat(locale, { hour: 'numeric', minute: '2-digit' }).format(date),
+    // Today and Tomorrow are the FAMILY's, and so is the clock (TIME-003).
+    const day = clock.dayKeyOf(date);
+    const wall = clock.wallToday();
+    const tomorrow = clock.wallKey(new Date(wall.getFullYear(), wall.getMonth(), wall.getDate() + 1));
+    if (day === clock.todayKey() || day === tomorrow) return tr(day === tomorrow ? 'photosModule.tomorrowAt' : 'photosModule.todayAt', {
+      time: format.fmtTime(date),
     });
     const language = locale.split('-')[0] as keyof typeof DATE_LOCALES;
     return formatDistanceToNow(date, { addSuffix: true, locale: DATE_LOCALES[language] ?? enUS });

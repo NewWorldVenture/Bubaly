@@ -9,14 +9,14 @@ import { Modal } from '@/components/ui/modal';
 import { Input, Textarea, Field } from '@/components/ui/input';
 import { Button } from '@/components/ui/button';
 import { cn } from '@/lib/utils/cn';
-import { parseEvent, parseDueDate, suggestKind, splitItems } from '@/lib/capture/parse';
+import { parseEventInZone, parseDueDateInZone, suggestKind, splitItems } from '@/lib/capture/parse';
 import { CaptureSaveError, saveCapture, undoCapture } from '@/lib/capture/save';
 import { isOpenCaptureKey, isSaveHotkey, isTypingTarget } from '@/lib/capture/shortcut';
 import { CaptureShortcuts } from '@/components/capture/capture-shortcuts';
 import { useJourney } from '@/lib/analytics/use-journey';
 import { describeDbError } from '@/lib/supabase/errors';
 import { useTranslations, useLocale } from '@/components/i18n/locale-provider';
-import { useFormat } from '@/components/i18n/use-format';
+import { useFamilyClock, useFormat, type FamilyClock } from '@/components/i18n/use-format';
 import type { Format } from '@/lib/utils/format';
 
 /**
@@ -27,12 +27,13 @@ import type { Format } from '@/lib/utils/format';
  * "Today", "Tomorrow" and the joining " at " were English literals. Now the
  * formatter and the translator both come from the component.
  */
-function formatWhen(startsAt: Date, allDay: boolean, fmt: Format, t: Translator): string {
-  const today = new Date(); today.setHours(0, 0, 0, 0);
-  const day = new Date(startsAt); day.setHours(0, 0, 0, 0);
-  const diffDays = Math.round((day.getTime() - today.getTime()) / 86400000);
-  const dayLabel = diffDays === 0 ? t('calendar.today')
-    : diffDays === 1 ? t('quickCapture.tomorrow')
+function formatWhen(startsAt: Date | string, allDay: boolean, fmt: Format, t: Translator, clock: FamilyClock): string {
+  // Today and Tomorrow are the FAMILY's days (TIME-003), compared as date keys.
+  const wall = clock.wallToday();
+  const tomorrow = clock.wallKey(new Date(wall.getFullYear(), wall.getMonth(), wall.getDate() + 1));
+  const day = clock.dayKeyOf(startsAt);
+  const dayLabel = day === clock.todayKey() ? t('calendar.today')
+    : day === tomorrow ? t('quickCapture.tomorrow')
     : fmt.fmtDate(startsAt, 'EEEE, MMM d');
   if (allDay) return dayLabel;
   return t('quickCapture.dayAtTime', { day: dayLabel, time: fmt.fmtTime(startsAt) });
@@ -62,6 +63,7 @@ export function QuickCapture() {
   const locale = useLocale();
   // The "when" preview follows the reader, not the browser (I18N-002).
   const fmt = useFormat();
+  const clock = useFamilyClock();
   const { familyId, userId, selfMember } = useApp();
   const { success, error: toastError } = useToast();
   const [open, setOpen] = useState(false);
@@ -145,7 +147,7 @@ export function QuickCapture() {
     const isCurrent = () => isCurrentOpening() && lifetime.current.pending === attempt;
     setSaving(true);
     try {
-      const res = await saveCapture(createClient(), { kind: type, text: value, familyId, userId, memberId: selfMember?.id ?? null, isCurrent });
+      const res = await saveCapture(createClient(), { kind: type, text: value, familyId, userId, memberId: selfMember?.id ?? null, isCurrent, timeZone: clock.timeZone });
       if (!isCurrent()) return;
       let undoUsed = false;
       success(
@@ -192,17 +194,17 @@ export function QuickCapture() {
   // Live "when" preview for events — parses "tomorrow at 3pm" as you type.
   const eventPreview = useMemo(() => {
     if (type !== 'event' || !text.trim()) return null;
-    return parseEvent(text);
-  }, [type, text]);
+    return parseEventInZone(text, new Date(), clock.timeZone);
+  }, [type, text, clock]);
 
   // Live due-date preview for tasks — "Pay rent friday" → Due Fri, Jul 3.
   const taskPreview = useMemo(() => {
     if (type !== 'task' || !text.trim()) return null;
-    const { title, dueDate } = parseDueDate(text);
+    const { title, dueDate } = parseDueDateInZone(text, new Date(), clock.timeZone);
     if (!dueDate) return null;
-    const [y, m, d] = dueDate.split('-').map(Number);
-    return { title, when: formatWhen(new Date(y, m - 1, d), true, fmt, tr) };
-  }, [type, text, fmt, tr]);
+    // A due DATE, rendered as written.
+    return { title, when: formatWhen(dueDate, true, fmt, tr, clock) };
+  }, [type, text, fmt, tr, clock]);
 
   // Live item-count preview for shopping — "milk, eggs and bread" → 3 items.
   const shoppingItems = useMemo(() => {
@@ -320,7 +322,7 @@ export function QuickCapture() {
             eventPreview?.matched ? (
               <p className="flex items-center gap-1.5 text-xs font-medium text-brand-text">
                 <CalendarClock className="h-3.5 w-3.5" />
-                {formatWhen(eventPreview.startsAt, eventPreview.allDay, fmt, tr)}
+                {formatWhen(eventPreview.startsAt, eventPreview.allDay, fmt, tr, clock)}
                 {eventPreview.title && eventPreview.title !== text.trim() && (
                   <span className="text-muted">· “{eventPreview.title}”</span>
                 )}

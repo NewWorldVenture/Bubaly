@@ -8,6 +8,7 @@ import type { MemberRole } from '@/lib/constants/roles';
 import type { FeatureTier } from '@/lib/constants/feature-catalog';
 import { AuthenticatedCacheBoundary } from '@/lib/offline/cache-scope';
 import { ownChannel } from '@/lib/realtime/own-channel';
+import { FamilyTimeZoneProvider } from '@/components/i18n/locale-provider';
 
 export type FamilyOption = { familyId: string; name: string };
 
@@ -118,7 +119,11 @@ function AppProviderState({ value, initialMembers, rosterReadFailed, children }:
 
   return (
     <AppContext.Provider value={{ unreadMessages: 0, ...value, members, selfMember, refreshMembers }}>
-      {children}
+      {/* The active family's own row is the authoritative zone for every framed
+          route: every clock and day below renders in it (TIME-003). */}
+      <FamilyTimeZoneProvider timeZone={value.family?.timezone}>
+        {children}
+      </FamilyTimeZoneProvider>
     </AppContext.Provider>
   );
 }

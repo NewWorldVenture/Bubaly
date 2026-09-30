@@ -24,7 +24,7 @@ import {
   suggestOutfit, closetSummary, neglectedItems, costPerWear, tempBand, weatherLabelFromTemp, dayDiff,
 } from '@/lib/closet/outfits';
 import { useLocale, useTranslations } from '@/components/i18n/locale-provider';
-import type { LocaleCode } from '@/lib/i18n/locales';
+import { useFamilyClock, useFormat } from '@/components/i18n/use-format';
 import { formatCents } from '@/lib/wallet/ledger';
 import { useConfirm } from '@/components/ui/confirm';
 import { bumpWearCount, type WearBump, type WearStore } from '@/lib/closet/wear';
@@ -42,15 +42,14 @@ const CURRENCY = 'USD';
 
 const fToC = (f: number) => Math.round(((f - 32) * 5) / 9);
 const cToF = (c: number) => Math.round((c * 9) / 5 + 32);
-const todayIso = () => new Date().toISOString().slice(0, 10);
 
-const fmtDateIn = (locale: LocaleCode) => (d: string): string => {
-  return new Date(`${d.slice(0, 10)}T00:00:00`).toLocaleDateString(locale, { month: 'short', day: 'numeric' });
-};
 
 export function ClosetModule() {
   const locale = useLocale();
-  const fmtDate = fmtDateIn(locale.code);
+  const { fmtDate: fmt } = useFormat();
+  const fmtDate = (d: string) => fmt(d.slice(0, 10), 'MMM d');
+  const clock = useFamilyClock();
+  const todayIso = clock.todayKey;
   const money = (cents: number) => formatCents(cents, CURRENCY, locale.code);
   const t = useTranslations();
   const askConfirm = useConfirm();
@@ -102,7 +101,9 @@ export function ClosetModule() {
   const [builderOpen, setBuilderOpen] = useState(false);
   const [busy, setBusy] = useState(false);
 
-  const today = useMemo(() => new Date(), []);
+  // The FAMILY's wall clock (TIME-003): the helpers below read local fields,
+  // so handing them this makes their "today" the family's day, not the phone's.
+  const today = useMemo(() => clock.wallNow(), [clock]);
   const tempC = fToC(tempF);
   const memberItems = useMemo(() => items.data.filter((i) => i.member_id === memberId), [items.data, memberId]);
   const memberLogs = useMemo(() => logs.data.filter((l) => l.member_id === memberId), [logs.data, memberId]);

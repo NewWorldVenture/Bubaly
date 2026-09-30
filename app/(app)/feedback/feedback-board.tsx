@@ -12,9 +12,10 @@ import {
 } from '@/lib/feedback/board';
 import { submitIdeaAction, toggleVoteAction, addCommentAction, setIdeaStatusAction } from './actions';
 import { FeedbackAttachmentUpload } from './feedback-attachment-upload';
-import { useLocale, useTranslations } from '@/components/i18n/locale-provider';
+import { useTranslations } from '@/components/i18n/locale-provider';
 import type { LocaleCode } from '@/lib/i18n/locales';
-import { createFormat } from '@/lib/utils/format';
+import { useFormat } from '@/components/i18n/use-format';
+import type { Format } from '@/lib/utils/format';
 
 type Comment = { id: string; author_name: string; is_team: boolean; body: string; created_at: string };
 
@@ -26,8 +27,8 @@ type Comment = { id: string; author_name: string; is_team: boolean; body: string
  * defect the hardcoded-locale scan cannot see, and "it accepts a LocaleCode" is not
  * evidence against it.
  */
-const timeAgoIn = (locale: LocaleCode) => (iso: string): string =>
-  createFormat(locale).fmtTimeAgo(iso, { absoluteAfterDays: 30 });
+const timeAgoWith = (format: Format) => (iso: string): string =>
+  format.fmtTimeAgo(iso, { absoluteAfterDays: 30 });
 
 const SORTS: { id: FeedbackSort; label: string }[] = [
   { id: 'top', label: 'Top' }, { id: 'trending', label: 'Trending' }, { id: 'new', label: 'Newest' },
@@ -167,8 +168,7 @@ function ShareIdeaForm({ userId, onCreated }: { userId: string; onCreated: (idea
 
 // ── Comment thread (lazy-loaded on expand) ───────────────────────────────────
 function CommentThread({ ideaId }: { ideaId: string }) {
-  const locale = useLocale();
-  const timeAgo = timeAgoIn(locale.code);
+  const timeAgo = timeAgoWith(useFormat());
   const t = useTranslations();
   const { error } = useToast();
   const [comments, setComments] = useState<Comment[] | null>(null);

@@ -25,7 +25,8 @@ import {
   insuranceSummary, fmtMoney as fmtPolicyMoney, type RenewalUrgency,
 } from '@/lib/insurance/policies';
 import { useLocale, useTranslations } from '@/components/i18n/locale-provider';
-import type { LocaleCode } from '@/lib/i18n/locales';
+import { useFormat } from '@/components/i18n/use-format';
+import type { Format } from '@/lib/utils/format';
 
 type Policy = Tables<'family_insurance_policies'>;
 
@@ -45,9 +46,9 @@ type Tr = (key: string, params?: Record<string, string | number>) => string;
 const typeLabel = (tr: Tr, type: string) => tr(`insuranceModule.type.${type}`);
 const perFrequency = (tr: Tr, amount: string, f: string) => tr(`insuranceModule.per.${f}`, { amount });
 
-function policyDate(d: string, locale: LocaleCode): string {
-  return new Date(`${d.slice(0, 10)}T00:00:00`)
-    .toLocaleDateString(locale, { month: 'short', day: 'numeric', year: 'numeric' });
+// A policy date is a DATE: rendered as written, never shifted (TIME-003).
+function policyDate(d: string, fmtDate: Format['fmtDate']): string {
+  return fmtDate(d.slice(0, 10), 'MMM d, yyyy');
 }
 
 export function InsuranceModule() {
@@ -57,7 +58,8 @@ export function InsuranceModule() {
   // amounts are whole dollars, so they go through the policies module's formatter
   // rather than the cents one in lib/utils/format.ts.
   const fmtMoney = (n: number | null | undefined) => fmtPolicyMoney(n, locale.code);
-  const fmtDate = (d: string) => policyDate(d, locale.code);
+  const format = useFormat();
+  const fmtDate = (d: string) => policyDate(d, format.fmtDate);
 
   const { familyId, userId, members, role } = useApp();
   // 0416 gives this table the manager-gated writes its twin `insurance_policies`
@@ -310,7 +312,8 @@ function PolicyDetail({ policy, coversName, onClose, onRemove }: {
   // amounts are whole dollars, so they go through the policies module's formatter
   // rather than the cents one in lib/utils/format.ts.
   const fmtMoney = (n: number | null | undefined) => fmtPolicyMoney(n, locale.code);
-  const fmtDate = (d: string) => policyDate(d, locale.code);
+  const format = useFormat();
+  const fmtDate = (d: string) => policyDate(d, format.fmtDate);
 
   const meta = policyTypeMeta(policy.policy_type);
   const annual = annualPremium(policy.premium_amount, policy.premium_frequency);
