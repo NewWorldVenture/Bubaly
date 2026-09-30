@@ -15,7 +15,6 @@ import { buildAdminDigest, digestSubject, renderAdminDigestHtml, type DigestRow 
 import { FROM_EMAIL } from '@/lib/email';
 import { readSuperAdminRecipients } from '@/lib/feedback/notify';
 import { createServiceClient } from '@/lib/supabase/server';
-import { readAll } from '@/lib/supabase/read-all';
 
 export const adminDigestEngineEnabled = () => process.env.ADMIN_DIGEST_DELIVERY_ENGINE === '1';
 
@@ -62,20 +61,58 @@ function summarize(report: OccurrenceReport) {
   };
 }
 
+const FEED_PAGE = 1000;
+const FEED_MAX = 20_000;
+type FeedRow = DigestRow & { id: string };
+
+/**
+ * The slot's window, read so that no row is counted twice. It reads the window of the slot, not "the
+ * last 24 h", so every tick for one slot reads the same rows, and windows abut.
+ *
+ * OFFSET paging is not enough before a plan is frozen. A row that becomes visible between two pages
+ * and sorts ahead of the boundary shifts every later offset, so a row already read is read again,
+ * and the frozen digest would carry an invented count. This traversal is keyset: newest first by
+ * (created_at, id), and each page starts strictly after the last row read. It also de-duplicates by
+ * id.
+ *
+ * Late-arrival policy: a row that becomes visible mid-read is counted only if it sorts after the
+ * cursor. Otherwise it is left for a retry, which reports planMismatch.payloadChanged. Either way,
+ * every counted row exists and is counted once. The bound is the current route's: more than 20,000
+ * rows is a failed read.
+ */
+async function readWindowFeed(admin: Admin, window: { start: string; end: string }): Promise<{ rows: DigestRow[]; error: unknown | null }> {
+  const rows: DigestRow[] = [];
+  const seen = new Set<string>();
+  let cursor: { createdAt: string; id: string } | null = null;
+  for (;;) {
+    let q = admin.from('admin_notifications').select('id, kind, title, created_at')
+      .gte('created_at', window.start).lt('created_at', window.end);
+    if (cursor) q = q.or(`created_at.lt.${cursor.createdAt},and(created_at.eq.${cursor.createdAt},id.lt.${cursor.id})`);
+    let data: FeedRow[] | null;
+    let error: unknown;
+    try {
+      ({ data, error } = await q.order('created_at', { ascending: false }).order('id', { ascending: false }).limit(FEED_PAGE) as { data: FeedRow[] | null; error: unknown });
+    } catch (cause) {
+      return { rows, error: cause };
+    }
+    if (error) return { rows, error };
+    if (!data) return { rows, error: new Error('The data page was unavailable') };
+    for (const r of data) {
+      if (seen.has(r.id)) continue;
+      seen.add(r.id);
+      rows.push({ kind: r.kind, title: r.title, created_at: r.created_at });
+    }
+    if (rows.length > FEED_MAX) return { rows, error: new Error(`more than ${FEED_MAX} notifications in one window`) };
+    if (data.length < FEED_PAGE) return { rows, error: null };
+    const last = data[data.length - 1];
+    cursor = { createdAt: last.created_at, id: last.id };
+  }
+}
+
 export async function runAdminDigestEngine(deps: AdminDigestEngineDeps): Promise<AdminDigestEngineResult> {
   const { occurrenceId, window, slot } = adminDigestSlot(deps.now());
 
-  // The slot's own window, not "the last 24 h": every tick for this slot reads the same rows, and
-  // windows abut, so no activity row is in two digests. Paged and bounded as the current route is.
-  const { rows, error: feedError } = await readAll<DigestRow>((from, to) => deps.admin
-    .from('admin_notifications')
-    .select('kind, title, created_at')
-    .gte('created_at', window.start)
-    .lt('created_at', window.end)
-    .order('created_at', { ascending: false })
-    .order('title')
-    .order('id')
-    .range(from, to), { max: 20_000 });
+  const { rows, error: feedError } = await readWindowFeed(deps.admin, window);
   if (feedError) {
     console.error('[admin-digest] notification feed read failed', feedError);
     return { status: 502, body: { ok: false, occurrenceId, reason: 'notification_feed_unavailable' } };

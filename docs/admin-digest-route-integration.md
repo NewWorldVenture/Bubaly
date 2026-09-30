@@ -32,8 +32,11 @@ With the flag on and no `RESEND_API_KEY`, the route answers `503 email_provider_
 **Open decisions:**
 1. **Catch-up across slots.** A tick only ever works on the *current* slot. If a whole slot is missed (an outage past the next slot), or its failed rows are never retried within the slot, that slot's digest is **never sent**; nothing resumes an older occurrence. The engine can resume one (`resumeDigestOccurrence`). Whether to do that, how far back, and with what staleness limit is a product and scheduler decision.
 2. **Retries within a slot need another tick.** An incomplete run answers non-2xx, but neither Vercel cron nor the GitHub dispatcher retries on its own today (see the scheduler report). Whether to add a same-slot retry tick, and how often, belongs to the scheduler work.
-3. **Late activity inside a frozen window.** A row written after the slot's plan was frozen, but timestamped inside its window, is in **no** digest. The next window starts at the slot. The route reports it as `planMismatch.payloadChanged`, and the frozen bytes are still what is sent. Is that acceptable, or should late rows roll into the next digest?
-4. **Schedule changes.** If the cron expression changes, `ADMIN_DIGEST_SCHEDULE` must change with it; the test fails until it does. A slot boundary that moves mid-day would create a new occurrence.
+3. **The feed is read so that no row is counted twice** (implemented; review P2). OFFSET paging could re-read a row when another became visible between pages, and freeze an invented count. The read is keyset: newest first by `(created_at, id)`, each page strictly after the last row read, de-duplicated by id.
+   - **Late-arrival policy:** a row that becomes visible mid-read is counted only if it sorts after the cursor; otherwise it is left for a retry, which reports `planMismatch.payloadChanged`.
+   - The route's feed is not one database snapshot. Every counted row exists and is counted once.
+4. **Late activity inside a frozen window.** A row written after the slot's plan was frozen, but timestamped inside its window, is in **no** digest. The next window starts at the slot. The route reports it as `planMismatch.payloadChanged`, and the frozen bytes are still what is sent. Is that acceptable, or should late rows roll into the next digest?
+5. **Schedule changes.** If the cron expression changes, `ADMIN_DIGEST_SCHEDULE` must change with it; the test fails until it does. A slot boundary that moves mid-day would create a new occurrence.
 
 ## 3. Recipients: open decisions
 
@@ -43,7 +46,15 @@ With the flag on and no `RESEND_API_KEY`, the route answers `503 email_provider_
 
 **Open decisions:**
 1. **Refuse vs drop.** Should one bad address block every admin, or be dropped and reported?
-2. **An admin removed after the freeze is still sent** that slot's digest on a retry. The stored plan wins; only `planMismatch.recipientsRemoved` (a count) reports it. There is a test pinning this current behaviour. Fixing it needs a fenced `withdraw` step in a later migration.
+2. **ACTIVATION HOLD (owner review 5372985996): an admin removed after the freeze is still sent** that slot's digest on a retry. The owner classes this as an authorization gap, not a policy choice.
+   - The test that pins today's behaviour stays **only as a marker of the gap**, until the fix below is approved and built.
+   - **Proposed fix, not implemented (needs the owner's go-ahead; `0474` is reserved for it on #710):** decide eligibility (the code/config allowlist ∪ `super_admins`) at **dispatch admission**, inside `admin_digest_begin_send`, after the row lock.
+     - An ineligible row becomes a terminal, fenced `withdrawn`, keeping its bytes, key, receipts and ambiguity.
+     - An unreadable `super_admins` fails closed.
+     - A removal committed after an admission was granted cannot stop that one dispatch, which is still bounded by `dispatchBy`.
+   - This needs a schema extension (a status value, a guard, claim and begin_send), so it waits for approval rather than being built from a review comment.
+
+   Earlier text: an admin removed after the freeze was still sent The stored plan wins; only `planMismatch.recipientsRemoved` (a count) reports it. There is a test pinning this current behaviour. Fixing it needs a fenced `withdraw` step in a later migration.
 3. **An admin added after the freeze** does not get that slot's digest (`recipientsAdded` is reported). They get the next one.
 
 ## 4. Retry policy and timing: PROPOSED values

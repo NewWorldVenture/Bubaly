@@ -163,6 +163,52 @@ describe('one slot, each admin once', () => {
   });
 });
 
+describe('the slot\'s feed is read so that no row is counted twice (review P2)', () => {
+  // 1,001 signups plus the suite's "Family A": 1,002 rows inside the window, so two pages. Between page one
+  // and page two, one paid-plan row becomes visible (a transaction that began before the slot and commits
+  // during the read). OFFSET paging would read a boundary signup twice and freeze "1003 new families".
+  // Keyset paging never re-reads a row.
+  function feedWithLateRow(lateAt: string) {
+    db.seed('admin_notifications', Array.from({ length: 1001 }, (_, i) => ({
+      id: `n-${String(i).padStart(5, '0')}`, kind: 'family_signup', title: `Family ${i}`,
+      created_at: new Date(Date.parse('2026-09-30T00:00:00Z') + i * 1000).toISOString(),
+    })));
+    const from = db.from.bind(db);
+    let pages = 0;
+    state.db = {
+      from(table: string) {
+        const qb = from(table) as unknown as { then: (f?: (v: unknown) => unknown, r?: (e: unknown) => unknown) => Promise<unknown> };
+        if (table !== 'admin_notifications') return qb;
+        const then = qb.then.bind(qb);
+        qb.then = (f, r) => then((v) => {
+          pages += 1;
+          if (pages === 1) db.seed('admin_notifications', [{ id: 'n-late', kind: 'subscription', title: 'Paid plan', created_at: lateAt }]);
+          return v;
+        }).then(f, r);
+        return qb;
+      },
+    };
+  }
+  const subjects = () => resend.inbox.map((m) => (JSON.parse(m.body) as { subject: string }).subject);
+
+  it('a row that becomes visible ahead of the page boundary is not counted, and no signup is counted twice', async () => {
+    feedWithLateRow('2026-09-30T10:00:00.000Z'); // newer than every signup: sorts ahead of page one's end
+    const r = await tick('2026-09-30T12:31:00Z');
+    expect(r.status).toBe(200);
+    expect(r.body).toMatchObject({ total: 1002, headline: '1002 new families.' });
+    expect(subjects().length).toBe(everyone().length);
+    expect(subjects().every((s) => s.endsWith('— 1002 new families.'))).toBe(true);
+  });
+
+  it('control: a row that becomes visible behind the cursor is counted once (the other coherent outcome)', async () => {
+    feedWithLateRow('2026-09-29T23:00:00.000Z'); // older than every signup, still inside the window
+    const r = await tick('2026-09-30T12:31:00Z');
+    expect(r.body).toMatchObject({ total: 1003 });
+    expect(String(r.body.headline)).toMatch(/1 new paid plan/);
+    expect(String(r.body.headline)).toMatch(/1002 new families/);
+  });
+});
+
 describe('failures and retries', () => {
   it('accepted but answered 500: the run is not done; the retry reuses the key and bytes and gets the original message back', async () => {
     resend.script = ({ to, n }) => (to === ENV_ADMIN && n === 1 ? 'accept_then_500' : 'accept');

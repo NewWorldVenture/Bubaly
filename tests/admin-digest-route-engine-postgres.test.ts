@@ -3,7 +3,9 @@
 // through the same `rpc` call shape the Supabase service client uses.
 //
 // Opt-in, like admin-digest-delivery-postgres.test.ts: DIGEST_DELIVERY_PG=1 and a local
-// cluster (docs/audit/verify-pg.sh). DIGEST_DELIVERY_PG_RESTART_CMD adds the restart case.
+// cluster (docs/audit/verify-pg.sh). DIGEST_DELIVERY_PG_RESTART_CMD adds the restart case; with it set,
+// run the PostgreSQL files with --no-file-parallelism, because a restart ends every connection to the
+// shared cluster, including another file's.
 // Fake: the notification and super-admin tables (in memory), the clock (Date, which is
 // also pinned into the database per call) and Resend at the HTTP boundary. Nothing is
 // sent; nothing touches a shared or production database.
