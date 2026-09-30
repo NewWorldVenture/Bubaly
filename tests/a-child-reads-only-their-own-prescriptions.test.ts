@@ -129,8 +129,20 @@ describe('the screens match the database', () => {
     expect(MEDS).toMatch(/await mutate\(`dose:\$\{due\.scheduleId\}:\$\{due\.slotKey\}`, false,/);
   });
 
+  // #674 review: the wording above must be TRUE before 0465 is applied, when a
+  // child's read still returns the family's rows. So the page itself asks a
+  // non-manager for their own prescriptions and doses; the migration makes the
+  // database agree, but the page does not depend on it.
+  it('medications: a non-manager\'s page asks for their own rows, independent of 0465', () => {
+    expect(MEDS).toContain('const ownMemberOnly = canEdit ? null : (selfMember?.id ?? NIL_UUID);');
+    expect(MEDS).toContain("const NIL_UUID = '00000000-0000-0000-0000-000000000000';");
+    expect(MEDS).toMatch(/table: 'medications', familyId, deps: \[familyId, ownMemberOnly\],\s*fetcher: \(sb\) => \{\s*const q = sb\.from\('medications'\)\.select\('\*'\)\.eq\('family_id', familyId\);\s*return \(ownMemberOnly \? q\.eq\('member_id', ownMemberOnly\) : q\)/);
+    expect(MEDS).toMatch(/table: 'medication_doses', familyId, deps: \[familyId, dayKey, ownMemberOnly\],[\s\S]{0,200}?return ownMemberOnly \? q\.eq\('member_id', ownMemberOnly\) : q;/);
+  });
+
   it('the health coach refuses a non-manager a question about someone else, and offers only themselves', () => {
-    expect(COACH).toContain("if (memberId && !isManager(ctx.active.role) && memberId !== ctx.active.member.id) {");
+    expect(COACH).toContain("if (memberId && !manager && memberId !== ctx.active.member.id) {");
+    expect(COACH).toContain('const manager = isManager(ctx.active.role);');
     expect(COACH).toContain("return NextResponse.json({ error: t('coach.onlyYourOwnHealth') }, { status: 403 });");
     // The refusal comes before any read that would ground an answer.
     expect(at(COACH, "t('coach.onlyYourOwnHealth')")).toBeLessThan(at(COACH, "supabase.from('medications')"));

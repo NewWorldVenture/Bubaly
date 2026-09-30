@@ -4052,7 +4052,20 @@ sessions inside one transaction: the parent reads all four fixture
 prescriptions, and each child reads only their own. The same probe also confirms
 that immunization and health-visit writes stay a parent's.
 
+**Before and after applying — what depends on the migration.** The app
+narrows two surfaces itself, so they are right on either side of the deploy:
+the medicines page asks a non-manager for their own prescriptions and doses
+only, and the health coach grounds a non-manager's general question on their
+own medicines and refuses a question about another member (403, before any
+read). What only 0465 provides is the DATABASE refusal: until it is applied,
+a child's session can still read every member's prescriptions through any
+other read of `medications`, `medication_schedules` or `medication_doses` (the
+API, another page, a custom client). The app wording ("You see the medicines
+prescribed to you") describes what the page shows, and is true before and
+after; the privacy guarantee itself begins when 0465 is applied.
+
 **After applying:** sign in as a child who has a prescription. The medicines
 page shows only theirs and says so. The health coach refuses questions about
 another member. As a parent, the whole family's list and the member filter are
-unchanged.
+unchanged. Run `docs/audit/a-child-reads-only-their-own-prescriptions-check.sql`
+in a transaction you roll back: it must report `OK 0465`.

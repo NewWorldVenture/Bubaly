@@ -71,16 +71,24 @@ function AdherenceRing({ rate, size = 96 }: { rate: number | null; size?: number
   );
 }
 
+const NIL_UUID = '00000000-0000-0000-0000-000000000000';
+
 export function MedicationsModule() {
   const t = useTranslations();
   const askConfirm = useConfirm();
-  const { familyId, userId, members, role, family } = useApp();
+  const { familyId, userId, members, role, family, selfMember } = useApp();
   // A dose slot is the family's 08:00, not the viewer's. Resolving it in the
   // family's zone is what lets the reminder cron recognise a dose this
   // browser logged; for a member sitting in that zone nothing changes.
   const familyZone = family.timezone || 'UTC';
   const { success, error: toastError } = useToast();
   const canEdit = isManager(role);
+  // A non-manager's page asks for their OWN prescriptions and doses (F-G09).
+  // 0465 makes the database refuse the rest, but this page must not depend on
+  // it: until 0465 is applied a child's read still returns the family's rows,
+  // and "you see the medicines prescribed to you" would be untrue. No member
+  // row matches nothing (the nil UUID), never everything.
+  const ownMemberOnly = canEdit ? null : (selfMember?.id ?? NIL_UUID);
 
   const [memberFilter, setMemberFilter] = useState<string>('all');
   const [medOpening, setMedOpening] = useState<object | null>(null);
@@ -143,16 +151,22 @@ export function MedicationsModule() {
 
   // ── Data ──────────────────────────────────────────────────
   const { data: meds, loading: medsLoading, error: medsError, refreshAndConfirm: confirmMeds, stale: medsStale } = useRealtimeQuery<Medication>({
-    table: 'medications', familyId, deps: [familyId],
-    fetcher: (sb) => sb.from('medications').select('*').eq('family_id', familyId).order('is_active', { ascending: false }).order('name'),
+    table: 'medications', familyId, deps: [familyId, ownMemberOnly],
+    fetcher: (sb) => {
+      const q = sb.from('medications').select('*').eq('family_id', familyId);
+      return (ownMemberOnly ? q.eq('member_id', ownMemberOnly) : q).order('is_active', { ascending: false }).order('name');
+    },
   });
   const { data: schedules, loading: schedulesLoading, error: schedulesError, refreshAndConfirm: confirmSchedules, stale: schedulesStale } = useRealtimeQuery<Schedule>({
     table: 'medication_schedules', familyId, deps: [familyId],
     fetcher: (sb) => sb.from('medication_schedules').select('*').eq('family_id', familyId).order('time_of_day'),
   });
   const { data: doses, loading: dosesLoading, error: dosesError, refreshAndConfirm: confirmDoses, stale: dosesStale } = useRealtimeQuery<Dose>({
-    table: 'medication_doses', familyId, deps: [familyId, dayKey],
-    fetcher: (sb) => sb.from('medication_doses').select('*').eq('family_id', familyId).gte('scheduled_for', windowStart),
+    table: 'medication_doses', familyId, deps: [familyId, dayKey, ownMemberOnly],
+    fetcher: (sb) => {
+      const q = sb.from('medication_doses').select('*').eq('family_id', familyId).gte('scheduled_for', windowStart);
+      return ownMemberOnly ? q.eq('member_id', ownMemberOnly) : q;
+    },
   });
   const loading = medsLoading || schedulesLoading || dosesLoading;
   const readError = medsError || schedulesError || dosesError;
