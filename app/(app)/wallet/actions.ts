@@ -212,12 +212,22 @@ export async function payChoreRewardAction(input: { choreAssignmentId: string })
 
   const { data: assignment, error: assignmentError } = await supabase
     .from('chore_assignments')
-    .select('id, member_id, family_id, cash_awarded_cents, chores(title, cash_cents)')
+    .select('id, member_id, family_id, status, cash_awarded_cents, chores(title, cash_cents, requires_approval)')
     .eq('id', input.choreAssignmentId).eq('family_id', familyId).maybeSingle();
   if (assignmentError) return actionFailure(assignmentError, t('actions.couldNotLoadThatChore'));
   if (!assignment) return { ok: false, error: t('actions.choreNotFound') };
 
-  const chore = (assignment as unknown as { chores: { title: string; cash_cents: number | null } | null }).chores;
+  const chore = (assignment as unknown as { chores: { title: string; cash_cents: number | null; requires_approval: boolean } | null }).chores;
+  // Only a FINISHED chore is paid: one a parent approved, or one marked done
+  // that never needed approval. The status was not read at all, so a chore
+  // still to do, in progress, waiting for review or rejected was credited just
+  // the same. `done` alone is not enough on a chore that needs approval:
+  // completeChoreAssignment only settles there when `requires_approval` is
+  // false, and 0223 leaves `done` writable by any member. Unknown (the chore
+  // could not be read with it) is not payable either.
+  const payable = assignment.status === 'approved'
+    || (assignment.status === 'done' && chore?.requires_approval === false);
+  if (!payable) return { ok: false, error: t('actions.thatChoreIsNoLonger') };
   const amount = assignment.cash_awarded_cents ?? chore?.cash_cents ?? 0;
   if (amount <= 0) return { ok: false, error: t('actions.thisChoreHasNoCash') };
 
