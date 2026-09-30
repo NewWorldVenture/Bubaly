@@ -50651,7 +50651,7 @@ because this audit has no production login and must not create data there.
 | B12 | Post-release re-crawl of every public page on production (sitemap + the routes it omits), 1280 and 390, after today's merges (#586, #591–#614) reached www.bubaly.com | session_01DXw2nu25BjyRfA6Fg3YiMS | ✅ done (1,092 pages × 2 widths on production `1180c77d`; P-23 fixed, see "B12" below) | 2026-09-27 20:40 |
 | B13 | Every `/admin` route in the ten other locales (B8 covered the family routes only), local, 1280 | session_01KRUgA6hD6QgzmtpSP6TUmP | ✅ done: 78 routes × 10 locales, 780 loads on a build of `d6546c0c`; no route flagged for a defect (the two text flags are the OAuth scope `offline.access` and the feature key `briefing.morning`, both recorded above as by design) | 2026-09-27 21:30 |
 | B14 | axe (WCAG 2 A/AA) on every signed-in route: the 274 family routes as a Family+ parent and as a `/kid-login` child, the 80 admin routes as a super administrator, local, 1280 (`scripts/axe-audit.mjs`) | session_01DXw2nu25BjyRfA6Fg3YiMS | ✅ done: first pass 13 violation types-by-page (P-27 to P-31), all fixed; the re-crawl on the fixed build has 0 violations on all 628 loads and exactly one `<h1>` on every route | 2026-09-28 00:20 |
-| B15 | The four roles no pass has pressed through yet — `adult`, `teen`, `caregiver` and `guest` (B6 was a parent, B11 a PIN child, B7 rendered a teen only): sign each in, then every route that session reaches — render, every control (`--interact`) and every form (`--submit`) — plus direct writes with each session's own token; local, 1280 | session_01TRY21ZKsFrfB3qtoP972A4 | 🔄 claimed 2026-09-28 11:10 | — |
+| B15 | The four roles no pass has pressed through yet — `adult`, `teen`, `caregiver` and `guest` (B6 was a parent, B11 a PIN child, B7 rendered a teen only): sign each in, then every route that session reaches — render, every control (`--interact`) and every form (`--submit`) — plus direct writes with each session's own token; local, 1280 | session_01TRY21ZKsFrfB3qtoP972A4 | ✅ done: adult, teen, caregiver and guest each render all 350 signed-in routes, press every control on the routes they reach (≈1,200 clicks each) and submit every form (94–113 each), plus direct writes with their own tokens; P-37 and P-40 found and fixed, PUSH-004 reproduced independently, the adult's self-promotion and ROLE-SCOPE-001 recorded for the owner (see "B15" below) | 2026-09-28 15:00 |
 
 "First pass" is what the crawler measures: the page loads and renders
 without an error, a failing request, a broken layout or a missing heading,
@@ -51272,7 +51272,16 @@ Fixed:
 
 *session_01TRY21ZKsFrfB3qtoP972A4, claimed 11:10Z (#633), run 2026-09-28 11:10–15:00Z.* B6 pressed everything as a parent, B11 as a PIN child; B7 only rendered a teen. This batch signs in one member of each remaining role, each through `/login` with an email, in the same Family+ household on a local production build of main `2d6bd78f`, with migrations through `0461` applied.
 
-<!-- B15 pass table: completed below when the submission passes finish -->
+| Pass | Adult | Teen | Caregiver | Guest |
+| --- | --- | --- | --- | --- |
+| Render, 1280 px, every signed-in route | 350; 272 reached | 350; 270 reached | 350; 270 reached | 350; 270 reached |
+| Every control (`--interact`) on the routes reached | 269 routes, 1,265 clicks | 268, 1,167 | 268 | 268, 1,171 |
+| Every form (`--submit`) | 113 forms: 111 answered, 6 refused by the browser (P-40) | 94: 88 answered, 5 refused by the app, 5 by the browser | 94: 87 answered, 6 by the app, 5 by the browser | 94: 84 answered, 6 by the app, 5 by the browser |
+| Direct writes with the session's own token (role, rename, invite a parent, plan, family, a bill) | self-promotion and the parent invite written (owner decision, above) | all refused | all refused | all refused |
+
+"Refused by the app" is always a manager-only write offered to a non-manager, answered in words: "You don't have permission to do that. Ask a family admin if you think this is a mistake." That applies to Add bill (bills, autopay, due), Add Entry (passwords) and Add subscription (0460). The refusal is correct. Whether a teen, caregiver or guest should be offered those forms at all is ROLE-SCOPE-001's and PROD-002's question. One caregiver "Add bill" recorded no message because the toast had gone by the time the crawler read it; by hand it shows for three seconds.
+
+A first run of the submission pass reused sessions saved three hours earlier. Their refresh tokens had already been rotated by the interaction pass, so every page answered as signed out. That run was discarded and repeated with fresh sessions, and every row above was signed in.
 
 **What each role reaches.** All four render 350 of 350 signed-in routes with no page error. The adult reaches 272 (every family route, and `/dashboard/family-access`); the teen, caregiver and guest reach the same 270 family routes and are sent from `/dashboard/family-access` to `/home`. Every `/admin` route sends all four to `/dashboard`. The redirect arrives mid-stream, so a crawler can catch the address before it changes. The check that matters: the HTML and the RSC payload of `/admin/users`, fetched as the guest, teen, adult and caregiver, never contain another family's email, while the super admin's copy of the same page does.
 
@@ -51301,6 +51310,16 @@ Fixed:
 - The cards are `role="presentation"`, with the click kept for the mouse. Their title `<button>` is the control.
 - A new scan (`nestedInteractive` in `tests/helpers/jsx-a11y-scan.ts`) checks the whole tree. It found exactly these two, plus two drop zones whose file input is hidden and so takes no focus. `tests/a-button-holds-no-other-control.test.ts` holds it at zero and fails on the previous cards.
 - Retested with a note and a recipe present: axe finds 0 violations on both pages. By keyboard alone, 7 and 12 Tabs land on the real title buttons and Enter opens each item.
+
+**P-40 · Medium · A money field refused the exact amount.** The browser refused the submission pass on the same fields for every role, the adult included. A number input rejects any value that is not a multiple of its `step`, and thirteen money fields carried a coarse one, so the form would not submit:
+- a mover's quote of $1,875 or a move's spend (step 50 and 10);
+- a salary target or range of $65,432 (step 100);
+- a project's budget, labour or quote of $125 (step 10);
+- a plan's budget (step 10);
+- a Trust rule's maximum amount and the wallet's approval threshold of $12 (step 5);
+- a babysitter payment of $60.25 in the field labelled "Or enter exact amount" (step 0.5).
+
+Every one is stored in cents, and every parser already keeps cents (`Math.round(n * 100)`). Fixed: all thirteen take `step="0.01"`. Minutes, a radius in metres, the investment sliders and reward points keep their deliberate increments. `tests/a-money-field-takes-the-exact-amount.test.ts` scans `components/` and `app/` for money-named number inputs and named all thirteen on the previous code.
 
 **Seen and not defects.**
 - `/api/ai/*` answered 503 "not configured" on a dozen pages: the local stack has no AI key.

@@ -2,7 +2,7 @@ import { readdirSync, readFileSync, statSync } from 'node:fs';
 import { join } from 'node:path';
 import { describe, expect, it } from 'vitest';
 
-// P-38 (finalaudit.md, page audit B15). Every role's form pass was refused by
+// P-40 (finalaudit.md, page audit B15). Every role's form pass was refused by
 // the BROWSER on the same fields: a move's budget and mover's quote (step 50),
 // a salary (step 100), a project's budget, labour and quote (step 10), a plan's
 // budget (step 10). A number input rejects any value that is not a multiple of
