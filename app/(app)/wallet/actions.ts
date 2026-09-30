@@ -275,9 +275,14 @@ export async function saveAllowanceRuleAction(input: {
   // amount and cadence live in the scheduler while the parent is shown the new
   // ones. Only the update branch can match nothing — an insert either lands or
   // errors — so only it is checked. Audit C1-S9-23.
+  //
+  // An edit leaves `is_active` alone. It used to write `true`, and the screen
+  // offers the edit on a paused allowance too, so correcting a paused child's
+  // amount quietly restarted the payments. Pausing and resuming is
+  // toggleAllowanceRuleAction's job; only a NEW rule starts active.
   const { data: saved, error } = input.id
     ? await supabase.from('allowance_rules')
-        .update({ amount_cents: amount, cadence: input.cadence, is_active: true, next_run_on: next })
+        .update({ amount_cents: amount, cadence: input.cadence, next_run_on: next })
         .eq('id', input.id).eq('family_id', familyId)
         .select('id')
     : await supabase.from('allowance_rules')
