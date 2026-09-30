@@ -62,7 +62,7 @@ All 52 loads meet all five of these conditions:
 
 ### Overlays: keyboard operation and focus return (`overlay-keyboard.jsonl`, 172 rows)
 
-**What was checked.** Every overlay that could be opened without changing data, on every route, role and width.
+**What was checked.** The overlays the probe found and could open without changing data, on the route/role/width combinations recorded in `overlay-keyboard.jsonl`: parent and child, 1280 and 390 px, on 10 of the 11 family routes. `/kids/submit/<assignmentId>` has no overlay observation, `/dashboard/social/feed` has only the shell's "All Services", "Open menu" and blog overlays, and no admin overlay was opened (see the coverage gaps below).
 - **How:** it was focused and opened with **Enter** only.
 - **Recorded:** whether focus moved inside; whether Tab stayed inside a modal; whether **Escape** closed it; and whether focus returned to the trigger.
 - **Totals:** 172 observations. 92 pass every recorded criterion. 44 fail focus return (36 Quick capture, 4 Request, 4 Ask for more allowance). 36 language-picker observations fail initial focus placement.
@@ -130,7 +130,7 @@ It is evidence for the dimension named, not a status change: no bulk PASS, and n
 - **Shared components:**
   - #671 counted 114 component files changed since `934219b5d`. Only what these 15 routes render, for these three roles and at these two widths, was exercised.
   - Components were not mapped file by file to routes.
-  - Shell overlays were exercised on every page, as recorded.
+  - Shell overlays were exercised only on the recorded route/role/width combinations: not on `/kids/submit/<assignmentId>`, and on `/dashboard/social/feed` without Quick capture or the language picker.
 - **Not covered:**
   - roles: teen, adult, caregiver or guest;
   - widths: 768 and 1024 px;
