@@ -10,6 +10,7 @@ const FOCUSABLE = 'a[href],button:not([disabled]),textarea:not([disabled]),input
 // one's. Only the top-most open dialog answers keys, and the scroll lock lifts
 // only when the last one holding it closes.
 const openDialogs: symbol[] = [];
+const dialogElements = new Map<symbol, HTMLElement>();
 const scrollLocks: symbol[] = [];
 let overflowBeforeLock = '';
 
@@ -26,6 +27,10 @@ let trackingFocus = false;
 function trackFocus(): void {
   if (trackingFocus || typeof document === 'undefined') return;
   trackingFocus = true;
+  // A trigger focused before this module loaded (a dialog in a chunk fetched
+  // on demand) is where the history starts.
+  const initial = document.activeElement as HTMLElement | null;
+  if (initial && initial !== document.body && typeof initial.focus === 'function') focusHistory.push(initial);
   document.addEventListener('focusin', (event) => {
     const target = event.target as HTMLElement | null;
     if (!target || typeof target.focus !== 'function') return;
@@ -46,6 +51,26 @@ function openerFromHistory(dialog: HTMLElement): HTMLElement | null {
     if (candidate.isConnected && !dialog.contains(candidate)) return candidate;
   }
   return null;
+}
+
+function canTakeFocus(element: HTMLElement): boolean {
+  return element.isConnected !== false && !(element as HTMLButtonElement).disabled && !element.closest?.('[inert]');
+}
+
+/**
+ * A dialog closed over another that stays open, and its opener cannot take
+ * focus (removed, disabled or inert): stay in the open one. Its most recent
+ * focus first, then its first control, then the panel itself.
+ */
+function focusInside(dialog: HTMLElement): boolean {
+  const recent = focusHistory.filter((candidate) => dialog.contains(candidate)).reverse();
+  const controls = Array.from(dialog.querySelectorAll<HTMLElement>(FOCUSABLE));
+  for (const candidate of [...recent, ...controls, dialog]) {
+    if (!canTakeFocus(candidate)) continue;
+    candidate.focus?.();
+    if (document.activeElement === candidate) return true;
+  }
+  return false;
 }
 
 /**
@@ -82,8 +107,9 @@ function focusMainLandmark(): void {
  *   - Escape closes, when the caller supplies `onClose`;
  *   - the background is scroll-locked;
  *   - focus returns to whatever had it before the dialog opened (even when a
- *     field inside took focus with `autoFocus`), or to the main landmark if
- *     that element is gone.
+ *     field inside took focus with `autoFocus`). If that element cannot take
+ *     it, focus stays inside a dialog that is still open, else goes to the
+ *     main landmark. Only the top-most dialog moves focus when it closes.
  *
  * A gate that must not be dismissed (a paywall, a lock screen) passes no
  * `onClose` and keeps the trap without an exit, which is the correct shape for
@@ -129,6 +155,7 @@ export function useDialogBehavior(
 
     const token = Symbol('dialog');
     openDialogs.push(token);
+    dialogElements.set(token, dialog);
 
     let previouslyFocused = document.activeElement as HTMLElement | null;
     // `autoFocus` inside the dialog already moved focus: the opener is in the
@@ -175,8 +202,12 @@ export function useDialogBehavior(
       document.body.style.overflow = 'hidden';
     }
     return () => {
+      // Closing underneath a dialog that stays open (a parent disposed before
+      // its confirmation) must not pull focus out of the one the user is in.
+      const topMost = openDialogs[openDialogs.length - 1] === token;
       const at = openDialogs.lastIndexOf(token);
       if (at >= 0) openDialogs.splice(at, 1);
+      dialogElements.delete(token);
       document.removeEventListener('keydown', onKey);
       if (lockScroll) {
         const lockAt = scrollLocks.lastIndexOf(token);
@@ -184,9 +215,14 @@ export function useDialogBehavior(
         // The lock lifts only when the last dialog holding it has closed.
         if (scrollLocks.length === 0) document.body.style.overflow = overflowBeforeLock;
       }
+      if (!topMost) return;
+      // With a dialog still open below, the opener counts only if it is inside it.
+      const below = dialogElements.get(openDialogs[openDialogs.length - 1]);
       if (previouslyFocused && previouslyFocused !== document.body && previouslyFocused.isConnected !== false
-        && !previouslyFocused.closest?.('[inert]')) previouslyFocused?.focus?.();
-      if (document.activeElement !== previouslyFocused || previouslyFocused === document.body) focusMainLandmark();
+        && !previouslyFocused.closest?.('[inert]') && (!below || below.contains(previouslyFocused))) previouslyFocused?.focus?.();
+      if (document.activeElement !== previouslyFocused || previouslyFocused === document.body) {
+        if (!below || !focusInside(below)) focusMainLandmark();
+      }
     };
   }, [ref, open, lockScroll]);
 }
