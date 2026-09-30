@@ -4,7 +4,7 @@
 ## Audit Status
 
 - Started: 2026-09-12 (existing Register B); Daniel adopted the complete `Final_Audit.txt` target on 2026-09-30.
-- Last Updated: 2026-09-30 21:50 UTC, Jimmy/Codex frozen containment and conditional availability follow-up. #668 merged with a separate open client-cache ownership P1; #704 is the urgent isolated correction, not cleared or deployed. Two further existing rows move to IN PROGRESS for investigated cache-scope and email-renderer behavior; zero PASS credit. Production remains NO.
+- Last Updated: 2026-09-30 22:05 UTC, Jimmy/Codex exact hosted gates and stale-alternative hold. #668 merged with a separate open client-cache ownership P1; #704 is the urgent isolated correction, not cleared or deployed. Two further existing rows move to IN PROGRESS for investigated cache-scope and email-renderer behavior; zero PASS credit. Production remains NO.
 - Source: main advanced externally to48d3769c9056253d4136d49a1484618a6fe7c1a4 via #700 at21:28:56. Public HTTP200 at21:37:44.994 confirms served48d3769; its helper remains unchanged. Historical e4c3e6791e4a37ee9a14b9ac9de21969bda19fa3 after #698 was preceded by #702 at55ac59ba and #668 at26d1b258. Public readback confirms e4c3e679 at20:44:28.303 UTC; it still contains cache-session blob08fec96e2117691e2c9f7e68a53da0895115ca41. #704 current candidate4e9b7b1bf1248504debb2d372dd676697b9ec8b0 is separate and not deployed; earlier candidates and failures remain historical. Candidate CI, combined-source tests, served revision and complete workflows remain distinct gates.
 - Total Audit Items: **14,300** in Register B. Session A's **841** overlapping items and the page/finding registers remain separate; do not add their denominators.
 - Not Started: **11,904**.
@@ -84,6 +84,12 @@ Historical main6511f6c8 CI36759928115 subsequently CANCELLED at19:03:54 after ne
 Production deployment6766923523 succeeded for05080090 at18:21:55, with independent trusted-CA public HTTP200 revision readback at18:23:35.579 UTC. Deployment6767300803 succeeded for6511f6c8 at18:40:12, with public HTTP200 matching revision at18:41:58.702 and private/no-store cache headers. These prove the served source revision, not full workflow or provider acceptance. Denied private Vercel team access was not bypassed. Separate Supabase preview110040661697 failed at18:40:18 with SQLSTATE57014; earlier050800 preview110033298353 failed at18:22:09. CI/deployment does not close that migration integration blocker, SEC-001, Stripe delivery or cron configuration/catch-up.
 
 Historical #690 moved four existing rows to IN PROGRESS; #703 adds the allowance UI and optional email helper investigations. This follow-on adds LIBRARY-BD02682C5B61 (actual cache-scope fence exercised) and LIBRARY-DC87FF26A5F8 (missing email renderer investigated). Totals:14,300 =11,904 NOT STARTED +2,044 IN PROGRESS +186 PASS +157 FIXED + PASS +9 BLOCKED. No IDs added/removed and no new closure credit;343/14,300 remains2.40%.
+
+## Current hosted gate and stale-alternative hold
+
+At22:05 UTC, frozen704 run36780789811 has Web/Database/Mobile PASS and E2E110110490213 still running (smoke step began21:48:06). Exact Web job110110490631 passed at21:53:52; its logs show22,595 tests in1,780 files passing in each of three timezones, with retained summaries at21:44:06,21:47:45 and21:51:21. Baseline main48d3769 separately completedCI36779702609 SUCCESS at21:58:23 with1,816 clean E2E passes in23.0minutes; that result does not certify the correction. No merge/deployed-containment acceptance yet.
+
+**Stale alternative706 is held.** Exact4955d1afe95569c459a921436257443ba6a002ea on main48d3769 replays preserved bd05. Both blobs independently match: helper952b8cdeb635d32df792445722b8bc1a08e2d886 and testsff6eacabcb7c2ee1792b367492a2981e2778b47c. The subsequently demonstrated held/refuted-peer, replacement-session and asynchronous-echo defects therefore remain applicable. Parent and review5372417436 prohibit integration of this alternative; its branch/evidence remain preserved. Blackstone was asked again to pause auth edits, without assuming acknowledgement. Only frozen704 is the containment candidate.
 
 ## 21:40 frozen containment candidate
 
