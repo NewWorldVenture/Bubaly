@@ -68,40 +68,16 @@
 -- because that helper takes no lock, and 0311 is still listed as unapplied in
 -- production (docs/PENDING_PROD_MIGRATIONS.md). Nothing here depends on it.
 --
--- Before any trigger is created, existing rows are checked, read-only. A
--- payment that already names another family's babysitter or event stops the
--- migration, counted, rather than being rewritten: which side of such a row is
--- wrong is a person's decision.
+-- Before any trigger is created, existing rows are checked, read-only, with
+-- writers to all three tables held off from before the check until the
+-- triggers exist (see the install block at the end). A payment that already
+-- names another family's babysitter or event stops the migration, counted,
+-- rather than being rewritten: which side of such a row is wrong is a person's
+-- decision. The two functions are created first; without their triggers they
+-- guard nothing.
 --
 -- Proof: docs/audit/a-babysitter-payment-names-its-own-familys-sitter-and-event-check.sql.
 
-do $$
-declare
-  cross_sitter bigint;
-  cross_event bigint;
-begin
-  if to_regclass('public.babysitter_payments') is null
-     or to_regclass('public.babysitter_profiles') is null
-     or to_regclass('public.calendar_events') is null then
-    return;
-  end if;
-
-  select count(*) into cross_sitter
-    from public.babysitter_payments p
-    join public.babysitter_profiles s on s.id = p.babysitter_id
-   where s.family_id is distinct from p.family_id;
-  select count(*) into cross_event
-    from public.babysitter_payments p
-    join public.calendar_events e on e.id = p.event_id
-   where e.family_id is distinct from p.family_id;
-
-  if cross_sitter > 0 or cross_event > 0 then
-    raise exception
-      'babysitter_payments already holds % payment(s) naming another family''s babysitter and % naming another family''s event; they need a decision before this guard can be installed',
-      cross_sitter, cross_event;
-  end if;
-end
-$$;
 
 create or replace function public.babysitter_payment_references_own_family()
 returns trigger
@@ -180,12 +156,49 @@ $fn$;
 comment on function public.babysitter_payment_parent_keeps_its_family() is
   'A babysitter profile or calendar event that a babysitter payment names may not move to another family while it is named. Takes the payment column as its trigger argument (0472).';
 
+-- Install, in ONE statement, holding writers out from before the check until
+-- the triggers exist. SHARE ROW EXCLUSIVE conflicts with every INSERT, UPDATE
+-- and DELETE (ROW EXCLUSIVE) and is the lock CREATE TRIGGER takes anyway, so
+-- nothing is upgraded mid-way. Without it (review 5373272320): a payment
+-- written but not yet committed is invisible to the check, the trigger
+-- creation then waits for it, and it is kept once it commits. Now the lock
+-- waits for that writer first, the check sees its committed row, and the
+-- whole block fails with no trigger installed. Readers are not blocked; writes
+-- to the three tables wait for the length of two counts and three triggers.
+--
+-- A missing table is a failed precondition, not a quiet no-op: every one of
+-- these exists from 0088 and earlier, and "installed nothing, recorded
+-- success" is the outcome this migration exists to rule out.
 do $$
+declare
+  cross_sitter bigint;
+  cross_event bigint;
+  t text;
 begin
-  if to_regclass('public.babysitter_payments') is null
-     or to_regclass('public.babysitter_profiles') is null
-     or to_regclass('public.calendar_events') is null then
-    return;
+  foreach t in array array['babysitter_payments', 'babysitter_profiles', 'calendar_events'] loop
+    if to_regclass('public.' || t) is null then
+      raise exception '0472: public.% does not exist; this guard cannot be installed', t;
+    end if;
+  end loop;
+
+  lock table public.babysitter_payments, public.babysitter_profiles, public.calendar_events
+    in share row exclusive mode;
+
+  -- Read-only: a payment that already names another family's babysitter or
+  -- event stops the migration, counted. Which side of such a row is wrong is a
+  -- person's decision, so nothing is rewritten.
+  select count(*) into cross_sitter
+    from public.babysitter_payments p
+    join public.babysitter_profiles s on s.id = p.babysitter_id
+   where s.family_id is distinct from p.family_id;
+  select count(*) into cross_event
+    from public.babysitter_payments p
+    join public.calendar_events e on e.id = p.event_id
+   where e.family_id is distinct from p.family_id;
+  if cross_sitter > 0 or cross_event > 0 then
+    raise exception
+      'babysitter_payments already holds % payment(s) naming another family''s babysitter and % naming another family''s event; they need a decision before this guard can be installed',
+      cross_sitter, cross_event;
   end if;
 
   drop trigger if exists trg_babysitter_payments_reference_family on public.babysitter_payments;

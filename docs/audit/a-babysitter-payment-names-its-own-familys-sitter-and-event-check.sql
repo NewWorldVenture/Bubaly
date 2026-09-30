@@ -6,9 +6,11 @@
 -- parent of family A, a payment may name A's babysitter and A's event, and not
 -- B's, whether written fresh or re-pointed. A reference to nothing is the
 -- foreign key's error, not this guard's. As a manager of BOTH families, a
--- babysitter or event that A's payments name cannot be moved to B, and a
--- payment filed in B cannot name A's babysitter: the rule is about the rows,
--- not the caller's rights. Then, still inside the same transaction, the guards
+-- babysitter or event that A's payments name cannot be moved to B, a payment
+-- filed in B cannot name A's babysitter, and A's payment cannot be moved to B:
+-- the rule is about the rows, not the caller's rights. Still allowed: a
+-- payment naming no babysitter, one naming A's archived babysitter, and
+-- deleting a paid babysitter (ON DELETE SET NULL keeps the payment). Then, still inside the same transaction, the guards
 -- are disabled and the same writes must LAND, or the refusals above were not
 -- the guards' doing.
 --
@@ -69,6 +71,10 @@ insert into public.babysitter_profiles (id, family_id, name) values
   ('04720000-0000-4000-8000-0000000000c3', '04720000-0000-4000-8000-00000000000a', 'A sitter, unpaid'),
   ('04720000-0000-4000-8000-0000000000c4', '04720000-0000-4000-8000-00000000000a', 'A sitter, race 1'),
   ('04720000-0000-4000-8000-0000000000c5', '04720000-0000-4000-8000-00000000000a', 'A sitter, race 2');
+-- c6 A's archived sitter, c7 A's sitter who will be deleted.
+insert into public.babysitter_profiles (id, family_id, name, is_active) values
+  ('04720000-0000-4000-8000-0000000000c6', '04720000-0000-4000-8000-00000000000a', 'A sitter, archived', false),
+  ('04720000-0000-4000-8000-0000000000c7', '04720000-0000-4000-8000-00000000000a', 'A sitter, leaving', true);
 -- e1 A's event, e2 B's event, e3 A's event nobody has paid for, e4/e5 A's events for the races.
 insert into public.calendar_events (id, family_id, title, starts_at) values
   ('04720000-0000-4000-8000-0000000000e1', '04720000-0000-4000-8000-00000000000a', 'A date night', now()),
@@ -92,7 +98,11 @@ declare
   eventB uuid := '04720000-0000-4000-8000-0000000000e2';
   eventFree uuid := '04720000-0000-4000-8000-0000000000e3';
   missing uuid := '04720000-0000-4000-8000-0000000000ff';
+  sitterArchived uuid := '04720000-0000-4000-8000-0000000000c6';
+  sitterLeaving uuid := '04720000-0000-4000-8000-0000000000c7';
   paid uuid;
+  paidLeaving uuid;
+  leftover uuid;
   n int;
   failures int := 0;
 begin
@@ -178,6 +188,34 @@ begin
   if n <> 1 then raise warning 'OVER-BLOCKED: A could not clear a payment''s event (rows: %)', n; failures := failures + 1; end if;
   update public.babysitter_payments set event_id = eventA where id = paid;
 
+  -- 7b. No babysitter at all, and A's own archived babysitter, are A's to record.
+  insert into public.babysitter_payments (family_id, babysitter_id, event_id, amount_cents, status, created_by)
+    values (famA, null, null, 1000, 'completed', uA);
+  get diagnostics n = row_count;
+  if n <> 1 then raise warning 'OVER-BLOCKED: a payment naming no babysitter was refused (rows: %)', n; failures := failures + 1; end if;
+  insert into public.babysitter_payments (family_id, babysitter_id, amount_cents, status, created_by)
+    values (famA, sitterArchived, 1000, 'completed', uA);
+  get diagnostics n = row_count;
+  if n <> 1 then raise warning 'OVER-BLOCKED: a late payment to A''s archived babysitter was refused (rows: %)', n; failures := failures + 1; end if;
+
+  -- 7c. Deleting a babysitter A has paid is the foreign key's ON DELETE SET
+  --     NULL: the payment stays, its reference cleared. The guard, which fires
+  --     on that cascaded update, must not stand in its way.
+  insert into public.babysitter_payments (family_id, babysitter_id, event_id, amount_cents, status, created_by)
+    values (famA, sitterLeaving, eventA, 1000, 'completed', uA) returning id into paidLeaving;
+  begin
+    delete from public.babysitter_profiles where id = sitterLeaving;
+    get diagnostics n = row_count;
+    if n <> 1 then raise warning 'OVER-BLOCKED: A could not delete its own paid babysitter (rows: %)', n; failures := failures + 1; end if;
+  exception when others then
+    raise warning 'OVER-BLOCKED: deleting A''s paid babysitter raised % %', sqlstate, sqlerrm; failures := failures + 1;
+  end;
+  select babysitter_id into leftover from public.babysitter_payments where id = paidLeaving;
+  if not found or leftover is not null then
+    raise warning 'WRONG: the payment to a deleted babysitter was not kept with its reference cleared (found: %, babysitter_id: %)', found, leftover;
+    failures := failures + 1;
+  end if;
+
   reset role;
 
   -- As a parent of BOTH families. 0322 checks rights in the old and the new
@@ -216,7 +254,17 @@ begin
     end if;
   end;
 
-  -- 11. Rights in both families do not make A's babysitter B's to pay.
+  -- 11. Rights in both families do not make A's babysitter B's to pay:
+  --     neither a new B payment naming it, nor A's payment moved to B.
+  begin
+    update public.babysitter_payments set family_id = famB where id = paid;
+    get diagnostics n = row_count;
+    if n > 0 then raise warning 'BREACH: a manager of both moved A''s payment, still naming A''s babysitter, to B'; failures := failures + 1; end if;
+  exception when insufficient_privilege then
+    if sqlerrm not like '%in another family%' then
+      raise warning 'REFUSED BY SOMETHING ELSE: %', sqlerrm; failures := failures + 1;
+    end if;
+  end;
   begin
     insert into public.babysitter_payments (family_id, babysitter_id, amount_cents, status, created_by)
       values (famB, sitterA, 5000, 'completed', uAB);
@@ -260,7 +308,7 @@ begin
   if failures > 0 then
     raise exception '0472 static: % assertion(s) failed', failures;
   end if;
-  raise notice '0472 static: OK — A pays only A''s babysitter and event; named rows stay; a manager of both is held to it; missing ids are the foreign key''s; disabling the guards lets every refused write land';
+  raise notice '0472 static: OK — A pays only A''s babysitter and event; named rows stay; a manager of both is held to it, payment moves included; missing ids are the foreign key''s; no babysitter, an archived one and a deleted one (reference cleared) are still A''s; disabling the guards lets every refused write land';
 end
 $static$;
 rollback;
