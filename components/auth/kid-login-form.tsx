@@ -69,7 +69,10 @@ export function KidLoginForm() {
       // The saved language follows the child to this device (I18N-001). Bounded,
       // and a failure never blocks the sign-in.
       await syncLanguageAfterSignInAction().catch(() => {});
-      if (!current()) return;
+      // The await is a window: another tab may have signed out or in meanwhile,
+      // so this child's session must still be the browser's before it navigates
+      // (#705 comment 5922913215).
+      if (!current() || !isPasswordSessionCurrent(data.session)) return;
       phase.current = 'complete';
       router.push('/home');
       if (mounted.current && attempt.current === id && isPasswordSessionCurrent(data.session)) router.refresh();
