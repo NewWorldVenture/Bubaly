@@ -8,6 +8,17 @@ const enabled = process.env.E2E_DURABLE_SESSION === '1';
 const INGRESS_TEST_TOKEN = 'ci-only-guardian-signed-ingress-fixture';
 type Client = SupabaseClient<Database>;
 
+// Format only bounded response metadata, never provider messages or row values.
+function receiptResponseDiagnostic(response: { status: number; error: { code?: string } | null; data: unknown }): string {
+  const status = Number.isInteger(response.status) && (response.status === 0 || (response.status >= 100 && response.status <= 599))
+    ? response.status : 'unavailable';
+  const code = response.error === null ? 'none'
+    : typeof response.error.code === 'string' && /^(?:[0-9A-Z]{5}|PGRST[0-9]{3})$/.test(response.error.code)
+      ? response.error.code : 'unavailable';
+  const rows = Array.isArray(response.data) ? response.data.length : 'unavailable';
+  return `status=${status} code=${code} rows=${rows}`;
+}
+
 function requireSyntheticIngress(): void {
   if (process.env.TWILIO_AUTH_TOKEN !== INGRESS_TEST_TOKEN
     || process.env.TWILIO_ACCOUNT_SID || process.env.TWILIO_PHONE_NUMBER
@@ -110,7 +121,7 @@ test.describe('Guardian receipt authority against disposable GoTrue and PostgRES
       const changed = await member.from('ai_tool_calls').update({ outputs: { fixture: 'forged' }, state: 'succeeded' })
         .eq('family_id', account.familyId).eq('id', receiptId).select('id');
       expect((!changed.error && changed.data?.length === 0) || changed.error?.code === '42501',
-        'A family manager must not update the receipt').toBe(true);
+        `A family manager must not update the receipt (${receiptResponseDiagnostic(changed)})`).toBe(true);
       const removed = await member.from('ai_tool_calls').delete().eq('family_id', account.familyId).eq('id', receiptId).select('id');
       expect((!removed.error && removed.data?.length === 0) || removed.error?.code === '42501',
         'A family manager must not delete the receipt').toBe(true);

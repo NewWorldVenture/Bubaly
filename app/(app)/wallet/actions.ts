@@ -657,6 +657,22 @@ export async function recordBabysitterPaymentAction(input: {
   if (!Number.isFinite(input.amountCents) || input.amountCents <= 0) return { ok: false, error: t('actions.enterAPaymentAmount') };
   const supabase = await createServer();
 
+  // The babysitter and the event are plain foreign keys (0088): the database
+  // refuses an id that does not exist but accepts ANOTHER family's, and the
+  // insert policies check only the payment's own family_id (0354). So read
+  // both back inside this family first, as saveWalletRuleAction does for its
+  // wallet, and write nothing otherwise. The event stays optional.
+  const { data: sitter, error: sitterError } = await supabase.from('babysitter_profiles')
+    .select('id').eq('id', input.babysitterId).eq('family_id', ctx.active.familyId).maybeSingle();
+  if (sitterError) return actionFailure(sitterError, t('actions.couldNotRecordThatBabysitter'));
+  if (!sitter) return { ok: false, error: t('actions.couldNotRecordThatBabysitter') };
+  if (input.eventId) {
+    const { data: event, error: eventError } = await supabase.from('calendar_events')
+      .select('id').eq('id', input.eventId).eq('family_id', ctx.active.familyId).maybeSingle();
+    if (eventError) return actionFailure(eventError, t('actions.couldNotRecordThatBabysitter'));
+    if (!event) return { ok: false, error: t('actions.couldNotRecordThatBabysitter') };
+  }
+
   const { decision } = await evaluateTrust(supabase, ctx.active.familyId, {
     actor: { kind: 'member', id: ctx.active.member.id, role: roleOf(ctx.active.role) },
     domain: 'finances', capability: 'automate',
