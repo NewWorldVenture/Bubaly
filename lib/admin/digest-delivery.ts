@@ -385,8 +385,17 @@ export function pgLength(s: string): number {
   for (const _ of s) n += 1;
   return n;
 }
-export const isStorableMessageId = (id: unknown): id is string =>
-  typeof id === 'string' && id.length > 0 && pgLength(id) <= MAX_PROVIDER_MESSAGE_ID_CHARS;
+export function isStorableMessageId(id: unknown): id is string {
+  if (typeof id !== 'string' || id.length === 0) return false;
+  let length = 0;
+  // JSON can encode NUL and lone UTF-16 surrogates, but PostgreSQL jsonb/text cannot.
+  // Iteration combines valid pairs, so supplementary Unicode remains one character.
+  for (const character of id) {
+    const point = character.codePointAt(0)!;
+    if (point === 0 || (point >= 0xd800 && point <= 0xdfff) || ++length > MAX_PROVIDER_MESSAGE_ID_CHARS) return false;
+  }
+  return true;
+}
 const occurrencePayloadHash = (p: DigestPayload) => sha256(JSON.stringify({ from: p.from, subject: p.subject, html: p.html }));
 
 // ── Validation (before any storage call or send) ────────────────────────────
