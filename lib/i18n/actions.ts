@@ -32,8 +32,9 @@ import { createServer } from '@/lib/supabase/server';
  *
  * HONEST about the second write, and BOUNDED. The picker waits for this action
  * before it repaints, so the profile gets LANGUAGE_SYNC_BUDGET_MS at most: on
- * the deadline the request is aborted, the switch finishes with the cookie,
- * and the result says the profile did not take (#705 comment 5921693652). A
+ * the deadline the request is abandoned, the switch finishes with the cookie,
+ * and the result says the profile was not confirmed (#705 comment 5921693652;
+ * an update the database already accepted may still commit). A
  * slow or failing database never fails the switch, but the result says whether
  * the profile took too, and if not, why:
  *
@@ -126,10 +127,12 @@ async function storeForSignedInUser(code: string): Promise<{ profile: 'stored' |
 }
 
 /**
- * The write itself. Once `signal` has fired it is abandoned work and never
- * writes: the lookup it may still be waiting on (getUser takes no signal) is
- * checked before the update is sent, and the update is aborted in flight, so
- * a late answer cannot overwrite a newer choice.
+ * The write itself. Once `signal` has fired it is abandoned work: if the
+ * lookup it may still be waiting on (getUser takes no signal) answers late,
+ * the update is never sent. An update already sent is aborted on this side
+ * only. The database may have accepted it, and it may still commit, even
+ * after a newer choice. Ordering those would need a version on the row,
+ * which this does not have; the result only reports 'timed-out'.
  */
 async function storeWithin(code: string, signal: AbortSignal, who: { userId: string | null }): Promise<'stored' | ProfileWrite> {
   try {
