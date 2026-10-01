@@ -246,14 +246,26 @@ describe.skipIf(!pgFixtureEnabled)('0471 + 0474 on PostgreSQL (disposable databa
       expect(await fx.sql(`select row_to_json(d)::text from public.admin_digest_deliveries d where ${where};`)).toBe(before);
     });
 
+    // Review 5922497031: the ordering is proven only if the admission is seen BLOCKED on the holder's lock
+    // before the holder commits. The holder sleeps longer than this wait may take; if the admission never
+    // reaches the lock in that time, the test fails instead of passing on an unexercised order.
+    const blockedBehind = (app: string) => vi.waitFor(async () => expect(await fx.sql(
+      `select count(*) from pg_stat_activity a
+        where a.wait_event_type = 'Lock' and a.query like '%admin_digest_begin_send%'
+          and (select pid from pg_stat_activity where application_name = '${app}') = any(pg_blocking_pids(a.pid));`)).toBe('1'),
+    { timeout: 3_000, interval: 20 });
+    const stillOpen = (app: string) => fx.sql(`select count(*) from pg_stat_activity where application_name = '${app}' and state = 'active';`);
+
     it('a removal committed while the admission waits for the row lock is seen: withdrawn, not granted', async () => {
       const { clock, fence, where } = await setup();
       // The holder locks the row, removes the admin in the same transaction, and commits only after the
-      // admission is queued behind it. Eligibility read before the lock would still see the admin.
+      // admission is blocked behind it. Eligibility read before the lock would still see the admin.
       const holder = fx.sql(`set application_name = 'removing_admin'; begin; select 1 from public.admin_digest_deliveries where ${where} for update;
-        delete from public.super_admins; select pg_sleep(1.2); commit;`);
+        delete from public.super_admins; select pg_sleep(4); commit;`);
       await sleepingIn('removing_admin');
       const admission = reconnect(clock).beginSend(OCC, K1, fence, BEGIN, TABLE_ONLY);
+      await blockedBehind('removing_admin');
+      expect(await stillOpen('removing_admin')).toBe('1'); // the removal is not yet committed while the admission waits
       await holder;
       expect(answerOf(await admission)).toBe('withdrawn');
       expect(await fx.sql(`select status || ':' || last_error from public.admin_digest_deliveries where ${where};`)).toBe('withdrawn:recipient_no_longer_eligible');
@@ -263,9 +275,11 @@ describe.skipIf(!pgFixtureEnabled)('0471 + 0474 on PostgreSQL (disposable databa
       const { clock, fence, where } = await setup();
       await fx.setAdmins([]);
       const holder = fx.sql(`set application_name = 'adding_admin'; begin; select 1 from public.admin_digest_deliveries where ${where} for update;
-        insert into public.super_admins (email) values ('${ONE}'); select pg_sleep(1.2); commit;`);
+        insert into public.super_admins (email) values ('${ONE}'); select pg_sleep(4); commit;`);
       await sleepingIn('adding_admin');
       const admission = reconnect(clock).beginSend(OCC, K1, fence, BEGIN, TABLE_ONLY);
+      await blockedBehind('adding_admin');
+      expect(await stillOpen('adding_admin')).toBe('1');
       await holder;
       expect(answerOf(await admission)).toBe('ok');
     }, 30_000);
