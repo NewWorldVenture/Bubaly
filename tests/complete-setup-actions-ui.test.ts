@@ -17,7 +17,7 @@ vi.mock('next/navigation', () => ({ useRouter: () => ({ push: state.push, refres
 vi.mock('@/components/ui/toast', () => ({ useToast: () => ({ error: state.error, success: state.success }) }));
 vi.mock('@/components/i18n/locale-provider', async () => {
   const { getMessages, translate } = await import('@/lib/i18n/messages');
-  return { useTranslations: () => (key: string, params?: Record<string, string | number>) => translate(getMessages(state.locale), key, params) };
+  return { useFamilyTimeZone: () => undefined, useTranslations: () => (key: string, params?: Record<string, string | number>) => translate(getMessages(state.locale), key, params) };
 });
 vi.mock('@/app/onboarding/actions', () => ({ saveFamilyDetailsAction: state.save, resetOnboardingAction: state.reset }));
 type Node = ReactElement<Record<string, unknown>>;

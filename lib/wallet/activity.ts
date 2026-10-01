@@ -3,6 +3,7 @@
 // No Supabase/React; the immutable ledger rows are the input.
 import type { WalletTxnType } from '@/lib/database.types';
 import { localDayKeyOf } from '@/lib/time/local-day';
+import { dayKeyIn, isValidTimezone } from '@/lib/time/zoned';
 
 const TYPE_LABEL: Record<string, string> = {
   gift_received: 'Gift', parent_top_up: 'Top-up', allowance: 'Allowance', chore_reward: 'Chore reward',
@@ -59,7 +60,8 @@ export function filterTxns<T extends ActivityTxn>(txns: T[], f: ActivityFilter):
 
 /** Group transactions by calendar day (YYYY-MM-DD), newest day first, and keep
  *  each day's rows in their incoming (newest-first) order. */
-export function groupByDay<T extends ActivityTxn>(txns: T[]): Array<{ date: string; txns: T[] }> {
+export function groupByDay<T extends ActivityTxn>(txns: T[], timeZone?: string): Array<{ date: string; txns: T[] }> {
+  const zone = timeZone && isValidTimezone(timeZone) ? timeZone : undefined;
   const map = new Map<string, T[]>();
   for (const t of txns) {
     // The READER's day, not Greenwich's. `.slice(0, 10)` on an ISO timestamp is
@@ -69,7 +71,9 @@ export function groupByDay<T extends ActivityTxn>(txns: T[]): Array<{ date: stri
     // reader, so `localDayKeyOf` is the right answer and no zone has to be
     // threaded; `lib/time/local-day.ts` exists for exactly this and carries no
     // server-only import.
-    const day = localDayKeyOf(t.created_at) ?? t.created_at.slice(0, 10);
+    // TIME-003: the FAMILY's day when the caller passes its zone.
+    const at = new Date(t.created_at);
+    const day = (zone && !Number.isNaN(at.getTime()) ? dayKeyIn(at, zone) : localDayKeyOf(t.created_at)) ?? t.created_at.slice(0, 10);
     const arr = map.get(day) ?? [];
     arr.push(t);
     map.set(day, arr);

@@ -3,6 +3,7 @@
 // No Supabase / React imports so timeline ordering, last-contact, and
 // well-being math stay deterministically unit-testable.
 
+import { dayKeyIn, isValidTimezone } from '@/lib/time/zoned';
 export type CareLogType = 'check_in' | 'visit' | 'call' | 'meal' | 'medication' | 'appointment' | 'incident' | 'note';
 
 export interface CareEntryLike {
@@ -51,11 +52,15 @@ export function averageWellbeing(entries: CareEntryLike[]): number | null {
 }
 
 /** Groups entries by local day-key (YYYY-MM-DD), newest day first. */
-export function groupByDay<T extends CareEntryLike>(entries: T[]): [string, T[]][] {
+export function groupByDay<T extends CareEntryLike>(entries: T[], timeZone?: string): [string, T[]][] {
   const map = new Map<string, T[]>();
+  // With `timeZone` (the family's, TIME-003) a day is that zone's calendar day;
+  // without it, the runtime's, as before.
+  const zone = timeZone && isValidTimezone(timeZone) ? timeZone : undefined;
   for (const e of sortByRecent(entries)) {
     const d = new Date(e.occurred_at);
-    const key = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
+    const key = zone && !Number.isNaN(d.getTime()) ? dayKeyIn(d, zone)
+      : `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
     const arr = map.get(key) ?? [];
     arr.push(e);
     map.set(key, arr);

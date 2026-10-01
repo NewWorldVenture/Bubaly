@@ -2,6 +2,7 @@
 // Quick Capture events. Pure + deterministic (inject `now`), no external deps,
 // so "Dentist at 3pm tomorrow" lands on the calendar at the right time instead
 // of "now" — and the recognized phrase is stripped from the event title.
+import { asWallClockUtc, instantForLocalTime, isValidTimezone } from '@/lib/time/zoned';
 
 const WEEKDAYS = ['sunday', 'monday', 'tuesday', 'wednesday', 'thursday', 'friday', 'saturday'];
 
@@ -281,4 +282,32 @@ export function suggestKind(input: string, now: Date = new Date(), opts?: ParseO
   if (/^(note|idea)\s*[:\-]/.test(t) || t.length > 80) return 'note';
 
   return 'task';
+}
+
+/**
+ * `parseEvent` against the FAMILY's clock (TIME-003), for a client.
+ *
+ * "Tomorrow at 3pm" is the family's tomorrow at the family's 3 pm, not the
+ * phone's: a parent booking the kids' game from a hotel abroad means home time.
+ * The parse runs on a UTC-anchored wall clock (the same bridge the server uses
+ * in lib/ai/context/intents.ts, so the runtime's own DST rules never touch it)
+ * and the answer is mapped back to a real instant. A time the zone skips at
+ * spring-forward moves to the first minute that exists. With no usable zone
+ * this is `parseEvent` exactly.
+ */
+export function parseEventInZone(input: string, now: Date, timeZone: string | undefined): ParsedEvent {
+  if (!timeZone || !isValidTimezone(timeZone)) return parseEvent(input, now);
+  const parsed = parseEvent(input, asWallClockUtc(now, timeZone), { utc: true });
+  const wall = parsed.startsAt;
+  const at = instantForLocalTime(
+    wall.getUTCFullYear(), wall.getUTCMonth() + 1, wall.getUTCDate(),
+    wall.getUTCHours() * 60 + wall.getUTCMinutes(), timeZone,
+  );
+  return { ...parsed, startsAt: at ?? wall };
+}
+
+/** `parseDueDate` against the FAMILY's day (TIME-003): "tomorrow" is theirs. */
+export function parseDueDateInZone(input: string, now: Date, timeZone: string | undefined): ParsedTask {
+  if (!timeZone || !isValidTimezone(timeZone)) return parseDueDate(input, now);
+  return parseDueDate(input, asWallClockUtc(now, timeZone), { utc: true });
 }

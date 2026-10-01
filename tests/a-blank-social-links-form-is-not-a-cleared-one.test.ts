@@ -140,7 +140,7 @@ vi.mock('@/lib/i18n/server', () => ({ getTranslations: async () => t }));
 // The form is a client component; give it the two hooks it needs so the REAL
 // inputs render and "are there six blank boxes on screen" is a real question.
 vi.mock('@/components/ui/toast', () => ({ useToast: () => ({ success: () => {}, error: () => {} }) }));
-vi.mock('@/components/i18n/locale-provider', () => ({ useTranslations: () => t }));
+vi.mock('@/components/i18n/locale-provider', () => ({ useFamilyTimeZone: () => undefined, useTranslations: () => t }));
 
 const { socialLinksRevision } = await import('@/lib/server/social-links');
 const { saveSocialLinksAction } = await import('@/app/(app)/admin/settings/social-links/actions');

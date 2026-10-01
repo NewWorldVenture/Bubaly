@@ -55,6 +55,8 @@ vi.mock('@/components/ui/toast', () => ({ useToast: () => ({ error: harness.toas
 vi.mock('@/components/i18n/locale-provider', () => ({
   useTranslations: () => (key: string) => key,
   useLocale: () => ({ code: 'en-US' }),
+  // No family bound: formatters fall back to the reader's zone (TIME-003).
+  useFamilyTimeZone: () => undefined,
 }));
 vi.mock('@/lib/supabase/auth', () => ({ requireUserContext: harness.requireUserContext }));
 vi.mock('@/lib/supabase/server', () => ({ createServer: harness.createServer }));

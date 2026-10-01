@@ -50,7 +50,10 @@ function scan() {
   for (const file of [...walk('app'), ...walk('lib'), ...walk('components')]) {
     const raw = readFileSync(file, 'utf8');
     if (!SET_HOURS_MIDNIGHT.test(blankComments(raw))) continue;
-    // A `'use client'` file runs in the browser, where the host IS the family.
+    // A `'use client'` file runs in the browser. It used to be assumed that the
+    // host IS the family there; the owner decided otherwise (TIME-003), and
+    // client files are now held to the family's clock by
+    // tests/a-client-clock-reads-the-familys-zone.test.ts, not here.
     (/^\s*['"]use client['"]/m.test(raw) ? client : server).push(file.split('\\').join('/'));
   }
   return { client, server };
@@ -61,7 +64,8 @@ describe('a day boundary computed on the server is the family\'s day', () => {
 
   it('finds both kinds of file (non-vacuity)', () => {
     // A scan that silently stopped matching would satisfy every case below.
-    expect(client.length).toBeGreaterThan(4);
+    // It is proved on the server side, which is what this file governs: the
+    // client count is falling to zero on purpose (TIME-003).
     // Three, not more: the relative-day helpers and the four AI quota buckets
     // that were declared here moved to family day keys on the audit branch
     // (tests/server-midnight-is-not-the-familys-midnight.test.ts tracks the

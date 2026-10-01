@@ -21,6 +21,7 @@ import {
 } from '@/lib/school/timetable';
 import type { Tables } from '@/lib/database.types';
 import { useTranslations } from '@/components/i18n/locale-provider';
+import { useFamilyClock } from '@/components/i18n/use-format';
 import { useConfirm } from '@/components/ui/confirm';
 
 type SchoolClass = Tables<'school_classes'>;
@@ -49,7 +50,10 @@ export function TimetableModule() {
   const { familyId, userId, members } = useApp();
   const { success, error: toastError } = useToast();
 
-  const todayWeek = useMemo(() => weekParity(new Date()), []);
+  // weekParity reads UTC fields, so it is handed the FAMILY's day as UTC
+  // midnight (TIME-003).
+  const clock = useFamilyClock();
+  const todayWeek = useMemo(() => weekParity(new Date(`${clock.todayKey()}T00:00:00Z`)), [clock]);
   const [week, setWeek] = useState<'a' | 'b'>(todayWeek);
   const [memberFilter, setMemberFilter] = useState<string>('all');
   const [open, setOpen] = useState(false);

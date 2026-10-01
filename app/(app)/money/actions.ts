@@ -45,10 +45,10 @@ export async function startConnectOnboardingAction(): Promise<Result<{ url: stri
   const ctx = await requireUserContext();
   if (!isManager(ctx.active.role)) return { ok: false, error: t('actions.onlyParentsCanSetUp') };
   const svc = createServiceClient();
-  const caps = await getMoneyCapabilities(svc);
-  if (!caps.connectOnboarding) return { ok: false, error: t('actions.paymentsSetupIsNotAvailable') };
 
   try {
+    const caps = await getMoneyCapabilities(svc);
+    if (!caps.connectOnboarding) return { ok: false, error: t('actions.paymentsSetupIsNotAvailable') };
     const { accountId } = await ensureConnectedAccount(svc, {
       familyId: ctx.active.familyId, email: ctx.user.email, userId: ctx.user.id,
     });
@@ -70,8 +70,10 @@ export async function refreshConnectStatusAction(): Promise<Result> {
   const ctx = await requireUserContext();
   if (!isManager(ctx.active.role)) return { ok: false, error: t('actions.onlyParentsCanDoThis') };
   const svc = createServiceClient();
-  const { data: acct, error: acctError } = await svc.from('stripe_connected_accounts')
-    .select('stripe_account_id').eq('family_id', ctx.active.familyId).maybeSingle();
+  const [{ data: acct, error: acctError }] = await settleAll([
+    svc.from('stripe_connected_accounts')
+      .select('stripe_account_id').eq('family_id', ctx.active.familyId).maybeSingle(),
+  ]);
   if (acctError) return actionFailure('load the connected account', t('money.couldNotLoadTheConnectedAccount'), acctError);
   if (!acct) return { ok: false, error: t('actions.noAccountToRefreshYet') };
   try {

@@ -127,7 +127,7 @@ vi.mock('next/link', async () => {
 vi.mock('@/components/ui/toast', () => ({ useToast: () => ({ error: mock.toast, success: mock.toast }) }));
 vi.mock('@/components/i18n/locale-provider', async () => {
   const { getMessages } = await import('@/lib/i18n/messages');
-  return { useTranslations: () => (key: string) => getMessages('en-US')[key] ?? key };
+  return { useFamilyTimeZone: () => undefined, useTranslations: () => (key: string) => getMessages('en-US')[key] ?? key };
 });
 vi.mock('@/components/auth/legal-consent', () => ({ LegalConsent: () => null }));
 vi.mock('@/lib/supabase/client', () => ({ createClient: () => ({ auth: {

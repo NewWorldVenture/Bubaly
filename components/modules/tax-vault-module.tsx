@@ -12,20 +12,24 @@ import { Input, Textarea, Field, Select } from '@/components/ui/input';
 import { Button } from '@/components/ui/button';
 import { SkeletonList, ErrorState, EmptyState } from '@/components/ui/states';
 import { AiInsight } from '@/components/ai/ai-insight';
-import { fmtDate } from '@/lib/utils/format';
+import { useFormat } from '@/components/i18n/use-format';
 import { usd as usdIn } from '@/lib/finance/splits';
 import { TAX_CATEGORIES, taxCategoryLabel, isDeductible, groupByYear, deductibleTotalCents, type TaxDocLike } from '@/lib/finance/tax';
 import { uploadFamilyDocument, getDocumentSignedUrl, removeFamilyDocument } from '@/lib/storage/documents';
 import type { Tables } from '@/lib/database.types';
 import { preOpenWindow } from '@/lib/utils/open-url';
 import { useLocale, useTranslations } from '@/components/i18n/locale-provider';
+import { useFamilyClock } from '@/components/i18n/use-format';
 
 type TaxDoc = Tables<'tax_documents'>;
 
-const thisYear = new Date().getFullYear();
-const blank = () => ({ name: '', tax_year: String(thisYear), category: 'receipt', amount: '', member_id: '', note: '', file: null as File | null });
+// The tax year defaults to the FAMILY's current year (TIME-003).
+const blank = (thisYear: number) => ({ name: '', tax_year: String(thisYear), category: 'receipt', amount: '', member_id: '', note: '', file: null as File | null });
 
 export function TaxVaultModule() {
+  const clock = useFamilyClock();
+  const thisYear = Number(clock.todayKey().slice(0, 4));
+  const { fmtDate } = useFormat();
   const t = useTranslations();
   // Money follows the reader; the currency stays the money's own.
   const locale = useLocale();
@@ -107,7 +111,7 @@ export function TaxVaultModule() {
         <h1 className="flex items-center gap-2 text-base font-semibold"><FolderLock className="h-4 w-4 text-brand-text" /> {t('taxVault.taxDocumentVault')}</h1>
         <div className="flex items-center gap-2">
           <AiInsight kind="tax" iconOnly />
-          <Button onClick={() => setForm(blank())}><Plus className="h-4 w-4" /> {t('taxVault.addDocument')}</Button>
+          <Button onClick={() => setForm(blank(thisYear))}><Plus className="h-4 w-4" /> {t('taxVault.addDocument')}</Button>
         </div>
       </div>
 

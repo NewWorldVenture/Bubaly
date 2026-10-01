@@ -6,6 +6,7 @@
 // that works without any AI — the AI coach then narrates and personalises it.
 
 import type { SleepSource } from '@/lib/database.types';
+import { isValidTimezone, localPartsAt } from '@/lib/time/zoned';
 
 export const SLEEP_SOURCES: { value: SleepSource; label: string }[] = [
   { value: 'manual', label: 'Logged by hand' }, { value: 'wearable', label: 'Wearable' }, { value: 'estimate', label: 'Estimate' },
@@ -45,10 +46,16 @@ export function durationMinutes(bedtime: string, wakeTime: string): number {
   return Math.max(0, Math.round(ms / 60_000));
 }
 
-/** Minutes since midnight of a local time; bedtimes before 04:00 count as 24h+ (after midnight). */
-export function minutesOfDay(iso: string): number {
+/**
+ * Minutes since midnight of a bedtime; bedtimes before 04:00 count as 24h+
+ * (after midnight). Read on the FAMILY's clock when `timeZone` is given, the
+ * same clock the routine's target and the Sleep page's times are in (#688
+ * comment 5922150055); without one, on the runtime's clock as before.
+ */
+export function minutesOfDay(iso: string, timeZone?: string | null): number {
   const d = new Date(iso);
-  const m = d.getHours() * 60 + d.getMinutes();
+  const p = timeZone && isValidTimezone(timeZone) && !Number.isNaN(d.getTime()) ? localPartsAt(d, timeZone) : null;
+  const m = p ? p.hour * 60 + p.minute : d.getHours() * 60 + d.getMinutes();
   return m < 240 ? m + 1440 : m;
 }
 
@@ -80,21 +87,21 @@ export function sleepDebtMinutes(logs: SleepLogLike[], targetMinHours: number): 
 }
 
 /** 0–100: how consistent bedtimes are (std dev of bedtime minutes; 0 min → 100, ≥ 90 min → 0). */
-export function consistencyScore(logs: SleepLogLike[]): number | null {
+export function consistencyScore(logs: SleepLogLike[], timeZone?: string | null): number | null {
   if (logs.length < 2) return null;
-  const mins = logs.map((l) => minutesOfDay(l.bedtime));
+  const mins = logs.map((l) => minutesOfDay(l.bedtime, timeZone));
   const mean = mins.reduce((a, b) => a + b, 0) / mins.length;
   const sd = Math.sqrt(mins.reduce((a, b) => a + (b - mean) ** 2, 0) / mins.length);
   return Math.max(0, Math.min(100, Math.round(100 - (sd / 90) * 100)));
 }
 
 /** Share of logged nights that started within 30 minutes of the routine's target bedtime. */
-export function routineAdherence(routine: RoutineLike | null | undefined, logs: SleepLogLike[]): number | null {
+export function routineAdherence(routine: RoutineLike | null | undefined, logs: SleepLogLike[], timeZone?: string | null): number | null {
   if (!routine || !logs.length) return null;
   const target = timeToMinutes(routine.target_bedtime);
   const applicable = logs.filter((l) => routine.days_of_week.includes(dateOnly(l.sleep_date).getDay()));
   if (!applicable.length) return null;
-  const onTime = applicable.filter((l) => Math.abs(minutesOfDay(l.bedtime) - target) <= 30).length;
+  const onTime = applicable.filter((l) => Math.abs(minutesOfDay(l.bedtime, timeZone) - target) <= 30).length;
   return Math.round((onTime / applicable.length) * 100);
 }
 
@@ -146,7 +153,7 @@ export type SleepSummary<T extends SleepLogLike = SleepLogLike> = {
   text: string;
 };
 
-export function sleepSummary<T extends SleepLogLike>(logs: T[], routine: RoutineLike | null | undefined, age: number | null, today: Date, memberId: string): SleepSummary<T> {
+export function sleepSummary<T extends SleepLogLike>(logs: T[], routine: RoutineLike | null | undefined, age: number | null, today: Date, memberId: string, timeZone?: string | null): SleepSummary<T> {
   const week = recentLogs(logs, memberId, today, 7);
   const target = recommendedSleepHours(age);
   const avgMinutes = averageDuration(week);
@@ -158,7 +165,7 @@ export function sleepSummary<T extends SleepLogLike>(logs: T[], routine: Routine
     : status === 'on_track'
       ? `${fmtHours(avgMinutes!)} avg · on track for ${target.min}–${target.max}h`
       : `${fmtHours(avgMinutes!)} avg · ${fmtHours(debtMinutes)} short this week`;
-  return { nights: week.length, avgMinutes, target, debtMinutes, consistency: consistencyScore(week), adherence: routineAdherence(routine, week), trend: sleepTrend(recentLogs(logs, memberId, today, 14)), lastNight, status, text };
+  return { nights: week.length, avgMinutes, target, debtMinutes, consistency: consistencyScore(week, timeZone), adherence: routineAdherence(routine, week, timeZone), trend: sleepTrend(recentLogs(logs, memberId, today, 14)), lastNight, status, text };
 }
 
 export type ProgramStep = { day: number; title: string; detail: string };

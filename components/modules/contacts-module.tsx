@@ -25,7 +25,8 @@ import { Badge } from '@/components/ui/badge';
 import { SkeletonList, ErrorState, EmptyState } from '@/components/ui/states';
 import { cn } from '@/lib/utils/cn';
 import type { Tables } from '@/lib/database.types';
-import { useLocale, useTranslations } from '@/components/i18n/locale-provider';
+import { useFormat } from '@/components/i18n/use-format';
+import { useTranslations } from '@/components/i18n/locale-provider';
 
 type Contact = Tables<'family_contacts'>;
 
@@ -70,7 +71,7 @@ function avatarStyle(name: string) {
 
 export function ContactsModule() {
   const t = useTranslations();
-  const { code: locale } = useLocale();
+  const format = useFormat();
   const { familyId, userId } = useApp();
   const { success, error: toastError } = useToast();
   const { run, isPending } = useAction({ onError: (e) => toastError(describeDbError(e)) });
@@ -366,7 +367,7 @@ export function ContactsModule() {
                 {selected.birthday_month && selected.birthday_day && (
                   <div className="flex items-center gap-2 rounded-xl bg-elevated/50 px-3 py-2.5 text-sm">
                     <Star className="h-4 w-4 text-warning" />
-                    <span className="text-muted">{t('family.birthday')}: {new Date(Date.UTC(2000, selected.birthday_month - 1, selected.birthday_day)).toLocaleDateString(locale, { month: 'long', day: 'numeric', timeZone: 'UTC' })}</span>
+                    <span className="text-muted">{t('family.birthday')}: {format.fmtDate(`2000-${String(selected.birthday_month).padStart(2, '0')}-${String(selected.birthday_day).padStart(2, '0')}`, 'MMMM d')}</span>
                   </div>
                 )}
                 {selected.notes && (
@@ -421,13 +422,13 @@ function ContactModal({ contact, familyId, userId, onClose, onSaved }: {
   onClose: () => void; onSaved: () => void;
 }) {
   const t = useTranslations();
-  const { code: locale } = useLocale();
+  const format = useFormat();
   const { success, error: toastError } = useToast();
   const [loading, setLoading] = useState(false);
   const months = useMemo(() => {
-    const formatter = new Intl.DateTimeFormat(locale, { month: 'long', timeZone: 'UTC' });
-    return Array.from({ length: 12 }, (_, month) => formatter.format(new Date(Date.UTC(2000, month, 1))));
-  }, [locale]);
+    // Month names from DATES, which the shared formatter renders as written.
+    return Array.from({ length: 12 }, (_, month) => format.fmtDate(`2000-${String(month + 1).padStart(2, '0')}-01`, 'MMMM'));
+  }, [format]);
 
   async function onSubmit(e: React.FormEvent<HTMLFormElement>) {
     e.preventDefault();

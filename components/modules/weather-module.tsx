@@ -17,8 +17,9 @@ import {
   type Forecast, type GeoResult,
 } from '@/lib/weather/open-meteo';
 import type { Tables } from '@/lib/database.types';
-import { useLocale, useTranslations } from '@/components/i18n/locale-provider';
-import type { LocaleCode } from '@/lib/i18n/locales';
+import { useTranslations } from '@/components/i18n/locale-provider';
+import { useFormat } from '@/components/i18n/use-format';
+import type { Format } from '@/lib/utils/format';
 
 type SavedLocation = Tables<'weather_locations'>;
 
@@ -46,15 +47,15 @@ function placeLabel(p: Place): string {
   return [p.name, p.admin1, p.country].filter(Boolean).slice(0, 2).join(', ');
 }
 
-const dayNameIn = (locale: LocaleCode) => (date: string, i: number): string => {
+const dayNameWith = (fmtDate: Format['fmtDate']) => (date: string, i: number): string => {
   if (i === 0) return 'Today';
   if (i === 1) return 'Tomorrow';
-  return new Date(date + 'T00:00:00').toLocaleDateString(locale, { weekday: 'short', month: 'short', day: 'numeric' });
+  // A forecast day is a DATE, rendered as written (TIME-003).
+  return fmtDate(date, 'EEE, MMM d');
 };
 
 export function WeatherModule() {
-  const locale = useLocale();
-  const dayName = dayNameIn(locale.code);
+  const dayName = dayNameWith(useFormat().fmtDate);
   const t = useTranslations();
   const { familyId, userId } = useApp();
   const { success, error: toastError } = useToast();
