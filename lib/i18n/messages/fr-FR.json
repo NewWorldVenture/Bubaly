@@ -16606,5 +16606,6 @@
   "tripCountdown.startedYesterday": "Commencé hier",
   "tripCountdown.daysAgo": "il y a {count} jours",
   "tripCountdown.travelersOne": "{count} voyageur",
-  "tripCountdown.travelersMany": "{count} voyageurs"
+  "tripCountdown.travelersMany": "{count} voyageurs",
+  "blogBlogSearch.searchUnavailable": "La recherche est indisponible pour le moment. Réessayez dans un instant."
 }

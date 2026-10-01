@@ -16606,5 +16606,6 @@
   "tripCountdown.startedYesterday": "Gisteren begonnen",
   "tripCountdown.daysAgo": "{count} dagen geleden",
   "tripCountdown.travelersOne": "{count} reiziger",
-  "tripCountdown.travelersMany": "{count} reizigers"
+  "tripCountdown.travelersMany": "{count} reizigers",
+  "blogBlogSearch.searchUnavailable": "Zoeken is nu niet beschikbaar. Probeer het zo meteen opnieuw."
 }
