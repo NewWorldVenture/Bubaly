@@ -13,7 +13,7 @@ import { Input, Textarea, Field, Select } from '@/components/ui/input';
 import { Button } from '@/components/ui/button';
 import { Avatar } from '@/components/ui/avatar';
 import { ErrorState, SkeletonList, EmptyState } from '@/components/ui/states';
-import { useFormat } from '@/components/i18n/use-format';
+import { useFamilyClock, useFormat } from '@/components/i18n/use-format';
 import { COMMON_VACCINES, sortByDateGiven, dueImmunizations, dueStatus, daysUntilDue } from '@/lib/health/immunizations';
 import type { Tables } from '@/lib/database.types';
 import { useTranslations } from '@/components/i18n/locale-provider';
@@ -29,6 +29,9 @@ const STATUS_STYLE: Record<string, string> = {
 };
 
 export function ImmunizationsModule({ title = 'Immunizations' }: { title?: string }) {
+  // Date-only helpers read local calendar fields: give them the FAMILY's day (TIME-003).
+  const familyClock = useFamilyClock();
+  const familyToday = useMemo(() => familyClock.calendarToday(), [familyClock]);
   const { fmtDate } = useFormat();
   const t = useTranslations();
   const { familyId, userId, members, role } = useApp();
@@ -144,7 +147,7 @@ export function ImmunizationsModule({ title = 'Immunizations' }: { title?: strin
           <p className="mb-1.5 flex items-center gap-1.5 text-xs font-semibold text-amber-300"><CalendarClock className="h-3.5 w-3.5" /> {t('immunizations.dosesComingDue')}</p>
           <ul className="space-y-1 text-sm">
             {due.slice(0, 4).map((s) => {
-              const d = daysUntilDue(s)!;
+              const d = daysUntilDue(s, familyToday)!;
               return <li key={s.id} className="flex items-center gap-2"><span className="font-medium">{s.vaccine}</span><span className="text-xs text-muted">{d < 0 ? `${-d}d overdue` : d === 0 ? 'today' : `in ${d}d`} · {fmtDate(s.next_due_date!)}</span></li>;
             })}
           </ul>
@@ -161,7 +164,7 @@ export function ImmunizationsModule({ title = 'Immunizations' }: { title?: strin
         <ul className="space-y-2">
           {scoped.map((s) => {
             const who = s.member_id ? memberById.get(s.member_id) : undefined;
-            const status = dueStatus(s);
+            const status = dueStatus(s, familyToday);
             return (
               <li key={s.id} className="rounded-2xl border border-border bg-surface/40 p-4">
                 <div className="flex items-start gap-3">

@@ -81,7 +81,7 @@ export function InsuranceModule() {
   const clock = useFamilyClock();
   const today = useMemo(() => clock.calendarToday(), [clock]);
   const summary = useMemo(() => insuranceSummary(policies.data, today), [policies.data, today]);
-  const renewals = useMemo(() => upcomingRenewals(policies.data).filter((r) => r.urgency !== 'upcoming').slice(0, 6), [policies.data]);
+  const renewals = useMemo(() => upcomingRenewals(policies.data, today).filter((r) => r.urgency !== 'upcoming').slice(0, 6), [policies.data, today]);
   const byType = useMemo(() => premiumByType(policies.data).slice(0, 5), [policies.data]);
 
   async function removePolicy(id: string) {
@@ -179,7 +179,7 @@ export function InsuranceModule() {
         <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
           {policies.data.map((p) => {
             const meta = policyTypeMeta(p.policy_type);
-            const u = renewalUrgency(p.renewal_date);
+            const u = renewalUrgency(p.renewal_date, today);
             const covers = memberName(p.member_id);
             return (
               <button
@@ -320,7 +320,9 @@ function PolicyDetail({ policy, coversName, onClose, onRemove }: {
 
   const meta = policyTypeMeta(policy.policy_type);
   const annual = annualPremium(policy.premium_amount, policy.premium_frequency);
-  const u = renewalUrgency(policy.renewal_date);
+  const clock = useFamilyClock();
+  const today = useMemo(() => clock.calendarToday(), [clock]);
+  const u = renewalUrgency(policy.renewal_date, today);
 
   const rows: { label: string; value: string | null }[] = [
     { label: tr('insuranceModule.row.insurer'), value: policy.insurer },

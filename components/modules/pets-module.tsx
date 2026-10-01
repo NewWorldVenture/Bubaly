@@ -48,6 +48,7 @@ export function PetsModule() {
   const { fmtDate: fmt } = useFormat();
   const fmtDate = (d: string) => fmt(d.slice(0, 10), 'MMM d, yyyy');
   const clock = useFamilyClock();
+  const familyToday = useMemo(() => clock.calendarToday(), [clock]);
   const t = useTranslations();
   const { familyId, userId } = useApp();
   const { success, error: toastError } = useToast();
@@ -71,7 +72,7 @@ export function PetsModule() {
     () => careSummary(pets.data.length, records.data, clock.calendarToday()),
     [pets.data.length, records.data, clock],
   );
-  const upcoming = useMemo(() => upcomingCare(records.data).slice(0, 6), [records.data]);
+  const upcoming = useMemo(() => upcomingCare(records.data, familyToday).slice(0, 6), [records.data, familyToday]);
 
   // The AI care engine: deterministic recommendations across all pets.
   const recommendations = useMemo(
@@ -154,9 +155,9 @@ export function PetsModule() {
         <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
           {pets.data.map((pet) => {
             const meta = speciesMeta(pet.species);
-            const age = petAgeLabel(pet.birthday);
+            const age = petAgeLabel(pet.birthday, familyToday);
             const petRecords = records.data.filter((r) => r.pet_id === pet.id);
-            const nextDue = upcomingCare(petRecords)[0];
+            const nextDue = upcomingCare(petRecords, familyToday)[0];
             return (
               <button
                 key={pet.id}
@@ -350,11 +351,14 @@ function PetDetail({ pet, records, onClose, onAddCare, onRemove }: {
 }) {
   const { fmtDate: fmt } = useFormat();
   const fmtDate = (d: string) => fmt(d.slice(0, 10), 'MMM d, yyyy');
+  // Date-only helpers read local calendar fields: give them the FAMILY's day (TIME-003).
+  const familyClock = useFamilyClock();
+  const familyToday = useMemo(() => familyClock.calendarToday(), [familyClock]);
   const t = useTranslations();
   const askConfirm = useConfirm();
   const { error: toastError } = useToast();
   const meta = speciesMeta(pet.species);
-  const age = petAgeLabel(pet.birthday);
+  const age = petAgeLabel(pet.birthday, familyToday);
   const sorted = [...records].sort((a, b) => (a.record_date < b.record_date ? 1 : -1));
 
   async function deleteRecord(id: string) {
@@ -401,7 +405,7 @@ function PetDetail({ pet, records, onClose, onAddCare, onRemove }: {
             <ul className="space-y-1.5">
               {sorted.map((r) => {
                 const Icon = CARE_ICON[r.kind] ?? PawPrint;
-                const u = careUrgency(r.next_due);
+                const u = careUrgency(r.next_due, familyToday);
                 return (
                   <li key={r.id} className="group flex items-center gap-3 rounded-xl border border-border px-3 py-2">
                     <Icon className="h-4 w-4 shrink-0 text-brand-text" />

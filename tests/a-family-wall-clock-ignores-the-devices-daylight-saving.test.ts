@@ -29,6 +29,7 @@ import { sessionStreak, weeklyPlan } from '@/lib/declutter/missions';
 import { streaksByMember } from '@/lib/chores/dashboard';
 import { upcomingRides } from '@/lib/rides/schedule';
 import { dosesForDay } from '@/lib/medications/adherence';
+import { daysUntil as tripDaysUntil, isActive as tripIsActive } from '@/lib/vacations/dates';
 
 const HOST_ZONE = process.env.TZ;
 afterEach(() => { process.env.TZ = HOST_ZONE; });
@@ -348,7 +349,7 @@ describe('a dose shown on the family\'s day can be logged on it (#688 comment 59
   });
 });
 
-describe('ages and renewals count from the family\'s calendar day, not the device\'s', () => {
+describe('ages, renewals, trips and due dates count from the family\'s calendar day, not the device\'s', () => {
   // ageOn and insuranceSummary read a Date's local date fields; a Date passed
   // in from the device clock would give the phone's day, not the family's.
   it.each([
@@ -360,6 +361,35 @@ describe('ages and renewals count from the family\'s calendar day, not the devic
     const src = readFileSync(join(__dirname, '..', file), 'utf8');
     expect(src).toContain(call);
     expect(src).not.toMatch(/(ageOn|insuranceSummary)\([^)]*new Date\(\)\)/);
+  });
+
+  it.each([
+    ['components/vacations/vacations-list.tsx', ['daysUntil(a.start_date, familyToday)', 'isActive(t.start_date, t.end_date, familyToday)', 'isActive(current.start_date, current.end_date, familyToday)', 'countdownLabel(tr, current.start_date, familyToday)', 'countdownLabel(tr, t.start_date, familyToday)', '[trips, familyToday]']],
+    ['components/vacations/vacations-reports.tsx', ['daysUntil(t.start_date, familyToday)']],
+    ['components/vacations/trip-overview.tsx', ['countdownLabel(tr, trip?.start_date, familyToday)']],
+    ['components/modules/immunizations-module.tsx', ['daysUntilDue(s, familyToday)', 'dueStatus(s, familyToday)']],
+    ['components/modules/health-visits-module.tsx', ['daysUntilFollowUp(v, familyToday)']],
+    ['components/modules/pets-module.tsx', ['upcomingCare(records.data, familyToday)', 'petAgeLabel(pet.birthday, familyToday)', 'upcomingCare(petRecords, familyToday)', 'careUrgency(r.next_due, familyToday)']],
+    ['components/modules/insurance-module.tsx', ['upcomingRenewals(policies.data, today)', 'renewalUrgency(p.renewal_date, today)', 'renewalUrgency(policy.renewal_date, today)']],
+    ['components/finance/bills-view.tsx', ['billDueStatus(b, familyToday)', '[visible, mode, familyToday]']],
+    ['components/finance/budgets-view.tsx', ['budgetSpent(allTxns, b.category, b.period as Period, familyToday)']],
+  ])('%s passes the family\'s day to its date-only helpers (#688 comment 5922119441 and the sweep after it)', (file, calls) => {
+    const src = readFileSync(join(__dirname, '..', file), 'utf8');
+    for (const call of calls) expect(src).toContain(call);
+  });
+
+  it.each([
+    ['Asia/Tokyo', 'UTC', '2026-09-30T22:30:00Z', '2026-09-30'],
+    ['America/Los_Angeles', 'UTC', '2026-10-01T02:30:00Z', '2026-10-01'],
+    ['UTC', 'UTC', '2026-10-01T02:30:00Z', '2026-10-01'],
+  ])('a trip on the family\'s day is today\'s trip: a %s phone, a %s family, at %s', (device, family, at, tripDay) => {
+    onDevice(device);
+    const clock = clockFor(family);
+    const now = new Date(at);
+    expect(tripDaysUntil(tripDay, clock.calendarToday(now))).toBe(0);
+    expect(tripIsActive(tripDay, tripDay, clock.calendarToday(now))).toBe(true);
+    // What the device's day gave when the dates differ: yesterday's or tomorrow's trip.
+    if (device !== family) expect(tripIsActive(tripDay, tripDay, now)).toBe(false);
   });
 
   it('a birthday turns over on the family\'s day: a Tokyo family, a Los Angeles phone', async () => {

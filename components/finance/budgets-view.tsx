@@ -29,7 +29,10 @@ export function BudgetsView() {
   const locale = useLocale();
   // The FAMILY's year (TIME-003). `new Date(y, 0, 1).toISOString()` was the
   // previous Dec 31 east of Greenwich, so January's first day was double-counted.
-  const yearStartYear = useFamilyClock().todayKey().slice(0, 4);
+  const familyClock = useFamilyClock();
+  const yearStartYear = familyClock.todayKey().slice(0, 4);
+  // budgetSpent reads its date's local calendar fields: the FAMILY's day.
+  const familyToday = useMemo(() => familyClock.calendarToday(), [familyClock]);
   const usd = (amount: number) => usdIn(amount, locale.code);
   const { familyId, userId } = useApp();
   const { success, error: toastError } = useToast();
@@ -69,7 +72,7 @@ export function BudgetsView() {
       ) : (
         <div className="grid gap-3 sm:grid-cols-2">
           {rows.map((b) => {
-            const spent = budgetSpent(allTxns, b.category, b.period as Period);
+            const spent = budgetSpent(allTxns, b.category, b.period as Period, familyToday);
             const p = pct(spent, Number(b.amount));
             const over = spent > Number(b.amount);
             return (

@@ -1,6 +1,7 @@
 'use client';
 
 import { useMemo } from 'react';
+import { useFamilyClock } from '@/components/i18n/use-format';
 import Link from 'next/link';
 import { BarChart3, Plane, Wallet, Gauge } from 'lucide-react';
 import { useApp } from '@/components/app/app-context';
@@ -18,6 +19,9 @@ type Budget = Tables<'vacation_budgets'>;
 type Score = Tables<'vacation_travel_scores'>;
 
 export function VacationsReports() {
+  // Date-only helpers read local calendar fields: give them the FAMILY's day (TIME-003).
+  const familyClock = useFamilyClock();
+  const familyToday = useMemo(() => familyClock.calendarToday(), [familyClock]);
   const tr = useTranslations();
   const locale = useLocale();
   // Money follows the reader; the currency stays the money's own.
@@ -50,7 +54,7 @@ export function VacationsReports() {
 
   const totalPlanned = [...plannedByTrip.values()].reduce((s, x) => s + x, 0);
   const totalSpent = [...spentByTrip.values()].reduce((s, x) => s + x, 0);
-  const upcoming = trips.filter((t) => (daysUntil(t.start_date) ?? -1) >= 0 && t.status !== 'cancelled').length;
+  const upcoming = trips.filter((t) => (daysUntil(t.start_date, familyToday) ?? -1) >= 0 && t.status !== 'cancelled').length;
 
   const byKind = useMemo(() => {
     const m = new Map<string, number>();

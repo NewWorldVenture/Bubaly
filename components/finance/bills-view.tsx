@@ -1,6 +1,7 @@
 'use client';
 
 import { useMemo, useState } from 'react';
+import { useFamilyClock } from '@/components/i18n/use-format';
 import { FileText, Plus, Trash2, Check, RotateCcw, Repeat, Bell } from 'lucide-react';
 import { useApp } from '@/components/app/app-context';
 import { useRealtimeQuery } from '@/lib/hooks/use-realtime-query';
@@ -30,6 +31,9 @@ const MODE_META: Record<BillsMode, { title: string; desc: string; icon: typeof F
 };
 
 export function BillsView({ mode }: { mode: BillsMode }) {
+  // Date-only helpers read local calendar fields: give them the FAMILY's day (TIME-003).
+  const familyClock = useFamilyClock();
+  const familyToday = useMemo(() => familyClock.calendarToday(), [familyClock]);
   const t = useTranslations();
   // Money and dates follow the reader; the currency stays the money's own.
   const locale = useLocale();
@@ -81,7 +85,7 @@ export function BillsView({ mode }: { mode: BillsMode }) {
 
   const Row = ({ b }: { b: Bill }) => {
   const t = useTranslations();
-    const ds = billDueStatus(b);
+    const ds = billDueStatus(b, familyToday);
     const dm = DUE_META[ds];
     return (
       <div className="group flex items-center gap-3 rounded-xl border border-border bg-surface/40 px-3 py-3">
@@ -114,9 +118,9 @@ export function BillsView({ mode }: { mode: BillsMode }) {
   const grouped = useMemo(() => {
     if (mode !== 'due') return null;
     const g: Record<string, Bill[]> = { overdue: [], due_soon: [], upcoming: [] };
-    for (const b of visible) { const s = billDueStatus(b); if (s !== 'paid') g[s].push(b); }
+    for (const b of visible) { const s = billDueStatus(b, familyToday); if (s !== 'paid') g[s].push(b); }
     return g;
-  }, [visible, mode]);
+  }, [visible, mode, familyToday]);
 
   return (
     <div className="module-page">
