@@ -150,11 +150,23 @@ describe('card policy admission controls', () => {
     expect(queryCalls.some(call => call.table === 'family_members')).toBe(false);
   });
 
+  it.each(['parent', 'adult'] as const)('refuses policy-required approval for %s before any instrument effects', async role => {
+    context.active.role = role; decision = policyDecision('require_approval');
+    expect(decision).toMatchObject({ effect: 'require_approval', basis: 'policy' });
+    expect.soft(await issueCardAction(input)).toEqual({ ok: false, error: 'translated:trust.blockedByHouseholdPolicy' });
+    expect.soft(mock.cardholder).not.toHaveBeenCalled(); expect.soft(mock.issueCard).not.toHaveBeenCalled();
+    expect.soft(mock.audit).not.toHaveBeenCalled(); expect.soft(mock.revalidate).not.toHaveBeenCalled();
+    expect.soft(queryCalls.some(call => call.table === 'family_members')).toBe(false);
+  });
+  it.each(['parent', 'adult'] as const)('refuses degraded rule reads for %s before any instrument effects', async role => {
+    context.active.role = role;
+    decision = { effect: 'require_approval', basis: 'degraded', reason: 'Synthetic unreadable rules require approval.' };
+    expect.soft(await issueCardAction(input)).toEqual({ ok: false, error: 'translated:trust.blockedByHouseholdPolicy' });
+    expect.soft(mock.cardholder).not.toHaveBeenCalled(); expect.soft(mock.issueCard).not.toHaveBeenCalled();
+    expect.soft(mock.audit).not.toHaveBeenCalled(); expect.soft(mock.revalidate).not.toHaveBeenCalled();
+    expect.soft(queryCalls.some(call => call.table === 'family_members')).toBe(false);
+  });
 });
-
-// Approval-required/degraded refusal is NOT established by these passing controls.
-// Separate ordinary desired-refusal probes reproduce the current policy bypass;
-// they remain an open source defect, not permissive characterization assertions.
 
 function deferred<T>() {
   let resolve!: (value: T) => void;
