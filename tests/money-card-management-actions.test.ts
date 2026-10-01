@@ -181,6 +181,19 @@ describe.each([
       if (table === 'stripe_issuing_cards') expect(mock.from.mock.calls).toEqual([['stripe_issuing_cards']]);
       noMutations();
     });
+    it.each([new Error(detail), detail, { code: 'XX999', message: detail }])('settles rejected prerequisite %j into a safe error', async rejection => {
+      replies[table].rejection = rejection;
+      await expect.soft(action()).resolves.toEqual({ ok: false, error: `translated:${key}` });
+      if (table === 'stripe_issuing_cards') expect(mock.from.mock.calls).toEqual([['stripe_issuing_cards']]);
+      noMutations();
+    });
+    it('sanitizes a coded transport rejection through the existing settle fallback', async () => {
+      replies[table].rejection = { code: '42501', message: detail };
+      // settleAll treats rejections as transport failures; resolved PostgREST
+      // errors retain their code and existing permission classification below.
+      await expect.soft(action()).resolves.toEqual({ ok: false, error: `translated:${key}` });
+      noMutations();
+    });
   });
   it('preserves classified permission errors without private database detail', async () => {
     replies.stripe_issuing_cards.error = { code: '42501', message: detail };
@@ -232,6 +245,11 @@ describe('freeze and unfreeze orchestration', () => {
 });
 
 describe('server-side card control normalization and forwarding', () => {
+  it.each([new Error(detail), detail, { code: 'XX999', message: detail }])('safely refuses a rejected capability read %j without mirrors or mutations', async rejection => {
+    mock.capabilities.mockRejectedValue(rejection);
+    await expect.soft(updateCardControlsAction(controlsInput)).resolves.toEqual({ ok: false, error: 'translated:money.couldNotLoadCardIssuingCapabilities' });
+    expect(mock.from).not.toHaveBeenCalled(); noMutations();
+  });
   it.each(['parent', 'adult'])('allows %s with exact normalized helper/audit payloads', async role => {
     context.active.role = role;
     expect(await updateCardControlsAction(controlsInput)).toEqual({ ok: true });
