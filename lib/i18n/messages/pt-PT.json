@@ -16607,5 +16607,8 @@
   "tripCountdown.daysAgo": "há {count} dias",
   "tripCountdown.travelersOne": "{count} viajante",
   "tripCountdown.travelersMany": "{count} viajantes",
-  "blogBlogSearch.searchUnavailable": "A pesquisa não está disponível neste momento. Tente novamente daqui a pouco."
+  "blogBlogSearch.searchUnavailable": "A pesquisa não está disponível neste momento. Tente novamente daqui a pouco.",
+  "coach.onlyYourOwnHealth": "Pode perguntar ao coach sobre a sua própria saúde. Um pai, uma mãe ou um adulto pode perguntar sobre outros membros da família.",
+  "medicationsModule.noMedicinesPrescribedToYou": "Não lhe foi receitado nenhum medicamento.",
+  "medicationsModule.yourOwnMedicinesOnly": "Vê os medicamentos que lhe foram receitados. Um pai, uma mãe ou um adulto gere as receitas da família."
 }
