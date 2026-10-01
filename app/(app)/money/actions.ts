@@ -91,10 +91,17 @@ export async function activateTreasuryAction(): Promise<Result> {
   const ctx = await requireUserContext();
   if (!isManager(ctx.active.role)) return { ok: false, error: t('actions.onlyParentsCanDoThis') };
   const svc = createServiceClient();
-  const caps = await getMoneyCapabilities(svc);
+  let caps: Awaited<ReturnType<typeof getMoneyCapabilities>>;
+  try {
+    caps = await getMoneyCapabilities(svc);
+  } catch (error) {
+    return actionFailure('load Treasury capabilities', t('money.couldNotOpenTheTreasuryAccount'), error);
+  }
   if (!caps.treasury) return { ok: false, error: t('actions.thisFeatureIsNotAvailable') };
-  const { data: acct, error: acctError } = await svc.from('stripe_connected_accounts')
-    .select('id, stripe_account_id, treasury_enabled').eq('family_id', ctx.active.familyId).maybeSingle();
+  const [{ data: acct, error: acctError }] = await settleAll([
+    svc.from('stripe_connected_accounts')
+      .select('id, stripe_account_id, treasury_enabled').eq('family_id', ctx.active.familyId).maybeSingle(),
+  ]);
   if (acctError) return actionFailure('load the Treasury account', t('money.couldNotLoadTheTreasuryAccount'), acctError);
   if (!acct?.treasury_enabled) return { ok: false, error: t('actions.finishAccountSetupFirst') };
   try {
@@ -116,7 +123,12 @@ export async function issueCardAction(input: {
   const ctx = await requireUserContext();
   if (!isManager(ctx.active.role)) return { ok: false, error: t('actions.onlyParentsCanIssueCards') };
   const svc = createServiceClient();
-  const caps = await getMoneyCapabilities(svc);
+  let caps: Awaited<ReturnType<typeof getMoneyCapabilities>>;
+  try {
+    caps = await getMoneyCapabilities(svc);
+  } catch (error) {
+    return actionFailure('load card-issuing capabilities', t('money.couldNotLoadCardIssuingCapabilities'), error);
+  }
   if (!caps.issuing) return { ok: false, error: t('actions.cardsAreNotAvailableYet') };
   if (input.type === 'physical' && !caps.physicalCards) return { ok: false, error: t('actions.physicalCardsAreNotAvailable') };
 
@@ -130,15 +142,23 @@ export async function issueCardAction(input: {
   if (!wallet) return { ok: false, error: t('actions.childWalletNotFound') };
 
   // Trust Engine governs issuing a payment instrument (Trust TODO #1).
-  const { decision } = await evaluateTrust(svc, ctx.active.familyId, {
-    actor: { kind: 'member', id: ctx.active.member.id, role: roleOf(ctx.active.role) },
-    domain: 'finances', capability: 'create',
-    title: `Issue ${input.type} card`,
-    context: { amountCents: input.spendLimitCents ?? undefined }, openApproval: false,
-  });
+  let trustOutcome: Awaited<ReturnType<typeof evaluateTrust>>;
+  try {
+    trustOutcome = await evaluateTrust(svc, ctx.active.familyId, {
+      actor: { kind: 'member', id: ctx.active.member.id, role: roleOf(ctx.active.role) },
+      domain: 'finances', capability: 'create',
+      title: `Issue ${input.type} card`,
+      context: { amountCents: input.spendLimitCents ?? undefined }, openApproval: false,
+    });
+  } catch (error) {
+    return actionFailure('evaluate card-issuing policy', t('money.couldNotIssueTheCard'), error);
+  }
+  const { decision } = trustOutcome;
   if (decision.effect !== 'allow') return { ok: false, error: householdPolicyBlocked(t, decision) };
 
-  const { data: member, error: memberError } = await svc.from('family_members').select('display_name').eq('id', wallet.member_id).maybeSingle();
+  const [{ data: member, error: memberError }] = await settleAll([
+    svc.from('family_members').select('display_name').eq('id', wallet.member_id).maybeSingle(),
+  ]);
   if (memberError) return actionFailure('load the cardholder profile', t('money.couldNotLoadTheCardholderProfile'), memberError);
 
   try {
