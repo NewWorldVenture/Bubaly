@@ -136,7 +136,7 @@ export async function issueCardAction(input: {
     title: `Issue ${input.type} card`,
     context: { amountCents: input.spendLimitCents ?? undefined }, openApproval: false,
   });
-  if (decision.effect === 'deny') return { ok: false, error: householdPolicyBlocked(t, decision) };
+  if (decision.effect !== 'allow') return { ok: false, error: householdPolicyBlocked(t, decision) };
 
   const { data: member, error: memberError } = await svc.from('family_members').select('display_name').eq('id', wallet.member_id).maybeSingle();
   if (memberError) return actionFailure('load the cardholder profile', t('money.couldNotLoadTheCardholderProfile'), memberError);
