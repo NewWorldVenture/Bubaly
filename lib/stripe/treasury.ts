@@ -14,11 +14,12 @@ export async function ensureFinancialAccount(
   supabase: DB,
   params: { familyId: string; connectedAccountRowId: string; accountId: string },
 ): Promise<{ rowId: string; financialAccountId: string }> {
-  const { data: existing } = await supabase
+  const { data: existing, error: lookupError } = await supabase
     .from('stripe_financial_accounts')
     .select('id, stripe_financial_account_id')
     .eq('family_id', params.familyId)
     .maybeSingle();
+  if (lookupError) throw new Error('Could not load the existing financial account');
   if (existing) return { rowId: existing.id, financialAccountId: existing.stripe_financial_account_id };
 
   const stripe = getStripe();
