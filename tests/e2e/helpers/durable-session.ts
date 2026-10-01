@@ -122,11 +122,33 @@ export async function expireStoredSession(context: BrowserContext, name: string)
   } catch { throw new Error('Durable-session E2E could not update its in-memory cookie jar.'); }
 }
 
-export async function closeWithoutSnapshot(context: BrowserContext): Promise<void> {
+export type CloseWithoutSnapshotPhase = 'pages-close-start' | 'pages-close-settled'
+  | 'context-close-start' | 'context-close-complete' | 'context-close-failed';
+export type CloseWithoutSnapshotCounts = { pageCount: number; rejectedCount?: number };
+type CloseWithoutSnapshotDiagnostic = (phase: CloseWithoutSnapshotPhase, counts?: CloseWithoutSnapshotCounts) => void;
+
+export function closeWithoutSnapshot(context: BrowserContext, diagnostic: CloseWithoutSnapshotDiagnostic): Promise<void>;
+export function closeWithoutSnapshot(context: BrowserContext): Promise<void>;
+export async function closeWithoutSnapshot(
+  context: BrowserContext,
+  diagnostic?: CloseWithoutSnapshotDiagnostic,
+): Promise<void> {
+  const report = (phase: CloseWithoutSnapshotPhase, counts?: CloseWithoutSnapshotCounts) => {
+    // Diagnostic output must never replace a body or cleanup failure.
+    try { if (typeof diagnostic === 'function') diagnostic(phase, counts); } catch {}
+  };
   // Close pages before their context so even an assertion failure cannot attach
   // a login form's values to Playwright's automatic error-context snapshot.
-  const pages = await Promise.allSettled(context.pages().map((page) => page.close()));
+  const openPages = context.pages();
+  report('pages-close-start', { pageCount: openPages.length });
+  const pages = await Promise.allSettled(openPages.map((page) => page.close()));
+  report('pages-close-settled', { pageCount: openPages.length, rejectedCount: pages.filter((result) => result.status === 'rejected').length });
+  report('context-close-start');
   try { await context.close(); }
-  catch { throw new Error('Durable-session E2E could not close its browser context.'); }
+  catch {
+    report('context-close-failed');
+    throw new Error('Durable-session E2E could not close its browser context.');
+  }
+  report('context-close-complete');
   if (pages.some((result) => result.status === 'rejected')) throw new Error('Durable-session E2E could not close its browser pages.');
 }
