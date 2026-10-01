@@ -750,6 +750,160 @@ describe('onboarding stores the language but writes no cookie (#705 CI: a cookie
   });
 });
 
+describe('onboarding claims a signed-out choice as it is entered (#705 review 5374948393)', () => {
+  const finalizeSync = async () => (await import('@/lib/i18n/sync')).syncLanguageForSignedInUser(undefined, { profileOnly: true });
+  const settle = async () => (await import('@/app/(auth)/actions')).syncLanguageAfterSignInAction();
+  const claim = async (budgetMs?: number) => (await import('@/lib/i18n/sync')).claimSignedOutChoice(budgetMs);
+  /** The wizard's entry: /onboarding sends an unowned marker through this handler before it renders. */
+  const enter = async (query = '') => (await import('@/app/onboarding/language/route')).GET(new Request(`http://localhost/onboarding/language${query}`));
+  const pending = () => db.jar.get(LOCALE_PENDING_COOKIE)?.value;
+
+  /** A visitor picks French signed out, signs up as PARENT and enters the wizard; SPOUSE already keeps German. */
+  async function signUpThroughTheWizard() {
+    await setLocale('fr-FR');
+    expect(pending()).toBe('fr-FR');
+    db.profiles.set(SPOUSE, 'de-DE');
+    db.user = { id: PARENT };
+    const entered = await enter();
+    expect(pending()).toBe(`fr-FR@${PARENT}`);
+    expect(await finalizeSync()).toEqual({ kind: 'stored', locale: 'fr-FR' });
+    expect(db.profiles.get(PARENT)).toBe('fr-FR');
+    return entered;
+  }
+  /** SPOUSE signs in on the same browser: their saved language must stay theirs and be what they see. */
+  async function theNextAccountKeepsItsOwn() {
+    db.user = { id: SPOUSE };
+    expect(await signIn()).toEqual({ kind: 'restored', locale: 'de-DE' });
+    expect(db.profiles.get(SPOUSE)).toBe('de-DE');
+    expect(cookie()?.value).toBe('de-DE');
+    expect(await renderedIn()).toEqual(['de-DE', 'cookie']);
+    expect(db.writes.filter(([caller]) => caller === SPOUSE)).toEqual([]);
+    expect(db.profiles.get(PARENT)).toBe('fr-FR');
+  }
+
+  it('leaving or closing the "all set" screen before either exit: the next account keeps its own', async () => {
+    await signUpThroughTheWizard();
+    await theNextAccountKeepsItsOwn();
+  });
+
+  it('a settle step that fails: the next account keeps its own', async () => {
+    await signUpThroughTheWizard();
+    db.throwOnConnect = true;
+    await settle();
+    db.throwOnConnect = false;
+    expect(pending()).toBe(`fr-FR@${PARENT}`);
+    await theNextAccountKeepsItsOwn();
+  });
+
+  it('a settle step that stalls until it is abandoned: the next account keeps its own', async () => {
+    await signUpThroughTheWizard();
+    db.hold = 'read';
+    expect(await (await import('@/lib/i18n/sync')).syncLanguageForSignedInUser(20)).toEqual({ kind: 'none' });
+    db.hold = null;
+    await theNextAccountKeepsItsOwn();
+  });
+
+  it('a different account signs in BEFORE the optional settle answers: the late settle runs as them and changes nothing', async () => {
+    await signUpThroughTheWizard();
+    await theNextAccountKeepsItsOwn();
+    await settle(); // PARENT's request, landing on SPOUSE's session
+    expect(db.profiles.get(SPOUSE)).toBe('de-DE');
+    expect(cookie()?.value).toBe('de-DE');
+    expect(db.profiles.get(PARENT)).toBe('fr-FR');
+  });
+
+  it('a different account signs in AFTER the optional settle answered: it keeps its own', async () => {
+    await signUpThroughTheWizard();
+    await settle();
+    expect(pending()).toBeUndefined();
+    await theNextAccountKeepsItsOwn();
+  });
+
+  it('control: the same account completing normally sees and keeps its choice', async () => {
+    const entered = await signUpThroughTheWizard();
+    expect(entered.status).toBe(303);
+    expect(new URL(entered.headers.get('location')!).pathname).toBe('/onboarding');
+    const writes = db.writes.length;
+    await settle();
+    expect(db.writes.length).toBe(writes);
+    expect(pending()).toBeUndefined();
+    expect(cookie()?.value).toBe('fr-FR');
+    expect(db.profiles.get(PARENT)).toBe('fr-FR');
+  });
+
+  it('control: a signed-out choice no wizard consumed is still adopted by the next sign-in', async () => {
+    await setLocale('fr-FR');
+    db.user = { id: PARENT };
+    expect(await signIn()).toEqual({ kind: 'stored', locale: 'fr-FR' });
+    expect(db.profiles.get(PARENT)).toBe('fr-FR');
+    expect(pending()).toBeUndefined();
+  });
+
+  it('an identity that cannot be read drops the marker rather than leave it to the next account', async () => {
+    for (const fail of [
+      () => { db.authError = { name: 'AuthRetryableFetchError', message: 'fetch failed', status: 503 }; },
+      () => { db.throwOnConnect = true; },
+    ]) {
+      freshDevice(); db.user = null; db.profiles.set(PARENT, null);
+      await setLocale('fr-FR');
+      db.user = { id: PARENT };
+      fail();
+      expect(await claim()).toBe('dropped');
+      db.authError = null; db.throwOnConnect = false;
+      expect(pending()).toBeUndefined();
+      // The choice is still what this device shows, so finalize stores it for the new member.
+      expect(cookie()?.value).toBe('fr-FR');
+      expect(await finalizeSync()).toEqual({ kind: 'stored', locale: 'fr-FR' });
+    }
+    db.profiles.set(SPOUSE, 'de-DE');
+    await theNextAccountKeepsItsOwn();
+  });
+
+  it('an identity lookup that never answers is bounded and fails closed', async () => {
+    await setLocale('fr-FR');
+    db.user = { id: PARENT };
+    db.hold = 'auth';
+    expect(await claim(20)).toBe('dropped');
+    expect(pending()).toBeUndefined();
+    db.open();
+  });
+
+  it('a marker that is already someone\'s, or none, is left exactly as it is', async () => {
+    db.jar.set(LOCALE_PENDING_COOKIE, { value: `de-DE@${SPOUSE}` });
+    db.user = { id: PARENT };
+    expect(await claim()).toBe('none');
+    expect(pending()).toBe(`de-DE@${SPOUSE}`);
+    db.jar.delete(LOCALE_PENDING_COOKIE);
+    expect(await claim()).toBe('none');
+    expect(db.jar.has(LOCALE_PENDING_COOKIE)).toBe(false);
+  });
+
+  it('a visitor with no session keeps their choice unowned (the page sends them to sign in)', async () => {
+    await setLocale('fr-FR');
+    expect(await claim()).toBe('signed-out');
+    expect(pending()).toBe('fr-FR');
+  });
+
+  it('the claimed marker is written as the picker writes it, and the wizard keeps its query', async () => {
+    await setLocale('fr-FR');
+    const picked = db.jar.get(LOCALE_PENDING_COOKIE)!.options;
+    db.user = { id: PARENT };
+    const res = await enter('?reviewPlan=plus_annual&calendarStatus=connected');
+    expect(db.jar.get(LOCALE_PENDING_COOKIE)!.options).toEqual(picked);
+    expect(res.headers.get('location')).toBe('http://localhost/onboarding?reviewPlan=plus_annual&calendarStatus=connected');
+    expect(res.headers.get('cache-control')).toBe('private, no-store');
+  });
+
+  it('the page claims before it renders the wizard, and only after it knows the person is signed in', () => {
+    const page = readFileSync(join(__dirname, '..', 'app/onboarding/page.tsx'), 'utf8');
+    const signedIn = at(page, "if (!ctx) redirect(authScreenHref('/login'");
+    const claimed = at(page, "?.owner === null) {");
+    expect(signedIn).toBeLessThan(claimed);
+    expect(at(page, "redirect(`/onboarding/language")).toBeGreaterThan(claimed);
+    expect(claimed).toBeLessThan(at(page, 'return <OnboardingWizard'));
+  });
+});
+
 describe('the decision, pinned', () => {
   it.each([
     [{ cookie: 'de-DE', stored: null }, { kind: 'stored', locale: 'de-DE' }],

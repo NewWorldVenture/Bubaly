@@ -10,7 +10,7 @@ import 'server-only';
 import { cookies } from 'next/headers';
 
 import { findLocale, LOCALE_COOKIE, LOCALE_COOKIE_MAX_AGE, type LocaleCode } from '@/lib/i18n/locales';
-import { decodePendingChoice, LOCALE_PENDING_COOKIE, type PendingChoice } from '@/lib/i18n/pending-choice';
+import { decodePendingChoice, encodePendingChoice, LOCALE_PENDING_COOKIE, type PendingChoice } from '@/lib/i18n/pending-choice';
 import { getLocaleContext } from '@/lib/i18n/server';
 import { createServer } from '@/lib/supabase/server';
 
@@ -172,4 +172,67 @@ async function syncWithin(signal: AbortSignal, profileOnly: boolean): Promise<La
     if (!signal.aborted) console.error('[i18n] language sync failed', e);
     return { kind: 'none' };
   }
+}
+
+/** What the onboarding entry did with a signed-out choice on this browser. */
+export type SignedOutClaim = 'none' | 'claimed' | 'dropped' | 'signed-out';
+
+/** The account a signed-out choice now belongs to; a choice that is already someone's is left alone. */
+export function decideSignedOutClaim(
+  pending: PendingChoice | null,
+  who: { userId: string } | 'signed-out' | 'unknown',
+): { kind: 'none' | 'signed-out' } | { kind: 'claimed'; value: string } | { kind: 'dropped' } {
+  if (!pending || pending.owner !== null) return { kind: 'none' };
+  if (who === 'signed-out') return { kind: 'signed-out' };
+  if (who === 'unknown') return { kind: 'dropped' };
+  return { kind: 'claimed', value: encodePendingChoice(pending.locale, who.userId) };
+}
+
+/**
+ * Make a signed-out choice this account's own, as it enters onboarding
+ * (#705 review 5374948393). Sign-up reaches /onboarding without the sign-in
+ * sync (the form pushes there, and a confirmed email or a provider comes back
+ * through /auth/complete), and finalize may write no cookie, so an unowned
+ * choice would otherwise outlive the wizard and be adopted by the next
+ * account to sign in on this browser. Claimed here, before the wizard
+ * renders, it is only ever this account's: finalize stores it, and anyone
+ * else ignores it whether or not an exit was ever clicked.
+ *
+ * Bounded and fail-closed: an identity that cannot be read within `budgetMs`
+ * (an outage, a throw, a stall) drops the marker rather than leave it to
+ * whoever signs in next. The choice itself survives in the visible cookie,
+ * which finalize stores for a profile that has no language yet. Only a
+ * visitor with no session at all keeps it unowned; the page then sends them
+ * to sign in. Writes cookies, so it runs from a Route Handler, never from a
+ * page render or from finalize.
+ */
+export async function claimSignedOutChoice(budgetMs: number = LANGUAGE_SYNC_BUDGET_MS): Promise<SignedOutClaim> {
+  const jar = await cookies();
+  const pending = decodePendingChoice(jar.get(LOCALE_PENDING_COOKIE)?.value);
+  if (!pending || pending.owner !== null) return 'none';
+  let timer: ReturnType<typeof setTimeout> | undefined;
+  const deadline = new Promise<'unknown'>((resolve) => { timer = setTimeout(() => resolve('unknown'), budgetMs); });
+  const lookup = (async (): Promise<{ userId: string } | 'signed-out' | 'unknown'> => {
+    try {
+      const { data: { user }, error } = await (await createServer()).auth.getUser();
+      if (user) return { userId: user.id };
+      return !error || isSessionMissing(error) ? 'signed-out' : 'unknown';
+    } catch {
+      return 'unknown';
+    }
+  })();
+  const who = await Promise.race([lookup, deadline]).finally(() => clearTimeout(timer));
+  const decision = decideSignedOutClaim(pending, who);
+  if (decision.kind === 'claimed') jar.set(LOCALE_PENDING_COOKIE, decision.value, { ...cookieOptions(), httpOnly: true });
+  if (decision.kind === 'dropped') {
+    console.error('[i18n] could not tell whose signed-out language this is; it is dropped, not left to the next account');
+    jar.delete(LOCALE_PENDING_COOKIE);
+  }
+  return decision.kind;
+}
+
+/** Supabase's answer for a visitor with no session, as lib/supabase/auth.ts reads it. */
+function isSessionMissing(error: { name?: unknown; code?: unknown; message?: unknown }): boolean {
+  return error.name === 'AuthSessionMissingError' || error.code === 'session_missing'
+    || (typeof error.message === 'string' && /auth session missing/i.test(error.message));
 }
