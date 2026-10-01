@@ -218,11 +218,9 @@ test.describe('form errors: what an invalid, refused and recovered submit expose
       });
 
       test('paperwork: a refused paste tells the reader it was not saved, in their words', async ({ page }) => {
-        // Reproduced: the composer shows a thrown action's message as-is; in
-        // production that is React's redacted #441 text. useActionError
-        // (components/ui/action-error.tsx) already maps it with
-        // refusalForThrown; the composer does not (paperwork-module.tsx).
-        test.fail();
+        // Was: the composer showed a thrown action's message as-is, which in
+        // production is React's redacted #441 text. It now reads the refusal
+        // with refusalForThrown, as useActionError does.
         const { text, submit } = await openComposer(page);
         await refuseNextAction(page);
         await text.fill(PAPER);
@@ -251,15 +249,18 @@ test.describe('form errors: what an invalid, refused and recovered submit expose
       });
 
       test('paperwork: a whitespace-only paste is not closed as if it were done', async ({ page }) => {
-        // Reproduced: native `required` accepts spaces, the action trims them
-        // to nothing and answers ok without saving, and the composer closes
-        // with nothing said (addPaperworkAction; ACTION-CD1E12585CD4).
-        test.fail();
+        // Was: native `required` accepted spaces, the action trimmed them to
+        // nothing and answered ok without saving, and the composer closed with
+        // nothing said. A blank paste is now refused like an empty one.
         const { text, submit } = await openComposer(page);
+        const seen = countActions(page);
         await text.fill('     ');
         await submit.click();
+        await expect(text).toBeFocused();
+        expect(await text.evaluate((el: HTMLTextAreaElement) => el.validity.valueMissing && el.validationMessage.length > 0)).toBe(true);
         await page.waitForLoadState('networkidle');
         await expect(text).toBeVisible();
+        expect(seen.posts).toBe(0);
       });
     });
   }

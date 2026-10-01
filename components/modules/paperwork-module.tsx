@@ -19,6 +19,7 @@ import {
 } from '@/app/(app)/dashboard/paperwork/actions';
 import { useToast } from '@/components/ui/toast';
 import { reportRefusal } from '@/lib/auth/step-up-client';
+import { refusalForThrown } from '@/lib/actions/refusal';
 import { cn } from '@/lib/utils/cn';
 import { useLocale, useTranslations } from '@/components/i18n/locale-provider';
 import { DocumentCapture } from '@/components/capture/document-capture';
@@ -346,15 +347,33 @@ function Composer({ onDone }: { onDone: () => void }) {
 
   return (
     <form
+      onSubmit={(e) => {
+        // Native `required` accepts a paste of only spaces, which the action
+        // trims to nothing and answers ok without saving. Treat it as the empty
+        // paste it is, so the browser refuses it the same way.
+        const field = e.currentTarget.elements.namedItem('text');
+        if (field instanceof HTMLTextAreaElement && !field.value.trim()) {
+          e.preventDefault();
+          field.value = '';
+          field.reportValidity();
+        }
+      }}
       action={(fd) => startTransition(async () => {
         // A throw here used to leave the form open with nothing said; a
         // step-up refusal is answered, not thrown, and goes to the code page.
+        // Production redacts a thrown action's message, so it is read with
+        // refusalForThrown, as useActionError does.
         try {
           const res = await addPaperworkAction(fd);
           if (!res.ok) { reportRefusal(res, toastError); return; }
           onDone();
         }
-        catch (err) { toastError(err instanceof Error && err.message ? err.message : t('globalError.somethingWentWrong')); }
+        catch (err) {
+          const refusal = refusalForThrown(err, process.env.NODE_ENV === 'production');
+          toastError(refusal
+            ? t(`actionRefusal.${refusal}`)
+            : err instanceof Error && err.message ? err.message : t('globalError.somethingWentWrong'));
+        }
       })}
       className="mt-4 rounded-2xl border border-brand/30 bg-brand/[0.05] p-4"
     >
