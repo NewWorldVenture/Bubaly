@@ -22,12 +22,13 @@ export async function ensureCardholder(
   supabase: DB,
   params: { familyId: string; memberId: string; childWalletId: string; name: string; accountId: string; userId: string | null },
 ): Promise<{ rowId: string; stripeCardholderId: string }> {
-  const { data: existing } = await supabase
+  const { data: existing, error: lookupError } = await supabase
     .from('stripe_cardholders')
     .select('id, stripe_cardholder_id')
     .eq('family_id', params.familyId)
     .eq('member_id', params.memberId)
     .maybeSingle();
+  if (lookupError) throw new Error('Could not load the existing cardholder');
   if (existing) return { rowId: existing.id, stripeCardholderId: existing.stripe_cardholder_id };
 
   const stripe = getStripe();
