@@ -9,7 +9,7 @@
 // for a service-role Supabase client (later), or the psql transport the
 // disposable-database tests use (tests/helpers/digest-delivery-postgres.ts).
 import {
-  MAX_PROVIDER_MESSAGE_ID_CHARS, payloadJsonOf, pgLength,
+  MAX_PROVIDER_MESSAGE_ID_CHARS, isStorableMessageId, payloadJsonOf,
   type Admission, type BeginSendPolicy, type ClaimPolicy, type ClaimRefusal, type DeliveryPayload, type DeliveryRow, type DeliveryStatus,
   type DigestDeliveryStore, type FrozenOccurrence, type ProviderSendResult, type StoredOccurrence,
 } from '@/lib/admin/digest-delivery';
@@ -156,10 +156,10 @@ export function createPostgresDigestDeliveryStore(rpc: RpcCall): DigestDeliveryS
     },
 
     async complete(occurrenceId, recipientKey, fence, result: ProviderSendResult, maxAttempts) {
-      // 0471 would truncate a longer id; a receipt is never altered, so it is never sent. (An empty id
-      // is sent: 0471, like decideCompletion, records it as unknown, not as a receipt.)
-      if (result.kind === 'accepted' && typeof result.messageId === 'string' && pgLength(result.messageId) > MAX_PROVIDER_MESSAGE_ID_CHARS) {
-        throw new TypeError(`digest-delivery store: an accepted message id must be 1-${MAX_PROVIDER_MESSAGE_ID_CHARS} characters`);
+      // Refuse IDs that jsonb cannot represent or 0471 would truncate, before the RPC.
+      // An empty id remains allowed here: 0471 records it as unknown, not a receipt.
+      if (result.kind === 'accepted' && result.messageId !== '' && !isStorableMessageId(result.messageId)) {
+        throw new TypeError(`digest-delivery store: an accepted message id must be 1-${MAX_PROVIDER_MESSAGE_ID_CHARS} Unicode characters without NUL or unpaired surrogates`);
       }
       const out = await rpc('admin_digest_complete', {
         p_occurrence_id: occurrenceId, p_recipient_key: recipientKey, p_fence: fenceArg(fence), p_result: result, p_max_attempts: maxAttempts,

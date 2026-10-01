@@ -595,6 +595,23 @@ describe.skipIf(!pgFixtureEnabled)('0471 + 0474 on PostgreSQL (disposable databa
       await expect(fx.sql(`update public.admin_digest_occurrences set window_end = window_end + interval '1 day';`)).rejects.toThrow(/never changed or deleted/);
       await expect(fx.sql(`delete from public.admin_digest_occurrences;`)).rejects.toThrow(/never changed or deleted/);
     });
+    it('the documented jsonb refusal, reproduced: a receipt id with U+0000 or a lone surrogate cannot reach the row, and nothing is written (#722\'s guard keeps the engine from sending one)', async () => {
+      const { clock, store, where } = await setup();
+      const a = await store.claim(OCC, K1, 'a', CLAIM);
+      if (!a.claimed) throw new Error('setup');
+      expect(answerOf(await store.beginSend(OCC, K1, a.row.fence, BEGIN, ADMITTED))).toBe('ok');
+      const marked = await fx.sql(`select row_to_json(d)::text from public.admin_digest_deliveries d where ${where};`);
+      // Straight to the function, past the adapter's guard, as JSON.stringify writes the id.
+      const raw = fx.rpc(clock.now);
+      for (const messageId of ['message\u0000id', 'msg-\ud800']) {
+        await expect(raw('admin_digest_complete', { p_occurrence_id: OCC, p_recipient_key: K1, p_fence: a.row.fence, p_result: { kind: 'accepted', messageId }, p_max_attempts: 4 }))
+          .rejects.toThrow(/unsupported Unicode escape sequence|surrogate/);
+      }
+      expect(await fx.sql(`select row_to_json(d)::text from public.admin_digest_deliveries d where ${where};`)).toBe(marked);
+      // Control: the same call with an id PostgreSQL can hold settles the row.
+      expect(await raw('admin_digest_complete', { p_occurrence_id: OCC, p_recipient_key: K1, p_fence: a.row.fence, p_result: { kind: 'accepted', messageId: 'msg-✓-\u{1F600}' }, p_max_attempts: 4 })).toBe('ok');
+    });
+
     it('a NULL fence is refused by begin_send and complete, and writes nothing', async () => {
       const { clock, store, where } = await setup();
       const a = await store.claim(OCC, K1, 'a', CLAIM);
