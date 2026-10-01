@@ -196,12 +196,12 @@ function resolveIdempotencyKey(scope: ServiceScope, tool: ToolDefinition, input:
 }
 
 type Reservation =
-  | { status: 'reserved'; id: string }
+  | { status: 'reserved'; id: string; attempt: number }
   | { status: 'duplicate'; id: string; outputs: Json | null }
   | { status: 'in_progress' }
   | { status: 'error'; error: string };
 
-type ToolCallIdentity = { id: string; familyId: string; key: string; toolName: string };
+type ToolCallIdentity = { id: string; familyId: string; key: string; toolName: string; attempt: number };
 
 async function reserveCall(
   ledger: DB,
@@ -228,7 +228,7 @@ async function reserveCall(
   };
 
   const { data, error } = await ledger.from('ai_tool_calls').insert(row).select('id').single();
-  if (!error && data) return { status: 'reserved', id: data.id };
+  if (!error && data) return { status: 'reserved', id: data.id, attempt: row.attempt };
 
   if (!isUniqueViolation(error)) {
     console.error('[tool-exec] could not reserve a tool call', error);
@@ -281,7 +281,7 @@ async function reserveCall(
     return { status: 'error', error: describeDbError(takeError, 'Bubaly could not record that action, so it did not run.') };
   }
   if (!taken) return { status: 'in_progress' };
-  return { status: 'reserved', id: taken.id };
+  return { status: 'reserved', id: taken.id, attempt: existing.attempt + 1 };
 }
 
 /** Close out a ledger row. Never throws: the household write already happened. */
@@ -311,6 +311,8 @@ async function finalizeCall(
     .eq('family_id', identity.familyId)
     .eq('idempotency_key', identity.key)
     .eq('tool_name', identity.toolName)
+    // A stale but live worker must not finish the newer attempt's receipt.
+    .eq('attempt', identity.attempt)
     .select('id');
   if (error || wroteNoRows(finalized)) {
     console.error('[tool-exec] could not finalize the tool call ledger row; a stale retry may re-execute it', {
@@ -731,7 +733,9 @@ export async function executeTool(
   }
 
   // ── 5. Execute ───────────────────────────────────────────────────────────
-  const identity: ToolCallIdentity = { id: reservation.id, familyId: callScope.familyId, key, toolName: tool.name };
+  const identity: ToolCallIdentity = {
+    id: reservation.id, familyId: callScope.familyId, key, toolName: tool.name, attempt: reservation.attempt,
+  };
   const startedAt = Date.now();
   const result = await runService({
     ...callScope,
