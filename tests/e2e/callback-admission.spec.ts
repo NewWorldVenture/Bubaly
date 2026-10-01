@@ -3,7 +3,8 @@ import { expect, test as base, type BrowserContext, type Page } from '@playwrigh
 import { callbackAdmissionMaterial, parseCallbackAdmissionCookies } from '../../lib/auth/callback-witness';
 import { encodePkceInitiationRecord, pkceInitiationCookieName, readPkceInitiationSlot } from '../../lib/auth/pkce-initiation';
 import {
-  authCookieName, authCookies, closeWithoutSnapshot, createOwnedAccount, readSession, requireLocalOrigin, type OwnedAccount,
+  authCookieName, authCookies, closeWithoutSnapshot, createOwnedAccount, readSession, requireLocalOrigin,
+  type CloseWithoutSnapshotCounts, type CloseWithoutSnapshotPhase, type OwnedAccount,
 } from './helpers/durable-session';
 
 // Runs against the real Next server and the CI job's disposable GoTrue. This is
@@ -294,27 +295,58 @@ test.describe('callback admission through the real Next HTTP path', () => {
     });
   }
 
-  test('real emailed recovery completes PKCE and the saved password works after production logout', async ({ browser, baseURL, account }) => {
+  test('real emailed recovery completes PKCE and the saved password works after production logout', async ({ browser, baseURL, account }, testInfo) => {
+    type Phase = CloseWithoutSnapshotPhase | 'context-create-start' | 'context-create-complete'
+      | 'reset-form-start' | 'reset-form-ready' | 'recovery-request-start' | 'recovery-request-accepted'
+      | 'initiation-checks-start' | 'initiation-checks-complete' | 'mailbox-wait-start' | 'mailbox-wait-complete'
+      | 'action-receipt-start' | 'action-receipt-complete' | 'recovery-adoption-start' | 'recovery-adoption-complete'
+      | 'password-save-start' | 'password-save-complete' | 'home-navigation-start' | 'home-navigation-complete'
+      | 'logout-start' | 'logout-complete' | 'password-relogin-start' | 'password-relogin-complete'
+      | 'body-complete' | 'body-failed' | 'cleanup-complete';
+    const startedAt = performance.now();
+    const report = (phase: Phase, counts?: CloseWithoutSnapshotCounts) => {
+      // Only static phases, runner identifiers, time and counts may reach CI logs.
+      try {
+        console.log('[callback-admission-recovery]', JSON.stringify({
+          phase, elapsedMs: Math.round(performance.now() - startedAt), timeoutMs: testInfo.timeout,
+          retry: testInfo.retry, project: testInfo.project.name, workerIndex: testInfo.workerIndex,
+          status: testInfo.status, pageCount: counts?.pageCount, rejectedCount: counts?.rejectedCount,
+        }));
+      } catch {}
+    };
+    report('context-create-start');
     const origin = requireLocalOrigin(baseURL), context = await browser.newContext({ locale: 'en-US' });
+    report('context-create-complete');
     try {
+      report('reset-form-start');
       const page = await context.newPage();
       await page.goto(`${origin}/login?reset=1`, { waitUntil: 'domcontentloaded' });
       await expect(page.getByRole('heading', { name: 'Reset your password', exact: true })).toBeVisible();
+      report('reset-form-ready');
+      report('recovery-request-start');
       try { await page.locator('input[name="email"]').fill(account.email); }
       catch { throw new Error('Callback admission E2E could not fill its owned recovery request.'); }
       await page.getByRole('button', { name: 'Send recovery link', exact: true }).click();
       await expect(page.getByRole('status')).toContainText('check your inbox for a recovery link', { timeout: 30_000 });
+      report('recovery-request-accepted');
+      report('initiation-checks-start');
       const verifier = authCookieName(provider) + '-code-verifier';
       expect((await context.cookies()).some(cookie => cookie.value && (cookie.name === verifier || cookie.name.startsWith(`${verifier}.`))),
         'The production email request must create a PKCE verifier').toBe(true);
       const initiated = readPkceInitiationSlot(await context.cookies(origin), authCookieName(provider))?.record;
       if (!initiated || initiated.kind !== 'recovery') throw new Error('The production recovery request must retain its original initiation record.');
+      report('initiation-checks-complete');
+      report('mailbox-wait-start');
       const link = await waitForOwnedRecoveryEmail(account.email, origin, initiated.nonce);
+      report('mailbox-wait-complete');
+      report('action-receipt-start');
       const exchange = await captureActualActionReceipt(page, origin, 'exchanged');
       // Keep the token-bearing URL out of Playwright's named navigation steps.
       try { await page.evaluate(value => { window.location.assign(value); }, link); }
       catch { throw new Error('Callback admission E2E could not follow its validated local recovery link.'); }
       await exchange();
+      report('action-receipt-complete');
+      report('recovery-adoption-start');
       // Compare a boolean so a broken redirect cannot expose its code in output.
       await expect.poll(() => page.url() === `${origin}/auth/recovery`, { timeout: 30_000 }).toBe(true);
       await expect(page.getByRole('button', { name: 'Save new password', exact: true })).toBeVisible({ timeout: 30_000 });
@@ -324,6 +356,8 @@ test.describe('callback admission through the real Next HTTP path', () => {
         'Successful isolated exchange must retire its PKCE verifier').toBe(false);
       expect(readPkceInitiationSlot(await context.cookies(origin), authCookieName(provider))?.raw,
         'Successful callback adoption must consume its exact initiation record').toBe(null);
+      report('recovery-adoption-complete');
+      report('password-save-start');
       const password = `Recovery1!${randomBytes(24).toString('base64url')}`;
       try {
         await page.locator('input[name="password"]').fill(password);
@@ -331,13 +365,27 @@ test.describe('callback admission through the real Next HTTP path', () => {
       } catch { throw new Error('Callback admission E2E could not fill its owned replacement password.'); }
       await page.getByRole('button', { name: 'Save new password', exact: true }).click();
       await expect(page.getByRole('heading', { name: 'Password updated', exact: true })).toBeVisible({ timeout: 30_000 });
+      report('password-save-complete');
+      report('home-navigation-start');
       await page.goto(`${origin}/home`, { waitUntil: 'domcontentloaded' });
+      report('home-navigation-complete');
+      report('logout-start');
       await page.getByRole('button', { name: 'Account menu', exact: true }).click();
       await page.getByRole('button', { name: 'Sign out', exact: true }).click();
       await page.getByRole('dialog').getByRole('button', { name: 'Sign out', exact: true }).click();
       await expect.poll(() => new URL(page.url()).pathname === '/login').toBe(true);
       expect(authCookies(await context.cookies(), authCookieName(provider)).length).toBe(0);
+      report('logout-complete');
+      report('password-relogin-start');
       await signIn(page, origin, { ...account, password });
-    } finally { await closeWithoutSnapshot(context); }
+      report('password-relogin-complete');
+      report('body-complete');
+    } catch (error) {
+      report('body-failed');
+      throw error;
+    } finally {
+      await closeWithoutSnapshot(context, report);
+      report('cleanup-complete');
+    }
   });
 });
