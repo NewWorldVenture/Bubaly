@@ -7,6 +7,7 @@ import { CASE_STUDIES_CACHE_TAG } from './case-study';
 import { unstable_cache } from 'next/cache';
 import { createServiceClient } from '@/lib/supabase/server';
 import { clampRating, publishedOnly } from '@/lib/marketing/reputation';
+import { withPublicReadBudget } from '@/lib/marketing/public-read';
 
 export type PublicTestimonial = {
   id: string;
@@ -37,6 +38,16 @@ export type PublicCaseStudy = {
 const TESTIMONIAL_LIMIT = 6;
 const CASE_STUDY_LIMIT = 3;
 
+function isCaseStudyRow(value: unknown): boolean {
+  if (!value || typeof value !== 'object' || Array.isArray(value)) return false;
+  const row = value as Record<string, unknown>;
+  return ['id', 'title', 'slug'].every(key => typeof row[key] === 'string')
+    && ['customer_name', 'summary', 'result_metric'].every(key => row[key] === null || typeof row[key] === 'string')
+    && typeof row.is_published === 'boolean'
+    // This column is absent before its migration; absence never earns a badge.
+    && (row.verified_at === undefined || row.verified_at === null || typeof row.verified_at === 'string');
+}
+
 export const getPublishedTestimonials = unstable_cache(
   async (): Promise<PublicTestimonial[]> => {
     try {
@@ -64,30 +75,39 @@ export const getPublishedTestimonials = unstable_cache(
   { revalidate: 3600 },
 );
 
-export const getPublishedCaseStudies = unstable_cache(
-  async (): Promise<PublicCaseStudy[]> => {
-    try {
-      const { data, error } = await createServiceClient()
-        .from('case_studies')
-        .select('*')
-        .eq('is_published', true)
-        .order('created_at', { ascending: false })
-        .limit(CASE_STUDY_LIMIT);
-      if (error) throw error;
-      return publishedOnly(data ?? []).map((row) => ({
-        id: row.id,
-        title: row.title,
-        slug: row.slug,
-        customerName: row.customer_name,
-        summary: row.summary,
-        resultMetric: row.result_metric,
-        verifiedAt: (row as { verified_at?: string | null }).verified_at ?? null,
-      }));
-    } catch (err) {
-      console.error('[marketing-reputation] case studies read failed', err);
-      return [];
-    }
-  },
-  ['public-case-studies'],
+const cachedPublishedCaseStudies = unstable_cache(
+  (): Promise<PublicCaseStudy[]> => withPublicReadBudget(async (signal) => {
+    const { data, error } = await createServiceClient()
+      .from('case_studies')
+      .select('*')
+      .eq('is_published', true)
+      .order('created_at', { ascending: false })
+      .limit(CASE_STUDY_LIMIT)
+      .abortSignal(signal);
+    if (error) throw error;
+    // Validate before filtering: a malformed row must not masquerade as a
+    // legitimately empty publication list and become successful cached data.
+    if (!Array.isArray(data) || !data.every(isCaseStudyRow)) throw new Error('Invalid published case studies response');
+    return publishedOnly(data).map((row) => ({
+      id: row.id,
+      title: row.title,
+      slug: row.slug,
+      customerName: row.customer_name,
+      summary: row.summary,
+      resultMetric: row.result_metric,
+      verifiedAt: (row as { verified_at?: string | null }).verified_at ?? null,
+    }));
+  }),
+  ['public-case-studies-validated-v2'],
   { revalidate: 3600, tags: [CASE_STUDIES_CACHE_TAG] },
 );
+
+/** An outage is not a successfully empty publication list. */
+export async function getPublishedCaseStudies(): Promise<PublicCaseStudy[]> {
+  try {
+    return await cachedPublishedCaseStudies();
+  } catch (err) {
+    console.error('[marketing-reputation] case studies read failed', err);
+    return [];
+  }
+}
