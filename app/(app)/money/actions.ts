@@ -168,12 +168,14 @@ export async function setCardFrozenAction(input: { cardId: string; frozen: boole
   const ctx = await requireUserContext();
   if (!isManager(ctx.active.role)) return { ok: false, error: t('actions.onlyParentsCanDoThis') };
   const svc = createServiceClient();
-  const { data: card, error: cardError } = await svc.from('stripe_issuing_cards')
-    .select('id, stripe_card_id').eq('family_id', ctx.active.familyId).eq('id', input.cardId).maybeSingle();
+  const [{ data: card, error: cardError }] = await settleAll([
+    svc.from('stripe_issuing_cards').select('id, stripe_card_id').eq('family_id', ctx.active.familyId).eq('id', input.cardId).maybeSingle(),
+  ]);
   if (cardError) return actionFailure('load the card', t('money.couldNotLoadTheCard'), cardError);
   if (!card) return { ok: false, error: t('actions.cardNotFound') };
-  const { data: acct, error: acctError } = await svc.from('stripe_connected_accounts')
-    .select('stripe_account_id').eq('family_id', ctx.active.familyId).maybeSingle();
+  const [{ data: acct, error: acctError }] = await settleAll([
+    svc.from('stripe_connected_accounts').select('stripe_account_id').eq('family_id', ctx.active.familyId).maybeSingle(),
+  ]);
   if (acctError) return actionFailure('load the connected account', t('money.couldNotLoadTheConnectedAccount'), acctError);
   if (!acct) return { ok: false, error: t('actions.noAccountConfigured') };
   try {
@@ -200,15 +202,22 @@ export async function updateCardControlsAction(input: {
   const ctx = await requireUserContext();
   if (!isManager(ctx.active.role)) return { ok: false, error: t('actions.onlyParentsCanSetSpending') };
   const svc = createServiceClient();
-  const caps = await getMoneyCapabilities(svc);
+  let caps: Awaited<ReturnType<typeof getMoneyCapabilities>>;
+  try {
+    caps = await getMoneyCapabilities(svc);
+  } catch (error) {
+    return actionFailure('load card-issuing capabilities', t('money.couldNotLoadCardIssuingCapabilities'), error);
+  }
   if (!caps.issuing) return { ok: false, error: t('actions.cardsAreNotAvailableYet') };
 
-  const { data: card, error: cardError } = await svc.from('stripe_issuing_cards')
-    .select('id, stripe_card_id').eq('family_id', ctx.active.familyId).eq('id', input.cardId).maybeSingle();
+  const [{ data: card, error: cardError }] = await settleAll([
+    svc.from('stripe_issuing_cards').select('id, stripe_card_id').eq('family_id', ctx.active.familyId).eq('id', input.cardId).maybeSingle(),
+  ]);
   if (cardError) return actionFailure('load the card', t('money.couldNotLoadTheCard'), cardError);
   if (!card) return { ok: false, error: t('actions.cardNotFound') };
-  const { data: acct, error: acctError } = await svc.from('stripe_connected_accounts')
-    .select('stripe_account_id').eq('family_id', ctx.active.familyId).maybeSingle();
+  const [{ data: acct, error: acctError }] = await settleAll([
+    svc.from('stripe_connected_accounts').select('stripe_account_id').eq('family_id', ctx.active.familyId).maybeSingle(),
+  ]);
   if (acctError) return actionFailure('load the connected account', t('money.couldNotLoadTheConnectedAccount'), acctError);
   if (!acct) return { ok: false, error: t('actions.noAccountConfigured') };
 
