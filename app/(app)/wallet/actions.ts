@@ -144,7 +144,7 @@ export async function addFundsAction(input: { childWalletId: string; amountCents
     title: `Add funds ${(amount / 100).toFixed(2)}`,
     context: { amountCents: amount }, openApproval: false,
   });
-  if (decision.effect === 'deny') return { ok: false, error: householdPolicyBlocked(t, decision) };
+  if (decision.effect !== 'allow') return { ok: false, error: householdPolicyBlocked(t, decision) };
 
   const split = normalizeSplit(rule?.split as Partial<Split> | null);
   const parts = allocate(amount, split);
@@ -503,7 +503,7 @@ export async function fundGoalAction(input: { goalId: string; amountCents: numbe
     title: `Fund goal "${goal.title}" ${(amount / 100).toFixed(2)}`,
     context: { amountCents: amount }, openApproval: false,
   });
-  if (decision.effect === 'deny') return { ok: false, error: householdPolicyBlocked(t, decision) };
+  if (decision.effect !== 'allow') return { ok: false, error: householdPolicyBlocked(t, decision) };
 
   const result = await fundGoal(supabase, {
     familyId, goalId: input.goalId, amountCents: amount, actorId: ctx.user.id,
@@ -562,7 +562,7 @@ export async function approveGiftAction(input: { giftPaymentId: string }): Promi
     title: `Approve gift ${(gift.amount_cents / 100).toFixed(2)}`,
     context: { amountCents: gift.amount_cents }, openApproval: false,
   });
-  if (decision.effect === 'deny') return { ok: false, error: householdPolicyBlocked(t, decision) };
+  if (decision.effect !== 'allow') return { ok: false, error: householdPolicyBlocked(t, decision) };
 
   const res = await approveGift(supabase, familyId, gift.id, ctx.user.id);
   if (!res.ok) return { ok: false, error: res.error };
@@ -949,7 +949,7 @@ export async function decideSpendRequestAction(input: {
       title: `Approve spend ${((txn.amount_cents ?? 0) / 100).toFixed(2)}`,
       context: { amountCents: txn.amount_cents ?? 0 }, openApproval: false,
     });
-    if (decision.effect === 'deny') return { ok: false, error: householdPolicyBlocked(t, decision) };
+    if (decision.effect !== 'allow') return { ok: false, error: householdPolicyBlocked(t, decision) };
 
   }
   const decision = await decideSpend(supabase, {
@@ -989,7 +989,7 @@ export async function sendMoneyAction(input: {
     title: `Transfer ${(amount / 100).toFixed(2)} between wallets`,
     context: { amountCents: amount }, openApproval: false,
   });
-  if (decision.effect === 'deny') return { ok: false, error: householdPolicyBlocked(t, decision) };
+  if (decision.effect !== 'allow') return { ok: false, error: householdPolicyBlocked(t, decision) };
 
   const transfer = await transferWallets(supabase, {
     familyId, fromChildWalletId: input.fromChildWalletId, toChildWalletId: input.toChildWalletId,
@@ -1074,7 +1074,7 @@ export async function decideAllowanceRequestAction(input: {
       title: `Approve allowance request ${(amount / 100).toFixed(2)}`,
       context: { amountCents: amount }, openApproval: false,
     });
-    if (decision.effect === 'deny') return { ok: false, error: householdPolicyBlocked(t, decision) };
+    if (decision.effect !== 'allow') return { ok: false, error: householdPolicyBlocked(t, decision) };
 
   }
   const decision = await decideAllowance(supabase, {
