@@ -259,19 +259,27 @@ describe('refresh family lookup and response boundaries', () => {
   });
 });
 
-// These two cases record existing failure behavior, not acceptance of it.
-// The prerequisite awaits are outside each action's try/catch. They are reported
-// as an open availability gap; the test-only slice does not repair application code.
-describe('unresolved prerequisite-rejection characterization', () => {
-  it('currently propagates a rejected capability read before onboarding effects', async () => {
-    const cause = new Error('synthetic capability transport failure');
+describe('prerequisite rejections return safe errors before provider effects', () => {
+  it.each([
+    new Error(providerDetail), providerDetail,
+    { code: 'XX999', message: providerDetail, details: 'synthetic private capability detail' },
+  ])('handles rejected capability read %j without onboarding effects', async cause => {
     mock.capabilities.mockRejectedValue(cause);
-    await expect(startConnectOnboardingAction()).rejects.toBe(cause);
-    expect(mock.ensureAccount).not.toHaveBeenCalled(); expect(mock.link).not.toHaveBeenCalled(); expect(mock.revalidate).not.toHaveBeenCalled();
+    await expect(startConnectOnboardingAction()).resolves.toEqual({ ok: false, error: 'translated:money.couldNotStartStripeOnboarding' });
+    expect(mock.ensureAccount).not.toHaveBeenCalled(); expect(mock.link).not.toHaveBeenCalled();
+    expect(mock.from).not.toHaveBeenCalled(); expect(mock.sync).not.toHaveBeenCalled();
+    expect(mock.headers).not.toHaveBeenCalled(); expect(mock.revalidate).not.toHaveBeenCalled();
+    expect(console.error).toHaveBeenCalledTimes(1);
   });
-  it('currently propagates a rejected account lookup before sync effects', async () => {
-    queryFailure = new Error('synthetic mirror lookup transport failure');
-    await expect(refreshConnectStatusAction()).rejects.toBe(queryFailure);
+  it.each([
+    new Error(providerDetail), providerDetail,
+    { code: 'XX999', message: providerDetail, details: 'synthetic private account detail' },
+  ])('handles rejected account lookup %j without sync effects', async cause => {
+    queryFailure = cause;
+    await expect(refreshConnectStatusAction()).resolves.toEqual({ ok: false, error: 'translated:money.couldNotLoadTheConnectedAccount' });
+    expect(queryCalls).toEqual([['from', 'stripe_connected_accounts'], ['select', 'stripe_account_id'], ['eq', 'family_id', familyA], ['maybeSingle']]);
     expect(mock.sync).not.toHaveBeenCalled(); expect(mock.revalidate).not.toHaveBeenCalled();
+    expect(mock.ensureAccount).not.toHaveBeenCalled(); expect(mock.link).not.toHaveBeenCalled();
+    expect(console.error).toHaveBeenCalledTimes(1);
   });
 });
