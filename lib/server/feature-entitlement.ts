@@ -43,9 +43,16 @@ export type FeatureEntitlement =
  * THROWS when the family's plan cannot be read. That is deliberate and is the
  * single most important thing about this function: an unreadable plan is not an
  * unentitled family, and returning `allowed: false` would turn a transient
- * database failure into a silent, wrong denial. Callers must decide what an
- * unknown answer means for them — a cron counts it as a failure for that family
- * and moves on, a request answers 503.
+ * database failure into a silent, wrong denial.
+ *
+ * It THROWS, too, when the feature tiers cannot be read (or not within their
+ * budget). The opposite mistake is the one to avoid there: the catalog default
+ * is not the configured tier — an admin can make a feature stricter than its
+ * default — so falling back to it would let a failed lookup grant a paid
+ * feature.
+ *
+ * Callers must decide what an unknown answer means for them — a cron counts it
+ * as a failure for that family and moves on, a request answers 503.
  *
  * Pass `tiers` when checking many families in one pass (a cron loop), so the
  * `app_settings` read happens once rather than per family.
@@ -79,7 +86,7 @@ export async function resolveFeatureEntitlement(
 ): Promise<FeatureEntitlement> {
   const [planLevel, byHref] = await Promise.all([
     resolveFamilyPlanLevel(db, familyId),
-    tiers ? Promise.resolve(tiers) : getFeatureTiersByHref(db),
+    tiers ? Promise.resolve(tiers) : getFeatureTiersByHref(db, { onUnavailable: 'throw' }),
   ]);
 
   const tier = byHref[href];
@@ -104,5 +111,8 @@ export async function familyHasFeature(
   return (await resolveFeatureEntitlement(db, familyId, href, tiers)).allowed;
 }
 
-/** The tier map, read once, for a caller that loops over families. */
+/**
+ * The tier map, read once, for a caller that loops over families. A caller
+ * deciding access with it reads it with `{ onUnavailable: 'throw' }`.
+ */
 export { getFeatureTiersByHref };
