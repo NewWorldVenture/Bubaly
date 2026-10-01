@@ -1,0 +1,15 @@
+import { chromium } from 'playwright';
+const [base, path, state, width, triggerName] = process.argv.slice(2);
+const browser = await chromium.launch({ executablePath: process.env.PAGE_AUDIT_CHROMIUM });
+const page = await (await browser.newContext({ storageState: state, viewport: { width: Number(width), height: 900 } })).newPage();
+await page.goto(base + path, { waitUntil: 'domcontentloaded' });
+await page.waitForLoadState('networkidle', { timeout: 8_000 }).catch(() => {});
+const handle = await page.getByRole('button', { name: triggerName, exact: true }).first().elementHandle();
+await handle.focus();
+await page.keyboard.press('Enter'); await page.waitForTimeout(500);
+const whileOpen = await handle.evaluate(el => ({ connected: el.isConnected, inertAncestor: !!el.closest('[inert]'), ariaHiddenAncestor: !!el.closest('[aria-hidden="true"]') }));
+await page.keyboard.press('Escape'); await page.waitForTimeout(500);
+const afterClose = await handle.evaluate(el => ({ connected: el.isConnected, inertAncestor: !!el.closest('[inert]'), sameNodeStillInDom: document.contains(el), focusedIsThisNode: document.activeElement === el, activeTag: document.activeElement?.tagName }));
+const replacement = await page.getByRole('button', { name: triggerName, exact: true }).first().evaluate((el, old) => el === old, handle).catch(() => null);
+console.log(JSON.stringify({ path, width: Number(width), trigger: triggerName, whileOpen, afterClose, triggerIsSameNodeAfterClose: replacement }));
+await browser.close();

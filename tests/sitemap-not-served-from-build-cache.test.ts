@@ -43,16 +43,26 @@ describe('the sitemap cannot be served from a stale build cache', () => {
     // A catch-all around the read would turn "this route cannot be static" into
     // an empty article list and let Next prerender and ship that.
     expect(POSTS).toMatch(/import \{ unstable_rethrow \} from 'next\/navigation'/);
-    for (const fn of ['getAllPosts', 'getAllPostRefs']) {
+    const body = (fn: string) => {
       const start = POSTS.indexOf(`export async function ${fn}(`);
       expect(start, `${fn} should exist`).toBeGreaterThan(-1);
       const next = POSTS.indexOf('\nexport async function ', start + 1);
-      const source = POSTS.slice(start, next === -1 ? undefined : next);
+      return POSTS.slice(start, next === -1 ? undefined : next);
+    };
+    // readAllPosts reports a failed read as `{ ok: false }` (the search index
+    // needs to tell it apart from an empty blog); getAllPostRefs falls back to [].
+    for (const [fn, fallback] of [['readAllPosts', 'return { ok: false'], ['getAllPostRefs', 'return [];']] as const) {
+      const source = body(fn);
       expect(source, `${fn} catches`).toMatch(/catch \(error\)/);
       expect(source, `${fn} rethrows framework errors first`).toMatch(/unstable_rethrow\(error\)/);
       // The rethrow must come BEFORE the fallback, or it never runs.
-      expect(at(source, 'unstable_rethrow(error)')).toBeLessThan(at(source, 'return [];'));
+      expect(at(source, 'unstable_rethrow(error)')).toBeLessThan(at(source, fallback));
     }
+    // getAllPosts degrades only what readAllPosts reports as a failure, so the
+    // framework error has already been rethrown; it must not catch on its own.
+    const all = body('getAllPosts');
+    expect(all).toContain('await readAllPosts()');
+    expect(all).not.toMatch(/catch \(/);
   });
 
   it('asks only for the columns a sitemap entry is made of', () => {

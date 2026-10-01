@@ -121,11 +121,17 @@ export async function GET(req: NextRequest) {
       // matches 0 rows and skips, so an allowance can never be double-credited.
       // If crediting then fails, we restore the prior schedule below so the next
       // run retries without skipping pay.
+      //
+      // `is_active` is part of the claim for the same reason: the rules were
+      // read as active, but a parent's pause that commits after that read does
+      // not move `next_run_on`, and this run can reach a rule long after reading
+      // it. A paused rule now matches nothing here and is not paid.
       const { data: claimed, error: scheduleError } = await supabase
         .from('allowance_rules')
         .update({ next_run_on: next, last_run_on: today })
         .eq('id', rule.id)
         .eq('family_id', rule.family_id)
+        .eq('is_active', true)
         .lte('next_run_on', today)
         .select('id')
         .maybeSingle();
