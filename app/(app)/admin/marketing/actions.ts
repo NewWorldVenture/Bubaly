@@ -4,7 +4,7 @@ import { revalidatePath, revalidateTag } from 'next/cache';
 import { AEO_TAG } from '@/lib/marketing/aeo';
 import { redirect } from 'next/navigation';
 import { requireMarketingAdmin, logMarketingAudit, marketingActionFailure } from '@/lib/marketing/admin';
-import { archiveLegacyLandingOnPlatform, syncLegacyLandingToPlatform } from '@/lib/marketing/legacy-bridge';
+import { archiveLegacyLandingOnPlatform, retireLegacyLandingAliases, syncLegacyLandingToPlatform } from '@/lib/marketing/legacy-bridge';
 import type { SegmentRules, Lifecycle } from '@/lib/marketing/customers';
 import type { Json } from '@/lib/database.types';
 import { refuseInput } from '@/lib/actions/refusal';
@@ -590,8 +590,8 @@ export async function updateLandingPage(formData: FormData) {
   const { data: landing, error: landingError } = await supabase.from('marketing_landing_pages')
     .select('id, slug, title, headline, subhead, body, metadata, published')
     .eq('id', id).is('deleted_at', null).maybeSingle();
-  if (landingError) marketingActionFailure('load the landing page for synchronization', landingError);
-  if (landing) await syncLegacyLandingToPlatform(supabase, {
+  if (landingError || !landing) marketingActionFailure('load the landing page for synchronization', landingError ?? new Error('Landing page not found.'));
+  const synchronized = await syncLegacyLandingToPlatform(supabase, {
     id: landing.id,
     slug: landing.slug,
     title: landing.title,
@@ -603,10 +603,14 @@ export async function updateLandingPage(formData: FormData) {
     publishedAt: landing.published ? new Date().toISOString() : null,
     actorId,
   });
+  let retiredPaths: string[] = [];
+  if (synchronized.available) {
+    if (!synchronized.pageId) marketingActionFailure('synchronize the landing page', new Error('Landing page synchronization was not confirmed.'));
+    retiredPaths = await retireLegacyLandingAliases(supabase, { id: landing.id, slug: landing.slug, actorId });
+  }
   await logMarketingAudit(supabase, { actorId, actorEmail, action: 'update', resource: 'marketing_landing_page', resourceId: id, metadata: { slug } });
   revalidatePath('/admin/marketing/landing-pages');
-  revalidatePath(`/lp/${existing.slug}`);
-  revalidatePath(`/lp/${data.slug}`);
+  for (const path of new Set([`/lp/${existing.slug}`, `/lp/${data.slug}`, ...retiredPaths])) revalidatePath(path);
 }
 
 export async function archiveLandingPage(formData: FormData) {
