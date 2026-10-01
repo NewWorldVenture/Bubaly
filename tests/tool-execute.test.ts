@@ -802,6 +802,98 @@ describe('receipt tool binding', () => {
   });
 });
 
+describe('reservation attempt finalization', () => {
+  const KEY = 'one-action-across-worker-attempts';
+  const TOOL = 'calendar.createEvent';
+  const newerOutput = { ...EVENT_ROW, title: 'Newer result', when: '9:00 AM Sunday' };
+  const olderOutput = { ...EVENT_ROW, title: 'Older result', when: '9:00 AM Sunday' };
+  type Result = { ok: true; data: unknown } | { ok: false; error: string; retryable: boolean };
+
+  function deferred<T>() {
+    let resolve!: (value: T) => void;
+    const promise = new Promise<T>((done) => { resolve = done; });
+    return { promise, resolve };
+  }
+
+  beforeEach(() => {
+    vi.useFakeTimers({ toFake: ['Date'] });
+    vi.setSystemTime(NOW);
+  });
+  afterEach(() => {
+    vi.useRealTimers();
+    vi.restoreAllMocks();
+  });
+
+  for (const acquisition of ['insert', 'takeover'] as const) {
+    for (const newerState of ['succeeded', 'reserved'] as const) {
+      it.each(['success', 'service-failure', 'invalid-output'] as const)(
+        `an older ${acquisition} attempt cannot finalize %s over a newer ${newerState} attempt`,
+        async (path) => {
+          const family = makeFamilyDb({ domain: calendarDomain });
+          // A non-default attempt proves takeover captures the generation it
+          // actually acquired, rather than assuming every worker owns attempt 1.
+          const initialAttempt = acquisition === 'takeover' ? 7 : 0;
+          const ledger = makeLedger(acquisition === 'takeover' ? [{
+            id: 'call-existing', family_id: 'fam-1', idempotency_key: KEY,
+            tool_name: TOOL, state: 'failed', attempt: initialAttempt,
+            locked_at: NOW.toISOString(),
+          }] : []);
+          ledgerHolder.client = ledger.db;
+          const oldEntered = deferred<void>();
+          const newEntered = deferred<void>();
+          const oldRelease = deferred<Result>();
+          const newRelease = deferred<Result>();
+          const executions = vi.spyOn(getTool(TOOL)!, 'execute')
+            .mockImplementationOnce(async () => { oldEntered.resolve(); return oldRelease.promise; })
+            .mockImplementationOnce(async () => { newEntered.resolve(); return newRelease.promise; })
+            .mockResolvedValue({ ok: true, data: { ...newerOutput, title: 'Unexpected third execution' } });
+          const run = () => executeTool(scopeWith(family.db), TOOL, CREATE_EVENT_ARGS, { idempotencyKey: KEY });
+
+          const older = run();
+          await oldEntered.promise;
+          expect(ledger.rows[0]).toMatchObject({ state: 'reserved', attempt: initialAttempt + 1 });
+          // The old worker is still alive when its lease expires. The existing
+          // stale-retry policy permits a new generation to run; this test only
+          // requires each finalization to keep its acquired generation.
+          vi.setSystemTime(NOW.getTime() + 121_000);
+          const newer = run();
+          await newEntered.promise;
+          if (newerState === 'succeeded') {
+            newRelease.resolve({ ok: true, data: newerOutput });
+            expect(await newer).toMatchObject({ status: 'ok', data: { title: 'Newer result' } });
+          }
+          const newerReceipt = structuredClone(ledger.rows[0]);
+          expect(newerReceipt).toMatchObject({ state: newerState, attempt: initialAttempt + 2 });
+
+          oldRelease.resolve(path === 'service-failure'
+            ? { ok: false, error: 'Synthetic old-worker failure', retryable: true }
+            : { ok: true, data: path === 'success' ? olderOutput : { unexpected: 'output' } });
+          expect((await older).status).toBe(path === 'success' ? 'ok' : 'error');
+          try {
+            // Keep every part of the newer receipt, including its output and
+            // error. An old failure must not enable a third execution, and an
+            // old success must not publish a replay while newer work is running.
+            expect(ledger.rows[0]).toEqual(newerReceipt);
+            expect(await run()).toMatchObject(newerState === 'succeeded'
+              ? { status: 'ok', data: { title: 'Newer result' } }
+              : { status: 'error', retryable: true });
+            expect(executions).toHaveBeenCalledTimes(2);
+          } finally {
+            newRelease.resolve({ ok: true, data: newerOutput });
+            await newer;
+          }
+          expect(ledger.rows[0]).toMatchObject({
+            state: 'succeeded', attempt: initialAttempt + 2,
+            outputs: { result: { title: 'Newer result' } },
+          });
+          expect(await run()).toMatchObject({ status: 'ok', data: { title: 'Newer result' } });
+          expect(executions).toHaveBeenCalledTimes(2);
+        },
+      );
+    }
+  }
+});
+
 describe('skipTrust', () => {
   it('executes an already-approved step without opening a second approval', async () => {
     const family = makeFamilyDb({ domain: calendarDomain });
