@@ -26,7 +26,7 @@
 # turned back into DROP TRIGGER IF EXISTS + CREATE TRIGGER: on re-application
 # it must take ACCESS EXCLUSIVE.
 #
-# Safety (reviews 5373431112, 5374783683):
+# Safety (reviews 5373431112, 5374783683, 5374946166):
 #   * The target must be a disposable LOCAL cluster, checked before any psql
 #     runs. PGDATABASE, P0472_MAINTENANCE_DB and PGUSER must be plain names and
 #     PGPORT a number (psql -d would take a conninfo string or URI and connect
@@ -35,16 +35,21 @@
 #     caller must confirm with P0472_DISPOSABLE_CLUSTER=yes. Then the server
 #     must report a Unix-socket or loopback connection (inet_server_addr()).
 #   * It works only on databases it creates, each a copy of $PGDATABASE named
-#     p0472_<64 random bits>_<case>. The random part is what makes a name this
-#     run's: nobody else can have chosen it. It refuses a name that already
-#     exists, and never drops one whose CREATE said it already existed.
-#   * Each name is written to a run manifest BEFORE its CREATE is sent, so a
-#     run stopped between the server committing a CREATE and the shell hearing
-#     back still knows it. On any exit the shell can trap (not SIGKILL), it
-#     drops every name it attempted and has not dropped, and deletes the
-#     manifest only when none is left. After a SIGKILL, or a drop that failed,
-#     the manifest (printed at start, in $P0472_MANIFEST_DIR or $TMPDIR) names
-#     what to drop by hand.
+#     p0472_<64 random bits>_<case>, and refuses a name that already exists.
+#   * It drops only a database whose CREATE it saw succeed. Each name is
+#     written to a run manifest BEFORE its CREATE is sent ("attempted"), then
+#     marked by how the CREATE ended: "created" (this run's, dropped on any
+#     exit the shell can trap), "refused <SQLSTATE>" (the server answered with
+#     an error, so nothing was created; 42P04, duplicate_database, is
+#     recorded as "foreign" and never touched), or "uncertain" (no answer:
+#     connection lost, deadline, interrupted). An uncertain name is never
+#     dropped here: a database left behind in a disposable cluster is safer
+#     than one dropped on a guess. The answer is classified by SQLSTATE, not
+#     by its wording, which the server localizes.
+#   * The manifest (printed at start, in $P0472_MANIFEST_DIR or $TMPDIR) is
+#     deleted only when nothing is left that this run created or may have
+#     created. After a SIGKILL, a failed drop or an uncertain CREATE it names
+#     what to check and drop by hand.
 #   * Every wait is finite: connect_timeout, statement_timeout, lock_timeout
 #     and idle_in_transaction_session_timeout on every session, including the
 #     writer opened through dblink; timeout(1) with a hard --kill-after on
@@ -100,20 +105,24 @@ WORK=$(mktemp -d)
 MANIFEST="${P0472_MANIFEST_DIR:-${TMPDIR:-/tmp}}/p0472-race-$RUN.manifest"
 ( set -o noclobber; : > "$MANIFEST" ) 2>/dev/null || refuse "cannot start the run manifest at $MANIFEST"
 echo "run $RUN; manifest $MANIFEST"
-declare -A ATTEMPTED=() # names whose CREATE was sent and that are not yet dropped
+declare -A OWNED=()     # CREATE answered success: this run's, and dropped by it
+declare -A UNCERTAIN=() # CREATE sent with no clear answer: never dropped here
+declare -A FOREIGN=()   # CREATE answered 42P04: someone else's, never touched
 PIDS=()
 cleanup() {
   local pid db
   for pid in ${PIDS[@]+"${PIDS[@]}"}; do kill "$pid" 2>/dev/null; done
-  for db in "${!ATTEMPTED[@]}"; do
+  for db in "${!OWNED[@]}"; do
     if timeout --kill-after=5 30 psql -X -q -d "$MAINT_DB" -c "drop database if exists \"$db\" with (force)" >/dev/null 2>&1; then
-      echo "dropped $db" >> "$MANIFEST"; unset 'ATTEMPTED[$db]'
+      echo "dropped $db" >> "$MANIFEST"; unset 'OWNED[$db]'
     fi
   done
-  if [ "${#ATTEMPTED[@]}" -eq 0 ]; then
+  if [ "${#OWNED[@]}" -eq 0 ] && [ "${#UNCERTAIN[@]}" -eq 0 ] && [ "${#FOREIGN[@]}" -eq 0 ]; then
     rm -f "$MANIFEST"
   else
-    echo "WARNING: could not drop ${!ATTEMPTED[*]}, which this run created; drop by hand (see $MANIFEST)" >&2
+    [ "${#FOREIGN[@]}" -eq 0 ] || echo "WARNING: ${!FOREIGN[*]} already existed when this run created it; it was not touched (see $MANIFEST)" >&2
+    [ "${#OWNED[@]}" -eq 0 ] || echo "WARNING: could not drop ${!OWNED[*]}, which this run created; drop by hand (see $MANIFEST)" >&2
+    [ "${#UNCERTAIN[@]}" -eq 0 ] || echo "WARNING: the CREATE of ${!UNCERTAIN[*]} got no clear answer, so nothing was dropped; if it exists, make sure it is this run's before dropping it (see $MANIFEST)" >&2
   fi
   rm -rf "$WORK"
 }
@@ -127,19 +136,33 @@ new_db() { # <name>: a copy of $SRC_DB that this run owns; refuses an existing n
   if [ "$exists" != 0 ]; then echo "refusing: database $db already exists and is not this run's" >&2; return 1; fi
   # Recorded BEFORE the CREATE is sent: if this shell is stopped after the
   # server commits it but before the answer arrives, the name is still known.
+  # Until the answer says otherwise it is uncertain, and not this run's to drop.
   echo "attempted $db" >> "$MANIFEST" || return 1
-  ATTEMPTED[$db]=1
-  if ! err=$(q -d "$MAINT_DB" -q -c "create database \"$db\" template \"$SRC_DB\"" 2>&1); then
-    echo "$err" >&2
-    # Someone else's, however unlikely with a random name: never claim it.
-    if [[ $err == *"already exists"* ]]; then echo "foreign $db" >> "$MANIFEST"; unset 'ATTEMPTED[$db]'; fi
-    return 1
+  UNCERTAIN[$db]=1
+  local out rc state
+  out=$(q -d "$MAINT_DB" -q -v VERBOSITY=sqlstate -c "create database \"$db\" template \"$SRC_DB\"" 2>&1); rc=$?
+  if [ "$rc" -eq 0 ]; then
+    OWNED[$db]=1; unset 'UNCERTAIN[$db]'
+    echo "created $db" >> "$MANIFEST"
+    return 0
   fi
-  echo "created $db" >> "$MANIFEST"
+  echo "$out" >&2
+  # VERBOSITY=sqlstate makes a server error one line, "<SEVERITY>:  <SQLSTATE>",
+  # whatever language the server answers in. psql exits 1 for that; a lost
+  # connection is 2, a deadline 124 or 137, and none of those says what the
+  # server did.
+  state=$(grep -oE '^[^ ]+:  [0-9A-Z]{5}$' <<<"$out" | grep -oE '[0-9A-Z]{5}$' | head -1)
+  if [ "$rc" -eq 1 ] && [ -n "$state" ]; then
+    unset 'UNCERTAIN[$db]'
+    if [ "$state" = 42P04 ]; then FOREIGN[$db]=1; echo "foreign $db" >> "$MANIFEST"; else echo "refused $state $db" >> "$MANIFEST"; fi
+  else
+    echo "uncertain rc=$rc $db" >> "$MANIFEST"
+  fi
+  return 1
 }
-drop_db() { # <name>: only one this run attempted
-  [ -n "${ATTEMPTED[$1]:-}" ] || { echo "refusing to drop $1: not created by this run" >&2; return 1; }
-  q -d "$MAINT_DB" -q -c "drop database if exists \"$1\" with (force)" && { echo "dropped $1" >> "$MANIFEST"; unset 'ATTEMPTED[$1]'; }
+drop_db() { # <name>: only one whose CREATE this run saw succeed
+  [ -n "${OWNED[$1]:-}" ] || { echo "refusing to drop $1: not created by this run" >&2; return 1; }
+  q -d "$MAINT_DB" -q -c "drop database if exists \"$1\" with (force)" && { echo "dropped $1" >> "$MANIFEST"; unset 'OWNED[$1]'; }
 }
 pre_0472() { # <db>: the database as it stood before 0472
   q -d "$1" -q <<'SQL'
