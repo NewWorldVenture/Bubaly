@@ -1,4 +1,5 @@
 import { afterAll, afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
+import { at } from './helpers/source-order';
 
 // Install hard network barriers before importing any action or provider module.
 // These guards count ATTEMPTS, so a caught transport exception still fails.
@@ -154,7 +155,7 @@ describe('real Trust bridge and engine with sealed synthetic I/O', () => {
     expect(auditRows[0]).toMatchObject({ decision: 'allow', context: { basis: 'policy' } });
     expect(mock.cardholder).toHaveBeenCalledTimes(1); expect(mock.issue).toHaveBeenCalledTimes(1);
     expect(mock.audit).toHaveBeenCalledTimes(1); expect(mock.revalidate).toHaveBeenCalledExactlyOnceWith('/wallet');
-    expect(events.indexOf('trust-audit')).toBeLessThan(events.indexOf('cardholder'));
+    expect(at(events, 'trust-audit')).toBeLessThan(at(events, 'cardholder'));
   });
   it('deny control blocks issuance after the real policy decision', async () => {
     expect(await exercise('deny')).toEqual({ ok: false, error: 'translated:trust.blockedByHouseholdPolicy' });

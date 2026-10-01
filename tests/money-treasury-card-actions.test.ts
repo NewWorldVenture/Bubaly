@@ -1,4 +1,5 @@
 import { afterAll, afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
+import { at } from './helpers/source-order';
 
 // Install hard network barriers before importing any action or provider module.
 // These guards count ATTEMPTS, so a caught transport exception still fails.
@@ -139,7 +140,7 @@ describe('card policy admission controls', () => {
     });
     expect(mock.cardholder).toHaveBeenCalledTimes(1); expect(mock.issueCard).toHaveBeenCalledTimes(1);
     expect(mock.audit).toHaveBeenCalledTimes(1); expect(mock.revalidate).toHaveBeenCalledExactlyOnceWith('/wallet');
-    expect(mock.events.indexOf('trust')).toBeLessThan(mock.events.indexOf('cardholder'));
+    expect(at(mock.events, 'trust')).toBeLessThan(at(mock.events, 'cardholder'));
   });
 
   it.each(['parent', 'adult'] as const)('refuses explicit policy deny for %s without instruments/audit/refresh', async role => {
