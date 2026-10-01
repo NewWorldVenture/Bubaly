@@ -1,4 +1,5 @@
 import { readFileSync } from 'node:fs';
+import ts from 'typescript';
 import { describe, expect, it } from 'vitest';
 
 /**
@@ -39,6 +40,40 @@ const CLIENTS = [
 /** `start(async () => { await someAction(...) })` with no `run(` around it. */
 const BARE_AWAIT = /start\w*\(async \(\) => \{[^}]*await (?!run\()\w+Action\(/g;
 
+function bulkIssueFunction(source: string) {
+  const file = ts.createSourceFile('money-cards-view.tsx', source, ts.ScriptTarget.Latest, true, ts.ScriptKind.TSX);
+  const component = file.statements.find((node): node is ts.FunctionDeclaration =>
+    ts.isFunctionDeclaration(node) && node.name?.text === 'MoneyCardsView');
+  const bulk = component?.body?.statements.find((node): node is ts.FunctionDeclaration =>
+    ts.isFunctionDeclaration(node) && node.name?.text === 'issueAllVirtual');
+  if (!bulk?.body) throw new Error('Missing MoneyCardsView.issueAllVirtual body');
+  return { file, bulk, body: bulk.body };
+}
+
+function expectBulkIssueContract(source: string) {
+  const { file, bulk, body } = bulkIssueFunction(source);
+  const claim = body.statements.flatMap(node => ts.isVariableStatement(node) ? [...node.declarationList.declarations] : [])
+    .find(node => node.initializer && ts.isCallExpression(node.initializer)
+      && ts.isIdentifier(node.initializer.expression) && node.initializer.expression.text === 'claimPending');
+  const releaseName = claim && ts.isIdentifier(claim.name) ? claim.name.text : null;
+  expect(releaseName, 'bulk must acquire its own pending release').not.toBeNull();
+  const work = body.statements.find(ts.isTryStatement);
+  expect(work?.tryBlock.getText(file)).toMatch(/await issueCardAction\(/);
+  // Sibling handlers also release in finally. Only this loop's own cleanup
+  // counts; a comment, deferred callback, or release on the success path does not.
+  expect(work?.finallyBlock?.statements.some(node => ts.isExpressionStatement(node)
+    && ts.isCallExpression(node.expression) && ts.isIdentifier(node.expression.expression)
+    && node.expression.expression.text === releaseName && node.expression.arguments.length === 0),
+  'bulk must invoke its claimed release directly in finally').toBe(true);
+
+  const code = bulk.getText(file);
+  // The count actually issued, not the count intended; singular and plural.
+  expect(code).toMatch(/if \(issued > 0\) \{\s*success\(issued === 1[\s\S]{0,160}\{ count: issued \}/);
+  expect(work?.tryBlock.getText(file)).toMatch(/if \(!res.ok\) failures.push\(res.error \|\| t\('globalError.somethingWentWrong'\)\);\s*else issued \+= 1;/);
+  expect(work?.catchClause?.getText(file)).toContain("failures.push(err instanceof Error && err.message ? err.message : t('globalError.somethingWentWrong'))");
+  expect(code).toContain('if (failures.length > 0) toastError(failures[0]);');
+}
+
 describe('a thrown server action is reported to the person who caused it', () => {
   for (const file of CLIENTS) {
     const source = readFileSync(file, 'utf8');
@@ -65,11 +100,26 @@ describe('a thrown server action is reported to the person who caused it', () =>
     // money-cards-view counted the children it MEANT to issue for, then threw
     // part-way and told nobody; the toast still named the full number.
     const cards = readFileSync('components/wallet/money-cards-view.tsx', 'utf8');
-    // The count actually issued, not the count intended — now through the
-    // catalogue (I18N-002), singular and plural.
-    expect(cards).toMatch(/if \(issued > 0\) \{\s*success\(issued === 1[\s\S]{0,160}\{ count: issued \}/);
-    expect(cards).toMatch(/finally \{\s*\n\s*setBusy\(null\);/);
+    expectBulkIssueContract(cards);
   });
+
+  for (const [name, replacement] of [
+    ['absent cleanup', 'finally {}'],
+    ['cleanup after finally', 'finally {}\n    release();'],
+    ['comment-only cleanup', 'finally { /* release(); */ }'],
+    ['uncalled cleanup callback', 'finally { const cleanup = () => release(); }'],
+  ]) {
+    it(`rejects bulk ${name} even while sibling handlers still release`, () => {
+      const cards = readFileSync('components/wallet/money-cards-view.tsx', 'utf8');
+      const { file, bulk } = bulkIssueFunction(cards);
+      const original = bulk.getText(file);
+      const changed = original.replace(/finally \{\s*release\(\);\s*\}/, replacement);
+      expect(changed).not.toBe(original);
+      const mutant = cards.slice(0, bulk.getStart(file)) + changed + cards.slice(bulk.end);
+      expect(mutant).toMatch(/finally \{\s*release\(\);\s*\}/);
+      expect(() => expectBulkIssueContract(mutant)).toThrow('bulk must invoke its claimed release directly in finally');
+    });
+  }
 
   it('falls back to a message that exists in every locale', () => {
     const helper = readFileSync('components/ui/action-error.tsx', 'utf8');
