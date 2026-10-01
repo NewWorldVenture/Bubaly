@@ -35,7 +35,7 @@ export function clampSpendLimitCents(v: unknown): number | null {
   if (v === null || v === undefined || v === '') return null;
   const n = typeof v === 'number' ? v : Number(v);
   if (!Number.isFinite(n) || n <= 0) return null;
-  return Math.min(Math.round(n), MAX_SPEND_LIMIT_CENTS);
+  return Math.min(Math.max(1, Math.round(n)), MAX_SPEND_LIMIT_CENTS);
 }
 
 /**
