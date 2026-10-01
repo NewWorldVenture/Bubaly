@@ -169,7 +169,8 @@ export function PaperworkModule({ items }: { items: Item[] }) {
         {/* A save closes the composer around the focused submit; hand focus to
             the toggle that opened it rather than letting it fall to <body> —
             but only while that composer still holds it, so a late save never
-            pulls focus from wherever the reader has gone since. */}
+            pulls focus from wherever the reader has gone since. A save from a
+            composer already closed does neither: it must not close a new one. */}
         <Composer onDone={(ownsFocus) => { setComposerOpen(false); if (ownsFocus) composerToggle.current?.focus(); }} />
       </div>}
 
@@ -360,41 +361,49 @@ function Composer({ onDone }: { onDone: (ownsFocus: boolean) => void }) {
     const active = document.activeElement;
     return !!form.current?.isConnected && (!active || active === document.body || form.current.contains(active));
   };
+  // A save closes only the composer that sent it, never one opened since.
+  const saved = () => { if (form.current?.isConnected) onDone(ownsFocus()); };
 
   return (
     <form
       ref={form}
       onSubmit={(e) => {
-        if (submitting.current) { e.preventDefault(); return; }
+        // Submitted here rather than through `action`: React resets a form's
+        // fields when its action settles, refused or not, which wiped a pasted
+        // letter the server had just refused. The composer closes on success,
+        // so what was typed only stays when there is a reason to keep it.
+        e.preventDefault();
+        if (submitting.current) return;
         // Native `required` accepts a paste of only spaces, which the action
         // trims to nothing and answers ok without saving. Treat it as the empty
         // paste it is, so the browser refuses it the same way.
         const field = e.currentTarget.elements.namedItem('text');
         if (field instanceof HTMLTextAreaElement && !field.value.trim()) {
-          e.preventDefault();
           field.value = '';
           field.reportValidity();
+          return;
         }
+        const fd = new FormData(e.currentTarget);
+        startTransition(async () => {
+          submitting.current = true;
+          // A throw here used to leave the form open with nothing said; a
+          // step-up refusal is answered, not thrown, and goes to the code page.
+          // Production redacts a thrown action's message, so it is read with
+          // refusalForThrown, as useActionError does.
+          try {
+            const res = await addPaperworkAction(fd);
+            if (!res.ok) { reportRefusal(res, toastError); return; }
+            saved();
+          }
+          catch (err) {
+            const refusal = refusalForThrown(err, process.env.NODE_ENV === 'production');
+            toastError(refusal
+              ? t(`actionRefusal.${refusal}`)
+              : err instanceof Error && err.message ? err.message : t('globalError.somethingWentWrong'));
+          }
+          finally { submitting.current = false; }
+        });
       }}
-      action={(fd) => startTransition(async () => {
-        submitting.current = true;
-        // A throw here used to leave the form open with nothing said; a
-        // step-up refusal is answered, not thrown, and goes to the code page.
-        // Production redacts a thrown action's message, so it is read with
-        // refusalForThrown, as useActionError does.
-        try {
-          const res = await addPaperworkAction(fd);
-          if (!res.ok) { reportRefusal(res, toastError); return; }
-          onDone(ownsFocus());
-        }
-        catch (err) {
-          const refusal = refusalForThrown(err, process.env.NODE_ENV === 'production');
-          toastError(refusal
-            ? t(`actionRefusal.${refusal}`)
-            : err instanceof Error && err.message ? err.message : t('globalError.somethingWentWrong'));
-        }
-        finally { submitting.current = false; }
-      })}
       className="mt-4 rounded-2xl border border-brand/30 bg-brand/[0.05] p-4"
     >
       <label htmlFor="pw-text" className="text-xs font-bold uppercase tracking-wide text-muted">

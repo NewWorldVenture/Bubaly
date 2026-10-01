@@ -275,6 +275,45 @@ test.describe('form errors: what an invalid, refused and recovered submit expose
         await expect(elsewhere).toBeFocused();
       });
 
+      test('paperwork: a paste the server refuses is kept, with the sender', async ({ page }) => {
+        // A real refusal, not a stubbed response: a paste over the server
+        // action body limit (1 MB by default) is refused by the framework.
+        // <form action> used to reset its fields as the action settled, so
+        // the pasted letter and its sender were wiped along with the refusal.
+        const { text, sender, submit } = await openComposer(page);
+        const letter = 'Permission slip: please sign and return by Friday. '.repeat(24_000);
+        await text.fill(letter);
+        await sender.fill('Riverside Elementary');
+        await submit.click();
+        await expect(alertsReading(page, COPY.notSaved)).toHaveCount(1);
+        await expect(text).toBeVisible();
+        expect((await text.inputValue()).length).toBe(letter.length);
+        await expect(sender).toHaveValue('Riverside Elementary');
+      });
+
+      test('paperwork: a save from a closed composer does not close the one opened since', async ({ page }) => {
+        const { text, submit } = await openComposer(page);
+        let release!: () => void;
+        const held = new Promise<void>((resolve) => { release = resolve; });
+        await page.route('**/dashboard/paperwork', async (route) => {
+          if (route.request().method() === 'POST' && route.request().headers()['next-action']) await held;
+          await route.continue();
+        });
+        await text.fill(PAPER);
+        await submit.click();
+        await page.getByRole('button', { name: 'Close' }).click();
+        await expect(text).toBeHidden();
+        await page.getByRole('button', { name: 'Add paperwork' }).click();
+        await expect(text).toBeVisible();
+        await text.fill('A second letter, still being written.');
+        const answered = page.waitForResponse((r) => r.request().method() === 'POST' && !!r.request().headers()['next-action']);
+        release();
+        await answered;
+        await page.waitForLoadState('networkidle');
+        await expect(text).toBeVisible();
+        await expect(text).toHaveValue('A second letter, still being written.');
+      });
+
       test('paperwork: a whitespace-only paste is not closed as if it were done', async ({ page }) => {
         // Was: native `required` accepted spaces, the action trimmed them to
         // nothing and answered ok without saving, and the composer closed with
