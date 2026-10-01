@@ -48,32 +48,49 @@ function isCaseStudyRow(value: unknown): boolean {
     && (row.verified_at === undefined || row.verified_at === null || typeof row.verified_at === 'string');
 }
 
-export const getPublishedTestimonials = unstable_cache(
-  async (): Promise<PublicTestimonial[]> => {
-    try {
-      const { data, error } = await createServiceClient()
-        .from('testimonials')
-        .select('id, author_name, author_role, company, quote, rating, is_published, sort_order')
-        .eq('is_published', true)
-        .order('sort_order')
-        .limit(TESTIMONIAL_LIMIT);
-      if (error) throw error;
-      return publishedOnly(data ?? []).map((row) => ({
-        id: row.id,
-        authorName: row.author_name,
-        authorRole: row.author_role,
-        company: row.company,
-        quote: row.quote,
-        rating: clampRating(row.rating),
-      }));
-    } catch (err) {
-      console.error('[marketing-reputation] testimonials read failed', err);
-      return [];
-    }
-  },
-  ['public-testimonials'],
+function isTestimonialRow(value: unknown): boolean {
+  if (!value || typeof value !== 'object' || Array.isArray(value)) return false;
+  const row = value as Record<string, unknown>;
+  return ['id', 'author_name', 'quote'].every(key => typeof row[key] === 'string')
+    && ['author_role', 'company'].every(key => row[key] === null || typeof row[key] === 'string')
+    && typeof row.is_published === 'boolean'
+    && typeof row.sort_order === 'number' && Number.isFinite(row.sort_order)
+    && (row.rating === null || (typeof row.rating === 'number' && Number.isFinite(row.rating)));
+}
+
+const cachedPublishedTestimonials = unstable_cache(
+  (): Promise<PublicTestimonial[]> => withPublicReadBudget(async (signal) => {
+    const { data, error } = await createServiceClient()
+      .from('testimonials')
+      .select('id, author_name, author_role, company, quote, rating, is_published, sort_order')
+      .eq('is_published', true)
+      .order('sort_order')
+      .limit(TESTIMONIAL_LIMIT)
+      .abortSignal(signal);
+    if (error) throw error;
+    if (!Array.isArray(data) || !data.every(isTestimonialRow)) throw new Error('Invalid published testimonials response');
+    return publishedOnly(data).map((row) => ({
+      id: row.id,
+      authorName: row.author_name,
+      authorRole: row.author_role,
+      company: row.company,
+      quote: row.quote,
+      rating: clampRating(row.rating),
+    }));
+  }),
+  ['public-testimonials-validated-v2'],
   { revalidate: 3600 },
 );
+
+/** Keep transient failures outside the cache, preserving last-good quotes. */
+export async function getPublishedTestimonials(): Promise<PublicTestimonial[]> {
+  try {
+    return await cachedPublishedTestimonials();
+  } catch (err) {
+    console.error('[marketing-reputation] testimonials read failed', err);
+    return [];
+  }
+}
 
 const cachedPublishedCaseStudies = unstable_cache(
   (): Promise<PublicCaseStudy[]> => withPublicReadBudget(async (signal) => {
