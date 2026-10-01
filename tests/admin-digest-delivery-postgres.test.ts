@@ -221,6 +221,57 @@ describe.skipIf(!pgFixtureEnabled)('0471 + 0474 on PostgreSQL (disposable databa
     });
   });
 
+  describe('0474 matching does not depend on the database collation (review 5373785714)', () => {
+    // PostgreSQL's lower() follows the collation. Under libc C.UTF-8 (this cluster's default) and ICU
+    // tr-TR it turns U+0130 into a plain "i"; under ICU und it gives "i" + U+0307, as JavaScript does.
+    // Each case runs the migrations in a database with that collation, records the settings, and shows:
+    // the removed plain-i admin is withdrawn with zero provider calls while ASCII-case, Unicode-whitespace
+    // and non-ASCII identities are admitted; and the old lower() predicate would have admitted the
+    // removed admin exactly where the collation folds U+0130 to "i".
+    const COLLATIONS = [
+      { label: 'libc C.UTF-8', create: `template template0 encoding 'UTF8' locale_provider libc locale 'C.UTF-8'`, provider: 'c', icu: '', lowerDottedI: '69' },
+      { label: 'ICU und', create: `template template0 encoding 'UTF8' locale_provider icu icu_locale 'und' locale 'C.UTF-8'`, provider: 'i', icu: 'und', lowerDottedI: '69cc87' },
+      { label: 'ICU tr-TR', create: `template template0 encoding 'UTF8' locale_provider icu icu_locale 'tr-TR' locale 'C.UTF-8'`, provider: 'i', icu: 'tr-TR', lowerDottedI: '69' },
+    ] as const;
+    const JOSE = 'jos\u00e9@example.test';
+    const TABLE = ['adm\u0130n-one@example.test', ' ADMIN-TWO@Example.TEST\u3000', JOSE]; // not admin-one; admin-two by ASCII case; jose as stored
+    const sql0474 = readFileSync('supabase/migrations/0474_a_removed_admin_is_not_sent_the_digest.sql', 'utf8');
+    /** The begin_send 0474 shipped before this review: the same function with lower() in the match. */
+    const lowerPredicate = () => {
+      const fn = sql0474.match(/create or replace function public\.admin_digest_begin_send\([\s\S]*?\nend \$\$;\n/)![0];
+      const old = fn.replace("convert_to(translate(regexp_replace(s.email,", "convert_to(lower(regexp_replace(s.email,")
+        .replace("'', 'g'), 'ABCDEFGHIJKLMNOPQRSTUVWXYZ', 'abcdefghijklmnopqrstuvwxyz'), 'UTF8')", "'', 'g')), 'UTF8')");
+      expect(old).not.toBe(fn);
+      return old;
+    };
+
+    it.each(COLLATIONS)('$label', async (c) => {
+      const db = await createPgFixture({ createOptions: c.create });
+      try {
+        // The settings this case ran under, and what lower() does to U+0130 there.
+        expect(await db.sql(`select datlocprovider::text || '|' || datcollate || '|' || datctype || '|' || coalesce(daticulocale, '') || '|' || encode(convert_to(lower(U&'\\0130'), 'UTF8'), 'hex')
+          from pg_database where datname = current_database();`)).toBe(`${c.provider}|C.UTF-8|C.UTF-8|${c.icu}|${c.lowerDottedI}`);
+        const clock = new FakeClock(T0);
+        const provider = new FakeResendProvider(clock.now);
+        const run = (occurrenceId: string) => deliverDigestOccurrence(contractPlan({ occurrenceId, recipients: [ONE, TWO, JOSE] }), {
+          store: createPostgresDigestDeliveryStore(db.rpc(clock.now)), provider, owner: 'w', config: CONFIG, now: clock.now,
+          eligibility: { allowlisted: () => false },
+        });
+        await db.setAdmins(TABLE);
+        const fixed = await run('admin-digest:2026-09-30T12:30:00.000Z');
+        expect(fixed.statuses).toEqual({ [K1]: 'withdrawn', [recipientKeyOf(TWO)]: 'accepted', [recipientKeyOf(JOSE)]: 'accepted' });
+        expect(provider.requests.filter((q) => q.to === ONE)).toEqual([]);
+        // Counterfactual, on this throwaway database only: the lower() predicate.
+        await db.sql(lowerPredicate());
+        const old = await run('admin-digest:2026-10-01T12:30:00.000Z');
+        expect(old.statuses![K1]).toBe(c.lowerDottedI === '69' ? 'accepted' : 'withdrawn');
+        expect(provider.requests.filter((q) => q.to === ONE)).toHaveLength(c.lowerDottedI === '69' ? 1 : 0);
+      } finally {
+        await db.drop();
+      }
+    }, 60_000);
+  });
+
   describe('0474 in the database itself: eligibility read after the row lock', () => {
     const setup = async () => {
       const clock = new FakeClock(T0);

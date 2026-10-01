@@ -373,6 +373,40 @@ export function describeDigestDeliveryStoreContract(label: string, make: (clock:
         expect(answerOf(await store.beginSend(id, key, a.row.fence, CONTRACT_BEGIN, TABLE_ONLY))).toBe('withdrawn');
       });
 
+      // Review 5373785714: PostgreSQL's lower() follows the database collation (libc C.UTF-8 and ICU
+      // tr-TR turn U+0130 into a plain "i"); JavaScript's toLowerCase() turns it into "i" + U+0307. A
+      // table row must never stand in for a different, removed admin, so the match lowercases ASCII
+      // only: an address that differs in non-ASCII case does not match (fail closed, withdrawn).
+      it('a capital dotted I is not a plain i: another table row cannot admit the removed admin', async () => {
+        const { store, id, key } = await setup();
+        await admins().set(['adm\u0130n-one@example.test', 'ADM\u0130N-ONE@EXAMPLE.TEST']);
+        const a = await store.claim(id, key, 'a', CONTRACT_POLICY);
+        if (!a.claimed) throw new Error('setup');
+        expect(answerOf(await store.beginSend(id, key, a.row.fence, CONTRACT_BEGIN, TABLE_ONLY))).toBe('withdrawn');
+      });
+
+      it('a non-ASCII address matches on its own identity: ASCII case and whitespace are forgiven, non-ASCII case is not', async () => {
+        const clock = new FakeClock(start);
+        const store = make(clock);
+        const frozen = freezePlan(contractPlan({ recipients: ['jos\u00e9@example.test', 'm\u00fcller@example.test', '\u00e5sa@example.test'] }), clock.now());
+        await store.freeze(frozen.occurrence, frozen.deliveries);
+        const id = frozen.occurrence.occurrenceId;
+        await admins().set([
+          'jos\u00e9@example.test', // the same identity, as stored
+          ' M\u00fcLLER@Example.TEST\u3000', // ASCII case and Unicode whitespace only
+          '\u00c5SA@example.test', // differs in non-ASCII case: equivalence is not proved, so no match
+        ]);
+        const answer = async (address: string) => {
+          const k = recipientKeyOf(address);
+          const c = await store.claim(id, k, 'a', CONTRACT_POLICY);
+          if (!c.claimed) throw new Error('setup');
+          return answerOf(await store.beginSend(id, k, c.row.fence, CONTRACT_BEGIN, TABLE_ONLY));
+        };
+        expect(await answer('jos\u00e9@example.test')).toBe('ok');
+        expect(await answer('m\u00fcller@example.test')).toBe('ok');
+        expect(await answer('\u00e5sa@example.test')).toBe('withdrawn');
+      });
+
       it('a stale claimant cannot withdraw: it is fenced out, and the live claim decides', async () => {
         const { clock, store, id, key } = await setup();
         const a = await store.claim(id, key, 'a', CONTRACT_POLICY);

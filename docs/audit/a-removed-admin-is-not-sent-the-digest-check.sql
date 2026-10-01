@@ -7,7 +7,10 @@
 --            is withdrawn under the live fence: terminal, with its bytes, key, attempts,
 --            anchor and ambiguity kept. No later claim, mark or completion can use the
 --            row, and not even the table owner can reopen it. A super_admins row matches
---            on the address trimmed (ASCII and Unicode whitespace) and lowercased.
+--            on the address trimmed (ASCII and Unicode whitespace) with ASCII letters
+--            lowercased, whatever the collation: a capital dotted I (U+0130), which
+--            lower() turns into a plain "i" under libc C.UTF-8, does not stand in for a
+--            removed plain-i admin.
 --            p_allowlisted admits whatever the table holds; a NULL p_allowlisted is bad
 --            input. A stale fence is refused before eligibility is read, so a stale worker
 --            cannot withdraw. An unreadable super_admins fails the call and writes nothing.
@@ -48,7 +51,8 @@ $$;
 -- are already there are left alone: every address below is the probe's own.
 insert into public.super_admins (email) values
   (E' Probe-Listed@Example.TEST\t'),
-  (U&'\00A0\FEFFPROBE-NBSP@example.test\3000');
+  (U&'\00A0\FEFFPROBE-NBSP@example.test\3000'),
+  (U&'probe-dotted-\0130@example.test');  -- not probe-dotted-i@: that admin was removed
 
 do $probe$
 declare
@@ -60,6 +64,7 @@ declare
   amb     jsonb := pg_temp.delivery(occ, 'probe-ambiguous@example.test');
   sick    jsonb := pg_temp.delivery(occ, 'probe-unreadable@example.test');
   stale   jsonb := pg_temp.delivery(occ, 'probe-stale@example.test');
+  dotted  jsonb := pg_temp.delivery(occ, 'probe-dotted-i@example.test');
   every   jsonb;
   ret     bigint := 86400000;
   mar     bigint := 3600000;
@@ -73,7 +78,7 @@ declare
   failures int := 0;
 begin
   perform set_config('admin_digest.test_now', pin::text, true);
-  every := jsonb_build_array(gone, listed, nbsp, conf, amb, sick, stale);
+  every := jsonb_build_array(gone, listed, nbsp, conf, amb, sick, stale, dotted);
 
   -- ── shape ────────────────────────────────────────────────────────────────
   if (select count(*) from pg_proc where proname = 'admin_digest_begin_send' and pronamespace = 'public'::regnamespace) <> 1
@@ -125,6 +130,15 @@ begin
     res := public.admin_digest_begin_send(occ, txt, 1, 150, ret, mar, false);
     if res ->> 'answer' is distinct from 'ok' then raise warning 'a super_admins row did not admit its normalised address: %', res; failures := failures + 1; end if;
   end loop;
+
+  -- ── a capital dotted I is not a plain i, whatever lower() does here ────────
+  res := public.admin_digest_claim(occ, dotted ->> 'recipientKey', 'a', 300000, 3, ret, mar);
+  res := public.admin_digest_begin_send(occ, dotted ->> 'recipientKey', 1, 150, ret, mar, false);
+  if res ->> 'answer' is distinct from 'withdrawn' then
+    raise warning 'a U+0130 row admitted the removed plain-i admin (lower(U+0130) is % here): %',
+      encode(convert_to(lower(U&'\0130'), 'UTF8'), 'hex'), res;
+    failures := failures + 1;
+  end if;
 
   -- ── on the allowlist, not in the table: admitted ───────────────────────────
   res := public.admin_digest_claim(occ, conf ->> 'recipientKey', 'a', 300000, 3, ret, mar);
@@ -189,7 +203,7 @@ begin
   if failures > 0 then
     raise exception 'the admin digest store does not withdraw as 0474 promises: % finding(s)', failures;
   end if;
-  raise notice 'OK: only the seven-argument begin_send exists and anon and authenticated cannot call it; a recipient on neither the allowlist nor super_admins is withdrawn under the live fence and never claimed, marked, completed or reopened again; a super_admins row admits its trimmed, lowercased address; the allowlist admits on its own; withdrawal keeps ambiguity; an unreadable super_admins writes nothing; a stale claimant cannot withdraw.';
+  raise notice 'OK: only the seven-argument begin_send exists and anon and authenticated cannot call it; a recipient on neither the allowlist nor super_admins is withdrawn under the live fence and never claimed, marked, completed or reopened again; a super_admins row admits its trimmed, ASCII-lowercased address and a U+0130 row does not stand in for a removed plain-i admin; the allowlist admits on its own; withdrawal keeps ambiguity; an unreadable super_admins writes nothing; a stale claimant cannot withdraw.';
 end
 $probe$;
 

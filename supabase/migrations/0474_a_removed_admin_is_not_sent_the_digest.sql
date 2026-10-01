@@ -9,7 +9,9 @@
 --   - the caller passes p_allowlisted (the code/config half, which only the
 --     application can see);
 --   - the function reads public.super_admins itself, AFTER the row lock, so a
---     removal committed before the admission is always seen;
+--     removal committed before the admission is always seen. A table address
+--     matches on trim plus ASCII-only lowercasing, independent of collation; one
+--     that differs from the recipient only in non-ASCII case does not match;
 --   - a recipient in neither is WITHDRAWN: the row becomes the terminal status
 --     'withdrawn' under the current fence, and nothing is dispatched. Its
 --     bytes, key, attempts, retention anchor and ambiguity are kept, so an
@@ -180,14 +182,20 @@ begin
   v_now := public.admin_digest_now();
   -- Eligibility, read after the lock: the allowlist half from the caller, super_admins from here.
   -- The table is read on every admission, allowlisted or not, so an unreadable table always fails
-  -- the call. An address is normalised as the engine normalises it before hashing: trimmed of what
-  -- JavaScript's String.prototype.trim removes, then lowercased. An address the two normalise
-  -- differently (non-ASCII case) does not match, so it is withdrawn, never sent: the safe side.
+  -- the call.
+  -- A table address matches the frozen recipient only if, trimmed of what JavaScript's
+  -- String.prototype.trim removes and with ASCII A-Z lowercased, its hash is the recipient key (the
+  -- engine's trim().toLowerCase() identity). Only ASCII is lowercased, on purpose: lower() follows
+  -- the database collation (libc C.UTF-8 and ICU tr-TR turn U+0130 into a plain "i"), so it could
+  -- let one table row stand in for a different, removed admin. With ASCII-only folding a match
+  -- implies the engine's identity matches; an address that differs only in non-ASCII case cannot
+  -- be proved equal, does not match, and is withdrawn: the safe side.
+  -- (lib/admin/digest-delivery.ts superAdminTableKey is this rule in TypeScript.)
   v_listed := exists (
     select 1 from public.super_admins s
-     where encode(sha256(convert_to(lower(regexp_replace(s.email,
+     where encode(sha256(convert_to(translate(regexp_replace(s.email,
              '^[\t\n\v\f\r \u00a0\u1680\u2000-\u200a\u2028\u2029\u202f\u205f\u3000\ufeff]+|[\t\n\v\f\r \u00a0\u1680\u2000-\u200a\u2028\u2029\u202f\u205f\u3000\ufeff]+$',
-             '', 'g')), 'UTF8')), 'hex') = r.recipient_key);
+             '', 'g'), 'ABCDEFGHIJKLMNOPQRSTUVWXYZ', 'abcdefghijklmnopqrstuvwxyz'), 'UTF8')), 'hex') = r.recipient_key);
   if not (p_allowlisted or v_listed) then
     update public.admin_digest_deliveries set
       status = 'withdrawn', lease_owner = null, lease_expires_at = null, send_started_at = null,

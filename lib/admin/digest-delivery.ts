@@ -381,6 +381,14 @@ const sha256 = (s: string) => createHash('sha256').update(s, 'utf8').digest('hex
 
 export const normalizeRecipient = (address: string) => address.trim().toLowerCase();
 export const recipientKeyOf = (address: string) => sha256(normalizeRecipient(address));
+/**
+ * 0474's rule for matching a super_admins row to a frozen recipient key: trimmed as `trim()` trims, and
+ * ASCII A-Z lowercased, nothing else. Full Unicode lowercasing differs between JavaScript and the
+ * database collation (PostgreSQL's libc C.UTF-8 lowers U+0130 to "i"; JavaScript to "i" + U+0307), and
+ * could let one row stand in for a different, removed admin. With ASCII-only folding a match implies
+ * `recipientKeyOf` matches; a row that differs only in non-ASCII case does not match (fail closed).
+ */
+export const superAdminTableKey = (address: string) => sha256(address.trim().replace(/[A-Z]/g, (c) => c.toLowerCase()));
 
 /**
  * The stable key: a function of (occurrence, recipient) and nothing else, so no

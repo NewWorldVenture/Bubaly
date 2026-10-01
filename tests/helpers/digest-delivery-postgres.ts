@@ -92,9 +92,13 @@ export type PgFixture = {
   drop(): Promise<void>;
 };
 
-export async function createPgFixture(): Promise<PgFixture> {
+/**
+ * `createOptions`: extra `create database` options (for example a locale provider and locale), so a
+ * test can run the migrations under a chosen collation. The default is the cluster's.
+ */
+export async function createPgFixture(opts: { createOptions?: string } = {}): Promise<PgFixture> {
   const db = `digest_delivery_${process.pid}_${randomBytes(4).toString('hex')}`;
-  await psql('postgres', `create database ${db};`);
+  await psql('postgres', `create database ${db}${opts.createOptions ? ` ${opts.createOptions}` : ''};`);
   const sql = (text: string) => psql(db, text);
   await sql(`
     do $$ begin create role anon nologin; exception when duplicate_object then null; end $$;

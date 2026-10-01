@@ -11,7 +11,7 @@
 // reads time only through one function the local test harness can pin).
 import { createHash } from 'node:crypto';
 import {
-  decideBeginSend, decideClaim, decideCompletion, recipientKeyOf,
+  decideBeginSend, decideClaim, decideCompletion, superAdminTableKey,
   type Admission, type BeginSendPolicy, type ClaimPolicy, type ClaimRefusal, type DeliveryRow, type DigestDeliveryStore, type DigestEmailProvider,
   type FrozenOccurrence, type ProviderSendResult, type StoredOccurrence,
 } from '@/lib/admin/digest-delivery';
@@ -150,7 +150,7 @@ export class MemoryDigestDeliveryStore implements DigestDeliveryStore {
     const row = this.rows.get(k);
     const fenced = !row || row.status !== 'in_flight' || row.fence !== fence;
     // Like 0474: a live claim's admission always reads the table, so an unreadable one always fails it.
-    const listed = !fenced && [...this.superAdmins()].some((a) => recipientKeyOf(a) === recipientKey);
+    const listed = !fenced && [...this.superAdmins()].some((a) => superAdminTableKey(a) === recipientKey);
     const eligible = fenced || admission.allowlisted || listed;
     const d = row ? decideBeginSend(copy(row), fence, this.clock(), policy, eligible) : { ok: false as const, reason: 'fenced_out' as const, next: null };
     if (d.next) this.rows.set(k, copy(d.next));

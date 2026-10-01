@@ -14,7 +14,7 @@ import { createHash } from 'node:crypto';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import {
   MAX_PAYLOAD_JSON_CHARS, MAX_PROVIDER_MESSAGE_ID_CHARS, RESEND_KEY_RETENTION_MS, classifyResendResponse, decideCompletion,
-  deliverDigestOccurrence, freezePlan, idempotencyKeyFor, payloadJsonOf, recipientKeyOf, resumeDigestOccurrence,
+  deliverDigestOccurrence, freezePlan, idempotencyKeyFor, payloadJsonOf, recipientKeyOf, resumeDigestOccurrence, superAdminTableKey,
   type EngineConfig, type EngineDeps, type OccurrencePlan,
 } from '@/lib/admin/digest-delivery';
 import { sendEmail } from '@/lib/server/email';
@@ -527,6 +527,23 @@ describe('an admin removed after the freeze is withdrawn, not sent (eligibility 
   /** Nobody on the code/config allowlist: the store's super_admins table alone decides. */
   const tableOnly: EngineDeps['eligibility'] = { allowlisted: () => false };
   const toOne = (provider: { requests: { to: string }[] }) => provider.requests.filter((q) => q.to === ONE);
+
+  it('a table row matches a recipient only if the engine\'s own identity matches (review 5373785714)', () => {
+    // Characters whose lowercase forms differ between JavaScript and some collations, or that fold to ASCII.
+    const parts = ['i', 'I', '\u0130', '\u0131', 'k', 'K', '\u212a', 's', 'S', '\u017f', '\u00df', '\u1e9e', '\u00e5', '\u00c5', '\u212b', '\u03c3', '\u03a3', '\u03c2', '\ufb03'];
+    const addresses = parts.flatMap((a) => parts.map((b) => `${a}${b}@example.test`)).concat([' Admin@Example.TEST\u3000', 'admin@example.test']);
+    let matches = 0;
+    for (const table of addresses) {
+      for (const recipient of addresses) {
+        if (superAdminTableKey(table) !== recipientKeyOf(recipient)) continue;
+        matches += 1;
+        expect(recipientKeyOf(table), `${JSON.stringify(table)} vs ${JSON.stringify(recipient)}`).toBe(recipientKeyOf(recipient));
+      }
+    }
+    expect(matches).toBeGreaterThan(addresses.length / 2); // ASCII case and whitespace still match
+    expect(superAdminTableKey('adm\u0130n@example.test')).not.toBe(recipientKeyOf('admin@example.test')); // the review's counterexample
+    expect(superAdminTableKey('\u212aate@example.test')).not.toBe(recipientKeyOf('kate@example.test')); // Kelvin sign: JavaScript folds it to "k"; the table does not
+  });
 
   it('removed before the first send: withdrawn, nothing sent to them, the other delivered, and the occurrence settled', async () => {
     const { store, provider, engine, admins } = world();
