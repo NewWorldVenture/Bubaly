@@ -23,7 +23,7 @@ import { SkeletonList, EmptyState, ErrorState } from '@/components/ui/states';
 import { cn } from '@/lib/utils/cn';
 import type { Tables } from '@/lib/database.types';
 import {
-  buildMomentPrep, momentWhen as momentWhenIn, type PrepDomain, type PrepItem, type MomentCategory, type MomentDeparture, type MomentEvent,
+  buildMomentPrep, type PrepDomain, type PrepItem, type MomentCategory, type MomentDeparture, type MomentEvent,
 } from '@/lib/moments/prep';
 import { upcomingBirthdayEvents } from '@/lib/moments/birthdays';
 import { findOverlaps } from '@/lib/moments/conflicts';
@@ -35,6 +35,7 @@ import {
   removeMomentGroceryAction,
 } from '@/app/(app)/dashboard/moment-actions';
 import { useLocale, useTranslations } from '@/components/i18n/locale-provider';
+import { useMomentWhen } from '@/components/moments/use-moment-when';
 import { useFamilyClock } from '@/components/i18n/use-format';
 
 type Event = Tables<'calendar_events'>;
@@ -79,7 +80,7 @@ export function MomentsView({ departures, departuresFailed = false, savedTicks, 
   const locale = useLocale();
   // The family's clock and Today/Tomorrow (TIME-003).
   const clock = useFamilyClock();
-  const momentWhen = (startsAt: string, allDay: boolean) => momentWhenIn(startsAt, allDay, new Date(), locale.code, t, clock.timeZone);
+  const momentWhen = useMomentWhen();
   const router = useRouter();
   const { familyId, members } = useApp();
   const { success, error: toastError } = useToast();

@@ -15,7 +15,8 @@ import { useApp } from '@/components/app/app-context';
 import { useRealtimeQuery } from '@/lib/hooks/use-realtime-query';
 import { useToast } from '@/components/ui/toast';
 import type { Tables } from '@/lib/database.types';
-import { buildMomentPrep, momentWhen as momentWhenIn, type PrepDomain, type MomentEvent } from '@/lib/moments/prep';
+import { buildMomentPrep, type PrepDomain, type MomentEvent } from '@/lib/moments/prep';
+import { useMomentWhen } from '@/components/moments/use-moment-when';
 import { upcomingBirthdayEvents } from '@/lib/moments/birthdays';
 import { weatherAdvisory, dayKey } from '@/lib/moments/weather';
 import { reminderTimeFor } from '@/lib/moments/reminders';
@@ -42,7 +43,7 @@ export function HomeMomentCard() {
   const clock = useFamilyClock();
   const format = useFormat();
   // The date follows the reader and the words come from the catalogue.
-  const momentWhen = (startsAt: string, allDay: boolean) => momentWhenIn(startsAt, allDay, new Date(), locale.code, t, clock.timeZone);
+  const momentWhen = useMomentWhen();
   const t = useTranslations();
   const { familyId, members } = useApp();
   const { success, error: toastError } = useToast();
