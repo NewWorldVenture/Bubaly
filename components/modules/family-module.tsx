@@ -45,8 +45,9 @@ function roleBadge(role: MemberRole): { labelKey: string; cls: string; icon: typ
   if (role === 'adult' || role === 'caregiver') return { labelKey: 'familyModule.role.adult', cls: 'text-blue-400', icon: Shield };
   return { labelKey: 'familyModule.badge.kidAccount', cls: 'text-sky-400', icon: Shield };
 }
-function memberAge(birthday: string | null): number | null {
-  const age = ageOn(birthday, new Date());
+/** `today` is the family's calendar day (clock.calendarToday()), not the device's. */
+function memberAge(birthday: string | null, today: Date): number | null {
+  const age = ageOn(birthday, today);
   return age !== null && age >= 0 && age < 130 ? age : null;
 }
 function inLabel(days: number): string {
@@ -266,7 +267,7 @@ export function FamilyModule() {
             <div className="mt-4 grid grid-cols-2 gap-3 sm:grid-cols-3 lg:grid-cols-4 xl:grid-cols-6">
               {visibleMembers.map((m) => {
                 const badge = roleBadge(m.role);
-                const age = memberAge(m.birthday);
+                const age = memberAge(m.birthday, now);
                 return (
                   <div key={m.id} className="group relative flex flex-col items-center gap-1.5 rounded-2xl border border-border bg-surface/20 p-4 text-center">
                     {canManage && !isLastManager(m) && (

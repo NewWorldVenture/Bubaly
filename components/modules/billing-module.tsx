@@ -253,8 +253,8 @@ function categoryColor(cat: string): string {
 }
 
 /** Age in whole years from an ISO birthday, or null if unknown/invalid. */
-function memberAge(birthday: string | null): number | null {
-  const age = ageOn(birthday, new Date());
+function memberAge(birthday: string | null, today: Date): number | null {
+  const age = ageOn(birthday, today);
   return age !== null && age >= 0 && age < 130 ? age : null;
 }
 
@@ -761,7 +761,7 @@ export function BillingModule({ serviceFeeNotice = null }: { serviceFeeNotice?: 
   // bill due date below is parsed in (local midnight), so the month, the ringed
   // day and the due-date comparisons are all the family's. A date, not a time:
   // never stored, never turned into an instant.
-  const familyDay = clock.calendarToday();
+  const familyDay = useMemo(() => clock.calendarToday(), [clock]);
   const currentMonth = familyDay.getMonth();
   const currentYear = familyDay.getFullYear();
 
@@ -877,14 +877,14 @@ export function BillingModule({ serviceFeeNotice = null }: { serviceFeeNotice?: 
           uid,
           name: m?.display_name ?? 'Someone',
           color: m?.color ?? null,
-          age: memberAge(m?.birthday ?? null),
+          age: memberAge(m?.birthday ?? null, familyDay),
           isSelf: uid === userId,
           amount,
           pct: Math.round((amount / total) * 100),
         };
       })
       .sort((a, b) => b.amount - a.amount);
-  }, [currentMonthTransactions, members, userId]);
+  }, [currentMonthTransactions, members, userId, familyDay]);
 
   // Month-over-month expense delta → the "Money Tip" banner.
   const lastMonthExpenses = useMemo(() => {

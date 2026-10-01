@@ -348,6 +348,30 @@ describe('a dose shown on the family\'s day can be logged on it (#688 comment 59
   });
 });
 
+describe('ages and renewals count from the family\'s calendar day, not the device\'s', () => {
+  // ageOn and insuranceSummary read a Date's local date fields; a Date passed
+  // in from the device clock would give the phone's day, not the family's.
+  it.each([
+    ['components/modules/family-module.tsx', 'memberAge(m.birthday, now)'],
+    ['components/modules/billing-module.tsx', 'memberAge(m?.birthday ?? null, familyDay)'],
+    ['components/medical/print-sheet.tsx', 'ageFrom(member.birthday, clock.calendarToday())'],
+    ['components/modules/insurance-module.tsx', 'insuranceSummary(policies.data, today)'],
+  ])('%s', (file, call) => {
+    const src = readFileSync(join(__dirname, '..', file), 'utf8');
+    expect(src).toContain(call);
+    expect(src).not.toMatch(/(ageOn|insuranceSummary)\([^)]*new Date\(\)\)/);
+  });
+
+  it('a birthday turns over on the family\'s day: a Tokyo family, a Los Angeles phone', async () => {
+    const { ageOn } = await import('@/lib/utils/birthday');
+    onDevice('America/Los_Angeles');
+    const clock = clockFor('Asia/Tokyo');
+    const now = new Date('2026-10-01T01:00:00Z'); // 1 October in Tokyo, still 30 September in Los Angeles
+    expect(ageOn('2016-10-01', clock.calendarToday(now))).toBe(10);
+    expect(ageOn('2016-10-01', now)).toBe(9); // what the device's day gave
+  });
+});
+
 describe('the date-only helpers step calendar days, not 24-hour blocks', () => {
   // They now receive the family's day at its (device-local) midnight, where a
   // 24-hour step lands on the wrong date across the phone's DST change.

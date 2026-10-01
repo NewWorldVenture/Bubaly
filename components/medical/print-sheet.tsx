@@ -4,7 +4,7 @@ import { parseISO } from 'date-fns';
 import { Printer, X } from 'lucide-react';
 import type { Tables, RecordKind } from '@/lib/database.types';
 import { useTranslations } from '@/components/i18n/locale-provider';
-import { useFormat } from '@/components/i18n/use-format';
+import { useFamilyClock, useFormat } from '@/components/i18n/use-format';
 import type { Format } from '@/lib/utils/format';
 import { ageOn } from '@/lib/utils/birthday';
 
@@ -32,8 +32,9 @@ const formatDateWith = (fmtDate: Format['fmtDate']) => (iso: string | null): str
   return fmtDate(iso, 'MMMM d, yyyy') || '—';
 };
 
-function ageFrom(birthday: string | null): string {
-  const age = ageOn(birthday, new Date());
+/** `today` is the family's calendar day (clock.calendarToday()), not the device's. */
+function ageFrom(birthday: string | null, today: Date): string {
+  const age = ageOn(birthday, today);
   return age === null ? '' : `${age}`;
 }
 
@@ -178,7 +179,8 @@ export function CheckInSheet({
 }) {
   const formatDate = formatDateWith(useFormat().fmtDate);
   const t = useTranslations();
-  const age = ageFrom(member.birthday);
+  const clock = useFamilyClock();
+  const age = ageFrom(member.birthday, clock.calendarToday());
   const primary = providers.find((p) => p.is_primary) ?? providers[0] ?? null;
   const medList = medications.length
     ? medications.map((m) => [m.name, m.dosage].filter(Boolean).join(' ')).join(', ')
