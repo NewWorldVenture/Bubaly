@@ -257,9 +257,15 @@ export async function createCardRevealAction(input: {
   const ctx = await requireUserContext();
   if (!isManager(ctx.active.role)) return { ok: false, error: t('actions.onlyParentsCanRevealCard') };
   const svc = createServiceClient();
-  const caps = await getMoneyCapabilities(svc);
+  let caps: Awaited<ReturnType<typeof getMoneyCapabilities>>;
+  try {
+    caps = await getMoneyCapabilities(svc);
+  } catch (error) {
+    return actionFailure('load card-issuing capabilities', t('money.couldNotLoadCardIssuingCapabilities'), error);
+  }
   if (!caps.issuing) return { ok: false, error: t('actions.cardsAreNotAvailableYet') };
-  if (!input.nonce?.trim()) return { ok: false, error: t('actions.missingRevealSession') };
+  const nonce = input?.nonce;
+  if (typeof nonce !== 'string' || !nonce.trim()) return { ok: false, error: t('actions.missingRevealSession') };
 
   const [{ data: card, error: cardError }, { data: acct, error: acctError }] = await settleAll([
     svc.from('stripe_issuing_cards').select('id, stripe_card_id')
@@ -277,9 +283,13 @@ export async function createCardRevealAction(input: {
 
   try {
     const key = await getStripe().ephemeralKeys.create(
-      { issuing_card: card.stripe_card_id, nonce: input.nonce },
+      { issuing_card: card.stripe_card_id, nonce },
       { apiVersion: '2026-05-27.dahlia', stripeAccount: acct.stripe_account_id },
     );
+    const ephemeralKeySecret = key?.secret;
+    if (typeof ephemeralKeySecret !== 'string' || !ephemeralKeySecret.trim()) {
+      return { ok: false, error: t('money.couldNotStartTheCardReveal') };
+    }
     await logWalletAudit(svc, {
       family_id: ctx.active.familyId, actor_user_id: ctx.user.id, action: 'card_revealed',
       entity_type: 'stripe_issuing_cards', entity_id: card.id,
@@ -287,7 +297,7 @@ export async function createCardRevealAction(input: {
     return {
       ok: true,
       data: {
-        ephemeralKeySecret: key.secret ?? '',
+        ephemeralKeySecret,
         stripeCardId: card.stripe_card_id,
         publishableKey,
         stripeAccount: acct.stripe_account_id,
@@ -309,15 +319,22 @@ export async function prepareCardRevealAction(cardId: string):
   const ctx = await requireUserContext();
   if (!isManager(ctx.active.role)) return { ok: false, error: t('actions.onlyParentsCanRevealCard') };
   const svc = createServiceClient();
-  const caps = await getMoneyCapabilities(svc);
+  let caps: Awaited<ReturnType<typeof getMoneyCapabilities>>;
+  try {
+    caps = await getMoneyCapabilities(svc);
+  } catch (error) {
+    return actionFailure('load card-issuing capabilities', t('money.couldNotLoadCardIssuingCapabilities'), error);
+  }
   if (!caps.issuing) return { ok: false, error: t('actions.cardsAreNotAvailableYet') };
 
-  const [{ data: card }, { data: acct }] = await settleAll([
+  const [{ data: card, error: cardError }, { data: acct, error: acctError }] = await settleAll([
     svc.from('stripe_issuing_cards').select('stripe_card_id')
       .eq('family_id', ctx.active.familyId).eq('id', cardId).maybeSingle(),
     svc.from('stripe_connected_accounts').select('stripe_account_id')
       .eq('family_id', ctx.active.familyId).maybeSingle(),
   ]);
+  if (cardError) return actionFailure('load the card', t('money.couldNotLoadTheCard'), cardError);
+  if (acctError) return actionFailure('load the connected account', t('money.couldNotLoadTheConnectedAccount'), acctError);
   if (!card) return { ok: false, error: t('actions.cardNotFound') };
   if (!acct) return { ok: false, error: t('actions.noAccountConfigured') };
   const publishableKey = effectivePublishableKey(null);
