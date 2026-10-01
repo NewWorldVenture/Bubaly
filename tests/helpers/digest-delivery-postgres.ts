@@ -14,7 +14,7 @@
 //      only in the throwaway database.
 // Calls run as `service_role`, through psql, one process per call, so
 // concurrent calls are concurrent transactions on separate connections.
-import { spawn } from 'node:child_process';
+import { execFileSync, spawn } from 'node:child_process';
 import { randomBytes } from 'node:crypto';
 import { readFileSync } from 'node:fs';
 import { fileURLToPath } from 'node:url';
@@ -32,6 +32,11 @@ const env = () => ({
   PGUSER: process.env.PGUSER ?? 'postgres',
   PGOPTIONS: '',
 });
+
+/** The server's version number (for example 160013), read synchronously so a suite can choose its cases. 0 when disabled. */
+export const pgServerVersionNum = (): number => (pgFixtureEnabled
+  ? Number(execFileSync('psql', ['-X', '-At', '-d', 'postgres', '-c', 'show server_version_num;'], { env: env() }).toString().trim())
+  : 0);
 
 /** Run SQL on stdin in one psql process; resolves to stdout (unaligned, tuples only). */
 export function psql(db: string, sql: string, opts: { signal?: AbortSignal } = {}): Promise<string> {

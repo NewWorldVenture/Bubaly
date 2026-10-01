@@ -161,7 +161,7 @@ The engine takes a `DigestEmailProvider` whose `send` returns one classified out
 - a terminal `withdrawn` status, which the guard keeps settled and `admin_digest_claim` refuses;
 - `admin_digest_begin_send` with a seventh argument, `p_allowlisted boolean` (NULL is bad input). It reads `super_admins` after the row lock, on every admission.
   - It matches an address trimmed of what JavaScript's `trim` removes, with **ASCII letters only** lowercased (`superAdminTableKey` in the engine is the same rule).
-  - It does not use `lower()`, which follows the collation. Libc `C.UTF-8` and ICU `tr-TR` turn U+0130 into a plain "i", so one row could stand in for a different, removed admin (review 5373785714).
+  - It does not use `lower()`, which follows the collation. Libc `C.UTF-8`, ICU `tr-TR` and PostgreSQL 17's builtin `pg_c_utf8` turn U+0130 into a plain "i", so one row could stand in for a different, removed admin (review 5373785714).
   - With ASCII-only folding, a match implies the engine's `trim().toLowerCase()` identity matches. An address that differs only in non-ASCII case cannot be proved equal, does not match, and is withdrawn: the safe side. So store addresses in `super_admins` lowercased;
 - the six-argument 0471 `begin_send` is dropped, so nothing can reach a dispatch without the check.
 

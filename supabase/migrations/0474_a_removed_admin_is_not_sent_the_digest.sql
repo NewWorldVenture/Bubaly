@@ -186,10 +186,11 @@ begin
   -- A table address matches the frozen recipient only if, trimmed of what JavaScript's
   -- String.prototype.trim removes and with ASCII A-Z lowercased, its hash is the recipient key (the
   -- engine's trim().toLowerCase() identity). Only ASCII is lowercased, on purpose: lower() follows
-  -- the database collation (libc C.UTF-8 and ICU tr-TR turn U+0130 into a plain "i"), so it could
-  -- let one table row stand in for a different, removed admin. With ASCII-only folding a match
-  -- implies the engine's identity matches; an address that differs only in non-ASCII case cannot
-  -- be proved equal, does not match, and is withdrawn: the safe side.
+  -- the database collation (libc C.UTF-8, ICU tr-TR and PostgreSQL 17's builtin pg_c_utf8 turn
+  -- U+0130 into a plain "i"), so a raw, unnormalised row could stand in for a different, removed
+  -- admin. With ASCII-only folding a match implies the engine's identity matches, whatever the
+  -- collation and however the row was written; an address that differs only in non-ASCII case
+  -- cannot be proved equal, does not match, and is withdrawn: the safe side.
   -- (lib/admin/digest-delivery.ts superAdminTableKey is this rule in TypeScript.)
   v_listed := exists (
     select 1 from public.super_admins s

@@ -20,7 +20,7 @@ import {
 import { createPostgresDigestDeliveryStore, parseDeliveryRow, supabaseRpc, type RpcCall } from '@/lib/admin/digest-delivery-store';
 import { FakeClock, FakeResendProvider, HOUR, MINUTE, MemoryDigestDeliveryStore, deferred, never } from './helpers/digest-delivery-fakes';
 import { ADMITTED, TABLE_ONLY, answerOf, contractPlan, describeDigestDeliveryStoreContract } from './helpers/digest-delivery-store-contract';
-import { createPgFixture, pgFixtureEnabled, psql, type PgFixture } from './helpers/digest-delivery-postgres';
+import { createPgFixture, pgFixtureEnabled, pgServerVersionNum, psql, type PgFixture } from './helpers/digest-delivery-postgres';
 
 const T0 = '2026-09-30T12:31:00.000Z';
 const MIGRATION_0471 = 'supabase/migrations/0471_an_admin_digest_reaches_each_admin_once.sql';
@@ -222,8 +222,10 @@ describe.skipIf(!pgFixtureEnabled)('0471 + 0474 on PostgreSQL (disposable databa
   });
 
   describe('0474 matching does not depend on the database collation (review 5373785714)', () => {
-    // PostgreSQL's lower() follows the collation. Under libc C.UTF-8 (this cluster's default) and ICU
-    // tr-TR it turns U+0130 into a plain "i"; under ICU und it gives "i" + U+0307, as JavaScript does.
+    // PostgreSQL's lower() follows the collation. Under libc C.UTF-8 (this cluster's default), ICU tr-TR
+    // and PostgreSQL 17's builtin C.UTF-8 (pg_c_utf8) it turns U+0130 into a plain "i"; under ICU und it
+    // gives "i" + U+0307, as JavaScript does. The rows are written straight into the table, as legacy or
+    // service-role data would be: nothing normalises them first.
     // Each case runs the migrations in a database with that collation, records the settings, and shows:
     // the removed plain-i admin is withdrawn with zero provider calls while ASCII-case, Unicode-whitespace
     // and non-ASCII identities are admitted; and the old lower() predicate would have admitted the
@@ -232,6 +234,8 @@ describe.skipIf(!pgFixtureEnabled)('0471 + 0474 on PostgreSQL (disposable databa
       { label: 'libc C.UTF-8', create: `template template0 encoding 'UTF8' locale_provider libc locale 'C.UTF-8'`, provider: 'c', icu: '', lowerDottedI: '69' },
       { label: 'ICU und', create: `template template0 encoding 'UTF8' locale_provider icu icu_locale 'und' locale 'C.UTF-8'`, provider: 'i', icu: 'und', lowerDottedI: '69cc87' },
       { label: 'ICU tr-TR', create: `template template0 encoding 'UTF8' locale_provider icu icu_locale 'tr-TR' locale 'C.UTF-8'`, provider: 'i', icu: 'tr-TR', lowerDottedI: '69' },
+      // PostgreSQL 17+ only; skipped on an older server.
+      { label: 'builtin C.UTF-8 (pg_c_utf8)', create: `template template0 encoding 'UTF8' locale_provider builtin builtin_locale 'C.UTF-8' locale 'C.UTF-8'`, provider: 'b', icu: 'C.UTF-8', lowerDottedI: '69', minVersion: 170000 },
     ] as const;
     const JOSE = 'jos\u00e9@example.test';
     const TABLE = ['adm\u0130n-one@example.test', ' ADMIN-TWO@Example.TEST\u3000', JOSE]; // not admin-one; admin-two by ASCII case; jose as stored
@@ -245,12 +249,16 @@ describe.skipIf(!pgFixtureEnabled)('0471 + 0474 on PostgreSQL (disposable databa
       return old;
     };
 
-    it.each(COLLATIONS)('$label', async (c) => {
+    // A case the server cannot run is left out, not passed vacuously.
+    const serverVersion = pgServerVersionNum();
+    it.each(COLLATIONS.filter((c) => !('minVersion' in c) || serverVersion >= c.minVersion))('$label', async (c) => {
       const db = await createPgFixture({ createOptions: c.create });
       try {
-        // The settings this case ran under, and what lower() does to U+0130 there.
-        expect(await db.sql(`select datlocprovider::text || '|' || datcollate || '|' || datctype || '|' || coalesce(daticulocale, '') || '|' || encode(convert_to(lower(U&'\\0130'), 'UTF8'), 'hex')
-          from pg_database where datname = current_database();`)).toBe(`${c.provider}|C.UTF-8|C.UTF-8|${c.icu}|${c.lowerDottedI}`);
+        // The settings this case ran under, and what lower() does to U+0130 there. The provider's locale
+        // column is daticulocale on PostgreSQL 16 and datlocale from 17.
+        expect(await db.sql(`select d.datlocprovider::text || '|' || d.datcollate || '|' || d.datctype || '|'
+            || coalesce(to_jsonb(d) ->> 'datlocale', to_jsonb(d) ->> 'daticulocale', '') || '|' || encode(convert_to(lower(U&'\\0130'), 'UTF8'), 'hex')
+          from pg_database d where d.datname = current_database();`)).toBe(`${c.provider}|C.UTF-8|C.UTF-8|${c.icu}|${c.lowerDottedI}`);
         const clock = new FakeClock(T0);
         const provider = new FakeResendProvider(clock.now);
         const run = (occurrenceId: string) => deliverDigestOccurrence(contractPlan({ occurrenceId, recipients: [ONE, TWO, JOSE] }), {
