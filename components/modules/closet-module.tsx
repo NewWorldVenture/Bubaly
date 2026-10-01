@@ -24,7 +24,7 @@ import {
   suggestOutfit, closetSummary, neglectedItems, costPerWear, tempBand, weatherLabelFromTemp, dayDiff,
 } from '@/lib/closet/outfits';
 import { useLocale, useTranslations } from '@/components/i18n/locale-provider';
-import { useFamilyClock, useFormat } from '@/components/i18n/use-format';
+import { useFamilyClock, useFormat, useFamilyCalendarToday } from '@/components/i18n/use-format';
 import { formatCents } from '@/lib/wallet/ledger';
 import { useConfirm } from '@/components/ui/confirm';
 import { bumpWearCount, type WearBump, type WearStore } from '@/lib/closet/wear';
@@ -103,7 +103,7 @@ export function ClosetModule() {
 
   // The FAMILY's wall clock (TIME-003): the helpers below read local fields,
   // so handing them this makes their "today" the family's day, not the phone's.
-  const today = useMemo(() => clock.calendarToday(), [clock]);
+  const today = useFamilyCalendarToday();
   const tempC = fToC(tempF);
   const memberItems = useMemo(() => items.data.filter((i) => i.member_id === memberId), [items.data, memberId]);
   const memberLogs = useMemo(() => logs.data.filter((l) => l.member_id === memberId), [logs.data, memberId]);

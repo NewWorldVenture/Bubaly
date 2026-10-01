@@ -20,7 +20,7 @@ import {
   SLEEP_SOURCES, durationMinutes, fmtHours, habitCorrelations, recentLogs, recommendedSleepHours, routineStepIdeas, sleepSummary, weeklyProgram, dayDiff,
 } from '@/lib/sleep/coach';
 import { useTranslations } from '@/components/i18n/locale-provider';
-import { useFamilyClock, useFormat } from '@/components/i18n/use-format';
+import { useFamilyClock, useFormat, useFamilyCalendarToday } from '@/components/i18n/use-format';
 import { useConfirm } from '@/components/ui/confirm';
 
 type Log = Tables<'sleep_logs'>;
@@ -68,7 +68,7 @@ export function SleepModule() {
   const [routineOpen, setRoutineOpen] = useState(false);
   const [checkinOpen, setCheckinOpen] = useState(false);
 
-  const today = useMemo(() => clock.calendarToday(), [clock]);
+  const today = useFamilyCalendarToday();
   const member = members.find((m) => m.id === memberId) ?? null;
   const age = ageOn(member?.birthday, today);
   const routine = routines.data.find((r) => r.member_id === memberId) ?? null;

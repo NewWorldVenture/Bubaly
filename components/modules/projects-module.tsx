@@ -22,7 +22,7 @@ import {
 } from '@/lib/projects/planner';
 import { compareQuotes as rankQuotes } from '@/lib/services/providers/compare';
 import { useLocale, useTranslations } from '@/components/i18n/locale-provider';
-import { useFamilyClock, useFormat } from '@/components/i18n/use-format';
+import { useFamilyClock, useFormat, useFamilyCalendarToday } from '@/components/i18n/use-format';
 import { useConfirm } from '@/components/ui/confirm';
 import { safeWebLink } from '@/lib/utils/safe-link';
 
@@ -74,7 +74,7 @@ export function ProjectsModule() {
 
   // The FAMILY's wall clock (TIME-003): the helpers below read local fields,
   // so handing them this makes their "today" the family's day, not the phone's.
-  const today = useMemo(() => clock.calendarToday(), [clock]);
+  const today = useFamilyCalendarToday();
   const summary = useMemo(() => projectsSummary(projects.data, materials.data, quotes.data, today), [projects.data, materials.data, quotes.data, today]);
   const nameOf = (id: string | null) => members.find((m) => m.id === id)?.display_name ?? null;
   const openProject = projects.data.find((p) => p.id === openId) ?? null;

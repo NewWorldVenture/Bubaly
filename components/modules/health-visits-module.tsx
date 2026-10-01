@@ -16,7 +16,7 @@ import { ErrorState, SkeletonList, EmptyState } from '@/components/ui/states';
 import { VISIT_KINDS, visitKindMeta, sortByVisitDate, upcomingFollowUps, daysUntilFollowUp, type VisitKind } from '@/lib/health/visits';
 import type { Tables } from '@/lib/database.types';
 import { useTranslations } from '@/components/i18n/locale-provider';
-import { useFamilyClock, useFormat } from '@/components/i18n/use-format';
+import { useFormat, useFamilyCalendarToday } from '@/components/i18n/use-format';
 import { todayInZone } from '@/lib/schedule/zoned';
 
 type Visit = Tables<'health_visits'>;
@@ -27,8 +27,7 @@ export function HealthVisitsModule({ defaultKind, title = 'Visits & History', lo
   defaultKind?: VisitKind; title?: string; lockKind?: boolean;
 }) {
   // Date-only helpers read local calendar fields: give them the FAMILY's day (TIME-003).
-  const familyClock = useFamilyClock();
-  const familyToday = useMemo(() => familyClock.calendarToday(), [familyClock]);
+  const familyToday = useFamilyCalendarToday();
   const t = useTranslations();
   const { fmtDate, fmtMoney } = useFormat();
   const { familyId, userId, members, family, role } = useApp();

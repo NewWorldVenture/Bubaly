@@ -23,7 +23,7 @@ import {
   searchItems, lentOut, warrantyAlerts, valueSummary, inventorySummary, lastConfirmed,
 } from '@/lib/inventory/finder';
 import { useLocale, useTranslations, usePlural } from '@/components/i18n/locale-provider';
-import { useFamilyClock, useFormat } from '@/components/i18n/use-format';
+import { useFamilyClock, useFormat, useFamilyCalendarToday } from '@/components/i18n/use-format';
 import type { LocaleCode } from '@/lib/i18n/locales';
 import { formatCents } from '@/lib/wallet/ledger';
 import { useConfirm } from '@/components/ui/confirm';
@@ -82,7 +82,7 @@ export function InventoryModule() {
 
   // The FAMILY's wall clock (TIME-003): the helpers below read local fields,
   // so handing them this makes their "today" the family's day, not the phone's.
-  const today = useMemo(() => clock.calendarToday(), [clock]);
+  const today = useFamilyCalendarToday();
   const owned = useMemo(() => items.data.filter((i) => i.status !== 'disposed'), [items.data]);
   const hits = useMemo(() => searchItems(items.data, locations.data, query), [items.data, locations.data, query]);
   const tree = useMemo(() => locationTree(locations.data), [locations.data]);

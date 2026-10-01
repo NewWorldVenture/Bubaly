@@ -48,7 +48,7 @@ import { Input, Field, Select } from '@/components/ui/input';
 import { PageHeader } from '@/components/app/page-header';
 import { Avatar } from '@/components/ui/avatar';
 import { AiInsight } from '@/components/ai/ai-insight';
-import { useFamilyClock, useFormat } from '@/components/i18n/use-format';
+import { useFamilyClock, useFormat, useFamilyCalendarToday } from '@/components/i18n/use-format';
 import { isInMonth, parseCalendarDate, startOfLocalDay } from '@/lib/utils/calendar-date';
 import { isAdmin } from '@/lib/constants/roles';
 import { BASIC_MONTHLY_CENTS, BASIC_ANNUAL_CENTS, PLUS_MONTHLY_CENTS, PLUS_ANNUAL_CENTS, planLevel } from '@/lib/constants/plans';
@@ -761,7 +761,7 @@ export function BillingModule({ serviceFeeNotice = null }: { serviceFeeNotice?: 
   // bill due date below is parsed in (local midnight), so the month, the ringed
   // day and the due-date comparisons are all the family's. A date, not a time:
   // never stored, never turned into an instant.
-  const familyDay = useMemo(() => clock.calendarToday(), [clock]);
+  const familyDay = useFamilyCalendarToday();
   const currentMonth = familyDay.getMonth();
   const currentYear = familyDay.getFullYear();
 

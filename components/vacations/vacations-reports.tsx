@@ -1,7 +1,7 @@
 'use client';
 
 import { useMemo } from 'react';
-import { useFamilyClock } from '@/components/i18n/use-format';
+import { useFamilyCalendarToday } from '@/components/i18n/use-format';
 import Link from 'next/link';
 import { BarChart3, Plane, Wallet, Gauge } from 'lucide-react';
 import { useApp } from '@/components/app/app-context';
@@ -20,8 +20,7 @@ type Score = Tables<'vacation_travel_scores'>;
 
 export function VacationsReports() {
   // Date-only helpers read local calendar fields: give them the FAMILY's day (TIME-003).
-  const familyClock = useFamilyClock();
-  const familyToday = useMemo(() => familyClock.calendarToday(), [familyClock]);
+  const familyToday = useFamilyCalendarToday();
   const tr = useTranslations();
   const locale = useLocale();
   // Money follows the reader; the currency stays the money's own.

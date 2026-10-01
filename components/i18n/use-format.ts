@@ -186,10 +186,25 @@ export function useFamilyClock(): FamilyClock {
       // Santiago phone's 6 September reads 01:00), never its year, month or day,
       // and those are all the helpers read. The three that stepped days in 24-hour
       // blocks now step calendar days, so that holds for their arithmetic too.
-      calendarToday: (now) => {
-        const [y, m, d] = todayKey(now).split('-').map(Number);
-        return new Date(y, m - 1, d);
-      },
+      calendarToday: (now) => calendarDayOfKey(todayKey(now)),
     };
   }, [timeZone]);
+}
+
+/** A `YYYY-MM-DD` day key as the local-calendar Date the date-only helpers read. */
+export function calendarDayOfKey(key: string): Date {
+  const [y, m, d] = key.split('-').map(Number);
+  return new Date(y, m - 1, d);
+}
+
+/**
+ * The family's calendar day for the date-only helpers, kept CURRENT: memoized
+ * on the family's day key, so a screen still open past the family's midnight
+ * moves to the new day on its next render. `useMemo(() => clock.calendarToday(),
+ * [clock])` froze it at mount instead — the clock object only changes with the
+ * zone, so that memo never recomputed (#688 comment 5922833445).
+ */
+export function useFamilyCalendarToday(): Date {
+  const key = useFamilyClock().todayKey();
+  return useMemo(() => calendarDayOfKey(key), [key]);
 }

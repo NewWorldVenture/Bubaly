@@ -23,7 +23,7 @@ import { cn } from '@/lib/utils/cn';
 import { MANAGER_ROLES, type MemberRole } from '@/lib/constants/roles';
 import type { Tables } from '@/lib/database.types';
 import { usePlural, useTranslations } from '@/components/i18n/locale-provider';
-import { useFamilyClock, useFormat, type FamilyClock } from '@/components/i18n/use-format';
+import { useFamilyClock, useFormat, type FamilyClock, useFamilyCalendarToday } from '@/components/i18n/use-format';
 import type { Format } from '@/lib/utils/format';
 import { isValidTimezone } from '@/lib/time/zoned';
 import { localDayKey } from '@/lib/time/local-day';
@@ -164,7 +164,7 @@ export function FamilyModule() {
 
   // nextBirthday reads a Date's LOCAL calendar fields: hand it the FAMILY's day
   // in that convention (TIME-003), and read its answer back the same way.
-  const now = useMemo(() => clock.calendarToday(), [clock]);
+  const now = useFamilyCalendarToday();
   const activeMembers = useMemo(() => members.filter((m) => m.is_active), [members]);
   const memberById = useMemo(() => new Map(members.map((m) => [m.id, m])), [members]);
 

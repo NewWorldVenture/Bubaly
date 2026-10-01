@@ -20,7 +20,7 @@ import {
   CEFR, SESSION_KINDS, LANGUAGES, GRADES, cefrMeta, kindMeta, languageMeta, starterDeck, sm2, dueCards, deckStats, weekProgress, streak, levelEstimate, suggestToday, languageSummary, isoDate, type Grade,
 } from '@/lib/language/practice';
 import { useTranslations } from '@/components/i18n/locale-provider';
-import { useFamilyClock, useFormat } from '@/components/i18n/use-format';
+import { useFamilyClock, useFormat, useFamilyCalendarToday } from '@/components/i18n/use-format';
 import { useConfirm } from '@/components/ui/confirm';
 
 type Goal = Tables<'language_goals'>;
@@ -76,7 +76,7 @@ export function LanguageModule() {
 
   // The FAMILY's wall clock (TIME-003): the helpers below read local fields,
   // so handing them this makes their "today" the family's day, not the phone's.
-  const today = useMemo(() => clock.calendarToday(), [clock]);
+  const today = useFamilyCalendarToday();
   const goal = goals.data.find((g) => g.id === goalId) ?? null;
   const myCards = useMemo(() => cards.data.filter((c) => c.goal_id === goalId), [cards.data, goalId]);
   const mySessions = useMemo(() => sessions.data.filter((s) => s.goal_id === goalId), [sessions.data, goalId]);

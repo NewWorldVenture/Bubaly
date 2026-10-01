@@ -13,7 +13,7 @@ import { Modal } from '@/components/ui/modal';
 import { Input, Textarea, Field, Select } from '@/components/ui/input';
 import { Button } from '@/components/ui/button';
 import { LoadingBlock, EmptyState, ErrorState } from '@/components/ui/states';
-import { useFamilyClock, useFormat } from '@/components/i18n/use-format';
+import { useFormat, useFamilyCalendarToday } from '@/components/i18n/use-format';
 import { VACATION_KINDS, VACATION_STATUSES, lookup } from '@/lib/vacations/meta';
 import { countdownLabel, daysUntil, isActive } from '@/lib/vacations/dates';
 import type { Tables } from '@/lib/database.types';
@@ -27,8 +27,7 @@ const blank = () => ({ title: '', kind: 'domestic', destination: '', start_date:
 
 export function VacationsList({ openCreate = false }: { openCreate?: boolean }) {
   // Date-only helpers read local calendar fields: give them the FAMILY's day (TIME-003).
-  const familyClock = useFamilyClock();
-  const familyToday = useMemo(() => familyClock.calendarToday(), [familyClock]);
+  const familyToday = useFamilyCalendarToday();
   const { fmtDate } = useFormat();
   const tr = useTranslations();
   const { familyId, userId } = useApp();

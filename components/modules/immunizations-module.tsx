@@ -13,7 +13,7 @@ import { Input, Textarea, Field, Select } from '@/components/ui/input';
 import { Button } from '@/components/ui/button';
 import { Avatar } from '@/components/ui/avatar';
 import { ErrorState, SkeletonList, EmptyState } from '@/components/ui/states';
-import { useFamilyClock, useFormat } from '@/components/i18n/use-format';
+import { useFormat, useFamilyCalendarToday } from '@/components/i18n/use-format';
 import { COMMON_VACCINES, sortByDateGiven, dueImmunizations, dueStatus, daysUntilDue } from '@/lib/health/immunizations';
 import type { Tables } from '@/lib/database.types';
 import { useTranslations } from '@/components/i18n/locale-provider';
@@ -30,8 +30,7 @@ const STATUS_STYLE: Record<string, string> = {
 
 export function ImmunizationsModule({ title = 'Immunizations' }: { title?: string }) {
   // Date-only helpers read local calendar fields: give them the FAMILY's day (TIME-003).
-  const familyClock = useFamilyClock();
-  const familyToday = useMemo(() => familyClock.calendarToday(), [familyClock]);
+  const familyToday = useFamilyCalendarToday();
   const { fmtDate } = useFormat();
   const t = useTranslations();
   const { familyId, userId, members, role } = useApp();

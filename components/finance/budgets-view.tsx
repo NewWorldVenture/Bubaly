@@ -17,7 +17,7 @@ import { cn } from '@/lib/utils/cn';
 import type { Tables } from '@/lib/database.types';
 import { usd as usdIn, budgetSpent, pct, type Period } from '@/lib/finance/hub';
 import { useLocale, useTranslations } from '@/components/i18n/locale-provider';
-import { useFamilyClock } from '@/components/i18n/use-format';
+import { useFamilyClock, useFamilyCalendarToday } from '@/components/i18n/use-format';
 
 type Budget = Tables<'budgets'>;
 type Txn = Tables<'transactions'>;
@@ -32,7 +32,7 @@ export function BudgetsView() {
   const familyClock = useFamilyClock();
   const yearStartYear = familyClock.todayKey().slice(0, 4);
   // budgetSpent reads its date's local calendar fields: the FAMILY's day.
-  const familyToday = useMemo(() => familyClock.calendarToday(), [familyClock]);
+  const familyToday = useFamilyCalendarToday();
   const usd = (amount: number) => usdIn(amount, locale.code);
   const { familyId, userId } = useApp();
   const { success, error: toastError } = useToast();

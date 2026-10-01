@@ -22,7 +22,7 @@ import {
   nextBoxNumber, boxesByRoom, findInBoxes, money as moneyIn, isoDate, addDays, dayDiff,
 } from '@/lib/moving/planner';
 import { useLocale, useTranslations } from '@/components/i18n/locale-provider';
-import { useFamilyClock, useFormat } from '@/components/i18n/use-format';
+import { useFamilyClock, useFormat, useFamilyCalendarToday } from '@/components/i18n/use-format';
 import { useConfirm } from '@/components/ui/confirm';
 
 type Move = Tables<'moves'>;
@@ -95,7 +95,7 @@ export function MovingWorkspace() {
 
   // The FAMILY's wall clock (TIME-003): the helpers below read local fields,
   // so handing them this makes their "today" the family's day, not the phone's.
-  const today = useMemo(() => clock.calendarToday(), [clock]);
+  const today = useFamilyCalendarToday();
   const todayIso = isoDate(today);
   const move = moves.data.find((m) => m.id === moveId) ?? null;
   const summary = useMemo(() => (move ? moveSummary(move, tasks.data, boxes.data, today) : null), [move, tasks.data, boxes.data, today]);

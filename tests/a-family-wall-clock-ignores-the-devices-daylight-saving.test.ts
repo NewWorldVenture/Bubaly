@@ -14,14 +14,14 @@
 // they hold whatever zone the suite itself runs in (CI: UTC, Los Angeles,
 // Tokyo). The first three groups use only the clock API the old implementation
 // also had, so the same assertions fail against it.
-import { readFileSync } from 'node:fs';
-import { at, between } from './helpers/source-order';
+import { readdirSync, readFileSync, statSync } from 'node:fs';
+import { at, between, bodyOf } from './helpers/source-order';
 import { join } from 'node:path';
 import { afterEach, describe, expect, it } from 'vitest';
 import { createElement } from 'react';
 import { renderToString } from 'react-dom/server';
 import { FamilyTimeZoneProvider, LocaleProvider } from '@/components/i18n/locale-provider';
-import { useFamilyClock, type FamilyClock } from '@/components/i18n/use-format';
+import { calendarDayOfKey, useFamilyClock, type FamilyClock } from '@/components/i18n/use-format';
 import { localeOrDefault } from '@/lib/i18n/locales';
 import { detectRoutines, materializeRoutine, templateFromSuggestion } from '@/lib/routines/detect';
 import { wallFromKey, wallMonthStart, wallWeekStart, wallKey } from '@/lib/time/wall-clock';
@@ -501,6 +501,45 @@ describe('behaviour streaks and weekly trends count the family\'s days (#688 com
     const src = readFileSync(join(__dirname, '..', 'components/modules/behavior-module.tsx'), 'utf8');
     expect(src).toContain('positiveStreakDays(mlogs, new Date(), clock.timeZone)');
     expect(src).toContain('trendByWeek(mlogs, 6, new Date(), clock.timeZone)');
+  });
+});
+
+describe('a screen left open past the family\'s midnight moves to the new day (#688 comment 5922833445)', () => {
+  it('the family\'s calendar day is derived from its day key alone, on every device', () => {
+    for (const device of ['UTC', 'America/Los_Angeles', 'Asia/Tokyo', 'America/Santiago']) {
+      onDevice(device);
+      const d = calendarDayOfKey('2026-09-06'); // Santiago skips this midnight
+      expect([d.getFullYear(), d.getMonth() + 1, d.getDate()]).toEqual([2026, 9, 6]);
+      const clock = clockFor('UTC');
+      for (const at of ['2026-09-30T23:59:00Z', '2026-10-01T00:01:00Z']) {
+        const now = new Date(at);
+        expect(clock.calendarToday(now).getTime()).toBe(calendarDayOfKey(clock.todayKey(now)).getTime());
+      }
+    }
+  });
+
+  it('useFamilyCalendarToday recomputes when the family\'s day key changes, not only with the zone', () => {
+    const src = readFileSync(join(__dirname, '..', 'components/i18n/use-format.ts'), 'utf8');
+    const hook = bodyOf(src, 'export function useFamilyCalendarToday(): Date {', '\n}\n');
+    expect(hook).toContain('const key = useFamilyClock().todayKey();');
+    expect(hook).toContain('return useMemo(() => calendarDayOfKey(key), [key]);');
+  });
+
+  it('no client file memoizes calendarToday() on the clock object, which froze the date at mount', () => {
+    const roots = ['components', 'app'];
+    const offenders: string[] = [];
+    const walk = (dir: string) => {
+      for (const name of readdirSync(dir)) {
+        const p = join(dir, name);
+        if (statSync(p).isDirectory()) { if (name !== 'node_modules') walk(p); continue; }
+        if (!/\.tsx?$/.test(name)) continue;
+        // Code only: a comment may name the pattern it warns against.
+        const code = readFileSync(p, 'utf8').split('\n').filter((l) => !/^\s*(\*|\/\/)/.test(l)).join('\n');
+        if (/useMemo\(\s*\(\)\s*=>\s*\w+\.calendarToday\(\)/.test(code)) offenders.push(p);
+      }
+    };
+    for (const r of roots) walk(join(__dirname, '..', r));
+    expect(offenders).toEqual([]);
   });
 });
 

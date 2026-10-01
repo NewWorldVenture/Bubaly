@@ -24,7 +24,7 @@ import {
   type CareUrgency,
 } from '@/lib/pets/care';
 import { useTranslations } from '@/components/i18n/locale-provider';
-import { useFamilyClock, useFormat } from '@/components/i18n/use-format';
+import { useFamilyClock, useFormat, useFamilyCalendarToday } from '@/components/i18n/use-format';
 import { useConfirm } from '@/components/ui/confirm';
 import { todayInZone } from '@/lib/schedule/zoned';
 
@@ -48,7 +48,7 @@ export function PetsModule() {
   const { fmtDate: fmt } = useFormat();
   const fmtDate = (d: string) => fmt(d.slice(0, 10), 'MMM d, yyyy');
   const clock = useFamilyClock();
-  const familyToday = useMemo(() => clock.calendarToday(), [clock]);
+  const familyToday = useFamilyCalendarToday();
   const t = useTranslations();
   const { familyId, userId } = useApp();
   const { success, error: toastError } = useToast();
@@ -69,8 +69,8 @@ export function PetsModule() {
   const [careForPet, setCareForPet] = useState<Pet | null>(null);
 
   const summary = useMemo(
-    () => careSummary(pets.data.length, records.data, clock.calendarToday()),
-    [pets.data.length, records.data, clock],
+    () => careSummary(pets.data.length, records.data, familyToday),
+    [pets.data.length, records.data, familyToday],
   );
   const upcoming = useMemo(() => upcomingCare(records.data, familyToday).slice(0, 6), [records.data, familyToday]);
 
@@ -352,8 +352,7 @@ function PetDetail({ pet, records, onClose, onAddCare, onRemove }: {
   const { fmtDate: fmt } = useFormat();
   const fmtDate = (d: string) => fmt(d.slice(0, 10), 'MMM d, yyyy');
   // Date-only helpers read local calendar fields: give them the FAMILY's day (TIME-003).
-  const familyClock = useFamilyClock();
-  const familyToday = useMemo(() => familyClock.calendarToday(), [familyClock]);
+  const familyToday = useFamilyCalendarToday();
   const t = useTranslations();
   const askConfirm = useConfirm();
   const { error: toastError } = useToast();

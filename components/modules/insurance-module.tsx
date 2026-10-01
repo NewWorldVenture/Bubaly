@@ -25,7 +25,7 @@ import {
   insuranceSummary, fmtMoney as fmtPolicyMoney, type RenewalUrgency,
 } from '@/lib/insurance/policies';
 import { useLocale, useTranslations } from '@/components/i18n/locale-provider';
-import { useFamilyClock, useFormat } from '@/components/i18n/use-format';
+import { useFamilyClock, useFormat, useFamilyCalendarToday } from '@/components/i18n/use-format';
 import type { Format } from '@/lib/utils/format';
 
 type Policy = Tables<'family_insurance_policies'>;
@@ -79,7 +79,7 @@ export function InsuranceModule() {
 
   // Renewals are date-only: count them from the family's calendar day (TIME-003).
   const clock = useFamilyClock();
-  const today = useMemo(() => clock.calendarToday(), [clock]);
+  const today = useFamilyCalendarToday();
   const summary = useMemo(() => insuranceSummary(policies.data, today), [policies.data, today]);
   const renewals = useMemo(() => upcomingRenewals(policies.data, today).filter((r) => r.urgency !== 'upcoming').slice(0, 6), [policies.data, today]);
   const byType = useMemo(() => premiumByType(policies.data).slice(0, 5), [policies.data]);
@@ -321,7 +321,7 @@ function PolicyDetail({ policy, coversName, onClose, onRemove }: {
   const meta = policyTypeMeta(policy.policy_type);
   const annual = annualPremium(policy.premium_amount, policy.premium_frequency);
   const clock = useFamilyClock();
-  const today = useMemo(() => clock.calendarToday(), [clock]);
+  const today = useFamilyCalendarToday();
   const u = renewalUrgency(policy.renewal_date, today);
 
   const rows: { label: string; value: string | null }[] = [

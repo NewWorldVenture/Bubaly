@@ -19,7 +19,7 @@ import {
   JOB_STAGES, CAREER_STATUSES, WORK_MODES, EMPLOYMENT_TYPES, OPEN_STAGES, stageMeta, parseKeywords, atsScore, pipelineStats, followUps, salaryFit, careerMap, careerSummary, money as moneyIn, isoDate,
 } from '@/lib/career/hub';
 import { useLocale, useTranslations } from '@/components/i18n/locale-provider';
-import { useFamilyClock, useFormat } from '@/components/i18n/use-format';
+import { useFamilyClock, useFormat, useFamilyCalendarToday } from '@/components/i18n/use-format';
 import { useConfirm } from '@/components/ui/confirm';
 import { safeWebLink } from '@/lib/utils/safe-link';
 
@@ -77,7 +77,7 @@ export function CareerModule() {
 
   // The FAMILY's wall clock (TIME-003): the helpers below read local fields,
   // so handing them this makes their "today" the family's day, not the phone's.
-  const today = useMemo(() => clock.calendarToday(), [clock]);
+  const today = useFamilyCalendarToday();
   const profile = profiles.data.find((p) => p.id === profileId) ?? null;
   const myApps = useMemo(() => apps.data.filter((a) => a.profile_id === profileId), [apps.data, profileId]);
   const myResumes = useMemo(() => resumes.data.filter((r) => r.profile_id === profileId), [resumes.data, profileId]);

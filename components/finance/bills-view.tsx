@@ -1,7 +1,7 @@
 'use client';
 
 import { useMemo, useState } from 'react';
-import { useFamilyClock } from '@/components/i18n/use-format';
+import { useFamilyCalendarToday } from '@/components/i18n/use-format';
 import { FileText, Plus, Trash2, Check, RotateCcw, Repeat, Bell } from 'lucide-react';
 import { useApp } from '@/components/app/app-context';
 import { useRealtimeQuery } from '@/lib/hooks/use-realtime-query';
@@ -32,8 +32,7 @@ const MODE_META: Record<BillsMode, { title: string; desc: string; icon: typeof F
 
 export function BillsView({ mode }: { mode: BillsMode }) {
   // Date-only helpers read local calendar fields: give them the FAMILY's day (TIME-003).
-  const familyClock = useFamilyClock();
-  const familyToday = useMemo(() => familyClock.calendarToday(), [familyClock]);
+  const familyToday = useFamilyCalendarToday();
   const t = useTranslations();
   // Money and dates follow the reader; the currency stays the money's own.
   const locale = useLocale();
