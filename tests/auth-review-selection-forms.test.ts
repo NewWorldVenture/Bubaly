@@ -287,6 +287,25 @@ describe('explicit destinations, failures and defaults', () => {
     expect(mock.syncLanguage).not.toHaveBeenCalled();
   });
 
+  it('an explicit return path whose language step never answers still signs in, after the client deadline (#705 comment 5923116178)', async () => {
+    const { SIGN_IN_LANGUAGE_WAIT_MS } = await import('@/lib/i18n/sign-in-language');
+    vi.useFakeTimers({ toFake: ['setTimeout', 'clearTimeout'] });
+    try {
+      mock.query = new URLSearchParams({ redirect: '/dashboard/meals' });
+      mock.syncLanguage.mockReturnValueOnce(new Promise(() => {}));
+      resetHooks();
+      const submitted = submit(render(LoginForm));
+      await vi.advanceTimersByTimeAsync(SIGN_IN_LANGUAGE_WAIT_MS - 1);
+      expect(mock.push).not.toHaveBeenCalled();
+      await vi.advanceTimersByTimeAsync(1);
+      await submitted;
+      expect(mock.push).toHaveBeenCalledWith('/dashboard/meals');
+      expect(mock.landing).not.toHaveBeenCalled();
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
   it('an explicit return path whose language step fails still signs in to that path (#705 comment 5922299372)', async () => {
     mock.query = new URLSearchParams({ redirect: '/dashboard/meals' });
     mock.syncLanguage.mockRejectedValueOnce(new Error('network'));

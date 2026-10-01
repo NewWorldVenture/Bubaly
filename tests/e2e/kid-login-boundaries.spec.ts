@@ -217,6 +217,17 @@ for (const [label, interrupt] of [['a newer B sign-in', 'signInB'], ['an explici
   });
 }
 
+test('a language step that never answers: the signed-in child still lands, after the client deadline (#705 comment 5923116178)', async ({ page }) => {
+  await fixture(page); await page.evaluate(() => { window.__kidLogin.holdSync = true; });
+  await fill(page); await submit(page);
+  await expect.poll(() => page.evaluate(() => window.__kidLogin.syncs)).toBe(1);
+  expect(await page.evaluate(() => window.__kidLogin.navigations)).toEqual([]); // still within the deadline
+  await expect.poll(() => page.evaluate(() => window.__kidLogin.navigations), { timeout: 8_000 }).toEqual(['/home']);
+  expect(await page.evaluate(() => window.__kidLogin.currentUser())).toBe(userA);
+  await page.evaluate(() => window.__kidLogin.releaseSync()); await settled(page); // a late answer changes nothing
+  expect(await page.evaluate(() => window.__kidLogin.navigations)).toEqual(['/home']);
+});
+
 test('control: a held language step that resolves with A still current navigates once', async ({ page }) => {
   await fixture(page); await page.evaluate(() => { window.__kidLogin.holdSync = true; });
   await fill(page); await submit(page);

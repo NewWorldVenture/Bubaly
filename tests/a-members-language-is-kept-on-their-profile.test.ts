@@ -640,12 +640,38 @@ describe('a sign-in that picks its own destination still syncs the language (#70
   });
 
   it.each([
-    ['components/auth/login-form.tsx', 'await syncLanguageAfterSignInAction().then(() => redirectDest, () => redirectDest)', 'router.push(destination)'],
-    ['components/auth/kid-login-form.tsx', 'await syncLanguageAfterSignInAction().catch(() => {});', "router.push('/home')"],
-    ['components/auth/phone-auth.tsx', 'await syncLanguageAfterSignInAction().catch(() => {});', 'router.push(destination)'],
+    ['components/auth/login-form.tsx', 'await waitForOptionalStep(syncLanguageAfterSignInAction).then(() => redirectDest)', 'router.push(destination)'],
+    ['components/auth/kid-login-form.tsx', 'await waitForOptionalStep(syncLanguageAfterSignInAction);', "router.push('/home')"],
+    ['components/auth/phone-auth.tsx', 'await waitForOptionalStep(syncLanguageAfterSignInAction);', 'router.push(destination)'],
   ])('%s syncs before it navigates', (file, call, push) => {
     const src = readFileSync(join(__dirname, '..', file), 'utf8');
     expect(at(src, call)).toBeLessThan(at(src, push));
+  });
+});
+
+describe('a sign-in form never waits on the language step for long (#705 comment 5923116178)', () => {
+  it('the client deadline is longer than the server budget, so an answering server is not cut short', async () => {
+    const { SIGN_IN_LANGUAGE_WAIT_MS } = await import('@/lib/i18n/sign-in-language');
+    const { LANGUAGE_SYNC_BUDGET_MS } = await import('@/lib/i18n/sync');
+    expect(SIGN_IN_LANGUAGE_WAIT_MS).toBeGreaterThan(LANGUAGE_SYNC_BUDGET_MS);
+  });
+
+  it('a step that never answers is waited for at most the deadline', async () => {
+    const { waitForOptionalStep } = await import('@/lib/i18n/sign-in-language');
+    const started = Date.now();
+    await waitForOptionalStep(() => new Promise(() => {}), 40);
+    expect(Date.now() - started).toBeLessThan(1000);
+  });
+
+  it.each([
+    ['resolves', () => Promise.resolve('x')],
+    ['rejects', () => Promise.reject(new Error('network'))],
+    ['throws', () => { throw new Error('sync throw'); }],
+  ] as const)('a step that %s settles at once, and never rejects', async (_, step) => {
+    const { waitForOptionalStep } = await import('@/lib/i18n/sign-in-language');
+    const started = Date.now();
+    await expect(waitForOptionalStep(step as () => Promise<unknown>, 5_000)).resolves.toBeUndefined();
+    expect(Date.now() - started).toBeLessThan(1000);
   });
 });
 
