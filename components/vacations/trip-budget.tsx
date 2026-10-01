@@ -12,7 +12,7 @@ import { ErrorState, LoadingBlock } from '@/components/ui/states';
 import { TripCrudSection, StatPill, Progress, type FieldDef } from './shared';
 import { BUDGET_CATEGORIES, dollars as dollarsIn, lookup } from '@/lib/vacations/meta';
 import { summarizeBudget } from '@/lib/vacations/budget';
-import { fmtDate } from '@/lib/utils/format';
+import { useFormat } from '@/components/i18n/use-format';
 import type { Tables, VacBudgetCategory } from '@/lib/database.types';
 import { useLocale, useTranslations } from '@/components/i18n/locale-provider';
 
@@ -29,6 +29,7 @@ const expenseFields: FieldDef[] = [
 ];
 
 export function TripBudget({ vacationId }: { vacationId: string }) {
+  const { fmtDate } = useFormat();
   const t = useTranslations();
   const locale = useLocale();
   // Money follows the reader; the currency stays the money's own.

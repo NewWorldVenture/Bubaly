@@ -23,7 +23,7 @@ import { recordVoiceCommand } from '@/lib/voice/history';
 import type { CaptureKind } from '@/lib/capture/parse';
 import type { Tables } from '@/lib/database.types';
 import { useTranslations } from '@/components/i18n/locale-provider';
-import { useFormat } from '@/components/i18n/use-format';
+import { useFamilyClock, useFormat } from '@/components/i18n/use-format';
 
 type VoiceCommand = Tables<'voice_commands'>;
 
@@ -54,6 +54,7 @@ export function VoiceModule() {
 }
 
 function VoiceCaptureSession() {
+  const clock = useFamilyClock();
   const tr = useTranslations();
   // One time-ago, and it follows the reader. Its tail called
   // toLocaleDateString(undefined, …) — the BROWSER's locale, not the family's.
@@ -115,7 +116,7 @@ function VoiceCaptureSession() {
       if (!route.text) { journey.abandon(); toastError(tr('voiceModule.didntCatchACommand')); return; }
       sb = createClient();
       const res = await saveCapture(sb, {
-        kind: route.kind, text: route.text, familyId, userId, memberId: selfMember?.id ?? null, isCurrent,
+        kind: route.kind, text: route.text, familyId, userId, memberId: selfMember?.id ?? null, isCurrent, timeZone: clock.timeZone,
       });
       if (!isCurrent()) return;
       // Log the command to the family's voice history (best-effort — a logging

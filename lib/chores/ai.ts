@@ -4,7 +4,7 @@
 // "parent_review_required" (never an automatic rejection), so a kid is never
 // penalised by an AI outage.
 import 'server-only';
-import { getProvider, type AIImage } from '@/lib/ai/provider';
+import { describeAIError, getProvider, type AIImage, type AIProvider } from '@/lib/ai/provider';
 import { withAiRequest } from '@/lib/ai/observability';
 import type { ServiceScope } from '@/lib/services/types';
 
@@ -157,20 +157,48 @@ const PLAN_SYSTEM =
   '"recurrence":"none|daily|weekly|monthly","proof_required":"none|photo|video|before_after",' +
   '"safety_level":"none|caution|parent_required","auto_approve_eligible":boolean}';
 
+export type ChorePlanResult = {
+  items: ChorePlanItem[];
+  error?: string;
+  /**
+   * Set when the model provider failed: describeAIError's category ('auth',
+   * 'quota', 'rate_limit', 'network', …). `error` is then a fixed message, and
+   * the caller can say it in the family's language.
+   */
+  providerFailure?: string;
+};
+
+/** What a provider failure says, here and on the request row: never its own words. */
+const PROVIDER_FAILED = 'AI is temporarily unavailable.';
+
 export async function generateChorePlan(
   scope: ServiceScope,
   prompt: string,
   kidAges: number[] = [],
-): Promise<{ items: ChorePlanItem[]; error?: string }> {
+): Promise<ChorePlanResult> {
   if (!aiConfigured()) return { items: [], error: 'AI is not configured.' };
   const userText = `Kids' ages: ${kidAges.length ? kidAges.join(', ') : 'unspecified'}\nRequest: ${prompt.slice(0, 1500)}`;
   try {
     return await withAiRequest(
       scope,
       { feature: 'chores.plan', text: 'Plan chores' },
-      async (obs) => {
-        const provider = getProvider();
-        const completion = await provider.complete({ system: PLAN_SYSTEM, messages: [{ role: 'user', content: userText }], tools: [] });
+      async (obs): Promise<ChorePlanResult> => {
+        let provider: AIProvider | null = null;
+        let completion: Awaited<ReturnType<AIProvider['complete']>>;
+        try {
+          provider = getProvider();
+          completion = await provider.complete({ system: PLAN_SYSTEM, messages: [{ role: 'user', content: userText }], tools: [] });
+        } catch (err) {
+          // A provider's message can carry a key fragment, a billing state or an
+          // upstream URL, and it reached both the family and the request row
+          // (#730). Classified HERE, before the wrapper sees it: a throw would be
+          // stored verbatim. The row keeps the category and the model; the
+          // family gets a fixed message.
+          const category = describeAIError(err).code;
+          if (provider) obs.used(provider.model, null);
+          obs.failed(new Error(`The model provider failed (${category}).`));
+          return { items: [], error: PROVIDER_FAILED, providerFailure: category };
+        }
         obs.used(provider.model, completion.usage);
         const parsed = parseJsonLoose(completion.text);
         if (!Array.isArray(parsed)) {
@@ -180,8 +208,10 @@ export async function generateChorePlan(
         return { items: parsed.map(normalizePlanItem).filter(Boolean) as ChorePlanItem[] };
       },
     );
-  } catch (err) {
-    return { items: [], error: err instanceof Error ? err.message : 'AI request failed.' };
+  } catch {
+    // Nothing above throws on purpose any more; whatever does is not the
+    // family's to read either.
+    return { items: [], error: PROVIDER_FAILED, providerFailure: 'unknown' };
   }
 }
 

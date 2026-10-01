@@ -144,7 +144,7 @@ export async function addFundsAction(input: { childWalletId: string; amountCents
     title: `Add funds ${(amount / 100).toFixed(2)}`,
     context: { amountCents: amount }, openApproval: false,
   });
-  if (decision.effect === 'deny') return { ok: false, error: householdPolicyBlocked(t, decision) };
+  if (decision.effect !== 'allow') return { ok: false, error: householdPolicyBlocked(t, decision) };
 
   const split = normalizeSplit(rule?.split as Partial<Split> | null);
   const parts = allocate(amount, split);
@@ -412,9 +412,15 @@ export async function runDueAllowancesAction(): Promise<Result & { ranCount?: nu
     // A loser is not an error: it means the period is already paid, so `continue`
     // rather than actionFailure. `maybeSingle`, because `single` treats zero rows
     // as a failure and that is exactly the case this now expects.
+    //
+    // `is_active` is claimed too. The read above selected active rules, but a
+    // pause does not move the due date, so a pause that commits between that
+    // read and this update used to be claimed and paid anyway. In the same
+    // statement, the pause and the claim cannot both win: a paused rule matches
+    // nothing and is skipped like one another run claimed.
     const { data: advancedRule, error: advanceError } = await supabase.from('allowance_rules')
       .update({ next_run_on: next, last_run_on: today })
-      .eq('id', rule.id).eq('family_id', familyId).lte('next_run_on', today)
+      .eq('id', rule.id).eq('family_id', familyId).eq('is_active', true).lte('next_run_on', today)
       .select('id').maybeSingle();
     if (advanceError) return actionFailure(advanceError, t('wallet.couldNotUpdateAnAllowanceSchedule'));
     if (!advancedRule) continue; // another run claimed this rule — do not double-pay
@@ -497,7 +503,7 @@ export async function fundGoalAction(input: { goalId: string; amountCents: numbe
     title: `Fund goal "${goal.title}" ${(amount / 100).toFixed(2)}`,
     context: { amountCents: amount }, openApproval: false,
   });
-  if (decision.effect === 'deny') return { ok: false, error: householdPolicyBlocked(t, decision) };
+  if (decision.effect !== 'allow') return { ok: false, error: householdPolicyBlocked(t, decision) };
 
   const result = await fundGoal(supabase, {
     familyId, goalId: input.goalId, amountCents: amount, actorId: ctx.user.id,
@@ -556,7 +562,7 @@ export async function approveGiftAction(input: { giftPaymentId: string }): Promi
     title: `Approve gift ${(gift.amount_cents / 100).toFixed(2)}`,
     context: { amountCents: gift.amount_cents }, openApproval: false,
   });
-  if (decision.effect === 'deny') return { ok: false, error: householdPolicyBlocked(t, decision) };
+  if (decision.effect !== 'allow') return { ok: false, error: householdPolicyBlocked(t, decision) };
 
   const res = await approveGift(supabase, familyId, gift.id, ctx.user.id);
   if (!res.ok) return { ok: false, error: res.error };
@@ -650,6 +656,22 @@ export async function recordBabysitterPaymentAction(input: {
   if (!isManager(ctx.active.role)) return { ok: false, error: t('actions.onlyAParentGuardianCan13') };
   if (!Number.isFinite(input.amountCents) || input.amountCents <= 0) return { ok: false, error: t('actions.enterAPaymentAmount') };
   const supabase = await createServer();
+
+  // The babysitter and the event are plain foreign keys (0088): the database
+  // refuses an id that does not exist but accepts ANOTHER family's, and the
+  // insert policies check only the payment's own family_id (0354). So read
+  // both back inside this family first, as saveWalletRuleAction does for its
+  // wallet, and write nothing otherwise. The event stays optional.
+  const { data: sitter, error: sitterError } = await supabase.from('babysitter_profiles')
+    .select('id').eq('id', input.babysitterId).eq('family_id', ctx.active.familyId).maybeSingle();
+  if (sitterError) return actionFailure(sitterError, t('actions.couldNotRecordThatBabysitter'));
+  if (!sitter) return { ok: false, error: t('actions.couldNotRecordThatBabysitter') };
+  if (input.eventId) {
+    const { data: event, error: eventError } = await supabase.from('calendar_events')
+      .select('id').eq('id', input.eventId).eq('family_id', ctx.active.familyId).maybeSingle();
+    if (eventError) return actionFailure(eventError, t('actions.couldNotRecordThatBabysitter'));
+    if (!event) return { ok: false, error: t('actions.couldNotRecordThatBabysitter') };
+  }
 
   const { decision } = await evaluateTrust(supabase, ctx.active.familyId, {
     actor: { kind: 'member', id: ctx.active.member.id, role: roleOf(ctx.active.role) },
@@ -927,7 +949,7 @@ export async function decideSpendRequestAction(input: {
       title: `Approve spend ${((txn.amount_cents ?? 0) / 100).toFixed(2)}`,
       context: { amountCents: txn.amount_cents ?? 0 }, openApproval: false,
     });
-    if (decision.effect === 'deny') return { ok: false, error: householdPolicyBlocked(t, decision) };
+    if (decision.effect !== 'allow') return { ok: false, error: householdPolicyBlocked(t, decision) };
 
   }
   const decision = await decideSpend(supabase, {
@@ -967,7 +989,7 @@ export async function sendMoneyAction(input: {
     title: `Transfer ${(amount / 100).toFixed(2)} between wallets`,
     context: { amountCents: amount }, openApproval: false,
   });
-  if (decision.effect === 'deny') return { ok: false, error: householdPolicyBlocked(t, decision) };
+  if (decision.effect !== 'allow') return { ok: false, error: householdPolicyBlocked(t, decision) };
 
   const transfer = await transferWallets(supabase, {
     familyId, fromChildWalletId: input.fromChildWalletId, toChildWalletId: input.toChildWalletId,
@@ -1052,7 +1074,7 @@ export async function decideAllowanceRequestAction(input: {
       title: `Approve allowance request ${(amount / 100).toFixed(2)}`,
       context: { amountCents: amount }, openApproval: false,
     });
-    if (decision.effect === 'deny') return { ok: false, error: householdPolicyBlocked(t, decision) };
+    if (decision.effect !== 'allow') return { ok: false, error: householdPolicyBlocked(t, decision) };
 
   }
   const decision = await decideAllowance(supabase, {

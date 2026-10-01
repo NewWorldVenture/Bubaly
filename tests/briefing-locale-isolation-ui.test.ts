@@ -30,7 +30,7 @@ vi.mock('react', async (original) => ({ ...await original<typeof import('react')
     useSyncExternalStore: (_subscribe: unknown, getSnapshot: () => unknown) => getSnapshot(),
 }));
 vi.mock('@/components/app/app-context', () => ({ useApp: () => mock.context }));
-vi.mock('@/components/i18n/locale-provider', async () => { const { getMessages, translate } = await import('@/lib/i18n/messages'); const { localeOrDefault } = await import('@/lib/i18n/locales'); return { useLocale: () => localeOrDefault(mock.locale), useTranslations: () => (key: string) => translate(getMessages(mock.locale), key) }; });
+vi.mock('@/components/i18n/locale-provider', async () => { const { getMessages, translate } = await import('@/lib/i18n/messages'); const { localeOrDefault } = await import('@/lib/i18n/locales'); return { useFamilyTimeZone: () => undefined, useLocale: () => localeOrDefault(mock.locale), useTranslations: () => (key: string) => translate(getMessages(mock.locale), key) }; });
 vi.mock('@/lib/hooks/use-realtime-query', () => ({ useRealtimeQuery: () => ({ data: [], error: null, refresh: vi.fn() }) }));
 vi.mock('@/components/approvals/approval-card', () => ({ ApprovalCard: () => null }));
 vi.mock('@/components/dashboard/home-approval-actions', () => ({ HomeApprovalActions: () => null }));

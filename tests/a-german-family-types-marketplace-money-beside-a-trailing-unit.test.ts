@@ -99,7 +99,7 @@ vi.mock('@/components/i18n/locale-provider', async () => {
   const { getMessages: messages } = await import('@/lib/i18n/messages');
   const { translate: lookup } = await import('@/lib/i18n/translate');
   const { localeOrDefault: resolve } = await import('@/lib/i18n/locales');
-  return {
+  return { useFamilyTimeZone: () => undefined,
     useLocale: () => resolve(h.locale),
     useTranslations: () => (key: string, params?: Record<string, string | number>) => lookup(messages(h.locale), key, params),
   };

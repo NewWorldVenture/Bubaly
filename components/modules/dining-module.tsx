@@ -11,7 +11,8 @@ import { useToast } from '@/components/ui/toast';
 import { cn } from '@/lib/utils/cn';
 import { toggleFavoriteAction, addRestaurantAction, logVisitAction } from '@/app/(app)/dashboard/dining/actions';
 import { useLocale, useTranslations } from '@/components/i18n/locale-provider';
-import type { LocaleCode } from '@/lib/i18n/locales';
+import { useFamilyClock, useFormat } from '@/components/i18n/use-format';
+import { wallFromKey } from '@/lib/time/wall-clock';
 import { formatCents } from '@/lib/wallet/ledger';
 
 export type DiningRow = {
@@ -43,11 +44,13 @@ const UNKNOWN = '—';
 const CURRENCY = 'USD';
 
 const priceLabel = (n: number | null) => (n && n > 0 ? '$'.repeat(Math.min(4, n)) : '');
-const fmtDayIn = (locale: LocaleCode) => (d: string | null) => (d ? new Date(d).toLocaleDateString(locale, { month: 'short', day: 'numeric', year: 'numeric' }) : '');
 
 export function DiningModule({ restaurants, visits, stats }: { restaurants: DiningRow[]; visits: DiningRow[]; stats: DiningStats }) {
   const locale = useLocale();
-  const fmtDay = fmtDayIn(locale.code);
+  // The family's zone and day (TIME-003).
+  const { fmtDate } = useFormat();
+  const fmtDay = (d: string | null) => (d ? fmtDate(d, 'MMM d, yyyy') : '');
+  const clock = useFamilyClock();
   const money = (cents: number) => formatCents(cents, CURRENCY, locale.code);
   const t = useTranslations();
   const router = useRouter();
@@ -57,7 +60,7 @@ export function DiningModule({ restaurants, visits, stats }: { restaurants: Dini
   const [logOpen, setLogOpen] = useState(false);
   const [busyId, setBusyId] = useState<string | null>(null);
   const [addForm, setAddForm] = useState({ name: '', cuisine: '', priceLevel: '2', rating: '' });
-  const [logForm, setLogForm] = useState({ name: '', amount: '', items: '', when: new Date().toISOString().slice(0, 10) });
+  const [logForm, setLogForm] = useState({ name: '', amount: '', items: '', when: clock.todayKey() });
 
   function toggleFav(r: DiningRow) {
     setBusyId(r.id);
@@ -94,12 +97,12 @@ export function DiningModule({ restaurants, visits, stats }: { restaurants: Dini
         name: logForm.name,
         amountCents: Number.isFinite(cents) ? cents : undefined,
         itemCount: logForm.items ? parseInt(logForm.items, 10) : undefined,
-        visitedAt: logForm.when ? new Date(logForm.when + 'T19:00:00').toISOString() : undefined,
+        visitedAt: logForm.when ? clock.toInstant(wallFromKey(logForm.when, 19, 0)).toISOString() : undefined,
       });
       if (!res.ok) { toastError(res.error); return; }
       success(t('diningModule.visitLogged'));
       setLogOpen(false);
-      setLogForm({ name: '', amount: '', items: '', when: new Date().toISOString().slice(0, 10) });
+      setLogForm({ name: '', amount: '', items: '', when: clock.todayKey() });
       router.refresh();
     });
   }

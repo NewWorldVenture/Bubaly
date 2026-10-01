@@ -37,6 +37,8 @@ const SOURCE_FILES = [
   // runs here: createFormat builds Intl objects from the locale code, and the
   // `date-fns` entry in `mocks` below covers the one npm import it carries.
   'components/i18n/use-format.ts', 'lib/utils/format.ts', 'lib/i18n/locales.ts',
+  // The family clock (TIME-003): the shared formatter and the zone helpers it reads.
+  'lib/time/local-day.ts', 'lib/time/wall-clock.ts',
 ];
 const MOCKED = [
   '@/components/app/app-context', '@/lib/supabase/client', '@/components/ui/toast',
@@ -132,7 +134,7 @@ async function fixture(page: Page) {
       // useFormat() calls useLocale() and reads locale.code off it, so this has
       // to hand back the whole Locale record. A () => 'en-US' stub would leave
       // code undefined and Intl would throw somewhere far from here.
-      '@/components/i18n/locale-provider': { useTranslations: () => tr, useLocale: () => load('@/lib/i18n/locales').localeOrDefault('en-US') },
+      '@/components/i18n/locale-provider': { useTranslations: () => tr, useLocale: () => load('@/lib/i18n/locales').localeOrDefault('en-US'), useFamilyTimeZone: () => undefined },
       // The real lib/utils/format.ts runs, and date-fns is the one npm module it
       // imports; the in-page loader has no bundler. Only parseISO is reached at
       // runtime here - every pattern this fixture formats is Intl-mapped inside

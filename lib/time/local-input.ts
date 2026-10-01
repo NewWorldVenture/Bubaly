@@ -41,18 +41,31 @@
 // it needs the existing rows decided first. That is a separate, larger change;
 // this one changes no stored byte and no rendered time.
 //
-// Framework-free and safe in a client bundle: no `server-only`, no DOM, no Intl.
+// TIME-003 settled that question for rendering: every family surface reads in
+// the FAMILY's zone. Both directions therefore take an optional `timeZone`, and
+// a caller that passes it must pass the SAME zone to both — the round trip is
+// closed in whichever frame the pair shares. Without it they keep the reader's
+// clock, which is the right answer where there is no family (and is what every
+// existing test of the pair pins).
+//
+// Framework-free and safe in a client bundle: no `server-only`, no DOM. The
+// zoned half uses `Intl` through `lib/time/zoned.ts`.
+import { instantForLocalTime, isValidTimezone, localPartsAt } from '@/lib/time/zoned';
 
 /**
  * The naive wall clock that a `datetime-local` box shows for an instant, as the
  * reader's own clock reads it. Empty for absent or unparseable input, which is
  * the empty box the control wants.
  */
-export function toLocalInput(iso: string | null | undefined): string {
+export function toLocalInput(iso: string | null | undefined, timeZone?: string): string {
   if (!iso) return '';
   const d = new Date(iso);
   if (Number.isNaN(d.getTime())) return '';
   const pad = (n: number) => String(n).padStart(2, '0');
+  if (timeZone && isValidTimezone(timeZone)) {
+    const p = localPartsAt(d, timeZone);
+    return `${p.year}-${pad(p.month)}-${pad(p.day)}T${pad(p.hour)}:${pad(p.minute)}`;
+  }
   return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}T${pad(d.getHours())}:${pad(d.getMinutes())}`;
 }
 
@@ -79,12 +92,23 @@ const NAIVE = /^(\d{4})-(\d{2})-(\d{2})T(\d{2}):(\d{2})(?::(\d{2})(?:\.(\d{1,3})
  * dropping the event out of the day. From that instant on the round trip is
  * closed as usual, because the box then shows the hour that does exist.
  */
-export function fromLocalInput(value: string | null | undefined): string | undefined {
+export function fromLocalInput(value: string | null | undefined, timeZone?: string): string | undefined {
   if (value == null) return undefined;
   const v = value.trim();
   if (!v) return undefined;
   const m = NAIVE.exec(v);
   if (!m) return v;
+  if (timeZone && isValidTimezone(timeZone)) {
+    // The family's clock, the same frame `toLocalInput(iso, timeZone)` read the
+    // prefill in. Seconds and milliseconds are carried on top of the minute the
+    // zone resolves, so a box that shows seconds round-trips them too.
+    const at = instantForLocalTime(
+      Number(m[1]), Number(m[2]), Number(m[3]), Number(m[4]) * 60 + Number(m[5]), timeZone,
+    );
+    if (!at) return v;
+    const extra = Number(m[6] ?? 0) * 1000 + Number((m[7] ?? '').padEnd(3, '0'));
+    return new Date(at.getTime() + extra).toISOString();
+  }
   const d = new Date(
     Number(m[1]), Number(m[2]) - 1, Number(m[3]),
     Number(m[4]), Number(m[5]), Number(m[6] ?? 0), Number((m[7] ?? '').padEnd(3, '0')),

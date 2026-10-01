@@ -1,6 +1,7 @@
 'use client';
 
 import { useEffect, useMemo, useRef, useState } from 'react';
+import { useFamilyCalendarToday } from '@/components/i18n/use-format';
 import Link from 'next/link';
 import { Gauge, Sparkles, RefreshCw, Lightbulb, Wallet, CloudSun, CheckCircle2, Plane, BedDouble, Ticket, FolderLock } from 'lucide-react';
 import { useApp } from '@/components/app/app-context';
@@ -27,6 +28,8 @@ const q = <T,>(table: string, familyId: string, vacationId: string) => ({
 });
 
 export function TripOverview({ vacationId }: { vacationId: string }) {
+  // Date-only helpers read local calendar fields: give them the FAMILY's day (TIME-003).
+  const familyToday = useFamilyCalendarToday();
   const tr = useTranslations();
   const locale = useLocale();
   // Money follows the reader; the currency stays the money's own.
@@ -151,7 +154,7 @@ export function TripOverview({ vacationId }: { vacationId: string }) {
           <ReadinessRing score={readiness.score} />
           <div className="flex-1">
             <h2 className="flex items-center gap-2 text-lg font-semibold"><Gauge className="h-5 w-5 text-brand-text" /> {tr('tripOverview.vacationReadiness')} {lvlLabel}</h2>
-            <p className="text-sm text-muted">{countdownLabel(tr, trip?.start_date)} · {tr(members.length === 1 ? 'tripCountdown.travelersOne' : 'tripCountdown.travelersMany', { count: members.length })}</p>
+            <p className="text-sm text-muted">{countdownLabel(tr, trip?.start_date, familyToday)} · {tr(members.length === 1 ? 'tripCountdown.travelersOne' : 'tripCountdown.travelersMany', { count: members.length })}</p>
           </div>
         </div>
         <div className="mt-4 grid gap-2 sm:grid-cols-3">

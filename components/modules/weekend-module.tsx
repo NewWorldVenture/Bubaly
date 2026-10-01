@@ -14,7 +14,7 @@ import { SkeletonList, ErrorState, EmptyState } from '@/components/ui/states';
 import { RADIUS_OPTIONS, DEFAULT_RADIUS, DEFAULT_DAYS, categoryMeta, priceRange, isValidZip, PLAN_STATUSES } from '@/lib/weekend/meta';
 import type { Tables, WeekendPlanStatus, WeekendFeedKind } from '@/lib/database.types';
 import { useLocale, useTranslations } from '@/components/i18n/locale-provider';
-import type { LocaleCode } from '@/lib/i18n/locales';
+import { useFamilyClock, useFormat } from '@/components/i18n/use-format';
 import { safeWebLink } from '@/lib/utils/safe-link';
 
 type Event = Tables<'weekend_events'>;
@@ -29,14 +29,17 @@ function sourceLabel(source: string): string {
   return source;
 }
 
-const dayKey = (iso: string) => iso.slice(0, 10);
-const fmtDayIn = (locale: LocaleCode) => (iso: string) => new Date(iso + 'T00:00:00').toLocaleDateString(locale, { weekday: 'long', month: 'short', day: 'numeric' });
-const fmtTimeIn = (locale: LocaleCode) => (iso: string | null) => (iso ? new Date(iso).toLocaleTimeString(locale, { hour: 'numeric', minute: '2-digit' }) : 'Time TBA');
 
 export function WeekendModule() {
   const locale = useLocale();
-  const fmtDay = fmtDayIn(locale.code);
-  const fmtTime = fmtTimeIn(locale.code);
+  // Grouped by the family's day and shown on the family's clock (TIME-003);
+  // `iso.slice(0, 10)` was Greenwich's day, so an evening event filed under the
+  // next one west of it.
+  const format = useFormat();
+  const clock = useFamilyClock();
+  const dayKey = (iso: string) => clock.dayKeyOf(iso);
+  const fmtDay = (key: string) => format.fmtDate(key, 'EEEE, MMM d');
+  const fmtTime = (iso: string | null) => (iso ? format.fmtTime(iso) : 'Time TBA');
   const t = useTranslations();
   const { familyId, userId } = useApp();
   const { success, error: toastError } = useToast();
@@ -89,9 +92,9 @@ export function WeekendModule() {
       .filter((e) => e.starts_at && new Date(e.starts_at).getTime() >= now - 3_600_000 && new Date(e.starts_at).getTime() <= horizon)
       .sort((a, b) => (a.starts_at! < b.starts_at! ? -1 : 1));
     const m = new Map<string, Event[]>();
-    for (const e of upcoming) { const k = dayKey(e.starts_at!); if (!m.has(k)) m.set(k, []); m.get(k)!.push(e); }
+    for (const e of upcoming) { const k = clock.dayKeyOf(e.starts_at!); if (!m.has(k)) m.set(k, []); m.get(k)!.push(e); }
     return [...m.entries()];
-  }, [events, days]);
+  }, [events, days, clock]);
 
   const savedEvents = useMemo(() => {
     const byId = new Map(events.map((e) => [e.id, e]));

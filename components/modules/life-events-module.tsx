@@ -37,6 +37,7 @@ import { launchDateFor, type LifeEventSuggestion } from '@/lib/life-events/detec
 import { launchLifeEventAction, setLifeEventStatusAction } from '@/app/(app)/dashboard/life-event-actions';
 import type { Tables } from '@/lib/database.types';
 import { useTranslations } from '@/components/i18n/locale-provider';
+import { useFamilyClock } from '@/components/i18n/use-format';
 import { useFormat } from '@/components/i18n/use-format';
 import type { Format } from '@/lib/utils/format';
 
@@ -67,6 +68,8 @@ export function LifeEventsModule({
   /** True when the signal read failed — the section says so instead of showing nothing. */
   suggestionsUnavailable?: boolean;
 } = {}) {
+  // The FAMILY's today (TIME-003).
+  const clock = useFamilyClock();
   const tr = useTranslations();
   // Dates follow the reader, not the browser (I18N-002).
   const fmt = useFormat();
@@ -242,7 +245,7 @@ export function LifeEventsModule({
                       variant="secondary"
                       className="self-start"
                       onClick={() => {
-                        setSuggestedDate(launchDateFor(s, new Date().toISOString().slice(0, 10)));
+                        setSuggestedDate(launchDateFor(s, clock.todayKey()));
                         setStartTemplate(s.templateKey);
                       }}
                     >
@@ -361,12 +364,13 @@ function StartModal({ template, launching, initialDate, onClose, onLaunch }: {
   onClose: () => void; onLaunch: (date: string | null) => void;
 }) {
   const tr = useTranslations();
+  const clock = useFamilyClock();
+  // The family's day, `defaultLeadDays` on (TIME-003). This read Greenwich's
+  // date of the phone's clock, a day off either side of midnight UTC.
   const defaultDate = useMemo(() => {
     if (initialDate) return initialDate;
-    const d = new Date();
-    d.setDate(d.getDate() + template.defaultLeadDays);
-    return d.toISOString().slice(0, 10);
-  }, [template.defaultLeadDays, initialDate]);
+    return clock.wallKey(clock.addDays(clock.wallToday(), template.defaultLeadDays));
+  }, [template.defaultLeadDays, initialDate, clock]);
   const [date, setDate] = useState(defaultDate);
   return (
     <Modal open onClose={onClose} title={tr('itemAction.startTitled', { name: template.title })} description={template.description}>

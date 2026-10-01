@@ -13,7 +13,7 @@ import { Modal } from '@/components/ui/modal';
 import { Input, Textarea, Field, Select } from '@/components/ui/input';
 import { Button } from '@/components/ui/button';
 import { LoadingBlock, EmptyState, ErrorState } from '@/components/ui/states';
-import { fmtDate } from '@/lib/utils/format';
+import { useFormat, useFamilyCalendarToday } from '@/components/i18n/use-format';
 import { VACATION_KINDS, VACATION_STATUSES, lookup } from '@/lib/vacations/meta';
 import { countdownLabel, daysUntil, isActive } from '@/lib/vacations/dates';
 import type { Tables } from '@/lib/database.types';
@@ -26,6 +26,9 @@ type Score = Tables<'vacation_travel_scores'>;
 const blank = () => ({ title: '', kind: 'domestic', destination: '', start_date: '', end_date: '', budget: '', description: '', is_international: false });
 
 export function VacationsList({ openCreate = false }: { openCreate?: boolean }) {
+  // Date-only helpers read local calendar fields: give them the FAMILY's day (TIME-003).
+  const familyToday = useFamilyCalendarToday();
+  const { fmtDate } = useFormat();
   const tr = useTranslations();
   const { familyId, userId } = useApp();
   const router = useRouter();
@@ -63,13 +66,13 @@ export function VacationsList({ openCreate = false }: { openCreate?: boolean }) 
     const rank = (v: Vacation) => (v.status === 'cancelled' || v.status === 'completed' ? 1 : 0);
     return [...trips].sort((a, b) => {
       if (rank(a) !== rank(b)) return rank(a) - rank(b);
-      const da = daysUntil(a.start_date) ?? 99999, db = daysUntil(b.start_date) ?? 99999;
+      const da = daysUntil(a.start_date, familyToday) ?? 99999, db = daysUntil(b.start_date, familyToday) ?? 99999;
       return da - db;
     });
-  }, [trips]);
+  }, [trips, familyToday]);
 
   const upcoming = sorted.filter((t) => t.status !== 'completed' && t.status !== 'cancelled');
-  const current = upcoming.find((t) => isActive(t.start_date, t.end_date)) ?? upcoming[0];
+  const current = upcoming.find((t) => isActive(t.start_date, t.end_date, familyToday)) ?? upcoming[0];
 
   const [saving, setSaving] = useState(false);
 
@@ -136,11 +139,11 @@ export function VacationsList({ openCreate = false }: { openCreate?: boolean }) 
           <div className="rounded-2xl border border-brand/30 bg-gradient-to-br from-brand/10 to-transparent p-5 transition hover:border-brand/50">
             <div className="flex flex-wrap items-center justify-between gap-3">
               <div>
-                <p className="text-xs font-medium uppercase tracking-wide text-brand-text">{isActive(current.start_date, current.end_date) ? 'Current trip' : 'Next trip'}</p>
+                <p className="text-xs font-medium uppercase tracking-wide text-brand-text">{isActive(current.start_date, current.end_date, familyToday) ? 'Current trip' : 'Next trip'}</p>
                 <h2 className="mt-1 flex items-center gap-2 text-xl font-bold">{lookup(VACATION_KINDS, current.kind).emoji} {current.title}</h2>
                 <p className="mt-0.5 flex items-center gap-3 text-sm text-muted">
                   {current.destination && <span className="flex items-center gap-1"><MapPin className="h-3.5 w-3.5" /> {current.destination}</span>}
-                  <span className="flex items-center gap-1"><CalendarDays className="h-3.5 w-3.5" /> {countdownLabel(tr, current.start_date)}</span>
+                  <span className="flex items-center gap-1"><CalendarDays className="h-3.5 w-3.5" /> {countdownLabel(tr, current.start_date, familyToday)}</span>
                 </p>
               </div>
               <ReadinessRing score={latestScore.get(current.id) ?? null} />
@@ -172,7 +175,7 @@ export function VacationsList({ openCreate = false }: { openCreate?: boolean }) 
                 <div className="mt-2 flex items-center gap-2">
                   <Gauge className="h-3.5 w-3.5 text-muted" />
                   <span className="text-xs text-muted">Readiness {latestScore.get(t.id) ?? '—'}{latestScore.has(t.id) ? '%' : ''}</span>
-                  <span className="ml-auto text-xs font-medium text-brand-text">{countdownLabel(tr, t.start_date)}</span>
+                  <span className="ml-auto text-xs font-medium text-brand-text">{countdownLabel(tr, t.start_date, familyToday)}</span>
                 </div>
               </Link>
             );

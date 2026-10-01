@@ -7,6 +7,8 @@ import { pluralize } from '@/lib/i18n/translate';
 
 const state = vi.hoisted(() => ({ slots: [] as unknown[], cursor: 0, tags: [] as string[], update: vi.fn(), db: vi.fn(), success: vi.fn(), error: vi.fn() }));
 vi.mock('react', async (original) => ({ ...await original<typeof import('react')>(),
+  // The shared formatter reads the reader's zone through this (TIME-003).
+  useSyncExternalStore: (_subscribe: unknown, getSnapshot: () => unknown) => getSnapshot(),
   useState: (initial: unknown) => { const index = state.cursor++; if (!(index in state.slots)) state.slots[index] = typeof initial === 'function' ? initial() : initial;
     return [state.slots[index], (value: unknown) => { state.slots[index] = typeof value === 'function' ? value(state.slots[index]) : value; }]; },
   useRef: (initial: unknown) => { const index = state.cursor++; if (!(index in state.slots)) state.slots[index] = { current: initial }; return state.slots[index]; },
@@ -24,6 +26,10 @@ vi.mock('@/components/ui/toast', () => ({ useToast: () => ({ success: state.succ
 vi.mock('@/components/i18n/locale-provider', () => ({
   useTranslations: () => (key: string, params?: Record<string, string | number>) => translate(getMessages('en-US'), key, params),
   usePlural: () => (key: string, count: number) => pluralize(getMessages('en-US'), 'en-US', key, count),
+  // The shared formatter (TIME-003) reads the locale and, with no family bound,
+  // falls back to the reader's zone.
+  useLocale: () => ({ code: 'en-US' }),
+  useFamilyTimeZone: () => undefined,
 }));
 vi.mock('@/components/ai/ai-insight', () => ({ AiInsight: () => null }));
 vi.mock('@/components/ui/button', () => ({ Button: ({ loading: _loading, ...props }: Record<string, unknown>) => createElement('button', props) }));

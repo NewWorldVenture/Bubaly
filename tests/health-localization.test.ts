@@ -15,6 +15,9 @@ vi.mock('react', async (original) => ({
   ...await original<typeof import('react')>(),
   useMemo: (make: () => unknown) => make(),
   useCallback: (callback: unknown) => callback,
+  // The shared formatter reads the reader's zone through this; the harness
+  // answers with the client snapshot, as a browser would after hydration.
+  useSyncExternalStore: (_subscribe: unknown, getSnapshot: () => unknown) => getSnapshot(),
   useState: (initial: unknown) => {
     const index = harness.cursor++;
     if (!(index in harness.slots)) harness.slots[index] = typeof initial === 'function' ? initial() : initial;
@@ -24,6 +27,8 @@ vi.mock('react', async (original) => ({
 vi.mock('@/components/i18n/locale-provider', () => ({
   useTranslations: () => (key: string, params?: Record<string, string | number>) => translate(getMessages(harness.locale), key, params),
   useLocale: () => localeOrDefault(harness.locale),
+  // No family bound in this harness: formatters fall back to the reader's zone.
+  useFamilyTimeZone: () => undefined,
 }));
 vi.mock('@/lib/i18n/server', () => ({ getTranslations: async () => (key: string) => translate(getMessages(harness.locale), key) }));
 vi.mock('@/lib/supabase/auth', () => ({ requireFeature: harness.requireFeature }));

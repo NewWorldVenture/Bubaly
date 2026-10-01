@@ -41,6 +41,7 @@ export async function planMealAction(input: PlanEntryInput): Promise<MealPlanAct
   const t = await getTranslations();
   if (!input || !input.date) return { ok: false, error: t('actions.pickAMealAndA') };
   const scope = await mealScope();
+  if (scope.role === 'guest') return { ok: false, error: t('actionRefusal.notAllowed') };
 
   try {
     const result = await setSlot(scope, input);
@@ -73,6 +74,7 @@ export async function removeMealPlanAction(planId: string): Promise<{ ok: true; 
   const t = await getTranslations();
   if (!planId) return { ok: false, error: t('actions.thatPlannedMealCouldNot') };
   const scope = await mealScope();
+  if (scope.role === 'guest') return { ok: false, error: t('actionRefusal.notAllowed') };
 
   try {
     const result = await removeSlot(scope, planId);

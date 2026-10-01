@@ -12,7 +12,7 @@ import { Input, Textarea, Field, Select } from '@/components/ui/input';
 import { Button } from '@/components/ui/button';
 import { SkeletonList, ErrorState, EmptyState } from '@/components/ui/states';
 import { AiInsight } from '@/components/ai/ai-insight';
-import { fmtDate } from '@/lib/utils/format';
+import { useFormat } from '@/components/i18n/use-format';
 import { tallyPoll, voterCount, memberSelections, isPollClosed, type VoteLike, type OptionLike } from '@/lib/voting/polls';
 import { facilitateConsensus, budgetCapForCategory, type ConsensusOption } from '@/lib/voting/consensus';
 import { WhyThis } from '@/components/ai/why-this';
@@ -50,6 +50,7 @@ const parseTags = (s: string): string[] =>
 const CURRENCY = 'USD';
 
 export function VotingModule() {
+  const { fmtDate } = useFormat();
   const tr = useTranslations();
   const locale = useLocale();
   const money = (cents: number) => formatCents(cents, CURRENCY, locale.code);

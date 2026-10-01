@@ -39,7 +39,7 @@ vi.mock('@/app/(app)/dashboard/concierge/actions', () => ({
 }));
 vi.mock('@/components/i18n/locale-provider', async () => {
   const { SOURCE_MESSAGES, translate } = await import('@/lib/i18n/messages');
-  return { useTranslations: () => (key: string, params?: Record<string, string | number>) => translate(SOURCE_MESSAGES, key, params) };
+  return { useFamilyTimeZone: () => undefined, useTranslations: () => (key: string, params?: Record<string, string | number>) => translate(SOURCE_MESSAGES, key, params) };
 });
 
 const NOW = new Date('2026-03-15T12:00:00.000Z');

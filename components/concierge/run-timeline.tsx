@@ -23,8 +23,9 @@ import type { StepState } from '@/lib/ai/runs/states';
 import type { CompletedSource } from '@/lib/home/today';
 import { toolDomainLabel } from '@/lib/ai/tool-domains';
 import { cn } from '@/lib/utils/cn';
-import { useLocale, useTranslations } from '@/components/i18n/locale-provider';
-import type { LocaleCode } from '@/lib/i18n/locales';
+import { useTranslations } from '@/components/i18n/locale-provider';
+import { useFormat } from '@/components/i18n/use-format';
+import type { Format } from '@/lib/utils/format';
 
 // ─── The read model ──────────────────────────────────────────────────────────
 //
@@ -180,10 +181,11 @@ export function ProgressBar({ progress }: { progress: RunProgressView }) {
   );
 }
 
-const whenIn = (locale: LocaleCode) => (iso: string): string => {
+// In the family's zone (TIME-003), through the shared formatter.
+const whenWith = (fmtTime: Format['fmtTime']) => (iso: string): string => {
   const ms = Date.parse(iso);
   if (!Number.isFinite(ms)) return '';
-  return new Date(ms).toLocaleTimeString(locale, { hour: 'numeric', minute: '2-digit' });
+  return fmtTime(new Date(ms));
 };
 
 /**
@@ -209,8 +211,8 @@ function SourceChip({ source }: { source: CompletedSource }) {
 }
 
 export function RunTimeline({ view, showActivity, stepSources }: { view: RunView; showActivity: boolean; stepSources?: StepSources }) {
-  const locale = useLocale();
-  const when = whenIn(locale.code);
+  const { fmtTime } = useFormat();
+  const when = whenWith(fmtTime);
   const t = useTranslations();
   useLiveRun(view.familyId, view.id, view.planId);
   const rows = timelineRows(view.steps, view.events);

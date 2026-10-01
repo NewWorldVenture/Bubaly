@@ -12,7 +12,7 @@ import { Input, Textarea, Field, Select } from '@/components/ui/input';
 import { Button } from '@/components/ui/button';
 import { AiInsight } from '@/components/ai/ai-insight';
 import { SkeletonList, ErrorState, EmptyState } from '@/components/ui/states';
-import { fmtDate } from '@/lib/utils/format';
+import { useFormat } from '@/components/i18n/use-format';
 import { SavingsCoachCard } from '@/components/modules/savings-coach-card';
 import { SubscriptionPriceHistoryReview } from '@/components/modules/subscription-price-history-review';
 import { usd as usdIn } from '@/lib/finance/splits';
@@ -51,6 +51,7 @@ export function SubscriptionsModule() {
 }
 
 export function SubscriptionsWorkspace({ context, timezone = 'UTC' }: { context: SubscriptionReviewContext; timezone?: string }) {
+  const { fmtDate } = useFormat();
   const t = useTranslations();
   // Money follows the reader; the currency stays the money's own.
   const locale = useLocale();
