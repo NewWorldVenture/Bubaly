@@ -86,8 +86,18 @@ const cookieOptions = () => ({
  * language must never be the reason a sign-in or an onboarding fails or waits,
  * so every failure is logged and answered with `none`, and so is running out
  * of `budgetMs`.
+ *
+ * `profileOnly` stores the profile's copy and writes NO cookie (not the visible
+ * language, not the pending marker). Onboarding's finalize uses it: a cookie
+ * written by a Server Action re-renders the page, and /onboarding re-rendered
+ * for a member who now has a family redirects to the dashboard before the
+ * wizard's "all set" step can show (#705 CI, authenticated + concierge E2E).
+ * The device's cookie is put in step at the next sign-in instead.
  */
-export async function syncLanguageForSignedInUser(budgetMs: number = LANGUAGE_SYNC_BUDGET_MS): Promise<LanguageSync> {
+export async function syncLanguageForSignedInUser(
+  budgetMs: number = LANGUAGE_SYNC_BUDGET_MS,
+  { profileOnly = false }: { profileOnly?: boolean } = {},
+): Promise<LanguageSync> {
   const controller = new AbortController();
   let timer: ReturnType<typeof setTimeout> | undefined;
   const deadline = new Promise<LanguageSync>((resolve) => {
@@ -98,13 +108,13 @@ export async function syncLanguageForSignedInUser(budgetMs: number = LANGUAGE_SY
     }, budgetMs);
   });
   try {
-    return await Promise.race([syncWithin(controller.signal), deadline]);
+    return await Promise.race([syncWithin(controller.signal, profileOnly), deadline]);
   } finally {
     clearTimeout(timer);
   }
 }
 
-async function syncWithin(signal: AbortSignal): Promise<LanguageSync> {
+async function syncWithin(signal: AbortSignal, profileOnly: boolean): Promise<LanguageSync> {
   try {
     const supabase = await createServer();
     const { data: { user } } = await supabase.auth.getUser();
@@ -132,7 +142,7 @@ async function syncWithin(signal: AbortSignal): Promise<LanguageSync> {
     // The owner's explicit choice is what this device shows, saved yet or not:
     // another account may have restored its own language onto the shared
     // browser since (#705 comment 5921554978).
-    if (claimed && visible !== claimed.locale) jar.set(LOCALE_COOKIE, claimed.locale, cookieOptions());
+    if (!profileOnly && claimed && visible !== claimed.locale) jar.set(LOCALE_COOKIE, claimed.locale, cookieOptions());
     if (decision.kind === 'stored') {
       // Confirmed, not assumed: the write reads back the row it changed, so a
       // profile RLS refused (or one that does not exist yet) is reported as not
@@ -148,13 +158,13 @@ async function syncWithin(signal: AbortSignal): Promise<LanguageSync> {
         console.error('[i18n] the language reached no profile row (refused or missing)');
         return { kind: 'none' };
       }
-    } else if (decision.kind === 'restored') {
+    } else if (decision.kind === 'restored' && !profileOnly) {
       jar.set(LOCALE_COOKIE, decision.locale, cookieOptions());
     }
     // A pending choice is settled once the profile holds it; one that was
     // another account's is left to them, and one this user has no claim to is
     // never read again for this user either way.
-    if (claimed && decision.kind !== 'none') {
+    if (!profileOnly && claimed && decision.kind !== 'none') {
       jar.delete(LOCALE_PENDING_COOKIE);
     }
     return decision;

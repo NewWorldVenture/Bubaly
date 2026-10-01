@@ -379,7 +379,7 @@ describe('sign-in is never failed by a language', () => {
     expect(landing.slice(0, at(landing, '\n}\n'))).toMatch(/^\s*await syncLanguageForSignedInUser\(\);/m);
     const onboarding = readFileSync(join(__dirname, '..', 'app/onboarding/actions.ts'), 'utf8');
     const finalize = onboarding.slice(at(onboarding, 'export async function finalizeOnboardingAction'));
-    const sync = at(finalize, 'await syncLanguageForSignedInUser();');
+    const sync = at(finalize, 'await syncLanguageForSignedInUser(undefined, { profileOnly: true });');
     expect(sync).toBeGreaterThan(at(finalize, "onboardingFailure('profile save'"));
     expect(sync).toBeLessThan(at(finalize, '// 2. Resolve the family'));
   });
@@ -552,7 +552,7 @@ describe('sign-in never waits on a slow language (#705 review 5919831949)', () =
 
   it('onboarding uses the same bounded sync', () => {
     const onboarding = readFileSync(join(__dirname, '..', 'app/onboarding/actions.ts'), 'utf8');
-    expect(onboarding).toContain('await syncLanguageForSignedInUser();');
+    expect(onboarding).toContain('await syncLanguageForSignedInUser(undefined, { profileOnly: true });');
   });
 });
 
@@ -672,6 +672,46 @@ describe('a sign-in form never waits on the language step for long (#705 comment
     const started = Date.now();
     await expect(waitForOptionalStep(step as () => Promise<unknown>, 5_000)).resolves.toBeUndefined();
     expect(Date.now() - started).toBeLessThan(1000);
+  });
+});
+
+describe('onboarding stores the language but writes no cookie (#705 CI: a cookie re-renders /onboarding past "all set")', () => {
+  const finalizeSync = async () => (await import('@/lib/i18n/sync')).syncLanguageForSignedInUser(undefined, { profileOnly: true });
+
+  it('a saved language this device lacks is not restored by onboarding: no cookie written', async () => {
+    db.profiles.set(PARENT, 'de-DE');
+    db.user = { id: PARENT };
+    expect(await finalizeSync()).toEqual({ kind: 'restored', locale: 'de-DE' });
+    expect(db.jar.size).toBe(0);
+    expect(db.writes).toEqual([]);
+  });
+
+  it('a choice made signed out is stored on the profile, and its marker is left for the next sign-in', async () => {
+    await setLocale('fr-FR'); // signed out: visible cookie + unowned pending marker
+    const before = new Map(db.jar);
+    db.user = { id: PARENT };
+    expect(await finalizeSync()).toEqual({ kind: 'stored', locale: 'fr-FR' });
+    expect(db.profiles.get(PARENT)).toBe('fr-FR');
+    expect(db.jar).toEqual(before); // nothing set, nothing deleted
+    // The next ordinary sign-in settles the device.
+    expect(await signIn()).toEqual({ kind: 'in-step', locale: 'fr-FR' });
+    expect(db.jar.has(LOCALE_PENDING_COOKIE)).toBe(false);
+  });
+
+  it('the language the wizard was read in is stored for a new member, cookie-free', async () => {
+    freshDevice({ 'x-vercel-ip-country': 'DE' });
+    db.user = { id: PARENT };
+    const out = await finalizeSync();
+    expect(out.kind).toBe('stored');
+    expect(db.profiles.get(PARENT)).toBe((out as { locale: string }).locale);
+    expect(db.jar.size).toBe(0);
+  });
+
+  it('sign-in, by contrast, still restores the device', async () => {
+    db.profiles.set(PARENT, 'de-DE');
+    db.user = { id: PARENT };
+    expect(await signIn()).toEqual({ kind: 'restored', locale: 'de-DE' });
+    expect(cookie()?.value).toBe('de-DE');
   });
 });
 

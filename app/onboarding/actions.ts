@@ -401,8 +401,10 @@ export async function finalizeOnboardingAction(input: {
 
   // 1a. Their language, stored (profiles.locale, 0466; I18N-001): the one they
   //     chose in the picker, or else the one they just read this whole wizard
-  //     in. Best-effort: never a reason to fail onboarding.
-  await syncLanguageForSignedInUser();
+  //     in. Best-effort: never a reason to fail onboarding. Profile only: a
+  //     cookie written here would re-render /onboarding into the dashboard
+  //     redirect before the "all set" step (lib/i18n/sync.ts).
+  await syncLanguageForSignedInUser(undefined, { profileOnly: true });
 
   // 2. Resolve the family this onboarding writes to. Guard against minting a
   //    SECOND family: the wizard UI is unreachable once you're in a family (the
