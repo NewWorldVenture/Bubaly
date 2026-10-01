@@ -611,6 +611,44 @@ describe('the picker\'s save never waits on a slow profile either (#705 comment 
   });
 });
 
+describe('a sign-in that picks its own destination still syncs the language (#705 comment 5922299372)', () => {
+  const action = async () => (await import('@/app/(auth)/actions')).syncLanguageAfterSignInAction();
+
+  it('restores the saved language on a new device', async () => {
+    db.profiles.set(PARENT, 'de-DE');
+    db.user = { id: PARENT };
+    await action();
+    expect(cookie()?.value).toBe('de-DE');
+    expect(await renderedIn()).toEqual(['de-DE', 'cookie']);
+  });
+
+  it('does nothing for a caller with no session: no read, no write', async () => {
+    db.readError = { message: 'must not be read', code: 'XX000' };
+    await action();
+    expect(db.writes).toEqual([]);
+    expect(db.jar.size).toBe(0);
+    expect(errors).not.toHaveBeenCalled();
+  });
+
+  it('a slow profile is abandoned within the budget', async () => {
+    db.user = { id: PARENT };
+    db.hold = 'read';
+    const { LANGUAGE_SYNC_BUDGET_MS } = await import('@/lib/i18n/sync');
+    const started = Date.now();
+    await action();
+    expect(Date.now() - started).toBeLessThan(LANGUAGE_SYNC_BUDGET_MS + 1000);
+  });
+
+  it.each([
+    ['components/auth/login-form.tsx', 'await syncLanguageAfterSignInAction().then(() => redirectDest, () => redirectDest)', 'router.push(destination)'],
+    ['components/auth/kid-login-form.tsx', 'await syncLanguageAfterSignInAction().catch(() => {});', "router.push('/home')"],
+    ['components/auth/phone-auth.tsx', 'await syncLanguageAfterSignInAction().catch(() => {});', 'router.push(destination)'],
+  ])('%s syncs before it navigates', (file, call, push) => {
+    const src = readFileSync(join(__dirname, '..', file), 'utf8');
+    expect(at(src, call)).toBeLessThan(at(src, push));
+  });
+});
+
 describe('the decision, pinned', () => {
   it.each([
     [{ cookie: 'de-DE', stored: null }, { kind: 'stored', locale: 'de-DE' }],

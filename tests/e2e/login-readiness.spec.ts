@@ -52,7 +52,7 @@ const loader = `
     '@/components/auth/oauth-buttons': { authButtonClass: '', OAuthButtons: () => null },
     '@/components/auth/phone-auth': { PhoneAuth: () => null },
     '@/components/auth/recovery-form': { RecoveryForm: () => null },
-    '@/app/(auth)/actions': { stitchIdentityAction: async () => {}, resolveLandingPathAction: async () => '/home' },
+    '@/app/(auth)/actions': { stitchIdentityAction: async () => {}, resolveLandingPathAction: async () => '/home', syncLanguageAfterSignInAction: async () => {} },
     '@/lib/auth/password-client': {
       isPasswordSessionCurrent: () => false,
       signInWithOwnedSession: async (credentials, canCommit) => {

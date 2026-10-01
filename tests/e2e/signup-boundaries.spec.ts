@@ -132,7 +132,7 @@ async function fixture(page: Page, options: { mode?: Mode; hold?: boolean; query
       'next/navigation': { useRouter: () => router, useSearchParams: () => new URLSearchParams(query) },
       '@/components/auth/oauth-buttons': { authButtonClass: '', OAuthButtons: ({ next }) => React.createElement('span', { 'data-testid': 'oauth-next', 'data-next': next }) },
       '@/components/auth/phone-auth': { PhoneAuth: ({ next, onBack }) => React.createElement('button', { onClick: onBack, 'data-testid': 'phone-next', 'data-next': next }, 'Back from phone') },
-      '@/app/(auth)/actions': { stitchIdentityAction: async () => { p.stitches++; if (p.rejectStitch) throw new Error('Fixture stitch failed'); } },
+      '@/app/(auth)/actions': { stitchIdentityAction: async () => { p.stitches++; if (p.rejectStitch) throw new Error('Fixture stitch failed'); }, syncLanguageAfterSignInAction: async () => {} },
       '@/app/(auth)/signup/actions': { rememberReferralCodeAction: async code => { p.referrals.push(code); if (p.rejectReferral) throw new Error('Fixture referral failed'); } },
       '@/lib/utils/cn': { cn: (...values) => values.filter(value => typeof value === 'string').join(' ') },
       '@capacitor/core': { Capacitor: { isNativePlatform: () => false } }, '@capacitor/haptics': {},

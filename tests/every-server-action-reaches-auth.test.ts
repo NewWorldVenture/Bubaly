@@ -49,6 +49,11 @@ const AUTH_CALL = /\b(requireUserContext|requireUser|requireMember|requireFamily
  */
 const PUBLIC_BY_DESIGN: Record<string, string> = {
   'app/(auth)/actions.ts::childSignInAction': 'a sign-in: there is no session yet, by definition',
+  // I18N-001 (#705 comment 5922299372): the identity check is auth.getUser
+  // INSIDE syncLanguageForSignedInUser's time budget, so a slow lookup cannot
+  // hold up the sign-in; a stranger gets no read and no write (pinned in
+  // a-members-language-is-kept-on-their-profile).
+  'app/(auth)/actions.ts::syncLanguageAfterSignInAction': 'acts only on the caller\'s own session: the bounded sync it calls reads auth.getUser first and does nothing for a caller with no session',
   'app/(auth)/signup/actions.ts::rememberReferralCodeAction': 'writes a referral cookie before any account exists',
   'app/gift/actions.ts::submitGiftPledgeAction': 'public gift flow behind an unguessable link, rate-limited, caps pending pledges',
   'app/reviews/new/actions.ts::submitReviewAction': 'public review submission behind an unguessable token',

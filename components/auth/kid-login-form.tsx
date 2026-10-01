@@ -8,7 +8,7 @@ import { Button } from '@/components/ui/button';
 import { useToast } from '@/components/ui/toast';
 import { normalizePin } from '@/lib/onboarding/pin';
 import { isValidUsername, normalizeUsername } from '@/lib/onboarding/child-login';
-import { childSignInAction } from '@/app/(auth)/actions';
+import { childSignInAction, syncLanguageAfterSignInAction } from '@/app/(auth)/actions';
 import { useTranslations } from '@/components/i18n/locale-provider';
 import { isPasswordSessionCurrent, signInWithOwnedSessionTokens } from '@/lib/auth/password-client';
 
@@ -66,6 +66,10 @@ export function KidLoginForm() {
       if (!data.session || !data.user || data.session.user.id !== data.user.id || !isPasswordSessionCurrent(data.session)) {
         throw new Error(t('actions.kidSignInIsTemporarily'));
       }
+      // The saved language follows the child to this device (I18N-001). Bounded,
+      // and a failure never blocks the sign-in.
+      await syncLanguageAfterSignInAction().catch(() => {});
+      if (!current()) return;
       phase.current = 'complete';
       router.push('/home');
       if (mounted.current && attempt.current === id && isPasswordSessionCurrent(data.session)) router.refresh();

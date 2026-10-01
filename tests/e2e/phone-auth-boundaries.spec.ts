@@ -6,7 +6,7 @@ import { reactBrowserScripts } from './helpers/react-browser';
 
 const { react, reactDom } = reactBrowserScripts('development');
 const sdk = fs.readFileSync(path.join(path.dirname(require.resolve('@supabase/supabase-js/package.json')), 'dist/umd/supabase.js'), 'utf8');
-const isolated = new Set(['react', 'lucide-react', 'next/navigation', '@/components/ui/toast', '@/lib/utils/cn']);
+const isolated = new Set(['react', 'lucide-react', 'next/navigation', '@/components/ui/toast', '@/lib/utils/cn', '@/app/(auth)/actions']);
 const modules: Record<string, { source: string; imports: Record<string, string> }> = {};
 function collect(filename: string): string {
   const id = path.resolve([filename, `${filename}.ts`, `${filename}.tsx`].find(f => fs.existsSync(f) && fs.statSync(f).isFile()) ?? filename);
@@ -75,7 +75,8 @@ async function fixture(page:Page,hold=false,existing?:'a'|'b',options:Options={}
     const mocks={react:React,'@supabase/supabase-js':window.supabase,'lucide-react':new Proxy({},{get:()=>()=>null}),
       'next/navigation':{useRouter:()=>({push:url=>p.routes.push(url),refresh:()=>p.refreshes++})},
       '@/components/ui/toast':{useToast:()=>({error:m=>p.messages.push(m),success:m=>p.messages.push(m)})},
-      '@/lib/utils/cn':{cn:(...values)=>values.filter(v=>typeof v==='string').join(' ')}};
+      '@/lib/utils/cn':{cn:(...values)=>values.filter(v=>typeof v==='string').join(' ')},
+      '@/app/(auth)/actions':{syncLanguageAfterSignInAction:async()=>{p.languageSyncs=(p.languageSyncs??0)+1;}}};
     function load(id){if(id in mocks)return mocks[id];if(loaded[id])return loaded[id].exports;const item=sources[id];if(!item)throw new Error('Unknown module '+id);const module=loaded[id]={exports:{}};new Function('require','module','exports','process',item.source)(name=>load(item.imports[name]),module,module.exports,process);if(id===entries.ssr){const actual=module.exports;module.exports={...actual,createBrowserClient:(...args)=>{
       const options=args[2],cookies=options?.cookies;if(cookies?.setAll){const write=cookies.setAll;options.cookies={...cookies,setAll:async batch=>{
         if(p.holdWrite&&batch.some(c=>(c.name===${JSON.stringify(key)}||c.name.startsWith(${JSON.stringify(key+'.')}))&&c.options.maxAge!==0)){

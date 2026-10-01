@@ -14,7 +14,7 @@ import { Smartphone } from 'lucide-react';
 import { OAuthButtons, authButtonClass } from '@/components/auth/oauth-buttons';
 import { PhoneAuth } from '@/components/auth/phone-auth';
 import { LegalConsent } from '@/components/auth/legal-consent';
-import { resolveLandingPathAction, stitchIdentityAction } from '@/app/(auth)/actions';
+import { resolveLandingPathAction, stitchIdentityAction, syncLanguageAfterSignInAction } from '@/app/(auth)/actions';
 import { describeDbError } from '@/lib/supabase/errors';
 import { authScreenHref, resolveAuthSelection } from '@/lib/billing/review-selection';
 import { useTranslations } from '@/components/i18n/locale-provider';
@@ -112,8 +112,12 @@ export function LoginForm() {
       // Attribute the anonymous visitor spine to this now-known user (best-effort).
       void Promise.resolve().then(() => { if (ownsSession()) return stitchIdentityAction(); }).catch(() => {});
       // Resolve server-side so super admins (DB seed OR env/code allowlist)
-      // land on the admin console even before migration 0008 is applied.
-      const destination = redirectDest || (await resolveLandingPathAction());
+      // land on the admin console even before migration 0008 is applied. An
+      // explicit return path skips that, so it puts the saved language in step
+      // itself (I18N-001); a failed language step never blocks the sign-in.
+      const destination = redirectDest
+        ? await syncLanguageAfterSignInAction().then(() => redirectDest, () => redirectDest)
+        : await resolveLandingPathAction();
       if (!ownsSession()) return;
       phase.current = 'complete';
       router.push(destination);

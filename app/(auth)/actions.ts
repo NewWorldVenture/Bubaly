@@ -25,11 +25,12 @@ import { syncLanguageForSignedInUser } from '@/lib/i18n/sync';
  *  Never throws: a context read that fails must not block a sign-in, and /home
  *  is the answer for every role but one.
  *
- *  It is also the one server step every sign-in and every accepted invite
- *  passes through, so it is where a person's language is put in step: the
- *  profile learns the language they signed in with, or this device learns the
- *  language they chose elsewhere (lib/i18n/sync.ts; I18N-001). That sync never
- *  throws either. */
+ *  It also puts the person's language in step (lib/i18n/sync.ts; I18N-001):
+ *  the profile learns the language they signed in with, or this device learns
+ *  the language they chose elsewhere. That sync is bounded and never throws.
+ *  A sign-in that picks its own destination instead of asking this (an
+ *  explicit return path, the kid and phone forms) calls
+ *  syncLanguageAfterSignInAction itself. */
 export async function resolveLandingPathAction(): Promise<string> {
   await syncLanguageForSignedInUser();
   if (await isSuperAdmin()) return '/admin';
@@ -41,6 +42,15 @@ export async function resolveLandingPathAction(): Promise<string> {
     console.error('[auth] landing role lookup failed', error);
     return DEFAULT_LANDING_PATH;
   }
+}
+
+/** The language half of resolveLandingPathAction, for a sign-in that already
+ *  knows where it is going (#705 comment 5922299372): a password login with an
+ *  explicit return path, the kid login and the phone login. Bounded by
+ *  LANGUAGE_SYNC_BUDGET_MS and never throws, so it cannot hold up or fail the
+ *  sign-in. */
+export async function syncLanguageAfterSignInAction(): Promise<void> {
+  await syncLanguageForSignedInUser();
 }
 
 const VID_COOKIE = 'bubaly_vid';

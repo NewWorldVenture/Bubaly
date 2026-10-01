@@ -97,6 +97,7 @@ async function fixture(page: Page, options: { mode?: Mode; hold?: boolean; query
       '@/components/auth/phone-auth': { PhoneAuth: ({ onBack }) => React.createElement('button', { onClick: onBack, 'data-testid': 'phone' }, 'Back from phone') },
       '@/components/auth/recovery-form': { RecoveryForm: () => React.createElement('p', { 'data-testid': 'recovery' }, 'Password recovery') },
       '@/app/(auth)/actions': {
+        syncLanguageAfterSignInAction: async () => { p.languageSyncs = (p.languageSyncs ?? 0) + 1; },
         stitchIdentityAction: () => { p.stitches++; if (p.throwStitch) throw new Error('Fixture optional stitch'); return p.rejectStitch ? Promise.reject(new Error('Fixture optional stitch')) : Promise.resolve(); },
         resolveLandingPathAction: async () => { p.landingCalls++; if (p.holdLanding) await new Promise(resolve => { releaseLanding = resolve; }); return p.landing; },
       },

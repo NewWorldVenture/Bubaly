@@ -73,6 +73,8 @@ const PUBLIC_BY_DESIGN: Record<string, string> = {
     'public survey form; respondents may be anonymous, and the slug must resolve to an active survey',
   'app/gift/actions.ts:submitGiftPledgeAction':
     'public gift page; the unguessable link token IS the authorization, pledges are written pending a parent approval, and pending pledges per link are capped',
+  'app/(auth)/actions.ts:syncLanguageAfterSignInAction':
+    'acts only on the caller\'s own session: syncLanguageForSignedInUser reads auth.getUser inside its time budget and returns with no read or write when there is none (pinned in a-members-language-is-kept-on-their-profile)',
   'app/(auth)/actions.ts:childSignInAction':
     'a sign-in cannot require a session; throttled per username via child_login_throttle so a 4-digit PIN cannot be enumerated',
 };

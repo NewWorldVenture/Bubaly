@@ -95,7 +95,7 @@ async function fixture(page: Page, mode: ActionMode = 'success', locale = 'en-US
       '@/components/i18n/locale-provider': { useTranslations: () => key => messages[key] ?? key },
       '@/components/ui/toast': { useToast: () => ({ error: message => p.toasts.push(message) }) },
       '@/lib/utils/cn': { cn: (...values) => values.filter(value => typeof value === 'string').join(' ') },
-      '@/app/(auth)/actions': { childSignInAction: async input => {
+      '@/app/(auth)/actions': { syncLanguageAfterSignInAction: async () => {}, childSignInAction: async input => {
         p.calls.push(input);
         const mode = p.mode;
         if (mode === 'hold') await new Promise(resolve => releases.push(resolve));
