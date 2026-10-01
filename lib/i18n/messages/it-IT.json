@@ -16607,8 +16607,8 @@
   "tripCountdown.daysAgo": "{count} giorni fa",
   "tripCountdown.travelersOne": "{count} viaggiatore",
   "tripCountdown.travelersMany": "{count} viaggiatori",
+  "blogBlogSearch.searchUnavailable": "La ricerca non è disponibile in questo momento. Riprova tra poco.",
   "coach.onlyYourOwnHealth": "Puoi chiedere al coach della tua salute. Un genitore o un adulto può chiedere degli altri membri della famiglia.",
   "medicationsModule.noMedicinesPrescribedToYou": "Non ti è stato prescritto alcun farmaco.",
-  "medicationsModule.yourOwnMedicinesOnly": "Vedi i farmaci che ti sono stati prescritti. Un genitore o un adulto gestisce le prescrizioni della famiglia.",
-  "blogBlogSearch.searchUnavailable": "La ricerca non è disponibile in questo momento. Riprova tra poco."
+  "medicationsModule.yourOwnMedicinesOnly": "Vedi i farmaci che ti sono stati prescritti. Un genitore o un adulto gestisce le prescrizioni della famiglia."
 }

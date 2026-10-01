@@ -16607,8 +16607,8 @@
   "tripCountdown.daysAgo": "{count} dagen geleden",
   "tripCountdown.travelersOne": "{count} reiziger",
   "tripCountdown.travelersMany": "{count} reizigers",
+  "blogBlogSearch.searchUnavailable": "Zoeken is nu niet beschikbaar. Probeer het zo meteen opnieuw.",
   "coach.onlyYourOwnHealth": "Je kunt de coach vragen stellen over je eigen gezondheid. Een ouder of volwassene kan vragen stellen over andere gezinsleden.",
   "medicationsModule.noMedicinesPrescribedToYou": "Er zijn jou geen medicijnen voorgeschreven.",
-  "medicationsModule.yourOwnMedicinesOnly": "Je ziet de medicijnen die jou zijn voorgeschreven. Een ouder of volwassene beheert de voorschriften van het gezin.",
-  "blogBlogSearch.searchUnavailable": "Zoeken is nu niet beschikbaar. Probeer het zo meteen opnieuw."
+  "medicationsModule.yourOwnMedicinesOnly": "Je ziet de medicijnen die jou zijn voorgeschreven. Een ouder of volwassene beheert de voorschriften van het gezin."
 }
