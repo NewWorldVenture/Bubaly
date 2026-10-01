@@ -500,7 +500,15 @@ describe('Supabase migration filename safety', () => {
     // makes a chat read receipt or reaction its reader's own (DB-RPC-M02).
     // 0464 makes an invited guest read-only on the eight household resources
     // /family/permissions shows them as read-only on (ROLE-M03).
-    expect(audit.nextVersion).toBe('0465');
+    //
+    // 0465 lets a child read only the prescriptions (medications and their
+    // doses) that name their own member row; a parent still reads and writes
+    // the family's (F-G09's read half, #674). RESERVED: NWV's unpublished local
+    // migrations were drafted as 0465–0470 on a branch that is not main (O-02,
+    // PROD-001/002, O-03, I18N-001, S-05, and this one as 0470). None of them
+    // may take 0465 when ported; each is renumbered from 0466 upward, in the
+    // order it reaches main.
+    expect(audit.nextVersion).toBe('0466');
   });
 
   it('flags a newly introduced collision instead of silently accepting it', () => {

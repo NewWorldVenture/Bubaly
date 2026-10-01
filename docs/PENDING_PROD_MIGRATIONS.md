@@ -4028,3 +4028,82 @@ access to equal the page's guest row: 8 findings before, 0 after.
 **After applying:** as a guest, open the calendar and try to add an event. It
 should be refused with the permission message. As a parent, add and delete one,
 which should succeed.
+
+## `0465` — a child read every family member's prescriptions (F-G09)
+
+`supabase/migrations/0465_a_child_reads_only_their_own_prescriptions.sql`
+
+**Severity: high (health data. A child could read a parent's or sibling's
+prescriptions, dosage and adherence history). Deploy order: only after the
+prerequisites below have been verified on the database being migrated.** Writes
+don't change. The application change needs none of them: it can deploy before
+0465, and it narrows the medicines page and the health coach on its own (see
+"Before and after applying"). What waits for 0465 is the database refusal itself.
+
+**Prerequisites to verify first, read-only, on the target database.** Nothing in
+this repository establishes them for production: its migration ledger records only
+`0001`-`0003` (see the top of this document), and repository or CI runs prove the
+isolated schema they build, not the live one. 0465 checks 1, 3 and 4 itself and
+raises if one fails, so an unmet prerequisite stops it rather than half-applying
+it; checking beforehand finds that out before a deploy window, not during one.
+
+```sql
+-- 1. The three tables exist.
+select to_regclass('public.medications'), to_regclass('public.medication_schedules'),
+       to_regclass('public.medication_doses');
+-- 2. The helpers the new policies call exist.
+select to_regprocedure('public.can_manage_family(uuid)'),
+       to_regprocedure('public.is_family_member(uuid)');
+-- 3. 0309/0434's six write guards exist and are RESTRICTIVE: expect 6 rows,
+--    every polpermissive = false. Fewer means 0309 or 0434 is not live: apply
+--    those first, not 0465.
+select polrelid::regclass as tbl, polname, polpermissive
+  from pg_policy
+ where polname in ('medications_manager_insert_guard', 'medications_manager_update_guard',
+                   'medications_manager_delete_guard', 'medication_schedules_manager_insert_guard',
+                   'medication_schedules_manager_update_guard', 'medication_schedules_manager_delete_guard')
+ order by 1, 2;
+-- 4. Every permissive FOR ALL policy on medication_doses grants plain
+--    membership (both expressions read is_family_member(family_id)); 0465
+--    refuses to split anything else.
+select polname, pg_get_expr(polqual, polrelid) as using_expr,
+       pg_get_expr(polwithcheck, polrelid) as check_expr
+  from pg_policy
+ where polrelid = 'public.medication_doses'::regclass and polcmd = '*' and polpermissive;
+```
+
+The owner decided that parents write and kids see only their own. `medications`
+is now readable by a manager (`can_manage_family`) for every row, and by anyone
+else only for rows whose `member_id` is their own member row. A row with no
+member ("Whole family") is a manager's to read. `medication_schedules` follow
+their medication for reads. A `medication_doses` row is readable by a manager,
+or by anyone else only when its medication is readable to them AND the dose is
+recorded for their own member row, so reassigning a medication to another child
+does not hand them the first child's dose history. Dose writes stay
+member-wide, so a child can still tick their own dose. The migration refuses
+to run, raising an error, if any of the six prescription write guards from
+0309/0434 is missing, or if a permissive read policy would survive and cancel
+out the narrowing.
+
+`docs/audit/a-child-reads-only-their-own-prescriptions-check.sql` runs as real
+sessions inside one transaction: the parent reads all four fixture
+prescriptions, and each child reads only their own. The same probe also confirms
+that immunization and health-visit writes stay a parent's.
+
+**Before and after applying — what depends on the migration.** The app
+narrows two surfaces itself, so they are right on either side of the deploy:
+the medicines page asks a non-manager for their own prescriptions and doses
+only, and the health coach grounds a non-manager's general question on their
+own medicines and refuses a question about another member (403, before any
+read). What only 0465 provides is the DATABASE refusal: until it is applied,
+a child's session can still read every member's prescriptions through any
+other read of `medications`, `medication_schedules` or `medication_doses` (the
+API, another page, a custom client). The app wording ("You see the medicines
+prescribed to you") describes what the page shows, and is true before and
+after; the privacy guarantee itself begins when 0465 is applied.
+
+**After applying:** sign in as a child who has a prescription. The medicines
+page shows only theirs and says so. The health coach refuses questions about
+another member. As a parent, the whole family's list and the member filter are
+unchanged. Run `docs/audit/a-child-reads-only-their-own-prescriptions-check.sql`
+in a transaction you roll back: it must report `OK 0465`.
