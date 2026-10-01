@@ -3,6 +3,7 @@
 import { useCallback, useMemo, useState } from 'react';
 import { Activity, ChevronRight, Dumbbell, Heart, Plus, Sparkles, Zap, Thermometer, CheckCircle2, Trash2, Target, Loader2 } from 'lucide-react';
 import { useApp } from '@/components/app/app-context';
+import { isManager } from '@/lib/constants/roles';
 import { useRealtimeQuery } from '@/lib/hooks/use-realtime-query';
 import { createClient } from '@/lib/supabase/client';
 import { wroteNoRows } from '@/lib/supabase/errors';
@@ -106,7 +107,7 @@ export function HealthModule() {
   const tr = useTranslations();
   const askConfirm = useConfirm();
   const { code: locale } = useLocale();
-  const { familyId, userId, members } = useApp();
+  const { familyId, userId, members, role } = useApp();
   const { success, error: toastError } = useToast();
   const [tab, setTab] = useState<Tab>('Overview');
   const [apptOpen, setApptOpen] = useState(false);
@@ -125,6 +126,13 @@ export function HealthModule() {
 
   // AI Health Coach modal state
   const [coachForm, setCoachForm] = useState({ member_id: '', question: '' });
+  // Whom the coach may be asked about. A manager may ask about anyone; anyone
+  // else about themselves (the route refuses the rest, because the reads it
+  // grounds on only show a child their own record — 0438, 0465).
+  const coachMembers = useMemo(
+    () => (isManager(role) ? members : members.filter((m) => m.user_id === userId)),
+    [role, members, userId],
+  );
   const [coachLoading, setCoachLoading] = useState(false);
   const [coachAnswer, setCoachAnswer] = useState('');
   const [coachError, setCoachError] = useState('');
@@ -925,7 +933,7 @@ export function HealthModule() {
       <Modal open={coachOpen} title={tr('health.aiHealthCoach')} onClose={() => setCoachOpen(false)}>
         <div className="space-y-4">
           <p className="text-xs leading-5 text-muted">{tr('healthDashboard.coachDescription')}</p>
-          <Field label={tr('health.aboutOptional')}>{(id) => <Select id={id} value={coachForm.member_id} onChange={(e) => setCoachForm((f) => ({ ...f, member_id: e.target.value }))}><option value="">{tr('health.generalWholeFamily')}</option>{members.map((m) => <option key={m.id} value={m.id}>{m.display_name}</option>)}</Select>}</Field>
+          <Field label={tr('health.aboutOptional')}>{(id) => <Select id={id} value={coachForm.member_id} onChange={(e) => setCoachForm((f) => ({ ...f, member_id: e.target.value }))}><option value="">{tr('health.generalWholeFamily')}</option>{coachMembers.map((m) => <option key={m.id} value={m.id}>{m.display_name}</option>)}</Select>}</Field>
           <Field label={tr('health.question')}>{(id) => <Textarea id={id} value={coachForm.question} onChange={(e) => setCoachForm((f) => ({ ...f, question: e.target.value }))} placeholder={tr('health.eGWhatCanHelpWith')} />}</Field>
           <Button onClick={askCoach} disabled={coachLoading || !coachForm.question.trim()} loading={coachLoading} className="w-full">
             {coachLoading ? <><Loader2 className="h-4 w-4 animate-spin" /> {tr('healthDashboard.thinking')}</> : <><Sparkles className="h-4 w-4" /> {tr('health.askTheCoach')}</>}

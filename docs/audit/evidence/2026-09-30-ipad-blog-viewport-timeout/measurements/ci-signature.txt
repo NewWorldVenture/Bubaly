@@ -1,0 +1,11 @@
+fix stall=28s | 1 passed (9.3s) | —
+fix stall=30s | 1 passed (9.4s) | —
+fix stall=32s | 1 passed (9.1s) | —
+main-48d3769c stall=28s | 1 passed (28.8s) | —
+main-48d3769c stall=29.5s | 1 passed (30.2s) | —
+main-48d3769c stall=29s | 1 passed (29.9s) | —
+main-48d3769c stall=30.5s | 1 failed | —
+main-48d3769c stall=30s | 1 failed | Error: page.evaluate: Test timeout of 30000ms exceeded
+main-48d3769c stall=31.5s | 1 failed | Error: page.setViewportSize: Test timeout of 30000ms exceeded
+main-48d3769c stall=31s | 1 failed | Error: page.evaluate: Test timeout of 30000ms exceeded
+main-48d3769c stall=32s | 1 failed | Error: page.evaluate: Test timeout of 30000ms exceeded

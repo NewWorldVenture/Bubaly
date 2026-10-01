@@ -16606,5 +16606,9 @@
   "tripCountdown.startedYesterday": "Gestern begonnen",
   "tripCountdown.daysAgo": "vor {count} Tagen",
   "tripCountdown.travelersOne": "{count} Reisende:r",
-  "tripCountdown.travelersMany": "{count} Reisende"
+  "tripCountdown.travelersMany": "{count} Reisende",
+  "blogBlogSearch.searchUnavailable": "Die Suche ist gerade nicht verfügbar. Versuche es gleich noch einmal.",
+  "coach.onlyYourOwnHealth": "Sie können den Coach zu Ihrer eigenen Gesundheit fragen. Ein Elternteil oder Erwachsener kann nach anderen Familienmitgliedern fragen.",
+  "medicationsModule.noMedicinesPrescribedToYou": "Ihnen wurden keine Medikamente verschrieben.",
+  "medicationsModule.yourOwnMedicinesOnly": "Sie sehen die Medikamente, die Ihnen verschrieben wurden. Ein Elternteil oder Erwachsener verwaltet die Verschreibungen der Familie."
 }
