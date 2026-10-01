@@ -354,3 +354,36 @@ describe('card capability, lookup and orchestration boundaries', () => {
     expect(mock.revalidate).toHaveBeenCalledExactlyOnceWith('/wallet');
   });
 });
+
+describe('safe refusal for Treasury and issuance prerequisites', () => {
+  it.each([new Error(detail), detail, { code: 'XX999', message: detail }])('Treasury capabilities rejects safely for %j', async error => {
+    mock.capabilities.mockRejectedValue(error);
+    await expect.soft(activateTreasuryAction()).resolves.toEqual({ ok: false, error: 'translated:money.couldNotOpenTheTreasuryAccount' });
+    expect(mock.from).not.toHaveBeenCalled(); expect(mock.trust).not.toHaveBeenCalled();
+    expect(mock.treasury).not.toHaveBeenCalled(); noInstrumentEffects();
+  });
+  it.each([new Error(detail), detail, { code: 'XX999', message: detail }])('Treasury mirror rejection refuses safely for %j', async error => {
+    replies.stripe_connected_accounts.rejection = error;
+    await expect.soft(activateTreasuryAction()).resolves.toEqual({ ok: false, error: 'translated:money.couldNotLoadTheTreasuryAccount' });
+    expect(mock.trust).not.toHaveBeenCalled(); expect(mock.treasury).not.toHaveBeenCalled(); noInstrumentEffects();
+  });
+  it.each([new Error(detail), detail, { code: 'XX999', message: detail }])('issuance capabilities rejects safely for %j', async error => {
+    mock.capabilities.mockRejectedValue(error);
+    await expect.soft(issueCardAction(input)).resolves.toEqual({ ok: false, error: 'translated:money.couldNotLoadCardIssuingCapabilities' });
+    expect(mock.from).not.toHaveBeenCalled(); expect(mock.trust).not.toHaveBeenCalled();
+    expect(mock.treasury).not.toHaveBeenCalled(); noInstrumentEffects();
+  });
+  it.each([new Error(detail), detail, { code: 'XX999', message: detail }])('Trust evaluation rejection refuses safely for %j', async error => {
+    mock.trust.mockRejectedValue(error);
+    await expect.soft(issueCardAction(input)).resolves.toEqual({ ok: false, error: 'translated:money.couldNotIssueTheCard' });
+    expect(mock.trust).toHaveBeenCalledTimes(1);
+    expect(queryCalls.some(call => call.table === 'family_members')).toBe(false);
+    expect(mock.treasury).not.toHaveBeenCalled(); noInstrumentEffects();
+  });
+  it.each([new Error(detail), detail, { code: 'XX999', message: detail }])('cardholder profile rejection refuses safely for %j', async error => {
+    replies.family_members.rejection = error;
+    await expect.soft(issueCardAction(input)).resolves.toEqual({ ok: false, error: 'translated:money.couldNotLoadTheCardholderProfile' });
+    expect(mock.trust).toHaveBeenCalledTimes(1);
+    expect(mock.treasury).not.toHaveBeenCalled(); noInstrumentEffects();
+  });
+});

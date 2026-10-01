@@ -36,7 +36,7 @@ import {
 } from '@/app/(app)/dashboard/moment-actions';
 import { useLocale, useTranslations } from '@/components/i18n/locale-provider';
 import { useMomentWhen } from '@/components/moments/use-moment-when';
-import { useFamilyClock } from '@/components/i18n/use-format';
+import { useFamilyCalendarToday, useFamilyClock } from '@/components/i18n/use-format';
 
 type Event = Tables<'calendar_events'>;
 
@@ -80,6 +80,11 @@ export function MomentsView({ departures, departuresFailed = false, savedTicks, 
   const locale = useLocale();
   // The family's clock and Today/Tomorrow (TIME-003).
   const clock = useFamilyClock();
+  // The family's calendar day, for which birthdays fall inside the next 30 days
+  // (TIME-003): memoized on the family's day key, so any render after the family's
+  // midnight selects for the new day. Nothing here schedules that render: an idle
+  // screen keeps yesterday's selection until something else re-renders it.
+  const familyToday = useFamilyCalendarToday();
   const momentWhen = useMomentWhen();
   const router = useRouter();
   const { familyId, members } = useApp();
@@ -117,11 +122,11 @@ export function MomentsView({ departures, departuresFailed = false, savedTicks, 
       id: e.id, title: e.title, category: e.category, location: e.location,
       starts_at: e.starts_at, all_day: e.all_day, description: e.description,
     }));
-    const all = [...evs, ...upcomingBirthdayEvents(members, new Date(), 30)]
+    const all = [...evs, ...upcomingBirthdayEvents(members, familyToday, 30)]
       .sort((a, b) => a.starts_at.localeCompare(b.starts_at));
     return all.map((e) => ({ event: e, prep: buildMomentPrep(e, { departure: departures?.[e.id] ?? null }) }))
       .filter((m) => m.prep.items.length > 0);
-  }, [rows, members, departures]);
+  }, [rows, members, departures, familyToday]);
 
   // Real double-bookings among the upcoming timed events (before they surprise you).
   const clashes = useMemo(() => findOverlaps(rows ?? []), [rows]);
