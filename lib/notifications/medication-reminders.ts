@@ -30,8 +30,9 @@ export interface MedReminder {
 /**
  * One reminder per active medication that still has at least one *pending*
  * (not taken/skipped) dose scheduled for `now`'s local day. Member-specific
- * meds notify that member; whole-family meds fan out to every manager (or a
- * single family-wide row when there are none).
+ * meds notify that member once their account is resolved; otherwise they wait
+ * for a later scan. Whole-family meds fan out to every manager (or a single
+ * family-wide row when there are none).
  *
  * `now` must already read as the family's wall clock (`asWallClockIn`) and
  * `timezone` must be the family's zone, or the day, the weekday and the instant
@@ -72,7 +73,11 @@ export function medicationDueReminders(
     const base = { type: 'medication_due' as const, related_type: 'medications' as const, related_id: med.id, title, body };
 
     if (med.member_id) {
-      out.push({ ...base, user_id: userByMember.get(med.member_id) ?? null });
+      const userId = userByMember.get(med.member_id);
+      // A missing private recipient is not a family-wide audience. This also
+      // defers the reminder when the generator could not read the roster.
+      if (!userId) continue;
+      out.push({ ...base, user_id: userId });
     } else if (managers.length === 0) {
       out.push({ ...base, user_id: null });
     } else {
