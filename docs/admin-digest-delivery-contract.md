@@ -2,8 +2,8 @@
 
 Status on 2026-09-30:
 - `lib/admin/digest-delivery.ts` exists, and its tests pass against an in-memory store and a fake provider.
-- **The PostgreSQL store exists, but is not applied to production.** It is migration `0471` plus `lib/admin/digest-delivery-store.ts`, tested on disposable local databases and in CI's replay.
-- **No route uses it.** `/api/cron/admin-digest` still sends the way it did.
+- **The PostgreSQL store exists, but is not applied to production.** It is migrations `0471` and `0474` plus `lib/admin/digest-delivery-store.ts`, tested on disposable local databases and in CI's replay.
+- **No route uses it by default.** `/api/cron/admin-digest` still sends the way it did unless `ADMIN_DIGEST_DELIVERY_ENGINE=1` (docs/admin-digest-route-integration.md); no environment sets it.
 - Duplicate admin digests are **not** fixed in production.
 
 This document is what the next two pieces must meet: a PostgreSQL store adapter and the route wiring.
@@ -29,9 +29,11 @@ These came out of an adversarial review of the engine. Each one belongs to the r
   - `readSuperAdminRecipients` lowercases table addresses but does not trim them.
   - `validatePlan` refuses the **whole occurrence** with a `TypeError` for any of these: a duplicate after trimming, an address that is not one plain address, or more than 200 recipients. Nothing is stored or sent.
   - The route must trim, lowercase and dedupe first. It must also decide whether one bad address refuses the occurrence or is dropped and reported; that is a policy choice. Either way it catches the `TypeError` and answers non-200.
-- **A recipient removed after the freeze is still sent on a retry of that occurrence.**
-  - The stored plan wins, and `planMismatch.recipientsRemoved` reports only a count. A row that was never ambiguous is retried at any age.
-  - Two options: the caller never resumes an old occurrence after an admin is removed, or a later migration adds a fenced `withdraw` step. That step is not in 0471.
+- **Pass the allowlist half of eligibility (`EngineDeps.eligibility`).** Since `0474`, a recipient removed after the freeze is **withdrawn, not sent**:
+  - Eligibility is the code/config allowlist ∪ `super_admins`. It is decided at each send's **admission**, inside `beginSend`, for a first send, a retry and a resume alike.
+  - The caller answers `allowlisted(recipientKey)` at that moment. The store reads `super_admins` itself, after its row lock, so a removal committed before the admission is always seen.
+  - **Ordering boundary:** a removal committed after an admission was granted cannot stop that one dispatch, which must still start before the grant's `dispatchBy`. Every later admission is refused.
+  - An unreadable `super_admins`, or an allowlist that throws, fails the admission: nothing is sent and nothing is withdrawn.
 - **Do not rotate `RESEND_API_KEY` while any row is `unknown` inside its window.**
   - Resend documents 24-hour key retention, but not whether a key is scoped per API key or per team.
   - If it is per API key, a retry after rotation is a new key, and the provider sends a second copy.
@@ -55,12 +57,14 @@ These came out of an adversarial review of the engine. Each one belongs to the r
 | `conflict` | 409 `invalid_idempotent_request`: the key was used for other bytes | Terminal, needs attention. The key is never changed. |
 | `exhausted` | `maxAttempts` used, nothing ever possibly accepted | Terminal, needs attention |
 | `needs_reconciliation` | Possibly accepted, and a retry is no longer safe (retention passed, attempts used up, or a final refusal after an ambiguous attempt) | Terminal. A person checks the provider by key. |
+| `withdrawn` | The recipient was on neither the allowlist nor `super_admins` at a send's admission (0474). Bytes, key, attempts, the retention anchor and ambiguity are kept. | Terminal. Settled for the occurrence if it was never ambiguous; if an earlier attempt may have been accepted, it needs attention and the occurrence is not complete. Adding the admin back does not revive it; they get the next occurrence. |
 
 **Lease expiry.** When a lease expires, the row's `sendStartedAt` mark decides what happened:
 - **Mark present.** The worker may have reached the provider, so the row is `unknown`, ambiguous and sticky.
 - **Mark absent.** It cannot have reached the provider, so the row is retried as not sent.
 
-**The mark is checked at the last moment.** `beginSend` is refused in three cases, and a refused `beginSend` sends nothing:
+**The mark is checked at the last moment.** `beginSend` is refused in four cases, and a refused `beginSend` sends nothing:
+- **`withdrawn`** (0474): the recipient is no longer eligible. Decided after the fence and before every other check; the row is withdrawn for good.
 - **`lease_expired`:** the lease has no more than the send deadline left, so another worker could claim mid-send.
 - **`retention_passed`:** an ambiguous row reached the cut-off after it was claimed. It is parked.
 - **`fenced_out`:** another claim superseded this one.
@@ -111,12 +115,12 @@ A PostgreSQL `DigestDeliveryStore` must meet all of these. It must also pass `te
    - **A NULL fence never matches.** In SQL, `fence <> NULL` is NULL, and an `IF` on NULL skips its refusal. So 0471 refuses a NULL fence as bad input (`22023`) and compares with `is distinct from`. The adapter sends only a non-negative safe integer. A stale integer such as `0` still reaches the database, which answers `fenced_out`.
    - Owner equality alone is not enough: the same owner can re-claim after its own lease lapsed.
 5. **`beginSend` commits before the provider call.** In one step it:
-   - evaluates `decideBeginSend`: fence, remaining lease against the send deadline, and the retention cut-off for ambiguous rows;
+   - evaluates `decideBeginSend`: fence, then eligibility (the caller's `allowlisted` or a `super_admins` row read after the lock; 0474), remaining lease against the send deadline, and the retention cut-off for ambiguous rows;
    - sets `send_started_at`;
    - sets `first_send_at` only if it is null;
    - returns the `dispatchBy` deadline, computed from the locked row.
 
-   A refusal that parks a row (`retention_passed`) is written in that same step. The adapter returns only after the commit (`synchronous_commit` on, the default).
+   A refusal that settles or parks a row (`withdrawn`, `retention_passed`) is written in that same step. The adapter returns only after the commit (`synchronous_commit` on, the default).
 6. **Frozen means immutable.** `recipient_key`, `idempotency_key`, `payload_json` and `payload_hash` never change after insert. Enforce this with a trigger, not only in code. `idempotency_key` is unique across the table. `payload_hash = sha256(payload_json)` is checked on insert.
 7. **Every predicate names the occurrence.** Each read and write is keyed by `(occurrence_id, recipient_key)`. The same recipient in two occurrences is two independent rows; the contract suite checks this.
 8. **Row invariants are checks.** `status = 'in_flight'` if and only if there is a lease. `status = 'accepted'` if and only if `provider_message_id` is set. `send_started_at` is set only while `in_flight`. `ambiguous` is never reset from true to false.
@@ -153,8 +157,13 @@ The engine takes a `DigestEmailProvider` whose `send` returns one classified out
 
 **It is not applied to production.** PROD-DB-0177 blocks every migration there. The shared `docs/PENDING_PROD_MIGRATIONS.md` entry is proposed to the coordinator for reconciliation, not written here.
 
+**`0474` (reserved by the coordinator on #710) extends it** for eligibility at admission, without rewriting 0471:
+- a terminal `withdrawn` status, which the guard keeps settled and `admin_digest_claim` refuses;
+- `admin_digest_begin_send` with a seventh argument, `p_allowlisted boolean` (NULL is bad input). It reads `super_admins` after the row lock, on every admission, and matches an address trimmed of what JavaScript's `trim` removes and lowercased, as the engine normalises it. An address the two normalise differently (non-ASCII case) does not match, so it is withdrawn: the safe side;
+- the six-argument 0471 `begin_send` is dropped, so nothing can reach a dispatch without the check.
+
 **Evidence:**
-- **CI.** `docs/audit/an-admin-digest-reaches-each-admin-once-check.sql` runs on the full migration replay: access refusals, freeze-once, the fence (a NULL fence included), a completion needing a mark, retention parking and frozen identity.
+- **CI.** `docs/audit/an-admin-digest-reaches-each-admin-once-check.sql` runs on the full migration replay: access refusals, freeze-once, the fence (a NULL fence included), a completion needing a mark, retention parking and frozen identity. `docs/audit/a-removed-admin-is-not-sent-the-digest-check.sql` adds 0474: the one `begin_send` signature, withdrawal under the live fence, the normalised match, the allowlist, ambiguity kept, an unreadable `super_admins`, a stale fence, and a withdrawn row that stays withdrawn.
 - **Disposable database.** `tests/admin-digest-delivery-postgres.test.ts` needs `DIGEST_DELIVERY_PG=1` and a local cluster; the `docs/audit/verify-pg.sh` harness is the default. It runs:
   - the store contract suite against PostgreSQL;
   - a differential check in which random steps, applied to the TypeScript rules and to the SQL, must agree after every step;
@@ -163,7 +172,8 @@ The engine takes a `DigestEmailProvider` whose `send` returns one classified out
   - backend death mid-claim and mid-receipt;
   - an immediate-mode server restart, which needs `DIGEST_DELIVERY_PG_RESTART_CMD`;
   - two engines at once, and an engine crash then restart;
-  - access and immutability.
+  - access and immutability;
+  - 0474: a removal, and an addition, committed while an admission waits for the row lock are both seen; an engine retry after a removal withdraws instead of sending.
 
 ## 6. What is and is not claimed
 
@@ -176,6 +186,7 @@ The engine takes a `DigestEmailProvider` whose `send` returns one classified out
   - Crashes before the mark are retried as not sent; crashes after it are retried as ambiguous.
   - Storage failures send nothing without a durable claim and mark.
   - A worker that stalls between its claim and its mark cannot send after its lease, or after the retention cut-off.
+  - A recipient on neither the allowlist nor `super_admins` at a send's admission is withdrawn, not sent, on a first send, a retry or a resume; a stale worker cannot withdraw.
 - **Tested on local PostgreSQL 16:**
   - atomic claims under 40 concurrent connections;
   - a claim decided on the clock read after its row lock;
@@ -185,5 +196,6 @@ The engine takes a `DigestEmailProvider` whose `send` returns one classified out
   - the access refusals and frozen identity above.
 - **Not claimed:**
   - Exactly-once delivery. The provider's key deduplication, inside its window, is what makes an ambiguous retry harmless.
-  - Any behaviour of the production database. 0471 is not applied there.
+  - That a removal stops a dispatch already admitted. It cannot: the boundary is the admission, and that dispatch is bounded by its `dispatchBy`.
+  - Any behaviour of the production database. Neither 0471 nor 0474 is applied there.
   - Anything about production at all. It is not wired, and production cron is not running (see the scheduler report).

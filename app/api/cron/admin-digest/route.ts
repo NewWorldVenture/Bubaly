@@ -27,7 +27,7 @@ export async function GET(req: NextRequest) {
   const admin = createServiceClient();
 
   // The per-recipient delivery engine (one digest per admin per scheduled slot) is OFF unless
-  // ADMIN_DIGEST_DELIVERY_ENGINE=1, and needs migration 0471. docs/admin-digest-route-integration.md.
+  // ADMIN_DIGEST_DELIVERY_ENGINE=1, and needs migrations 0471 and 0474. docs/admin-digest-route-integration.md.
   if (adminDigestEngineEnabled()) {
     const { status, body } = await runAdminDigestEngineForRoute(admin);
     return NextResponse.json(body, { status });

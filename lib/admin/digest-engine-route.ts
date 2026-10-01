@@ -1,17 +1,18 @@
 // /api/cron/admin-digest on the per-recipient delivery engine. OFF unless
 // ADMIN_DIGEST_DELIVERY_ENGINE=1; with the flag unset the route keeps its current
-// behaviour. Turning it on also needs migration 0471 applied and verified in that
-// environment. See docs/admin-digest-route-integration.md for the gates and the
+// behaviour. Turning it on also needs migrations 0471 and 0474 applied and verified
+// in that environment. See docs/admin-digest-route-integration.md for the gates and the
 // decisions that are still open.
 import { randomUUID } from 'node:crypto';
 import {
-  deliverDigestOccurrence, type DeliveryStatus, type DigestDeliveryStore, type DigestEmailProvider,
-  type EngineConfig, type OccurrenceReport, RESEND_KEY_RETENTION_MS,
+  deliverDigestOccurrence, recipientKeyOf, type DeliveryStatus, type DigestDeliveryStore, type DigestEmailProvider,
+  type EngineConfig, type EngineDeps, type OccurrenceReport, RESEND_KEY_RETENTION_MS,
 } from '@/lib/admin/digest-delivery';
 import { createPostgresDigestDeliveryStore, supabaseRpc } from '@/lib/admin/digest-delivery-store';
 import { adminDigestSlot, normalizeDigestRecipients } from '@/lib/admin/digest-occurrence';
 import { createResendDigestProvider } from '@/lib/admin/digest-provider';
 import { buildAdminDigest, digestSubject, renderAdminDigestHtml, type DigestRow } from '@/lib/admin/digest';
+import { superAdminEmails } from '@/lib/constants/super-admins';
 import { FROM_EMAIL } from '@/lib/email';
 import { readSuperAdminRecipients } from '@/lib/feedback/notify';
 import { createServiceClient } from '@/lib/supabase/server';
@@ -42,7 +43,16 @@ export type AdminDigestEngineDeps = {
 
 export type AdminDigestEngineResult = { status: number; body: Record<string, unknown> };
 
-const COUNTED: readonly DeliveryStatus[] = ['accepted', 'pending', 'in_flight', 'failed', 'unknown', 'rejected', 'conflict', 'exhausted', 'needs_reconciliation'];
+const COUNTED: readonly DeliveryStatus[] = ['accepted', 'withdrawn', 'pending', 'in_flight', 'failed', 'unknown', 'rejected', 'conflict', 'exhausted', 'needs_reconciliation'];
+
+/**
+ * The application's half of eligibility at each send's admission (0474): the code/config allowlist,
+ * read again at every admission, so a SUPER_ADMIN_EMAILS change is seen by the next send. The store
+ * adds super_admins, read after its row lock. A recipient in neither is withdrawn, not sent.
+ */
+export const allowlistEligibility: EngineDeps['eligibility'] = {
+  allowlisted: (recipientKey) => superAdminEmails().some((e) => recipientKeyOf(e) === recipientKey),
+};
 
 /** The response carries counts and the occurrence id only: no address, key or message body. */
 function summarize(report: OccurrenceReport) {
@@ -141,6 +151,7 @@ export async function runAdminDigestEngine(deps: AdminDigestEngineDeps): Promise
   try {
     report = await deliverDigestOccurrence({ occurrenceId, window, recipients: emails, payload }, {
       store: deps.store, provider: deps.provider, owner: deps.owner, now: deps.now, config: deps.config ?? ADMIN_DIGEST_ENGINE_CONFIG,
+      eligibility: allowlistEligibility,
     });
   } catch (err) {
     // validatePlan / validateConfig: refused before anything is stored or sent. The message names
@@ -158,7 +169,7 @@ export async function runAdminDigestEngine(deps: AdminDigestEngineDeps): Promise
   };
 }
 
-/** The route's wiring: the 0471 store over the service client, and the Resend adapter. */
+/** The route's wiring: the 0471 + 0474 store over the service client, and the Resend adapter. */
 export async function runAdminDigestEngineForRoute(admin: Admin): Promise<AdminDigestEngineResult> {
   const apiKey = process.env.RESEND_API_KEY;
   if (!apiKey || !apiKey.trim()) {

@@ -1,14 +1,15 @@
-// /api/cron/admin-digest on the delivery engine, with the REAL 0471 store: the route,
-// the PostgreSQL adapter and migration 0471 on a disposable local database, reached
+// /api/cron/admin-digest on the delivery engine, with the REAL 0471 + 0474 store: the
+// route, the PostgreSQL adapter and both migrations on a disposable local database, reached
 // through the same `rpc` call shape the Supabase service client uses.
 //
 // Opt-in, like admin-digest-delivery-postgres.test.ts: DIGEST_DELIVERY_PG=1 and a local
 // cluster (docs/audit/verify-pg.sh). DIGEST_DELIVERY_PG_RESTART_CMD adds the restart case; with it set,
 // run the PostgreSQL files with --no-file-parallelism, because a restart ends every connection to the
 // shared cluster, including another file's.
-// Fake: the notification and super-admin tables (in memory), the clock (Date, which is
-// also pinned into the database per call) and Resend at the HTTP boundary. Nothing is
-// sent; nothing touches a shared or production database.
+// Fake: the notification and super-admin tables the route reads (in memory; super_admins
+// is mirrored into the database, where 0474 reads it at each admission), the clock (Date,
+// which is also pinned into the database per call) and Resend at the HTTP boundary.
+// Nothing is sent; nothing touches a shared or production database.
 import { afterAll, afterEach, beforeAll, beforeEach, describe, expect, it, vi } from 'vitest';
 import { execSync } from 'node:child_process';
 import { createInMemorySupabase, type InMemorySupabase } from './helpers/in-memory-supabase';
@@ -28,7 +29,7 @@ const OCC = 'admin-digest:2026-09-30T12:30:00.000Z';
 const everyone = () => [...new Set([...superAdminEmails(), TABLE_ADMIN])];
 const RESTART = process.env.DIGEST_DELIVERY_PG_RESTART_CMD;
 
-describe.skipIf(!pgFixtureEnabled)('the admin digest route on PostgreSQL (0471, disposable database)', () => {
+describe.skipIf(!pgFixtureEnabled)('the admin digest route on PostgreSQL (0471 + 0474, disposable database)', () => {
   let fx: PgFixture;
   let db: InMemorySupabase;
   let resend: ReturnType<typeof createFakeResendHttp>;
@@ -45,6 +46,7 @@ describe.skipIf(!pgFixtureEnabled)('the admin digest route on PostgreSQL (0471, 
     process.env.ADMIN_DIGEST_DELIVERY_ENGINE = '1';
     db = createInMemorySupabase();
     db.seed('super_admins', [{ email: TABLE_ADMIN }]);
+    await fx.setAdmins([TABLE_ADMIN]);
     db.seed('admin_notifications', [{ id: 'n-1', kind: 'family_signup', title: 'Family A joined', created_at: '2026-09-30T09:00:00.000Z' }]);
     // The service client: tables from memory, `rpc` to the real functions as service_role, at the test's clock.
     const pg = fx.rpc(() => new Date());
@@ -106,6 +108,26 @@ describe.skipIf(!pgFixtureEnabled)('the admin digest route on PostgreSQL (0471, 
     expect(await tick('2026-09-30T12:36:00Z')).toMatchObject({ status: 200, body: { ok: true, complete: true } });
     expect(resend.deliveredTo(TABLE_ADMIN)).toBe(1);
   }, 120_000);
+
+  it('an admin removed after the freeze: the database withdraws them at the retry\'s admission, and nothing more is sent', async () => {
+    resend.script = ({ to, n }) => (to === TABLE_ADMIN && n === 1 ? 'reject_429' : 'accept');
+    expect((await tick('2026-09-30T12:31:00Z')).status).toBe(502);
+    db.replace('super_admins', []);
+    await fx.setAdmins([]);
+    expect(await tick('2026-09-30T12:36:00Z')).toMatchObject({ status: 200, body: { ok: true, complete: true, statuses: { withdrawn: 1 } } });
+    expect(await fx.sql(`select status || ':' || attempts || ':' || last_error from public.admin_digest_deliveries where occurrence_id = '${OCC}' and status <> 'accepted';`))
+      .toBe('withdrawn:2:recipient_no_longer_eligible');
+    expect(resend.requests.filter((q) => q.to === TABLE_ADMIN)).toHaveLength(1);
+    expect(resend.deliveredTo(TABLE_ADMIN)).toBe(0);
+    expect(await tick('2026-09-30T18:48:00Z')).toMatchObject({ status: 200, body: { sentThisRun: 0 } });
+  }, 60_000);
+
+  it('an unreadable super_admins in the database at admission: nothing is sent, and the route says the run is not done', async () => {
+    await fx.breakAdmins();
+    expect(await tick('2026-09-30T12:31:00Z')).toMatchObject({ status: 502, body: { ok: false, storageErrors: everyone().length } });
+    expect(resend.requests).toEqual([]);
+    expect(await fx.sql(`select count(*) from public.admin_digest_deliveries where send_started_at is not null or status = 'withdrawn';`)).toBe('0');
+  }, 60_000);
 
   it('an address the engine cannot use: nothing reaches the database or Resend', async () => {
     db.seed('super_admins', [{ email: 'Ops <ops@example.test>' }]);

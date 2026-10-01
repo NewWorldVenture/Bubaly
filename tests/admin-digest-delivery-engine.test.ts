@@ -23,7 +23,21 @@ import {
 } from './helpers/digest-delivery-fakes';
 import { contractPlan, describeDigestDeliveryStoreContract } from './helpers/digest-delivery-store-contract';
 
-describeDigestDeliveryStoreContract('in-memory store', (clock) => new MemoryDigestDeliveryStore(clock.now));
+const contractAdmins = { emails: [] as string[], broken: false };
+describeDigestDeliveryStoreContract(
+  'in-memory store',
+  (clock) => {
+    Object.assign(contractAdmins, { emails: [], broken: false });
+    return new MemoryDigestDeliveryStore(clock.now, () => {
+      if (contractAdmins.broken) throw new Error('synthetic: super_admins unreadable');
+      return contractAdmins.emails;
+    });
+  },
+  () => ({
+    set: async (emails) => { contractAdmins.emails = [...emails]; },
+    breakTable: async () => { contractAdmins.broken = true; },
+  }),
+);
 
 const ONE = 'admin-one@example.test';
 const TWO = 'admin-two@example.test';
@@ -42,14 +56,23 @@ const CONFIG: EngineConfig = {
   retentionSafetyMarginMs: HOUR,
 };
 
+/** Everyone on the code/config allowlist: the default, so only the 0474 tests meet the table. */
+const EVERYONE_ALLOWLISTED: EngineDeps['eligibility'] = { allowlisted: () => true };
+
 function world(start = T0) {
   const clock = new FakeClock(start);
-  const store = new MemoryDigestDeliveryStore(clock.now);
+  /** The store's super_admins table (raw addresses); `null` makes it unreadable. */
+  const admins: { emails: string[] | null } = { emails: [] };
+  const table = () => {
+    if (admins.emails === null) throw new Error('synthetic: super_admins unreadable');
+    return admins.emails;
+  };
+  const store = new MemoryDigestDeliveryStore(clock.now, table);
   const provider = new FakeResendProvider(clock.now);
   const engine = (owner: string, over: Partial<EngineDeps> = {}): EngineDeps => ({
-    store, provider, owner, config: CONFIG, now: clock.now, ...over,
+    store, provider, owner, config: CONFIG, now: clock.now, eligibility: EVERYONE_ALLOWLISTED, ...over,
   });
-  return { clock, store, provider, engine };
+  return { clock, store, provider, engine, admins, table };
 }
 
 const plan = (over: Partial<OccurrencePlan> = {}) => contractPlan(over);
@@ -498,6 +521,144 @@ describe('a stale receipt while the row is in flight under a newer claim', () =>
   });
 });
 
+// ── Eligibility at admission (0474) ─────────────────────────────────────────
+
+describe('an admin removed after the freeze is withdrawn, not sent (eligibility at admission, 0474)', () => {
+  /** Nobody on the code/config allowlist: the store's super_admins table alone decides. */
+  const tableOnly: EngineDeps['eligibility'] = { allowlisted: () => false };
+  const toOne = (provider: { requests: { to: string }[] }) => provider.requests.filter((q) => q.to === ONE);
+
+  it('removed before the first send: withdrawn, nothing sent to them, the other delivered, and the occurrence settled', async () => {
+    const { store, provider, engine, admins } = world();
+    admins.emails = [TWO];
+    const r = await deliverDigestOccurrence(plan(), engine('a', { eligibility: tableOnly }));
+    expect(r.statuses).toEqual({ [K1]: 'withdrawn', [K2]: 'accepted' });
+    expect(r).toMatchObject({ complete: true, needsAttention: [] });
+    expect(r.attempts.find((x) => x.recipientKey === K1)).toMatchObject({ result: 'not_sent', recorded: 'not_sent', detail: 'withdrawn' });
+    expect(toOne(provider)).toEqual([]);
+    expect(store.row(OCC, K1)).toMatchObject({ status: 'withdrawn', lastError: 'recipient_no_longer_eligible', ambiguous: false, firstSendAt: null });
+  });
+
+  it('removed between a failed attempt and its retry: the retry withdraws them and sends nothing more', async () => {
+    const { clock, provider, engine, admins } = world();
+    admins.emails = [ONE, TWO];
+    provider.script = ({ to, n }) => (to === ONE && n === 1 ? { do: 'reject', status: 429, code: 'rate_limit_exceeded', retryable: true } : { do: 'accept' });
+    expect((await deliverDigestOccurrence(plan(), engine('a', { eligibility: tableOnly }))).complete).toBe(false);
+    admins.emails = [TWO];
+    clock.advance(MINUTE);
+    const r = await deliverDigestOccurrence(plan(), engine('b', { eligibility: tableOnly }));
+    expect(r).toMatchObject({ complete: true, statuses: { [K1]: 'withdrawn', [K2]: 'accepted' } });
+    expect(toOne(provider)).toHaveLength(1); // the refused first attempt only
+    expect(provider.deliveredTo(ONE)).toBe(0);
+  });
+
+  it('control: unchanged eligibility, the same retry is sent once', async () => {
+    const { clock, provider, engine, admins } = world();
+    admins.emails = [' Admin-One@Example.TEST ', TWO];
+    provider.script = ({ to, n }) => (to === ONE && n === 1 ? { do: 'reject', status: 429, code: 'rate_limit_exceeded', retryable: true } : { do: 'accept' });
+    await deliverDigestOccurrence(plan(), engine('a', { eligibility: tableOnly }));
+    clock.advance(MINUTE);
+    expect(await deliverDigestOccurrence(plan(), engine('b', { eligibility: tableOnly }))).toMatchObject({ complete: true, statuses: { [K1]: 'accepted', [K2]: 'accepted' } });
+    expect(provider.deliveredTo(ONE)).toBe(1);
+  });
+
+  it('removed between the claim and the admission: the admission sees it, and nothing is sent', async () => {
+    const { store, provider, engine, admins } = world();
+    admins.emails = [ONE, TWO];
+    store.hooks.push(hookOn('beginSend', 'before', K1, () => { admins.emails = [TWO]; }));
+    const r = await deliverDigestOccurrence(plan(), engine('a', { eligibility: tableOnly }));
+    expect(r.statuses).toEqual({ [K1]: 'withdrawn', [K2]: 'accepted' });
+    expect(toOne(provider)).toEqual([]);
+  });
+
+  it('the ordering boundary: removed after the admission was granted, that one dispatch still happens, once', async () => {
+    const { store, provider, engine, admins } = world();
+    admins.emails = [ONE, TWO];
+    store.hooks.push(hookOn('beginSend', 'after', K1, () => { admins.emails = [TWO]; }));
+    const r = await deliverDigestOccurrence(plan(), engine('a', { eligibility: tableOnly }));
+    expect(r.statuses).toEqual({ [K1]: 'accepted', [K2]: 'accepted' });
+    expect(provider.deliveredTo(ONE)).toBe(1);
+    expect((await deliverDigestOccurrence(plan(), engine('b', { eligibility: tableOnly }))).attempts).toEqual([]);
+  });
+
+  it('an earlier send that may have reached them is not hidden: withdrawn but ambiguous, flagged for a person, not complete', async () => {
+    const { clock, store, provider, engine, admins } = world();
+    admins.emails = [ONE, TWO];
+    provider.script = ({ to, n }) => (to === ONE && n === 1 ? { do: 'accept_then_lose_answer' } : { do: 'accept' });
+    await deliverDigestOccurrence(plan(), engine('a', { eligibility: tableOnly }));
+    admins.emails = [TWO];
+    clock.advance(MINUTE);
+    const r = await deliverDigestOccurrence(plan(), engine('b', { eligibility: tableOnly }));
+    expect(r).toMatchObject({ complete: false, needsAttention: [{ recipientKey: K1, status: 'withdrawn' }] });
+    expect(store.row(OCC, K1)).toMatchObject({ status: 'withdrawn', ambiguous: true, firstSendAt: T0, attempts: 2 });
+    expect(toOne(provider)).toHaveLength(1);
+  });
+
+  it('the code/config allowlist admits whatever the table holds', async () => {
+    const { provider, engine } = world();
+    const r = await deliverDigestOccurrence(plan(), engine('a', { eligibility: { allowlisted: (k) => k === K1 } }));
+    expect(r.statuses).toEqual({ [K1]: 'accepted', [K2]: 'withdrawn' });
+    expect(provider.deliveredTo(ONE)).toBe(1);
+    expect(provider.requests.filter((q) => q.to === TWO)).toEqual([]);
+  });
+
+  it('an unreadable table: nothing is sent and nothing withdrawn; once it is readable again, each admin gets one copy', async () => {
+    const { clock, store, provider, engine, admins } = world();
+    admins.emails = null;
+    const r = await deliverDigestOccurrence(plan(), engine('a', { eligibility: tableOnly }));
+    expect(r.complete).toBe(false);
+    expect(r.storageErrors.map((e) => e.stage)).toEqual(['beginSend', 'beginSend']);
+    expect(provider.requests).toEqual([]);
+    expect(store.row(OCC, K1)).toMatchObject({ status: 'in_flight', sendStartedAt: null });
+    admins.emails = [ONE, TWO];
+    clock.advance(5 * MINUTE);
+    expect(await deliverDigestOccurrence(plan(), engine('b', { eligibility: tableOnly }))).toMatchObject({ complete: true });
+    expect([provider.deliveredTo(ONE), provider.deliveredTo(TWO)]).toEqual([1, 1]);
+  });
+
+  it('an allowlist that cannot answer: nothing is sent, and nothing is withdrawn', async () => {
+    const { store, provider, engine } = world();
+    const r = await deliverDigestOccurrence(plan(), engine('a', { eligibility: { allowlisted: () => { throw new Error('synthetic'); } } }));
+    expect(r.storageErrors.map((e) => e.stage)).toEqual(['beginSend', 'beginSend']);
+    expect(provider.requests).toEqual([]);
+    expect(store.row(OCC, K1)!.status).toBe('in_flight');
+  });
+
+  it('a stale worker cannot withdraw a delivery another worker already settled: its late admission is fenced out', async () => {
+    const { clock, store, provider, engine, admins } = world();
+    admins.emails = [ONE, TWO];
+    const gate = deferred();
+    let stalled = false;
+    store.hooks.push((m, p, k) => {
+      if (m !== 'beginSend' || p !== 'before' || k !== K1 || stalled) return undefined;
+      stalled = true;
+      return gate.promise; // the first worker stalls just before its admission
+    });
+    const stale = deliverDigestOccurrence(plan(), engine('stale', { eligibility: tableOnly }));
+    await vi.waitFor(() => expect(stalled).toBe(true));
+    clock.advance(5 * MINUTE);
+    expect((await deliverDigestOccurrence(plan(), engine('live', { eligibility: tableOnly }))).statuses![K1]).toBe('accepted');
+    admins.emails = [TWO];
+    gate.resolve();
+    const r = await stale;
+    expect(r.attempts.find((x) => x.recipientKey === K1)).toMatchObject({ result: 'not_sent', recorded: 'fenced_out', detail: 'fenced_out' });
+    expect(store.row(OCC, K1)).toMatchObject({ status: 'accepted' });
+    expect(provider.deliveredTo(ONE)).toBe(1);
+  });
+
+  it('restart: a withdrawal is durable; a new process, even with the admin back in the table, sends them nothing', async () => {
+    const { clock, store, provider, engine, admins } = world();
+    admins.emails = [TWO];
+    await deliverDigestOccurrence(plan(), engine('a', { eligibility: tableOnly }));
+    const restarted = MemoryDigestDeliveryStore.restore(store.snapshot(), clock.now, () => [ONE, TWO]);
+    const r = await resumeDigestOccurrence(OCC, { store: restarted, provider, owner: 'b', config: CONFIG, now: clock.now, eligibility: tableOnly });
+    expect(r.statuses![K1]).toBe('withdrawn');
+    expect(r.attempts).toEqual([]); // a settled row is not even claimed
+    expect(await restarted.claim(OCC, K1, 'c', CONFIG)).toEqual({ claimed: false, reason: 'withdrawn' });
+    expect(toOne(provider)).toEqual([]);
+  });
+});
+
 // ── Crashes and restarts ───────────────────────────────────────────────────
 
 describe('crashes and restarts from saved state', () => {
@@ -508,7 +669,7 @@ describe('crashes and restarts from saved state', () => {
     await vi.waitFor(() => expect(store.row(OCC, FIRST.key)?.status).toBe('accepted'));
     const saved = store.snapshot();
     const restarted = MemoryDigestDeliveryStore.restore(saved, clock.now);
-    const r = await resumeDigestOccurrence(OCC, { store: restarted, provider, owner: 'second', config: CONFIG, now: clock.now });
+    const r = await resumeDigestOccurrence(OCC, { store: restarted, provider, owner: 'second', config: CONFIG, now: clock.now, eligibility: EVERYONE_ALLOWLISTED });
     expect(r.attempts.map((x) => x.recipientKey)).toEqual([SECOND.key]);
     expect(r.complete).toBe(true);
     expect(provider.inbox.find((d) => d.to === SECOND.to)!.payloadJson).toBe(freezePlan(plan(), new Date(T0)).deliveries.find((d) => d.recipientKey === SECOND.key)!.payloadJson);

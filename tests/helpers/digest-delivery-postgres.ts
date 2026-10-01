@@ -23,6 +23,7 @@ import type { RpcCall } from '@/lib/admin/digest-delivery-store';
 export const pgFixtureEnabled = process.env.DIGEST_DELIVERY_PG === '1';
 
 const MIGRATION = fileURLToPath(new URL('../../supabase/migrations/0471_an_admin_digest_reaches_each_admin_once.sql', import.meta.url));
+const MIGRATION_0474 = fileURLToPath(new URL('../../supabase/migrations/0474_a_removed_admin_is_not_sent_the_digest.sql', import.meta.url));
 
 const env = () => ({
   ...process.env,
@@ -53,12 +54,12 @@ function lit(value: string): string {
   return `$${tag}$${value}$${tag}$`;
 }
 
-type ArgType = 'text' | 'jsonb' | 'integer' | 'bigint';
+type ArgType = 'text' | 'jsonb' | 'integer' | 'bigint' | 'boolean';
 const SIGNATURES: Record<string, { returns: 'jsonb' | 'text'; args: Record<string, ArgType> }> = {
   admin_digest_freeze: { returns: 'jsonb', args: { p_occurrence: 'jsonb', p_deliveries: 'jsonb' } },
   admin_digest_load: { returns: 'jsonb', args: { p_occurrence_id: 'text' } },
   admin_digest_claim: { returns: 'jsonb', args: { p_occurrence_id: 'text', p_recipient_key: 'text', p_owner: 'text', p_lease_ms: 'integer', p_max_attempts: 'integer', p_retention_ms: 'bigint', p_margin_ms: 'bigint' } },
-  admin_digest_begin_send: { returns: 'jsonb', args: { p_occurrence_id: 'text', p_recipient_key: 'text', p_fence: 'bigint', p_min_lease_ms: 'integer', p_retention_ms: 'bigint', p_margin_ms: 'bigint' } },
+  admin_digest_begin_send: { returns: 'jsonb', args: { p_occurrence_id: 'text', p_recipient_key: 'text', p_fence: 'bigint', p_min_lease_ms: 'integer', p_retention_ms: 'bigint', p_margin_ms: 'bigint', p_allowlisted: 'boolean' } },
   admin_digest_complete: { returns: 'text', args: { p_occurrence_id: 'text', p_recipient_key: 'text', p_fence: 'bigint', p_result: 'jsonb', p_max_attempts: 'integer' } },
 };
 
@@ -67,6 +68,10 @@ function arg(name: string, type: ArgType, value: unknown): string {
   if (type === 'text') {
     if (typeof value !== 'string') throw new TypeError(`${name} must be a string`);
     return `${lit(value)}::text`;
+  }
+  if (type === 'boolean') {
+    if (typeof value !== 'boolean') throw new TypeError(`${name} must be a boolean`);
+    return `${value}::boolean`;
   }
   if (typeof value !== 'number' || !Number.isSafeInteger(value)) throw new TypeError(`${name} must be an integer`);
   return `${value}::${type}`;
@@ -78,8 +83,12 @@ export type PgFixture = {
   sql(text: string): Promise<string>;
   /** The adapter's transport: named-argument calls as `service_role`, at `now` when given. */
   rpc(now?: () => Date): RpcCall;
-  /** Empty both tables (TRUNCATE fires no row trigger; only the fixture owner can do it). */
+  /** Empty both tables (TRUNCATE fires no row trigger; only the fixture owner can do it). Restores super_admins, empty. */
   reset(): Promise<void>;
+  /** Replace public.super_admins with these raw addresses (0474 reads it at admission). */
+  setAdmins(emails: readonly string[]): Promise<void>;
+  /** Make public.super_admins unreadable (renamed away) until the next reset. */
+  breakAdmins(): Promise<void>;
   drop(): Promise<void>;
 };
 
@@ -95,7 +104,11 @@ export async function createPgFixture(): Promise<PgFixture> {
     alter default privileges in schema public grant all on tables to anon, authenticated, service_role;
     alter default privileges in schema public grant all on functions to anon, authenticated, service_role;
   `);
+  // public.super_admins as 0008 creates it (0474 reads it at admission).
+  await sql(`create table if not exists public.super_admins (email text primary key, created_at timestamptz not null default now());
+    alter table public.super_admins enable row level security;`);
   await sql(readFileSync(MIGRATION, 'utf8'));
+  await sql(readFileSync(MIGRATION_0474, 'utf8'));
   await sql(`
     create or replace function public.admin_digest_now()
     returns timestamptz language sql volatile set search_path = public, pg_temp
@@ -113,7 +126,19 @@ export async function createPgFixture(): Promise<PgFixture> {
       if (sig.returns === 'text') return out;
       return out === '' ? null : JSON.parse(out);
     },
-    reset: async () => { await sql('truncate public.admin_digest_deliveries, public.admin_digest_occurrences;'); },
+    reset: async () => {
+      await sql(`truncate public.admin_digest_deliveries, public.admin_digest_occurrences;
+        do $$ begin
+          if to_regclass('public.super_admins') is null and to_regclass('public.super_admins_unreadable') is not null then
+            alter table public.super_admins_unreadable rename to super_admins;
+          end if;
+        end $$;
+        delete from public.super_admins;`);
+    },
+    setAdmins: async (emails) => {
+      await sql(`delete from public.super_admins;${emails.length ? ` insert into public.super_admins (email) values ${emails.map((e) => `(${lit(e)})`).join(', ')};` : ''}`);
+    },
+    breakAdmins: async () => { await sql('alter table public.super_admins rename to super_admins_unreadable;'); },
     drop: async () => { await psql('postgres', `drop database if exists ${db} with (force);`); },
   };
 }

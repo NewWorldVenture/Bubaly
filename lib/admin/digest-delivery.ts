@@ -95,12 +95,14 @@ export type FrozenOccurrence = {
 //
 //   exhausted             attempts used up, nothing ever possibly accepted  (terminal)
 //   needs_reconciliation  possibly accepted, and retrying is no longer safe  (terminal)
+//   withdrawn             the recipient was no longer eligible at a send's admission; nothing sent
+//                         under that claim (terminal; an earlier ambiguous send stays ambiguous)
 
 export type DeliveryStatus =
   | 'pending' | 'in_flight' | 'failed' | 'unknown'
-  | 'accepted' | 'rejected' | 'conflict' | 'exhausted' | 'needs_reconciliation';
+  | 'accepted' | 'rejected' | 'conflict' | 'exhausted' | 'needs_reconciliation' | 'withdrawn';
 
-export const TERMINAL_STATUSES: readonly DeliveryStatus[] = ['accepted', 'rejected', 'conflict', 'exhausted', 'needs_reconciliation'];
+export const TERMINAL_STATUSES: readonly DeliveryStatus[] = ['accepted', 'rejected', 'conflict', 'exhausted', 'needs_reconciliation', 'withdrawn'];
 export const isTerminal = (s: DeliveryStatus) => TERMINAL_STATUSES.includes(s);
 
 export type DeliveryRow = {
@@ -215,18 +217,27 @@ export type BeginSendDecision =
   /**
    * `fenced_out`: another claim superseded this one. `lease_expired`: too little lease left to finish
    * the send before another worker could claim; the row is left for the next claim. `retention_passed`:
-   * an ambiguous row reached the cut-off after it was claimed; it is parked in `next`.
+   * an ambiguous row reached the cut-off after it was claimed; it is parked in `next`. `withdrawn`: the
+   * recipient was no longer eligible at admission; `next` is the terminal withdrawn row (0474).
    */
-  | { ok: false; reason: 'fenced_out' | 'lease_expired' | 'retention_passed'; next: DeliveryRow | null };
+  | { ok: false; reason: 'fenced_out' | 'lease_expired' | 'retention_passed' | 'withdrawn'; next: DeliveryRow | null };
 
 /**
  * The beginSend rule: fenced, and re-checked at the last moment before the
  * provider call. A store MUST evaluate it and persist `next` in one atomic
  * step, with its own clock. Only `ok` permits a send.
  */
-export function decideBeginSend(row: DeliveryRow, fence: number, now: Date, policy: BeginSendPolicy): BeginSendDecision {
+export function decideBeginSend(row: DeliveryRow, fence: number, now: Date, policy: BeginSendPolicy, eligibleNow: boolean): BeginSendDecision {
   if (row.status !== 'in_flight' || row.fence !== fence) return { ok: false, reason: 'fenced_out', next: null };
   const nowIso = now.toISOString();
+  // Eligibility at admission (allowlist ∪ super_admins, as the store sees them now): an ineligible
+  // recipient is withdrawn for good. Bytes, key, attempts, the anchor and ambiguity are kept.
+  if (!eligibleNow) {
+    return {
+      ok: false, reason: 'withdrawn',
+      next: { ...row, status: 'withdrawn', leaseOwner: null, leaseExpiresAt: null, sendStartedAt: null, lastError: 'recipient_no_longer_eligible', updatedAt: nowIso },
+    };
+  }
   if (row.leaseExpiresAt === null || Date.parse(row.leaseExpiresAt) - now.getTime() <= policy.minLeaseRemainingMs) {
     return { ok: false, reason: 'lease_expired', next: null };
   }
@@ -335,7 +346,13 @@ export type StoredOccurrence = { occurrence: FrozenOccurrence; deliveries: Deliv
 
 export type BeginSendAnswer =
   | { ok: true; dispatchBy: string }
-  | { ok: false; reason: 'fenced_out' | 'lease_expired' | 'retention_passed' };
+  | { ok: false; reason: 'fenced_out' | 'lease_expired' | 'retention_passed' | 'withdrawn' };
+
+/**
+ * The application's half of eligibility at admission: whether the recipient is on the code/config
+ * allowlist. The store adds its own half, super_admins as of the admission, read inside the step.
+ */
+export type Admission = { allowlisted: boolean };
 
 /**
  * What a store must provide. Each method is ONE atomic step against durable
@@ -348,8 +365,12 @@ export interface DigestDeliveryStore {
   load(occurrenceId: string): Promise<StoredOccurrence | null>;
   /** Apply `decideClaim` atomically. */
   claim(occurrenceId: string, recipientKey: string, owner: string, policy: ClaimPolicy): Promise<{ claimed: true; row: DeliveryRow } | { claimed: false; reason: ClaimRefusal }>;
-  /** Apply `decideBeginSend` atomically (persisting `next` when set); a granted mark returns its dispatch deadline. */
-  beginSend(occurrenceId: string, recipientKey: string, fence: number, policy: BeginSendPolicy): Promise<BeginSendAnswer>;
+  /**
+   * Apply `decideBeginSend` atomically (persisting `next` when set), with `eligibleNow` =
+   * admission.allowlisted OR the recipient is in the store's super_admins, read in the same step. A
+   * granted mark returns its dispatch deadline. An unreadable super_admins must fail the call.
+   */
+  beginSend(occurrenceId: string, recipientKey: string, fence: number, policy: BeginSendPolicy, admission: Admission): Promise<BeginSendAnswer>;
   /** Apply `decideCompletion` atomically. */
   complete(occurrenceId: string, recipientKey: string, fence: number, result: ProviderSendResult, maxAttempts: number): Promise<'ok' | 'fenced_out'>;
 }
@@ -475,6 +496,12 @@ export type EngineDeps = {
   config: EngineConfig;
   /** For the report and the freeze timestamp only. Leases and retention use the store's clock. */
   now: () => Date;
+  /**
+   * The code/config half of eligibility (the allowlist), asked at each send's admission. The store
+   * decides with super_admins as of that moment, so an admin removed after the freeze is withdrawn,
+   * not sent, on a first send, a retry or a resume alike.
+   */
+  eligibility: { allowlisted(recipientKey: string): boolean };
 };
 
 export type AttemptReport = {
@@ -502,13 +529,17 @@ export type OccurrenceReport = {
   storageErrors: { stage: 'freeze' | 'load' | 'claim' | 'beginSend' | 'complete' | 'final_load'; recipientKey?: string }[];
   /** From a final read; null when that read failed. */
   statuses: Record<string, DeliveryStatus> | null;
-  /** Every recipient confirmed accepted. */
+  /** Every recipient confirmed accepted, or withdrawn with nothing possibly sent to them. */
   complete: boolean;
-  /** Parked rows a person must look at. */
+  /** Parked rows a person must look at, and withdrawn recipients an earlier attempt may have reached. */
   needsAttention: { recipientKey: string; status: DeliveryStatus }[];
 };
 
 const ATTENTION: readonly DeliveryStatus[] = ['rejected', 'conflict', 'exhausted', 'needs_reconciliation'];
+/** Settled for this occurrence: accepted, or withdrawn with nothing possibly sent. */
+const settledOk = (d: DeliveryRow) => d.status === 'accepted' || (d.status === 'withdrawn' && !d.ambiguous);
+/** A person should look: a parked row, or a withdrawn recipient who may have received an earlier send. */
+const needsAttention = (d: DeliveryRow) => ATTENTION.includes(d.status) || (d.status === 'withdrawn' && d.ambiguous);
 
 /** Freeze (or load) the occurrence, then deliver to every recipient still owed. */
 export async function deliverDigestOccurrence(plan: OccurrencePlan, deps: EngineDeps): Promise<OccurrenceReport> {
@@ -586,7 +617,7 @@ async function run(stored: StoredOccurrence, deps: EngineDeps, report: Occurrenc
         minLeaseRemainingMs: config.sendTimeoutMs,
         providerKeyRetentionMs: config.providerKeyRetentionMs,
         retentionSafetyMarginMs: config.retentionSafetyMarginMs,
-      });
+      }, { allowlisted: deps.eligibility.allowlisted(key) });
     } catch {
       report.storageErrors.push({ stage: 'beginSend', recipientKey: key });
       continue;
@@ -621,8 +652,8 @@ async function run(stored: StoredOccurrence, deps: EngineDeps, report: Occurrenc
     const final = await store.load(id);
     if (final) {
       report.statuses = Object.fromEntries(final.deliveries.map((d) => [d.recipientKey, d.status]));
-      report.complete = final.deliveries.length > 0 && final.deliveries.every((d) => d.status === 'accepted');
-      report.needsAttention = final.deliveries.filter((d) => ATTENTION.includes(d.status)).map((d) => ({ recipientKey: d.recipientKey, status: d.status }));
+      report.complete = final.deliveries.length > 0 && final.deliveries.every(settledOk);
+      report.needsAttention = final.deliveries.filter(needsAttention).map((d) => ({ recipientKey: d.recipientKey, status: d.status }));
     }
   } catch {
     report.storageErrors.push({ stage: 'final_load' });

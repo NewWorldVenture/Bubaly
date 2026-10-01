@@ -4,13 +4,14 @@
 // (readAll), readSuperAdminRecipients (#685), recipient normalisation, rendering,
 // the engine, and the Resend adapter down to `fetch`.
 // Fake: the database tables (tests/helpers/in-memory-supabase), the delivery store
-// (the in-memory twin of 0471 that the engine's contract suite pins; the PostgreSQL
-// run of the same route is admin-digest-route-engine-postgres.test.ts), the clock
+// (the in-memory twin of 0471 + 0474 that the engine's contract suite pins, reading the
+// same super_admins rows at each admission; the PostgreSQL run of the same route is
+// admin-digest-route-engine-postgres.test.ts), the clock
 // (Date only) and Resend (tests/helpers/fake-resend-http, at the HTTP boundary).
 // Nothing is sent and no migration is applied.
 //
-// What these tests do NOT show: behaviour on the production database (0471 is not
-// applied there), a real provider, or a real scheduler. Duplicate delivery is not
+// What these tests do NOT show: behaviour on the production database (0471 and 0474
+// are not applied there), a real provider, or a real scheduler. Duplicate delivery is not
 // claimed solved in production by them.
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { idempotencyKeyFor, recipientKeyOf } from '@/lib/admin/digest-delivery';
@@ -64,7 +65,8 @@ beforeEach(() => {
   db = createInMemorySupabase();
   db.seed('super_admins', [{ email: TABLE_ADMIN }]);
   state.db = db;
-  store = new MemoryDigestDeliveryStore(() => new Date());
+  // The store reads the same super_admins rows the route does, at each send's admission (0474).
+  store = new MemoryDigestDeliveryStore(() => new Date(), () => db.table('super_admins').map((r) => String(r.email)));
   state.store = store;
   resend = createFakeResendHttp();
   vi.stubGlobal('fetch', resend.fetchImpl);
@@ -278,14 +280,48 @@ describe('recipients', () => {
     expect(resend.requests).toEqual([]);
   });
 
-  it('OPEN DECISION (docs §3): an admin removed after the freeze is still sent that slot\'s digest on a retry; only a count is reported', async () => {
+  it('an admin removed after the freeze is withdrawn on the retry, not sent (0474; owner review 5372985996)', async () => {
     resend.script = ({ to, n }) => (to === TABLE_ADMIN && n === 1 ? 'reject_429' : 'accept');
     expect((await tick('2026-09-30T12:31:00Z')).status).toBe(502);
-    const noTable = db.from.bind(db);
-    state.db = { from: (t: string) => (t === 'super_admins' ? { select: () => ({ order: () => ({ range: async () => ({ data: [], error: null }) }) }) } : noTable(t)) };
+    db.replace('super_admins', []);
     const retry = await tick('2026-09-30T12:36:00Z');
-    expect(retry.body).toMatchObject({ ok: true, planMismatch: { recipientsRemoved: 1, recipientsAdded: 0 } });
-    expect(resend.deliveredTo(TABLE_ADMIN)).toBe(1);
+    expect(retry).toMatchObject({
+      status: 200,
+      body: { ok: true, complete: true, needsAttention: 0, statuses: { accepted: everyone().length - 1, withdrawn: 1 }, planMismatch: { recipientsRemoved: 1, recipientsAdded: 0 } },
+    });
+    expect(resend.requests.filter((q) => q.to === TABLE_ADMIN)).toHaveLength(1); // the refused first attempt only
+    expect(resend.deliveredTo(TABLE_ADMIN)).toBe(0);
+    expect(retry.text).not.toMatch(/table-admin/);
+  });
+
+  it('removed before the first send of the slot (between the freeze and the admission): never sent', async () => {
+    store.hooks.push((method, phase, key) => {
+      if (method === 'beginSend' && phase === 'before' && key === recipientKeyOf(TABLE_ADMIN)) db.replace('super_admins', []);
+    });
+    const r = await tick('2026-09-30T12:31:00Z');
+    expect(r).toMatchObject({ status: 200, body: { ok: true, complete: true, statuses: { accepted: everyone().length - 1, withdrawn: 1 } } });
+    expect(resend.requests.filter((q) => q.to === TABLE_ADMIN)).toEqual([]);
+  });
+
+  it('an admin on the code/config allowlist is never withdrawn by the table', async () => {
+    db.seed('super_admins', [{ email: ENV_ADMIN }]);
+    resend.script = ({ to, n }) => (to === ENV_ADMIN && n === 1 ? 'reject_429' : 'accept');
+    await tick('2026-09-30T12:31:00Z');
+    db.replace('super_admins', []); // both table rows go; ENV_ADMIN stays allowlisted by SUPER_ADMIN_EMAILS
+    const retry = await tick('2026-09-30T12:36:00Z');
+    expect(retry.body).toMatchObject({ ok: true, complete: true });
+    expect(retry.body.statuses).toEqual({ accepted: everyone().length }); // nobody withdrawn
+    expect(resend.deliveredTo(ENV_ADMIN)).toBe(1);
+    expect(resend.deliveredTo(TABLE_ADMIN)).toBe(1); // accepted on the first tick, before its removal: settled rows stay settled
+  });
+
+  it('an admin removed from SUPER_ADMIN_EMAILS after the freeze, and in no table, is withdrawn too', async () => {
+    resend.script = ({ to, n }) => (to === ENV_ADMIN && n === 1 ? 'reject_429' : 'accept');
+    await tick('2026-09-30T12:31:00Z');
+    process.env.SUPER_ADMIN_EMAILS = '';
+    const retry = await tick('2026-09-30T12:36:00Z');
+    expect(retry.body).toMatchObject({ ok: true, complete: true, statuses: { withdrawn: 1 } });
+    expect(resend.deliveredTo(ENV_ADMIN)).toBe(0);
   });
 
   it('activity that arrives inside a frozen slot\'s window changes nothing already frozen; the difference is reported', async () => {
