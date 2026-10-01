@@ -20,26 +20,45 @@ function sanitizeOverrides(value: unknown): FeatureOverrides {
 }
 
 /**
- * How long one settings read may take. /pricing, the app shell's nav and every
- * feature gate wait on it, and it had no deadline: a stalled data API held all
- * of them open for as long as the stall lasted. The budget is the query's own
- * abort signal, so the request is cancelled when it runs out, and the SDK's
- * retry backoff on a failed GET (1 s, 2 s, 4 s) ends with it.
+ * How long one settings read may take. The app shell's nav, the admin listing
+ * and every feature gate wait on it, and it had no deadline: a stalled data API
+ * held all of them open for as long as the stall lasted.
  */
 export const FEATURE_TIER_READ_BUDGET_MS = 3_000;
 
+/**
+ * The deadline bounds the WHOLE read, not just the request. An abort signal
+ * reaches the fetch (and ends the SDK's retry backoff), but it does not end an
+ * access-token lookup the SDK makes before sending, a transport that ignores
+ * the signal, or a response body that never finishes (review 5379178080). So
+ * the read is raced against the deadline, and the deadline also aborts the
+ * request so nothing keeps running behind it. A late answer is discarded.
+ */
 async function readFeatureOverrides(supabase: DB): Promise<FeatureOverrides> {
-  const { data, error } = await supabase
-    .from('app_settings')
-    .select('value')
-    .eq('key', KEY)
-    .abortSignal(AbortSignal.timeout(FEATURE_TIER_READ_BUDGET_MS))
-    .maybeSingle();
-  if (error) {
-    console.error('[feature-tiers] override read failed', error);
-    throw error;
+  const controller = new AbortController();
+  let timer: ReturnType<typeof setTimeout> | undefined;
+  const deadline = new Promise<never>((_, reject) => {
+    timer = setTimeout(() => {
+      const timeout = new Error(`The feature-tier read exceeded its ${FEATURE_TIER_READ_BUDGET_MS} ms budget`);
+      console.error('[feature-tiers] override read timed out', timeout);
+      controller.abort(timeout);
+      reject(timeout);
+    }, FEATURE_TIER_READ_BUDGET_MS);
+  });
+  try {
+    const { data, error } = await Promise.race([
+      supabase.from('app_settings').select('value').eq('key', KEY).abortSignal(controller.signal).maybeSingle(),
+      deadline,
+    ]);
+    if (error) {
+      console.error('[feature-tiers] override read failed', error);
+      throw error;
+    }
+    return sanitizeOverrides(data?.value);
+  } finally {
+    clearTimeout(timer);
+    controller.abort();
   }
-  return sanitizeOverrides(data?.value);
 }
 
 /** The settings could not be read, or not within the budget. */
