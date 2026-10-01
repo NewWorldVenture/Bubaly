@@ -24,7 +24,7 @@ import { findOverlaps } from '@/lib/moments/conflicts';
 import { useDefaultForecast } from '@/components/moments/use-default-forecast';
 import { createMomentReminderAction } from '@/app/(app)/dashboard/moment-actions';
 import { useLocale, useTranslations } from '@/components/i18n/locale-provider';
-import { useFamilyClock, useFormat } from '@/components/i18n/use-format';
+import { useFamilyCalendarToday, useFamilyClock, useFormat } from '@/components/i18n/use-format';
 
 type Event = Tables<'calendar_events'>;
 
@@ -41,6 +41,9 @@ export function HomeMomentCard() {
   const locale = useLocale();
   // The family's clock and Today/Tomorrow (TIME-003).
   const clock = useFamilyClock();
+  // The family's calendar day, for which birthday is today/tomorrow (TIME-003):
+  // memoized on the family's day key, so it moves at the family's midnight.
+  const familyToday = useFamilyCalendarToday();
   const format = useFormat();
   // The date follows the reader and the words come from the catalogue.
   const momentWhen = useMomentWhen();
@@ -73,7 +76,7 @@ export function HomeMomentCard() {
       id: e.id, title: e.title, category: e.category, location: e.location,
       starts_at: e.starts_at, all_day: e.all_day, description: e.description,
     }));
-    const merged = [...evs, ...upcomingBirthdayEvents(members, new Date(), 2)]
+    const merged = [...evs, ...upcomingBirthdayEvents(members, familyToday, 2)]
       .sort((a, b) => a.starts_at.localeCompare(b.starts_at));
     for (const e of merged) {
       if (new Date(e.starts_at).getTime() - Date.now() > HORIZON_MS) break;
@@ -81,7 +84,7 @@ export function HomeMomentCard() {
       if (prep.items.length > 0) return { event: e, prep };
     }
     return null;
-  }, [rows, members]);
+  }, [rows, members, familyToday]);
 
   // The single best reminder to offer inline: the leave-by time, else the first
   // step that can become a reminder (nudged the evening before / 2h out).
