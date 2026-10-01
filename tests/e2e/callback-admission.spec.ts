@@ -302,6 +302,9 @@ test.describe('callback admission through the real Next HTTP path', () => {
       | 'action-receipt-start' | 'action-receipt-complete' | 'recovery-adoption-start' | 'recovery-adoption-complete'
       | 'password-save-start' | 'password-save-complete' | 'home-navigation-start' | 'home-navigation-complete'
       | 'logout-start' | 'logout-complete' | 'password-relogin-start' | 'password-relogin-complete'
+      | 'logout-account-menu-start' | 'logout-account-menu-complete' | 'logout-sign-out-start' | 'logout-sign-out-complete'
+      | 'logout-confirmation-start' | 'logout-confirmation-complete' | 'logout-redirect-check-start' | 'logout-redirect-check-complete'
+      | 'logout-cookie-check-start' | 'logout-cookie-check-complete'
       | 'body-complete' | 'body-failed' | 'cleanup-complete';
     const startedAt = performance.now();
     const report = (phase: Phase, counts?: CloseWithoutSnapshotCounts) => {
@@ -370,11 +373,21 @@ test.describe('callback admission through the real Next HTTP path', () => {
       await page.goto(`${origin}/home`, { waitUntil: 'domcontentloaded' });
       report('home-navigation-complete');
       report('logout-start');
+      report('logout-account-menu-start');
       await page.getByRole('button', { name: 'Account menu', exact: true }).click();
+      report('logout-account-menu-complete');
+      report('logout-sign-out-start');
       await page.getByRole('button', { name: 'Sign out', exact: true }).click();
+      report('logout-sign-out-complete');
+      report('logout-confirmation-start');
       await page.getByRole('dialog').getByRole('button', { name: 'Sign out', exact: true }).click();
+      report('logout-confirmation-complete');
+      report('logout-redirect-check-start');
       await expect.poll(() => new URL(page.url()).pathname === '/login').toBe(true);
+      report('logout-redirect-check-complete');
+      report('logout-cookie-check-start');
       expect(authCookies(await context.cookies(), authCookieName(provider)).length).toBe(0);
+      report('logout-cookie-check-complete');
       report('logout-complete');
       report('password-relogin-start');
       await signIn(page, origin, { ...account, password });
