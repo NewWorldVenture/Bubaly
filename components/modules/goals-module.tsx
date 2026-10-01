@@ -18,7 +18,7 @@ import { Badge } from '@/components/ui/badge';
 import { Modal } from '@/components/ui/modal';
 import { Input, Field, Textarea } from '@/components/ui/input';
 import { SkeletonList, EmptyState, ErrorState } from '@/components/ui/states';
-import { fmtDate } from '@/lib/utils/format';
+import { useFormat } from '@/components/i18n/use-format';
 import { cn } from '@/lib/utils/cn';
 import type { Tables } from '@/lib/database.types';
 import { useTranslations } from '@/components/i18n/locale-provider';
@@ -129,6 +129,7 @@ function GoalCard({ goal, pending, onEdit, onDelete, onProgress }: {
   onDelete: (id: string) => void;
   onProgress: (g: Goal, progress: number) => void;
 }) {
+  const { fmtDate } = useFormat();
   const t = useTranslations();
   return (
     <Card className={cn('flex flex-col gap-3', goal.is_complete && 'opacity-70')}>

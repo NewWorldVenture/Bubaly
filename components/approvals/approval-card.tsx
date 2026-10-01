@@ -29,6 +29,8 @@ import type { ApprovalCardData, EditableField } from '@/lib/approvals/card-data'
 import { sliceLabel, sliceLabelKey } from '@/lib/trust/slice-labels';
 import { useLocale, useTranslations } from '@/components/i18n/locale-provider';
 import type { LocaleCode } from '@/lib/i18n/locales';
+import { useFormat } from '@/components/i18n/use-format';
+import type { Format } from '@/lib/utils/format';
 import { formatCents } from '@/lib/wallet/ledger';
 
 /** A context slice in the family's words; the raw name when it is not one we ship. */
@@ -67,11 +69,13 @@ export function formatAmount(cents: number | null | undefined, currency: string,
   return formatCents(cents, currency, locale);
 }
 
-const formatWhenIn = (locale: LocaleCode) => (iso: string | null | undefined): string | null => {
+// Formatted through the family's zone (TIME-003), so a request reads at the
+// same time on every member's phone as on the server page beside it.
+const formatWhenWith = (fmtDate: Format['fmtDate']) => (iso: string | null | undefined): string | null => {
   if (!iso) return null;
   const ms = Date.parse(iso);
   if (!Number.isFinite(ms)) return null;
-  return new Date(ms).toLocaleString(locale, { month: 'short', day: 'numeric', hour: 'numeric', minute: '2-digit' });
+  return fmtDate(new Date(ms), 'MMM d, h:mm a');
 };
 
 /** "Expires in 2 days" / "Expires in 3h" / "Expired" — the deadline a parent is deciding against. */
@@ -157,7 +161,8 @@ export function ApprovalCard({
   }, [approval.id, busy, onResult, router, success, toastError]);
 
   const locale = useLocale();
-  const formatWhen = formatWhenIn(locale.code);
+  const { fmtDate } = useFormat();
+  const formatWhen = formatWhenWith(fmtDate);
   const amount = formatAmount(approval.amountCents, 'USD', locale.code);
   const when = formatWhen(approval.requestedAt);
   const expiry = formatExpiry(approval.expiresAt, t);

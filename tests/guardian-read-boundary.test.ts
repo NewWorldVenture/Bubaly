@@ -91,6 +91,8 @@ vi.mock('@/lib/guardian/twilio', () => ({ isTwilioConfigured: () => true }));
 vi.mock('@/components/i18n/locale-provider', () => ({
   useTranslations: () => t,
   useLocale: () => 'en-US',
+  // No family bound: formatters fall back to the reader's zone (TIME-003).
+  useFamilyTimeZone: () => undefined,
 }));
 vi.mock('@/components/ui/toast', () => ({
   useToast: () => ({ success: () => {}, error: () => {}, info: () => {}, show: () => {} }),

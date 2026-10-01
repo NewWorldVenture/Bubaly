@@ -228,8 +228,14 @@ describe('the modal hands the action an instant, not a box value', () => {
     // using a different clock from the other, so what has to be pinned is that
     // both ends come from the one module that keeps them inverses.
     expect(src()).toMatch(/import \{ fromLocalInput, toLocalInput \} from '@\/lib\/time\/local-input'/);
-    expect(src()).toMatch(/startsAt: fromLocalInput\(parsed\.data\.starts_at\)/);
-    expect(src()).toMatch(/endsAt: fromLocalInput\(parsed\.data\.ends_at\)/);
+    // TIME-003: both directions take the FAMILY's zone, the same one on each
+    // side, so the round trip is closed in the family's frame.
+    // Resolved once, compared (end after start) and saved as those same values
+    // (#688 comment 5922125002).
+    expect(src()).toMatch(/const startsAt = fromLocalInput\(parsed\.data\.starts_at, timeZone\)/);
+    expect(src()).toMatch(/const endsAt = fromLocalInput\(parsed\.data\.ends_at, timeZone\)/);
+    expect(src()).toMatch(/title: parsed\.data\.title,\n\s*startsAt,\n\s*endsAt,/);
+    expect(src()).toMatch(/defaultValue=\{toLocalInput\(existing\?\.starts_at \?\? null, timeZone\)\}/);
   });
 
   it('keeps no private copy of the conversion to drift from the shared one', () => {

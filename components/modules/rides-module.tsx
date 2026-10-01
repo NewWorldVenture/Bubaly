@@ -24,7 +24,8 @@ import {
   RIDE_STATUS_LABELS, type RideLike,
 } from '@/lib/rides/schedule';
 import type { Tables, RideStatus } from '@/lib/database.types';
-import { useLocale, useTranslations } from '@/components/i18n/locale-provider';
+import { useTranslations } from '@/components/i18n/locale-provider';
+import { useFamilyClock, useFormat } from '@/components/i18n/use-format';
 import { useConfirm } from '@/components/ui/confirm';
 
 type Ride = Tables<'rides'>;
@@ -36,19 +37,16 @@ const STATUS_STYLES: Record<RideStatus, string> = {
   cancelled: 'text-rose-300 bg-rose-500/10 border-rose-500/30 line-through',
 };
 
-function todayKey(): string {
-  const d = new Date();
-  return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
-}
-
+// ride_date is filled from the FAMILY's today when the form opens (TIME-003).
 const blankRide = {
-  id: '', title: '', ride_date: todayKey(), pickup_time: '', dropoff_time: '',
+  id: '', title: '', ride_date: '', pickup_time: '', dropoff_time: '',
   pickup_location: '', dropoff_location: '', driver_id: '', rider_ids: [] as string[],
   status: 'planned' as RideStatus, notes: '',
 };
 
 export function RidesModule() {
-  const locale = useLocale();
+  const format = useFormat();
+  const clock = useFamilyClock();
   const tr = useTranslations();
   const askConfirm = useConfirm();
   const t = useTranslations();
@@ -58,7 +56,7 @@ export function RidesModule() {
 
   const [showPast, setShowPast] = useState(false);
   const [modalOpen, setModalOpen] = useState(false);
-  const [form, setForm] = useState(blankRide);
+  const [form, setForm] = useState(() => ({ ...blankRide, ride_date: clock.todayKey() }));
   const [saving, setSaving] = useState(false);
 
   const { data: rides, loading, error } = useRealtimeQuery<Ride>({
@@ -75,7 +73,9 @@ export function RidesModule() {
       driver_id: r.driver_id, rider_ids: r.rider_ids, status: r.status,
     })), [rides]);
 
-  const tk = todayKey();
+  // The FAMILY's today (TIME-003): which rides are upcoming, and a new ride's
+  // default date, follow the family's calendar, not the phone's.
+  const tk = clock.todayKey();
   const upcoming = useMemo(() => upcomingRides(rides ?? [], tk), [rides, tk]);
   const visibleRideLikes = useMemo(() => showPast ? rideLikes : upcomingRides(rideLikes, tk), [showPast, rideLikes, tk]);
   const timing = useMemo(() => assessDriverSchedule(visibleRideLikes), [visibleRideLikes]);
@@ -150,8 +150,8 @@ export function RidesModule() {
     setForm((f) => ({ ...f, rider_ids: f.rider_ids.includes(id) ? f.rider_ids.filter((x) => x !== id) : [...f.rider_ids, id] }));
   }
 
-  const fmtDay = (key: string) =>
-    new Date(`${key}T00:00:00`).toLocaleDateString(locale.code, { weekday: 'long', month: 'short', day: 'numeric' });
+  // A ride day is a DATE, rendered as written (TIME-003).
+  const fmtDay = (key: string) => format.fmtDate(key, 'EEEE, MMM d');
 
   if (loading) return <SkeletonList count={5} />;
   if (error) return <ErrorState message={typeof error === 'string' ? error : 'Failed to load rides'} />;

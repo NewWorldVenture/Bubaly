@@ -16,7 +16,7 @@
 
 import Link from 'next/link';
 import { CheckCircle2, AlertTriangle, RotateCw } from 'lucide-react';
-import { fmtTime } from '@/lib/utils/format';
+import { useFormat } from '@/components/i18n/use-format';
 import { useTranslations } from '@/components/i18n/locale-provider';
 
 /** One finished run, shaped by the server page from the ledger row. */
@@ -41,6 +41,7 @@ export type HandledToday =
 export const HANDLED_TILE_ITEMS = 3;
 
 export function HandledTodayTile({ handled, onRetry }: { handled?: HandledToday; onRetry?: () => void }) {
+  const { fmtTime } = useFormat();
   const t = useTranslations();
 
   // `undefined` is the same fact as an error — the page did not hand this tile a

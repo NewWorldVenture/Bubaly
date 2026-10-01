@@ -2,6 +2,8 @@
 // insights. Aggregation, balance score, weekly trend and positive-streak math.
 // No Supabase/React so it's deterministically unit-testable.
 
+import { dayKeyIn, isValidTimezone } from '@/lib/time/zoned';
+
 export const BEHAVIOR_KINDS = ['positive', 'concern', 'neutral'] as const;
 export type BehaviorKind = (typeof BEHAVIOR_KINDS)[number];
 
@@ -63,9 +65,34 @@ export function summarizeMember(logs: BehaviorLogLike[]): MemberSummary {
 const DAY = 86_400_000;
 const dayKey = (iso: string) => iso.slice(0, 10);
 
+// The FAMILY's calendar (TIME-003, #688 comment 5922251129): with a zone, a
+// log counts on the family's date and weeks start on the family's Monday.
+// Keys are civil dates, stepped as dates, so no zone's DST can skip one.
+const zoneOf = (timeZone?: string | null) => (timeZone && isValidTimezone(timeZone) ? timeZone : null);
+const addKeyDays = (key: string, n: number) => {
+  const [y, m, d] = key.split('-').map(Number);
+  return new Date(Date.UTC(y, m - 1, d + n)).toISOString().slice(0, 10);
+};
+const mondayOfKey = (key: string) => addKeyDays(key, -((new Date(`${key}T00:00:00Z`).getUTCDay() + 6) % 7));
+
 /** Per-week positive/concern counts for the last `weeks` weeks (oldest→newest). */
-export function trendByWeek(logs: BehaviorLogLike[], weeks = 6, now = new Date()): Array<{ weekStart: string; positive: number; concern: number }> {
+export function trendByWeek(logs: BehaviorLogLike[], weeks = 6, now = new Date(), timeZone?: string | null): Array<{ weekStart: string; positive: number; concern: number }> {
   const buckets: Array<{ weekStart: string; positive: number; concern: number }> = [];
+  const zone = zoneOf(timeZone);
+  if (zone) {
+    const thisMonday = mondayOfKey(dayKeyIn(now, zone));
+    for (let i = weeks - 1; i >= 0; i--) buckets.push({ weekStart: addKeyDays(thisMonday, -7 * i), positive: 0, concern: 0 });
+    for (const l of logs) {
+      const at = new Date(l.occurred_at);
+      if (Number.isNaN(at.getTime())) continue;
+      const k = dayKeyIn(at, zone);
+      const b = buckets.find((w) => k >= w.weekStart && k < addKeyDays(w.weekStart, 7));
+      if (!b) continue;
+      if (l.kind === 'positive') b.positive++;
+      else if (l.kind === 'concern') b.concern++;
+    }
+    return buckets;
+  }
   const start = new Date(now.getTime());
   start.setUTCHours(0, 0, 0, 0);
   // Monday-anchored week start.
@@ -90,10 +117,13 @@ export function trendByWeek(logs: BehaviorLogLike[], weeks = 6, now = new Date()
 }
 
 /** Consecutive days (ending today) with ≥1 positive log and zero concerns. */
-export function positiveStreakDays(logs: BehaviorLogLike[], now = new Date()): number {
+export function positiveStreakDays(logs: BehaviorLogLike[], now = new Date(), timeZone?: string | null): number {
+  const zone = zoneOf(timeZone);
   const byDay = new Map<string, { pos: number; con: number }>();
   for (const l of logs) {
-    const k = dayKey(l.occurred_at);
+    const at = new Date(l.occurred_at);
+    if (zone && Number.isNaN(at.getTime())) continue;
+    const k = zone ? dayKeyIn(at, zone) : dayKey(l.occurred_at);
     const d = byDay.get(k) ?? { pos: 0, con: 0 };
     if (l.kind === 'positive') d.pos++;
     else if (l.kind === 'concern') d.con++;
@@ -102,9 +132,10 @@ export function positiveStreakDays(logs: BehaviorLogLike[], now = new Date()): n
   let streak = 0;
   const cursor = new Date(now.getTime());
   cursor.setUTCHours(0, 0, 0, 0);
+  const todayKey = zone ? dayKeyIn(now, zone) : null;
   // Allow today to be empty without breaking a prior streak.
   for (let i = 0; i < 366; i++) {
-    const k = new Date(cursor.getTime() - i * DAY).toISOString().slice(0, 10);
+    const k = todayKey ? addKeyDays(todayKey, -i) : new Date(cursor.getTime() - i * DAY).toISOString().slice(0, 10);
     const d = byDay.get(k);
     if (!d) { if (i === 0) continue; break; }
     if (d.con > 0 || d.pos === 0) break;

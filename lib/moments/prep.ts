@@ -225,6 +225,15 @@ function dayIndexInZone(ms: number, tz: string): number {
   return key ? Math.round(Date.parse(`${key}T00:00:00Z`) / 86_400_000) : Math.round(ms / 86_400_000);
 }
 
+/**
+ * An all-day `starts_at` with NO zone designator and no time but midnight
+ * (`YYYY-MM-DD` or `YYYY-MM-DDT00:00[:00[.000]]`) is a calendar DATE, not an
+ * instant: the synthetic birthday events (lib/moments/birthdays.ts) carry
+ * exactly that shape. Rows the database stores are timestamptz and always carry
+ * an offset, so they never match and keep their instant meaning.
+ */
+const CALENDAR_DATE = /^(\d{4}-\d{2}-\d{2})(?:T00:00(?::00(?:\.0+)?)?)?$/;
+
 /** Human "when" label for a moment, e.g. "in 2 hours", "Tomorrow", "Sat 9:00 AM". */
 export function momentWhen(
   startsAt: string,
@@ -250,6 +259,23 @@ export function momentWhen(
   // THREE things here are zone-sensitive and all three had to move, which is why
   // this is not a one-line change: the clock below, the Today/Tomorrow decision,
   // and the weekday label at the end.
+  //
+  // A calendar DATE (see CALENDAR_DATE) is compared as the date it names, with
+  // the family's today. Parsing it as a local instant put it on the DEVICE's
+  // midnight, which in the family's zone can be the day before or after
+  // (#728 review 5374669346: a UTC phone, a Los Angeles family, tomorrow's
+  // birthday labelled "Today").
+  const date = allDay ? CALENDAR_DATE.exec(startsAt)?.[1] : undefined;
+  if (date) {
+    const todayIndex = timeZone
+      ? dayIndexInZone(now.getTime(), timeZone)
+      : Math.round(Date.UTC(now.getFullYear(), now.getMonth(), now.getDate()) / 86_400_000);
+    const dateDiff = Math.round(Date.parse(`${date}T00:00:00Z`) / 86_400_000) - todayIndex;
+    if (dateDiff === 0) return t ? t('calendar.today') : 'Today';
+    if (dateDiff === 1) return t ? t('quickCapture.tomorrow') : 'Tomorrow';
+    // A DATE is rendered in no zone (lib/utils/format.ts DATE_ONLY).
+    return createFormat(locale, undefined, timeZone).fmtDate(date, 'EEE, MMM d');
+  }
   const d = new Date(startsAt);
   if (Number.isNaN(d.getTime())) return '';
   const mins = Math.round((d.getTime() - now.getTime()) / 60000);

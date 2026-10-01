@@ -15,7 +15,7 @@ import { SkeletonList, ErrorState, EmptyState } from '@/components/ui/states';
 import { PageHeader } from '@/components/app/page-header';
 import { AiInsight } from '@/components/ai/ai-insight';
 import { isAdmin } from '@/lib/constants/roles';
-import { fmtDateTime } from '@/lib/utils/format';
+import { useFormat } from '@/components/i18n/use-format';
 import type { Tables } from '@/lib/database.types';
 import { useTranslations } from '@/components/i18n/locale-provider';
 
@@ -23,6 +23,7 @@ type Announcement = Tables<'family_announcements'>;
 type Read = Tables<'announcement_reads'>;
 
 export function AnnouncementsModule() {
+  const { fmtDateTime } = useFormat();
   const t = useTranslations();
   const { familyId, userId, role, members, selfMember } = useApp();
   const admin = isAdmin(role);

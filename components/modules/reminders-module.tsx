@@ -23,7 +23,7 @@ import { Modal } from '@/components/ui/modal';
 import { Input, Field, Textarea } from '@/components/ui/input';
 import { Badge } from '@/components/ui/badge';
 import { SkeletonList, ErrorState, EmptyState } from '@/components/ui/states';
-import { fmtDate, fmtRelative } from '@/lib/utils/format';
+import { useFormat } from '@/components/i18n/use-format';
 import { cn } from '@/lib/utils/cn';
 import {
   EARLY_REMINDER_OPTIONS, parseTags, formatTags, normalizeSubtasks, newSubtask, subtaskProgress, nextRemindAt,
@@ -109,6 +109,7 @@ function earlyText(tr: Tr, plural: Plural, minutes: number | null | undefined): 
 }
 
 export function RemindersModule() {
+  const { fmtDate } = useFormat();
   const tr = useTranslations();
   const plural = usePlural();
   const { familyId, userId, members } = useApp();

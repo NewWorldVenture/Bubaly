@@ -13,8 +13,9 @@ import { EventScheduleInsights } from '@/components/calendar/event-detail';
 import { Avatar } from '@/components/ui/avatar';
 import { cn } from '@/lib/utils/cn';
 import type { Tables } from '@/lib/database.types';
-import { useLocale, useTranslations } from '@/components/i18n/locale-provider';
-import type { LocaleCode } from '@/lib/i18n/locales';
+import { useTranslations } from '@/components/i18n/locale-provider';
+import { useFormat } from '@/components/i18n/use-format';
+import type { Format } from '@/lib/utils/format';
 
 type Event = Tables<'calendar_events'>;
 type Member = Tables<'family_members'>;
@@ -26,12 +27,11 @@ const OPTIONS: { value: 'accepted' | 'declined' | 'maybe'; label: string; icon: 
   { value: 'declined', label: "Can't", icon: X, cls: 'bg-rose-500/15 text-rose-300 border-rose-500/40' },
 ];
 
-const fmtRangeIn = (locale: LocaleCode) => (e: Event): string => {
-  const s = new Date(e.starts_at);
-  if (e.all_day) return s.toLocaleDateString(locale, { weekday: 'long', month: 'long', day: 'numeric' }) + ' · All day';
-  const opts: Intl.DateTimeFormatOptions = { hour: 'numeric', minute: '2-digit', hour12: true };
-  const date = s.toLocaleDateString(locale, { weekday: 'long', month: 'long', day: 'numeric' });
-  const time = s.toLocaleTimeString(locale, opts) + (e.ends_at ? ` – ${new Date(e.ends_at).toLocaleTimeString(locale, opts)}` : '');
+// In the FAMILY's zone (TIME-003), through the shared formatter.
+const fmtRangeWith = ({ fmtDate, fmtTime }: Format) => (e: Event): string => {
+  if (e.all_day) return fmtDate(e.starts_at, 'EEEE, MMMM d') + ' · All day';
+  const date = fmtDate(e.starts_at, 'EEEE, MMMM d');
+  const time = fmtTime(e.starts_at) + (e.ends_at ? ` – ${fmtTime(e.ends_at)}` : '');
   return `${date} · ${time}`;
 };
 
@@ -39,8 +39,7 @@ export function EventDetailModal({ event, members, selfMemberId, familyId, onClo
   event: Event; members: Member[]; selfMemberId: string | null; familyId: string; onClose: () => void;
   onEdit?: (event: Event) => void; onDeleted?: () => void;
 }) {
-  const locale = useLocale();
-  const fmtRange = fmtRangeIn(locale.code);
+  const fmtRange = fmtRangeWith(useFormat());
   const t = useTranslations();
   const { error: toastError } = useToast();
   const [rsvps, setRsvps] = useState<Rsvp[]>([]);
