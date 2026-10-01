@@ -4,7 +4,7 @@
 // Three modes: (A) provider not configured → explicit unavailable state, (B) setup
 // needed → guided 3-step onboarding wizard, (C) live → manage per-child cards
 // with instant freeze, spend controls, and physical-card ordering.
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useRef } from 'react';
 import { useRouter } from 'next/navigation';
 import {
   CreditCard, ShieldCheck, Snowflake, Sparkles, Loader2, SlidersHorizontal,
@@ -50,7 +50,8 @@ export function MoneyCardsView({
   const tr = useTranslations();
   const router = useRouter();
   const { success, error: toastError } = useToast();
-  const [busy, setBusy] = useState<string | null>(null);
+  const [busy, setBusy] = useState<ReadonlySet<string>>(() => new Set());
+  const busyRef = useRef(new Set<string>());
   const [expanded, setExpanded] = useState<string | null>(null);
   const [orderingCard, setOrderingCard] = useState<CardChild | null>(null);
   const [revealing, setRevealing] = useState<{ cardId: string; childName: string } | null>(null);
@@ -73,25 +74,52 @@ export function MoneyCardsView({
 
   const childrenWithoutCards = childWallets.filter((c) => !cardsByChild.has(c.id));
 
+  function claimPending(keys: string[]) {
+    // Claim synchronously: a retained callback can run again before React has
+    // committed disabled buttons. Independent operations keep their own keys.
+    if (keys.some((key) => busyRef.current.has(key))) return null;
+    for (const key of keys) busyRef.current.add(key);
+    setBusy(new Set(busyRef.current));
+    return () => {
+      for (const key of keys) busyRef.current.delete(key);
+      setBusy(new Set(busyRef.current));
+    };
+  }
+
   async function startSetup() {
-    setBusy('setup');
-    const res = await startConnectOnboardingAction();
-    setBusy(null);
-    if (!res.ok) return toastError(res.error);
-    if (res.data?.url) window.location.href = res.data.url;
+    const release = claimPending(['setup']);
+    if (!release) return;
+    try {
+      const res = await startConnectOnboardingAction();
+      if (!res.ok) return toastError(res.error);
+      if (res.data?.url) window.location.href = res.data.url;
+    } catch {
+      toastError(t('globalError.somethingWentWrong'));
+    } finally {
+      release();
+    }
   }
 
   async function issueVirtual(childWalletId: string) {
-    setBusy(`issue-${childWalletId}`);
-    const res = await issueCardAction({ childWalletId, type: 'virtual', spendLimitCents: null, spendWindow: 'per_authorization' });
-    setBusy(null);
-    if (!res.ok) return toastError(res.error);
-    success(t('moneyCardsView.virtualCardCreated'));
-    router.refresh();
+    const release = claimPending([`issue-${childWalletId}`]);
+    if (!release) return;
+    try {
+      const res = await issueCardAction({ childWalletId, type: 'virtual', spendLimitCents: null, spendWindow: 'per_authorization' });
+      if (!res.ok) return toastError(res.error);
+      success(t('moneyCardsView.virtualCardCreated'));
+      router.refresh();
+    } catch {
+      toastError(t('globalError.somethingWentWrong'));
+    } finally {
+      release();
+    }
   }
 
   async function issueAllVirtual() {
-    setBusy('issue-all');
+    // Reserve every target, including children not yet reached by the loop,
+    // so bulk and individual issuance cannot dispatch the same work together.
+    const release = claimPending(['issue-all', ...childrenWithoutCards.map((child) => `issue-${child.id}`)]);
+    if (!release) return;
     // Every result used to be discarded and the toast reported the number
     // ATTEMPTED as the number issued. What was thrown away includes Trust-Engine
     // denials and "Finish account setup first" — the product REFUSING, reported
@@ -112,7 +140,7 @@ export function MoneyCardsView({
     } catch (err) {
       failures.push(err instanceof Error && err.message ? err.message : t('globalError.somethingWentWrong'));
     } finally {
-      setBusy(null);
+      release();
     }
     if (issued > 0) {
       success(issued === 1
@@ -128,12 +156,18 @@ export function MoneyCardsView({
   }
 
   async function toggleFreeze(card: IssuedCard) {
-    setBusy(`freeze-${card.id}`);
-    const res = await setCardFrozenAction({ cardId: card.id, frozen: !card.isFrozen });
-    setBusy(null);
-    if (!res.ok) return toastError(res.error);
-    success(card.isFrozen ? 'Card unfrozen' : 'Card frozen');
-    router.refresh();
+    const release = claimPending([`freeze-${card.id}`]);
+    if (!release) return;
+    try {
+      const res = await setCardFrozenAction({ cardId: card.id, frozen: !card.isFrozen });
+      if (!res.ok) return toastError(res.error);
+      success(card.isFrozen ? 'Card unfrozen' : 'Card frozen');
+      router.refresh();
+    } catch {
+      toastError(t('globalError.somethingWentWrong'));
+    } finally {
+      release();
+    }
   }
 
   // ── Mode A: card provider is not configured → explicit unavailable state ──
@@ -181,7 +215,7 @@ export function MoneyCardsView({
               </p>
               <div className="mt-4 flex flex-wrap gap-3">
                 {canManage ? (
-                  <Button onClick={startSetup} loading={busy === 'setup'} size="lg">
+                  <Button onClick={startSetup} loading={busy.has('setup')} size="lg">
                     {onboardingStarted ? 'Continue setup' : 'Get started — 5 mins'}
                   </Button>
                 ) : (
@@ -236,7 +270,8 @@ export function MoneyCardsView({
                 : t('moneyCards.childrenNoCards', { n: childrenWithoutCards.length })}
             </p>
           </div>
-          <Button size="sm" onClick={issueAllVirtual} loading={busy === 'issue-all'}>
+          <Button size="sm" onClick={issueAllVirtual} loading={busy.has('issue-all')}
+            disabled={childrenWithoutCards.some((child) => busy.has(`issue-${child.id}`))}>
             {tr('moneyCards.issueAll')}
           </Button>
         </div>
@@ -263,10 +298,10 @@ export function MoneyCardsView({
                     <div className="flex items-center gap-1.5">
                       <button
                         type="button" onClick={() => issueVirtual(child.id)}
-                        disabled={busy === `issue-${child.id}`}
+                        disabled={busy.has(`issue-${child.id}`)}
                         className="flex items-center gap-1 rounded-lg border border-border px-2.5 py-1.5 text-xs font-medium hover:bg-elevated disabled:opacity-60 transition"
                       >
-                        {busy === `issue-${child.id}` ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Zap className="h-3.5 w-3.5" />}
+                        {busy.has(`issue-${child.id}`) ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Zap className="h-3.5 w-3.5" />}
                         Virtual
                       </button>
                       {capabilities.physicalCards && (
@@ -355,7 +390,7 @@ function SetupSteps({ current }: { current: number }) {
 // ─── Card Row ─────────────────────────────────────────────────────────────────
 
 function CardRow({ card, canManage, busy, expanded, onFreeze, onReveal, onToggleControls, onSaved }: {
-  card: IssuedCard; canManage: boolean; busy: string | null; expanded: string | null;
+  card: IssuedCard; canManage: boolean; busy: ReadonlySet<string>; expanded: string | null;
   onFreeze: () => void; onReveal: () => void; onToggleControls: () => void; onSaved: () => void;
 }) {
   const locale = useLocale();
@@ -400,9 +435,9 @@ function CardRow({ card, canManage, busy, expanded, onFreeze, onReveal, onToggle
               className="inline-flex items-center gap-1 rounded-lg border border-border px-2.5 py-1.5 text-xs font-medium hover:bg-elevated transition">
               <SlidersHorizontal className="h-3.5 w-3.5" /> {tr('moneyCards.controls')}
             </button>
-            <button type="button" onClick={onFreeze} disabled={busy === `freeze-${card.id}`}
+            <button type="button" onClick={onFreeze} disabled={busy.has(`freeze-${card.id}`)}
               className="inline-flex items-center gap-1 rounded-lg border border-border px-2.5 py-1.5 text-xs font-medium hover:bg-elevated disabled:opacity-60 transition">
-              {busy === `freeze-${card.id}` ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Snowflake className="h-3.5 w-3.5" />}
+              {busy.has(`freeze-${card.id}`) ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Snowflake className="h-3.5 w-3.5" />}
               {card.isFrozen ? 'Unfreeze' : 'Freeze'}
             </button>
           </div>
