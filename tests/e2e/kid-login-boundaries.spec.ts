@@ -44,6 +44,7 @@ type Probe = {
   mode: ActionMode; calls: Array<{ username: string; pin: string }>; toasts: string[]; errors: string[]; navigations: string[]; links: string[];
   refreshes: number; pending: number; mount: () => void; retire: () => void; captureSubmit: () => void; fireCaptured: (count?: number) => void;
   release: () => void; settle: () => Promise<void>; currentUser: () => string | null; signInB: () => Promise<void>; logout: () => void; failWrites: () => void;
+  syncs: number; holdSync: boolean; releaseSync: () => void;
 };
 declare global { interface Window { __kidLogin: Probe } }
 type Fixture = { requests: string[]; rejectVerification: boolean };
@@ -83,8 +84,8 @@ async function fixture(page: Page, mode: ActionMode = 'success', locale = 'en-US
   await page.addScriptTag({ content: `(() => {
     const sources = ${JSON.stringify(modules)}, entries = ${JSON.stringify(entries)}, loaded = {}, messages = ${JSON.stringify(messages)};
     const process = { env: { NEXT_PUBLIC_SUPABASE_URL: ${JSON.stringify(provider)}, NEXT_PUBLIC_SUPABASE_ANON_KEY: 'synthetic-public-anon' } };
-    const p = window.__kidLogin = { mode: ${JSON.stringify(mode)}, calls: [], toasts: [], errors: [], navigations: [], links: [], refreshes: 0, pending: 0 };
-    let root, captured, jobs = [], releases = [];
+    const p = window.__kidLogin = { mode: ${JSON.stringify(mode)}, calls: [], toasts: [], errors: [], navigations: [], links: [], refreshes: 0, pending: 0, syncs: 0, holdSync: false };
+    let root, captured, jobs = [], releases = [], syncReleases = [];
     window.addEventListener('error', event => p.errors.push(event.message));
     window.addEventListener('unhandledrejection', event => { p.errors.push(String(event.reason)); event.preventDefault(); });
     const router = { push: path => p.navigations.push(path), refresh: () => { p.refreshes++; } };
@@ -95,7 +96,7 @@ async function fixture(page: Page, mode: ActionMode = 'success', locale = 'en-US
       '@/components/i18n/locale-provider': { useTranslations: () => key => messages[key] ?? key },
       '@/components/ui/toast': { useToast: () => ({ error: message => p.toasts.push(message) }) },
       '@/lib/utils/cn': { cn: (...values) => values.filter(value => typeof value === 'string').join(' ') },
-      '@/app/(auth)/actions': { childSignInAction: async input => {
+      '@/app/(auth)/actions': { syncLanguageAfterSignInAction: async () => { p.syncs++; if (p.holdSync) await new Promise(resolve => syncReleases.push(resolve)); }, childSignInAction: async input => {
         p.calls.push(input);
         const mode = p.mode;
         if (mode === 'hold') await new Promise(resolve => releases.push(resolve));
@@ -126,6 +127,7 @@ async function fixture(page: Page, mode: ActionMode = 'success', locale = 'en-US
     };
     p.fireCaptured = (count = 1) => { for (let i = 0; i < count; i++) { p.pending++; jobs.push(Promise.resolve(captured()).finally(() => p.pending--)); } };
     p.release = () => { for (const release of releases.splice(0)) release(); };
+    p.releaseSync = () => { for (const release of syncReleases.splice(0)) release(); };
     p.settle = async () => { await Promise.all(jobs); jobs = []; };
     p.currentUser = () => storage.captureBrowserSessionSnapshot()?.userId ?? null;
     p.signInB = async () => { const { error } = await db.auth.signInWithPassword({ email: 'b@example.invalid', password: 'synthetic-password' }); if (error) throw error; };
@@ -199,6 +201,40 @@ test('a delayed child response preserves newer B and performs no stale verificat
   expect(state.requests).toEqual(['POST /auth/v1/token']);
   expect(await page.evaluate(() => window.__kidLogin.currentUser())).toBe(userB);
   expect(await page.evaluate(() => window.__kidLogin.navigations)).toEqual([]);
+});
+
+for (const [label, interrupt] of [['a newer B sign-in', 'signInB'], ['an explicit logout', 'logout']] as const) {
+  test(`${label} while the language step is held: the adopted child session does not navigate (#705 comment 5922913215)`, async ({ page }) => {
+    await fixture(page); await page.evaluate(() => { window.__kidLogin.holdSync = true; });
+    await fill(page); await submit(page);
+    await expect.poll(() => page.evaluate(() => window.__kidLogin.syncs)).toBe(1);
+    expect(await page.evaluate(() => window.__kidLogin.currentUser())).toBe(userA); // A was adopted first
+    await page.evaluate((name) => window.__kidLogin[name](), interrupt);
+    await page.evaluate(() => window.__kidLogin.releaseSync()); await settled(page);
+    expect(await page.evaluate(() => window.__kidLogin.navigations)).toEqual([]);
+    expect(await page.evaluate(() => window.__kidLogin.refreshes)).toBe(0);
+    expect(await page.evaluate(() => window.__kidLogin.currentUser())).toBe(interrupt === 'signInB' ? userB : null);
+  });
+}
+
+test('a language step that never answers: the signed-in child still lands, after the client deadline (#705 comment 5923116178)', async ({ page }) => {
+  await fixture(page); await page.evaluate(() => { window.__kidLogin.holdSync = true; });
+  await fill(page); await submit(page);
+  await expect.poll(() => page.evaluate(() => window.__kidLogin.syncs)).toBe(1);
+  expect(await page.evaluate(() => window.__kidLogin.navigations)).toEqual([]); // still within the deadline
+  await expect.poll(() => page.evaluate(() => window.__kidLogin.navigations), { timeout: 8_000 }).toEqual(['/home']);
+  expect(await page.evaluate(() => window.__kidLogin.currentUser())).toBe(userA);
+  await page.evaluate(() => window.__kidLogin.releaseSync()); await settled(page); // a late answer changes nothing
+  expect(await page.evaluate(() => window.__kidLogin.navigations)).toEqual(['/home']);
+});
+
+test('control: a held language step that resolves with A still current navigates once', async ({ page }) => {
+  await fixture(page); await page.evaluate(() => { window.__kidLogin.holdSync = true; });
+  await fill(page); await submit(page);
+  await expect.poll(() => page.evaluate(() => window.__kidLogin.syncs)).toBe(1);
+  await page.evaluate(() => window.__kidLogin.releaseSync()); await settled(page);
+  expect(await page.evaluate(() => window.__kidLogin.navigations)).toEqual(['/home']);
+  expect(await page.evaluate(() => window.__kidLogin.currentUser())).toBe(userA);
 });
 
 test('explicit logout from empty storage invalidates the pending child response', async ({ page }) => {

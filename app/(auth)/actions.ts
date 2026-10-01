@@ -14,6 +14,7 @@ import { reserveChildLoginAttempt } from '@/lib/auth/child-throttle-store';
 import { clientIp } from '@/lib/server/rate-limit';
 import { enforceRequestRateLimit } from '@/lib/server/request-rate-limit';
 import { createClient as createPasswordClient } from '@supabase/supabase-js';
+import { syncLanguageForSignedInUser } from '@/lib/i18n/sync';
 
 /** Where a just-signed-in user should land: the admin console for super
  *  admins, the Grandparent Portal for a guest (M28 — the role extended-family
@@ -22,8 +23,16 @@ import { createClient as createPasswordClient } from '@supabase/supabase-js';
  *  honored, and so the role comes from the membership rather than the browser.
  *
  *  Never throws: a context read that fails must not block a sign-in, and /home
- *  is the answer for every role but one. */
+ *  is the answer for every role but one.
+ *
+ *  It also puts the person's language in step (lib/i18n/sync.ts; I18N-001):
+ *  the profile learns the language they signed in with, or this device learns
+ *  the language they chose elsewhere. That sync is bounded and never throws.
+ *  A sign-in that picks its own destination instead of asking this (an
+ *  explicit return path, the kid and phone forms) calls
+ *  syncLanguageAfterSignInAction itself. */
 export async function resolveLandingPathAction(): Promise<string> {
+  await syncLanguageForSignedInUser();
   if (await isSuperAdmin()) return '/admin';
   try {
     const ctx = await getUserContext();
@@ -33,6 +42,15 @@ export async function resolveLandingPathAction(): Promise<string> {
     console.error('[auth] landing role lookup failed', error);
     return DEFAULT_LANDING_PATH;
   }
+}
+
+/** The language half of resolveLandingPathAction, for a sign-in that already
+ *  knows where it is going (#705 comment 5922299372): a password login with an
+ *  explicit return path, the kid login and the phone login. Bounded by
+ *  LANGUAGE_SYNC_BUDGET_MS and never throws, so it cannot hold up or fail the
+ *  sign-in. */
+export async function syncLanguageAfterSignInAction(): Promise<void> {
+  await syncLanguageForSignedInUser();
 }
 
 const VID_COOKIE = 'bubaly_vid';

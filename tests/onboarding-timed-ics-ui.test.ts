@@ -32,6 +32,7 @@ vi.mock('@/components/i18n/locale-provider', async () => {
     useTranslations: () => (key: string, params?: Record<string, string | number>) => translate(getMessages(mock.locale), key, params),
   };
 });
+vi.mock('@/app/(auth)/actions', () => ({ syncLanguageAfterSignInAction: async () => {} }));
 vi.mock('@/app/onboarding/actions', () => ({ previewCalendarImportAction: mock.preview, finalizeOnboardingAction: mock.finish }));
 vi.mock('@/app/onboarding/calendar-actions', () => ({ startCalendarConnectionAction: vi.fn(), previewConnectedCalendarAction: vi.fn() }));
 vi.mock('@/lib/analytics/onboarding-track', () => ({ trackOnboarding: vi.fn() }));

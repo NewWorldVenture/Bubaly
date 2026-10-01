@@ -8,7 +8,7 @@ import type { LocaleCode } from '@/lib/i18n/locales';
 
 type Effect = { deps: unknown[]; cleanup?: () => void };
 const mocks = vi.hoisted(() => ({ slots: [] as unknown[], cursor: 0, effects: [] as (() => void)[],
-  finish: vi.fn(), preview: vi.fn(), push: vi.fn(), refresh: vi.fn(), error: vi.fn(), locale: 'en-US' as LocaleCode }));
+  finish: vi.fn(), preview: vi.fn(), push: vi.fn(), refresh: vi.fn(), error: vi.fn(), settle: vi.fn(async () => {}), locale: 'en-US' as LocaleCode }));
 // Actual wizard callbacks with persistent hook slots and storage; no browser claim.
 vi.mock('react', async (original) => ({
   ...await original<typeof import('react')>(),
@@ -32,6 +32,7 @@ vi.mock('@/components/i18n/locale-provider', async () => {
  const { getMessages, translate } = await import('@/lib/i18n/messages');
  return { useLocale: () => ({ code: mocks.locale }), useTranslations: () => (key: string, vars?: Record<string, string | number>) => translate(getMessages(mocks.locale), key, vars) };
 });
+vi.mock('@/app/(auth)/actions', () => ({ syncLanguageAfterSignInAction: mocks.settle }));
 vi.mock('@/app/onboarding/actions', () => ({ finalizeOnboardingAction: mocks.finish, previewCalendarImportAction: mocks.preview }));
 vi.mock('@/app/onboarding/calendar-actions', () => ({ startCalendarConnectionAction: vi.fn(), previewConnectedCalendarAction: vi.fn() }));
 vi.mock('@/lib/analytics/onboarding-track', () => ({ trackOnboarding: vi.fn() }));
@@ -142,7 +143,21 @@ describe('explicit selected-plan review after successful onboarding',()=>{
  it('plain onboarding has no review action and keeps its dashboard control',async()=>{
   render({reviewPlan:null});finishControl(render({reviewPlan:null}))();await vi.waitFor(()=>expect(donePanel(render({reviewPlan:null}))).not.toBeNull());
   const panel=donePanel(render({reviewPlan:null}));expect(textOf(panel)).not.toContain('Review selected plan');
+  mocks.settle.mockClear();
   control(panel,'onboardingWizard.startExploring')();expect(mocks.push).toHaveBeenCalledWith('/dashboard');
+  // Leaving the wizard settles the language (#705 review 5374766490), without holding the navigation.
+  await vi.waitFor(()=>expect(mocks.settle).toHaveBeenCalledOnce());
+ });
+ it.each([
+  ['never answers',()=>new Promise<void>(()=>{})],
+  ['fails',()=>Promise.reject(new Error('network'))],
+ ] as const)('a settle step that %s does not hold or break Start exploring',async(_label,settle)=>{
+  mocks.settle.mockReset().mockImplementation(settle);
+  try{
+   render({reviewPlan:null});finishControl(render({reviewPlan:null}))();await vi.waitFor(()=>expect(donePanel(render({reviewPlan:null}))).not.toBeNull());
+   control(donePanel(render({reviewPlan:null})),'onboardingWizard.startExploring')();expect(mocks.push).toHaveBeenCalledWith('/dashboard');
+   await vi.waitFor(()=>expect(mocks.settle).toHaveBeenCalledOnce());
+  }finally{mocks.settle.mockReset().mockImplementation(async()=>{});}
  });
  it('a missing expired calendar hint offers explicit plan reselection without inventing a choice',()=>{
   const tree=render({reviewPlan:null,calendarStatus:'unavailable'});expect(nodes(tree).some(n=>n.props.href==='/pricing')).toBe(true);

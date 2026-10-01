@@ -48,7 +48,7 @@ const loader = `
     '@/components/i18n/locale-provider': { useTranslations: () => key => messages[key] ?? key },
     '@/components/ui/toast': { useToast: () => ({ error: () => {} }) },
     '@/lib/utils/cn': { cn: (...values) => values.filter(value => typeof value === 'string').join(' ') },
-    '@/app/(auth)/actions': { childSignInAction: async () => {
+    '@/app/(auth)/actions': { syncLanguageAfterSignInAction: async () => {}, childSignInAction: async () => {
       probe.calls++;
       return { ok: false, error: 'Synthetic credential rejection' };
     } },

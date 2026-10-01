@@ -4028,3 +4028,77 @@ access to equal the page's guest row: 8 findings before, 0 after.
 **After applying:** as a guest, open the calendar and try to add an event. It
 should be refused with the permission message. As a parent, add and delete one,
 which should succeed.
+
+## `0466` — a member's language lived only in a browser cookie (I18N-001, the storage half)
+
+`supabase/migrations/0466_a_members_language_is_kept_on_their_profile.sql`
+
+**Severity: low (additive: a nullable column, a CHECK and a restrictive policy;
+nobody loses access). Deploy order: only after the prerequisites below have been
+verified on the database being migrated.** `0465` belongs to #674 and has no
+dependency either way with this one.
+
+**Prerequisites to verify first, read-only, on the target database.** Nothing in
+this repository establishes them for production (its ledger records only
+`0001`-`0003`; see the top of this document). 0466 checks the policy itself and
+raises rather than apply without it.
+
+```sql
+-- 1. The table exists, and has no `locale` column yet (expect no row from the
+--    second query). A column already there was not made by this repository:
+--    stop and have a person look before applying, because 0466 would keep it
+--    and its CHECK would then judge values nobody here wrote.
+select to_regclass('public.profiles');
+select data_type from information_schema.columns
+ where table_schema = 'public' and table_name = 'profiles' and column_name = 'locale';
+-- 2. A member can update their own profile today: expect one row, polcmd 'w',
+--    using_expr (id = auth.uid()).
+select polname, polcmd, pg_get_expr(polqual, polrelid) as using_expr
+  from pg_policy
+ where polrelid = 'public.profiles'::regclass and polname = 'profiles_update_self';
+```
+
+The owner decided to store each member's language (2026-09-29). Until now it
+lived only in the `bubaly-locale` cookie, which a new device does not have and
+which nothing Bubaly sends (crons, digests, reminders) can read. 0466 adds
+`profiles.locale` — per person, not per membership, so one inbox gets one
+language across households — limited by a CHECK to the eleven shipped locales
+(`tests/a-members-language-is-kept-on-their-profile.test.ts` holds the list
+equal to `LOCALES`). It also adds `profiles_update_own_row_only`, a RESTRICTIVE
+UPDATE policy, so a permissive profiles UPDATE policy added later cannot by
+itself let one member rewrite another's language. Reads are unchanged:
+co-members already read each other's profile (`0426`); another family cannot.
+
+The app writes it in three places: the language switcher (`setLocale`, which
+still sets the cookie exactly as before), password sign-in and invite join
+(`resolveLandingPathAction`), and onboarding completion. At sign-in on a device
+with no language cookie, the stored language is copied onto the device. The
+senders reading it are a separate change: until that lands, every email, push
+and notification is still written in en-US, as today.
+
+`docs/audit/a-members-language-check.sql` runs as real sessions in one
+transaction: a member sets and clears their own language and a co-member reads
+it; another member, or someone in another family, cannot set it (0 rows), the
+other family cannot read it, and `'xx-XX'`, `'de'`, `'de-de'` and `''` are
+refused (23514). Replayed locally on all 448 migrations, it passes. It fails
+with the restrictive policy dropped under a permissive co-member UPDATE policy,
+with the CHECK dropped, or before 0466 (no column).
+
+**Before and after applying — both are safe.** The app tolerates the column
+being absent: the switcher's profile write fails and is reported
+(`{ ok: true, stored: false, profile: 'failed' }`, logged), the cookie still
+takes, and the page still changes language; the sign-in sync logs the failed
+read and does nothing. So deploying the app first costs one logged error per
+language switch and per sign-in, and no behaviour. Applying 0466 first costs
+nothing, because nothing reads the column before the app does. Prefer applying
+0466 first, to keep the logs quiet.
+
+**After applying:** sign in with a password, switch the language to Deutsch,
+then check your own row: `select locale from public.profiles where id =
+auth.uid()` reads `de-DE`. Sign in on a second browser with no cookies: after
+sign-in the app is in German. Run `docs/audit/a-members-language-check.sql` in
+a transaction you roll back; it must exit 0. OAuth and email-link sign-ins do
+not restore the language onto a new device yet: their completion step,
+`lib/auth/callback-server.ts`, is untouched here. On such a device the app keeps
+the language it detected until the person switches it or signs in with a
+password.

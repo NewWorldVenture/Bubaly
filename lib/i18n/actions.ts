@@ -4,7 +4,10 @@
 
 import { cookies } from 'next/headers';
 
-import { isLocaleCode, LOCALE_COOKIE, LOCALE_COOKIE_MAX_AGE } from '@/lib/i18n/locales';
+import { isLocaleCode, findLocale, LOCALE_COOKIE, LOCALE_COOKIE_MAX_AGE } from '@/lib/i18n/locales';
+import { encodePendingChoice, LOCALE_PENDING_COOKIE } from '@/lib/i18n/pending-choice';
+import { LANGUAGE_SYNC_BUDGET_MS } from '@/lib/i18n/sync';
+import { createServer } from '@/lib/supabase/server';
 
 /**
  * Record an explicit locale choice.
@@ -17,10 +20,44 @@ import { isLocaleCode, LOCALE_COOKIE, LOCALE_COOKIE_MAX_AGE } from '@/lib/i18n/l
  * Not httpOnly — the value is a display preference, not a credential, and the
  * client reads it to keep the picker in sync without a round trip. `lax` keeps
  * it attached to normal top-level navigation while staying off cross-site POSTs.
+ *
+ * TWO places, for two readers. The cookie is for the UI: it is readable on the
+ * very first render, so a chosen language never flashes English first, and it
+ * works for a visitor with no account. The profile row (profiles.locale, 0466)
+ * is the durable copy: it follows the person to a new device at sign-in
+ * (lib/i18n/sync.ts), and it is what Bubaly's outbound messages are to be
+ * written in (finalaudit I18N-001) — those are composed by crons that never see
+ * a cookie. A signed-in member's choice is written to both; a visitor's only to
+ * the cookie, and sign-in or onboarding copies it onto the profile.
+ *
+ * HONEST about the second write, and BOUNDED. The picker waits for this action
+ * before it repaints, so the profile gets LANGUAGE_SYNC_BUDGET_MS at most: on
+ * the deadline the request is abandoned, the switch finishes with the cookie,
+ * and the result says the profile was not confirmed (#705 comment 5921693652;
+ * an update the database already accepted may still commit). A
+ * slow or failing database never fails the switch, but the result says whether
+ * the profile took too, and if not, why:
+ *
+ *   { ok: false }                            not a shipped language; nothing written
+ *   { ok: true, stored: true }               cookie and profile
+ *   { ok: true, stored: false, profile: 'signed-out' }  a visitor: cookie only, by design
+ *   { ok: true, stored: false, profile: 'unverified' }  who is asking could not be looked up
+ *   { ok: true, stored: false, profile: 'timed-out' }   no answer within the budget
+ *   { ok: true, stored: false, profile: 'refused' }     the write reached no row
+ *   { ok: true, stored: false, profile: 'failed' }      the write errored or threw
  */
-export async function setLocale(code: string): Promise<{ ok: boolean }> {
-  if (!isLocaleCode(code)) return { ok: false };
+export type LocaleChoice =
+  | { ok: false; stored: false }
+  | { ok: true; stored: true }
+  | { ok: true; stored: false; profile: ProfileWrite };
 
+type ProfileWrite = 'signed-out' | 'unverified' | 'timed-out' | 'refused' | 'failed';
+
+export async function setLocale(code: string): Promise<LocaleChoice> {
+  if (!isLocaleCode(code)) return { ok: false, stored: false };
+
+  // The cookie is written exactly as it was before the profile existed; its
+  // one reader (getLocaleContext -> resolveLocale) matches case-insensitively.
   const jar = await cookies();
   jar.set(LOCALE_COOKIE, code, {
     path: '/',
@@ -29,5 +66,110 @@ export async function setLocale(code: string): Promise<{ ok: boolean }> {
     secure: process.env.NODE_ENV === 'production',
   });
 
-  return { ok: true };
+  // The profile gets the catalogue's spelling: the column's CHECK is exact.
+  const canonical = findLocale(code)!.code;
+  const { profile, userId } = await storeForSignedInUser(canonical);
+  // An explicit choice the profile did not take is remembered as PENDING, with
+  // whose it is, so the next sign-in stores it; a plain cookie alone never
+  // overwrites a saved preference (lib/i18n/pending-choice.ts).
+  if (profile === 'stored') {
+    jar.delete(LOCALE_PENDING_COOKIE);
+    return { ok: true, stored: true };
+  }
+  // An identity that could not be looked up is neither signed out nor anyone
+  // in particular: a pending choice with no owner would be adopted by the next
+  // account to sign in here (#705 comment 5921554978). So none is left, and an
+  // older one goes too rather than outrank this newer choice. The same holds
+  // for a failure before anyone was identified (the client could not start).
+  if (profile === 'unverified' || (profile !== 'signed-out' && !userId)) {
+    jar.delete(LOCALE_PENDING_COOKIE);
+    return { ok: true, stored: false, profile };
+  }
+  jar.set(LOCALE_PENDING_COOKIE, encodePendingChoice(canonical, profile === 'signed-out' ? null : userId), {
+    path: '/',
+    maxAge: LOCALE_COOKIE_MAX_AGE,
+    sameSite: 'lax',
+    secure: process.env.NODE_ENV === 'production',
+    httpOnly: true,
+  });
+  return { ok: true, stored: false, profile };
+}
+
+/**
+ * Write the choice onto the caller's own profile, on the caller's own session:
+ * RLS (profiles_update_self, and 0466's restrictive own-row policy) is what
+ * limits it to their row. A visitor with no session stores nothing and that is
+ * not a failure — the cookie already took.
+ *
+ * A failed or refused write is logged and REPORTED, never thrown: the page is
+ * already in the new language, and the next switch or sign-in writes it again.
+ */
+async function storeForSignedInUser(code: string): Promise<{ profile: 'stored' | ProfileWrite; userId: string | null }> {
+  // Who is asking is recorded as soon as it is known, so a deadline that
+  // interrupts the write still leaves an OWNED retry, and one that interrupts
+  // the lookup leaves none ('unverified').
+  const who: { userId: string | null } = { userId: null };
+  const controller = new AbortController();
+  let timer: ReturnType<typeof setTimeout> | undefined;
+  const deadline = new Promise<ProfileWrite>((resolve) => {
+    timer = setTimeout(() => {
+      controller.abort();
+      console.error(`[i18n] the language choice was not saved within ${LANGUAGE_SYNC_BUDGET_MS}ms; the switch carries on`);
+      resolve(who.userId ? 'timed-out' : 'unverified');
+    }, LANGUAGE_SYNC_BUDGET_MS);
+  });
+  try {
+    const profile = await Promise.race([storeWithin(code, controller.signal, who), deadline]);
+    return { profile, userId: who.userId };
+  } finally {
+    clearTimeout(timer);
+  }
+}
+
+/**
+ * The write itself. Once `signal` has fired it is abandoned work: if the
+ * lookup it may still be waiting on (getUser takes no signal) answers late,
+ * the update is never sent. An update already sent is aborted on this side
+ * only. The database may have accepted it, and it may still commit, even
+ * after a newer choice. Ordering those would need a version on the row,
+ * which this does not have; the result only reports 'timed-out'.
+ */
+async function storeWithin(code: string, signal: AbortSignal, who: { userId: string | null }): Promise<'stored' | ProfileWrite> {
+  try {
+    const supabase = await createServer();
+    const { data: { user }, error: authError } = await supabase.auth.getUser();
+    if (signal.aborted) return 'unverified';
+    if (!user) {
+      // Only a missing session is signed out; any other error is an outage.
+      if (!authError || isSessionMissing(authError)) return 'signed-out';
+      console.error('[i18n] could not look up who is choosing a language', authError);
+      return 'unverified';
+    }
+    who.userId = user.id;
+    const { data, error } = await supabase
+      .from('profiles')
+      .update({ locale: code })
+      .eq('id', user.id)
+      .select('id')
+      .abortSignal(signal);
+    if (signal.aborted) return 'timed-out';
+    if (error) {
+      console.error('[i18n] could not store the language choice on the profile', error);
+      return 'failed';
+    }
+    if ((data ?? []).length !== 1) {
+      console.error('[i18n] the language choice reached no profile row (refused or missing)');
+      return 'refused';
+    }
+    return 'stored';
+  } catch (e) {
+    if (!signal.aborted) console.error('[i18n] could not store the language choice on the profile', e);
+    return 'failed';
+  }
+}
+
+/** Supabase's answer for a visitor with no session, as lib/supabase/auth.ts reads it. */
+function isSessionMissing(error: { name?: unknown; code?: unknown; message?: unknown }): boolean {
+  return error.name === 'AuthSessionMissingError' || error.code === 'session_missing'
+    || (typeof error.message === 'string' && /auth session missing/i.test(error.message));
 }

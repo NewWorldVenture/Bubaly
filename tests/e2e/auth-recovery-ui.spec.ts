@@ -144,7 +144,7 @@ async function fixture(page: Page, options: { hash?: string; query?: string; exi
       '@/components/auth/oauth-buttons': { OAuthButtons: () => null, authButtonClass: '' }, '@/components/auth/phone-auth': { PhoneAuth: () => null },
       '@/components/ui/toast': { useToast: () => ({ error: message => p.errors.push(message) }) },
       '@/lib/utils/cn': { cn: (...values) => values.filter(v => typeof v === 'string').join(' ') },
-      '@/app/(auth)/actions': { stitchIdentityAction: async () => {}, resolveLandingPathAction: async () => '/home' },
+      '@/app/(auth)/actions': { stitchIdentityAction: async () => {}, resolveLandingPathAction: async () => '/home', syncLanguageAfterSignInAction: async () => {} },
       '@/app/(auth)/auth/recovery/actions': { prepareRecoveryAction: (...values) => action('prepare', values), consumeRecoveryAction: (...values) => action('consume', values), inspectRecoveryAction: (...values) => action('inspect', values), saveRecoveryAction: (...values) => action('save', values) },
     };
     const process = { env: { NEXT_PUBLIC_SUPABASE_URL: ${JSON.stringify(provider)}, NEXT_PUBLIC_SUPABASE_ANON_KEY: 'synthetic-public-anon-fixture' } };

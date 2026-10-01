@@ -6,11 +6,13 @@ import { configuredAdapters } from '@/lib/sync/registry';
 import { hasEncryptionKey } from '@/lib/sync/crypto';
 import { z } from 'zod';
 import { redirect } from 'next/navigation';
+import { cookies } from 'next/headers';
 import { getUserContext } from '@/lib/supabase/auth';
 import { scopeFromUserContext } from '@/lib/services/scope';
 import { verifyCalendarWizard } from '@/lib/services/onboarding-calendar/setup';
 import { authScreenHref, parseReviewSelection, reviewBillingPath, reviewOnboardingPath } from '@/lib/billing/review-selection';
 import { getTranslations } from '@/lib/i18n/server';
+import { decodePendingChoice, LOCALE_PENDING_COOKIE } from '@/lib/i18n/pending-choice';
 
 export async function generateMetadata(): Promise<Metadata> {
   return { title: (await getTranslations())('onboardingWizard.createProfileTitle') };
@@ -27,6 +29,13 @@ export default async function OnboardingPage({ searchParams }: { searchParams?: 
   // pending-activation gate ahead of profile reads and provider configuration.
   const ctx = await getUserContext();
   if (!ctx) redirect(authScreenHref('/login', { next: reviewPlan ? reviewOnboardingPath(reviewPlan) : null, reviewPlan }));
+  // A language chosen while signed out becomes this account's before the wizard
+  // renders, so it cannot outlive the wizard as anyone's (#705 review
+  // 5374948393). The claim writes a cookie, which a page render cannot: the
+  // Route Handler does it and sends the person straight back here.
+  if (decodePendingChoice((await cookies()).get(LOCALE_PENDING_COOKIE)?.value)?.owner === null) {
+    redirect(`/onboarding/language${params.size ? `?${params}` : ''}`);
+  }
   const supabase = await createServer();
   if (!('needsFamily' in ctx) && !await verifyCalendarWizard(scopeFromUserContext(ctx, supabase), { allowPendingActivation: true })) {
     redirect(reviewPlan ? reviewBillingPath(reviewPlan) : '/dashboard');

@@ -19,6 +19,8 @@ import { isRetryableAuthError } from '@/lib/auth/session';
 import { describeDbError } from '@/lib/supabase/errors';
 import { safeInternalRedirect } from '@/lib/auth/redirect';
 import { useTranslations } from '@/components/i18n/locale-provider';
+import { syncLanguageAfterSignInAction } from '@/app/(auth)/actions';
+import { waitForOptionalStep } from '@/lib/i18n/sign-in-language';
 
 const RESEND_SECONDS = 30;
 
@@ -172,6 +174,10 @@ export function PhoneAuth({ next = '/onboarding', onBack }: { next?: string; onB
       if (!canCommit()) return;
       if (error) throw error;
       if (!data.session || !isPasswordSessionCurrent(data.session)) return;
+      // The saved language follows the person to this device (I18N-001).
+      // Bounded on this side too, and a failure never blocks the sign-in.
+      await waitForOptionalStep(syncLanguageAfterSignInAction);
+      if (!canCommit() || !isPasswordSessionCurrent(data.session)) return;
       busy.current = 'complete';
       stopCountdown();
       router.push(destination);

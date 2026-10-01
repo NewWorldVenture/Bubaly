@@ -12,7 +12,7 @@ import type { ReviewPlan } from '@/lib/billing/review-selection';
 const mock = vi.hoisted(() => ({
   slots: [] as unknown[], cursor: 0, effects: [] as (() => void)[], cleanups: [] as (() => void)[],
   query: new URLSearchParams(), locale: 'en-US' as LocaleCode,
-  push: vi.fn(), refresh: vi.fn(), toast: vi.fn(), stitch: vi.fn(), landing: vi.fn(), referral: vi.fn(),
+  push: vi.fn(), refresh: vi.fn(), toast: vi.fn(), stitch: vi.fn(), landing: vi.fn(), syncLanguage: vi.fn(), referral: vi.fn(),
   signUp: vi.fn(), password: vi.fn(), oauth: vi.fn(), otp: vi.fn(), verify: vi.fn(), fetch: vi.fn(),
   passwordCurrent: vi.fn(), passwordGuards: [] as Array<() => boolean>,
 }));
@@ -78,7 +78,7 @@ vi.mock('@/lib/auth/password-client', () => ({
   verifySmsWithOwnedSession: (credentials: unknown, canCommit: () => boolean) => mock.verify(credentials, canCommit),
   isPasswordSessionCurrent: mock.passwordCurrent,
 }));
-vi.mock('@/app/(auth)/actions', () => ({ resolveLandingPathAction: mock.landing, stitchIdentityAction: mock.stitch }));
+vi.mock('@/app/(auth)/actions', () => ({ resolveLandingPathAction: mock.landing, stitchIdentityAction: mock.stitch, syncLanguageAfterSignInAction: mock.syncLanguage }));
 vi.mock('@/app/(auth)/signup/actions', () => ({ rememberReferralCodeAction: mock.referral }));
 
 type Node = ReactElement<Record<string, unknown>>;
@@ -136,6 +136,7 @@ beforeEach(() => {
   mock.otp.mockReset().mockResolvedValue({ error: null });
   mock.verify.mockReset().mockResolvedValue(passwordReceipt());
   mock.landing.mockReset().mockResolvedValue('/home');
+  mock.syncLanguage.mockReset().mockResolvedValue(undefined);
   vi.stubGlobal('window', { location: { origin: 'https://bubaly.test', hash: '', href: 'https://bubaly.test/login' } });
   vi.stubGlobal('FormData', class { constructor(private fields: Record<string, string>) {} get(name: string) { return this.fields[name]; } });
   vi.stubGlobal('fetch', mock.fetch);
@@ -178,6 +179,8 @@ describe.each(choices)('auth handoff for %s', (query, plan) => {
     await submit(tree);
     expect(mock.push).toHaveBeenCalledWith(destination);
     expect(mock.landing).not.toHaveBeenCalled();
+    // The explicit destination still puts the saved language in step (#705 comment 5922299372).
+    expect(mock.syncLanguage).toHaveBeenCalledTimes(1);
   });
 
   it('passes one destination from each auth screen to the real Google and SMS components', async () => {
@@ -280,6 +283,36 @@ describe('explicit destinations, failures and defaults', () => {
     resetHooks(); await submit(render(LoginForm));
     expect(mock.push).toHaveBeenCalledWith(path);
     expect(mock.landing).toHaveBeenCalledTimes(1);
+    // The landing action syncs the language itself; it is not done twice.
+    expect(mock.syncLanguage).not.toHaveBeenCalled();
+  });
+
+  it('an explicit return path whose language step never answers still signs in, after the client deadline (#705 comment 5923116178)', async () => {
+    const { SIGN_IN_LANGUAGE_WAIT_MS } = await import('@/lib/i18n/sign-in-language');
+    vi.useFakeTimers({ toFake: ['setTimeout', 'clearTimeout'] });
+    try {
+      mock.query = new URLSearchParams({ redirect: '/dashboard/meals' });
+      mock.syncLanguage.mockReturnValueOnce(new Promise(() => {}));
+      resetHooks();
+      const submitted = submit(render(LoginForm));
+      await vi.advanceTimersByTimeAsync(SIGN_IN_LANGUAGE_WAIT_MS - 1);
+      expect(mock.push).not.toHaveBeenCalled();
+      await vi.advanceTimersByTimeAsync(1);
+      await submitted;
+      expect(mock.push).toHaveBeenCalledWith('/dashboard/meals');
+      expect(mock.landing).not.toHaveBeenCalled();
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
+  it('an explicit return path whose language step fails still signs in to that path (#705 comment 5922299372)', async () => {
+    mock.query = new URLSearchParams({ redirect: '/dashboard/meals' });
+    mock.syncLanguage.mockRejectedValueOnce(new Error('network'));
+    resetHooks(); await submit(render(LoginForm));
+    expect(mock.syncLanguage).toHaveBeenCalledTimes(1);
+    expect(mock.landing).not.toHaveBeenCalled();
+    expect(mock.push).toHaveBeenCalledWith('/dashboard/meals');
   });
 
   it.each<LocaleCode>(['en-US', 'de-DE', 'fr-FR', 'pt-PT', 'es-ES', 'it-IT', 'nl-NL'])('uses localized review copy in %s and never interpolates raw plan input', (locale) => {
