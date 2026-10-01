@@ -295,7 +295,9 @@ jobs:
     # viewports. (WebKit-native runs are opt-in via PW_WEBKIT=1 where installed.)
     name: E2E (public · a11y · authenticated · mobile device matrix)
     runs-on: ubuntu-latest
-    timeout-minutes: 35
+    # Slow isolated-stack/browser setup plus a full smoke run exceeded 35 minutes.
+    # Leave time for the complete suite and cleanup without changing test limits.
+    timeout-minutes: 60
     steps:
       - uses: actions/checkout@v4
 

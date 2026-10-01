@@ -1,0 +1,3978 @@
+{
+ "comparison_baseline": "bc147c761ae7ebc5aff4b2627e18241593f61ac9",
+ "compared_source": "231e8140ea8394c2106c37f617b33b5fb5e8e569",
+ "scope": "Static target module/import comparison; no actions, probes or database operations executed.",
+ "measurement_note": "Baseline is not a measurement claim. Preserve per-action fdcdb425/bc147c76 results in results.tsv.",
+ "counts": {
+  "current": 487,
+  "stale": 7
+ },
+ "actions": [
+  {
+   "id": "ACTION-A1ED72ED6D21",
+   "file": "app/(app)/account/actions.ts",
+   "export": "closeAccountAction",
+   "stale": "current",
+   "why": [],
+   "neutral_changes": []
+  },
+  {
+   "id": "ACTION-95CB46C9F1D4",
+   "file": "app/(app)/account/actions.ts",
+   "export": "reopenAccountAction",
+   "stale": "current",
+   "why": [],
+   "neutral_changes": []
+  },
+  {
+   "id": "ACTION-0D0863DB430B",
+   "file": "app/(app)/actions.ts",
+   "export": "setActiveFamilyAction",
+   "stale": "current",
+   "why": [],
+   "neutral_changes": []
+  },
+  {
+   "id": "ACTION-8C7A2BA78A66",
+   "file": "app/(app)/actions.ts",
+   "export": "setDefaultDashboardAction",
+   "stale": "current",
+   "why": [],
+   "neutral_changes": []
+  },
+  {
+   "id": "ACTION-42FEA397E048",
+   "file": "app/(app)/actions.ts",
+   "export": "updateMyProfileAction",
+   "stale": "current",
+   "why": [],
+   "neutral_changes": []
+  },
+  {
+   "id": "ACTION-5E0CBCAA383B",
+   "file": "app/(app)/admin/actions.ts",
+   "export": "adminCreateFamilyAction",
+   "stale": "current",
+   "why": [],
+   "neutral_changes": []
+  },
+  {
+   "id": "ACTION-A0A8D880DCCC",
+   "file": "app/(app)/admin/actions.ts",
+   "export": "adminCreateUserAction",
+   "stale": "current",
+   "why": [],
+   "neutral_changes": []
+  },
+  {
+   "id": "ACTION-A6C51AE39D61",
+   "file": "app/(app)/admin/actions.ts",
+   "export": "adminDeleteDocumentAction",
+   "stale": "current",
+   "why": [],
+   "neutral_changes": []
+  },
+  {
+   "id": "ACTION-C6D239741E62",
+   "file": "app/(app)/admin/actions.ts",
+   "export": "adminGetDocumentUrlAction",
+   "stale": "current",
+   "why": [],
+   "neutral_changes": []
+  },
+  {
+   "id": "ACTION-EB625E046D14",
+   "file": "app/(app)/admin/actions.ts",
+   "export": "adminRemoveMemberAction",
+   "stale": "current",
+   "why": [],
+   "neutral_changes": []
+  },
+  {
+   "id": "ACTION-DCCA3CE5F795",
+   "file": "app/(app)/admin/actions.ts",
+   "export": "adminResendInviteAction",
+   "stale": "current",
+   "why": [],
+   "neutral_changes": []
+  },
+  {
+   "id": "ACTION-EFA7ACE65F64",
+   "file": "app/(app)/admin/actions.ts",
+   "export": "adminRevokeInviteAction",
+   "stale": "current",
+   "why": [],
+   "neutral_changes": []
+  },
+  {
+   "id": "ACTION-00F500AE8E65",
+   "file": "app/(app)/admin/actions.ts",
+   "export": "adminSendPasswordResetAction",
+   "stale": "current",
+   "why": [],
+   "neutral_changes": []
+  },
+  {
+   "id": "ACTION-E914CCCA9CD9",
+   "file": "app/(app)/admin/actions.ts",
+   "export": "adminSetFamilyPlanAction",
+   "stale": "current",
+   "why": [],
+   "neutral_changes": []
+  },
+  {
+   "id": "ACTION-7504CAD715C4",
+   "file": "app/(app)/admin/actions.ts",
+   "export": "adminSetSuperAdminAction",
+   "stale": "current",
+   "why": [],
+   "neutral_changes": []
+  },
+  {
+   "id": "ACTION-120353088DD0",
+   "file": "app/(app)/admin/actions.ts",
+   "export": "adminSetUserBanAction",
+   "stale": "current",
+   "why": [],
+   "neutral_changes": []
+  },
+  {
+   "id": "ACTION-0EB7DABC5253",
+   "file": "app/(app)/admin/actions.ts",
+   "export": "adminToggleFeatureFlagAction",
+   "stale": "current",
+   "why": [],
+   "neutral_changes": []
+  },
+  {
+   "id": "ACTION-8881B2A5193B",
+   "file": "app/(app)/admin/actions.ts",
+   "export": "adminUpdateMemberAction",
+   "stale": "current",
+   "why": [],
+   "neutral_changes": []
+  },
+  {
+   "id": "ACTION-B4CBE245E543",
+   "file": "app/(app)/admin/actions.ts",
+   "export": "adminUpdateTicketStatusAction",
+   "stale": "current",
+   "why": [],
+   "neutral_changes": []
+  },
+  {
+   "id": "ACTION-B2348A63B8A8",
+   "file": "app/(app)/admin/actions.ts",
+   "export": "saveStripeSettingsAction",
+   "stale": "current",
+   "why": [],
+   "neutral_changes": []
+  },
+  {
+   "id": "ACTION-35689A210D3C",
+   "file": "app/(app)/admin/actions.ts",
+   "export": "testStripeConnectionAction",
+   "stale": "current",
+   "why": [],
+   "neutral_changes": []
+  },
+  {
+   "id": "ACTION-333482E00703",
+   "file": "app/(app)/admin/admins/actions.ts",
+   "export": "activateAdminAction",
+   "stale": "current",
+   "why": [],
+   "neutral_changes": []
+  },
+  {
+   "id": "ACTION-5CDD0AE24E1B",
+   "file": "app/(app)/admin/admins/actions.ts",
+   "export": "deactivateAdminAction",
+   "stale": "current",
+   "why": [],
+   "neutral_changes": []
+  },
+  {
+   "id": "ACTION-34D740FB66A9",
+   "file": "app/(app)/admin/admins/actions.ts",
+   "export": "inviteAdminAction",
+   "stale": "current",
+   "why": [],
+   "neutral_changes": []
+  },
+  {
+   "id": "ACTION-E2B252E56FBE",
+   "file": "app/(app)/admin/admins/actions.ts",
+   "export": "revokeAdminAction",
+   "stale": "current",
+   "why": [],
+   "neutral_changes": []
+  },
+  {
+   "id": "ACTION-64B952BDF516",
+   "file": "app/(app)/admin/ai/actions.ts",
+   "export": "saveAIConfigAction",
+   "stale": "current",
+   "why": [],
+   "neutral_changes": []
+  },
+  {
+   "id": "ACTION-3AB7DB1EA5AD",
+   "file": "app/(app)/admin/ai/actions.ts",
+   "export": "testAIConnectionAction",
+   "stale": "current",
+   "why": [],
+   "neutral_changes": []
+  },
+  {
+   "id": "ACTION-2E23B34F2298",
+   "file": "app/(app)/admin/benchmarks/actions.ts",
+   "export": "setBenchmarksPublicationAction",
+   "stale": "current",
+   "why": [],
+   "neutral_changes": []
+  },
+  {
+   "id": "ACTION-BF1211188697",
+   "file": "app/(app)/admin/feedback/actions.ts",
+   "export": "deleteIdeaAction",
+   "stale": "current",
+   "why": [],
+   "neutral_changes": []
+  },
+  {
+   "id": "ACTION-F47571EBA445",
+   "file": "app/(app)/admin/feedback/actions.ts",
+   "export": "markAdminNotificationsReadAction",
+   "stale": "current",
+   "why": [],
+   "neutral_changes": []
+  },
+  {
+   "id": "ACTION-52BFDCBCFDB2",
+   "file": "app/(app)/admin/feedback/actions.ts",
+   "export": "postTeamReplyAction",
+   "stale": "current",
+   "why": [],
+   "neutral_changes": []
+  },
+  {
+   "id": "ACTION-546DCE5B3BE7",
+   "file": "app/(app)/admin/feedback/actions.ts",
+   "export": "setIdeaPinnedAction",
+   "stale": "current",
+   "why": [],
+   "neutral_changes": []
+  },
+  {
+   "id": "ACTION-6A2836F4B039",
+   "file": "app/(app)/admin/feedback/actions.ts",
+   "export": "syncGithubNowAction",
+   "stale": "current",
+   "why": [],
+   "neutral_changes": []
+  },
+  {
+   "id": "ACTION-E9E50909B33C",
+   "file": "app/(app)/admin/feedback/actions.ts",
+   "export": "updateIdeaAction",
+   "stale": "current",
+   "why": [],
+   "neutral_changes": []
+  },
+  {
+   "id": "ACTION-7C64505FA0F1",
+   "file": "app/(app)/admin/marketing/actions.ts",
+   "export": "addAeoQuestion",
+   "stale": "current",
+   "why": [],
+   "neutral_changes": []
+  },
+  {
+   "id": "ACTION-A0DEE78F196F",
+   "file": "app/(app)/admin/marketing/actions.ts",
+   "export": "addKeyword",
+   "stale": "current",
+   "why": [],
+   "neutral_changes": []
+  },
+  {
+   "id": "ACTION-B7029FB09B95",
+   "file": "app/(app)/admin/marketing/actions.ts",
+   "export": "archiveLandingPage",
+   "stale": "current",
+   "why": [],
+   "neutral_changes": []
+  },
+  {
+   "id": "ACTION-480E687C76E5",
+   "file": "app/(app)/admin/marketing/actions.ts",
+   "export": "archiveSegment",
+   "stale": "current",
+   "why": [],
+   "neutral_changes": []
+  },
+  {
+   "id": "ACTION-74E5D6051F01",
+   "file": "app/(app)/admin/marketing/actions.ts",
+   "export": "archiveSeoKeyword",
+   "stale": "current",
+   "why": [],
+   "neutral_changes": []
+  },
+  {
+   "id": "ACTION-DDBC5C29D446",
+   "file": "app/(app)/admin/marketing/actions.ts",
+   "export": "archiveSeoPage",
+   "stale": "current",
+   "why": [],
+   "neutral_changes": []
+  },
+  {
+   "id": "ACTION-D127770344BC",
+   "file": "app/(app)/admin/marketing/actions.ts",
+   "export": "createAdCampaign",
+   "stale": "current",
+   "why": [],
+   "neutral_changes": []
+  },
+  {
+   "id": "ACTION-A993B70699F8",
+   "file": "app/(app)/admin/marketing/actions.ts",
+   "export": "createAutomation",
+   "stale": "current",
+   "why": [],
+   "neutral_changes": []
+  },
+  {
+   "id": "ACTION-2435FBF0272E",
+   "file": "app/(app)/admin/marketing/actions.ts",
+   "export": "createCampaign",
+   "stale": "current",
+   "why": [],
+   "neutral_changes": []
+  },
+  {
+   "id": "ACTION-FBEE42263766",
+   "file": "app/(app)/admin/marketing/actions.ts",
+   "export": "createContentItem",
+   "stale": "current",
+   "why": [],
+   "neutral_changes": []
+  },
+  {
+   "id": "ACTION-683CAA077264",
+   "file": "app/(app)/admin/marketing/actions.ts",
+   "export": "createEmailDraft",
+   "stale": "current",
+   "why": [],
+   "neutral_changes": []
+  },
+  {
+   "id": "ACTION-1EEC6DA56ECA",
+   "file": "app/(app)/admin/marketing/actions.ts",
+   "export": "createForm",
+   "stale": "current",
+   "why": [],
+   "neutral_changes": []
+  },
+  {
+   "id": "ACTION-710162D88275",
+   "file": "app/(app)/admin/marketing/actions.ts",
+   "export": "createFunnel",
+   "stale": "current",
+   "why": [],
+   "neutral_changes": []
+  },
+  {
+   "id": "ACTION-7E556A79CFE8",
+   "file": "app/(app)/admin/marketing/actions.ts",
+   "export": "createLandingPage",
+   "stale": "current",
+   "why": [],
+   "neutral_changes": []
+  },
+  {
+   "id": "ACTION-3CC6D1B68A65",
+   "file": "app/(app)/admin/marketing/actions.ts",
+   "export": "createSegment",
+   "stale": "current",
+   "why": [],
+   "neutral_changes": []
+  },
+  {
+   "id": "ACTION-3C20B106C849",
+   "file": "app/(app)/admin/marketing/actions.ts",
+   "export": "createSmsDraft",
+   "stale": "current",
+   "why": [],
+   "neutral_changes": []
+  },
+  {
+   "id": "ACTION-A5808340A13C",
+   "file": "app/(app)/admin/marketing/actions.ts",
+   "export": "createSocialPost",
+   "stale": "current",
+   "why": [],
+   "neutral_changes": []
+  },
+  {
+   "id": "ACTION-FB16E1969148",
+   "file": "app/(app)/admin/marketing/actions.ts",
+   "export": "deleteAeoQuestion",
+   "stale": "current",
+   "why": [],
+   "neutral_changes": []
+  },
+  {
+   "id": "ACTION-050B5AC457E7",
+   "file": "app/(app)/admin/marketing/actions.ts",
+   "export": "saveSeoPage",
+   "stale": "current",
+   "why": [],
+   "neutral_changes": []
+  },
+  {
+   "id": "ACTION-A2980CA7F763",
+   "file": "app/(app)/admin/marketing/actions.ts",
+   "export": "saveSetting",
+   "stale": "current",
+   "why": [],
+   "neutral_changes": []
+  },
+  {
+   "id": "ACTION-4A1C622F5658",
+   "file": "app/(app)/admin/marketing/actions.ts",
+   "export": "setAutomationStatus",
+   "stale": "current",
+   "why": [],
+   "neutral_changes": []
+  },
+  {
+   "id": "ACTION-8BA3151CD0BE",
+   "file": "app/(app)/admin/marketing/actions.ts",
+   "export": "setCampaignStatus",
+   "stale": "current",
+   "why": [],
+   "neutral_changes": []
+  },
+  {
+   "id": "ACTION-85CDA493FED3",
+   "file": "app/(app)/admin/marketing/actions.ts",
+   "export": "setFormStatus",
+   "stale": "current",
+   "why": [],
+   "neutral_changes": []
+  },
+  {
+   "id": "ACTION-39097FA690C2",
+   "file": "app/(app)/admin/marketing/actions.ts",
+   "export": "setLandingPublished",
+   "stale": "current",
+   "why": [],
+   "neutral_changes": []
+  },
+  {
+   "id": "ACTION-A1EE82BBA47D",
+   "file": "app/(app)/admin/marketing/actions.ts",
+   "export": "updateAeoQuestion",
+   "stale": "current",
+   "why": [],
+   "neutral_changes": []
+  },
+  {
+   "id": "ACTION-5E0AC9502487",
+   "file": "app/(app)/admin/marketing/actions.ts",
+   "export": "updateLandingPage",
+   "stale": "current",
+   "why": [],
+   "neutral_changes": []
+  },
+  {
+   "id": "ACTION-7137C703147D",
+   "file": "app/(app)/admin/marketing/actions.ts",
+   "export": "updateSeoKeyword",
+   "stale": "current",
+   "why": [],
+   "neutral_changes": []
+  },
+  {
+   "id": "ACTION-9C82EB5CFEF1",
+   "file": "app/(app)/admin/marketing/affiliates/actions.ts",
+   "export": "deleteAffiliateAction",
+   "stale": "current",
+   "why": [],
+   "neutral_changes": []
+  },
+  {
+   "id": "ACTION-1C7D08D285A3",
+   "file": "app/(app)/admin/marketing/affiliates/actions.ts",
+   "export": "markAffiliatePaidAction",
+   "stale": "current",
+   "why": [],
+   "neutral_changes": []
+  },
+  {
+   "id": "ACTION-C6795595529A",
+   "file": "app/(app)/admin/marketing/affiliates/actions.ts",
+   "export": "saveAffiliateAction",
+   "stale": "current",
+   "why": [],
+   "neutral_changes": []
+  },
+  {
+   "id": "ACTION-6275BD94235E",
+   "file": "app/(app)/admin/marketing/affiliates/actions.ts",
+   "export": "toggleAffiliateStatusAction",
+   "stale": "current",
+   "why": [],
+   "neutral_changes": []
+  },
+  {
+   "id": "ACTION-4A2066895C0E",
+   "file": "app/(app)/admin/marketing/assets/actions.ts",
+   "export": "deleteAssetAction",
+   "stale": "current",
+   "why": [],
+   "neutral_changes": []
+  },
+  {
+   "id": "ACTION-71630153BB4B",
+   "file": "app/(app)/admin/marketing/assets/actions.ts",
+   "export": "updateAssetAction",
+   "stale": "current",
+   "why": [],
+   "neutral_changes": []
+  },
+  {
+   "id": "ACTION-578FDE4E7B8A",
+   "file": "app/(app)/admin/marketing/assets/actions.ts",
+   "export": "uploadAssetAction",
+   "stale": "current",
+   "why": [],
+   "neutral_changes": []
+  },
+  {
+   "id": "ACTION-50D2A6EB1319",
+   "file": "app/(app)/admin/marketing/competitive/actions.ts",
+   "export": "deleteBacklinkAction",
+   "stale": "current",
+   "why": [],
+   "neutral_changes": []
+  },
+  {
+   "id": "ACTION-2302F1E4D97E",
+   "file": "app/(app)/admin/marketing/competitive/actions.ts",
+   "export": "deleteCompetitorAction",
+   "stale": "current",
+   "why": [],
+   "neutral_changes": []
+  },
+  {
+   "id": "ACTION-21EC4A22857A",
+   "file": "app/(app)/admin/marketing/competitive/actions.ts",
+   "export": "deleteKeywordAction",
+   "stale": "current",
+   "why": [],
+   "neutral_changes": []
+  },
+  {
+   "id": "ACTION-A3D347EBD366",
+   "file": "app/(app)/admin/marketing/competitive/actions.ts",
+   "export": "saveBacklinkAction",
+   "stale": "current",
+   "why": [],
+   "neutral_changes": []
+  },
+  {
+   "id": "ACTION-67D9318B223C",
+   "file": "app/(app)/admin/marketing/competitive/actions.ts",
+   "export": "saveCompetitorAction",
+   "stale": "current",
+   "why": [],
+   "neutral_changes": []
+  },
+  {
+   "id": "ACTION-17D4568BBE11",
+   "file": "app/(app)/admin/marketing/competitive/actions.ts",
+   "export": "saveKeywordAction",
+   "stale": "current",
+   "why": [],
+   "neutral_changes": []
+  },
+  {
+   "id": "ACTION-0368F45E7CF8",
+   "file": "app/(app)/admin/marketing/content/actions.ts",
+   "export": "archiveContentAction",
+   "stale": "current",
+   "why": [],
+   "neutral_changes": []
+  },
+  {
+   "id": "ACTION-AEC31509ACBA",
+   "file": "app/(app)/admin/marketing/content/actions.ts",
+   "export": "publishContentToBlogAction",
+   "stale": "current",
+   "why": [],
+   "neutral_changes": []
+  },
+  {
+   "id": "ACTION-28408A7C8CCF",
+   "file": "app/(app)/admin/marketing/content/actions.ts",
+   "export": "unpublishBlogPostAction",
+   "stale": "current",
+   "why": [],
+   "neutral_changes": []
+  },
+  {
+   "id": "ACTION-5808E1A55143",
+   "file": "app/(app)/admin/marketing/content/actions.ts",
+   "export": "updateContentAction",
+   "stale": "current",
+   "why": [],
+   "neutral_changes": []
+  },
+  {
+   "id": "ACTION-21726EE9DFA4",
+   "file": "app/(app)/admin/marketing/crm/actions.ts",
+   "export": "deleteContactAction",
+   "stale": "current",
+   "why": [],
+   "neutral_changes": []
+  },
+  {
+   "id": "ACTION-73C2DABE2251",
+   "file": "app/(app)/admin/marketing/crm/actions.ts",
+   "export": "deleteDealAction",
+   "stale": "current",
+   "why": [],
+   "neutral_changes": []
+  },
+  {
+   "id": "ACTION-67C14859ADCA",
+   "file": "app/(app)/admin/marketing/crm/actions.ts",
+   "export": "saveContactAction",
+   "stale": "current",
+   "why": [],
+   "neutral_changes": []
+  },
+  {
+   "id": "ACTION-A1B9703683BA",
+   "file": "app/(app)/admin/marketing/crm/actions.ts",
+   "export": "saveDealAction",
+   "stale": "current",
+   "why": [],
+   "neutral_changes": []
+  },
+  {
+   "id": "ACTION-D8BFFCAE89A4",
+   "file": "app/(app)/admin/marketing/crm/actions.ts",
+   "export": "setDealStageAction",
+   "stale": "current",
+   "why": [],
+   "neutral_changes": []
+  },
+  {
+   "id": "ACTION-0AD61A98DD69",
+   "file": "app/(app)/admin/marketing/exit-intent/actions.ts",
+   "export": "createExitIntentAction",
+   "stale": "current",
+   "why": [],
+   "neutral_changes": []
+  },
+  {
+   "id": "ACTION-5E46A704BA79",
+   "file": "app/(app)/admin/marketing/exit-intent/actions.ts",
+   "export": "deleteExitIntentAction",
+   "stale": "current",
+   "why": [],
+   "neutral_changes": []
+  },
+  {
+   "id": "ACTION-727733BB15E7",
+   "file": "app/(app)/admin/marketing/exit-intent/actions.ts",
+   "export": "toggleExitIntentAction",
+   "stale": "current",
+   "why": [],
+   "neutral_changes": []
+  },
+  {
+   "id": "ACTION-D2B83C20F776",
+   "file": "app/(app)/admin/marketing/experiments/actions.ts",
+   "export": "createExperiment",
+   "stale": "current",
+   "why": [],
+   "neutral_changes": []
+  },
+  {
+   "id": "ACTION-8E59C5C40490",
+   "file": "app/(app)/admin/marketing/experiments/actions.ts",
+   "export": "setExperimentStatus",
+   "stale": "current",
+   "why": [],
+   "neutral_changes": []
+  },
+  {
+   "id": "ACTION-F1ADEA57CAE7",
+   "file": "app/(app)/admin/marketing/experiments/actions.ts",
+   "export": "setExperimentWinner",
+   "stale": "current",
+   "why": [],
+   "neutral_changes": []
+  },
+  {
+   "id": "ACTION-C596C962E0B0",
+   "file": "app/(app)/admin/marketing/lead-scores/actions.ts",
+   "export": "recomputeLeadScoresAction",
+   "stale": "current",
+   "why": [],
+   "neutral_changes": []
+  },
+  {
+   "id": "ACTION-944B9D591C0F",
+   "file": "app/(app)/admin/marketing/loyalty/actions.ts",
+   "export": "awardPointsAction",
+   "stale": "current",
+   "why": [],
+   "neutral_changes": []
+  },
+  {
+   "id": "ACTION-17503EE16C2D",
+   "file": "app/(app)/admin/marketing/loyalty/actions.ts",
+   "export": "cancelRedemptionAction",
+   "stale": "current",
+   "why": [],
+   "neutral_changes": []
+  },
+  {
+   "id": "ACTION-B3FFD0C4C4CE",
+   "file": "app/(app)/admin/marketing/loyalty/actions.ts",
+   "export": "deleteRewardAction",
+   "stale": "current",
+   "why": [],
+   "neutral_changes": []
+  },
+  {
+   "id": "ACTION-E167AEB36458",
+   "file": "app/(app)/admin/marketing/loyalty/actions.ts",
+   "export": "fulfillRedemptionAction",
+   "stale": "current",
+   "why": [],
+   "neutral_changes": []
+  },
+  {
+   "id": "ACTION-BBF7460A6A75",
+   "file": "app/(app)/admin/marketing/loyalty/actions.ts",
+   "export": "saveLoyaltySettingsAction",
+   "stale": "current",
+   "why": [],
+   "neutral_changes": []
+  },
+  {
+   "id": "ACTION-1D23B78FE46E",
+   "file": "app/(app)/admin/marketing/loyalty/actions.ts",
+   "export": "saveRewardAction",
+   "stale": "current",
+   "why": [],
+   "neutral_changes": []
+  },
+  {
+   "id": "ACTION-BEB0BE97AA24",
+   "file": "app/(app)/admin/marketing/personalization/actions.ts",
+   "export": "createRuleAction",
+   "stale": "current",
+   "why": [],
+   "neutral_changes": []
+  },
+  {
+   "id": "ACTION-E202B0737B2A",
+   "file": "app/(app)/admin/marketing/personalization/actions.ts",
+   "export": "deleteRuleAction",
+   "stale": "current",
+   "why": [],
+   "neutral_changes": []
+  },
+  {
+   "id": "ACTION-C0C5317102F6",
+   "file": "app/(app)/admin/marketing/personalization/actions.ts",
+   "export": "toggleRuleStatusAction",
+   "stale": "current",
+   "why": [],
+   "neutral_changes": []
+  },
+  {
+   "id": "ACTION-38F15AB4C6A6",
+   "file": "app/(app)/admin/marketing/platform/actions.ts",
+   "export": "archivePlatformPage",
+   "stale": "current",
+   "why": [],
+   "neutral_changes": []
+  },
+  {
+   "id": "ACTION-85002300C60F",
+   "file": "app/(app)/admin/marketing/platform/actions.ts",
+   "export": "createPlatformPage",
+   "stale": "current",
+   "why": [],
+   "neutral_changes": []
+  },
+  {
+   "id": "ACTION-6CEF5437F8ED",
+   "file": "app/(app)/admin/marketing/platform/actions.ts",
+   "export": "retryMarketingJob",
+   "stale": "current",
+   "why": [],
+   "neutral_changes": []
+  },
+  {
+   "id": "ACTION-59E056B14B59",
+   "file": "app/(app)/admin/marketing/platform/actions.ts",
+   "export": "saveMarketingBrandRule",
+   "stale": "current",
+   "why": [],
+   "neutral_changes": []
+  },
+  {
+   "id": "ACTION-119E12121A02",
+   "file": "app/(app)/admin/marketing/platform/actions.ts",
+   "export": "saveMarketingTemplate",
+   "stale": "current",
+   "why": [],
+   "neutral_changes": []
+  },
+  {
+   "id": "ACTION-91A2F191AA7A",
+   "file": "app/(app)/admin/marketing/platform/actions.ts",
+   "export": "updatePlatformPage",
+   "stale": "current",
+   "why": [],
+   "neutral_changes": []
+  },
+  {
+   "id": "ACTION-B5791CD3F2A2",
+   "file": "app/(app)/admin/marketing/proposals/actions.ts",
+   "export": "deleteQuoteAction",
+   "stale": "current",
+   "why": [],
+   "neutral_changes": []
+  },
+  {
+   "id": "ACTION-0DAB4AF8075D",
+   "file": "app/(app)/admin/marketing/proposals/actions.ts",
+   "export": "saveQuoteAction",
+   "stale": "current",
+   "why": [],
+   "neutral_changes": []
+  },
+  {
+   "id": "ACTION-88C23664B6D1",
+   "file": "app/(app)/admin/marketing/proposals/actions.ts",
+   "export": "setQuoteStatusAction",
+   "stale": "current",
+   "why": [],
+   "neutral_changes": []
+  },
+  {
+   "id": "ACTION-BDE7FD6EF5B1",
+   "file": "app/(app)/admin/marketing/push/actions.ts",
+   "export": "createPushCampaignAction",
+   "stale": "current",
+   "why": [],
+   "neutral_changes": []
+  },
+  {
+   "id": "ACTION-A679BF182948",
+   "file": "app/(app)/admin/marketing/push/actions.ts",
+   "export": "deletePushCampaignAction",
+   "stale": "current",
+   "why": [],
+   "neutral_changes": []
+  },
+  {
+   "id": "ACTION-E7AFDF8C4FA3",
+   "file": "app/(app)/admin/marketing/push/actions.ts",
+   "export": "sendPushCampaignAction",
+   "stale": "current",
+   "why": [],
+   "neutral_changes": []
+  },
+  {
+   "id": "ACTION-8DDFD84D2ECE",
+   "file": "app/(app)/admin/marketing/referrals/actions.ts",
+   "export": "saveReferralConfigAction",
+   "stale": "current",
+   "why": [],
+   "neutral_changes": []
+  },
+  {
+   "id": "ACTION-E0A7155F8E9F",
+   "file": "app/(app)/admin/marketing/reputation/actions.ts",
+   "export": "deleteCaseStudyAction",
+   "stale": "current",
+   "why": [],
+   "neutral_changes": []
+  },
+  {
+   "id": "ACTION-BE932074A69F",
+   "file": "app/(app)/admin/marketing/reputation/actions.ts",
+   "export": "deleteTestimonialAction",
+   "stale": "current",
+   "why": [],
+   "neutral_changes": []
+  },
+  {
+   "id": "ACTION-110820E77C4B",
+   "file": "app/(app)/admin/marketing/reputation/actions.ts",
+   "export": "saveCaseStudyAction",
+   "stale": "current",
+   "why": [],
+   "neutral_changes": []
+  },
+  {
+   "id": "ACTION-532C496F8C29",
+   "file": "app/(app)/admin/marketing/reputation/actions.ts",
+   "export": "saveTestimonialAction",
+   "stale": "current",
+   "why": [],
+   "neutral_changes": []
+  },
+  {
+   "id": "ACTION-F8FC8A9B5F50",
+   "file": "app/(app)/admin/marketing/reputation/actions.ts",
+   "export": "togglePublishTestimonialAction",
+   "stale": "current",
+   "why": [],
+   "neutral_changes": []
+  },
+  {
+   "id": "ACTION-05FB23BEB1BC",
+   "file": "app/(app)/admin/marketing/reviews/actions.ts",
+   "export": "deleteReviewAction",
+   "stale": "current",
+   "why": [],
+   "neutral_changes": []
+  },
+  {
+   "id": "ACTION-CC165F41AE00",
+   "file": "app/(app)/admin/marketing/reviews/actions.ts",
+   "export": "moderateReviewAction",
+   "stale": "current",
+   "why": [],
+   "neutral_changes": []
+  },
+  {
+   "id": "ACTION-4CD0228A0979",
+   "file": "app/(app)/admin/marketing/reviews/actions.ts",
+   "export": "replyToReviewAction",
+   "stale": "current",
+   "why": [],
+   "neutral_changes": []
+  },
+  {
+   "id": "ACTION-5BDD312CA8E2",
+   "file": "app/(app)/admin/marketing/reviews/actions.ts",
+   "export": "saveReputationSettingsAction",
+   "stale": "current",
+   "why": [],
+   "neutral_changes": []
+  },
+  {
+   "id": "ACTION-B2F2841920BF",
+   "file": "app/(app)/admin/marketing/social/recurring/actions.ts",
+   "export": "createRecurringAdAction",
+   "stale": "current",
+   "why": [],
+   "neutral_changes": []
+  },
+  {
+   "id": "ACTION-C10F677B0EFE",
+   "file": "app/(app)/admin/marketing/social/recurring/actions.ts",
+   "export": "deleteRecurringAdAction",
+   "stale": "current",
+   "why": [],
+   "neutral_changes": []
+  },
+  {
+   "id": "ACTION-1BBA1A5A0567",
+   "file": "app/(app)/admin/marketing/social/recurring/actions.ts",
+   "export": "runRecurringAdNowAction",
+   "stale": "current",
+   "why": [],
+   "neutral_changes": []
+  },
+  {
+   "id": "ACTION-C420BD46F150",
+   "file": "app/(app)/admin/marketing/social/recurring/actions.ts",
+   "export": "setRecurringAdStatusAction",
+   "stale": "current",
+   "why": [],
+   "neutral_changes": []
+  },
+  {
+   "id": "ACTION-5A26CD60D3B6",
+   "file": "app/(app)/admin/marketing/surveys/actions.ts",
+   "export": "createSurveyAction",
+   "stale": "current",
+   "why": [],
+   "neutral_changes": []
+  },
+  {
+   "id": "ACTION-98E650226197",
+   "file": "app/(app)/admin/marketing/surveys/actions.ts",
+   "export": "deleteSurveyAction",
+   "stale": "current",
+   "why": [],
+   "neutral_changes": []
+  },
+  {
+   "id": "ACTION-D65DABB27735",
+   "file": "app/(app)/admin/marketing/surveys/actions.ts",
+   "export": "setSurveyStatusAction",
+   "stale": "current",
+   "why": [],
+   "neutral_changes": []
+  },
+  {
+   "id": "ACTION-7F1AA5436C30",
+   "file": "app/(app)/admin/marketing/video/actions.ts",
+   "export": "deleteVideoAction",
+   "stale": "current",
+   "why": [],
+   "neutral_changes": []
+  },
+  {
+   "id": "ACTION-74941DD5D790",
+   "file": "app/(app)/admin/marketing/video/actions.ts",
+   "export": "saveVideoAction",
+   "stale": "current",
+   "why": [],
+   "neutral_changes": []
+  },
+  {
+   "id": "ACTION-6860916259AA",
+   "file": "app/(app)/admin/marketing/video/actions.ts",
+   "export": "toggleVideoPublishAction",
+   "stale": "current",
+   "why": [],
+   "neutral_changes": []
+  },
+  {
+   "id": "ACTION-404C30AADBAC",
+   "file": "app/(app)/admin/marketplace/reports/actions.ts",
+   "export": "resolveReportAction",
+   "stale": "current",
+   "why": [],
+   "neutral_changes": []
+  },
+  {
+   "id": "ACTION-1EF7E8F30C4B",
+   "file": "app/(app)/admin/marketplace/reports/actions.ts",
+   "export": "startReviewAction",
+   "stale": "current",
+   "why": [],
+   "neutral_changes": []
+  },
+  {
+   "id": "ACTION-C92352AB9B14",
+   "file": "app/(app)/admin/notifications-actions.ts",
+   "export": "markAdminNotesReadAction",
+   "stale": "current",
+   "why": [],
+   "neutral_changes": []
+  },
+  {
+   "id": "ACTION-7577F0B34CFD",
+   "file": "app/(app)/admin/services/actions.ts",
+   "export": "resetServiceDescriptionAction",
+   "stale": "current",
+   "why": [],
+   "neutral_changes": []
+  },
+  {
+   "id": "ACTION-4BCF86045E2D",
+   "file": "app/(app)/admin/services/actions.ts",
+   "export": "saveServiceDescriptionAction",
+   "stale": "current",
+   "why": [],
+   "neutral_changes": []
+  },
+  {
+   "id": "ACTION-14BD09590041",
+   "file": "app/(app)/admin/settings/social-links/actions.ts",
+   "export": "saveSocialLinksAction",
+   "stale": "current",
+   "why": [],
+   "neutral_changes": []
+  },
+  {
+   "id": "ACTION-9BB4336C48FB",
+   "file": "app/(app)/admin/support-tickets/actions.ts",
+   "export": "assignTicketToMeAction",
+   "stale": "current",
+   "why": [],
+   "neutral_changes": []
+  },
+  {
+   "id": "ACTION-10EFD1799A85",
+   "file": "app/(app)/admin/support-tickets/actions.ts",
+   "export": "closeTicketAction",
+   "stale": "current",
+   "why": [],
+   "neutral_changes": []
+  },
+  {
+   "id": "ACTION-16972A0BA4CB",
+   "file": "app/(app)/admin/support-tickets/actions.ts",
+   "export": "createTicketAction",
+   "stale": "current",
+   "why": [],
+   "neutral_changes": []
+  },
+  {
+   "id": "ACTION-18144BF64553",
+   "file": "app/(app)/admin/support-tickets/actions.ts",
+   "export": "reopenTicketAction",
+   "stale": "current",
+   "why": [],
+   "neutral_changes": []
+  },
+  {
+   "id": "ACTION-0C548CD16BE8",
+   "file": "app/(app)/admin/support-tickets/actions.ts",
+   "export": "resolveTicketAction",
+   "stale": "current",
+   "why": [],
+   "neutral_changes": []
+  },
+  {
+   "id": "ACTION-04A8A8C1AE2F",
+   "file": "app/(app)/admin/tier-features/actions.ts",
+   "export": "resetFeatureTiersAction",
+   "stale": "current",
+   "why": [],
+   "neutral_changes": []
+  },
+  {
+   "id": "ACTION-8B8E0B6A7AA6",
+   "file": "app/(app)/admin/tier-features/actions.ts",
+   "export": "setFeatureTierAction",
+   "stale": "current",
+   "why": [],
+   "neutral_changes": []
+  },
+  {
+   "id": "ACTION-B6D27445070B",
+   "file": "app/(app)/capture/shortcuts-actions.ts",
+   "export": "loadCaptureShortcuts",
+   "stale": "current",
+   "why": [],
+   "neutral_changes": []
+  },
+  {
+   "id": "ACTION-8545A131965A",
+   "file": "app/(app)/capture/shortcuts-actions.ts",
+   "export": "saveCaptureShortcutsAction",
+   "stale": "current",
+   "why": [],
+   "neutral_changes": []
+  },
+  {
+   "id": "ACTION-3FF1CF422A1C",
+   "file": "app/(app)/dashboard/agents/actions.ts",
+   "export": "resolveActivityAction",
+   "stale": "current",
+   "why": [],
+   "neutral_changes": []
+  },
+  {
+   "id": "ACTION-2818A604DE3C",
+   "file": "app/(app)/dashboard/ai-feedback-actions.ts",
+   "export": "recordAiFeedbackAction",
+   "stale": "current",
+   "why": [],
+   "neutral_changes": []
+  },
+  {
+   "id": "ACTION-7B3C7D2E6998",
+   "file": "app/(app)/dashboard/app-store/actions.ts",
+   "export": "installAppAction",
+   "stale": "current",
+   "why": [],
+   "neutral_changes": []
+  },
+  {
+   "id": "ACTION-497B5F6177F1",
+   "file": "app/(app)/dashboard/app-store/actions.ts",
+   "export": "toggleAppAction",
+   "stale": "current",
+   "why": [],
+   "neutral_changes": []
+  },
+  {
+   "id": "ACTION-76DF090DECE9",
+   "file": "app/(app)/dashboard/app-store/actions.ts",
+   "export": "uninstallAppAction",
+   "stale": "current",
+   "why": [],
+   "neutral_changes": []
+  },
+  {
+   "id": "ACTION-03B29F75B827",
+   "file": "app/(app)/dashboard/approvals-actions.ts",
+   "export": "decideApproval",
+   "stale": "current",
+   "why": [],
+   "neutral_changes": []
+  },
+  {
+   "id": "ACTION-38840F5B33E9",
+   "file": "app/(app)/dashboard/approvals-actions.ts",
+   "export": "editAndApproveApproval",
+   "stale": "current",
+   "why": [],
+   "neutral_changes": []
+  },
+  {
+   "id": "ACTION-D7CE64DF3169",
+   "file": "app/(app)/dashboard/assistant/purchases/[approvalId]/actions.ts",
+   "export": "retryPurchaseAnswer",
+   "stale": "current",
+   "why": [],
+   "neutral_changes": []
+  },
+  {
+   "id": "ACTION-274EDFA6815C",
+   "file": "app/(app)/dashboard/assistants/actions.ts",
+   "export": "createAssistantLinkAction",
+   "stale": "current",
+   "why": [],
+   "neutral_changes": []
+  },
+  {
+   "id": "ACTION-1BD5BCD928F8",
+   "file": "app/(app)/dashboard/assistants/actions.ts",
+   "export": "revokeAssistantLinkAction",
+   "stale": "current",
+   "why": [],
+   "neutral_changes": []
+  },
+  {
+   "id": "ACTION-E31F2050163D",
+   "file": "app/(app)/dashboard/auto/actions.ts",
+   "export": "deleteAutoServiceAction",
+   "stale": "current",
+   "why": [],
+   "neutral_changes": []
+  },
+  {
+   "id": "ACTION-F8BC27963E70",
+   "file": "app/(app)/dashboard/auto/actions.ts",
+   "export": "deleteInspectionAction",
+   "stale": "current",
+   "why": [],
+   "neutral_changes": []
+  },
+  {
+   "id": "ACTION-FD39CA24A649",
+   "file": "app/(app)/dashboard/auto/actions.ts",
+   "export": "deleteLicenseAction",
+   "stale": "current",
+   "why": [],
+   "neutral_changes": []
+  },
+  {
+   "id": "ACTION-87CA12F1EDEA",
+   "file": "app/(app)/dashboard/auto/actions.ts",
+   "export": "deletePolicyAction",
+   "stale": "current",
+   "why": [],
+   "neutral_changes": []
+  },
+  {
+   "id": "ACTION-F1A91EBA9C09",
+   "file": "app/(app)/dashboard/auto/actions.ts",
+   "export": "deleteRegistrationAction",
+   "stale": "current",
+   "why": [],
+   "neutral_changes": []
+  },
+  {
+   "id": "ACTION-4D7C1C060966",
+   "file": "app/(app)/dashboard/auto/actions.ts",
+   "export": "deleteRentalAction",
+   "stale": "current",
+   "why": [],
+   "neutral_changes": []
+  },
+  {
+   "id": "ACTION-9771EF95BAD4",
+   "file": "app/(app)/dashboard/auto/actions.ts",
+   "export": "deleteVehicleAction",
+   "stale": "current",
+   "why": [],
+   "neutral_changes": []
+  },
+  {
+   "id": "ACTION-AC57AA6F6AF5",
+   "file": "app/(app)/dashboard/auto/actions.ts",
+   "export": "saveAutoServiceAction",
+   "stale": "current",
+   "why": [],
+   "neutral_changes": []
+  },
+  {
+   "id": "ACTION-9690C67725E8",
+   "file": "app/(app)/dashboard/auto/actions.ts",
+   "export": "saveInspectionAction",
+   "stale": "current",
+   "why": [],
+   "neutral_changes": []
+  },
+  {
+   "id": "ACTION-F585F63E9A52",
+   "file": "app/(app)/dashboard/auto/actions.ts",
+   "export": "saveLicenseAction",
+   "stale": "current",
+   "why": [],
+   "neutral_changes": []
+  },
+  {
+   "id": "ACTION-C63C3FAC0ABE",
+   "file": "app/(app)/dashboard/auto/actions.ts",
+   "export": "savePolicyAction",
+   "stale": "current",
+   "why": [],
+   "neutral_changes": []
+  },
+  {
+   "id": "ACTION-BF505BA2DE64",
+   "file": "app/(app)/dashboard/auto/actions.ts",
+   "export": "saveRegistrationAction",
+   "stale": "current",
+   "why": [],
+   "neutral_changes": []
+  },
+  {
+   "id": "ACTION-F3975BE4A793",
+   "file": "app/(app)/dashboard/auto/actions.ts",
+   "export": "saveRentalAction",
+   "stale": "current",
+   "why": [],
+   "neutral_changes": []
+  },
+  {
+   "id": "ACTION-5642CA924329",
+   "file": "app/(app)/dashboard/auto/actions.ts",
+   "export": "saveVehicleAction",
+   "stale": "current",
+   "why": [],
+   "neutral_changes": []
+  },
+  {
+   "id": "ACTION-65B7A9DF3AFD",
+   "file": "app/(app)/dashboard/autopilot/actions.ts",
+   "export": "resolveAutopilotSuggestionAction",
+   "stale": "current",
+   "why": [],
+   "neutral_changes": []
+  },
+  {
+   "id": "ACTION-A7AC1E2A50BB",
+   "file": "app/(app)/dashboard/billing/actions.ts",
+   "export": "contributeToGoalAction",
+   "stale": "current",
+   "why": [],
+   "neutral_changes": []
+  },
+  {
+   "id": "ACTION-04474DC90357",
+   "file": "app/(app)/dashboard/billing/actions.ts",
+   "export": "createSavingsGoalAction",
+   "stale": "current",
+   "why": [],
+   "neutral_changes": []
+  },
+  {
+   "id": "ACTION-3EB6EC6D3C8F",
+   "file": "app/(app)/dashboard/billing/actions.ts",
+   "export": "createTransactionAction",
+   "stale": "current",
+   "why": [],
+   "neutral_changes": []
+  },
+  {
+   "id": "ACTION-31070FC9434F",
+   "file": "app/(app)/dashboard/billing/actions.ts",
+   "export": "deleteBudgetAction",
+   "stale": "current",
+   "why": [],
+   "neutral_changes": []
+  },
+  {
+   "id": "ACTION-9044433F1559",
+   "file": "app/(app)/dashboard/billing/actions.ts",
+   "export": "deleteSavingsGoalAction",
+   "stale": "current",
+   "why": [],
+   "neutral_changes": []
+  },
+  {
+   "id": "ACTION-8D7121FB9456",
+   "file": "app/(app)/dashboard/billing/actions.ts",
+   "export": "deleteTransactionAction",
+   "stale": "current",
+   "why": [],
+   "neutral_changes": []
+  },
+  {
+   "id": "ACTION-25567E8FF47B",
+   "file": "app/(app)/dashboard/billing/actions.ts",
+   "export": "setBudgetAction",
+   "stale": "current",
+   "why": [],
+   "neutral_changes": []
+  },
+  {
+   "id": "ACTION-F28061A6CFAD",
+   "file": "app/(app)/dashboard/billing/value-actions.ts",
+   "export": "loadFamilyDeliveredValueAction",
+   "stale": "current",
+   "why": [],
+   "neutral_changes": []
+  },
+  {
+   "id": "ACTION-8116B9A0715C",
+   "file": "app/(app)/dashboard/billing/value-comparison-actions.ts",
+   "export": "loadFamilyValueComparisonAction",
+   "stale": "current",
+   "why": [],
+   "neutral_changes": []
+  },
+  {
+   "id": "ACTION-A825F244E83B",
+   "file": "app/(app)/dashboard/calendar/actions.ts",
+   "export": "applyRoutineToCalendarAction",
+   "stale": "current",
+   "why": [],
+   "neutral_changes": []
+  },
+  {
+   "id": "ACTION-9FEB2DB251E0",
+   "file": "app/(app)/dashboard/calendar/actions.ts",
+   "export": "createCalendarEventAction",
+   "stale": "current",
+   "why": [],
+   "neutral_changes": []
+  },
+  {
+   "id": "ACTION-783E8E49F829",
+   "file": "app/(app)/dashboard/calendar/actions.ts",
+   "export": "deleteCalendarEventAction",
+   "stale": "current",
+   "why": [],
+   "neutral_changes": []
+  },
+  {
+   "id": "ACTION-36DC69B7BB4A",
+   "file": "app/(app)/dashboard/calendar/actions.ts",
+   "export": "eventScheduleInsightsAction",
+   "stale": "current",
+   "why": [],
+   "neutral_changes": []
+  },
+  {
+   "id": "ACTION-59D8A2C9CF49",
+   "file": "app/(app)/dashboard/calendar/actions.ts",
+   "export": "undoCalendarEventsAction",
+   "stale": "current",
+   "why": [],
+   "neutral_changes": []
+  },
+  {
+   "id": "ACTION-038A8197A4CD",
+   "file": "app/(app)/dashboard/calendar/actions.ts",
+   "export": "updateCalendarEventAction",
+   "stale": "current",
+   "why": [],
+   "neutral_changes": []
+  },
+  {
+   "id": "ACTION-CD9A69A3E83C",
+   "file": "app/(app)/dashboard/chores/actions.ts",
+   "export": "createChoreAction",
+   "stale": "current",
+   "why": [],
+   "neutral_changes": []
+  },
+  {
+   "id": "ACTION-EC21E9E7762F",
+   "file": "app/(app)/dashboard/chores/actions.ts",
+   "export": "deleteChoreAssignmentAction",
+   "stale": "current",
+   "why": [],
+   "neutral_changes": []
+  },
+  {
+   "id": "ACTION-664373BDE189",
+   "file": "app/(app)/dashboard/chores/actions.ts",
+   "export": "setChoreStatusAction",
+   "stale": "current",
+   "why": [],
+   "neutral_changes": []
+  },
+  {
+   "id": "ACTION-FF2EAC8C7918",
+   "file": "app/(app)/dashboard/concierge-calls/actions.ts",
+   "export": "cancelCallAction",
+   "stale": "current",
+   "why": [],
+   "neutral_changes": []
+  },
+  {
+   "id": "ACTION-86C5E5D6C26E",
+   "file": "app/(app)/dashboard/concierge-calls/actions.ts",
+   "export": "logCallOutcomeAction",
+   "stale": "current",
+   "why": [],
+   "neutral_changes": []
+  },
+  {
+   "id": "ACTION-51C43DE8EA7C",
+   "file": "app/(app)/dashboard/concierge-calls/actions.ts",
+   "export": "requestCallAction",
+   "stale": "current",
+   "why": [],
+   "neutral_changes": []
+  },
+  {
+   "id": "ACTION-D9CBE5F0EA78",
+   "file": "app/(app)/dashboard/concierge-calls/actions.ts",
+   "export": "requeueCallAction",
+   "stale": "current",
+   "why": [],
+   "neutral_changes": []
+  },
+  {
+   "id": "ACTION-868185556319",
+   "file": "app/(app)/dashboard/concierge/actions.ts",
+   "export": "applyConciergePlanAction",
+   "stale": "current",
+   "why": [],
+   "neutral_changes": []
+  },
+  {
+   "id": "ACTION-BB7CCC59F13B",
+   "file": "app/(app)/dashboard/concierge/actions.ts",
+   "export": "dismissQueuedRunAction",
+   "stale": "current",
+   "why": [],
+   "neutral_changes": []
+  },
+  {
+   "id": "ACTION-AAF8BA72C390",
+   "file": "app/(app)/dashboard/concierge/actions.ts",
+   "export": "executeQueuedRunAction",
+   "stale": "current",
+   "why": [],
+   "neutral_changes": []
+  },
+  {
+   "id": "ACTION-A29C7E5C3F79",
+   "file": "app/(app)/dashboard/concierge/actions.ts",
+   "export": "planAcceptedAction",
+   "stale": "current",
+   "why": [],
+   "neutral_changes": []
+  },
+  {
+   "id": "ACTION-A6BF2165755D",
+   "file": "app/(app)/dashboard/concierge/actions.ts",
+   "export": "setConciergeAutopilotAction",
+   "stale": "current",
+   "why": [],
+   "neutral_changes": []
+  },
+  {
+   "id": "ACTION-BD59E51EF937",
+   "file": "app/(app)/dashboard/concierge/run-actions.ts",
+   "export": "answerRunAction",
+   "stale": "current",
+   "why": [],
+   "neutral_changes": []
+  },
+  {
+   "id": "ACTION-FBCA9698198B",
+   "file": "app/(app)/dashboard/concierge/run-actions.ts",
+   "export": "askBubalyAction",
+   "stale": "current",
+   "why": [],
+   "neutral_changes": []
+  },
+  {
+   "id": "ACTION-D629A3638EB2",
+   "file": "app/(app)/dashboard/concierge/run-actions.ts",
+   "export": "controlRunAction",
+   "stale": "current",
+   "why": [],
+   "neutral_changes": []
+  },
+  {
+   "id": "ACTION-FDA40AED3CD5",
+   "file": "app/(app)/dashboard/concierge/run-actions.ts",
+   "export": "loadRunAction",
+   "stale": "current",
+   "why": [],
+   "neutral_changes": []
+  },
+  {
+   "id": "ACTION-787669E3FCD9",
+   "file": "app/(app)/dashboard/concierge/runs/[id]/page.tsx",
+   "export": "$$RSC_SERVER_ACTION_0",
+   "stale": "current",
+   "why": [],
+   "neutral_changes": []
+  },
+  {
+   "id": "ACTION-4EE6E1BA998B",
+   "file": "app/(app)/dashboard/conflicts/actions.ts",
+   "export": "rescheduleEventAction",
+   "stale": "current",
+   "why": [],
+   "neutral_changes": []
+  },
+  {
+   "id": "ACTION-94F23566076E",
+   "file": "app/(app)/dashboard/contact-center/actions.ts",
+   "export": "assignEmailAction",
+   "stale": "current",
+   "why": [],
+   "neutral_changes": []
+  },
+  {
+   "id": "ACTION-FD08ADD85C8A",
+   "file": "app/(app)/dashboard/contact-center/actions.ts",
+   "export": "provisionNumberAction",
+   "stale": "current",
+   "why": [],
+   "neutral_changes": []
+  },
+  {
+   "id": "ACTION-183CAA85923F",
+   "file": "app/(app)/dashboard/contact-center/actions.ts",
+   "export": "setMessageStatusAction",
+   "stale": "current",
+   "why": [],
+   "neutral_changes": []
+  },
+  {
+   "id": "ACTION-E698D59FDBA3",
+   "file": "app/(app)/dashboard/contact-center/actions.ts",
+   "export": "updateConciergeAction",
+   "stale": "current",
+   "why": [],
+   "neutral_changes": []
+  },
+  {
+   "id": "ACTION-5692EC585B44",
+   "file": "app/(app)/dashboard/contacts/[id]/actions.ts",
+   "export": "deleteInteractionAction",
+   "stale": "current",
+   "why": [],
+   "neutral_changes": []
+  },
+  {
+   "id": "ACTION-4BC6CC859E7F",
+   "file": "app/(app)/dashboard/contacts/[id]/actions.ts",
+   "export": "draftReconnectMessageAction",
+   "stale": "current",
+   "why": [],
+   "neutral_changes": []
+  },
+  {
+   "id": "ACTION-C161EDDB96B7",
+   "file": "app/(app)/dashboard/contacts/[id]/actions.ts",
+   "export": "logInteractionAction",
+   "stale": "current",
+   "why": [],
+   "neutral_changes": []
+  },
+  {
+   "id": "ACTION-C8833C3BA0D1",
+   "file": "app/(app)/dashboard/customize-actions.ts",
+   "export": "logDashboardEventAction",
+   "stale": "current",
+   "why": [],
+   "neutral_changes": []
+  },
+  {
+   "id": "ACTION-B08ADB71B9AF",
+   "file": "app/(app)/dashboard/customize-actions.ts",
+   "export": "resetAllLayoutsAction",
+   "stale": "current",
+   "why": [],
+   "neutral_changes": []
+  },
+  {
+   "id": "ACTION-664724EB6103",
+   "file": "app/(app)/dashboard/customize-actions.ts",
+   "export": "resetDashboardLayoutAction",
+   "stale": "current",
+   "why": [],
+   "neutral_changes": []
+  },
+  {
+   "id": "ACTION-6DDA408B62AE",
+   "file": "app/(app)/dashboard/customize-actions.ts",
+   "export": "saveDashboardLayoutAction",
+   "stale": "current",
+   "why": [],
+   "neutral_changes": []
+  },
+  {
+   "id": "ACTION-2677F9A42D51",
+   "file": "app/(app)/dashboard/customize-actions.ts",
+   "export": "saveDashboardSettingsAction",
+   "stale": "current",
+   "why": [],
+   "neutral_changes": []
+  },
+  {
+   "id": "ACTION-189AB85FF7FB",
+   "file": "app/(app)/dashboard/customize-actions.ts",
+   "export": "saveFamilyDefaultLayoutAction",
+   "stale": "current",
+   "why": [],
+   "neutral_changes": []
+  },
+  {
+   "id": "ACTION-557354D4F82F",
+   "file": "app/(app)/dashboard/dining/actions.ts",
+   "export": "addRestaurantAction",
+   "stale": "current",
+   "why": [],
+   "neutral_changes": []
+  },
+  {
+   "id": "ACTION-885920C91B68",
+   "file": "app/(app)/dashboard/dining/actions.ts",
+   "export": "logVisitAction",
+   "stale": "current",
+   "why": [],
+   "neutral_changes": []
+  },
+  {
+   "id": "ACTION-E7BFD9F7072B",
+   "file": "app/(app)/dashboard/dining/actions.ts",
+   "export": "toggleFavoriteAction",
+   "stale": "current",
+   "why": [],
+   "neutral_changes": []
+  },
+  {
+   "id": "ACTION-9799EDE8D029",
+   "file": "app/(app)/dashboard/family-cfo/actions.ts",
+   "export": "assessAffordabilityAction",
+   "stale": "current",
+   "why": [],
+   "neutral_changes": []
+  },
+  {
+   "id": "ACTION-9C8E227CD5FB",
+   "file": "app/(app)/dashboard/family-digital-twin/actions.ts",
+   "export": "deleteSimulationAction",
+   "stale": "current",
+   "why": [],
+   "neutral_changes": []
+  },
+  {
+   "id": "ACTION-0EAB6903D9E2",
+   "file": "app/(app)/dashboard/family-digital-twin/actions.ts",
+   "export": "projectActivityAction",
+   "stale": "current",
+   "why": [],
+   "neutral_changes": []
+  },
+  {
+   "id": "ACTION-13D081167F71",
+   "file": "app/(app)/dashboard/family-digital-twin/actions.ts",
+   "export": "saveSimulationAction",
+   "stale": "current",
+   "why": [],
+   "neutral_changes": []
+  },
+  {
+   "id": "ACTION-0450C5505E88",
+   "file": "app/(app)/dashboard/family-digital-twin/actions.ts",
+   "export": "simulateDecisionAction",
+   "stale": "current",
+   "why": [],
+   "neutral_changes": []
+  },
+  {
+   "id": "ACTION-37CED65E2E35",
+   "file": "app/(app)/dashboard/family-signals/actions.ts",
+   "export": "refreshSignalsAction",
+   "stale": "current",
+   "why": [],
+   "neutral_changes": []
+  },
+  {
+   "id": "ACTION-8522485B70B0",
+   "file": "app/(app)/dashboard/family-signals/actions.ts",
+   "export": "setSignalStatusAction",
+   "stale": "current",
+   "why": [],
+   "neutral_changes": []
+  },
+  {
+   "id": "ACTION-B3B4E4153D21",
+   "file": "app/(app)/dashboard/goals/actions.ts",
+   "export": "deleteGoalAction",
+   "stale": "current",
+   "why": [],
+   "neutral_changes": []
+  },
+  {
+   "id": "ACTION-5E65B4B68F7C",
+   "file": "app/(app)/dashboard/goals/actions.ts",
+   "export": "saveGoalAction",
+   "stale": "current",
+   "why": [],
+   "neutral_changes": []
+  },
+  {
+   "id": "ACTION-B26796481B72",
+   "file": "app/(app)/dashboard/goals/actions.ts",
+   "export": "setGoalProgressAction",
+   "stale": "current",
+   "why": [],
+   "neutral_changes": []
+  },
+  {
+   "id": "ACTION-C745FFD9BC03",
+   "file": "app/(app)/dashboard/graph/twin-actions.ts",
+   "export": "projectTwinAction",
+   "stale": "current",
+   "why": [],
+   "neutral_changes": []
+  },
+  {
+   "id": "ACTION-FAE89EDA6446",
+   "file": "app/(app)/dashboard/grocery/actions.ts",
+   "export": "addGroceryItemsAction",
+   "stale": "current",
+   "why": [],
+   "neutral_changes": []
+  },
+  {
+   "id": "ACTION-0EE694AB25F2",
+   "file": "app/(app)/dashboard/grocery/actions.ts",
+   "export": "addMealPlanToGroceryListAction",
+   "stale": "current",
+   "why": [],
+   "neutral_changes": []
+  },
+  {
+   "id": "ACTION-4E887905D377",
+   "file": "app/(app)/dashboard/grocery/actions.ts",
+   "export": "clearCheckedGroceriesAction",
+   "stale": "current",
+   "why": [],
+   "neutral_changes": []
+  },
+  {
+   "id": "ACTION-06A3F4E73165",
+   "file": "app/(app)/dashboard/grocery/actions.ts",
+   "export": "recordShoppingTripAction",
+   "stale": "current",
+   "why": [],
+   "neutral_changes": []
+  },
+  {
+   "id": "ACTION-8837CE631C1C",
+   "file": "app/(app)/dashboard/grocery/actions.ts",
+   "export": "removeGroceryItemAction",
+   "stale": "current",
+   "why": [],
+   "neutral_changes": []
+  },
+  {
+   "id": "ACTION-4338DE1FC8D8",
+   "file": "app/(app)/dashboard/grocery/actions.ts",
+   "export": "setGroceryItemCheckedAction",
+   "stale": "current",
+   "why": [],
+   "neutral_changes": []
+  },
+  {
+   "id": "ACTION-511E8EAE5D3F",
+   "file": "app/(app)/dashboard/home/actions.ts",
+   "export": "deleteContractorAction",
+   "stale": "current",
+   "why": [],
+   "neutral_changes": []
+  },
+  {
+   "id": "ACTION-519195A63714",
+   "file": "app/(app)/dashboard/home/actions.ts",
+   "export": "deleteServiceRecordAction",
+   "stale": "current",
+   "why": [],
+   "neutral_changes": []
+  },
+  {
+   "id": "ACTION-D4AB4A7E1598",
+   "file": "app/(app)/dashboard/home/actions.ts",
+   "export": "deleteWarrantyAction",
+   "stale": "current",
+   "why": [],
+   "neutral_changes": []
+  },
+  {
+   "id": "ACTION-5C383A793E23",
+   "file": "app/(app)/dashboard/home/actions.ts",
+   "export": "saveContractorAction",
+   "stale": "current",
+   "why": [],
+   "neutral_changes": []
+  },
+  {
+   "id": "ACTION-006967105DCD",
+   "file": "app/(app)/dashboard/home/actions.ts",
+   "export": "saveServiceRecordAction",
+   "stale": "current",
+   "why": [],
+   "neutral_changes": []
+  },
+  {
+   "id": "ACTION-32EEEB118D20",
+   "file": "app/(app)/dashboard/home/actions.ts",
+   "export": "saveWarrantyAction",
+   "stale": "current",
+   "why": [],
+   "neutral_changes": []
+  },
+  {
+   "id": "ACTION-DD076FC781C8",
+   "file": "app/(app)/dashboard/home/actions.ts",
+   "export": "scheduleRecommendedTasksAction",
+   "stale": "current",
+   "why": [],
+   "neutral_changes": []
+  },
+  {
+   "id": "ACTION-201D33862E34",
+   "file": "app/(app)/dashboard/inbox/actions.ts",
+   "export": "archiveInboxMessageAction",
+   "stale": "current",
+   "why": [],
+   "neutral_changes": []
+  },
+  {
+   "id": "ACTION-B979DD7EA29A",
+   "file": "app/(app)/dashboard/inbox/actions.ts",
+   "export": "handleInboxMessageAction",
+   "stale": "current",
+   "why": [],
+   "neutral_changes": []
+  },
+  {
+   "id": "ACTION-DFACF8805CFF",
+   "file": "app/(app)/dashboard/independence/actions.ts",
+   "export": "achieveMilestoneAction",
+   "stale": "current",
+   "why": [],
+   "neutral_changes": []
+  },
+  {
+   "id": "ACTION-8FA22E77AF99",
+   "file": "app/(app)/dashboard/independence/actions.ts",
+   "export": "skipMilestoneAction",
+   "stale": "current",
+   "why": [],
+   "neutral_changes": []
+  },
+  {
+   "id": "ACTION-BA6D9C001E47",
+   "file": "app/(app)/dashboard/independence/actions.ts",
+   "export": "startMilestoneAction",
+   "stale": "current",
+   "why": [],
+   "neutral_changes": []
+  },
+  {
+   "id": "ACTION-632D1C4485C5",
+   "file": "app/(app)/dashboard/insight-actions.ts",
+   "export": "actOnInsightAction",
+   "stale": "current",
+   "why": [],
+   "neutral_changes": []
+  },
+  {
+   "id": "ACTION-F86C1B82654C",
+   "file": "app/(app)/dashboard/insight-actions.ts",
+   "export": "dismissInsightAction",
+   "stale": "current",
+   "why": [],
+   "neutral_changes": []
+  },
+  {
+   "id": "ACTION-1153C80AAF7F",
+   "file": "app/(app)/dashboard/kitchen/actions.ts",
+   "export": "addLeftoverAction",
+   "stale": "current",
+   "why": [],
+   "neutral_changes": []
+  },
+  {
+   "id": "ACTION-76FAFB715AEE",
+   "file": "app/(app)/dashboard/kitchen/actions.ts",
+   "export": "deleteLeftoverAction",
+   "stale": "current",
+   "why": [],
+   "neutral_changes": []
+  },
+  {
+   "id": "ACTION-A7A7EDE23299",
+   "file": "app/(app)/dashboard/kitchen/actions.ts",
+   "export": "snapshotFoodScoreAction",
+   "stale": "current",
+   "why": [],
+   "neutral_changes": []
+  },
+  {
+   "id": "ACTION-1529E29192D5",
+   "file": "app/(app)/dashboard/kitchen/actions.ts",
+   "export": "updateLeftoverStatusAction",
+   "stale": "current",
+   "why": [],
+   "neutral_changes": []
+  },
+  {
+   "id": "ACTION-A4B8E175C5FC",
+   "file": "app/(app)/dashboard/knowledge/actions.ts",
+   "export": "forgetFactAction",
+   "stale": "current",
+   "why": [],
+   "neutral_changes": []
+  },
+  {
+   "id": "ACTION-83696258D19C",
+   "file": "app/(app)/dashboard/knowledge/actions.ts",
+   "export": "saveFactAction",
+   "stale": "current",
+   "why": [],
+   "neutral_changes": []
+  },
+  {
+   "id": "ACTION-C3C601C7C299",
+   "file": "app/(app)/dashboard/knowledge/actions.ts",
+   "export": "setFactPinnedAction",
+   "stale": "current",
+   "why": [],
+   "neutral_changes": []
+  },
+  {
+   "id": "ACTION-BFAA74E0C4FE",
+   "file": "app/(app)/dashboard/library/actions.ts",
+   "export": "addBookAction",
+   "stale": "current",
+   "why": [],
+   "neutral_changes": []
+  },
+  {
+   "id": "ACTION-F3AC8A6C2E1D",
+   "file": "app/(app)/dashboard/library/actions.ts",
+   "export": "refreshFeedAction",
+   "stale": "current",
+   "why": [],
+   "neutral_changes": []
+  },
+  {
+   "id": "ACTION-86DDF0156A9D",
+   "file": "app/(app)/dashboard/library/actions.ts",
+   "export": "saveProgressAction",
+   "stale": "current",
+   "why": [],
+   "neutral_changes": []
+  },
+  {
+   "id": "ACTION-B3F17CEDFF9B",
+   "file": "app/(app)/dashboard/library/actions.ts",
+   "export": "subscribeFeedAction",
+   "stale": "current",
+   "why": [],
+   "neutral_changes": []
+  },
+  {
+   "id": "ACTION-E69528A3174C",
+   "file": "app/(app)/dashboard/library/actions.ts",
+   "export": "unsubscribeFeedAction",
+   "stale": "current",
+   "why": [],
+   "neutral_changes": []
+  },
+  {
+   "id": "ACTION-545BEF9BFE45",
+   "file": "app/(app)/dashboard/life-event-actions.ts",
+   "export": "launchLifeEventAction",
+   "stale": "current",
+   "why": [],
+   "neutral_changes": []
+  },
+  {
+   "id": "ACTION-F4D4116828A1",
+   "file": "app/(app)/dashboard/life-event-actions.ts",
+   "export": "setLifeEventStatusAction",
+   "stale": "current",
+   "why": [],
+   "neutral_changes": []
+  },
+  {
+   "id": "ACTION-9A1F079806FF",
+   "file": "app/(app)/dashboard/locator/actions.ts",
+   "export": "deletePlace",
+   "stale": "current",
+   "why": [],
+   "neutral_changes": []
+  },
+  {
+   "id": "ACTION-DCF9C14AD2D4",
+   "file": "app/(app)/dashboard/locator/actions.ts",
+   "export": "savePlace",
+   "stale": "current",
+   "why": [],
+   "neutral_changes": []
+  },
+  {
+   "id": "ACTION-16D000B65EB5",
+   "file": "app/(app)/dashboard/locator/actions.ts",
+   "export": "setGeofenceEnabled",
+   "stale": "current",
+   "why": [],
+   "neutral_changes": []
+  },
+  {
+   "id": "ACTION-7EC0FD404B79",
+   "file": "app/(app)/dashboard/locator/actions.ts",
+   "export": "setLocationSharing",
+   "stale": "current",
+   "why": [],
+   "neutral_changes": []
+  },
+  {
+   "id": "ACTION-D51DF328F97F",
+   "file": "app/(app)/dashboard/locator/actions.ts",
+   "export": "updateMyLocation",
+   "stale": "current",
+   "why": [],
+   "neutral_changes": []
+  },
+  {
+   "id": "ACTION-73DB0E2176B9",
+   "file": "app/(app)/dashboard/meals/actions.ts",
+   "export": "createMealAction",
+   "stale": "current",
+   "why": [],
+   "neutral_changes": []
+  },
+  {
+   "id": "ACTION-1A67F7331B29",
+   "file": "app/(app)/dashboard/meals/actions.ts",
+   "export": "planMealAction",
+   "stale": "current",
+   "why": [],
+   "neutral_changes": []
+  },
+  {
+   "id": "ACTION-91AEADE5CC7B",
+   "file": "app/(app)/dashboard/meals/actions.ts",
+   "export": "removeMealPlanAction",
+   "stale": "current",
+   "why": [],
+   "neutral_changes": []
+  },
+  {
+   "id": "ACTION-06C82E2828E8",
+   "file": "app/(app)/dashboard/migrate/actions.ts",
+   "export": "commitImport",
+   "stale": "current",
+   "why": [],
+   "neutral_changes": []
+  },
+  {
+   "id": "ACTION-2F9CFA288C8F",
+   "file": "app/(app)/dashboard/migrate/actions.ts",
+   "export": "prepareImport",
+   "stale": "current",
+   "why": [],
+   "neutral_changes": []
+  },
+  {
+   "id": "ACTION-9FAA2BF77E5F",
+   "file": "app/(app)/dashboard/moment-actions.ts",
+   "export": "addMomentGroceryAction",
+   "stale": "current",
+   "why": [],
+   "neutral_changes": []
+  },
+  {
+   "id": "ACTION-ED73CED91B24",
+   "file": "app/(app)/dashboard/moment-actions.ts",
+   "export": "createMomentReminderAction",
+   "stale": "current",
+   "why": [],
+   "neutral_changes": []
+  },
+  {
+   "id": "ACTION-1A3AD1A02F9E",
+   "file": "app/(app)/dashboard/moment-actions.ts",
+   "export": "loadMomentPrep",
+   "stale": "current",
+   "why": [],
+   "neutral_changes": []
+  },
+  {
+   "id": "ACTION-59FEC0DE848A",
+   "file": "app/(app)/dashboard/moment-actions.ts",
+   "export": "removeMomentGroceryAction",
+   "stale": "current",
+   "why": [],
+   "neutral_changes": []
+  },
+  {
+   "id": "ACTION-1AEED72D9878",
+   "file": "app/(app)/dashboard/moment-actions.ts",
+   "export": "setMomentPrepDoneAction",
+   "stale": "current",
+   "why": [],
+   "neutral_changes": []
+  },
+  {
+   "id": "ACTION-94972CCF8DD8",
+   "file": "app/(app)/dashboard/moments/actions.ts",
+   "export": "dismissMomentAction",
+   "stale": "current",
+   "why": [],
+   "neutral_changes": []
+  },
+  {
+   "id": "ACTION-0D464B09E078",
+   "file": "app/(app)/dashboard/moments/actions.ts",
+   "export": "engageMomentAction",
+   "stale": "current",
+   "why": [],
+   "neutral_changes": []
+  },
+  {
+   "id": "ACTION-345E2D2E981B",
+   "file": "app/(app)/dashboard/money-timeline/actions.ts",
+   "export": "setMoneyInsightStatusAction",
+   "stale": "current",
+   "why": [],
+   "neutral_changes": []
+  },
+  {
+   "id": "ACTION-78A06636ED27",
+   "file": "app/(app)/dashboard/money-timeline/actions.ts",
+   "export": "syncMoneyInsightsAction",
+   "stale": "current",
+   "why": [],
+   "neutral_changes": []
+  },
+  {
+   "id": "ACTION-C5EF1ECD4052",
+   "file": "app/(app)/dashboard/navigation-actions.ts",
+   "export": "loadSidebarPrefs",
+   "stale": "current",
+   "why": [],
+   "neutral_changes": []
+  },
+  {
+   "id": "ACTION-0C414E002599",
+   "file": "app/(app)/dashboard/navigation-actions.ts",
+   "export": "saveSidebarNavAction",
+   "stale": "current",
+   "why": [],
+   "neutral_changes": []
+  },
+  {
+   "id": "ACTION-3C3E8B92B091",
+   "file": "app/(app)/dashboard/needs-you/actions.ts",
+   "export": "archiveInboxMessageAction",
+   "stale": "current",
+   "why": [],
+   "neutral_changes": []
+  },
+  {
+   "id": "ACTION-2DCA2954497B",
+   "file": "app/(app)/dashboard/needs-you/actions.ts",
+   "export": "confirmFactSuggestionAction",
+   "stale": "current",
+   "why": [],
+   "neutral_changes": []
+  },
+  {
+   "id": "ACTION-AA44E6041AFD",
+   "file": "app/(app)/dashboard/needs-you/actions.ts",
+   "export": "dismissFactSuggestionAction",
+   "stale": "current",
+   "why": [],
+   "neutral_changes": []
+  },
+  {
+   "id": "ACTION-06405B2537DE",
+   "file": "app/(app)/dashboard/notes/actions.ts",
+   "export": "deleteNoteAction",
+   "stale": "current",
+   "why": [],
+   "neutral_changes": []
+  },
+  {
+   "id": "ACTION-F1089720B176",
+   "file": "app/(app)/dashboard/notes/actions.ts",
+   "export": "duplicateNoteAction",
+   "stale": "current",
+   "why": [],
+   "neutral_changes": []
+  },
+  {
+   "id": "ACTION-F6A01A5733FD",
+   "file": "app/(app)/dashboard/notes/actions.ts",
+   "export": "saveNoteAction",
+   "stale": "current",
+   "why": [],
+   "neutral_changes": []
+  },
+  {
+   "id": "ACTION-73BFC71CAD3A",
+   "file": "app/(app)/dashboard/notes/actions.ts",
+   "export": "setNotePinnedAction",
+   "stale": "current",
+   "why": [],
+   "neutral_changes": []
+  },
+  {
+   "id": "ACTION-C144B7C6CB81",
+   "file": "app/(app)/dashboard/pantry/actions.ts",
+   "export": "adjustPantryQuantityAction",
+   "stale": "current",
+   "why": [],
+   "neutral_changes": []
+  },
+  {
+   "id": "ACTION-CF5B816455B8",
+   "file": "app/(app)/dashboard/pantry/actions.ts",
+   "export": "removePantryItemAction",
+   "stale": "current",
+   "why": [],
+   "neutral_changes": []
+  },
+  {
+   "id": "ACTION-CF58A1319822",
+   "file": "app/(app)/dashboard/pantry/actions.ts",
+   "export": "savePantryItemAction",
+   "stale": "current",
+   "why": [],
+   "neutral_changes": []
+  },
+  {
+   "id": "ACTION-CD1E12585CD4",
+   "file": "app/(app)/dashboard/paperwork/actions.ts",
+   "export": "addPaperworkAction",
+   "stale": "current",
+   "why": [],
+   "neutral_changes": []
+  },
+  {
+   "id": "ACTION-C511C4594D9C",
+   "file": "app/(app)/dashboard/paperwork/actions.ts",
+   "export": "draftPaperworkReplyAction",
+   "stale": "current",
+   "why": [],
+   "neutral_changes": []
+  },
+  {
+   "id": "ACTION-ECFFB30B78F2",
+   "file": "app/(app)/dashboard/paperwork/actions.ts",
+   "export": "materializePaperworkActionAction",
+   "stale": "current",
+   "why": [],
+   "neutral_changes": []
+  },
+  {
+   "id": "ACTION-BB47512A2540",
+   "file": "app/(app)/dashboard/paperwork/actions.ts",
+   "export": "setPaperworkStatusAction",
+   "stale": "current",
+   "why": [],
+   "neutral_changes": []
+  },
+  {
+   "id": "ACTION-749B60DB8A71",
+   "file": "app/(app)/dashboard/playbook/playbook-actions.ts",
+   "export": "acceptSuggestionAction",
+   "stale": "current",
+   "why": [],
+   "neutral_changes": []
+  },
+  {
+   "id": "ACTION-02925240D5D8",
+   "file": "app/(app)/dashboard/playbook/playbook-actions.ts",
+   "export": "dismissSuggestionAction",
+   "stale": "current",
+   "why": [],
+   "neutral_changes": []
+  },
+  {
+   "id": "ACTION-FB26742D7D6C",
+   "file": "app/(app)/dashboard/playbook/playbook-actions.ts",
+   "export": "refreshPlaybookAction",
+   "stale": "current",
+   "why": [],
+   "neutral_changes": []
+  },
+  {
+   "id": "ACTION-FB1C60C3CE5A",
+   "file": "app/(app)/dashboard/prep-plans/prep-actions.ts",
+   "export": "generatePrepPlansAction",
+   "stale": "current",
+   "why": [],
+   "neutral_changes": []
+  },
+  {
+   "id": "ACTION-A027C4B03998",
+   "file": "app/(app)/dashboard/recipes/discover/actions.ts",
+   "export": "saveDiscoveredRecipe",
+   "stale": "current",
+   "why": [],
+   "neutral_changes": []
+  },
+  {
+   "id": "ACTION-57E2B828AEF1",
+   "file": "app/(app)/dashboard/recipes/vote/actions.ts",
+   "export": "addWinnerToGrocery",
+   "stale": "current",
+   "why": [],
+   "neutral_changes": []
+  },
+  {
+   "id": "ACTION-CBBE36D1F20D",
+   "file": "app/(app)/dashboard/recipes/vote/actions.ts",
+   "export": "castBallot",
+   "stale": "current",
+   "why": [],
+   "neutral_changes": []
+  },
+  {
+   "id": "ACTION-86A2E89027E6",
+   "file": "app/(app)/dashboard/recipes/vote/actions.ts",
+   "export": "closeMealVote",
+   "stale": "current",
+   "why": [],
+   "neutral_changes": []
+  },
+  {
+   "id": "ACTION-4AF60B043671",
+   "file": "app/(app)/dashboard/recipes/vote/actions.ts",
+   "export": "createMealVote",
+   "stale": "current",
+   "why": [],
+   "neutral_changes": []
+  },
+  {
+   "id": "ACTION-3E2448BE3727",
+   "file": "app/(app)/dashboard/recipes/vote/actions.ts",
+   "export": "reopenMealVote",
+   "stale": "current",
+   "why": [],
+   "neutral_changes": []
+  },
+  {
+   "id": "ACTION-39B5301E5FB2",
+   "file": "app/(app)/dashboard/relationship/actions.ts",
+   "export": "toggleDateOnCalendarAction",
+   "stale": "current",
+   "why": [],
+   "neutral_changes": []
+  },
+  {
+   "id": "ACTION-4DDEA9C8979E",
+   "file": "app/(app)/dashboard/reminders/actions.ts",
+   "export": "createReminderAction",
+   "stale": "current",
+   "why": [],
+   "neutral_changes": []
+  },
+  {
+   "id": "ACTION-6D0F54B75EC1",
+   "file": "app/(app)/dashboard/reminders/actions.ts",
+   "export": "deleteReminderAction",
+   "stale": "current",
+   "why": [],
+   "neutral_changes": []
+  },
+  {
+   "id": "ACTION-231CFD9291F4",
+   "file": "app/(app)/dashboard/reminders/actions.ts",
+   "export": "snoozeReminderAction",
+   "stale": "current",
+   "why": [],
+   "neutral_changes": []
+  },
+  {
+   "id": "ACTION-B1F1A5BB67EA",
+   "file": "app/(app)/dashboard/rewards/actions.ts",
+   "export": "decideRedemptionAction",
+   "stale": "current",
+   "why": [],
+   "neutral_changes": []
+  },
+  {
+   "id": "ACTION-82773087CA67",
+   "file": "app/(app)/dashboard/rewards/actions.ts",
+   "export": "requestRedemptionAction",
+   "stale": "current",
+   "why": [],
+   "neutral_changes": []
+  },
+  {
+   "id": "ACTION-949C04ABC5DB",
+   "file": "app/(app)/dashboard/school/actions.ts",
+   "export": "proposeFrontDeskAction",
+   "stale": "current",
+   "why": [],
+   "neutral_changes": []
+  },
+  {
+   "id": "ACTION-A549F00E8641",
+   "file": "app/(app)/dashboard/search/actions.ts",
+   "export": "searchRecordsAction",
+   "stale": "current",
+   "why": [],
+   "neutral_changes": []
+  },
+  {
+   "id": "ACTION-642602E9A881",
+   "file": "app/(app)/dashboard/settings/ai-actions.ts",
+   "export": "clearAiMemoryAction",
+   "stale": "current",
+   "why": [],
+   "neutral_changes": []
+  },
+  {
+   "id": "ACTION-C70E7D20BC6E",
+   "file": "app/(app)/dashboard/settings/ai-actions.ts",
+   "export": "confirmAiMemoryAction",
+   "stale": "current",
+   "why": [],
+   "neutral_changes": []
+  },
+  {
+   "id": "ACTION-1504D74E776D",
+   "file": "app/(app)/dashboard/settings/ai-actions.ts",
+   "export": "forgetAiMemoryAction",
+   "stale": "current",
+   "why": [],
+   "neutral_changes": []
+  },
+  {
+   "id": "ACTION-559FD267EC97",
+   "file": "app/(app)/dashboard/settings/ai-actions.ts",
+   "export": "forgetRoutineAction",
+   "stale": "current",
+   "why": [],
+   "neutral_changes": []
+  },
+  {
+   "id": "ACTION-67ABBCD07C3A",
+   "file": "app/(app)/dashboard/settings/ai-actions.ts",
+   "export": "loadAISettingsAction",
+   "stale": "current",
+   "why": [],
+   "neutral_changes": []
+  },
+  {
+   "id": "ACTION-171543AFD011",
+   "file": "app/(app)/dashboard/settings/ai-actions.ts",
+   "export": "loadAiMemoryAction",
+   "stale": "current",
+   "why": [],
+   "neutral_changes": []
+  },
+  {
+   "id": "ACTION-D84503619E8A",
+   "file": "app/(app)/dashboard/settings/ai-actions.ts",
+   "export": "resetMemberTraitsAction",
+   "stale": "current",
+   "why": [],
+   "neutral_changes": []
+  },
+  {
+   "id": "ACTION-D0411EA3236B",
+   "file": "app/(app)/dashboard/settings/ai-actions.ts",
+   "export": "saveAISettingsAction",
+   "stale": "current",
+   "why": [],
+   "neutral_changes": []
+  },
+  {
+   "id": "ACTION-B9402DBBD22E",
+   "file": "app/(app)/dashboard/settings/profile-actions.ts",
+   "export": "getProfileStateAction",
+   "stale": "current",
+   "why": [],
+   "neutral_changes": []
+  },
+  {
+   "id": "ACTION-AB19B9275099",
+   "file": "app/(app)/dashboard/settings/profile-actions.ts",
+   "export": "saveProfileAnswerAction",
+   "stale": "current",
+   "why": [],
+   "neutral_changes": []
+  },
+  {
+   "id": "ACTION-8D855B590D55",
+   "file": "app/(app)/dashboard/settings/profile-actions.ts",
+   "export": "skipProfileFieldAction",
+   "stale": "current",
+   "why": [],
+   "neutral_changes": []
+  },
+  {
+   "id": "ACTION-4391301E1AC2",
+   "file": "app/(app)/dashboard/social-feed/actions.ts",
+   "export": "addByUrlAction",
+   "stale": "current",
+   "why": [],
+   "neutral_changes": []
+  },
+  {
+   "id": "ACTION-70192299722B",
+   "file": "app/(app)/dashboard/social-feed/actions.ts",
+   "export": "addFeedItemAction",
+   "stale": "current",
+   "why": [],
+   "neutral_changes": []
+  },
+  {
+   "id": "ACTION-E1802CD42535",
+   "file": "app/(app)/dashboard/social-feed/actions.ts",
+   "export": "addSourceAction",
+   "stale": "current",
+   "why": [],
+   "neutral_changes": []
+  },
+  {
+   "id": "ACTION-1BF1CFD2A289",
+   "file": "app/(app)/dashboard/social-feed/actions.ts",
+   "export": "markAllReadAction",
+   "stale": "current",
+   "why": [],
+   "neutral_changes": []
+  },
+  {
+   "id": "ACTION-B326FDF1A333",
+   "file": "app/(app)/dashboard/social-feed/actions.ts",
+   "export": "markReadAction",
+   "stale": "current",
+   "why": [],
+   "neutral_changes": []
+  },
+  {
+   "id": "ACTION-955CFD2274EE",
+   "file": "app/(app)/dashboard/social-feed/actions.ts",
+   "export": "removeSourceAction",
+   "stale": "current",
+   "why": [],
+   "neutral_changes": []
+  },
+  {
+   "id": "ACTION-C276C13E409F",
+   "file": "app/(app)/dashboard/social-feed/actions.ts",
+   "export": "toggleFavoriteAction",
+   "stale": "current",
+   "why": [],
+   "neutral_changes": []
+  },
+  {
+   "id": "ACTION-38924C6BA1BC",
+   "file": "app/(app)/dashboard/social/actions.ts",
+   "export": "connectAccountAction",
+   "stale": "current",
+   "why": [],
+   "neutral_changes": []
+  },
+  {
+   "id": "ACTION-9F9715F212FF",
+   "file": "app/(app)/dashboard/social/actions.ts",
+   "export": "createMediaAction",
+   "stale": "current",
+   "why": [],
+   "neutral_changes": []
+  },
+  {
+   "id": "ACTION-3C9C7E7C3208",
+   "file": "app/(app)/dashboard/social/actions.ts",
+   "export": "createPostAction",
+   "stale": "current",
+   "why": [],
+   "neutral_changes": []
+  },
+  {
+   "id": "ACTION-34DED829EF63",
+   "file": "app/(app)/dashboard/social/actions.ts",
+   "export": "disconnectAccountAction",
+   "stale": "current",
+   "why": [],
+   "neutral_changes": []
+  },
+  {
+   "id": "ACTION-EB48756176AA",
+   "file": "app/(app)/dashboard/social/actions.ts",
+   "export": "grantAccessAction",
+   "stale": "current",
+   "why": [],
+   "neutral_changes": []
+  },
+  {
+   "id": "ACTION-29B242DBD1B3",
+   "file": "app/(app)/dashboard/social/actions.ts",
+   "export": "resolveCommentAction",
+   "stale": "current",
+   "why": [],
+   "neutral_changes": []
+  },
+  {
+   "id": "ACTION-FD08580CBD41",
+   "file": "app/(app)/dashboard/social/actions.ts",
+   "export": "retryPublishAction",
+   "stale": "current",
+   "why": [],
+   "neutral_changes": []
+  },
+  {
+   "id": "ACTION-FD1221F34629",
+   "file": "app/(app)/dashboard/social/actions.ts",
+   "export": "updateSettingsAction",
+   "stale": "current",
+   "why": [],
+   "neutral_changes": []
+  },
+  {
+   "id": "ACTION-AFAB381F1832",
+   "file": "app/(app)/dashboard/sync/feeds/actions.ts",
+   "export": "addCalendarFeed",
+   "stale": "current",
+   "why": [],
+   "neutral_changes": []
+  },
+  {
+   "id": "ACTION-67F689691FB0",
+   "file": "app/(app)/dashboard/sync/feeds/actions.ts",
+   "export": "removeCalendarFeed",
+   "stale": "current",
+   "why": [],
+   "neutral_changes": []
+  },
+  {
+   "id": "ACTION-C711866C26D0",
+   "file": "app/(app)/dashboard/sync/feeds/actions.ts",
+   "export": "syncCalendarFeed",
+   "stale": "current",
+   "why": [],
+   "neutral_changes": []
+  },
+  {
+   "id": "ACTION-A5AA67D27167",
+   "file": "app/(app)/dashboard/todos/actions.ts",
+   "export": "completeTodoAction",
+   "stale": "current",
+   "why": [],
+   "neutral_changes": []
+  },
+  {
+   "id": "ACTION-52B73F1492C2",
+   "file": "app/(app)/dashboard/todos/actions.ts",
+   "export": "createTodoAction",
+   "stale": "current",
+   "why": [],
+   "neutral_changes": []
+  },
+  {
+   "id": "ACTION-1139AA62CCF0",
+   "file": "app/(app)/dashboard/todos/actions.ts",
+   "export": "deleteTodoAction",
+   "stale": "current",
+   "why": [],
+   "neutral_changes": []
+  },
+  {
+   "id": "ACTION-32A1ACCC3D46",
+   "file": "app/(app)/dashboard/todos/actions.ts",
+   "export": "updateTodoAction",
+   "stale": "current",
+   "why": [],
+   "neutral_changes": []
+  },
+  {
+   "id": "ACTION-2AB660F8D748",
+   "file": "app/(app)/dashboard/trip-intel/actions.ts",
+   "export": "deleteDeparturePlanAction",
+   "stale": "current",
+   "why": [],
+   "neutral_changes": []
+  },
+  {
+   "id": "ACTION-DCDC3B48AFA9",
+   "file": "app/(app)/dashboard/trip-intel/actions.ts",
+   "export": "deleteTripPlanAction",
+   "stale": "current",
+   "why": [],
+   "neutral_changes": []
+  },
+  {
+   "id": "ACTION-FCA30030544D",
+   "file": "app/(app)/dashboard/trip-intel/actions.ts",
+   "export": "refreshDeparturePlanAction",
+   "stale": "current",
+   "why": [],
+   "neutral_changes": []
+  },
+  {
+   "id": "ACTION-E96F97DA2368",
+   "file": "app/(app)/dashboard/trip-intel/actions.ts",
+   "export": "saveDeparturePlanAction",
+   "stale": "current",
+   "why": [],
+   "neutral_changes": []
+  },
+  {
+   "id": "ACTION-16605C4EF782",
+   "file": "app/(app)/dashboard/trip-intel/actions.ts",
+   "export": "saveTripPlanAction",
+   "stale": "current",
+   "why": [],
+   "neutral_changes": []
+  },
+  {
+   "id": "ACTION-604D3EBDBFDA",
+   "file": "app/(app)/dashboard/trust/actions.ts",
+   "export": "acceptPolicySuggestionAction",
+   "stale": "current",
+   "why": [],
+   "neutral_changes": []
+  },
+  {
+   "id": "ACTION-E665CDB33E65",
+   "file": "app/(app)/dashboard/trust/actions.ts",
+   "export": "activateEmergencyAction",
+   "stale": "current",
+   "why": [],
+   "neutral_changes": []
+  },
+  {
+   "id": "ACTION-99F36D6FBAE2",
+   "file": "app/(app)/dashboard/trust/actions.ts",
+   "export": "createDelegationAction",
+   "stale": "current",
+   "why": [],
+   "neutral_changes": []
+  },
+  {
+   "id": "ACTION-A24B5453EA57",
+   "file": "app/(app)/dashboard/trust/actions.ts",
+   "export": "createSharingPresetAction",
+   "stale": "current",
+   "why": [],
+   "neutral_changes": []
+  },
+  {
+   "id": "ACTION-72DB6B2CE780",
+   "file": "app/(app)/dashboard/trust/actions.ts",
+   "export": "decideApprovalAction",
+   "stale": "current",
+   "why": [],
+   "neutral_changes": []
+  },
+  {
+   "id": "ACTION-B5CAAFBB69C4",
+   "file": "app/(app)/dashboard/trust/actions.ts",
+   "export": "deletePolicyAction",
+   "stale": "current",
+   "why": [],
+   "neutral_changes": []
+  },
+  {
+   "id": "ACTION-EBAF0F9342CC",
+   "file": "app/(app)/dashboard/trust/actions.ts",
+   "export": "endEmergencyAction",
+   "stale": "current",
+   "why": [],
+   "neutral_changes": []
+  },
+  {
+   "id": "ACTION-1318E1F05B65",
+   "file": "app/(app)/dashboard/trust/actions.ts",
+   "export": "revokeDelegationAction",
+   "stale": "current",
+   "why": [],
+   "neutral_changes": []
+  },
+  {
+   "id": "ACTION-B107F1871DA9",
+   "file": "app/(app)/dashboard/trust/actions.ts",
+   "export": "savePolicyAction",
+   "stale": "current",
+   "why": [],
+   "neutral_changes": []
+  },
+  {
+   "id": "ACTION-2BF1B4138494",
+   "file": "app/(app)/dashboard/trust/actions.ts",
+   "export": "setPermissionGrantAction",
+   "stale": "current",
+   "why": [],
+   "neutral_changes": []
+  },
+  {
+   "id": "ACTION-41B123BCB323",
+   "file": "app/(app)/dashboard/trust/actions.ts",
+   "export": "togglePolicyAction",
+   "stale": "current",
+   "why": [],
+   "neutral_changes": []
+  },
+  {
+   "id": "ACTION-03981958F45C",
+   "file": "app/(app)/dashboard/vacations/[id]/actions.ts",
+   "export": "listDisruptableBookingsAction",
+   "stale": "current",
+   "why": [],
+   "neutral_changes": []
+  },
+  {
+   "id": "ACTION-6E60DCF988F2",
+   "file": "app/(app)/dashboard/vacations/[id]/actions.ts",
+   "export": "reportDisruptionAction",
+   "stale": "current",
+   "why": [],
+   "neutral_changes": []
+  },
+  {
+   "id": "ACTION-AA8B11ACA10C",
+   "file": "app/(app)/dashboard/wishlists/actions.ts",
+   "export": "adviseBeforeBuying",
+   "stale": "current",
+   "why": [],
+   "neutral_changes": []
+  },
+  {
+   "id": "ACTION-9D92F62AA5BE",
+   "file": "app/(app)/dashboard/workload/actions.ts",
+   "export": "moveAssignmentAction",
+   "stale": "current",
+   "why": [],
+   "neutral_changes": []
+  },
+  {
+   "id": "ACTION-D91AB2BF25EC",
+   "file": "app/(app)/dashboard/workload/actions.ts",
+   "export": "saveWorkloadSnapshotAction",
+   "stale": "current",
+   "why": [],
+   "neutral_changes": []
+  },
+  {
+   "id": "ACTION-15AC56471580",
+   "file": "app/(app)/economy/actions.ts",
+   "export": "awardTokensAction",
+   "stale": "stale",
+   "why": [
+    "app/(app)/economy/actions.ts"
+   ],
+   "neutral_changes": []
+  },
+  {
+   "id": "ACTION-406DD2DE86E3",
+   "file": "app/(app)/economy/actions.ts",
+   "export": "createCurrencyAction",
+   "stale": "stale",
+   "why": [
+    "app/(app)/economy/actions.ts"
+   ],
+   "neutral_changes": []
+  },
+  {
+   "id": "ACTION-0DF41D871E0C",
+   "file": "app/(app)/economy/actions.ts",
+   "export": "createRewardAction",
+   "stale": "stale",
+   "why": [
+    "app/(app)/economy/actions.ts"
+   ],
+   "neutral_changes": []
+  },
+  {
+   "id": "ACTION-A8F6037143A6",
+   "file": "app/(app)/economy/actions.ts",
+   "export": "decideRedemptionAction",
+   "stale": "stale",
+   "why": [
+    "app/(app)/economy/actions.ts"
+   ],
+   "neutral_changes": []
+  },
+  {
+   "id": "ACTION-82980A9A8005",
+   "file": "app/(app)/economy/actions.ts",
+   "export": "requestRedemptionAction",
+   "stale": "stale",
+   "why": [
+    "app/(app)/economy/actions.ts"
+   ],
+   "neutral_changes": []
+  },
+  {
+   "id": "ACTION-0DBCDF276549",
+   "file": "app/(app)/economy/actions.ts",
+   "export": "setCurrencyActiveAction",
+   "stale": "stale",
+   "why": [
+    "app/(app)/economy/actions.ts"
+   ],
+   "neutral_changes": []
+  },
+  {
+   "id": "ACTION-8A0C9AFBCF11",
+   "file": "app/(app)/economy/actions.ts",
+   "export": "setRewardActiveAction",
+   "stale": "stale",
+   "why": [
+    "app/(app)/economy/actions.ts"
+   ],
+   "neutral_changes": []
+  },
+  {
+   "id": "ACTION-C2C30832A31E",
+   "file": "app/(app)/family/child-login-actions.ts",
+   "export": "createChildLoginAction",
+   "stale": "current",
+   "why": [],
+   "neutral_changes": []
+  },
+  {
+   "id": "ACTION-25A37296236E",
+   "file": "app/(app)/family/child-login-actions.ts",
+   "export": "resetChildPinAction",
+   "stale": "current",
+   "why": [],
+   "neutral_changes": []
+  },
+  {
+   "id": "ACTION-D4ABFAF428B5",
+   "file": "app/(app)/feedback/actions.ts",
+   "export": "addCommentAction",
+   "stale": "current",
+   "why": [],
+   "neutral_changes": []
+  },
+  {
+   "id": "ACTION-B051124F8C08",
+   "file": "app/(app)/feedback/actions.ts",
+   "export": "setIdeaStatusAction",
+   "stale": "current",
+   "why": [],
+   "neutral_changes": []
+  },
+  {
+   "id": "ACTION-82E1146F4C98",
+   "file": "app/(app)/feedback/actions.ts",
+   "export": "submitIdeaAction",
+   "stale": "current",
+   "why": [],
+   "neutral_changes": []
+  },
+  {
+   "id": "ACTION-07CA64EC69C1",
+   "file": "app/(app)/feedback/actions.ts",
+   "export": "toggleVoteAction",
+   "stale": "current",
+   "why": [],
+   "neutral_changes": []
+  },
+  {
+   "id": "ACTION-BDB3D8713C85",
+   "file": "app/(app)/guardian/actions.ts",
+   "export": "acknowledgeEscalationAction",
+   "stale": "current",
+   "why": [],
+   "neutral_changes": []
+  },
+  {
+   "id": "ACTION-CF3838F9EA45",
+   "file": "app/(app)/guardian/actions.ts",
+   "export": "assignGuardianPhoneAction",
+   "stale": "current",
+   "why": [],
+   "neutral_changes": []
+  },
+  {
+   "id": "ACTION-6F7B023FEF84",
+   "file": "app/(app)/guardian/actions.ts",
+   "export": "createRuleAction",
+   "stale": "current",
+   "why": [],
+   "neutral_changes": []
+  },
+  {
+   "id": "ACTION-BBEFE0F2FAC3",
+   "file": "app/(app)/guardian/actions.ts",
+   "export": "deleteContactAction",
+   "stale": "current",
+   "why": [],
+   "neutral_changes": []
+  },
+  {
+   "id": "ACTION-E6F7B4AF6000",
+   "file": "app/(app)/guardian/actions.ts",
+   "export": "deleteRuleAction",
+   "stale": "current",
+   "why": [],
+   "neutral_changes": []
+  },
+  {
+   "id": "ACTION-B50C4C6F0114",
+   "file": "app/(app)/guardian/actions.ts",
+   "export": "generateGuardianSuggestionsAction",
+   "stale": "current",
+   "why": [],
+   "neutral_changes": []
+  },
+  {
+   "id": "ACTION-A8FDA0AD1999",
+   "file": "app/(app)/guardian/actions.ts",
+   "export": "reviewSuggestionAction",
+   "stale": "current",
+   "why": [],
+   "neutral_changes": []
+  },
+  {
+   "id": "ACTION-80E877267F7C",
+   "file": "app/(app)/guardian/actions.ts",
+   "export": "toggleRuleAction",
+   "stale": "current",
+   "why": [],
+   "neutral_changes": []
+  },
+  {
+   "id": "ACTION-FF65228D56B4",
+   "file": "app/(app)/guardian/actions.ts",
+   "export": "updateContactTrustAction",
+   "stale": "current",
+   "why": [],
+   "neutral_changes": []
+  },
+  {
+   "id": "ACTION-763D6D1492D1",
+   "file": "app/(app)/guardian/actions.ts",
+   "export": "updateContextAction",
+   "stale": "current",
+   "why": [],
+   "neutral_changes": []
+  },
+  {
+   "id": "ACTION-6C89778FB2C2",
+   "file": "app/(app)/guardian/actions.ts",
+   "export": "upsertContactAction",
+   "stale": "current",
+   "why": [],
+   "neutral_changes": []
+  },
+  {
+   "id": "ACTION-6F9F5392DFCA",
+   "file": "app/(app)/guardian/actions.ts",
+   "export": "upsertMemberProfileAction",
+   "stale": "current",
+   "why": [],
+   "neutral_changes": []
+  },
+  {
+   "id": "ACTION-AADABAD791D2",
+   "file": "app/(app)/marketplace/actions.ts",
+   "export": "leaveReviewAction",
+   "stale": "current",
+   "why": [],
+   "neutral_changes": []
+  },
+  {
+   "id": "ACTION-AE9AAC2E62DB",
+   "file": "app/(app)/marketplace/actions.ts",
+   "export": "makeOfferAction",
+   "stale": "current",
+   "why": [],
+   "neutral_changes": []
+  },
+  {
+   "id": "ACTION-E8ECFA5EC29B",
+   "file": "app/(app)/marketplace/actions.ts",
+   "export": "setMatchStatusAction",
+   "stale": "current",
+   "why": [],
+   "neutral_changes": []
+  },
+  {
+   "id": "ACTION-A21306398A80",
+   "file": "app/(app)/marketplace/actions.ts",
+   "export": "setOrderStatusAction",
+   "stale": "current",
+   "why": [],
+   "neutral_changes": []
+  },
+  {
+   "id": "ACTION-F7EB4A9FE45E",
+   "file": "app/(app)/marketplace/actions.ts",
+   "export": "toggleFollowAction",
+   "stale": "current",
+   "why": [],
+   "neutral_changes": []
+  },
+  {
+   "id": "ACTION-17DECF058BEA",
+   "file": "app/(app)/marketplace/actions.ts",
+   "export": "toggleSaveAction",
+   "stale": "current",
+   "why": [],
+   "neutral_changes": []
+  },
+  {
+   "id": "ACTION-D1655FF5DACD",
+   "file": "app/(app)/marketplace/actions.ts",
+   "export": "upsertStoreAction",
+   "stale": "current",
+   "why": [],
+   "neutral_changes": []
+  },
+  {
+   "id": "ACTION-B47AF4698D24",
+   "file": "app/(app)/marketplace/alerts/actions.ts",
+   "export": "createSavedSearchAction",
+   "stale": "current",
+   "why": [],
+   "neutral_changes": []
+  },
+  {
+   "id": "ACTION-1BD84D020C84",
+   "file": "app/(app)/marketplace/alerts/actions.ts",
+   "export": "deleteSavedSearchAction",
+   "stale": "current",
+   "why": [],
+   "neutral_changes": []
+  },
+  {
+   "id": "ACTION-C6976CF78076",
+   "file": "app/(app)/marketplace/alerts/actions.ts",
+   "export": "markSearchSeenAction",
+   "stale": "current",
+   "why": [],
+   "neutral_changes": []
+  },
+  {
+   "id": "ACTION-BAA4633EC108",
+   "file": "app/(app)/marketplace/assistant-actions.ts",
+   "export": "askMarketAssistantAction",
+   "stale": "current",
+   "why": [],
+   "neutral_changes": []
+  },
+  {
+   "id": "ACTION-76449256AC69",
+   "file": "app/(app)/marketplace/auctions/actions.ts",
+   "export": "buyNowAction",
+   "stale": "current",
+   "why": [],
+   "neutral_changes": []
+  },
+  {
+   "id": "ACTION-A071862AEF49",
+   "file": "app/(app)/marketplace/auctions/actions.ts",
+   "export": "placeBidAction",
+   "stale": "current",
+   "why": [],
+   "neutral_changes": []
+  },
+  {
+   "id": "ACTION-264716C07EFA",
+   "file": "app/(app)/marketplace/community/actions.ts",
+   "export": "createCircleAction",
+   "stale": "current",
+   "why": [],
+   "neutral_changes": []
+  },
+  {
+   "id": "ACTION-EDFBC371F417",
+   "file": "app/(app)/marketplace/community/actions.ts",
+   "export": "joinCircleAction",
+   "stale": "current",
+   "why": [],
+   "neutral_changes": []
+  },
+  {
+   "id": "ACTION-3D89CEC81535",
+   "file": "app/(app)/marketplace/community/actions.ts",
+   "export": "leaveCircleAction",
+   "stale": "current",
+   "why": [],
+   "neutral_changes": []
+  },
+  {
+   "id": "ACTION-1F416EA12C3A",
+   "file": "app/(app)/marketplace/community/actions.ts",
+   "export": "shareListingAction",
+   "stale": "current",
+   "why": [],
+   "neutral_changes": []
+  },
+  {
+   "id": "ACTION-3EC068E0CA4F",
+   "file": "app/(app)/marketplace/community/actions.ts",
+   "export": "unshareListingAction",
+   "stale": "current",
+   "why": [],
+   "neutral_changes": []
+  },
+  {
+   "id": "ACTION-ED88541ABEB4",
+   "file": "app/(app)/marketplace/handoff/actions.ts",
+   "export": "cancelHandoffAction",
+   "stale": "current",
+   "why": [],
+   "neutral_changes": []
+  },
+  {
+   "id": "ACTION-1CEE0512C3B5",
+   "file": "app/(app)/marketplace/handoff/actions.ts",
+   "export": "completeHandoffAction",
+   "stale": "current",
+   "why": [],
+   "neutral_changes": []
+  },
+  {
+   "id": "ACTION-F437CA8170C1",
+   "file": "app/(app)/marketplace/handoff/actions.ts",
+   "export": "confirmHandoffAction",
+   "stale": "current",
+   "why": [],
+   "neutral_changes": []
+  },
+  {
+   "id": "ACTION-775FF1987E61",
+   "file": "app/(app)/marketplace/handoff/actions.ts",
+   "export": "proposeHandoffAction",
+   "stale": "current",
+   "why": [],
+   "neutral_changes": []
+  },
+  {
+   "id": "ACTION-413ABC6A45E6",
+   "file": "app/(app)/marketplace/negotiations/actions.ts",
+   "export": "makeOfferAction",
+   "stale": "current",
+   "why": [],
+   "neutral_changes": []
+  },
+  {
+   "id": "ACTION-49DA06B7508F",
+   "file": "app/(app)/marketplace/negotiations/actions.ts",
+   "export": "respondToOfferAction",
+   "stale": "current",
+   "why": [],
+   "neutral_changes": []
+  },
+  {
+   "id": "ACTION-228F3E7BE775",
+   "file": "app/(app)/marketplace/report/actions.ts",
+   "export": "reportListingAction",
+   "stale": "current",
+   "why": [],
+   "neutral_changes": []
+  },
+  {
+   "id": "ACTION-8C3719D04A6B",
+   "file": "app/(app)/missions/actions.ts",
+   "export": "approveSubmissionAction",
+   "stale": "current",
+   "why": [],
+   "neutral_changes": []
+  },
+  {
+   "id": "ACTION-90B5B17EC5CD",
+   "file": "app/(app)/missions/actions.ts",
+   "export": "createChoreAction",
+   "stale": "current",
+   "why": [],
+   "neutral_changes": []
+  },
+  {
+   "id": "ACTION-11C43592C280",
+   "file": "app/(app)/missions/actions.ts",
+   "export": "disputeSubmissionAction",
+   "stale": "current",
+   "why": [],
+   "neutral_changes": []
+  },
+  {
+   "id": "ACTION-F2ADC481FA89",
+   "file": "app/(app)/missions/actions.ts",
+   "export": "generatePlanAction",
+   "stale": "current",
+   "why": [],
+   "neutral_changes": []
+  },
+  {
+   "id": "ACTION-2C186CCC803D",
+   "file": "app/(app)/missions/actions.ts",
+   "export": "rejectSubmissionAction",
+   "stale": "current",
+   "why": [],
+   "neutral_changes": []
+  },
+  {
+   "id": "ACTION-C2AA8E5E7DD1",
+   "file": "app/(app)/missions/actions.ts",
+   "export": "submitProofAction",
+   "stale": "current",
+   "why": [],
+   "neutral_changes": []
+  },
+  {
+   "id": "ACTION-7315BE5B81B4",
+   "file": "app/(app)/money/actions.ts",
+   "export": "activateTreasuryAction",
+   "stale": "current",
+   "why": [],
+   "neutral_changes": []
+  },
+  {
+   "id": "ACTION-0C2016225BBE",
+   "file": "app/(app)/money/actions.ts",
+   "export": "createCardRevealAction",
+   "stale": "current",
+   "why": [],
+   "neutral_changes": []
+  },
+  {
+   "id": "ACTION-3C21F3079C96",
+   "file": "app/(app)/money/actions.ts",
+   "export": "issueCardAction",
+   "stale": "current",
+   "why": [],
+   "neutral_changes": []
+  },
+  {
+   "id": "ACTION-53042D6812AD",
+   "file": "app/(app)/money/actions.ts",
+   "export": "prepareCardRevealAction",
+   "stale": "current",
+   "why": [],
+   "neutral_changes": []
+  },
+  {
+   "id": "ACTION-A7BDEBEBAD71",
+   "file": "app/(app)/money/actions.ts",
+   "export": "refreshConnectStatusAction",
+   "stale": "current",
+   "why": [],
+   "neutral_changes": []
+  },
+  {
+   "id": "ACTION-425A583FF086",
+   "file": "app/(app)/money/actions.ts",
+   "export": "setCardFrozenAction",
+   "stale": "current",
+   "why": [],
+   "neutral_changes": []
+  },
+  {
+   "id": "ACTION-B1C0ECA8F288",
+   "file": "app/(app)/money/actions.ts",
+   "export": "startConnectOnboardingAction",
+   "stale": "current",
+   "why": [],
+   "neutral_changes": []
+  },
+  {
+   "id": "ACTION-952254A76EA8",
+   "file": "app/(app)/money/actions.ts",
+   "export": "updateCardControlsAction",
+   "stale": "current",
+   "why": [],
+   "neutral_changes": []
+  },
+  {
+   "id": "ACTION-0AD9C8014208",
+   "file": "app/(app)/referrals/actions.ts",
+   "export": "applyReferralCodeAction",
+   "stale": "current",
+   "why": [],
+   "neutral_changes": []
+  },
+  {
+   "id": "ACTION-4FDB462605BB",
+   "file": "app/(app)/referrals/actions.ts",
+   "export": "dismissReferralHomeCardAction",
+   "stale": "current",
+   "why": [],
+   "neutral_changes": []
+  },
+  {
+   "id": "ACTION-FA5FF91E21B6",
+   "file": "app/(app)/referrals/actions.ts",
+   "export": "sendReferralEmailAction",
+   "stale": "current",
+   "why": [],
+   "neutral_changes": []
+  },
+  {
+   "id": "ACTION-5A3E77D917DA",
+   "file": "app/(app)/settings/app-lock-actions.ts",
+   "export": "saveAppLockConfig",
+   "stale": "current",
+   "why": [],
+   "neutral_changes": []
+  },
+  {
+   "id": "ACTION-61EE5A6DD0D6",
+   "file": "app/(app)/wallet/actions.ts",
+   "export": "activateFamilyWalletAction",
+   "stale": "current",
+   "why": [],
+   "neutral_changes": []
+  },
+  {
+   "id": "ACTION-148C47BB8A22",
+   "file": "app/(app)/wallet/actions.ts",
+   "export": "addFundsAction",
+   "stale": "current",
+   "why": [],
+   "neutral_changes": []
+  },
+  {
+   "id": "ACTION-0F463285844F",
+   "file": "app/(app)/wallet/actions.ts",
+   "export": "approveGiftAction",
+   "stale": "current",
+   "why": [],
+   "neutral_changes": []
+  },
+  {
+   "id": "ACTION-FADA7B86237A",
+   "file": "app/(app)/wallet/actions.ts",
+   "export": "archiveBabysitterAction",
+   "stale": "current",
+   "why": [],
+   "neutral_changes": []
+  },
+  {
+   "id": "ACTION-08F2999FFC3A",
+   "file": "app/(app)/wallet/actions.ts",
+   "export": "claimPayHandleAction",
+   "stale": "current",
+   "why": [],
+   "neutral_changes": []
+  },
+  {
+   "id": "ACTION-4EFA99FD3EF9",
+   "file": "app/(app)/wallet/actions.ts",
+   "export": "createGiftLinkAction",
+   "stale": "current",
+   "why": [],
+   "neutral_changes": []
+  },
+  {
+   "id": "ACTION-A465DB1C3703",
+   "file": "app/(app)/wallet/actions.ts",
+   "export": "createGoalAction",
+   "stale": "current",
+   "why": [],
+   "neutral_changes": []
+  },
+  {
+   "id": "ACTION-B474AE170511",
+   "file": "app/(app)/wallet/actions.ts",
+   "export": "decideAllowanceRequestAction",
+   "stale": "current",
+   "why": [],
+   "neutral_changes": []
+  },
+  {
+   "id": "ACTION-3DB849535F18",
+   "file": "app/(app)/wallet/actions.ts",
+   "export": "decideSpendRequestAction",
+   "stale": "current",
+   "why": [],
+   "neutral_changes": []
+  },
+  {
+   "id": "ACTION-352006673597",
+   "file": "app/(app)/wallet/actions.ts",
+   "export": "dismissGiftAction",
+   "stale": "current",
+   "why": [],
+   "neutral_changes": []
+  },
+  {
+   "id": "ACTION-9BA4E71ADEE9",
+   "file": "app/(app)/wallet/actions.ts",
+   "export": "fundGoalAction",
+   "stale": "current",
+   "why": [],
+   "neutral_changes": []
+  },
+  {
+   "id": "ACTION-DD0EECD42C71",
+   "file": "app/(app)/wallet/actions.ts",
+   "export": "payChoreRewardAction",
+   "stale": "current",
+   "why": [],
+   "neutral_changes": []
+  },
+  {
+   "id": "ACTION-B0B83B2B1B5A",
+   "file": "app/(app)/wallet/actions.ts",
+   "export": "recordBabysitterPaymentAction",
+   "stale": "current",
+   "why": [],
+   "neutral_changes": []
+  },
+  {
+   "id": "ACTION-AB41E531B9BB",
+   "file": "app/(app)/wallet/actions.ts",
+   "export": "releasePayHandleAction",
+   "stale": "current",
+   "why": [],
+   "neutral_changes": []
+  },
+  {
+   "id": "ACTION-8AA29BB74838",
+   "file": "app/(app)/wallet/actions.ts",
+   "export": "requestAllowanceAction",
+   "stale": "current",
+   "why": [],
+   "neutral_changes": []
+  },
+  {
+   "id": "ACTION-ABA436EAC1FB",
+   "file": "app/(app)/wallet/actions.ts",
+   "export": "requestSpendAction",
+   "stale": "current",
+   "why": [],
+   "neutral_changes": []
+  },
+  {
+   "id": "ACTION-14F1D3BFB97A",
+   "file": "app/(app)/wallet/actions.ts",
+   "export": "runDueAllowancesAction",
+   "stale": "current",
+   "why": [],
+   "neutral_changes": []
+  },
+  {
+   "id": "ACTION-2E83328F1CA0",
+   "file": "app/(app)/wallet/actions.ts",
+   "export": "saveAllowanceRuleAction",
+   "stale": "current",
+   "why": [],
+   "neutral_changes": []
+  },
+  {
+   "id": "ACTION-CF6E77C74E5C",
+   "file": "app/(app)/wallet/actions.ts",
+   "export": "saveBabysitterAction",
+   "stale": "current",
+   "why": [],
+   "neutral_changes": []
+  },
+  {
+   "id": "ACTION-34A3D968CD47",
+   "file": "app/(app)/wallet/actions.ts",
+   "export": "saveWalletRuleAction",
+   "stale": "current",
+   "why": [],
+   "neutral_changes": []
+  },
+  {
+   "id": "ACTION-8F2CA578152D",
+   "file": "app/(app)/wallet/actions.ts",
+   "export": "sendMoneyAction",
+   "stale": "current",
+   "why": [],
+   "neutral_changes": []
+  },
+  {
+   "id": "ACTION-432EA8AE6D79",
+   "file": "app/(app)/wallet/actions.ts",
+   "export": "toggleAllowanceRuleAction",
+   "stale": "current",
+   "why": [],
+   "neutral_changes": []
+  },
+  {
+   "id": "ACTION-EC8D89991D6B",
+   "file": "app/(app)/wallet/hub-actions.ts",
+   "export": "addAccountAction",
+   "stale": "current",
+   "why": [],
+   "neutral_changes": []
+  },
+  {
+   "id": "ACTION-D2385E96A93B",
+   "file": "app/(app)/wallet/hub-actions.ts",
+   "export": "addCardAction",
+   "stale": "current",
+   "why": [],
+   "neutral_changes": []
+  },
+  {
+   "id": "ACTION-7CA10A51A8B8",
+   "file": "app/(app)/wallet/hub-actions.ts",
+   "export": "addPassAction",
+   "stale": "current",
+   "why": [],
+   "neutral_changes": []
+  },
+  {
+   "id": "ACTION-5D3801997423",
+   "file": "app/(app)/wallet/hub-actions.ts",
+   "export": "addRewardAction",
+   "stale": "current",
+   "why": [],
+   "neutral_changes": []
+  },
+  {
+   "id": "ACTION-2C2B60DC5F0C",
+   "file": "app/(app)/wallet/hub-actions.ts",
+   "export": "addTransactionAction",
+   "stale": "current",
+   "why": [],
+   "neutral_changes": []
+  },
+  {
+   "id": "ACTION-ABA3017332BE",
+   "file": "app/(app)/wallet/hub-actions.ts",
+   "export": "deleteWalletRowAction",
+   "stale": "current",
+   "why": [],
+   "neutral_changes": []
+  },
+  {
+   "id": "ACTION-142B5EB6AC00",
+   "file": "app/(app)/wallet/invest/actions.ts",
+   "export": "decideInvestOrderAction",
+   "stale": "current",
+   "why": [],
+   "neutral_changes": []
+  },
+  {
+   "id": "ACTION-068676844C8C",
+   "file": "app/(app)/wallet/invest/actions.ts",
+   "export": "placeInvestOrderAction",
+   "stale": "current",
+   "why": [],
+   "neutral_changes": []
+  },
+  {
+   "id": "ACTION-BBDAE32AD14B",
+   "file": "app/(auth)/actions.ts",
+   "export": "childSignInAction",
+   "stale": "current",
+   "why": [],
+   "neutral_changes": []
+  },
+  {
+   "id": "ACTION-E6AC69DF9AEB",
+   "file": "app/(auth)/actions.ts",
+   "export": "resolveLandingPathAction",
+   "stale": "current",
+   "why": [],
+   "neutral_changes": []
+  },
+  {
+   "id": "ACTION-9FB724502062",
+   "file": "app/(auth)/actions.ts",
+   "export": "stitchIdentityAction",
+   "stale": "current",
+   "why": [],
+   "neutral_changes": []
+  },
+  {
+   "id": "ACTION-6AED5815E8B4",
+   "file": "app/(auth)/auth/complete/actions.ts",
+   "export": "completeCallbackAction",
+   "stale": "current",
+   "why": [],
+   "neutral_changes": []
+  },
+  {
+   "id": "ACTION-C837852680A0",
+   "file": "app/(auth)/auth/recovery/actions.ts",
+   "export": "consumeRecoveryAction",
+   "stale": "current",
+   "why": [],
+   "neutral_changes": []
+  },
+  {
+   "id": "ACTION-F52FD7C3A46F",
+   "file": "app/(auth)/auth/recovery/actions.ts",
+   "export": "inspectRecoveryAction",
+   "stale": "current",
+   "why": [],
+   "neutral_changes": []
+  },
+  {
+   "id": "ACTION-616ECD0B139E",
+   "file": "app/(auth)/auth/recovery/actions.ts",
+   "export": "prepareRecoveryAction",
+   "stale": "current",
+   "why": [],
+   "neutral_changes": []
+  },
+  {
+   "id": "ACTION-D9DE0BA020AA",
+   "file": "app/(auth)/auth/recovery/actions.ts",
+   "export": "saveRecoveryAction",
+   "stale": "current",
+   "why": [],
+   "neutral_changes": []
+  },
+  {
+   "id": "ACTION-A1C6EC63DB88",
+   "file": "app/(auth)/signup/actions.ts",
+   "export": "rememberReferralCodeAction",
+   "stale": "current",
+   "why": [],
+   "neutral_changes": []
+  },
+  {
+   "id": "ACTION-DF5E347562DF",
+   "file": "app/gift/actions.ts",
+   "export": "submitGiftPledgeAction",
+   "stale": "current",
+   "why": [],
+   "neutral_changes": []
+  },
+  {
+   "id": "ACTION-03BB5F5C118E",
+   "file": "app/onboarding/actions.ts",
+   "export": "finalizeOnboardingAction",
+   "stale": "current",
+   "why": [],
+   "neutral_changes": []
+  },
+  {
+   "id": "ACTION-478E5E023D7F",
+   "file": "app/onboarding/actions.ts",
+   "export": "previewCalendarImportAction",
+   "stale": "current",
+   "why": [],
+   "neutral_changes": []
+  },
+  {
+   "id": "ACTION-7FE88226F6DE",
+   "file": "app/onboarding/actions.ts",
+   "export": "resetOnboardingAction",
+   "stale": "current",
+   "why": [],
+   "neutral_changes": []
+  },
+  {
+   "id": "ACTION-2C0D1DC16D66",
+   "file": "app/onboarding/actions.ts",
+   "export": "saveFamilyDetailsAction",
+   "stale": "current",
+   "why": [],
+   "neutral_changes": []
+  },
+  {
+   "id": "ACTION-C61B927E5B2B",
+   "file": "app/onboarding/calendar-actions.ts",
+   "export": "previewConnectedCalendarAction",
+   "stale": "current",
+   "why": [],
+   "neutral_changes": []
+  },
+  {
+   "id": "ACTION-AE6546C60714",
+   "file": "app/onboarding/calendar-actions.ts",
+   "export": "startCalendarConnectionAction",
+   "stale": "current",
+   "why": [],
+   "neutral_changes": []
+  },
+  {
+   "id": "ACTION-B46855B1C594",
+   "file": "app/reviews/new/actions.ts",
+   "export": "submitReviewAction",
+   "stale": "current",
+   "why": [],
+   "neutral_changes": []
+  },
+  {
+   "id": "ACTION-5B3957A71DC5",
+   "file": "app/s/[slug]/actions.ts",
+   "export": "submitResponseAction",
+   "stale": "current",
+   "why": [],
+   "neutral_changes": []
+  },
+  {
+   "id": "ACTION-5DD3E2CD9411",
+   "file": "lib/family/actions.ts",
+   "export": "createFamilyRecord",
+   "stale": "current",
+   "why": [],
+   "neutral_changes": []
+  },
+  {
+   "id": "ACTION-AAA33C6778C3",
+   "file": "lib/family/actions.ts",
+   "export": "deleteFamilyRecord",
+   "stale": "current",
+   "why": [],
+   "neutral_changes": []
+  },
+  {
+   "id": "ACTION-8BB383A8C479",
+   "file": "lib/family/actions.ts",
+   "export": "resolveAutomationRun",
+   "stale": "current",
+   "why": [],
+   "neutral_changes": []
+  },
+  {
+   "id": "ACTION-51DBA0529315",
+   "file": "lib/family/actions.ts",
+   "export": "setRecommendationStatus",
+   "stale": "current",
+   "why": [],
+   "neutral_changes": []
+  },
+  {
+   "id": "ACTION-F4CCD6A8E67A",
+   "file": "lib/family/actions.ts",
+   "export": "updateFamilyRecord",
+   "stale": "current",
+   "why": [],
+   "neutral_changes": []
+  },
+  {
+   "id": "ACTION-BA359E31039E",
+   "file": "lib/i18n/actions.ts",
+   "export": "setLocale",
+   "stale": "current",
+   "why": [],
+   "neutral_changes": []
+  }
+ ]
+}

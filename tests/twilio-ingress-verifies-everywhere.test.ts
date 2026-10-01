@@ -10,7 +10,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 //
 // Two properties, and the second is the one a source grep cannot see:
 //   1. an unverifiable callback is REFUSED, never waved through;
-//   2. the only way to skip is to say so out loud.
+//   2. unsigned fixtures require an explicit test environment AND fixture flag.
 //
 // `lib/guardian/twilio.ts` captures TWILIO_AUTH_TOKEN at module load, so every
 // case resets modules and imports fresh — stubbing the env after the import
@@ -158,11 +158,33 @@ describe('an unverifiable callback', () => {
     expect(error).toHaveBeenCalled();
   });
 
-  it('is admitted only when a deliberate, named opt-out says so', async () => {
+  it('is admitted only in the explicit test environment with the fixture flag', async () => {
+    vi.stubEnv('NODE_ENV', 'test');
     vi.stubEnv('TWILIO_AUTH_TOKEN', '');
     vi.stubEnv('ALLOW_UNSIGNED_TWILIO_WEBHOOKS', '1');
     const { verifyTwilioRequest } = await ingress();
     expect(verifyTwilioRequest(request(PATH), {}, 'test')).toEqual({ ok: true, via: 'unsigned_opt_out' });
+  });
+
+  it.each(['production', 'development', undefined])('refuses the fixture flag outside test mode: %s', async (mode) => {
+    vi.stubEnv('NODE_ENV', mode);
+    vi.stubEnv('TWILIO_AUTH_TOKEN', '');
+    vi.stubEnv('ALLOW_UNSIGNED_TWILIO_WEBHOOKS', '1');
+    vi.spyOn(console, 'error').mockImplementation(() => {});
+    const { verifyTwilioRequest } = await ingress();
+    expect(verifyTwilioRequest(request(PATH), {}, 'guardian/inbound/sms'))
+      .toEqual({ ok: false, status: 503, reason: 'not_configured', tried: [] });
+  });
+
+  it('still accepts a correctly signed production request with the fixture flag set', async () => {
+    vi.stubEnv('NODE_ENV', 'production');
+    vi.stubEnv('TWILIO_AUTH_TOKEN', TOKEN);
+    vi.stubEnv('ALLOW_UNSIGNED_TWILIO_WEBHOOKS', '1');
+    vi.stubEnv('NEXT_PUBLIC_APP_URL', 'https://configured.test');
+    const params = { From: '+15555550100', Body: 'signed fixture' };
+    const req = request(PATH, { 'x-twilio-signature': sign(`https://configured.test${PATH}`, params) });
+    const { verifyTwilioRequest } = await ingress();
+    expect(verifyTwilioRequest(req, params, 'guardian/inbound/sms')).toEqual({ ok: true, via: 'signature' });
   });
 
   it('is not admitted by the opt-out once a token exists — the opt-out cannot disable a real check', async () => {
@@ -176,7 +198,7 @@ describe('an unverifiable callback', () => {
     expect(verifyTwilioRequest(request(PATH), { From: '+1' }, 'test')).toMatchObject({ ok: false, status: 401 });
   });
 
-  it('does not consult NODE_ENV at all', async () => {
+  it('refuses an unconfigured callback in every environment without the fixture flag', async () => {
     // The whole point: what the gate decides must not depend on how the bundle
     // was built. Same inputs, both build modes, same answer.
     vi.stubEnv('TWILIO_AUTH_TOKEN', '');

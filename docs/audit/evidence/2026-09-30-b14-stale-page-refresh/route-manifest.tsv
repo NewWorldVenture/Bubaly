@@ -1,0 +1,16 @@
+uiRoute	path	pageFile	roles	fixture	landing (all roles, 1280 and 390 px)
+UI-ROUTE-0008	/admin/billing	app/(app)/admin/billing/page.tsx	super admin	none needed	200, in place
+UI-ROUTE-0024	/admin/marketing/content	app/(app)/admin/marketing/content/page.tsx	super admin	none needed	200, in place
+UI-ROUTE-0060	/admin/reports	app/(app)/admin/reports/page.tsx	super admin	none needed	200, in place
+UI-ROUTE-0077	/admin/users	app/(app)/admin/users/page.tsx	super admin	none needed	200, in place
+UI-ROUTE-0198	/dashboard/more	app/(app)/dashboard/more/page.tsx	parent, /kid-login child	none needed	200, in place
+UI-ROUTE-0219	/dashboard/readiness	app/(app)/dashboard/readiness/page.tsx	parent, /kid-login child	none needed	200, in place
+UI-ROUTE-0247	/dashboard/social/feed	app/(app)/dashboard/social/feed/page.tsx	parent, /kid-login child	none needed	200, in place
+UI-ROUTE-0300	/family/members	app/(app)/family/members/page.tsx	parent, /kid-login child	the household's members; the child is listed	200, in place; child shown
+UI-ROUTE-0302	/family/permissions	app/(app)/family/permissions/page.tsx	parent, /kid-login child	none needed	200, in place
+UI-ROUTE-0311	/home	app/(app)/home/page.tsx	parent, /kid-login child	none needed	200, in place
+UI-ROUTE-0313	/kids/submit/<assignmentId>	app/(app)/kids/submit/[assignmentId]/page.tsx	parent, /kid-login child	chore_assignments row for the child (seeded), its chores row (seeded)	200, in place; chore title shown
+UI-ROUTE-0327	/marketplace	app/(app)/marketplace/page.tsx	parent, /kid-login child	none needed	200, in place
+UI-ROUTE-0319	/marketplace/creators/<storeId>	app/(app)/marketplace/creators/[id]/page.tsx	parent, /kid-login child	the child's active marketplace_stores row (existing), one listing (seeded)	200, in place; listing shown
+UI-ROUTE-0324	/marketplace/item/<listingId>	app/(app)/marketplace/item/[id]/page.tsx	parent, /kid-login child	marketplace_listings row owned by the child (seeded)	200, in place; listing title shown
+UI-ROUTE-0344	/wallet/children/<childWalletId>	app/(app)/wallet/children/[childId]/page.tsx	parent, /kid-login child	the child's active child_wallets row (existing)	200, in place; child shown

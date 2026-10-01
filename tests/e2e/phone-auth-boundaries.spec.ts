@@ -2,9 +2,9 @@ import fs from 'node:fs';
 import path from 'node:path';
 import ts from 'typescript';
 import { expect, test, type Page } from '@playwright/test';
+import { reactBrowserScripts } from './helpers/react-browser';
 
-const react = fs.readFileSync(path.join(path.dirname(require.resolve('react/package.json')), 'umd/react.development.js'), 'utf8');
-const reactDom = fs.readFileSync(path.join(path.dirname(require.resolve('react-dom/package.json')), 'umd/react-dom.development.js'), 'utf8');
+const { react, reactDom } = reactBrowserScripts('development');
 const sdk = fs.readFileSync(path.join(path.dirname(require.resolve('@supabase/supabase-js/package.json')), 'dist/umd/supabase.js'), 'utf8');
 const isolated = new Set(['react', 'lucide-react', 'next/navigation', '@/components/ui/toast', '@/lib/utils/cn']);
 const modules: Record<string, { source: string; imports: Record<string, string> }> = {};

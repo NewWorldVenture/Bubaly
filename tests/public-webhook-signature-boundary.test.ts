@@ -87,9 +87,9 @@ describe('guardian public webhook signature boundary', () => {
     // An unset token must not mean "come in" — that is the SEC-009 shape, a
     // signature check that passes because there is nothing to check against.
     expect(src).toMatch(/status:\s*503,\s*reason:\s*'not_configured'/);
-    // The single bypass is explicit, named and greppable — never a build mode.
+    // The fixture flag alone is insufficient. Runtime tests exercise production,
+    // development, missing mode and explicit test mode against the actual gate.
     expect(src).toContain("process.env.ALLOW_UNSIGNED_TWILIO_WEBHOOKS === '1'");
-    expect(src.replace(/\/\*[\s\S]*?\*\/|\/\/[^\n]*/g, '')).not.toMatch(/NODE_ENV/);
     // …and it is set in exactly one place: the test config.
     expect(readFileSync('vitest.config.ts', 'utf8')).toContain('ALLOW_UNSIGNED_TWILIO_WEBHOOKS');
   });

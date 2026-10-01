@@ -2,14 +2,14 @@ import fs from 'node:fs';
 import path from 'node:path';
 import ts from 'typescript';
 import { expect, test, type Page, type Route } from '@playwright/test';
+import { reactBrowserScripts } from './helpers/react-browser';
 
 // Independent review of deferred mutation completion.
 // Actual RewardsModule, query hook, cache boundary, ledger math and shared form
 // controls execute in Chromium. Installed Supabase/PostgREST performs the reads
 // and writes against an intercepted, persisted fixture. Auth identity, realtime
 // delivery, avatars and AI are controlled; no live database or points are used.
-const react = fs.readFileSync(path.join(path.dirname(require.resolve('react/package.json')), 'umd/react.development.js'), 'utf8');
-const reactDom = fs.readFileSync(path.join(path.dirname(require.resolve('react-dom/package.json')), 'umd/react-dom.development.js'), 'utf8');
+const { react, reactDom } = reactBrowserScripts('development');
 const sdk = fs.readFileSync(path.join(path.dirname(require.resolve('@supabase/supabase-js/package.json')), 'dist/umd/supabase.js'), 'utf8');
 const sources = Object.fromEntries([
   'components/modules/rewards-module.tsx', 'lib/hooks/use-realtime-query.ts', 'lib/realtime/own-channel.ts',

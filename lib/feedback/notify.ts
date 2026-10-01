@@ -8,6 +8,7 @@ import {
 } from '@/lib/integrations/github';
 import { issueTitle, issueBody, githubLabels } from '@/lib/feedback/github-map';
 import { wroteNoRows } from '@/lib/supabase/errors';
+import { readAll } from '@/lib/supabase/read-all';
 
 type Admin = ReturnType<typeof createServiceClient>;
 
@@ -17,14 +18,50 @@ function appUrl(): string {
   return (process.env.NEXT_PUBLIC_APP_URL || 'https://www.bubaly.com').replace(/\/$/, '');
 }
 
-/** Every super-admin email: the code/env allowlist ∪ the super_admins table. */
-export async function allSuperAdminEmails(admin: Admin): Promise<string[]> {
+/** The most `super_admins` rows a recipient read accepts; one more is a truncated read. */
+const SUPER_ADMIN_READ_MAX = 1_000;
+
+/**
+ * `failure` is a classification, not a message: the raw cause is kept apart for
+ * the server log only, so nothing a database said can reach a response body.
+ */
+export type SuperAdminRecipients =
+  | { emails: string[]; failure: null }
+  | { emails: null; failure: 'read_failed' | 'truncated'; cause: unknown };
+
+/**
+ * Every super-admin email — the code/env allowlist ∪ the super_admins table — or
+ * an error when the table could not be read COMPLETELY.
+ *
+ * An empty table is not an error: the allowlist is then the whole, legitimate
+ * list. A failed read, a thrown query and a read past the ceiling are errors,
+ * because the allowlist alone would silently drop every admin who exists only in
+ * the table. `{ data }` alone could not tell those apart: a PostgREST call
+ * RESOLVES with `{ data: null, error }`, which read as "no rows".
+ */
+export async function readSuperAdminRecipients(admin: Admin): Promise<SuperAdminRecipients> {
   const set = new Set(envSuperAdminEmails());
   try {
-    const { data } = await admin.from('super_admins').select('email');
-    for (const r of data ?? []) if (r.email) set.add(r.email.toLowerCase());
-  } catch { /* table may not exist yet — env allowlist still applies */ }
-  return [...set];
+    const { rows, error, truncated } = await readAll<{ email: string | null }>((from, to) => admin
+      .from('super_admins').select('email').order('email').range(from, to), { max: SUPER_ADMIN_READ_MAX });
+    if (error) return { emails: null, failure: truncated ? 'truncated' : 'read_failed', cause: error };
+    for (const r of rows) if (r.email) set.add(r.email.toLowerCase());
+  } catch (cause) {
+    return { emails: null, failure: 'read_failed', cause };
+  }
+  return { emails: [...set], failure: null };
+}
+
+/**
+ * Best-effort form for alerts (notifySuperAdmins): when the table cannot be read
+ * it still reaches the allowlist rather than nobody, and says so in the log. A
+ * caller that must not send to a partial list uses readSuperAdminRecipients.
+ */
+export async function allSuperAdminEmails(admin: Admin): Promise<string[]> {
+  const read = await readSuperAdminRecipients(admin);
+  if (read.failure === null) return read.emails;
+  console.error('[feedback-notify] super_admins read failed; using the env allowlist only', read.failure, read.cause);
+  return envSuperAdminEmails();
 }
 
 /**

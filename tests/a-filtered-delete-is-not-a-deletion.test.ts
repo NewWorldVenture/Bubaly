@@ -1,5 +1,5 @@
 import { readFileSync, readdirSync, statSync } from 'node:fs';
-import { join } from 'node:path';
+import { join, posix, relative, resolve, sep, win32 } from 'node:path';
 import { describe, expect, it } from 'vitest';
 
 const ROOT = join(__dirname, '..');
@@ -102,20 +102,25 @@ function tsxFiles(dir: string): string[] {
  * rather than filtering it away, so branching on `error` is correct there and
  * demanding a readback would prove nothing.
  */
-function gatedWrites(): { file: string; table: string; verb: string; window: string }[] {
+function gatedWrites(
+  files?: string[],
+  readSource = (file: string) => readFileSync(file, 'utf8'),
+  root = ROOT,
+  paths = { relative, resolve, sep },
+): { file: string; table: string; verb: string; window: string }[] {
   const hits: { file: string; table: string; verb: string; window: string }[] = [];
   // `components/` was the original scope, and it was too narrow: a server action
   // or route handler on the RLS-BOUND client (`createServer()`) is filtered by
   // exactly the same policies. Only the SERVICE client is exempt, because it
   // bypasses RLS entirely — a write through it is never filtered, so the rule has
   // nothing to say about it.
-  const files = [
+  const candidates = files ?? [
     ...tsxFiles(join(ROOT, 'components')),
     ...tsxFiles(join(ROOT, 'app')),
     ...tsxFiles(join(ROOT, 'lib')),
   ];
-  for (const file of files) {
-    const src = readFileSync(file, 'utf8');
+  for (const file of candidates) {
+    const src = readSource(file);
     if (!/createServer\(|from '@\/lib\/supabase\/client'/.test(src)) continue;
     // Which local names hold a SERVICE client. A file can hold both —
     // app/(app)/dashboard/assistants/actions.ts writes through `admin =
@@ -142,7 +147,10 @@ function gatedWrites(): { file: string; table: string; verb: string; window: str
           // exemptions get bolted on until it means nothing.
           const semi = src.indexOf(';', m.index);
           hits.push({
-            file: file.slice(ROOT.length + 1), table,
+            // Keep native paths for IO, but compare repository names with the
+            // slash-only ratchet below. Relative fixture paths are rooted at
+            // `root`; absolute paths outside it must retain their ../ prefix.
+            file: paths.relative(root, paths.resolve(root, file)).split(paths.sep).join('/'), table,
             verb: verb.startsWith('delete') ? 'delete' : 'update',
             window: src.slice(m.index, semi < 0 ? src.length : semi + 1),
           });
@@ -299,5 +307,104 @@ describe('a filtered delete is not a deletion', () => {
     for (const [name, cat] of populated) {
       expect(cat['actions.couldNotDeleteThatRecord'], `${name} is missing the refusal string`).toBeTruthy();
     }
+  });
+});
+
+describe.each([
+  { name: 'POSIX', root: '/audit/repo', paths: posix },
+  { name: 'Windows', root: 'C:\\audit\\repo', paths: win32 },
+])('$name scanner path portability', ({ root, paths }) => {
+  const knownFile = 'components/modules/messages-module.tsx';
+  const knownKey = `${knownFile} update family_messages`;
+  const windows = [
+    `sb.from('family_messages').update({ body: '${'x'.repeat(400)}' }).eq('id', id);`,
+    "sb.from('medications').delete().eq('id', id);",
+    "sb.from('medications').update({ name: 'Safe' }).eq('id', id).eq('family_id', family).select('id');",
+  ];
+  const source = [
+    'const sb = createServer();',
+    'const admin = createServiceClient();',
+    ...windows.map((statement) => `await ${statement}`),
+    "await admin.from('medications').delete().eq('id', id);",
+    "await admin\n  .from('family_messages').update({ body: 'Service write' }).eq('id', id);",
+    "await sb.from('medications').insert({ name: 'Insert is refused, not filtered' });",
+    "await sb.from('scanner_ungated_fixture').delete().eq('id', id);",
+  ].join('\n');
+
+  const spellings = [
+    { name: 'native absolute', file: paths.join(root, knownFile) },
+    { name: 'slash absolute', file: paths.join(root, knownFile).split(paths.sep).join('/') },
+    { name: 'repository relative', file: knownFile },
+    { name: 'native relative', file: knownFile.split('/').join(paths.sep) },
+    { name: 'dot relative', file: `.${paths.sep}${knownFile}` },
+    { name: 'normalized relative', file: ['components', 'unused', '..', 'modules', 'messages-module.tsx'].join(paths.sep) },
+  ];
+
+  it.each(spellings)('scans $name paths with identical complete records and exact exceptions', ({ file }) => {
+    const reads: string[] = [];
+    const hits = gatedWrites([file], (key) => { reads.push(key); return source; }, root, paths);
+    expect(reads).toEqual([file]); // Normalization must never rewrite the IO key.
+    expect(hits).toEqual([
+      { file: knownFile, table: 'family_messages', verb: 'update', window: windows[0] },
+      { file: knownFile, table: 'medications', verb: 'delete', window: windows[1] },
+      { file: knownFile, table: 'medications', verb: 'update', window: windows[2] },
+    ].sort((a, b) => GATED.indexOf(a.table) - GATED.indexOf(b.table)));
+    expect(hits.filter((hit) => KNOWN_UNFIXED.includes(siteKey(hit))).map(siteKey)).toEqual([knownKey]);
+    const unscoped = hits.filter((hit) => !ownershipFiltered(hit.window) && !KNOWN_UNFIXED.includes(siteKey(hit)));
+    expect(unscoped.map(siteKey)).toEqual([`${knownFile} delete medications`]);
+    const silent = hits.filter((hit) => !/\.select\(/.test(hit.window) && /\.eq\('id'/.test(hit.window)
+      && !KNOWN_UNFIXED.includes(siteKey(hit)));
+    expect(silent).toEqual(unscoped);
+  });
+
+  it('handles a trailing root separator without truncating the first directory', () => {
+    const hits = gatedWrites([paths.join(root, knownFile)], () => source, root + paths.sep, paths);
+    expect(hits.map((hit) => hit.file)).toEqual([knownFile, knownFile, knownFile]);
+  });
+
+  it.each([
+    'components/modules/messages-module-copy.tsx',
+    'components/other/messages-module.tsx',
+    'app/(app)/messages-module.ts',
+    'lib/messages-module.ts',
+    'components/modules/Messages-module.tsx',
+  ])('does not exempt the same forbidden writes in %s', (file) => {
+    const hits = gatedWrites([paths.resolve(root, file)], () => source, root, paths);
+    expect(hits).toHaveLength(3);
+    expect(hits.every((hit) => hit.file === file)).toBe(true);
+    expect(hits.some((hit) => KNOWN_UNFIXED.includes(siteKey(hit)))).toBe(false);
+    expect(hits.filter((hit) => !ownershipFiltered(hit.window))).toHaveLength(2);
+  });
+
+  it('keeps a wrong verb unexempt even at a recorded file and table', () => {
+    const hits = gatedWrites([knownFile], () => "const sb = createServer(); sb.from('family_messages').delete().eq('id', id);", root, paths);
+    expect(hits.map(siteKey)).toEqual([`${knownFile} delete family_messages`]);
+    expect(KNOWN_UNFIXED.includes(siteKey(hits[0]))).toBe(false);
+  });
+
+  it('keeps outside-root writes unexempt instead of slicing them into a known file', () => {
+    const file = paths.resolve(root, '../peer', knownFile);
+    // The old prefix-length slice aliases this same-length sibling to an
+    // exempt key. This is a negative control, not a new filesystem scan root.
+    expect(file.slice(root.length + 1).split(paths.sep).join('/')).toBe(knownFile);
+    const hits = gatedWrites([file], () => source, root, paths);
+    expect(hits.map((hit) => hit.file)).toEqual(Array(3).fill(`../peer/${knownFile}`));
+    expect(hits.some((hit) => KNOWN_UNFIXED.includes(siteKey(hit)))).toBe(false);
+  });
+
+  it('does not confuse a shared root prefix with containment', () => {
+    const file = paths.join(`${root}-other`, knownFile);
+    const hits = gatedWrites([file], () => source, root, paths);
+    expect(hits.map((hit) => hit.file)).toEqual(Array(3).fill(`../repo-other/${knownFile}`));
+    expect(hits.some((hit) => KNOWN_UNFIXED.includes(siteKey(hit)))).toBe(false);
+  });
+
+  it('still makes a repaired known site stale rather than exempt forever', () => {
+    const hits = gatedWrites([paths.join(root, knownFile)], () =>
+      "const sb = createServer(); sb.from('family_messages').update({ body: 'Fixed' }).eq('id', id).eq('family_id', f).select('id');", root, paths);
+    expect(hits.map(siteKey)).toEqual([knownKey]);
+    const offending = hits.filter((hit) => (!/\.select\(/.test(hit.window) && /\.eq\('id'/.test(hit.window))
+      || !ownershipFiltered(hit.window));
+    expect(offending.map(siteKey)).not.toContain(knownKey);
   });
 });

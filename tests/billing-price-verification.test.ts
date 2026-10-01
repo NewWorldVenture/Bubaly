@@ -1,5 +1,6 @@
 import { NextRequest } from 'next/server';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
+import type Stripe from 'stripe';
 import PRICES from '@/lib/constants/family-prices.json';
 import { POST as checkout } from '@/app/api/billing/checkout/route';
 import { POST as changePlan } from '@/app/api/billing/change-plan/route';
@@ -126,6 +127,11 @@ vi.mock('@/lib/referrals/server', () => ({ markReferralConverted: async () => {}
 vi.mock('@/lib/marketing/automation-events', () => ({ fireAutomationEvent: async () => {} }));
 
 const request = (plan: unknown) => new NextRequest('https://app.example.test/api/billing', { method: 'POST', body: JSON.stringify({ plan }) });
+function subscriptionItem(priceId: string, currentPeriodEnd = 1_900_000_000) {
+  return {
+    id: `si-${priceId}`, price: { id: priceId }, current_period_end: currentPeriodEnd,
+  } satisfies Pick<Stripe.SubscriptionItem, 'id' | 'current_period_end'> & { price: { id: string } };
+}
 function validPrice(id = PRICES.stripePrices.basic_annual.id) {
   const plan = Object.entries(PRICES.stripePrices).find(([, entry]) => entry.id === id)?.[0] ?? 'basic_annual';
   const annual = plan.endsWith('_annual'); const tier = plan.startsWith('plus') ? PRICES.plus : PRICES.basic;
@@ -385,8 +391,8 @@ describe('subscription webhook price history', () => {
   function event(priceId: string) {
     vi.stubEnv('STRIPE_WEBHOOK_SECRET', 'synthetic-webhook-secret');
     const subscription = {
-      id: 'sub-fixture', metadata: { family_id: 'family-a' }, customer: 'cus-fixture', items: { data: [{ price: { id: priceId } }] },
-      status: 'active', current_period_end: 1_900_000_000, cancel_at_period_end: false,
+      id: 'sub-fixture', metadata: { family_id: 'family-a' }, customer: 'cus-fixture', items: { data: [subscriptionItem(priceId)], has_more: false },
+      status: 'active', cancel_at_period_end: false,
     };
     mocks.constructEvent.mockReturnValue({ id: 'evt-fixture', type: 'customer.subscription.updated', data: { object: subscription } });
     // The webhook persists the subscription's current state from Stripe (PAY-ORDER-001).
@@ -400,18 +406,162 @@ describe('subscription webhook price history', () => {
     // which was never a target Postgres could infer (no unique index on that
     // column), so every delivery had failed at planning time. What this asserts
     // is unchanged — the family's subscription row carries the mapped plan.
-    expect(mocks.writes).toContainEqual(expect.objectContaining({ table: 'subscriptions', operation: 'update', value: expect.objectContaining({ plan: slug }) }));
+    expect(mocks.writes).toContainEqual(expect.objectContaining({ table: 'subscriptions', operation: 'update', value: expect.objectContaining({ plan: slug, current_period_end: new Date(1_900_000_000_000).toISOString() }) }));
     expect(mocks.markProcessed).toHaveBeenCalledTimes(1);
   });
-  it('retains custom environment-configured price mapping', async () => {
-    vi.stubEnv('STRIPE_PRICE_PLUS_ANNUAL', 'price_custom_annual');
+  it.each([
+    ['STRIPE_PRICE_PLUS_MONTHLY', 'plus'], ['STRIPE_PRICE_PLUS_ANNUAL', 'plus_annual'],
+    ['STRIPE_PRICE_BASIC_MONTHLY', 'basic'], ['STRIPE_PRICE_BASIC_ANNUAL', 'basic_annual'],
+    ['STRIPE_PRICE_FAMILY_MONTHLY', 'basic'], ['STRIPE_PRICE_FAMILY_ANNUAL', 'basic_annual'],
+  ])('retains custom environment-configured price mapping for %s', async (key, slug) => {
+    vi.stubEnv(key, 'price_custom_annual');
     expect((await webhook(event('price_custom_annual'))).status).toBe(200);
-    expect(mocks.writes).toContainEqual(expect.objectContaining({ table: 'subscriptions', value: expect.objectContaining({ plan: 'plus_annual' }) }));
+    expect(mocks.writes).toContainEqual(expect.objectContaining({ table: 'subscriptions', value: expect.objectContaining({ plan: slug, current_period_end: new Date(1_900_000_000_000).toISOString() }) }));
   });
   it('rejects an unknown price without writing a free or incorrect subscription', async () => {
     expect((await webhook(event('price_unknown'))).status).toBe(500);
     expect(mocks.writes).toEqual([]); expect(mocks.markProcessed).not.toHaveBeenCalled();
     expect(mocks.markError).toHaveBeenCalledTimes(1);
+  });
+});
+
+describe('subscription webhook item periods', () => {
+  const basic = PRICES.stripePrices.basic_monthly.id;
+  const plus = PRICES.stripePrices.plus_annual.id;
+  const period = 1_900_000_000;
+  const isoPeriod = new Date(period * 1000).toISOString();
+  const subscription = (items: unknown[] = [subscriptionItem(basic)]) => ({
+    id: 'sub-existing', metadata: { family_id: 'family-a' }, customer: 'cus-fixture',
+    status: 'active', cancel_at_period_end: false, items: { data: items, has_more: false },
+  });
+  const delivery = () => new NextRequest('https://app.example.test/api/webhooks/stripe', { method: 'POST', body: '{}' });
+  function setup(current: Record<string, unknown>, type = 'customer.subscription.updated', payload = current) {
+    vi.stubEnv('STRIPE_WEBHOOK_SECRET', 'synthetic-webhook-secret');
+    mocks.constructEvent.mockReturnValue({ id: 'evt-period', type, data: { object: payload } });
+    mocks.retrieveSubscription.mockResolvedValue(current);
+  }
+  function expectPeriodWrite(plan = 'basic', currentPeriodEnd = isoPeriod) {
+    expect(mocks.writes).toContainEqual(expect.objectContaining({ table: 'subscriptions', operation: 'update',
+      value: expect.objectContaining({ plan, current_period_end: currentPeriodEnd }) }));
+  }
+  async function expectRetryableFailure() {
+    const response = await webhook(delivery());
+    expect(response.status).toBe(500);
+    expect(await response.json()).toEqual({ error: 'stripe.handlerFailed' });
+    expect(mocks.writes).toEqual([]);
+    expect(mocks.markProcessed).not.toHaveBeenCalled();
+    expect(mocks.markError).toHaveBeenCalledWith(expect.anything(), 'evt-period', expect.any(String), 'claim-fixture');
+  }
+
+  it.each(['created', 'updated', 'deleted'])('persists the item period for subscription.%s', async lifecycle => {
+    const current = { ...subscription(), status: lifecycle === 'deleted' ? 'canceled' : 'active' };
+    if (lifecycle === 'created') mocks.rows.subscriptions = null;
+    setup(current, `customer.subscription.${lifecycle}`);
+    expect((await webhook(delivery())).status).toBe(200);
+    expectPeriodWrite();
+    const writes = mocks.writes.filter(w => w.table === 'subscriptions');
+    expect(writes.map(w => w.operation)).toEqual(lifecycle === 'created' ? ['update', 'insert'] : ['update']);
+    for (const write of writes) expect(write.value).toMatchObject({ status: current.status, current_period_end: isoPeriod });
+    expect(mocks.markProcessed).toHaveBeenCalledWith(expect.anything(), 'evt-period', 'claim-fixture');
+    expect(mocks.markError).not.toHaveBeenCalled();
+  });
+
+  it.each([0, 1, 2])('uses the unique mapped item at index %i, ignoring unrelated earlier/later periods', async index => {
+    const items = [subscriptionItem('price_addon_early', period - 10_000), subscriptionItem('price_addon_late', period + 10_000)];
+    items.splice(index, 0, subscriptionItem(plus, period));
+    setup({ ...subscription(items), current_period_end: period + 99_000 });
+    expect((await webhook(delivery())).status).toBe(200);
+    expectPeriodWrite('plus_annual');
+  });
+
+  it.each([
+    ['two different plans', [subscriptionItem(basic), subscriptionItem(plus)]],
+    ['the same mapped price twice', [subscriptionItem(basic), subscriptionItem(basic, period + 10_000)]],
+    ['no recognized plan', [subscriptionItem('price_unrelated')]],
+    ['no items', []],
+    ['an item without a price', [{}]],
+    ['a malformed extra item', [subscriptionItem(basic), null]],
+    ['a malformed extra price ID', [subscriptionItem(basic), { price: { id: 123 } }]],
+  ])('retries %s without granting or changing entitlement', async (_label, items) => {
+    setup(subscription(items as unknown[]));
+    await expectRetryableFailure();
+  });
+
+  it('does not infer uniqueness from a partial item list', async () => {
+    const current = subscription();
+    setup({ ...current, items: { ...current.items, has_more: true } });
+    await expectRetryableFailure();
+  });
+
+  it.each([undefined, null, {}, { data: null }])('retries malformed item collection %j', async items => {
+    setup({ ...subscription(), items });
+    await expectRetryableFailure();
+  });
+
+  it.each([undefined, null, '1900000000', NaN, Infinity, -Infinity, 0, -1, period + 0.5, Number.MAX_SAFE_INTEGER + 1, 8_640_000_000_001])(
+    'retries an invalid mapped item period %s even with other valid periods', async invalid => {
+      setup({ ...subscription([
+        subscriptionItem('price_addon'), { ...subscriptionItem(basic), current_period_end: invalid },
+      ]), current_period_end: period });
+      await expectRetryableFailure();
+    },
+  );
+
+  it('accepts a past item period when recording a cancellation', async () => {
+    setup({ ...subscription([subscriptionItem(basic, 1_600_000_000)]), status: 'canceled' }, 'customer.subscription.deleted');
+    expect((await webhook(delivery())).status).toBe(200);
+    expectPeriodWrite('basic', new Date(1_600_000_000_000).toISOString());
+  });
+
+  it('writes both the plan and period from retrieval when the delivered event is stale', async () => {
+    setup(subscription([subscriptionItem(plus, period + 10_000)]), 'customer.subscription.updated', subscription());
+    expect((await webhook(delivery())).status).toBe(200);
+    expect(mocks.retrieveSubscription).toHaveBeenCalledWith('sub-existing');
+    expectPeriodWrite('plus_annual', new Date((period + 10_000) * 1000).toISOString());
+  });
+
+  it('reprocesses a failed period delivery using the newly retrieved item', async () => {
+    setup(subscription([{ ...subscriptionItem(basic), current_period_end: undefined }]));
+    await expectRetryableFailure();
+    mocks.retrieveSubscription.mockResolvedValue(subscription());
+    expect((await webhook(delivery())).status).toBe(200);
+    expectPeriodWrite();
+    expect(mocks.retrieveSubscription).toHaveBeenCalledTimes(2);
+    expect(mocks.markProcessed).toHaveBeenCalledTimes(1);
+  });
+
+  it.each(['returned', 'thrown'] as const)('retries a %s persistence failure with the same valid item period', async failure => {
+    setup(subscription());
+    mocks.syncFailure = failure;
+    expect((await webhook(delivery())).status).toBe(500);
+    expect(mocks.markProcessed).not.toHaveBeenCalled();
+    expect(mocks.markError).toHaveBeenCalledTimes(1);
+    mocks.syncFailure = 'none';
+    mocks.writes = [];
+    expect((await webhook(delivery())).status).toBe(200);
+    expectPeriodWrite();
+  });
+
+  it('returns 503 on failed finalization and safely persists the retrieved period on retry', async () => {
+    setup(subscription());
+    mocks.markProcessed.mockRejectedValueOnce(new Error('finalization unavailable'));
+    expect((await webhook(delivery())).status).toBe(503);
+    expectPeriodWrite();
+    mocks.writes = [];
+    expect((await webhook(delivery())).status).toBe(200);
+    expectPeriodWrite();
+    expect(mocks.markProcessed).toHaveBeenCalledTimes(2);
+    expect(mocks.markError).not.toHaveBeenCalled();
+  });
+
+  it.each([['duplicate', 200], ['in_flight', 409]] as const)('does not retrieve or write an already %s delivery', async (outcome, status) => {
+    setup(subscription());
+    mocks.recordEvent.mockResolvedValue({ outcome });
+    expect((await webhook(delivery())).status).toBe(status);
+    expect(mocks.retrieveSubscription).not.toHaveBeenCalled();
+    expect(mocks.writes).toEqual([]);
+    expect(mocks.markProcessed).not.toHaveBeenCalled();
+    expect(mocks.markError).not.toHaveBeenCalled();
   });
 });
 
@@ -456,8 +606,8 @@ describe('an ended subscription does not overwrite a different live one (PAY-DOU
   function ended(status: string, id = 'sub-old') {
     vi.stubEnv('STRIPE_WEBHOOK_SECRET', 'synthetic-webhook-secret');
     const subscription = {
-      id, metadata: { family_id: 'family-a' }, customer: 'cus-fixture', items: { data: [{ price: { id: PRICES.stripePrices.basic_monthly.id } }] },
-      status, current_period_end: 1_900_000_000, cancel_at_period_end: false,
+      id, metadata: { family_id: 'family-a' }, customer: 'cus-fixture', items: { data: [subscriptionItem(PRICES.stripePrices.basic_monthly.id)], has_more: false },
+      status, cancel_at_period_end: false,
     };
     mocks.constructEvent.mockReturnValue({ id: `evt-${status}`, type: 'customer.subscription.deleted', data: { object: subscription } });
     mocks.retrieveSubscription.mockResolvedValue(subscription);
@@ -487,8 +637,8 @@ describe('a subscription event arriving out of order does not undo a newer state
     return new NextRequest('https://app.example.test/api/webhooks/stripe', { method: 'POST', body: '{}' });
   }
   const sub = (status: string) => ({
-    id: 'sub-existing', metadata: { family_id: 'family-a' }, customer: 'cus-fixture', items: { data: [{ price: { id: basic } }] },
-    status, current_period_end: 1_900_000_000, cancel_at_period_end: false,
+    id: 'sub-existing', metadata: { family_id: 'family-a' }, customer: 'cus-fixture', items: { data: [subscriptionItem(basic)], has_more: false },
+    status, cancel_at_period_end: false,
   });
 
   it('records the canceled state Stripe holds, not the older active payload', async () => {

@@ -2,12 +2,12 @@ import fs from 'node:fs';
 import path from 'node:path';
 import ts from 'typescript';
 import { expect, test, type Page } from '@playwright/test';
+import { reactBrowserScripts } from './helpers/react-browser';
 
 // Real KidLoginForm, guarded adoption helper, SSR adapter and auth SDK.
 // The server-action transport and provider HTTP are controlled separately from
 // tests/child-login-session-adoption.test.ts, which executes the real action.
-const react = fs.readFileSync(path.join(path.dirname(require.resolve('react/package.json')), 'umd/react.development.js'), 'utf8');
-const reactDom = fs.readFileSync(path.join(path.dirname(require.resolve('react-dom/package.json')), 'umd/react-dom.development.js'), 'utf8');
+const { react, reactDom } = reactBrowserScripts('development');
 const sdk = fs.readFileSync(path.join(path.dirname(require.resolve('@supabase/supabase-js/package.json')), 'dist/umd/supabase.js'), 'utf8');
 const isolated = new Set(['react', 'lucide-react', 'next/link', 'next/navigation', '@/components/ui/toast', '@/components/i18n/locale-provider', '@/app/(auth)/actions', '@/lib/utils/cn']);
 const modules: Record<string, { source: string; imports: Record<string, string> }> = {};

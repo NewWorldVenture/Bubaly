@@ -876,6 +876,7 @@
   "adminCredential.secret": "A chave configurada tem o formato correto (sb_secret_…). Verifica se pertence a outro projeto ou se foi revogada.",
   "adminCredential.unknown": "A chave configurada não corresponde a nenhum formato de chave Supabase conhecido.",
   "adminDigest.notificationFeedUnavailable": "Feed de notificações indisponível.",
+  "adminDigest.recipientsUnavailable": "Lista de destinatários superadministradores indisponível.",
   "adminDigest.unauthorized": "Não autorizado",
   "adminFeedback.couldNotDeleteIdea": "Não foi possível eliminar a ideia.",
   "adminFeedback.couldNotPinIdea": "Não foi possível fixar a ideia.",
@@ -16608,5 +16609,6 @@
   "tripCountdown.travelersMany": "{count} viajantes",
   "coach.onlyYourOwnHealth": "Pode perguntar ao coach sobre a sua própria saúde. Um pai, uma mãe ou um adulto pode perguntar sobre outros membros da família.",
   "medicationsModule.noMedicinesPrescribedToYou": "Não lhe foi receitado nenhum medicamento.",
-  "medicationsModule.yourOwnMedicinesOnly": "Vê os medicamentos que lhe foram receitados. Um pai, uma mãe ou um adulto gere as receitas da família."
+  "medicationsModule.yourOwnMedicinesOnly": "Vê os medicamentos que lhe foram receitados. Um pai, uma mãe ou um adulto gere as receitas da família.",
+  "blogBlogSearch.searchUnavailable": "A pesquisa não está disponível neste momento. Tente novamente daqui a pouco."
 }

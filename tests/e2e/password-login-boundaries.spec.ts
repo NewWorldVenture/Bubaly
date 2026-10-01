@@ -2,11 +2,11 @@ import fs from 'node:fs';
 import path from 'node:path';
 import ts from 'typescript';
 import { expect, test, type Page } from '@playwright/test';
+import { reactBrowserScripts } from './helpers/react-browser';
 
 // Real LoginForm/React, shared controls/providers, password helper and installed
 // SSR/auth SDK. Provider HTTP and server-action/navigation outcomes are fixtures.
-const react = fs.readFileSync(path.join(path.dirname(require.resolve('react/package.json')), 'umd/react.development.js'), 'utf8');
-const reactDom = fs.readFileSync(path.join(path.dirname(require.resolve('react-dom/package.json')), 'umd/react-dom.development.js'), 'utf8');
+const { react, reactDom } = reactBrowserScripts('development');
 const sdk = fs.readFileSync(path.join(path.dirname(require.resolve('@supabase/supabase-js/package.json')), 'dist/umd/supabase.js'), 'utf8');
 const isolated = new Set(['react', 'lucide-react', 'next/link', 'next/navigation', '@/components/auth/oauth-buttons',
   '@/components/auth/phone-auth', '@/components/auth/recovery-form', '@/app/(auth)/actions', '@/lib/utils/cn', '@capacitor/core', '@capacitor/haptics']);
