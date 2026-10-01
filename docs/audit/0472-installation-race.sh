@@ -26,21 +26,31 @@
 # turned back into DROP TRIGGER IF EXISTS + CREATE TRIGGER: on re-application
 # it must take ACCESS EXCLUSIVE.
 #
-# Safety:
-#   * The target must be a disposable LOCAL cluster. PGHOST must be unset, one
-#     socket directory or one loopback name or address; the server must report
-#     a Unix-socket or loopback connection (inet_server_addr()); and the caller
-#     must confirm with P0472_DISPOSABLE_CLUSTER=yes.
+# Safety (reviews 5373431112, 5374783683):
+#   * The target must be a disposable LOCAL cluster, checked before any psql
+#     runs. PGDATABASE, P0472_MAINTENANCE_DB and PGUSER must be plain names and
+#     PGPORT a number (psql -d would take a conninfo string or URI and connect
+#     wherever it says); PGHOST must be unset, one socket directory or one
+#     loopback name or address; PGSERVICE and PGHOSTADDR must be unset; the
+#     caller must confirm with P0472_DISPOSABLE_CLUSTER=yes. Then the server
+#     must report a Unix-socket or loopback connection (inet_server_addr()).
 #   * It works only on databases it creates, each a copy of $PGDATABASE named
-#     p0472_<epoch>_<pid>_<case>, unique to this run. It refuses a name that
-#     already exists, never drops a database it did not create in this run,
-#     and drops each one it did, on any exit.
+#     p0472_<64 random bits>_<case>. The random part is what makes a name this
+#     run's: nobody else can have chosen it. It refuses a name that already
+#     exists, and never drops one whose CREATE said it already existed.
+#   * Each name is written to a run manifest BEFORE its CREATE is sent, so a
+#     run stopped between the server committing a CREATE and the shell hearing
+#     back still knows it. On any exit the shell can trap (not SIGKILL), it
+#     drops every name it attempted and has not dropped, and deletes the
+#     manifest only when none is left. After a SIGKILL, or a drop that failed,
+#     the manifest (printed at start, in $P0472_MANIFEST_DIR or $TMPDIR) names
+#     what to drop by hand.
 #   * Every wait is finite: connect_timeout, statement_timeout, lock_timeout
 #     and idle_in_transaction_session_timeout on every session, including the
-#     writer opened through dblink; timeout(1) on every psql it starts; and a
-#     bounded poll. On exit it kills only the processes it started, and
-#     DROP DATABASE … WITH (FORCE) ends only backends connected to its own
-#     databases.
+#     writer opened through dblink; timeout(1) with a hard --kill-after on
+#     every psql it starts, cleanup included; and a bounded poll. On exit it
+#     kills only the processes it started, and DROP DATABASE … WITH (FORCE)
+#     ends only backends connected to its own databases.
 #
 # Connects with the PG* variables (as pg-bootstrap.sh does) to a database that
 # already has every migration applied. Never point it at production.
@@ -52,17 +62,23 @@ ROOT="$(cd "$(dirname "$0")/../.." && pwd)"
 MIG="$ROOT/supabase/migrations/0472_a_babysitter_payment_names_its_own_familys_sitter_and_event.sql"
 SRC_DB=${PGDATABASE:?PGDATABASE names the replayed database to copy}
 MAINT_DB=${P0472_MAINTENANCE_DB:-postgres}
-RUN="$(date +%s)_$$"
+RUN=$(od -An -N8 -tx1 /dev/urandom | tr -d ' \n')
 PSQL_DEADLINE=90 # seconds, for every psql this starts
 
 refuse() { echo "refusing: $*" >&2; exit 2; }
 
-# ── the target ───────────────────────────────────────────────────────────────
+# ── the target, checked before any psql runs ─────────────────────────────────
+NAME='^[A-Za-z_][A-Za-z0-9_]{0,62}$'
+[[ $RUN =~ ^[0-9a-f]{16}$ ]] || refuse "could not draw this run's random name"
 [ "${P0472_DISPOSABLE_CLUSTER:-}" = yes ] || refuse "set P0472_DISPOSABLE_CLUSTER=yes to confirm the PG* target is a throwaway local cluster"
 [ -z "${PGSERVICE:-}" ] && [ -z "${PGHOSTADDR:-}" ] || refuse "PGSERVICE and PGHOSTADDR are not supported; name the target with PGHOST"
+[[ $SRC_DB =~ $NAME ]] || refuse "PGDATABASE must be a plain database name, not a connection string or URI"
+[[ $MAINT_DB =~ $NAME ]] || refuse "P0472_MAINTENANCE_DB must be a plain database name, not a connection string or URI"
+[ -z "${PGUSER:-}" ] || [[ $PGUSER =~ $NAME ]] || refuse "PGUSER must be a plain role name"
+[ -z "${PGPORT:-}" ] || [[ $PGPORT =~ ^[0-9]{1,5}$ ]] || refuse "PGPORT must be a port number"
 case "${PGHOST:-}" in
-  *,*) refuse "PGHOST lists more than one host" ;;
-  '' | /* | localhost | 127.0.0.1 | ::1) ;;
+  '' | localhost | 127.0.0.1 | ::1) ;;
+  /*) [[ $PGHOST =~ ^/[A-Za-z0-9._/-]+$ ]] || refuse "PGHOST must be one plain socket directory" ;;
   *) refuse "PGHOST=$PGHOST is neither a socket directory nor a loopback address" ;;
 esac
 [ "$MAINT_DB" != "$SRC_DB" ] || refuse "the maintenance database cannot be the one copied (a template must have no other session)"
@@ -81,30 +97,49 @@ tables=$(q -d "$SRC_DB" -At -c "select count(to_regclass(t)) from unnest(array['
 
 # ── what this run owns ───────────────────────────────────────────────────────
 WORK=$(mktemp -d)
-declare -A OWNED=()
+MANIFEST="${P0472_MANIFEST_DIR:-${TMPDIR:-/tmp}}/p0472-race-$RUN.manifest"
+( set -o noclobber; : > "$MANIFEST" ) 2>/dev/null || refuse "cannot start the run manifest at $MANIFEST"
+echo "run $RUN; manifest $MANIFEST"
+declare -A ATTEMPTED=() # names whose CREATE was sent and that are not yet dropped
 PIDS=()
 cleanup() {
   local pid db
   for pid in ${PIDS[@]+"${PIDS[@]}"}; do kill "$pid" 2>/dev/null; done
-  for db in "${!OWNED[@]}"; do
-    timeout 30 psql -X -q -d "$MAINT_DB" -c "drop database if exists \"$db\" with (force)" >/dev/null 2>&1 \
-      || echo "WARNING: could not drop $db, which this run created; drop it by hand" >&2
+  for db in "${!ATTEMPTED[@]}"; do
+    if timeout --kill-after=5 30 psql -X -q -d "$MAINT_DB" -c "drop database if exists \"$db\" with (force)" >/dev/null 2>&1; then
+      echo "dropped $db" >> "$MANIFEST"; unset 'ATTEMPTED[$db]'
+    fi
   done
+  if [ "${#ATTEMPTED[@]}" -eq 0 ]; then
+    rm -f "$MANIFEST"
+  else
+    echo "WARNING: could not drop ${!ATTEMPTED[*]}, which this run created; drop by hand (see $MANIFEST)" >&2
+  fi
   rm -rf "$WORK"
 }
 trap cleanup EXIT
 trap 'exit 130' INT TERM
 
 new_db() { # <name>: a copy of $SRC_DB that this run owns; refuses an existing name
-  local db=$1 exists
+  local db=$1 exists err
+  [[ $db == "p0472_${RUN}_"* ]] || { echo "refusing: $db is not a name of this run" >&2; return 1; }
   exists=$(q -d "$MAINT_DB" -At -c "select count(*) from pg_database where datname = '$db'") || return 1
   if [ "$exists" != 0 ]; then echo "refusing: database $db already exists and is not this run's" >&2; return 1; fi
-  q -d "$MAINT_DB" -q -c "create database \"$db\" template \"$SRC_DB\"" || return 1
-  OWNED[$db]=1
+  # Recorded BEFORE the CREATE is sent: if this shell is stopped after the
+  # server commits it but before the answer arrives, the name is still known.
+  echo "attempted $db" >> "$MANIFEST" || return 1
+  ATTEMPTED[$db]=1
+  if ! err=$(q -d "$MAINT_DB" -q -c "create database \"$db\" template \"$SRC_DB\"" 2>&1); then
+    echo "$err" >&2
+    # Someone else's, however unlikely with a random name: never claim it.
+    if [[ $err == *"already exists"* ]]; then echo "foreign $db" >> "$MANIFEST"; unset 'ATTEMPTED[$db]'; fi
+    return 1
+  fi
+  echo "created $db" >> "$MANIFEST"
 }
-drop_db() { # <name>: only one this run created
-  [ -n "${OWNED[$1]:-}" ] || { echo "refusing to drop $1: not created by this run" >&2; return 1; }
-  q -d "$MAINT_DB" -q -c "drop database \"$1\" with (force)" && unset 'OWNED[$1]'
+drop_db() { # <name>: only one this run attempted
+  [ -n "${ATTEMPTED[$1]:-}" ] || { echo "refusing to drop $1: not created by this run" >&2; return 1; }
+  q -d "$MAINT_DB" -q -c "drop database if exists \"$1\" with (force)" && { echo "dropped $1" >> "$MANIFEST"; unset 'ATTEMPTED[$1]'; }
 }
 pre_0472() { # <db>: the database as it stood before 0472
   q -d "$1" -q <<'SQL'
