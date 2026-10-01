@@ -444,6 +444,18 @@ describe('sleep adherence reads bedtimes on the family\'s clock (#688 comment 59
     expect(consistencyScore([log('2026-09-29T21:30:00Z'), log('2026-09-30T21:30:00Z')], 'UTC')).toBe(100);
   });
 
+  it('a New York family\'s 21:30 bedtime either side of its fall-back is perfectly consistent (#688 comment 5922824315)', () => {
+    // 21:30 EDT on 31 Oct is 01:30Z; 21:30 EST on 1 Nov is 02:30Z. Read on a
+    // UTC or Tokyo clock they are an hour apart; on the family's, identical.
+    const nights = [log('2026-11-01T01:30:00Z'), log('2026-11-02T02:30:00Z')];
+    for (const device of ['UTC', 'America/Los_Angeles', 'Asia/Tokyo']) {
+      onDevice(device);
+      expect(consistencyScore(nights, 'America/New_York')).toBe(100);
+    }
+    onDevice('UTC');
+    expect(consistencyScore(nights)).toBeLessThan(100); // the zone-less answer
+  });
+
   it('without the zone it read the phone\'s clock (the old answer on a Los Angeles phone)', () => {
     onDevice('America/Los_Angeles');
     expect(routineAdherence(routine, [log('2026-09-30T21:30:00Z')])).toBe(0);
