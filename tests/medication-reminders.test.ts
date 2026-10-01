@@ -41,6 +41,20 @@ describe('medicationDueReminders', () => {
     expect(out.map((r) => r.user_id).sort()).toEqual(['u-dad', 'u-mom']);
   });
 
+  it.each([
+    ['unlinked member', new Map<string, string | null>([['kid', null]])],
+    ['missing member', new Map<string, string | null>()],
+    ['empty account', new Map<string, string | null>([['kid', '']])],
+  ])('defers a private reminder for an %s without changing its audience', (_name, recipients) => {
+    expect(medicationDueReminders([med({})], [sched({})], [], recipients, managers, now)).toEqual([]);
+  });
+
+  it('preserves the whole-family fallback when there are no managers', () => {
+    const out = medicationDueReminders([med({ member_id: null })], [sched({})], [], userByMember, [], now);
+    expect(out).toHaveLength(1);
+    expect(out[0].user_id).toBeNull();
+  });
+
   it('skips inactive meds, meds without schedules, and non-matching weekdays', () => {
     expect(medicationDueReminders([med({ is_active: false })], [sched({})], [], userByMember, managers, now)).toHaveLength(0);
     expect(medicationDueReminders([med({})], [], [], userByMember, managers, now)).toHaveLength(0);
