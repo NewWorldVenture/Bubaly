@@ -27,6 +27,7 @@ import { cn } from '@/lib/utils/cn';
 import { NUTRIENT_LABELS, dailyValuePct, fmtAmount, type Nutrition } from '@/lib/meals/nutrition';
 import type { Tables, MealType } from '@/lib/database.types';
 import { useLocale, useTranslations } from '@/components/i18n/locale-provider';
+import { useFormat } from '@/components/i18n/use-format';
 import { formatMealDay, mealWeek } from '@/lib/meals/week';
 import type { Ingredient, PlanSlot } from '@/lib/services/meals';
 import type { QueryRefreshConfirmation } from '@/lib/hooks/use-realtime-query';
@@ -77,6 +78,7 @@ function MealImg({ src, emoji, className }: { src: string | null; emoji: string;
 export function MealsModule() {
   const tr = useTranslations();
   const locale = useLocale().code;
+  const { fmtDate } = useFormat();
   const { familyId, userId, family, members, selfMember } = useApp();
   const { success, error: toastError } = useToast();
   const selfId = selfMember?.id ?? null;
@@ -466,7 +468,7 @@ export function MealsModule() {
                       <div className="p-2">
                         <div className="truncate text-xs font-semibold">{r.name}</div>
                         <div className="mt-0.5 text-[10px] text-muted">
-                          {r.last_made_at ? new Date(r.last_made_at).toLocaleDateString(locale, { month: 'short', day: 'numeric' }) : ''}
+                          {r.last_made_at ? fmtDate(r.last_made_at, 'MMM d') : ''}
                         </div>
                       </div>
                     </div>

@@ -25,7 +25,8 @@ import {
   insuranceSummary, fmtMoney as fmtPolicyMoney, type RenewalUrgency,
 } from '@/lib/insurance/policies';
 import { useLocale, useTranslations } from '@/components/i18n/locale-provider';
-import type { LocaleCode } from '@/lib/i18n/locales';
+import { useFamilyClock, useFormat, useFamilyCalendarToday } from '@/components/i18n/use-format';
+import type { Format } from '@/lib/utils/format';
 
 type Policy = Tables<'family_insurance_policies'>;
 
@@ -45,9 +46,9 @@ type Tr = (key: string, params?: Record<string, string | number>) => string;
 const typeLabel = (tr: Tr, type: string) => tr(`insuranceModule.type.${type}`);
 const perFrequency = (tr: Tr, amount: string, f: string) => tr(`insuranceModule.per.${f}`, { amount });
 
-function policyDate(d: string, locale: LocaleCode): string {
-  return new Date(`${d.slice(0, 10)}T00:00:00`)
-    .toLocaleDateString(locale, { month: 'short', day: 'numeric', year: 'numeric' });
+// A policy date is a DATE: rendered as written, never shifted (TIME-003).
+function policyDate(d: string, fmtDate: Format['fmtDate']): string {
+  return fmtDate(d.slice(0, 10), 'MMM d, yyyy');
 }
 
 export function InsuranceModule() {
@@ -57,7 +58,8 @@ export function InsuranceModule() {
   // amounts are whole dollars, so they go through the policies module's formatter
   // rather than the cents one in lib/utils/format.ts.
   const fmtMoney = (n: number | null | undefined) => fmtPolicyMoney(n, locale.code);
-  const fmtDate = (d: string) => policyDate(d, locale.code);
+  const format = useFormat();
+  const fmtDate = (d: string) => policyDate(d, format.fmtDate);
 
   const { familyId, userId, members, role } = useApp();
   // 0416 gives this table the manager-gated writes its twin `insurance_policies`
@@ -75,8 +77,11 @@ export function InsuranceModule() {
   const [addOpen, setAddOpen] = useState(false);
   const [selected, setSelected] = useState<Policy | null>(null);
 
-  const summary = useMemo(() => insuranceSummary(policies.data, new Date()), [policies.data]);
-  const renewals = useMemo(() => upcomingRenewals(policies.data).filter((r) => r.urgency !== 'upcoming').slice(0, 6), [policies.data]);
+  // Renewals are date-only: count them from the family's calendar day (TIME-003).
+  const clock = useFamilyClock();
+  const today = useFamilyCalendarToday();
+  const summary = useMemo(() => insuranceSummary(policies.data, today), [policies.data, today]);
+  const renewals = useMemo(() => upcomingRenewals(policies.data, today).filter((r) => r.urgency !== 'upcoming').slice(0, 6), [policies.data, today]);
   const byType = useMemo(() => premiumByType(policies.data).slice(0, 5), [policies.data]);
 
   async function removePolicy(id: string) {
@@ -174,7 +179,7 @@ export function InsuranceModule() {
         <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
           {policies.data.map((p) => {
             const meta = policyTypeMeta(p.policy_type);
-            const u = renewalUrgency(p.renewal_date);
+            const u = renewalUrgency(p.renewal_date, today);
             const covers = memberName(p.member_id);
             return (
               <button
@@ -310,11 +315,14 @@ function PolicyDetail({ policy, coversName, onClose, onRemove }: {
   // amounts are whole dollars, so they go through the policies module's formatter
   // rather than the cents one in lib/utils/format.ts.
   const fmtMoney = (n: number | null | undefined) => fmtPolicyMoney(n, locale.code);
-  const fmtDate = (d: string) => policyDate(d, locale.code);
+  const format = useFormat();
+  const fmtDate = (d: string) => policyDate(d, format.fmtDate);
 
   const meta = policyTypeMeta(policy.policy_type);
   const annual = annualPremium(policy.premium_amount, policy.premium_frequency);
-  const u = renewalUrgency(policy.renewal_date);
+  const clock = useFamilyClock();
+  const today = useFamilyCalendarToday();
+  const u = renewalUrgency(policy.renewal_date, today);
 
   const rows: { label: string; value: string | null }[] = [
     { label: tr('insuranceModule.row.insurer'), value: policy.insurer },

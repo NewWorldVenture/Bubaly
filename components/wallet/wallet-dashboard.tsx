@@ -19,7 +19,7 @@ import { useToast } from '@/components/ui/toast';
 import { Avatar } from '@/components/ui/avatar';
 import { cn } from '@/lib/utils/cn';
 import { progressBarA11y } from '@/lib/ui/a11y';
-import { fmtRelative } from '@/lib/utils/format';
+import { useFormat } from '@/components/i18n/use-format';
 import { formatCents as formatCentsIn, type BucketKind } from '@/lib/wallet/ledger';
 import { computeFunding, serviceFeeLabel, type WalletTier } from '@/lib/wallet/fees';
 import { WALLET_TIERS, aiCoachLevel } from '@/lib/wallet/tiers';
@@ -87,6 +87,7 @@ export function WalletDashboard({ familyTotal, mode, tier, canManage, childWalle
   pendingApprovals: PendingApproval[];
   analytics?: WalletAnalytics;
 }) {
+  const { fmtRelative } = useFormat();
   const locale = useLocale();
   // Money follows the reader; the currency stays the money's own.
   const formatCents = (cents: number, currency?: string) =>
@@ -388,6 +389,7 @@ function SpendingAnalytics({ analytics }: { analytics: WalletAnalytics }) {
 
 /** One pending approval row with inline Approve / Reject (managers only). */
 function ApprovalRow({ approval, canDecide }: { approval: PendingApproval; canDecide: boolean }) {
+  const { fmtRelative } = useFormat();
   const locale = useLocale();
   // Money follows the reader; the currency stays the money's own.
   const formatCents = (cents: number, currency?: string) =>

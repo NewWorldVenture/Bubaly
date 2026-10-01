@@ -8,6 +8,8 @@ import { TrialPaywallGate } from '@/components/app/trial-paywall-gate';
 import { AccountClosedGate } from '@/components/app/account-closed-gate';
 import { SessionKeeper } from '@/components/auth/session-keeper';
 import { ScopedLocaleProvider } from '@/components/i18n/scoped-locale-provider';
+import { FamilyTimeZoneProvider } from '@/components/i18n/locale-provider';
+import { activeFamilyTimeZone } from '@/lib/server/family-time-zone';
 import { ConfirmProvider } from '@/components/ui/confirm';
 
 // Shared layout for ALL authenticated (app) routes — dashboard, wallet, economy,
@@ -42,10 +44,33 @@ async function AuthenticatedShell({ children }: { children: React.ReactNode }) {
   const user = auth.user;
   if (!user) return <>{children}</>;
 
+  // The family's zone enters the locale context here, above every family
+  // surface — the framed routes and the ones with no frame (kids view, kitchen
+  // display, settings) alike — so every client clock and day below reads in it
+  // (TIME-003). Resolved beside the super-admin check; it never throws.
+  const [superAdmin, familyZone] = await Promise.all([
+    isSuperAdmin(),
+    activeFamilyTimeZone(supabase, user.id),
+  ]);
+  return (
+    <FamilyTimeZoneProvider timeZone={familyZone}>
+      <GatedShell supabase={supabase} userId={user.id} superAdmin={superAdmin}>{children}</GatedShell>
+    </FamilyTimeZoneProvider>
+  );
+}
+
+async function GatedShell({
+  supabase, userId, superAdmin, children,
+}: {
+  supabase: Awaited<ReturnType<typeof createServer>>;
+  userId: string;
+  superAdmin: boolean;
+  children: React.ReactNode;
+}) {
+  const user = { id: userId };
   // Billing gate: a soft-closed account, or a NEW family whose 5-day free trial
   // has ended without subscribing, is locked behind an overlay (super-admins and
   // grandfathered existing free families pass; resolveEntitlement fails open).
-  const superAdmin = await isSuperAdmin();
   if (!superAdmin) {
     const ent = await resolveEntitlement(supabase, user.id, { isSuperAdmin: false });
     if (ent.closed) return <AccountClosedGate />;

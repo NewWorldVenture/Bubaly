@@ -5,7 +5,7 @@ import { useState, useTransition } from 'react';
 import { ActionError, useActionError } from '@/components/ui/action-error';
 import { Wrench, Plus, Trash2, CalendarClock } from 'lucide-react';
 import { saveServiceRecordAction, deleteServiceRecordAction } from '@/app/(app)/dashboard/home/actions';
-import { fmtDate } from '@/lib/utils/format';
+import { useFormat } from '@/components/i18n/use-format';
 import type { Tables } from '@/lib/database.types';
 import { Card } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
@@ -15,12 +15,15 @@ import { Input, Select, Textarea } from '@/components/ui/input';
 import { Field } from '@/components/home/field';
 import { EmptyState } from '@/components/ui/states';
 import { useLocale, useTranslations } from '@/components/i18n/locale-provider';
+import { useFamilyClock } from '@/components/i18n/use-format';
 import { formatCents } from '@/lib/wallet/ledger';
 
 type ServiceRecord = Tables<'home_service_records'>;
 type Asset = Tables<'home_assets'>;
 
 export function ServiceClient({ records, assets }: { records: ServiceRecord[]; assets: Asset[] }) {
+  const clock = useFamilyClock();
+  const { fmtDate } = useFormat();
   const t = useTranslations();
   const locale = useLocale();
   // In the reader's format. `home_service_records.cost` is dollars (numeric, not
@@ -81,7 +84,7 @@ export function ServiceClient({ records, assets }: { records: ServiceRecord[]; a
             <Field label={t('serviceClient.asset')}>
               <Select name="asset_id" defaultValue=""><option value="">{t('serviceClient.none')}</option>{assets.map((a) => <option key={a.id} value={a.id}>{a.name}</option>)}</Select>
             </Field>
-            <Field label={t('serviceClient.date')}><Input type="date" name="service_date" defaultValue={new Date().toISOString().slice(0, 10)} /></Field>
+            <Field label={t('serviceClient.date')}><Input type="date" name="service_date" defaultValue={clock.todayKey()} /></Field>
           </div>
           <div className="grid grid-cols-2 gap-3">
             <Field label={t('serviceClient.provider')}><Input name="provider" placeholder={t('serviceClient.acmeHeating')} /></Field>

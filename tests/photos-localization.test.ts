@@ -132,8 +132,12 @@ function expand(node: ReactNode): ReactNode {
 function Capture() { h.tree = expand(PhotosModule()); return h.tree; }
 function render() {
   h.cursor = 0;
+  // The family lives where this process runs (TIME-003 renders a family
+  // surface in the family's zone), so "local today" below means the same day
+  // on either reading in every zone CI runs this in.
   const providerProps = {
-    locale: localeOrDefault(h.locale), source: 'cookie', messages: getMessages(h.locale), children: createElement(Capture),
+    locale: localeOrDefault(h.locale), source: 'cookie', messages: getMessages(h.locale),
+    timeZone: Intl.DateTimeFormat().resolvedOptions().timeZone, children: createElement(Capture),
   } as const;
   return renderToStaticMarkup(createElement(LocaleProvider, providerProps));
 }

@@ -14,7 +14,7 @@ import { Button } from '@/components/ui/button';
 import { AiInsight } from '@/components/ai/ai-insight';
 import { Avatar } from '@/components/ui/avatar';
 import { SkeletonList, ErrorState, EmptyState } from '@/components/ui/states';
-import { fmtDate } from '@/lib/utils/format';
+import { useFormat } from '@/components/i18n/use-format';
 import {
   usd as usdIn, splitEvenly, memberBalances, settlementSuggestions, summarizeSplits,
   type SplitLike, type ShareLike,
@@ -31,6 +31,7 @@ const CATEGORIES = ['Groceries', 'Dining', 'Travel', 'Utilities', 'Entertainment
 const blank = (tz: string) => ({ description: '', amount: '', category: 'Groceries', paid_by: '', spent_on: todayInZone(tz), participants: [] as string[] });
 
 export function ExpensesModule() {
+  const { fmtDate } = useFormat();
   const tr = useTranslations();
   // Money follows the reader; the currency stays the money's own.
   const locale = useLocale();

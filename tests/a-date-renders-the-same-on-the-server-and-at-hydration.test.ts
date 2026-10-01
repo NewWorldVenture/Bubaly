@@ -54,10 +54,13 @@ describe('a date on the first render', () => {
     expect(html).not.toMatch(/8:30|20:30/);
   });
 
-  it('switches to the reader\'s zone only once hydration is done', () => {
+  // TIME-003: with a family bound the family's zone is used on every render,
+  // server and client alike; the UTC-then-reader switch applies only where
+  // there is no family (a public page).
+  it('switches to the reader\'s zone only once hydration is done, where there is no family', () => {
     const src = readFileSync('components/i18n/use-format.ts', 'utf8');
     expect(src).toMatch(/useSyncExternalStore\(noSubscribe, \(\) => true, \(\) => false\)/);
-    expect(src).toMatch(/createFormat\(locale\.code, t, hydrated \? undefined : 'UTC'\)/);
+    expect(src).toMatch(/createFormat\(locale\.code, t, familyZone \?\? \(hydrated \? undefined : 'UTC'\)\)/);
     expect(src).not.toMatch(/suppressHydrationWarning\s*[={}]/);
   });
 

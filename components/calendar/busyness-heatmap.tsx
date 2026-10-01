@@ -7,7 +7,8 @@ import { readAllAsQuery } from '@/lib/supabase/read-all';
 import { ErrorState } from '@/components/ui/states';
 import { cn } from '@/lib/utils/cn';
 import { buildHeatmap, type HeatEvent } from '@/lib/calendar/heatmap';
-import { expandEvents } from '@/lib/calendar/recurrence';
+import { expandEventsInZone } from '@/lib/calendar/recurrence';
+import { useFamilyClock } from '@/components/i18n/use-format';
 import type { Tables } from '@/lib/database.types';
 import { useTranslations } from '@/components/i18n/locale-provider';
 
@@ -28,6 +29,7 @@ const DOW = ['M', 'T', 'W', 'T', 'F', 'S', 'S'];
  * is forward-looking; this needs history).
  */
 export function BusynessHeatmap({ familyId }: { familyId: string }) {
+  const clock = useFamilyClock();
   const t = useTranslations();
   const [open, setOpen] = useState(true);
 
@@ -59,12 +61,13 @@ export function BusynessHeatmap({ familyId }: { familyId: string }) {
 
   const report = useMemo(() => {
     const start = new Date(Date.now() - WEEKS * 7 * 86400_000);
-    const occurrences = expandEvents(rows, start, new Date());
+    // Recurrence stepped, and days bucketed, in the FAMILY's zone (TIME-003).
+    const occurrences = expandEventsInZone(rows, start, new Date(), clock.timeZone);
     const events: HeatEvent[] = occurrences.map(e => ({
       startsAt: e.starts_at, endsAt: e.ends_at, allDay: e.all_day,
     }));
-    return buildHeatmap(events, new Date(), WEEKS);
-  }, [rows]);
+    return buildHeatmap(events, new Date(), WEEKS, clock.timeZone);
+  }, [rows, clock]);
 
   // Column-per-week grid: pad so the strip starts on a Monday row.
   const firstDow = (new Date(report.days[0]?.date ?? Date.now()).getUTCDay() + 6) % 7;

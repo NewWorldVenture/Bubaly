@@ -10,12 +10,15 @@ import { cn } from '@/lib/utils/cn';
 import type { Tables } from '@/lib/database.types';
 import { usd as usdIn, fmtDueDate as fmtDueDateIn } from '@/lib/finance/hub';
 import { useLocale, useTranslations } from '@/components/i18n/locale-provider';
+import { useFamilyClock, useFormat } from '@/components/i18n/use-format';
 
 type Txn = Tables<'transactions'>;
 const FILTERS = ['all', 'income', 'expense', 'transfer'] as const;
 
 export function PaymentsView() {
   const locale = useLocale();
+  const clock = useFamilyClock();
+  const { fmtDate } = useFormat();
   const tr = useTranslations();
   // Money and dates follow the reader; the currency stays the money's own.
   const usd = (amount: number) => usdIn(amount, locale.code);
@@ -51,7 +54,8 @@ export function PaymentsView() {
   // This-month summary from ALL transactions (not the filtered view), so the
   // tiles stay stable while searching.
   const summary = useMemo(() => {
-    const key = new Date().toISOString().slice(0, 7);
+    // The FAMILY's month (TIME-003), not Greenwich's.
+    const key = clock.todayKey().slice(0, 7);
     let income = 0, expense = 0, count = 0;
     for (const t of txns) {
       if (!t.date.startsWith(key)) continue;
@@ -60,7 +64,7 @@ export function PaymentsView() {
       if (t.type === 'income') income += amt; else if (t.type === 'expense') expense += amt;
     }
     return { income, expense, net: income - expense, count };
-  }, [txns]);
+  }, [txns, clock]);
 
   const monthTotal = (items: Txn[]) =>
     items.reduce((s, t) => s + (t.type === 'income' ? 1 : -1) * Math.abs(Number(t.amount)), 0);
@@ -114,7 +118,7 @@ export function PaymentsView() {
           {byMonth.map(([month, items]) => (
             <section key={month}>
               <h2 className="mb-2 flex items-baseline justify-between text-sm font-bold uppercase tracking-wide text-muted">
-                <span>{new Date(`${month}-01T00:00:00`).toLocaleDateString(locale.code, { month: 'long', year: 'numeric' })}</span>
+                <span>{fmtDate(`${month}-01`, 'MMMM yyyy')}</span>
                 <span className={cn('text-xs font-bold normal-case tabular-nums', monthTotal(items) < 0 ? 'text-muted' : 'text-emerald-400')}>
                   {monthTotal(items) < 0 ? '-' : '+'}{usd(Math.abs(monthTotal(items)))}
                 </span>

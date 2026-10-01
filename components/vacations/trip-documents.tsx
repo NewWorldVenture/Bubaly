@@ -1,7 +1,7 @@
 'use client';
 
 import { FolderLock, AlertTriangle } from 'lucide-react';
-import { fmtDate } from '@/lib/utils/format';
+import { useFormat } from '@/components/i18n/use-format';
 import { TripCrudSection, type FieldDef } from './shared';
 import { DOC_KINDS, lookup } from '@/lib/vacations/meta';
 import type { Tables } from '@/lib/database.types';
@@ -28,6 +28,7 @@ function expiryWarning(expires: string | null): boolean {
 }
 
 export function TripDocuments({ vacationId }: { vacationId: string }) {
+  const { fmtDate } = useFormat();
   const t = useTranslations();
   return (
     <TripCrudSection<Doc>

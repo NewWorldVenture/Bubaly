@@ -18,6 +18,9 @@ const mocks = vi.hoisted(() => ({
 }));
 vi.mock('react', async (original) => ({
   ...await original<typeof import('react')>(),
+  // The shared formatter reads the reader's zone through this (TIME-003);
+  // components here run as plain functions, so answer with the client snapshot.
+  useSyncExternalStore: (_subscribe: unknown, getSnapshot: () => unknown) => getSnapshot(),
   useMemo: (factory: () => unknown) => factory(),
   useState: (initial: unknown) => {
     const index = mocks.cursor++;
@@ -48,7 +51,7 @@ vi.mock('@/components/i18n/locale-provider', async () => {
   // useContext is unavailable. Resolve through the real catalogue rather than
   // returning the key, so assertions keep checking the words a user sees.
   const { SOURCE_MESSAGES, translate } = await import('@/lib/i18n/messages');
-  return {
+  return { useFamilyTimeZone: () => undefined,
     useTranslations: () => (key: string, params?: Record<string, string | number>) => translate(SOURCE_MESSAGES, key, params),
     useLocale: () => ({ code: 'en-US', language: 'en', region: 'US', dir: 'ltr' }),
     useLocaleSource: () => 'default',

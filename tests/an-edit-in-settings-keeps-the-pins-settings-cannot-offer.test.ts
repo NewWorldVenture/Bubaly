@@ -39,7 +39,7 @@ vi.mock('@/app/(app)/dashboard/navigation-actions', () => ({ loadSidebarPrefs: m
 vi.mock('@/components/ui/toast', () => ({ useToast: () => ({ success: mocks.success, error: mocks.error }) }));
 vi.mock('@/components/i18n/locale-provider', async () => {
   const { SOURCE_MESSAGES, translate } = await import('@/lib/i18n/messages');
-  return { useTranslations: () => (key: string, vars?: Record<string, string | number>) => translate(SOURCE_MESSAGES, key, vars) };
+  return { useFamilyTimeZone: () => undefined, useTranslations: () => (key: string, vars?: Record<string, string | number>) => translate(SOURCE_MESSAGES, key, vars) };
 });
 vi.mock('@/components/app/app-context', () => ({ useApp: () => mocks.app }));
 

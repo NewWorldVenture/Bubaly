@@ -98,6 +98,21 @@ const PATTERNS: Record<string, Intl.DateTimeFormatOptions> = {
   'M/d/yy':              { month: 'numeric', day: 'numeric', year: '2-digit' },
   'P':                   { year: 'numeric', month: 'numeric', day: 'numeric' },
   'pp':                  { hour: 'numeric', minute: '2-digit', second: '2-digit' },
+  // TIME-003: the client surfaces that used to call `toLocaleDateString(locale,
+  // { ... })` directly, and so formatted in the DEVICE's zone, pass these shapes
+  // now — each is exactly the options object the call site had.
+  'MMM':                 { month: 'short' },
+  'MMMM':                { month: 'long' },
+  'MMMM yyyy':           { month: 'long', year: 'numeric' },
+  'EEEEE':               { weekday: 'narrow' },
+  'EEE, MMM d, yyyy':    { weekday: 'short', month: 'short', day: 'numeric', year: 'numeric' },
+  'EEEE, MMM d, yyyy':   { weekday: 'long', month: 'short', day: 'numeric', year: 'numeric' },
+  'EEEE, MMMM d, yyyy':  { weekday: 'long', month: 'long', day: 'numeric', year: 'numeric' },
+  'MMMM d':              { month: 'long', day: 'numeric' },
+  'd':                   { day: 'numeric' },
+  // A moment shown WITH its zone's name, for an expiry whose reader must not
+  // have to guess which clock it is on.
+  'MMM d, yyyy h:mm:ss a z': { month: 'short', day: 'numeric', year: 'numeric', hour: 'numeric', minute: '2-digit', second: '2-digit', timeZoneName: 'short' },
 };
 
 /**
