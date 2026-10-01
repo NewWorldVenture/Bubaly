@@ -11,6 +11,8 @@ import { validateChoreSubmission, generateChorePlan, type ChorePlanItem } from '
 import { computeReward, canAutoApprove, type ChoreReward, type Difficulty } from '@/lib/chores/logic';
 import { applyCompletionRewards, logChoreEvent } from '@/lib/chores/server';
 import { wroteNoRows, describeActionError } from '@/lib/supabase/errors';
+import { assertAIAccess } from '@/lib/server/ai-access';
+import { familyDetailsBaseSchema } from '@/lib/validation';
 
 const BUCKET = 'chore-proof';
 const MAX_FILE = 50 * 1024 * 1024;
@@ -584,10 +586,33 @@ export async function createChoreAction(formData: FormData): Promise<MissionActi
   return { ok: true };
 }
 
+/**
+ * The ages a family can give at all: the onboarding shape (whole years 0–21, at
+ * most 20 of them). A server action's arguments are whatever the request
+ * carried, and these are written into the model's prompt.
+ */
+const PLAN_AGES = familyDetailsBaseSchema.shape.childAges;
+
 /** AI chore-plan generator — returns suggestions for the parent to review. */
 export async function generatePlanAction(prompt: string, kidAges: number[]): Promise<{ items: ChorePlanItem[]; error?: string }> {
   const t = await getTranslations();
   const ctx = await requireUserContext();
-  if (!prompt.trim()) return { items: [], error: t('actions.describeWhatYouWantFirst') };
-  return generateChorePlan(scopeFromUserContext(ctx, await createServer()), prompt, kidAges);
+  if (typeof prompt !== 'string' || !prompt.trim()) return { items: [], error: t('actions.describeWhatYouWantFirst') };
+  const ages = PLAN_AGES.safeParse(kidAges ?? []);
+  // The plan builder never sends ages, so only a hand-made request is refused
+  // here, and a generic answer is the honest one (#730).
+  if (!ages.success) return { items: [], error: t('hubActions.invalidRequest') };
+
+  const supabase = await createServer();
+  // A draft is a paid model call for a Family+ feature. Every other AI surface
+  // asks this gate before it opens a request row or asks a model, and this one
+  // asked neither: a Free family, a family with the feature off, or one past
+  // its monthly allowance was answered anyway (#730). Its refusal is already
+  // the family's answer.
+  const access = await assertAIAccess(ctx, { db: supabase, featureKey: 'family-missions' });
+  if (!access.ok) return { items: [], error: access.error };
+
+  const plan = await generateChorePlan(scopeFromUserContext(ctx, supabase), prompt, ages.data);
+  if (plan.providerFailure) return { items: [], error: t('ai.aiIsTemporarilyUnavailable') };
+  return plan.error === undefined ? { items: plan.items } : { items: plan.items, error: plan.error };
 }
