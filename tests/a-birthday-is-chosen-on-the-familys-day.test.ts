@@ -8,8 +8,10 @@
 //
 // They now pass useFamilyCalendarToday() — the family's day key as the
 // local-calendar Date the date-only helper reads, memoized on that key — so the
-// selection follows the family and moves at the family's midnight even on a
-// screen that stays open. The helper itself, and its no-zone callers
+// selection follows the family on the first render and on every later one,
+// including a render after the family's midnight on a screen that stayed open.
+// Nothing schedules that render: an idle screen is not refreshed at midnight on
+// its own (a separate follow-up). The helper itself, and its no-zone callers
 // (lib/moments/notify.ts), are unchanged.
 //
 // The consumers are run as functions under a hook-slot harness whose useMemo

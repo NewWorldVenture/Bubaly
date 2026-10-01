@@ -81,7 +81,9 @@ export function MomentsView({ departures, departuresFailed = false, savedTicks, 
   // The family's clock and Today/Tomorrow (TIME-003).
   const clock = useFamilyClock();
   // The family's calendar day, for which birthdays fall inside the next 30 days
-  // (TIME-003): memoized on the family's day key, so it moves at the family's midnight.
+  // (TIME-003): memoized on the family's day key, so any render after the family's
+  // midnight selects for the new day. Nothing here schedules that render: an idle
+  // screen keeps yesterday's selection until something else re-renders it.
   const familyToday = useFamilyCalendarToday();
   const momentWhen = useMomentWhen();
   const router = useRouter();
