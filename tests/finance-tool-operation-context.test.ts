@@ -57,7 +57,7 @@ function setup(existingState?: 'succeeded' | 'failed' | 'reserved') {
     }
     if (call.kind === 'select') {
       return { data: {
-        id: 'reserved-operation', state: existingState, attempt: 1,
+        id: 'reserved-operation', tool_name: 'finances.createTransaction', state: existingState, attempt: 1,
         locked_at: new Date().toISOString(), outputs: { result: { id: 'recorded-transaction' } },
       }, error: null };
     }
@@ -121,7 +121,12 @@ describe('finance executor operation-context handoff', () => {
     expect(execute.mock.calls[0][0].toolOperation).toEqual({ id: 'reserved-operation', db: ledger.db });
     expect(ledger.calls).toContainEqual(expect.objectContaining({
       // `attempt` is the takeover's token (SEC-021): `state` alone matched twice.
-      kind: 'update', filters: { id: 'reserved-operation', state: 'failed', attempt: 1 },
+      kind: 'update', filters: {
+        id: 'reserved-operation', family_id: scope.familyId,
+        idempotency_key: (ledger.calls[0].payload as { idempotency_key: string }).idempotency_key,
+        tool_name: 'finances.createTransaction',
+        state: 'failed', attempt: 1,
+      },
     }));
   });
 

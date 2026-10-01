@@ -12,7 +12,7 @@
 // domain tables the services write) and the service-role client the ledger is
 // written with, which is mocked at the module boundary because production code
 // must never be able to write that ledger with a member's client.
-import { describe, it, expect, vi, beforeEach } from 'vitest';
+import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 import type { SupabaseClient } from '@supabase/supabase-js';
 import type { Database } from '@/lib/database.types';
 import type { ServiceScope } from '@/lib/services/types';
@@ -69,7 +69,11 @@ function makeDb(respond: (call: Call) => Reply) {
 type LedgerRow = Record<string, unknown> & { id: string; state: string; attempt: number; idempotency_key: string; family_id: string };
 
 /** An in-memory `ai_tool_calls` with the real unique key, so conflicts behave like 0250. */
-function makeLedger(seed: LedgerRow[] = [], opts: { pendingApproval?: string; readBarrier?: number } = {}) {
+function makeLedger(seed: LedgerRow[] = [], opts: {
+  pendingApproval?: string;
+  readBarrier?: number;
+  beforeUpdate?: (row: LedgerRow, call: Call) => void;
+} = {}) {
   const rows: LedgerRow[] = [...seed];
   let counter = 0;
   // Holds ledger reads until `readBarrier` of them have arrived, each answered
@@ -112,6 +116,9 @@ function makeLedger(seed: LedgerRow[] = [], opts: { pendingApproval?: string; re
     if (call.kind === 'update') {
       const row = rows.find((r) => r.id === call.filters.id);
       if (!row) return { data: null, error: null };
+      // A concurrent writer may change a binding after the preceding read.
+      // Apply that interleaving before evaluating EVERY update predicate.
+      opts.beforeUpdate?.(row, call);
       // The optimistic guard the takeover relies on: like PostgREST, EVERY
       // filter must match the row as it is now. Honouring only the filter the
       // code happened to send is how a guard that matched twice looked safe.
@@ -649,6 +656,149 @@ describe('idempotency', () => {
     expect(ledger.rows).toHaveLength(1);
     expect(ledger.rows[0]).toMatchObject({ run_id: 'run-1', plan_step_id: 'step-1' });
     expect(family.calls.filter((c) => c.table === 'calendar_events' && c.kind === 'insert')).toHaveLength(1);
+  });
+});
+
+describe('receipt tool binding', () => {
+  const KEY = 'money.issue_card.v1:00000000-0000-4000-8000-000000000001';
+  const TOOL = 'calendar.createEvent';
+  const eventOutput = { ...EVENT_ROW, when: '9:00 AM Sunday' };
+  const providerReceipt = { version: 1, revision: 'receipt-revision', phase: 'dispatch_reserved', providerId: 'card-synthetic' };
+  const compatibleReceipt = { result: eventOutput, verified: true };
+  const bindingColumns = ['id', 'family_id', 'idempotency_key', 'tool_name'] as const;
+  const foreignRow = (state: string, outputs: unknown = providerReceipt): LedgerRow => ({
+    id: 'foreign-receipt', family_id: 'fam-1', idempotency_key: KEY, state, attempt: 1,
+    tool_name: 'money.issue_card.v1', locked_at: new Date(Date.now() - 10 * 60_000).toISOString(),
+    requested_by: null, requested_by_member_id: null, actor_kind: 'member',
+    inputs: { operationId: '00000000-0000-4000-8000-000000000001' }, outputs,
+  });
+
+  afterEach(() => vi.restoreAllMocks());
+
+  for (const keySource of ['options', 'scope'] as const) {
+    it.each([
+      { state: 'succeeded', shape: 'provider', outputs: providerReceipt },
+      { state: 'succeeded', shape: 'compatible', outputs: compatibleReceipt },
+      { state: 'failed', shape: 'provider', outputs: providerReceipt },
+      { state: 'reserved', shape: 'provider', outputs: providerReceipt },
+    ])(`refuses a foreign $state receipt with $shape outputs via ${keySource}`, async ({ state, outputs }) => {
+      const family = makeFamilyDb({ domain: calendarDomain });
+      const ledger = makeLedger([foreignRow(state, outputs)]);
+      ledgerHolder.client = ledger.db;
+      const before = structuredClone(ledger.rows);
+      const executions = vi.spyOn(getTool(TOOL)!, 'execute');
+
+      const outcome = await executeTool(
+        scopeWith(family.db, keySource === 'scope' ? { idempotencyKey: KEY } : undefined),
+        TOOL, CREATE_EVENT_ARGS, keySource === 'options' ? { idempotencyKey: KEY } : {},
+      );
+
+      expect(outcome.status).toBe('error');
+      expect(executions).not.toHaveBeenCalled();
+      expect(ledger.rows).toEqual(before);
+      expect(ledger.calls.filter((call) => call.kind === 'update')).toHaveLength(0);
+    });
+  }
+
+  for (const state of ['succeeded', 'failed', 'reserved']) {
+    it.each([undefined, 42])(`refuses an unbound ${state} receipt with tool_name=%j`, async (toolName) => {
+      const family = makeFamilyDb({ domain: calendarDomain });
+      const row = foreignRow(state, compatibleReceipt);
+      if (toolName === undefined) delete row.tool_name;
+      else row.tool_name = toolName;
+      const ledger = makeLedger([row]);
+      ledgerHolder.client = ledger.db;
+      const before = structuredClone(ledger.rows);
+      const executions = vi.spyOn(getTool(TOOL)!, 'execute');
+
+      const outcome = await executeTool(scopeWith(family.db), TOOL, CREATE_EVENT_ARGS, { idempotencyKey: KEY });
+
+      expect(outcome.status).toBe('error');
+      expect(executions).not.toHaveBeenCalled();
+      expect(ledger.rows).toEqual(before);
+      expect(ledger.calls.filter((call) => call.kind === 'update')).toHaveLength(0);
+    });
+  }
+
+  it.each(bindingColumns)('does not reclaim a receipt whose %s changes after the read', async (column) => {
+    const family = makeFamilyDb({ domain: calendarDomain });
+    let changed: LedgerRow[] | undefined;
+    const ledger = makeLedger([{ ...foreignRow('reserved'), tool_name: TOOL }], {
+      beforeUpdate: (row) => {
+        if (changed) return;
+        row[column] = `changed-${column}`;
+        changed = [structuredClone(row)];
+      },
+    });
+    ledgerHolder.client = ledger.db;
+    const executions = vi.spyOn(getTool(TOOL)!, 'execute');
+
+    const outcome = await executeTool(scopeWith(family.db), TOOL, CREATE_EVENT_ARGS, { idempotencyKey: KEY });
+
+    expect(changed).toBeDefined();
+    expect(outcome.status).toBe('error');
+    expect(executions).not.toHaveBeenCalled();
+    expect(ledger.rows).toEqual(changed);
+    expect(ledger.calls.filter((call) => call.kind === 'update')).toHaveLength(1);
+  });
+
+  for (const path of ['success', 'service-failure', 'invalid-output'] as const) {
+    const result = path === 'service-failure'
+      ? { ok: false as const, error: 'Synthetic service refusal', retryable: true }
+      : { ok: true as const, data: path === 'success' ? eventOutput : { unexpected: 'output' } };
+
+    it.each(bindingColumns)(`does not finalize ${path} over a changed %s binding`, async (column) => {
+      const family = makeFamilyDb({ domain: calendarDomain });
+      let changed: LedgerRow[] | undefined;
+      const ledger = makeLedger([], {
+        beforeUpdate: (row) => {
+          row[column] = `changed-${column}`;
+          changed = [structuredClone(row)];
+        },
+      });
+      ledgerHolder.client = ledger.db;
+      const executions = vi.spyOn(getTool(TOOL)!, 'execute').mockResolvedValue(result);
+
+      const outcome = await executeTool(scopeWith(family.db), TOOL, CREATE_EVENT_ARGS, { idempotencyKey: KEY });
+
+      expect(outcome.status).toBe(path === 'success' ? 'ok' : 'error');
+      expect(executions).toHaveBeenCalledTimes(1);
+      expect(changed).toBeDefined();
+      expect(ledger.rows).toEqual(changed);
+      expect(ledger.calls.filter((call) => call.kind === 'update')).toHaveLength(1);
+    });
+
+    it(`still finalizes ${path} when the receipt binding is unchanged`, async () => {
+      const family = makeFamilyDb({ domain: calendarDomain });
+      const ledger = makeLedger();
+      ledgerHolder.client = ledger.db;
+      const executions = vi.spyOn(getTool(TOOL)!, 'execute').mockResolvedValue(result);
+
+      const outcome = await executeTool(scopeWith(family.db), TOOL, CREATE_EVENT_ARGS, { idempotencyKey: KEY });
+
+      expect(outcome.status).toBe(path === 'success' ? 'ok' : 'error');
+      expect(executions).toHaveBeenCalledTimes(1);
+      expect(ledger.rows).toHaveLength(1);
+      expect(ledger.rows[0]).toMatchObject({
+        family_id: 'fam-1', idempotency_key: KEY, tool_name: TOOL,
+        state: path === 'service-failure' ? 'failed' : 'succeeded',
+      });
+    });
+  }
+
+  it('replays a canonical same-tool receipt through a legacy alias', async () => {
+    const family = makeFamilyDb({ domain: calendarDomain });
+    const ledger = makeLedger([{ ...foreignRow('succeeded', compatibleReceipt), tool_name: TOOL }]);
+    ledgerHolder.client = ledger.db;
+    const before = structuredClone(ledger.rows);
+    const executions = vi.spyOn(getTool(TOOL)!, 'execute');
+
+    const outcome = await executeTool(scopeWith(family.db), 'create_calendar_event', CREATE_EVENT_ARGS, { idempotencyKey: KEY });
+
+    expect(outcome).toMatchObject({ status: 'ok', data: { id: EVENT_ROW.id }, summary: 'Added Soccer at 9:00 AM Sunday' });
+    expect(executions).not.toHaveBeenCalled();
+    expect(ledger.rows).toEqual(before);
+    expect(ledger.calls.filter((call) => call.kind === 'update')).toHaveLength(0);
   });
 });
 
