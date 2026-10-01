@@ -35,6 +35,7 @@ import {
   type OnboardingStep, type OnboardingDraft,
 } from '@/lib/onboarding/flow';
 import { finalizeOnboardingAction, previewCalendarImportAction } from '@/app/onboarding/actions';
+import { syncLanguageAfterSignInAction } from '@/app/(auth)/actions';
 import { buildFirstBrief, type FirstBrief } from '@/lib/onboarding/first-brief';
 import { formatFirstBrief } from '@/lib/onboarding/first-brief-display';
 import { pickFirstThing } from '@/lib/outcomes/launcher';
@@ -203,6 +204,17 @@ export function OnboardingWizard({ initialName = '', initialLastName = '', calen
     }
   }
 
+  // Finalize stores the language on the profile but may write no cookie (a
+  // cookie would re-render /onboarding into its dashboard redirect before this
+  // "all set" step). Leaving the wizard is the first point where a cookie write
+  // is harmless, so the ordinary sync runs here: it settles a signed-out choice
+  // the profile now holds, so that marker cannot become the NEXT account's
+  // language on this browser (#705 review 5374766490). Not awaited: the person
+  // is navigating either way, and the action is bounded and never throws.
+  function settleLanguage() {
+    void Promise.resolve().then(() => syncLanguageAfterSignInAction()).catch(() => {});
+  }
+
   function advance() {
     if (!canGo) return;
     if (isLastFormStep(step)) { void finish(); return; }
@@ -259,8 +271,8 @@ export function OnboardingWizard({ initialName = '', initialLastName = '', calen
         {step === 'members' && <MembersPanel draft={draft} update={update} />}
         {step === 'pin' && <PinPanel draft={draft} update={update} firstName={firstName} />}
         {step === 'done' && <DonePanel draft={draft} firstName={firstName} brief={doneBrief}
-          onReview={isReviewPlan(reviewPlan) ? () => { if (mounted.current && currentScreen.current === screenOwner) { router.push(reviewBillingPath(reviewPlan)); router.refresh(); } } : undefined}
-          onGo={() => { if (mounted.current && currentScreen.current === screenOwner) { router.push('/dashboard'); router.refresh(); } }} />}
+          onReview={isReviewPlan(reviewPlan) ? () => { if (mounted.current && currentScreen.current === screenOwner) { settleLanguage(); router.push(reviewBillingPath(reviewPlan)); router.refresh(); } } : undefined}
+          onGo={() => { if (mounted.current && currentScreen.current === screenOwner) { settleLanguage(); router.push('/dashboard'); router.refresh(); } }} />}
       </div>
 
       {step !== 'done' && (

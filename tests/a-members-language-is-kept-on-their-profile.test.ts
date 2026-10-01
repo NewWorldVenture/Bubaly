@@ -707,6 +707,41 @@ describe('onboarding stores the language but writes no cookie (#705 CI: a cookie
     expect(db.jar.size).toBe(0);
   });
 
+  it('after the wizard, the settled choice cannot become the next account\'s language (#705 review 5374766490)', async () => {
+    await setLocale('fr-FR'); // signed out
+    db.profiles.set(SPOUSE, 'de-DE');
+    db.user = { id: PARENT };
+    expect(await finalizeSync()).toEqual({ kind: 'stored', locale: 'fr-FR' }); // finalize: profile only
+    // "Start exploring": the wizard's exit runs the ordinary sync.
+    await (await import('@/app/(auth)/actions')).syncLanguageAfterSignInAction();
+    expect(db.jar.has(LOCALE_PENDING_COOKIE)).toBe(false);
+    // Another account then signs in on this browser and keeps its own language.
+    db.user = { id: SPOUSE };
+    expect(await signIn()).toEqual({ kind: 'restored', locale: 'de-DE' });
+    expect(db.profiles.get(SPOUSE)).toBe('de-DE');
+    expect(db.profiles.get(PARENT)).toBe('fr-FR');
+  });
+
+  it('control: the same account\'s post-wizard step is in step and leaves its language alone', async () => {
+    await setLocale('fr-FR');
+    db.user = { id: PARENT };
+    await finalizeSync();
+    const writes = db.writes.length;
+    await (await import('@/app/(auth)/actions')).syncLanguageAfterSignInAction();
+    expect(db.writes.length).toBe(writes); // nothing re-written
+    expect(db.profiles.get(PARENT)).toBe('fr-FR');
+    expect(cookie()?.value).toBe('fr-FR');
+  });
+
+  it('both wizard exits settle the language before they navigate', () => {
+    const src = readFileSync(join(__dirname, '..', 'components/onboarding/onboarding-wizard.tsx'), 'utf8');
+    for (const exit of ['onGo={() =>', 'onReview={isReviewPlan(reviewPlan) ? () =>']) {
+      const body = src.slice(at(src, exit));
+      expect(at(body, 'settleLanguage();')).toBeLessThan(at(body, 'router.push('));
+    }
+    expect(src).toContain('void Promise.resolve().then(() => syncLanguageAfterSignInAction()).catch(() => {});');
+  });
+
   it('sign-in, by contrast, still restores the device', async () => {
     db.profiles.set(PARENT, 'de-DE');
     db.user = { id: PARENT };
