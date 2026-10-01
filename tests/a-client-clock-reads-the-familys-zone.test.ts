@@ -30,7 +30,9 @@ function walk(dir: string, out: string[] = []): string[] {
     if (name === 'node_modules') continue;
     const p = join(dir, name);
     if (statSync(p).isDirectory()) walk(p, out);
-    else if (/\.tsx?$/.test(name) && !name.endsWith('.d.ts')) out.push(p);
+    // Forward slashes on every OS, so EXEMPT's keys match on Windows too
+    // (#688 comment 5922726657); readFileSync accepts them there.
+    else if (/\.tsx?$/.test(name) && !name.endsWith('.d.ts')) out.push(p.split('\\').join('/'));
   }
   return out;
 }
