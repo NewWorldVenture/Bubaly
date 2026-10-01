@@ -88,7 +88,7 @@ Both commits are on main.
 | First pass | 15 pages with violations | 4 | 1 |
 | Re-crawl, fixed build | 0 | 0 | 0 |
 
-On the historical re-crawl, each reached landing page has exactly one `<h1>`. Axe inspects the reached page after navigation: when a requested route redirects, its result belongs to the landing page, not inaccessible content at the requested route.
+On the historical 628-load re-crawl, 627 reached pages recorded exactly one `<h1>`; the seeded parent vacation-detail load recorded zero (`b14-axe-2026-09-27.jsonl`, line830). All 628 recorded zero axe violations. These observations do not prove current heading behavior or complete accessibility. Axe inspects the reached page after navigation: when a requested route redirects, its result belongs to the landing page, not inaccessible content at the requested route.
 
 **Findings.** P-27 to P-31, all fixed. MAIN-F-D02, F-D03 and F-D05 were closed on this evidence.
 
