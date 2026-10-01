@@ -50,7 +50,7 @@ const BASELINE = new Map<string, number>([
   ['components/modules/weather-module.tsx', 1],
 ]);
 
-const COMPONENT_FILES = () => filesMatching("grep -rlE '\\.(update|delete)\\(' components --include='*.ts' --include='*.tsx'");
+const COMPONENT_FILES = () => filesMatching(['components'], /\.(update|delete)\(/);
 
 describe('the unconfirmed-write class in components/ only shrinks (C1-S9-77)', () => {
   const found = perFile(COMPONENT_FILES().flatMap(unconfirmedWritesIn));

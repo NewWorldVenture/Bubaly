@@ -155,10 +155,11 @@ export async function updateCardControls(
     })
     .eq('id', params.cardRowId)
     .eq('family_id', params.familyId)
-    .select('id');
+    // A rejected mirror is the same best-effort failure as a returned error.
+    .select('id').then(undefined, () => ({ data: null, error: true }));
   if (error || wroteNoRows(controlled)) {
     console.error('[money] card controls changed at Stripe but the mirror write failed; issuing_card.updated reconciles it',
-      { cardRowId: params.cardRowId, error });
+      { cardRowId: params.cardRowId });
   }
 }
 
@@ -181,9 +182,9 @@ export async function setCardFrozen(
     .update({ is_frozen: params.frozen, status: params.frozen ? 'inactive' : 'active' })
     .eq('id', params.cardRowId)
     .eq('family_id', params.familyId)
-    .select('id');
+    .select('id').then(undefined, () => ({ data: null, error: true }));
   if (error || wroteNoRows(frozenRow)) {
     console.error('[money] card freeze changed at Stripe but the mirror write failed; issuing_card.updated reconciles it',
-      { cardRowId: params.cardRowId, frozen: params.frozen, error });
+      { cardRowId: params.cardRowId, frozen: params.frozen });
   }
 }
