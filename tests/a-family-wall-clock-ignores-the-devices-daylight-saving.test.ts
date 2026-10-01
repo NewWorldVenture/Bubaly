@@ -15,6 +15,7 @@
 // Tokyo). The first three groups use only the clock API the old implementation
 // also had, so the same assertions fail against it.
 import { readFileSync } from 'node:fs';
+import { at, between } from './helpers/source-order';
 import { join } from 'node:path';
 import { afterEach, describe, expect, it } from 'vitest';
 import { createElement } from 'react';
@@ -346,7 +347,7 @@ describe('a dose shown on the family\'s day can be logged on it (#688 comment 59
 
   it('logDose re-checks on the family\'s calendar day, not the device\'s', () => {
     const src = readFileSync(join(__dirname, '..', 'components/modules/medications-module.tsx'), 'utf8');
-    const logDose = src.slice(src.indexOf('async function logDose('), src.indexOf('await mutate(`dose:'));
+    const logDose = between(src, 'async function logDose(', 'await mutate(`dose:');
     expect(logDose).toContain('dosesForDay([schedule], [], clock.calendarToday(), familyZone)');
     expect(logDose).not.toMatch(/dosesForDay\([^)]*new Date\(\)/);
   });
@@ -425,11 +426,11 @@ describe('the calendar form compares the times it will save (#688 comment 592212
 
   it('NewEventModal resolves both boxes on the family\'s clock before comparing them, and saves those', () => {
     const src = readFileSync(join(__dirname, '..', 'components/modules/calendar-module.tsx'), 'utf8');
-    const submit = src.slice(src.indexOf('const parsed = eventSchema.safeParse(input);'), src.indexOf('const result = existing'));
+    const submit = between(src, 'const parsed = eventSchema.safeParse(input);', 'const result = existing');
     expect(submit).toContain('const startsAt = fromLocalInput(parsed.data.starts_at, timeZone)');
     expect(submit).toContain('if (endsAt && new Date(endsAt) <= new Date(startsAt))');
     expect(submit).not.toMatch(/new Date\(parsed\.data\./);
-    expect(submit.indexOf('const startsAt')).toBeLessThan(submit.indexOf('new Date(endsAt)'));
+    expect(at(submit, 'const startsAt')).toBeLessThan(at(submit, 'new Date(endsAt)'));
   });
 });
 
