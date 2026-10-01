@@ -268,7 +268,7 @@ export function MedicationsModule() {
     }
     const med = latest.current.meds.find((m) => m.id === due.medicationId && m.family_id === familyId && m.is_active);
     const schedule = latest.current.schedules.find((s) => s.id === due.scheduleId && s.medication_id === med?.id && s.family_id === familyId);
-    const currentSlot = schedule && dosesForDay([schedule], [], new Date(), familyZone).find((slot) => slot.slotKey === due.slotKey);
+    const currentSlot = schedule && dosesForDay([schedule], [], clock.calendarToday(), familyZone).find((slot) => slot.slotKey === due.slotKey);
     if (!med || !currentSlot || (med.member_id && !latest.current.members.some((m) => m.id === med.member_id && m.family_id === familyId))) {
       toastError(t('medicationsModule.doseChanged'));
       return;

@@ -28,6 +28,7 @@ import { addDays as addPracticeDays } from '@/lib/language/practice';
 import { sessionStreak, weeklyPlan } from '@/lib/declutter/missions';
 import { streaksByMember } from '@/lib/chores/dashboard';
 import { upcomingRides } from '@/lib/rides/schedule';
+import { dosesForDay } from '@/lib/medications/adherence';
 
 const HOST_ZONE = process.env.TZ;
 afterEach(() => { process.env.TZ = HOST_ZONE; });
@@ -311,6 +312,39 @@ describe('rides and chore streaks read the family\'s day (#688 review comments 5
   it('the chores sidebar buckets completions in the family\'s zone', () => {
     const src = readFileSync(join(__dirname, '..', 'components/modules/chores-module.tsx'), 'utf8');
     expect(src).toContain('streaksByMember(members, asgLike(data), clock.todayKey(), clock.timeZone)');
+  });
+});
+
+describe('a dose shown on the family\'s day can be logged on it (#688 comment 5921999453)', () => {
+  const daily = { id: 's1', medication_id: 'm1', time_of_day: '00:15', days_of_week: [0, 1, 2, 3, 4, 5, 6], starts_on: '2026-01-01', ends_on: null };
+  /** The medicines list: slots for the family's day key, as the module builds them. */
+  const listed = (clock: FamilyClock, now: Date) =>
+    dosesForDay([daily], [], new Date(`${clock.todayKey(now)}T12:00:00`), clock.timeZone).map((d) => d.slotKey);
+  /** logDose's fresh check: the same schedule, re-read on the family's calendar day. */
+  const rechecked = (clock: FamilyClock, now: Date) =>
+    dosesForDay([daily], [], clock.calendarToday(now), clock.timeZone).map((d) => d.slotKey);
+
+  it.each([
+    ['America/Los_Angeles', 'UTC', '2026-10-01T02:30:00Z', '2026-10-01T00:15'],
+    ['Asia/Tokyo', 'UTC', '2026-09-30T16:30:00Z', '2026-09-30T00:15'],
+    ['UTC', 'UTC', '2026-10-01T02:30:00Z', '2026-10-01T00:15'],
+    ['Asia/Tokyo', 'Asia/Tokyo', '2026-09-30T16:30:00Z', '2026-10-01T00:15'],
+  ])('a %s phone, a %s family, at %s: the listed slot passes the re-check', (device, family, at, slot) => {
+    onDevice(device);
+    const clock = clockFor(family);
+    const now = new Date(at);
+    expect(listed(clock, now)).toEqual([slot]);
+    expect(rechecked(clock, now)).toEqual([slot]);
+    // What the re-check used to read: the device's day, a different slot whenever the dates differ.
+    const deviceDay = dosesForDay([daily], [], now, clock.timeZone).map((d) => d.slotKey);
+    if (device !== family) expect(deviceDay).not.toEqual([slot]);
+  });
+
+  it('logDose re-checks on the family\'s calendar day, not the device\'s', () => {
+    const src = readFileSync(join(__dirname, '..', 'components/modules/medications-module.tsx'), 'utf8');
+    const logDose = src.slice(src.indexOf('async function logDose('), src.indexOf('await mutate(`dose:'));
+    expect(logDose).toContain('dosesForDay([schedule], [], clock.calendarToday(), familyZone)');
+    expect(logDose).not.toMatch(/dosesForDay\([^)]*new Date\(\)/);
   });
 });
 
