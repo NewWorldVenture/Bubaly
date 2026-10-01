@@ -32,6 +32,7 @@ import { dosesForDay } from '@/lib/medications/adherence';
 import { daysUntil as tripDaysUntil, isActive as tripIsActive } from '@/lib/vacations/dates';
 import { fromLocalInput } from '@/lib/time/local-input';
 import { routineAdherence, consistencyScore } from '@/lib/sleep/coach';
+import { positiveStreakDays, trendByWeek } from '@/lib/behavior/insights';
 
 const HOST_ZONE = process.env.TZ;
 afterEach(() => { process.env.TZ = HOST_ZONE; });
@@ -450,6 +451,43 @@ describe('sleep adherence reads bedtimes on the family\'s clock (#688 comment 59
   it('the Sleep page passes the family\'s zone', () => {
     const src = readFileSync(join(__dirname, '..', 'components/modules/sleep-module.tsx'), 'utf8');
     expect(src).toContain('sleepSummary(memberLogs, routine, age, today, memberId, clock.timeZone)');
+  });
+});
+
+describe('behaviour streaks and weekly trends count the family\'s days (#688 comment 5922251129)', () => {
+  const pos = (occurred_at: string) => ({ kind: 'positive', category: 'kindness', points: 1, occurred_at, member_id: 'm' }) as never;
+  const weekly = (zone: string, at: string, now: string) =>
+    trendByWeek([pos(at)], 2, new Date(now), zone).map((w) => `${w.weekStart}:${w.positive}`);
+
+  it.each([
+    ['Asia/Tokyo', ['2026-09-29T15:30:00Z', '2026-10-01T03:00:00Z'], '2026-10-01T04:00:00Z'], // 30 Sep and 1 Oct in Tokyo
+    ['America/Los_Angeles', ['2026-09-29T15:00:00Z', '2026-10-01T01:00:00Z'], '2026-10-01T02:30:00Z'], // 29 and 30 Sep in LA
+    ['UTC', ['2026-09-30T00:30:00Z', '2026-10-01T12:00:00Z'], '2026-10-01T13:00:00Z'], // control
+  ])('a %s family\'s two consecutive days are a two-day streak', (zone, ats, now) => {
+    for (const device of ['UTC', 'America/Los_Angeles', 'Asia/Tokyo']) {
+      onDevice(device);
+      expect(positiveStreakDays(ats.map(pos), new Date(now), zone)).toBe(2);
+    }
+  });
+
+  it('a log on the family\'s Monday is in that Monday\'s week; one on its Sunday is in the week before', () => {
+    for (const device of ['UTC', 'America/Los_Angeles', 'Asia/Tokyo']) {
+      onDevice(device);
+      expect(weekly('Asia/Tokyo', '2026-10-04T15:15:00Z', '2026-10-04T15:30:00Z')).toEqual(['2026-09-28:0', '2026-10-05:1']);
+      expect(weekly('America/Los_Angeles', '2026-10-05T06:30:00Z', '2026-10-05T07:30:00Z')).toEqual(['2026-09-28:1', '2026-10-05:0']);
+      expect(weekly('UTC', '2026-10-05T00:15:00Z', '2026-10-05T00:30:00Z')).toEqual(['2026-09-28:0', '2026-10-05:1']); // control
+    }
+  });
+
+  it('without a zone the old UTC calendar is unchanged (the reviewer\'s "actual" values)', () => {
+    expect(positiveStreakDays(['2026-09-29T15:30:00Z', '2026-10-01T03:00:00Z'].map(pos), new Date('2026-10-01T04:00:00Z'))).toBe(1);
+    expect(trendByWeek([pos('2026-10-04T15:15:00Z')], 2, new Date('2026-10-04T15:30:00Z')).map((w) => `${w.weekStart}:${w.positive}`)).toEqual(['2026-09-21:0', '2026-09-28:1']);
+  });
+
+  it('the Behavior page passes the family\'s zone to both', () => {
+    const src = readFileSync(join(__dirname, '..', 'components/modules/behavior-module.tsx'), 'utf8');
+    expect(src).toContain('positiveStreakDays(mlogs, new Date(), clock.timeZone)');
+    expect(src).toContain('trendByWeek(mlogs, 6, new Date(), clock.timeZone)');
   });
 });
 

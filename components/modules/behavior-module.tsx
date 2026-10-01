@@ -194,8 +194,8 @@ export function BehaviorModule() {
           {memberIds.map((mid) => {
             const mlogs = all.filter((l) => l.member_id === mid) as BehaviorLogLike[];
             const s = summarizeMember(mlogs);
-            const streak = positiveStreakDays(mlogs);
-            const trend = trendByWeek(mlogs, 6);
+            const streak = positiveStreakDays(mlogs, new Date(), clock.timeZone); // instant: the family's day is taken from it in clock.timeZone
+            const trend = trendByWeek(mlogs, 6, new Date(), clock.timeZone); // instant: weeks anchor on the family's Monday in clock.timeZone
             const maxBar = Math.max(1, ...trend.map((t) => t.positive + t.concern));
             const m = memberById.get(mid);
             return (
