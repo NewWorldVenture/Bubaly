@@ -5,6 +5,7 @@ import Link from 'next/link';
 import { Search, X } from 'lucide-react';
 import { cn } from '@/lib/utils/cn';
 import { useTranslations } from '@/components/i18n/locale-provider';
+import { createSearchIndexLoader, type SearchIndexState } from '@/lib/blog/search-index-loader';
 
 type SearchablePost = {
   slug: string;
@@ -20,27 +21,24 @@ type SearchablePost = {
  * 1,048 posts serialised into the /blog HTML — 446 KB of a 597 KB response —
  * paid by every visitor so that the few who search could filter locally. Now
  * the page ships nothing, and the first focus or keystroke pulls an index the
- * CDN already has warm.
+ * CDN already has warm. When it cannot be loaded the dropdown says so, and a
+ * later interaction may try again (see lib/blog/search-index-loader.ts).
  */
 export function BlogSearch() {
   const t = useTranslations();
   const [query, setQuery] = useState('');
   const [focused, setFocused] = useState(false);
   const [posts, setPosts] = useState<SearchablePost[]>([]);
-  // Fetch once per mount, and never twice concurrently: focus fires before the
-  // first keystroke, and both want the index.
-  const requested = useRef(false);
+  const [indexState, setIndexState] = useState<SearchIndexState>('idle');
+  const loader = useRef<ReturnType<typeof createSearchIndexLoader<SearchablePost>> | null>(null);
   const containerRef = useRef<HTMLDivElement>(null);
 
   const loadIndex = () => {
-    if (requested.current) return;
-    requested.current = true;
-    fetch('/api/blog/search-index')
-      .then((r) => (r.ok ? r.json() : []))
-      .then((data: unknown) => { if (Array.isArray(data)) setPosts(data as SearchablePost[]); })
-      // A failed index means search finds nothing, which the empty state
-      // already says. It must never break the page around it.
-      .catch(() => {});
+    loader.current ??= createSearchIndexLoader<SearchablePost>({
+      fetchIndex: () => fetch('/api/blog/search-index'),
+      onChange: (state, loaded) => { setIndexState(state); if (state === 'ready') setPosts(loaded); },
+    });
+    loader.current.load();
   };
 
   const results = useMemo(() => {
@@ -88,7 +86,11 @@ export function BlogSearch() {
 
       {showDropdown && (
         <div className="absolute left-0 right-0 top-full z-50 mt-2 overflow-hidden rounded-xl border border-white/10 bg-[#0c1220] shadow-2xl">
-          {results.length === 0 ? (
+          {indexState === 'unavailable' ? (
+            <div role="status" className="px-4 py-6 text-center text-sm text-white/60">
+              {t('blogBlogSearch.searchUnavailable')}
+            </div>
+          ) : results.length === 0 ? (
             <div className="px-4 py-6 text-center text-sm text-white/40">
               {t('blogBlogSearch.noArticlesFoundForLdquo')}{query}&rdquo;
             </div>
