@@ -17,7 +17,9 @@
 --                          is their own member row
 --   medication_schedules   follow their medication: readable exactly when the
 --                          medication is
---   medication_doses       follow their medication for READS; WRITES stay any
+--   medication_doses       READS: a manager reads the family's; anyone else a
+--                          dose that is recorded for their own member row AND
+--                          whose medication they can read. WRITES stay any
 --                          member's, as 0309, 0414 and 0434 left them — the
 --                          person taking the medicine is the one who ticks it
 --
@@ -51,6 +53,17 @@
 -- prescription it is the history of. The module already reads doses only
 -- for medications it can see (windowDoseLogs, todayDoses), so for a child it
 -- changes nothing on screen.
+--
+-- A dose is the history of ONE person's taking, so it is that person's, not
+-- whoever holds the medication now (#674 comment 5922523738). A parent can
+-- reassign a medication from one child to another (the module's edit keeps
+-- the row and changes `member_id`, and does not rewrite past doses); following
+-- only the medication's current owner would hand child B child A's taken /
+-- skipped history and its free-text notes. So a non-manager's dose read needs
+-- BOTH: the medication is readable to them, and the dose's own `member_id` is
+-- theirs. After a reassignment B sees the doses B records, A no longer sees
+-- the medication or its doses, and a manager sees all of them. A dose whose
+-- member was deleted (`member_id` SET NULL) is a manager's to read.
 --
 -- The one FOR ALL policy there ("Members can manage medication_doses", 00261)
 -- is split into a narrowed SELECT and three member-wide write policies with
@@ -179,6 +192,8 @@ begin
     pred := case t
       when 'medications' then
         'public.is_family_member(family_id) and (public.can_manage_family(family_id) or public.is_self_member(member_id))'
+      when 'medication_doses' then
+        'public.medication_is_readable(medication_id, family_id) and (public.can_manage_family(family_id) or public.is_self_member(member_id))'
       else
         'public.medication_is_readable(medication_id, family_id)'
     end;

@@ -16,6 +16,13 @@
 --   DOSES   the child still records, re-marks and un-marks a dose of their own
 --           medication (insert / update / delete, the module's three writes),
 --           and cannot rewrite the sibling's dose.
+--   REASSIGNMENT  (#674 comment 5922523738) a parent moves a medication from
+--           the child to the sibling through the ordinary update. The child's
+--           past dose of it, with its notes, is then readable by neither the
+--           child (no longer their medication) nor the sibling (not their
+--           dose); the sibling reads the dose they record afterwards; the
+--           parent reads both; the child's other, unmoved medication and its
+--           dose are unaffected.
 --   WRITES  immunizations and health_visits: the child's insert is REFUSED
 --           (42501), their update and delete reach no row; the parent's
 --           insert, update and delete each land. Prescriptions: the child still
@@ -43,6 +50,11 @@ declare
   sch_sib      uuid;
   dose_sib     uuid;
   dose_child   uuid;
+  med_move     uuid;
+  sch_move     uuid;
+  dose_move_a  uuid;
+  dose_move_b  uuid;
+  dose_ctrl    uuid;
   imm_id       uuid;
   visit_id     uuid;
   blocked      boolean;
@@ -202,6 +214,65 @@ begin
   select count(*) into n from public.medication_doses where id = dose_sib;
   if n <> 1 then raise exception 'the sibling cannot read their own dose'; end if;
 
+  -- ── REASSIGNMENT: a dose stays its own person's (#674 comment 5922523738) ──
+  reset role;
+  perform set_config('request.jwt.claim.sub', parent_uid::text, true);
+  set local role authenticated;
+  insert into public.medications (family_id, member_id, name, dosage, is_active, created_by)
+    values (fam, child_mid, 'Cetirizine', '5mg', true, parent_uid) returning id into med_move;
+  insert into public.medication_schedules (family_id, medication_id, time_of_day)
+    values (fam, med_move, '19:00') returning id into sch_move;
+  insert into public.medication_doses (family_id, medication_id, schedule_id, member_id, scheduled_for, status, logged_by, notes)
+    values (fam, med_move, sch_move, child_mid, date_trunc('day', now()) - interval '1 day' + interval '19 hours', 'taken', parent_uid, 'child-only marker')
+    returning id into dose_move_a;
+  -- An unmoved control: the child's own Amoxicillin dose.
+  insert into public.medication_doses (family_id, medication_id, schedule_id, member_id, scheduled_for, status, logged_by)
+    values (fam, med_child, sch_child, child_mid, date_trunc('day', now()) - interval '1 day' + interval '8 hours', 'taken', parent_uid)
+    returning id into dose_ctrl;
+
+  reset role;
+  perform set_config('request.jwt.claim.sub', child_uid::text, true);
+  set local role authenticated;
+  select count(*) into n from public.medication_doses where id in (dose_move_a, dose_ctrl);
+  if n <> 2 then raise exception 'before the move, the child cannot read both of their own doses (% of 2)', n; end if;
+
+  -- The parent reassigns the medication through the module's ordinary update.
+  reset role;
+  perform set_config('request.jwt.claim.sub', parent_uid::text, true);
+  set local role authenticated;
+  update public.medications set member_id = sib_mid where id = med_move and family_id = fam;
+  get diagnostics n = row_count;
+  if n <> 1 then raise exception 'a parent cannot reassign a medication (%)', n; end if;
+
+  reset role;
+  perform set_config('request.jwt.claim.sub', sib_uid::text, true);
+  set local role authenticated;
+  select count(*) into n from public.medications where id = med_move;
+  if n <> 1 then raise exception 'the sibling cannot read the medication reassigned to them'; end if;
+  select count(*) into n from public.medication_doses where id = dose_move_a;
+  if n <> 0 then raise exception 'after a reassignment the sibling read the child''s past dose of it'; end if;
+  select count(*) into n from public.medication_doses where notes = 'child-only marker';
+  if n <> 0 then raise exception 'after a reassignment the sibling read the child''s dose notes'; end if;
+  insert into public.medication_doses (family_id, medication_id, schedule_id, member_id, scheduled_for, status, logged_by)
+    values (fam, med_move, sch_move, sib_mid, date_trunc('day', now()) + interval '19 hours', 'taken', sib_uid)
+    returning id into dose_move_b;
+  select count(*) into n from public.medication_doses where id = dose_move_b;
+  if n <> 1 then raise exception 'the sibling cannot read the dose they recorded of their reassigned medication'; end if;
+
+  reset role;
+  perform set_config('request.jwt.claim.sub', child_uid::text, true);
+  set local role authenticated;
+  select count(*) into n from public.medication_doses where id in (dose_move_a, dose_move_b);
+  if n <> 0 then raise exception 'after the move the child still reads a dose of a medication that is no longer theirs (%)', n; end if;
+  select count(*) into n from public.medication_doses where id = dose_ctrl;
+  if n <> 1 then raise exception 'the child lost their unmoved medication''s dose'; end if;
+
+  reset role;
+  perform set_config('request.jwt.claim.sub', parent_uid::text, true);
+  set local role authenticated;
+  select count(*) into n from public.medication_doses where id in (dose_move_a, dose_move_b, dose_ctrl);
+  if n <> 3 then raise exception 'a parent no longer reads every dose after a reassignment (% of 3)', n; end if;
+
   -- ── As the PARENT again: deletes land ────────────────────────────────────
   reset role;
   perform set_config('request.jwt.claim.sub', parent_uid::text, true);
@@ -216,7 +287,7 @@ begin
   if names is distinct from 'taken' then raise exception 'the sibling''s dose changed under the child''s refused update (%)', names; end if;
 
   reset role;
-  raise notice 'OK 0465: a parent reads every prescription and writes the health record; a child reads only their own prescription, schedule and doses, still records their own dose, and cannot write an immunization or a visit';
+  raise notice 'OK 0465: a parent reads every prescription and writes the health record; a child reads only their own prescription, schedule and doses, still records their own dose, and cannot write an immunization or a visit; a reassigned medication''s past doses stay their own person''s';
 end $$;
 
 -- Non-vacuity, for whoever re-runs this: inside the same rolled-back
@@ -230,3 +301,14 @@ end $$;
 --   alter policy medication_doses_select on public.medication_doses using (public.is_family_member(family_id));
 --
 -- and the probe fails at "a child read a prescription that is not theirs".
+--
+-- For the reassignment half alone: restore only the dose read to the
+-- medication-follows rule of 0465's first draft —
+--
+--   alter policy medication_doses_select on public.medication_doses
+--     using (public.medication_is_readable(medication_id, family_id));
+--   alter policy medication_doses_own_or_manager_read_guard on public.medication_doses
+--     using (public.medication_is_readable(medication_id, family_id));
+--
+-- and the probe fails at "after a reassignment the sibling read the child's
+-- past dose of it".

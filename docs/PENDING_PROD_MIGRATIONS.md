@@ -4075,8 +4075,11 @@ select polname, pg_get_expr(polqual, polrelid) as using_expr,
 The owner decided that parents write and kids see only their own. `medications`
 is now readable by a manager (`can_manage_family`) for every row, and by anyone
 else only for rows whose `member_id` is their own member row. A row with no
-member ("Whole family") is a manager's to read. `medication_schedules` and
-`medication_doses` follow their medication for reads. Dose writes stay
+member ("Whole family") is a manager's to read. `medication_schedules` follow
+their medication for reads. A `medication_doses` row is readable by a manager,
+or by anyone else only when its medication is readable to them AND the dose is
+recorded for their own member row, so reassigning a medication to another child
+does not hand them the first child's dose history. Dose writes stay
 member-wide, so a child can still tick their own dose. The migration refuses
 to run, raising an error, if any of the six prescription write guards from
 0309/0434 is missing, or if a permissive read policy would survive and cancel
