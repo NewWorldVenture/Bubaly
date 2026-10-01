@@ -33,8 +33,30 @@ const network = await vi.hoisted(async () => {
     vi.spyOn(net.Socket.prototype, 'connect').mockImplementation(deny('socket')),
     vi.spyOn(tls, 'connect').mockImplementation(deny('tls')),
   ];
-  return { attempts, restore() { guards.forEach(guard => guard.mockRestore()); globalThis.fetch = originalFetch; } };
+  // Whether every native entry point is still the denying guard. A spy that was
+  // restored puts the real function back while `attempts` keeps reading zero,
+  // so the counters alone cannot show the seal is still in place.
+  const entries = () => [
+    http.request, http.get, https.request, https.get,
+    net.connect, net.createConnection, net.Socket.prototype.connect, tls.connect, globalThis.fetch,
+  ] as unknown as (() => unknown)[];
+  const sealed = () => entries().map(fn => vi.isMockFunction(fn));
+  /**
+   * Call every entry point and report which refused; the counters are put back.
+   * It calls nothing unless every entry point is still a guard, so a broken
+   * seal can never turn the probe itself into a real request.
+   */
+  const probe = () => {
+    if (!sealed().every(Boolean)) return { refused: sealed(), counted: 0 };
+    const before = { ...attempts };
+    const refused = entries().map(fn => { try { fn(); return false; } catch { return true; } });
+    const counted = Object.values(attempts).reduce((a, b) => a + b, 0) - Object.values(before).reduce((a, b) => a + b, 0);
+    Object.assign(attempts, before);
+    return { refused, counted };
+  };
+  return { attempts, sealed, probe, restore() { guards.forEach(guard => guard.mockRestore()); globalThis.fetch = originalFetch; } };
 });
+const SEALED = Array(9).fill(true);
 const mock = vi.hoisted(() => ({
   requireUserContext: vi.fn(), createServiceClient: vi.fn(), capabilities: vi.fn(), getStripe: vi.fn(),
   trust: vi.fn(), roleOf: vi.fn(), audit: vi.fn(), translations: vi.fn(), revalidate: vi.fn(),
@@ -175,6 +197,7 @@ let db: ReturnType<typeof createInMemorySupabase>;
 let provider: ReturnType<typeof syntheticProvider>;
 let outage: { cardMirrorInserts: number };
 let service: SupabaseClient<Database>;
+let quiet: { mockRestore(): void }[] = [];
 
 function seedHousehold() {
   db.seed('stripe_connected_accounts', [{ family_id: FAMILY, stripe_account_id: ACCOUNT, card_issuing_enabled: true }]);
@@ -191,6 +214,7 @@ const mirrorCards = (childWalletId = 'wallet-a') => db.table('stripe_issuing_car
 const audits = (action: string) => mock.audit.mock.calls.filter(([, row]) => (row as Row).action === action);
 
 beforeEach(() => {
+  expect(network.sealed()).toEqual(SEALED);
   vi.clearAllMocks();
   vi.useFakeTimers({ toFake: ['Date'] });
   vi.setSystemTime(T0);
@@ -229,12 +253,18 @@ beforeEach(() => {
   mock.audit.mockResolvedValue(undefined);
   mock.translations.mockResolvedValue((key: string) => `translated:${key}`);
   mock.forbidden.mockImplementation(() => { throw new Error('Unrelated client/provider call'); });
-  vi.spyOn(console, 'error').mockImplementation(() => {});
-  vi.spyOn(console, 'warn').mockImplementation(() => {});
+  quiet = [
+    vi.spyOn(console, 'error').mockImplementation(() => {}),
+    vi.spyOn(console, 'warn').mockImplementation(() => {}),
+  ];
 });
 afterEach(() => {
   vi.useRealTimers();
-  vi.restoreAllMocks();
+  // Restore only this case's console spies. vi.restoreAllMocks() would also
+  // put back the native functions the hoisted network guards replaced, leaving
+  // every later case unsealed while `attempts` still read zero.
+  quiet.forEach(spy => spy.mockRestore());
+  expect(network.sealed()).toEqual(SEALED);
   expect(network.attempts).toEqual({ fetch: 0, http: 0, https: 0, socket: 0, tls: 0 });
   expect(mock.forbidden).not.toHaveBeenCalled();
   expect(mock.sdkModuleLoads).toBe(0);
@@ -373,18 +403,21 @@ describe('freeze requests reaching the server more than once', () => {
   });
   const mirror = () => db.table('stripe_issuing_cards').find(row => row.id === CARD_ROW)!;
 
-  it('converges: a repeated freeze (a remounted view sends the same direction) answered in either order ends frozen', async () => {
+  it.each([
+    { order: 'second answered first', releases: [1, 0] },
+    { order: 'first answered first', releases: [0, 1] },
+  ])('converges: a repeated freeze (a remounted view sends the same direction) ends frozen, $order', async ({ releases }) => {
     // The view sends `frozen: !card.isFrozen` from its props, which do not
     // change until router.refresh(), so a re-click repeats the direction.
-    const first = setCardFrozenAction({ cardId: CARD_ROW, frozen: true });
+    const requests = [setCardFrozenAction({ cardId: CARD_ROW, frozen: true })];
     await vi.waitFor(() => expect(provider.held).toHaveLength(1));
-    const second = setCardFrozenAction({ cardId: CARD_ROW, frozen: true });
+    requests.push(setCardFrozenAction({ cardId: CARD_ROW, frozen: true }));
     await vi.waitFor(() => expect(provider.held).toHaveLength(2));
 
-    provider.held[1].release();
-    expect(await second).toEqual({ ok: true });
-    provider.held[0].release();
-    expect(await first).toEqual({ ok: true });
+    for (const index of releases) {
+      provider.held[index].release();
+      expect(await requests[index]).toEqual({ ok: true });
+    }
 
     expect(provider.log.updates).toEqual([{ id: STRIPE_CARD, status: 'inactive' }, { id: STRIPE_CARD, status: 'inactive' }]);
     expect(provider.cards.get(STRIPE_CARD)?.status).toBe('inactive');
@@ -411,4 +444,10 @@ describe('freeze requests reaching the server more than once', () => {
     await handleIssuingCardUpdated(service, provider.event(STRIPE_CARD));
     expect(mirror()).toMatchObject({ is_frozen: false, status: 'active' });
   });
+});
+
+// Last on purpose: every case above has run its hooks by now.
+it('keeps the native network seal installed and refusing in a later case', () => {
+  expect(network.sealed()).toEqual(SEALED);
+  expect(network.probe()).toEqual({ refused: SEALED, counted: 9 });
 });
