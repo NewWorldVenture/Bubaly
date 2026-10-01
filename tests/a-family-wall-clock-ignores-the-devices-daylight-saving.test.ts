@@ -30,6 +30,8 @@ import { streaksByMember } from '@/lib/chores/dashboard';
 import { upcomingRides } from '@/lib/rides/schedule';
 import { dosesForDay } from '@/lib/medications/adherence';
 import { daysUntil as tripDaysUntil, isActive as tripIsActive } from '@/lib/vacations/dates';
+import { fromLocalInput } from '@/lib/time/local-input';
+import { routineAdherence, consistencyScore } from '@/lib/sleep/coach';
 
 const HOST_ZONE = process.env.TZ;
 afterEach(() => { process.env.TZ = HOST_ZONE; });
@@ -399,6 +401,55 @@ describe('ages, renewals, trips and due dates count from the family\'s calendar 
     const now = new Date('2026-10-01T01:00:00Z'); // 1 October in Tokyo, still 30 September in Los Angeles
     expect(ageOn('2016-10-01', clock.calendarToday(now))).toBe(10);
     expect(ageOn('2016-10-01', now)).toBe(9); // what the device's day gave
+  });
+});
+
+describe('the calendar form compares the times it will save (#688 comment 5922125002)', () => {
+  it('a UTC family\'s 02:30–03:15 on the day a Los Angeles phone springs forward is a valid event', () => {
+    onDevice('America/Los_Angeles');
+    const start = fromLocalInput('2026-03-08T02:30', 'UTC')!;
+    const end = fromLocalInput('2026-03-08T03:15', 'UTC')!;
+    expect([start, end].map((v) => new Date(v).toISOString())).toEqual(['2026-03-08T02:30:00.000Z', '2026-03-08T03:15:00.000Z']);
+    expect(new Date(end) > new Date(start)).toBe(true);
+    // The old check read the naive text on the phone's clock, where 02:30 is skipped to 03:30.
+    expect(new Date('2026-03-08T03:15') <= new Date('2026-03-08T02:30')).toBe(true);
+  });
+
+  it('an end before or equal to the start is still refused', () => {
+    onDevice('America/Los_Angeles');
+    const start = fromLocalInput('2026-03-08T03:15', 'UTC')!;
+    expect(new Date(fromLocalInput('2026-03-08T03:15', 'UTC')!) <= new Date(start)).toBe(true);
+    expect(new Date(fromLocalInput('2026-03-08T02:30', 'UTC')!) <= new Date(start)).toBe(true);
+  });
+
+  it('NewEventModal resolves both boxes on the family\'s clock before comparing them, and saves those', () => {
+    const src = readFileSync(join(__dirname, '..', 'components/modules/calendar-module.tsx'), 'utf8');
+    const submit = src.slice(src.indexOf('const parsed = eventSchema.safeParse(input);'), src.indexOf('const result = existing'));
+    expect(submit).toContain('const startsAt = fromLocalInput(parsed.data.starts_at, timeZone)');
+    expect(submit).toContain('if (endsAt && new Date(endsAt) <= new Date(startsAt))');
+    expect(submit).not.toMatch(/new Date\(parsed\.data\./);
+    expect(submit.indexOf('const startsAt')).toBeLessThan(submit.indexOf('new Date(endsAt)'));
+  });
+});
+
+describe('sleep adherence reads bedtimes on the family\'s clock (#688 comment 5922150055)', () => {
+  const log = (bedtime: string) => ({ id: bedtime, member_id: 'm', sleep_date: bedtime.slice(0, 10), bedtime, wake_time: bedtime, duration_min: 480, quality: null }) as never;
+  const routine = { target_bedtime: '21:30', days_of_week: [0, 1, 2, 3, 4, 5, 6] } as never;
+
+  it.each(['UTC', 'America/Los_Angeles', 'Asia/Tokyo'])('a UTC family\'s 21:30 bedtime meets its 21:30 routine on a %s phone', (device) => {
+    onDevice(device);
+    expect(routineAdherence(routine, [log('2026-09-30T21:30:00Z')], 'UTC')).toBe(100);
+    expect(consistencyScore([log('2026-09-29T21:30:00Z'), log('2026-09-30T21:30:00Z')], 'UTC')).toBe(100);
+  });
+
+  it('without the zone it read the phone\'s clock (the old answer on a Los Angeles phone)', () => {
+    onDevice('America/Los_Angeles');
+    expect(routineAdherence(routine, [log('2026-09-30T21:30:00Z')])).toBe(0);
+  });
+
+  it('the Sleep page passes the family\'s zone', () => {
+    const src = readFileSync(join(__dirname, '..', 'components/modules/sleep-module.tsx'), 'utf8');
+    expect(src).toContain('sleepSummary(memberLogs, routine, age, today, memberId, clock.timeZone)');
   });
 });
 

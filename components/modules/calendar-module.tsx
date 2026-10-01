@@ -1001,8 +1001,18 @@ function NewEventModal({ existing, onClose, onSaved }: {
     };
     const parsed = eventSchema.safeParse(input);
     if (!parsed.success) { setErrors(fieldErrors(parsed.error)); return; }
+    // The boxes hold naive wall clocks on the FAMILY's clock. `fromLocalInput`
+    // resolves them on the same clock the prefill above rendered them with, so
+    // Save on an untouched form stores the instants it opened with instead of
+    // re-applying this reader's offset. Compare those instants: `new Date()` on
+    // the naive text would read it on the device's clock, where a time the
+    // device skips (its own DST gap) moves (#688 comment 5922125002).
+    // `eventSchema` already rejected a blank start, so the `?? ''` is for the
+    // type and cannot fire.
+    const startsAt = fromLocalInput(parsed.data.starts_at, timeZone) ?? '';
+    const endsAt = fromLocalInput(parsed.data.ends_at, timeZone) ?? null;
     // End must be after start when both are provided.
-    if (parsed.data.ends_at && new Date(parsed.data.ends_at) <= new Date(parsed.data.starts_at)) {
+    if (endsAt && new Date(endsAt) <= new Date(startsAt)) {
       setErrors({ ends_at: tr('calendarModule.endAfterStart') });
       return;
     }
@@ -1012,13 +1022,8 @@ function NewEventModal({ existing, onClose, onSaved }: {
       const recurrence = String(form.get('recurrence') ?? 'none');
       const fields = {
         title: parsed.data.title,
-        // The box holds a naive wall clock; `fromLocalInput` resolves it on the
-        // same clock the prefill above rendered it with, so Save on an untouched
-        // form stores the instant it opened with instead of re-applying this
-        // reader's offset. `eventSchema` already rejected a blank start, so the
-        // `?? ''` is for the type and cannot fire.
-        startsAt: fromLocalInput(parsed.data.starts_at, timeZone) ?? '',
-        endsAt: fromLocalInput(parsed.data.ends_at, timeZone) ?? null,
+        startsAt,
+        endsAt,
         category: parsed.data.category,
         location: parsed.data.location ?? null,
         description: parsed.data.description ?? null,

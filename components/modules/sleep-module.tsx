@@ -74,7 +74,7 @@ export function SleepModule() {
   const routine = routines.data.find((r) => r.member_id === memberId) ?? null;
   const memberLogs = useMemo(() => logs.data.filter((l) => l.member_id === memberId), [logs.data, memberId]);
   const memberCheckins = useMemo(() => checkins.data.filter((c) => c.member_id === memberId), [checkins.data, memberId]);
-  const summary = useMemo(() => sleepSummary(memberLogs, routine, age, today, memberId), [memberLogs, routine, age, today, memberId]);
+  const summary = useMemo(() => sleepSummary(memberLogs, routine, age, today, memberId, clock.timeZone), [memberLogs, routine, age, today, memberId, clock.timeZone]);
   const fortnight = useMemo(() => recentLogs(memberLogs, memberId, today, 14).slice().reverse(), [memberLogs, memberId, today]);
   const correlations = useMemo(() => habitCorrelations(recentLogs(memberLogs, memberId, today, 30), memberCheckins), [memberLogs, memberCheckins, memberId, today]);
   const program = useMemo(() => weeklyProgram(summary, correlations, routine), [summary, correlations, routine]);

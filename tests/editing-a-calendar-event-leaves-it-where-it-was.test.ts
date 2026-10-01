@@ -230,8 +230,11 @@ describe('the modal hands the action an instant, not a box value', () => {
     expect(src()).toMatch(/import \{ fromLocalInput, toLocalInput \} from '@\/lib\/time\/local-input'/);
     // TIME-003: both directions take the FAMILY's zone, the same one on each
     // side, so the round trip is closed in the family's frame.
-    expect(src()).toMatch(/startsAt: fromLocalInput\(parsed\.data\.starts_at, timeZone\)/);
-    expect(src()).toMatch(/endsAt: fromLocalInput\(parsed\.data\.ends_at, timeZone\)/);
+    // Resolved once, compared (end after start) and saved as those same values
+    // (#688 comment 5922125002).
+    expect(src()).toMatch(/const startsAt = fromLocalInput\(parsed\.data\.starts_at, timeZone\)/);
+    expect(src()).toMatch(/const endsAt = fromLocalInput\(parsed\.data\.ends_at, timeZone\)/);
+    expect(src()).toMatch(/title: parsed\.data\.title,\n\s*startsAt,\n\s*endsAt,/);
     expect(src()).toMatch(/defaultValue=\{toLocalInput\(existing\?\.starts_at \?\? null, timeZone\)\}/);
   });
 
