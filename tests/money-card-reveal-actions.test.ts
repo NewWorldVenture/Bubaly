@@ -265,3 +265,35 @@ describe('create reveal nonce, settled errors and synthetic provider boundary', 
     audit.resolve(); expect(await pending).toEqual({ ok: true, data: { ephemeralKeySecret: ephemeral, stripeCardId: 'ic_synthetic', publishableKey: publishable, stripeAccount: 'acct_synthetic' } });
   });
 });
+
+describe('reveal refuses failed prerequisites and unusable key data', () => {
+  describe.each([
+    ['stripe_issuing_cards', 'money.couldNotLoadTheCard'],
+    ['stripe_connected_accounts', 'money.couldNotLoadTheConnectedAccount'],
+  ] as const)('%s prepare failures', (table, key) => {
+    it.each(['resolved-empty', 'resolved-stale', 'rejected'] as const)('refuses %s lookup failure rather than successful preparation or false absence', async mode => {
+      if (mode === 'rejected') replies[table].rejection = new Error(detail);
+      else { replies[table].error = new Error(detail); if (mode === 'resolved-empty') replies[table].data = null; }
+      await expect.soft(prepareCardRevealAction(cardId)).resolves.toEqual({ ok: false, error: `translated:${key}` });
+      expect.soft(mock.publishableKey).not.toHaveBeenCalled(); noKeyEffects();
+    });
+  });
+  it.each([
+    ['prepare', () => prepareCardRevealAction(cardId)],
+    ['create', () => createCardRevealAction({ cardId, nonce })],
+  ] as const)('returns a safe result for %s capability rejection', async (_name, action) => {
+    mock.capabilities.mockRejectedValue(new Error(detail));
+    await expect.soft(action()).resolves.toEqual({ ok: false, error: 'translated:money.couldNotLoadCardIssuingCapabilities' });
+    expect(mock.from).not.toHaveBeenCalled(); noKeyEffects();
+  });
+  it.each([{}, { secret: null }, { secret: '' }])('refuses incomplete synthetic ephemeral response %j without success audit', async response => {
+    mock.ephemeral.mockResolvedValue(response);
+    await expect.soft(createCardRevealAction({ cardId, nonce })).resolves.toEqual({ ok: false, error: 'translated:money.couldNotStartTheCardReveal' });
+    expect.soft(mock.audit).not.toHaveBeenCalled();
+    expect.soft(console.error).not.toHaveBeenCalled();
+  });
+  it.each([123, {}])('refuses malformed nonce %j as a safe Result before lookups', async value => {
+    await expect.soft(createCardRevealAction({ cardId, nonce: value as unknown as string })).resolves.toEqual({ ok: false, error: 'translated:actions.missingRevealSession' });
+    expect(mock.from).not.toHaveBeenCalled(); noKeyEffects();
+  });
+});
