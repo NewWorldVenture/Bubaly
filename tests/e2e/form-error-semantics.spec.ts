@@ -230,9 +230,9 @@ test.describe('form errors: what an invalid, refused and recovered submit expose
       });
 
       test('paperwork: keyboard focus is not dropped to the page after a refused or a saved paste', async ({ page }) => {
-        // Reproduced: the natively disabled pending submit drops focus to
-        // <body> on a refusal, and a save unmounts the composer around it.
-        test.fail();
+        // Was: the natively disabled pending submit dropped focus to <body> on
+        // a refusal, and a save unmounted the composer around it. The submit is
+        // now aria-disabled while pending, and a save hands focus to the toggle.
         const { text, submit } = await openComposer(page);
         await refuseNextAction(page);
         await text.fill(PAPER);
@@ -240,12 +240,14 @@ test.describe('form errors: what an invalid, refused and recovered submit expose
         await page.keyboard.press('Enter');
         await expect(page.getByRole('alert').first()).toBeVisible();
         expect(await focusIsBody(page)).toBe(false);
+        await expect(submit).toBeFocused();
         await page.unroute('**/dashboard/paperwork');
         await text.fill(PAPER);
         await submit.focus();
         await page.keyboard.press('Enter');
         await expect(text).toBeHidden();
         expect(await focusIsBody(page)).toBe(false);
+        await expect(page.getByRole('button', { name: 'Add paperwork' })).toBeFocused();
       });
 
       test('paperwork: a whitespace-only paste is not closed as if it were done', async ({ page }) => {

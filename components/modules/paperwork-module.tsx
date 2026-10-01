@@ -3,7 +3,7 @@
 // Paperwork Inbox — mobile-first triage for family paperwork. Status filter
 // chips, urgency-ranked cards with the AI-extracted action items, one-tap
 // materialization (calendar event / reminder), and a paste-to-capture composer.
-import { useMemo, useState, useTransition } from 'react';
+import { useMemo, useRef, useState, useTransition } from 'react';
 import {
   Inbox, FileSignature, School, Stethoscope, Trophy, Receipt, PartyPopper,
   FileText, Plus, Check, CalendarPlus, BellPlus, Archive, RotateCcw, CalendarCheck,
@@ -71,6 +71,7 @@ export function PaperworkModule({ items }: { items: Item[] }) {
   const router = useRouter();
   const [filter, setFilter] = useState<(typeof FILTERS)[number]['key']>('needs_action');
   const [composerOpen, setComposerOpen] = useState(false);
+  const composerToggle = useRef<HTMLButtonElement>(null);
   const [pending, startTransition] = useTransition();
   const [busyKey, setBusyKey] = useState<string | null>(null);
   const [drafts, setDrafts] = useState<Record<string, string>>({});
@@ -152,6 +153,7 @@ export function PaperworkModule({ items }: { items: Item[] }) {
           <p className="mt-1 max-w-xl text-sm text-muted">{t('paperworkModule.pasteAnySlipFormOr')}</p>
         </div>
         <button
+          ref={composerToggle}
           onClick={() => setComposerOpen((v) => !v)}
           className="inline-flex h-10 items-center gap-2 rounded-xl bg-brand px-4 text-sm font-bold text-brand-fg transition hover:opacity-90"
         >
@@ -164,7 +166,9 @@ export function PaperworkModule({ items }: { items: Item[] }) {
       {composerOpen && <div className="mt-4 space-y-4">
         <DocumentCapture onSaved={() => { setFilter('needs_action'); router.refresh(); }} />
         <a className="my-3 block text-sm text-brand-text underline" href="/capture/link">{t('documentLink.title')}</a>
-        <Composer onDone={() => setComposerOpen(false)} />
+        {/* A save closes the composer around the focused submit; hand focus to
+            the toggle that opened it rather than letting it fall to <body>. */}
+        <Composer onDone={() => { setComposerOpen(false); composerToggle.current?.focus(); }} />
       </div>}
 
       {/* Filter chips */}
@@ -344,10 +348,14 @@ function Composer({ onDone }: { onDone: () => void }) {
   const t = useTranslations();
   const { error: toastError } = useToast();
   const [pending, startTransition] = useTransition();
+  // Refuses a second submit while one is in flight: the submit stays focusable
+  // (aria-disabled, not disabled), so it no longer blocks one natively.
+  const submitting = useRef(false);
 
   return (
     <form
       onSubmit={(e) => {
+        if (submitting.current) { e.preventDefault(); return; }
         // Native `required` accepts a paste of only spaces, which the action
         // trims to nothing and answers ok without saving. Treat it as the empty
         // paste it is, so the browser refuses it the same way.
@@ -359,6 +367,7 @@ function Composer({ onDone }: { onDone: () => void }) {
         }
       }}
       action={(fd) => startTransition(async () => {
+        submitting.current = true;
         // A throw here used to leave the form open with nothing said; a
         // step-up refusal is answered, not thrown, and goes to the code page.
         // Production redacts a thrown action's message, so it is read with
@@ -374,6 +383,7 @@ function Composer({ onDone }: { onDone: () => void }) {
             ? t(`actionRefusal.${refusal}`)
             : err instanceof Error && err.message ? err.message : t('globalError.somethingWentWrong'));
         }
+        finally { submitting.current = false; }
       })}
       className="mt-4 rounded-2xl border border-brand/30 bg-brand/[0.05] p-4"
     >
@@ -394,10 +404,12 @@ function Composer({ onDone }: { onDone: () => void }) {
           placeholder={t('paperwork.fromSchoolCoachClinicOptional')}
           className="h-10 flex-1 rounded-xl border border-border bg-bg px-3 text-sm text-fg outline-none ring-brand/50 placeholder:text-muted focus:ring-2"
         />
+        {/* aria-disabled, not disabled: a natively disabled submit drops the
+            keyboard focus that pressed it to <body> while the action runs. */}
         <button
           type="submit"
-          disabled={pending}
-          className="inline-flex h-10 items-center justify-center gap-2 rounded-xl bg-brand px-5 text-sm font-bold text-brand-fg transition hover:opacity-90 disabled:opacity-60"
+          aria-disabled={pending || undefined}
+          className="inline-flex h-10 items-center justify-center gap-2 rounded-xl bg-brand px-5 text-sm font-bold text-brand-fg transition hover:opacity-90 aria-disabled:opacity-60"
         >
           {pending ? <Loader2 className="h-4 w-4 animate-spin" /> : <Plus className="h-4 w-4" />}
           {t('paperwork.triageIt')}
