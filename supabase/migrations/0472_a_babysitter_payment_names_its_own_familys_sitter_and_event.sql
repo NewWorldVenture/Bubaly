@@ -158,13 +158,20 @@ comment on function public.babysitter_payment_parent_keeps_its_family() is
 
 -- Install, in ONE statement, holding writers out from before the check until
 -- the triggers exist. SHARE ROW EXCLUSIVE conflicts with every INSERT, UPDATE
--- and DELETE (ROW EXCLUSIVE) and is the lock CREATE TRIGGER takes anyway, so
--- nothing is upgraded mid-way. Without it (review 5373272320): a payment
+-- and DELETE (ROW EXCLUSIVE). Without it (review 5373272320): a payment
 -- written but not yet committed is invisible to the check, the trigger
 -- creation then waits for it, and it is kept once it commits. Now the lock
 -- waits for that writer first, the check sees its committed row, and the
--- whole block fails with no trigger installed. Readers are not blocked; writes
--- to the three tables wait for the length of two counts and three triggers.
+-- whole block fails with no trigger installed.
+--
+-- The triggers are created with CREATE OR REPLACE, not DROP + CREATE, so the
+-- block never needs more than that lock. DROP TRIGGER on a trigger that
+-- exists takes ACCESS EXCLUSIVE, which would upgrade the lock mid-block when
+-- this file is applied a second time, and block readers until it commits.
+-- CREATE OR REPLACE TRIGGER takes SHARE ROW EXCLUSIVE whether or not the
+-- trigger exists (measured with pg_locks on PostgreSQL 16, first application
+-- and re-application). So readers are not blocked, on either application;
+-- writes to the three tables wait for two counts and three trigger creations.
 --
 -- A missing table is a failed precondition, not a quiet no-op: every one of
 -- these exists from 0088 and earlier, and "installed nothing, recorded
@@ -201,19 +208,16 @@ begin
       cross_sitter, cross_event;
   end if;
 
-  drop trigger if exists trg_babysitter_payments_reference_family on public.babysitter_payments;
-  create trigger trg_babysitter_payments_reference_family
+  create or replace trigger trg_babysitter_payments_reference_family
     before insert or update of babysitter_id, event_id, family_id on public.babysitter_payments
     for each row execute function public.babysitter_payment_references_own_family();
 
-  drop trigger if exists trg_babysitter_profiles_keep_paid_family on public.babysitter_profiles;
-  create trigger trg_babysitter_profiles_keep_paid_family
+  create or replace trigger trg_babysitter_profiles_keep_paid_family
     before update of family_id on public.babysitter_profiles
     for each row when (old.family_id is distinct from new.family_id)
     execute function public.babysitter_payment_parent_keeps_its_family('babysitter_id');
 
-  drop trigger if exists trg_calendar_events_keep_paid_family on public.calendar_events;
-  create trigger trg_calendar_events_keep_paid_family
+  create or replace trigger trg_calendar_events_keep_paid_family
     before update of family_id on public.calendar_events
     for each row when (old.family_id is distinct from new.family_id)
     execute function public.babysitter_payment_parent_keeps_its_family('event_id');

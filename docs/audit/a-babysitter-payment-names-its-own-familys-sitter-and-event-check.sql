@@ -10,9 +10,10 @@
 -- filed in B cannot name A's babysitter, and A's payment cannot be moved to B:
 -- the rule is about the rows, not the caller's rights. Still allowed: a
 -- payment naming no babysitter, one naming A's archived babysitter, and
--- deleting a paid babysitter (ON DELETE SET NULL keeps the payment). Then, still inside the same transaction, the guards
--- are disabled and the same writes must LAND, or the refusals above were not
--- the guards' doing.
+-- deleting a paid babysitter (ON DELETE SET NULL keeps the payment). Then,
+-- still inside the same transaction, the guards are disabled and every refused
+-- write (fresh, re-pointed, moved) is repeated by the same caller and must
+-- land on exactly one row, or its refusal above was not the guards' doing.
 --
 -- RACES. What the server action could not close (#701): the reference is read,
 -- Trust is awaited, and only then is the payment written. Two real sessions,
@@ -103,6 +104,7 @@ declare
   paid uuid;
   paidLeaving uuid;
   leftover uuid;
+  probe text[];
   n int;
   failures int := 0;
 begin
@@ -279,36 +281,49 @@ begin
   reset role;
 
   -- 12. NEGATIVE CONTROL, in this same rolled-back transaction: with the three
-  --     triggers disabled, the same refused writes must land. If they do not,
-  --     2, 3, 9 and 10 were refused by something other than 0472.
+  --     triggers disabled, every write refused in 2-5 and 9-11 is repeated by
+  --     the same caller and must land on exactly one row. If one does not, its
+  --     refusal above came from something other than 0472. The payment moved
+  --     to B (11) and the re-points (4, 5) are put back before the parent
+  --     moves, so 9 and 10 still move rows that A's payments name. The undo
+  --     steps are writes the guards allow anyway; they are counted only so a
+  --     silent no-op cannot pass.
   alter table public.babysitter_payments disable trigger trg_babysitter_payments_reference_family;
   alter table public.babysitter_profiles disable trigger trg_babysitter_profiles_keep_paid_family;
   alter table public.calendar_events disable trigger trg_calendar_events_keep_paid_family;
-  perform set_config('request.jwt.claim.sub', uA::text, true);
-  set local role authenticated;
-  begin
-    insert into public.babysitter_payments (family_id, babysitter_id, event_id, amount_cents, status, created_by)
-      values (famA, sitterB, eventB, 5000, 'completed', uA);
-  exception when others then
-    raise warning 'UNPROVEN: with the payment guard disabled A still could not name B''s rows (% %)', sqlstate, sqlerrm;
-    failures := failures + 1;
-  end;
-  reset role;
-  perform set_config('request.jwt.claim.sub', uAB::text, true);
-  set local role authenticated;
-  begin
-    update public.babysitter_profiles set family_id = famB where id = sitterA;
-    update public.calendar_events set family_id = famB where id = eventA;
-  exception when others then
-    raise warning 'UNPROVEN: with the parent guards disabled the named rows still could not move (% %)', sqlstate, sqlerrm;
-    failures := failures + 1;
-  end;
-  reset role;
+  foreach probe slice 1 in array array[
+    ['2', uA::text, format('insert into public.babysitter_payments (family_id, babysitter_id, amount_cents, status, created_by) values (%L, %L, 5000, %L, %L)', famA, sitterB, 'completed', uA)],
+    ['3', uA::text, format('insert into public.babysitter_payments (family_id, babysitter_id, event_id, amount_cents, status, created_by) values (%L, %L, %L, 5000, %L, %L)', famA, sitterA, eventB, 'completed', uA)],
+    ['4', uA::text, format('update public.babysitter_payments set babysitter_id = %L where id = %L', sitterB, paid)],
+    ['4 undone', uA::text, format('update public.babysitter_payments set babysitter_id = %L where id = %L', sitterA, paid)],
+    ['5', uA::text, format('update public.babysitter_payments set event_id = %L where id = %L', eventB, paid)],
+    ['5 undone', uA::text, format('update public.babysitter_payments set event_id = %L where id = %L', eventA, paid)],
+    ['11 (payment moved)', uAB::text, format('update public.babysitter_payments set family_id = %L where id = %L', famB, paid)],
+    ['11 undone', uAB::text, format('update public.babysitter_payments set family_id = %L where id = %L', famA, paid)],
+    ['11 (B payment)', uAB::text, format('insert into public.babysitter_payments (family_id, babysitter_id, amount_cents, status, created_by) values (%L, %L, 5000, %L, %L)', famB, sitterA, 'completed', uAB)],
+    ['9', uAB::text, format('update public.babysitter_profiles set family_id = %L where id = %L', famB, sitterA)],
+    ['10', uAB::text, format('update public.calendar_events set family_id = %L where id = %L', famB, eventA)]
+  ] loop
+    perform set_config('request.jwt.claim.sub', probe[2], true);
+    set local role authenticated;
+    begin
+      execute probe[3];
+      get diagnostics n = row_count;
+      if n <> 1 then
+        raise warning 'UNPROVEN: with the guards disabled, write % did not land (rows: %)', probe[1], n;
+        failures := failures + 1;
+      end if;
+    exception when others then
+      raise warning 'UNPROVEN: with the guards disabled, write % was still refused (% %)', probe[1], sqlstate, sqlerrm;
+      failures := failures + 1;
+    end;
+    reset role;
+  end loop;
 
   if failures > 0 then
     raise exception '0472 static: % assertion(s) failed', failures;
   end if;
-  raise notice '0472 static: OK — A pays only A''s babysitter and event; named rows stay; a manager of both is held to it, payment moves included; missing ids are the foreign key''s; no babysitter, an archived one and a deleted one (reference cleared) are still A''s; disabling the guards lets every refused write land';
+  raise notice '0472 static: OK — A pays only A''s babysitter and event; named rows stay; a manager of both is held to it, payment moves included; missing ids are the foreign key''s; no babysitter, an archived one and a deleted one (reference cleared) are still A''s; with the guards disabled, each refused write (2, 3, 4, 5, 9, 10, 11) lands on one row';
 end
 $static$;
 rollback;
