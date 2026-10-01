@@ -250,6 +250,31 @@ test.describe('form errors: what an invalid, refused and recovered submit expose
         await expect(page.getByRole('button', { name: 'Add paperwork' })).toBeFocused();
       });
 
+      test('paperwork: a save that lands after the reader has moved on leaves their focus alone', async ({ page }) => {
+        // Review 5941818072 on #778: the save used to hand focus to the toggle
+        // unconditionally, so a late answer pulled the reader back from
+        // wherever they had gone. It now does so only while the composer that
+        // sent it still holds the focus.
+        const { text, submit } = await openComposer(page);
+        let release!: () => void;
+        const held = new Promise<void>((resolve) => { release = resolve; });
+        await page.route('**/dashboard/paperwork', async (route) => {
+          if (route.request().method() === 'POST' && route.request().headers()['next-action']) await held;
+          await route.continue();
+        });
+        await text.fill(PAPER);
+        await submit.click();
+        await page.getByRole('button', { name: 'Close' }).click();
+        await expect(text).toBeHidden();
+        const elsewhere = page.getByRole('button', { name: 'Archived', exact: true });
+        await elsewhere.focus();
+        const answered = page.waitForResponse((r) => r.request().method() === 'POST' && !!r.request().headers()['next-action']);
+        release();
+        await answered;
+        await page.waitForLoadState('networkidle');
+        await expect(elsewhere).toBeFocused();
+      });
+
       test('paperwork: a whitespace-only paste is not closed as if it were done', async ({ page }) => {
         // Was: native `required` accepted spaces, the action trimmed them to
         // nothing and answered ok without saving, and the composer closed with

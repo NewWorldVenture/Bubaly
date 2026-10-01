@@ -167,8 +167,10 @@ export function PaperworkModule({ items }: { items: Item[] }) {
         <DocumentCapture onSaved={() => { setFilter('needs_action'); router.refresh(); }} />
         <a className="my-3 block text-sm text-brand-text underline" href="/capture/link">{t('documentLink.title')}</a>
         {/* A save closes the composer around the focused submit; hand focus to
-            the toggle that opened it rather than letting it fall to <body>. */}
-        <Composer onDone={() => { setComposerOpen(false); composerToggle.current?.focus(); }} />
+            the toggle that opened it rather than letting it fall to <body> —
+            but only while that composer still holds it, so a late save never
+            pulls focus from wherever the reader has gone since. */}
+        <Composer onDone={(ownsFocus) => { setComposerOpen(false); if (ownsFocus) composerToggle.current?.focus(); }} />
       </div>}
 
       {/* Filter chips */}
@@ -344,16 +346,24 @@ export function PaperworkModule({ items }: { items: Item[] }) {
   );
 }
 
-function Composer({ onDone }: { onDone: () => void }) {
+function Composer({ onDone }: { onDone: (ownsFocus: boolean) => void }) {
   const t = useTranslations();
   const { error: toastError } = useToast();
   const [pending, startTransition] = useTransition();
   // Refuses a second submit while one is in flight: the submit stays focusable
   // (aria-disabled, not disabled), so it no longer blocks one natively.
   const submitting = useRef(false);
+  const form = useRef<HTMLFormElement>(null);
+  // Whether this composer still holds the focus: it is mounted and focus is
+  // inside it, or has fallen to <body> as its submit went away.
+  const ownsFocus = () => {
+    const active = document.activeElement;
+    return !!form.current?.isConnected && (!active || active === document.body || form.current.contains(active));
+  };
 
   return (
     <form
+      ref={form}
       onSubmit={(e) => {
         if (submitting.current) { e.preventDefault(); return; }
         // Native `required` accepts a paste of only spaces, which the action
@@ -375,7 +385,7 @@ function Composer({ onDone }: { onDone: () => void }) {
         try {
           const res = await addPaperworkAction(fd);
           if (!res.ok) { reportRefusal(res, toastError); return; }
-          onDone();
+          onDone(ownsFocus());
         }
         catch (err) {
           const refusal = refusalForThrown(err, process.env.NODE_ENV === 'production');
