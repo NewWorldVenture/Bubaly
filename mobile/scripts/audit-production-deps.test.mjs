@@ -98,7 +98,10 @@ test('output that is not a complete version-2 report fails', () => {
     ['vulnerabilities as an empty array with zero counts', { auditReportVersion: 2, vulnerabilities: [], metadata: { vulnerabilities: zero } }, /not a map/],
     ['a dependency the report does not list', missingTarget, /does not list/],
     ['a moderate package whose dependency is not listed', report([['expo', 'moderate', ['missing-package']]]), /depends on missing-package, which the report does not list/],
-    ['a high package with no high advisory beneath it', unjustified, /no listed advisory or dependency is/],
+    ['a high package with no high advisory beneath it', unjustified, /expo is high but reaches no high or critical advisory/],
+    ['a high package that depends only on itself', report([['a', 'high', ['a']]]), /a is high but reaches no high or critical advisory/],
+    ['a high cycle that reaches no advisory', report([['a', 'high', ['b']], ['b', 'high', ['a']]]), /reaches no high or critical advisory/],
+    ['a high package whose only advisory is moderate', report([['a', 'high', [advisory('GHSA-w5hq-g745-h8pq', 'moderate')]]]), /a is high but reaches no high or critical advisory/],
     ['metadata that disagrees with the packages', wrongCounts, /metadata counts 3 high, the report lists 4/],
     ['a metadata total that disagrees', { ...TODAY, metadata: { vulnerabilities: { ...TODAY.metadata.vulnerabilities, total: 99 } } }, /metadata total is 99/],
     ['version 1', { ...TODAY, auditReportVersion: 1 }, /not 2/],
@@ -112,6 +115,16 @@ test('output that is not a complete version-2 report fails', () => {
   }
   assert.equal(auditGate(run('npm ERR! something'), '2026-10-02', RULE).ok, false, 'not JSON');
   assert.equal(reportProblem(TODAY), null);
+});
+
+test('a dependency cycle is judged by the advisory it reaches, not refused for being a cycle', () => {
+  const cycle = (id) => report([['a', 'high', ['b']], ['b', 'high', ['a', 'forge']], ['forge', 'high', [advisory(id, 'high')]]]);
+  assert.equal(reportProblem(cycle('GHSA-aaaa-bbbb-cccc')), null);
+  assert.equal(auditGate(run(cycle('GHSA-aaaa-bbbb-cccc')), '2026-10-02', RULE).ok, true);
+  assert.equal(auditGate(run(cycle('GHSA-dddd-eeee-ffff')), '2026-10-02', RULE).ok, false);
+  // The cycle's own members can carry the advisory too.
+  const selfAnchored = report([['a', 'high', ['b', advisory('GHSA-aaaa-bbbb-cccc', 'high')]], ['b', 'high', ['a']]]);
+  assert.equal(auditGate(run(selfAnchored), '2026-10-02', RULE).ok, true);
 });
 
 test('every committed exception names one advisory, a real date and a reason', () => {

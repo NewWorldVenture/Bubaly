@@ -44,8 +44,9 @@ export function runProblem(run) {
 /**
  * Why a parsed report is not a complete, self-consistent `npm audit --json`
  * version-2 report, or null. Every "depends on" name must be listed, every
- * high or critical package must trace to a high or critical advisory, and the
- * metadata counts must equal the listed packages.
+ * high or critical package must reach a high or critical advisory through its
+ * high or critical dependencies (a cycle that reaches none does not count), and
+ * the metadata counts must equal the listed packages.
  */
 export function reportProblem(report) {
   if (!isMap(report)) return 'the report is not an object';
@@ -60,19 +61,29 @@ export function reportProblem(report) {
     if (!isMap(entry) || !SEVERITIES.includes(entry.severity)) return `${pkg} has no known severity`;
     if (!Array.isArray(entry.via) || entry.via.length === 0) return `${pkg} has no via list`;
     listed[entry.severity] += 1;
-    let justified = !FAILING_SEVERITIES.includes(entry.severity);
     for (const via of entry.via) {
       if (typeof via === 'string') {
         if (!Object.hasOwn(entries, via)) return `${pkg} depends on ${via}, which the report does not list`;
-        if (FAILING_SEVERITIES.includes(entries[via]?.severity)) justified = true;
-      } else if (isMap(via) && SEVERITIES.includes(via.severity)) {
-        if (FAILING_SEVERITIES.includes(via.severity)) justified = true;
-      } else {
+      } else if (!isMap(via) || !SEVERITIES.includes(via.severity)) {
         return `${pkg} has a malformed advisory`;
       }
     }
-    if (!justified) return `${pkg} is ${entry.severity} but no listed advisory or dependency is`;
   }
+  // The high or critical packages that reach a high or critical advisory: those
+  // listing one themselves, then, to a fixed point, those depending on one that does.
+  const failing = Object.keys(entries).filter((pkg) => FAILING_SEVERITIES.includes(entries[pkg].severity));
+  const anchored = new Set(failing.filter((pkg) => entries[pkg].via.some((via) => isMap(via) && FAILING_SEVERITIES.includes(via.severity))));
+  for (let grew = true; grew;) {
+    grew = false;
+    for (const pkg of failing) {
+      if (!anchored.has(pkg) && entries[pkg].via.some((via) => typeof via === 'string' && anchored.has(via))) {
+        anchored.add(pkg);
+        grew = true;
+      }
+    }
+  }
+  const unanchored = failing.find((pkg) => !anchored.has(pkg));
+  if (unanchored) return `${unanchored} is ${entries[unanchored].severity} but reaches no high or critical advisory`;
   for (const s of SEVERITIES) {
     if (counts[s] !== listed[s]) return `metadata counts ${JSON.stringify(counts[s])} ${s}, the report lists ${listed[s]}`;
   }
