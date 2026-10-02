@@ -129,6 +129,25 @@ function contentDrift(stored: TodoItem, wanted: TodoContent): string[] {
   return drift;
 }
 
+/** A task's member reference must share its server-derived family scope. */
+async function checkTodoAssignee(scope: ServiceScope, memberId: string | null): Promise<ServiceResult<null>> {
+  if (memberId === null) return ok(null);
+  if (typeof memberId !== 'string' || !memberId.trim()) {
+    return fail('That task assignee could not be found.', { code: SERVICE_CODES.notFound });
+  }
+  try {
+    const { data, error } = await scope.db.from('family_members')
+      .select('id, family_id').eq('id', memberId).eq('family_id', scope.familyId).maybeSingle();
+    if (error) return fail(describeDbError(error, 'Could not verify that task assignee.'), { code: SERVICE_CODES.db });
+    if (!data || typeof data !== 'object' || Array.isArray(data) || data.id !== memberId || data.family_id !== scope.familyId) {
+      return fail('That task assignee could not be found.', { code: SERVICE_CODES.notFound });
+    }
+    return ok(null);
+  } catch (error) {
+    return fail(describeDbError(error, 'Could not verify that task assignee.'), { code: SERVICE_CODES.db });
+  }
+}
+
 export async function createTodo(
   scope: ServiceScope,
   input: CreateTodoInput,
@@ -140,11 +159,14 @@ export async function createTodo(
     return fail('A due date must look like 2026-09-05.', { code: SERVICE_CODES.invalidInput });
   }
 
+  const assigneeId = input.assigneeId !== undefined ? input.assigneeId : scope.memberId;
+  const assignee = await checkTodoAssignee(scope, assigneeId ?? null);
+  if (!assignee.ok) return assignee;
+
   const list = input.listId ? { ok: true as const, data: { id: input.listId } } : await ensureTodoList(scope);
   if (!list.ok) return list;
 
   const priority = input.priority && TODO_PRIORITIES.includes(input.priority) ? input.priority : 'medium';
-  const assigneeId = input.assigneeId !== undefined ? input.assigneeId : scope.memberId;
   const wanted: TodoContent = {
     list_id: list.data.id,
     title,
@@ -229,6 +251,8 @@ export async function completeTodo(scope: ServiceScope, todoId: string, done = t
 
 /** `memberId` is a `family_members.id`; null unassigns. */
 export async function assignTodo(scope: ServiceScope, todoId: string, memberId: string | null): Promise<ServiceResult<TodoItem>> {
+  const assignee = await checkTodoAssignee(scope, memberId);
+  if (!assignee.ok) return assignee;
   const { data, error } = await scope.db
     .from('todo_items')
     .update({ assigned_to_id: memberId })
@@ -289,6 +313,11 @@ export async function updateTodo(scope: ServiceScope, todoId: string, patch: Upd
 
   if (Object.keys(update).length === 0) {
     return fail('Nothing to change on that task.', { code: SERVICE_CODES.invalidInput });
+  }
+
+  if (patch.assigneeId !== undefined) {
+    const assignee = await checkTodoAssignee(scope, patch.assigneeId);
+    if (!assignee.ok) return assignee;
   }
 
   const { data, error } = await scope.db

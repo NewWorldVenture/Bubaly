@@ -126,6 +126,7 @@ beforeEach(() => {
     },
   });
   db.seed('todo_lists', [{ id: LIST, family_id: FAMILY, name: 'Tasks', created_by: MEMBER, sort_order: 0 }]);
+  db.seed('family_members', [{ id: MEMBER, family_id: FAMILY }]);
   mocks.requireUserContext.mockResolvedValue(CTX);
   mocks.createServer.mockResolvedValue(db);
 });
