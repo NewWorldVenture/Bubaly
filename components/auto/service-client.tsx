@@ -6,7 +6,7 @@ import { ActionError, useActionError } from '@/components/ui/action-error';
 import { Wrench, Plus, Trash2 } from 'lucide-react';
 import { saveAutoServiceAction, deleteAutoServiceAction } from '@/app/(app)/dashboard/auto/actions';
 import { vehicleLabel } from '@/lib/auto/renewals';
-import { fmtDate } from '@/lib/utils/format';
+import { useFormat } from '@/components/i18n/use-format';
 import type { Tables } from '@/lib/database.types';
 import { Card } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
@@ -16,12 +16,15 @@ import { Input, Select, Textarea } from '@/components/ui/input';
 import { Field } from '@/components/home/field';
 import { EmptyState } from '@/components/ui/states';
 import { useLocale, useTranslations } from '@/components/i18n/locale-provider';
+import { useFamilyClock } from '@/components/i18n/use-format';
 import { formatCents } from '@/lib/wallet/ledger';
 
 type AutoService = Tables<'auto_service_records'>;
 type Vehicle = Tables<'vehicles'>;
 
 export function AutoServiceClient({ records, vehicles }: { records: AutoService[]; vehicles: Vehicle[] }) {
+  const clock = useFamilyClock();
+  const { fmtDate } = useFormat();
   const t = useTranslations();
   const locale = useLocale();
   // In the reader's format. `auto_service_records.cost` is dollars (numeric, not
@@ -71,7 +74,7 @@ export function AutoServiceClient({ records, vehicles }: { records: AutoService[
           <Field label={t('serviceClient.whatWasDone')}><Input name="title" required placeholder={t('serviceClient.oilChangeRotation')} /></Field>
           <div className="grid grid-cols-2 gap-3">
             <Field label={t('serviceClient.vehicle')}><Select name="vehicle_id" defaultValue=""><option value="">—</option>{vehicles.map((v) => <option key={v.id} value={v.id}>{vehicleLabel(v)}</option>)}</Select></Field>
-            <Field label={t('serviceClient.date')}><Input type="date" name="service_date" defaultValue={new Date().toISOString().slice(0, 10)} /></Field>
+            <Field label={t('serviceClient.date')}><Input type="date" name="service_date" defaultValue={clock.todayKey()} /></Field>
           </div>
           <div className="grid grid-cols-3 gap-3">
             <Field label={t('serviceClient.provider')}><Input name="provider" /></Field>

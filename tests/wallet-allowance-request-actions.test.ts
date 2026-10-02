@@ -313,11 +313,13 @@ describe('decideAllowanceRequestAction (ACTION-B474AE170511)', () => {
     expect(harness.revalidatePath).not.toHaveBeenCalled();
   });
 
-  it('a Trust answer short of a denial does not stop an approval', async () => {
-    harness.decision = { effect: 'require_approval', reason: 'Needs a second parent.', basis: 'policy' };
+  it('a Trust requirement for another approval stops the credit before the RPC', async () => {
+    const decision = { effect: 'require_approval', reason: 'Needs a second parent.', basis: 'policy' } as const;
+    harness.decision = decision;
 
-    expect(await decide()).toEqual({ ok: true });
-    expect(decideCalls).toHaveLength(1);
+    expect(await decide()).toEqual({ ok: false, error: householdPolicyBlocked(t, decision) });
+    expect(decideCalls).toHaveLength(0);
+    expect(harness.revalidatePath).not.toHaveBeenCalled();
   });
 
   it('a Trust denial does not stop a rejection, which moves no money', async () => {

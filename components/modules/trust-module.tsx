@@ -31,6 +31,8 @@ import { useLocale, usePlural, useTranslations } from '@/components/i18n/locale-
 import { explainTrustDecision, isAcceptedPolicy } from '@/lib/ai/explanation';
 import { TrustSharingSection } from '@/components/modules/trust-sharing-section';
 import type { LocaleCode } from '@/lib/i18n/locales';
+import { useFormat } from '@/components/i18n/use-format';
+import type { Format } from '@/lib/utils/format';
 
 // What a person reads for a grant's effect; the stored values stay identifiers.
 const TRUST_STATE_KEYS: Record<string, string> = {
@@ -103,9 +105,8 @@ function amountIn(locale: LocaleCode, cents: number | null) {
   if (cents == null) return null;
   return new Intl.NumberFormat(locale, { style: 'currency', currency: 'USD', maximumFractionDigits: 0 }).format(cents / 100);
 }
-const fmtWhenIn = (locale: LocaleCode) => (iso: string) => {
-  return new Date(iso).toLocaleString(locale, { month: 'short', day: 'numeric', hour: 'numeric', minute: '2-digit' });
-};
+// In the family's zone (TIME-003), through the shared formatter.
+const fmtWhenWith = (fmtDate: Format['fmtDate']) => (iso: string) => fmtDate(iso, 'MMM d, h:mm a');
 /**
  * How long a delegation has left. FORWARD-facing, so it is not `fmtTimeAgo` —
  * and every rung was an English literal, which the hardcoded-locale scan cannot
@@ -206,8 +207,7 @@ function ApprovalsTab({ approvals, members, canManage, needsYouHref, basedOn }: 
   /** Context slice names per approval id (M24); absent for a viewer who may not see them. */
   basedOn?: Record<string, BasedOn>;
 }) {
-  const locale = useLocale();
-  const fmtWhen = fmtWhenIn(locale.code);
+  const fmtWhen = fmtWhenWith(useFormat().fmtDate);
   const tr = useTranslations();
   const router = useRouter();
   // Optimistic: a decided card leaves the inbox at once; router.refresh()
@@ -608,8 +608,7 @@ function PermissionsTab({ members, grants, canManage }: { members: Member[]; gra
 
 // ─── Delegations ─────────────────────────────────────────────────────────────
 function DelegationsTab({ delegations, members, canManage }: { delegations: Delegation[]; members: Member[]; canManage: boolean }) {
-  const locale = useLocale();
-  const fmtWhen = fmtWhenIn(locale.code);
+  const fmtWhen = fmtWhenWith(useFormat().fmtDate);
   const tr = useTranslations();
   const timeLeft = timeLeftIn(tr);
   const router = useRouter();
@@ -718,8 +717,7 @@ function DelegationModal({ members, onClose, onSaved }: { members: Member[]; onC
 
 // ─── Emergency ────────────────────────────────────────────────────────────────
 function EmergencyTab({ active, canManage }: { active: Emergency | null; canManage: boolean }) {
-  const locale = useLocale();
-  const fmtWhen = fmtWhenIn(locale.code);
+  const fmtWhen = fmtWhenWith(useFormat().fmtDate);
   const tr = useTranslations();
   const router = useRouter();
   const { success, error: toastError } = useToast();
@@ -804,8 +802,7 @@ function EmergencyTab({ active, canManage }: { active: Emergency | null; canMana
 
 // ─── Audit ────────────────────────────────────────────────────────────────────
 function AuditTab({ audit, members, policies }: { audit: Audit[]; members: Member[]; policies: Policy[] }) {
-  const locale = useLocale();
-  const fmtWhen = fmtWhenIn(locale.code);
+  const fmtWhen = fmtWhenWith(useFormat().fmtDate);
   const tr = useTranslations();
   const nameById = useMemo(() => new Map(members.map(m => [m.id, m.name])), [members]);
   const policyById = useMemo(() => new Map(policies.map(p => [p.id, p])), [policies]);

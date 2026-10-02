@@ -12,13 +12,15 @@ import { Input, Textarea, Field, Select } from '@/components/ui/input';
 import { Button } from '@/components/ui/button';
 import { SkeletonList, ErrorState, EmptyState } from '@/components/ui/states';
 import { AiInsight } from '@/components/ai/ai-insight';
-import { fmtDate } from '@/lib/utils/format';
+import { useFormat } from '@/components/i18n/use-format';
 import { UTILITY_KINDS, utilityLabel, usd as usdIn, latestByKind, monthlyTotalCents, trendForKind, deltaPct, type BillLike } from '@/lib/home/utilities';
 import type { Tables } from '@/lib/database.types';
 import { useLocale, useTranslations } from '@/components/i18n/locale-provider';
+import { useFamilyClock } from '@/components/i18n/use-format';
 
 type Bill = Tables<'utility_bills'>;
-const blank = () => ({ kind: 'electric', provider: '', period_month: new Date().toISOString().slice(0, 7) + '-01', amount: '', usage: '', unit: '', note: '' });
+// The bill month defaults to the FAMILY's current month (TIME-003).
+const blank = (todayKey: string) => ({ kind: 'electric', provider: '', period_month: todayKey.slice(0, 7) + '-01', amount: '', usage: '', unit: '', note: '' });
 
 type SavingsFinding = { kind: string; severity: 'high' | 'medium' | 'info'; title: string; detail: string };
 type SavingsResult = {
@@ -34,6 +36,8 @@ const SEVERITY_CLS: Record<SavingsFinding['severity'], string> = {
 };
 
 export function UtilitiesModule() {
+  const clock = useFamilyClock();
+  const { fmtDate } = useFormat();
   const t = useTranslations();
   // Money follows the reader; the currency stays the money's own.
   const locale = useLocale();
@@ -115,7 +119,7 @@ export function UtilitiesModule() {
             </Button>
           )}
           <AiInsight kind="utilities" iconOnly />
-          <Button onClick={() => setForm(blank())}><Plus className="h-4 w-4" /> {t('utilities.addBill')}</Button>
+          <Button onClick={() => setForm(blank(clock.todayKey()))}><Plus className="h-4 w-4" /> {t('utilities.addBill')}</Button>
         </div>
       </div>
 

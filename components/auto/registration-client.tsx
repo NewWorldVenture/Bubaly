@@ -8,7 +8,7 @@ import {
   saveRegistrationAction, deleteRegistrationAction, saveInspectionAction, deleteInspectionAction,
 } from '@/app/(app)/dashboard/auto/actions';
 import { renewalStatus, vehicleLabel, INSPECTION_TYPES } from '@/lib/auto/renewals';
-import { fmtDate } from '@/lib/utils/format';
+import { useFormat } from '@/components/i18n/use-format';
 import type { Tables } from '@/lib/database.types';
 import { Card } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
@@ -28,6 +28,7 @@ export function RegistrationClient({
 }: {
   registrations: Registration[]; inspections: Inspection[]; vehicles: Vehicle[];
 }) {
+  const { fmtDate } = useFormat();
   const tr = useTranslations();
   const [regOpen, setRegOpen] = useState(false);
   const [regEdit, setRegEdit] = useState<Registration | null>(null);

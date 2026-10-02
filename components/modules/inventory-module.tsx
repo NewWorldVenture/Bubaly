@@ -23,6 +23,7 @@ import {
   searchItems, lentOut, warrantyAlerts, valueSummary, inventorySummary, lastConfirmed,
 } from '@/lib/inventory/finder';
 import { useLocale, useTranslations, usePlural } from '@/components/i18n/locale-provider';
+import { useFamilyClock, useFormat, useFamilyCalendarToday } from '@/components/i18n/use-format';
 import type { LocaleCode } from '@/lib/i18n/locales';
 import { formatCents } from '@/lib/wallet/ledger';
 import { useConfirm } from '@/components/ui/confirm';
@@ -39,15 +40,14 @@ type Move = Tables<'inventory_moves'>;
 // BEFORE formatting rather than by a second formatter.
 const CURRENCY = 'USD';
 const moneyIn = (locale: LocaleCode) => (cents: number) => formatCents(Math.round(cents / 100) * 100, CURRENCY, locale);
-const todayIso = () => new Date().toISOString().slice(0, 10);
-const fmtDateIn = (locale: LocaleCode) => (d: string): string => {
-  return new Date(d.length <= 10 ? `${d}T00:00:00` : d).toLocaleDateString(locale, { month: 'short', day: 'numeric' });
-};
 
 export function InventoryModule() {
   const locale = useLocale();
   const money = moneyIn(locale.code);
-  const fmtDate = fmtDateIn(locale.code);
+  const { fmtDate: fmt } = useFormat();
+  // A DATE column is its own day; a timestamp is read in the family's zone.
+  const fmtDate = (d: string) => fmt(d, 'MMM d');
+  const clock = useFamilyClock();
   const tr = useTranslations();
   const plural = usePlural();
   const askConfirm = useConfirm();
@@ -80,7 +80,9 @@ export function InventoryModule() {
   const [moveFor, setMoveFor] = useState<Item | null>(null);
   const [lendFor, setLendFor] = useState<Item | null>(null);
 
-  const today = useMemo(() => new Date(), []);
+  // The FAMILY's wall clock (TIME-003): the helpers below read local fields,
+  // so handing them this makes their "today" the family's day, not the phone's.
+  const today = useFamilyCalendarToday();
   const owned = useMemo(() => items.data.filter((i) => i.status !== 'disposed'), [items.data]);
   const hits = useMemo(() => searchItems(items.data, locations.data, query), [items.data, locations.data, query]);
   const tree = useMemo(() => locationTree(locations.data), [locations.data]);
@@ -539,6 +541,7 @@ function MoveForm({ familyId, userId, memberId, item, locations, onClose, onSave
 
 function LendForm({ item, onClose, onSaved }: { item: Item; onClose: () => void; onSaved: () => void }) {
   const tr = useTranslations();
+  const { todayKey } = useFamilyClock();
   const { error: toastError } = useToast();
   const [loading, setLoading] = useState(false);
 
@@ -548,7 +551,7 @@ function LendForm({ item, onClose, onSaved }: { item: Item; onClose: () => void;
     const to = String(f.get('lent_to') ?? '').trim();
     if (!to) return toastError(tr('inventoryModule.whoHasIt'));
     setLoading(true);
-    const { data: lent, error } = await createClient().from('inventory_items').update({ status: 'lent', lent_to: to, lent_on: String(f.get('lent_on') ?? '') || todayIso() }).eq('id', item.id).select('id');
+    const { data: lent, error } = await createClient().from('inventory_items').update({ status: 'lent', lent_to: to, lent_on: String(f.get('lent_on') ?? '') || todayKey() }).eq('id', item.id).select('id');
     setLoading(false);
     if (error) return toastError(describeDbError(error));
     if (wroteNoRows(lent)) return toastError(tr('errors.thatChangeWasNotSaved'));
@@ -560,7 +563,7 @@ function LendForm({ item, onClose, onSaved }: { item: Item; onClose: () => void;
       <form onSubmit={onSubmit} className="space-y-4">
         <div className="grid grid-cols-2 gap-3">
           <Field label="To" required>{(id) => <Input id={id} name="lent_to" autoFocus placeholder={tr('inventory.theNguyensNextDoor')} />}</Field>
-          <Field label={tr('inventory.since')}>{(id) => <Input id={id} name="lent_on" type="date" defaultValue={todayIso()} />}</Field>
+          <Field label={tr('inventory.since')}>{(id) => <Input id={id} name="lent_on" type="date" defaultValue={todayKey()} />}</Field>
         </div>
         <div className="flex justify-end gap-2 pt-1">
           <Button type="button" variant="ghost" onClick={onClose}>{tr('inventory.cancel')}</Button>

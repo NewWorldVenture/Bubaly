@@ -19,7 +19,7 @@ import { Card } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
 import { SkeletonList, EmptyState, ErrorState } from '@/components/ui/states';
-import { fmtRelative } from '@/lib/utils/format';
+import { useFormat } from '@/components/i18n/use-format';
 import { notificationsLine } from '@/lib/tone/partner-phrasing';
 import { cn } from '@/lib/utils/cn';
 import type { Tables } from '@/lib/database.types';
@@ -237,6 +237,7 @@ function NotificationSection({
   onInline: (id: string, action: NotificationInlineAction, decision?: 'approved' | 'rejected') => void;
   onDelete: (id: string) => void;
 }) {
+  const { fmtRelative } = useFormat();
   return (
     <Card className="p-3">
       <div className="px-1 pb-2">

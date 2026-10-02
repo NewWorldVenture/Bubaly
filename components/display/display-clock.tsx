@@ -1,10 +1,11 @@
 'use client';
 
 import { useEffect, useState } from 'react';
-import { useLocale } from '@/components/i18n/locale-provider';
+import { useFormat } from '@/components/i18n/use-format';
 
 export function DisplayClock() {
-  const locale = useLocale();
+  // The family's clock (TIME-003).
+  const { fmtDate, fmtTime } = useFormat();
   const [now, setNow] = useState<Date | null>(null);
 
   useEffect(() => {
@@ -17,10 +18,10 @@ export function DisplayClock() {
   return (
     <div className="text-right">
       <div className="text-5xl font-black tabular-nums leading-none lg:text-6xl">
-        {now.toLocaleTimeString(locale.code, { hour: 'numeric', minute: '2-digit' })}
+        {fmtTime(now)}
       </div>
       <div className="mt-2 text-base text-white/60 lg:text-lg">
-        {now.toLocaleDateString(locale.code, { weekday: 'long', month: 'long', day: 'numeric' })}
+        {fmtDate(now, 'EEEE, MMMM d')}
       </div>
     </div>
   );

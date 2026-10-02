@@ -17,6 +17,7 @@ import { cn } from '@/lib/utils/cn';
 import type { Tables } from '@/lib/database.types';
 import { usd as usdIn, budgetSpent, pct, type Period } from '@/lib/finance/hub';
 import { useLocale, useTranslations } from '@/components/i18n/locale-provider';
+import { useFamilyClock, useFamilyCalendarToday } from '@/components/i18n/use-format';
 
 type Budget = Tables<'budgets'>;
 type Txn = Tables<'transactions'>;
@@ -26,6 +27,12 @@ export function BudgetsView() {
   const t = useTranslations();
   // Money and dates follow the reader; the currency stays the money's own.
   const locale = useLocale();
+  // The FAMILY's year (TIME-003). `new Date(y, 0, 1).toISOString()` was the
+  // previous Dec 31 east of Greenwich, so January's first day was double-counted.
+  const familyClock = useFamilyClock();
+  const yearStartYear = familyClock.todayKey().slice(0, 4);
+  // budgetSpent reads its date's local calendar fields: the FAMILY's day.
+  const familyToday = useFamilyCalendarToday();
   const usd = (amount: number) => usdIn(amount, locale.code);
   const { familyId, userId } = useApp();
   const { success, error: toastError } = useToast();
@@ -38,7 +45,7 @@ export function BudgetsView() {
   // computed from it, so losing it silently reports every category as untouched.
   const { data: txns, loading: txnsLoading, error: txnsError, stale: txnsStale, refresh: refreshTxns } = useRealtimeQuery<Txn>({
     table: 'transactions', familyId, deps: [familyId],
-    fetcher: (sb) => sb.from('transactions').select('*').eq('family_id', familyId).gte('date', new Date(new Date().getFullYear(), 0, 1).toISOString().slice(0, 10)),
+    fetcher: (sb) => sb.from('transactions').select('*').eq('family_id', familyId).gte('date', `${yearStartYear}-01-01`),
   });
   const readError = budgetsError || txnsError;
 
@@ -65,7 +72,7 @@ export function BudgetsView() {
       ) : (
         <div className="grid gap-3 sm:grid-cols-2">
           {rows.map((b) => {
-            const spent = budgetSpent(allTxns, b.category, b.period as Period);
+            const spent = budgetSpent(allTxns, b.category, b.period as Period, familyToday);
             const p = pct(spent, Number(b.amount));
             const over = spent > Number(b.amount);
             return (

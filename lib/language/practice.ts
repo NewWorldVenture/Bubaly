@@ -93,7 +93,9 @@ const DAY_MS = 86_400_000;
 const dateOnly = (v: string | Date) => (typeof v === 'string' ? new Date(`${v.slice(0, 10)}T00:00:00`) : new Date(v.getFullYear(), v.getMonth(), v.getDate()));
 export const dayDiff = (from: string | Date, to: string | Date) => Math.round((dateOnly(to).getTime() - dateOnly(from).getTime()) / DAY_MS);
 export const isoDate = (d: Date) => `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
-export const addDays = (iso: string, days: number) => isoDate(new Date(dateOnly(iso).getTime() + days * DAY_MS));
+// Calendar days, not 24-hour steps: from a local midnight, 86,400,000 ms lands
+// on the wrong date across a daylight-saving change.
+export const addDays = (iso: string, days: number) => { const d = dateOnly(iso); return isoDate(new Date(d.getFullYear(), d.getMonth(), d.getDate() + days)); };
 
 /** Review grades: 0 = blank, 1 = wrong but recognised, 2 = wrong, easy recall, 3 = hard, 4 = good, 5 = easy. */
 export type Grade = 0 | 1 | 2 | 3 | 4 | 5;

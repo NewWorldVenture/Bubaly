@@ -2,6 +2,7 @@ import 'server-only';
 import { unstable_cache } from 'next/cache';
 import { createClient, type SupabaseClient } from '@supabase/supabase-js';
 import type { Database } from '@/lib/database.types';
+import { withPublicReadBudget } from '@/lib/marketing/public-read';
 
 export type PublicStats = {
   families: number;
@@ -59,15 +60,18 @@ function num(row: Row, key: string): number {
  * directly: the RPC is the only door, and it is SECURITY DEFINER + aggregate.
  */
 type HandledStatsRpc = {
-  rpc: (fn: 'public_handled_stats') => PromiseLike<{ data: unknown; error: unknown }>;
+  rpc: (fn: 'public_handled_stats') => {
+    abortSignal: (signal: AbortSignal) => PromiseLike<{ data: unknown; error: unknown }>;
+  };
 };
 
 type HandledStats = Pick<PublicStats, 'handledCompleted' | 'handled30d' | 'familiesWithRuns'>;
 type AccountStats = Pick<PublicStats, 'families' | 'members' | 'tasksCompleted'>;
 
-async function readHandledStats(client: SupabaseClient<Database>): Promise<HandledStats> {
-  try {
-    const { data, error } = await (client as unknown as HandledStatsRpc).rpc('public_handled_stats');
+async function readHandledStats(): Promise<HandledStats> {
+  return withPublicReadBudget(async (signal) => {
+    const client = anonClient();
+    const { data, error } = await (client as unknown as HandledStatsRpc).rpc('public_handled_stats').abortSignal(signal);
     if (error) throw error;
     const row = firstRow(data);
     const counts = {
@@ -79,18 +83,13 @@ async function readHandledStats(client: SupabaseClient<Database>): Promise<Handl
       throw new Error('Inconsistent aggregate counts');
     }
     return counts;
-  } catch (err) {
-    // Zeros are what the formatters HIDE, so a failed read shows nothing
-    // rather than a number — but it is still logged, because "the RPC is not
-    // applied yet" and "Supabase is down" look identical from the page.
-    console.error('[marketing-stats] public_handled_stats read failed (rendering no handled aggregates)', err);
-    return { handledCompleted: 0, handled30d: 0, familiesWithRuns: 0 };
-  }
+  });
 }
 
-async function readAccountStats(client: SupabaseClient<Database>): Promise<AccountStats> {
-  try {
-    const { data, error } = await client.rpc('public_stats');
+async function readAccountStats(): Promise<AccountStats> {
+  return withPublicReadBudget(async (signal) => {
+    const client = anonClient();
+    const { data, error } = await client.rpc('public_stats').abortSignal(signal);
     if (error) throw error;
     const row = firstRow(data);
     return {
@@ -98,28 +97,34 @@ async function readAccountStats(client: SupabaseClient<Database>): Promise<Accou
       members: num(row, 'members'),
       tasksCompleted: num(row, 'tasks_completed'),
     };
-  } catch (err) {
-    console.error('[marketing-stats] public_stats read failed (rendering no family counts)', err);
-    return { families: 0, members: 0, tasksCompleted: 0 };
-  }
+  });
 }
 
-/** Real aggregate counts for the public site, cached for an hour. Degrades to
- *  zeros if Supabase is unreachable so marketing pages always render — and the
- *  two RPCs fail independently, so a missing handled-stats function never
- *  hides the registered-family count. */
-export const getPublicStats = unstable_cache(
-  async (): Promise<PublicStats> => {
-    let client: SupabaseClient<Database>;
-    try {
-      client = anonClient();
-    } catch (err) {
-      console.error('[marketing-stats] public client unavailable (rendering no aggregates)', err);
-      return { ...EMPTY_PUBLIC_STATS };
-    }
-    const [accounts, handled] = await Promise.all([readAccountStats(client), readHandledStats(client)]);
-    return { ...accounts, ...handled };
-  },
-  ['public-stats-validated-v2'],
+// Each successful group is cached independently. Throwing before the cache
+// write keeps a failed refresh from replacing last-good data with hidden zeros.
+// New keys exclude fallback values previously cached as successful evidence.
+const cachedAccountStats = unstable_cache(
+  readAccountStats,
+  ['public-account-stats-validated-v3'],
   { revalidate: 3600 },
 );
+const cachedHandledStats = unstable_cache(
+  readHandledStats,
+  ['public-handled-stats-validated-v3'],
+  { revalidate: 3600 },
+);
+
+/** Validated public counts, with per-group hidden-zero fallbacks outside cache. */
+export async function getPublicStats(): Promise<PublicStats> {
+  const [accounts, handled] = await Promise.all([
+    cachedAccountStats().catch((err): AccountStats => {
+      console.error('[marketing-stats] public_stats read failed (rendering no family counts)', err);
+      return { families: 0, members: 0, tasksCompleted: 0 };
+    }),
+    cachedHandledStats().catch((err): HandledStats => {
+      console.error('[marketing-stats] public_handled_stats read failed (rendering no handled aggregates)', err);
+      return { handledCompleted: 0, handled30d: 0, familiesWithRuns: 0 };
+    }),
+  ]);
+  return { ...accounts, ...handled };
+}

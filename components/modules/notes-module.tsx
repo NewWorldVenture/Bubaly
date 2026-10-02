@@ -20,7 +20,7 @@ import { Button } from '@/components/ui/button';
 import { Modal } from '@/components/ui/modal';
 import { Input, Field, Textarea } from '@/components/ui/input';
 import { SkeletonList, EmptyState, ErrorState } from '@/components/ui/states';
-import { fmtRelative } from '@/lib/utils/format';
+import { useFormat } from '@/components/i18n/use-format';
 import { cn } from '@/lib/utils/cn';
 import { stopAnd } from '@/lib/ui/a11y';
 import { formatInsightsForNote, type NotesInsights } from '@/lib/notes/ai';
@@ -87,6 +87,7 @@ function renderChecklist(body: string) {
 }
 
 export function NotesModule() {
+  const { fmtRelative } = useFormat();
   const t = useTranslations();
   const askConfirm = useConfirm();
   const { familyId } = useApp();
@@ -259,6 +260,7 @@ function NoteGroup({ notes, view, onOpen, onTogglePin, onDelete, onDuplicate }: 
   onDelete: (id: string) => void;
   onDuplicate: (n: Note) => void;
 }) {
+  const { fmtRelative } = useFormat();
   const t = useTranslations();
   const askConfirm = useConfirm();
   if (view === 'list') {

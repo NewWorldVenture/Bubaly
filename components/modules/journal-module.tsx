@@ -17,7 +17,7 @@ import { Button } from '@/components/ui/button';
 import { Modal } from '@/components/ui/modal';
 import { Input, Field, Textarea } from '@/components/ui/input';
 import { SkeletonList, EmptyState, ErrorState } from '@/components/ui/states';
-import { fmtDate } from '@/lib/utils/format';
+import { useFormat } from '@/components/i18n/use-format';
 import { cn } from '@/lib/utils/cn';
 import type { Tables } from '@/lib/database.types';
 import { promptOfTheDay } from '@/lib/journal/prompts';
@@ -38,6 +38,7 @@ const MOODS: { id: Mood; emoji: string; labelKey: string }[] = [
 const moodOf = (id: string | null) => MOODS.find((m) => m.id === id);
 
 export function JournalModule() {
+  const { fmtDate } = useFormat();
   const t = useTranslations();
   const { familyId, userId, selfMember } = useApp();
   const memberId = selfMember?.id ?? null;

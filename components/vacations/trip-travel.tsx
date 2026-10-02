@@ -1,17 +1,18 @@
 'use client';
 
 import { Plane, Car } from 'lucide-react';
-import { fmtDate } from '@/lib/utils/format';
+import { useFormat } from '@/components/i18n/use-format';
 import { TripCrudSection, type FieldDef } from './shared';
 import { TRANSPORT_KINDS, dollars as dollarsIn, lookup } from '@/lib/vacations/meta';
 import type { Tables } from '@/lib/database.types';
 import { useLocale, useTranslations } from '@/components/i18n/locale-provider';
-import type { LocaleCode } from '@/lib/i18n/locales';
+import type { Format } from '@/lib/utils/format';
 
 type Flight = Tables<'vacation_flights'>;
 type Transport = Tables<'vacation_transportation'>;
 
-const fmtDTIn = (locale: LocaleCode) => (s: string | null) => (s ? new Date(s).toLocaleString(locale, { month: 'short', day: 'numeric', hour: 'numeric', minute: '2-digit' }) : '—');
+// In the family's zone (TIME-003), through the shared formatter.
+const fmtDTWith = (fmtDate: Format['fmtDate']) => (s: string | null) => (s ? fmtDate(s, 'MMM d, h:mm a') : '—');
 
 const flightFields: FieldDef[] = [
   { name: 'airline', label: 'Airline', type: 'text', half: true },
@@ -48,7 +49,7 @@ export function TripTravel({ vacationId }: { vacationId: string }) {
   const locale = useLocale();
   // Money follows the reader; the currency stays the money's own.
   const dollars = (cents: number | null | undefined) => dollarsIn(cents, locale.code);
-  const fmtDT = fmtDTIn(locale.code);
+  const fmtDT = fmtDTWith(useFormat().fmtDate);
   const tr = useTranslations();
   return (
     <div className="space-y-8">

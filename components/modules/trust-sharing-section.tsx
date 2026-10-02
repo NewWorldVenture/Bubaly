@@ -31,7 +31,9 @@ import {
   type SharingPreset,
 } from '@/lib/trust/sharing-presets';
 import { createSharingPresetAction } from '@/app/(app)/dashboard/trust/actions';
-import { useLocale, useTranslations } from '@/components/i18n/locale-provider';
+import { useTranslations } from '@/components/i18n/locale-provider';
+import { useFormat } from '@/components/i18n/use-format';
+import type { Format } from '@/lib/utils/format';
 
 type Member = { id: string; name: string; role: string; color: string | null };
 type Grant = { member_id: string; domain: string; capability: string; effect: string };
@@ -57,7 +59,7 @@ export function TrustSharingSection({ members, grants, delegations, canManage }:
   members: Member[]; grants: Grant[]; delegations: Delegation[]; canManage: boolean;
 }) {
   const tr = useTranslations();
-  const locale = useLocale();
+  const { fmtDate } = useFormat();
   const [preset, setPreset] = useState<SharingPreset | null>(null);
 
   const domainLabel = (d: string) => (DOMAIN_KEYS[d] ? tr(DOMAIN_KEYS[d]) : DOMAIN_LABELS[d] ?? d);
@@ -152,7 +154,7 @@ export function TrustSharingSection({ members, grants, delegations, canManage }:
                       <Line term={tr('trustSharing.sharedWithThemNow')}>
                         {summary.delegatedDomains.map(domainLabel).join(' · ')}
                         {' — '}
-                        {tr('trustSharing.untilWhen', { when: fmtWhen(summary.delegationExpiresAt, locale.code) })}
+                        {tr('trustSharing.untilWhen', { when: fmtWhen(summary.delegationExpiresAt, fmtDate) })}
                       </Line>
                     )}
                   </dl>
@@ -192,7 +194,7 @@ function SharePresetModal({ preset, members, onClose }: {
   preset: SharingPreset; members: Member[]; onClose: () => void;
 }) {
   const tr = useTranslations();
-  const locale = useLocale();
+  const { fmtDate } = useFormat();
   const router = useRouter();
   const { success, error: toastError } = useToast();
   const managers = useMemo(() => members.filter((m) => m.role === 'parent' || m.role === 'adult'), [members]);
@@ -251,7 +253,7 @@ function SharePresetModal({ preset, members, onClose }: {
             {preset.domains.map((d) => tr(`trustDomain.${camel(d)}`)).join(' · ')}
           </p>
           <p className="mt-2 flex items-center gap-1 text-[11px] font-medium text-amber-400">
-            <Clock className="h-3 w-3" /> {tr('trustSharing.expiresOn', { when: fmtWhen(preview.expiresAt, locale.code) })}
+            <Clock className="h-3 w-3" /> {tr('trustSharing.expiresOn', { when: fmtWhen(preview.expiresAt, fmtDate) })}
           </p>
         </div>
 
@@ -273,8 +275,8 @@ function durationLabel(tr: (key: string, params?: Record<string, string | number
     : tr('trustSharing.lastsDays', { days: Math.round(preset.durationHours / 24) });
 }
 
-/** The reader's own locale formats the expiry — an expiry a person misreads is
- *  worse than no expiry shown at all. */
-function fmtWhen(iso: string, locale: string): string {
-  return new Date(iso).toLocaleString(locale, { month: 'short', day: 'numeric', hour: 'numeric', minute: '2-digit' });
+/** The reader's own locale formats the expiry, in the family's zone (TIME-003)
+ *  — an expiry a person misreads is worse than no expiry shown at all. */
+function fmtWhen(iso: string, fmtDate: Format['fmtDate']): string {
+  return fmtDate(iso, 'MMM d, h:mm a');
 }

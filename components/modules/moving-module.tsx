@@ -22,15 +22,13 @@ import {
   nextBoxNumber, boxesByRoom, findInBoxes, money as moneyIn, isoDate, addDays, dayDiff,
 } from '@/lib/moving/planner';
 import { useLocale, useTranslations } from '@/components/i18n/locale-provider';
-import type { LocaleCode } from '@/lib/i18n/locales';
+import { useFamilyClock, useFormat, useFamilyCalendarToday } from '@/components/i18n/use-format';
 import { useConfirm } from '@/components/ui/confirm';
 
 type Move = Tables<'moves'>;
 type Task = Tables<'move_tasks'>;
 type Box = Tables<'move_boxes'>;
 
-const fmtDateIn = (locale: LocaleCode) => (d: string) => new Date(`${d.slice(0, 10)}T00:00:00`).toLocaleDateString(locale, { month: 'short', day: 'numeric' });
-const fmtLongIn = (locale: LocaleCode) => (d: string) => new Date(`${d.slice(0, 10)}T00:00:00`).toLocaleDateString(locale, { weekday: 'short', month: 'short', day: 'numeric', year: 'numeric' });
 // Move statuses render from the catalogue (I18N-002); MOVE_STATUSES in lib/
 // stays the English source for non-screen uses.
 const MOVE_STATUS_KEYS: Record<MoveStatus, string> = {
@@ -48,8 +46,10 @@ export function MovingModule() {
 
 export function MovingWorkspace() {
   const locale = useLocale();
-  const fmtDate = fmtDateIn(locale.code);
-  const fmtLong = fmtLongIn(locale.code);
+  const { fmtDate: fmt } = useFormat();
+  const fmtDate = (d: string) => fmt(d.slice(0, 10), 'MMM d');
+  const fmtLong = (d: string) => fmt(d.slice(0, 10), 'EEE, MMM d, yyyy');
+  const clock = useFamilyClock();
   const tr = useTranslations();
   const askConfirm = useConfirm();
   // Money follows the reader; the currency stays the money's own.
@@ -93,7 +93,9 @@ export function MovingWorkspace() {
   const [dateReceipt, setDateReceipt] = useState<MoveDateResult | null>(null);
   const dateMove = moves.data.find((candidate) => candidate.id === dateMoveId) ?? null;
 
-  const today = useMemo(() => new Date(), []);
+  // The FAMILY's wall clock (TIME-003): the helpers below read local fields,
+  // so handing them this makes their "today" the family's day, not the phone's.
+  const today = useFamilyCalendarToday();
   const todayIso = isoDate(today);
   const move = moves.data.find((m) => m.id === moveId) ?? null;
   const summary = useMemo(() => (move ? moveSummary(move, tasks.data, boxes.data, today) : null), [move, tasks.data, boxes.data, today]);
@@ -390,6 +392,7 @@ const dollarsToCents = (v: FormDataEntryValue | null) => { const n = Number(Stri
 const centsToDollars = (c: number | null | undefined) => (c === null || c === undefined ? '' : String(c / 100));
 
 function MoveForm({ familyId, userId, move, onClose, onSaved }: { familyId: string; userId: string; move: Move | null; onClose: () => void; onSaved: (id: string) => void }) {
+  const clock = useFamilyClock();
   const tr = useTranslations();
   const { error: toastError } = useToast();
   const [loading, setLoading] = useState(false);
@@ -431,7 +434,7 @@ function MoveForm({ familyId, userId, move, onClose, onSaved }: { familyId: stri
       <form onSubmit={onSubmit} className="space-y-4">
         <div className="grid grid-cols-2 gap-3">
           <Field label={tr('moving.move')} required>{(id) => <Input id={id} name="title" defaultValue={move?.title ?? ''} placeholder={tr('moving.moveToMapleStreet')} autoFocus />}</Field>
-          <Field label={tr('moving.moveDay')} required>{(id) => <Input id={id} name="move_date" type="date" readOnly={!!move} defaultValue={move?.move_date ?? addDays(isoDate(new Date()), 56)} />}</Field>
+          <Field label={tr('moving.moveDay')} required>{(id) => <Input id={id} name="move_date" type="date" readOnly={!!move} defaultValue={move?.move_date ?? addDays(clock.todayKey(), 56)} />}</Field>
         </div>
         {move && <p className="text-xs text-muted">{tr('movingModule.useChangeDateOnThe')}</p>}
         <div className="grid grid-cols-2 gap-3">
@@ -467,8 +470,9 @@ function MoveForm({ familyId, userId, move, onClose, onSaved }: { familyId: stri
 }
 
 function TaskForm({ familyId, userId, move, members, task, onClose, onSaved }: { familyId: string; userId: string; move: Move; members: { id: string; display_name: string }[]; task: Task | null; onClose: () => void; onSaved: () => void }) {
-  const locale = useLocale();
-  const fmtDate = fmtDateIn(locale.code);
+  const { fmtDate: fmt } = useFormat();
+  const fmtDate = (d: string) => fmt(d.slice(0, 10), 'MMM d');
+  const clock = useFamilyClock();
   const tr = useTranslations();
   const { error: toastError } = useToast();
   const [loading, setLoading] = useState(false);
@@ -505,7 +509,7 @@ function TaskForm({ familyId, userId, move, members, task, onClose, onSaved }: {
         <Field label={tr('moving.task')} required>{(id) => <Input id={id} name="title" defaultValue={task?.title ?? ''} placeholder={tr('moving.returnTheCableBox')} autoFocus />}</Field>
         <div className="grid grid-cols-2 gap-3">
           <Field label={tr('moving.category')}>{(id) => <Select id={id} name="category" defaultValue={task?.category ?? 'other'}>{TASK_CATEGORIES.map((c) => <option key={c.value} value={c.value}>{c.emoji} {c.label}</option>)}</Select>}</Field>
-          <Field label={tr('moving.due')} hint={tr('moving.moveDayIs', { date: fmtDate(move.move_date) })}>{(id) => <Input id={id} name="due_date" type="date" defaultValue={task?.due_date ?? isoDate(new Date())} />}</Field>
+          <Field label={tr('moving.due')} hint={tr('moving.moveDayIs', { date: fmtDate(move.move_date) })}>{(id) => <Input id={id} name="due_date" type="date" defaultValue={task?.due_date ?? clock.todayKey()} />}</Field>
         </div>
         <label className="flex items-center gap-2 text-sm"><input type="checkbox" checked={followDate} onChange={(event) => setFollowDate(event.target.checked)} className="accent-brand" /> {tr('moving.followTheMoveDate')}</label>
         <p className="text-xs text-muted">{tr('moving.fixedDatesIncludingOlderTasks')}</p>

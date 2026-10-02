@@ -77,7 +77,7 @@ vi.mock('react', async (original) => ({
 vi.mock('@/components/i18n/locale-provider', async () => {
   const { default: enUS } = await import('@/lib/i18n/messages/en-US.json');
   const { translate } = await import('@/lib/i18n/translate');
-  return { useTranslations: () => (key: string, params?: Record<string, string | number>) => translate(enUS, key, params) };
+  return { useFamilyTimeZone: () => undefined, useTranslations: () => (key: string, params?: Record<string, string | number>) => translate(enUS, key, params) };
 });
 vi.mock('@/components/ui/modal', () => ({
   Modal: ({ children }: { children?: ReactNode }) => createElement('div', null, children),
