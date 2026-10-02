@@ -3,6 +3,9 @@ import path from 'node:path';
 import ts from 'typescript';
 import { expect, test, type Page } from '@playwright/test';
 import type { CreatePostResult } from '@/app/(app)/dashboard/social/actions';
+import { reactBrowserScripts } from './helpers/react-browser';
+
+const { react, reactDom } = reactBrowserScripts('development');
 
 // Actual StudioForm, schedule-time conversion, shared presentation components
 // and LocaleProvider execute in Chromium. createPostAction is an explicit
@@ -14,6 +17,8 @@ const clientFiles = [
   'components/social/studio-form.tsx', 'lib/social/schedule-time.ts',
   'lib/social/capabilities.ts', 'lib/social/content.ts', 'lib/social/ai-kinds.ts',
   'components/i18n/locale-provider.tsx', 'lib/i18n/locales.ts', 'lib/i18n/messages.ts', 'lib/i18n/translate.ts',
+  // The family clock (TIME-003): the shared formatter and the zone helpers it reads.
+  'lib/time/zoned.ts',
   'components/social/platform.tsx', 'components/ui/card.tsx', 'components/ui/badge.tsx',
 ];
 const sources = Object.fromEntries(clientFiles.map(file => [`@/${file.replace(/\.tsx?$/, '')}`, ts.transpileModule(fs.readFileSync(file, 'utf8'), {
@@ -43,7 +48,7 @@ async function fixture(page: Page, options: { defaultTimezone?: string; locale?:
   });
   await page.clock.setFixedTime(new Date('2026-01-01T12:00:00.000Z'));
   await page.goto(origin);
-  for (const pkg of ['react', 'react-dom']) await page.addScriptTag({ content: fs.readFileSync(path.join(path.dirname(require.resolve(`${pkg}/package.json`)), `umd/${pkg}.development.js`), 'utf8') });
+  for (const content of [react, reactDom]) await page.addScriptTag({ content });
   await page.addScriptTag({ content: `(() => {
     const sources = ${JSON.stringify(sources)}, messages = ${JSON.stringify(catalogue)}, modules = {};
     const p = window.__socialSchedulingUI = { errors: [], results: [], navigations: [] };

@@ -875,6 +875,7 @@
   "adminCredential.secret": "La clave configurada tiene el formato correcto (sb_secret_…). Comprueba si pertenece a otro proyecto o ha sido revocada.",
   "adminCredential.unknown": "La clave configurada no coincide con ningún formato de clave conocido de Supabase.",
   "adminDigest.notificationFeedUnavailable": "Feed de notificaciones no disponible.",
+  "adminDigest.recipientsUnavailable": "Lista de destinatarios superadministradores no disponible.",
   "adminDigest.unauthorized": "No autorizado",
   "adminFeedback.couldNotDeleteIdea": "No se ha podido eliminar la idea.",
   "adminFeedback.couldNotPinIdea": "No se ha podido fijar la idea.",
@@ -16612,5 +16613,9 @@
   "error.dbInvalid": "Falta información obligatoria o no es válida. Revísala y vuelve a intentarlo.",
   "error.dbNetwork": "Problema de red: comprueba tu conexión y vuelve a intentarlo.",
   "aiSavings.allowanceSpentSuggestions": "Ya habéis usado las solicitudes de IA de este mes; aquí tenéis sugerencias basadas en vuestras finanzas.",
-  "aiSavings.notConfiguredSuggestions": "La IA no está configurada; aquí tenéis sugerencias basadas en vuestras finanzas."
+  "aiSavings.notConfiguredSuggestions": "La IA no está configurada; aquí tenéis sugerencias basadas en vuestras finanzas.",
+  "blogBlogSearch.searchUnavailable": "La búsqueda no está disponible ahora mismo. Vuelve a intentarlo en un momento.",
+  "coach.onlyYourOwnHealth": "Puedes preguntar al coach sobre tu propia salud. Un padre, una madre o un adulto puede preguntar por otros miembros de la familia.",
+  "medicationsModule.noMedicinesPrescribedToYou": "No te han recetado ningún medicamento.",
+  "medicationsModule.yourOwnMedicinesOnly": "Ves los medicamentos que te han recetado. Un padre, una madre o un adulto gestiona las recetas de la familia."
 }

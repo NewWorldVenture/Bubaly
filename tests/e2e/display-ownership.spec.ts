@@ -5,12 +5,12 @@ import { expect, test, type Page } from '@playwright/test';
 import type { DisplayData } from '../../components/display/display-grid';
 import type { DisplaySettings } from '../../lib/display/ambient';
 import type { Tile } from '../../lib/display/tiles';
+import { reactBrowserScripts } from './helpers/react-browser';
 
 // Real React, DisplayShell, setup card and layout/settings normalizers execute
 // in Chromium. Only persistence and peripheral device/widget boundaries are
 // controlled; no live account, database, provider or display device is touched.
-const react = fs.readFileSync(path.join(path.dirname(require.resolve('react/package.json')), 'umd/react.production.min.js'), 'utf8');
-const reactDom = fs.readFileSync(path.join(path.dirname(require.resolve('react-dom/package.json')), 'umd/react-dom.production.min.js'), 'utf8');
+const { react, reactDom } = reactBrowserScripts('production');
 const sdk = fs.readFileSync(path.join(path.dirname(require.resolve('@supabase/supabase-js/package.json')), 'dist/umd/supabase.js'), 'utf8');
 // The signed-media hook reads the real browser cookie owner. Keep that import
 // graph executable even though this layout fixture has no photos or session.
@@ -41,6 +41,8 @@ const ownerEntries = Object.fromEntries([
 ].map(([id, file]) => [id, collectOwner(file)]));
 const sources = Object.fromEntries([
   'lib/display/ambient.ts', 'lib/display/tiles.ts', 'lib/display/calendar.ts', 'lib/onboarding/ics-time.ts',
+  // The family clock (TIME-003): the real shared formatter and the zone helpers it reads.
+  'components/i18n/use-format.ts', 'lib/utils/format.ts', 'lib/time/zoned.ts', 'lib/time/local-day.ts', 'lib/time/wall-clock.ts',
   'lib/i18n/locales.ts',
   'components/display/setup-card.tsx', 'components/display/display-grid.tsx',
   'components/display/display-shell-client.tsx',
@@ -128,9 +130,13 @@ test.beforeEach(async ({ page }) => {
         error: message => p.notices.push({ kind: 'error', message }),
       }) },
       '@/components/ui/avatar': { Avatar: empty },
-      '@/components/i18n/locale-provider': { useTranslations: () => translation, useLocale: () => load('lib/i18n/locales.ts').localeOrDefault(p.localeCode) },
-      '@/lib/utils/format': { fmtTime: value => String(value) },
+      '@/components/i18n/locale-provider': { useTranslations: () => translation, useLocale: () => load('lib/i18n/locales.ts').localeOrDefault(p.localeCode), useFamilyTimeZone: () => undefined },
       '@/lib/utils/cn': { cn: (...parts) => parts.flat().filter(Boolean).join(' ') },
+      // The real lib/utils/format.ts runs here (TIME-003, through useFormat);
+      // date-fns is its one npm import and every pattern reached maps to Intl.
+      'date-fns': { parseISO: value => new Date(value), format: value => new Date(value).toISOString(),
+        isToday: value => value.toDateString() === new Date().toDateString(),
+        isTomorrow: value => { const day = new Date(); day.setDate(day.getDate() + 1); return value.toDateString() === day.toDateString(); } },
       '@/lib/constants/navigation': { ALL_SERVICES_CATALOG: [], ALL_SERVICES_BY_HREF: new Map() },
       '@/lib/display/imagery': { recipeImage: () => '', mealImage: () => '', AMBIENT_FALLBACK_PHOTOS: [] },
       './ask-tile': { AskTile: empty }, './handled-today-tile': { HandledTodayTile: empty },
@@ -161,6 +167,12 @@ test.beforeEach(async ({ page }) => {
         if (Object.prototype.hasOwnProperty.call(ownerEntries, id)) return loadOwner(ownerEntries[id]);
         if (id === './family-media-ref') return load('lib/storage/family-media-ref.ts');
         if (id === '@/lib/offline/cache') return load('lib/offline/cache.ts');
+        // The family clock (TIME-003): the real shared formatter and its helpers.
+        if (id === '@/components/i18n/use-format') return load('components/i18n/use-format.ts');
+        if (id === '@/lib/utils/format') return load('lib/utils/format.ts');
+        if (id === '@/lib/time/zoned') return load('lib/time/zoned.ts');
+        if (id === '@/lib/time/local-day') return load('lib/time/local-day.ts');
+        if (id === '@/lib/time/wall-clock') return load('lib/time/wall-clock.ts');
         if (Object.prototype.hasOwnProperty.call(requires, id)) return requires[id];
         throw new Error('Unexpected import ' + id);
       };

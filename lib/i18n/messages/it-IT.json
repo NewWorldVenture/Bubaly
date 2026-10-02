@@ -875,6 +875,7 @@
   "adminCredential.secret": "La chiave configurata ha il formato corretto (sb_secret_…). Verifica se appartiene a un altro progetto o è stata revocata.",
   "adminCredential.unknown": "La chiave configurata non corrisponde a nessun formato di chiave Supabase conosciuto.",
   "adminDigest.notificationFeedUnavailable": "Feed di notifiche non disponibile.",
+  "adminDigest.recipientsUnavailable": "Elenco dei destinatari super amministratori non disponibile.",
   "adminDigest.unauthorized": "Non autorizzato",
   "adminFeedback.couldNotDeleteIdea": "Impossibile eliminare l’idea.",
   "adminFeedback.couldNotPinIdea": "Impossibile fissare l’idea.",
@@ -16612,5 +16613,9 @@
   "error.dbInvalid": "Alcune informazioni obbligatorie mancano o non sono valide. Controllale e riprova.",
   "error.dbNetwork": "Problema di rete: controlla la connessione e riprova.",
   "aiSavings.allowanceSpentSuggestions": "Avete usato le richieste IA di questo mese: ecco suggerimenti basati sulle vostre finanze.",
-  "aiSavings.notConfiguredSuggestions": "L'IA non è configurata: ecco suggerimenti basati sulle vostre finanze."
+  "aiSavings.notConfiguredSuggestions": "L'IA non è configurata: ecco suggerimenti basati sulle vostre finanze.",
+  "blogBlogSearch.searchUnavailable": "La ricerca non è disponibile in questo momento. Riprova tra poco.",
+  "coach.onlyYourOwnHealth": "Puoi chiedere al coach della tua salute. Un genitore o un adulto può chiedere degli altri membri della famiglia.",
+  "medicationsModule.noMedicinesPrescribedToYou": "Non ti è stato prescritto alcun farmaco.",
+  "medicationsModule.yourOwnMedicinesOnly": "Vedi i farmaci che ti sono stati prescritti. Un genitore o un adulto gestisce le prescrizioni della famiglia."
 }

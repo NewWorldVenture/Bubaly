@@ -26,17 +26,21 @@ describe('the blog typeahead index', () => {
     expect(component).toMatch(/onChange=\{\(e\) => \{ loadIndex\(\);/);
   });
 
-  it('fetches at most once, however many times it is triggered', () => {
-    // A ref, not state: two events in the same tick must not both fire a
-    // request, and a re-render must not re-arm it.
-    expect(component).toMatch(/requested\s*=\s*useRef\(false\)/);
-    expect(component).toMatch(/if \(requested\.current\) return;\s*\n\s*requested\.current = true;/);
+  it('goes through the bounded loader, held in a ref so a re-render cannot re-arm it', () => {
+    // At most one request in flight, none after a success, and a bounded
+    // retry after a failure: all behavioural, in
+    // tests/blog-search-index-loader.test.ts. Here, only that the component
+    // uses that loader and keeps one per mount.
+    expect(component).toContain("import { createSearchIndexLoader, type SearchIndexState } from '@/lib/blog/search-index-loader';");
+    expect(component).toMatch(/loader\.current \?\?= createSearchIndexLoader</);
+    expect(component).toContain("fetchIndex: () => fetch('/api/blog/search-index')");
   });
 
-  it('leaves the page usable when the index cannot be loaded', () => {
-    expect(component).toContain('.catch(() => {});');
-    // A non-2xx must not throw into the promise chain either.
-    expect(component).toContain('r.ok ? r.json() : []');
+  it('says the index is unavailable instead of "no articles found" when it cannot be loaded', () => {
+    // An outage read as an empty list said "no articles" for every query
+    // (review 5372934636). The unavailable state has its own announced copy.
+    expect(component).toMatch(/indexState === 'unavailable' \?/);
+    expect(component).toMatch(/role="status"[^>]*>\s*\{t\('blogBlogSearch\.searchUnavailable'\)\}/);
   });
 });
 
@@ -74,12 +78,14 @@ describe('the search-index route', () => {
     expect(route).toContain('429');
   });
 
-  it('returns the published posts, and an empty list when the database is down', async () => {
+  it('returns the published posts, cacheable, when the read succeeds', async () => {
+    // The failed-read answer (503, no-store) is behavioural, against the real
+    // loaders: tests/blog-search-index-unavailable.test.ts.
     vi.resetModules();
     vi.doMock('@/lib/blog/posts', () => ({
-      getAllPosts: vi.fn(async () => [
+      readAllPosts: vi.fn(async () => ({ ok: true, posts: [
         { slug: 'a', title: 'A', excerpt: 'x'.repeat(200), category: 'Parenting', body: [], tags: ['t'] },
-      ]),
+      ] })),
     }));
     vi.doMock('@/lib/server/rate-limit', () => ({
       rateLimit: () => ({ ok: true, remaining: 59, retryAfter: 0 }),

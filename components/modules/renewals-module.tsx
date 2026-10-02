@@ -25,7 +25,8 @@ import {
   type RenewalLike, type ExpiryBucket,
 } from '@/lib/renewals/expiry';
 import type { Tables, RenewalStatus } from '@/lib/database.types';
-import { useLocale, useTranslations } from '@/components/i18n/locale-provider';
+import { useTranslations } from '@/components/i18n/locale-provider';
+import { useFamilyClock, useFormat } from '@/components/i18n/use-format';
 import { useConfirm } from '@/components/ui/confirm';
 import { safeWebLink } from '@/lib/utils/safe-link';
 
@@ -39,18 +40,14 @@ const BUCKET_ACCENT: Record<ExpiryBucket, string> = {
   expired: 'text-rose-400', soon: 'text-amber-400', upcoming: 'text-sky-400', done: 'text-emerald-400',
 };
 
-function todayKey(): string {
-  const d = new Date();
-  return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
-}
-
 const blank = {
   id: '', member_id: '', title: '', category: 'id', expires_at: '', reminder_days: 30,
   cost: '', url: '', status: 'active' as RenewalStatus, notes: '',
 };
 
 export function RenewalsModule() {
-  const locale = useLocale();
+  const format = useFormat();
+  const clock = useFamilyClock();
   const t = useTranslations();
   const askConfirm = useConfirm();
   const { familyId, userId, members, role } = useApp();
@@ -68,7 +65,8 @@ export function RenewalsModule() {
   });
 
   const memberName = (id: string | null) => members.find((m) => m.id === id)?.display_name ?? null;
-  const tk = todayKey();
+  // The FAMILY's today (TIME-003), not the phone's.
+  const tk = clock.todayKey();
 
   const stats = useMemo(() => renewalStats((renewals ?? []) as RenewalLike[], tk), [renewals, tk]);
   const grouped = useMemo(() => groupByExpiry((renewals ?? []) as RenewalLike[], tk), [renewals, tk]);
@@ -134,7 +132,8 @@ export function RenewalsModule() {
     success(t('renewalsModule.renewalDeleted'));
   }
 
-  const fmtDate = (key: string) => new Date(`${key}T00:00:00`).toLocaleDateString(locale.code, { month: 'short', day: 'numeric', year: 'numeric' });
+  // A renewal date is a DATE, rendered as written (TIME-003).
+  const fmtDate = (key: string) => format.fmtDate(key, 'MMM d, yyyy');
   const countdown = (r: Renewal) => {
     const d = daysToExpiry(r as RenewalLike, tk);
     if (d < 0) return `${Math.abs(d)}d ago`;

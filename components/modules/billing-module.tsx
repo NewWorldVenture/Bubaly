@@ -48,7 +48,7 @@ import { Input, Field, Select } from '@/components/ui/input';
 import { PageHeader } from '@/components/app/page-header';
 import { Avatar } from '@/components/ui/avatar';
 import { AiInsight } from '@/components/ai/ai-insight';
-import { fmtDate } from '@/lib/utils/format';
+import { useFamilyClock, useFormat, useFamilyCalendarToday } from '@/components/i18n/use-format';
 import { isInMonth, parseCalendarDate, startOfLocalDay } from '@/lib/utils/calendar-date';
 import { isAdmin } from '@/lib/constants/roles';
 import { BASIC_MONTHLY_CENTS, BASIC_ANNUAL_CENTS, PLUS_MONTHLY_CENTS, PLUS_ANNUAL_CENTS, planLevel } from '@/lib/constants/plans';
@@ -253,8 +253,8 @@ function categoryColor(cat: string): string {
 }
 
 /** Age in whole years from an ISO birthday, or null if unknown/invalid. */
-function memberAge(birthday: string | null): number | null {
-  const age = ageOn(birthday, new Date());
+function memberAge(birthday: string | null, today: Date): number | null {
+  const age = ageOn(birthday, today);
   return age !== null && age >= 0 && age < 130 ? age : null;
 }
 
@@ -327,11 +327,13 @@ function AddTransactionModal({ open, onClose, familyId, userId, accounts, onDone
   const [name, setName] = useState('');
   const [amount, setAmount] = useState('');
   const [category, setCategory] = useState('Other');
-  const [date, setDate] = useState(new Date().toISOString().slice(0, 10));
+  // The FAMILY's today (TIME-003); Greenwich's was a day off every evening west of it.
+  const clock = useFamilyClock();
+  const [date, setDate] = useState(() => clock.todayKey());
   const [type, setType] = useState<'expense' | 'income' | 'transfer'>('expense');
   const [accountId, setAccountId] = useState('');
 
-  function reset() { setName(''); setAmount(''); setCategory('Other'); setDate(new Date().toISOString().slice(0, 10)); setType('expense'); setAccountId(''); }
+  function reset() { setName(''); setAmount(''); setCategory('Other'); setDate(clock.todayKey()); setType('expense'); setAccountId(''); }
 
   async function submit(e: React.FormEvent) {
     e.preventDefault();
@@ -544,6 +546,8 @@ function AddSavingsGoalModal({ open, onClose, familyId, userId, onDone }: {
 // ── Main Module ─────────────────────────────────────────────────────────────
 
 export function BillingModule({ serviceFeeNotice = null }: { serviceFeeNotice?: string | null } = {}) {
+  const { fmtDate } = useFormat();
+  const clock = useFamilyClock();
   const tr = useTranslations();
   const askConfirm = useConfirm();
   // Money follows the reader's locale; the currency does not.
@@ -753,9 +757,13 @@ export function BillingModule({ serviceFeeNotice = null }: { serviceFeeNotice?: 
   // ── Computed values ─────────────────────────────────────────────────────
   const totalBalance = useMemo(() => accounts.reduce((s, a) => s + (a.balance ?? 0), 0), [accounts]);
 
-  const now = new Date();
-  const currentMonth = now.getMonth();
-  const currentYear = now.getFullYear();
+  // The FAMILY's day (TIME-003) as a local calendar date, the convention every
+  // bill due date below is parsed in (local midnight), so the month, the ringed
+  // day and the due-date comparisons are all the family's. A date, not a time:
+  // never stored, never turned into an instant.
+  const familyDay = useFamilyCalendarToday();
+  const currentMonth = familyDay.getMonth();
+  const currentYear = familyDay.getFullYear();
 
   const currentMonthTransactions = useMemo(() =>
     transactions.filter((tx) => isInMonth(tx.date, currentYear, currentMonth)),
@@ -810,7 +818,7 @@ export function BillingModule({ serviceFeeNotice = null }: { serviceFeeNotice?: 
     bills.filter((b) => {
       if (b.status === 'upcoming') return true;
       const due = parseCalendarDate(b.due_date);
-      return due !== null && due >= startOfLocalDay(now);  // due today is still upcoming
+      return due !== null && due >= startOfLocalDay(familyDay);  // due today is still upcoming
     }).slice(0, 5),
     // eslint-disable-next-line react-hooks/exhaustive-deps
     [bills],
@@ -869,14 +877,14 @@ export function BillingModule({ serviceFeeNotice = null }: { serviceFeeNotice?: 
           uid,
           name: m?.display_name ?? 'Someone',
           color: m?.color ?? null,
-          age: memberAge(m?.birthday ?? null),
+          age: memberAge(m?.birthday ?? null, familyDay),
           isSelf: uid === userId,
           amount,
           pct: Math.round((amount / total) * 100),
         };
       })
       .sort((a, b) => b.amount - a.amount);
-  }, [currentMonthTransactions, members, userId]);
+  }, [currentMonthTransactions, members, userId, familyDay]);
 
   // Month-over-month expense delta → the "Money Tip" banner.
   const lastMonthExpenses = useMemo(() => {
@@ -905,13 +913,13 @@ export function BillingModule({ serviceFeeNotice = null }: { serviceFeeNotice?: 
     for (let day = 1; day <= daysInMonth; day++) cells.push({ day, bills: billsByDay[day] ?? [] });
     return cells;
   }, [bills, currentMonth, currentYear]);
-  const todayDate = now.getDate();
+  const todayDate = familyDay.getDate();
 
   function billDotColor(b: Bill): string {
     if (b.status === 'paid') return 'bg-emerald-500';
     if (b.status === 'overdue') return 'bg-rose-500';
     const due = parseCalendarDate(b.due_date);
-    return due !== null && due > now ? 'bg-amber-500' : 'bg-brand';
+    return due !== null && due > familyDay ? 'bg-amber-500' : 'bg-brand';
   }
 
   // ── CRUD helpers ────────────────────────────────────────────────────────
@@ -1133,7 +1141,7 @@ export function BillingModule({ serviceFeeNotice = null }: { serviceFeeNotice?: 
           <div className="grid gap-5 sm:grid-cols-2">
             {/* Mini calendar */}
             <div>
-              <p className="mb-2 text-center text-sm font-semibold">{now.toLocaleString('default', { month: 'long', year: 'numeric' })}</p>
+              <p className="mb-2 text-center text-sm font-semibold">{fmtDate(`${currentYear}-${String(currentMonth + 1).padStart(2, '0')}-01`, 'MMMM yyyy')}</p>
               <div className="grid grid-cols-7 gap-y-1 text-center text-[10px] text-muted">
                 {['S', 'M', 'T', 'W', 'T', 'F', 'S'].map((d, idx) => <span key={idx}>{d}</span>)}
               </div>

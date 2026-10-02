@@ -19,7 +19,7 @@ import {
   JOB_STAGES, CAREER_STATUSES, WORK_MODES, EMPLOYMENT_TYPES, OPEN_STAGES, stageMeta, parseKeywords, atsScore, pipelineStats, followUps, salaryFit, careerMap, careerSummary, money as moneyIn, isoDate,
 } from '@/lib/career/hub';
 import { useLocale, useTranslations } from '@/components/i18n/locale-provider';
-import type { LocaleCode } from '@/lib/i18n/locales';
+import { useFamilyClock, useFormat, useFamilyCalendarToday } from '@/components/i18n/use-format';
 import { useConfirm } from '@/components/ui/confirm';
 import { safeWebLink } from '@/lib/utils/safe-link';
 
@@ -27,7 +27,6 @@ type Profile = Tables<'career_profiles'>;
 type Application = Tables<'job_applications'>;
 type Resume = Tables<'resume_versions'>;
 
-const fmtDateIn = (locale: LocaleCode) => (d: string) => new Date(`${d.slice(0, 10)}T00:00:00`).toLocaleDateString(locale, { month: 'short', day: 'numeric' });
 const dollarsToCents = (v: FormDataEntryValue | null) => { const raw = String(v ?? '').trim(); if (!raw) return null; const n = Number(raw.replace(/[^0-9.]/g, '')); return Number.isFinite(n) ? Math.round(n * 100) : null; };
 const centsToDollars = (c: number | null | undefined) => (c === null || c === undefined ? '' : String(c / 100));
 const STAGE_STYLE: Record<JobStage, string> = {
@@ -38,7 +37,9 @@ const STAGE_STYLE: Record<JobStage, string> = {
 
 export function CareerModule() {
   const locale = useLocale();
-  const fmtDate = fmtDateIn(locale.code);
+  const { fmtDate: fmt } = useFormat();
+  const fmtDate = (d: string) => fmt(d.slice(0, 10), 'MMM d');
+  const clock = useFamilyClock();
   const tr = useTranslations();
   const askConfirm = useConfirm();
   // Money follows the reader; the currency stays the money's own.
@@ -74,7 +75,9 @@ export function CareerModule() {
   const [tab, setTab] = useState<'pipeline' | 'resumes' | 'map'>('pipeline');
   const [showClosed, setShowClosed] = useState(false);
 
-  const today = useMemo(() => new Date(), []);
+  // The FAMILY's wall clock (TIME-003): the helpers below read local fields,
+  // so handing them this makes their "today" the family's day, not the phone's.
+  const today = useFamilyCalendarToday();
   const profile = profiles.data.find((p) => p.id === profileId) ?? null;
   const myApps = useMemo(() => apps.data.filter((a) => a.profile_id === profileId), [apps.data, profileId]);
   const myResumes = useMemo(() => resumes.data.filter((r) => r.profile_id === profileId), [resumes.data, profileId]);
@@ -88,8 +91,8 @@ export function CareerModule() {
   const visibleProfiles = profiles.data.filter((p) => p.is_active || showArchived || p.id === profileId);
 
   async function moveStage(a: Application, stage: JobStage) {
-    const patch: Database['public']['Tables']['job_applications']['Update'] = { stage, last_activity_on: isoDate(new Date()) };
-    if (stage === 'applied' && !a.applied_on) patch.applied_on = isoDate(new Date());
+    const patch: Database['public']['Tables']['job_applications']['Update'] = { stage, last_activity_on: clock.todayKey() };
+    if (stage === 'applied' && !a.applied_on) patch.applied_on = clock.todayKey();
     // Under RLS a refused row comes back with no error and zero rows, which this used to report as done. Audit C1-S9-80.
     const { data: updated, error } = await createClient().from('job_applications').update(patch).eq('id', a.id).select('id');
     if (error) return toastError(describeDbError(error));
@@ -390,7 +393,7 @@ function ProfileForm({ familyId, userId, members, profile, defaultMember, onClos
         <div className="grid grid-cols-3 gap-3">
           <Field label={tr('career.type')}>{(id) => <Select id={id} name="employment_type" defaultValue={profile?.employment_type ?? 'full_time'}>{EMPLOYMENT_TYPES.map((t) => <option key={t.value} value={t.value}>{t.label}</option>)}</Select>}</Field>
           <Field label={tr('career.workMode')}>{(id) => <Select id={id} name="work_mode" defaultValue={profile?.work_mode ?? 'any'}>{WORK_MODES.map((w) => <option key={w.value} value={w.value}>{w.label}</option>)}</Select>}</Field>
-          <Field label={tr('career.targetPayYrOrHr')}>{(id) => <Input id={id} name="salary_target" type="number" min={0} step={100} defaultValue={centsToDollars(profile?.salary_target_cents)} />}</Field>
+          <Field label={tr('career.targetPayYrOrHr')}>{(id) => <Input id={id} name="salary_target" type="number" min={0} step="0.01" inputMode="decimal" defaultValue={centsToDollars(profile?.salary_target_cents)} />}</Field>
         </div>
         <div className="grid grid-cols-2 gap-3">
           <Field label={tr('career.location')}>{(id) => <Input id={id} name="location" defaultValue={profile?.location ?? ''} placeholder={tr('career.austinTx')} />}</Field>
@@ -407,6 +410,7 @@ function ProfileForm({ familyId, userId, members, profile, defaultMember, onClos
 }
 
 function ApplicationForm({ familyId, userId, profile, resumes, application, onClose, onSaved }: { familyId: string; userId: string; profile: Profile; resumes: Resume[]; application: Application | null; onClose: () => void; onSaved: () => void }) {
+  const clock = useFamilyClock();
   const tr = useTranslations();
   const { error: toastError } = useToast();
   const [loading, setLoading] = useState(false);
@@ -420,12 +424,12 @@ function ApplicationForm({ familyId, userId, profile, resumes, application, onCl
     if (!company || !roleTitle) return toastError(tr('careerModule.companyAndRoleAreRequired'));
     const stage = String(f.get('stage') ?? 'saved') as JobStage;
     setLoading(true);
-    const appliedOn = String(f.get('applied_on') ?? '') || (stage !== 'saved' ? isoDate(new Date()) : null);
+    const appliedOn = String(f.get('applied_on') ?? '') || (stage !== 'saved' ? clock.todayKey() : null);
     const payload = {
       company, role_title: roleTitle, stage, source: String(f.get('source') ?? '').trim() || null, url: String(f.get('url') ?? '').trim() || null,
       location: String(f.get('location') ?? '').trim() || null, work_mode: (String(f.get('work_mode') ?? '') || null) as Application['work_mode'],
       salary_min_cents: dollarsToCents(f.get('salary_min')), salary_max_cents: dollarsToCents(f.get('salary_max')),
-      applied_on: appliedOn, last_activity_on: isoDate(new Date()), next_step: String(f.get('next_step') ?? '').trim() || null, next_step_on: String(f.get('next_step_on') ?? '') || null,
+      applied_on: appliedOn, last_activity_on: clock.todayKey(), next_step: String(f.get('next_step') ?? '').trim() || null, next_step_on: String(f.get('next_step_on') ?? '') || null,
       contact_name: String(f.get('contact_name') ?? '').trim() || null, contact_email: String(f.get('contact_email') ?? '').trim() || null,
       resume_id: String(f.get('resume_id') ?? '') || null, excitement: excitement || null, notes: String(f.get('notes') ?? '').trim() || null,
     };
@@ -457,8 +461,8 @@ function ApplicationForm({ familyId, userId, profile, resumes, application, onCl
           <Field label={tr('career.workMode')}>{(id) => <Select id={id} name="work_mode" defaultValue={application?.work_mode ?? ''}><option value="">{tr('career.unknown')}</option><option value="remote">{tr('career.remote')}</option><option value="hybrid">{tr('career.hybrid')}</option><option value="onsite">On-site</option></Select>}</Field>
         </div>
         <div className="grid grid-cols-2 gap-3">
-          <Field label={tr('career.salaryFrom')}>{(id) => <Input id={id} name="salary_min" type="number" min={0} step={100} defaultValue={centsToDollars(application?.salary_min_cents)} />}</Field>
-          <Field label={tr('career.salaryTo')}>{(id) => <Input id={id} name="salary_max" type="number" min={0} step={100} defaultValue={centsToDollars(application?.salary_max_cents)} />}</Field>
+          <Field label={tr('career.salaryFrom')}>{(id) => <Input id={id} name="salary_min" type="number" min={0} step="0.01" inputMode="decimal" defaultValue={centsToDollars(application?.salary_min_cents)} />}</Field>
+          <Field label={tr('career.salaryTo')}>{(id) => <Input id={id} name="salary_max" type="number" min={0} step="0.01" inputMode="decimal" defaultValue={centsToDollars(application?.salary_max_cents)} />}</Field>
         </div>
         <div className="grid grid-cols-2 gap-3">
           <Field label={tr('career.nextStep')}>{(id) => <Input id={id} name="next_step" defaultValue={application?.next_step ?? ''} placeholder={tr('career.followUpPhoneScreenSendPortfolio')} />}</Field>

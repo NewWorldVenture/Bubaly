@@ -3,12 +3,12 @@ import path from 'node:path';
 import { execFileSync } from 'node:child_process';
 import ts from 'typescript';
 import { expect, test, type Page } from '@playwright/test';
+import { reactBrowserScripts } from './helpers/react-browser';
 
 // Actual VoiceModule, save/parse/router and installed React/Supabase execute.
 // Speech, context, history subscription and presentation primitives are isolated;
 // this exercises typed-command persistence, not a microphone or live provider.
-const react = fs.readFileSync(path.join(path.dirname(require.resolve('react/package.json')), 'umd/react.development.js'), 'utf8');
-const reactDom = fs.readFileSync(path.join(path.dirname(require.resolve('react-dom/package.json')), 'umd/react-dom.development.js'), 'utf8');
+const { react, reactDom } = reactBrowserScripts('development');
 const sdk = fs.readFileSync(path.join(path.dirname(require.resolve('@supabase/supabase-js/package.json')), 'dist/umd/supabase.js'), 'utf8');
 // Everything the loader below will be asked for that is not mocked. It throws
 // on any id it was not given, so a module missing here does not fail as a
@@ -37,6 +37,8 @@ const SOURCE_FILES = [
   // runs here: createFormat builds Intl objects from the locale code, and the
   // `date-fns` entry in `mocks` below covers the one npm import it carries.
   'components/i18n/use-format.ts', 'lib/utils/format.ts', 'lib/i18n/locales.ts',
+  // The family clock (TIME-003): the shared formatter and the zone helpers it reads.
+  'lib/time/local-day.ts', 'lib/time/wall-clock.ts',
 ];
 const MOCKED = [
   '@/components/app/app-context', '@/lib/supabase/client', '@/components/ui/toast',
@@ -132,7 +134,7 @@ async function fixture(page: Page) {
       // useFormat() calls useLocale() and reads locale.code off it, so this has
       // to hand back the whole Locale record. A () => 'en-US' stub would leave
       // code undefined and Intl would throw somewhere far from here.
-      '@/components/i18n/locale-provider': { useTranslations: () => tr, useLocale: () => load('@/lib/i18n/locales').localeOrDefault('en-US') },
+      '@/components/i18n/locale-provider': { useTranslations: () => tr, useLocale: () => load('@/lib/i18n/locales').localeOrDefault('en-US'), useFamilyTimeZone: () => undefined },
       // The real lib/utils/format.ts runs, and date-fns is the one npm module it
       // imports; the in-page loader has no bundler. Only parseISO is reached at
       // runtime here - every pattern this fixture formats is Intl-mapped inside

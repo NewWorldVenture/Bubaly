@@ -8,6 +8,7 @@ import { revalidatePath } from 'next/cache';
 import { getTranslations } from '@/lib/i18n/server';
 import { requireUserContext } from '@/lib/supabase/auth';
 import { settleAll } from '@/lib/supabase/settle';
+import { readAllAsQuery } from '@/lib/supabase/read-all';
 import { createServer } from '@/lib/supabase/server';
 import { wroteNoRows } from '@/lib/supabase/errors';
 import { isManager } from '@/lib/constants/roles';
@@ -189,9 +190,15 @@ export async function requestRedemptionAction(input: { rewardId: string; memberI
   }
 
   // Soft pre-check affordability (final check is on approval, to avoid races).
-  const { data: txns, error: txnError } = await supabase
+  // Summed from the member's WHOLE ledger in this currency: an unpaged select is
+  // answered with at most db-max-rows (1,000), so a long ledger was checked
+  // against an arbitrary slice of it, refusing requests the member could afford
+  // and queuing ones they could not. Same ceiling as the economy page; past it,
+  // or on any failed page, the check fails closed.
+  const { data: txns, error: txnError } = await readAllAsQuery((from, to) => supabase
     .from('currency_transactions').select('direction, amount')
-    .eq('family_id', familyId).eq('currency_id', reward.currency_id).eq('member_id', input.memberId);
+    .eq('family_id', familyId).eq('currency_id', reward.currency_id).eq('member_id', input.memberId)
+    .order('id').range(from, to), { max: 5000, failOnMax: true });
   if (txnError) return actionFailure('check the token balance', t('economy.couldNotCheckTheTokenBalance'), txnError);
   if (!canAfford(balanceFrom(txns ?? []), reward.cost)) return { ok: false, error: t('actions.notEnoughTokensYet') };
 

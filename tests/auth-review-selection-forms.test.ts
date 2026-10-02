@@ -50,11 +50,17 @@ vi.mock('react', async (original) => {
   };
 });
 vi.mock('next/navigation', () => ({ useRouter: () => ({ push: mock.push, refresh: mock.refresh }), useSearchParams: () => mock.query }));
-vi.mock('next/link', () => ({ default: ({ children, ...props }: { children: ReactNode }) => ({ type: 'a', props: { ...props, children }, $$typeof: Symbol.for('react.element') }) }));
+// Built with createElement rather than a hand-written element object: the
+// element marker is React's own internal detail (React 19 changed it), so a
+// literal `$$typeof` only renders under the React version it was copied from.
+vi.mock('next/link', async () => {
+  const { createElement } = await vi.importActual<typeof import('react')>('react');
+  return { default: ({ children, ...props }: { children: ReactNode }) => createElement('a', props, children) };
+});
 vi.mock('@/components/ui/toast', () => ({ useToast: () => ({ error: mock.toast, success: mock.toast }) }));
 vi.mock('@/components/i18n/locale-provider', async () => {
   const { getMessages } = await import('@/lib/i18n/messages');
-  return { useTranslations: () => (key: string, params?: Record<string, string>) => Object.entries(params ?? {})
+  return { useFamilyTimeZone: () => undefined, useTranslations: () => (key: string, params?: Record<string, string>) => Object.entries(params ?? {})
     .reduce((text, [name, value]) => text.replace(`{${name}}`, value), getMessages(mock.locale)[key] ?? key) };
 });
 vi.mock('@/components/auth/legal-consent', () => ({ LegalConsent: () => null }));

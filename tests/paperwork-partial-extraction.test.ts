@@ -19,7 +19,7 @@ vi.mock('@/lib/supabase/auth', () => ({ requireUserContext: async () => ({ user:
 // answer, so this session is one that already cleared step-up.
 vi.mock('@/lib/auth/require-aal2', () => ({ aal2Verdict: async () => ({ action: 'allow' }) }));
 vi.mock('@/components/ui/toast', () => ({ useToast: () => ({ success: vi.fn(), error: vi.fn() }) }));
-vi.mock('@/components/i18n/locale-provider', () => ({ useTranslations: () => (key: string) => getMessages(state.locale)[key] ?? key, useLocale: () => localeOrDefault(state.locale) }));
+vi.mock('@/components/i18n/locale-provider', () => ({ useFamilyTimeZone: () => undefined, useTranslations: () => (key: string) => getMessages(state.locale)[key] ?? key, useLocale: () => localeOrDefault(state.locale) }));
 vi.mock('@/lib/i18n/server', () => ({ getTranslations: async () => (key: string) => getMessages(state.locale)[key] ?? key }));
 // The AI path now carries the same rate-limit budget as every API route that
 // reaches the model (audit C3-S4-01). The limiter deliberately fails CLOSED,

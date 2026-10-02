@@ -2,15 +2,17 @@ import fs from 'node:fs';
 import path from 'node:path';
 import ts from 'typescript';
 import { test, expect, type Page } from '@playwright/test';
+import { reactBrowserScripts } from './helpers/react-browser';
 
 // Actual clock/photo components and temporal helpers execute with React in a
 // browser whose timezone deliberately differs from the family's timezone.
-const react = fs.readFileSync(path.join(path.dirname(require.resolve('react/package.json')), 'umd/react.development.js'), 'utf8');
-const reactDom = fs.readFileSync(path.join(path.dirname(require.resolve('react-dom/package.json')), 'umd/react-dom.development.js'), 'utf8');
+const { react, reactDom } = reactBrowserScripts('development');
 const sources = Object.fromEntries([
   'components/display/ambient-clock.tsx', 'components/display/photo-frame.tsx',
   'lib/display/ambient.ts', 'lib/display/calendar.ts', 'lib/onboarding/ics-time.ts',
   'components/i18n/locale-provider.tsx', 'lib/i18n/locales.ts', 'lib/i18n/messages.ts', 'lib/i18n/translate.ts',
+  // The provider carries the family zone (TIME-003) and validates it here.
+  'lib/time/zoned.ts',
 ].map(file => [`@/${file.replace(/\.tsx?$/, '')}`, ts.transpileModule(fs.readFileSync(file, 'utf8'), {
   compilerOptions: { target: ts.ScriptTarget.ES2020, module: ts.ModuleKind.CommonJS, jsx: ts.JsxEmit.React },
 }).outputText]));

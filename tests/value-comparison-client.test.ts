@@ -10,7 +10,7 @@ vi.mock('@/app/(app)/dashboard/billing/value-comparison-actions', () => ({ loadF
 vi.mock('@/components/app/app-context', () => ({ useApp: () => ({ familyId: harness.familyId }) }));
 vi.mock('@/components/i18n/locale-provider', async () => {
   const { SOURCE_MESSAGES, translate } = await import('@/lib/i18n/messages');
-  return {
+  return { useFamilyTimeZone: () => undefined,
     useTranslations: () => (key: string, params?: Record<string, string | number>) => translate(SOURCE_MESSAGES, key, params),
     useLocale: () => ({ code: 'en-US' }),
   };

@@ -1,0 +1,15 @@
+== parent.json
+POST /api/admin/marketing/ai 403 {"error":"Forbidden"}
+GET /api/admin/marketing/email/send?id=00000000-0000-4000-8000-000000000000 403 {"error":"Forbidden"}
+POST /api/admin/marketing/email/send 403 {"error":"Forbidden"}
+POST /api/autopilot/scan 200 {"scanned":0,"autoExecuted":0,"cleared":0,"notified":0,"policyCandidates":0}
+== teen.json
+POST /api/admin/marketing/ai 403 {"error":"Forbidden"}
+GET /api/admin/marketing/email/send?id=00000000-0000-4000-8000-000000000000 403 {"error":"Forbidden"}
+POST /api/admin/marketing/email/send 403 {"error":"Forbidden"}
+POST /api/autopilot/scan 200 {"scanned":0,"autoExecuted":0,"cleared":0,"notified":0,"policyCandidates":0}
+== -
+POST /api/admin/marketing/ai 200 <!DOCTYPE html> … (the login page)
+GET /api/admin/marketing/email/send?id=00000000-0000-4000-8000-000000000000 200 <!DOCTYPE html> … (the login page)
+POST /api/admin/marketing/email/send 200 <!DOCTYPE html> … (the login page)
+POST /api/autopilot/scan 200 <!DOCTYPE html> … (the login page)

@@ -26,7 +26,7 @@ import type { ChefReply } from '@/lib/food/chef';
 import {
   addLeftoverAction, updateLeftoverStatusAction, deleteLeftoverAction, snapshotFoodScoreAction,
 } from '@/app/(app)/dashboard/kitchen/actions';
-import { useLocale, useTranslations } from '@/components/i18n/locale-provider';
+import { useTranslations } from '@/components/i18n/locale-provider';
 import { useFormat } from '@/components/i18n/use-format';
 
 export type KitchenData = {
@@ -69,7 +69,7 @@ function scoreRing(n: number): string {
 }
 
 export function KitchenDashboard({ data }: { data: KitchenData }) {
-  const locale = useLocale();
+  const format = useFormat();
   const tr = useTranslations();
   const [addingLeftover, setAddingLeftover] = useState(false);
   const [chefOpen, setChefOpen] = useState(false);
@@ -130,7 +130,7 @@ export function KitchenDashboard({ data }: { data: KitchenData }) {
             {data.upcoming.map((m, i) => (
               <div key={i} className="min-w-[140px] flex-shrink-0 rounded-2xl border border-border bg-surface/40 p-3">
                 <p className="text-[11px] font-semibold uppercase text-muted">
-                  {new Date(m.date + 'T00:00:00').toLocaleDateString(locale.code, { weekday: 'short' })} · {m.mealType}
+                  {format.fmtDate(m.date, 'EEE')} · {m.mealType}
                 </p>
                 <p className="mt-1 text-sm font-medium leading-tight">{m.dish}</p>
               </div>

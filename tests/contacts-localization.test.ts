@@ -250,7 +250,10 @@ it('reformats an open form on locale changes without translating persisted value
   expect(html).toContain('Nouveau contact');
 });
 
-it('keeps a leap-day birthday as a calendar date with an explicit UTC formatting zone', () => {
+// TIME-003 moved this onto the shared formatter's DATE path, which renders a
+// date-only value as written in no zone at all — the same guarantee the
+// explicit-UTC call gave, without a device-zone formatting call to get wrong.
+it('keeps a leap-day birthday as a calendar date, formatted as a DATE', () => {
   harness.locale = 'fr-FR';
   harness.contacts = [contact('doctor', { birthday_month: 2, birthday_day: 29 })];
   const format = Date.prototype.toLocaleDateString;
@@ -262,7 +265,5 @@ it('keeps a leap-day birthday as a calendar date with an explicit UTC formatting
   render();
   selectContact('Person doctor');
   expect(render()).toContain('29 février');
-  expect(seen).toEqual([{ instant: Date.UTC(2000, 1, 29), locale: 'fr-FR', options: {
-    month: 'long', day: 'numeric', timeZone: 'UTC',
-  } }]);
+  expect(seen).toEqual([]);
 });

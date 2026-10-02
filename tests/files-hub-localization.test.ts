@@ -128,10 +128,13 @@ function expandFields(node: ReactNode): ReactNode {
   if (typeof node.type === 'function' && node.type.name === 'Field') return (node.type as (p: Props) => ReactNode)(node.props);
   return node.props.children === undefined ? node : cloneElement(node, undefined, expandFields(node.props.children));
 }
+const FAMILY_ZONE = 'Asia/Tokyo';
 function render(view: FileView = 'cloud') {
   h.cursor = 0; h.form = null;
   function Capture() { h.tree = expandFields(FilesHubModule({ view })); return h.tree; }
-  const props = { locale: localeOrDefault(h.locale), source: 'cookie', messages: getMessages(h.locale), children: createElement(Capture) } as const;
+  // The family lives in Tokyo (TIME-003): its dates are Tokyo's whatever zone
+  // this process runs in, which is what makes the assertion below portable.
+  const props = { locale: localeOrDefault(h.locale), source: 'cookie', messages: getMessages(h.locale), timeZone: FAMILY_ZONE, children: createElement(Capture) } as const;
   return renderToStaticMarkup(createElement(LocaleProvider, props));
 }
 async function prepareUpload(view: FileView, category = '') {
@@ -186,7 +189,8 @@ describe.each(LOCALES)('Files hub in %s', (locale) => {
     const html = render();
     expect(html).toContain(escaped(new Intl.NumberFormat(locale).format(1001)));
     expect(html).toContain(escaped(formatBytes(2_517_000, locale)));
-    expect(html).toContain(escaped(new Date('2026-05-01T15:00:00Z').toLocaleDateString(locale, { weekday: 'short', month: 'short', day: 'numeric' })));
+    // 15:00 UTC on 1 May is already 2 May in the family's zone.
+    expect(html).toContain(escaped(new Date('2026-05-01T15:00:00Z').toLocaleDateString(locale, { weekday: 'short', month: 'short', day: 'numeric', timeZone: FAMILY_ZONE })));
     expect(html).toContain('General'); expect(html).toContain('Original.pdf');
     h.docs = [doc({ created_at: 'not-a-date' })];
     expect(render()).toContain(escaped(t('filesHubModule.uncategorized')));

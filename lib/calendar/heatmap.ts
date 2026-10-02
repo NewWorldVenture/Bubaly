@@ -4,6 +4,7 @@
 // per-day busyness grid for the last N weeks + advice: which days are
 // overloaded, which weekday is chronically heaviest, and where the calm
 // pockets are. The calendar module renders this as a compact heat strip.
+import { dayKeyIn, isValidTimezone } from '@/lib/time/zoned';
 
 export interface HeatEvent {
   startsAt: string;          // ISO
@@ -55,17 +56,25 @@ function levelFor(minutes: number, count: number): 0 | 1 | 2 | 3 | 4 {
  * Events outside the window are ignored; multi-day handling is start-day
  * based (each occurrence lands on its start date, which is how families
  * read a calendar: "what starts that day").
+ *
+ * With `timeZone` (the family's, TIME-003) "today" and each start day are that
+ * zone's calendar days; without it they are Greenwich's, as before. The grid
+ * itself is keyed by date either way, so the arithmetic stays on UTC dates.
  */
-export function buildHeatmap(events: HeatEvent[], today = new Date(), weeks = 8): HeatmapReport {
+export function buildHeatmap(events: HeatEvent[], today = new Date(), weeks = 8, timeZone?: string): HeatmapReport {
   const dayCount = weeks * 7;
-  const end = new Date(Date.UTC(today.getUTCFullYear(), today.getUTCMonth(), today.getUTCDate()));
+  const zone = timeZone && isValidTimezone(timeZone) ? timeZone : undefined;
+  const todayKey = zone ? dayKeyIn(today, zone) : dayKey(today);
+  const end = new Date(`${todayKey}T00:00:00Z`);
   const start = new Date(end.getTime() - (dayCount - 1) * 86400_000);
+  const startKey = dayKey(start);
 
   const byDay = new Map<string, { count: number; minutes: number }>();
   for (const e of events) {
     const d = new Date(e.startsAt);
-    if (isNaN(d.getTime()) || d < start || d.getTime() >= end.getTime() + 86400_000) continue;
-    const key = dayKey(d);
+    if (isNaN(d.getTime())) continue;
+    const key = zone ? dayKeyIn(d, zone) : dayKey(d);
+    if (key < startKey || key > todayKey) continue;
     const cur = byDay.get(key) ?? { count: 0, minutes: 0 };
     cur.count += 1;
     cur.minutes += minutesOf(e);

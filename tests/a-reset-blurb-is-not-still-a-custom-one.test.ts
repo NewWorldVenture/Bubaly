@@ -94,7 +94,7 @@ vi.mock('react', async (original) => ({
 }));
 
 vi.mock('@/components/ui/toast', () => ({ useToast: () => ({ success: state.success, error: state.error }) }));
-vi.mock('@/components/i18n/locale-provider', () => ({ useTranslations: () => t }));
+vi.mock('@/components/i18n/locale-provider', () => ({ useFamilyTimeZone: () => undefined, useTranslations: () => t }));
 
 // Server-action dependencies. Everything else in the action — the super-admin
 // gate, the known-key whitelist, the empty/same-as-default delete rule and the

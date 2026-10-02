@@ -21,20 +21,27 @@ async function persistSubscription(supabase: ReturnType<typeof createServiceClie
   const familyId = sub.metadata.family_id;
   if (!familyId) return;
 
-  const item = sub.items.data[0];
-  const priceId = item?.price.id;
-  if (!priceId) throw new Error('Subscription price is missing');
-
-  // Map price → plan slug
-  const plan = catalogPlanForPrice(priceId) ?? (
-    priceId === process.env.STRIPE_PRICE_PLUS_MONTHLY   ? 'plus' :
-    priceId === process.env.STRIPE_PRICE_PLUS_ANNUAL    ? 'plus_annual' :
-    priceId === process.env.STRIPE_PRICE_BASIC_MONTHLY  ? 'basic' :
-    priceId === process.env.STRIPE_PRICE_BASIC_ANNUAL   ? 'basic_annual' :
-    // Legacy price IDs (backward-compat with existing subscriptions)
-    priceId === process.env.STRIPE_PRICE_FAMILY_MONTHLY ? 'basic' :
-    priceId === process.env.STRIPE_PRICE_FAMILY_ANNUAL  ? 'basic_annual' :
-    null);
+  const items = sub.items?.data;
+  if (!Array.isArray(items) || items.length === 0) throw new Error('Subscription price is missing');
+  // A partial list cannot establish that exactly one item grants entitlement.
+  if (sub.items.has_more) throw new Error('Subscription items are incomplete');
+  const recognized = items.map(item => {
+    const priceId = typeof item?.price?.id === 'string' ? item.price.id : null;
+    if (!priceId) throw new Error('Subscription price is missing');
+    // Preserve current, historical and environment-configured price mappings.
+    const plan = catalogPlanForPrice(priceId) ?? (
+      priceId === process.env.STRIPE_PRICE_PLUS_MONTHLY   ? 'plus' :
+      priceId === process.env.STRIPE_PRICE_PLUS_ANNUAL    ? 'plus_annual' :
+      priceId === process.env.STRIPE_PRICE_BASIC_MONTHLY  ? 'basic' :
+      priceId === process.env.STRIPE_PRICE_BASIC_ANNUAL   ? 'basic_annual' :
+      // Legacy price IDs (backward-compat with existing subscriptions)
+      priceId === process.env.STRIPE_PRICE_FAMILY_MONTHLY ? 'basic' :
+      priceId === process.env.STRIPE_PRICE_FAMILY_ANNUAL  ? 'basic_annual' :
+      null);
+    return { item, plan };
+  }).filter(({ plan }) => plan !== null);
+  if (recognized.length > 1) throw new Error('Subscription plan items are ambiguous');
+  const { item, plan } = recognized[0] ?? {};
   if (!plan) throw new Error('Unknown Stripe subscription price');
 
   // Resolve billing_customer_id + the PRIOR subscription state (to detect a
@@ -60,6 +67,13 @@ async function persistSubscription(supabase: ReturnType<typeof createServiceClie
     return;
   }
 
+  // Since Basil, periods belong to items. Persist the SAME item's plan and
+  // period; neither another item's date nor a legacy top-level date is safe.
+  const periodEnd = item.current_period_end;
+  if (!Number.isSafeInteger(periodEnd) || periodEnd <= 0) throw new Error('Subscription item period is invalid');
+  const periodEndDate = new Date(periodEnd * 1000);
+  if (!Number.isFinite(periodEndDate.getTime())) throw new Error('Subscription item period is invalid');
+
   // `family_id` is deliberately not part of `fields`: it selects the row, and
   // the Update type withholds it so no code path can move a subscription
   // between families.
@@ -68,7 +82,7 @@ async function persistSubscription(supabase: ReturnType<typeof createServiceClie
     plan,
     status: sub.status as 'trialing' | 'active' | 'past_due' | 'canceled' | 'incomplete' | 'incomplete_expired' | 'unpaid',
     provider_ref: sub.id,
-    current_period_end: new Date((sub as unknown as { current_period_end: number }).current_period_end * 1000).toISOString(),
+    current_period_end: periodEndDate.toISOString(),
     cancel_at_period_end: sub.cancel_at_period_end ?? false,
     seats: 10,
   };
@@ -146,21 +160,21 @@ async function persistSubscription(supabase: ReturnType<typeof createServiceClie
   }
 }
 
-/**
- * The subscription as Stripe holds it NOW, not as this event described it.
- *
- * Stripe does not deliver events in order. An `updated` sent before a
- * `deleted`, or a `past_due` before the payment that cleared it, can arrive
- * second — and writing the payload of whichever came last left the family's
- * row describing a state the subscription had already left (PAY-ORDER-001).
- * Reading the object back makes every delivery write the latest state, so the
- * order they arrive in no longer matters. A read that fails throws, and the
- * handler answers 500 so Stripe retries rather than writing a stale payload.
- */
-async function currentSubscription(settings: StripeSettings | null, sent: Stripe.Subscription): Promise<Stripe.Subscription> {
-  const key = effectiveSecretKey(settings);
-  if (!key) throw new Error('Stripe secret key is not configured; the subscription state cannot be confirmed');
-  return await stripeFromKey(key).subscriptions.retrieve(sent.id);
+// Stripe does not deliver events in order. An `updated` sent before a
+// `deleted` can arrive after it, and the payload each carries is the
+// subscription as it was when THAT event was created — so writing the payload
+// let the older event land last and bring a canceled subscription back to
+// active (PAY-ORDER-001). The event says only that something changed; what the
+// row records is the subscription's state now, read from Stripe. An event for
+// no Bubaly family is left as it came, since nothing is written for it.
+async function currentSubscription(settings: StripeSettings | null, fromEvent: Stripe.Subscription): Promise<Stripe.Subscription> {
+  if (!fromEvent.metadata?.family_id) return fromEvent;
+  const secretKey = effectiveSecretKey(settings);
+  // Without the key the current state cannot be read, and writing the payload
+  // instead is the bug. Failing here returns 500, so Stripe retries once the
+  // key is configured.
+  if (!secretKey) throw new Error('Stripe secret key is not configured; the subscription\'s current state cannot be read');
+  return stripeFromKey(secretKey).subscriptions.retrieve(fromEvent.id);
 }
 
 export async function POST(req: NextRequest) {
@@ -174,8 +188,8 @@ export async function POST(req: NextRequest) {
   // secret saved there, and building the client with getStripe() threw when
   // STRIPE_SECRET_KEY was unset, which the catch below reported as a bad
   // signature: every real event refused, and no subscription ever recorded.
-  const stripeSettings = await getStripeSettings();
-  const webhookSecret = effectiveWebhookSecret(stripeSettings) ?? '';
+  const settings = await getStripeSettings();
+  const webhookSecret = effectiveWebhookSecret(settings) ?? '';
   if (!webhookSecret) return NextResponse.json({ error: t('stripe.webhookNotConfigured') }, { status: 503 });
 
   let event: Stripe.Event;
@@ -212,7 +226,7 @@ export async function POST(req: NextRequest) {
       case 'customer.subscription.created':
       case 'customer.subscription.updated':
       case 'customer.subscription.deleted': {
-        await persistSubscription(supabase, await currentSubscription(stripeSettings, event.data.object as Stripe.Subscription));
+        await persistSubscription(supabase, await currentSubscription(settings, event.data.object as Stripe.Subscription));
         break;
       }
 

@@ -96,13 +96,13 @@ const ROOTS = ['app', 'lib', 'components'];
 //     would not have prevented it.
 //
 //   • lib/routines/detect.ts — `materializeRoutine` builds calendar events from
-//     a device-local Monday, and the entire calendar grid it feeds is ALSO
-//     device-local (`weekStart(weekOffset)` in components/modules/
-//     calendar-module.tsx). Converting only this helper would make a routine's
-//     events land at times that disagree with the grid the user just clicked
-//     in — worse than what is there now. Whether that whole module should
-//     render in the family's zone is a real product decision, and not one to
-//     make under cover of a one-line timezone fix.
+//     a device-local Monday by default. The warning that used to stand here —
+//     converting only this helper would disagree with the grid it is applied
+//     from — was answered by converting both together: the owner decided every
+//     family surface reads in the family's zone (TIME-003), the calendar grid
+//     is built from family wall readings, and it passes its zone, so a routine
+//     applied from it lands at the family's wall-clock times. The device-local
+//     path remains for a caller that passes no zone, which is why it is tracked.
 //
 // So this list is now a RECORD, not a queue. A new entry appearing here is
 // still a regression to look at; these two are not work waiting to be done.

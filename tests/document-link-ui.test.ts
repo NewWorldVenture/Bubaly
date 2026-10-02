@@ -22,7 +22,7 @@ vi.mock('react', async (original) => ({ ...await original<typeof import('react')
   },
 }));
 vi.mock('@/components/app/app-context', () => ({ useApp: () => ({ familyId: state.familyId, userId: state.userId }) }));
-vi.mock('@/components/i18n/locale-provider', () => ({ useTranslations: () => (key: string) => translate(getMessages(state.locale), key) }));
+vi.mock('@/components/i18n/locale-provider', () => ({ useFamilyTimeZone: () => undefined, useTranslations: () => (key: string) => translate(getMessages(state.locale), key) }));
 vi.mock('@/lib/capture/document-link', async (original) => ({ ...await original<typeof import('@/lib/capture/document-link')>(), importDocumentLink: state.send }));
 type Node = ReactElement<Record<string, unknown>>;
 const props = { expectedFamilyId: 'family-1', expectedUserId: 'user-1', initialUrl: 'https://school.org/form.pdf' };

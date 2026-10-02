@@ -24,10 +24,11 @@ import {
 import { ErrorState } from '@/components/ui/states';
 import { cn } from '@/lib/utils/cn';
 import { DOMAIN_LABELS } from '@/lib/trust/engine';
-import { useLocale, useTranslations } from '@/components/i18n/locale-provider';
+import { useTranslations } from '@/components/i18n/locale-provider';
 import { sliceLabel, sliceLabelKey } from '@/lib/trust/slice-labels';
 import type { TrustActivity, TrustToolCall } from '@/lib/trust/activity';
-import type { LocaleCode } from '@/lib/i18n/locales';
+import { useFormat } from '@/components/i18n/use-format';
+import type { Format } from '@/lib/utils/format';
 
 /** The policy columns this tab needs to show a dial beside the rules for the same domain. */
 export type ActivityPolicy = { domain: string; enabled: boolean };
@@ -56,10 +57,11 @@ const ACTOR_KEYS: Record<string, string> = {
   system: 'trustActivity.actorAutomatic',
 };
 
-const fmtWhenIn = (locale: LocaleCode) => (iso: string): string => {
+// In the family's zone (TIME-003), through the shared formatter.
+const fmtWhenWith = (fmtDate: Format['fmtDate']) => (iso: string): string => {
   const ms = Date.parse(iso);
   if (!Number.isFinite(ms)) return '';
-  return new Date(ms).toLocaleString(locale, { month: 'short', day: 'numeric', hour: 'numeric', minute: '2-digit' });
+  return fmtDate(new Date(ms), 'MMM d, h:mm a');
 };
 
 export function TrustActivityTab({
@@ -72,8 +74,7 @@ export function TrustActivityTab({
   error: string | null;
   policies: ActivityPolicy[];
 }) {
-  const locale = useLocale();
-  const fmtWhen = fmtWhenIn(locale.code);
+  const fmtWhen = fmtWhenWith(useFormat().fmtDate);
   const tr = useTranslations();
   const router = useRouter();
 
@@ -218,8 +219,7 @@ function Section({
 }
 
 function ToolCallRow({ call }: { call: TrustToolCall }) {
-  const locale = useLocale();
-  const fmtWhen = fmtWhenIn(locale.code);
+  const fmtWhen = fmtWhenWith(useFormat().fmtDate);
   const tr = useTranslations();
   const stateKey = STATE_KEYS[call.state] ?? STATE_KEYS.reserved;
   return (

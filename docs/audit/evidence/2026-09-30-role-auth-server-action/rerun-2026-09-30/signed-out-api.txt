@@ -1,0 +1,8 @@
+/api/admin/marketing/ai | fetch(cors): 401 {"code":"unauthenticated"} | accept-json: 401 {"code":"unauthenticated"} | navigate: 307 -> /login?redirect=%2Fapi%2Fadmin%2Fmarketing%2Fai
+/api/admin/marketing/email/send | fetch(cors): 401 {"code":"unauthenticated"} | accept-json: 401 {"code":"unauthenticated"} | navigate: 307 -> /login?redirect=%2Fapi%2Fadmin%2Fmarketing%2Femail%2Fsend
+/api/autopilot/scan | fetch(cors): 401 {"code":"unauthenticated"} | accept-json: 401 {"code":"unauthenticated"} | navigate: 307 -> /login?redirect=%2Fapi%2Fautopilot%2Fscan
+/api/ai/home/diagnose | fetch(cors): 401 {"code":"unauthenticated"} | accept-json: 401 {"code":"unauthenticated"} | navigate: 307 -> /login?redirect=%2Fapi%2Fai%2Fhome%2Fdiagnose
+/api/weekend/discover | fetch(cors): 401 {"code":"unauthenticated"} | accept-json: 401 {"code":"unauthenticated"} | navigate: 307 -> /login?redirect=%2Fapi%2Fweekend%2Fdiscover
+/dashboard page navigate: 307 -> /login?redirect=%2Fdashboard
+/admin page navigate: 307 -> /login?redirect=%2Fadmin
+/wallet page navigate: 307 -> /login?redirect=%2Fwallet

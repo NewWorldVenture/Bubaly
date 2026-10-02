@@ -2,6 +2,7 @@ import { NextResponse } from 'next/server';
 import { refuseOverAIAllowance } from '@/lib/server/ai-access';
 import { getTranslations } from '@/lib/i18n/server';
 import { requireUserContext } from '@/lib/supabase/auth';
+import { isManager } from '@/lib/constants/roles';
 import { createServer } from '@/lib/supabase/server';
 import { settleAll } from '@/lib/supabase/settle';
 import { refuseUnlessEntitled } from '@/lib/server/route-feature-gate';
@@ -40,6 +41,24 @@ export async function POST(req: Request) {
   const memberId = typeof body.memberId === 'string' && body.memberId ? body.memberId : null;
   if (!question) return NextResponse.json({ error: t('coach.askAQuestionFirst') }, { status: 400 });
 
+  // Parents write, kids see their own (0438 for the medical profile, 0465 for
+  // prescriptions). For a non-manager asking about SOMEONE ELSE, RLS hands the
+  // reads below `{ data: [], error: null }` rather than an error, so the
+  // grounding check cannot catch it and the model would be told "Active
+  // medications: none on file" about a sibling who takes one — a confident
+  // wrong answer on a health surface. Refuse the question instead. Asking about
+  // yourself, or a general question, is unchanged.
+  const manager = isManager(ctx.active.role);
+  if (memberId && !manager && memberId !== ctx.active.member.id) {
+    return NextResponse.json({ error: t('coach.onlyYourOwnHealth') }, { status: 403 });
+  }
+  // A GENERAL question (no member named) grounds on the family's active
+  // medications — for a manager. For anyone else it grounds on their OWN,
+  // enforced here and not left to RLS: until 0465 is applied a child's read of
+  // `medications` still returns every member's rows, and the names and dosages
+  // would go to the model and back into the answer.
+  const ownOnly = manager ? null : ctx.active.member.id;
+
   const supabase = await createServer();
   // The page in front of this is feature-gated; this endpoint was not, and it
   // calls a model. Same resolver, so the two cannot disagree.
@@ -74,7 +93,9 @@ export async function POST(req: Request) {
     memberId ? supabase.from('medical_profiles').select('blood_type, allergies, conditions, current_medications').eq('member_id', memberId).eq('family_id', familyId).maybeSingle() : Promise.resolve({ data: null, error: null }),
     memberId
       ? supabase.from('medications').select('name, dosage, instructions').eq('family_id', familyId).eq('member_id', memberId).eq('is_active', true).limit(20)
-      : supabase.from('medications').select('name, dosage').eq('family_id', familyId).eq('is_active', true).limit(20),
+      : ownOnly
+        ? supabase.from('medications').select('name, dosage').eq('family_id', familyId).eq('member_id', ownOnly).eq('is_active', true).limit(20)
+        : supabase.from('medications').select('name, dosage').eq('family_id', familyId).eq('is_active', true).limit(20),
     memberId
       ? supabase.from('symptom_logs').select('symptom, severity, started_at, status, notes').eq('member_id', memberId).eq('family_id', familyId).order('started_at', { ascending: false }).limit(10)
       : Promise.resolve({ data: null, error: null }),

@@ -875,6 +875,7 @@
   "adminCredential.secret": "Der konfigurierte Schlüssel hat das richtige Format (sb_secret_…). Prüfe, ob er zu einem anderen Projekt gehört oder widerrufen wurde.",
   "adminCredential.unknown": "Der konfigurierte Schlüssel entspricht keinem bekannten Supabase-Schlüsselformat.",
   "adminDigest.notificationFeedUnavailable": "Benachrichtigungs-Feed nicht verfügbar.",
+  "adminDigest.recipientsUnavailable": "Empfängerliste der Super-Admins nicht verfügbar.",
   "adminDigest.unauthorized": "Nicht autorisiert",
   "adminFeedback.couldNotDeleteIdea": "Die Idee konnte nicht gelöscht werden.",
   "adminFeedback.couldNotPinIdea": "Die Idee konnte nicht angeheftet werden.",
@@ -16612,5 +16613,9 @@
   "error.dbInvalid": "Einige erforderliche Angaben fehlen oder sind ungültig. Bitte prüfe sie und versuche es erneut.",
   "error.dbNetwork": "Netzwerkproblem – prüfe deine Verbindung und versuche es erneut.",
   "aiSavings.allowanceSpentSuggestions": "Die KI-Anfragen dieses Monats sind aufgebraucht – hier sind datenbasierte Vorschläge aus euren Finanzen.",
-  "aiSavings.notConfiguredSuggestions": "KI ist nicht eingerichtet – hier sind datenbasierte Vorschläge aus euren Finanzen."
+  "aiSavings.notConfiguredSuggestions": "KI ist nicht eingerichtet – hier sind datenbasierte Vorschläge aus euren Finanzen.",
+  "blogBlogSearch.searchUnavailable": "Die Suche ist gerade nicht verfügbar. Versuche es gleich noch einmal.",
+  "coach.onlyYourOwnHealth": "Sie können den Coach zu Ihrer eigenen Gesundheit fragen. Ein Elternteil oder Erwachsener kann nach anderen Familienmitgliedern fragen.",
+  "medicationsModule.noMedicinesPrescribedToYou": "Ihnen wurden keine Medikamente verschrieben.",
+  "medicationsModule.yourOwnMedicinesOnly": "Sie sehen die Medikamente, die Ihnen verschrieben wurden. Ein Elternteil oder Erwachsener verwaltet die Verschreibungen der Familie."
 }

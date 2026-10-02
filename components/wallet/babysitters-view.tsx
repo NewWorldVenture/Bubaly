@@ -19,6 +19,7 @@ import {
   saveBabysitterAction, archiveBabysitterAction, recordBabysitterPaymentAction,
 } from '@/app/(app)/wallet/actions';
 import { useLocale, useTranslations } from '@/components/i18n/locale-provider';
+import { useFormat } from '@/components/i18n/use-format';
 
 export type BabysitterRow = {
   id: string; name: string; phone: string | null; email: string | null;
@@ -33,6 +34,7 @@ export function BabysittersView({ sitters, payments, canManage }: {
   sitters: BabysitterRow[]; payments: PaymentRow[]; canManage: boolean;
 }) {
   const locale = useLocale();
+  const format = useFormat();
   // Money follows the reader; the currency stays the money's own.
   const formatCents = (cents: number, currency?: string) =>
     formatCentsIn(cents, currency, locale.code);
@@ -143,7 +145,7 @@ export function BabysittersView({ sitters, payments, canManage }: {
                   <div className="flex items-center gap-2 text-[11px] text-muted">
                     {p.hours != null && <span className="flex items-center gap-0.5"><Clock className="h-2.5 w-2.5" />{p.hours}h</span>}
                     {p.tipCents > 0 && <span>+{formatCents(p.tipCents)} tip</span>}
-                    <span>{new Date(p.createdAt).toLocaleDateString(locale.code, { month: 'short', day: 'numeric' })}</span>
+                    <span>{format.fmtDate(p.createdAt, 'MMM d')}</span>
                   </div>
                 </div>
                 <div className="text-sm font-bold">{formatCents(p.amountCents)}</div>
@@ -265,7 +267,7 @@ function PaymentModal({ sitter, onClose, onSaved }: {
             <span className="font-bold">{formatCents(computed)}</span>
           </div>
         )}
-        <Field label={tr('babysitters.orEnterExactAmount')}>{(id) => <Input id={id} name="amount" type="number" min="0" step="0.5" placeholder={rate > 0 ? (computed / 100).toFixed(2) : '60'} />}</Field>
+        <Field label={tr('babysitters.orEnterExactAmount')}>{(id) => <Input id={id} name="amount" type="number" min="0" step="0.01" inputMode="decimal" placeholder={rate > 0 ? (computed / 100).toFixed(2) : '60'} />}</Field>
         <div className="flex justify-end gap-2 pt-1">
           <Button type="button" variant="ghost" onClick={onClose}>{tr('babysitters.cancel')}</Button>
           <Button type="submit" loading={loading}>{loading ? 'Recording…' : 'Record Payment'}</Button>

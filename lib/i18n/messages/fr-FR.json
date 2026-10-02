@@ -875,6 +875,7 @@
   "adminCredential.secret": "La clé configurée a le bon format (sb_secret_…). Vérifiez si elle appartient à un autre projet ou si elle a été révoquée.",
   "adminCredential.unknown": "La clé configurée ne correspond à aucun format de clé Supabase connu.",
   "adminDigest.notificationFeedUnavailable": "Fil de notifications indisponible.",
+  "adminDigest.recipientsUnavailable": "Liste des destinataires super-administrateurs indisponible.",
   "adminDigest.unauthorized": "Non autorisé",
   "adminFeedback.couldNotDeleteIdea": "Impossible de supprimer l’idée.",
   "adminFeedback.couldNotPinIdea": "Impossible d’épingler l’idée.",
@@ -16612,5 +16613,9 @@
   "error.dbInvalid": "Des informations obligatoires manquent ou ne sont pas valides. Vérifiez-les et réessayez.",
   "error.dbNetwork": "Problème de réseau — vérifiez votre connexion et réessayez.",
   "aiSavings.allowanceSpentSuggestions": "Vous avez utilisé les demandes d'IA de ce mois — voici des suggestions tirées de vos finances.",
-  "aiSavings.notConfiguredSuggestions": "L'IA n'est pas configurée — voici des suggestions tirées de vos finances."
+  "aiSavings.notConfiguredSuggestions": "L'IA n'est pas configurée — voici des suggestions tirées de vos finances.",
+  "blogBlogSearch.searchUnavailable": "La recherche est indisponible pour le moment. Réessayez dans un instant.",
+  "coach.onlyYourOwnHealth": "Vous pouvez interroger le coach sur votre propre santé. Un parent ou un adulte peut poser des questions sur les autres membres de la famille.",
+  "medicationsModule.noMedicinesPrescribedToYou": "Aucun médicament ne vous a été prescrit.",
+  "medicationsModule.yourOwnMedicinesOnly": "Vous voyez les médicaments qui vous sont prescrits. Un parent ou un adulte gère les prescriptions de la famille."
 }

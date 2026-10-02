@@ -1,0 +1,144 @@
+app/api/ab/track/route.ts	[POST,]	 createServiceClient
+app/api/admin/benchmarks/export/route.ts	[GET,]	 getUser isSuperAdmin createServiceClient
+app/api/admin/marketing/ai/route.ts	[POST,]	
+app/api/admin/marketing/email/send/route.ts	[GET,POST,]	
+app/api/ai/assist/route.ts	[POST,]	 requireUserContext refuseUnlessEntitled createServer
+app/api/ai/auto/accident/route.ts	[POST,]	 requireUserContext refuseUnlessEntitled createServer
+app/api/ai/briefing/route.ts	[POST,]	 requireUserContext refuseUnlessEntitled createServer
+app/api/ai/chat/route.ts	[POST,]	 requireUserContext createServer
+app/api/ai/chef/route.ts	[POST,]	 requireUserContext refuseUnlessEntitled createServer
+app/api/ai/flyer/route.ts	[POST,]	 requireUserContext refuseUnlessEntitled createServiceClient createServer
+app/api/ai/gift/route.ts	[POST,]	 createServiceClient
+app/api/ai/habits/route.ts	[POST,]	 requireUserContext createServer
+app/api/ai/health/coach/route.ts	[POST,]	 requireUserContext refuseUnlessEntitled createServer
+app/api/ai/home/diagnose/route.ts	[POST,]	 requireUserContext refuseUnlessEntitled createServer
+app/api/ai/home/find-pro/route.ts	[POST,]	 requireUserContext refuseUnlessEntitled createServer
+app/api/ai/home/forecast/route.ts	[POST,]	 requireUserContext refuseUnlessEntitled createServer
+app/api/ai/home/utility-savings/route.ts	[POST,]	 requireUserContext refuseUnlessEntitled createServer
+app/api/ai/import/route.ts	[POST,]	 requireUserContext refuseUnlessEntitled createServer
+app/api/ai/insights/route.ts	[POST,]	 requireUserContext createServer
+app/api/ai/invest/route.ts	[POST,]	 requireUserContext createServer
+app/api/ai/journal/route.ts	[POST,]	 requireUserContext createServer
+app/api/ai/meals/nutrition/route.ts	[POST,]	 requireUserContext createServer
+app/api/ai/meals/plan/route.ts	[POST,]	 requireUserContext createServer
+app/api/ai/notes/route.ts	[POST,]	 requireUserContext createServer
+app/api/ai/pantry-chef/route.ts	[POST,]	 requireUserContext createServiceClient createServer
+app/api/ai/relationship/route.ts	[POST,]	 requireUserContext createServer
+app/api/ai/requests/route.ts	[POST,]	 authenticateAI assertAIAccess
+app/api/ai/resolve-conflict/route.ts	[POST,]	 requireUserContext refuseUnlessEntitled createServer
+app/api/ai/route.ts	[GET,POST,]	 requireUserContext getUserContext getUser getBearerUserContext createServer
+app/api/ai/runs/[id]/answer/route.ts	[POST,]	 authenticateAI assertAIAccess
+app/api/ai/runs/[id]/cancel/route.ts	[POST,]	 authenticateAI
+app/api/ai/runs/[id]/pause/route.ts	[POST,]	 authenticateAI
+app/api/ai/runs/[id]/rerun/route.ts	[POST,]	 authenticateAI assertAIAccess
+app/api/ai/runs/[id]/resume/route.ts	[POST,]	 authenticateAI assertAIAccess
+app/api/ai/runs/[id]/route.ts	[GET,]	 authenticateAI
+app/api/ai/savings/route.ts	[POST,]	 requireUserContext refuseUnlessEntitled createServer
+app/api/ai/schedule/route.ts	[POST,]	 requireUserContext createServer
+app/api/ai/trip/route.ts	[POST,]	 requireUserContext refuseUnlessEntitled createServer
+app/api/ai/voice/speak/route.ts	[POST,]	 authenticateAI
+app/api/ai/voice/transcribe/route.ts	[POST,]	 authenticateAI
+app/api/ai/wallet/child/[childId]/route.ts	[POST,]	 requireUserContext createServer
+app/api/ai/wallet/route.ts	[POST,]	 requireUserContext createServer
+app/api/ai/weekly-briefing/route.ts	[POST,]	 requireUserContext createServer
+app/api/assistant/alexa/route.ts	[POST,]	 createServiceClient
+app/api/assistant/route.ts	[POST,]	 createServiceClient
+app/api/autopilot/scan/route.ts	[POST,]	 requireUserContext createServer
+app/api/behavior/insight/route.ts	[POST,]	 requireUserContext refuseUnlessEntitled createServer
+app/api/billing/cancel/route.ts	[POST,]	 requireUserContext createServiceClient createServer
+app/api/billing/change-plan/route.ts	[POST,]	 requireUserContext getUserContext createServiceClient createServer
+app/api/billing/checkout/route.ts	[POST,]	 requireUserContext createServiceClient createServer
+app/api/billing/portal/route.ts	[POST,]	 requireUserContext createServer
+app/api/blog/like/route.ts	[GET,POST,]	 createServiceClient
+app/api/blog/save/route.ts	[GET,POST,]	 getUser createServiceClient createServer
+app/api/blog/search-index/route.ts	[GET,]	
+app/api/blog/subscribe/route.ts	[POST,]	 createServiceClient
+app/api/blog/unsubscribe/route.ts	[GET,]	 createServiceClient
+app/api/build-info/route.ts	[GET,]	
+app/api/calendar/sync/route.ts	[POST,]	 requireUserContext createServer
+app/api/concierge-calls/place/route.ts	[GET,]	 hasCronAuthorization CRON_SECRET createServiceClient
+app/api/contact-center/email/route.ts	[POST,]	 CONTACT_CENTER_INBOUND_SECRET createServiceClient
+app/api/contact-center/sms/route.ts	[POST,]	 createServiceClient
+app/api/contact-center/voice/route.ts	[POST,]	 createServiceClient
+app/api/contact-center/voice/transcription/route.ts	[POST,]	 createServiceClient
+app/api/contact/route.ts	[POST,]	 createServiceClient
+app/api/cron/admin-digest/route.ts	[GET,]	 hasCronAuthorization CRON_SECRET createServiceClient
+app/api/cron/ai-runs/route.ts	[GET,]	 hasCronAuthorization createServiceClient
+app/api/cron/automations/route.ts	[GET,]	 hasCronAuthorization createServiceClient
+app/api/cron/autopilot-scan/route.ts	[GET,]	 hasCronAuthorization createServiceClient
+app/api/cron/calendar-feeds/route.ts	[GET,]	 hasCronAuthorization createServiceClient
+app/api/cron/checkout-abandoned/route.ts	[GET,]	 hasCronAuthorization createServiceClient
+app/api/cron/chore-reminders/route.ts	[GET,]	 hasCronAuthorization createServiceClient
+app/api/cron/close-auctions/route.ts	[GET,]	 hasCronAuthorization createServiceClient
+app/api/cron/family-routines/route.ts	[GET,]	 hasCronAuthorization createServiceClient
+app/api/cron/feedback-github-sync/route.ts	[GET,]	 hasCronAuthorization CRON_SECRET createServiceClient
+app/api/cron/guardian-learning/route.ts	[GET,]	 hasCronAuthorization createServiceClient
+app/api/cron/journey-recovery/route.ts	[GET,]	 hasCronAuthorization createServiceClient
+app/api/cron/library-feeds/route.ts	[GET,]	 hasCronAuthorization createServiceClient
+app/api/cron/marketing-providers/route.ts	[GET,]	 hasCronAuthorization createServiceClient
+app/api/cron/marketing-social/route.ts	[GET,]	 hasCronAuthorization createServiceClient
+app/api/cron/marketing/route.ts	[GET,]	 hasCronAuthorization createServiceClient
+app/api/cron/model-refresh/route.ts	[GET,]	 hasCronAuthorization createServiceClient
+app/api/cron/network-aggregate/route.ts	[GET,]	 hasCronAuthorization createServiceClient
+app/api/cron/notifications/route.ts	[GET,]	 hasCronAuthorization createServiceClient
+app/api/cron/provider-sync/route.ts	[GET,]	 hasCronAuthorization createServiceClient
+app/api/cron/push-scan/route.ts	[GET,]	 hasCronAuthorization createServiceClient
+app/api/cron/return-reminders/route.ts	[GET,]	 hasCronAuthorization createServiceClient
+app/api/cron/wallet-allowance/route.ts	[GET,]	 hasCronAuthorization createServiceClient
+app/api/cron/weekly-digest/route.ts	[GET,]	 hasCronAuthorization createServiceClient
+app/api/email/invite/route.ts	[POST,]	 requireUserContext createServer
+app/api/email/welcome/route.ts	[POST,]	 createServiceClient
+app/api/exit-intent/resolve/route.ts	[POST,]	
+app/api/exit-intent/track/route.ts	[POST,]	 createServiceClient
+app/api/forms/submit/route.ts	[POST,]	 createServiceClient
+app/api/gif/search/route.ts	[GET,]	 getUser createServer
+app/api/google/calendar/auth/route.ts	[GET,]	 requireUserContext
+app/api/google/calendar/callback/route.ts	[GET,]	 getUser createServer
+app/api/google/calendar/sync/route.ts	[POST,GET,]	 requireUserContext createServer
+app/api/guardian/escalate/route.ts	[POST,]	 CRON_SECRET createServiceClient
+app/api/guardian/escalate/twiml/route.ts	[GET,POST,]	
+app/api/guardian/inbound/sms/route.ts	[POST,]	 createServiceClient
+app/api/guardian/inbound/voice/route.ts	[POST,]	 createServiceClient
+app/api/guardian/inbound/whatsapp/route.ts	[POST,]	 createServiceClient
+app/api/guardian/screen/route.ts	[POST,]	 createServiceClient
+app/api/guardian/status/voicemail/route.ts	[POST,]	 createServiceClient
+app/api/health/route.ts	[GET,]	
+app/api/lp/track/route.ts	[POST,]	 createServiceClient
+app/api/marketing/unsubscribe/route.ts	[GET,POST,]	 createServiceClient
+app/api/mkt/consent/route.ts	[POST,GET,]	 createServiceClient
+app/api/mkt/track/route.ts	[POST,]	 createServiceClient
+app/api/moving/recalculate/route.ts	[POST,]	 getUserContext isSuperAdmin createServer
+app/api/notifications/generate/route.ts	[POST,]	 requireUserContext refuseUnlessEntitled createServiceClient createServer
+app/api/paperwork/capture/route.ts	[POST,]	 requireUserContext createServer
+app/api/paperwork/link/route.ts	[POST,]	 requireUserContext createServer
+app/api/privacy/export/route.ts	[GET,]	 getUserContext createServer
+app/api/push/subscribe/route.ts	[POST,]	 getUser createServer
+app/api/push/test/route.ts	[POST,]	 getUser createServiceClient
+app/api/push/unsubscribe/route.ts	[POST,]	 getUser createServer
+app/api/recipes/search/route.ts	[GET,]	 requireUserContext
+app/api/recipes/suggest/route.ts	[POST,]	 requireUserContext createServer
+app/api/recipes/transform/route.ts	[POST,]	 requireUserContext createServer
+app/api/services/descriptions/route.ts	[GET,]	 createServiceClient
+app/api/social/ai/route.ts	[POST,]	 requireUserContext refuseUnlessEntitled createServer
+app/api/subscriptions/candidates/route.ts	[GET,]	 getUserContext isSuperAdmin createServer
+app/api/subscriptions/price-history/route.ts	[GET,]	 getUserContext isSuperAdmin createServer
+app/api/sync/[provider]/auth/route.ts	[GET,]	 requireUserContext
+app/api/sync/[provider]/callback/route.ts	[GET,]	 requireUserContext createServiceClient
+app/api/sync/[provider]/disconnect/route.ts	[POST,]	 requireUserContext createServiceClient
+app/api/sync/[provider]/status/route.ts	[GET,]	 requireUserContext createServiceClient
+app/api/sync/feeds/[token]/route.ts	[GET,]	 createServiceClient
+app/api/sync/google/auth/route.ts	[GET,]	 requireUserContext
+app/api/sync/google/callback/route.ts	[GET,]	 requireUserContext createServiceClient
+app/api/sync/google/disconnect/route.ts	[POST,]	 requireUserContext createServiceClient
+app/api/sync/google/sync/route.ts	[POST,]	 requireUserContext createServiceClient
+app/api/sync/run/route.ts	[POST,]	 requireUserContext createServiceClient
+app/api/vacations/ai/route.ts	[POST,]	 requireUserContext refuseUnlessEntitled createServer
+app/api/vacations/confirmation-import/route.ts	[POST,]	 requireUserContext getUserContext getUser createServer
+app/api/vacations/weather/route.ts	[POST,]	 requireUserContext refuseUnlessEntitled createServer
+app/api/webhooks/money/route.ts	[POST,]	 createServiceClient
+app/api/webhooks/resend/route.ts	[POST,]	 createServiceClient
+app/api/webhooks/stripe/route.ts	[POST,]	 createServiceClient
+app/api/weekend/discover/route.ts	[POST,]	 requireUserContext refuseUnlessEntitled createServer
+app/auth/callback/route.ts	[GET,]	 requireUserContext getUser createServiceClient createServer
+app/auth/signout/route.ts	[POST,]	 createServer
+app/library/media/[itemId]/route.ts	[GET,]	 requireUserContext createServer

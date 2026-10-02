@@ -2,12 +2,12 @@ import fs from 'node:fs';
 import path from 'node:path';
 import ts from 'typescript';
 import { expect, test, type Page } from '@playwright/test';
+import { reactBrowserScripts } from './helpers/react-browser';
 
 // Execute the production hook/cache/publication decision with real React and
 // localStorage in Chromium. Only Supabase transport is controlled. No Next
 // server, authenticated account, database or external request is used here.
-const react = fs.readFileSync(path.join(path.dirname(require.resolve('react/package.json')), 'umd/react.development.js'), 'utf8');
-const reactDom = fs.readFileSync(path.join(path.dirname(require.resolve('react-dom/package.json')), 'umd/react-dom.development.js'), 'utf8');
+const { react, reactDom } = reactBrowserScripts('development');
 const sources = Object.fromEntries([
   'lib/hooks/use-realtime-query.ts', 'lib/realtime/own-channel.ts', 'lib/offline/cache.ts',
   'lib/offline/cache-scope.tsx', 'lib/auth/cache-session.ts', 'lib/auth/session-change.ts',

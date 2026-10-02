@@ -2,11 +2,11 @@ import fs from 'node:fs';
 import path from 'node:path';
 import ts from 'typescript';
 import { expect, test, type Page } from '@playwright/test';
+import { reactBrowserScripts } from './helpers/react-browser';
 
 // Real React, modal, form and all six consumers. Session storage/removal is a
 // controlled contract here; the browser-signout tests exercise that boundary.
-const react = fs.readFileSync(path.join(path.dirname(require.resolve('react/package.json')), 'umd/react.development.js'), 'utf8');
-const reactDom = fs.readFileSync(path.join(path.dirname(require.resolve('react-dom/package.json')), 'umd/react-dom.development.js'), 'utf8');
+const { react, reactDom } = reactBrowserScripts('development');
 const sources = Object.fromEntries([
   'components/auth/sign-out-form.tsx', 'components/auth/sign-out-button.tsx', 'components/auth/step-up-form.tsx',
   'components/settings/privacy-center.tsx', 'components/app/account-closed-gate.tsx', 'components/app/app-lock-gate.tsx',
@@ -63,6 +63,9 @@ async function fixture(page: Page, control: Control = 'plain', locale = 'en-US')
       '@/app/(app)/account/actions': { reopenAccountAction: async () => { throw new Error('Unrelated action'); }, closeAccountAction: async () => { throw new Error('Unrelated action'); } },
       '@/lib/constants/plans': { BASIC_ANNUAL_CENTS: 11988, PLUS_ANNUAL_CENTS: 23988 },
       '@/lib/utils/format': { fmtDateTime: value => value },
+      // Formatting is not what this fixture is about (TIME-003 moved these
+      // components onto useFormat): the same stub, one layer up.
+      '@/components/i18n/use-format': { useFormat: () => new Proxy({}, { get: () => value => String(value ?? '') }), useFamilyClock: () => ({ timeZone: 'UTC', todayKey: () => new Date().toISOString().slice(0, 10), dayKeyOf: value => String(value).slice(0, 10), hourNow: () => new Date().getUTCHours(), wallNow: () => new Date(), wallToday: () => new Date(), wallOf: value => new Date(value), addDays: (wall, n) => new Date(wall.getTime() + n * 86400000), toInstant: wall => wall, wallKey: wall => wall.toISOString().slice(0, 10), dayStart: () => new Date(), calendarToday: () => new Date() }) },
       '@/components/ui/otp-input': { OtpInput: () => null },
       '@/components/auth/mfa-error-copy': { MfaErrorNotice: () => null },
       '@/lib/supabase/client': { createClient: () => ({ auth: {

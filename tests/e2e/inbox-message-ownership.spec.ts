@@ -2,13 +2,13 @@ import fs from 'node:fs';
 import path from 'node:path';
 import ts from 'typescript';
 import { expect, test, type Page } from '@playwright/test';
+import { reactBrowserScripts } from './helpers/react-browser';
 
 // Actual InboxModule, React and reachable UI modules. Session context, locale
 // lookup, query/action/AI/write receipts and notification delivery are explicit
 // controlled boundaries. These cases verify message ownership and pending edits;
 // database persistence, provider delivery and RLS require separate acceptance.
-const react = fs.readFileSync(path.join(path.dirname(require.resolve('react/package.json')), 'umd/react.development.js'), 'utf8');
-const reactDom = fs.readFileSync(path.join(path.dirname(require.resolve('react-dom/package.json')), 'umd/react-dom.development.js'), 'utf8');
+const { react, reactDom } = reactBrowserScripts('development');
 const icons = fs.readFileSync(path.join(path.dirname(require.resolve('lucide-react/package.json')), 'dist/umd/lucide-react.min.js'), 'utf8');
 const isolated = new Set([
   'react', 'react-dom', 'lucide-react', 'next/link', '@/components/app/app-context',
@@ -67,7 +67,7 @@ async function fixture(page:Page) {
       react:React,'react-dom':ReactDOM,'lucide-react':window.LucideReact,
       'next/link':{__esModule:true,default:({href,children,...props})=>h('a',{...props,href},children)},
       '@/components/app/app-context':{useApp:()=>({familyId:'family-A',userId:'user-A'})},
-      '@/components/i18n/locale-provider':{useTranslations:()=>translate,useLocale:()=>({code:'en-US'})},
+      '@/components/i18n/locale-provider':{useTranslations:()=>translate,useLocale:()=>({code:'en-US'}),useFamilyTimeZone:()=>undefined},
       '@/components/ui/toast':{useToast:()=>({success:x=>p.notices.push(x),error:x=>p.notices.push(x)})},
       '@/lib/hooks/use-realtime-query':{useRealtimeQuery:opts=>({data:opts.table==='family_communications'?rows:[],loading:false,error:null,refresh:()=>{p.refreshes++;}})},
       '@/lib/supabase/client':{createClient:()=>db},

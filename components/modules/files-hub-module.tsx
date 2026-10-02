@@ -29,13 +29,16 @@ import {
 import type { Tables } from '@/lib/database.types';
 import { preOpenWindow } from '@/lib/utils/open-url';
 import { useLocale, useTranslations } from '@/components/i18n/locale-provider';
+import { useFormat } from '@/components/i18n/use-format';
+import type { Format } from '@/lib/utils/format';
 
 type Document = Tables<'documents'>;
 
-function displayDate(value: string, locale: string) {
+// In the family's zone (TIME-003), through the shared formatter.
+function displayDate(value: string, fmtDate: Format['fmtDate']) {
   const parsed = parseISO(value);
   const date = Number.isFinite(parsed.getTime()) ? parsed : new Date(value);
-  return Number.isFinite(date.getTime()) ? date.toLocaleDateString(locale, { weekday: 'short', month: 'short', day: 'numeric' }) : '';
+  return Number.isFinite(date.getTime()) ? fmtDate(date, 'EEE, MMM d') : '';
 }
 
 const KIND_ICON: Record<string, typeof FileIcon> = {
@@ -58,6 +61,7 @@ const toDocLike = (d: Document): DocLike => ({
 export function FilesHubModule({ view }: { view: FileView }) {
   const t = useTranslations();
   const locale = useLocale().code;
+  const { fmtDate } = useFormat();
   const number = new Intl.NumberFormat(locale);
   const { familyId, userId, role } = useApp();
   // 0266 made the Secure Vault a database boundary rather than a folder label:
@@ -298,7 +302,7 @@ export function FilesHubModule({ view }: { view: FileView }) {
                 </div>
                 <div className="mt-1 flex items-center gap-1.5 text-[11px] text-muted">
                   {d.is_secure && <span className="inline-flex items-center gap-1 rounded bg-brand/10 px-1.5 py-0.5 text-brand-text"><Lock className="h-2.5 w-2.5" /> {t('filesHub.secure')}</span>}
-                  <span>{displayDate(full.created_at, locale)}</span>
+                  <span>{displayDate(full.created_at, fmtDate)}</span>
                 </div>
                 <div className="mt-3 flex items-center gap-2 border-t border-border/50 pt-3">
                   <Button size="sm" variant="outline" className="flex-1" onClick={() => download(d.id)} loading={busy === d.id}>

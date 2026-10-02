@@ -22,8 +22,9 @@ import { SkeletonList, ErrorState, EmptyState } from '@/components/ui/states';
 import { Avatar } from '@/components/ui/avatar';
 import { cn } from '@/lib/utils/cn';
 import type { Tables } from '@/lib/database.types';
-import { useLocale, useTranslations } from '@/components/i18n/locale-provider';
-import type { LocaleCode } from '@/lib/i18n/locales';
+import { useTranslations } from '@/components/i18n/locale-provider';
+import { useFamilyClock, useFormat } from '@/components/i18n/use-format';
+import type { Format } from '@/lib/utils/format';
 
 type TodoList = Tables<'todo_lists'>;
 type TodoItem = Tables<'todo_items'>;
@@ -54,21 +55,16 @@ const DONUT = {
   completed: { labelKey: 'todosModule.donut.completed', hex: '#22c55e' },
 };
 
-function ymd(d: Date): string {
-  return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
-}
-
-const dueLabelIn = (locale: LocaleCode) => (due: string, todayStr: string, tomorrowStr: string): string => {
+const dueLabelWith = (fmtDate: Format['fmtDate']) => (due: string, todayStr: string, tomorrowStr: string): string => {
   if (due === todayStr) return 'Today';
   if (due === tomorrowStr) return 'Tomorrow';
-  // due is 'YYYY-MM-DD' — render without TZ surprises.
-  const [y, m, d] = due.split('-').map(Number);
-  return new Date(y, m - 1, d).toLocaleDateString(locale, { month: 'short', day: 'numeric' });
+  // due is 'YYYY-MM-DD', a DATE: the formatter renders it as written.
+  return fmtDate(due, 'MMM d');
 };
 
 export function TodosModule() {
-  const locale = useLocale();
-  const dueLabel = dueLabelIn(locale.code);
+  const dueLabel = dueLabelWith(useFormat().fmtDate);
+  const clock = useFamilyClock();
   const tr = useTranslations();
   const { familyId, members, selfMember } = useApp();
   const { success, error: toastError } = useToast();
@@ -110,10 +106,12 @@ export function TodosModule() {
   const listById = useMemo(() => new Map(lists.map((l) => [l.id, l])), [lists]);
   const memberById = useMemo(() => new Map(members.map((m) => [m.id, m])), [members]);
 
-  const now = new Date();
-  const todayStr = ymd(now);
-  const tomorrowStr = ymd(new Date(now.getTime() + 86400000));
-  const weekEndStr = ymd(new Date(now.getTime() + 7 * 86400000));
+  // The family's today (TIME-003), stepped by calendar day so a DST change
+  // cannot land "tomorrow" on the same date or skip one.
+  const wall = clock.wallToday();
+  const todayStr = clock.wallKey(wall);
+  const tomorrowStr = clock.wallKey(clock.addDays(wall, 1));
+  const weekEndStr = clock.wallKey(clock.addDays(wall, 7));
 
   const active = useMemo(() => items.filter((i) => !i.is_done), [items]);
   const completed = useMemo(() => items.filter((i) => i.is_done), [items]);

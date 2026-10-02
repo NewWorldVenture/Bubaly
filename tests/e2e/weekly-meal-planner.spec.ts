@@ -5,6 +5,7 @@ import postcss from 'postcss';
 import tailwindcss from 'tailwindcss';
 import autoprefixer from 'autoprefixer';
 import { expect, test, type Page } from '@playwright/test';
+import { reactBrowserScripts } from './helpers/react-browser';
 
 // Actual MealsModule, Modal, form controls, query hook and application CSS.
 // The notification interaction cases also mount the actual ToastProvider;
@@ -12,8 +13,7 @@ import { expect, test, type Page } from '@playwright/test';
 // Session context, PostgREST reads and server-action transport are explicit
 // boundaries. Service/action tests separately verify database persistence and
 // authorization; these tests do not claim to execute production RLS.
-const react = fs.readFileSync(path.join(path.dirname(require.resolve('react/package.json')), 'umd/react.development.js'), 'utf8');
-const reactDom = fs.readFileSync(path.join(path.dirname(require.resolve('react-dom/package.json')), 'umd/react-dom.development.js'), 'utf8');
+const { react, reactDom } = reactBrowserScripts('development');
 const icons = fs.readFileSync(path.join(path.dirname(require.resolve('lucide-react/package.json')), 'dist/umd/lucide-react.min.js'), 'utf8');
 const isolated = new Set([
   'react', 'react-dom', 'lucide-react', 'next/link', '@/components/app/app-context',
@@ -194,7 +194,7 @@ async function fixture(page: Page, options: { familyId?: string; timezone?: stri
       react:React, 'react-dom':ReactDOM, 'lucide-react':window.LucideReact,
       'next/link':{default:({children,...props})=>h('a',props,children)},
       '@/components/app/app-context':{useApp:()=>({familyId:p.familyId,userId:'user-A',family:{id:p.familyId,name:p.familyId,timezone:p.timezone},members:[],selfMember:null,role:'parent',planLevel:2})},
-      '@/components/i18n/locale-provider':{useTranslations:()=>translate,useLocale:()=> ({code:'en-US'})},
+      '@/components/i18n/locale-provider':{useTranslations:()=>translate,useLocale:()=> ({code:'en-US'}),useFamilyTimeZone:()=>undefined},
       '@/components/ui/toast':{useToast:()=>({success:message=>p.notices.push({kind:'success',message}),error:message=>p.notices.push({kind:'error',message})})},
       '@capacitor/core':{Capacitor:{isNativePlatform:()=>false}}, '@capacitor/haptics':{},
       '@/components/ai/ai-insight':{AiInsight:()=>null},
