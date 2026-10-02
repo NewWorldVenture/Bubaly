@@ -113,8 +113,8 @@ async function fixture(page: Page, options: { familyId?: string; timezone?: stri
     const translate = (key, vars = {}) => Object.entries(vars).reduce((text, [name,value]) => text.split('{' + name + '}').join(String(value)), messages[key] || key);
     function from(table) {
       const filters = [];
-      let limit = Infinity;
-      const builder = { select() { return this; }, order() { return this; }, limit(value) { limit = value; return this; },
+      let limit = Infinity; const orders = [];
+      const builder = { select() { return this; }, order(column, options = {}) { orders.push({column, ...options}); return this; }, limit(value) { limit = value; return this; },
         eq(column,value) { filters.push(['eq',column,value]); return this; },
         gte(column,value) { filters.push(['gte',column,value]); return this; },
         lte(column,value) { filters.push(['lte',column,value]); return this; },
@@ -124,7 +124,15 @@ async function fixture(page: Page, options: { familyId?: string; timezone?: stri
           const isJoin = table === 'meals' && filters.some(([op]) => op === 'in');
           const fail = p.readErrors[isJoin ? 'meal-join' : table];
           const rows = (p.tables[table] || []).filter(row => filters.every(([op,column,value]) => op === 'eq' ? row[column] === value
-            : op === 'gte' ? row[column] >= value : op === 'lte' ? row[column] <= value : value.includes(row[column]))).slice(0,limit);
+            : op === 'gte' ? row[column] >= value : op === 'lte' ? row[column] <= value : value.includes(row[column]))).sort((a,b) => {
+            for (const ordering of orders) {
+              const x=a[ordering.column], y=b[ordering.column];
+              if (x === y) continue;
+              if (x == null || y == null) return x == null ? (ordering.nullsFirst === true ? -1 : 1) : (ordering.nullsFirst === true ? 1 : -1);
+              const cmp=String(x).localeCompare(String(y)); if (cmp) return ordering.ascending === false ? -cmp : cmp;
+            }
+            return 0;
+          }).slice(0,limit);
           return Promise.resolve(fail ? {data:null,error:{message:'Fixture read unavailable',code:'XX000'}} : {data:structuredClone(rows),error:null}).then(resolve,reject);
         },
       };
@@ -771,6 +779,11 @@ test('dismisses a hovered save notification after reopening a dinner and replace
   expect(await calls(page)).toHaveLength(3);
 });
 const carouselCaseNames = new Set([
+  'unmatched search does not report the saved recipe library is empty',
+  'truly empty recipe library has the ordinary empty state',
+  'clearing an unmatched search restores the saved recipe unchanged',
+  'ordered read keeps recently cooked first and sorts uncooked recipes by name',
+  'saved meal picker follows alphabetical library order',
   'deleting selected last dinner keeps remaining carousel name and date consistent',
   'same-week refresh removing selected dinner keeps remaining carousel usable',
   'empty selected week keeps seven choices and truthful sidebar',
@@ -838,4 +851,37 @@ test('keeps dinner navigation and indicators consistent after shrinking three di
   await expect(card.getByRole('link',{name:'View recipe'})).toHaveAttribute('href','https://recipe.invalid/tacos');
   await card.getByRole('button',{name:'Previous dinner'}).click();await expect(card).toContainText('Coconut curry');await expect(card).toContainText('Tuesday');
   await expect(card.locator('span.bg-brand')).toHaveCount(1);
+});
+const libraryRecipes=(page:Page)=>page.locator('.module-main .group .truncate.text-sm.font-semibold');
+async function recipesTab(page:Page){await page.getByRole('button',{name:'Recipes',exact:true}).click();}
+test('unmatched search does not report the saved recipe library is empty',async({page})=>{
+ await fixture(page);await recipesTab(page);await expect(page.getByText('Tomato soup',{exact:true})).toBeVisible();
+ await page.getByPlaceholder('Search recipes…').fill('zzzz-not-a-recipe');
+ const tables=await page.evaluate(()=>window.__weeklyMeals.tables.family_recipes.filter(r=>r.family_id==='family-A'));
+ expect(tables).toHaveLength(1);await expect(page.getByRole('heading',{name:'No meals match your search.',exact:true})).toBeVisible();await expect(page.getByRole('heading',{name:'No recipes yet',exact:true})).toHaveCount(0);await expect(page.getByText('Saved recipes will appear here.',{exact:true})).toHaveCount(0);
+});
+test('truly empty recipe library has the ordinary empty state',async({page})=>{
+ await fixture(page);await page.evaluate(()=>{window.__weeklyMeals.tables.family_recipes=[];window.dispatchEvent(new Event('online'));});
+ await recipesTab(page);await expect(page.getByRole('heading',{name:'No recipes yet',exact:true})).toBeVisible();
+});
+test('clearing an unmatched search restores the saved recipe unchanged',async({page})=>{
+ await fixture(page);await recipesTab(page);const search=page.getByPlaceholder('Search recipes…');await search.fill('zzzz-not-a-recipe');await search.fill(' tomato ');
+ await expect(page.getByText('Tomato soup',{exact:true})).toBeVisible();await search.fill('');await expect(page.getByText('Tomato soup',{exact:true})).toBeVisible();
+ expect((await page.evaluate(()=>window.__weeklyMeals.tables.family_recipes.filter(r=>r.family_id==='family-A')))[0].id).toBe('recipe-soup');
+});
+test('ordered read keeps recently cooked first and sorts uncooked recipes by name',async({page})=>{
+ await fixture(page);await page.evaluate(()=>{
+ const base=window.__weeklyMeals.tables.family_recipes[0];window.__weeklyMeals.tables.family_recipes=[
+ {...base,id:'older',name:'Older cooked',last_made_at:'2026-09-01T12:00:00Z'},
+ {...base,id:'zebra',name:'Zebra uncooked',last_made_at:null},
+ {...base,id:'recent',name:'Recent cooked',last_made_at:'2026-09-11T12:00:00Z'},
+ {...base,id:'apple',name:'Apple uncooked',last_made_at:null},
+ ];window.dispatchEvent(new Event('online'));});await recipesTab(page);
+ await expect(libraryRecipes(page)).toHaveText(['Recent cooked','Older cooked','Apple uncooked','Zebra uncooked']);
+});
+test('saved meal picker follows alphabetical library order',async({page})=>{
+ await fixture(page,{meals:[
+ {id:'z',family_id:'family-A',name:'Zucchini dinner',ingredients:[],meal_type:'dinner',image_url:null,recipe_url:null},
+ {id:'a',family_id:'family-A',name:'Apple dinner',ingredients:[],meal_type:'dinner',image_url:null,recipe_url:null},
+ ]});await slot(page).click();await expect(dialog(page).getByRole('button',{name:/Apple dinner|Zucchini dinner/})).toHaveText(['🍽️Apple dinner','🍽️Zucchini dinner']);
 });
