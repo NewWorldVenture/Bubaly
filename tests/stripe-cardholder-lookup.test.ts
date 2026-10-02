@@ -164,6 +164,10 @@ describe('a duplicate first cardholder insert', () => {
   const exact = { id: 'winner-row', family_id: params.familyId, member_id: params.memberId, stripe_cardholder_id: 'ich_created_synthetic' };
   const refusal = `Failed to persist cardholder: ${duplicate.message}`;
   beforeEach(() => {
+    // vi.clearAllMocks() keeps queued once-values; a case that does not re-read
+    // must not leave one for the next case.
+    mock.lookup.mockReset();
+    mock.lookup.mockResolvedValue({ data: null, error: null });
     mock.single.mockResolvedValue({ data: null, error: duplicate });
     mock.lookup.mockResolvedValueOnce({ data: null, error: null });
   });
