@@ -27828,6 +27828,17 @@ as evidence that a claim in the copy ships. Checked before it was written down.
 IP-rate-limited both in memory and durably, scoped to one already-secret gift
 token, and read-only. It is the model the other routes should have followed.
 
+> **Mobile dependency audit, 2026-10-02 (session_01776xJyhVe8xJQvTGeNfT9T), dated
+> exception.** GHSA-86w9-cpqp-85rv (high) was published against every node-forge
+> version (`*`), reached only through Expo's CLI, with no patched release; the
+> mobile job's `npm audit --audit-level=high` failed on every PR. With the
+> owner's approval the step now runs `scripts/npm-audit-gate.mjs`: the same
+> `high` level with one named exception in `mobile/audit-exceptions.json`,
+> **expiring 2026-11-01**. Any other high or critical advisory still fails, the
+> exception fails the job by name once it expires, and output that is not an
+> audit report fails (`tests/npm-audit-gate.test.ts`). Relates to MAIN-F-C10;
+> that row is left as its owner wrote it.
+
 ## F19 — Most AI endpoints run unmetered *(Medium, open — a pricing decision)*
 
 > **Update 2026-10-02 (session_01776xJyhVe8xJQvTGeNfT9T): fixed, first option.**

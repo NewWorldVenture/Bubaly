@@ -1,0 +1,8 @@
+[
+  {
+    "id": "GHSA-86w9-cpqp-85rv",
+    "package": "node-forge",
+    "expires": "2026-11-01",
+    "reason": "Every node-forge version is affected (range `*`), reached only through Expo's CLI (@expo/code-signing-certificates); no patched release exists and `npm audit fix --force` would install expo@44. Owner approved a time-boxed exception on 2026-10-02. Renew only with a fresh check for a patched release."
+  }
+]

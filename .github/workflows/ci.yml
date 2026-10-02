@@ -151,10 +151,18 @@ jobs:
       # The web app's audit runs at `moderate` (above). The Expo app had none at
       # all (MAIN-F-C10). It runs at `high` for now: on 2026-09-27 the lockfile
       # carried 14 moderate advisories, all transitive through @expo/config and
-      # @expo/config-plugins, whose fix is a breaking Expo upgrade. None high or
-      # critical, so this passes today and stops anything worse arriving.
+      # @expo/config-plugins, whose fix is a breaking Expo upgrade.
+      #
+      # On 2026-10-02 GHSA-86w9-cpqp-85rv was published against every node-forge
+      # version, reached only through Expo's CLI, with no patched release. The
+      # gate below is `--audit-level=high` with one named, dated exception
+      # (mobile/audit-exceptions.json): any other high or critical advisory
+      # still fails, and the exception fails the job once it expires. A report
+      # that is not an audit report (npm or network failure) fails too.
       - name: Dependency audit (production dependencies)
-        run: npm audit --omit=dev --audit-level=high
+        run: |
+          npm audit --omit=dev --json > "$RUNNER_TEMP/mobile-audit.json" || true
+          node ../scripts/npm-audit-gate.mjs --level high --exceptions audit-exceptions.json < "$RUNNER_TEMP/mobile-audit.json"
 
       - name: Typecheck
         run: npm run typecheck
