@@ -56,6 +56,8 @@ vi.mock('@/lib/supabase/server', () => ({
         // Healthy recipients in this suite are adults. The real child-channel
         // helper still reads membership; its empty result needs no settings.
         if (table === 'family_members') return { data: [], error: null };
+        // No saved email preference keeps the recipient's default opt-in.
+        if (table === 'user_preferences') return { data: [], error: null };
         if (table === 'chore_assignments') {
           if (state.assignmentsError) return { data: null, error: state.assignmentsError };
           const all = state.assignments;
