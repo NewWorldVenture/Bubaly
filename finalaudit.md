@@ -490,6 +490,15 @@ Additions after the 10:55 UTC base, each with its own time: #772 opened 10:58 UT
       - All the earlier 40 behavioural and 17 digest assertions are kept.
       - Blobs: route `05fb88ff`, test `83af9036`, digest `6e485a9d`.
   - **#787 now at `fec150afa773dfe5465e6d2b4b40dbe7fbd91d53`.** Five test-fixture lines now honour settings ordering, ranges and caps; the source stays `b7fdbad1`. All 38 assertions are kept. The original helper passes 43 recipient, boundary and digest cases, and the exact #789 helper passes 38. Full TypeScript, lint and diff pass. Test blob `fa01f137`.
+    - **Further scope for #787 (owner comment posted 2026-10-02 10:37:38 UTC, [#771 comment 5950545855](https://github.com/NewWorldVenture/Bubaly/pull/771#issuecomment-5950545855); written 2026-10-02 10:38 UTC):**
+      - **The gap:** an actual-SDK review confirms that preference lookup is incomplete when the configured response cap is below the 100-user chunk. With two current adults and a cap of 1, the second `email_enabled = false` row is omitted and both digests are sent, and a later preference-page error is never queried. The receipt shows 2 desired failures and 39 controls.
+      - **What this is:** configured-small-cap resilience. It is **not** a default-cap or production-occurrence claim, because a cap of 1,000 cannot truncate this unique-user table within a 100-ID chunk.
+      - **Planned repair**, in `lib/server/notification-emails.ts` and its existing SDK test only:
+        - use `readAllInChunks` with stable unique `user_id` ordering and empty-page termination;
+        - make the fixture honour real preference offsets and caps, keeping all 38 prior assertions and the settings adapter;
+        - add capped and later-error controls;
+        - make any preference read error happen before sends and acknowledgments.
+      - **Status:** `LIBRARY-BBE70CE57610` stays IN PROGRESS, with no closure credit.
   - **Local composition, verified and unpublished:** branch `codex/notification-composition-20261002` at `f55200105ccacaa7ce4be6e613bc8505786076f3` merges #784 `6fcca98d`, #786 `0e0e3ac2`, #787 `fec150af` and #789 `d4a6f0dd`.
     - Three overlapping query fixtures were resolved, keeping active-roster and child-policy paging, with no change to application source.
     - **414/414 tests across 27 files pass**, and full TypeScript and lint and diff on 12 files pass. The exact source blobs match all four published candidates.
