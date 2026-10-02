@@ -1389,6 +1389,17 @@ Additions after the 10:55 UTC base, each with its own time: #772 opened 10:58 UT
     - The routine claim, later #814; the recipe claim, later #815; the chores claim, later #809.
     - The owner's #788 marketplace-fallback and voice follow-through (review 5392003945).
   - **Not acted on:** a stale stored check-in prompt fired at 14:22 UTC. It names heads `85b22a4f`, `c7420f79` and `d4ac2819` from an earlier context, which are not this branch's history. **PRODUCTION READY: NO.**
+- **#771 head `ec0d8367d` terminal CI ([run 37021912435](https://github.com/NewWorldVenture/Bubaly/actions/runs/37021912435); written 2026-10-02 15:21 UTC).** This is the first #771 run carrying main `d25e39ea` and #775's fixed-date fixture.
+  - **Passed:** Database at 14:46:08 UTC, Web at 15:08:02 UTC, and **E2E at 15:14:25 UTC**. The expired-fixture failure at `social-publish-consumers.spec.ts:269`, which failed every earlier #771 head, no longer fails.
+  - **Failed:** Mobile at 14:44:26 UTC, on the unchanged production dependency audit (node-forge GHSA-86w9-cpqp-85rv, no patched version; the high-severity gate is kept per owner review 5391214026).
+  - This is hosted evidence for this docs head only. It is not a full-gate pass, and no closure follows from it.
+- **Fast-forward to root's #818 at `eaf681ad` (2026-10-02 15:20:30 UTC).** It descends from #771 `ec0d8367d`, so no merge commit or conflict resolution was needed.
+  - **Recounted mechanically:** **Register B 14,454 unique = 11,846 NOT STARTED + 2,255 IN PROGRESS + 185 PASS + 159 FIXED + PASS + 9 BLOCKED.** Coverage is 344 / 14,454, which is 2.38%.
+  - **Present and verified here:**
+    - Watchlist `COMPONENT-F2BFDA80F80B` and goals `COMPONENT-1FBEEFCE2E89` are IN PROGRESS.
+    - The #816 Watchlist test `SUPPORT-589426258CD4` and the #817 recipe-servings test `SUPPORT-F4B5E2AC02C3` are registered; both IDs were re-derived here by SHA-256 of their paths.
+    - #816 `7e1f1728` (12 pass versus 4 failures and 8 controls on main) and #817 `77a83eea` (18 pass versus 13 failures and 5 controls on #815) are candidate evidence only.
+  - The qualification that the two tally-tool closures rest on an unmerged stack is retained, pending the owner's confirmation. **PRODUCTION READY: NO.**
 - **#768 integration:** promotion out of draft and any merge are blocked pending the owner's explicit approval. This checkpoint promotes and merges nothing.
 - **Register B status-mark correction:** #770 introduced three rows whose status cell read `?? IN PROGRESS` instead of `🔄 IN PROGRESS` (SUPPORT-AD3999932010, SUPPORT-EC79FA65AC23, SUPPORT-9C6B11D5A8EB). The register prose already counted them as IN PROGRESS, so only the mark is restored. Every ID, order, status, count and piece of evidence text is unchanged. Register B stays **14,364 = 11,877 NOT STARTED + 2,136 IN PROGRESS + 185 PASS + 157 FIXED + PASS + 9 BLOCKED**.
 
