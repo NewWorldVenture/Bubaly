@@ -523,6 +523,11 @@ Additions after the 10:55 UTC base, each with its own time: #772 opened 10:58 UT
     - **The defect:** at head `524c05da`, the public gift calls check the family AI allowance but never consume it. The root independently reproduces two allowed sequential calls at 9 of 10, with 1 desired failure and 4 controls, and verifies unchanged source blobs on the latest head.
     - **Status:** `API-4332A474F9DA`, `LIBRARY-D00A1904A00E` and `MAIN-F19` stay open.
     - **Ownership:** #788 belongs to a separate Claude session (`claude/bubaly-repo-connect-45d8k6`), not this ledger lane. There is no takeover or branch edit from here.
+    - **Follow-up at the current head (owner-account #771 comment 5951255053, 2026-10-02 11:21 UTC):** at #788 head `cd485c0a`, two responses pass the HTTP status check but are malformed: an HTTP 200 flyer response with malformed JSON, and transcription text that is not a string. Both return 500 only after the observed request has already been closed as completed with `usage.ok=true`.
+      - The root's actual SDK/store matrix (c08b00) reproduces 2 desired failures and 13 passing controls. Both cases consume the tenth request.
+      - This is a response-validation and diagnostic-correctness defect. It is not a meter bypass, and it does not duplicate the resolved HTTP-status failures.
+      - The fix belongs to #788's own session. The evidence is synthetic, inert and native-sealed only.
+      - `MAIN-F19` stays **IN PROGRESS** with this bounded follow-up. No closure credit.
   - **PRODUCTION READY: NO.**
 - **Audit lane claim: the weekly digest honours the recipient's personal email preference (owner comment posted 2026-10-02 10:42:27 UTC, [#771 comment 5950615197](https://github.com/NewWorldVenture/Bubaly/pull/771#issuecomment-5950615197); written 2026-10-02 10:43 UTC).**
   - **Branch and files:** `codex/weekly-email-preference-20261002` from main `01b2c380`. Files are `app/api/cron/weekly-digest/route.ts`, `tests/the-weekly-digest-reaches-every-family.test.ts` if its adapter needs adjusting, and a new `tests/weekly-digest-email-preference.test.ts`.
@@ -627,7 +632,7 @@ Additions after the 10:55 UTC base, each with its own time: #772 opened 10:58 UT
   - **What this is:** it joins stored writes to the real consumer gates.
   - **Not certified:** browser-to-deployed-server transport; real Auth, RLS, SQL and providers; atomic snapshots; or completeness of the unpaged weekly member read and the pending queue.
   - **Earlier result is historical:** the 490 tests across 34 files plus full types predate the UI and registry merges, and the final, larger unit and type composition is running.
-  - **Ledger-state correction:** the handoff says the hosted ledger is still `132d791` and that the 14,372 obligations and status transitions are unpublished. In fact #771 `93b9654a6` was pushed at 2026-10-02 ~10:53 UTC and carries **14,372 = 11,865 + 2,156 + 185 + 157 + 9**, counted mechanically from that head. The local checkpoint is now 14,373 = 11,863 + 2,159 + 185 + 157 + 9. Neither credits any closure.
+  - **Ledger-state correction:** the handoff says the hosted ledger is still `132d791` and that the 14,372 obligations and status transitions are unpublished. In fact #771 `93b9654a6` was pushed at 2026-10-02 ~10:53 UTC and carries **14,372 = 11,865 + 2,156 + 185 + 157 + 9**, counted mechanically from that head. The local checkpoint is now 14,373 = 11,863 + 2,159 + 185 + 157 + 9. Neither credits any closure. The owner account independently parsed the same hosted ledger (`93b9654a6`, blob `3402d992`) as 14,372 unique rows, 0 duplicates and 342 closures = 2.3796%, with no blocked credit (#771 comment 5951255053, 2026-10-02 11:21 UTC).
   - All affected rows stay IN PROGRESS. **PRODUCTION READY: NO.**
 - **Two scoped claims (owner comments posted 2026-10-02 11:05:37 UTC; written 2026-10-02 11:06 UTC):**
   - **#789 total-order follow-up ([#771 comment 5950973248](https://github.com/NewWorldVenture/Bubaly/pull/771#issuecomment-5950973248)):**
