@@ -22,7 +22,7 @@ type Row = Record<string, unknown> & { id: string };
 const messages: Record<string, string> = JSON.parse(fs.readFileSync('lib/i18n/messages/en-US.json', 'utf8'));
 const clientFiles = ['components/social/studio-form.tsx', 'components/social/retry-button.tsx',
   'lib/social/capabilities.ts', 'lib/social/content.ts', 'lib/social/ai-kinds.ts', 'lib/social/schedule-time.ts',
-  'components/i18n/locale-provider.tsx', 'lib/i18n/locales.ts', 'lib/i18n/messages.ts', 'lib/i18n/translate.ts',
+  'components/i18n/locale-provider.tsx', 'lib/supabase/errors.ts', 'lib/i18n/locales.ts', 'lib/i18n/messages.ts', 'lib/i18n/translate.ts',
   // The family clock (TIME-003): the shared formatter and the zone helpers it reads.
   'lib/time/zoned.ts',
   'components/social/platform.tsx', 'components/ui/card.tsx', 'components/ui/badge.tsx'];
