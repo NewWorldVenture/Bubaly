@@ -8,6 +8,7 @@
 //
 // Stale Web Push subscriptions (404/410) are pruned automatically.
 import 'server-only';
+import { randomUUID } from 'node:crypto';
 import webpush from 'web-push';
 import type { SupabaseClient } from '@supabase/supabase-js';
 import type { Database } from '@/lib/database.types';
@@ -340,20 +341,23 @@ export async function dispatchPendingPushes(
   if (cursor && rows.length < limit) rows.push(...await page(limit - rows.length, true));
   if (rows.length === 0) return { notifications: 0, result: { sent: 0, skipped: 0, failed: 0, pruned: 0, withheld: 0 } };
   const last = rows[rows.length - 1];
-  const nextCursor = parsePushCursor({ version: 1, createdAt: last.created_at, id: last.id });
-  if (!nextCursor) throw new Error('Push notification cursor fields are invalid.');
+  const nextPosition = parsePushCursor({ version: 1, createdAt: last.created_at, id: last.id });
+  if (!nextPosition) throw new Error('Push notification cursor fields are invalid.');
+  // A wrap can return to the same position. Change the stored identity even
+  // then, so only one competing snapshot can match the original JSON value.
+  const nextCursor = { ...nextPosition, generation: randomUUID() };
   // Save progress before any external send. A write failure sends nothing;
   // a later delivery failure stays pending and is revisited on wrap-around.
   //
-  // Once a cursor exists the write is a compare-and-set against the value THIS
-  // run read, which is what stops two overlapping workers delivering the same
-  // batch. The plain upsert took the last writer, so both advanced the cursor,
-  // both kept their rows, and every device in the batch buzzed twice. The loser
-  // now matches no row and returns having sent nothing; the winner owns the batch.
+  // Compare the complete stored value, including any generation, while accepting
+  // legacy position-only cursors. Fresh generations fence competing snapshots
+  // of that value even if traversal returns to the same position. They do not
+  // fence another scope, or a later worker reading the new generation before
+  // this worker records delivery; this is not a per-notification send lease.
   //
   // The very first run for a scope has no cursor to compare against and still
   // upserts. Two workers racing that one batch remains possible exactly once per
-  // scope, before any cursor exists; after that the guard holds.
+  // scope, before any cursor exists.
   const stamp = new Date().toISOString();
   if (stored) {
     const { data: claimed, error: claimError } = await supabase.from('app_settings')
