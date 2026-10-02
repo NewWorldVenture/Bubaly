@@ -767,6 +767,15 @@ Additions after the 10:55 UTC base, each with its own time: #772 opened 10:58 UT
   - **Planned repair:** when saved recipes exist and the trimmed query matches none, show the existing `mealsPlanner.noMatches` and drop the empty-library guidance. Keep the 49 browser cases and add unmatched, empty and clear controls.
     - No SQL, service conversion, AI routes, catalogues, providers, or the held NWV I18N-011 toast lines are touched.
   - **Status:** `COMPONENT-4D0C5DE53A9F` and `SUPPORT-E8F3F434DAC5` stay IN PROGRESS. The #794 candidate at `a9ca92e5` is superseded once the extension is pushed. No PASS. **PRODUCTION READY: NO.**
+- **Root composition of #794 and #795 (local, unpublished; owner-account comment posted 2026-10-02 11:33 UTC, [#771 comment 5951479057](https://github.com/NewWorldVenture/Bubaly/pull/771#issuecomment-5951479057)).**
+  - **The composition:** #794 at exactly `a9ca92e5` and #795 at exactly `cd6d6b3e` merge cleanly onto the eight-head composition `54b8aba3`, giving unpublished `0c48ad1c`.
+    - 65 files / 1,037 related Vitest tests pass (05afb9), and full non-incremental TypeScript passes (6fa70a).
+    - This ran with TZ=UTC set before Node, the native network sealed and synthetic data only. The ledger stays at main blob `e9b908fa`.
+  - **Independent checks:**
+    - The browser carousel fails 2 with 2 controls on the original (f7ca08) and passes 4/4 on source `c6e90a4a` (b94abd). Source review (c3dd9b/f5d27c) confirms a bounded render, state and navigation, and the browser console hooks.
+    - The dashboard's final 32 SDK cases pass (8c69e1) at source `ce3d9549` and test `7a9ddf74`. The original 16-case matrix shows 4 failures and 12 controls (1672ea), and the author's 32-case baseline shows 17 failures and 15 controls (12ebf9).
+  - **Scope:** these results apply only to those **exact heads**. They do not carry over to the #794 recipe-search extension or the calendar-navigation candidate, and there is no Auth, RLS or deployed-transport closure.
+  - **Status:** `COMPONENT-4D0C5DE53A9F`, `SUPPORT-E8F3F434DAC5` and `ACTION-2677F9A42D51` stay **IN PROGRESS**, and the affected workflows stay open. No PASS. **PRODUCTION READY: NO.**
 - **#768 integration:** promotion out of draft and any merge are blocked pending the owner's explicit approval. This checkpoint promotes and merges nothing.
 - **Register B status-mark correction:** #770 introduced three rows whose status cell read `?? IN PROGRESS` instead of `🔄 IN PROGRESS` (SUPPORT-AD3999932010, SUPPORT-EC79FA65AC23, SUPPORT-9C6B11D5A8EB). The register prose already counted them as IN PROGRESS, so only the mark is restored. Every ID, order, status, count and piece of evidence text is unchanged. Register B stays **14,364 = 11,877 NOT STARTED + 2,136 IN PROGRESS + 185 PASS + 157 FIXED + PASS + 9 BLOCKED**.
 
