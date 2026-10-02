@@ -29,6 +29,10 @@ beforeEach(()=>{
    if(mode==='member-missing')return response([]);
    const roster=[{id:member,family_id:family,is_active:true},{id:foreignMember,family_id:foreignFamily,is_active:true}];return response(roster.filter(r=>(!u.searchParams.has('id')||u.searchParams.get('id')==='eq.'+r.id)&&(!u.searchParams.has('family_id')||u.searchParams.get('family_id')==='eq.'+r.family_id)));
   }
+  if(method==='GET'&&table==='todo_lists'){
+   expect(u.searchParams.get('select')).toBe('id,family_id');expect(u.searchParams.get('family_id')).toBe('eq.'+family);expect(u.searchParams.get('id')).toBe('eq.eeeeeeee-eeee-4eee-8eee-000000000001');
+   return response([{id:'eeeeeeee-eeee-4eee-8eee-000000000001',family_id:family}]);
+  }
   if(method==='POST'&&table==='todo_items'){
    expect(body.family_id).toBe(family);expect(body.created_by).toBe(member);expect(body.list_id).toBe('eeeeeeee-eeee-4eee-8eee-000000000001');
    const row={id:'dddddddd-dddd-4ddd-8ddd-000000000003',...body};rows.push(row);return response(structuredClone(row));
