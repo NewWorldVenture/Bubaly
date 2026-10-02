@@ -406,6 +406,13 @@ Additions after the 10:55 UTC base, each with its own time: #772 opened 10:58 UT
     - **Kept as is:** the child-only, explicit-false and global-family policy. #784 and #786's own sources are not touched.
     - **Limits:** a live roster traversal is not a snapshot and not atomic revocation. No release credit.
     - **Overlap:** NWV has no local changes to this helper.
+    - **Scope and progress update (owner comment posted 2026-10-02 10:20:01 UTC, [#771 comment 5950222443](https://github.com/NewWorldVenture/Bubaly/pull/771#issuecomment-5950222443); written 2026-10-02 10:20 UTC):**
+      - **Wider test-only scope:** the adapter scope now also covers `tests/push-consent-boundary.test.ts`, `tests/push-device-read-is-not-an-empty-roster.test.ts` and `tests/push-failure-is-not-delivery.test.ts`. Their legacy query mocks lack range handling, and three single-request count assertions must account for the terminal empty page and 100-ID batches.
+      - **What doesn't change:** the behavioural refusal and delivery assertions stay intact. These files overlap #784's fixture portions, so composition will be checked. NWV has no local changes to these files.
+      - **Results so far:** the new actual-SDK helper tests pass 30/30, and the existing helper controls pass 11/11. The verified original helper gives 13 failures and 17 controls on the same 30 cases.
+      - **First broader run, not a pass:** 227 passed and 23 failed. Nine are the identified fixture adaptations. Fourteen are the known React 18 `useFormStatus` rendering failures in two unchanged marketing suites, which remain a runtime acceptance hold. No dependency was installed and no assertion was weakened.
+      - **#786 composition:** #786's child-query SDK fixture also needs range and order semantics when composed with the paged helper. Independent review is testing that composition in temporary files first, and a separate test-only update to the chore branch will keep its assertions.
+      - **Limits:** membership or consent changes after the live reads remain a race. No whole-workflow clearance.
 - **Repair candidate: queued notification-email recipients, [#787](https://github.com/NewWorldVenture/Bubaly/pull/787), plus a new Register B obligation (owner comment posted 2026-10-02 10:17:57 UTC, [#771 comment 5950183387](https://github.com/NewWorldVenture/Bubaly/pull/771#issuecomment-5950183387); written 2026-10-02 10:18 UTC).** This is reviewer- and author-reported synthetic evidence and was not re-run here. The two-file diff was read here.
   - **Head and scope:** exact `a24f048fee938cc6e764a80f664863df4cf41b89`, from main `01b2c380`. Files are `lib/server/notification-emails.ts` and the new `tests/notification-email-membership.test.ts`.
   - **The repair:**
