@@ -21,7 +21,8 @@ begin
     on conflict (id) do nothing;
   insert into public.families (id, name, created_by) values (fam, 'Conversation family', uPar);
   insert into public.family_members (family_id, user_id, display_name, role, is_active) values (fam, uKid, 'Kid', 'child', true);
-  insert into public.family_conversations (family_id, name, kind, created_by) values (fam, 'Family Chat', 'group', uPar) returning id into conv;
+  insert into public.family_conversations (family_id, name, kind, created_by, member_ids)
+    values (fam, 'Family Chat', 'group', uPar, array[uPar, uKid]) returning id into conv;
   insert into public.family_messages (conversation_id, family_id, sender_id, content, kind) values (conv, fam, uPar, 'Dinner at 6', 'text');
 
   perform set_config('request.jwt.claim.sub', uKid::text, true);

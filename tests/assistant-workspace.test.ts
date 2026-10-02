@@ -230,7 +230,8 @@ describe('assistant module', () => {
   });
 
   it('parses the stream through the shared contract, renders cards through the pane, and rehydrates structured_content', () => {
-    expect(src).toContain('parseAssistantStreamEvent(raw)');
+    expect(src).toContain('consumeAssistantStream(res.body,');
+    expect(read('lib/ai/conversation-session.ts')).toContain('parseAssistantStreamEvent(raw)');
     expect(src).toContain("ev.type === 'card'");
     expect(src).toContain("ev.type === 'run'");
     expect(src).toContain('structured_content');

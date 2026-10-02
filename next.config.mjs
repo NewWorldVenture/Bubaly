@@ -1,10 +1,11 @@
 import { buildContentSecurityPolicy } from './lib/security/csp.mjs';
 import { parseBuildRevision } from './lib/build-identity.mjs';
+import { fileURLToPath } from 'node:url';
 
 // Next's bundled react-dom client, production and development, stable and
 // experimental: where scripts/react-hydration-replay-fix.cjs applies.
 const REACT_DOM_CLIENT = /[\\/]next[\\/]dist[\\/]compiled[\\/]react-dom(?:-experimental)?[\\/]cjs[\\/]react-dom-client\.(?:production|development)\.js$/;
-const REACT_HYDRATION_REPLAY_FIX = new URL('./scripts/react-hydration-replay-fix.cjs', import.meta.url).pathname;
+const REACT_HYDRATION_REPLAY_FIX = fileURLToPath(new URL('./scripts/react-hydration-replay-fix.cjs', import.meta.url));
 
 /** @type {import('next').NextConfig} */
 const nextConfig = {

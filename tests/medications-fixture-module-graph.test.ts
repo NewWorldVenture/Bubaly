@@ -37,8 +37,10 @@ const LOADER_THROW = /throw new Error\(\s*'Unexpected [^']*(?:module|import)/;
  * self-maintaining fails the case below instead of quietly leaving coverage.
  */
 const SELF_MAINTAINING = [
+  'assistant-conversation-lifecycle.spec.ts',
   'auth-cache-partition.spec.ts', 'auth-initiation-order.spec.ts', 'auth-recovery-ui.spec.ts',
   'browser-session-storage.spec.ts', 'callback-completion-ui.spec.ts', 'family-media-session-ownership.spec.ts',
+  'family-messages-state.spec.ts',
   'format-hydration.spec.ts', 'framework-hydration-replay.spec.ts',
   'inbox-message-ownership.spec.ts',
   'kid-login-boundaries.spec.ts',

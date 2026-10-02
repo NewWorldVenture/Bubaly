@@ -48,7 +48,7 @@ begin
 
   insert into public.family_albums (family_id, name) values (fam, 'Holidays');
   insert into public.family_contacts (family_id, name) values (fam, 'Pediatrician');
-  insert into public.family_conversations (family_id) values (fam) returning id into conv;
+  insert into public.family_conversations (family_id, member_ids) values (fam, array[uPar, uEx]) returning id into conv;
   insert into public.family_messages (family_id, conversation_id) values (fam, conv);
   insert into public.family_photos (family_id, storage_path) values (fam, fam || '/beach.jpg');
   insert into public.family_recipes (family_id, name) values (fam, 'Pancakes');

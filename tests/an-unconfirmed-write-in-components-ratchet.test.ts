@@ -43,7 +43,6 @@ import { filesMatching, perFile, unconfirmedWritesIn } from './helpers/unconfirm
 const BASELINE = new Map<string, number>([
   ['components/modules/career-module.tsx', 1],
   ['components/modules/meals-module.tsx', 1],
-  ['components/modules/messages-module.tsx', 1],
   ['components/modules/notifications-module.tsx', 1],
   ['components/modules/routines-panel.tsx', 1],
   ['components/modules/voting-module.tsx', 2],
@@ -83,9 +82,9 @@ describe('the unconfirmed-write class in components/ only shrinks (C1-S9-77)', (
     expect(stale, 'BASELINE lists files with no unconfirmed writes left — remove them').toEqual([]);
   });
 
-  it('the baseline total matches what finalaudit.md records', () => {
+  it('the remaining baseline excludes the replaced messenger read-receipt fallback', () => {
     const total = [...BASELINE.values()].reduce((a, b) => a + b, 0);
-    expect(total).toBe(8);
+    expect(total).toBe(7);
   });
 
   // C1-S9-86: the burn-down is finished. What is left is a register of writes

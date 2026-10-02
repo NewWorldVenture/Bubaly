@@ -1,0 +1,48 @@
+name: Messaging verification
+
+on:
+  pull_request:
+  push:
+    branches: [main]
+
+permissions:
+  contents: read
+
+concurrency:
+  group: messaging-verification-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  messaging:
+    name: Messaging privacy, concurrency and browser lifecycle
+    runs-on: ubuntu-24.04
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version-file: .nvmrc
+          cache: npm
+      - run: npm ci
+      - name: Install local PostgreSQL binaries
+        run: |
+          sudo apt-get update -qq
+          sudo apt-get install -y --no-install-recommends postgresql-16
+      # Creates its own loopback-only cluster in mkdtemp and destroys only that
+      # cluster. No production URLs, credentials, providers, or data are used.
+      - name: Participant boundaries and independent-session races
+        run: node scripts/verify-messaging-database.mjs --bin /usr/lib/postgresql/16/bin
+      - name: Install Chromium
+        run: npx playwright install --with-deps chromium
+      # Real React components with deterministic transport boundaries. Database
+      # authorization is verified separately above, not simulated by the UI fake.
+      - name: Conversation ownership, sending and streaming
+        run: npx playwright test tests/e2e/family-messages-state.spec.ts tests/e2e/assistant-conversation-lifecycle.spec.ts --project=chromium
+        env:
+          PLAYWRIGHT_EXTERNAL_SERVER: '1'
+      - uses: actions/upload-artifact@v4
+        if: failure()
+        with:
+          name: messaging-browser-failures
+          path: test-results/
+          if-no-files-found: ignore

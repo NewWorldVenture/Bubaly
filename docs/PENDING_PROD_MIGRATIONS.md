@@ -1,5 +1,30 @@
 # Production release status and historical feature inventory
 
+## Chat and messaging rollout (2026-10-02)
+
+The messaging buildout adds `0475_messaging_conversation_privacy_and_delivery.sql`
+and `0476_messaging_notifications_preferences.sql`. Neither has been applied to
+production by this task. Apply them, in order, before releasing the accompanying
+web/native changes: the application deliberately fails closed when the new RPCs
+or preference table are unavailable. Production migration execution remains a
+human-owned operation under the existing release controls below.
+
+0475 restricts direct/group conversations, messages, media and private realtime
+topics to active participants; adds a canonical whole-family chat and atomic
+creation/read/reaction/leave operations; and validates identity and reply paths.
+0476 adds recipient-only, content-free **in-app** notices and durable per-user
+mute. Chat notices are intentionally excluded from email and push dispatch.
+
+Both migrations pass reapplication, real PostgreSQL role probes, independent-
+session concurrency checks, and repeated message seeds in a disposable local
+database. This is not proof of the production schema or hosted Realtime setup.
+After applying, smoke-test two participants and a same-family nonparticipant,
+private uploads, realtime reconnect, mute and a notification deep link. Previously
+issued signed media URLs retain their existing expiry semantics.
+
+See [the buildout verification record](chat-messaging-buildout.md) and the dedicated
+`Messaging verification` CI workflow. The historical baseline below is unchanged.
+
 **Current status (2026-09-05; main `01881fb279589d7a90acb8302817bb385fbe036d`).**
 **This baseline is stale — see "Migrations added since this document's stated
 baseline" at the end for the thirty-one migrations (`0255`-`0285`) that landed after

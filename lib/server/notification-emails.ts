@@ -30,6 +30,8 @@ export async function deliverNotificationEmails(supabase: DB): Promise<Notificat
     .from('notifications')
     .select('id, user_id, type, title, body')
     .is('sent_at', null)
+    // Chat notices are in-app only; do not turn every message into an email.
+    .or('related_type.is.null,related_type.neq.family_message')
     .not('user_id', 'is', null)
     .lte('send_at', nowIso)
     .order('created_at', { ascending: true })
