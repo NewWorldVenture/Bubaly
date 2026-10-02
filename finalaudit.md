@@ -724,6 +724,20 @@ Additions after the 10:55 UTC base, each with its own time: #772 opened 10:58 UT
     - INT-O01 is `4ffc0c853`: it hides "Rate the app" unless a store listing is configured.
   - **Composition (local `git merge-tree`, no build or test):** #788 merges cleanly with #783 `9aa9898d`, with #775 `046bc33b` and with #771 `f40462ac`. #783 and #788 change different hunks of `app/api/ai/import/route.ts`.
   - The handoff plan is in [#771 comment 5951399731](https://github.com/NewWorldVenture/Bubaly/pull/771#issuecomment-5951399731) (posted 2026-10-02 11:27 UTC). No closure credit is taken from #788's ledger edits, which mark F19 FIXED, INT-O01 FIXED, I18N-011 PARTIAL and `INTEGRATION-3BBD7C83445A` FIXED + PASS. In this ledger, `MAIN-F19` and the I18N-011 and INT-O01 rows keep their current status.
+- **Audit lane claim: ordinary calendar month navigation and weekday alignment (owner-account comment posted 2026-10-02 11:27 UTC, [#771 comment 5951392582](https://github.com/NewWorldVenture/Bubaly/pull/771#issuecomment-5951392582)).**
+  - **Branch and files:** `codex/calendar-navigation-20261002`, clean at main `01b2c380`. The files are `components/modules/calendar-module.tsx` (blob `9fcc9bbc`), the existing `tests/calendar-split-view.test.ts` (all assertions kept) and a new `tests/e2e/calendar-navigation.spec.ts`.
+  - **The defect:** whole-component callbacks on main with synthetic hooks reproduce three desired failures, with 4 healthy controls passing (7 frozen cases; root reproduced independently).
+    - On March 2, Next stays on March.
+    - On March 30, Previous stays on March.
+    - A Monday date sits under the mini calendar's Sunday heading.
+    - The 41 existing recurrence, zoned, split and date cases all pass despite these defects. A scratch causal change passes the same 7 assertions; that is not yet a browser or workflow claim.
+  - **Planned repair:** step the month to the adjacent calendar month, keeping week and day navigation and the family wall-clock semantics, and align the weekday labels with the Monday-first cells. Browser controls cover year, leap-year and Sunday-first boundaries, Today, and week navigation.
+  - **Status (verified, unchanged; no transition requested):**
+    - `COMPONENT-58F072E654BC` (`calendar-module.tsx`), `SUPPORT-F3FE52A739BC` (`calendar-split-view.test.ts`), `CONTROL-65B075695BF2` (MiniCalendar) and `LIBRARY-141D81A1905F` (`lib/calendar/recurrence.ts`) stay NOT STARTED.
+    - The new spec has no Register B row and none is created unasked; by the path rule it would be `SUPPORT-FC487ADCA94E`.
+  - **Overlap (NWV, local and unpublished):** the I18N-011 commit `eb213702` (local `integrate` and the held agent worktrees) changes two error-toast lines of `calendar-module.tsx`. The stale `time003-wip-backup` branch holds a superseded TIME-003 work-in-progress port of the same file, which is not for review or revival. Neither touches month stepping or weekday-label order.
+  - **Not claimed:** providers, Auth, SQL, migrations, production configuration or money. **PRODUCTION READY: NO.**
+- **#771 head `f40462ac4` CI ([run 37000907856](https://github.com/NewWorldVenture/Bubaly/actions/runs/37000907856)):** Mobile failed on the same production dependency audit, 16 vulnerabilities (12 moderate, 4 high), including node-forge through Expo. The log reports the exit at 11:25:47 UTC. Per owner review 5391214026 the gate stays and no exception is made. The other jobs were still running when this was written.
 - **#768 integration:** promotion out of draft and any merge are blocked pending the owner's explicit approval. This checkpoint promotes and merges nothing.
 - **Register B status-mark correction:** #770 introduced three rows whose status cell read `?? IN PROGRESS` instead of `🔄 IN PROGRESS` (SUPPORT-AD3999932010, SUPPORT-EC79FA65AC23, SUPPORT-9C6B11D5A8EB). The register prose already counted them as IN PROGRESS, so only the mark is restored. Every ID, order, status, count and piece of evidence text is unchanged. Register B stays **14,364 = 11,877 NOT STARTED + 2,136 IN PROGRESS + 185 PASS + 157 FIXED + PASS + 9 BLOCKED**.
 
