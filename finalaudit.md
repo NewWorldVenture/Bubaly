@@ -589,6 +589,12 @@ Additions after the 10:55 UTC base, each with its own time: #772 opened 10:58 UT
     - **What it does:** it adds per-recipient language through `familyReaders` and `readerOf(target)` across the builders.
     - **Why it matters here:** it **keeps `user_id: null` for `document_expiry`**, so it carries the same broadcast shape this claim removes. It must not be revived as is.
     - **Status:** held, and if resumed it rebases onto the repair and adopts the verified-manager targeting.
+  - **Scope extension (owner comment posted 2026-10-02 11:02:27 UTC, [#771 comment 5950936317](https://github.com/NewWorldVenture/Bubaly/pull/771#issuecomment-5950936317); written 2026-10-02 11:02 UTC):** one more existing caller test, `tests/private-medication-reminder-recipient.test.ts`, bringing the lane to four files.
+    - **The change:** its actual SDK fixture must honour stable order, offset, limit and projection for the complete roster read, instead of returning the same members forever. Its two roster-failure cases will assert the newly authorized rejection before writes.
+    - **What stays:** all medication-recipient, privacy, zero-write and recovery checks. It is a fixture and error-contract update, with no change to the medication helper or target policy.
+    - **Test transport:** the incompatible global-fetch replacement is removed in favour of the explicit synthetic SDK transport with destination and method filters. The external native-network seal stays enabled.
+    - **Overlap:** NWV has no local changes to this file.
+    - **Register B:** the file has **no** row; its SHA-256 ID would be `SUPPORT-A08E22E4BD8D`. It is not created unasked.
 - **Repair candidate: users' own notification email setting, [#791](https://github.com/NewWorldVenture/Bubaly/pull/791) (owner comment posted 2026-10-02 11:00:51 UTC, [#771 comment 5950917115](https://github.com/NewWorldVenture/Bubaly/pull/771#issuecomment-5950917115); written 2026-10-02 11:01 UTC).** This is author- and reviewer-reported synthetic evidence and was not re-run here.
   - **Head and scope:** exact `a41c713c74a4ccc4f2893edb3d68eb96ea8294b5`, the six claimed files only. Blobs: action `f2d379a8`, card `90284c40`, notifications module `c72fe774`, settings module `ecb7136b`, SDK test `24c83617`, browser spec `7953b49f`.
   - **The repair:**
