@@ -681,6 +681,17 @@ Additions after the 10:55 UTC base, each with its own time: #772 opened 10:58 UT
     - Separate scoped local evidence: #791's React 19 synthetic browser cases (17) and the saved-preference-to-three-consumers cases (9) pass.
     - Not performed: no live Auth, RLS, storage provider, email/SMS delivery, scheduler, production configuration, migration or financial action. The hosted Mobile dependency-audit and fixed-date E2E holds remain.
     - It grants no PASS, closure, promotion or deployment authority. **PRODUCTION READY: NO** stays in force.
+  - **Hosted CI snapshot of the eight exact heads (read-only; owner-account #771 comment 5951287815, 2026-10-02 11:22 UTC; receipt `bubaly-final8-head-ci-receipt-20261002.json`, SHA-256 `f4de11c4…c91f1c`):**
+    - **Database:** all eight succeeded.
+    - **Web (terminal success, all three timezone runs, types and build):**
+      - #784 `6fcca98d`: run 36994274138, job 110797527364, 23,952 passed + 2 expected failures.
+      - #790 `632f150c`: run 36997661466, job 110807989946, 23,941 passed + 2 expected failures.
+      - #791 `a41c713c`: run 36998518910, job 110810653517, 23,968 passed + 2 expected failures.
+      - Counts are per run, not summed across timezones.
+      - Still running, with no terminal credit: #786 `0648c258`, #787 `bec49a67`, #789 `f2b1e356`, #792 `80c4ab67` and #793 `30bf0080`.
+    - **Mobile:** all eight failed the existing production dependency audit. It reported 16 findings (12 moderate, 4 high), including node-forge GHSA-86w9-cpqp-85rv through Expo. The type and config steps were skipped, so this is not a React, type or config failure.
+    - **E2E:** #784 is terminal with 1 failure and 1,908 passes. The failure is at `social-publish-consumers.spec.ts:269`: the saved-schedule `resultCount` was expected to be 1 and was 0. This is the fixed-date fixture fixed by #775 on its branch and not yet on main. The other seven were still running.
+    - No workflow was rerun, and no pending or cancelled result is borrowed. **PRODUCTION READY: NO.**
   - **PRODUCTION READY: NO.**
 - **Audit lane claim: the weekly meal dinner carousel stays usable when its selected dinner is removed or a same-week refresh shortens the plan (owner comment posted 2026-10-02 11:22 UTC, [#771 comment 5951285447](https://github.com/NewWorldVenture/Bubaly/pull/771#issuecomment-5951285447); written 2026-10-02 11:23 UTC).**
   - **Branch and files:** `codex/meal-carousel-refresh-20261002`, clean at main `01b2c380`. Only `components/modules/meals-module.tsx` (original blob `a730e3ce`) and `tests/e2e/weekly-meal-planner.spec.ts`. #788's AI meal routes and tests are excluded.
