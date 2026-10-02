@@ -1,4 +1,13 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
+
+// F19: on a capped plan the request row is the meter, so withAiRequest refuses
+// when it cannot be filed. This file is about other behaviour and its fake
+// database files no row, so the family is on Basic, whose allowance is
+// unlimited: an unfiled request is bookkeeping there, as it always was.
+vi.mock('@/lib/server/plan', async (importOriginal) => ({
+  ...(await importOriginal<typeof import('@/lib/server/plan')>()),
+  resolveFamilyPlanLevel: async () => 1,
+}));
 import type { StreamEvent, ToolRunResult } from '@/lib/ai/provider';
 
 type Row = Record<string, unknown>;
