@@ -1,4 +1,5 @@
 import { NextResponse } from 'next/server';
+import { withinAIAllowance, AIAllowanceSpent } from '@/lib/server/ai-access';
 import { getTranslations } from '@/lib/i18n/server';
 import { requireUserContext } from '@/lib/supabase/auth';
 import { createServer } from '@/lib/supabase/server';
@@ -99,6 +100,8 @@ export async function POST() {
       // failure is on the row before it is swallowed. This route returns 200
       // either way — `aiUsed: false` is the only outward sign, and nobody
       // reading a support ticket can tell it from "AI wasn't configured".
+      // F19: past the monthly AI allowance, give the answer this route gives without AI.
+      if (!(await withinAIAllowance(ctx, supabase))) throw new AIAllowanceSpent();
       recommendations = await withAiRequest(
         scopeFromUserContext(ctx, supabase),
         { feature: 'home.utility-savings', text: 'Utility savings' },

@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { assertAIRequestFamily, getAIRequestTranslations } from '@/lib/server/ai-request-context';
-import { authenticateAI } from '@/lib/server/ai-access';
+import { authenticateAI, refuseOverAIAllowance } from '@/lib/server/ai-access';
 import { getOpenAIKey } from '@/lib/ai/settings';
 import { cleanTranscript, isValidAudioUpload } from '@/lib/ai/voice';
 import { enforceAIRateLimit } from '@/lib/server/ai-rate-limit';
@@ -64,6 +64,11 @@ export async function POST(req: NextRequest) {
     upstream.append('model', model);
     upstream.append('response_format', 'json');
 
+    // F19: past the monthly allowance the assistant turn this serves is refused,
+    // so neither is this. Not recorded separately: it is the assistant's input or
+    // output, and the turn itself is what counts.
+    const overAllowance = await refuseOverAIAllowance(authed.ctx, authed.supabase);
+    if (overAllowance) return overAllowance;
     const res = await fetchWithDeadline('https://api.openai.com/v1/audio/transcriptions', {
       method: 'POST',
       headers: { authorization: `Bearer ${apiKey}` },

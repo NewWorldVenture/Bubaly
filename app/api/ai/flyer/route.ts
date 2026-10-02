@@ -1,4 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
+import { refuseOverAIAllowance } from '@/lib/server/ai-access';
+import { withAiRequest } from '@/lib/ai/observability';
+import { scopeFromUserContext } from '@/lib/services/scope';
 import { getTranslations } from '@/lib/i18n/server';
 import { createServer, createServiceClient } from '@/lib/supabase/server';
 import { refuseUnlessEntitled } from '@/lib/server/route-feature-gate';
@@ -142,6 +145,10 @@ Rules:
     // OpenAI-only deployment. Use the admin-configured OpenAI key/model
     // (Admin → AI Engine) with env fallback. gpt-4o reads images directly and
     // PDFs via the file input part.
+    // F19: the monthly AI allowance the plans sell, checked before the model runs.
+    const overAllowance = await refuseOverAIAllowance(ctx, supabase);
+    if (overAllowance) return overAllowance;
+
     const aiConfig = await getAIConfig(createServiceClient());
     const apiKey = aiConfig.openaiKey ?? process.env.OPENAI_API_KEY;
     if (!apiKey) {
@@ -153,15 +160,24 @@ Rules:
       ? { type: 'file' as const, file: { filename: 'flyer.pdf', file_data: `data:application/pdf;base64,${data}` } }
       : { type: 'image_url' as const, image_url: { url: `data:${mediaType};base64,${data}` } };
 
-    const aiRes = await fetchWithDeadline('https://api.openai.com/v1/chat/completions', {
-      method: 'POST',
-      headers: { 'content-type': 'application/json', authorization: `Bearer ${apiKey}` },
-      body: JSON.stringify({
-        model,
-        max_tokens: 1500,
-        messages: [{ role: 'user', content: [{ type: 'text', text: prompt }, filePart] }],
-      }),
-    }, 60_000);
+    // Recorded like every other AI route, so the call counts against the allowance (F19).
+    const aiRes = await withAiRequest(
+      scopeFromUserContext(ctx, supabase),
+      { feature: 'flyer.scan', text: 'Scan a flyer' },
+      async (obs) => {
+        const res = await fetchWithDeadline('https://api.openai.com/v1/chat/completions', {
+          method: 'POST',
+          headers: { 'content-type': 'application/json', authorization: `Bearer ${apiKey}` },
+          body: JSON.stringify({
+            model,
+            max_tokens: 1500,
+            messages: [{ role: 'user', content: [{ type: 'text', text: prompt }, filePart] }],
+          }),
+        }, 60_000);
+        obs.used(model, null);
+        return res;
+      },
+    );
     if (!aiRes.ok) {
       const bounded = await readBoundedResponseText(aiRes, 64 * 1024);
       console.error('Flyer OpenAI error', aiRes.status, bounded.ok ? bounded.text : '[provider error response exceeded 64 KiB]');

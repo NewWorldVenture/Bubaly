@@ -1,4 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server';
+import { assertFamilyAIAllowance, accessDeniedResponse } from '@/lib/server/ai-access';
 import { getTranslations } from '@/lib/i18n/server';
 import { createServiceClient } from '@/lib/supabase/server';
 import { settleAll, describeReadError } from '@/lib/supabase/settle';
@@ -82,6 +83,11 @@ export async function POST(req: NextRequest) {
     const { system, user } = buildGiftAssistPrompt({
       childName, occasion: link.occasion, relationship, goalTitle, goalSavedCents, goalTargetCents,
     });
+    // F19: the family whose link this is pays for the model call, so it counts
+    // against that family's monthly allowance. The giver is not signed in, so it
+    // is checked but not recorded as a member's request.
+    const allowance = await assertFamilyAIAllowance(supabase, link.family_id);
+    if (!allowance.ok) return accessDeniedResponse(allowance);
     const provider = await resolveProvider();
     const completion = await provider.complete({ system, messages: [{ role: 'user', content: user }], tools: [], maxTokens: 500 });
     const suggestions = parseGiftSuggestions(completion.text || '');

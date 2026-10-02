@@ -16605,5 +16605,12 @@
   "tripCountdown.startedYesterday": "Commencé hier",
   "tripCountdown.daysAgo": "il y a {count} jours",
   "tripCountdown.travelersOne": "{count} voyageur",
-  "tripCountdown.travelersMany": "{count} voyageurs"
+  "tripCountdown.travelersMany": "{count} voyageurs",
+  "error.dbPermission": "Vous n'avez pas l'autorisation de faire cela. Demandez à un administrateur de la famille si vous pensez qu'il s'agit d'une erreur.",
+  "error.dbConflict": "Cela existe déjà. Essayez une autre valeur.",
+  "error.dbNotFound": "Cet élément est introuvable — il a peut-être déjà été supprimé.",
+  "error.dbInvalid": "Des informations obligatoires manquent ou ne sont pas valides. Vérifiez-les et réessayez.",
+  "error.dbNetwork": "Problème de réseau — vérifiez votre connexion et réessayez.",
+  "aiSavings.allowanceSpentSuggestions": "Vous avez utilisé les demandes d'IA de ce mois — voici des suggestions tirées de vos finances.",
+  "aiSavings.notConfiguredSuggestions": "L'IA n'est pas configurée — voici des suggestions tirées de vos finances."
 }

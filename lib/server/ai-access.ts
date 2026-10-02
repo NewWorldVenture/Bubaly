@@ -138,6 +138,15 @@ export async function assertAIAccess(
     };
   }
 
+  return monthlyAllowance(ctx.active.familyId, opts, planLevel, superAdmin);
+}
+
+async function monthlyAllowance(
+  familyId: string,
+  opts: { db: DB; now?: Date },
+  planLevel: number,
+  superAdmin: boolean,
+): Promise<AIAccess> {
   const level = (planLevel >= 2 ? 2 : planLevel >= 1 ? 1 : 0) as 0 | 1 | 2;
   const allowance = superAdmin ? null : AI_MONTHLY_ALLOWANCE[level];
   if (allowance === null) return { ok: true, planLevel, monthlyUsed: null, monthlyAllowance: null };
@@ -160,6 +169,69 @@ export async function assertAIAccess(
     };
   }
   return { ok: true, planLevel, monthlyUsed: used, monthlyAllowance: allowance };
+}
+
+/**
+ * The monthly AI allowance alone, for a route whose FEATURE is already decided
+ * by `refuseUnlessEntitled` or is Free (F19).
+ *
+ * The allowance is the whole-product budget the plans sell — Free lists
+ * "10 AI requests/month", Basic and Plus "Unlimited" — and the count is every
+ * `ai_requests` row the family filed this month, which `withAiRequest` writes
+ * for every one of these routes. But only the routes that called
+ * `assertAIAccess` refused past it, so a Free family could call the meal
+ * planner, the chef, the journal and twenty more without end, each a paid
+ * model request. This is the same check without the concierge's tier gate
+ * (`assertAIAccess` would refuse a Free family a Free feature), so it changes
+ * nothing for a Basic or Plus family, whose allowance is unlimited.
+ */
+export async function assertAIAllowance(ctx: UserContext, opts: { db: DB; now?: Date }): Promise<AIAccess> {
+  const superAdmin = isSuperAdminEmail(ctx.user.email);
+  let planLevel: number;
+  try {
+    planLevel = superAdmin ? 2 : await resolveFamilyPlanLevel(opts.db, ctx.active.familyId);
+  } catch (error) {
+    console.error('[ai-access] plan level read failed', error);
+    return { ok: false, status: 403, code: 'unavailable', error: 'Bubaly could not confirm your plan right now. Try again in a moment.' };
+  }
+  return monthlyAllowance(ctx.active.familyId, opts, planLevel, superAdmin);
+}
+
+/**
+ * For a route that has an answer without AI (a deterministic fallback): past
+ * the allowance it should give that answer, not a refusal. Throw this inside
+ * the try that already falls back when the model fails; the model is never
+ * called, so the request is not counted either.
+ */
+export class AIAllowanceSpent extends Error {
+  constructor() { super('The family has used this month\'s AI allowance.'); this.name = 'AIAllowanceSpent'; }
+}
+
+/** True while the family may still spend an AI request this month. */
+export async function withinAIAllowance(ctx: UserContext, db: DB): Promise<boolean> {
+  return (await assertAIAllowance(ctx, { db })).ok;
+}
+
+/**
+ * The allowance of a family with no signed-in member on the request — the
+ * public gift page, where a relative writes a message for a family's link.
+ * `db` must be able to count that family's rows (the service client there).
+ */
+export async function assertFamilyAIAllowance(db: DB, familyId: string): Promise<AIAccess> {
+  let planLevel: number;
+  try {
+    planLevel = await resolveFamilyPlanLevel(db, familyId);
+  } catch (error) {
+    console.error('[ai-access] plan level read failed', error);
+    return { ok: false, status: 403, code: 'unavailable', error: 'Bubaly could not confirm the plan right now. Try again in a moment.' };
+  }
+  return monthlyAllowance(familyId, { db }, planLevel, false);
+}
+
+/** The route form of `assertAIAllowance`: `null` to proceed, or the response to return. */
+export async function refuseOverAIAllowance(ctx: UserContext, db: DB): Promise<NextResponse | null> {
+  const allowance = await assertAIAllowance(ctx, { db });
+  return allowance.ok ? null : accessDeniedResponse(allowance);
 }
 
 /** JSON body for a denial, with the status the denial names. */

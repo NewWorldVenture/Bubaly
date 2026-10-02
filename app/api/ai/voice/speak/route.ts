@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { assertAIRequestFamily, getAIRequestTranslations } from '@/lib/server/ai-request-context';
-import { authenticateAI } from '@/lib/server/ai-access';
+import { authenticateAI, refuseOverAIAllowance } from '@/lib/server/ai-access';
 import { getOpenAIKey } from '@/lib/ai/settings';
 import { prepareSpeechText, normalizeTtsVoice } from '@/lib/ai/voice';
 import { enforceAIRateLimit } from '@/lib/server/ai-rate-limit';
@@ -46,6 +46,11 @@ export async function POST(req: NextRequest) {
     if (!speech) return NextResponse.json({ error: t('speak.nothingToSay') }, { status: 400 });
 
     const model = process.env.OPENAI_TTS_MODEL || 'gpt-4o-mini-tts';
+    // F19: past the monthly allowance the assistant turn this serves is refused,
+    // so neither is this. Not recorded separately: it is the assistant's input or
+    // output, and the turn itself is what counts.
+    const overAllowance = await refuseOverAIAllowance(authed.ctx, authed.supabase);
+    if (overAllowance) return overAllowance;
     const res = await fetchWithDeadline('https://api.openai.com/v1/audio/speech', {
       method: 'POST',
       headers: { 'content-type': 'application/json', authorization: `Bearer ${apiKey}` },

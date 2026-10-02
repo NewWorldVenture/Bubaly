@@ -16605,5 +16605,12 @@
   "tripCountdown.startedYesterday": "Gestern begonnen",
   "tripCountdown.daysAgo": "vor {count} Tagen",
   "tripCountdown.travelersOne": "{count} Reisende:r",
-  "tripCountdown.travelersMany": "{count} Reisende"
+  "tripCountdown.travelersMany": "{count} Reisende",
+  "error.dbPermission": "Dafür fehlt dir die Berechtigung. Frag eine Familien-Admin-Person, wenn du das für einen Fehler hältst.",
+  "error.dbConflict": "Das gibt es bereits. Versuche einen anderen Wert.",
+  "error.dbNotFound": "Das wurde nicht gefunden – vielleicht wurde es schon entfernt.",
+  "error.dbInvalid": "Einige erforderliche Angaben fehlen oder sind ungültig. Bitte prüfe sie und versuche es erneut.",
+  "error.dbNetwork": "Netzwerkproblem – prüfe deine Verbindung und versuche es erneut.",
+  "aiSavings.allowanceSpentSuggestions": "Die KI-Anfragen dieses Monats sind aufgebraucht – hier sind datenbasierte Vorschläge aus euren Finanzen.",
+  "aiSavings.notConfiguredSuggestions": "KI ist nicht eingerichtet – hier sind datenbasierte Vorschläge aus euren Finanzen."
 }

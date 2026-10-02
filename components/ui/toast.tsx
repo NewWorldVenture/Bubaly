@@ -2,6 +2,7 @@
 
 import { createContext, useCallback, useContext, useMemo, useRef, useState } from 'react';
 import { useTranslations } from '@/components/i18n/locale-provider';
+import { localizeDbErrorText } from '@/lib/supabase/errors';
 import { CheckCircle2, AlertTriangle, Info, X } from 'lucide-react';
 import { cn } from '@/lib/utils/cn';
 
@@ -164,7 +165,7 @@ export function ToastProvider({ children }: { children: React.ReactNode }) {
                   t.tone === 'info' && 'text-brand-text',
                 )}
               />
-              <span className="flex-1">{t.message}</span>
+              <span className="flex-1">{localizeDbErrorText(t.message, tr)}</span>
               {t.action && (
                 <button
                   onClick={() => { t.action!.onClick(); dismiss(t.id); }}

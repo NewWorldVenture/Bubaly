@@ -383,10 +383,13 @@ describe('subscription webhook price history', () => {
   const known = Object.entries(PRICES.stripePrices).flatMap(([plan, entry]) => [entry.id, ...entry.previousIds].map(id => ({ id, slug: plan.replace('_monthly', '') })));
   function event(priceId: string) {
     vi.stubEnv('STRIPE_WEBHOOK_SECRET', 'synthetic-webhook-secret');
-    mocks.constructEvent.mockReturnValue({ id: 'evt-fixture', type: 'customer.subscription.updated', data: { object: {
+    const object = {
       id: 'sub-fixture', metadata: { family_id: 'family-a' }, customer: 'cus-fixture', items: { data: [{ price: { id: priceId } }] },
       status: 'active', current_period_end: 1_900_000_000, cancel_at_period_end: false,
-    } } });
+    };
+    mocks.constructEvent.mockReturnValue({ id: 'evt-fixture', type: 'customer.subscription.updated', data: { object } });
+    // Stripe's current state agrees with the event here; PAY-ORDER-001 below is where they differ.
+    mocks.retrieveSubscription.mockResolvedValue(object);
     return new NextRequest('https://app.example.test/api/webhooks/stripe', { method: 'POST', body: '{}' });
   }
   it.each(known)('preserves $slug entitlement for current or historical price $id', async ({ id, slug }) => {
@@ -451,10 +454,12 @@ describe('Checkout refuses a family that already has a live subscription', () =>
 describe('an ended subscription does not overwrite a different live one (PAY-DOUBLE-001)', () => {
   function ended(status: string, id = 'sub-old') {
     vi.stubEnv('STRIPE_WEBHOOK_SECRET', 'synthetic-webhook-secret');
-    mocks.constructEvent.mockReturnValue({ id: `evt-${status}`, type: 'customer.subscription.deleted', data: { object: {
+    const object = {
       id, metadata: { family_id: 'family-a' }, customer: 'cus-fixture', items: { data: [{ price: { id: PRICES.stripePrices.basic_monthly.id } }] },
       status, current_period_end: 1_900_000_000, cancel_at_period_end: false,
-    } } });
+    };
+    mocks.constructEvent.mockReturnValue({ id: `evt-${status}`, type: 'customer.subscription.deleted', data: { object } });
+    mocks.retrieveSubscription.mockResolvedValue(object);
     return new NextRequest('https://app.example.test/api/webhooks/stripe', { method: 'POST', body: '{}' });
   }
   it.each(['canceled', 'incomplete_expired', 'unpaid'])('keeps the live row when another subscription reports %s', async status => {
@@ -467,5 +472,38 @@ describe('an ended subscription does not overwrite a different live one (PAY-DOU
   it('still records the end of the subscription the row holds', async () => {
     expect((await webhook(ended('canceled', 'sub-existing'))).status).toBe(200);
     expect(mocks.writes).toContainEqual(expect.objectContaining({ table: 'subscriptions', operation: 'update', value: expect.objectContaining({ status: 'canceled', provider_ref: 'sub-existing' }) }));
+  });
+});
+
+// PAY-ORDER-001: Stripe does not deliver events in order. The webhook used to
+// write whatever the arriving event carried, so an older event delivered last
+// left the row describing a state the subscription had already left.
+describe('an event that arrives out of order does not roll the subscription back (PAY-ORDER-001)', () => {
+  function stale(eventStatus: string) {
+    vi.stubEnv('STRIPE_WEBHOOK_SECRET', 'synthetic-webhook-secret');
+    vi.stubEnv('STRIPE_SECRET_KEY', 'sk_test_synthetic');
+    const base = { id: 'sub-existing', metadata: { family_id: 'family-a' }, customer: 'cus-fixture',
+      items: { data: [{ price: { id: PRICES.stripePrices.plus_monthly.id } }] }, current_period_end: 1_900_000_000, cancel_at_period_end: false };
+    mocks.constructEvent.mockReturnValue({ id: 'evt-late', type: 'customer.subscription.updated', data: { object: { ...base, status: eventStatus } } });
+    // What Stripe holds now: the payment cleared after that event was sent.
+    mocks.retrieveSubscription.mockResolvedValue({ ...base, status: 'active' });
+    return new NextRequest('https://app.example.test/api/webhooks/stripe', { method: 'POST', body: '{}' });
+  }
+
+  it('writes the state Stripe holds now, not the late event\'s', async () => {
+    expect((await webhook(stale('past_due'))).status).toBe(200);
+    expect(mocks.retrieveSubscription).toHaveBeenCalledWith('sub-existing');
+    const written = mocks.writes.filter(w => w.table === 'subscriptions');
+    expect(written).toContainEqual(expect.objectContaining({ value: expect.objectContaining({ status: 'active' }) }));
+    expect(written).not.toContainEqual(expect.objectContaining({ value: expect.objectContaining({ status: 'past_due' }) }));
+  });
+
+  it('answers 500 and writes nothing when Stripe cannot be read, so Stripe retries', async () => {
+    const request = stale('past_due');
+    mocks.retrieveSubscription.mockRejectedValue(new Error('stripe unreachable'));
+    expect((await webhook(request)).status).toBe(500);
+    expect(mocks.writes.filter(w => w.table === 'subscriptions')).toEqual([]);
+    expect(mocks.markError).toHaveBeenCalledTimes(1);
+    expect(mocks.markProcessed).not.toHaveBeenCalled();
   });
 });

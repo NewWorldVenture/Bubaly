@@ -162,7 +162,11 @@ export function ProfileModule({ member, userEmail, stats }: ProfileModuleProps) 
             </button>
           </div>
           <Row icon={HelpCircle} label={t('profile.helpSupport')} href="/dashboard/settings#support" />
-          <Row icon={Star} label={t('profile.rateTheApp')} onClick={() => window.open('https://apps.apple.com/', '_blank', 'noopener,noreferrer')} />
+          {/* The review page carries the store listings an admin has configured
+              (App Store, Google Play, Trustpilot) and Bubaly's own review form.
+              This opened the App Store's front page, which lists no Bubaly
+              app at all. Audit INT-O01. */}
+          <Row icon={Star} label={t('profile.rateTheApp')} href="/reviews/new" />
         </Section>
       </div>
 

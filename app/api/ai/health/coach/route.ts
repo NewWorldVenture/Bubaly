@@ -1,4 +1,5 @@
 import { NextResponse } from 'next/server';
+import { refuseOverAIAllowance } from '@/lib/server/ai-access';
 import { getTranslations } from '@/lib/i18n/server';
 import { requireUserContext } from '@/lib/supabase/auth';
 import { createServer } from '@/lib/supabase/server';
@@ -121,6 +122,9 @@ export async function POST(req: Request) {
   const userMsg = `Household health context:\n${context}\n\nQuestion: ${question}`;
 
   try {
+    // F19: the monthly AI allowance the plans sell, checked before the model runs.
+    const overAllowance = await refuseOverAIAllowance(ctx, supabase);
+    if (overAllowance) return overAllowance;
     const text = (await withAiRequest(
       scopeFromUserContext(ctx, supabase),
       { feature: 'health.coach', text: 'Health coaching' },

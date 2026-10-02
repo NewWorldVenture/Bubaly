@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { getTranslations } from '@/lib/i18n/server';
-import { constructWebhookEvent } from '@/lib/stripe';
-import { getStripeSettings, effectiveWebhookSecret } from '@/lib/stripe/settings';
+import { constructWebhookEvent, stripeFromKey } from '@/lib/stripe';
+import { getStripeSettings, effectiveWebhookSecret, effectiveSecretKey, type StripeSettings } from '@/lib/stripe/settings';
 import { createServiceClient } from '@/lib/supabase/server';
 import { settleAll } from '@/lib/supabase/settle';
 import { markReferralConverted, rewardConvertedReferral } from '@/lib/referrals/server';
@@ -146,6 +146,23 @@ async function persistSubscription(supabase: ReturnType<typeof createServiceClie
   }
 }
 
+/**
+ * The subscription as Stripe holds it NOW, not as this event described it.
+ *
+ * Stripe does not deliver events in order. An `updated` sent before a
+ * `deleted`, or a `past_due` before the payment that cleared it, can arrive
+ * second — and writing the payload of whichever came last left the family's
+ * row describing a state the subscription had already left (PAY-ORDER-001).
+ * Reading the object back makes every delivery write the latest state, so the
+ * order they arrive in no longer matters. A read that fails throws, and the
+ * handler answers 500 so Stripe retries rather than writing a stale payload.
+ */
+async function currentSubscription(settings: StripeSettings | null, sent: Stripe.Subscription): Promise<Stripe.Subscription> {
+  const key = effectiveSecretKey(settings);
+  if (!key) throw new Error('Stripe secret key is not configured; the subscription state cannot be confirmed');
+  return await stripeFromKey(key).subscriptions.retrieve(sent.id);
+}
+
 export async function POST(req: NextRequest) {
   const t = await getTranslations();
   const boundedBody = await readBoundedRequestText(req, MAX_WEBHOOK_BODY_BYTES);
@@ -157,7 +174,8 @@ export async function POST(req: NextRequest) {
   // secret saved there, and building the client with getStripe() threw when
   // STRIPE_SECRET_KEY was unset, which the catch below reported as a bad
   // signature: every real event refused, and no subscription ever recorded.
-  const webhookSecret = effectiveWebhookSecret(await getStripeSettings()) ?? '';
+  const stripeSettings = await getStripeSettings();
+  const webhookSecret = effectiveWebhookSecret(stripeSettings) ?? '';
   if (!webhookSecret) return NextResponse.json({ error: t('stripe.webhookNotConfigured') }, { status: 503 });
 
   let event: Stripe.Event;
@@ -194,7 +212,7 @@ export async function POST(req: NextRequest) {
       case 'customer.subscription.created':
       case 'customer.subscription.updated':
       case 'customer.subscription.deleted': {
-        await persistSubscription(supabase, event.data.object as Stripe.Subscription);
+        await persistSubscription(supabase, await currentSubscription(stripeSettings, event.data.object as Stripe.Subscription));
         break;
       }
 

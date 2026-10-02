@@ -16605,5 +16605,12 @@
   "tripCountdown.startedYesterday": "Started yesterday",
   "tripCountdown.daysAgo": "{count} days ago",
   "tripCountdown.travelersOne": "{count} traveler",
-  "tripCountdown.travelersMany": "{count} travelers"
+  "tripCountdown.travelersMany": "{count} travelers",
+  "error.dbPermission": "You don't have permission to do that. Ask a family admin if you think this is a mistake.",
+  "error.dbConflict": "That already exists. Try a different value.",
+  "error.dbNotFound": "That item could not be found — it may have already been removed.",
+  "error.dbInvalid": "Some required information is missing or invalid. Please review and try again.",
+  "error.dbNetwork": "Network problem — check your connection and try again.",
+  "aiSavings.allowanceSpentSuggestions": "You've used this month's AI requests — here are data-driven suggestions from your finances.",
+  "aiSavings.notConfiguredSuggestions": "AI is not configured — here are data-driven suggestions from your finances."
 }
