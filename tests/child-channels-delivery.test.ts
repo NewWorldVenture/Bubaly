@@ -21,25 +21,34 @@ type Setting = { family_id: string; child_channels: unknown };
 function makeDb(members: Member[], settings: Setting[], fail?: 'members' | 'settings') {
   const from = (table: string) => {
     const filters: Record<string, unknown> = {};
+    let order: string | null = null;
+    let range: [number, number] | null = null;
+    const page = <T extends Record<string, unknown>>(rows: T[]) => {
+      const ordered = order ? [...rows].sort((a, b) => String(a[order!]).localeCompare(String(b[order!]))) : rows;
+      return range ? ordered.slice(range[0], range[1] + 1) : ordered;
+    };
     const b: Record<string, unknown> = {};
     Object.assign(b, {
       select: () => b,
       eq: (c: string, v: unknown) => { filters[c] = v; return b; },
       in: (c: string, v: unknown[]) => { filters[c] = v; return b; },
+      order: (column: string) => { order = column; return b; },
+      range: (from: number, to: number) => { range = [from, to]; return b; },
       then: (resolve: (r: { data: unknown; error: unknown }) => void) => {
         if (table === 'family_members') {
           if (fail === 'members') return resolve({ data: null, error: { message: 'boom' } });
           const want = (filters.user_id ?? []) as string[];
           return resolve({
-            data: members.filter((m) => m.user_id && want.includes(m.user_id)
+            data: page(members.map((m, i) => ({ ...m, id: `member-${i}` })).filter((m) => m.user_id && want.includes(m.user_id)
               && m.role === filters.role && m.is_active === filters.is_active)
+              .map((m) => ({ id: m.id, user_id: m.user_id, family_id: m.family_id })))
               .map((m) => ({ user_id: m.user_id, family_id: m.family_id })),
             error: null,
           });
         }
         if (fail === 'settings') return resolve({ data: null, error: { message: 'boom' } });
         const want = (filters.family_id ?? []) as string[];
-        return resolve({ data: settings.filter((s) => want.includes(s.family_id)), error: null });
+        return resolve({ data: page(settings.filter((s) => want.includes(s.family_id))), error: null });
       },
     });
     return b;

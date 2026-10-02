@@ -45,9 +45,17 @@ function fakeSupabase(updates: Record<string, unknown>[], createdAt = NOTIFICATI
     child_channels: [],
   };
   const from = (table: string) => {
+    let range: [number, number] | null = null;
+    let order: string | null = null;
+    const page = () => {
+      const data = (rows[table] ?? []) as Record<string, unknown>[];
+      const ordered = order ? [...data].sort((a, b) => String(a[order!]).localeCompare(String(b[order!]))) : data;
+      return range ? ordered.slice(range[0], range[1] + 1) : ordered;
+    };
     const chain: Record<string, unknown> = {
       select: () => chain, is: () => chain, lte: () => chain, eq: () => chain,
-      in: () => chain, order: () => chain, limit: () => chain, or: () => chain,
+      in: () => chain, order: (column: string) => { order = column; return chain; }, limit: () => chain, or: () => chain,
+      range: (from: number, to: number) => { range = [from, to]; return chain; },
       // main added a compare-and-set dispatch cursor in `app_settings` (PUSH-003)
       // after this guard was written. Served as "no cursor stored yet", which is
       // the first-run path: the batch is claimed with a plain upsert and the
@@ -62,7 +70,7 @@ function fakeSupabase(updates: Record<string, unknown>[], createdAt = NOTIFICATI
       },
       delete: () => ({ eq: () => Promise.resolve({ error: null }) }),
       then: (onF: (v: unknown) => unknown) =>
-        Promise.resolve({ data: rows[table] ?? [], error: null }).then(onF),
+        Promise.resolve({ data: page(), error: null }).then(onF),
     };
     return chain;
   };
