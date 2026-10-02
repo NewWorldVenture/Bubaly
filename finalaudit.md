@@ -749,6 +749,16 @@ Additions after the 10:55 UTC base, each with its own time: #772 opened 10:58 UT
     - The browser fixture's no-op `order()` does not prove recipe or library sorting, which stays a separate obligation.
   - **Status:** `COMPONENT-4D0C5DE53A9F` stays IN PROGRESS. **`SUPPORT-E8F3F434DAC5` is already IN PROGRESS on hosted #771 `f40462ac4`** (pushed 2026-10-02 11:25 UTC). The handoff read the earlier hosted `93b9654a`, so it is not still NOT STARTED and no further transition is needed. The row now cites #794. No PASS: hosted CI on #794 is pending.
   - **Overlap:** as recorded for the claim. The NWV I18N-011 toast lines and the unpublished React 19 spec header stay held and will be rebased on #794 if it lands first. **PRODUCTION READY: NO.**
+- **Candidate #795 for the dashboard-settings lane (owner-account comment posted 2026-10-02 11:29 UTC, [#771 comment 5951424500](https://github.com/NewWorldVenture/Bubaly/pull/771#issuecomment-5951424500)).**
+  - **The candidate:** draft [#795](https://github.com/NewWorldVenture/Bubaly/pull/795) at `cd6d6b3e`, on main `01b2c380`, changing two files: `customize-actions.ts` (blob `ce3d9549`) and the new `tests/dashboard-settings-validation.test.ts` (blob `7a9ddf74`).
+    - After the existing context and manager gate, writes need a non-null object with two exact booleans. Null, arrays, missing fields, strings and scalars get the existing localized refusal.
+    - The IDs stay server-derived and the 204 upsert is kept. No catalogue or shared helper changes.
+  - **Author-reported local evidence:**
+    - 32 new cases plus 18 existing ones pass together, 50/50 (af49df). TypeScript (7a2fae), scoped ESLint and the diff checks (cf8324) pass. The root passes the final 32 (8c69e1) and accepts the review (cb7cee).
+    - The same 32 cases against main's action blob `d0a15518` give 17 desired failures and 15 healthy controls (12ebf9). The root verified the causal reproduction (1672ea).
+    - Auth context, tier and the Next cache are inert seams.
+  - **Status:** `ACTION-2677F9A42D51` stays IN PROGRESS and cites #795 here. No PASS: #795's hosted CI is pending. The new test file has no Register B row (the path rule gives `SUPPORT-F9B48DA4B77F`); one is added only on request.
+  - **Not claimed:** a normal-UI failure, a cross-family write, a child-role bypass, live Auth, RLS, SQL or providers, or the complete workflow. **PRODUCTION READY: NO.**
 - **#768 integration:** promotion out of draft and any merge are blocked pending the owner's explicit approval. This checkpoint promotes and merges nothing.
 - **Register B status-mark correction:** #770 introduced three rows whose status cell read `?? IN PROGRESS` instead of `🔄 IN PROGRESS` (SUPPORT-AD3999932010, SUPPORT-EC79FA65AC23, SUPPORT-9C6B11D5A8EB). The register prose already counted them as IN PROGRESS, so only the mark is restored. Every ID, order, status, count and piece of evidence text is unchanged. Register B stays **14,364 = 11,877 NOT STARTED + 2,136 IN PROGRESS + 185 PASS + 157 FIXED + PASS + 9 BLOCKED**.
 
