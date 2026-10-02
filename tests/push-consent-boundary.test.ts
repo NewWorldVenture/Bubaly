@@ -62,7 +62,10 @@ describe('all public push senders enforce consent', () => {
     }
     expect(await sendPushToUsers(f.db, ['child', 'parent', 'teen', 'parent'], payload)).toEqual(counts({ sent: 2, withheld: 1 }));
     expect(state.send.mock.calls.map(call => call[1])).toEqual(['parent-fixture-token', 'teen-fixture-token']);
-    for (const table of ['family_members', 'family_ai_settings', 'user_preferences']) expect(f.calls.filter(call => call.table === table)).toHaveLength(1);
+    // One complete policy read includes its empty terminal page; preferences
+    // retain their existing single-query batch behavior.
+    for (const table of ['family_members', 'family_ai_settings']) expect(f.calls.filter(call => call.table === table).map(call => call.count)).toEqual([1, 0]);
+    expect(f.calls.filter(call => call.table === 'user_preferences')).toHaveLength(1);
   });
 
   it('skips consent/device queries for a genuinely empty batch', async () => {
@@ -77,7 +80,9 @@ describe('all public push senders enforce consent', () => {
     f.tables.user_preferences = ids.map(user_id => ({ user_id, push_enabled: false }));
     expect(await sendPushToUsers(f.db, [...ids, ...ids.slice(0, 5)], payload)).toEqual(counts({ withheld: 401 }));
     expect(f.calls.filter(call => call.table === 'user_preferences').map(call => call.count)).toEqual([200, 200, 1]);
-    expect(f.calls.filter(call => call.table === 'family_members')).toHaveLength(3);
+    // Each 200-recipient public batch now uses 100-ID child-policy chunks:
+    // two, two, and one. Each empty chunk terminates on its first response.
+    expect(f.calls.filter(call => call.table === 'family_members').map(call => call.count)).toEqual([0, 0, 0, 0, 0]);
     expect(state.send).not.toHaveBeenCalled();
   });
 
@@ -110,10 +115,11 @@ describe('all public push senders enforce consent', () => {
     const f = fixture();
     f.tables.notifications = Array.from({ length: 20 }, (_, index) => ({ ...f.tables.notifications[0], id: notificationId(index + 1) }));
     expect((await dispatchPendingPushes(f.db, { now: NOW })).result.sent).toBe(20);
-    // One roster page plus its empty end page, and one child-role read for
-    // consent, independent of the twenty notifications in the batch.
-    expect(f.calls.filter(call => call.table === 'family_members')).toHaveLength(3);
-    for (const table of ['family_ai_settings', 'user_preferences']) expect(f.calls.filter(call => call.table === table)).toHaveLength(1);
+    // One active-roster read and one child-role policy read, each with its
+    // empty terminal page, independent of the twenty queued notifications.
+    expect(f.calls.filter(call => call.table === 'family_members').map(call => call.count)).toEqual([1, 0, 1, 0]);
+    expect(f.calls.filter(call => call.table === 'family_ai_settings').map(call => call.count)).toEqual([1, 0]);
+    expect(f.calls.filter(call => call.table === 'user_preferences')).toHaveLength(1);
   });
 
   it.each(['recipient', 'parent'])('returns a non-success own-device test result for %s opt-out', async mode => {
