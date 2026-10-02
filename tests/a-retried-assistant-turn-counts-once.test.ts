@@ -46,6 +46,7 @@ class Query {
   upsert(rows: Row | Row[]) { this.op = 'upsert'; this.payload = Array.isArray(rows) ? rows : [rows]; return this; }
   update(patch: Row) { this.op = 'update'; this.payload = patch; return this; }
   eq(col: string, v: unknown) { this.filters.push((r) => r[col] === v); return this; }
+  in(col: string, vs: unknown[]) { this.filters.push((r) => vs.includes(r[col])); return this; }
   gte(col: string, v: string) { this.filters.push((r) => String(r[col]) >= v); return this; }
   lte(col: string, v: string) { this.filters.push((r) => String(r[col]) <= v); return this; }
   order(col: string, opts?: { ascending?: boolean }) { this.ordered = { col, asc: opts?.ascending !== false }; return this; }
@@ -99,7 +100,10 @@ const ctx = () => ({
 });
 
 vi.mock('@/lib/supabase/server', () => ({ createServer: async () => db, createServiceClient: () => db }));
-vi.mock('@/lib/supabase/auth', () => ({ getUserContext: async () => ctx() }));
+vi.mock('@/lib/supabase/auth', () => ({ getUserContext: async () => ctx(), requireUserContext: async () => ctx() }));
+vi.mock('@/lib/i18n/server', () => ({ getTranslations: async () => (key: string) => key }));
+vi.mock('@/lib/assistant/tools', () => ({ buildAssistantTools: () => [] }));
+vi.mock('@/lib/assistant/trust-wrapper', () => ({ wrapToolsWithTrust: () => [] }));
 vi.mock('@/lib/supabase/bearer', () => ({ extractBearerToken: () => null, getBearerUserContext: async () => ({ ok: false, reason: 'invalid_token' }) }));
 vi.mock('@/lib/server/ensure-family', () => ({ ensureActiveFamily: async () => true }));
 vi.mock('@/lib/server/ai-request-context', () => ({
@@ -121,6 +125,7 @@ vi.mock('@/lib/ai/usage', () => ({ recordModelCall: async () => {} }));
 vi.mock('@/lib/ai/provider', async (importOriginal) => ({
   ...(await importOriginal<typeof import('@/lib/ai/provider')>()),
   isAIConfigured: async () => true,
+  resolveProvider: async () => provider,
 }));
 
 const ANSWER = 'Dinner is planned for Friday.';
@@ -129,11 +134,12 @@ async function model() {
   if (state.gate) await state.gate;
   state.effects += 1;
 }
-const provider = {
+const provider = vi.hoisted(() => ({}) as Record<string, unknown>);
+Object.assign(provider, {
   model: 'test-model',
   runTools: async () => { await model(); return { text: ANSWER, actions: [], usage: { promptTokens: 1, completionTokens: 1 } }; },
   async *runToolsStream() { await model(); yield { type: 'delta' as const, text: ANSWER }; },
-};
+});
 // Preparation (classifier + context) is the costly half before the model; a
 // replay must not reach it either.
 vi.mock('@/lib/ai/assistant-engine', async (importOriginal) => ({
@@ -151,6 +157,14 @@ vi.mock('@/lib/ai/assistant-engine', async (importOriginal) => ({
     };
   },
 }));
+
+function sendChat(key?: string, message = 'Plan dinner') {
+  return new NextRequest('http://localhost/api/ai/chat', {
+    method: 'POST',
+    headers: { 'content-type': 'application/json', ...(key ? { 'idempotency-key': key } : {}) },
+    body: JSON.stringify({ conversationId: CONV, message }),
+  });
+}
 
 function send(opts: { key?: string | null; message?: string; conversationId?: string; json?: boolean; bodyKey?: string } = {}) {
   const headers: Record<string, string> = { 'content-type': 'application/json', accept: opts.json === false ? 'text/event-stream' : 'application/json' };
@@ -370,5 +384,57 @@ describe('a retry of an attempt that has not answered', () => {
     expect(res.status).toBe(409);
     expect((await res.json() as { code: string }).code).toBe('turn_answered');
     expect(state.providerCalls).toBe(0);
+  });
+});
+
+// The second assistant entry point (`chat.assistant`, SSE only) keeps the
+// same rule, through the same lookup and the same index.
+describe('/api/ai/chat: a retried send is one turn there too', () => {
+  const chatRows = () => tableOf('ai_requests').filter((r) => r.feature === 'chat.assistant');
+
+  it('the retry of the turn that reached 10 of 10 replays it with the same request id', async () => {
+    const { POST } = await import('@/app/api/ai/chat/route');
+    seed(9);
+    const first = events(await (await POST(sendChat('send-0001-abcdef'))).text());
+    const done = first.find((e) => e.type === 'done');
+    expect(done).toMatchObject({ content: ANSWER, requestId: chatRows()[0].id });
+    const replay = events(await (await POST(sendChat('send-0001-abcdef'))).text());
+    expect(replay).toEqual([
+      { type: 'delta', text: ANSWER },
+      { type: 'done', content: ANSWER, persisted: true, requestId: done!.requestId },
+    ]);
+    expect(state.providerCalls).toBe(1);
+    expect(tableOf('ai_requests')).toHaveLength(10);
+    expect(tableOf('ai_messages')).toHaveLength(2);
+    expect((await POST(sendChat('send-0002-abcdef', 'And lunch?'))).status).toBe(429);
+  });
+
+  it('two attempts racing with one key are one turn', async () => {
+    const { POST } = await import('@/app/api/ai/chat/route');
+    let release!: () => void;
+    state.gate = new Promise<void>((r) => { release = r; });
+    const [ra, rb] = await Promise.all([POST(sendChat('send-0001-abcdef')), POST(sendChat('send-0001-abcdef'))]);
+    expect(events(await rb.text())).toEqual([{ type: 'error', error: 'ai.thisMessageIsAlreadyBeingAnswered' }]);
+    release();
+    expect(events(await ra.text()).at(-1)).toMatchObject({ type: 'done', content: ANSWER });
+    expect(state.providerCalls).toBe(1);
+    expect(chatRows()).toHaveLength(1);
+  });
+
+  it('the key with different words, or a malformed key, is refused and runs nothing', async () => {
+    const { POST } = await import('@/app/api/ai/chat/route');
+    await (await POST(sendChat('send-0001-abcdef'))).text();
+    expect((await POST(sendChat('send-0001-abcdef', 'Something else'))).status).toBe(409);
+    expect((await POST(sendChat('short'))).status).toBe(400);
+    expect(state.providerCalls).toBe(1);
+  });
+
+  it('a key filed on /api/ai replays on /api/ai/chat (one turn, whichever door)', async () => {
+    const { POST: viaAi } = await import('@/app/api/ai/route');
+    const { POST: viaChat } = await import('@/app/api/ai/chat/route');
+    expect((await viaAi(send({ key: 'send-0001-abcdef' }))).status).toBe(200);
+    const replay = events(await (await viaChat(sendChat('send-0001-abcdef'))).text());
+    expect(replay.at(-1)).toMatchObject({ type: 'done', content: ANSWER, requestId: turnRows()[0].id });
+    expect(state.providerCalls).toBe(1);
   });
 });
