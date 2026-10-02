@@ -64,6 +64,20 @@ describe('the mobile app\'s dependencies are audited (MAIN-F-C10)', () => {
   it('the mobile CI job runs npm audit on production dependencies', () => {
     const mobileJob = ci.slice(ci.indexOf('\n  mobile:'), ci.indexOf('\n  database:'));
     expect(mobileJob).toContain('working-directory: mobile');
-    expect(mobileJob).toMatch(/run: npm audit --omit=dev --audit-level=(high|moderate|critical)\b/);
+    // Since 2026-10-02 the level is enforced by scripts/npm-audit-gate.mjs, so
+    // one named, dated exception can be carried (GHSA-86w9-cpqp-85rv, owner-
+    // approved). The property is unchanged: production dependencies are
+    // audited, and anything at the level fails.
+    expect(mobileJob).toMatch(/npm audit --omit=dev --json\b/);
+    expect(mobileJob).toMatch(/node \.\.\/scripts\/npm-audit-gate\.mjs --level (high|moderate|critical)\b/);
+  });
+
+  it('the gate cannot be reached without a report, and its exceptions are dated', () => {
+    const mobileJob = ci.slice(ci.indexOf('\n  mobile:'), ci.indexOf('\n  database:'));
+    // The audit's own exit code is ignored (`|| true`) only because the gate
+    // reads its JSON and decides; the gate fails a non-report itself.
+    expect(mobileJob).toMatch(/--exceptions audit-exceptions\.json/);
+    const list = JSON.parse(readFileSync('mobile/audit-exceptions.json', 'utf8')) as Array<{ expires?: string }>;
+    for (const e of list) expect(e.expires, 'every exception expires').toMatch(/^\d{4}-\d{2}-\d{2}$/);
   });
 });
