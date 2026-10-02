@@ -11,8 +11,8 @@
 // reads time only through one function the local test harness can pin).
 import { createHash } from 'node:crypto';
 import {
-  decideBeginSend, decideClaim, decideCompletion,
-  type BeginSendPolicy, type ClaimPolicy, type ClaimRefusal, type DeliveryRow, type DigestDeliveryStore, type DigestEmailProvider,
+  decideBeginSend, decideClaim, decideCompletion, superAdminTableKey,
+  type Admission, type BeginSendPolicy, type ClaimPolicy, type ClaimRefusal, type DeliveryRow, type DigestDeliveryStore, type DigestEmailProvider,
   type FrozenOccurrence, type ProviderSendResult, type StoredOccurrence,
 } from '@/lib/admin/digest-delivery';
 
@@ -55,16 +55,21 @@ export class MemoryDigestDeliveryStore implements DigestDeliveryStore {
   hooks: StoreHook[] = [];
   readonly calls: { method: Method; recipientKey: string | null }[] = [];
 
-  constructor(private readonly clock: () => Date) {}
+  /**
+   * `superAdmins`: the store's super_admins table as it stands now (raw addresses). It is read inside
+   * beginSend's critical section, as 0474 reads the table after the row lock. A throw is an unreadable
+   * table: the call fails and writes nothing.
+   */
+  constructor(private readonly clock: () => Date, private readonly superAdmins: () => Iterable<string> = () => []) {}
 
   /** Saved state, as text: what a restarted process would find. */
   snapshot(): string {
     return JSON.stringify({ occurrences: [...this.occurrences], rows: [...this.rows] } satisfies Snapshot);
   }
 
-  static restore(text: string, clock: () => Date): MemoryDigestDeliveryStore {
+  static restore(text: string, clock: () => Date, superAdmins: () => Iterable<string> = () => []): MemoryDigestDeliveryStore {
     const s = JSON.parse(text) as Snapshot;
-    const store = new MemoryDigestDeliveryStore(clock);
+    const store = new MemoryDigestDeliveryStore(clock, superAdmins);
     store.occurrences = new Map(s.occurrences);
     store.rows = new Map(s.rows);
     return store;
@@ -138,12 +143,16 @@ export class MemoryDigestDeliveryStore implements DigestDeliveryStore {
     return out;
   }
 
-  async beginSend(occurrenceId: string, recipientKey: string, fence: number, policy: BeginSendPolicy) {
+  async beginSend(occurrenceId: string, recipientKey: string, fence: number, policy: BeginSendPolicy, admission: Admission) {
     await this.hook('beginSend', 'before', recipientKey);
     // ── critical section ──
     const k = rowKey(occurrenceId, recipientKey);
     const row = this.rows.get(k);
-    const d = row ? decideBeginSend(copy(row), fence, this.clock(), policy) : { ok: false as const, reason: 'fenced_out' as const, next: null };
+    const fenced = !row || row.status !== 'in_flight' || row.fence !== fence;
+    // Like 0474: a live claim's admission always reads the table, so an unreadable one always fails it.
+    const listed = !fenced && [...this.superAdmins()].some((a) => superAdminTableKey(a) === recipientKey);
+    const eligible = fenced || admission.allowlisted || listed;
+    const d = row ? decideBeginSend(copy(row), fence, this.clock(), policy, eligible) : { ok: false as const, reason: 'fenced_out' as const, next: null };
     if (d.next) this.rows.set(k, copy(d.next));
     // ── end ──
     await this.hook('beginSend', 'after', recipientKey);

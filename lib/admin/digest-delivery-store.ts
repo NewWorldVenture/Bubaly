@@ -9,8 +9,8 @@
 // for a service-role Supabase client (later), or the psql transport the
 // disposable-database tests use (tests/helpers/digest-delivery-postgres.ts).
 import {
-  MAX_PROVIDER_MESSAGE_ID_CHARS, payloadJsonOf, pgLength,
-  type BeginSendPolicy, type ClaimPolicy, type ClaimRefusal, type DeliveryPayload, type DeliveryRow, type DeliveryStatus,
+  MAX_PROVIDER_MESSAGE_ID_CHARS, isStorableMessageId, payloadJsonOf,
+  type Admission, type BeginSendPolicy, type ClaimPolicy, type ClaimRefusal, type DeliveryPayload, type DeliveryRow, type DeliveryStatus,
   type DigestDeliveryStore, type FrozenOccurrence, type ProviderSendResult, type StoredOccurrence,
 } from '@/lib/admin/digest-delivery';
 
@@ -28,9 +28,9 @@ export function supabaseRpc(client: RpcClient): RpcCall {
   };
 }
 
-const STATUSES: readonly DeliveryStatus[] = ['pending', 'in_flight', 'failed', 'unknown', 'accepted', 'rejected', 'conflict', 'exhausted', 'needs_reconciliation'];
-const REFUSALS: readonly string[] = ['leased', 'not_found', 'accepted', 'rejected', 'conflict', 'exhausted', 'needs_reconciliation'];
-const BEGIN_REFUSALS = ['fenced_out', 'lease_expired', 'retention_passed'] as const;
+const STATUSES: readonly DeliveryStatus[] = ['pending', 'in_flight', 'failed', 'unknown', 'accepted', 'rejected', 'conflict', 'exhausted', 'needs_reconciliation', 'withdrawn'];
+const REFUSALS: readonly string[] = ['leased', 'not_found', 'accepted', 'rejected', 'conflict', 'exhausted', 'needs_reconciliation', 'withdrawn'];
+const BEGIN_REFUSALS = ['fenced_out', 'lease_expired', 'retention_passed', 'withdrawn'] as const;
 
 function bad(what: string): never { throw new Error(`digest-delivery store: malformed ${what} from the database`); }
 const obj = (v: unknown, what: string) => (v && typeof v === 'object' && !Array.isArray(v) ? v as Record<string, unknown> : bad(what));
@@ -140,11 +140,14 @@ export function createPostgresDigestDeliveryStore(rpc: RpcCall): DigestDeliveryS
       return { claimed: false, reason: reason as ClaimRefusal };
     },
 
-    async beginSend(occurrenceId, recipientKey, fence, policy: BeginSendPolicy) {
+    async beginSend(occurrenceId, recipientKey, fence, policy: BeginSendPolicy, admission: Admission) {
+      // 0474: the database adds super_admins, read after the row lock; only a real boolean is sent.
+      if (typeof admission?.allowlisted !== 'boolean') throw new TypeError('digest-delivery store: admission.allowlisted must be a boolean');
       const out = await rpc('admin_digest_begin_send', {
         p_occurrence_id: occurrenceId, p_recipient_key: recipientKey, p_fence: fenceArg(fence),
         p_min_lease_ms: ms(policy.minLeaseRemainingMs, 'minLease'),
         p_retention_ms: ms(policy.providerKeyRetentionMs, 'retention'), p_margin_ms: ms(policy.retentionSafetyMarginMs, 'margin'),
+        p_allowlisted: admission.allowlisted,
       });
       const a = obj(out, 'begin_send');
       if (a.answer === 'ok') return { ok: true, dispatchBy: iso(a.dispatchBy, 'begin_send.dispatchBy') };
@@ -153,10 +156,10 @@ export function createPostgresDigestDeliveryStore(rpc: RpcCall): DigestDeliveryS
     },
 
     async complete(occurrenceId, recipientKey, fence, result: ProviderSendResult, maxAttempts) {
-      // 0471 would truncate a longer id; a receipt is never altered, so it is never sent. (An empty id
-      // is sent: 0471, like decideCompletion, records it as unknown, not as a receipt.)
-      if (result.kind === 'accepted' && typeof result.messageId === 'string' && pgLength(result.messageId) > MAX_PROVIDER_MESSAGE_ID_CHARS) {
-        throw new TypeError(`digest-delivery store: an accepted message id must be 1-${MAX_PROVIDER_MESSAGE_ID_CHARS} characters`);
+      // Refuse IDs that jsonb cannot represent or 0471 would truncate, before the RPC.
+      // An empty id remains allowed here: 0471 records it as unknown, not a receipt.
+      if (result.kind === 'accepted' && result.messageId !== '' && !isStorableMessageId(result.messageId)) {
+        throw new TypeError(`digest-delivery store: an accepted message id must be 1-${MAX_PROVIDER_MESSAGE_ID_CHARS} Unicode characters without NUL or unpaired surrogates`);
       }
       const out = await rpc('admin_digest_complete', {
         p_occurrence_id: occurrenceId, p_recipient_key: recipientKey, p_fence: fenceArg(fence), p_result: result, p_max_attempts: maxAttempts,

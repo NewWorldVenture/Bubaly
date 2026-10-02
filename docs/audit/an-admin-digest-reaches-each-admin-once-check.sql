@@ -12,6 +12,9 @@
 --            an ambiguous row is parked at retention minus margin, at claim and
 --            at mark; too little lease left refuses the mark; a success without
 --            a message id is not a receipt; a settled row stays settled.
+-- Since 0474, begin_send also takes p_allowlisted: every call here passes true (a
+-- recipient on the code/config allowlist), so this probe sees 0471's rules alone.
+-- a-removed-admin-is-not-sent-the-digest-check.sql covers eligibility.
 -- Time is pinned for the transaction by replacing admin_digest_now() with a
 -- version that reads a local setting; the replacement is rolled back with
 -- everything else. The disposable-database suite
@@ -114,13 +117,13 @@ begin
   if res ->> 'reason' is distinct from 'leased' then raise warning 'a live lease did not refuse: %', res; failures := failures + 1; end if;
   -- A NULL fence is bad input, never a match; the unmarked-completion check below also proves it wrote no mark.
   rejected := false;
-  begin perform public.admin_digest_begin_send(occ, k1, null, 150, ret, mar); exception when invalid_parameter_value then rejected := true; end;
+  begin perform public.admin_digest_begin_send(occ, k1, null, 150, ret, mar, true); exception when invalid_parameter_value then rejected := true; end;
   if not rejected then raise warning 'begin_send accepted a NULL fence'; failures := failures + 1; end if;
   if public.admin_digest_complete(occ, k1, 1, '{"kind":"unknown","reason":"timeout"}', 3) <> 'fenced_out' then
     raise warning 'a completion without a mark was accepted'; failures := failures + 1;
   end if;
-  if public.admin_digest_begin_send(occ, k1, 0, 150, ret, mar) ->> 'answer' <> 'fenced_out' then raise warning 'a stale fence marked'; failures := failures + 1; end if;
-  if public.admin_digest_begin_send(occ, k1, 1, 150, ret, mar) ->> 'answer' <> 'ok' then raise warning 'the current fence could not mark'; failures := failures + 1; end if;
+  if public.admin_digest_begin_send(occ, k1, 0, 150, ret, mar, true) ->> 'answer' <> 'fenced_out' then raise warning 'a stale fence marked'; failures := failures + 1; end if;
+  if public.admin_digest_begin_send(occ, k1, 1, 150, ret, mar, true) ->> 'answer' <> 'ok' then raise warning 'the current fence could not mark'; failures := failures + 1; end if;
   -- The completion below succeeding proves this one wrote nothing.
   rejected := false;
   begin perform public.admin_digest_complete(occ, k1, null, '{"kind":"accepted","messageId":"msg-forged"}', 3); exception when invalid_parameter_value then rejected := true; end;
@@ -138,12 +141,12 @@ begin
 
   -- A lease that lapses after a mark makes the row ambiguous; too little lease refuses the mark.
   res := public.admin_digest_claim(occ, k2, 'a', 300000, 3, ret, mar);
-  if public.admin_digest_begin_send(occ, k2, 1, 150, ret, mar) ->> 'answer' <> 'ok' then raise warning 'k2 mark'; failures := failures + 1; end if;
+  if public.admin_digest_begin_send(occ, k2, 1, 150, ret, mar, true) ->> 'answer' <> 'ok' then raise warning 'k2 mark'; failures := failures + 1; end if;
   perform set_config('admin_digest.test_now', (pin + interval '23 hours 5 minutes 1 second')::text, true);
   res := public.admin_digest_claim(occ, k2, 'b', 300000, 3, ret, mar);
   if not (res #>> '{row,ambiguous}')::boolean or (res #>> '{row,fence}')::int <> 2 then raise warning 'a lapsed marked lease was not ambiguous: %', res; failures := failures + 1; end if;
   perform set_config('admin_digest.test_now', (pin + interval '23 hours 10 minutes 0.9 seconds')::text, true);
-  if public.admin_digest_begin_send(occ, k2, 2, 150, ret, mar) ->> 'answer' <> 'lease_expired' then raise warning 'a nearly lapsed lease still marked'; failures := failures + 1; end if;
+  if public.admin_digest_begin_send(occ, k2, 2, 150, ret, mar, true) ->> 'answer' <> 'lease_expired' then raise warning 'a nearly lapsed lease still marked'; failures := failures + 1; end if;
   reset role;
 
   -- ── frozen means frozen, for everyone (these are the owner's own writes) ────

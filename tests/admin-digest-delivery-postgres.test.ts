@@ -1,10 +1,11 @@
-// Migration 0471 and the PostgreSQL DigestDeliveryStore.
+// Migrations 0471 and 0474 and the PostgreSQL DigestDeliveryStore.
 //
 // The first block always runs: the adapter's strictness, with a fake transport.
 // Everything else needs a real database. It is opt-in (DIGEST_DELIVERY_PG=1,
 // see tests/helpers/digest-delivery-postgres.ts) and SKIPPED otherwise; CI's
 // Database job covers the same functions through
-// docs/audit/an-admin-digest-reaches-each-admin-once-check.sql.
+// docs/audit/an-admin-digest-reaches-each-admin-once-check.sql and
+// docs/audit/a-removed-admin-is-not-sent-the-digest-check.sql.
 //
 // Synthetic data only. No provider is called: the engine tests use the fake
 // provider that follows Resend's documented key semantics.
@@ -14,12 +15,12 @@ import { afterAll, beforeAll, describe, expect, it, vi } from 'vitest';
 import {
   MAX_PAYLOAD_JSON_CHARS, MAX_PROVIDER_MESSAGE_ID_CHARS, RESEND_KEY_RETENTION_MS, deliverDigestOccurrence, freezePlan,
   payloadJsonOf, recipientKeyOf, resumeDigestOccurrence,
-  type BeginSendPolicy, type ClaimPolicy, type DigestDeliveryStore, type EngineConfig, type ProviderSendResult,
+  type BeginSendPolicy, type ClaimPolicy, type DigestDeliveryStore, type EngineConfig, type EngineDeps, type ProviderSendResult,
 } from '@/lib/admin/digest-delivery';
 import { createPostgresDigestDeliveryStore, parseDeliveryRow, supabaseRpc, type RpcCall } from '@/lib/admin/digest-delivery-store';
 import { FakeClock, FakeResendProvider, HOUR, MINUTE, MemoryDigestDeliveryStore, deferred, never } from './helpers/digest-delivery-fakes';
-import { answerOf, contractPlan, describeDigestDeliveryStoreContract } from './helpers/digest-delivery-store-contract';
-import { createPgFixture, pgFixtureEnabled, psql, type PgFixture } from './helpers/digest-delivery-postgres';
+import { ADMITTED, TABLE_ONLY, answerOf, contractPlan, describeDigestDeliveryStoreContract } from './helpers/digest-delivery-store-contract';
+import { createPgFixture, pgFixtureEnabled, pgServerVersionNum, psql, type PgFixture } from './helpers/digest-delivery-postgres';
 
 const T0 = '2026-09-30T12:31:00.000Z';
 const MIGRATION_0471 = 'supabase/migrations/0471_an_admin_digest_reaches_each_admin_once.sql';
@@ -30,6 +31,7 @@ const K1 = recipientKeyOf(ONE);
 const CLAIM: ClaimPolicy = { leaseMs: 5 * MINUTE, maxAttempts: 4, providerKeyRetentionMs: RESEND_KEY_RETENTION_MS, retentionSafetyMarginMs: HOUR };
 const BEGIN: BeginSendPolicy = { minLeaseRemainingMs: 150, providerKeyRetentionMs: RESEND_KEY_RETENTION_MS, retentionSafetyMarginMs: HOUR };
 const CONFIG: EngineConfig = { ...CLAIM, maxAttempts: 5, sendTimeoutMs: 2_000 };
+const EVERYONE: EngineDeps['eligibility'] = { allowlisted: () => true };
 
 // ── the adapter, strict about what it reads (always runs) ──────────────────
 
@@ -69,18 +71,31 @@ describe('PostgreSQL adapter: strict mapping (fake transport)', () => {
   });
 
   it('beginSend and complete accept only their documented answers', async () => {
-    await expect(storeAnswering('yes').store.beginSend(OCC, K1, 1, BEGIN)).rejects.toThrow(/malformed/);
+    await expect(storeAnswering('yes').store.beginSend(OCC, K1, 1, BEGIN, ADMITTED)).rejects.toThrow(/malformed/);
     await expect(storeAnswering(null).store.complete(OCC, K1, 1, { kind: 'accepted', messageId: 'm' }, 3)).rejects.toThrow(/malformed/);
-    expect(await storeAnswering({ answer: 'ok', dispatchBy: '2026-09-30T12:35:59.85+00:00' }).store.beginSend(OCC, K1, 1, BEGIN)).toEqual({ ok: true, dispatchBy: '2026-09-30T12:35:59.850Z' });
-    for (const r of ['fenced_out', 'lease_expired', 'retention_passed']) expect(await storeAnswering({ answer: r }).store.beginSend(OCC, K1, 1, BEGIN)).toEqual({ ok: false, reason: r });
-    await expect(storeAnswering({ answer: 'ok' }).store.beginSend(OCC, K1, 1, BEGIN)).rejects.toThrow(/malformed/); // a grant without a deadline
-    await expect(storeAnswering('ok').store.beginSend(OCC, K1, 1, BEGIN)).rejects.toThrow(/malformed/);
+    expect(await storeAnswering({ answer: 'ok', dispatchBy: '2026-09-30T12:35:59.85+00:00' }).store.beginSend(OCC, K1, 1, BEGIN, ADMITTED)).toEqual({ ok: true, dispatchBy: '2026-09-30T12:35:59.850Z' });
+    for (const r of ['fenced_out', 'lease_expired', 'retention_passed', 'withdrawn']) expect(await storeAnswering({ answer: r }).store.beginSend(OCC, K1, 1, BEGIN, ADMITTED)).toEqual({ ok: false, reason: r });
+    await expect(storeAnswering({ answer: 'ok' }).store.beginSend(OCC, K1, 1, BEGIN, ADMITTED)).rejects.toThrow(/malformed/); // a grant without a deadline
+    await expect(storeAnswering('ok').store.beginSend(OCC, K1, 1, BEGIN, ADMITTED)).rejects.toThrow(/malformed/);
+  });
+
+  it('allowlist membership that is not a boolean never reaches the database (0474 would refuse a NULL)', async () => {
+    for (const admission of [undefined, null, {}, { allowlisted: 'true' }, { allowlisted: 1 }, { allowlisted: null }]) {
+      const { store, calls } = storeAnswering({ answer: 'ok', dispatchBy: '2026-09-30T12:35:59.85+00:00' });
+      await expect(store.beginSend(OCC, K1, 1, BEGIN, admission as never)).rejects.toThrow(TypeError);
+      expect(calls, JSON.stringify(admission)).toEqual([]);
+    }
+    // Controls: both booleans go through as p_allowlisted, for the database to add super_admins to.
+    const { store, calls } = storeAnswering({ answer: 'withdrawn' });
+    expect(await store.beginSend(OCC, K1, 1, BEGIN, ADMITTED)).toEqual({ ok: false, reason: 'withdrawn' });
+    expect(await store.beginSend(OCC, K1, 1, BEGIN, TABLE_ONLY)).toEqual({ ok: false, reason: 'withdrawn' });
+    expect(calls.map((c) => c[1].p_allowlisted)).toEqual([true, false]);
   });
 
   it('a fence that is not a non-negative integer never reaches the database', async () => {
     for (const fence of [null, undefined, -1, 1.5, Number.NaN, Number.POSITIVE_INFINITY, '1']) {
       const { store, calls } = storeAnswering({ answer: 'ok', dispatchBy: '2026-09-30T12:35:59.85+00:00' });
-      await expect(store.beginSend(OCC, K1, fence as never, BEGIN)).rejects.toThrow(TypeError);
+      await expect(store.beginSend(OCC, K1, fence as never, BEGIN, ADMITTED)).rejects.toThrow(TypeError);
       await expect(store.complete(OCC, K1, fence as never, { kind: 'accepted', messageId: 'm' }, 3)).rejects.toThrow(TypeError);
       expect(calls, String(fence)).toEqual([]);
     }
@@ -130,7 +145,7 @@ describe('PostgreSQL adapter: strict mapping (fake transport)', () => {
 
 // ── against a real, disposable PostgreSQL database ─────────────────────────
 
-describe.skipIf(!pgFixtureEnabled)('0471 on PostgreSQL (disposable database)', () => {
+describe.skipIf(!pgFixtureEnabled)('0471 + 0474 on PostgreSQL (disposable database)', () => {
   let fx: PgFixture;
   beforeAll(async () => { fx = await createPgFixture(); }, 60_000);
   afterAll(async () => { await fx?.drop(); }, 60_000);
@@ -149,11 +164,16 @@ describe.skipIf(!pgFixtureEnabled)('0471 on PostgreSQL (disposable database)', (
     `select count(*) from pg_stat_activity where application_name = '${app}' and state = 'active' and query like 'select pg_sleep%';`)).toBe('1'),
   { timeout: 5_000, interval: 20 });
 
-  describeDigestDeliveryStoreContract('postgres store (0471)', (clock) => pgStore(clock));
+  describeDigestDeliveryStoreContract('postgres store (0471 + 0474)', (clock) => pgStore(clock), () => ({
+    set: (emails) => fx.setAdmins(emails),
+    breakTable: () => fx.breakAdmins(),
+  }));
 
   describe('the SQL rules are the TypeScript rules (differential)', () => {
     // Every step is applied to the in-memory store (the pure TypeScript rules) and to
     // PostgreSQL (the four functions); answers and full state must agree after each one.
+    // Admissions carry a random allowlist answer, and the super_admins table changes between
+    // steps (0474), so withdrawal is decided by both from the same inputs.
     const mulberry = (seed: number) => () => { seed = (seed + 0x6D2B79F5) | 0; let t = Math.imul(seed ^ (seed >>> 15), 1 | seed); t = (t + Math.imul(t ^ (t >>> 7), 61 | t)) ^ t; return ((t ^ (t >>> 14)) >>> 0) / 4294967296; };
     const RESULTS: ProviderSendResult[] = [
       { kind: 'accepted', messageId: 'm-1' }, { kind: 'accepted', messageId: '' }, { kind: 'payload_conflict' }, { kind: 'in_progress' },
@@ -161,31 +181,203 @@ describe.skipIf(!pgFixtureEnabled)('0471 on PostgreSQL (disposable database)', (
       { kind: 'unknown', reason: 'timeout' }, { kind: 'unknown', reason: 'server_error' },
     ];
     const STEPS = [0, 1_000, 4 * MINUTE, 5 * MINUTE, 6 * MINUTE, 2 * HOUR, 11 * HOUR, 23 * HOUR];
+    const reached = new Set<string>();
+    const TABLES: readonly (readonly string[])[] = [[ONE, TWO], [ONE, TWO], [' Admin-One@Example.TEST ', TWO], [ONE], [TWO], [], ['someone-else@example.test']];
 
     it.each([1, 2, 3])('seed %i: 160 random steps agree exactly', async (seed) => {
       const rand = mulberry(seed);
       const pick = <T,>(xs: readonly T[]) => xs[Math.floor(rand() * xs.length)];
       const clock = new FakeClock(T0);
-      const mem = new MemoryDigestDeliveryStore(clock.now);
+      let admins: readonly string[] = [ONE, TWO];
+      const mem = new MemoryDigestDeliveryStore(clock.now, () => admins);
       const pg = pgStore(clock);
       const frozen = freezePlan(contractPlan(), clock.now());
       await mem.freeze(frozen.occurrence, frozen.deliveries);
-      await pg.freeze(frozen.occurrence, frozen.deliveries);
+      await pg.freeze(frozen.occurrence, frozen.deliveries); // after pgStore's reset, which empties super_admins
+      await fx.setAdmins(admins);
       const keys = frozen.occurrence.recipientKeys;
       for (let i = 0; i < 160; i += 1) {
         const key = pick(keys);
         const current = mem.row(OCC, key)!.fence;
         const fence = rand() < 0.8 ? current : Math.max(0, current - 1);
-        const op = pick(['claim', 'claim', 'begin', 'begin', 'complete', 'complete', 'advance'] as const);
+        const op = pick(['claim', 'claim', 'begin', 'begin', 'complete', 'complete', 'advance', 'admins'] as const);
         let a: unknown; let b: unknown;
         if (op === 'claim') { const owner = pick(['A', 'B']); a = await mem.claim(OCC, key, owner, CLAIM); b = await pg.claim(OCC, key, owner, CLAIM); }
-        else if (op === 'begin') { a = await mem.beginSend(OCC, key, fence, BEGIN); b = await pg.beginSend(OCC, key, fence, BEGIN); }
+        else if (op === 'begin') {
+          const admission = rand() < 0.6 ? ADMITTED : TABLE_ONLY;
+          a = await mem.beginSend(OCC, key, fence, BEGIN, admission); b = await pg.beginSend(OCC, key, fence, BEGIN, admission);
+          reached.add(answerOf(a as never));
+        }
+        else if (op === 'admins') { admins = pick(TABLES); await fx.setAdmins(admins); }
         else if (op === 'complete') { const r = pick(RESULTS); a = await mem.complete(OCC, key, fence, r, CLAIM.maxAttempts); b = await pg.complete(OCC, key, fence, r, CLAIM.maxAttempts); }
         else clock.advance(pick(STEPS));
         expect(b, `step ${i} ${op} ${key.slice(0, 6)} fence ${fence}`).toEqual(a);
         expect(await pg.load(OCC), `state after step ${i}`).toEqual(await mem.load(OCC));
       }
     }, 240_000);
+
+    it('the random steps reached a grant, a withdrawal and a fenced refusal', () => {
+      expect([...reached]).toEqual(expect.arrayContaining(['ok', 'withdrawn', 'fenced_out']));
+    });
+  });
+
+  describe('0474 matching does not depend on the database collation (review 5373785714)', () => {
+    // PostgreSQL's lower() follows the collation. Under libc C.UTF-8 (this cluster's default), ICU tr-TR
+    // and PostgreSQL 17's builtin C.UTF-8 (pg_c_utf8) it turns U+0130 into a plain "i"; under ICU und it
+    // gives "i" + U+0307, as JavaScript does. The rows are written straight into the table, as legacy or
+    // service-role data would be: nothing normalises them first.
+    // Each case runs the migrations in a database with that collation, records the settings, and shows:
+    // the removed plain-i admin is withdrawn with zero provider calls while ASCII-case, Unicode-whitespace
+    // and non-ASCII identities are admitted; and the old lower() predicate would have admitted the
+    // removed admin exactly where the collation folds U+0130 to "i".
+    const COLLATIONS = [
+      { label: 'libc C.UTF-8', create: `template template0 encoding 'UTF8' locale_provider libc locale 'C.UTF-8'`, provider: 'c', icu: '', lowerDottedI: '69' },
+      { label: 'ICU und', create: `template template0 encoding 'UTF8' locale_provider icu icu_locale 'und' locale 'C.UTF-8'`, provider: 'i', icu: 'und', lowerDottedI: '69cc87' },
+      { label: 'ICU tr-TR', create: `template template0 encoding 'UTF8' locale_provider icu icu_locale 'tr-TR' locale 'C.UTF-8'`, provider: 'i', icu: 'tr-TR', lowerDottedI: '69' },
+      // PostgreSQL 17+ only; skipped on an older server.
+      { label: 'builtin C.UTF-8 (pg_c_utf8)', create: `template template0 encoding 'UTF8' locale_provider builtin builtin_locale 'C.UTF-8' locale 'C.UTF-8'`, provider: 'b', icu: 'C.UTF-8', lowerDottedI: '69', minVersion: 170000 },
+    ] as const;
+    const JOSE = 'jos\u00e9@example.test';
+    const TABLE = ['adm\u0130n-one@example.test', ' ADMIN-TWO@Example.TEST\u3000', JOSE]; // not admin-one; admin-two by ASCII case; jose as stored
+    const sql0474 = readFileSync('supabase/migrations/0474_a_removed_admin_is_not_sent_the_digest.sql', 'utf8');
+    /** The begin_send 0474 shipped before this review: the same function with lower() in the match. */
+    const lowerPredicate = () => {
+      const fn = sql0474.match(/create or replace function public\.admin_digest_begin_send\([\s\S]*?\nend \$\$;\n/)![0];
+      const old = fn.replace("convert_to(translate(regexp_replace(s.email,", "convert_to(lower(regexp_replace(s.email,")
+        .replace("'', 'g'), 'ABCDEFGHIJKLMNOPQRSTUVWXYZ', 'abcdefghijklmnopqrstuvwxyz'), 'UTF8')", "'', 'g')), 'UTF8')");
+      expect(old).not.toBe(fn);
+      return old;
+    };
+
+    // A case the server cannot run is left out, not passed vacuously.
+    const serverVersion = pgServerVersionNum();
+    it.each(COLLATIONS.filter((c) => !('minVersion' in c) || serverVersion >= c.minVersion))('$label', async (c) => {
+      const db = await createPgFixture({ createOptions: c.create });
+      try {
+        // The settings this case ran under, and what lower() does to U+0130 there. The provider's locale
+        // column is daticulocale on PostgreSQL 16 and datlocale from 17.
+        expect(await db.sql(`select d.datlocprovider::text || '|' || d.datcollate || '|' || d.datctype || '|'
+            || coalesce(to_jsonb(d) ->> 'datlocale', to_jsonb(d) ->> 'daticulocale', '') || '|' || encode(convert_to(lower(U&'\\0130'), 'UTF8'), 'hex')
+          from pg_database d where d.datname = current_database();`)).toBe(`${c.provider}|C.UTF-8|C.UTF-8|${c.icu}|${c.lowerDottedI}`);
+        const clock = new FakeClock(T0);
+        const provider = new FakeResendProvider(clock.now);
+        const run = (occurrenceId: string) => deliverDigestOccurrence(contractPlan({ occurrenceId, recipients: [ONE, TWO, JOSE] }), {
+          store: createPostgresDigestDeliveryStore(db.rpc(clock.now)), provider, owner: 'w', config: CONFIG, now: clock.now,
+          eligibility: { allowlisted: () => false },
+        });
+        await db.setAdmins(TABLE);
+        const fixed = await run('admin-digest:2026-09-30T12:30:00.000Z');
+        expect(fixed.statuses).toEqual({ [K1]: 'withdrawn', [recipientKeyOf(TWO)]: 'accepted', [recipientKeyOf(JOSE)]: 'accepted' });
+        expect(provider.requests.filter((q) => q.to === ONE)).toEqual([]);
+        // Counterfactual, on this throwaway database only: the lower() predicate.
+        await db.sql(lowerPredicate());
+        const old = await run('admin-digest:2026-10-01T12:30:00.000Z');
+        expect(old.statuses![K1]).toBe(c.lowerDottedI === '69' ? 'accepted' : 'withdrawn');
+        expect(provider.requests.filter((q) => q.to === ONE)).toHaveLength(c.lowerDottedI === '69' ? 1 : 0);
+      } finally {
+        await db.drop();
+      }
+    }, 60_000);
+  });
+
+  describe('0474 in the database itself: eligibility read after the row lock', () => {
+    const setup = async () => {
+      const clock = new FakeClock(T0);
+      const store = pgStore(clock);
+      const f = freezePlan(contractPlan({ recipients: [ONE] }), clock.now());
+      await store.freeze(f.occurrence, f.deliveries);
+      await fx.setAdmins([ONE]);
+      const c = await store.claim(OCC, K1, 'w', CLAIM);
+      if (!c.claimed) throw new Error('setup');
+      return { clock, store, fence: c.row.fence, where: `occurrence_id = '${OCC}' and recipient_key = '${K1}'` };
+    };
+
+    it('only the seven-argument begin_send exists: nothing can reach a dispatch without the check', async () => {
+      expect(await fx.sql(`select string_agg(pg_get_function_identity_arguments(oid), ' | ') from pg_proc where proname = 'admin_digest_begin_send';`))
+        .toBe('p_occurrence_id text, p_recipient_key text, p_fence bigint, p_min_lease_ms integer, p_retention_ms bigint, p_margin_ms bigint, p_allowlisted boolean');
+    });
+
+    it('a NULL allowlist answer is refused and writes nothing', async () => {
+      const { clock, where } = await setup();
+      const before = await fx.sql(`select row_to_json(d)::text from public.admin_digest_deliveries d where ${where};`);
+      await expect(fx.sql(`set admin_digest.test_now = '${clock.now().toISOString()}';\nset role service_role;\nselect public.admin_digest_begin_send('${OCC}', '${K1}', 1, 150, 86400000, 3600000, null);`))
+        .rejects.toThrow(/allowlist membership is required/);
+      expect(await fx.sql(`select row_to_json(d)::text from public.admin_digest_deliveries d where ${where};`)).toBe(before);
+    });
+
+    // Review 5922497031: the ordering is proven only if the admission is seen BLOCKED on the holder's lock
+    // before the holder commits. The holder sleeps longer than this wait may take; if the admission never
+    // reaches the lock in that time, the test fails instead of passing on an unexercised order.
+    const blockedBehind = (app: string) => vi.waitFor(async () => expect(await fx.sql(
+      `select count(*) from pg_stat_activity a
+        where a.wait_event_type = 'Lock' and a.query like '%admin_digest_begin_send%'
+          and (select pid from pg_stat_activity where application_name = '${app}') = any(pg_blocking_pids(a.pid));`)).toBe('1'),
+    { timeout: 3_000, interval: 20 });
+    const stillOpen = (app: string) => fx.sql(`select count(*) from pg_stat_activity where application_name = '${app}' and state = 'active';`);
+
+    it('a removal committed while the admission waits for the row lock is seen: withdrawn, not granted', async () => {
+      const { clock, fence, where } = await setup();
+      // The holder locks the row, removes the admin in the same transaction, and commits only after the
+      // admission is blocked behind it. Eligibility read before the lock would still see the admin.
+      const holder = fx.sql(`set application_name = 'removing_admin'; begin; select 1 from public.admin_digest_deliveries where ${where} for update;
+        delete from public.super_admins; select pg_sleep(4); commit;`);
+      await sleepingIn('removing_admin');
+      const admission = reconnect(clock).beginSend(OCC, K1, fence, BEGIN, TABLE_ONLY);
+      await blockedBehind('removing_admin');
+      expect(await stillOpen('removing_admin')).toBe('1'); // the removal is not yet committed while the admission waits
+      await holder;
+      expect(answerOf(await admission)).toBe('withdrawn');
+      expect(await fx.sql(`select status || ':' || last_error from public.admin_digest_deliveries where ${where};`)).toBe('withdrawn:recipient_no_longer_eligible');
+    }, 30_000);
+
+    it('control: an admin added while the admission waits is seen too, and the send is granted', async () => {
+      const { clock, fence, where } = await setup();
+      await fx.setAdmins([]);
+      const holder = fx.sql(`set application_name = 'adding_admin'; begin; select 1 from public.admin_digest_deliveries where ${where} for update;
+        insert into public.super_admins (email) values ('${ONE}'); select pg_sleep(4); commit;`);
+      await sleepingIn('adding_admin');
+      const admission = reconnect(clock).beginSend(OCC, K1, fence, BEGIN, TABLE_ONLY);
+      await blockedBehind('adding_admin');
+      expect(await stillOpen('adding_admin')).toBe('1');
+      await holder;
+      expect(answerOf(await admission)).toBe('ok');
+    }, 30_000);
+
+    it('a withdrawn row stays withdrawn: the guard refuses to revive it, even for the table owner', async () => {
+      const { store, fence, where } = await setup();
+      await fx.setAdmins([]);
+      expect(answerOf(await store.beginSend(OCC, K1, fence, BEGIN, TABLE_ONLY))).toBe('withdrawn');
+      await expect(fx.sql(`update public.admin_digest_deliveries set status = 'in_flight' where ${where};`)).rejects.toThrow(/stays settled/);
+      await expect(fx.sql(`update public.admin_digest_deliveries set status = 'pending' where ${where};`)).rejects.toThrow(/stays settled/);
+    });
+
+    it('an unreadable super_admins fails the call inside the database, and the transaction writes nothing', async () => {
+      const { clock, fence, where } = await setup();
+      const before = await fx.sql(`select row_to_json(d)::text from public.admin_digest_deliveries d where ${where};`);
+      await fx.breakAdmins();
+      await expect(reconnect(clock).beginSend(OCC, K1, fence, BEGIN, ADMITTED)).rejects.toThrow(/super_admins/);
+      expect(await fx.sql(`select row_to_json(d)::text from public.admin_digest_deliveries d where ${where};`)).toBe(before);
+    });
+
+    it('the engine on PostgreSQL: an admin removed after a failed attempt is withdrawn on the retry, and nothing more is sent', async () => {
+      const clock = new FakeClock(T0);
+      const provider = new FakeResendProvider(clock.now);
+      provider.script = ({ n }) => (n === 1 ? { do: 'reject', status: 429, code: 'rate_limit_exceeded', retryable: true } : { do: 'accept' });
+      pgStore(clock);
+      await fx.reset();
+      await fx.setAdmins([ONE, TWO]);
+      const tableOnly: EngineDeps['eligibility'] = { allowlisted: () => false };
+      const deps = (owner: string): EngineDeps => ({ store: reconnect(clock), provider, owner, config: CONFIG, now: clock.now, eligibility: tableOnly });
+      const first = await deliverDigestOccurrence(contractPlan(), deps('first'));
+      expect(first.complete).toBe(false);
+      await fx.setAdmins([TWO]);
+      clock.advance(MINUTE);
+      const retry = await deliverDigestOccurrence(contractPlan(), deps('retry'));
+      expect(retry).toMatchObject({ complete: true, needsAttention: [] });
+      expect(retry.statuses).toEqual({ [K1]: 'withdrawn', [recipientKeyOf(TWO)]: 'accepted' });
+      expect(provider.requests.filter((q) => q.to === ONE)).toHaveLength(1); // the refused first attempt only
+      expect(provider.deliveredTo(ONE)).toBe(0);
+    }, 30_000);
   });
 
   describe('concurrency, crashes and restarts', () => {
@@ -246,7 +438,7 @@ describe.skipIf(!pgFixtureEnabled)('0471 on PostgreSQL (disposable database)', (
       await store.freeze(f.occurrence, f.deliveries);
       const c = await store.claim(OCC, K1, 'w', CLAIM);
       if (!c.claimed) throw new Error('setup');
-      expect(answerOf(await store.beginSend(OCC, K1, c.row.fence, BEGIN))).toBe('ok');
+      expect(answerOf(await store.beginSend(OCC, K1, c.row.fence, BEGIN, ADMITTED))).toBe('ok');
       const dying = psql(fx.db, `set application_name = 'doomed_receipt'; set admin_digest.test_now = '${T0}'; set role service_role; begin;
         select public.admin_digest_complete('${OCC}', '${K1}', 1, '{"kind":"accepted","messageId":"m-lost"}'::jsonb, 4); select pg_sleep(30); commit;`).catch((e: Error) => e);
       await sleepingIn('doomed_receipt'); // the receipt has been written inside the open transaction
@@ -265,7 +457,7 @@ describe.skipIf(!pgFixtureEnabled)('0471 on PostgreSQL (disposable database)', (
       await store.freeze(f.occurrence, f.deliveries);
       const c = await store.claim(OCC, K1, 'w', CLAIM);
       if (!c.claimed) throw new Error('setup');
-      await store.beginSend(OCC, K1, c.row.fence, BEGIN);
+      await store.beginSend(OCC, K1, c.row.fence, BEGIN, ADMITTED);
       expect(await store.complete(OCC, K1, c.row.fence, { kind: 'accepted', messageId: 'm-durable' }, 4)).toBe('ok');
       execSync(process.env.DIGEST_DELIVERY_PG_RESTART_CMD!, { stdio: 'ignore' });
       await vi.waitFor(async () => expect(await fx.sql('select 1;')).toBe('1'), { timeout: 30_000, interval: 250 });
@@ -278,7 +470,7 @@ describe.skipIf(!pgFixtureEnabled)('0471 on PostgreSQL (disposable database)', (
       const gate = deferred();
       provider.script = () => ({ do: 'delay_before_arrival', until: gate.promise, then: { do: 'accept' } });
       pgStore(clock);
-      const engine = (owner: string) => ({ store: reconnect(clock), provider, owner, config: CONFIG, now: clock.now });
+      const engine = (owner: string) => ({ store: reconnect(clock), provider, owner, config: CONFIG, now: clock.now, eligibility: EVERYONE });
       await fx.reset();
       const a = deliverDigestOccurrence(contractPlan(), engine('instance-a'));
       const b = deliverDigestOccurrence(contractPlan(), engine('instance-b'));
@@ -295,10 +487,10 @@ describe.skipIf(!pgFixtureEnabled)('0471 on PostgreSQL (disposable database)', (
       const provider = new FakeResendProvider(clock.now);
       const base = pgStore(clock);
       const crashing: DigestDeliveryStore = { ...base, complete: () => never() }; // the process dies before any receipt
-      void deliverDigestOccurrence(contractPlan({ recipients: [ONE] }), { store: crashing, provider, owner: 'dies', config: CONFIG, now: clock.now });
+      void deliverDigestOccurrence(contractPlan({ recipients: [ONE] }), { store: crashing, provider, owner: 'dies', config: CONFIG, now: clock.now, eligibility: EVERYONE });
       await vi.waitFor(() => expect(provider.deliveredTo(ONE)).toBe(1), { timeout: 10_000 });
       clock.advance(6 * MINUTE);
-      const r = await resumeDigestOccurrence(OCC, { store: reconnect(clock), provider, owner: 'restarted', config: CONFIG, now: clock.now });
+      const r = await resumeDigestOccurrence(OCC, { store: reconnect(clock), provider, owner: 'restarted', config: CONFIG, now: clock.now, eligibility: EVERYONE });
       expect(r.complete).toBe(true);
       expect(provider.deliveredTo(ONE)).toBe(1);
       const toOne = provider.requests.filter((q) => q.to === ONE);
@@ -314,7 +506,7 @@ describe.skipIf(!pgFixtureEnabled)('0471 on PostgreSQL (disposable database)', (
       `select public.admin_digest_load('x');`,
       `select public.admin_digest_freeze('{}'::jsonb, '[]'::jsonb);`,
       `select public.admin_digest_claim('x', 'y', 'w', 1000, 1, 86400000, 3600000);`,
-      `select public.admin_digest_begin_send('x', 'y', 1, 0, 86400000, 3600000);`,
+      `select public.admin_digest_begin_send('x', 'y', 1, 0, 86400000, 3600000, true);`,
       `select public.admin_digest_complete('x', 'y', 1, '{"kind":"unknown"}'::jsonb, 1);`,
     ];
     const TABLE_STATEMENTS = [
@@ -339,7 +531,7 @@ describe.skipIf(!pgFixtureEnabled)('0471 on PostgreSQL (disposable database)', (
     it('the functions refuse a policy the engine refuses: retention past the verified 24 h, a lease that outlasts the retry window', async () => {
       const bad = (stmt: string) => expect(fx.sql(`set role service_role; ${stmt}`)).rejects.toThrow(/bad owner, lease, attempts or retention|bad lease or retention/);
       await bad(`select public.admin_digest_claim('x', 'y', 'w', 1000, 1, 86400001, 3600000);`);
-      await bad(`select public.admin_digest_begin_send('x', 'y', 1, 0, 86400001, 3600000);`);
+      await bad(`select public.admin_digest_begin_send('x', 'y', 1, 0, 86400001, 3600000, true);`);
       await bad(`select public.admin_digest_claim('x', 'y', 'w', ${23 * HOUR}, 1, 86400000, 3600000);`);
       await bad(`select public.admin_digest_claim('x', 'y', 'w', 2147483647, 1, 86400000, 3600000);`); // the largest lease the integer parameter holds
       // Control: the longest lease that still lapses inside the retry window is accepted.
@@ -359,7 +551,7 @@ describe.skipIf(!pgFixtureEnabled)('0471 on PostgreSQL (disposable database)', (
       expect(payloadJsonOf({ ...plan.payload, to: ONE }).length).toBeGreaterThan(600_000);
       expect(() => freezePlan(plan, new Date(T0))).toThrow(TypeError);
       const store = pgStore(new FakeClock(T0));
-      await expect(deliverDigestOccurrence(plan, { store, provider: new FakeResendProvider(() => new Date(T0)), owner: 'a', config: CONFIG, now: () => new Date(T0) })).rejects.toThrow(TypeError);
+      await expect(deliverDigestOccurrence(plan, { store, provider: new FakeResendProvider(() => new Date(T0)), owner: 'a', config: CONFIG, now: () => new Date(T0), eligibility: EVERYONE })).rejects.toThrow(TypeError);
       expect(await occurrences()).toBe('0');
     });
 
@@ -403,6 +595,23 @@ describe.skipIf(!pgFixtureEnabled)('0471 on PostgreSQL (disposable database)', (
       await expect(fx.sql(`update public.admin_digest_occurrences set window_end = window_end + interval '1 day';`)).rejects.toThrow(/never changed or deleted/);
       await expect(fx.sql(`delete from public.admin_digest_occurrences;`)).rejects.toThrow(/never changed or deleted/);
     });
+    it('the documented jsonb refusal, reproduced: a receipt id with U+0000 or a lone surrogate cannot reach the row, and nothing is written (#722\'s guard keeps the engine from sending one)', async () => {
+      const { clock, store, where } = await setup();
+      const a = await store.claim(OCC, K1, 'a', CLAIM);
+      if (!a.claimed) throw new Error('setup');
+      expect(answerOf(await store.beginSend(OCC, K1, a.row.fence, BEGIN, ADMITTED))).toBe('ok');
+      const marked = await fx.sql(`select row_to_json(d)::text from public.admin_digest_deliveries d where ${where};`);
+      // Straight to the function, past the adapter's guard, as JSON.stringify writes the id.
+      const raw = fx.rpc(clock.now);
+      for (const messageId of ['message\u0000id', 'msg-\ud800']) {
+        await expect(raw('admin_digest_complete', { p_occurrence_id: OCC, p_recipient_key: K1, p_fence: a.row.fence, p_result: { kind: 'accepted', messageId }, p_max_attempts: 4 }))
+          .rejects.toThrow(/unsupported Unicode escape sequence|surrogate/);
+      }
+      expect(await fx.sql(`select row_to_json(d)::text from public.admin_digest_deliveries d where ${where};`)).toBe(marked);
+      // Control: the same call with an id PostgreSQL can hold settles the row.
+      expect(await raw('admin_digest_complete', { p_occurrence_id: OCC, p_recipient_key: K1, p_fence: a.row.fence, p_result: { kind: 'accepted', messageId: 'msg-✓-\u{1F600}' }, p_max_attempts: 4 })).toBe('ok');
+    });
+
     it('a NULL fence is refused by begin_send and complete, and writes nothing', async () => {
       const { clock, store, where } = await setup();
       const a = await store.claim(OCC, K1, 'a', CLAIM);
@@ -412,10 +621,10 @@ describe.skipIf(!pgFixtureEnabled)('0471 on PostgreSQL (disposable database)', (
       const asService = (call: string) => fx.sql(`set admin_digest.test_now = '${clock.now().toISOString()}';\nset role service_role;\n${call}`);
       const rawRow = () => fx.sql(`select row_to_json(d)::text from public.admin_digest_deliveries d where ${where};`);
       const before = await rawRow();
-      await expect(asService(`select public.admin_digest_begin_send('${OCC}', '${K1}', null, 150, 86400000, 3600000);`)).rejects.toThrow(/a fence is required/);
+      await expect(asService(`select public.admin_digest_begin_send('${OCC}', '${K1}', null, 150, 86400000, 3600000, true);`)).rejects.toThrow(/a fence is required/);
       expect(await rawRow()).toBe(before);
       expect((await store.load(OCC))!.deliveries[0]).toMatchObject({ status: 'in_flight', fence: 1, sendStartedAt: null, firstSendAt: null });
-      expect(answerOf(await store.beginSend(OCC, K1, a.row.fence, BEGIN))).toBe('ok');
+      expect(answerOf(await store.beginSend(OCC, K1, a.row.fence, BEGIN, ADMITTED))).toBe('ok');
       const marked = await rawRow();
       await expect(asService(`select public.admin_digest_complete('${OCC}', '${K1}', null, '{"kind":"accepted","messageId":"msg-forged"}'::jsonb, 4);`)).rejects.toThrow(/a fence is required/);
       expect(await rawRow()).toBe(marked);
@@ -438,14 +647,14 @@ describe.skipIf(!pgFixtureEnabled)('0471 on PostgreSQL (disposable database)', (
       const { store, where } = await setup();
       const c = await store.claim(OCC, K1, 'w', CLAIM);
       if (!c.claimed) throw new Error('setup');
-      await store.beginSend(OCC, K1, c.row.fence, BEGIN);
+      await store.beginSend(OCC, K1, c.row.fence, BEGIN, ADMITTED);
       await store.complete(OCC, K1, c.row.fence, { kind: 'unknown', reason: 'timeout' }, 4);
       await expect(fx.sql(`update public.admin_digest_deliveries set ambiguous = false where ${where};`)).rejects.toThrow(/only move forward/);
       await expect(fx.sql(`update public.admin_digest_deliveries set fence = 0 where ${where};`)).rejects.toThrow(/only move forward/);
       await expect(fx.sql(`update public.admin_digest_deliveries set first_send_at = first_send_at + interval '1 hour' where ${where};`)).rejects.toThrow(/only move forward/);
       const d = await store.claim(OCC, K1, 'w2', CLAIM);
       if (!d.claimed) throw new Error('setup');
-      await store.beginSend(OCC, K1, d.row.fence, BEGIN);
+      await store.beginSend(OCC, K1, d.row.fence, BEGIN, ADMITTED);
       await store.complete(OCC, K1, d.row.fence, { kind: 'accepted', messageId: 'm-1' }, 4);
       await expect(fx.sql(`update public.admin_digest_deliveries set status = 'unknown', provider_message_id = null where ${where};`)).rejects.toThrow(/stays settled/);
     });
