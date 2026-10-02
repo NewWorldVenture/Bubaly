@@ -14,6 +14,7 @@ import type { Database } from '@/lib/database.types';
 import { nativePushConfigured, sendNativePush } from '@/lib/server/native-push';
 import { childrenBlockedOn } from '@/lib/notifications/child-channels';
 import { isMissingRelationError } from '@/lib/supabase/errors';
+import { readAll } from '@/lib/supabase/read-all';
 
 type DB = SupabaseClient<Database>;
 
@@ -37,7 +38,7 @@ import { isDeliverablePushEndpoint } from '@/lib/server/push-endpoint';
 export type PushPayload = { title: string; body?: string | null; url?: string | null };
 export type PushResult = {
   sent: number; skipped: number; failed: number; pruned: number;
-  /** Recipient opt-outs, distinct from unconfigured/skipped device attempts. */
+  /** Recipient opt-outs or revoked family access, distinct from skipped device attempts. */
   withheld: number;
 };
 
@@ -380,20 +381,24 @@ export async function dispatchPendingPushes(
     if (cursorWriteError || saved?.key !== cursorKey) throw new Error('Push cursor write failed.');
   }
 
-  // Cache family member user ids for whole-family notifications.
-  const familyMembers = new Map<string, string[]>();
-  async function membersOf(familyId: string): Promise<string[]> {
+  // Resolve current family access at delivery, including directly addressed
+  // rows that were queued before a member was removed. Pages are a live read;
+  // membership changes during paging or sending are not atomically enforced.
+  const familyMembers = new Map<string, Set<string>>();
+  async function membersOf(familyId: string): Promise<Set<string>> {
     if (familyMembers.has(familyId)) return familyMembers.get(familyId)!;
-    const { data, error } = await supabase
+    const { rows: members, error } = await readAll<{ user_id: string | null }>((from, to) => supabase
       .from('family_members')
       .select('user_id')
       .eq('family_id', familyId)
-      .eq('is_active', true);
+      .eq('is_active', true)
+      .order('id')
+      .range(from, to));
     if (error) {
-      console.error('[push] family_members read failed for fan-out', { familyId, error });
+      console.error('[push] family_members read failed for delivery', { familyId, error });
       throw new Error('Push recipient read failed.');
     }
-    const ids = (data ?? []).map((m) => m.user_id).filter((id): id is string => Boolean(id));
+    const ids = new Set(members.map((m) => m.user_id).filter((id): id is string => Boolean(id)));
     familyMembers.set(familyId, ids);
     return ids;
   }
@@ -405,8 +410,10 @@ export async function dispatchPendingPushes(
   // without this a child is reached by the fan-out even when the family said no.
   const candidates = new Set<string>();
   for (const n of rows) {
-    if (n.user_id) candidates.add(n.user_id);
-    else for (const id of await membersOf(n.family_id)) candidates.add(id);
+    const members = await membersOf(n.family_id);
+    if (n.user_id) {
+      if (members.has(n.user_id)) candidates.add(n.user_id);
+    } else for (const id of members) candidates.add(id);
   }
   const pushBlocked = await blockedPushRecipients(supabase, [...candidates]);
   // Read before any send, like the consent reads above: a failure here sends
@@ -415,8 +422,9 @@ export async function dispatchPendingPushes(
 
   const totals: PushResult = { sent: 0, skipped: 0, failed: 0, pruned: 0, withheld: 0 };
   for (const n of rows) {
-    const addressed = n.user_id ? [n.user_id] : [...new Set(await membersOf(n.family_id))];
-    const recipients = addressed.filter((id) => !pushBlocked.has(id));
+    const members = await membersOf(n.family_id);
+    const addressed = n.user_id ? [n.user_id] : [...members];
+    const recipients = addressed.filter((id) => members.has(id) && !pushBlocked.has(id));
     // Still stamped below even when everyone was filtered out: the notification
     // was handled, and leaving `pushed_at` null would re-consider it every run.
     const url = n.related_type === 'social' ? '/dashboard/social' : '/dashboard/notifications';

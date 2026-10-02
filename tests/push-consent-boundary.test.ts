@@ -110,7 +110,10 @@ describe('all public push senders enforce consent', () => {
     const f = fixture();
     f.tables.notifications = Array.from({ length: 20 }, (_, index) => ({ ...f.tables.notifications[0], id: notificationId(index + 1) }));
     expect((await dispatchPendingPushes(f.db, { now: NOW })).result.sent).toBe(20);
-    for (const table of ['family_members', 'family_ai_settings', 'user_preferences']) expect(f.calls.filter(call => call.table === table)).toHaveLength(1);
+    // One roster page plus its empty end page, and one child-role read for
+    // consent, independent of the twenty notifications in the batch.
+    expect(f.calls.filter(call => call.table === 'family_members')).toHaveLength(3);
+    for (const table of ['family_ai_settings', 'user_preferences']) expect(f.calls.filter(call => call.table === table)).toHaveLength(1);
   });
 
   it.each(['recipient', 'parent'])('returns a non-success own-device test result for %s opt-out', async mode => {
