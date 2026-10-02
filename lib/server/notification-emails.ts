@@ -1,7 +1,9 @@
 // Delivers pending Bubaly notifications as per-recipient email digests.
-// Runs after the notification generator (same cron). Idempotent via the
-// notifications.sent_at column: a row is emailed (or intentionally skipped)
-// exactly once. No-ops cleanly when RESEND_API_KEY isn't configured.
+// Runs after the notification generator (same cron). sent_at records accepted
+// or intentionally skipped rows; a stable digest key protects identical replay
+// within the provider's retention window. Changed batches and expired keys can
+// still duplicate delivery. No-ops when RESEND_API_KEY isn't configured.
+import { createHash } from 'node:crypto';
 import type { SupabaseClient } from '@supabase/supabase-js';
 import type { Database } from '@/lib/database.types';
 import { sendReactEmail, emailEnabled } from '@/lib/email';
@@ -16,6 +18,12 @@ type DB = SupabaseClient<Database>;
 export type NotificationEmailResult = { sent: number; failed: number; skipped: number };
 
 const emptyResult = (): NotificationEmailResult => ({ sent: 0, failed: 0, skipped: 0 });
+
+function digestIdempotencyKey(userId: string, notificationIds: string[]): string {
+  return `notification-digest/v1/${createHash('sha256')
+    .update(JSON.stringify([userId, [...notificationIds].sort()]))
+    .digest('hex')}`;
+}
 
 /**
  * Emails each member a digest of their unsent, user-targeted notifications that
@@ -33,6 +41,7 @@ export async function deliverNotificationEmails(supabase: DB): Promise<Notificat
     .not('user_id', 'is', null)
     .lte('send_at', nowIso)
     .order('created_at', { ascending: true })
+    .order('id', { ascending: true })
     .limit(500);
   if (pendingError) {
     console.error('[notification-email] pending notification read failed', pendingError);
@@ -145,6 +154,11 @@ export async function deliverNotificationEmails(supabase: DB): Promise<Notificat
       to: meta.email,
       subject: `${notifs.length} family update${notifs.length > 1 ? 's' : ''} · Bubaly`,
       react: React.createElement(NotificationDigestEmail, { name: meta.name, items }),
+      // Same recipient and row set reuse one request key. The provider may
+      // reject an in-flight or changed-payload replay; keep those rows pending.
+      // This does not cover changed row sets, partial acknowledgements or keys
+      // older than the provider's 24-hour retention window.
+      idempotencyKey: digestIdempotencyKey(userId, ids),
     });
     if (notSent) {
       // No mail provider: nothing was emailed. Leave sent_at null so these go
