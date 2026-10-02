@@ -708,6 +708,22 @@ Additions after the 10:55 UTC base, each with its own time: #772 opened 10:58 UT
     - No NWV edit touches carousel selection.
   - **Not claimed:** live Auth or providers, production configuration, migrations, money, or AI and Claude source changes. No deployed-workflow or full meal-feature PASS.
   - **PRODUCTION READY: NO.**
+- **Audit lane claim: dashboard settings runtime validation, `ACTION-2677F9A42D51` / ACT-054 (owner-account comment posted 2026-10-02 11:24 UTC, [#771 comment 5951323281](https://github.com/NewWorldVenture/Bubaly/pull/771#issuecomment-5951323281)).**
+  - **Branch and files:** `codex/dashboard-settings-validation-20261002`, clean at main `01b2c380`. Only `app/(app)/dashboard/customize-actions.ts` and a new `tests/dashboard-settings-validation.test.ts`.
+  - **The defect:** the save action coerces the serialized string `"false"` to boolean `true` and persists it, and the child layout gate then allows customization. Synthetic SDK proofs 18d184 and root 1672ea show 4 desired malformed-input refusal failures, 11 healthy controls and 1 causal reproduction. The 18 existing related checks pass but do not test this input validation.
+  - **Planned repair:** after the existing authenticated context and manager gate, require a non-null, non-array object whose two settings are exact booleans. Keep the server-derived IDs, the normal upsert and the existing messages.
+  - **Status:** `ACTION-2677F9A42D51` stays **IN PROGRESS** (verified). Register A `ACT-054` stays NOT STARTED, because no transition was requested. The new test file has no Register B row and none is created unasked; by the path rule it would be `SUPPORT-F9B48DA4B77F`.
+  - **Overlap:** no NWV branch or worktree edits these files.
+  - **Not claimed:** a UI failure, a cross-family write, a child-role bypass or the complete workflow. **PRODUCTION READY: NO.**
+- **Owner coordination review 5391214026 (2026-10-02 11:24 UTC): #788 versus the NWV-held F19, I18N-011 and INT-O01 copies, and node-forge.**
+  - **node-forge:** the owner keeps the high-severity Mobile gate. An exception or a downgrade is **not** an approved repair. GHSA-86w9-cpqp-85rv lists affected versions up to 1.4.0 and has no patched version. Mobile stays an unresolved external-dependency blocker. That closes option (b), and option (c) stands until a patched version or an Expo chain without node-forge exists.
+  - **Inventory (read-only; #788 head `d6141de1`, newer than the reviewed `66a5273e`):** 69 files. They cover 30 `app/api/ai/*` route files, `lib/server/ai-access.ts`, `lib/ai/observability.ts`, `lib/server/provider-http-error.ts`, `lib/supabase/errors.ts`, the locale provider and toast, the seven catalogues, the profile module and `finalaudit.md`.
+  - **The NWV held copies (local, unpublished, based on the 2026-09-29 main):**
+    - F19 is `72ddb047b`: 91 files.
+    - I18N-011 is `eb2137026`: 319 files. It passes the translator through every `describeDbError` call.
+    - INT-O01 is `4ffc0c853`: it hides "Rate the app" unless a store listing is configured.
+  - **Composition (local `git merge-tree`, no build or test):** #788 merges cleanly with #783 `9aa9898d`, with #775 `046bc33b` and with #771 `f40462ac`. #783 and #788 change different hunks of `app/api/ai/import/route.ts`.
+  - The handoff plan is in [#771 comment 5951399731](https://github.com/NewWorldVenture/Bubaly/pull/771#issuecomment-5951399731) (posted 2026-10-02 11:27 UTC). No closure credit is taken from #788's ledger edits, which mark F19 FIXED, INT-O01 FIXED, I18N-011 PARTIAL and `INTEGRATION-3BBD7C83445A` FIXED + PASS. In this ledger, `MAIN-F19` and the I18N-011 and INT-O01 rows keep their current status.
 - **#768 integration:** promotion out of draft and any merge are blocked pending the owner's explicit approval. This checkpoint promotes and merges nothing.
 - **Register B status-mark correction:** #770 introduced three rows whose status cell read `?? IN PROGRESS` instead of `🔄 IN PROGRESS` (SUPPORT-AD3999932010, SUPPORT-EC79FA65AC23, SUPPORT-9C6B11D5A8EB). The register prose already counted them as IN PROGRESS, so only the mark is restored. Every ID, order, status, count and piece of evidence text is unchanged. Register B stays **14,364 = 11,877 NOT STARTED + 2,136 IN PROGRESS + 185 PASS + 157 FIXED + PASS + 9 BLOCKED**.
 
