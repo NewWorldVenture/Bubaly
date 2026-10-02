@@ -440,11 +440,16 @@ function NoteModal({ note, onClose, onSaved }: {
     const body = bodyValue.trim() || null;
     if (!body && !title) return toastError(t('notesModule.noteMustHaveContent'));
     setLoading(true);
-    const res = await saveNoteAction(note?.id ?? null, { title, body: body ?? '' });
-    setLoading(false);
-    if (!res.ok) return toastError(res.error);
-    success(t(note ? 'notesModule.noteSaved' : 'notesModule.noteCreated'));
-    onSaved();
+    try {
+      const res = await saveNoteAction(note?.id ?? null, { title, body: body ?? '' });
+      if (!res.ok) return toastError(res.error);
+      success(t(note ? 'notesModule.noteSaved' : 'notesModule.noteCreated'));
+      onSaved();
+    } catch (err) {
+      toastError(describeDbError(err, t('actions.couldNotSaveThatNote')));
+    } finally {
+      setLoading(false);
+    }
   }
 
   const currentColor = NOTE_COLORS.find((c) => c.id === selectedColor) ?? NOTE_COLORS[0];
