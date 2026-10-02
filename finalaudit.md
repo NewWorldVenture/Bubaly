@@ -554,6 +554,12 @@ Additions after the 10:55 UTC base, each with its own time: #772 opened 10:58 UT
       - This is a response-validation and diagnostic-correctness defect. It is not a meter bypass, and it does not duplicate the resolved HTTP-status failures.
       - The fix belongs to #788's own session. The evidence is synthetic, inert and native-sealed only.
       - `MAIN-F19` stays **IN PROGRESS** with this bounded follow-up. No closure credit.
+    - **Second follow-up, at #788 head `10295026` (read-only; owner-account comment posted 2026-10-02 12:10 UTC, [#771 comment 5952002961](https://github.com/NewWorldVenture/Bubaly/pull/771#issuecomment-5952002961); finding on [#788 comment 5951995366](https://github.com/NewWorldVenture/Bubaly/pull/788#issuecomment-5951995366)):** a nested flyer `location` object escapes the declared `text|null` response shape.
+      - A nested object that cannot convert to text gives a 500, after the actual SDK and store have run from executing to completed and the usage acknowledgment has come back `ok:true`. The request stays counted at 10.
+      - The author's 22-case proof (cec8c1) and an independent reviewer (896d5b) agree on 2 desired failures and 20 passing controls. The outer invalid-JSON, non-string and interrupted-body repairs pass. The 25 existing flyer and observability cases across 2 files pass (78d054) but do not cover nested locations.
+      - This is an inherited gap in normalization and diagnostics in the current repair. It is not an allowance bypass and not a concurrency regression. A handled 502 would be an acceptable eventual response.
+      - The verified blobs are flyer `9db270ce`, transcribe `1a178a92` and wrapper `6f3d4b79`.
+      - `API-754EB564B7B5`, Session-A API-010, `LIBRARY-3059BA1B2D06` and `MAIN-F19` stay open. The source belongs to #788's session.
   - **PRODUCTION READY: NO.**
 - **Audit lane claim: the weekly digest honours the recipient's personal email preference (owner comment posted 2026-10-02 10:42:27 UTC, [#771 comment 5950615197](https://github.com/NewWorldVenture/Bubaly/pull/771#issuecomment-5950615197); written 2026-10-02 10:43 UTC).**
   - **Branch and files:** `codex/weekly-email-preference-20261002` from main `01b2c380`. Files are `app/api/cron/weekly-digest/route.ts`, `tests/the-weekly-digest-reaches-every-family.test.ts` if its adapter needs adjusting, and a new `tests/weekly-digest-email-preference.test.ts`.
