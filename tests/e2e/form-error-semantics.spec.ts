@@ -1,5 +1,5 @@
 import { createClient } from '@supabase/supabase-js';
-import { expect, test, type CDPSession, type Locator, type Page } from '@playwright/test';
+import { expect, test, type CDPSession, type Locator, type Page, type Request } from '@playwright/test';
 import { createOwnedAccount, requireLocalOrigin, type OwnedAccount } from './helpers/durable-session';
 
 // A11Y-001, the two-form slice (JIMMY-BLK-FORM-A11Y-20261001): what the contact
@@ -245,19 +245,37 @@ test.describe('form errors: what an invalid, refused and recovered submit expose
       // ── Paperwork: native `required`, a server action ──
 
       async function openComposer(page: Page) {
+        // Next runs one server action at a time, so a save sent while the
+        // page's own mount reads (the sidebar's preferences) are in flight
+        // waits behind them; on a loaded runner that pushed a save past the
+        // assertion's 5 s. Each case starts once those reads have settled.
+        const inFlight = new Set<Request>();
+        const settle = (r: Request) => { inFlight.delete(r); };
+        page.on('request', (r) => { if (r.method() === 'POST' && r.headers()['next-action']) inFlight.add(r); });
+        page.on('requestfinished', settle);
+        page.on('requestfailed', settle);
         await signIn(page, '/dashboard/paperwork');
         await page.getByRole('button', { name: 'Add paperwork' }).click();
         const text = page.getByRole('textbox', { name: /paste the paperwork text/i });
         await expect(text).toBeVisible();
+        // The click opened the composer, so the page has hydrated and run its
+        // mount effects: their reads have been sent, and now have to settle.
+        await expect.poll(() => inFlight.size, { message: "the page's own server actions settle" }).toBe(0);
         return { text, sender: page.getByRole('textbox', { name: /optional/ }), submit: page.getByRole('button', { name: 'Triage it' }) };
       }
+      // The composer's save is the only action posted with its `text` field
+      // (React sends the FormData as `_1_text`). Other actions on this page,
+      // such as the sidebar's preference read, pass through and are not
+      // counted, so a case refuses and counts exactly the save it is about.
+      const isComposerSave = (request: Request) => request.method() === 'POST'
+        && !!request.headers()['next-action'] && /name="_?\d+_text"/.test(request.postData() ?? '');
       const refuseNextAction = (page: Page) => page.route('**/dashboard/paperwork', (route) => (
-        route.request().method() === 'POST' && route.request().headers()['next-action']
+        isComposerSave(route.request())
           ? route.fulfill({ status: 500, contentType: 'text/plain', body: PRODUCTION_REDACTED })
           : route.continue()));
       const countActions = (page: Page) => {
         const seen = { posts: 0 };
-        page.on('request', (r) => { if (r.method() === 'POST' && r.headers()['next-action'] && r.url().includes('/dashboard/paperwork')) seen.posts += 1; });
+        page.on('request', (r) => { if (isComposerSave(r) && r.url().includes('/dashboard/paperwork')) seen.posts += 1; });
         return seen;
       };
 
