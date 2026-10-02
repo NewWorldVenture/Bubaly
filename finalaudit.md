@@ -398,6 +398,18 @@ Additions after the 10:55 UTC base, each with its own time: #772 opened 10:58 UT
     - **The same 40 authored cases:** they give 17 failures and 23 controls on the original `cc64517`, and 5 failures and 35 controls on the intermediate `2af3eeee`. The root and an independent reviewer each pass 57 across 2 files on the final source.
     - Blobs: route `3f87b1a5`, test `5eb756a9`, digest `1548c3ef`.
   - **Status:** no workflow or closure credit. `API-F190F9FD81D5`, `JOB-F290D7D4DBF1` and the library child-consent row stay IN PROGRESS.
+  - **#786 follow-up scope: the stored email opt-out (owner comment posted 2026-10-02 10:25:22 UTC, [#771 comment 5950313011](https://github.com/NewWorldVenture/Bubaly/pull/771#issuecomment-5950313011); written 2026-10-02 10:26 UTC):**
+    - **The gap:** a read-only actual-SDK audit confirms that weekly chore emails ignore a stored `user_preferences.email_enabled = false`, while the existing digest withholds. Comparing the actual GET with the digest gave 40 assertions and 24 synthetic SDK requests, zero native: `false` sends one chore email, and the `true` and absent controls send in both.
+    - **Why it matters:** the adopted spec `docs/AI_FAMILY_OS_SPEC.md` §21 requires orchestration to respect user and channel preferences. This concerns scheduled chore notifications, not security or transactional email.
+    - **Test adapter, local and unpublished:** commit `aef737cf9`, one commit ahead of #786's `f0c420270`. It keeps all 40 behavioural assertions and strict logical-batch and page checks for both the old and the paged helper. The old helper passes 57 cases and the new helper 40; a duplicate-preflight mutation fails 2 checks with 38 controls. It is held to publish together with the preference repair.
+    - **Planned repair, only in the chore route and its existing SDK test:**
+      - read complete preference pages in bounded 100-ID filters, ordered by unique `user_id`;
+      - keep the absent default as on, and keep the digest's refusal for a present `false` or `null`;
+      - fail closed before any send on any preference page or transport error;
+      - combine with the parental child-email decisions, and keep the counts.
+      - A temporary candidate passes 53 synthetic cases; applying it in the repository and review are pending.
+    - **Separate workflow gap, kept open:** there is no current web or mobile writer or toggle for `email_enabled`, even though the digest footer points people to Settings → Notifications. Enforcing a stored preference does not prove a working user opt-out flow. That UI obligation stays open separately, and no new ID is assigned here without the owner's direction.
+    - The chore and library items stay IN PROGRESS, with no closure credit.
   - **Not covered:** real Auth, RLS, provider, email rendering, the scheduler, and the race after the read. NWV's held locale edit will rebase.
   - **New linked claim, existing `LIBRARY-40148DB4E591` (`childrenBlockedOn`, source `693e7af3`):**
     - **The gap:** its membership and settings reads are unpaged. With the actual final chore GET, the actual helper and the SDK, a cap of 1 with two children, and a cap of 1,000 with 1,001 children, both send to the final opted-out child: 2 desired failures and 40 controls. Removing only the fixture cap makes all 42 pass.
