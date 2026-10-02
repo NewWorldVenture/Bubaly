@@ -164,6 +164,13 @@ Additions after the 10:55 UTC base, each with its own time: #772 opened 10:58 UT
     - **What it confirms:** the reviewed line ranges keep the prior bounded evidence, keep fixture and production separate, keep the failed CI and the unresolved flake, and keep #777's device and browser limits.
     - **Limit:** this clears that delta only. It is not acceptance of the whole audit. The local commits written after `6a2e87abb` (the chronology correction and the `6a2e87abb` CI entry) were not part of that review.
   - **PRODUCTION READY: NO** stays in force.
+- **Audit lane claim: routine export completeness (owner comment posted 2026-10-02 00:10:59 UTC, [#771 comment 5943101530](https://github.com/NewWorldVenture/Bubaly/pull/771#issuecomment-5943101530); written 2026-10-02 00:12 UTC).**
+  - **The work:** an isolated branch from main `01b2c380` takes on the existing [#726 routine-export finding](https://github.com/NewWorldVenture/Bubaly/pull/726#issuecomment-5923438352). Export `c4818814` and the routine service `8f1e1804` keep a silent 100-row ceiling.
+  - **Files:** `lib/privacy/export.ts`, `lib/services/routines/index.ts` and `tests/privacy-export.test.ts`.
+  - **The plan:** complete, caller-scoped enumeration instead of a metadata-only warning, keeping the dashboard listing as it is. It retests multiple pages, foreign-family and non-scheduled exclusion, disabled routines, refusal on a later page, and export failure and audit behaviour.
+  - **Out of scope:** shared-ledger edits, production configuration, migrations and money movement.
+  - **Status:** `LIBRARY-594010CB34E8`, `LIBRARY-12410F65E196` and `API-BB4FF5888E65` stay under owner reconciliation, with no status credit until scoped evidence arrives.
+  - **Overlap check:** NWV's only adjacent unpublished change is the held I18N-011 commit `eb2137026`, which touches the routines service's three error-text calls only. It stays held.
 - **#768 integration:** promotion out of draft and any merge are blocked pending the owner's explicit approval. This checkpoint promotes and merges nothing.
 - **Register B status-mark correction:** #770 introduced three rows whose status cell read `?? IN PROGRESS` instead of `🔄 IN PROGRESS` (SUPPORT-AD3999932010, SUPPORT-EC79FA65AC23, SUPPORT-9C6B11D5A8EB). The register prose already counted them as IN PROGRESS, so only the mark is restored. Every ID, order, status, count and piece of evidence text is unchanged. Register B stays **14,364 = 11,877 NOT STARTED + 2,136 IN PROGRESS + 185 PASS + 157 FIXED + PASS + 9 BLOCKED**.
 
