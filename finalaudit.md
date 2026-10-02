@@ -213,6 +213,18 @@ Additions after the 10:55 UTC base, each with its own time: #772 opened 10:58 UT
   - **External dependency blocker:** a supported, compatible patched release is needed. Then update the lock, re-run the audit at the same threshold, and run mobile typecheck, config and acceptance.
   - Earlier Mobile greens are not carried forward to new heads.
   - This is **recorded against the existing `SUPPORT-D5FE0185C2FA` (IN PROGRESS, High) with companion `SUPPORT-F4C98A72E8D6`**. No new ID, no status change, and no global audit BLOCKED claim. No Auth, code-signing, provider or production operation was performed.
+- **Audit lane claim: memory notes and evidence privacy coverage (owner comment posted 2026-10-02 00:29:18 UTC, [#771 comment 5943290607](https://github.com/NewWorldVenture/Bubaly/pull/771#issuecomment-5943290607); written 2026-10-02 00:30 UTC).**
+  - **The work:** an isolated root-owned branch from main `01b2c380` takes on the existing [#719 notes/evidence finding](https://github.com/NewWorldVenture/Bubaly/pull/719#issuecomment-5923612307). Service `768d64a6` and tool `ea97b3ad` still omit notes and evidence.
+  - **Intended scope:**
+    - The classifier covers notes and evidence.
+    - The tool and every `rememberFact` producer check pass the note.
+    - Stored-fact and suggestion visibility, and the resulting `updateFact` notes, follow the same rule.
+    - Context, settings and purchase-advisor checks include metadata.
+    - Search filters sensitive memory rows before building snippets that carry notes.
+  - **Not claimed:** new keyword expansion, or a claim that the classifier is complete.
+  - **Boundary kept:** browser reads of knowledge, life events and playbooks, and RLS's current category-only behaviour, need independent database acceptance. There is no migration or production configuration, and this app-path fix does not certify database or privacy completeness.
+  - **Status:** `LIBRARY-25FA3C8CA9F4`, `LIBRARY-312898DD7ABA` and the affected API and search rows are reconciled only on evidence, with no broad PASS.
+  - **Overlap check ([#771 comment 5943296959](https://github.com/NewWorldVenture/Bubaly/pull/771#issuecomment-5943296959)):** NWV's only adjacent unpublished change is the held I18N-011 commit `eb2137026`, which is error text only in the memory service, the tool and the context builder. It stays held.
 - **#768 integration:** promotion out of draft and any merge are blocked pending the owner's explicit approval. This checkpoint promotes and merges nothing.
 - **Register B status-mark correction:** #770 introduced three rows whose status cell read `?? IN PROGRESS` instead of `🔄 IN PROGRESS` (SUPPORT-AD3999932010, SUPPORT-EC79FA65AC23, SUPPORT-9C6B11D5A8EB). The register prose already counted them as IN PROGRESS, so only the mark is restored. Every ID, order, status, count and piece of evidence text is unchanged. Register B stays **14,364 = 11,877 NOT STARTED + 2,136 IN PROGRESS + 185 PASS + 157 FIXED + PASS + 9 BLOCKED**.
 
