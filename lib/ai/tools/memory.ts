@@ -103,7 +103,7 @@ export const memoryTools: ToolDefinition[] = [
       const key = input.key.trim();
       const content = input.content.trim();
       if (!key || !content) return fail('A memory needs both a label and the thing to remember.', { code: SERVICE_CODES.invalidInput });
-      if (isSensitiveMemory({ category: input.category ?? null, key, content })) {
+      if (isSensitiveMemory({ category: input.category ?? null, key, content, notes: input.note })) {
         return fail(SENSITIVE_REFUSAL, { code: SERVICE_CODES.denied });
       }
 
