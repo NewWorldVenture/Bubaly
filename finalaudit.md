@@ -560,6 +560,10 @@ Additions after the 10:55 UTC base, each with its own time: #772 opened 10:58 UT
       - This is an inherited gap in normalization and diagnostics in the current repair. It is not an allowance bypass and not a concurrency regression. A handled 502 would be an acceptable eventual response.
       - The verified blobs are flyer `9db270ce`, transcribe `1a178a92` and wrapper `6f3d4b79`.
       - `API-754EB564B7B5`, Session-A API-010, `LIBRARY-3059BA1B2D06` and `MAIN-F19` stay open. The source belongs to #788's session.
+      - **Re-qualified at #788 `3cfadcd4` (comment edited 2026-10-02 12:16 UTC):** independent run 85bf58 executes only the 18 flyer and durable-filing cases and gives 2 desired failures and 16 controls.
+        - The nested-location and completed-before-500 behaviours still reproduce.
+        - The flyer blob `9db270ce` and the wrapper `6f3d4b79` are byte-identical (439ca9). Transcribe changed to `d0e20674`, so its 4 cases are skipped under the owner's policy change.
+        - The earlier 22-case receipt belongs to `10295026` and is not counted as current evidence.
   - **PRODUCTION READY: NO.**
 - **Audit lane claim: the weekly digest honours the recipient's personal email preference (owner comment posted 2026-10-02 10:42:27 UTC, [#771 comment 5950615197](https://github.com/NewWorldVenture/Bubaly/pull/771#issuecomment-5950615197); written 2026-10-02 10:43 UTC).**
   - **Branch and files:** `codex/weekly-email-preference-20261002` from main `01b2c380`. Files are `app/api/cron/weekly-digest/route.ts`, `tests/the-weekly-digest-reaches-every-family.test.ts` if its adapter needs adjusting, and a new `tests/weekly-digest-email-preference.test.ts`.
