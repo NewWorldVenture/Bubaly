@@ -796,6 +796,18 @@ Additions after the 10:55 UTC base, each with its own time: #772 opened 10:58 UT
     - **Windows note:** thread workers gave 13 identical timezone-control failures on the untouched base. Forks apply the per-case timezone and pass. This is a host-runner limit, not a product failure.
   - **Status (verified, unchanged; no transition requested):** `COMPONENT-58F072E654BC`, `SUPPORT-F3FE52A739BC`, `CONTROL-65B075695BF2`, `LIBRARY-141D81A1905F` and the calendar page workflow obligations stay as recorded. Recurrence-library coverage is a control, not closure. No PASS: hosted CI on #796 is pending, and the root reproduction is pending.
   - **Not established:** application CSS, responsive layout, Auth, SQL or providers, deployment, or the complete calendar workflow. **PRODUCTION READY: NO.**
+- **Audit lane claim: grocery-toggle transport failures are contained and reported (owner-account comment posted 2026-10-02 11:39 UTC, [#771 comment 5951560251](https://github.com/NewWorldVenture/Bubaly/pull/771#issuecomment-5951560251)).**
+  - **Branch and files:** `codex/meal-grocery-toggle-errors-20261002`, clean at the exact #794 head `ae92d448`. The same two files as #794: `meals-module.tsx` and `weekly-meal-planner.spec.ts`.
+    - The draft PR will target #794's branch and depend on it explicitly. #794 stays frozen. The PR is retargeted to main only after #794 merges.
+  - **The defect:** synthetic proof e1cc52 shows 2 desired failures and 2 healthy controls.
+    - A transport rejection before the write, and a response lost after a synthetic commit, both give no error notice and an unhandled rejection.
+    - Checking and unchecking with a real query refresh, and feedback for a reported refusal, both pass.
+    - The earlier browser bridge always returned success and changed no rows, so it never tested this.
+  - **Planned repair:** a narrow try/catch with the existing localized `actions.couldNotUpdateThatItem` fallback. Success refresh and reported-refusal feedback are kept. There is no automatic retry, no rollback and no assumption about an uncertain commit.
+    - 4 component cases are added to the 54, for 58 browser cases, plus related units, full types and lint.
+  - **Status:** `COMPONENT-4D0C5DE53A9F` and `SUPPORT-E8F3F434DAC5` stay IN PROGRESS. No transition and no PASS.
+  - **Overlap:** only the lane's own #794. The NWV I18N-011 toast lines are held and untouched, and #788's AI routes and catalogues are outside its scope.
+  - **Not claimed:** live Auth, protected account paths, SQL, money, providers, production configuration or migrations. **PRODUCTION READY: NO.**
 - **#768 integration:** promotion out of draft and any merge are blocked pending the owner's explicit approval. This checkpoint promotes and merges nothing.
 - **Register B status-mark correction:** #770 introduced three rows whose status cell read `?? IN PROGRESS` instead of `🔄 IN PROGRESS` (SUPPORT-AD3999932010, SUPPORT-EC79FA65AC23, SUPPORT-9C6B11D5A8EB). The register prose already counted them as IN PROGRESS, so only the mark is restored. Every ID, order, status, count and piece of evidence text is unchanged. Register B stays **14,364 = 11,877 NOT STARTED + 2,136 IN PROGRESS + 185 PASS + 157 FIXED + PASS + 9 BLOCKED**.
 
