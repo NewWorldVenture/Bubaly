@@ -13,6 +13,7 @@ type Assignment = {
 type EmailProps = { memberName: string; familyName: string; chores: { title: string; points: number; dueAt: string | null }[] };
 type ChannelMember = { user_id: string; family_id: string; role: string; is_active: boolean };
 type ChannelSetting = { family_id: string; child_channels: unknown };
+type EmailPreference = { user_id: string; email_enabled: boolean | null };
 const h = vi.hoisted(() => ({
   db: null as SupabaseClient<Database> | null,
   assignments: [] as Assignment[],
@@ -20,6 +21,8 @@ const h = vi.hoisted(() => ({
   users: [] as { id: string; email: string | null }[],
   channelMembers: [] as ChannelMember[],
   channelSettings: [] as ChannelSetting[],
+  preferences: [] as EmailPreference[],
+  failPreferenceOffset: null as number | null, rejectPreferences: false,
   sends: [] as { to: string; props: EmailProps }[],
   calls: [] as { table: string; query: string }[],
   cap: 1000, failAssignmentOffset: null as number | null, failFamilies: false, failUsers: false,
@@ -65,6 +68,7 @@ beforeEach(() => {
   h.families = [{ id: FAMILY, name: 'Synthetic family' }, { id: FOREIGN, name: 'Synthetic other family' }];
   h.users = [{ id: 'synthetic-user', email: 'member@synthetic.invalid' }];
   h.channelMembers = []; h.channelSettings = [];
+  h.preferences = []; h.failPreferenceOffset = null; h.rejectPreferences = false;
   h.sends = []; h.calls = []; h.cap = 1000; h.failAssignmentOffset = null; h.failFamilies = false; h.failUsers = false;
   h.emailResult = { ok: true };
   h.failChannelMembers = false; h.failChannelSettings = false;
@@ -105,6 +109,17 @@ beforeEach(() => {
         const ids = /^in\.\((.*)\)$/.exec(query.get('id') ?? '')?.[1].split(',');
         if (!ids) throw new Error('Unexpected family filter');
         data = h.families.filter(row => ids.includes(row.id));
+      } else if (table === 'user_preferences') {
+        const users = /^in\.\((.*)\)$/.exec(query.get('user_id') ?? '')?.[1].split(',');
+        if (!users || users.length > 100 || new Set(users).size !== users.length || query.get('select') !== 'user_id,email_enabled'
+          || query.get('order') !== 'user_id.asc' || !query.has('offset') || !query.has('limit')) throw new Error('Unexpected preference query');
+        const offset = Number(query.get('offset'));
+        if (h.rejectPreferences) throw new Error('Synthetic preference transport rejection');
+        if (offset === h.failPreferenceOffset) return error('Synthetic preference read failure');
+        data = h.preferences.filter(row => users.includes(row.user_id))
+          .sort((a, b) => a.user_id.localeCompare(b.user_id))
+          .slice(offset, offset + Math.min(h.cap, Number(query.get('limit'))))
+          .map(row => ({ user_id: row.user_id, email_enabled: row.email_enabled }));
       } else if (table === 'family_members') {
         if (h.failChannelMembers) return error('Synthetic child membership read failure');
         const users = /^in\.\((.*)\)$/.exec(query.get('user_id') ?? '')?.[1].split(',');
@@ -320,5 +335,84 @@ describe('weekly chore reminder membership through the actual GET and SDK', () =
     h.failChannelMembers = failure === 'members'; h.failChannelSettings = failure === 'settings';
     expect(await run()).toEqual({ status: 500, body: { error: 'choreReminders.choreReminderProcessingFailed' } });
     expect(h.sends).toEqual([]);
+  });
+});
+
+describe('weekly chore reminder user email preferences through the actual GET and SDK', () => {
+  it.each([false, null])('withholds a reminder for stored email_enabled=%s', async enabled => {
+    h.preferences = [{ user_id: 'synthetic-user', email_enabled: enabled }];
+    expect(await run()).toEqual({ status: 200, body: { sent: 0, failed: 0, skipped: 1 } });
+    expect(h.sends).toEqual([]);
+  });
+
+  it.each(['true', 'absent'])('preserves delivery for a %s preference', async kind => {
+    h.preferences = kind === 'true' ? [{ user_id: 'synthetic-user', email_enabled: true }] : [];
+    expect(await run()).toEqual({ status: 200, body: { sent: 1, failed: 0, skipped: 0 } });
+    expect(h.sends).toHaveLength(1);
+    expect(h.calls.filter(call => call.table === 'user_preferences').map(call => new URLSearchParams(call.query).get('offset')))
+      .toEqual(kind === 'true' ? ['0', '1'] : ['0']);
+  });
+
+  it('does not apply an unrelated user preference to an accepted recipient', async () => {
+    h.preferences = [{ user_id: 'other-user', email_enabled: false }];
+    expect(await run()).toEqual({ status: 200, body: { sent: 1, failed: 0, skipped: 0 } });
+    expect(h.sends).toHaveLength(1);
+  });
+
+  it('finds an opt-out beyond a capped first page and proves the end with an empty page', async () => {
+    h.cap = 1;
+    h.assignments = [assignment('a', { member_id: 'a-member', family_members: member({ user_id: 'a-user' }) }),
+      assignment('z', { member_id: 'z-member', family_members: member({ user_id: 'z-user' }) })];
+    h.users = [{ id: 'a-user', email: 'a@synthetic.invalid' }, { id: 'z-user', email: 'z@synthetic.invalid' }];
+    h.preferences = [{ user_id: 'z-user', email_enabled: false }, { user_id: 'a-user', email_enabled: true }];
+    expect(await run()).toEqual({ status: 200, body: { sent: 1, failed: 0, skipped: 1 } });
+    expect(h.sends.map(send => send.to)).toEqual(['a@synthetic.invalid']);
+    expect(h.calls.filter(call => call.table === 'user_preferences').map(call => new URLSearchParams(call.query).get('offset'))).toEqual(['0', '1', '2']);
+  });
+
+  it.each([0, 1])('refuses all sends when the preference page at offset %i fails', async offset => {
+    h.cap = 1; h.failPreferenceOffset = offset;
+    h.assignments.push(assignment('second', { member_id: 'other-member', family_members: member({ user_id: 'other-user' }) }));
+    h.users.push({ id: 'other-user', email: 'other@synthetic.invalid' });
+    h.preferences = [{ user_id: 'other-user', email_enabled: true }, { user_id: 'synthetic-user', email_enabled: false }];
+    expect(await run()).toEqual({ status: 500, body: { error: 'choreReminders.choreReminderProcessingFailed' } });
+    expect(h.sends).toEqual([]);
+  });
+
+  it('refuses all sends when the preference transport rejects', async () => {
+    h.rejectPreferences = true;
+    expect(await run()).toEqual({ status: 500, body: { error: 'choreReminders.choreReminderProcessingFailed' } });
+    expect(h.sends).toEqual([]);
+  });
+
+  it('deduplicates preference IDs while retaining one skip per member bucket', async () => {
+    h.assignments.push(assignment('second', { member_id: 'other-member' }));
+    h.preferences = [{ user_id: 'synthetic-user', email_enabled: false }];
+    expect(await run()).toEqual({ status: 200, body: { sent: 0, failed: 0, skipped: 2 } });
+    expect(h.sends).toEqual([]);
+    expect(h.calls.filter(call => call.table === 'user_preferences').map(call => new URLSearchParams(call.query).get('user_id')))
+      .toEqual(['in.(synthetic-user)', 'in.(synthetic-user)']);
+  });
+
+  it.each([true, false])('combines child permission and member preference (%s) without double counting', async enabled => {
+    h.preferences = [{ user_id: 'synthetic-user', email_enabled: enabled }];
+    h.channelMembers = [{ user_id: 'synthetic-user', family_id: FAMILY, role: 'child', is_active: true }];
+    h.channelSettings = [{ family_id: FAMILY, child_channels: { email: false } }];
+    expect(await run()).toEqual({ status: 200, body: { sent: 0, failed: 0, skipped: 1 } });
+    expect(h.sends).toEqual([]);
+  });
+
+  it('reads every bounded preference batch before sending, including the 101st opt-out', async () => {
+    h.assignments = Array.from({ length: 101 }, (_, i) => assignment('assignment-' + String(i).padStart(3, '0'), {
+      member_id: 'member-' + i, family_members: member({ user_id: 'user-' + String(i).padStart(3, '0') }),
+    }));
+    h.users = h.assignments.map(row => ({ id: (row.family_members as Member).user_id!, email: row.member_id + '@synthetic.invalid' }));
+    h.preferences = h.users.map((user, i) => ({ user_id: user.id, email_enabled: i !== 100 }));
+    expect(await run()).toEqual({ status: 200, body: { sent: 100, failed: 0, skipped: 1 } });
+    expect(h.sends).toHaveLength(100);
+    expect(h.sends.some(send => send.to === 'member-100@synthetic.invalid')).toBe(false);
+    const calls = h.calls.filter(call => call.table === 'user_preferences').map(call => new URLSearchParams(call.query));
+    expect(calls.filter(query => query.get('offset') === '0').map(query => query.get('user_id')!.slice(4, -1).split(',').length).sort((a,b) => a-b)).toEqual([1, 100]);
+    expect(calls.filter(query => query.get('offset') !== '0').map(query => query.get('offset')).sort()).toEqual(['1', '100']);
   });
 });

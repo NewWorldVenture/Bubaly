@@ -3,7 +3,7 @@ import { getTranslations } from '@/lib/i18n/server';
 import { createServiceClient } from '@/lib/supabase/server';
 import { listAllAuthUsers } from '@/lib/server/list-all-auth-users';
 import { readAll } from '@/lib/supabase/read-all';
-import { readInChunks } from '@/lib/supabase/chunked-in';
+import { readAllInChunks, readInChunks } from '@/lib/supabase/chunked-in';
 import { sendReactEmail } from '@/lib/email';
 import { ChoreReminderEmail } from '@/lib/emails/chore-reminder';
 import * as React from 'react';
@@ -132,13 +132,31 @@ export async function GET(req: NextRequest) {
   }
 
   // Fetch emails
-  const userIds = [...byMember.values()].map((v) => v.userId);
+  const userIds = [...new Set([...byMember.values()].map((v) => v.userId))];
+  // Scheduled reminder emails respect the recipient's notification preference.
+  // Page every bounded ID batch: a capped first page can omit an opt-out.
+  const { data: preferences, error: preferencesError } = await readAllInChunks<
+    { user_id: string; email_enabled: boolean | null }, { message: string }
+  >(userIds, (chunk, from, to) => supabase
+    .from('user_preferences')
+    .select('user_id, email_enabled')
+    .in('user_id', chunk)
+    .order('user_id')
+    .range(from, to));
+  if (preferencesError) {
+    console.error('Cron chore email preference read error:', preferencesError);
+    return NextResponse.json({ error: t('choreReminders.choreReminderProcessingFailed') }, { status: 500 });
+  }
+  // An absent row keeps the default opt-in; existing false/null rows opt out,
+  // matching notification digest delivery.
+  const preferenceBlocked = new Set((preferences ?? []).filter((p) => !p.email_enabled).map((p) => p.user_id));
   // A weekly chore email reaches a child directly, so the same parental
   // channel decision used by notification email delivery applies here too.
   // Resolve it before any send: an unavailable setting must not allow a batch.
   let emailBlocked: Set<string>;
   try {
     emailBlocked = await childrenBlockedOn(supabase, 'email', userIds);
+    for (const userId of preferenceBlocked) emailBlocked.add(userId);
   } catch (error) {
     console.error('Cron chore child email permission read error:', error);
     return NextResponse.json({ error: t('choreReminders.choreReminderProcessingFailed') }, { status: 500 });
