@@ -819,6 +819,16 @@ Additions after the 10:55 UTC base, each with its own time: #772 opened 10:58 UT
     - The root's independent baseline and fix review is pending and not credited.
   - **Status:** `COMPONENT-4D0C5DE53A9F` and `SUPPORT-E8F3F434DAC5` stay IN PROGRESS. No PASS. #797 depends on #794 and cannot be integrated before it. The authorization of the existing service and action is not reclassified by this client-side repair.
   - **Not established:** deployed Auth, RLS, SQL, providers, or the full meal workflow. **PRODUCTION READY: NO.**
+- **Audit lane claim: the todo dialog's pending save does not close a later dialog, `COMPONENT-35043C5F192D` (owner-account comment posted 2026-10-02 11:43 UTC, [#771 comment 5951634321](https://github.com/NewWorldVenture/Bubaly/pull/771#issuecomment-5951634321)).**
+  - **Branch and files:** `codex/todo-modal-completion-20261002`, clean at main `01b2c380`. Only `components/modules/todos-module.tsx` and a new `tests/e2e/todo-modal-completion.spec.ts`. The handoff read hosted #771 `f40462ac`.
+  - **The defect:** root reproduction f62b38 runs the actual React 19 module and shows 1 causal defect and 4 controls. Save A with a delayed response, close its dialog and open B to edit; A's successful response then closes B and loses B's draft.
+  - **Planned repair:** fence completion by dialog instance and by unmount. A's already-requested save is kept and its result refreshed. There is no backend cancellation, and no change to date conversion, retry policy, financial rewards, or the TIME-003 or NWV-owned consumers.
+  - **Status:** `COMPONENT-35043C5F192D` is verified **NOT STARTED** and stays NOT STARTED; the claim requests no transition. The new spec has no Register B row (the path rule gives `SUPPORT-CCE14DE15E82`); one is added only on request.
+  - **Overlap (NWV, local and unpublished):**
+    - The I18N-011 commit (`eb213702` on `integrate` and the held agent worktrees; `1ccc0dbd` in one of them) changes six `describeDbError(…, tr)` error-toast lines of `todos-module.tsx`. It is held and unchanged, and will be rebased on whichever lands first.
+    - The stale `time003-wip-backup` holds superseded TIME-003 work-in-progress date-string lines in the same file. It is not for revival.
+    - Neither touches dialog completion.
+  - **Not claimed:** live Auth, providers, SQL, migrations, production configuration or money. **PRODUCTION READY: NO.**
 - **#768 integration:** promotion out of draft and any merge are blocked pending the owner's explicit approval. This checkpoint promotes and merges nothing.
 - **Register B status-mark correction:** #770 introduced three rows whose status cell read `?? IN PROGRESS` instead of `🔄 IN PROGRESS` (SUPPORT-AD3999932010, SUPPORT-EC79FA65AC23, SUPPORT-9C6B11D5A8EB). The register prose already counted them as IN PROGRESS, so only the mark is restored. Every ID, order, status, count and piece of evidence text is unchanged. Register B stays **14,364 = 11,877 NOT STARTED + 2,136 IN PROGRESS + 185 PASS + 157 FIXED + PASS + 9 BLOCKED**.
 
