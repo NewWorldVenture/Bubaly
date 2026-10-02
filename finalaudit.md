@@ -886,6 +886,16 @@ Additions after the 10:55 UTC base, each with its own time: #772 opened 10:58 UT
     - The new spec has no Register B row (`SUPPORT-CCE14DE15E82` by rule).
     - The handoff calls the TIME-003 reminder conversion NWV-owned. NWV has since released that one consumer (5951651650), pending the owner's word.
   - **PRODUCTION READY: NO.**
+- **Candidate #799 for the pantry-dialog lane (owner-account comment posted 2026-10-02 11:52 UTC, [#771 comment 5951785762](https://github.com/NewWorldVenture/Bubaly/pull/771#issuecomment-5951785762)).**
+  - **The candidate:** draft [#799](https://github.com/NewWorldVenture/Bubaly/pull/799) at `98bae272`, changing exactly `pantry-module.tsx` (blob `ee9481b9`) and the new `tests/e2e/pantry-dialog-completion.spec.ts` (blob `d50fea0a`).
+    - Closed editors cannot close a reopened draft of the same item or another item, show stale feedback or change its loading state. A submitted successful save still commits and refreshes.
+    - An active rejected save keeps the draft and re-enables Save.
+  - **Author-reported local evidence:**
+    - React 19 StrictMode/Chromium 15/15 pass.
+    - The same assertions on main `01b2c380` give 11 desired failures and 4 controls: 4 successful completions closing a new draft, 3 stale refusal toasts, 3 unhandled closed rejections, and 1 active rejection left loading.
+    - The guards cover console, page, window, rejection, failed-request and unexpected-request events. The 43 related cases in 2 unit files pass, as do full types, lint and the staged diff.
+  - **Status:** `COMPONENT-FCDDC65D5020`, `CONTROL-C059FA40D296` and MOD-071 stay **NOT STARTED**, because no transition was requested. No PASS: hosted CI on #799 and the root's independent review are pending. The new spec has no Register B row (`SUPPORT-15B9AC768762` by rule).
+  - **Not claimed:** styling, responsive layout, the full backend workflow, backend cancellation or retry. **PRODUCTION READY: NO.**
 - **#768 integration:** promotion out of draft and any merge are blocked pending the owner's explicit approval. This checkpoint promotes and merges nothing.
 - **Register B status-mark correction:** #770 introduced three rows whose status cell read `?? IN PROGRESS` instead of `🔄 IN PROGRESS` (SUPPORT-AD3999932010, SUPPORT-EC79FA65AC23, SUPPORT-9C6B11D5A8EB). The register prose already counted them as IN PROGRESS, so only the mark is restored. Every ID, order, status, count and piece of evidence text is unchanged. Register B stays **14,364 = 11,877 NOT STARTED + 2,136 IN PROGRESS + 185 PASS + 157 FIXED + PASS + 9 BLOCKED**.
 
