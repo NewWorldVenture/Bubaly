@@ -139,4 +139,3 @@ test('an ambiguous create response does not automatically create another note',a
   await expect(page.getByRole('dialog')).toBeVisible();await expect(page.locator('input[name=title]')).toHaveValue('Possibly saved title');await expect(page.getByRole('button',{name:'Create Note',exact:true})).toBeEnabled();expect(proof.calls).toHaveLength(1);expect(proof.rows).toHaveLength(3);expect(proof.rows[2]).toMatchObject({title:'Possibly saved title',body:'Possibly saved content'});
   expect(await page.evaluate(()=>window.__toasts)).toEqual([['error','Synthetic response lost after commit']]);await page.getByRole('button',{name:'Cancel',exact:true}).click();expect(proof.calls).toHaveLength(1);expect(proof.errors).toEqual([]);
 });
-
