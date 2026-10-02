@@ -1,7 +1,7 @@
 'use client';
 
 // Enhanced notes: color coding, checklists, categories, grid/list view, search
-import { useMemo, useState, useId } from 'react';
+import { useMemo, useState, useId, useEffect, useRef } from 'react';
 import {
   StickyNote, Plus, Trash2, Pin, PinOff, Search, X, Copy, List, LayoutGrid,
   CheckSquare, Square, Palette, Clock, FileText, Sparkles, User,
@@ -246,7 +246,7 @@ export function NotesModule() {
         <NoteModal
           note={editing}
           onClose={() => { setAddOpen(false); setEditing(null); }}
-          onSaved={() => { setAddOpen(false); setEditing(null); void refresh(); }}
+          onSaved={() => { void refresh(); }}
         />
       )}
     </div>
@@ -393,6 +393,15 @@ function NoteModal({ note, onClose, onSaved }: {
   const a11yId = useId();
   const { success, error: toastError } = useToast();
   const [loading, setLoading] = useState(false);
+  const active = useRef(true);
+  useEffect(() => {
+    active.current = true;
+    return () => { active.current = false; };
+  }, []);
+  function close() {
+    active.current = false;
+    onClose();
+  }
   // Local only, and it stays local: there is no `notes.color` column for the
   // save below to write it to. See the note on `noteColor` above.
   const [selectedColor, setSelectedColor] = useState((note as Record<string, unknown> | null)?.color as string ?? 'default');
@@ -442,20 +451,28 @@ function NoteModal({ note, onClose, onSaved }: {
     setLoading(true);
     try {
       const res = await saveNoteAction(note?.id ?? null, { title, body: body ?? '' });
-      if (!res.ok) return toastError(res.error);
-      success(t(note ? 'notesModule.noteSaved' : 'notesModule.noteCreated'));
+      if (!res.ok) {
+        if (active.current) toastError(res.error);
+        return;
+      }
+      if (active.current) {
+        close();
+        success(t(note ? 'notesModule.noteSaved' : 'notesModule.noteCreated'));
+      }
+      // A save already requested may commit after Cancel; still refresh it,
+      // without letting that closed instance dismiss a newly opened draft.
       onSaved();
     } catch (err) {
-      toastError(describeDbError(err, t('actions.couldNotSaveThatNote')));
+      if (active.current) toastError(describeDbError(err, t('actions.couldNotSaveThatNote')));
     } finally {
-      setLoading(false);
+      if (active.current) setLoading(false);
     }
   }
 
   const currentColor = NOTE_COLORS.find((c) => c.id === selectedColor) ?? NOTE_COLORS[0];
 
   return (
-    <Modal open onClose={onClose} title={note ? t('dialogTitle.editNote') : t('dialogTitle.newNote')}>
+    <Modal open onClose={close} title={note ? t('dialogTitle.editNote') : t('dialogTitle.newNote')}>
       <form onSubmit={onSubmit} className="space-y-4">
         {/* Color picker */}
         <div className="flex items-center gap-2">
@@ -539,7 +556,7 @@ function NoteModal({ note, onClose, onSaved }: {
         </div>
 
         <div className="flex justify-end gap-2 pt-2">
-          <Button type="button" variant="ghost" onClick={onClose}>{t('notes.cancel')}</Button>
+          <Button type="button" variant="ghost" onClick={close}>{t('notes.cancel')}</Button>
           <Button type="submit" loading={loading}>{note ? 'Save' : 'Create Note'}</Button>
         </div>
       </form>
