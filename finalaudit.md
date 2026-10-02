@@ -759,6 +759,14 @@ Additions after the 10:55 UTC base, each with its own time: #772 opened 10:58 UT
     - Auth context, tier and the Next cache are inert seams.
   - **Status:** `ACTION-2677F9A42D51` stays IN PROGRESS and cites #795 here. No PASS: #795's hosted CI is pending. The new test file has no Register B row (the path rule gives `SUPPORT-F9B48DA4B77F`); one is added only on request.
   - **Not claimed:** a normal-UI failure, a cross-family write, a child-role bypass, live Auth, RLS, SQL or providers, or the complete workflow. **PRODUCTION READY: NO.**
+- **Claim extension on #794: an unmatched recipe search versus an empty saved library (owner-account comment posted 2026-10-02 11:31 UTC, [#771 comment 5951458487](https://github.com/NewWorldVenture/Bubaly/pull/771#issuecomment-5951458487)).**
+  - **Scope:** the same branch `codex/meal-carousel-refresh-20261002`, starting clean at `a9ca92e5`, and the same two files. The handoff read hosted #771 `f40462ac` (blob `5d18013b`), which matches the pushed head.
+  - **The defect:** synthetic proof d00e03 shows 1 desired failure and 4 healthy controls. With a saved Tomato soup, a search with no matches shows "No recipes yet" with empty-library guidance.
+    - The empty-library copy, clearing and padded search, recently-cooked ordering and alphabetic meal-picker controls all pass.
+    - A faithful ordered local transport replaces the fixture's ignored `order()`. That improves coverage; it is not evidence of a sorting defect, and the separate sorting obligation recorded under #794 stays open.
+  - **Planned repair:** when saved recipes exist and the trimmed query matches none, show the existing `mealsPlanner.noMatches` and drop the empty-library guidance. Keep the 49 browser cases and add unmatched, empty and clear controls.
+    - No SQL, service conversion, AI routes, catalogues, providers, or the held NWV I18N-011 toast lines are touched.
+  - **Status:** `COMPONENT-4D0C5DE53A9F` and `SUPPORT-E8F3F434DAC5` stay IN PROGRESS. The #794 candidate at `a9ca92e5` is superseded once the extension is pushed. No PASS. **PRODUCTION READY: NO.**
 - **#768 integration:** promotion out of draft and any merge are blocked pending the owner's explicit approval. This checkpoint promotes and merges nothing.
 - **Register B status-mark correction:** #770 introduced three rows whose status cell read `?? IN PROGRESS` instead of `🔄 IN PROGRESS` (SUPPORT-AD3999932010, SUPPORT-EC79FA65AC23, SUPPORT-9C6B11D5A8EB). The register prose already counted them as IN PROGRESS, so only the mark is restored. Every ID, order, status, count and piece of evidence text is unchanged. Register B stays **14,364 = 11,877 NOT STARTED + 2,136 IN PROGRESS + 185 PASS + 157 FIXED + PASS + 9 BLOCKED**.
 
