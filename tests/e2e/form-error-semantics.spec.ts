@@ -66,9 +66,20 @@ test.describe('form errors: what an invalid, refused and recovered submit expose
     const origin = requireLocalOrigin(provider);
     account = await createOwnedAccount(origin, serviceKey);
     const admin = createClient(origin, serviceKey, { auth: { autoRefreshToken: false, persistSession: false } });
-    const { error } = await admin.from('subscriptions')
-      .upsert({ family_id: account.familyId, plan: 'plus', status: 'active' }, { onConflict: 'family_id' });
-    if (error) throw new Error('Form error E2E could not give its household a Plus plan.');
+    // One retry, and only when nothing answered (status 0) or the gateway did
+    // (5xx): the upsert is idempotent, and postgrest-js retries a GET on those
+    // but never a POST. A refusal from the database (4xx) is thrown at once.
+    // The status and code are reported; the message and details stay out of CI.
+    const seen: string[] = [];
+    for (let attempt = 0; attempt < 2; attempt += 1) {
+      const { data, error, status } = await admin.from('subscriptions')
+        .upsert({ family_id: account.familyId, plan: 'plus', status: 'active' }, { onConflict: 'family_id' })
+        .select('plan');
+      if (!error && data?.length === 1 && data[0].plan === 'plus') return;
+      seen.push(`${status}${error?.code ? ` ${error.code}` : ''}`);
+      if (!error || (status !== 0 && status < 500)) break;
+    }
+    throw new Error(`Form error E2E could not give its household a Plus plan (${seen.join(', then ')}).`);
   });
   test.afterEach(async () => {
     try { await account?.dispose(); } finally { account = null; }
