@@ -4,6 +4,12 @@
 //   POST /api/ai?mode=json  or  Accept: application/json  → one JSON result
 //   GET  /api/ai            → capability manifest (transports, auth, tools)
 //
+// Retries: send `Idempotency-Key` (or `clientRequestId` in the body), one per
+// logical send and the same on every retry of it. A repeat replays the saved
+// answer, or answers 409 while the first attempt is running or after it
+// failed; either way it runs nothing and counts nothing (F19). A send without
+// a key is a new turn every time.
+//
 // Auth: the web app's cookie session OR `Authorization: Bearer <supabase jwt>`
 // (the Expo mobile app). Either way every tool runs under the caller's RLS.
 // The assistant executes the shared toolbox plus every lib/ai/actions.ts
@@ -21,7 +27,9 @@ import { refuseUnlessEntitled } from '@/lib/server/route-feature-gate';
 import { rateLimit } from '@/lib/server/rate-limit';
 import { AI_ASSISTANT_FEATURE_KEY, accessDeniedResponse, assertAIAccess } from '@/lib/server/ai-access';
 import { rateLimitDb } from '@/lib/server/rate-limit-db';
-import { parseAIChatRequest } from '@/lib/ai/chat-request';
+import { parseAIChatRequest, parseAssistantTurnKey } from '@/lib/ai/chat-request';
+import { findPriorTurn, type PriorTurn } from '@/lib/ai/assistant-turn-replay';
+import { AiRequestDuplicate } from '@/lib/ai/observability';
 import { MAX_PROVIDER_JSON_BYTES, readBoundedRequestJson } from '@/lib/server/bounded-request-body';
 import { describeActionError } from '@/lib/supabase/errors';
 import { buildAssistantTools } from '@/lib/assistant/tools';
@@ -88,6 +96,46 @@ async function authenticate(req: NextRequest): Promise<Authed | NextResponse> {
     }
   }
   return { supabase, ctx, via: 'cookie' };
+}
+
+/**
+ * The answer to a send whose key already filed a turn. An answered turn is
+ * replayed in the transport the client asked for — the stream ends with the
+ * same `done` (and request id, so speaking it rides on the same exchange) —
+ * and everything else is a 409 that counts nothing.
+ */
+function answerPriorTurn(
+  prior: Exclude<PriorTurn, { kind: 'none' }>,
+  opts: { conversationId: string; json: boolean; tr: (key: string) => string },
+): Response {
+  const { conversationId, json, tr } = opts;
+  if (prior.kind === 'unreadable') {
+    return NextResponse.json({ error: tr('ai.accountContextIsTemporarilyUnavailable'), code: 'unavailable' }, { status: 503 });
+  }
+  if (prior.kind === 'mismatch') {
+    return NextResponse.json({ error: tr('ai.thatRetryDoesNotMatchThisMessage'), code: 'client_request_id_conflict' }, { status: 409 });
+  }
+  if (prior.kind === 'in_progress') {
+    return NextResponse.json({ error: tr('ai.thisMessageIsAlreadyBeingAnswered'), code: 'turn_in_progress', requestId: prior.requestId }, { status: 409 });
+  }
+  if (prior.kind === 'failed') {
+    return NextResponse.json({ error: tr('ai.thatAttemptDidNotFinish'), code: 'turn_failed', requestId: prior.requestId }, { status: 409 });
+  }
+  if (prior.content === null) {
+    return NextResponse.json({ error: tr('ai.thisMessageWasAlreadyAnswered'), code: 'turn_answered', requestId: prior.requestId }, { status: 409 });
+  }
+  if (json) {
+    return NextResponse.json({
+      conversationId, content: prior.content, actions: [], cards: [], runIds: [], persisted: true,
+      replayed: true, requestId: prior.requestId,
+    });
+  }
+  const encoder = new TextEncoder();
+  const events = [
+    { type: 'delta', text: prior.content },
+    { type: 'done', content: prior.content, persisted: true, requestId: prior.requestId },
+  ];
+  return new Response(encoder.encode(events.map((e) => `data: ${JSON.stringify(e)}\n\n`).join('')), { headers: SSE_HEADERS });
 }
 
 export async function GET(req: NextRequest) {
@@ -158,6 +206,38 @@ export async function POST(req: NextRequest) {
     const durable = await rateLimitDb(supabase, key, AI_RATE_LIMIT);
     if (!durable.ok) return rejected(durable.retryAfter);
 
+    const boundedBody = await readBoundedRequestJson(req, MAX_PROVIDER_JSON_BYTES);
+    if (!boundedBody.ok) {
+      return NextResponse.json({ error: boundedBody.reason === 'too_large' ? 'Request body is too large.' : 'Invalid request body' }, { status: 400 });
+    }
+    const rawBody = boundedBody.value;
+    const parsed = parseAIChatRequest(rawBody);
+    if (!parsed.ok) {
+      const messageByError = {
+        invalid_body: 'Invalid request body',
+        conversation_required: 'conversationId is required',
+        conversation_invalid: 'conversationId must be a valid UUID',
+        message_required: 'Message is required',
+        message_too_long: 'Message is too long',
+      } as const;
+      return NextResponse.json({ error: messageByError[parsed.error], code: parsed.error }, { status: 400 });
+    }
+    const { conversationId, message } = parsed.value;
+    const json = wantsJsonTransport(req, (rawBody && typeof rawBody === 'object' ? rawBody : {}) as Record<string, unknown>);
+
+    // A retried send is the same turn (F19; #788 review 5393250792). Read
+    // BEFORE the allowance: the retry of the turn that reached 10 of 10 is not
+    // an eleventh request and must not be refused as one. Nothing below — the
+    // allowance, the classifier, the model, the tools — runs for it.
+    const turnKey = parseAssistantTurnKey(rawBody, req.headers.get('idempotency-key'));
+    if (!turnKey.ok) {
+      return NextResponse.json({ error: tr('ai.thisMessageCouldNotBeIdentified'), code: turnKey.error }, { status: 400 });
+    }
+    if (turnKey.key) {
+      const prior = await findPriorTurn(supabase, { familyId, userId: ctx.user.id, conversationId, message }, turnKey.key);
+      if (prior.kind !== 'none') return answerPriorTurn(prior, { conversationId, json, tr });
+    }
+
     // The plan gate, on the side that can enforce it.
     //
     // It used to live only on the PAGE — `requireFeature('/dashboard/assistant')`
@@ -182,25 +262,6 @@ export async function POST(req: NextRequest) {
       return NextResponse.json({ error: tr('ai.accountContextIsTemporarilyUnavailable'), code: 'unavailable' }, { status: 503 });
     }
     if (!access.ok) return accessDeniedResponse(access);
-
-    const boundedBody = await readBoundedRequestJson(req, MAX_PROVIDER_JSON_BYTES);
-    if (!boundedBody.ok) {
-      return NextResponse.json({ error: boundedBody.reason === 'too_large' ? 'Request body is too large.' : 'Invalid request body' }, { status: 400 });
-    }
-    const rawBody = boundedBody.value;
-    const parsed = parseAIChatRequest(rawBody);
-    if (!parsed.ok) {
-      const messageByError = {
-        invalid_body: 'Invalid request body',
-        conversation_required: 'conversationId is required',
-        conversation_invalid: 'conversationId must be a valid UUID',
-        message_required: 'Message is required',
-        message_too_long: 'Message is too long',
-      } as const;
-      return NextResponse.json({ error: messageByError[parsed.error], code: parsed.error }, { status: 400 });
-    }
-    const { conversationId, message } = parsed.value;
-    const json = wantsJsonTransport(req, (rawBody && typeof rawBody === 'object' ? rawBody : {}) as Record<string, unknown>);
 
     if (!(await isAIConfigured())) {
       return NextResponse.json({ error: tr('ai.theAiEngineIsnT'), code: 'not_configured' }, { status: 503 });
@@ -227,13 +288,23 @@ export async function POST(req: NextRequest) {
     const input: AssistantTurnInput = {
       supabase, familyId, userId: ctx.user.id, role: ctx.active.role,
       familyName: ctx.active.family.name, tz, conversationId, message,
+      clientRequestId: turnKey.key, alreadyAnswering: tr('ai.thisMessageIsAlreadyBeingAnswered'),
     };
     const prepared = await prepareAssistantTurn(input);
     if (!prepared.ok) return NextResponse.json({ error: prepared.error }, { status: 500 });
 
     if (json) {
-      const result = await runAssistantTurn(input, prepared.turn);
-      return NextResponse.json({ conversationId, ...result });
+      try {
+        const result = await runAssistantTurn(input, prepared.turn);
+        return NextResponse.json({ conversationId, ...result });
+      } catch (err) {
+        // Another attempt with this key filed the turn between the lookup
+        // above and this one's filing; this attempt ran nothing.
+        if (err instanceof AiRequestDuplicate) {
+          return NextResponse.json({ error: tr('ai.thisMessageIsAlreadyBeingAnswered'), code: 'turn_in_progress', requestId: err.requestId }, { status: 409 });
+        }
+        throw err;
+      }
     }
     return new Response(createAssistantStream(input, prepared.turn), { headers: SSE_HEADERS });
   } catch (err) {

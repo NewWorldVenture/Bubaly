@@ -49,6 +49,14 @@ export type AiRequestSpec = {
   text: string;
   kind?: AiRequestKind;
   conversationId?: string | null;
+  /**
+   * The caller's retry key for this logical request, stored on the row under
+   * the (family_id, client_request_id) unique index. When a row with this key
+   * already exists the body does NOT run: `AiRequestDuplicate` is thrown before
+   * the model, so a retry that raced past the caller's own lookup files no
+   * second row and repeats no effect.
+   */
+  clientRequestId?: string | null;
 };
 
 export type AiObserver = {
@@ -97,6 +105,7 @@ export async function withAiRequest<T>(
     requestText: spec.text.slice(0, MAX_AI_REQUEST_TEXT_CHARS),
     conversationId: spec.conversationId ?? null,
     feature: spec.feature,
+    clientRequestId: spec.clientRequestId ?? null,
   }).catch((err: unknown) => {
     console.error('[ai-observability] could not open a request row', { feature: spec.feature, err });
     return null;
@@ -110,6 +119,10 @@ export async function withAiRequest<T>(
     // the family's work goes on as before, unrecorded.
     throw new AiRequestNotFiled(spec.feature);
   }
+  // The key named a request already filed: this is a retry of it, not a new
+  // one. Its row is left exactly as it is (it belongs to the first attempt) and
+  // nothing below runs.
+  if (opened?.ok && opened.data.existing) throw new AiRequestDuplicate(spec.feature, opened.data.id);
   if (opened?.ok) {
     requestId = opened.data.id;
     // `executing` with a start stamp, so a row that never completes is visibly
@@ -184,6 +197,14 @@ export class AiRequestNotFiled extends Error {
   constructor(readonly feature: string) {
     super(`could not file the AI request for ${feature}; refused because the allowance counts it`);
     this.name = 'AiRequestNotFiled';
+  }
+}
+
+/** A retry key named a request already filed; the body did not run. */
+export class AiRequestDuplicate extends Error {
+  constructor(readonly feature: string, readonly requestId: string) {
+    super(`${feature} request ${requestId} was already filed under this retry key`);
+    this.name = 'AiRequestDuplicate';
   }
 }
 

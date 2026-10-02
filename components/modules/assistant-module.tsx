@@ -345,6 +345,7 @@ export function AssistantModule() {
     setHighlightId(null);
 
     const userMsg: Message = { role: 'user', content: msg, id: generateId() };
+    const turnKey = crypto.randomUUID();
     const replyId = generateId();
     // Add the user turn + an empty assistant bubble we fill as the stream arrives.
     setMessages((prev) => [...prev, userMsg, { role: 'assistant', content: '', id: replyId, actions: [], cards: [], runIds: [] }]);
@@ -360,7 +361,9 @@ export function AssistantModule() {
     try {
       const res = await fetch('/api/ai', {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json', Accept: 'text/event-stream' },
+        // One key per send, kept by any retry of it: the server answers a repeat
+        // with the saved reply instead of counting a second turn (F19).
+        headers: { 'Content-Type': 'application/json', Accept: 'text/event-stream', 'Idempotency-Key': turnKey },
         body: JSON.stringify({ conversationId: convId, message: msg }),
       });
       if (!res.ok || !res.body) {

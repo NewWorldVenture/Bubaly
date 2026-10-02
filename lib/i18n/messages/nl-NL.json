@@ -16617,5 +16617,10 @@
   "blogBlogSearch.searchUnavailable": "Zoeken is nu niet beschikbaar. Probeer het zo meteen opnieuw.",
   "coach.onlyYourOwnHealth": "Je kunt de coach vragen stellen over je eigen gezondheid. Een ouder of volwassene kan vragen stellen over andere gezinsleden.",
   "medicationsModule.noMedicinesPrescribedToYou": "Er zijn jou geen medicijnen voorgeschreven.",
-  "medicationsModule.yourOwnMedicinesOnly": "Je ziet de medicijnen die jou zijn voorgeschreven. Een ouder of volwassene beheert de voorschriften van het gezin."
+  "medicationsModule.yourOwnMedicinesOnly": "Je ziet de medicijnen die jou zijn voorgeschreven. Een ouder of volwassene beheert de voorschriften van het gezin.",
+  "ai.thatAttemptDidNotFinish": "Die poging is niet afgerond. Stuur het bericht opnieuw.",
+  "ai.thatRetryDoesNotMatchThisMessage": "Die nieuwe poging hoort niet bij dit bericht. Stuur het opnieuw.",
+  "ai.thisMessageIsAlreadyBeingAnswered": "Dit bericht wordt al beantwoord.",
+  "ai.thisMessageWasAlreadyAnswered": "Dit bericht is al beantwoord. Laad het gesprek opnieuw om het antwoord te zien.",
+  "ai.thisMessageCouldNotBeIdentified": "Dit bericht kon niet worden herkend. Stuur het opnieuw."
 }

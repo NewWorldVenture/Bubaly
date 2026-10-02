@@ -16617,5 +16617,10 @@
   "blogBlogSearch.searchUnavailable": "A pesquisa não está disponível neste momento. Tente novamente daqui a pouco.",
   "coach.onlyYourOwnHealth": "Pode perguntar ao coach sobre a sua própria saúde. Um pai, uma mãe ou um adulto pode perguntar sobre outros membros da família.",
   "medicationsModule.noMedicinesPrescribedToYou": "Não lhe foi receitado nenhum medicamento.",
-  "medicationsModule.yourOwnMedicinesOnly": "Vê os medicamentos que lhe foram receitados. Um pai, uma mãe ou um adulto gere as receitas da família."
+  "medicationsModule.yourOwnMedicinesOnly": "Vê os medicamentos que lhe foram receitados. Um pai, uma mãe ou um adulto gere as receitas da família.",
+  "ai.thatAttemptDidNotFinish": "Essa tentativa não terminou. Envie a mensagem novamente.",
+  "ai.thatRetryDoesNotMatchThisMessage": "Essa nova tentativa não corresponde a esta mensagem. Envie-a novamente.",
+  "ai.thisMessageIsAlreadyBeingAnswered": "Esta mensagem já está a ser respondida.",
+  "ai.thisMessageWasAlreadyAnswered": "Esta mensagem já foi respondida. Recarregue a conversa para ver a resposta.",
+  "ai.thisMessageCouldNotBeIdentified": "Não foi possível identificar esta mensagem. Envie-a novamente."
 }
