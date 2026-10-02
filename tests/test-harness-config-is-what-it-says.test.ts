@@ -64,6 +64,14 @@ describe('the mobile app\'s dependencies are audited (MAIN-F-C10)', () => {
   it('the mobile CI job runs npm audit on production dependencies', () => {
     const mobileJob = ci.slice(ci.indexOf('\n  mobile:'), ci.indexOf('\n  database:'));
     expect(mobileJob).toContain('working-directory: mobile');
-    expect(mobileJob).toMatch(/run: npm audit --omit=dev --audit-level=(high|moderate|critical)\b/);
+    expect(mobileJob).toMatch(/run: node --test scripts\/audit-production-deps\.test\.mjs && node scripts\/audit-production-deps\.mjs\n/);
+  });
+
+  it('that script audits production dependencies and fails on high or critical outside dated exceptions', () => {
+    const script = readFileSync('mobile/scripts/audit-production-deps.mjs', 'utf8');
+    expect(script).toContain("['audit', '--omit=dev', '--json']");
+    expect(script).toContain("FAILING_SEVERITIES = ['high', 'critical']");
+    expect(script).toMatch(/if \(rule && today <= rule\.until\) continue;/);
+    expect(script).toContain('process.exit(1)');
   });
 });
