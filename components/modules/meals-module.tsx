@@ -217,6 +217,13 @@ export function MealsModule() {
     () => days.map((d) => planMap.get(cellKey(d, 'dinner'))).filter((p): p is Plan => !!p?.meal),
     [days, planMap],
   );
+  // A removal or realtime refresh can shorten this week's dinners without
+  // changing weeks. Keep every part of the card on the same remaining dish.
+  const selectedDinnerIndex = Math.min(dinnerIdx, Math.max(0, dinners.length - 1));
+  const selectedDinner = dinners[selectedDinnerIndex];
+  useEffect(() => {
+    setDinnerIdx(index => Math.min(index, Math.max(0, dinners.length - 1)));
+  }, [dinners.length]);
   useEffect(() => { setDinnerIdx(0); setLastAdd(null); }, [weekOffset]);
 
   /**
@@ -580,28 +587,28 @@ export function MealsModule() {
           ) : (
             <div className="relative">
               <div className="overflow-hidden rounded-xl border border-border">
-                <MealImg src={dinners[dinnerIdx]?.meal?.image_url ?? null} emoji="🍽️" className="h-36 w-full" />
+                <MealImg src={selectedDinner?.meal?.image_url ?? null} emoji="🍽️" className="h-36 w-full" />
               </div>
               <div className="mt-2">
-                <p className="text-sm font-bold leading-snug">{dinners[dinnerIdx]?.meal?.name}</p>
+                <p className="text-sm font-bold leading-snug">{selectedDinner?.meal?.name}</p>
                 <p className="mt-0.5 text-[11px] text-muted">
-                  {dayLabel(dinners[Math.min(dinnerIdx, dinners.length - 1)].plan_date)}
+                  {dayLabel(dinners[selectedDinnerIndex].plan_date)}
                 </p>
               </div>
-              {dinners[dinnerIdx]?.meal?.recipe_url && (
-                <a href={dinners[dinnerIdx]!.meal!.recipe_url!} target="_blank" rel="noreferrer"
+              {selectedDinner?.meal?.recipe_url && (
+                <a href={selectedDinner.meal.recipe_url} target="_blank" rel="noreferrer"
                   className="mt-2 block rounded-lg bg-brand py-2 text-center text-xs font-semibold text-brand-fg transition hover:opacity-90">
                   {tr('meals.viewRecipe')}
                 </a>
               )}
               {dinners.length > 1 && (
                 <>
-                  <button onClick={() => setDinnerIdx((i) => (i - 1 + dinners.length) % dinners.length)} aria-label={tr('meals.previousDinner')}
+                  <button onClick={() => setDinnerIdx((i) => (Math.min(i, dinners.length - 1) - 1 + dinners.length) % dinners.length)} aria-label={tr('meals.previousDinner')}
                     className="absolute left-1 top-[68px] grid h-7 w-7 -translate-y-1/2 place-items-center rounded-full bg-bg/70 text-fg backdrop-blur hover:bg-bg"><ChevronLeft className="h-4 w-4" /></button>
-                  <button onClick={() => setDinnerIdx((i) => (i + 1) % dinners.length)} aria-label={tr('meals.nextDinner')}
+                  <button onClick={() => setDinnerIdx((i) => (Math.min(i, dinners.length - 1) + 1) % dinners.length)} aria-label={tr('meals.nextDinner')}
                     className="absolute right-1 top-[68px] grid h-7 w-7 -translate-y-1/2 place-items-center rounded-full bg-bg/70 text-fg backdrop-blur hover:bg-bg"><ChevronRight className="h-4 w-4" /></button>
                   <div className="mt-2 flex justify-center gap-1">
-                    {dinners.map((_, i) => <span key={i} className={cn('h-1.5 w-1.5 rounded-full', i === dinnerIdx ? 'bg-brand' : 'bg-border')} />)}
+                    {dinners.map((_, i) => <span key={i} className={cn('h-1.5 w-1.5 rounded-full', i === selectedDinnerIndex ? 'bg-brand' : 'bg-border')} />)}
                   </div>
                 </>
               )}

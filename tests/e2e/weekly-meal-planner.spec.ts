@@ -770,3 +770,72 @@ test('dismisses a hovered save notification after reopening a dinner and replace
   expect(plans.find(row=>row.id==='existing-lunch')?.meal_id).toBe('meal-tacos');
   expect(await calls(page)).toHaveLength(3);
 });
+const carouselCaseNames = new Set([
+  'deleting selected last dinner keeps remaining carousel name and date consistent',
+  'same-week refresh removing selected dinner keeps remaining carousel usable',
+  'empty selected week keeps seven choices and truthful sidebar',
+  'remaining first selection survives removal without hiding its dish',
+  'keeps dinner navigation and indicators consistent after shrinking three dinners to two',
+]);
+const carouselBrowserEvents = new WeakMap<Page, string[]>();
+test.beforeEach(async ({page}, testInfo) => {
+  if (!carouselCaseNames.has(testInfo.title)) return;
+  const events: string[] = [];
+  carouselBrowserEvents.set(page, events);
+  page.on('console', message => {
+    if (message.type() === 'error' || message.type() === 'warning') events.push(`${message.type()}: ${message.text()}`);
+  });
+  page.on('pageerror', error => events.push(`pageerror: ${error.message}`));
+  page.on('requestfailed', request => events.push(`requestfailed: ${request.url()} ${request.failure()?.errorText}`));
+});
+test.afterEach(async ({page}) => {
+  const events = carouselBrowserEvents.get(page);
+  if (events) expect(events).toEqual([]);
+});
+
+const carouselMeals = [
+  {id:'meal-tacos',family_id:'family-A',name:'Lime tacos',ingredients:[],meal_type:'dinner',image_url:null,recipe_url:'https://recipe.invalid/tacos'},
+  {id:'meal-curry',family_id:'family-A',name:'Coconut curry',ingredients:[],meal_type:'dinner',image_url:null,recipe_url:'https://recipe.invalid/curry'},
+];
+const carouselPlans = [
+ {id:'first-dinner',family_id:'family-A',meal_id:'meal-tacos',plan_date:'2026-09-07',meal_type:'dinner'},
+ {id:'last-dinner',family_id:'family-A',meal_id:'meal-curry',plan_date:'2026-09-08',meal_type:'dinner'},
+];
+const dinnerCard=(page:Page)=>page.locator('.module-sidebar .sidebar-card').first();
+test('deleting selected last dinner keeps remaining carousel name and date consistent',async({page})=>{
+ await page.setViewportSize({width:1280,height:900});await fixture(page,{plans:carouselPlans,meals:carouselMeals});
+ const card=dinnerCard(page);await expect(card).toContainText('Lime tacos');await card.getByRole('button',{name:'Next dinner'}).click();await expect(card).toContainText('Coconut curry');
+ await page.getByRole('button',{name:/Remove meal: Dinner, Tuesday/}).click();
+ await expect(slot(page,'Tuesday')).toContainText('Choose a meal');await expect(slot(page,'Monday')).toContainText('Lime tacos');
+ await expect(card).toContainText('Lime tacos');await expect(card).toContainText('Monday');await expect(card.getByRole('link',{name:'View recipe'})).toHaveAttribute('href','https://recipe.invalid/tacos');
+});
+test('same-week refresh removing selected dinner keeps remaining carousel usable',async({page})=>{
+ await page.setViewportSize({width:1280,height:900});await fixture(page,{plans:carouselPlans,meals:carouselMeals});const card=dinnerCard(page);
+ await card.getByRole('button',{name:'Next dinner'}).click();await expect(card).toContainText('Coconut curry');
+ await page.evaluate(()=>{window.__weeklyMeals.tables.meal_plans=window.__weeklyMeals.tables.meal_plans.filter(row=>row.id!=='last-dinner');window.dispatchEvent(new Event('online'));});
+ await expect(slot(page,'Tuesday')).toContainText('Choose a meal');await expect(card).toContainText('Lime tacos');
+});
+test('empty selected week keeps seven choices and truthful sidebar',async({page})=>{
+ await fixture(page);await expect(page.getByRole('button',{name:/Dinner for /})).toHaveCount(7);await expect(dinnerCard(page)).toContainText('No dinners planned this week yet');
+ await page.getByRole('button',{name:'Next week',exact:true}).click();await expect(page.getByRole('button',{name:/Dinner for /})).toHaveCount(7);
+ await page.getByRole('button',{name:'This Week',exact:true}).click();await expect(slot(page,'Monday')).toContainText('Choose a meal');
+});
+test('remaining first selection survives removal without hiding its dish',async({page})=>{
+ await page.setViewportSize({width:1280,height:900});await fixture(page,{plans:carouselPlans,meals:carouselMeals});
+ await page.getByRole('button',{name:/Remove meal: Dinner, Tuesday/}).click();await expect(dinnerCard(page)).toContainText('Lime tacos');await expect(dinnerCard(page)).toContainText('Monday');
+});
+test('keeps dinner navigation and indicators consistent after shrinking three dinners to two',async({page})=>{
+  await page.setViewportSize({width:1280,height:900});
+  await fixture(page,{meals:carouselMeals,plans:[...carouselPlans,{id:'third-dinner',family_id:'family-A',meal_id:'meal-tacos',plan_date:'2026-09-09',meal_type:'dinner'}]});
+  const card=dinnerCard(page);
+  await card.getByRole('button',{name:'Next dinner'}).click();await card.getByRole('button',{name:'Next dinner'}).click();
+  await expect(card).toContainText('Wednesday');
+  await page.getByRole('button',{name:/Remove meal: Dinner, Wednesday/}).click();
+  await expect(card).toContainText('Coconut curry');await expect(card).toContainText('Tuesday');
+  await expect(card.getByRole('link',{name:'View recipe'})).toHaveAttribute('href','https://recipe.invalid/curry');
+  await expect(card.locator('span.bg-brand')).toHaveCount(1);
+  await card.getByRole('button',{name:'Next dinner'}).click();await expect(card).toContainText('Lime tacos');await expect(card).toContainText('Monday');
+  await expect(card.getByRole('link',{name:'View recipe'})).toHaveAttribute('href','https://recipe.invalid/tacos');
+  await card.getByRole('button',{name:'Previous dinner'}).click();await expect(card).toContainText('Coconut curry');await expect(card).toContainText('Tuesday');
+  await expect(card.locator('span.bg-brand')).toHaveCount(1);
+});
