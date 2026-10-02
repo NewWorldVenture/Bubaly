@@ -19,7 +19,10 @@ function fixture(options: { inaccessible?: boolean; error?: boolean; messages?: 
     }
     const before = url.searchParams.get('or')?.match(/created_at\.lt\.([^,]+)/)?.[1];
     return Response.json(options.messages ?? rows.filter((row) => !before || row.created_at < before).reverse().slice(0, 101));
-  } } }) as Db;
+  // Root Vitest and the independent Expo app install different Supabase SDK
+  // versions. Bridge only this transport fixture: the real root query builder
+  // still executes, and assertions below verify every native query/filter.
+  } } }) as unknown as Db;
   return { db, calls, signal: new AbortController().signal };
 }
 

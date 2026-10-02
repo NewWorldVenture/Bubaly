@@ -27,13 +27,14 @@
 -- IDEMPOTENT: every seeded message is tagged sender_avatar='seed:messages' and
 --   deleted before re-insert. Seeded conversations are reused if they already
 --   exist (matched by family_id + name + created_by), so re-running never
---   duplicates and never touches your real (non-seed) conversations.
+--   duplicates tagged messages. Matching conversation metadata, including the
+--   canonical family chat, can be updated. Use a disposable LOCAL database only.
 --
 -- HOW TO RUN (local):
 --   npm run db:seed:messages
 --     -- or --
 --   psql "$SUPABASE_DB_URL" -f supabase/seed_messages_one_family.sql
---   (also runnable by pasting into the Supabase SQL editor and pressing Run)
+--   Never use a production SQL editor or a production connection for this seed.
 --
 -- VERIFY: open /dashboard/messages and hard-refresh. You should see the
 --   conversation list with previews + unread badges, tabs (All/Direct/Groups/

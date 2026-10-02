@@ -472,6 +472,7 @@ jobs:
             test-results/**/*.png
             !test-results/**/trace.zip
             !test-results/*durable-session*/**
+            !test-results/*family-messaging-authenticated*/**
             !test-results/**/storageState*
             !test-results/**/storage-state*
             !test-results/**/auth.json

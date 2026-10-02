@@ -136,7 +136,7 @@ create policy family_conversations_insert on public.family_conversations for ins
   with check (public.is_family_member(family_id) and created_by = auth.uid() and not is_family_chat);
 create policy family_conversations_update on public.family_conversations for update to authenticated
   using (messaging_private.can_access_conversation(id) and ((not is_family_chat and created_by = auth.uid()) or public.can_manage_family(family_id)))
-  with check (public.is_family_member(family_id));
+  with check (messaging_private.can_access_conversation(id) and ((not is_family_chat and created_by = auth.uid()) or public.can_manage_family(family_id)));
 create policy family_conversations_delete on public.family_conversations for delete to authenticated
   using (not is_family_chat and messaging_private.can_access_conversation(id) and (created_by = auth.uid() or public.can_manage_family(family_id)));
 

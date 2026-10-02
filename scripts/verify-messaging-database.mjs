@@ -74,7 +74,7 @@ try {
     grant select, insert on realtime.messages to authenticated;`);
   const migrations = [
     '0001_extensions_enums.sql', '0002_tables.sql', '0003_functions_triggers.sql', '0004_rls.sql',
-    '0014_core_platform.sql', '0017_conversation_participants.sql', '01081_messages_enhance.sql',
+    '0014_core_platform.sql', '0015_todos.sql', '0017_conversation_participants.sql', '0082_family_tree.sql', '01081_messages_enhance.sql',
     '01100_family_profile.sql', '0163_messages_audio_read_fix.sql', '0216_family_media_bucket.sql',
     '0225_pin_definer_search_path.sql', '0293_notifications_related_id_is_a_key.sql', '0301_notification_authorship.sql',
     '0367_a_message_is_its_senders.sql', '0368_a_conversation_is_not_anyones_to_wipe.sql',
@@ -93,10 +93,17 @@ try {
   console.log(result.trim());
   console.log(file('docs/audit/messaging-notification.probe.sql').trim());
   console.log(file('docs/audit/messaging-membership-lifecycle.probe.sql').trim());
-  for (const name of ['message-sender-check.sql', 'conversation-owner-check.sql', 'a-read-receipt-is-the-readers-own-check.sql']) {
+  for (const name of ['message-sender-check.sql', 'conversation-owner-check.sql', 'a-read-receipt-is-the-readers-own-check.sql',
+    'family-media-answers-to-the-family-check.sql', 'removed-member-access-check.sql']) {
     file(`docs/audit/${name}`);
   }
-  console.log('PASS: existing message sender, conversation owner and receipt/reaction regression probes.');
+  // Reuse the actual global policy sweep without the unrelated marketplace
+  // deal fixture, whose tables are not part of this focused migration replay.
+  const dealProbe = readFileSync(join(root, 'docs/audit/marketplace-deal-terms-check.sql'), 'utf8');
+  const sweepStart = dealProbe.indexOf('-- The class, not the two names:');
+  if (sweepStart < 0) throw new Error('Could not locate the shared UPDATE-policy symmetry assertion.');
+  sql(dealProbe.slice(sweepStart));
+  console.log('PASS: existing sender, owner, receipt/reaction, family-media, removed-member and UPDATE-policy symmetry probes.');
   const seed = readFileSync(join(root, 'supabase/seed_messages_one_family.sql'), 'utf8');
   const legacySeed = readFileSync(join(root, 'supabase/seed_messages.sql'), 'utf8');
   sql(`begin;

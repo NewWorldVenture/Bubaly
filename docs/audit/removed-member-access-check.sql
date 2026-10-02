@@ -68,6 +68,16 @@ begin
       raise warning 'CONTROL FAILED: an active member cannot read % (rows: %)', t, n;
       failures := failures + 1;
     end if;
+    if t = 'family_conversations' then
+      -- 0475 makes family_id immutable through column grants. Prove that the
+      -- replacement mutable-column write really works before testing removal.
+      update public.family_conversations set name = name where family_id = fam;
+      get diagnostics n = row_count;
+      if n <> 1 then
+        raise warning 'CONTROL FAILED: an active participating manager cannot update the conversation';
+        failures := failures + 1;
+      end if;
+    end if;
   end loop;
   reset role;
 
@@ -81,7 +91,11 @@ begin
       raise warning 'BREACH: a removed member still reads % (rows: %)', t, n;
       failures := failures + 1;
     end if;
-    execute format('update public.%I set family_id = family_id where family_id = $1', t) using fam;
+    if t = 'family_conversations' then
+      update public.family_conversations set name = name where family_id = fam;
+    else
+      execute format('update public.%I set family_id = family_id where family_id = $1', t) using fam;
+    end if;
     get diagnostics n = row_count;
     if n <> 0 then
       raise warning 'BREACH: a removed member still writes % (rows: %)', t, n;
