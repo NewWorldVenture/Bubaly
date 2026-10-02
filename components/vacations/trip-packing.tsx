@@ -1,6 +1,6 @@
 'use client';
 
-import { useMemo, useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import { Luggage, Plus, Trash2, Wand2, Sparkles } from 'lucide-react';
 import { useApp } from '@/components/app/app-context';
 import { useRealtimeQuery } from '@/lib/hooks/use-realtime-query';
@@ -30,12 +30,27 @@ export function TripPacking({ vacationId }: { vacationId: string }) {
   const tr = useTranslations();
   const { familyId, userId, members } = useApp();
   const { success, error: toastError } = useToast();
+  const owner = useMemo(() => ({ familyId, userId, vacationId }), [familyId, userId, vacationId]);
+  const currentOwner = useRef(owner);
+  currentOwner.current = owner;
+  const editorVersion = useRef(0);
+  useEffect(() => () => { editorVersion.current += 1; }, []);
 
   const tripQuery = useRealtimeQuery<Trip>({ table: 'vacations', familyId, deps: [familyId, vacationId], fetcher: (sb) => sb.from('vacations').select('*').eq('id', vacationId) });
   const listsQuery = useRealtimeQuery<List>({ table: 'vacation_packing_lists', familyId, deps: [familyId, vacationId], fetcher: (sb) => sb.from('vacation_packing_lists').select('*').eq('family_id', familyId).eq('vacation_id', vacationId) });
   const itemsQuery = useRealtimeQuery<PackItem>({ table: 'vacation_packing_items', familyId, deps: [familyId, vacationId], fetcher: (sb) => sb.from('vacation_packing_items').select('*').eq('family_id', familyId).eq('vacation_id', vacationId) });
   const weatherQuery = useRealtimeQuery<Weather>({ table: 'vacation_weather_snapshots', familyId, deps: [familyId, vacationId], fetcher: (sb) => sb.from('vacation_weather_snapshots').select('*').eq('family_id', familyId).eq('vacation_id', vacationId) });
   const activitiesQuery = useRealtimeQuery<Activity>({ table: 'vacation_activities', familyId, deps: [familyId, vacationId], fetcher: (sb) => sb.from('vacation_activities').select('*').eq('family_id', familyId).eq('vacation_id', vacationId) });
+  const currentReadback = useRef({ owner, lists: listsQuery.refresh, items: itemsQuery.refresh });
+  currentReadback.current = { owner, lists: listsQuery.refresh, items: itemsQuery.refresh };
+  function refreshConfirmed(kind: 'lists' | 'items') {
+    const current = currentReadback.current;
+    // A trip can be left and reopened while a dispatched write is pending.
+    // Refresh only the matching current read scope; never another trip's data.
+    if (current.owner.familyId === owner.familyId && current.owner.userId === owner.userId && current.owner.vacationId === owner.vacationId) {
+      void current[kind]();
+    }
+  }
   const trip = tripQuery.data[0];
   const lists = listsQuery.data;
   const items = itemsQuery.data;
@@ -57,14 +72,29 @@ export function TripPacking({ vacationId }: { vacationId: string }) {
 
   const [saving, setSaving] = useState(false);
 
-  const [form, setForm] = useState<ReturnType<typeof blank> | null>(null);
+  const [storedForm, setForm] = useState<ReturnType<typeof blank> | null>(null);
+  const [formOwner, setFormOwner] = useState<typeof owner | null>(null);
+  const form = formOwner === owner ? storedForm : null;
   const [busy, setBusy] = useState(false);
 
-  async function ensureMasterList(): Promise<string | null> {
+  function openEditor() {
+    editorVersion.current += 1;
+    setSaving(false);
+    setFormOwner(owner);
+    setForm(blank());
+  }
+  function closeEditor() {
+    editorVersion.current += 1;
+    setSaving(false);
+    setFormOwner(null);
+    setForm(null);
+  }
+
+  async function ensureMasterList(reportError = toastError): Promise<string | null> {
     const master = lists.find((l) => l.is_master);
     if (master) return master.id;
     const { data, error } = await createClient().from('vacation_packing_lists').insert({ family_id: familyId, vacation_id: vacationId, name: 'Master list', is_master: true, created_by: userId }).select('id').single();
-    if (error) { toastError(describeDbError(error)); return null; }
+    if (error) { reportError(describeDbError(error)); return null; }
     return data.id;
   }
 
@@ -106,20 +136,29 @@ export function TripPacking({ vacationId }: { vacationId: string }) {
     // preventDefault() stays ABOVE it. Returning before it on the second submit
     // would hand the form to the browser's own native submission — a full page
     // navigation — which is worse than the double insert this exists to stop.
-    if (saving) return;
+    const version = editorVersion.current;
+    const isCurrent = () => editorVersion.current === version && currentOwner.current === owner;
+    if (saving || !isCurrent()) return;
     setSaving(true);
     try {
       if (!form?.name.trim()) return;
-      const listId = await ensureMasterList();
-      if (!listId) return;
+      const listId = await ensureMasterList((message) => { if (isCurrent()) toastError(message); });
+      // A confirmed master may be useful to the next editor, but a cancelled
+      // editor must not start an item write after its master result arrives.
+      if (listId) refreshConfirmed('lists');
+      if (!listId || !isCurrent()) return;
       const { error } = await createClient().from('vacation_packing_items').insert({ family_id: familyId, vacation_id: vacationId, list_id: listId, name: form.name.trim(), category: form.category, quantity: parseInt(form.quantity) || 1, created_by: userId });
+      // A dispatched write can finish after closing. Read its confirmed result
+      // without closing, notifying, or clearing the saving state of a new editor.
+      if (!error) refreshConfirmed('items');
+      if (!isCurrent()) return;
       if (error) { toastError(describeDbError(error)); return; }
       success(tr('tripPacking.added'));
-      setForm(null);
+      closeEditor();
     } catch (cause) {
-      toastError(describeDbError(cause, tr('actions.couldNotSaveThatItem')));
+      if (isCurrent()) toastError(describeDbError(cause, tr('actions.couldNotSaveThatItem')));
     } finally {
-      setSaving(false);
+      if (isCurrent()) setSaving(false);
     }
   }
   async function remove(id: string) {
@@ -137,7 +176,7 @@ export function TripPacking({ vacationId }: { vacationId: string }) {
         <h2 className="flex items-center gap-2 text-lg font-semibold"><Luggage className="h-5 w-5 text-brand-text" /> {tr('tripPacking.packing')}</h2>
         <div className="flex gap-2">
           <Button size="sm" variant="secondary" onClick={generate} loading={busy}><Wand2 className="h-4 w-4" /> {tr('tripPacking.smartList')}</Button>
-          <Button size="sm" onClick={() => setForm(blank())}><Plus className="h-4 w-4" /> Add</Button>
+          <Button size="sm" onClick={openEditor}><Plus className="h-4 w-4" /> Add</Button>
         </div>
       </div>
 
@@ -171,7 +210,7 @@ export function TripPacking({ vacationId }: { vacationId: string }) {
       )}
 
       {form && (
-        <Modal open onClose={() => setForm(null)} title={tr('tripPacking.addPackingItem')}>
+        <Modal open onClose={closeEditor} title={tr('tripPacking.addPackingItem')}>
           <form onSubmit={add} className="space-y-3">
             <Field label={tr('tripPacking.item')} required>{(id) => <Input id={id} value={form.name} onChange={(e) => setForm({ ...form, name: e.target.value })} required />}</Field>
             <div className="grid grid-cols-2 gap-3">
@@ -179,7 +218,7 @@ export function TripPacking({ vacationId }: { vacationId: string }) {
               <Field label={tr('tripPacking.quantity')}>{(id) => <Input id={id} type="number" min="1" value={form.quantity} onChange={(e) => setForm({ ...form, quantity: e.target.value })} />}</Field>
             </div>
             <div className="flex justify-end gap-2 pt-1">
-              <Button type="button" variant="ghost" onClick={() => setForm(null)}>{tr('tripPacking.cancel')}</Button>
+              <Button type="button" variant="ghost" onClick={closeEditor}>{tr('tripPacking.cancel')}</Button>
               <Button type="submit" loading={saving}>Add</Button>
             </div>
           </form>
