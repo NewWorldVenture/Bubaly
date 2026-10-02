@@ -148,6 +148,24 @@ async function checkTodoAssignee(scope: ServiceScope, memberId: string | null): 
   }
 }
 
+/** An explicit task list must share the task's server-derived family scope. */
+async function checkTodoList(scope: ServiceScope, listId: string): Promise<ServiceResult<{ id: string }>> {
+  if (typeof listId !== 'string' || !listId.trim()) {
+    return fail('That task list could not be found.', { code: SERVICE_CODES.notFound });
+  }
+  try {
+    const { data, error } = await scope.db.from('todo_lists')
+      .select('id, family_id').eq('id', listId).eq('family_id', scope.familyId).maybeSingle();
+    if (error) return fail(describeDbError(error, 'Could not verify that task list.'), { code: SERVICE_CODES.db });
+    if (!data || typeof data !== 'object' || Array.isArray(data) || data.id !== listId || data.family_id !== scope.familyId) {
+      return fail('That task list could not be found.', { code: SERVICE_CODES.notFound });
+    }
+    return ok({ id: data.id });
+  } catch (error) {
+    return fail(describeDbError(error, 'Could not verify that task list.'), { code: SERVICE_CODES.db });
+  }
+}
+
 export async function createTodo(
   scope: ServiceScope,
   input: CreateTodoInput,
@@ -163,7 +181,7 @@ export async function createTodo(
   const assignee = await checkTodoAssignee(scope, assigneeId ?? null);
   if (!assignee.ok) return assignee;
 
-  const list = input.listId ? { ok: true as const, data: { id: input.listId } } : await ensureTodoList(scope);
+  const list = input.listId ? await checkTodoList(scope, input.listId) : await ensureTodoList(scope);
   if (!list.ok) return list;
 
   const priority = input.priority && TODO_PRIORITIES.includes(input.priority) ? input.priority : 'medium';
