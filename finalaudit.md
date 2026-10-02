@@ -27845,7 +27845,16 @@ token, and read-only. It is the model the other routes should have followed.
 > walks every route under `app/api/ai/` and fails if one reaches a model without
 > the check. The public gift route, which has no signed-in requester, files its
 > own row for the link's family before the model call (review on #788;
-> `tests/a-gift-request-counts-against-the-allowance.test.ts`). **Known limit:**
+> `tests/a-gift-request-counts-against-the-allowance.test.ts`). Voice speech and
+> transcription are recorded as requests of their own: nothing tied a voice call
+> to an assistant turn the family had already paid for, so "part of the turn"
+> let them be called alone, without end, at no cost to the count. On a capped
+> plan a fully spoken exchange therefore counts up to three requests
+> (transcribe, the turn, speak); linking voice to its turn so it rides free would
+> need a provenance check the routes do not have. A provider HTTP error inside
+> the flyer, speech or transcription call is now recorded as `failed`, not
+> `completed` (review on #788; `tests/a-refused-flyer-scan-is-recorded-as-failed.test.ts`,
+> `tests/ai-voice-routes-auth.test.ts`). **Known limit:**
 > the check and the filing are two steps, so two requests at 9 of 10 arriving
 > together can both be admitted. Every metered route shares this; closing it
 > needs an atomic claim in the database (a migration), not a route change.

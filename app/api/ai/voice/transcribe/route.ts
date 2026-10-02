@@ -7,6 +7,9 @@ import { enforceAIRateLimit } from '@/lib/server/ai-rate-limit';
 import { readBoundedRequestFormData } from '@/lib/server/bounded-request-body';
 import { readBoundedResponseJson, readBoundedResponseText } from '@/lib/server/bounded-response-body';
 import { fetchWithDeadline } from '@/lib/server/fetch-with-deadline';
+import { ProviderHttpError } from '@/lib/server/provider-http-error';
+import { withAiRequest } from '@/lib/ai/observability';
+import { scopeFromUserContext } from '@/lib/services/scope';
 
 export const runtime = 'nodejs';
 export const maxDuration = 60;
@@ -64,28 +67,41 @@ export async function POST(req: NextRequest) {
     upstream.append('model', model);
     upstream.append('response_format', 'json');
 
-    // F19: past the monthly allowance the assistant turn this serves is refused,
-    // so neither is this. Not recorded separately: it is the assistant's input or
-    // output, and the turn itself is what counts.
+    // F19: past the monthly allowance this is refused before the provider.
     const overAllowance = await refuseOverAIAllowance(authed.ctx, authed.supabase);
     if (overAllowance) return overAllowance;
-    const res = await fetchWithDeadline('https://api.openai.com/v1/audio/transcriptions', {
-      method: 'POST',
-      headers: { authorization: `Bearer ${apiKey}` },
-      body: upstream,
-    }, 60_000);
-
-    if (!res.ok) {
-      const bounded = await readBoundedResponseText(res, 64 * 1024);
-      const detail = bounded.ok ? bounded.text : '[provider error response exceeded 64 KiB]';
-      console.error('OpenAI transcription error', res.status, detail);
-      const msg = res.status === 429
+    // Recorded as its own request, so it counts against the allowance (F19).
+    // A transcription runs before any assistant turn exists and nothing ties
+    // it to one, so it is a paid model call of its own. A provider error is
+    // thrown inside the observed body, so the row says `failed`.
+    let data: { text?: string };
+    try {
+      data = await withAiRequest(
+        scopeFromUserContext(authed.ctx, authed.supabase),
+        { feature: 'voice.transcribe', text: 'voice:transcribe' },
+        async (obs) => {
+          const res = await fetchWithDeadline('https://api.openai.com/v1/audio/transcriptions', {
+            method: 'POST',
+            headers: { authorization: `Bearer ${apiKey}` },
+            body: upstream,
+          }, 60_000);
+          obs.used(model, null);
+          if (!res.ok) {
+            const bounded = await readBoundedResponseText(res, 64 * 1024);
+            throw new ProviderHttpError(res.status, bounded.ok ? bounded.text : '[provider error response exceeded 64 KiB]');
+          }
+          return readBoundedResponseJson<{ text?: string }>(res, 256 * 1024);
+        },
+      );
+    } catch (err) {
+      if (!(err instanceof ProviderHttpError)) throw err;
+      console.error('OpenAI transcription error', err.status, err.detail);
+      const msg = err.status === 429
         ? 'The AI engine is busy. Please try again in a moment.'
         : 'Could not transcribe that recording. Please try again.';
       return NextResponse.json({ error: msg }, { status: 502 });
     }
 
-    const data = await readBoundedResponseJson<{ text?: string }>(res, 256 * 1024);
     const text = cleanTranscript(data.text ?? '');
     if (!text) {
       return NextResponse.json({ error: t('transcribe.iCouldnTHearAnything') }, { status: 422 });
