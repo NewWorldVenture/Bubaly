@@ -808,6 +808,17 @@ Additions after the 10:55 UTC base, each with its own time: #772 opened 10:58 UT
   - **Status:** `COMPONENT-4D0C5DE53A9F` and `SUPPORT-E8F3F434DAC5` stay IN PROGRESS. No transition and no PASS.
   - **Overlap:** only the lane's own #794. The NWV I18N-011 toast lines are held and untouched, and #788's AI routes and catalogues are outside its scope.
   - **Not claimed:** live Auth, protected account paths, SQL, money, providers, production configuration or migrations. **PRODUCTION READY: NO.**
+- **Candidate #797 for the grocery-toggle lane (owner-account comment posted 2026-10-02 11:42 UTC, [#771 comment 5951623227](https://github.com/NewWorldVenture/Bubaly/pull/771#issuecomment-5951623227)).**
+  - **The candidate:** draft [#797](https://github.com/NewWorldVenture/Bubaly/pull/797) at `5a0ea150`. Its base is #794's branch at exactly `ae92d448`, and it will be retargeted to main after #794 merges. It changes two files: the module (blob `9cf6569b`) and the browser spec (blob `d48bf5d7`).
+    - The meal grocery checkbox catches a rejected action and shows the existing localized `actions.couldNotUpdateThatItem`. Successful refresh and reported refusals are unchanged. There is no automatic retry and no rollback of an uncertain save.
+    - In the lost-response case there is exactly one action call, and the committed synthetic value appears on an explicit refresh.
+  - **Author-reported local evidence:**
+    - React 19.3/Chromium 58/58 pass (5d1997): the 54 earlier cases plus 4 new ones. All 14 newer cases assert a clean browser console.
+    - Full TypeScript (b8b6b6), two-file lint and diff checks, and the 83 related cases across 7 unit files (6eb1de) pass.
+    - The four new cases against the original `25dec457` give 2 desired failures and 2 healthy controls (4e6caa).
+    - The root's independent baseline and fix review is pending and not credited.
+  - **Status:** `COMPONENT-4D0C5DE53A9F` and `SUPPORT-E8F3F434DAC5` stay IN PROGRESS. No PASS. #797 depends on #794 and cannot be integrated before it. The authorization of the existing service and action is not reclassified by this client-side repair.
+  - **Not established:** deployed Auth, RLS, SQL, providers, or the full meal workflow. **PRODUCTION READY: NO.**
 - **#768 integration:** promotion out of draft and any merge are blocked pending the owner's explicit approval. This checkpoint promotes and merges nothing.
 - **Register B status-mark correction:** #770 introduced three rows whose status cell read `?? IN PROGRESS` instead of `🔄 IN PROGRESS` (SUPPORT-AD3999932010, SUPPORT-EC79FA65AC23, SUPPORT-9C6B11D5A8EB). The register prose already counted them as IN PROGRESS, so only the mark is restored. Every ID, order, status, count and piece of evidence text is unchanged. Register B stays **14,364 = 11,877 NOT STARTED + 2,136 IN PROGRESS + 185 PASS + 157 FIXED + PASS + 9 BLOCKED**.
 
