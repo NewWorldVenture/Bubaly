@@ -366,6 +366,16 @@ Additions after the 10:55 UTC base, each with its own time: #772 opened 10:58 UT
     - **Existing caller IDs:** they keep their own rows. This is a file obligation, not a duplicate logical workflow.
     - **Register B 14,365 = 11,877 NOT STARTED + 2,137 IN PROGRESS + 185 PASS + 157 FIXED + PASS + 9 BLOCKED.**
     - **Verified closure coverage:** 342 / 14,365, which is 2.38% and unchanged at two decimals. There is no new PASS or closure.
+- **Audit lane claim: queued notification-email recipient membership, under existing `LIBRARY-BBE70CE57610` (`lib/server/notification-emails.ts`, source `33a07cff`) (owner comment posted 2026-10-02 10:10:54 UTC, [#771 comment 5950029472](https://github.com/NewWorldVenture/Bubaly/pull/771#issuecomment-5950029472); written 2026-10-02 10:11 UTC).**
+  - **Characterization, synthetic:** the actual `deliverNotificationEmails`, with the actual grouping, child-consent and chunk helpers and the SDK, and inert account and email transports. Ten scenarios with 110 assertions and 35 SDK requests, zero native: **4 violations and 6 controls**.
+    - Departed inactive adults, adults who belong only to another family, and absent members still receive the queued family title and body, and an acknowledgment that it was sent.
+    - Rows for the same user from their current family and from a foreign family leak into one email.
+    - Migration 0301's insert-time recipient check does not revoke notifications already queued. The pending query omits `family_id`, and the child-only consent query is not general family authorization.
+    - No production occurrence is claimed.
+  - **Branch and files:** `codex/notification-email-membership-20261002` from main `01b2c380`. Files are `lib/server/notification-emails.ts` and a new synthetic membership regression test, plus existing fixtures only where the real tests need authorized data, with assertions kept.
+  - **Planned repair:** before grouping, check complete active memberships scoped to each notification's family. Invalid rows are withheld and settled without content, and a read error sends and acknowledges nothing.
+  - **Status:** `LIBRARY-BBE70CE57610` stays IN PROGRESS, with no closure or release credit.
+  - **Overlap check ([#771 comment 5950037291](https://github.com/NewWorldVenture/Bubaly/pull/771#issuecomment-5950037291)):** the same stale, uncommitted I18N-001-era edit in a local agent worktree touches this file. It adds `family_id` to the pending select and picks the zone from `notifs[0].family_id`; it does not touch membership logic. It stays held and will rebase.
 - **#768 integration:** promotion out of draft and any merge are blocked pending the owner's explicit approval. This checkpoint promotes and merges nothing.
 - **Register B status-mark correction:** #770 introduced three rows whose status cell read `?? IN PROGRESS` instead of `🔄 IN PROGRESS` (SUPPORT-AD3999932010, SUPPORT-EC79FA65AC23, SUPPORT-9C6B11D5A8EB). The register prose already counted them as IN PROGRESS, so only the mark is restored. Every ID, order, status, count and piece of evidence text is unchanged. Register B stays **14,364 = 11,877 NOT STARTED + 2,136 IN PROGRESS + 185 PASS + 157 FIXED + PASS + 9 BLOCKED**.
 
