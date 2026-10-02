@@ -1,6 +1,7 @@
 # Admin digest: route integration of the delivery engine (draft)
 
-Status on 2026-10-01: a **draft**, stacked on #699 (engine, adapter and migration `0471`), with migration `0474` added here.
+Status on 2026-10-02: a **draft**, stacked on #699 (engine, adapter and migration `0471`), with migration `0474` added here.
+- **Decided by the owner on 2026-10-02:** the schedule (§2), refusing the whole run on an unusable address (§3) and the retry values (§4). The owner also confirmed that the Supabase GitHub integration's automatic deploy to production is off (§6).
 - **Off by default.** `/api/cron/admin-digest` behaves exactly as before unless `ADMIN_DIGEST_DELIVERY_ENGINE=1`. No environment sets it.
 - **Needs `0471` and `0474`,** neither of which is applied to any production database (PROD-DB-0177 blocks every migration there).
 - **Nothing here sends email.** Every test uses a synthetic Resend over a stubbed `fetch`.
@@ -18,9 +19,9 @@ Status on 2026-10-01: a **draft**, stacked on #699 (engine, adapter and migratio
 
 With the flag on and no `RESEND_API_KEY`, the route answers `503 email_provider_not_configured` and freezes nothing.
 
-## 2. Scheduling: PROPOSED, needs a decision
+## 2. Scheduling: DECIDED (owner, 2026-10-02)
 
-**Proposal (implemented).**
+**Decision (implemented).**
 - An occurrence is the **most recent `30 12 * * *` slot at or before now**. That is the schedule in both `vercel.json` and `scripts/cron-dispatch.mjs`, and a test pins that they agree.
 - Its window is the 24 hours that **end at the slot**. The digest is labelled by the slot's date, not the clock, so every tick renders the same bytes.
 
@@ -29,13 +30,13 @@ With the flag on and no `RESEND_API_KEY`, the route answers `503 email_provider_
 - Windows abut, so no activity row is in two digests (#677 C5).
 - Activity written after the slot goes to the next slot's digest.
 
-**Open decisions:**
-1. **Catch-up across slots.** A tick only ever works on the *current* slot. If a whole slot is missed (an outage past the next slot), or its failed rows are never retried within the slot, that slot's digest is **never sent**; nothing resumes an older occurrence. The engine can resume one (`resumeDigestOccurrence`). Whether to do that, how far back, and with what staleness limit is a product and scheduler decision.
-2. **Retries within a slot need another tick.** An incomplete run answers non-2xx, but neither Vercel cron nor the GitHub dispatcher retries on its own today (see the scheduler report). Whether to add a same-slot retry tick, and how often, belongs to the scheduler work.
+**Decided and still open:**
+1. **No catch-up across slots (decided).** A tick only ever works on the *current* slot. If a whole slot is missed (an outage past the next slot), or its failed rows are never retried within the slot, that slot's digest is **never sent**; nothing resumes an older occurrence. The engine could resume one (`resumeDigestOccurrence`), but the owner chose not to.
+2. **Retries within a slot need another tick (open; scheduler work).** An incomplete run answers non-2xx, but neither Vercel cron nor the GitHub dispatcher retries on its own today (see the scheduler report). Whether to add a same-slot retry tick, and how often, belongs to the scheduler work.
 3. **The feed is read so that no row is counted twice** (implemented; review P2). OFFSET paging could re-read a row when another became visible between pages, and freeze an invented count. The read is keyset: newest first by `(created_at, id)`, each page strictly after the last row read, de-duplicated by id.
    - **Late-arrival policy:** a row that becomes visible mid-read is counted only if it sorts after the cursor; otherwise it is left for a retry, which reports `planMismatch.payloadChanged`.
    - The route's feed is not one database snapshot. Every counted row exists and is counted once.
-4. **Late activity inside a frozen window.** A row written after the slot's plan was frozen, but timestamped inside its window, is in **no** digest. The next window starts at the slot. The route reports it as `planMismatch.payloadChanged`, and the frozen bytes are still what is sent. Is that acceptable, or should late rows roll into the next digest?
+4. **Late activity inside a frozen window (decided: reported, not sent).** A row written after the slot's plan was frozen, but timestamped inside its window, is in **no** digest. The next window starts at the slot. The route reports it as `planMismatch.payloadChanged`, and the frozen bytes are still what is sent.
 5. **Schedule changes.** If the cron expression changes, `ADMIN_DIGEST_SCHEDULE` must change with it; the test fails until it does. A slot boundary that moves mid-day would create a new occurrence.
 
 ## 3. Recipients
@@ -44,8 +45,8 @@ With the flag on and no `RESEND_API_KEY`, the route answers `503 email_provider_
 - The #685 reader, which fails closed on an unreadable list, then normalisation.
 - An address the engine cannot use (not one plain address, or more than 200 recipients) **refuses the whole occurrence** before anything is stored or sent: `502 plan_refused`, and the message names the rule, not the address. This follows #685's fail-closed stance, and it means **no admin** gets that slot's digest while one bad row exists in `super_admins`.
 
-**Open decisions:**
-1. **Refuse vs drop.** Should one bad address block every admin, or be dropped and reported?
+**Decided and current behaviour:**
+1. **Refuse, not drop (decided).** One unusable address refuses the whole occurrence, as implemented. The owner chose this over dropping it and reporting it.
 2. **An admin added after the freeze** does not get that slot's digest (`recipientsAdded` is reported). They get the next one.
 
 **An admin removed after the freeze is withdrawn, not sent (implemented in `0474`, as proposed under owner review 5372985996).** This is the fix for that activation hold; the hold stands until this is reviewed.
@@ -66,7 +67,7 @@ With the flag on and no `RESEND_API_KEY`, the route answers `503 email_provider_
 
   An address that differs from the frozen recipient only in non-ASCII case cannot be proved equal, so it does not match and is withdrawn. **Operator rule:** store `super_admins` addresses lowercased. The production database's collation is not visible from here; the match does not depend on it.
 
-## 4. Retry policy and timing: PROPOSED values
+## 4. Retry policy and timing: APPROVED values (owner, 2026-10-02)
 
 | Setting | Value | Why |
 |---|---|---|
@@ -93,8 +94,9 @@ With the flag on and no `RESEND_API_KEY`, the route answers `503 email_provider_
 ## 6. Gates before the flag is set anywhere, in order
 
 1. **#699 merged,** including the shared `migration-version-safety` pin, which is the coordinator's call. This draft adds `0474`, so the pin moves again (to `0475`); that hunk is the coordinator's too.
+   - **Merging does not apply migrations.** The owner confirmed on 2026-10-02 that the Supabase GitHub integration's automatic deploy to production is off. Production's ledger agrees: the `supabase migration list --linked` step of the production workflow (run 36779702646, 2026-09-30) shows `0001`–`0176` applied and `0177`–`0464` merged but not applied. Migrations reach production only through the workflow's `workflow_dispatch` with `apply=true`.
 2. **The PROD-DB-0177 migration-ledger remedy,** then `0471` and `0474` applied and checked with `docs/audit/an-admin-digest-reaches-each-admin-once-check.sql` and `docs/audit/a-removed-admin-is-not-sent-the-digest-check.sql`.
-3. **This draft reviewed and merged,** with the open §2 and §3 decisions recorded.
+3. **This draft reviewed and merged.** The §2, §3 and §4 decisions are recorded above (2026-10-02). The same-slot retry tick (§2.2) remains scheduler work.
 4. **`CRON_SECRET` set,** only after the other email crons' preconditions in the scheduler report are handled.
 5. **A preview or staging run with the flag on,** a real database, and a Resend test key or sandbox domain. Verify one delivery per admin per slot, and verify a retry.
 6. **Only then,** production. The scheduler prototype's route change (key `admin-digest/<until>/…`) **must not** ship alongside, because its keys never deduplicate against the engine's.

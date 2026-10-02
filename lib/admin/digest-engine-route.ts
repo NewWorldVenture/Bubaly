@@ -2,7 +2,7 @@
 // ADMIN_DIGEST_DELIVERY_ENGINE=1; with the flag unset the route keeps its current
 // behaviour. Turning it on also needs migrations 0471 and 0474 applied and verified
 // in that environment. See docs/admin-digest-route-integration.md for the gates and the
-// decisions that are still open.
+// owner's decisions.
 import { randomUUID } from 'node:crypto';
 import {
   deliverDigestOccurrence, recipientKeyOf, type DeliveryStatus, type DigestDeliveryStore, type DigestEmailProvider,
@@ -19,7 +19,7 @@ import { createServiceClient } from '@/lib/supabase/server';
 
 export const adminDigestEngineEnabled = () => process.env.ADMIN_DIGEST_DELIVERY_ENGINE === '1';
 
-/** PROPOSED values (docs §4). validateConfig refuses anything unsafe. */
+/** Values approved by the owner on 2026-10-02 (docs §4). validateConfig refuses anything unsafe. */
 export const ADMIN_DIGEST_ENGINE_CONFIG: EngineConfig = {
   leaseMs: 5 * 60 * 1000,
   sendTimeoutMs: 15 * 1000,

@@ -1,6 +1,6 @@
 // Which admin digest a request belongs to, and who it goes to.
 //
-// PROPOSED POLICY, NOT YET DECIDED (docs/admin-digest-route-integration.md §2):
+// POLICY DECIDED by the owner on 2026-10-02 (docs/admin-digest-route-integration.md §2):
 // an occurrence is the most recent scheduled slot at or before "now", and its
 // window is the 24 h that end at that slot. Every tick for the same slot (a
 // retry, a late GitHub dispatch, a second scheduler) names the same occurrence,

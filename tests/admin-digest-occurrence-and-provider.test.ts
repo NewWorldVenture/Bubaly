@@ -1,5 +1,5 @@
 // The two pieces the route adds around the delivery engine, tested alone:
-//   - which occurrence a request belongs to (a PROPOSED policy; see
+//   - which occurrence a request belongs to (the owner's decided policy; see
 //     docs/admin-digest-route-integration.md §2), and how the recipient list is
 //     normalised before the engine sees it;
 //   - the Resend adapter: stored bytes verbatim under the stored key, the engine's
@@ -11,7 +11,7 @@ import { ADMIN_DIGEST_SCHEDULE, adminDigestSlot, normalizeDigestRecipients } fro
 import { RESEND_EMAILS_ENDPOINT, createResendDigestProvider } from '@/lib/admin/digest-provider';
 import { contractPlan } from './helpers/digest-delivery-store-contract';
 
-describe('the occurrence a request belongs to (proposed policy)', () => {
+describe('the occurrence a request belongs to (decided policy)', () => {
   it('matches the schedule in vercel.json and the GitHub dispatcher', async () => {
     const { readFileSync } = await import('node:fs');
     expect(JSON.parse(readFileSync('vercel.json', 'utf8')).crons.find((c: { path: string }) => c.path === '/api/cron/admin-digest').schedule)
