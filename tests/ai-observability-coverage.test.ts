@@ -335,16 +335,17 @@ describe('what is deliberately NOT adopted', () => {
 
   it('leaves the public gift assistant alone, with a reason', () => {
     // /api/ai/gift is UNAUTHENTICATED by design — givers are not signed in, so
-    // there is no user scope to build one from. Attributing a stranger's
-    // request to the family's own `ai_requests` ledger is a product decision
-    // about whose AI budget a gift-link visitor spends, not a mechanical
-    // conversion, so it is left out rather than guessed at.
+    // there is no user scope to build one from, so it does not use the
+    // wrapper. Since F19 (2026-10-02) it files its own `ai_requests` row for
+    // the link's family before the model call — the family pays for the call,
+    // so it counts against that family's allowance — with no requester named.
+    // `tests/a-gift-request-counts-against-the-allowance.test.ts` pins that.
     const src = readFileSync('app/api/ai/gift/route.ts', 'utf8');
     expect(src).not.toContain('withAiRequest(');
     expect(src).toContain('createServiceClient()');
   });
 
-  it('the floor is 3, and it is these three', () => {
+  it('the floor is 2, and it is these two', () => {
     // A correction. This assertion used to say "the floor is 1" and named only
     // `lib/ai/routing.ts`, because the gift route was documented as
     // deliberately-not-adopted in its own test and never counted toward the
@@ -352,6 +353,9 @@ describe('what is deliberately NOT adopted', () => {
     // SILENT. The floor was 2 the day that sentence was written, and it is 3
     // now. Naming all three in one place is what stops the arithmetic drifting
     // again.
+    //
+    // It was 3 until 2026-10-02, when the gift route began filing its own
+    // `ai_requests` row for F19 and stopped being silent.
     //
     // None of them is excluded from the count. Excluding any would mean teaching
     // the scanner a judgement call, and a scanner that makes judgement calls is
@@ -361,9 +365,6 @@ describe('what is deliberately NOT adopted', () => {
       // without ever calling one. No request to observe, no scope to observe it
       // with — the caller that asked for the provider is the surface.
       'lib/ai/routing.ts',
-      // Unauthenticated by design: a giver following a gift link is not signed
-      // in, so there is no user scope to build one from.
-      'app/api/ai/gift/route.ts',
       // Authenticates as a super admin and never resolves a family at all — it
       // answers "does the configured key work?".
       'app/(app)/admin/ai/actions.ts',
@@ -378,8 +379,11 @@ describe('what is deliberately NOT adopted', () => {
     expect(readFileSync('lib/ai/routing.ts', 'utf8')).toContain('new OpenAIProvider(');
     expect(readFileSync('lib/ai/routing.ts', 'utf8')).not.toContain('.complete(');
     // The ceiling can never go below this, so a future tranche that claims to
-    // have finished §33 has to reckon with these three by name.
-    expect(floor).toHaveLength(3);
+    // have finished §33 has to reckon with these two by name.
+    expect(floor).toHaveLength(2);
+    // And the gift route, which left the floor, stays out of it: it files the
+    // family's request row itself.
+    expect([...SILENT]).not.toContain('app/api/ai/gift/route.ts');
   });
 });
 
@@ -465,6 +469,10 @@ describe('the remaining silence is counted, not ignored', () => {
     // A broken scanner returns an empty set and this file goes quietly green
     // while every surface is silent — the exact failure mode it exists to catch.
     expect(SILENT.size).toBeGreaterThan(0);
-    expect([...SILENT].some((f) => f.startsWith('app/api/ai/'))).toBe(true);
+    // It finds a silent file under app/ and one under lib/, so it is walking
+    // both trees. (This used to name an app/api/ai/ route — the gift route —
+    // which since F19 files its own request row and is no longer silent.)
+    expect([...SILENT].some((f) => f.startsWith('app/'))).toBe(true);
+    expect([...SILENT].some((f) => f.startsWith('lib/'))).toBe(true);
   });
 });

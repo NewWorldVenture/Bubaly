@@ -12,7 +12,8 @@ import { MAX_PROVIDER_JSON_BYTES, readBoundedRequestJson } from '@/lib/server/bo
 // POST /api/ai/gift — PUBLIC AI Gift Assistant for the gift-link page.
 // Givers aren't signed in, so this is unauthenticated: it's rate-limited per IP
 // and only ever reads a single gift link by its (already-secret) token. It
-// returns warm message drafts + suggested amounts; it never writes anything.
+// returns warm message drafts + suggested amounts. Its one write is the
+// `ai_requests` row that counts the call against the family's allowance (F19).
 export const runtime = 'nodejs';
 
 export async function POST(req: NextRequest) {
@@ -79,24 +80,67 @@ export async function POST(req: NextRequest) {
     if (goal) { goalTitle = goal.title; goalSavedCents = goal.saved_cents; goalTargetCents = goal.target_cents; }
   }
 
+  let requestId: string | null = null;
   try {
     const { system, user } = buildGiftAssistPrompt({
       childName, occasion: link.occasion, relationship, goalTitle, goalSavedCents, goalTargetCents,
     });
     // F19: the family whose link this is pays for the model call, so it counts
-    // against that family's monthly allowance. The giver is not signed in, so it
-    // is checked but not recorded as a member's request.
+    // against that family's monthly allowance — checked, and then RECORDED
+    // before the provider is called. The allowance is a count of this family's
+    // `ai_requests` rows, so a check with no row behind it let a family at 9 of
+    // 10 stay at 9 and call again without end. The giver is not signed in, so
+    // the row names no requester; the family is the link's. If the row cannot
+    // be written the call is refused: a request the allowance cannot see is
+    // the unmetered call F19 closes.
     const allowance = await assertFamilyAIAllowance(supabase, link.family_id);
     if (!allowance.ok) return accessDeniedResponse(allowance);
+    const { data: recorded, error: recordError } = await supabase
+      .from('ai_requests')
+      .insert({
+        family_id: link.family_id,
+        requested_by: null,
+        requested_by_member_id: null,
+        kind: 'feature',
+        feature: 'gift',
+        request_text: 'gift:suggestions',
+        status: 'executing',
+        started_at: new Date().toISOString(),
+      })
+      .select('id')
+      .single();
+    if (recordError || !recorded) {
+      console.error('[ai/gift] could not record the request against the allowance', recordError);
+      return NextResponse.json({ error: t('gift.couldNotGenerateIdeasRight') }, { status: 503 });
+    }
+    requestId = recorded.id as string;
     const provider = await resolveProvider();
     const completion = await provider.complete({ system, messages: [{ role: 'user', content: user }], tools: [], maxTokens: 500 });
     const suggestions = parseGiftSuggestions(completion.text || '');
     if (suggestions.messages.length === 0) {
+      await settleRequest(supabase, requestId, 'failed', 'no suggestions parsed');
       return NextResponse.json({ error: t('gift.couldNotThinkOfIdeas') }, { status: 502 });
     }
+    await settleRequest(supabase, requestId, 'completed', null);
     return NextResponse.json(suggestions);
   } catch (err) {
     console.error('AI gift assistant error:', err);
+    if (requestId) await settleRequest(supabase, requestId, 'failed', 'provider error');
     return NextResponse.json({ error: t('gift.couldNotGenerateIdeasRight') }, { status: 500 });
   }
+}
+
+// Closing the row is bookkeeping: the request already counts from the moment it
+// was opened, so a failure here is logged and never changes the answer.
+async function settleRequest(
+  supabase: ReturnType<typeof createServiceClient>,
+  id: string,
+  status: 'completed' | 'failed',
+  error: string | null,
+): Promise<void> {
+  const { error: writeError } = await supabase
+    .from('ai_requests')
+    .update({ status, error, completed_at: new Date().toISOString() })
+    .eq('id', id);
+  if (writeError) console.error('[ai/gift] could not close the request row', writeError);
 }
