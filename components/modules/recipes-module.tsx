@@ -315,9 +315,10 @@ export function RecipesModule() {
 
       {/* Recipe grid */}
       {filtered.length === 0 ? (
-        <EmptyState icon={ChefHat} title={tr('recipes.noRecipesYet')}
-          description={tr('recipesModule.addYourFamilySFavorite')}
-          action={<Button onClick={() => setAddOpen(true)}><Plus className="h-4 w-4" /> {tr('recipes.addFirstRecipe')}</Button>} />
+        <EmptyState icon={ChefHat}
+          title={recipes.length === 0 ? tr('recipes.noRecipesYet') : tr('dashboardRecipesDiscoverDiscoverClient.noRecipesFoundTryAnotherSearch')}
+          description={recipes.length === 0 ? tr('recipesModule.addYourFamilySFavorite') : undefined}
+          action={recipes.length === 0 ? <Button onClick={() => setAddOpen(true)}><Plus className="h-4 w-4" /> {tr('recipes.addFirstRecipe')}</Button> : undefined} />
       ) : (
         <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4">
           {filtered.map((recipe) => {
