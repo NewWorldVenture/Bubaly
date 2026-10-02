@@ -252,6 +252,16 @@ Additions after the 10:55 UTC base, each with its own time: #772 opened 10:58 UT
     - The current-head CI36946449483 was live, and its Mobile job failed on the dependency audit recorded above.
   - **#781 CI36945336669 and #771 `b1d2d20fc` CI36945586627** were still live: Database succeeded, Mobile failed, and Web and E2E were in progress. There is no restart, and no result is borrowed from another head.
   - **PRODUCTION READY: NO** stays in force.
+- **Audit lane claim: Magic Import tool-domain authorization (owner comment posted 2026-10-02 00:50:48 UTC, [#771 comment 5943502150](https://github.com/NewWorldVenture/Bubaly/pull/771#issuecomment-5943502150); written 2026-10-02 00:51 UTC).**
+  - **Branch and scope:** `codex/import-domain-authorization-20261002` from main `01b2c380`. Files are `app/api/ai/import/route.ts` and a new synthetic route-domain regression test only. There are no Trust engine, gate or executor edits and no ledger edit.
+  - **Reproduction, synthetic only:** the main POST runs through the actual gate, the pure Trust engine and the actual action bridge, with an inert executor. Fifteen scenarios with 86 assertions characterize six overlapping desired violations:
+    - Canonical `calendar.createEvent` and the valid alias `add_calendar_event` bypass the calendar recommend/prepare setting, and also an explicit calendar deny policy.
+    - The cause: the route supplies the fallback domain `tasks` and then tells the bridge `alreadyAuthorized: true`.
+    - Nine legacy, healthy and global-off controls behave as expected. There were zero native, model, SQL, provider or mutation operations.
+  - **What this is:** a reproducible application authorization defect, **not a production-occurrence claim**.
+  - **Planned repair:** resolve the registered tool identity, supply its declared domain, and refuse an unresolved name before opening an approval or attempting execution. The registry's resolution of canonical, legacy, underscored and case-insensitive names is kept.
+  - **Existing IDs:** `API-9D988F2B8ACC`, Session-A alias `API-018`, `LIBRARY-EA80145A97B2` and `LIBRARY-732B2252086A`. No duplicate IDs and no workflow PASS.
+  - **Overlap check ([#771 comment 5943508657](https://github.com/NewWorldVenture/Bubaly/pull/771#issuecomment-5943508657)):** NWV's held F19 commit `72ddb047b` adds an AI-allowance refusal to phase 1 of the same route. It is a different concern, with no change to tool resolution or domain, and it stays held.
 - **#768 integration:** promotion out of draft and any merge are blocked pending the owner's explicit approval. This checkpoint promotes and merges nothing.
 - **Register B status-mark correction:** #770 introduced three rows whose status cell read `?? IN PROGRESS` instead of `🔄 IN PROGRESS` (SUPPORT-AD3999932010, SUPPORT-EC79FA65AC23, SUPPORT-9C6B11D5A8EB). The register prose already counted them as IN PROGRESS, so only the mark is restored. Every ID, order, status, count and piece of evidence text is unchanged. Register B stays **14,364 = 11,877 NOT STARTED + 2,136 IN PROGRESS + 185 PASS + 157 FIXED + PASS + 9 BLOCKED**.
 
