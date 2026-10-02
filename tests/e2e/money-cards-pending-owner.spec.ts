@@ -4,16 +4,19 @@ import { expect, test, type Page } from '@playwright/test';
 import { reactBrowserScripts } from './helpers/react-browser';
 
 // JIMMY-SUPPORT-CARD-RETRY-20261001, repair A: a pending card operation belongs
-// to the signed-in user, that sign-in's session and the active family, and it
+// to the signed-in actor and the active family the page was rendered for, and it
 // outlives the mounted view that started it. Leaving and re-entering the page
 // before the request answers must not allow a second freeze or a second order
-// of the same thing; a different account, a new sign-in, another family or an
-// unsettled identity must never inherit someone else's pending state; and a
-// claim is released under the owner that made it when its request settles.
+// of the same thing; a different account, another family or an unknown
+// identity must never inherit someone else's pending state; a claim is released
+// under the owner that made it when its request settles; and a remounted view
+// re-reads its data when an inherited claim settles.
 //
 // The real MoneyCardsView and Button run in the browser. Every server action is
-// a controlled promise; the authenticated scope is a fixture value. The context
-// is offline and every request is aborted and recorded. No server, provider,
+// a controlled promise; the app identity (useApp) is a fixture value. A forced
+// dispatch calls the control's React handler directly, as a retained callback
+// would, because click() on a disabled button never reaches it. The context is
+// offline and every request is aborted and recorded. No server, provider,
 // database or network is involved.
 const { react, reactDom } = reactBrowserScripts('development');
 const sources = Object.fromEntries(['components/wallet/money-cards-view.tsx', 'components/ui/button.tsx'].map(file => [
@@ -24,17 +27,19 @@ const sources = Object.fromEntries(['components/wallet/money-cards-view.tsx', 'c
 ]));
 type ActionCall = { action: string; args?: Record<string, unknown>; settled: boolean };
 type Outcome = 'refusal' | 'rejection' | 'success';
-type Who = { status?: 'ready' | 'pending' | 'blocked' | 'unavailable'; user?: string; session?: string; family?: string };
+type Who = { user: string | null; family: string | null };
 type Probe = {
   calls: ActionCall[]; errors: string[]; successes: string[]; refreshes: number; faults: string[]; mounted: boolean;
   complete: (index: number, outcome: Outcome) => void;
   mount: (who: Who) => void; unmount: () => void; rerender: (who: Who) => void;
+  forceClick: (label: string, index?: number) => void; forceSubmit: () => void;
   settle: () => Promise<void>;
 };
 declare global { interface Window { __cardOwner: Probe } }
 
-const U1: Who = { user: 'user-1', session: 'session-1', family: 'family-1' };
-const U2: Who = { user: 'user-2', session: 'session-2', family: 'family-1' };
+const U1: Who = { user: 'user-1', family: 'family-1' };
+const U2: Who = { user: 'user-2', family: 'family-1' };
+const UNKNOWN: Who = { user: null, family: null };
 
 async function fixture(page: Page, who: Who = U1) {
   await page.context().setOffline(true);
@@ -51,15 +56,9 @@ async function fixture(page: Page, who: Who = U1) {
       p.calls.push({ action: name, args, settled: false });
       return new Promise((resolve, reject) => waiting.push({ resolve, reject }));
     }
-    // What useAuthenticatedCacheScope() returns: a partition only when ready.
-    let scope = null;
-    function scopeFor(who) {
-      const status = who.status ?? 'ready';
-      return {
-        status, familyId: who.family ?? 'family-1', key: JSON.stringify(who), sessionRevision: 1, error: null, familyMismatchError: '',
-        partition: status === 'ready' ? { userId: who.user, sessionId: who.session, accessIdentity: 'fixture' } : null,
-      };
-    }
+    // What useApp() returns for the identity the page was rendered for.
+    let identity = { userId: null, familyId: null };
+    function identityFor(who) { return { userId: who.user, familyId: who.family }; }
     const mocks = {
       react: React,
       'next/navigation': { useRouter: () => ({ refresh: () => { p.refreshes++; } }) },
@@ -78,7 +77,7 @@ async function fixture(page: Page, who: Who = U1) {
       '@/components/wallet/card-reveal-modal': { CardRevealModal: () => null },
       '@/components/i18n/locale-provider': { useLocale: () => ({ code: 'en-US' }), useTranslations: () => (key, values) => values?.count ? key + ':' + values.count : key },
       '@/lib/marketplace/listings': { currencyUnit: () => ({ before: true, symbol: '$' }) },
-      '@/lib/offline/cache-scope': { useAuthenticatedCacheScope: () => scope },
+      '@/components/app/app-context': { useApp: () => identity },
     };
     function load(id) {
       if (Object.hasOwn(mocks, id)) return mocks[id];
@@ -99,13 +98,24 @@ async function fixture(page: Page, who: Who = U1) {
     function render() { ReactDOM.flushSync(() => root.render(React.createElement(View, props))); }
     p.mount = who => {
       if (root) throw new Error('already mounted');
-      scope = scopeFor(who);
+      identity = identityFor(who);
       root = ReactDOM.createRoot(document.getElementById('root'));
       render(); p.mounted = true;
     };
     p.unmount = () => { ReactDOM.flushSync(() => root.unmount()); root = null; p.mounted = false; };
     // The same mounted view re-rendered with another identity, without a remount.
-    p.rerender = who => { scope = scopeFor(who); render(); };
+    p.rerender = who => { identity = identityFor(who); render(); };
+    const reactProps = element => element[Object.keys(element).find(key => key.startsWith('__reactProps$'))];
+    p.forceClick = (label, index = 0) => {
+      const button = [...document.querySelectorAll('button')].filter(button => button.textContent.trim() === label)[index];
+      if (!button) throw new Error('Missing button ' + label);
+      void reactProps(button).onClick();
+    };
+    p.forceSubmit = () => {
+      const form = document.querySelector('form');
+      if (!form) throw new Error('Missing form');
+      void reactProps(form).onSubmit({ preventDefault() {} });
+    };
     p.complete = (index, outcome) => {
       p.calls[index].settled = true;
       if (outcome === 'rejection') waiting[index].reject(new Error('Action unavailable'));
@@ -138,9 +148,13 @@ async function rerender(page: Page, who: Who) {
   await page.evaluate(w => window.__cardOwner.rerender(w), who);
   await page.evaluate(() => window.__cardOwner.settle());
 }
-/** A click that ignores `disabled`, as a retained or scripted handler would. */
-async function force(page: Page, button: ReturnType<typeof virtual>) {
-  await button.evaluate(element => (element as HTMLButtonElement).click());
+/** Call a control's React handler directly, as a retained callback would; click() on a disabled button never reaches it. */
+async function force(page: Page, label: string, index = 0) {
+  await page.evaluate(({ label, index }) => window.__cardOwner.forceClick(label, index), { label, index });
+  await page.evaluate(() => window.__cardOwner.settle());
+}
+async function forceSubmit(page: Page) {
+  await page.evaluate(() => window.__cardOwner.forceSubmit());
   await page.evaluate(() => window.__cardOwner.settle());
 }
 test.afterEach(async ({ page }) => {
@@ -152,14 +166,16 @@ test('a remounted view of the same owner keeps an in-flight order pending, then 
   await virtual(page).click(); await expect(virtual(page)).toBeDisabled();
   await remount(page, U1);
   await expect(virtual(page)).toBeDisabled();
-  await force(page, virtual(page));
+  await force(page, 'Virtual');
   expect((await read(page)).calls).toHaveLength(1);
   // The other child is not held by this claim.
   await expect(virtual(page, 1)).toBeEnabled();
 
   await complete(page, 0, 'success');
   await expect(virtual(page)).toBeEnabled();
-  expect(await read(page)).toMatchObject({ successes: ['moneyCardsView.virtualCardCreated'], refreshes: 1 });
+  // The committed order completes as before (toast and refresh from the
+  // request's own handler), and the remounted view re-reads its stale list.
+  expect(await read(page)).toMatchObject({ successes: ['moneyCardsView.virtualCardCreated'], refreshes: 2 });
   // A deliberate new order after the first settled still goes out: several cards per child.
   await virtual(page).click();
   expect((await read(page)).calls.map(call => call.args)).toEqual([
@@ -175,20 +191,34 @@ test('a remounted view of the same owner keeps an in-flight freeze pending and d
   await freeze(page).click(); await expect(freeze(page)).toBeDisabled();
   await remount(page, U1);
   await expect(freeze(page)).toBeDisabled();
-  await force(page, freeze(page));
+  await force(page, 'Freeze');
   expect((await read(page)).calls).toEqual([{ action: 'setCardFrozenAction', args: { cardId: 'card-a', frozen: true }, settled: false }]);
   await complete(page, 0, 'success');
   await expect(freeze(page)).toBeEnabled();
-  expect(await read(page)).toMatchObject({ successes: ['Card frozen'], refreshes: 1 });
+  expect(await read(page)).toMatchObject({ successes: ['Card frozen'], refreshes: 2 });
+  expect(requests).toEqual([]);
+});
+
+test('a physical order left pending by a remount reconciles the remounted view when it settles', async ({ page }) => {
+  const requests = await fixture(page);
+  await physical(page).click(); await order(page).click();
+  await remount(page, U1);
+  await physical(page).click();
+  await expect(order(page)).toBeDisabled();
+  await forceSubmit(page);
+  expect((await read(page)).calls).toHaveLength(1);
+  await complete(page, 0, 'success');
+  // The unmounted dialog presents nothing (#753); the remounted view re-reads
+  // the card list before its Order button is used again.
+  expect(await read(page)).toMatchObject({ successes: [], errors: [], refreshes: 1 });
+  await expect(order(page)).toBeEnabled();
   expect(requests).toEqual([]);
 });
 
 for (const { label, next } of [
   { label: 'another account in the same family', next: U2 },
   { label: 'the same user in another family', next: { ...U1, family: 'family-2' } },
-  { label: 'a new sign-in of the same user', next: { ...U1, session: 'session-1b' } },
-  { label: 'a signed-out (blocked) identity', next: { status: 'blocked', family: 'family-1' } as Who },
-  { label: 'an identity still settling', next: { status: 'pending', family: 'family-1' } as Who },
+  { label: 'a view with no known identity', next: UNKNOWN },
 ]) {
   test(`${label} does not inherit a pending order, and its own order is independent`, async ({ page }) => {
     const requests = await fixture(page);
@@ -206,27 +236,39 @@ for (const { label, next } of [
   });
 }
 
-test('views without a settled identity never share claims with each other', async ({ page }) => {
-  const requests = await fixture(page, { status: 'pending', family: 'family-1' });
+test('the same actor signing in again sees their own order still pending', async ({ page }) => {
+  // The owner is the actor and family, not the sign-in: an order the same
+  // person placed is still in flight after they sign in again.
+  const requests = await fixture(page);
+  await virtual(page).click();
+  await remount(page, U1);
+  await expect(virtual(page)).toBeDisabled();
+  await complete(page, 0, 'refusal');
+  await expect(virtual(page)).toBeEnabled();
+  expect(requests).toEqual([]);
+});
+
+test('views without a known identity never share claims with each other', async ({ page }) => {
+  const requests = await fixture(page, UNKNOWN);
   await virtual(page).click(); await expect(virtual(page)).toBeDisabled();
-  await remount(page, { status: 'pending', family: 'family-1' });
+  await remount(page, UNKNOWN);
   await expect(virtual(page)).toBeEnabled();
   await complete(page, 0, 'refusal');
   expect(requests).toEqual([]);
 });
 
-test('an identity change in place releases a claim under the owner that made it', async ({ page }) => {
+test('a claim is released under the owner that made it, even if the view re-renders for another', async ({ page }) => {
+  // Defensive: the app remounts on an identity change, but a re-render with
+  // another identity must still not let one owner's answer release another's claim.
   const requests = await fixture(page);
   await virtual(page).click(); await expect(virtual(page)).toBeDisabled();
   await rerender(page, U2);
   await expect(virtual(page)).toBeEnabled();
   await virtual(page).click(); await expect(virtual(page)).toBeDisabled();
-  // U1's answer must not release U2's claim on the same child.
   await complete(page, 0, 'success');
   await expect(virtual(page)).toBeDisabled();
   await complete(page, 1, 'refusal');
   await expect(virtual(page)).toBeEnabled();
-  // And U1's own claim is gone: back as U1, the child is free.
   await rerender(page, U1);
   await expect(virtual(page)).toBeEnabled();
   expect(requests).toEqual([]);
@@ -246,6 +288,8 @@ for (const outcome of ['success', 'refusal', 'rejection'] as const) {
     await page.evaluate(() => window.__cardOwner.settle());
     await expect(virtual(page)).toBeEnabled();
     await expect(freeze(page)).toBeEnabled();
+    // Nothing was inherited, so mounting adds no refresh.
+    expect((await read(page)).refreshes).toBe(outcome === 'success' ? 1 : 0);
     expect(requests).toEqual([]);
   });
 }
@@ -259,9 +303,10 @@ test('a pending virtual order does not block a physical order for the same child
   expect((await read(page)).calls.map(call => call.args?.type)).toEqual(['virtual', 'physical']);
   await remount(page, U1);
   await expect(virtual(page)).toBeDisabled();
+  await force(page, 'Virtual');
   await physical(page).click();
   await expect(order(page)).toBeDisabled();
-  await force(page, order(page));
+  await forceSubmit(page);
   expect((await read(page)).calls).toHaveLength(2);
   await complete(page, 0, 'success'); await complete(page, 1, 'success');
   await expect(virtual(page)).toBeEnabled();

@@ -85,7 +85,14 @@ export async function ensureCardholder(
         .eq('family_id', params.familyId)
         .eq('member_id', params.memberId)
         .maybeSingle()
-        .then(({ data, error: rereadError }) => (rereadError ? null : data), () => null);
+        .then(({ data, error: rereadError }) => {
+          if (!rereadError) return data;
+          console.error('[money] cardholder duplicate re-read failed; keeping the refusal', { memberId: params.memberId, code: rereadError.code });
+          return null;
+        }, () => {
+          console.error('[money] cardholder duplicate re-read rejected; keeping the refusal', { memberId: params.memberId });
+          return null;
+        });
       if (winner && winner.family_id === params.familyId && winner.member_id === params.memberId
         && winner.stripe_cardholder_id === cardholder.id) {
         return { rowId: winner.id, stripeCardholderId: cardholder.id };
