@@ -10,7 +10,7 @@ import { iconForType, groupByUser } from '@/lib/notifications/digest';
 import * as React from 'react';
 import { listAllAuthUsers } from './list-all-auth-users';
 import { childrenBlockedOn } from '@/lib/notifications/child-channels';
-import { readInChunks } from '@/lib/supabase/chunked-in';
+import { readAllInChunks, readInChunks } from '@/lib/supabase/chunked-in';
 
 type DB = SupabaseClient<Database>;
 export type NotificationEmailResult = { sent: number; failed: number; skipped: number };
@@ -28,7 +28,7 @@ export async function deliverNotificationEmails(supabase: DB): Promise<Notificat
   const nowIso = new Date().toISOString();
   const { data: pending, error: pendingError } = await supabase
     .from('notifications')
-    .select('id, user_id, type, title, body')
+    .select('id, family_id, user_id, type, title, body')
     .is('sent_at', null)
     .not('user_id', 'is', null)
     .lte('send_at', nowIso)
@@ -41,7 +41,27 @@ export async function deliverNotificationEmails(supabase: DB): Promise<Notificat
 
   if (!pending?.length) return emptyResult();
 
-  const byUser = groupByUser(pending);
+  // A queued notification can outlive the recipient's membership. The service
+  // client still knows their email, so authorize each family/user pair before
+  // grouping content. Read every roster page before any send or acknowledgement.
+  const queuedUserIds = [...new Set(pending.map((n) => n.user_id).filter((id): id is string => Boolean(id)))];
+  const { data: members, error: membersError } = await readAllInChunks<{
+    id: string; user_id: string | null; family_id: string;
+  }>(queuedUserIds, (chunk, from, to) => supabase
+    .from('family_members')
+    .select('id, user_id, family_id')
+    .in('user_id', chunk)
+    .eq('is_active', true)
+    .order('id')
+    .range(from, to));
+  if (membersError) {
+    console.error('[notification-email] membership read failed', membersError);
+    return { sent: 0, failed: 1, skipped: 0 };
+  }
+  const currentPairs = new Set((members ?? []).map((m) => `${m.family_id}:${m.user_id}`));
+  const permitted = pending.filter((n) => currentPairs.has(`${n.family_id}:${n.user_id}`));
+  const withheldIds = pending.filter((n) => !currentPairs.has(`${n.family_id}:${n.user_id}`)).map((n) => n.id);
+  const byUser = groupByUser(permitted);
   const userIds = [...byUser.keys()];
 
   // Respect the per-user email toggle (default on).
@@ -99,8 +119,10 @@ export async function deliverNotificationEmails(supabase: DB): Promise<Notificat
 
   let sent = 0;
   let failed = 0;
-  let skipped = 0;
-  const resolvedIds: string[] = []; // emailed OR intentionally skipped → mark sent_at
+  // Counts are per recipient digest: a mixed digest retains only permitted
+  // content and is counted once; a wholly withheld recipient is one skip.
+  let skipped = queuedUserIds.filter((id) => !byUser.has(id)).length;
+  const resolvedIds: string[] = [...withheldIds]; // emailed OR intentionally skipped → mark sent_at
 
   for (const [userId, notifs] of byUser) {
     const ids = notifs.map((n) => n.id);
