@@ -1,6 +1,6 @@
 'use client';
 
-import { useMemo, useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import {
   Package, Plus, Trash2, Edit2, AlertTriangle, Clock, ShoppingCart,
   PackageCheck, Minus, Boxes,
@@ -235,7 +235,7 @@ export function PantryModule() {
         <PantryItemModal
           item={editing} familyId={familyId} userId={userId}
           onClose={() => { setOpen(false); setEditing(null); }}
-          onSaved={() => { setOpen(false); setEditing(null); void refresh(); }}
+          onSaved={() => { void refresh(); }}
         />
       )}
     </div>
@@ -249,6 +249,18 @@ function PantryItemModal({ item, familyId, userId, onClose, onSaved }: {
   const { success, error: toastError } = useToast();
   const [loading, setLoading] = useState(false);
   const [isStaple, setIsStaple] = useState(item?.is_staple ?? false);
+  const active = useRef(true);
+  useEffect(() => {
+    active.current = true;
+    return () => { active.current = false; };
+  }, []);
+
+  function close() {
+    // Closing is synchronous: a settling save cannot affect a later editor,
+    // even before this instance's effect cleanup has run.
+    active.current = false;
+    onClose();
+  }
 
   async function onSubmit(e: React.FormEvent<HTMLFormElement>) {
     e.preventDefault();
@@ -270,25 +282,38 @@ function PantryItemModal({ item, familyId, userId, onClose, onSaved }: {
     // `savePantryItem`, not `pantryAdjust`: the latter carries only quantity,
     // unit, location and expiry, so it would drop the category, threshold,
     // staple flag and notes this form sets.
-    const res = await savePantryItemAction(item?.id ?? null, {
-      name: payload.name,
-      category: payload.category,
-      location: payload.location,
-      quantity: payload.quantity,
-      unit: payload.unit,
-      lowThreshold: payload.low_threshold,
-      expiresAt: payload.expires_at,
-      isStaple: payload.is_staple,
-      notes: payload.notes,
-    });
-    setLoading(false);
-    if (!res.ok) return toastError(res.error);
-    success(item ? 'Updated' : 'Item added');
-    onSaved();
+    try {
+      const res = await savePantryItemAction(item?.id ?? null, {
+        name: payload.name,
+        category: payload.category,
+        location: payload.location,
+        quantity: payload.quantity,
+        unit: payload.unit,
+        lowThreshold: payload.low_threshold,
+        expiresAt: payload.expires_at,
+        isStaple: payload.is_staple,
+        notes: payload.notes,
+      });
+      if (!res.ok) {
+        if (active.current) toastError(res.error);
+        return;
+      }
+      if (active.current) {
+        success(item ? 'Updated' : 'Item added');
+        close();
+      }
+      // The submitted save may still commit after closing. Always refresh
+      // that result, while only its own active instance may close the editor.
+      onSaved();
+    } catch (err) {
+      if (active.current) toastError(describeDbError(err, t('actions.couldNotSaveThatItem')));
+    } finally {
+      if (active.current) setLoading(false);
+    }
   }
 
   return (
-    <Modal open onClose={onClose} title={item ? t('dialogTitle.editItem') : t('dialogTitle.addPantryItem')}>
+    <Modal open onClose={close} title={item ? t('dialogTitle.editItem') : t('dialogTitle.addPantryItem')}>
       <form onSubmit={onSubmit} className="space-y-4">
         <Field label={t('pantry.itemName')} required>
           {(id) => <Input id={id} name="name" defaultValue={item?.name ?? ''} placeholder={t('pantry.oliveOilEggsPaperTowels')} autoFocus />}
@@ -323,7 +348,7 @@ function PantryItemModal({ item, familyId, userId, onClose, onSaved }: {
         </label>
         <Field label={t('pantry.notes')}>{(id) => <Textarea id={id} name="notes" defaultValue={item?.notes ?? ''} placeholder={t('pantry.brandWhereToBuy')} className="min-h-[50px]" />}</Field>
         <div className="flex justify-end gap-2 pt-1">
-          <Button type="button" variant="ghost" onClick={onClose}>{t('pantry.cancel')}</Button>
+          <Button type="button" variant="ghost" onClick={close}>{t('pantry.cancel')}</Button>
           <Button type="submit" loading={loading}>{item ? 'Save' : 'Add item'}</Button>
         </div>
       </form>
