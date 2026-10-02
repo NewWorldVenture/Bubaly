@@ -504,6 +504,12 @@ Additions after the 10:55 UTC base, each with its own time: #772 opened 10:58 UT
         - **Evidence:** all 38 original assertions and the settings adapter are kept. The final 44 cases give 3 small-cap failures and 41 controls against the pre-follow-up source, and all 44 pass when repaired, including with the exact #789 child helper. The related gate passes 186 across 13 files, using Git Bash for the unchanged POSIX-find ratchet. The root independently passes 49 recipient, boundary and digest tests. Full TypeScript, lint and diff pass.
         - **The earlier composition result is historical:** the 414/414 local composition predates this source change and is being retested.
         - **Not claimed:** no default-cap or production occurrence, and no workflow closure or count credit.
+        - **#787 hosted Web, and a guard follow-up** (owner comment posted 2026-10-02 10:56:47 UTC, [#771 comment 5950868324](https://github.com/NewWorldVenture/Bubaly/pull/771#issuecomment-5950868324); written 2026-10-02 10:57 UTC):
+          - **Not green:** CI36997189520, Web job 110807074388, gave 23,971 passed, **1 failed** and 2 expected failures. The later time-zone, type and build steps did not complete.
+          - **The failure:** the total-order guard `tests/a-paged-read-needs-a-total-order.test.ts` has no registry entry for `user_preferences`, which now has ordered paged reads.
+          - **Checked here against main:** `supabase/migrations/0002_tables.sql:490` declares `user_id uuid primary key`, so the order is genuinely unique, and the registry on main has no `user_preferences` entry.
+          - **Claimed fix:** add only that schema-backed key, with its migration evidence and a direct schema assertion. The scanner, anti-vacuity, stale-entry and all other constraints are kept. No source exclusion, invented column or suppressed assertion. #786 needs the same entry in composition.
+          - No CI or production acceptance is claimed.
   - **Local composition, verified and unpublished:** branch `codex/notification-composition-20261002` at `f55200105ccacaa7ce4be6e613bc8505786076f3` merges #784 `6fcca98d`, #786 `0e0e3ac2`, #787 `fec150af` and #789 `d4a6f0dd`.
     - Three overlapping query fixtures were resolved, keeping active-roster and child-policy paging, with no change to application source.
     - **414/414 tests across 27 files pass**, and full TypeScript and lint and diff on 12 files pass. The exact source blobs match all four published candidates.
