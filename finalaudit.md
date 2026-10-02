@@ -27843,7 +27843,13 @@ token, and read-only. It is the model the other routes should have followed.
 > (Basic and up) see no change; the family that can now hit the wall is one on
 > a capped plan. `tests/every-ai-route-counts-against-the-allowance.test.ts`
 > walks every route under `app/api/ai/` and fails if one reaches a model without
-> the check. The section below is the original record, kept as written.
+> the check. The public gift route, which has no signed-in requester, files its
+> own row for the link's family before the model call (review on #788;
+> `tests/a-gift-request-counts-against-the-allowance.test.ts`). **Known limit:**
+> the check and the filing are two steps, so two requests at 9 of 10 arriving
+> together can both be admitted. Every metered route shares this; closing it
+> needs an atomic claim in the database (a migration), not a route change.
+> The section below is the original record, kept as written.
 
 F18 fixed *entitlement*. It did not fix *metering*, and the two are different
 questions.
