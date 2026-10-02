@@ -499,10 +499,15 @@ Additions after the 10:55 UTC base, each with its own time: #772 opened 10:58 UT
         - add capped and later-error controls;
         - make any preference read error happen before sends and acknowledgments.
       - **Status:** `LIBRARY-BBE70CE57610` stays IN PROGRESS, with no closure credit.
+      - **Published as #787 head `54e8662c21ce7b1d5121fe67c21f685c70119faf`** (owner comment posted 2026-10-02 10:46:30 UTC, [#771 comment 5950687199](https://github.com/NewWorldVenture/Bubaly/pull/771#issuecomment-5950687199); written 2026-10-02 10:46 UTC):
+        - **The change:** only `lib/server/notification-emails.ts` and its existing membership test (source blob `a006e3f5`, test blob `8c6f2278`). Complete, ordered preference pages keep opt-outs under configured caps below 100, and an ordinary cap of 1,000 is tested safe. Any preference-page error sends and acknowledges nothing, and missing rows keep the default on.
+        - **Evidence:** all 38 original assertions and the settings adapter are kept. The final 44 cases give 3 small-cap failures and 41 controls against the pre-follow-up source, and all 44 pass when repaired, including with the exact #789 child helper. The related gate passes 186 across 13 files, using Git Bash for the unchanged POSIX-find ratchet. The root independently passes 49 recipient, boundary and digest tests. Full TypeScript, lint and diff pass.
+        - **The earlier composition result is historical:** the 414/414 local composition predates this source change and is being retested.
+        - **Not claimed:** no default-cap or production occurrence, and no workflow closure or count credit.
   - **Local composition, verified and unpublished:** branch `codex/notification-composition-20261002` at `f55200105ccacaa7ce4be6e613bc8505786076f3` merges #784 `6fcca98d`, #786 `0e0e3ac2`, #787 `fec150af` and #789 `d4a6f0dd`.
     - Three overlapping query fixtures were resolved, keeping active-roster and child-policy paging, with no change to application source.
     - **414/414 tests across 27 files pass**, and full TypeScript and lint and diff on 12 files pass. The exact source blobs match all four published candidates.
-    - No integration branch was pushed. This is **composition proof**, not main, production or full-workflow acceptance.
+    - No integration branch was pushed. This is **composition proof**, not main, production or full-workflow acceptance. It is superseded as historical by #787's later source change at `54e8662c`, and a retest is in progress.
   - **Still open:**
     - The missing user-facing email-preference toggle is a separate workflow investigation.
     - Preference or membership changes after the preflight.
