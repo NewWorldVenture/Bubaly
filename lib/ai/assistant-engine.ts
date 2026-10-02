@@ -584,7 +584,10 @@ export function createAssistantStream(input: AssistantTurnInput, prepared: Prepa
             obs.failed(new Error(`Turn not persisted: ${persisted.error}`), { partial: true });
             send({ type: 'error', error: persisted.error });
           }
-          send({ type: 'done', content: assistantContent, persisted: persisted.ok });
+          // The turn's request id lets the client speak this answer as part of
+          // the same, already-counted exchange (F19: one spoken exchange, one
+          // request). Null when the row could not be filed.
+          send({ type: 'done', content: assistantContent, persisted: persisted.ok, requestId: obs.requestId });
           controller.close();
         },
       );

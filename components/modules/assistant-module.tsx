@@ -373,6 +373,8 @@ export function AssistantModule() {
       const decoder = new TextDecoder();
       let buf = '';
       let finalText = '';
+      // The turn's request id: the spoken answer rides on this exchange (F19).
+      let exchangeId: string | null = null;
       for (;;) {
         const { done, value } = await reader.read();
         if (done) break;
@@ -394,11 +396,11 @@ export function AssistantModule() {
             addCard(runStatusCard({ runId: ev.runId, status: ev.status, summary: ev.summary }));
           }
           else if (ev.type === 'error') patchReply((m) => ({ ...m, content: m.content || ev.error }));
-          else if (ev.type === 'done') { finalText = ev.content || finalText; patchReply((m) => ({ ...m, content: m.content || (ev.content || 'Done.') })); }
+          else if (ev.type === 'done') { finalText = ev.content || finalText; exchangeId = ev.requestId; patchReply((m) => ({ ...m, content: m.content || (ev.content || 'Done.') })); }
         }
       }
       // Speak the reply aloud when voice output is enabled on this device.
-      if (finalText.trim() && voice.shouldSpeak()) void voice.speak(finalText);
+      if (finalText.trim() && voice.shouldSpeak()) void voice.speak(finalText, exchangeId);
     } catch (error) {
       console.error('[assistant] request failed', error);
       patchReply((m) => ({ ...m, content: m.content || t('assistantModule.somethingWentWrong') }));

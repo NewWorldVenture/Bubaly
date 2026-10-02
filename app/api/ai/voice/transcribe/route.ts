@@ -9,6 +9,8 @@ import { readBoundedResponseJson, readBoundedResponseText } from '@/lib/server/b
 import { fetchWithDeadline } from '@/lib/server/fetch-with-deadline';
 
 export const runtime = 'nodejs';
+
+const COULD_NOT_TRANSCRIBE = 'Could not transcribe that recording. Please try again.';
 export const maxDuration = 60;
 const MAX_AUDIO_REQUEST_BYTES = 26 * 1024 * 1024;
 
@@ -84,12 +86,25 @@ export async function POST(req: NextRequest) {
       console.error('OpenAI transcription error', res.status, detail);
       const msg = res.status === 429
         ? 'The AI engine is busy. Please try again in a moment.'
-        : 'Could not transcribe that recording. Please try again.';
+        : COULD_NOT_TRANSCRIBE;
       return NextResponse.json({ error: msg }, { status: 502 });
     }
 
-    const data = await readBoundedResponseJson<{ text?: string }>(res, 256 * 1024);
-    const text = cleanTranscript(data.text ?? '');
+    // A 200 whose body is unreadable, or whose `text` is not a string, is a
+    // provider failure: the caller gets the same 502 as a provider error, not a
+    // 500 from a parse or a string method on a number.
+    let body: { text?: unknown };
+    try {
+      body = await readBoundedResponseJson<{ text?: unknown }>(res, 256 * 1024);
+    } catch (parseErr) {
+      console.error('OpenAI transcription returned an unreadable body', parseErr);
+      return NextResponse.json({ error: COULD_NOT_TRANSCRIBE }, { status: 502 });
+    }
+    if (body?.text !== undefined && body?.text !== null && typeof body.text !== 'string') {
+      console.error('OpenAI transcription returned a non-string text field', typeof body.text);
+      return NextResponse.json({ error: COULD_NOT_TRANSCRIBE }, { status: 502 });
+    }
+    const text = cleanTranscript(typeof body?.text === 'string' ? body.text : '');
     if (!text) {
       return NextResponse.json({ error: t('transcribe.iCouldnTHearAnything') }, { status: 422 });
     }

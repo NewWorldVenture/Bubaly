@@ -246,7 +246,8 @@ describe('createAssistantStream (SSE transport)', () => {
       { type: 'action', name: 'create_meal_plan_entry', ok: true, summary: 'Planned.' },
       { type: 'delta', text: 'Tacos ' },
       { type: 'delta', text: 'are planned.' },
-      { type: 'done', content: 'Tacos are planned.', persisted: true },
+      // requestId: the turn's row, which this fake store does not file (F19).
+      { type: 'done', content: 'Tacos are planned.', persisted: true, requestId: null },
     ]);
     expect(inserts.find((i) => i.table === 'ai_messages'), 'the stream must persist its messages').toBeTruthy();
     // The streaming transport names itself separately from the JSON one, so a
@@ -264,7 +265,7 @@ describe('createAssistantStream (SSE transport)', () => {
     if (!prepared.ok) throw new Error('prepare failed');
     const events = await readSse(createAssistantStream(input, prepared.turn));
     expect(events.map((e) => e.type)).toEqual(['delta', 'done']);
-    expect(events[1]).toEqual({ type: 'done', content: 'Recovered.', persisted: true });
+    expect(events[1]).toEqual({ type: 'done', content: 'Recovered.', persisted: true, requestId: null });
   });
 
   it('surfaces a mid-stream failure but keeps the partial answer', async () => {

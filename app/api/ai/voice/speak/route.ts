@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { assertAIRequestFamily, getAIRequestTranslations } from '@/lib/server/ai-request-context';
 import { authenticateAI, refuseOverAIAllowance } from '@/lib/server/ai-access';
+import { isCountedExchange } from '@/lib/ai/voice-exchange';
 import { getOpenAIKey } from '@/lib/ai/settings';
 import { prepareSpeechText, normalizeTtsVoice } from '@/lib/ai/voice';
 import { enforceAIRateLimit } from '@/lib/server/ai-rate-limit';
@@ -41,19 +42,24 @@ export async function POST(req: NextRequest) {
 
     const boundedBody = await readBoundedRequestJson(req, MAX_SMALL_JSON_BYTES);
     if (!boundedBody.ok) return NextResponse.json({ error: boundedBody.reason === 'too_large' ? 'Request body is too large.' : 'Invalid request body' }, { status: 400 });
-    const { text, voice } = (boundedBody.value ?? {}) as { text?: string; voice?: string };
+    const { text, voice, exchangeId } = (boundedBody.value ?? {}) as { text?: string; voice?: string; exchangeId?: unknown };
     const speech = prepareSpeechText(text ?? '');
     if (!speech) return NextResponse.json({ error: t('speak.nothingToSay') }, { status: 400 });
 
     const model = process.env.OPENAI_TTS_MODEL || 'gpt-4o-mini-tts';
     // F19, the owner's decision of 2026-10-02: one spoken exchange counts as
-    // ONE request — the assistant turn it carries, which files its own row.
-    // Speech and transcription therefore file nothing; they are refused only
-    // once the month is spent, so a family past its allowance cannot keep a
-    // voice exchange going. How a standalone voice call (one with no turn) is
-    // counted is documented as open, not given an invented rule here.
-    const overAllowance = await refuseOverAIAllowance(authed.ctx, authed.supabase);
-    if (overAllowance) return overAllowance;
+    // ONE request — the assistant turn, which files its own row. Speech files
+    // nothing. Speaking a turn the caller just had (`exchangeId`, that turn's
+    // row) is part of an exchange already counted, so it is NOT checked again:
+    // an exchange admitted at 9 of 10 must be able to finish speaking after its
+    // own turn took the count to 10. Speech that names no such turn is a
+    // standalone voice call; it is refused once the month is spent, and how it
+    // should count is documented as open rather than given an invented rule.
+    const counted = await isCountedExchange(authed.supabase, { familyId: authed.ctx.active.familyId, userId: authed.ctx.user.id }, exchangeId);
+    if (!counted) {
+      const overAllowance = await refuseOverAIAllowance(authed.ctx, authed.supabase);
+      if (overAllowance) return overAllowance;
+    }
     const res = await fetchWithDeadline('https://api.openai.com/v1/audio/speech', {
       method: 'POST',
       headers: { 'content-type': 'application/json', authorization: `Bearer ${apiKey}` },

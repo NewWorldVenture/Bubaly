@@ -251,7 +251,8 @@ export async function POST(req: NextRequest) {
         }
 
         obs.used(provider.model, undefined);
-        send({ type: 'done', content: assistantContent, persisted: !persistenceError });
+        // The turn's request id, so a spoken answer rides on this exchange (F19).
+        send({ type: 'done', content: assistantContent, persisted: !persistenceError, requestId: obs.requestId });
         controller.close();
           },
         );

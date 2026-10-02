@@ -244,7 +244,7 @@ export type AssistantStreamEvent =
   | { type: 'card'; card: ResultCard }
   | { type: 'run'; runId: string; href: string; status: string; summary: string | null }
   | { type: 'error'; error: string }
-  | { type: 'done'; content: string; persisted: boolean };
+  | { type: 'done'; content: string; persisted: boolean; requestId: string | null };
 
 /** Parse one decoded SSE payload. Unknown or malformed events are dropped, not thrown. */
 export function parseAssistantStreamEvent(raw: unknown): AssistantStreamEvent | null {
@@ -271,7 +271,10 @@ export function parseAssistantStreamEvent(raw: unknown): AssistantStreamEvent | 
     case 'error':
       return { type: 'error', error: typeof ev.error === 'string' && ev.error ? ev.error : 'Something went wrong.' };
     case 'done':
-      return { type: 'done', content: typeof ev.content === 'string' ? ev.content : '', persisted: ev.persisted !== false };
+      return {
+        type: 'done', content: typeof ev.content === 'string' ? ev.content : '', persisted: ev.persisted !== false,
+        requestId: typeof ev.requestId === 'string' && ev.requestId ? ev.requestId : null,
+      };
     default:
       return null;
   }
