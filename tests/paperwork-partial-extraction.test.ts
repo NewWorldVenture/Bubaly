@@ -1,6 +1,14 @@
 import React from 'react';
 import { renderToStaticMarkup } from 'react-dom/server';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
+
+// F19: these user-requested AI actions now check the family's monthly allowance
+// before the model. This file is about other behaviour, so the family is on
+// Basic, whose allowance is unlimited: the real check runs and passes.
+vi.mock('@/lib/server/plan', async (importOriginal) => ({
+  ...(await importOriginal<typeof import('@/lib/server/plan')>()),
+  resolveFamilyPlanLevel: async () => 1,
+}));
 import { PaperworkModule } from '@/components/modules/paperwork-module';
 import { draftPaperworkReplyAction, materializePaperworkActionAction, setPaperworkStatusAction } from '@/app/(app)/dashboard/paperwork/actions';
 import { getMessages } from '@/lib/i18n/messages';

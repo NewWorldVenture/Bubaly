@@ -8,6 +8,7 @@
 //      (lib/marketplace/assistant.ts) composes the same grounded answer.
 // Either way the caller gets a reply + deep links; the UI never breaks on a
 // missing key. History is passed through for multi-turn context (LLM tier).
+import { assertAIAllowance } from '@/lib/server/ai-access';
 import { requireUserContext } from '@/lib/supabase/auth';
 import { settleAll } from '@/lib/supabase/settle';
 import { getLocaleContext, getTranslations } from '@/lib/i18n/server';
@@ -53,6 +54,11 @@ export async function askMarketAssistantAction(
   // Reuses the inbox intake's existing key rather than inventing one across 11
   // catalogues — an unresolved key renders as the raw key on screen.
   if (!limited.ok) return { ok: false, error: t('inboxActions.tooManyRequestsRightNow') };
+
+  // F19: a member's own AI request, so it counts against the family's monthly
+  // allowance (the owner's decision of 2026-10-02). Refused before the model.
+  const allowance = await assertAIAllowance(ctx, { db: sb });
+  if (!allowance.ok) return { ok: false, error: allowance.error };
 
   const [{ data: listings }, { data: offers }] = await settleAll([
     sb.from('marketplace_listings')
