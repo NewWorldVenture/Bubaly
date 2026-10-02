@@ -7,22 +7,13 @@ import { resolveProvider, isAIConfigured } from '@/lib/ai/provider';
 import { withAiRequest } from '@/lib/ai/observability';
 import { scopeFromUserContext } from '@/lib/services/scope';
 import { AI_TOOLS, runAction } from '@/lib/ai/actions';
+import { getTool } from '@/lib/ai/tools/registry';
 import { enforceAIRateLimit } from '@/lib/server/ai-rate-limit';
 import { roleOf } from '@/lib/trust/server';
 import { gateAiAction } from '@/lib/trust/ai-gate';
 import { fenceUntrustedBlock, UNTRUSTED_CONTENT_RULE } from '@/lib/ai/safety/untrusted';
 import { MAX_PROVIDER_JSON_BYTES, readBoundedRequestJson } from '@/lib/server/bounded-request-body';
 import { buildProposal, classify } from '@/lib/front-desk/school-sports';
-
-// Map a Magic-Import action to a Trust Engine domain so the governance layer can
-// allow / block / require-approval before the AI writes anything.
-const ACTION_DOMAIN: Record<string, string> = {
-  create_calendar_event: 'calendar',
-  create_chore: 'chores',
-  create_reminder: 'scheduling',
-  add_grocery_item: 'shopping',
-  create_meal_plan_entry: 'meal_planning',
-};
 
 export const runtime = 'nodejs';
 
@@ -156,7 +147,13 @@ export async function POST(req: NextRequest) {
       const actorRole = roleOf(ctx.active.role);
       const results = await Promise.all(
         body.confirm.slice(0, 50).map(async (item) => {
-          const domain = ACTION_DOMAIN[item.name] ?? 'tasks';
+          // The bridge resolves canonical names, aliases and function names to
+          // one registered tool. Authorize that same identity: a legacy-only
+          // map let other calendar spellings fall back to the tasks policy.
+          const tool = getTool(item.name);
+          if (!tool) {
+            return { summary: item.summary, ok: false, blocked: true, error: 'That action is not available.' };
+          }
           // The shared AI gate (lib/trust/ai-gate.ts), same as chat and the
           // tool registry. Magic Import used to call the bare engine, so a
           // family who had switched Bubaly off — or set a category to
@@ -164,7 +161,7 @@ export async function POST(req: NextRequest) {
           // into their calendar.
           const outcome = await gateAiAction(supabase, familyId, {
             toolName: item.name,
-            domain,
+            domain: tool.domain,
             actorId: 'magic_import',
             actorRole,
             agent: 'Magic Import',

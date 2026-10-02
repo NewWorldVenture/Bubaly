@@ -14,6 +14,7 @@ import {
   autoReplyText, classifyIntent, intentMeta, routeInbound, shouldNotifyFamily, shouldPlanInbound,
 } from '@/lib/contact-center/routing';
 import { buildProposal, classify } from '@/lib/front-desk/school-sports';
+import { getTool } from '@/lib/ai/tools/registry';
 
 const deskCard = readFileSync('components/modules/school-module.tsx', 'utf8');
 const deskAction = readFileSync('app/(app)/dashboard/school/actions.ts', 'utf8');
@@ -299,9 +300,15 @@ describe('magic import proposes the same thing', () => {
     expect(keyFn![0]).toContain("item.name === 'add_grocery_item' ? groceryNames(item.args)");
   });
 
-  it('maps every proposable tool to a trust domain', () => {
-    for (const tool of ['create_calendar_event', 'create_reminder', 'add_grocery_item']) {
-      expect(importRoute).toMatch(new RegExp(`${tool}: '`));
+  it('resolves desk proposals to their registered Trust domains', () => {
+    // Route behavior, including aliases and policy refusals, is exercised in
+    // ai-import-tool-domain.test.ts. A source-text map cannot prove that gate.
+    for (const [name, domain] of [
+      ['create_calendar_event', 'calendar'],
+      ['create_reminder', 'scheduling'],
+      ['add_grocery_item', 'shopping'],
+    ]) {
+      expect(getTool(name)?.domain).toBe(domain);
     }
   });
 });
@@ -356,8 +363,8 @@ describe('every string the desk shows is translated', () => {
 // "sent for a parent to approve" then promises a review that is not in anyone's
 // queue, which is the one thing this desk must never say.
 describe('a proposal held for approval says so only when an approval exists', () => {
-  const module = readFileSync(new URL('../components/modules/school-module.tsx', import.meta.url), 'utf8');
-  const branch = module.slice(module.indexOf("if (result.outcome === 'pending_approval')"), module.indexOf('    // Re-read rather than patch state'));
+  const schoolModule = readFileSync(new URL('../components/modules/school-module.tsx', import.meta.url), 'utf8');
+  const branch = schoolModule.slice(schoolModule.indexOf("if (result.outcome === 'pending_approval')"), schoolModule.indexOf('    // Re-read rather than patch state'));
 
   it('reads approvalId before claiming a parent was asked', () => {
     expect(branch).toContain('result.approvalId');
