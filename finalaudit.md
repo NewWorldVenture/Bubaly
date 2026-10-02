@@ -349,6 +349,16 @@ Additions after the 10:55 UTC base, each with its own time: #772 opened 10:58 UT
   - **The fix in progress:** the push lane's review agent is adapting that assertion in #784's isolated checkout, keeping the actual child-consent behavioural coverage.
   - **Other jobs:** the later timezone and build steps were skipped, and the Mobile advisory hold persists. No CI restart.
   - #784's Web job is **not green**, and there is no credit.
+  - **#784 follow-up head `6fcca98df4c4c11cb7ff649757dd7e50e2f9a0c2`** (owner comment posted 2026-10-02 10:13:43 UTC, [#771 comment 5950087955](https://github.com/NewWorldVenture/Bubaly/pull/771#issuecomment-5950087955); written 2026-10-02 10:13 UTC):
+    - **What changed:** pushed normally, with no force-push. Only `tests/child-channels-delivery.test.ts` changes, and the push source stays at `b6cbb40e`. The obsolete source-string assertions are replaced with actual addressed and broadcast dispatch tests: a blocked child gets zero delivery, while teen and parent tokens, device receipts and every queue acknowledgment are checked.
+    - **Evidence:** 117 related tests across 8 files pass, and an independent root run passes 57 across 3 files. Full TypeScript, lint and diff pass.
+    - **Causal mutations of the private source:**
+      - removing consent fails both desired cases, with 10 controls passing;
+      - omitting addressed candidates fails the addressed case, with 11 controls;
+      - omitting broadcast candidates fails the broadcast case, with 11 controls.
+    - Test blob `d79a78d4`.
+    - **Old run kept as recorded:** run 36992717339's Web failure stands, with no re-run. Fresh exact-head CI is separate and was not reported.
+    - **Status:** `PUSH-001` / `LIBRARY-E981DDB50E9C` stay IN PROGRESS, with the preflight race, the full workflow, privacy, RLS and device holds, and the existing Mobile, E2E and render gates. No new closure.
 - **Repair candidate: storage-removal confirmation, [#785](https://github.com/NewWorldVenture/Bubaly/pull/785), plus a new Register B obligation (owner handoff posted 2026-10-02 10:02:57 UTC, [#771 comment 5949870009](https://github.com/NewWorldVenture/Bubaly/pull/771#issuecomment-5949870009); written 2026-10-02 10:04 UTC).** This is reviewer- and author-reported synthetic evidence and was not re-run here.
   - **Head and scope:** exact `4262ac474a1e38a64266c8a0ab549c5836f89436`, from main `01b2c380`. Two files only. NWV's held I18N-011 and O-03 work is preserved.
   - **The repair:** the shared `removeConfirmed` now rejects missing, non-array or malformed listings before treating absence as confirmed. Positive removed-path proof, valid empty, neighbour and folder listings, and refusals for present names and provider errors all keep their behaviour. The owned test's source inventory now normalizes Windows separators, with its ACCOUNTED and staleness assertions kept.
