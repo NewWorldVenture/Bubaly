@@ -154,17 +154,66 @@ test.describe('form errors: what an invalid, refused and recovered submit expose
       });
 
       test('contacts: a refused save keeps keyboard focus inside the dialog', async ({ page }) => {
-        // Reproduced: the shared Button is natively disabled while `loading`,
-        // so the focused submit drops focus to <body>, outside the aria-modal
-        // dialog (components/ui/button.tsx; COMPONENT-2795B661F080).
-        test.fail();
+        // Was: the shared Button is natively disabled while `loading`, so the
+        // focused submit dropped focus to <body>, outside the aria-modal dialog
+        // (COMPONENT-2795B661F080). The contact form's submit is now
+        // aria-disabled while saving; the shared Button is unchanged.
         const { dialog } = await openNewContact(page);
         await dialog.getByRole('textbox', { name: 'Full name' }).fill('Robin Probe');
-        await refuseContactWrites(page);
-        await dialog.getByRole('button', { name: 'Add Contact' }).focus();
+        let release!: () => void, sent!: () => void;
+        const held = new Promise<void>((resolve) => { release = resolve; });
+        const seen = new Promise<void>((resolve) => { sent = resolve; });
+        await page.route('**/rest/v1/family_contacts*', async (route) => {
+          if (route.request().method() !== 'POST') return route.continue();
+          sent();
+          await held;
+          await route.fulfill({ status: 409, contentType: 'application/json', body: JSON.stringify({ code: '23505', message: 'duplicate key value violates unique constraint', details: null, hint: null }) });
+        });
+        const submit = dialog.getByRole('button', { name: 'Add Contact' });
+        await submit.focus();
         await page.keyboard.press('Enter');
+        await seen;
+        // While the write is held: the pending state has rendered, and the
+        // submit that was pressed still has the focus.
+        await expect(dialog.locator('button[type="submit"] svg.animate-spin')).toBeVisible();
+        await expect(submit).toBeFocused();
+        release();
         await expect(alertsReading(page, COPY.duplicate)).toHaveCount(1);
+        await expect(submit).toBeFocused();
         expect(await focusInside(dialog)).toBe(true);
+      });
+
+      test('contacts: a second Enter while a save is in flight sends one write', async ({ page }) => {
+        const { dialog, opener } = await openNewContact(page);
+        await dialog.getByRole('textbox', { name: 'Full name' }).fill('Robin Probe');
+        // A control: a natively disabled submit also refused this. It guards
+        // the contact form's own in-flight refusal now that the submit stays
+        // focusable while saving.
+        let posts = 0;
+        let release!: () => void, sent!: () => void;
+        const held = new Promise<void>((resolve) => { release = resolve; });
+        const seen = new Promise<void>((resolve) => { sent = resolve; });
+        await page.route('**/rest/v1/family_contacts*', async (route) => {
+          if (route.request().method() !== 'POST') return route.continue();
+          posts += 1;
+          sent();
+          await held;
+          await route.continue();
+        });
+        const submit = dialog.getByRole('button', { name: 'Add Contact' });
+        await submit.focus();
+        await page.keyboard.press('Enter');
+        await seen;
+        await expect(dialog.locator('button[type="submit"] svg.animate-spin')).toBeVisible();
+        await page.keyboard.press('Enter');
+        // A DOM click, not a pointer click: it submits the form whatever the
+        // dialog's scroll position, so only the in-flight refusal can stop it.
+        await submit.evaluate((button: HTMLButtonElement) => button.click());
+        release();
+        await expect(page.getByRole('status').filter({ hasText: COPY.contactAdded })).toHaveCount(1);
+        await expect(dialog).toBeHidden();
+        await expect(opener).toBeFocused();
+        expect(posts).toBe(1);
       });
 
       if (width === 1280) {
@@ -234,8 +283,12 @@ test.describe('form errors: what an invalid, refused and recovered submit expose
         // with refusalForThrown, as useActionError does.
         const { text, submit } = await openComposer(page);
         await refuseNextAction(page);
+        const seen = countActions(page);
         await text.fill(PAPER);
         await submit.click();
+        // First that the refused request was sent (so a failure here says which
+        // side failed), then what the reader is told.
+        await expect.poll(() => seen.posts).toBe(1);
         await expect(alertsReading(page, COPY.notSaved)).toHaveCount(1);
         await expect(page.getByRole('alert').filter({ hasText: 'Minified React error' })).toHaveCount(0);
       });
