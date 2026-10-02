@@ -12,7 +12,8 @@ const h = vi.hoisted(() => ({
   users: [] as { id: string; email: string | null }[],
   sends: [] as { to: string; props: Digest; subject: string }[], ackIds: [] as string[],
   calls: [] as { table: string; method: string; query: string }[],
-  cap: 1000, failRosterOffset: null as number | null, failTable: '', failAccounts: false, failResolve: false,
+  cap: 1000, failRosterOffset: null as number | null, failPrefsOffset: null as number | null,
+  failTable: '', failAccounts: false, failResolve: false,
   emailConfigured: true, emailResult: { ok: true } as { ok: boolean; skipped?: boolean },
 }));
 // Actual delivery helper, grouping, consent reader, paging and SDK run. Account
@@ -68,7 +69,13 @@ function db(): SupabaseClient<Database> {
         if (q.get('order') === 'id.asc') rows.sort((a, b) => String(a.id).localeCompare(String(b.id)));
         rows = rows.slice(offset, offset + Math.min(Number(q.get('limit') ?? 1000), h.cap));
       } else if (table === 'user_preferences') {
+        const offset = Number(q.get('offset') ?? 0);
+        if (offset === h.failPrefsOffset) return failure();
+        const paged = q.has('offset') || q.has('limit');
+        if (paged && (!q.has('offset') || !q.has('limit') || q.get('order') !== 'user_id.asc')) throw new Error('Unexpected preference page');
         rows = h.prefs.filter(p => idsIn(q.get('user_id')).includes(p.user_id));
+        if (q.get('order') === 'user_id.asc') rows.sort((a, b) => String(a.user_id).localeCompare(String(b.user_id)));
+        rows = rows.slice(offset, offset + Math.min(Number(q.get('limit') ?? 1000), h.cap));
       } else if (table === 'family_ai_settings') {
         const paged = q.has('offset') || q.has('limit');
         if (paged && (!q.has('offset') || !q.has('limit') || q.get('order') !== 'family_id.asc')) throw new Error('Unexpected child settings page');
@@ -89,7 +96,7 @@ function db(): SupabaseClient<Database> {
 beforeEach(() => {
   h.notices = [notice()]; h.members = [member()]; h.prefs = []; h.settings = [];
   h.users = [{ id: USER, email: 'synthetic@synthetic.invalid' }];
-  h.sends = []; h.ackIds = []; h.calls = []; h.cap = 1000; h.failRosterOffset = null; h.failTable = ''; h.failAccounts = false; h.failResolve = false;
+  h.sends = []; h.ackIds = []; h.calls = []; h.cap = 1000; h.failRosterOffset = null; h.failPrefsOffset = null; h.failTable = ''; h.failAccounts = false; h.failResolve = false;
   h.emailConfigured = true; h.emailResult = { ok: true };
   vi.spyOn(console, 'error').mockImplementation(() => {});
 });
@@ -211,5 +218,66 @@ describe('queued notification emails require current membership in each family',
     h.notices = [notice({ user_id: null })];
     expect(await deliverNotificationEmails(db())).toEqual({ sent: 0, failed: 0, skipped: 0 });
     expect(h.sends).toEqual([]); expect(h.ackIds).toEqual([]);
+  });
+});
+
+describe('queued email preference preflight under configured small response caps', () => {
+  function secondAdult() {
+    h.notices.push(notice({ id: uuid(301), user_id: uuid(101), title: 'Synthetic second adult title' }));
+    h.members.push(member({ id: uuid(201), user_id: uuid(101), role: 'adult' }));
+    h.users.push({ id: uuid(101), email: 'second-adult@synthetic.invalid' });
+    h.prefs = [{ user_id: USER, email_enabled: true }, { user_id: uuid(101), email_enabled: false }];
+    h.cap = 1;
+  }
+  it('preserves a second adult opt-out after a one-row preference response cap', async () => {
+    secondAdult();
+    const result = await deliverNotificationEmails(db());
+    expect(h.sends.map(send => send.to)).toEqual(['synthetic@synthetic.invalid']);
+    expect(result).toEqual({ sent: 1, failed: 0, skipped: 1 });
+    expect([...h.ackIds].sort()).toEqual([uuid(300), uuid(301)]);
+  });
+  it('does not send or acknowledge any row after a later preference page fails', async () => {
+    secondAdult(); h.failPrefsOffset = 1; h.notices.push(notice({ id: uuid(302), family_id: OTHER, title: 'Synthetic withheld family update' }));
+    expect(await deliverNotificationEmails(db())).toEqual({ sent: 0, failed: 1, skipped: 0 });
+    expect(h.sends).toEqual([]); expect(h.ackIds).toEqual([]);
+  });
+  it('preserves delivery to both opted-in adults under the same cap', async () => {
+    secondAdult(); h.prefs[1].email_enabled = true;
+    expect(await deliverNotificationEmails(db())).toEqual({ sent: 2, failed: 0, skipped: 0 });
+    expect(h.sends.map(send => send.to)).toEqual(['synthetic@synthetic.invalid', 'second-adult@synthetic.invalid']);
+    expect([...h.ackIds].sort()).toEqual([uuid(300), uuid(301)]);
+  });
+});
+
+describe('queued email preference completeness controls', () => {
+  it('preserves the ordinary-cap opt-out without implying a default-cap defect', async () => {
+    h.notices.push(notice({ id: uuid(301), user_id: uuid(101) }));
+    h.members.push(member({ id: uuid(201), user_id: uuid(101), role: 'adult' }));
+    h.users.push({ id: uuid(101), email: 'second-adult@synthetic.invalid' });
+    h.prefs = [{ user_id: USER, email_enabled: true }, { user_id: uuid(101), email_enabled: false }];
+    expect(await deliverNotificationEmails(db())).toEqual({ sent: 1, failed: 0, skipped: 1 });
+    expect(h.sends.map(s => s.to)).toEqual(['synthetic@synthetic.invalid']);
+    expect([...h.ackIds].sort()).toEqual([uuid(300), uuid(301)]);
+  });
+  it('keeps missing preference rows allowed after a capped read reaches its empty end page', async () => {
+    h.cap = 1; h.prefs = [];
+    expect(await deliverNotificationEmails(db())).toEqual({ sent: 1, failed: 0, skipped: 0 });
+    expect(h.sends.map(s => s.to)).toEqual(['synthetic@synthetic.invalid']);
+    expect(h.ackIds).toEqual([uuid(300)]);
+  });
+  it('bounds preference IDs and retrieves all false settings across a capped 101-recipient batch', async () => {
+    h.notices = []; h.members = []; h.users = []; h.prefs = []; h.cap = 40;
+    for (let i = 0; i < 101; i++) {
+      const user = uuid(1000 + i);
+      h.notices.push(notice({ id: uuid(3000 + i), user_id: user }));
+      h.members.push(member({ id: uuid(2000 + i), user_id: user }));
+      h.users.push({ id: user, email: `adult-${i}@synthetic.invalid` });
+      h.prefs.push({ user_id: user, email_enabled: false });
+    }
+    expect(await deliverNotificationEmails(db())).toEqual({ sent: 0, failed: 0, skipped: 101 });
+    expect(h.sends).toEqual([]); expect(h.ackIds).toHaveLength(101);
+    const calls = h.calls.filter(c => c.table === 'user_preferences');
+    expect(calls.filter(c => new URLSearchParams(c.query).get('offset') === '0').map(c => idsIn(new URLSearchParams(c.query).get('user_id')).length)).toEqual([100, 1]);
+    expect(calls.filter(c => idsIn(new URLSearchParams(c.query).get('user_id')).length === 100).map(c => new URLSearchParams(c.query).get('offset'))).toEqual(['0', '40', '80', '100']);
   });
 });

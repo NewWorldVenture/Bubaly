@@ -10,7 +10,7 @@ import { iconForType, groupByUser } from '@/lib/notifications/digest';
 import * as React from 'react';
 import { listAllAuthUsers } from './list-all-auth-users';
 import { childrenBlockedOn } from '@/lib/notifications/child-channels';
-import { readAllInChunks, readInChunks } from '@/lib/supabase/chunked-in';
+import { readAllInChunks } from '@/lib/supabase/chunked-in';
 
 type DB = SupabaseClient<Database>;
 export type NotificationEmailResult = { sent: number; failed: number; skipped: number };
@@ -74,12 +74,17 @@ export async function deliverNotificationEmails(supabase: DB): Promise<Notificat
   // the same way. Nothing is settled before this point, so the stall is
   // self-reinforcing: it begins exactly when the backlog is big enough to
   // matter and never clears on its own.
-  const { data: prefs, error: prefsError } = await readInChunks<
+  // One preference row per user fits the ordinary 1000-row cap in a 100-ID
+  // chunk. A smaller configured cap can still hide an explicit opt-out, so
+  // complete every ordered chunk through its empty end page before delivery.
+  const { data: prefs, error: prefsError } = await readAllInChunks<
     { user_id: string; email_enabled: boolean | null }, { message: string }
-  >(userIds, (chunk) => supabase
+  >(userIds, (chunk, from, to) => supabase
     .from('user_preferences')
     .select('user_id, email_enabled')
-    .in('user_id', chunk));
+    .in('user_id', chunk)
+    .order('user_id')
+    .range(from, to));
   if (prefsError) {
     console.error('[notification-email] preference read failed', prefsError);
     return { sent: 0, failed: 1, skipped: 0 };
