@@ -37,6 +37,10 @@ function makeDb(respond: (call: Call, index: number) => Reply) {
     const b: Record<string, unknown> = {};
     const chain = () => b;
     const filter = (column: string, value: unknown) => { call.filters[column] = value; return b; };
+    const reply = () => call.table === 'family_members'
+      ? { data: ['member-1', 'member-2'].map((id) => ({ id, family_id: 'fam-1' }))
+        .find((row) => row.id === call.filters.id && row.family_id === call.filters.family_id) ?? null, error: null }
+      : respond(call, index);
     Object.assign(b, {
       select: chain, order: chain, limit: chain, ilike: chain, or: chain,
       eq: filter, is: filter, in: filter,
@@ -47,9 +51,9 @@ function makeDb(respond: (call: Call, index: number) => Reply) {
       insert: (payload: unknown) => { call.kind = 'insert'; call.payload = payload; return b; },
       update: (payload: unknown) => { call.kind = 'update'; call.payload = payload; return b; },
       delete: () => { call.kind = 'delete'; return b; },
-      single: () => Promise.resolve(respond(call, index)),
-      maybeSingle: () => Promise.resolve(respond(call, index)),
-      then: (resolve: (value: Reply) => void) => resolve(respond(call, index)),
+      single: () => Promise.resolve(reply()),
+      maybeSingle: () => Promise.resolve(reply()),
+      then: (resolve: (value: Reply) => void) => resolve(reply()),
     });
     return b;
   };
