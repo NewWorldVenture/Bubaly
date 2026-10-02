@@ -304,9 +304,13 @@ export function MealsModule() {
   async function toggleGrocery(item: Tables<'grocery_items'>) {
     // The shopping page's action, not a second spelling of it — two versions of
     // one operation on one table is how the forks this work removes began.
-    const result = await setGroceryItemCheckedAction(item.id, !item.is_checked);
-    if (!result.ok) return toastError(result.error);
-    void refreshGrocery();
+    try {
+      const result = await setGroceryItemCheckedAction(item.id, !item.is_checked);
+      if (!result.ok) return toastError(result.error);
+      void refreshGrocery();
+    } catch (cause) {
+      toastError(describeDbError(cause, tr('actions.couldNotUpdateThatItem')));
+    }
   }
 
   async function castVote(optionId: string) {
