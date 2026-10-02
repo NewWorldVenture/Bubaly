@@ -84,6 +84,46 @@ describe('a flyer scan the provider refused is recorded as failed', () => {
     });
   }
 
+  // Third review on #788: nested fields were built after the row closed. A
+  // wrong-typed optional field is now dropped to null inside the observed call,
+  // so the response is usable and the row's status is the truth.
+  const reply = (events: unknown[]) => new Response(
+    JSON.stringify({ choices: [{ message: { content: JSON.stringify(events) } }] }),
+    { status: 200, headers: { 'content-type': 'application/json' } },
+  );
+  for (const [label, location] of [
+    ['an object location', { label: 'Synthetic hall' }],
+    ['a location that throws when formatted', { toString: 7, valueOf: 7 }],
+  ] as const) {
+    it(`${label}: the event is returned with no location, and the row says completed`, async () => {
+      fetchWithDeadline.mockResolvedValue(reply([{ title: 'Bake sale', date: '2026-10-10', time: '14:00', location }]));
+      const { POST } = await import('@/app/api/ai/flyer/route');
+      const res = await POST(scan());
+      expect(res.status).toBe(200);
+      const body = await res.json() as { events: Array<{ title: string; location: unknown }> };
+      expect(body.events).toHaveLength(1);
+      expect(body.events[0].location).toBeNull();
+      expect(finalStatus()).toBe('completed');
+    });
+  }
+
+  it('a textual location and a wrong-typed description are kept and dropped respectively', async () => {
+    fetchWithDeadline.mockResolvedValue(reply([{ title: 'Game', date: '2026-10-11', location: 'Field 3', description: 42 }]));
+    const { POST } = await import('@/app/api/ai/flyer/route');
+    const body = await (await POST(scan())).json() as { events: Array<{ location: unknown; description: unknown }> };
+    expect(body.events[0]).toMatchObject({ location: 'Field 3', description: null });
+    expect(finalStatus()).toBe('completed');
+  });
+
+  it('a reply whose array holds no usable event returns none, completed', async () => {
+    fetchWithDeadline.mockResolvedValue(reply([7, null, { title: 5, date: '2026-10-10' }]));
+    const { POST } = await import('@/app/api/ai/flyer/route');
+    const res = await POST(scan());
+    expect(res.status).toBe(200);
+    expect((await res.json() as { events: unknown[] }).events).toEqual([]);
+    expect(finalStatus()).toBe('completed');
+  });
+
   it('control: a valid answer is recorded as completed', async () => {
     fetchWithDeadline.mockResolvedValue(new Response(
       JSON.stringify({ choices: [{ message: { content: '[]' } }] }),

@@ -30,6 +30,47 @@ type ProposedEvent = {
 
 const CATEGORIES = ['general', 'school', 'sports', 'appointment', 'medication', 'maintenance', 'birthday', 'holiday', 'other'];
 
+/** A string field, or null: a provider value of any other type is not used. */
+const textOrNull = (v: unknown): string | null => (typeof v === 'string' && v.trim() ? v : null);
+
+/**
+ * The model's reply, as the events the confirm step can use. Only rows with a
+ * string title and date are kept; every optional field the model sent with the
+ * wrong type is dropped to null rather than cast, so the response never carries
+ * an object where `ProposedEvent` says string. A reply with no JSON array is no
+ * events, as before.
+ */
+function buildEvents(text: string): ProposedEvent[] {
+  let raw: unknown = [];
+  try {
+    const match = text.match(/\[[\s\S]*\]/);
+    raw = JSON.parse(match?.[0] ?? '[]');
+  } catch {
+    raw = [];
+  }
+  if (!Array.isArray(raw)) return [];
+  return raw
+    .filter((r): r is Record<string, unknown> => !!r && typeof r === 'object' && typeof (r as Record<string, unknown>).title === 'string' && typeof (r as Record<string, unknown>).date === 'string')
+    .map((r) => {
+      const date = r.date as string;
+      const { iso, allDay } = toIso(date, textOrNull(r.time));
+      const endTime = textOrNull(r.end_time);
+      const ends = endTime ? toIso(date, endTime).iso : null;
+      const location = textOrNull(r.location);
+      const category = typeof r.category === 'string' && CATEGORIES.includes(r.category) ? r.category : 'general';
+      return {
+        title: r.title as string,
+        starts_at: iso,
+        ends_at: ends,
+        all_day: allDay,
+        location,
+        description: textOrNull(r.description),
+        category,
+        summary: fmtSummary(r.title as string, iso, allDay, location),
+      };
+    });
+}
+
 /** The most events one confirm may create — the cap `/api/ai/import` uses. */
 const MAX_CONFIRMED_EVENTS = 50;
 
@@ -166,9 +207,9 @@ Rules:
     // the observed body: a provider 500 or 429, invalid JSON, or a non-string
     // answer is a failed call, and checking any of them after the Response was
     // returned recorded it as completed.
-    let text: string;
+    let events: ProposedEvent[];
     try {
-      text = await withAiRequest(
+      events = await withAiRequest(
       scopeFromUserContext(ctx, supabase),
       { feature: 'flyer.scan', text: 'Scan a flyer' },
       async (obs) => {
@@ -196,7 +237,16 @@ Rules:
         if (content !== undefined && content !== null && typeof content !== 'string') {
           throw new ProviderMalformedResponse(res.status, `message content is ${typeof content}, not text`);
         }
-        return content ?? '[]';
+        // The events are parsed and shaped here too, while the request is
+        // still open: a nested field of the wrong type (a location object, a
+        // value that throws when formatted) is a malformed answer, and building
+        // the response after the row closed recorded it as completed and then
+        // failed the caller with a 500.
+        try {
+          return buildEvents(content ?? '[]');
+        } catch (buildErr) {
+          throw new ProviderMalformedResponse(res.status, `unusable events: ${String(buildErr)}`);
+        }
       },
       );
     } catch (err) {
@@ -204,33 +254,6 @@ Rules:
       console.error('Flyer OpenAI error', err.status, err.detail);
       return NextResponse.json({ error: t('flyer.couldNotReadThatFlyer') }, { status: 502 });
     }
-    let raw: Array<Record<string, unknown>> = [];
-    try {
-      const match = text.match(/\[[\s\S]*\]/);
-      raw = JSON.parse(match?.[0] ?? '[]');
-    } catch {
-      raw = [];
-    }
-
-    const events: ProposedEvent[] = raw
-      .filter((r) => r && typeof r.title === 'string' && typeof r.date === 'string')
-      .map((r) => {
-        const { iso, allDay } = toIso(r.date as string, (r.time as string) ?? null);
-        const ends = r.end_time ? toIso(r.date as string, r.end_time as string).iso : null;
-        const location = (r.location as string) ?? null;
-        const category = CATEGORIES.includes(r.category as string) ? (r.category as string) : 'general';
-        return {
-          title: r.title as string,
-          starts_at: iso,
-          ends_at: ends,
-          all_day: allDay,
-          location,
-          description: (r.description as string) ?? null,
-          category,
-          summary: fmtSummary(r.title as string, iso, allDay, location),
-        };
-      });
-
     return NextResponse.json({ events });
   } catch (err) {
     console.error('Flyer scan error:', err);
