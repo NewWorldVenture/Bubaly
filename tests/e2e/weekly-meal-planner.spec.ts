@@ -50,6 +50,7 @@ const entry = collect('components/modules/meals-module.tsx');
 const origin = 'https://weekly-meals-fixture.invalid';
 type Row = Record<string, unknown>;
 type ActionKind = 'plan' | 'create' | 'remove' | 'grocery';
+type GroceryToggleMode = 'success' | 'transport' | 'refuse' | 'lost-response';
 type ActionMode = 'success' | 'hold' | 'reject' | 'throw' | 'wrong-slot' | 'missing-slot' | 'lost-response' | 'duplicate-slot';
 type ApiMode = 'success' | 'hold' | 'reject' | 'not-written' | 'zero-count' | 'no-rows' | 'wrong-row' | 'duplicate-row';
 type Call = { kind: ActionKind; input: Row | string; familyId: string };
@@ -62,7 +63,7 @@ type Probe = {
   captureClick: (label: string) => void; captureSubmit: () => void; fireCaptured: (count: number) => void;
   apiMode: ApiMode; apiCalls: Row[]; api: (input: Row) => Promise<{ status: number; body: Row }>;
   finishApi: (mode?: ApiMode) => void;
-  toastLifetime: number | null;
+  toastLifetime: number | null; groceryToggleMode?: GroceryToggleMode; groceryCheckCalls?: Array<{id:string;checked:boolean}>;
 };
 declare global { interface Window { __weeklyMeals: Probe } }
 
@@ -209,7 +210,17 @@ async function fixture(page: Page, options: { familyId?: string; timezone?: stri
       '@/lib/supabase/client':{createClient:()=>db},
       '@/lib/offline/cache-scope':{useAuthenticatedCacheScope:()=>null,isAuthenticatedCacheScopeCurrent:()=>true},
       '@/app/(app)/dashboard/meals/actions':{planMealAction:input=>action('plan',input),createMealAction:input=>action('create',input),removeMealPlanAction:input=>action('remove',input)},
-      '@/app/(app)/dashboard/grocery/actions':{addMealPlanToGroceryListAction:input=>action('grocery',input),setGroceryItemCheckedAction:async()=>({ok:true})},
+      '@/app/(app)/dashboard/grocery/actions':{addMealPlanToGroceryListAction:input=>action('grocery',input),setGroceryItemCheckedAction:async(id,checked)=>{
+        p.groceryCheckCalls ||= []; p.groceryCheckCalls.push({id,checked});
+        const mode=p.groceryToggleMode || 'success';
+        if(mode==='transport') throw new Error('Synthetic grocery transport unavailable');
+        if(mode==='refuse') return {ok:false,error:'Synthetic grocery change refused'};
+        const row=p.tables.grocery_items.find(row=>row.id===id && row.family_id===p.familyId);
+        if(!row) return {ok:false,error:'Synthetic item missing'};
+        row.is_checked=checked;
+        if(mode==='lost-response') throw new Error('Synthetic grocery response lost after commit');
+        return {ok:true,id};
+      }},
     };
     function load(id) {
       if (id in mocks) return mocks[id]; if (loaded[id]) return loaded[id].exports;
@@ -779,6 +790,10 @@ test('dismisses a hovered save notification after reopening a dinner and replace
   expect(await calls(page)).toHaveLength(3);
 });
 const carouselCaseNames = new Set([
+  'check then uncheck survives actual query reload',
+  'reported refusal gives feedback without changing the item',
+  'transport failure gives feedback and contains the rejection',
+  'lost-response failure gives feedback and contains the rejection',
   'unmatched search does not report the saved recipe library is empty',
   'truly empty recipe library has the ordinary empty state',
   'clearing an unmatched search restores the saved recipe unchanged',
@@ -884,4 +899,37 @@ test('saved meal picker follows alphabetical library order',async({page})=>{
  {id:'z',family_id:'family-A',name:'Zucchini dinner',ingredients:[],meal_type:'dinner',image_url:null,recipe_url:null},
  {id:'a',family_id:'family-A',name:'Apple dinner',ingredients:[],meal_type:'dinner',image_url:null,recipe_url:null},
  ]});await slot(page).click();await expect(dialog(page).getByRole('button',{name:/Apple dinner|Zucchini dinner/})).toHaveText(['🍽️Apple dinner','🍽️Zucchini dinner']);
+});
+async function groceryToggleFixture(page:Page,mode:GroceryToggleMode='success') {
+ await fixture(page);
+ await page.evaluate(mode=>{
+  const p=window.__weeklyMeals;p.groceryToggleMode=mode;
+  p.tables.grocery_items=[{id:'rice',family_id:'family-A',list_id:'list-A',name:'Synthetic rice',quantity:'1 cup',is_checked:false,created_at:'2026-09-12T12:00:00Z'}];
+  window.dispatchEvent(new Event('online'));
+ },mode);
+ await page.getByRole('button',{name:'Groceries',exact:true}).click();
+ await expect(page.locator('.module-main').getByRole('button',{name:/Synthetic rice/})).toBeVisible();
+}
+test('check then uncheck survives actual query reload',async({page})=>{
+ await groceryToggleFixture(page);const item=page.locator('.module-main').getByRole('button',{name:/Synthetic rice/});
+ await item.click();await expect(item.getByText('Synthetic rice',{exact:true})).toHaveClass(/line-through/);
+ expect(await page.evaluate(()=>window.__weeklyMeals.tables.grocery_items[0].is_checked)).toBe(true);
+ await item.click();await expect(item.getByText('Synthetic rice',{exact:true})).not.toHaveClass(/line-through/);
+ expect(await page.evaluate(()=>window.__weeklyMeals.tables.grocery_items[0].is_checked)).toBe(false);
+});
+test('reported refusal gives feedback without changing the item',async({page})=>{
+ await groceryToggleFixture(page,'refuse');await page.locator('.module-main').getByRole('button',{name:/Synthetic rice/}).click();
+ await expect.poll(async()=> (await notices(page)).length).toBe(1);expect(await page.evaluate(()=>window.__weeklyMeals.tables.grocery_items[0].is_checked)).toBe(false);
+});
+for(const mode of ['transport','lost-response'] as const)test(`${mode} failure gives feedback and contains the rejection`,async({page})=>{
+ await groceryToggleFixture(page,mode);await page.locator('.module-main').getByRole('button',{name:/Synthetic rice/}).click();
+ await expect.poll(async()=> (await notices(page)).length).toBe(1);
+ expect(await page.evaluate(()=>window.__weeklyMeals.errors)).toEqual([]);expect(await notices(page,'success')).toEqual([]);
+ expect(await page.evaluate(()=>window.__weeklyMeals.groceryCheckCalls)).toEqual([{id:'rice',checked:true}]);
+ expect(await page.evaluate(()=>window.__weeklyMeals.tables.grocery_items[0].is_checked)).toBe(mode==='lost-response');
+ if(mode==='lost-response'){
+  await page.evaluate(()=>window.dispatchEvent(new Event('online')));
+  await expect(page.locator('.module-main').getByText('Synthetic rice',{exact:true})).toHaveClass(/line-through/);
+  expect(await page.evaluate(()=>window.__weeklyMeals.groceryCheckCalls?.length)).toBe(1);
+ }
 });
