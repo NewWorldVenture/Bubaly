@@ -70,7 +70,12 @@ function db(): SupabaseClient<Database> {
       } else if (table === 'user_preferences') {
         rows = h.prefs.filter(p => idsIn(q.get('user_id')).includes(p.user_id));
       } else if (table === 'family_ai_settings') {
+        const paged = q.has('offset') || q.has('limit');
+        if (paged && (!q.has('offset') || !q.has('limit') || q.get('order') !== 'family_id.asc')) throw new Error('Unexpected child settings page');
         rows = h.settings.filter(s => idsIn(q.get('family_id')).includes(s.family_id));
+        if (q.get('order') === 'family_id.asc') rows.sort((a, b) => String(a.family_id).localeCompare(String(b.family_id)));
+        const offset = Number(q.get('offset') ?? 0);
+        rows = rows.slice(offset, offset + Math.min(Number(q.get('limit') ?? 1000), h.cap));
       } else throw new Error('Unexpected table');
       // Honor actual SELECT: unselected family metadata cannot accidentally
       // make a broken projection pass authorization or mixed-digest tests.
