@@ -978,6 +978,18 @@ Additions after the 10:55 UTC base, each with its own time: #772 opened 10:58 UT
     - The root reproduced the original independently (2 failures and 2 controls; 411577/a303ad), saw the fix pass 4/4 (78ec8b) and accepted the diff (25454a).
   - **Status discrepancy, corrected here:** the handoff calls `COMPONENT-3385D14A6F1E` "IN PROGRESS". In the ledger at #771 `d1c2f919` and in root's #800 `f6600535` it is verifiably **NOT STARTED**, and no transition has been requested. It stays NOT STARTED until the owner asks, and #801 is recorded as candidate evidence under that ID. `LIBRARY-D87DA1107039` also stays NOT STARTED. The new spec has no Register B row (`SUPPORT-9F8B4AB74A71` by rule).
   - **Not established:** the backend, RLS, Realtime delivery, the pending or reopened editor lifecycle, hosted CI, merge or production. **PRODUCTION READY: NO.**
+- **Candidate #803 for the note-dialog lane (owner-account comment posted 2026-10-02 12:04 UTC, [#771 comment 5951927804](https://github.com/NewWorldVenture/Bubaly/pull/771#issuecomment-5951927804)).**
+  - **The candidate:** draft [#803](https://github.com/NewWorldVenture/Bubaly/pull/803) at `50f5757e`, on main `01b2c380`, changing two files: `notes-module.tsx` (blob `258c956a`) and the new `tests/e2e/notes-save-rejection.spec.ts` (blob `d9a45878`).
+    - Submit catches a rejected action, always clears loading in `finally`, keeps the title and body, and uses the existing `actions.couldNotSaveThatNote` (present in all seven catalogues).
+    - There is no automatic retry and no create-idempotency policy.
+  - **Author-reported local evidence:**
+    - React 19/Chromium 10/10 pass (30435f), with a clean browser console. The same 10 against the original `47fe3695` give 4 desired failures and 6 healthy controls (45c82a).
+    - The 4 related files pass 56/56 (e44269), and strict TypeScript passes (5a1f5d).
+    - Scoped ESLint reports 0 errors. Its 6 a11y warnings already exist and match the original exactly (74c8ba).
+    - The earlier characterization 0829de (1 defect and 3 controls) is not an application pass.
+  - **Known residual:** a lost create response can hide a committed save, and a manual retry could then create a duplicate. That is documented, not solved.
+  - **Status:** `COMPONENT-8113992604A0` stays **NOT STARTED**, because no transition was requested. #803 is recorded as candidate evidence under that ID. MOD-068 stays IN PROGRESS. The new spec has no Register B row (`SUPPORT-D1144DAD768C` by rule).
+  - **Not established:** styling, responsive layout, live Auth, RLS, Next action transport, backend persistence or hosted CI. **PRODUCTION READY: NO.**
 - **#768 integration:** promotion out of draft and any merge are blocked pending the owner's explicit approval. This checkpoint promotes and merges nothing.
 - **Register B status-mark correction:** #770 introduced three rows whose status cell read `?? IN PROGRESS` instead of `🔄 IN PROGRESS` (SUPPORT-AD3999932010, SUPPORT-EC79FA65AC23, SUPPORT-9C6B11D5A8EB). The register prose already counted them as IN PROGRESS, so only the mark is restored. Every ID, order, status, count and piece of evidence text is unchanged. Register B stays **14,364 = 11,877 NOT STARTED + 2,136 IN PROGRESS + 185 PASS + 157 FIXED + PASS + 9 BLOCKED**.
 
