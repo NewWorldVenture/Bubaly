@@ -30,6 +30,8 @@ import type { ServiceScope } from '@/lib/services/types';
 import { MAX_AI_REQUEST_TEXT_CHARS } from '@/lib/ai/chat-request';
 import { createRequest, updateRequest } from '@/lib/ai/runs/store';
 import { recordModelCall } from '@/lib/ai/usage';
+import { monthlyAllowanceFor } from '@/lib/constants/ai-allowance';
+import { resolveFamilyPlanLevel } from '@/lib/server/plan';
 import type { TokenUsage } from '@/lib/ai/usage';
 
 export type AiRequestSpec = {
@@ -99,6 +101,15 @@ export async function withAiRequest<T>(
     console.error('[ai-observability] could not open a request row', { feature: spec.feature, err });
     return null;
   });
+  if (!opened?.ok && await allowanceDependsOnTheRow(scope)) {
+    // The row is not only diagnostics: on a capped plan it IS the meter (F19).
+    // `monthlyAllowance` counts these rows, so a model call made without one
+    // is a call the allowance never sees, and a family at 9 of 10 whose filing
+    // failed stayed at 9 however often it called. On a capped plan the call is
+    // refused instead; on an unlimited plan nothing is metered by the row, and
+    // the family's work goes on as before, unrecorded.
+    throw new AiRequestNotFiled(spec.feature);
+  }
   if (opened?.ok) {
     requestId = opened.data.id;
     // `executing` with a start stamp, so a row that never completes is visibly
@@ -165,5 +176,26 @@ export async function withAiRequest<T>(
     // unchanged: this observes, it does not handle.
     await settle({ status: 'failed', error: describe(err) }, false);
     throw err;
+  }
+}
+
+/** The request row could not be filed on a plan whose allowance counts it (F19). */
+export class AiRequestNotFiled extends Error {
+  constructor(readonly feature: string) {
+    super(`could not file the AI request for ${feature}; refused because the allowance counts it`);
+    this.name = 'AiRequestNotFiled';
+  }
+}
+
+// Whether this family's allowance is counted from `ai_requests`, i.e. its plan
+// is capped. A plan that cannot be read is treated as capped: an allowance that
+// cannot be checked is not an allowance, the rule `monthlyAllowance` follows.
+async function allowanceDependsOnTheRow(scope: ServiceScope): Promise<boolean> {
+  try {
+    const level = await resolveFamilyPlanLevel(scope.db, scope.familyId);
+    return monthlyAllowanceFor(level) !== null;
+  } catch (err) {
+    console.error('[ai-observability] plan level read failed after a failed filing', err);
+    return true;
   }
 }

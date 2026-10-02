@@ -24,6 +24,7 @@ import { tierToLevel } from '@/lib/features/tiers';
 import { getResolvedFeatureTiers } from '@/lib/server/feature-tiers';
 import { ensureActiveFamily } from '@/lib/server/ensure-family';
 import { resolveFamilyPlanLevel } from '@/lib/server/plan';
+import { AI_MONTHLY_ALLOWANCE } from '@/lib/constants/ai-allowance';
 import { createServer } from '@/lib/supabase/server';
 import { getUserContext, type UserContext } from '@/lib/supabase/auth';
 import { extractBearerToken, getBearerUserContext } from '@/lib/supabase/bearer';
@@ -53,7 +54,7 @@ export const AI_ASSISTANT_FEATURE_KEY = 'ai-assistant';
  * `withAiRequest`), so a meter that only counted concierge rows would have read
  * zero however much a family used Bubaly.
  */
-export const AI_MONTHLY_ALLOWANCE: Readonly<Record<0 | 1 | 2, number | null>> = { 0: 10, 1: null, 2: null };
+export { AI_MONTHLY_ALLOWANCE };
 
 export type AIAccessDenial = {
   ok: false;
@@ -161,7 +162,14 @@ async function monthlyAllowance(
     console.error('[ai-access] monthly usage read failed', error);
     return { ok: false, status: 403, code: 'unavailable', error: 'Bubaly could not check this month\'s usage. Try again in a moment.' };
   }
-  const used = count ?? 0;
+  // A response with no error and no count is not a count of zero: it is a
+  // meter that did not answer. Reading it as zero let a family that had spent
+  // its month call the model again. Refused the same way as a failed read.
+  if (typeof count !== 'number' || !Number.isFinite(count) || count < 0) {
+    console.error('[ai-access] monthly usage read returned no count', { count });
+    return { ok: false, status: 403, code: 'unavailable', error: 'Bubaly could not check this month\'s usage. Try again in a moment.' };
+  }
+  const used = count;
   if (used >= allowance) {
     return {
       ok: false, status: 429, code: 'allowance_exceeded',

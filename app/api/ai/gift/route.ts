@@ -138,9 +138,10 @@ async function settleRequest(
   status: 'completed' | 'failed',
   error: string | null,
 ): Promise<void> {
-  const { error: writeError } = await supabase
+  const { data, error: writeError } = await supabase
     .from('ai_requests')
     .update({ status, error, completed_at: new Date().toISOString() })
-    .eq('id', id);
-  if (writeError) console.error('[ai/gift] could not close the request row', writeError);
+    .eq('id', id)
+    .select('id');
+  if (writeError || !data?.length) console.error('[ai/gift] could not close the request row', writeError ?? 'no row matched');
 }

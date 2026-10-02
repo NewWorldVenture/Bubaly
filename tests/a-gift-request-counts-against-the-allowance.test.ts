@@ -54,11 +54,13 @@ function fakeDb() {
             }),
           }),
           update: (patch: Record<string, unknown>) => ({
-            eq: async (_c: string, id: string) => {
-              const row = state.rows.find((r) => r.id === id);
-              if (row) Object.assign(row, patch);
-              return { error: null };
-            },
+            eq: (_c: string, id: string) => ({
+              select: async () => {
+                const row = state.rows.find((r) => r.id === id);
+                if (row) Object.assign(row, patch);
+                return { data: row ? [{ id }] : [], error: null };
+              },
+            }),
           }),
         };
       }

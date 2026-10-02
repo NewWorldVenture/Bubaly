@@ -27854,7 +27854,13 @@ token, and read-only. It is the model the other routes should have followed.
 > need a provenance check the routes do not have. A provider HTTP error inside
 > the flyer, speech or transcription call is now recorded as `failed`, not
 > `completed` (review on #788; `tests/a-refused-flyer-scan-is-recorded-as-failed.test.ts`,
-> `tests/ai-voice-routes-auth.test.ts`). **Known limit:**
+> `tests/ai-voice-routes-auth.test.ts`). On a capped plan the `ai_requests` row
+> is the meter, so `withAiRequest` now refuses (`AiRequestNotFiled`) when the
+> row cannot be filed, instead of running the model unrecorded; on an unlimited
+> plan the row is bookkeeping and the work goes on as before. A count read that
+> answers with no error and no count is refused as unavailable rather than read
+> as zero (reviews on #788; `tests/ai-observability.test.ts`,
+> `tests/ai-monthly-allowance.test.ts`). **Known limit:**
 > the check and the filing are two steps, so two requests at 9 of 10 arriving
 > together can both be admitted. Every metered route shares this; closing it
 > needs an atomic claim in the database (a migration), not a route change.
