@@ -339,6 +339,16 @@ Additions after the 10:55 UTC base, each with its own time: #772 opened 10:58 UT
     - **Added file:** `tests/digest-cron-read-boundary.test.ts`. Its healthy fixtures omit the newly selected `is_active` and `family_id`, giving 7 failures and 10 controls. Those fixtures get the actual authorized fields, with assertions preserved. NWV has no local changes to that test.
     - **Separate:** child email-channel enforcement is under independent investigation and is not claimed repaired or passing.
     - **Status:** `API-F190F9FD81D5` and `JOB-F290D7D4DBF1` stay IN PROGRESS, with no closure credit.
+  - **Child email-channel follow-up confirmed (owner comment posted 2026-10-02 10:08:49 UTC, [#771 comment 5949989607](https://github.com/NewWorldVenture/Bubaly/pull/771#issuecomment-5949989607); written 2026-10-02 10:09 UTC):**
+    - **The defect:** the actual current GET, with the actual `childrenBlockedOn` helper and SDK, ignores `child_channels.email = false` (5 scenarios with 86 assertions and 23 synthetic requests; 1 violation and 4 permitted controls).
+    - **The contract:** migration 0257 and its helper make this explicit for children only, and only for an explicit false. Teens, parents and absent defaults stay allowed.
+    - **The fix:** the same lane applies the existing helper as a batch preflight before any send. Blocked children are withheld and counted as skipped, and a consent-read error returns 500 with no sends. The shared helper's semantics do not change.
+    - **Status:** `LIBRARY-40148DB4E591` and `API-F190F9FD81D5` / `JOB-F290D7D4DBF1` stay IN PROGRESS. Removal or consent changes after the preflight are still not atomic.
+- **#784 hosted Web follow-up (same comment):**
+  - **The result:** job 110792401175 (run 36992717339, 10:02:43 UTC) reports 23,950 passed, **1 failed** and 2 expected failures. The single failure is an obsolete source-string assertion at `tests/child-channels-delivery.test.ts:121`.
+  - **The fix in progress:** the push lane's review agent is adapting that assertion in #784's isolated checkout, keeping the actual child-consent behavioural coverage.
+  - **Other jobs:** the later timezone and build steps were skipped, and the Mobile advisory hold persists. No CI restart.
+  - #784's Web job is **not green**, and there is no credit.
 - **Repair candidate: storage-removal confirmation, [#785](https://github.com/NewWorldVenture/Bubaly/pull/785), plus a new Register B obligation (owner handoff posted 2026-10-02 10:02:57 UTC, [#771 comment 5949870009](https://github.com/NewWorldVenture/Bubaly/pull/771#issuecomment-5949870009); written 2026-10-02 10:04 UTC).** This is reviewer- and author-reported synthetic evidence and was not re-run here.
   - **Head and scope:** exact `4262ac474a1e38a64266c8a0ab549c5836f89436`, from main `01b2c380`. Two files only. NWV's held I18N-011 and O-03 work is preserved.
   - **The repair:** the shared `removeConfirmed` now rejects missing, non-array or malformed listings before treating absence as confirmed. Positive removed-path proof, valid empty, neighbour and folder listings, and refusals for present names and provider errors all keep their behaviour. The owned test's source inventory now normalizes Windows separators, with its ACCOUNTED and staleness assertions kept.
