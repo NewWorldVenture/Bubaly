@@ -274,6 +274,7 @@ export function MealsModule() {
     const q = recipeSearch.trim().toLowerCase();
     return q ? recipes.filter((r) => r.name.toLowerCase().includes(q)) : recipes;
   }, [recipes, recipeSearch]);
+  const noRecipeMatches = recipes.length > 0 && filteredRecipes.length === 0;
 
   async function removePlan(id: string) {
     if (!isCurrentScope() || removeIntent.current) return;
@@ -496,7 +497,8 @@ export function MealsModule() {
               {recipeSearch && <button onClick={() => setRecipeSearch('')} aria-label={tr('meals.clear')}><XIcon className="h-4 w-4 text-muted" /></button>}
             </div>
             {recipesLoading ? <SkeletonList count={3} /> : recipesError ? <ErrorState message={recipesError} onRetry={refreshRecipes} /> : filteredRecipes.length === 0 ? (
-              <EmptyState icon={Utensils} title={tr('meals.noRecipesYet')} description={tr('mealsModule.savedRecipesWillAppearHere')} />
+              <EmptyState icon={Utensils} title={tr(noRecipeMatches ? 'mealsPlanner.noMatches' : 'meals.noRecipesYet')}
+                description={noRecipeMatches ? undefined : tr('mealsModule.savedRecipesWillAppearHere')} />
             ) : (
               <RecipeGrid recipes={filteredRecipes} onToggleFavorite={toggleFavorite} />
             )}
