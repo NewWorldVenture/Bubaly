@@ -69,6 +69,21 @@ describe('a flyer scan the provider refused is recorded as failed', () => {
     });
   }
 
+  // Second review on #788: a 200 is not a success if the body cannot be used.
+  for (const [label, body] of [
+    ['invalid JSON', 'not json at all'],
+    ['a non-string answer', JSON.stringify({ choices: [{ message: { content: 7 } }] })],
+  ] as const) {
+    it(`a 200 with ${label}: the caller gets 502 and the request row says failed`, async () => {
+      fetchWithDeadline.mockResolvedValue(new Response(body, { status: 200, headers: { 'content-type': 'application/json' } }));
+      const { POST } = await import('@/app/api/ai/flyer/route');
+      const res = await POST(scan());
+      expect(res.status).toBe(502);
+      expect(finalStatus()).toBe('failed');
+      expect(modelCalls.every((c) => c.ok === false)).toBe(true);
+    });
+  }
+
   it('control: a valid answer is recorded as completed', async () => {
     fetchWithDeadline.mockResolvedValue(new Response(
       JSON.stringify({ choices: [{ message: { content: '[]' } }] }),

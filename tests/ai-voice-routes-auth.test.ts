@@ -272,6 +272,20 @@ describe('each voice call counts, and a provider error is recorded as failed (F1
     expect(finalStatus(requestRows[0])).toBe('completed');
   });
 
+  for (const [label, body] of [
+    ['invalid JSON', 'not json at all'],
+    ['a non-string text field', JSON.stringify({ text: 7 })],
+  ] as const) {
+    it(`a 200 transcription with ${label} answers 502 and is recorded as failed`, async () => {
+      getUserContext.mockResolvedValue(ctx);
+      fetchWithDeadline.mockResolvedValue(new Response(body, { status: 200, headers: { 'content-type': 'application/json' } }));
+      const { POST } = await import('@/app/api/ai/voice/transcribe/route');
+      expect((await POST(transcribeRequest())).status).toBe(502);
+      expect(finalStatus(requestRows[0])).toBe('failed');
+      expect(modelCalls.every((c) => c.ok === false)).toBe(true);
+    });
+  }
+
   for (const status of [500, 429]) {
     it(`a provider ${status} on transcription answers 502 and is recorded as failed`, async () => {
       getUserContext.mockResolvedValue(ctx);

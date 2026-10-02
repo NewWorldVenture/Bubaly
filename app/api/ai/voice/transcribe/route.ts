@@ -7,7 +7,7 @@ import { enforceAIRateLimit } from '@/lib/server/ai-rate-limit';
 import { readBoundedRequestFormData } from '@/lib/server/bounded-request-body';
 import { readBoundedResponseJson, readBoundedResponseText } from '@/lib/server/bounded-response-body';
 import { fetchWithDeadline } from '@/lib/server/fetch-with-deadline';
-import { ProviderHttpError } from '@/lib/server/provider-http-error';
+import { ProviderHttpError, ProviderMalformedResponse } from '@/lib/server/provider-http-error';
 import { withAiRequest } from '@/lib/ai/observability';
 import { scopeFromUserContext } from '@/lib/services/scope';
 
@@ -74,9 +74,9 @@ export async function POST(req: NextRequest) {
     // A transcription runs before any assistant turn exists and nothing ties
     // it to one, so it is a paid model call of its own. A provider error is
     // thrown inside the observed body, so the row says `failed`.
-    let data: { text?: string };
+    let text: string;
     try {
-      data = await withAiRequest(
+      text = await withAiRequest(
         scopeFromUserContext(authed.ctx, authed.supabase),
         { feature: 'voice.transcribe', text: 'voice:transcribe' },
         async (obs) => {
@@ -90,7 +90,18 @@ export async function POST(req: NextRequest) {
             const bounded = await readBoundedResponseText(res, 64 * 1024);
             throw new ProviderHttpError(res.status, bounded.ok ? bounded.text : '[provider error response exceeded 64 KiB]');
           }
-          return readBoundedResponseJson<{ text?: string }>(res, 256 * 1024);
+          // Parsed and shape-checked here, inside the observed body: a 200 whose
+          // body is unreadable or whose `text` is not a string is a failed call.
+          let body: { text?: unknown };
+          try {
+            body = await readBoundedResponseJson<{ text?: unknown }>(res, 256 * 1024);
+          } catch (parseErr) {
+            throw new ProviderMalformedResponse(res.status, `unreadable body: ${String(parseErr)}`);
+          }
+          if (body?.text !== undefined && body?.text !== null && typeof body.text !== 'string') {
+            throw new ProviderMalformedResponse(res.status, `text is ${typeof body.text}, not a string`);
+          }
+          return cleanTranscript(body?.text ?? '');
         },
       );
     } catch (err) {
@@ -102,7 +113,6 @@ export async function POST(req: NextRequest) {
       return NextResponse.json({ error: msg }, { status: 502 });
     }
 
-    const text = cleanTranscript(data.text ?? '');
     if (!text) {
       return NextResponse.json({ error: t('transcribe.iCouldnTHearAnything') }, { status: 422 });
     }

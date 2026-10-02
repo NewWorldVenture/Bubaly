@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { ProviderHttpError } from '@/lib/server/provider-http-error';
+import { ProviderHttpError, ProviderMalformedResponse } from '@/lib/server/provider-http-error';
 import { refuseOverAIAllowance } from '@/lib/server/ai-access';
 import { withAiRequest } from '@/lib/ai/observability';
 import { scopeFromUserContext } from '@/lib/services/scope';
@@ -162,11 +162,13 @@ Rules:
       : { type: 'image_url' as const, image_url: { url: `data:${mediaType};base64,${data}` } };
 
     // Recorded like every other AI route, so the call counts against the allowance (F19).
-    // The status is checked INSIDE the observed body: a provider 500 or 429 is a
-    // failed call, and returning the Response first recorded it as completed.
-    let aiRes: Response;
+    // The status, the body and the field the route reads are all checked INSIDE
+    // the observed body: a provider 500 or 429, invalid JSON, or a non-string
+    // answer is a failed call, and checking any of them after the Response was
+    // returned recorded it as completed.
+    let text: string;
     try {
-      aiRes = await withAiRequest(
+      text = await withAiRequest(
       scopeFromUserContext(ctx, supabase),
       { feature: 'flyer.scan', text: 'Scan a flyer' },
       async (obs) => {
@@ -184,7 +186,17 @@ Rules:
           const bounded = await readBoundedResponseText(res, 64 * 1024);
           throw new ProviderHttpError(res.status, bounded.ok ? bounded.text : '[provider error response exceeded 64 KiB]');
         }
-        return res;
+        let body: { choices?: Array<{ message?: { content?: unknown } }> };
+        try {
+          body = await readBoundedResponseJson<typeof body>(res, 1 * 1024 * 1024);
+        } catch (parseErr) {
+          throw new ProviderMalformedResponse(res.status, `unreadable body: ${String(parseErr)}`);
+        }
+        const content = body?.choices?.[0]?.message?.content;
+        if (content !== undefined && content !== null && typeof content !== 'string') {
+          throw new ProviderMalformedResponse(res.status, `message content is ${typeof content}, not text`);
+        }
+        return content ?? '[]';
       },
       );
     } catch (err) {
@@ -192,8 +204,6 @@ Rules:
       console.error('Flyer OpenAI error', err.status, err.detail);
       return NextResponse.json({ error: t('flyer.couldNotReadThatFlyer') }, { status: 502 });
     }
-    const aiJson = await readBoundedResponseJson<{ choices?: Array<{ message?: { content?: string } }> }>(aiRes, 1 * 1024 * 1024);
-    const text: string = aiJson.choices?.[0]?.message?.content ?? '[]';
     let raw: Array<Record<string, unknown>> = [];
     try {
       const match = text.match(/\[[\s\S]*\]/);

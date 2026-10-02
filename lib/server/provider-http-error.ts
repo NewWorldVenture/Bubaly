@@ -11,3 +11,17 @@ export class ProviderHttpError extends Error {
     this.name = 'ProviderHttpError';
   }
 }
+
+/**
+ * A provider answered 200 with a body the route cannot use: invalid JSON, or
+ * the field the route reads is the wrong type. Also a failed model call, and
+ * thrown inside `withAiRequest` for the same reason — parsing after the
+ * observed body returned closed the row as `completed` and then failed the
+ * request with a 500. A subclass, so a route's existing catch handles both.
+ */
+export class ProviderMalformedResponse extends ProviderHttpError {
+  constructor(status: number, detail: string) {
+    super(status, detail);
+    this.name = 'ProviderMalformedResponse';
+  }
+}
