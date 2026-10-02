@@ -99,6 +99,21 @@ test.describe('form errors: what an invalid, refused and recovered submit expose
         await expect(dialog).toBeVisible();
         return { opener, dialog };
       }
+      // The held write has to be sent before anything else is asserted, and
+      // waiting for it must end. Seen in CI: under load the shared session
+      // boundary briefly reported the session unavailable, replaced the page
+      // with its "temporarily unavailable" notice and reset everything under
+      // it, so the dialog (and the typed name) was gone before Enter and no
+      // write was ever sent. That is the session cache's behaviour, not this
+      // form's; say so instead of timing the whole test out.
+      async function writeSent(page: Page, sent: Promise<void>) {
+        const timedOut = new Promise<false>((resolve) => { setTimeout(() => resolve(false), 10_000); });
+        if (await Promise.race([sent.then(() => true as const), timedOut])) return;
+        const main = await page.evaluate(() => document.querySelector('main')?.textContent?.replace(/\s+/g, ' ').trim() ?? '');
+        throw new Error(/temporarily unavailable/i.test(main)
+          ? 'The contact write was never sent: the session boundary reported the session unavailable and replaced the page, closing the dialog.'
+          : `The contact write was not sent within 10 s. The page reads: "${main.slice(0, 200)}"`);
+      }
       const refuseContactWrites = (page: Page) => page.route('**/rest/v1/family_contacts*', (route) => (
         route.request().method() === 'POST'
           ? route.fulfill({ status: 409, contentType: 'application/json', body: JSON.stringify({ code: '23505', message: 'duplicate key value violates unique constraint', details: null, hint: null }) })
@@ -172,7 +187,7 @@ test.describe('form errors: what an invalid, refused and recovered submit expose
         const submit = dialog.getByRole('button', { name: 'Add Contact' });
         await submit.focus();
         await page.keyboard.press('Enter');
-        await seen;
+        await writeSent(page, seen);
         // While the write is held: the pending state has rendered, and the
         // submit that was pressed still has the focus.
         await expect(dialog.locator('button[type="submit"] svg.animate-spin')).toBeVisible();
@@ -203,7 +218,7 @@ test.describe('form errors: what an invalid, refused and recovered submit expose
         const submit = dialog.getByRole('button', { name: 'Add Contact' });
         await submit.focus();
         await page.keyboard.press('Enter');
-        await seen;
+        await writeSent(page, seen);
         await expect(dialog.locator('button[type="submit"] svg.animate-spin')).toBeVisible();
         await page.keyboard.press('Enter');
         // A DOM click, not a pointer click: it submits the form whatever the
