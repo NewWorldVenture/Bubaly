@@ -55,7 +55,7 @@ export async function POST(req: NextRequest) {
     // own turn took the count to 10. Speech that names no such turn is a
     // standalone voice call; it is refused once the month is spent, and how it
     // should count is documented as open rather than given an invented rule.
-    const counted = await isCountedExchange(authed.supabase, { familyId: authed.ctx.active.familyId, userId: authed.ctx.user.id }, exchangeId);
+    const counted = await isCountedExchange(authed.supabase, { familyId: authed.ctx.active.familyId, userId: authed.ctx.user.id }, exchangeId, text ?? '');
     if (!counted) {
       const overAllowance = await refuseOverAIAllowance(authed.ctx, authed.supabase);
       if (overAllowance) return overAllowance;

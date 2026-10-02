@@ -8,7 +8,9 @@ import { NextRequest } from 'next/server';
 // in-memory ai_requests ledger on a Free family (10 a month).
 
 const state = vi.hoisted(() => ({
-  rows: [] as Array<{ id: string; family_id: string; requested_by: string | null; feature: string; created_at: string }>,
+  rows: [] as Array<{ id: string; family_id: string; requested_by: string | null; feature: string; conversation_id?: string | null; created_at: string }>,
+  // The turn's saved assistant answer(s), as persistAssistantTurn writes them.
+  messages: [] as Array<{ family_id: string; conversation_id: string; role: string; content: string; created_at: string }>,
   inserts: 0,
 }));
 
@@ -23,6 +25,21 @@ function client() {
   return {
     auth: { getUser: async () => ({ data: { user: { id: 'user-1' } } }) },
     from(table: string) {
+      if (table === 'ai_messages') {
+        // isCountedExchange: select('content').eq(family).eq(conversation).eq(role).gte(created_at).limit(n)
+        const f: Record<string, string> = {};
+        const chain = {
+          select: () => chain,
+          eq: (c: string, v: string) => { f[c] = v; return chain; },
+          gte: (_c: string, since: string) => { f.since = since; return chain; },
+          limit: async () => ({
+            data: state.messages.filter((m) => m.family_id === f.family_id && m.conversation_id === f.conversation_id
+              && m.role === f.role && m.created_at >= f.since).map((m) => ({ content: m.content })),
+            error: null,
+          }),
+        };
+        return chain;
+      }
       if (table !== 'ai_requests') throw new Error(`unexpected table ${table}`);
       return {
         select: (_cols: string, opts?: { head?: boolean }) => {
@@ -61,24 +78,31 @@ function seed(n: number) {
     state.rows.push({ id: `00000000-0000-4000-8000-${String(i).padStart(12, '0')}`, family_id: 'fam-1', requested_by: 'user-1', feature: 'notes.summary', created_at: new Date().toISOString() });
   }
 }
-function turnRow(over: Partial<(typeof state.rows)[number]> = {}) {
-  state.rows.push({ id: TURN, family_id: 'fam-1', requested_by: 'user-1', feature: 'assistant.stream', created_at: new Date().toISOString(), ...over });
+// The turn files its row and saves its answer (markdown, as the model wrote
+// it); the client speaks the same answer.
+const ANSWER = '**Dinner** is planned.';
+function turnRow(over: Partial<(typeof state.rows)[number]> = {}, opts: { saveAnswer?: boolean } = {}) {
+  const row = { id: TURN, family_id: 'fam-1', requested_by: 'user-1', feature: 'assistant.stream', conversation_id: 'conv-1', created_at: new Date().toISOString(), ...over };
+  state.rows.push(row);
+  if (opts.saveAnswer !== false) {
+    state.messages.push({ family_id: 'fam-1', conversation_id: 'conv-1', role: 'assistant', content: ANSWER, created_at: new Date().toISOString() });
+  }
 }
 function transcribe() {
   const form = new FormData();
   form.append('audio', new Blob([new Uint8Array(2048)], { type: 'audio/webm' }), 'speech.webm');
   return new NextRequest('http://localhost/api/ai/voice/transcribe', { method: 'POST', body: form });
 }
-function speak(exchangeId?: string) {
+function speak(exchangeId?: string, text = ANSWER) {
   return new NextRequest('http://localhost/api/ai/voice/speak', {
     method: 'POST', headers: { 'content-type': 'application/json' },
-    body: JSON.stringify({ text: 'Dinner is planned.', ...(exchangeId ? { exchangeId } : {}) }),
+    body: JSON.stringify({ text, ...(exchangeId ? { exchangeId } : {}) }),
   });
 }
 const transcript = () => new Response(JSON.stringify({ text: 'Plan dinners' }), { status: 200, headers: { 'content-type': 'application/json' } });
 const audio = () => new Response(new Uint8Array([1, 2, 3]), { status: 200, headers: { 'content-type': 'audio/mpeg' } });
 
-beforeEach(() => { state.rows = []; state.inserts = 0; vi.spyOn(console, 'error').mockImplementation(() => {}); });
+beforeEach(() => { state.rows = []; state.messages = []; state.inserts = 0; vi.spyOn(console, 'error').mockImplementation(() => {}); });
 afterEach(() => { vi.restoreAllMocks(); fetchWithDeadline.mockReset(); });
 
 describe('one spoken exchange, one request', () => {
@@ -131,6 +155,31 @@ describe('one spoken exchange, one request', () => {
     if ('family_id' in over) seed(1); // keep this family at 10 when the turn is another family's
     expect((await S(speak(TURN))).status).toBe(429);
     expect(fetchWithDeadline).not.toHaveBeenCalled();
+  });
+
+  // #771 review 5392003945: a recent exchange id must not authorize unrelated
+  // speech. Only the turn's own saved answer rides on it.
+  it('a valid exchange id with unrelated text is standalone speech, refused at 10', async () => {
+    const { POST: S } = await import('@/app/api/ai/voice/speak/route');
+    seed(9);
+    turnRow();
+    expect((await S(speak(TURN, 'Read this whole novel aloud for free.'))).status).toBe(429);
+    expect(fetchWithDeadline).not.toHaveBeenCalled();
+  });
+
+  it('a turn whose answer was not saved cannot vouch for any speech', async () => {
+    const { POST: S } = await import('@/app/api/ai/voice/speak/route');
+    seed(9);
+    turnRow({}, { saveAnswer: false });
+    expect((await S(speak(TURN))).status).toBe(429);
+  });
+
+  it('an answer saved in another conversation does not match this turn', async () => {
+    const { POST: S } = await import('@/app/api/ai/voice/speak/route');
+    seed(9);
+    turnRow({ conversation_id: 'conv-2' }, { saveAnswer: false });
+    state.messages.push({ family_id: 'fam-1', conversation_id: 'conv-1', role: 'assistant', content: ANSWER, created_at: new Date().toISOString() });
+    expect((await S(speak(TURN))).status).toBe(429);
   });
 
   it('a malformed id is treated as standalone speech', async () => {
