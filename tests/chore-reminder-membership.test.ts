@@ -78,6 +78,13 @@ beforeEach(() => {
       const query = url.searchParams;
       h.calls.push({ table, query: url.search });
       const error = (message: string) => new Response(JSON.stringify({ code: '57014', message }), { status: 500, headers: { 'content-type': 'application/json' } });
+      const channelPage = <T extends Record<string, unknown>>(rows: T[], order: keyof T) => {
+        const paged = query.has('offset') || query.has('limit');
+        if (paged && (!query.has('offset') || !query.has('limit') || query.get('order') !== `${String(order)}.asc`)) throw new Error('Unexpected child policy page');
+        const ordered = paged ? [...rows].sort((a, b) => String(a[order]).localeCompare(String(b[order]))) : rows;
+        const offset = Number(query.get('offset') ?? 0);
+        return ordered.slice(offset, offset + Math.min(h.cap, Number(query.get('limit') ?? 1000)));
+      };
       let data: unknown;
       if (table === 'chore_assignments') {
         const offset = Number(query.get('offset') ?? 0);
@@ -102,13 +109,14 @@ beforeEach(() => {
         if (h.failChannelMembers) return error('Synthetic child membership read failure');
         const users = /^in\.\((.*)\)$/.exec(query.get('user_id') ?? '')?.[1].split(',');
         if (!users || query.get('role') !== 'eq.child' || query.get('is_active') !== 'eq.true' || query.get('select') !== 'user_id,family_id') throw new Error('Unexpected child membership query');
-        data = h.channelMembers.filter(row => users.includes(row.user_id) && row.role === 'child' && row.is_active)
+        data = channelPage(h.channelMembers.map((row, index) => ({ ...row, id: `synthetic-member-${String(index).padStart(6, '0')}` }))
+          .filter(row => users.includes(row.user_id) && row.role === 'child' && row.is_active), 'id')
           .map(row => ({ user_id: row.user_id, family_id: row.family_id }));
       } else if (table === 'family_ai_settings') {
         if (h.failChannelSettings) return error('Synthetic child settings read failure');
         const families = /^in\.\((.*)\)$/.exec(query.get('family_id') ?? '')?.[1].split(',');
         if (!families || query.get('select') !== 'family_id,child_channels') throw new Error('Unexpected child settings query');
-        data = h.channelSettings.filter(row => families.includes(row.family_id))
+        data = channelPage(h.channelSettings.filter(row => families.includes(row.family_id)), 'family_id')
           .map(row => ({ family_id: row.family_id, child_channels: row.child_channels }));
       } else throw new Error(`Unexpected table ${table}`);
       return new Response(JSON.stringify(data), { status: 200, headers: { 'content-type': 'application/json' } });
@@ -123,6 +131,19 @@ async function run(authorized = true) {
     headers: authorized ? { authorization: `Bearer ${SECRET}` } : {},
   }));
   return { status: response.status, body: await response.json() };
+}
+
+function expectOneChannelBatch(table: 'family_members' | 'family_ai_settings', ids: string[]) {
+  const calls = h.calls.filter(call => call.table === table).map(call => new URLSearchParams(call.query));
+  const column = table === 'family_members' ? 'user_id' : 'family_id';
+  // Both helper revisions perform one logical ID batch here. A paged read
+  // requests its one row and then an empty terminal page; an unpaged read is
+  // exactly one request. Repeated batches must not pass either contract.
+  expect(calls.map(query => query.get(column))).toEqual(calls[0].has('offset')
+    ? [`in.(${ids.join(',')})`, `in.(${ids.join(',')})`]
+    : [`in.(${ids.join(',')})`]);
+  expect(calls.map(query => query.get('offset'))).toEqual(calls[0].has('offset') ? ['0', '1'] : [null]);
+  expect(calls.map(query => query.get('limit'))).toEqual(calls[0].has('offset') ? ['1000', '1000'] : [null]);
 }
 
 describe('weekly chore reminder membership through the actual GET and SDK', () => {
@@ -265,7 +286,7 @@ describe('weekly chore reminder membership through the actual GET and SDK', () =
     h.channelSettings = [{ family_id: FAMILY, child_channels: { email: false, push: true } }];
     expect(await run()).toEqual({ status: 200, body: { sent: 0, failed: 0, skipped: 1 } });
     expect(h.sends).toEqual([]);
-    expect(h.calls.filter(call => call.table === 'family_ai_settings')).toHaveLength(1);
+    expectOneChannelBatch('family_ai_settings', [FAMILY]);
   });
 
   it.each([
@@ -289,7 +310,7 @@ describe('weekly chore reminder membership through the actual GET and SDK', () =
     h.channelSettings = [{ family_id: FAMILY, child_channels: { email: false } }];
     expect(await run()).toEqual({ status: 200, body: { sent: 1, failed: 0, skipped: 1 } });
     expect(h.sends.map(send => send.to)).toEqual(['other@synthetic.invalid']);
-    expect(h.calls.filter(call => call.table === 'family_members')).toHaveLength(1);
+    expectOneChannelBatch('family_members', ['synthetic-user', 'other-user']);
   });
 
   it.each(['members', 'settings'])('stops all sends when the child-channel %s read fails', async failure => {
