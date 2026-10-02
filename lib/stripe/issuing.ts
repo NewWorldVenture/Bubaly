@@ -70,7 +70,29 @@ export async function ensureCardholder(
     })
     .select('id')
     .single();
-  if (error) throw new Error(`Failed to persist cardholder: ${error.message}`);
+  if (error) {
+    // Two first orders for one child (Virtual and the physical dialog claim
+    // separately) both miss the lookup, and the stable key above gives both the
+    // SAME provider cardholder — so the second insert meets the first one's row
+    // under UNIQUE (family_id, member_id) and the order was refused for nothing.
+    // Adopt that row only when it is exactly this family, this member and this
+    // provider cardholder; anything else, including a failed re-read, keeps the
+    // refusal. Audit JIMMY-SUPPORT-CARD-RETRY-20261001 (R5).
+    if (error.code === '23505') {
+      const winner = await supabase
+        .from('stripe_cardholders')
+        .select('id, family_id, member_id, stripe_cardholder_id')
+        .eq('family_id', params.familyId)
+        .eq('member_id', params.memberId)
+        .maybeSingle()
+        .then(({ data, error: rereadError }) => (rereadError ? null : data), () => null);
+      if (winner && winner.family_id === params.familyId && winner.member_id === params.memberId
+        && winner.stripe_cardholder_id === cardholder.id) {
+        return { rowId: winner.id, stripeCardholderId: cardholder.id };
+      }
+    }
+    throw new Error(`Failed to persist cardholder: ${error.message}`);
+  }
   return { rowId: row.id, stripeCardholderId: cardholder.id };
 }
 

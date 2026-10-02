@@ -1,6 +1,7 @@
 import { afterAll, afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import type { SupabaseClient } from '@supabase/supabase-js';
 import type { Database } from '@/lib/database.types';
+import { createInMemorySupabase } from './helpers/in-memory-supabase';
 
 // LIBRARY-3EC5705EFABD: run the helper, with provider/client construction sealed.
 const network = await vi.hoisted(async () => {
@@ -152,4 +153,100 @@ it('preserves a rejected mirror insert after provider creation', async () => {
   mock.single.mockRejectedValue(error);
   await expect(ensureCardholder(client, params)).rejects.toBe(error);
   expect(mock.create).toHaveBeenCalledTimes(1);
+});
+
+// JIMMY-SUPPORT-CARD-RETRY-20261001, repair C. Two first orders for one child
+// both miss the lookup; the stable idempotency key gives both the SAME provider
+// cardholder, so the second insert meets the first one's row. That exact
+// duplicate is adopted; anything else keeps the refusal.
+describe('a duplicate first cardholder insert', () => {
+  const duplicate = { code: '23505', message: 'duplicate key value violates unique constraint "stripe_cardholders_family_id_member_id_key"' };
+  const exact = { id: 'winner-row', family_id: params.familyId, member_id: params.memberId, stripe_cardholder_id: 'ich_created_synthetic' };
+  const refusal = `Failed to persist cardholder: ${duplicate.message}`;
+  beforeEach(() => {
+    mock.single.mockResolvedValue({ data: null, error: duplicate });
+    mock.lookup.mockResolvedValueOnce({ data: null, error: null });
+  });
+
+  it('adopts the row only when it is exactly this family, member and provider cardholder', async () => {
+    mock.lookup.mockResolvedValueOnce({ data: exact, error: null });
+    await expect(ensureCardholder(client, params)).resolves.toEqual({ rowId: 'winner-row', stripeCardholderId: 'ich_created_synthetic' });
+    expect(mock.create).toHaveBeenCalledTimes(1);
+    expect(mock.insert).toHaveBeenCalledTimes(1);
+    expect(mock.select.mock.calls).toEqual([['id, stripe_cardholder_id'], ['id, family_id, member_id, stripe_cardholder_id']]);
+    expect(mock.eq.mock.calls).toEqual([
+      ['family_id', params.familyId], ['member_id', params.memberId],
+      ['family_id', params.familyId], ['member_id', params.memberId],
+    ]);
+    expect(mock.insert.mock.invocationCallOrder[0]).toBeLessThan(mock.lookup.mock.invocationCallOrder[1]);
+  });
+
+  it.each([
+    ['another provider cardholder', { data: { ...exact, stripe_cardholder_id: 'ich_other_synthetic' }, error: null }],
+    ['another family', { data: { ...exact, family_id: 'family-other' }, error: null }],
+    ['another member', { data: { ...exact, member_id: 'member-other' }, error: null }],
+    ['no row', { data: null, error: null }],
+    ['a returned error, even beside exact data', { data: exact, error: { code: '08006', message: 'synthetic re-read refusal' } }],
+  ])('keeps the refusal when the re-read finds %s', async (_label, reread) => {
+    mock.lookup.mockResolvedValueOnce(reread);
+    await expect(ensureCardholder(client, params)).rejects.toThrow(refusal);
+    expect(mock.lookup).toHaveBeenCalledTimes(2);
+  });
+
+  it('keeps the refusal when the re-read rejects', async () => {
+    mock.lookup.mockRejectedValueOnce(new Error('synthetic re-read transport failure'));
+    await expect(ensureCardholder(client, params)).rejects.toThrow(refusal);
+  });
+
+  it.each([
+    { code: '08006', message: 'synthetic connection refusal' },
+    { code: '23503', message: 'synthetic foreign key refusal' },
+    { message: 'synthetic refusal without a code' },
+  ])('does not re-read after a non-duplicate insert failure %j', async error => {
+    mock.single.mockResolvedValue({ data: null, error });
+    await expect(ensureCardholder(client, params)).rejects.toThrow(`Failed to persist cardholder: ${error.message}`);
+    expect(mock.lookup).toHaveBeenCalledTimes(1);
+    expect(mock.select).toHaveBeenCalledTimes(1);
+  });
+});
+
+describe('two concurrent first orders for one child, against the unique constraints', () => {
+  function concurrentProvider(ids: (key: string, arrival: number) => string) {
+    let arrived = 0;
+    let open!: () => void;
+    // Both creates are held until both have arrived, so both lookups miss first.
+    const both = new Promise<void>(resolve => { open = resolve; setTimeout(resolve, 1000); });
+    mock.create.mockImplementation(async (_body: unknown, opts: { idempotencyKey: string }) => {
+      const arrival = ++arrived;
+      if (arrival >= 2) open();
+      await both;
+      return { id: ids(opts.idempotencyKey, arrival) };
+    });
+  }
+  const database = () => createInMemorySupabase({
+    uniques: { stripe_cardholders: [['family_id', 'member_id'], ['stripe_cardholder_id']] },
+  });
+
+  it('both resolve to the one row when the provider replays one cardholder for the stable key', async () => {
+    concurrentProvider(key => `ich_for_${key}`);
+    const db = database();
+    const dbClient = db as unknown as SupabaseClient<Database>;
+    const [first, second] = await Promise.all([ensureCardholder(dbClient, params), ensureCardholder(dbClient, params)]);
+    expect(first).toEqual(second);
+    expect(first.stripeCardholderId).toBe(`ich_for_cardholder-${params.memberId}`);
+    expect(db.table('stripe_cardholders')).toEqual([expect.objectContaining({
+      id: first.rowId, family_id: params.familyId, member_id: params.memberId, stripe_cardholder_id: first.stripeCardholderId,
+    })]);
+    expect(mock.create.mock.calls.map(([, opts]) => opts.idempotencyKey)).toEqual([`cardholder-${params.memberId}`, `cardholder-${params.memberId}`]);
+  });
+
+  it('still refuses the second when the provider answered with a different cardholder', async () => {
+    concurrentProvider((_key, arrival) => `ich_distinct_${arrival}`);
+    const db = database();
+    const dbClient = db as unknown as SupabaseClient<Database>;
+    const results = await Promise.allSettled([ensureCardholder(dbClient, params), ensureCardholder(dbClient, params)]);
+    expect(results.map(result => result.status)).toEqual(['fulfilled', 'rejected']);
+    expect(((results[1] as PromiseRejectedResult).reason as Error).message).toMatch(/^Failed to persist cardholder: duplicate key/);
+    expect(db.table('stripe_cardholders').map(row => row.stripe_cardholder_id)).toEqual(['ich_distinct_1']);
+  });
 });
