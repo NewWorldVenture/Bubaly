@@ -1,4 +1,40 @@
-# LB-005 runbook — run the authenticated E2E journey (it's already built + CI-wired)
+# LB-005 — current authenticated login evidence
+
+## Verified checkpoint, 2026-10-02
+
+CI run [37063130617](https://github.com/NewWorldVenture/Bubaly/actions/runs/37063130617)
+passed against `0afe69748db0205b9cfa975ab3312e741445546d`. Its E2E job logged
+**1,930 passed in 25 minutes**, with `E2E_AUTHENTICATED=1` and
+`E2E_DURABLE_SESSION=1` enabled against disposable local Supabase. Its final
+browser summary had no skipped cases. The inspected durable-session sources
+cover real password and child PIN login, persistent-cookie reopening, real
+refresh after accelerated stored expiry, parallel expired-session requests,
+and local logout that preserves another device's session.
+
+The same run passed web typecheck/lint/test/build, Expo typecheck/config, and
+migration/RLS checks. Unit results were 24,147 passed, two expected failures,
+and 72 skipped; skips are not passing evidence. The auth sources and durable
+fixtures match main `d25e39eac`. This supersedes the historical runner blocker
+below. It does not certify production policies, deployment, or native devices.
+
+For reproduction, use the current `.github/workflows/ci.yml` disposable-backend
+sequence, including its CI-only migration deduplication and local Auth setup.
+Enable both flags above and the workflow's synthetic child secret. The durable
+fixture refuses remote providers even with the generic remote-E2E override;
+it cleans only its owned records and keeps session snapshots in memory.
+
+Remaining acceptance: inspect production session timebox, inactivity timeout
+and single-session restrictions; verify configured email/OAuth providers;
+and run Expo and Capacitor login, force-stop/relaunch, background past token
+expiry, offline/reconnect, callback return, and logout/relaunch on real iOS and
+Android devices. Browser emulation and cookie-only reopening do not establish
+physical-device persistence. See [persistent sessions](persistent-sessions.md).
+
+This Windows workstation has no available Docker, adb/Android SDK or Xcode,
+and the current checkout has no configured environment file. A fresh CLI
+project-list request failed; that does not establish production policy values.
+
+## Historical runbook (runner-blocker statements superseded above)
 
 **A-20 / A-03 finding.** LB-005 is recorded as "authenticated browser E2E includes an intentional
 skip." Grounding it in the code shows it's **more done than the blocker implies**: the authenticated

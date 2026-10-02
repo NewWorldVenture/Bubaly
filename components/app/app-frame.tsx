@@ -8,7 +8,6 @@ import { getFeatureTiersByHref } from '@/lib/server/feature-tiers';
 import { AppProvider } from '@/components/app/app-context';
 import { AppShell } from '@/components/app/app-shell';
 import { RegisterSW } from '@/components/pwa/register-sw';
-import { NativeBootstrap } from '@/components/native/native-bootstrap';
 import { PushRegistrar } from '@/components/native/push-registrar';
 
 /**
@@ -97,7 +96,6 @@ export async function AppFrame({ children }: { children: React.ReactNode }) {
     >
       <AppShell>{children}</AppShell>
       <RegisterSW />
-      <NativeBootstrap />
       <PushRegistrar />
     </AppProvider>
   );
