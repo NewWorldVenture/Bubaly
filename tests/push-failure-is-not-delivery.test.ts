@@ -45,9 +45,13 @@ function fakeSupabase(updates: Record<string, unknown>[], createdAt = NOTIFICATI
     child_channels: [],
   };
   const from = (table: string) => {
+    let rangeFrom: number | undefined, rangeTo: number | undefined;
     const chain: Record<string, unknown> = {
       select: () => chain, is: () => chain, lte: () => chain, eq: () => chain,
       in: () => chain, order: () => chain, limit: () => chain, or: () => chain,
+      // PostgREST ranges include both ends. Advancing past this fixture's
+      // single member must yield an empty page, not repeat the roster forever.
+      range: (start: number, end: number) => { rangeFrom = start; rangeTo = end; return chain; },
       // main added a compare-and-set dispatch cursor in `app_settings` (PUSH-003)
       // after this guard was written. Served as "no cursor stored yet", which is
       // the first-run path: the batch is claimed with a plain upsert and the
@@ -62,7 +66,7 @@ function fakeSupabase(updates: Record<string, unknown>[], createdAt = NOTIFICATI
       },
       delete: () => ({ eq: () => Promise.resolve({ error: null }) }),
       then: (onF: (v: unknown) => unknown) =>
-        Promise.resolve({ data: rows[table] ?? [], error: null }).then(onF),
+        Promise.resolve({ data: rangeFrom === undefined ? rows[table] ?? [] : (rows[table] ?? []).slice(rangeFrom, (rangeTo ?? 0) + 1), error: null }).then(onF),
     };
     return chain;
   };

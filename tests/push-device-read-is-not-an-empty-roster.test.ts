@@ -41,9 +41,13 @@ function fakeSupabase(updates: Record<string, unknown>[], unreadable: string | n
     family_members: [{ user_id: 'u1' }],
   };
   const from = (table: string) => {
+    let rangeFrom: number | undefined, rangeTo: number | undefined;
     const chain: Record<string, unknown> = {
       select: () => chain, is: () => chain, lte: () => chain, eq: () => chain,
       in: () => chain, order: () => chain, limit: () => chain, or: () => chain,
+      // Inclusive range semantics preserve the actual roster and prove its
+      // end with an empty page when the reader advances past this one member.
+      range: (start: number, end: number) => { rangeFrom = start; rangeTo = end; return chain; },
       // main added a compare-and-set dispatch cursor in `app_settings` (PUSH-003)
       // after this guard was written. Served as "no cursor stored yet", which is
       // the first-run path: the batch is claimed with a plain upsert and the
@@ -60,7 +64,7 @@ function fakeSupabase(updates: Record<string, unknown>[], unreadable: string | n
       then: (onF: (v: unknown) => unknown) => Promise.resolve(
         table === unreadable
           ? { data: null, error: { message: `permission denied for table ${table}` } }
-          : { data: rows[table] ?? [], error: null },
+          : { data: rangeFrom === undefined ? rows[table] ?? [] : (rows[table] ?? []).slice(rangeFrom, (rangeTo ?? 0) + 1), error: null },
       ).then(onF),
     };
     return chain;

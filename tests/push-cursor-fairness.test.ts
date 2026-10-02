@@ -27,7 +27,11 @@ function fixture(rows: PushFixtureRow[]) {
       { id: 'web', user_id: 'healthy', enabled: true, provider: 'webpush', endpoint: 'https://push.example.test/device', p256dh: 'key', auth: 'auth' },
       { id: 'native', user_id: 'unconfigured', enabled: true, provider: 'fcm', token: 'fixture-token' },
     ],
-    family_members: [], family_ai_settings: [], user_preferences: [],
+    // These delivery fixtures represent eligible recipients. Missing or
+    // revoked membership is independently tested in push-family-membership.
+    family_members: ['family-a', 'family-b'].flatMap(family_id =>
+      ['healthy', 'unconfigured'].map(user_id => ({ family_id, user_id, role: 'parent', is_active: true }))),
+    family_ai_settings: [], user_preferences: [],
   });
 }
 
