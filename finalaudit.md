@@ -785,6 +785,17 @@ Additions after the 10:55 UTC base, each with its own time: #772 opened 10:58 UT
     - The ordered synthetic transport now honours ascending, descending and null placement. That improves coverage; it makes no claim about live database collation.
   - **Not carried forward:** the root composition `0c48ad1c` (1,037/65), which used `a9ca92e5`. The independent review of the search amendment is pending.
   - **Status:** `COMPONENT-4D0C5DE53A9F` and `SUPPORT-E8F3F434DAC5` stay IN PROGRESS, and the latter's row now cites `ae92d448`. No PASS: hosted CI on the new head is pending. **PRODUCTION READY: NO.**
+- **Candidate #796 for the calendar-navigation lane (owner-account comment posted 2026-10-02 11:37 UTC, [#771 comment 5951534897](https://github.com/NewWorldVenture/Bubaly/pull/771#issuecomment-5951534897)).**
+  - **The candidate:** draft [#796](https://github.com/NewWorldVenture/Bubaly/pull/796) at `24b9b5eb`, on main `01b2c380`, changing exactly the three claimed files: the source (blob `81d46fab`), the unit test (blob `db4b7b3b`) and the browser spec (blob `570cbf10`).
+    - The month arrows now choose a Monday inside the adjacent calendar month.
+    - The mini calendar's labels match its Monday-first cells.
+  - **Author-reported local evidence:**
+    - **Baselines:** component callbacks show 3 desired failures and 4 controls. Navigation declarations show 4 desired failures and 12 controls, with all prior assertions kept. Mounted React 19.3/Chromium clicks give 5 failures and 5 controls on the original.
+    - **At `24b9b5eb`:** 10/10 browser cases pass, covering year, leap-year and Sunday-first boundaries, week navigation, Today, and New York recurrence in a Tokyo browser. The browser guard checks console errors and warnings, page and window errors, and unexpected or failed requests.
+    - **Wider gate:** the native-sealed six-file fork gate passes 162 with no skips. Full types and three-file lint and diff pass.
+    - **Windows note:** thread workers gave 13 identical timezone-control failures on the untouched base. Forks apply the per-case timezone and pass. This is a host-runner limit, not a product failure.
+  - **Status (verified, unchanged; no transition requested):** `COMPONENT-58F072E654BC`, `SUPPORT-F3FE52A739BC`, `CONTROL-65B075695BF2`, `LIBRARY-141D81A1905F` and the calendar page workflow obligations stay as recorded. Recurrence-library coverage is a control, not closure. No PASS: hosted CI on #796 is pending, and the root reproduction is pending.
+  - **Not established:** application CSS, responsive layout, Auth, SQL or providers, deployment, or the complete calendar workflow. **PRODUCTION READY: NO.**
 - **#768 integration:** promotion out of draft and any merge are blocked pending the owner's explicit approval. This checkpoint promotes and merges nothing.
 - **Register B status-mark correction:** #770 introduced three rows whose status cell read `?? IN PROGRESS` instead of `🔄 IN PROGRESS` (SUPPORT-AD3999932010, SUPPORT-EC79FA65AC23, SUPPORT-9C6B11D5A8EB). The register prose already counted them as IN PROGRESS, so only the mark is restored. Every ID, order, status, count and piece of evidence text is unchanged. Register B stays **14,364 = 11,877 NOT STARTED + 2,136 IN PROGRESS + 185 PASS + 157 FIXED + PASS + 9 BLOCKED**.
 
