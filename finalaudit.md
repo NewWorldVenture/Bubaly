@@ -1003,6 +1003,18 @@ Additions after the 10:55 UTC base, each with its own time: #772 opened 10:58 UT
   - **Known residual:** a lost create response can hide a committed save, and a manual retry could then create a duplicate. That is documented, not solved.
   - **Status:** `COMPONENT-8113992604A0` stays **NOT STARTED**, because no transition was requested. #803 is recorded as candidate evidence under that ID. MOD-068 stays IN PROGRESS. The new spec has no Register B row (`SUPPORT-D1144DAD768C` by rule).
   - **Not established:** styling, responsive layout, live Auth, RLS, Next action transport, backend persistence or hosted CI. **PRODUCTION READY: NO.**
+- **Owner follow-through review 5391604223 (2026-10-02 12:16 UTC) on the three decisions.** It was relayed to #788's session in [#788 comment 5952125457](https://github.com/NewWorldVenture/Bubaly/pull/788#issuecomment-5952125457).
+  - **Scope:** the user-requested paths identified are within the approved scope, so no second approval is needed. Indirect coverage is verified first; the paths are candidates, not proven missing gates.
+    - Chore-plan generation already calls `assertAIAccess(…, featureKey: 'family-missions')` (verified at #788 `3cfadcd4`, `app/(app)/missions/actions.ts:612`). That stronger gate stays, and no redundant or weaker gate is added.
+    - Vacation build and concierge are mutually exclusive branches.
+    - Chore-proof side effects and other background work stay separately classified and documented.
+  - **#788 at `3cfadcd4`, verified read-only:** no change against main in `finalaudit.md`, `mobile/`, `.github/` or `scripts/`. The custom exception, the gate change and the ledger edits are gone. The real-listing-only "Rate the app" guard is present (`tests/rate-the-app-only-with-a-real-store-listing.test.ts`). These are candidate evidence only, not acceptance.
+  - **Before the one-request voice accounting is accepted:**
+    - Boundary and retry tests: an exchange admitted at 9/10 completes its speech after the count reaches 10; a new exchange at 10 is refused; retries don't double-count.
+    - Static inspection still finds a separate TTS allowance check (`voice/speak/route.ts:55`) and no exchange correlation or deduplication. That is a risk, not a reproduced defect.
+    - The transcription malformed-response validation and its regression coverage, which were removed with the accounting wrappers, are restored.
+  - **Still required:** the #783 composition before integrated acceptance; the security gate unchanged; no schema, migration, merge or deploy authorization.
+  - `MAIN-F19`, I18N-011 and INT-O01 keep their current status. **PRODUCTION READY: NO.**
 - **#768 integration:** promotion out of draft and any merge are blocked pending the owner's explicit approval. This checkpoint promotes and merges nothing.
 - **Register B status-mark correction:** #770 introduced three rows whose status cell read `?? IN PROGRESS` instead of `🔄 IN PROGRESS` (SUPPORT-AD3999932010, SUPPORT-EC79FA65AC23, SUPPORT-9C6B11D5A8EB). The register prose already counted them as IN PROGRESS, so only the mark is restored. Every ID, order, status, count and piece of evidence text is unchanged. Register B stays **14,364 = 11,877 NOT STARTED + 2,136 IN PROGRESS + 185 PASS + 157 FIXED + PASS + 9 BLOCKED**.
 
