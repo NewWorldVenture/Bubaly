@@ -967,6 +967,16 @@ Additions after the 10:55 UTC base, each with its own time: #772 opened 10:58 UT
     - The held agent worktree `agent-a504f64b581099b9a` has an uncommitted display-only change to `fmtRelative` → `useFormat` in the same file. It was inspected read-only and left untouched.
     - Neither touches the save control flow. Both stay held.
   - **Not claimed:** privacy, flags, AI or providers, Auth, services, the database, configuration, money or TIME-003. **PRODUCTION READY: NO.**
+- **Candidate #801 for the packing manual-add lane (owner-account comment posted 2026-10-02 12:00 UTC, [#771 comment 5951874359](https://github.com/NewWorldVenture/Bubaly/pull/771#issuecomment-5951874359)).**
+  - **The candidate:** draft [#801](https://github.com/NewWorldVenture/Bubaly/pull/801) at `a1c4a0f7`, on main `01b2c380`, changing two files: `trip-packing.tsx` (blob `f975b034`) and the new `tests/e2e/packing-save.spec.ts` (blob `7b8f438e`).
+    - Manual Add stops if the master list is missing or refused. It keeps the draft after a returned error or a thrown transport failure, re-enables Add, and closes only on success.
+    - There is no automatic retry and no rollback of an uncertain save. Other mutations, smart generation and the date helpers are unchanged.
+  - **Author-reported local evidence:**
+    - The final nine React 19/Chromium cases pass (3a1f84). The same nine against the original `8599f3bd` give 6 desired failures and 3 healthy controls (d7adfd). The frozen causal four go from 2 failures and 2 controls (507542) to 4/4 (6da5a8).
+    - Full TypeScript (61823d), two-file ESLint and the diff check (b14b0b) pass, as do 28 related cases across 5 unit files (6ed79b).
+    - The root reproduced the original independently (2 failures and 2 controls; 411577/a303ad), saw the fix pass 4/4 (78ec8b) and accepted the diff (25454a).
+  - **Status discrepancy, corrected here:** the handoff calls `COMPONENT-3385D14A6F1E` "IN PROGRESS". In the ledger at #771 `d1c2f919` and in root's #800 `f6600535` it is verifiably **NOT STARTED**, and no transition has been requested. It stays NOT STARTED until the owner asks, and #801 is recorded as candidate evidence under that ID. `LIBRARY-D87DA1107039` also stays NOT STARTED. The new spec has no Register B row (`SUPPORT-9F8B4AB74A71` by rule).
+  - **Not established:** the backend, RLS, Realtime delivery, the pending or reopened editor lifecycle, hosted CI, merge or production. **PRODUCTION READY: NO.**
 - **#768 integration:** promotion out of draft and any merge are blocked pending the owner's explicit approval. This checkpoint promotes and merges nothing.
 - **Register B status-mark correction:** #770 introduced three rows whose status cell read `?? IN PROGRESS` instead of `🔄 IN PROGRESS` (SUPPORT-AD3999932010, SUPPORT-EC79FA65AC23, SUPPORT-9C6B11D5A8EB). The register prose already counted them as IN PROGRESS, so only the mark is restored. Every ID, order, status, count and piece of evidence text is unchanged. Register B stays **14,364 = 11,877 NOT STARTED + 2,136 IN PROGRESS + 185 PASS + 157 FIXED + PASS + 9 BLOCKED**.
 
