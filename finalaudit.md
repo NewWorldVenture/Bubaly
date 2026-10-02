@@ -948,6 +948,20 @@ Additions after the 10:55 UTC base, each with its own time: #772 opened 10:58 UT
     - Root's section says "TIME-003 remains NWV-owned". NWV has offered to release the one reminders input consumer (5951651650), but that release waits on the owner's word, so both statements stand until the owner decides.
     - Root's section cites an independent composition `775ad8c6` (71 files / 1,199 tests, c1138e; TypeScript 9ea782) and independent peer runs for #798 (65dd92) and #799 (f78ab3). These are root's local evidence and are recorded as such.
   - **PRODUCTION READY: NO.**
+- **Root's draft #800 (owner-account comment posted 2026-10-02 11:56 UTC, [#771 comment 5951831578](https://github.com/NewWorldVenture/Bubaly/pull/771#issuecomment-5951831578)).** [#800](https://github.com/NewWorldVenture/Bubaly/pull/800) publishes root's isolated checkpoint at `d2b3d343` (blob `56ba31c5`), with this ledger branch as its base.
+  - That exact head is already in #771 `d1c2f919` by the normal merge recorded above, so #800 adds nothing further.
+  - Root reports its document guard passing 3/3, a before/after ID, status, count and index comparison (d6d721) and `git diff --check`, all passing. Its counts match this ledger's mechanical recount.
+  - Root states it will keep sending isolated `finalaudit.md` patches under Daniel's latest instruction. This writer integrates them by normal merge, without duplicate registration.
+- **Audit lane claim: the note dialog's rejected save, `COMPONENT-8113992604A0` (owner-account comment posted 2026-10-02 11:57 UTC, [#771 comment 5951846111](https://github.com/NewWorldVenture/Bubaly/pull/771#issuecomment-5951846111)).**
+  - **Branch and files:** `codex/notes-save-rejection-20261002`, clean at main `01b2c380`. Only `components/modules/notes-module.tsx` (main blob `47fe3695`, verified) and a new `tests/e2e/notes-save-rejection.spec.ts`. #788 at `10295026` changes the notes AI route, not this module.
+  - **The defect:** synthetic React 19 browser proof 0829de shows 1 defect and 3 controls. An action-transport rejection leaves Save disabled and loading, and causes an unhandled browser rejection. A healthy save and reopen, a returned refusal and an unsent cancel all work.
+  - **Planned repair:** catch the rejection, keep the title and body, restore Save in `finally` and use the existing translated feedback. Retry stays the user's choice. There is no automatic create retry and no idempotency policy, because a lost response doesn't show whether the save landed.
+  - **Status:** `COMPONENT-8113992604A0` is verified **NOT STARTED** and stays so; no transition was requested. MOD-068 stays IN PROGRESS. The new spec has no Register B row (`SUPPORT-D1144DAD768C` by rule).
+  - **Overlap (NWV, local and unpublished):**
+    - The I18N-011 commit (`eb213702`, and `1ccc0dbd` in one worktree) changes one error line of `notes-module.tsx`.
+    - The held agent worktree `agent-a504f64b581099b9a` has an uncommitted display-only change to `fmtRelative` → `useFormat` in the same file. It was inspected read-only and left untouched.
+    - Neither touches the save control flow. Both stay held.
+  - **Not claimed:** privacy, flags, AI or providers, Auth, services, the database, configuration, money or TIME-003. **PRODUCTION READY: NO.**
 - **#768 integration:** promotion out of draft and any merge are blocked pending the owner's explicit approval. This checkpoint promotes and merges nothing.
 - **Register B status-mark correction:** #770 introduced three rows whose status cell read `?? IN PROGRESS` instead of `🔄 IN PROGRESS` (SUPPORT-AD3999932010, SUPPORT-EC79FA65AC23, SUPPORT-9C6B11D5A8EB). The register prose already counted them as IN PROGRESS, so only the mark is restored. Every ID, order, status, count and piece of evidence text is unchanged. Register B stays **14,364 = 11,877 NOT STARTED + 2,136 IN PROGRESS + 185 PASS + 157 FIXED + PASS + 9 BLOCKED**.
 
