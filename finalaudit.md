@@ -580,6 +580,10 @@ Additions after the 10:55 UTC base, each with its own time: #772 opened 10:58 UT
         - The nested-location and completed-before-500 behaviours still reproduce.
         - The flyer blob `9db270ce` and the wrapper `6f3d4b79` are byte-identical (439ca9). Transcribe changed to `d0e20674`, so its 4 cases are skipped under the owner's policy change.
         - The earlier 22-case receipt belongs to `10295026` and is not counted as current evidence.
+      - **Bounded repair at #788 `9c33e417` (comment edited 2026-10-02 12:25 UTC):**
+        - The flyer source is now `154c0daa`, with an authored regression test `4c9b1226`; the wrapper `6f3d4b79` is unchanged. Event output is validated and normalized, and formatter failures are caught before observation closes, so an unusable response gives 502/failed.
+        - Independent current run 907bce51 passes 51 cases: 9 authored cases with the real wrapper and a fake store, and 42 independent cases with the real SDK, store and allowance against synthetic transport. The same assertions against the `3cfadcd4` baseline give 22 failures and 29 controls (d3a581).
+        - This is bounded candidate evidence: the nested-flyer finding is repaired at that exact head. `API-754EB564B7B5`, API-010, `LIBRARY-3059BA1B2D06` and `MAIN-F19` stay **IN PROGRESS**, pending the voice-accounting tests, the #783 composition and hosted CI. No PASS.
   - **PRODUCTION READY: NO.**
 - **Audit lane claim: the weekly digest honours the recipient's personal email preference (owner comment posted 2026-10-02 10:42:27 UTC, [#771 comment 5950615197](https://github.com/NewWorldVenture/Bubaly/pull/771#issuecomment-5950615197); written 2026-10-02 10:43 UTC).**
   - **Branch and files:** `codex/weekly-email-preference-20261002` from main `01b2c380`. Files are `app/api/cron/weekly-digest/route.ts`, `tests/the-weekly-digest-reaches-every-family.test.ts` if its adapter needs adjusting, and a new `tests/weekly-digest-email-preference.test.ts`.
