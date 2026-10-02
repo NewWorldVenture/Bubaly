@@ -1562,6 +1562,23 @@ Additions after the 10:55 UTC base, each with its own time: #772 opened 10:58 UT
   - `COMPONENT-0337E00DA6ED` is NOT STARTED and matches the rule.
   - The 15:48 claim treats them as two permanent historical aliases of one investigation. Neither row is removed or renumbered here. Merging or retiring an ID is the owner's decision, and until then the in-progress count includes both for one file.
 - **PRODUCTION READY: NO.**
+- **#771 head `6b07d7f1c` terminal CI ([run 37030675004](https://github.com/NewWorldVenture/Bubaly/actions/runs/37030675004)).**
+  - **Passed:** Database at 16:00:07 UTC, Web at 16:23:25 UTC and E2E at 16:30:19 UTC. That is the third consecutive green E2E.
+  - **Failed:** Mobile at 15:58:34 UTC on node-forge. The gate is kept.
+  - This is docs-head evidence only.
+- **Fast-forward to root's #823 at `c1f0d1e5`.** It descends from `6b07d7f1c`.
+  - **Recounted mechanically:** **Register B 14,458 unique = 11,841 NOT STARTED + 2,264 IN PROGRESS + 185 PASS + 159 FIXED + PASS + 9 BLOCKED.** Coverage is 344 / 14,458, which is 2.38%.
+  - **The gap recorded above is now filled.**
+    - These rows are IN PROGRESS: wishlists `COMPONENT-06E1A19B14BF`, projects `COMPONENT-B7C42696683F` and its guard `SUPPORT-0C2F47F35A80`, both declutter IDs, inventory `COMPONENT-C72AAD46CF55` and decisions `COMPONENT-4DEFCC5E7746`.
+    - The spec rows `SUPPORT-6A0B89232A20`, `SUPPORT-815513B2F609`, `SUPPORT-5805BD90ABB5` and `SUPPORT-4B821649D735` are registered. Each was re-derived here by path hash.
+    - The duplicate-path note for declutter stands: both IDs are now IN PROGRESS, so one investigation is counted twice.
+  - **Not yet registered:** inventory `SUPPORT-EF223AEF68B9` (no published spec yet) and decisions `SUPPORT-7A1E3F97C0EB`, the spec in published #824. Both are expected from root's next increment.
+- **New candidates and claims, without closure:**
+  - Declutter #822 `05f23a07`: 7 pass, against 3 failures and 4 controls on main, independently repeated.
+  - Decisions #824 `4bfb3f82`: 7 pass, against 2 failures and 5 controls, independently repeated.
+  - The Inventory browse-continuation claim (1 failure and 4 controls).
+  - The queued-digest idempotency claim, stacked on #787 `bec49a67`, against `LIBRARY-BBE70CE57610` and `LIBRARY-DC87FF26A5F8`. Root registers `SUPPORT-184E8DAF4B6A` and, by its claim, `SUPPORT-1A789DB6FC74`. Changed batch membership and provider key retention stay **open**, and exactly-once delivery is not claimed.
+- **Root's note on TypeScript:** the default heap runs out of memory, and the same compiler passes with an 8 GB heap. That is retained as a tooling qualification, not a pass of the default gate. **PRODUCTION READY: NO.**
 - **#768 integration:** promotion out of draft and any merge are blocked pending the owner's explicit approval. This checkpoint promotes and merges nothing.
 - **Register B status-mark correction:** #770 introduced three rows whose status cell read `?? IN PROGRESS` instead of `🔄 IN PROGRESS` (SUPPORT-AD3999932010, SUPPORT-EC79FA65AC23, SUPPORT-9C6B11D5A8EB). The register prose already counted them as IN PROGRESS, so only the mark is restored. Every ID, order, status, count and piece of evidence text is unchanged. Register B stays **14,364 = 11,877 NOT STARTED + 2,136 IN PROGRESS + 185 PASS + 157 FIXED + PASS + 9 BLOCKED**.
 
