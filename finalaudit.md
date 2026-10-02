@@ -1478,6 +1478,24 @@ Additions after the 10:55 UTC base, each with its own time: #772 opened 10:58 UT
     - The #816 Watchlist test `SUPPORT-589426258CD4` and the #817 recipe-servings test `SUPPORT-F4B5E2AC02C3` are registered; both IDs were re-derived here by SHA-256 of their paths.
     - #816 `7e1f1728` (12 pass versus 4 failures and 8 controls on main) and #817 `77a83eea` (18 pass versus 13 failures and 5 controls on #815) are candidate evidence only.
   - The qualification that the two tally-tool closures rest on an unmerged stack is retained, pending the owner's confirmation. **PRODUCTION READY: NO.**
+- **#771 head `3df0b39a9` terminal CI ([run 37026410890](https://github.com/NewWorldVenture/Bubaly/actions/runs/37026410890); written 2026-10-02 15:58 UTC).**
+  - **Passed:** Database at 15:24:04 UTC, Web at 15:38:28 UTC and E2E at 15:52:11 UTC. This is the second consecutive green E2E since main's #775 fixture fix.
+  - **Failed:** Mobile at 15:22:05 UTC on the unchanged node-forge production dependency audit. The gate is kept.
+  - This is docs-head evidence only, with no closure.
+- **New candidates (recorded from owner-account handoffs on #771; candidate evidence only, with no PASS):**
+  - **Goals #819 `ea9789d4`:** 19 pass, against 11 desired failures and 8 controls on main, independently repeated. The save is an inert synthetic-store seam, not the real server action.
+  - **Projects #820 `36388233`:** 14 pass, against 10 failures and 4 controls on main, independently repeated. The starter-template dispatch is verified by AST only.
+  - **Wishlist #821 `ac74e2f5`:** 15 pass, against 6 failures and 9 controls on the original, independently repeated. The related-test selection ran only 2 tests, with 99 filtered, so it is not a whole-suite pass.
+  - **Declutter claim:** the archived-zone visibility claim (1 desired failure and 4 controls), on #771 at 15:49 UTC.
+- **Ledger-state gap, recorded and not filled here so the work is not duplicated with root's pending publication:**
+  - The handoffs say root marked `COMPONENT-06E1A19B14BF` (wishlists), `COMPONENT-B7C42696683F` (projects), `SUPPORT-0C2F47F35A80` (the projects test guard) and the declutter rows IN PROGRESS at 15:23, 15:24 and 15:48 UTC. In the **published** ledger (root `eaf681ad`, contained in this head), they are still **NOT STARTED**.
+  - The new spec rows are also absent: goals `SUPPORT-6A0B89232A20`, projects `SUPPORT-815513B2F609`, wishlist `SUPPORT-5805BD90ABB5` and declutter `SUPPORT-4B821649D735`, all by the path rule.
+  - They are expected in root's next published increment and will be verified on merge.
+- **Duplicate path in Register B:** `components/modules/declutter-module.tsx` has two IDs.
+  - `COMPONENT-0380E00DA6ED` is IN PROGRESS and does not match the SHA-256 path rule.
+  - `COMPONENT-0337E00DA6ED` is NOT STARTED and matches the rule.
+  - The 15:48 claim treats them as two permanent historical aliases of one investigation. Neither row is removed or renumbered here. Merging or retiring an ID is the owner's decision, and until then the in-progress count includes both for one file.
+- **PRODUCTION READY: NO.**
 - **#768 integration:** promotion out of draft and any merge are blocked pending the owner's explicit approval. This checkpoint promotes and merges nothing.
 - **Register B status-mark correction:** #770 introduced three rows whose status cell read `?? IN PROGRESS` instead of `🔄 IN PROGRESS` (SUPPORT-AD3999932010, SUPPORT-EC79FA65AC23, SUPPORT-9C6B11D5A8EB). The register prose already counted them as IN PROGRESS, so only the mark is restored. Every ID, order, status, count and piece of evidence text is unchanged. Register B stays **14,364 = 11,877 NOT STARTED + 2,136 IN PROGRESS + 185 PASS + 157 FIXED + PASS + 9 BLOCKED**.
 
