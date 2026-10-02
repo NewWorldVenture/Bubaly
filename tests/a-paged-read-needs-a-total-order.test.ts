@@ -55,6 +55,7 @@ const UNIQUE_KEYS: Record<string, { columns: string[]; why: string }[]> = {
   network_consent: [{ columns: ['family_id'], why: '0132: `family_id uuid primary key`' }],
   network_contributions: [{ columns: ['family_id'], why: '0135: `family_id uuid primary key`' }],
   super_admins: [{ columns: ['email'], why: '0008: `email text PRIMARY KEY`' }],
+  user_preferences: [{ columns: ['user_id'], why: '0002: line 490, `user_id uuid primary key`' }],
 };
 
 function walk(dir: string, out: string[] = []): string[] {
@@ -194,6 +195,14 @@ describe('a paged read needs a total order', () => {
         expect(/primary key|unique/i.test(why), `${table} cites no constraint`).toBe(true);
       }
     }
+  });
+
+  it('the preference paging key is the table’s declared primary key', () => {
+    const migration = readFileSync(join(ROOT, 'supabase/migrations/0002_tables.sql'), 'utf8');
+    const preferenceTable = /create table if not exists public\.user_preferences\s*\(([\s\S]*?)\n\);/.exec(migration)?.[1];
+    expect(preferenceTable, 'the migration must still declare the preferences table').toBeDefined();
+    expect(preferenceTable).toMatch(/^\s*user_id\s+uuid\s+primary key\b/m);
+    expect(UNIQUE_KEYS.user_preferences.map(key => key.columns)).toEqual([['user_id']]);
   });
 
   it('counts an .eq() as pinning and a .gte()/.in() as not (guards the matcher)', () => {
