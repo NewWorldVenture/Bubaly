@@ -296,6 +296,18 @@ Additions after the 10:55 UTC base, each with its own time: #772 opened 10:58 UT
     - #778 carries the #775 fixture, which explains why its E2E differs from heads based on main. Its file list was checked here: the same `social-publish-consumers.spec.ts` change as #775.
     - The render-stream log errors remain untriaged.
   - **PRODUCTION READY: NO** stays in force.
+- **Audit lane claim: storage-removal confirmation resilience, under existing `SEC-015` / `LIBRARY-AADB2DB77F07` / `COMPONENT-DBC7A368F1FF` (owner comment posted 2026-10-02 09:56:24 UTC, [#771 comment 5949727214](https://github.com/NewWorldVenture/Bubaly/pull/771#issuecomment-5949727214); written 2026-10-02 09:57 UTC).**
+  - **Branch and files:** `codex/storage-removal-confirmation-20261002` from main `01b2c380`. Files are `lib/storage/confirm-removal.ts` and `tests/a-deleted-row-does-not-unlock-a-file.test.ts` only.
+  - **Synthetic receipt:** it runs the actual `FilesHub.remove`, the actual `removeFamilyDocument` with its shared confirmation helper, and the installed Supabase 2.108.2 SDK.
+    - **Finding:** an HTTP 200 JSON `null` listing after an empty or null removal is wrongly treated as confirmed absence, and the metadata DELETE and success toast follow.
+    - **Size:** six baseline scenarios give 2 desired failures and 4 controls; a private array-validation counterfactual passes 6/6.
+  - **What this is:** malformed-response resilience evidence. It is **not** proof that production Storage returns `null`, and not a production privacy leak.
+  - **Planned repair:** refuse malformed or non-array listing data before declaring absence, while keeping confirmed removals, valid empty absence, errors, and the refusal when an object with the exact name survives.
+  - **Kept separate:** #688's broader failed-upload cleanup and recovery stays unresolved, and #768's photo diagnostics are untouched. Synthetic only. No PASS.
+  - **Overlap check ([#771 comment 5949755589](https://github.com/NewWorldVenture/Bubaly/pull/771#issuecomment-5949755589)):** NWV has two held, unpushed commits that touch these files.
+    - I18N-011 `eb2137026` adds a translator parameter to `removeConfirmed`, for error text only.
+    - O-03 `b71076b59` (0467, held) removes home-module from the test's list of delete paths.
+    - Neither overlaps the logic. Both stay held and will rebase.
 - **#768 integration:** promotion out of draft and any merge are blocked pending the owner's explicit approval. This checkpoint promotes and merges nothing.
 - **Register B status-mark correction:** #770 introduced three rows whose status cell read `?? IN PROGRESS` instead of `🔄 IN PROGRESS` (SUPPORT-AD3999932010, SUPPORT-EC79FA65AC23, SUPPORT-9C6B11D5A8EB). The register prose already counted them as IN PROGRESS, so only the mark is restored. Every ID, order, status, count and piece of evidence text is unchanged. Register B stays **14,364 = 11,877 NOT STARTED + 2,136 IN PROGRESS + 185 PASS + 157 FIXED + PASS + 9 BLOCKED**.
 
