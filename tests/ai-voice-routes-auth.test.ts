@@ -249,60 +249,22 @@ describe.each([
   });
 });
 
-describe('each voice call counts, and a provider error is recorded as failed (F19)', () => {
-  const finalStatus = (row: { patches: Array<Record<string, unknown>> }) =>
-    row.patches.map((p) => p.status).filter(Boolean).at(-1);
-
-  it('a transcription opens and completes its own request', async () => {
+describe('a spoken exchange counts once: voice files no request of its own (F19)', () => {
+  // The owner's decision of 2026-10-02: one spoken exchange is ONE request, the
+  // assistant turn it carries. Speech and transcription file nothing, so a
+  // voice exchange is not charged three times.
+  it('a transcription files no request row', async () => {
     getUserContext.mockResolvedValue(ctx);
     const { POST } = await import('@/app/api/ai/voice/transcribe/route');
     expect((await POST(transcribeRequest())).status).toBe(200);
-    expect(requestRows).toHaveLength(1);
-    expect(requestRows[0].feature).toBe('voice.transcribe');
-    expect(finalStatus(requestRows[0])).toBe('completed');
+    expect(requestRows).toHaveLength(0);
   });
 
-  it('a speech call opens and completes its own request', async () => {
+  it('a speech call files no request row', async () => {
     getUserContext.mockResolvedValue(ctx);
     fetchWithDeadline.mockResolvedValue(new Response(new Uint8Array([1, 2, 3]), { status: 200, headers: { 'content-type': 'audio/mpeg' } }));
     const { POST } = await import('@/app/api/ai/voice/speak/route');
     expect((await POST(speakRequest())).status).toBe(200);
-    expect(requestRows).toHaveLength(1);
-    expect(requestRows[0].feature).toBe('voice.speak');
-    expect(finalStatus(requestRows[0])).toBe('completed');
+    expect(requestRows).toHaveLength(0);
   });
-
-  for (const [label, body] of [
-    ['invalid JSON', 'not json at all'],
-    ['a non-string text field', JSON.stringify({ text: 7 })],
-  ] as const) {
-    it(`a 200 transcription with ${label} answers 502 and is recorded as failed`, async () => {
-      getUserContext.mockResolvedValue(ctx);
-      fetchWithDeadline.mockResolvedValue(new Response(body, { status: 200, headers: { 'content-type': 'application/json' } }));
-      const { POST } = await import('@/app/api/ai/voice/transcribe/route');
-      expect((await POST(transcribeRequest())).status).toBe(502);
-      expect(finalStatus(requestRows[0])).toBe('failed');
-      expect(modelCalls.every((c) => c.ok === false)).toBe(true);
-    });
-  }
-
-  for (const status of [500, 429]) {
-    it(`a provider ${status} on transcription answers 502 and is recorded as failed`, async () => {
-      getUserContext.mockResolvedValue(ctx);
-      fetchWithDeadline.mockResolvedValue(new Response('refused', { status }));
-      const { POST } = await import('@/app/api/ai/voice/transcribe/route');
-      expect((await POST(transcribeRequest())).status).toBe(502);
-      expect(finalStatus(requestRows[0])).toBe('failed');
-      expect(modelCalls.every((c) => c.ok === false)).toBe(true);
-    });
-
-    it(`a provider ${status} on speech answers 502 and is recorded as failed`, async () => {
-      getUserContext.mockResolvedValue(ctx);
-      fetchWithDeadline.mockResolvedValue(new Response('refused', { status }));
-      const { POST } = await import('@/app/api/ai/voice/speak/route');
-      expect((await POST(speakRequest())).status).toBe(502);
-      expect(finalStatus(requestRows[0])).toBe('failed');
-      expect(modelCalls.every((c) => c.ok === false)).toBe(true);
-    });
-  }
 });

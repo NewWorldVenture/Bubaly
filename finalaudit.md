@@ -702,7 +702,7 @@ Result: **76 ✅ PASS, 3 🛠 FIXED + PASS, 1 🔄 IN PROGRESS** (the owner's ca
 |---|---|---|---|---|
 | **INT-M01** | The fetcher for family-supplied URLs (calendar feeds, weekend feeds, the social-feed page reader) could be steered to an internal address by DNS rebinding. | Medium | `fetchPublicText` resolved a hostname and refused private answers, then called `fetch(hostname)`, which resolved it again. A zero-TTL answer could pass the check as public and connect as `127.0.0.1` or `169.254.169.254`, on every redirect hop too. Recorded earlier as "Recorded, not fixed: DNS rebinding". The document fetcher already pinned its socket; this one did not. | **Fixed:** `pinnedPublicFetch` resolves, applies the same address policy, and hands the socket that exact address through `lookup`. The hostname is kept for Host and TLS, there is no pooled connection, `Accept-Encoding: identity`, and http or https. It is the default for every caller. `tests/a-public-fetch-connects-where-it-checked.test.ts` runs real sockets with a stub resolver: the rebinding second answer is refused and never connected (red on the old fetcher), the pinned address is used with the hostname in Host, and private literals are refused. |
 | **INT-L01** | Two buttons opened an external site in a new tab with no `noopener`, handing it `window.opener` (reverse tabnabbing): the contacts "open in Maps" and the profile's "Rate the app". | Low | `window.open(url, '_blank')` in `components/modules/contacts-module.tsx` and `profile-module.tsx`. Links elsewhere carry `rel="noreferrer"`. | **Fixed:** both pass `'noopener,noreferrer'`. `tests/an-external-tab-gets-no-handle-back.test.ts` holds it tree-wide (red on the old tree). |
-| **INT-O01** | "Rate the app" on the profile opens the App Store's front page, not a Bubaly listing. | Low | `window.open('https://apps.apple.com/', …)`; the repository holds no App Store id, so there is no listing to link. | **Fixed (2026-10-02).** The row now opens `/reviews/new`, Bubaly's own review form, so "Rate the app" records a rating the family can see instead of landing on the App Store's front page. When a store listing exists it can link there instead. Pinned by `tests/rate-the-app-leads-to-a-review.test.ts`, which fails on the old row. *As first recorded:* **Owner's call:** link a listing once one exists, or change the row. Left in place rather than hidden. |
+| **INT-O01** | "Rate the app" on the profile opens the App Store's front page, not a Bubaly listing. | Low | `window.open('https://apps.apple.com/', …)`; the repository holds no App Store id, so there is no listing to link. | **Owner's call:** link a listing once one exists, or change the row. Left in place rather than hidden. |
 
 **PRODUCTION READY: NO.**
 
@@ -761,7 +761,7 @@ The boundary probes read `storage.objects` policies in SQL. They cannot see the 
 | **ROLE-L06** | A member's role was English whatever the reader's language: on the family members page, both halves of the permissions matrix (labels and descriptions), the settings role picker, the app shell, the sidebar, the personal dashboard, three places in Messages and the admin console. | Low | Twelve screens rendered `ROLE_LABELS` / `ROLE_DESCRIPTIONS` from `lib/constants/roles.ts`, while the invite form and the trust screens beside them already used `trustRole.*`. | **Fixed:** `ROLE_LABEL_KEYS` (the existing `trustRole.*`), `ROLE_DESCRIPTION_KEYS` (six new keys in seven catalogues) and `roleLabel()`, which shows an unknown role as itself. The English maps remain for the assistant's context, which has no reader. `tests/a-role-is-named-in-the-readers-language.test.ts`: 12 files red on the old tree. |
 | **ROLE-L07** | The App Lock settings panel's toasts, its "On" badge and the whole PIN dialog were English; and a save that never completed left the panel on "saving" with every button disabled and no message. | Low | 14 literals in `components/settings/app-lock-settings.tsx`. A server action rejects when the request never completes, and Web Crypto is absent on an insecure origin, so `await saveAppLockConfig` / `buildAppLockConfig` threw past `setSaving(false)`. | **Fixed:** 12 new keys in seven catalogues; both saves and the hashing report through the existing `appLockActions.couldNotSaveAppLockSettings`. `tests/app-lock-settings-say-what-happened.test.ts`: 2 of 3 red on the old file. |
 | **ROLE-L08** | The mobile sign-in showed the auth server's own wording for any error it did not recognise, and a thrown error left the sign-in button spinning. | Low | `friendlyAuthError` returned `message` unchanged as its fallback ("Database error querying schema" reaches the person), pinned by a test; `signInWithPassword` rethrows a non-AuthError and `signIn` did not catch it. | **Fixed:** an unrecognised message is logged and the generic sentence shown, as the web forms do for a coded error; `signIn` catches a throw. `tests/mobile-core.test.ts` 21/21, with the pinned case changed and a new case for the throw. |
-| **I18N-011** | The five classified messages `describeDbError` writes ("You don't have permission to do that…", "That already exists…", "That item could not be found…", "Some required information is missing…", "Network problem…") are English in every locale. | Medium | `lib/supabase/errors.ts` returns English literals from those branches; only the caller's `fallback` is translated. 689 call sites in `app/`, `components/` and `lib/` use it, so a German family refused by RLS reads English. `lib/` is outside `scripts/i18n-scan.mjs`, and `docs/i18n.md`'s 7,402-string count covers only `app/` and `components/`. | **Half fixed (2026-10-02).** The five messages are catalogue keys (`error.dbPermission`, `dbConflict`, `dbNotFound`, `dbInvalid`, `dbNetwork`) in all seven catalogues. In the browser, `LocaleProvider` registers its translator with `lib/supabase/errors.ts`, so every client caller of `describeDbError` returns the reader's language. On the server a module-level translator would leak between requests, so it still returns English; the toast translates that English back through `localizeDbErrorText`, which covers server-action errors shown as toasts. **Still English:** a server-side `describeDbError` message rendered anywhere other than a toast (58 files call it on the server). Pinned by `tests/a-database-error-reads-in-the-readers-language.test.ts`. *As first recorded:* **Open.** Proposed fix: return catalogue keys from the classified branches and resolve them where the text is shown (the client has `t`, server actions have `getTranslations`), migrating callers by surface with a ratchet. Too wide for the ROLE rows. |
+| **I18N-011** | The five classified messages `describeDbError` writes ("You don't have permission to do that…", "That already exists…", "That item could not be found…", "Some required information is missing…", "Network problem…") are English in every locale. | Medium | `lib/supabase/errors.ts` returns English literals from those branches; only the caller's `fallback` is translated. 689 call sites in `app/`, `components/` and `lib/` use it, so a German family refused by RLS reads English. `lib/` is outside `scripts/i18n-scan.mjs`, and `docs/i18n.md`'s 7,402-string count covers only `app/` and `components/`. | **Open.** Proposed fix: return catalogue keys from the classified branches and resolve them where the text is shown (the client has `t`, server actions have `getTranslations`), migrating callers by surface with a ratchet. Too wide for the ROLE rows. |
 
 **Production:** production has no migration from `0177` on (PROD-DB-0177), so `0369` (no public listing), `0418` (MIME lists), `0450` (`feedback-attachments` private) and `0459` are not live there. This result is the repository's, not bubaly.com's.
 
@@ -2068,9 +2068,9 @@ IDs link each route to its row in the Session A register (`PAGE-`) and the Sessi
 >
 > **What "done" means for the finding rows, stated so it is checkable rather
 > than argued.** `docs/audit/finding-index.py` derives the tally from the
-> document itself: **FIXED 160 · CHECKED 2 · PARTIAL 6 · OWNER'S 8 · OPEN 4 ·
+> document itself: **FIXED 158 · CHECKED 2 · PARTIAL 5 · OWNER'S 9 · OPEN 6 ·
 > BLOCKED 1 · SUPERSEDED 1** — 175 distinct ids over 182 rows, **none blank**
-> (CONC-002 added 2026-09-27, and AUTH-005, DATA-023, METRIC-002 and PUSH-007 on 2026-09-28: FIXED +5; ROLE-SCOPE-001 on 2026-09-28: OWNER'S +1; DB-RPC-M01 and -M02 from the DB-RPC pass on 2026-09-28: FIXED +2; ROLE-L01, -L02, -L03 and -M03 from the ROLE rows on 2026-09-28: FIXED +4; ROLE-L04 to -L08 from the last ROLE rows: FIXED +5; I18N-011: OPEN +1; PAY-DOUBLE-001, CB-M01, CB-M02 and CB-L01 from the CALLBACK rows: FIXED +4; PAY-ORDER-001: OPEN +1; INT-M01 and INT-L01 from the INTEGRATION rows: FIXED +2; INT-O01: OWNER'S +1; AUTHZ-020 and IMPORT-001 OPEN → FIXED and AQ-01 PARTIAL → FIXED on 2026-09-28, each status cell now leading with its evidence: FIXED +3; W-03 OPEN → CHECKED, the sidebar already locks it at Family+: CHECKED +1; NAV-L01 and NAV-L02 from the NAV rows: FIXED +2; UIF-001, I18N-012 and I18N-013 from the UI-FLOW rows: FIXED +3; on the owner's instruction of 2026-09-29, W-03 CHECKED → FIXED (the nav file now says Family+) and W-04 PARTIAL → FIXED (the empty Experience Scorecard left the sidebar): FIXED +2; ADMIN-CONTENT-001 from the admin walk: FIXED +1; LAYOUT-001, -002 and -003 from the LAYOUT rows: FIXED +3; on 2026-10-02, INT-O01 OWNER'S → FIXED and F19 OPEN → FIXED: FIXED +2, OPEN −1, OWNER'S −1; I18N-011 OPEN → PARTIAL (the server half outside a toast is still English): OPEN −1, PARTIAL +1. PAY-ORDER-001 was already FIXED in main's generated index; this prose line had not caught up).
+> (CONC-002 added 2026-09-27, and AUTH-005, DATA-023, METRIC-002 and PUSH-007 on 2026-09-28: FIXED +5; ROLE-SCOPE-001 on 2026-09-28: OWNER'S +1; DB-RPC-M01 and -M02 from the DB-RPC pass on 2026-09-28: FIXED +2; ROLE-L01, -L02, -L03 and -M03 from the ROLE rows on 2026-09-28: FIXED +4; ROLE-L04 to -L08 from the last ROLE rows: FIXED +5; I18N-011: OPEN +1; PAY-DOUBLE-001, CB-M01, CB-M02 and CB-L01 from the CALLBACK rows: FIXED +4; PAY-ORDER-001: OPEN +1; INT-M01 and INT-L01 from the INTEGRATION rows: FIXED +2; INT-O01: OWNER'S +1; AUTHZ-020 and IMPORT-001 OPEN → FIXED and AQ-01 PARTIAL → FIXED on 2026-09-28, each status cell now leading with its evidence: FIXED +3; W-03 OPEN → CHECKED, the sidebar already locks it at Family+: CHECKED +1; NAV-L01 and NAV-L02 from the NAV rows: FIXED +2; UIF-001, I18N-012 and I18N-013 from the UI-FLOW rows: FIXED +3; on the owner's instruction of 2026-09-29, W-03 CHECKED → FIXED (the nav file now says Family+) and W-04 PARTIAL → FIXED (the empty Experience Scorecard left the sidebar): FIXED +2; ADMIN-CONTENT-001 from the admin walk: FIXED +1; LAYOUT-001, -002 and -003 from the LAYOUT rows: FIXED +3).
 >
 > Recounted on the merges of `main` into PR #548's branch — 6ff770da (#579's
 > 0344–0380 and #582's release note), then dcc0b42b (#581, which closed
@@ -2395,7 +2395,7 @@ worked; a claim with no commit touching it for six hours may be taken over.
 | DB policy pass and DB-RPC pass (every table's policies; every function in `public`); migrations `0462`, `0463` | session_01776xJyhVe8xJQvTGeNfT9T | done 2026-09-28: DB-TBL rows and DB-RPC rows carry their facts; DB-RPC-M01 and -M02 fixed in the repo (`0462`, `0463`, unapplied in production). The per-role and workflow half of each DB-TBL/DB-RPC row is released, claimable |
 | ROLE rows (the 61 authorization and role-visibility files) and the storage audit; migration `0464` | session_01776xJyhVe8xJQvTGeNfT9T | done 2026-09-28, merged in #646: storage 5 rows PASS; ROLE all 61 read (49 PASS, 11 FIXED + PASS, 1 IN PROGRESS on ROLE-SCOPE-001); ROLE-L01…L08 and -M03 fixed, I18N-011 recorded open. |
 | CALLBACK rows (the 13 NOT STARTED inbound webhooks and provider callbacks: contact-center email/voice/transcription, Google Calendar and sync callbacks, Guardian escalate/screen/voicemail, money, Resend and Stripe webhooks) | session_01776xJyhVe8xJQvTGeNfT9T | done 2026-09-28: 13 read (9 PASS, 4 FIXED + PASS); PAY-DOUBLE-001, CB-M01, CB-M02 and CB-L01 fixed, PAY-ORDER-001 recorded open. The five IN PROGRESS CALLBACK rows stay with their sessions. |
-| INTEGRATION rows (all 80 external hosts) | session_01776xJyhVe8xJQvTGeNfT9T | done 2026-09-28: 76 PASS, 3 FIXED + PASS (INT-M01 DNS-rebinding pin, INT-L01 noopener), 1 IN PROGRESS (INT-O01, the owner's call). Update 2026-10-02: INT-O01 fixed, so 76 PASS, 4 FIXED + PASS. |
+| INTEGRATION rows (all 80 external hosts) | session_01776xJyhVe8xJQvTGeNfT9T | done 2026-09-28: 76 PASS, 3 FIXED + PASS (INT-M01 DNS-rebinding pin, INT-L01 noopener), 1 IN PROGRESS (INT-O01, the owner's call). |
 | NAV rows (all 33 navigation files) | session_01776xJyhVe8xJQvTGeNfT9T | done 2026-09-28: 24 PASS, 9 FIXED + PASS (NAV-L01 menus in the reader's language, NAV-L02 trust score honest on failure). |
 | UI-FLOW rows (all 31 workflows) | session_01776xJyhVe8xJQvTGeNfT9T | done 2026-09-29: 7 PASS, 18 FIXED + PASS (UIF-001 contact save, I18N-012 dialog titles and labels, I18N-013 the move label, ADMIN-CONTENT-001 the content pipeline past 1,000 rows), 6 IN PROGRESS for provider keys, a second member, non-text forms or a super-admin session. |
 | LAYOUT rows (all 29 layout files) | session_01776xJyhVe8xJQvTGeNfT9T | done 2026-09-29: 15 PASS, 14 FIXED + PASS (LAYOUT-001 roster retry, LAYOUT-002 trip header translated, LAYOUT-003 onboarding safe area). |
@@ -2404,7 +2404,7 @@ worked; a claim with no commit touching it for six hours may be taken over.
 
 <!-- finding-index:begin -->
 
-*Generated by `docs/audit/finding-index.py`. 182 finding rows, 175 distinct ids. BLOCKED 1 · CHECKED 2 · FIXED 160 · OPEN 4 · OWNER'S 8 · PARTIAL 6 · SUPERSEDED 1*
+*Generated by `docs/audit/finding-index.py`. 182 finding rows, 175 distinct ids. BLOCKED 1 · CHECKED 2 · FIXED 158 · OPEN 6 · OWNER'S 9 · PARTIAL 5 · SUPERSEDED 1*
 
 | id | status | finding | in |
 |---|---|---|---|
@@ -2419,7 +2419,7 @@ worked; a claim with no commit touching it for six hours may be taken over.
 | **NAV-L02** | FIXED | When the marketplace trust-score reads failed, the sidebar widget showed a zero-baseline score as the member's o… | Navigation — the 33 NAV rows — 202 |
 | **INT-M01** | FIXED | The fetcher for family-supplied URLs (calendar feeds, weekend feeds, the social-feed page reader) could be steer… | Integrations — the 80 INTEGRATION  |
 | **INT-L01** | FIXED | Two buttons opened an external site in a new tab with no noopener, handing it window.opener (reverse tabnabbing)… | Integrations — the 80 INTEGRATION  |
-| **INT-O01** | FIXED | "Rate the app" on the profile opens the App Store's front page, not a Bubaly listing. | Integrations — the 80 INTEGRATION  |
+| **INT-O01** | OWNER'S | "Rate the app" on the profile opens the App Store's front page, not a Bubaly listing. | Integrations — the 80 INTEGRATION  |
 | **PAY-DOUBLE-001** | FIXED | A family already paying for Basic that tapped a Plus feature got a second Stripe subscription, billed alongside… | Callbacks and webhooks — the 13 un |
 | **CB-M01** | FIXED | An emergency escalation whose phone lookup failed texted and called nobody, and was recorded as handled. | Callbacks and webhooks — the 13 un |
 | **CB-M02** | FIXED | In a family protecting two members, a screened call was screened without the called member's settings, and a "tr… | Callbacks and webhooks — the 13 un |
@@ -2434,7 +2434,7 @@ worked; a claim with no commit touching it for six hours may be taken over.
 | **ROLE-L06** | FIXED | A member's role was English whatever the reader's language: on the family members page, both halves of the permi… | Storage audit — five buckets throu |
 | **ROLE-L07** | FIXED | The App Lock settings panel's toasts, its "On" badge and the whole PIN dialog were English; and a save that neve… | Storage audit — five buckets throu |
 | **ROLE-L08** | FIXED | The mobile sign-in showed the auth server's own wording for any error it did not recognise, and a thrown error l… | Storage audit — five buckets throu |
-| **I18N-011** | PARTIAL | The five classified messages describeDbError writes ("You don't have permission to do that…", "That already exis… | Storage audit — five buckets throu |
+| **I18N-011** | OPEN | The five classified messages describeDbError writes ("You don't have permission to do that…", "That already exis… | Storage audit — five buckets throu |
 | **DB-RPC-M01** | FIXED | A family that could not see a marketplace listing could still bid on it, Buy-It-Now it, open a negotiation on it… | DB-RPC pass — every function in `p |
 | **DB-RPC-M02** | FIXED | Any family member could erase another member's read receipt or reaction on a chat message, mark a message read f… | DB-RPC pass — every function in `p |
 | **O-01** | FIXED | A child could read, change and delete the family's stored card PIN. family_credentials allows categories card an… | 2. Critical Issues |
@@ -2571,7 +2571,7 @@ worked; a claim with no commit touching it for six hours may be taken over.
 | **F-020** | FIXED | The documented production-recovery procedure did not work — db push stopped on 0004 and left the guard unclearab… | Critical Issues |
 | **F5 / F-001** | BLOCKED | Production migration ledger records only 0001–0003; every schema release is blocked *(restated)* | High Priority |
 | **F6** | OPEN | Family email is built but not routed | Medium Priority |
-| **F19** | FIXED | Most AI endpoints run unmetered | Medium Priority |
+| **F19** | OPEN | Most AI endpoints run unmetered | Medium Priority |
 | **F13** | SUPERSEDED | Unknown top-level paths redirect to login | Low Priority |
 | **F-G03** | FIXED | CRITICAL *(restated)* | Fixed in this pass |
 | **F-G17** | FIXED | CRITICAL *(restated)* | Fixed in this pass |
@@ -15317,7 +15317,7 @@ not read the same on this page.*
 | INTEGRATION-9E6FA86433D5 | INTEGRATION | app.schoology.com | ✅ PASS | None found | Read 2026-09-28; located in shipped code by a tree scan. | None needed | PASS (2026-09-28) | A calendar-provider URL pattern (`lib/calendar/providers.ts`); a family's feed URL is fetched only through the pinned public fetcher (INT-M01). |
 | INTEGRATION-98B50B0F593B | INTEGRATION | app.ticketmaster.com | ✅ PASS | None found | Read 2026-09-28; located in shipped code by a tree scan. | None needed | PASS (2026-09-28) | Called from the server only, through `fetchWithDeadline`/`fetchWithTimeout` or a signalled fetch (every outbound server `fetch` in `lib/`, `app/api` and `shared/` enumerated on 2026-09-28: all carry a deadline); its key, if any, is a server-only variable (no `NEXT_PUBLIC_` secret exists). |
 | INTEGRATION-2265CBCC3EF2 | INTEGRATION | apple.com | ✅ PASS | None found | Read 2026-09-28; located in shipped code by a tree scan. | None needed | PASS (2026-09-28) | APNs over HTTP/2 (`lib/server/native-push.ts`) with its own per-request deadline, response size cap and a discarded connection on failure; the other matches are support and developer links. |
-| INTEGRATION-3BBD7C83445A | INTEGRATION | apps.apple.com | 🛠 FIXED + PASS | Low | Read 2026-09-28; 2026-10-02 `tests/rate-the-app-leads-to-a-review.test.ts` (red on the old row). | noopener added (INT-L01); INT-O01 fixed 2026-10-02: the row opens `/reviews/new` and no longer calls apps.apple.com | FIXED + PASS (2026-10-02) | "Rate the app" on the profile opens the App Store front page, not a Bubaly listing: the repository holds no App Store id. |
+| INTEGRATION-3BBD7C83445A | INTEGRATION | apps.apple.com | 🔄 IN PROGRESS | Low | Read 2026-09-28. | noopener added (INT-L01); the destination is INT-O01, the owner's call | Pending | "Rate the app" on the profile opens the App Store front page, not a Bubaly listing: the repository holds no App Store id. |
 | INTEGRATION-6375772C3FE0 | INTEGRATION | bubaly.invalid | ✅ PASS | None found | Read 2026-09-28; located in shipped code by a tree scan. | None needed | PASS (2026-09-28) | A development default or sentinel: a local fallback, a placeholder shown when a service is unconfigured, or an unroutable base used only to parse relative URLs. |
 | INTEGRATION-C7B9F34E9228 | INTEGRATION | caldav.icloud.com | ✅ PASS | None found | Read 2026-09-28; located in shipped code by a tree scan. | None needed | PASS (2026-09-28) | Called from the server only, through `fetchWithDeadline`/`fetchWithTimeout` or a signalled fetch (every outbound server `fetch` in `lib/`, `app/api` and `shared/` enumerated on 2026-09-28: all carry a deadline); its key, if any, is a server-only variable (no `NEXT_PUBLIC_` secret exists). CalDAV requests set their own deadline. |
 | INTEGRATION-EDA633271F4E | INTEGRATION | calendar.google.com | ✅ PASS | None found | Read 2026-09-28; located in shipped code by a tree scan. | None needed | PASS (2026-09-28) | A calendar-provider URL pattern (`lib/calendar/providers.ts`); a family's feed URL is fetched only through the pinned public fetcher (INT-M01). |
@@ -26721,7 +26721,7 @@ highest-yield check in this repository.
 | # | Finding | Status |
 |---|---|---|
 | **F6** | Family email is built but not routed | **OPEN — operator config** |
-| **F19** | Most AI endpoints run unmetered | **Fixed (2026-10-02)** — at the owner's direction to fix every open finding, every AI route now counts against the plan's existing `AI_MONTHLY_ALLOWANCE` (the first option in the F19 section). *As first recorded:* OPEN — pricing decision for the owner |
+| **F19** | Most AI endpoints run unmetered | **OPEN — pricing decision for the owner** |
 | F2 | `robots.txt` omitted 20 authenticated surfaces | fixed |
 | F4 | The test named for F1's property could not observe it | fixed |
 | F7 | The family email gate existed only on the screen | fixed |
@@ -27828,54 +27828,7 @@ as evidence that a claim in the copy ships. Checked before it was written down.
 IP-rate-limited both in memory and durably, scoped to one already-secret gift
 token, and read-only. It is the model the other routes should have followed.
 
-> **Mobile dependency audit, 2026-10-02 (session_01776xJyhVe8xJQvTGeNfT9T), dated
-> exception.** GHSA-86w9-cpqp-85rv (high) was published against every node-forge
-> version (`*`), reached only through Expo's CLI, with no patched release; the
-> mobile job's `npm audit --audit-level=high` failed on every PR. With the
-> owner's approval the step now runs `scripts/npm-audit-gate.mjs`: the same
-> `high` level with one named exception in `mobile/audit-exceptions.json`,
-> **expiring 2026-11-01**. Any other high or critical advisory still fails, the
-> exception fails the job by name once it expires, and output that is not an
-> audit report fails (`tests/npm-audit-gate.test.ts`). Relates to MAIN-F-C10;
-> that row is left as its owner wrote it.
-
 ## F19 — Most AI endpoints run unmetered *(Medium, open — a pricing decision)*
-
-> **Update 2026-10-02 (session_01776xJyhVe8xJQvTGeNfT9T): fixed, first option.**
-> The owner directed that every open finding be fixed, so every AI route now
-> counts against the plan's existing allowance. `lib/server/ai-access.ts` adds
-> `assertAIAllowance` / `assertFamilyAIAllowance` (and `withinAIAllowance` for
-> routes with a non-AI fallback). The routes already wrapped in `withAiRequest`
-> check it before the model call; `flyer` and `pantry-chef` are now wrapped and
-> metered; `voice/speak` and `voice/transcribe` are metered; `gift` meters the
-> family behind the gift link. Six routes with a data-only fallback (briefing,
-> chef, home/utility-savings, journal, trip, savings) serve that fallback when
-> the month is spent rather than refusing. Plans whose allowance is unlimited
-> (Basic and up) see no change; the family that can now hit the wall is one on
-> a capped plan. `tests/every-ai-route-counts-against-the-allowance.test.ts`
-> walks every route under `app/api/ai/` and fails if one reaches a model without
-> the check. The public gift route, which has no signed-in requester, files its
-> own row for the link's family before the model call (review on #788;
-> `tests/a-gift-request-counts-against-the-allowance.test.ts`). Voice speech and
-> transcription are recorded as requests of their own: nothing tied a voice call
-> to an assistant turn the family had already paid for, so "part of the turn"
-> let them be called alone, without end, at no cost to the count. On a capped
-> plan a fully spoken exchange therefore counts up to three requests
-> (transcribe, the turn, speak); linking voice to its turn so it rides free would
-> need a provenance check the routes do not have. A provider HTTP error inside
-> the flyer, speech or transcription call is now recorded as `failed`, not
-> `completed` (review on #788; `tests/a-refused-flyer-scan-is-recorded-as-failed.test.ts`,
-> `tests/ai-voice-routes-auth.test.ts`). On a capped plan the `ai_requests` row
-> is the meter, so `withAiRequest` now refuses (`AiRequestNotFiled`) when the
-> row cannot be filed, instead of running the model unrecorded; on an unlimited
-> plan the row is bookkeeping and the work goes on as before. A count read that
-> answers with no error and no count is refused as unavailable rather than read
-> as zero (reviews on #788; `tests/ai-observability.test.ts`,
-> `tests/ai-monthly-allowance.test.ts`). **Known limit:**
-> the check and the filing are two steps, so two requests at 9 of 10 arriving
-> together can both be admitted. Every metered route shares this; closing it
-> needs an atomic claim in the database (a migration), not a route change.
-> The section below is the original record, kept as written.
 
 F18 fixed *entitlement*. It did not fix *metering*, and the two are different
 questions.

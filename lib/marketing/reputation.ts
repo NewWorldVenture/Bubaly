@@ -69,3 +69,26 @@ export function clampRating(rating: number | null | undefined): number | null {
   if (rating == null || Number.isNaN(rating)) return null;
   return Math.max(1, Math.min(5, Math.round(rating)));
 }
+
+/**
+ * A real app-store LISTING for "Rate the app", or null.
+ *
+ * INT-O01, the owner's decision of 2026-10-02: the row is hidden until a real
+ * listing is configured — not the App Store's front page (what it opened
+ * before), and not Bubaly's own /reviews/new form. A listing is an https URL on
+ * the store's own host that names an app: an App Store `/app/...` page or a
+ * Google Play `details?id=` page. Anything else — a bare host, http, another
+ * domain, seeder text — is not a listing, and the row stays hidden.
+ */
+export function storeListingUrl(settings: { app_store_url?: string | null; play_store_url?: string | null } | null | undefined): string | null {
+  for (const raw of [settings?.app_store_url, settings?.play_store_url]) {
+    const value = (raw ?? '').trim();
+    if (!value || isSeederText(value)) continue;
+    let url: URL;
+    try { url = new URL(value); } catch { continue; }
+    if (url.protocol !== 'https:' || url.username || url.password) continue;
+    if (url.hostname === 'apps.apple.com' && /\/app\/[^/]+(\/id\d+)?/.test(url.pathname) && /\/id\d+/.test(url.pathname)) return url.href;
+    if (url.hostname === 'play.google.com' && url.pathname === '/store/apps/details' && /^[A-Za-z][\w.]*$/.test(url.searchParams.get('id') ?? '')) return url.href;
+  }
+  return null;
+}
