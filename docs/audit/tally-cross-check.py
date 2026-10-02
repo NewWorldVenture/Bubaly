@@ -33,7 +33,8 @@ GENERATED = re.compile(
     r'(?P<rows>\d+) finding rows, (?P<ids>\d+) distinct ids\. (?P<tally>[^*]+)\*')
 PROSE = re.compile(
     r'derives the tally from the\s*\n?>?\s*document itself: '
-    r'\*\*(?P<tally>.+?)\*\* — (?P<rows>\d+) rows', re.S)
+    r'\*\*(?P<tally>.+?)\*\* — '
+    r'(?:(?P<ids>\d+) distinct ids over )?(?P<rows>\d+) rows', re.S)
 
 
 def buckets(text: str) -> dict:
@@ -61,7 +62,10 @@ def buckets(text: str) -> dict:
         if not m:
             raise ValueError(f'unparseable tally bucket: {part!r}')
         name = m.group(1).strip().replace('’', "'")
-        out['BLANK' if name == '—' else name] = int(m.group(2))
+        key = 'BLANK' if name == '—' else name
+        if key in out:
+            raise ValueError(f'duplicate tally bucket: {key!r}')
+        out[key] = int(m.group(2))
     return out
 
 
@@ -91,11 +95,25 @@ def main() -> int:
         return 2
 
     g_rows, p_rows = int(gen.group('rows')), int(prose.group('rows'))
+    g_ids = int(gen.group('ids'))
+    p_ids = int(prose.group('ids')) if prose.group('ids') is not None else None
+    # Zero totals are not a comparison of evidence, and distinct IDs cannot
+    # outnumber rows. The legacy prose omits IDs; do not invent that count.
+    if (g_rows <= 0 or p_rows <= 0 or not 0 < g_ids <= g_rows or
+            (p_ids is not None and not 0 < p_ids <= p_rows)):
+        print('CANNOT COMPARE: row and distinct-id counts must be positive, '
+              'with no more distinct ids than rows. Nothing was checked.',
+              file=sys.stderr)
+        return 2
     problems = []
     if g_rows != p_rows:
         problems.append(f'row count: generated {g_rows}, prose {p_rows}')
+    if p_ids is not None and g_ids != p_ids:
+        problems.append(f'distinct-id count: generated {g_ids}, prose {p_ids}')
     if sum(g.values()) != g_rows:
         problems.append(f'the generated buckets sum to {sum(g.values())} but it claims {g_rows} rows')
+    if sum(p.values()) != p_rows:
+        problems.append(f'the prose buckets sum to {sum(p.values())} but it claims {p_rows} rows')
     for key in sorted(set(g) | set(p)):
         if g.get(key) != p.get(key):
             problems.append(f'{key}: generated {g.get(key, "absent")}, prose {p.get(key, "absent")}')
