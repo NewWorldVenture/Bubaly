@@ -635,6 +635,11 @@ Additions after the 10:55 UTC base, each with its own time: #772 opened 10:58 UT
     - **Checked here against main:** `supabase/migrations/0257_family_ai_settings.sql` declares `family_id uuid primary key` at line 42 (the handoff cites 43), and the registry has no `family_ai_settings` entry.
     - **Planned fix:** a test-only addition to `tests/a-paged-read-needs-a-total-order.test.ts`, registering the key with direct migration evidence and keeping every guard assertion. It deliberately leaves out the `user_preferences` entry, which #787 owns, so the two must compose.
     - **Register B:** the total-order test still has **no** row; its ID would be `SUPPORT-AA60D0836DDE`, as noted above. The full earlier composition is not claimed green.
+  - **#786 standalone guard follow-up ([#771 comment 5951005132](https://github.com/NewWorldVenture/Bubaly/pull/771#issuecomment-5951005132), posted 2026-10-02 11:08:19 UTC; written 2026-10-02 11:08 UTC):**
+    - **Not green:** #786's exact head `0e0e3ac2` has CI36995846343, Web job 110802587044, with 23,980 passed, **1 failed** on the total-order registry and 2 expected failures. The later time-zone, type and build steps were skipped.
+    - **The cause:** #786's ordered `user_preferences` read uses the real primary key, `0002_tables.sql:490`, which was verified above. Standalone #786 does not carry #787's published registry patch (`bec49a67`).
+    - **Claimed fix:** apply the exact nine-line #787 registry and schema-evidence patch to `tests/a-paged-read-needs-a-total-order.test.ts` only, with no source or other files. Identical patches in both PRs should compose without divergence, and all guard controls are kept.
+    - No CI or full-workflow acceptance is claimed.
   - **Catalogue-scanner Windows path portability ([#771 comment 5950973465](https://github.com/NewWorldVenture/Bubaly/pull/771#issuecomment-5950973465)):**
     - **Branch and file:** `codex/catalog-scanner-portability-20261002` from main, editing only `tests/every-key-a-t-call-names-is-in-the-catalogue.test.ts`.
     - **Baseline:** one Windows known-location positive-control failure and three healthy controls, scanning 2,130 files with 15,928 literal and 585 dynamic keys and zero missing keys.
