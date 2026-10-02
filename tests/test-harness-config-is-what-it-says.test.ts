@@ -73,5 +73,8 @@ describe('the mobile app\'s dependencies are audited (MAIN-F-C10)', () => {
     expect(script).toContain("FAILING_SEVERITIES = ['high', 'critical']");
     expect(script).toMatch(/if \(rule && today <= rule\.until\) continue;/);
     expect(script).toContain('process.exit(1)');
+    // Fail closed on a failed or killed npm and on an incomplete report (review on #804).
+    expect(script).toContain('const problem = runProblem(run);');
+    expect(script).toContain('const invalid = reportProblem(report);');
   });
 });
