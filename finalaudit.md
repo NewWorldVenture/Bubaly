@@ -896,6 +896,16 @@ Additions after the 10:55 UTC base, each with its own time: #772 opened 10:58 UT
     - The guards cover console, page, window, rejection, failed-request and unexpected-request events. The 43 related cases in 2 unit files pass, as do full types, lint and the staged diff.
   - **Status:** `COMPONENT-FCDDC65D5020`, `CONTROL-C059FA40D296` and MOD-071 stay **NOT STARTED**, because no transition was requested. No PASS: hosted CI on #799 and the root's independent review are pending. The new spec has no Register B row (`SUPPORT-15B9AC768762` by rule).
   - **Not claimed:** styling, responsive layout, the full backend workflow, backend cancellation or retry. **PRODUCTION READY: NO.**
+- **Audit lane claim: packing manual-add save keeps the draft on failure (owner-account comment posted 2026-10-02 11:54 UTC, [#771 comment 5951812749](https://github.com/NewWorldVenture/Bubaly/pull/771#issuecomment-5951812749)).**
+  - **Branch and files:** `codex/packing-save-drafts-20261002`, clean at main `01b2c380`. Only the manual add in `components/vacations/trip-packing.tsx` and a new `tests/e2e/packing-save.spec.ts`. `lib/vacations/packing.ts` is read-only.
+  - **The defect:** a React 19 browser baseline (507542) gives 2 desired failures and 2 controls.
+    - A refused item insert closes the dialog and discards the draft.
+    - A refused master-list insert carries on and inserts the item with `list_id: null`; `0070_vacations.sql` makes `list_id` nullable.
+    - The 5 existing source-guard tests pass (a574dd) and do not cover a failed manual add.
+  - **Planned repair:** stop if creating the master list fails, keep the entered values on a refusal or transport failure, close only after success, and re-enable Save in `finally`. No automatic retry and no speculative rollback.
+  - **Status (verified, unchanged; no transition requested):** `COMPONENT-3385D14A6F1E` and `LIBRARY-D87DA1107039` stay **NOT STARTED**. The new spec has no Register B row (`SUPPORT-9F8B4AB74A71` by rule).
+  - **Overlap (NWV, local and unpublished):** the I18N-011 commit (`eb213702`, and `1ccc0dbd` in one worktree) changes 5 `describeDbError(…, tr)` lines of `trip-packing.tsx`. It is held, unchanged, and will be rebased on whichever lands first. It does not touch the manual-add control flow.
+  - **Not claimed:** dates, providers, Auth, configuration, migrations or production. **PRODUCTION READY: NO.**
 - **#768 integration:** promotion out of draft and any merge are blocked pending the owner's explicit approval. This checkpoint promotes and merges nothing.
 - **Register B status-mark correction:** #770 introduced three rows whose status cell read `?? IN PROGRESS` instead of `🔄 IN PROGRESS` (SUPPORT-AD3999932010, SUPPORT-EC79FA65AC23, SUPPORT-9C6B11D5A8EB). The register prose already counted them as IN PROGRESS, so only the mark is restored. Every ID, order, status, count and piece of evidence text is unchanged. Register B stays **14,364 = 11,877 NOT STARTED + 2,136 IN PROGRESS + 185 PASS + 157 FIXED + PASS + 9 BLOCKED**.
 
