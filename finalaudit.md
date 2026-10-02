@@ -816,7 +816,7 @@ Additions after the 10:55 UTC base, each with its own time: #772 opened 10:58 UT
     - React 19.3/Chromium 58/58 pass (5d1997): the 54 earlier cases plus 4 new ones. All 14 newer cases assert a clean browser console.
     - Full TypeScript (b8b6b6), two-file lint and diff checks, and the 83 related cases across 7 unit files (6eb1de) pass.
     - The four new cases against the original `25dec457` give 2 desired failures and 2 healthy controls (4e6caa).
-    - The root's independent baseline and fix review is pending and not credited.
+    - **Update (comment edited 2026-10-02 11:43 UTC):** the root's independent run of all 58 cases against the original `25dec457` (c3f256) reproduces 2 desired failures and 56 healthy controls. Both transport and lost-response failures give no feedback and an unhandled rejection. The independent review of the final fix is still pending and not credited.
   - **Status:** `COMPONENT-4D0C5DE53A9F` and `SUPPORT-E8F3F434DAC5` stay IN PROGRESS. No PASS. #797 depends on #794 and cannot be integrated before it. The authorization of the existing service and action is not reclassified by this client-side repair.
   - **Not established:** deployed Auth, RLS, SQL, providers, or the full meal workflow. **PRODUCTION READY: NO.**
 - **Audit lane claim: the todo dialog's pending save does not close a later dialog, `COMPONENT-35043C5F192D` (owner-account comment posted 2026-10-02 11:43 UTC, [#771 comment 5951634321](https://github.com/NewWorldVenture/Bubaly/pull/771#issuecomment-5951634321)).**
@@ -829,6 +829,22 @@ Additions after the 10:55 UTC base, each with its own time: #772 opened 10:58 UT
     - The stale `time003-wip-backup` holds superseded TIME-003 work-in-progress date-string lines in the same file. It is not for revival.
     - Neither touches dialog completion.
   - **Not claimed:** live Auth, providers, SQL, migrations, production configuration or money. **PRODUCTION READY: NO.**
+- **TIME-003 finding: a title-only reminder edit moves the saved instant outside UTC (owner-account comment posted 2026-10-02 11:43 UTC, [#771 comment 5951639694](https://github.com/NewWorldVenture/Bubaly/pull/771#issuecomment-5951639694); read-only).**
+  - **Mechanism, verified on main `01b2c380`:** the reminders-module blob is `296a2ec7`.
+    - The edit field is filled with `reminder.remind_at.slice(0, 16)`, a UTC wall clock.
+    - Save parses it with `new Date(remindAtRaw).toISOString()`, which reads it as device-local time.
+  - **Reproduction:** the root's frozen receipt 0bf3f4 confirms author b45251. Each title-only Save shifts the instant by the device offset:
+    - New York in October: 16:00Z → 20:00Z → 00:00Z the next day.
+    - New York in December: 16:00Z → 21:00Z → 02:00Z the next day.
+    - Tokyo: 16:00Z → 07:00Z → 22:00Z the previous day.
+    - UTC does not drift. Cancel, an explicit refusal and a zero-row acknowledgment keep the original.
+    - These are 7 characterization and control cases across 3 affected scenarios, not 7 workflow passes. This is a synthetic fixture; nothing about a deployed server, Auth, RLS or providers is claimed.
+  - **Reconciliation with the NWV-held clock work:**
+    - No held NWV work fixes this. The TIME-003 family-zone branches are already merged into main.
+    - The stale `time003-wip-backup` changes only the reminder date *display* (`useFormat`), not the input conversion, and it is superseded.
+    - Main already has the established pattern, `toLocalInput` / `fromLocalInput` from `lib/time/local-input` with the family zone, used by the calendar and behavior modules. The reminders form was not moved onto it.
+    - NWV releases this one input consumer (the reminders `remind_at` fill and parse) to a root-authorized lane unless the owner says otherwise ([#771 comment 5951651650](https://github.com/NewWorldVenture/Bubaly/pull/771#issuecomment-5951651650)). The other TIME-003 consumers stay as recorded.
+  - **Status:** `COMPONENT-8DAC200BDFEA` and MOD-083 stay **IN PROGRESS**, and the full edit and timezone workflow stays open. No PASS. **PRODUCTION READY: NO.**
 - **#768 integration:** promotion out of draft and any merge are blocked pending the owner's explicit approval. This checkpoint promotes and merges nothing.
 - **Register B status-mark correction:** #770 introduced three rows whose status cell read `?? IN PROGRESS` instead of `🔄 IN PROGRESS` (SUPPORT-AD3999932010, SUPPORT-EC79FA65AC23, SUPPORT-9C6B11D5A8EB). The register prose already counted them as IN PROGRESS, so only the mark is restored. Every ID, order, status, count and piece of evidence text is unchanged. Register B stays **14,364 = 11,877 NOT STARTED + 2,136 IN PROGRESS + 185 PASS + 157 FIXED + PASS + 9 BLOCKED**.
 
