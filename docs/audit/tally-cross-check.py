@@ -72,7 +72,15 @@ def buckets(text: str) -> dict:
 def main() -> int:
     doc = open(DOC, encoding='utf-8').read()
 
-    gen, prose = GENERATED.search(doc), PROSE.search(doc)
+    generated = list(GENERATED.finditer(doc))
+    written = list(PROSE.finditer(doc))
+    if len(generated) > 1 or len(written) > 1:
+        print(f'CANNOT COMPARE: ambiguous tally metadata ({len(generated)} '
+              f'generated records, {len(written)} prose records). Nothing was '
+              'checked; the document must identify one of each.', file=sys.stderr)
+        return 2
+    gen = generated[0] if generated else None
+    prose = written[0] if written else None
     # Neither half may be assumed. A missing prose tally with a present generated
     # one is exactly what "somebody reworded the header" looks like, and reporting
     # AGREE off one side would be agreement with nothing.
