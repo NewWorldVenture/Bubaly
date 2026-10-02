@@ -872,6 +872,20 @@ Additions after the 10:55 UTC base, each with its own time: #772 opened 10:58 UT
     - Fractional, zero, cleared-unit and cancel behaviour stay. There is no backend cancellation or retry, no shared helper, and no change to copy, AI or TIME-003.
   - **Status (verified, unchanged; no transition requested):** `COMPONENT-FCDDC65D5020`, `CONTROL-C059FA40D296` (PantryItemModal) and MOD-071 stay **NOT STARTED**. The new spec has no Register B row (the path rule gives `SUPPORT-15B9AC768762`); one is added only on request. No NWV branch or worktree edits `pantry-module.tsx`.
   - **Not claimed:** Auth, providers, SQL, migrations, production configuration or money. **PRODUCTION READY: NO.**
+- **Candidate #798 for the todo-dialog lane (owner-account comment posted 2026-10-02 11:49 UTC, [#771 comment 5951730732](https://github.com/NewWorldVenture/Bubaly/pull/771#issuecomment-5951730732)).**
+  - **The candidate:** draft [#798](https://github.com/NewWorldVenture/Bubaly/pull/798) at `58d67b66`, on main `01b2c380`, changing two files: `todos-module.tsx` (blob `f8c732eb`) and the new `tests/e2e/todo-modal-completion.spec.ts` (blob `3d19da32`).
+    - UI completion is fenced per editor on close and on unmount, and a successful committed save always refreshes. A requested save can still persist after its dialog closes; there is no backend cancellation and no retry is added.
+    - The existing changed-retry submission-id reset and its source guard are kept. Error and catalogue strings and date conversions are untouched.
+  - **Author-reported local evidence:**
+    - React 19/Chromium 16/16 pass (80d073). It covers same-task and different-task reopening; delayed success, refusal and throw; StrictMode; Cancel, Escape and X; persistence; duplicate-save disabling; read refusal and full unmount. The browser console is clean.
+    - The same 16 cases against main's `6fa1c96e` give 9 desired failures and 7 controls (f319b6): 4 late-success closes, 4 stale-editor toasts and 1 unmounted toast.
+    - The 5 related files pass 77/77 (b6bd11), and scoped lint, strict TypeScript (448805) and the diff check (ef6fd1) pass.
+    - The root reproduced the defect independently (f62b38).
+    - Action transport, session, realtime and icons are inert seams. There is no live Auth, RLS or Next server-action proof.
+  - **Status:** `COMPONENT-35043C5F192D` stays **NOT STARTED**, because no transition was requested. #798 is recorded here as candidate evidence under that permanent ID. No PASS: hosted CI on #798 is pending.
+    - The new spec has no Register B row (`SUPPORT-CCE14DE15E82` by rule).
+    - The handoff calls the TIME-003 reminder conversion NWV-owned. NWV has since released that one consumer (5951651650), pending the owner's word.
+  - **PRODUCTION READY: NO.**
 - **#768 integration:** promotion out of draft and any merge are blocked pending the owner's explicit approval. This checkpoint promotes and merges nothing.
 - **Register B status-mark correction:** #770 introduced three rows whose status cell read `?? IN PROGRESS` instead of `🔄 IN PROGRESS` (SUPPORT-AD3999932010, SUPPORT-EC79FA65AC23, SUPPORT-9C6B11D5A8EB). The register prose already counted them as IN PROGRESS, so only the mark is restored. Every ID, order, status, count and piece of evidence text is unchanged. Register B stays **14,364 = 11,877 NOT STARTED + 2,136 IN PROGRESS + 185 PASS + 157 FIXED + PASS + 9 BLOCKED**.
 
