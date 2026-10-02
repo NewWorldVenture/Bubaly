@@ -8,6 +8,7 @@ import { useApp } from '@/components/app/app-context';
 import { familyMediaPath } from '@/lib/storage/family-media';
 import { useRealtimeQuery } from '@/lib/hooks/use-realtime-query';
 import { createClient } from '@/lib/supabase/client';
+import { readAllAsQuery } from '@/lib/supabase/read-all';
 import { describeDbError, wroteNoRows } from '@/lib/supabase/errors';
 import { useToast } from '@/components/ui/toast';
 import { PageHeader } from '@/components/app/page-header';
@@ -62,7 +63,9 @@ export function InventoryModule() {
   });
   const items = useRealtimeQuery<Item>({
     table: 'inventory_items', familyId,
-    fetcher: (s) => s.from('inventory_items').select('*').eq('family_id', familyId).order('updated_at', { ascending: false }),
+    // This live traversal is ordered, but is not a snapshot of concurrent edits.
+    fetcher: (s) => readAllAsQuery<Item>((from, to) => s.from('inventory_items').select('*')
+      .eq('family_id', familyId).order('updated_at', { ascending: false }).order('id', { ascending: false }).range(from, to)),
     deps: [familyId],
   });
   const moves = useRealtimeQuery<Move>({
