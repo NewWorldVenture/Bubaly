@@ -45,7 +45,7 @@ describe('blog counts/list paginate past the 1000-row cap', () => {
     expect(helper).toMatch(/\.order\('published_at'[^)]*\)\s*\n?\s*\.order\('slug'\)/);
   });
 
-  for (const fn of ['getCategoryCounts', 'getAllPosts', 'getAllPostRefs']) {
+  for (const fn of ['getCategoryCounts', 'readAllPosts', 'getAllPostRefs']) {
     it(`${fn} fetches through the paginating helper (not a single capped query)`, () => {
       const b = body(fn);
       expect(b).toContain('fetchAllPublishedRows');
@@ -53,4 +53,8 @@ describe('blog counts/list paginate past the 1000-row cap', () => {
       expect(b).not.toMatch(/\.select\('slug, category'\)\s*\.eq\('published', true\);/);
     });
   }
+
+  it('getAllPosts reads through readAllPosts, so it paginates the same way', () => {
+    expect(body('getAllPosts')).toContain('await readAllPosts()');
+  });
 });

@@ -5,7 +5,7 @@
 
 import type { SupabaseBrowser } from '@/lib/supabase/types';
 import { isMissingFunctionError } from '@/lib/supabase/errors';
-import { parseEvent, parseDueDate, splitItems, parseGroceryItem, type CaptureKind } from './parse';
+import { parseEventInZone, parseDueDateInZone, splitItems, parseGroceryItem, type CaptureKind } from './parse';
 
 export type CaptureTable = 'notes' | 'calendar_events' | 'todo_items' | 'grocery_items';
 
@@ -126,6 +126,12 @@ export type CaptureSaveInput = CaptureOperationGuard & {
   userId: string;
   /** The acting member, used to self-assign tasks. */
   memberId?: string | null;
+  /**
+   * The FAMILY's IANA zone (TIME-003). "Tomorrow at 3pm" and a task's due day
+   * resolve on the family's clock, not the device's. Without it they resolve
+   * on the runtime's, as before.
+   */
+  timeZone?: string;
 };
 
 const NO_FUNCTION = Symbol('no-function');
@@ -204,7 +210,7 @@ export async function saveCapture(supabase: SupabaseBrowser, input: CaptureSaveI
   }
 
   if (kind === 'event') {
-    const parsed = parseEvent(value);
+    const parsed = parseEventInZone(value, new Date(), input.timeZone);
     const ids = await write(operation, 'capture', 1, signal => supabase.from('calendar_events').insert({
       family_id: familyId, title: parsed.title, starts_at: parsed.startsAt.toISOString(),
       all_day: parsed.allDay, category: 'general', created_by: userId,
@@ -218,7 +224,7 @@ export async function saveCapture(supabase: SupabaseBrowser, input: CaptureSaveI
     // 0015) — the auth user id violates that FK and the task never saves.
     const listId = await defaultTodoListId(supabase, familyId, memberId ?? null, operation);
     current(operation, 'capture');
-    const { title, dueDate } = parseDueDate(value);
+    const { title, dueDate } = parseDueDateInZone(value, new Date(), input.timeZone);
     const ids = await write(operation, 'capture', 1, signal => supabase.from('todo_items').insert({
       family_id: familyId, list_id: listId, title, due_date: dueDate, created_by: memberId ?? null,
       assigned_to_id: memberId ?? null,

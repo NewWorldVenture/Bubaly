@@ -13,11 +13,10 @@ import { Input, Textarea, Field, Select } from '@/components/ui/input';
 import { Button } from '@/components/ui/button';
 import { Avatar } from '@/components/ui/avatar';
 import { ErrorState, SkeletonList, EmptyState } from '@/components/ui/states';
-import { fmtDate } from '@/lib/utils/format';
 import { VISIT_KINDS, visitKindMeta, sortByVisitDate, upcomingFollowUps, daysUntilFollowUp, type VisitKind } from '@/lib/health/visits';
 import type { Tables } from '@/lib/database.types';
 import { useTranslations } from '@/components/i18n/locale-provider';
-import { useFormat } from '@/components/i18n/use-format';
+import { useFormat, useFamilyCalendarToday } from '@/components/i18n/use-format';
 import { todayInZone } from '@/lib/schedule/zoned';
 
 type Visit = Tables<'health_visits'>;
@@ -27,8 +26,10 @@ const blank = (kind: VisitKind, tz: string) => ({ id: '', member_id: '', kind, t
 export function HealthVisitsModule({ defaultKind, title = 'Visits & History', lockKind = false }: {
   defaultKind?: VisitKind; title?: string; lockKind?: boolean;
 }) {
+  // Date-only helpers read local calendar fields: give them the FAMILY's day (TIME-003).
+  const familyToday = useFamilyCalendarToday();
   const t = useTranslations();
-  const { fmtMoney } = useFormat();
+  const { fmtDate, fmtMoney } = useFormat();
   const { familyId, userId, members, family, role } = useApp();
   // 0414 makes the database refuse a non-manager write on this table. The
   // controls follow it, the way medications-module.tsx already does — a button
@@ -139,7 +140,7 @@ export function HealthVisitsModule({ defaultKind, title = 'Visits & History', lo
           <p className="mb-1.5 flex items-center gap-1.5 text-xs font-semibold text-amber-300"><CalendarClock className="h-3.5 w-3.5" /> {t('healthVisits.upcomingFollowUps')}</p>
           <ul className="space-y-1 text-sm">
             {followUps.slice(0, 4).map((v) => {
-              const d = daysUntilFollowUp(v)!;
+              const d = daysUntilFollowUp(v, familyToday)!;
               return <li key={v.id} className="flex items-center gap-2"><span className="font-medium">{v.title}</span><span className="text-xs text-muted">{d < 0 ? `${-d}d overdue` : d === 0 ? 'today' : `in ${d}d`} · {fmtDate(v.follow_up_date!)}</span></li>;
             })}
           </ul>

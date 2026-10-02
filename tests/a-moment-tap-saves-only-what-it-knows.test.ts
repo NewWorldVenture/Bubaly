@@ -51,6 +51,9 @@ const state = vi.hoisted(() => ({
 
 vi.mock('react', async (original) => ({
   ...(await original<typeof import('react')>()),
+  // The shared formatter reads the reader's zone through this (TIME-003);
+  // components here run as plain functions, so answer with the client snapshot.
+  useSyncExternalStore: (_subscribe: unknown, getSnapshot: () => unknown) => getSnapshot(),
   useState: (initial: unknown) => {
     const index = state.cursor++;
     if (!(index in state.slots)) state.slots[index] = typeof initial === 'function' ? initial() : initial;
@@ -76,6 +79,8 @@ vi.mock('@/components/ui/toast', () => ({ useToast: () => ({ success: state.succ
 vi.mock('@/components/i18n/locale-provider', () => ({
   useTranslations: () => say,
   useLocale: () => ({ code: 'en-US' }),
+  // No family bound: formatters fall back to the reader's zone (TIME-003).
+  useFamilyTimeZone: () => undefined,
 }));
 vi.mock('next/navigation', () => ({ useRouter: () => ({ refresh: () => {}, push: () => {} }) }));
 vi.mock('next/link', () => ({ default: (props: Record<string, unknown>) => createElement('a', props) }));

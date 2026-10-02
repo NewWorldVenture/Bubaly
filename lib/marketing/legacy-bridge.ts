@@ -135,13 +135,40 @@ export async function syncLegacyLandingToPlatform(db: MarketingDb, page: LegacyL
     deleted_at: null,
   }, { onConflict: 'path' }).select('id').single();
   if (error) {
-    if (isMissingPlatformSchema(error)) {
+    // A missing trigger dependency must not masquerade as an absent registry.
+    // Keep this compatibility check specific to the landing table being synced.
+    const missingRegistry =
+      (error.code === 'PGRST205' && /could not find the table ['"](?:public\.)?marketing_pages['"] in the schema cache/i.test(error.message)) ||
+      (error.code === '42P01' && /^relation ["']?(?:public\.)?marketing_pages["']? does not exist$/i.test(error.message));
+    if (missingRegistry) {
       console.warn('[marketing-legacy-bridge] marketing platform migration is not applied; legacy landing page remains active');
       return { available: false, pageId: null };
     }
     throw error;
   }
   return { available: true, pageId: data?.id ?? null };
+}
+
+/**
+ * Retire only noncurrent URLs belonging to this legacy landing page. Run after
+ * a confirmed current-page sync, including retries whose legacy slug already
+ * changed before an earlier retirement failed. Ownership stays in the UPDATE
+ * predicates so reassigned canonical rows cannot be archived by a stale read.
+ *
+ * This repairs canonical URL visibility only. AEO withdrawal needs a database
+ * retirement guarantee; a separate path-only answer update can affect a new
+ * owner at that path and is deliberately not performed here.
+ */
+export async function retireLegacyLandingAliases(db: MarketingDb, page: Pick<LegacyLanding, 'id' | 'slug' | 'actorId'>): Promise<string[]> {
+  const { data, error } = await db.from('marketing_pages').update({
+    status: 'archived', deleted_at: new Date().toISOString(), updated_by: page.actorId,
+  }).eq('page_type', 'landing')
+    .contains('content', { source: 'marketing_landing_pages', source_id: page.id })
+    .like('path', '/lp/%').neq('path', `/lp/${page.slug}`).is('deleted_at', null)
+    .select('path');
+  if (error) throw error;
+  if (!Array.isArray(data)) throw new Error('Could not confirm landing page alias retirement.');
+  return data.map(row => row.path);
 }
 
 export async function archiveLegacyLandingOnPlatform(db: MarketingDb, slug: string, actorId: string): Promise<boolean> {

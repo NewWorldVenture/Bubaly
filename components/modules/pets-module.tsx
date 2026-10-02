@@ -23,8 +23,8 @@ import {
   petAgeLabel, careUrgency, upcomingCare, careSummary, recommendedCare,
   type CareUrgency,
 } from '@/lib/pets/care';
-import { useLocale, useTranslations } from '@/components/i18n/locale-provider';
-import type { LocaleCode } from '@/lib/i18n/locales';
+import { useTranslations } from '@/components/i18n/locale-provider';
+import { useFamilyClock, useFormat, useFamilyCalendarToday } from '@/components/i18n/use-format';
 import { useConfirm } from '@/components/ui/confirm';
 import { todayInZone } from '@/lib/schedule/zoned';
 
@@ -43,13 +43,12 @@ const URGENCY_STYLE: Record<CareUrgency, string> = {
   ok: 'border-border bg-surface/50 text-muted',
 };
 
-const fmtDateIn = (locale: LocaleCode) => (d: string): string => {
-  return new Date(`${d.slice(0, 10)}T00:00:00`).toLocaleDateString(locale, { month: 'short', day: 'numeric', year: 'numeric' });
-};
 
 export function PetsModule() {
-  const locale = useLocale();
-  const fmtDate = fmtDateIn(locale.code);
+  const { fmtDate: fmt } = useFormat();
+  const fmtDate = (d: string) => fmt(d.slice(0, 10), 'MMM d, yyyy');
+  const clock = useFamilyClock();
+  const familyToday = useFamilyCalendarToday();
   const t = useTranslations();
   const { familyId, userId } = useApp();
   const { success, error: toastError } = useToast();
@@ -70,10 +69,10 @@ export function PetsModule() {
   const [careForPet, setCareForPet] = useState<Pet | null>(null);
 
   const summary = useMemo(
-    () => careSummary(pets.data.length, records.data, new Date()),
-    [pets.data.length, records.data],
+    () => careSummary(pets.data.length, records.data, familyToday),
+    [pets.data.length, records.data, familyToday],
   );
-  const upcoming = useMemo(() => upcomingCare(records.data).slice(0, 6), [records.data]);
+  const upcoming = useMemo(() => upcomingCare(records.data, familyToday).slice(0, 6), [records.data, familyToday]);
 
   // The AI care engine: deterministic recommendations across all pets.
   const recommendations = useMemo(
@@ -156,9 +155,9 @@ export function PetsModule() {
         <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
           {pets.data.map((pet) => {
             const meta = speciesMeta(pet.species);
-            const age = petAgeLabel(pet.birthday);
+            const age = petAgeLabel(pet.birthday, familyToday);
             const petRecords = records.data.filter((r) => r.pet_id === pet.id);
-            const nextDue = upcomingCare(petRecords)[0];
+            const nextDue = upcomingCare(petRecords, familyToday)[0];
             return (
               <button
                 key={pet.id}
@@ -350,13 +349,15 @@ function CareForm({ familyId, userId, pet, onClose, onSaved }: { familyId: strin
 function PetDetail({ pet, records, onClose, onAddCare, onRemove }: {
   pet: Pet; records: CareRecord[]; onClose: () => void; onAddCare: () => void; onRemove: () => void;
 }) {
-  const locale = useLocale();
-  const fmtDate = fmtDateIn(locale.code);
+  const { fmtDate: fmt } = useFormat();
+  const fmtDate = (d: string) => fmt(d.slice(0, 10), 'MMM d, yyyy');
+  // Date-only helpers read local calendar fields: give them the FAMILY's day (TIME-003).
+  const familyToday = useFamilyCalendarToday();
   const t = useTranslations();
   const askConfirm = useConfirm();
   const { error: toastError } = useToast();
   const meta = speciesMeta(pet.species);
-  const age = petAgeLabel(pet.birthday);
+  const age = petAgeLabel(pet.birthday, familyToday);
   const sorted = [...records].sort((a, b) => (a.record_date < b.record_date ? 1 : -1));
 
   async function deleteRecord(id: string) {
@@ -403,7 +404,7 @@ function PetDetail({ pet, records, onClose, onAddCare, onRemove }: {
             <ul className="space-y-1.5">
               {sorted.map((r) => {
                 const Icon = CARE_ICON[r.kind] ?? PawPrint;
-                const u = careUrgency(r.next_due);
+                const u = careUrgency(r.next_due, familyToday);
                 return (
                   <li key={r.id} className="group flex items-center gap-3 rounded-xl border border-border px-3 py-2">
                     <Icon className="h-4 w-4 shrink-0 text-brand-text" />

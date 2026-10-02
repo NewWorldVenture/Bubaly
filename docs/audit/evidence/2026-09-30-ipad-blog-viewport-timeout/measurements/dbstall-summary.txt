@@ -1,0 +1,4 @@
+median/p90/max ms
+ipad            /          n=  1 total 2830/2830/2830   goto 1608/1608/1608 ping 14/32/32   resize 36/55/55       raf 261/337/337  long-sum 886/886/886    longest 242/242/242  nodes 911
+ipad            /faq       n=  1 total 770/770/770      goto 329/329/329    ping 35/44/44   resize 46/62/62       raf 25/45/45     long-sum 56/56/56       longest 56/56/56     nodes 271
+ipad            /pricing   n=  1 total 20913/20913/20913 goto 20199/20199/20199 ping 20/107/107 resize 47/74/74       raf 61/84/84     long-sum 148/148/148    longest 84/84/84     nodes 2027

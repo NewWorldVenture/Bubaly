@@ -23,6 +23,7 @@ import {
 } from '@/lib/opportunities/next-actions';
 import type { Tables } from '@/lib/database.types';
 import { useTranslations } from '@/components/i18n/locale-provider';
+import { useFamilyClock } from '@/components/i18n/use-format';
 
 type Event = Tables<'calendar_events'>;
 type Task = Tables<'todo_items'>;
@@ -34,10 +35,6 @@ const SOURCE_META: Record<ActionSource, { icon: typeof Target; cls: string; labe
   opportunity: { icon: Trophy, cls: 'text-amber-300 bg-amber-500/10 border-amber-500/30', label: 'Opportunity' },
 };
 
-/** Local YYYY-MM-DD (en-CA renders ISO date). */
-function dayKey(d: Date | string): string {
-  return new Date(d).toLocaleDateString('en-CA');
-}
 
 const OPEN_OPP = new Set(['interested', 'registered', 'waitlisted']);
 const PRIORITIES = new Set<ActionPriority>(['low', 'medium', 'high']);
@@ -54,9 +51,14 @@ export function NextActionsModule() {
     journey.start();
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
-  const today = dayKey(new Date());
+  // The FAMILY's day (TIME-003). The old helper read the device's day and took
+  // a date-only due date as UTC midnight, so west of Greenwich a task due the
+  // 8th ranked as due the 7th.
+  const clock = useFamilyClock();
+  const dayKey = clock.dayKeyOf;
+  const today = clock.todayKey();
   // 45-day horizon keeps the list focused on what's actually actionable soon.
-  const horizon = dayKey(new Date(Date.now() + 45 * 86_400_000));
+  const horizon = clock.wallKey(clock.addDays(clock.wallToday(), 45));
 
   const { data: events, loading: eventsLoading, error: eventsError, refresh: refreshEvents } = useRealtimeQuery<Event>({
     table: 'calendar_events', familyId, deps: [familyId],
@@ -101,7 +103,7 @@ export function NextActionsModule() {
       });
     }
     return rankNextActions(inputs, today);
-  }, [events, tasks, opps, today, horizon]);
+  }, [events, tasks, opps, today, horizon, dayKey]);
 
   const loading = eventsLoading || tasksLoading || oppsLoading;
   const error = eventsError || tasksError || oppsError;

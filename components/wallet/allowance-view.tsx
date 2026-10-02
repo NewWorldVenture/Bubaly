@@ -19,6 +19,7 @@ import { dueAllowances } from '@/lib/wallet/allowance';
 import { WalletSubnav } from '@/components/wallet/wallet-subnav';
 import { saveAllowanceRuleAction, toggleAllowanceRuleAction, runDueAllowancesAction } from '@/app/(app)/wallet/actions';
 import { useLocale, useTranslations } from '@/components/i18n/locale-provider';
+import { useFamilyClock } from '@/components/i18n/use-format';
 
 export type AllowanceRow = {
   childWalletId: string; name: string; ruleId: string | null;
@@ -36,7 +37,8 @@ export function AllowanceView({ rows, enabled, canManage }: { rows: AllowanceRow
   const [editing, setEditing] = useState<AllowanceRow | null>(null);
   const [running, setRunning] = useState(false);
 
-  const today = new Date().toISOString().slice(0, 10);
+  // Due by the FAMILY's day (TIME-003), not Greenwich's.
+  const today = useFamilyClock().todayKey();
   const due = dueAllowances(rows.map((r) => ({ isActive: r.isActive && !!r.ruleId, nextRunOn: r.nextRunOn, amountCents: r.amountCents })), today);
 
   async function toggle(row: AllowanceRow) {

@@ -63,14 +63,19 @@ describe('a day key is the day the reader sees', () => {
   });
 });
 
-describe('the calendar module keys days the readers way', () => {
+describe('the calendar module keys its columns and its events in one frame', () => {
   it('has no UTC day key left in it', () => {
     const source = readFileSync(join(ROOT, 'components/modules/calendar-module.tsx'), 'utf8');
     expect(
       source.includes('toISOString().slice(0, 10)'),
       'a UTC day key is back in calendar-module.tsx — the grid and its events will disagree outside UTC',
     ).toBe(false);
-    expect(source).toContain('localDayKey');
+    // TIME-003 (owner decision: every family surface reads in the FAMILY's zone):
+    // the columns are family wall readings keyed by `wallKey`, and the events
+    // are keyed by `clock.dayKeyOf`, the family's day of the instant — the same
+    // frame on both sides, which is the invariant this file exists for.
+    expect(source).toMatch(/\bwallKey\(/);
+    expect(source).toContain('clock.dayKeyOf(e.starts_at)');
   });
 });
 

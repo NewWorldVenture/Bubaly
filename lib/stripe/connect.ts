@@ -34,11 +34,12 @@ export async function ensureConnectedAccount(
   supabase: DB,
   params: { familyId: string; email: string | null; userId: string | null },
 ): Promise<{ accountId: string; rowId: string }> {
-  const { data: existing } = await supabase
+  const { data: existing, error: lookupError } = await supabase
     .from('stripe_connected_accounts')
     .select('id, stripe_account_id')
     .eq('family_id', params.familyId)
     .maybeSingle();
+  if (lookupError) throw new Error('Could not load the existing connected account');
   if (existing) return { accountId: existing.stripe_account_id, rowId: existing.id };
 
   const stripe = getStripe();

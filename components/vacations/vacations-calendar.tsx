@@ -11,6 +11,7 @@ import { VACATION_KINDS, lookup } from '@/lib/vacations/meta';
 import { buildICS, type IcsEvent } from '@/lib/vacations/ics';
 import type { Tables } from '@/lib/database.types';
 import { useTranslations } from '@/components/i18n/locale-provider';
+import { useFamilyClock } from '@/components/i18n/use-format';
 
 type Trip = Tables<'vacations'>;
 
@@ -27,9 +28,13 @@ export function VacationsCalendar() {
   const { familyId } = useApp();
   const { data: trips, error, refresh } = useRealtimeQuery<Trip>({ table: 'vacations', familyId, deps: [familyId], fetcher: (sb) => sb.from('vacations').select('*').eq('family_id', familyId) });
 
-  const now = new Date();
-  const [year, setYear] = useState(now.getFullYear());
-  const [month, setMonth] = useState(now.getMonth());
+  // The FAMILY's month and today (TIME-003). `toISOString().slice(0, 10)` was
+  // Greenwich's day, so "today" was ringed on the wrong square every evening
+  // west of it.
+  const clock = useFamilyClock();
+  const todayKey = clock.todayKey();
+  const [year, setYear] = useState(() => Number(todayKey.slice(0, 4)));
+  const [month, setMonth] = useState(() => Number(todayKey.slice(5, 7)) - 1);
 
   const cells = useMemo(() => {
     const first = new Date(year, month, 1);
@@ -89,7 +94,7 @@ export function VacationsCalendar() {
           {cells.map((day, i) => {
             if (!day) return <div key={i} className="aspect-square rounded-lg" />;
             const dayTrips = datedTrips.filter((t) => inRange(day, t.start_date, t.end_date));
-            const isToday = day === now.toISOString().slice(0, 10);
+            const isToday = day === todayKey;
             return (
               <div key={i} className={`aspect-square overflow-hidden rounded-lg border p-1 text-left ${isToday ? 'border-brand' : 'border-border/50'} ${dayTrips.length ? 'bg-brand/5' : ''}`}>
                 <span className={`text-[11px] ${isToday ? 'font-bold text-brand-text' : 'text-muted'}`}>{Number(day.slice(-2))}</span>

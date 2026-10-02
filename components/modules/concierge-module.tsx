@@ -23,6 +23,7 @@ import { planAcceptedAction } from '@/app/(app)/dashboard/concierge/actions';
 import type { Tables } from '@/lib/database.types';
 import { useLocale, useTranslations } from '@/components/i18n/locale-provider';
 import type { LocaleCode } from '@/lib/i18n/locales';
+import { useFormat } from '@/components/i18n/use-format';
 
 type Plan = Tables<'concierge_plans'>;
 
@@ -49,11 +50,6 @@ const STATUS_STYLES: Record<string, string> = {
   cancelled: 'bg-red-500/15 text-red-400 border border-red-500/30',
 };
 
-const fmtDateIn = (locale: LocaleCode) => (d: string | null) => {
-  if (!d) return null;
-  return new Date(d).toLocaleDateString(locale, { month: 'short', day: 'numeric', year: 'numeric' });
-};
-
 function centsIn(locale: LocaleCode, cents: number | null) {
   if (!cents) return null;
   return new Intl.NumberFormat(locale, { style: 'currency', currency: 'USD', maximumFractionDigits: 0 }).format(cents / 100);
@@ -65,7 +61,9 @@ export function ConciergeModule() {
   const t = useTranslations();
   // Money follows the reader's locale; the currency does not.
   const locale = useLocale();
-  const fmtDate = fmtDateIn(locale.code);
+  // In the family's zone, and a date-only value as written (TIME-003).
+  const { fmtDate: fmt } = useFormat();
+  const fmtDate = (d: string | null) => (d ? fmt(d, 'MMM d, yyyy') : null);
   const fmtCents = (cents: number | null) => centsIn(locale.code, cents);
   const { familyId, userId, family } = useApp();
   const { success, error: toastError } = useToast();
@@ -421,7 +419,9 @@ function PlanDetail({ plan, onClose, onDelete, onRefresh }: {
   const t = useTranslations();
   // Money follows the reader's locale; the currency does not.
   const locale = useLocale();
-  const fmtDate = fmtDateIn(locale.code);
+  // In the family's zone, and a date-only value as written (TIME-003).
+  const { fmtDate: fmt } = useFormat();
+  const fmtDate = (d: string | null) => (d ? fmt(d, 'MMM d, yyyy') : null);
   const fmtCents = (cents: number | null) => centsIn(locale.code, cents);
   const { success, error: toastError } = useToast();
   const [editStatus, setEditStatus] = useState(plan.status);
