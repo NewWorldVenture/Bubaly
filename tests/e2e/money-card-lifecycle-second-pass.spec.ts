@@ -69,9 +69,9 @@ async function viewFixture(page: Page) {
       '@/components/wallet/card-reveal-modal': { CardRevealModal: () => null },
       '@/components/i18n/locale-provider': { useLocale: () => ({ code: 'en-US' }), useTranslations: () => (key, values) => values?.name ? key + ':' + values.name : key },
       '@/lib/marketplace/listings': { currencyUnit: () => ({ before: true, symbol: '$' }) },
-      // No settled sign-in: each mounted view keeps its own claims (#811 keys
-      // claims by signed-in owner; these reproductions pin the per-view case).
-      '@/lib/offline/cache-scope': { useAuthenticatedCacheScope: () => null },
+      // No known identity: each mounted view keeps its own claims (#811 keys
+      // claims by actor and family; these reproductions pin the per-view case).
+      '@/components/app/app-context': { useApp: () => ({ userId: null, familyId: null }) },
     };
     function load(id) {
       if (Object.hasOwn(mocks, id)) return mocks[id];
