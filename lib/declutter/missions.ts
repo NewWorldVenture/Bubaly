@@ -83,6 +83,10 @@ const DAY_MS = 86_400_000;
 const dateOnly = (v: string | Date) => (typeof v === 'string' ? new Date(`${v.slice(0, 10)}T00:00:00`) : new Date(v.getFullYear(), v.getMonth(), v.getDate()));
 export const dayDiff = (from: string | Date, to: string | Date) => Math.round((dateOnly(to).getTime() - dateOnly(from).getTime()) / DAY_MS);
 export const isoDate = (d: Date) => `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
+// A calendar day on, not 24 hours on: a day with a daylight-saving change is 23
+// or 25 hours long, and a step of 86,400,000 ms from a midnight lands on the
+// wrong date across one.
+const addCalendarDays = (d: Date, days: number) => new Date(d.getFullYear(), d.getMonth(), d.getDate() + days);
 
 /** Missions to generate for a zone right now: more when it's worse, none when tidy. */
 export function missionsForZone(zone: ZoneLike): MissionTemplate[] {
@@ -113,7 +117,7 @@ export function weeklyPlan(zones: ZoneLike[], existing: MissionLike[], memberIds
   // The day chip on a seven-day plan reads "Mon"/"Mo"/"lun." — the reader's.
   const weekday = new Intl.DateTimeFormat(locale, { weekday: 'short' });
   const weekStart = isoDate(today);
-  const weekEnd = isoDate(new Date(today.getTime() + 6 * DAY_MS));
+  const weekEnd = isoDate(addCalendarDays(today, 6));
   const alreadyPlanned = new Set(existing.filter((m) => m.status === 'planned' && m.scheduled_for && m.scheduled_for >= weekStart && m.scheduled_for <= weekEnd).map((m) => m.zone_id));
   const candidates = zones
     .filter((z) => z.is_active && z.clutter_score > 1 && !alreadyPlanned.has(z.id))
@@ -125,7 +129,7 @@ export function weeklyPlan(zones: ZoneLike[], existing: MissionLike[], memberIds
     for (const template of templates) {
       const dayIndex = Math.floor(slot / perDay);
       if (dayIndex > 6) return plan;
-      const d = new Date(today.getTime() + dayIndex * DAY_MS);
+      const d = addCalendarDays(today, dayIndex);
       plan.push({ day: isoDate(d), dayLabel: weekday.format(d), zone, template, assigneeId: memberIds.length ? memberIds[slot % memberIds.length] : null });
       slot += 1;
     }
@@ -138,8 +142,8 @@ export function sessionStreak(sessions: SessionLike[], today: Date): number {
   const days = new Set(sessions.map((s) => isoDate(dateOnly(s.started_at))));
   let streak = 0;
   let cursor = dateOnly(today);
-  if (!days.has(isoDate(cursor))) cursor = new Date(cursor.getTime() - DAY_MS);
-  while (days.has(isoDate(cursor))) { streak += 1; cursor = new Date(cursor.getTime() - DAY_MS); }
+  if (!days.has(isoDate(cursor))) cursor = addCalendarDays(cursor, -1);
+  while (days.has(isoDate(cursor))) { streak += 1; cursor = addCalendarDays(cursor, -1); }
   return streak;
 }
 

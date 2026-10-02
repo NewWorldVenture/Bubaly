@@ -18,7 +18,7 @@ vi.mock('@/lib/autopilot/engine', () => ({ successProbability: () => 0 }));
 vi.mock('@/lib/services/approvals', () => ({ listPending: async () => ({ ok: true, data: [] }) }));
 vi.mock('@/lib/home/completed', () => ({ loadCompletedByBubaly: async () => ({ ok: true, data: [] }) }));
 vi.mock('@/lib/i18n/server', () => ({ getLocaleContext: async () => ({ locale: { code: mocks.locale }, messages: getMessages(mocks.locale) }) }));
-vi.mock('@/components/i18n/locale-provider', () => ({ useTranslations: () => (key: string, params?: Record<string, string | number>) => translate(getMessages(mocks.locale), key, params) }));
+vi.mock('@/components/i18n/locale-provider', () => ({ useFamilyTimeZone: () => undefined, useTranslations: () => (key: string, params?: Record<string, string | number>) => translate(getMessages(mocks.locale), key, params) }));
 vi.mock('next/link', () => ({ default: ({ children, ...props }: React.ComponentProps<'a'>) => React.createElement('a', props, children) }));
 vi.mock('@/components/concierge/ask-bubaly', () => ({ AskBubaly: () => null }));
 vi.mock('@/components/concierge/working-on', () => ({ WorkingOn: () => null }));

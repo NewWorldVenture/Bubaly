@@ -4,7 +4,7 @@
 // Three modes: (A) provider not configured → explicit unavailable state, (B) setup
 // needed → guided 3-step onboarding wizard, (C) live → manage per-child cards
 // with instant freeze, spend controls, and physical-card ordering.
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useRef } from 'react';
 import { useRouter } from 'next/navigation';
 import {
   CreditCard, ShieldCheck, Snowflake, Sparkles, Loader2, SlidersHorizontal,
@@ -50,11 +50,25 @@ export function MoneyCardsView({
   const tr = useTranslations();
   const router = useRouter();
   const { success, error: toastError } = useToast();
-  const [busy, setBusy] = useState<string | null>(null);
-  const [expanded, setExpanded] = useState<string | null>(null);
-  const [orderingCard, setOrderingCard] = useState<CardChild | null>(null);
+  const [busy, setBusy] = useState<ReadonlySet<string>>(() => new Set());
+  const busyRef = useRef(new Set<string>());
+  const [expanded, setExpanded] = useState<{ cardId: string; instance: number } | null>(null);
+  const [orderingCard, setOrderingCard] = useState<{ child: CardChild; instance: number } | null>(null);
+  const controlsInstance = useRef(0);
+  const orderInstance = useRef(0);
+  const formsMounted = useRef(true);
   const [revealing, setRevealing] = useState<{ cardId: string; childName: string } | null>(null);
   const [issueType, setIssueType] = useState<'virtual' | 'physical'>('virtual');
+
+  useEffect(() => {
+    formsMounted.current = true;
+    return () => { formsMounted.current = false; };
+  }, []);
+
+  function closeOrder() {
+    orderInstance.current += 1;
+    setOrderingCard(null);
+  }
 
   // Show success banner briefly when returning from Stripe onboarding.
   const [showSetupSuccess, setShowSetupSuccess] = useState(justCompletedSetup && accountReady);
@@ -73,25 +87,52 @@ export function MoneyCardsView({
 
   const childrenWithoutCards = childWallets.filter((c) => !cardsByChild.has(c.id));
 
+  function claimPending(keys: string[]) {
+    // Claim synchronously: a retained callback can run again before React has
+    // committed disabled buttons. Independent operations keep their own keys.
+    if (keys.some((key) => busyRef.current.has(key))) return null;
+    for (const key of keys) busyRef.current.add(key);
+    setBusy(new Set(busyRef.current));
+    return () => {
+      for (const key of keys) busyRef.current.delete(key);
+      setBusy(new Set(busyRef.current));
+    };
+  }
+
   async function startSetup() {
-    setBusy('setup');
-    const res = await startConnectOnboardingAction();
-    setBusy(null);
-    if (!res.ok) return toastError(res.error);
-    if (res.data?.url) window.location.href = res.data.url;
+    const release = claimPending(['setup']);
+    if (!release) return;
+    try {
+      const res = await startConnectOnboardingAction();
+      if (!res.ok) return toastError(res.error);
+      if (res.data?.url) window.location.href = res.data.url;
+    } catch {
+      toastError(t('globalError.somethingWentWrong'));
+    } finally {
+      release();
+    }
   }
 
   async function issueVirtual(childWalletId: string) {
-    setBusy(`issue-${childWalletId}`);
-    const res = await issueCardAction({ childWalletId, type: 'virtual', spendLimitCents: null, spendWindow: 'per_authorization' });
-    setBusy(null);
-    if (!res.ok) return toastError(res.error);
-    success(t('moneyCardsView.virtualCardCreated'));
-    router.refresh();
+    const release = claimPending([`issue-${childWalletId}`]);
+    if (!release) return;
+    try {
+      const res = await issueCardAction({ childWalletId, type: 'virtual', spendLimitCents: null, spendWindow: 'per_authorization' });
+      if (!res.ok) return toastError(res.error);
+      success(t('moneyCardsView.virtualCardCreated'));
+      router.refresh();
+    } catch {
+      toastError(t('globalError.somethingWentWrong'));
+    } finally {
+      release();
+    }
   }
 
   async function issueAllVirtual() {
-    setBusy('issue-all');
+    // Reserve every target, including children not yet reached by the loop,
+    // so bulk and individual issuance cannot dispatch the same work together.
+    const release = claimPending(['issue-all', ...childrenWithoutCards.map((child) => `issue-${child.id}`)]);
+    if (!release) return;
     // Every result used to be discarded and the toast reported the number
     // ATTEMPTED as the number issued. What was thrown away includes Trust-Engine
     // denials and "Finish account setup first" — the product REFUSING, reported
@@ -112,7 +153,7 @@ export function MoneyCardsView({
     } catch (err) {
       failures.push(err instanceof Error && err.message ? err.message : t('globalError.somethingWentWrong'));
     } finally {
-      setBusy(null);
+      release();
     }
     if (issued > 0) {
       success(issued === 1
@@ -128,12 +169,18 @@ export function MoneyCardsView({
   }
 
   async function toggleFreeze(card: IssuedCard) {
-    setBusy(`freeze-${card.id}`);
-    const res = await setCardFrozenAction({ cardId: card.id, frozen: !card.isFrozen });
-    setBusy(null);
-    if (!res.ok) return toastError(res.error);
-    success(card.isFrozen ? 'Card unfrozen' : 'Card frozen');
-    router.refresh();
+    const release = claimPending([`freeze-${card.id}`]);
+    if (!release) return;
+    try {
+      const res = await setCardFrozenAction({ cardId: card.id, frozen: !card.isFrozen });
+      if (!res.ok) return toastError(res.error);
+      success(card.isFrozen ? 'Card unfrozen' : 'Card frozen');
+      router.refresh();
+    } catch {
+      toastError(t('globalError.somethingWentWrong'));
+    } finally {
+      release();
+    }
   }
 
   // ── Mode A: card provider is not configured → explicit unavailable state ──
@@ -181,7 +228,7 @@ export function MoneyCardsView({
               </p>
               <div className="mt-4 flex flex-wrap gap-3">
                 {canManage ? (
-                  <Button onClick={startSetup} loading={busy === 'setup'} size="lg">
+                  <Button onClick={startSetup} loading={busy.has('setup')} size="lg">
                     {onboardingStarted ? 'Continue setup' : 'Get started — 5 mins'}
                   </Button>
                 ) : (
@@ -236,7 +283,8 @@ export function MoneyCardsView({
                 : t('moneyCards.childrenNoCards', { n: childrenWithoutCards.length })}
             </p>
           </div>
-          <Button size="sm" onClick={issueAllVirtual} loading={busy === 'issue-all'}>
+          <Button size="sm" onClick={issueAllVirtual} loading={busy.has('issue-all')}
+            disabled={childrenWithoutCards.some((child) => busy.has(`issue-${child.id}`))}>
             {tr('moneyCards.issueAll')}
           </Button>
         </div>
@@ -263,15 +311,15 @@ export function MoneyCardsView({
                     <div className="flex items-center gap-1.5">
                       <button
                         type="button" onClick={() => issueVirtual(child.id)}
-                        disabled={busy === `issue-${child.id}`}
+                        disabled={busy.has(`issue-${child.id}`)}
                         className="flex items-center gap-1 rounded-lg border border-border px-2.5 py-1.5 text-xs font-medium hover:bg-elevated disabled:opacity-60 transition"
                       >
-                        {busy === `issue-${child.id}` ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Zap className="h-3.5 w-3.5" />}
+                        {busy.has(`issue-${child.id}`) ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Zap className="h-3.5 w-3.5" />}
                         Virtual
                       </button>
                       {capabilities.physicalCards && (
                         <button
-                          type="button" onClick={() => { setOrderingCard(child); setIssueType('physical'); }}
+                          type="button" onClick={() => { setOrderingCard({ child, instance: ++orderInstance.current }); setIssueType('physical'); }}
                           className="flex items-center gap-1 rounded-lg border border-border px-2.5 py-1.5 text-xs font-medium hover:bg-elevated transition"
                         >
                           <Package className="h-3.5 w-3.5" />{' '}{t('moneyCardsView.physical')}</button>
@@ -288,11 +336,26 @@ export function MoneyCardsView({
                     {childCards.map((card) => (
                       <CardRow
                         key={card.id} card={card} canManage={canManage}
-                        busy={busy} expanded={expanded}
+                        busy={busy} expanded={expanded?.cardId ?? null}
+                        controlsKey={expanded?.instance}
+                        claimControls={() => claimPending([`controls-${card.id}`])}
+                        controlsCurrent={() => formsMounted.current && controlsInstance.current === expanded?.instance}
                         onFreeze={() => toggleFreeze(card)}
                         onReveal={() => setRevealing({ cardId: card.id, childName: child.name })}
-                        onToggleControls={() => setExpanded(expanded === card.id ? null : card.id)}
-                        onSaved={() => { setExpanded(null); router.refresh(); }}
+                        onToggleControls={() => {
+                          const instance = ++controlsInstance.current;
+                          setExpanded(expanded?.cardId === card.id ? null : { cardId: card.id, instance });
+                        }}
+                        onSaved={() => {
+                          if (!formsMounted.current) return;
+                          if (controlsInstance.current === expanded?.instance) {
+                            controlsInstance.current += 1;
+                            setExpanded(null);
+                          }
+                          // A dismissed form cannot cancel its dispatched write.
+                          // Reconcile success without closing a newer editor.
+                          router.refresh();
+                        }}
                       />
                     ))}
                   </div>
@@ -306,9 +369,17 @@ export function MoneyCardsView({
       {/* Physical card order modal */}
       {orderingCard && (
         <PhysicalCardModal
-          child={orderingCard}
-          onClose={() => setOrderingCard(null)}
-          onIssued={() => { setOrderingCard(null); router.refresh(); }}
+          key={orderingCard.instance}
+          child={orderingCard.child}
+          pending={busy.has(`physical-${orderingCard.child.id}`)}
+          claim={() => claimPending([`physical-${orderingCard.child.id}`])}
+          isCurrent={() => formsMounted.current && orderInstance.current === orderingCard.instance}
+          onClose={closeOrder}
+          onIssued={() => {
+            if (!formsMounted.current) return;
+            if (orderInstance.current === orderingCard.instance) closeOrder();
+            router.refresh();
+          }}
         />
       )}
 
@@ -354,8 +425,9 @@ function SetupSteps({ current }: { current: number }) {
 
 // ─── Card Row ─────────────────────────────────────────────────────────────────
 
-function CardRow({ card, canManage, busy, expanded, onFreeze, onReveal, onToggleControls, onSaved }: {
-  card: IssuedCard; canManage: boolean; busy: string | null; expanded: string | null;
+function CardRow({ card, canManage, busy, expanded, controlsKey, claimControls, controlsCurrent, onFreeze, onReveal, onToggleControls, onSaved }: {
+  card: IssuedCard; canManage: boolean; busy: ReadonlySet<string>; expanded: string | null;
+  controlsKey?: number; claimControls: () => (() => void) | null; controlsCurrent: () => boolean;
   onFreeze: () => void; onReveal: () => void; onToggleControls: () => void; onSaved: () => void;
 }) {
   const locale = useLocale();
@@ -400,16 +472,17 @@ function CardRow({ card, canManage, busy, expanded, onFreeze, onReveal, onToggle
               className="inline-flex items-center gap-1 rounded-lg border border-border px-2.5 py-1.5 text-xs font-medium hover:bg-elevated transition">
               <SlidersHorizontal className="h-3.5 w-3.5" /> {tr('moneyCards.controls')}
             </button>
-            <button type="button" onClick={onFreeze} disabled={busy === `freeze-${card.id}`}
+            <button type="button" onClick={onFreeze} disabled={busy.has(`freeze-${card.id}`)}
               className="inline-flex items-center gap-1 rounded-lg border border-border px-2.5 py-1.5 text-xs font-medium hover:bg-elevated disabled:opacity-60 transition">
-              {busy === `freeze-${card.id}` ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Snowflake className="h-3.5 w-3.5" />}
+              {busy.has(`freeze-${card.id}`) ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Snowflake className="h-3.5 w-3.5" />}
               {card.isFrozen ? 'Unfreeze' : 'Freeze'}
             </button>
           </div>
         )}
       </div>
       {canManage && expanded === card.id && (
-        <CardControlsEditor card={card} onSaved={onSaved} />
+        <CardControlsEditor key={controlsKey} card={card} pending={busy.has(`controls-${card.id}`)}
+          claim={claimControls} isCurrent={controlsCurrent} onSaved={onSaved} />
       )}
     </div>
   );
@@ -417,29 +490,39 @@ function CardRow({ card, canManage, busy, expanded, onFreeze, onReveal, onToggle
 
 // ─── Physical Card Order Modal ────────────────────────────────────────────────
 
-function PhysicalCardModal({ child, onClose, onIssued }: {
-  child: CardChild; onClose: () => void; onIssued: () => void;
+function PhysicalCardModal({ child, pending, claim, isCurrent, onClose, onIssued }: {
+  child: CardChild; pending: boolean; claim: () => (() => void) | null; isCurrent: () => boolean;
+  onClose: () => void; onIssued: () => void;
 }) {
   const t = useTranslations();
   const tr = useTranslations();
   const unit = currencyUnit(useLocale().code);
   const { success, error: toastError } = useToast();
-  const [loading, setLoading] = useState(false);
   const [limitDollars, setLimitDollars] = useState('');
 
   async function submit(e: React.FormEvent<HTMLFormElement>) {
     e.preventDefault();
-    setLoading(true);
+    if (!isCurrent()) return;
+    const release = claim();
+    if (!release) return;
     const spendLimitCents = limitDollars.trim() ? Math.round(parseFloat(limitDollars) * 100) : null;
-    const res = await issueCardAction({
-      childWalletId: child.id, type: 'physical',
-      spendLimitCents: spendLimitCents && spendLimitCents > 0 ? spendLimitCents : null,
-      spendWindow: 'daily',
-    });
-    setLoading(false);
-    if (!res.ok) return toastError(res.error ?? 'Could not order card');
-    success(t('wallet.physicalCardOrdered', { name: child.name }));
-    onIssued();
+    try {
+      const res = await issueCardAction({
+        childWalletId: child.id, type: 'physical',
+        spendLimitCents: spendLimitCents && spendLimitCents > 0 ? spendLimitCents : null,
+        spendWindow: 'daily',
+      });
+      if (!res.ok) {
+        if (isCurrent()) toastError(res.error ?? 'Could not order card');
+        return;
+      }
+      if (isCurrent()) success(t('wallet.physicalCardOrdered', { name: child.name }));
+      onIssued();
+    } catch {
+      if (isCurrent()) toastError(t('globalError.somethingWentWrong'));
+    } finally {
+      release();
+    }
   }
 
   return (
@@ -480,7 +563,7 @@ function PhysicalCardModal({ child, onClose, onIssued }: {
 
         <div className="flex justify-end gap-2 pt-1">
           <Button type="button" variant="ghost" onClick={onClose}>{tr('moneyCards.cancel')}</Button>
-          <Button type="submit" loading={loading}>
+          <Button type="submit" loading={pending}>
             <Package className="h-4 w-4" /> {tr('moneyCards.orderCard')}
           </Button>
         </div>
@@ -491,7 +574,9 @@ function PhysicalCardModal({ child, onClose, onIssued }: {
 
 // ─── Card Controls Editor ─────────────────────────────────────────────────────
 
-function CardControlsEditor({ card, onSaved }: { card: IssuedCard; onSaved: () => void }) {
+function CardControlsEditor({ card, pending, claim, isCurrent, onSaved }: {
+  card: IssuedCard; pending: boolean; claim: () => (() => void) | null; isCurrent: () => boolean; onSaved: () => void;
+}) {
   const t = useTranslations();
   const tr = useTranslations();
   const unit = currencyUnit(useLocale().code);
@@ -499,25 +584,33 @@ function CardControlsEditor({ card, onSaved }: { card: IssuedCard; onSaved: () =
   const [limitDollars, setLimitDollars] = useState(card.spendLimitCents != null ? String(card.spendLimitCents / 100) : '');
   const [windowVal, setWindowVal] = useState<SpendWindow>((card.spendWindow as SpendWindow) ?? 'per_authorization');
   const [blocked, setBlocked] = useState<string[]>(card.blockedCategories);
-  const [saving, setSaving] = useState(false);
 
   function toggleCat(value: string) {
     setBlocked((b) => (b.includes(value) ? b.filter((x) => x !== value) : [...b, value]));
   }
 
   async function save() {
-    setSaving(true);
+    if (!isCurrent()) return;
     const trimmed = limitDollars.trim();
     const spendLimitCents = trimmed === '' ? null : Math.round(Number(trimmed) * 100);
     if (spendLimitCents != null && (!Number.isFinite(spendLimitCents) || spendLimitCents <= 0)) {
-      setSaving(false);
       return toastError(t('moneyCardsView.enterAValidLimitOr'));
     }
-    const res = await updateCardControlsAction({ cardId: card.id, spendLimitCents, spendWindow: windowVal, blockedCategories: blocked });
-    setSaving(false);
-    if (!res.ok) return toastError(res.error ?? 'Could not save controls.');
-    success(t('moneyCardsView.controlsSaved'));
-    onSaved();
+    const release = claim();
+    if (!release) return;
+    try {
+      const res = await updateCardControlsAction({ cardId: card.id, spendLimitCents, spendWindow: windowVal, blockedCategories: blocked });
+      if (!res.ok) {
+        if (isCurrent()) toastError(res.error ?? 'Could not save controls.');
+        return;
+      }
+      if (isCurrent()) success(t('moneyCardsView.controlsSaved'));
+      onSaved();
+    } catch {
+      if (isCurrent()) toastError(t('globalError.somethingWentWrong'));
+    } finally {
+      release();
+    }
   }
 
   return (
@@ -563,7 +656,7 @@ function CardControlsEditor({ card, onSaved }: { card: IssuedCard; onSaved: () =
       </div>
 
       <div className="flex justify-end">
-        <Button onClick={save} loading={saving}>{tr('moneyCards.saveControls')}</Button>
+        <Button onClick={save} loading={pending}>{tr('moneyCards.saveControls')}</Button>
       </div>
     </div>
   );

@@ -23,7 +23,8 @@ import {
   type HomeworkLike, type DueBucket,
 } from '@/lib/homework/board';
 import type { Tables, HomeworkStatus } from '@/lib/database.types';
-import { useLocale, useTranslations } from '@/components/i18n/locale-provider';
+import { useTranslations } from '@/components/i18n/locale-provider';
+import { useFormat } from '@/components/i18n/use-format';
 import { useConfirm } from '@/components/ui/confirm';
 
 type Homework = Tables<'homework_assignments'>;
@@ -47,7 +48,7 @@ function toLocalInput(iso: string | null): string {
 const blank = { id: '', member_id: '', subject: '', title: '', details: '', due_at: '', status: 'assigned' as HomeworkStatus };
 
 export function HomeworkModule() {
-  const locale = useLocale();
+  const format = useFormat();
   const t = useTranslations();
   const askConfirm = useConfirm();
   const { familyId, userId, members, role } = useApp();
@@ -67,7 +68,7 @@ export function HomeworkModule() {
 
   const memberName = (id: string | null) => members.find((m) => m.id === id)?.display_name ?? null;
   const students = useMemo(() => members.filter((m) => m.role === 'child' || m.role === 'teen'), [members]);
-  const now = useMemo(() => new Date(), []);
+  const now = useMemo(() => new Date(), []); // instant: compared with due_at only (lib/homework/board.ts)
 
   const visible = useMemo(() => {
     let list = homework ?? [];
@@ -133,7 +134,7 @@ export function HomeworkModule() {
 
   const fmtDue = (iso: string | null) => {
     if (!iso) return null;
-    return new Date(iso).toLocaleString(locale.code, { weekday: 'short', month: 'short', day: 'numeric', hour: 'numeric', minute: '2-digit' });
+    return format.fmtDate(iso, "EEE, MMM d 'at' h:mm a");
   };
 
   if (loading) return <SkeletonList count={5} />;

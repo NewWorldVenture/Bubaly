@@ -62,6 +62,8 @@ vi.mock('@/components/ui/toast', () => ({
 vi.mock('@/components/i18n/locale-provider', () => ({
   useTranslations: () => (key: string) => key,
   useLocale: () => ({ code: 'en-US' }),
+  // No family bound: formatters fall back to the reader's zone (TIME-003).
+  useFamilyTimeZone: () => undefined,
 }));
 vi.mock('next/navigation', () => ({
   useRouter: () => ({ refresh: () => {}, push: () => {}, replace: () => {}, back: () => {} }),

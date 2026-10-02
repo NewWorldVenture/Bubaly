@@ -38,7 +38,7 @@ vi.mock('react', async (original) => ({
 vi.mock('@/components/i18n/locale-provider', async () => {
   const { SOURCE_MESSAGES, translate } = await import('@/lib/i18n/messages');
   const t = (key: string, vars?: Record<string, string | number>) => translate(SOURCE_MESSAGES, key, vars);
-  return { useTranslations: () => t };
+  return { useFamilyTimeZone: () => undefined, useTranslations: () => t };
 });
 vi.mock('@/app/onboarding/calendar-actions', () => ({ startCalendarConnectionAction: mocks.start, previewConnectedCalendarAction: mocks.preview }));
 type Node = ReactElement<Record<string, unknown>>;

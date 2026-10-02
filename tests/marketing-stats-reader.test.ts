@@ -22,7 +22,12 @@ function results(handledData: unknown, accountData: unknown = [accounts]) {
 beforeEach(() => {
   vi.resetAllMocks();
   vi.spyOn(console, 'error').mockImplementation(() => {});
-  boundary.createClient.mockReturnValue({ rpc: boundary.rpc });
+  boundary.createClient.mockReturnValue({
+    rpc: (name: string) => {
+      const reply = boundary.rpc(name);
+      return Object.assign(Promise.resolve(reply), { abortSignal: () => reply });
+    },
+  });
   results([handled]);
 });
 
@@ -94,6 +99,7 @@ describe('public aggregate reader', () => {
     boundary.createClient.mockImplementation(() => { throw new Error('unavailable'); });
     expect(await getPublicStats()).toEqual(EMPTY_PUBLIC_STATS);
     expect(boundary.rpc).not.toHaveBeenCalled();
-    expect(console.error).toHaveBeenCalledTimes(1);
+    // The independently cached groups each report their unavailable client.
+    expect(console.error).toHaveBeenCalledTimes(2);
   });
 });

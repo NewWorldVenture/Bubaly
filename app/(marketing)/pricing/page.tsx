@@ -6,8 +6,7 @@ import { getPublicStats } from '@/lib/marketing/stats';
 import { sampleBriefNumbers } from '@/lib/marketing/handled-sample';
 import { getPublishedCaseStudies } from '@/lib/marketing/reputation-server';
 import { SwitchingBand } from '@/components/marketing/switching-band';
-import { createServiceClient } from '@/lib/supabase/server';
-import { getResolvedFeatureTiers } from '@/lib/server/feature-tiers';
+import { getPricingFeatureTiers } from '@/lib/marketing/pricing-tiers';
 import { FEATURE_CATALOG, FEATURE_SECTIONS } from '@/lib/constants/feature-catalog';
 import type { FeatureTier } from '@/lib/constants/feature-catalog';
 import { MarketingAeoSection } from '@/components/marketing/marketing-aeo-section';
@@ -30,16 +29,15 @@ export default async function PricingPage() {
   // brief composer over a fixed week) and the admin-published case studies.
   // pricing-content.tsx is a client module and can reach none of them itself.
   //
-  // Neither cached reader can reject — each catches its own failure and
-  // returns zeros or an empty list, which the page then HIDES rather than
-  // prints — so nothing here rides in settleAll and nothing is orphaned if
-  // the feature-tier read throws.
+  // Optional database reads have deadlines. Their public fallbacks stay outside the
+  // caches, so an outage cannot replace valid counts or stories with a cached
+  // zero/empty result. The page HIDES those fallbacks rather than printing them.
   const [stats, caseStudies, resolved] = await Promise.all([
     getPublicStats(),
     getPublishedCaseStudies(),
     // Build the admin-controlled feature matrix (Off/Free/Basic/Plus per service)
     // so the pricing page reflects the Tier & Features admin live.
-    getResolvedFeatureTiers(createServiceClient()),
+    getPricingFeatureTiers(),
   ]);
   const matrix = FEATURE_SECTIONS.map((section) => ({
     section,

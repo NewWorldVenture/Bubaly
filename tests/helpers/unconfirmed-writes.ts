@@ -1,5 +1,5 @@
-import { execSync } from 'node:child_process';
-import { readFileSync } from 'node:fs';
+import { readFileSync, readdirSync } from 'node:fs';
+import path from 'node:path';
 
 /**
  * The scanner behind the unconfirmed-write ratchets (C1-S9-50, C1-S9-61).
@@ -154,17 +154,31 @@ export function unconfirmedWritesIn(file: string): WriteSite[] {
   return out;
 }
 
-export function filesMatching(command: string): string[] {
-  return execSync(command, { encoding: 'utf8' }).trim().split('\n').filter(Boolean).sort();
+export function filesMatching(roots: readonly string[], pattern: RegExp, cwd = process.cwd()): string[] {
+  const files: string[] = [];
+  function walk(directory: string) {
+    for (const entry of readdirSync(path.resolve(cwd, directory), { withFileTypes: true })) {
+      const file = path.posix.join(directory, entry.name);
+      // Match grep -r: visit hidden/untracked directories, but do not follow
+      // links encountered within them. Explicit root links are still traversed.
+      if (entry.isDirectory()) walk(file);
+      else if (entry.isFile() && /\.tsx?$/.test(entry.name)) {
+        pattern.lastIndex = 0;
+        if (pattern.test(readFileSync(path.resolve(cwd, file), 'utf8'))) files.push(file);
+      }
+    }
+  }
+  for (const root of roots) walk(root.replace(/\\/g, '/'));
+  return files.sort();
 }
 
-export const USE_SERVER_FILES = () =>
-  filesMatching("grep -rl \"^'use server'\" app lib --include='*.ts' --include='*.tsx'");
+export const USE_SERVER_FILES = (cwd = process.cwd()) =>
+  filesMatching(['app', 'lib'], /^'use server'/m, cwd);
 
 /** Everything else under app/ and lib/ that can reach the database. */
-export const NON_ACTION_FILES = () => {
-  const actions = new Set(USE_SERVER_FILES());
-  return filesMatching("grep -rlE '\\.(update|delete)\\(' app lib --include='*.ts' --include='*.tsx'")
+export const NON_ACTION_FILES = (cwd = process.cwd()) => {
+  const actions = new Set(USE_SERVER_FILES(cwd));
+  return filesMatching(['app', 'lib'], /\.(update|delete)\(/, cwd)
     .filter((f) => !actions.has(f) && !/\.test\.|\.d\.ts$/.test(f));
 };
 

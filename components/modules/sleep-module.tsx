@@ -19,27 +19,28 @@ import { ageOn } from '@/lib/members/age';
 import {
   SLEEP_SOURCES, durationMinutes, fmtHours, habitCorrelations, recentLogs, recommendedSleepHours, routineStepIdeas, sleepSummary, weeklyProgram, dayDiff,
 } from '@/lib/sleep/coach';
-import { useLocale, useTranslations } from '@/components/i18n/locale-provider';
-import type { LocaleCode } from '@/lib/i18n/locales';
+import { useTranslations } from '@/components/i18n/locale-provider';
+import { useFamilyClock, useFormat, useFamilyCalendarToday } from '@/components/i18n/use-format';
 import { useConfirm } from '@/components/ui/confirm';
 
 type Log = Tables<'sleep_logs'>;
 type Routine = Tables<'bedtime_routines'>;
 type Checkin = Tables<'sleep_checkins'>;
 
-const todayIso = () => new Date().toISOString().slice(0, 10);
 const localInput = (d: Date) => {
   const p = (n: number) => String(n).padStart(2, '0');
   return `${d.getFullYear()}-${p(d.getMonth() + 1)}-${p(d.getDate())}T${p(d.getHours())}:${p(d.getMinutes())}`;
 };
-const fmtTimeIn = (locale: LocaleCode) => (iso: string) => new Date(iso).toLocaleTimeString(locale, { hour: 'numeric', minute: '2-digit' });
-const fmtDayIn = (locale: LocaleCode) => (d: string) => new Date(`${d.slice(0, 10)}T00:00:00`).toLocaleDateString(locale, { weekday: 'short' });
 const DAYS = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'];
 
 export function SleepModule() {
-  const locale = useLocale();
-  const fmtTime = fmtTimeIn(locale.code);
-  const fmtDay = fmtDayIn(locale.code);
+  // The family's clock and day (TIME-003): a night logged at 23:30 belongs to
+  // the family's date, not Greenwich's or the phone's.
+  const format = useFormat();
+  const fmtTime = (iso: string) => format.fmtTime(iso);
+  const fmtDay = (d: string) => format.fmtDate(d.slice(0, 10), 'EEE');
+  const clock = useFamilyClock();
+  const todayIso = () => clock.todayKey();
   const t = useTranslations();
   const askConfirm = useConfirm();
   const { familyId, userId, members, selfMember } = useApp();
@@ -67,13 +68,13 @@ export function SleepModule() {
   const [routineOpen, setRoutineOpen] = useState(false);
   const [checkinOpen, setCheckinOpen] = useState(false);
 
-  const today = useMemo(() => new Date(), []);
+  const today = useFamilyCalendarToday();
   const member = members.find((m) => m.id === memberId) ?? null;
   const age = ageOn(member?.birthday, today);
   const routine = routines.data.find((r) => r.member_id === memberId) ?? null;
   const memberLogs = useMemo(() => logs.data.filter((l) => l.member_id === memberId), [logs.data, memberId]);
   const memberCheckins = useMemo(() => checkins.data.filter((c) => c.member_id === memberId), [checkins.data, memberId]);
-  const summary = useMemo(() => sleepSummary(memberLogs, routine, age, today, memberId), [memberLogs, routine, age, today, memberId]);
+  const summary = useMemo(() => sleepSummary(memberLogs, routine, age, today, memberId, clock.timeZone), [memberLogs, routine, age, today, memberId, clock.timeZone]);
   const fortnight = useMemo(() => recentLogs(memberLogs, memberId, today, 14).slice().reverse(), [memberLogs, memberId, today]);
   const correlations = useMemo(() => habitCorrelations(recentLogs(memberLogs, memberId, today, 30), memberCheckins), [memberLogs, memberCheckins, memberId, today]);
   const program = useMemo(() => weeklyProgram(summary, correlations, routine), [summary, correlations, routine]);
@@ -259,8 +260,10 @@ function LogForm({ familyId, userId, memberId, existing, onClose, onSaved }: { f
   const t = useTranslations();
   const { error: toastError } = useToast();
   const [loading, setLoading] = useState(false);
-  const defaultBed = useMemo(() => { const d = new Date(); d.setDate(d.getDate() - 1); d.setHours(21, 30, 0, 0); return existing ? new Date(existing.bedtime) : d; }, [existing]);
-  const defaultWake = useMemo(() => { const d = new Date(); d.setHours(7, 0, 0, 0); return existing ? new Date(existing.wake_time) : d; }, [existing]);
+  // The bedtime/wake datetime-local defaults: this form's save path still reads
+  // the device clock (TIME-003 remaining scope).
+  const defaultBed = useMemo(() => { const d = new Date(); d.setDate(d.getDate() - 1); d.setHours(21, 30, 0, 0); return existing ? new Date(existing.bedtime) : d; }, [existing]); // device-input: datetime-local default
+  const defaultWake = useMemo(() => { const d = new Date(); d.setHours(7, 0, 0, 0); return existing ? new Date(existing.wake_time) : d; }, [existing]); // device-input: datetime-local default
 
   async function onSubmit(e: React.FormEvent<HTMLFormElement>) {
     e.preventDefault();
@@ -359,6 +362,7 @@ function RoutineForm({ familyId, userId, memberId, age, routine, onClose, onSave
 }
 
 function CheckinForm({ familyId, userId, memberId, existing, onClose, onSaved }: { familyId: string; userId: string; memberId: string; existing: Checkin | null; onClose: () => void; onSaved: () => void }) {
+  const clock = useFamilyClock();
   const t = useTranslations();
   const { error: toastError } = useToast();
   const [loading, setLoading] = useState(false);
@@ -373,7 +377,7 @@ function CheckinForm({ familyId, userId, memberId, existing, onClose, onSaved }:
     const f = new FormData(e.currentTarget);
     setLoading(true);
     const { error } = await createClient().from('sleep_checkins').upsert({
-      family_id: familyId, member_id: memberId, checkin_date: todayIso(), energy, mood, caffeine_after_2pm: caffeine, screens_in_bed: screens, exercised,
+      family_id: familyId, member_id: memberId, checkin_date: clock.todayKey(), energy, mood, caffeine_after_2pm: caffeine, screens_in_bed: screens, exercised,
       notes: String(f.get('notes') ?? '').trim() || null, created_by: userId,
     }, { onConflict: 'member_id,checkin_date' });
     setLoading(false);

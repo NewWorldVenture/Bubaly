@@ -2,18 +2,20 @@
 -- default list, not two (DATA-007).
 --
 -- The race is made deterministic rather than hoped for. A holder session takes
--- ACCESS EXCLUSIVE on grocery_lists, so any read of the table waits. Two racer
--- sessions then call get-or-create at the same moment:
+-- SHARE on grocery_lists: SELECT can finish, but INSERT's ROW EXCLUSIVE lock
+-- waits. Two racer sessions then call get-or-create at the same moment:
 --
 --   * with 0443's function, the first racer takes the per-family advisory lock
---     and waits on the table; the second waits on the ADVISORY lock. Released,
---     the first reads nothing and inserts, commits, and only then does the
+--     and waits to INSERT; the second waits on the ADVISORY lock. Released,
+--     the first inserts, commits, and only then does the
 --     second read — and finds the first one's list.
 --   * with the same function minus the advisory lock (the negative control),
---     both racers wait on the table, both then read "no list", and both insert:
+--     both racers have already read "no list" before waiting to INSERT:
 --     two lists, which is the defect as shipped.
 --
 -- Both stages run the SAME race, or the control proves nothing about the probe.
+-- ACCESS EXCLUSIVE is not a substitute: it blocks the reads, so releasing it
+-- can let one racer read, insert and commit before the other reads anything.
 -- dblink opens the sessions; where it is unavailable the race SKIPS, loudly.
 --
 -- Also asserted, without a race: RLS still decides (a non-member is refused,
@@ -82,19 +84,21 @@ create or replace procedure public.dl_probe_race(p_call text, p_family uuid, ino
 language plpgsql as $proc$
 declare
   v_conn text := 'dbname=' || current_database()
-    || ' host=' || split_part(current_setting('unix_socket_directories'), ',', 1)
+    || ' host=' || coalesce(nullif(split_part(current_setting('unix_socket_directories'), ',', 1), ''), '127.0.0.1')
     || ' port=' || current_setting('port')
-    || ' user=' || current_user;
+    || ' user=' || current_user || ' connect_timeout=5';
   waiters int := 0; seen int := 0; waited_ms int := 0;
 begin
   perform dblink_connect('dl_hold', v_conn || ' application_name=dl_holder');
   perform dblink_exec('dl_hold', 'begin');
   -- Never hang the suite: a holder that cannot get its lock fails in 5s.
   perform dblink_exec('dl_hold', 'set local lock_timeout = ''5s''');
-  perform dblink_exec('dl_hold', 'lock table public.grocery_lists in access exclusive mode');
+  perform dblink_exec('dl_hold', 'lock table public.grocery_lists in share mode');
 
   perform dblink_connect('dl_a', v_conn || ' application_name=dl_racer');
   perform dblink_connect('dl_b', v_conn || ' application_name=dl_racer');
+  perform dblink_exec('dl_a', 'set statement_timeout = ''15s''');
+  perform dblink_exec('dl_b', 'set statement_timeout = ''15s''');
   perform dblink_send_query('dl_a', format('select %s(%L)::text', p_call, p_family));
   perform dblink_send_query('dl_b', format('select %s(%L)::text', p_call, p_family));
 
@@ -186,8 +190,8 @@ end $$;
 
 -- 5. The race, twice: the lock-less control, then the real function. Each in
 --    its OWN transaction and its own family: anything the calling session has
---    read or written on grocery_lists stays locked until it commits, and the
---    holder's ACCESS EXCLUSIVE would then wait on the probe itself.
+--    written on grocery_lists keeps ROW EXCLUSIVE until it commits, and the
+--    holder's SHARE would then wait on the probe itself.
 do $$
 declare
   outcome text;

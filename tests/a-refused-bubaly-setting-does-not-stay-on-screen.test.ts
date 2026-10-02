@@ -66,6 +66,8 @@ vi.mock('@/app/(app)/dashboard/settings/ai-actions', () => ({
 vi.mock('@/components/ui/toast', () => ({ useToast: () => ({ success: state.success, error: state.error }) }));
 vi.mock('@/components/i18n/locale-provider', () => ({
   useTranslations: () => (key: string) => MESSAGES[key] ?? key,
+  // No family bound: formatters fall back to the reader's zone (TIME-003).
+  useFamilyTimeZone: () => undefined,
 }));
 // The memory panel loads its own data through its own actions; it is not what
 // this file is about.

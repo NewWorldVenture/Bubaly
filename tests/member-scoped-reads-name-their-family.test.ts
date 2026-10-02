@@ -30,7 +30,7 @@
 // this one does not.
 import { describe, expect, it } from 'vitest';
 import { readFileSync, readdirSync } from 'node:fs';
-import { join, relative } from 'node:path';
+import { join, relative, sep } from 'node:path';
 import ts from 'typescript';
 
 const ROOT = process.cwd();
@@ -83,7 +83,7 @@ function chainsIn(file: string): Chain[] {
         table: (node.arguments[0] as ts.StringLiteral).text,
         text: top.getText(sf),
         line: sf.getLineAndCharacterOfPosition(node.getStart(sf)).line + 1,
-        file: relative(ROOT, file),
+        file: relative(ROOT, file).split(sep).join('/'),
       };
       chains.push(chain);
       // `let q = supabase.from('t')…` — remember the binding so that a later
