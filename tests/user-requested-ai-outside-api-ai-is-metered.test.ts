@@ -1,5 +1,6 @@
 import { readFileSync } from 'node:fs';
 import { describe, expect, it } from 'vitest';
+import { at, between } from './helpers/source-order';
 
 // F19, the owner's decision of 2026-10-02 (#771 reviews 5391362628 and
 // 5391604223): the Free plan's monthly allowance applies consistently across
@@ -41,21 +42,25 @@ describe('user-requested AI outside app/api/ai checks the monthly allowance firs
 
   it('the vacation builder and concierge are each checked once, and recommendations not at all', () => {
     const src = readFileSync('app/api/vacations/ai/route.ts', 'utf8');
-    const reco = src.slice(src.indexOf("if (action === 'recommendations')"), src.indexOf("if (action === 'build')"));
-    const build = src.slice(src.indexOf("if (action === 'build')"), src.indexOf("if (action === 'concierge')"));
-    const concierge = src.slice(src.indexOf("if (action === 'concierge')"));
+    // between()/at() assert presence and order, so a renamed branch fails
+    // here instead of leaving an empty or whole-file slice behind.
+    const reco = between(src, "if (action === 'recommendations')", "if (action === 'build')");
+    const build = between(src, "if (action === 'build')", "if (action === 'concierge')");
+    const concierge = src.slice(at(src, "if (action === 'concierge')"));
     expect(positions(reco, CHECK)).toHaveLength(0);
     expect(positions(build, CHECK)).toHaveLength(1);
     expect(positions(concierge, CHECK)).toHaveLength(1);
     // The concierge checks before it saves the member's message, so a refusal
     // leaves no orphan message behind.
-    expect(concierge.search(CHECK)).toBeLessThan(concierge.indexOf("from('vacation_ai_conversations')"));
+    const check = concierge.search(CHECK);
+    expect(check, 'the concierge checks the allowance').toBeGreaterThan(-1);
+    expect(check).toBeLessThan(at(concierge, "from('vacation_ai_conversations')"));
   });
 
   it('chore-plan generation keeps its stronger existing gate', () => {
     const src = readFileSync('app/(app)/missions/actions.ts', 'utf8');
-    const plan = src.slice(src.indexOf('export async function generatePlanAction'));
+    const plan = src.slice(at(src, 'export async function generatePlanAction'));
     expect(plan).toMatch(/assertAIAccess\(ctx, \{ db: supabase, featureKey: 'family-missions' \}\)/);
-    expect(plan.indexOf('assertAIAccess(')).toBeLessThan(plan.indexOf('generateChorePlan('));
+    expect(at(plan, 'assertAIAccess(')).toBeLessThan(at(plan, 'generateChorePlan('));
   });
 });
