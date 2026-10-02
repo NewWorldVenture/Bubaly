@@ -111,9 +111,13 @@ export function TripPacking({ vacationId }: { vacationId: string }) {
     try {
       if (!form?.name.trim()) return;
       const listId = await ensureMasterList();
+      if (!listId) return;
       const { error } = await createClient().from('vacation_packing_items').insert({ family_id: familyId, vacation_id: vacationId, list_id: listId, name: form.name.trim(), category: form.category, quantity: parseInt(form.quantity) || 1, created_by: userId });
-      if (error) toastError(describeDbError(error)); else success(tr('tripPacking.added'));
+      if (error) { toastError(describeDbError(error)); return; }
+      success(tr('tripPacking.added'));
       setForm(null);
+    } catch (cause) {
+      toastError(describeDbError(cause, tr('actions.couldNotSaveThatItem')));
     } finally {
       setSaving(false);
     }
