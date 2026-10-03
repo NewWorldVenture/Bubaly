@@ -1,4 +1,6 @@
 import type { Metadata } from 'next';
+import { readCalendarOccurrences } from '@/lib/calendar/occurrences';
+import { instantCalendarBounds } from '@/lib/briefing/calendar-window';
 import { getTranslations } from '@/lib/i18n/server';
 import { requireFeature } from '@/lib/supabase/auth';
 import { settleAll } from '@/lib/supabase/settle';
@@ -19,18 +21,17 @@ export default async function TripIntelPage() {
 
   const now = new Date();
   const horizon = new Date(now.getTime() + 21 * 86400000).toISOString();
+  const tz = ctx.active.family.timezone || 'UTC';
 
   const [{ data: events }, { data: members }, tripRes, depRes] = await settleAll([
     // Upcoming events that have a location — these are the candidates for both
     // destination research and smart-departure planning.
-    supabase.from('calendar_events')
-      .select('id, title, location, starts_at, ends_at, category, assignee_id')
-      .eq('family_id', familyId)
-      .gte('starts_at', now.toISOString())
-      .lte('starts_at', horizon)
-      .not('location', 'is', null)
-      .order('starts_at')
-      .limit(40),
+    // Series included: a weekly away game needs its departure plan every week (lib/calendar/occurrences.ts).
+    readCalendarOccurrences(supabase, familyId, instantCalendarBounds(now.toISOString(), horizon, tz), tz, {
+      columns: ['id', 'title', 'location', 'starts_at', 'ends_at', 'category', 'assignee_id'],
+      refine: (query) => query.not('location', 'is', null),
+      limit: 40,
+    }),
     supabase.from('family_members').select('id, display_name, color').eq('family_id', familyId).eq('is_active', true),
     supabase.from('trip_plans')
       .select('id, title, destination, start_date, end_date, members, interests, recommendations, weather_summary, status, created_at')

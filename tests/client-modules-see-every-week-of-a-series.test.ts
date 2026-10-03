@@ -5,8 +5,9 @@ import { describe, expect, it } from 'vitest';
 /**
  * THE CLIENT MODULES SEE EVERY WEEK OF A SERIES.
  *
- * Fourteen reads of `calendar_events` in the browser-side modules and the
- * three dashboard components filtered `starts_at` — a series' FIRST start — by
+ * Sixteen reads of `calendar_events` in the browser-side modules, the three
+ * dashboard components and two more pages (trip intelligence's located events,
+ * the Family COO's week) filtered `starts_at` — a series' FIRST start — by
  * their window: the assistant's rail (today, next fortnight), the family
  * module's next four, the kitchen screen's window, the focus list, the next
  * actions' 46 days, the moments view and the Home moment card, the personal
@@ -36,6 +37,9 @@ const SERVER = [
   ['components/dashboard/personal-dashboard.tsx', 2],
   ['components/dashboard/ai-home-dashboard.tsx', 3],
   ['components/dashboard/family-dashboard.tsx', 2],
+  // Two pages the final sweep found after the dashboard-pages unit.
+  ['app/(app)/dashboard/trip-intel/page.tsx', 1],
+  ['app/(app)/dashboard/family-coo/page.tsx', 1],
 ] as const;
 
 describe('every client module reads the calendar through the shared read', () => {
