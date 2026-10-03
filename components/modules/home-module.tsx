@@ -21,6 +21,7 @@ import type { Format } from '@/lib/utils/format';
 import { isManager } from '@/lib/constants/roles';
 import { uploadFamilyDocument, getDocumentSignedUrl, removeFamilyDocument } from '@/lib/storage/documents';
 import { MANUAL_CATEGORY, WARRANTY_CATEGORY } from '@/lib/home/asset-detail';
+import { maintenanceCompletionPatch } from '@/lib/home/maintenance-rollover';
 import type { Tables } from '@/lib/database.types';
 import { preOpenWindow } from '@/lib/utils/open-url';
 import { useTranslations } from '@/components/i18n/locale-provider';
@@ -168,10 +169,15 @@ export function HomeModule() {
 
   async function completeTask(id: string) {
     const supabase = createClient();
+    // A repeating task ("every 90 days", a yearly service) rolls to its next
+    // due time and stays open; marked `done` it left the open list for good
+    // (lib/home/maintenance-rollover.ts). A task the list no longer holds is
+    // done as before.
+    const task = (tasks ?? []).find((t) => t.id === id);
+    const now = new Date().toISOString();
+    const patch = task ? maintenanceCompletionPatch(task, now) : { status: 'done' as const, completed_at: now };
     // Under RLS a refused row comes back with no error and zero rows, which this used to report as done. Audit C1-S9-82.
-    const { data: updated, error } = await supabase.from('maintenance_tasks').update({
-      status: 'done', completed_at: new Date().toISOString(),
-    }).eq('id', id).select('id');
+    const { data: updated, error } = await supabase.from('maintenance_tasks').update(patch).eq('id', id).select('id');
     if (error) return toastError(describeDbError(error));
     if (wroteNoRows(updated)) return toastError(tr('errors.thatChangeWasNotSaved'));
     success(tr('homeModule.taskCompleted'));
