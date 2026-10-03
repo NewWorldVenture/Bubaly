@@ -17,7 +17,7 @@
 // changed — and a late-evening one crossed into the neighbouring local day,
 // where a "what's on today" query then missed it entirely.
 import {
-  daysInMonth, instantForLocalTime, localPartsAt, type LocalParts,
+  dayKeyIn, daysInMonth, instantForLocalTime, localPartsAt, type LocalParts,
 } from '@/lib/time/zoned';
 
 export interface RecurrableEvent {
@@ -26,6 +26,15 @@ export interface RecurrableEvent {
   ends_at: string | null;
   recurrence: string;
   recurrence_until?: string | null;
+  /**
+   * Instants of occurrences this series has given up: a moved or cancelled
+   * occurrence of a subscribed calendar (its RECURRENCE-ID), or an EXDATE. An
+   * occurrence falling on the same LOCAL DAY as one of these is not produced.
+   * The day, not the instant: a series has at most one occurrence a day, and
+   * the source's instant and ours can differ by an hour across a DST change
+   * when the series was published in another zone, while the day cannot.
+   */
+  exception_dates?: readonly string[] | null;
 }
 
 /** Hard cap on occurrences generated per event PER WINDOW (a daily event over a
@@ -120,6 +129,7 @@ export function expandEventsInZone<T extends RecurrableEvent>(
     const until = e.recurrence_until ? new Date(e.recurrence_until) : null;
     const seriesEnd = until && until < windowEnd ? until : windowEnd;
     const durationMs = e.ends_at ? new Date(e.ends_at).getTime() - start.getTime() : null;
+    const exceptionDays = exceptionDayKeys(e.exception_dates, timezone);
     const base = localPartsAt(start, timezone);
     const minutes = base.hour * 60 + base.minute;
     const subMinuteMs = start.getUTCSeconds() * 1000 + start.getUTCMilliseconds();
@@ -137,6 +147,7 @@ export function expandEventsInZone<T extends RecurrableEvent>(
       // Keep source precision within the resolver-selected local minute.
       cursor.setTime(cursor.getTime() + subMinuteMs);
       if (cursor >= seriesEnd) break;   // the sequence is monotone in n
+      if (exceptionDays && exceptionDays.has(dayKeyIn(cursor, timezone))) continue;  // given up by the source
       if (cursor >= windowStart) {
         out.push({
           ...e,
@@ -148,6 +159,17 @@ export function expandEventsInZone<T extends RecurrableEvent>(
   }
   out.sort((a, b) => a.starts_at.localeCompare(b.starts_at));
   return out;
+}
+
+/** The local days, in `timezone`, of a series' exception dates; null when there are none. */
+function exceptionDayKeys(dates: readonly string[] | null | undefined, timezone: string): Set<string> | null {
+  if (!dates || dates.length === 0) return null;
+  const days = new Set<string>();
+  for (const value of dates) {
+    const at = new Date(value);
+    if (!Number.isNaN(at.getTime())) days.add(dayKeyIn(at, timezone));
+  }
+  return days.size ? days : null;
 }
 
 function runtimeTimezone(): string {

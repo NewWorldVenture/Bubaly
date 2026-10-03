@@ -11,9 +11,9 @@
 
 import type { SupabaseClient } from '@supabase/supabase-js';
 import { parseICS } from '@/lib/sync/ics';
-import { planFeedRows } from '@/lib/calendar/feeds';
+import { planFeedRows, type FeedEventRow } from '@/lib/calendar/feeds';
 import { fetchPublicCalendarText } from '@/lib/server/public-calendar-fetch';
-import { wroteNoRows } from '@/lib/supabase/errors';
+import { isMissingRelationError, wroteNoRows } from '@/lib/supabase/errors';
 
 export type FeedSyncResult = { ok: true; imported: number } | { ok: false; error: string };
 
@@ -54,11 +54,24 @@ export async function syncFeed(
   }
 
   let imported = 0;
+  // A deploy can precede its migration. On a database without
+  // `calendar_events.exception_dates` the upsert is refused for the one column
+  // it does not know; the rows are then written without it — the series
+  // renders every slot, as it did before the column — rather than the whole
+  // feed failing to sync. Said once per sync, naming the migration.
+  let withoutExceptionDates = false;
   for (let i = 0; i < rows.length; i += 200) {
     const chunk = rows.slice(i, i + 200);
-    const { error } = await supabase
+    let { error } = await supabase
       .from('calendar_events')
-      .upsert(chunk, { onConflict: 'feed_id,external_uid' });
+      .upsert(withoutExceptionDates ? chunk.map(dropExceptionDates) : chunk, { onConflict: 'feed_id,external_uid' });
+    if (error && !withoutExceptionDates && isMissingExceptionDatesColumn(error)) {
+      console.warn(`Calendar feed ${feed.id}: calendar_events.exception_dates is not in this database yet (its migration has not been applied); syncing without exception dates, so a moved or cancelled occurrence still shows at its original slot.`);
+      withoutExceptionDates = true;
+      ({ error } = await supabase
+        .from('calendar_events')
+        .upsert(chunk.map(dropExceptionDates), { onConflict: 'feed_id,external_uid' }));
+    }
     if (error) {
       console.error(`Calendar feed event upsert failed for ${feed.id}:`, error);
       const stampError = await stampFeed(supabase, feed.id, { last_status: 'error', last_error: 'Could not save calendar events' });
@@ -93,6 +106,19 @@ export async function syncFeed(
   });
   if (stampError) return { ok: false, error: 'Calendar feed status could not be saved' };
   return { ok: true, imported };
+}
+
+/** The row as a database without the `exception_dates` column accepts it. */
+function dropExceptionDates(row: FeedEventRow): Omit<FeedEventRow, 'exception_dates'> {
+  const copy: Partial<FeedEventRow> = { ...row };
+  delete copy.exception_dates;
+  return copy as Omit<FeedEventRow, 'exception_dates'>;
+}
+
+/** PostgREST (PGRST204) or Postgres (42703) refusing the one column this database does not have yet. */
+function isMissingExceptionDatesColumn(error: unknown): boolean {
+  const message = typeof error === 'object' && error && 'message' in error ? String((error as { message: unknown }).message) : '';
+  return isMissingRelationError(error) && /exception_dates/i.test(message);
 }
 
 async function stampFeed(
