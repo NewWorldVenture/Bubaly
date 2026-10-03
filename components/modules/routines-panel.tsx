@@ -5,7 +5,7 @@
 // history and lets a family save them as reusable routines, then apply a
 // routine to a week (materializing concrete calendar_events). 100% Supabase.
 
-import { useMemo, useRef, useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import { Plus, Sparkles, Repeat, Trash2, Pencil, Loader2, X, Wand2, CalendarPlus } from 'lucide-react';
 import { useApp } from '@/components/app/app-context';
 import { useRealtimeQuery } from '@/lib/hooks/use-realtime-query';
@@ -267,22 +267,25 @@ export function RoutinesPanel({ events, weekStartMonday, timeZone, onApplied }: 
 
       {(creating || editing) && (
         <RoutineEditor
+          key={`${familyId}:${userId}:${editing?.template.id ?? 'new'}`}
           familyId={familyId} userId={userId} members={members} memberById={memberById}
           template={editing?.template} initialItems={editing?.items}
           onClose={() => { setCreating(false); setEditing(null); }}
-          onSaved={() => { setCreating(false); setEditing(null); refreshAll(); }}
+          onSaved={() => { setCreating(false); setEditing(null); }}
+          onCommitted={refreshAll}
         />
       )}
     </div>
   );
 }
 
-function RoutineEditor({ familyId, userId, members, template, initialItems, onClose, onSaved }: {
+function RoutineEditor({ familyId, userId, members, template, initialItems, onClose, onSaved, onCommitted }: {
   familyId: string; userId: string;
   members: ReturnType<typeof useApp>['members'];
   memberById: Map<string, ReturnType<typeof useApp>['members'][number]>;
   template?: Template; initialItems?: Item[];
   onClose: () => void; onSaved: () => void;
+  onCommitted: () => void;
 }) {
   const tr = useTranslations();
   const { error: toastError } = useToast();
@@ -295,12 +298,16 @@ function RoutineEditor({ familyId, userId, members, template, initialItems, onCl
       ? initialItems.map((i) => ({ title: i.title, category: i.category, start: minutesToTimeValue(i.start_minutes), duration: i.duration_minutes, assignee_id: i.assignee_id ?? '' }))
       : [{ title: '', category: 'general', start: '07:00', duration: 30, assignee_id: '' }],
   );
+  const active = useRef(true);
+  useEffect(() => { active.current = true; return () => { active.current = false; }; }, []);
+  function close() { active.current = false; onClose(); }
 
   function addRow() { setRows((r) => [...r, { title: '', category: 'general', start: '08:00', duration: 30, assignee_id: '' }]); }
   function removeRow(i: number) { setRows((r) => r.filter((_, idx) => idx !== i)); }
   function patchRow(i: number, patch: Partial<DraftItem>) { setRows((r) => r.map((row, idx) => (idx === i ? { ...row, ...patch } : row))); }
 
   async function save() {
+    if (saving) return;
     const cleanName = name.trim();
     if (!cleanName) { toastError(tr('routinesPanel.nameYourRoutine')); return; }
     const steps = rows.filter((r) => r.title.trim());
@@ -315,7 +322,7 @@ function RoutineEditor({ familyId, userId, members, template, initialItems, onCl
         // first: under RLS a refused row is no error and zero rows. Audit C1-S9-82.
         const { data: renamed, error } = await sb.from('routine_templates').update({ name: cleanName, icon, weekday_mask: mask }).eq('id', templateId).select('id');
         if (error) throw error;
-        if (wroteNoRows(renamed)) { toastError(tr('errors.thatChangeWasNotSaved')); return; }
+        if (wroteNoRows(renamed)) { if (active.current) toastError(tr('errors.thatChangeWasNotSaved')); return; }
         // Replace items wholesale (simple + correct for a small list). If the
         // delete fails we must NOT insert or the template keeps the old steps
         // alongside the new ones (duplicates). Zero rows is a legitimate answer
@@ -340,16 +347,18 @@ function RoutineEditor({ familyId, userId, members, template, initialItems, onCl
         })),
       );
       if (e2) throw e2;
-      onSaved();
+      if (active.current) { active.current = false; onSaved(); }
+      // The dispatched pipeline still finishes after close; refresh only confirmed complete saves.
+      onCommitted();
     } catch (err) {
-      toastError(describeDbError(err));
+      if (active.current) toastError(describeDbError(err));
     } finally {
-      setSaving(false);
+      if (active.current) setSaving(false);
     }
   }
 
   return (
-    <Modal open title={template ? tr('dialogTitle.editRoutine') : tr('dialogTitle.newRoutine')} onClose={onClose}>
+    <Modal open title={template ? tr('dialogTitle.editRoutine') : tr('dialogTitle.newRoutine')} onClose={close}>
       <div className="space-y-4">
         <Field label={tr('routines.name')}>
           {(id) => <Input id={id} value={name} onChange={(e) => setName(e.target.value)} placeholder={tr('routines.schoolMorning')} autoFocus />}
@@ -408,7 +417,7 @@ function RoutineEditor({ familyId, userId, members, template, initialItems, onCl
         </div>
 
         <div className="flex justify-end gap-2 pt-1">
-          <Button type="button" variant="ghost" onClick={onClose}>{tr('routines.cancel')}</Button>
+          <Button type="button" variant="ghost" onClick={close}>{tr('routines.cancel')}</Button>
           <Button type="button" loading={saving} onClick={save}>{template ? 'Save routine' : 'Create routine'}</Button>
         </div>
       </div>

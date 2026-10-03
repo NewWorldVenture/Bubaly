@@ -58,6 +58,9 @@ async function readMove(scope: ServiceScope, moveId: string | null): Promise<Ser
     console.error('[service:moving] move read failed', error);
     return fail(describeDbError(error, 'Could not load the move.'), { code: SERVICE_CODES.db });
   }
+  if (data != null && !Array.isArray(data)) {
+    return fail('Could not load the move.', { code: SERVICE_CODES.db });
+  }
   return ok(data?.[0] ?? null);
 }
 
@@ -295,6 +298,26 @@ export async function addTask(scope: ServiceScope, input: AddTaskInput): Promise
   const relative = input.offsetDays != null;
   const dueDate = relative ? addMoveDays(move.data.move_date, input.offsetDays as number) : (input.dueDate ?? null);
   if (relative && !dueDate) return fail('That offset puts the task outside the calendar.', { code: SERVICE_CODES.invalidInput });
+
+  if (input.assigneeId != null) {
+    const { data: members, error: memberError } = await scope.db
+      .from('family_members')
+      .select('id,family_id')
+      .eq('family_id', scope.familyId)
+      .eq('id', input.assigneeId)
+      .limit(1);
+    if (memberError) {
+      return fail(describeDbError(memberError, 'Could not confirm the task assignee.'), { code: SERVICE_CODES.db });
+    }
+    const member = Array.isArray(members) ? members[0] : null;
+    if (!member || typeof member !== 'object' || Array.isArray(member)
+      || typeof member.id !== 'string' || typeof member.family_id !== 'string'
+      || typeof input.assigneeId !== 'string'
+      || member.id.toLowerCase() !== input.assigneeId.toLowerCase()
+      || member.family_id.toLowerCase() !== scope.familyId.toLowerCase()) {
+      return fail('Could not confirm the task assignee.', { code: SERVICE_CODES.db });
+    }
+  }
 
   const { data, error } = await scope.db
     .from('move_tasks')

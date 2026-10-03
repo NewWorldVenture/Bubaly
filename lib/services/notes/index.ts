@@ -178,13 +178,17 @@ export async function updateNote(
   // so neither clause can be reached with one. They stay so that a later
   // refactor of that read cannot silently widen the write, but nothing proves
   // them and this comment says so rather than implying coverage.
-  const { data, error } = await scope.db
+  const write = scope.db
     .from('notes')
     .update(patch)
     .eq('id', noteId)
-    .eq('family_id', scope.familyId)
-    .select('*')
-    .maybeSingle();
+    .eq('family_id', scope.familyId);
+  if (patch.title !== undefined || patch.body !== undefined) {
+    if (existing.data.title === null) write.is('title', null);
+    else write.eq('title', existing.data.title);
+    write.eq('body', existing.data.body);
+  }
+  const { data, error } = await write.select('*').maybeSingle();
 
   if (error || !data) {
     console.error('[service:notes] update failed', error);
@@ -221,7 +225,7 @@ export async function deleteNote(scope: ServiceScope, noteId: string): Promise<S
     .eq('family_id', scope.familyId)
     .select('id');
 
-  if (!error && wroteNoRows(deleted)) {
+  if (!error && (!Array.isArray(deleted) || wroteNoRows(deleted))) {
     console.error('[service:notes] delete matched no row', { familyId: scope.familyId, noteId });
     return fail('Could not delete that note.', { code: SERVICE_CODES.db });
   }

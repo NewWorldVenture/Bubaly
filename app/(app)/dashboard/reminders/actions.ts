@@ -30,7 +30,7 @@ import { getTranslations } from '@/lib/i18n/server';
 import { requireUserContext } from '@/lib/supabase/auth';
 import { createServer } from '@/lib/supabase/server';
 import { createReminder, deleteReminder, snoozeReminder } from '@/lib/services/reminders';
-import { makeKey } from '@/lib/services/idempotency';
+import { ALREADY_SAVED, makeKey } from '@/lib/services/idempotency';
 import { dayKeyInTz, scopeFromUserContext, zonedTimeMs } from '@/lib/services/scope';
 import { isSubmissionId } from '@/lib/utils/submission-id';
 import { describeActionError } from '@/lib/supabase/errors';
@@ -39,7 +39,7 @@ const PATH = '/dashboard/reminders';
 
 export type ReminderActionResult =
   | { ok: true; id: string }
-  | { ok: false; error: string };
+  | { ok: false; error: string; code?: typeof ALREADY_SAVED };
 
 export type CreateReminderActionInput = {
   title: string;
@@ -116,8 +116,12 @@ export async function createReminderAction(input: CreateReminderActionInput): Pr
       remindAt: input.remindAt ?? nextDefaultRemindAt(scope.tz, new Date()),
       memberId: input.memberId ?? null,
       aiSuggested: input.aiSuggested,
-    });
-    if (!result.ok) return { ok: false, error: result.error };
+    }, { rejectChangedRetry: true });
+    if (!result.ok) {
+      return result.code === ALREADY_SAVED
+        ? { ok: false, error: result.error, code: ALREADY_SAVED }
+        : { ok: false, error: result.error };
+    }
 
     revalidatePath(PATH);
     return { ok: true, id: result.data.id };
