@@ -20,7 +20,7 @@ import { getTranslations } from '@/lib/i18n/server';
 import { MAX_AI_ANSWER_CHARS, parseAIRequestIntake, runPagePath, type AIRequestResponse } from '@/lib/ai/chat-request';
 import { loadRunDetail, toRunView, type RunView } from '@/lib/ai/runs/detail';
 import {
-  answerClarification, applyRunControl, submitRequest, type RunControlAction, type RunControlResult,
+  answerClarification, applyRunControl, isRetryPastAllowance, submitRequest, type RunControlAction, type RunControlResult,
 } from '@/lib/ai/runs/intake';
 import { isAIConfigured } from '@/lib/ai/provider';
 import { isManager } from '@/lib/constants/roles';
@@ -83,13 +83,15 @@ export async function askBubalyAction(input: {
   const supabase = await createServer();
   const limited = await enforceAIRateLimit(supabase, `ai-requests:${ctx.user.id}`, REQUEST_RATE_LIMIT);
   if (!limited.ok) return await rateLimited();
+  const scope = scopeFromUserContext(ctx, supabase);
   const access = await assertAIAccess(ctx, { db: supabase });
-  if (!access.ok) return accessDenied(access);
+  // A retry of a request already filed replays it, even at the allowance.
+  if (!access.ok && !(await isRetryPastAllowance(scope, access, parsed.value.clientRequestId))) return accessDenied(access);
   if (!(await isAIConfigured())) {
     return { ok: false, error: t('runActions.theAiEngineIsnT'), code: 'not_configured' };
   }
 
-  const result = await submitRequest(scopeFromUserContext(ctx, supabase), parsed.value, { startedAtMs: startedAt });
+  const result = await submitRequest(scope, parsed.value, { startedAtMs: startedAt });
   if (!result.ok) return { ok: false, error: result.error, code: result.code };
   revalidatePath('/home');
   revalidatePath('/dashboard');

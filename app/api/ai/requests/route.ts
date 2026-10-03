@@ -20,7 +20,7 @@ import { NextRequest, NextResponse } from 'next/server';
 import { getTranslations } from '@/lib/i18n/server';
 import { isAIConfigured } from '@/lib/ai/provider';
 import { parseAIRequestIntake } from '@/lib/ai/chat-request';
-import { isAllowanceRefusal, statusForServiceCode, submitRequest } from '@/lib/ai/runs/intake';
+import { isAllowanceRefusal, isRetryPastAllowance, statusForServiceCode, submitRequest } from '@/lib/ai/runs/intake';
 import { accessDeniedResponse, assertAIAccess, authenticateAI } from '@/lib/server/ai-access';
 import { enforceAIRateLimit } from '@/lib/server/ai-rate-limit';
 import { MAX_SMALL_JSON_BYTES, readBoundedRequestJson } from '@/lib/server/bounded-request-body';
@@ -63,15 +63,19 @@ export async function POST(req: NextRequest) {
     const parsed = parseAIRequestIntake(body.value, { idempotencyKey: req.headers.get('idempotency-key') });
     if (!parsed.ok) return NextResponse.json({ error: t(PARSE_ERRORS[parsed.error]), code: parsed.error }, { status: 400 });
 
+    const scope = scopeFromUserContext(ctx, supabase);
     const access = await assertAIAccess(ctx, { db: supabase });
-    if (!access.ok) return accessDeniedResponse(access, t);
+    // A retry of a request already filed is answered with that request, even
+    // at the allowance: replaying it files and plans nothing.
+    if (!access.ok && !(await isRetryPastAllowance(scope, access, parsed.value.clientRequestId))) {
+      return accessDeniedResponse(access, t);
+    }
 
     // The scripted provider (AI_PROVIDER_STUB) needs no key; see lib/ai/provider-stub.ts.
     if (!(await isAIConfigured())) {
       return NextResponse.json({ error: t('requests.theAiEngineIsnT'), code: 'not_configured' }, { status: 503 });
     }
 
-    const scope = scopeFromUserContext(ctx, supabase);
     const result = await submitRequest(scope, parsed.value, { startedAtMs: startedAt });
     // At the allowance (F19): admitted atomically and refused. Answered exactly
     // like the gate's own allowance denial above, in the reader's language.

@@ -115,24 +115,18 @@ Against the pre-change code they fail with:
 
 ## Known gaps
 
-- **Streaming `/api/ai`:** the stream goes through `createAssistantStream` in
-  `lib/ai/assistant-engine.ts`. A refusal there is reported through the existing
-  `AiRequestNotFiled` branch with the "not recorded" text. The model does not run, but
-  the event carries no `allowance_exceeded` code. Fixing that needs a change to the
-  engine.
-- **Chore-proof validation** (`lib/chores/ai.ts`, `chores.validate`) was classified by
-  the owner as not charged. On a Free family at 10/10 it is now refused, and the code
-  falls back to parent review. Passing `exemptFromAllowance: true` there keeps it
-  unrefused.
+- **Streaming `/api/ai` (closed in `71b176cb4`):** `createAssistantStream` in
+  `lib/ai/assistant-engine.ts` catches `AiRequestOverAllowance` before the generic
+  `AiRequestNotFiled` branch. It sends `{type:'error', code:'allowance_exceeded',
+  limit}` with the localized `ai.yourFamilyUsedItsMonthlyAllowance` text, and the
+  model does not run.
+- **Chore-proof validation (closed in `71b176cb4`):** `lib/chores/ai.ts`
+  (`chores.validate`) was classified by the owner as not charged. It passes
+  `exemptFromAllowance: true`, so a Free family at 10/10 is filed plainly and never
+  refused (`tests/chores-ai-observed.test.ts`).
 - **Super-administrators** bypass the allowance in `assertAIAccess`, but
   `withAiRequest` cannot see the caller's email. A super-admin acting in a Free family
   past 10/10 is therefore refused at admission.
-- **Keyed retry of the 10th request through a gate:** `/api/ai/requests`, the
-  concierge form action and the inbox action run `assertAIAccess` before the intake.
-  At 10/10 the gate answers 429 before the intake can replay a keyed retry of the
-  request that made it 10. Nothing is filed or planned twice, but the retry is
-  refused instead of replayed. This ordering predates F19, and fixing it needs a
-  change to the gate or to the callers. The intake itself replays correctly at 10/10.
 
 ## Closed: the concierge intake (Ask Bubaly)
 
@@ -171,7 +165,19 @@ at 9/10 both filed and both were planned.
   for is metered (owner decision on #771). A member scope on the same plan at 10/10
   is still refused.
 
-**Evidence.** `tests/f19-intake-admission-is-atomic.test.ts` (10 tests) drives the real
+- **Keyed retry of the 10th request through a gate (closed):** `/api/ai/requests`,
+  the concierge form action and the inbox action run `assertAIAccess` before the
+  intake. At 10/10 the gate used to answer 429 before the intake could replay a
+  keyed retry of the request that made it 10. Now `isRetryPastAllowance` passes
+  over an `allowance_exceeded` denial, and only that code. It does so only when the
+  key already names a `kind: 'concierge'` row filed by the same requester; the
+  intake then replays that row (200, the same request, no new row, no planning).
+  - Still refused: `feature_off`, `plan_required`, `unavailable`, a new key, an
+    unkeyed submission, another member's key, or a key on an assistant-turn row.
+  - A new key at the cap is refused by the gate and again, atomically, by 0477.
+  - A failed lookup keeps the gate's refusal.
+
+**Evidence.** `tests/f19-intake-admission-is-atomic.test.ts` (15 tests) drives the real
 intake, store and route over one in-memory database. The member and ledger clients
 are two views of that database, and `admit_ai_request` is emulated by
 `tests/helpers/admit-ai-request.ts`. A barrier holds route racers after the gate's
@@ -187,6 +193,10 @@ Against the pre-change intake and route, 6 of the 8 tests fail:
 After the change, all 8 pass. Two later tests pin the system-scope rule: a system
 scope at 10/10 files plainly, and as a negative control a member scope at 10/10 is
 refused. Without the `actorKind === 'system'` guard, the system-scope test fails.
+Five more tests pin the retry-past-the-gate rule, through the route and the form
+action. Without `isRetryPastAllowance` the two replay tests fail (429). Without its
+requester check, the other-member test fails. Without its kind check, the
+assistant-turn test fails.
 
 Local SQL, on a disposable family seeded with 9 rows: 8 concurrent
 `admit_ai_request(..., 'concierge', ...)` calls were made as `service_role`, each

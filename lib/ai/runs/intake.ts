@@ -95,6 +95,36 @@ export function isAllowanceRefusal(result: { ok: boolean }): result is IntakeAll
   return !result.ok && (result as { code?: unknown }).code === OVER_ALLOWANCE && typeof (result as { limit?: unknown }).limit === 'number';
 }
 
+/**
+ * True when the gate's allowance denial must not stop this submission: its key
+ * already names a concierge request THIS requester filed, so `submitRequest`
+ * replays that request rather than filing a new one (0477 answers `existing`
+ * before it looks at the allowance). Without it a retry of the request that
+ * made the month 10 of 10 was refused by `assertAIAccess`, never replayed.
+ * Only `allowance_exceeded` is ever passed over: a feature that is off, a plan
+ * below the tier or an unreadable plan still refuse, and a new key at the cap
+ * is still refused, by the gate and again, atomically, by the admission. Any
+ * read failure answers false, which keeps the gate's refusal.
+ */
+export async function isRetryPastAllowance(
+  scope: ServiceScope,
+  denial: { code?: string },
+  clientRequestId: string | null | undefined,
+): Promise<boolean> {
+  if (denial.code !== OVER_ALLOWANCE || !clientRequestId) return false;
+  const { data, error } = await scope.db
+    .from('ai_requests')
+    .select('id, requested_by, kind')
+    .eq('family_id', scope.familyId)
+    .eq('client_request_id', clientRequestId)
+    .maybeSingle();
+  if (error) {
+    console.error('[ai/intake] could not look up a retry key at the allowance', error);
+    return false;
+  }
+  return Boolean(data && data.kind === 'concierge' && data.requested_by === scope.userId);
+}
+
 function allowanceRefusal(limit: number): IntakeAllowanceRefusal {
   return {
     ok: false, status: 429, code: OVER_ALLOWANCE, limit, retryable: false,

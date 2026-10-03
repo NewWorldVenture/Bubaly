@@ -23,7 +23,7 @@
 import { revalidatePath } from 'next/cache';
 import { getTranslations } from '@/lib/i18n/server';
 import { runPagePath } from '@/lib/ai/chat-request';
-import { submitRequest } from '@/lib/ai/runs/intake';
+import { isRetryPastAllowance, submitRequest } from '@/lib/ai/runs/intake';
 import { isAIConfigured } from '@/lib/ai/provider';
 import { assertAIAccess } from '@/lib/server/ai-access';
 import { enforceAIRateLimit } from '@/lib/server/ai-rate-limit';
@@ -85,7 +85,10 @@ export async function handleInboxMessageAction(
   const limited = await enforceAIRateLimit(supabase, `ai-requests:${ctx.user.id}`, REQUEST_RATE_LIMIT);
   if (!limited.ok) return { ok: false, error: t('inboxActions.tooManyRequestsRightNow'), code: 'rate_limited' };
   const access = await assertAIAccess(ctx, { db: supabase });
-  if (!access.ok) return { ok: false, error: access.error, code: access.code };
+  // A retry of a request already filed replays it, even at the allowance.
+  if (!access.ok && !(await isRetryPastAllowance(scope, access, clientRequestId))) {
+    return { ok: false, error: access.error, code: access.code };
+  }
   if (!(await isAIConfigured())) {
     return { ok: false, error: t('inboxActions.bubalyIsNotConnectedTo'), code: 'not_configured' };
   }

@@ -77,6 +77,7 @@ const ctx = {
   active: { familyId: FAMILY, role: 'parent', member: { id: MEMBER }, family: { name: 'Fam', timezone: 'UTC' } },
 };
 
+vi.mock('next/cache', () => ({ revalidatePath: () => {} }));
 vi.mock('@/lib/supabase/server', () => ({ createServer: async () => memberDb, createServiceClient: () => ledgerDb }));
 vi.mock('@/lib/supabase/auth', () => ({ getUserContext: async () => ctx, requireUserContext: async () => ctx }));
 vi.mock('@/lib/server/ensure-family', () => ({ ensureActiveFamily: async () => true }));
@@ -113,6 +114,7 @@ vi.mock('@/lib/ai/runs/continue', () => ({ kickRun: (...a: unknown[]) => kickRun
 
 const { submitRequest } = await import('@/lib/ai/runs/intake');
 const { POST } = await import('@/app/api/ai/requests/route');
+const { askBubalyAction } = await import('@/app/(app)/dashboard/concierge/run-actions');
 
 const scope = (): ServiceScope => ({
   db: memberDb as unknown as ServiceScope['db'],
@@ -217,13 +219,81 @@ describe('F19: the concierge intake admits its request atomically', () => {
     expect(planRequest).not.toHaveBeenCalled();
     expect(state.rpcCalls.at(-1)?.args).toMatchObject({ p_client_request_id: 'retry-key-0001' });
 
-    // Through the route, the gate (`assertAIAccess`) counts 10 of 10 and
-    // answers 429 BEFORE the intake is reached. That ordering predates this fix
-    // and is outside the intake; pinned here so a change to it is deliberate.
+    // Through the route the gate (`assertAIAccess`) counts 10 of 10, but the
+    // key names this requester's own concierge request, so the denial is
+    // passed over and the intake replays it: 200 (the route's replay status),
+    // the same request, no new row.
     const res = await POST(post({ text: 'Plan our week', clientRequestId: 'retry-key-0001' }));
-    expect(res.status).toBe(429);
-    expect(state.rpcCalls).toHaveLength(2);
+    expect(res.status).toBe(200);
+    expect(await res.json()).toMatchObject({ requestId, outcome: 'plan', planId: 'plan-1' });
+    expect(state.rpcCalls).toHaveLength(3);
+    expect(state.rpcCalls.at(-1)?.args).toMatchObject({ p_client_request_id: 'retry-key-0001' });
     expect(rows()).toHaveLength(10);
+    expect(planRequest).not.toHaveBeenCalled();
+    expect(kickRun).not.toHaveBeenCalled();
+  });
+
+  describe('the gate passes over its allowance denial only for a retry of this requester\'s own concierge request', () => {
+    async function fileTenth(key: string) {
+      seed(9);
+      const first = await submitRequest(scope(), { text: 'Plan our week', clientRequestId: key }, { kick: vi.fn() });
+      expect(first.ok).toBe(true);
+      const requestId = first.ok ? first.data.requestId : '';
+      store.seed('family_automation_runs', [{ family_id: FAMILY, request_id: requestId, plan_id: 'plan-1', state: 'ready', summary: 'Planned the week.' }]);
+      planRequest.mockClear();
+      classifyIntent.mockClear();
+      state.rpcCalls = [];
+      return requestId;
+    }
+
+    it('a NEW key at 10 of 10 is still refused by the gate: 429, nothing admitted, nothing planned', async () => {
+      await fileTenth('retry-key-0002');
+      const res = await POST(post({ text: 'Plan our weekend', clientRequestId: 'fresh-key-0002' }));
+      expect(res.status).toBe(429);
+      expect(await res.json()).toMatchObject({ code: 'allowance_exceeded', limit: 10 });
+      expect(state.rpcCalls).toHaveLength(0);
+      expect(rows()).toHaveLength(10);
+      expect(classifyIntent).not.toHaveBeenCalled();
+      expect(planRequest).not.toHaveBeenCalled();
+    });
+
+    it('an unkeyed submission at 10 of 10 is still refused by the gate', async () => {
+      await fileTenth('retry-key-0003');
+      const res = await POST(post({ text: 'Plan our week' }));
+      expect(res.status).toBe(429);
+      expect(state.rpcCalls).toHaveLength(0);
+      expect(rows()).toHaveLength(10);
+    });
+
+    it('a key filed by ANOTHER member is not a retry: refused, never replayed', async () => {
+      seed(9);
+      store.seed('ai_requests', [{ family_id: FAMILY, kind: 'concierge', status: 'completed', request_text: 'theirs', client_request_id: 'their-key-0001', requested_by: 'other-user' }]);
+      const res = await POST(post({ text: 'Plan our week', clientRequestId: 'their-key-0001' }));
+      expect(res.status).toBe(429);
+      expect(state.rpcCalls).toHaveLength(0);
+      expect(rows()).toHaveLength(10);
+      expect(planRequest).not.toHaveBeenCalled();
+    });
+
+    it('a key that names a non-concierge row (an assistant turn) is not a concierge retry: refused', async () => {
+      seed(9);
+      store.seed('ai_requests', [{ family_id: FAMILY, kind: 'feature', feature: 'chat.assistant', status: 'completed', request_text: 'Assistant turn', client_request_id: 'turn-key-0001', requested_by: USER }]);
+      const res = await POST(post({ text: 'Plan our week', clientRequestId: 'turn-key-0001' }));
+      expect(res.status).toBe(429);
+      expect(state.rpcCalls).toHaveLength(0);
+      expect(rows()).toHaveLength(10);
+    });
+
+    it('the concierge form action replays a keyed retry at 10 of 10 the same way', async () => {
+      const requestId = await fileTenth('retry-key-0004');
+      const result = await askBubalyAction({ text: 'Plan our week', clientRequestId: 'retry-key-0004' });
+      expect(result).toMatchObject({ ok: true, data: { requestId, outcome: 'plan', planId: 'plan-1' } });
+      expect(rows()).toHaveLength(10);
+      expect(planRequest).not.toHaveBeenCalled();
+      const fresh = await askBubalyAction({ text: 'Plan our weekend', clientRequestId: 'fresh-key-0004' });
+      expect(fresh).toMatchObject({ ok: false, code: 'allowance_exceeded' });
+      expect(rows()).toHaveLength(10);
+    });
   });
 
   it('an unlimited plan files plainly on the member client and is never refused', async () => {
