@@ -33,6 +33,7 @@ import type { AI_ALLOWANCE_EXCEEDED } from '@/lib/ai/runs/store';
 import { recordModelCall } from '@/lib/ai/usage';
 import { monthlyAllowanceFor } from '@/lib/constants/ai-allowance';
 import { resolveFamilyPlanLevel } from '@/lib/server/plan';
+import { isSuperAdminCaller } from '@/lib/server/super-admin-caller';
 import type { TokenUsage } from '@/lib/ai/usage';
 
 export type AiRequestSpec = {
@@ -117,7 +118,7 @@ export async function withAiRequest<T>(
   // on a system scope (a cron job, inbound routing).
   const exempt = Boolean(spec.exemptFromAllowance) || scope.actorKind === 'system';
 
-  const opened = await createRequest(scope, {
+  const filing = (allowance: number | null) => createRequest(scope, {
     kind: spec.kind ?? 'feature',
     // Bounded HERE rather than at each caller, because "keep it short" is this
     // module's own documented contract and fifteen call sites remembering a
@@ -130,12 +131,20 @@ export async function withAiRequest<T>(
     conversationId: spec.conversationId ?? null,
     feature: spec.feature,
     clientRequestId: spec.clientRequestId ?? null,
-    allowance: exempt ? null : plan.allowance,
+    allowance,
     unmetered: exempt,
   }).catch((err: unknown) => {
     console.error('[ai-observability] could not open a request row', { feature: spec.feature, err });
     return null;
   });
+  let opened = await filing(exempt ? null : plan.allowance);
+  // A super-administrator is never refused by the allowance — the gate's own
+  // rule (`assertAIAccess`), which this admission cannot see because a scope
+  // carries no email. Asked only after a refusal; the row is then filed as it
+  // was before the admission existed: plainly, and counted.
+  if (opened && !opened.ok && opened.code === OVER_ALLOWANCE && await isSuperAdminCaller(scope)) {
+    opened = await filing(null);
+  }
   // The family is at its allowance: admitted and counted in one decision under
   // a per-family lock, so N concurrent requests at 9 of 10 admit exactly one.
   // Nothing below runs and no row was filed.

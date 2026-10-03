@@ -32,6 +32,7 @@ import { describeDbError } from '@/lib/supabase/errors';
 import { makeKey } from '@/lib/services/idempotency';
 import { monthlyAllowanceFor } from '@/lib/constants/ai-allowance';
 import { resolveFamilyPlanLevel } from '@/lib/server/plan';
+import { isSuperAdminCaller } from '@/lib/server/super-admin-caller';
 import type { AIAccessDenial } from '@/lib/server/ai-access';
 import { fail, ok, SERVICE_CODES, type ServiceResult, type ServiceScope } from '@/lib/services/types';
 import { cancelRun, pauseRun, rerunStep, resumeRun } from './controls';
@@ -291,11 +292,18 @@ export async function submitRequest(
   // fails and nothing is planned — never an unmetered filing.
   const clientRequestId = input.clientRequestId ?? null;
   const allowance = await intakeAllowance(scope);
-  const created = await createRequest(
+  const file = (cap: number | null) => createRequest(
     scope,
-    { requestText: text, kind: 'concierge', conversationId, clientRequestId, allowance },
-    allowance === null ? undefined : { db },
+    { requestText: text, kind: 'concierge', conversationId, clientRequestId, allowance: cap },
+    cap === null ? undefined : { db },
   );
+  let created = await file(allowance);
+  // A super-administrator is never refused by the allowance (the gate's rule,
+  // which this admission cannot see from a scope): filed as before 0477,
+  // plainly on the member's client, and counted.
+  if (!created.ok && created.code === OVER_ALLOWANCE && allowance !== null && await isSuperAdminCaller(scope)) {
+    created = await file(null);
+  }
   if (!created.ok) return created.code === OVER_ALLOWANCE && allowance !== null ? allowanceRefusal(allowance) : created;
   // A retried POST (a dropped connection, a double tap) lands here: the key
   // already names a request, so the answer is the one that request got —

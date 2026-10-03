@@ -124,9 +124,19 @@ Against the pre-change code they fail with:
   (`chores.validate`) was classified by the owner as not charged. It passes
   `exemptFromAllowance: true`, so a Free family at 10/10 is filed plainly and never
   refused (`tests/chores-ai-observed.test.ts`).
-- **Super-administrators** bypass the allowance in `assertAIAccess`, but
-  `withAiRequest` cannot see the caller's email. A super-admin acting in a Free family
-  past 10/10 is therefore refused at admission.
+- **Super-administrators (closed):** they bypass the allowance in `assertAIAccess`,
+  but `withAiRequest` and the concierge intake only have a scope, with no email, so
+  a super-admin in a Free family at 10/10 used to be refused at admission.
+  - Only after a refusal, `isSuperAdminCaller` (`lib/server/super-admin-caller.ts`)
+    looks the caller up by user id through the ledger client, using the gate's own
+    allowlist.
+  - A super-admin's row is then filed as it was before 0477: plainly, and counted.
+  - A system scope, no user, or a failed lookup keeps the refusal (fail closed).
+  - The ordinary path makes no lookup.
+  - `tests/f19-super-admin-is-not-refused.test.ts` (7 tests): against the old
+    source, 4 fail; the member, failed-lookup and no-lookup controls pass both ways.
+  - Whether super-admin work should count at all is still the owner's to decide.
+    This only restores the gate's rule.
 
 ## Closed: the concierge intake (Ask Bubaly)
 
