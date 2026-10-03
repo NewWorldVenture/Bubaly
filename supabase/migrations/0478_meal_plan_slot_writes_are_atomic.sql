@@ -102,24 +102,56 @@ revoke all on public.meal_plan_write_receipts from public, anon, authenticated, 
 create or replace function public.meal_plan_slot_write_guard()
 returns trigger
 language plpgsql
+security definer
 set search_path = pg_catalog, public
 as $$
 declare
+  v_actor uuid := auth.uid();
+  v_family_ids uuid[] := array[]::uuid[];
+  v_family_id uuid;
+  v_member record;
+  v_has_editor boolean;
+  v_has_guest boolean;
   v_old_key text;
   v_new_key text;
   v_slot_key text;
 begin
-  if auth.uid() is not null then
-    if (tg_op <> 'INSERT' and exists (
-          select 1 from public.family_members fm where fm.family_id = old.family_id
-            and fm.user_id = auth.uid() and fm.is_active and fm.role = 'guest'
-        ))
-       or (tg_op <> 'DELETE' and exists (
-          select 1 from public.family_members fm where fm.family_id = new.family_id
-            and fm.user_id = auth.uid() and fm.is_active and fm.role = 'guest'
-        )) then
-      raise exception 'A guest can view the household but not change its meal plan' using errcode = '42501';
-    end if;
+  if v_actor is not null then
+    if tg_op <> 'INSERT' then v_family_ids := array_append(v_family_ids, old.family_id); end if;
+    if tg_op <> 'DELETE' then v_family_ids := array_append(v_family_ids, new.family_id); end if;
+
+    -- Direct authenticated table writes also pass through this trigger. Lock
+    -- the actor's rows for each affected family before waiting on slot locks;
+    -- SECURITY DEFINER is required because ordinary members have SELECT but
+    -- intentionally lack UPDATE privilege on family_members.
+    for v_family_id in
+      select distinct f.family_id from unnest(v_family_ids) as f(family_id)
+      where f.family_id is not null order by f.family_id
+    loop
+      v_has_editor := false;
+      v_has_guest := false;
+      for v_member in
+        select fm.is_active, fm.role
+        from public.family_members fm
+        where fm.family_id = v_family_id and fm.user_id = v_actor
+        order by fm.id
+        for share
+      loop
+        if v_member.is_active then
+          if v_member.role = 'guest' then
+            v_has_guest := true;
+          else
+            v_has_editor := true;
+          end if;
+        end if;
+      end loop;
+      if v_has_guest then
+        raise exception 'A guest can view the household but not change its meal plan' using errcode = '42501';
+      end if;
+      if not v_has_editor then
+        raise exception 'Not a member of this family' using errcode = '42501';
+      end if;
+    end loop;
   end if;
   if tg_op <> 'INSERT' then
     v_old_key := old.family_id::text || ':' || old.plan_date::text || ':' || old.meal_type::text;
@@ -150,14 +182,15 @@ begin
 end;
 $$;
 
-revoke all on function public.meal_plan_slot_write_guard() from public, anon, authenticated;
+revoke all on function public.meal_plan_slot_write_guard() from public, anon, authenticated, service_role;
 drop trigger if exists meal_plan_slot_write_guard on public.meal_plans;
 create trigger meal_plan_slot_write_guard
   before insert or update or delete on public.meal_plans
   for each row execute function public.meal_plan_slot_write_guard();
 
-create or replace function public.meal_plan_replace_slots(
+create or replace function public.meal_plan_replace_slots_internal(
   p_family_id uuid,
+  p_actor_id uuid,
   p_request_id text,
   p_entries jsonb
 )
@@ -167,7 +200,7 @@ security definer
 set search_path = pg_catalog, public
 as $$
 declare
-  v_actor uuid := auth.uid();
+  v_actor uuid := p_actor_id;
   v_hash text;
   v_receipt public.meal_plan_write_receipts%rowtype;
   v_claimed integer;
@@ -178,6 +211,14 @@ declare
   v_rows jsonb;
   v_result jsonb;
 begin
+  -- Serialize admission with removal/demotion. FOR SHARE conflicts with the
+  -- non-key UPDATE locks used for is_active and role changes and is held until
+  -- the surrounding transaction commits.
+  if v_actor is not null then
+    perform 1 from public.family_members fm
+      where fm.family_id = p_family_id and fm.user_id = v_actor
+      order by fm.id for share;
+  end if;
   if v_actor is null
      or not exists (select 1 from public.family_members fm where fm.family_id = p_family_id
        and fm.user_id = v_actor and fm.is_active and fm.role <> 'guest')
@@ -268,8 +309,9 @@ begin
 end;
 $$;
 
-create or replace function public.meal_plan_remove_slot(
+create or replace function public.meal_plan_remove_slot_internal(
   p_family_id uuid,
+  p_actor_id uuid,
   p_request_id text,
   p_plan_id uuid
 )
@@ -279,13 +321,18 @@ security definer
 set search_path = pg_catalog, public
 as $$
 declare
-  v_actor uuid := auth.uid();
+  v_actor uuid := p_actor_id;
   v_hash text;
   v_receipt public.meal_plan_write_receipts%rowtype;
   v_claimed integer;
   v_row public.meal_plans%rowtype;
   v_result jsonb;
 begin
+  if v_actor is not null then
+    perform 1 from public.family_members fm
+      where fm.family_id = p_family_id and fm.user_id = v_actor
+      order by fm.id for share;
+  end if;
   if v_actor is null
      or not exists (select 1 from public.family_members fm where fm.family_id = p_family_id
        and fm.user_id = v_actor and fm.is_active and fm.role <> 'guest')
@@ -325,10 +372,81 @@ begin
 end;
 $$;
 
-revoke all on function public.meal_plan_replace_slots(uuid, text, jsonb) from public, anon;
-revoke all on function public.meal_plan_remove_slot(uuid, text, uuid) from public, anon;
+-- The actor-aware core is never an API surface. Only the fixed-role wrappers
+-- below can invoke it, and every actor is revalidated under a membership lock.
+revoke all on function public.meal_plan_replace_slots_internal(uuid, uuid, text, jsonb) from public, anon, authenticated, service_role;
+revoke all on function public.meal_plan_remove_slot_internal(uuid, uuid, text, uuid) from public, anon, authenticated, service_role;
+
+create or replace function public.meal_plan_replace_slots(
+  p_family_id uuid,
+  p_request_id text,
+  p_entries jsonb
+)
+returns jsonb
+language plpgsql
+security definer
+set search_path = pg_catalog, public
+as $$
+begin
+  return public.meal_plan_replace_slots_internal(p_family_id, auth.uid(), p_request_id, p_entries);
+end;
+$$;
+
+create or replace function public.meal_plan_remove_slot(
+  p_family_id uuid,
+  p_request_id text,
+  p_plan_id uuid
+)
+returns jsonb
+language plpgsql
+security definer
+set search_path = pg_catalog, public
+as $$
+begin
+  return public.meal_plan_remove_slot_internal(p_family_id, auth.uid(), p_request_id, p_plan_id);
+end;
+$$;
+
+create or replace function public.meal_plan_replace_slots_for_actor(
+  p_family_id uuid,
+  p_actor_id uuid,
+  p_request_id text,
+  p_entries jsonb
+)
+returns jsonb
+language plpgsql
+security definer
+set search_path = pg_catalog, public
+as $$
+begin
+  return public.meal_plan_replace_slots_internal(p_family_id, p_actor_id, p_request_id, p_entries);
+end;
+$$;
+
+create or replace function public.meal_plan_remove_slot_for_actor(
+  p_family_id uuid,
+  p_actor_id uuid,
+  p_request_id text,
+  p_plan_id uuid
+)
+returns jsonb
+language plpgsql
+security definer
+set search_path = pg_catalog, public
+as $$
+begin
+  return public.meal_plan_remove_slot_internal(p_family_id, p_actor_id, p_request_id, p_plan_id);
+end;
+$$;
+
+revoke all on function public.meal_plan_replace_slots(uuid, text, jsonb) from public, anon, service_role;
+revoke all on function public.meal_plan_remove_slot(uuid, text, uuid) from public, anon, service_role;
+revoke all on function public.meal_plan_replace_slots_for_actor(uuid, uuid, text, jsonb) from public, anon, authenticated;
+revoke all on function public.meal_plan_remove_slot_for_actor(uuid, uuid, text, uuid) from public, anon, authenticated;
 grant execute on function public.meal_plan_replace_slots(uuid, text, jsonb) to authenticated;
 grant execute on function public.meal_plan_remove_slot(uuid, text, uuid) to authenticated;
+grant execute on function public.meal_plan_replace_slots_for_actor(uuid, uuid, text, jsonb) to service_role;
+grant execute on function public.meal_plan_remove_slot_for_actor(uuid, uuid, text, uuid) to service_role;
 
 comment on table public.meal_plan_write_receipts is
   'Private actor-scoped durable receipts for atomic meal-plan operations; rows can only be written/read by the restricted meal-plan RPCs.';
