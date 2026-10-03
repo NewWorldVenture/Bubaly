@@ -3,16 +3,16 @@
 // `sports_events` (0002) is the one household table besides `calendar_events`
 // that carries a recurrence rule, and weekly practice is exactly the row a
 // family enters once and expects to see every week. A plain window read would
-// show the first practice and then nothing, so this service expands the rule
-// with the same `expandEvents` the calendar views use — occurrences keep the
-// source row's id with shifted times, which is what a planner needs to say
+// show the first practice and then nothing, so this service reads through the
+// shared series-aware read (lib/calendar/occurrences.ts) — occurrences keep
+// the source row's id with shifted times, which is what a planner needs to say
 // "soccer is Tuesday at 5 again".
 //
 // Read-only, family-scoped explicitly, and 'education' in the trust taxonomy
 // because `TRUST_DOMAINS` has no sports domain and the reads exist to serve
 // the same school-week planning.
 import 'server-only';
-import { expandEventsInZone } from '@/lib/calendar/recurrence';
+import { readSportsOccurrences } from '@/lib/calendar/occurrences';
 import type { Tables } from '@/lib/database.types';
 import { describeDbError } from '@/lib/supabase/errors';
 import { resolveWindow } from '../school';
@@ -22,8 +22,6 @@ export type TeamRow = Tables<'teams'>;
 export type SportsEventRow = Tables<'sports_events'>;
 
 const MAX_ROWS = 500;
-/** A recurring series is read back this far so its occurrences in the window are found. */
-const RECURRENCE_LOOKBACK_MS = 366 * 86_400_000;
 
 export async function listTeams(scope: ServiceScope, input: { memberId?: string | null; activeOnly?: boolean } = {}): Promise<ServiceResult<TeamRow[]>> {
   let query = scope.db
@@ -57,52 +55,31 @@ export type PracticesInput = {
 /**
  * Practices, games and tournaments in a window, recurring series expanded,
  * soonest first. Each occurrence keeps its source row's id.
+ *
+ * The read is the shared series-aware one (lib/calendar/occurrences.ts), so
+ * this service, the free-slot finder, the reminder engine and the briefs all
+ * see the same practices. `to` is inclusive, as this window has always been.
  */
 export async function listPracticesBetween(scope: ServiceScope, input: PracticesInput = {}): Promise<ServiceResult<SportsEventRow[]>> {
   const window = resolveWindow(scope, input);
   if (!window.ok) return window;
-  const fromMs = Date.parse(window.data.from);
-  const toMs = Date.parse(window.data.to);
-
-  // Two reads: the one-off rows inside the window, and every recurring row
-  // that started before the window ends (a weekly practice entered last
-  // season still repeats into it).
-  let single = scope.db
-    .from('sports_events')
-    .select('*')
-    .eq('family_id', scope.familyId)
-    .eq('recurrence', 'none')
-    .gte('starts_at', window.data.from)
-    .lte('starts_at', window.data.to)
-    .limit(MAX_ROWS);
-  let recurring = scope.db
-    .from('sports_events')
-    .select('*')
-    .eq('family_id', scope.familyId)
-    .neq('recurrence', 'none')
-    .gte('starts_at', new Date(toMs - RECURRENCE_LOOKBACK_MS).toISOString())
-    .lte('starts_at', window.data.to)
-    .limit(MAX_ROWS);
-  if (input.memberId) {
-    single = single.eq('member_id', input.memberId);
-    recurring = recurring.eq('member_id', input.memberId);
+  const eventType = input.eventType;
+  const res = await readSportsOccurrences(
+    scope.db,
+    scope.familyId,
+    { timedFrom: window.data.from, timedTo: new Date(Date.parse(window.data.to) + 1).toISOString() },
+    scope.tz,
+    {
+      memberId: input.memberId ?? undefined,
+      refine: eventType ? (query) => query.eq('event_type', eventType) : undefined,
+      // The one-off read keeps its database-side cap; the answer is cut to the caller's limit after the merge.
+      singlesLimit: MAX_ROWS,
+      limit: Math.min(Math.max(input.limit ?? 200, 1), MAX_ROWS),
+    },
+  );
+  if (res.error) {
+    console.error('[service:sports] events read failed', res.error);
+    return fail(describeDbError(res.error, 'Could not load sports events.'), { code: SERVICE_CODES.db });
   }
-  if (input.eventType) {
-    single = single.eq('event_type', input.eventType);
-    recurring = recurring.eq('event_type', input.eventType);
-  }
-
-  const [singles, series] = await Promise.all([single, recurring]);
-  if (singles.error || series.error) {
-    console.error('[service:sports] events read failed', singles.error ?? series.error);
-    return fail(describeDbError(singles.error ?? series.error, 'Could not load sports events.'), { code: SERVICE_CODES.db });
-  }
-
-  // `expandEvents` treats the window end as exclusive; the reads above are
-  // inclusive, so a millisecond is added to keep an event exactly at `to`.
-  const expanded = expandEventsInZone(series.data ?? [], new Date(fromMs), new Date(toMs + 1), scope.tz);
-  const rows = [...(singles.data ?? []), ...expanded]
-    .sort((a, b) => Date.parse(a.starts_at) - Date.parse(b.starts_at))
-    .slice(0, Math.min(Math.max(input.limit ?? 200, 1), MAX_ROWS));
-  return ok(rows);
+  return ok(res.data as SportsEventRow[]);
 }

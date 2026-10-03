@@ -4,7 +4,7 @@ import { requireUserContext } from '@/lib/supabase/auth';
 import { settleAll } from '@/lib/supabase/settle';
 import { createServer } from '@/lib/supabase/server';
 import { findFreeSlots, isCalendarContext, type BusyEvent, type CalendarContext } from '@/lib/calendar/scheduling';
-import { readCalendarOccurrences } from '@/lib/calendar/occurrences';
+import { readCalendarOccurrences, readSportsOccurrences } from '@/lib/calendar/occurrences';
 import { instantCalendarBounds } from '@/lib/briefing/calendar-window';
 import { MAX_SMALL_JSON_BYTES, readBoundedRequestJson } from '@/lib/server/bounded-request-body';
 
@@ -54,7 +54,7 @@ export async function POST(req: NextRequest) {
       // so a `context` column that is not there yet is simply absent.
       readCalendarOccurrences(supabase, familyId, instantCalendarBounds(fromISO, toISO, tz), tz),
       supabase.from('school_events').select('starts_at, ends_at, member_id').eq('family_id', familyId).gte('starts_at', fromISO).lte('starts_at', toISO),
-      supabase.from('sports_events').select('starts_at, ends_at, member_id').eq('family_id', familyId).gte('starts_at', fromISO).lte('starts_at', toISO),
+      readSportsOccurrences(supabase, familyId, instantCalendarBounds(fromISO, toISO, tz), tz, { columns: ['starts_at', 'ends_at', 'member_id'] }),
     ]);
 
     // A free slot is an ASSERTION about what is not in the calendar, so it is

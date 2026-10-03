@@ -3,6 +3,7 @@ import {createClient} from '@supabase/supabase-js';
 import {writeFileSync} from 'node:fs';
 import {listPracticesBetween, type SportsEventRow} from '@/lib/services/sports';
 import type {ServiceScope} from '@/lib/services/types';
+import {orPredicate} from './helpers/in-memory-supabase';
 // Only explicit bounds are exercised; never load the school module's scope/Auth/default-clock graph.
 vi.mock('@/lib/services/school', () => ({
   resolveWindow(_scope: ServiceScope, input?: {from?: string|null;to?: string|null}) {
@@ -37,17 +38,33 @@ function scope(tz:string,rows:SportsEventRow[],errorBranch?:'single'|'series'):S
     const url=new URL(typeof input==='string'?input:input instanceof URL?input.href:input.url);
     const method=init?.method??(input instanceof Request?input.method:'GET');
     receipts.push({method,path:url.pathname,query:[...url.searchParams]});
+    // The transport contract of the shared series-aware read (lib/calendar/
+    // occurrences.ts): two GETs, both family-scoped and ordered by start. The
+    // one-off read carries the window as an `or` of one `and(...)` clause plus
+    // the no-series clause and the service's own cap; the series read selects
+    // every series that started by the window's end and has not ended before
+    // its start, one row past its ceiling.
+    const series=url.searchParams.get('recurrence')==='neq.none';
     try {
       expect(url.origin).toBe('https://sports-proof.invalid');expect(url.pathname).toBe('/rest/v1/sports_events');expect(method).toBe('GET');expect(receipts.length).toBeLessThanOrEqual(2);
-      expect(url.searchParams.get('family_id')).toBe('eq.'+FAMILY);expect(url.searchParams.get('select')).toBe('*');expect(url.searchParams.get('limit')).toBe('500');
-      expect(url.searchParams.get('recurrence')).toMatch(/^(eq|neq)\.none$/);
-      const times=url.searchParams.getAll('starts_at');expect(times.length).toBe(2);expect(times.some(t=>t.startsWith('gte.'))).toBe(true);expect(times.some(t=>t.startsWith('lte.'))).toBe(true);
+      expect(url.searchParams.get('family_id')).toBe('eq.'+FAMILY);expect(url.searchParams.get('select')).toBe('*');expect(url.searchParams.get('order')).toBe('starts_at.asc');
+      const ors=url.searchParams.getAll('or');
+      if(series) {
+        expect(url.searchParams.get('limit')).toBe('2001');
+        expect(url.searchParams.get('starts_at')).toMatch(/^lte\./);
+        expect(ors).toEqual([expect.stringMatching(/^\(recurrence_until\.is\.null,recurrence_until\.gte\..+\)$/)]);
+      } else {
+        expect(url.searchParams.get('limit')).toBe('500');
+        expect(url.searchParams.get('recurrence')).toBeNull();expect(url.searchParams.get('starts_at')).toBeNull();
+        expect(ors).toEqual([expect.stringMatching(/^\(and\(starts_at\.gte\..+,starts_at\.lt\..+\)\)$/),'(recurrence.is.null,recurrence.eq.none)']);
+      }
     } catch(cause) {fixtureErrors.push(String(cause));throw cause;}
-    const single=url.searchParams.get('recurrence')==='eq.none';
-    if(errorBranch===(single?'single':'series')) return new Response(JSON.stringify({code:'42501',message:'synthetic denied'}),{status:403,headers:{'content-type':'application/json'}});
+    if(errorBranch===(series?'series':'single')) return new Response(JSON.stringify({code:'42501',message:'synthetic denied'}),{status:403,headers:{'content-type':'application/json'}});
     const data=rows.filter(row=>{
       for(const [key,predicate] of url.searchParams) {
-        if(key==='select'||key==='limit') continue;
+        if(key==='select'||key==='limit'||key==='order') continue;
+        // PostgREST wraps an `or` in parentheses; the in-memory helper's parser reads what is inside.
+        if(key==='or') {if(!orPredicate(predicate.slice(1,-1))(row)) return false; continue;}
         const dot=predicate.indexOf('.'),op=predicate.slice(0,dot),wanted=predicate.slice(dot+1);
         const value=String(row[key as keyof SportsEventRow]);
         if(op==='eq'&&value!==wanted)return false;if(op==='neq'&&value===wanted)return false;

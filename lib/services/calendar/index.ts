@@ -16,7 +16,7 @@
 // fastest way to lose a family's trust in the assistant.
 import 'server-only';
 import { detectConflicts, type ConflictEvent, type EventConflict } from '@/lib/home/conflicts';
-import { readCalendarOccurrences } from '@/lib/calendar/occurrences';
+import { readCalendarOccurrences, readSportsOccurrences } from '@/lib/calendar/occurrences';
 import { calendarOpenWindowFilter, instantCalendarBounds } from '@/lib/briefing/calendar-window';
 import { freeGaps, mergeIntervals, type Interval } from '@/lib/calendar/scheduling';
 import { isValidTimezone } from '@/lib/time/zoned';
@@ -627,8 +627,10 @@ export async function findFreeSlots(scope: ServiceScope, input: FindFreeSlotsInp
     }),
     scope.db.from('school_events').select('starts_at, ends_at, member_id')
       .eq('family_id', scope.familyId).gte('starts_at', fromIso).lte('starts_at', toIso),
-    scope.db.from('sports_events').select('starts_at, ends_at, member_id')
-      .eq('family_id', scope.familyId).gte('starts_at', fromIso).lte('starts_at', toIso),
+    // A weekly practice is one sports row and busy every week.
+    readSportsOccurrences(scope.db, scope.familyId, instantCalendarBounds(fromIso, toIso, tz), tz, {
+      columns: ['starts_at', 'ends_at', 'member_id'],
+    }),
   ]);
 
   // A free-slot suggestion is a source-of-truth read: a partial answer would
@@ -728,8 +730,7 @@ export async function busyEvenings(
     readCalendarOccurrences(scope.db, scope.familyId, instantCalendarBounds(fromIso, toIso, tz), tz, {
       columns: ['starts_at', 'all_day'],
     }),
-    scope.db.from('sports_events').select('starts_at')
-      .eq('family_id', scope.familyId).gte('starts_at', fromIso).lte('starts_at', toIso),
+    readSportsOccurrences(scope.db, scope.familyId, instantCalendarBounds(fromIso, toIso, tz), tz, { columns: ['starts_at'] }),
   ]);
   if (calendar.error || sports.error) {
     console.error('[service:calendar] busy evenings read failed', calendar.error ?? sports.error);

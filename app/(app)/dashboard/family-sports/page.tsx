@@ -4,6 +4,8 @@ import { requireUserContext } from '@/lib/supabase/auth';
 import { settleAll } from '@/lib/supabase/settle';
 import { createServer } from '@/lib/supabase/server';
 import { isMissingTableError } from '@/lib/supabase/errors';
+import { readSportsOccurrences } from '@/lib/calendar/occurrences';
+import { instantCalendarBounds } from '@/lib/briefing/calendar-window';
 import { PageHeader } from '@/components/app/page-header';
 import { StatTile, SectionCard, MiniEmpty } from '@/components/family/shell';
 import { ErrorState } from '@/components/ui/states';
@@ -36,7 +38,9 @@ export default async function FamilySportsPage() {
     supabase.from('family_members').select('id, display_name').eq('family_id', familyId).eq('is_active', true),
     supabase.from('teams').select('*').eq('family_id', familyId).eq('is_active', true).order('created_at'),
     supabase.from('game_results').select('*').eq('family_id', familyId).order('date', { ascending: false }).limit(6),
-    supabase.from('sports_events').select('*').eq('family_id', familyId).gte('starts_at', now).lte('starts_at', in14).order('starts_at').limit(8),
+    // Series included: a weekly practice entered in August is on the next
+    // fortnight every fortnight (lib/calendar/occurrences.ts).
+    readSportsOccurrences(supabase, familyId, instantCalendarBounds(now, in14, tz), tz, { limit: 8 }),
   ]);
 
   // Teams, game results, and sports events are source-of-truth: a dropped error

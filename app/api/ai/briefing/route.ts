@@ -22,8 +22,8 @@ import { BRIEFING_RESPONSE_LIMITS, parseBriefingResponse } from '@/lib/briefing/
 import { fenceUntrustedBlock, UNTRUSTED_CONTENT_RULE } from '@/lib/ai/safety/untrusted';
 import { dayKeyInTz, zonedDayBoundsMs, scopeFromUserContext } from '@/lib/services/scope';
 import { withAiRequest } from '@/lib/ai/observability';
-import { briefingCalendarBounds } from '@/lib/briefing/calendar-window';
-import { readCalendarOccurrences } from '@/lib/calendar/occurrences';
+import { briefingCalendarBounds, instantCalendarBounds } from '@/lib/briefing/calendar-window';
+import { readCalendarOccurrences, readSportsOccurrences } from '@/lib/calendar/occurrences';
 
 function normalizeBriefTimezone(candidate: string): string {
   try {
@@ -133,7 +133,8 @@ export async function POST(req: NextRequest) {
       readCalendarOccurrences(supabase, familyId, briefingCalendarBounds(today, tz, 1, 7), tz, { columns: ['title', 'starts_at', 'all_day', 'category'], limit: 8 }),
       supabase.from('chore_assignments').select('status, due_at, member_id').eq('family_id', familyId).in('status', ['todo', 'in_progress']).lte('due_at', todayEnd),
       supabase.from('school_events').select('title, starts_at, event_type, notes, member_id').eq('family_id', familyId).gte('starts_at', todayStart).lte('starts_at', weekEnd).order('starts_at').limit(10),
-      supabase.from('sports_events').select('title, starts_at, sport, team, location, member_id').eq('family_id', familyId).gte('starts_at', todayStart).lte('starts_at', weekEnd).order('starts_at').limit(10),
+      // A weekly practice is on the week's list every week, not the week it was entered.
+      readSportsOccurrences(supabase, familyId, instantCalendarBounds(todayStart, weekEnd, tz), tz, { columns: ['title', 'starts_at', 'sport', 'team', 'location', 'member_id'], limit: 10 }),
       supabase.from('grocery_items').select('name, category').eq('family_id', familyId).eq('is_checked', false).limit(15),
       supabase.from('reminders').select('title, notes, remind_at').eq('family_id', familyId).eq('is_done', false).lte('remind_at', weekEnd).order('remind_at').limit(8),
       supabase.from('meal_plans').select('plan_date, meal_type, meals(name)').eq('family_id', familyId).gte('plan_date', today).lte('plan_date', weekEndKey).order('plan_date').limit(14),

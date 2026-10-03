@@ -22,6 +22,8 @@
 // family's day, so they are compared against the family day key untouched — no
 // conversion, because there is no instant to convert.
 import { createServer } from '@/lib/supabase/server';
+import { readCalendarOccurrences, readSportsOccurrences } from '@/lib/calendar/occurrences';
+import { instantCalendarBounds } from '@/lib/briefing/calendar-window';
 import { settleAll } from '@/lib/supabase/settle';
 import { addDaysToDayKey, dayKeyInTz, zonedDayBoundsMs, zonedTimeMs } from '@/lib/services/scope';
 import { computeStress, type StressInput, type StressResult } from './stress';
@@ -123,8 +125,9 @@ export async function gatherSignalsResult(
     meals,
     grocery,
   ] = await settleAll([
-    supabase.from('calendar_events').select('starts_at')
-      .eq('family_id', familyId).gte('starts_at', startIso).lte('starts_at', in7Iso),
+    // Series included: a weekly event is on the week's load every week, not
+    // the week it was created (lib/calendar/occurrences.ts).
+    readCalendarOccurrences(supabase, familyId, instantCalendarBounds(startIso, in7Iso, tz), tz, { columns: ['starts_at'] }),
     supabase.from('appointments').select('id, starts_at')
       .eq('family_id', familyId).gte('starts_at', startIso).lt('starts_at', endIso),
     supabase.from('chore_assignments').select('due_at')
@@ -136,8 +139,7 @@ export async function gatherSignalsResult(
     supabase.from('bills').select('status, due_date').eq('family_id', familyId),
     supabase.from('school_events').select('id')
       .eq('family_id', familyId).gte('starts_at', startIso).lte('starts_at', in3Iso),
-    supabase.from('sports_events').select('starts_at')
-      .eq('family_id', familyId).gte('starts_at', startIso).lte('starts_at', in7Iso),
+    readSportsOccurrences(supabase, familyId, instantCalendarBounds(startIso, in7Iso, tz), tz, { columns: ['starts_at'] }),
     supabase.from('family_routines').select('days_of_week')
       .eq('family_id', familyId).eq('status', 'active'),
     supabase.from('meal_plans').select('id', { count: 'exact', head: true })

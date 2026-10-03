@@ -11,7 +11,7 @@ import { approvalReminders, type ApprovalInput } from '@/lib/notifications/appro
 import type { NeedsReader } from '@/lib/home/needs-sources';
 import { SOURCE_MESSAGES, translate } from '@/lib/i18n/messages';
 import { detectConflicts, type ConflictEvent } from '@/lib/home/conflicts';
-import { isSeries, readCalendarOccurrences } from '@/lib/calendar/occurrences';
+import { isSeries, readCalendarOccurrences, readSportsOccurrences } from '@/lib/calendar/occurrences';
 import { instantCalendarBounds } from '@/lib/briefing/calendar-window';
 import { medicationDueReminders } from '@/lib/notifications/medication-reminders';
 import { upcomingRelationship, formatCountdown, milestoneLabel, type RelDate } from '@/lib/relationship/dates';
@@ -156,7 +156,10 @@ export async function generateFamilyNotifications(supabase: DB, familyId: string
       }),
       supabase.from('chore_assignments').select('id, due_at, member_id, chore_id, status').eq('family_id', familyId).in('status', ['todo', 'in_progress']).not('due_at', 'is', null).lte('due_at', in24).gte('due_at', nowIso),
       supabase.from('school_events').select('id, title, starts_at, member_id, event_type').eq('family_id', familyId).gte('starts_at', nowIso).lte('starts_at', in48),
-      supabase.from('sports_events').select('id, title, starts_at, member_id, sport, location').eq('family_id', familyId).gte('starts_at', nowIso).lte('starts_at', in48),
+      // A weekly practice is one row too, and reminded every week.
+      readSportsOccurrences(supabase, familyId, instantCalendarBounds(nowIso, in48, tz), tz, {
+        columns: ['id', 'title', 'starts_at', 'member_id', 'sport', 'location'],
+      }),
       supabase.from('reminders').select('id, title, remind_at, member_id, is_done').eq('family_id', familyId).eq('is_done', false).gte('remind_at', nowIso).lte('remind_at', in24),
       supabase.from('documents').select('id, title, expires_at').eq('family_id', familyId).not('expires_at', 'is', null).gte('expires_at', nowIso).lte('expires_at', in14d),
       // Renewals within ~90d (per-item reminder window applied in code) and open signups within 7d.
@@ -253,7 +256,8 @@ export async function generateFamilyNotifications(supabase: DB, familyId: string
   for (const s of sports ?? []) {
     const target = s.member_id ? userByMember.get(s.member_id) ?? null : null;
     candidates.push({
-      type: 'sports_event', related_type: 'sports_events', related_id: s.id, user_id: target,
+      // Keyed by the occurrence for a series, as the calendar reminder is.
+      type: 'sports_event', related_type: 'sports_events', related_id: isSeries(s) ? `${s.id}:${s.starts_at.slice(0, 10)}` : s.id, user_id: target,
       title: `${s.sport ?? 'Sports'}: ${s.title}`,
       body: `${timeLabel(s.starts_at, tz)}${s.location ? ` · ${s.location}` : ''}`,
     });
