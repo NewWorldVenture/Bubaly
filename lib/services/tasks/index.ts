@@ -415,6 +415,9 @@ export async function searchTodos(scope: ServiceScope, input: SearchTodosInput =
     console.error('[service:tasks] to-do search failed', error);
     return fail(describeDbError(error, 'Could not load your tasks.'), { code: SERVICE_CODES.db });
   }
+  if (data != null && !Array.isArray(data)) {
+    return fail('Could not load your tasks.', { code: SERVICE_CODES.db });
+  }
   return ok(data ?? []);
 }
 
