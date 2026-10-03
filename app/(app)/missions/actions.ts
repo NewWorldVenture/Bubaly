@@ -6,6 +6,8 @@ import { revalidatePath } from 'next/cache';
 import { requireUserContext } from '@/lib/supabase/auth';
 import { createServer, createServiceClient } from '@/lib/supabase/server';
 import { scopeFromUserContext } from '@/lib/services/scope';
+import type { ServiceScope } from '@/lib/services/types';
+import { respawnChoreAssignment } from '@/lib/services/tasks';
 import { isManager } from '@/lib/constants/roles';
 import { validateChoreSubmission, generateChorePlan, type ChorePlanItem } from '@/lib/chores/ai';
 import { computeReward, canAutoApprove, type ChoreReward, type Difficulty } from '@/lib/chores/logic';
@@ -258,7 +260,7 @@ export async function submitProofAction(formData: FormData): Promise<{ ok: boole
       // session (the submitter). Route the reward finalization through the service
       // role so it credits the immutable ledger under the manager-only wallet RLS
       // (0217) — the child's session must never be the authority for a money credit.
-      await finalizeApproval(service, { familyId, tz, assignment, chore, submissionId: submission.id, score: verdict.quality_score, actorId: assignment.member_id, auto: true });
+      await finalizeApproval(service, { familyId, tz, assignment, chore, submissionId: submission.id, score: verdict.quality_score, actorId: assignment.member_id, auto: true, scope: scopeFromUserContext(ctx, service) });
     } catch {
       await setSubmissionStatus(service, familyId, submission.id, 'parent_review');
       // The payout above ran as the service role, so its repair does too: a
@@ -293,7 +295,7 @@ export async function submitProofAction(formData: FormData): Promise<{ ok: boole
 /** Shared approval finalizer: sets reward, flips status, applies gamification. */
 async function finalizeApproval(
   supabase: Awaited<ReturnType<typeof createServer>>,
-  args: { familyId: string; tz: string; assignment: Record<string, unknown>; chore: Record<string, unknown>; submissionId: string; score: number; actorId: string | null; auto: boolean; pointsOverride?: number | null; cashOverride?: number | null },
+  args: { familyId: string; tz: string; scope: ServiceScope; assignment: Record<string, unknown>; chore: Record<string, unknown>; submissionId: string; score: number; actorId: string | null; auto: boolean; pointsOverride?: number | null; cashOverride?: number | null },
 ) {
   const reward = computeReward(rewardConfig(args.chore), args.score);
   const points = args.pointsOverride ?? reward.points;
@@ -360,6 +362,21 @@ async function finalizeApproval(
     familyId: args.familyId, assignmentId: args.assignment.id as string, submissionId: args.submissionId,
     actorId: args.actorId, action: args.auto ? 'auto_approve' : 'approve', pointsAwarded: points, cashCents,
   });
+
+  // A recurring chore comes back: approving this assignment creates the
+  // child's next one (lib/services/tasks `respawnChoreAssignment`, keyed so a
+  // repeat is harmless). After the payout, so a reward failure's rollback
+  // never leaves a next assignment behind; its own failure is logged, not
+  // thrown — the approval and the payout stand.
+  const respawn = await respawnChoreAssignment(args.scope, {
+    assignment: { chore_id: args.assignment.chore_id as string, member_id: args.assignment.member_id as string, due_at: (args.assignment.due_at as string | null) ?? null },
+    recurrence: args.chore.recurrence as string | null | undefined,
+  });
+  if (!respawn.ok) {
+    console.error('[chore approval] next assignment of a recurring chore was not created', {
+      assignmentId: args.assignment.id, familyId: args.familyId, error: respawn.error,
+    });
+  }
 }
 
 /** Parent approves a submission, optionally overriding the AI's reward. */
@@ -396,7 +413,7 @@ export async function approveSubmissionAction(formData: FormData): Promise<Missi
   }
   try {
     await finalizeApproval(supabase, {
-      familyId, tz, assignment, chore, submissionId, score, actorId: ctx.active.member.id, auto: false,
+      familyId, tz, assignment, chore, submissionId, score, actorId: ctx.active.member.id, auto: false, scope: scopeFromUserContext(ctx, supabase),
       pointsOverride: intVal(formData, 'points'), cashOverride: intVal(formData, 'cash_cents'),
     });
   } catch (err) {

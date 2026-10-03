@@ -21,6 +21,9 @@ import {
 } from '../idempotency';
 import { fail, ok, SERVICE_CODES, type ServiceResult, type ServiceScope } from '../types';
 import { escapeLike } from '@/lib/supabase/escape-like';
+import { makeKey } from '../idempotency';
+import { scopeNow } from '../scope';
+import { nextChoreDueAt } from '@/lib/chores/respawn';
 import { getTranslations } from '@/lib/i18n/server';
 
 export type TodoList = Tables<'todo_lists'>;
@@ -724,12 +727,70 @@ export async function assignChore(
 }
 
 /**
+ * The next assignment of a recurring chore, once one of its assignments is
+ * approved.
+ *
+ * A chore with a cadence was ONE assignment: approval closed it and nothing
+ * created the next, so a daily "make your bed" was done once, ever, and the
+ * board's Daily tab emptied after day one. This creates the following
+ * assignment for the same child, due per `nextChoreDueAt`, unless they
+ * already have an open one for the chore. It is keyed (`tasks.respawnChore`,
+ * chore, member, due) through 0256's unique index, so the two approval screens,
+ * or two approvals arriving together, create one; a refused insert whose key
+ * is already in the table reports `respawned: false` rather than failing.
+ * `{ assignment: null }` when the chore does not repeat.
+ */
+export async function respawnChoreAssignment(
+  scope: ServiceScope,
+  input: { assignment: { chore_id: string; member_id: string; due_at: string | null }; recurrence: string | null | undefined },
+): Promise<ServiceResult<{ assignment: ChoreAssignment | null; respawned: boolean }>> {
+  const dueAt = nextChoreDueAt(input.assignment.due_at, input.recurrence, scopeNow(scope).toISOString());
+  if (!dueAt) return ok({ assignment: null, respawned: false });
+
+  const { data: open, error: openError } = await scope.db
+    .from('chore_assignments')
+    .select('id')
+    .eq('family_id', scope.familyId)
+    .eq('chore_id', input.assignment.chore_id)
+    .eq('member_id', input.assignment.member_id)
+    .in('status', ['todo', 'in_progress'])
+    .limit(1);
+  if (openError) {
+    console.error('[service:tasks] open assignment lookup failed', openError);
+    return fail(describeDbError(openError, 'Could not check that chore.'), { code: SERVICE_CODES.db });
+  }
+  if (open && open.length > 0) return ok({ assignment: null, respawned: false });
+
+  const idempotencyKey = makeKey(['tasks.respawnChore', scope.familyId, input.assignment.chore_id, input.assignment.member_id, dueAt]);
+  const created = await assignChore(scope, { choreId: input.assignment.chore_id, memberId: input.assignment.member_id, dueAt, idempotencyKey });
+  if (created.ok) return ok({ assignment: created.data, respawned: true });
+
+  // `assignChore` folds every write error into one message. The one that is
+  // not a failure here is 0256 refusing a key already written — by the other
+  // approval screen, or by this one a moment ago.
+  const { data: existing } = await scope.db
+    .from('chore_assignments')
+    .select('id')
+    .eq('family_id', scope.familyId)
+    .eq('idempotency_key', idempotencyKey)
+    .maybeSingle();
+  if (existing) return ok({ assignment: null, respawned: false });
+  return created;
+}
+
+/**
  * Mark an assignment done.
  *
  * A chore whose `requires_approval` is true goes to 'submitted', not 'done':
  * the parent approving it is what awards the points, and skipping that step
  * would let a child bank rewards unilaterally. Points and rewards themselves
  * stay in `lib/chores/server.ts`.
+ *
+ * A chore that needs NO approval settles here, so here is where a recurring
+ * one comes back: `respawnChoreAssignment` creates the child's next
+ * assignment once this one is done (an approved one is respawned by the
+ * approval instead). Its failure is logged, not returned — the completion
+ * stands.
  */
 export async function completeChoreAssignment(scope: ServiceScope, assignmentId: string): Promise<ServiceResult<ChoreAssignment>> {
   const { data: assignment, error: readError } = await scope.db
@@ -746,7 +807,7 @@ export async function completeChoreAssignment(scope: ServiceScope, assignmentId:
 
   const { data: chore, error: choreError } = await scope.db
     .from('chores')
-    .select('requires_approval, title')
+    .select('requires_approval, title, recurrence')
     .eq('id', assignment.chore_id)
     .eq('family_id', scope.familyId)
     .maybeSingle();
@@ -781,6 +842,15 @@ export async function completeChoreAssignment(scope: ServiceScope, assignmentId:
     memberId: data.member_id,
     resourceId: data.id,
   });
+  if (status === 'done') {
+    const respawn = await respawnChoreAssignment(scope, {
+      assignment: { chore_id: data.chore_id, member_id: data.member_id, due_at: data.due_at },
+      recurrence: chore?.recurrence,
+    });
+    if (!respawn.ok) {
+      console.error('[service:tasks] next assignment of a recurring chore was not created', { assignmentId, error: respawn.error });
+    }
+  }
   return ok(data);
 }
 
