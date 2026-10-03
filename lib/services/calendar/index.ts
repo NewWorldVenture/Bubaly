@@ -147,6 +147,24 @@ export async function createEvent(
       } : undefined,
     },
     async (key) => {
+      if (wanted.assignee_id != null) {
+        const { data: assignee, error: assigneeError } = await scope.db
+          .from('family_members')
+          .select('id,family_id')
+          .eq('family_id', scope.familyId)
+          .eq('id', wanted.assignee_id)
+          .maybeSingle();
+
+        if (assigneeError) {
+          return fail(describeDbError(assigneeError, 'Could not check that event assignee.'), { code: SERVICE_CODES.db });
+        }
+        if (!assignee || typeof assignee !== 'object' || Array.isArray(assignee)
+          || typeof assignee.id !== 'string' || typeof assignee.family_id !== 'string'
+          || !sameId(assignee.id, wanted.assignee_id) || !sameId(assignee.family_id, scope.familyId)) {
+          return fail('Choose an assignee from your family.', { code: SERVICE_CODES.invalidInput });
+        }
+      }
+
       const { data, error } = await scope.db
         .from('calendar_events')
         .insert({
