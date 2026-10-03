@@ -63,7 +63,7 @@ type Mode = 'allow' | 'deny' | 'policy_approval' | 'degraded_policy_error' | 'de
 type Reply = { data: unknown; error: unknown; rejection?: unknown };
 const family = 'family-bridge-synthetic';
 const manager = 'manager-bridge-synthetic';
-const input = { childWalletId: 'wallet-bridge-synthetic', type: 'virtual' as const, spendLimitCents: 5000, spendWindow: 'monthly' };
+const input = { childWalletId: 'wallet-bridge-synthetic', type: 'virtual' as const, spendLimitCents: 5000, spendWindow: 'monthly', expectedCount: 0 };
 let replies: Record<string, Reply>;
 let reads: { table: string; method: string; args: unknown[] }[];
 let auditRows: Record<string, unknown>[];

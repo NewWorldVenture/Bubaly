@@ -12,20 +12,21 @@ import { reactBrowserScripts } from './helpers/react-browser';
 // A browser tab is its own JavaScript realm with its own module registry, and the
 // view shares nothing between tabs (no BroadcastChannel, storage or lock), so a
 // second tab of the same parent never sees the first tab's claim. Both tabs send
-// issueCardAction for the same child and type, with byte-identical input: the
-// client sends no attempt identity, so nothing in the request tells "the same
-// order twice" from "a second deliberate order". The same holds for a stale tab
-// that orders after the first tab's order already completed.
+// issueCardAction for the same child and type, with byte-identical input,
+// including the count of that child's cards of that type each view showed
+// (expectedCount). The server keys an attempt by its mirrored count (repair B,
+// lib/stripe/issuing.ts), so two such orders in flight together get one card
+// (server-side tests). A stale tab that orders after the first tab's card was
+// mirrored still sends the old count, and the server refuses it ("refresh to try
+// again"); the tab re-reads and a further order carries the new count.
 //
-// The tests labelled "reproduces:" document that CURRENT behaviour and pass on
-// the current source; "preserves:" tests are controls that must keep passing.
-//
-// What the server does with these calls is not exercised here: every action is
-// a held promise and the fixture's answers stand in for the server. Server side,
-// repair B (lib/stripe/issuing.ts) keys an order by its attempt, so two calls
-// that overlap before the first card is mirrored get one card
-// (tests/money-card-attempt-identity.test.ts). A stale tab that orders after the
-// first card is mirrored is a new attempt there and still gets a second card.
+// The tests labelled "reproduces:" document what the client sends and pass on
+// the current source; "preserves:" tests are controls that must keep passing;
+// "repaired:" tests pin the stale-order guard. What the server does with these
+// calls is not exercised here: every action is a held promise and the fixture's
+// answers stand in for the server. Server side, see
+// tests/money-card-attempt-identity.test.ts and
+// tests/money-card-stale-order.test.ts.
 //
 // The real MoneyCardsView and Button run in Chromium. Each tab is a separate page
 // in one browser context, each with its own copy of the view module (as each real
@@ -45,7 +46,11 @@ const sources = Object.fromEntries([VIEW, 'components/ui/button.tsx'].map(file =
 ]));
 
 type ActionCall = { action: string; args?: Record<string, unknown>; settled: boolean };
-type Outcome = 'refusal' | 'rejection' | 'success';
+// 'stale' is the server's answer to an order made against a count it has moved past.
+// 'stale-localized' is that answer in another locale's words, and
+// 'refusal-in-stale-words' an ordinary refusal that happens to read like it: the
+// flag, not the words, is what makes the view re-read.
+type Outcome = 'refusal' | 'rejection' | 'stale' | 'stale-localized' | 'refusal-in-stale-words' | 'success';
 type ServerCall = { tab: string; action: string; args?: Record<string, unknown> };
 type Probe = {
   tab: string; calls: ActionCall[]; errors: string[]; successes: string[]; refreshes: number; faults: string[];
@@ -69,8 +74,12 @@ const PROPS = {
 };
 // What a re-read of the page returns once the first order has been issued.
 const ISSUED = { id: 'card-1', childWalletId: 'child-a', type: 'virtual', status: 'active', last4: '4242', brand: 'Visa', isFrozen: false, spendLimitCents: null, spendWindow: 'per_authorization', blockedCategories: [] };
-const VIRTUAL_INPUT = { childWalletId: 'child-a', type: 'virtual', spendLimitCents: null, spendWindow: 'per_authorization' };
-const PHYSICAL_INPUT = { childWalletId: 'child-a', type: 'physical', spendLimitCents: null, spendWindow: 'daily' };
+const ISSUED_PHYSICAL = { ...ISSUED, type: 'physical', last4: '4343', spendWindow: 'daily' };
+// What a view showing no card for the child sends.
+const VIRTUAL_INPUT = { childWalletId: 'child-a', type: 'virtual', spendLimitCents: null, spendWindow: 'per_authorization', expectedCount: 0 };
+const PHYSICAL_INPUT = { childWalletId: 'child-a', type: 'physical', spendLimitCents: null, spendWindow: 'daily', expectedCount: 0 };
+// The fixture's translator returns the key, so the stale answer reads as its key.
+const STALE_TEXT = 'wallet.refreshToTryAgain';
 
 const serverLogs = new WeakMap<BrowserContext, ServerCall[]>();
 const tabNames = new WeakMap<Page, string>();
@@ -88,7 +97,7 @@ async function server(context: BrowserContext): Promise<ServerCall[]> {
   return log;
 }
 
-async function fixture(page: Page, tab: string) {
+async function fixture(page: Page, tab: string, props: typeof PROPS | Record<string, unknown> = PROPS) {
   await server(page.context());
   tabNames.set(page, tab);
   await page.context().setOffline(true);
@@ -107,7 +116,7 @@ async function fixture(page: Page, tab: string) {
       void window.__issuingServer({ action: name, args });
       return new Promise((resolve, reject) => waiting.push({ resolve, reject }));
     }
-    let props = ${JSON.stringify(PROPS)}, reread = null, root = null;
+    let props = ${JSON.stringify(props)}, reread = null, root = null;
     // router.refresh() re-reads the page: the same mounted view re-renders with
     // what the server now returns (set per tab), as a Next refresh does.
     const router = { refresh: () => {
@@ -172,7 +181,11 @@ async function fixture(page: Page, tab: string) {
     p.complete = (index, outcome) => {
       p.calls[index].settled = true;
       if (outcome === 'rejection') waiting[index].reject(new Error('Action unavailable'));
-      else waiting[index].resolve(outcome === 'refusal' ? { ok: false, error: 'Action refused' } : { ok: true, data: { cardId: 'card-' + (index + 1) } });
+      else waiting[index].resolve(outcome === 'refusal' ? { ok: false, error: 'Action refused' }
+        : outcome === 'stale' ? { ok: false, error: ${JSON.stringify(STALE_TEXT)}, stale: true }
+        : outcome === 'stale-localized' ? { ok: false, error: 'Aktualisieren Sie, um es erneut zu versuchen.', stale: true }
+        : outcome === 'refusal-in-stale-words' ? { ok: false, error: ${JSON.stringify(STALE_TEXT)} }
+        : { ok: true, data: { cardId: 'card-' + (index + 1) } });
     };
     p.settle = () => new Promise(resolve => requestAnimationFrame(() => requestAnimationFrame(resolve)));
     p.mount();
@@ -247,7 +260,8 @@ test('reproduces: two tabs of the same parent each send a Virtual order for the 
   await force(tab2, 'Virtual');
 
   // Both orders are in flight at once and reach the "server" with identical
-  // input: no attempt identity tells them apart.
+  // input: both views showed no card, so both carry the same count and the
+  // server's attempt key (repair B) gives them one card.
   expect(await received(log, 2)).toEqual([
     { tab: 'tab-1', action: 'issueCardAction', args: VIRTUAL_INPUT },
     { tab: 'tab-2', action: 'issueCardAction', args: VIRTUAL_INPUT },
@@ -364,40 +378,109 @@ test('preserves: a Virtual order in one tab and a physical order in another for 
   expect(log).toHaveLength(2);
 });
 
-test('reproduces: a stale second tab orders the same Virtual card after the first tab\'s order completed and refreshed (2 calls, no attempt identity)', async ({ context }) => {
-  const { log, tab1, tab2 } = await twoTabs(context);
-  // After the first order is issued, a re-read in tab 1 returns the new card.
-  await tab1.evaluate(card => window.__cardTab.refreshReads([card]), ISSUED);
+const ENTRY_POINTS = [
+  { name: 'the Virtual button', input: VIRTUAL_INPUT, card: ISSUED, toast: 'moneyCardsView.virtualCardCreated', send: (page: Page) => virtual(page).click() },
+  { name: 'issue-all', input: VIRTUAL_INPUT, card: ISSUED, toast: 'moneyCards.issuedOneVirtualCard', send: (page: Page) => bulk(page).click() },
+  { name: 'the physical order dialog', input: PHYSICAL_INPUT, card: ISSUED_PHYSICAL, toast: 'wallet.physicalCardOrdered:Child A', send: async (page: Page) => { await physical(page).click(); await order(page).click(); } },
+];
 
-  await virtual(tab1).click();
-  await complete(tab1, 0, 'success');
-  expect(await read(tab1)).toMatchObject({ successes: ['moneyCardsView.virtualCardCreated'], errors: [], refreshes: 1 });
-  // Tab 1 refreshed and shows the card.
-  await expect(tab1.getByText('Visa card', { exact: false })).toBeVisible();
-  await expect(tab1.getByText('moneyCardsView.noCardYetUseThe')).toHaveCount(0);
-  await expect(bulk(tab1)).toHaveCount(0);
-  // A deliberate further order from the refreshed tab is still allowed (several cards per child).
-  await expect(virtual(tab1)).toBeEnabled();
+for (const entry of ENTRY_POINTS) {
+  test(`repaired: a stale second tab ordering through ${entry.name} after the first tab's order completed is refused, shows the answer and re-reads; its next order carries the new count`, async ({ context }) => {
+    const { log, tab1, tab2 } = await twoTabs(context);
+    // After the first order is issued, a re-read in either tab returns the new card.
+    for (const tab of [tab1, tab2]) await tab.evaluate(card => window.__cardTab.refreshReads([card]), entry.card);
 
-  // Tab 2 was never refreshed: it still shows the child with no card.
-  await expect(tab2.getByText('moneyCardsView.noCardYetUseThe')).toBeVisible();
-  await expect(tab2.getByText('moneyCards.childNoCard:Child A')).toBeVisible();
-  await expect(virtual(tab2)).toBeEnabled();
-  await virtual(tab2).click();
+    await entry.send(tab1);
+    await complete(tab1, 0, 'success');
+    expect(await read(tab1)).toMatchObject({ successes: [entry.toast], errors: [], refreshes: 1 });
+    // Tab 1 refreshed and shows the card.
+    await expect(tab1.getByText('Visa card', { exact: false })).toBeVisible();
+    await expect(tab1.getByText('moneyCardsView.noCardYetUseThe')).toHaveCount(0);
+    await expect(bulk(tab1)).toHaveCount(0);
 
-  // The second call is identical to the first: the server cannot tell a stale
-  // tab's repeat from a deliberate second card. Under repair B the first card is
-  // already mirrored, so this is a new attempt and gets a second card: the
-  // stale-tab residual, not asserted here.
-  expect(await received(log, 2)).toEqual([
-    { tab: 'tab-1', action: 'issueCardAction', args: VIRTUAL_INPUT },
-    { tab: 'tab-2', action: 'issueCardAction', args: VIRTUAL_INPUT },
-  ]);
-  expect((await read(tab1)).calls).toEqual([{ action: 'issueCardAction', args: VIRTUAL_INPUT, settled: true }]);
-  expect((await read(tab2)).calls).toEqual([{ action: 'issueCardAction', args: VIRTUAL_INPUT, settled: false }]);
+    // Tab 2 was never refreshed: it still shows the child with no card.
+    await expect(tab2.getByText('moneyCardsView.noCardYetUseThe')).toBeVisible();
+    await expect(tab2.getByText('moneyCards.childNoCard:Child A')).toBeVisible();
+    await entry.send(tab2);
 
-  await complete(tab2, 0, 'success');
-  expect(await read(tab2)).toMatchObject({ successes: ['moneyCardsView.virtualCardCreated'], errors: [], refreshes: 1 });
-  expect((await read(tab1)).refreshes).toBe(1);
+    // Both views showed no card, so both orders carry the count 0; by the time
+    // tab 2's arrives the server has mirrored one, and refuses it as stale.
+    expect(await received(log, 2)).toEqual([
+      { tab: 'tab-1', action: 'issueCardAction', args: entry.input },
+      { tab: 'tab-2', action: 'issueCardAction', args: entry.input },
+    ]);
+    expect((await read(tab1)).calls).toEqual([{ action: 'issueCardAction', args: entry.input, settled: true }]);
+    expect((await read(tab2)).calls).toEqual([{ action: 'issueCardAction', args: entry.input, settled: false }]);
+
+    await complete(tab2, 0, 'stale');
+    // The answer is shown as any refusal is, and the view re-reads.
+    expect(await read(tab2)).toMatchObject({ successes: [], errors: [STALE_TEXT], refreshes: 1 });
+    await expect(tab2.getByText('Visa card', { exact: false })).toBeVisible();
+    await expect(tab2.getByText('moneyCardsView.noCardYetUseThe')).toHaveCount(0);
+    await expect(bulk(tab2)).toHaveCount(0);
+    expect((await read(tab1)).refreshes).toBe(1);
+
+    // The order dialog closes on a stale answer, so the parent sees the card that
+    // made it stale before deciding on another, rather than one more click away
+    // from a second card.
+    if (entry.input.type === 'physical') await expect(order(tab2)).toHaveCount(0);
+    // A further order from the refreshed tab is deliberate and carries the new count.
+    if (entry.input.type === 'physical') { await physical(tab2).click(); await order(tab2).click(); }
+    else await virtual(tab2).click();
+    const next = { ...entry.input, expectedCount: 1 };
+    expect((await received(log, 3))[2]).toEqual({ tab: 'tab-2', action: 'issueCardAction', args: next });
+    expect((await read(tab2)).calls.map(call => call.args)).toEqual([entry.input, next]);
+  });
+}
+
+test('repaired: the view re-reads on the server\'s stale flag, whatever its words, and not on a refusal that only reads like it', async ({ page }) => {
+  const log = await server(page.context());
+  await fixture(page, 'tab-1');
+
+  await virtual(page).click();
+  await complete(page, 0, 'stale-localized');
+  expect(await read(page)).toMatchObject({ successes: [], errors: ['Aktualisieren Sie, um es erneut zu versuchen.'], refreshes: 1 });
+
+  await expect(virtual(page)).toBeEnabled();
+  await virtual(page).click();
+  await complete(page, 1, 'refusal-in-stale-words');
+  expect(await read(page)).toMatchObject({
+    successes: [], errors: ['Aktualisieren Sie, um es erneut zu versuchen.', STALE_TEXT], refreshes: 1,
+  });
   expect(log).toHaveLength(2);
+});
+
+test('repaired: an up-to-date tab sends, for each order, that child\'s count of that card type, every status', async ({ page }) => {
+  const log = await server(page.context());
+  const card = (id: string, childWalletId: string, type: string, status: string) => ({ ...ISSUED, id, childWalletId, type, status, last4: id.slice(-4) });
+  // Child A: one virtual card, two physical (one canceled). Child B: one frozen virtual card.
+  // Per child and type: A virtual 1, A physical 2, B virtual 1; A in all types 3; the family 4.
+  await fixture(page, 'tab-1', {
+    ...PROPS,
+    childWallets: [{ id: 'child-a', name: 'Child A', color: null }, { id: 'child-b', name: 'Child B', color: null }],
+    cards: [
+      card('card-0001', 'child-a', 'virtual', 'active'),
+      card('card-0002', 'child-a', 'physical', 'active'),
+      card('card-0003', 'child-a', 'physical', 'canceled'),
+      { ...card('card-0004', 'child-b', 'virtual', 'inactive'), isFrozen: true },
+    ],
+  });
+  await expect(bulk(page)).toHaveCount(0);
+
+  await virtual(page).first().click();
+  await physical(page).first().click();
+  await order(page).click();
+  await virtual(page).nth(1).click();
+
+  const expected = [
+    { ...VIRTUAL_INPUT, expectedCount: 1 },
+    { ...PHYSICAL_INPUT, expectedCount: 2 },
+    { ...VIRTUAL_INPUT, childWalletId: 'child-b', expectedCount: 1 },
+  ];
+  expect(await received(log, 3)).toEqual(expected.map(args => ({ tab: 'tab-1', action: 'issueCardAction', args })));
+  expect((await read(page)).calls.map(call => call.args)).toEqual(expected);
+
+  for (const index of [0, 1, 2]) await complete(page, index, 'success');
+  expect(await read(page)).toMatchObject({ errors: [], refreshes: 3 });
+  expect(log).toHaveLength(3);
 });

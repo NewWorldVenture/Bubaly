@@ -140,6 +140,16 @@ export function MoneyCardsView({
 
   const childrenWithoutCards = childWallets.filter((c) => !cardsByChild.has(c.id));
 
+  // How many of this child's cards of this type this view shows, every status:
+  // the count an order from here is made against. The server refuses an order
+  // whose count its mirror has moved past (another tab or device ordered since
+  // this view read), so a stale view cannot become a second card; it answers
+  // "refresh to try again", and the view re-reads so the next order is made
+  // against what now exists. Audit JIMMY-SUPPORT-CARD-RETRY-20261001.
+  function shownCount(childWalletId: string, type: IssuedCard['type']) {
+    return (cardsByChild.get(childWalletId) ?? []).filter((card) => card.type === type).length;
+  }
+
   function claimPending(keys: string[]) {
     // Claim synchronously: a retained callback can run again before React has
     // committed disabled buttons. Independent operations keep their own keys.
@@ -176,8 +186,15 @@ export function MoneyCardsView({
     const release = claimPending([`issue-${childWalletId}`]);
     if (!release) return;
     try {
-      const res = await issueCardAction({ childWalletId, type: 'virtual', spendLimitCents: null, spendWindow: 'per_authorization' });
-      if (!res.ok) return toastError(res.error);
+      const res = await issueCardAction({
+        childWalletId, type: 'virtual', spendLimitCents: null, spendWindow: 'per_authorization',
+        expectedCount: shownCount(childWalletId, 'virtual'),
+      });
+      if (!res.ok) {
+        toastError(res.error);
+        if ('stale' in res && res.stale) router.refresh();
+        return;
+      }
       success(t('moneyCardsView.virtualCardCreated'));
       router.refresh();
     } catch {
@@ -205,7 +222,10 @@ export function MoneyCardsView({
     let issued = 0;
     try {
       for (const child of childrenWithoutCards) {
-        const res = await issueCardAction({ childWalletId: child.id, type: 'virtual', spendLimitCents: null, spendWindow: 'per_authorization' });
+        const res = await issueCardAction({
+          childWalletId: child.id, type: 'virtual', spendLimitCents: null, spendWindow: 'per_authorization',
+          expectedCount: shownCount(child.id, 'virtual'),
+        });
         if (!res.ok) failures.push(res.error || t('globalError.somethingWentWrong'));
         else issued += 1;
       }
@@ -430,11 +450,21 @@ export function MoneyCardsView({
         <PhysicalCardModal
           key={orderingCard.instance}
           child={orderingCard.child}
+          expectedCount={shownCount(orderingCard.child.id, 'physical')}
           pending={busy.has(`physical-${orderingCard.child.id}`)}
           claim={() => claimPending([`physical-${orderingCard.child.id}`])}
           isCurrent={() => formsMounted.current && orderInstance.current === orderingCard.instance}
           onClose={closeOrder}
           onIssued={() => {
+            if (!formsMounted.current) return;
+            if (orderInstance.current === orderingCard.instance) closeOrder();
+            router.refresh();
+          }}
+          onStale={() => {
+            // The cards changed under this order. Close the dialog so the
+            // parent sees the refreshed list, with the card that made it
+            // stale, before deciding on another: left open, one more click
+            // would order a second card against the new count.
             if (!formsMounted.current) return;
             if (orderInstance.current === orderingCard.instance) closeOrder();
             router.refresh();
@@ -549,9 +579,9 @@ function CardRow({ card, canManage, busy, expanded, controlsKey, claimControls, 
 
 // ─── Physical Card Order Modal ────────────────────────────────────────────────
 
-function PhysicalCardModal({ child, pending, claim, isCurrent, onClose, onIssued }: {
-  child: CardChild; pending: boolean; claim: () => (() => void) | null; isCurrent: () => boolean;
-  onClose: () => void; onIssued: () => void;
+function PhysicalCardModal({ child, expectedCount, pending, claim, isCurrent, onClose, onIssued, onStale }: {
+  child: CardChild; expectedCount: number; pending: boolean; claim: () => (() => void) | null; isCurrent: () => boolean;
+  onClose: () => void; onIssued: () => void; onStale: () => void;
 }) {
   const t = useTranslations();
   const tr = useTranslations();
@@ -569,10 +599,11 @@ function PhysicalCardModal({ child, pending, claim, isCurrent, onClose, onIssued
       const res = await issueCardAction({
         childWalletId: child.id, type: 'physical',
         spendLimitCents: spendLimitCents && spendLimitCents > 0 ? spendLimitCents : null,
-        spendWindow: 'daily',
+        spendWindow: 'daily', expectedCount,
       });
       if (!res.ok) {
         if (isCurrent()) toastError(res.error ?? 'Could not order card');
+        if ('stale' in res && res.stale) onStale();
         return;
       }
       if (isCurrent()) success(t('wallet.physicalCardOrdered', { name: child.name }));

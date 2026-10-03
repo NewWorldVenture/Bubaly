@@ -73,11 +73,16 @@ import { issueCardAction } from '@/app/(app)/money/actions';
 const FAMILY = 'family-synthetic';
 const ACCOUNT = 'acct_synthetic';
 const T0 = Date.UTC(2026, 9, 1, 12, 0, 0);
-// What the two UI entry points send (components/wallet/money-cards-view.tsx).
-const VIRTUAL = { childWalletId: 'wallet-a', type: 'virtual', spendLimitCents: null, spendWindow: 'per_authorization' } as const;
-const PHYSICAL = { childWalletId: 'wallet-a', type: 'physical', spendLimitCents: 2500, spendWindow: 'daily' } as const;
+// What the two UI entry points send (components/wallet/money-cards-view.tsx)
+// from a view showing no card of that type for the child; `shown` gives the
+// count a view showing others sends.
+const VIRTUAL = { childWalletId: 'wallet-a', type: 'virtual', spendLimitCents: null, spendWindow: 'per_authorization', expectedCount: 0 } as const;
+const PHYSICAL = { childWalletId: 'wallet-a', type: 'physical', spendLimitCents: 2500, spendWindow: 'daily', expectedCount: 0 } as const;
+const shown = <T extends object>(input: T, expectedCount: number) => ({ ...input, expectedCount });
 // The action's own text, and lib/supabase/errors.ts's text for a duplicate key.
 const REFUSED = 'translated:money.couldNotIssueTheCard';
+// The answer to an order made against a count the mirror has moved past.
+const STALE = 'translated:wallet.refreshToTryAgain';
 const DUPLICATE_TEXT = 'That already exists. Try a different value.';
 type Result = Awaited<ReturnType<typeof issueCardAction>>;
 /** A canned answer for one `from('stripe_issuing_cards')` builder, or a rejection. */
@@ -414,7 +419,8 @@ describe('one card order reaching the server twice before its card is mirrored',
 
 describe('controls: orders that must stay separate cards, before and after the repair', () => {
   it('control: deliberate later orders, each after the previous card is mirrored, each issue a new card', async () => {
-    const orders = [VIRTUAL, VIRTUAL, PHYSICAL, PHYSICAL];
+    // Each is made from a view that shows the cards issued before it.
+    const orders = [VIRTUAL, shown(VIRTUAL, 1), PHYSICAL, shown(PHYSICAL, 1)];
     const results: Result[] = [];
     for (const [step, input] of orders.entries()) {
       vi.setSystemTime(T0 + step * 60_000);
@@ -458,17 +464,21 @@ describe('controls: orders that must stay separate cards, before and after the r
 });
 
 describe('residuals the attempt key does not cover', () => {
-  it.each([0, 1, 60_000])('residual: a second order of the same type after the first card is mirrored gets a new card, keyed by the count and not the clock (%i ms later)', async gap => {
-    // A second tab whose stale view never showed the first card sends exactly
-    // what a deliberate second order sends. The mirrored count moved, so it is
-    // a new attempt; telling them apart needs the view to send the count it
-    // saw (an expectedCount design, client and server), not done here.
+  it.each([0, 1, 60_000])('formerly residual, now refused: a second order of the same type after the first card is mirrored, from a view that never showed it, is refused as stale; from one that did, it is a new card keyed by the count and not the clock (%i ms later)', async gap => {
+    // A second tab whose stale view never showed the first card sends the
+    // count it saw (0), which the mirror has moved past (1): refused before the
+    // provider. A view that shows the first card sends 1, a deliberate second
+    // order. See tests/money-card-stale-order.test.ts.
     const first = await issueCardAction(VIRTUAL);
     vi.setSystemTime(T0 + gap);
     const stale = await issueCardAction(VIRTUAL);
+    expect(stale).toEqual({ ok: false, error: STALE, stale: true });
+    expect(provider.active('virtual')).toHaveLength(1);
+    expect(provider.log.cardKeys).toEqual([key('virtual', 0)]);
+    const deliberate = await issueCardAction(shown(VIRTUAL, 1));
 
     const rows = mirrorCards();
-    expect([first, stale]).toEqual(rows.map(row => ({ ok: true, data: { cardId: row.id } })));
+    expect([first, deliberate]).toEqual(rows.map(row => ({ ok: true, data: { cardId: row.id } })));
     expect(provider.active('virtual')).toHaveLength(2);
     expect(provider.log.cardKeys).toEqual([key('virtual', 0), key('virtual', 1)]);
     expect(provider.log.cardOutcomes).toEqual(['created', 'created']);
@@ -571,10 +581,10 @@ describe('the count that names the attempt', () => {
       { family_id: FAMILY, child_wallet_id: 'wallet-a', cardholder_id: 'holder-a', stripe_card_id: 'ic_seeded_4', type: 'virtual', status: 'canceled' },
       { family_id: FAMILY, child_wallet_id: 'wallet-a', cardholder_id: 'holder-a', stripe_card_id: 'ic_seeded_5', type: 'virtual', status: 'inactive', is_frozen: true },
     ]);
-    expect((await issueCardAction(VIRTUAL)).ok).toBe(true);
+    expect((await issueCardAction(shown(VIRTUAL, 2))).ok).toBe(true);
     vi.setSystemTime(T0 + 60_000);
-    expect((await issueCardAction(VIRTUAL)).ok).toBe(true);
-    expect((await issueCardAction(PHYSICAL)).ok).toBe(true);
+    expect((await issueCardAction(shown(VIRTUAL, 3))).ok).toBe(true);
+    expect((await issueCardAction(shown(PHYSICAL, 1))).ok).toBe(true);
     expect(provider.log.cardKeys).toEqual([key('virtual', 2), key('virtual', 3), key('physical', 1)]);
     expect(provider.log.cardOutcomes).toEqual(['created', 'created', 'created']);
   });
@@ -603,7 +613,7 @@ describe('a card mirror insert that meets UNIQUE (stripe_card_id)', () => {
     },
   ])('adopts the row that is exactly this family, child wallet, type, cardholder row and card ($label), without a second audit', async ({ row }) => {
     db.seed('stripe_issuing_cards', [row]);
-    expect(await issueCardAction(VIRTUAL)).toEqual({ ok: true, data: { cardId: EXACT.id } });
+    expect(await issueCardAction(shown(VIRTUAL, 1))).toEqual({ ok: true, data: { cardId: EXACT.id } });
     // Adopted as it is: nothing about the row is rewritten.
     expect(db.table('stripe_issuing_cards')).toEqual([expect.objectContaining(row)]);
     expect(provider.log.cardKeys).toEqual([key('virtual', 1)]);
@@ -613,14 +623,16 @@ describe('a card mirror insert that meets UNIQUE (stripe_card_id)', () => {
     expect(console.error).not.toHaveBeenCalled();
   });
 
+  // The last column is how many of this child's virtual cards the view shows:
+  // the seeded row counts only when it is this family's, this child's and virtual.
   it.each([
-    ['another family', { family_id: 'family-other' }],
-    ['another child wallet', { child_wallet_id: 'wallet-b' }],
-    ['another type', { type: 'physical' }],
-    ['another cardholder row', { cardholder_id: 'holder-other' }],
-  ])('keeps the refusal when the mirrored row belongs to %s', async (_label, change) => {
+    ['another family', { family_id: 'family-other' }, 0],
+    ['another child wallet', { child_wallet_id: 'wallet-b' }, 0],
+    ['another type', { type: 'physical' }, 0],
+    ['another cardholder row', { cardholder_id: 'holder-other' }, 1],
+  ])('keeps the refusal when the mirrored row belongs to %s', async (_label, change, count) => {
     db.seed('stripe_issuing_cards', [{ ...EXACT, ...change }]);
-    expect(await issueCardAction(VIRTUAL)).toEqual({ ok: false, error: DUPLICATE_TEXT });
+    expect(await issueCardAction(shown(VIRTUAL, count))).toEqual({ ok: false, error: DUPLICATE_TEXT });
     expect(db.table('stripe_issuing_cards')).toEqual([expect.objectContaining({ ...EXACT, ...change })]);
     expect(provider.stripe.issuing.cards.create).toHaveBeenCalledTimes(1);
     expect(issuedAudits()).toEqual([]);
@@ -651,7 +663,7 @@ describe('a card mirror insert that meets UNIQUE (stripe_card_id)', () => {
   ])('keeps the original refusal when the re-read gives $label', async ({ reply, logged, mismatch }) => {
     db.seed('stripe_issuing_cards', [EXACT]);
     script.push(null, null, reply);
-    expect(await issueCardAction(VIRTUAL)).toEqual({ ok: false, error: DUPLICATE_TEXT });
+    expect(await issueCardAction(shown(VIRTUAL, 1))).toEqual({ ok: false, error: DUPLICATE_TEXT });
     expect(failures()).toEqual([expect.stringMatching(/^Failed to persist card: duplicate key value/)]);
     expect(rereadLogs()).toEqual(logged);
     expect(mismatchLogs()).toEqual(mismatch);
@@ -659,19 +671,47 @@ describe('a card mirror insert that meets UNIQUE (stripe_card_id)', () => {
     expect(cardTableCalls()).toBe(3);
   });
 
-  it.each([
+  const NON_DUPLICATE = [
     { code: '08006', message: 'synthetic connection refusal' },
     { code: '23503', message: 'synthetic foreign key refusal' },
     { message: 'synthetic refusal without a code' },
-  ])('does not re-read after a non-duplicate mirror insert failure %j, and names the provider card', async error => {
-    // An adoptable row is there: only the error code keeps it from being read.
+  ];
+  const readBackLogs = () => vi.mocked(console.error).mock.calls
+    .filter(([message]) => typeof message === 'string' && message.startsWith('[money] card mirror read-back'));
+
+  it.each(NON_DUPLICATE)('reads the card back after a non-duplicate mirror insert failure %j and, when this attempt\'s exact row is there (the insert committed, its reply was lost), answers with it and audits it once', async error => {
     db.seed('stripe_issuing_cards', [EXACT]);
     script.push(null, { error });
-    expect(await issueCardAction(VIRTUAL)).toEqual({ ok: false, error: REFUSED });
+    expect(await issueCardAction(shown(VIRTUAL, 1))).toEqual({ ok: true, data: { cardId: EXACT.id } });
+    // This order's own card: audited here, by the request whose insert committed.
+    expect(issuedAudits()).toEqual([EXACT.id]);
+    expect(cardTableCalls()).toBe(3);
+    expect(failures()).toEqual([]);
+    expect(unmirroredLogs()).toEqual([]);
+    expect(readBackLogs()).toEqual([]);
+    expect(rereadLogs()).toEqual([]);
+  });
+
+  it.each(NON_DUPLICATE)('keeps the refusal after a non-duplicate mirror insert failure %j when the read-back finds no row, and names the provider card', async error => {
+    script.push(null, { error });
+    expect(await issueCardAction(shown(VIRTUAL, 0))).toEqual({ ok: false, error: REFUSED });
     expect(failures()).toEqual([`Failed to persist card: ${error.message}`]);
     expect(unmirroredLogs()).toEqual([[UNMIRRORED, { stripeCardId: CARD, code: error.code }]]);
-    expect(cardTableCalls()).toBe(2);
+    expect(cardTableCalls()).toBe(3);
     expect(issuedAudits()).toEqual([]);
-    expect(rereadLogs()).toEqual([]);
+    expect(mismatchLogs()).toEqual([]);
+  });
+
+  it.each([
+    { label: 'a returned error', reply: { error: { code: '08006', message: 'synthetic read-back refusal' } } as Scripted, logged: [['[money] card mirror read-back after a failed insert failed; keeping the refusal', { stripeCardId: CARD, code: '08006' }]] },
+    { label: 'a rejection', reply: 'reject' as Scripted, logged: [['[money] card mirror read-back after a failed insert rejected; keeping the refusal', { stripeCardId: CARD }]] },
+  ])('keeps the refusal after a non-duplicate mirror insert failure when the read-back gives $label', async ({ reply, logged }) => {
+    db.seed('stripe_issuing_cards', [EXACT]);
+    script.push(null, { error: { code: '08006', message: 'synthetic connection refusal' } }, reply);
+    expect(await issueCardAction(shown(VIRTUAL, 1))).toEqual({ ok: false, error: REFUSED });
+    expect(readBackLogs()).toEqual(logged);
+    expect(unmirroredLogs()).toEqual([[UNMIRRORED, { stripeCardId: CARD, code: '08006' }]]);
+    expect(issuedAudits()).toEqual([]);
+    expect(cardTableCalls()).toBe(3);
   });
 });

@@ -127,7 +127,7 @@ for (const kind of ['physical', 'controls'] as const) {
     await submit(page, kind).click(); await expect(submit(page, kind)).toBeDisabled();
     await submit(page, kind).evaluate(button => (button as HTMLButtonElement).click());
     const expected = kind === 'physical'
-      ? { childWalletId: 'child-a', type: 'physical', spendLimitCents: value ? 1200 : null, spendWindow: 'daily' }
+      ? { childWalletId: 'child-a', type: 'physical', spendLimitCents: value ? 1200 : null, spendWindow: 'daily', expectedCount: 0 }
       : { cardId: 'card-a', spendLimitCents: value ? 1200 : null, spendWindow: 'weekly', blockedCategories: ['betting_casino_gambling'] };
     expect((await read(page)).calls).toEqual([{ action: kind === 'physical' ? 'issueCardAction' : 'updateCardControlsAction', args: expected, settled: false }]);
     await complete(page, 0, 'refusal'); await expect(submit(page, kind)).toBeEnabled();
