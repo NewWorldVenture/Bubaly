@@ -12,7 +12,7 @@
 // because `TRUST_DOMAINS` has no sports domain and the reads exist to serve
 // the same school-week planning.
 import 'server-only';
-import { expandEvents } from '@/lib/calendar/recurrence';
+import { expandEventsInZone } from '@/lib/calendar/recurrence';
 import type { Tables } from '@/lib/database.types';
 import { describeDbError } from '@/lib/supabase/errors';
 import { resolveWindow } from '../school';
@@ -97,7 +97,7 @@ export async function listPracticesBetween(scope: ServiceScope, input: Practices
 
   // `expandEvents` treats the window end as exclusive; the reads above are
   // inclusive, so a millisecond is added to keep an event exactly at `to`.
-  const expanded = expandEvents(series.data ?? [], new Date(fromMs), new Date(toMs + 1));
+  const expanded = expandEventsInZone(series.data ?? [], new Date(fromMs), new Date(toMs + 1), scope.tz);
   const rows = [...(singles.data ?? []), ...expanded]
     .sort((a, b) => Date.parse(a.starts_at) - Date.parse(b.starts_at))
     .slice(0, Math.min(Math.max(input.limit ?? 200, 1), MAX_ROWS));
