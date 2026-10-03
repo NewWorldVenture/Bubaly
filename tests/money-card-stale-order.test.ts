@@ -386,3 +386,50 @@ describe('a count that cannot be read', () => {
     expect(db.log.filter(entry => entry.table === 'stripe_issuing_cards')).toHaveLength(1);
   });
 });
+
+describe('a card that was mirrored but whose success never reached the parent', () => {
+  /**
+   * The next card mirror INSERT commits its row, then its reply is lost (a
+   * dropped connection or a timeout after commit): the server sees an error
+   * although the row is there.
+   */
+  function loseNextInsertReplyAfterCommit() {
+    const realFrom = service.from.bind(service);
+    let armed = true;
+    (service as unknown as { from: (table: string) => unknown }).from = (table: string) => {
+      const builder = realFrom(table) as unknown as Record<string, (...args: unknown[]) => unknown>;
+      if (table !== 'stripe_issuing_cards' || !armed) return builder;
+      return Object.assign(Object.create(builder), {
+        insert(values: unknown) {
+          armed = false;
+          const committed = (builder.insert(values) as { select: (c: string) => { single: () => Promise<unknown> } }).select('id').single();
+          const lost = committed.then(() => ({ data: null, error: { code: '08006', message: 'synthetic reply lost after commit' } }));
+          return { select: () => ({ single: () => lost }) };
+        },
+      });
+    };
+  }
+
+  it.each([VIRTUAL, PHYSICAL])('the action\'s own answer is lost after a $type card was mirrored and audited: the retry from the unrefreshed view is refused as stale, so one card, row and audit', async input => {
+    // Tab 1's answer never arrives; its view still shows no card.
+    expect((await order(input, 0)).ok).toBe(true);
+    vi.setSystemTime(T0 + 30_000);
+    expect(await order(input, 0)).toEqual({ ok: false, error: STALE, stale: true });
+    expect(tally()).toEqual({ creates: 1, live: 1, rows: 1, audits: 1 });
+  });
+
+  it.each([VIRTUAL, PHYSICAL])('the mirror insert of a $type card committed but its reply was lost: the order answers with that card and audits it once, and a retry from the unrefreshed view is refused as stale', async input => {
+    loseNextInsertReplyAfterCommit();
+    const first = await order(input, 0);
+    const [row] = mirrorCards();
+    expect(row).toBeDefined();
+    // Recovered: the committed row is this order's card.
+    expect(first).toEqual({ ok: true, data: { cardId: row.id } });
+    expect(issuedAudits()).toEqual([row.id]);
+    expect(tally()).toEqual({ creates: 1, live: 1, rows: 1, audits: 1 });
+
+    vi.setSystemTime(T0 + 30_000);
+    expect(await order(input, 0)).toEqual({ ok: false, error: STALE, stale: true });
+    expect(tally()).toEqual({ creates: 1, live: 1, rows: 1, audits: 1 });
+  });
+});
