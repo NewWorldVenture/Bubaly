@@ -297,3 +297,38 @@ it is a one-line change in `createRequest`.
     7 refused, 10 metered, 8 unmetered, 18 rows;
   - control, with the old behaviour (exempt rows metered): 8 exempt rows at 9 take
     the meter to 17.
+
+## Closed: paperwork transcription was a paid model call nobody recorded
+
+Filing a document reads it with a vision model. `extractDocumentText` sends the
+image or PDF to a multimodal `structuredCompletion` of up to 8,192 tokens. Three
+paths do this:
+- an upload (`/api/paperwork/capture`, member scope);
+- a link (`/api/paperwork/link`, member scope);
+- an emailed attachment (the inbound email webhook, system scope).
+
+None of them opened an `ai_requests` row. Paperwork has no feature-tier gate, so a
+Free family could transcribe without limit, unrecorded and uncounted. The §33
+coverage scanner never saw these paths: it counted only `@/lib/ai/provider`
+producers, and these obtained their model through `resolveProviderForTask`.
+
+**Fix.**
+- **Scanner:** it now treats `resolveProviderForTask` as reaching a model. With
+  only that change, the three paths appear and the ceiling fails.
+- **Helper:** `transcribeDocument` (`lib/ai/observed-document-text.ts`) wraps each
+  transcription that reaches a model in `withAiRequest`. The feature is
+  `paperwork.transcribe.{upload|link|email}` and the text is fixed.
+  - The row is `exemptFromAllowance`: `metered = false`, never refused.
+  - A plain-text, empty, oversized or unsupported file opens no row.
+  - A transcription that fails settles its row `failed`.
+- **Ceiling:** the silent ceiling is now the exact count, 5.
+
+**Owner decision:** whether a member's upload or link should count against Free's
+10 requests. If yes, it is one flag; emailed attachments stay unmetered as
+background work.
+
+**Evidence.**
+- `tests/paperwork-transcription-is-recorded.test.ts`: 6 tests, including 10/10 on
+  Free, a failure, the system scope, and plain-text and unsupported controls.
+- Coverage test: with the old services it fails 2 cases ("does not grow", and the
+  new paperwork assertion); with the new ones it passes.

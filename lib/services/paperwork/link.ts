@@ -2,8 +2,8 @@ import 'server-only';
 import { createHash } from 'node:crypto';
 import type { Json } from '@/lib/database.types';
 import { canonicalDocumentUrl, documentLinkCandidates, type DocumentLinkInput, type DocumentLinkResult } from '@/lib/capture/document-link';
-import { extractDocumentText } from '@/lib/ai/document-text';
-import { resolveProviderForTask } from '@/lib/ai/routing';
+import type { extractDocumentText } from '@/lib/ai/document-text';
+import { transcribeDocument } from '@/lib/ai/observed-document-text';
 import { sanitizeUntrusted } from '@/lib/ai/safety/untrusted';
 import { fetchPublicDocument, PublicDocumentError } from '@/lib/server/public-document-fetch';
 import { paperworkKindFields, triagePaperwork } from '@/lib/paperwork/triage';
@@ -69,8 +69,7 @@ export async function captureDocumentLink(scope: ServiceScope, input: DocumentLi
     options.signal?.throwIfAborted();
     const document = await (options.fetch ?? fetchPublicDocument)(originalUrl, { signal: options.signal });
     if (document.mediaType === 'text/plain' && document.bytes.length === 0) return { ok: false, reason: 'empty_document', retryable: false };
-    const extracted = await (options.extract ?? extractDocumentText)(document,
-      (signal) => resolveProviderForTask('vision', { db: scope.db, failClosed: true, signal }), options.signal);
+    const extracted = await transcribeDocument(scope, 'link', document, { extract: options.extract, signal: options.signal });
     if (!extracted.ok) return { ok: false, reason: extracted.reason === 'invalid_file' ? 'unsupported' : extracted.reason, retryable: extracted.retryable };
     const text = extracted.text.replace(/\u0000/g, '');
     if (!text.trim() && !extracted.truncated) return { ok: false, reason: 'empty_document', retryable: false };

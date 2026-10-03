@@ -1,8 +1,8 @@
 import 'server-only';
 import { createHash } from 'node:crypto';
 import type { Json } from '@/lib/database.types';
-import { extractDocumentText, MAX_DOCUMENT_BYTES } from '@/lib/ai/document-text';
-import { resolveProviderForTask } from '@/lib/ai/routing';
+import { MAX_DOCUMENT_BYTES, type extractDocumentText } from '@/lib/ai/document-text';
+import { transcribeDocument } from '@/lib/ai/observed-document-text';
 import { sanitizeUntrusted } from '@/lib/ai/safety/untrusted';
 import { paperworkKindFields, triagePaperwork } from '@/lib/paperwork/triage';
 import { isPaperworkExtractionPartial } from '@/lib/paperwork/extraction';
@@ -49,10 +49,9 @@ export async function captureDocument(scope: ServiceScope, input: { captureId: s
     if (existing) return await finish(isPaperworkExtractionPartial(existing.meta));
     if (!input.file || !bytes) return { ok: false, reason: 'needs_file', retryable: false };
     const filename = sanitizeUntrusted(input.file.name, 255) || 'document';
-    const extracted = await (options.extract ?? extractDocumentText)(
+    const extracted = await transcribeDocument(scope, 'upload',
       { name: filename, mediaType: input.file.type.toLowerCase(), bytes },
-      (signal) => resolveProviderForTask('vision', { db: scope.db, failClosed: true, signal }),
-    );
+      { extract: options.extract });
     if (!extracted.ok) return { ok: false, reason: extracted.reason, retryable: extracted.retryable };
     const text = extracted.text.replace(/\u0000/g, '');
     if (!text.trim() && !extracted.truncated) return { ok: false, reason: 'empty_document', retryable: false };

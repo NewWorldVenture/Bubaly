@@ -24,6 +24,12 @@ const walk = (dir: string): string[] =>
 // Importing anything else from that module — a `ToolSpec` type, `describeAIError`,
 // `isAIConfigured` — does not put a file anywhere near a model.
 const PROVIDER_PRODUCERS = ['resolveProvider', 'getProvider', 'providerFromConfig', 'OpenAIProvider'];
+// …and the per-task factory in `lib/ai/routing`, which hands back the same
+// AIProvider. The scanner used to read only `@/lib/ai/provider`, so a file that
+// obtained its model through `resolveProviderForTask` was invisible to it: the
+// three paperwork transcription paths reached a vision model on every upload,
+// link and email attachment, recorded nothing, and never appeared below.
+const ROUTING_PRODUCERS = ['resolveProviderForTask'];
 
 /**
  * Every import statement in `src` that ends at `@/lib/ai/provider`, found by
@@ -37,11 +43,11 @@ const PROVIDER_PRODUCERS = ['resolveProvider', 'getProvider', 'providerFromConfi
  * which imports `resolveProvider` and calls `provider.runTools`, as unable to
  * reach a model at all.
  */
-function providerImports(src: string): string[] {
+function providerImports(src: string, specifier: RegExp = /from '@\/lib\/ai\/provider'/g): string[] {
   // Leading newline so a provider import on line 1 is still found.
   const text = `\n${src}`;
   const out: string[] = [];
-  const re = /from '@\/lib\/ai\/provider'/g;
+  const re = new RegExp(specifier.source, 'g');
   let m: RegExpExecArray | null;
   while ((m = re.exec(text))) {
     const start = text.lastIndexOf('\nimport ', m.index);
@@ -52,14 +58,19 @@ function providerImports(src: string): string[] {
 
 /** Whether a file can actually obtain a provider, as opposed to naming a type. */
 export function reachesAModel(src: string): boolean {
-  return providerImports(src).some((clause) => {
+  return producesFrom(providerImports(src), PROVIDER_PRODUCERS)
+    || producesFrom(providerImports(src, /from '@\/lib\/ai\/routing'/), ROUTING_PRODUCERS);
+}
+
+function producesFrom(clauses: string[], producers: string[]): boolean {
+  return clauses.some((clause) => {
     if (/^import\s+type\b/.test(clause)) return false;
     const inner = clause.slice(clause.indexOf('{') + 1, clause.lastIndexOf('}'));
     return inner
       .split(',')
       .map((n) => n.trim())
       .filter((n) => n && !/^type\s/.test(n))
-      .some((n) => PROVIDER_PRODUCERS.includes(n.split(/\s/)[0]));
+      .some((n) => producers.includes(n.split(/\s/)[0]));
   });
 }
 
@@ -127,6 +138,16 @@ describe('§33 the surfaces a family would ask about are observed', () => {
       // to use rather than the one that answered.
       expect(src, `${file} must record the model that answered`).toMatch(/obs\.used\((?:completion|done|provider)\.model/);
     }
+  });
+
+  it('paperwork transcription opens a request row on every path that reaches a model', () => {
+    for (const file of ['lib/services/paperwork/capture.ts', 'lib/services/paperwork/link.ts', 'lib/services/paperwork/email-attachments.ts']) {
+      expect([...SILENT], `${file} must not be silent`).not.toContain(file);
+      expect(readFileSync(file, 'utf8'), `${file} must transcribe through the recorded helper`).toContain('transcribeDocument(scope, ');
+    }
+    const helper = readFileSync('lib/ai/observed-document-text.ts', 'utf8');
+    expect(helper).toContain('withAiRequest(');
+    expect(helper).toContain('feature: `paperwork.transcribe.${surface}`');
   });
 
   it('the daily brief opens a request row', () => {
@@ -398,7 +419,14 @@ describe('the remaining silence is counted, not ignored', () => {
     // surface adopts withAiRequest — 52 → 48 → 44 → 42 → 40 → 36 → 32, then 23
     // when the scanner stopped counting files that cannot reach a model at all,
     // then 22 when the assistant engine adopted it, then 19, then 17, then 14,
-    // then 11, then 8, then 6.
+    // then 11, then 8, then 6, then 5.
+    //
+    // 5 is a correction AND three adoptions. The scanner learned that
+    // `resolveProviderForTask` (lib/ai/routing) hands back a model too, which
+    // put three paperwork transcriptions it had never seen into the count
+    // (upload, link, emailed attachment: a vision model on every file, recorded
+    // nowhere); they adopted withAiRequest in the same change. The sixth unit
+    // was slack, and slack is what this ratchet must not carry.
     //
     // That drop is a CORRECTION, not nine adoptions. The old scanner counted any
     // import from `lib/ai/provider`, so six files importing only a `ToolSpec` or
@@ -406,7 +434,7 @@ describe('the remaining silence is counted, not ignored', () => {
     // `isAIConfigured`, sat in the count. None of them can obtain a provider.
     // They were nine units of slack in the very ratchet this comment says must
     // have none.
-    const CEILING = 6;
+    const CEILING = 5;
     expect(
       SILENT.size,
       `these reach a model and record nothing:\n  ${[...SILENT].join('\n  ')}\n` +
