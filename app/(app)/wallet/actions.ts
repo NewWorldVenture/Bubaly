@@ -447,9 +447,14 @@ export async function runDueAllowancesAction(): Promise<Result & { ranCount?: nu
     // read and this update used to be claimed and paid anyway. In the same
     // statement, the pause and the claim cannot both win: a paused rule matches
     // nothing and is skipped like one another run claimed.
+    //
+    // So is the amount this run read — it is the amount credited below. An
+    // amount-only edit keeps the rule's date (saveAllowanceRuleAction), so one
+    // that commits after the read would otherwise be claimed and paid at the old
+    // figure; with it the claim misses and the rule stays due for the next run.
     const { data: advancedRule, error: advanceError } = await supabase.from('allowance_rules')
       .update({ next_run_on: next, last_run_on: today })
-      .eq('id', rule.id).eq('family_id', familyId).eq('is_active', true).lte('next_run_on', today)
+      .eq('id', rule.id).eq('family_id', familyId).eq('is_active', true).eq('amount_cents', rule.amount_cents).lte('next_run_on', today)
       .select('id').maybeSingle();
     if (advanceError) return actionFailure(advanceError, t('wallet.couldNotUpdateAnAllowanceSchedule'));
     if (!advancedRule) continue; // another run claimed this rule — do not double-pay
