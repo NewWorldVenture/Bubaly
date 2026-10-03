@@ -5,15 +5,18 @@ import { createInMemorySupabase, type InMemorySupabase, type Row } from './helpe
  * Changing an allowance's amount moved the child's payday.
  *
  * `saveAllowanceRuleAction`'s edit branch always wrote
- * `next_run_on = nextRunDate(today, cadence)`. A weekly allowance due tomorrow,
- * raised from $10 to $12 today, was next paid a week from today: an eight-day
- * gap, one payment fewer. A monthly one edited three days before payday went
- * about 33 days. The allowance row shows "next <date>" and the dialog never
- * said the date would move.
+ * `next_run_on = nextRunDate(today, cadence)`. A weekly allowance last paid
+ * 09-22 and due tomorrow (09-29), raised from $10 to $12 today, was next paid on
+ * 10-05: 13 days between payments instead of 7, one payment fewer. A monthly one
+ * last paid 09-01 and due 10-01, edited on 09-28, went to 10-28: 57 days instead
+ * of 30. The allowance row shows "next <date>" and the dialog never said the
+ * date would move.
  *
- * An edit that keeps the cadence now keeps the payday. A cadence change still
- * re-dates from today (a weekly date means nothing to a monthly rule), and so
- * does a rule that has no date yet.
+ * An edit that keeps the cadence of an ACTIVE allowance now keeps the payday. A
+ * cadence change still re-dates from today (a weekly date means nothing to a
+ * monthly rule), and so does a rule that has no date yet, and so does a paused
+ * one: its date stopped meaning anything when it was paused, and keeping a date
+ * from before the pause would make resuming it pay at once.
  *
  * The store is in memory and the clock is pinned (2026-09-28T02:30Z, a Basic
  * family on UTC). Row-level security on `allowance_rules` is not exercised.
@@ -50,11 +53,12 @@ const PG_ERROR = { code: '57014', message: 'canceling statement due to statement
 
 let db: InMemorySupabase;
 let patches: Row[];
+let consoleError: ReturnType<typeof vi.spyOn>;
 
 beforeEach(() => {
   vi.useFakeTimers({ toFake: ['Date'] });
   vi.setSystemTime(new Date('2026-09-28T02:30:00.000Z'));
-  vi.spyOn(console, 'error').mockImplementation(() => {});
+  consoleError = vi.spyOn(console, 'error').mockImplementation(() => {});
   harness.revalidatePath.mockClear();
   db = createInMemorySupabase();
   harness.db = db;
@@ -80,7 +84,7 @@ beforeEach(() => {
   };
 });
 
-afterEach(() => { vi.useRealTimers(); });
+afterEach(() => { vi.useRealTimers(); consoleError.mockRestore(); });
 
 const rule = (id: string) => db.table('allowance_rules').find((row) => row.id === id) as Row;
 const snapshot = () => structuredClone(db.table('allowance_rules'));
@@ -117,10 +121,14 @@ describe('changing only the amount keeps the payday', () => {
     expect(patches).toEqual([{ amount_cents: 1_200 }]);
   });
 
-  it('a paused allowance keeps its date and its pause', async () => {
+  it('a paused allowance is re-dated as before and stays paused, so resuming it does not pay the paused weeks at once', async () => {
+    // Its date (08-15) is from before the pause. Kept, the edit-then-resume
+    // would find the rule already due and pay it that night.
     expect(await edit('biweekly-paused', 800, 'biweekly')).toEqual({ ok: true });
 
-    expect(rule('biweekly-paused')).toMatchObject({ amount_cents: 800, next_run_on: '2026-08-15', is_active: false });
+    expect(rule('biweekly-paused')).toMatchObject({ amount_cents: 800, next_run_on: '2026-10-12', is_active: false });
+    expect(await toggleAllowanceRuleAction({ id: 'biweekly-paused', isActive: true })).toEqual({ ok: true });
+    expect(rollForward(String(rule('biweekly-paused').next_run_on), 'biweekly', '2026-09-28', 1)).toEqual({ runs: 0, next: '2026-10-12' });
   });
 
   it('every other rule is untouched', async () => {
@@ -244,11 +252,38 @@ describe('what an edit could not do before, it still cannot do', () => {
     expect(snapshot()).toEqual(before);
   });
 
-  it('a kept payday survives a pause and resume made around the edit', async () => {
+  it('an edit made while paused re-dates as main did, and the resume keeps that date', async () => {
     expect(await toggleAllowanceRuleAction({ id: 'weekly-tomorrow', isActive: false })).toEqual({ ok: true });
     expect(await edit('weekly-tomorrow', 1_100, 'weekly')).toEqual({ ok: true });
     expect(await toggleAllowanceRuleAction({ id: 'weekly-tomorrow', isActive: true })).toEqual({ ok: true });
 
-    expect(rule('weekly-tomorrow')).toMatchObject({ amount_cents: 1_100, next_run_on: '2026-09-29', is_active: true });
+    expect(rule('weekly-tomorrow')).toMatchObject({ amount_cents: 1_100, next_run_on: '2026-10-05', is_active: true });
+  });
+
+  it('a dated rule whose cadence changes, when the re-dating write fails, is left as it was', async () => {
+    // The tests above that fail EVERY allowance_rules update stop at the
+    // amount-only write; this one lets that write run (it matches nothing — the
+    // cadence differs) so the failure lands on the update that re-dates.
+    const from = db.from.bind(db);
+    let updates = 0;
+    (db as unknown as { from: (name: string) => unknown }).from = (name: string) => {
+      const builder = from(name) as unknown as Record<string, unknown>;
+      if (name === 'allowance_rules') {
+        const update = (builder.update as (patch: Row) => unknown).bind(builder);
+        builder.update = (patch: Row) => {
+          updates += 1;
+          if (updates === 1) return update(patch);
+          const settle = { then: (resolve: (v: unknown) => unknown) => Promise.resolve({ data: null, error: PG_ERROR, count: null, status: 500, statusText: 'Error' }).then(resolve) };
+          const chain = { eq: () => chain, not: () => chain, select: () => settle };
+          return chain;
+        };
+      }
+      return builder;
+    };
+    const before = snapshot();
+
+    expect(await edit('weekly-tomorrow', 1_200, 'monthly')).toEqual({ ok: false, error: describeActionError(PG_ERROR, COULD_NOT_SAVE) });
+    expect(snapshot()).toEqual(before);
+    expect(updates).toBe(2);
   });
 });
