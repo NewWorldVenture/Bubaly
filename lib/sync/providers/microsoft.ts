@@ -20,6 +20,7 @@ import { SyncApiError } from '@/lib/sync/adapter';
 import { eventContentHash, reminderContentHash } from '@/lib/sync/hash';
 import { readBoundedResponseJson, readBoundedResponseText } from '@/lib/server/bounded-response-body';
 import { fetchWithDeadline } from '@/lib/server/fetch-with-deadline';
+import { graphRecurrenceToRrule, type GraphRecurrence } from '@/lib/sync/providers/graph-recurrence';
 
 const TENANT = process.env.MICROSOFT_SYNC_TENANT || 'common';
 const AUTHORITY = `https://login.microsoftonline.com/${TENANT}/oauth2/v2.0`;
@@ -157,7 +158,13 @@ type MsEvent = {
   isCancelled?: boolean;
   originalStartTimeZone?: string;
   originalEndTimeZone?: string;
-  recurrence?: unknown;
+  /** singleInstance | occurrence | exception | seriesMaster. A delta on a calendar returns masters and exceptions; occurrences are the master's to expand. */
+  type?: string;
+  /** On an occurrence or exception: the series master's id … */
+  seriesMasterId?: string;
+  /** … and the slot the occurrence originally had (UTC). */
+  originalStart?: string;
+  recurrence?: GraphRecurrence;
   changeKey?: string;
   lastModifiedDateTime?: string;
 };
@@ -203,7 +210,10 @@ async function pullEvents(accessToken: string, calendarExternalId: string, curso
     // Follow nextLink pages; the final page carries a deltaLink to persist.
     for (let guard = 0; guard < 50; guard++) {
       const page = await gfetch<{ value?: MsEvent[]; '@odata.nextLink'?: string; '@odata.deltaLink'?: string }>(url, accessToken);
-      for (const ev of page.value ?? []) events.push(msEventToRow(ev));
+      // An occurrence is the master's RRULE expanded; mirroring it beside the
+      // master would publish the series twice. Exceptions stay: they carry the
+      // slot they left, which the engine folds into the master.
+      for (const ev of page.value ?? []) if (!isSeriesOccurrence(ev)) events.push(msEventToRow(ev));
       if (page['@odata.nextLink']) {
         if (guard === 49) throw new SyncApiError(502, 'Calendar read exceeded the page limit');
         url = page['@odata.nextLink']; continue;
@@ -311,7 +321,21 @@ function deleteTask(accessToken: string, listExternalId: string, taskExternalId:
 }
 
 // ── Pure mappers (unit-tested) ──────────────────────────────────────────────
-/** Graph event → normalized row. Graph gives naive datetimes + an explicit tz. */
+/** A Graph `occurrence`: one expansion of a series master, not a row of its own. */
+export function isSeriesOccurrence(ev: Pick<MsEvent, 'type'>): boolean {
+  return ev.type === 'occurrence';
+}
+
+/**
+ * Graph event → normalized row. Graph gives naive datetimes + an explicit tz.
+ *
+ * A series master carries `recurrence` as a structured object; it is written as
+ * the RRULE the mirror and the feed speak (lib/sync/providers/graph-recurrence).
+ * An `exception` — one occurrence the user changed or cancelled — names its
+ * master and the slot it left, which the engine folds into the master's
+ * exception dates. Before this, every event mirrored with `recurrence_rule:
+ * null`, so a weekly lesson was the one occasion it started on.
+ */
 export function msEventToRow(ev: MsEvent): NormalizedEvent {
   const removed = !!ev['@removed'] || ev.isCancelled === true;
   const toIso = (d?: MsDateTime): string | null => {
@@ -321,6 +345,9 @@ export function msEventToRow(ev: MsEvent): NormalizedEvent {
     return new Date(raw).toISOString();
   };
   const starts = toIso(ev.start);
+  const allDay = ev.isAllDay === true;
+  const isException = ev.type === 'exception' && !!ev.seriesMasterId;
+  const isMaster = ev.type === 'seriesMaster' || (!ev.type && !!ev.recurrence?.pattern);
   return {
     external_id: ev.id,
     uid: ev.iCalUId ?? null,
@@ -329,12 +356,15 @@ export function msEventToRow(ev: MsEvent): NormalizedEvent {
     location: ev.location?.displayName ?? null,
     starts_at: starts ?? new Date(0).toISOString(),
     ends_at: toIso(ev.end),
-    all_day: ev.isAllDay === true,
-    recurrence_rule: null, // Graph uses a structured recurrence object; RRULE mapping is a follow-up
+    all_day: allDay,
+    recurrence_rule: isMaster ? graphRecurrenceToRrule(ev.recurrence, { allDay, zoneHint: ev.originalStartTimeZone ?? ev.start?.timeZone }) : null,
     status: removed ? 'cancelled' : 'confirmed',
     etag: ev.changeKey ?? null,
     updated_at: ev.lastModifiedDateTime ?? null,
     cancelled: removed,
+    exception_dates: [],
+    recurring_event_id: isException ? ev.seriesMasterId ?? null : null,
+    original_starts_at: isException && ev.originalStart ? new Date(ev.originalStart).toISOString() : null,
   };
 }
 
