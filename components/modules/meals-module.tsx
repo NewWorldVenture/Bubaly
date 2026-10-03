@@ -366,7 +366,7 @@ export function MealsModule() {
             description={tr('mealsModule.planHealthyMealsYourFamily')}
             action={
               <div className="flex items-center gap-2">
-                <Button size="sm" onClick={() => setNewMealOpen(true)}><Plus className="h-4 w-4" /> {tr('meals.addMeal')}</Button>
+                <Button size="sm" onClick={() => setNewMealOpen(true)}><Plus className="h-4 w-4" /> {tr('mealsPlanner.addMealToLibrary')}</Button>
                 <Button variant="outline" size="sm" onClick={() => { setTab('recipes'); }}>
                   <Search className="h-4 w-4" /> {tr('meals.recipeSearch')}
                 </Button>
@@ -398,7 +398,7 @@ export function MealsModule() {
           {/* Tabs */}
           <div className="tab-bar mt-3 border-b border-border pb-2">
             {TABS.map((t) => (
-              <button key={t.id} onClick={() => setTab(t.id)}
+              <button key={t.id} onClick={() => setTab(t.id)} aria-pressed={tab === t.id}
                 className={cn('tab-item', tab === t.id ? 'tab-item-active' : 'tab-item-inactive')}>
                 {tr(t.labelKey)}
               </button>
@@ -1085,7 +1085,7 @@ function MealPicker({ date, mealType, title, library, recipes, choicesLoading, c
                       <MealImg src={recipe.photo_url} emoji={MEAL_ICONS.dinner} className="h-9 w-9 shrink-0 rounded-lg" /><span className="break-words">{recipe.name}</span>
                     </button>)}
                   </div></div>}
-                  {meals.length === 0 && recipeChoices.length === 0 && <p className="text-sm text-muted">{tr('mealsPlanner.noMatches')}</p>}
+                  {meals.length === 0 && recipeChoices.length === 0 && <p className="text-sm text-muted">{tr(search ? 'mealsPlanner.noMatches' : 'mealsPlanner.noSavedChoices')}</p>}
                 </div>
               )}
             </>
