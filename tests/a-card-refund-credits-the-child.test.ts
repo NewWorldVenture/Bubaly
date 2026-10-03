@@ -256,6 +256,82 @@ describe('a refused refund insert that is not a duplicate', () => {
   });
 });
 
+describe('two overlapping deliveries of one capture', () => {
+  // The debit side of review 4174926185. debitCardSpend checks for the capture
+  // with a select and then inserts, exactly as the refund did, so two claims of
+  // one capture that overlap (two event ids, or recordEvent reclaiming a claim
+  // its first holder is still running) both pass the select. With no key the
+  // child is debited twice: one $20 purchase leaves Spend at $10, not $30. The
+  // database key (a unique index on stripe_ref for completed card_spend rows,
+  // requested on #699) makes the second insert fail with 23505; this store is
+  // given the same key. The second delivery must then read back the capture
+  // the first wrote and answer success, not 500.
+  function storeWithTheKey() {
+    db = createInMemorySupabase({ uniques: {
+      stripe_webhook_events: [['stripe_event_id']],
+      wallet_transactions: [['stripe_ref', 'type']],
+    } });
+    harness.db = db;
+    db.seed('stripe_issuing_cards', [
+      { id: 'card-row-1', family_id: FAMILY, child_wallet_id: WALLET, stripe_card_id: 'ic_child', is_frozen: false, blocked_categories: [], status: 'active' },
+    ]);
+    db.seed('wallet_buckets', [{ id: 'bucket-spend', family_id: FAMILY, child_wallet_id: WALLET, kind: 'spend' }]);
+    db.seed('wallet_transactions', [
+      { id: 'txn-topup', family_id: FAMILY, child_wallet_id: WALLET, bucket_id: 'bucket-spend', type: 'parent_top_up', status: 'completed', direction: 'credit', amount_cents: 5_000, stripe_ref: null },
+      { id: 'txn-hold', family_id: FAMILY, child_wallet_id: WALLET, bucket_id: 'bucket-spend', type: 'card_spend', status: 'processing', direction: 'debit', amount_cents: 2_000, stripe_ref: 'iauth_1' },
+    ]);
+    db.seed('stripe_webhook_events', []);
+    db.seed('wallet_audit_logs', []);
+  }
+
+  it('are debited once, and both are acknowledged', async () => {
+    storeWithTheKey();
+    let captureInserts = 0;
+    const from = db.from.bind(db);
+    (db as unknown as { from: (name: string) => unknown }).from = (name: string) => {
+      const builder = from(name) as unknown as Record<string, (...args: unknown[]) => unknown>;
+      if (name === 'wallet_transactions') {
+        const insert = builder.insert.bind(builder);
+        builder.insert = (row: unknown) => {
+          if ((row as Row).type === 'card_spend') captureInserts += 1;
+          return insert(row);
+        };
+      }
+      return builder;
+    };
+
+    const [first, second] = await Promise.all([deliver(issuingTransaction({}), 'evt_a'), deliver(issuingTransaction({}), 'evt_b')]);
+
+    // Both got past the select: the overlap really happened.
+    expect(captureInserts).toBe(2);
+    expect([first.status, second.status]).toEqual([200, 200]);
+    expect(byRef('ipi_capture')).toEqual([expect.objectContaining({ type: 'card_spend', status: 'completed', direction: 'debit', amount_cents: 2_000 })]);
+    expect(byRef('iauth_1')).toEqual([expect.objectContaining({ id: 'txn-hold', status: 'cancelled' })]);
+    expect(spendCents()).toBe(5_000 - 2_000);
+    expect(spendableCents()).toBe(5_000 - 2_000);
+  });
+
+  it('a 23505 with no capture to read back still fails, so Stripe retries and the hold stays', async () => {
+    const from = db.from.bind(db);
+    (db as unknown as { from: (name: string) => unknown }).from = (name: string) => {
+      const builder = from(name) as unknown as Record<string, (...args: unknown[]) => unknown>;
+      if (name === 'wallet_transactions') {
+        builder.insert = () => {
+          const settle = { then: (resolve: (v: unknown) => unknown) => Promise.resolve({ data: null, error: { code: '23505', message: 'duplicate key value violates unique constraint "some_other_key"', details: null, hint: null } }).then(resolve) };
+          return { select: () => ({ single: () => settle }) };
+        };
+      }
+      return builder;
+    };
+
+    const res = await deliver(issuingTransaction({}));
+
+    expect(res.status).toBe(500);
+    expect(byRef('ipi_capture')).toEqual([]);
+    expect(byRef('iauth_1')).toEqual([expect.objectContaining({ id: 'txn-hold', status: 'processing' })]);
+  });
+});
+
 describe('a purchase is still a purchase', () => {
   it('a capture is one completed card_spend debit and releases its hold', async () => {
     expect((await deliver(issuingTransaction({}))).status).toBe(200);
