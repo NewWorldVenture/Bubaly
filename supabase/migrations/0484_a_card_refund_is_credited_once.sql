@@ -1,0 +1,39 @@
+-- 0484: a card refund is credited once.
+--
+-- Number reserved by the coordinator on #699 (5974208357) for #925, following
+-- owner review 4174926185. Filename coordination only: this file is a
+-- repository candidate, not an instruction to apply anything to production.
+--
+-- lib/wallet/server.ts creditCardRefund posts one completed `card_refund`
+-- credit per Stripe Issuing refund transaction, keyed by `stripe_ref`. Its
+-- duplicate check is a select and then an insert — two statements — so two
+-- deliveries of one refund that overlap (two event ids for one transaction, or
+-- recordEvent reclaiming a claim the first holder is still running) can both
+-- pass the select and both credit the child. 0342 records that
+-- wallet_transactions has no unique index on stripe_ref at all.
+--
+-- This index makes the key the database's: the second insert fails with 23505,
+-- and creditCardRefund reads back the refund the first wrote and answers
+-- success. It covers card_refund rows only:
+--   - card_spend rows share stripe_ref between an authorization's hold and a
+--     replayed hold placed after it was cancelled (0155/0342), so a plain key
+--     on card_spend would refuse rows the ledger relies on;
+--   - nothing in the repository wrote card_refund before #925, so no existing
+--     row can conflict with the index being built.
+-- Partial and NULL-skipping, as every other key on this table: a row with no
+-- stripe_ref is not a Stripe refund.
+--
+-- APPLY NOTE. A plain `create unique index` blocks writes to
+-- wallet_transactions while it builds. That is right for a replay and a small
+-- table; on a large production table the owner may prefer the CONCURRENTLY
+-- form of the same statement, run on its own and outside a transaction, as
+-- 0321 describes. Either way, confirm first that no two card_refund rows
+-- share a stripe_ref, or the build fails:
+--   select stripe_ref from public.wallet_transactions
+--    where type = 'card_refund' and stripe_ref is not null
+--    group by 1 having count(*) > 1;
+-- Agents must NOT apply this to production (docs/PENDING_PROD_MIGRATIONS.md).
+
+create unique index if not exists uq_wallet_txn_card_refund_ref
+  on public.wallet_transactions (stripe_ref)
+  where type = 'card_refund' and stripe_ref is not null;
