@@ -27,6 +27,22 @@ export function parseAIChatRequest(value: unknown): AIChatRequestParse {
   return { ok: true, value: { conversationId, message } };
 }
 
+/**
+ * The assistant turn's retry key: the `Idempotency-Key` header, else a
+ * `clientRequestId` in the body. One logical send keeps one key across its
+ * retries; a new send gets a new key. Absent is allowed (older clients); a
+ * malformed key is refused rather than dropped, because a dropped key turns a
+ * retry back into a second, separately counted turn.
+ */
+export function parseAssistantTurnKey(body: unknown, header: string | null | undefined):
+  { ok: true; key: string | null } | { ok: false; error: 'client_request_id_invalid' } {
+  const fromBody = body && typeof body === 'object' && !Array.isArray(body) ? (body as Record<string, unknown>).clientRequestId : undefined;
+  const raw = typeof header === 'string' && header.trim() ? header : fromBody;
+  if (raw === undefined || raw === null) return { ok: true, key: null };
+  const key = typeof raw === 'string' ? raw.trim() : '';
+  return isClientRequestId(key) ? { ok: true, key } : { ok: false, error: 'client_request_id_invalid' };
+}
+
 // ─── Request intake (POST /api/ai/requests) ─────────────────────────────────
 //
 // The contract the Ask Bubaly entry points speak. Kept next to the chat parser

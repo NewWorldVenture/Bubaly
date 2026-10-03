@@ -1,4 +1,5 @@
 import { NextResponse } from 'next/server';
+import { refuseOverAIAllowance } from '@/lib/server/ai-access';
 import { getTranslations } from '@/lib/i18n/server';
 import { createServer } from '@/lib/supabase/server';
 import { settleAll, describeReadError } from '@/lib/supabase/settle';
@@ -156,6 +157,9 @@ export async function POST() {
 
     // No partner name on the row: who someone is buying a gift for is not
     // something the request ledger needs to carry.
+    // F19: the monthly AI allowance the plans sell, checked before the model runs.
+    const overAllowance = await refuseOverAIAllowance(ctx, supabase);
+    if (overAllowance) return overAllowance;
     const digest = await withAiRequest(
       scopeFromUserContext(ctx, supabase),
       { feature: 'relationship.digest', text: 'Relationship suggestions' },

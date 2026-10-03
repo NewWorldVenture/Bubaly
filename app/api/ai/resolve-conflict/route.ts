@@ -1,4 +1,5 @@
 import { NextResponse } from 'next/server';
+import { refuseOverAIAllowance } from '@/lib/server/ai-access';
 import { getTranslations } from '@/lib/i18n/server';
 import { requireUserContext } from '@/lib/supabase/auth';
 import { createServer } from '@/lib/supabase/server';
@@ -68,6 +69,9 @@ export async function POST(req: Request) {
     'Only use the facts provided — never invent names, places, or times. Return one option per line, no numbering.';
 
   try {
+    // F19: the monthly AI allowance the plans sell, checked before the model runs.
+    const overAllowance = await refuseOverAIAllowance(ctx, supabase);
+    if (overAllowance) return overAllowance;
     const ideas = await withAiRequest(
       scopeFromUserContext(ctx, supabase),
       { feature: 'calendar.resolve-conflict', text: 'Resolve a calendar clash' },

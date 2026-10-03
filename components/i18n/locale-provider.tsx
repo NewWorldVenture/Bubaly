@@ -7,7 +7,8 @@
 // the browser downloads one language rather than eleven, and the first paint is
 // already correct — no English flash before a preference is read from storage.
 
-import { createContext, useContext, useMemo } from 'react';
+import { createContext, useContext, useEffect, useMemo } from 'react';
+import { setDbErrorTranslator } from '@/lib/supabase/errors';
 
 import { DEFAULT_LOCALE, localeOrDefault, type Locale } from '@/lib/i18n/locales';
 import { isValidTimezone } from '@/lib/time/zoned';
@@ -72,6 +73,11 @@ export function LocaleProvider({
     }),
     [locale, source, messages, zone],
   );
+
+  // The database's classified error messages follow the reader's language
+  // (I18N-011). Every provider carries the `error` namespace, and they all
+  // speak the same locale, so whichever registers last is right.
+  useEffect(() => { setDbErrorTranslator((key) => value.t(key)); }, [value]);
 
   return <LocaleContext.Provider value={value}>{children}</LocaleContext.Provider>;
 }

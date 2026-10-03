@@ -77,6 +77,22 @@ describe('the Free plan gets the ten requests it was sold', () => {
     expect(access).toMatchObject({ ok: false, status: 403, code: 'unavailable' });
   });
 
+  // Review on #788: a response with no error AND no count is a meter that did
+  // not answer, not a count of zero. Read as zero, it let a family that had
+  // spent its month call the model again.
+  it('fails closed when the read succeeds but carries no count', async () => {
+    const { assertAIAccess, assertFamilyAIAllowance, AI_ASSISTANT_FEATURE_KEY } = await import('@/lib/server/ai-access');
+    const access = await assertAIAccess(ctx(), { db: db(null).client, now: NOW, featureKey: AI_ASSISTANT_FEATURE_KEY });
+    expect(access).toMatchObject({ ok: false, status: 403, code: 'unavailable' });
+    const family = await assertFamilyAIAllowance(db(null).client, 'fam-1');
+    expect(family).toMatchObject({ ok: false, status: 403, code: 'unavailable' });
+  });
+
+  it('a real count of zero is still allowed', async () => {
+    const { assertFamilyAIAllowance } = await import('@/lib/server/ai-access');
+    expect(await assertFamilyAIAllowance(db(0).client, 'fam-1')).toMatchObject({ ok: true, monthlyUsed: 0 });
+  });
+
   // The defect this replaced: the count filtered `kind = 'concierge'`, and the
   // assistant files its turns under the default kind 'feature'. A meter that
   // counted only concierge rows read zero forever.

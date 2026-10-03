@@ -1,4 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server';
+import { refuseOverAIAllowance } from '@/lib/server/ai-access';
 import { getTranslations } from '@/lib/i18n/server';
 import { requireUserContext } from '@/lib/supabase/auth';
 import { createServer } from '@/lib/supabase/server';
@@ -38,6 +39,9 @@ export async function POST(req: NextRequest) {
     const { system, user } = buildNotesPrompt(text);
     // The note itself is not stored on the row — a family note is exactly the
     // kind of thing `text` must not carry verbatim.
+    // F19: the monthly AI allowance the plans sell, checked before the model runs.
+    const overAllowance = await refuseOverAIAllowance(ctx, supabase);
+    if (overAllowance) return overAllowance;
     const insights = await withAiRequest(
       scopeFromUserContext(ctx, supabase),
       { feature: 'notes.assist', text: 'Analyse a note' },

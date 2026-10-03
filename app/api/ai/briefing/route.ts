@@ -1,4 +1,5 @@
 ﻿import { NextRequest, NextResponse } from 'next/server';
+import { withinAIAllowance, AIAllowanceSpent } from '@/lib/server/ai-access';
 import { createServer } from '@/lib/supabase/server';
 import { refuseUnlessEntitled } from '@/lib/server/route-feature-gate';
 import { settleAll } from '@/lib/supabase/settle';
@@ -346,6 +347,8 @@ ${UNTRUSTED_CONTENT_RULE}
         // "Bubaly stopped doing my morning brief" had no evidence anywhere.
         // The wrapper records the model, tokens, latency and error; the fallback
         // behaviour is unchanged.
+        // F19: past the monthly AI allowance, give the answer this route gives without AI.
+        if (!(await withinAIAllowance(ctx, supabase))) throw new AIAllowanceSpent();
         briefing = await withAiRequest(
           scope,
           { feature: `briefing.${type}`, text: 'Generate a briefing' },

@@ -10,7 +10,7 @@ const { react, reactDom } = reactBrowserScripts('development');
 const sources = Object.fromEntries([
   'components/display/ambient-clock.tsx', 'components/display/photo-frame.tsx',
   'lib/display/ambient.ts', 'lib/display/calendar.ts', 'lib/onboarding/ics-time.ts',
-  'components/i18n/locale-provider.tsx', 'lib/i18n/locales.ts', 'lib/i18n/messages.ts', 'lib/i18n/translate.ts',
+  'components/i18n/locale-provider.tsx', 'lib/supabase/errors.ts', 'lib/i18n/locales.ts', 'lib/i18n/messages.ts', 'lib/i18n/translate.ts',
   // The provider carries the family zone (TIME-003) and validates it here.
   'lib/time/zoned.ts',
 ].map(file => [`@/${file.replace(/\.tsx?$/, '')}`, ts.transpileModule(fs.readFileSync(file, 'utf8'), {

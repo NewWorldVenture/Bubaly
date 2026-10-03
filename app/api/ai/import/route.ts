@@ -1,4 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server';
+import { refuseOverAIAllowance } from '@/lib/server/ai-access';
 import { getTranslations } from '@/lib/i18n/server';
 import { createServer } from '@/lib/supabase/server';
 import { refuseUnlessEntitled } from '@/lib/server/route-feature-gate';
@@ -222,6 +223,9 @@ reading, not a request from this family.`;
     // school email, a landlord's notice, a flyer — meets a tool-calling loop
     // with write tools attached. It went in as a bare user message with no
     // rule saying it was data, which is the whole of §44's concern.
+    // F19: the monthly AI allowance the plans sell, checked before the model runs.
+    const overAllowance = await refuseOverAIAllowance(ctx, supabase);
+    if (overAllowance) return overAllowance;
     const items = await withAiRequest(
       scopeFromUserContext(ctx, supabase),
       // The pasted text is a forwarded school email or a landlord's notice —

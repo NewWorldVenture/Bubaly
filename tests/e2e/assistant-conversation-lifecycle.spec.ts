@@ -49,7 +49,7 @@ async function fixture(page: Page, search = '') {
   await page.addScriptTag({ content: react }); await page.addScriptTag({ content: reactDom });
   await page.addScriptTag({ content: `(() => {
     const sources=${JSON.stringify(modules)}, entry=${JSON.stringify(entry)}, catalogue=${JSON.stringify(catalogue)}, A=${JSON.stringify(A)}, B=${JSON.stringify(B)}, loaded={};
-    const h=React.createElement, p=window.__assistant={errors:[],sends:[],streams:[],pending:[],hold:null,readFailure:false,stopSpeech:0};
+    const h=React.createElement, p=window.__assistant={errors:[],sends:[],streams:[],replies:[],pending:[],hold:null,readFailure:false,stopSpeech:0};
     window.addEventListener('error',e=>p.errors.push(e.message)); window.addEventListener('unhandledrejection',e=>p.errors.push(String(e.reason)));
     const translate=(key,params={})=>Object.entries(params).reduce((value,[key,replacement])=>value.split('{'+key+'}').join(String(replacement)),catalogue[key]||key);
     const initial={userId:'user-a',familyId:'family-a',family:{id:'family-a'},selfMember:{id:'member-a',display_name:'Casey'},role:'parent'};
@@ -94,7 +94,12 @@ async function fixture(page: Page, search = '') {
       '@/components/ui/button':{Button:({children,variant,size,...props})=>h('button',props,children)},
       '@/components/ui/states':{ErrorState:({message,onRetry})=>h('div',{role:'alert'},message,h('button',{onClick:onRetry},'Retry')),SkeletonText:()=>h('p',null,'Loading')},
     };
-    window.fetch=async(_url,init)=>{p.sends.push({body:JSON.parse(init.body),signal:init.signal});let controller;const stream=new ReadableStream({start:c=>{controller=c;}});p.streams.push(controller);return new Response(stream,{headers:{'Content-Type':'text/event-stream'}});};
+    // A queued reply answers the next send: {status,json} as JSON, {network:true}
+    // as a dropped connection; otherwise the send streams under test control.
+    window.fetch=async(_url,init)=>{p.sends.push({body:JSON.parse(init.body),signal:init.signal,key:init.headers['Idempotency-Key']});const reply=p.replies.shift()||{};
+      if(reply.network)throw new TypeError('Failed to fetch');
+      if(reply.status)return new Response(JSON.stringify(reply.json),{status:reply.status,headers:{'Content-Type':'application/json'}});
+      let controller;const stream=new ReadableStream({start:c=>{controller=c;}});p.streams.push(controller);return new Response(stream,{headers:{'Content-Type':'text/event-stream'}});};
     p.event=(index,event)=>p.streams[index].enqueue(new TextEncoder().encode('data: '+JSON.stringify(event)+'\\n\\n'));
     p.end=index=>p.streams[index].close();
     function load(id){if(id in mocks)return mocks[id];if(loaded[id])return loaded[id].exports;const item=sources[id];if(!item)throw new Error('Unexpected module '+id);const module=loaded[id]={exports:{}};new Function('require','module','exports',item.source)(name=>load(item.imports[name]),module,module.exports);return module.exports;}
@@ -192,4 +197,105 @@ test('a refused history read preserves the old thread and exposes a working retr
   await expect(page.getByRole('alert')).toBeVisible();await expect(page.getByText('Saved answer A',{exact:true})).toBeVisible();
   await page.evaluate(() => { (window as any).__assistant.readFailure=false; });await page.getByRole('button',{name:'Try again',exact:true}).click();
   await expect(page.getByText('Saved answer B',{exact:true})).toBeVisible();await expect(page.getByRole('alert')).toHaveCount(0);
+});
+
+// A retried send is the same turn (F19). Edit & retry with the words unchanged
+// must carry the first attempt's Idempotency-Key, so the server replays a turn
+// that already finished instead of counting and running it again; every other
+// send — edited, independent, or after the server called the key spent — is a
+// new turn with a new key.
+type Send = { body: { message: string }; key: string };
+const sends = (page: Page) => page.evaluate(() => (window as any).__assistant.sends.map((s: Send) => ({ body: s.body, key: s.key })) as Send[]);
+const queue = (page: Page, ...replies: object[]) => page.evaluate(r => { (window as any).__assistant.replies.push(...r); }, replies);
+async function sendText(page: Page, text: string, count: number) {
+  await page.getByRole('textbox').fill(text);
+  await page.getByRole('button', { name: 'Send', exact: true }).click();
+  await expect.poll(async () => (await sends(page)).length).toBe(count);
+}
+async function resend(page: Page, count: number) {
+  await page.getByRole('button', { name: 'Send', exact: true }).click();
+  await expect.poll(async () => (await sends(page)).length).toBe(count);
+}
+/** Stream events into the `index`th streamed send and close it. */
+async function stream(page: Page, index: number, events: object[]) {
+  await page.evaluate(async ([i, list]) => {
+    const p = (window as any).__assistant;
+    for (const e of list as object[]) p.event(i, e);
+    p.end(i); await p.flush();
+  }, [index, events] as const);
+}
+const answer = (text: string, requestId: string) => [{ type: 'delta', text }, { type: 'done', content: text, persisted: true, requestId }];
+async function editAndRetry(page: Page, expected: string) {
+  await page.getByRole('button', { name: 'Edit and retry', exact: true }).last().click();
+  await expect(page.getByRole('textbox')).toHaveValue(expected);
+}
+
+test('an interrupted stream retried unchanged reuses its key, renders the replay, and the next send is a new turn', async ({ page }) => {
+  await fixture(page);
+  await sendText(page, 'Plan dinner for Friday', 1);
+  // The stream drops before `done`: the turn may have finished server-side.
+  await stream(page, 0, [{ type: 'delta', text: 'Partial dinner' }]);
+  await expect(page.getByRole('alert')).toContainText('The response was interrupted');
+  await editAndRetry(page, 'Plan dinner for Friday');
+  await resend(page, 2);
+  const [first, retry] = await sends(page);
+  expect(retry.body.message).toBe('Plan dinner for Friday');
+  expect(retry.key).toBe(first.key);
+
+  // The server replays the saved answer (one delta + done): an ordinary reply.
+  await stream(page, 1, answer('Tacos on Friday.', 'req-1'));
+  await expect(page.getByText('Tacos on Friday.', { exact: true })).toBeVisible();
+  await expect(page.getByRole('alert')).toHaveCount(1);
+
+  // A later send, even of the same words, is a fresh turn.
+  await sendText(page, 'Plan dinner for Friday', 3);
+  expect((await sends(page))[2].key).not.toBe(first.key);
+});
+
+test('a failed request (500, network, unsaved reply) retried unchanged sends the same key', async ({ page }) => {
+  await fixture(page);
+  await queue(page, { status: 500, json: { error: 'Server trouble' } });
+  await sendText(page, 'Remind me about soccer', 1);
+  await expect(page.getByRole('alert')).toContainText('Server trouble');
+  await queue(page, { network: true });
+  await editAndRetry(page, 'Remind me about soccer');
+  await resend(page, 2);
+  await expect(page.getByRole('alert').last()).toContainText('The response was interrupted');
+  await editAndRetry(page, 'Remind me about soccer');
+  await resend(page, 3);
+  await stream(page, 0, [{ type: 'error', error: 'Could not save this reply.' }, { type: 'done', content: 'Saved?', persisted: false, requestId: 'req-2' }]);
+  await expect(page.getByRole('alert').last()).toContainText('Could not save this reply.');
+  await editAndRetry(page, 'Remind me about soccer');
+  await resend(page, 4);
+  expect(new Set((await sends(page)).map(s => s.key)).size).toBe(1);
+});
+
+test('an edited retry, a key the server called spent, and independent sends each get a new key', async ({ page }) => {
+  await fixture(page);
+  await sendText(page, 'First question', 1);
+  await stream(page, 0, answer('First answer.', 'req-a'));
+  await sendText(page, 'Second question', 2);
+  await stream(page, 1, answer('Second answer.', 'req-b'));
+  const [a, b] = await sends(page);
+  expect(a.key).not.toBe(b.key);
+
+  await queue(page, { status: 500, json: { error: 'Server trouble' } });
+  await sendText(page, 'Book the dentist', 3);
+  await editAndRetry(page, 'Book the dentist');
+  await sendText(page, 'Book the dentist for Tuesday', 4);
+  const [, , failed, edited] = await sends(page);
+  expect(edited.body.message).toBe('Book the dentist for Tuesday');
+  expect(edited.key).not.toBe(failed.key);
+  await stream(page, 2, answer('Booked.', 'req-c'));
+
+  // The server says this key's turn ended without an answer: sending again is
+  // a new turn, so the retry must not reuse a key that can only be refused.
+  await queue(page, { status: 409, json: { error: 'That attempt didn’t finish. Send the message again.', code: 'turn_failed' } });
+  await sendText(page, 'Order groceries', 5);
+  await expect(page.getByRole('alert').last()).toContainText('That attempt didn’t finish');
+  await editAndRetry(page, 'Order groceries');
+  await resend(page, 6);
+  const [, , , , spent, fresh] = await sends(page);
+  expect(fresh.body.message).toBe('Order groceries');
+  expect(fresh.key).not.toBe(spent.key);
 });

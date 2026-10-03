@@ -1,3 +1,4 @@
+import { refuseOverAIAllowance } from '@/lib/server/ai-access';
 import { NextRequest, NextResponse } from 'next/server';
 import { getTranslations } from '@/lib/i18n/server';
 import { requireUserContext } from '@/lib/supabase/auth';
@@ -57,6 +58,11 @@ export async function POST(req: NextRequest) {
     ingredients: (r.ingredients as unknown as { name: string }[]) ?? [],
   }));
 
+  // F19: a member's own AI request, so it counts against the family's monthly
+  // allowance (the owner's decision of 2026-10-02: the Free plan's 10 apply
+  // consistently across user-requested AI). Refused before the model is called.
+  const overAllowance = await refuseOverAIAllowance(ctx, supabase);
+  if (overAllowance) return overAllowance;
   let picks;
   try {
     const prompt = buildSuggestPrompt(lite, constraint);

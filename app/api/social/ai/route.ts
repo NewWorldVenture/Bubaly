@@ -1,3 +1,4 @@
+import { refuseOverAIAllowance } from '@/lib/server/ai-access';
 import { NextResponse } from 'next/server';
 import { getTranslations } from '@/lib/i18n/server';
 import { requireUserContext } from '@/lib/supabase/auth';
@@ -63,6 +64,11 @@ export async function POST(req: Request) {
     { status: 429, headers: { 'Retry-After': String(limited.retryAfter) } },
   );
 
+  // F19: a member's own AI request, so it counts against the family's monthly
+  // allowance (the owner's decision of 2026-10-02: the Free plan's 10 apply
+  // consistently across user-requested AI). Refused before the model is called.
+  const overAllowance = await refuseOverAIAllowance(ctx, supabase);
+  if (overAllowance) return overAllowance;
   let result;
   try {
     result = await generate(scopeFromUserContext(ctx, supabase), { kind, topic, platform, tone, source });

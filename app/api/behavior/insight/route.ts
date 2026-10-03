@@ -1,3 +1,4 @@
+import { refuseOverAIAllowance } from '@/lib/server/ai-access';
 import { NextRequest, NextResponse } from 'next/server';
 import { dayKeyInZone } from '@/lib/schedule/zoned';
 import { getTranslations } from '@/lib/i18n/server';
@@ -82,6 +83,11 @@ export async function POST(req: NextRequest) {
     .slice(0, 40)
     .map((l) => `${dayKeyInZone(Date.parse(l.occurred_at), tz) ?? l.occurred_at.slice(0, 10)} · ${l.kind} · ${l.category}${l.note ? ` — ${l.note}` : ''}`)
     .join('\n');
+
+  // F19: a parent's own AI request, so it counts against the family's monthly
+  // allowance (the owner's decision of 2026-10-02). Refused before the model.
+  const overAllowance = await refuseOverAIAllowance(ctx, supabase);
+  if (overAllowance) return overAllowance;
 
   try {
     // The sharpest silence on this list. Three ways a parent gets something that

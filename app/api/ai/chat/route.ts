@@ -1,9 +1,10 @@
 import { NextRequest, NextResponse } from 'next/server';
+import { refuseOverAIAllowance } from '@/lib/server/ai-access';
 import { getTranslations } from '@/lib/i18n/server';
 import { createServer } from '@/lib/supabase/server';
 import { settleAll } from '@/lib/supabase/settle';
 import { requireUserContext } from '@/lib/supabase/auth';
-import { withAiRequest } from '@/lib/ai/observability';
+import { AiRequestDuplicate, AiRequestNotFiled, withAiRequest } from '@/lib/ai/observability';
 import { scopeFromUserContext } from '@/lib/services/scope';
 import { resolveProvider, describeAIError, isAIConfigured, type AIMessage } from '@/lib/ai/provider';
 import { finalizeAssistantContent, summarizeToolResult } from '@/lib/ai/assistant-engine';
@@ -14,7 +15,9 @@ import { wrapToolsWithTrust } from '@/lib/assistant/trust-wrapper';
 import type { Database } from '@/lib/database.types';
 import { rateLimitDb } from '@/lib/server/rate-limit-db';
 import { rateLimit } from '@/lib/server/rate-limit';
-import { parseAIChatRequest } from '@/lib/ai/chat-request';
+import { parseAIChatRequest, parseAssistantTurnKey } from '@/lib/ai/chat-request';
+import { assistantTurnRequestKey, findPriorTurn } from '@/lib/ai/assistant-turn-replay';
+import { answerPriorTurn } from '@/lib/ai/assistant-turn-answer';
 import { MAX_PROVIDER_JSON_BYTES, readBoundedRequestJson } from '@/lib/server/bounded-request-body';
 import { describeActionError, wroteNoRows } from '@/lib/supabase/errors';
 
@@ -59,6 +62,16 @@ export async function POST(req: NextRequest) {
       return NextResponse.json({ error: messageByError[parsed.error] }, { status: 400 });
     }
     const { conversationId, message } = parsed.value;
+
+    // A retried send is the same turn, exactly as on /api/ai (F19; #788
+    // review 5393250792): looked up before the family context, the model and
+    // the allowance below, none of which run for it.
+    const turnKey = parseAssistantTurnKey(rawBody, req.headers.get('idempotency-key'));
+    if (!turnKey.ok) return NextResponse.json({ error: t('ai.thisMessageCouldNotBeIdentified'), code: turnKey.error }, { status: 400 });
+    if (turnKey.key) {
+      const prior = await findPriorTurn(supabase, { familyId, userId: ctx.user.id, conversationId, message }, turnKey.key);
+      if (prior.kind !== 'none') return answerPriorTurn(prior, { conversationId, json: false, tr: t });
+    }
 
     if (!(await isAIConfigured())) {
       return NextResponse.json({ error: t('chat.theAiEngineIsnT') }, { status: 503 });
@@ -152,6 +165,11 @@ export async function POST(req: NextRequest) {
 
     // Stream the run as Server-Sent Events: `action` chips as tools fire,
     // `delta` chunks as the reply streams, then a final `done` (after persisting).
+    // F19: the monthly AI allowance the plans sell, checked before the stream
+    // opens — a `return` inside the stream's start() would not reach the caller.
+    const overAllowance = await refuseOverAIAllowance(ctx, supabase);
+    if (overAllowance) return overAllowance;
+
     const encoder = new TextEncoder();
     let connected = true;
     const stream = new ReadableStream({
@@ -167,9 +185,13 @@ export async function POST(req: NextRequest) {
         // reached a wrapper's catch — a turn the family watched break recorded
         // nothing at all. `obs.failed` is how a surface that handles its own
         // errors still leaves the evidence.
+        try {
         await withAiRequest(
           scopeFromUserContext(ctx, supabase),
-          { feature: 'chat.assistant', text: 'Assistant chat', kind: 'feature', conversationId },
+          {
+            feature: 'chat.assistant', text: 'Assistant chat', kind: 'feature', conversationId,
+            clientRequestId: turnKey.key ? assistantTurnRequestKey(turnKey.key) : null,
+          },
           async (obs) => {
         let content = '';
         let responseError: string | undefined;
@@ -187,8 +209,11 @@ export async function POST(req: NextRequest) {
           console.error('AI stream error:', streamErr);
           // Recorded now, before the fallback: what broke FIRST is the diagnosis,
           // and `partial` distinguishes "the stream died having said nothing"
-          // from "the family got half an answer".
-          obs.failed(streamErr, { partial: Boolean(content) });
+          // from "the family got half an answer". A tool that already ran is
+          // part of the answer too: such a turn has no fallback, its exchange is
+          // saved, and a keyed retry must replay it rather than read "did not
+          // finish" and run the tools a second time (as the engine does).
+          obs.failed(streamErr, { partial: Boolean(content) || actions.length > 0 });
           // Resilience: if streaming failed before producing any text (e.g. a proxy
           // buffered/blocked the SSE response), fall back to a single non-streaming
           // run so the assistant still works. Only surface an error if that fails too.
@@ -218,9 +243,14 @@ export async function POST(req: NextRequest) {
         // Persist both turns + the structured actions, then finish the conversation.
         let persistenceError: unknown = null;
         const { error: messageInsertError } = await supabase.from('ai_messages').insert([
-            { family_id: familyId, conversation_id: conversationId, role: 'user', content: message },
+            // Bound to this turn's request (0250 `request_id`), so speech and a
+            // retried send find this answer exactly, never by time.
+            { family_id: familyId, conversation_id: conversationId, role: 'user', content: message, request_id: obs.requestId },
             {
               family_id: familyId, conversation_id: conversationId, role: 'assistant', content: assistantContent,
+              request_id: obs.requestId,
+              // Saved with the answer, so a retry that finds this exchange
+              // before the row settles still knows it was cut off.
               structured_content: toStructuredContent([], [], responseError),
               tool_calls: actions.length ? (actions.map((a) => ({ name: a.name, args: a.args })) as unknown as Database['public']['Tables']['ai_messages']['Insert']['tool_calls']) : null,
               tool_results: actions.length ? (actions.map((a) => ({ name: a.name, ...summarizeToolResult(a.result) })) as unknown as Database['public']['Tables']['ai_messages']['Insert']['tool_results']) : null,
@@ -229,6 +259,11 @@ export async function POST(req: NextRequest) {
         if (messageInsertError) {
           persistenceError = messageInsertError;
           console.error('[ai-chat] message persistence failed', messageInsertError);
+          // The answer was streamed and its tools ran, but the exchange was not
+          // saved. Partial, not completed: a retry must learn it cannot be
+          // replayed, rather than read "answered" and find nothing (as the
+          // engine does, #875 review 5970538108).
+          obs.failed(new Error(`Turn not persisted: ${messageInsertError.message}`), { partial: true });
         } else {
           const { data: conv, error: titleReadError } = await supabase.from('ai_conversations').select('title').eq('id', conversationId).maybeSingle();
           if (titleReadError) {
@@ -257,10 +292,20 @@ export async function POST(req: NextRequest) {
         }
 
         obs.used(provider.model, undefined);
-        send({ type: 'done', content: assistantContent, persisted: !persistenceError });
+        // The turn's request id, so a spoken answer rides on this exchange (F19).
+        send({ type: 'done', content: assistantContent, persisted: !persistenceError, requestId: obs.requestId });
         if (connected) controller.close();
           },
         );
+        } catch (err) {
+          // Another attempt with this send's key filed the turn first; this
+          // one ran nothing and counts nothing.
+          // Or the turn could not be recorded: keyed, an earlier attempt's
+          // outcome is unknown, so nothing ran (fail closed).
+          if (!(err instanceof AiRequestDuplicate) && !(err instanceof AiRequestNotFiled)) throw err;
+          send({ type: 'error', error: t(err instanceof AiRequestDuplicate ? 'ai.thisMessageIsAlreadyBeingAnswered' : 'ai.accountContextIsTemporarilyUnavailable') });
+          if (connected) controller.close();
+        }
       },
     });
 
