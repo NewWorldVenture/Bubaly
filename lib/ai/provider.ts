@@ -205,6 +205,13 @@ export function describeAIError(err: unknown): { code: string; message: string; 
   const has = (re: RegExp) => re.test(raw);
   if (err instanceof Error && err.name === 'AbortError')
     return { code: 'cancelled', message: 'That request was cancelled.', detail };
+  // The family's monthly allowance refused the request at admission (F19,
+  // `AiRequestOverAllowance` in lib/ai/observability — matched by name, so this
+  // module stays free of it). Its message is already the reader-facing refusal
+  // with the cap; read as "Something went wrong… try again" it told a family at
+  // its limit to retry a request that cannot succeed this month.
+  if (err instanceof Error && err.name === 'AiRequestOverAllowance')
+    return { code: 'allowance_exceeded', message: raw, detail };
   if (has(/not configured|missing.*key|no api key/i))
     return { code: 'unconfigured', message: 'The AI engine isn’t set up yet. Add an OpenAI API key in Admin → AI Engine.', detail };
   if (has(/insufficient_quota|exceeded your current quota|billing|payment required|\b402\b/i))
