@@ -366,11 +366,11 @@ test.describe('form errors: what an invalid, refused and recovered submit expose
           await dialog.getByRole('button', { name: 'Add Contact' }).click();
           await expect(alertsReading(page, COPY.nameRequired)).toHaveCount(1);
           const [box] = await toastBoxes(page);
-          // pl-4, and pr-[calc(5rem+var(--safe-right))]: the corner column
+          // pl-4, and pr-[calc(4.75rem+var(--safe-right))]: the corner column
           // (Quick capture and the orb, 3.5rem wide at right 1rem) plus a
-          // 0.5rem gap. 390 - 16 - 64 = 310.
+          // 0.25rem gap. 390 - 76 = 314.
           expect(Math.abs(box.left - 16)).toBeLessThanOrEqual(1);
-          expect(Math.abs(box.right - (390 - 80))).toBeLessThanOrEqual(1);
+          expect(Math.abs(box.right - (390 - 76))).toBeLessThanOrEqual(1);
           // bottom-[calc(5rem+var(--safe-bottom))]: the stack (not a toast,
           // which fades in from below) ends clear of the 4rem tab bar.
           const stackBottom = await page.evaluate(() => document.querySelector('.pointer-events-none.fixed:has(> [role="alert"])')!.getBoundingClientRect().bottom);
@@ -385,10 +385,10 @@ test.describe('form errors: what an invalid, refused and recovered submit expose
       // (plus the safe area), right 1rem. From lg the toast stack sits at the
       // same edge (right 1rem), lifted to bottom 10rem, clear of the orb's top
       // at 9.5rem; below lg it sits above the tab bar, level with Quick
-      // capture, and stops 5rem from the right edge, left of the column both
-      // buttons sit in (3.5rem wide at right 1rem, plus a 0.5rem gap). These
-      // cases put up one short notice, one long one (German, the longest the
-      // contact form can be made to say) and three at once on
+      // capture, and stops 4.75rem from the right edge, left of the column
+      // both buttons sit in (3.5rem wide at right 1rem, plus a 0.25rem gap).
+      // These cases put up one short notice, one long one (German, the
+      // longest the contact form can be made to say) and three at once on
       // /dashboard/contacts with no dialog open, and record: every control a
       // toast's box intersects, what a pointer at each corner button's centre
       // lands on, and that each button is still reached and opened from the
@@ -443,7 +443,7 @@ test.describe('form errors: what an invalid, refused and recovered submit expose
       }, { selector: TOASTS, ...names });
 
       /** Raises `state` from the contact dialog on /dashboard/contacts, holds the notices by hovering them, and closes the dialog. */
-      async function raiseNotices(page: Page, state: CornerState) {
+      async function raiseNotices(page: Page, state: CornerState, { keepDialog = false } = {}) {
         let dialog: Locator;
         let name: Locator;
         if (state === 'long') {
@@ -482,11 +482,60 @@ test.describe('form errors: what an invalid, refused and recovered submit expose
         // corner button's centre by elementFromPoint, not by moving it.
         const notices = page.locator(TOASTS);
         await notices.last().hover();
+        if (keepDialog) {
+          await expect(notices).toHaveCount(state === 'stacked' ? 3 : 1);
+          return notices;
+        }
         await page.keyboard.press('Escape');
         await expect(dialog).toBeHidden();
         await expect(notices).toHaveCount(state === 'stacked' ? 3 : 1);
         return notices;
       }
+
+      /**
+       * Below the stack with the contact dialog open (a bottom sheet below
+       * sm): every control of the dialog a visible notice's box intersects,
+       * and those whose centre a notice takes (a tap there lands on the
+       * notice).
+       */
+      const dialogReport = (page: Page) => page.evaluate(async (selector) => {
+        await document.fonts.ready;
+        const toasts = Array.from(document.querySelectorAll(selector));
+        await Promise.all(toasts.flatMap((t) => t.getAnimations({ subtree: true }))
+          .filter((a) => a.effect?.getComputedTiming().endTime !== Infinity)
+          .map((a) => a.finished.catch(() => undefined)));
+        const stack = toasts[0]?.parentElement ?? null;
+        const boxes = toasts.map((t) => t.getBoundingClientRect());
+        const nameOf = (el: Element) => ((el as HTMLInputElement).labels?.[0]?.textContent || el.getAttribute('aria-label') || el.textContent || '').replace(/\s*\*$/, '').replace(/\s+/g, ' ').trim();
+        const covered: string[] = [];
+        const intercepted: string[] = [];
+        for (const el of Array.from(document.querySelectorAll('[role="dialog"] button, [role="dialog"] input, [role="dialog"] textarea, [role="dialog"] select'))) {
+          const b = el.getBoundingClientRect();
+          if (!b.width || !b.height) continue;
+          if (!boxes.some((t) => t.left < b.right && t.right > b.left && t.top < b.bottom && t.bottom > b.top)) continue;
+          covered.push(nameOf(el));
+          const hit = document.elementFromPoint(b.left + b.width / 2, b.top + b.height / 2);
+          if (hit && stack?.contains(hit)) intercepted.push(nameOf(el));
+        }
+        return { covered: covered.sort(), intercepted: intercepted.sort() };
+      }, TOASTS);
+
+      /** For the named page control: what a pointer at its centre lands on ("toast" inside the stack), and the largest box overlap with a notice, in px. */
+      const underNotice = (page: Page, name: string) => page.evaluate(({ selector, name }) => {
+        const toasts = Array.from(document.querySelectorAll(selector));
+        const stack = toasts[0]?.parentElement ?? null;
+        const target = Array.from(document.querySelectorAll('button, a[href]')).find((el) => !stack?.contains(el) && (el.textContent ?? '').replace(/\s+/g, ' ').trim() === name);
+        if (!target) return null;
+        const b = target.getBoundingClientRect();
+        let overlap: [number, number] = [0, 0];
+        for (const t of toasts.map((x) => x.getBoundingClientRect())) {
+          const w = Math.min(b.right, t.right) - Math.max(b.left, t.left);
+          const h = Math.min(b.bottom, t.bottom) - Math.max(b.top, t.top);
+          if (w > 0 && h > 0 && w * h > overlap[0] * overlap[1]) overlap = [Math.round(w), Math.round(h)];
+        }
+        const hit = document.elementFromPoint(b.left + b.width / 2, b.top + b.height / 2);
+        return { centre: hit && stack?.contains(hit) ? 'toast' : name, overlap, size: [Math.round(b.width), Math.round(b.height)] };
+      }, { selector: TOASTS, name });
 
       /**
        * Who takes a tap at a corner button's centre: "toast" for any point
@@ -526,13 +575,44 @@ test.describe('form errors: what an invalid, refused and recovered submit expose
         '390x844 long': { covered: ['Sprache ändern'], capture: DE.capture, ai: DE.ai },
         '390x844 stacked': { covered: ['Change language'], capture: QC, ai: AI },
         // RESIDUAL, recorded as it is, not accepted: at 360 the stack is
-        // 264px wide, and the long German notice wraps to 7 lines (166px; 5
-        // lines, 126px, at full width). It then reaches this empty page's
-        // "Ersten Kontakt hinzufügen" as well as the language bar. Three
-        // notices reach "Add First Contact" at any width. Measured on #778.
+        // 268px wide and the long German notice wraps to 6 lines (146px; 5
+        // lines, 126px, at full width; 7 lines at the 264px of a 5rem
+        // inset). Its box still reaches the edge of this empty page's
+        // "Ersten Kontakt hinzufügen", whose centre stays clear (see
+        // UNDER_NOTICE), as well as the language bar. Three notices reach
+        // "Add First Contact" at any width, its centre included. Measured on
+        // #778.
         '360x780 short': { covered: ['Change language'], capture: QC, ai: AI },
         '360x780 long': { covered: ['Ersten Kontakt hinzufügen', 'Sprache ändern'], capture: DE.capture, ai: DE.ai },
         '360x780 stacked': { covered: ['Add First Contact', 'Change language'], capture: QC, ai: AI },
+      };
+      /**
+       * RESIDUAL: page content still under a notice below lg, recorded as it
+       * is, not accepted. `centre` is what a pointer at the control's centre
+       * lands on ("toast" when a notice takes it); `overlap` is the largest
+       * box overlap with one notice, width x height in px (+-2).
+       */
+      const UNDER_NOTICE: Record<string, { control: string; centre: string; overlap: [number, number] }> = {
+        // The notice's foot crosses the top 15px of the 249x44 button; its
+        // centre stays clear (at a 5rem inset a notice took it).
+        '360x780 long': { control: 'Ersten Kontakt hinzufügen', centre: 'Ersten Kontakt hinzufügen', overlap: [229, 15] },
+        // The whole 184x44 button is under the notices, and its centre with it.
+        '360x780 stacked': { control: 'Add First Contact', centre: 'toast', overlap: [184, 44] },
+      };
+      /**
+       * RESIDUAL: with the contact dialog open (a bottom sheet below sm), the
+       * dialog's own controls a notice's box covers, and those whose centre a
+       * notice takes. The relationship chips stay clear of one long notice at
+       * 360 (at a 5rem inset Sonstiges was taken and Freund covered); three
+       * notices still take Friend and Other there, as they did at full width.
+       */
+      const DIALOG_OPEN: Record<string, { covered: string[]; intercepted: string[] }> = {
+        '360x780 short': { covered: ['Phone'], intercepted: [] },
+        '360x780 long': { covered: ['Telefon'], intercepted: ['Telefon'] },
+        '360x780 stacked': { covered: ['Friend', 'Other', 'Phone'], intercepted: ['Friend', 'Other', 'Phone'] },
+        '390x844 short': { covered: ['Alternate phone'], intercepted: ['Alternate phone'] },
+        '390x844 long': { covered: ['Alternative Telefonnummer', 'Telefon'], intercepted: ['Alternative Telefonnummer', 'Telefon'] },
+        '390x844 stacked': { covered: ['Alternate phone', 'Phone'], intercepted: ['Alternate phone', 'Phone'] },
       };
       /** The placements this replaced, as measured on #778 (736e1ffd; 360x780 on f3988ccb with the replaced placement put back): from lg at bottom 1.5rem, below lg full width. */
       const BEFORE: Record<string, CornerRow> = {
@@ -586,6 +666,14 @@ test.describe('form errors: what an invalid, refused and recovered submit expose
                 }
               }
               expect(matchesCorner(report, expected)).toBe(true);
+              const residual = UNDER_NOTICE[`${w}x${h} ${state}`];
+              if (residual) {
+                const under = await underNotice(page, residual.control);
+                expect(under, `${residual.control} is on the page`).not.toBeNull();
+                expect(under!.centre).toBe(residual.centre);
+                expect(Math.abs(under!.overlap[0] - residual.overlap[0]), `overlap width ${under!.overlap[0]} of ${under!.size[0]}x${under!.size[1]}`).toBeLessThanOrEqual(2);
+                expect(Math.abs(under!.overlap[1] - residual.overlap[1]), `overlap height ${under!.overlap[1]}`).toBeLessThanOrEqual(2);
+              }
               if (w >= 1024) {
                 // lg:bottom-40: the stack (not a toast, which fades in from
                 // below) ends 10rem above the viewport's foot.
@@ -633,6 +721,26 @@ test.describe('form errors: what an invalid, refused and recovered submit expose
                 await expect(sheet.getByRole('textbox', { name: names.ask })).toBeVisible();
               }
             });
+
+            if (w < 1024) {
+              test(`${w}x${h}, ${state}, contact dialog open: the dialog's own controls under the notices, and each notice's Dismiss`, async ({ page }) => {
+                await page.setViewportSize({ width: w, height: h });
+                const notices = await raiseNotices(page, state, { keepDialog: true });
+                const report = await dialogReport(page);
+                expect(report).toEqual(DIALOG_OPEN[`${w}x${h} ${state}`]);
+                if (state === 'long') {
+                  for (const chip of ['Freund', 'Sonstiges']) expect(report.covered, `${chip} is clear`).not.toContain(chip);
+                }
+                // Each notice's own Dismiss takes its own tap and its focus.
+                const dismiss = state === 'long' ? 'Ausblenden' : 'Dismiss';
+                for (let i = 0; i < await notices.count(); i += 1) {
+                  const button = notices.nth(i).getByRole('button', { name: dismiss });
+                  expect(await hitAt(page, button)).toBe(dismiss);
+                  await button.focus();
+                  await expect(button).toBeFocused();
+                }
+              });
+            }
 
             // The negative control: the same notices, put back where the
             // placement this replaced had them (the stack's own inline style,
