@@ -4,6 +4,11 @@
       "package": "node-forge",
       "added": "2026-10-02",
       "reason": "node-forge <=1.4.0 RSA PKCS#1 v1.5 signature check; no patched release yet. Reached only through expo -> @expo/cli / @expo/code-signing-certificates (build tooling). Remove when node-forge ships a fix."
+    },
+    "GHSA-vfj7-8cjw-p6xm": {
+      "package": "braces",
+      "added": "2026-10-03",
+      "reason": "braces <=3.0.3 stack-exhaustion DoS on deeply nested patterns; no patched release yet. Reached only through expo -> @expo/cli -> @expo/metro-file-map -> micromatch (build tooling). Remove when braces ships a fix."
     }
   }
 }
