@@ -613,6 +613,7 @@ export async function generatePlanAction(prompt: string, kidAges: number[]): Pro
   if (!access.ok) return { items: [], error: denialMessage(access, t) };
 
   const plan = await generateChorePlan(scopeFromUserContext(ctx, supabase), prompt, ages.data);
+  if (plan.allowanceLimit !== undefined) return { items: [], error: t('ai.yourFamilyUsedItsMonthlyAllowance', { limit: plan.allowanceLimit }) };
   if (plan.providerFailure) return { items: [], error: t('ai.aiIsTemporarilyUnavailable') };
   return plan.error === undefined ? { items: plan.items } : { items: plan.items, error: plan.error };
 }

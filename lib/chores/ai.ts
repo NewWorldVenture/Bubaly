@@ -5,7 +5,7 @@
 // penalised by an AI outage.
 import 'server-only';
 import { describeAIError, getProvider, type AIImage, type AIProvider } from '@/lib/ai/provider';
-import { withAiRequest } from '@/lib/ai/observability';
+import { AiRequestOverAllowance, withAiRequest } from '@/lib/ai/observability';
 import type { ServiceScope } from '@/lib/services/types';
 
 export type ValidationStatus = 'approved' | 'needs_improvement' | 'unclear' | 'rejected' | 'parent_review_required';
@@ -169,6 +169,13 @@ export type ChorePlanResult = {
    * the caller can say it in the family's language.
    */
   providerFailure?: string;
+  /**
+   * Set when the family's monthly allowance refused the request at admission
+   * (F19): the cap, so the caller can say so in the family's language. Nothing
+   * ran. Not a provider failure — "temporarily unavailable" would send a family
+   * at its limit back to retry a request that cannot succeed this month.
+   */
+  allowanceLimit?: number;
 };
 
 /** What a provider failure says, here and on the request row: never its own words. */
@@ -211,7 +218,10 @@ export async function generateChorePlan(
         return { items: parsed.map(normalizePlanItem).filter(Boolean) as ChorePlanItem[] };
       },
     );
-  } catch {
+  } catch (err) {
+    // The admission refused the request (another one took the 10th): nothing
+    // ran, and it is the allowance, not an outage.
+    if (err instanceof AiRequestOverAllowance) return { items: [], error: err.message, allowanceLimit: err.allowance };
     // Nothing above throws on purpose any more; whatever does is not the
     // family's to read either.
     return { items: [], error: PROVIDER_FAILED, providerFailure: 'unknown' };
