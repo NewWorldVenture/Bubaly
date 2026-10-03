@@ -21,6 +21,9 @@ import {
 } from '../idempotency';
 import { fail, ok, SERVICE_CODES, type ServiceResult, type ServiceScope } from '../types';
 import { escapeLike } from '@/lib/supabase/escape-like';
+import { makeKey } from '../idempotency';
+import { scopeNow } from '../scope';
+import { nextChoreDueAt } from '@/lib/chores/respawn';
 import { getTranslations } from '@/lib/i18n/server';
 
 export type TodoList = Tables<'todo_lists'>;
@@ -721,6 +724,58 @@ export async function assignChore(
     return fail(describeDbError(error, 'Could not assign that chore.'), { code: SERVICE_CODES.db });
   }
   return ok(data);
+}
+
+/**
+ * The next assignment of a recurring chore, once one of its assignments is
+ * approved.
+ *
+ * A chore with a cadence was ONE assignment: approval closed it and nothing
+ * created the next, so a daily "make your bed" was done once, ever, and the
+ * board's Daily tab emptied after day one. This creates the following
+ * assignment for the same child, due per `nextChoreDueAt`, unless they
+ * already have an open one for the chore. It is keyed (`tasks.respawnChore`,
+ * chore, member, due) through 0256's unique index, so the two approval screens,
+ * or two approvals arriving together, create one; a refused insert whose key
+ * is already in the table reports `respawned: false` rather than failing.
+ * `{ assignment: null }` when the chore does not repeat.
+ */
+export async function respawnChoreAssignment(
+  scope: ServiceScope,
+  input: { assignment: { chore_id: string; member_id: string; due_at: string | null }; recurrence: string | null | undefined },
+): Promise<ServiceResult<{ assignment: ChoreAssignment | null; respawned: boolean }>> {
+  const dueAt = nextChoreDueAt(input.assignment.due_at, input.recurrence, scopeNow(scope).toISOString());
+  if (!dueAt) return ok({ assignment: null, respawned: false });
+
+  const { data: open, error: openError } = await scope.db
+    .from('chore_assignments')
+    .select('id')
+    .eq('family_id', scope.familyId)
+    .eq('chore_id', input.assignment.chore_id)
+    .eq('member_id', input.assignment.member_id)
+    .in('status', ['todo', 'in_progress'])
+    .limit(1);
+  if (openError) {
+    console.error('[service:tasks] open assignment lookup failed', openError);
+    return fail(describeDbError(openError, 'Could not check that chore.'), { code: SERVICE_CODES.db });
+  }
+  if (open && open.length > 0) return ok({ assignment: null, respawned: false });
+
+  const idempotencyKey = makeKey(['tasks.respawnChore', scope.familyId, input.assignment.chore_id, input.assignment.member_id, dueAt]);
+  const created = await assignChore(scope, { choreId: input.assignment.chore_id, memberId: input.assignment.member_id, dueAt, idempotencyKey });
+  if (created.ok) return ok({ assignment: created.data, respawned: true });
+
+  // `assignChore` folds every write error into one message. The one that is
+  // not a failure here is 0256 refusing a key already written — by the other
+  // approval screen, or by this one a moment ago.
+  const { data: existing } = await scope.db
+    .from('chore_assignments')
+    .select('id')
+    .eq('family_id', scope.familyId)
+    .eq('idempotency_key', idempotencyKey)
+    .maybeSingle();
+  if (existing) return ok({ assignment: null, respawned: false });
+  return created;
 }
 
 /**
