@@ -385,8 +385,13 @@ export function expenseSuggestions(s: FamilySnapshot, locale: LocaleCode, t: Tra
   for (const sub of s.subscriptions) {
     if (sub.status !== 'active' && sub.status !== 'trial') continue;
 
-    if (sub.nextCharge) {
-      const d = daysUntil(s.today, sub.nextCharge);
+    // Where the charge falls TODAY, not the day typed in when the subscription
+    // was added (lib/finance/hub.ts `projectedNextCharge`). Nothing rolls
+    // `next_charge`, so measured against the stored date this heads-up fired
+    // for one cycle and never again; the key below carries the cycle.
+    const charge = projectedNextCharge(sub.nextCharge, sub.cadence, s.today);
+    if (charge) {
+      const d = daysUntil(s.today, charge);
       if (d >= 0 && d <= 7) {
         const titleFacts: SubscriptionTitleFacts = { kind: 'charge', name: sub.name, amountCents: sub.costCents, inDays: d };
         out.push({
@@ -401,8 +406,8 @@ export function expenseSuggestions(s: FamilySnapshot, locale: LocaleCode, t: Tra
           sourceKind: 'subscriptions_tracked',
           sourceId: sub.id,
           memberId: null,
-          dedupeKey: `sub-charge:${sub.id}:${isoDay(sub.nextCharge)}`,
-          expiresAt: `${isoDay(sub.nextCharge)}T23:59:59Z`,
+          dedupeKey: `sub-charge:${sub.id}:${charge}`,
+          expiresAt: `${charge}T23:59:59Z`,
         });
       }
     }
@@ -566,6 +571,7 @@ export function insuranceSuggestions(s: FamilySnapshot): SuggestionDraft[] {
 }
 
 import { confidenceAdjustment, clampConfidence, clampUrgency as clampU, type MemberTraits } from '@/lib/autopilot/twin';
+import { projectedNextCharge } from '@/lib/finance/hub';
 
 /**
  * Apply the Digital Twin's per-member reliability traits to a draft, bending its

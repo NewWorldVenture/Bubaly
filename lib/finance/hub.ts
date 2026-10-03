@@ -127,6 +127,48 @@ export function billPaidPatch(bill: RecurringBillLike, today: string): BillPaidP
   return next ? { status: 'upcoming', due_date: next } : { status: 'paid' };
 }
 
+// ── Subscriptions ───────────────────────────────────────────────────────────
+
+/** The cadence a subscription is billed on: the module's four plus the forecast's aliases; anything else reads as monthly, as the forecast does. */
+export function subscriptionCadence(cadence: string | null | undefined): BillCadence {
+  return (cadence ? CADENCES[cadence.toLowerCase()] : undefined) ?? 'monthly';
+}
+
+/**
+ * The first occurrence of the series anchored at `anchor` that falls ON OR
+ * AFTER `today` — `anchor` itself while it has not passed. Null when `anchor`
+ * is not a calendar day. (`nextBillDueDate` is the strictly-after sibling a
+ * payment needs; a charge still coming today is still coming.)
+ */
+export function nextOccurrenceOnOrAfter(anchor: string, cadence: BillCadence, today: string): string | null {
+  const start = parseDayKey(anchor);
+  if (!start) return null;
+  const from = anchor.slice(0, 10);
+  const floor = parseDayKey(today) ? today.slice(0, 10) : from;
+  if (from >= floor) return from;
+  for (let n = 1; n <= 5000; n += 1) {
+    const next = stepFrom(start, cadence, n);
+    if (next >= floor) return next;
+  }
+  return null;
+}
+
+/**
+ * Where a subscription's next charge falls TODAY.
+ *
+ * `subscriptions_tracked.next_charge` is typed in by hand and nothing rolls
+ * it, so after its first cycle it is a date in the past. The autopilot's
+ * "charge in N days" heads-up (lib/autopilot/engine.ts) measured against it
+ * and never fired again, and the Subscriptions module said "Next on" about a
+ * day already gone. Projected onto the cadence the stored date is the
+ * series' anchor — the 14th stays the 14th — which is how the forecast
+ * (lib/finance/timeline.ts) has always walked it.
+ */
+export function projectedNextCharge(nextCharge: string | null | undefined, cadence: string | null | undefined, today: string): string | null {
+  if (!nextCharge) return null;
+  return nextOccurrenceOnOrAfter(nextCharge.slice(0, 10), subscriptionCadence(cadence), today);
+}
+
 export const DUE_META: Record<DueStatus, { label: string; tint: string }> = {
   paid: { label: 'Paid', tint: 'bg-emerald-500/15 text-emerald-300' },
   overdue: { label: 'Overdue', tint: 'bg-rose-500/15 text-rose-300' },
