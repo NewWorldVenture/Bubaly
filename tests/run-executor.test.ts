@@ -23,7 +23,7 @@ type FakeRun = RunSnapshot & Partial<RunRow>;
 const FAMILY = 'fam-1';
 const RUN_ID = 'run-1';
 
-type ToolCall = { name: string; args: unknown; opts: { idempotencyKey: string; skipTrust: boolean; stepId: string } };
+type ToolCall = { name: string; args: unknown; opts: { fallbackIdempotencyKey: string; skipTrust: boolean; stepId: string } };
 
 type FakeOptions = {
   steps: Array<Partial<StepSnapshot> & { id: string }>;
@@ -129,7 +129,7 @@ function makeFake(options: FakeOptions): Fake {
       return options.scopeError ? fail(options.scopeError, { code: 'denied' }) : ok(scope);
     },
     async runTool(_scope, name, args, opts) {
-      const call: ToolCall = { name, args, opts: { idempotencyKey: opts.idempotencyKey, skipTrust: opts.skipTrust, stepId: opts.stepId } };
+      const call: ToolCall = { name, args, opts: { fallbackIdempotencyKey: opts.fallbackIdempotencyKey, skipTrust: opts.skipTrust, stepId: opts.stepId } };
       fake.calls.push(call);
       const attempt = (attempts.get(opts.stepId) ?? 0) + 1;
       attempts.set(opts.stepId, attempt);
@@ -488,7 +488,7 @@ describe('failure handling', () => {
     expect(fake.run.error).toBe('0 of 1 step completed — 1 failed.');
   });
 
-  it('uses the same idempotency key on every attempt, so a retry cannot duplicate a write', async () => {
+  it('hands the same step key to every attempt, as the fallback, so a retry cannot duplicate a write', async () => {
     const fake = makeFake({
       steps: [{ id: 's1', tool_name: 'calendar.createEvent', max_retries: 2 }],
       tool: () => ({ status: 'error', error: 'Connection reset.', retryable: true, toolCallId: null }),
@@ -496,7 +496,10 @@ describe('failure handling', () => {
 
     await runGraphWith(fake.port, RUN_ID, { budgetMs: 60_000 });
 
-    const keys = new Set(fake.calls.map((c) => c.opts.idempotencyKey));
+    // The FALLBACK key: executeTool prefers the tool's natural key within the
+    // run (two-steps-that-do-the-same-thing.test.ts), and takes this one when
+    // the tool has none. Either way every attempt of a step carries the same.
+    const keys = new Set(fake.calls.map((c) => c.opts.fallbackIdempotencyKey));
     expect(keys.size).toBe(1);
     expect([...keys][0]).toBe(stepIdempotencyKey(FAMILY, RUN_ID, 's1', 'calendar.createEvent'));
   });

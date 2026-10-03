@@ -155,7 +155,7 @@ export type ExecutorPort = {
     scope: ServiceScope,
     name: string,
     args: unknown,
-    opts: { runId: string; stepId: string; requestId: string | null; idempotencyKey: string; skipTrust: boolean },
+    opts: { runId: string; stepId: string; requestId: string | null; fallbackIdempotencyKey: string; skipTrust: boolean },
   ): Promise<ToolOutcome>;
   requestApproval(scope: ServiceScope, run: RunSnapshot, step: StepSnapshot): Promise<ServiceResult<{ id: string }>>;
   loadApproval(scope: ServiceScope, approvalId: string): Promise<ServiceResult<ApprovalSnapshot | null>>;
@@ -216,6 +216,13 @@ export const MAX_REPLANS_PER_RUN = 2;
  * retried, the same key reaches the `ai_tool_calls` ledger, so a first attempt
  * that actually succeeded before the response was lost returns its original
  * result instead of writing a second row.
+ *
+ * It is the FALLBACK key, not the only one. A tool that defines a natural key
+ * (title + time, the shape of the thing being created) is keyed by that within
+ * the run, so two steps of one plan that create the same thing collapse to one
+ * write; this key is taken when the tool has none (finalaudit Q41). Handing it
+ * to `executeTool` as `idempotencyKey` made it win outright and left the
+ * natural-key branch unreachable from a plan.
  */
 export function stepIdempotencyKey(familyId: string, runId: string, stepId: string, toolName: string): string {
   return createHash('sha256').update([familyId, runId, stepId, toolName].join(' ')).digest('hex');
@@ -961,7 +968,9 @@ async function runToolStep(
     runId: run.id,
     stepId: step.id,
     requestId: run.request_id,
-    idempotencyKey: stepIdempotencyKey(run.family_id, run.id, step.id, toolName),
+    // The step key is the fallback: a tool with a natural key is deduplicated
+    // across the run's steps by that key instead (Q41).
+    fallbackIdempotencyKey: stepIdempotencyKey(run.family_id, run.id, step.id, toolName),
     // An approval a person already decided is not re-gated: doing so would open
     // a second approval row for work the family has already said yes to.
     skipTrust: approvedPayload !== null || (step.approval_required && !!step.approval_id),
@@ -1267,7 +1276,7 @@ export function createExecutorPort(db: SupabaseClient<Database>, opts: ExecutorP
         runId: opts.runId,
         stepId: opts.stepId,
         requestId: opts.requestId,
-        idempotencyKey: opts.idempotencyKey,
+        fallbackIdempotencyKey: opts.fallbackIdempotencyKey,
         skipTrust: opts.skipTrust,
       });
     },

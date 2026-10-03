@@ -95,6 +95,16 @@ export type ExecuteToolOptions = {
   confidence?: number;
   idempotencyKey?: string | null;
   /**
+   * The key for a call whose tool defines no natural key. The run executor
+   * supplies its step key here — household + run + step + tool, with no
+   * argument hash, so a retried step whose recomputed arguments moved still
+   * finds its own receipt. Inside a run a tool's natural key beats it: two
+   * steps of one plan that create the same thing collapse to one write
+   * (finalaudit Q41). A caller that wants its key to win outright uses
+   * `idempotencyKey`.
+   */
+  fallbackIdempotencyKey?: string | null;
+  /**
    * Skip the trust gate. The ONLY legitimate caller is the run executor
    * replaying a step whose `approval_requests` row is already approved: the
    * approval was the gate, and re-evaluating it would open a second approval
@@ -179,7 +189,11 @@ function ledgerClient(): DB | null {
  *
  * Within a context, the tool's own natural key (title + time, the shape of the
  * thing being created) beats the argument hash, because two steps can ask for
- * the same event with differently-spelled arguments.
+ * the same event with differently-spelled arguments. The run executor used to
+ * hand its step key in as `idempotencyKey`, which won outright and made the
+ * natural-key branch unreachable from a plan: two steps creating the same
+ * thing got two keys and wrote it twice (finalaudit Q41). It now hands the
+ * step key in as the FALLBACK, taken only when the tool has no natural key.
  */
 function resolveIdempotencyKey(scope: ServiceScope, tool: ToolDefinition, input: unknown, opts: ExecuteToolOptions): string {
   const supplied = opts.idempotencyKey ?? scope.idempotencyKey ?? null;
@@ -190,7 +204,10 @@ function resolveIdempotencyKey(scope: ServiceScope, tool: ToolDefinition, input:
     // Deliberately keyed by the run/request and NOT the step: the duplicate a
     // plan actually produces is two steps creating the same thing.
     if (natural) return makeKey([scope.familyId, scope.runId ?? scope.requestId ?? null, tool.name, natural]);
-    return scopeKey(scope, tool.name, input);
+    // No natural key: the executor's step key, which carries no argument hash
+    // so a retry with recomputed arguments is still the same step; or, for a
+    // caller that supplied none, the full argument hash under run + step.
+    return opts.fallbackIdempotencyKey ?? scopeKey(scope, tool.name, input);
   }
   return makeKey([scope.familyId, tool.name, 'once', crypto.randomUUID()]);
 }
@@ -652,7 +669,7 @@ export async function executeTool(
     return { status: 'denied', reason: `Bubaly has no tool called "${name}", so nothing was done.`, toolCallId: null };
   }
 
-  const callScope: ServiceScope = {
+  const context: ServiceScope = {
     ...scope,
     runId: opts.runId ?? scope.runId ?? null,
     stepId: opts.stepId ?? scope.stepId ?? null,
@@ -671,6 +688,19 @@ export async function executeTool(
     };
   }
   const input = parsed.data;
+
+  // ── The key this call is known by ─────────────────────────────────────────
+  // Resolved before anything runs, so the services see the SAME key the ledger
+  // reserves under: the row-level duplicate guard (0256) and `ai_tool_calls`
+  // then agree about which two calls are one call. Inside a run or request that
+  // is the tool's natural key when it has one and the executor's step key
+  // otherwise. A bare chat call keeps no key on its scope, exactly as before:
+  // its ledger key is unique and nothing of it is deduplicated. Read-only tools
+  // have no ledger row and no key to carry.
+  const key = resolveIdempotencyKey(context, tool, input, opts);
+  const callScope: ServiceScope = !tool.readOnly && (context.runId || context.stepId || context.requestId || context.idempotencyKey)
+    ? { ...context, idempotencyKey: key }
+    : context;
 
   // ── 3. Trust ─────────────────────────────────────────────────────────────
   let gated: Gate;
@@ -715,7 +745,6 @@ export async function executeTool(
     };
   }
 
-  const key = resolveIdempotencyKey(callScope, tool, input, opts);
   const reservation = await reserveCall(ledger, callScope, tool, key, input);
   if (reservation.status === 'error') {
     return { status: 'error', error: reservation.error, retryable: true, toolCallId: null };
