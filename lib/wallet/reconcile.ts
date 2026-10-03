@@ -16,6 +16,7 @@
 //  9. Reversal direction mismatch  — a reversal pointing the same way as its original
 // 10. Reversal of uncounted        — a counted reversal of an original that never counted
 // 11. Unanchored reversal          — a reversal that names no original at all
+// 12. Reversal cycle               — reversals whose chain of originals loops back
 //
 // Check 6 replaces a "bucket sum drift" check that compared Σ(bucket balances)
 // against the wallet total. Both sides were accumulated from the same `v` in the
@@ -57,7 +58,8 @@ export type AnomalyKind =
   | 'reversal_wallet_mismatch'
   | 'reversal_direction_mismatch'
   | 'reversal_of_uncounted'
-  | 'unanchored_reversal';
+  | 'unanchored_reversal'
+  | 'reversal_cycle';
 
 export type Anomaly = {
   kind: AnomalyKind;
@@ -217,6 +219,51 @@ export function reconcileLedger(txns: ReconTxn[], now: Date = new Date()): Recon
     });
   }
 
+  // A chain of reversals has to end at a transaction that is not a reversal.
+  // Two reversals naming each other each pass every check above — opposite
+  // directions, equal cents, a completed "original", one reversal apiece — yet
+  // neither undoes anything that happened. Walk `reverses_id` from every
+  // reversal; a walk that comes back on itself is a loop, reported once with
+  // its members and any reversal whose chain runs into it. A walk that stops at
+  // a missing or unnamed original is the orphan/unanchored checks' business.
+  const loopOf = new Map<string, string | null>(); // reversal id → loop key, or null when the chain ends
+  const loops = new Map<string, { members: string[]; feeders: string[] }>();
+  for (const start of txns) {
+    if (start.type !== 'reversal' || loopOf.has(start.id)) continue;
+    const path: string[] = [];
+    const onPath = new Map<string, number>();
+    let cur: ReconTxn | undefined = start;
+    let key: string | null = null;
+    while (cur && cur.type === 'reversal') {
+      if (loopOf.has(cur.id)) { key = loopOf.get(cur.id) ?? null; break; }
+      const seen = onPath.get(cur.id);
+      if (seen !== undefined) {
+        const members = path.slice(seen);
+        key = members[0];
+        loops.set(key, { members, feeders: [] });
+        break;
+      }
+      onPath.set(cur.id, path.length);
+      path.push(cur.id);
+      cur = cur.reverses_id ? byId.get(cur.reverses_id) : undefined;
+    }
+    for (const id of path) {
+      loopOf.set(id, key);
+      if (key && !loops.get(key)!.members.includes(id)) loops.get(key)!.feeders.push(id);
+    }
+  }
+  for (const { members, feeders } of loops.values()) {
+    const rows = [...members, ...feeders].map((id) => byId.get(id)!);
+    const first = byId.get(members[0])!;
+    anomalies.push({
+      kind: 'reversal_cycle', severity: 'high', childWalletId: first.child_wallet_id,
+      detail: `Reversals ${members.join(' → ')} reverse each other in a loop, so none of them undoes a real transaction`
+        + (feeders.length ? `; ${feeders.join(', ')} ${feeders.length === 1 ? 'reverses' : 'reverse'} into it` : ''),
+      amountCents: rows.reduce((sum, t) => sum + (t.status === 'completed'
+        ? (t.direction === 'credit' ? 1 : -1) * Math.max(0, Math.trunc(t.amount_cents)) : 0), 0),
+    });
+  }
+
   // Per-wallet anomalies: negative total, negative bucket, unattributed money
   for (const walletId of wallets) {
     const total = walletTotals.get(walletId) ?? 0;
@@ -275,6 +322,7 @@ const ANOMALY_LABELS: Record<AnomalyKind, string> = {
   reversal_direction_mismatch: 'Reversal in the same direction',
   reversal_of_uncounted: 'Reversal of an uncounted transaction',
   unanchored_reversal: 'Reversal with no original',
+  reversal_cycle: 'Reversals that reverse each other',
 };
 
 export function anomalyLabel(kind: AnomalyKind): string {

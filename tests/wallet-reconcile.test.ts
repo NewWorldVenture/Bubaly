@@ -415,3 +415,112 @@ describe('reconcileLedger — reversal integrity', () => {
     expect(anomalyLabel('unanchored_reversal')).toBe('Reversal with no original');
   });
 });
+
+// ── A reversal chain has to end at a real transaction ────────────────────────
+//
+// Review 5971795342 on #911: two completed reversals that name each other as
+// their original each passed every check above — opposite directions, equal
+// cents, same wallet, a completed "original", one reversal per original — so
+// the ledger read healthy while neither row undid anything that happened.
+// Following `reverses_id` from any reversal must reach a transaction that is
+// not itself a reversal; a chain that comes back on itself never does.
+describe('reconcileLedger — reversal cycles', () => {
+  const kinds = (r: ReturnType<typeof reconcileLedger>) => r.anomalies.map((a) => a.kind);
+  const cycles = (r: ReturnType<typeof reconcileLedger>) => r.anomalies.filter((a) => a.kind === 'reversal_cycle');
+
+  it('flags two reversals that reverse each other (the reviewer’s rows)', () => {
+    const r = reconcileLedger([
+      txn({ id: 'a', type: 'reversal', reverses_id: 'b', direction: 'credit', amount_cents: 1000 }),
+      txn({ id: 'b', type: 'reversal', reverses_id: 'a', direction: 'debit', amount_cents: 1000 }),
+    ], NOW);
+    expect(kinds(r)).toEqual(['reversal_cycle']);
+    expect(r.anomalies[0].severity).toBe('high');
+    expect(r.anomalies[0].detail).toContain('a');
+    expect(r.anomalies[0].detail).toContain('b');
+    expect(r.healthy).toBe(false);
+    expect(r.reversalCount).toBe(2);
+  });
+
+  it('flags a longer loop once, not once per member', () => {
+    const r = reconcileLedger([
+      txn({ id: 'top', amount_cents: 9000 }),
+      txn({ id: 'r1', type: 'reversal', reverses_id: 'r3', direction: 'debit', amount_cents: 500 }),
+      txn({ id: 'r2', type: 'reversal', reverses_id: 'r1', direction: 'credit', amount_cents: 500 }),
+      txn({ id: 'r3', type: 'reversal', reverses_id: 'r2', direction: 'debit', amount_cents: 500 }),
+    ], NOW);
+    expect(cycles(r)).toHaveLength(1);
+    for (const id of ['r1', 'r2', 'r3']) expect(cycles(r)[0].detail).toContain(id);
+  });
+
+  it('flags a reversal that names itself', () => {
+    const r = reconcileLedger([
+      txn({ id: 'top', amount_cents: 9000 }),
+      txn({ id: 'self', type: 'reversal', reverses_id: 'self', direction: 'debit', amount_cents: 300 }),
+    ], NOW);
+    expect(cycles(r)).toHaveLength(1);
+    expect(cycles(r)[0].detail).toContain('self');
+  });
+
+  it('names a reversal that chains into a loop with that loop, and reports nothing for it separately', () => {
+    const r = reconcileLedger([
+      txn({ id: 'top', amount_cents: 9000 }),
+      txn({ id: 'a', type: 'reversal', reverses_id: 'b', direction: 'credit', amount_cents: 1000 }),
+      txn({ id: 'b', type: 'reversal', reverses_id: 'a', direction: 'debit', amount_cents: 1000 }),
+      txn({ id: 'tail', type: 'reversal', reverses_id: 'a', direction: 'debit', amount_cents: 1000 }),
+    ], NOW);
+    expect(cycles(r)).toHaveLength(1);
+    expect(cycles(r)[0].detail).toContain('tail');
+    // `tail` and `b` both reverse `a`: that is a real duplicate, still reported as one.
+    expect(kinds(r).sort()).toEqual(['duplicate_reversal', 'reversal_cycle']);
+  });
+
+  it('reports two separate loops separately', () => {
+    const r = reconcileLedger([
+      txn({ id: 'a', type: 'reversal', reverses_id: 'b', direction: 'credit', amount_cents: 1000 }),
+      txn({ id: 'b', type: 'reversal', reverses_id: 'a', direction: 'debit', amount_cents: 1000 }),
+      txn({ id: 'c', child_wallet_id: 'w2', type: 'reversal', reverses_id: 'd', direction: 'credit', amount_cents: 200 }),
+      txn({ id: 'd', child_wallet_id: 'w2', type: 'reversal', reverses_id: 'c', direction: 'debit', amount_cents: 200 }),
+    ], NOW);
+    expect(cycles(r).map((a) => a.childWalletId).sort()).toEqual(['w1', 'w2']);
+  });
+
+  it('leaves a long acyclic chain of reversals healthy', () => {
+    // A purchase undone, the undo undone, and that undone again: every link
+    // reaches `a`, a real transaction, so there is nothing to report.
+    const r = reconcileLedger([
+      txn({ id: 'a', direction: 'credit', amount_cents: 1000 }),
+      txn({ id: 'r1', type: 'reversal', reverses_id: 'a', direction: 'debit', amount_cents: 1000 }),
+      txn({ id: 'r2', type: 'reversal', reverses_id: 'r1', direction: 'credit', amount_cents: 1000 }),
+      txn({ id: 'r3', type: 'reversal', reverses_id: 'r2', direction: 'debit', amount_cents: 1000 }),
+    ], NOW);
+    expect(r.anomalies).toEqual([]);
+    expect(r.healthy).toBe(true);
+  });
+
+  it('does not call a chain that ends at a missing or unnamed original a loop', () => {
+    const r = reconcileLedger([
+      txn({ id: 'top', amount_cents: 9000 }),
+      txn({ id: 'r1', type: 'reversal', reverses_id: 'gone', direction: 'debit', amount_cents: 100 }),
+      txn({ id: 'r2', type: 'reversal', reverses_id: 'r1', direction: 'credit', amount_cents: 100 }),
+      txn({ id: 'u1', type: 'reversal', reverses_id: null, direction: 'debit', amount_cents: 100 }),
+      txn({ id: 'u2', type: 'reversal', reverses_id: 'u1', direction: 'credit', amount_cents: 100 }),
+    ], NOW);
+    expect(cycles(r)).toEqual([]);
+    expect(kinds(r).sort()).toEqual(['orphan_reversal', 'unanchored_reversal']);
+  });
+
+  it('ends a chain at the first transaction that is not a reversal, whatever that row points at', () => {
+    // `adj` is a real (non-reversal) transaction that happens to carry a
+    // reverses_id; the chain from `r` stops there, so this is no loop.
+    const r = reconcileLedger([
+      txn({ id: 'adj', type: 'adjustment', reverses_id: 'r', direction: 'credit', amount_cents: 1000 }),
+      txn({ id: 'r', type: 'reversal', reverses_id: 'adj', direction: 'debit', amount_cents: 1000 }),
+    ], NOW);
+    expect(cycles(r)).toEqual([]);
+    expect(r.healthy).toBe(true);
+  });
+
+  it('labels the kind for the operator', () => {
+    expect(anomalyLabel('reversal_cycle')).toBe('Reversals that reverse each other');
+  });
+});
