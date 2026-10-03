@@ -1,5 +1,6 @@
 'use server';
 
+import { assertAIAllowance } from '@/lib/server/ai-access';
 import { revalidatePath } from 'next/cache';
 import { getLocaleContext, getTranslations } from '@/lib/i18n/server';
 import { requireUserContext } from '@/lib/supabase/auth';
@@ -169,6 +170,12 @@ export async function draftReconnectMessageAction(
     `Desired tone: ${toneWord}\n\n` +
     `Recent history (most recent first):\n${historyLines}\n\n` +
     'Write the reconnect message to send.';
+
+  // F19: a member's own AI request, so it counts against the family's monthly
+  // allowance (the owner's decision of 2026-10-02). Checked here, immediately
+  // before the model, so the reads above still answer for themselves.
+  const allowance = await assertAIAllowance(ctx, { db: supabase });
+  if (!allowance.ok) return { ok: false, error: allowance.error };
 
   try {
     // The contact's name stays off the row: who a family is trying to reconnect

@@ -1,4 +1,5 @@
 import { NextResponse } from 'next/server';
+import { refuseOverAIAllowance } from '@/lib/server/ai-access';
 import { getTranslations } from '@/lib/i18n/server';
 import { createServer } from '@/lib/supabase/server';
 import { settleAll, describeReadError } from '@/lib/supabase/settle';
@@ -158,6 +159,9 @@ export async function POST(_req: Request, { params }: { params: Promise<{ childI
     // The child's name is not on the row — `childId` is already the subject of
     // the audit-log entry below, and the request ledger does not need to repeat
     // which kid is being coached about money.
+    // F19: the monthly AI allowance the plans sell, checked before the model runs.
+    const overAllowance = await refuseOverAIAllowance(ctx, supabase);
+    if (overAllowance) return overAllowance;
     const coaching = await withAiRequest(
       scopeFromUserContext(ctx, supabase),
       { feature: 'wallet.coach.child', text: 'Money coaching for one child' },

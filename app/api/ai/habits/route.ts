@@ -1,4 +1,5 @@
 import { NextResponse } from 'next/server';
+import { refuseOverAIAllowance } from '@/lib/server/ai-access';
 import { getTranslations } from '@/lib/i18n/server';
 import { createServer } from '@/lib/supabase/server';
 import { readAll } from '@/lib/supabase/read-all';
@@ -103,6 +104,9 @@ export async function POST() {
 
     const firstName = ctx.active.member?.display_name?.split(' ')[0] ?? 'there';
     const { system, user } = buildCoachPrompt(stats, firstName);
+    // F19: the monthly AI allowance the plans sell, checked before the model runs.
+    const overAllowance = await refuseOverAIAllowance(ctx, supabase);
+    if (overAllowance) return overAllowance;
     const coaching = await withAiRequest(
       scopeFromUserContext(ctx, supabase),
       { feature: 'habits.coach', text: 'Habit coaching' },

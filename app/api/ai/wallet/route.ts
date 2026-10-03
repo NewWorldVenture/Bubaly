@@ -1,4 +1,5 @@
 import { NextResponse } from 'next/server';
+import { refuseOverAIAllowance } from '@/lib/server/ai-access';
 import { getTranslations } from '@/lib/i18n/server';
 import { createServer } from '@/lib/supabase/server';
 import { settleAll } from '@/lib/supabase/settle';
@@ -132,6 +133,9 @@ export async function POST() {
     });
 
     const { system, user } = buildWalletCoachPrompt({ children, goals: coachGoals, familyName: ctx.active.family.name });
+    // F19: the monthly AI allowance the plans sell, checked before the model runs.
+    const overAllowance = await refuseOverAIAllowance(ctx, supabase);
+    if (overAllowance) return overAllowance;
     const coaching = await withAiRequest(
       scopeFromUserContext(ctx, supabase),
       { feature: 'wallet.coach', text: 'Money coaching for the family' },

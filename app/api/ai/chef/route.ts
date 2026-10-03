@@ -1,4 +1,5 @@
 import { NextResponse } from 'next/server';
+import { withinAIAllowance, AIAllowanceSpent } from '@/lib/server/ai-access';
 import { getTranslations } from '@/lib/i18n/server';
 import { requireUserContext } from '@/lib/supabase/auth';
 import { settleAll } from '@/lib/supabase/settle';
@@ -98,6 +99,8 @@ export async function POST(req: Request) {
       // `parseChefReply` cannot read. Both end at `source: 'fallback'`, which is
       // also what "no API key" looks like. The wrapper sits inside the swallow
       // so the row can tell the three apart.
+      // F19: past the monthly AI allowance, give the answer this route gives without AI.
+      if (!(await withinAIAllowance(ctx, supabase))) throw new AIAllowanceSpent();
       const parsed = await withAiRequest(
         scopeFromUserContext(ctx, supabase),
         { feature: 'meals.chef', text: 'Recipe from the AI chef' },

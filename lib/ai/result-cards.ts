@@ -244,7 +244,7 @@ export type AssistantStreamEvent =
   | { type: 'card'; card: ResultCard }
   | { type: 'run'; runId: string; href: string; status: string; summary: string | null }
   | { type: 'error'; error: string }
-  | { type: 'done'; content: string; persisted: boolean };
+  | { type: 'done'; content: string; persisted: boolean; requestId: string | null };
 
 /** Parse one decoded SSE payload. Unknown or malformed events are dropped, not thrown. */
 export function parseAssistantStreamEvent(raw: unknown): AssistantStreamEvent | null {
@@ -271,7 +271,10 @@ export function parseAssistantStreamEvent(raw: unknown): AssistantStreamEvent | 
     case 'error':
       return { type: 'error', error: typeof ev.error === 'string' && ev.error ? ev.error : 'Something went wrong.' };
     case 'done':
-      return { type: 'done', content: typeof ev.content === 'string' ? ev.content : '', persisted: ev.persisted !== false };
+      return {
+        type: 'done', content: typeof ev.content === 'string' ? ev.content : '', persisted: ev.persisted !== false,
+        requestId: typeof ev.requestId === 'string' && ev.requestId ? ev.requestId : null,
+      };
     default:
       return null;
   }
@@ -312,21 +315,21 @@ const RUN_TITLES: Record<string, string> = {
 export const STRUCTURED_CONTENT_VERSION = 1;
 
 /** What `ai_messages.structured_content` holds: the cards of the turn plus the runs it touched. */
-export type StructuredContent = { version: number; cards: ResultCard[]; runIds: string[] };
+export type StructuredContent = { version: number; cards: ResultCard[]; runIds: string[]; responseError?: string };
 
 /** Null when the turn produced nothing structured, so the column stays null instead of `{cards:[]}`. */
-export function toStructuredContent(cards: ResultCard[], runIds: string[]): StructuredContent | null {
-  if (cards.length === 0 && runIds.length === 0) return null;
-  return { version: STRUCTURED_CONTENT_VERSION, cards, runIds: [...new Set(runIds)] };
+export function toStructuredContent(cards: ResultCard[], runIds: string[], responseError?: string): StructuredContent | null {
+  if (cards.length === 0 && runIds.length === 0 && !responseError) return null;
+  return { version: STRUCTURED_CONTENT_VERSION, cards, runIds: [...new Set(runIds)], ...(responseError ? { responseError } : {}) };
 }
 
 /** Read a stored column back; every card is re-validated because the schema may have moved on. */
-export function structuredContentFrom(value: unknown): { cards: ResultCard[]; runIds: string[] } {
+export function structuredContentFrom(value: unknown): { cards: ResultCard[]; runIds: string[]; responseError?: string } {
   if (!value || typeof value !== 'object') return { cards: [], runIds: [] };
   const record = value as Record<string, unknown>;
   const cards = Array.isArray(record.cards) ? record.cards.map(parseResultCard).filter((c): c is ResultCard => c !== null) : [];
   const runIds = Array.isArray(record.runIds) ? record.runIds.filter((id): id is string => typeof id === 'string' && id.length > 0) : [];
-  return { cards, runIds };
+  return { cards, runIds, ...(typeof record.responseError === 'string' && record.responseError.trim() ? { responseError: record.responseError.slice(0, 1000) } : {}) };
 }
 
 // ─── Tool result → card ─────────────────────────────────────────────────────

@@ -58,6 +58,13 @@ vi.mock('@/lib/supabase/auth', () => ({
 }));
 vi.mock('@/lib/server/route-feature-gate', () => ({ refuseUnlessEntitled: async () => null }));
 vi.mock('@/lib/server/ai-rate-limit', () => ({ enforceAIRateLimit: async () => ({ ok: true }) }));
+// Every AI route now counts against the family's monthly allowance (F19).
+// This file is about whose health the coach is grounded on, so the family is
+// on Basic, whose allowance is unlimited: the real check runs and passes.
+vi.mock('@/lib/server/plan', async (importOriginal) => ({
+  ...(await importOriginal<typeof import('@/lib/server/plan')>()),
+  resolveFamilyPlanLevel: async () => 1,
+}));
 vi.mock('@/lib/services/scope', () => ({ scopeFromUserContext: () => ({}) }));
 vi.mock('@/lib/ai/observability', () => ({
   withAiRequest: async (_scope: unknown, _meta: unknown, fn: (obs: { used: () => void }) => Promise<string>) => fn({ used: () => {} }),

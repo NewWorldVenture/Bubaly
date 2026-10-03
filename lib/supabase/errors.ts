@@ -9,6 +9,63 @@ export type DbErrorLike =
   | undefined;
 
 /**
+ * The five messages this file writes for a classified database error, and the
+ * catalogue key each one has (I18N-011).
+ *
+ * They were English literals, returned from 689 call sites, so a German family
+ * refused by RLS read "You don't have permission to do that…" in English. The
+ * keys sit in the `error` namespace, which every client scope carries (it is in
+ * ROOT_CHROME_SCOPE), so they resolve on every surface.
+ */
+export const DB_ERROR_MESSAGES = {
+  permission: { key: 'error.dbPermission', en: "You don't have permission to do that. Ask a family admin if you think this is a mistake." },
+  conflict: { key: 'error.dbConflict', en: 'That already exists. Try a different value.' },
+  notFound: { key: 'error.dbNotFound', en: 'That item could not be found — it may have already been removed.' },
+  invalid: { key: 'error.dbInvalid', en: 'Some required information is missing or invalid. Please review and try again.' },
+  network: { key: 'error.dbNetwork', en: 'Network problem — check your connection and try again.' },
+} as const;
+type DbErrorKind = keyof typeof DB_ERROR_MESSAGES;
+type Translate = (key: string) => string;
+
+// Set by the browser's LocaleProvider. `describeDbError` is synchronous and is
+// called from event handlers, so it cannot ask for the locale itself; in the
+// browser there is one reader and one language at a time, so a registered
+// translator is exact. On the server it stays null — a module global there
+// would be shared between requests in different languages — and the English
+// text a server action returns is translated where it is shown instead
+// (`localizeDbErrorText`, used by the toast).
+let registeredTranslator: Translate | null = null;
+
+export function setDbErrorTranslator(t: Translate | null): void {
+  if (typeof window === 'undefined') return;
+  registeredTranslator = t;
+}
+
+function translated(t: Translate | null, kind: DbErrorKind): string {
+  const { key, en } = DB_ERROR_MESSAGES[kind];
+  if (!t) return en;
+  const out = t(key);
+  // A missing key comes back as the key itself; never show that.
+  return out && out !== key ? out : en;
+}
+
+function classified(kind: DbErrorKind): string {
+  return translated(registeredTranslator, kind);
+}
+
+/**
+ * The reader's-language form of a classified message produced elsewhere — a
+ * server action that returned `describeDbError`'s English. Any other text is
+ * returned unchanged.
+ */
+export function localizeDbErrorText(text: string, t: Translate): string {
+  for (const kind of Object.keys(DB_ERROR_MESSAGES) as DbErrorKind[]) {
+    if (DB_ERROR_MESSAGES[kind].en === text) return translated(t, kind);
+  }
+  return text;
+}
+
+/**
  * True when an error means the table/relation simply isn't provisioned yet —
  * e.g. a migration hasn't been applied to this database. Used to degrade
  * un-migrated features to a friendly empty state instead of a scary error, so a
@@ -49,22 +106,22 @@ export function describeDbError(error: unknown, fallback = 'Something went wrong
     msg.includes('not allowed') ||
     msg.includes('policy')
   ) {
-    return "You don't have permission to do that. Ask a family admin if you think this is a mistake.";
+    return classified('permission');
   }
 
   // Unique / conflict — 23505.
   if (code === '23505' || msg.includes('duplicate key') || msg.includes('already exists')) {
-    return 'That already exists. Try a different value.';
+    return classified('conflict');
   }
 
   // Foreign key / not found — 23503 or PostgREST PGRST116 (no rows).
   if (code === '23503' || code === 'PGRST116' || msg.includes('not found') || msg.includes('no rows')) {
-    return 'That item could not be found — it may have already been removed.';
+    return classified('notFound');
   }
 
   // Not-null / check constraint — 23502 / 23514.
   if (code === '23502' || code === '23514' || msg.includes('violates check') || msg.includes('null value')) {
-    return 'Some required information is missing or invalid. Please review and try again.';
+    return classified('invalid');
   }
 
   // Network / fetch transport.
@@ -76,7 +133,7 @@ export function describeDbError(error: unknown, fallback = 'Something went wrong
     msg.includes('timeout') ||
     msg.includes('aborted')
   ) {
-    return 'Network problem — check your connection and try again.';
+    return classified('network');
   }
 
   // Everything above is a message this file WROTE. What is left is the raw

@@ -24,11 +24,15 @@ import { tierToLevel } from '@/lib/features/tiers';
 import { getResolvedFeatureTiers } from '@/lib/server/feature-tiers';
 import { ensureActiveFamily } from '@/lib/server/ensure-family';
 import { resolveFamilyPlanLevel } from '@/lib/server/plan';
+import { AI_MONTHLY_ALLOWANCE } from '@/lib/constants/ai-allowance';
 import { createServer } from '@/lib/supabase/server';
 import { getUserContext, type UserContext } from '@/lib/supabase/auth';
 import { extractBearerToken, getBearerUserContext } from '@/lib/supabase/bearer';
+import { getTranslations } from '@/lib/i18n/server';
 
 type DB = SupabaseClient<Database>;
+/** A request's translator — `getTranslations()` or `getAIRequestTranslations(req)`. */
+type Translator = (key: string, params?: Record<string, string | number>) => string;
 
 export const AI_REQUESTS_FEATURE_KEY = 'ai-requests';
 /** The assistant page + `/api/ai`. A different product, at a different tier, from the concierge. */
@@ -53,7 +57,7 @@ export const AI_ASSISTANT_FEATURE_KEY = 'ai-assistant';
  * `withAiRequest`), so a meter that only counted concierge rows would have read
  * zero however much a family used Bubaly.
  */
-export const AI_MONTHLY_ALLOWANCE: Readonly<Record<0 | 1 | 2, number | null>> = { 0: 10, 1: null, 2: null };
+export { AI_MONTHLY_ALLOWANCE };
 
 export type AIAccessDenial = {
   ok: false;
@@ -63,6 +67,8 @@ export type AIAccessDenial = {
   error: string;
   /** Plan level the feature needs, for the upgrade link. */
   needLevel?: number;
+  /** The monthly cap that was reached (`allowance_exceeded` only), so a client can format its own copy. */
+  limit?: number;
 };
 
 export type AIAccessGrant = {
@@ -138,6 +144,15 @@ export async function assertAIAccess(
     };
   }
 
+  return monthlyAllowance(ctx.active.familyId, opts, planLevel, superAdmin);
+}
+
+async function monthlyAllowance(
+  familyId: string,
+  opts: { db: DB; now?: Date },
+  planLevel: number,
+  superAdmin: boolean,
+): Promise<AIAccess> {
   const level = (planLevel >= 2 ? 2 : planLevel >= 1 ? 1 : 0) as 0 | 1 | 2;
   const allowance = superAdmin ? null : AI_MONTHLY_ALLOWANCE[level];
   if (allowance === null) return { ok: true, planLevel, monthlyUsed: null, monthlyAllowance: null };
@@ -152,20 +167,114 @@ export async function assertAIAccess(
     console.error('[ai-access] monthly usage read failed', error);
     return { ok: false, status: 403, code: 'unavailable', error: 'Bubaly could not check this month\'s usage. Try again in a moment.' };
   }
-  const used = count ?? 0;
+  // A response with no error and no count is not a count of zero: it is a
+  // meter that did not answer. Reading it as zero let a family that had spent
+  // its month call the model again. Refused the same way as a failed read.
+  if (typeof count !== 'number' || !Number.isFinite(count) || count < 0) {
+    console.error('[ai-access] monthly usage read returned no count', { count });
+    return { ok: false, status: 403, code: 'unavailable', error: 'Bubaly could not check this month\'s usage. Try again in a moment.' };
+  }
+  const used = count;
   if (used >= allowance) {
+    // `error` stays the English source text: server actions and pages read it
+    // directly. A route renders it in the reader's language through
+    // `accessDeniedResponse(denial, t)`, which keys off `limit`.
     return {
-      ok: false, status: 429, code: 'allowance_exceeded',
+      ok: false, status: 429, code: 'allowance_exceeded', limit: allowance,
       error: `Your family has used its ${allowance} AI requests for this month. Upgrade to Family Basic for unlimited, or try again next month.`,
     };
   }
   return { ok: true, planLevel, monthlyUsed: used, monthlyAllowance: allowance };
 }
 
-/** JSON body for a denial, with the status the denial names. */
-export function accessDeniedResponse(denial: AIAccessDenial): NextResponse {
+/**
+ * The monthly AI allowance alone, for a route whose FEATURE is already decided
+ * by `refuseUnlessEntitled` or is Free (F19).
+ *
+ * The allowance is the whole-product budget the plans sell — Free lists
+ * "10 AI requests/month", Basic and Plus "Unlimited" — and the count is every
+ * `ai_requests` row the family filed this month, which `withAiRequest` writes
+ * for every one of these routes. But only the routes that called
+ * `assertAIAccess` refused past it, so a Free family could call the meal
+ * planner, the chef, the journal and twenty more without end, each a paid
+ * model request. This is the same check without the concierge's tier gate
+ * (`assertAIAccess` would refuse a Free family a Free feature), so it changes
+ * nothing for a Basic or Plus family, whose allowance is unlimited.
+ */
+export async function assertAIAllowance(ctx: UserContext, opts: { db: DB; now?: Date }): Promise<AIAccess> {
+  const superAdmin = isSuperAdminEmail(ctx.user.email);
+  let planLevel: number;
+  try {
+    planLevel = superAdmin ? 2 : await resolveFamilyPlanLevel(opts.db, ctx.active.familyId);
+  } catch (error) {
+    console.error('[ai-access] plan level read failed', error);
+    return { ok: false, status: 403, code: 'unavailable', error: 'Bubaly could not confirm your plan right now. Try again in a moment.' };
+  }
+  return monthlyAllowance(ctx.active.familyId, opts, planLevel, superAdmin);
+}
+
+/**
+ * For a route that has an answer without AI (a deterministic fallback): past
+ * the allowance it should give that answer, not a refusal. Throw this inside
+ * the try that already falls back when the model fails; the model is never
+ * called, so the request is not counted either.
+ */
+export class AIAllowanceSpent extends Error {
+  constructor() { super('The family has used this month\'s AI allowance.'); this.name = 'AIAllowanceSpent'; }
+}
+
+/** True while the family may still spend an AI request this month. */
+export async function withinAIAllowance(ctx: UserContext, db: DB): Promise<boolean> {
+  return (await assertAIAllowance(ctx, { db })).ok;
+}
+
+/**
+ * The allowance of a family with no signed-in member on the request — the
+ * public gift page, where a relative writes a message for a family's link.
+ * `db` must be able to count that family's rows (the service client there).
+ */
+export async function assertFamilyAIAllowance(db: DB, familyId: string): Promise<AIAccess> {
+  let planLevel: number;
+  try {
+    planLevel = await resolveFamilyPlanLevel(db, familyId);
+  } catch (error) {
+    console.error('[ai-access] plan level read failed', error);
+    return { ok: false, status: 403, code: 'unavailable', error: 'Bubaly could not confirm the plan right now. Try again in a moment.' };
+  }
+  return monthlyAllowance(familyId, { db }, planLevel, false);
+}
+
+/**
+ * The route form of `assertAIAllowance`: `null` to proceed, or the response to return.
+ *
+ * The refusal is written in the reader's language. A route that already holds
+ * a request translator passes it (the bearer routes do: `getAIRequestTranslations`
+ * honours the native app's Accept-Language over the edge's geo guess);
+ * otherwise the cookie/geo/Accept-Language translator for this request is used.
+ */
+export async function refuseOverAIAllowance(ctx: UserContext, db: DB, t?: Translator): Promise<NextResponse | null> {
+  const allowance = await assertAIAllowance(ctx, { db });
+  if (allowance.ok) return null;
+  return accessDeniedResponse(allowance, allowance.code === 'allowance_exceeded' ? (t ?? await getTranslations()) : undefined);
+}
+
+/**
+ * JSON body for a denial, with the status the denial names.
+ *
+ * With a translator, the monthly allowance refusal is rendered in the reader's
+ * language (status 429 and code `allowance_exceeded` unchanged); without one,
+ * or for any other code, `denial.error` is sent as it is.
+ */
+export function accessDeniedResponse(denial: AIAccessDenial, t?: Translator): NextResponse {
+  const error = t && denial.code === 'allowance_exceeded' && denial.limit !== undefined
+    ? t('ai.yourFamilyUsedItsMonthlyAllowance', { limit: denial.limit })
+    : denial.error;
   return NextResponse.json(
-    { error: denial.error, code: denial.code, ...(denial.needLevel !== undefined ? { needLevel: denial.needLevel } : {}) },
+    {
+      error, code: denial.code,
+      ...(denial.needLevel !== undefined ? { needLevel: denial.needLevel } : {}),
+      ...(denial.limit !== undefined ? { limit: denial.limit } : {}),
+    },
     { status: denial.status },
   );
 }

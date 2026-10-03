@@ -1,4 +1,5 @@
 import { NextResponse } from 'next/server';
+import { refuseOverAIAllowance } from '@/lib/server/ai-access';
 import { getTranslations } from '@/lib/i18n/server';
 import { requireUserContext } from '@/lib/supabase/auth';
 import { settleAll } from '@/lib/supabase/settle';
@@ -126,6 +127,9 @@ export async function POST(req: Request) {
   // Ask the model ---------------------------------------------------------
   let text: string;
   try {
+    // F19: the monthly AI allowance the plans sell, checked before the model runs.
+    const overAllowance = await refuseOverAIAllowance(ctx, supabase);
+    if (overAllowance) return overAllowance;
     text = await withAiRequest(
       scope,
       { feature: 'meals.plan', text: 'Plan the week\u2019s meals' },

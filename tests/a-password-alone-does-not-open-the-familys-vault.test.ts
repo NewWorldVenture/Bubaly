@@ -31,6 +31,14 @@
 import { readdirSync, readFileSync, statSync } from 'node:fs';
 import { extname, join } from 'node:path';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
+
+// F19: these user-requested AI actions now check the family's monthly allowance
+// before the model. This file is about other behaviour, so the family is on
+// Basic, whose allowance is unlimited: the real check runs and passes.
+vi.mock('@/lib/server/plan', async (importOriginal) => ({
+  ...(await importOriginal<typeof import('@/lib/server/plan')>()),
+  resolveFamilyPlanLevel: async () => 1,
+}));
 import { createInMemorySupabase, type InMemorySupabase } from './helpers/in-memory-supabase';
 
 const STEP_UP = '/auth/step-up?next=%2Fdashboard%2Fpaperwork';

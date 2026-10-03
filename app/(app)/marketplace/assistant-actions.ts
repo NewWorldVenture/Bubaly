@@ -8,6 +8,7 @@
 //      (lib/marketplace/assistant.ts) composes the same grounded answer.
 // Either way the caller gets a reply + deep links; the UI never breaks on a
 // missing key. History is passed through for multi-turn context (LLM tier).
+import { assertAIAllowance } from '@/lib/server/ai-access';
 import { requireUserContext } from '@/lib/supabase/auth';
 import { settleAll } from '@/lib/supabase/settle';
 import { getLocaleContext, getTranslations } from '@/lib/i18n/server';
@@ -79,8 +80,14 @@ export async function askMarketAssistantAction(
 
   // Tier 2 (LLM) — best-effort on top of the same snapshot; the deterministic
   // links still ride along so the UI always has somewhere to go.
+  //
+  // F19 (the owner's decision of 2026-10-02): the model call is a member's own
+  // AI request, so it counts against the family's monthly allowance. Only the
+  // model is metered: a family past its month still gets the grounded answer,
+  // which reaches no provider, exactly as a family with no key configured does.
+  const allowance = await assertAIAllowance(ctx, { db: sb });
   try {
-    if (await isAIConfigured()) {
+    if (allowance.ok && await isAIConfigured()) {
       // Two ways this ends at `source: 'engine'` — the provider threw, or it
       // answered with nothing usable — and the shopper sees the same
       // deterministic reply either way, which is also what "no API key" looks

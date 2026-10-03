@@ -1,4 +1,5 @@
 import { NextResponse } from 'next/server';
+import { withinAIAllowance, AIAllowanceSpent } from '@/lib/server/ai-access';
 import { getTranslations } from '@/lib/i18n/server';
 import { createServer } from '@/lib/supabase/server';
 import { requireUserContext } from '@/lib/supabase/auth';
@@ -52,6 +53,8 @@ export async function POST() {
       // Inside the try that falls through to the evergreen prompt, so a failure
       // is recorded before it is swallowed — the same reason the daily brief
       // wraps inside its own silent catch.
+      // F19: past the monthly AI allowance, give the answer this route gives without AI.
+      if (!(await withinAIAllowance(ctx, supabase))) throw new AIAllowanceSpent();
       const prompt = await withAiRequest(
         scopeFromUserContext(ctx, supabase),
         { feature: 'journal.prompt', text: 'Journal prompt' },

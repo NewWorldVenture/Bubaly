@@ -345,6 +345,7 @@ export function AssistantModule() {
     setHighlightId(null);
 
     const userMsg: Message = { role: 'user', content: msg, id: generateId() };
+    const turnKey = crypto.randomUUID();
     const replyId = generateId();
     // Add the user turn + an empty assistant bubble we fill as the stream arrives.
     setMessages((prev) => [...prev, userMsg, { role: 'assistant', content: '', id: replyId, actions: [], cards: [], runIds: [] }]);
@@ -360,7 +361,9 @@ export function AssistantModule() {
     try {
       const res = await fetch('/api/ai', {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json', Accept: 'text/event-stream' },
+        // One key per send, kept by any retry of it: the server answers a repeat
+        // with the saved reply instead of counting a second turn (F19).
+        headers: { 'Content-Type': 'application/json', Accept: 'text/event-stream', 'Idempotency-Key': turnKey },
         body: JSON.stringify({ conversationId: convId, message: msg }),
       });
       if (!res.ok || !res.body) {
@@ -373,6 +376,8 @@ export function AssistantModule() {
       const decoder = new TextDecoder();
       let buf = '';
       let finalText = '';
+      // The turn's request id: the spoken answer rides on this exchange (F19).
+      let exchangeId: string | null = null;
       for (;;) {
         const { done, value } = await reader.read();
         if (done) break;
@@ -394,11 +399,11 @@ export function AssistantModule() {
             addCard(runStatusCard({ runId: ev.runId, status: ev.status, summary: ev.summary }));
           }
           else if (ev.type === 'error') patchReply((m) => ({ ...m, content: m.content || ev.error }));
-          else if (ev.type === 'done') { finalText = ev.content || finalText; patchReply((m) => ({ ...m, content: m.content || (ev.content || 'Done.') })); }
+          else if (ev.type === 'done') { finalText = ev.content || finalText; exchangeId = ev.requestId; patchReply((m) => ({ ...m, content: m.content || (ev.content || 'Done.') })); }
         }
       }
       // Speak the reply aloud when voice output is enabled on this device.
-      if (finalText.trim() && voice.shouldSpeak()) void voice.speak(finalText);
+      if (finalText.trim() && voice.shouldSpeak()) void voice.speak(finalText, exchangeId);
     } catch (error) {
       console.error('[assistant] request failed', error);
       patchReply((m) => ({ ...m, content: m.content || t('assistantModule.somethingWentWrong') }));
