@@ -8,7 +8,10 @@ import { syntheticProvider } from './helpers/synthetic-issuing-provider';
 // card order or a freeze reaches them more than once. Characterization only —
 // these pin CURRENT behaviour so a repair has to change them on purpose. Tests
 // named "reproduces" describe a defect candidate; "preserves" describe the
-// existing multiple-card contract any repair must keep.
+// existing multiple-card contract any repair must keep; "repaired (B)" pin what
+// attempt identity (issueCard's count-based key, lib/stripe/issuing.ts)
+// changed on purpose. Its interleavings live in
+// tests/money-card-attempt-identity.test.ts.
 //
 // Sealed: no network, no real Stripe SDK, no real database client. The provider
 // is an in-process double with Stripe's documented idempotency semantics
@@ -90,9 +93,6 @@ const ACCOUNT = 'acct_synthetic';
 const T0 = Date.UTC(2026, 9, 1, 12, 0, 0);
 // What the two UI entry points send (components/wallet/money-cards-view.tsx):
 // the row's Virtual button and the physical order dialog with a limit entered.
-// lib/supabase/errors.ts's text for a 23505, which describeActionError passes
-// through instead of the action's own translated fallback.
-const DUPLICATE_TEXT = 'That already exists. Try a different value.';
 const VIRTUAL = { childWalletId: 'wallet-a', type: 'virtual', spendLimitCents: null, spendWindow: 'per_authorization' } as const;
 const PHYSICAL = { childWalletId: 'wallet-a', type: 'physical', spendLimitCents: 2500, spendWindow: 'daily' } as const;
 
@@ -115,6 +115,8 @@ function seedHousehold() {
 }
 const mirrorCards = (childWalletId = 'wallet-a') => db.table('stripe_issuing_cards').filter(row => row.child_wallet_id === childWalletId);
 const audits = (action: string) => mock.audit.mock.calls.filter(([, row]) => (row as Row).action === action);
+/** Repair B's attempt key: the child's cardholder row, wallet, type and mirrored count. */
+const cardKey = (type: string, n: number) => `card-${db.table('stripe_cardholders')[0].id}-wallet-a-${type}-${n}`;
 
 beforeEach(() => {
   expect(network.sealed()).toEqual(SEALED);
@@ -185,9 +187,12 @@ describe('card issuance reaching the server more than once', () => {
     expect(first.ok && second.ok).toBe(true);
     if (!first.ok || !second.ok) return;
     expect(first.data?.cardId).not.toBe(second.data?.cardId);
-    // The key carries the wallet and the clock, not the attempt: the provider
-    // cannot tell a retry of one order from a second order.
-    expect(provider.log.cardKeys).toEqual([`card-wallet-a-${T0}`, `card-wallet-a-${T0 + 1}`]);
+    // The key carries the attempt now (the mirrored count), not the clock, but
+    // the first card was mirrored before the re-click arrived: the count moved,
+    // so the provider still cannot tell it from a second order. Telling them
+    // apart needs the view to send the count it saw (not implemented).
+    expect(provider.log.cardKeys).toEqual([cardKey(input.type, 0), cardKey(input.type, 1)]);
+    expect(provider.log.cardOutcomes).toEqual(['created', 'created']);
     expect(provider.active(input.type)).toHaveLength(2);
     expect(mirrorCards().map(row => row.type)).toEqual([input.type, input.type]);
     expect(audits('card_issued')).toHaveLength(2);
@@ -196,34 +201,42 @@ describe('card issuance reaching the server more than once', () => {
     expect(provider.cardholders).toHaveLength(1);
   });
 
-  it('reproduces: the same order twice within one millisecond replays one provider card and reports the second as failed', async () => {
+  it('repaired (B): the same order sent again within one millisecond, after the first card is mirrored, is a new attempt — no clock collision, a second live card', async () => {
     const first = await issueCardAction(VIRTUAL);
     const second = await issueCardAction(VIRTUAL);
 
-    expect(first.ok).toBe(true);
-    // The 23505 below reaches describeActionError, which answers with its
-    // generic duplicate text — untranslated, and about a card that does exist.
-    expect(second).toEqual({ ok: false, error: DUPLICATE_TEXT });
-    expect(provider.log.cardKeys).toEqual([`card-wallet-a-${T0}`, `card-wallet-a-${T0}`]);
-    expect(provider.cards.size).toBe(1);
-    expect(provider.active()).toHaveLength(1);
-    // UNIQUE (stripe_card_id) refuses the second mirror row for the same card.
-    expect(mirrorCards()).toHaveLength(1);
-    expect(audits('card_issued')).toHaveLength(1);
+    // Before B the shared clock key replayed one card and the second mirror
+    // insert's 23505 reached the parent as "That already exists". The key no
+    // longer reads the clock: the first card was mirrored before the second
+    // order read the count, so it is a new attempt (the re-click case above).
+    // Orders that overlap before the first is mirrored share one key: see
+    // tests/money-card-attempt-identity.test.ts.
+    expect(first.ok && second.ok).toBe(true);
+    if (!first.ok || !second.ok) return;
+    expect(first.data?.cardId).not.toBe(second.data?.cardId);
+    expect(provider.log.cardKeys).toEqual([cardKey('virtual', 0), cardKey('virtual', 1)]);
+    expect(provider.log.cardOutcomes).toEqual(['created', 'created']);
+    expect(provider.cards.size).toBe(2);
+    expect(provider.active('virtual')).toHaveLength(2);
+    expect(mirrorCards().map(row => row.id)).toEqual([first.data?.cardId, second.data?.cardId]);
+    expect(audits('card_issued')).toHaveLength(2);
   });
 
-  it('reproduces: virtual and physical for one child in the same millisecond share one key and the provider refuses the second', async () => {
+  it('repaired (B): virtual and physical for one child in the same millisecond carry their own keys and both issue', async () => {
     const virtual = await issueCardAction(VIRTUAL);
     const physical = await issueCardAction(PHYSICAL);
 
-    expect(virtual.ok).toBe(true);
-    expect(physical).toEqual({ ok: false, error: 'translated:money.couldNotIssueTheCard' });
-    expect(provider.log.cardKeys).toEqual([`card-wallet-a-${T0}`, `card-wallet-a-${T0}`]);
-    expect(provider.active()).toHaveLength(1);
-    expect(mirrorCards().map(row => row.type)).toEqual(['virtual']);
+    const rows = mirrorCards();
+    expect(rows.map(row => row.type)).toEqual(['virtual', 'physical']);
+    expect([virtual, physical]).toEqual(rows.map(row => ({ ok: true, data: { cardId: row.id } })));
+    expect(provider.log.cardKeys).toEqual([cardKey('virtual', 0), cardKey('physical', 0)]);
+    expect(provider.log.cardOutcomes).toEqual(['created', 'created']);
+    expect(provider.active('virtual')).toHaveLength(1);
+    expect(provider.active('physical')).toHaveLength(1);
+    expect(audits('card_issued')).toHaveLength(2);
   });
 
-  it('reproduces: a mirror outage after provider creation reports failure, leaves a live unlisted card, and the retry issues a second', async () => {
+  it('reproduces: a mirror outage after provider creation reports failure and leaves a live unlisted card; repaired (B): the identical retry replays and mirrors that card instead of issuing a second', async () => {
     outage.cardMirrorInserts = 1;
     const failed = await issueCardAction(PHYSICAL);
 
@@ -231,9 +244,11 @@ describe('card issuance reaching the server more than once', () => {
     const [orphan] = provider.active('physical');
     expect(orphan).toBeDefined();
     expect(mirrorCards()).toHaveLength(0);
-    // Nothing compensates: no cancel or deactivate reaches the provider.
+    // Nothing compensates: no cancel or deactivate reaches the provider. The
+    // log now names the card, so it can be found.
     expect(provider.stripe.issuing.cards.update).not.toHaveBeenCalled();
     expect(audits('card_issued')).toHaveLength(0);
+    expect(console.error).toHaveBeenCalledWith('[money] card mirror insert failed after the provider created the card', { stripeCardId: orphan.id, code: '08006' });
 
     // The reconciler does not adopt it either: a card this deployment does not
     // mirror is logged and skipped (lib/stripe/webhook.ts).
@@ -241,16 +256,26 @@ describe('card issuance reaching the server more than once', () => {
     expect(console.warn).toHaveBeenCalledWith(expect.stringContaining('does not mirror'), { stripeCardId: orphan.id });
     expect(mirrorCards()).toHaveLength(0);
 
-    // The parent saw "could not issue" and tries again.
+    // The parent saw "could not issue" and tries again with the same order.
+    // Nothing was mirrored, so the count and the key are unchanged and the
+    // provider replays the orphan, which is now mirrored: no second card.
+    // Only an IDENTICAL retry while the provider keeps the key (at least 24
+    // hours) heals it: a changed retry is refused, and a retry that never comes
+    // leaves the card live and unlisted. Nothing cancels it (repair E, not
+    // implemented); see the residuals in money-card-attempt-identity.test.ts.
     vi.setSystemTime(T0 + 1);
     const retried = await issueCardAction(PHYSICAL);
-    expect(retried.ok).toBe(true);
-    expect(provider.active('physical')).toHaveLength(2);
-    expect(mirrorCards().map(row => row.stripe_card_id)).toEqual([provider.active('physical')[1].id]);
-    expect(mirrorCards()[0].stripe_card_id).not.toBe(orphan.id);
+    expect(provider.log.cardKeys).toEqual([cardKey('physical', 0), cardKey('physical', 0)]);
+    expect(provider.log.cardOutcomes).toEqual(['created', 'replayed']);
+    expect(provider.active('physical')).toEqual([orphan]);
+    expect(provider.cards.size).toBe(1);
+    expect(mirrorCards().map(row => row.stripe_card_id)).toEqual([orphan.id]);
+    expect(retried).toEqual({ ok: true, data: { cardId: mirrorCards()[0].id } });
+    expect(audits('card_issued').map(([, row]) => (row as Row).entity_id)).toEqual([mirrorCards()[0].id]);
+    expect(provider.stripe.issuing.cards.update).not.toHaveBeenCalled();
   });
 
-  it('reproduces: virtual and physical ordered together for a child with no cardholder share one cardholder, and the same-millisecond card key refuses one', async () => {
+  it('repaired (B): virtual and physical ordered together for a child with no cardholder share one cardholder, and each issues its own card', async () => {
     // The view claims `issue-<child>` for Virtual and `physical-<child>` for the
     // order dialog, so one mounted view can dispatch both at once.
     provider.cardholderBarrier(2);
@@ -265,24 +290,22 @@ describe('card issuance reaching the server more than once', () => {
     expect(console.error).not.toHaveBeenCalledWith('[money-action] issue the card failed',
       expect.objectContaining({ message: expect.stringContaining('Failed to persist cardholder') }));
 
-    // Both then carry `card-<wallet>-<ms>`. In one millisecond that is one key
-    // with different parameters, which the provider refuses (as in the case
-    // above), so one order is still refused: at the card step, with the
-    // action's own text. Attempt identity (B) is the fix for that.
-    expect(provider.log.cardKeys).toEqual([`card-wallet-a-${T0}`, `card-wallet-a-${T0}`]);
-    expect([virtual.ok, physical.ok].sort()).toEqual([false, true]);
-    const refused = virtual.ok ? physical : virtual;
-    expect(refused).toEqual({ ok: false, error: 'translated:money.couldNotIssueTheCard' });
-    expect(console.error).toHaveBeenCalledWith('[money-action] issue the card failed',
-      expect.objectContaining({ message: expect.stringContaining('idempotency_error') }));
-    expect(provider.cards.size).toBe(1);
-    expect(mirrorCards()).toHaveLength(1);
-
-    // Ordered again once the first settled, the refused type is issued.
-    vi.setSystemTime(T0 + 1);
-    const again = await issueCardAction(virtual.ok ? PHYSICAL : VIRTUAL);
-    expect(again.ok).toBe(true);
-    expect(mirrorCards().map(row => row.type).sort()).toEqual(['physical', 'virtual']);
+    // Before B both carried `card-<wallet>-<ms>`, one key with different
+    // parameters in one millisecond, and the provider refused one. Each type is
+    // its own attempt now, so neither is refused and nothing needs ordering again.
+    expect([...provider.log.cardKeys].sort()).toEqual([cardKey('physical', 0), cardKey('virtual', 0)]);
+    expect(provider.log.cardOutcomes).toEqual(['created', 'created']);
+    expect(console.error).not.toHaveBeenCalledWith('[money-action] issue the card failed', expect.anything());
+    const rows = mirrorCards();
+    expect(rows.map(row => row.type).sort()).toEqual(['physical', 'virtual']);
+    expect([virtual, physical]).toEqual([
+      { ok: true, data: { cardId: rows.find(row => row.type === 'virtual')!.id } },
+      { ok: true, data: { cardId: rows.find(row => row.type === 'physical')!.id } },
+    ]);
+    expect(provider.cards.size).toBe(2);
+    expect(provider.active('virtual')).toHaveLength(1);
+    expect(provider.active('physical')).toHaveLength(1);
+    expect(audits('card_issued')).toHaveLength(2);
   });
 
   it('preserves: deliberate later orders each issue their own card — several virtual and physical cards per child, one cardholder', async () => {
