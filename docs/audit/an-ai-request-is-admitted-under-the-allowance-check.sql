@@ -80,6 +80,12 @@ begin
   if has_table_privilege('authenticated', 'public.ai_requests', 'insert') or has_table_privilege('anon', 'public.ai_requests', 'insert') then
     failures := array_append(failures, 'a client role holds INSERT on ai_requests');
   end if;
+  -- The meter counts `metered` rows through the member's session, so members
+  -- must be able to read the column whatever column grants other migrations
+  -- (0480) put in place.
+  if not has_column_privilege('authenticated', 'public.ai_requests', 'metered', 'select') then
+    failures := array_append(failures, 'members cannot read ai_requests.metered: the allowance check counted through their session would fail');
+  end if;
   -- NEGATIVE CONTROL: restore 0255's grant and policy; the same insert lands.
   begin
     grant insert on public.ai_requests to authenticated;

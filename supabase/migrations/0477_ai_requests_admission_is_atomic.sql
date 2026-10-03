@@ -50,6 +50,15 @@
 -- default privileges give anon and authenticated (0456).
 
 alter table public.ai_requests add column if not exists metered boolean not null default true;
+-- The meter reads this column through the member's own session
+-- (`monthlyAllowance`: `.eq('metered', true)`). A table-level SELECT grant
+-- covers a new column; a column-level one does not. 0480 (#927) replaces
+-- `authenticated`'s table grant with a grant of the columns that exist when it
+-- runs, so where 0480 reaches a database before this migration, `metered` would
+-- be unreadable to members and every capped family's allowance check would fail
+-- with "permission denied". Granted by name, so the order does not matter
+-- (redundant, and harmless, while the table-level grant stands).
+grant select (metered) on public.ai_requests to authenticated;
 
 comment on column public.ai_requests.metered is
   'F19 (0477): counted against the family''s monthly AI allowance. False for work the family did not ask for (chore-proof validation, system-scope intake, scheduled routines). Written by server code only.';
@@ -177,6 +186,9 @@ begin
        and is_nullable = 'NO' and column_default = 'true'
   ) then
     raise exception '0477: ai_requests.metered must be NOT NULL DEFAULT true, or existing rows and writers would stop being counted';
+  end if;
+  if not has_column_privilege('authenticated', 'public.ai_requests', 'metered', 'select') then
+    raise exception '0477: members cannot read ai_requests.metered, so the allowance check (counted through their session) would fail';
   end if;
   if has_table_privilege('authenticated', 'public.ai_requests', 'insert') or has_table_privilege('anon', 'public.ai_requests', 'insert') then
     raise exception '0477: a client role can still insert into ai_requests, outside the admission lock';
