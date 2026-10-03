@@ -103,7 +103,11 @@ export async function ensureCardholder(
   return { rowId: row.id, stripeCardholderId: cardholder.id };
 }
 
-/** Issue a card for a child wallet. Mirrors spending controls to Stripe. */
+/**
+ * Issue a card for a child wallet. Mirrors spending controls to Stripe.
+ * `adopted` is true when this call did not mirror a new card but met the exact
+ * row another request for the same attempt already wrote.
+ */
 export async function issueCard(
   supabase: DB,
   params: {
@@ -111,7 +115,28 @@ export async function issueCard(
     accountId: string; type: 'virtual' | 'physical'; spendLimitCents: number | null;
     spendWindow: string; userId: string | null;
   },
-): Promise<{ rowId: string; stripeCardId: string }> {
+): Promise<{ rowId: string; stripeCardId: string; adopted: boolean }> {
+  // The attempt this order belongs to. One order sent twice — two tabs, two
+  // devices, a re-click — before its card is mirrored reads the same count of
+  // this child's cards of this type, so both requests carry one idempotency key
+  // and the provider replays the first card (same parameters) or refuses the
+  // second (different parameters, or the first still executing) instead of
+  // issuing two. Once a card is mirrored the count moves on, so a later order
+  // is a new attempt. Every status counts, and app code never deletes these
+  // rows; the cardholder ROW id keeps a recreated cardholder (whose cards
+  // cascaded away) from reusing an earlier key. A count that cannot be read is
+  // not zero: nothing reaches the provider without it.
+  // Audit JIMMY-SUPPORT-CARD-RETRY-20261001 (repair B).
+  const { count: mirrored, error: countError } = await supabase
+    .from('stripe_issuing_cards')
+    .select('id', { count: 'exact', head: true })
+    .eq('family_id', params.familyId)
+    .eq('child_wallet_id', params.childWalletId)
+    .eq('type', params.type);
+  if (countError || mirrored === null || !Number.isSafeInteger(mirrored) || mirrored < 0) {
+    throw new Error('Could not count the existing cards');
+  }
+
   const stripe = getStripe();
   const interval = WINDOW_INTERVAL[params.spendWindow] ?? 'per_authorization';
   const card = await stripe.issuing.cards.create(
@@ -125,7 +150,10 @@ export async function issueCard(
         : undefined,
       metadata: { family_id: params.familyId, child_wallet_id: params.childWalletId },
     },
-    { stripeAccount: params.accountId, idempotencyKey: `card-${params.childWalletId}-${Date.now()}` },
+    {
+      stripeAccount: params.accountId,
+      idempotencyKey: `card-${params.cardholderRowId}-${params.childWalletId}-${params.type}-${mirrored}`,
+    },
   );
 
   const { data: row, error } = await supabase
@@ -140,8 +168,41 @@ export async function issueCard(
     })
     .select('id')
     .single();
-  if (error) throw new Error(`Failed to persist card: ${error.message}`);
-  return { rowId: row.id, stripeCardId: card.id };
+  if (error) {
+    // The provider replayed a card another request of this attempt already
+    // mirrored, so this insert met that row under UNIQUE (stripe_card_id).
+    // Adopt it only when it is exactly this family, child, type, cardholder row
+    // and provider card. Its controls, freeze, status and author may have
+    // changed since, legitimately, so they are not compared. Anything else,
+    // including a failed re-read, keeps the refusal.
+    if (error.code === '23505') {
+      const winner = await supabase
+        .from('stripe_issuing_cards')
+        .select('id, family_id, child_wallet_id, type, cardholder_id, stripe_card_id')
+        .eq('stripe_card_id', card.id)
+        .maybeSingle()
+        .then(({ data, error: rereadError }) => {
+          if (!rereadError) return data;
+          console.error('[money] card duplicate re-read failed; keeping the refusal', { stripeCardId: card.id, code: rereadError.code });
+          return null;
+        }, () => {
+          console.error('[money] card duplicate re-read rejected; keeping the refusal', { stripeCardId: card.id });
+          return null;
+        });
+      if (winner && winner.stripe_card_id === card.id && winner.family_id === params.familyId
+        && winner.child_wallet_id === params.childWalletId && winner.type === params.type
+        && winner.cardholder_id === params.cardholderRowId) {
+        return { rowId: winner.id, stripeCardId: card.id, adopted: true };
+      }
+    } else {
+      // The card is live at the provider with no mirror row; name it so it can
+      // be found. An identical retry within the provider's key window replays
+      // it, but nothing here cancels it.
+      console.error('[money] card mirror insert failed after the provider created the card', { stripeCardId: card.id, code: error.code });
+    }
+    throw new Error(`Failed to persist card: ${error.message}`);
+  }
+  return { rowId: row.id, stripeCardId: card.id, adopted: false };
 }
 
 /** Update a card's spending controls (limit + window + blocked categories). */

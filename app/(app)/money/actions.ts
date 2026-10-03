@@ -166,15 +166,19 @@ export async function issueCardAction(input: {
       familyId: ctx.active.familyId, memberId: wallet.member_id, childWalletId: wallet.id,
       name: member?.display_name ?? 'Child', accountId: acct.stripe_account_id, userId: ctx.user.id,
     });
-    const { rowId } = await issueCard(svc, {
+    const { rowId, adopted } = await issueCard(svc, {
       familyId: ctx.active.familyId, childWalletId: wallet.id, cardholderRowId, stripeCardholderId,
       accountId: acct.stripe_account_id, type: input.type,
       spendLimitCents: input.spendLimitCents, spendWindow: input.spendWindow, userId: ctx.user.id,
     });
-    await logWalletAudit(svc, {
-      family_id: ctx.active.familyId, actor_user_id: ctx.user.id, action: 'card_issued',
-      entity_type: 'stripe_issuing_cards', entity_id: rowId, detail: `${input.type} card issued`,
-    }, 'card issuance');
+    // An adopted card's row was written, and is audited, by the request of this
+    // same order that inserted it; answering with it here is not a second issue.
+    if (!adopted) {
+      await logWalletAudit(svc, {
+        family_id: ctx.active.familyId, actor_user_id: ctx.user.id, action: 'card_issued',
+        entity_type: 'stripe_issuing_cards', entity_id: rowId, detail: `${input.type} card issued`,
+      }, 'card issuance');
+    }
     revalidatePath('/wallet');
     return { ok: true, data: { cardId: rowId } };
   } catch (e) {
