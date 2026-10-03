@@ -6,6 +6,7 @@ on:
       - '.github/workflows/meal-plan-atomic-write-runtime.yml'
       - 'supabase/migrations/0478_meal_plan_slot_writes_are_atomic.sql'
       - 'tests/fixtures/0475-meal-plan-*'
+      - 'docs/audit/meal-plan-membership-revocation.sql'
       - 'lib/services/meals/**'
       - 'app/(app)/dashboard/meals/actions.ts'
       - 'lib/database.types.ts'
@@ -47,7 +48,7 @@ jobs:
           done
           docker exec "$container" pg_isready --host=/var/run/postgresql --username=postgres --dbname=bubaly_meal_plan_atomic_ci
 
-      - name: Apply minimal schema and actual migration 0475
+      - name: Apply minimal schema and actual migration 0478
         shell: bash
         run: |
           set -euo pipefail
@@ -97,6 +98,16 @@ jobs:
             --dbname=bubaly_meal_plan_atomic_ci --set=ON_ERROR_STOP=1 \
             --set=VERBOSITY=terse --set=SHOW_CONTEXT=never \
             < tests/fixtures/0475-meal-plan-concurrency.sql
+
+      - name: Verify membership revocation ordering and post-revocation denial
+        shell: bash
+        run: |
+          set -euo pipefail
+          docker exec -i "$MEAL_PLAN_ATOMIC_CONTAINER" psql -X --quiet --output=/dev/null \
+            --file=- --no-password --host=/var/run/postgresql --username=postgres \
+            --dbname=bubaly_meal_plan_atomic_ci --set=ON_ERROR_STOP=1 \
+            --set=VERBOSITY=terse --set=SHOW_CONTEXT=never \
+            < docs/audit/meal-plan-membership-revocation.sql
 
       - name: Reject an incompatible same-name receipt constraint
         shell: bash
