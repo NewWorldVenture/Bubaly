@@ -213,8 +213,13 @@ describe('a sync against the family calendar', () => {
     const result = await syncFeed(client(), FEED);
 
     expect(result).toEqual({ ok: true, imported: 1 });
-    expect(db.table('calendar_events').map((r) => r.id).sort()).toEqual(['ev-manual', 'ev-other-feed', expect.any(String)].sort());
-    expect(db.table('calendar_events').find((r) => r.id === 'ev-concert')).toBeUndefined();
+    // Not `.sort()` against an array holding `expect.any(String)`: the new row's
+    // id is a random uuid, and where it sorts relative to 'ev-…' depends on its
+    // first character, so that comparison failed about one run in eight.
+    const ids = db.table('calendar_events').map((r) => r.id as string);
+    expect(ids).toHaveLength(3);
+    expect(ids).toEqual(expect.arrayContaining(['ev-manual', 'ev-other-feed']));
+    expect(ids).not.toContain('ev-concert');
     expect(feedEvents().map((r) => r.external_uid)).toEqual(['series']);
     expect(feedRow()).toMatchObject({ last_status: 'ok', event_count: 1 });
   });
