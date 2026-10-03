@@ -503,7 +503,7 @@ test.describe('form errors: what an invalid, refused and recovered submit expose
       const matchesCorner = (report: CornerRow, row: CornerRow) => JSON.stringify(report.covered) === JSON.stringify(row.covered)
         && tapped(report.capture) === tapped(row.capture) && tapped(report.ai) === tapped(row.ai);
 
-      const CORNER_VIEWPORTS: ReadonlyArray<readonly [number, number]> = width === 1280 ? [[1024, 768], [1280, 800], [1440, 900]] : [[390, 844]];
+      const CORNER_VIEWPORTS: ReadonlyArray<readonly [number, number]> = width === 1280 ? [[1024, 768], [1280, 800], [1440, 900]] : [[360, 780], [390, 844]];
       const QC = CORNER_NAMES.en.capture, AI = CORNER_NAMES.en.ai, DE = CORNER_NAMES.de;
       const CORNER: Record<string, CornerRow> = {
         // From lg: the stack sits above both buttons, so whatever the notices
@@ -525,8 +525,16 @@ test.describe('form errors: what an invalid, refused and recovered submit expose
         '390x844 short': { covered: [], capture: QC, ai: AI },
         '390x844 long': { covered: ['Sprache ändern'], capture: DE.capture, ai: DE.ai },
         '390x844 stacked': { covered: ['Change language'], capture: QC, ai: AI },
+        // RESIDUAL, recorded as it is, not accepted: at 360 the stack is
+        // 264px wide, and the long German notice wraps to 7 lines (166px; 5
+        // lines, 126px, at full width). It then reaches this empty page's
+        // "Ersten Kontakt hinzufügen" as well as the language bar. Three
+        // notices reach "Add First Contact" at any width. Measured on #778.
+        '360x780 short': { covered: ['Change language'], capture: QC, ai: AI },
+        '360x780 long': { covered: ['Ersten Kontakt hinzufügen', 'Sprache ändern'], capture: DE.capture, ai: DE.ai },
+        '360x780 stacked': { covered: ['Add First Contact', 'Change language'], capture: QC, ai: AI },
       };
-      /** The placements this replaced, as measured on #778 (736e1ffd): from lg at bottom 1.5rem, below lg full width. */
+      /** The placements this replaced, as measured on #778 (736e1ffd; 360x780 on f3988ccb with the replaced placement put back): from lg at bottom 1.5rem, below lg full width. */
       const BEFORE: Record<string, CornerRow> = {
         '1024x768 short': { covered: [QC], capture: 'toast', ai: AI },
         '1024x768 long': { covered: [DE.ai, DE.capture], capture: 'toast', ai: 'toast' },
@@ -540,6 +548,9 @@ test.describe('form errors: what an invalid, refused and recovered submit expose
         '390x844 short': { covered: [QC], capture: 'toast', ai: AI },
         '390x844 long': { covered: [DE.ai, DE.capture, 'Sprache ändern'], capture: 'toast', ai: 'toast' },
         '390x844 stacked': { covered: [AI, 'Change language', QC], capture: 'toast', ai: 'toast' },
+        '360x780 short': { covered: ['Change language', QC], capture: 'toast', ai: AI },
+        '360x780 long': { covered: [DE.ai, DE.capture, 'Sprache ändern'], capture: 'toast', ai: 'toast' },
+        '360x780 stacked': { covered: ['Add First Contact', AI, 'Change language', QC], capture: 'toast', ai: 'toast' },
       };
       /** The inline style that puts the replaced placement back on the stack, in one page only. */
       const REPLACED_PLACEMENT = (w: number): Record<string, string> => (w >= 1024 ? { bottom: '1.5rem' } : { paddingRight: '1rem' });
