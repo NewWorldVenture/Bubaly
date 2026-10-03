@@ -1,0 +1,128 @@
+name: Meal plan atomic write SQL runtime
+
+on:
+  pull_request:
+    paths:
+      - '.github/workflows/meal-plan-atomic-write-runtime.yml'
+      - 'supabase/migrations/0478_meal_plan_slot_writes_are_atomic.sql'
+      - 'tests/fixtures/0475-meal-plan-*'
+      - 'lib/services/meals/**'
+      - 'app/(app)/dashboard/meals/actions.ts'
+      - 'lib/database.types.ts'
+
+permissions:
+  contents: read
+
+concurrency:
+  group: meal-plan-atomic-sql-${{ github.event.pull_request.number }}
+  cancel-in-progress: true
+
+jobs:
+  meal-plan-atomic-sql:
+    if: github.event.pull_request.head.repo.full_name == github.repository
+    runs-on: ubuntu-latest
+    timeout-minutes: 12
+    steps:
+      - name: Check out this PR head
+        uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683
+        with:
+          ref: ${{ github.event.pull_request.head.sha }}
+          persist-credentials: false
+
+      - name: Start isolated PostgreSQL 17
+        shell: bash
+        run: |
+          set -euo pipefail
+          container="bubaly-meal-plan-atomic-${GITHUB_RUN_ID}-${GITHUB_RUN_ATTEMPT}"
+          printf 'MEAL_PLAN_ATOMIC_CONTAINER=%s\n' "$container" >> "$GITHUB_ENV"
+          docker run --detach --name "$container" --network none --log-driver none \
+            --env POSTGRES_HOST_AUTH_METHOD=trust \
+            --env POSTGRES_DB=bubaly_meal_plan_atomic_ci \
+            postgres:17 -c listen_addresses=127.0.0.1 > /dev/null
+          for attempt in $(seq 1 40); do
+            if docker exec "$container" pg_isready --host=/var/run/postgresql --username=postgres --dbname=bubaly_meal_plan_atomic_ci > /dev/null 2>&1; then
+              break
+            fi
+            sleep 1
+          done
+          docker exec "$container" pg_isready --host=/var/run/postgresql --username=postgres --dbname=bubaly_meal_plan_atomic_ci
+
+      - name: Apply minimal schema and actual migration 0475
+        shell: bash
+        run: |
+          set -euo pipefail
+          pg() {
+            docker exec -i "$MEAL_PLAN_ATOMIC_CONTAINER" psql -X --quiet --output=/dev/null \
+              --file=- --no-password --host=/var/run/postgresql --username=postgres \
+              --dbname=bubaly_meal_plan_atomic_ci --set=ON_ERROR_STOP=1 \
+              --set=VERBOSITY=terse --set=SHOW_CONTEXT=never
+          }
+          pg < tests/fixtures/0475-meal-plan-bootstrap.sql
+          pg < supabase/migrations/0478_meal_plan_slot_writes_are_atomic.sql
+
+      - name: Reapply actual migration on the same synthetic database
+        shell: bash
+        run: |
+          set -euo pipefail
+          docker exec "$MEAL_PLAN_ATOMIC_CONTAINER" psql -X --quiet \
+            --no-password --host=/var/run/postgresql --username=postgres \
+            --dbname=bubaly_meal_plan_atomic_ci --set=ON_ERROR_STOP=1 \
+            --command='create policy synthetic_receipt_leak on public.meal_plan_write_receipts for all to authenticated using (true) with check (true)'
+          docker exec -i "$MEAL_PLAN_ATOMIC_CONTAINER" psql -X --quiet --output=/dev/null \
+            --file=- --no-password --host=/var/run/postgresql --username=postgres \
+            --dbname=bubaly_meal_plan_atomic_ci --set=ON_ERROR_STOP=1 \
+            --set=VERBOSITY=terse --set=SHOW_CONTEXT=never \
+            < supabase/migrations/0478_meal_plan_slot_writes_are_atomic.sql
+          docker exec "$MEAL_PLAN_ATOMIC_CONTAINER" psql -X --quiet \
+            --no-password --host=/var/run/postgresql --username=postgres \
+            --dbname=bubaly_meal_plan_atomic_ci --set=ON_ERROR_STOP=1 \
+            --command="do \$\$ begin if exists (select 1 from pg_catalog.pg_policy where polrelid = 'public.meal_plan_write_receipts'::regclass) then raise exception 'receipt RLS policy survived migration replay'; end if; end \$\$"
+
+      - name: Verify rollback, authorization, receipts and legacy duplicate handling
+        shell: bash
+        run: |
+          set -euo pipefail
+          docker exec -i "$MEAL_PLAN_ATOMIC_CONTAINER" psql -X --quiet --output=/dev/null \
+            --file=- --no-password --host=/var/run/postgresql --username=postgres \
+            --dbname=bubaly_meal_plan_atomic_ci --set=ON_ERROR_STOP=1 \
+            --set=VERBOSITY=terse --set=SHOW_CONTEXT=never \
+            < tests/fixtures/0475-meal-plan-runtime.sql
+
+      - name: Verify independent-session retry and direct-writer races
+        shell: bash
+        run: |
+          set -euo pipefail
+          docker exec -i "$MEAL_PLAN_ATOMIC_CONTAINER" psql -X --quiet --output=/dev/null \
+            --file=- --no-password --host=/var/run/postgresql --username=postgres \
+            --dbname=bubaly_meal_plan_atomic_ci --set=ON_ERROR_STOP=1 \
+            --set=VERBOSITY=terse --set=SHOW_CONTEXT=never \
+            < tests/fixtures/0475-meal-plan-concurrency.sql
+
+      - name: Reject an incompatible same-name receipt constraint
+        shell: bash
+        run: |
+          set -euo pipefail
+          docker exec "$MEAL_PLAN_ATOMIC_CONTAINER" psql -X --quiet \
+            --no-password --host=/var/run/postgresql --username=postgres \
+            --dbname=bubaly_meal_plan_atomic_ci --set=ON_ERROR_STOP=1 \
+            --command='alter table public.meal_plan_write_receipts drop constraint meal_plan_write_receipts_operation_check; alter table public.meal_plan_write_receipts add constraint meal_plan_write_receipts_operation_check check (true)'
+          if docker exec -i "$MEAL_PLAN_ATOMIC_CONTAINER" psql -X --quiet --output=/dev/null \
+            --file=- --no-password --host=/var/run/postgresql --username=postgres \
+            --dbname=bubaly_meal_plan_atomic_ci --set=ON_ERROR_STOP=1 \
+            --set=VERBOSITY=terse --set=SHOW_CONTEXT=never \
+            < supabase/migrations/0478_meal_plan_slot_writes_are_atomic.sql \
+            > incompatible-replay.log 2>&1; then
+            echo 'Migration unexpectedly accepted an incompatible receipt table' >&2
+            exit 1
+          fi
+          grep -F 'meal_plan_write_receipts has incompatible constraints' incompatible-replay.log
+
+      - name: Remove only this run's synthetic database container
+        if: always()
+        shell: bash
+        run: |
+          set -euo pipefail
+          expected="bubaly-meal-plan-atomic-${GITHUB_RUN_ID}-${GITHUB_RUN_ATTEMPT}"
+          if [ "${MEAL_PLAN_ATOMIC_CONTAINER:-}" = "$expected" ]; then
+            docker rm --force "$expected" > /dev/null 2>&1 || true
+          fi
