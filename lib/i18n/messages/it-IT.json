@@ -16623,5 +16623,6 @@
   "ai.thisMessageIsAlreadyBeingAnswered": "Si sta già rispondendo a questo messaggio.",
   "ai.thisMessageWasAlreadyAnswered": "Questo messaggio ha già ricevuto una risposta. Ricarica la conversazione per vederla.",
   "ai.thisMessageCouldNotBeIdentified": "Non è stato possibile identificare questo messaggio. Invialo di nuovo.",
-  "ai.thatAnswerWasCutOff": "Quella risposta si è interrotta prima della fine. Chiedi di nuovo per ricevere la risposta completa."
+  "ai.thatAnswerWasCutOff": "Quella risposta si è interrotta prima della fine. Chiedi di nuovo per ricevere la risposta completa.",
+  "ai.yourFamilyUsedItsMonthlyAllowance": "La tua famiglia ha usato le sue {limit} richieste IA di questo mese. Passa a Family Basic per richieste illimitate oppure riprova il mese prossimo."
 }

@@ -64,7 +64,7 @@ export async function POST(req: NextRequest) {
     if (!parsed.ok) return NextResponse.json({ error: t(PARSE_ERRORS[parsed.error]), code: parsed.error }, { status: 400 });
 
     const access = await assertAIAccess(ctx, { db: supabase });
-    if (!access.ok) return accessDeniedResponse(access);
+    if (!access.ok) return accessDeniedResponse(access, t);
 
     // The scripted provider (AI_PROVIDER_STUB) needs no key; see lib/ai/provider-stub.ts.
     if (!(await isAIConfigured())) {

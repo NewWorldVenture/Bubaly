@@ -222,7 +222,7 @@ export async function POST(req: NextRequest) {
       console.error('[ai] entitlement check failed', error);
       return NextResponse.json({ error: tr('ai.accountContextIsTemporarilyUnavailable'), code: 'unavailable' }, { status: 503 });
     }
-    if (!access.ok) return accessDeniedResponse(access);
+    if (!access.ok) return accessDeniedResponse(access, tr);
 
     if (!(await isAIConfigured())) {
       return NextResponse.json({ error: tr('ai.theAiEngineIsnT'), code: 'not_configured' }, { status: 503 });
