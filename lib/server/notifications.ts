@@ -256,10 +256,14 @@ export async function generateFamilyNotifications(supabase: DB, familyId: string
   }
 
   // Expiring documents → notify managers (one per manager so each is alerted).
+  // The dedup below is permanent, so the key carries the expiry it is about:
+  // a passport renewed and given its new date is a new occurrence, and keyed
+  // by document and manager alone it was never announced again.
   for (const d of docs ?? []) {
     const when = d.expires_at ? new Date(d.expires_at).toLocaleDateString('en-US', { month: 'short', day: 'numeric' }) : 'soon';
+    const expiryDay = String(d.expires_at ?? '').slice(0, 10);
     for (const m of documentManagers) {
-      candidates.push({ type: 'document_expiry', related_type: 'documents', related_id: `${d.id}:${m.id}`, user_id: m.user_id, title: `Document expiring: ${d.title}`, body: `Expires ${when}` });
+      candidates.push({ type: 'document_expiry', related_type: 'documents', related_id: `${d.id}:${expiryDay}:${m.id}`, user_id: m.user_id, title: `Document expiring: ${d.title}`, body: `Expires ${when}` });
     }
   }
 
