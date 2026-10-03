@@ -45,6 +45,8 @@ const { saveAllowanceRuleAction, toggleAllowanceRuleAction } = await import('@/a
 const { rollForward } = await import('@/lib/wallet/allowance');
 const { SOURCE_MESSAGES, translate } = await import('@/lib/i18n/messages');
 const COULD_NOT_SAVE = translate(SOURCE_MESSAGES, 'actions.couldNotSaveThatAllowance');
+const { describeActionError } = await import('@/lib/supabase/errors');
+const PG_ERROR = { code: '57014', message: 'canceling statement due to statement timeout', details: null, hint: null };
 
 let db: InMemorySupabase;
 let patches: Row[];
@@ -164,6 +166,30 @@ describe('what an edit could not do before, it still cannot do', () => {
   it('a rule that does not exist is not reported as saved', async () => {
     expect(await saveAllowanceRuleAction({ id: 'missing', childWalletId: 'wallet-a', amountCents: 100, cadence: 'weekly' }))
       .toEqual({ ok: false, error: COULD_NOT_SAVE });
+  });
+
+  it('a failure of the amount-only write is a failure in words, not a fall-through to a new date', async () => {
+    // Only the first allowance_rules update fails; a later one would go through.
+    // An error here must end the edit, not hand it to the re-dating write.
+    const from = db.from.bind(db);
+    let failed = false;
+    (db as unknown as { from: (name: string) => unknown }).from = (name: string) => {
+      const builder = from(name) as unknown as Record<string, unknown>;
+      if (name === 'allowance_rules' && !failed) {
+        builder.update = () => {
+          failed = true;
+          const settle = { then: (resolve: (v: unknown) => unknown) => Promise.resolve({ data: null, error: PG_ERROR, count: null, status: 500, statusText: 'Error' }).then(resolve) };
+          const chain = { eq: () => chain, select: () => settle };
+          return chain;
+        };
+      }
+      return builder;
+    };
+    const before = snapshot();
+
+    expect(await edit('weekly-tomorrow', 1_200, 'weekly')).toEqual({ ok: false, error: describeActionError(PG_ERROR, COULD_NOT_SAVE) });
+    expect(snapshot()).toEqual(before);
+    expect(harness.revalidatePath).not.toHaveBeenCalled();
   });
 
   it('a kept payday survives a pause and resume made around the edit', async () => {

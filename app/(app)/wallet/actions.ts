@@ -311,16 +311,39 @@ export async function saveAllowanceRuleAction(input: {
   // offers the edit on a paused allowance too, so correcting a paused child's
   // amount quietly restarted the payments. Pausing and resuming is
   // toggleAllowanceRuleAction's job; only a NEW rule starts active.
-  const { data: saved, error } = input.id
-    ? await supabase.from('allowance_rules')
-        .update({ amount_cents: amount, cadence: input.cadence, next_run_on: next })
-        .eq('id', input.id).eq('family_id', familyId)
-        .select('id')
-    : await supabase.from('allowance_rules')
-        .insert({ family_id: familyId, child_wallet_id: input.childWalletId, amount_cents: amount, cadence: input.cadence, is_active: true, next_run_on: next, created_by: ctx.user.id })
-        .select('id');
-  if (error) return actionFailure(error, t('actions.couldNotSaveThatAllowance'));
-  if (input.id && wroteNoRows(saved)) return { ok: false, error: t('actions.couldNotSaveThatAllowance') };
+  //
+  // An edit that keeps the cadence keeps the payday, too. Every edit used to
+  // re-date the rule from today, so raising a weekly allowance the day before
+  // it was due paid it a week later instead (one payment fewer), and a monthly
+  // one edited a few days early went nearly two months between payments —
+  // while the row went on showing the old "next" date until the save. This
+  // guarded write changes only the amount, and only where the cadence is the
+  // one being saved and a date is already set. It matches nothing when the
+  // cadence changed (a weekly date means nothing to a monthly rule), when the
+  // rule has no date yet, or when the row is not this family's to write; each
+  // of those takes the full update below, which re-dates from today and still
+  // fails when it, too, matches nothing.
+  let keptPayday = false;
+  if (input.id) {
+    const { data: kept, error: keepError } = await supabase.from('allowance_rules')
+      .update({ amount_cents: amount })
+      .eq('id', input.id).eq('family_id', familyId).eq('cadence', input.cadence)
+      .select('id, next_run_on');
+    if (keepError) return actionFailure(keepError, t('actions.couldNotSaveThatAllowance'));
+    keptPayday = !wroteNoRows(kept) && Boolean(kept?.[0]?.next_run_on);
+  }
+  if (!keptPayday) {
+    const { data: saved, error } = input.id
+      ? await supabase.from('allowance_rules')
+          .update({ amount_cents: amount, cadence: input.cadence, next_run_on: next })
+          .eq('id', input.id).eq('family_id', familyId)
+          .select('id')
+      : await supabase.from('allowance_rules')
+          .insert({ family_id: familyId, child_wallet_id: input.childWalletId, amount_cents: amount, cadence: input.cadence, is_active: true, next_run_on: next, created_by: ctx.user.id })
+          .select('id');
+    if (error) return actionFailure(error, t('actions.couldNotSaveThatAllowance'));
+    if (input.id && wroteNoRows(saved)) return { ok: false, error: t('actions.couldNotSaveThatAllowance') };
+  }
 
   revalidatePath('/wallet');
   return { ok: true };
