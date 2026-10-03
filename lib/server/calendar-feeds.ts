@@ -1,13 +1,17 @@
 // lib/server/calendar-feeds.ts — server-side calendar feed sync.
 // Fetches a subscribed ICS URL, parses it, and upserts its events into
 // calendar_events keyed by (feed_id, external_uid) so re-syncing a changing
-// public calendar updates rows in place instead of duplicating them. Used by
+// public calendar updates rows in place instead of duplicating them, and
+// removes the events the source marks cancelled. Events the source simply
+// drops are NOT removed: a feed that publishes a rolling window would otherwise
+// erase a family's history on every sync, and that trade-off is recorded, not
+// made here. Used by
 // both the dashboard server actions and the nightly cron. Accepts any Supabase
 // client (RLS-scoped server client for user actions, service client for cron).
 
 import type { SupabaseClient } from '@supabase/supabase-js';
 import { parseICS } from '@/lib/sync/ics';
-import { buildFeedRows } from '@/lib/calendar/feeds';
+import { planFeedRows } from '@/lib/calendar/feeds';
 import { fetchPublicCalendarText } from '@/lib/server/public-calendar-fetch';
 import { wroteNoRows } from '@/lib/supabase/errors';
 
@@ -39,8 +43,9 @@ export async function syncFeed(
   }
 
   let rows;
+  let cancelled: string[];
   try {
-    rows = buildFeedRows(parseICS(icsText), feed.family_id, feed.id);
+    ({ rows, cancelled } = planFeedRows(parseICS(icsText), feed.family_id, feed.id));
   } catch {
     const msg = 'Could not parse the calendar';
     const stampError = await stampFeed(supabase, feed.id, { last_status: 'error', last_error: msg });
@@ -60,6 +65,26 @@ export async function syncFeed(
       return { ok: false, error: stampError ? 'Calendar feed status could not be saved' : 'Could not save calendar events' };
     }
     imported += chunk.length;
+  }
+
+  // What the source says is cancelled comes off the family's calendar. Scoped
+  // to this feed's own rows, and only to the uids the source named: nothing
+  // else of the family's is reachable from here. A key never imported deletes
+  // nothing, which is the ordinary case and not a failure; `.select` confirms
+  // the statement ran, not that it matched.
+  for (let i = 0; i < cancelled.length; i += 200) {
+    const chunk = cancelled.slice(i, i + 200);
+    const { error } = await supabase
+      .from('calendar_events')
+      .delete()
+      .eq('feed_id', feed.id)
+      .in('external_uid', chunk)
+      .select('id');
+    if (error) {
+      console.error(`Calendar feed cancellation removal failed for ${feed.id}:`, error);
+      const stampError = await stampFeed(supabase, feed.id, { last_status: 'error', last_error: 'Could not remove cancelled events' });
+      return { ok: false, error: stampError ? 'Calendar feed status could not be saved' : 'Could not remove cancelled events' };
+    }
   }
 
   const stampError = await stampFeed(supabase, feed.id, {
