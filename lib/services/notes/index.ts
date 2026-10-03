@@ -221,7 +221,7 @@ export async function deleteNote(scope: ServiceScope, noteId: string): Promise<S
     .eq('family_id', scope.familyId)
     .select('id');
 
-  if (!error && wroteNoRows(deleted)) {
+  if (!error && (!Array.isArray(deleted) || wroteNoRows(deleted))) {
     console.error('[service:notes] delete matched no row', { familyId: scope.familyId, noteId });
     return fail('Could not delete that note.', { code: SERVICE_CODES.db });
   }
