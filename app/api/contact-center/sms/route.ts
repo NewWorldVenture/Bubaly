@@ -154,7 +154,7 @@ export async function POST(req: NextRequest) {
       }
       replyReceipt = await prepareSmsReply(admin, { familyId, channelId: channel.family_id, smsSid: boundSid, from, to, body }, async signal => {
         signal.throwIfAborted();
-        const candidate = await runConcierge({ channel: 'sms', from: from ?? undefined, text: body, familyLabel, signal });
+        const candidate = await runConcierge({ channel: 'sms', from: from ?? undefined, text: body, familyLabel, signal, record: { db: admin, familyId } });
         signal.throwIfAborted();
         const { locale } = await getLocaleContext();
         const suppression = channel.ai_concierge_enabled === false ? 'disabled'
@@ -169,7 +169,7 @@ export async function POST(req: NextRequest) {
       result = replyReceipt.candidate;
     } else {
       // Retain unsupported/legacy intake without inventing a unique reply occasion.
-      result = await runConcierge({ channel: 'sms', from: from ?? undefined, text: body, familyLabel });
+      result = await runConcierge({ channel: 'sms', from: from ?? undefined, text: body, familyLabel, record: { db: admin, familyId } });
     }
   } catch (error) {
     // Filing the text matters more than answering it. Twilio does not retry an

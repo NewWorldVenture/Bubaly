@@ -419,14 +419,16 @@ describe('the remaining silence is counted, not ignored', () => {
     // surface adopts withAiRequest — 52 → 48 → 44 → 42 → 40 → 36 → 32, then 23
     // when the scanner stopped counting files that cannot reach a model at all,
     // then 22 when the assistant engine adopted it, then 19, then 17, then 14,
-    // then 11, then 8, then 6, then 5.
+    // then 11, then 8, then 6, then 5, then 4.
     //
     // 5 is a correction AND three adoptions. The scanner learned that
     // `resolveProviderForTask` (lib/ai/routing) hands back a model too, which
     // put three paperwork transcriptions it had never seen into the count
     // (upload, link, emailed attachment: a vision model on every file, recorded
     // nowhere); they adopted withAiRequest in the same change. The sixth unit
-    // was slack, and slack is what this ratchet must not carry.
+    // was slack, and slack is what this ratchet must not carry. 4: the
+    // contact-center concierge, which answers strangers on the family's line,
+    // records its model call on a system scope.
     //
     // That drop is a CORRECTION, not nine adoptions. The old scanner counted any
     // import from `lib/ai/provider`, so six files importing only a `ToolSpec` or
@@ -434,7 +436,7 @@ describe('the remaining silence is counted, not ignored', () => {
     // `isAIConfigured`, sat in the count. None of them can obtain a provider.
     // They were nine units of slack in the very ratchet this comment says must
     // have none.
-    const CEILING = 5;
+    const CEILING = 4;
     expect(
       SILENT.size,
       `these reach a model and record nothing:\n  ${[...SILENT].join('\n  ')}\n` +

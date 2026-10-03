@@ -332,3 +332,26 @@ background work.
   Free, a failure, the system scope, and plain-text and unsupported controls.
 - Coverage test: with the old services it fails 2 cases ("does not grow", and the
   new paperwork assertion); with the new ones it passes.
+
+## Closed: the contact-center concierge records its model call
+
+`runConcierge` answers every inbound SMS, email and voicemail transcript with
+`provider.complete`, and its summary is delivered to the family's phone. It opened
+no `ai_requests` row, so a line that answered badly, or fell back every time, left
+nothing to diagnose.
+
+**Fix.**
+- The three inbound routes pass `record: { db, familyId }`. The model call then
+  runs inside `withAiRequest` on a system scope (`contact-center.{sms|email|voice}`,
+  fixed text).
+- The row is unmetered and never refused: this is inbound work nobody in the
+  family asked for.
+- `runConcierge` still never throws. A model error, an unparseable answer or an
+  abort after the row opened settles the row `failed`, and the deterministic
+  fallback answers the line.
+- No row is opened when AI is not configured or the call is already aborted.
+- The §33 silent ceiling goes from 5 to 4.
+
+**Evidence.** `tests/contact-center-concierge-is-recorded.test.ts` has 6 tests.
+Against the old source 5 fail: the 4 recording cases plus the coverage ceiling.
+The controls (no `record`; not configured or aborted) pass either way.
