@@ -24,6 +24,7 @@ import { AiInsight } from '@/components/ai/ai-insight';
 import { Button } from '@/components/ui/button';
 import { Avatar } from '@/components/ui/avatar';
 import { cn } from '@/lib/utils/cn';
+import { safeWebLink } from '@/lib/utils/safe-link';
 import { NUTRIENT_LABELS, dailyValuePct, fmtAmount, type Nutrition } from '@/lib/meals/nutrition';
 import type { Tables, MealType } from '@/lib/database.types';
 import { useLocale, useTranslations } from '@/components/i18n/locale-provider';
@@ -221,6 +222,7 @@ export function MealsModule() {
   // changing weeks. Keep every part of the card on the same remaining dish.
   const selectedDinnerIndex = Math.min(dinnerIdx, Math.max(0, dinners.length - 1));
   const selectedDinner = dinners[selectedDinnerIndex];
+  const selectedDinnerRecipeUrl = safeWebLink(selectedDinner?.meal?.recipe_url);
   useEffect(() => {
     setDinnerIdx(index => Math.min(index, Math.max(0, dinners.length - 1)));
   }, [dinners.length]);
@@ -601,8 +603,8 @@ export function MealsModule() {
                   {dayLabel(dinners[selectedDinnerIndex].plan_date)}
                 </p>
               </div>
-              {selectedDinner?.meal?.recipe_url && (
-                <a href={selectedDinner.meal.recipe_url} target="_blank" rel="noreferrer"
+              {selectedDinnerRecipeUrl && (
+                <a href={selectedDinnerRecipeUrl} target="_blank" rel="noreferrer"
                   className="mt-2 block rounded-lg bg-brand py-2 text-center text-xs font-semibold text-brand-fg transition hover:opacity-90">
                   {tr('meals.viewRecipe')}
                 </a>
