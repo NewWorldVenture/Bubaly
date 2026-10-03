@@ -180,6 +180,8 @@ export type ChorePlanResult = {
 
 /** What a provider failure says, here and on the request row: never its own words. */
 const PROVIDER_FAILED = 'AI is temporarily unavailable.';
+/** The admission's refusal, in fixed words; the caller says it with the cap in the family's language. */
+const ALLOWANCE_USED = 'The family has used this month\'s AI allowance.';
 
 export async function generateChorePlan(
   scope: ServiceScope,
@@ -221,7 +223,7 @@ export async function generateChorePlan(
   } catch (err) {
     // The admission refused the request (another one took the 10th): nothing
     // ran, and it is the allowance, not an outage.
-    if (err instanceof AiRequestOverAllowance) return { items: [], error: err.message, allowanceLimit: err.allowance };
+    if (err instanceof AiRequestOverAllowance) return { items: [], error: ALLOWANCE_USED, allowanceLimit: err.allowance };
     // Nothing above throws on purpose any more; whatever does is not the
     // family's to read either.
     return { items: [], error: PROVIDER_FAILED, providerFailure: 'unknown' };
