@@ -57,6 +57,14 @@ describe('every client module reads the calendar through the shared read', () =>
     expect(src).toContain("ctx.active.family.timezone || 'UTC'");
   });
 
+  it('the sports hub reads its fortnight through the shared sports read, in the family clock\'s zone', () => {
+    const src = readFileSync(join(ROOT, 'components/modules/sports-module.tsx'), 'utf8');
+    expect(src.match(/readSportsOccurrences\(/g) ?? []).toHaveLength(1);
+    expect(src).toContain('clock.timeZone');
+    // The inserts and the delete stay; no read of the table by its first start remains.
+    expect(src).not.toContain(".from('sports_events').select(");
+  });
+
   it('the open-ended lists keep their one-offs open-ended and bound only the series', () => {
     for (const file of ['components/modules/family-module.tsx', 'components/moments/moments-view.tsx', 'components/moments/home-moment-card.tsx']) {
       const src = readFileSync(join(ROOT, file), 'utf8');
