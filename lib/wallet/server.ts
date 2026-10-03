@@ -1,8 +1,11 @@
-// lib/wallet/server.ts — server-side wallet money movement. The ONE place that
-// writes credits into the immutable ledger: allocates an amount across a child's
-// buckets per their split rule and inserts one `completed` credit per bucket.
-// Reused by parent top-ups, allowance runs, and chore rewards so every credit
-// path is identical and auditable.
+// lib/wallet/server.ts — server-side wallet money movement. `creditChildWallet`
+// is the one place NEW money enters the immutable ledger: it allocates an amount
+// across a child's buckets per their split rule and inserts one `completed`
+// credit per bucket. Reused by parent top-ups, allowance runs, and chore rewards
+// so every credit path is identical and auditable. The card writers below are
+// the exception by design: a card spend leaves Spend, and a card refund
+// (`creditCardRefund`) returns to Spend unsplit, because it undoes a purchase
+// rather than adding money.
 import type { SupabaseClient } from '@supabase/supabase-js';
 import type { Database, Json, WalletTxnType } from '@/lib/database.types';
 import { allocate, normalizeSplit, type Split } from '@/lib/wallet/ledger';
@@ -235,6 +238,9 @@ export async function debitCardSpend(supabase: DB, params: {
  */
 export async function creditCardRefund(supabase: DB, params: {
   familyId: string; childWalletId: string; amountCents: number; description: string; stripeRef: string;
+  /** The purchase's authorization, when Stripe links the refund to one — kept so
+   *  reconciliation can match a refund to what it undoes. */
+  authorizationId?: string | null;
 }): Promise<{ ok: boolean; txnId?: string; error?: string }> {
   const amount = Math.trunc(params.amountCents);
   if (amount <= 0) return { ok: false, error: 'Amount must be greater than 0' };
@@ -256,7 +262,8 @@ export async function creditCardRefund(supabase: DB, params: {
     .insert({
       family_id: params.familyId, child_wallet_id: params.childWalletId, bucket_id: bucket.id,
       type: 'card_refund', status: 'completed', direction: 'credit', amount_cents: amount,
-      description: params.description, stripe_ref: params.stripeRef, metadata: { source: 'issuing' },
+      description: params.description, stripe_ref: params.stripeRef,
+      metadata: { source: 'issuing', authorization: params.authorizationId ?? null },
     })
     .select('id')
     .single();

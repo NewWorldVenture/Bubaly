@@ -240,9 +240,10 @@ export async function handleAuthorizationRequest(
 
 /**
  * Handle issuing_transaction.created — a capture or a refund. A capture posts the
- * real debit (keyed by the transaction id, idempotent); a refund posts the credit
- * back to Spend, keyed the same way. Either releases the authorization hold that
- * was reserved at approval, so the two never double-count. Idempotent.
+ * real debit (keyed by the transaction id, idempotent) and releases the
+ * authorization hold reserved at approval, so the two never double-count; a
+ * refund posts the credit back to Spend, keyed the same way, and leaves any hold
+ * to its capture. Idempotent.
  */
 export async function handleTransactionCreated(
   supabase: DB, txn: Stripe.Issuing.Transaction,
@@ -264,16 +265,21 @@ export async function handleTransactionCreated(
       amountCents: -amount, description: merchant, stripeRef: txn.id,
     });
     if (!debit.ok) throw new Error(debit.error ?? 'Card spend persistence failed');
+    // The captured debit now represents the spend; drop the pending hold.
+    if (authId) await releaseCardHold(supabase, authId);
   } else if (amount > 0) {
+    // A refund leaves the purchase's hold alone. Only the capture replaces it
+    // (or issuing_authorization.updated, when the authorization closes). Stripe
+    // does not promise event order, and a refund processed before its capture
+    // used to cancel the hold as well as credit the refund — the held $20 and
+    // the refunded $20 both became spendable, and the late capture overdrew.
     const merchant = txn.merchant_data?.name ?? 'Card refund';
     const refund = await creditCardRefund(supabase, {
       familyId: card.family_id, childWalletId: card.child_wallet_id,
-      amountCents: amount, description: merchant, stripeRef: txn.id,
+      amountCents: amount, description: merchant, stripeRef: txn.id, authorizationId: authId,
     });
     if (!refund.ok) throw new Error(refund.error ?? 'Card refund persistence failed');
   }
-  // The captured debit now represents the spend; drop the pending hold.
-  if (authId) await releaseCardHold(supabase, authId);
 }
 
 /**

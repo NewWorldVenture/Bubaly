@@ -83,6 +83,11 @@ const spendCents = () => ledger()
   .filter((r) => r.bucket_id === 'bucket-spend' && r.status === 'completed')
   .reduce((sum, r) => sum + (r.direction === 'credit' ? Number(r.amount_cents) : -Number(r.amount_cents)), 0);
 const byRef = (ref: string) => ledger().filter((r) => r.stripe_ref === ref);
+/** What the next authorization is decided against: wallet_reserve_card_auth
+ *  totals `completed` AND `processing`, so a live hold counts against Spend. */
+const spendableCents = () => ledger()
+  .filter((r) => r.bucket_id === 'bucket-spend' && (r.status === 'completed' || r.status === 'processing'))
+  .reduce((sum, r) => sum + (r.direction === 'credit' ? Number(r.amount_cents) : -Number(r.amount_cents)), 0);
 
 describe('a refund gives the money back', () => {
   it('a $20 purchase then its $20 refund leaves the child where they started', async () => {
@@ -147,6 +152,36 @@ describe('a refund gives the money back', () => {
     expect(db.table('wallet_audit_logs')).toEqual([
       expect.objectContaining({ family_id: FAMILY, action: 'card_refund', entity_id: WALLET }),
     ]);
+  });
+});
+
+describe('a refund leaves the purchase\'s hold to the purchase', () => {
+  // Review of #925 (finding 1): a refund also released its authorization's
+  // hold. Stripe does not promise event order, so a refund processed before
+  // its capture cancelled the $20 hold AND credited $20 — spendable went from
+  // $30 to $70, a $70 authorization was approved, and the late capture left
+  // Spend at -$20. Only the capture replaces the hold; a refund leaves it.
+  it('a refund that arrives before its capture does not free the held money as well', async () => {
+    expect(spendableCents()).toBe(3_000);
+
+    expect((await deliver(issuingTransaction({ id: 'ipi_refund', type: 'refund', amount: 2_000 }))).status).toBe(200);
+
+    expect(byRef('iauth_1')).toEqual([expect.objectContaining({ id: 'txn-hold', status: 'processing' })]);
+    expect(spendableCents()).toBe(5_000);
+
+    expect((await deliver(issuingTransaction({}))).status).toBe(200);
+
+    expect(byRef('iauth_1')).toEqual([expect.objectContaining({ id: 'txn-hold', status: 'cancelled' })]);
+    expect(spendableCents()).toBe(5_000);
+    expect(spendCents()).toBe(5_000);
+  });
+
+  it('records which authorization a refund belongs to, so it can be matched to its purchase', async () => {
+    await deliver(issuingTransaction({ id: 'ipi_refund', type: 'refund', amount: 2_000 }));
+    await deliver(issuingTransaction({ id: 'ipi_unlinked', type: 'refund', amount: 500, authorization: null }));
+
+    expect(byRef('ipi_refund')[0].metadata).toEqual({ source: 'issuing', authorization: 'iauth_1' });
+    expect(byRef('ipi_unlinked')[0].metadata).toEqual({ source: 'issuing', authorization: null });
   });
 });
 
