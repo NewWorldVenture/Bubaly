@@ -92,3 +92,13 @@ export function calendarWindowFilter(bounds: CalendarWindowBounds): string {
   return `and(all_day.eq.false,starts_at.gte.${bounds.timedFrom},starts_at.lt.${bounds.timedTo}),`
     + `and(all_day.eq.true,starts_at.gte.${bounds.allDayFromDay}T00:00:00.000Z,starts_at.lt.${bounds.allDayToDay}T00:00:00.000Z)`;
 }
+
+/**
+ * The same two halves from the window's START on, with no end — the calendar
+ * search with no `to` reads every one-off ahead, as it always did, while its
+ * series are expanded over a bounded horizon.
+ */
+export function calendarOpenWindowFilter(bounds: Pick<CalendarWindowBounds, 'timedFrom' | 'allDayFromDay'>): string {
+  return `and(all_day.eq.false,starts_at.gte.${bounds.timedFrom}),`
+    + `and(all_day.eq.true,starts_at.gte.${bounds.allDayFromDay}T00:00:00.000Z)`;
+}
