@@ -601,6 +601,8 @@ export function createAssistantStream(input: AssistantTurnInput, prepared: Prepa
                 // spent and the answer is half an answer: `partially_completed`.
                 obs.used(provider.model, undefined);
                 obs.failed(streamErr, { partial: true });
+                // Saved with the answer, so a retry that finds this exchange
+                // before the row settles still knows it was cut off.
                 responseError = describeAIError(streamErr).message;
                 send({ type: 'error', error: responseError });
               }

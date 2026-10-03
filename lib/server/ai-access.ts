@@ -28,8 +28,11 @@ import { AI_MONTHLY_ALLOWANCE } from '@/lib/constants/ai-allowance';
 import { createServer } from '@/lib/supabase/server';
 import { getUserContext, type UserContext } from '@/lib/supabase/auth';
 import { extractBearerToken, getBearerUserContext } from '@/lib/supabase/bearer';
+import { getTranslations } from '@/lib/i18n/server';
 
 type DB = SupabaseClient<Database>;
+/** A request's translator — `getTranslations()` or `getAIRequestTranslations(req)`. */
+type Translator = (key: string, params?: Record<string, string | number>) => string;
 
 export const AI_REQUESTS_FEATURE_KEY = 'ai-requests';
 /** The assistant page + `/api/ai`. A different product, at a different tier, from the concierge. */
@@ -64,6 +67,8 @@ export type AIAccessDenial = {
   error: string;
   /** Plan level the feature needs, for the upgrade link. */
   needLevel?: number;
+  /** The monthly cap that was reached (`allowance_exceeded` only), so a client can format its own copy. */
+  limit?: number;
 };
 
 export type AIAccessGrant = {
@@ -171,8 +176,11 @@ async function monthlyAllowance(
   }
   const used = count;
   if (used >= allowance) {
+    // `error` stays the English source text: server actions and pages read it
+    // directly. A route renders it in the reader's language through
+    // `accessDeniedResponse(denial, t)`, which keys off `limit`.
     return {
-      ok: false, status: 429, code: 'allowance_exceeded',
+      ok: false, status: 429, code: 'allowance_exceeded', limit: allowance,
       error: `Your family has used its ${allowance} AI requests for this month. Upgrade to Family Basic for unlimited, or try again next month.`,
     };
   }
@@ -236,16 +244,37 @@ export async function assertFamilyAIAllowance(db: DB, familyId: string): Promise
   return monthlyAllowance(familyId, { db }, planLevel, false);
 }
 
-/** The route form of `assertAIAllowance`: `null` to proceed, or the response to return. */
-export async function refuseOverAIAllowance(ctx: UserContext, db: DB): Promise<NextResponse | null> {
+/**
+ * The route form of `assertAIAllowance`: `null` to proceed, or the response to return.
+ *
+ * The refusal is written in the reader's language. A route that already holds
+ * a request translator passes it (the bearer routes do: `getAIRequestTranslations`
+ * honours the native app's Accept-Language over the edge's geo guess);
+ * otherwise the cookie/geo/Accept-Language translator for this request is used.
+ */
+export async function refuseOverAIAllowance(ctx: UserContext, db: DB, t?: Translator): Promise<NextResponse | null> {
   const allowance = await assertAIAllowance(ctx, { db });
-  return allowance.ok ? null : accessDeniedResponse(allowance);
+  if (allowance.ok) return null;
+  return accessDeniedResponse(allowance, allowance.code === 'allowance_exceeded' ? (t ?? await getTranslations()) : undefined);
 }
 
-/** JSON body for a denial, with the status the denial names. */
-export function accessDeniedResponse(denial: AIAccessDenial): NextResponse {
+/**
+ * JSON body for a denial, with the status the denial names.
+ *
+ * With a translator, the monthly allowance refusal is rendered in the reader's
+ * language (status 429 and code `allowance_exceeded` unchanged); without one,
+ * or for any other code, `denial.error` is sent as it is.
+ */
+export function accessDeniedResponse(denial: AIAccessDenial, t?: Translator): NextResponse {
+  const error = t && denial.code === 'allowance_exceeded' && denial.limit !== undefined
+    ? t('ai.yourFamilyUsedItsMonthlyAllowance', { limit: denial.limit })
+    : denial.error;
   return NextResponse.json(
-    { error: denial.error, code: denial.code, ...(denial.needLevel !== undefined ? { needLevel: denial.needLevel } : {}) },
+    {
+      error, code: denial.code,
+      ...(denial.needLevel !== undefined ? { needLevel: denial.needLevel } : {}),
+      ...(denial.limit !== undefined ? { limit: denial.limit } : {}),
+    },
     { status: denial.status },
   );
 }

@@ -57,7 +57,7 @@ export async function POST(req: NextRequest) {
     // should count is documented as open rather than given an invented rule.
     const counted = await isCountedExchange(authed.supabase, { familyId: authed.ctx.active.familyId, userId: authed.ctx.user.id }, exchangeId, text ?? '');
     if (!counted) {
-      const overAllowance = await refuseOverAIAllowance(authed.ctx, authed.supabase);
+      const overAllowance = await refuseOverAIAllowance(authed.ctx, authed.supabase, t);
       if (overAllowance) return overAllowance;
     }
     const res = await fetchWithDeadline('https://api.openai.com/v1/audio/speech', {

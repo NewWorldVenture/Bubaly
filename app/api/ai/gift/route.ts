@@ -94,7 +94,7 @@ export async function POST(req: NextRequest) {
     // be written the call is refused: a request the allowance cannot see is
     // the unmetered call F19 closes.
     const allowance = await assertFamilyAIAllowance(supabase, link.family_id);
-    if (!allowance.ok) return accessDeniedResponse(allowance);
+    if (!allowance.ok) return accessDeniedResponse(allowance, t);
     const { data: recorded, error: recordError } = await supabase
       .from('ai_requests')
       .insert({

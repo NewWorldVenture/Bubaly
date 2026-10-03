@@ -72,7 +72,7 @@ export async function POST(req: NextRequest) {
     // once the month is spent, so a family past its allowance cannot keep a
     // voice exchange going. How a standalone voice call (one with no turn) is
     // counted is documented as open, not given an invented rule here.
-    const overAllowance = await refuseOverAIAllowance(authed.ctx, authed.supabase);
+    const overAllowance = await refuseOverAIAllowance(authed.ctx, authed.supabase, t);
     if (overAllowance) return overAllowance;
     const res = await fetchWithDeadline('https://api.openai.com/v1/audio/transcriptions', {
       method: 'POST',

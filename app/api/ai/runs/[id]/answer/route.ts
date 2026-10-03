@@ -51,7 +51,7 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ id:
     if (answer.length > MAX_AI_ANSWER_CHARS) return NextResponse.json({ error: t('answer.thatAnswerIsTooLong'), code: 'answer_too_long' }, { status: 400 });
 
     const access = await assertAIAccess(ctx, { db: supabase });
-    if (!access.ok) return accessDeniedResponse(access);
+    if (!access.ok) return accessDeniedResponse(access, t);
 
     const scope = scopeFromUserContext(ctx, supabase);
     const result = await answerClarification(scope, id, answer, { startedAtMs: startedAt });

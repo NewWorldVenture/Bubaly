@@ -249,6 +249,8 @@ export async function POST(req: NextRequest) {
             {
               family_id: familyId, conversation_id: conversationId, role: 'assistant', content: assistantContent,
               request_id: obs.requestId,
+              // Saved with the answer, so a retry that finds this exchange
+              // before the row settles still knows it was cut off.
               structured_content: toStructuredContent([], [], responseError),
               tool_calls: actions.length ? (actions.map((a) => ({ name: a.name, args: a.args })) as unknown as Database['public']['Tables']['ai_messages']['Insert']['tool_calls']) : null,
               tool_results: actions.length ? (actions.map((a) => ({ name: a.name, ...summarizeToolResult(a.result) })) as unknown as Database['public']['Tables']['ai_messages']['Insert']['tool_results']) : null,
@@ -257,6 +259,11 @@ export async function POST(req: NextRequest) {
         if (messageInsertError) {
           persistenceError = messageInsertError;
           console.error('[ai-chat] message persistence failed', messageInsertError);
+          // The answer was streamed and its tools ran, but the exchange was not
+          // saved. Partial, not completed: a retry must learn it cannot be
+          // replayed, rather than read "answered" and find nothing (as the
+          // engine does, #875 review 5970538108).
+          obs.failed(new Error(`Turn not persisted: ${messageInsertError.message}`), { partial: true });
         } else {
           const { data: conv, error: titleReadError } = await supabase.from('ai_conversations').select('title').eq('id', conversationId).maybeSingle();
           if (titleReadError) {
