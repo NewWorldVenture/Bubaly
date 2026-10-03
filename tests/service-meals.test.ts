@@ -313,6 +313,23 @@ describe('planWeek / setSlot atomic persistence', () => {
     expect(requestIds).toHaveLength(2);
     expect(requestIds[0]).toBe(requestIds[1]);
   });
+
+  it.each([
+    ['missing date', { id: 'planned-1', meal_type: 'dinner', replayed: false }],
+    ['null date', { id: 'planned-1', plan_date: null, meal_type: 'dinner', replayed: false }],
+    ['numeric date', { id: 'planned-1', plan_date: 20260907, meal_type: 'dinner', replayed: false }],
+    ['impossible date', { id: 'planned-1', plan_date: '2026-02-30', meal_type: 'dinner', replayed: false }],
+    ['missing type', { id: 'planned-1', plan_date: '2026-09-07', replayed: false }],
+    ['null type', { id: 'planned-1', plan_date: '2026-09-07', meal_type: null, replayed: false }],
+    ['numeric type', { id: 'planned-1', plan_date: '2026-09-07', meal_type: 3, replayed: false }],
+    ['unknown type', { id: 'planned-1', plan_date: '2026-09-07', meal_type: 'brunch', replayed: false }],
+  ])('removeSlot refuses incomplete receipt fields: %s before recording activity', async (_label, rpcData) => {
+    const { db, calls } = atomicDb({ rpcData });
+    expect(await removeSlot(scopeWith(db), 'planned-1', 'incomplete-remove')).toMatchObject({ ok: false, code: 'db' });
+    expect(calls.some((call) => call.table === 'rpc:meal_plan_remove_slot')).toBe(true);
+    expect(calls.some((call) => call.table === 'agent_activity' || call.table === 'audit_logs')).toBe(false);
+  });
+
   it('rejects a non-string remove request ID before calling the RPC', async () => {
     const { db, calls } = atomicDb();
     expect(await removeSlot(scopeWith(db), 'planned-1', 42 as never)).toMatchObject({ ok: false, code: 'invalid_input' });

@@ -48,7 +48,9 @@ function createDb(options: Options = {}) {
   const rpc = async (name: string, args: Record<string, unknown>) => {
     calls.push({ name: 'rpc:' + name, args, kind: 'rpc' });
     if (name === 'meal_plan_replace_slots') return { data: Object.hasOwn(options, 'replaceData') ? options.replaceData : { planned: [row()], replaced: 1, replayed: false }, error: options.replaceError ?? null };
-    return { data: Object.hasOwn(options, 'removeData') ? options.removeData : { id: 'planned-slot', replayed: false }, error: options.removeError ?? null };
+    return { data: Object.hasOwn(options, 'removeData') ? options.removeData : {
+      id: 'planned-slot', plan_date: '2026-09-08', meal_type: 'dinner', replayed: false,
+    }, error: options.removeError ?? null };
   };
   return { db: { from, rpc } as unknown as SupabaseClient<Database>, calls };
 }
@@ -115,6 +117,21 @@ describe('meal-plan atomic RPC receipts', () => {
   });
 
   it('does not report a remove success from a wrong-ID or malformed receipt', async () => {
+    const incompleteReceipts = [
+      ['null', { id: 'planned-slot', meal_type: 'dinner', replayed: false }],
+      ['null day', { id: 'planned-slot', plan_date: null, meal_type: 'dinner', replayed: false }],
+      ['numeric day', { id: 'planned-slot', plan_date: 20260908, meal_type: 'dinner', replayed: false }],
+      ['impossible day', { id: 'planned-slot', plan_date: '2026-02-30', meal_type: 'dinner', replayed: false }],
+      ['missing type', { id: 'planned-slot', plan_date: '2026-09-08', replayed: false }],
+      ['null type', { id: 'planned-slot', plan_date: '2026-09-08', meal_type: null, replayed: false }],
+      ['numeric type', { id: 'planned-slot', plan_date: '2026-09-08', meal_type: 3, replayed: false }],
+      ['unknown type', { id: 'planned-slot', plan_date: '2026-09-08', meal_type: 'brunch', replayed: false }],
+    ] as const;
+    for (const [label, removeData] of incompleteReceipts) {
+      const { db, calls } = createDb({ removeData });
+      expect(await removeSlot(scope(db), 'planned-slot', 'remove-key'), label).toMatchObject({ ok: false, code: 'db' });
+      expect(calls.some((call) => call.name === 'rpc:meal_plan_remove_slot')).toBe(true);
+    }
     for (const removeData of [null, 'id', [], { id: 'different-slot', replayed: false }, { id: 'planned-slot' }]) {
       const { db, calls } = createDb({ removeData });
       expect(await removeSlot(scope(db), 'planned-slot', 'remove-key')).toMatchObject({ ok: false, code: 'db' });
@@ -130,5 +147,16 @@ describe('meal-plan atomic RPC receipts', () => {
       p_family_id: family, p_request_id: 'remove-key', p_plan_id: 'planned-slot',
     });
     expect(seams.activity).toHaveLength(1);
+  });
+
+  it('accepts a complete replay receipt without recording the delete twice', async () => {
+    const { db, calls } = createDb({ removeData: {
+      id: 'planned-slot', plan_date: '2026-09-08', meal_type: 'dinner', replayed: true,
+    } });
+    expect(await removeSlot(scope(db), 'planned-slot', 'remove-key')).toEqual({ ok: true, data: { id: 'planned-slot' } });
+    expect(calls.find((call) => call.name === 'rpc:meal_plan_remove_slot')?.args).toEqual({
+      p_family_id: family, p_request_id: 'remove-key', p_plan_id: 'planned-slot',
+    });
+    expect(seams.activity).toEqual([]);
   });
 });
