@@ -19,8 +19,10 @@
 //
 // Now: TZID is honoured (lib/time/zoned, the same clock the rest of the app
 // keeps; a zone this runtime does not know falls back to the old reading and
-// says so in the parser's header), an exception is stored under
-// `uid#recurrenceId` so neither it nor the master can overwrite the other, and a
+// says so in the parser's header), an exception is stored under the UID joined
+// to its RECURRENCE-ID by a control character no UID can carry (0x1F; `#` was
+// ambiguous with a stand-alone UID that contained it, review 5971622223) so
+// neither it nor the master nor a look-alike can overwrite the other, and a
 // cancelled event is a removal, scoped to the feed's own rows. Events the source
 // simply DROPS are deliberately not removed — a rolling-window feed would erase a
 // family's history on every sync — and that decision is recorded in
@@ -60,7 +62,12 @@ const MOVED = ['UID:series', 'SUMMARY:Soccer practice (moved)', 'RECURRENCE-ID:2
 const CANCELLED_WEEK = ['UID:series', 'SUMMARY:Soccer practice', 'RECURRENCE-ID:20260919T140000Z', 'DTSTART:20260919T140000Z', 'STATUS:CANCELLED'];
 const CONCERT = ['UID:concert', 'SUMMARY:Autumn concert', 'DTSTART:20260920T180000Z', 'DTEND:20260920T200000Z'];
 const CONCERT_OFF = [...CONCERT, 'STATUS:CANCELLED'];
-const MOVED_KEY = 'series#2026-09-12T14:00:00.000Z';
+const MOVED_KEY = 'series\u001F2026-09-12T14:00:00.000Z';
+/** A stand-alone event whose UID is, character for character, the OLD key of the moved occurrence. */
+const LOOKALIKE = ['UID:series#2026-09-12T14:00:00.000Z', 'SUMMARY:Unrelated talk', 'DTSTART:20260912T180000Z', 'DTEND:20260912T190000Z'];
+const LOOKALIKE_UID = 'series#2026-09-12T14:00:00.000Z';
+/** The 12 September occurrence cancelled outright: under the old key this shared `LOOKALIKE_UID`. */
+const CANCELLED_MOVED_WEEK = ['UID:series', 'SUMMARY:Soccer practice', 'RECURRENCE-ID:20260912T140000Z', 'DTSTART:20260912T140000Z', 'STATUS:CANCELLED'];
 
 const byUid = (events: ReturnType<typeof parseICS>, uid: string) => events.filter((e) => e.uid === uid);
 
@@ -135,7 +142,7 @@ describe('a recurring series and its exceptions', () => {
   it('a cancelled occurrence is a removal of that occurrence only', () => {
     const { rows, cancelled } = planFeedRows(parseICS(ics(MASTER, CANCELLED_WEEK)), FAMILY, FEED.id);
     expect(rows.map((r) => r.external_uid)).toEqual(['series']);
-    expect(cancelled).toEqual(['series#2026-09-19T14:00:00.000Z']);
+    expect(cancelled).toEqual(['series\u001F2026-09-19T14:00:00.000Z']);
   });
 
   it('a cancelled master is a removal of the series', () => {
@@ -210,6 +217,47 @@ describe('a sync against the family calendar', () => {
     expect(db.table('calendar_events').find((r) => r.id === 'ev-concert')).toBeUndefined();
     expect(feedEvents().map((r) => r.external_uid)).toEqual(['series']);
     expect(feedRow()).toMatchObject({ last_status: 'ok', event_count: 1 });
+  });
+
+  // Review 5971622223 on #908: under the old `uid#recurrenceId` key, a
+  // stand-alone event whose UID happened to be `series#2026-09-12T14:00:00.000Z`
+  // shared a key with the moved 12 September occurrence, so one of them was lost
+  // in the plan — and when that occurrence was cancelled, the feed-scoped delete
+  // took the stand-alone event with it.
+  it('keeps a stand-alone event whose UID looks like an exception key beside the moved occurrence it looks like', async () => {
+    reachable(ics(MASTER, MOVED, LOOKALIKE));
+    const result = await syncFeed(client(), FEED);
+    expect(result).toEqual({ ok: true, imported: 3 });
+    const keys = feedEvents().map((r) => r.external_uid as string).sort();
+    expect(new Set(keys).size, 'three rows, three keys').toBe(3);
+    expect(keys).toContain(LOOKALIKE_UID);
+    expect(keys).toContain(MOVED_KEY);
+    expect(feedEvents().map((r) => r.title).sort()).toEqual(['Soccer practice', 'Soccer practice (moved)', 'Unrelated talk']);
+  });
+
+  it.each([
+    ['the cancelled occurrence before the look-alike', [MASTER, CANCELLED_MOVED_WEEK, LOOKALIKE]],
+    ['the look-alike before the cancelled occurrence', [MASTER, LOOKALIKE, CANCELLED_MOVED_WEEK]],
+  ])('cancelling the occurrence does not remove the look-alike, with %s', async (_order, vevents) => {
+    // Imported on an earlier sync, under the bare UID every one-off is stored by.
+    db.seed('calendar_events', [{ id: 'ev-lookalike', family_id: FAMILY, feed_id: FEED.id, external_uid: LOOKALIKE_UID, title: 'Unrelated talk', starts_at: '2026-09-12T18:00:00.000Z', recurrence: 'none' }]);
+    reachable(ics(...vevents));
+    const result = await syncFeed(client(), FEED);
+    expect(result).toEqual({ ok: true, imported: 2 });
+    expect(db.table('calendar_events').find((r) => r.id === 'ev-lookalike'), 'the stand-alone event survives the cancellation').toBeDefined();
+    expect(feedEvents().map((r) => r.external_uid).sort()).toEqual([LOOKALIKE_UID, 'series'].sort());
+    expect(feedRow()).toMatchObject({ last_status: 'ok', event_count: 2 });
+  });
+
+  it('an exception key can never equal a bare UID, whatever the publisher wrote', () => {
+    for (const uid of ['series', LOOKALIKE_UID, 'odd\u001Fuid', `${MOVED_KEY}`]) {
+      expect(feedExternalUid({ uid, recurrenceId: null }), uid).not.toContain('\u001F');
+    }
+    expect(feedExternalUid({ uid: 'series', recurrenceId: '2026-09-12T14:00:00.000Z' })).toBe(MOVED_KEY);
+    // A UID that arrives carrying the separator (invalid ICS) is stripped of it,
+    // so it reads as a one-off and cannot impersonate the moved occurrence.
+    expect(feedExternalUid({ uid: MOVED_KEY, recurrenceId: null })).toBe('series2026-09-12T14:00:00.000Z');
+    expect(feedExternalUid({ uid: MOVED_KEY, recurrenceId: null })).not.toBe(MOVED_KEY);
   });
 
   it('a cancellation of something the family never imported is not a failure', async () => {
