@@ -27,6 +27,8 @@ function makeDb(respond: (call: Call) => Reply) {
       lte: (c: string, v: unknown) => filter(`lte:${c}`, v),
       gte: (c: string, v: unknown) => filter(`gte:${c}`, v),
       not: (c: string, op: string, v: unknown) => filter(`not:${c}:${op}`, v),
+      // A window arrives as one PostgREST `or`; a read may add more than one.
+      or: (expression: string) => { call.filters.or = [...((call.filters.or as string[] | undefined) ?? []), expression]; return b; },
       then: (resolve: (value: Reply) => void) => resolve(respond(call)),
     });
     return b;
@@ -109,7 +111,8 @@ describe('sports', () => {
   it('expands a weekly practice into every occurrence inside the window, keeping the source id', async () => {
     const weekly = event({ id: 'series', starts_at: '2026-08-04T21:00:00.000Z', recurrence: 'weekly' });
     const single = event({ id: 'game', title: 'Game', starts_at: '2026-09-12T14:00:00.000Z' });
-    const { db, calls } = makeDb((call) => (call.filters.recurrence === 'none' ? { data: [single], error: null } : { data: [weekly], error: null }));
+    const isSeriesRead = (call: Call) => call.filters['neq:recurrence'] === 'none';
+    const { db, calls } = makeDb((call) => (isSeriesRead(call) ? { data: [weekly], error: null } : { data: [single], error: null }));
     const res = await listPracticesBetween(scopeWith(db), { from: '2026-09-07T00:00:00Z', to: '2026-09-21T00:00:00Z' });
     expect(res.ok).toBe(true);
     if (!res.ok) return;
@@ -119,20 +122,25 @@ describe('sports', () => {
       'series@2026-09-15T21:00:00.000Z',
     ]);
     expect(res.data[0].ends_at).toBe('2026-09-08T22:00:00.000Z');
-    // Both reads are family-scoped; the series read looks back a year so an old start still repeats.
+    // Both reads are family-scoped (the shared read, lib/calendar/occurrences.ts).
+    // The one-offs are selected by the window, `to` inclusive; the series read
+    // reaches every series that started by the window's end and has not ended
+    // before its start — however old its first practice.
     expect(calls.every((c) => c.filters.family_id === 'fam-1')).toBe(true);
-    expect(calls.find((c) => c.filters['neq:recurrence'] === 'none')?.filters['gte:starts_at']).toBe('2025-09-20T00:00:00.000Z');
+    const [singles, series] = calls;
+    expect(singles.filters.or).toEqual(['and(starts_at.gte.2026-09-07T00:00:00.000Z,starts_at.lt.2026-09-21T00:00:00.001Z)', 'recurrence.is.null,recurrence.eq.none']);
+    expect(series.filters).toMatchObject({ 'neq:recurrence': 'none', 'lte:starts_at': '2026-09-21T00:00:00.001Z', or: ['recurrence_until.is.null,recurrence_until.gte.2026-09-07T00:00:00.000Z'] });
   });
 
   it('stops a series at recurrence_until', async () => {
     const weekly = event({ id: 'series', starts_at: '2026-08-04T21:00:00.000Z', recurrence: 'weekly', recurrence_until: '2026-09-10T00:00:00.000Z' });
-    const { db } = makeDb((call) => (call.filters.recurrence === 'none' ? { data: [], error: null } : { data: [weekly], error: null }));
+    const { db } = makeDb((call) => (call.filters['neq:recurrence'] === 'none' ? { data: [weekly], error: null } : { data: [], error: null }));
     const res = await listPracticesBetween(scopeWith(db), { from: '2026-09-07T00:00:00Z', to: '2026-09-21T00:00:00Z' });
     expect(res.ok && res.data.map((e) => e.starts_at)).toEqual(['2026-09-08T21:00:00.000Z']);
   });
 
   it('fails closed when either read fails', async () => {
-    const { db } = makeDb((call) => (call.filters.recurrence === 'none' ? { data: [], error: null } : { data: null, error: { message: 'boom' } }));
+    const { db } = makeDb((call) => (call.filters['neq:recurrence'] === 'none' ? { data: null, error: { message: 'boom' } } : { data: [], error: null }));
     expect(await listPracticesBetween(scopeWith(db))).toMatchObject({ ok: false, code: 'db' });
   });
 });

@@ -264,9 +264,10 @@ describe('findFreeSlots', () => {
       expect(res.data[0].startsAt).toBe('2026-09-07T12:00:00.000Z');
       expect(res.data[0].dayKey).toBe('2026-09-07');
     }
-    // Every source is read and every source is family-scoped. The calendar is
-    // two reads: the one-offs in the window and the series that could reach it.
-    expect(calls.map((c) => c.table).sort()).toEqual(['calendar_events', 'calendar_events', 'school_events', 'sports_events']);
+    // Every source is read and every source is family-scoped. The calendar and
+    // the sports table are two reads each: the one-offs in the window and the
+    // series that could reach it.
+    expect(calls.map((c) => c.table).sort()).toEqual(['calendar_events', 'calendar_events', 'school_events', 'sports_events', 'sports_events']);
     expect(calls.every((c) => c.filters.family_id === 'fam-1')).toBe(true);
   });
 

@@ -11,6 +11,7 @@
 // assertion depends on the host's TZ. CI runs this file under TZ=UTC and
 // TZ=America/Los_Angeles; it was also run under Asia/Tokyo and Etc/GMT+12.
 import { describe, expect, it, vi } from 'vitest';
+import { orPredicate } from './helpers/in-memory-supabase';
 import { addDaysToDayKey, dayKeyInTz } from '@/lib/services/scope';
 
 const LA = 'America/Los_Angeles';
@@ -41,6 +42,7 @@ function fakeDb(tables: Record<string, Row[]>) {
       const rows = tables[table] ?? [];
       const predicates: ((row: Row) => boolean)[] = [];
       let counting = false;
+      let limitTo: number | null = null;
       const query = {
         select(_columns: string, options?: { count?: string; head?: boolean }) {
           counting = Boolean(options?.count);
@@ -52,11 +54,19 @@ function fakeDb(tables: Record<string, Row[]>) {
         lte(column: string, value: unknown) { predicates.push((r) => compare(r[column], value) <= 0); return query; },
         gt(column: string, value: unknown) { predicates.push((r) => compare(r[column], value) > 0); return query; },
         lt(column: string, value: unknown) { predicates.push((r) => compare(r[column], value) < 0); return query; },
+        neq(column: string, value: unknown) { predicates.push((r) => r[column] !== value); return query; },
+        // The series-aware calendar and sports reads (lib/calendar/occurrences.ts)
+        // arrive as PostgREST `or` expressions; the in-memory helper's parser
+        // gives them the same semantics here.
+        or(expression: string) { predicates.push(orPredicate(expression)); return query; },
+        order() { return query; },
+        limit(count: number) { limitTo = count; return query; },
         then<TResult1, TResult2 = never>(
           onFulfilled?: ((value: { data: Row[] | null; count: number | null; error: null }) => TResult1 | PromiseLike<TResult1>) | null,
           onRejected?: ((reason: unknown) => TResult2 | PromiseLike<TResult2>) | null,
         ): PromiseLike<TResult1 | TResult2> {
-          const matched = rows.filter((row) => predicates.every((p) => p(row)));
+          const all = rows.filter((row) => predicates.every((p) => p(row)));
+          const matched = limitTo === null ? all : all.slice(0, limitTo);
           const result = counting
             ? { data: null, count: matched.length, error: null as null }
             : { data: matched, count: null, error: null as null };
@@ -83,17 +93,19 @@ const f = (row: Row): Row => ({ family_id: FAMILY, ...row });
  */
 function household(): Record<string, Row[]> {
   return {
+    // Timed rows, as the table holds them (`all_day` is NOT NULL): the
+    // series-aware read selects timed and all-day rows by different bounds.
     calendar_events: [
       // 03:00 on the 21st in LA. In Tokyo this is 19:00 on the 21st — before
       // Tokyo's window even opens, so Tokyo must not see it at all.
-      f({ starts_at: '2026-09-21T10:00:00Z' }),
+      f({ all_day: false, starts_at: '2026-09-21T10:00:00Z' }),
       // 10:00 on the 21st in LA; 02:00 on the 22nd in Tokyo. Today for both.
-      f({ starts_at: '2026-09-21T17:00:00Z' }),
+      f({ all_day: false, starts_at: '2026-09-21T17:00:00Z' }),
       // 22:00 on the 21st in LA — today there, but the GREENWICH day is the
       // 22nd. This is the row the old code lost.
-      f({ starts_at: '2026-09-22T05:00:00Z' }),
+      f({ all_day: false, starts_at: '2026-09-22T05:00:00Z' }),
       // 03:00 on the 22nd in LA (tomorrow); 19:00 on the 22nd in Tokyo (today).
-      f({ starts_at: '2026-09-22T10:00:00Z' }),
+      f({ all_day: false, starts_at: '2026-09-22T10:00:00Z' }),
     ],
     appointments: [
       f({ id: 'ap-1', starts_at: '2026-09-21T10:00:00Z' }),

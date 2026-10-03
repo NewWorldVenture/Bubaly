@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { instantCalendarBounds } from '@/lib/briefing/calendar-window';
-import { readCalendarOccurrences } from '@/lib/calendar/occurrences';
+import { readCalendarOccurrences, readSportsOccurrences } from '@/lib/calendar/occurrences';
 import { getTranslations } from '@/lib/i18n/server';
 import { createServer } from '@/lib/supabase/server';
 import { settleAll } from '@/lib/supabase/settle';
@@ -67,7 +67,7 @@ export async function POST(req: NextRequest) {
       // Series included, so the week grid shows every week of a weekly event (lib/calendar/occurrences.ts).
       readCalendarOccurrences(supabase, familyId, instantCalendarBounds(w.aheadStart, w.aheadEnd, tz), tz, { columns: ['title', 'starts_at', 'ends_at', 'location', 'category', 'assignee_id'], limit: 60 }),
       supabase.from('school_events').select('title, starts_at, event_type, notes, member_id').eq('family_id', familyId).gte('starts_at', w.aheadStart).lte('starts_at', w.aheadEnd).order('starts_at').limit(20),
-      supabase.from('sports_events').select('title, starts_at, sport, team, location, member_id').eq('family_id', familyId).gte('starts_at', w.aheadStart).lte('starts_at', w.aheadEnd).order('starts_at').limit(20),
+      readSportsOccurrences(supabase, familyId, instantCalendarBounds(w.aheadStart, w.aheadEnd, tz), tz, { columns: ['title', 'starts_at', 'sport', 'team', 'location', 'member_id'], limit: 20 }),
       supabase.from('appointments').select('title, starts_at, provider, location, member_id').eq('family_id', familyId).gte('starts_at', w.aheadStart).lte('starts_at', w.aheadEnd).order('starts_at').limit(15),
       supabase.from('chore_assignments').select('status, due_at, member_id').eq('family_id', familyId).gte('due_at', w.aheadStart).lte('due_at', w.aheadEnd),
       supabase.from('meal_plans').select('plan_date, meal_type, meals(name)').eq('family_id', familyId).gte('plan_date', w.days[0]).lte('plan_date', w.days[w.days.length - 1]).order('plan_date').limit(21),

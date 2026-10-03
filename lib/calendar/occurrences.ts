@@ -24,12 +24,18 @@
 // `starts_at` by its window as well, so a weekly practice was invisible to all
 // of them from its second week: the planner double-booked over it, no reminder
 // fired for it, and the free-slot finder offered its hour.
+//
+// `sports_events` (0006) is the one other household table with a recurrence
+// rule, and weekly practice is exactly the row a family enters once. The same
+// core reads it (`readSportsOccurrences`): its rows are all timed, so its
+// window is the instant window alone.
 import type { SupabaseClient } from '@supabase/supabase-js';
 import type { Database } from '@/lib/database.types';
 import { expandEventsInZone } from '@/lib/calendar/recurrence';
 import { calendarWindowFilter, type CalendarWindowBounds } from '@/lib/briefing/calendar-window';
 
 type EventRow = Database['public']['Tables']['calendar_events']['Row'];
+type SportsRow = Database['public']['Tables']['sports_events']['Row'];
 type Db = SupabaseClient<Database>;
 
 /** The columns the expander needs; always read, whatever the caller asked for. */
@@ -92,6 +98,74 @@ export const isSeries = (row: { recurrence: string | null }): boolean => !!row.r
 const earlier = (a: string, b: string) => (a < b ? a : b);
 const later = (a: string, b: string) => (a > b ? a : b);
 
+/** The builder the core drives: a `select` already applied, the rest added here. */
+type WindowQuery = PromiseLike<{ data: unknown; error: { message: string } | null }> & {
+  eq(column: string, value: string): WindowQuery;
+  neq(column: string, value: string): WindowQuery;
+  lte(column: string, value: string): WindowQuery;
+  or(filter: string): WindowQuery;
+  order(column: string): WindowQuery;
+  limit(count: number): WindowQuery;
+};
+
+type WindowRow = { id: string; starts_at: string; recurrence: string | null };
+
+type WindowReads<R> = { singles: R[]; series: R[]; error: null } | { singles: null; series: null; error: { message: string } };
+
+/**
+ * The two reads every series-aware window shares, issued together and awaited
+ * together: the one-off rows the window filter selects (series excluded, or a
+ * master whose first occurrence falls in the window would appear twice), and
+ * every series row that could reach the window — started by `latest`, not
+ * ended before `earliest`. `neq` excludes a null recurrence as SQL does. One
+ * row past the ceiling is read so a household past it is a failed read, not a
+ * prefix. Both lists are filtered here as well as in the query, so a row the
+ * database (or a stand-in for it) answers out of place is still counted once.
+ */
+async function readWindowRows<R extends WindowRow>(args: {
+  select: () => WindowQuery;
+  familyId: string;
+  singlesFilter: string;
+  latest: string;
+  earliest: string;
+  scope?: { column: string; value: string };
+  refine?: (query: OccurrenceFilters) => OccurrenceFilters;
+  singlesLimit?: number;
+}): Promise<WindowReads<R>> {
+  // The caller's filters, on both reads. The builder returns itself from every
+  // filter, so the structural view and the typed builder are the same object.
+  const scoped = (query: WindowQuery): WindowQuery => {
+    const own = args.scope ? query.eq(args.scope.column, args.scope.value) : query;
+    return args.refine ? (args.refine(own as unknown as OccurrenceFilters) as unknown as WindowQuery) : own;
+  };
+  const singlesBase = scoped(args.select().eq('family_id', args.familyId))
+    .or(args.singlesFilter)
+    .or('recurrence.is.null,recurrence.eq.none')
+    .order('starts_at');
+  const singlesQuery = args.singlesLimit !== undefined ? singlesBase.limit(args.singlesLimit) : singlesBase;
+  const seriesQuery = scoped(args.select().eq('family_id', args.familyId))
+    .neq('recurrence', 'none')
+    .lte('starts_at', args.latest)
+    .or(`recurrence_until.is.null,recurrence_until.gte.${args.earliest}`)
+    .order('starts_at')
+    .limit(SERIES_READ_MAX + 1);
+  const [singles, series] = await Promise.all([singlesQuery, seriesQuery]);
+  if (singles.error) return { singles: null, series: null, error: singles.error };
+  if (series.error) return { singles: null, series: null, error: series.error };
+  const seriesRows = ((series.data ?? []) as R[]).filter(isSeries);
+  if (seriesRows.length > SERIES_READ_MAX) {
+    return { singles: null, series: null, error: { message: `More than ${SERIES_READ_MAX} recurring events; the window cannot be read whole` } };
+  }
+  return { singles: ((singles.data ?? []) as R[]).filter((row) => !isSeries(row)), series: seriesRows, error: null };
+}
+
+/** One-offs and occurrences together, in `starts_at` order, cut at `limit`; `count` is the total before the cut. */
+function mergeOccurrences<R extends WindowRow>(singles: R[], occurrences: R[], limit: number | undefined) {
+  const rows = [...singles, ...occurrences]
+    .sort((a, b) => a.starts_at.localeCompare(b.starts_at) || String(a.id).localeCompare(String(b.id)));
+  return { data: limit !== undefined ? rows.slice(0, limit) : rows, count: rows.length, error: null as null };
+}
+
 /**
  * Every occurrence in the window, in `starts_at` order.
  *
@@ -112,57 +186,84 @@ export async function readCalendarOccurrences<C extends keyof EventRow = keyof E
   const columns = opts.columns ? [...new Set<string>([...opts.columns, ...RECURRENCE_COLUMNS])].join(', ') : '*';
   const dayStart = `${bounds.allDayFromDay}T00:00:00.000Z`;
   const dayEnd = `${bounds.allDayToDay}T00:00:00.000Z`;
-  // The caller's filters, on both reads. The builder returns itself from every
-  // filter, so the structural view and the typed builder are the same object.
-  const scoped = <Q extends { eq: (column: string, value: string) => Q }>(query: Q): Q => {
-    const own = opts.assigneeId ? query.eq('assignee_id', opts.assigneeId) : query;
-    return opts.refine ? (opts.refine(own as unknown as OccurrenceFilters) as unknown as Q) : own;
-  };
+  const read = await readWindowRows<CalendarOccurrence<C>>({
+    select: () => db.from('calendar_events').select(columns) as unknown as WindowQuery,
+    familyId,
+    singlesFilter: opts.singlesFilter ?? calendarWindowFilter(bounds),
+    latest: later(bounds.timedTo, dayEnd),
+    earliest: earlier(bounds.timedFrom, dayStart),
+    scope: opts.assigneeId ? { column: 'assignee_id', value: opts.assigneeId } : undefined,
+    refine: opts.refine,
+    singlesLimit: opts.singlesLimit,
+  });
+  if (read.error) return { data: null, count: null, error: read.error };
 
-  // Two reads, issued together and awaited together: the one-offs by the
-  // window filter, series excluded (a master whose first occurrence falls in
-  // the window is the series read's to produce, once); and every series that
-  // could reach the window — started by its end, not ended before its start.
-  // `neq` excludes a null recurrence as SQL does. One row past the ceiling is
-  // read so a household past it is a failed read, not a prefix.
-  const latest = later(bounds.timedTo, dayEnd);
-  const earliest = earlier(bounds.timedFrom, dayStart);
-  const singlesBase = scoped(db
-    .from('calendar_events')
-    .select(columns)
-    .eq('family_id', familyId))
-    .or(opts.singlesFilter ?? calendarWindowFilter(bounds))
-    .or('recurrence.is.null,recurrence.eq.none')
-    .order('starts_at');
-  const singlesQuery = opts.singlesLimit !== undefined ? singlesBase.limit(opts.singlesLimit) : singlesBase;
-  const seriesQuery = scoped(db
-    .from('calendar_events')
-    .select(columns)
-    .eq('family_id', familyId))
-    .neq('recurrence', 'none')
-    .lte('starts_at', latest)
-    .or(`recurrence_until.is.null,recurrence_until.gte.${earliest}`)
-    .order('starts_at')
-    .limit(SERIES_READ_MAX + 1);
-  const [singles, series] = await Promise.all([singlesQuery, seriesQuery]);
-  if (singles.error) return { data: null, count: null, error: singles.error };
-  if (series.error) return { data: null, count: null, error: series.error };
-  const seriesRows = ((series.data ?? []) as unknown as CalendarOccurrence<C>[]).filter(isSeries);
-  if (seriesRows.length > SERIES_READ_MAX) return { data: null, count: null, error: { message: `More than ${SERIES_READ_MAX} recurring events; the window cannot be read whole` } };
-
-  const timed = seriesRows.filter((row) => !row.all_day);
-  const allDay = seriesRows.filter((row) => row.all_day);
+  const timed = read.series.filter((row) => !row.all_day);
+  const allDay = read.series.filter((row) => row.all_day);
   const occurrences = [
     ...expandEventsInZone(timed, new Date(bounds.timedFrom), new Date(bounds.timedTo), timezone),
     // An all-day series steps by calendar date; its rows are UTC midnights of
     // the family's dates, so the date window and a UTC clock read them as written.
     ...expandEventsInZone(allDay, new Date(dayStart), new Date(dayEnd), 'UTC'),
   ];
+  return mergeOccurrences(read.singles, occurrences, opts.limit);
+}
 
-  // Both lists are filtered here as well as in the query, so a row the database
-  // (or a stand-in for it) answers out of place is still counted once.
-  const singleRows = ((singles.data ?? []) as unknown as CalendarOccurrence<C>[]).filter((row) => !isSeries(row));
-  const rows = [...singleRows, ...occurrences]
-    .sort((a, b) => a.starts_at.localeCompare(b.starts_at) || String(a.id).localeCompare(String(b.id)));
-  return { data: opts.limit !== undefined ? rows.slice(0, opts.limit) : rows, count: rows.length, error: null };
+// ── sports_events ────────────────────────────────────────────────────────────
+
+/** The columns the expander needs from a sports row; always read. */
+const SPORTS_RECURRENCE_COLUMNS = ['id', 'starts_at', 'ends_at', 'recurrence', 'recurrence_until'] as const;
+type SportsRecurrenceColumn = (typeof SPORTS_RECURRENCE_COLUMNS)[number];
+
+/** A sports row as the caller asked for it, plus the recurrence columns, with `starts_at`/`ends_at` of THIS occurrence. */
+export type SportsOccurrence<C extends keyof SportsRow> = Pick<SportsRow, C | SportsRecurrenceColumn>;
+
+export type SportsOccurrencesResult<C extends keyof SportsRow> =
+  | { data: SportsOccurrence<C>[]; count: number; error: null }
+  | { data: null; count: null; error: { message: string } };
+
+export type SportsOccurrencesOptions<C extends keyof SportsRow> = {
+  /** The columns to read; omitted reads every column. The recurrence columns are always read. */
+  columns?: readonly C[];
+  /** Applied after the merge, to the sorted occurrences. */
+  limit?: number;
+  /** A database-side cap on the one-off read; `count` is then a floor. */
+  singlesLimit?: number;
+  /** Only this member's practices and games. */
+  memberId?: string;
+  /** Filters added to both reads — an event type. */
+  refine?: (query: OccurrenceFilters) => OccurrenceFilters;
+};
+
+/** The one-off filter for a table whose rows are all timed: the instant window, `timedTo` exclusive. */
+export function timedWindowFilter(bounds: Pick<CalendarWindowBounds, 'timedFrom' | 'timedTo'>): string {
+  return `and(starts_at.gte.${bounds.timedFrom},starts_at.lt.${bounds.timedTo})`;
+}
+
+/**
+ * Every practice, game and tournament in the window, series expanded in the
+ * family's zone, in `starts_at` order. Each occurrence keeps its source row's
+ * id, which is what a planner needs to say "soccer is Tuesday at 5 again".
+ */
+export async function readSportsOccurrences<C extends keyof SportsRow = keyof SportsRow>(
+  db: Db,
+  familyId: string,
+  bounds: Pick<CalendarWindowBounds, 'timedFrom' | 'timedTo'>,
+  timezone: string,
+  opts: SportsOccurrencesOptions<C> = {},
+): Promise<SportsOccurrencesResult<C>> {
+  const columns = opts.columns ? [...new Set<string>([...opts.columns, ...SPORTS_RECURRENCE_COLUMNS])].join(', ') : '*';
+  const read = await readWindowRows<SportsOccurrence<C>>({
+    select: () => db.from('sports_events').select(columns) as unknown as WindowQuery,
+    familyId,
+    singlesFilter: timedWindowFilter(bounds),
+    latest: bounds.timedTo,
+    earliest: bounds.timedFrom,
+    scope: opts.memberId ? { column: 'member_id', value: opts.memberId } : undefined,
+    refine: opts.refine,
+    singlesLimit: opts.singlesLimit,
+  });
+  if (read.error) return { data: null, count: null, error: read.error };
+  const occurrences = expandEventsInZone(read.series, new Date(bounds.timedFrom), new Date(bounds.timedTo), timezone);
+  return mergeOccurrences(read.singles, occurrences, opts.limit);
 }
