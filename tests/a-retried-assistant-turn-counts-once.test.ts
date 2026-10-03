@@ -1,5 +1,6 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { NextRequest } from 'next/server';
+import { admitRpc, type AdmitArgs } from './helpers/admit-ai-request';
 
 // F19, owner review 5393250792 on #788: a retried or accidentally repeated
 // assistant send is ONE turn. It must not consume another allowance unit or
@@ -109,7 +110,13 @@ class Query {
   }
 }
 
-const db = { from: (name: string) => new Query(name), auth: { getUser: async () => ({ data: { user: state.user } }) } };
+// F19 (0477): a Free family's turn is filed through `admit_ai_request`, which
+// this emulates over the same in-memory table (and its injected faults).
+const db = {
+  from: (name: string) => new Query(name),
+  rpc: (name: string, args: AdmitArgs) => admitRpc(db)(name, args),
+  auth: { getUser: async () => ({ data: { user: state.user } }) },
+};
 
 const ctx = () => ({
   user: state.user,
@@ -636,5 +643,36 @@ describe('a keyed send whose request cannot be recorded runs nothing, on every p
     state.fault = 'insert-error';
     expect((await POST(send())).status).not.toBe(200);
     expect(state.providerCalls).toBe(0);
+  });
+});
+
+describe('two NEW sends racing at 9 of 10 (F19, 0477)', () => {
+  // Both read 9 at the route's check before either files; the admission counts
+  // and files under one per-family lock, so exactly one turn reaches the model
+  // and the other is answered with the allowance refusal.
+  it('/api/ai JSON: one 200, one 429 allowance_exceeded with its limit, one model call', async () => {
+    const { POST } = await import('@/app/api/ai/route');
+    seed(9);
+    const responses = await Promise.all([
+      POST(send({ key: 'send-0001-abcdef' })),
+      POST(send({ key: 'send-0002-abcdef', message: 'And lunch?' })),
+    ]);
+    expect(responses.map((r) => r.status).sort()).toEqual([200, 429]);
+    const refused = responses.find((r) => r.status === 429)!;
+    expect(await refused.json()).toMatchObject({ code: 'allowance_exceeded', limit: 10, error: 'ai.yourFamilyUsedItsMonthlyAllowance' });
+    expect(state.providerCalls).toBe(1);
+    expect(tableOf('ai_requests')).toHaveLength(10);
+  });
+
+  it('/api/ai/chat stream: the refused send reports the allowance and runs nothing', async () => {
+    const { POST } = await import('@/app/api/ai/chat/route');
+    seed(9);
+    const responses = await Promise.all([sendChat('send-0001-abcdef'), sendChat('send-0002-abcdef', 'And lunch?')].map((r) => POST(r)));
+    const streams = await Promise.all(responses.map(async (r) => events(await r.text())));
+    const refusals = streams.flat().filter((e) => e.type === 'error' && e.code === 'allowance_exceeded');
+    expect(refusals).toHaveLength(1);
+    expect(refusals[0]).toMatchObject({ limit: 10, error: 'ai.yourFamilyUsedItsMonthlyAllowance' });
+    expect(state.providerCalls).toBe(1);
+    expect(tableOf('ai_requests')).toHaveLength(10);
   });
 });

@@ -2798,6 +2798,18 @@ export interface Database {
       wallet_reserve_card_auth: { Args: { p_family: string; p_child_wallet: string; p_amount: number; p_auth_id: string; p_description: string }; Returns: boolean };
       rate_limit_hit: { Args: { p_key: string; p_limit: number; p_window_seconds: number }; Returns: { allowed: boolean; retry_after: number }[] };
       rate_limit_prune: { Args: Record<string, never>; Returns: undefined };
+      // 0477 (F19): count-and-file under a per-family lock, service role only.
+      // outcome 'admitted' | 'refused' (at the allowance; no row) | 'existing'
+      // (the retry key already names a filed request).
+      admit_ai_request: {
+        Args: {
+          p_family_id: string; p_allowance: number; p_kind: string; p_request_text: string;
+          p_requested_by?: string | null; p_requested_by_member_id?: string | null; p_conversation_id?: string | null;
+          p_feature?: string | null; p_interpreted_intent?: string | null; p_status?: string; p_priority?: number;
+          p_client_request_id?: string | null; p_started_at?: string | null;
+        };
+        Returns: { request_id: string | null; outcome: 'admitted' | 'refused' | 'existing'; used: number | null }[];
+      };
       mark_conversation_read: { Args: { p_conversation_id: string }; Returns: undefined };
       marketplace_create_circle: { Args: { p_family: string; p_name: string; p_emoji?: string }; Returns: string };
       marketplace_join_circle: { Args: { p_family: string; p_code: string }; Returns: string };

@@ -1,5 +1,6 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { NextRequest } from 'next/server';
+import { admitRpc, type AdmitArgs } from './helpers/admit-ai-request';
 
 // F19 on the public gift route. The allowance is a COUNT of the family's
 // `ai_requests` rows, so a route that checks the count but files no row lets a
@@ -16,7 +17,10 @@ const state = vi.hoisted(() => ({
 }));
 
 function fakeDb() {
-  return {
+  const client = {
+    // F19 (0477): a capped family's row is filed through `admit_ai_request`,
+    // emulated over this same table, with its per-family lock.
+    rpc: (name: string, args: AdmitArgs) => admitRpc(client)(name, args),
     from(table: string) {
       if (table === 'gift_links') {
         return {
@@ -67,6 +71,7 @@ function fakeDb() {
       throw new Error(`unexpected table ${table}`);
     },
   };
+  return client;
 }
 
 vi.mock('@/lib/supabase/server', () => ({ createServiceClient: () => fakeDb() }));
@@ -124,6 +129,18 @@ describe('a gift-link request counts against the family allowance (F19)', () => 
     const second = await POST(call());
     expect(second.status).toBe(429);
     expect(state.providerCalls).toBe(1);
+  });
+
+  it('two requests racing at 9 of 10: one is answered, one is refused, the provider is called once', async () => {
+    // The check-then-file race (F19): both requests read 9 before either row
+    // lands. Admission counts and files under one per-family lock, so the
+    // second is counted against the first's row.
+    const { POST } = await import('@/app/api/ai/gift/route');
+    seed(9);
+    const statuses = (await Promise.all([POST(call()), POST(call())])).map((r) => r.status).sort();
+    expect(statuses).toEqual([200, 429]);
+    expect(state.providerCalls).toBe(1);
+    expect(state.rows).toHaveLength(10);
   });
 
   it('refuses rather than calling the model when the request cannot be filed', async () => {

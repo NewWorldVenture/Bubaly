@@ -19,6 +19,7 @@
 // handler map. Every result is `{ data, error, count }` — nothing throws, the
 // way the real client behaves.
 import { randomUUID } from 'node:crypto';
+import { admitAiRequest, type AdmitArgs } from './admit-ai-request';
 
 export type Row = Record<string, unknown>;
 
@@ -70,6 +71,13 @@ const BUILT_IN_RPC: Record<string, (args: Record<string, unknown>, db: InMemoryS
   family_allergies: (args, db) => db.table('medical_profiles')
     .filter((row) => row.family_id === args.p_family_id)
     .map((row) => ({ member_id: row.member_id, allergies: row.allergies ?? null })),
+  // 0477 (F19): a capped family's `ai_requests` row is admitted — counted and
+  // filed under a per-family lock — over this same table.
+  admit_ai_request: async (args, db) => {
+    const { data, error } = await admitAiRequest(db, args as unknown as AdmitArgs);
+    if (error) throw new Error(error.message);
+    return data;
+  },
 };
 
 function pgError(code: string, message: string): PostgrestError {
