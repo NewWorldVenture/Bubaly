@@ -58,6 +58,9 @@ async function readMove(scope: ServiceScope, moveId: string | null): Promise<Ser
     console.error('[service:moving] move read failed', error);
     return fail(describeDbError(error, 'Could not load the move.'), { code: SERVICE_CODES.db });
   }
+  if (data != null && !Array.isArray(data)) {
+    return fail('Could not load the move.', { code: SERVICE_CODES.db });
+  }
   return ok(data?.[0] ?? null);
 }
 
