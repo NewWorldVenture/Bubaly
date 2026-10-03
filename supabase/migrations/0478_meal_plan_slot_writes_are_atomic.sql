@@ -182,14 +182,15 @@ begin
 end;
 $$;
 
-revoke all on function public.meal_plan_slot_write_guard() from public, anon, authenticated;
+revoke all on function public.meal_plan_slot_write_guard() from public, anon, authenticated, service_role;
 drop trigger if exists meal_plan_slot_write_guard on public.meal_plans;
 create trigger meal_plan_slot_write_guard
   before insert or update or delete on public.meal_plans
   for each row execute function public.meal_plan_slot_write_guard();
 
-create or replace function public.meal_plan_replace_slots(
+create or replace function public.meal_plan_replace_slots_internal(
   p_family_id uuid,
+  p_actor_id uuid,
   p_request_id text,
   p_entries jsonb
 )
@@ -199,7 +200,7 @@ security definer
 set search_path = pg_catalog, public
 as $$
 declare
-  v_actor uuid := auth.uid();
+  v_actor uuid := p_actor_id;
   v_hash text;
   v_receipt public.meal_plan_write_receipts%rowtype;
   v_claimed integer;
@@ -308,8 +309,9 @@ begin
 end;
 $$;
 
-create or replace function public.meal_plan_remove_slot(
+create or replace function public.meal_plan_remove_slot_internal(
   p_family_id uuid,
+  p_actor_id uuid,
   p_request_id text,
   p_plan_id uuid
 )
@@ -319,7 +321,7 @@ security definer
 set search_path = pg_catalog, public
 as $$
 declare
-  v_actor uuid := auth.uid();
+  v_actor uuid := p_actor_id;
   v_hash text;
   v_receipt public.meal_plan_write_receipts%rowtype;
   v_claimed integer;
@@ -370,10 +372,81 @@ begin
 end;
 $$;
 
-revoke all on function public.meal_plan_replace_slots(uuid, text, jsonb) from public, anon;
-revoke all on function public.meal_plan_remove_slot(uuid, text, uuid) from public, anon;
+-- The actor-aware core is never an API surface. Only the fixed-role wrappers
+-- below can invoke it, and every actor is revalidated under a membership lock.
+revoke all on function public.meal_plan_replace_slots_internal(uuid, uuid, text, jsonb) from public, anon, authenticated, service_role;
+revoke all on function public.meal_plan_remove_slot_internal(uuid, uuid, text, uuid) from public, anon, authenticated, service_role;
+
+create or replace function public.meal_plan_replace_slots(
+  p_family_id uuid,
+  p_request_id text,
+  p_entries jsonb
+)
+returns jsonb
+language plpgsql
+security definer
+set search_path = pg_catalog, public
+as $$
+begin
+  return public.meal_plan_replace_slots_internal(p_family_id, auth.uid(), p_request_id, p_entries);
+end;
+$$;
+
+create or replace function public.meal_plan_remove_slot(
+  p_family_id uuid,
+  p_request_id text,
+  p_plan_id uuid
+)
+returns jsonb
+language plpgsql
+security definer
+set search_path = pg_catalog, public
+as $$
+begin
+  return public.meal_plan_remove_slot_internal(p_family_id, auth.uid(), p_request_id, p_plan_id);
+end;
+$$;
+
+create or replace function public.meal_plan_replace_slots_for_actor(
+  p_family_id uuid,
+  p_actor_id uuid,
+  p_request_id text,
+  p_entries jsonb
+)
+returns jsonb
+language plpgsql
+security definer
+set search_path = pg_catalog, public
+as $$
+begin
+  return public.meal_plan_replace_slots_internal(p_family_id, p_actor_id, p_request_id, p_entries);
+end;
+$$;
+
+create or replace function public.meal_plan_remove_slot_for_actor(
+  p_family_id uuid,
+  p_actor_id uuid,
+  p_request_id text,
+  p_plan_id uuid
+)
+returns jsonb
+language plpgsql
+security definer
+set search_path = pg_catalog, public
+as $$
+begin
+  return public.meal_plan_remove_slot_internal(p_family_id, p_actor_id, p_request_id, p_plan_id);
+end;
+$$;
+
+revoke all on function public.meal_plan_replace_slots(uuid, text, jsonb) from public, anon, service_role;
+revoke all on function public.meal_plan_remove_slot(uuid, text, uuid) from public, anon, service_role;
+revoke all on function public.meal_plan_replace_slots_for_actor(uuid, uuid, text, jsonb) from public, anon, authenticated;
+revoke all on function public.meal_plan_remove_slot_for_actor(uuid, uuid, text, uuid) from public, anon, authenticated;
 grant execute on function public.meal_plan_replace_slots(uuid, text, jsonb) to authenticated;
 grant execute on function public.meal_plan_remove_slot(uuid, text, uuid) to authenticated;
+grant execute on function public.meal_plan_replace_slots_for_actor(uuid, uuid, text, jsonb) to service_role;
+grant execute on function public.meal_plan_remove_slot_for_actor(uuid, uuid, text, uuid) to service_role;
 
 comment on table public.meal_plan_write_receipts is
   'Private actor-scoped durable receipts for atomic meal-plan operations; rows can only be written/read by the restricted meal-plan RPCs.';
