@@ -86,7 +86,9 @@ const rosterReads = () => reads.filter(r => r.table === 'family_members');
 describe('document notifications use only verified account-backed managers', () => {
   it('targets the parent and preserves its member-specific dedupe identity', async () => {
     expect(await generate()).toBe(1);
-    expect(documentWrites()).toMatchObject([{ user_id: USER, related_id: `${id(10001)}:${id(999999)}`, title: `Document expiring: ${TITLE}` }]);
+    // Keyed by document, EXPIRY DAY and manager: a renewed document with a new
+    // date is a new occurrence for the permanent dedupe.
+    expect(documentWrites()).toMatchObject([{ user_id: USER, related_id: `${id(10001)}:${String(documents[0].expires_at).slice(0, 10)}:${id(999999)}`, title: `Document expiring: ${TITLE}` }]);
   });
   it('targets each parent/adult separately while excluding child and teen accounts', async () => {
     members.push(member(15, 'adult', id(90002)), member(16, 'teen'));

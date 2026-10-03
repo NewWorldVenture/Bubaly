@@ -22,8 +22,10 @@ describe('renewalReminders', () => {
     const rows = renewalReminders([renewal({ expires_at: '2026-07-01', reminder_days: 30 })], managers, today);
     expect(rows).toHaveLength(2);
     expect(rows.map((r) => r.user_id).sort()).toEqual(['u-dad', 'u-mom']);
-    expect(rows[0]).toMatchObject({ type: 'document_expiry', related_type: 'renewals', related_id: 'r1' });
-    expect(rows[0].related_id).toBe('r1'); // valid uuid placeholder, not composite
+    expect(rows[0]).toMatchObject({ type: 'document_expiry', related_type: 'renewals', related_id: 'r1:2026-07-01' });
+    // The id AND the expiry it is about: "Mark renewed" rolls the date and
+    // keeps the row, so keyed by the row alone next year's reminder is deduped away.
+    expect(rows[0].related_id).toBe('r1:2026-07-01');
     expect(rows[0].title).toBe('Renewal due: Passport');
     expect(rows[0].body).toContain('Jul 1');
   });

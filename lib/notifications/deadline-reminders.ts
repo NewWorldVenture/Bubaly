@@ -12,9 +12,16 @@ export interface RenewalInput { id: string; title: string; expires_at: string; r
 export interface OpportunityInput { id: string; title: string; deadline: string | null; status: OpportunityStatus }
 
 /** A notification row, shaped to match the engine's Candidate (minus family_id).
- *  `related_id` is always the item's own UUID; per-manager fan-out is expressed
- *  through `user_id` so the (type, related_id, user_id) dedup key stays unique
- *  without stuffing a non-UUID composite into the uuid column. */
+ *  Per-manager fan-out is expressed through `user_id`, so the
+ *  (type, related_id, user_id) dedup key stays unique per recipient.
+ *
+ *  `related_id` names the OCCURRENCE, not just the row, because the engine
+ *  dedupes on it PERMANENTLY. A signup has one deadline, so its id is enough.
+ *  A renewal does not: "Mark renewed" rolls `expires_at` forward a year and
+ *  keeps the row active (components/modules/renewals-module.tsx), so keyed by
+ *  the row alone the first year's reminder stood in for every year after it —
+ *  car insurance was announced once, ever. The key carries the expiry it is
+ *  about; `entityIdFrom` (lib/notifications/actions.ts) still finds the uuid. */
 export interface DeadlineReminder {
   type: 'document_expiry' | 'system';
   related_type: 'renewals' | 'opportunities';
@@ -54,7 +61,7 @@ export function renewalReminders(renewals: RenewalInput[], managers: ManagerLite
     const d = daysToExpiry({ id: r.id, expires_at: r.expires_at, reminder_days: r.reminder_days, status: 'active' }, todayKey);
     if (d < 0 || d > r.reminder_days) continue;
     out.push(...fanOut(managers, {
-      type: 'document_expiry', related_type: 'renewals', related_id: r.id,
+      type: 'document_expiry', related_type: 'renewals', related_id: `${r.id}:${r.expires_at}`,
       title: `Renewal due: ${r.title}`,
       body: `Expires ${fmtDate(r.expires_at)} · ${daysLabel(d)}`,
     }));
