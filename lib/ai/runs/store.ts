@@ -168,12 +168,18 @@ export async function createRequest(
   };
   // `metered` is written only when false: a metered row takes the column's
   // default, so it files the same way whether or not 0477 is applied yet.
-  let { data, error } = await db.from('ai_requests').insert(metered ? row : { ...row, metered: false }).select('id').single();
+  const { data, error } = await db.from('ai_requests').insert(metered ? row : { ...row, metered: false }).select('id').single();
   if (!metered && isMissingColumn(error)) {
-    // This code deployed before 0477 added the column: file the record as it
-    // was filed before (counted) rather than lose the family's work.
-    console.error('[ai/runs] ai_requests.metered is missing; filing an exempt request as metered until 0477 is applied', error);
-    ({ data, error } = await db.from('ai_requests').insert(row).select('id').single());
+    // This code deployed before 0477 added the column. An exempt request is
+    // NOT filed without it: 0477 adds `metered` with DEFAULT true, so a row
+    // written now would be counted against the family's paid allowance the
+    // moment the migration lands, and no column tells it apart afterwards
+    // (#892 review 5971047090). Unfiled instead: exempt work behind
+    // `withAiRequest` runs unrecorded (an exempt filing never refuses), and a
+    // system intake or routine reports the failure until 0477 is applied —
+    // which is the documented deploy order (migration first).
+    console.error('[ai/runs] ai_requests.metered is missing; an exempt request is not filed until 0477 is applied', error);
+    return fail('Bubaly could not record that request.', { code: SERVICE_CODES.db, retryable: true });
   }
 
   if (error?.code === '23505' && input.clientRequestId) {

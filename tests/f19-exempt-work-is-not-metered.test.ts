@@ -197,12 +197,38 @@ describe('exempt work racing paid admissions (concurrent)', () => {
   });
 });
 
-describe('deployed before 0477 adds the column', () => {
-  it('an exempt filing falls back to the metered insert rather than losing the record', async () => {
-    state.planLevel = 1;
+describe('deployed before 0477 adds the column (#892 review 5971047090)', () => {
+  // A row written in this window would be backfilled `metered = true` by
+  // 0477's DEFAULT, and nothing could tell it apart afterwards. So no exempt
+  // row is written: the work behind withAiRequest still runs, unrecorded.
+  it('a chore proof at 9 of 10 runs and files nothing; after 0477 the family still has its 10th paid request', async () => {
+    seedPaid(9);
     state.columnMissing = true;
     await expect(choreProof()).resolves.toBe('answer');
-    // Filed the way it was before this change: counted (the column's default).
-    expect(rows()).toEqual([expect.objectContaining({ feature: 'chores.validate', metered: true })]);
+    expect(rows()).toHaveLength(9);
+
+    // 0477 lands: every existing row is metered (the column's default).
+    state.columnMissing = false;
+    expect(rows().filter((r: Row) => r.metered === true)).toHaveLength(9);
+    await expect(paid()).resolves.toBe('answer');
+    await expect(paid()).rejects.toBeInstanceOf(AiRequestOverAllowance);
+    expect(model).toHaveBeenCalledTimes(2);
+  });
+
+  it('a system-scope intake in the window reports failure and files nothing, rather than a row 0477 would charge', async () => {
+    seedPaid(9);
+    state.columnMissing = true;
+    const inbound = await submitRequest(system(), { text: 'Inbound: plan the dentist visit' }, { kick: vi.fn() });
+    expect(inbound.ok).toBe(false);
+    expect(rows()).toHaveLength(9);
+    state.columnMissing = false;
+    expect(await used()).toBe(9);
+  });
+
+  it('control: a metered request in the window files as before (it names no new column)', async () => {
+    state.planLevel = 1;
+    state.columnMissing = true;
+    await expect(paid()).resolves.toBe('answer');
+    expect(rows()).toEqual([expect.objectContaining({ feature: 'notes.summary', metered: true })]);
   });
 });

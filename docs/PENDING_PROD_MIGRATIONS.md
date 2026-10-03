@@ -4083,8 +4083,13 @@ so that work no longer uses up a Free family's 10 requests (#892 review
 
 Code deployed before this migration: the app's meter filters on `metered`, so
 on a capped plan the gate refuses with "could not check this month's usage"
-(it refused as "not recorded" before). An exempt filing whose insert names the
-missing column is retried without it. Unlimited plans are unaffected.
+(it refused as "not recorded" before). An exempt request is not filed at all in
+that window: 0477's `DEFAULT true` would turn such a row metered, and nothing could
+tell it apart afterwards (#892 review 5971047090).
+- Exempt work behind `withAiRequest` runs unrecorded.
+- A system intake or routine reports failure until 0477 is applied.
+
+Unlimited plans are unaffected. **Apply 0477 first.**
 
 **Rollback:** `drop function if exists public.admit_ai_request(uuid, integer, text, text, uuid, uuid, uuid, text, text, text, smallint, text, timestamptz); alter table public.ai_requests drop column if exists metered;`
 together with reverting the application change. With only the database rolled

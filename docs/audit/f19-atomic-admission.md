@@ -263,8 +263,14 @@ refused. At 10/10 exempt rows went past the cap without the lock.
 - `withAiRequest` treats a system scope as exempt. An exempt filing that fails no
   longer refuses on a capped plan: it is a record, not the meter.
 - `metered` is sent only when false, so metered inserts look exactly as they did.
-  If the column is missing (code deployed before 0477), the exempt insert is
-  retried without it, which files the row counted, as before.
+  If the column is missing (code deployed before 0477), an exempt request is not
+  filed: 0477's default would make such a row metered, and nothing could
+  distinguish it afterwards (#892 review 5971047090).
+  - Exempt work behind `withAiRequest` still runs, unrecorded.
+  - System intake and routines report failure until the migration lands.
+  - Regression: `tests/f19-exempt-work-is-not-metered.test.ts` runs a chore proof
+    and a system intake in that window, then applies 0477 and asserts that the
+    family still has its 10th paid request.
 
 **Who can unmeter a row.** Only server code. Members have no UPDATE or DELETE
 policy on `ai_requests`. A concierge row a member inserts directly (0255) with
