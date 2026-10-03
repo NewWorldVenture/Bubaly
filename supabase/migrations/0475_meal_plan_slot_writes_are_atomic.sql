@@ -2,7 +2,7 @@
 -- for the affected slots. Existing duplicate rows are left untouched until a
 -- family explicitly replaces or removes those slots.
 
-create table public.meal_plan_write_receipts (
+create table if not exists public.meal_plan_write_receipts (
   family_id uuid not null references public.families(id) on delete cascade,
   actor_id uuid not null references auth.users(id) on delete cascade,
   request_id text not null check (length(request_id) between 1 and 128),
@@ -12,6 +12,66 @@ create table public.meal_plan_write_receipts (
   created_at timestamptz not null default now(),
   primary key (family_id, actor_id, request_id)
 );
+
+-- CREATE TABLE IF NOT EXISTS makes migration replay safe, but it must not
+-- silently accept a same-named table with a different receipt contract.
+do $$
+declare
+  v_columns text[];
+  v_primary_key text[];
+  v_constraints text[];
+begin
+  select array_agg(
+    a.attnum::text || ':' || a.attname || ':' || pg_catalog.format_type(a.atttypid, a.atttypmod) || ':' || a.attnotnull::text
+    order by a.attnum
+  ) into v_columns
+  from pg_catalog.pg_attribute a
+  where a.attrelid = 'public.meal_plan_write_receipts'::regclass
+    and a.attnum > 0 and not a.attisdropped;
+
+  if v_columns is distinct from array[
+    '1:family_id:uuid:true',
+    '2:actor_id:uuid:true',
+    '3:request_id:text:true',
+    '4:operation:text:true',
+    '5:payload_hash:text:true',
+    '6:result:jsonb:false',
+    '7:created_at:timestamp with time zone:true'
+  ]::text[] then
+    raise exception 'meal_plan_write_receipts has an incompatible column contract';
+  end if;
+
+  select array_agg(a.attname order by k.ordinality) into v_primary_key
+  from pg_catalog.pg_constraint c
+  cross join lateral unnest(c.conkey) with ordinality as k(attnum, ordinality)
+  join pg_catalog.pg_attribute a on a.attrelid = c.conrelid and a.attnum = k.attnum
+  where c.conrelid = 'public.meal_plan_write_receipts'::regclass and c.contype = 'p';
+  if v_primary_key is distinct from array['family_id', 'actor_id', 'request_id']::text[] then
+    raise exception 'meal_plan_write_receipts has an incompatible primary key';
+  end if;
+
+  select array_agg(c.conname || ':' || c.contype::text order by c.conname) into v_constraints
+  from pg_catalog.pg_constraint c
+  where c.conrelid = 'public.meal_plan_write_receipts'::regclass;
+  if v_constraints is distinct from array[
+    'meal_plan_write_receipts_actor_id_fkey:f',
+    'meal_plan_write_receipts_family_id_fkey:f',
+    'meal_plan_write_receipts_operation_check:c',
+    'meal_plan_write_receipts_payload_hash_check:c',
+    'meal_plan_write_receipts_pkey:p',
+    'meal_plan_write_receipts_request_id_check:c'
+  ]::text[] then
+    raise exception 'meal_plan_write_receipts has incompatible constraints';
+  end if;
+
+  if exists (
+    select 1 from pg_catalog.pg_policy p
+    where p.polrelid = 'public.meal_plan_write_receipts'::regclass
+  ) then
+    raise exception 'meal_plan_write_receipts must not have row-level security policies';
+  end if;
+end;
+$$;
 
 alter table public.meal_plan_write_receipts enable row level security;
 alter table public.meal_plan_write_receipts force row level security;
