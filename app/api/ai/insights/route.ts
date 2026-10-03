@@ -353,6 +353,7 @@ async function fetchRows(
           category: typeof f.category === 'string' ? f.category : null,
           key: String(f.label ?? ''),
           content: String(f.value ?? ''),
+          notes: typeof f.notes === 'string' ? f.notes : null,
         });
       });
       // Gift state is hidden from the person the wish belongs to, so their own
