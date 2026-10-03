@@ -84,8 +84,11 @@ end $$;
 update public.family_members set is_active = false where id = '00000000-0000-4000-8000-0000000047a3';
 set local role authenticated;
 set local request.jwt.claim.sub = '00000000-0000-4000-8000-000000004751';
+-- Match the client flow: create/resolve the canonical conversation before
+-- inserting its message, so the RLS statement snapshot can see that row.
+select public.ensure_family_conversation('00000000-0000-4000-8000-0000000047f1') as canonical_chat_id \gset
 insert into public.family_messages (id, family_id, conversation_id, sender_id, content) values
- ('00000000-0000-4000-8000-000000004764', '00000000-0000-4000-8000-0000000047f1', '00000000-0000-4000-8000-0000000047c3', '00000000-0000-4000-8000-000000004751', 'Family message');
+ ('00000000-0000-4000-8000-000000004764', '00000000-0000-4000-8000-0000000047f1', :'canonical_chat_id', '00000000-0000-4000-8000-000000004751', 'Family message');
 reset role;
 do $$ begin
   if (select count(*) from public.notifications where related_type = 'family_message') <> 1 then raise exception 'Whole-family recipients include sender, removed member, or outsider'; end if;

@@ -16,13 +16,14 @@ import { describe, expect, it } from 'vitest';
 // boundary proofs have been deleted" — which is why these two are worth closing
 // too rather than assumed.
 // Messaging's migration-time fixtures require a separate disposable-cluster
-// runner. Its three explicit exceptions below must assert AND remain wired to
+// runner. Its four explicit exceptions below must assert AND remain wired to
 // that runner and CI; a new unregistered .probe.sql does not silently opt out.
 
 const DIR = 'docs/audit';
 const sql = readdirSync(DIR).filter((f) => f.endsWith('.sql'));
 const checks = sql.filter((f) => f.endsWith('-check.sql'));
 const messagingProbes = [
+  'messaging-canonical-history.probe.sql',
   'messaging-participant-boundaries.probe.sql',
   'messaging-notification.probe.sql',
   'messaging-membership-lifecycle.probe.sql',
