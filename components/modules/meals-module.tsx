@@ -24,6 +24,7 @@ import { AiInsight } from '@/components/ai/ai-insight';
 import { Button } from '@/components/ui/button';
 import { Avatar } from '@/components/ui/avatar';
 import { cn } from '@/lib/utils/cn';
+import { safeWebLink } from '@/lib/utils/safe-link';
 import { NUTRIENT_LABELS, dailyValuePct, fmtAmount, type Nutrition } from '@/lib/meals/nutrition';
 import type { Tables, MealType } from '@/lib/database.types';
 import { useLocale, useTranslations } from '@/components/i18n/locale-provider';
@@ -124,9 +125,10 @@ export function MealsModule() {
   scopeRef.current = scope;
   const mounted = useRef(false), pickerSequence = useRef(0);
   const groceryIntent = useRef<object | null>(null), removeIntent = useRef<object | null>(null);
+  const removeRequest = useRef<{ scope: object; planId: string; requestId: string } | null>(null);
   useLayoutEffect(() => { mounted.current = true; return () => { mounted.current = false; }; }, []);
   useLayoutEffect(() => {
-    groceryIntent.current = null; removeIntent.current = null;
+    groceryIntent.current = null; removeIntent.current = null; removeRequest.current = null;
     setAddCell(null); setNewMealOpen(false); setAutoPlanOpen(false);
     setAddingPlan(false); setRemovingPlan(null); setLastAdd(null); setDinnerIdx(0); setSkipPantry(false);
   }, [scope]);
@@ -217,6 +219,14 @@ export function MealsModule() {
     () => days.map((d) => planMap.get(cellKey(d, 'dinner'))).filter((p): p is Plan => !!p?.meal),
     [days, planMap],
   );
+  // A removal or realtime refresh can shorten this week's dinners without
+  // changing weeks. Keep every part of the card on the same remaining dish.
+  const selectedDinnerIndex = Math.min(dinnerIdx, Math.max(0, dinners.length - 1));
+  const selectedDinner = dinners[selectedDinnerIndex];
+  const selectedDinnerRecipeUrl = safeWebLink(selectedDinner?.meal?.recipe_url);
+  useEffect(() => {
+    setDinnerIdx(index => Math.min(index, Math.max(0, dinners.length - 1)));
+  }, [dinners.length]);
   useEffect(() => { setDinnerIdx(0); setLastAdd(null); }, [weekOffset]);
 
   /**
@@ -267,19 +277,25 @@ export function MealsModule() {
     const q = recipeSearch.trim().toLowerCase();
     return q ? recipes.filter((r) => r.name.toLowerCase().includes(q)) : recipes;
   }, [recipes, recipeSearch]);
+  const noRecipeMatches = recipes.length > 0 && filteredRecipes.length === 0;
 
   async function removePlan(id: string) {
     if (!isCurrentScope() || removeIntent.current) return;
+    if (!removeRequest.current || removeRequest.current.scope !== scope || removeRequest.current.planId !== id) {
+      removeRequest.current = { scope, planId: id, requestId: crypto.randomUUID() };
+    }
+    const request = removeRequest.current;
     const intent = {}; removeIntent.current = intent; setRemovingPlan(id);
     const current = () => isCurrentScope() && removeIntent.current === intent;
     try {
-      const result = await removeMealPlanAction(id);
+      const result = await removeMealPlanAction(id, request.requestId);
       if (!current()) return;
       if (!result.ok) { toastError(result.error); return; }
       if (result.id !== id) { toastError(tr('mealsPlanner.removeUnconfirmed')); return; }
       const readback = await refreshAndConfirm();
       if (!current()) return;
       if (!readback.ok || plansRef.current.some(plan => plan.id === id)) { toastError(tr('mealsPlanner.removeUnconfirmed')); return; }
+      if (removeRequest.current === request) removeRequest.current = null;
       success(tr('mealsPlanner.removed'));
     } catch (err) { if (current()) toastError(describeDbError(err, tr('mealsPlanner.removeUnconfirmed'))); }
     finally { if (current()) { removeIntent.current = null; setRemovingPlan(null); } }
@@ -296,9 +312,13 @@ export function MealsModule() {
   async function toggleGrocery(item: Tables<'grocery_items'>) {
     // The shopping page's action, not a second spelling of it — two versions of
     // one operation on one table is how the forks this work removes began.
-    const result = await setGroceryItemCheckedAction(item.id, !item.is_checked);
-    if (!result.ok) return toastError(result.error);
-    void refreshGrocery();
+    try {
+      const result = await setGroceryItemCheckedAction(item.id, !item.is_checked);
+      if (!result.ok) return toastError(result.error);
+      void refreshGrocery();
+    } catch (cause) {
+      toastError(describeDbError(cause, tr('actions.couldNotUpdateThatItem')));
+    }
   }
 
   async function castVote(optionId: string) {
@@ -354,7 +374,7 @@ export function MealsModule() {
             description={tr('mealsModule.planHealthyMealsYourFamily')}
             action={
               <div className="flex items-center gap-2">
-                <Button size="sm" onClick={() => setNewMealOpen(true)}><Plus className="h-4 w-4" /> {tr('meals.addMeal')}</Button>
+                <Button size="sm" onClick={() => setNewMealOpen(true)}><Plus className="h-4 w-4" /> {tr('mealsPlanner.addMealToLibrary')}</Button>
                 <Button variant="outline" size="sm" onClick={() => { setTab('recipes'); }}>
                   <Search className="h-4 w-4" /> {tr('meals.recipeSearch')}
                 </Button>
@@ -386,7 +406,7 @@ export function MealsModule() {
           {/* Tabs */}
           <div className="tab-bar mt-3 border-b border-border pb-2">
             {TABS.map((t) => (
-              <button key={t.id} onClick={() => setTab(t.id)}
+              <button key={t.id} onClick={() => setTab(t.id)} aria-pressed={tab === t.id}
                 className={cn('tab-item', tab === t.id ? 'tab-item-active' : 'tab-item-inactive')}>
                 {tr(t.labelKey)}
               </button>
@@ -489,7 +509,8 @@ export function MealsModule() {
               {recipeSearch && <button onClick={() => setRecipeSearch('')} aria-label={tr('meals.clear')}><XIcon className="h-4 w-4 text-muted" /></button>}
             </div>
             {recipesLoading ? <SkeletonList count={3} /> : recipesError ? <ErrorState message={recipesError} onRetry={refreshRecipes} /> : filteredRecipes.length === 0 ? (
-              <EmptyState icon={Utensils} title={tr('meals.noRecipesYet')} description={tr('mealsModule.savedRecipesWillAppearHere')} />
+              <EmptyState icon={Utensils} title={tr(noRecipeMatches ? 'mealsPlanner.noMatches' : 'meals.noRecipesYet')}
+                description={noRecipeMatches ? undefined : tr('mealsModule.savedRecipesWillAppearHere')} />
             ) : (
               <RecipeGrid recipes={filteredRecipes} onToggleFavorite={toggleFavorite} />
             )}
@@ -580,28 +601,28 @@ export function MealsModule() {
           ) : (
             <div className="relative">
               <div className="overflow-hidden rounded-xl border border-border">
-                <MealImg src={dinners[dinnerIdx]?.meal?.image_url ?? null} emoji="🍽️" className="h-36 w-full" />
+                <MealImg src={selectedDinner?.meal?.image_url ?? null} emoji="🍽️" className="h-36 w-full" />
               </div>
               <div className="mt-2">
-                <p className="text-sm font-bold leading-snug">{dinners[dinnerIdx]?.meal?.name}</p>
+                <p className="text-sm font-bold leading-snug">{selectedDinner?.meal?.name}</p>
                 <p className="mt-0.5 text-[11px] text-muted">
-                  {dayLabel(dinners[Math.min(dinnerIdx, dinners.length - 1)].plan_date)}
+                  {dayLabel(dinners[selectedDinnerIndex].plan_date)}
                 </p>
               </div>
-              {dinners[dinnerIdx]?.meal?.recipe_url && (
-                <a href={dinners[dinnerIdx]!.meal!.recipe_url!} target="_blank" rel="noreferrer"
+              {selectedDinnerRecipeUrl && (
+                <a href={selectedDinnerRecipeUrl} target="_blank" rel="noreferrer"
                   className="mt-2 block rounded-lg bg-brand py-2 text-center text-xs font-semibold text-brand-fg transition hover:opacity-90">
                   {tr('meals.viewRecipe')}
                 </a>
               )}
               {dinners.length > 1 && (
                 <>
-                  <button onClick={() => setDinnerIdx((i) => (i - 1 + dinners.length) % dinners.length)} aria-label={tr('meals.previousDinner')}
+                  <button onClick={() => setDinnerIdx((i) => (Math.min(i, dinners.length - 1) - 1 + dinners.length) % dinners.length)} aria-label={tr('meals.previousDinner')}
                     className="absolute left-1 top-[68px] grid h-7 w-7 -translate-y-1/2 place-items-center rounded-full bg-bg/70 text-fg backdrop-blur hover:bg-bg"><ChevronLeft className="h-4 w-4" /></button>
-                  <button onClick={() => setDinnerIdx((i) => (i + 1) % dinners.length)} aria-label={tr('meals.nextDinner')}
+                  <button onClick={() => setDinnerIdx((i) => (Math.min(i, dinners.length - 1) + 1) % dinners.length)} aria-label={tr('meals.nextDinner')}
                     className="absolute right-1 top-[68px] grid h-7 w-7 -translate-y-1/2 place-items-center rounded-full bg-bg/70 text-fg backdrop-blur hover:bg-bg"><ChevronRight className="h-4 w-4" /></button>
                   <div className="mt-2 flex justify-center gap-1">
-                    {dinners.map((_, i) => <span key={i} className={cn('h-1.5 w-1.5 rounded-full', i === dinnerIdx ? 'bg-brand' : 'bg-border')} />)}
+                    {dinners.map((_, i) => <span key={i} className={cn('h-1.5 w-1.5 rounded-full', i === selectedDinnerIndex ? 'bg-brand' : 'bg-border')} />)}
                   </div>
                 </>
               )}
@@ -644,7 +665,7 @@ export function MealsModule() {
 
       {/* Add-to-cell picker */}
       {addCell?.scope === scope && (
-        <MealPicker key={addCell.id} date={addCell.date} mealType={addCell.type}
+        <MealPicker key={addCell.id} familyId={familyId} userId={userId} date={addCell.date} mealType={addCell.type}
           title={tr('mealsPlanner.forDay', { meal: mealLabel(addCell.type), date: dayLabel(addCell.date) })}
           library={library} recipes={recipes} choicesLoading={libraryLoading || recipesLoading}
           choicesError={libraryError || recipesError} retryChoices={() => { void reloadLibrary(); void refreshRecipes(); }}
@@ -990,9 +1011,9 @@ function CustomMealFields({ name, setName, ingredients, setIngredients }: {
   );
 }
 
-function MealPicker({ date, mealType, title, library, recipes, choicesLoading, choicesError, retryChoices,
+function MealPicker({ familyId, userId, date, mealType, title, library, recipes, choicesLoading, choicesError, retryChoices,
   isScopeCurrent, refreshAndConfirm, readSlot, onClose, onSaved }: {
-  date: string; mealType: MealType; title: string; library: Meal[]; recipes: Recipe[];
+  familyId: string; userId: string; date: string; mealType: MealType; title: string; library: Meal[]; recipes: Recipe[];
   choicesLoading: boolean; choicesError: string | null; retryChoices: () => void;
   isScopeCurrent: () => boolean; refreshAndConfirm: () => Promise<QueryRefreshConfirmation>;
   readSlot: (slot: PlanSlot) => boolean; onClose: () => void; onSaved: () => void;
@@ -1004,6 +1025,7 @@ function MealPicker({ date, mealType, title, library, recipes, choicesLoading, c
   const [saving, setSaving] = useState(false), [failure, setFailure] = useState<string | null>(null);
   const [saved, setSaved] = useState<PlanSlot | null>(null);
   const alive = useRef(false), closed = useRef(false), pending = useRef(false), attempt = useRef(0), receipt = useRef<PlanSlot | null>(null);
+  const requestRef = useRef<{ scope: string; fingerprint: string; requestId: string } | null>(null);
   const onCloseRef = useRef(onClose); onCloseRef.current = onClose;
   useLayoutEffect(() => { alive.current = true; return () => { alive.current = false; }; }, []);
   const close = useCallback(() => { closed.current = true; attempt.current++; onCloseRef.current(); }, []);
@@ -1023,8 +1045,14 @@ function MealPicker({ date, mealType, title, library, recipes, choicesLoading, c
     const current = () => alive.current && !closed.current && isScopeCurrent() && attempt.current === id;
     try {
       if (!receipt.current) {
-        const result = await planMealAction({ date, mealType, ...(custom ? { mealName: name.trim(), ingredients: ingredientPayload(ingredients) }
-          : selected?.kind === 'recipe' ? { recipeId: selected.id } : { mealId: selected!.id }) });
+        const input = { date, mealType, ...(custom ? { mealName: name.trim(), ingredients: ingredientPayload(ingredients) }
+          : selected?.kind === 'recipe' ? { recipeId: selected.id } : { mealId: selected!.id }) };
+        const scopeKey = JSON.stringify([familyId, userId]);
+        const fingerprint = JSON.stringify(input);
+        if (!requestRef.current || requestRef.current.scope !== scopeKey || requestRef.current.fingerprint !== fingerprint) {
+          requestRef.current = { scope: scopeKey, fingerprint, requestId: crypto.randomUUID() };
+        }
+        const result = await planMealAction(input, requestRef.current.requestId);
         if (!current()) return;
         if (!result.ok) { setFailure(result.error); return; }
         const slot = result.slot;
@@ -1072,7 +1100,7 @@ function MealPicker({ date, mealType, title, library, recipes, choicesLoading, c
                       <MealImg src={recipe.photo_url} emoji={MEAL_ICONS.dinner} className="h-9 w-9 shrink-0 rounded-lg" /><span className="break-words">{recipe.name}</span>
                     </button>)}
                   </div></div>}
-                  {meals.length === 0 && recipeChoices.length === 0 && <p className="text-sm text-muted">{tr('mealsPlanner.noMatches')}</p>}
+                  {meals.length === 0 && recipeChoices.length === 0 && <p className="text-sm text-muted">{tr(search ? 'mealsPlanner.noMatches' : 'mealsPlanner.noSavedChoices')}</p>}
                 </div>
               )}
             </>
