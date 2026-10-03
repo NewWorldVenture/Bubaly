@@ -50,16 +50,35 @@ begin
     raise exception 'meal_plan_write_receipts has an incompatible primary key';
   end if;
 
-  select array_agg(c.conname || ':' || c.contype::text order by c.conname) into v_constraints
+  select array_agg(
+    case c.contype
+      when 'f' then c.conname || ':f:' ||
+        (select string_agg(la.attname, ',' order by lk.ordinality)
+         from unnest(c.conkey) with ordinality as lk(attnum, ordinality)
+         join pg_catalog.pg_attribute la on la.attrelid = c.conrelid and la.attnum = lk.attnum) || '->' ||
+        (select rn.nspname || '.' || rr.relname || '(' || string_agg(ra.attname, ',' order by rk.ordinality) || ')'
+         from pg_catalog.pg_class rr
+         join pg_catalog.pg_namespace rn on rn.oid = rr.relnamespace
+         cross join lateral unnest(c.confkey) with ordinality as rk(attnum, ordinality)
+         join pg_catalog.pg_attribute ra on ra.attrelid = rr.oid and ra.attnum = rk.attnum
+         where rr.oid = c.confrelid
+         group by rn.nspname, rr.relname) ||
+        ':delete=' || c.confdeltype::text || ':validated=' || c.convalidated::text ||
+        ':deferrable=' || c.condeferrable::text
+      else c.conname || ':' || c.contype::text || ':' ||
+        pg_catalog.pg_get_constraintdef(c.oid, true) ||
+        ':validated=' || c.convalidated::text || ':deferrable=' || c.condeferrable::text
+    end order by c.conname
+  ) into v_constraints
   from pg_catalog.pg_constraint c
   where c.conrelid = 'public.meal_plan_write_receipts'::regclass;
   if v_constraints is distinct from array[
-    'meal_plan_write_receipts_actor_id_fkey:f',
-    'meal_plan_write_receipts_family_id_fkey:f',
-    'meal_plan_write_receipts_operation_check:c',
-    'meal_plan_write_receipts_payload_hash_check:c',
-    'meal_plan_write_receipts_pkey:p',
-    'meal_plan_write_receipts_request_id_check:c'
+    'meal_plan_write_receipts_actor_id_fkey:f:actor_id->auth.users(id):delete=c:validated=true:deferrable=false',
+    'meal_plan_write_receipts_family_id_fkey:f:family_id->public.families(id):delete=c:validated=true:deferrable=false',
+    'meal_plan_write_receipts_operation_check:c:CHECK (operation = ANY (ARRAY[''replace''::text, ''remove''::text])):validated=true:deferrable=false',
+    'meal_plan_write_receipts_payload_hash_check:c:CHECK (payload_hash ~ ''^[0-9a-f]{64}$''::text):validated=true:deferrable=false',
+    'meal_plan_write_receipts_pkey:p:PRIMARY KEY (family_id, actor_id, request_id):validated=true:deferrable=false',
+    'meal_plan_write_receipts_request_id_check:c:CHECK (length(request_id) >= 1 AND length(request_id) <= 128):validated=true:deferrable=false'
   ]::text[] then
     raise exception 'meal_plan_write_receipts has incompatible constraints';
   end if;

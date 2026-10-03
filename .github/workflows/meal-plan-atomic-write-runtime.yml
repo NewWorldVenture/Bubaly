@@ -90,14 +90,14 @@ jobs:
             --set=VERBOSITY=terse --set=SHOW_CONTEXT=never \
             < tests/fixtures/0475-meal-plan-concurrency.sql
 
-      - name: Reject an incompatible existing receipt table
+      - name: Reject an incompatible same-name receipt constraint
         shell: bash
         run: |
           set -euo pipefail
           docker exec "$MEAL_PLAN_ATOMIC_CONTAINER" psql -X --quiet \
             --no-password --host=/var/run/postgresql --username=postgres \
             --dbname=bubaly_meal_plan_atomic_ci --set=ON_ERROR_STOP=1 \
-            --command='alter table public.meal_plan_write_receipts drop column payload_hash'
+            --command='alter table public.meal_plan_write_receipts drop constraint meal_plan_write_receipts_operation_check; alter table public.meal_plan_write_receipts add constraint meal_plan_write_receipts_operation_check check (true)'
           if docker exec -i "$MEAL_PLAN_ATOMIC_CONTAINER" psql -X --quiet --output=/dev/null \
             --file=- --no-password --host=/var/run/postgresql --username=postgres \
             --dbname=bubaly_meal_plan_atomic_ci --set=ON_ERROR_STOP=1 \
@@ -107,7 +107,7 @@ jobs:
             echo 'Migration unexpectedly accepted an incompatible receipt table' >&2
             exit 1
           fi
-          grep -F 'meal_plan_write_receipts has an incompatible column contract' incompatible-replay.log
+          grep -F 'meal_plan_write_receipts has incompatible constraints' incompatible-replay.log
 
       - name: Remove only this run's synthetic database container
         if: always()
