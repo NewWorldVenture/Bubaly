@@ -10,7 +10,7 @@ let requests: RequestReceipt[], mode: string, selectedBody: unknown;
 beforeEach(() => { requests = []; mode = 'healthy'; selectedBody = undefined; });
 
 function page() {
-  const db = createClient('https://synthetic-read-shape.invalid', 'synthetic-not-a-secret', {
+  const db = createClient('https://synthetic-read-shape.invalid', 'synthetic-not-a-secret', {accessToken:async()=>null,
     auth: { persistSession: false, autoRefreshToken: false, detectSessionInUrl: false },
     global: { fetch: async (input, init) => {
       const u = new URL(String(input));

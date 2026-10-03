@@ -27,7 +27,7 @@ vi.mock('resend',()=>({Resend:class{
 import {deliverNotificationEmails} from '@/lib/server/notification-emails';
 const family='00000000-0000-4000-8000-000000000001',other='00000000-0000-4000-8000-000000000002',user='00000000-0000-4000-8000-000000000100',notice='00000000-0000-4000-8000-000000000300';
 const ids=(v:string|null)=>v?.startsWith('in.(')?v.slice(4,-1).split(','):[];
-function db():SupabaseClient<Database>{return createClient<Database>('https://queued-email.synthetic.invalid','synthetic-key',{auth:{persistSession:false,autoRefreshToken:false,detectSessionInUrl:false},global:{fetch:async(input,init)=>{
+function db():SupabaseClient<Database>{return createClient<Database>('https://queued-email.synthetic.invalid','synthetic-key',{accessToken:async()=>null,auth:{persistSession:false,autoRefreshToken:false,detectSessionInUrl:false},global:{fetch:async(input,init)=>{
  const url=new URL(typeof input==='string'?input:input instanceof URL?input.href:input.url),q=url.searchParams,table=url.pathname.split('/').at(-1)!,method=init?.method??'GET';
  if(url.origin!=='https://queued-email.synthetic.invalid'||!url.pathname.startsWith('/rest/v1/'))throw Error('Unexpected transport');h.calls.push({table,method,query:url.search});
  const response=(data:any,status=200)=>new Response(data===null?null:JSON.stringify(data),{status,headers:{'Content-Type':'application/json'}});

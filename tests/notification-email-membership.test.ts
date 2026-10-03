@@ -38,7 +38,7 @@ const notice = (overrides: Partial<Notice> = {}): Notice => ({ id: uuid(300), fa
 const idsIn = (filter: string | null) => filter?.startsWith('in.(') ? filter.slice(4, -1).split(',') : [];
 
 function db(): SupabaseClient<Database> {
-  return createClient<Database>('https://synthetic.invalid', 'synthetic-key', {
+  return createClient<Database>('https://synthetic.invalid', 'synthetic-key', {accessToken:async()=>null,
     auth: { persistSession: false, autoRefreshToken: false, detectSessionInUrl: false },
     global: { fetch: async (input, init) => {
       const url = new URL(typeof input === 'string' ? input : input instanceof URL ? input.href : input.url);
