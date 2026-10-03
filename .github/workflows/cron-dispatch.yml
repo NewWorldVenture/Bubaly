@@ -104,22 +104,36 @@ jobs:
           # previous one stopped would otherwise become the place the next one
           # starts from, and every minute before it would be lost for good.
           lookup=ok
-          if since="$(gh api \
+          since=''
+          # One answer per outcome, so the two look-alikes cannot be confused:
+          # `none` means the API answered and no previous scheduled success
+          # exists (the first tick ever); a timestamp is the boundary; anything
+          # else — a selected run whose start is null or missing, a body of
+          # another shape (jq's own error on a body without `workflow_runs`
+          # fails the command, like a 403 does) — is unusable.
+          if answer="$(gh api \
             "repos/${REPO}/actions/workflows/cron-dispatch.yml/runs?status=success&event=schedule&per_page=5" \
-            --jq "[.workflow_runs[] | select(.id != ${RUN_ID})][0].run_started_at // empty" 2>/dev/null)"; then
-            if [[ "$since" =~ ^[0-9]{4}-[0-9]{2}-[0-9]{2}T[0-9]{2}:[0-9]{2}:[0-9]{2}Z$ ]]; then
-              echo "Previous successful tick started at ${since}; catching up from there."
-            elif [[ -z "$since" ]]; then
+            --jq '([.workflow_runs[] | select(.id != (env.RUN_ID | tonumber))][0]) as $run
+                  | if $run == null then "none"
+                    elif ($run.run_started_at | type) == "string" then $run.run_started_at
+                    else "unusable" end')"; then
+            if [[ "$answer" == none ]]; then
               echo "No previous successful scheduled tick is recorded; this one starts the chain with the fixed five-minute window."
+            elif [[ "$answer" =~ ^[0-9]{4}-[0-9]{2}-[0-9]{2}T[0-9]{2}:[0-9]{2}:[0-9]{2}Z$ ]] \
+              && started="$(date -u -d "$answer" +%s 2>/dev/null)" && (( started <= $(date -u +%s) )); then
+              # The same two tests the dispatcher's tickWindow applies — a real
+              # timestamp, not in the future — so a boundary this step accepts
+              # is one the dispatcher will use, never one it silently ignores
+              # while the run goes on to finish green.
+              since="$answer"
+              echo "Previous successful tick started at ${since}; catching up from there."
             else
-              echo "The previous tick's start was unusable (got '${since:0:80}'); dispatching the fixed five-minute window, and this tick will not be a boundary."
+              echo "The previous tick's start was unusable (got '${answer:0:80}'); dispatching the fixed five-minute window, and this tick will not be a boundary."
               lookup=failed
-              since=''
             fi
           else
             echo "The previous-tick lookup failed; dispatching the fixed five-minute window, and this tick will not be a boundary."
             lookup=failed
-            since=''
           fi
           echo "since=${since}" >> "$GITHUB_OUTPUT"
           echo "lookup=${lookup}" >> "$GITHUB_OUTPUT"
