@@ -10,13 +10,17 @@
 // run belonged to nobody and was never looked at again — "working on it" for
 // ever — while the cron's own comment said the recovery pass would retry it.
 //
-// Now the lease is EXPIRED, not removed: the row keeps the exact shape that
-// pass recovers, and the pass decides between `ready` and the dead-letter
-// `failed` once the attempts are spent. The pass itself is SQL; this file
-// drives the real route, the real `continueRun` and the real `releaseRun`
-// against the in-memory client with a line-for-line emulation of 0263's two
-// predicates, and docs/audit/a-run-that-threw-is-not-stranded-check.sql proves
-// the same three outcomes against the real function.
+// Now the lease is SHORTENED to two minutes, not removed: the row keeps the
+// exact shape that pass recovers, and the pass decides between `ready` and the
+// dead-letter `failed` once the attempts are spent. Shortened rather than
+// expired outright, because the cron keeps claiming waves until its 85-second
+// deadline: an expired lease was claimed straight back by the tick that had
+// just failed it, and a repeatable throw burnt every attempt in seconds
+// (review on #900). The pass itself is SQL; this file drives the real route,
+// the real `continueRun` and the real `releaseRun` against the in-memory client
+// with a line-for-line emulation of 0263's two predicates, and
+// docs/audit/a-run-that-threw-is-not-stranded-check.sql proves the same three
+// outcomes against the real function.
 import { randomUUID } from 'node:crypto';
 import { NextRequest } from 'next/server';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
@@ -32,13 +36,14 @@ vi.mock('@/lib/ai/planner/replan-port', () => ({ replanPortFor: () => null }));
 
 import { GET as tick } from '@/app/api/cron/ai-runs/route';
 import { continueRun } from '@/lib/ai/runs/continue';
-import { claimRun, releaseRun } from '@/lib/ai/runs/store';
+import { claimRun, RELEASE_RETRY_DELAY_MS, releaseRun } from '@/lib/ai/runs/store';
 
 const CRON_SECRET = 'cron-fixture-secret';
 const FAMILY = '00000000-0000-4000-8000-00000000a0f1';
 const RUN = '00000000-0000-4000-8000-00000000a0a1';
 const ABANDONED = 'Run abandoned after the maximum number of attempts.';
 const DONE = { status: 'completed', completed: 1, failed: 0, pending: 0, awaitingApproval: 0 };
+const TICK_CADENCE_MS = 5 * 60_000;
 
 /**
  * `claim_ai_runs` as 0263 writes it, predicate for predicate: the recovery pass
@@ -107,6 +112,11 @@ async function cronTick() {
 }
 
 beforeEach(() => {
+  // Only the clock is faked, so the route's deadlines, releaseRun's delay and
+  // the emulated pass all read the same `now`, and a test can let a tick's
+  // worth of time pass between two invocations.
+  vi.useFakeTimers({ toFake: ['Date'] });
+  vi.setSystemTime(new Date('2026-10-03T12:00:00.000Z'));
   vi.stubEnv('CRON_SECRET', CRON_SECRET);
   db = createInMemorySupabase({ rpc: { claim_ai_runs: (args, client) => claimAiRuns(args, client) } });
   db.seed('families', [{ id: FAMILY, name: 'Fixture', timezone: 'UTC' }]);
@@ -115,10 +125,12 @@ beforeEach(() => {
   seam.runGraph.mockReset();
   vi.spyOn(console, 'error').mockImplementation((...args: unknown[]) => { errors.push(args); });
 });
-afterEach(() => { vi.restoreAllMocks(); vi.unstubAllEnvs(); });
+afterEach(() => { vi.useRealTimers(); vi.restoreAllMocks(); vi.unstubAllEnvs(); });
+
+const nextTick = () => vi.setSystemTime(new Date(Date.now() + TICK_CADENCE_MS));
 
 describe('the cron tick, when a run throws', () => {
-  it('leaves the run in the shape the recovery pass looks for: executing, our lease, expired', async () => {
+  it('leaves the run in the shape the recovery pass looks for: executing, our lease, due to run out shortly', async () => {
     seedRun();
     seam.runGraph.mockRejectedValue(new Error('provider exploded'));
     const first = await cronTick();
@@ -129,9 +141,25 @@ describe('the cron tick, when a run throws', () => {
     const row = run();
     expect(row.state).toBe('executing');
     expect(row.attempt).toBe(1);
-    expect(row.lease_owner, 'the lease is expired, not cleared — a lease-less executing run is never recovered').not.toBeNull();
+    expect(row.lease_owner, 'the lease is shortened, not cleared — a lease-less executing run is never recovered').not.toBeNull();
     expect(row.lease_expires_at).not.toBeNull();
-    expect(Date.parse(String(row.lease_expires_at))).toBeLessThanOrEqual(Date.now());
+    const until = Date.parse(String(row.lease_expires_at));
+    expect(until, 'still held: the tick that failed it must not get it back').toBeGreaterThan(Date.now());
+    expect(until, 'but not for the whole 180-second lease').toBeLessThanOrEqual(Date.now() + RELEASE_RETRY_DELAY_MS);
+  });
+
+  it('does not claim a repeatable throw straight back in its next wave — one attempt per tick, not five', async () => {
+    // The review's case: the loop keeps claiming until the 85-second deadline,
+    // and an expired lease was recovered by the very next wave of the same
+    // invocation. A fast, repeatable rejection then burnt every attempt and
+    // dead-lettered the run in seconds. The shortened lease outlives the tick.
+    seedRun();
+    seam.runGraph.mockRejectedValue(new Error('provider exploded'));
+    const first = await cronTick();
+    expect(first.body.claimed).toBe(1);
+    expect(seam.runGraph).toHaveBeenCalledTimes(1);
+    expect(run()).toMatchObject({ state: 'executing', attempt: 1 });
+    expect(run().error ?? null, 'and it is not dead-lettered').toBeNull();
   });
 
   it('so the next tick recovers it, claims it again and runs it — it used to be stranded for ever', async () => {
@@ -140,6 +168,7 @@ describe('the cron tick, when a run throws', () => {
     await cronTick();
     completesTheRun();
 
+    nextTick();
     const second = await cronTick();
     expect(second.body.claimed, 'the stranded run was never claimed again').toBe(1);
     expect(second.body.results).toEqual([{ runId: RUN, status: 'completed', completed: 1, failed: 0 }]);
@@ -153,6 +182,7 @@ describe('the cron tick, when a run throws', () => {
     await cronTick();
     expect(run()).toMatchObject({ state: 'executing', attempt: 5 });
 
+    nextTick();
     const second = await cronTick();
     expect(second.body.claimed).toBe(0);
     expect(seam.runGraph).toHaveBeenCalledTimes(1);
@@ -183,10 +213,13 @@ describe('an interactive continuation whose slice throws', () => {
     const row = run();
     expect(row.state).toBe('executing');
     expect(row.lease_owner).not.toBeNull();
-    expect(Date.parse(String(row.lease_expires_at))).toBeLessThanOrEqual(Date.now());
+    expect(Date.parse(String(row.lease_expires_at))).toBeLessThanOrEqual(Date.now() + RELEASE_RETRY_DELAY_MS);
 
+    const held = await db.rpc('claim_ai_runs', { p_limit: 10, p_lease_seconds: 120 });
+    expect(held.data, 'not yet: the shortened lease still holds the run for this tick').toEqual([]);
+    nextTick();
     const { data } = await db.rpc('claim_ai_runs', { p_limit: 10, p_lease_seconds: 120 });
-    expect(data, 'the recovery pass picks the run up').toEqual([RUN]);
+    expect(data, 'the recovery pass picks the run up on the next tick').toEqual([RUN]);
     expect(run()).toMatchObject({ state: 'executing', attempt: 2 });
   });
 
@@ -202,13 +235,21 @@ describe('an interactive continuation whose slice throws', () => {
 describe('releaseRun', () => {
   const client = () => db as unknown as SupabaseClient<Database>;
 
-  it('expires our own lease on an executing run and keeps everything else', async () => {
+  it('shortens our own lease on an executing run to the retry delay and keeps everything else', async () => {
     const owner = randomUUID();
-    seedRun({ state: 'executing', attempt: 1, lease_owner: owner, lease_expires_at: new Date(Date.now() + 120_000).toISOString() });
+    seedRun({ state: 'executing', attempt: 1, lease_owner: owner, lease_expires_at: new Date(Date.now() + 180_000).toISOString() });
     await releaseRun(client(), RUN, owner);
     const row = run();
     expect(row).toMatchObject({ state: 'executing', attempt: 1, lease_owner: owner });
-    expect(Date.parse(String(row.lease_expires_at))).toBeLessThanOrEqual(Date.now());
+    expect(Date.parse(String(row.lease_expires_at))).toBe(Date.now() + RELEASE_RETRY_DELAY_MS);
+  });
+
+  it('outlives any one invocation and falls inside the dispatcher cadence', () => {
+    // 85 s is the cron tick's box (TICK_BUDGET_MS); 300 s is the five-minute
+    // dispatcher. Between the two, the failing tick cannot reclaim the run and
+    // the next tick does.
+    expect(RELEASE_RETRY_DELAY_MS).toBeGreaterThan(85_000);
+    expect(RELEASE_RETRY_DELAY_MS).toBeLessThan(TICK_CADENCE_MS);
   });
 
   it.each([
