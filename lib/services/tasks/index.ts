@@ -863,5 +863,8 @@ export async function listOpenChores(
     console.error('[service:tasks] open chores read failed', error);
     return fail(describeDbError(error, 'Could not load the chore board.'), { code: SERVICE_CODES.db });
   }
+  if (data != null && !Array.isArray(data)) {
+    return fail('Could not load the chore board.', { code: SERVICE_CODES.db });
+  }
   return ok(data ?? []);
 }
