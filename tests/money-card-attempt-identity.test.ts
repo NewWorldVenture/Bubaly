@@ -525,9 +525,10 @@ describe('residuals the attempt key does not cover', () => {
     expect(provider.log.cardOutcomes).toEqual(['failed', 'replayed_failure']);
     expect(provider.cards.size).toBe(0);
     expect(mirrorCards()).toHaveLength(0);
-    // Both answers are named; this double sends no response headers, so neither reads as a replay.
+    // Both answers are named; the second is the provider's replay of the saved
+    // failure. Without an HTTP status it is not retried under a fresh key.
     const failed = { childWalletId: 'wallet-a', type: 'virtual', attempt: 0, requestId: undefined, statusCode: undefined, replayed: false };
-    expect(providerFailureLogs()).toEqual([[PROVIDER_FAILED, failed], [PROVIDER_FAILED, failed]]);
+    expect(providerFailureLogs()).toEqual([[PROVIDER_FAILED, failed], [PROVIDER_FAILED, { ...failed, replayed: true }]]);
 
     provider.forgetKeys();
     expect((await issueCardAction(VIRTUAL)).ok).toBe(true);
@@ -540,17 +541,115 @@ describe('residuals the attempt key does not cover', () => {
     { label: 'a first answer', replayedHeader: undefined, replayed: false },
     { label: "the provider's replay of a saved failure", replayedHeader: 'true', replayed: true },
   ])('names a failed provider create ($label) by request, status and attempt, so a blocked parent can be traced', async ({ replayedHeader, replayed }) => {
+    // A 5xx, so the replay is not retried and only the naming is under test.
     const failure = Object.assign(new Error('synthetic card refusal after execution began'), {
-      requestId: 'req_synthetic_1', statusCode: 402,
+      requestId: 'req_synthetic_1', statusCode: 500,
       headers: replayedHeader === undefined ? {} : { 'idempotent-replayed': replayedHeader },
     });
     provider.failNextCardCreate(failure);
     expect(await issueCardAction(PHYSICAL)).toEqual({ ok: false, error: REFUSED });
     expect(providerFailureLogs()).toEqual([[PROVIDER_FAILED, {
-      childWalletId: 'wallet-a', type: 'physical', attempt: 0, requestId: 'req_synthetic_1', statusCode: 402, replayed,
+      childWalletId: 'wallet-a', type: 'physical', attempt: 0, requestId: 'req_synthetic_1', statusCode: 500, replayed,
     }]]);
     expect(mirrorCards()).toHaveLength(0);
     expect(issuedAudits()).toEqual([]);
+  });
+});
+
+describe('a provider refusal saved under the attempt key and replayed to a later order', () => {
+  /** A refusal that began executing at the provider, so the provider saved it under the key. */
+  const refusal = (statusCode: number | undefined) => Object.assign(
+    new Error('synthetic card refusal after execution began'), { statusCode, requestId: 'req_saved_1' },
+  );
+  const retryKey = (type: string, n: number) => `${key(type, n)}-retry`;
+
+  it.each([400, 402, 403, 404])('a replayed %i is tried once more under the attempt\'s retry key, so a parent who fixed the cause gets the card', async status => {
+    provider.failNextCardCreate(refusal(status));
+    // The provider's first answer is not a replay: it stands.
+    expect(await issueCardAction(VIRTUAL)).toEqual({ ok: false, error: REFUSED });
+    expect(provider.log.cardKeys).toEqual([key('virtual', 0)]);
+
+    vi.setSystemTime(T0 + 60_000);
+    const second = await issueCardAction(VIRTUAL);
+    const [row] = mirrorCards();
+    expect(second).toEqual({ ok: true, data: { cardId: row.id } });
+    expect(provider.log.cardKeys).toEqual([key('virtual', 0), key('virtual', 0), retryKey('virtual', 0)]);
+    expect(provider.log.cardOutcomes).toEqual(['failed', 'replayed_failure', 'created']);
+    expect(provider.active()).toHaveLength(1);
+    expect(mirrorCards()).toHaveLength(1);
+    expect(issuedAudits()).toEqual([row.id]);
+  });
+
+  it.each([500, 502, undefined])('a replayed %s is not retried: whether it created a card is unknown, so the refusal stands', async status => {
+    provider.failNextCardCreate(refusal(status));
+    expect(await issueCardAction(VIRTUAL)).toEqual({ ok: false, error: REFUSED });
+    vi.setSystemTime(T0 + 60_000);
+    expect(await issueCardAction(VIRTUAL)).toEqual({ ok: false, error: REFUSED });
+    expect(provider.log.cardKeys).toEqual([key('virtual', 0), key('virtual', 0)]);
+    expect(provider.log.cardOutcomes).toEqual(['failed', 'replayed_failure']);
+    expect(provider.cards.size).toBe(0);
+    expect(issuedAudits()).toEqual([]);
+  });
+
+  it.each([
+    { label: 'a 409 conflict', failure: () => refusal(409) },
+    { label: 'a 429 rate limit', failure: () => refusal(429) },
+    { label: 'a misused key (StripeIdempotencyError)', failure: () => Object.assign(refusal(400), { type: 'StripeIdempotencyError' }) },
+  ])('a replayed $label is not retried under the retry key either', async ({ failure }) => {
+    provider.failNextCardCreate(failure());
+    expect(await issueCardAction(VIRTUAL)).toEqual({ ok: false, error: REFUSED });
+    vi.setSystemTime(T0 + 60_000);
+    expect(await issueCardAction(VIRTUAL)).toEqual({ ok: false, error: REFUSED });
+    expect(provider.log.cardKeys).toEqual([key('virtual', 0), key('virtual', 0)]);
+    expect(provider.log.cardOutcomes).toEqual(['failed', 'replayed_failure']);
+    expect(provider.cards.size).toBe(0);
+  });
+
+  it('when the retry key fails too, a later order is refused without a third attempt until the provider forgets the keys', async () => {
+    provider.failNextCardCreate(refusal(402));
+    expect(await issueCardAction(VIRTUAL)).toEqual({ ok: false, error: REFUSED });
+    vi.setSystemTime(T0 + 60_000);
+    provider.failNextCardCreate(refusal(402));
+    expect(await issueCardAction(VIRTUAL)).toEqual({ ok: false, error: REFUSED });
+    vi.setSystemTime(T0 + 120_000);
+    expect(await issueCardAction(VIRTUAL)).toEqual({ ok: false, error: REFUSED });
+    const k = key('virtual', 0);
+    expect(provider.log.cardKeys).toEqual([k, k, retryKey('virtual', 0), k, retryKey('virtual', 0)]);
+    expect(provider.log.cardOutcomes).toEqual(['failed', 'replayed_failure', 'failed', 'replayed_failure', 'replayed_failure']);
+    expect(provider.cards.size).toBe(0);
+    expect(issuedAudits()).toEqual([]);
+    // Every answer is named; the retry key's are marked as the retry.
+    const named = { childWalletId: 'wallet-a', type: 'virtual', attempt: 0, requestId: 'req_saved_1', statusCode: 402 };
+    expect(providerFailureLogs()).toEqual([
+      [PROVIDER_FAILED, { ...named, replayed: false }],
+      [PROVIDER_FAILED, { ...named, replayed: true }],
+      [PROVIDER_FAILED, { ...named, replayed: false, retried: true }],
+      [PROVIDER_FAILED, { ...named, replayed: true }],
+      [PROVIDER_FAILED, { ...named, replayed: true, retried: true }],
+    ]);
+  });
+
+  it('two tabs retrying a replayed refusal at once share the retry key: one card, both answered with it, one audit', async () => {
+    provider.failNextCardCreate(refusal(402));
+    expect(await issueCardAction(VIRTUAL)).toEqual({ ok: false, error: REFUSED });
+    vi.setSystemTime(T0 + 60_000);
+    const [a, b] = await Promise.all([issueCardAction(VIRTUAL), issueCardAction(VIRTUAL)]);
+    const [row] = mirrorCards();
+    expect([a, b]).toEqual([{ ok: true, data: { cardId: row.id } }, { ok: true, data: { cardId: row.id } }]);
+    expect(provider.active()).toHaveLength(1);
+    expect(mirrorCards()).toHaveLength(1);
+    expect(issuedAudits()).toEqual([row.id]);
+    expect(new Set(provider.log.cardKeys.slice(1))).toEqual(new Set([key('virtual', 0), retryKey('virtual', 0)]));
+  });
+
+  it('a parameter mismatch on the attempt key is never retried under the retry key: it may be another order', async () => {
+    provider.failNextCardCreate(refusal(402));
+    expect(await issueCardAction(PHYSICAL)).toEqual({ ok: false, error: REFUSED });
+    vi.setSystemTime(T0 + 60_000);
+    expect(await issueCardAction({ ...PHYSICAL, spendLimitCents: 9900 })).toEqual({ ok: false, error: REFUSED });
+    expect(provider.log.cardKeys).toEqual([key('physical', 0), key('physical', 0)]);
+    expect(provider.log.cardOutcomes).toEqual(['failed', 'mismatch']);
+    expect(provider.cards.size).toBe(0);
   });
 });
 

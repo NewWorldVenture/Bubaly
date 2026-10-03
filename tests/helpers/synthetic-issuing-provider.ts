@@ -99,7 +99,7 @@ export function syntheticProvider() {
             if (!conflictRetries) {
               throw Object.assign(
                 new Error('synthetic idempotency_key_in_use: another request with this key is still in progress'),
-                { statusCode: 409, code: 'idempotency_key_in_use' },
+                { statusCode: 409, code: 'idempotency_key_in_use', type: 'StripeIdempotencyError' },
               );
             }
             await running;
@@ -109,11 +109,19 @@ export function syntheticProvider() {
           if (prior) {
             if (prior.body !== json) {
               log.cardOutcomes.push('mismatch');
-              throw new Error('synthetic idempotency_error: key reused with different parameters');
+              throw Object.assign(
+                new Error('synthetic idempotency_error: key reused with different parameters'),
+                { statusCode: 400, code: 'idempotency_error', type: 'StripeIdempotencyError' },
+              );
             }
             if (prior.failure) {
               log.cardOutcomes.push('replayed_failure');
-              throw prior.failure;
+              // The provider answers a replay with the saved response and marks
+              // it with the Idempotent-Replayed header (lower-cased by the SDK).
+              const saved = prior.failure as Error & { headers?: Record<string, string> };
+              throw Object.assign(new Error(saved.message), saved, {
+                headers: { ...(saved.headers ?? {}), 'idempotent-replayed': 'true' },
+              });
             }
             log.cardOutcomes.push('replayed');
             result = prior.result;

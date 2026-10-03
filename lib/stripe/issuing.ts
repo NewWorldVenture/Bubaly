@@ -174,7 +174,8 @@ export async function issueCard(
 
   const stripe = getStripe();
   const interval = WINDOW_INTERVAL[params.spendWindow] ?? 'per_authorization';
-  const card = await stripe.issuing.cards.create(
+  const attemptKey = `card-${params.cardholderRowId}-${params.childWalletId}-${params.type}-${mirrored}`;
+  const createCard = (idempotencyKey: string) => stripe.issuing.cards.create(
     {
       cardholder: params.stripeCardholderId,
       currency: 'usd',
@@ -185,24 +186,41 @@ export async function issueCard(
         : undefined,
       metadata: { family_id: params.familyId, child_wallet_id: params.childWalletId },
     },
-    {
-      stripeAccount: params.accountId,
-      idempotencyKey: `card-${params.cardholderRowId}-${params.childWalletId}-${params.type}-${mirrored}`,
-    },
-  ).catch((failure: unknown) => {
-    // The provider saves a failure under the key it was sent with and replays
-    // it to every later order of this attempt (the count has not moved) until
-    // it prunes the key, at least 24 hours on. Name the request, and whether
-    // this answer was such a replay, so a blocked parent can be traced.
+    { stripeAccount: params.accountId, idempotencyKey },
+  );
+  // The provider saves a failure under the key it was sent with and replays
+  // it to every later order of this attempt (the count has not moved) until
+  // it prunes the key, at least 24 hours on. Name the request, and whether
+  // this answer was such a replay, so a blocked parent can be traced.
+  const named = (failure: unknown, retried: boolean) => {
     const detail = typeof failure === 'object' && failure !== null
-      ? failure as { requestId?: unknown; statusCode?: unknown; headers?: Record<string, unknown> }
+      ? failure as { requestId?: unknown; statusCode?: unknown; type?: unknown; headers?: Record<string, unknown> }
       : {};
     console.error('[money] card create failed at the provider', {
       childWalletId: params.childWalletId, type: params.type, attempt: mirrored,
       requestId: detail.requestId, statusCode: detail.statusCode,
       replayed: detail.headers?.['idempotent-replayed'] === 'true',
+      ...(retried ? { retried: true } : {}),
     });
-    throw failure;
+    return detail;
+  };
+  const card = await createCard(attemptKey).catch((failure: unknown) => {
+    const detail = named(failure, false);
+    // A replayed client refusal (4xx, other than a conflict, a rate limit or a
+    // misused key) created no card, so one fresh try under the attempt's fixed
+    // retry key cannot duplicate one; two tabs retrying derive the same key and
+    // still share one card. A 5xx or an unknown status may have created a card,
+    // so it is not retried, and neither is a retry's own failure: the next
+    // fresh try comes when the provider prunes the keys.
+    const status = detail.statusCode;
+    const replayedClientRefusal = detail.headers?.['idempotent-replayed'] === 'true'
+      && typeof status === 'number' && status >= 400 && status < 500 && status !== 409 && status !== 429
+      && detail.type !== 'StripeIdempotencyError';
+    if (!replayedClientRefusal) throw failure;
+    return createCard(`${attemptKey}-retry`).catch((retryFailure: unknown) => {
+      named(retryFailure, true);
+      throw retryFailure;
+    });
   });
 
   const { data: row, error } = await supabase
