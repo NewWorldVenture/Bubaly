@@ -211,31 +211,42 @@ export async function issueCard(
     .select('id')
     .single();
   if (error) {
-    // The provider replayed a card another request of this attempt already
-    // mirrored, so this insert met that row under UNIQUE (stripe_card_id).
-    // Adopt it only when it is exactly this family, child, type, cardholder row
-    // and provider card. Its controls, freeze, status and author may have
-    // changed since, legitimately, so they are not compared. Anything else,
-    // including a failed re-read, keeps the refusal.
-    if (error.code === '23505') {
-      const winner = await supabase
-        .from('stripe_issuing_cards')
-        .select('id, family_id, child_wallet_id, type, cardholder_id, stripe_card_id')
-        .eq('stripe_card_id', card.id)
-        .maybeSingle()
-        .then(({ data, error: rereadError }) => {
-          if (!rereadError) return data;
-          console.error('[money] card duplicate re-read failed; keeping the refusal', { stripeCardId: card.id, code: rereadError.code });
-          return undefined;
-        }, () => {
-          console.error('[money] card duplicate re-read rejected; keeping the refusal', { stripeCardId: card.id });
-          return undefined;
-        });
-      if (winner && winner.stripe_card_id === card.id && winner.family_id === params.familyId
-        && winner.child_wallet_id === params.childWalletId && winner.type === params.type
-        && winner.cardholder_id === params.cardholderRowId) {
-        return { rowId: winner.id, stripeCardId: card.id, adopted: true };
-      }
+    // Two outcomes leave this attempt's exact row in the mirror although the
+    // insert reports an error; both are recovered by reading the card back.
+    // - 23505: the provider replayed a card another request of this attempt
+    //   already mirrored (UNIQUE (stripe_card_id)). That request audits it;
+    //   this one adopts it.
+    // - Any other error: the insert may have committed with only its reply
+    //   lost (a dropped connection, a timeout). The row is then this order's
+    //   own card, answered and audited here; unread, the parent was told
+    //   "could not issue" for a live, mirrored card with no audit. (Should a
+    //   concurrent request of the same attempt have committed while this
+    //   insert did not, both audit it.)
+    // Adopt only exactly this family, child, type, cardholder row and card.
+    // Controls, freeze, status and author may have changed since,
+    // legitimately, so they are not compared. Anything else, including a
+    // failed read, keeps the refusal.
+    const duplicate = error.code === '23505';
+    const reading = duplicate ? 'card duplicate re-read' : 'card mirror read-back after a failed insert';
+    const winner = await supabase
+      .from('stripe_issuing_cards')
+      .select('id, family_id, child_wallet_id, type, cardholder_id, stripe_card_id')
+      .eq('stripe_card_id', card.id)
+      .maybeSingle()
+      .then(({ data, error: rereadError }) => {
+        if (!rereadError) return data;
+        console.error(`[money] ${reading} failed; keeping the refusal`, { stripeCardId: card.id, code: rereadError.code });
+        return undefined;
+      }, () => {
+        console.error(`[money] ${reading} rejected; keeping the refusal`, { stripeCardId: card.id });
+        return undefined;
+      });
+    if (winner && winner.stripe_card_id === card.id && winner.family_id === params.familyId
+      && winner.child_wallet_id === params.childWalletId && winner.type === params.type
+      && winner.cardholder_id === params.cardholderRowId) {
+      return { rowId: winner.id, stripeCardId: card.id, adopted: duplicate };
+    }
+    if (duplicate) {
       // Read, but not this attempt's row: only a corrupted mirror gets here.
       if (winner !== undefined) {
         console.error('[money] card duplicate is not this attempt\'s row; keeping the refusal', { stripeCardId: card.id, found: winner !== null });

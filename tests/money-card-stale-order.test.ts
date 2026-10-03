@@ -394,10 +394,11 @@ describe('a card that was mirrored but whose success never reached the parent', 
    * although the row is there.
    */
   function loseNextInsertReplyAfterCommit() {
-    const realFrom = service.from.bind(service);
+    const loose = service as unknown as { from: (table: string) => unknown };
+    const realFrom = loose.from.bind(service);
     let armed = true;
-    (service as unknown as { from: (table: string) => unknown }).from = (table: string) => {
-      const builder = realFrom(table) as unknown as Record<string, (...args: unknown[]) => unknown>;
+    loose.from = (table: string) => {
+      const builder = realFrom(table) as Record<string, (...args: unknown[]) => unknown>;
       if (table !== 'stripe_issuing_cards' || !armed) return builder;
       return Object.assign(Object.create(builder), {
         insert(values: unknown) {

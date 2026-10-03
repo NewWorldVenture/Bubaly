@@ -671,19 +671,47 @@ describe('a card mirror insert that meets UNIQUE (stripe_card_id)', () => {
     expect(cardTableCalls()).toBe(3);
   });
 
-  it.each([
+  const NON_DUPLICATE = [
     { code: '08006', message: 'synthetic connection refusal' },
     { code: '23503', message: 'synthetic foreign key refusal' },
     { message: 'synthetic refusal without a code' },
-  ])('does not re-read after a non-duplicate mirror insert failure %j, and names the provider card', async error => {
-    // An adoptable row is there: only the error code keeps it from being read.
+  ];
+  const readBackLogs = () => vi.mocked(console.error).mock.calls
+    .filter(([message]) => typeof message === 'string' && message.startsWith('[money] card mirror read-back'));
+
+  it.each(NON_DUPLICATE)('reads the card back after a non-duplicate mirror insert failure %j and, when this attempt\'s exact row is there (the insert committed, its reply was lost), answers with it and audits it once', async error => {
     db.seed('stripe_issuing_cards', [EXACT]);
     script.push(null, { error });
-    expect(await issueCardAction(shown(VIRTUAL, 1))).toEqual({ ok: false, error: REFUSED });
+    expect(await issueCardAction(shown(VIRTUAL, 1))).toEqual({ ok: true, data: { cardId: EXACT.id } });
+    // This order's own card: audited here, by the request whose insert committed.
+    expect(issuedAudits()).toEqual([EXACT.id]);
+    expect(cardTableCalls()).toBe(3);
+    expect(failures()).toEqual([]);
+    expect(unmirroredLogs()).toEqual([]);
+    expect(readBackLogs()).toEqual([]);
+    expect(rereadLogs()).toEqual([]);
+  });
+
+  it.each(NON_DUPLICATE)('keeps the refusal after a non-duplicate mirror insert failure %j when the read-back finds no row, and names the provider card', async error => {
+    script.push(null, { error });
+    expect(await issueCardAction(shown(VIRTUAL, 0))).toEqual({ ok: false, error: REFUSED });
     expect(failures()).toEqual([`Failed to persist card: ${error.message}`]);
     expect(unmirroredLogs()).toEqual([[UNMIRRORED, { stripeCardId: CARD, code: error.code }]]);
-    expect(cardTableCalls()).toBe(2);
+    expect(cardTableCalls()).toBe(3);
     expect(issuedAudits()).toEqual([]);
-    expect(rereadLogs()).toEqual([]);
+    expect(mismatchLogs()).toEqual([]);
+  });
+
+  it.each([
+    { label: 'a returned error', reply: { error: { code: '08006', message: 'synthetic read-back refusal' } } as Scripted, logged: [['[money] card mirror read-back after a failed insert failed; keeping the refusal', { stripeCardId: CARD, code: '08006' }]] },
+    { label: 'a rejection', reply: 'reject' as Scripted, logged: [['[money] card mirror read-back after a failed insert rejected; keeping the refusal', { stripeCardId: CARD }]] },
+  ])('keeps the refusal after a non-duplicate mirror insert failure when the read-back gives $label', async ({ reply, logged }) => {
+    db.seed('stripe_issuing_cards', [EXACT]);
+    script.push(null, { error: { code: '08006', message: 'synthetic connection refusal' } }, reply);
+    expect(await issueCardAction(shown(VIRTUAL, 1))).toEqual({ ok: false, error: REFUSED });
+    expect(readBackLogs()).toEqual(logged);
+    expect(unmirroredLogs()).toEqual([[UNMIRRORED, { stripeCardId: CARD, code: '08006' }]]);
+    expect(issuedAudits()).toEqual([]);
+    expect(cardTableCalls()).toBe(3);
   });
 });
