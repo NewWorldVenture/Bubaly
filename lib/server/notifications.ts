@@ -257,7 +257,10 @@ export async function generateFamilyNotifications(supabase: DB, familyId: string
 
   // Expiring documents → notify managers (one per manager so each is alerted).
   for (const d of docs ?? []) {
-    const when = d.expires_at ? new Date(d.expires_at).toLocaleDateString('en-US', { month: 'short', day: 'numeric' }) : 'soon';
+    // `documents.expires_at` is a DATE (0002_tables.sql). Parsed, that is UTC
+    // midnight; rendered on the host's clock a US server said "Oct 7" about a
+    // passport that expires on the 8th. A date is rendered as the date it is.
+    const when = d.expires_at ? new Date(d.expires_at).toLocaleDateString('en-US', { month: 'short', day: 'numeric', timeZone: 'UTC' }) : 'soon';
     for (const m of documentManagers) {
       candidates.push({ type: 'document_expiry', related_type: 'documents', related_id: `${d.id}:${m.id}`, user_id: m.user_id, title: `Document expiring: ${d.title}`, body: `Expires ${when}` });
     }
