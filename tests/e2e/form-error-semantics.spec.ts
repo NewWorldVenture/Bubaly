@@ -494,7 +494,9 @@ test.describe('form errors: what an invalid, refused and recovered submit expose
         // Below lg the full-width stack ends level with Quick capture's foot:
         // a tap there lands on the notice's own Dismiss. A long notice or
         // three reach the orb, and the language bar at the foot of this short
-        // page is under them too.
+        // page is under them too. Which part of a notice is under the point
+        // (its body, or Dismiss or Ausblenden) is as seen locally and is not
+        // compared; see `tapped` below.
         '390x844 short': { covered: [QC], capture: 'toast: Dismiss', ai: AI },
         '390x844 long': { covered: [DE.ai, DE.capture, 'Sprache ändern'], capture: 'toast', ai: 'toast: Ausblenden' },
         '390x844 stacked': { covered: [AI, 'Change language', QC], capture: 'toast', ai: 'toast' },
@@ -518,7 +520,17 @@ test.describe('form errors: what an invalid, refused and recovered submit expose
               const count = await notices.count();
 
               const report = await cornerReport(page, names);
-              expect(report).toEqual(CORNER[`${w}x${h} ${state}`]);
+              // The claim in the pointer columns is who takes the tap: the
+              // notice, or the corner button itself. Where in the notice it
+              // lands, on its body or on one of its own buttons, moves with
+              // where the text wraps: at 390x844 the long German notice put
+              // Ausblenden under the orb's centre locally and the notice's
+              // body there in CI. So any hit inside the stack compares as
+              // "toast"; a button outside it still has to match by name.
+              const tapped = (hit: string | null) => (hit !== null && /^toast(: |$)/.test(hit) ? 'toast' : hit);
+              const expected = CORNER[`${w}x${h} ${state}`];
+              expect({ ...report, capture: tapped(report.capture), ai: tapped(report.ai) })
+                .toEqual({ ...expected, capture: tapped(expected.capture), ai: tapped(expected.ai) });
               if (w >= 1024) {
                 // lg:bottom-40: the stack (not a toast, which fades in from
                 // below) ends 10rem above the viewport's foot.
