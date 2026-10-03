@@ -120,7 +120,7 @@ export async function issueCardAction(input: {
   childWalletId: string; type: 'virtual' | 'physical'; spendLimitCents: number | null; spendWindow: string;
   /** How many of this child's cards of this type the ordering view showed, every status. */
   expectedCount: number;
-}): Promise<Result<{ cardId: string }>> {
+}): Promise<Result<{ cardId: string }> | { ok: false; error: string; stale: true }> {
   const t = await getTranslations();
   const ctx = await requireUserContext();
   if (!isManager(ctx.active.role)) return { ok: false, error: t('actions.onlyParentsCanIssueCards') };
@@ -192,7 +192,7 @@ export async function issueCardAction(input: {
   } catch (e) {
     // Made against a view another tab or device has moved past: nothing reached
     // the provider, and the view re-reads on this answer.
-    if (e instanceof StaleCardOrderError) return { ok: false, error: t('wallet.refreshToTryAgain') };
+    if (e instanceof StaleCardOrderError) return { ok: false, error: t('wallet.refreshToTryAgain'), stale: true };
     return actionFailure('issue the card', t('money.couldNotIssueTheCard'), e);
   }
 }

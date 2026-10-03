@@ -191,7 +191,7 @@ describe('card issuance reaching the server more than once', () => {
     // and the provider issued a second live card. The view sends the count it
     // showed (0), which the mirror has moved past: refused before the provider.
     expect(first.ok).toBe(true);
-    expect(second).toEqual({ ok: false, error: 'translated:wallet.refreshToTryAgain' });
+    expect(second).toEqual({ ok: false, error: 'translated:wallet.refreshToTryAgain', stale: true });
     expect(provider.log.cardKeys).toEqual([cardKey(input.type, 0)]);
     expect(provider.log.cardOutcomes).toEqual(['created']);
     expect(provider.active(input.type)).toHaveLength(1);

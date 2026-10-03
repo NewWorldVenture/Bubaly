@@ -341,7 +341,7 @@ describe('card capability, lookup and orchestration boundaries', () => {
   });
   it('answers a stale-order refusal from issueCard with "refresh to try again", without audit, refresh or failure log', async () => {
     mock.issueCard.mockRejectedValue(new mock.StaleCardOrderError(detail));
-    expect(await issueCardAction(input)).toEqual({ ok: false, error: 'translated:wallet.refreshToTryAgain' });
+    expect(await issueCardAction(input)).toEqual({ ok: false, error: 'translated:wallet.refreshToTryAgain', stale: true });
     expect(mock.issueCard).toHaveBeenCalledTimes(1);
     expect(mock.audit).not.toHaveBeenCalled(); expect(mock.revalidate).not.toHaveBeenCalled();
     expect(console.error).not.toHaveBeenCalled();

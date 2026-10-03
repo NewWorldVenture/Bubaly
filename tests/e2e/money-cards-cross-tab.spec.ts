@@ -47,7 +47,10 @@ const sources = Object.fromEntries([VIEW, 'components/ui/button.tsx'].map(file =
 
 type ActionCall = { action: string; args?: Record<string, unknown>; settled: boolean };
 // 'stale' is the server's answer to an order made against a count it has moved past.
-type Outcome = 'refusal' | 'rejection' | 'stale' | 'success';
+// 'stale-localized' is that answer in another locale's words, and
+// 'refusal-in-stale-words' an ordinary refusal that happens to read like it: the
+// flag, not the words, is what makes the view re-read.
+type Outcome = 'refusal' | 'rejection' | 'stale' | 'stale-localized' | 'refusal-in-stale-words' | 'success';
 type ServerCall = { tab: string; action: string; args?: Record<string, unknown> };
 type Probe = {
   tab: string; calls: ActionCall[]; errors: string[]; successes: string[]; refreshes: number; faults: string[];
@@ -179,7 +182,9 @@ async function fixture(page: Page, tab: string, props: typeof PROPS | Record<str
       p.calls[index].settled = true;
       if (outcome === 'rejection') waiting[index].reject(new Error('Action unavailable'));
       else waiting[index].resolve(outcome === 'refusal' ? { ok: false, error: 'Action refused' }
-        : outcome === 'stale' ? { ok: false, error: ${JSON.stringify(STALE_TEXT)} }
+        : outcome === 'stale' ? { ok: false, error: ${JSON.stringify(STALE_TEXT)}, stale: true }
+        : outcome === 'stale-localized' ? { ok: false, error: 'Aktualisieren Sie, um es erneut zu versuchen.', stale: true }
+        : outcome === 'refusal-in-stale-words' ? { ok: false, error: ${JSON.stringify(STALE_TEXT)} }
         : { ok: true, data: { cardId: 'card-' + (index + 1) } });
     };
     p.settle = () => new Promise(resolve => requestAnimationFrame(() => requestAnimationFrame(resolve)));
@@ -423,6 +428,23 @@ for (const entry of ENTRY_POINTS) {
     expect((await read(tab2)).calls.map(call => call.args)).toEqual([entry.input, next]);
   });
 }
+
+test('repaired: the view re-reads on the server\'s stale flag, whatever its words, and not on a refusal that only reads like it', async ({ page }) => {
+  const log = await server(page.context());
+  await fixture(page, 'tab-1');
+
+  await virtual(page).click();
+  await complete(page, 0, 'stale-localized');
+  expect(await read(page)).toMatchObject({ successes: [], errors: ['Aktualisieren Sie, um es erneut zu versuchen.'], refreshes: 1 });
+
+  await expect(virtual(page)).toBeEnabled();
+  await virtual(page).click();
+  await complete(page, 1, 'refusal-in-stale-words');
+  expect(await read(page)).toMatchObject({
+    successes: [], errors: ['Aktualisieren Sie, um es erneut zu versuchen.', STALE_TEXT], refreshes: 1,
+  });
+  expect(log).toHaveLength(2);
+});
 
 test('repaired: an up-to-date tab sends, for each order, that child\'s count of that card type, every status', async ({ page }) => {
   const log = await server(page.context());

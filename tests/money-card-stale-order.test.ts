@@ -205,7 +205,7 @@ describe('an order made against a count the mirror has moved past', () => {
 
     // Tab 2 was never refreshed: it still shows `shown` cards.
     vi.setSystemTime(T0 + (shown + 1) * 60_000);
-    expect(await order(input, shown)).toEqual({ ok: false, error: STALE });
+    expect(await order(input, shown)).toEqual({ ok: false, error: STALE, stale: true });
 
     expect(tally()).toEqual(before);
     expect(provider.log.cardKeys).toEqual(Array.from({ length: shown + 1 }, (_, n) => key(input.type, n)));
@@ -235,7 +235,7 @@ describe('an order made against a count the mirror has moved past', () => {
   it.each([VIRTUAL, PHYSICAL])('after the stale refusal the refreshed view orders a second $type card on purpose against the new count', async input => {
     expect((await order(input, 0)).ok).toBe(true);
     vi.setSystemTime(T0 + 60_000);
-    expect(await order(input, 0)).toEqual({ ok: false, error: STALE });
+    expect(await order(input, 0)).toEqual({ ok: false, error: STALE, stale: true });
     expect(tally()).toEqual({ creates: 1, live: 1, rows: 1, audits: 1 });
     vi.setSystemTime(T0 + 120_000);
     expect((await order(input, 1)).ok).toBe(true);
@@ -247,7 +247,7 @@ describe('an order made against a count the mirror has moved past', () => {
   it('an order ahead of the mirror (expectedCount above the count) is refused too, before any card reaches the provider', async () => {
     // A view can show a card the mirror no longer counts (a recreated
     // cardholder's cards cascade away). It is just as stale.
-    expect(await order(VIRTUAL, 1)).toEqual({ ok: false, error: STALE });
+    expect(await order(VIRTUAL, 1)).toEqual({ ok: false, error: STALE, stale: true });
     expect(tally()).toEqual({ creates: 0, live: 0, rows: 0, audits: 0 });
     // The cardholder is ensured first, as for any order; it is reused later.
     expect(provider.log.cardholderKeys).toEqual(['cardholder-member-a']);
@@ -290,7 +290,7 @@ describe('two overlapping orders that were both made against N', () => {
     const second = await late;
 
     expect(first).toEqual({ ok: true, data: { cardId: mirrorCards()[0].id } });
-    expect(second).toEqual({ ok: false, error: STALE });
+    expect(second).toEqual({ ok: false, error: STALE, stale: true });
     expect(tally()).toEqual({ creates: 1, live: 1, rows: 1, audits: 1 });
     expect(provider.log.cardKeys).toEqual([key(input.type, 0)]);
     expect(provider.log.cardOutcomes).toEqual(['created']);
@@ -331,7 +331,7 @@ describe('what the count is made of', () => {
       { family_id: FAMILY, child_wallet_id: 'wallet-a', cardholder_id: 'holder-a', stripe_card_id: 'ic_seeded_2', type: 'virtual', status: 'inactive', is_frozen: true },
     ]);
     // Counting only the active cards (0) is stale.
-    expect(await order(VIRTUAL, 0)).toEqual({ ok: false, error: STALE });
+    expect(await order(VIRTUAL, 0)).toEqual({ ok: false, error: STALE, stale: true });
     expect(provider.stripe.issuing.cards.create).not.toHaveBeenCalled();
     expect((await order(VIRTUAL, 2)).ok).toBe(true);
     expect(provider.log.cardKeys).toEqual([key('virtual', 2)]);

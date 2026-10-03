@@ -192,7 +192,7 @@ export function MoneyCardsView({
       });
       if (!res.ok) {
         toastError(res.error);
-        if (res.error === t('wallet.refreshToTryAgain')) router.refresh();
+        if ('stale' in res && res.stale) router.refresh();
         return;
       }
       success(t('moneyCardsView.virtualCardCreated'));
@@ -597,7 +597,7 @@ function PhysicalCardModal({ child, expectedCount, pending, claim, isCurrent, on
       });
       if (!res.ok) {
         if (isCurrent()) toastError(res.error ?? 'Could not order card');
-        if (res.error === t('wallet.refreshToTryAgain')) onStale();
+        if ('stale' in res && res.stale) onStale();
         return;
       }
       if (isCurrent()) success(t('wallet.physicalCardOrdered', { name: child.name }));

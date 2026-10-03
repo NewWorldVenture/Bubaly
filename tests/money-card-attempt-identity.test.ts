@@ -472,7 +472,7 @@ describe('residuals the attempt key does not cover', () => {
     const first = await issueCardAction(VIRTUAL);
     vi.setSystemTime(T0 + gap);
     const stale = await issueCardAction(VIRTUAL);
-    expect(stale).toEqual({ ok: false, error: STALE });
+    expect(stale).toEqual({ ok: false, error: STALE, stale: true });
     expect(provider.active('virtual')).toHaveLength(1);
     expect(provider.log.cardKeys).toEqual([key('virtual', 0)]);
     const deliberate = await issueCardAction(shown(VIRTUAL, 1));
