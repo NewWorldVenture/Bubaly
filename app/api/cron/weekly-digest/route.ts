@@ -1,4 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server';
+import { instantCalendarBounds } from '@/lib/briefing/calendar-window';
+import { readCalendarOccurrences } from '@/lib/calendar/occurrences';
 import { dayKeyInZone } from '@/lib/schedule/zoned';
 import { getTranslations } from '@/lib/i18n/server';
 import { createServiceClient } from '@/lib/supabase/server';
@@ -104,8 +106,8 @@ export async function GET(req: NextRequest) {
     // reading those from it errors and skipped every family's digest. Counts,
     // not rows: only the totals are rendered.
     const [{ data: events, error: eventsError }, { count: openChores, error: choresError }, { count: mealsPlanned, error: mealsError }, { data: members, error: membersError }] = await settleAll([
-      supabase.from('calendar_events').select('title, starts_at').eq('family_id', family.id)
-        .gte('starts_at', weekStart).lte('starts_at', weekEnd).order('starts_at').limit(10),
+      // Series included: the digest's week has every week of a weekly event (lib/calendar/occurrences.ts).
+      readCalendarOccurrences(supabase, family.id, instantCalendarBounds(weekStart, weekEnd, tz), tz, { columns: ['title', 'starts_at'], limit: 10 }),
       supabase.from('chore_assignments').select('id', { count: 'exact', head: true })
         .eq('family_id', family.id).in('status', ['todo', 'in_progress']),
       supabase.from('meal_plans').select('id', { count: 'exact', head: true })
