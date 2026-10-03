@@ -61,6 +61,7 @@ import {
 import { cn } from '@/lib/utils/cn';
 import type { Tables, SubscriptionStatus, AccountType, TransactionType, BudgetPeriod, BillStatus } from '@/lib/database.types';
 import { categoryLabel } from '@/lib/finance/category-label';
+import { billPaidPatch } from '@/lib/finance/hub';
 import { useLocale, useTranslations } from '@/components/i18n/locale-provider';
 import { FamilyDeliveredValue } from '@/components/billing/family-delivered-value';
 import type { LocaleCode } from '@/lib/i18n/locales';
@@ -954,7 +955,13 @@ export function BillingModule({ serviceFeeNotice = null }: { serviceFeeNotice?: 
 
   async function markBillPaid(id: string) {
     const supabase = createClient();
-    const { data: rows, error } = await supabase.from('bills').update({ status: 'paid' }).eq('id', id).eq('family_id', familyId).select('id');
+    // A one-off is paid; a recurring bill rolls to its next due date (in the
+    // family's day) and stays open — marked `paid` it left every "due soon"
+    // reader for good, and a monthly bill was reminded about once, ever
+    // (lib/finance/hub.ts). A bill the list no longer holds is paid as before.
+    const bill = (bills ?? []).find((b) => b.id === id);
+    const patch = bill ? billPaidPatch(bill, clock.todayKey()) : { status: 'paid' as const };
+    const { data: rows, error } = await supabase.from('bills').update(patch).eq('id', id).eq('family_id', familyId).select('id');
     if (error) return toastError(describeDbError(error));
     if (wroteNoRows(rows)) return toastError(tr('errors.thatChangeWasNotSaved'));
     success(tr('billingModule.billMarkedAsPaid'));
