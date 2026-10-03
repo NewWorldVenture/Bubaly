@@ -11,8 +11,8 @@ import type { InMemorySupabase, Row } from './in-memory-supabase';
  * probes under docs/audit. This is the stand-in a test registers as
  * `rpc: { claim_ai_runs }` so the real cron route, `continueRun`, `claimRun`
  * and `releaseRun` can be driven end to end. It writes the RUN ROW only; the
- * four-table reconcile of a dead-lettered run (steps, request ledger, timeline)
- * is the probes' to prove.
+ * reconcile of a dead-lettered run (steps, request ledger, timeline, pending
+ * approvals) is the probes' to prove.
  *
  * The recovery statement has two arms sharing one `failed` outcome:
  *   - an `executing` run whose lease is NOT NULL and in the past: back to

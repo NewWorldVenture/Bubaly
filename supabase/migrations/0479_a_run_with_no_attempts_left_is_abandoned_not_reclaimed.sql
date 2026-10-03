@@ -26,15 +26,20 @@
 --      attempts left: `ready` or `scheduled_followup`, no live lease, no cancel
 --      in flight, `attempt >= max_attempts`. It takes the dead-letter arm —
 --      `failed`, 0022's legacy status, the error, `completed_at` — and the same
---      four-table reconcile 0263 added (steps, request ledger, `run_failed`
---      event), so the family is told, not shown "Scheduled" for ever. A run
---      whose cancel is in flight is left for the cancel to finish: it must end
---      `cancelled`, not `failed`. A follow-up that is not yet due is abandoned
---      now, not on the day: it would never have run.
+--      reconcile 0263 added (steps, request ledger, `run_failed` event), so the
+--      family is told, not shown "Scheduled" for ever. A run whose cancel is in
+--      flight is left for the cancel to finish: it must end `cancelled`, not
+--      `failed`. A follow-up that is not yet due is abandoned now, not on the
+--      day: it would never have run.
 --   2. The candidates query gains `attempt < max_attempts`, which makes the
 --      ceiling the same predicate in both claim paths. After (1) it is also
 --      belt-and-braces: a run at the ceiling is `failed` by the time the
 --      candidates are read.
+--   3. The reconcile gains a fourth bounded write, for BOTH dead-letter arms:
+--      the run's approvals still `pending` are `cancelled`. 0263 left them
+--      open, so a run that died with an approval in flight kept a card in
+--      "Needs your decision" until `expires_at`, and a parent who decided it
+--      approved work that would never start.
 --
 -- Nothing else changes: the arm for an expired lease, the lease token's type,
 -- the increment, the ordering, `for update skip locked`, the grants.
@@ -50,7 +55,8 @@
 -- 0475–0478 is referenced.
 --
 -- IDEMPOTENT: `create or replace function`; every write is bounded to the rows
--- the same statement just dead-lettered. Safe to re-run.
+-- the same statement just dead-lettered (0093 for `approval_requests`, 0251 for
+-- its `run_id`). Safe to re-run.
 -- ============================================================================
 
 create or replace function public.claim_ai_runs(p_limit integer default 10, p_lease_seconds integer default 120)
@@ -123,6 +129,26 @@ begin
            'Bubaly stopped working on this and could not pick it up again.', 'system'
     from public.family_automation_runs r
     where r.id = any(v_dead);
+
+    -- Approvals still waiting on a run that is over. Left `pending`, each one
+    -- sits in "Needs your decision" for a run that has already died, and a
+    -- decision on it marks the row approved while the work it gated never
+    -- starts (lib/services/approvals: a terminal run is never re-opened by a
+    -- late decision). Closed the way `cancelRun` closes them — `cancelled`,
+    -- never `expired`: time did not run out, the run did — found by the run
+    -- and by the step that carries the approval (0251 lets `run_id` be null),
+    -- with no decider, because nobody decided.
+    update public.approval_requests a
+    set status = 'cancelled',
+        decided_at = now(),
+        updated_at = now()
+    where a.status = 'pending'
+      and (a.run_id = any(v_dead)
+           or a.id in (select s.approval_id
+                       from public.ai_plan_steps s
+                       join public.family_automation_runs r on r.plan_id = s.plan_id
+                       where r.id = any(v_dead)
+                         and s.approval_id is not null));
   end if;
 
   -- The claiming half. `attempt < max_attempts` is the same ceiling `claimRun`
