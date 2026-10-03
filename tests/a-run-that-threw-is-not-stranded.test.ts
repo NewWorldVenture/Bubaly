@@ -18,7 +18,7 @@
 // just failed it, and a repeatable throw burnt every attempt in seconds
 // (review on #900). The pass itself is SQL; this file drives the real route,
 // the real `continueRun` and the real `releaseRun` against the in-memory client
-// with a line-for-line emulation of 0263's two predicates, and
+// with the predicate-for-predicate stand-in in tests/helpers/claim-ai-runs.ts, and
 // docs/audit/a-run-that-threw-is-not-stranded-check.sql proves the same three
 // outcomes against the real function.
 import { randomUUID } from 'node:crypto';
@@ -27,6 +27,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import type { SupabaseClient } from '@supabase/supabase-js';
 import type { Database } from '@/lib/database.types';
 import { createInMemorySupabase, type InMemorySupabase, type Row } from './helpers/in-memory-supabase';
+import { ABANDONED, claimAiRuns } from './helpers/claim-ai-runs';
 
 const seam = vi.hoisted(() => ({ service: vi.fn(), runGraph: vi.fn() }));
 vi.mock('@/lib/supabase/server', () => ({ createServiceClient: seam.service }));
@@ -41,46 +42,8 @@ import { claimRun, RELEASE_RETRY_DELAY_MS, releaseRun } from '@/lib/ai/runs/stor
 const CRON_SECRET = 'cron-fixture-secret';
 const FAMILY = '00000000-0000-4000-8000-00000000a0f1';
 const RUN = '00000000-0000-4000-8000-00000000a0a1';
-const ABANDONED = 'Run abandoned after the maximum number of attempts.';
 const DONE = { status: 'completed', completed: 1, failed: 0, pending: 0, awaitingApproval: 0 };
 const TICK_CADENCE_MS = 5 * 60_000;
-
-/**
- * `claim_ai_runs` as 0263 writes it, predicate for predicate: the recovery pass
- * over `executing` rows whose lease is NOT NULL and past, then the candidates
- * from `ready` and `scheduled_followup`. Rows are the live table objects.
- */
-function claimAiRuns(args: Record<string, unknown>, db: InMemorySupabase): string[] {
-  const limit = Math.max(1, Math.min(Number(args.p_limit ?? 10), 50));
-  const leaseSeconds = Math.max(30, Math.min(Number(args.p_lease_seconds ?? 120), 900));
-  const now = Date.now();
-  const rows = db.table('family_automation_runs') as Array<Row & { id: string }>;
-  for (const r of rows) {
-    if (r.state !== 'executing' || r.lease_expires_at == null || Date.parse(String(r.lease_expires_at)) >= now) continue;
-    const dead = Number(r.attempt) >= Number(r.max_attempts);
-    Object.assign(r, {
-      state: dead ? 'failed' : 'ready',
-      status: dead ? 'failed' : r.status,
-      error: dead ? (r.error ?? ABANDONED) : r.error,
-      completed_at: dead ? new Date(now).toISOString() : r.completed_at,
-      lease_owner: null, lease_expires_at: null, run_after: new Date(now).toISOString(),
-    });
-  }
-  const candidates = rows
-    .filter((r) => (r.state === 'ready' || r.state === 'scheduled_followup')
-      && Date.parse(String(r.run_after)) <= now
-      && (r.lease_expires_at == null || Date.parse(String(r.lease_expires_at)) < now)
-      && r.cancel_requested_at == null)
-    .sort((a, b) => String(a.run_after).localeCompare(String(b.run_after)))
-    .slice(0, limit);
-  for (const r of candidates) {
-    Object.assign(r, {
-      state: 'executing', attempt: Number(r.attempt) + 1, lease_owner: randomUUID(),
-      lease_expires_at: new Date(now + leaseSeconds * 1000).toISOString(), started_at: r.started_at ?? new Date(now).toISOString(),
-    });
-  }
-  return candidates.map((r) => r.id);
-}
 
 let db: InMemorySupabase;
 let errors: unknown[][];

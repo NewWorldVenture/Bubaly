@@ -3,9 +3,13 @@
 --
 -- WHICH MIGRATION OWNS THIS RULE. `claim_ai_runs` was created by
 -- `0250_ai_runtime_core.sql`, revoked from the client roles by `0253`, REWRITTEN
--- by `0263_dead_letter_reconcile.sql`, and only re-GRANTED — not redefined — by
--- `0292_privileged_rpc_grant_reassert.sql`. So 0263's body is what a replayed
--- database runs, and its recovery half has two arms:
+-- by `0263_dead_letter_reconcile.sql`, only re-GRANTED — not redefined — by
+-- `0292_privileged_rpc_grant_reassert.sql`, and REWRITTEN again by
+-- `0479_a_run_with_no_attempts_left_is_abandoned_not_reclaimed.sql`, which keeps
+-- the expired-lease arms this probe tests word for word and adds a second arm
+-- for a run parked in the queue with no attempts left (proved by its own probe,
+-- a-run-with-no-attempts-left-is-abandoned-check.sql). So 0479's body is what a
+-- replayed database runs, and the recovery half this probe exercises has two arms:
 --
 --     state = case when attempt >= max_attempts then 'failed' else 'ready' end
 --

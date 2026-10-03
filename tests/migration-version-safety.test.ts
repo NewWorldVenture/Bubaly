@@ -502,10 +502,12 @@ describe('Supabase migration filename safety', () => {
     // /family/permissions shows them as read-only on (ROLE-M03).
     // 0471 adds the per-recipient admin digest delivery store, and 0474
     // (reserved for #710) withdraws an admin removed after a digest was
-    // frozen. This literal tracks the checked-in high-water mark, not
-    // migration allocation: 0465-0470 remain NWV's, 0472 Support's, and 0473
-    // the coordinator's.
-    expect(audit.nextVersion).toBe('0475');
+    // frozen. 0479 (reserved on #699, 5970781386) makes the cron's claim pass
+    // honour the attempt ceiling and abandon a queued run with no attempts
+    // left (Q40). This literal tracks the checked-in high-water mark, not
+    // migration allocation: 0465-0470 remain NWV's, 0472 Support's, 0473 the
+    // coordinator's, 0475-0476 messaging's, 0477 Surge's and 0478 Meals'.
+    expect(audit.nextVersion).toBe('0480');
   });
 
   it('flags a newly introduced collision instead of silently accepting it', () => {

@@ -61,12 +61,16 @@ export async function GET(req: NextRequest) {
         const remaining = deadline - Date.now();
         if (remaining < MIN_SLICE_MS) {
           // Out of tick. Put it back exactly as it was found so the next tick
-          // (or an approval decision) picks it up without waiting out the lease.
+          // (or an approval decision) picks it up without waiting out the lease
+          // — including the attempt the claim charged. A run that was not given
+          // a slice has not been tried, and `claim_ai_runs` abandons a run at
+          // `max_attempts`, so an unexecuted claim must not spend the budget.
           const { data: requeued, error } = await db
             .from('family_automation_runs')
             .update({
               state: 'ready',
               status: legacyStatusFor('ready'),
+              attempt: Math.max(0, run.attempt - 1),
               lease_owner: null,
               lease_expires_at: null,
               run_after: new Date().toISOString(),

@@ -48,16 +48,18 @@
 -- `claim_ai_runs`. Functions carry no trigger, CHECK or index to confuse with it.
 --
 -- WHICH STATEMENTS WRITE THAT ACL. Grepping the five names across
--- supabase/migrations returns 0204, 0218, 0237, 0250, 0253, 0263 and 0292; 0218
--- only mentions loyalty_redeem_reward in a comment. No migration after 0292
--- names any of them (checked through 0387, the newest file when this was
--- written). No migration does a blanket `grant|revoke … on all functions`, sets
+-- supabase/migrations returns 0204, 0218, 0237, 0250, 0253, 0263, 0292 and
+-- 0479; 0218 only mentions loyalty_redeem_reward in a comment. After 0292 only
+-- 0479 names any of them: it rewrites `claim_ai_runs` once more (the claiming
+-- half gains the attempt ceiling) and restates 0263:114-115 byte for byte, so
+-- the ACL it leaves is the one 0292 left (no other file through 0474, the newest
+-- when this was written). No migration does a blanket `grant|revoke … on all functions`, sets
 -- `alter default privileges` for functions, or builds a function grant/revoke
 -- with `execute format(…)` — the only two dynamic ACL loops, 0338:154 and
 -- 0352:123, revoke TABLE DML from anon. So the final ACL of each function is the
 -- product of these statements, last writer last:
 --
---   claim_ai_runs                     0250 (from public) · 0253 · 0263 · 0292
+--   claim_ai_runs                     0250 (from public) · 0253 · 0263 · 0292 · 0479 (restates 0292)
 --   claim_marketing_generation_jobs   0237 (from public ONLY) · 0292
 --   loyalty_award_points / _redeem_reward / _cancel_redemption   0204 · 0292
 --

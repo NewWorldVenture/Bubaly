@@ -581,7 +581,8 @@ export async function updateRunWhereState(
 
 // ─── Leases ─────────────────────────────────────────────────────────────────
 
-export type ClaimedRun = { id: string; familyId: string; leaseOwner: string | null };
+/** `attempt` is the value AFTER the claim charged it, so a caller that hands the run back unexecuted can give the charge back. */
+export type ClaimedRun = { id: string; familyId: string; leaseOwner: string | null; attempt: number };
 
 /**
  * Lease a batch of due runs through the 0250 RPC. `for update skip locked`
@@ -604,13 +605,13 @@ export async function claimRuns(
 
   const { data: rows, error: readError } = await db
     .from('family_automation_runs')
-    .select('id, family_id, lease_owner')
+    .select('id, family_id, lease_owner, attempt')
     .in('id', ids);
   if (readError) {
     console.error('[ai/runs] failed to read the claimed runs', readError);
     return fail(describeDbError(readError, 'Bubaly could not read the claimed runs.'), { code: SERVICE_CODES.db, retryable: true });
   }
-  return ok((rows ?? []).map((r) => ({ id: r.id, familyId: r.family_id, leaseOwner: r.lease_owner })));
+  return ok((rows ?? []).map((r) => ({ id: r.id, familyId: r.family_id, leaseOwner: r.lease_owner, attempt: r.attempt })));
 }
 
 /**
