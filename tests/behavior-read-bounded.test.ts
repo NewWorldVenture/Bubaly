@@ -49,16 +49,18 @@ describe('A-05 growth-table module reads are bounded (perf)', () => {
   // PLA-0814: next-actions pushed its 45-day horizon into the calendar_events query
   // instead of loading the family's full calendar history and filtering client-side.
   it('next-actions calendar_events: bounded by an upcoming date window + cap', () => {
-    const fetcher = nextActions.slice(nextActions.indexOf("table: 'calendar_events'"), nextActions.indexOf("table: 'calendar_events'") + 700);
-    expect(fetcher).toContain(".gte('starts_at'");
-    expect(fetcher).toContain(".lte('starts_at'");
-    expect(fetcher).toMatch(/\.limit\(500\)/);
+    const fetcher = nextActions.slice(nextActions.indexOf("table: 'calendar_events'"), nextActions.indexOf("table: 'calendar_events'") + 900);
+    // The series-aware read (lib/calendar/occurrences.ts) takes the window as
+    // bounds and the cap as its own option; both reads it issues are bounded.
+    expect(fetcher).toContain('readCalendarOccurrences(');
+    expect(fetcher).toContain('instantCalendarBounds(');
+    expect(fetcher).toMatch(/limit: 500/);
   });
 
   it('briefing calendar_events: bounded to a small window around today', () => {
     const fetcher = briefing.slice(briefing.indexOf("table: 'calendar_events'"), briefing.indexOf("table: 'calendar_events'") + 700);
-    expect(fetcher).toContain(".gte('starts_at'");
-    expect(fetcher).toContain(".lte('starts_at'");
-    expect(fetcher).toMatch(/\.limit\(200\)/);
+    expect(fetcher).toContain('readCalendarOccurrences(');
+    expect(fetcher).toContain('instantCalendarBounds(');
+    expect(fetcher).toMatch(/limit: 200/);
   });
 });

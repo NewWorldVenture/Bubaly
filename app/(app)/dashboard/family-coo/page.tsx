@@ -1,4 +1,6 @@
 import type { Metadata } from 'next';
+import { readCalendarOccurrences } from '@/lib/calendar/occurrences';
+import { instantCalendarBounds } from '@/lib/briefing/calendar-window';
 import Link from 'next/link';
 import { CheckSquare, ShoppingCart, CalendarDays, Repeat, Wrench, ArrowRight } from 'lucide-react';
 import { requireFeature } from '@/lib/supabase/auth';
@@ -39,7 +41,8 @@ export default async function FamilyCooPage() {
   const [membersRes, openChoresRes, eventsRes, groceryRes, routinesRes, maintRes] = await settleAll([
     supabase.from('family_members').select('id, display_name').eq('family_id', familyId).eq('is_active', true),
     supabase.from('chore_assignments').select('id, due_at, status, member_id, chore_id').eq('family_id', familyId).in('status', ['todo', 'in_progress']).order('due_at').limit(8),
-    supabase.from('calendar_events').select('id, title, starts_at, all_day').eq('family_id', familyId).gte('starts_at', now).lte('starts_at', in7).order('starts_at').limit(6),
+    // Series included: a weekly event is on this week's list every week (lib/calendar/occurrences.ts).
+    readCalendarOccurrences(supabase, familyId, instantCalendarBounds(now, in7, tz), tz, { columns: ['id', 'title', 'starts_at', 'all_day'], limit: 6 }),
     supabase.from('grocery_items').select('id, name').eq('family_id', familyId).eq('is_checked', false).limit(8),
     supabase.from('family_routines').select('*').eq('family_id', familyId).eq('status', 'active').order('created_at'),
     supabase.from('maintenance_tasks').select('id, title, due_at, status').eq('family_id', familyId).in('status', ['todo', 'in_progress']).order('due_at').limit(5),

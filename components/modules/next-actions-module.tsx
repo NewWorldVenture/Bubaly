@@ -5,6 +5,8 @@
 // answer to "what should we do next?" is a real, ranked, one-tap list. 100%
 // Supabase via useRealtimeQuery; ranking is the pure lib/opportunities/next-actions.
 import { useEffect, useMemo } from 'react';
+import { readCalendarOccurrences } from '@/lib/calendar/occurrences';
+import { instantCalendarBounds } from '@/lib/briefing/calendar-window';
 import Link from 'next/link';
 import {
   Target, CalendarPlus, CheckSquare, Trophy, Check, ArrowRight, Sparkles, AlertCircle,
@@ -66,10 +68,10 @@ export function NextActionsModule() {
     // below). Push that bound into the query instead of loading the family's ENTIRE
     // calendar history and filtering client-side — a generous window (yesterday →
     // +46 days) with a hard cap keeps the read bounded; the client trim stays exact.
-    fetcher: (sb) => sb.from('calendar_events').select('*').eq('family_id', familyId)
-      .gte('starts_at', new Date(Date.now() - 86_400_000).toISOString())
-      .lte('starts_at', new Date(Date.now() + 46 * 86_400_000).toISOString())
-      .order('starts_at', { ascending: true }).limit(500),
+    // Series included: a weekly event is a next action every week (lib/calendar/occurrences.ts).
+    fetcher: (sb) => readCalendarOccurrences(sb, familyId,
+      instantCalendarBounds(new Date(Date.now() - 86_400_000).toISOString(), new Date(Date.now() + 46 * 86_400_000).toISOString(), clock.timeZone),
+      clock.timeZone, { limit: 500 }),
   });
   const { data: tasks, loading: tasksLoading, error: tasksError, refresh: refreshTasks } = useRealtimeQuery<Task>({
     table: 'todo_items', familyId, deps: [familyId],

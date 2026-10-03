@@ -63,6 +63,8 @@ export type OccurrenceFilters = {
   ilike(column: string, pattern: string): OccurrenceFilters;
   is(column: string, value: boolean | null): OccurrenceFilters;
   not(column: string, operator: string, value: unknown): OccurrenceFilters;
+  /** A further PostgREST `or` of the caller's own — "mine or the whole family's", say; the reads' own `or`s are ANDed with it. */
+  or(filter: string): OccurrenceFilters;
 };
 
 export type OccurrencesOptions<C extends keyof EventRow> = {

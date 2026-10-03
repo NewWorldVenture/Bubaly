@@ -1,6 +1,8 @@
 'use client';
 
 import { useCallback, useEffect, useMemo, useState } from 'react';
+import { readCalendarOccurrences } from '@/lib/calendar/occurrences';
+import { calendarOpenWindowFilter, instantCalendarBounds } from '@/lib/briefing/calendar-window';
 import { firstName } from '@/lib/utils/format';
 import Link from 'next/link';
 import {
@@ -124,11 +126,16 @@ export function FamilyModule() {
   const load = useCallback(async () => {
     const sb = createClient();
     const nowIso = new Date().toISOString();
+    // The four nearest things ahead, series included: one-offs open-ended as
+    // before, a series expanded over the year ahead (lib/calendar/occurrences.ts).
+    const aheadBounds = instantCalendarBounds(nowIso, new Date(Date.parse(nowIso) + 366 * 86_400_000 - 1).toISOString(), clock.timeZone);
     try {
       const [fam, subRes, evRes, alRes, cContacts, cDocs, cNotes, cMedical, cCreds] = await settleAll([
         sb.from('families').select('*').eq('id', familyId).maybeSingle(),
         sb.from('subscriptions').select('plan, current_period_end').eq('family_id', familyId).maybeSingle(),
-        sb.from('calendar_events').select('id, title, starts_at, ends_at, all_day, assignee_id').eq('family_id', familyId).gte('starts_at', nowIso).order('starts_at').limit(4),
+        readCalendarOccurrences(sb, familyId, aheadBounds, clock.timeZone, {
+          columns: ['id', 'title', 'starts_at', 'ends_at', 'all_day', 'assignee_id'], singlesFilter: calendarOpenWindowFilter(aheadBounds), singlesLimit: 4, limit: 4,
+        }),
         sb.from('family_albums').select('id, name, cover_url, kind, created_at').eq('family_id', familyId).order('created_at', { ascending: false }).limit(12),
         sb.from('family_contacts').select('id', { count: 'exact', head: true }).eq('family_id', familyId).eq('is_emergency', true),
         sb.from('documents').select('id', { count: 'exact', head: true }).eq('family_id', familyId),
@@ -158,7 +165,7 @@ export function FamilyModule() {
     } finally {
       setLoading(false);
     }
-  }, [familyId]);
+  }, [familyId, clock.timeZone]);
 
   useEffect(() => { void load(); }, [load]);
 

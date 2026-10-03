@@ -1,6 +1,8 @@
 'use client';
 
 import { useMemo, useState } from 'react';
+import { readSportsOccurrences } from '@/lib/calendar/occurrences';
+import { instantCalendarBounds } from '@/lib/briefing/calendar-window';
 import { firstName } from '@/lib/utils/format';
 import { Calendar, ChevronRight, Trash2, Plus, Sparkles, Trophy, Users, Zap } from 'lucide-react';
 import { useApp } from '@/components/app/app-context';
@@ -59,9 +61,14 @@ export function SportsModule() {
   const monthKey = clock.todayKey().slice(0, 7);
 
   // --- Realtime queries ---
+  // The next fortnight, series included: a weekly practice entered in August
+  // is on the hub's "upcoming" every fortnight (lib/calendar/occurrences.ts).
+  // This used to read EVERY row and keep those starting from now, which left a
+  // recurring practice behind from its second week.
+  const fortnight = useMemo(() => instantCalendarBounds(now, new Date(Date.parse(now) + 14 * 86_400_000).toISOString(), clock.timeZone), [now, clock.timeZone]);
   const { data: events, loading: eventsLoading, error: eventsError, refresh: refreshEvents } = useRealtimeQuery<SportsEvent>({
     table: 'sports_events', familyId, deps: [familyId],
-    fetcher: (sb) => sb.from('sports_events').select('*').eq('family_id', familyId).order('starts_at'),
+    fetcher: (sb) => readSportsOccurrences(sb, familyId, fortnight, clock.timeZone) as never,
   });
 
   const { data: teams, loading: teamsLoading, error: teamsError, refresh: refreshTeams } = useRealtimeQuery<Team>({

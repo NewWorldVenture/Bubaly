@@ -6,6 +6,8 @@
 // so Home stays calm.
 
 import { useEffect, useMemo, useState } from 'react';
+import { readCalendarOccurrences } from '@/lib/calendar/occurrences';
+import { calendarOpenWindowFilter, instantCalendarBounds } from '@/lib/briefing/calendar-window';
 import Link from 'next/link';
 import {
   Sparkles, Clock, CloudSun, Backpack, ShoppingCart, PiggyBank, Stethoscope,
@@ -56,11 +58,13 @@ export function HomeMomentCard() {
   const wxByDate = useDefaultForecast(familyId);
   const [remindState, setRemindState] = useState<'idle' | 'saving' | 'done'>('idle');
 
+  // The three nearest things ahead, series included (lib/calendar/occurrences.ts).
+  const aheadBounds = useMemo(() => instantCalendarBounds(nowISO, new Date(Date.parse(nowISO) + 366 * 86_400_000 - 1).toISOString(), clock.timeZone), [nowISO, clock.timeZone]);
   const { data: rows, error } = useRealtimeQuery<Event>({
     table: 'calendar_events', familyId, deps: [familyId],
-    fetcher: (sb) => sb.from('calendar_events').select('*')
-      .eq('family_id', familyId).gte('starts_at', nowISO)
-      .order('starts_at', { ascending: true }).limit(3),
+    fetcher: (sb) => readCalendarOccurrences(sb, familyId, aheadBounds, clock.timeZone, {
+      singlesFilter: calendarOpenWindowFilter(aheadBounds), singlesLimit: 3, limit: 3,
+    }),
   });
 
   // Same shape as on-this-day: this banner is meant to be absent when there is
