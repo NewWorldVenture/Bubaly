@@ -389,7 +389,7 @@ describe('the browser half: when the submission id is spent', () => {
     return source.slice(at);
   };
 
-  function assertSettledModalRemint(source: string) {
+  function assertSettledModalRemint(source: string, requiresCurrentFence = false) {
     // Closing fences a pending result before its old modal can mutate state.
     // The guard still requires settlement and the exact fresh-id assignment.
     expect(source)
@@ -407,8 +407,15 @@ describe('the browser half: when the submission id is spent', () => {
     const statements = refusals.map((block) => block.statements.map((statement) => statement.getText(tree)))
       .find((block) => block.includes(renewal));
     expect(statements).toBeDefined();
-    const fence = statements!.indexOf('if (!isCurrent()) return;');
-    if (fence !== -1) expect(fence).toBeLessThan(statements!.indexOf(renewal));
+    const at = (statement: string) => {
+      const index = statements!.indexOf(statement);
+      expect(index, `required statement missing: ${statement}`).toBeGreaterThanOrEqual(0);
+      return index;
+    };
+    const renewalAt = at(renewal);
+    const currentFence = 'if (!isCurrent()) return;';
+    if (requiresCurrentFence) expect(at(currentFence)).toBeLessThan(renewalAt);
+    else if (statements!.includes(currentFence)) expect(at(currentFence)).toBeLessThan(renewalAt);
   }
   it('Quick Add drops its id when the attempt is settled, before it branches on the result', () => {
     const quickAdd = from(stripped('components/modules/todos-module.tsx'), 'async function quickAdd(').split('async function openAdd(')[0]!;
@@ -418,10 +425,10 @@ describe('the browser half: when the submission id is spent', () => {
   });
 
   it.each([
-    ['components/modules/todos-module.tsx', 'function ItemModal('],
-    ['components/modules/calendar-module.tsx', 'function NewEventModal('],
-    ['components/modules/chores-module.tsx', 'function NewChoreModal('],
-  ])('%s: the modal mints a fresh id when its save is settled without closing', (file, modal) => {
-    assertSettledModalRemint(from(stripped(file), modal));
+    ['components/modules/todos-module.tsx', 'function ItemModal(', false],
+    ['components/modules/calendar-module.tsx', 'function NewEventModal(', false],
+    ['components/modules/chores-module.tsx', 'function NewChoreModal(', true],
+  ])('%s: the modal mints a fresh id when its save is settled without closing', (file, modal, requiresCurrentFence) => {
+    assertSettledModalRemint(from(stripped(file), modal), requiresCurrentFence);
   });
 });

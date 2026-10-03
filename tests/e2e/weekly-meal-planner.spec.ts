@@ -830,6 +830,19 @@ const carouselPlans = [
  {id:'last-dinner',family_id:'family-A',meal_id:'meal-curry',plan_date:'2026-09-08',meal_type:'dinner'},
 ];
 const dinnerCard=(page:Page)=>page.locator('.module-sidebar .sidebar-card').first();
+test('unsafe stored dinner recipe URLs do not render as clickable links',async({page})=>{
+ for(const recipeUrl of ['javascript:alert(1)','data:text/html,unsafe','file:///etc/passwd','https://user:pass@recipe.invalid/path']){
+  await page.setViewportSize({width:1280,height:900});
+  await fixture(page,{meals:[{...carouselMeals[0],recipe_url:recipeUrl}],plans:[carouselPlans[0]]});
+  await expect(dinnerCard(page)).toContainText('Lime tacos');
+  await expect(dinnerCard(page).getByRole('link',{name:'View recipe'})).toHaveCount(0);
+ }
+});
+test('safe stored dinner recipe URLs render normalized web links',async({page})=>{
+ await page.setViewportSize({width:1280,height:900});
+ await fixture(page,{meals:[{...carouselMeals[0],recipe_url:'https://recipe.invalid/path'}],plans:[carouselPlans[0]]});
+ await expect(dinnerCard(page).getByRole('link',{name:'View recipe'})).toHaveAttribute('href','https://recipe.invalid/path');
+});
 test('deleting selected last dinner keeps remaining carousel name and date consistent',async({page})=>{
  await page.setViewportSize({width:1280,height:900});await fixture(page,{plans:carouselPlans,meals:carouselMeals});
  const card=dinnerCard(page);await expect(card).toContainText('Lime tacos');await card.getByRole('button',{name:'Next dinner'}).click();await expect(card).toContainText('Coconut curry');
