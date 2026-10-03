@@ -434,3 +434,33 @@ Both cases passed, and the families were removed afterwards. This proves the
 parameter names and types, the returned table shape and the outcome mapping
 against the deployed function's actual interface, not only the emulator's
 reading of it.
+
+## Hosted proof of the race: eight real sessions
+
+`docs/audit/eight-ai-requests-at-the-cap-admit-one-check.sql` runs in CI's
+Database job. It uses `dblink` to open eight real backends, each calling
+`admit_ai_request` for one family seeded with 9 metered rows.
+
+**How it proves concurrency.** The parent holds the family's own admission lock
+(`hashtextextended('ai_requests_admission:' || family, 0)`) exclusively, sends all
+eight calls, and polls `pg_locks` until it has seen all eight queued on that one
+key. Only then does it release them. So the probe counts evidence instead of
+hoping the calls overlapped.
+
+**Asserted:**
+- all 8 were seen queued together;
+- exactly 1 was admitted and 7 refused;
+- the family has 10 metered rows afterwards.
+
+**Negative control.** The same eight sessions, released together from a gate, run
+the naive count-then-insert every route used before 0477. They must overshoot the
+cap.
+
+**Measured** on a CI-shaped PG16 (`docs/audit/verify-pg.sh up`, all migrations
+replayed):
+- the probe: 8 seen queued, 1 admitted, 7 refused, 10 rows;
+- the negative control: all 8 filed, so 17 rows;
+- a mutant of 0477 without its advisory lock fails the probe (2 admitted, 11
+  metered rows), and restoring the real function passes it again;
+- the full probe runner: 183 passed, 0 failed. The one skip is
+  `plpgsql-bodies-resolve-check`, which needs `plpgsql_check`; CI installs it.
