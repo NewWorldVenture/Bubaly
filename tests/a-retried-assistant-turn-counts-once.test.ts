@@ -22,6 +22,8 @@ const state = vi.hoisted(() => ({
   planLevel: 0,
   user: { id: 'user-1', email: 'parent@example.com' },
   gate: null as Promise<void> | null,
+  /** What the model answers; a test that needs two distinguishable turns sets it. */
+  answer: null as string | null,
 }));
 
 const FAMILY = 'fam-1';
@@ -137,8 +139,8 @@ async function model() {
 const provider = vi.hoisted(() => ({}) as Record<string, unknown>);
 Object.assign(provider, {
   model: 'test-model',
-  runTools: async () => { await model(); return { text: ANSWER, actions: [], usage: { promptTokens: 1, completionTokens: 1 } }; },
-  async *runToolsStream() { await model(); yield { type: 'delta' as const, text: ANSWER }; },
+  runTools: async () => { await model(); return { text: state.answer ?? ANSWER, actions: [], usage: { promptTokens: 1, completionTokens: 1 } }; },
+  async *runToolsStream() { await model(); yield { type: 'delta' as const, text: state.answer ?? ANSWER }; },
 });
 // Preparation (classifier + context) is the costly half before the model; a
 // replay must not reach it either.
@@ -195,6 +197,7 @@ beforeEach(() => {
   state.planLevel = 0;
   state.user = { id: 'user-1', email: 'parent@example.com' };
   state.gate = null;
+  state.answer = null;
   vi.spyOn(console, 'error').mockImplementation(() => {});
 });
 afterEach(() => { vi.restoreAllMocks(); });
@@ -436,5 +439,64 @@ describe('/api/ai/chat: a retried send is one turn there too', () => {
     const replay = events(await (await viaChat(sendChat('send-0001-abcdef'))).text());
     expect(replay.at(-1)).toMatchObject({ type: 'done', content: ANSWER, requestId: turnRows()[0].id });
     expect(state.providerCalls).toBe(1);
+  });
+});
+
+// #788 release review 5964060680: the replay found "its" answer as the first
+// user/assistant pair written in the conversation after the row was filed.
+// It now reads the exchange bound to the request (`ai_messages.request_id`).
+describe('a replay returns its own turn’s answer, never a neighbour’s', () => {
+  it('two turns in one conversation each replay their own answer', async () => {
+    const { POST } = await import('@/app/api/ai/route');
+    state.answer = 'First answer.';
+    expect((await POST(send({ key: 'send-0001-abcdef', message: 'First question' }))).status).toBe(200);
+    state.answer = 'Second answer.';
+    expect((await POST(send({ key: 'send-0002-abcdef', message: 'Second question' }))).status).toBe(200);
+    state.answer = 'Never asked for.';
+    const first = await (await POST(send({ key: 'send-0001-abcdef', message: 'First question' }))).json() as { content: string };
+    const second = await (await POST(send({ key: 'send-0002-abcdef', message: 'Second question' }))).json() as { content: string };
+    expect(first.content).toBe('First answer.');
+    expect(second.content).toBe('Second answer.');
+    expect(state.providerCalls).toBe(2);
+  });
+
+  it('a turn whose own answer was not saved never replays the next turn’s answer', async () => {
+    const { POST } = await import('@/app/api/ai/route');
+    // Filed and answered, but its exchange was not saved…
+    tableOf('ai_requests').push({
+      id: 'turn-1', family_id: FAMILY, requested_by: 'user-1', feature: 'assistant.turn', conversation_id: CONV,
+      client_request_id: 'assistant:send-0001-abcdef', status: 'partially_completed', created_at: tick(), completed_at: tick(),
+    });
+    // …and five seconds later another turn saved its exchange in the same conversation.
+    tableOf('ai_messages').push(
+      { id: 'm1', family_id: FAMILY, conversation_id: CONV, role: 'user', content: 'Plan dinner', request_id: 'turn-2', created_at: tick() },
+      { id: 'm2', family_id: FAMILY, conversation_id: CONV, role: 'assistant', content: 'Someone else’s answer.', request_id: 'turn-2', created_at: tick() },
+    );
+    const res = await POST(send({ key: 'send-0001-abcdef' }));
+    expect(res.status).toBe(409);
+    expect((await res.json() as { code: string }).code).toBe('turn_answered');
+    expect(state.providerCalls).toBe(0);
+  });
+
+  it('a message a member writes later under the same request id does not replace the replayed answer', async () => {
+    const { POST } = await import('@/app/api/ai/route');
+    expect((await POST(send({ key: 'send-0001-abcdef' }))).status).toBe(200);
+    tableOf('ai_messages').push({ id: 'zz', family_id: FAMILY, conversation_id: CONV, role: 'assistant', content: 'Forged.', request_id: turnRows()[0].id, created_at: tick() });
+    const replay = await (await POST(send({ key: 'send-0001-abcdef' }))).json() as { content: string };
+    expect(replay.content).toBe(ANSWER);
+  });
+
+  it('every saved exchange row carries its turn’s request id', async () => {
+    const { POST: viaAi } = await import('@/app/api/ai/route');
+    const { POST: viaChat } = await import('@/app/api/ai/chat/route');
+    await viaAi(send({ key: 'send-0001-abcdef' }));
+    await (await viaAi(send({ key: 'send-0002-abcdef', json: false }))).text();
+    await (await viaChat(sendChat('send-0003-abcdef'))).text();
+    const rows = tableOf('ai_requests').filter((r) => typeof r.client_request_id === 'string');
+    expect(rows).toHaveLength(3);
+    for (const r of rows) {
+      const saved = tableOf('ai_messages').filter((m) => m.request_id === r.id);
+      expect(saved.map((m) => m.role).sort()).toEqual(['assistant', 'user']);
+    }
   });
 });

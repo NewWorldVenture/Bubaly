@@ -383,13 +383,20 @@ export async function persistAssistantTurn(
     familyId: string; conversationId: string; message: string; assistantContent: string; actions: ExecutedAssistantAction[]; model: string;
     /** The turn's cards and runs (0250 `structured_content`), so the conversation re-opens with its outcomes. */
     structured?: StructuredContent | null;
+    /**
+     * The turn's `ai_requests` row (0250 `request_id`). It binds this exchange
+     * to its request exactly: a spoken answer and a retried send find the
+     * answer by this id, never by time or position in the conversation.
+     */
+    requestId?: string | null;
   },
 ): Promise<{ ok: true } | { ok: false; error: string }> {
   const { familyId, conversationId, message, assistantContent, actions, model } = args;
   const rows: MessageInsert[] = [
-    { family_id: familyId, conversation_id: conversationId, role: 'user', content: message },
+    { family_id: familyId, conversation_id: conversationId, role: 'user', content: message, request_id: args.requestId ?? null },
     {
       family_id: familyId, conversation_id: conversationId, role: 'assistant', content: assistantContent, model,
+      request_id: args.requestId ?? null,
       tool_calls: actions.length ? (actions.map((a) => ({ name: a.name, args: a.args })) as unknown as MessageInsert['tool_calls']) : null,
       // Summaries only: raw results can carry transaction rows or a signed
       // document URL, and a conversation row outlives the moment it was shown.
@@ -474,7 +481,7 @@ export async function runAssistantTurn(input: AssistantTurnInput, prepared: Prep
       const { cards, runIds } = await collectOutcomes(input, prepared, actions);
       const persisted = await persistAssistantTurn(input.supabase, {
         familyId: input.familyId, conversationId: input.conversationId, message: input.message,
-        assistantContent: content, actions, model: provider.model, structured: toStructuredContent(cards, runIds),
+        assistantContent: content, actions, model: provider.model, structured: toStructuredContent(cards, runIds), requestId: obs.requestId,
       });
       // Partial, not failed: the family got their answer, the conversation did
       // not keep it.
@@ -587,7 +594,7 @@ export function createAssistantStream(input: AssistantTurnInput, prepared: Prepa
             const assistantContent = finalizeAssistantContent(content, actions);
             const persisted = await persistAssistantTurn(input.supabase, {
               familyId: input.familyId, conversationId: input.conversationId, message: input.message,
-              assistantContent, actions, model: provider.model, structured: toStructuredContent(cards, runIds),
+              assistantContent, actions, model: provider.model, structured: toStructuredContent(cards, runIds), requestId: obs.requestId,
             });
             if (!persisted.ok) {
               // The answer was streamed and then not saved: the family will meet this

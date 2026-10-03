@@ -13,8 +13,10 @@ import { prepareSpeechText } from '@/lib/ai/voice';
  * the allowance again: an exchange admitted at 9 of 10 has to be able to finish
  * speaking after its own turn took the count to 10. It is accepted only if the
  * row really is that exchange — this family's, this caller's, an assistant
- * turn, and recent — and the text being spoken is that turn's own answer, as
- * saved in its conversation. A valid id cannot carry unrelated text: speech of
+ * turn, and recent — and the text being spoken is that turn's own answer:
+ * the assistant message saved with that request's id (0250
+ * `ai_messages.request_id`), never one matched by time or by position in the
+ * conversation (#788 release review 5964060680). A valid id cannot carry unrelated text: speech of
  * anything else is standalone and checked against the allowance like any other.
  * A retry of the same spoken answer files nothing, so it cannot count twice.
  */
@@ -51,17 +53,33 @@ export async function isCountedExchange(
   const age = now.getTime() - created;
   if (age < -60_000 || age > EXCHANGE_WINDOW_MS) return false;
 
-  // The turn's own answer: an assistant message saved in that conversation
-  // since the turn began. If the answer was not saved, nothing can be matched
-  // and the speech is standalone — the safe side of a failed persist.
-  const { data: answers, error: answersError } = await db
+  const answer = await savedAnswerOf(db, { familyId: caller.familyId, conversationId: data.conversation_id }, data.id);
+  return answer !== null && prepareSpeechText(answer) === spoken;
+}
+
+/**
+ * The answer a turn saved, bound to it by `request_id`. The turn saves it
+ * before `done` hands the client the id, so the EARLIEST assistant message
+ * carrying that id is the genuine one; a row a member inserted later with the
+ * same id (members may write their own conversation) cannot displace it. Null
+ * when the turn saved no answer: then nothing can ride on it.
+ */
+export async function savedAnswerOf(
+  db: SupabaseClient<Database>,
+  turn: { familyId: string; conversationId: string },
+  requestId: string,
+): Promise<string | null> {
+  const { data, error } = await db
     .from('ai_messages')
-    .select('content')
-    .eq('family_id', caller.familyId)
-    .eq('conversation_id', data.conversation_id)
+    .select('content, conversation_id')
+    .eq('family_id', turn.familyId)
+    .eq('request_id', requestId)
     .eq('role', 'assistant')
-    .gte('created_at', new Date(created - 60_000).toISOString())
-    .limit(5);
-  if (answersError || !Array.isArray(answers)) return false;
-  return answers.some((a) => typeof a.content === 'string' && prepareSpeechText(a.content) === spoken);
+    .order('created_at', { ascending: true })
+    .order('id', { ascending: true })
+    .limit(1);
+  if (error || !Array.isArray(data) || !data[0]) return null;
+  const [first] = data;
+  if (first.conversation_id !== turn.conversationId || typeof first.content !== 'string') return null;
+  return first.content;
 }

@@ -34,7 +34,6 @@ export type PriorTurn =
   | { kind: 'failed'; requestId: string }
   | { kind: 'answered'; requestId: string; content: string | null };
 
-const CLOCK_SKEW_MS = 60_000;
 const ANSWERED = new Set(['completed', 'partially_completed']);
 const ENDED_WITHOUT_ANSWER = new Set(['failed', 'cancelled', 'blocked']);
 
@@ -45,7 +44,7 @@ export async function findPriorTurn(
 ): Promise<PriorTurn> {
   const { data: row, error } = await db
     .from('ai_requests')
-    .select('id, requested_by, feature, conversation_id, status, created_at, completed_at')
+    .select('id, requested_by, feature, conversation_id, status')
     .eq('family_id', caller.familyId)
     .eq('client_request_id', assistantTurnRequestKey(key))
     .maybeSingle();
@@ -61,27 +60,26 @@ export async function findPriorTurn(
   if (ENDED_WITHOUT_ANSWER.has(row.status)) return { kind: 'failed', requestId: row.id };
   if (!ANSWERED.has(row.status)) return { kind: 'in_progress', requestId: row.id };
 
-  // The turn saves its user and assistant messages together, inside the
-  // request and before it closes: the first pair written after the row was
-  // filed, and before it closed, is this turn's. `completed_at` is stamped by
-  // the app server and `created_at` by the database, so the upper bound
-  // allows for clock skew between the two.
-  let query = db
+  // The turn's own exchange, bound to it by `request_id` (0250): the first
+  // user and assistant messages saved with this request's id, never a pair
+  // found by time or position (#788 release review 5964060680). Rows saved
+  // before turns carried the id have none, and read as an unsaved answer.
+  const { data: messages, error: messagesError } = await db
     .from('ai_messages')
-    .select('role, content, created_at')
+    .select('role, content, conversation_id')
     .eq('family_id', caller.familyId)
-    .eq('conversation_id', caller.conversationId)
-    .gte('created_at', row.created_at);
-  const closed = row.completed_at ? Date.parse(row.completed_at) : NaN;
-  if (Number.isFinite(closed)) query = query.lte('created_at', new Date(closed + CLOCK_SKEW_MS).toISOString());
-  const { data: messages, error: messagesError } = await query.order('created_at', { ascending: true }).limit(2);
+    .eq('request_id', row.id)
+    .order('created_at', { ascending: true })
+    .order('id', { ascending: true })
+    .limit(10);
   if (messagesError) {
     console.error('[assistant-turn-replay] saved answer read failed', messagesError);
     return { kind: 'answered', requestId: row.id, content: null };
   }
-  const asked = (messages ?? []).find((m) => m.role === 'user');
+  const own = (messages ?? []).filter((m) => m.conversation_id === caller.conversationId);
+  const asked = own.find((m) => m.role === 'user');
   // The key was sent with different words: not a retry of that turn.
   if (asked && asked.content.trim() !== caller.message.trim()) return { kind: 'mismatch' };
-  const answer = (messages ?? []).find((m) => m.role === 'assistant');
+  const answer = own.find((m) => m.role === 'assistant');
   return { kind: 'answered', requestId: row.id, content: answer?.content ?? null };
 }

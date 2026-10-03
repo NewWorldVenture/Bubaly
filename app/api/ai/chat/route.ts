@@ -229,9 +229,12 @@ export async function POST(req: NextRequest) {
         // Persist both turns + the structured actions, then finish the conversation.
         let persistenceError: unknown = null;
         const { error: messageInsertError } = await supabase.from('ai_messages').insert([
-            { family_id: familyId, conversation_id: conversationId, role: 'user', content: message },
+            // Bound to this turn's request (0250 `request_id`), so speech and a
+            // retried send find this answer exactly, never by time.
+            { family_id: familyId, conversation_id: conversationId, role: 'user', content: message, request_id: obs.requestId },
             {
               family_id: familyId, conversation_id: conversationId, role: 'assistant', content: assistantContent,
+              request_id: obs.requestId,
               tool_calls: actions.length ? (actions.map((a) => ({ name: a.name, args: a.args })) as unknown as Database['public']['Tables']['ai_messages']['Insert']['tool_calls']) : null,
               tool_results: actions.length ? (actions.map((a) => ({ name: a.name, ...summarizeToolResult(a.result) })) as unknown as Database['public']['Tables']['ai_messages']['Insert']['tool_results']) : null,
             },

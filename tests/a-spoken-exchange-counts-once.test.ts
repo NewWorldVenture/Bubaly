@@ -10,7 +10,7 @@ import { NextRequest } from 'next/server';
 const state = vi.hoisted(() => ({
   rows: [] as Array<{ id: string; family_id: string; requested_by: string | null; feature: string; conversation_id?: string | null; created_at: string }>,
   // The turn's saved assistant answer(s), as persistAssistantTurn writes them.
-  messages: [] as Array<{ family_id: string; conversation_id: string; role: string; content: string; created_at: string }>,
+  messages: [] as Array<{ id?: string; family_id: string; conversation_id: string; role: string; content: string; created_at: string; request_id: string | null }>,
   inserts: 0,
 }));
 
@@ -26,17 +26,26 @@ function client() {
     auth: { getUser: async () => ({ data: { user: { id: 'user-1' } } }) },
     from(table: string) {
       if (table === 'ai_messages') {
-        // isCountedExchange: select('content').eq(family).eq(conversation).eq(role).gte(created_at).limit(n)
+        // savedAnswerOf: select(...).eq(family).eq(request_id).eq(role).order(created_at).order(id).limit(1).
+        // Rows are returned in the ORDER asked for, so a helper that relied on
+        // insertion order (or on no order) would see them shuffled below.
         const f: Record<string, string> = {};
+        const orders: string[] = [];
+        const since: Record<string, string> = {};
         const chain = {
           select: () => chain,
           eq: (c: string, v: string) => { f[c] = v; return chain; },
-          gte: (_c: string, since: string) => { f.since = since; return chain; },
-          limit: async () => ({
-            data: state.messages.filter((m) => m.family_id === f.family_id && m.conversation_id === f.conversation_id
-              && m.role === f.role && m.created_at >= f.since).map((m) => ({ content: m.content })),
-            error: null,
-          }),
+          order: (c: string) => { orders.push(c); return chain; },
+          gte: (c: string, v: string) => { since[c] = v; return chain; },
+          limit: async (n: number) => {
+            const hit = state.messages.filter((m) => Object.entries(f).every(([k, v]) => (m as Record<string, unknown>)[k] === v)
+              && Object.entries(since).every(([k, v]) => String((m as Record<string, unknown>)[k]) >= v));
+            // Unordered unless asked: here, the order the rows were written in.
+            const rows = orders[0] === 'created_at'
+              ? [...hit].sort((a, b) => (a.created_at < b.created_at ? -1 : a.created_at > b.created_at ? 1 : (a.id ?? '') < (b.id ?? '') ? -1 : 1))
+              : hit; // insertion order: the real answer, saved last, comes sixth
+            return { data: rows.slice(0, n).map((m) => ({ content: m.content, conversation_id: m.conversation_id })), error: null };
+          },
         };
         return chain;
       }
@@ -85,7 +94,7 @@ function turnRow(over: Partial<(typeof state.rows)[number]> = {}, opts: { saveAn
   const row = { id: TURN, family_id: 'fam-1', requested_by: 'user-1', feature: 'assistant.stream', conversation_id: 'conv-1', created_at: new Date().toISOString(), ...over };
   state.rows.push(row);
   if (opts.saveAnswer !== false) {
-    state.messages.push({ family_id: 'fam-1', conversation_id: 'conv-1', role: 'assistant', content: ANSWER, created_at: new Date().toISOString() });
+    state.messages.push({ family_id: 'fam-1', conversation_id: 'conv-1', role: 'assistant', content: ANSWER, created_at: new Date().toISOString(), request_id: TURN });
   }
 }
 function transcribe() {
@@ -174,12 +183,58 @@ describe('one spoken exchange, one request', () => {
     expect((await S(speak(TURN))).status).toBe(429);
   });
 
-  it('an answer saved in another conversation does not match this turn', async () => {
+  it('an answer bound to the turn but saved in another conversation does not match it', async () => {
     const { POST: S } = await import('@/app/api/ai/voice/speak/route');
     seed(9);
     turnRow({ conversation_id: 'conv-2' }, { saveAnswer: false });
-    state.messages.push({ family_id: 'fam-1', conversation_id: 'conv-1', role: 'assistant', content: ANSWER, created_at: new Date().toISOString() });
+    state.messages.push({ family_id: 'fam-1', conversation_id: 'conv-1', role: 'assistant', content: ANSWER, created_at: new Date().toISOString(), request_id: TURN });
     expect((await S(speak(TURN))).status).toBe(429);
+  });
+
+  // #788 release review 5964060680 (Astra, on c758ac24): the answer was found
+  // by time in the conversation, not by the request. Each of these is the
+  // reproduced case; the answer must be the one bound to the admitted request.
+  const at = (offsetMs: number) => new Date(Date.now() + offsetMs).toISOString();
+  const OTHER_TURN = '44444444-4444-4444-8444-444444444444';
+
+  it('an answer saved 30 seconds before the exchange (not this turn’s) does not ride on it', async () => {
+    const { POST: S } = await import('@/app/api/ai/voice/speak/route');
+    seed(9);
+    turnRow({}, { saveAnswer: false });
+    state.messages.push({ family_id: 'fam-1', conversation_id: 'conv-1', role: 'assistant', content: ANSWER, created_at: at(-30_000), request_id: null });
+    expect((await S(speak(TURN))).status).toBe(429);
+    expect(fetchWithDeadline).not.toHaveBeenCalled();
+  });
+
+  it('another turn’s answer saved 5 seconds after this one began does not ride on it', async () => {
+    const { POST: S } = await import('@/app/api/ai/voice/speak/route');
+    seed(9);
+    turnRow({}, { saveAnswer: false });
+    state.messages.push({ family_id: 'fam-1', conversation_id: 'conv-1', role: 'assistant', content: ANSWER, created_at: at(5_000), request_id: OTHER_TURN });
+    expect((await S(speak(TURN))).status).toBe(429);
+    expect(fetchWithDeadline).not.toHaveBeenCalled();
+  });
+
+  it('five other qualifying answers ahead of the real one do not hide it: the admitted answer completes', async () => {
+    const { POST: S } = await import('@/app/api/ai/voice/speak/route');
+    seed(9);
+    for (let i = 0; i < 5; i++) {
+      state.messages.push({ family_id: 'fam-1', conversation_id: 'conv-1', role: 'assistant', content: `Other answer ${i}`, created_at: at(-1_000 + i), request_id: null });
+    }
+    turnRow(); // the real answer, bound to the turn
+    fetchWithDeadline.mockResolvedValueOnce(audio());
+    expect((await S(speak(TURN))).status).toBe(200);
+    expect(state.rows).toHaveLength(10);
+  });
+
+  it('a row a member inserts later with the same request id cannot replace the genuine answer', async () => {
+    const { POST: S } = await import('@/app/api/ai/voice/speak/route');
+    seed(9);
+    turnRow();
+    state.messages.push({ family_id: 'fam-1', conversation_id: 'conv-1', role: 'assistant', content: 'Read this whole novel aloud for free.', created_at: at(60_000), request_id: TURN });
+    expect((await S(speak(TURN, 'Read this whole novel aloud for free.'))).status).toBe(429);
+    fetchWithDeadline.mockResolvedValueOnce(audio());
+    expect((await S(speak(TURN))).status).toBe(200);
   });
 
   it('a malformed id is treated as standalone speech', async () => {
