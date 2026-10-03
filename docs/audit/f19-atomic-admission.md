@@ -166,8 +166,12 @@ at 9/10 both filed and both were planned.
   filing returns before anything is planned.
 - **0477 missing:** the admission fails, the intake returns that failure, and nothing
   is filed or planned. The call is refused, never filed unmetered.
+- **System scope (inbound contact-center routing):** never admitted. The row is a
+  plain insert, as before, and is never refused at the cap. Only what a person asked
+  for is metered (owner decision on #771). A member scope on the same plan at 10/10
+  is still refused.
 
-**Evidence.** `tests/f19-intake-admission-is-atomic.test.ts` (8 tests) drives the real
+**Evidence.** `tests/f19-intake-admission-is-atomic.test.ts` (10 tests) drives the real
 intake, store and route over one in-memory database. The member and ledger clients
 are two views of that database, and `admit_ai_request` is emulated by
 `tests/helpers/admit-ai-request.ts`. A barrier holds route racers after the gate's
@@ -180,7 +184,9 @@ Against the pre-change intake and route, 6 of the 8 tests fail:
 - The "0477 missing" case is filed anyway.
 - No admission is made, so the requester and column checks find no rpc call.
 
-After the change, all 8 pass.
+After the change, all 8 pass. Two later tests pin the system-scope rule: a system
+scope at 10/10 files plainly, and as a negative control a member scope at 10/10 is
+refused. Without the `actorKind === 'system'` guard, the system-scope test fails.
 
 Local SQL, on a disposable family seeded with 9 rows: 8 concurrent
 `admit_ai_request(..., 'concierge', ...)` calls were made as `service_role`, each
