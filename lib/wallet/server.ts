@@ -218,7 +218,20 @@ export async function debitCardSpend(supabase: DB, params: {
     })
     .select('id')
     .single();
-  if (error) return { ok: false, error: walletFailure(error, 'Could not post that card spend.') };
+  if (error) {
+    // The same two statements as the refund below, with the same race: two
+    // claims of one capture that overlap both pass the select. The database key
+    // (uq_wallet_txn_card_capture_ref, one completed card_spend per stripe_ref)
+    // refuses the second insert with 23505; that is the first one's debit,
+    // already written, so answer it as the success it is — never a second debit.
+    if ((error as { code?: string }).code === '23505') {
+      const { data: written, error: rereadError } = await supabase
+        .from('wallet_transactions').select('id')
+        .eq('stripe_ref', params.stripeRef).eq('type', 'card_spend').eq('status', 'completed').maybeSingle();
+      if (!rereadError && written) return { ok: true, txnId: written.id };
+    }
+    return { ok: false, error: walletFailure(error, 'Could not post that card spend.') };
+  }
 
   await logWalletAudit(supabase, {
     family_id: params.familyId, actor_user_id: null, action: 'card_spend',
