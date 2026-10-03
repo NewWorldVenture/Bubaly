@@ -47,10 +47,11 @@ function createDb(options: Options = {}) {
   };
   const rpc = async (name: string, args: Record<string, unknown>) => {
     calls.push({ name: 'rpc:' + name, args, kind: 'rpc' });
-    if (name === 'meal_plan_replace_slots') return { data: Object.hasOwn(options, 'replaceData') ? options.replaceData : { planned: [row()], replaced: 1, replayed: false }, error: options.replaceError ?? null };
-    return { data: Object.hasOwn(options, 'removeData') ? options.removeData : {
+    if (name === 'meal_plan_replace_slots' || name === 'meal_plan_replace_slots_for_actor') return { data: Object.hasOwn(options, 'replaceData') ? options.replaceData : { planned: [row()], replaced: 1, replayed: false }, error: options.replaceError ?? null };
+    if (name === 'meal_plan_remove_slot' || name === 'meal_plan_remove_slot_for_actor') return { data: Object.hasOwn(options, 'removeData') ? options.removeData : {
       id: 'planned-slot', plan_date: '2026-09-08', meal_type: 'dinner', replayed: false,
     }, error: options.removeError ?? null };
+    return { data: null, error: null };
   };
   return { db: { from, rpc } as unknown as SupabaseClient<Database>, calls };
 }
@@ -108,6 +109,46 @@ describe('meal-plan atomic RPC receipts', () => {
       p_family_id: family, p_request_id: 'healthy', p_entries: [{ meal_id: meal.id, plan_date: entries[0].date, meal_type: 'dinner' }],
     });
     expect(seams.activity).toHaveLength(1);
+  });
+
+  it('uses only the executor ledger client and scoped actor for delegated replacement', async () => {
+    const userClient = createDb();
+    const ledgerClient = createDb();
+    const delegatedScope = scope(userClient.db, { toolOperation: { id: 'executor-only-operation', db: ledgerClient.db } });
+    const untrustedEntry = { ...entries[0], actorId: 'attacker-selected-actor' } as typeof entries[number];
+    const result = await planWeek(delegatedScope, [untrustedEntry], 'delegated-replace-request');
+    expect(result.ok).toBe(true);
+    expect(userClient.calls.some((call) => call.name.startsWith('rpc:'))).toBe(false);
+    expect(ledgerClient.calls.find((call) => call.name === 'rpc:meal_plan_replace_slots_for_actor')?.args).toEqual({
+      p_family_id: family, p_actor_id: user, p_request_id: 'delegated-replace-request',
+      p_entries: [{ meal_id: meal.id, plan_date: entries[0].date, meal_type: entries[0].mealType }],
+    });
+    expect(ledgerClient.calls.some((call) => call.name === 'rpc:meal_plan_replace_slots')).toBe(false);
+  });
+
+  it('uses only the executor ledger client and scoped actor for delegated removal', async () => {
+    const userClient = createDb();
+    const ledgerClient = createDb();
+    const delegatedScope = scope(userClient.db, { toolOperation: { id: 'executor-only-operation', db: ledgerClient.db } });
+    expect(await removeSlot(delegatedScope, 'planned-slot', 'delegated-remove-request')).toEqual({ ok: true, data: { id: 'planned-slot' } });
+    expect(userClient.calls.some((call) => call.name.startsWith('rpc:'))).toBe(false);
+    expect(ledgerClient.calls.find((call) => call.name === 'rpc:meal_plan_remove_slot_for_actor')?.args).toEqual({
+      p_family_id: family, p_actor_id: user, p_request_id: 'delegated-remove-request', p_plan_id: 'planned-slot',
+    });
+    expect(ledgerClient.calls.some((call) => call.name === 'rpc:meal_plan_remove_slot')).toBe(false);
+  });
+
+  it('refuses delegated writes without a scoped actor before any read, write, or RPC', async () => {
+    const userClient = createDb();
+    const ledgerClient = createDb();
+    const delegatedScope = scope(userClient.db, { userId: null, toolOperation: { id: 'executor-only-operation', db: ledgerClient.db } });
+    expect(await planWeek(delegatedScope, [{ date: '2026-09-08', mealName: 'Synthetic custom dish' }]))
+      .toMatchObject({ ok: false, code: 'denied' });
+    expect(await removeSlot(delegatedScope, 'planned-slot', 'missing-actor-remove'))
+      .toMatchObject({ ok: false, code: 'denied' });
+    expect(userClient.calls).toEqual([]);
+    expect(ledgerClient.calls).toEqual([]);
+    expect(seams.activity).toEqual([]);
   });
 
   it('treats a lost RPC response as unknown and never tries client-side compensation', async () => {

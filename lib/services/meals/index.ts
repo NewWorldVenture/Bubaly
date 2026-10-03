@@ -379,6 +379,10 @@ export type PlanWeekResult = {
 export async function planWeek(scope: ServiceScope, entries: PlanEntryInput[], requestId?: string): Promise<ServiceResult<PlanWeekResult>> {
   const valid = validateEntries(entries);
   if (!valid.ok) return valid;
+  const operation = scope.toolOperation;
+  if (operation && (!operation.id || !operation.db || typeof scope.userId !== 'string' || !scope.userId.trim())) {
+    return fail('This meal-plan operation has no valid acting user.', { code: SERVICE_CODES.denied });
+  }
 
   const createdMealIds: string[] = [];
   const removeCreatedMeals = async () => {
@@ -409,15 +413,18 @@ export async function planWeek(scope: ServiceScope, entries: PlanEntryInput[], r
   // New library dishes are resolved before this transaction. If its response
   // is lost, the RPC may have committed; leave those dishes intact because a
   // guessed cleanup could break committed references (the FK sets meal_id NULL).
-  const { data: result, error } = await scope.db.rpc('meal_plan_replace_slots', {
-    p_family_id: scope.familyId,
-    p_request_id: scopedRequestId,
-    p_entries: resolved.data.map((entry) => ({
-      meal_id: entry.mealId,
-      plan_date: entry.date,
-      meal_type: entry.mealType,
-    })),
-  });
+  const rpcEntries = resolved.data.map((entry) => ({
+    meal_id: entry.mealId,
+    plan_date: entry.date,
+    meal_type: entry.mealType,
+  }));
+  const { data: result, error } = operation
+    ? await operation.db.rpc('meal_plan_replace_slots_for_actor', {
+      p_family_id: scope.familyId, p_actor_id: scope.userId!, p_request_id: scopedRequestId, p_entries: rpcEntries,
+    })
+    : await scope.db.rpc('meal_plan_replace_slots', {
+      p_family_id: scope.familyId, p_request_id: scopedRequestId, p_entries: rpcEntries,
+    });
   if (error || !result || typeof result !== 'object' || Array.isArray(result)) {
     console.error('[service:meals] atomic plan write failed', error);
     return fail('Could not confirm whether the meal plan was saved. Refresh the plan before retrying.', { code: SERVICE_CODES.db });
@@ -482,14 +489,20 @@ export async function removeSlot(scope: ServiceScope, planId: string, requestId?
   if (!planId || (requestId !== undefined && (typeof requestId !== 'string' || requestId.trim().length === 0 || requestId.length > 128))) {
     return fail('That planned meal could not be found.', { code: SERVICE_CODES.invalidInput });
   }
+  const operation = scope.toolOperation;
+  if (operation && (!operation.id || !operation.db || typeof scope.userId !== 'string' || !scope.userId.trim())) {
+    return fail('This meal-plan operation has no valid acting user.', { code: SERVICE_CODES.denied });
+  }
   const scopedRequestId = requestId ?? (scope.idempotencyKey || scope.runId || scope.stepId || scope.requestId
     ? `meal-remove:${makeKey([scope.familyId, scope.idempotencyKey, scope.runId, scope.stepId, scope.requestId])}`
     : randomUUID());
-  const { data, error } = await scope.db.rpc('meal_plan_remove_slot', {
-    p_family_id: scope.familyId,
-    p_request_id: scopedRequestId,
-    p_plan_id: planId,
-  });
+  const { data, error } = operation
+    ? await operation.db.rpc('meal_plan_remove_slot_for_actor', {
+      p_family_id: scope.familyId, p_actor_id: scope.userId!, p_request_id: scopedRequestId, p_plan_id: planId,
+    })
+    : await scope.db.rpc('meal_plan_remove_slot', {
+      p_family_id: scope.familyId, p_request_id: scopedRequestId, p_plan_id: planId,
+    });
   const receipt = data as { id?: unknown; plan_date?: unknown; meal_type?: unknown; replayed?: unknown } | null;
   if (error || !receipt || typeof receipt !== 'object' || Array.isArray(receipt) || receipt.id !== planId
     || !isDayKey(receipt.plan_date) || !isMealType(receipt.meal_type) || typeof receipt.replayed !== 'boolean') {
