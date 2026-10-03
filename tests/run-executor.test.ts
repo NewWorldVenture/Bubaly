@@ -933,3 +933,119 @@ describe('re-planning through a wired port', () => {
     expect(result).toMatchObject({ status: 'partially_completed', completed: 1, failed: 1 });
   });
 });
+
+// ── Q40: a slice that made progress does not spend a retry ──────────────────
+//
+// `attempt` is the run's abandonment budget: `claimRun` refuses at
+// `max_attempts`, and `claim_ai_runs` dead-letters there. Every claim spends
+// one, and until now nothing gave it back — so five healthy slices left a run
+// that no resume, approval kick or step re-run could claim, and the first real
+// worker death dead-lettered it as "abandoned". The park now hands the budget
+// back when, and only when, the slice left more steps satisfied than it found.
+// A slice that completed nothing keeps the charge, which is what still lets a
+// run that never progresses terminate.
+describe('a slice that made progress does not spend a retry (Q40)', () => {
+  it('hands the budget back when it parks on the clock after finishing steps', async () => {
+    const fake = makeFake({
+      run: { attempt: 3 },
+      steps: [
+        { id: 's1', description: 'One' },
+        { id: 's2', description: 'Two', dependency_ids: ['s1'] },
+        { id: 's3', description: 'Three', dependency_ids: ['s2'] },
+      ],
+      tool: (_call, _attempt, f) => { f.advance(20_000); return okOutcome(); },
+    });
+
+    const result = await runGraphWith(fake.port, RUN_ID, { budgetMs: 45_000 });
+
+    expect(result.status).toBe('ready');
+    expect(fake.step('s1').status).toBe('completed');
+    expect(fake.step('s3').status).toBe('queued');
+    // Reset, not decremented: a run that is moving has its whole budget again.
+    expect(fake.run.attempt, 'two steps were finished; this slice was not an abandonment').toBe(0);
+  });
+
+  it('keeps the charge when it parks without having finished anything', async () => {
+    const fake = makeFake({
+      run: { attempt: 3 },
+      steps: [{ id: 's1', max_retries: 8, retry_count: 5 }],
+      tool: (_call, _attempt, f) => {
+        f.advance(9_000);
+        return { status: 'error', error: 'Rate limited.', retryable: true, toolCallId: null };
+      },
+    });
+
+    const result = await runGraphWith(fake.port, RUN_ID, { budgetMs: 12_000 + BUDGET_RESERVE_MS });
+
+    expect(result.status).toBe('ready');
+    expect(fake.step('s1').status).toBe('ready');
+    // The proof that a run which never progresses still terminates: the
+    // budget this claim spent stays spent.
+    expect(fake.run.attempt).toBe(3);
+  });
+
+  it('keeps the charge when the first step parks on a person', async () => {
+    const fake = makeFake({
+      run: { attempt: 2 },
+      steps: [
+        { id: 's1', description: 'Book the plumber', approval_required: true },
+        { id: 's2', description: 'Tell the family', dependency_ids: ['s1'] },
+      ],
+    });
+
+    const result = await runGraphWith(fake.port, RUN_ID, { budgetMs: 60_000 });
+
+    expect(result.status).toBe('awaiting_approval');
+    expect(fake.calls).toHaveLength(0);
+    expect(fake.run.attempt, 'nothing was done, so nothing was earned').toBe(2);
+  });
+
+  it('hands the budget back when it parks on a person after finishing a step', async () => {
+    const fake = makeFake({
+      run: { attempt: 2 },
+      steps: [
+        { id: 's1', description: 'Find a plumber' },
+        { id: 's2', description: 'Book the plumber', approval_required: true, dependency_ids: ['s1'] },
+      ],
+    });
+
+    const result = await runGraphWith(fake.port, RUN_ID, { budgetMs: 60_000 });
+
+    expect(result.status).toBe('awaiting_approval');
+    expect(fake.step('s1').status).toBe('completed');
+    expect(fake.run.attempt).toBe(0);
+  });
+
+  it('hands the budget back when it schedules a follow-up after finishing a step', async () => {
+    const fake = makeFake({
+      run: { attempt: 4 },
+      steps: [
+        { id: 's1' },
+        { id: 's2', step_type: 'followup', tool_name: null, dependency_ids: ['s1'], input_json: { delayMinutes: 120 } },
+        { id: 's3', dependency_ids: ['s2'] },
+      ],
+    });
+
+    const result = await runGraphWith(fake.port, RUN_ID, { budgetMs: 60_000 });
+
+    expect(result.status).toBe('scheduled_followup');
+    expect(fake.step('s1').status).toBe('completed');
+    expect(fake.run.attempt).toBe(0);
+  });
+
+  it('a skipped step is progress too — the graph moved past it for good', async () => {
+    const fake = makeFake({
+      run: { attempt: 2 },
+      steps: [
+        { id: 's1', condition: 'false' },
+        { id: 's2', dependency_ids: ['s1'], approval_required: true },
+      ],
+    });
+
+    const result = await runGraphWith(fake.port, RUN_ID, { budgetMs: 60_000 });
+
+    expect(result.status).toBe('awaiting_approval');
+    expect(fake.step('s1').status).toBe('skipped');
+    expect(fake.run.attempt).toBe(0);
+  });
+});

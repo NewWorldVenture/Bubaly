@@ -42,7 +42,7 @@ import { notify } from '@/lib/services/notifications';
 import { fail, ok, SERVICE_CODES, type ServiceResult, type ServiceScope } from '@/lib/services/types';
 import {
   blockedSteps, describeProgress, findDependencyCycle, isTerminalRunState, legacyStatusFor,
-  selectRunnableSteps, summarizeSteps, terminalRunStateFor, type RunState, type StepState,
+  SATISFYING_STEP_STATES, selectRunnableSteps, summarizeSteps, terminalRunStateFor, type RunState, type StepState,
 } from './states';
 import {
   appendEvent as storeAppendEvent, heartbeatRun, loadPlanSteps, loadRunActor, loadRunById,
@@ -454,6 +454,18 @@ export async function runGraphWith(port: ExecutorPort, runId: string, opts?: { b
     steps = afterDecisions.data;
   }
 
+  // `attempt` is the run's abandonment budget — `claimRun` refuses at
+  // `max_attempts` and `claim_ai_runs` dead-letters there — but every claim
+  // spends one, this slice's included, and nothing gave it back: five healthy
+  // slices left a run no resume, approval kick or re-run could claim, and the
+  // first real worker death then dead-lettered it as "abandoned" (Q40). A
+  // slice that moved the graph forward is not an abandonment, so every park
+  // below hands the budget back when, and only when, this slice left more
+  // steps satisfied than it found. A slice that completed nothing keeps the
+  // charge, which is what still lets a run that never progresses terminate.
+  const satisfiedAtStart = countSatisfied(steps);
+  const progressed = () => countSatisfied(steps) > satisfiedAtStart;
+
   if (run.state !== 'executing') {
     await port.updateRun(run, {
       state: 'executing', status: legacyStatusFor('executing'), started_at: new Date(port.now()).toISOString(),
@@ -497,14 +509,14 @@ export async function runGraphWith(port: ExecutorPort, runId: string, opts?: { b
     }
 
     const runnable = selectRunnableSteps(steps);
-    if (!runnable.length) return finalizeRun(port, run, steps);
+    if (!runnable.length) return finalizeRun(port, run, steps, progressed());
 
     // Stop while there is still time to persist. The run goes back in the queue
     // with `run_after = now`, so the next continuation resumes here.
     if (deadline - port.now() < BUDGET_RESERVE_MS) {
       return parkForContinuation(
         port, run, steps, new Date(port.now()).toISOString(),
-        'Bubaly ran out of time in this pass and will pick up the rest shortly.',
+        'Bubaly ran out of time in this pass and will pick up the rest shortly.', progressed(),
       );
     }
 
@@ -513,7 +525,7 @@ export async function runGraphWith(port: ExecutorPort, runId: string, opts?: { b
       // Only replan steps can run, and a step is still waiting on a person: the
       // re-plan must see that decision, so the run parks (finalizeRun reports
       // `awaiting_approval` when anything is) and resumes when it lands.
-      return finalizeRun(port, run, steps);
+      return finalizeRun(port, run, steps, progressed());
     }
     const settled = await Promise.allSettled(batch.map((step) => runStep(port, scope, run, step, steps, deadline)));
 
@@ -553,12 +565,12 @@ export async function runGraphWith(port: ExecutorPort, runId: string, opts?: { b
     steps = reloaded.data;
 
     if (scheduledFor) {
-      return parkForContinuation(port, run, steps, scheduledFor, 'Bubaly scheduled the rest of this for later.', 'scheduled_followup');
+      return parkForContinuation(port, run, steps, scheduledFor, 'Bubaly scheduled the rest of this for later.', progressed(), 'scheduled_followup');
     }
     if (parkedApproval && !selectRunnableSteps(steps).length) {
       await port.updateRun(run, {
         state: 'awaiting_approval', status: legacyStatusFor('awaiting_approval'), progress: progressJson(steps),
-        lease_owner: null, lease_expires_at: null,
+        lease_owner: null, lease_expires_at: null, ...budgetReset(progressed()),
       });
       await port.setRequestState(run, 'awaiting_approval', null);
       return summarize('awaiting_approval', steps);
@@ -566,14 +578,30 @@ export async function runGraphWith(port: ExecutorPort, runId: string, opts?: { b
     if (outOfBudget) {
       return parkForContinuation(
         port, run, steps, new Date(port.now()).toISOString(),
-        'Bubaly paused between retries and will continue shortly.',
+        'Bubaly paused between retries and will continue shortly.', progressed(),
       );
     }
   }
 
   // Reaching the pass cap means the graph stopped converging; finishing
   // honestly beats spinning until the function is killed.
-  return finalizeRun(port, run, steps);
+  return finalizeRun(port, run, steps, progressed());
+}
+
+/** Steps the graph no longer has to run: the measure of a slice's progress. */
+function countSatisfied(steps: readonly StepSnapshot[]): number {
+  return steps.filter((step) => SATISFYING_STEP_STATES.includes(step.status)).length;
+}
+
+/**
+ * The patch that hands the abandonment budget back after a slice that made
+ * progress, and nothing after one that did not. Steps only ever move INTO a
+ * satisfying state, so "more satisfied than at the start" is monotone and
+ * bounded by the plan: a run that keeps parking without completing anything
+ * cannot earn a reset, and still runs out of attempts the way it always has.
+ */
+function budgetReset(progressed: boolean): Pick<RunPatch, 'attempt'> {
+  return progressed ? { attempt: 0 } : {};
 }
 
 /**
@@ -708,6 +736,7 @@ async function parkForContinuation(
   steps: readonly StepSnapshot[],
   runAfter: string,
   message: string,
+  progressed: boolean,
   state: RunState = 'ready',
 ): Promise<RunGraphResult> {
   await port.updateRun(run, {
@@ -717,6 +746,7 @@ async function parkForContinuation(
     progress: progressJson(steps),
     lease_owner: null,
     lease_expires_at: null,
+    ...budgetReset(progressed),
   });
   await port.appendEvent(run, {
     eventType: 'followup_scheduled',
@@ -753,7 +783,7 @@ async function finalizeCancelled(port: ExecutorPort, run: RunSnapshot, steps: re
   return summarize('cancelled', after);
 }
 
-async function finalizeRun(port: ExecutorPort, run: RunSnapshot, steps: readonly StepSnapshot[]): Promise<RunGraphResult> {
+async function finalizeRun(port: ExecutorPort, run: RunSnapshot, steps: readonly StepSnapshot[], progressed = false): Promise<RunGraphResult> {
   const counts = summarizeSteps(steps);
 
   // Nothing runnable but something is waiting on a person: not terminal.
@@ -764,6 +794,7 @@ async function finalizeRun(port: ExecutorPort, run: RunSnapshot, steps: readonly
       progress: progressJson(steps),
       lease_owner: null,
       lease_expires_at: null,
+      ...budgetReset(progressed),
     });
     await port.setRequestState(run, 'awaiting_approval', null);
     return summarize('awaiting_approval', steps);

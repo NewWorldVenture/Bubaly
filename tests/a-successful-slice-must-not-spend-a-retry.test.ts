@@ -12,9 +12,10 @@ const USER = '00000000-0000-4000-8000-0000000000a1';
 const RUN = '00000000-0000-4000-8000-00000000ru01';
 
 /**
- * `attempt` decides whether a run is ABANDONED, and successful work spends it.
+ * `attempt` decides whether a run is ABANDONED, and successful work used to
+ * spend it.
  *
- * Three places read the counter, and they do not agree about what it counts:
+ * Three places read the counter, and they agree about what it counts:
  *
  *   claim_ai_runs pass 1 (0250:434)   state = case when attempt >= max_attempts
  *                                       then 'failed' ...
@@ -25,23 +26,33 @@ const RUN = '00000000-0000-4000-8000-00000000ru01';
  *
  * The error text and the dead-letter framing both say this is a FAILURE budget.
  * But every claim increments it — `claim_ai_runs` at 0250:461 and `claimRun` at
- * store.ts:638 — and nothing anywhere resets it. `parkForContinuation`
- * (executor.ts:661) clears the lease and sets `run_after`, and leaves `attempt`
- * exactly where the claim left it.
+ * store.ts:638 — and nothing anywhere reset it. `parkForContinuation` cleared
+ * the lease and set `run_after`, and left `attempt` exactly where the claim
+ * left it.
  *
- * So a run that is working perfectly spends its abandonment budget by making
+ * So a run that was working perfectly spent its abandonment budget by making
  * progress. The executor slices at PER_RUN_BUDGET_MS = 25s inside an 85s tick,
  * and parks for an approval every time it needs a human, so five slices is an
- * ordinary long plan, not a pathological one.
+ * ordinary long plan, not a pathological one. After five, every human-initiated
+ * path (resume, the kick after an approval answer, a step re-run) was refused
+ * silently, and the first genuine worker death dead-lettered the run as
+ * "abandoned" (finalaudit Q40).
  *
  * That the run-level counter was not meant to be the retry mechanism is visible
  * in the schema: per-step retries have their own column, `ai_plan_steps.max_retries`
- * (default 2). `attempt` is the run's abandonment budget, and successful slices
- * are eating it.
+ * (default 2). `attempt` is the run's abandonment budget.
  *
- * This test drives the REAL `claimRun` against the in-memory PostgREST stand-in
- * — real filters, the real compare-and-set on `attempt` — and shows a healthy
- * run becoming unresumable after five successful slices.
+ * The first half of Q40's filed fix: the executor's parks now hand the budget
+ * back when, and ONLY when, the slice left more steps satisfied than it found
+ * (run-executor.test.ts pins that through the real `runGraphWith`). A slice that
+ * completed nothing keeps the charge, which is what still lets a run that never
+ * progresses terminate — the proof Q40 asked for is the first case below. The
+ * second half — the same ceiling inside `claim_ai_runs` — is a migration, and
+ * is still open; the last case pins that the two claim paths still disagree.
+ *
+ * This file drives the REAL `claimRun` against the in-memory PostgREST stand-in
+ * — real filters, the real compare-and-set on `attempt` — with the park written
+ * the way the executor writes it.
  */
 
 function freshDb(): SupabaseClient<Database> {
@@ -59,18 +70,23 @@ function freshDb(): SupabaseClient<Database> {
   return db as unknown as SupabaseClient<Database>;
 }
 
-/** One healthy slice: claim it, do work, park it back to `ready` the way the executor does. */
-async function healthySlice(db: SupabaseClient<Database>): Promise<boolean> {
+/**
+ * One slice: claim it, do work, park it back to `ready` the way the executor
+ * does. `progressed` is what parkForContinuation knows at the park — whether
+ * this slice left more steps satisfied than it found — and is the only thing
+ * that touches `attempt` (executor.ts, budgetReset).
+ */
+async function slice(db: SupabaseClient<Database>, progressed: boolean): Promise<boolean> {
   const claim = await claimRun(db, RUN, 120);
   if (!claim.ok || !claim.data.claimed) return false;
-  // parkForContinuation: lease cleared, state back to `ready`, due immediately.
-  // It does not touch `attempt`, and neither does anything else.
   await releaseRun(db, RUN, claim.data.leaseOwner as string);
   await db.from('family_automation_runs')
-    .update({ state: 'ready', lease_owner: null, lease_expires_at: null, run_after: new Date(0).toISOString() })
+    .update({ state: 'ready', lease_owner: null, lease_expires_at: null, run_after: new Date(0).toISOString(), ...(progressed ? { attempt: 0 } : {}) })
     .eq('id', RUN);
   return true;
 }
+const sliceWithoutProgress = (db: SupabaseClient<Database>) => slice(db, false);
+const sliceWithProgress = (db: SupabaseClient<Database>) => slice(db, true);
 
 async function attemptOf(db: SupabaseClient<Database>): Promise<number> {
   const { data } = await db.from('family_automation_runs').select('attempt').eq('id', RUN).maybeSingle();
@@ -78,7 +94,6 @@ async function attemptOf(db: SupabaseClient<Database>): Promise<number> {
 }
 
 let db: SupabaseClient<Database>;
-
 beforeEach(async () => {
   db = freshDb();
   await db.from('family_automation_runs').insert({
@@ -86,34 +101,57 @@ beforeEach(async () => {
   } as never);
 });
 
-describe('a successful slice must not spend a retry', () => {
-  it('five healthy slices exhaust the abandonment budget, and the sixth is refused', async () => {
+describe('a successful slice must not spend a retry (Q40)', () => {
+  it('a run that never progresses still terminates: five slices without progress exhaust the budget, and the sixth is refused', async () => {
     for (let i = 1; i <= 5; i += 1) {
-      expect(await healthySlice(db), `slice ${i} should have been claimable`).toBe(true);
+      expect(await sliceWithoutProgress(db), `slice ${i} should have been claimable`).toBe(true);
       expect(await attemptOf(db), `after slice ${i}`).toBe(i);
     }
 
-    // Nothing has gone wrong. The run is `ready`, unleased, due, not cancelled.
+    // The run is `ready`, unleased, due, not cancelled — and has done nothing
+    // five times over. That is what the abandonment budget is for.
     const { data: row } = await db.from('family_automation_runs')
       .select('state, lease_owner, cancel_requested_at, error').eq('id', RUN).maybeSingle();
     expect(row).toMatchObject({ state: 'ready', lease_owner: null, cancel_requested_at: null, error: null });
 
-    // And it can never be picked up again by any interactive path: the resume
-    // button, the kick after an approval answer, a step re-run. All of them go
-    // through claimRun.
     const sixth = await claimRun(db, RUN, 120);
     expect(sixth.ok).toBe(true);
-    expect(sixth.ok && sixth.data.claimed, 'a healthy run was refused for making progress').toBe(false);
+    expect(sixth.ok && sixth.data.claimed, 'a run that made no progress five times must stop').toBe(false);
+  });
+
+  it('a slice that completed a step hands the budget back, so a long healthy run stays claimable', async () => {
+    // Eight slices, each finishing work: more than the whole budget, and every
+    // one of them claimable. This is the case that used to be refused at six.
+    for (let i = 1; i <= 8; i += 1) {
+      expect(await sliceWithProgress(db), `healthy slice ${i} was refused for making progress`).toBe(true);
+      expect(await attemptOf(db), `after healthy slice ${i}`).toBe(0);
+    }
+    const ninth = await claimRun(db, RUN, 120);
+    expect(ninth.ok && ninth.data.claimed).toBe(true);
+  });
+
+  it('progress only hands back what this run has spent — it does not bank credit for a later run that stalls', async () => {
+    // Three stalls, one good slice, then five more stalls: the good slice reset
+    // the counter, so the stalls after it are counted from zero and the SIXTH of
+    // them is the one refused — not the third.
+    for (let i = 0; i < 3; i += 1) await sliceWithoutProgress(db);
+    expect(await attemptOf(db)).toBe(3);
+    await sliceWithProgress(db);
+    expect(await attemptOf(db)).toBe(0);
+    for (let i = 1; i <= 5; i += 1) expect(await sliceWithoutProgress(db), `stall ${i} after the reset`).toBe(true);
+    const refused = await claimRun(db, RUN, 120);
+    expect(refused.ok && refused.data.claimed).toBe(false);
   });
 
   it('the refusal is silent — no error, no state change, nothing a caller can see', async () => {
-    for (let i = 0; i < 5; i += 1) await healthySlice(db);
+    for (let i = 0; i < 5; i += 1) await sliceWithoutProgress(db);
     const before = await db.from('family_automation_runs').select('*').eq('id', RUN).maybeSingle();
 
     const refused = await claimRun(db, RUN, 120);
     // Not an error: `ok` with `claimed: false`, which continueRun reports as
     // `status: run.state` — i.e. "ready". A caller sees a ready run that will
-    // not run, and no reason why.
+    // not run, and no reason why. (Still true; it is why the budget has to be
+    // spent only on abandonment.)
     expect(refused.ok).toBe(true);
     expect(refused.ok && refused.data.claimed).toBe(false);
     expect(refused.ok && refused.data.run?.state).toBe('ready');
@@ -123,30 +161,36 @@ describe('a successful slice must not spend a retry', () => {
   });
 
   it('a run below the ceiling is claimable — the mechanism is the count, not the state', async () => {
-    // Non-vacuity. Four slices leaves attempt at 4 < 5, and the fifth claim works.
-    for (let i = 0; i < 4; i += 1) await healthySlice(db);
+    // Non-vacuity. Four stalls leave attempt at 4 < 5, and the fifth claim works.
+    for (let i = 0; i < 4; i += 1) await sliceWithoutProgress(db);
     expect(await attemptOf(db)).toBe(4);
     const fifth = await claimRun(db, RUN, 120);
     expect(fifth.ok && fifth.data.claimed, 'attempt 4 of 5 should still be claimable').toBe(true);
   });
 
-  it('nothing in the codebase ever resets the counter', () => {
-    // The reason the above is terminal rather than transient. If a reset is
-    // ever added, this fails and the finding should be revisited.
-    for (const rel of [
-      'lib/ai/runs/store.ts', 'lib/ai/runs/executor.ts', 'lib/ai/runs/continue.ts',
-      'lib/ai/runs/controls.ts', 'lib/ai/runs/intake.ts',
-    ]) {
+  it('the only reset is the progress park in the executor', () => {
+    // The budget is handed back in exactly one place, and that place is guarded
+    // by progress. A reset anywhere else — a store helper, a control, the intake
+    // — would stop genuinely stuck runs from ever dead-lettering, which is the
+    // half of Q40 that argued against a bare reset.
+    for (const rel of ['lib/ai/runs/store.ts', 'lib/ai/runs/continue.ts', 'lib/ai/runs/controls.ts', 'lib/ai/runs/intake.ts']) {
       const src = readFileSync(join(ROOT, rel), 'utf8');
-      expect(src, `${rel} resets attempt — re-check this finding`).not.toMatch(/attempt:\s*0\b/);
+      expect(src, `${rel} resets attempt — the reset belongs to the executor's park alone`).not.toMatch(/attempt:\s*0\b/);
     }
+    const executor = readFileSync(join(ROOT, 'lib/ai/runs/executor.ts'), 'utf8');
+    expect(executor.match(/attempt:\s*0\b/g), 'one reset, in budgetReset').toHaveLength(1);
+    expect(executor).toContain('function budgetReset(progressed: boolean)');
+    expect(executor).toContain("return progressed ? { attempt: 0 } : {};");
+    // Every park goes through it, so no park can forget the guard.
+    expect(executor.match(/budgetReset\(/g)?.length).toBe(4);
   });
 
-  it('the two claim paths disagree, which is why the cron can still advance it', () => {
+  it('the two claim paths still disagree — the second half of Q40 is a migration and is still open', () => {
     // store.claimRun refuses at the ceiling; the cron RPC has no such filter in
     // its claiming pass, so a run past max_attempts is unreachable by every
-    // human-initiated path while the cron keeps moving it. That inconsistency
-    // is the only reason this is not a total deadlock — and it is itself a bug.
+    // human-initiated path while the cron keeps moving it. With the budget now
+    // spent only on slices that made no progress, that is much harder to reach
+    // — but the inconsistency itself is unchanged and still a bug.
     const rpc = readFileSync(join(ROOT, 'supabase/migrations/0250_ai_runtime_core.sql'), 'utf8');
     const claimPass = rpc.slice(rpc.indexOf('with candidates as'), rpc.indexOf('returning r.id'));
     expect(claimPass, 'the claiming pass gained an attempt ceiling — re-check this finding').not.toMatch(/attempt\s*<\s*.*max_attempts/);
