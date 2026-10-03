@@ -68,7 +68,7 @@ do $$ begin
     raise exception 'BREACH: direct roster mutated through leave';
   exception when insufficient_privilege then null; end;
   begin
-    perform public.leave_family_conversation('00000000-0000-4000-8000-0000000047c3');
+    perform public.leave_family_conversation(public.ensure_family_conversation('00000000-0000-4000-8000-0000000047f1'));
     raise exception 'BREACH: canonical membership mutated through leave';
   exception when insufficient_privilege then null; end;
 end $$;

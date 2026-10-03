@@ -12,18 +12,10 @@ create unique index if not exists family_message_operation_once
 create index if not exists family_messages_history_cursor
   on public.family_messages(conversation_id, created_at desc, id desc) where deleted_at is null;
 
--- Adopt an existing household-wide group only, never an arbitrary subgroup.
-with candidates as (
-  select c.id, row_number() over (partition by c.family_id order by c.created_at, c.id) as rank
-  from public.family_conversations c where c.kind = 'group' and not c.is_archived and not c.is_family_chat
-    and not exists (select 1 from public.family_conversations f where f.family_id = c.family_id and f.is_family_chat)
-    and ((cardinality(c.participant_ids) = 0 and cardinality(c.member_ids) = 0 and lower(c.name) in ('family', 'family chat'))
-      or (exists (select 1 from public.family_members m where m.family_id = c.family_id and m.is_active)
-        and not exists (select 1 from public.family_members m where m.family_id = c.family_id and m.is_active
-          and not ((cardinality(c.participant_ids) > 0 and m.id = any(c.participant_ids))
-            or (cardinality(c.participant_ids) = 0 and m.user_id is not null and m.user_id = any(c.member_ids))))))
-)
-update public.family_conversations c set is_family_chat = true from candidates x where x.id = c.id and x.rank = 1;
+-- Legacy names and current rosters do not authorize exposing old history to
+-- future household members. Preserve every existing conversation and its
+-- participant scope. The normal ensure_family_conversation RPC creates a new,
+-- empty canonical chat; an explicitly flagged canonical chat survives reapply.
 
 create or replace function messaging_private.can_access_conversation(p_id uuid)
 returns boolean language sql stable security definer set search_path = '' as $$

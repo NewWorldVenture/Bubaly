@@ -83,6 +83,7 @@ try {
   ];
   for (const name of migrations) file(`supabase/migrations/${name}`);
   file('docs/audit/messaging-legacy-fixture.sql');
+  file('docs/audit/messaging-canonical-history-fixture.sql');
   file('supabase/migrations/0475_messaging_conversation_privacy_and_delivery.sql');
   file('supabase/migrations/0476_messaging_notifications_preferences.sql');
   // Replaying older migrations must retain policies installed by newer ones.
@@ -101,6 +102,7 @@ try {
   file('supabase/migrations/0475_messaging_conversation_privacy_and_delivery.sql');
   file('supabase/migrations/0476_messaging_notifications_preferences.sql');
   console.log('PASS: both messaging migrations apply again to the existing schema.');
+  console.log(file('docs/audit/messaging-canonical-history.probe.sql').trim());
   const result = file('docs/audit/messaging-participant-boundaries.probe.sql');
   console.log(result.trim());
   console.log(file('docs/audit/messaging-notification.probe.sql').trim());
