@@ -4,7 +4,7 @@ on:
   pull_request:
     paths:
       - '.github/workflows/meal-plan-atomic-write-runtime.yml'
-      - 'supabase/migrations/0475_meal_plan_slot_writes_are_atomic.sql'
+      - 'supabase/migrations/0478_meal_plan_slot_writes_are_atomic.sql'
       - 'tests/fixtures/0475-meal-plan-*'
       - 'lib/services/meals/**'
       - 'app/(app)/dashboard/meals/actions.ts'
@@ -58,17 +58,25 @@ jobs:
               --set=VERBOSITY=terse --set=SHOW_CONTEXT=never
           }
           pg < tests/fixtures/0475-meal-plan-bootstrap.sql
-          pg < supabase/migrations/0475_meal_plan_slot_writes_are_atomic.sql
+          pg < supabase/migrations/0478_meal_plan_slot_writes_are_atomic.sql
 
       - name: Reapply actual migration on the same synthetic database
         shell: bash
         run: |
           set -euo pipefail
+          docker exec "$MEAL_PLAN_ATOMIC_CONTAINER" psql -X --quiet \
+            --no-password --host=/var/run/postgresql --username=postgres \
+            --dbname=bubaly_meal_plan_atomic_ci --set=ON_ERROR_STOP=1 \
+            --command='create policy synthetic_receipt_leak on public.meal_plan_write_receipts for all to authenticated using (true) with check (true)'
           docker exec -i "$MEAL_PLAN_ATOMIC_CONTAINER" psql -X --quiet --output=/dev/null \
             --file=- --no-password --host=/var/run/postgresql --username=postgres \
             --dbname=bubaly_meal_plan_atomic_ci --set=ON_ERROR_STOP=1 \
             --set=VERBOSITY=terse --set=SHOW_CONTEXT=never \
-            < supabase/migrations/0475_meal_plan_slot_writes_are_atomic.sql
+            < supabase/migrations/0478_meal_plan_slot_writes_are_atomic.sql
+          docker exec "$MEAL_PLAN_ATOMIC_CONTAINER" psql -X --quiet \
+            --no-password --host=/var/run/postgresql --username=postgres \
+            --dbname=bubaly_meal_plan_atomic_ci --set=ON_ERROR_STOP=1 \
+            --command="do \$\$ begin if exists (select 1 from pg_catalog.pg_policy where polrelid = 'public.meal_plan_write_receipts'::regclass) then raise exception 'receipt RLS policy survived migration replay'; end if; end \$\$"
 
       - name: Verify rollback, authorization, receipts and legacy duplicate handling
         shell: bash
@@ -102,7 +110,7 @@ jobs:
             --file=- --no-password --host=/var/run/postgresql --username=postgres \
             --dbname=bubaly_meal_plan_atomic_ci --set=ON_ERROR_STOP=1 \
             --set=VERBOSITY=terse --set=SHOW_CONTEXT=never \
-            < supabase/migrations/0475_meal_plan_slot_writes_are_atomic.sql \
+            < supabase/migrations/0478_meal_plan_slot_writes_are_atomic.sql \
             > incompatible-replay.log 2>&1; then
             echo 'Migration unexpectedly accepted an incompatible receipt table' >&2
             exit 1

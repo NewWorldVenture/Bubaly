@@ -20,6 +20,7 @@ declare
   v_columns text[];
   v_primary_key text[];
   v_constraints text[];
+  v_policy name;
 begin
   select array_agg(
     a.attnum::text || ':' || a.attname || ':' || pg_catalog.format_type(a.atttypid, a.atttypmod) || ':' || a.attnotnull::text
@@ -83,12 +84,14 @@ begin
     raise exception 'meal_plan_write_receipts has incompatible constraints';
   end if;
 
-  if exists (
-    select 1 from pg_catalog.pg_policy p
+  -- This is an RPC-only private receipt table. Remove any generic family CRUD
+  -- policies carried forward by an existing schema before reasserting RLS.
+  for v_policy in
+    select p.polname from pg_catalog.pg_policy p
     where p.polrelid = 'public.meal_plan_write_receipts'::regclass
-  ) then
-    raise exception 'meal_plan_write_receipts must not have row-level security policies';
-  end if;
+  loop
+    execute format('drop policy %I on public.meal_plan_write_receipts', v_policy);
+  end loop;
 end;
 $$;
 
