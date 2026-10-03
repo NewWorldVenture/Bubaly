@@ -20,7 +20,7 @@ import { SyncApiError } from '@/lib/sync/adapter';
 import { eventContentHash, reminderContentHash } from '@/lib/sync/hash';
 import { readBoundedResponseJson, readBoundedResponseText } from '@/lib/server/bounded-response-body';
 import { fetchWithDeadline } from '@/lib/server/fetch-with-deadline';
-import { graphRecurrenceToRrule, type GraphRecurrence } from '@/lib/sync/providers/graph-recurrence';
+import { graphRecurrenceToRrule, rruleToGraphRecurrence, type GraphRecurrence } from '@/lib/sync/providers/graph-recurrence';
 
 const TENANT = process.env.MICROSOFT_SYNC_TENANT || 'common';
 const AUTHORITY = `https://login.microsoftonline.com/${TENANT}/oauth2/v2.0`;
@@ -383,6 +383,13 @@ export function rowToMsEvent(row: LocalEventRow): Record<string, unknown> {
   } else {
     body.start = { dateTime: new Date(row.starts_at).toISOString().replace('Z', ''), timeZone: 'UTC' };
     body.end = { dateTime: new Date(row.ends_at ?? row.starts_at).toISOString().replace('Z', ''), timeZone: 'UTC' };
+  }
+  if (row.recurrence_rule) {
+    // A series goes to Outlook as a series. A rule Graph cannot say leaves the
+    // body without recurrence, as every push did before, rather than a
+    // different series.
+    const recurrence = rruleToGraphRecurrence(row.recurrence_rule, { startsAt: row.starts_at, allDay: row.all_day === true });
+    if (recurrence) body.recurrence = recurrence;
   }
   return body;
 }
