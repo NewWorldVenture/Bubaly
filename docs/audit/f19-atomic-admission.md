@@ -127,6 +127,65 @@ Against the pre-change code they fail with:
 - **Super-administrators** bypass the allowance in `assertAIAccess`, but
   `withAiRequest` cannot see the caller's email. A super-admin acting in a Free family
   past 10/10 is therefore refused at admission.
-- **The concierge intake** (`lib/ai/runs/intake.ts`) calls `createRequest` directly
-  after `assertAIAccess`. It does not yet pass `allowance`, so it is still
-  check-then-insert.
+- **Keyed retry of the 10th request through a gate:** `/api/ai/requests`, the
+  concierge form action and the inbox action run `assertAIAccess` before the intake.
+  At 10/10 the gate answers 429 before the intake can replay a keyed retry of the
+  request that made it 10. Nothing is filed or planned twice, but the retry is
+  refused instead of replayed. This ordering predates F19, and fixing it needs a
+  change to the gate or to the callers. The intake itself replays correctly at 10/10.
+
+## Closed: the concierge intake (Ask Bubaly)
+
+`submitRequest` in `lib/ai/runs/intake.ts` is used by `POST /api/ai/requests`, the
+concierge form action, the inbox action and inbound contact-center routing. It used
+to file its `kind: 'concierge'` row with a plain insert on the member's client after
+the caller's `assertAIAccess` count. That was check-then-insert, so two submissions
+at 9/10 both filed and both were planned.
+
+- **Plan:** the intake reads the plan once with `resolveFamilyPlanLevel` +
+  `monthlyAllowanceFor`, the same read and table as `withAiRequest`. There is no
+  TypeScript date math, because the window is the function's own.
+- **Capped plan:** the row goes through `createRequest(..., { allowance })`, which
+  calls `admitRequest` on the intake's ledger client (`admit_ai_request` is
+  service-role only). The requester comes from `scope.userId`/`scope.memberId`, as
+  before. 0477 already takes everything the intake writes at filing: `kind`
+  'concierge', `conversation_id`, `request_text`, `client_request_id`, a null
+  `feature`, `status` 'queued' and priority 0. The intent is written after filing,
+  as before.
+- **Refusal:** a refused admission returns `IntakeAllowanceRefusal`. This has the
+  same shape as `assertAIAccess`'s denial: status 429, `code: 'allowance_exceeded'`,
+  `limit`, and the same English text. Nothing is classified or planned.
+  `/api/ai/requests` answers it with `accessDeniedResponse(refusal, t)`, so the
+  response is localized (`ai.yourFamilyUsedItsMonthlyAllowance`). The server actions
+  pass `error`/`code` through exactly as they do for the gate's denial.
+- **Keyed retry:** the function answers `existing` before checking the allowance, so
+  the intake's replay path runs even at 10/10.
+- **Unlimited plan:** the row is a plain insert on the member's client, as before
+  (RLS proves the requester). There is no rpc call.
+- **Plan unreadable:** the row is filed plainly (`withAiRequest`'s rule). A failed
+  filing returns before anything is planned.
+- **0477 missing:** the admission fails, the intake returns that failure, and nothing
+  is filed or planned. The call is refused, never filed unmetered.
+
+**Evidence.** `tests/f19-intake-admission-is-atomic.test.ts` (8 tests) drives the real
+intake, store and route over one in-memory database. The member and ledger clients
+are two views of that database, and `admit_ai_request` is emulated by
+`tests/helpers/admit-ai-request.ts`. A barrier holds route racers after the gate's
+count, which makes the race deterministic.
+
+Against the pre-change intake and route, 6 of the 8 tests fail:
+- Two direct submissions at 9/10 leave 11 rows instead of 10.
+- Two POSTs give `[202, 202]` instead of `[202, 429]`.
+- Eight POSTs give eight 202s instead of one.
+- The "0477 missing" case is filed anyway.
+- No admission is made, so the requester and column checks find no rpc call.
+
+After the change, all 8 pass.
+
+Local SQL, on a disposable family seeded with 9 rows: 8 concurrent
+`admit_ai_request(..., 'concierge', ...)` calls were made as `service_role`, each
+held 0.3 s before commit.
+- Result: 1 `admitted:10` and 7 `refused:10`, for exactly 10 rows, all concierge.
+- A retry under the admitted key at 10/10 answered `existing`.
+- A new key at 10/10 answered `refused:10`.
+- The family was deleted afterwards. 0 rows remain.

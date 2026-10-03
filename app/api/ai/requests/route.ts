@@ -20,7 +20,7 @@ import { NextRequest, NextResponse } from 'next/server';
 import { getTranslations } from '@/lib/i18n/server';
 import { isAIConfigured } from '@/lib/ai/provider';
 import { parseAIRequestIntake } from '@/lib/ai/chat-request';
-import { statusForServiceCode, submitRequest } from '@/lib/ai/runs/intake';
+import { isAllowanceRefusal, statusForServiceCode, submitRequest } from '@/lib/ai/runs/intake';
 import { accessDeniedResponse, assertAIAccess, authenticateAI } from '@/lib/server/ai-access';
 import { enforceAIRateLimit } from '@/lib/server/ai-rate-limit';
 import { MAX_SMALL_JSON_BYTES, readBoundedRequestJson } from '@/lib/server/bounded-request-body';
@@ -73,6 +73,9 @@ export async function POST(req: NextRequest) {
 
     const scope = scopeFromUserContext(ctx, supabase);
     const result = await submitRequest(scope, parsed.value, { startedAtMs: startedAt });
+    // At the allowance (F19): admitted atomically and refused. Answered exactly
+    // like the gate's own allowance denial above, in the reader's language.
+    if (isAllowanceRefusal(result)) return accessDeniedResponse(result, t);
     if (!result.ok) {
       return NextResponse.json({ error: result.error, code: result.code ?? 'request_failed' }, { status: statusForServiceCode(result.code, result.retryable) });
     }
