@@ -355,3 +355,23 @@ nothing to diagnose.
 **Evidence.** `tests/contact-center-concierge-is-recorded.test.ts` has 6 tests.
 Against the old source 5 fail: the 4 recording cases plus the coverage ceiling.
 The controls (no `record`; not configured or aborted) pass either way.
+
+## Hosted proof: the boundary probe
+
+`docs/audit/an-ai-request-is-admitted-under-the-allowance-check.sql` runs 0477's
+real function in CI's Database job. That job replays every migration into a real
+Postgres and runs every `*-check.sql` probe under `ON_ERROR_STOP`. The probe
+asserts eight things in one transaction that rolls back:
+- at 9 of 10 the request is admitted, reporting 10 used;
+- at 10 of 10, keyed or not, it is refused and nothing is filed;
+- 5 unmetered rows are not counted. The negative control flips those same rows to
+  metered and requires a refusal;
+- rows from last month fall outside the window;
+- a retry key at the cap answers `existing` with the first row's id;
+- an insert that says nothing about `metered` is metered;
+- `anon` and `authenticated` cannot execute the function, and `service_role` can.
+
+Locally, against a mutant of the function without `and r.metered`, the probe
+fails four assertions by name. Against the real function it passes. Concurrency
+needs several sessions, so it stays with the local multi-session script above;
+the probe proves the decision each session makes.
