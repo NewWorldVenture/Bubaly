@@ -1,6 +1,7 @@
 import { readFileSync, readdirSync, statSync } from 'node:fs';
 import { join } from 'node:path';
 import { describe, expect, it } from 'vitest';
+import { StorageClient } from '@supabase/storage-js';
 import { removeFamilyDocument } from '@/lib/storage/documents';
 import { removeConfirmed, type RemovableBucket } from '@/lib/storage/confirm-removal';
 import type { SupabaseBrowser } from '@/lib/supabase/types';
@@ -56,6 +57,73 @@ function client(remove: RemoveResult, list: ListResult, seen?: { listedFolder?: 
 
 const KEY = 'fam-1/legal/1790000000000-Will.pdf';
 const NAME = '1790000000000-Will.pdf';
+
+// Exercise the installed SDK's JSON decoding with an explicit synthetic fetch.
+// No provider request, Auth/RLS decision or database mutation is executed.
+function sdkBucket(removed: unknown, listed: unknown, listStatus = 200) {
+  const calls: { method: string; path: string }[] = [];
+  const storage = new StorageClient('https://synthetic.invalid/storage/v1', {}, async (input, init) => {
+    const url = new URL(String(input));
+    const method = init?.method ?? 'GET';
+    calls.push({ method, path: url.pathname });
+    if (method === 'DELETE') {
+      expect(url.pathname).toBe('/storage/v1/object/documents');
+      expect(JSON.parse(String(init?.body))).toEqual({ prefixes: [KEY] });
+      return new Response(JSON.stringify(removed), { status: 200, headers: { 'Content-Type': 'application/json' } });
+    }
+    expect(method).toBe('POST');
+    expect(url.pathname).toBe('/storage/v1/object/list/documents');
+    expect(JSON.parse(String(init?.body))).toMatchObject({ prefix: 'fam-1/legal', search: NAME, limit: 100 });
+    return new Response(JSON.stringify(listed), { status: listStatus, headers: { 'Content-Type': 'application/json' } });
+  });
+  return { bucket: storage.from('documents'), calls };
+}
+
+describe('storage absence confirmation validates SDK response data', () => {
+  it.each([
+    { label: 'null', data: null },
+    { label: 'object', data: {} },
+    { label: 'string', data: 'not a listing' },
+    { label: 'null entry', data: [null] },
+    { label: 'missing name', data: [{}] },
+    { label: 'non-string name', data: [{ name: 42 }] },
+  ])('refuses a successful but malformed $label listing', async ({ data }) => {
+    const { bucket, calls } = sdkBucket([], data);
+    expect((await removeConfirmed(bucket, KEY)).error).toBeTruthy();
+    expect(calls).toHaveLength(2);
+  });
+
+  it('refuses null removal and listing data without throwing or confirming absence', async () => {
+    const { bucket, calls } = sdkBucket(null, null);
+    expect((await removeConfirmed(bucket, KEY)).error).toBeTruthy();
+    expect(calls).toHaveLength(2);
+  });
+
+  it('retains explicit removal proof without requesting a listing', async () => {
+    const { bucket, calls } = sdkBucket([{ name: KEY }], null);
+    expect(await removeConfirmed(bucket, KEY)).toEqual({ error: null });
+    expect(calls).toHaveLength(1);
+  });
+
+  it.each([
+    { label: 'empty', data: [] },
+    { label: 'neighboring', data: [{ name: `${NAME}.bak` }] },
+  ])('accepts a valid $label listing that confirms exact-name absence', async ({ data }) => {
+    const { bucket, calls } = sdkBucket([], data);
+    expect(await removeConfirmed(bucket, KEY)).toEqual({ error: null });
+    expect(calls).toHaveLength(2);
+  });
+
+  it('retains refusal when the SDK lists the surviving exact name', async () => {
+    const { bucket } = sdkBucket([], [{ name: NAME }]);
+    expect((await removeConfirmed(bucket, KEY)).error).toBeTruthy();
+  });
+
+  it('retains a provider error instead of treating it as absence', async () => {
+    const { bucket } = sdkBucket([], { message: 'Synthetic forbidden', statusCode: '403' }, 403);
+    expect((await removeConfirmed(bucket, KEY)).error).toBeTruthy();
+  });
+});
 
 describe('a deleted row does not unlock a file (SEC-015)', () => {
   it('confirms a removal that actually happened', async () => {
@@ -152,7 +220,8 @@ describe('a deleted row does not unlock a file (SEC-015)', () => {
         if (entry === 'node_modules' || entry === '.next' || entry.startsWith('.')) continue;
         const full = join(dir, entry);
         if (statSync(full).isDirectory()) walk(full);
-        else if (/\.tsx?$/.test(entry)) files.push(full);
+        // Inventory keys are repository paths on every host, including Windows.
+        else if (/\.tsx?$/.test(entry)) files.push(full.replaceAll('\\', '/'));
       }
     };
     for (const root of ['app', 'components', 'lib']) walk(root);
