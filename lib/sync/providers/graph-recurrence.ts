@@ -18,7 +18,7 @@
 // own start zone, then to UTC, so the series still ends on the right date for
 // every zone within a few hours of UTC and the limit is stated rather than
 // hidden.
-import { instantForLocalTime, isValidTimezone } from '@/lib/time/zoned';
+import { instantForLocalTime, isValidTimezone, localPartsAt } from '@/lib/time/zoned';
 
 export type GraphRecurrence = {
   pattern?: {
@@ -161,4 +161,130 @@ export function graphRecurrenceToRrule(
     }
   }
   return parts.join(';');
+}
+
+const DAY_NAME: Record<string, string> = {
+  SU: 'sunday', MO: 'monday', TU: 'tuesday', WE: 'wednesday', TH: 'thursday', FR: 'friday', SA: 'saturday',
+};
+const INDEX_NAME: Record<number, string> = { 1: 'first', 2: 'second', 3: 'third', 4: 'fourth', [-1]: 'last' };
+const WEEKDAYS = ['sunday', 'monday', 'tuesday', 'wednesday', 'thursday', 'friday', 'saturday'];
+const pad = (n: number) => String(n).padStart(2, '0');
+
+/** The Graph shape of a series, for an event request body. */
+export type GraphPatternedRecurrence = {
+  pattern: Record<string, unknown>;
+  range: { type: 'noEnd' | 'numbered' | 'endDate'; startDate: string; endDate?: string; numberOfOccurrences?: number };
+};
+
+/**
+ * The inverse: an RRULE from a locally-owned series, as Graph's
+ * `patternedRecurrence` for the body `rowToMsEvent` sends. Until this, the push
+ * side sent no recurrence at all, so a weekly lesson created in Bubaly reached
+ * Outlook as a single event.
+ *
+ * Dates in the range are read the way the body's `start` is written: a timed
+ * row is sent as a UTC instant, and an all-day row stores its date as UTC
+ * midnight and is sent as that date, so both read in UTC. UNTIL on a timed
+ * series is an instant; the end DATE is the date of the last occurrence at or
+ * before it, so `UNTIL=20261001T035959Z` on a 19:00Z series ends on 30
+ * September, not 1 October. A rule Graph cannot say (hourly, several month
+ * days, an ordinal it has no word for) yields null and the body carries no
+ * recurrence, as before, rather than a different series.
+ */
+export function rruleToGraphRecurrence(
+  rrule: string,
+  opts: { startsAt: string; allDay: boolean },
+): GraphPatternedRecurrence | null {
+  const parts = new Map<string, string>();
+  for (const piece of rrule.split(';')) {
+    const [key, value] = piece.split('=');
+    if (key && value) parts.set(key.trim().toUpperCase(), value.trim());
+  }
+  const freq = parts.get('FREQ');
+  if (!freq) return null;
+  const start = new Date(opts.startsAt);
+  if (Number.isNaN(start.getTime())) return null;
+  const zone = 'Etc/UTC';
+  const sp = localPartsAt(start, zone);
+  const startDate = `${sp.year}-${pad(sp.month)}-${pad(sp.day)}`;
+
+  const interval = Math.max(1, Math.floor(Number(parts.get('INTERVAL') ?? '1')) || 1);
+  const byday = (parts.get('BYDAY') ?? '').split(',').map((d) => d.trim()).filter(Boolean);
+  const dayCodes = byday.map((d) => d.replace(/^[+-]?\d+/, ''));
+  const daysOfWeek = dayCodes.map((d) => DAY_NAME[d]).filter(Boolean);
+  if (daysOfWeek.length !== dayCodes.length) return null;
+  const ordinals = [...new Set(byday.map((d) => d.match(/^([+-]?\d+)/)?.[1]).filter((o): o is string => !!o).map(Number))];
+  if (ordinals.length > 1) return null;
+  const setPos = parts.has('BYSETPOS') ? Number(parts.get('BYSETPOS')) : ordinals[0];
+  const index = setPos === undefined ? undefined : INDEX_NAME[setPos];
+  const single = (key: string): number | null | undefined => {
+    const raw = parts.get(key);
+    if (raw === undefined) return undefined;
+    if (raw.includes(',')) return null;
+    const n = Number(raw);
+    return Number.isInteger(n) && n > 0 ? n : null;
+  };
+  const monthDay = single('BYMONTHDAY');
+  const month = single('BYMONTH');
+  if (monthDay === null || month === null) return null;
+
+  let pattern: Record<string, unknown>;
+  switch (freq) {
+    case 'DAILY':
+      pattern = { type: 'daily', interval };
+      break;
+    case 'WEEKLY':
+      pattern = {
+        type: 'weekly', interval,
+        daysOfWeek: daysOfWeek.length ? daysOfWeek : [WEEKDAYS[new Date(Date.UTC(sp.year, sp.month - 1, sp.day)).getUTCDay()]],
+        firstDayOfWeek: DAY_NAME[parts.get('WKST') ?? 'SU'] ?? 'sunday',
+      };
+      break;
+    case 'MONTHLY':
+      if (daysOfWeek.length) {
+        if (!index) return null;
+        pattern = { type: 'relativeMonthly', interval, daysOfWeek, index };
+      } else {
+        pattern = { type: 'absoluteMonthly', interval, dayOfMonth: monthDay ?? sp.day };
+      }
+      break;
+    case 'YEARLY':
+      if (daysOfWeek.length) {
+        if (!index) return null;
+        pattern = { type: 'relativeYearly', interval, month: month ?? sp.month, daysOfWeek, index };
+      } else {
+        pattern = { type: 'absoluteYearly', interval, month: month ?? sp.month, dayOfMonth: monthDay ?? sp.day };
+      }
+      break;
+    default:
+      return null;
+  }
+
+  const count = parts.get('COUNT');
+  const until = parts.get('UNTIL');
+  if (count) {
+    const n = Number(count);
+    if (!Number.isInteger(n) || n < 1) return null;
+    return { pattern, range: { type: 'numbered', startDate, numberOfOccurrences: n } };
+  }
+  if (until) {
+    const m = until.match(/^(\d{4})(\d{2})(\d{2})(?:T(\d{2})(\d{2})(\d{2})(Z?))?$/);
+    if (!m) return null;
+    let endDate: string;
+    if (!m[4]) {
+      endDate = `${m[1]}-${m[2]}-${m[3]}`;
+    } else {
+      // The last occurrence at or before the instant: on UNTIL's own date when
+      // the series' time of day has already come by then, else the day before.
+      const untilInstant = new Date(Date.UTC(Number(m[1]), Number(m[2]) - 1, Number(m[3]), Number(m[4]), Number(m[5]), Number(m[6])));
+      const up = localPartsAt(untilInstant, zone);
+      const startSeconds = sp.hour * 3600 + sp.minute * 60 + start.getUTCSeconds();
+      const untilSeconds = up.hour * 3600 + up.minute * 60 + untilInstant.getUTCSeconds();
+      const day = new Date(Date.UTC(up.year, up.month - 1, up.day));
+      if (untilSeconds < startSeconds) day.setUTCDate(day.getUTCDate() - 1);
+      endDate = day.toISOString().slice(0, 10);
+    }
+    return { pattern, range: { type: 'endDate', startDate, endDate } };
+  }
+  return { pattern, range: { type: 'noEnd', startDate } };
 }
