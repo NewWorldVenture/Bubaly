@@ -251,6 +251,7 @@ export async function POST(req: NextRequest) {
       familyName: ctx.active.family.name, tz, conversationId, message,
       clientRequestId: turnKey.key, alreadyAnswering: tr('ai.thisMessageIsAlreadyBeingAnswered'),
       notRecorded: tr('ai.accountContextIsTemporarilyUnavailable'),
+      overAllowance: (limit: number) => tr('ai.yourFamilyUsedItsMonthlyAllowance', { limit }),
     };
     const prepared = await prepareAssistantTurn(input);
     if (!prepared.ok) return NextResponse.json({ error: prepared.error }, { status: 500 });

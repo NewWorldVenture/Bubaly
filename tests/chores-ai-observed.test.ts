@@ -17,9 +17,10 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 // when it cannot be filed. This file is about other behaviour and its fake
 // database files no row, so the family is on Basic, whose allowance is
 // unlimited: an unfiled request is bookkeeping there, as it always was.
+const plan = vi.hoisted(() => ({ level: 1 }));
 vi.mock('@/lib/server/plan', async (importOriginal) => ({
   ...(await importOriginal<typeof import('@/lib/server/plan')>()),
-  resolveFamilyPlanLevel: async () => 1,
+  resolveFamilyPlanLevel: async () => plan.level,
 }));
 
 const mocks = vi.hoisted(() => ({ getProvider: vi.fn(), complete: vi.fn(), createRequest: vi.fn(), updateRequest: vi.fn(), recordModelCall: vi.fn() }));
@@ -48,6 +49,7 @@ function settledStatuses() { return mocks.updateRequest.mock.calls.map(([, , pat
 
 beforeEach(() => {
   vi.clearAllMocks();
+  plan.level = 1;
   process.env.OPENAI_API_KEY = 'test-key-not-a-real-secret';
   mocks.getProvider.mockReturnValue({ model: 'test-model', complete: mocks.complete });
   mocks.createRequest.mockResolvedValue({ ok: true, data: { id: 'req-1' } });
@@ -121,5 +123,20 @@ describe('bookkeeping never costs a child their verdict', () => {
     });
     const verdict = await validateChoreSubmission(scope, submission);
     expect(verdict.status).toBe('approved');
+  });
+});
+
+// Owner decision (#771): chore-proof validation is not charged against the
+// allowance. Since 0477 a capped plan's request is ADMITTED against its
+// allowance and refused at the cap; this surface is exempt, so a Free family
+// at 10 of 10 still gets a verdict rather than an automatic parent review.
+describe('chore-proof validation on a capped plan (F19, 0477)', () => {
+  it('is filed without an allowance to admit against, so the cap never refuses it', async () => {
+    plan.level = 0;
+    mocks.complete.mockResolvedValue({ text: JSON.stringify({ status: 'approved', confidence: 0.95, feedback: 'Great job!' }), usage: { promptTokens: 40, completionTokens: 6 } });
+    const verdict = await validateChoreSubmission(scope, submission);
+    expect(verdict.status).toBe('approved');
+    const filed = mocks.createRequest.mock.calls.map(([, input]) => input as { feature?: string; allowance?: number | null });
+    expect(filed).toEqual([expect.objectContaining({ feature: 'chores.validate', allowance: null })]);
   });
 });

@@ -108,7 +108,10 @@ export async function validateChoreSubmission(scope: ServiceScope, input: Valida
       scope,
       // The chore title, not the child's note: a kid's own words about what they
       // did are not something the request ledger needs to carry.
-      { feature: 'chores.validate', text: 'Validate a chore submission' },
+      // Not charged against the allowance (owner decision, #771): filed and
+      // counted like any request, but never refused at the cap — a child's
+      // proof falls to parent review only when the AI itself fails.
+      { feature: 'chores.validate', text: 'Validate a chore submission', exemptFromAllowance: true },
       async (obs) => {
         const provider = getProvider();
         const completion = await provider.complete({

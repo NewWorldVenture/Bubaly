@@ -4028,3 +4028,32 @@ access to equal the page's guest row: 8 findings before, 0 after.
 **After applying:** as a guest, open the calendar and try to add an event. It
 should be refused with the permission message. As a parent, add and delete one,
 which should succeed.
+
+## `0477` — two AI requests at the cap could both run (F19)
+
+`supabase/migrations/0477_ai_requests_admission_is_atomic.sql`
+
+**Severity: medium (a Free family's monthly AI allowance could be exceeded by
+parallel requests). Deploy order: migration first, or together.** Application
+code that reaches production before this migration **fails safe**: on a capped
+plan the missing function makes the request refuse as not recorded (the model
+does not run); unlimited plans are unaffected.
+
+The allowance counted a family's `ai_requests` rows for the month, and every
+metered route checked that count before filing its own row, so requests sent
+together at 9 of 10 all passed the check. Measured on the local stack with 9
+rows seeded: 8 parallel requests left 17 rows, 16 left 25. 0477 adds
+`public.admit_ai_request(...)` (SECURITY DEFINER, `search_path` pinned,
+`service_role` only): it takes a per-family transaction advisory lock, counts
+the month exactly as the app's meter does, and inserts the row only under the
+allowance, returning `admitted`, `refused` or `existing` (a retry key already
+filed). The same experiments then leave exactly 10 rows (1 admitted, 7 or 15
+refused). Design, evidence and rollback: `docs/audit/f19-atomic-admission.md`.
+
+**Rollback:** `drop function if exists public.admit_ai_request(uuid, integer, text, text, uuid, uuid, uuid, text, text, text, smallint, text, timestamptz);` together with
+reverting the application change; with only the function dropped, capped plans
+refuse as not recorded until the code is reverted.
+
+**After applying:** on a Free family with 9 requests this month, send two
+assistant messages at the same moment from two tabs. One is answered; the
+other shows the monthly allowance message. Paid families are unaffected.

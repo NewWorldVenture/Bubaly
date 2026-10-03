@@ -17,7 +17,7 @@ import 'server-only';
 import type { SupabaseClient } from '@supabase/supabase-js';
 import type { Database } from '@/lib/database.types';
 import { resolveProvider, describeAIError, type AIMessage, type AIProvider, type ToolSpec } from '@/lib/ai/provider';
-import { AiRequestDuplicate, AiRequestNotFiled, withAiRequest } from '@/lib/ai/observability';
+import { AiRequestDuplicate, AiRequestNotFiled, AiRequestOverAllowance, withAiRequest } from '@/lib/ai/observability';
 import { assistantTurnRequestKey } from '@/lib/ai/assistant-turn-replay';
 import { buildAssistantTools } from '@/lib/assistant/tools';
 import { wrapToolsWithTrust } from '@/lib/assistant/trust-wrapper';
@@ -86,6 +86,8 @@ export type AssistantTurnInput = {
   alreadyAnswering?: string;
   /** What the stream says when the turn's request could not be recorded. */
   notRecorded?: string;
+  /** The monthly allowance refusal in the reader's language, given the cap. */
+  overAllowance?: (limit: number) => string;
 };
 
 export type ExecutedAssistantAction = { name: string; args: Record<string, unknown>; result: unknown };
@@ -616,10 +618,14 @@ export function createAssistantStream(input: AssistantTurnInput, prepared: Prepa
         // turn could not be recorded (keyed: an earlier attempt's outcome is
         // unknown). Either way this attempt ran nothing and counts nothing.
         if (!(err instanceof AiRequestDuplicate) && !(err instanceof AiRequestNotFiled)) throw err;
-        const error = err instanceof AiRequestDuplicate
-          ? input.alreadyAnswering ?? 'This message is already being answered.'
-          : input.notRecorded ?? 'This message could not be recorded. Try again.';
-        controller.enqueue(encoder.encode(`data: ${JSON.stringify({ type: 'error', error })}\n\n`));
+        // A refused admission (F19, 0477) is the monthly allowance, not an
+        // outage: it says so, with the code and the cap, as the JSON route does.
+        const event = err instanceof AiRequestOverAllowance
+          ? { type: 'error', error: input.overAllowance?.(err.allowance) ?? err.message, code: err.code, limit: err.allowance }
+          : { type: 'error', error: err instanceof AiRequestDuplicate
+            ? input.alreadyAnswering ?? 'This message is already being answered.'
+            : input.notRecorded ?? 'This message could not be recorded. Try again.' };
+        controller.enqueue(encoder.encode(`data: ${JSON.stringify(event)}\n\n`));
         controller.close();
       }
     },

@@ -500,7 +500,7 @@ describe('Supabase migration filename safety', () => {
     // makes a chat read receipt or reaction its reader's own (DB-RPC-M02).
     // 0464 makes an invited guest read-only on the eight household resources
     // /family/permissions shows them as read-only on (ROLE-M03).
-    expect(audit.nextVersion).toBe('0465');
+    expect(audit.nextVersion).toBe('0478');
   });
 
   it('flags a newly introduced collision instead of silently accepting it', () => {

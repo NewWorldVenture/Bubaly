@@ -664,6 +664,20 @@ describe('two NEW sends racing at 9 of 10 (F19, 0477)', () => {
     expect(tableOf('ai_requests')).toHaveLength(10);
   });
 
+  it('/api/ai stream: the refused send reports the allowance (code and limit), not an outage', async () => {
+    const { POST } = await import('@/app/api/ai/route');
+    seed(9);
+    const responses = await Promise.all([
+      POST(send({ key: 'send-0001-abcdef', json: false })),
+      POST(send({ key: 'send-0002-abcdef', message: 'And lunch?', json: false })),
+    ]);
+    const streams = await Promise.all(responses.map(async (r) => events(await r.text())));
+    const refusals = streams.flat().filter((e) => e.type === 'error');
+    expect(refusals).toEqual([{ type: 'error', error: 'ai.yourFamilyUsedItsMonthlyAllowance', code: 'allowance_exceeded', limit: 10 }]);
+    expect(state.providerCalls).toBe(1);
+    expect(tableOf('ai_requests')).toHaveLength(10);
+  });
+
   it('/api/ai/chat stream: the refused send reports the allowance and runs nothing', async () => {
     const { POST } = await import('@/app/api/ai/chat/route');
     seed(9);
