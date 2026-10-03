@@ -542,6 +542,25 @@ test.describe('an order claim that never settles', () => {
     expect((await read(page)).refreshes).toBe(1);
   });
 
+  test('preserves: a settled order\'s expiry does not touch a newer order on the same child (one re-read per answer)', async ({ page }) => {
+    await page.clock.install();
+    await server(page.context());
+    await fixture(page, 'tab-1');
+    await virtual(page).click();
+    await page.clock.fastForward(10_000);
+    await complete(page, 0, 'success');
+    expect((await read(page)).refreshes).toBe(1);
+    // A deliberate second order, still pending when the first one's expiry would have fired.
+    await page.clock.fastForward(10_000);
+    await virtual(page).click();
+    await page.clock.fastForward(45_000);
+    await settle(page);
+    await expect(virtual(page)).toBeDisabled();
+    expect((await read(page)).refreshes).toBe(1);
+    await complete(page, 1, 'success');
+    expect(await read(page)).toMatchObject({ successes: ['moneyCardsView.virtualCardCreated', 'moneyCardsView.virtualCardCreated'], refreshes: 2 });
+  });
+
   test('preserves: an answer that arrives after the claim expired is still presented once', async ({ page }) => {
     await page.clock.install();
     await server(page.context());
