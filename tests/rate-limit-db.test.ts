@@ -83,7 +83,7 @@ describe('durable rate-limit SDK response boundary', () => {
           headers: { 'content-type': 'application/json' },
         });
       };
-      const db = createClient('https://rpc-fixture.invalid', 'synthetic-public-key', {
+      const db = createClient('https://rpc-fixture.invalid', 'synthetic-public-key', {accessToken:async()=>null,
         global: { fetch: transport },
         auth: { persistSession: false, autoRefreshToken: false, detectSessionInUrl: false },
       });

@@ -13,7 +13,7 @@ let scope: ServiceScope;
 let transportAssertionErrors: unknown[];
 beforeEach(()=>{
  rows=[];mode='healthy';receipts=[];transportAssertionErrors=[];activity.mockReset();activity.mockResolvedValue(undefined);
- const db=createClient('https://synthetic-grocery-reference.invalid','synthetic-not-a-secret',{
+ const db=createClient('https://synthetic-grocery-reference.invalid','synthetic-not-a-secret',{accessToken:async()=>null,
   auth:{persistSession:false,autoRefreshToken:false,detectSessionInUrl:false},
   global:{fetch:async(input,init)=>{
    try {

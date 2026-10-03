@@ -22,14 +22,22 @@ beforeEach(()=>{
  rows=[];receipts=[];mode='healthy';winnerPatch={};vi.clearAllMocks();m.activity.mockResolvedValue(undefined);
  m.context.mockResolvedValue({user:{id:user},active:{familyId:family,role:'parent',member:{id:member},family:{timezone:'UTC'}}});
  const db=createClient('https://synthetic-reminder-receipt.invalid','synthetic-not-a-secret',{
+ accessToken:async()=>null,
  auth:{persistSession:false,autoRefreshToken:false,detectSessionInUrl:false},
  global:{fetch:async(input,init)=>{
   const url=new URL(String(input));expect(url.origin).toBe('https://synthetic-reminder-receipt.invalid');
-  const table=url.pathname.slice('/rest/v1/'.length);expect(url.pathname).toBe('/rest/v1/'+table);expect(table).toBe('family_reminders');
+  const table=url.pathname.slice('/rest/v1/'.length);expect(url.pathname).toBe('/rest/v1/'+table);expect(['family_reminders','family_members']).toContain(table);
   const method=String(init?.method);expect(['GET','POST']).toContain(method);
   const payload=init?.body ? JSON.parse(String(init.body)) as Record<string,unknown> : undefined;
   receipts.push({method,table,payload});expect(receipts.length).toBeLessThanOrEqual(4);
   const reply=(body:unknown,status=200)=>new Response(JSON.stringify(body),{status,headers:{'content-type':'application/json'}});
+  if(table==='family_members'){
+   expect(method).toBe('GET');expect(url.searchParams.get('select')).toBe('id,family_id');expect(url.searchParams.get('limit')).toBe('1');
+   expect(url.searchParams.get('family_id')).toBe('eq.'+family);
+   const requested=url.searchParams.get('id');
+   expect([member,differentMember].map(id=>'eq.'+id)).toContain(requested?.toLowerCase());
+   const id=requested!.slice(3).toLowerCase();return reply([{id,family_id:family}]);
+  }
   if(method==='GET'){
    expect(table).toBe('family_reminders');expect(url.searchParams.get('family_id')).toBe('eq.'+family);expect(url.searchParams.get('limit')).toBe('1');
    const key=url.searchParams.get('idempotency_key');expect(key).toMatch(/^eq\.[a-f0-9]{64}$/);
@@ -188,13 +196,13 @@ it.each(['identical','changed'] as const)('losing insert re-probe compares the %
   if(variant==='changed')expect(result).toMatchObject({ok:false,code:'already_saved'});
   else expect(result).toMatchObject({ok:true,data:{id:'race-winner',notes:serviceOriginal.notes}});
   expect(rows).toHaveLength(1);expect(writes()).toHaveLength(1);expect(audits()).toHaveLength(0);
-  expect(receipts.map(r=>r.method)).toEqual(['GET','POST','GET']);
+  expect(receipts.filter(r=>r.table==='family_reminders').map(r=>r.method)).toEqual(['GET','POST','GET']);
 });
 it.each(['write-error','post-transport'] as const)('a genuine %s with no winner remains a database failure',async failure=>{
   const scope=await directScope();mode=failure;
   expect(await createReminder(scope,serviceOriginal,{rejectChangedRetry:true})).toMatchObject({ok:false,code:'db'});
   expect(rows).toHaveLength(0);expect(writes()).toHaveLength(1);expect(audits()).toHaveLength(0);
-  expect(receipts.map(r=>r.method)).toEqual(['GET','POST','GET']);
+  expect(receipts.filter(r=>r.table==='family_reminders').map(r=>r.method)).toEqual(['GET','POST','GET']);
 });
 it('a transport-refused initial read cannot fall through to a save',async()=>{
   const scope=await directScope();mode='read-transport';

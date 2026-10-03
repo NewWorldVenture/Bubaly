@@ -12,7 +12,7 @@ const title='Packs their school bag';
 let rows:any[],requests:any[],mode:string;
 beforeEach(()=>{rows=[];requests=[];mode='healthy';state.role='parent';state.audits=[];state.serverCalls=0;
  const roster=[{id:ownMember,family_id:family},{id:foreignMember,family_id:foreignFamily}];
- state.db=createClient('https://synthetic-independence.invalid','synthetic-not-a-secret',{auth:{persistSession:false,autoRefreshToken:false,detectSessionInUrl:false},global:{fetch:async(input:any,init:any)=>{
+ state.db=createClient('https://synthetic-independence.invalid','synthetic-not-a-secret',{accessToken:async()=>null,auth:{persistSession:false,autoRefreshToken:false,detectSessionInUrl:false},global:{fetch:async(input:any,init:any)=>{
   const u=new URL(String(input));expect(u.origin).toBe('https://synthetic-independence.invalid');const table=u.pathname.split('/').pop(),method=init.method||'GET',body=init.body?JSON.parse(init.body):null;
   requests.push({table,method,body,query:Object.fromEntries(u.searchParams),prefer:new Headers(init.headers).get('prefer')});
   const reply=(data:any,status=200)=>new Response(JSON.stringify(data),{status,headers:{'content-type':'application/json'}});

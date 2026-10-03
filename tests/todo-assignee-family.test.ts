@@ -13,7 +13,7 @@ const scope=()=>({db:state.db,familyId:family,userId:user,memberId:member,role:'
 let rows:any[],requests:any[],mode:string;
 beforeEach(()=>{
  rows=[{id:ownTask,family_id:family,title:'Synthetic kit task',assigned_to_id:member,is_done:false},{id:foreignTask,family_id:foreignFamily,title:'Synthetic foreign task',assigned_to_id:foreignMember,is_done:false}];requests=[];mode='healthy';state.revalidated=[];state.activity=[];
- state.db=createClient('https://synthetic-todo-family.invalid','synthetic-not-a-secret',{auth:{persistSession:false,autoRefreshToken:false,detectSessionInUrl:false},global:{fetch:async(input:any,init:any)=>{
+ state.db=createClient('https://synthetic-todo-family.invalid','synthetic-not-a-secret',{accessToken:async()=>null,auth:{persistSession:false,autoRefreshToken:false,detectSessionInUrl:false},global:{fetch:async(input:any,init:any)=>{
   const u=new URL(String(input));if(u.origin!=='https://synthetic-todo-family.invalid')throw Error('unexpected SDK destination');const table=u.pathname.split('/').pop(),method=init.method||'GET',body=init.body?JSON.parse(init.body):null;requests.push({table,method,body,query:Object.fromEntries(u.searchParams)});
   const response=(body:any,status=200)=>new Response(JSON.stringify(body),{status,headers:{'content-type':'application/json'}});
   if(method==='GET'&&table==='family_members'){
