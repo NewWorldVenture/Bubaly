@@ -82,6 +82,7 @@ export function DeclutterModule() {
   const today = useFamilyCalendarToday();
   const todayIso = isoDate(today);
   const activeZones = useMemo(() => zones.data.filter((z) => z.is_active), [zones.data]);
+  const visibleZones = showArchived ? zones.data : activeZones;
   const summary = useMemo(() => declutterSummary(zones.data, missions.data, sessions.data, today), [zones.data, missions.data, sessions.data, today]);
   const plan = useMemo(() => weeklyPlan(zones.data, missions.data, members.map((m) => m.id), today, 2, locale.code), [zones.data, missions.data, members, today, locale.code]);
   const nameOf = (id: string | null) => members.find((m) => m.id === id)?.display_name ?? null;
@@ -235,11 +236,11 @@ export function DeclutterModule() {
             <h2 className="text-sm font-semibold">{tr('declutter.zones')}</h2>
             {zones.data.some((z) => !z.is_active) && <button onClick={() => setShowArchived((v) => !v)} className="text-xs text-muted hover:text-fg">{showArchived ? 'Hide' : 'Show'} archived</button>}
           </div>
-          {activeZones.length === 0 ? (
+          {visibleZones.length === 0 ? (
             <EmptyState icon={Sparkle} title={tr('declutter.noZonesYet')} description={tr('declutterModule.aZoneIsAnySpot')} action={<Button onClick={() => setZoneForm({ open: true, zone: null })}><Plus className="h-4 w-4" /> {tr('declutter.addAZone')}</Button>} />
           ) : (
             <ul className="space-y-2">
-              {(showArchived ? zones.data : activeZones).map((z) => {
+              {visibleZones.map((z) => {
                 const h = zoneHealth(z, today);
                 const meta = zoneKindMeta(z.kind);
                 const openHere = open.filter((m) => m.zone_id === z.id).length;

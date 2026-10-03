@@ -24,6 +24,7 @@ import { notificationsLine } from '@/lib/tone/partner-phrasing';
 import { cn } from '@/lib/utils/cn';
 import type { Tables } from '@/lib/database.types';
 import { useTranslations } from '@/components/i18n/locale-provider';
+import { NotificationEmailPreference } from '@/components/settings/notification-email-preference';
 
 type Notification = Tables<'notifications'>;
 
@@ -156,9 +157,6 @@ export function NotificationsModule() {
   // agrees with the bell instead of contradicting it.
   const { now: urgentRows, digest: digestRows } = partitionByPriority(data);
 
-  if (loading) return <SkeletonList />;
-  if (error) return <ErrorState message={error} onRetry={refresh} />;
-
   return (
     <div className="module-page">
       <PageHeader
@@ -179,7 +177,9 @@ export function NotificationsModule() {
         )}
       />
 
-      {data.length === 0 ? (
+      <NotificationEmailPreference />
+
+      {loading ? <SkeletonList /> : error ? <ErrorState message={error} onRetry={refresh} /> : data.length === 0 ? (
         <EmptyState icon={Bell} title={t('notifications.allCaughtUp')} description="No notifications at the moment. We'll let you know when something comes up." />
       ) : (
         <div className="space-y-4">

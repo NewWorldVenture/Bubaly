@@ -16610,5 +16610,7 @@
   "blogBlogSearch.searchUnavailable": "A pesquisa não está disponível neste momento. Tente novamente daqui a pouco.",
   "coach.onlyYourOwnHealth": "Pode perguntar ao coach sobre a sua própria saúde. Um pai, uma mãe ou um adulto pode perguntar sobre outros membros da família.",
   "medicationsModule.noMedicinesPrescribedToYou": "Não lhe foi receitado nenhum medicamento.",
-  "medicationsModule.yourOwnMedicinesOnly": "Vê os medicamentos que lhe foram receitados. Um pai, uma mãe ou um adulto gere as receitas da família."
+  "medicationsModule.yourOwnMedicinesOnly": "Vê os medicamentos que lhe foram receitados. Um pai, uma mãe ou um adulto gere as receitas da família.",
+  "mealsPlanner.addMealToLibrary": "Adicionar refeição à biblioteca",
+  "mealsPlanner.noSavedChoices": "Ainda não há refeições nem receitas guardadas. Crie uma nova refeição abaixo para começar a planear."
 }

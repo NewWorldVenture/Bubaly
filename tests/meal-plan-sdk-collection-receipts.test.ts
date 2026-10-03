@@ -51,7 +51,7 @@ function anomaly(mode:string,expected:Row[]):unknown{
   return expected;
 }
 function scope():ServiceScope{
-  const db=createClient('https://synthetic-planweek.invalid','synthetic-not-a-secret',{
+  const db=createClient('https://synthetic-planweek.invalid','synthetic-not-a-secret',{accessToken:async()=>null,
     auth:{persistSession:false,autoRefreshToken:false,detectSessionInUrl:false},
     global:{fetch:async(input,init)=>{
       try{
