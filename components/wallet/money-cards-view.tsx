@@ -51,6 +51,13 @@ type Caps = { connectOnboarding: boolean; issuing: boolean; physicalCards: boole
 // claim is released under the owner that made it, when its request settles,
 // mounted or not. Audit JIMMY-SUPPORT-CARD-RETRY-20261001 (A).
 const NO_PENDING: ReadonlySet<string> = new Set();
+// A card ORDER that never settles (its request lost in flight) gives its
+// controls back after this long, and the view re-reads to show whether the
+// card landed. A re-click cannot become a second card: while the first order
+// is in flight it shares its provider key (issueCard's attempt key), and once
+// that card is mirrored it is refused as stale (the expected-count guard).
+// Freeze and controls have no such server-side dedupe, so their claims hold.
+const ORDER_CLAIM_EXPIRES_MS = 60_000;
 const pendingByOwner = new Map<string, ReadonlySet<string>>();
 const pendingListeners = new Set<() => void>();
 let privateOwners = 0;
@@ -150,22 +157,34 @@ export function MoneyCardsView({
     return (cardsByChild.get(childWalletId) ?? []).filter((card) => card.type === type).length;
   }
 
-  function claimPending(keys: string[]) {
+  function claimPending(keys: string[], { expires = false } = {}) {
     // Claim synchronously: a retained callback can run again before React has
     // committed disabled buttons. Independent operations keep their own keys.
     const claimedBy = owner;
     const held = pendingFor(claimedBy);
     if (keys.some((key) => held.has(key))) return null;
-    for (const key of keys) claimedHere.current.add(key);
+    const own = claimedHere.current;
+    for (const key of keys) own.add(key);
     setPending(claimedBy, new Set([...held, ...keys]));
     let released = false;
-    return () => {
+    let expiry: ReturnType<typeof setTimeout> | undefined;
+    const release = () => {
       if (released) return;
       released = true;
+      if (expiry !== undefined) clearTimeout(expiry);
       const remaining = new Set(pendingFor(claimedBy));
       for (const key of keys) remaining.delete(key);
       setPending(claimedBy, remaining);
     };
+    if (expires) {
+      expiry = setTimeout(() => {
+        // No longer this view's own claim: its release is reconciled like an
+        // inherited one, by re-reading (see the pending effect above).
+        for (const key of keys) own.delete(key);
+        release();
+      }, ORDER_CLAIM_EXPIRES_MS);
+    }
+    return release;
   }
 
   async function startSetup() {
@@ -183,7 +202,7 @@ export function MoneyCardsView({
   }
 
   async function issueVirtual(childWalletId: string) {
-    const release = claimPending([`issue-${childWalletId}`]);
+    const release = claimPending([`issue-${childWalletId}`], { expires: true });
     if (!release) return;
     try {
       const res = await issueCardAction({
@@ -207,7 +226,7 @@ export function MoneyCardsView({
   async function issueAllVirtual() {
     // Reserve every target, including children not yet reached by the loop,
     // so bulk and individual issuance cannot dispatch the same work together.
-    const release = claimPending(['issue-all', ...childrenWithoutCards.map((child) => `issue-${child.id}`)]);
+    const release = claimPending(['issue-all', ...childrenWithoutCards.map((child) => `issue-${child.id}`)], { expires: true });
     if (!release) return;
     // Every result used to be discarded and the toast reported the number
     // ATTEMPTED as the number issued. What was thrown away includes Trust-Engine
@@ -452,7 +471,7 @@ export function MoneyCardsView({
           child={orderingCard.child}
           expectedCount={shownCount(orderingCard.child.id, 'physical')}
           pending={busy.has(`physical-${orderingCard.child.id}`)}
-          claim={() => claimPending([`physical-${orderingCard.child.id}`])}
+          claim={() => claimPending([`physical-${orderingCard.child.id}`], { expires: true })}
           isCurrent={() => formsMounted.current && orderInstance.current === orderingCard.instance}
           onClose={closeOrder}
           onIssued={() => {
