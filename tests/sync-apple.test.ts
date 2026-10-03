@@ -216,6 +216,50 @@ describe('apple event mappers', () => {
     expect(row.etag).toBe('etag-1');
   });
 
+  it('keeps the series master when an override VEVENT comes first in the resource', () => {
+    // iCloud rewrites a resource with the edited occurrence ahead of the master.
+    // Before this fix the row took the FIRST VEVENT: a one-off at the moved
+    // time with no RRULE, so the whole series collapsed to a single event.
+    const item: SyncItem = {
+      href: '/123456/calendars/work/series.ics', etag: 'etag-2', deleted: false,
+      calendarData: [
+        'BEGIN:VCALENDAR',
+        'BEGIN:VEVENT',
+        'UID:series@icloud',
+        'RECURRENCE-ID:20260722T150000Z',
+        'SUMMARY:Team Sync (moved)',
+        'DTSTART:20260722T170000Z',
+        'DTEND:20260722T173000Z',
+        'END:VEVENT',
+        'BEGIN:VEVENT',
+        'UID:series@icloud',
+        'SUMMARY:Team Sync',
+        'DTSTART:20260715T150000Z',
+        'DTEND:20260715T153000Z',
+        'RRULE:FREQ=WEEKLY',
+        'END:VEVENT',
+        'END:VCALENDAR',
+      ].join('\r\n'),
+    };
+    const row = appleEventToRow(item)!;
+    expect(row.uid).toBe('series@icloud');
+    expect(row.title).toBe('Team Sync');
+    expect(row.starts_at).toBe('2026-07-15T15:00:00.000Z');
+    expect(row.recurrence_rule).toBe('FREQ=WEEKLY');
+  });
+
+  it('a resource holding only an override still maps to that occurrence', () => {
+    // A single forwarded instance arrives without its master; nothing to prefer.
+    const item: SyncItem = {
+      href: '/123456/calendars/work/instance.ics', etag: 'etag-3', deleted: false,
+      calendarData: 'BEGIN:VCALENDAR\r\nBEGIN:VEVENT\r\nUID:series@icloud\r\nRECURRENCE-ID:20260722T150000Z\r\nSUMMARY:Team Sync (moved)\r\nDTSTART:20260722T170000Z\r\nDTEND:20260722T173000Z\r\nEND:VEVENT\r\nEND:VCALENDAR',
+    };
+    const row = appleEventToRow(item)!;
+    expect(row.title).toBe('Team Sync (moved)');
+    expect(row.starts_at).toBe('2026-07-22T17:00:00.000Z');
+    expect(row.recurrence_rule).toBeNull();
+  });
+
   it('maps a deletion tombstone to a cancelled event', () => {
     const row = appleEventToRow({ href: '/x/gone.ics', etag: null, deleted: true, calendarData: null })!;
     expect(row.cancelled).toBe(true);

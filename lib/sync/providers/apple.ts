@@ -196,7 +196,14 @@ export function appleEventToRow(item: SyncItem): NormalizedEvent | null {
   }
   if (!item.calendarData) return null;
   const events = parseICS(item.calendarData);
-  const ev = events[0];
+  // One CalDAV resource holds a whole series: the master VEVENT plus one
+  // override VEVENT (RECURRENCE-ID) per moved or edited occurrence. RFC 5545
+  // does not fix their order and iCloud writes an override first after an
+  // occurrence is edited, so the first VEVENT is not reliably the series. Take
+  // the master when there is one; a resource of overrides alone (a single
+  // forwarded instance) keeps its first entry. The overrides themselves are
+  // not mirrored: NormalizedEvent carries one row per resource.
+  const ev = events.find((e) => !e.recurrenceId) ?? events[0];
   if (!ev) return null;
   return {
     external_id: item.href,
