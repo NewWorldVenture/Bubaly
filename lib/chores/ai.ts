@@ -5,7 +5,7 @@
 // penalised by an AI outage.
 import 'server-only';
 import { describeAIError, getProvider, type AIImage, type AIProvider } from '@/lib/ai/provider';
-import { withAiRequest } from '@/lib/ai/observability';
+import { AiRequestOverAllowance, withAiRequest } from '@/lib/ai/observability';
 import type { ServiceScope } from '@/lib/services/types';
 
 export type ValidationStatus = 'approved' | 'needs_improvement' | 'unclear' | 'rejected' | 'parent_review_required';
@@ -108,7 +108,11 @@ export async function validateChoreSubmission(scope: ServiceScope, input: Valida
       scope,
       // The chore title, not the child's note: a kid's own words about what they
       // did are not something the request ledger needs to carry.
-      { feature: 'chores.validate', text: 'Validate a chore submission' },
+      // Not charged against the allowance (owner decision, #771): filed as a
+      // record (metered = false, so the monthly count never sees it) and never
+      // refused at the cap — a child's proof falls to parent review only when
+      // the AI itself fails.
+      { feature: 'chores.validate', text: 'Validate a chore submission', exemptFromAllowance: true },
       async (obs) => {
         const provider = getProvider();
         const completion = await provider.complete({
@@ -166,10 +170,19 @@ export type ChorePlanResult = {
    * the caller can say it in the family's language.
    */
   providerFailure?: string;
+  /**
+   * Set when the family's monthly allowance refused the request at admission
+   * (F19): the cap, so the caller can say so in the family's language. Nothing
+   * ran. Not a provider failure — "temporarily unavailable" would send a family
+   * at its limit back to retry a request that cannot succeed this month.
+   */
+  allowanceLimit?: number;
 };
 
 /** What a provider failure says, here and on the request row: never its own words. */
 const PROVIDER_FAILED = 'AI is temporarily unavailable.';
+/** The admission's refusal, in fixed words; the caller says it with the cap in the family's language. */
+const ALLOWANCE_USED = 'The family has used this month\'s AI allowance.';
 
 export async function generateChorePlan(
   scope: ServiceScope,
@@ -208,7 +221,10 @@ export async function generateChorePlan(
         return { items: parsed.map(normalizePlanItem).filter(Boolean) as ChorePlanItem[] };
       },
     );
-  } catch {
+  } catch (err) {
+    // The admission refused the request (another one took the 10th): nothing
+    // ran, and it is the allowance, not an outage.
+    if (err instanceof AiRequestOverAllowance) return { items: [], error: ALLOWANCE_USED, allowanceLimit: err.allowance };
     // Nothing above throws on purpose any more; whatever does is not the
     // family's to read either.
     return { items: [], error: PROVIDER_FAILED, providerFailure: 'unknown' };

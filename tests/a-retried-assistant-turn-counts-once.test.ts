@@ -1,5 +1,6 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { NextRequest } from 'next/server';
+import { admitRpc, type AdmitArgs } from './helpers/admit-ai-request';
 
 // F19, owner review 5393250792 on #788: a retried or accidentally repeated
 // assistant send is ONE turn. It must not consume another allowance unit or
@@ -99,7 +100,8 @@ class Query {
       const out: Row[] = [];
       for (const raw of this.payload as Row[]) {
         if (this.op === 'upsert' && rows.some((r) => r.id === raw.id)) continue;
-        const row: Row = { id: raw.id ?? crypto.randomUUID(), created_at: tick(), ...raw };
+        // `metered` defaults to true on ai_requests, as 0477's column does.
+        const row: Row = { id: raw.id ?? crypto.randomUUID(), created_at: tick(), ...(this.name === 'ai_requests' ? { metered: true } : {}), ...raw };
         if (this.name === 'ai_requests' && row.client_request_id != null
           && rows.some((r) => r.family_id === row.family_id && r.client_request_id === row.client_request_id)) {
           return { data: null, error: { code: '23505', message: 'duplicate key value violates unique constraint "uq_ai_requests_client_request"' } };
@@ -124,7 +126,13 @@ class Query {
   }
 }
 
-const db = { from: (name: string) => new Query(name), auth: { getUser: async () => ({ data: { user: state.user } }) } };
+// F19 (0477): a Free family's turn is filed through `admit_ai_request`, which
+// this emulates over the same in-memory table (and its injected faults).
+const db = {
+  from: (name: string) => new Query(name),
+  rpc: (name: string, args: AdmitArgs) => admitRpc(db)(name, args),
+  auth: { getUser: async () => ({ data: { user: state.user } }) },
+};
 
 const ctx = () => ({
   user: state.user,
@@ -219,7 +227,7 @@ function send(opts: { key?: string | null; message?: string; conversationId?: st
 
 const turnRows = () => tableOf('ai_requests').filter((r) => r.feature === 'assistant.turn' || r.feature === 'assistant.stream');
 function seed(n: number) {
-  for (let i = 0; i < n; i++) tableOf('ai_requests').push({ id: `old-${i}`, family_id: FAMILY, requested_by: 'user-1', feature: 'notes.summary', status: 'completed', created_at: tick() });
+  for (let i = 0; i < n; i++) tableOf('ai_requests').push({ id: `old-${i}`, family_id: FAMILY, requested_by: 'user-1', feature: 'notes.summary', status: 'completed', metered: true, created_at: tick() });
 }
 function events(text: string) {
   return text.split('\n\n').filter((p) => p.startsWith('data:')).map((p) => JSON.parse(p.slice(5).trim()) as Record<string, unknown>);
@@ -669,6 +677,51 @@ describe('a keyed send whose request cannot be recorded runs nothing, on every p
     state.fault = 'insert-error';
     expect((await POST(send())).status).not.toBe(200);
     expect(state.providerCalls).toBe(0);
+  });
+});
+
+describe('two NEW sends racing at 9 of 10 (F19, 0477)', () => {
+  // Both read 9 at the route's check before either files; the admission counts
+  // and files under one per-family lock, so exactly one turn reaches the model
+  // and the other is answered with the allowance refusal.
+  it('/api/ai JSON: one 200, one 429 allowance_exceeded with its limit, one model call', async () => {
+    const { POST } = await import('@/app/api/ai/route');
+    seed(9);
+    const responses = await Promise.all([
+      POST(send({ key: 'send-0001-abcdef' })),
+      POST(send({ key: 'send-0002-abcdef', message: 'And lunch?' })),
+    ]);
+    expect(responses.map((r) => r.status).sort()).toEqual([200, 429]);
+    const refused = responses.find((r) => r.status === 429)!;
+    expect(await refused.json()).toMatchObject({ code: 'allowance_exceeded', limit: 10, error: 'ai.yourFamilyUsedItsMonthlyAllowance' });
+    expect(state.providerCalls).toBe(1);
+    expect(tableOf('ai_requests')).toHaveLength(10);
+  });
+
+  it('/api/ai stream: the refused send reports the allowance (code and limit), not an outage', async () => {
+    const { POST } = await import('@/app/api/ai/route');
+    seed(9);
+    const responses = await Promise.all([
+      POST(send({ key: 'send-0001-abcdef', json: false })),
+      POST(send({ key: 'send-0002-abcdef', message: 'And lunch?', json: false })),
+    ]);
+    const streams = await Promise.all(responses.map(async (r) => events(await r.text())));
+    const refusals = streams.flat().filter((e) => e.type === 'error');
+    expect(refusals).toEqual([{ type: 'error', error: 'ai.yourFamilyUsedItsMonthlyAllowance', code: 'allowance_exceeded', limit: 10 }]);
+    expect(state.providerCalls).toBe(1);
+    expect(tableOf('ai_requests')).toHaveLength(10);
+  });
+
+  it('/api/ai/chat stream: the refused send reports the allowance and runs nothing', async () => {
+    const { POST } = await import('@/app/api/ai/chat/route');
+    seed(9);
+    const responses = await Promise.all([sendChat('send-0001-abcdef'), sendChat('send-0002-abcdef', 'And lunch?')].map((r) => POST(r)));
+    const streams = await Promise.all(responses.map(async (r) => events(await r.text())));
+    const refusals = streams.flat().filter((e) => e.type === 'error' && e.code === 'allowance_exceeded');
+    expect(refusals).toHaveLength(1);
+    expect(refusals[0]).toMatchObject({ limit: 10, error: 'ai.yourFamilyUsedItsMonthlyAllowance' });
+    expect(state.providerCalls).toBe(1);
+    expect(tableOf('ai_requests')).toHaveLength(10);
   });
 });
 

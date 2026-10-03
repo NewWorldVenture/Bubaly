@@ -11,7 +11,7 @@ import { validateChoreSubmission, generateChorePlan, type ChorePlanItem } from '
 import { computeReward, canAutoApprove, type ChoreReward, type Difficulty } from '@/lib/chores/logic';
 import { applyCompletionRewards, logChoreEvent } from '@/lib/chores/server';
 import { wroteNoRows, describeActionError } from '@/lib/supabase/errors';
-import { assertAIAccess } from '@/lib/server/ai-access';
+import { assertAIAccess, denialMessage } from '@/lib/server/ai-access';
 import { familyDetailsBaseSchema } from '@/lib/validation';
 
 const BUCKET = 'chore-proof';
@@ -610,9 +610,10 @@ export async function generatePlanAction(prompt: string, kidAges: number[]): Pro
   // its monthly allowance was answered anyway (#730). Its refusal is already
   // the family's answer.
   const access = await assertAIAccess(ctx, { db: supabase, featureKey: 'family-missions' });
-  if (!access.ok) return { items: [], error: access.error };
+  if (!access.ok) return { items: [], error: denialMessage(access, t) };
 
   const plan = await generateChorePlan(scopeFromUserContext(ctx, supabase), prompt, ages.data);
+  if (plan.allowanceLimit !== undefined) return { items: [], error: t('ai.yourFamilyUsedItsMonthlyAllowance', { limit: plan.allowanceLimit }) };
   if (plan.providerFailure) return { items: [], error: t('ai.aiIsTemporarilyUnavailable') };
   return plan.error === undefined ? { items: plan.items } : { items: plan.items, error: plan.error };
 }

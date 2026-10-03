@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { refuseOverAIAllowance } from '@/lib/server/ai-access';
+import { refuseOverAIAllowance, admissionRefusalResponse } from '@/lib/server/ai-access';
 import { withAiRequest } from '@/lib/ai/observability';
 import { scopeFromUserContext } from '@/lib/services/scope';
 import { getTranslations } from '@/lib/i18n/server';
@@ -184,6 +184,8 @@ export async function POST(req: NextRequest) {
 
     return NextResponse.json({ recipes, allergiesConsidered: allergies.length });
   } catch (error) {
+    const refused = admissionRefusalResponse(error, t);
+    if (refused) return refused;
     console.error('[ai/pantry-chef] request failed', error);
     return NextResponse.json({ error: t('pantryChef.fridgeChefIsUnavailableRight') }, { status: 500 });
   }

@@ -1,5 +1,6 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { NextRequest } from 'next/server';
+import { admitRpc, type AdmitArgs } from './helpers/admit-ai-request';
 
 // F19 on the public gift route. The allowance is a COUNT of the family's
 // `ai_requests` rows, so a route that checks the count but files no row lets a
@@ -16,7 +17,10 @@ const state = vi.hoisted(() => ({
 }));
 
 function fakeDb() {
-  return {
+  const client = {
+    // F19 (0477): a capped family's row is filed through `admit_ai_request`,
+    // emulated over this same table, with its per-family lock.
+    rpc: (name: string, args: AdmitArgs) => admitRpc(client)(name, args),
     from(table: string) {
       if (table === 'gift_links') {
         return {
@@ -32,14 +36,15 @@ function fakeDb() {
       }
       if (table === 'ai_requests') {
         return {
-          // The allowance read: select(..., { head: true }).eq(family).gte(created_at)
+          // The allowance read: select(..., { head: true }).eq(family).eq(metered).gte(created_at)
           select: (_cols: string, opts?: { head?: boolean }) => {
             if (opts?.head) {
-              return {
-                eq: (_c: string, familyId: string) => ({
-                  gte: async () => ({ count: state.rows.filter((r) => r.family_id === familyId).length, error: null }),
-                }),
+              const filters: Array<(r: Record<string, unknown>) => boolean> = [];
+              const head = {
+                eq: (c: string, v: unknown) => { filters.push((r) => r[c] === v); return head; },
+                gte: async () => ({ count: state.rows.filter((r) => filters.every((f) => f(r))).length, error: null }),
               };
+              return head;
             }
             throw new Error('unexpected ai_requests select');
           },
@@ -48,7 +53,7 @@ function fakeDb() {
               single: async () => {
                 if (state.failInsert) return { data: null, error: { message: 'insert refused' } };
                 const id = `req-${state.rows.length + 1}`;
-                state.rows.push({ ...row, id });
+                state.rows.push({ metered: true, ...row, id });
                 return { data: { id }, error: null };
               },
             }),
@@ -67,6 +72,7 @@ function fakeDb() {
       throw new Error(`unexpected table ${table}`);
     },
   };
+  return client;
 }
 
 vi.mock('@/lib/supabase/server', () => ({ createServiceClient: () => fakeDb() }));
@@ -100,7 +106,7 @@ function call() {
 }
 
 function seed(n: number) {
-  for (let i = 0; i < n; i++) state.rows.push({ id: `old-${i}`, family_id: 'fam-1', kind: 'feature' });
+  for (let i = 0; i < n; i++) state.rows.push({ id: `old-${i}`, family_id: 'fam-1', kind: 'feature', metered: true });
 }
 
 describe('a gift-link request counts against the family allowance (F19)', () => {
@@ -124,6 +130,18 @@ describe('a gift-link request counts against the family allowance (F19)', () => 
     const second = await POST(call());
     expect(second.status).toBe(429);
     expect(state.providerCalls).toBe(1);
+  });
+
+  it('two requests racing at 9 of 10: one is answered, one is refused, the provider is called once', async () => {
+    // The check-then-file race (F19): both requests read 9 before either row
+    // lands. Admission counts and files under one per-family lock, so the
+    // second is counted against the first's row.
+    const { POST } = await import('@/app/api/ai/gift/route');
+    seed(9);
+    const statuses = (await Promise.all([POST(call()), POST(call())])).map((r) => r.status).sort();
+    expect(statuses).toEqual([200, 429]);
+    expect(state.providerCalls).toBe(1);
+    expect(state.rows).toHaveLength(10);
   });
 
   it('refuses rather than calling the model when the request cannot be filed', async () => {

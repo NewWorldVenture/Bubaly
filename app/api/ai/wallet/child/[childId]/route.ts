@@ -1,5 +1,5 @@
 import { NextResponse } from 'next/server';
-import { refuseOverAIAllowance } from '@/lib/server/ai-access';
+import { refuseOverAIAllowance, admissionRefusalResponse } from '@/lib/server/ai-access';
 import { getTranslations } from '@/lib/i18n/server';
 import { createServer } from '@/lib/supabase/server';
 import { settleAll, describeReadError } from '@/lib/supabase/settle';
@@ -189,6 +189,8 @@ export async function POST(_req: Request, { params }: { params: Promise<{ childI
 
     return NextResponse.json({ coaching, tier });
   } catch (err) {
+    const refused = admissionRefusalResponse(err, tr);
+    if (refused) return refused;
     console.error('Child wallet coach error:', err);
     return NextResponse.json({ error: tr('child.failedToGenerateCoaching') }, { status: 500 });
   }

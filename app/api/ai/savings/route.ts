@@ -7,7 +7,7 @@ import { settleAll, describeReadError } from '@/lib/supabase/settle';
 import { readAllAsQuery } from '@/lib/supabase/read-all';
 import { requireUserContext } from '@/lib/supabase/auth';
 import { isManager } from '@/lib/constants/roles';
-import { withAiRequest } from '@/lib/ai/observability';
+import { withAiRequest, AiRequestOverAllowance } from '@/lib/ai/observability';
 import { scopeFromUserContext } from '@/lib/services/scope';
 import { resolveProvider } from '@/lib/ai/provider';
 import { summarizeSubscriptions, wastedMonthlyCents, isStale, monthlyCostCents, type SubLike } from '@/lib/finance/subscriptions';
@@ -150,7 +150,8 @@ export async function POST() {
     return NextResponse.json(result);
   } catch (err) {
     // Say which of the two it was: past the monthly allowance is not "not configured".
-    const summary = err instanceof AIAllowanceSpent
+    // The admission (0477) refusing the last slot to a parallel request is the same allowance.
+    const summary = err instanceof AIAllowanceSpent || err instanceof AiRequestOverAllowance
       ? tr('aiSavings.allowanceSpentSuggestions')
       : tr('aiSavings.notConfiguredSuggestions');
     return NextResponse.json({ summary, suggestions: fallback, wastedMonthlyCents: wasted });

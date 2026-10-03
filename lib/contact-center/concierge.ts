@@ -1,5 +1,9 @@
 import 'server-only';
+import type { SupabaseClient } from '@supabase/supabase-js';
+import type { Database } from '@/lib/database.types';
+import { withAiRequest, type AiObserver } from '@/lib/ai/observability';
 import { resolveProvider, isAIConfigured } from '@/lib/ai/provider';
+import { scopeForSystem } from '@/lib/services/scope';
 import { fenceUntrustedBlock, UNTRUSTED_CONTENT_RULE } from '@/lib/ai/safety/untrusted';
 import { resolveInboundEntityContext } from '@/lib/graph/resolve-server';
 import type { ServiceScope } from '@/lib/services/types';
@@ -57,6 +61,14 @@ export function preferFrontDesk(modelIntent: InboundIntent, fallback: InboundInt
  */
 export async function runConcierge(input: {
   channel: InboundChannel; from?: string; text: string; familyLabel?: string; signal?: AbortSignal;
+  /**
+   * The family whose line this is, so the model call leaves a record (§33): a
+   * family asking why their line answered badly, or stopped answering, can be
+   * told which model ran and what broke. Filed on a system scope — this is
+   * inbound work nobody in the family asked for, so it is unmetered and never
+   * refused (F19). Without it the call runs unrecorded, as it always did.
+   */
+  record?: { db: SupabaseClient<Database>; familyId: string };
 }): Promise<ConciergeResult> {
   const familyLabel = safeContactText(input.familyLabel || 'the family', 200);
   const replyText = (value: string) => input.channel === 'sms' ? safeSmsReplyText(value, 320) : safeContactText(value, 320);
@@ -69,50 +81,71 @@ export async function runConcierge(input: {
   };
 
   if (input.signal?.aborted || !(await isAIConfigured()) || input.signal?.aborted) return fallback;
+  if (!input.record) return answer();
   try {
-    const provider = await resolveProvider();
-    if (input.signal?.aborted) return fallback;
-    const completion = await provider.complete({
-      system: SYSTEM,
-      messages: [{
-        role: 'user',
-        // The message body and the sender's number come from a stranger — this
-        // line answers texts, emails and voicemail transcripts from anyone who
-        // knows the family's number. `lib/guardian/scam-ai.ts` handles the same
-        // class of input and says so in its own header ("the transcript is
-        // ATTACKER-CONTROLLED (an inbound caller / SMS)"), fencing it with a
-        // random nonce and telling the model the fence contains data. This did
-        // not, and its output is not cosmetic: `summary` is delivered to the
-        // family's real phone as "🚨 Urgent at your Bubaly line: …". Audit C1-S7-03.
-        // Line ORDER is main's (From, then the household label); the FENCES are
-        // this session's. Neither half is dropped: the order is what main's
-        // prompt test pins, and the fences are what stop an inbound text that
-        // says "ignore your instructions" from being read as one. The inner
-        // `safeContactText` is load-bearing rather than belt-and-braces —
-        // `fenceUntrustedBlock` bounds with a plain `.slice(maxChars)`, which
-        // would cut a surrogate pair in half; bounding scalar-safely FIRST
-        // makes that slice a no-op.
-        content: `Channel: ${input.channel}\n`
-          + `From: ${fenceUntrustedBlock('inbound_from', input.from ?? 'unknown', 64)}\n`
-          + `Replying on behalf of: ${familyLabel}\n`
-          + `Message:\n${fenceUntrustedBlock('inbound_message', safeContactText(input.text, 2000), 2000)}`,
-      }],
-      tools: [],
-      maxTokens: 400,
-      signal: input.signal,
-    });
-    if (input.signal?.aborted) return fallback;
-    const raw = completion.text.trim().replace(/^```(?:json)?/i, '').replace(/```$/, '').trim();
-    const parsed = JSON.parse(raw) as { intent?: unknown; summary?: unknown; reply?: unknown };
-    const intent = preferFrontDesk(coerceIntent(parsed.intent), fallbackIntent);
-    return {
-      intent,
-      summary: typeof parsed.summary === 'string' && parsed.summary.trim() ? safeContactText(parsed.summary.trim(), 140) : fallback.summary,
-      reply: replyText(typeof parsed.reply === 'string' && parsed.reply.trim() ? parsed.reply.trim() : autoReplyText(intent, familyLabel)),
-      aiUsed: true,
-    };
+    return await withAiRequest(
+      scopeForSystem(input.record.db, { id: input.record.familyId }),
+      { feature: `contact-center.${input.channel}`, text: 'Answer an inbound message', exemptFromAllowance: true },
+      (obs) => answer(obs),
+    );
   } catch (e) {
-    console.error('[contact-center] concierge AI failed, using deterministic fallback', e);
+    // `answer` never throws, and an unkeyed, unmetered filing is never
+    // refused, so nothing should reach here. The line still answers if it does.
+    console.error('[contact-center] concierge request record failed; deterministic fallback', e);
     return fallback;
+  }
+
+  async function answer(obs?: AiObserver): Promise<ConciergeResult> {
+    // A call stopped before it produced anything is a failure for the record,
+    // not a completion: the family's line answered with the fallback.
+    const stopped = () => { obs?.failed(new Error('Concierge call aborted')); return fallback; };
+    try {
+      const provider = await resolveProvider();
+      if (input.signal?.aborted) return stopped();
+      const completion = await provider.complete({
+        system: SYSTEM,
+        messages: [{
+          role: 'user',
+          // The message body and the sender's number come from a stranger — this
+          // line answers texts, emails and voicemail transcripts from anyone who
+          // knows the family's number. `lib/guardian/scam-ai.ts` handles the same
+          // class of input and says so in its own header ("the transcript is
+          // ATTACKER-CONTROLLED (an inbound caller / SMS)"), fencing it with a
+          // random nonce and telling the model the fence contains data. This did
+          // not, and its output is not cosmetic: `summary` is delivered to the
+          // family's real phone as "🚨 Urgent at your Bubaly line: …". Audit C1-S7-03.
+          // Line ORDER is main's (From, then the household label); the FENCES are
+          // this session's. Neither half is dropped: the order is what main's
+          // prompt test pins, and the fences are what stop an inbound text that
+          // says "ignore your instructions" from being read as one. The inner
+          // `safeContactText` is load-bearing rather than belt-and-braces —
+          // `fenceUntrustedBlock` bounds with a plain `.slice(maxChars)`, which
+          // would cut a surrogate pair in half; bounding scalar-safely FIRST
+          // makes that slice a no-op.
+          content: `Channel: ${input.channel}\n`
+            + `From: ${fenceUntrustedBlock('inbound_from', input.from ?? 'unknown', 64)}\n`
+            + `Replying on behalf of: ${familyLabel}\n`
+            + `Message:\n${fenceUntrustedBlock('inbound_message', safeContactText(input.text, 2000), 2000)}`,
+        }],
+        tools: [],
+        maxTokens: 400,
+        signal: input.signal,
+      });
+      obs?.used(completion.model ?? provider.model, completion.usage);
+      if (input.signal?.aborted) return stopped();
+      const raw = completion.text.trim().replace(/^```(?:json)?/i, '').replace(/```$/, '').trim();
+      const parsed = JSON.parse(raw) as { intent?: unknown; summary?: unknown; reply?: unknown };
+      const intent = preferFrontDesk(coerceIntent(parsed.intent), fallbackIntent);
+      return {
+        intent,
+        summary: typeof parsed.summary === 'string' && parsed.summary.trim() ? safeContactText(parsed.summary.trim(), 140) : fallback.summary,
+        reply: replyText(typeof parsed.reply === 'string' && parsed.reply.trim() ? parsed.reply.trim() : autoReplyText(intent, familyLabel)),
+        aiUsed: true,
+      };
+    } catch (e) {
+      console.error('[contact-center] concierge AI failed, using deterministic fallback', e);
+      obs?.failed(e);
+      return fallback;
+    }
   }
 }

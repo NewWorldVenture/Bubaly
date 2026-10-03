@@ -29,9 +29,11 @@ import type { AiRequestKind, Database } from '@/lib/database.types';
 import type { ServiceScope } from '@/lib/services/types';
 import { MAX_AI_REQUEST_TEXT_CHARS } from '@/lib/ai/chat-request';
 import { createRequest, updateRequest } from '@/lib/ai/runs/store';
+import type { AI_ALLOWANCE_EXCEEDED } from '@/lib/ai/runs/store';
 import { recordModelCall } from '@/lib/ai/usage';
-import { monthlyAllowanceFor } from '@/lib/constants/ai-allowance';
+import { allowanceUsedText, monthlyAllowanceFor } from '@/lib/constants/ai-allowance';
 import { resolveFamilyPlanLevel } from '@/lib/server/plan';
+import { isSuperAdminCaller } from '@/lib/server/super-admin-caller';
 import type { TokenUsage } from '@/lib/ai/usage';
 
 export type AiRequestSpec = {
@@ -57,6 +59,16 @@ export type AiRequestSpec = {
    * second row and repeats no effect.
    */
   clientRequestId?: string | null;
+  /**
+   * F19: on a capped plan the row is ADMITTED — counted and filed as one
+   * decision (`admit_ai_request`, 0477) — and a family at its allowance is
+   * refused with `AiRequestOverAllowance` before the body runs. `true` keeps
+   * the row as a record only — filed with `metered = false`, so it is neither
+   * counted nor refused by the allowance (0477) — for a surface the owner
+   * classified as not charged, such as chore-proof validation. A system scope
+   * is always treated this way. Unlimited plans are never admitted either way.
+   */
+  exemptFromAllowance?: boolean;
 };
 
 export type AiObserver = {
@@ -79,6 +91,10 @@ export type AiObserver = {
   failed: (err: unknown, opts?: { partial?: boolean }) => void;
 };
 
+// The store's refusal code, held to it by type so the two cannot drift. A value
+// import would make every test that mocks the store declare it.
+const OVER_ALLOWANCE: typeof AI_ALLOWANCE_EXCEEDED = 'allowance_exceeded';
+
 /** Trim an error for a column a family may end up reading in a support reply. */
 function describe(err: unknown): string {
   const raw = err instanceof Error ? err.message : String(err ?? 'Unknown error');
@@ -93,7 +109,17 @@ export async function withAiRequest<T>(
   const started = Date.now();
   let requestId: string | null = null;
 
-  const opened = await createRequest(scope, {
+  // Work the family did not ask for is recorded but never charged (owner,
+  // #771 review 5391362628): a surface classified exempt, or anything running
+  // on a system scope (a cron job, inbound routing).
+  const exempt = Boolean(spec.exemptFromAllowance) || scope.actorKind === 'system';
+  // The plan is read ONCE, before the filing (F19): it decides both how the
+  // row is filed (admitted against the allowance, or plainly) and whether a
+  // failed filing refuses. Exempt work is filed plainly and never refused, so
+  // it has no use for the plan and skips the read.
+  const plan = exempt ? { capped: false, allowance: null } : await filingPlan(scope);
+
+  const filing = (allowance: number | null) => createRequest(scope, {
     kind: spec.kind ?? 'feature',
     // Bounded HERE rather than at each caller, because "keep it short" is this
     // module's own documented contract and fifteen call sites remembering a
@@ -106,23 +132,43 @@ export async function withAiRequest<T>(
     conversationId: spec.conversationId ?? null,
     feature: spec.feature,
     clientRequestId: spec.clientRequestId ?? null,
+    allowance,
+    unmetered: exempt,
   }).catch((err: unknown) => {
     console.error('[ai-observability] could not open a request row', { feature: spec.feature, err });
     return null;
   });
+  let opened = await filing(exempt ? null : plan.allowance);
+  // A super-administrator is never refused by the allowance — the gate's own
+  // rule (`assertAIAccess`), which this admission cannot see because a scope
+  // carries no email. Asked only after a refusal; the row is then filed as it
+  // was before the admission existed: plainly, and counted.
+  if (opened && !opened.ok && opened.code === OVER_ALLOWANCE && await isSuperAdminCaller(scope)) {
+    opened = await filing(null);
+  }
+  // The family is at its allowance: admitted and counted in one decision under
+  // a per-family lock, so N concurrent requests at 9 of 10 admit exactly one.
+  // Nothing below runs and no row was filed.
+  if (opened && !opened.ok && opened.code === OVER_ALLOWANCE && plan.allowance !== null) {
+    throw new AiRequestOverAllowance(spec.feature, plan.allowance);
+  }
   // With a retry key the row is also the idempotency record. A filing that
   // failed — including a key collision whose original row could not be read
   // back — leaves an earlier attempt's outcome unknown, so the body must not
   // run on ANY plan: running it could repeat that attempt's effects (#788
   // review 5964206145). Unkeyed calls keep the plan-based rule below.
   if (!opened?.ok && spec.clientRequestId) throw new AiRequestNotFiled(spec.feature);
-  if (!opened?.ok && await allowanceDependsOnTheRow(scope)) {
+  // An exempt row is a record, not the meter, so its failed filing leaves no
+  // hole in the allowance and the work goes on, as on an unlimited plan.
+  if (!opened?.ok && plan.capped && !exempt) {
     // The row is not only diagnostics: on a capped plan it IS the meter (F19).
     // `monthlyAllowance` counts these rows, so a model call made without one
     // is a call the allowance never sees, and a family at 9 of 10 whose filing
     // failed stayed at 9 however often it called. On a capped plan the call is
     // refused instead; on an unlimited plan nothing is metered by the row, and
-    // the family's work goes on as before, unrecorded.
+    // the family's work goes on as before, unrecorded. A capped plan whose
+    // admission failed for any other reason — including `admit_ai_request` not
+    // existing yet because this code deployed before 0477 — lands here too.
     throw new AiRequestNotFiled(spec.feature);
   }
   // The key named a request already filed: this is a retry of it, not a new
@@ -206,6 +252,22 @@ export class AiRequestNotFiled extends Error {
   }
 }
 
+/**
+ * The family is at its monthly allowance (F19): the admission refused to file
+ * the row and the body did not run. A subclass of `AiRequestNotFiled`, so every
+ * caller that already stops on an unfiled request stops on this too; the
+ * routes that answer allowance denials map it to their 429 `allowance_exceeded`.
+ * The message is the allowance refusal `assertAIAccess` gives.
+ */
+export class AiRequestOverAllowance extends AiRequestNotFiled {
+  readonly code = 'allowance_exceeded' as const;
+  constructor(feature: string, readonly allowance: number) {
+    super(feature);
+    this.name = 'AiRequestOverAllowance';
+    this.message = allowanceUsedText(allowance);
+  }
+}
+
 /** A retry key named a request already filed; the body did not run. */
 export class AiRequestDuplicate extends Error {
   constructor(readonly feature: string, readonly requestId: string) {
@@ -214,15 +276,24 @@ export class AiRequestDuplicate extends Error {
   }
 }
 
-// Whether this family's allowance is counted from `ai_requests`, i.e. its plan
-// is capped. A plan that cannot be read is treated as capped: an allowance that
-// cannot be checked is not an allowance, the rule `monthlyAllowance` follows.
-async function allowanceDependsOnTheRow(scope: ServiceScope): Promise<boolean> {
+// How this family's request is filed. `capped`: the allowance is counted from
+// `ai_requests`, so a failed filing refuses. `allowance`: the number the row is
+// admitted against, or null to file it plainly.
+//
+// A plan that cannot be read is treated as capped — an allowance that cannot be
+// checked is not an allowance, the rule `monthlyAllowance` follows — but with
+// no number to admit against, so the row is filed plainly and only a failed
+// filing refuses (the rule before admission existed). Admitting against the
+// Free number instead would refuse a paying family over ten during a plan-read
+// outage; the routes' own allowance check, which fails closed on the same read,
+// has already run.
+async function filingPlan(scope: ServiceScope): Promise<{ capped: boolean; allowance: number | null }> {
   try {
     const level = await resolveFamilyPlanLevel(scope.db, scope.familyId);
-    return monthlyAllowanceFor(level) !== null;
+    const allowance = monthlyAllowanceFor(level);
+    return { capped: allowance !== null, allowance };
   } catch (err) {
-    console.error('[ai-observability] plan level read failed after a failed filing', err);
-    return true;
+    console.error('[ai-observability] plan level read failed before filing', err);
+    return { capped: true, allowance: null };
   }
 }

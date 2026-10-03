@@ -45,7 +45,7 @@ export async function POST(req: NextRequest) {
   }
   const familyLabel = familyResult.data?.name || 'the family';
 
-  const result = await runConcierge({ channel: 'voice', from: from ?? undefined, text, familyLabel });
+  const result = await runConcierge({ channel: 'voice', from: from ?? undefined, text, familyLabel, record: { db: admin, familyId } });
   let filed: Awaited<ReturnType<typeof captureInboundWithUrgency>>;
   try { filed = await captureInboundWithUrgency(admin, {
     familyId, channel: 'voice', from: from ?? undefined, to: params.To || channelResult.data?.phone_number || undefined, subject: 'Voicemail', body: text,

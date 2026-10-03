@@ -23,7 +23,7 @@ vi.mock('@/lib/supabase/auth', () => ({ requireUserContext: async () => ctx }));
 vi.mock('@/lib/supabase/server', () => ({ createServer: async () => db, createServiceClient: () => db }));
 vi.mock('@/lib/server/route-feature-gate', () => ({ refuseUnlessEntitled: async () => null }));
 vi.mock('@/lib/server/ai-rate-limit', () => ({ enforceAIRateLimit: async () => ({ ok: true }) }));
-vi.mock('@/lib/server/ai-access', () => ({ refuseOverAIAllowance: async () => null }));
+vi.mock('@/lib/server/ai-access', () => ({ refuseOverAIAllowance: async () => null, admissionRefusalResponse: () => null }));
 vi.mock('@/lib/ai/settings', () => ({ getAIConfig: async () => ({ openaiKey: 'sk-test', model: 'gpt-4o' }) }));
 vi.mock('@/lib/server/fetch-with-deadline', () => ({ fetchWithDeadline: (...a: unknown[]) => fetchWithDeadline(...a) }));
 vi.mock('@/lib/ai/runs/store', () => ({

@@ -6,6 +6,12 @@
 // RLS. On a local stack with every migration, a crawl that used them all left
 // 13 concierge rows and not one feature row, and the Free plan's monthly AI
 // allowance, which counts these rows, never counted an assistant turn.
+//
+// #892 review 4174949251 then closed the concierge exception too: 0255's member
+// INSERT policy let a member file rows the F19 meter counts through the Data API,
+// outside 0477's admission lock and free to say `metered = false`. 0477 withdraws
+// INSERT from `authenticated`, so EVERY kind is filed on the ledger client, for
+// the family and person of the verified scope.
 import { readFileSync } from 'node:fs';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import type { ServiceScope } from '@/lib/services/types';
@@ -42,14 +48,14 @@ describe('who files an AI request', () => {
     expect(inserts[0].row).toMatchObject({ family_id: 'fam-1', requested_by: 'u1', requested_by_member_id: 'm1', kind: 'feature', status: 'queued' });
   });
 
-  it('keeps a concierge request on the person\'s own client, where RLS checks it (control)', async () => {
+  it('files a concierge request on the ledger client too, never the person\'s own (0477 withdraws member INSERT)', async () => {
     await createRequest(member, { requestText: 'plan our week', kind: 'concierge' });
-    expect(inserts.map((i) => i.client)).toEqual(['member']);
+    expect(inserts).toEqual([expect.objectContaining({ client: 'service', row: expect.objectContaining({ kind: 'concierge', family_id: 'fam-1', requested_by: 'u1', requested_by_member_id: 'm1' }) })]);
   });
 
-  it('treats an unknown kind as the concierge, on the person\'s client', async () => {
+  it('treats an unknown kind as the concierge, on the ledger client', async () => {
     await createRequest(member, { requestText: 'x', kind: 'made-up' });
-    expect(inserts).toEqual([expect.objectContaining({ client: 'member', row: expect.objectContaining({ kind: 'concierge' }) })]);
+    expect(inserts).toEqual([expect.objectContaining({ client: 'service', row: expect.objectContaining({ kind: 'concierge' }) })]);
   });
 
   it('uses the client a caller hands it (the cron, the executor)', async () => {
@@ -57,8 +63,9 @@ describe('who files an AI request', () => {
     expect(inserts.map((i) => i.client)).toEqual(['cron']);
   });
 
-  it('matches the policy it has to satisfy: a member may insert the concierge kind only', () => {
-    const sql = readFileSync('supabase/migrations/0255_ai_runtime_lockdown.sql', 'utf8');
-    expect(sql).toMatch(/create policy ai_requests_insert[\s\S]*?and kind = 'concierge'/);
+  it('matches the schema it has to satisfy: no client role inserts a request row (0477)', () => {
+    const sql = readFileSync('supabase/migrations/0477_ai_requests_admission_is_atomic.sql', 'utf8');
+    expect(sql).toMatch(/drop policy if exists ai_requests_insert on public\.ai_requests;/);
+    expect(sql).toMatch(/revoke insert on public\.ai_requests from anon, authenticated;/);
   });
 });

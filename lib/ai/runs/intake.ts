@@ -30,6 +30,10 @@ import { planRequest, type PlanOutcome } from '@/lib/ai/planner';
 import { runPagePath, type AIRequestContext, type AIRequestResponse } from '@/lib/ai/chat-request';
 import { describeDbError } from '@/lib/supabase/errors';
 import { makeKey } from '@/lib/services/idempotency';
+import { allowanceUsedText, monthlyAllowanceFor } from '@/lib/constants/ai-allowance';
+import { resolveFamilyPlanLevel } from '@/lib/server/plan';
+import { isSuperAdminCaller } from '@/lib/server/super-admin-caller';
+import type { AIAccessDenial } from '@/lib/server/ai-access';
 import { fail, ok, SERVICE_CODES, type ServiceResult, type ServiceScope } from '@/lib/services/types';
 import { cancelRun, pauseRun, rerunStep, resumeRun } from './controls';
 import { kickRun } from './continue';
@@ -37,6 +41,7 @@ import { legacyStatusFor } from './states';
 import {
   appendEvent, createRequest, createRun, ledgerClient, loadRun, loadRunActor, updateRequest, updateRun, updateRunWhereState, type RequestRow,
 } from './store';
+import type { AI_ALLOWANCE_EXCEEDED } from './store';
 
 type DB = SupabaseClient<Database>;
 
@@ -72,6 +77,84 @@ export type IntakeResult = AIRequestResponse & {
   /** True when the answer was rebuilt from a request that already existed under the caller's key (nothing was planned). */
   replayed?: boolean;
 };
+
+// The store's refusal code, held to it by type (as in `withAiRequest`): a value
+// import would make every test that mocks the store declare it.
+const OVER_ALLOWANCE: typeof AI_ALLOWANCE_EXCEEDED = 'allowance_exceeded';
+
+/**
+ * The family is at its monthly allowance (F19): the admission refused to file
+ * the request and nothing was classified or planned. The same shape, status,
+ * code, `limit` and English text as `assertAIAccess`'s allowance denial, so a
+ * route answers it with `accessDeniedResponse(refusal, t)` and a server action
+ * passes `error`/`code` on exactly as it does for that denial.
+ */
+export type IntakeAllowanceRefusal = AIAccessDenial & { status: 429; code: typeof AI_ALLOWANCE_EXCEEDED; limit: number; retryable: false };
+
+/** True when `submitRequest` refused because the family is at its monthly allowance. */
+export function isAllowanceRefusal(result: { ok: boolean }): result is IntakeAllowanceRefusal {
+  return !result.ok && (result as { code?: unknown }).code === OVER_ALLOWANCE && typeof (result as { limit?: unknown }).limit === 'number';
+}
+
+/**
+ * True when the gate's allowance denial must not stop this submission: its key
+ * already names a concierge request THIS requester filed, so `submitRequest`
+ * replays that request rather than filing a new one (0477 answers `existing`
+ * before it looks at the allowance). Without it a retry of the request that
+ * made the month 10 of 10 was refused by `assertAIAccess`, never replayed.
+ * Only `allowance_exceeded` is ever passed over: a feature that is off, a plan
+ * below the tier or an unreadable plan still refuse, and a new key at the cap
+ * is still refused, by the gate and again, atomically, by the admission. Any
+ * read failure answers false, which keeps the gate's refusal.
+ */
+export async function isRetryPastAllowance(
+  scope: ServiceScope,
+  denial: { code?: string },
+  clientRequestId: string | null | undefined,
+): Promise<boolean> {
+  if (denial.code !== OVER_ALLOWANCE || !clientRequestId) return false;
+  const { data, error } = await scope.db
+    .from('ai_requests')
+    .select('id, requested_by, kind')
+    .eq('family_id', scope.familyId)
+    .eq('client_request_id', clientRequestId)
+    .maybeSingle();
+  if (error) {
+    console.error('[ai/intake] could not look up a retry key at the allowance', error);
+    return false;
+  }
+  return Boolean(data && data.kind === 'concierge' && data.requested_by === scope.userId);
+}
+
+function allowanceRefusal(limit: number): IntakeAllowanceRefusal {
+  return {
+    ok: false, status: 429, code: OVER_ALLOWANCE, limit, retryable: false,
+    error: allowanceUsedText(limit),
+  };
+}
+
+/**
+ * The number this family's concierge request is admitted against, or null to
+ * file it plainly — the rule `withAiRequest` follows (`filingPlan` in
+ * lib/ai/observability.ts), over the same plan read and the same allowance
+ * table. A plan that cannot be read files plainly: the caller's
+ * `assertAIAccess`, which fails closed on the same read, has already run, and
+ * admitting against the Free number would refuse a paying family over ten
+ * during a plan-read outage. A failed filing plans nothing, whatever the plan.
+ * A system scope (inbound contact-center routing) is never admitted.
+ */
+async function intakeAllowance(scope: ServiceScope): Promise<number | null> {
+  // Only what a person asked for is metered (owner decision on #771): an
+  // inbound message the contact center routes here on a system scope stays
+  // unmetered and is filed plainly, as it was before admission existed.
+  if (scope.actorKind === 'system') return null;
+  try {
+    return monthlyAllowanceFor(await resolveFamilyPlanLevel(scope.db, scope.familyId));
+  } catch (err) {
+    console.error('[ai/intake] plan level read failed before filing', err);
+    return null;
+  }
+}
 
 /**
  * One entry of `ai_requests.clarifications`, in the shape the planner writes
@@ -173,7 +256,7 @@ export async function submitRequest(
   scope: ServiceScope,
   input: { text: string; conversationId?: string | null; context?: AIRequestContext | null; answers?: Record<string, string> | null; clientRequestId?: string | null },
   opts: IntakeOptions = {},
-): Promise<ServiceResult<IntakeResult>> {
+): Promise<ServiceResult<IntakeResult> | IntakeAllowanceRefusal> {
   const text = input.text.trim();
   if (!text) return fail('Tell Bubaly what you need.', { code: SERVICE_CODES.invalidInput });
   const startedAt = opts.startedAtMs ?? Date.now();
@@ -192,11 +275,36 @@ export async function submitRequest(
     if (!conversation) return fail('Conversation not found.', { code: SERVICE_CODES.notFound });
   }
 
-  // Through the caller's OWN client on purpose: 0250 gives members INSERT on
-  // ai_requests with `requested_by = auth.uid()`, so RLS proves the requester.
+  // Unlimited plan: through the caller's OWN client on purpose — 0250 gives
+  // members INSERT on ai_requests with `requested_by = auth.uid()`, so RLS
+  // proves the requester.
+  //
+  // Capped plan (F19): the caller's `assertAIAccess` counted the month and
+  // passed, but that count and this insert are two statements, so N parallel
+  // submissions at 9 of 10 all read 9 and all filed — each one a planner call.
+  // The row is ADMITTED instead: counted and inserted as one decision under a
+  // per-family lock (`admit_ai_request`, 0477), which only the ledger client
+  // may call. The requester is still the verified scope's (`createRequest`
+  // takes it from `scope.userId`/`scope.memberId`, never from input). A retry
+  // key that already names a request answers `existing` before the allowance
+  // is looked at, so a retry at 10 of 10 replays below rather than refusing.
+  // If the function is missing (this code deployed before 0477) the admission
+  // fails and nothing is planned — never an unmetered filing.
   const clientRequestId = input.clientRequestId ?? null;
-  const created = await createRequest(scope, { requestText: text, kind: 'concierge', conversationId, clientRequestId });
-  if (!created.ok) return created;
+  const allowance = await intakeAllowance(scope);
+  const file = (cap: number | null) => createRequest(
+    scope,
+    { requestText: text, kind: 'concierge', conversationId, clientRequestId, allowance: cap },
+    cap === null ? undefined : { db },
+  );
+  let created = await file(allowance);
+  // A super-administrator is never refused by the allowance (the gate's rule,
+  // which this admission cannot see from a scope): filed as before 0477,
+  // plainly on the member's client, and counted.
+  if (!created.ok && created.code === OVER_ALLOWANCE && allowance !== null && await isSuperAdminCaller(scope)) {
+    created = await file(null);
+  }
+  if (!created.ok) return created.code === OVER_ALLOWANCE && allowance !== null ? allowanceRefusal(allowance) : created;
   // A retried POST (a dropped connection, a double tap) lands here: the key
   // already names a request, so the answer is the one that request got —
   // never a second plan and a second run over the same words.
@@ -614,6 +722,7 @@ export function statusForServiceCode(code: string | undefined, retryable?: boole
     case SERVICE_CODES.invalidInput: return 409;
     case INTAKE_CODES.inProgress: return 409;
     case INTAKE_CODES.timeout: return 504;
+    case OVER_ALLOWANCE: return 429;
     case 'unconfigured': return 503;
     case SERVICE_CODES.db: return retryable ? 503 : 500;
     default: return retryable ? 503 : 502;

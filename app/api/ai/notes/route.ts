@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { refuseOverAIAllowance } from '@/lib/server/ai-access';
+import { refuseOverAIAllowance, admissionRefusalResponse } from '@/lib/server/ai-access';
 import { getTranslations } from '@/lib/i18n/server';
 import { requireUserContext } from '@/lib/supabase/auth';
 import { createServer } from '@/lib/supabase/server';
@@ -71,6 +71,8 @@ export async function POST(req: NextRequest) {
 
     return NextResponse.json({ insights });
   } catch (err) {
+    const refused = admissionRefusalResponse(err, t);
+    if (refused) return refused;
     console.error('Notes AI error:', err);
     return NextResponse.json({ error: t('notes.failedToAnalyzeNote') }, { status: 500 });
   }

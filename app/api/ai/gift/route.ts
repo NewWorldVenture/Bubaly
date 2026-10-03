@@ -8,6 +8,7 @@ import { rateLimit, clientIp } from '@/lib/server/rate-limit';
 import { rateLimitDb } from '@/lib/server/rate-limit-db';
 import { buildGiftAssistPrompt, parseGiftSuggestions } from '@/lib/wallet/gift-ai';
 import { MAX_PROVIDER_JSON_BYTES, readBoundedRequestJson } from '@/lib/server/bounded-request-body';
+import { AI_ALLOWANCE_EXCEEDED, admitRequest } from '@/lib/ai/runs/store';
 
 // POST /api/ai/gift — PUBLIC AI Gift Assistant for the gift-link page.
 // Givers aren't signed in, so this is unauthenticated: it's rate-limited per IP
@@ -95,25 +96,21 @@ export async function POST(req: NextRequest) {
     // the unmetered call F19 closes.
     const allowance = await assertFamilyAIAllowance(supabase, link.family_id);
     if (!allowance.ok) return accessDeniedResponse(allowance, t);
-    const { data: recorded, error: recordError } = await supabase
-      .from('ai_requests')
-      .insert({
-        family_id: link.family_id,
-        requested_by: null,
-        requested_by_member_id: null,
-        kind: 'feature',
-        feature: 'gift',
-        request_text: 'gift:suggestions',
-        status: 'executing',
-        started_at: new Date().toISOString(),
-      })
-      .select('id')
-      .single();
-    if (recordError || !recorded) {
-      console.error('[ai/gift] could not record the request against the allowance', recordError);
+    // On a capped plan the row is ADMITTED: counted and filed as one decision
+    // under a per-family lock (0477), because two gift requests at 9 of 10
+    // could otherwise both pass the check above and both call the provider.
+    const filed = await fileGiftRequest(supabase, link.family_id, allowance.monthlyAllowance);
+    if (filed === 'refused' && allowance.monthlyAllowance !== null) {
+      const limit = allowance.monthlyAllowance;
+      return accessDeniedResponse({
+        ok: false, status: 429, code: 'allowance_exceeded', limit,
+        error: t('ai.yourFamilyUsedItsMonthlyAllowance', { limit }),
+      }, t);
+    }
+    if (filed === 'refused' || filed === null) {
       return NextResponse.json({ error: t('gift.couldNotGenerateIdeasRight') }, { status: 503 });
     }
-    requestId = recorded.id as string;
+    requestId = filed;
     const provider = await resolveProvider();
     const completion = await provider.complete({ system, messages: [{ role: 'user', content: user }], tools: [], maxTokens: 500 });
     const suggestions = parseGiftSuggestions(completion.text || '');
@@ -128,6 +125,48 @@ export async function POST(req: NextRequest) {
     if (requestId) await settleRequest(supabase, requestId, 'failed', 'provider error');
     return NextResponse.json({ error: t('gift.couldNotGenerateIdeasRight') }, { status: 500 });
   }
+}
+
+// The giver is not signed in, so the row names no requester; the family is the
+// link's. Answers the new row's id, 'refused' when the admission found the
+// family at its allowance, or null when the row could not be written — which
+// includes `admit_ai_request` not existing yet (code deployed before 0477): the
+// caller refuses either way, never calling the provider unmetered.
+async function fileGiftRequest(
+  supabase: ReturnType<typeof createServiceClient>,
+  familyId: string,
+  monthlyAllowance: number | null,
+): Promise<string | 'refused' | null> {
+  const startedAt = new Date().toISOString();
+  if (monthlyAllowance !== null) {
+    const admitted = await admitRequest(supabase, {
+      familyId, kind: 'feature', feature: 'gift', requestText: 'gift:suggestions',
+      status: 'executing', startedAt,
+    }, monthlyAllowance);
+    if (admitted.ok) return admitted.data.id;
+    if (admitted.code === AI_ALLOWANCE_EXCEEDED) return 'refused';
+    console.error('[ai/gift] could not admit the request against the allowance', admitted.error);
+    return null;
+  }
+  const { data: recorded, error: recordError } = await supabase
+    .from('ai_requests')
+    .insert({
+      family_id: familyId,
+      requested_by: null,
+      requested_by_member_id: null,
+      kind: 'feature',
+      feature: 'gift',
+      request_text: 'gift:suggestions',
+      status: 'executing',
+      started_at: startedAt,
+    })
+    .select('id')
+    .single();
+  if (recordError || !recorded) {
+    console.error('[ai/gift] could not record the request', recordError);
+    return null;
+  }
+  return recorded.id as string;
 }
 
 // Closing the row is bookkeeping: the request already counts from the moment it

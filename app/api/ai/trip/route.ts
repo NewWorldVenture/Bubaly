@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { withinAIAllowance, AIAllowanceSpent } from '@/lib/server/ai-access';
+import { withinAIAllowance, AIAllowanceSpent, admissionRefusalResponse } from '@/lib/server/ai-access';
 import { getTranslations } from '@/lib/i18n/server';
 import { requireUserContext } from '@/lib/supabase/auth';
 import { createServer } from '@/lib/supabase/server';
@@ -89,6 +89,8 @@ export async function POST(req: NextRequest) {
 
     return NextResponse.json({ recommendations, source });
   } catch (err) {
+    const refused = admissionRefusalResponse(err, t);
+    if (refused) return refused;
     console.error('Trip research error:', err);
     return NextResponse.json({ error: t('trip.couldNotResearchThisTrip') }, { status: 500 });
   }

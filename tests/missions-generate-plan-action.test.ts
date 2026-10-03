@@ -432,6 +432,27 @@ describe('generatePlanAction (ACTION-F2ADC481FA89)', () => {
       expect(ownCount()).toBe(10);
     });
 
+    it('in the race — the gate read 9, then another request took the 10th — the allowance, not "temporarily unavailable"', async () => {
+      free();
+      tier('free');
+      usedThisMonth(9);
+      // Another of the family's requests is admitted between this action's
+      // gate and its own admission (0477), so the admission refuses it.
+      const rpc = db.rpc.bind(db);
+      (db as unknown as { rpc: typeof rpc }).rpc = (async (name: string, args: Record<string, unknown>) => {
+        if (name === 'admit_ai_request' && !requests().some((row) => row.id === 'req-raced')) {
+          db.seed('ai_requests', [{ id: 'req-raced', family_id: FAMILY, kind: 'feature', feature: 'notes.summary', request_text: 'Summarise a note', status: 'completed' }]);
+        }
+        return rpc(name, args);
+      }) as typeof rpc;
+
+      const result = await generatePlanAction('Plan', [8]);
+
+      expect(result).toEqual({ items: [], error: 'Your family has used its 10 AI requests for this month. Upgrade to Family Basic for unlimited, or try again next month.' });
+      expect(complete).not.toHaveBeenCalled();
+      expect(ownCount()).toBe(10);
+    });
+
     it('a plan that cannot be confirmed is refused, not guessed', async () => {
       const from = db.from.bind(db);
       (db as unknown as { from: (n: string) => unknown }).from = (n: string) => {

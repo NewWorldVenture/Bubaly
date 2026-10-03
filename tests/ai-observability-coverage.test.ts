@@ -24,6 +24,12 @@ const walk = (dir: string): string[] =>
 // Importing anything else from that module — a `ToolSpec` type, `describeAIError`,
 // `isAIConfigured` — does not put a file anywhere near a model.
 const PROVIDER_PRODUCERS = ['resolveProvider', 'getProvider', 'providerFromConfig', 'OpenAIProvider'];
+// …and the per-task factory in `lib/ai/routing`, which hands back the same
+// AIProvider. The scanner used to read only `@/lib/ai/provider`, so a file that
+// obtained its model through `resolveProviderForTask` was invisible to it: the
+// three paperwork transcription paths reached a vision model on every upload,
+// link and email attachment, recorded nothing, and never appeared below.
+const ROUTING_PRODUCERS = ['resolveProviderForTask'];
 
 /**
  * Every import statement in `src` that ends at `@/lib/ai/provider`, found by
@@ -37,11 +43,11 @@ const PROVIDER_PRODUCERS = ['resolveProvider', 'getProvider', 'providerFromConfi
  * which imports `resolveProvider` and calls `provider.runTools`, as unable to
  * reach a model at all.
  */
-function providerImports(src: string): string[] {
+function providerImports(src: string, specifier: RegExp = /from '@\/lib\/ai\/provider'/g): string[] {
   // Leading newline so a provider import on line 1 is still found.
   const text = `\n${src}`;
   const out: string[] = [];
-  const re = /from '@\/lib\/ai\/provider'/g;
+  const re = new RegExp(specifier.source, 'g');
   let m: RegExpExecArray | null;
   while ((m = re.exec(text))) {
     const start = text.lastIndexOf('\nimport ', m.index);
@@ -52,14 +58,25 @@ function providerImports(src: string): string[] {
 
 /** Whether a file can actually obtain a provider, as opposed to naming a type. */
 export function reachesAModel(src: string): boolean {
-  return providerImports(src).some((clause) => {
+  return producesFrom(providerImports(src), PROVIDER_PRODUCERS)
+    || producesFrom(providerImports(src, /from '@\/lib\/ai\/routing'/), ROUTING_PRODUCERS)
+    || DIRECT_MODEL_ENDPOINT.test(src);
+}
+
+// A file that skips the provider and calls a model vendor's HTTP API itself
+// (speech, transcription, guardian screening) reaches a model just the same.
+// The scanner could not see these at all.
+const DIRECT_MODEL_ENDPOINT = /['`]https:\/\/api\.(openai|anthropic)\.com\//;
+
+function producesFrom(clauses: string[], producers: string[]): boolean {
+  return clauses.some((clause) => {
     if (/^import\s+type\b/.test(clause)) return false;
     const inner = clause.slice(clause.indexOf('{') + 1, clause.lastIndexOf('}'));
     return inner
       .split(',')
       .map((n) => n.trim())
       .filter((n) => n && !/^type\s/.test(n))
-      .some((n) => PROVIDER_PRODUCERS.includes(n.split(/\s/)[0]));
+      .some((n) => producers.includes(n.split(/\s/)[0]));
   });
 }
 
@@ -127,6 +144,16 @@ describe('§33 the surfaces a family would ask about are observed', () => {
       // to use rather than the one that answered.
       expect(src, `${file} must record the model that answered`).toMatch(/obs\.used\((?:completion|done|provider)\.model/);
     }
+  });
+
+  it('paperwork transcription opens a request row on every path that reaches a model', () => {
+    for (const file of ['lib/services/paperwork/capture.ts', 'lib/services/paperwork/link.ts', 'lib/services/paperwork/email-attachments.ts']) {
+      expect([...SILENT], `${file} must not be silent`).not.toContain(file);
+      expect(readFileSync(file, 'utf8'), `${file} must transcribe through the recorded helper`).toContain('transcribeDocument(scope, ');
+    }
+    const helper = readFileSync('lib/ai/observed-document-text.ts', 'utf8');
+    expect(helper).toContain('withAiRequest(');
+    expect(helper).toContain('feature: `paperwork.transcribe.${surface}`');
   });
 
   it('the daily brief opens a request row', () => {
@@ -345,7 +372,7 @@ describe('what is deliberately NOT adopted', () => {
     expect(src).toContain('createServiceClient()');
   });
 
-  it('the floor is 2, and it is these two', () => {
+  it('the floor is 3, and it is these three', () => {
     // A correction. This assertion used to say "the floor is 1" and named only
     // `lib/ai/routing.ts`, because the gift route was documented as
     // deliberately-not-adopted in its own test and never counted toward the
@@ -355,7 +382,9 @@ describe('what is deliberately NOT adopted', () => {
     // again.
     //
     // It was 3 until 2026-10-02, when the gift route began filing its own
-    // `ai_requests` row for F19 and stopped being silent.
+    // `ai_requests` row for F19 and stopped being silent. It is 3 again from
+    // 2026-10-03: the provider itself, once the scanner could see direct
+    // endpoint calls.
     //
     // None of them is excluded from the count. Excluding any would mean teaching
     // the scanner a judgement call, and a scanner that makes judgement calls is
@@ -365,6 +394,11 @@ describe('what is deliberately NOT adopted', () => {
       // without ever calling one. No request to observe, no scope to observe it
       // with — the caller that asked for the provider is the surface.
       'lib/ai/routing.ts',
+      // The provider itself: it sends every surface's request to the vendor's
+      // endpoint, so it is the transport, not a surface. It joined the count
+      // when the scanner learned to see direct endpoint calls; what it carries
+      // is recorded by the surface that called it.
+      'lib/ai/provider.ts',
       // Authenticates as a super admin and never resolves a family at all — it
       // answers "does the configured key work?".
       'app/(app)/admin/ai/actions.ts',
@@ -380,7 +414,7 @@ describe('what is deliberately NOT adopted', () => {
     expect(readFileSync('lib/ai/routing.ts', 'utf8')).not.toContain('.complete(');
     // The ceiling can never go below this, so a future tranche that claims to
     // have finished §33 has to reckon with these two by name.
-    expect(floor).toHaveLength(2);
+    expect(floor).toHaveLength(3);
     // And the gift route, which left the floor, stays out of it: it files the
     // family's request row itself.
     expect([...SILENT]).not.toContain('app/api/ai/gift/route.ts');
@@ -398,7 +432,26 @@ describe('the remaining silence is counted, not ignored', () => {
     // surface adopts withAiRequest — 52 → 48 → 44 → 42 → 40 → 36 → 32, then 23
     // when the scanner stopped counting files that cannot reach a model at all,
     // then 22 when the assistant engine adopted it, then 19, then 17, then 14,
-    // then 11, then 8, then 6.
+    // then 11, then 8, then 6, then 5, then 4 — and then 9, RAISED, and why:
+    //
+    // The scanner learned that a file calling a vendor's endpoint itself
+    // (`https://api.openai.com/…`, `https://api.anthropic.com/…`) reaches a model.
+    // Five files had been invisible: the provider (floor, above), the two voice
+    // routes (speech and transcription; the spoken exchange is counted on the
+    // assistant turn under the owner's F19 voice decision, but the voice calls
+    // themselves leave no record), and guardian call screening and scam
+    // detection (`lib/guardian/ai-screen.ts`, `scam-ai.ts`), owned by the
+    // guardian lane and reported to it on #771. They were silent before this
+    // change too; now they are counted. Lower it as they adopt withAiRequest.
+    //
+    // 5 is a correction AND three adoptions. The scanner learned that
+    // `resolveProviderForTask` (lib/ai/routing) hands back a model too, which
+    // put three paperwork transcriptions it had never seen into the count
+    // (upload, link, emailed attachment: a vision model on every file, recorded
+    // nowhere); they adopted withAiRequest in the same change. The sixth unit
+    // was slack, and slack is what this ratchet must not carry. 4: the
+    // contact-center concierge, which answers strangers on the family's line,
+    // records its model call on a system scope.
     //
     // That drop is a CORRECTION, not nine adoptions. The old scanner counted any
     // import from `lib/ai/provider`, so six files importing only a `ToolSpec` or
@@ -406,7 +459,7 @@ describe('the remaining silence is counted, not ignored', () => {
     // `isAIConfigured`, sat in the count. None of them can obtain a provider.
     // They were nine units of slack in the very ratchet this comment says must
     // have none.
-    const CEILING = 6;
+    const CEILING = 9;
     expect(
       SILENT.size,
       `these reach a model and record nothing:\n  ${[...SILENT].join('\n  ')}\n` +
@@ -425,6 +478,13 @@ describe('the remaining silence is counted, not ignored', () => {
     // `lib/chores/ai.ts` each sat here until they adopted, one tranche apart —
     // hence picking fixtures that are not next in line.)
     expect([...SILENT]).toContain('lib/marketing/platform.ts');
+    // A direct call to a vendor endpoint reaches a model; one wrapped in
+    // withAiRequest is observed.
+    expect([...SILENT]).toContain('lib/guardian/scam-ai.ts');
+    expect([...SILENT]).toContain('app/api/ai/voice/speak/route.ts');
+    expect([...SILENT]).not.toContain('app/api/ai/pantry-chef/route.ts');
+    expect(reachesAModel("const r = await fetch('https://api.openai.com/v1/audio/speech', {})")).toBe(true);
+    expect(reachesAModel("// see https://api.openai.com docs, no call here")).toBe(false);
     expect([...SILENT]).toContain('app/api/admin/marketing/ai/route.ts');
     // `lib/ai/assistant-engine.ts` used to be asserted here. It was found only
     // after the backward scan was fixed — a forward regex read its earlier

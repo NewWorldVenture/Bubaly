@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { refuseOverAIAllowance } from '@/lib/server/ai-access';
+import { refuseOverAIAllowance, admissionRefusalResponse } from '@/lib/server/ai-access';
 import { getTranslations } from '@/lib/i18n/server';
 import { createServer } from '@/lib/supabase/server';
 import { settleAll } from '@/lib/supabase/settle';
@@ -248,6 +248,8 @@ Rules:
 
     return NextResponse.json({ briefing, generatedAt: new Date().toISOString(), weekKey: w.days[0] });
   } catch (err) {
+    const refused = admissionRefusalResponse(err, t);
+    if (refused) return refused;
     console.error('Weekly briefing error:', err);
     // An engine with no key, no credit or no connection is unavailable, not a
     // server fault behind a 500 (P-25).

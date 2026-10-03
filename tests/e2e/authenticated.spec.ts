@@ -190,6 +190,12 @@ test.describe('authenticated first-value journey', () => {
         ['parent_approvals', { family_id: familyId, kind: 'allowance_request', requested_by: user.id, status: 'approved' }],
         ['ai_requests', { ...request, status: 'completed' }],
         ['ai_requests', { ...request, prompt_tokens: -100 }],
+        // 0477 (#892 review 4174949251): no client files a request row at all.
+        // Server code files every kind on the ledger client; a member's direct
+        // insert would be counted against the allowance outside the admission
+        // lock, or could choose `metered = false`.
+        ['ai_requests', request],
+        ['ai_requests', { ...request, kind: 'concierge', request_text: 'Isolated permission probe', status: 'queued', metered: false }],
       ];
       for (const [table, row] of forbidden) {
         const { error } = await member.from(table).insert(row);
@@ -201,7 +207,6 @@ test.describe('authenticated first-value journey', () => {
         ['family_automation_runs', { ...run, status: 'executed' }],
         ['approval_requests', { ...approval, requested_by_kind: 'member', requested_by_member_id: membership.id }],
         ['parent_approvals', { family_id: familyId, kind: 'allowance_request', requested_by: user.id }],
-        ['ai_requests', request],
       ];
       for (const [table, row] of allowed) {
         const { error } = await member.from(table).insert(row);

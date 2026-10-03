@@ -16625,6 +16625,12 @@
   "ai.thisMessageCouldNotBeIdentified": "No se pudo identificar este mensaje. Vuelve a enviarlo.",
   "ai.thatAnswerWasCutOff": "Esa respuesta se cortó antes de terminar. Vuelve a preguntar para obtener la respuesta completa.",
   "ai.yourFamilyUsedItsMonthlyAllowance": "Tu familia ha usado sus {limit} solicitudes de IA de este mes. Pasa a Family Basic para tenerlas ilimitadas o vuelve a intentarlo el mes que viene.",
+  "ai.featureIsPartOfFamilyPlus": "{feature} forma parte de Family+. Mejora tu plan para que Bubaly planifique y actúe por tu familia.",
+  "ai.featureIsPartOfFamilyBasic": "{feature} forma parte de Family Basic. Mejora tu plan para que Bubaly planifique y actúe por tu familia.",
+  "ai.couldNotConfirmYourPlan": "Bubaly no ha podido confirmar tu plan ahora mismo. Inténtalo de nuevo en un momento.",
+  "ai.couldNotCheckThisMonthsUsage": "Bubaly no ha podido comprobar el uso de este mes. Inténtalo de nuevo en un momento.",
+  "ai.notFound": "No encontrado.",
+  "ai.featureIsNotAvailableForYourFamily": "{feature} no está disponible para tu familia.",
   "ai.thatAnswerWasNotSaved": "Bubaly respondió a este mensaje, pero no pudo guardar la respuesta. Lo que hizo ya se ha realizado, así que compruébalo antes de volver a preguntar.",
   "mealsPlanner.addMealToLibrary": "Añadir comida a la biblioteca",
   "mealsPlanner.noSavedChoices": "Aún no hay comidas ni recetas guardadas. Crea una comida nueva abajo para empezar a planificar."

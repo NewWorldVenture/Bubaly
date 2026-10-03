@@ -23,9 +23,9 @@
 import { revalidatePath } from 'next/cache';
 import { getTranslations } from '@/lib/i18n/server';
 import { runPagePath } from '@/lib/ai/chat-request';
-import { submitRequest } from '@/lib/ai/runs/intake';
+import { isAllowanceRefusal, isRetryPastAllowance, submitRequest } from '@/lib/ai/runs/intake';
 import { isAIConfigured } from '@/lib/ai/provider';
-import { assertAIAccess } from '@/lib/server/ai-access';
+import { assertAIAccess, denialMessage } from '@/lib/server/ai-access';
 import { enforceAIRateLimit } from '@/lib/server/ai-rate-limit';
 import { scopeFromUserContext } from '@/lib/services/scope';
 import { archiveInboxMessage, loadInboxMessage, markInboxMessageHandled } from '@/lib/services/inbox';
@@ -85,7 +85,10 @@ export async function handleInboxMessageAction(
   const limited = await enforceAIRateLimit(supabase, `ai-requests:${ctx.user.id}`, REQUEST_RATE_LIMIT);
   if (!limited.ok) return { ok: false, error: t('inboxActions.tooManyRequestsRightNow'), code: 'rate_limited' };
   const access = await assertAIAccess(ctx, { db: supabase });
-  if (!access.ok) return { ok: false, error: access.error, code: access.code };
+  // A retry of a request already filed replays it, even at the allowance.
+  if (!access.ok && !(await isRetryPastAllowance(scope, access, clientRequestId))) {
+    return { ok: false, error: denialMessage(access, t), code: access.code };
+  }
   if (!(await isAIConfigured())) {
     return { ok: false, error: t('inboxActions.bubalyIsNotConnectedTo'), code: 'not_configured' };
   }
@@ -95,6 +98,7 @@ export async function handleInboxMessageAction(
     { text, context: { module: 'inbox' }, clientRequestId: clientRequestId ?? null },
     { startedAtMs: startedAt },
   );
+  if (isAllowanceRefusal(filed)) return { ok: false, error: denialMessage(filed, t), code: filed.code };
   if (!filed.ok) return { ok: false, error: filed.error, code: filed.code };
 
   // Only now — a request row exists — may the inbox say "handled". The write

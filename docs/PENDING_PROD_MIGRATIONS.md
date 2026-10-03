@@ -4052,3 +4052,72 @@ access to equal the page's guest row: 8 findings before, 0 after.
 **After applying:** as a guest, open the calendar and try to add an event. It
 should be refused with the permission message. As a parent, add and delete one,
 which should succeed.
+
+## `0477` — two AI requests at the cap could both run (F19)
+
+`supabase/migrations/0477_ai_requests_admission_is_atomic.sql`
+
+**Severity: medium (a Free family's monthly AI allowance could be exceeded by
+parallel requests). Deploy order: migration first, or together.** Application
+code that reaches production before this migration **fails safe**: on a capped
+plan the missing function makes the request refuse as not recorded (the model
+does not run). On every plan, work filed unmetered (below) loses its record or
+fails until 0477 is applied.
+
+The allowance counted a family's `ai_requests` rows for the month, and every
+metered route checked that count before filing its own row, so requests sent
+together at 9 of 10 all passed the check. Measured on the local stack with 9
+rows seeded: 8 parallel requests left 17 rows, 16 left 25. 0477 adds
+`public.admit_ai_request(...)` (SECURITY DEFINER, `search_path` pinned,
+`service_role` only): it takes a per-family transaction advisory lock, counts
+the month exactly as the app's meter does, and inserts the row only under the
+allowance, returning `admitted`, `refused` or `existing` (a retry key already
+filed). The same experiments then leave exactly 10 rows (1 admitted, 7 or 15
+refused). Design, evidence and rollback: `docs/audit/f19-atomic-admission.md`.
+
+It also adds `ai_requests.metered boolean not null default true` (a constant
+default, so no table rewrite). Work the family did not ask for is filed with
+`metered = false`: chore-proof validation, system-scope intake (inbound
+contact center) and scheduled routines. Both meters count only metered rows,
+so that work no longer uses up a Free family's 10 requests (#892 review
+5970498462). Every existing row stays metered.
+
+Code deployed before this migration: the app's meter filters on `metered`, so
+on a capped plan the gate refuses with "could not check this month's usage"
+(it refused as "not recorded" before). An exempt request is not filed at all in
+that window: 0477's `DEFAULT true` would turn such a row metered, and nothing could
+tell it apart afterwards (#892 review 5971047090).
+On **every** plan, unlimited ones included:
+- Exempt work behind `withAiRequest` (chore-proof checks, paperwork
+  transcription, the contact-center concierge) runs unrecorded.
+- A system-scope intake (inbound contact-center routing) or a scheduled routine
+  reports failure until 0477 is applied — the routine does not run.
+
+A member's own request on an unlimited plan files as before (it names no new
+column).
+
+**0477 also withdraws INSERT on `ai_requests` from `authenticated` and `anon`**
+(#892 review 4174949251). 0255's member policy let a signed-in member file
+concierge rows directly through the Data API. Those rows counted toward the
+allowance outside the admission lock and with no model call, and the member
+could mark them `metered = false`. The application now files every request on
+the ledger (service) client.
+
+**Deploy together.** If they cannot ship together:
+- **Migration first:** the previous code files an unlimited-plan concierge
+  request through the member's session, and that insert is now refused
+  ("could not file the request") until the code ships.
+- **Code first:** exempt work goes unrecorded and system intake fails, as
+  described above.
+
+Prefer the window that matters least to the families on the plans involved.
+
+**Rollback:** `drop function if exists public.admit_ai_request(uuid, integer, text, text, uuid, uuid, uuid, text, text, text, smallint, text, timestamptz); alter table public.ai_requests drop column if exists metered;`
+together with reverting the application change. With only the database rolled
+back, capped plans refuse until the code is reverted.
+
+**After applying:** on a Free family with 9 requests this month, send two
+assistant messages at the same moment from two tabs. One is answered; the
+other shows the monthly allowance message. Paid families are unaffected. Then
+submit a chore proof as a child of that family: it is still checked, and the
+family's count (Settings, AI usage) does not change.

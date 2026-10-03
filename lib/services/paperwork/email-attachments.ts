@@ -2,8 +2,8 @@ import 'server-only';
 import { createHash } from 'node:crypto';
 import type { SupabaseClient } from '@supabase/supabase-js';
 import type { Database, Json } from '@/lib/database.types';
-import { extractDocumentText, MAX_DOCUMENT_BYTES } from '@/lib/ai/document-text';
-import { resolveProviderForTask } from '@/lib/ai/routing';
+import { MAX_DOCUMENT_BYTES, type extractDocumentText } from '@/lib/ai/document-text';
+import { transcribeDocument, visionProvider } from '@/lib/ai/observed-document-text';
 import { sanitizeUntrusted } from '@/lib/ai/safety/untrusted';
 import { paperworkKindFields, triagePaperwork } from '@/lib/paperwork/triage';
 import { scopeForSystem } from '@/lib/services/scope';
@@ -56,9 +56,8 @@ export async function fileEmailAttachments(db: DB, input: Input, options: Option
 
   const scope = scopeForSystem(db, { id: input.familyId });
   const deadline = AbortSignal.timeout(ATTACHMENT_DEADLINE_MS);
-  let provider: ReturnType<typeof resolveProviderForTask> | undefined;
-  const engine = (signal?: AbortSignal) => provider ??= resolveProviderForTask('vision', { db, failClosed: true, signal });
-  const extract = options.extract ?? extractDocumentText;
+  const engine = visionProvider(db);
+  const extract = options.extract;
   const enrich = options.enrich ?? enrichPaperworkEntities;
   let totalBytes = 0;
   const results: EmailAttachmentResult[] = [];
@@ -102,7 +101,7 @@ export async function fileEmailAttachments(db: DB, input: Input, options: Option
         continue;
       }
       if (deadline.aborted) throw new Error('Attachment processing deadline reached');
-      const extracted = await extract({ name: filename, mediaType: file.type.toLowerCase(), bytes }, engine, deadline);
+      const extracted = await transcribeDocument(scope, 'email', { name: filename, mediaType: file.type.toLowerCase(), bytes }, { extract, provider: engine, signal: deadline });
       if (!extracted.ok) {
         results.push({ filename, status: extracted.retryable ? 'retry' : 'skipped', reason: extracted.reason });
         continue;

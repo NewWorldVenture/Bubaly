@@ -232,7 +232,10 @@ describe('POST /api/ai/requests — intake', () => {
     });
 
     // The request row is written through the caller's own client (RLS) with the family and the requester.
-    const insert = cookieDb.calls.find((c) => c.table === 'ai_requests' && c.kind === 'insert');
+    // Filed by server code on the ledger client; the caller's own client never
+    // inserts a request row (0477 withdraws member INSERT, #892 review 4174949251).
+    expect(cookieDb.calls.some((c) => c.table === 'ai_requests' && c.kind === 'insert')).toBe(false);
+    const insert = ledgerDb.calls.find((c) => c.table === 'ai_requests' && c.kind === 'insert');
     expect(insert?.payload).toMatchObject({ family_id: 'fam-1', requested_by: 'user-1', requested_by_member_id: 'member-1', kind: 'concierge', request_text: 'Plan our week', status: 'queued' });
 
     // The pipeline ran in order, against the same request, with the page context.
@@ -334,29 +337,33 @@ describe('POST /api/ai/requests — idempotency', () => {
   it('stores the Idempotency-Key on the request and keys the run from it; without one, nothing is deduplicated', async () => {
     const { POST } = await import('@/app/api/ai/requests/route');
     expect((await POST(post({ text: 'Plan our week' }, { 'idempotency-key': KEY }))).status).toBe(202);
-    const insert = cookieDb.calls.find((c) => c.table === 'ai_requests' && c.kind === 'insert');
+    const insert = ledgerDb.calls.find((c) => c.table === 'ai_requests' && c.kind === 'insert');
     expect(insert?.payload).toMatchObject({ family_id: 'fam-1', client_request_id: KEY });
     // The run row gets a key derived from the same id, so a retry that reached the planner would re-find the run (0250's index).
     expect(planRequest.mock.calls[0][1]).toMatchObject({ requestId: 'req-1', runIdempotencyKey: makeKey(['fam-1', 'request', KEY]) });
 
     vi.clearAllMocks();
     cookieDb = makeDb(respond);
+    ledgerDb = makeDb(respond);
     expect((await POST(post({ text: 'Plan our week' }))).status).toBe(202);
-    expect(cookieDb.calls.find((c) => c.table === 'ai_requests' && c.kind === 'insert')?.payload).toMatchObject({ client_request_id: null });
+    expect(ledgerDb.calls.find((c) => c.table === 'ai_requests' && c.kind === 'insert')?.payload).toMatchObject({ client_request_id: null });
     expect(planRequest.mock.calls[0][1]).toMatchObject({ runIdempotencyKey: null });
   });
 
   it('accepts clientRequestId in the body, prefers the header, and 400s an id it cannot store', async () => {
     const { POST } = await import('@/app/api/ai/requests/route');
     expect((await POST(post({ text: 'Plan our week', clientRequestId: 'phone-7:000042' }))).status).toBe(202);
-    expect(cookieDb.calls.find((c) => c.table === 'ai_requests' && c.kind === 'insert')?.payload).toMatchObject({ client_request_id: 'phone-7:000042' });
+    expect(ledgerDb.calls.find((c) => c.table === 'ai_requests' && c.kind === 'insert')?.payload).toMatchObject({ client_request_id: 'phone-7:000042' });
 
     cookieDb = makeDb(respond);
+    ledgerDb = makeDb(respond);
+
     expect((await POST(post({ text: 'Plan our week', clientRequestId: 'phone-7:000042' }, { 'idempotency-key': KEY }))).status).toBe(202);
-    expect(cookieDb.calls.find((c) => c.table === 'ai_requests' && c.kind === 'insert')?.payload).toMatchObject({ client_request_id: KEY });
+    expect(ledgerDb.calls.find((c) => c.table === 'ai_requests' && c.kind === 'insert')?.payload).toMatchObject({ client_request_id: KEY });
 
     for (const bad of [{ body: { text: 'Plan our week', clientRequestId: 'short' } }, { body: { text: 'Plan our week' }, headers: { 'idempotency-key': 'has spaces in it' } }, { body: { text: 'Plan our week', clientRequestId: 'x'.repeat(129) } }]) {
       cookieDb = makeDb(respond);
+      ledgerDb = makeDb(respond);
       const res = await POST(post(bad.body, bad.headers ?? {}));
       expect(res.status).toBe(400);
       expect((await res.json()).code).toBe('client_request_id_invalid');
@@ -374,13 +381,17 @@ describe('POST /api/ai/requests — idempotency', () => {
       requestId: 'req-0', runId: 'run-0', planId: 'plan-0', outcome: 'plan', summary: 'Planned the week.', redirect: '/dashboard/concierge/runs/run-0',
     });
     // The insert was attempted (the index decides the race), the loser read the winner back, and nothing else happened.
-    expect(cookieDb.calls.find((c) => c.table === 'ai_requests' && c.kind === 'select')?.filters).toMatchObject({ family_id: 'fam-1', client_request_id: KEY });
+    // Both on the ledger client: the caller's own client never writes a request row (0477).
+    expect(ledgerDb.calls.find((c) => c.table === 'ai_requests' && c.kind === 'select')?.filters).toMatchObject({ family_id: 'fam-1', client_request_id: KEY });
     expect(classifyIntent).not.toHaveBeenCalled();
     expect(buildContext).not.toHaveBeenCalled();
     expect(planRequest).not.toHaveBeenCalled();
     expect(kickRun).not.toHaveBeenCalled();
-    expect(ledgerDb.calls.filter((c) => c.kind !== 'select')).toHaveLength(0);
-    for (const call of ledgerDb.calls) expect(call.filters.family_id).toBe('fam-1');
+    expect(ledgerDb.calls.filter((c) => c.kind !== 'select').map((c) => `${c.table}:${c.kind}`)).toEqual(['ai_requests:insert']);
+    expect(cookieDb.calls.filter((c) => c.kind !== 'select')).toHaveLength(0);
+    for (const call of ledgerDb.calls) {
+      expect(call.kind === 'insert' ? (call.payload as Record<string, unknown>).family_id : call.filters.family_id).toBe('fam-1');
+    }
   });
 
   it('replays a parked question as the clarification it was, and an inline answer as an answer', async () => {

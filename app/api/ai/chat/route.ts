@@ -4,7 +4,7 @@ import { getTranslations } from '@/lib/i18n/server';
 import { createServer } from '@/lib/supabase/server';
 import { settleAll } from '@/lib/supabase/settle';
 import { requireUserContext } from '@/lib/supabase/auth';
-import { AiRequestDuplicate, AiRequestNotFiled, withAiRequest } from '@/lib/ai/observability';
+import { AiRequestDuplicate, AiRequestNotFiled, AiRequestOverAllowance, withAiRequest } from '@/lib/ai/observability';
 import { scopeFromUserContext } from '@/lib/services/scope';
 import { resolveProvider, describeAIError, isAIConfigured, type AIMessage } from '@/lib/ai/provider';
 import { finalizeAssistantContent, summarizeToolResult } from '@/lib/ai/assistant-engine';
@@ -292,7 +292,10 @@ export async function POST(req: NextRequest) {
           // Or the turn could not be recorded: keyed, an earlier attempt's
           // outcome is unknown, so nothing ran (fail closed).
           if (!(err instanceof AiRequestDuplicate) && !(err instanceof AiRequestNotFiled)) throw err;
-          send({ type: 'error', error: t(err instanceof AiRequestDuplicate ? 'ai.thisMessageIsAlreadyBeingAnswered' : 'ai.accountContextIsTemporarilyUnavailable') });
+          // Or the family reached its allowance after the check above (F19):
+          // the admission refused the turn, so it says so, as the check does.
+          if (err instanceof AiRequestOverAllowance) send({ type: 'error', error: t('ai.yourFamilyUsedItsMonthlyAllowance', { limit: err.allowance }), code: err.code, limit: err.allowance });
+          else send({ type: 'error', error: t(err instanceof AiRequestDuplicate ? 'ai.thisMessageIsAlreadyBeingAnswered' : 'ai.accountContextIsTemporarilyUnavailable') });
           controller.close();
         }
       },

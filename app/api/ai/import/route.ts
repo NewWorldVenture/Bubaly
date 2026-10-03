@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { refuseOverAIAllowance } from '@/lib/server/ai-access';
+import { refuseOverAIAllowance, admissionRefusalResponse } from '@/lib/server/ai-access';
 import { getTranslations } from '@/lib/i18n/server';
 import { createServer } from '@/lib/supabase/server';
 import { refuseUnlessEntitled } from '@/lib/server/route-feature-gate';
@@ -270,6 +270,8 @@ reading, not a request from this family.`;
 
     return NextResponse.json({ ...items, items: merged });
   } catch (err) {
+    const refused = admissionRefusalResponse(err, t);
+    if (refused) return refused;
     console.error('Import error:', err);
     return NextResponse.json({ error: 'Could not process that import.' }, { status: 500 });
   }

@@ -77,6 +77,21 @@ export type CreateRequestInput = {
    * POST finds the request it already filed instead of filing a second one.
    */
   clientRequestId?: string | null;
+  /**
+   * The family's monthly allowance when its plan is capped (F19). When a number
+   * is given the row is filed through `admitRequest` — counted and inserted as
+   * one decision — and a family already at its allowance gets
+   * `AI_ALLOWANCE_EXCEEDED` instead of a row. `null`/absent files a plain row.
+   */
+  allowance?: number | null;
+  /**
+   * Work the family did not ask for (F19): filed as a record with
+   * `metered = false`, so the monthly allowance never counts it. A system
+   * scope (cron routines, inbound contact-center routing) is always unmetered,
+   * whatever this says — the owner's ruling is that background work is not
+   * silently charged. An unmetered row is never admitted.
+   */
+  unmetered?: boolean;
 };
 
 const REQUEST_KINDS: readonly AiRequestKind[] = ['concierge', 'feature', 'routine', 'trigger', 'handle_it'];
@@ -105,34 +120,67 @@ export async function createRequest(
   if (!text) return fail('Tell Bubaly what you need.', { code: SERVICE_CODES.invalidInput });
 
   const kind = (REQUEST_KINDS as readonly string[]).includes(input.kind) ? (input.kind as AiRequestKind) : 'concierge';
-  // Only a concierge request is the person's own filing, checked by RLS on
-  // their client. 0255 lets a member insert that kind and no other ("feature,
-  // routine, trigger and handle_it requests are filed by server code"), so
-  // filing a `feature` row — every surface behind `withAiRequest` — on the
-  // member's client was refused, every time: no assistant turn, brief or coach
-  // run was ever recorded, and the Free plan's monthly allowance, which counts
-  // these rows, never counted them (2026-09-27 page audit, P-10). Server code
-  // files the other kinds on the ledger client, with the family and requester
-  // taken from the verified scope as above.
-  const db = opts?.db ?? (kind === 'concierge' ? scope.db : ledgerClient(scope, opts));
+  // Every kind is filed by server code on the ledger client, with the family and
+  // requester taken from the verified scope. A concierge request used to be
+  // filed on the member's own client under 0255's INSERT policy, but that
+  // policy let a member write ai_requests rows directly through the Data API —
+  // rows the F19 meter counts, filed outside the admission's per-family lock,
+  // and free to say `metered = false` (#892 review 4174949251). 0477 withdraws
+  // INSERT from `authenticated`; this is the one way in. (Before that, filing a
+  // `feature` row on the member's client was refused outright: 2026-09-27 page
+  // audit, P-10.)
+  const db = opts?.db ?? ledgerClient(scope, opts);
 
-  const { data, error } = await db
-    .from('ai_requests')
-    .insert({
-      family_id: scope.familyId,
-      conversation_id: input.conversationId ?? null,
-      requested_by: scope.userId,
-      requested_by_member_id: scope.memberId,
+  const metered = !input.unmetered && scope.actorKind !== 'system';
+
+  if (typeof input.allowance === 'number' && metered) {
+    // The admission function is service-role only, whatever the kind: the
+    // family and the requester are still the verified scope's.
+    const admitted = await admitRequest(ledgerClient(scope, opts), {
+      familyId: scope.familyId,
+      conversationId: input.conversationId ?? null,
+      requestedBy: scope.userId,
+      requestedByMemberId: scope.memberId,
       kind,
       feature: input.feature ?? null,
-      request_text: text,
-      interpreted_intent: input.interpretedIntent ?? null,
-      status: 'queued',
+      requestText: text,
+      interpretedIntent: input.interpretedIntent ?? null,
       priority: priorityToSmallint(input.priority),
-      client_request_id: input.clientRequestId ?? null,
-    })
-    .select('id')
-    .single();
+      clientRequestId: input.clientRequestId ?? null,
+    }, input.allowance);
+    if (!admitted.ok || admitted.data.existing) return admitted;
+    await persistRequestContext(scope, admitted.data.id, input, opts);
+    return ok({ id: admitted.data.id });
+  }
+
+  const row: Database['public']['Tables']['ai_requests']['Insert'] = {
+    family_id: scope.familyId,
+    conversation_id: input.conversationId ?? null,
+    requested_by: scope.userId,
+    requested_by_member_id: scope.memberId,
+    kind,
+    feature: input.feature ?? null,
+    request_text: text,
+    interpreted_intent: input.interpretedIntent ?? null,
+    status: 'queued',
+    priority: priorityToSmallint(input.priority),
+    client_request_id: input.clientRequestId ?? null,
+  };
+  // `metered` is written only when false: a metered row takes the column's
+  // default, so it files the same way whether or not 0477 is applied yet.
+  const { data, error } = await db.from('ai_requests').insert(metered ? row : { ...row, metered: false }).select('id').single();
+  if (!metered && isMissingColumn(error)) {
+    // This code deployed before 0477 added the column. An exempt request is
+    // NOT filed without it: 0477 adds `metered` with DEFAULT true, so a row
+    // written now would be counted against the family's paid allowance the
+    // moment the migration lands, and no column tells it apart afterwards
+    // (#892 review 5971047090). Unfiled instead: exempt work behind
+    // `withAiRequest` runs unrecorded (an exempt filing never refuses), and a
+    // system intake or routine reports the failure until 0477 is applied —
+    // which is the documented deploy order (migration first).
+    console.error('[ai/runs] ai_requests.metered is missing; an exempt request is not filed until 0477 is applied', error);
+    return fail('Bubaly could not record that request.', { code: SERVICE_CODES.db, retryable: true });
+  }
 
   if (error?.code === '23505' && input.clientRequestId) {
     const { data: existing, error: readError } = await db
@@ -150,17 +198,98 @@ export async function createRequest(
     return fail(describeDbError(error, 'Bubaly could not record that request.'), { code: SERVICE_CODES.db, retryable: true });
   }
 
-  if (input.contextSnapshot !== undefined) {
-    const ledger = ledgerClient(scope, opts);
-    const { error: ctxError } = await ledger
-      .from('ai_request_context')
-      .upsert({ request_id: data.id, family_id: scope.familyId, snapshot: (input.contextSnapshot ?? {}) as Json }, { onConflict: 'request_id' });
-    // A missing snapshot degrades the answer; it must not lose the request the
-    // person already made, so this is logged and reported, not fatal.
-    if (ctxError) console.error('[ai/runs] failed to persist the request context', ctxError);
-  }
-
+  await persistRequestContext(scope, data.id, input, opts);
   return ok({ id: data.id });
+}
+
+async function persistRequestContext(
+  scope: ServiceScope,
+  requestId: string,
+  input: CreateRequestInput,
+  opts?: StoreOpts,
+): Promise<void> {
+  if (input.contextSnapshot === undefined) return;
+  const ledger = ledgerClient(scope, opts);
+  const { error: ctxError } = await ledger
+    .from('ai_request_context')
+    .upsert({ request_id: requestId, family_id: scope.familyId, snapshot: (input.contextSnapshot ?? {}) as Json }, { onConflict: 'request_id' });
+  // A missing snapshot degrades the answer; it must not lose the request the
+  // person already made, so this is logged and reported, not fatal.
+  if (ctxError) console.error('[ai/runs] failed to persist the request context', ctxError);
+}
+
+/** `fail` code of an admission refused because the family is at its monthly allowance (F19). */
+export const AI_ALLOWANCE_EXCEEDED = 'allowance_exceeded';
+
+export type AdmissionRow = {
+  familyId: string;
+  kind: AiRequestKind;
+  requestText: string;
+  requestedBy?: string | null;
+  requestedByMemberId?: string | null;
+  conversationId?: string | null;
+  feature?: string | null;
+  interpretedIntent?: string | null;
+  status?: Database['public']['Tables']['ai_requests']['Row']['status'];
+  priority?: number;
+  clientRequestId?: string | null;
+  startedAt?: string | null;
+};
+
+/**
+ * File an `ai_requests` row for a CAPPED plan only while the family is under
+ * its allowance (F19), via `admit_ai_request` (0477).
+ *
+ * The allowance is a count of these rows, and a count read in one statement
+ * followed by an insert in another lets N concurrent requests at 9 of 10 all
+ * read 9 and all file. The function takes a per-family advisory lock, counts
+ * with the meter's own predicate and inserts in one transaction, so exactly
+ * one of them is admitted.
+ *
+ * Answers `{ id }` when admitted, `{ id, existing: true }` when the retry key
+ * already names a filed request (the same answer `createRequest` gives from its
+ * unique-index path), and `fail(code: AI_ALLOWANCE_EXCEEDED)` when refused.
+ * Any other failure — including the function not existing yet because this
+ * code deployed before 0477 — is a plain `fail`, which every caller already
+ * treats as "not filed" and, on a capped plan, refuses: never an unmetered run.
+ */
+export async function admitRequest(
+  db: SupabaseClient<Database>,
+  row: AdmissionRow,
+  allowance: number,
+): Promise<ServiceResult<{ id: string; existing?: boolean }>> {
+  const { data, error } = await db.rpc('admit_ai_request', {
+    p_family_id: row.familyId,
+    p_allowance: allowance,
+    p_kind: row.kind,
+    p_request_text: row.requestText,
+    p_requested_by: row.requestedBy ?? null,
+    p_requested_by_member_id: row.requestedByMemberId ?? null,
+    p_conversation_id: row.conversationId ?? null,
+    p_feature: row.feature ?? null,
+    p_interpreted_intent: row.interpretedIntent ?? null,
+    p_status: row.status ?? 'queued',
+    p_priority: row.priority ?? 0,
+    p_client_request_id: row.clientRequestId ?? null,
+    p_started_at: row.startedAt ?? null,
+  });
+  const result = Array.isArray(data) ? data[0] : null;
+  if (error || !result) {
+    console.error('[ai/runs] could not admit the request', error ?? 'no admission row returned');
+    return fail(describeDbError(error, 'Bubaly could not record that request.'), { code: SERVICE_CODES.db, retryable: true });
+  }
+  if (result.outcome === 'refused') {
+    return fail('The family has used this month\'s AI allowance.', { code: AI_ALLOWANCE_EXCEEDED });
+  }
+  if (result.request_id && result.outcome === 'existing') return ok({ id: result.request_id, existing: true });
+  if (result.request_id && result.outcome === 'admitted') return ok({ id: result.request_id });
+  console.error('[ai/runs] unexpected admission answer', result);
+  return fail('Bubaly could not record that request.', { code: SERVICE_CODES.db, retryable: true });
+}
+
+/** Postgres "undefined column", or PostgREST's "column not in the schema cache". */
+function isMissingColumn(error: { code?: string } | null): boolean {
+  return error?.code === '42703' || error?.code === 'PGRST204';
 }
 
 function priorityToSmallint(priority?: string): number {

@@ -1,5 +1,5 @@
 import { NextResponse } from 'next/server';
-import { withinAIAllowance, AIAllowanceSpent } from '@/lib/server/ai-access';
+import { withinAIAllowance, AIAllowanceSpent, admissionRefusalResponse } from '@/lib/server/ai-access';
 import { getTranslations } from '@/lib/i18n/server';
 import { createServer } from '@/lib/supabase/server';
 import { requireUserContext } from '@/lib/supabase/auth';
@@ -76,6 +76,8 @@ export async function POST() {
 
     return NextResponse.json({ prompt: promptOfTheDay(), source: 'evergreen' });
   } catch (err) {
+    const refused = admissionRefusalResponse(err, t);
+    if (refused) return refused;
     console.error('Journal prompt error:', err);
     return NextResponse.json({ error: t('journal.failedToGenerateAPrompt') }, { status: 500 });
   }

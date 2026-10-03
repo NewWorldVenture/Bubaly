@@ -30,7 +30,7 @@ import { rateLimitDb } from '@/lib/server/rate-limit-db';
 import { parseAIChatRequest, parseAssistantTurnKey } from '@/lib/ai/chat-request';
 import { findPriorTurn } from '@/lib/ai/assistant-turn-replay';
 import { answerPriorTurn } from '@/lib/ai/assistant-turn-answer';
-import { AiRequestDuplicate, AiRequestNotFiled } from '@/lib/ai/observability';
+import { AiRequestDuplicate, AiRequestNotFiled, AiRequestOverAllowance } from '@/lib/ai/observability';
 import { MAX_PROVIDER_JSON_BYTES, readBoundedRequestJson } from '@/lib/server/bounded-request-body';
 import { describeActionError } from '@/lib/supabase/errors';
 import { buildAssistantTools } from '@/lib/assistant/tools';
@@ -251,6 +251,7 @@ export async function POST(req: NextRequest) {
       familyName: ctx.active.family.name, tz, conversationId, message,
       clientRequestId: turnKey.key, alreadyAnswering: tr('ai.thisMessageIsAlreadyBeingAnswered'),
       notRecorded: tr('ai.accountContextIsTemporarilyUnavailable'),
+      overAllowance: (limit: number) => tr('ai.yourFamilyUsedItsMonthlyAllowance', { limit }),
     };
     const prepared = await prepareAssistantTurn(input);
     if (!prepared.ok) return NextResponse.json({ error: prepared.error }, { status: 500 });
@@ -264,6 +265,15 @@ export async function POST(req: NextRequest) {
         // above and this one's filing; this attempt ran nothing.
         if (err instanceof AiRequestDuplicate) {
           return NextResponse.json({ error: tr('ai.thisMessageIsAlreadyBeingAnswered'), code: 'turn_in_progress', requestId: err.requestId }, { status: 409 });
+        }
+        // The family reached its allowance between the check above and this
+        // turn's filing (F19): the admission refused it and nothing ran. The
+        // same 429 the check above gives.
+        if (err instanceof AiRequestOverAllowance) {
+          return accessDeniedResponse({
+            ok: false, status: 429, code: err.code, limit: err.allowance,
+            error: tr('ai.yourFamilyUsedItsMonthlyAllowance', { limit: err.allowance }),
+          }, tr);
         }
         // The turn could not be recorded: on a keyed send that leaves an
         // earlier attempt's outcome unknown, so nothing ran (fail closed).

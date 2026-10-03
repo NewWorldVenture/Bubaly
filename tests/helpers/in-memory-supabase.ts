@@ -19,6 +19,7 @@
 // handler map. Every result is `{ data, error, count }` — nothing throws, the
 // way the real client behaves.
 import { randomUUID } from 'node:crypto';
+import { admitAiRequest, type AdmitArgs } from './admit-ai-request';
 
 export type Row = Record<string, unknown>;
 
@@ -70,6 +71,13 @@ const BUILT_IN_RPC: Record<string, (args: Record<string, unknown>, db: InMemoryS
   family_allergies: (args, db) => db.table('medical_profiles')
     .filter((row) => row.family_id === args.p_family_id)
     .map((row) => ({ member_id: row.member_id, allergies: row.allergies ?? null })),
+  // 0477 (F19): a capped family's `ai_requests` row is admitted — counted and
+  // filed under a per-family lock — over this same table.
+  admit_ai_request: async (args, db) => {
+    const { data, error } = await admitAiRequest(db, args as unknown as AdmitArgs);
+    if (error) throw new Error(error.message);
+    return data;
+  },
 };
 
 function pgError(code: string, message: string): PostgrestError {
@@ -523,7 +531,7 @@ export class InMemorySupabase {
   withDefaults(table: string, raw: Row): Row {
     const now = new Date().toISOString();
     const row: Row = { ...raw };
-    for (const [column, value] of Object.entries(this.options.defaults?.[table] ?? {})) {
+    for (const [column, value] of Object.entries({ ...MIGRATION_DEFAULTS[table], ...this.options.defaults?.[table] })) {
       if (row[column] === undefined) row[column] = typeof value === 'object' && value !== null ? structuredClone(value) : value;
     }
     if (row.id === undefined || row.id === null) row.id = randomUUID();
@@ -532,6 +540,15 @@ export class InMemorySupabase {
     return row;
   }
 }
+
+/**
+ * Column defaults a migration gives one table, applied to every fake so a test
+ * that seeds or inserts a row without them sees what Postgres would store.
+ */
+const MIGRATION_DEFAULTS: Record<string, Row> = {
+  // 0477: every row counts against the allowance unless server code says not.
+  ai_requests: { metered: true },
+};
 
 /** Build one, typed as the client the server code expects. */
 export function createInMemorySupabase<T = unknown>(options: InMemoryOptions = {}): InMemorySupabase & T {
