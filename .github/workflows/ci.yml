@@ -154,7 +154,8 @@ jobs:
       # @expo/config-plugins, whose fix is a breaking Expo upgrade. None high or
       # critical, so this passes today and stops anything worse arriving.
       # On 2026-10-02 a high advisory with no patched release arrived through
-      # expo (node-forge GHSA-86w9-cpqp-85rv). It is accepted by id in
+      # expo (node-forge GHSA-86w9-cpqp-85rv), and on 2026-10-03 another
+      # (braces GHSA-vfj7-8cjw-p6xm). Each is accepted by id in
       # mobile/npm-audit-allowlist.json; any other high advisory still fails.
       - name: Dependency audit (production dependencies)
         run: node ../scripts/audit-npm-advisories.mjs --omit=dev --audit-level=high --allowlist=npm-audit-allowlist.json
