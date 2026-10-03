@@ -16704,5 +16704,6 @@
   "ai.thatRetryDoesNotMatchThisMessage": "Essa nova tentativa não corresponde a esta mensagem. Envie-a novamente.",
   "ai.thisMessageIsAlreadyBeingAnswered": "Esta mensagem já está a ser respondida.",
   "ai.thisMessageWasAlreadyAnswered": "Esta mensagem já foi respondida. Recarregue a conversa para ver a resposta.",
-  "ai.thisMessageCouldNotBeIdentified": "Não foi possível identificar esta mensagem. Envie-a novamente."
+  "ai.thisMessageCouldNotBeIdentified": "Não foi possível identificar esta mensagem. Envie-a novamente.",
+  "ai.thatAnswerWasCutOff": "Essa resposta foi interrompida antes de terminar. Pergunte novamente para obter a resposta completa."
 }

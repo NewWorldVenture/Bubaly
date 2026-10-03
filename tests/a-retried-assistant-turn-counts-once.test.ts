@@ -408,6 +408,76 @@ describe('a retry of an attempt that has not answered', () => {
   });
 });
 
+// A turn whose stream broke after text reached the family settles
+// `partially_completed` and its first attempt ended with an `error` event. Its
+// retry replays the saved half answer the same way — never as a clean reply
+// the client would take for a whole answer (and speak aloud).
+describe('a retry of an answer that was cut off says so', () => {
+  const HALF = 'Dinner is planned for';
+  function cutOffTurn(feature = 'assistant.stream') {
+    tableOf('ai_requests').push({
+      id: 'turn-1', family_id: FAMILY, requested_by: 'user-1', feature, conversation_id: CONV,
+      client_request_id: 'assistant:send-0001-abcdef', status: 'partially_completed', created_at: tick(), completed_at: tick(),
+    });
+    tableOf('ai_messages').push(
+      { id: 'm1', family_id: FAMILY, conversation_id: CONV, role: 'user', content: 'Plan dinner', request_id: 'turn-1', created_at: tick() },
+      { id: 'm2', family_id: FAMILY, conversation_id: CONV, role: 'assistant', content: HALF, request_id: 'turn-1', created_at: tick() },
+    );
+  }
+
+  it('/api/ai stream: the half answer, then the error, then done — no model, no new row', async () => {
+    const { POST } = await import('@/app/api/ai/route');
+    seed(9);
+    cutOffTurn();
+    const replay = events(await (await POST(send({ key: 'send-0001-abcdef', json: false }))).text());
+    expect(replay).toEqual([
+      { type: 'delta', text: HALF },
+      { type: 'error', error: 'ai.thatAnswerWasCutOff' },
+      { type: 'done', content: HALF, persisted: true, requestId: 'turn-1' },
+    ]);
+    expect(state.providerCalls).toBe(0);
+    expect(state.prepares).toBe(0);
+    expect(tableOf('ai_requests')).toHaveLength(10);
+  });
+
+  it('/api/ai JSON: a 200 replay marked partial, with the error', async () => {
+    const { POST } = await import('@/app/api/ai/route');
+    seed(9);
+    cutOffTurn();
+    const res = await POST(send({ key: 'send-0001-abcdef' }));
+    expect(res.status).toBe(200);
+    expect(await res.json()).toEqual({
+      conversationId: CONV, content: HALF, actions: [], cards: [], runIds: [], persisted: true,
+      replayed: true, requestId: 'turn-1', partial: true, error: 'ai.thatAnswerWasCutOff',
+    });
+    expect(state.providerCalls).toBe(0);
+    expect(tableOf('ai_requests')).toHaveLength(10);
+  });
+
+  it('/api/ai/chat: the same three events', async () => {
+    const { POST } = await import('@/app/api/ai/chat/route');
+    cutOffTurn('chat.assistant');
+    const replay = events(await (await POST(sendChat('send-0001-abcdef'))).text());
+    expect(replay).toEqual([
+      { type: 'delta', text: HALF },
+      { type: 'error', error: 'ai.thatAnswerWasCutOff' },
+      { type: 'done', content: HALF, persisted: true, requestId: 'turn-1' },
+    ]);
+    expect(state.providerCalls).toBe(0);
+    expect(tableOf('ai_requests')).toHaveLength(1);
+  });
+
+  it('control: a completed turn with the same saved exchange replays clean, unmarked', async () => {
+    const { POST } = await import('@/app/api/ai/route');
+    cutOffTurn();
+    tableOf('ai_requests')[0].status = 'completed';
+    const body = await (await POST(send({ key: 'send-0001-abcdef' }))).json() as Record<string, unknown>;
+    expect(body).toMatchObject({ content: HALF, replayed: true });
+    expect(body).not.toHaveProperty('partial');
+    expect(body).not.toHaveProperty('error');
+  });
+});
+
 // The second assistant entry point (`chat.assistant`, SSE only) keeps the
 // same rule, through the same lookup and the same index.
 describe('/api/ai/chat: a retried send is one turn there too', () => {

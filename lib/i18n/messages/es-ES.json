@@ -16704,5 +16704,6 @@
   "ai.thatRetryDoesNotMatchThisMessage": "Ese reintento no coincide con este mensaje. Vuelve a enviarlo.",
   "ai.thisMessageIsAlreadyBeingAnswered": "Ya se está respondiendo a este mensaje.",
   "ai.thisMessageWasAlreadyAnswered": "Este mensaje ya se respondió. Vuelve a cargar la conversación para ver la respuesta.",
-  "ai.thisMessageCouldNotBeIdentified": "No se pudo identificar este mensaje. Vuelve a enviarlo."
+  "ai.thisMessageCouldNotBeIdentified": "No se pudo identificar este mensaje. Vuelve a enviarlo.",
+  "ai.thatAnswerWasCutOff": "Esa respuesta se cortó antes de terminar. Vuelve a preguntar para obtener la respuesta completa."
 }

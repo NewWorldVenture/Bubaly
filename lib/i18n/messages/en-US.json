@@ -16704,5 +16704,6 @@
   "ai.thatRetryDoesNotMatchThisMessage": "That retry doesn’t match this message. Send it again.",
   "ai.thisMessageIsAlreadyBeingAnswered": "This message is already being answered.",
   "ai.thisMessageWasAlreadyAnswered": "This message was already answered. Reload the conversation to see the reply.",
-  "ai.thisMessageCouldNotBeIdentified": "This message could not be identified. Send it again."
+  "ai.thisMessageCouldNotBeIdentified": "This message could not be identified. Send it again.",
+  "ai.thatAnswerWasCutOff": "That answer was cut off before it finished. Ask again for the full reply."
 }
