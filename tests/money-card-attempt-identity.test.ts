@@ -591,6 +591,20 @@ describe('a provider refusal saved under the attempt key and replayed to a later
     expect(issuedAudits()).toEqual([]);
   });
 
+  it.each([
+    { label: 'a 409 conflict', failure: () => refusal(409) },
+    { label: 'a 429 rate limit', failure: () => refusal(429) },
+    { label: 'a misused key (StripeIdempotencyError)', failure: () => Object.assign(refusal(400), { type: 'StripeIdempotencyError' }) },
+  ])('a replayed $label is not retried under the retry key either', async ({ failure }) => {
+    provider.failNextCardCreate(failure());
+    expect(await issueCardAction(VIRTUAL)).toEqual({ ok: false, error: REFUSED });
+    vi.setSystemTime(T0 + 60_000);
+    expect(await issueCardAction(VIRTUAL)).toEqual({ ok: false, error: REFUSED });
+    expect(provider.log.cardKeys).toEqual([key('virtual', 0), key('virtual', 0)]);
+    expect(provider.log.cardOutcomes).toEqual(['failed', 'replayed_failure']);
+    expect(provider.cards.size).toBe(0);
+  });
+
   it('when the retry key fails too, a later order is refused without a third attempt until the provider forgets the keys', async () => {
     provider.failNextCardCreate(refusal(402));
     expect(await issueCardAction(VIRTUAL)).toEqual({ ok: false, error: REFUSED });
