@@ -354,7 +354,10 @@ describe('card capability, lookup and orchestration boundaries', () => {
     expect(await issueCardAction(input)).toEqual({ ok: false, error: 'translated:money.couldNotIssueTheCard' });
     expect(mock.audit).not.toHaveBeenCalled(); expect(mock.revalidate).not.toHaveBeenCalled();
   });
-  it.each([-1, 0.5, Number.NaN, Number.POSITIVE_INFINITY, '0', null, undefined])('refuses an expectedCount of %j before service, Trust or provider access', async expectedCount => {
+  it.each([
+    ['-1', -1], ['0.5', 0.5], ['NaN', Number.NaN], ['Infinity', Number.POSITIVE_INFINITY],
+    ["the string '0'", '0'], ['null', null], ['undefined', undefined],
+  ])('refuses an expectedCount of %s before service, Trust or provider access', async (_label, expectedCount) => {
     expect(await issueCardAction({ ...input, expectedCount } as unknown as typeof input)).toEqual({ ok: false, error: 'translated:money.couldNotIssueTheCard' });
     noEffects();
   });
