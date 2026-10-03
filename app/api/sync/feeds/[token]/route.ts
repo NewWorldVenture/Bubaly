@@ -5,6 +5,7 @@ import { isValidFeedToken } from '@/lib/sync/feed-request';
 import { clientIp, rateLimit } from '@/lib/server/rate-limit';
 import { rateLimitDb } from '@/lib/server/rate-limit-db';
 import { readAll } from '@/lib/supabase/read-all';
+import { isMissingExceptionDatesColumn } from '@/lib/sync/engine/exceptions';
 
 /** The most events one feed publishes: the nearest ones win. */
 const FEED_MAX_EVENTS = 2000;
@@ -91,15 +92,35 @@ export async function GET(
   // `.limit(2000)` is not a bound — PostgREST caps a response at db-max-rows
   // whatever the client asked for, so a busy calendar published 1,000 events and
   // called that the feed. `id` breaks ties so two pages cannot overlap or skip.
-  const { rows, error: eventsError } = await readAll((from, to) => supabase
-    .from('sync_calendar_events')
-    .select('id, uid, title, description, location, starts_at, ends_at, all_day, recurrence_rule, status, updated_at')
-    .eq('calendar_id', calendar.id)
-    .is('deleted_at', null)
-    .lte('starts_at', horizon)
-    .order('starts_at', { ascending: true })
-    .order('id')
-    .range(from, to), { max: FEED_MAX_EVENTS });
+  // `exception_dates` and `recurrence_id` are what keep a subscriber from
+  // rendering the slot a moved or cancelled occurrence left behind. A database
+  // that has not applied the column's migration answers the select with the
+  // one error that names it; that read is repeated without the column, with a
+  // warning, rather than published as an empty feed.
+  type FeedRow = {
+    id: string; uid: string | null; title: string; description: string | null; location: string | null;
+    starts_at: string; ends_at: string | null; all_day: boolean; recurrence_rule: string | null; recurrence_id: string | null;
+    status: string; updated_at: string; exception_dates?: string[] | null;
+  };
+  const page = (from: number, to: number, withExceptionDates: boolean) => {
+    const query = supabase.from('sync_calendar_events');
+    const selected = withExceptionDates
+      ? query.select('id, uid, title, description, location, starts_at, ends_at, all_day, recurrence_rule, recurrence_id, status, updated_at, exception_dates')
+      : query.select('id, uid, title, description, location, starts_at, ends_at, all_day, recurrence_rule, recurrence_id, status, updated_at');
+    return selected
+      .eq('calendar_id', calendar.id)
+      .is('deleted_at', null)
+      .lte('starts_at', horizon)
+      .order('starts_at', { ascending: true })
+      .order('id')
+      .range(from, to) as unknown as PromiseLike<{ data: FeedRow[] | null; error: { message: string } | null }>;
+  };
+  const readEvents = (withExceptionDates: boolean) => readAll<FeedRow>((from, to) => page(from, to, withExceptionDates), { max: FEED_MAX_EVENTS });
+  let { rows, error: eventsError } = await readEvents(true);
+  if (eventsError && isMissingExceptionDatesColumn(eventsError)) {
+    console.warn('[sync-feed] sync_calendar_events.exception_dates is not in this database yet (its migration has not been applied); publishing without exception dates, so a moved or cancelled occurrence still shows at its original slot.', { calendarId: calendar.id });
+    ({ rows, error: eventsError } = await readEvents(false));
+  }
   // readAll reports two different things as an error. Reaching the cap returns
   // exactly FEED_MAX_EVENTS rows — the nearest ones, in order — and that prefix
   // is a correct feed for a very busy calendar. Anything short of the cap with an
@@ -139,6 +160,10 @@ export async function GET(
     endsAt: e.ends_at,
     allDay: e.all_day,
     recurrenceRule: e.recurrence_rule,
+    // A single changed occurrence of a series names the slot it left; the
+    // master carries every slot the series gave up.
+    recurrenceId: e.recurrence_id,
+    exceptionDates: e.exception_dates ?? [],
     updatedAt: e.updated_at,
     status: (e.status as IcsEvent['status']) ?? 'confirmed',
   }));

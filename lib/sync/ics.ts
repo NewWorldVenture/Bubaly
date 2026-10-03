@@ -108,6 +108,12 @@ export function buildVevent(ev: IcsEvent, dtstamp: string): string[] {
   if (ev.description) emit(lines, 'DESCRIPTION', escapeIcsText(ev.description));
   if (ev.location) emit(lines, 'LOCATION', escapeIcsText(ev.location));
   if (ev.recurrenceRule) emit(lines, 'RRULE', ev.recurrenceRule);
+  if (ev.recurrenceId) {
+    // A changed occurrence shares its series' UID; this is what tells a
+    // subscriber it REPLACES one occurrence rather than duplicating the series.
+    if (ev.allDay) lines.push(`RECURRENCE-ID;VALUE=DATE:${toIcsDate(ev.recurrenceId)}`);
+    else emit(lines, 'RECURRENCE-ID', toIcsUtc(ev.recurrenceId));
+  }
   if (ev.exceptionDates?.length) {
     // The occurrences this series has given up travel with it, so a subscriber
     // does not render the slot a moved or cancelled occurrence left behind.
@@ -204,6 +210,26 @@ function splitContentLine(line: string): { name: string; tzid: string | null; va
   return { name: rawName.toUpperCase(), tzid, value: line.slice(colon + 1) };
 }
 
+/** The instants an EXDATE value list names, read in the zone its TZID gave. */
+function exdateValues(value: string, tzid: string | null): string[] {
+  return value.split(',').map((v) => v.trim()).filter(Boolean).map((v) => parseIcsDate(v, tzid).iso);
+}
+
+/**
+ * The instants one `EXDATE` content line names, or nothing for any other line.
+ *
+ * Google's events API hands a series' recurrence back as the raw ICS lines
+ * (`RRULE:…`, `EXDATE;TZID=America/New_York:20260722T150000,…`,
+ * `EXDATE;VALUE=DATE:20260722`), so the provider mapper reads them with the
+ * same rules a subscribed feed is read with: the TZID is honoured, a quoted
+ * parameter value may carry a colon, a date-only value is the day.
+ */
+export function parseExdateLine(line: string): string[] {
+  const parsed = splitContentLine(line.trim());
+  if (!parsed || parsed.name !== 'EXDATE') return [];
+  return exdateValues(parsed.value, parsed.tzid);
+}
+
 export function parseICS(text: string): IcsEvent[] {
   // Unfold: a CRLF (or LF) followed by space/tab continues the previous line.
   const unfolded = text.replace(/\r\n/g, '\n').replace(/\n[ \t]/g, '');
@@ -268,10 +294,7 @@ export function parseICS(text: string): IcsEvent[] {
         cur.recurrenceId = parseIcsDate(value, tzid).iso;
         break;
       case 'EXDATE':
-        cur.exceptionDates = [
-          ...(cur.exceptionDates ?? []),
-          ...value.split(',').map((v) => v.trim()).filter(Boolean).map((v) => parseIcsDate(v, tzid).iso),
-        ];
+        cur.exceptionDates = [...(cur.exceptionDates ?? []), ...exdateValues(value, tzid)];
         break;
       case 'RRULE':
         cur.recurrenceRule = value;

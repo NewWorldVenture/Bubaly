@@ -11,8 +11,14 @@ import { createHash } from 'node:crypto';
 export function eventContentHash(r: {
   title: string; description?: string | null; location?: string | null;
   starts_at: string; ends_at?: string | null; all_day?: boolean; recurrence_rule?: string | null;
+  exception_dates?: readonly string[] | null;
 }): string {
   const parts = [r.title, r.description ?? '', r.location ?? '', r.starts_at, r.ends_at ?? '', r.all_day ? '1' : '0', r.recurrence_rule ?? ''];
+  // A series' exception dates change what the series means, so they change its
+  // digest — but only when there are any: a stored hash for a series without
+  // exceptions (every row written before the column existed) must stay valid,
+  // or the first pull after this change rewrites every mirrored event.
+  if (r.exception_dates?.length) parts.push([...r.exception_dates].sort().join(','));
   // Separator MUST match lib/sync/providers/google.ts (a \x01 SOH) so every adapter
   // yields the SAME digest for the same normalized item — see the round-trip test.
   return createHash('sha256').update(parts.join('\x01')).digest('hex');
