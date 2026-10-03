@@ -16,6 +16,14 @@
 // page uses, timed series in the family's zone and all-day series by date.
 // The caller's `limit` applies to the merged, sorted result, so eight slots of
 // "coming up" are the eight nearest things, not the eight nearest rows.
+//
+// The planner's reads go through here too: the calendar service's search (and
+// so the assistant's calendar tools, the schedule slice and the trip planner),
+// the free-slot finder, the busy-evenings check, the reminder engine's 48-hour
+// and conflict sweeps, and the readiness page. Each of them used to filter
+// `starts_at` by its window as well, so a weekly practice was invisible to all
+// of them from its second week: the planner double-booked over it, no reminder
+// fired for it, and the free-slot finder offered its hour.
 import type { SupabaseClient } from '@supabase/supabase-js';
 import type { Database } from '@/lib/database.types';
 import { expandEventsInZone } from '@/lib/calendar/recurrence';
@@ -36,24 +44,50 @@ export type OccurrencesResult<C extends keyof EventRow> =
   | { data: CalendarOccurrence<C>[]; count: number; error: null }
   | { data: null; count: null; error: { message: string } };
 
+/**
+ * The filters a caller may add to BOTH reads (a category, a title match, an
+ * assignee that must be set). Each returns the builder it was given, as the
+ * PostgREST builder does; the shape is structural so a caller is not tied to
+ * the client library's generics for a read whose select list is built here.
+ */
+export type OccurrenceFilters = {
+  eq(column: string, value: unknown): OccurrenceFilters;
+  neq(column: string, value: unknown): OccurrenceFilters;
+  in(column: string, values: readonly unknown[]): OccurrenceFilters;
+  ilike(column: string, pattern: string): OccurrenceFilters;
+  not(column: string, operator: string, value: unknown): OccurrenceFilters;
+};
+
 export type OccurrencesOptions<C extends keyof EventRow> = {
-  columns: readonly C[];
+  /** The columns to read; omitted reads every column. The recurrence columns are always read. */
+  columns?: readonly C[];
   /** Applied after the merge, to the sorted occurrences. */
   limit?: number;
+  /**
+   * A database-side cap on the ONE-OFF read, for a caller that wants the
+   * nearest `limit` things and not a count: the merged first `limit` can only
+   * draw on the first `limit` one-offs by start. `count` is then a floor, not
+   * the window's total.
+   */
+  singlesLimit?: number;
   /** Only this member's events (the digital twin reads one person's load). */
   assigneeId?: string;
   /**
    * The PostgREST OR filter for the one-off rows, when the window's own
    * (`calendarWindowFilter`) is not the right one — the kitchen display reads
-   * events that OVERLAP the window, not only those that start in it.
+   * events that OVERLAP the window, not only those that start in it; the
+   * calendar search with no end reads every one-off from the start on.
    */
   singlesFilter?: string;
+  /** Filters added to both reads — a category, a title match. */
+  refine?: (query: OccurrenceFilters) => OccurrenceFilters;
 };
 
 /** More series than a household could have; a read past it is a failed read, never a silent prefix. */
 const SERIES_READ_MAX = 2000;
 
-const isSeries = (row: { recurrence: string | null }) => !!row.recurrence && row.recurrence !== 'none';
+/** A row that stands for a series: one record, an occurrence per step. */
+export const isSeries = (row: { recurrence: string | null }): boolean => !!row.recurrence && row.recurrence !== 'none';
 
 const earlier = (a: string, b: string) => (a < b ? a : b);
 const later = (a: string, b: string) => (a > b ? a : b);
@@ -68,18 +102,22 @@ const later = (a: string, b: string) => (a > b ? a : b);
  * failed read is returned as the error it was, so a caller that treats an
  * unreadable calendar as "unavailable, never an empty day" still can.
  */
-export async function readCalendarOccurrences<C extends keyof EventRow>(
+export async function readCalendarOccurrences<C extends keyof EventRow = keyof EventRow>(
   db: Db,
   familyId: string,
   bounds: CalendarWindowBounds,
   timezone: string,
-  opts: OccurrencesOptions<C>,
+  opts: OccurrencesOptions<C> = {},
 ): Promise<OccurrencesResult<C>> {
-  const columns = [...new Set<string>([...opts.columns, ...RECURRENCE_COLUMNS])].join(', ');
+  const columns = opts.columns ? [...new Set<string>([...opts.columns, ...RECURRENCE_COLUMNS])].join(', ') : '*';
   const dayStart = `${bounds.allDayFromDay}T00:00:00.000Z`;
   const dayEnd = `${bounds.allDayToDay}T00:00:00.000Z`;
-  const scoped = <Q extends { eq: (column: string, value: string) => Q }>(query: Q): Q =>
-    (opts.assigneeId ? query.eq('assignee_id', opts.assigneeId) : query);
+  // The caller's filters, on both reads. The builder returns itself from every
+  // filter, so the structural view and the typed builder are the same object.
+  const scoped = <Q extends { eq: (column: string, value: string) => Q }>(query: Q): Q => {
+    const own = opts.assigneeId ? query.eq('assignee_id', opts.assigneeId) : query;
+    return opts.refine ? (opts.refine(own as unknown as OccurrenceFilters) as unknown as Q) : own;
+  };
 
   // Two reads, issued together and awaited together: the one-offs by the
   // window filter, series excluded (a master whose first occurrence falls in
@@ -89,13 +127,14 @@ export async function readCalendarOccurrences<C extends keyof EventRow>(
   // read so a household past it is a failed read, not a prefix.
   const latest = later(bounds.timedTo, dayEnd);
   const earliest = earlier(bounds.timedFrom, dayStart);
-  const singlesQuery = scoped(db
+  const singlesBase = scoped(db
     .from('calendar_events')
     .select(columns)
     .eq('family_id', familyId))
     .or(opts.singlesFilter ?? calendarWindowFilter(bounds))
     .or('recurrence.is.null,recurrence.eq.none')
     .order('starts_at');
+  const singlesQuery = opts.singlesLimit !== undefined ? singlesBase.limit(opts.singlesLimit) : singlesBase;
   const seriesQuery = scoped(db
     .from('calendar_events')
     .select(columns)

@@ -36,8 +36,11 @@ function makeDb(respond: (call: Call) => Reply) {
     const chain = () => b;
     const filter = (column: string, value: unknown) => { call.filters[column] = value; return b; };
     Object.assign(b, {
-      select: chain, order: chain, limit: chain, ilike: chain, or: chain,
+      select: chain, order: chain, limit: chain, ilike: chain,
+      // An `or` carries a whole window, and a read may add more than one.
+      or: (expression: string) => { call.filters.or = [...((call.filters.or as string[] | undefined) ?? []), expression]; return b; },
       eq: filter, is: filter, in: filter,
+      neq: (c: string, v: unknown) => filter(`neq:${c}`, v),
       lt: (c: string, v: unknown) => filter(`lt:${c}`, v),
       lte: (c: string, v: unknown) => filter(`lte:${c}`, v),
       gte: (c: string, v: unknown) => filter(`gte:${c}`, v),
@@ -193,7 +196,25 @@ describe('searchEvents', () => {
   it('filters by family and defaults the window to now onwards', async () => {
     const { db, calls } = makeDb(() => ({ data: [EVENT_ROW], error: null }));
     const res = await searchEvents(scopeWith(db), { to: '2026-09-12T00:00:00Z', assigneeId: 'member-2' });
-    expect(res).toMatchObject({ ok: true });
+    expect(res).toMatchObject({ ok: true, data: [EVENT_ROW] });
+    // Two reads — the one-offs by the window, the series that could reach it —
+    // and both are family-scoped and narrowed to the assignee.
+    expect(calls.map((c) => c.table)).toEqual(['calendar_events', 'calendar_events']);
+    for (const call of calls) expect(call.filters).toMatchObject({ family_id: 'fam-1', assignee_id: 'member-2' });
+    const [singles, series] = calls;
+    // The window starts at the scope's `now`, and `to` is inclusive as it always was.
+    expect(singles.filters.or).toEqual([
+      expect.stringContaining(`starts_at.gte.${NOW.toISOString()},starts_at.lt.2026-09-12T00:00:00.001Z`),
+      'recurrence.is.null,recurrence.eq.none',
+    ]);
+    expect(series.filters).toMatchObject({ 'neq:recurrence': 'none', 'lte:starts_at': '2026-09-12T00:00:00.001Z' });
+  });
+
+  it('reads the stored rows, a series once, when asked not to expand', async () => {
+    const { db, calls } = makeDb(() => ({ data: [EVENT_ROW], error: null }));
+    const res = await searchEvents(scopeWith(db), { to: '2026-09-12T00:00:00Z', assigneeId: 'member-2', expandSeries: false });
+    expect(res).toMatchObject({ ok: true, data: [EVENT_ROW] });
+    expect(calls).toHaveLength(1);
     expect(calls[0].filters).toMatchObject({
       family_id: 'fam-1',
       'gte:starts_at': NOW.toISOString(),
@@ -243,8 +264,9 @@ describe('findFreeSlots', () => {
       expect(res.data[0].startsAt).toBe('2026-09-07T12:00:00.000Z');
       expect(res.data[0].dayKey).toBe('2026-09-07');
     }
-    // Every source is read and every source is family-scoped.
-    expect(calls.map((c) => c.table).sort()).toEqual(['calendar_events', 'school_events', 'sports_events']);
+    // Every source is read and every source is family-scoped. The calendar is
+    // two reads: the one-offs in the window and the series that could reach it.
+    expect(calls.map((c) => c.table).sort()).toEqual(['calendar_events', 'calendar_events', 'school_events', 'sports_events']);
     expect(calls.every((c) => c.filters.family_id === 'fam-1')).toBe(true);
   });
 

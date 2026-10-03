@@ -53,6 +53,7 @@ function makeDb(respond: (call: Call) => Reply) {
       lte: (c: string, v: unknown) => filter(`lte:${c}`, v),
       gt: (c: string, v: unknown) => filter(`gt:${c}`, v),
       gte: (c: string, v: unknown) => filter(`gte:${c}`, v),
+      neq: (c: string, v: unknown) => filter(`neq:${c}`, v),
       not: (c: string, op: string, v: unknown) => filter(`not:${c}:${op}`, v),
       insert: (payload: unknown) => { call.kind = 'insert'; call.payload = payload; return b; },
       update: (payload: unknown) => { call.kind = 'update'; call.payload = payload; return b; },

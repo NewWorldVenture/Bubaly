@@ -11,6 +11,8 @@ import { approvalReminders, type ApprovalInput } from '@/lib/notifications/appro
 import type { NeedsReader } from '@/lib/home/needs-sources';
 import { SOURCE_MESSAGES, translate } from '@/lib/i18n/messages';
 import { detectConflicts, type ConflictEvent } from '@/lib/home/conflicts';
+import { isSeries, readCalendarOccurrences } from '@/lib/calendar/occurrences';
+import { instantCalendarBounds } from '@/lib/briefing/calendar-window';
 import { medicationDueReminders } from '@/lib/notifications/medication-reminders';
 import { upcomingRelationship, formatCountdown, milestoneLabel, type RelDate } from '@/lib/relationship/dates';
 import { dueFamilyReminderNotices, reminderFetchHorizonIso, type FamilyReminderRow } from '@/lib/reminders/notify';
@@ -146,7 +148,12 @@ export async function generateFamilyNotifications(supabase: DB, familyId: string
     systemScopeForFamily(supabase, familyId),
     settleAll([
       Promise.resolve({ data: roster.rows, error: null }),
-      supabase.from('calendar_events').select('id, title, starts_at, all_day, location, assignee_id').eq('family_id', familyId).gte('starts_at', nowIso).lte('starts_at', in48),
+      // Series included, one entry per occurrence: a weekly practice is
+      // reminded every week, not the week it was created. The family's zone
+      // decides which all-day rows belong to the next two days.
+      readCalendarOccurrences(supabase, familyId, instantCalendarBounds(nowIso, in48, tz), tz, {
+        columns: ['id', 'title', 'starts_at', 'all_day', 'location', 'assignee_id'],
+      }),
       supabase.from('chore_assignments').select('id, due_at, member_id, chore_id, status').eq('family_id', familyId).in('status', ['todo', 'in_progress']).not('due_at', 'is', null).lte('due_at', in24).gte('due_at', nowIso),
       supabase.from('school_events').select('id, title, starts_at, member_id, event_type').eq('family_id', familyId).gte('starts_at', nowIso).lte('starts_at', in48),
       supabase.from('sports_events').select('id, title, starts_at, member_id, sport, location').eq('family_id', familyId).gte('starts_at', nowIso).lte('starts_at', in48),
@@ -213,7 +220,13 @@ export async function generateFamilyNotifications(supabase: DB, familyId: string
   for (const e of events ?? []) {
     const target = e.assignee_id ? userByMember.get(e.assignee_id) ?? null : null;
     candidates.push({
-      type: 'calendar_event', related_type: 'calendar_events', related_id: e.id, user_id: target,
+      type: 'calendar_event', related_type: 'calendar_events', user_id: target,
+      // The dedupe below is permanent and keyed by `related_id`. A series is
+      // one row and many dates, so its key carries the occurrence's date —
+      // keyed by the row alone, the first week's reminder would stand in for
+      // every week after it. A one-off keeps its id, and `entityIdFrom`
+      // (lib/notifications/actions.ts) still finds the uuid in front of the colon.
+      related_id: isSeries(e) ? `${e.id}:${e.starts_at.slice(0, 10)}` : e.id,
       title: e.title,
       body: `${timeLabel(e.starts_at, tz, e.all_day)}${e.location ? ` · ${e.location}` : ''}`,
     });
@@ -359,14 +372,25 @@ export async function generateFamilyNotifications(supabase: DB, familyId: string
 
   // Calendar double-bookings → proactively flag whoever is double-booked (or the
   // managers, for a child with no account). Reuses the pure conflict detector.
-  const { data: conflictEvents } = await supabase.from('calendar_events')
-    .select('id, title, starts_at, ends_at, all_day, assignee_id')
-    .eq('family_id', familyId).not('assignee_id', 'is', null)
-    .gte('starts_at', nowIso).lte('starts_at', in14d)
-    .order('starts_at').limit(200);
+  // Series included: a one-off booked over a weekly practice is a clash in the
+  // week it is booked, which is almost never the practice's first week.
+  const conflictRead = await readCalendarOccurrences(supabase, familyId, instantCalendarBounds(nowIso, in14d, tz), tz, {
+    columns: ['id', 'title', 'starts_at', 'ends_at', 'all_day', 'assignee_id'],
+    refine: (query) => query.not('assignee_id', 'is', null),
+    limit: 200,
+  });
+  if (conflictRead.error) console.error('[notifications] conflict read failed', { familyId, error: conflictRead.error });
+  const conflictEvents = conflictRead.data ?? [];
+  const seriesIds = new Set(conflictEvents.filter(isSeries).map((e) => e.id));
   const nameByMember = new Map((members ?? []).map((m) => [m.id, m.display_name]));
-  for (const c of detectConflicts((conflictEvents ?? []) as ConflictEvent[])) {
-    const key = `conflict:${[...c.eventIds].sort().join('-')}`;
+  for (const c of detectConflicts(conflictEvents as ConflictEvent[])) {
+    const ids = [...c.eventIds].sort();
+    // A clash with a series recurs on each of its dates, so its key carries
+    // the date; a clash of one-offs keeps the key it has always had, so the
+    // ones already sent are not sent again.
+    const key = ids.some((id) => seriesIds.has(id))
+      ? `conflict:${ids.join('-')}:${c.startsAt.slice(0, 10)}`
+      : `conflict:${ids.join('-')}`;
     const who = nameByMember.get(c.assigneeId);
     const body = `${who ? `${who}: ` : ''}${c.eventIds.length} events overlap ${timeLabel(c.startsAt, tz)}`;
     const target = userByMember.get(c.assigneeId) ?? null;
