@@ -161,10 +161,33 @@ describe('a purchase is still a purchase', () => {
     expect(spendCents()).toBe(3_000);
   });
 
-  it('a zero-amount transaction writes nothing', async () => {
-    await deliver(issuingTransaction({ id: 'ipi_zero', amount: 0 }));
+  it('a zero-amount transaction writes nothing and is acknowledged', async () => {
+    expect((await deliver(issuingTransaction({ id: 'ipi_zero', amount: 0 }))).status).toBe(200);
 
     expect(byRef('ipi_zero')).toEqual([]);
+  });
+
+  it('a refund whose duplicate check cannot be read is not credited blind — it fails so Stripe retries', async () => {
+    const from = db.from.bind(db);
+    (db as unknown as { from: (name: string) => unknown }).from = (name: string) => {
+      const builder = from(name) as unknown as Record<string, (...args: unknown[]) => unknown>;
+      if (name !== 'wallet_transactions') return builder;
+      let inserting = false;
+      const insert = builder.insert.bind(builder);
+      const select = builder.select.bind(builder);
+      builder.insert = (...args: unknown[]) => { inserting = true; return insert(...args); };
+      builder.select = (...args: unknown[]) => {
+        if (inserting) return select(...args);
+        const chain = { eq: () => chain, maybeSingle: async () => ({ data: null, error: { code: '57014', message: 'canceling statement due to statement timeout', details: null, hint: null } }) };
+        return chain;
+      };
+      return builder;
+    };
+
+    const res = await deliver(issuingTransaction({ id: 'ipi_refund', type: 'refund', amount: 2_000, authorization: null }));
+
+    expect(res.status).toBe(500);
+    expect(byRef('ipi_refund')).toEqual([]);
   });
 
   it('a refund on a card we do not know fails loudly so Stripe retries, and writes nothing', async () => {

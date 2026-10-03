@@ -225,6 +225,51 @@ export async function debitCardSpend(supabase: DB, params: {
   return { ok: true, txnId: row.id };
 }
 
+/**
+ * Post a card refund as a CREDIT to the child's SPEND bucket. Used by the
+ * Issuing webhook when Stripe reports a refund — an `issuing.transaction` whose
+ * amount is positive. It goes straight to Spend rather than through
+ * `creditChildWallet`'s split: a refund is the purchase undone, so it lands
+ * where that purchase's debit was, not divided across Save, Give and Invest as
+ * new money would be. Immutable and idempotent on the Stripe ref, like the debit.
+ */
+export async function creditCardRefund(supabase: DB, params: {
+  familyId: string; childWalletId: string; amountCents: number; description: string; stripeRef: string;
+}): Promise<{ ok: boolean; txnId?: string; error?: string }> {
+  const amount = Math.trunc(params.amountCents);
+  if (amount <= 0) return { ok: false, error: 'Amount must be greater than 0' };
+
+  // Idempotency: skip if this Stripe transaction already produced a refund.
+  const { data: dupe, error: dupeError } = await supabase
+    .from('wallet_transactions').select('id').eq('stripe_ref', params.stripeRef).eq('type', 'card_refund').maybeSingle();
+  if (dupeError) return { ok: false, error: walletFailure(dupeError, 'Could not verify that card refund.') };
+  if (dupe) return { ok: true, txnId: dupe.id };
+
+  const { data: bucket, error: bucketError } = await supabase
+    .from('wallet_buckets').select('id')
+    .eq('family_id', params.familyId).eq('child_wallet_id', params.childWalletId).eq('kind', 'spend').maybeSingle();
+  if (bucketError) return { ok: false, error: walletFailure(bucketError, 'Could not load the wallet Spend bucket.') };
+  if (!bucket?.id) return { ok: false, error: 'The wallet Spend bucket is unavailable.' };
+
+  const { data: row, error } = await supabase
+    .from('wallet_transactions')
+    .insert({
+      family_id: params.familyId, child_wallet_id: params.childWalletId, bucket_id: bucket.id,
+      type: 'card_refund', status: 'completed', direction: 'credit', amount_cents: amount,
+      description: params.description, stripe_ref: params.stripeRef, metadata: { source: 'issuing' },
+    })
+    .select('id')
+    .single();
+  if (error) return { ok: false, error: walletFailure(error, 'Could not post that card refund.') };
+
+  await logWalletAudit(supabase, {
+    family_id: params.familyId, actor_user_id: null, action: 'card_refund',
+    entity_type: 'child_wallets', entity_id: params.childWalletId,
+    detail: `${params.description} (${amount}c)`, metadata: { stripeRef: params.stripeRef },
+  }, 'card refund');
+  return { ok: true, txnId: row.id };
+}
+
 export async function creditChildWallet(supabase: DB, params: {
   familyId: string;
   childWalletId: string;

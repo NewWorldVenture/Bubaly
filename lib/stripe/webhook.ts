@@ -14,7 +14,7 @@ import type { Database } from '@/lib/database.types';
 import type Stripe from 'stripe';
 import { randomUUID } from 'node:crypto';
 import { getStripe } from '@/lib/stripe';
-import { reserveCardAuth, releaseCardHold, debitCardSpend } from '@/lib/wallet/server';
+import { reserveCardAuth, releaseCardHold, debitCardSpend, creditCardRefund } from '@/lib/wallet/server';
 
 type DB = SupabaseClient<Database>;
 const STALE_EVENT_MS = 10 * 60 * 1000;
@@ -239,9 +239,10 @@ export async function handleAuthorizationRequest(
 }
 
 /**
- * Handle issuing_transaction.created — the capture. Posts the real debit (keyed
- * by the transaction id, idempotent) and releases the authorization hold that was
- * reserved at approval, so the two never double-count. Idempotent.
+ * Handle issuing_transaction.created — a capture or a refund. A capture posts the
+ * real debit (keyed by the transaction id, idempotent); a refund posts the credit
+ * back to Spend, keyed the same way. Either releases the authorization hold that
+ * was reserved at approval, so the two never double-count. Idempotent.
  */
 export async function handleTransactionCreated(
   supabase: DB, txn: Stripe.Issuing.Transaction,
@@ -250,15 +251,26 @@ export async function handleTransactionCreated(
   const card = cardId ? await cardForAuthorization(supabase, cardId) : null;
   if (!card) throw new Error('Stripe card mapping not found');
   const authId = typeof txn.authorization === 'string' ? txn.authorization : txn.authorization?.id ?? null;
-  // Stripe issuing transaction amounts are negative for spends.
-  const spend = Math.abs(txn.amount ?? 0);
-  if (spend > 0) {
+  // `amount` is what the transaction does to the balance (stripe-node's
+  // Issuing.Transaction: "reflected in your balance"): negative for a capture,
+  // positive for a refund. Its absolute value used to be debited either way, so
+  // a merchant refund took the money out a second time instead of giving it
+  // back — a $20 purchase refunded in full left the child $40 down.
+  const amount = Math.trunc(txn.amount ?? 0);
+  if (amount < 0) {
     const merchant = txn.merchant_data?.name ?? 'Card purchase';
     const debit = await debitCardSpend(supabase, {
       familyId: card.family_id, childWalletId: card.child_wallet_id,
-      amountCents: spend, description: merchant, stripeRef: txn.id,
+      amountCents: -amount, description: merchant, stripeRef: txn.id,
     });
     if (!debit.ok) throw new Error(debit.error ?? 'Card spend persistence failed');
+  } else if (amount > 0) {
+    const merchant = txn.merchant_data?.name ?? 'Card refund';
+    const refund = await creditCardRefund(supabase, {
+      familyId: card.family_id, childWalletId: card.child_wallet_id,
+      amountCents: amount, description: merchant, stripeRef: txn.id,
+    });
+    if (!refund.ok) throw new Error(refund.error ?? 'Card refund persistence failed');
   }
   // The captured debit now represents the spend; drop the pending hold.
   if (authId) await releaseCardHold(supabase, authId);
