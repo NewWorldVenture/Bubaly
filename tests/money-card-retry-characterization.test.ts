@@ -1,8 +1,8 @@
 import { afterAll, afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
-import type Stripe from 'stripe';
 import type { SupabaseClient } from '@supabase/supabase-js';
 import type { Database } from '@/lib/database.types';
 import { createInMemorySupabase, type Row } from './helpers/in-memory-supabase';
+import { syntheticProvider } from './helpers/synthetic-issuing-provider';
 
 // JIMMY-SUPPORT-CARD-RETRY-20261001: what the server and the provider do when a
 // card order or a freeze reaches them more than once. Characterization only —
@@ -11,7 +11,8 @@ import { createInMemorySupabase, type Row } from './helpers/in-memory-supabase';
 // existing multiple-card contract any repair must keep.
 //
 // Sealed: no network, no real Stripe SDK, no real database client. The provider
-// is an in-process double with Stripe's documented idempotency semantics, and
+// is an in-process double with Stripe's documented idempotency semantics
+// (tests/helpers/synthetic-issuing-provider.ts), and
 // the database is the in-memory fake with the 00901 unique constraints.
 
 const network = await vi.hoisted(async () => {
@@ -94,104 +95,6 @@ const T0 = Date.UTC(2026, 9, 1, 12, 0, 0);
 const DUPLICATE_TEXT = 'That already exists. Try a different value.';
 const VIRTUAL = { childWalletId: 'wallet-a', type: 'virtual', spendLimitCents: null, spendWindow: 'per_authorization' } as const;
 const PHYSICAL = { childWalletId: 'wallet-a', type: 'physical', spendLimitCents: 2500, spendWindow: 'daily' } as const;
-
-type Held = { release: () => void };
-type ProviderCard = { id: string; status: 'active' | 'inactive' | 'canceled'; type: string; cardholder: string; limits: unknown[] };
-
-/**
- * A provider double with Stripe's documented idempotency rules, per connected
- * account: a key seen before returns the first result and creates nothing; the
- * same key with different parameters is refused; a new key creates a new
- * object. An update applies when the provider receives it; its RESPONSE can be
- * held, which is how a test orders two in-flight requests.
- */
-function syntheticProvider() {
-  const replay = new Map<string, { body: string; result: unknown }>();
-  const cardholders: string[] = [];
-  const cards = new Map<string, ProviderCard>();
-  const log = { cardholderKeys: [] as string[], cardKeys: [] as string[], updates: [] as { id: string; status: unknown }[] };
-  const held: Held[] = [];
-  let holdUpdates = false;
-  let barrier: { size: number; arrived: number; open: () => void; opened: Promise<void> } | null = null;
-  let next = 0;
-
-  function idempotent<T>(account: string, key: string, body: unknown, make: () => T): T {
-    const scoped = `${account}:${key}`;
-    const json = JSON.stringify(body);
-    const prior = replay.get(scoped);
-    if (prior) {
-      if (prior.body !== json) throw new Error('synthetic idempotency_error: key reused with different parameters');
-      return prior.result as T;
-    }
-    const result = make();
-    replay.set(scoped, { body: json, result });
-    return result;
-  }
-
-  const stripe = {
-    accounts: { retrieve: vi.fn(async () => ({ individual: { address: { line1: '1 Fixture Lane', city: 'Fixture', state: 'CA', postal_code: '00000', country: 'US' } } })) },
-    issuing: {
-      cardholders: {
-        create: vi.fn(async (body: unknown, opts: { stripeAccount: string; idempotencyKey: string }) => {
-          log.cardholderKeys.push(opts.idempotencyKey);
-          const result = idempotent(opts.stripeAccount, opts.idempotencyKey, body, () => {
-            const id = `ich_synthetic_${++next}`;
-            cardholders.push(id);
-            return { id };
-          });
-          if (barrier) {
-            barrier.arrived += 1;
-            if (barrier.arrived >= barrier.size) barrier.open();
-            await barrier.opened;
-          }
-          return result;
-        }),
-      },
-      cards: {
-        create: vi.fn(async (body: { type: string; cardholder: string; status: 'active'; spending_controls?: { spending_limits: unknown[] } }, opts: { stripeAccount: string; idempotencyKey: string }) => {
-          log.cardKeys.push(opts.idempotencyKey);
-          return idempotent(opts.stripeAccount, opts.idempotencyKey, body, () => {
-            const id = `ic_synthetic_${++next}`;
-            cards.set(id, { id, status: body.status, type: body.type, cardholder: body.cardholder, limits: body.spending_controls?.spending_limits ?? [] });
-            return { id, last4: '0000', brand: 'Visa', exp_month: 1, exp_year: 2030 };
-          });
-        }),
-        update: vi.fn(async (id: string, body: { status?: ProviderCard['status'] }) => {
-          const card = cards.get(id);
-          if (!card) throw new Error('synthetic resource_missing');
-          if (body.status) card.status = body.status;
-          log.updates.push({ id, status: body.status });
-          // The response describes the card as this request left it.
-          const response = { id, status: card.status };
-          if (holdUpdates) await new Promise<void>(resolve => { held.push({ release: resolve }); });
-          return response;
-        }),
-      },
-    },
-  };
-
-  return {
-    stripe, cardholders, cards, log, held,
-    holdUpdates() { holdUpdates = true; },
-    /**
-     * Hold every cardholder create until `size` of them have reached the
-     * provider. It opens on its own after a second, so a change that stops the
-     * second request from arriving fails the assertions instead of hanging.
-     */
-    cardholderBarrier(size: number) {
-      let open!: () => void;
-      const opened = new Promise<void>(resolve => { open = resolve; setTimeout(resolve, 1000); });
-      barrier = { size, arrived: 0, open, opened };
-    },
-    seedCard(id: string, status: ProviderCard['status']) { cards.set(id, { id, status, type: 'virtual', cardholder: 'ich_seeded', limits: [] }); },
-    /** The event body issuing_card.updated would carry for this card. */
-    event(id: string): Stripe.Issuing.Card {
-      const card = cards.get(id)!;
-      return { id, status: card.status, spending_controls: { spending_limits: card.limits, blocked_categories: [] } } as unknown as Stripe.Issuing.Card;
-    },
-    active(type?: string) { return [...cards.values()].filter(card => card.status === 'active' && (!type || card.type === type)); },
-  };
-}
 
 let db: ReturnType<typeof createInMemorySupabase>;
 let provider: ReturnType<typeof syntheticProvider>;
