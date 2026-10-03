@@ -23,23 +23,25 @@ this evidence.
 | `GET https://www.bubaly.com/api/build-info` | 2026-10-03 11:01 | `{"revision":"d4612dc9…"}` — production serves current main |
 | `GET https://www.bubaly.com/api/health` | 2026-10-03 11:01:23 | `status: degraded`, HTTP 200; `env`, `database` (189 ms), `auth`, `serviceRole` (725 ms) all `ok`; `features.missing`: `CRON_SECRET`, `CHILD_LOGIN_SECRET`, `MARKETING_UNSUB_SECRET`, `GUARDIAN_INTERNAL_SECRET`, `FCM_PRIVATE_KEY`, `APNS_PRIVATE_KEY`. Not listed, so set: `RESEND_API_KEY`, `INTERNAL_SECRET`, `CONTACT_CENTER_INBOUND_SECRET`, `VAPID_PRIVATE_KEY` |
 | `Supabase production migrations` run 84 ([37005151905](https://github.com/NewWorldVenture/Bubaly/actions/runs/37005151905)), push of main `d25e39ea` | 2026-10-02 12:10–12:12 | `supabase link` **succeeded**; `supabase migration list --linked` **succeeded**; `audit-production-migration-state.mjs --enforce-history` **passed**: 192 ledger rows `0001`…`0176`, 444 public tables, 1,002 policies, `requiresBaselineReview: false`, `moneyWrites.exploitable: false`, all ten money tables `closed by restrictive guard`; **"Apply ordered migrations" skipped** (push event); the job then failed at "Verify household module schema" with HTTP 401 on every check |
-| The one apply attempt, run [35465574540](https://github.com/NewWorldVenture/Bubaly/actions/runs/35465574540) | 2026-09-19 19:51–19:53 | `Applying migration 0177_remove_synthetic_auth_users.sql…`, then `NOTICE: skip dependent cleanup on families(created_by): … violates foreign key constraint "family_model_dirty_family_id_fkey"`, then after about two minutes `ERROR: canceling statement due to statement timeout (SQLSTATE 57014)` at statement 1, the `DO` block |
+| The apply attempt quoted here: push run 64, [35465574540](https://github.com/NewWorldVenture/Bubaly/actions/runs/35465574540) | 2026-09-19 19:51–19:53 | `Applying migration 0177_remove_synthetic_auth_users.sql…`, then `NOTICE: skip dependent cleanup on families(created_by): … violates foreign key constraint "family_model_dirty_family_id_fkey"`, then after about two minutes `ERROR: canceling statement due to statement timeout (SQLSTATE 57014)` at statement 1, the `DO` block |
 | `Cron dispatch` run 176 ([37104408735](https://github.com/NewWorldVenture/Bubaly/actions/runs/37104408735)) | 2026-10-03 06:51 | `CRON_SECRET:` (blank) → `CRON_SECRET is required for dispatch. Add the matching application secret under Settings → Secrets → Actions.` exit 1, before any dispatch. Runs 174 and 175 also failed |
 | `Supabase reviewed forward release` run 3 ([34781290560](https://github.com/NewWorldVenture/Bubaly/actions/runs/34781290560)) | 2026-09-13 | the preview step failed; nothing applied |
 | Public DNS (`dns.google`) for `bubaly.com` | 2026-10-03 11:05 | `MX 10 mx1.improvmx.com`, `MX 20 mx2.improvmx.com`; `TXT v=spf1 include:spf.improvmx.com ~all`, a `brevo-code:` verification and a `google-site-verification` |
 | The repository at `d4612dc9` | — | code and tests cited per row |
 
-Local checks on this branch: the 16 test files around the changed code pass
-(237 tests), among them `tests/cron-auth.test.ts`,
-`tests/health-feature-secrets.test.ts`, `tests/marketing-unsubscribe.test.ts`
-(10), `tests/marketing-unsubscribe-route.test.ts`,
+Local checks on this branch: these 16 test files pass together, 239 tests:
+`tests/marketing-unsubscribe.test.ts` (10), `tests/marketing-unsubscribe-route.test.ts`,
 `tests/contact-center-inbound-email-auth.test.ts` (15, new),
-`tests/contact-center-callback-boundary.test.ts`,
-`tests/production-migration-state.test.ts`,
-`tests/migration-ledger-preflight.test.ts` and
-`tests/production-forward-release.test.ts`. ESLint is clean on the changed
+`tests/contact-center-callback-boundary.test.ts`, `tests/email-attachments.test.ts`,
+`tests/family-email-plan-gate.test.ts`, `tests/inbound-email-entity-retry.test.ts`,
+`tests/contact-center-email-reply-execution.test.ts`, `tests/health-feature-secrets.test.ts`,
+`tests/outbound-email-is-rate-limited.test.ts`, `tests/middleware-public-api-boundary.test.ts`,
+`tests/every-env-var-the-code-reads-is-documented.test.ts`,
+`tests/env-example-documents-what-the-app-reads.test.ts`,
+`tests/migration-ledger-preflight.test.ts`, `tests/production-forward-release.test.ts` and
+`tests/production-migration-state.test.ts`; also `tests/cron-auth.test.ts`. ESLint is clean on the changed
 files. Four mutation controls each fail the new tests: verifying against only
-the first unsubscribe secret (1 test), ignoring Basic credentials (4), accepting
+the first unsubscribe secret (1 test), ignoring Basic credentials (5), accepting
 colon-less credentials (1), and warning about `?key=` despite Basic credentials
 (1).
 
@@ -57,8 +59,9 @@ colon-less credentials (1), and warning about `?key=` despite Basic credentials
 | MAIN-F6 family email not routed | MX points at a forwarding service, not at an inbound-parse provider | none: DNS and the provider are outside the repository | point MX at an inbound-parse provider aimed at the webhook; then the end-to-end check | yes (step 1 of 3 is done) |
 | MAIN-F-E06 secret in the query string | an owner decision (SEC-011) on removing `?key=` | **done here**: Basic credentials are accepted, so a provider that cannot set a header has an alternative to `?key=` | owner: approve removing `?key=` (a one-line change plus the runbook) | yes |
 
-If the ledger's owner awards all nine, coverage moves from 2.37% to the 2.44% the
-checkpoint already computes for that case. Nothing below changes
+If the ledger's owner awards all nine, coverage moves from 2.37% (344 of
+14,505) to 2.43% (353 of 14,505); the older status block on `main` computed
+2.44% for the same case on 14,360 rows. Nothing below changes
 `PRODUCTION READY: NO`.
 
 ---
@@ -71,8 +74,9 @@ the bearer with `bearerMatches`, which returns false before building the
 rather than ever matching `Bearer undefined`. `tests/cron-auth.test.ts`
 enumerates every `app/api/cron/*/route.ts` from disk and requires both the call
 and the 401; `tests/health-feature-secrets.test.ts` requires every cron in
-`vercel.json` (27 today) to enforce it. The sub-daily schedules run from
-`.github/workflows/cron-dispatch.yml` every five minutes, which reads the
+`vercel.json` (27 today) to enforce it. The sub-daily schedules are requested from `.github/workflows/cron-dispatch.yml`
+on a `*/5` schedule (delivered far less often: about seven runs a day by the
+workflow's own note, and hours apart in the run list), which reads the
 Actions secret of the same name and refuses to dispatch without it: run 176 on
 2026-10-03 06:51 UTC printed `CRON_SECRET:` blank and exited 1 before any
 request, as did 174 and 175. `/api/guardian/escalate` also falls back to this
@@ -121,9 +125,10 @@ is pinned by `tests/child-login-action-security.test.ts` and its siblings.
 **Exact external action (owner).** Vercel Production: `CHILD_LOGIN_SECRET` =
 `openssl rand -hex 32`; redeploy. Verify: `/api/health` no longer lists it;
 `/dashboard/family-access` no longer shows the not-configured notice; a parent
-can create a child login and the child can sign in with it. Changing the value
-later invalidates every existing child password (they are derived from it), so
-set it once.
+can create a child login and the child can sign in with it. Changing the value later invalidates every existing child password (they are
+derived from it), so set it once; a later rotation is recoverable only by a
+parent resetting every child's PIN (`resetChildPinAction` re-derives with the
+current secret).
 
 ## ENV-57E10566D252 — `GUARDIAN_INTERNAL_SECRET`
 
@@ -135,8 +140,10 @@ fan-out (push + SMS + outbound call to every manager) answers 401 to every
 caller. `lib/health/status.ts` lists the name on its own, by presence, so the
 health line stays until a dedicated value exists even once `CRON_SECRET` is set.
 No code in the repository calls this endpoint with the bearer (the only
-in-repository reference is its Twilio-signed `twiml` sub-route), so the caller
-is external and must be configured with the same value.
+in-repository reference is its Twilio-signed `twiml` sub-route;
+`lib/guardian/pipeline.ts` sets an escalation flag and never POSTs), and no
+external caller is recorded anywhere in the repository. Until one is named, a
+dedicated value changes only the health line.
 
 **Production state.** `/api/health` lists it missing (2026-10-03 11:01 UTC).
 
@@ -145,11 +152,13 @@ deliberate deploy-wide default, written at the call site. Removing the health
 line would hide the hygiene point (one credential for scheduled jobs and for an
 endpoint that can text every parent).
 
-**Exact external action (owner).** Setting `CRON_SECRET` (above) makes the
-endpoint work. To separate the two credentials, also set
-`GUARDIAN_INTERNAL_SECRET` = `openssl rand -hex 32` in Vercel Production,
-redeploy, and configure whatever calls `/api/guardian/escalate` to present it
-as `Authorization: Bearer`. Verify: `/api/health` no longer lists it; a POST
+**Exact external action (owner).** Set `CRON_SECRET` (above); the endpoint
+then accepts that bearer. Before setting a dedicated
+`GUARDIAN_INTERNAL_SECRET`, name the caller that will present it: nothing in
+the repository does, and a value nobody presents only clears the health line.
+Once a caller exists, set `GUARDIAN_INTERNAL_SECRET` = `openssl rand -hex 32`
+in Vercel Production, redeploy, and configure that caller with
+`Authorization: Bearer`. Verify: `/api/health` no longer lists it; a POST
 without the bearer answers 401.
 
 ## ENV-F3AB1A14762D — `MARKETING_UNSUB_SECRET`
@@ -179,7 +188,12 @@ a valid unsubscribe key once a real signing secret exists (which is how the
 code behaved before, too). `tests/marketing-unsubscribe.test.ts` adds the
 before/after case, a not-configured-secret case, a blank-secret case, the
 service-role-only case and the production fail-closed case for verification;
-the route test is unchanged.
+the route test is unchanged. One thing this does not do: `INTERNAL_SECRET`
+stays a valid verification key for as long as it is configured, with no
+sunset, so the hygiene point (a public link verified against the
+internal-callback secret) remains until a follow-up drops that fallback after
+an owner-chosen mailbox age; that follow-up is repository-side and is noted
+here rather than hidden.
 
 **Production state.** `/api/health` lists it missing (2026-10-03 11:01 UTC).
 
@@ -203,46 +217,65 @@ pinned by `tests/production-migration-state.test.ts`), so a push to main
 verifies and never applies; runs 81–84 all skipped it.
 
 What blocks the apply is `0177_remove_synthetic_auth_users.sql`
-(PROD-DB-0177). The one dispatch with `apply=true`, run 35465574540 on
-2026-09-19, applied nothing: `0177`'s single `DO` block was cancelled by the
-statement timeout after about two minutes, having first skipped its
-`families(created_by)` cleanup on `family_model_dirty_family_id_fkey` (the
-trigger that `0249` later repairs). Everything from `0177` on, 257 files up to
-`0474`, is unapplied. The repository replays `0177` on a fresh database in
+(PROD-DB-0177). Before the 2026-09-27 dispatch-only gate (`b7181cc71`), a
+push to main ran "Apply ordered migrations" itself, and every such run
+failed inside `0177`: push run 64 (`35465574540`, 2026-09-19) is the one
+quoted above, and the ledger records the same failure on `533554be`,
+`7e54596d` and `671c5f6a` (runs 65–67). Each time `0177`'s single `DO` block
+was cancelled by the statement timeout after about two minutes, having first
+skipped its `families(created_by)` cleanup on
+`family_model_dirty_family_id_fkey` (the trigger that `0249` later repairs).
+No `workflow_dispatch` with `apply=true` has ever been run. Everything from
+`0177` on is unapplied: 257 files, `0177` to `0474` in ledger order (the 35
+five-digit renumbered legacy files sort below `0176` there and are in
+production's 192-row ledger). The repository replays `0177` on a fresh database in
 every CI run (the Database job), where it is a no-op.
 
-Run 84's own failure is later and separate: "Verify household module schema"
-got HTTP 401 from PostgREST on every check, which is the repository secret
-`SUPABASE_SERVICE_ROLE_KEY` no longer matching the project. It does not block
-the apply step, which comes before it, but it will fail the verification steps
-after any apply until rotated.
+Run 84's own failure is later and separate: "Verify household module
+schema" got HTTP 401 from PostgREST on all 52 checks, so PostgREST rejects
+the `SUPABASE_SERVICE_ROLE_KEY` the workflow holds (whether the key, the
+project's JWT secret or its legacy keys changed is not in the log). It does
+not block the apply step, which comes before it, but it will fail the
+verification steps after any apply until that repository secret is
+replaced.
 
 **Repository-side verification.** `tests/production-migration-state.test.ts`,
 `tests/migration-ledger-preflight.test.ts` and
 `docs/audit/rehearse-ledger-repair.sh` (CI) pass. `docs/PENDING_PROD_MIGRATIONS.md`
 now opens with a dated correction (it said connectivity was lost and the
-ledger stopped at `0003`), and LB-016 §4.3 is annotated the same way, which
-settles DEPLOY-003: there is no replay from `0004` to disagree about.
+ledger stopped at `0003`), and LB-016 §4.3 is annotated the same way, which makes DEPLOY-003 moot on the
+replay point: there is no replay from `0004` to disagree about. Whether and
+when to run the ordered apply against production stays the owner's
+decision.
 
-**Why the remaining repository-side candidate is not taken here.** A bounded
-repair of `0177` is possible in principle (lift `statement_timeout` for its
-transaction, bound `lock_timeout`, and account for the `0249` trigger ordering
-that Jimmy's reproduction showed leaves family-referenced synthetic users in
-place). The owner has reserved exactly that as a reviewed change, the
+**Why the remaining repository-side candidate is not taken here.** A bounded repair of `0177` is possible in principle (lift `statement_timeout`
+for its transaction, bound `lock_timeout`, and decide what to do with the
+seed `families` rows that step 1 cannot delete before `0249`: with the
+`0134` trigger on `family_members` and nine other child tables, a cascading
+family delete inserts a dirty row for the family being removed and fails on
+`family_model_dirty_family_id_fkey`, so that cleanup is skipped; the user
+delete in step 2 still succeeds, because `families.created_by` is `on delete
+set null` and `family_members.user_id` cascades, which is what Jimmy's
+synthetic reproduction recorded: the user removed, its family row left). The owner has reserved exactly that as a reviewed change, the
 investigation is active in another lane (MIGRATION-229E5BF02AC9, "Hosted 57014
 cause remains unproven"), and its effect in the hosted path cannot be proven
 from the repository. Changing a migration under an active investigation,
 unreviewed, would be the wrong kind of help.
 
 **Exact external action (owner).** The remedy recorded in the ledger's
-PROD-DB-0177 entry, in order: (1) against production, in the SQL editor or
-`psql`, `set statement_timeout = 0;` and run the body of `0177` once (or first
-delete the `onb…@seed-onb.bubaly.test` / `person…@seed.bubaly.test` users
-through the Auth admin API, which makes `0177` a no-op); expect the
-`Retired synthetic Auth users: N removed, M still referenced` notice, and note
-that users referenced by `families` rows stay "still referenced" until `0249`'s
-trigger repair is in place; (2) `supabase migration repair --status applied 0177`;
-(3) rotate the `SUPABASE_SERVICE_ROLE_KEY` repository secret; (4) dispatch
+PROD-DB-0177 entry (its steps 1, 2 and 4 below; step 3 is added by this review
+from run 84's 401s, and step 4 is a dispatch with `apply=true` since the
+2026-09-27 gate), in order: (1) against production, in the SQL editor or `psql`, `set statement_timeout =
+0;` and run the body of `0177` once; expect the `Retired synthetic Auth users:
+N removed, M still referenced` notice, and expect the seed `families` rows
+whose cleanup is skipped on `family_model_dirty_family_id_fkey` to remain
+(with `created_by` nulled) until `0249` is applied. The ledger's alternative,
+deleting those users through the Auth admin API first, is a plain delete on
+`auth.users`, which `0177`'s own header records as refused with `23503` by
+non-cascading references such as `game_results.created_by`; it works only for
+users with no such reference; (2) `supabase migration repair --status applied 0177`;
+(3) replace the `SUPABASE_SERVICE_ROLE_KEY` repository secret with one
+PostgREST accepts; (4) dispatch
 `Supabase production migrations` with `apply=true`, which applies `0178`
 onward in order, in a maintenance window (LB-016 §4.4's open-boundary window
 between `0006`'s policies and `0267`/`0275` applies to any ordered apply).
@@ -268,12 +301,14 @@ carry the dated correction. No code.
 `0001`–`0003` and migrations `0240`–`0254`, with a production catalog snapshot
 from 2026-09-05. `scripts/apply-production-forward-release.mjs` refuses it on
 two independent guards, both correctly: `assertNoNewerMigrations` (the
-repository has 179 files past `0254`) and `assertPreflight` ("Unexpected or
+repository has 179 files past `0254` in ledger order; the guard compares
+versions numerically and so flags 212, the 179 plus 33 five-digit legacy
+versions that are already in production's ledger) and `assertPreflight` ("Unexpected or
 partially applied migration ledger": production's ledger is `0001`–`0176`, not
 `0001`–`0003`). Run 3 on 2026-09-13 failed at the preview step. A re-pin that
-matched reality would be baseline `0001`–`0176` and a range of 257 files applied
-in one transaction under the script's own `statement_timeout = '90s'`, when
-`0177` alone exceeds 120 s. The mechanism was a one-time atomic bundle for a
+matched reality would be baseline `0001`–`0176` and a range of 257 files
+applied in one transaction under the script's own `statement_timeout = '90s'`,
+when `0177` alone exceeds 120 s. The mechanism was a one-time atomic bundle for a
 15-migration release; it cannot carry the catch-up, and the ordered
 `supabase db push` in the production workflow is what will.
 
@@ -311,8 +346,9 @@ before step 2.
 **Repository-side verification.** The route fails closed: 401 with a wrong or
 absent secret before any household read
 (`tests/contact-center-callback-boundary.test.ts`,
-`tests/contact-center-inbound-email-auth.test.ts`), and `/api/contact-center`
-is on the middleware's public list so the route's own guard runs
+`tests/contact-center-inbound-email-auth.test.ts`), and `/api/contact-center/email` is one of the five exact paths on the
+middleware's public callback list (the `/api/contact-center` prefix itself
+stays protected), so the route's own guard runs
 (`tests/middleware-public-api-boundary.test.ts`). The 2026-09-13 production
 probe (401) stands; it was not repeated from this session.
 

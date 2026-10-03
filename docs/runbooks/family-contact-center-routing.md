@@ -56,8 +56,11 @@ The secret may be presented three ways. Pick the first your provider supports:
 2. HTTP Basic credentials in the webhook URL:
    `https://inbound:<secret>@www.bubaly.com/api/contact-center/email` — for
    providers that cannot set a header but accept `user:password@` in the URL.
-   Postmark documents this for its webhooks; for any other provider, confirm
-   with the §3 check that it sends `Authorization: Basic` for such a URL before
+   Postmark documents this form for its webhooks (cited for the URL form only:
+   Postmark's inbound JSON uses `TextBody`, `HtmlBody` and `MessageID`, which
+   are not in the §2 field table, so the route would need those names added
+   before Postmark is chosen); for any other provider, confirm with the §3
+   credential check that it sends `Authorization: Basic` for such a URL before
    moving MX. The username is ignored; the secret is the password. The provider
    sends it as an `Authorization: Basic` header, so it never appears in the
    request line that access logs record.
@@ -110,9 +113,14 @@ curl -s -o /dev/null -w '%{http_code}\n' -X POST \
 # appears in that family's Contact Center inbox.
 ```
 
-A 401 after setting the secret means the provider is not presenting it — check
-that it sends the credentials you configured (Basic credentials arrive as an
-`Authorization` header; some providers drop a query string on redirect).
+**Credential check, before MX moves:** point the provider's test-webhook or
+"send test" feature at the URL from §2 with any non-`@bubaly.com` `to`
+address. `200 {"ok":true,"skipped":"no bubaly recipient"}` means the
+credentials arrived (that path reads nothing from the database); `401` means
+they did not. A 401 after setting the secret means the provider is not
+presenting it — check that it sends the credentials you configured (Basic
+credentials arrive as an `Authorization` header; some providers drop a query
+string on redirect).
 
 ### Expected non-error responses
 
