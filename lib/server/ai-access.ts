@@ -50,8 +50,10 @@ export const AI_ASSISTANT_FEATURE_KEY = 'ai-assistant';
  * meter that did not exist.
  *
  * "AI requests" is the whole-product budget the copy names, so the count below
- * is every `ai_requests` row the family filed this month whatever its kind — an
- * assistant turn, a concierge request, a briefing. It used to filter
+ * is every METERED `ai_requests` row the family filed this month whatever its
+ * kind — an assistant turn, a concierge request, a briefing. Work the family
+ * did not ask for is filed with `metered = false` (0477) and is not counted.
+ * It used to filter
  * `kind = 'concierge'`, which counted none of the assistant's turns: the
  * assistant records its turns with the default kind `'feature'` (see
  * `withAiRequest`), so a meter that only counted concierge rows would have read
@@ -165,6 +167,10 @@ async function monthlyAllowance(
     .from('ai_requests')
     .select('id', { count: 'exact', head: true })
     .eq('family_id', familyId)
+    // Only what the family is charged for (0477): exempt work — chore-proof
+    // validation, system-scope intake, scheduled routines — is filed with
+    // `metered = false` and never uses up the allowance.
+    .eq('metered', true)
     .gte('created_at', monthStartIso(opts.now ?? new Date()));
   if (error) {
     // Fail closed: an allowance that cannot be checked is not an allowance.

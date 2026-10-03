@@ -36,14 +36,15 @@ function fakeDb() {
       }
       if (table === 'ai_requests') {
         return {
-          // The allowance read: select(..., { head: true }).eq(family).gte(created_at)
+          // The allowance read: select(..., { head: true }).eq(family).eq(metered).gte(created_at)
           select: (_cols: string, opts?: { head?: boolean }) => {
             if (opts?.head) {
-              return {
-                eq: (_c: string, familyId: string) => ({
-                  gte: async () => ({ count: state.rows.filter((r) => r.family_id === familyId).length, error: null }),
-                }),
+              const filters: Array<(r: Record<string, unknown>) => boolean> = [];
+              const head = {
+                eq: (c: string, v: unknown) => { filters.push((r) => r[c] === v); return head; },
+                gte: async () => ({ count: state.rows.filter((r) => filters.every((f) => f(r))).length, error: null }),
               };
+              return head;
             }
             throw new Error('unexpected ai_requests select');
           },
@@ -52,7 +53,7 @@ function fakeDb() {
               single: async () => {
                 if (state.failInsert) return { data: null, error: { message: 'insert refused' } };
                 const id = `req-${state.rows.length + 1}`;
-                state.rows.push({ ...row, id });
+                state.rows.push({ metered: true, ...row, id });
                 return { data: { id }, error: null };
               },
             }),
@@ -105,7 +106,7 @@ function call() {
 }
 
 function seed(n: number) {
-  for (let i = 0; i < n; i++) state.rows.push({ id: `old-${i}`, family_id: 'fam-1', kind: 'feature' });
+  for (let i = 0; i < n; i++) state.rows.push({ id: `old-${i}`, family_id: 'fam-1', kind: 'feature', metered: true });
 }
 
 describe('a gift-link request counts against the family allowance (F19)', () => {

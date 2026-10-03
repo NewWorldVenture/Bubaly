@@ -85,7 +85,8 @@ class Query {
       const out: Row[] = [];
       for (const raw of this.payload as Row[]) {
         if (this.op === 'upsert' && rows.some((r) => r.id === raw.id)) continue;
-        const row: Row = { id: raw.id ?? crypto.randomUUID(), created_at: tick(), ...raw };
+        // `metered` defaults to true on ai_requests, as 0477's column does.
+        const row: Row = { id: raw.id ?? crypto.randomUUID(), created_at: tick(), ...(this.name === 'ai_requests' ? { metered: true } : {}), ...raw };
         if (this.name === 'ai_requests' && row.client_request_id != null
           && rows.some((r) => r.family_id === row.family_id && r.client_request_id === row.client_request_id)) {
           return { data: null, error: { code: '23505', message: 'duplicate key value violates unique constraint "uq_ai_requests_client_request"' } };
@@ -206,7 +207,7 @@ function send(opts: { key?: string | null; message?: string; conversationId?: st
 
 const turnRows = () => tableOf('ai_requests').filter((r) => r.feature === 'assistant.turn' || r.feature === 'assistant.stream');
 function seed(n: number) {
-  for (let i = 0; i < n; i++) tableOf('ai_requests').push({ id: `old-${i}`, family_id: FAMILY, requested_by: 'user-1', feature: 'notes.summary', status: 'completed', created_at: tick() });
+  for (let i = 0; i < n; i++) tableOf('ai_requests').push({ id: `old-${i}`, family_id: FAMILY, requested_by: 'user-1', feature: 'notes.summary', status: 'completed', metered: true, created_at: tick() });
 }
 function events(text: string) {
   return text.split('\n\n').filter((p) => p.startsWith('data:')).map((p) => JSON.parse(p.slice(5).trim()) as Record<string, unknown>);

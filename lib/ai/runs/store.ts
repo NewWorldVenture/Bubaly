@@ -84,6 +84,14 @@ export type CreateRequestInput = {
    * `AI_ALLOWANCE_EXCEEDED` instead of a row. `null`/absent files a plain row.
    */
   allowance?: number | null;
+  /**
+   * Work the family did not ask for (F19): filed as a record with
+   * `metered = false`, so the monthly allowance never counts it. A system
+   * scope (cron routines, inbound contact-center routing) is always unmetered,
+   * whatever this says — the owner's ruling is that background work is not
+   * silently charged. An unmetered row is never admitted.
+   */
+  unmetered?: boolean;
 };
 
 const REQUEST_KINDS: readonly AiRequestKind[] = ['concierge', 'feature', 'routine', 'trigger', 'handle_it'];
@@ -123,7 +131,9 @@ export async function createRequest(
   // taken from the verified scope as above.
   const db = opts?.db ?? (kind === 'concierge' ? scope.db : ledgerClient(scope, opts));
 
-  if (typeof input.allowance === 'number') {
+  const metered = !input.unmetered && scope.actorKind !== 'system';
+
+  if (typeof input.allowance === 'number' && metered) {
     // The admission function is service-role only, whatever the kind: the
     // family and the requester are still the verified scope's.
     const admitted = await admitRequest(ledgerClient(scope, opts), {
@@ -143,23 +153,28 @@ export async function createRequest(
     return ok({ id: admitted.data.id });
   }
 
-  const { data, error } = await db
-    .from('ai_requests')
-    .insert({
-      family_id: scope.familyId,
-      conversation_id: input.conversationId ?? null,
-      requested_by: scope.userId,
-      requested_by_member_id: scope.memberId,
-      kind,
-      feature: input.feature ?? null,
-      request_text: text,
-      interpreted_intent: input.interpretedIntent ?? null,
-      status: 'queued',
-      priority: priorityToSmallint(input.priority),
-      client_request_id: input.clientRequestId ?? null,
-    })
-    .select('id')
-    .single();
+  const row: Database['public']['Tables']['ai_requests']['Insert'] = {
+    family_id: scope.familyId,
+    conversation_id: input.conversationId ?? null,
+    requested_by: scope.userId,
+    requested_by_member_id: scope.memberId,
+    kind,
+    feature: input.feature ?? null,
+    request_text: text,
+    interpreted_intent: input.interpretedIntent ?? null,
+    status: 'queued',
+    priority: priorityToSmallint(input.priority),
+    client_request_id: input.clientRequestId ?? null,
+  };
+  // `metered` is written only when false: a metered row takes the column's
+  // default, so it files the same way whether or not 0477 is applied yet.
+  let { data, error } = await db.from('ai_requests').insert(metered ? row : { ...row, metered: false }).select('id').single();
+  if (!metered && isMissingColumn(error)) {
+    // This code deployed before 0477 added the column: file the record as it
+    // was filed before (counted) rather than lose the family's work.
+    console.error('[ai/runs] ai_requests.metered is missing; filing an exempt request as metered until 0477 is applied', error);
+    ({ data, error } = await db.from('ai_requests').insert(row).select('id').single());
+  }
 
   if (error?.code === '23505' && input.clientRequestId) {
     const { data: existing, error: readError } = await db
@@ -264,6 +279,11 @@ export async function admitRequest(
   if (result.request_id && result.outcome === 'admitted') return ok({ id: result.request_id });
   console.error('[ai/runs] unexpected admission answer', result);
   return fail('Bubaly could not record that request.', { code: SERVICE_CODES.db, retryable: true });
+}
+
+/** Postgres "undefined column", or PostgREST's "column not in the schema cache". */
+function isMissingColumn(error: { code?: string } | null): boolean {
+  return error?.code === '42703' || error?.code === 'PGRST204';
 }
 
 function priorityToSmallint(priority?: string): number {

@@ -531,7 +531,7 @@ export class InMemorySupabase {
   withDefaults(table: string, raw: Row): Row {
     const now = new Date().toISOString();
     const row: Row = { ...raw };
-    for (const [column, value] of Object.entries(this.options.defaults?.[table] ?? {})) {
+    for (const [column, value] of Object.entries({ ...MIGRATION_DEFAULTS[table], ...this.options.defaults?.[table] })) {
       if (row[column] === undefined) row[column] = typeof value === 'object' && value !== null ? structuredClone(value) : value;
     }
     if (row.id === undefined || row.id === null) row.id = randomUUID();
@@ -540,6 +540,15 @@ export class InMemorySupabase {
     return row;
   }
 }
+
+/**
+ * Column defaults a migration gives one table, applied to every fake so a test
+ * that seeds or inserts a row without them sees what Postgres would store.
+ */
+const MIGRATION_DEFAULTS: Record<string, Row> = {
+  // 0477: every row counts against the allowance unless server code says not.
+  ai_requests: { metered: true },
+};
 
 /** Build one, typed as the client the server code expects. */
 export function createInMemorySupabase<T = unknown>(options: InMemoryOptions = {}): InMemorySupabase & T {

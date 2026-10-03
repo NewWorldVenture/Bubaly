@@ -27,7 +27,8 @@ function db() {
     from(table: string) {
       if (table === 'ai_requests') {
         return {
-          select: () => ({ eq: () => ({ gte: async () => ({ count: state.used, error: null }) }) }),
+          // The monthly count: select(..., { head: true }).eq(family).eq(metered).gte(created_at)
+          select: () => { const count = { eq: () => count, gte: async () => ({ count: state.used, error: null }) }; return count; },
         };
       }
       const rows = table === 'marketplace_listings' ? LISTINGS : [];

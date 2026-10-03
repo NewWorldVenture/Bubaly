@@ -3,7 +3,8 @@
 -- The Free plan sells "10 AI requests/month", and the meter is a COUNT of the
 -- family's `ai_requests` rows since the start of the UTC month
 -- (lib/server/ai-access.ts `monthlyAllowance`: `.eq('family_id', f)
--- .gte('created_at', <UTC month start>)`, every kind, every status). A route
+-- .eq('metered', true) .gte('created_at', <UTC month start>)`, every kind,
+-- every status). A route
 -- reads that count, and the row that makes the request count is filed later
 -- (`withAiRequest` -> `createRequest`, or the gift route's own insert). Two
 -- requests at 9 of 10 both read 9, both pass, both file: 11 rows. N requests
@@ -28,10 +29,30 @@
 -- unique violation raised by a writer that does not take this lock is caught
 -- and answered the same way.
 --
--- Additive: one new function. Nothing existing is altered. Server-only: the
--- ledger client (`createServiceClient`, service_role) is its only caller, so
+-- WHAT IS METERED. Not every row is a request the family is charged for: the
+-- owner's ruling (#771 review 5391362628) is that background work is not to be
+-- silently charged against the allowance. Chore-proof validation, an inbound
+-- message the contact center routes on a system scope, and a scheduled routine
+-- all file rows (they are the observability record), and the meter used to
+-- count them: a family at 9 of 10 whose child submitted a chore proof was at
+-- 10 of 10 and refused its next real request (#892 review 5970498462).
+-- `metered` says which rows the allowance counts. It defaults to true, so every
+-- existing row and every writer that does not say otherwise is counted exactly
+-- as before; server code files exempt work with `metered = false`. Clients
+-- cannot unmeter a row: members have no UPDATE or DELETE policy on this table,
+-- and a concierge row a member inserts directly is never planned by anything,
+-- whatever its flag (no sweeper picks up queued rows), so it buys no AI work.
+--
+-- Additive: one new column with a constant default (no table rewrite) and one
+-- new function. Nothing existing is altered. Server-only: the ledger client
+-- (`createServiceClient`, service_role) is the function's only caller, so
 -- every client role is refused EXECUTE, including the direct grants Supabase's
 -- default privileges give anon and authenticated (0456).
+
+alter table public.ai_requests add column if not exists metered boolean not null default true;
+
+comment on column public.ai_requests.metered is
+  'F19 (0477): counted against the family''s monthly AI allowance. False for work the family did not ask for (chore-proof validation, system-scope intake, scheduled routines). Written by server code only.';
 
 create or replace function public.admit_ai_request(
   p_family_id uuid,
@@ -80,10 +101,13 @@ begin
     end if;
   end if;
 
-  -- The meter: the same rows lib/server/ai-access.ts counts.
+  -- The meter: the same rows lib/server/ai-access.ts counts. An unmetered row
+  -- (exempt work) is filed without this lock and is never counted, so it can
+  -- neither use up the allowance nor race an admission.
   select count(*)::integer into v_used
     from public.ai_requests r
    where r.family_id = p_family_id
+     and r.metered
      and r.created_at >= date_trunc('month', now(), 'UTC');
 
   if v_used >= p_allowance then
@@ -135,6 +159,13 @@ begin
   end if;
   if not has_function_privilege('service_role', fn, 'execute') then
     raise exception '0477: service_role cannot execute %, so the ledger client cannot admit a request', fn;
+  end if;
+  if not exists (
+    select 1 from information_schema.columns
+     where table_schema = 'public' and table_name = 'ai_requests' and column_name = 'metered'
+       and is_nullable = 'NO' and column_default = 'true'
+  ) then
+    raise exception '0477: ai_requests.metered must be NOT NULL DEFAULT true, or existing rows and writers would stop being counted';
   end if;
 end
 $check$;

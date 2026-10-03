@@ -4050,10 +4050,24 @@ allowance, returning `admitted`, `refused` or `existing` (a retry key already
 filed). The same experiments then leave exactly 10 rows (1 admitted, 7 or 15
 refused). Design, evidence and rollback: `docs/audit/f19-atomic-admission.md`.
 
-**Rollback:** `drop function if exists public.admit_ai_request(uuid, integer, text, text, uuid, uuid, uuid, text, text, text, smallint, text, timestamptz);` together with
-reverting the application change; with only the function dropped, capped plans
-refuse as not recorded until the code is reverted.
+It also adds `ai_requests.metered boolean not null default true` (a constant
+default, so no table rewrite). Work the family did not ask for is filed with
+`metered = false`: chore-proof validation, system-scope intake (inbound
+contact center) and scheduled routines. Both meters count only metered rows,
+so that work no longer uses up a Free family's 10 requests (#892 review
+5970498462). Every existing row stays metered.
+
+Code deployed before this migration: the app's meter filters on `metered`, so
+on a capped plan the gate refuses with "could not check this month's usage"
+(it refused as "not recorded" before). An exempt filing whose insert names the
+missing column is retried without it. Unlimited plans are unaffected.
+
+**Rollback:** `drop function if exists public.admit_ai_request(uuid, integer, text, text, uuid, uuid, uuid, text, text, text, smallint, text, timestamptz); alter table public.ai_requests drop column if exists metered;`
+together with reverting the application change. With only the database rolled
+back, capped plans refuse until the code is reverted.
 
 **After applying:** on a Free family with 9 requests this month, send two
 assistant messages at the same moment from two tabs. One is answered; the
-other shows the monthly allowance message. Paid families are unaffected.
+other shows the monthly allowance message. Paid families are unaffected. Then
+submit a chore proof as a child of that family: it is still checked, and the
+family's count (Settings, AI usage) does not change.

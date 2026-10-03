@@ -38,7 +38,8 @@ class Query {
     await Promise.resolve();
     if (this.op === 'insert') {
       if (state.insertFault) return { data: null, error: { code: '08006', message: 'connection failure' } };
-      const row: Row = { id: `req-${state.rows.length + 1}`, created_at: new Date().toISOString(), ...(this.payload as Row) };
+      // `metered` defaults to true, as 0477's column does.
+      const row: Row = { id: `req-${state.rows.length + 1}`, created_at: new Date().toISOString(), metered: true, ...(this.payload as Row) };
       if (row.client_request_id != null && state.rows.some((r) => r.family_id === row.family_id && r.client_request_id === row.client_request_id)) {
         return { data: null, error: { code: '23505', message: 'duplicate key value violates unique constraint "uq_ai_requests_client_request"' } };
       }
@@ -81,7 +82,7 @@ const FAMILY = 'fam-1';
 const scope = { db: ledger, familyId: FAMILY, userId: 'u1', memberId: 'm1', role: 'parent', actorKind: 'member', tz: 'UTC' } as unknown as ServiceScope;
 
 function seed(n: number) {
-  for (let i = 0; i < n; i++) state.rows.push({ id: `old-${i}`, family_id: FAMILY, kind: 'feature', created_at: new Date().toISOString() });
+  for (let i = 0; i < n; i++) state.rows.push({ id: `old-${i}`, family_id: FAMILY, kind: 'feature', metered: true, created_at: new Date().toISOString() });
 }
 const admissions = () => state.rpcCalls.filter((c) => c.name === 'admit_ai_request');
 

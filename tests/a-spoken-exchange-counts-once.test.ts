@@ -53,8 +53,14 @@ function client() {
       return {
         select: (_cols: string, opts?: { head?: boolean }) => {
           if (opts?.head) {
-            // The monthly count: select(..., { head: true }).eq(family).gte(created_at)
-            return { eq: (_c: string, fam: string) => ({ gte: async () => ({ count: state.rows.filter((r) => r.family_id === fam).length, error: null }) }) };
+            // The monthly count: select(..., { head: true }).eq(family).eq(metered).gte(created_at).
+            // Every row here is a paid request, so all of them are metered (0477's default).
+            const where: Record<string, unknown> = {};
+            const count = {
+              eq: (c: string, v: unknown) => { where[c] = v; return count; },
+              gte: async () => ({ count: state.rows.filter((r) => r.family_id === where.family_id).length, error: null }),
+            };
+            return count;
           }
           // isCountedExchange: select(...).eq('id', id).maybeSingle()
           return { eq: (_c: string, id: string) => ({ maybeSingle: async () => ({ data: state.rows.find((r) => r.id === id) ?? null, error: null }) }) };

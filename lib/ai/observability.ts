@@ -62,9 +62,10 @@ export type AiRequestSpec = {
    * F19: on a capped plan the row is ADMITTED — counted and filed as one
    * decision (`admit_ai_request`, 0477) — and a family at its allowance is
    * refused with `AiRequestOverAllowance` before the body runs. `true` keeps
-   * the row as a record only (filed, counted, never refused by the allowance)
-   * for a surface the owner classified as not charged, such as chore-proof
-   * validation. Unlimited plans are never admitted either way.
+   * the row as a record only — filed with `metered = false`, so it is neither
+   * counted nor refused by the allowance (0477) — for a surface the owner
+   * classified as not charged, such as chore-proof validation. A system scope
+   * is always treated this way. Unlimited plans are never admitted either way.
    */
   exemptFromAllowance?: boolean;
 };
@@ -111,6 +112,10 @@ export async function withAiRequest<T>(
   // row is filed (admitted against the allowance, or plainly) and whether a
   // failed filing refuses.
   const plan = await filingPlan(scope);
+  // Work the family did not ask for is recorded but never charged (owner,
+  // #771 review 5391362628): a surface classified exempt, or anything running
+  // on a system scope (a cron job, inbound routing).
+  const exempt = Boolean(spec.exemptFromAllowance) || scope.actorKind === 'system';
 
   const opened = await createRequest(scope, {
     kind: spec.kind ?? 'feature',
@@ -125,7 +130,8 @@ export async function withAiRequest<T>(
     conversationId: spec.conversationId ?? null,
     feature: spec.feature,
     clientRequestId: spec.clientRequestId ?? null,
-    allowance: spec.exemptFromAllowance ? null : plan.allowance,
+    allowance: exempt ? null : plan.allowance,
+    unmetered: exempt,
   }).catch((err: unknown) => {
     console.error('[ai-observability] could not open a request row', { feature: spec.feature, err });
     return null;
@@ -142,7 +148,9 @@ export async function withAiRequest<T>(
   // run on ANY plan: running it could repeat that attempt's effects (#788
   // review 5964206145). Unkeyed calls keep the plan-based rule below.
   if (!opened?.ok && spec.clientRequestId) throw new AiRequestNotFiled(spec.feature);
-  if (!opened?.ok && plan.capped) {
+  // An exempt row is a record, not the meter, so its failed filing leaves no
+  // hole in the allowance and the work goes on, as on an unlimited plan.
+  if (!opened?.ok && plan.capped && !exempt) {
     // The row is not only diagnostics: on a capped plan it IS the meter (F19).
     // `monthlyAllowance` counts these rows, so a model call made without one
     // is a call the allowance never sees, and a family at 9 of 10 whose filing

@@ -229,3 +229,61 @@ Six keys were added to all 7 base catalogues.
 the real gate, actions, translator and catalogues in German. Against the old
 source, 10 of the 13 fail. The three that still pass are the positive control, the
 English control and the catalogue check.
+
+## Closed: exempt work no longer uses up the allowance
+
+Independent review on #892 (comment 5970498462) found that both meters counted
+every `ai_requests` row of the month: 0477's admission and `assertAIAccess`. That
+included rows the owner said must not be charged ("not approval to silently
+charge background work", #771 review 5391362628):
+- chore-proof validation (`exemptFromAllowance`);
+- system-scope concierge intake (inbound contact center);
+- system-scope `kind: 'routine'` requests from the family-routines cron.
+
+At 9/10 a chore proof made the family 10/10, and its next real request was
+refused. At 10/10 exempt rows went past the cap without the lock.
+
+**Fix.**
+- 0477 adds `ai_requests.metered boolean not null default true`. Existing rows and
+  every writer that says nothing stay metered.
+- Both meters count `metered` rows only: 0477's `admit_ai_request` (`and
+  r.metered`) and `monthlyAllowance` (`.eq('metered', true)`).
+- `createRequest` writes `metered = false` when the request is exempt or its scope
+  is a system scope, and never admits such a row.
+- `withAiRequest` treats a system scope as exempt. An exempt filing that fails no
+  longer refuses on a capped plan: it is a record, not the meter.
+- `metered` is sent only when false, so metered inserts look exactly as they did.
+  If the column is missing (code deployed before 0477), the exempt insert is
+  retried without it, which files the row counted, as before.
+
+**Who can unmeter a row.** Only server code. Members have no UPDATE or DELETE
+policy on `ai_requests`. A concierge row a member inserts directly (0255) with
+`metered = false` is never planned, because nothing sweeps queued rows, so it buys
+no AI work.
+
+**Owner-visible consequence.** Routine runs, scheduled by a member and run by cron,
+are now unmetered. That follows the ruling above. If routines should be metered,
+it is a one-line change in `createRequest`.
+
+**Evidence.**
+- `tests/f19-exempt-work-is-not-metered.test.ts` has 8 tests. It drives the real
+  `withAiRequest`, `createRequest`, `submitRequest` and `assertAIAccess` over one
+  in-memory database with `admit_ai_request` emulated from the same table.
+  - Sequential: a chore proof at 9/10, then the 10th paid request is admitted and
+    the 11th refused. A chore proof at 10/10 runs and stays out of the count. A
+    system intake at 9/10 leaves the member's 10th request. A routine is
+    unmetered.
+  - Concurrent: 8 proofs and 8 paid requests at 9/10 give 8 proofs, 1 paid
+    admitted, 7 refused, 10 metered of 18, and 9 model calls. A second race uses 4
+    system intakes and 4 member submissions.
+  - Controls: a member's ordinary request is metered, and a pre-0477 schema falls
+    back to the metered insert.
+  - Against the old source, 6 of the 8 fail; the 2 controls pass.
+- Local SQL (`scratchpad` script, a disposable family, real Postgres):
+  - sequential, at 9 paid: 1 exempt row leaves metered at 9; paid #10 is
+    admitted; an exempt row at 10/10 is filed with metered still 10; paid #11 is
+    refused;
+  - concurrent, 8 exempt and 8 paid at 9, each transaction held 0.3 s: 1 admitted,
+    7 refused, 10 metered, 8 unmetered, 18 rows;
+  - control, with the old behaviour (exempt rows metered): 8 exempt rows at 9 take
+    the meter to 17.

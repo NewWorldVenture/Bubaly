@@ -6,8 +6,8 @@
 // insert, an unreadable read-back) reaches the admission exactly as it reaches
 // a plain `createRequest`. The per-family advisory lock is modelled by a
 // promise chain per family, so concurrent admissions in one test serialise the
-// way they do in Postgres. The count is the meter's: the family's rows since
-// the start of the UTC month.
+// way they do in Postgres. The count is the meter's: the family's METERED rows
+// since the start of the UTC month (0477's `and r.metered`).
 
 type Result = { data: unknown; error: { code?: string; message: string } | null; count?: number | null };
 // The fake builders are thenables with whichever filters their test needed;
@@ -64,6 +64,7 @@ export async function admitAiRequest(db: FakeDb, args: AdmitArgs, opts?: { now?:
     }
     const counted: Result = await chain(db).select('id', { count: 'exact', head: true })
       .eq('family_id', args.p_family_id)
+      .eq('metered', true)
       .gte('created_at', monthStartIso(opts?.now ?? new Date()));
     if (counted.error) return { data: null, error: counted.error };
     const used = counted.count ?? 0;
