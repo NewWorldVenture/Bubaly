@@ -48,6 +48,7 @@ beforeEach(() => {
     // to repeat, keyed ones are not.
     uniques: { chore_assignments: [['family_id', 'idempotency_key']] },
   });
+  db.seed('family_members', [{ id: 'member-2', family_id: FAMILY }]);
   mocks.requireUserContext.mockResolvedValue({
     user: { id: 'user-1' },
     active: {

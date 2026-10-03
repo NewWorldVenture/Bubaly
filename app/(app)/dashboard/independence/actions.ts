@@ -28,6 +28,18 @@ export async function startMilestoneAction(memberId: string, title: string): Pro
   const m = LADDER.find(l => l.title === title);
   if (!m) return { ok: false, error: t('actions.unknownMilestone') };
 
+  // The member FK checks existence, so confirm this family's exact member first.
+  try {
+    const { data: member, error: memberError } = await supabase.from('family_members')
+      .select('id,family_id').eq('id', memberId).eq('family_id', ctx.active.familyId).maybeSingle();
+    if (memberError || !member || typeof member.id !== 'string' || member.id !== memberId ||
+        member.family_id !== ctx.active.familyId) {
+      return { ok: false, error: t('actions.familyMemberNotFound') };
+    }
+  } catch {
+    return { ok: false, error: t('actions.familyMemberNotFound') };
+  }
+
   const { error } = await supabase.from('independence_milestones').upsert({
     family_id: ctx.active.familyId,
     member_id: memberId,

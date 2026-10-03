@@ -1,18 +1,34 @@
 import type { SupabaseClient } from '@supabase/supabase-js';
 import type { Database } from '@/lib/database.types';
 
-/** Append an entry to the family audit log. Best-effort: never throws into the caller. */
-export async function logAudit(
+type AuditEntry = {
+  familyId: string | null;
+  actorId?: string | null;
+  action: string;
+  resource: string;
+  resourceId?: string | null;
+  metadata?: Record<string, unknown> | null;
+};
+
+/** Whether an audit row landed; `error` is what the database answered. */
+export type AuditOutcome = { ok: true } | { ok: false; error: unknown };
+
+/**
+ * Append an entry to the family audit log and SAY whether it landed.
+ *
+ * For the caller that must not go on without its row. An export of personal
+ * data is the clear case: the audit row is the only record that it happened,
+ * and when the write is refused nothing has been sent yet, so refusing costs
+ * the operator a retry and nothing else. The privacy export already does this
+ * against trust_audit_logs; this is the same rule for audit_logs. Where the
+ * action has already happened by the time the row is written — money moved, a
+ * login created — use logAudit below: being loud is the fix there, being fatal
+ * is not. Never rejects.
+ */
+export async function recordAudit(
   supabase: SupabaseClient<Database>,
-  entry: {
-    familyId: string | null;
-    actorId?: string | null;
-    action: string;
-    resource: string;
-    resourceId?: string | null;
-    metadata?: Record<string, unknown> | null;
-  },
-): Promise<void> {
+  entry: AuditEntry,
+): Promise<AuditOutcome> {
   try {
     const { error } = await supabase.from('audit_logs').insert({
       family_id: entry.familyId,
@@ -29,12 +45,18 @@ export async function logAudit(
     // mismatch or a dead connection: every one of those resolves. The line that
     // was written to notice a failed audit write had never run, and could not,
     // which is why every failure across all 14 callers was silent.
-    if (error) console.error('[audit] failed to write log', error);
+    return error ? { ok: false, error } : { ok: true };
   } catch (e) {
     // Kept for the one way left to arrive here: a synchronous throw while the
     // query is being built, e.g. a client constructed without a URL.
-    console.error('[audit] failed to write log', e);
+    return { ok: false, error: e };
   }
+}
+
+/** Append an entry to the family audit log. Best-effort: reports a lost row, never throws into the caller. */
+export async function logAudit(supabase: SupabaseClient<Database>, entry: AuditEntry): Promise<void> {
+  const outcome = await recordAudit(supabase, entry);
+  if (!outcome.ok) console.error('[audit] failed to write log', outcome.error);
 }
 
 /**

@@ -16625,5 +16625,7 @@
   "ai.thisMessageCouldNotBeIdentified": "Não foi possível identificar esta mensagem. Envie-a novamente.",
   "ai.thatAnswerWasCutOff": "Essa resposta foi interrompida antes de terminar. Pergunte novamente para obter a resposta completa.",
   "ai.yourFamilyUsedItsMonthlyAllowance": "A sua família já utilizou os {limit} pedidos de IA deste mês. Mude para o Family Basic para ter pedidos ilimitados, ou tente novamente no próximo mês.",
-  "ai.thatAnswerWasNotSaved": "O Bubaly respondeu a esta mensagem, mas não conseguiu guardar a resposta. O que fez já aconteceu, por isso verifique antes de voltar a perguntar."
+  "ai.thatAnswerWasNotSaved": "O Bubaly respondeu a esta mensagem, mas não conseguiu guardar a resposta. O que fez já aconteceu, por isso verifique antes de voltar a perguntar.",
+  "mealsPlanner.addMealToLibrary": "Adicionar refeição à biblioteca",
+  "mealsPlanner.noSavedChoices": "Ainda não há refeições nem receitas guardadas. Crie uma nova refeição abaixo para começar a planear."
 }

@@ -26,10 +26,16 @@
 export type SettledFallback = { data: null; count: null; error: { message: string } };
 
 function toFallback(cause: unknown): SettledFallback {
+  let message: string;
+  try {
+    message = cause instanceof Error ? cause.message : String(cause);
+  } catch {
+    message = 'Query failed.';
+  }
   return {
     data: null,
     count: null,
-    error: { message: cause instanceof Error ? cause.message : String(cause) },
+    error: { message },
   };
 }
 

@@ -16625,5 +16625,7 @@
   "ai.thisMessageCouldNotBeIdentified": "This message could not be identified. Send it again.",
   "ai.thatAnswerWasCutOff": "That answer was cut off before it finished. Ask again for the full reply.",
   "ai.yourFamilyUsedItsMonthlyAllowance": "Your family has used its {limit} AI requests for this month. Upgrade to Family Basic for unlimited, or try again next month.",
-  "ai.thatAnswerWasNotSaved": "Bubaly answered this message but could not save the answer. Anything it did has already happened, so check before asking again."
+  "ai.thatAnswerWasNotSaved": "Bubaly answered this message but could not save the answer. Anything it did has already happened, so check before asking again.",
+  "mealsPlanner.addMealToLibrary": "Add meal to library",
+  "mealsPlanner.noSavedChoices": "No saved meals or recipes yet. Create a new meal below to start planning."
 }
