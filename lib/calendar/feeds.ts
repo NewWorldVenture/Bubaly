@@ -69,11 +69,34 @@ export interface FeedEventRow {
  * The `external_uid` a VEVENT is stored under. A stand-alone event and a
  * recurring series master are stored under their UID; an EXCEPTION to a series
  * — a VEVENT carrying RECURRENCE-ID, which shares the master's UID and replaces
- * one occurrence — is stored under `uid#recurrenceId`, so it never overwrites
+ * one occurrence — is stored under the UID joined to its RECURRENCE-ID by a
+ * separator no UID can carry (`EXCEPTION_KEY_SEPARATOR`), so it never overwrites
  * the series it belongs to and the series never overwrites it.
  */
+/**
+ * The separator between a UID and a RECURRENCE-ID in an exception's key.
+ *
+ * RFC 5545 forbids control characters in a property value, so no UID a
+ * publisher can write contains one — and both halves are stripped of them
+ * below, so a UID that arrives with one anyway cannot impersonate an
+ * exception. `#` was the separator before, and a stand-alone event whose UID
+ * happened to be `series#2026-09-12T14:00:00.000Z` shared a key with the moved
+ * occurrence of `series`: one of the two was lost in the plan, and when that
+ * occurrence was cancelled the feed-scoped delete removed the stand-alone
+ * event (review on #908). 0x1F is a unit separator, storable in a text column
+ * and safe in a PostgREST filter.
+ */
+export const EXCEPTION_KEY_SEPARATOR = '\u001F';
+const CONTROL_CHARACTERS = /[\u0000-\u001F\u007F]/g;
+
+/**
+ * The `external_uid` a VEVENT is stored under: the bare UID for a master or a
+ * one-off — the key every row imported before this change already has — and
+ * UID + separator + RECURRENCE-ID for an exception, which no bare UID can equal.
+ */
 export function feedExternalUid(ev: Pick<IcsEvent, 'uid' | 'recurrenceId'>): string {
-  return ev.recurrenceId ? `${ev.uid}#${ev.recurrenceId}` : ev.uid;
+  const uid = ev.uid.replace(CONTROL_CHARACTERS, '');
+  return ev.recurrenceId ? `${uid}${EXCEPTION_KEY_SEPARATOR}${ev.recurrenceId.replace(CONTROL_CHARACTERS, '')}` : uid;
 }
 
 /**
