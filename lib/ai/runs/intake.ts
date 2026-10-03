@@ -110,8 +110,13 @@ function allowanceRefusal(limit: number): IntakeAllowanceRefusal {
  * `assertAIAccess`, which fails closed on the same read, has already run, and
  * admitting against the Free number would refuse a paying family over ten
  * during a plan-read outage. A failed filing plans nothing, whatever the plan.
+ * A system scope (inbound contact-center routing) is never admitted.
  */
 async function intakeAllowance(scope: ServiceScope): Promise<number | null> {
+  // Only what a person asked for is metered (owner decision on #771): an
+  // inbound message the contact center routes here on a system scope stays
+  // unmetered and is filed plainly, as it was before admission existed.
+  if (scope.actorKind === 'system') return null;
   try {
     return monthlyAllowanceFor(await resolveFamilyPlanLevel(scope.db, scope.familyId));
   } catch (err) {

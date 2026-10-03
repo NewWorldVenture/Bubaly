@@ -241,6 +241,26 @@ describe('F19: the concierge intake admits its request atomically', () => {
     expect(planRequest).toHaveBeenCalledTimes(2);
   });
 
+  it('a system-scope intake (inbound contact-center routing) at 10 of 10 files plainly and is never refused', async () => {
+    seed(10);
+    const kick = vi.fn();
+    const result = await submitRequest({ ...scope(), actorKind: 'system' }, { text: 'Inbound: plan the dentist visit' }, { kick });
+    expect(result.ok).toBe(true);
+    expect(rows()).toHaveLength(11);
+    expect(state.rpcCalls).toHaveLength(0);
+    expect(state.inserts).toEqual(['member']);
+    expect(planRequest).toHaveBeenCalledTimes(1);
+  });
+
+  it('a member-scope intake at 10 of 10 on the same plan is refused (negative control)', async () => {
+    seed(10);
+    const kick = vi.fn();
+    const result = await submitRequest(scope(), { text: 'Plan our week' }, { kick });
+    expect(result).toMatchObject({ ok: false, status: 429, code: 'allowance_exceeded', limit: 10 });
+    expect(rows()).toHaveLength(10);
+    expect(planRequest).not.toHaveBeenCalled();
+  });
+
   it('a capped plan whose admission function is missing (deployed before 0477) is refused: nothing filed or planned', async () => {
     state.rpcFault = 'missing';
     seed(3);
