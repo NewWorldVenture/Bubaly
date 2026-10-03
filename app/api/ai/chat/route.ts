@@ -209,8 +209,11 @@ export async function POST(req: NextRequest) {
           console.error('AI stream error:', streamErr);
           // Recorded now, before the fallback: what broke FIRST is the diagnosis,
           // and `partial` distinguishes "the stream died having said nothing"
-          // from "the family got half an answer".
-          obs.failed(streamErr, { partial: Boolean(content) });
+          // from "the family got half an answer". A tool that already ran is
+          // part of the answer too: such a turn has no fallback, its exchange is
+          // saved, and a keyed retry must replay it rather than read "did not
+          // finish" and run the tools a second time (as the engine does).
+          obs.failed(streamErr, { partial: Boolean(content) || actions.length > 0 });
           // Resilience: if streaming failed before producing any text (e.g. a proxy
           // buffered/blocked the SSE response), fall back to a single non-streaming
           // run so the assistant still works. Only surface an error if that fails too.

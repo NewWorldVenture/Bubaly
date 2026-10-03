@@ -29,6 +29,8 @@ const state = vi.hoisted(() => ({
    * read-back of the original row fails. 'insert-error': the INSERT fails.
    */
   fault: null as null | 'collision-unreadable' | 'insert-error',
+  /** The model's stream runs a tool, then breaks before any text. */
+  breakAfterAction: false,
   faulted: false,
 }));
 
@@ -156,7 +158,15 @@ const provider = vi.hoisted(() => ({}) as Record<string, unknown>);
 Object.assign(provider, {
   model: 'test-model',
   runTools: async () => { await model(); return { text: state.answer ?? ANSWER, actions: [], usage: { promptTokens: 1, completionTokens: 1 } }; },
-  async *runToolsStream() { await model(); yield { type: 'delta' as const, text: state.answer ?? ANSWER }; },
+  async *runToolsStream() {
+    await model();
+    if (state.breakAfterAction) {
+      // A tool ran, then the stream broke before any text.
+      yield { type: 'action' as const, name: 'add_grocery_item', args: { name: 'milk' }, result: { ok: true, summary: 'Added milk' } };
+      throw new Error('stream broke');
+    }
+    yield { type: 'delta' as const, text: state.answer ?? ANSWER };
+  },
 });
 // Preparation (classifier + context) is the costly half before the model; a
 // replay must not reach it either.
@@ -216,6 +226,7 @@ beforeEach(() => {
   state.answer = null;
   state.fault = null;
   state.faulted = false;
+  state.breakAfterAction = false;
   vi.spyOn(console, 'error').mockImplementation(() => {});
 });
 afterEach(() => { vi.restoreAllMocks(); });
@@ -636,5 +647,26 @@ describe('a keyed send whose request cannot be recorded runs nothing, on every p
     state.fault = 'insert-error';
     expect((await POST(send())).status).not.toBe(200);
     expect(state.providerCalls).toBe(0);
+  });
+});
+
+// Review of #875 (claim #771 5968933130): #834 runs no fallback once a tool has
+// run, so on /api/ai/chat a stream that broke after a tool but before any text
+// settled `failed`. #788's replay then said "did not finish" and the resend ran
+// the tool again. A turn whose tool ran is partial, as on the engine path.
+describe('/api/ai/chat: a turn whose tool ran before the stream broke is partial, not failed', () => {
+  it('settles partially_completed, and a keyed retry replays it instead of running the tool again', async () => {
+    const { POST } = await import('@/app/api/ai/chat/route');
+    state.breakAfterAction = true;
+    await (await POST(sendChat('send-0001-abcdef'))).text();
+    const row = tableOf('ai_requests').find((r) => r.feature === 'chat.assistant');
+    expect(row?.status).toBe('partially_completed');
+    expect(state.effects).toBe(1);
+
+    const replay = events(await (await POST(sendChat('send-0001-abcdef'))).text());
+    expect(replay.map((e) => e.type)).toEqual(['delta', 'error', 'done']);
+    expect(replay.at(-1)).toMatchObject({ requestId: row!.id });
+    expect(state.providerCalls).toBe(1);
+    expect(state.effects).toBe(1);
   });
 });
