@@ -6,8 +6,9 @@
 -- by `0263_dead_letter_reconcile.sql`, only re-GRANTED — not redefined — by
 -- `0292_privileged_rpc_grant_reassert.sql`, and REWRITTEN again by
 -- `0479_a_run_with_no_attempts_left_is_abandoned_not_reclaimed.sql`, which keeps
--- the expired-lease arms this probe tests word for word and adds a second arm
--- for a run parked in the queue with no attempts left (proved by its own probe,
+-- the expired-lease arms this probe tests word for word, adds a second arm for
+-- a run parked in the queue with no attempts left, and closes a dead run's
+-- pending approvals (both proved by its own probe,
 -- a-run-with-no-attempts-left-is-abandoned-check.sql). So 0479's body is what a
 -- replayed database runs, and the recovery half this probe exercises has two arms:
 --

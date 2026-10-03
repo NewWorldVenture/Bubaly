@@ -264,10 +264,24 @@ describe('the migration', () => {
 
   it("keeps 0263's reconcile, bounded to the runs the statement dead-lettered", () => {
     expect(sql).toMatch(/select coalesce\(array_agg\(id\) filter \(where state = 'failed'\), '\{\}'\) into v_dead/);
-    expect(sql.match(/r\.id = any\(v_dead\)/g)).toHaveLength(3);
+    // Steps, request ledger, timeline — and the approvals write below.
+    expect(sql.match(/r\.id = any\(v_dead\)/g)).toHaveLength(4);
     expect(sql).toMatch(/update public\.ai_plan_steps s[\s\S]*?and s\.status in \('executing', 'verifying', 'queued', 'ready'\)/);
     expect(sql).toMatch(/update public\.ai_requests q[\s\S]*?and q\.status not in \('completed', 'partially_completed', 'failed', 'cancelled'\)/);
     expect(sql).toMatch(/insert into public\.ai_run_events[\s\S]*?'run_failed'/);
+  });
+
+  it("closes a dead run's pending approvals, by the run and by the step, with no decider", () => {
+    // 0263 left them open: a card in "Needs your decision" for a run that had
+    // died, and a decision on it approved work that never starts.
+    const approvals = sql.slice(sql.indexOf('update public.approval_requests a'), sql.indexOf('  end if;'));
+    expect(approvals.length, 'the approvals write sits inside the dead-letter block').toBeGreaterThan(0);
+    expect(approvals).toContain("set status = 'cancelled'");
+    expect(approvals).toContain('decided_at = now()');
+    expect(approvals, 'nobody decided').not.toContain('decided_by');
+    expect(approvals).toContain("where a.status = 'pending'");
+    expect(approvals).toContain('a.run_id = any(v_dead)');
+    expect(approvals).toMatch(/or a\.id in \(select s\.approval_id[\s\S]*?where r\.id = any\(v_dead\)[\s\S]*?and s\.approval_id is not null\)/);
   });
 
   it('keeps the function service-role only, as 0253 left it', () => {
@@ -284,6 +298,11 @@ describe('the migration', () => {
       'a cancel in flight',
       'lease is still live',
       'expected one run_failed event',
+      'approval (by run_id) was left',
+      'reachable only through the step',
+      'names a decider when nobody decided',
+      // SQL doubles the apostrophe inside its string literal.
+      "CONTROL FAILED: the claimed run''s approval was",
     ]) {
       expect(proof, claim).toContain(claim);
     }
