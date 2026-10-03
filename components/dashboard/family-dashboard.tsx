@@ -1,4 +1,6 @@
 import Link from 'next/link';
+import { readCalendarOccurrences } from '@/lib/calendar/occurrences';
+import { instantCalendarBounds } from '@/lib/briefing/calendar-window';
 import {
   Cake, Calendar, CheckCircle2, ChevronRight,
   ListChecks, Plus, ShoppingCart, Sparkles, Users,
@@ -74,7 +76,8 @@ export async function FamilyDashboard({ ctx }: { ctx: UserContext }) {
   const { locale } = await getLocaleContext();
   const familyId = ctx.active.familyId;
   const supabase = await createServer();
-  const { start, end, in7, in14, weekStart, weekEnd } = dayBounds(ctx.active.family.timezone || 'UTC');
+  const tz = ctx.active.family.timezone || 'UTC';
+  const { start, end, in7, in14, weekStart, weekEnd } = dayBounds(tz);
 
   const [
     { data: todayEvents },
@@ -90,15 +93,15 @@ export async function FamilyDashboard({ ctx }: { ctx: UserContext }) {
     { data: overdueReminders },
     { count: unreadMessages },
   ] = await settleAll([
-    supabase.from('calendar_events').select('*').eq('family_id', familyId)
-      .gte('starts_at', start.toISOString()).lt('starts_at', end.toISOString()).order('starts_at').limit(8),
+    // Series included: the weekly lesson is on today every week (lib/calendar/occurrences.ts).
+    readCalendarOccurrences(supabase, familyId, instantCalendarBounds(start.toISOString(), new Date(end.getTime() - 1).toISOString(), tz), tz, { limit: 8 }),
     supabase.from('chore_assignments').select('id', { count: 'exact', head: true })
       .eq('family_id', familyId).in('status', ['todo', 'in_progress']),
     supabase.from('chore_assignments').select('id', { count: 'exact', head: true })
       .eq('family_id', familyId).eq('due_at', start.toISOString().slice(0, 10)).in('status', ['todo', 'in_progress']),
-    supabase.from('calendar_events').select('id, title, starts_at, all_day, location, category')
-      .eq('family_id', familyId).gte('starts_at', end.toISOString()).lte('starts_at', in14.toISOString())
-      .order('starts_at').limit(5),
+    readCalendarOccurrences(supabase, familyId, instantCalendarBounds(end.toISOString(), in14.toISOString(), tz), tz, {
+      columns: ['id', 'title', 'starts_at', 'all_day', 'location', 'category'], limit: 5,
+    }),
     supabase.from('meal_plans').select('plan_date, meal_type, meal_id')
       .eq('family_id', familyId)
       .gte('plan_date', weekStart.toISOString().slice(0, 10))

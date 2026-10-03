@@ -6,6 +6,8 @@
 // (leave-by, packing, snacks, weather, budget, photos), remembering what's done.
 
 import { useMemo, useState } from 'react';
+import { readCalendarOccurrences } from '@/lib/calendar/occurrences';
+import { calendarOpenWindowFilter, instantCalendarBounds } from '@/lib/briefing/calendar-window';
 import Link from 'next/link';
 import { useRouter } from 'next/navigation';
 import {
@@ -91,11 +93,14 @@ export function MomentsView({ departures, departuresFailed = false, savedTicks, 
   const { success, error: toastError } = useToast();
 
   const nowISO = useMemo(() => new Date().toISOString(), []);
+  // The eight nearest things ahead, series included: one-offs open-ended as
+  // before, a series expanded over the year ahead (lib/calendar/occurrences.ts).
+  const aheadBounds = useMemo(() => instantCalendarBounds(nowISO, new Date(Date.parse(nowISO) + 366 * 86_400_000 - 1).toISOString(), clock.timeZone), [nowISO, clock.timeZone]);
   const { data: rows, loading, error: readError, refresh } = useRealtimeQuery<Event>({
     table: 'calendar_events', familyId, deps: [familyId],
-    fetcher: (sb) => sb.from('calendar_events').select('*')
-      .eq('family_id', familyId).gte('starts_at', nowISO)
-      .order('starts_at', { ascending: true }).limit(8),
+    fetcher: (sb) => readCalendarOccurrences(sb, familyId, aheadBounds, clock.timeZone, {
+      singlesFilter: calendarOpenWindowFilter(aheadBounds), singlesLimit: 8, limit: 8,
+    }),
   });
 
   // What this session has tapped, LAYERED OVER the server's answer rather than

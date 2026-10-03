@@ -6,6 +6,8 @@
 // dashboard and just act. 100% Supabase-wired (reads calendar_events,
 // chore_assignments, todo_items; safely completes todos).
 import { useCallback, useEffect, useId, useReducer, useRef, useState } from 'react';
+import { readCalendarOccurrences } from '@/lib/calendar/occurrences';
+import { instantCalendarBounds } from '@/lib/briefing/calendar-window';
 import {
   Focus, Check, ArrowRight, Calendar, CheckSquare, ListChecks, Sparkles, RotateCcw,
 } from 'lucide-react';
@@ -71,10 +73,10 @@ function FocusQueue() {
       const myMemberId = member?.id ?? null;
 
       const [{ data: events, error: evErr }, { data: chores, error: chErr }, { data: todos, error: tdErr }] = await settleAll([
-        supabase.from('calendar_events').select('id, title, starts_at, all_day, location')
-          .eq('family_id', familyId)
-          .gte('starts_at', dayStart.toISOString()).lt('starts_at', dayEnd.toISOString())
-          .order('starts_at').limit(20),
+        // Series included: today's weekly lesson is on today's focus list (lib/calendar/occurrences.ts).
+        readCalendarOccurrences(supabase, familyId, instantCalendarBounds(dayStart.toISOString(), new Date(dayEnd.getTime() - 1).toISOString(), clock.timeZone), clock.timeZone, {
+          columns: ['id', 'title', 'starts_at', 'all_day', 'location'], limit: 20,
+        }),
         myMemberId
           ? supabase.from('chore_assignments').select('id, due_at, chores(title)')
               .eq('family_id', familyId).eq('member_id', myMemberId).in('status', ['todo', 'in_progress'])

@@ -56,12 +56,16 @@ async function home(zone = 'UTC', role = 'parent') {
   const ctx = { user: { id: 'user', email: 'alex@example.test' }, active: { familyId: 'family', role, member: { id: 'parent', display_name: 'Alex' }, family: { name: 'Family', timezone: zone } } } as UserContext;
   return renderToStaticMarkup(await AiHomeDashboard({ ctx }));
 }
+// Each of Home's three calendar reads is the series-aware read
+// (lib/calendar/occurrences.ts), which issues TWO queries per read — the
+// one-offs by the window and the series that could reach it — so read N is
+// queries 2N-1 and 2N, and failing either fails the read.
 function failCalendar(read: number, rejection: boolean) {
   let n = 0;
   const from = db.from.bind(db);
   return vi.spyOn(db, 'from').mockImplementation(table => {
     const query = from(table);
-    return table !== 'calendar_events' || ++n !== read ? query : new Proxy(query, { get: (target, key, receiver) => key === 'then'
+    return table !== 'calendar_events' || Math.ceil(++n / 2) !== read ? query : new Proxy(query, { get: (target, key, receiver) => key === 'then'
       ? (resolve: (value: unknown) => void, reject: (cause: unknown) => void) => rejection
         ? reject(new Error('Internal calendar transport detail')) : resolve({ data: [], error: { message: 'Internal calendar query detail' } })
       : Reflect.get(target, key, receiver) });
@@ -113,6 +117,26 @@ describe('actual Home calendar reads and rendered read availability', () => {
     expect(degraded.includes('Healthy today event')).toBe(read !== 1); expect(degraded.includes('Healthy upcoming event')).toBe(read !== 2);
     secondFailure.mockRestore(); const recovered = await home();
     expect(recovered).not.toContain('temporarily unavailable'); expect(recovered).toContain('Healthy today event'); expect(recovered).toContain('Healthy upcoming event');
+  });
+
+  it('a weekly lesson created last month is on Today and Coming up this week, and its clash is found', async () => {
+    // One row, Wednesday 12 August 17:00 New York, weekly. Read by its first
+    // start, as Home used to, it was in no window after August. The series-
+    // aware read (lib/calendar/occurrences.ts) expands it into every week.
+    db.seed('calendar_events', [
+      { id: 'piano', title: 'Piano lesson', starts_at: '2026-08-12T21:00:00.000Z', ends_at: '2026-08-12T22:00:00.000Z', all_day: false, assignee_id: 'parent', family_id: 'family', location: 'Studio', recurrence: 'weekly', recurrence_until: null },
+      // Today 17:30–18:30 New York, booked over the lesson.
+      row('Team photo', '2026-09-09T21:30:00.000Z', false, 'parent', 'family', '2026-09-09T22:30:00.000Z'),
+    ]);
+    const html = await home('America/New_York');
+    expect(mocks.today.mock.calls[0][0].events.map((e: { id: string; starts_at: string }) => [e.id, e.starts_at]))
+      .toEqual([['piano', '2026-09-09T21:00:00.000Z'], ['Team photo', '2026-09-09T21:30:00.000Z']]);
+    // Next Wednesday's lesson is in the week ahead, at the same hour.
+    expect(mocks.upcoming.mock.calls[0][0].map((e: { id: string; starts_at: string }) => [e.id, e.starts_at])).toEqual([['piano', '2026-09-16T21:00:00.000Z']]);
+    // The clash detector was handed this week's occurrence, not August's row.
+    expect(mocks.conflicts.mock.calls[0][0].map((e: { id: string; starts_at: string }) => [e.id, e.starts_at]))
+      .toEqual(expect.arrayContaining([['piano', '2026-09-09T21:00:00.000Z'], ['Team photo', '2026-09-09T21:30:00.000Z']]));
+    expect(html).toContain('Piano lesson');
   });
 
   it('keeps healthy empty arrays successful', async () => {
@@ -186,18 +210,35 @@ describe('actual Home calendar reads and rendered read availability', () => {
     } } });
     mocks.server.mockResolvedValue(client); await home('America/New_York');
     const calendar = requests.filter(url => url.pathname.endsWith('/calendar_events'));
-    expect(calendar).toHaveLength(3);
+    // Three series-aware reads, two queries each: the one-offs by the window
+    // (visibility, then the typed window, then the no-series clause, all
+    // conjunctive) and the series that could reach it (visibility, then
+    // `recurrence=neq.none`, a start no later than the window's end, an end
+    // no earlier than its start, one row past the ceiling).
+    expect(calendar).toHaveLength(6);
     for (const [i, url] of calendar.entries()) {
+      const read = Math.floor(i / 2); const series = i % 2 === 1;
       expect(url.searchParams.get('family_id')).toBe('eq.family');
       expect(url.searchParams.get('order')).toBe('starts_at.asc');
-      expect(url.searchParams.get('limit')).toBe(i === 2 ? '200' : '5');
       const logic = url.searchParams.getAll('or');
-      expect(logic).toHaveLength(i === 2 ? 1 : 2);
-      if (i < 2) expect(logic[0]).toBe('(assignee_id.eq.parent,assignee_id.is.null)');
+      if (read < 2) expect(logic[0]).toBe('(assignee_id.eq.parent,assignee_id.is.null)');
       else expect(url.searchParams.get('assignee_id')).toBe('not.is.null');
-      expect(logic.at(-1)).toContain('and(all_day.eq.false,starts_at.gte.2026-09-');
-      expect(logic.at(-1)).toContain('and(all_day.eq.true,starts_at.gte.2026-09-');
-      expect(url.searchParams.get('starts_at')).toBeNull();
+      const own = read < 2 ? 1 : 0;
+      if (series) {
+        expect(url.searchParams.get('recurrence')).toBe('neq.none');
+        expect(url.searchParams.get('starts_at')).toMatch(/^lte\.2026-09-/);
+        expect(url.searchParams.get('limit')).toBe('2001');
+        expect(logic).toHaveLength(own + 1);
+        expect(logic.at(-1)).toMatch(/^\(recurrence_until\.is\.null,recurrence_until\.gte\.2026-09-/);
+      } else {
+        expect(url.searchParams.get('recurrence')).toBeNull();
+        expect(url.searchParams.get('starts_at')).toBeNull();
+        expect(url.searchParams.get('limit')).toBeNull();
+        expect(logic).toHaveLength(own + 2);
+        expect(logic[own]).toContain('and(all_day.eq.false,starts_at.gte.2026-09-');
+        expect(logic[own]).toContain('and(all_day.eq.true,starts_at.gte.2026-09-');
+        expect(logic.at(-1)).toBe('(recurrence.is.null,recurrence.eq.none)');
+      }
     }
   });
 

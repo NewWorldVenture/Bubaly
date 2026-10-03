@@ -1,4 +1,6 @@
 import Link from 'next/link';
+import { readCalendarOccurrences } from '@/lib/calendar/occurrences';
+import { instantCalendarBounds } from '@/lib/briefing/calendar-window';
 import {
   Award, Bell, Calendar, CheckCircle2, ChevronRight, ClipboardCheck,
   Gift, LayoutDashboard, ListChecks, Sparkles, Star, Trophy, Users,
@@ -76,7 +78,10 @@ export async function PersonalDashboard({ ctx }: { ctx: UserContext }) {
   const manager = isManager(role);
   const isKid = role === 'child' || role === 'teen';
   const supabase = await createServer();
-  const { start, end, in14 } = dayBounds(ctx.active.family.timezone || 'UTC');
+  const tz = ctx.active.family.timezone || 'UTC';
+  const { start, end, in14 } = dayBounds(tz);
+  // Mine or the whole family's, series included (lib/calendar/occurrences.ts).
+  const mineOrShared = `assignee_id.eq.${myMemberId},assignee_id.is.null`;
 
   const [
     { data: myChores },
@@ -103,18 +108,12 @@ export async function PersonalDashboard({ ctx }: { ctx: UserContext }) {
     supabase.from('chore_assignments').select('id', { count: 'exact', head: true })
       .eq('family_id', familyId).eq('member_id', myMemberId).in('status', ['approved', 'done']),
     // Today's events assigned to me OR shared with the whole family
-    supabase.from('calendar_events')
-      .select('id, title, starts_at, all_day, location, assignee_id')
-      .eq('family_id', familyId)
-      .or(`assignee_id.eq.${myMemberId},assignee_id.is.null`)
-      .gte('starts_at', start.toISOString()).lt('starts_at', end.toISOString())
-      .order('starts_at').limit(8),
-    supabase.from('calendar_events')
-      .select('id, title, starts_at, all_day, assignee_id')
-      .eq('family_id', familyId)
-      .or(`assignee_id.eq.${myMemberId},assignee_id.is.null`)
-      .gte('starts_at', end.toISOString()).lte('starts_at', in14.toISOString())
-      .order('starts_at').limit(5),
+    readCalendarOccurrences(supabase, familyId, instantCalendarBounds(start.toISOString(), new Date(end.getTime() - 1).toISOString(), tz), tz, {
+      columns: ['id', 'title', 'starts_at', 'all_day', 'location', 'assignee_id'], refine: (query) => query.or(mineOrShared), limit: 8,
+    }),
+    readCalendarOccurrences(supabase, familyId, instantCalendarBounds(end.toISOString(), in14.toISOString(), tz), tz, {
+      columns: ['id', 'title', 'starts_at', 'all_day', 'assignee_id'], refine: (query) => query.or(mineOrShared), limit: 5,
+    }),
     supabase.from('family_members').select('id, display_name, color, role')
       .eq('family_id', familyId).eq('is_active', true).order('created_at'),
   ]);

@@ -11,6 +11,8 @@
 // `run` for the outcomes worth a card, then `done`. Reopening a conversation
 // rehydrates its cards from `ai_messages.structured_content`.
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import { readCalendarOccurrences } from '@/lib/calendar/occurrences';
+import { instantCalendarBounds } from '@/lib/briefing/calendar-window';
 import { useDismissOnEscape } from '@/lib/hooks/use-dismiss-on-escape';
 import {
   CalendarDays, CheckCircle2, Bell, Pill, ListChecks,
@@ -185,13 +187,15 @@ export function AssistantModule() {
     setRailLoading(true);
 
     const [todayRes, choresRes, upcomingRes, remindersRes, medsRes] = await settleAll([
-      supabase.from('calendar_events').select('id, title, starts_at, all_day, created_at')
-        .eq('family_id', family.id).gte('starts_at', start.toISOString()).lt('starts_at', end.toISOString()),
+      // Series included: the weekly lesson is on today's rail every week (lib/calendar/occurrences.ts).
+      readCalendarOccurrences(supabase, family.id, instantCalendarBounds(start.toISOString(), new Date(end.getTime() - 1).toISOString(), clock.timeZone), clock.timeZone, {
+        columns: ['id', 'title', 'starts_at', 'all_day', 'created_at'],
+      }),
       supabase.from('chore_assignments').select('id', { count: 'exact', head: true })
         .eq('family_id', family.id).in('status', ['todo', 'in_progress']),
-      supabase.from('calendar_events').select('id, title, starts_at, all_day')
-        .eq('family_id', family.id).gte('starts_at', end.toISOString()).lte('starts_at', in14.toISOString())
-        .order('starts_at').limit(4),
+      readCalendarOccurrences(supabase, family.id, instantCalendarBounds(end.toISOString(), in14.toISOString(), clock.timeZone), clock.timeZone, {
+        columns: ['id', 'title', 'starts_at', 'all_day'], limit: 4,
+      }),
       supabase.from('reminders').select('id', { count: 'exact', head: true })
         .eq('family_id', family.id).eq('is_done', false).lte('remind_at', end.toISOString()),
       supabase.from('medications').select('id', { count: 'exact', head: true })

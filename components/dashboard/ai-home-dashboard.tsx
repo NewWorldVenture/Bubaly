@@ -1,4 +1,5 @@
 import Link from 'next/link';
+import { readCalendarOccurrences } from '@/lib/calendar/occurrences';
 import {
   Sparkles, Calendar, ArrowRight, Bell, ChevronRight, Sun, Clock, MessageSquare, Plane, PhoneCall,
 } from 'lucide-react';
@@ -38,7 +39,7 @@ import { type ParentApprovalRow, type RenewalRow, type DocumentRow, type Awaitin
 import { buildHomeNeeds } from '@/lib/home/needs-build';
 import { detectConflicts, type ConflictEvent } from '@/lib/home/conflicts';
 import { buildHomeBrief } from '@/lib/home/home-brief';
-import { briefingCalendarWindow } from '@/lib/briefing/calendar-window';
+import { briefingCalendarBounds } from '@/lib/briefing/calendar-window';
 import type { DinnerIdea, DinnerEffort } from '@/lib/onboarding/dinner-ideas';
 import { HomeOutcomeCard } from '@/components/dashboard/home-outcome-card';
 import { buildInsightCandidates, rankInsights, type InsightKind, type InsightSources } from '@/lib/home/insight-of-day';
@@ -119,12 +120,10 @@ export async function AiHomeDashboard({ ctx }: { ctx: UserContext }) {
   ] = await settleAll([
     supabase.from('chore_assignments').select('id', { count: 'exact', head: true })
       .eq('family_id', familyId).eq('member_id', myMemberId).in('status', ['todo', 'in_progress']),
-    supabase.from('calendar_events')
-      .select('id, title, starts_at, all_day, location')
-      .eq('family_id', familyId)
-      .or(`assignee_id.eq.${myMemberId},assignee_id.is.null`)
-      .or(briefingCalendarWindow(todayKey, tz, 0, 1))
-      .order('starts_at').limit(5),
+    // Series included: the weekly lesson is on today every week (lib/calendar/occurrences.ts).
+    readCalendarOccurrences(supabase, familyId, briefingCalendarBounds(todayKey, tz, 0, 1), tz, {
+      columns: ['id', 'title', 'starts_at', 'all_day', 'location'], refine: (query) => query.or(`assignee_id.eq.${myMemberId},assignee_id.is.null`), limit: 5,
+    }),
     supabase.from('grocery_items').select('id', { count: 'exact', head: true })
       .eq('family_id', familyId).eq('is_checked', false),
     supabase.from('medications').select('id', { count: 'exact', head: true })
@@ -137,12 +136,9 @@ export async function AiHomeDashboard({ ctx }: { ctx: UserContext }) {
       .eq('family_id', familyId).eq('is_done', false),
     supabase.from('family_members').select('id, display_name, color, role')
       .eq('family_id', familyId).eq('is_active', true).order('created_at').limit(6),
-    supabase.from('calendar_events')
-      .select('id, title, starts_at, all_day')
-      .eq('family_id', familyId)
-      .or(`assignee_id.eq.${myMemberId},assignee_id.is.null`)
-      .or(briefingCalendarWindow(todayKey, tz, 1, 7))
-      .order('starts_at').limit(5),
+    readCalendarOccurrences(supabase, familyId, briefingCalendarBounds(todayKey, tz, 1, 7), tz, {
+      columns: ['id', 'title', 'starts_at', 'all_day'], refine: (query) => query.or(`assignee_id.eq.${myMemberId},assignee_id.is.null`), limit: 5,
+    }),
     supabase.from('autopilot_suggestions')
       .select('id, title, detail, kind, urgency, confidence, payload')
       .eq('family_id', familyId).eq('status', 'open')
@@ -180,10 +176,9 @@ export async function AiHomeDashboard({ ctx }: { ctx: UserContext }) {
       .eq('family_id', familyId).in('status', ['active', 'expired'])
       .lte('expires_at', new Date(Date.now() + 45 * 86400000).toISOString()).limit(50),
     // Assigned events through the complete local date +14 → personal double-bookings.
-    supabase.from('calendar_events').select('id, title, starts_at, ends_at, all_day, assignee_id')
-      .eq('family_id', familyId).not('assignee_id', 'is', null)
-      .or(briefingCalendarWindow(todayKey, tz, 0, 15))
-      .order('starts_at').limit(200),
+    readCalendarOccurrences(supabase, familyId, briefingCalendarBounds(todayKey, tz, 0, 15), tz, {
+      columns: ['id', 'title', 'starts_at', 'ends_at', 'all_day', 'assignee_id'], refine: (query) => query.not('assignee_id', 'is', null), limit: 200,
+    }),
     // Stored documents expiring within ~30 days (passports, licenses, insurance…).
     supabase.from('documents').select('id, title, expires_at')
       .eq('family_id', familyId).not('expires_at', 'is', null)
