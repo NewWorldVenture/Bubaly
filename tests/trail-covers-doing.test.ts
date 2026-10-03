@@ -43,6 +43,7 @@ function lastLine() {
 beforeEach(() => {
   vi.clearAllMocks();
   db = createInMemorySupabase<SupabaseClient<Database>>({
+    userId: 'user-1',
     defaults: {
       audit_logs: { resource_id: null, metadata: null },
       todo_items: { is_done: false, completed_at: null, assigned_to_id: null },
@@ -54,6 +55,7 @@ beforeEach(() => {
       calendar_events: { all_day: false, ends_at: null, assignee_id: null },
     },
   });
+  db.seed('family_members', [{ id: 'member-1', family_id: FAMILY, user_id: 'user-1', role: 'parent', is_active: true }]);
   mocks.requireUserContext.mockResolvedValue({
     user: { id: 'user-1' },
     active: {

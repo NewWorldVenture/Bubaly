@@ -1,6 +1,6 @@
 import { readFileSync } from 'node:fs';
 import { describe, expect, it } from 'vitest';
-import { at } from './helpers/source-order';
+import { at, between } from './helpers/source-order';
 
 /**
  * Audit C1-S9-62 — the first tranche of the unconfirmed-write class OUTSIDE
@@ -377,8 +377,9 @@ describe('services that stay ungated on rows say why (C1-S9-65)', () => {
     expect(validation).toBeGreaterThan(rpc);
     expect(readback).toBeGreaterThan(validation);
 
-    const replace = meals.slice(at(meals, 'export async function planWeek('), at(meals, 'export async function setSlot('));
-    const receiptGuard = replace.slice(validation - at(meals, 'export async function planWeek('), readback - at(meals, 'export async function planWeek('));
+    const replace = between(meals, 'export async function planWeek(', 'export async function setSlot(');
+    const receiptGuard = between(replace,
+      'if (!Array.isArray(rows) || rows.length !== resolved.data.length', 'const savedSlots = await loadSlots(');
     expect(receiptGuard).toContain('row.family_id !== scope.familyId');
     expect(receiptGuard).toContain('row.created_by !== scope.userId');
     expect(receiptGuard).toContain('row.meal_id');
