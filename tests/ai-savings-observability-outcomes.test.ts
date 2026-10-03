@@ -11,6 +11,8 @@ const mocks = vi.hoisted(() => ({
   failed: vi.fn(),
   callbackFailed: vi.fn(),
   settled: [] as Array<{ result: unknown; failed: boolean }>,
+  /** Set to the admission's refusal (F19 race): the gate passed, 0477 refused the filing. */
+  admissionRefuses: null as Error | null,
 }));
 
 vi.mock('@/lib/supabase/auth', () => ({ requireUserContext: mocks.requireUserContext }));
@@ -31,12 +33,15 @@ vi.mock('@/lib/finance/subscriptions', () => ({
   isStale: () => false,
   monthlyCostCents: () => 0,
 }));
-vi.mock('@/lib/ai/observability', () => ({
+vi.mock('@/lib/ai/observability', async (importOriginal) => ({
+  // The real refusal class: the route tells the admission's refusal apart by it.
+  AiRequestOverAllowance: (await importOriginal<typeof import('@/lib/ai/observability')>()).AiRequestOverAllowance,
   withAiRequest: async (
     _scope: unknown,
     _meta: unknown,
     run: (obs: { used: typeof mocks.used; failed: typeof mocks.failed }) => Promise<unknown>,
   ) => {
+    if (mocks.admissionRefuses) throw mocks.admissionRefuses;
     try {
       const result = await run({ used: mocks.used, failed: mocks.failed });
       mocks.settled.push({ result, failed: mocks.failed.mock.calls.length > 0 });
@@ -55,12 +60,14 @@ const fallback = [{
   detail: 'No overspending or unused subscriptions detected. Set category budgets to unlock sharper suggestions.',
 }];
 const defaultSummary = 'Here are the biggest opportunities to save.';
+const allowanceSpentSummary = "You've used this month's AI requests \u2014 here are data-driven suggestions from your finances.";
 const unavailableSummary = 'AI is not configured \u2014 here are data-driven suggestions from your finances.';
 const validSuggestion = { title: 'Example title', detail: 'Example detail.' };
 
 beforeEach(() => {
   vi.resetAllMocks();
   mocks.settled.length = 0;
+  mocks.admissionRefuses = null;
   mocks.requireUserContext.mockResolvedValue({ user: { id: 'user-1' }, active: { familyId: 'family-1', role: 'parent' } });
   mocks.enforceAIRateLimit.mockResolvedValue({ ok: true });
   mocks.resolveProvider.mockResolvedValue({ complete: mocks.complete });
@@ -186,5 +193,24 @@ describe('savings observed outcomes', () => {
     expect(await response.json()).toEqual({ summary: unavailableSummary, suggestions: fallback, wastedMonthlyCents: 0 });
     expect(mocks.callbackFailed).toHaveBeenCalledExactlyOnceWith(expect.any(TypeError));
     expect(mocks.settled).toEqual([]);
+  });
+
+  it('the admission refusing the last slot (F19 race) says the allowance is used, not that AI is not configured', async () => {
+    const { AiRequestOverAllowance } = await vi.importActual<typeof import('@/lib/ai/observability')>('@/lib/ai/observability');
+    mocks.admissionRefuses = new AiRequestOverAllowance('finances.savings', 10);
+
+    const response = await POST();
+
+    expect(response.status).toBe(200);
+    expect(await response.json()).toEqual({ summary: allowanceSpentSummary, suggestions: fallback, wastedMonthlyCents: 0 });
+    expect(mocks.complete).not.toHaveBeenCalled();
+  });
+
+  it('control: any other failure before the model still reads as unavailable', async () => {
+    mocks.admissionRefuses = new Error('the filing failed');
+
+    const response = await POST();
+
+    expect(await response.json()).toEqual({ summary: unavailableSummary, suggestions: fallback, wastedMonthlyCents: 0 });
   });
 });

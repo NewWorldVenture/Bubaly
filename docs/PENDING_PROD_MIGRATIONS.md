@@ -4061,7 +4061,8 @@ which should succeed.
 parallel requests). Deploy order: migration first, or together.** Application
 code that reaches production before this migration **fails safe**: on a capped
 plan the missing function makes the request refuse as not recorded (the model
-does not run); unlimited plans are unaffected.
+does not run). On every plan, work filed unmetered (below) loses its record or
+fails until 0477 is applied.
 
 The allowance counted a family's `ai_requests` rows for the month, and every
 metered route checked that count before filing its own row, so requests sent
@@ -4086,10 +4087,14 @@ on a capped plan the gate refuses with "could not check this month's usage"
 (it refused as "not recorded" before). An exempt request is not filed at all in
 that window: 0477's `DEFAULT true` would turn such a row metered, and nothing could
 tell it apart afterwards (#892 review 5971047090).
-- Exempt work behind `withAiRequest` runs unrecorded.
-- A system intake or routine reports failure until 0477 is applied.
+On **every** plan, unlimited ones included:
+- Exempt work behind `withAiRequest` (chore-proof checks, paperwork
+  transcription, the contact-center concierge) runs unrecorded.
+- A system-scope intake (inbound contact-center routing) or a scheduled routine
+  reports failure until 0477 is applied — the routine does not run.
 
-Unlimited plans are unaffected. **Apply 0477 first.**
+A member's own request on an unlimited plan files as before (it names no new
+column). **Apply 0477 first.**
 
 **Rollback:** `drop function if exists public.admit_ai_request(uuid, integer, text, text, uuid, uuid, uuid, text, text, text, smallint, text, timestamptz); alter table public.ai_requests drop column if exists metered;`
 together with reverting the application change. With only the database rolled

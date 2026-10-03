@@ -66,7 +66,10 @@ If the TypeScript ships **before** the migration, the RPC fails with
 - The gift route answers 503.
 - Capped (Free) families are refused rather than metered loosely. This **fails safe**,
   in the same way as an `AiRequestNotFiled` that is already in place.
-- Unlimited plans are unaffected.
+- A member's own request on an unlimited plan files as before.
+- On every plan, work filed unmetered (`metered = false`: exempt surfaces, system
+  intake, routines) needs the column: exempt work runs unrecorded, and a system
+  intake or routine reports failure until 0477 is applied.
 
 **Apply 0477 before or together with the code.**
 

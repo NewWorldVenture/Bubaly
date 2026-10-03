@@ -11,3 +11,12 @@ export const AI_MONTHLY_ALLOWANCE: Readonly<Record<0 | 1 | 2, number | null>> = 
 export function monthlyAllowanceFor(planLevel: number): number | null {
   return AI_MONTHLY_ALLOWANCE[planLevel >= 2 ? 2 : planLevel >= 1 ? 1 : 0];
 }
+
+/**
+ * The allowance refusal's English source text. The gate, the admission's
+ * refusal and the concierge intake all say this one sentence; `denialMessage`
+ * (lib/server/ai-access.ts) says it in the reader's language.
+ */
+export function allowanceUsedText(limit: number): string {
+  return `Your family has used its ${limit} AI requests for this month. Upgrade to Family Basic for unlimited, or try again next month.`;
+}

@@ -39,11 +39,31 @@ function fiveHundredCatches(src: string): string[] {
   return out;
 }
 
-describe('every AI route answers the admission refusal as the allowance (F19)', () => {
-  const files = routes('app/api').filter((f) => readFileSync(f, 'utf8').includes('withAiRequest('));
+function libs(dir: string): string[] {
+  return readdirSync(dir).flatMap((name) => {
+    const path = join(dir, name);
+    return statSync(path).isDirectory() ? libs(path) : name.endsWith('.ts') ? [path] : [];
+  });
+}
 
-  it('finds the routes it polices', () => {
+// A route can file through a library rather than call the wrapper itself (the
+// social generator, the chat engine): the admission's refusal reaches its catch
+// all the same. Every lib module that calls `withAiRequest(`, as its `@/` import.
+const FILING_LIBS = libs('lib')
+  .filter((f) => f !== join('lib', 'ai', 'observability.ts') && readFileSync(f, 'utf8').includes('withAiRequest('))
+  .map((f) => `@/${f.replace(/\\/g, '/').replace(/\.ts$/, '')}`);
+
+function filesThroughTheWrapper(src: string): boolean {
+  return src.includes('withAiRequest(') || FILING_LIBS.some((m) => src.includes(`from '${m}'`));
+}
+
+describe('every AI route answers the admission refusal as the allowance (F19)', () => {
+  const files = routes('app/api').filter((f) => filesThroughTheWrapper(readFileSync(f, 'utf8')));
+
+  it('finds the routes it polices, including one that files through a library', () => {
     expect(files.length).toBeGreaterThan(20);
+    expect(FILING_LIBS).toContain('@/lib/social/ai');
+    expect(files).toContain(join('app', 'api', 'social', 'ai', 'route.ts'));
   });
 
   it('each 5xx catch asks admissionRefusalResponse first', () => {

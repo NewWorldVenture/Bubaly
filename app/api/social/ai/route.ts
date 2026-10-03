@@ -1,4 +1,4 @@
-import { refuseOverAIAllowance } from '@/lib/server/ai-access';
+import { admissionRefusalResponse, refuseOverAIAllowance } from '@/lib/server/ai-access';
 import { NextResponse } from 'next/server';
 import { getTranslations } from '@/lib/i18n/server';
 import { requireUserContext } from '@/lib/supabase/auth';
@@ -73,6 +73,9 @@ export async function POST(req: Request) {
   try {
     result = await generate(scopeFromUserContext(ctx, supabase), { kind, topic, platform, tone, source });
   } catch (err) {
+    const refused = admissionRefusalResponse(err, t);
+    // The admission (0477) refused: the allowance, not an outage, and nothing was generated to record.
+    if (refused) return refused;
     console.error('Social AI generation error:', err);
     const message = describeAIError(err).message;
     // Persist the failed attempt for auditability.

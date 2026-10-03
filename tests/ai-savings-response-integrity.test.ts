@@ -23,7 +23,9 @@ vi.mock('@/lib/supabase/server', () => ({
 vi.mock('@/lib/server/ai-rate-limit', () => ({ enforceAIRateLimit: mocks.enforceAIRateLimit }));
 vi.mock('@/lib/ai/provider', () => ({ resolveProvider: mocks.resolveProvider }));
 vi.mock('@/lib/services/scope', () => ({ scopeFromUserContext: () => ({}) }));
-vi.mock('@/lib/ai/observability', () => ({
+vi.mock('@/lib/ai/observability', async (importOriginal) => ({
+  // The real refusal class: the route tells the admission's refusal apart by it.
+  AiRequestOverAllowance: (await importOriginal<typeof import('@/lib/ai/observability')>()).AiRequestOverAllowance,
   withAiRequest: (
     _scope: unknown,
     _meta: unknown,

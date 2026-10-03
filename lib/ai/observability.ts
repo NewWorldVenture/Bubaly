@@ -31,7 +31,7 @@ import { MAX_AI_REQUEST_TEXT_CHARS } from '@/lib/ai/chat-request';
 import { createRequest, updateRequest } from '@/lib/ai/runs/store';
 import type { AI_ALLOWANCE_EXCEEDED } from '@/lib/ai/runs/store';
 import { recordModelCall } from '@/lib/ai/usage';
-import { monthlyAllowanceFor } from '@/lib/constants/ai-allowance';
+import { allowanceUsedText, monthlyAllowanceFor } from '@/lib/constants/ai-allowance';
 import { resolveFamilyPlanLevel } from '@/lib/server/plan';
 import { isSuperAdminCaller } from '@/lib/server/super-admin-caller';
 import type { TokenUsage } from '@/lib/ai/usage';
@@ -91,11 +91,11 @@ export type AiObserver = {
   failed: (err: unknown, opts?: { partial?: boolean }) => void;
 };
 
-/** Trim an error for a column a family may end up reading in a support reply. */
 // The store's refusal code, held to it by type so the two cannot drift. A value
 // import would make every test that mocks the store declare it.
 const OVER_ALLOWANCE: typeof AI_ALLOWANCE_EXCEEDED = 'allowance_exceeded';
 
+/** Trim an error for a column a family may end up reading in a support reply. */
 function describe(err: unknown): string {
   const raw = err instanceof Error ? err.message : String(err ?? 'Unknown error');
   return raw.slice(0, 500);
@@ -109,14 +109,15 @@ export async function withAiRequest<T>(
   const started = Date.now();
   let requestId: string | null = null;
 
-  // The plan is read ONCE, before the filing (F19): it decides both how the
-  // row is filed (admitted against the allowance, or plainly) and whether a
-  // failed filing refuses.
-  const plan = await filingPlan(scope);
   // Work the family did not ask for is recorded but never charged (owner,
   // #771 review 5391362628): a surface classified exempt, or anything running
   // on a system scope (a cron job, inbound routing).
   const exempt = Boolean(spec.exemptFromAllowance) || scope.actorKind === 'system';
+  // The plan is read ONCE, before the filing (F19): it decides both how the
+  // row is filed (admitted against the allowance, or plainly) and whether a
+  // failed filing refuses. Exempt work is filed plainly and never refused, so
+  // it has no use for the plan and skips the read.
+  const plan = exempt ? { capped: false, allowance: null } : await filingPlan(scope);
 
   const filing = (allowance: number | null) => createRequest(scope, {
     kind: spec.kind ?? 'feature',
@@ -263,7 +264,7 @@ export class AiRequestOverAllowance extends AiRequestNotFiled {
   constructor(feature: string, readonly allowance: number) {
     super(feature);
     this.name = 'AiRequestOverAllowance';
-    this.message = `Your family has used its ${allowance} AI requests for this month. Upgrade to Family Basic for unlimited, or try again next month.`;
+    this.message = allowanceUsedText(allowance);
   }
 }
 

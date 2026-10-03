@@ -23,6 +23,8 @@ const USER = 'user-1';
 
 const state = vi.hoisted(() => ({
   planLevel: 0,
+  /** Plan reads, counted: exempt work has no use for the plan (#892 review). */
+  planReads: 0,
   /** Refuse an insert that names `metered`, as PostgREST does before 0477 adds the column. */
   columnMissing: false,
 }));
@@ -57,7 +59,7 @@ function client() {
 const db = { from: (t: string) => client().from(t), rpc: (n: string, a: Record<string, unknown>) => client().rpc(n, a), auth: client().auth };
 
 vi.mock('@/lib/supabase/server', () => ({ createServer: async () => db, createServiceClient: () => db }));
-vi.mock('@/lib/server/plan', () => ({ resolveFamilyPlanLevel: async () => state.planLevel }));
+vi.mock('@/lib/server/plan', () => ({ resolveFamilyPlanLevel: async () => { state.planReads += 1; return state.planLevel; } }));
 vi.mock('@/lib/server/feature-tiers', () => ({ getResolvedFeatureTiers: async () => ({ 'ai-requests': 'free' }) }));
 vi.mock('@/lib/ai/context/intents', () => ({
   classifyIntent: async () => ({ intent: 'plan_week', confidence: 0.9, entities: {}, source: 'fast_path' }),
@@ -109,6 +111,7 @@ const used = async () => {
 beforeEach(() => {
   store = createInMemorySupabase({ userId: USER, uniques: { ai_requests: [['family_id', 'client_request_id']] } });
   state.planLevel = 0;
+  state.planReads = 0;
   state.columnMissing = false;
   vi.spyOn(console, 'error').mockImplementation(() => {});
 });
@@ -155,6 +158,16 @@ describe('exempt work is recorded but never charged (sequential)', () => {
     const filed = await createRequest(system(), { requestText: 'Weekly plan', kind: 'routine' }, { db: db as never });
     expect(filed.ok).toBe(true);
     expect(rows()).toEqual([expect.objectContaining({ kind: 'routine', metered: false })]);
+  });
+
+  it('exempt work is filed without reading the plan (it is never admitted or refused); a paid request reads it once', async () => {
+    seedPaid(10);
+    await choreProof();
+    await withAiRequest(system(), { feature: 'routines.run', text: 'A routine' }, () => model());
+    expect(state.planReads).toBe(0);
+    expect(model).toHaveBeenCalledTimes(2);
+    await expect(paid()).rejects.toBeInstanceOf(AiRequestOverAllowance);
+    expect(state.planReads).toBe(1);
   });
 
   it('negative control: a member\'s ordinary request on an unlimited plan is still metered', async () => {

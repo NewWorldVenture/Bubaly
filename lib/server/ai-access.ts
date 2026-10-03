@@ -24,7 +24,7 @@ import { tierToLevel } from '@/lib/features/tiers';
 import { getResolvedFeatureTiers } from '@/lib/server/feature-tiers';
 import { ensureActiveFamily } from '@/lib/server/ensure-family';
 import { resolveFamilyPlanLevel } from '@/lib/server/plan';
-import { AI_MONTHLY_ALLOWANCE } from '@/lib/constants/ai-allowance';
+import { AI_MONTHLY_ALLOWANCE, allowanceUsedText } from '@/lib/constants/ai-allowance';
 import { createServer } from '@/lib/supabase/server';
 import { getUserContext, type UserContext } from '@/lib/supabase/auth';
 import { extractBearerToken, getBearerUserContext } from '@/lib/supabase/bearer';
@@ -191,7 +191,7 @@ async function monthlyAllowance(
     // which keys off `limit`.
     return {
       ok: false, status: 429, code: 'allowance_exceeded', limit: allowance,
-      error: allowanceRefusalText(allowance),
+      error: allowanceUsedText(allowance),
     };
   }
   return { ok: true, planLevel, monthlyUsed: used, monthlyAllowance: allowance };
@@ -265,16 +265,9 @@ export async function assertFamilyAIAllowance(db: DB, familyId: string): Promise
 export async function refuseOverAIAllowance(ctx: UserContext, db: DB, t?: Translator): Promise<NextResponse | null> {
   const allowance = await assertAIAllowance(ctx, { db });
   if (allowance.ok) return null;
-  return accessDeniedResponse(allowance, allowance.code === 'allowance_exceeded' ? (t ?? await getTranslations()) : undefined);
+  return accessDeniedResponse(allowance, t ?? await getTranslations());
 }
 
-/**
- * JSON body for a denial, with the status the denial names.
- *
- * With a translator, the monthly allowance refusal is rendered in the reader's
- * language (status 429 and code `allowance_exceeded` unchanged); without one,
- * or for any other code, `denial.error` is sent as it is.
- */
 /**
  * A refusal from `assertAIAccess` (or one built in its shape) in the reader's
  * language. Every denial carries its English source text in `error`, which is
@@ -303,11 +296,6 @@ export function denialMessage(denial: AIAccessDenial, t: Translator): string {
   }
 }
 
-/** The allowance refusal's English source text; `denialMessage` says it in the reader's language. */
-function allowanceRefusalText(limit: number): string {
-  return `Your family has used its ${limit} AI requests for this month. Upgrade to Family Basic for unlimited, or try again next month.`;
-}
-
 /**
  * The admission refusal (F19), answered as the gate answers it. A route checks
  * the allowance, then files its request through `withAiRequest`; when another
@@ -322,9 +310,16 @@ export function admissionRefusalResponse(err: unknown, t?: Translator): NextResp
   if (!(err instanceof Error) || err.name !== 'AiRequestOverAllowance') return null;
   const limit = (err as Error & { allowance?: unknown }).allowance;
   if (typeof limit !== 'number') return null;
-  return accessDeniedResponse({ ok: false, status: 429, code: 'allowance_exceeded', limit, error: allowanceRefusalText(limit) }, t);
+  return accessDeniedResponse({ ok: false, status: 429, code: 'allowance_exceeded', limit, error: allowanceUsedText(limit) }, t);
 }
 
+/**
+ * JSON body for a denial, with the status the denial names.
+ *
+ * With a translator, the monthly allowance refusal is rendered in the reader's
+ * language (status 429 and code `allowance_exceeded` unchanged); without one,
+ * or for any other code, `denial.error` is sent as it is.
+ */
 export function accessDeniedResponse(denial: AIAccessDenial, t?: Translator): NextResponse {
   const error = t ? denialMessage(denial, t) : denial.error;
   return NextResponse.json(

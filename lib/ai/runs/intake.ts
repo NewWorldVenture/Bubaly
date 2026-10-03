@@ -30,7 +30,7 @@ import { planRequest, type PlanOutcome } from '@/lib/ai/planner';
 import { runPagePath, type AIRequestContext, type AIRequestResponse } from '@/lib/ai/chat-request';
 import { describeDbError } from '@/lib/supabase/errors';
 import { makeKey } from '@/lib/services/idempotency';
-import { monthlyAllowanceFor } from '@/lib/constants/ai-allowance';
+import { allowanceUsedText, monthlyAllowanceFor } from '@/lib/constants/ai-allowance';
 import { resolveFamilyPlanLevel } from '@/lib/server/plan';
 import { isSuperAdminCaller } from '@/lib/server/super-admin-caller';
 import type { AIAccessDenial } from '@/lib/server/ai-access';
@@ -129,7 +129,7 @@ export async function isRetryPastAllowance(
 function allowanceRefusal(limit: number): IntakeAllowanceRefusal {
   return {
     ok: false, status: 429, code: OVER_ALLOWANCE, limit, retryable: false,
-    error: `Your family has used its ${limit} AI requests for this month. Upgrade to Family Basic for unlimited, or try again next month.`,
+    error: allowanceUsedText(limit),
   };
 }
 

@@ -547,7 +547,7 @@ ${UNTRUSTED_CONTENT_RULE}
         : {}),
     });
   } catch (err) {
-    const refused = admissionRefusalResponse(err);
+    const refused = admissionRefusalResponse(err, tr);
     if (refused) return refused;
     console.error('Briefing error:', err);
     return NextResponse.json({ error: tr('briefing.failedToGenerateBriefing') }, { status: 500 });
