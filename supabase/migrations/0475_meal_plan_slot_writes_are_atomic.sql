@@ -138,7 +138,8 @@ begin
   get diagnostics v_claimed = row_count;
   if v_claimed = 0 then
     select * into v_receipt from public.meal_plan_write_receipts
-      where family_id = p_family_id and actor_id = v_actor and request_id = p_request_id;
+      where family_id = p_family_id and actor_id = v_actor and request_id = p_request_id
+      for update;
     if not found or v_receipt.operation <> 'replace' or v_receipt.payload_hash <> v_hash or v_receipt.result is null then
       raise exception 'Meal-plan request ID was already used for a different or incomplete request' using errcode = '22023';
     end if;
