@@ -409,6 +409,13 @@ test.describe('form errors: what an invalid, refused and recovered submit expose
         // the web font.
         await document.fonts.ready;
         const toasts = Array.from(document.querySelectorAll(selector));
+        // And on the notices coming to rest: each fades in from 8px below
+        // (animate-fade-in, 0.4s), and read mid-slide a box sits lower than
+        // it will. Locally that moved the point under the orb at 390x844 from
+        // the long notice's Ausblenden to its body in 2 of 12 samples.
+        await Promise.all(toasts.flatMap((t) => t.getAnimations({ subtree: true }))
+          .filter((a) => a.effect?.getComputedTiming().endTime !== Infinity)
+          .map((a) => a.finished.catch(() => undefined)));
         const stack = toasts[0]?.parentElement ?? null;
         const boxes = toasts.map((t) => t.getBoundingClientRect());
         const nameOf = (el: Element) => (el.getAttribute('aria-label') || el.textContent || (el as HTMLInputElement).name || el.tagName).replace(/\s+/g, ' ').trim();
@@ -476,9 +483,24 @@ test.describe('form errors: what an invalid, refused and recovered submit expose
         return notices;
       }
 
+      /**
+       * Who takes a tap at a corner button's centre: "toast" for any point
+       * inside the stack, else the name of the button there. Which part of a
+       * notice is under the point, its body or one of its own buttons, moves
+       * with where the text wraps: at 390x844 the long German notice put
+       * Ausblenden under the orb's centre locally and the notice's body there
+       * in CI (run 37126950007). That is not the claim; the notice taking the
+       * tap is.
+       */
+      const tapped = (hit: string | null) => (hit !== null && /^toast(: |$)/.test(hit) ? 'toast' : hit);
+      type CornerRow = { covered: string[]; capture: string | null; ai: string | null };
+      /** Whether `report` is the characterization `row`: the same controls covered, and the same taker of each tap. */
+      const matchesCorner = (report: CornerRow, row: CornerRow) => JSON.stringify(report.covered) === JSON.stringify(row.covered)
+        && tapped(report.capture) === tapped(row.capture) && tapped(report.ai) === tapped(row.ai);
+
       const CORNER_VIEWPORTS: ReadonlyArray<readonly [number, number]> = width === 1280 ? [[1024, 768], [1280, 800], [1440, 900]] : [[390, 844]];
       const QC = CORNER_NAMES.en.capture, AI = CORNER_NAMES.en.ai, DE = CORNER_NAMES.de;
-      const CORNER: Record<string, { covered: string[]; capture: string | null; ai: string | null }> = {
+      const CORNER: Record<string, CornerRow> = {
         // From lg: the stack sits above both buttons, so whatever the notices
         // say and however many there are, neither is covered and a pointer at
         // each one's centre lands on that button.
@@ -496,7 +518,7 @@ test.describe('form errors: what an invalid, refused and recovered submit expose
         // three reach the orb, and the language bar at the foot of this short
         // page is under them too. Which part of a notice is under the point
         // (its body, or Dismiss or Ausblenden) is as seen locally and is not
-        // compared; see `tapped` below.
+        // compared; see `tapped` above.
         '390x844 short': { covered: [QC], capture: 'toast: Dismiss', ai: AI },
         '390x844 long': { covered: [DE.ai, DE.capture, 'Sprache ändern'], capture: 'toast', ai: 'toast: Ausblenden' },
         '390x844 stacked': { covered: [AI, 'Change language', QC], capture: 'toast', ai: 'toast' },
@@ -520,17 +542,19 @@ test.describe('form errors: what an invalid, refused and recovered submit expose
               const count = await notices.count();
 
               const report = await cornerReport(page, names);
-              // The claim in the pointer columns is who takes the tap: the
-              // notice, or the corner button itself. Where in the notice it
-              // lands, on its body or on one of its own buttons, moves with
-              // where the text wraps: at 390x844 the long German notice put
-              // Ausblenden under the orb's centre locally and the notice's
-              // body there in CI. So any hit inside the stack compares as
-              // "toast"; a button outside it still has to match by name.
-              const tapped = (hit: string | null) => (hit !== null && /^toast(: |$)/.test(hit) ? 'toast' : hit);
               const expected = CORNER[`${w}x${h} ${state}`];
-              expect({ ...report, capture: tapped(report.capture), ai: tapped(report.ai) })
-                .toEqual({ ...expected, capture: tapped(expected.capture), ai: tapped(expected.ai) });
+              expect(report.covered).toEqual(expected.covered);
+              for (const which of ['capture', 'ai'] as const) {
+                if (tapped(expected[which]) === 'toast') {
+                  // Blocked: the point is inside the toast stack, so the
+                  // notice takes the tap.
+                  expect(tapped(report[which]), `${which}: a notice takes the tap`).toBe('toast');
+                } else {
+                  // Clear: the corner button is under its own centre.
+                  expect(report[which], `${which}: the button takes its own tap`).toBe(expected[which]);
+                }
+              }
+              expect(matchesCorner(report, expected)).toBe(true);
               if (w >= 1024) {
                 // lg:bottom-40: the stack (not a toast, which fades in from
                 // below) ends 10rem above the viewport's foot.
@@ -578,6 +602,40 @@ test.describe('form errors: what an invalid, refused and recovered submit expose
                 await expect(sheet.getByRole('textbox', { name: names.ask })).toBeVisible();
               }
             });
+
+            if (w < 1024) {
+              // The negative control for the blocked rows: the same notices,
+              // moved clear of the corner in this page only (the stack's own
+              // inline style; the app's CSS is untouched), must NOT pass as
+              // blocked. Each button is then under its own centre, nothing in
+              // the stack takes either tap, and the row no longer matches.
+              test(`${w}x${h}, ${state}, moved clear (negative control): an unobstructed corner does not pass as blocked`, async ({ page }) => {
+                await page.setViewportSize({ width: w, height: h });
+                const names = CORNER_NAMES[state === 'long' ? 'de' : 'en'];
+                const notices = await raiseNotices(page, state);
+                const count = await notices.count();
+                const blocked = CORNER[`${w}x${h} ${state}`];
+                expect(matchesCorner(await cornerReport(page, names), blocked)).toBe(true);
+                // Lift the stack until its foot is 8px above the orb, the
+                // higher of the two buttons, and hold the notices again with
+                // the pointer where they now are.
+                await notices.first().evaluate((t, ai) => {
+                  const orb = Array.from(document.querySelectorAll('button')).find((b) => b.getAttribute('aria-label') === ai)!.getBoundingClientRect();
+                  (t.parentElement as HTMLElement).style.bottom = `${innerHeight - orb.top + 8}px`;
+                }, names.ai);
+                await notices.last().hover();
+                await expect(notices).toHaveCount(count);
+                const clear = await cornerReport(page, names);
+                expect(clear.covered).not.toContain(names.capture);
+                expect(clear.covered).not.toContain(names.ai);
+                expect(tapped(clear.capture)).not.toBe('toast');
+                expect(tapped(clear.ai)).not.toBe('toast');
+                expect(clear.capture).toBe(names.capture);
+                expect(clear.ai).toBe(names.ai);
+                expect(matchesCorner(clear, blocked)).toBe(false);
+                await expect(notices).toHaveCount(count);
+              });
+            }
           }
         }
       });
