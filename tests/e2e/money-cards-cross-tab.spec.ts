@@ -386,9 +386,9 @@ test('reproduces: a stale second tab orders the same Virtual card after the firs
   await virtual(tab2).click();
 
   // The second call is identical to the first: the server cannot tell a stale
-  // tab's repeat from a deliberate second card. DESIRED (repair B, server): one
-  // card per attempt; how a later, separate attempt is told apart is the server's
-  // decision and is not asserted here.
+  // tab's repeat from a deliberate second card. Under repair B the first card is
+  // already mirrored, so this is a new attempt and gets a second card: the
+  // stale-tab residual, not asserted here.
   expect(await received(log, 2)).toEqual([
     { tab: 'tab-1', action: 'issueCardAction', args: VIRTUAL_INPUT },
     { tab: 'tab-2', action: 'issueCardAction', args: VIRTUAL_INPUT },
