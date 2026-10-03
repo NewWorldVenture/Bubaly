@@ -20,13 +20,16 @@ declare
   foreign_conv uuid := '00000000-0000-4000-8000-0000000047c4';
   first_msg uuid := '00000000-0000-4000-8000-0000000047b1';
   message public.family_messages; conversation public.family_conversations;
-  path text; count_rows integer;
+  path text; count_rows integer; canonical uuid;
 begin
   if has_table_privilege(current_user, 'public.family_messages', 'TRUNCATE')
     or has_table_privilege(current_user, 'public.family_messages', 'TRIGGER') then
     raise exception 'BREACH: browser retains messaging administration privileges'; end if;
-  if public.ensure_family_conversation(fam) <> whole or public.ensure_family_conversation(fam) <> whole then
-    raise exception 'Canonical chat did not reuse the full-family group atomically'; end if;
+  canonical := public.ensure_family_conversation(fam);
+  if canonical in (whole, subgroup, dm) or public.ensure_family_conversation(fam) <> canonical then
+    raise exception 'Canonical chat must be newly empty and reused only by its explicit flag'; end if;
+  if exists(select 1 from public.family_messages where conversation_id=canonical) then
+    raise exception 'Legacy history entered the new canonical chat'; end if;
   if exists(select 1 from public.family_conversations where id = subgroup and is_family_chat) then
     raise exception 'A subgroup with stale whole-family member_ids was promoted to family-wide visibility'; end if;
   conversation := public.create_family_conversation(fam, array[ma, mb], 'Duplicate DM', 'direct');
@@ -223,7 +226,8 @@ reset role;
 set local request.jwt.claim.sub = '';
 set local role service_role;
 do $$ begin
-  if public.ensure_family_conversation('00000000-0000-4000-8000-0000000047f1') <> '00000000-0000-4000-8000-0000000047c3'::uuid then
+  if public.ensure_family_conversation('00000000-0000-4000-8000-0000000047f1') is distinct from
+    (select id from public.family_conversations where family_id='00000000-0000-4000-8000-0000000047f1' and is_family_chat) then
     raise exception 'Trusted system actor cannot obtain canonical chat'; end if;
 end $$;
 reset role;
