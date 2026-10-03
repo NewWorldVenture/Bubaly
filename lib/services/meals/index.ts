@@ -490,17 +490,17 @@ export async function removeSlot(scope: ServiceScope, planId: string, requestId?
     p_request_id: scopedRequestId,
     p_plan_id: planId,
   });
-  if (error || !data || typeof data !== 'object' || Array.isArray(data) || (data as { id?: unknown }).id !== planId
-    || typeof (data as { replayed?: unknown }).replayed !== 'boolean') {
+  const receipt = data as { id?: unknown; plan_date?: unknown; meal_type?: unknown; replayed?: unknown } | null;
+  if (error || !receipt || typeof receipt !== 'object' || Array.isArray(receipt) || receipt.id !== planId
+    || !isDayKey(receipt.plan_date) || !isMealType(receipt.meal_type) || typeof receipt.replayed !== 'boolean') {
     console.error('[service:meals] remove slot failed', error);
     return fail('Could not confirm whether the planned meal was cleared. Refresh the plan before retrying.', { code: SERVICE_CODES.db });
   }
-  const receipt = data as { id: string; plan_date?: string; meal_type?: MealType; replayed: boolean };
   if (!receipt.replayed) {
     await recordActivitySafely(scope, {
       agent: 'meal_planner',
       action: 'delete',
-      title: `Cleared the ${receipt.meal_type ?? 'planned meal'}${receipt.plan_date ? ` planned for ${receipt.plan_date}` : ''}`,
+      title: `Cleared the ${receipt.meal_type} planned for ${receipt.plan_date}`,
       href: '/dashboard/meals',
       resourceId: receipt.id,
     });
