@@ -321,6 +321,9 @@ export async function listDue(
     console.error('[service:reminders] due read failed', error);
     return fail(describeDbError(error, 'Could not load your reminders.'), { code: SERVICE_CODES.db });
   }
+  if (data != null && !Array.isArray(data)) {
+    return fail('Could not load your reminders.', { code: SERVICE_CODES.db });
+  }
 
   const due = (data ?? []).filter((row) => {
     if (row.status !== 'snoozed') return true;
