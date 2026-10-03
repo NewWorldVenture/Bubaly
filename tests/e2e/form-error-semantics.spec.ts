@@ -231,29 +231,144 @@ test.describe('form errors: what an invalid, refused and recovered submit expose
         expect(posts).toBe(1);
       });
 
+      // ── The toast stack (components/ui/toast.tsx), A11Y-001 #2 ──
+      // Bottom-centre at every width, a 384px toast covered a centred dialog's
+      // own footer (Cancel and its submit) at 1024-1280px, the moment a refusal
+      // was shown. From lg the stack sits bottom-right and each toast is at
+      // most 14rem (224px) wide; below lg it keeps its mobile place.
+
+      /** Every control a visible toast's box intersects, within `scope`. */
+      const controlsUnderToasts = (page: Page, scope: string) => page.evaluate((within) => {
+        const toasts = Array.from(document.querySelectorAll('.pointer-events-none.fixed > [role="alert"], .pointer-events-none.fixed > [role="status"]'))
+          .map((t) => t.getBoundingClientRect());
+        const covered: string[] = [];
+        for (const el of Array.from(document.querySelectorAll(`${within} button, ${within} input, ${within} a[href], ${within} textarea, ${within} select`))) {
+          const b = el.getBoundingClientRect();
+          if (!b.width || !b.height) continue;
+          if (toasts.some((t) => t.left < b.right && t.right > b.left && t.top < b.bottom && t.bottom > b.top)) {
+            covered.push((el.getAttribute('aria-label') || el.textContent || (el as HTMLInputElement).name || el.tagName).trim());
+          }
+        }
+        return covered;
+      }, scope);
+      const toastBoxes = (page: Page) => page.evaluate(() => Array.from(document.querySelectorAll('.pointer-events-none.fixed > [role="alert"], .pointer-events-none.fixed > [role="status"]'))
+        .map((t) => {
+          const b = t.getBoundingClientRect();
+          const text = t.querySelector('span');
+          return { left: b.left, right: b.right, bottom: b.bottom, width: b.width, overflows: !!text && text.scrollWidth > text.clientWidth + 1 };
+        }));
+      /** What a pointer at the centre of `target` would land on: the nearest button's name. */
+      const hitAt = async (page: Page, target: Locator) => {
+        const box = (await target.boundingBox())!;
+        return page.evaluate(({ x, y }) => {
+          const button = document.elementFromPoint(x, y)?.closest('button');
+          return button?.getAttribute('aria-label') || button?.textContent?.trim() || null;
+        }, { x: box.x + box.width / 2, y: box.y + box.height / 2 });
+      };
+      const pause = (ms: number) => new Promise((resolve) => { setTimeout(resolve, ms); });
+
       if (width === 1280) {
-        test('contacts: the refusal notice does not cover the dialog\'s own submit button', async ({ page }) => {
-          // Reproduced: the toast stack sits bottom-centre above the dialog
-          // and takes the pointer over "Add Contact" (and pauses its own
-          // dismissal while hovered) — the class recorded for the meal toast
-          // on 2026-09-27 (components/ui/toast.tsx; COMPONENT-433AE57D4A2F).
-          test.fail();
-          const { dialog } = await openNewContact(page);
-          const name = dialog.getByRole('textbox', { name: 'Full name' });
-          const submit = dialog.getByRole('button', { name: 'Add Contact' });
-          // The usual order: a first try without a name, then a refused save.
+        for (const [w, h] of [[1024, 768], [1280, 800], [1440, 900]] as const) {
+          test(`contacts at ${w}x${h}: two refusal notices cover none of the dialog's own controls`, async ({ page }) => {
+            await page.setViewportSize({ width: w, height: h });
+            const { dialog } = await openNewContact(page);
+            const submit = dialog.getByRole('button', { name: 'Add Contact' });
+            // The usual order: a first try without a name, then a refused save.
+            await submit.click();
+            await expect(alertsReading(page, COPY.nameRequired)).toHaveCount(1);
+            await dialog.getByRole('textbox', { name: 'Full name' }).fill('Robin Probe');
+            await refuseContactWrites(page);
+            await submit.click();
+            await expect(alertsReading(page, COPY.duplicate)).toHaveCount(1);
+            expect(await hitAt(page, submit)).toBe('Add Contact');
+            expect(await controlsUnderToasts(page, '[role="dialog"]')).toEqual([]);
+            const boxes = await toastBoxes(page);
+            expect(boxes).toHaveLength(2);
+            for (const box of boxes) {
+              expect(box.width).toBeLessThanOrEqual(224.5);
+              expect(Math.abs(box.right - (w - 16))).toBeLessThanOrEqual(1);
+              expect(box.overflows).toBe(false);
+            }
+          });
+        }
+
+        test('contacts: a long German notice wraps inside the 14rem toast and still clears the dialog', async ({ page }) => {
+          await page.setViewportSize({ width: 1024, height: 768 });
+          await signIn(page, '/dashboard/contacts');
+          // As a reader would: the language picker, then Deutsch.
+          await page.getByRole('button', { name: 'Change language' }).click();
+          await page.getByRole('option', { name: /Deutsch/ }).first().click();
+          await page.getByRole('button', { name: 'Kontakt hinzufügen', exact: true }).first().click();
+          const dialog = page.getByRole('dialog', { name: 'Neuer Kontakt' });
+          await expect(dialog).toBeVisible();
+          const submit = dialog.getByRole('button', { name: 'Kontakt hinzufügen' });
           await submit.click();
-          await expect(alertsReading(page, COPY.nameRequired)).toHaveCount(1);
-          await name.fill('Robin Probe');
+          await expect(page.getByRole('alert').filter({ hasText: 'Ein Name ist erforderlich' })).toHaveCount(1);
+          await dialog.getByRole('textbox', { name: 'Vollständiger Name' }).fill('Robin Probe');
           await refuseContactWrites(page);
           await submit.click();
-          await expect(alertsReading(page, COPY.duplicate)).toHaveCount(1);
-          const box = (await submit.boundingBox())!;
-          const hit = await page.evaluate(({ x, y }) => {
-            const el = document.elementFromPoint(x, y);
-            return el?.closest('button')?.textContent?.trim() ?? el?.closest('[role]')?.getAttribute('role') ?? el?.tagName;
-          }, { x: box.x + box.width / 2, y: box.y + box.height / 2 });
-          expect(hit).toBe('Add Contact');
+          await expect(page.locator('.pointer-events-none.fixed > [role="alert"]')).toHaveCount(2);
+          const boxes = await toastBoxes(page);
+          for (const box of boxes) {
+            expect(box.width).toBeLessThanOrEqual(224.5);
+            expect(box.left).toBeGreaterThanOrEqual(0);
+            expect(box.bottom).toBeLessThanOrEqual(768);
+            expect(box.overflows).toBe(false);
+          }
+          expect(await hitAt(page, submit)).toBe('Kontakt hinzufügen');
+          expect(await controlsUnderToasts(page, '[role="dialog"]')).toEqual([]);
+        });
+
+        test('quick capture: the Undo toast sits bottom-right, Undo and Dismiss are its own, and it holds while hovered or focused', async ({ page }) => {
+          // LIFETIME.action is 7s; the waits below outlast it on purpose.
+          test.setTimeout(90_000);
+          await signIn(page, '/dashboard/contacts');
+          const capture = async (text: string) => {
+            await page.getByRole('button', { name: 'Quick capture' }).click();
+            const dialog = page.getByRole('dialog', { name: 'Quick capture' });
+            await dialog.getByRole('textbox', { name: 'Task' }).fill(text);
+            await dialog.getByRole('button', { name: 'Save', exact: true }).click();
+            const toast = page.getByRole('status').filter({ has: page.getByRole('button', { name: 'Undo' }) });
+            await expect(toast).toHaveCount(1);
+            return toast;
+          };
+          const first = await capture('Probe toast hover');
+          const [box] = await toastBoxes(page);
+          expect(box.width).toBeLessThanOrEqual(224.5);
+          expect(Math.abs(box.right - (1280 - 16))).toBeLessThanOrEqual(1);
+          expect(await hitAt(page, first.getByRole('button', { name: 'Undo' }))).toBe('Undo');
+          expect(await hitAt(page, first.getByRole('button', { name: 'Dismiss' }))).toBe('Dismiss');
+          // Hovered past its lifetime, it stays; let go, and it leaves on its own.
+          await first.hover();
+          await pause(7_800);
+          await expect(first).toHaveCount(1);
+          await page.mouse.move(10, 10);
+          await expect(first).toHaveCount(0, { timeout: 10_000 });
+
+          // Focused past its lifetime, it stays; Undo by keyboard still undoes.
+          const second = await capture('Probe toast focus');
+          await second.getByRole('button', { name: 'Undo' }).focus();
+          await pause(7_800);
+          await expect(second).toHaveCount(1);
+          await page.keyboard.press('Enter');
+          await expect(second).toHaveCount(0);
+          await expect(page.getByRole('status').filter({ hasText: /undone|removed/i })).toHaveCount(1);
+        });
+      }
+
+      if (width === 390) {
+        test('contacts at 390 px: the notice keeps its mobile place, centred above the tab bar', async ({ page }) => {
+          const { dialog } = await openNewContact(page);
+          await dialog.getByRole('button', { name: 'Add Contact' }).click();
+          await expect(alertsReading(page, COPY.nameRequired)).toHaveCount(1);
+          const [box] = await toastBoxes(page);
+          // px-4 either side and full width: 390 - 2 x 16.
+          expect(Math.abs(box.left - 16)).toBeLessThanOrEqual(1);
+          expect(Math.abs(box.right - (390 - 16))).toBeLessThanOrEqual(1);
+          // bottom-[calc(5rem+var(--safe-bottom))]: the stack (not a toast,
+          // which fades in from below) ends clear of the 4rem tab bar.
+          const stackBottom = await page.evaluate(() => document.querySelector('.pointer-events-none.fixed:has(> [role="alert"])')!.getBoundingClientRect().bottom);
+          expect(Math.abs(stackBottom - (844 - 80))).toBeLessThanOrEqual(1);
         });
       }
 

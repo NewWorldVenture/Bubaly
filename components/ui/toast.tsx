@@ -123,7 +123,14 @@ export function ToastProvider({ children }: { children: React.ReactNode }) {
     <ToastContext.Provider value={api}>
       {children}
       {/* Above the mobile bottom tab bar (4rem, visible until lg) + home indicator;
-          only drops to bottom-6 once the bar is gone (M-033). */}
+          only drops to bottom-6 once the bar is gone (M-033). From lg it sits
+          bottom-right and each toast is at most 14rem wide: bottom-centre, a
+          384px toast covered a centred dialog's own footer (its submit and
+          Cancel) at 1024-1280px, the moment an error was shown. A centred
+          512px dialog leaves 256px either side at 1024px, so the narrower
+          width is what clears it; longer messages wrap. While a toast shows
+          it covers Quick capture and the AI button in that corner instead
+          (it pauses on hover and dismisses itself). A11Y-001 #2, on #778. */}
       {/* Pause on hover AND on focus. Focus is the half that matters for the
           keyboard user this is meant to help: `onFocusCapture` fires as the
           focus lands anywhere inside the stack, including on the Undo button
@@ -141,7 +148,7 @@ export function ToastProvider({ children }: { children: React.ReactNode }) {
         onMouseLeave={resumeAll}
         onFocusCapture={pauseAll}
         onBlurCapture={resumeAll}
-        className="pointer-events-none fixed inset-x-0 bottom-[calc(5rem+var(--safe-bottom))] z-[100] flex flex-col items-center gap-2 px-4 lg:bottom-6"
+        className="pointer-events-none fixed inset-x-0 bottom-[calc(5rem+var(--safe-bottom))] z-[100] flex flex-col items-center gap-2 px-4 lg:inset-x-auto lg:right-4 lg:bottom-6 lg:items-end lg:px-0"
       >
         {toasts.map((t) => {
           const Icon = ICONS[t.tone];
@@ -151,7 +158,7 @@ export function ToastProvider({ children }: { children: React.ReactNode }) {
               role={t.tone === 'error' ? 'alert' : 'status'}
               aria-live={t.tone === 'error' ? 'assertive' : 'polite'}
               className={cn(
-                'pointer-events-auto flex w-full max-w-sm items-start gap-3 rounded-xl popover-surface px-4 py-3 text-sm shadow-glass animate-fade-in',
+                'pointer-events-auto flex w-full max-w-sm items-start gap-3 rounded-xl popover-surface px-4 py-3 text-sm shadow-glass animate-fade-in lg:max-w-56',
                 t.tone === 'success' && 'border-success/30',
                 t.tone === 'error' && 'border-danger/30',
               )}
