@@ -249,6 +249,38 @@ describe('a sync against the family calendar', () => {
     expect(feedRow()).toMatchObject({ last_status: 'ok', event_count: 2 });
   });
 
+  // Second review on #908 (5972372165): the first fix stripped every control
+  // character, HTAB included — and RFC 5545 admits HTAB in TEXT, so two legal
+  // UIDs that differ only by an interior tab were one key.
+  it('two UIDs that differ only by an interior tab are two events, live and cancelled, in either order', async () => {
+    const TABBED = ['UID:club\tnight', 'SUMMARY:Club night', 'DTSTART:20260912T190000Z', 'DTEND:20260912T200000Z'];
+    const PLAIN = ['UID:clubnight', 'SUMMARY:Plain night', 'DTSTART:20260912T190000Z', 'DTEND:20260912T200000Z'];
+    reachable(ics(TABBED, PLAIN));
+    expect(await syncFeed(client(), FEED)).toEqual({ ok: true, imported: 2 });
+    expect(feedEvents().map((r) => [r.external_uid, r.title]).sort()).toEqual([['club\tnight', 'Club night'], ['clubnight', 'Plain night']]);
+
+    // Cancelling the tabbed one removes the tabbed one only, whichever is published first.
+    for (const order of [[[...TABBED, 'STATUS:CANCELLED'], PLAIN], [PLAIN, [...TABBED, 'STATUS:CANCELLED']]]) {
+      reachable(ics(...order));
+      expect(await syncFeed(client(), FEED)).toEqual({ ok: true, imported: 1 });
+      expect(feedEvents().map((r) => r.external_uid)).toEqual(['clubnight']);
+      reachable(ics(TABBED, PLAIN));
+      await syncFeed(client(), FEED);
+    }
+  });
+
+  it('a previously imported UID carrying a tab is updated in place, not duplicated under a stripped key', async () => {
+    db.seed('calendar_events', [{ id: 'ev-tabbed', family_id: FAMILY, feed_id: FEED.id, external_uid: 'club\tnight', title: 'Club night (old title)', starts_at: '2026-09-12T19:00:00.000Z', recurrence: 'none' }]);
+    reachable(ics(['UID:club\tnight', 'SUMMARY:Club night', 'DTSTART:20260912T190000Z', 'DTEND:20260912T200000Z']));
+    expect(await syncFeed(client(), FEED)).toEqual({ ok: true, imported: 1 });
+    expect(feedEvents()).toHaveLength(1);
+    expect(feedEvents()[0]).toMatchObject({ id: 'ev-tabbed', external_uid: 'club\tnight', title: 'Club night' });
+    // A separator-carrying UID (illegal ICS) is still stripped; a tab is not a separator.
+    expect(feedExternalUid({ uid: 'a\tb', recurrenceId: null })).toBe('a\tb');
+    expect(feedExternalUid({ uid: 'a\u001Fb', recurrenceId: null })).toBe('ab');
+    expect(feedExternalUid({ uid: 'a\tb', recurrenceId: '2026-09-12T14:00:00.000Z' })).toBe('a\tb\u001F2026-09-12T14:00:00.000Z');
+  });
+
   it('an exception key can never equal a bare UID, whatever the publisher wrote', () => {
     for (const uid of ['series', LOOKALIKE_UID, 'odd\u001Fuid', `${MOVED_KEY}`]) {
       expect(feedExternalUid({ uid, recurrenceId: null }), uid).not.toContain('\u001F');
