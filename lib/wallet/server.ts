@@ -267,7 +267,20 @@ export async function creditCardRefund(supabase: DB, params: {
     })
     .select('id')
     .single();
-  if (error) return { ok: false, error: walletFailure(error, 'Could not post that card refund.') };
+  if (error) {
+    // The select above and this insert are two statements, so two deliveries of
+    // one refund that overlap can both pass the select. The database key
+    // (uq_wallet_txn_card_refund_ref, one card_refund per stripe_ref) refuses
+    // the second insert with 23505; that is the first one's refund, already
+    // written, so answer it as the success it is rather than a failure Stripe
+    // would retry — and never as a second credit.
+    if ((error as { code?: string }).code === '23505') {
+      const { data: written, error: rereadError } = await supabase
+        .from('wallet_transactions').select('id').eq('stripe_ref', params.stripeRef).eq('type', 'card_refund').maybeSingle();
+      if (!rereadError && written) return { ok: true, txnId: written.id };
+    }
+    return { ok: false, error: walletFailure(error, 'Could not post that card refund.') };
+  }
 
   await logWalletAudit(supabase, {
     family_id: params.familyId, actor_user_id: null, action: 'card_refund',

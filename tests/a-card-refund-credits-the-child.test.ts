@@ -185,6 +185,77 @@ describe('a refund leaves the purchase\'s hold to the purchase', () => {
   });
 });
 
+describe('two overlapping deliveries of one refund', () => {
+  // Review 4174926185 on #925: the duplicate check is a select and then an
+  // insert, so two refund events for one Stripe transaction that overlap both
+  // pass the select. The database key (a unique index on stripe_ref for
+  // card_refund rows, reserved in #699) makes the second insert fail with
+  // 23505; this store is given the same key here. The second delivery must
+  // then read the refund the first wrote and answer success — not 500, and
+  // not a second credit.
+  it('are credited once, and both are acknowledged', async () => {
+    db = createInMemorySupabase({ uniques: {
+      stripe_webhook_events: [['stripe_event_id']],
+      wallet_transactions: [['stripe_ref', 'type']],
+    } });
+    harness.db = db;
+    db.seed('stripe_issuing_cards', [
+      { id: 'card-row-1', family_id: FAMILY, child_wallet_id: WALLET, stripe_card_id: 'ic_child', is_frozen: false, blocked_categories: [], status: 'active' },
+    ]);
+    db.seed('wallet_buckets', [{ id: 'bucket-spend', family_id: FAMILY, child_wallet_id: WALLET, kind: 'spend' }]);
+    db.seed('wallet_transactions', [
+      { id: 'txn-topup', family_id: FAMILY, child_wallet_id: WALLET, bucket_id: 'bucket-spend', type: 'parent_top_up', status: 'completed', direction: 'credit', amount_cents: 5_000, stripe_ref: null },
+      { id: 'txn-capture', family_id: FAMILY, child_wallet_id: WALLET, bucket_id: 'bucket-spend', type: 'card_spend', status: 'completed', direction: 'debit', amount_cents: 2_000, stripe_ref: 'ipi_capture' },
+    ]);
+    db.seed('stripe_webhook_events', []);
+    db.seed('wallet_audit_logs', []);
+    let refundInserts = 0;
+    const from = db.from.bind(db);
+    (db as unknown as { from: (name: string) => unknown }).from = (name: string) => {
+      const builder = from(name) as unknown as Record<string, (...args: unknown[]) => unknown>;
+      if (name === 'wallet_transactions') {
+        const insert = builder.insert.bind(builder);
+        builder.insert = (row: unknown) => {
+          if ((row as Row).type === 'card_refund') refundInserts += 1;
+          return insert(row);
+        };
+      }
+      return builder;
+    };
+    const refund = issuingTransaction({ id: 'ipi_refund', type: 'refund', amount: 2_000, authorization: null });
+
+    const [first, second] = await Promise.all([deliver(refund, 'evt_a'), deliver(refund, 'evt_b')]);
+
+    // Both got past the select: the overlap really happened.
+    expect(refundInserts).toBe(2);
+    expect([first.status, second.status]).toEqual([200, 200]);
+    expect(byRef('ipi_refund')).toHaveLength(1);
+    expect(spendCents()).toBe(3_000 + 2_000);
+  });
+});
+
+describe('a refused refund insert that is not a duplicate', () => {
+  it('is not mistaken for one: a 23505 with no refund to read back still fails, so Stripe retries', async () => {
+    const from = db.from.bind(db);
+    (db as unknown as { from: (name: string) => unknown }).from = (name: string) => {
+      const builder = from(name) as unknown as Record<string, (...args: unknown[]) => unknown>;
+      if (name === 'wallet_transactions') {
+        builder.insert = () => {
+          const settle = { then: (resolve: (v: unknown) => unknown) => Promise.resolve({ data: null, error: { code: '23505', message: 'duplicate key value violates unique constraint "some_other_key"', details: null, hint: null } }).then(resolve) };
+          const chain = { select: () => ({ single: () => settle }) };
+          return chain;
+        };
+      }
+      return builder;
+    };
+
+    const res = await deliver(issuingTransaction({ id: 'ipi_refund', type: 'refund', amount: 2_000, authorization: null }));
+
+    expect(res.status).toBe(500);
+    expect(byRef('ipi_refund')).toEqual([]);
+  });
+});
+
 describe('a purchase is still a purchase', () => {
   it('a capture is one completed card_spend debit and releases its hold', async () => {
     expect((await deliver(issuingTransaction({}))).status).toBe(200);
