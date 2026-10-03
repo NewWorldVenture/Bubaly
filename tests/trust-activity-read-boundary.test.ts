@@ -29,20 +29,27 @@ type Reply = { data: unknown; error: unknown };
  * A PostgREST-shaped stub: every builder method chains, and the chain resolves
  * to the reply scripted for that table (await, `.limit()` or `.maybeSingle()`).
  */
+/** Every column list a read asked of each table, to pin what a member session selects. */
+const selected: Record<string, string[]> = {};
+
 function fakeDb(replies: Record<string, Reply>): SupabaseClient<Database> {
   const chainFor = (table: string) => {
     const reply = replies[table] ?? { data: [], error: null };
     const chain: Record<string, unknown> = {};
-    for (const method of ['select', 'eq', 'in', 'order', 'is', 'gt', 'neq']) {
+    for (const method of ['eq', 'in', 'order', 'is', 'gt', 'neq']) {
       chain[method] = () => chain;
     }
+    chain.select = (columns?: string) => { (selected[table] ??= []).push(columns ?? '*'); return chain; };
     chain.limit = () => Promise.resolve(reply);
     chain.maybeSingle = () => Promise.resolve(reply);
     chain.then = (resolve: (value: Reply) => unknown, reject: (reason: unknown) => unknown) =>
       Promise.resolve(reply).then(resolve, reject);
     return chain;
   };
-  return { from: (table: string) => chainFor(table) } as unknown as SupabaseClient<Database>;
+  // 0480: the words come from `ai_request_words`, which answers only for the
+  // requester or a manager. Scripted as `rpc:ai_request_words`.
+  const rpc = async (name: string) => replies[`rpc:${name}`] ?? { data: [], error: { message: `unexpected rpc ${name}` } };
+  return { from: (table: string) => chainFor(table), rpc } as unknown as SupabaseClient<Database>;
 }
 
 function scopeFor(db: SupabaseClient<Database>, role: ServiceScope['role']): ServiceScope {
@@ -95,7 +102,11 @@ function repliesWith(overrides: Record<string, Reply> = {}): Record<string, Repl
       error: null,
     },
     ai_requests: {
-      data: [{ id: 'req-1', request_text: 'Plan meals for next week', interpreted_intent: 'plan_meals' }],
+      data: [{ id: 'req-1', interpreted_intent: 'plan_meals' }],
+      error: null,
+    },
+    'rpc:ai_request_words': {
+      data: [{ id: 'req-1', request_text: 'Plan meals for next week', clarifications: [] }],
       error: null,
     },
     ...overrides,
@@ -147,6 +158,30 @@ describe('loadTrustActivity read boundary', () => {
 
     expect(res.ok).toBe(false);
     expect(err.mock.calls.map((c) => String(c[0]))).toContain('[trust/activity] request read failed');
+  });
+
+  it('fails closed when the request words cannot be read (0480)', async () => {
+    const err = vi.spyOn(console, 'error').mockImplementation(() => {});
+    const db = fakeDb(repliesWith({ 'rpc:ai_request_words': { data: null, error: { message: 'timeout' } } }));
+
+    const res = await loadTrustActivity(scopeFor(db, 'parent'));
+
+    expect(res.ok).toBe(false);
+    expect(err.mock.calls.map((c) => String(c[0]))).toContain('[trust/activity] request read failed');
+  });
+
+  it('never selects request_text through the member session (0480 withholds the column)', async () => {
+    for (const key of Object.keys(selected)) delete selected[key];
+    await loadTrustActivity(scopeFor(fakeDb(repliesWith()), 'parent'));
+    expect(selected.ai_requests).toEqual(['id, interpreted_intent']);
+  });
+
+  it('a request the function does not answer for reads without its words', async () => {
+    const db = fakeDb(repliesWith({ 'rpc:ai_request_words': { data: [], error: null } }));
+    const res = await loadTrustActivity(scopeFor(db, 'parent'));
+    expect(res.ok).toBe(true);
+    if (!res.ok) return;
+    expect(res.data.contextReads[0]).toMatchObject({ requestId: 'req-1', requestText: '', intent: 'plan_meals' });
   });
 
   it('gives a manager the ledger with run links, the dials, and slice NAMES only', async () => {

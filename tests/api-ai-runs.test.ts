@@ -50,7 +50,15 @@ function makeDb(respond: (call: Call) => Reply) {
     });
     return builder;
   };
-  return { from, calls, auth: { getUser: async () => ({ data: { user: { id: 'user-1' } } }) } };
+  // 0480: the request's words come from `ai_request_words`, which answers the
+  // requester or a manager — this viewer is a parent, so it gets them.
+  const rpc = async (name: string, args: { p_request_ids?: string[] }) => {
+    calls.push({ table: `rpc:${name}`, kind: 'select', filters: { family_id: 'fam-1' }, payload: args });
+    if (name !== 'ai_request_words') return { data: null, error: { message: `unexpected rpc ${name}` } };
+    const ids = new Set(args.p_request_ids ?? []);
+    return { data: ids.has(REQUEST.id) ? [{ id: REQUEST.id, request_text: REQUEST.request_text, clarifications: REQUEST.clarifications }] : [], error: null };
+  };
+  return { from, rpc, calls, auth: { getUser: async () => ({ data: { user: { id: 'user-1' } } }) } };
 }
 
 const RUN = {

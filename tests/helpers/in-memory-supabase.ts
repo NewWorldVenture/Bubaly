@@ -70,6 +70,18 @@ const BUILT_IN_RPC: Record<string, (args: Record<string, unknown>, db: InMemoryS
   family_allergies: (args, db) => db.table('medical_profiles')
     .filter((row) => row.family_id === args.p_family_id)
     .map((row) => ({ member_id: row.member_id, allergies: row.allergies ?? null })),
+  // 0480: a request's words and answers, for the user who filed it or an active
+  // parent/adult of its family (`can_manage_family`); every other request is absent.
+  ai_request_words: (args, db) => {
+    const uid = db.userId;
+    if (!uid) return [];
+    const ids = new Set((args.p_request_ids as string[] | undefined) ?? []);
+    const manages = (familyId: unknown) => db.table('family_members').some((m) =>
+      m.family_id === familyId && m.user_id === uid && m.is_active !== false && (m.role === 'parent' || m.role === 'adult'));
+    return db.table('ai_requests')
+      .filter((r) => ids.has(r.id as string) && (r.requested_by === uid || manages(r.family_id)))
+      .map((r) => ({ id: r.id, request_text: r.request_text, clarifications: r.clarifications ?? [] }));
+  },
 };
 
 function pgError(code: string, message: string): PostgrestError {
@@ -473,6 +485,9 @@ export class InMemorySupabase {
   readonly log: { table: string }[] = [];
 
   constructor(private readonly options: InMemoryOptions = {}) {}
+
+  /** The signed-in user the store answers `auth.uid()` with, if any. */
+  get userId(): string | null { return this.options.userId ?? null; }
 
   /** The server's per-response row ceiling, or undefined for no cap. */
   get maxRows(): number | undefined { return this.options.maxRows; }

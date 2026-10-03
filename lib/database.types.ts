@@ -2784,6 +2784,8 @@ export interface Database {
       family_allergies: { Args: { p_family_id: string }; Returns: { member_id: string; allergies: string | null }[] };
       // Executor lease (0250): returns the ids it just leased. service_role only.
       claim_ai_runs: { Args: { p_limit?: number; p_lease_seconds?: number }; Returns: string[] };
+      // 0480: the words of AI requests (text, clarification answers), for their requester or a family manager.
+      ai_request_words: { Args: { p_request_ids: string[] }; Returns: { id: string; request_text: string; clarifications: Json }[] };
       can_manage_family: { Args: { p_family_id: string }; Returns: boolean };
       is_family_admin: { Args: { p_family_id: string }; Returns: boolean };
       is_super_admin: { Args: Record<string, never>; Returns: boolean };

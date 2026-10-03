@@ -34,6 +34,7 @@ import { describeProgress, displayRunState, summarizeSteps, type RunState, type 
 import {
   loadRunDetail as loadRunCore, type PlanRow, type RequestRow, type RunEventRow, type RunRow, type StepRow,
 } from './store';
+import { MEMBER_REQUEST_COLUMNS, readRequestWords, type RequestWords } from './request-text';
 
 type DB = SupabaseClient<Database>;
 type ApprovalRow = Database['public']['Tables']['approval_requests']['Row'];
@@ -73,7 +74,7 @@ export async function loadRunDetail(
 
   const [{ data: request, error: requestError }, { data: approvalRows, error: approvalError }] = await Promise.all([
     run.request_id
-      ? db.from('ai_requests').select('*').eq('id', run.request_id).eq('family_id', familyId).maybeSingle()
+      ? db.from('ai_requests').select(MEMBER_REQUEST_COLUMNS).eq('id', run.request_id).eq('family_id', familyId).maybeSingle()
       : Promise.resolve({ data: null, error: null }),
     settle(db.from('approval_requests').select('*').eq('family_id', familyId).eq('run_id', runId).order('created_at', { ascending: true })),
   ]);
@@ -81,6 +82,17 @@ export async function loadRunDetail(
   if (readError) {
     console.error('[ai/runs] failed to read the run detail request/approvals', readError);
     return fail(describeDbError(readError, 'Bubaly could not open that run.'), { code: SERVICE_CODES.db, retryable: true });
+  }
+
+  // The person's own words and answers (0480): only the requester or a manager
+  // reads them. Anyone else in the family still opens the run; it reads by its
+  // plan's objective, or "Your request", without the words. A failed read is
+  // the same — the words are not needed to show the run.
+  let words: RequestWords | null = null;
+  if (request && run.request_id) {
+    const read = await readRequestWords(db, [run.request_id]);
+    if (read.ok) words = read.words.get(run.request_id) ?? null;
+    else console.error('[ai/runs] failed to read the request words', read.error);
   }
 
   const approvals = (approvalRows ?? []) as ApprovalRow[];
@@ -97,7 +109,9 @@ export async function loadRunDetail(
 
   return ok({
     run,
-    request: (request as RequestRow | null) ?? null,
+    request: request
+      ? { ...(request as unknown as Omit<RequestRow, 'request_text' | 'clarifications'>), request_text: words?.requestText ?? '', clarifications: words?.clarifications ?? [] } as RequestRow
+      : null,
     plan,
     steps,
     events,
