@@ -10,6 +10,23 @@ import type { ServiceScope } from '@/lib/services/types';
 import { createInMemorySupabase } from './helpers/in-memory-supabase';
 import { bodyOf } from './helpers/source-order';
 
+// The scheduling API (app/api/ai/schedule) reads the same tables itself; its
+// session and client come from these two seams, and its words from the
+// catalogue, resolved outside a request scope.
+const seams = vi.hoisted(() => ({ db: null as unknown }));
+vi.mock('@/lib/supabase/server', () => ({ createServer: async () => seams.db, createServiceClient: () => seams.db }));
+vi.mock('@/lib/supabase/auth', () => {
+  const ctx = {
+    user: { id: '00000000-0000-4000-8000-00000000aa01' },
+    active: { familyId: '00000000-0000-4000-8000-00000000fa01', role: 'parent', member: { id: '00000000-0000-4000-8000-00000000ad01', role: 'parent' }, family: { timezone: 'America/New_York' } },
+  };
+  return { requireUserContext: async () => ctx, requireFeature: async () => ctx };
+});
+vi.mock('@/lib/i18n/server', async () => {
+  const { SOURCE_MESSAGES, translate } = await import('@/lib/i18n/messages');
+  return { getTranslations: async () => (key: string, params?: Record<string, string | number>) => translate(SOURCE_MESSAGES, key, params) };
+});
+
 /**
  * THE PLANNER, THE REMINDER ENGINE AND THE FREE-SLOT FINDER SEE EVERY WEEK OF
  * A SERIES.
@@ -219,6 +236,30 @@ describe('findEventByTitle — "RSVP to piano" four weeks into the series', () =
   });
 });
 
+describe('the scheduling API — the same hour, asked for over HTTP', () => {
+  // The route clips its window at the real clock; the week under test is in the past of the machine running this.
+  beforeEach(() => { vi.useFakeTimers(); vi.setSystemTime(NOW); });
+  afterEach(() => { vi.useRealTimers(); });
+
+  it('does not propose the lesson\'s hour to the child who has it', async () => {
+    const { POST } = await import('@/app/api/ai/schedule/route');
+    const { NextRequest } = await import('next/server');
+    seams.db = household();
+    const res = await POST(new NextRequest('http://localhost/api/ai/schedule', {
+      method: 'POST',
+      body: JSON.stringify({
+        memberIds: [KID], durationMin: 60, windowStartISO: '2026-09-22T19:00:00.000Z', windowEndISO: '2026-09-22T22:00:00.000Z',
+        workingHours: { startHour: 15, endHour: 18 },
+      }),
+    }));
+    expect(res.status).toBe(200);
+    const body = await res.json() as { busyCount: number; slots: { startISO: string; endISO: string }[] };
+    // The lesson and the photo are both busy; 15:00 is the only whole hour left.
+    expect(body.busyCount).toBe(2);
+    expect(body.slots.map((s) => s.startISO)).toEqual(['2026-09-22T19:00:00.000Z']);
+  });
+});
+
 describe('busyEvenings — a Tuesday lesson takes every Tuesday', () => {
   it('marks the lesson\'s evening in a week four weeks after the series began', async () => {
     const res = await busyEvenings(scopeFor(household()), { from: WEEK.from, to: WEEK.to, eveningFromHour: 16 });
@@ -317,6 +358,12 @@ describe('the reads are the shared one (source pins)', () => {
     expect(notifications).not.toContain(".from('calendar_events')");
     expect(notifications).toContain("related_id: isSeries(e) ? `${e.id}:${e.starts_at.slice(0, 10)}` : e.id");
     expect(notifications).toContain('refine: (query) => query.not(\'assignee_id\', \'is\', null)');
+  });
+
+  it('the scheduling API reads the calendar through the shared read', () => {
+    const route = readFileSync(join(ROOT, 'app/api/ai/schedule/route.ts'), 'utf8');
+    expect(route).toContain('readCalendarOccurrences(supabase, familyId, instantCalendarBounds(fromISO, toISO, tz), tz)');
+    expect(route).not.toContain(".from('calendar_events')");
   });
 
   it('the readiness page reads both horizons through the shared read', () => {
