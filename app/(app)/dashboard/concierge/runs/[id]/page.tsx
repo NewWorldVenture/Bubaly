@@ -17,7 +17,7 @@ import { revalidatePath } from 'next/cache';
 import { ArrowLeft, Sparkles } from 'lucide-react';
 import { requireUserContext } from '@/lib/supabase/auth';
 import { createServer } from '@/lib/supabase/server';
-import { assertAIAccess } from '@/lib/server/ai-access';
+import { assertAIAccess, denialMessage } from '@/lib/server/ai-access';
 import { isManager } from '@/lib/constants/roles';
 import { scopeFromUserContext } from '@/lib/services/scope';
 import { loadRunDetail, toRunView } from '@/lib/ai/runs/detail';
@@ -69,7 +69,7 @@ export default async function RunDetailPage({ params }: { params: Promise<{ id: 
   const access = await assertAIAccess(ctx, { db: supabase });
   if (!access.ok) {
     if (access.status === 404) return <AppNotFound backHref="/dashboard/concierge/runs" />;
-    return <RunUnavailable message={access.error} />;
+    return <RunUnavailable message={denialMessage(access, t)} />;
   }
 
   const detail = await loadRunDetail(supabase, familyId, id, { viewerRole: ctx.active.role });

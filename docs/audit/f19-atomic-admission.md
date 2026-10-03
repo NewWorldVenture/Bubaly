@@ -148,7 +148,7 @@ at 9/10 both filed and both were planned.
   as before.
 - **Refusal:** a refused admission returns `IntakeAllowanceRefusal`. This has the
   same shape as `assertAIAccess`'s denial: status 429, `code: 'allowance_exceeded'`,
-  `limit`, and the same English text. Nothing is classified or planned.
+  `limit`, and the same English source text. Nothing is classified or planned.
   `/api/ai/requests` answers it with `accessDeniedResponse(refusal, t)`, so the
   response is localized (`ai.yourFamilyUsedItsMonthlyAllowance`). The server actions
   pass `error`/`code` through exactly as they do for the gate's denial.
@@ -205,3 +205,27 @@ held 0.3 s before commit.
 - A retry under the admitted key at 10/10 answered `existing`.
 - A new key at 10/10 answered `refused:10`.
 - The family was deleted afterwards. 0 rows remain.
+
+## Closed: every access refusal in the reader's language
+
+`assertAIAccess` writes its refusals in English. API routes translated only the
+allowance one, through `accessDeniedResponse(denial, t)`. Server actions (the
+concierge form, run answer and control, the inbox "Ask Bubaly", the mission draft)
+and the concierge run pages showed `denial.error` as it was. A German family read
+"Ask Bubaly is part of Family Basic…" in English.
+
+`denialMessage(denial, t)` in `lib/server/ai-access.ts` translates every code:
+- `allowance_exceeded`, with `limit`;
+- `plan_required`, with `feature` and `needLevel`;
+- `unavailable`, with `unreadable` set to `plan` or `usage`;
+- `feature_off`: a bare "Not found." in API responses; actions name the feature,
+  because the member is already on its page.
+
+`accessDeniedResponse`, every action and both pages use it. The intake's own
+allowance refusal goes through it too. `error` stays the English source text.
+
+Six keys were added to all 7 base catalogues.
+`tests/ai-access-refusals-are-localized-off-the-api.test.ts` has 13 tests and drives
+the real gate, actions, translator and catalogues in German. Against the old
+source, 10 of the 13 fail. The three that still pass are the positive control, the
+English control and the catalogue check.

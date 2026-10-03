@@ -23,7 +23,7 @@ import Link from 'next/link';
 import { ArrowLeft, ChevronLeft, ChevronRight, History } from 'lucide-react';
 import { requireFeature } from '@/lib/supabase/auth';
 import { createServer } from '@/lib/supabase/server';
-import { assertAIAccess } from '@/lib/server/ai-access';
+import { assertAIAccess, denialMessage } from '@/lib/server/ai-access';
 import { scopeFromUserContext } from '@/lib/services/scope';
 import { listRuns } from '@/lib/ai/runs/store';
 import { loadRunEvidence } from '@/lib/ai/runs/evidence';
@@ -103,7 +103,7 @@ export default async function RunHistoryPage({ searchParams }: { searchParams: P
   const access = await assertAIAccess(ctx, { db: supabase });
   if (!access.ok) {
     if (access.status === 404) return <AppNotFound backHref="/dashboard" />;
-    return <Unavailable message={access.error} retryHref={selfHref} />;
+    return <Unavailable message={denialMessage(access, t)} retryHref={selfHref} />;
   }
 
   // A chip filters on the value the badge shows — `displayRunState`, which

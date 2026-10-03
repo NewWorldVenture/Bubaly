@@ -26,7 +26,8 @@ vi.mock('@/lib/server/rate-limit-db', () => ({ rateLimitDb: (...a: unknown[]) =>
 vi.mock('@/lib/server/feature-tiers', () => ({ getResolvedFeatureTiers: (...a: unknown[]) => getResolvedFeatureTiers(...a) }));
 vi.mock('@/lib/server/plan', () => ({ resolveFamilyPlanLevel: (...a: unknown[]) => resolveFamilyPlanLevel(...a) }));
 vi.mock('@/lib/ai/provider', () => ({ isAIConfigured: () => isAIConfigured() }));
-vi.mock('@/lib/ai/runs/intake', () => ({
+vi.mock('@/lib/ai/runs/intake', async (importOriginal) => ({
+  ...(await importOriginal<typeof import('@/lib/ai/runs/intake')>()),
   submitRequest: (...a: unknown[]) => submitRequest(...a),
   answerClarification: (...a: unknown[]) => answerClarification(...a),
   applyRunControl: (...a: unknown[]) => applyRunControl(...a),

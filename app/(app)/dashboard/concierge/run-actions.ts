@@ -20,11 +20,11 @@ import { getTranslations } from '@/lib/i18n/server';
 import { MAX_AI_ANSWER_CHARS, parseAIRequestIntake, runPagePath, type AIRequestResponse } from '@/lib/ai/chat-request';
 import { loadRunDetail, toRunView, type RunView } from '@/lib/ai/runs/detail';
 import {
-  answerClarification, applyRunControl, isRetryPastAllowance, submitRequest, type RunControlAction, type RunControlResult,
+  answerClarification, applyRunControl, isAllowanceRefusal, isRetryPastAllowance, submitRequest, type RunControlAction, type RunControlResult,
 } from '@/lib/ai/runs/intake';
 import { isAIConfigured } from '@/lib/ai/provider';
 import { isManager } from '@/lib/constants/roles';
-import { assertAIAccess, type AIAccessDenial } from '@/lib/server/ai-access';
+import { assertAIAccess, denialMessage, type AIAccessDenial } from '@/lib/server/ai-access';
 import { enforceAIRateLimit } from '@/lib/server/ai-rate-limit';
 import { scopeFromUserContext } from '@/lib/services/scope';
 import { requireUserContext } from '@/lib/supabase/auth';
@@ -43,8 +43,13 @@ async function rateLimited(): Promise<RunActionResult<never>> {
   return { ok: false, error: t('runActions.tooManyRequestsPleaseTry'), code: 'rate_limited' };
 }
 
-function accessDenied(denial: AIAccessDenial): RunActionResult<never> {
-  return { ok: false, error: denial.status === 404 ? 'Ask Bubaly is not available for your family.' : denial.error, code: denial.code };
+// In the reader's language (`denialMessage`). A switched-off feature is named
+// here, unlike in an API response: the member is already on its page.
+function accessDenied(denial: AIAccessDenial, t: Awaited<ReturnType<typeof getTranslations>>): RunActionResult<never> {
+  const error = denial.status === 404
+    ? t('ai.featureIsNotAvailableForYourFamily', { feature: denial.feature ?? 'Ask Bubaly' })
+    : denialMessage(denial, t);
+  return { ok: false, error, code: denial.code };
 }
 
 /**
@@ -86,12 +91,14 @@ export async function askBubalyAction(input: {
   const scope = scopeFromUserContext(ctx, supabase);
   const access = await assertAIAccess(ctx, { db: supabase });
   // A retry of a request already filed replays it, even at the allowance.
-  if (!access.ok && !(await isRetryPastAllowance(scope, access, parsed.value.clientRequestId))) return accessDenied(access);
+  if (!access.ok && !(await isRetryPastAllowance(scope, access, parsed.value.clientRequestId))) return accessDenied(access, t);
   if (!(await isAIConfigured())) {
     return { ok: false, error: t('runActions.theAiEngineIsnT'), code: 'not_configured' };
   }
 
   const result = await submitRequest(scope, parsed.value, { startedAtMs: startedAt });
+  // The intake's own allowance refusal (F19) is a denial in the gate's shape.
+  if (isAllowanceRefusal(result)) return accessDenied(result, t);
   if (!result.ok) return { ok: false, error: result.error, code: result.code };
   revalidatePath('/home');
   revalidatePath('/dashboard');
@@ -112,7 +119,7 @@ export async function answerRunAction(runId: string, answer: string): Promise<Ru
   const limited = await enforceAIRateLimit(supabase, `ai-requests:${ctx.user.id}`, REQUEST_RATE_LIMIT);
   if (!limited.ok) return await rateLimited();
   const access = await assertAIAccess(ctx, { db: supabase });
-  if (!access.ok) return accessDenied(access);
+  if (!access.ok) return accessDenied(access, t);
 
   const result = await answerClarification(scopeFromUserContext(ctx, supabase), runId, reply, { startedAtMs: startedAt });
   if (!result.ok) return { ok: false, error: result.error, code: result.code };
@@ -139,7 +146,7 @@ export async function controlRunAction(
   const supabase = await createServer();
   if (KICKING_CONTROLS.includes(action)) {
     const access = await assertAIAccess(ctx, { db: supabase });
-    if (!access.ok) return accessDenied(access);
+    if (!access.ok) return accessDenied(access, t);
   }
   const result = await applyRunControl(scopeFromUserContext(ctx, supabase), runId, action, args, { startedAtMs: startedAt });
   if (!result.ok) return { ok: false, error: result.error, code: result.code };

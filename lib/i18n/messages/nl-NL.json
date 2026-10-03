@@ -16624,5 +16624,11 @@
   "ai.thisMessageWasAlreadyAnswered": "Dit bericht is al beantwoord. Laad het gesprek opnieuw om het antwoord te zien.",
   "ai.thisMessageCouldNotBeIdentified": "Dit bericht kon niet worden herkend. Stuur het opnieuw.",
   "ai.thatAnswerWasCutOff": "Dat antwoord werd afgebroken voordat het klaar was. Vraag het opnieuw voor het volledige antwoord.",
-  "ai.yourFamilyUsedItsMonthlyAllowance": "Je gezin heeft de {limit} AI-verzoeken voor deze maand gebruikt. Upgrade naar Family Basic voor onbeperkt gebruik, of probeer het volgende maand opnieuw."
+  "ai.yourFamilyUsedItsMonthlyAllowance": "Je gezin heeft de {limit} AI-verzoeken voor deze maand gebruikt. Upgrade naar Family Basic voor onbeperkt gebruik, of probeer het volgende maand opnieuw.",
+  "ai.featureIsPartOfFamilyPlus": "{feature} hoort bij Family+. Upgrade zodat Bubaly voor je gezin kan plannen en handelen.",
+  "ai.featureIsPartOfFamilyBasic": "{feature} hoort bij Family Basic. Upgrade zodat Bubaly voor je gezin kan plannen en handelen.",
+  "ai.couldNotConfirmYourPlan": "Bubaly kon je abonnement nu niet bevestigen. Probeer het zo opnieuw.",
+  "ai.couldNotCheckThisMonthsUsage": "Bubaly kon het gebruik van deze maand niet controleren. Probeer het zo opnieuw.",
+  "ai.notFound": "Niet gevonden.",
+  "ai.featureIsNotAvailableForYourFamily": "{feature} is niet beschikbaar voor je gezin."
 }

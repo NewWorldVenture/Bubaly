@@ -69,6 +69,10 @@ export type AIAccessDenial = {
   needLevel?: number;
   /** The monthly cap that was reached (`allowance_exceeded` only), so a client can format its own copy. */
   limit?: number;
+  /** The catalog name of the feature refused (`plan_required`, `feature_off`), for `denialMessage`. */
+  feature?: string;
+  /** What could not be read (`unavailable` only): the plan, or this month's usage. */
+  unreadable?: 'plan' | 'usage';
 };
 
 export type AIAccessGrant = {
@@ -126,7 +130,7 @@ export async function assertAIAccess(
   const superAdmin = isSuperAdminEmail(ctx.user.email);
 
   if (tier === 'off' && !superAdmin) {
-    return { ok: false, status: 404, code: 'feature_off', error: 'Not found.' };
+    return { ok: false, status: 404, code: 'feature_off', feature: label, error: 'Not found.' };
   }
 
   let planLevel: number;
@@ -134,12 +138,12 @@ export async function assertAIAccess(
     planLevel = superAdmin ? 2 : await resolveFamilyPlanLevel(opts.db, familyId);
   } catch (error) {
     console.error('[ai-access] plan level read failed', error);
-    return { ok: false, status: 403, code: 'unavailable', error: 'Bubaly could not confirm your plan right now. Try again in a moment.' };
+    return { ok: false, status: 403, code: 'unavailable', unreadable: 'plan', error: 'Bubaly could not confirm your plan right now. Try again in a moment.' };
   }
   const need = tier === 'off' ? 0 : tierToLevel(tier);
   if (planLevel < need) {
     return {
-      ok: false, status: 403, code: 'plan_required', needLevel: need,
+      ok: false, status: 403, code: 'plan_required', needLevel: need, feature: label,
       error: need >= 2 ? `${label} is part of Family+. Upgrade to let Bubaly plan and act for your family.` : `${label} is part of Family Basic. Upgrade to let Bubaly plan and act for your family.`,
     };
   }
@@ -165,20 +169,20 @@ async function monthlyAllowance(
   if (error) {
     // Fail closed: an allowance that cannot be checked is not an allowance.
     console.error('[ai-access] monthly usage read failed', error);
-    return { ok: false, status: 403, code: 'unavailable', error: 'Bubaly could not check this month\'s usage. Try again in a moment.' };
+    return { ok: false, status: 403, code: 'unavailable', unreadable: 'usage', error: 'Bubaly could not check this month\'s usage. Try again in a moment.' };
   }
   // A response with no error and no count is not a count of zero: it is a
   // meter that did not answer. Reading it as zero let a family that had spent
   // its month call the model again. Refused the same way as a failed read.
   if (typeof count !== 'number' || !Number.isFinite(count) || count < 0) {
     console.error('[ai-access] monthly usage read returned no count', { count });
-    return { ok: false, status: 403, code: 'unavailable', error: 'Bubaly could not check this month\'s usage. Try again in a moment.' };
+    return { ok: false, status: 403, code: 'unavailable', unreadable: 'usage', error: 'Bubaly could not check this month\'s usage. Try again in a moment.' };
   }
   const used = count;
   if (used >= allowance) {
-    // `error` stays the English source text: server actions and pages read it
-    // directly. A route renders it in the reader's language through
-    // `accessDeniedResponse(denial, t)`, which keys off `limit`.
+    // `error` stays the English source text, for logs and callers without a
+    // translator. What a reader sees goes through `denialMessage(denial, t)`,
+    // which keys off `limit`.
     return {
       ok: false, status: 429, code: 'allowance_exceeded', limit: allowance,
       error: `Your family has used its ${allowance} AI requests for this month. Upgrade to Family Basic for unlimited, or try again next month.`,
@@ -208,7 +212,7 @@ export async function assertAIAllowance(ctx: UserContext, opts: { db: DB; now?: 
     planLevel = superAdmin ? 2 : await resolveFamilyPlanLevel(opts.db, ctx.active.familyId);
   } catch (error) {
     console.error('[ai-access] plan level read failed', error);
-    return { ok: false, status: 403, code: 'unavailable', error: 'Bubaly could not confirm your plan right now. Try again in a moment.' };
+    return { ok: false, status: 403, code: 'unavailable', unreadable: 'plan', error: 'Bubaly could not confirm your plan right now. Try again in a moment.' };
   }
   return monthlyAllowance(ctx.active.familyId, opts, planLevel, superAdmin);
 }
@@ -239,7 +243,7 @@ export async function assertFamilyAIAllowance(db: DB, familyId: string): Promise
     planLevel = await resolveFamilyPlanLevel(db, familyId);
   } catch (error) {
     console.error('[ai-access] plan level read failed', error);
-    return { ok: false, status: 403, code: 'unavailable', error: 'Bubaly could not confirm the plan right now. Try again in a moment.' };
+    return { ok: false, status: 403, code: 'unavailable', unreadable: 'plan', error: 'Bubaly could not confirm the plan right now. Try again in a moment.' };
   }
   return monthlyAllowance(familyId, { db }, planLevel, false);
 }
@@ -265,10 +269,36 @@ export async function refuseOverAIAllowance(ctx: UserContext, db: DB, t?: Transl
  * language (status 429 and code `allowance_exceeded` unchanged); without one,
  * or for any other code, `denial.error` is sent as it is.
  */
+/**
+ * A refusal from `assertAIAccess` (or one built in its shape) in the reader's
+ * language. Every denial carries its English source text in `error`, which is
+ * what a page or server action used to show as is, so a German family read
+ * "Ask Bubaly is part of Family Basic" in English. The codes and the fields
+ * beside them (`limit`, `needLevel`, `feature`, `unreadable`) are enough to
+ * say it in any catalogue. A denial this does not recognise keeps `error`.
+ * `feature_off` stays a bare "Not found." — the gate never confirms that a
+ * switched-off feature exists.
+ */
+export function denialMessage(denial: AIAccessDenial, t: Translator): string {
+  switch (denial.code) {
+    case 'allowance_exceeded':
+      return denial.limit !== undefined ? t('ai.yourFamilyUsedItsMonthlyAllowance', { limit: denial.limit }) : denial.error;
+    case 'plan_required':
+      if (!denial.feature) return denial.error;
+      return t((denial.needLevel ?? 0) >= 2 ? 'ai.featureIsPartOfFamilyPlus' : 'ai.featureIsPartOfFamilyBasic', { feature: denial.feature });
+    case 'unavailable':
+      if (denial.unreadable === 'plan') return t('ai.couldNotConfirmYourPlan');
+      if (denial.unreadable === 'usage') return t('ai.couldNotCheckThisMonthsUsage');
+      return denial.error;
+    case 'feature_off':
+      return t('ai.notFound');
+    default:
+      return denial.error;
+  }
+}
+
 export function accessDeniedResponse(denial: AIAccessDenial, t?: Translator): NextResponse {
-  const error = t && denial.code === 'allowance_exceeded' && denial.limit !== undefined
-    ? t('ai.yourFamilyUsedItsMonthlyAllowance', { limit: denial.limit })
-    : denial.error;
+  const error = t ? denialMessage(denial, t) : denial.error;
   return NextResponse.json(
     {
       error, code: denial.code,

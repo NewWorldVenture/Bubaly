@@ -16624,5 +16624,11 @@
   "ai.thisMessageWasAlreadyAnswered": "Diese Nachricht wurde bereits beantwortet. Laden Sie die Unterhaltung neu, um die Antwort zu sehen.",
   "ai.thisMessageCouldNotBeIdentified": "Diese Nachricht konnte nicht zugeordnet werden. Senden Sie sie erneut.",
   "ai.thatAnswerWasCutOff": "Diese Antwort wurde abgebrochen, bevor sie fertig war. Fragen Sie erneut, um die vollständige Antwort zu erhalten.",
-  "ai.yourFamilyUsedItsMonthlyAllowance": "Ihre Familie hat ihre {limit} KI-Anfragen für diesen Monat aufgebraucht. Wechseln Sie zu Family Basic für unbegrenzte Anfragen oder versuchen Sie es nächsten Monat erneut."
+  "ai.yourFamilyUsedItsMonthlyAllowance": "Ihre Familie hat ihre {limit} KI-Anfragen für diesen Monat aufgebraucht. Wechseln Sie zu Family Basic für unbegrenzte Anfragen oder versuchen Sie es nächsten Monat erneut.",
+  "ai.featureIsPartOfFamilyPlus": "{feature} ist Teil von Family+. Führen Sie ein Upgrade durch, damit Bubaly für Ihre Familie planen und handeln kann.",
+  "ai.featureIsPartOfFamilyBasic": "{feature} ist Teil von Family Basic. Führen Sie ein Upgrade durch, damit Bubaly für Ihre Familie planen und handeln kann.",
+  "ai.couldNotConfirmYourPlan": "Bubaly konnte Ihren Tarif gerade nicht bestätigen. Versuchen Sie es gleich noch einmal.",
+  "ai.couldNotCheckThisMonthsUsage": "Bubaly konnte die Nutzung in diesem Monat nicht prüfen. Versuchen Sie es gleich noch einmal.",
+  "ai.notFound": "Nicht gefunden.",
+  "ai.featureIsNotAvailableForYourFamily": "{feature} ist für Ihre Familie nicht verfügbar."
 }

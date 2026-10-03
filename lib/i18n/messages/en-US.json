@@ -16624,5 +16624,11 @@
   "ai.thisMessageWasAlreadyAnswered": "This message was already answered. Reload the conversation to see the reply.",
   "ai.thisMessageCouldNotBeIdentified": "This message could not be identified. Send it again.",
   "ai.thatAnswerWasCutOff": "That answer was cut off before it finished. Ask again for the full reply.",
-  "ai.yourFamilyUsedItsMonthlyAllowance": "Your family has used its {limit} AI requests for this month. Upgrade to Family Basic for unlimited, or try again next month."
+  "ai.yourFamilyUsedItsMonthlyAllowance": "Your family has used its {limit} AI requests for this month. Upgrade to Family Basic for unlimited, or try again next month.",
+  "ai.featureIsPartOfFamilyPlus": "{feature} is part of Family+. Upgrade to let Bubaly plan and act for your family.",
+  "ai.featureIsPartOfFamilyBasic": "{feature} is part of Family Basic. Upgrade to let Bubaly plan and act for your family.",
+  "ai.couldNotConfirmYourPlan": "Bubaly could not confirm your plan right now. Try again in a moment.",
+  "ai.couldNotCheckThisMonthsUsage": "Bubaly could not check this month's usage. Try again in a moment.",
+  "ai.notFound": "Not found.",
+  "ai.featureIsNotAvailableForYourFamily": "{feature} is not available for your family."
 }
