@@ -262,6 +262,27 @@ export async function createEvents(
     if (seen.data.length > 0) return ok(seen.data);
   }
 
+  const assigneeIds = rows
+    .map((row) => row.assignee_id)
+    .filter((id): id is string => id != null)
+    .filter((id, index, ids) => ids.findIndex((other) => sameId(other, id)) === index);
+  if (assigneeIds.length) {
+    const { data: members, error: memberError } = await scope.db
+      .from('family_members')
+      .select('id, family_id')
+      .eq('family_id', scope.familyId)
+      .in('id', assigneeIds);
+    if (memberError) {
+      return fail(describeDbError(memberError, 'Could not check those assignees.'), { code: SERVICE_CODES.db });
+    }
+    if (!Array.isArray(members) || !members.every((member) => member && typeof member === 'object'
+      && !Array.isArray(member) && typeof member.id === 'string' && typeof member.family_id === 'string'
+      && sameId(member.family_id, scope.familyId) && assigneeIds.some((id) => sameId(member.id, id)))
+      || !assigneeIds.every((id) => members.some((member) => sameId(member.id, id)))) {
+      return fail('Choose assignees from your family.', { code: SERVICE_CODES.invalidInput });
+    }
+  }
+
   const { data, error } = await scope.db.from('calendar_events').insert(rows).select('*');
   if (error || !data) {
     // On a keyed batch this is what losing the race looks like: the winner's
