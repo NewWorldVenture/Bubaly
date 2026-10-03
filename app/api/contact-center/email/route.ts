@@ -46,12 +46,12 @@ export const dynamic = 'force-dynamic';
 const MAX_BODY = 1024 * 1024; // inbound emails can carry a lot of text
 
 // The password of HTTP Basic credentials (RFC 7617), for providers that cannot
-// set a custom header but can carry `user:password@` in the webhook URL, which
-// is most of them (SendGrid Inbound Parse, Mailgun routes, Postmark). The URL
-// form is only how the provider is CONFIGURED: what it sends is an
-// `Authorization: Basic` header, so the secret travels outside the request
-// line that access logs record. Any username; the secret is the password. No
-// colon, or an empty password, is no credential at all.
+// set a custom header but can carry `user:password@` in the webhook URL
+// (Postmark documents this; confirm it for any other provider before moving
+// MX, with the runbook's §3 check). The URL form is only how the provider is
+// CONFIGURED: what it sends is an `Authorization: Basic` header, so the secret
+// travels outside the request line that access logs record. Any username; the
+// secret is the password. No colon, or an empty password, is no credential.
 function basicAuthPassword(authorization: string | null): string | null {
   const match = /^Basic\s+([A-Za-z0-9+/=]+)\s*$/i.exec(authorization ?? '');
   if (!match) return null;

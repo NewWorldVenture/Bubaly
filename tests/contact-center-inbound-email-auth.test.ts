@@ -76,6 +76,23 @@ describe('inbound email accepts the secret as the password of Basic credentials'
   });
 });
 
+describe('a request whose only credential is Basic reaches the route', () => {
+  // middleware.ts reads Authorization only for the AI bridge, and lists the
+  // contact-center callbacks as public, so Basic credentials are not consumed
+  // or redirected on the way in. This pins that, since the runbook now sends
+  // providers down this path.
+  it('passes the middleware to the route, which then decides', async () => {
+    const { middleware } = await import('@/middleware');
+    for (const [password, status] of [[SECRET, 200], ['wrong', 401]] as const) {
+      const req = new NextRequest(ROUTE, { method: 'POST', headers: { 'content-type': 'application/json', authorization: basic(`inbound:${password}`) }, body: '{}' });
+      expect((await middleware(req)).headers.get('x-middleware-next')).toBe('1');
+      const { POST } = await import('@/app/api/contact-center/email/route');
+      expect((await POST(req)).status).toBe(status);
+    }
+    expect(mocks.admin).not.toHaveBeenCalled();
+  });
+});
+
 describe('the other two forms are unchanged', () => {
   it('accepts the header without warning', async () => {
     const res = await post({ 'x-inbound-secret': SECRET });

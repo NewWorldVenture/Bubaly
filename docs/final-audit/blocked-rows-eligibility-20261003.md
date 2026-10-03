@@ -32,8 +32,8 @@ this evidence.
 Local checks on this branch: the 16 test files around the changed code pass
 (237 tests), among them `tests/cron-auth.test.ts`,
 `tests/health-feature-secrets.test.ts`, `tests/marketing-unsubscribe.test.ts`
-(9), `tests/marketing-unsubscribe-route.test.ts`,
-`tests/contact-center-inbound-email-auth.test.ts` (14, new),
+(10), `tests/marketing-unsubscribe-route.test.ts`,
+`tests/contact-center-inbound-email-auth.test.ts` (15, new),
 `tests/contact-center-callback-boundary.test.ts`,
 `tests/production-migration-state.test.ts`,
 `tests/migration-ledger-preflight.test.ts` and
@@ -50,12 +50,12 @@ colon-less credentials (1), and warning about `?key=` despite Basic credentials
 | ENV-A40897767E88 `CRON_SECRET` | unset in production (health); the GitHub dispatcher fails every tick | none possible: the value must be shared by the caller and the route | set it in Vercel Production **and** as the Actions secret, redeploy | yes |
 | ENV-FCB95D3AD8BB `CHILD_LOGIN_SECRET` | unset in production (health) | none: a default or derived value would mint child credentials from something guessable | set it in Vercel Production, redeploy | yes |
 | ENV-57E10566D252 `GUARDIAN_INTERNAL_SECRET` | unset, and its fallback `CRON_SECRET` is unset too | none; the row's premise is corrected below | set `CRON_SECRET` (escalation then works through the fallback); set a dedicated value to separate the credentials | yes |
-| ENV-F3AB1A14762D `MARKETING_UNSUB_SECRET` | unset; links are signed with the `INTERNAL_SECRET` fallback today | **done here**: verification accepts every configured secret, so setting the dedicated one keeps mailed links valid | after this change is deployed, set it in Vercel Production, redeploy | yes, once this change is live |
+| ENV-F3AB1A14762D `MARKETING_UNSUB_SECRET` | unset; links are signed with the `INTERNAL_SECRET` fallback today | **done here**: verification accepts the internal secret as well as the dedicated one, so setting the dedicated one keeps mailed links valid | after this change is deployed, set it in Vercel Production, redeploy | yes, once this change is live |
 | MAIN-F5 production migrations | `0177`'s statement timeout (PROD-DB-0177); credentials and ledger are no longer the blocker | a bounded repair of `0177` is reserved for the owner's reviewed change (MIGRATION-229E5BF02AC9), not made here | the recorded remedy: run `0177`'s body with no statement timeout, repair its ledger row, dispatch the workflow with `apply=true`; rotate `SUPABASE_SERVICE_ROLE_KEY` | yes, on the operator steps; the repo-side candidate is owner-reserved |
 | MAIN-F-001 ledger "records only 0001–0003" | historical: the ledger records `0001`–`0176` | docs corrected (LB-016 §4.3, `PENDING_PROD_MIGRATIONS.md`) | same as MAIN-F5 | yes |
 | MAIN-F-C08 forward release pinned at 0240–0254 | the manifest's baseline and range match neither production nor the repository, and cannot | none without a release-policy decision | owner: retire the forward-release mechanism in favour of the ordered apply, or re-pin a reviewed bundle after the catch-up | yes, as an owner decision |
 | MAIN-F6 family email not routed | MX points at a forwarding service, not at an inbound-parse provider | none: DNS and the provider are outside the repository | point MX at an inbound-parse provider aimed at the webhook; then the end-to-end check | yes (step 1 of 3 is done) |
-| MAIN-F-E06 secret in the query string | an owner decision (SEC-011) on removing `?key=` | **done here**: Basic credentials are accepted, so no provider needs `?key=` | owner: approve removing `?key=` (a one-line change plus the runbook) | yes |
+| MAIN-F-E06 secret in the query string | an owner decision (SEC-011) on removing `?key=` | **done here**: Basic credentials are accepted, so a provider that cannot set a header has an alternative to `?key=` | owner: approve removing `?key=` (a one-line change plus the runbook) | yes |
 
 If the ledger's owner awards all nine, coverage moves from 2.37% to the 2.44% the
 checkpoint already computes for that case. Nothing below changes
@@ -168,12 +168,18 @@ unsafe: `verifyUnsubToken` checked only the first configured secret, so every
 unsubscribe link already in an inbox, signed with `INTERNAL_SECRET`, would have
 stopped working the moment `MARKETING_UNSUB_SECRET` was set. A recipient who
 cannot unsubscribe from a marketing email is a compliance failure. Verification
-now accepts a token signed with any configured secret (each compared in
-constant time), while signing still uses the first, so new links move to the
-dedicated secret immediately and old ones keep working for as long as the
-fallback stays configured. `tests/marketing-unsubscribe.test.ts` adds the
-before/after case, a not-configured-secret case, a blank-secret case and the
-production fail-closed case for verification; the route test is unchanged.
+now accepts a token signed with the dedicated secret or with `INTERNAL_SECRET`
+when both are set (each compared in constant time), while signing still uses
+the first, so new links move to the dedicated secret immediately and old ones
+keep working for as long as `INTERNAL_SECRET` stays configured. Two deliberate
+edges: a blank or whitespace-only value counts as unset, as `/api/health`
+already treats it; and `SUPABASE_SERVICE_ROLE_KEY` signs, and verifies, only
+while neither of the other two is set, so a database credential does not stay
+a valid unsubscribe key once a real signing secret exists (which is how the
+code behaved before, too). `tests/marketing-unsubscribe.test.ts` adds the
+before/after case, a not-configured-secret case, a blank-secret case, the
+service-role-only case and the production fail-closed case for verification;
+the route test is unchanged.
 
 **Production state.** `/api/health` lists it missing (2026-10-03 11:01 UTC).
 
@@ -332,22 +338,26 @@ headers, so removing it would choose which providers can integrate. That is
 the whole of the blocker: not a missing fix, but a trade-off.
 
 **Repository-side fix, made here.** The trade-off had a third option the route
-did not offer. Providers that cannot set a header can almost all carry
-`user:password@` in the webhook URL (SendGrid Inbound Parse, Mailgun routes,
-Postmark), which they send as an `Authorization: Basic` header, outside the
-request line that access logs record. The route now accepts the secret as the
+did not offer. A provider that cannot set a header can often carry
+`user:password@` in the webhook URL (Postmark documents this for its
+webhooks; any other provider should be confirmed with the runbook's §3 check
+before MX moves), which it sends as an `Authorization: Basic` header, outside
+the request line that access logs record. The route now accepts the secret as the
 password of Basic credentials (any username; RFC 7617; constant-time compare
 through `secretEquals`; no colon or an empty password is no credential). The
 header is still preferred, `?key=` still works and still warns, now naming
 both alternatives, and the first credential presented decides.
-`tests/contact-center-inbound-email-auth.test.ts` (14 cases) covers the
+`tests/contact-center-inbound-email-auth.test.ts` (15 cases) covers the
 accepted forms, seven refusals, the unset-secret-in-production case, the
-warning, and precedence. The runbook now lists the three forms in order of
+warning, precedence, and that a request carrying only Basic credentials passes
+the middleware to the route's own guard. The runbook now lists the three forms in order of
 preference and points the provider URL at the Basic form.
 
-**Why this is the end of the repository's part.** With Basic credentials, no
-provider needs `?key=`. Dropping it is a one-line change plus the runbook, and
-it is the owner's call under SEC-011, which this review does not pre-empt.
+**Why this is the end of the repository's part.** With Basic credentials, a
+provider that cannot set a header has a route-line-free option, so `?key=` is
+no longer the only way in for any class of provider. Dropping it is a one-line
+change plus the runbook, and it is the owner's call under SEC-011, which this
+review does not pre-empt.
 
 **Exact external action (owner).** Approve removing the `?key=` fallback (then
 it is removed in a follow-up, with the runbook), or sign off keeping it as an

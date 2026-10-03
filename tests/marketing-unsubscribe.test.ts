@@ -57,8 +57,8 @@ describe('marketing unsubscribe tokens', () => {
     expect(fresh).not.toBe(mailed);
     expect(verifyUnsubToken(e, mailed)).toBe(true);
     expect(verifyUnsubToken(e, fresh)).toBe(true);
-    // The older service-role fallback is still honoured while it is configured.
-    expect(verifyUnsubToken(e, createHmac('sha256', 'service-role').update(e).digest('hex'))).toBe(true);
+    // The database credential is not an unsubscribe key once a signing secret exists.
+    expect(verifyUnsubToken(e, createHmac('sha256', 'service-role').update(e).digest('hex'))).toBe(false);
   });
 
   it('does not verify a token signed with a secret that is not configured', () => {
@@ -80,5 +80,20 @@ describe('marketing unsubscribe tokens', () => {
     const e = 'parent@example.com';
     expect(unsubToken(e)).toBe(createHmac('sha256', 'internal-only').update(e).digest('hex'));
     expect(verifyUnsubToken(e, createHmac('sha256', '   ').update(e).digest('hex'))).toBe(false);
+  });
+
+  it('signs and verifies with the service-role key only while nothing else is configured', () => {
+    vi.stubEnv('MARKETING_UNSUB_SECRET', '');
+    vi.stubEnv('INTERNAL_SECRET', '');
+    vi.stubEnv('SUPABASE_SERVICE_ROLE_KEY', 'service-role');
+    const e = 'parent@example.com';
+    const lastResort = unsubToken(e);
+    expect(lastResort).toBe(createHmac('sha256', 'service-role').update(e).digest('hex'));
+    expect(verifyUnsubToken(e, lastResort)).toBe(true);
+    // As soon as a real signing secret exists the credential stops being one,
+    // for signing and for verification alike, as before this change.
+    vi.stubEnv('INTERNAL_SECRET', 'internal-only');
+    expect(unsubToken(e)).toBe(createHmac('sha256', 'internal-only').update(e).digest('hex'));
+    expect(verifyUnsubToken(e, lastResort)).toBe(false);
   });
 });

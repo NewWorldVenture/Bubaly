@@ -55,16 +55,17 @@ The secret may be presented three ways. Pick the first your provider supports:
    header (Cloudflare Email Workers, your own relay).
 2. HTTP Basic credentials in the webhook URL:
    `https://inbound:<secret>@www.bubaly.com/api/contact-center/email` — for
-   providers that cannot set a header but accept `user:password@` in the URL
-   (SendGrid Inbound Parse, Mailgun routes, Postmark). The username is ignored;
-   the secret is the password. The provider sends it as an `Authorization:
-   Basic` header, so it never appears in the request line that access logs
-   record.
+   providers that cannot set a header but accept `user:password@` in the URL.
+   Postmark documents this for its webhooks; for any other provider, confirm
+   with the §3 check that it sends `Authorization: Basic` for such a URL before
+   moving MX. The username is ignored; the secret is the password. The provider
+   sends it as an `Authorization: Basic` header, so it never appears in the
+   request line that access logs record.
 3. query string: `?key=<secret>` — last resort. It works, and the route warns
    on every request that uses it, because a secret in a URL is written to every
-   access log and proxy log along the path (MAIN-F-E06). With 2 available, no
-   provider needs this form; whether to remove it is the owner's decision,
-   recorded under SEC-011.
+   access log and proxy log along the path (MAIN-F-E06). With 2 available, a
+   provider that cannot set a header no longer has to use this form; whether to
+   remove it is the owner's decision, recorded under SEC-011.
 
 ## 2. Point MX at an inbound-parse provider
 
