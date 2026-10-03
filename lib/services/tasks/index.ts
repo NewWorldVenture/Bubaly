@@ -678,6 +678,25 @@ export async function assignChore(
   }
   if (!chore) return fail('That chore could not be found.', { code: SERVICE_CODES.notFound });
 
+  const { data: assignee, error: assigneeError } = await scope.db
+    .from('family_members')
+    .select('id, family_id')
+    .eq('id', input.memberId)
+    .eq('family_id', scope.familyId)
+    .maybeSingle();
+  if (assigneeError) {
+    console.error('[service:tasks] chore assignee lookup failed', assigneeError);
+    return fail(describeDbError(assigneeError, 'Could not load that family member.'), { code: SERVICE_CODES.db });
+  }
+  if (
+    !assignee || typeof assignee !== 'object' || Array.isArray(assignee)
+    || typeof assignee.id !== 'string' || typeof assignee.family_id !== 'string'
+    || assignee.id.toLowerCase() !== input.memberId.toLowerCase()
+    || assignee.family_id.toLowerCase() !== scope.familyId.toLowerCase()
+  ) {
+    return fail('That person could not be found in this family.', { code: SERVICE_CODES.notFound });
+  }
+
   const { data, error } = await scope.db
     .from('chore_assignments')
     .insert({
