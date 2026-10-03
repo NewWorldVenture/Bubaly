@@ -151,7 +151,7 @@ describe('createReminder', () => {
   });
 
   it('returns the existing reminder rather than a duplicate on a retry', async () => {
-    const { db, calls } = makeDb(() => ({ data: { id: 'rem-1', title: 'Bins' }, error: null }));
+    const { db, calls } = makeDb(() => ({ data: { id: 'rem-1', title: 'Bins', family_id: 'fam-1', idempotency_key: 'retry-1' }, error: null }));
     const res = await createReminder(scopeWith(db, { idempotencyKey: 'retry-1' }), {
       title: 'Bins', remindAt: '2026-09-06T22:00:00Z',
     });
