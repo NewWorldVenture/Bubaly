@@ -6,7 +6,7 @@ import { createServer } from '@/lib/supabase/server';
 import { refuseUnlessEntitled } from '@/lib/server/route-feature-gate';
 import { resolveProvider, isAIConfigured } from '@/lib/ai/provider';
 import { withAiRequest } from '@/lib/ai/observability';
-import { scopeFromUserContext, todayKeyFor } from '@/lib/services/scope';
+import { scopeFromUserContext, todayKeyFor, hourInTz } from '@/lib/services/scope';
 import { isMissingTableError } from '@/lib/supabase/errors';
 import { enforceAIRateLimit } from '@/lib/server/ai-rate-limit';
 import { MAX_PROVIDER_JSON_BYTES, readBoundedRequestJsonOrEmpty } from '@/lib/server/bounded-request-body';
@@ -70,10 +70,14 @@ export async function POST(req: Request) {
   // fine and stayed quiet about food that was not.
   const expiringItems = expiringSoon(pantry, 7, todayKeyFor(ctx)).map((p) => p.name).slice(0, 15);
 
-  // Busy evenings (events after 4pm) become "keep it quick" signals.
-  const dayShort = (iso: string) => new Date(iso).toLocaleDateString('en-US', { weekday: 'short' });
+  // Busy evenings (events after 4pm) become "keep it quick" signals — on the
+  // FAMILY's clock. `getHours()` is the host's hour, so on a UTC server a 6pm
+  // Californian practice read as 1am and was never a busy night, and its
+  // weekday was tomorrow's.
+  const tz = ctx.active.family.timezone || 'UTC';
+  const dayShort = (iso: string) => new Date(iso).toLocaleDateString('en-US', { weekday: 'short', timeZone: tz });
   const busyNights = (eventsRes.data ?? [])
-    .filter((e) => new Date(e.starts_at).getHours() >= 16)
+    .filter((e) => hourInTz(new Date(e.starts_at), tz) >= 16)
     .map((e) => `${dayShort(e.starts_at)}: ${e.title}`)
     .slice(0, 10);
 

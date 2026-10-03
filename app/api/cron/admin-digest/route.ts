@@ -96,7 +96,9 @@ export async function GET(req: NextRequest) {
   }
 
   const appUrl = (process.env.NEXT_PUBLIC_APP_URL || 'https://www.bubaly.com').replace(/\/$/, '');
-  const dateLabel = new Date().toLocaleDateString('en-US', { month: 'short', day: 'numeric' });
+  // Explicitly UTC: the digest has no family, and a label that followed the
+  // host's zone would name a different day from one cron host to the next.
+  const dateLabel = new Date().toLocaleDateString('en-US', { month: 'short', day: 'numeric', timeZone: 'UTC' });
   const html = renderAdminDigestHtml(digest, { appUrl, dateLabel, recent: rows });
   const subject = digestSubject(digest, dateLabel);
 
