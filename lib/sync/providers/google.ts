@@ -9,6 +9,7 @@
 
 import { readBoundedResponseJson, readBoundedResponseText } from '@/lib/server/bounded-response-body';
 import { fetchWithDeadline } from '@/lib/server/fetch-with-deadline';
+import { parseExdateLine } from '@/lib/sync/ics';
 
 const AUTH_URL = 'https://accounts.google.com/o/oauth2/v2/auth';
 const TOKEN_URL = 'https://oauth2.googleapis.com/token';
@@ -199,6 +200,10 @@ export type GEvent = {
   start?: { dateTime?: string; date?: string; timeZone?: string };
   end?: { dateTime?: string; date?: string; timeZone?: string };
   recurrence?: string[];
+  /** Set on a single occurrence of a series the user changed or cancelled: the master's id … */
+  recurringEventId?: string;
+  /** … and the slot that occurrence left. */
+  originalStartTime?: { dateTime?: string; date?: string; timeZone?: string };
   etag?: string;
   updated?: string;
 };
@@ -360,14 +365,27 @@ export type MappedEvent = {
   status: string;
   etag: string | null;
   cancelled: boolean;
+  exception_dates: string[];
+  recurring_event_id: string | null;
+  original_starts_at: string | null;
 };
 
-/** Google event -> normalized row fields. Returns null if it lacks a usable start. */
+/**
+ * Google event -> normalized row fields. Returns null if it lacks a usable start.
+ *
+ * The events list runs with `singleEvents=false`, so a series arrives as ONE
+ * master whose `recurrence` holds the RRULE and any `EXDATE` lines, plus one
+ * event per occurrence the user changed or cancelled, carrying
+ * `recurringEventId` and `originalStartTime`. Before this read them, the master
+ * kept only its RRULE and the occurrences were plain events, so the mirror and
+ * the feed built from it showed every slot the family had cancelled or moved.
+ */
 export function googleEventToRow(ev: GEvent): MappedEvent | null {
   const startRaw = ev.start?.dateTime ?? ev.start?.date;
   if (!startRaw) return null;
   const allDay = !ev.start?.dateTime;
   const toIso = (v?: string) => (v ? new Date(v).toISOString() : null);
+  const original = ev.originalStartTime?.dateTime ?? ev.originalStartTime?.date;
   return {
     external_id: ev.id,
     uid: ev.iCalUID ?? null,
@@ -381,6 +399,9 @@ export function googleEventToRow(ev: GEvent): MappedEvent | null {
     status: ev.status ?? 'confirmed',
     etag: ev.etag ?? null,
     cancelled: ev.status === 'cancelled',
+    exception_dates: [...new Set((ev.recurrence ?? []).flatMap(parseExdateLine))].sort(),
+    recurring_event_id: ev.recurringEventId ?? null,
+    original_starts_at: original ? new Date(original).toISOString() : null,
   };
 }
 

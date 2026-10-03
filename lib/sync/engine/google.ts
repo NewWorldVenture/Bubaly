@@ -21,6 +21,7 @@ import {
   GoogleApiError,
 } from '@/lib/sync/providers/google';
 import { requireSyncWrite } from '@/lib/sync/persistence';
+import { exceptionDatesPatch, exceptionDatesSupport, exceptionLedger, foldExceptionsIntoMasters, noteException, writeWithExceptionDates } from '@/lib/sync/engine/exceptions';
 import { loadSyncExecutionPolicy, type SyncExecutionPolicy } from '@/lib/services/sync/policy';
 import { refreshOnboardingCalendar } from '@/lib/services/onboarding-calendar';
 import { systemScopeForFamily } from '@/lib/services/scope';
@@ -145,9 +146,15 @@ async function syncCalendar(admin: Admin, account: Account, accessToken: string,
     let pull = await pullEvents(accessToken, primary.id, { syncToken: cal.sync_token });
     if (pull.gone) pull = await pullEvents(accessToken, primary.id, {}); // token expired -> full resync
 
+    // A series' exceptions are folded into their masters after the loop, and the
+    // column that holds them may not exist yet (lib/sync/engine/exceptions).
+    const support = exceptionDatesSupport();
+    const ledger = exceptionLedger();
+
     for (const ev of pull.events) {
       const row = googleEventToRow(ev);
       if (!row) { result.skipped++; continue; }
+      noteException(ledger, row);
 
       const { data: mapping, error: mappingError } = await admin
         .from('sync_external_mappings')
@@ -186,12 +193,13 @@ async function syncCalendar(admin: Admin, account: Account, accessToken: string,
           continue;
         }
         if (localHash === remoteHash) { result.skipped++; continue; }
-        const { data: updatedEvent, error: eventUpdateError } = await admin.from('sync_calendar_events').update({
+        const { data: updatedEvent, error: eventUpdateError } = await writeWithExceptionDates(support, 'updating mirrored events', (s) => admin.from('sync_calendar_events').update({
           title: row.title, description: row.description, location: row.location,
           starts_at: row.starts_at, ends_at: row.ends_at, all_day: row.all_day,
-          recurrence_rule: row.recurrence_rule, status: row.status, etag: row.etag,
+          recurrence_rule: row.recurrence_rule, recurrence_id: row.original_starts_at ?? null, status: row.status, etag: row.etag,
           content_hash: remoteHash, sync_status: 'synced', last_synced_at: new Date().toISOString(), metadata: REMOTE_META,
-        }).eq('id', mapping.local_id).select('id').maybeSingle();
+          ...exceptionDatesPatch(row, s),
+        }).eq('id', mapping.local_id).select('id').maybeSingle());
         requireSyncWrite(updatedEvent, eventUpdateError, 'event update');
         const { data: updatedMapping, error: mappingUpdateError } = await admin.from('sync_external_mappings')
           .update({ external_etag: row.etag, metadata: hashMeta(remoteHash), last_synced_at: new Date().toISOString() })
@@ -199,14 +207,16 @@ async function syncCalendar(admin: Admin, account: Account, accessToken: string,
         requireSyncWrite(updatedMapping, mappingUpdateError, 'event mapping update');
         result.imported++;
       } else {
-        const { data: inserted, error: insertError } = await admin.from('sync_calendar_events').insert({
+        const { data: inserted, error: insertError } = await writeWithExceptionDates(support, 'inserting mirrored events', (s) => admin.from('sync_calendar_events').insert({
           calendar_id: cal.id, family_id: account.family_id, user_id: account.user_id, provider: 'google',
           external_id: row.external_id, uid: row.uid, title: row.title, description: row.description, location: row.location,
           starts_at: row.starts_at, ends_at: row.ends_at, all_day: row.all_day, recurrence_rule: row.recurrence_rule,
+          recurrence_id: row.original_starts_at ?? null,
           status: row.status, etag: row.etag, content_hash: remoteHash, sync_status: 'synced',
           last_synced_at: new Date().toISOString(), metadata: REMOTE_META,
-        }).select('id').single();
-        const event = requireSyncWrite(inserted, insertError, 'event creation');
+          ...exceptionDatesPatch(row, s),
+        }).select('id').single());
+        const event = requireSyncWrite(inserted as { id: string } | null, insertError, 'event creation');
         {
           const { data: mappingRow, error: mappingInsertError } = await admin.from('sync_external_mappings').insert({
             family_id: account.family_id, account_id: account.id, provider: 'google', item_type: 'event',
@@ -218,6 +228,10 @@ async function syncCalendar(admin: Admin, account: Account, accessToken: string,
         result.imported++;
       }
     }
+
+    // Every master in the page has its mapping now, whichever order the page
+    // came in, so the slots its exceptions left can be written to it.
+    await foldExceptionsIntoMasters(admin, { accountId: account.id, provider: 'google', ledger, support });
 
     if (!pull.gone && pull.nextSyncToken) {
       const { data: cursor, error: cursorError } = await admin.from('sync_calendars')

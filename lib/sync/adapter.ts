@@ -56,6 +56,20 @@ export type NormalizedEvent = {
   updated_at?: string | null;
   /** true when the provider reports this event deleted/cancelled */
   cancelled: boolean;
+  /**
+   * For a series master: the occurrences the source has given up, as ISO
+   * instants (RFC 5545 EXDATE). Mirrored into `sync_calendar_events.exception_dates`
+   * so the feed does not re-expand a slot the family cancelled or moved.
+   */
+  exception_dates?: string[];
+  /**
+   * For a single occurrence of a series that the source changed or cancelled:
+   * the master's external id and the slot the occurrence left. The engine adds
+   * that slot to the master's exception dates, whether the occurrence arrives
+   * with its master or alone on a later incremental pull.
+   */
+  recurring_event_id?: string | null;
+  original_starts_at?: string | null;
 };
 
 /** A provider task mapped to normalized reminder row fields (matches sync_reminders). */

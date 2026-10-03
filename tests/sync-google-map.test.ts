@@ -34,6 +34,52 @@ describe('Google event mapping', () => {
     expect(googleEventToRow(ev)!.recurrence_rule).toBe('FREQ=WEEKLY;BYDAY=MO');
   });
 
+  it('reads the EXDATE lines of a series in the zone they name, as a subscribed feed would', () => {
+    const ev: GEvent = {
+      id: 'g6', summary: 'Piano', start: { dateTime: '2026-07-01T19:00:00Z', timeZone: 'America/New_York' },
+      recurrence: [
+        'EXDATE;TZID=America/New_York:20260722T150000,20260729T150000',
+        'RRULE:FREQ=WEEKLY;BYDAY=WE',
+        'EXDATE:20260805T190000Z',
+      ],
+    };
+    const row = googleEventToRow(ev)!;
+    expect(row.recurrence_rule).toBe('FREQ=WEEKLY;BYDAY=WE');
+    // 15:00 New York in July is 19:00Z; the UTC line is taken as written; sorted, deduplicated.
+    expect(row.exception_dates).toEqual(['2026-07-22T19:00:00.000Z', '2026-07-29T19:00:00.000Z', '2026-08-05T19:00:00.000Z']);
+    expect(row.recurring_event_id).toBeNull();
+    expect(row.original_starts_at).toBeNull();
+  });
+
+  it('reads a date-only EXDATE for an all-day series as the day', () => {
+    const ev: GEvent = { id: 'g7', summary: 'Bins', start: { date: '2026-07-01' }, recurrence: ['RRULE:FREQ=WEEKLY', 'EXDATE;VALUE=DATE:20260722,20260805'] };
+    expect(googleEventToRow(ev)!.exception_dates).toEqual(['2026-07-22T00:00:00.000Z', '2026-08-05T00:00:00.000Z']);
+  });
+
+  it('a series without exceptions has none, not a missing field', () => {
+    const ev: GEvent = { id: 'g8', summary: 'Weekly', start: { dateTime: '2026-06-21T09:00:00Z' }, recurrence: ['RRULE:FREQ=WEEKLY'] };
+    expect(googleEventToRow(ev)!.exception_dates).toEqual([]);
+  });
+
+  it('a changed or cancelled occurrence names its master and the slot it left', () => {
+    const moved: GEvent = {
+      id: 'g6_20260722T190000Z', summary: 'Piano (moved)', recurringEventId: 'g6',
+      originalStartTime: { dateTime: '2026-07-22T15:00:00-04:00', timeZone: 'America/New_York' },
+      start: { dateTime: '2026-07-23T15:00:00-04:00' }, end: { dateTime: '2026-07-23T16:00:00-04:00' },
+    };
+    const row = googleEventToRow(moved)!;
+    expect(row.recurring_event_id).toBe('g6');
+    expect(row.original_starts_at).toBe('2026-07-22T19:00:00.000Z');
+    expect(row.starts_at).toBe('2026-07-23T19:00:00.000Z');
+    expect(row.cancelled).toBe(false);
+
+    const cancelled: GEvent = {
+      id: 'g6_20260729T190000Z', status: 'cancelled', recurringEventId: 'g6',
+      originalStartTime: { dateTime: '2026-07-29T15:00:00-04:00' }, start: { dateTime: '2026-07-29T15:00:00-04:00' },
+    };
+    expect(googleEventToRow(cancelled)).toMatchObject({ cancelled: true, recurring_event_id: 'g6', original_starts_at: '2026-07-29T19:00:00.000Z' });
+  });
+
   it('flags cancelled events', () => {
     const ev: GEvent = { id: 'g4', status: 'cancelled', start: { dateTime: '2026-06-21T09:00:00Z' } };
     expect(googleEventToRow(ev)!.cancelled).toBe(true);
