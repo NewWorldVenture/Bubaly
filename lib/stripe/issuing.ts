@@ -104,16 +104,36 @@ export async function ensureCardholder(
 }
 
 /**
+ * A card order made against a count of the child's cards of its type that the
+ * mirror no longer holds: the view that sent it is stale (another tab or
+ * device ordered since it last read). Thrown before the provider is asked for
+ * anything, so the caller can tell it from a failure and ask for a refresh.
+ */
+export class StaleCardOrderError extends Error {
+  readonly expectedCount: number;
+  readonly mirroredCount: number;
+
+  constructor(expectedCount: number, mirroredCount: number) {
+    super(`Card order made against ${expectedCount} existing cards; ${mirroredCount} are mirrored`);
+    this.name = 'StaleCardOrderError';
+    this.expectedCount = expectedCount;
+    this.mirroredCount = mirroredCount;
+  }
+}
+
+/**
  * Issue a card for a child wallet. Mirrors spending controls to Stripe.
- * `adopted` is true when this call did not mirror a new card but met the exact
- * row another request for the same attempt already wrote.
+ * `expectedCount` is how many of this child's cards of this type the ordering
+ * view showed; an order whose count the mirror has moved past throws
+ * StaleCardOrderError. `adopted` is true when this call did not mirror a new
+ * card but met the exact row another request for the same attempt already wrote.
  */
 export async function issueCard(
   supabase: DB,
   params: {
     familyId: string; childWalletId: string; cardholderRowId: string; stripeCardholderId: string;
     accountId: string; type: 'virtual' | 'physical'; spendLimitCents: number | null;
-    spendWindow: string; userId: string | null;
+    spendWindow: string; userId: string | null; expectedCount: number;
   },
 ): Promise<{ rowId: string; stripeCardId: string; adopted: boolean }> {
   // The attempt this order belongs to. One order sent twice — two tabs, two
@@ -136,6 +156,14 @@ export async function issueCard(
   if (countError || mirrored === null || !Number.isSafeInteger(mirrored) || mirrored < 0) {
     throw new Error('Could not count the existing cards');
   }
+  // The count is also the one the order was made against. A view that still
+  // shows N cards after another tab's card was mirrored (N+1) would otherwise
+  // read as a new attempt and issue a second card: the server cannot tell it
+  // from a deliberate order, so the view says what it saw. Either direction is
+  // stale; the view re-reads and orders against what exists. Orders that
+  // overlap before the first is mirrored still match and share one key.
+  // Audit JIMMY-SUPPORT-CARD-RETRY-20261001 (stale-order guard).
+  if (mirrored !== params.expectedCount) throw new StaleCardOrderError(params.expectedCount, mirrored);
 
   const stripe = getStripe();
   const interval = WINDOW_INTERVAL[params.spendWindow] ?? 'per_authorization';
