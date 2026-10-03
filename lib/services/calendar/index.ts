@@ -339,6 +339,9 @@ export async function deleteEvents(scope: ServiceScope, eventIds: string[]): Pro
     return fail(describeDbError(error, 'Could not undo those events.'), { code: SERVICE_CODES.db });
   }
 
+  if (data != null && !Array.isArray(data)) {
+    return fail('Could not confirm those events were removed.', { code: SERVICE_CODES.db });
+  }
   const removed = data ?? [];
   // The batch create records a line; without this its Undo left none, so the
   // trail showed a week going onto the calendar and never coming off.
