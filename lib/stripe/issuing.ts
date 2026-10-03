@@ -106,8 +106,9 @@ export async function ensureCardholder(
 /**
  * A card order made against a count of the child's cards of its type that the
  * mirror no longer holds: the view that sent it is stale (another tab or
- * device ordered since it last read). Thrown before the provider is asked for
- * anything, so the caller can tell it from a failure and ask for a refresh.
+ * device ordered since it last read). Thrown before any card is created at the
+ * provider (a first order may already have created the child's cardholder), so
+ * the caller can tell it from a failure and ask for a refresh.
  */
 export class StaleCardOrderError extends Error {
   readonly expectedCount: number;
@@ -163,7 +164,13 @@ export async function issueCard(
   // stale; the view re-reads and orders against what exists. Orders that
   // overlap before the first is mirrored still match and share one key.
   // Audit JIMMY-SUPPORT-CARD-RETRY-20261001 (stale-order guard).
-  if (mirrored !== params.expectedCount) throw new StaleCardOrderError(params.expectedCount, mirrored);
+  if (mirrored !== params.expectedCount) {
+    // Not a failure, but worth a trace when a parent reports a refused order.
+    console.warn('[money] card order refused as stale', {
+      childWalletId: params.childWalletId, type: params.type, expectedCount: params.expectedCount, mirrored,
+    });
+    throw new StaleCardOrderError(params.expectedCount, mirrored);
+  }
 
   const stripe = getStripe();
   const interval = WINDOW_INTERVAL[params.spendWindow] ?? 'per_authorization';

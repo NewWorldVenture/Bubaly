@@ -461,7 +461,13 @@ export function MoneyCardsView({
             router.refresh();
           }}
           onStale={() => {
-            if (formsMounted.current) router.refresh();
+            // The cards changed under this order. Close the dialog so the
+            // parent sees the refreshed list, with the card that made it
+            // stale, before deciding on another: left open, one more click
+            // would order a second card against the new count.
+            if (!formsMounted.current) return;
+            if (orderInstance.current === orderingCard.instance) closeOrder();
+            router.refresh();
           }}
         />
       )}
