@@ -61,6 +61,7 @@ beforeEach(() => {
     defaults: { chore_assignments: { status: 'todo' }, chores: { points: 10, requires_approval: true } },
   });
   db.seed('families', [{ id: FAMILY, name: 'Test household', timezone: 'UTC' }]);
+  db.seed('family_members', [{ id: 'member-child', family_id: FAMILY }]);
   db.seed('chores', [{ id: 'chore-1', family_id: FAMILY, title: 'Empty the dishwasher' }]);
   db.seed('chore_assignments', [
     { id: 'assign-1', family_id: FAMILY, chore_id: 'chore-1', member_id: 'member-child', status: 'todo' },
