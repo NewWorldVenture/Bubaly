@@ -11,6 +11,11 @@
 //  4. Reversal amount mismatch     — a reversal whose cents ≠ the row it reverses
 //  5. Stuck pending                — a non-completed txn older than the threshold
 //  6. Unattributed money           — a completed entry that belongs to no bucket
+//  7. Duplicate reversal           — one original undone by two counted reversals
+//  8. Reversal wallet mismatch     — a reversal booked to another child wallet
+//  9. Reversal direction mismatch  — a reversal pointing the same way as its original
+// 10. Reversal of uncounted        — a counted reversal of an original that never counted
+// 11. Unanchored reversal          — a reversal that names no original at all
 //
 // Check 6 replaces a "bucket sum drift" check that compared Σ(bucket balances)
 // against the wallet total. Both sides were accumulated from the same `v` in the
@@ -47,7 +52,12 @@ export type AnomalyKind =
   | 'orphan_reversal'
   | 'reversal_mismatch'
   | 'stuck_pending'
-  | 'unattributed_bucket';
+  | 'unattributed_bucket'
+  | 'duplicate_reversal'
+  | 'reversal_wallet_mismatch'
+  | 'reversal_direction_mismatch'
+  | 'reversal_of_uncounted'
+  | 'unanchored_reversal';
 
 export type Anomaly = {
   kind: AnomalyKind;
@@ -92,6 +102,8 @@ export function reconcileLedger(txns: ReconTxn[], now: Date = new Date()): Recon
   const walletBuckets = new Map<string, Record<BucketKind, number>>();
   const walletUnattributed = new Map<string, number>();
   const wallets = new Set<string>();
+  // Completed reversals per original, in ledger order, for the duplicate check.
+  const countedReversals = new Map<string, ReconTxn[]>();
 
   for (const t of txns) {
     if (t.child_wallet_id) wallets.add(t.child_wallet_id);
@@ -112,10 +124,22 @@ export function reconcileLedger(txns: ReconTxn[], now: Date = new Date()): Recon
       }
     }
 
-    // Reversal integrity
+    // Reversal integrity. A reversal undoes its original only when it is the one
+    // counted reversal of a counted original, in the same wallet, pointing the
+    // other way, for the same cents. Each way it can miss is reported on its
+    // own: one row can be wrong in several of them at once.
     if (t.type === 'reversal') {
       reversalCount += 1;
-      if (t.reverses_id) {
+      if (!t.reverses_id) {
+        // Medium, like unattributed money: `reverses_id` is ON DELETE SET NULL,
+        // so this is also a reversal whose original row was deleted. The figure
+        // may be right; nothing left in the ledger can show that it is.
+        anomalies.push({
+          kind: 'unanchored_reversal', severity: 'medium', childWalletId: t.child_wallet_id,
+          detail: `Reversal ${t.id} names no original transaction, so what it undoes cannot be checked`,
+          amountCents: t.amount_cents,
+        });
+      } else {
         const orig = byId.get(t.reverses_id);
         if (!orig) {
           anomalies.push({
@@ -123,12 +147,42 @@ export function reconcileLedger(txns: ReconTxn[], now: Date = new Date()): Recon
             detail: `Reversal ${t.id} points at missing transaction ${t.reverses_id}`,
             amountCents: t.amount_cents,
           });
-        } else if (Math.trunc(orig.amount_cents) !== Math.trunc(t.amount_cents)) {
-          anomalies.push({
-            kind: 'reversal_mismatch', severity: 'high', childWalletId: t.child_wallet_id,
-            detail: `Reversal ${t.id} is ${t.amount_cents}¢ but original ${orig.id} is ${orig.amount_cents}¢`,
-            amountCents: t.amount_cents,
-          });
+        } else {
+          if (Math.trunc(orig.amount_cents) !== Math.trunc(t.amount_cents)) {
+            anomalies.push({
+              kind: 'reversal_mismatch', severity: 'high', childWalletId: t.child_wallet_id,
+              detail: `Reversal ${t.id} is ${t.amount_cents}¢ but original ${orig.id} is ${orig.amount_cents}¢`,
+              amountCents: t.amount_cents,
+            });
+          }
+          if (orig.direction === t.direction) {
+            anomalies.push({
+              kind: 'reversal_direction_mismatch', severity: 'high', childWalletId: t.child_wallet_id,
+              detail: `Reversal ${t.id} is a ${t.direction}, the same as original ${orig.id}, so it repeats it instead of undoing it`,
+              amountCents: t.amount_cents,
+            });
+          }
+          if (orig.child_wallet_id !== t.child_wallet_id) {
+            anomalies.push({
+              kind: 'reversal_wallet_mismatch', severity: 'high', childWalletId: t.child_wallet_id,
+              detail: `Reversal ${t.id} is booked to wallet ${t.child_wallet_id ?? '(none)'} `
+                + `but original ${orig.id} is in wallet ${orig.child_wallet_id ?? '(none)'}`,
+              amountCents: t.amount_cents,
+            });
+          }
+          if (t.status === 'completed') {
+            if (orig.status !== 'completed') {
+              anomalies.push({
+                kind: 'reversal_of_uncounted', severity: 'high', childWalletId: t.child_wallet_id,
+                detail: `Reversal ${t.id} is completed but original ${orig.id} is ${orig.status}, `
+                  + `so it takes back money the original never added`,
+                amountCents: t.amount_cents,
+              });
+            }
+            const counted = countedReversals.get(orig.id) ?? [];
+            counted.push(t);
+            countedReversals.set(orig.id, counted);
+          }
         }
       }
     }
@@ -148,6 +202,19 @@ export function reconcileLedger(txns: ReconTxn[], now: Date = new Date()): Recon
         unattributedCents += v;
       }
     }
+  }
+
+  // An original can be undone once. Every counted reversal past the first takes
+  // its cents out again; reported once per original, for the cents beyond one.
+  for (const [origId, counted] of countedReversals) {
+    if (counted.length < 2) continue;
+    const orig = byId.get(origId)!;
+    anomalies.push({
+      kind: 'duplicate_reversal', severity: 'high', childWalletId: orig.child_wallet_id,
+      detail: `Transaction ${orig.id} is reversed ${counted.length} times (${counted.map((r) => r.id).join(', ')}); `
+        + `it can only be undone once`,
+      amountCents: (counted.length - 1) * Math.max(0, Math.trunc(orig.amount_cents)),
+    });
   }
 
   // Per-wallet anomalies: negative total, negative bucket, unattributed money
@@ -203,6 +270,11 @@ const ANOMALY_LABELS: Record<AnomalyKind, string> = {
   reversal_mismatch: 'Reversal amount mismatch',
   stuck_pending: 'Stuck pending transaction',
   unattributed_bucket: 'Money in no bucket',
+  duplicate_reversal: 'Transaction reversed more than once',
+  reversal_wallet_mismatch: 'Reversal in a different wallet',
+  reversal_direction_mismatch: 'Reversal in the same direction',
+  reversal_of_uncounted: 'Reversal of an uncounted transaction',
+  unanchored_reversal: 'Reversal with no original',
 };
 
 export function anomalyLabel(kind: AnomalyKind): string {
