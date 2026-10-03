@@ -133,7 +133,14 @@ export function ToastProvider({ children }: { children: React.ReactNode }) {
           1.5rem) and the AI orb (bottom 6rem, its top 9.5rem up), which at
           bottom-6 the stack covered. Raised, it may instead sit over the right
           edge of the page's own content on some pages (it pauses on hover and
-          dismisses itself). A11Y-001 #2, on #778. */}
+          dismisses itself). Below lg those two controls sit in a column at the
+          right edge (3.5rem wide at right 1rem, bottom 5rem and 9rem), level
+          with the stack, so the stack stops 5rem from the right
+          (pr-[calc(5rem+var(--safe-right))]) and sits left of that column:
+          a full-width notice there took the tap meant for Quick capture, and a
+          long one or three the orb's too. Narrower, a long notice wraps to more
+          lines and reaches further up the page and into a bottom-sheet
+          dialog's lower fields. A11Y-001 #2, on #778. */}
       {/* Pause on hover AND on focus. Focus is the half that matters for the
           keyboard user this is meant to help: `onFocusCapture` fires as the
           focus lands anywhere inside the stack, including on the Undo button
@@ -151,7 +158,7 @@ export function ToastProvider({ children }: { children: React.ReactNode }) {
         onMouseLeave={resumeAll}
         onFocusCapture={pauseAll}
         onBlurCapture={resumeAll}
-        className="pointer-events-none fixed inset-x-0 bottom-[calc(5rem+var(--safe-bottom))] z-[100] flex flex-col items-center gap-2 px-4 lg:inset-x-auto lg:right-4 lg:bottom-40 lg:items-end lg:px-0"
+        className="pointer-events-none fixed inset-x-0 bottom-[calc(5rem+var(--safe-bottom))] z-[100] flex flex-col items-center gap-2 pl-4 pr-[calc(5rem+var(--safe-right))] lg:inset-x-auto lg:right-4 lg:bottom-40 lg:items-end lg:px-0"
       >
         {toasts.map((t) => {
           const Icon = ICONS[t.tone];

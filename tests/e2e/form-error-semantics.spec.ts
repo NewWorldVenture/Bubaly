@@ -361,14 +361,16 @@ test.describe('form errors: what an invalid, refused and recovered submit expose
       }
 
       if (width === 390) {
-        test('contacts at 390 px: the notice keeps its mobile place, centred above the tab bar', async ({ page }) => {
+        test('contacts at 390 px: the notice sits above the tab bar, left of the corner buttons', async ({ page }) => {
           const { dialog } = await openNewContact(page);
           await dialog.getByRole('button', { name: 'Add Contact' }).click();
           await expect(alertsReading(page, COPY.nameRequired)).toHaveCount(1);
           const [box] = await toastBoxes(page);
-          // px-4 either side and full width: 390 - 2 x 16.
+          // pl-4, and pr-[calc(5rem+var(--safe-right))]: the corner column
+          // (Quick capture and the orb, 3.5rem wide at right 1rem) plus a
+          // 0.5rem gap. 390 - 16 - 64 = 310.
           expect(Math.abs(box.left - 16)).toBeLessThanOrEqual(1);
-          expect(Math.abs(box.right - (390 - 16))).toBeLessThanOrEqual(1);
+          expect(Math.abs(box.right - (390 - 80))).toBeLessThanOrEqual(1);
           // bottom-[calc(5rem+var(--safe-bottom))]: the stack (not a toast,
           // which fades in from below) ends clear of the 4rem tab bar.
           const stackBottom = await page.evaluate(() => document.querySelector('.pointer-events-none.fixed:has(> [role="alert"])')!.getBoundingClientRect().bottom);
@@ -382,21 +384,24 @@ test.describe('form errors: what an invalid, refused and recovered submit expose
       // bottom 1.5rem and 6rem, right 1.5rem; below lg at bottom 5rem and 9rem
       // (plus the safe area), right 1rem. From lg the toast stack sits at the
       // same edge (right 1rem), lifted to bottom 10rem, clear of the orb's top
-      // at 9.5rem; below lg it sits bottom-centre above the tab bar, where a
-      // notice can sit over either button. These cases put up one short
-      // notice, one long one (German, the longest the contact form can be
-      // made to say) and three at once on /dashboard/contacts with no dialog
-      // open, and record: every control a toast's box intersects, what a
-      // pointer at each corner button's centre lands on, and that each button
-      // is still reached and opened from the keyboard.
+      // at 9.5rem; below lg it sits above the tab bar, level with Quick
+      // capture, and stops 5rem from the right edge, left of the column both
+      // buttons sit in (3.5rem wide at right 1rem, plus a 0.5rem gap). These
+      // cases put up one short notice, one long one (German, the longest the
+      // contact form can be made to say) and three at once on
+      // /dashboard/contacts with no dialog open, and record: every control a
+      // toast's box intersects, what a pointer at each corner button's centre
+      // lands on, and that each button is still reached and opened from the
+      // keyboard.
       //
       // CORNER is the pointer half as it is today, written down rather than
-      // hidden: it is what a real pointer hits. From lg the lifted stack covers
-      // neither button and each one is under its own centre (at bottom 1.5rem
-      // it covered Quick capture, and a long notice or three the orb as well).
-      // Below lg the overlap disclosed on #778 is still open and recorded as
-      // it is. A placement change that moves either half changes this table
-      // with it. The keyboard half holds whatever the placement.
+      // hidden: it is what a real pointer hits. At every size the stack now
+      // covers neither button and each one is under its own centre. BEFORE is
+      // the same half for the placements this replaced (lg:bottom-6 from lg;
+      // full width, px-4, below lg), and the negative controls put those back
+      // in the page to show they still read as blocked. A placement change
+      // that moves either half changes these tables with it. The keyboard
+      // half holds whatever the placement.
       type CornerState = 'short' | 'long' | 'stacked';
       const CORNER_NAMES = {
         en: { capture: 'Quick capture', ai: 'Ask the AI assistant', aiSheet: 'AI assistant', ask: 'Ask Bubaly' },
@@ -513,16 +518,31 @@ test.describe('form errors: what an invalid, refused and recovered submit expose
         '1440x900 short': { covered: [], capture: QC, ai: AI },
         '1440x900 long': { covered: [], capture: DE.capture, ai: DE.ai },
         '1440x900 stacked': { covered: [], capture: QC, ai: AI },
-        // Below lg the full-width stack ends level with Quick capture's foot:
-        // a tap there lands on the notice's own Dismiss. A long notice or
-        // three reach the orb, and the language bar at the foot of this short
-        // page is under them too. Which part of a notice is under the point
-        // (its body, or Dismiss or Ausblenden) is as seen locally and is not
-        // compared; see `tapped` above.
-        '390x844 short': { covered: [QC], capture: 'toast: Dismiss', ai: AI },
-        '390x844 long': { covered: [DE.ai, DE.capture, 'Sprache ändern'], capture: 'toast', ai: 'toast: Ausblenden' },
+        // Below lg the stack stops left of the corner column, so neither
+        // button is covered and each takes its own tap. KNOWN, and kept: a
+        // long notice or three still reach the language bar at the foot of
+        // this short page (page content, not a corner control).
+        '390x844 short': { covered: [], capture: QC, ai: AI },
+        '390x844 long': { covered: ['Sprache ändern'], capture: DE.capture, ai: DE.ai },
+        '390x844 stacked': { covered: ['Change language'], capture: QC, ai: AI },
+      };
+      /** The placements this replaced, as measured on #778 (736e1ffd): from lg at bottom 1.5rem, below lg full width. */
+      const BEFORE: Record<string, CornerRow> = {
+        '1024x768 short': { covered: [QC], capture: 'toast', ai: AI },
+        '1024x768 long': { covered: [DE.ai, DE.capture], capture: 'toast', ai: 'toast' },
+        '1024x768 stacked': { covered: [AI, QC], capture: 'toast', ai: 'toast' },
+        '1280x800 short': { covered: [QC], capture: 'toast', ai: AI },
+        '1280x800 long': { covered: [DE.ai, DE.capture], capture: 'toast', ai: 'toast' },
+        '1280x800 stacked': { covered: [AI, QC], capture: 'toast', ai: 'toast' },
+        '1440x900 short': { covered: [QC], capture: 'toast', ai: AI },
+        '1440x900 long': { covered: [DE.ai, DE.capture], capture: 'toast', ai: 'toast' },
+        '1440x900 stacked': { covered: [AI, QC], capture: 'toast', ai: 'toast' },
+        '390x844 short': { covered: [QC], capture: 'toast', ai: AI },
+        '390x844 long': { covered: [DE.ai, DE.capture, 'Sprache ändern'], capture: 'toast', ai: 'toast' },
         '390x844 stacked': { covered: [AI, 'Change language', QC], capture: 'toast', ai: 'toast' },
       };
+      /** The inline style that puts the replaced placement back on the stack, in one page only. */
+      const REPLACED_PLACEMENT = (w: number): Record<string, string> => (w >= 1024 ? { bottom: '1.5rem' } : { paddingRight: '1rem' });
 
       test.describe('the toast stack and the corner buttons', () => {
         // These cases refuse the contact write with page.route. Locally, 3 of
@@ -603,39 +623,29 @@ test.describe('form errors: what an invalid, refused and recovered submit expose
               }
             });
 
-            if (w < 1024) {
-              // The negative control for the blocked rows: the same notices,
-              // moved clear of the corner in this page only (the stack's own
-              // inline style; the app's CSS is untouched), must NOT pass as
-              // blocked. Each button is then under its own centre, nothing in
-              // the stack takes either tap, and the row no longer matches.
-              test(`${w}x${h}, ${state}, moved clear (negative control): an unobstructed corner does not pass as blocked`, async ({ page }) => {
-                await page.setViewportSize({ width: w, height: h });
-                const names = CORNER_NAMES[state === 'long' ? 'de' : 'en'];
-                const notices = await raiseNotices(page, state);
-                const count = await notices.count();
-                const blocked = CORNER[`${w}x${h} ${state}`];
-                expect(matchesCorner(await cornerReport(page, names), blocked)).toBe(true);
-                // Lift the stack until its foot is 8px above the orb, the
-                // higher of the two buttons, and hold the notices again with
-                // the pointer where they now are.
-                await notices.first().evaluate((t, ai) => {
-                  const orb = Array.from(document.querySelectorAll('button')).find((b) => b.getAttribute('aria-label') === ai)!.getBoundingClientRect();
-                  (t.parentElement as HTMLElement).style.bottom = `${innerHeight - orb.top + 8}px`;
-                }, names.ai);
-                await notices.last().hover();
-                await expect(notices).toHaveCount(count);
-                const clear = await cornerReport(page, names);
-                expect(clear.covered).not.toContain(names.capture);
-                expect(clear.covered).not.toContain(names.ai);
-                expect(tapped(clear.capture)).not.toBe('toast');
-                expect(tapped(clear.ai)).not.toBe('toast');
-                expect(clear.capture).toBe(names.capture);
-                expect(clear.ai).toBe(names.ai);
-                expect(matchesCorner(clear, blocked)).toBe(false);
-                await expect(notices).toHaveCount(count);
-              });
-            }
+            // The negative control: the same notices, put back where the
+            // placement this replaced had them (the stack's own inline style,
+            // in this page only; the app's CSS is untouched), must NOT pass as
+            // clear. The obstructed corner reads as it did before the fix, and
+            // the clear row no longer matches.
+            test(`${w}x${h}, ${state}, replaced placement (negative control): an obstructed corner does not pass as clear`, async ({ page }) => {
+              await page.setViewportSize({ width: w, height: h });
+              const names = CORNER_NAMES[state === 'long' ? 'de' : 'en'];
+              const notices = await raiseNotices(page, state);
+              const count = await notices.count();
+              const clearRow = CORNER[`${w}x${h} ${state}`];
+              expect(matchesCorner(await cornerReport(page, names), clearRow)).toBe(true);
+              await notices.first().evaluate((t, style) => { Object.assign((t.parentElement as HTMLElement).style, style); }, REPLACED_PLACEMENT(w));
+              // Hold the notices again with the pointer where they now are.
+              await notices.last().hover();
+              await expect(notices).toHaveCount(count);
+              const blocked = await cornerReport(page, names);
+              expect(blocked.covered).toContain(names.capture);
+              expect(tapped(blocked.capture), 'capture: a notice takes the tap').toBe('toast');
+              expect(matchesCorner(blocked, BEFORE[`${w}x${h} ${state}`])).toBe(true);
+              expect(matchesCorner(blocked, clearRow)).toBe(false);
+              await expect(notices).toHaveCount(count);
+            });
           }
         }
       });

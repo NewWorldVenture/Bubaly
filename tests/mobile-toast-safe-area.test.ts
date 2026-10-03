@@ -25,4 +25,17 @@ describe('toast container clears the mobile bottom nav (M-033)', () => {
     expect(toast).toContain('lg:bottom-40');
     expect(toast).not.toContain('lg:bottom-6');
   });
+
+  // Below lg the corner controls sit in a column at the right edge, level
+  // with the stack (Quick capture at bottom 5rem, the orb at 9rem, both 3.5rem
+  // wide at right 1rem plus the safe area). The stack keeps 5rem clear on the
+  // right, safe-area-aware like them, so it ends left of that column; from lg
+  // lg:px-0 drops the inset (A11Y-001 #2, on #778).
+  it('stops left of the corner column below lg', () => {
+    const stack = toast.match(/className="(pointer-events-none fixed [^"]*)"/)?.[1].split(' ') ?? [];
+    expect(stack).toContain('pl-4');
+    expect(stack).toContain('pr-[calc(5rem+var(--safe-right))]');
+    expect(stack).not.toContain('px-4');
+    expect(stack).toContain('lg:px-0');
+  });
 });
