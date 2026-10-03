@@ -24,7 +24,7 @@ type Reply = { data: unknown; error: { message: string } | null };
  */
 function chainFor(reply: Reply) {
   const chain: Record<string, unknown> = {};
-  for (const method of ['select', 'eq', 'neq', 'gte', 'gt', 'lt', 'lte', 'is', 'in', 'not', 'limit', 'order']) {
+  for (const method of ['select', 'eq', 'neq', 'gte', 'gt', 'lt', 'lte', 'is', 'in', 'not', 'or', 'limit', 'order']) {
     chain[method] = () => chain;
   }
   chain.range = (from: number, to: number) => ({

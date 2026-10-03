@@ -9,7 +9,7 @@ import { loadMoneyTimeline, loadMoneyTimelineInput, planCommitments } from '@/li
 type Reply = { data: unknown; error: unknown };
 function chain(result: Reply) {
   const c: Record<string, unknown> = {};
-  for (const m of ['select', 'eq', 'neq', 'in', 'gte', 'gt', 'lte', 'lt', 'order', 'limit']) c[m] = () => c;
+  for (const m of ['select', 'eq', 'neq', 'in', 'gte', 'gt', 'lte', 'lt', 'or', 'order', 'limit']) c[m] = () => c;
   // `.range()` slices, so a paged read reaches an empty page and stops. Without
   // that a stub returning all rows to every call would page to its ceiling.
   c.range = (from: number, to: number) => ({

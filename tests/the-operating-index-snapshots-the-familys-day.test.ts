@@ -57,7 +57,10 @@ function makeDb() {
     const filter = (column: string, value: unknown) => { call.filters[column] = value; return b; };
     const reply = { data: [] as unknown[], error: null };
     Object.assign(b, {
-      select: chain, order: chain, limit: chain, in: chain, is: chain, or: chain, ilike: chain, not: chain,
+      select: chain, order: chain, limit: chain, in: chain, is: chain, ilike: chain, not: chain,
+      // The series-aware calendar read (lib/calendar/occurrences.ts) carries a
+      // window as a PostgREST `or`; a read may add more than one.
+      or: (expression: string) => { call.filters.or = [...((call.filters.or as string[] | undefined) ?? []), expression]; return b; },
       // A paged read stops at an empty page, so `.range()` has to slice.
       range: (start: number, end: number) => ({
         then: (resolve: (value: typeof reply) => void) => resolve({ ...reply, data: reply.data.slice(start, end + 1) }),
@@ -90,11 +93,23 @@ async function run(tz: string, now: Date) {
     billsHorizon: calls.find((c) => c.table === 'bills')?.filters['lte:due_date'],
     docsHorizon: calls.find((c) => c.table === 'documents')?.filters['lte:expires_at'],
     expensesFloor: calls.find((c) => c.table === 'transactions')?.filters['gte:date'],
-    // Only the orchestrator's "tomorrow" read bounds starts_at with `.lt()`;
-    // every other calendar read uses `.lte()`.
-    tomorrowFrom: calls.find((c) => c.table === 'calendar_events' && 'lt:starts_at' in c.filters)?.filters['gte:starts_at'],
-    tomorrowUntil: calls.find((c) => c.table === 'calendar_events' && 'lt:starts_at' in c.filters)?.filters['lt:starts_at'],
+    // Every calendar read is series-aware now and carries its window as the
+    // one-off read's `or`: timed rows by instant, all-day rows by family date.
+    // The orchestrator's "tomorrow" is the one whose date half spans ONE day;
+    // the snapshot's week and the missing-location fortnight span more.
+    tomorrowFrom: tomorrowWindow(calls)?.[1],
+    tomorrowUntil: tomorrowWindow(calls)?.[2],
   };
+}
+
+const WINDOW = /and\(all_day\.eq\.false,starts_at\.gte\.([^,]+),starts_at\.lt\.([^)]+)\),and\(all_day\.eq\.true,starts_at\.gte\.(\d{4}-\d{2}-\d{2})T00:00:00\.000Z,starts_at\.lt\.(\d{4}-\d{2}-\d{2})T00:00:00\.000Z\)/;
+function tomorrowWindow(calls: Call[]): RegExpExecArray | null {
+  for (const call of calls) {
+    if (call.table !== 'calendar_events' || !Array.isArray(call.filters.or)) continue;
+    const match = WINDOW.exec(String((call.filters.or as string[])[0]));
+    if (match && Date.parse(`${match[4]}T00:00:00Z`) - Date.parse(`${match[3]}T00:00:00Z`) === 86_400_000) return match;
+  }
+  return null;
 }
 
 describe("the operating index snapshots the family's day, not Greenwich's", () => {

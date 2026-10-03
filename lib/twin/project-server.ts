@@ -5,6 +5,8 @@
 // service client (the cron passes the service client + null creator).
 
 import type { SupabaseClient } from '@supabase/supabase-js';
+import { readCalendarOccurrences } from '@/lib/calendar/occurrences';
+import { instantCalendarBounds } from '@/lib/briefing/calendar-window';
 import { settleAll } from '@/lib/supabase/settle';
 import type { Database } from '@/lib/database.types';
 import {
@@ -58,7 +60,7 @@ function firstReadFailure(reads: Array<[string, { error: { message: string } | n
   return null;
 }
 
-export async function runTwinProjection(sb: DB, familyId: string, createdBy: string | null, now: Date = new Date()): Promise<TwinProjectionResult> {
+export async function runTwinProjection(sb: DB, familyId: string, createdBy: string | null, now: Date = new Date(), tz = 'UTC'): Promise<TwinProjectionResult> {
   const eventRange = eventWindow(now);
   const [members, pets, vehicles, classes, teams, routines, places, accounts, providers] = await settleAll([
     sb.from('family_members').select('id, display_name').eq('family_id', familyId).eq('is_active', true),
@@ -80,9 +82,11 @@ export async function runTwinProjection(sb: DB, familyId: string, createdBy: str
     // unordered `.limit()` returns an arbitrary — and run-to-run different —
     // page. The calendar takes the soonest events, which is the half worth
     // keeping; everything else takes a deterministic slice by id.
-    sb.from('calendar_events').select('id, title, starts_at, ends_at, all_day, category, location, assignee_id')
-      .eq('family_id', familyId).gte('starts_at', eventRange.from).lt('starts_at', eventRange.to)
-      .order('starts_at', { ascending: true }).order('id', { ascending: true }).limit(ROW_LIMIT),
+    // Series included, expanded in the family's zone (`tz`), soonest first
+    // (lib/calendar/occurrences.ts orders by start then id).
+    readCalendarOccurrences(sb, familyId, instantCalendarBounds(eventRange.from, new Date(Date.parse(eventRange.to) - 1).toISOString(), tz), tz, {
+      columns: ['id', 'title', 'starts_at', 'ends_at', 'all_day', 'category', 'location', 'assignee_id'], limit: ROW_LIMIT,
+    }),
     sb.from('homes').select('id, name').eq('family_id', familyId).is('deleted_at', null),
     sb.from('home_locations').select('id, name, kind').eq('family_id', familyId).order('id', { ascending: true }).limit(ROW_LIMIT),
     sb.from('home_assets').select('id, name, category, home_id, location, warranty_until')

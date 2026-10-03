@@ -12,6 +12,8 @@
 // call). An event nobody has planned a departure for falls back to the
 // category buffer, and the model says which it used.
 import 'server-only';
+import { readCalendarOccurrences } from '@/lib/calendar/occurrences';
+import { instantCalendarBounds } from '@/lib/briefing/calendar-window';
 import type { SupabaseClient } from '@supabase/supabase-js';
 import type { Database } from '@/lib/database.types';
 import { describeDbError } from '@/lib/supabase/errors';
@@ -59,11 +61,13 @@ export async function loadScheduleIntelligence(db: Db, opts: LoadScheduleOptions
   const familyId = opts.familyId;
 
   const [eventsRes, membersRes, ridesRes, vehiclesRes, mealsRes, sittersRes, plansRes] = await settleAll([
-    db.from('calendar_events')
-      .select('id, title, category, location, starts_at, ends_at, all_day, assignee_id, description')
-      .eq('family_id', familyId).eq('all_day', false)
-      .gte('starts_at', fromIso).lt('starts_at', toIso)
-      .order('starts_at', { ascending: true }).limit(opts.eventLimit ?? 200),
+    // Timed events only, series included: the weekly lesson needs its drive
+    // every week (lib/calendar/occurrences.ts).
+    readCalendarOccurrences(db, familyId, instantCalendarBounds(fromIso, new Date(toMs - 1).toISOString(), opts.tz), opts.tz, {
+      columns: ['id', 'title', 'category', 'location', 'starts_at', 'ends_at', 'all_day', 'assignee_id', 'description'],
+      refine: (query) => query.eq('all_day', false),
+      limit: opts.eventLimit ?? 200,
+    }),
     db.from('family_members')
       .select('id, display_name, role, is_active')
       .eq('family_id', familyId).eq('is_active', true).limit(50),

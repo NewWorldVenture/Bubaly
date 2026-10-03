@@ -61,6 +61,7 @@ export type OccurrenceFilters = {
   neq(column: string, value: unknown): OccurrenceFilters;
   in(column: string, values: readonly unknown[]): OccurrenceFilters;
   ilike(column: string, pattern: string): OccurrenceFilters;
+  is(column: string, value: boolean | null): OccurrenceFilters;
   not(column: string, operator: string, value: unknown): OccurrenceFilters;
 };
 

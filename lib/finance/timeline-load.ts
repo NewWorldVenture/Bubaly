@@ -38,6 +38,8 @@
 // from that module", the same way the CFO page degrades.
 
 import type { SupabaseClient } from '@supabase/supabase-js';
+import { readCalendarOccurrences } from '@/lib/calendar/occurrences';
+import { instantCalendarBounds } from '@/lib/briefing/calendar-window';
 import { settleAll } from '@/lib/supabase/settle';
 import type { Database } from '@/lib/database.types';
 import { isMissingTableError } from '@/lib/supabase/errors';
@@ -224,12 +226,10 @@ export async function loadMoneyTimelineInput(
     supabase.from('financial_accounts')
       .select('balance, type')
       .eq('family_id', familyId).limit(200),
-    supabase.from('calendar_events')
-      .select('title, starts_at')
-      .eq('family_id', familyId)
-      .gte('starts_at', todayStartIso)
-      .lt('starts_at', horizonEndIso)
-      .order('starts_at').limit(500),
+    // Series included: a weekly event is on the money timeline every week (lib/calendar/occurrences.ts).
+    readCalendarOccurrences(supabase, familyId, instantCalendarBounds(todayStartIso, new Date(Date.parse(horizonEndIso) - 1).toISOString(), tz), tz, {
+      columns: ['title', 'starts_at'], limit: 500,
+    }),
     supabase.from('subscriptions_tracked')
       .select('name, cost_cents, cadence, status, next_charge, category')
       .eq('family_id', familyId)

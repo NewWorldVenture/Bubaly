@@ -37,6 +37,8 @@
 // adding N × 86_400_000 ms: a local day is 23 or 25 hours twice a year, so the
 // fixed-millisecond form lands an hour off and formats as the wrong day.
 import type { SupabaseClient } from '@supabase/supabase-js';
+import { readCalendarOccurrences } from '@/lib/calendar/occurrences';
+import { instantCalendarBounds } from '@/lib/briefing/calendar-window';
 import { settleAll } from '@/lib/supabase/settle';
 import type { Database } from '@/lib/database.types';
 import { buildSuggestions, confidenceTier, type FamilySnapshot } from '@/lib/autopilot/engine';
@@ -171,7 +173,10 @@ export async function runAutopilotScan(
     supabase.from('family_members').select('id, display_name, birthday').eq('family_id', familyId).eq('is_active', true).not('birthday', 'is', null).limit(50),
     supabase.from('grocery_items').select('id, name, created_at, is_checked').eq('family_id', familyId).eq('is_checked', false).limit(200),
     supabase.from('reminders').select('related_id').eq('family_id', familyId).eq('related_type', 'appointment').eq('is_done', false).limit(200),
-    supabase.from('calendar_events').select('id, title, starts_at, ends_at, assignee_id, all_day, location').eq('family_id', familyId).gte('starts_at', startIso).lt('starts_at', in3Iso).limit(100),
+    // Series included: tomorrow's weekly lesson is tomorrow's every week (lib/calendar/occurrences.ts).
+    readCalendarOccurrences(supabase, familyId, instantCalendarBounds(startIso, new Date(Date.parse(in3Iso) - 1).toISOString(), tz), tz, {
+      columns: ['id', 'title', 'starts_at', 'ends_at', 'assignee_id', 'all_day', 'location'], limit: 100,
+    }),
     supabase.from('subscriptions_tracked').select('id, name, cost_cents, cadence, next_charge, last_used, status').eq('family_id', familyId).in('status', ['active', 'trial']).limit(200),
     supabase.from('family_stress_signals').select('member_id, weight, occurred_on').eq('family_id', familyId).eq('status', 'active').gte('occurred_on', since8Key).limit(500),
     supabase.from('medications').select('id, name, member_id, refill_on, refill_reminder_days').eq('family_id', familyId).eq('is_active', true).not('refill_on', 'is', null).limit(200),

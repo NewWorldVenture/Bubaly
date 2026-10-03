@@ -7,6 +7,8 @@
 // are read; the engines stay pure.
 
 import type { SupabaseClient } from '@supabase/supabase-js';
+import { readCalendarOccurrences } from '@/lib/calendar/occurrences';
+import { instantCalendarBounds } from '@/lib/briefing/calendar-window';
 import type { Database } from '@/lib/database.types';
 import { detectConflicts, type ConflictEvent } from '@/lib/home/conflicts';
 import {
@@ -38,7 +40,7 @@ const DAY = 86_400_000;
  * the reasoning report word budget drift again from `evidence` for theirs, and
  * the proactive AI context in en-US (signalWordsFor in ./hard-signals).
  */
-export async function runSignalDetection(sb: DB, familyId: string, locale: LocaleCode, t: Translate, now: Date = new Date()): Promise<SignalDetectionResult> {
+export async function runSignalDetection(sb: DB, familyId: string, locale: LocaleCode, t: Translate, now: Date = new Date(), tz = 'UTC'): Promise<SignalDetectionResult> {
   const since90 = new Date(now.getTime() - 90 * DAY).toISOString();
   const windowStart = new Date(now.getTime() - 21 * DAY).toISOString();
   const windowEnd = new Date(now.getTime() + 14 * DAY).toISOString();
@@ -54,11 +56,11 @@ export async function runSignalDetection(sb: DB, familyId: string, locale: Local
       .select('id, title, remind_at, status, completed_at, member_id')
       .eq('family_id', familyId).not('remind_at', 'is', null)
       .gte('remind_at', since90).order('id').range(from, to), { max: 2000 }),
-    readAllAsQuery((from, to) => sb.from('calendar_events')
-      .select('id, title, starts_at, ends_at, assignee_id')
-      .eq('family_id', familyId)
-      .gte('starts_at', windowStart).lte('starts_at', windowEnd)
-      .order('id').range(from, to), { max: 2000 }),
+    // Series included, expanded in the family's zone (`tz`): a weekly event is
+    // in the five-week window every week (lib/calendar/occurrences.ts).
+    readCalendarOccurrences(sb, familyId, instantCalendarBounds(windowStart, windowEnd, tz), tz, {
+      columns: ['id', 'title', 'starts_at', 'ends_at', 'assignee_id'],
+    }),
     readAllAsQuery((from, to) => sb.from('chore_assignments')
       .select('chore_id, status, disputed, member_id, chores(title)')
       .eq('family_id', familyId).gte('created_at', since90)

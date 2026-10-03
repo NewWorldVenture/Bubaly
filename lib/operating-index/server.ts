@@ -10,6 +10,8 @@
 // inventory, events missing a location, and threads the family hasn't caught up
 // on. Nothing is hardcoded to a stub.
 import 'server-only';
+import { readCalendarOccurrences } from '@/lib/calendar/occurrences';
+import { briefingCalendarBounds, instantCalendarBounds } from '@/lib/briefing/calendar-window';
 import { settleAll } from '@/lib/supabase/settle';
 import type { SupabaseClient } from '@supabase/supabase-js';
 import type { Database, Json, TaskStatus, EventCategory } from '@/lib/database.types';
@@ -109,8 +111,10 @@ export async function buildSnapshot(supabase: DB, familyId: string, tz: string, 
     budgetsRes, expensesRes, accountsRes, pantryRes, messagesRes,
   ] = await settleAll([
     supabase.from('family_members').select('id, display_name').eq('family_id', familyId).eq('is_active', true),
-    supabase.from('calendar_events').select('id, title, starts_at, ends_at, all_day, assignee_id, location, category')
-      .eq('family_id', familyId).gte('starts_at', nowIso).lte('starts_at', in7).order('starts_at').limit(400),
+    // Series included: a weekly lesson is part of the week's load every week (lib/calendar/occurrences.ts).
+    readCalendarOccurrences(supabase, familyId, instantCalendarBounds(nowIso, in7, tz), tz, {
+      columns: ['id', 'title', 'starts_at', 'ends_at', 'all_day', 'assignee_id', 'location', 'category'], limit: 400,
+    }),
     supabase.from('family_reminders').select('id, remind_at, status')
       .eq('family_id', familyId).eq('status', 'active').not('remind_at', 'is', null).lt('remind_at', nowIso).limit(200),
     supabase.from('chore_assignments').select('id, status').eq('family_id', familyId).gte('created_at', since7).limit(500),
@@ -263,14 +267,18 @@ async function buildOrchestratorReport(
   const in14 = new Date(now.getTime() + 14 * DAY_MS).toISOString();
 
   const [tomorrowRes, autoRes, approvalsRes, missingRes] = await settleAll([
-    supabase.from('calendar_events').select('id, title, starts_at, ends_at, all_day, assignee_id, location, category')
-      .eq('family_id', familyId).gte('starts_at', startOfTomorrow.toISOString()).lt('starts_at', startOfDayAfter.toISOString()).order('starts_at').limit(200),
+    // Tomorrow on the family's wall, series included.
+    readCalendarOccurrences(supabase, familyId, briefingCalendarBounds(tomorrowKey, tz, 0, 1), tz, {
+      columns: ['id', 'title', 'starts_at', 'ends_at', 'all_day', 'assignee_id', 'location', 'category'], limit: 200,
+    }),
     supabase.from('autopilot_suggestions').select('id, title, action_label')
       .eq('family_id', familyId).eq('status', 'open').gte('confidence', AUTO_CONFIDENCE).order('urgency', { ascending: false }).limit(10),
     supabase.from('approval_requests').select('id, title').eq('family_id', familyId).eq('status', 'pending').order('created_at').limit(10),
-    supabase.from('calendar_events').select('id, title, starts_at, location, category')
-      .eq('family_id', familyId).is('location', null).gte('starts_at', nowIso).lte('starts_at', in14)
-      .in('category', NEEDS_LOCATION_LIST).order('starts_at').limit(10),
+    readCalendarOccurrences(supabase, familyId, instantCalendarBounds(nowIso, in14, tz), tz, {
+      columns: ['id', 'title', 'starts_at', 'location', 'category'],
+      refine: (query) => query.is('location', null).in('category', NEEDS_LOCATION_LIST),
+      limit: 10,
+    }),
   ]);
 
   const readError = [tomorrowRes.error, autoRes.error, approvalsRes.error, missingRes.error].find(Boolean);

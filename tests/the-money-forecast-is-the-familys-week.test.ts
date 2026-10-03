@@ -76,6 +76,9 @@ function fakeSupabase(results: Record<string, Reply>, filters: Filter[] = []): S
     for (const op of ['eq', 'neq', 'in', 'gte', 'lte', 'gt', 'lt']) {
       c[op] = (column: string, value: unknown) => { filters.push({ table, op, column, value }); return c; };
     }
+    // The series-aware calendar read (lib/calendar/occurrences.ts) carries its
+    // window as a PostgREST `or` expression; recorded under an empty column.
+    c.or = (expression: string) => { filters.push({ table, op: 'or', column: '', value: expression }); return c; };
     c.range = (from: number, to: number) => ({
       then: (res: (v: Reply) => unknown, rej?: (e: unknown) => unknown) => Promise.resolve(
         Array.isArray(result.data) ? { ...result, data: result.data.slice(from, to + 1) } : result,
@@ -146,8 +149,11 @@ describe("the money forecast asks the family's day, not Greenwich's", () => {
     expect(bound(filters, 'vacations', 'lte', 'start_date'), label(c)).toBe(c.horizonEnd);
     // The one timestamptz column is bounded by instants — local midnight of the
     // family's today, and local midnight after the horizon's last family day.
-    expect(bound(filters, 'calendar_events', 'gte', 'starts_at'), label(c)).toBe(c.midnightIso);
-    expect(typeof bound(filters, 'calendar_events', 'lt', 'starts_at')).toBe('string');
+    // The calendar is read series-aware: the one-offs carry the window as an
+    // `or` (timed rows by instant, all-day rows by date) and the series read
+    // reaches every series that started by the window's end.
+    expect(bound(filters, 'calendar_events', 'or', ''), label(c)).toContain(`starts_at.gte.${c.midnightIso},starts_at.lt.`);
+    expect(typeof bound(filters, 'calendar_events', 'lte', 'starts_at')).toBe('string');
   });
 
   it.each(CASES)('hands the brain the family day, so the forecast starts on the family week ($tz, $week)', async (c) => {
