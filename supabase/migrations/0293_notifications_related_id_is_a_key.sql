@@ -32,8 +32,21 @@
 -- Verified before: inserting 'moment:<uuid>:<date>' raises 22P02.
 -- Verified after: the same insert succeeds and the dedupe read matches it.
 
-alter table public.notifications
-  alter column related_id type text using related_id::text;
+-- Later restrictive policies reference this column. Reissuing ALTER TYPE even
+-- when it is already text fails on those dependencies during a full replay.
+-- Skip only that redundant alteration; retain every dependent policy.
+do $$
+begin
+  if not exists (
+    select 1 from pg_catalog.pg_attribute
+    where attrelid = 'public.notifications'::regclass
+      and attname = 'related_id' and not attisdropped
+      and atttypid = 'pg_catalog.text'::regtype
+  ) then
+    alter table public.notifications
+      alter column related_id type text using related_id::text;
+  end if;
+end $$;
 
 do $$
 begin

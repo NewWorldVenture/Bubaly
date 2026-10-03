@@ -85,6 +85,18 @@ try {
   file('docs/audit/messaging-legacy-fixture.sql');
   file('supabase/migrations/0475_messaging_conversation_privacy_and_delivery.sql');
   file('supabase/migrations/0476_messaging_notifications_preferences.sql');
+  // Replaying older migrations must retain policies installed by newer ones.
+  // 0476's restrictive notice policy references notifications.related_id;
+  // even ALTER TYPE text -> text fails while that dependency exists.
+  file('supabase/migrations/0293_notifications_related_id_is_a_key.sql');
+  sql(`do $$ begin
+    if not exists (select 1 from pg_policies where schemaname='public'
+      and tablename='notifications' and policyname='message_notice_current_access'
+      and permissive='RESTRICTIVE') then
+      raise exception 'Reapplying 0293 removed the restrictive message notice policy';
+    end if;
+  end $$;`);
+  console.log('PASS: 0293 reapplies after 0476 without removing its restrictive notice policy.');
   // Full-replay CI also reapplies migrations to an existing schema.
   file('supabase/migrations/0475_messaging_conversation_privacy_and_delivery.sql');
   file('supabase/migrations/0476_messaging_notifications_preferences.sql');
