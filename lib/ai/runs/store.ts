@@ -120,16 +120,16 @@ export async function createRequest(
   if (!text) return fail('Tell Bubaly what you need.', { code: SERVICE_CODES.invalidInput });
 
   const kind = (REQUEST_KINDS as readonly string[]).includes(input.kind) ? (input.kind as AiRequestKind) : 'concierge';
-  // Only a concierge request is the person's own filing, checked by RLS on
-  // their client. 0255 lets a member insert that kind and no other ("feature,
-  // routine, trigger and handle_it requests are filed by server code"), so
-  // filing a `feature` row — every surface behind `withAiRequest` — on the
-  // member's client was refused, every time: no assistant turn, brief or coach
-  // run was ever recorded, and the Free plan's monthly allowance, which counts
-  // these rows, never counted them (2026-09-27 page audit, P-10). Server code
-  // files the other kinds on the ledger client, with the family and requester
-  // taken from the verified scope as above.
-  const db = opts?.db ?? (kind === 'concierge' ? scope.db : ledgerClient(scope, opts));
+  // Every kind is filed by server code on the ledger client, with the family and
+  // requester taken from the verified scope. A concierge request used to be
+  // filed on the member's own client under 0255's INSERT policy, but that
+  // policy let a member write ai_requests rows directly through the Data API —
+  // rows the F19 meter counts, filed outside the admission's per-family lock,
+  // and free to say `metered = false` (#892 review 4174949251). 0477 withdraws
+  // INSERT from `authenticated`; this is the one way in. (Before that, filing a
+  // `feature` row on the member's client was refused outright: 2026-09-27 page
+  // audit, P-10.)
+  const db = opts?.db ?? ledgerClient(scope, opts);
 
   const metered = !input.unmetered && scope.actorKind !== 'system';
 

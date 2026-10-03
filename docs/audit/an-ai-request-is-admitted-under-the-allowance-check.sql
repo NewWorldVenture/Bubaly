@@ -21,7 +21,12 @@
 --   7. a plain insert that says nothing about `metered` is metered (the
 --      column's default — every writer that predates 0477 stays counted);
 --   8. no client role may execute the function: only the ledger client
---      (service_role) admits.
+--      (service_role) admits;
+--   9. no client role may INSERT a request row (#892 review 4174949251): a
+--      member's own concierge insert — the 0255 policy's shape, default or
+--      `metered = false` — is refused, so nothing is counted outside the lock;
+--      NEGATIVE CONTROL: with 0255's policy and grant restored, the same
+--      member's insert lands, so the refusal is what 0477 changed.
 --
 -- Concurrency itself (the per-family advisory lock) needs several sessions and
 -- is proven by the local multi-session script in docs/audit/f19-atomic-
@@ -37,6 +42,7 @@ begin;
 
 insert into auth.users (id, email) values (:'UA', 'f19-admission-probe@example.com') on conflict do nothing;
 insert into public.families (id, name, created_by) values (:'FA', 'Admission Probe House', :'UA') on conflict do nothing;
+insert into public.family_members (family_id, user_id, role, display_name, is_active) values (:'FA', :'UA', 'parent', 'Probe Parent', true) on conflict do nothing;
 
 do $$
 declare
@@ -54,6 +60,43 @@ begin
   if not has_function_privilege('service_role', fn, 'execute') then
     failures := array_append(failures, 'service_role cannot execute admit_ai_request, so no capped request can be filed');
   end if;
+
+  -- 9. A member cannot file a request row directly (the reviewer's repro).
+  perform set_config('request.jwt.claims', json_build_object('sub', '00000000-0000-4000-8000-00000000f191', 'role', 'authenticated')::text, true);
+  perform set_config('role', 'authenticated', true);
+  begin
+    insert into public.ai_requests (family_id, requested_by, kind, request_text, status)
+      values (fam, '00000000-0000-4000-8000-00000000f191', 'concierge', 'Probe direct insert', 'queued');
+    failures := array_append(failures, 'a member inserted a concierge row directly: it is counted outside the admission lock, with no model call');
+  exception when insufficient_privilege then null;
+  end;
+  begin
+    insert into public.ai_requests (family_id, requested_by, kind, request_text, status, metered)
+      values (fam, '00000000-0000-4000-8000-00000000f191', 'concierge', 'Probe direct unmetered', 'queued', false);
+    failures := array_append(failures, 'a member inserted a row with metered = false: the meter is the caller''s to choose');
+  exception when insufficient_privilege then null;
+  end;
+  perform set_config('role', 'none', true);
+  if has_table_privilege('authenticated', 'public.ai_requests', 'insert') or has_table_privilege('anon', 'public.ai_requests', 'insert') then
+    failures := array_append(failures, 'a client role holds INSERT on ai_requests');
+  end if;
+  -- NEGATIVE CONTROL: restore 0255's grant and policy; the same insert lands.
+  begin
+    grant insert on public.ai_requests to authenticated;
+    create policy ai_requests_insert_probe on public.ai_requests for insert to authenticated
+      with check (public.is_family_member(family_id) and requested_by = auth.uid() and kind = 'concierge' and status = 'queued');
+    perform set_config('role', 'authenticated', true);
+    insert into public.ai_requests (family_id, requested_by, kind, request_text, status)
+      values (fam, '00000000-0000-4000-8000-00000000f191', 'concierge', 'Probe control insert', 'queued');
+    perform set_config('role', 'none', true);
+    raise exception using errcode = 'P0001', message = 'probe-rollback';
+  exception
+    when sqlstate 'P0001' then
+      if sqlerrm <> 'probe-rollback' then raise; end if;
+    when insufficient_privilege then
+      failures := array_append(failures, 'negative control: with 0255''s policy restored the member still could not insert — check 9 does not show what 0477 changed');
+  end;
+  perform set_config('role', 'none', true);
 
   -- 7. The column's default keeps every older writer counted.
   insert into public.ai_requests (family_id, kind, feature, request_text, status)
@@ -122,7 +165,7 @@ begin
   if array_length(failures, 1) > 0 then
     raise exception E'0477 admission probe failed:\n  - %', array_to_string(failures, E'\n  - ');
   end if;
-  raise notice '0477 admission probe: 8 assertions hold (admit at 9, refuse at 10, exempt rows uncounted with a negative control, month window, retry key, default, privileges)';
+  raise notice '0477 admission probe: 9 assertions hold (admit at 9, refuse at 10, exempt rows uncounted with a negative control, month window, retry key, default, function privileges, no client insert with a negative control)';
 end
 $$;
 

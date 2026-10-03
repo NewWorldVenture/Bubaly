@@ -67,6 +67,11 @@ If the TypeScript ships **before** the migration, the RPC fails with
 - Capped (Free) families are refused rather than metered loosely. This **fails safe**,
   in the same way as an `AiRequestNotFiled` that is already in place.
 - A member's own request on an unlimited plan files as before.
+- 0477 also revokes `authenticated` INSERT on `ai_requests` (#892 review
+  4174949251): no client can file a counted row outside the lock or choose
+  `metered`. The code files every kind on the ledger client. With the
+  migration applied before the code, the old code's member-session concierge
+  insert is refused until the code ships, so deploy the two together.
 - On every plan, work filed unmetered (`metered = false`: exempt surfaces, system
   intake, routines) needs the column: exempt work runs unrecorded, and a system
   intake or routine reports failure until 0477 is applied.

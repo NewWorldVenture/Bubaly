@@ -4094,7 +4094,23 @@ On **every** plan, unlimited ones included:
   reports failure until 0477 is applied — the routine does not run.
 
 A member's own request on an unlimited plan files as before (it names no new
-column). **Apply 0477 first.**
+column).
+
+**0477 also withdraws INSERT on `ai_requests` from `authenticated` and `anon`**
+(#892 review 4174949251). 0255's member policy let a signed-in member file
+concierge rows directly through the Data API. Those rows counted toward the
+allowance outside the admission lock and with no model call, and the member
+could mark them `metered = false`. The application now files every request on
+the ledger (service) client.
+
+**Deploy together.** If they cannot ship together:
+- **Migration first:** the previous code files an unlimited-plan concierge
+  request through the member's session, and that insert is now refused
+  ("could not file the request") until the code ships.
+- **Code first:** exempt work goes unrecorded and system intake fails, as
+  described above.
+
+Prefer the window that matters least to the families on the plans involved.
 
 **Rollback:** `drop function if exists public.admit_ai_request(uuid, integer, text, text, uuid, uuid, uuid, text, text, text, smallint, text, timestamptz); alter table public.ai_requests drop column if exists metered;`
 together with reverting the application change. With only the database rolled

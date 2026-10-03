@@ -150,6 +150,17 @@ comment on function public.admit_ai_request(uuid, integer, text, text, uuid, uui
 revoke all on function public.admit_ai_request(uuid, integer, text, text, uuid, uuid, uuid, text, text, text, smallint, text, timestamptz) from public, anon, authenticated;
 grant execute on function public.admit_ai_request(uuid, integer, text, text, uuid, uuid, uuid, text, text, text, smallint, text, timestamptz) to service_role;
 
+-- ── No client writes a request row (#892 review 4174949251) ───────────────────
+-- 0255 left members an INSERT policy for their own `concierge` rows. Through
+-- the Data API that let a member file rows the meter counts WITHOUT this lock
+-- (the count-then-insert race this migration closes, reopened by hand) and
+-- without any model call — ten inserts spend a Free family's month — and choose
+-- `metered = false` on their own rows. Every request row is now filed by server
+-- code: `createRequest` on the ledger client, admitted here when the plan is
+-- capped. Members keep reading the ledger (0250's SELECT policy).
+drop policy if exists ai_requests_insert on public.ai_requests;
+revoke insert on public.ai_requests from anon, authenticated;
+
 do $check$
 declare
   fn text := 'public.admit_ai_request(uuid, integer, text, text, uuid, uuid, uuid, text, text, text, smallint, text, timestamptz)';
@@ -166,6 +177,9 @@ begin
        and is_nullable = 'NO' and column_default = 'true'
   ) then
     raise exception '0477: ai_requests.metered must be NOT NULL DEFAULT true, or existing rows and writers would stop being counted';
+  end if;
+  if has_table_privilege('authenticated', 'public.ai_requests', 'insert') or has_table_privilege('anon', 'public.ai_requests', 'insert') then
+    raise exception '0477: a client role can still insert into ai_requests, outside the admission lock';
   end if;
 end
 $check$;

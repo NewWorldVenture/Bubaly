@@ -28,6 +28,15 @@ const planRequest = vi.fn();
 vi.mock('@/lib/ai/context/builder', () => ({ buildContext: (...args: unknown[]) => buildContext(...args) }));
 vi.mock('@/lib/ai/planner', () => ({ planRequest: (...args: unknown[]) => planRequest(...args) }));
 vi.mock('@/lib/ai/runs/continue', () => ({ kickRun: vi.fn() }));
+// Every request row is filed on the ledger client (0477 withdraws member
+// INSERT, #892 review 4174949251): here, the same in-memory database. An
+// unlimited plan, so the launch files plainly — the allowance is not what this
+// file tests (tests/f19-intake-admission-is-atomic.test.ts is).
+vi.mock('@/lib/supabase/server', () => ({ createServiceClient: () => db, createServer: async () => db }));
+vi.mock('@/lib/server/plan', async (importOriginal) => ({
+  ...(await importOriginal<typeof import('@/lib/server/plan')>()),
+  resolveFamilyPlanLevel: async () => 1,
+}));
 
 const { submitRequest } = await import('@/lib/ai/runs/intake');
 

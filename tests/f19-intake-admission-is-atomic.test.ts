@@ -296,7 +296,7 @@ describe('F19: the concierge intake admits its request atomically', () => {
     });
   });
 
-  it('an unlimited plan files plainly on the member client and is never refused', async () => {
+  it('an unlimited plan files plainly on the ledger client (0477: no member INSERT) and is never refused', async () => {
     state.planLevel = 1;
     seed(25);
     const kick = vi.fn();
@@ -307,7 +307,7 @@ describe('F19: the concierge intake admits its request atomically', () => {
     expect(results.every((r) => r.ok)).toBe(true);
     expect(rows()).toHaveLength(27);
     expect(state.rpcCalls).toHaveLength(0);
-    expect(state.inserts).toEqual(['member', 'member']);
+    expect(state.inserts).toEqual(['ledger', 'ledger']);
     expect(planRequest).toHaveBeenCalledTimes(2);
   });
 
@@ -348,7 +348,7 @@ describe('F19: the concierge intake admits its request atomically', () => {
     const filed = await submitRequest(scope(), { text: 'Plan our week' }, { kick: vi.fn() });
     expect(filed.ok).toBe(true);
     expect(state.rpcCalls).toHaveLength(0);
-    expect(state.inserts).toEqual(['member']);
+    expect(state.inserts).toEqual(['ledger']);
   });
 
   it('the admitted row carries the requester from the verified scope, and the intake\'s columns', async () => {
