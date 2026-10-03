@@ -46,7 +46,7 @@ vi.mock('@/lib/supabase/server', () => ({ createServer: async () => state.db, cr
 
 const { choreRepeats, nextChoreDueAt } = await import('@/lib/chores/respawn');
 const { nextRemindAt } = await import('@/lib/reminders/details');
-const { respawnChoreAssignment } = await import('@/lib/services/tasks');
+const { completeChoreAssignment, respawnChoreAssignment } = await import('@/lib/services/tasks');
 const { makeKey } = await import('@/lib/services/idempotency');
 const { approveSubmissionAction } = await import('@/app/(app)/missions/actions');
 const { respawnChoreAssignmentAction } = await import('@/app/(app)/dashboard/chores/actions');
@@ -182,6 +182,37 @@ describe('approving from the missions screen', () => {
     await approve('sub-daily');
     expect(openOf('chore-daily')).toHaveLength(1);
     expect(assignmentsOf('chore-daily')).toHaveLength(2);
+  });
+});
+
+describe('a chore that needs no approval comes back when the child finishes it', () => {
+  // Such a chore settles as `done` in `completeChoreAssignment`, never reaching
+  // an approval — so the respawn has to live there too.
+  const kidScope = (): ServiceScope => ({ ...scope(), userId: 'u-kid', memberId: KID, role: 'child' });
+  it('a daily chore finished today is assigned again for tomorrow', async () => {
+    Object.assign(db.table('chores').find((c) => c.id === 'chore-daily')!, { requires_approval: false });
+    Object.assign(db.table('chore_assignments').find((a) => a.id === 'asg-daily')!, { status: 'in_progress' });
+    const done = await completeChoreAssignment(kidScope(), 'asg-daily');
+    expect(done.ok).toBe(true);
+    if (done.ok) expect(done.data.status).toBe('done');
+    const [next] = openOf('chore-daily');
+    expect(next).toMatchObject({ member_id: KID, status: 'todo', due_at: TOMORROW, idempotency_key: KEY });
+    // Finishing it again (a double tap) does not create a second.
+    await completeChoreAssignment(kidScope(), 'asg-daily');
+    expect(openOf('chore-daily')).toHaveLength(1);
+  });
+  it('a chore that needs approval is only submitted here — the approval respawns it', async () => {
+    Object.assign(db.table('chore_assignments').find((a) => a.id === 'asg-daily')!, { status: 'in_progress' });
+    const done = await completeChoreAssignment(kidScope(), 'asg-daily');
+    if (done.ok) expect(done.data.status).toBe('submitted');
+    expect(openOf('chore-daily')).toHaveLength(0);
+  });
+  it('a one-off that needs no approval is simply done', async () => {
+    Object.assign(db.table('chores').find((c) => c.id === 'chore-once')!, { requires_approval: false });
+    Object.assign(db.table('chore_assignments').find((a) => a.id === 'asg-once')!, { status: 'in_progress' });
+    await completeChoreAssignment(kidScope(), 'asg-once');
+    expect(openOf('chore-once')).toHaveLength(0);
+    expect(assignmentsOf('chore-once')).toHaveLength(1);
   });
 });
 

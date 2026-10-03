@@ -785,6 +785,12 @@ export async function respawnChoreAssignment(
  * the parent approving it is what awards the points, and skipping that step
  * would let a child bank rewards unilaterally. Points and rewards themselves
  * stay in `lib/chores/server.ts`.
+ *
+ * A chore that needs NO approval settles here, so here is where a recurring
+ * one comes back: `respawnChoreAssignment` creates the child's next
+ * assignment once this one is done (an approved one is respawned by the
+ * approval instead). Its failure is logged, not returned — the completion
+ * stands.
  */
 export async function completeChoreAssignment(scope: ServiceScope, assignmentId: string): Promise<ServiceResult<ChoreAssignment>> {
   const { data: assignment, error: readError } = await scope.db
@@ -801,7 +807,7 @@ export async function completeChoreAssignment(scope: ServiceScope, assignmentId:
 
   const { data: chore, error: choreError } = await scope.db
     .from('chores')
-    .select('requires_approval, title')
+    .select('requires_approval, title, recurrence')
     .eq('id', assignment.chore_id)
     .eq('family_id', scope.familyId)
     .maybeSingle();
@@ -836,6 +842,15 @@ export async function completeChoreAssignment(scope: ServiceScope, assignmentId:
     memberId: data.member_id,
     resourceId: data.id,
   });
+  if (status === 'done') {
+    const respawn = await respawnChoreAssignment(scope, {
+      assignment: { chore_id: data.chore_id, member_id: data.member_id, due_at: data.due_at },
+      recurrence: chore?.recurrence,
+    });
+    if (!respawn.ok) {
+      console.error('[service:tasks] next assignment of a recurring chore was not created', { assignmentId, error: respawn.error });
+    }
+  }
   return ok(data);
 }
 
