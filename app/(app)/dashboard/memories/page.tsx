@@ -1,4 +1,6 @@
 import type { Metadata } from 'next';
+import { readCalendarOccurrences } from '@/lib/calendar/occurrences';
+import { calendarOpenWindowFilter, instantCalendarBounds } from '@/lib/briefing/calendar-window';
 import Link from 'next/link';
 import {
   Plus, Upload, FolderPlus, MoreHorizontal, Search, Filter, ChevronRight, Camera,
@@ -68,6 +70,10 @@ export default async function MemoriesPage({ searchParams }: { searchParams: Pro
   const now = new Date();
   const yearStart = new Date(now.getFullYear(), 0, 1).toISOString();
   const nowIso = now.toISOString();
+  // The three nearest things ahead, series included: one-offs open-ended as
+  // before, a series expanded over the year ahead (lib/calendar/occurrences.ts).
+  const tz = ctx.active.family.timezone || 'UTC';
+  const aheadBounds = instantCalendarBounds(nowIso, new Date(now.getTime() + 366 * 86_400_000 - 1).toISOString(), tz);
 
   const [
     albumsRes,
@@ -84,8 +90,9 @@ export default async function MemoriesPage({ searchParams }: { searchParams: Pro
     supabase.from('family_photos').select('id, album_id, uploaded_by, url, thumbnail_url, caption, media_type, taken_at, created_at')
       .eq('family_id', familyId).order('created_at', { ascending: false }).limit(400),
     supabase.from('family_members').select('id, user_id, display_name, color').eq('family_id', familyId).eq('is_active', true),
-    supabase.from('calendar_events').select('id, title, starts_at, ends_at, category, all_day')
-      .eq('family_id', familyId).gte('starts_at', nowIso).order('starts_at').limit(3),
+    readCalendarOccurrences(supabase, familyId, aheadBounds, tz, {
+      columns: ['id', 'title', 'starts_at', 'ends_at', 'category', 'all_day'], singlesFilter: calendarOpenWindowFilter(aheadBounds), singlesLimit: 3, limit: 3,
+    }),
     supabase.from('family_photos').select('id', { count: 'exact', head: true }).eq('family_id', familyId).eq('media_type', 'image').gte('created_at', yearStart),
     supabase.from('family_photos').select('id', { count: 'exact', head: true }).eq('family_id', familyId).eq('media_type', 'video').gte('created_at', yearStart),
     supabase.from('family_albums').select('id', { count: 'exact', head: true }).eq('family_id', familyId),

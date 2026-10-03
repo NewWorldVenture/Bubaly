@@ -1,4 +1,6 @@
 import type { Metadata } from 'next';
+import { readCalendarOccurrences } from '@/lib/calendar/occurrences';
+import { instantCalendarBounds } from '@/lib/briefing/calendar-window';
 import { PartialReadBanner } from '@/components/ui/partial-read-banner';
 import Link from 'next/link';
 import {
@@ -51,8 +53,11 @@ export default async function CommandCenterPage() {
 
   const [membersResult, eventsResult, openChoresResult, mealPlansResult, expiringDocsResult] = await settleAll([
     supabase.from('family_members').select('id, display_name, color').eq('family_id', familyId).eq('is_active', true),
-    supabase.from('calendar_events').select('id, title, starts_at, ends_at, all_day, location, assignee_id', { count: 'exact' })
-      .eq('family_id', familyId).gte('starts_at', now.toISOString()).lte('starts_at', weekEnd.toISOString()).order('starts_at'),
+    // Series included, with `count` the whole window so the outcome snapshot
+    // still knows it read every row (lib/calendar/occurrences.ts).
+    readCalendarOccurrences(supabase, familyId, instantCalendarBounds(now.toISOString(), weekEnd.toISOString(), tz), tz, {
+      columns: ['id', 'title', 'starts_at', 'ends_at', 'all_day', 'location', 'assignee_id'],
+    }),
     supabase.from('chore_assignments').select('id, due_at, status, member_id', { count: 'exact' })
       .eq('family_id', familyId).in('status', ['todo', 'in_progress']),
     supabase.from('meal_plans').select('plan_date, meal_type', { count: 'exact' }).eq('family_id', familyId)

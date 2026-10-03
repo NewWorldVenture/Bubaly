@@ -1,4 +1,6 @@
 import type { Metadata } from 'next';
+import { readCalendarOccurrences } from '@/lib/calendar/occurrences';
+import { calendarOpenWindowFilter, instantCalendarBounds } from '@/lib/briefing/calendar-window';
 import { FamilyMediaImg } from '@/components/media/family-media-img';
 import Link from 'next/link';
 import {
@@ -95,6 +97,10 @@ export default async function PlanningPage() {
   // the bare `fmtTime` import, which renders in the RUNTIME's zone — the server's
   // here — so this page selected the family's day and then timed it in UTC.
   const { fmtTime } = await getFormat(tz);
+  // The four nearest things ahead and how many there are, series included: a
+  // weekly lesson counts once a week, not once. One-offs stay open-ended; a
+  // series is expanded over the year ahead (lib/calendar/occurrences.ts).
+  const aheadBounds = instantCalendarBounds(nowIso, new Date(now.getTime() + 366 * 86_400_000 - 1).toISOString(), tz);
 
   const [
     { data: events, count: eventCount },
@@ -106,8 +112,9 @@ export default async function PlanningPage() {
     { data: milestones, count: milestoneCount },
     { data: photos, count: photoCount },
   ] = await Promise.all([
-    safe(supabase.from('calendar_events').select('id, title, starts_at, all_day', { count: 'exact' })
-      .eq('family_id', familyId).gte('starts_at', nowIso).order('starts_at').limit(4)),
+    safe(readCalendarOccurrences(supabase, familyId, aheadBounds, tz, {
+      columns: ['id', 'title', 'starts_at', 'all_day'], singlesFilter: calendarOpenWindowFilter(aheadBounds), limit: 4,
+    })),
     safe(supabase.from('todo_items').select('id, title, due_date', { count: 'exact' })
       .eq('family_id', familyId).eq('is_done', false).order('due_date', { ascending: true, nullsFirst: false }).limit(4)),
     safe(supabase.from('family_reminders').select('id, title, remind_at', { count: 'exact' })
