@@ -69,18 +69,22 @@ export interface FeedEventRow {
 /**
  * The separator between a UID and a RECURRENCE-ID in an exception's key.
  *
- * RFC 5545 forbids control characters in a property value, so no UID a
- * publisher can write contains one — and both halves are stripped of them
- * below, so a UID that arrives with one anyway cannot impersonate an
- * exception. `#` was the separator before, and a stand-alone event whose UID
- * happened to be `series#2026-09-12T14:00:00.000Z` shared a key with the moved
- * occurrence of `series`: one of the two was lost in the plan, and when that
- * occurrence was cancelled the feed-scoped delete removed the stand-alone
- * event (review on #908). 0x1F is a unit separator, storable in a text column
- * and safe in a PostgREST filter.
+ * RFC 5545 forbids control characters in a property value — every one except
+ * HTAB, which TEXT admits as white space — so no UID a publisher can write
+ * contains the separator, and both halves are stripped of the forbidden
+ * controls below, so a UID that arrives with one anyway cannot impersonate an
+ * exception. HTAB is kept: two legal UIDs that differ only by an interior tab
+ * are two events, and stripping it made them one (second review on #908).
+ * `#` was the separator before, and a stand-alone event whose UID happened to
+ * be `series#2026-09-12T14:00:00.000Z` shared a key with the moved occurrence
+ * of `series`: one of the two was lost in the plan, and when that occurrence
+ * was cancelled the feed-scoped delete removed the stand-alone event (first
+ * review on #908). 0x1F is a unit separator, storable in a text column and
+ * safe in a PostgREST filter.
  */
 export const EXCEPTION_KEY_SEPARATOR = '\u001F';
-const CONTROL_CHARACTERS = /[\u0000-\u001F\u007F]/g;
+/** The controls RFC 5545 forbids in TEXT: everything below 0x20 except HTAB, and DEL. */
+const FORBIDDEN_CONTROLS = /[\u0000-\u0008\u000A-\u001F\u007F]/g;
 
 /**
  * The `external_uid` a VEVENT is stored under: the bare UID for a master or a
@@ -88,8 +92,8 @@ const CONTROL_CHARACTERS = /[\u0000-\u001F\u007F]/g;
  * UID + separator + RECURRENCE-ID for an exception, which no bare UID can equal.
  */
 export function feedExternalUid(ev: Pick<IcsEvent, 'uid' | 'recurrenceId'>): string {
-  const uid = ev.uid.replace(CONTROL_CHARACTERS, '');
-  return ev.recurrenceId ? `${uid}${EXCEPTION_KEY_SEPARATOR}${ev.recurrenceId.replace(CONTROL_CHARACTERS, '')}` : uid;
+  const uid = ev.uid.replace(FORBIDDEN_CONTROLS, '');
+  return ev.recurrenceId ? `${uid}${EXCEPTION_KEY_SEPARATOR}${ev.recurrenceId.replace(FORBIDDEN_CONTROLS, '')}` : uid;
 }
 
 /**
