@@ -16631,5 +16631,7 @@
   "ai.couldNotCheckThisMonthsUsage": "Bubaly n'a pas pu vérifier l'utilisation de ce mois-ci. Réessayez dans un instant.",
   "ai.notFound": "Introuvable.",
   "ai.featureIsNotAvailableForYourFamily": "{feature} n'est pas disponible pour votre famille.",
-  "ai.thatAnswerWasNotSaved": "Bubaly a répondu à ce message mais n'a pas pu enregistrer la réponse. Ce qu'il a fait a déjà eu lieu : vérifiez avant de redemander."
+  "ai.thatAnswerWasNotSaved": "Bubaly a répondu à ce message mais n'a pas pu enregistrer la réponse. Ce qu'il a fait a déjà eu lieu : vérifiez avant de redemander.",
+  "mealsPlanner.addMealToLibrary": "Ajouter le repas à la bibliothèque",
+  "mealsPlanner.noSavedChoices": "Aucun repas ni recette enregistré pour le moment. Créez un nouveau repas ci-dessous pour commencer à planifier."
 }

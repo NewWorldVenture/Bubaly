@@ -27,6 +27,7 @@
 // applying a routine keys (routine, week) by design — a second Apply is the
 // same composition whatever the steps now say — which is not this defect.
 import { readFileSync } from 'node:fs';
+import ts from 'typescript';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import type { SupabaseClient } from '@supabase/supabase-js';
 import type { Database } from '@/lib/database.types';
@@ -126,6 +127,7 @@ beforeEach(() => {
     },
   });
   db.seed('todo_lists', [{ id: LIST, family_id: FAMILY, name: 'Tasks', created_by: MEMBER, sort_order: 0 }]);
+  db.seed('family_members', [{ id: MEMBER, family_id: FAMILY }]);
   mocks.requireUserContext.mockResolvedValue(CTX);
   mocks.createServer.mockResolvedValue(db);
 });
@@ -387,6 +389,34 @@ describe('the browser half: when the submission id is spent', () => {
     return source.slice(at);
   };
 
+  function assertSettledModalRemint(source: string, requiresCurrentFence = false) {
+    // Closing fences a pending result before its old modal can mutate state.
+    // The guard still requires settlement and the exact fresh-id assignment.
+    expect(source)
+      .toMatch(/if \(!result\.ok\) \{\s*(?:if \(!isCurrent\(\)\) return;\s*)?if \(submissionSettled\(result\)\) submissionId\.current = newSubmissionId\(\);/);
+    const tree = ts.createSourceFile('modal.tsx', source, ts.ScriptTarget.Latest, true, ts.ScriptKind.TSX);
+    const refusals: ts.Block[] = [];
+    function visit(node: ts.Node) {
+      if (ts.isIfStatement(node) && node.expression.getText(tree) === '!result.ok' && ts.isBlock(node.thenStatement)) {
+        refusals.push(node.thenStatement);
+      }
+      ts.forEachChild(node, visit);
+    }
+    visit(tree);
+    const renewal = 'if (submissionSettled(result)) submissionId.current = newSubmissionId();';
+    const statements = refusals.map((block) => block.statements.map((statement) => statement.getText(tree)))
+      .find((block) => block.includes(renewal));
+    expect(statements).toBeDefined();
+    const at = (statement: string) => {
+      const index = statements!.indexOf(statement);
+      expect(index, `required statement missing: ${statement}`).toBeGreaterThanOrEqual(0);
+      return index;
+    };
+    const renewalAt = at(renewal);
+    const currentFence = 'if (!isCurrent()) return;';
+    if (requiresCurrentFence) expect(at(currentFence)).toBeLessThan(renewalAt);
+    else if (statements!.includes(currentFence)) expect(at(currentFence)).toBeLessThan(renewalAt);
+  }
   it('Quick Add drops its id when the attempt is settled, before it branches on the result', () => {
     const quickAdd = from(stripped('components/modules/todos-module.tsx'), 'async function quickAdd(').split('async function openAdd(')[0]!;
     expect(quickAdd).toMatch(/if \(submissionSettled\(result\)\) quickSubmission\.current = '';\s*if \(!result\.ok\)/);
@@ -395,11 +425,10 @@ describe('the browser half: when the submission id is spent', () => {
   });
 
   it.each([
-    ['components/modules/todos-module.tsx', 'function ItemModal('],
-    ['components/modules/calendar-module.tsx', 'function NewEventModal('],
-    ['components/modules/chores-module.tsx', 'function NewChoreModal('],
-  ])('%s: the modal mints a fresh id when its save is settled without closing', (file, modal) => {
-    expect(from(stripped(file), modal))
-      .toMatch(/if \(!result\.ok\) \{\s*if \(submissionSettled\(result\)\) submissionId\.current = newSubmissionId\(\);/);
+    ['components/modules/todos-module.tsx', 'function ItemModal(', false],
+    ['components/modules/calendar-module.tsx', 'function NewEventModal(', false],
+    ['components/modules/chores-module.tsx', 'function NewChoreModal(', true],
+  ])('%s: the modal mints a fresh id when its save is settled without closing', (file, modal, requiresCurrentFence) => {
+    assertSettledModalRemint(from(stripped(file), modal), requiresCurrentFence);
   });
 });

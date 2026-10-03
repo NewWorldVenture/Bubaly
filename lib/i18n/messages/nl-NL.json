@@ -16631,5 +16631,7 @@
   "ai.couldNotCheckThisMonthsUsage": "Bubaly kon het gebruik van deze maand niet controleren. Probeer het zo opnieuw.",
   "ai.notFound": "Niet gevonden.",
   "ai.featureIsNotAvailableForYourFamily": "{feature} is niet beschikbaar voor je gezin.",
-  "ai.thatAnswerWasNotSaved": "Bubaly heeft dit bericht beantwoord, maar kon het antwoord niet opslaan. Wat Bubaly heeft gedaan, is al gebeurd. Controleer dat voordat je het opnieuw vraagt."
+  "ai.thatAnswerWasNotSaved": "Bubaly heeft dit bericht beantwoord, maar kon het antwoord niet opslaan. Wat Bubaly heeft gedaan, is al gebeurd. Controleer dat voordat je het opnieuw vraagt.",
+  "mealsPlanner.addMealToLibrary": "Maaltijd aan bibliotheek toevoegen",
+  "mealsPlanner.noSavedChoices": "Er zijn nog geen opgeslagen maaltijden of recepten. Maak hieronder een nieuwe maaltijd om te beginnen met plannen."
 }
