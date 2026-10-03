@@ -21,6 +21,15 @@ name: Cron dispatch
 # is being billed or delivered; raising delivery needs a scheduler that keeps
 # its word (Vercel Pro's native sub-daily crons) rather than a different cron
 # string here. See scripts/cron-dispatch.mjs for the per-route shortfall.
+#
+# Catch-up: a tick that arrives hours late used to evaluate only its own last
+# five minutes, so every sub-daily firing in the gap was lost. The tick now asks
+# the Actions API for the previous successful SCHEDULED run of this workflow and
+# passes its start as CRON_SINCE; the dispatcher evaluates every minute since
+# then (never less than five, capped at a day, daily routes left to Vercel, one
+# call per route however many of its minutes fell in the gap). If the lookup
+# fails the tick still runs with its five-minute window and says so. This
+# recovers the firing, not the rate — see the dispatcher header.
 # On Vercel Pro, move the schedules back into vercel.json and disable this.
 
 on:
@@ -35,6 +44,8 @@ on:
 
 permissions:
   contents: read
+  # Listing this workflow's own runs (the catch-up boundary) needs actions: read.
+  actions: read
 
 concurrency:
   group: cron-dispatch
@@ -61,10 +72,37 @@ jobs:
         with:
           node-version-file: .nvmrc
 
+      - name: Find the previous successful tick (catch-up boundary)
+        id: previous
+        env:
+          # The job's GITHUB_TOKEN; `gh` reads it from GH_TOKEN.
+          GH_TOKEN: ${{ github.token }}
+          REPO: ${{ github.repository }}
+          RUN_ID: ${{ github.run_id }}
+        run: |
+          # The previous SCHEDULED success, not any success: a manual single-route
+          # run dispatches one route, so taking it as the boundary would skip every
+          # other route due since the real previous tick. The current run is
+          # excluded by id. The dispatcher never narrows below its fixed window, so
+          # a boundary that is too recent costs nothing, and one that is too old is
+          # capped there. Failure here must not fail the tick: the dispatcher then
+          # runs its fixed five-minute window exactly as it did before catch-up.
+          since="$(gh api \
+            "repos/${REPO}/actions/workflows/cron-dispatch.yml/runs?status=success&event=schedule&per_page=5" \
+            --jq "[.workflow_runs[] | select(.id != ${RUN_ID})][0].run_started_at // empty" 2>/dev/null)" || since=''
+          if [[ "$since" =~ ^[0-9]{4}-[0-9]{2}-[0-9]{2}T[0-9]{2}:[0-9]{2}:[0-9]{2}Z$ ]]; then
+            echo "Previous successful tick started at ${since}; catching up from there."
+          else
+            echo "No usable previous tick (got '${since:0:80}'); dispatching with the fixed five-minute window."
+            since=''
+          fi
+          echo "since=${since}" >> "$GITHUB_OUTPUT"
+
       - name: Validate configuration and dispatch due routes
         env:
           CRON_SECRET: ${{ secrets.CRON_SECRET }}
           CRON_BASE_URL: ${{ vars.CRON_BASE_URL }}
+          CRON_SINCE: ${{ steps.previous.outputs.since }}
           ROUTE: ${{ github.event.inputs.route }}
         run: |
           if [ -n "$ROUTE" ]; then
