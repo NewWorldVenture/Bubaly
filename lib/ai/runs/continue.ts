@@ -67,7 +67,9 @@ export async function continueRun(
   } finally {
     // The executor clears the lease itself when it parks or finishes; this is
     // the path for a throw, so a crashed slice does not hold the run hostage
-    // for the whole lease window.
+    // for the whole lease window — the lease is expired, and the next
+    // `claim_ai_runs` recovers the run. (Clearing it instead would strand the
+    // run in `executing` with no lease, which that pass never looks at.)
     if (leaseOwner) await releaseRun(db, runId, leaseOwner);
   }
 }

@@ -88,9 +88,11 @@ export async function GET(req: NextRequest) {
           const result = await runGraph(run.id, { budgetMs: Math.min(PER_RUN_BUDGET_MS, remaining - 2_000), db, replan: replanPortFor(db) });
           results.push({ runId: run.id, status: result.status, completed: result.completed, failed: result.failed });
         } catch (error) {
-          // One bad run must not take the tick down: the lease is released so
-          // the recovery pass in `claim_ai_runs` can retry it, and the next run
-          // in the wave still gets its slice.
+          // One bad run must not take the tick down: the lease is expired so
+          // the recovery pass in `claim_ai_runs` retries it (or dead-letters it
+          // once its attempts are spent), and the next run in the wave still
+          // gets its slice. Expired, not cleared — a lease-less `executing` run
+          // is one that pass never looks at (releaseRun).
           console.error('[cron/ai-runs] run threw', run.id, error);
           results.push({ runId: run.id, status: 'error', completed: 0, failed: 0 });
           if (run.leaseOwner) await releaseRun(db, run.id, run.leaseOwner);
