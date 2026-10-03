@@ -234,8 +234,9 @@ test.describe('form errors: what an invalid, refused and recovered submit expose
       // ── The toast stack (components/ui/toast.tsx), A11Y-001 #2 ──
       // Bottom-centre at every width, a 384px toast covered a centred dialog's
       // own footer (Cancel and its submit) at 1024-1280px, the moment a refusal
-      // was shown. From lg the stack sits bottom-right and each toast is at
-      // most 14rem (224px) wide; below lg it keeps its mobile place.
+      // was shown. From lg the stack sits bottom-right, lifted 10rem above the
+      // corner buttons, and each toast is at most 14rem (224px) wide; below lg
+      // it keeps its mobile place.
 
       /** Every control a visible toast's box intersects, within `scope`. */
       const controlsUnderToasts = (page: Page, scope: string) => page.evaluate((within) => {
@@ -336,6 +337,9 @@ test.describe('form errors: what an invalid, refused and recovered submit expose
           const [box] = await toastBoxes(page);
           expect(box.width).toBeLessThanOrEqual(224.5);
           expect(Math.abs(box.right - (1280 - 16))).toBeLessThanOrEqual(1);
+          // Lifted 10rem, clear of Quick capture and the AI orb below it.
+          const stackBottom = await first.evaluate((t) => t.parentElement!.getBoundingClientRect().bottom);
+          expect(Math.abs(stackBottom - (800 - 160))).toBeLessThanOrEqual(1);
           expect(await hitAt(page, first.getByRole('button', { name: 'Undo' }))).toBe('Undo');
           expect(await hitAt(page, first.getByRole('button', { name: 'Dismiss' }))).toBe('Dismiss');
           // Hovered past its lifetime, it stays; let go, and it leaves on its own.
@@ -376,21 +380,23 @@ test.describe('form errors: what an invalid, refused and recovered submit expose
       // Quick capture (components/app/quick-capture.tsx) and the AI orb
       // (components/app/ai-orb.tsx) are fixed at the right edge: from lg at
       // bottom 1.5rem and 6rem, right 1.5rem; below lg at bottom 5rem and 9rem
-      // (plus the safe area), right 1rem. The toast stack sits in that corner
-      // from lg and bottom-centre above the tab bar below it, so while a notice
-      // shows it can sit over either. These cases put up one short notice, one
-      // long one (German, the longest the contact form can be made to say) and
-      // three at once on /dashboard/contacts with no dialog open, and record:
-      // every control a toast's box intersects, what a pointer at each corner
-      // button's centre lands on, and that each button is still reached and
-      // opened from the keyboard.
+      // (plus the safe area), right 1rem. From lg the toast stack sits at the
+      // same edge (right 1rem), lifted to bottom 10rem, clear of the orb's top
+      // at 9.5rem; below lg it sits bottom-centre above the tab bar, where a
+      // notice can sit over either button. These cases put up one short
+      // notice, one long one (German, the longest the contact form can be
+      // made to say) and three at once on /dashboard/contacts with no dialog
+      // open, and record: every control a toast's box intersects, what a
+      // pointer at each corner button's centre lands on, and that each button
+      // is still reached and opened from the keyboard.
       //
-      // CORNER is the pointer half as it is today, the KNOWN overlap disclosed
-      // on #778, written down rather than hidden: it is what a real pointer
-      // hits, so a placement fix that clears the corner changes these rows
-      // (to nothing covered and the button itself under the pointer) and has
-      // to change this table with it; so does any change that makes it worse.
-      // The keyboard half holds whatever the placement.
+      // CORNER is the pointer half as it is today, written down rather than
+      // hidden: it is what a real pointer hits. From lg the lifted stack covers
+      // neither button and each one is under its own centre (at bottom 1.5rem
+      // it covered Quick capture, and a long notice or three the orb as well).
+      // Below lg the overlap disclosed on #778 is still open and recorded as
+      // it is. A placement change that moves either half changes this table
+      // with it. The keyboard half holds whatever the placement.
       type CornerState = 'short' | 'long' | 'stacked';
       const CORNER_NAMES = {
         en: { capture: 'Quick capture', ai: 'Ask the AI assistant', aiSheet: 'AI assistant', ask: 'Ask Bubaly' },
@@ -473,18 +479,18 @@ test.describe('form errors: what an invalid, refused and recovered submit expose
       const CORNER_VIEWPORTS: ReadonlyArray<readonly [number, number]> = width === 1280 ? [[1024, 768], [1280, 800], [1440, 900]] : [[390, 844]];
       const QC = CORNER_NAMES.en.capture, AI = CORNER_NAMES.en.ai, DE = CORNER_NAMES.de;
       const CORNER: Record<string, { covered: string[]; capture: string | null; ai: string | null }> = {
-        // From lg: one notice sits over Quick capture; a long one or three
-        // reach up over the AI orb as well. Neither button can be clicked
-        // until the notices go.
-        '1024x768 short': { covered: [QC], capture: 'toast', ai: AI },
-        '1024x768 long': { covered: [DE.ai, DE.capture], capture: 'toast', ai: 'toast' },
-        '1024x768 stacked': { covered: [AI, QC], capture: 'toast', ai: 'toast' },
-        '1280x800 short': { covered: [QC], capture: 'toast', ai: AI },
-        '1280x800 long': { covered: [DE.ai, DE.capture], capture: 'toast', ai: 'toast' },
-        '1280x800 stacked': { covered: [AI, QC], capture: 'toast', ai: 'toast' },
-        '1440x900 short': { covered: [QC], capture: 'toast', ai: AI },
-        '1440x900 long': { covered: [DE.ai, DE.capture], capture: 'toast', ai: 'toast' },
-        '1440x900 stacked': { covered: [AI, QC], capture: 'toast', ai: 'toast' },
+        // From lg: the stack sits above both buttons, so whatever the notices
+        // say and however many there are, neither is covered and a pointer at
+        // each one's centre lands on that button.
+        '1024x768 short': { covered: [], capture: QC, ai: AI },
+        '1024x768 long': { covered: [], capture: DE.capture, ai: DE.ai },
+        '1024x768 stacked': { covered: [], capture: QC, ai: AI },
+        '1280x800 short': { covered: [], capture: QC, ai: AI },
+        '1280x800 long': { covered: [], capture: DE.capture, ai: DE.ai },
+        '1280x800 stacked': { covered: [], capture: QC, ai: AI },
+        '1440x900 short': { covered: [], capture: QC, ai: AI },
+        '1440x900 long': { covered: [], capture: DE.capture, ai: DE.ai },
+        '1440x900 stacked': { covered: [], capture: QC, ai: AI },
         // Below lg the full-width stack ends level with Quick capture's foot:
         // a tap there lands on the notice's own Dismiss. A long notice or
         // three reach the orb, and the language bar at the foot of this short
@@ -513,6 +519,12 @@ test.describe('form errors: what an invalid, refused and recovered submit expose
 
               const report = await cornerReport(page, names);
               expect(report).toEqual(CORNER[`${w}x${h} ${state}`]);
+              if (w >= 1024) {
+                // lg:bottom-40: the stack (not a toast, which fades in from
+                // below) ends 10rem above the viewport's foot.
+                const stackBottom = await notices.first().evaluate((t) => t.parentElement!.getBoundingClientRect().bottom);
+                expect(Math.abs(stackBottom - (h - 160))).toBeLessThanOrEqual(1);
+              }
 
               // The keyboard path, taken while the notices still show: each
               // corner button takes focus, Tab and Shift+Tab move between
