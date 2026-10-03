@@ -2,7 +2,7 @@
 -- for the affected slots. Existing duplicate rows are left untouched until a
 -- family explicitly replaces or removes those slots.
 
-create table public.meal_plan_write_receipts (
+create table if not exists public.meal_plan_write_receipts (
   family_id uuid not null references public.families(id) on delete cascade,
   actor_id uuid not null references auth.users(id) on delete cascade,
   request_id text not null check (length(request_id) between 1 and 128),
@@ -12,6 +12,85 @@ create table public.meal_plan_write_receipts (
   created_at timestamptz not null default now(),
   primary key (family_id, actor_id, request_id)
 );
+
+-- CREATE TABLE IF NOT EXISTS makes migration replay safe, but it must not
+-- silently accept a same-named table with a different receipt contract.
+do $$
+declare
+  v_columns text[];
+  v_primary_key text[];
+  v_constraints text[];
+begin
+  select array_agg(
+    a.attnum::text || ':' || a.attname || ':' || pg_catalog.format_type(a.atttypid, a.atttypmod) || ':' || a.attnotnull::text
+    order by a.attnum
+  ) into v_columns
+  from pg_catalog.pg_attribute a
+  where a.attrelid = 'public.meal_plan_write_receipts'::regclass
+    and a.attnum > 0 and not a.attisdropped;
+
+  if v_columns is distinct from array[
+    '1:family_id:uuid:true',
+    '2:actor_id:uuid:true',
+    '3:request_id:text:true',
+    '4:operation:text:true',
+    '5:payload_hash:text:true',
+    '6:result:jsonb:false',
+    '7:created_at:timestamp with time zone:true'
+  ]::text[] then
+    raise exception 'meal_plan_write_receipts has an incompatible column contract';
+  end if;
+
+  select array_agg(a.attname order by k.ordinality) into v_primary_key
+  from pg_catalog.pg_constraint c
+  cross join lateral unnest(c.conkey) with ordinality as k(attnum, ordinality)
+  join pg_catalog.pg_attribute a on a.attrelid = c.conrelid and a.attnum = k.attnum
+  where c.conrelid = 'public.meal_plan_write_receipts'::regclass and c.contype = 'p';
+  if v_primary_key is distinct from array['family_id', 'actor_id', 'request_id']::text[] then
+    raise exception 'meal_plan_write_receipts has an incompatible primary key';
+  end if;
+
+  select array_agg(
+    case c.contype
+      when 'f' then c.conname || ':f:' ||
+        (select string_agg(la.attname, ',' order by lk.ordinality)
+         from unnest(c.conkey) with ordinality as lk(attnum, ordinality)
+         join pg_catalog.pg_attribute la on la.attrelid = c.conrelid and la.attnum = lk.attnum) || '->' ||
+        (select rn.nspname || '.' || rr.relname || '(' || string_agg(ra.attname, ',' order by rk.ordinality) || ')'
+         from pg_catalog.pg_class rr
+         join pg_catalog.pg_namespace rn on rn.oid = rr.relnamespace
+         cross join lateral unnest(c.confkey) with ordinality as rk(attnum, ordinality)
+         join pg_catalog.pg_attribute ra on ra.attrelid = rr.oid and ra.attnum = rk.attnum
+         where rr.oid = c.confrelid
+         group by rn.nspname, rr.relname) ||
+        ':delete=' || c.confdeltype::text || ':validated=' || c.convalidated::text ||
+        ':deferrable=' || c.condeferrable::text
+      else c.conname || ':' || c.contype::text || ':' ||
+        pg_catalog.pg_get_constraintdef(c.oid, true) ||
+        ':validated=' || c.convalidated::text || ':deferrable=' || c.condeferrable::text
+    end order by c.conname
+  ) into v_constraints
+  from pg_catalog.pg_constraint c
+  where c.conrelid = 'public.meal_plan_write_receipts'::regclass;
+  if v_constraints is distinct from array[
+    'meal_plan_write_receipts_actor_id_fkey:f:actor_id->auth.users(id):delete=c:validated=true:deferrable=false',
+    'meal_plan_write_receipts_family_id_fkey:f:family_id->public.families(id):delete=c:validated=true:deferrable=false',
+    'meal_plan_write_receipts_operation_check:c:CHECK (operation = ANY (ARRAY[''replace''::text, ''remove''::text])):validated=true:deferrable=false',
+    'meal_plan_write_receipts_payload_hash_check:c:CHECK (payload_hash ~ ''^[0-9a-f]{64}$''::text):validated=true:deferrable=false',
+    'meal_plan_write_receipts_pkey:p:PRIMARY KEY (family_id, actor_id, request_id):validated=true:deferrable=false',
+    'meal_plan_write_receipts_request_id_check:c:CHECK (length(request_id) >= 1 AND length(request_id) <= 128):validated=true:deferrable=false'
+  ]::text[] then
+    raise exception 'meal_plan_write_receipts has incompatible constraints';
+  end if;
+
+  if exists (
+    select 1 from pg_catalog.pg_policy p
+    where p.polrelid = 'public.meal_plan_write_receipts'::regclass
+  ) then
+    raise exception 'meal_plan_write_receipts must not have row-level security policies';
+  end if;
+end;
+$$;
 
 alter table public.meal_plan_write_receipts enable row level security;
 alter table public.meal_plan_write_receipts force row level security;
@@ -138,7 +217,8 @@ begin
   get diagnostics v_claimed = row_count;
   if v_claimed = 0 then
     select * into v_receipt from public.meal_plan_write_receipts
-      where family_id = p_family_id and actor_id = v_actor and request_id = p_request_id;
+      where family_id = p_family_id and actor_id = v_actor and request_id = p_request_id
+      for update;
     if not found or v_receipt.operation <> 'replace' or v_receipt.payload_hash <> v_hash or v_receipt.result is null then
       raise exception 'Meal-plan request ID was already used for a different or incomplete request' using errcode = '22023';
     end if;
