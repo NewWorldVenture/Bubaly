@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import { readFileSync } from 'node:fs';
-import { SCHEDULES, TICK_MINUTES, parseCron, matchesAt, dueRoutes } from '../scripts/cron-dispatch.mjs';
+import { CATCH_UP_MAX_MINUTES, SCHEDULES, TICK_MINUTES, parseCron, matchesAt, dueRoutes, isSubDaily, tickWindow } from '../scripts/cron-dispatch.mjs';
 
 const vercel = JSON.parse(readFileSync('vercel.json', 'utf8')) as { crons: { path: string; schedule: string }[] };
 
@@ -53,5 +53,164 @@ describe('vercel.json ↔ dispatcher table', () => {
       '/api/cron/social-publish',
     ]);
     for (const path of slowed) expect(runsAtMostDaily(SCHEDULES[path as keyof typeof SCHEDULES]), path).toBe(false);
+  });
+});
+
+describe('the tick window', () => {
+  const NOW = new Date('2026-09-12T12:05:00Z');
+  const FIXED_START = new Date('2026-09-12T12:00:00Z');
+
+  it('is the fixed five minutes when no boundary is given', () => {
+    for (const since of [undefined, null, '', '   ']) {
+      const w = tickWindow(NOW, since);
+      expect(w.start).toEqual(FIXED_START);
+      expect(w.minutes).toBe(TICK_MINUTES);
+      expect(w.since).toBeNull();
+      expect(w.note).toBeNull();
+    }
+  });
+
+  it('ignores an unparseable or future boundary, keeps the fixed window and says why', () => {
+    const bad = tickWindow(NOW, 'not-a-timestamp');
+    expect(bad.start).toEqual(FIXED_START);
+    expect(bad.minutes).toBe(TICK_MINUTES);
+    expect(bad.since).toBeNull();
+    expect(bad.note).toContain('not a timestamp');
+    const future = tickWindow(NOW, '2026-09-12T12:06:00Z');
+    expect(future.start).toEqual(FIXED_START);
+    expect(future.minutes).toBe(TICK_MINUTES);
+    expect(future.since).toBeNull();
+    expect(future.note).toContain('in the future');
+  });
+
+  it('never narrows below the fixed window: a boundary two minutes ago is a floor, not a cut', () => {
+    // Two scheduled runs five minutes apart, or a manual run between ticks, must
+    // not cost the minutes between them.
+    const w = tickWindow(NOW, '2026-09-12T12:03:00Z');
+    expect(w.start).toEqual(FIXED_START);
+    expect(w.minutes).toBe(TICK_MINUTES);
+    expect(w.since).toEqual(new Date('2026-09-12T12:03:00Z'));
+    expect(w.note).toBeNull();
+  });
+
+  it('widens to the boundary and counts the whole minutes in (since, now]', () => {
+    // 08:58:00 → the first minute considered is 08:59, the last 12:05: 187 of them.
+    const w = tickWindow(NOW, '2026-09-12T08:58:00Z');
+    expect(w.start).toEqual(new Date('2026-09-12T08:58:00Z'));
+    expect(w.minutes).toBe(187);
+    expect(w.since).toEqual(new Date('2026-09-12T08:58:00Z'));
+    expect(w.note).toBeNull();
+    // A boundary inside a minute excludes that minute (08:58 is not after 08:58:30) and nothing else;
+    // seconds on `now` do not add a minute either.
+    expect(tickWindow(NOW, '2026-09-12T08:58:30Z').minutes).toBe(187);
+    expect(tickWindow(new Date('2026-09-12T12:05:45Z'), '2026-09-12T08:58:00Z').minutes).toBe(187);
+    expect(tickWindow(NOW, new Date('2026-09-12T08:58:00Z')).minutes).toBe(187); // a Date works like its ISO string
+  });
+
+  it('clamps a boundary older than the cap to the cap instead of discarding it', () => {
+    expect(CATCH_UP_MAX_MINUTES).toBe(24 * 60);
+    const w = tickWindow(NOW, '2026-09-01T00:00:00Z');
+    expect(w.start).toEqual(new Date('2026-09-11T12:05:00Z'));
+    expect(w.minutes).toBe(CATCH_UP_MAX_MINUTES);
+    expect(w.since).toEqual(new Date('2026-09-01T00:00:00Z'));
+    expect(w.note).toContain(`capped at ${CATCH_UP_MAX_MINUTES} min`);
+    // Exactly at the cap is not clamped.
+    expect(tickWindow(NOW, '2026-09-11T12:05:00Z').note).toBeNull();
+    expect(tickWindow(NOW, '2026-09-11T12:05:00Z').minutes).toBe(CATCH_UP_MAX_MINUTES);
+  });
+
+  it('the cap is at least the longest gap of every route it serves, so a clamped window still fires each of them', () => {
+    // If a route were added that fires, say, every 36 hours, isSubDaily would
+    // admit it to the catch-up and a 24-hour clamp could hide its one missed
+    // firing. This keeps the constant honest against the table.
+    const WEEK = 7 * 24 * 60;
+    for (const [route, expr] of Object.entries(SCHEDULES)) {
+      if (!isSubDaily(expr)) continue;
+      const parsed = parseCron(expr);
+      let longest = 0;
+      let last: number | null = null;
+      // Monday 00:00 through the following Monday 23:59, so a weekly wrap is seen.
+      for (let i = 0; i < WEEK + 24 * 60; i += 1) {
+        if (!matchesAt(parsed, new Date(Date.UTC(2026, 8, 7, 0, i)))) continue;
+        if (last !== null) longest = Math.max(longest, i - last);
+        last = i;
+      }
+      expect(last, `${route} never fires`).not.toBeNull();
+      expect(longest, `${route} (${expr}) can go ${longest} min between firings, longer than CATCH_UP_MAX_MINUTES`).toBeLessThanOrEqual(CATCH_UP_MAX_MINUTES);
+    }
+  });
+});
+
+describe('catch-up: dueRoutes with a boundary', () => {
+  // Saturday 12:05, with the previous successful tick at 08:58 — about the
+  // median gap GitHub actually delivers (209 minutes).
+  const NOW = new Date('2026-09-12T12:05:00Z');
+  const SINCE = '2026-09-12T08:58:00Z';
+
+  it('fires a route whose minute fell in (since, now] but outside the five-minute window', () => {
+    const fixed = dueRoutes(NOW);
+    const caughtUp = dueRoutes(NOW, SCHEDULES, TICK_MINUTES, SINCE);
+    for (const r of fixed) expect(caughtUp).toContain(r);
+    // 09:00; 09:15, 10:15, 11:15; 10:00, 12:00; 12:00; 12:00 — none inside (12:00, 12:05].
+    for (const r of ['/api/cron/journey-recovery', '/api/cron/feedback-github-sync', '/api/cron/push-scan', '/api/cron/library-feeds', '/api/cron/checkout-abandoned']) {
+      expect(fixed).not.toContain(r);
+      expect(caughtUp).toContain(r);
+    }
+    // A sub-daily route with no minute in the gap is still not due: '15 */4' is 08:15 and 12:15.
+    expect(caughtUp).not.toContain('/api/cron/provider-sync');
+  });
+
+  it('fires a route once however many of its minutes fell in the window', () => {
+    const caughtUp = dueRoutes(NOW, SCHEDULES, TICK_MINUTES, SINCE);
+    expect(new Set(caughtUp).size).toBe(caughtUp.length);
+    expect(caughtUp.filter((r) => r === '/api/cron/push-scan')).toHaveLength(1); // 10:00 and 12:00
+    // Thirty-eight matching minutes (09:00 … 12:05), one call.
+    expect(dueRoutes(NOW, { '/x': '*/5 * * * *' }, TICK_MINUTES, SINCE)).toEqual(['/x']);
+  });
+
+  it('does not catch up a route that fires at most daily — Vercel already did', () => {
+    // 11:00 is in (08:58, 12:05] and notifications is '0 11 * * *'.
+    expect(dueRoutes(NOW, SCHEDULES, TICK_MINUTES, SINCE)).not.toContain('/api/cron/notifications');
+    // Its fixed window is untouched: a tick at 11:03 still fires it, boundary or not.
+    expect(dueRoutes(new Date('2026-09-12T11:03:00Z'))).toContain('/api/cron/notifications');
+    expect(dueRoutes(new Date('2026-09-12T11:03:00Z'), SCHEDULES, TICK_MINUTES, SINCE)).toContain('/api/cron/notifications');
+    // Weekly is "at most daily" too: chore-reminders, Sunday 18:00.
+    expect(dueRoutes(new Date('2026-09-06T20:00:00Z'), SCHEDULES, TICK_MINUTES, '2026-09-06T17:00:00Z')).not.toContain('/api/cron/chore-reminders');
+    expect(dueRoutes(new Date('2026-09-06T18:02:00Z'))).toContain('/api/cron/chore-reminders');
+    // The case a-mirrored-cron-must-be-idempotent names: admin-digest at 12:30 must
+    // not be replayed by a 15:00 tick on top of Vercel's own 12:30 run.
+    expect(dueRoutes(new Date('2026-09-12T15:00:00Z'), SCHEDULES, TICK_MINUTES, '2026-09-12T12:00:00Z')).not.toContain('/api/cron/admin-digest');
+  });
+
+  it('the rule that keeps a route out of catch-up is the rule vercel.json mirrors it by', () => {
+    // isSubDaily is the negation of Vercel Hobby's "at most once a day", so the
+    // routes left to Vercel are exactly the ones Vercel fires at the dispatcher's
+    // own minute — excluding them loses nothing — and the routes caught up are
+    // exactly the ones Vercel had to slow down.
+    const byPath = new Map(vercel.crons.map((c) => [c.path, c.schedule]));
+    let leftToVercel = 0;
+    for (const [route, expr] of Object.entries(SCHEDULES)) {
+      expect(isSubDaily(expr), `${route} ${expr}`).toBe(!runsAtMostDaily(expr));
+      if (isSubDaily(expr)) {
+        expect(byPath.get(route), `${route} is caught up but vercel.json keeps its full cadence`).not.toBe(expr);
+      } else {
+        expect(byPath.get(route), `${route} is left to Vercel but vercel.json fires it at a different minute`).toBe(expr);
+        leftToVercel += 1;
+      }
+    }
+    expect(leftToVercel).toBeGreaterThanOrEqual(10);
+  });
+
+  it('a boundary older than the cap fires what was due inside the cap, not what was due only before it', () => {
+    // Saturday 12:05, boundary Thursday 12:05 (48 h). '/in' fired Fri 15:00 and
+    // Sat 03:00; '/before' (Thursdays only) fired Thu 15:00 — inside (since, now]
+    // but 45 hours ago, beyond the 24-hour cap.
+    const due = dueRoutes(NOW, { '/in': '0 3,15 * * *', '/before': '0 3,15 * * 4' }, TICK_MINUTES, '2026-09-10T12:05:00Z');
+    expect(due).toEqual(['/in']);
+  });
+
+  it('a bad or future boundary evaluates exactly the fixed window', () => {
+    expect(dueRoutes(NOW, SCHEDULES, TICK_MINUTES, 'not-a-timestamp')).toEqual(dueRoutes(NOW));
+    expect(dueRoutes(NOW, SCHEDULES, TICK_MINUTES, '2026-09-12T12:06:00Z')).toEqual(dueRoutes(NOW));
   });
 });
