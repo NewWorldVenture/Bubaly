@@ -190,7 +190,8 @@ describe('pauseRun and resumeRun', () => {
     const resumeResult = await resumeRun(scopeWith(resumed.db), 'run-1', { db: resumed.db });
     expect(resumeResult).toMatchObject({ ok: true, data: { state: 'ready' } });
     const resumePayload = find(resumed.calls, 'family_automation_runs', 'update')[0].payload as Record<string, unknown>;
-    expect(resumePayload).toMatchObject({ state: 'ready', paused_at: null });
+    // A person resumed it, so the abandonment budget starts over (freshBudget).
+    expect(resumePayload).toMatchObject({ state: 'ready', paused_at: null, attempt: 0 });
     expect(resumePayload.run_after).toBeTruthy();
   });
 
@@ -245,7 +246,7 @@ describe('rerunStep', () => {
     // Both blocked dependents become runnable again; the completed one is left alone.
     expect(stepUpdates.map((c) => c.filters.id)).toEqual(['s1', 's2', 's3']);
 
-    expect(find(calls, 'family_automation_runs', 'update')[0].payload).toMatchObject({ state: 'ready', completed_at: null });
+    expect(find(calls, 'family_automation_runs', 'update')[0].payload).toMatchObject({ state: 'ready', completed_at: null, attempt: 0 });
     expect(find(calls, 'ai_run_events', 'insert')[0].payload).toMatchObject({ event_type: 'step_retried' });
   });
 
@@ -292,7 +293,7 @@ describe('editStepInput', () => {
     // Dependencies survive the re-keying as real uuids of the NEW steps.
     expect(inserted[2].dependency_ids).toEqual([inserted[1].id]);
 
-    expect(find(calls, 'family_automation_runs', 'update')[0].payload).toMatchObject({ plan_id: 'plan-2', state: 'ready' });
+    expect(find(calls, 'family_automation_runs', 'update')[0].payload).toMatchObject({ plan_id: 'plan-2', state: 'ready', attempt: 0 });
     expect(find(calls, 'ai_run_events', 'insert')[0].payload).toMatchObject({ event_type: 'planned' });
   });
 

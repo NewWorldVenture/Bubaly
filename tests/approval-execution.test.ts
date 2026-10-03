@@ -177,7 +177,10 @@ describe('decide — plan_steps', () => {
         payload: { kind: 'plan_steps', run_id: 'run-1', step_ids: ['step-1'] }, payload_kind: 'plan_steps',
         run_id: 'run-1', plan_step_ids: ['step-1'], plan_step_id: 'step-1',
       })],
-      family_automation_runs: [runRow()],
+      // Parked at the attempt ceiling: the slices before the approval step
+      // completed nothing. The decision must hand the budget back, or the
+      // kick refuses the run and the next tick abandons it, decision and all.
+      family_automation_runs: [runRow({ attempt: 5, max_attempts: 5 })],
       ai_plan_steps: [stepRow()],
       ai_requests: [{ id: 'req-1', family_id: 'fam-1', status: 'awaiting_approval' }],
     });
@@ -193,7 +196,7 @@ describe('decide — plan_steps', () => {
     expect(approval.executed_at).toBeTruthy();
 
     expect(store.tables.ai_plan_steps[0]).toMatchObject({ status: 'ready', approval_required: true, approval_id: 'appr-1' });
-    expect(store.tables.family_automation_runs[0]).toMatchObject({ state: 'ready', status: 'approved', error: null });
+    expect(store.tables.family_automation_runs[0]).toMatchObject({ state: 'ready', status: 'approved', error: null, attempt: 0 });
     expect(kicked.runs).toEqual(['run-1']);
 
     // Exactly one approval row still exists — nothing re-opened a gate.

@@ -22,7 +22,7 @@ import { describeDbError, wroteNoRows } from '@/lib/supabase/errors';
 import { fail, ok, SERVICE_CODES, type ServiceResult, type ServiceScope } from '@/lib/services/types';
 import { canTransitionRun, isTerminalRunState, legacyStatusFor, type RunState, type StepState } from './states';
 import {
-  appendEvent, ledgerClient, loadPlanSteps, loadRun, savePlan, updateRequest, updateRun, updateStep,
+  appendEvent, freshBudget, ledgerClient, loadPlanSteps, loadRun, savePlan, updateRequest, updateRun, updateStep,
   type PlanStepInput, type RunRow, type StepRow, type StoreOpts,
 } from './store';
 
@@ -122,6 +122,7 @@ export async function resumeRun(scope: ServiceScope, runId: string, opts?: Contr
     paused_at: null,
     run_after: new Date().toISOString(),
     error: null,
+    ...freshBudget(),
   }, { db });
   if (!updated.ok) return updated;
 
@@ -314,6 +315,7 @@ export async function rerunStep(
     run_after: new Date().toISOString(),
     completed_at: null,
     error: null,
+    ...freshBudget(),
   }, { db });
   if (!resumed.ok) return resumed;
 
@@ -425,6 +427,7 @@ export async function editStepInput(
     completed_at: null,
     error: null,
     current_step_id: null,
+    ...freshBudget(),
   }, { db });
   if (!repointed.ok) return repointed;
 

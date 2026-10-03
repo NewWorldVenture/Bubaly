@@ -55,7 +55,7 @@ import { getTranslations } from '@/lib/i18n/server';
 import { kickRun } from '@/lib/ai/runs/continue';
 import { isTerminalRunState, legacyStatusFor, type RunState, type StepState } from '@/lib/ai/runs/states';
 import {
-  appendEvent, ledgerClient, loadPlanSteps, loadRun, updateRequest, updateRun, updateStep, type StepRow,
+  appendEvent, freshBudget, ledgerClient, loadPlanSteps, loadRun, updateRequest, updateRun, updateStep, type StepRow,
 } from '@/lib/ai/runs/store';
 import {
   availableWriteBackKinds, reminderLeadAt, writeBackTitle, type WriteBackKind,
@@ -462,6 +462,9 @@ async function foldIntoRun(
     return ok({ resumedRunId: null, runId, released: gated.length });
   }
 
+  // A person decided, so the run gets its attempt budget back along with its
+  // place in the queue: at the ceiling the kick below would refuse it and the
+  // next tick would abandon it, decision and all (controls.ts, freshBudget).
   const resumed = await updateRun(scope, runId, {
     state: 'ready',
     status: legacyStatusFor('ready'),
@@ -469,6 +472,7 @@ async function foldIntoRun(
     error: null,
     lease_owner: null,
     lease_expires_at: null,
+    ...freshBudget(),
   }, { db });
   if (!resumed.ok) return resumed;
   if (run.data.request_id) await updateRequest(scope, run.data.request_id, { status: 'ready', error: null }, { db });

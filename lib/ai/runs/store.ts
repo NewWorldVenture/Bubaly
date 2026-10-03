@@ -615,6 +615,23 @@ export async function claimRuns(
 }
 
 /**
+ * The attempt budget a person's own re-entry hands back.
+ *
+ * `attempt` counts the slices in a row that completed nothing; at
+ * `max_attempts` the run is abandoned (`claim_ai_runs`' recovery arm) and
+ * `claimRun` refuses to lease it. Resume, re-run a step, edit a step and an
+ * approval decision (lib/services/approvals) each put the run back to `ready`
+ * because a member of the family asked for it, and each one tells them Bubaly
+ * will pick it up. Written without this, a run that had spent its budget was
+ * promised that and then refused by the kick and dead-lettered by the next
+ * tick, with nothing a person could do about it. A human asking again is a
+ * new budget, the way a slice that made progress is (executor.ts, budgetReset).
+ */
+export function freshBudget(): Pick<Database['public']['Tables']['family_automation_runs']['Update'], 'attempt'> {
+  return { attempt: 0 };
+}
+
+/**
  * Lease ONE run by id.
  *
  * `claim_ai_runs` selects by due-ness, not by id, so it cannot be used to pick
