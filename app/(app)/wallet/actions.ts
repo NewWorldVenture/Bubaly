@@ -318,19 +318,22 @@ export async function saveAllowanceRuleAction(input: {
   // one edited a few days early went nearly two months between payments —
   // while the row went on showing the old "next" date until the save. This
   // guarded write changes only the amount, and only where the cadence is the
-  // one being saved and a date is already set. It matches nothing when the
-  // cadence changed (a weekly date means nothing to a monthly rule), when the
-  // rule has no date yet, or when the row is not this family's to write; each
-  // of those takes the full update below, which re-dates from today and still
-  // fails when it, too, matches nothing.
+  // one being saved and a date is already set — the date condition is in the
+  // write itself, so an undated rule is never half-saved (amount written, date
+  // still to come) if the write that dates it then fails. It matches nothing
+  // when the cadence changed (a weekly date means nothing to a monthly rule),
+  // when the rule has no date yet, or when the row is not this family's to
+  // write; each of those takes the full update below, which re-dates from
+  // today and still fails when it, too, matches nothing.
   let keptPayday = false;
   if (input.id) {
     const { data: kept, error: keepError } = await supabase.from('allowance_rules')
       .update({ amount_cents: amount })
       .eq('id', input.id).eq('family_id', familyId).eq('cadence', input.cadence)
-      .select('id, next_run_on');
+      .not('next_run_on', 'is', null)
+      .select('id');
     if (keepError) return actionFailure(keepError, t('actions.couldNotSaveThatAllowance'));
-    keptPayday = !wroteNoRows(kept) && Boolean(kept?.[0]?.next_run_on);
+    keptPayday = !wroteNoRows(kept);
   }
   if (!keptPayday) {
     const { data: saved, error } = input.id

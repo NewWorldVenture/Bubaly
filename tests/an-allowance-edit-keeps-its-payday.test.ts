@@ -179,7 +179,7 @@ describe('what an edit could not do before, it still cannot do', () => {
         builder.update = () => {
           failed = true;
           const settle = { then: (resolve: (v: unknown) => unknown) => Promise.resolve({ data: null, error: PG_ERROR, count: null, status: 500, statusText: 'Error' }).then(resolve) };
-          const chain = { eq: () => chain, select: () => settle };
+          const chain = { eq: () => chain, not: () => chain, select: () => settle };
           return chain;
         };
       }
@@ -190,6 +190,58 @@ describe('what an edit could not do before, it still cannot do', () => {
     expect(await edit('weekly-tomorrow', 1_200, 'weekly')).toEqual({ ok: false, error: describeActionError(PG_ERROR, COULD_NOT_SAVE) });
     expect(snapshot()).toEqual(before);
     expect(harness.revalidatePath).not.toHaveBeenCalled();
+  });
+
+  it('an undated rule whose dating write fails is left exactly as it was, not half-saved', async () => {
+    // Review 5973286446 on #916: the amount-only write used to match an undated
+    // rule (same cadence, next_run_on null), commit the new amount, and only
+    // then hand over to the write that dates it — so when that second write
+    // failed, the parent was told "could not save" about an amount that had
+    // already changed. Every allowance_rules update after the first fails here.
+    const from = db.from.bind(db);
+    let updates = 0;
+    (db as unknown as { from: (name: string) => unknown }).from = (name: string) => {
+      const builder = from(name) as unknown as Record<string, unknown>;
+      if (name === 'allowance_rules') {
+        const update = (builder.update as (patch: Row) => unknown).bind(builder);
+        builder.update = (patch: Row) => {
+          updates += 1;
+          if (updates === 1) return update(patch);
+          const settle = { then: (resolve: (v: unknown) => unknown) => Promise.resolve({ data: null, error: PG_ERROR, count: null, status: 500, statusText: 'Error' }).then(resolve) };
+          const chain = { eq: () => chain, not: () => chain, select: () => settle };
+          return chain;
+        };
+      }
+      return builder;
+    };
+    const before = snapshot();
+
+    expect(await edit('weekly-undated', 400, 'weekly')).toEqual({ ok: false, error: describeActionError(PG_ERROR, COULD_NOT_SAVE) });
+    expect(snapshot()).toEqual(before);
+    expect(harness.revalidatePath).not.toHaveBeenCalled();
+  });
+
+  it('an undated rule whose dating write matches nothing is left as it was, too', async () => {
+    const from = db.from.bind(db);
+    let updates = 0;
+    (db as unknown as { from: (name: string) => unknown }).from = (name: string) => {
+      const builder = from(name) as unknown as Record<string, unknown>;
+      if (name === 'allowance_rules') {
+        const update = (builder.update as (patch: Row) => unknown).bind(builder);
+        builder.update = (patch: Row) => {
+          updates += 1;
+          if (updates === 1) return update(patch);
+          const settle = { then: (resolve: (v: unknown) => unknown) => Promise.resolve({ data: [], error: null, count: null, status: 200, statusText: 'OK' }).then(resolve) };
+          const chain = { eq: () => chain, not: () => chain, select: () => settle };
+          return chain;
+        };
+      }
+      return builder;
+    };
+    const before = snapshot();
+
+    expect(await edit('weekly-undated', 400, 'weekly')).toEqual({ ok: false, error: COULD_NOT_SAVE });
+    expect(snapshot()).toEqual(before);
   });
 
   it('a kept payday survives a pause and resume made around the edit', async () => {

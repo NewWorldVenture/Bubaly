@@ -90,7 +90,7 @@ function failUpdate(reply: Record<string, unknown>) {
     const builder = from(name) as unknown as Record<string, unknown>;
     if (name === 'allowance_rules') {
       const settle = { then: (resolve: (v: unknown) => unknown) => Promise.resolve({ data: null, count: null, status: 500, statusText: 'Error', ...reply }).then(resolve) };
-      builder.update = () => { const chain = { eq: () => chain, select: () => settle }; return chain; };
+      builder.update = () => { const chain = { eq: () => chain, not: () => chain, select: () => settle }; return chain; };
     }
     return builder;
   };
