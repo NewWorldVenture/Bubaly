@@ -25,7 +25,7 @@ import type { SupabaseClient } from '@supabase/supabase-js';
 import type { Database } from '@/lib/database.types';
 import { createInMemorySupabase, type InMemorySupabase, type Row } from './helpers/in-memory-supabase';
 import { generateICS, parseICS } from '@/lib/sync/ics';
-import { planFeedRows } from '@/lib/calendar/feeds';
+import { EXCEPTION_KEY_SEPARATOR, planFeedRows } from '@/lib/calendar/feeds';
 import { expandEventsInZone, type RecurrableEvent } from '@/lib/calendar/recurrence';
 
 const mocks = vi.hoisted(() => ({ fetchPublicCalendarText: vi.fn() }));
@@ -91,13 +91,13 @@ describe('the feed planner hands the master the occurrences it gave up', () => {
   it('a moved occurrence: the master forgets the Saturday, the Sunday is its own event', () => {
     const { rows } = planFeedRows(parseICS(ics(MASTER, MOVED)), FAMILY, FEED.id);
     expect(rows.find((r) => r.external_uid === 'series')?.exception_dates).toEqual([SEP_12]);
-    expect(rows.find((r) => r.external_uid === `series#${SEP_12}`)?.exception_dates).toEqual([]);
+    expect(rows.find((r) => r.external_uid === `series${EXCEPTION_KEY_SEPARATOR}${SEP_12}`)?.exception_dates).toEqual([]);
   });
 
   it('a cancelled occurrence: the master forgets it, and it is a removal', () => {
     const { rows, cancelled } = planFeedRows(parseICS(ics(CANCELLED_WEEK, MASTER)), FAMILY, FEED.id);
     expect(rows.find((r) => r.external_uid === 'series')?.exception_dates).toEqual([SEP_19]);
-    expect(cancelled).toEqual([`series#${SEP_19}`]);
+    expect(cancelled).toEqual([`series${EXCEPTION_KEY_SEPARATOR}${SEP_19}`]);
   });
 
   it('EXDATEs and exception VEVENTs are one sorted set, however the feed orders them', () => {
@@ -107,7 +107,7 @@ describe('the feed planner hands the master the occurrences it gave up', () => {
 
   it('an exception whose master is not in the feed stands alone, and a one-off has nothing to give up', () => {
     const { rows } = planFeedRows(parseICS(ics(MOVED, ['UID:concert', 'SUMMARY:Concert', 'DTSTART:20260920T180000Z'])), FAMILY, FEED.id);
-    expect(rows.map((r) => [r.external_uid, r.exception_dates])).toEqual([[`series#${SEP_12}`, []], ['concert', []]]);
+    expect(rows.map((r) => [r.external_uid, r.exception_dates])).toEqual([[`series${EXCEPTION_KEY_SEPARATOR}${SEP_12}`, []], ['concert', []]]);
   });
 });
 
