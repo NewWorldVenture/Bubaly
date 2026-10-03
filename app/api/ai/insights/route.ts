@@ -1,5 +1,5 @@
 import { NextResponse } from 'next/server';
-import { refuseOverAIAllowance } from '@/lib/server/ai-access';
+import { refuseOverAIAllowance, admissionRefusalResponse } from '@/lib/server/ai-access';
 import { getTranslations } from '@/lib/i18n/server';
 import { requireUserContext } from '@/lib/supabase/auth';
 import { settle, describeReadError } from '@/lib/supabase/settle';
@@ -99,6 +99,8 @@ export async function POST(req: Request) {
       memberId: ctx.active.member.id,
     });
   } catch (err) {
+    const refused = admissionRefusalResponse(err, t);
+    if (refused) return refused;
     console.error('AI insights data load failed:', err);
     return NextResponse.json({ error: t('insights.couldNotLoadDataFor') }, { status: 500 });
   }
@@ -149,6 +151,8 @@ export async function POST(req: Request) {
     if (!text) return NextResponse.json({ error: t('insights.noSuggestionsJustNowPlease') }, { status: 502 });
     return NextResponse.json({ text });
   } catch (err) {
+    const refused = admissionRefusalResponse(err, t);
+    if (refused) return refused;
     console.error('AI insights error:', err);
     return NextResponse.json({ error: describeAIError(err).message }, { status: 503 });
   }

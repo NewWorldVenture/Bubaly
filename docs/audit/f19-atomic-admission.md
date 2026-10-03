@@ -381,3 +381,56 @@ Locally, against a mutant of the function without `and r.metered`, the probe
 fails four assertions by name. Against the real function it passes. Concurrency
 needs several sessions, so it stays with the local multi-session script above;
 the probe proves the decision each session makes.
+
+## Closed: a refusal at admission reads as the allowance everywhere
+
+Under 0477, a request can pass a route's allowance check at 9/10 and then be
+refused at admission, because another of the family's requests took the 10th.
+`withAiRequest` throws `AiRequestOverAllowance` before the model runs. Only
+`/api/ai`, `/api/ai/chat`, the gift route and the concierge intake mapped it.
+Everywhere else the route's own catch read it as an outage: "failed" or "temporarily
+unavailable", with a 500, 502 or 503. That told a family at its limit to retry a
+request that cannot succeed this month.
+
+**Fix.**
+- **Routes:** `admissionRefusalResponse(err, t)` (`lib/server/ai-access.ts`) answers
+  the refusal as the gate does: 429 `allowance_exceeded` with `limit`, in the
+  reader's language. It runs first in every 5xx catch of the 27 routes that file
+  through `withAiRequest`. Three routes fall back to a deterministic answer and
+  need nothing.
+- **Shared error reading:** `describeAIError` recognises the refusal too.
+- **Actions:** the paperwork draft, the contact reconnect and the mission plan
+  say the allowance with the cap.
+
+**Evidence.**
+- `tests/every-ai-route-answers-the-admission-refusal-as-the-allowance.test.ts` is
+  a ratchet: every such catch must ask first.
+- `tests/ai-allowance-refusal-is-localized.test.ts` stages the race on
+  `/api/ai/notes`, in German: 429 with the cap. A control shows that any other
+  failure is still the route's 500.
+- `tests/a-draft-action-says-the-allowance-not-try-again.test.ts` and
+  `tests/missions-generate-plan-action.test.ts` cover the actions.
+- Each is red with the change reverted.
+
+## Live contract: the app's store through PostgREST to 0477
+
+The app tests drive an emulator, and the probe drives the SQL. This run joins the
+two. A throwaway vitest file (not committed) uses the real `createRequest` and
+`admitRequest` from `lib/ai/runs/store.ts`. It goes through supabase-js and the
+local stack's PostgREST to the real `admit_ai_request`, on disposable families
+seeded with 9 rows each.
+
+**Sequential:**
+- the 10th request is admitted;
+- a retry of its key answers `existing` with the same id;
+- the 11th is refused with `allowance_exceeded`;
+- an exempt filing lands with `metered = false`;
+- afterwards there are 10 metered rows and 1 unmetered.
+
+**Race:** 8 parallel `admitRequest` calls through PostgREST at 9/10 give 1
+admitted and 7 refused, leaving 10 metered rows.
+
+Both cases passed, and the families were removed afterwards. This proves the
+parameter names and types, the returned table shape and the outcome mapping
+against the deployed function's actual interface, not only the emulator's
+reading of it.

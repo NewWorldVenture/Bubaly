@@ -1,4 +1,4 @@
-import { refuseOverAIAllowance } from '@/lib/server/ai-access';
+import { refuseOverAIAllowance, admissionRefusalResponse } from '@/lib/server/ai-access';
 import { NextRequest, NextResponse } from 'next/server';
 import { getTranslations } from '@/lib/i18n/server';
 import { requireUserContext } from '@/lib/supabase/auth';
@@ -83,6 +83,8 @@ export async function POST(req: NextRequest) {
       },
     );
   } catch (err) {
+    const refused = admissionRefusalResponse(err, t);
+    if (refused) return refused;
     console.error('Recipe suggest error:', err);
     return NextResponse.json({ error: t('suggest.aiIsTemporarilyUnavailable') }, { status: 502 });
   }

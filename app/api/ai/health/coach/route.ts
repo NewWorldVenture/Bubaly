@@ -1,5 +1,5 @@
 import { NextResponse } from 'next/server';
-import { refuseOverAIAllowance } from '@/lib/server/ai-access';
+import { refuseOverAIAllowance, admissionRefusalResponse } from '@/lib/server/ai-access';
 import { getTranslations } from '@/lib/i18n/server';
 import { requireUserContext } from '@/lib/supabase/auth';
 import { isManager } from '@/lib/constants/roles';
@@ -158,6 +158,8 @@ export async function POST(req: Request) {
     )).trim() || 'I couldn’t generate guidance just now. Please try again.';
     return NextResponse.json({ text });
   } catch (err) {
+    const refused = admissionRefusalResponse(err, t);
+    if (refused) return refused;
     console.error('AI health coach error:', err);
     return NextResponse.json({ error: describeAIError(err).message }, { status: 503 });
   }

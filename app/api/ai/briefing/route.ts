@@ -1,5 +1,5 @@
 ﻿import { NextRequest, NextResponse } from 'next/server';
-import { withinAIAllowance, AIAllowanceSpent } from '@/lib/server/ai-access';
+import { withinAIAllowance, AIAllowanceSpent, admissionRefusalResponse } from '@/lib/server/ai-access';
 import { createServer } from '@/lib/supabase/server';
 import { refuseUnlessEntitled } from '@/lib/server/route-feature-gate';
 import { settleAll } from '@/lib/supabase/settle';
@@ -547,6 +547,8 @@ ${UNTRUSTED_CONTENT_RULE}
         : {}),
     });
   } catch (err) {
+    const refused = admissionRefusalResponse(err);
+    if (refused) return refused;
     console.error('Briefing error:', err);
     return NextResponse.json({ error: tr('briefing.failedToGenerateBriefing') }, { status: 500 });
   }

@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { refuseOverAIAllowance } from '@/lib/server/ai-access';
+import { refuseOverAIAllowance, admissionRefusalResponse } from '@/lib/server/ai-access';
 import { getTranslations } from '@/lib/i18n/server';
 import { createServer } from '@/lib/supabase/server';
 import { settleAll } from '@/lib/supabase/settle';
@@ -144,6 +144,8 @@ export async function POST(req: NextRequest) {
     }, 'AI invest mentor call');
     return NextResponse.json({ coaching, tier });
   } catch (err) {
+    const refused = admissionRefusalResponse(err, t);
+    if (refused) return refused;
     console.error('Invest mentor error:', err);
     return NextResponse.json({ error: t('invest.failedToGenerateAnExplanation') }, { status: 500 });
   }

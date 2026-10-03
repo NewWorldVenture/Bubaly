@@ -191,7 +191,7 @@ async function monthlyAllowance(
     // which keys off `limit`.
     return {
       ok: false, status: 429, code: 'allowance_exceeded', limit: allowance,
-      error: `Your family has used its ${allowance} AI requests for this month. Upgrade to Family Basic for unlimited, or try again next month.`,
+      error: allowanceRefusalText(allowance),
     };
   }
   return { ok: true, planLevel, monthlyUsed: used, monthlyAllowance: allowance };
@@ -301,6 +301,28 @@ export function denialMessage(denial: AIAccessDenial, t: Translator): string {
     default:
       return denial.error;
   }
+}
+
+/** The allowance refusal's English source text; `denialMessage` says it in the reader's language. */
+function allowanceRefusalText(limit: number): string {
+  return `Your family has used its ${limit} AI requests for this month. Upgrade to Family Basic for unlimited, or try again next month.`;
+}
+
+/**
+ * The admission refusal (F19), answered as the gate answers it. A route checks
+ * the allowance, then files its request through `withAiRequest`; when another
+ * of the family's requests takes the last slot in between, the admission
+ * (0477) refuses before the model runs and throws `AiRequestOverAllowance`.
+ * A route's own catch then read it as an outage — "failed", "temporarily
+ * unavailable", 500/502/503 — telling a family at its limit to retry a request
+ * that cannot succeed this month. Matched by name, so this module does not
+ * import the observability wrapper. Null for any other error.
+ */
+export function admissionRefusalResponse(err: unknown, t?: Translator): NextResponse | null {
+  if (!(err instanceof Error) || err.name !== 'AiRequestOverAllowance') return null;
+  const limit = (err as Error & { allowance?: unknown }).allowance;
+  if (typeof limit !== 'number') return null;
+  return accessDeniedResponse({ ok: false, status: 429, code: 'allowance_exceeded', limit, error: allowanceRefusalText(limit) }, t);
 }
 
 export function accessDeniedResponse(denial: AIAccessDenial, t?: Translator): NextResponse {

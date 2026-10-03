@@ -16,6 +16,8 @@ const ENGLISH = 'Your family has used its 10 AI requests for this month. Upgrade
 const GERMAN = 'Ihre Familie hat ihre 10 KI-Anfragen für diesen Monat aufgebraucht. Wechseln Sie zu Family Basic für unbegrenzte Anfragen oder versuchen Sie es nächsten Monat erneut.';
 
 const state = vi.hoisted(() => ({
+  /** The admission refuses after the gate passed: another request took the 10th (F19 race). */
+  race: false,
   used: 10,
   cookie: undefined as string | undefined,
   headers: {} as Record<string, string>,
@@ -73,6 +75,17 @@ vi.mock('@/lib/ai/assistant-engine', async (importOriginal) => ({
   prepareAssistantTurn: (...a: unknown[]) => prepareAssistantTurn(...a),
 }));
 
+vi.mock('@/lib/ai/observability', async (importOriginal) => {
+  const real = await importOriginal<typeof import('@/lib/ai/observability')>();
+  return {
+    ...real,
+    withAiRequest: (async (scope, spec, body) => {
+      if (state.race) throw new real.AiRequestOverAllowance(spec.feature, 10);
+      return real.withAiRequest(scope, spec, body);
+    }) as typeof real.withAiRequest,
+  };
+});
+
 // The first import parses every catalogue; give it room on a cold cache.
 vi.setConfig({ testTimeout: 20_000 });
 
@@ -84,6 +97,7 @@ function post(url: string, body: unknown, headers: Record<string, string> = {}) 
 }
 
 beforeEach(() => {
+  state.race = false;
   state.used = 10;
   state.cookie = undefined;
   state.headers = {};
@@ -137,6 +151,27 @@ describe('a route behind refuseOverAIAllowance (/api/ai/notes)', () => {
     const res = await POST(post('/api/ai/notes', { content: 'Buy milk' }));
     expect(res.status).toBe(429);
     expect(await res.json()).toEqual({ error: ENGLISH, code: 'allowance_exceeded', limit: 10 });
+  });
+});
+
+describe('the race: the gate passed at 9, the admission refused at 10', () => {
+  it('/api/ai/notes answers the allowance (429, German, with the cap), not "failed to analyze" (500)', async () => {
+    state.cookie = 'de-DE';
+    state.used = 9;
+    state.race = true;
+    const { POST } = await import('@/app/api/ai/notes/route');
+    const res = await POST(post('/api/ai/notes', { content: 'Buy milk' }));
+    expect(res.status).toBe(429);
+    expect(await res.json()).toEqual({ error: GERMAN, code: 'allowance_exceeded', limit: 10 });
+    expect(complete).not.toHaveBeenCalled();
+  });
+
+  it('control: any other failure in that catch is still the route\'s own 500', async () => {
+    state.used = 9;
+    complete.mockRejectedValueOnce(new Error('provider down'));
+    const { POST } = await import('@/app/api/ai/notes/route');
+    const res = await POST(post('/api/ai/notes', { content: 'Buy milk' }));
+    expect(res.status).toBe(500);
   });
 });
 

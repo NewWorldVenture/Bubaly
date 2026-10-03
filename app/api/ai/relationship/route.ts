@@ -1,5 +1,5 @@
 import { NextResponse } from 'next/server';
-import { refuseOverAIAllowance } from '@/lib/server/ai-access';
+import { refuseOverAIAllowance, admissionRefusalResponse } from '@/lib/server/ai-access';
 import { getTranslations } from '@/lib/i18n/server';
 import { createServer } from '@/lib/supabase/server';
 import { settleAll, describeReadError } from '@/lib/supabase/settle';
@@ -186,6 +186,8 @@ export async function POST() {
     };
     return NextResponse.json({ digest, context });
   } catch (err) {
+    const refused = admissionRefusalResponse(err, t);
+    if (refused) return refused;
     console.error('Relationship AI error:', err);
     // An engine with no key, no credit or no connection is unavailable, as
     // every other AI route answers it — not a server fault behind a 500.

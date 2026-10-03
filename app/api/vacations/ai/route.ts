@@ -1,4 +1,4 @@
-import { refuseOverAIAllowance } from '@/lib/server/ai-access';
+import { refuseOverAIAllowance, admissionRefusalResponse } from '@/lib/server/ai-access';
 import { NextRequest, NextResponse } from 'next/server';
 import { getTranslations } from '@/lib/i18n/server';
 import { requireUserContext } from '@/lib/supabase/auth';
@@ -158,6 +158,8 @@ Costs/planned are whole US dollars. Keep itinerary day numbers between 1 and ${r
       if (!built) return NextResponse.json({ error: t('ai.aiBuilderReturnedAnInvalid') }, { status: 502 });
       plan = built;
     } catch (err) {
+      const refused = admissionRefusalResponse(err, t);
+      if (refused) return refused;
       console.error('Vacation build error:', err);
       return NextResponse.json({ error: t('ai.aiBuilderIsTemporarilyUnavailable') }, { status: 502 });
     }
@@ -361,6 +363,8 @@ Itinerary days planned: ${(days.data ?? []).length} | items: ${(items.data ?? []
         },
       );
     } catch (err) {
+      const refused = admissionRefusalResponse(err, t);
+      if (refused) return refused;
       console.error('Concierge error:', err);
       return NextResponse.json({ error: t('ai.aiIsTemporarilyUnavailable') }, { status: 502 });
     }

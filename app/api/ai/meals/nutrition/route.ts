@@ -1,5 +1,5 @@
 import { NextResponse } from 'next/server';
-import { refuseOverAIAllowance } from '@/lib/server/ai-access';
+import { refuseOverAIAllowance, admissionRefusalResponse } from '@/lib/server/ai-access';
 import { getTranslations } from '@/lib/i18n/server';
 import { requireUserContext } from '@/lib/supabase/auth';
 import { createServer } from '@/lib/supabase/server';
@@ -193,6 +193,8 @@ export async function POST(req: Request) {
       },
     );
   } catch (err) {
+    const refused = admissionRefusalResponse(err, t);
+    if (refused) return refused;
     console.error('Meal nutrition generation error:', err);
     return NextResponse.json({ error: describeAIError(err).message }, { status: 503 });
   }
