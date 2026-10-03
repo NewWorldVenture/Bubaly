@@ -138,6 +138,10 @@ const failures = () => vi.mocked(console.error).mock.calls
   .map(([, error]) => (error instanceof Error ? error.message : error));
 const rereadLogs = () => vi.mocked(console.error).mock.calls
   .filter(([message]) => typeof message === 'string' && message.startsWith('[money] card duplicate re-read'));
+const MISMATCH = "[money] card duplicate is not this attempt's row; keeping the refusal";
+const mismatchLogs = () => vi.mocked(console.error).mock.calls.filter(([message]) => message === MISMATCH);
+const PROVIDER_FAILED = '[money] card create failed at the provider';
+const providerFailureLogs = () => vi.mocked(console.error).mock.calls.filter(([message]) => message === PROVIDER_FAILED);
 
 beforeEach(() => {
   expect(network.sealed()).toEqual(SEALED);
@@ -521,11 +525,32 @@ describe('residuals the attempt key does not cover', () => {
     expect(provider.log.cardOutcomes).toEqual(['failed', 'replayed_failure']);
     expect(provider.cards.size).toBe(0);
     expect(mirrorCards()).toHaveLength(0);
+    // Both answers are named; this double sends no response headers, so neither reads as a replay.
+    const failed = { childWalletId: 'wallet-a', type: 'virtual', attempt: 0, requestId: undefined, statusCode: undefined, replayed: false };
+    expect(providerFailureLogs()).toEqual([[PROVIDER_FAILED, failed], [PROVIDER_FAILED, failed]]);
 
     provider.forgetKeys();
     expect((await issueCardAction(VIRTUAL)).ok).toBe(true);
     expect(provider.log.cardOutcomes).toEqual(['failed', 'replayed_failure', 'created']);
     expect(provider.active('virtual')).toHaveLength(1);
+    expect(providerFailureLogs()).toHaveLength(2);
+  });
+
+  it.each([
+    { label: 'a first answer', replayedHeader: undefined, replayed: false },
+    { label: "the provider's replay of a saved failure", replayedHeader: 'true', replayed: true },
+  ])('names a failed provider create ($label) by request, status and attempt, so a blocked parent can be traced', async ({ replayedHeader, replayed }) => {
+    const failure = Object.assign(new Error('synthetic card refusal after execution began'), {
+      requestId: 'req_synthetic_1', statusCode: 402,
+      headers: replayedHeader === undefined ? {} : { 'idempotent-replayed': replayedHeader },
+    });
+    provider.failNextCardCreate(failure);
+    expect(await issueCardAction(PHYSICAL)).toEqual({ ok: false, error: REFUSED });
+    expect(providerFailureLogs()).toEqual([[PROVIDER_FAILED, {
+      childWalletId: 'wallet-a', type: 'physical', attempt: 0, requestId: 'req_synthetic_1', statusCode: 402, replayed,
+    }]]);
+    expect(mirrorCards()).toHaveLength(0);
+    expect(issuedAudits()).toEqual([]);
   });
 });
 
@@ -614,27 +639,34 @@ describe('a card mirror insert that meets UNIQUE (stripe_card_id)', () => {
     expect(cardTableCalls()).toBe(3);
     expect(failures()).toEqual([expect.stringMatching(/^Failed to persist card: duplicate key value/)]);
     expect(rereadLogs()).toEqual([]);
+    expect(mismatchLogs()).toEqual([[MISMATCH, { stripeCardId: CARD, found: true }]]);
   });
 
   it.each([
-    { label: 'no row', reply: { data: null } as Scripted, logged: [] },
-    { label: 'a row for another provider card', reply: { data: { ...EXACT, stripe_card_id: 'ic_other' } } as Scripted, logged: [] },
+    { label: 'no row', reply: { data: null } as Scripted, logged: [], mismatch: [[MISMATCH, { stripeCardId: CARD, found: false }]] },
+    {
+      label: 'a row for another provider card', reply: { data: { ...EXACT, stripe_card_id: 'ic_other' } } as Scripted, logged: [],
+      mismatch: [[MISMATCH, { stripeCardId: CARD, found: true }]],
+    },
     {
       label: 'a returned error, even beside exact data',
       reply: { data: EXACT, error: { code: '08006', message: 'synthetic re-read refusal' } } as Scripted,
       logged: [['[money] card duplicate re-read failed; keeping the refusal', { stripeCardId: CARD, code: '08006' }]],
+      mismatch: [],
     },
     {
       label: 'a rejection',
       reply: 'reject' as Scripted,
       logged: [['[money] card duplicate re-read rejected; keeping the refusal', { stripeCardId: CARD }]],
+      mismatch: [],
     },
-  ])('keeps the original refusal when the re-read gives $label', async ({ reply, logged }) => {
+  ])('keeps the original refusal when the re-read gives $label', async ({ reply, logged, mismatch }) => {
     db.seed('stripe_issuing_cards', [EXACT]);
     script.push(null, null, reply);
     expect(await issueCardAction(shown(VIRTUAL, 1))).toEqual({ ok: false, error: DUPLICATE_TEXT });
     expect(failures()).toEqual([expect.stringMatching(/^Failed to persist card: duplicate key value/)]);
     expect(rereadLogs()).toEqual(logged);
+    expect(mismatchLogs()).toEqual(mismatch);
     expect(issuedAudits()).toEqual([]);
     expect(cardTableCalls()).toBe(3);
   });

@@ -22,8 +22,11 @@ import { reactBrowserScripts } from './helpers/react-browser';
 //
 // The tests labelled "reproduces:" document what the client sends and pass on
 // the current source; "preserves:" tests are controls that must keep passing;
-// "repaired:" tests pin the stale-order guard. Here every action is a held
-// promise and the fixture's answers stand in for the server.
+// "repaired:" tests pin the stale-order guard. What the server does with these
+// calls is not exercised here: every action is a held promise and the fixture's
+// answers stand in for the server. Server side, see
+// tests/money-card-attempt-identity.test.ts and
+// tests/money-card-stale-order.test.ts.
 //
 // The real MoneyCardsView and Button run in Chromium. Each tab is a separate page
 // in one browser context, each with its own copy of the view module (as each real
@@ -261,8 +264,8 @@ test('reproduces: two tabs of the same parent each send a Virtual order for the 
   expect((await read(tab1)).calls).toEqual([{ action: 'issueCardAction', args: VIRTUAL_INPUT, settled: false }]);
   expect((await read(tab2)).calls).toEqual([{ action: 'issueCardAction', args: VIRTUAL_INPUT, settled: false }]);
 
-  // Each tab presents its own success and re-reads; the server answers both
-  // with the one card (server-side tests).
+  // Each tab then presents its own success and re-reads. Server side, these two
+  // overlapping calls are one attempt under repair B: one card, both answered.
   await complete(tab1, 0, 'success');
   await complete(tab2, 0, 'success');
   for (const tab of [tab1, tab2]) {
@@ -337,7 +340,7 @@ test('reproduces: two tabs of the same parent each submit a physical order for t
   expect((await read(tab1)).calls).toHaveLength(1);
   expect((await read(tab2)).calls).toHaveLength(1);
 
-  // Same count, one attempt: the server gives both the one card (server-side tests).
+  // Server side, repair B answers these overlapping calls with one card.
   await complete(tab1, 0, 'success');
   await complete(tab2, 0, 'success');
   for (const tab of [tab1, tab2]) {
