@@ -660,7 +660,9 @@ describe('/api/ai/chat: a turn whose tool ran before the stream broke is partial
     state.breakAfterAction = true;
     await (await POST(sendChat('send-0001-abcdef'))).text();
     const row = tableOf('ai_requests').find((r) => r.feature === 'chat.assistant');
-    expect(row?.status).toBe('partially_completed');
+    // The stream closes inside the request; the row settles just after the
+    // body returns, so wait for it rather than assume the runtime's ordering.
+    await vi.waitFor(() => expect(row?.status).toBe('partially_completed'));
     expect(state.effects).toBe(1);
 
     const replay = events(await (await POST(sendChat('send-0001-abcdef'))).text());
