@@ -135,6 +135,24 @@ export async function createReminder(
       } : undefined,
     },
     async (key) => {
+      if (input.memberId != null) {
+        const { data: members, error: memberError } = await scope.db
+          .from('family_members')
+          .select('id,family_id')
+          .eq('family_id', scope.familyId)
+          .eq('id', input.memberId)
+          .limit(1);
+        if (memberError) {
+          return fail(describeDbError(memberError, 'Could not verify that reminder member.'), { code: SERVICE_CODES.db });
+        }
+        const member = Array.isArray(members) ? members[0] : null;
+        if (!member || typeof member !== 'object' || Array.isArray(member)
+          || typeof member.id !== 'string' || typeof member.family_id !== 'string'
+          || !sameId(member.id, input.memberId) || !sameId(member.family_id, scope.familyId)) {
+          return fail('That reminder member could not be verified in this family.', { code: SERVICE_CODES.denied });
+        }
+      }
+
       const { data, error } = await scope.db
         .from('family_reminders')
         .insert({
