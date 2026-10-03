@@ -39,6 +39,9 @@ export async function listTeams(scope: ServiceScope, input: { memberId?: string 
     console.error('[service:sports] teams read failed', error);
     return fail(describeDbError(error, 'Could not load the teams.'), { code: SERVICE_CODES.db });
   }
+  if (data != null && !Array.isArray(data)) {
+    return fail('Could not load the teams.', { code: SERVICE_CODES.db });
+  }
   return ok(data ?? []);
 }
 
