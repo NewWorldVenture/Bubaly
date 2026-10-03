@@ -17,7 +17,7 @@ import { isManager } from '@/lib/constants/roles';
 import { getMoneyCapabilities } from '@/lib/stripe/capabilities';
 import { ensureConnectedAccount, createOnboardingLink, syncConnectedAccount } from '@/lib/stripe/connect';
 import { ensureFinancialAccount } from '@/lib/stripe/treasury';
-import { ensureCardholder, issueCard, setCardFrozen, updateCardControls } from '@/lib/stripe/issuing';
+import { ensureCardholder, issueCard, setCardFrozen, StaleCardOrderError, updateCardControls } from '@/lib/stripe/issuing';
 import { clampSpendLimitCents, normalizeSpendWindow, normalizeBlockedCategories } from '@/lib/wallet/card-controls';
 import { evaluateTrust, roleOf } from '@/lib/trust/server';
 import { getStripe } from '@/lib/stripe';
@@ -118,10 +118,17 @@ export async function activateTreasuryAction(): Promise<Result> {
 /** Issue a card for a child (requires Issuing capability). */
 export async function issueCardAction(input: {
   childWalletId: string; type: 'virtual' | 'physical'; spendLimitCents: number | null; spendWindow: string;
-}): Promise<Result<{ cardId: string }>> {
+  /** How many of this child's cards of this type the ordering view showed, every status. */
+  expectedCount: number;
+}): Promise<Result<{ cardId: string }> | { ok: false; error: string; stale: true }> {
   const t = await getTranslations();
   const ctx = await requireUserContext();
   if (!isManager(ctx.active.role)) return { ok: false, error: t('actions.onlyParentsCanIssueCards') };
+  // The count the order was made against is what tells a stale view's repeat
+  // from a deliberate order (issueCard); without a real count there is no order.
+  if (!Number.isSafeInteger(input.expectedCount) || input.expectedCount < 0) {
+    return { ok: false, error: t('money.couldNotIssueTheCard') };
+  }
   const svc = createServiceClient();
   let caps: Awaited<ReturnType<typeof getMoneyCapabilities>>;
   try {
@@ -166,18 +173,26 @@ export async function issueCardAction(input: {
       familyId: ctx.active.familyId, memberId: wallet.member_id, childWalletId: wallet.id,
       name: member?.display_name ?? 'Child', accountId: acct.stripe_account_id, userId: ctx.user.id,
     });
-    const { rowId } = await issueCard(svc, {
+    const { rowId, adopted } = await issueCard(svc, {
       familyId: ctx.active.familyId, childWalletId: wallet.id, cardholderRowId, stripeCardholderId,
       accountId: acct.stripe_account_id, type: input.type,
       spendLimitCents: input.spendLimitCents, spendWindow: input.spendWindow, userId: ctx.user.id,
+      expectedCount: input.expectedCount,
     });
-    await logWalletAudit(svc, {
-      family_id: ctx.active.familyId, actor_user_id: ctx.user.id, action: 'card_issued',
-      entity_type: 'stripe_issuing_cards', entity_id: rowId, detail: `${input.type} card issued`,
-    }, 'card issuance');
+    // An adopted card's row was written, and is audited, by the request of this
+    // same order that inserted it; answering with it here is not a second issue.
+    if (!adopted) {
+      await logWalletAudit(svc, {
+        family_id: ctx.active.familyId, actor_user_id: ctx.user.id, action: 'card_issued',
+        entity_type: 'stripe_issuing_cards', entity_id: rowId, detail: `${input.type} card issued`,
+      }, 'card issuance');
+    }
     revalidatePath('/wallet');
     return { ok: true, data: { cardId: rowId } };
   } catch (e) {
+    // Made against a view another tab or device has moved past: nothing reached
+    // the provider, and the view re-reads on this answer.
+    if (e instanceof StaleCardOrderError) return { ok: false, error: t('wallet.refreshToTryAgain'), stale: true };
     return actionFailure('issue the card', t('money.couldNotIssueTheCard'), e);
   }
 }

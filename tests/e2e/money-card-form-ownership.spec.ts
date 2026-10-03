@@ -57,6 +57,8 @@ async function fixture(page: Page) {
       '@/components/wallet/card-reveal-modal': { CardRevealModal: () => null },
       '@/components/i18n/locale-provider': { useLocale: () => ({ code: 'en-US' }), useTranslations: () => (key, values) => values?.name ? key + ':' + values.name : key },
       '@/lib/marketplace/listings': { currencyUnit: () => ({ before: true, symbol: '$' }) },
+      // No known identity: each mounted view keeps its own claims, as before.
+      '@/components/app/app-context': { useApp: () => ({ userId: null, familyId: null }) },
     };
     function load(id) {
       if (Object.hasOwn(mocks, id)) return mocks[id];
@@ -125,7 +127,7 @@ for (const kind of ['physical', 'controls'] as const) {
     await submit(page, kind).click(); await expect(submit(page, kind)).toBeDisabled();
     await submit(page, kind).evaluate(button => (button as HTMLButtonElement).click());
     const expected = kind === 'physical'
-      ? { childWalletId: 'child-a', type: 'physical', spendLimitCents: value ? 1200 : null, spendWindow: 'daily' }
+      ? { childWalletId: 'child-a', type: 'physical', spendLimitCents: value ? 1200 : null, spendWindow: 'daily', expectedCount: 0 }
       : { cardId: 'card-a', spendLimitCents: value ? 1200 : null, spendWindow: 'weekly', blockedCategories: ['betting_casino_gambling'] };
     expect((await read(page)).calls).toEqual([{ action: kind === 'physical' ? 'issueCardAction' : 'updateCardControlsAction', args: expected, settled: false }]);
     await complete(page, 0, 'refusal'); await expect(submit(page, kind)).toBeEnabled();
