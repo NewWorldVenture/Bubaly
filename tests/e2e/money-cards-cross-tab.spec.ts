@@ -20,12 +20,12 @@ import { reactBrowserScripts } from './helpers/react-browser';
 // The tests labelled "reproduces:" document that CURRENT behaviour and pass on
 // the current source; "preserves:" tests are controls that must keep passing.
 //
-// DESIRED outcome, server side (repair B, lib/stripe/issuing.ts, owned by
-// another change and not exercised here): one card per attempt. A repeated
-// dispatch of an attempt must yield the card already issued for that attempt,
-// never a second live card. Today the server issues a card for each call
-// (characterized in the server-side tests); here every action is a held promise
-// and the fixture's answers stand in for the server.
+// What the server does with these calls is not exercised here: every action is
+// a held promise and the fixture's answers stand in for the server. Server side,
+// repair B (lib/stripe/issuing.ts) keys an order by its attempt, so two calls
+// that overlap before the first card is mirrored get one card
+// (tests/money-card-attempt-identity.test.ts). A stale tab that orders after the
+// first card is mirrored is a new attempt there and still gets a second card.
 //
 // The real MoneyCardsView and Button run in Chromium. Each tab is a separate page
 // in one browser context, each with its own copy of the view module (as each real
@@ -255,8 +255,8 @@ test('reproduces: two tabs of the same parent each send a Virtual order for the 
   expect((await read(tab1)).calls).toEqual([{ action: 'issueCardAction', args: VIRTUAL_INPUT, settled: false }]);
   expect((await read(tab2)).calls).toEqual([{ action: 'issueCardAction', args: VIRTUAL_INPUT, settled: false }]);
 
-  // Today the server issues a card for each call; each tab then presents its own
-  // success and re-reads. DESIRED (repair B, server): one card per attempt.
+  // Each tab then presents its own success and re-reads. Server side, these two
+  // overlapping calls are one attempt under repair B: one card, both answered.
   await complete(tab1, 0, 'success');
   await complete(tab2, 0, 'success');
   for (const tab of [tab1, tab2]) {
@@ -331,7 +331,7 @@ test('reproduces: two tabs of the same parent each submit a physical order for t
   expect((await read(tab1)).calls).toHaveLength(1);
   expect((await read(tab2)).calls).toHaveLength(1);
 
-  // DESIRED (repair B, server): one card per attempt, not two shipped cards.
+  // Server side, repair B answers these overlapping calls with one card.
   await complete(tab1, 0, 'success');
   await complete(tab2, 0, 'success');
   for (const tab of [tab1, tab2]) {

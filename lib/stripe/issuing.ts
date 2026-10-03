@@ -154,7 +154,21 @@ export async function issueCard(
       stripeAccount: params.accountId,
       idempotencyKey: `card-${params.cardholderRowId}-${params.childWalletId}-${params.type}-${mirrored}`,
     },
-  );
+  ).catch((failure: unknown) => {
+    // The provider saves a failure under the key it was sent with and replays
+    // it to every later order of this attempt (the count has not moved) until
+    // it prunes the key, at least 24 hours on. Name the request, and whether
+    // this answer was such a replay, so a blocked parent can be traced.
+    const detail = typeof failure === 'object' && failure !== null
+      ? failure as { requestId?: unknown; statusCode?: unknown; headers?: Record<string, unknown> }
+      : {};
+    console.error('[money] card create failed at the provider', {
+      childWalletId: params.childWalletId, type: params.type, attempt: mirrored,
+      requestId: detail.requestId, statusCode: detail.statusCode,
+      replayed: detail.headers?.['idempotent-replayed'] === 'true',
+    });
+    throw failure;
+  });
 
   const { data: row, error } = await supabase
     .from('stripe_issuing_cards')
@@ -184,15 +198,19 @@ export async function issueCard(
         .then(({ data, error: rereadError }) => {
           if (!rereadError) return data;
           console.error('[money] card duplicate re-read failed; keeping the refusal', { stripeCardId: card.id, code: rereadError.code });
-          return null;
+          return undefined;
         }, () => {
           console.error('[money] card duplicate re-read rejected; keeping the refusal', { stripeCardId: card.id });
-          return null;
+          return undefined;
         });
       if (winner && winner.stripe_card_id === card.id && winner.family_id === params.familyId
         && winner.child_wallet_id === params.childWalletId && winner.type === params.type
         && winner.cardholder_id === params.cardholderRowId) {
         return { rowId: winner.id, stripeCardId: card.id, adopted: true };
+      }
+      // Read, but not this attempt's row: only a corrupted mirror gets here.
+      if (winner !== undefined) {
+        console.error('[money] card duplicate is not this attempt\'s row; keeping the refusal', { stripeCardId: card.id, found: winner !== null });
       }
     } else {
       // The card is live at the provider with no mirror row; name it so it can
