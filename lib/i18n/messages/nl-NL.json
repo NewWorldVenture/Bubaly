@@ -16622,5 +16622,6 @@
   "ai.thatRetryDoesNotMatchThisMessage": "Die nieuwe poging hoort niet bij dit bericht. Stuur het opnieuw.",
   "ai.thisMessageIsAlreadyBeingAnswered": "Dit bericht wordt al beantwoord.",
   "ai.thisMessageWasAlreadyAnswered": "Dit bericht is al beantwoord. Laad het gesprek opnieuw om het antwoord te zien.",
-  "ai.thisMessageCouldNotBeIdentified": "Dit bericht kon niet worden herkend. Stuur het opnieuw."
+  "ai.thisMessageCouldNotBeIdentified": "Dit bericht kon niet worden herkend. Stuur het opnieuw.",
+  "ai.thatAnswerWasCutOff": "Dat antwoord werd afgebroken voordat het klaar was. Vraag het opnieuw voor het volledige antwoord."
 }

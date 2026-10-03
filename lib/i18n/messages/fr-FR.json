@@ -16622,5 +16622,6 @@
   "ai.thatRetryDoesNotMatchThisMessage": "Cette nouvelle tentative ne correspond pas à ce message. Renvoyez-le.",
   "ai.thisMessageIsAlreadyBeingAnswered": "Une réponse à ce message est déjà en cours.",
   "ai.thisMessageWasAlreadyAnswered": "Ce message a déjà reçu une réponse. Rechargez la conversation pour la voir.",
-  "ai.thisMessageCouldNotBeIdentified": "Ce message n’a pas pu être identifié. Renvoyez-le."
+  "ai.thisMessageCouldNotBeIdentified": "Ce message n’a pas pu être identifié. Renvoyez-le.",
+  "ai.thatAnswerWasCutOff": "Cette réponse a été interrompue avant la fin. Reposez la question pour obtenir la réponse complète."
 }

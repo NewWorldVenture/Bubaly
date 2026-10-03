@@ -11,6 +11,11 @@ import type { PriorTurn } from '@/lib/ai/assistant-turn-replay';
  * replayed in the transport the client asked for — the stream ends with the
  * same `done` (and request id, so speaking it rides on the same exchange) —
  * and everything else is a 409 that counts nothing.
+ *
+ * A turn whose answer was cut off (`partially_completed`) replays the same
+ * way its first attempt ended: the saved half answer, then an `error`, then
+ * `done`. In JSON it stays a 200 replay but says `partial: true` with the
+ * error, so neither transport presents half an answer as a whole one.
  */
 export function answerPriorTurn(
   prior: Exclude<PriorTurn, { kind: 'none' }>,
@@ -32,15 +37,18 @@ export function answerPriorTurn(
   if (prior.content === null) {
     return NextResponse.json({ error: tr('ai.thisMessageWasAlreadyAnswered'), code: 'turn_answered', requestId: prior.requestId }, { status: 409 });
   }
+  const cutOff = prior.partial ? tr('ai.thatAnswerWasCutOff') : null;
   if (json) {
     return NextResponse.json({
       conversationId, content: prior.content, actions: [], cards: [], runIds: [], persisted: true,
       replayed: true, requestId: prior.requestId,
+      ...(cutOff ? { partial: true, error: cutOff } : {}),
     });
   }
   const encoder = new TextEncoder();
   const events = [
     { type: 'delta', text: prior.content },
+    ...(cutOff ? [{ type: 'error', error: cutOff }] : []),
     { type: 'done', content: prior.content, persisted: true, requestId: prior.requestId },
   ];
   return new Response(encoder.encode(events.map((e) => `data: ${JSON.stringify(e)}\n\n`).join('')), { headers: SSE_HEADERS });

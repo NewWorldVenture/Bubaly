@@ -16622,5 +16622,6 @@
   "ai.thatRetryDoesNotMatchThisMessage": "Diese Wiederholung passt nicht zu dieser Nachricht. Senden Sie sie erneut.",
   "ai.thisMessageIsAlreadyBeingAnswered": "Diese Nachricht wird bereits beantwortet.",
   "ai.thisMessageWasAlreadyAnswered": "Diese Nachricht wurde bereits beantwortet. Laden Sie die Unterhaltung neu, um die Antwort zu sehen.",
-  "ai.thisMessageCouldNotBeIdentified": "Diese Nachricht konnte nicht zugeordnet werden. Senden Sie sie erneut."
+  "ai.thisMessageCouldNotBeIdentified": "Diese Nachricht konnte nicht zugeordnet werden. Senden Sie sie erneut.",
+  "ai.thatAnswerWasCutOff": "Diese Antwort wurde abgebrochen, bevor sie fertig war. Fragen Sie erneut, um die vollständige Antwort zu erhalten."
 }

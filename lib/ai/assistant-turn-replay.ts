@@ -6,6 +6,8 @@
 //
 //   • none        → a new turn: checked against the allowance and counted.
 //   • answered    → replay the saved answer; no model, no tools, no new row.
+//                   `partial` when the answer was cut off (partially_completed),
+//                   so the replay can say so as the first attempt did.
 //   • in_progress → the first attempt is still running; refuse, count nothing.
 //   • failed      → the first attempt ended without an answer; refuse, count
 //                   nothing. Sending again is a new send with a new key.
@@ -32,7 +34,7 @@ export type PriorTurn =
   | { kind: 'mismatch' }
   | { kind: 'in_progress'; requestId: string }
   | { kind: 'failed'; requestId: string }
-  | { kind: 'answered'; requestId: string; content: string | null };
+  | { kind: 'answered'; requestId: string; content: string | null; partial: boolean };
 
 const ANSWERED = new Set(['completed', 'partially_completed']);
 const ENDED_WITHOUT_ANSWER = new Set(['failed', 'cancelled', 'blocked']);
@@ -59,6 +61,7 @@ export async function findPriorTurn(
   }
   if (ENDED_WITHOUT_ANSWER.has(row.status)) return { kind: 'failed', requestId: row.id };
   if (!ANSWERED.has(row.status)) return { kind: 'in_progress', requestId: row.id };
+  const partial = row.status === 'partially_completed';
 
   // The turn's own exchange, bound to it by `request_id` (0250): the first
   // user and assistant messages saved with this request's id, never a pair
@@ -74,12 +77,12 @@ export async function findPriorTurn(
     .limit(10);
   if (messagesError) {
     console.error('[assistant-turn-replay] saved answer read failed', messagesError);
-    return { kind: 'answered', requestId: row.id, content: null };
+    return { kind: 'answered', requestId: row.id, content: null, partial };
   }
   const own = (messages ?? []).filter((m) => m.conversation_id === caller.conversationId);
   const asked = own.find((m) => m.role === 'user');
   // The key was sent with different words: not a retry of that turn.
   if (asked && asked.content.trim() !== caller.message.trim()) return { kind: 'mismatch' };
   const answer = own.find((m) => m.role === 'assistant');
-  return { kind: 'answered', requestId: row.id, content: answer?.content ?? null };
+  return { kind: 'answered', requestId: row.id, content: answer?.content ?? null, partial };
 }
