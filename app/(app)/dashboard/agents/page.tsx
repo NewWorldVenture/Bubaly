@@ -1,4 +1,6 @@
 import type { Metadata } from 'next';
+import { readCalendarOccurrences } from '@/lib/calendar/occurrences';
+import { instantCalendarBounds } from '@/lib/briefing/calendar-window';
 import { dayKeyInZone } from '@/lib/schedule/zoned';
 import { getTranslations } from '@/lib/i18n/server';
 import Link from 'next/link';
@@ -80,8 +82,10 @@ export default async function AgentsPage() {
     openGrocery, billsDueSoon, subscriptions, overdueChores, expiringDocs, maintenanceDue,
     upcomingTrips, pendingApprovals, newMemories,
   ] = await Promise.all([
-    settle(supabase.from('calendar_events').select('id, title, starts_at, ends_at, all_day, assignee_id, category')
-      .eq('family_id', familyId).gte('starts_at', dayStart).lte('starts_at', weekEnd.toISOString()).order('starts_at').limit(500)),
+    // Series included: a weekly event is on the agents' week every week (lib/calendar/occurrences.ts).
+    settle(readCalendarOccurrences(supabase, familyId, instantCalendarBounds(dayStart, weekEnd.toISOString(), tz), tz, {
+      columns: ['id', 'title', 'starts_at', 'ends_at', 'all_day', 'assignee_id', 'category'], limit: 500,
+    })),
     settle(supabase.from('meal_plans').select('plan_date, meal_type').eq('family_id', familyId)
       .gte('plan_date', todayKey).lt('plan_date', weekEndKey)),
     settle(supabase.from('family_members').select('birthday').eq('family_id', familyId)),

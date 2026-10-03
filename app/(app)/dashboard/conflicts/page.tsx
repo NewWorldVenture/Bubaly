@@ -1,4 +1,6 @@
 import type { Metadata } from 'next';
+import { readCalendarOccurrences } from '@/lib/calendar/occurrences';
+import { instantCalendarBounds } from '@/lib/briefing/calendar-window';
 import Link from 'next/link';
 import { CalendarClock, ArrowLeft } from 'lucide-react';
 import { requireFeature } from '@/lib/supabase/auth';
@@ -41,21 +43,20 @@ export default async function ConflictsPage() {
 
   const now = new Date();
   const in14 = new Date(now.getTime() + 14 * 24 * 3_600_000);
+  const tz = ctx.active.family.timezone || 'UTC';
 
   // A failed read here is not "no conflicts". `detectConflicts([])` returns an
   // empty list, which this page renders as the all-clear — the one answer a
   // conflict detector must never give when it could not look.
   const [{ data: events, error: eventsError }, { data: members, error: membersError }] = await settleAll([
-    supabase
-      .from('calendar_events')
-      .select('id, title, starts_at, ends_at, all_day, location, assignee_id')
-      .eq('family_id', familyId)
-      .gte('starts_at', now.toISOString())
-      .lte('starts_at', in14.toISOString())
-      .order('starts_at', { ascending: true })
-      // Bounded on both sides: the read, and the pairs it can produce below.
-      // Neither was, and a dense fortnight rendered a card per overlapping pair.
-      .limit(MAX_EVENTS),
+    // Series included: a one-off booked over a weekly lesson is a clash in the
+    // week it is booked, which is almost never the lesson's first week
+    // (lib/calendar/occurrences.ts). Bounded on both sides: the read, and the
+    // pairs it can produce below — a dense fortnight once rendered a card per
+    // overlapping pair.
+    readCalendarOccurrences(supabase, familyId, instantCalendarBounds(now.toISOString(), in14.toISOString(), tz), tz, {
+      columns: ['id', 'title', 'starts_at', 'ends_at', 'all_day', 'location', 'assignee_id'], limit: MAX_EVENTS,
+    }),
     supabase.from('family_members').select('id, display_name').eq('family_id', familyId),
   ]);
 

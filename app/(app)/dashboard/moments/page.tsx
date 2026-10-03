@@ -1,4 +1,6 @@
 import type { Metadata } from 'next';
+import { readCalendarOccurrences } from '@/lib/calendar/occurrences';
+import { instantCalendarBounds } from '@/lib/briefing/calendar-window';
 import { getTranslations } from '@/lib/i18n/server';
 import { requireUserContext } from '@/lib/supabase/auth';
 import { settleAll } from '@/lib/supabase/settle';
@@ -73,7 +75,8 @@ export default async function Page() {
     const [members, trips, holidays, homework, dismissedRows] = await settleAll([
       supabase.from('family_members').select('display_name, birthday').eq('family_id', familyId).eq('is_active', true).not('birthday', 'is', null),
       supabase.from('vacations').select('title, start_date').eq('family_id', familyId).not('start_date', 'is', null).gte('start_date', todayIso).order('start_date').limit(1),
-      supabase.from('calendar_events').select('title, starts_at').eq('family_id', familyId).eq('category', 'holiday').gte('starts_at', now.toISOString()).lte('starts_at', in21).order('starts_at').limit(1),
+      // Series included: a yearly holiday entered last year is the next holiday this year (lib/calendar/occurrences.ts).
+      readCalendarOccurrences(supabase, familyId, instantCalendarBounds(now.toISOString(), in21, tz), tz, { columns: ['title', 'starts_at'], refine: (query) => query.eq('category', 'holiday'), limit: 1 }),
       supabase.from('homework_assignments').select('id', { count: 'exact', head: true }).eq('family_id', familyId).eq('status', 'assigned').gte('due_at', tomorrowStart.toISOString()).lt('due_at', tomorrowEnd.toISOString()),
       supabase.from('moment_activations').select('moment_key, status').eq('family_id', familyId).eq('as_of_date', todayIso),
     ]);

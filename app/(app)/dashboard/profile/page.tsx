@@ -1,4 +1,6 @@
 import type { Metadata } from 'next';
+import { readCalendarOccurrences } from '@/lib/calendar/occurrences';
+import { instantCalendarBounds } from '@/lib/briefing/calendar-window';
 import { getTranslations } from '@/lib/i18n/server';
 import { requireUserContext } from '@/lib/supabase/auth';
 import { settleAll } from '@/lib/supabase/settle';
@@ -19,8 +21,9 @@ export default async function ProfilePage() {
   const familyId = ctx.active.familyId;
 
   const monthAgo = new Date(Date.now() - 30 * 86400_000).toISOString();
-  const weekAhead = new Date(Date.now() + 7 * 86400_000).toISOString();
+  const weekAhead = new Date(Date.now() + 7 * 86400_000 - 1).toISOString();
   const nowIso = new Date().toISOString();
+  const tz = ctx.active.family.timezone || 'UTC';
 
   const [{ data: member }, doneQ, upcomingQ, milestonesQ] = await settleAll([
     supabase.from('family_members').select('*').eq('id', memberId).maybeSingle(),
@@ -28,10 +31,9 @@ export default async function ProfilePage() {
       .select('points_awarded, approved_at')
       .eq('family_id', familyId).eq('member_id', memberId)
       .not('approved_at', 'is', null).gte('approved_at', monthAgo).limit(500),
-    supabase.from('calendar_events')
-      .select('id', { count: 'exact', head: true })
-      .eq('family_id', familyId).eq('assignee_id', memberId)
-      .gte('starts_at', nowIso).lt('starts_at', weekAhead),
+    // This member's week, series included: a weekly lesson is one of their
+    // events every week (lib/calendar/occurrences.ts); `count` is the total.
+    readCalendarOccurrences(supabase, familyId, instantCalendarBounds(nowIso, weekAhead, tz), tz, { columns: ['id'], assigneeId: memberId }),
     supabase.from('independence_milestones')
       .select('id', { count: 'exact', head: true })
       .eq('family_id', familyId).eq('member_id', memberId).eq('status', 'achieved'),

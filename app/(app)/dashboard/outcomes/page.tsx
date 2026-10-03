@@ -1,4 +1,6 @@
 import type { Metadata } from 'next';
+import { readCalendarOccurrences } from '@/lib/calendar/occurrences';
+import { briefingCalendarBounds } from '@/lib/briefing/calendar-window';
 import Link from 'next/link';
 import { getTranslations } from '@/lib/i18n/server';
 import { requireUserContext } from '@/lib/supabase/auth';
@@ -39,8 +41,8 @@ export default async function OutcomesPage({ searchParams }: { searchParams?: Pr
 
   // Real, focused snapshot — all family-scoped, count-only where possible.
   const [eventsRes, overdueRes, groceryRes, membersRes] = await settleAll([
-    supabase.from('calendar_events').select('id', { count: 'exact', head: true })
-      .eq('family_id', familyId).gte('starts_at', dayStart).lt('starts_at', dayEnd),
+    // Today on the family's wall, series included (lib/calendar/occurrences.ts); `count` is every occurrence.
+    readCalendarOccurrences(supabase, familyId, briefingCalendarBounds(todayKey, tz, 0, 1), tz, { columns: ['id'] }),
     supabase.from('todo_items').select('id', { count: 'exact', head: true })
       .eq('family_id', familyId).eq('is_done', false).lt('due_date', todayKey),
     supabase.from('grocery_items').select('id', { count: 'exact', head: true })
