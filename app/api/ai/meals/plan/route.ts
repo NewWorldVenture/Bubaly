@@ -1,4 +1,6 @@
 import { NextResponse } from 'next/server';
+import { readCalendarOccurrences } from '@/lib/calendar/occurrences';
+import { instantCalendarBounds } from '@/lib/briefing/calendar-window';
 import { getTranslations } from '@/lib/i18n/server';
 import { requireUserContext } from '@/lib/supabase/auth';
 import { settleAll } from '@/lib/supabase/settle';
@@ -102,14 +104,14 @@ export async function POST(req: Request) {
   const scope = scopeFromUserContext(ctx, supabase);
   const windowFrom = new Date(`${weekStart}T00:00:00Z`);
   const windowTo = new Date(windowFrom.getTime() + 8 * 86_400_000);
-  const { data: weekEvents, error: weekEventsError } = await supabase
-    .from('calendar_events')
-    .select('title,starts_at,ends_at,all_day,category')
-    .eq('family_id', familyId)
-    .gte('starts_at', new Date(windowFrom.getTime() - 86_400_000).toISOString())
-    .lt('starts_at', windowTo.toISOString())
-    .order('starts_at', { ascending: true })
-    .limit(400);
+  // Series included: a Tuesday practice is a busy Tuesday every week, not the
+  // week it was created (lib/calendar/occurrences.ts).
+  const { data: weekEvents, error: weekEventsError } = await readCalendarOccurrences(
+    supabase, familyId,
+    instantCalendarBounds(new Date(windowFrom.getTime() - 86_400_000).toISOString(), new Date(windowTo.getTime() - 1).toISOString(), scope.tz),
+    scope.tz,
+    { columns: ['title', 'starts_at', 'ends_at', 'all_day', 'category'], limit: 400 },
+  );
   if (weekEventsError) {
     // Fail closed. Planning "around" a calendar we could not read would put a
     // two-hour braise on the night of the away game and call it calendar-aware.

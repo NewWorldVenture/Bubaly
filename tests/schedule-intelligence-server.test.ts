@@ -13,7 +13,7 @@ type Reply = { data: unknown; error: unknown };
 /** Every builder method returns the chain; awaiting it (or `Promise.all`) resolves the reply. */
 function queryChain(reply: Reply, record: (method: string, args: unknown[]) => void) {
   const chain: Record<string, unknown> = {};
-  for (const method of ['select', 'eq', 'in', 'is', 'not', 'gt', 'gte', 'lt', 'lte', 'order', 'limit']) {
+  for (const method of ['select', 'eq', 'neq', 'in', 'is', 'not', 'gt', 'gte', 'lt', 'lte', 'or', 'order', 'limit']) {
     chain[method] = (...args: unknown[]) => { record(method, args); return chain; };
   }
   chain.then = (resolve: (v: Reply) => unknown, reject?: (e: unknown) => unknown) => Promise.resolve(reply).then(resolve, reject);

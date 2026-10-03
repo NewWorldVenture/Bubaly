@@ -15,7 +15,7 @@ export type ProjectResult = { ok: boolean; error?: string; entities?: number; ed
 export async function projectTwinAction(): Promise<ProjectResult> {
   const ctx = await requireUserContext();
   const sb = await createServer();
-  const res = await runTwinProjection(sb, ctx.active.familyId, ctx.user.id);
+  const res = await runTwinProjection(sb, ctx.active.familyId, ctx.user.id, new Date(), ctx.active.family.timezone || 'UTC');
   // The runner returns the database's own text for its cron log; a person gets
   // the described form (SEC-023).
   return res.ok ? { ok: true, entities: res.entities, edges: res.edges } : { ok: false, error: describeActionError(res.error) };

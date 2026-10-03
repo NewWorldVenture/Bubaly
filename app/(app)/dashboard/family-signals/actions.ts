@@ -19,7 +19,7 @@ export async function refreshSignalsAction(): Promise<Result<{ signals: number }
   // The stored sentence is worded for the person who pressed Refresh.
   const { locale } = await getLocaleContext();
   const t = await getTranslations();
-  const res = await runSignalDetection(supabase, ctx.active.familyId, locale.code, t, new Date());
+  const res = await runSignalDetection(supabase, ctx.active.familyId, locale.code, t, new Date(), ctx.active.family.timezone || 'UTC');
   if (!res.ok) return { ok: false, error: res.error ?? 'Could not refresh signals' };
   revalidatePath('/dashboard/family-signals');
   return { ok: true, data: { signals: res.signals } };

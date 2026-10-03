@@ -2,6 +2,8 @@
 // model can call maps to a real, RLS-scoped Supabase write so the assistant can
 // actually DO things (schedule events, add chores, build lists) — not just talk.
 import 'server-only';
+import { readCalendarOccurrences } from '@/lib/calendar/occurrences';
+import { briefingCalendarBounds, instantCalendarBounds } from '@/lib/briefing/calendar-window';
 import { settleAll } from '@/lib/supabase/settle';
 import type { SupabaseClient } from '@supabase/supabase-js';
 import type { Database } from '@/lib/database.types';
@@ -380,10 +382,12 @@ export function buildAssistantTools(supabase: DB, ctx: AssistantCtx): ToolSpec[]
         const days = Number.isFinite(a.days) ? Math.max(1, Math.min(90, Math.round(a.days as number))) : 7;
         const now = new Date();
         const until = new Date(now.getTime() + days * 86400000).toISOString();
-        const { data, error } = await supabase.from('calendar_events')
-          .select('title, starts_at, ends_at, all_day, location, assignee_id')
-          .eq('family_id', ctx.familyId).gte('starts_at', now.toISOString()).lte('starts_at', until)
-          .order('starts_at').limit(50);
+        // Series included: "what's on this week" has the weekly lesson in it
+        // every week, not the week it was created (lib/calendar/occurrences.ts).
+        const tz = ctx.tz || 'UTC';
+        const { data, error } = await readCalendarOccurrences(supabase, ctx.familyId, instantCalendarBounds(now.toISOString(), until, tz), tz, {
+          columns: ['title', 'starts_at', 'ends_at', 'all_day', 'location', 'assignee_id'], limit: 50,
+        });
         if (error) return toolFailure('load upcoming events', error);
         const byId = new Map(ctx.members.map((m) => [m.id, m.display_name]));
         return { ok: true, events: (data ?? []).map((e) => ({ title: e.title, starts_at: e.starts_at, all_day: e.all_day, location: e.location, who: e.assignee_id ? byId.get(e.assignee_id) ?? null : null })) };
@@ -453,7 +457,10 @@ export function buildAssistantTools(supabase: DB, ctx: AssistantCtx): ToolSpec[]
           supabase.from('renewals').select('id, title, expires_at, reminder_days, status, created_at').eq('family_id', ctx.familyId).in('status', ['active', 'expired']).lte('expires_at', in45).limit(50),
           supabase.from('documents').select('id, title, expires_at').eq('family_id', ctx.familyId).not('expires_at', 'is', null).lte('expires_at', in30).limit(50),
           supabase.from('family_reminders').select('id, remind_at, status').eq('family_id', ctx.familyId).eq('status', 'active').not('remind_at', 'is', null).lte('remind_at', todayEnd.toISOString()).limit(100),
-          supabase.from('calendar_events').select('id, title, starts_at, ends_at, all_day, assignee_id').eq('family_id', ctx.familyId).not('assignee_id', 'is', null).gte('starts_at', now.toISOString()).lte('starts_at', in14).order('starts_at').limit(200),
+          // Series included, so a one-off booked over a weekly lesson is a clash in the week it is booked.
+          readCalendarOccurrences(supabase, ctx.familyId, instantCalendarBounds(now.toISOString(), in14, tz), tz, {
+            columns: ['id', 'title', 'starts_at', 'ends_at', 'all_day', 'assignee_id'], refine: (query) => query.not('assignee_id', 'is', null), limit: 200,
+          }),
           supabase.from('chore_assignments').select('id', { count: 'exact', head: true }).eq('family_id', ctx.familyId).eq('status', 'submitted'),
           supabase.from('grocery_items').select('id', { count: 'exact', head: true }).eq('family_id', ctx.familyId).eq('is_checked', false),
           supabase.from('todo_items').select('id', { count: 'exact', head: true }).eq('family_id', ctx.familyId).eq('is_done', false),
@@ -496,18 +503,17 @@ export function buildAssistantTools(supabase: DB, ctx: AssistantCtx): ToolSpec[]
       execute: async (a) => {
         const date = str(a.date);
         if (!/^\d{4}-\d{2}-\d{2}$/.test(date)) return { ok: false, error: 'date must be YYYY-MM-DD' };
-        // Pull a generous UTC window so the local day is fully covered across offsets.
-        const from = new Date(`${date}T00:00:00Z`); from.setUTCHours(from.getUTCHours() - 14);
-        const to = new Date(`${date}T23:59:59Z`); to.setUTCHours(to.getUTCHours() + 14);
-        const memberId = resolveMember(ctx, a.assignee);
-        let q = supabase.from('calendar_events')
-          .select('title, starts_at, ends_at, all_day, assignee_id')
-          .eq('family_id', ctx.familyId).gte('starts_at', from.toISOString()).lte('starts_at', to.toISOString())
-          .order('starts_at').limit(50);
-        if (memberId) q = q.eq('assignee_id', memberId);
-        const { data, error } = await q;
-        if (error) return toolFailure('find free time', error);
         const tz = ctx.tz || 'America/New_York';
+        // The family's day, series included: the weekly lesson is busy on its
+        // day every week (lib/calendar/occurrences.ts). The window used to be
+        // a 14-hour margin either side of the UTC day, filtered afterwards.
+        let bounds: ReturnType<typeof briefingCalendarBounds>;
+        try { bounds = briefingCalendarBounds(date, tz, 0, 1); } catch { return { ok: false, error: 'date must be a real calendar day' }; }
+        const memberId = resolveMember(ctx, a.assignee);
+        const { data, error } = await readCalendarOccurrences(supabase, ctx.familyId, bounds, tz, {
+          columns: ['title', 'starts_at', 'ends_at', 'all_day', 'assignee_id'], assigneeId: memberId ?? undefined, limit: 50,
+        });
+        if (error) return toolFailure('find free time', error);
         const fmt = (iso: string | null) => {
           if (!iso) return null;
           try { return new Intl.DateTimeFormat('en-US', { timeZone: tz, weekday: 'short', month: 'short', day: 'numeric', hour: 'numeric', minute: '2-digit' }).format(new Date(iso)); }

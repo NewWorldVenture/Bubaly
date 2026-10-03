@@ -36,7 +36,10 @@ export async function scheduleGraphAutoRefresh(supabase: DB, familyId: string): 
     after(async () => {
       try {
         const svc = createServiceClient();
-        const res = await runTwinProjection(svc, familyId, null);
+        // The projection expands recurring events in the family's zone; a
+        // family whose zone cannot be read is projected on UTC rather than skipped.
+        const { data: fam } = await svc.from('families').select('timezone').eq('id', familyId).maybeSingle();
+        const res = await runTwinProjection(svc, familyId, null, new Date(), fam?.timezone || 'UTC');
         if (res.ok) {
           // Its result used to be discarded outright — not even the error bound. Best-effort, so logged rather than raised. Audit C1-S9-76.
           const { error: familyModelDirtyWriteError } = await svc
