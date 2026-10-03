@@ -54,7 +54,7 @@ function fixture({advances=false,inactive=false,receiptError=false,generation=''
     if(table==='notifications'&&method==='PATCH'){for(const row of tables.notifications.filter(matches))Object.assign(row,body);return reply(null);}
     throw Error('Unexpected operation '+table+'/'+method);
   };
-  const db=createClient('https://synthetic.invalid','synthetic-key',{auth:{persistSession:false,autoRefreshToken:false},global:{fetch:fetcher}});
+  const db=createClient('https://synthetic.invalid','synthetic-key',{accessToken:async()=>null,auth:{persistSession:false,autoRefreshToken:false},global:{fetch:fetcher}});
   native.send.mockImplementation(async()=>{sends++;await releaseSend.promise;return outcome;});
   return {db,requests,tables,settings,notice,get sends(){return sends},releaseSend,firstPending,bothPending,releasePending,bothClaims,enableBarrier(){barrier=true;},disableBarrier(){barrier=false;}};
 }

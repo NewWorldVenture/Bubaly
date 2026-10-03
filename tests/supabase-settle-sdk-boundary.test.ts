@@ -12,7 +12,7 @@ afterEach(()=>{
  expect(requests.length).toBeGreaterThanOrEqual(1);
 });
 function query(mode:'success'|'http-error'|'reject',cause?:unknown,throwOnError=false){
- const db=createClient('https://synthetic-settle-boundary.invalid','synthetic-not-a-secret',{
+ const db=createClient('https://synthetic-settle-boundary.invalid','synthetic-not-a-secret',{accessToken:async()=>null,
   auth:{persistSession:false,autoRefreshToken:false,detectSessionInUrl:false},
   global:{fetch:async(input,init)=>{
    try{
