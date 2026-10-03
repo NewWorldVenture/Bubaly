@@ -256,6 +256,13 @@ export async function completeTodo(scope: ServiceScope, todoId: string, done = t
   }
   if (!data) return fail('That task could not be found.', { code: SERVICE_CODES.notFound });
 
+  if (Array.isArray(data) || typeof data !== 'object'
+    || typeof data.id !== 'string' || !data.id.trim()
+    || typeof data.family_id !== 'string' || !data.family_id.trim()
+    || !sameId(data.id, todoId) || !sameId(data.family_id, scope.familyId)) {
+    return fail('Could not update that task.', { code: SERVICE_CODES.db });
+  }
+
   await recordActivitySafely(scope, {
     agent: 'tasks',
     action: 'update',

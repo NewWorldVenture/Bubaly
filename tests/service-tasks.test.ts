@@ -154,7 +154,7 @@ describe('createTodo', () => {
 
 describe('completeTodo / assignTodo / searchTodos', () => {
   it('scopes completion to the family', async () => {
-    const { db, calls } = makeDb(() => ({ data: { id: 'todo-1', is_done: true }, error: null }));
+    const { db, calls } = makeDb(() => ({ data: { id: 'todo-1', family_id: 'fam-1', is_done: true }, error: null }));
     const res = await completeTodo(scopeWith(db), 'todo-1');
     expect(res.ok).toBe(true);
     expect(calls[0].filters).toMatchObject({ id: 'todo-1', family_id: 'fam-1' });
