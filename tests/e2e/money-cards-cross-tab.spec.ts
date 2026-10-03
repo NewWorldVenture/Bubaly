@@ -420,8 +420,12 @@ for (const entry of ENTRY_POINTS) {
     await expect(bulk(tab2)).toHaveCount(0);
     expect((await read(tab1)).refreshes).toBe(1);
 
+    // The order dialog closes on a stale answer, so the parent sees the card that
+    // made it stale before deciding on another, rather than one more click away
+    // from a second card.
+    if (entry.input.type === 'physical') await expect(order(tab2)).toHaveCount(0);
     // A further order from the refreshed tab is deliberate and carries the new count.
-    if (entry.input.type === 'physical') await order(tab2).click();
+    if (entry.input.type === 'physical') { await physical(tab2).click(); await order(tab2).click(); }
     else await virtual(tab2).click();
     const next = { ...entry.input, expectedCount: 1 };
     expect((await received(log, 3))[2]).toEqual({ tab: 'tab-2', action: 'issueCardAction', args: next });

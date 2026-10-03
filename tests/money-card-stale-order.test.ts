@@ -206,6 +206,10 @@ describe('an order made against a count the mirror has moved past', () => {
     // Tab 2 was never refreshed: it still shows `shown` cards.
     vi.setSystemTime(T0 + (shown + 1) * 60_000);
     expect(await order(input, shown)).toEqual({ ok: false, error: STALE, stale: true });
+    // Traced on the server, with ids and counts only.
+    expect(vi.mocked(console.warn).mock.calls.filter(([message]) => message === '[money] card order refused as stale')).toEqual([[
+      '[money] card order refused as stale', { childWalletId: 'wallet-a', type: input.type, expectedCount: shown, mirrored: shown + 1 },
+    ]]);
 
     expect(tally()).toEqual(before);
     expect(provider.log.cardKeys).toEqual(Array.from({ length: shown + 1 }, (_, n) => key(input.type, n)));
