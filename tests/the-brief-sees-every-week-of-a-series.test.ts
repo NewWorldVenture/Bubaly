@@ -127,7 +127,7 @@ describe('readCalendarOccurrences', () => {
           const builder = target.from(table) as unknown as Record<string, unknown>;
           if (table === 'calendar_events') {
             const stub: Record<string, unknown> = {};
-            Object.assign(stub, { eq: () => stub, or: () => stub, order: () => stub, not: () => stub, neq: () => stub, lt: () => stub, range: () => stub, then: (resolve: (v: unknown) => void) => resolve({ data: null, error: { message: 'permission denied for table calendar_events' } }) });
+            Object.assign(stub, { eq: () => stub, or: () => stub, order: () => stub, neq: () => stub, lte: () => stub, limit: () => stub, then: (resolve: (v: unknown) => void) => resolve({ data: null, error: { message: 'permission denied for table calendar_events' } }) });
             builder.select = () => stub;
           }
           return builder;
