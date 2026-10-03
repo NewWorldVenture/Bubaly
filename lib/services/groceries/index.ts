@@ -250,6 +250,9 @@ export async function addItems(
       skipped.push(item.name);
       continue;
     }
+    if (item.sourceMealId != null && (typeof item.sourceMealId !== 'string' || !item.sourceMealId.trim())) {
+      return fail('Choose a valid source meal for those items.', { code: SERVICE_CODES.invalidInput });
+    }
     seen.add(key);
     rows.push({
       family_id: scope.familyId,
@@ -265,6 +268,25 @@ export async function addItems(
   }
 
   if (rows.length === 0) return ok({ listId, added: [], skipped });
+
+  // The column's single-ID FK does not establish the referenced meal's family.
+  // Check only rows that will be inserted; an already-open duplicate is a no-op.
+  const sourceMealIds = [...new Set(rows.flatMap((row) => row.source_meal_id == null ? [] : [row.source_meal_id]))];
+  if (sourceMealIds.length > 0) {
+    const { data: meals, error: mealError } = await scope.db.from('meals').select('id, family_id')
+      .eq('family_id', scope.familyId).in('id', sourceMealIds);
+    if (mealError) {
+      return fail(describeDbError(mealError, 'Could not check those source meals.'), { code: SERVICE_CODES.db });
+    }
+    if (!Array.isArray(meals) || meals.some((meal) => !meal || typeof meal !== 'object' || Array.isArray(meal)
+      || typeof meal.id !== 'string' || meal.family_id !== scope.familyId || !sourceMealIds.includes(meal.id))
+      || new Set(meals.map((meal) => meal.id)).size !== meals.length) {
+      return fail('Could not confirm those source meals.', { code: SERVICE_CODES.db });
+    }
+    if (meals.length !== sourceMealIds.length) {
+      return fail('A source meal could not be found in your family.', { code: SERVICE_CODES.notFound });
+    }
+  }
 
   const { data, error } = await scope.db.from('grocery_items').insert(rows).select('*');
   const matches = (saved: GroceryItem, requested: Omit<typeof rows[number], 'source_meal_id'> & { source_meal_id?: string | null }) =>
