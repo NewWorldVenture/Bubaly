@@ -24,7 +24,7 @@ this evidence.
 | `GET https://www.bubaly.com/api/health` | 2026-10-03 11:01:23 | `status: degraded`, HTTP 200; `env`, `database` (189 ms), `auth`, `serviceRole` (725 ms) all `ok`; `features.missing`: `CRON_SECRET`, `CHILD_LOGIN_SECRET`, `MARKETING_UNSUB_SECRET`, `GUARDIAN_INTERNAL_SECRET`, `FCM_PRIVATE_KEY`, `APNS_PRIVATE_KEY`. Not listed, so set: `RESEND_API_KEY`, `INTERNAL_SECRET`, `CONTACT_CENTER_INBOUND_SECRET`, `VAPID_PRIVATE_KEY` |
 | `Supabase production migrations` run 84 ([37005151905](https://github.com/NewWorldVenture/Bubaly/actions/runs/37005151905)), push of main `d25e39ea` | 2026-10-02 12:10–12:12 | `supabase link` **succeeded**; `supabase migration list --linked` **succeeded**; `audit-production-migration-state.mjs --enforce-history` **passed**: 192 ledger rows `0001`…`0176`, 444 public tables, 1,002 policies, `requiresBaselineReview: false`, `moneyWrites.exploitable: false`, all ten money tables `closed by restrictive guard`; **"Apply ordered migrations" skipped** (push event); the job then failed at "Verify household module schema" with HTTP 401 on every check |
 | The one apply attempt, run [35465574540](https://github.com/NewWorldVenture/Bubaly/actions/runs/35465574540) | 2026-09-19 19:51–19:53 | `Applying migration 0177_remove_synthetic_auth_users.sql…`, then `NOTICE: skip dependent cleanup on families(created_by): … violates foreign key constraint "family_model_dirty_family_id_fkey"`, then after about two minutes `ERROR: canceling statement due to statement timeout (SQLSTATE 57014)` at statement 1, the `DO` block |
-| `Cron dispatch` run 176 ([37104408735](https://github.com/NewWorldVenture/Bubaly/actions/runs/37104408735)) | 2026-10-03 06:51 | `CRON_SECRET:` (blank) → `CRON_SECRET is required for dispatch. Add the matching application secret under Settings → Secrets → Actions.` exit 1, before any dispatch. Runs 174 and 175 the same |
+| `Cron dispatch` run 176 ([37104408735](https://github.com/NewWorldVenture/Bubaly/actions/runs/37104408735)) | 2026-10-03 06:51 | `CRON_SECRET:` (blank) → `CRON_SECRET is required for dispatch. Add the matching application secret under Settings → Secrets → Actions.` exit 1, before any dispatch. Runs 174 and 175 also failed |
 | `Supabase reviewed forward release` run 3 ([34781290560](https://github.com/NewWorldVenture/Bubaly/actions/runs/34781290560)) | 2026-09-13 | the preview step failed; nothing applied |
 | Public DNS (`dns.google`) for `bubaly.com` | 2026-10-03 11:05 | `MX 10 mx1.improvmx.com`, `MX 20 mx2.improvmx.com`; `TXT v=spf1 include:spf.improvmx.com ~all`, a `brevo-code:` verification and a `google-site-verification` |
 | The repository at `d4612dc9` | — | code and tests cited per row |
@@ -268,7 +268,7 @@ carry the dated correction. No code.
 `0001`–`0003` and migrations `0240`–`0254`, with a production catalog snapshot
 from 2026-09-05. `scripts/apply-production-forward-release.mjs` refuses it on
 two independent guards, both correctly: `assertNoNewerMigrations` (the
-repository has 257 files past `0254`) and `assertPreflight` ("Unexpected or
+repository has 179 files past `0254`) and `assertPreflight` ("Unexpected or
 partially applied migration ledger": production's ledger is `0001`–`0176`, not
 `0001`–`0003`). Run 3 on 2026-09-13 failed at the preview step. A re-pin that
 matched reality would be baseline `0001`–`0176` and a range of 257 files applied
@@ -299,8 +299,9 @@ it.
 **Investigation.** The runbook's three steps: (1) set
 `CONTACT_CENTER_INBOUND_SECRET`; (2) point `bubaly.com` MX at an inbound-parse
 provider aimed at `/api/contact-center/email`; (3) verify end to end. Step 1 is
-**done**: `/api/health` no longer lists the secret (it did on 2026-09-26). Step
-2 is not: public DNS answers `MX 10 mx1.improvmx.com / 20 mx2.improvmx.com`
+**done**: `/api/health` does not list the secret among the missing ones, and
+the 2026-09-26 PROD-ENV reading already had it set, so the row's step 1 was
+stale when it was written. Step 2 is not: public DNS answers `MX 10 mx1.improvmx.com / 20 mx2.improvmx.com`
 and SPF `include:spf.improvmx.com`, a mail-forwarding service, which delivers
 to a mailbox and never POSTs to a webhook. A `brevo-code:` TXT record shows a
 Brevo domain verification exists; Brevo offers inbound parsing, so it may be

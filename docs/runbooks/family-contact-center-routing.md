@@ -13,7 +13,7 @@ Verified against production on 2026-09-13: `POST /api/contact-center/email`
 answers **401**, which is the correct fail-closed state for "secret not set".
 
 **Status on 2026-10-03** (blocked-rows eligibility review, MAIN-F6 / MAIN-F-E06):
-step 1 is done — production's `/api/health` no longer lists
+step 1 is done — production's `/api/health` does not list
 `CONTACT_CENTER_INBOUND_SECRET` among its missing feature secrets. Step 2 is
 not: public DNS still answers `bubaly.com MX 10 mx1.improvmx.com / 20
 mx2.improvmx.com` (SPF `include:spf.improvmx.com`), a forwarding service, not an
