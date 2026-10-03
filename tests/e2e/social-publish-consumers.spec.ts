@@ -268,7 +268,14 @@ test('a lost action response does not offer a duplicate create after the provide
 
 test('a saved schedule links to its existing record and does not schedule or publish a second copy', async ({ page }) => {
   const { state } = await fixture(page); await compose(page);
-  await page.locator('input[type="datetime-local"]').fill('2026-10-01T12:00');
+  // A week ahead, in the browser's own local time: a fixed date becomes a
+  // past schedule the day it arrives, and a past time is not schedulable.
+  const nextWeek = await page.evaluate(() => {
+    const d = new Date(Date.now() + 7 * 24 * 60 * 60 * 1000);
+    const two = (n: number) => String(n).padStart(2, '0');
+    return `${d.getFullYear()}-${two(d.getMonth() + 1)}-${two(d.getDate())}T${two(d.getHours())}:${two(d.getMinutes())}`;
+  });
+  await page.locator('input[type="datetime-local"]').fill(nextWeek);
   await page.getByRole('button', { name: messages['studio.schedule'], exact: true }).click(); await resultCount(page, 1);
   expect(state.rows.social_posts).toHaveLength(1); expect(state.rows.social_schedules).toHaveLength(1); expect(state.rows.social_calendar_items).toHaveLength(1);
   expect(state.providerCalls).toBe(0);
