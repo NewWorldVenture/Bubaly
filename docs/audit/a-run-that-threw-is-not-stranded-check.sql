@@ -28,7 +28,7 @@ begin
   -- 1. The trap: executing, no lease. What releaseRun used to leave behind.
   insert into public.family_automation_runs (family_id, state, status, attempt, max_attempts, run_after, lease_owner, lease_expires_at)
     values (fam, 'executing', 'approved', 1, 5, now() - interval '1 minute', null, null) returning id into trapped;
-  -- 2. What it leaves behind now: our lease, expired.
+  -- 2. What it leaves behind now, once its shortened lease has run out: our lease, in the past.
   insert into public.family_automation_runs (family_id, state, status, attempt, max_attempts, run_after, lease_owner, lease_expires_at)
     values (fam, 'executing', 'approved', 1, 5, now() - interval '1 minute', gen_random_uuid(), now() - interval '1 second') returning id into released;
   -- 3. The same, with its attempts spent.
