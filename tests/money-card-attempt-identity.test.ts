@@ -541,14 +541,15 @@ describe('residuals the attempt key does not cover', () => {
     { label: 'a first answer', replayedHeader: undefined, replayed: false },
     { label: "the provider's replay of a saved failure", replayedHeader: 'true', replayed: true },
   ])('names a failed provider create ($label) by request, status and attempt, so a blocked parent can be traced', async ({ replayedHeader, replayed }) => {
+    // A 5xx, so the replay is not retried and only the naming is under test.
     const failure = Object.assign(new Error('synthetic card refusal after execution began'), {
-      requestId: 'req_synthetic_1', statusCode: 402,
+      requestId: 'req_synthetic_1', statusCode: 500,
       headers: replayedHeader === undefined ? {} : { 'idempotent-replayed': replayedHeader },
     });
     provider.failNextCardCreate(failure);
     expect(await issueCardAction(PHYSICAL)).toEqual({ ok: false, error: REFUSED });
     expect(providerFailureLogs()).toEqual([[PROVIDER_FAILED, {
-      childWalletId: 'wallet-a', type: 'physical', attempt: 0, requestId: 'req_synthetic_1', statusCode: 402, replayed,
+      childWalletId: 'wallet-a', type: 'physical', attempt: 0, requestId: 'req_synthetic_1', statusCode: 500, replayed,
     }]]);
     expect(mirrorCards()).toHaveLength(0);
     expect(issuedAudits()).toEqual([]);
@@ -603,6 +604,15 @@ describe('a provider refusal saved under the attempt key and replayed to a later
     expect(provider.log.cardOutcomes).toEqual(['failed', 'replayed_failure', 'failed', 'replayed_failure', 'replayed_failure']);
     expect(provider.cards.size).toBe(0);
     expect(issuedAudits()).toEqual([]);
+    // Every answer is named; the retry key's are marked as the retry.
+    const named = { childWalletId: 'wallet-a', type: 'virtual', attempt: 0, requestId: 'req_saved_1', statusCode: 402 };
+    expect(providerFailureLogs()).toEqual([
+      [PROVIDER_FAILED, { ...named, replayed: false }],
+      [PROVIDER_FAILED, { ...named, replayed: true }],
+      [PROVIDER_FAILED, { ...named, replayed: false, retried: true }],
+      [PROVIDER_FAILED, { ...named, replayed: true }],
+      [PROVIDER_FAILED, { ...named, replayed: true, retried: true }],
+    ]);
   });
 
   it('two tabs retrying a replayed refusal at once share the retry key: one card, both answered with it, one audit', async () => {
