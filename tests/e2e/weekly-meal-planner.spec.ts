@@ -579,7 +579,7 @@ for (const width of [280,320]) {
 
 test('standalone meal creation preserves ingredient rows and submits once', async ({page}) => {
   await fixture(page);
-  const trigger=page.getByRole('button',{name:'Add Meal',exact:true});
+  const trigger=page.getByRole('button',{name:'Add meal to library',exact:true});
   await trigger.click();
   await dialog(page).getByRole('textbox',{name:/^Meal name/}).fill('Garden pasta');
   await dialog(page).getByRole('textbox',{name:'Ingredient 1',exact:true}).fill('Pasta');
@@ -605,12 +605,12 @@ test('standalone meal creation preserves ingredient rows and submits once', asyn
 
 test('standalone pending creation is retired when the family changes', async ({page}) => {
   await fixture(page);
-  await page.getByRole('button',{name:'Add Meal',exact:true}).click();
+  await page.getByRole('button',{name:'Add meal to library',exact:true}).click();
   await dialog(page).getByRole('textbox',{name:/^Meal name/}).fill('Old family dish');
   await page.evaluate(()=>{window.__weeklyMeals.modes.create='hold';});
   await save(page).click();
   await page.evaluate(()=>window.__weeklyMeals.render({familyId:'family-B'}));
-  await page.getByRole('button',{name:'Add Meal',exact:true}).click();
+  await page.getByRole('button',{name:'Add meal to library',exact:true}).click();
   const name=dialog(page).getByRole('textbox',{name:/^Meal name/});
   await name.fill('New family draft');
   await finish(page);
@@ -620,7 +620,7 @@ test('standalone pending creation is retired when the family changes', async ({p
 
 test('standalone saved meal retries its failed library read without creating it again', async ({page}) => {
   await fixture(page);
-  await page.getByRole('button',{name:'Add Meal',exact:true}).click();
+  await page.getByRole('button',{name:'Add meal to library',exact:true}).click();
   await dialog(page).getByRole('textbox',{name:/^Meal name/}).fill('Saved beans');
   await page.evaluate(()=>{window.__weeklyMeals.modes.create='hold';});
   await save(page).click();
