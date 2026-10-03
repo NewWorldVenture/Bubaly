@@ -16624,5 +16624,6 @@
   "ai.thisMessageWasAlreadyAnswered": "Diese Nachricht wurde bereits beantwortet. Laden Sie die Unterhaltung neu, um die Antwort zu sehen.",
   "ai.thisMessageCouldNotBeIdentified": "Diese Nachricht konnte nicht zugeordnet werden. Senden Sie sie erneut.",
   "ai.thatAnswerWasCutOff": "Diese Antwort wurde abgebrochen, bevor sie fertig war. Fragen Sie erneut, um die vollständige Antwort zu erhalten.",
-  "ai.yourFamilyUsedItsMonthlyAllowance": "Ihre Familie hat ihre {limit} KI-Anfragen für diesen Monat aufgebraucht. Wechseln Sie zu Family Basic für unbegrenzte Anfragen oder versuchen Sie es nächsten Monat erneut."
+  "ai.yourFamilyUsedItsMonthlyAllowance": "Ihre Familie hat ihre {limit} KI-Anfragen für diesen Monat aufgebraucht. Wechseln Sie zu Family Basic für unbegrenzte Anfragen oder versuchen Sie es nächsten Monat erneut.",
+  "ai.thatAnswerWasNotSaved": "Bubaly hat diese Nachricht beantwortet, konnte die Antwort aber nicht speichern. Was Bubaly dabei getan hat, ist bereits geschehen. Prüfen Sie das, bevor Sie erneut fragen."
 }

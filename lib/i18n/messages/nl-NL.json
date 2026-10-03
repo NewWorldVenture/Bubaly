@@ -16624,5 +16624,6 @@
   "ai.thisMessageWasAlreadyAnswered": "Dit bericht is al beantwoord. Laad het gesprek opnieuw om het antwoord te zien.",
   "ai.thisMessageCouldNotBeIdentified": "Dit bericht kon niet worden herkend. Stuur het opnieuw.",
   "ai.thatAnswerWasCutOff": "Dat antwoord werd afgebroken voordat het klaar was. Vraag het opnieuw voor het volledige antwoord.",
-  "ai.yourFamilyUsedItsMonthlyAllowance": "Je gezin heeft de {limit} AI-verzoeken voor deze maand gebruikt. Upgrade naar Family Basic voor onbeperkt gebruik, of probeer het volgende maand opnieuw."
+  "ai.yourFamilyUsedItsMonthlyAllowance": "Je gezin heeft de {limit} AI-verzoeken voor deze maand gebruikt. Upgrade naar Family Basic voor onbeperkt gebruik, of probeer het volgende maand opnieuw.",
+  "ai.thatAnswerWasNotSaved": "Bubaly heeft dit bericht beantwoord, maar kon het antwoord niet opslaan. Wat Bubaly heeft gedaan, is al gebeurd. Controleer dat voordat je het opnieuw vraagt."
 }

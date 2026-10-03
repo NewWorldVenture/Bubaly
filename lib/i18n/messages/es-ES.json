@@ -16624,5 +16624,6 @@
   "ai.thisMessageWasAlreadyAnswered": "Este mensaje ya se respondió. Vuelve a cargar la conversación para ver la respuesta.",
   "ai.thisMessageCouldNotBeIdentified": "No se pudo identificar este mensaje. Vuelve a enviarlo.",
   "ai.thatAnswerWasCutOff": "Esa respuesta se cortó antes de terminar. Vuelve a preguntar para obtener la respuesta completa.",
-  "ai.yourFamilyUsedItsMonthlyAllowance": "Tu familia ha usado sus {limit} solicitudes de IA de este mes. Pasa a Family Basic para tenerlas ilimitadas o vuelve a intentarlo el mes que viene."
+  "ai.yourFamilyUsedItsMonthlyAllowance": "Tu familia ha usado sus {limit} solicitudes de IA de este mes. Pasa a Family Basic para tenerlas ilimitadas o vuelve a intentarlo el mes que viene.",
+  "ai.thatAnswerWasNotSaved": "Bubaly respondió a este mensaje, pero no pudo guardar la respuesta. Lo que hizo ya se ha realizado, así que compruébalo antes de volver a preguntar."
 }

@@ -34,6 +34,12 @@ export function answerPriorTurn(
   if (prior.kind === 'failed') {
     return NextResponse.json({ error: tr('ai.thatAttemptDidNotFinish'), code: 'turn_failed', requestId: prior.requestId }, { status: 409 });
   }
+  // Answered, but the answer was never saved (the turn settled
+  // `partially_completed` when its messages could not be written): there is
+  // nothing to replay, and running it again would repeat what it already did.
+  if (prior.content === null && prior.partial) {
+    return NextResponse.json({ error: tr('ai.thatAnswerWasNotSaved'), code: 'turn_unsaved', requestId: prior.requestId }, { status: 409 });
+  }
   if (prior.content === null) {
     return NextResponse.json({ error: tr('ai.thisMessageWasAlreadyAnswered'), code: 'turn_answered', requestId: prior.requestId }, { status: 409 });
   }
