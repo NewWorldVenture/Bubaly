@@ -99,6 +99,17 @@ function csvField(value: string | number): string {
   return /[",\n\r]/.test(s) ? `"${s.replace(/"/g, '""')}"` : s;
 }
 
+/** A cell somebody typed — a merchant's name, a spend request's words, a
+ *  child's name. One that begins with = + - @ (or a tab or carriage return) is
+ *  a FORMULA to Excel, Sheets and Numbers, so `=HYPERLINK(…)` in a description
+ *  became a live link in the parent's spreadsheet. An apostrophe in front makes
+ *  it text, as the support-ticket export does (lib/admin/tickets-csv.ts,
+ *  C1-S9-105). Only for text: the Amount and Balance cells are the app's own
+ *  signed numbers and "-0.50" has to stay something a spreadsheet can sum. */
+function asText(value: string): string {
+  return /^[=+\-@\t\r]/.test(value) ? `'${value}` : value;
+}
+
 /** Dollars string with sign, from signed cents: 12345 → "123.45", -50 → "-0.50". */
 function dollars(cents: number): string {
   const sign = cents < 0 ? '-' : '';
@@ -140,8 +151,8 @@ export function toStatementCsv(txns: CsvTxn[]): string {
       date,
       time,
       txnTypeLabel(t.type),
-      t.description ?? '',
-      t.childName ?? '',
+      asText(t.description ?? ''),
+      asText(t.childName ?? ''),
       t.direction === 'credit' ? 'in' : 'out',
       dollars(signedAmountCents(t)),
       t.status.replace(/_/g, ' '),
