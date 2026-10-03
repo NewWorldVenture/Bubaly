@@ -4093,10 +4093,19 @@ words, but trust activity fails closed ("could not read what it looked at").
 `ai_requests` is refused, so the run page would not open. **Apply both together,
 migration first.**
 
-**Not covered (separate review, as the report asks):** a run's `summary` and a
-plan's `objective` are written by the model. A clarifying question is stored as
-the awaiting run's summary. These can echo the request, and runs are
-family-readable.
+**The run page follows the request (#927 comment 5973640023).** For a run
+started from a request, everything the model wrote from it — the plan's
+objective and reasoning, its steps, the run's events, approvals and
+`summary` (where a clarifying question is kept) — is shown only to a viewer
+`ai_request_words` answers for. The decision is made in `loadRunDetail`, so it
+holds even when a server action passes the service client. A sibling sees that
+the run exists and its state, as "Your request".
+
+**Still open (a product decision, not in this change):**
+`family_automation_runs.summary` is family-readable in the table itself. Home,
+Needs you, the display kiosk, the briefing and the autopilot and
+family-automation pages list it across the family, and a summary can repeat the
+request. Withholding it changes those surfaces.
 
 `docs/audit/a-request-text-is-its-requesters-check.sql` covers 9 assertions:
 - the sibling is refused on the text and on the answers;

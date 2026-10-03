@@ -85,9 +85,9 @@ export async function loadRunDetail(
   }
 
   // The person's own words and answers (0480): only the requester or a manager
-  // reads them. Anyone else in the family still opens the run; it reads by its
-  // plan's objective, or "Your request", without the words. A failed read is
-  // the same — the words are not needed to show the run.
+  // reads them. Anyone else in the family still opens the run, as "Your
+  // request", without the words. A failed read is the same — the words are not
+  // needed to show the run.
   let words: RequestWords | null = null;
   if (request && run.request_id) {
     const read = await readRequestWords(db, [run.request_id]);
@@ -107,15 +107,28 @@ export async function loadRunDetail(
   }
   const canEdit = isManager(opts.viewerRole);
 
+  // Everything the model wrote FROM the request can repeat it: the plan's
+  // objective and reasoning, its steps, the run's events and summary (where a
+  // clarifying question is kept), and the approvals the plan opened (#927
+  // comment 5973640023). So they follow the request: a run started from a
+  // request shows them only to a viewer `ai_request_words` answered for — its
+  // requester or a manager. Anyone else in the family still sees that the run
+  // exists, its state and when it ran. Decided here rather than left to RLS
+  // because a server action may hand this function the service client.
+  // A failed words read hides them too (fail closed).
+  const mayRead = !run.request_id || words !== null;
+
   return ok({
-    run,
+    run: mayRead ? run : { ...run, summary: null },
     request: request
       ? { ...(request as unknown as Omit<RequestRow, 'request_text' | 'clarifications'>), request_text: words?.requestText ?? '', clarifications: words?.clarifications ?? [] } as RequestRow
       : null,
-    plan,
-    steps,
-    events,
-    approvals: approvals.map((row) => toCardData(row, { requestedBy: row.requested_by_member_id ? names.get(row.requested_by_member_id) ?? null : null, canEdit })),
+    plan: mayRead ? plan : null,
+    steps: mayRead ? steps : [],
+    events: mayRead ? events : [],
+    approvals: mayRead
+      ? approvals.map((row) => toCardData(row, { requestedBy: row.requested_by_member_id ? names.get(row.requested_by_member_id) ?? null : null, canEdit }))
+      : [],
   });
 }
 
