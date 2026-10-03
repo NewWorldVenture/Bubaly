@@ -70,7 +70,7 @@ const TRY_ASKING = [
 ];
 
 type ChatAction = { name: string; ok: boolean; summary: string };
-type Message = ConversationMessage & { actions?: ChatAction[]; runIds?: string[]; error?: string; retryText?: string };
+type Message = ConversationMessage & { actions?: ChatAction[]; runIds?: string[]; error?: string; retryText?: string; retryKey?: string };
 const MESSAGE_PAGE_SIZE = 100;
 const CONVERSATION_PAGE_SIZE = 25;
 type HistoryCursor = { id: string; created_at: string };
@@ -160,6 +160,9 @@ function AssistantSession() {
   const activeId = useRef(convId);
   const drafts = useRef(new Map<string, string>());
   const pendingSend = useRef<{ controller: AbortController; replyId: string } | null>(null);
+  // The failed send that Edit & retry put back in the composer: sent again
+  // unchanged, in the same conversation, it is the same turn and keeps its key.
+  const pendingRetry = useRef<{ conversationId: string; text: string; key?: string } | null>(null);
   const pendingThread = useRef(false);
   const listRequest = useRef(0);
   const railRequest = useRef(0);
@@ -488,7 +491,12 @@ function AssistantSession() {
     setHighlightId(null);
 
     const userMsg: Message = { role: 'user', content: msg, id: generateId() };
-    const turnKey = crypto.randomUUID();
+    const retry = pendingRetry.current;
+    pendingRetry.current = null;
+    const turnKey = (retry?.conversationId === conversationId && retry.text === msg && retry.key) || crypto.randomUUID();
+    // Every failure below offers the same text back; the key rides along unless
+    // the server said that key can never answer (a failed turn or a mismatch).
+    const retryable = { retryText: msg, retryKey: turnKey };
     const replyId = generateId();
     pendingSend.current = { controller: ticket.controller, replyId };
     // Add the user turn + an empty assistant bubble we fill as the stream arrives.
@@ -513,8 +521,9 @@ function AssistantSession() {
       });
       if (!ticket.current()) return;
       if (!res.ok || !res.body) {
-        const err = await res.json().catch(() => ({ error: t('assistantModule.sorryIHadTroubleWith') })) as { error?: string };
-        patchReply((m) => ({ ...m, error: err.error ?? t('assistantModule.sorryIHadTroubleWith'), retryText: msg }));
+        const err = await res.json().catch(() => ({ error: t('assistantModule.sorryIHadTroubleWith') })) as { error?: string; code?: string };
+        const spent = err.code === 'turn_failed' || err.code === 'client_request_id_conflict';
+        patchReply((m) => ({ ...m, error: err.error ?? t('assistantModule.sorryIHadTroubleWith'), retryText: msg, retryKey: spent ? undefined : turnKey }));
         return;
       }
       let finalText = '';
@@ -544,12 +553,15 @@ function AssistantSession() {
         failed = true;
         patchReply((m) => ({ ...m, error: m.error || t('assistantModule.session.interrupted') }));
       }
+      // An unsaved or cut-off answer may still have finished on the server; a
+      // retry under the same key replays it instead of running the turn twice.
+      if (failed) patchReply((m) => ({ ...m, ...retryable }));
       // Speak the reply aloud when voice output is enabled on this device.
       if (!failed && finalText.trim() && voice.shouldSpeak()) void voice.speak(finalText, exchangeId);
     } catch (error) {
       if (!ticket.current()) return;
       console.error('[assistant] request failed', error);
-      patchReply((m) => ({ ...m, error: t('assistantModule.session.interrupted') }));
+      patchReply((m) => ({ ...m, error: t('assistantModule.session.interrupted'), ...retryable }));
     } finally {
       if (ticket.current()) {
         pendingSend.current = null;
@@ -558,6 +570,12 @@ function AssistantSession() {
       }
       ticket.finish();
     }
+  }
+
+  function editRetry(msg: Message) {
+    if (!msg.retryText || !mounted.current || activeId.current !== convId) return;
+    pendingRetry.current = { conversationId: convId, text: msg.retryText, key: msg.retryKey };
+    setDraft(msg.retryText);
   }
 
   function stopResponse() {
@@ -636,7 +654,7 @@ function AssistantSession() {
                     <button type="button" disabled={loading || threadLoading} onClick={() => void loadConversation(convId)} className="focus-ring mt-2 min-h-11 rounded-lg border border-current px-2 disabled:opacity-50">
                       {t('assistantModule.session.reviewSaved')}
                     </button>
-                    {msg.retryText && <button type="button" disabled={loading || threadLoading} onClick={() => setDraft(msg.retryText!)} className="focus-ring ml-2 min-h-11 rounded-lg border border-current px-2 disabled:opacity-50">
+                    {msg.retryText && <button type="button" disabled={loading || threadLoading} onClick={() => editRetry(msg)} className="focus-ring ml-2 min-h-11 rounded-lg border border-current px-2 disabled:opacity-50">
                       {t('assistantModule.session.editRetry')}
                     </button>}
                   </div>
