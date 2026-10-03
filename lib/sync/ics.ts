@@ -1,6 +1,8 @@
 // lib/sync/ics.ts
 //
-// RFC 5545 (iCalendar) generation + a pragmatic parser. This is the one piece of
+// RFC 5545 (iCalendar) generation + a pragmatic parser.
+import { instantForLocalTime, isValidTimezone } from '@/lib/time/zoned';
+// This is the one piece of
 // cross-provider sync that works with NO OAuth and no provider cooperation: any
 // calendar app (Apple Calendar, Outlook, Google "from URL", Alexa) can subscribe
 // to a generated ICS feed URL and receive bubaly events. Generation is pure
@@ -21,6 +23,14 @@ export type IcsEvent = {
   /** Last modification ISO timestamp (drives DTSTAMP / LAST-MODIFIED). */
   updatedAt?: string | null;
   status?: 'confirmed' | 'tentative' | 'cancelled';
+  /**
+   * RECURRENCE-ID as an ISO instant: this VEVENT replaces ONE occurrence of
+   * the recurring series that shares its UID (a rescheduled or cancelled
+   * instance). Null for a stand-alone event or a series master. Two VEVENTs with
+   * one UID are the rule for any calendar with a moved occurrence, so a reader
+   * that keys by UID alone must look here before letting one overwrite the other.
+   */
+  recurrenceId?: string | null;
 };
 
 export type IcsCalendarOptions = {
@@ -123,17 +133,63 @@ export function unescapeIcsText(value: string): string {
     .replace(/\\\\/g, '\\');
 }
 
-/** Parse an iCalendar UTC/DATE value into an ISO string. */
-export function parseIcsDate(value: string): { iso: string; allDay: boolean } {
-  // DATE: 20260620 ; UTC DATETIME: 20260620T143000Z ; local DATETIME: 20260620T143000
+/**
+ * Parse an iCalendar DATE / DATE-TIME value into an ISO instant.
+ *
+ *   DATE            20260620                 → all-day, midnight UTC of that date
+ *   UTC DATE-TIME   20260620T143000Z         → that instant
+ *   zoned DATE-TIME 20260620T143000 + TZID   → the instant at which the clock in
+ *                                              that zone reads 14:30 (DTSTART;TZID=
+ *                                              America/New_York:…), so a school
+ *                                              calendar published in local time
+ *                                              lands at the right hour. A reading
+ *                                              the zone skips at spring-forward
+ *                                              resolves to the first minute that
+ *                                              exists, as the rest of the app does.
+ *   floating        20260620T143000, no TZID → read as UTC, as before. There is no
+ *                                              observer to be local to here.
+ *
+ * A TZID this runtime does not know (Windows names such as "Eastern Standard
+ * Time") falls back to the floating rule rather than failing the event: a
+ * calendar that imports at the wrong hour is recoverable, one that does not
+ * import is not. The limit is stated rather than hidden.
+ */
+export function parseIcsDate(value: string, tzid?: string | null): { iso: string; allDay: boolean } {
   if (/^\d{8}$/.test(value)) {
     return { iso: `${value.slice(0, 4)}-${value.slice(4, 6)}-${value.slice(6, 8)}T00:00:00.000Z`, allDay: true };
   }
   const m = value.match(/^(\d{4})(\d{2})(\d{2})T(\d{2})(\d{2})(\d{2})(Z?)$/);
   if (!m) throw new Error(`Unparseable ICS date: ${value}`);
   const [, y, mo, d, h, mi, s, z] = m;
-  const suffix = z === 'Z' ? 'Z' : 'Z'; // we normalize naive local times to UTC
-  return { iso: `${y}-${mo}-${d}T${h}:${mi}:${s}.000${suffix}`, allDay: false };
+  if (!z && tzid && isValidTimezone(tzid)) {
+    const at = instantForLocalTime(Number(y), Number(mo), Number(d), Number(h) * 60 + Number(mi), tzid);
+    if (at) return { iso: new Date(at.getTime() + Number(s) * 1000).toISOString(), allDay: false };
+  }
+  return { iso: `${y}-${mo}-${d}T${h}:${mi}:${s}.000Z`, allDay: false };
+}
+
+/**
+ * Split a content line into name, parameters and value. The value starts at
+ * the first `:` outside double quotes: a parameter value may carry a colon
+ * when quoted (`TZID="(UTC-05:00) Eastern Time (US & Canada)"`), and taking the
+ * first colon blindly made the parameter the value.
+ */
+function splitContentLine(line: string): { name: string; tzid: string | null; value: string } | null {
+  let quoted = false;
+  let colon = -1;
+  for (let i = 0; i < line.length; i += 1) {
+    const ch = line[i];
+    if (ch === '"') quoted = !quoted;
+    else if (ch === ':' && !quoted) { colon = i; break; }
+  }
+  if (colon === -1) return null;
+  const [rawName, ...params] = line.slice(0, colon).split(';');
+  let tzid: string | null = null;
+  for (const param of params) {
+    const m = param.match(/^TZID=(.+)$/i);
+    if (m) tzid = m[1].replace(/^"(.*)"$/, '$1');
+  }
+  return { name: rawName.toUpperCase(), tzid, value: line.slice(colon + 1) };
 }
 
 export function parseICS(text: string): IcsEvent[] {
@@ -161,6 +217,7 @@ export function parseICS(text: string): IcsEvent[] {
           allDay: cur.allDay ?? false,
           recurrenceRule: cur.recurrenceRule ?? null,
           status: cur.status,
+          recurrenceId: cur.recurrenceId ?? null,
         });
       }
       cur = null;
@@ -168,11 +225,9 @@ export function parseICS(text: string): IcsEvent[] {
     }
     if (!cur) continue;
 
-    const colon = line.indexOf(':');
-    if (colon === -1) continue;
-    const left = line.slice(0, colon);
-    const value = line.slice(colon + 1);
-    const name = left.split(';')[0].toUpperCase();
+    const parsed = splitContentLine(line);
+    if (!parsed) continue;
+    const { name, tzid, value } = parsed;
 
     switch (name) {
       case 'UID':
@@ -188,13 +243,16 @@ export function parseICS(text: string): IcsEvent[] {
         cur.location = unescapeIcsText(value);
         break;
       case 'DTSTART': {
-        const { iso, allDay } = parseIcsDate(value);
+        const { iso, allDay } = parseIcsDate(value, tzid);
         cur.startsAt = iso;
         cur.allDay = allDay;
         break;
       }
       case 'DTEND':
-        cur.endsAt = parseIcsDate(value).iso;
+        cur.endsAt = parseIcsDate(value, tzid).iso;
+        break;
+      case 'RECURRENCE-ID':
+        cur.recurrenceId = parseIcsDate(value, tzid).iso;
         break;
       case 'RRULE':
         cur.recurrenceRule = value;

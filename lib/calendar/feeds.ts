@@ -59,6 +59,44 @@ export interface FeedEventRow {
 }
 
 /**
+ * The `external_uid` a VEVENT is stored under. A stand-alone event and a
+ * recurring series master are stored under their UID; an EXCEPTION to a series
+ * — a VEVENT carrying RECURRENCE-ID, which shares the master's UID and replaces
+ * one occurrence — is stored under the UID joined to its RECURRENCE-ID by a
+ * separator no UID can carry (`EXCEPTION_KEY_SEPARATOR`), so it never overwrites
+ * the series it belongs to and the series never overwrites it.
+ */
+/**
+ * The separator between a UID and a RECURRENCE-ID in an exception's key.
+ *
+ * RFC 5545 forbids control characters in a property value — every one except
+ * HTAB, which TEXT admits as white space — so no UID a publisher can write
+ * contains the separator, and both halves are stripped of the forbidden
+ * controls below, so a UID that arrives with one anyway cannot impersonate an
+ * exception. HTAB is kept: two legal UIDs that differ only by an interior tab
+ * are two events, and stripping it made them one (second review on #908).
+ * `#` was the separator before, and a stand-alone event whose UID happened to
+ * be `series#2026-09-12T14:00:00.000Z` shared a key with the moved occurrence
+ * of `series`: one of the two was lost in the plan, and when that occurrence
+ * was cancelled the feed-scoped delete removed the stand-alone event (first
+ * review on #908). 0x1F is a unit separator, storable in a text column and
+ * safe in a PostgREST filter.
+ */
+export const EXCEPTION_KEY_SEPARATOR = '\u001F';
+/** The controls RFC 5545 forbids in TEXT: everything below 0x20 except HTAB, and DEL. */
+const FORBIDDEN_CONTROLS = /[\u0000-\u0008\u000A-\u001F\u007F]/g;
+
+/**
+ * The `external_uid` a VEVENT is stored under: the bare UID for a master or a
+ * one-off — the key every row imported before this change already has — and
+ * UID + separator + RECURRENCE-ID for an exception, which no bare UID can equal.
+ */
+export function feedExternalUid(ev: Pick<IcsEvent, 'uid' | 'recurrenceId'>): string {
+  const uid = ev.uid.replace(FORBIDDEN_CONTROLS, '');
+  return ev.recurrenceId ? `${uid}${EXCEPTION_KEY_SEPARATOR}${ev.recurrenceId.replace(FORBIDDEN_CONTROLS, '')}` : uid;
+}
+
+/**
  * Shapes a parsed ICS event into a calendar_events upsert row tied to a feed.
  * The (feed_id, external_uid) pair is the upsert conflict target, so re-syncing
  * a changed public calendar updates rows in place instead of duplicating them.
@@ -67,7 +105,7 @@ export function mapIcsEventToRow(ev: IcsEvent, familyId: string, feedId: string)
   return {
     family_id: familyId,
     feed_id: feedId,
-    external_uid: ev.uid,
+    external_uid: feedExternalUid(ev),
     title: ev.title || 'Untitled',
     description: ev.description ?? null,
     location: ev.location ?? null,
@@ -79,14 +117,54 @@ export function mapIcsEventToRow(ev: IcsEvent, familyId: string, feedId: string)
   };
 }
 
-/** Builds dedup'd upsert rows from parsed ICS events (last write wins per UID). */
-export function buildFeedRows(events: IcsEvent[], familyId: string, feedId: string): FeedEventRow[] {
-  const byUid = new Map<string, FeedEventRow>();
+export type FeedRowPlan = {
+  /** The rows to upsert: every live event, one per `external_uid`. */
+  rows: FeedEventRow[];
+  /**
+   * The `external_uid`s the source says are CANCELLED (STATUS:CANCELLED), to be
+   * removed from the family's calendar if an earlier sync imported them. A
+   * cancelled series master names the whole series; a cancelled exception
+   * names that one occurrence.
+   */
+  cancelled: string[];
+};
+
+/**
+ * What a sync should write and what it should remove, from parsed ICS events.
+ *
+ * Keyed by `feedExternalUid`, last write wins per key: a feed that repeats a
+ * UID is still upserted cleanly, and a series master and its exceptions are
+ * DIFFERENT keys, so neither replaces the other. Before this, "last write wins
+ * per UID" let a rescheduled occurrence — the last VEVENT with that UID in
+ * most exports — overwrite the weekly master with a one-off at the new time,
+ * and the whole series vanished from the family calendar. A cancelled event is
+ * not a row; it is a removal.
+ *
+ * Known limit, stated: the app's recurrence model has no exception dates, so
+ * the master still renders the ORIGINAL slot of a moved or cancelled
+ * occurrence alongside the exception. That is a duplicate on one week, where
+ * the previous behaviour lost the series or the exception outright.
+ */
+export function planFeedRows(events: IcsEvent[], familyId: string, feedId: string): FeedRowPlan {
+  const live = new Map<string, FeedEventRow>();
+  const cancelled = new Set<string>();
   for (const ev of events) {
     if (!ev.uid || !ev.startsAt) continue;
-    byUid.set(ev.uid, mapIcsEventToRow(ev, familyId, feedId));
+    const key = feedExternalUid(ev);
+    if (ev.status === 'cancelled') {
+      live.delete(key);
+      cancelled.add(key);
+      continue;
+    }
+    cancelled.delete(key);
+    live.set(key, mapIcsEventToRow(ev, familyId, feedId));
   }
-  return [...byUid.values()];
+  return { rows: [...live.values()], cancelled: [...cancelled] };
+}
+
+/** The rows half of `planFeedRows`, for callers that only write. */
+export function buildFeedRows(events: IcsEvent[], familyId: string, feedId: string): FeedEventRow[] {
+  return planFeedRows(events, familyId, feedId).rows;
 }
 
 /**
