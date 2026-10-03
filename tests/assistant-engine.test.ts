@@ -1,4 +1,13 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
+
+// F19: on a capped plan the request row is the meter, so withAiRequest refuses
+// when it cannot be filed. This file is about other behaviour and its fake
+// database files no row, so the family is on Basic, whose allowance is
+// unlimited: an unfiled request is bookkeeping there, as it always was.
+vi.mock('@/lib/server/plan', async (importOriginal) => ({
+  ...(await importOriginal<typeof import('@/lib/server/plan')>()),
+  resolveFamilyPlanLevel: async () => 1,
+}));
 import type { StreamEvent, ToolRunResult } from '@/lib/ai/provider';
 
 type Row = Record<string, unknown>;
@@ -261,7 +270,8 @@ describe('createAssistantStream (SSE transport)', () => {
       { type: 'action', name: 'create_meal_plan_entry', ok: true, summary: 'Planned.' },
       { type: 'delta', text: 'Tacos ' },
       { type: 'delta', text: 'are planned.' },
-      { type: 'done', content: 'Tacos are planned.', persisted: true },
+      // requestId: the turn's row, which this fake store does not file (F19).
+      { type: 'done', content: 'Tacos are planned.', persisted: true, requestId: null },
     ]);
     expect(inserts.find((i) => i.table === 'ai_messages'), 'the stream must persist its messages').toBeTruthy();
     // The streaming transport names itself separately from the JSON one, so a
@@ -279,7 +289,7 @@ describe('createAssistantStream (SSE transport)', () => {
     if (!prepared.ok) throw new Error('prepare failed');
     const events = await readSse(createAssistantStream(input, prepared.turn));
     expect(events.map((e) => e.type)).toEqual(['delta', 'done']);
-    expect(events[1]).toEqual({ type: 'done', content: 'Recovered.', persisted: true });
+    expect(events[1]).toEqual({ type: 'done', content: 'Recovered.', persisted: true, requestId: null });
   });
 
   it('surfaces a mid-stream failure but keeps the partial answer', async () => {

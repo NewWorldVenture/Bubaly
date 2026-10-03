@@ -16689,8 +16689,20 @@
   "tripCountdown.daysAgo": "{count} dagen geleden",
   "tripCountdown.travelersOne": "{count} reiziger",
   "tripCountdown.travelersMany": "{count} reizigers",
+  "error.dbPermission": "Je hebt geen toestemming om dat te doen. Vraag een gezinsbeheerder als je denkt dat dit een vergissing is.",
+  "error.dbConflict": "Dat bestaat al. Probeer een andere waarde.",
+  "error.dbNotFound": "Dat item is niet gevonden — misschien is het al verwijderd.",
+  "error.dbInvalid": "Er ontbreekt verplichte informatie of die is ongeldig. Controleer het en probeer het opnieuw.",
+  "error.dbNetwork": "Netwerkprobleem — controleer je verbinding en probeer het opnieuw.",
+  "aiSavings.allowanceSpentSuggestions": "De AI-verzoeken van deze maand zijn op — hier zijn suggesties op basis van jullie financiën.",
+  "aiSavings.notConfiguredSuggestions": "AI is niet ingesteld — hier zijn suggesties op basis van jullie financiën.",
   "blogBlogSearch.searchUnavailable": "Zoeken is nu niet beschikbaar. Probeer het zo meteen opnieuw.",
   "coach.onlyYourOwnHealth": "Je kunt de coach vragen stellen over je eigen gezondheid. Een ouder of volwassene kan vragen stellen over andere gezinsleden.",
   "medicationsModule.noMedicinesPrescribedToYou": "Er zijn jou geen medicijnen voorgeschreven.",
-  "medicationsModule.yourOwnMedicinesOnly": "Je ziet de medicijnen die jou zijn voorgeschreven. Een ouder of volwassene beheert de voorschriften van het gezin."
+  "medicationsModule.yourOwnMedicinesOnly": "Je ziet de medicijnen die jou zijn voorgeschreven. Een ouder of volwassene beheert de voorschriften van het gezin.",
+  "ai.thatAttemptDidNotFinish": "Die poging is niet afgerond. Stuur het bericht opnieuw.",
+  "ai.thatRetryDoesNotMatchThisMessage": "Die nieuwe poging hoort niet bij dit bericht. Stuur het opnieuw.",
+  "ai.thisMessageIsAlreadyBeingAnswered": "Dit bericht wordt al beantwoord.",
+  "ai.thisMessageWasAlreadyAnswered": "Dit bericht is al beantwoord. Laad het gesprek opnieuw om het antwoord te zien.",
+  "ai.thisMessageCouldNotBeIdentified": "Dit bericht kon niet worden herkend. Stuur het opnieuw."
 }

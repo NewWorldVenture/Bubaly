@@ -201,7 +201,10 @@ describe('stream and persistence contracts', () => {
     expect(parseAssistantStreamEvent({ type: 'run', runId: 'r1' })).toEqual({ type: 'run', runId: 'r1', href: '/dashboard/concierge/runs/r1', status: 'queued', summary: null });
     expect(parseAssistantStreamEvent({ type: 'run' })).toBeNull();
     expect(parseAssistantStreamEvent({ type: 'error' })).toEqual({ type: 'error', error: 'Something went wrong.' });
-    expect(parseAssistantStreamEvent({ type: 'done', content: 'Done.', persisted: false })).toEqual({ type: 'done', content: 'Done.', persisted: false });
+    expect(parseAssistantStreamEvent({ type: 'done', content: 'Done.', persisted: false })).toEqual({ type: 'done', content: 'Done.', persisted: false, requestId: null });
+    // The turn's request id rides on done so a spoken answer joins its exchange (F19).
+    expect(parseAssistantStreamEvent({ type: 'done', content: 'Done.', persisted: true, requestId: 'r-1' })).toEqual({ type: 'done', content: 'Done.', persisted: true, requestId: 'r-1' });
+    expect(parseAssistantStreamEvent({ type: 'done', content: 'Done.', persisted: true, requestId: 7 })).toEqual({ type: 'done', content: 'Done.', persisted: true, requestId: null });
     expect(parseAssistantStreamEvent({ type: 'thinking', text: 'secret' })).toBeNull();
     expect(parseAssistantStreamEvent('data')).toBeNull();
   });

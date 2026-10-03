@@ -30,6 +30,8 @@ interface ProfileModuleProps {
   userId: string;
   userEmail: string;
   stats?: ProfileStats;
+  /** A real store listing for "Rate the app", or null to hide the row (INT-O01). */
+  storeListing?: string | null;
 }
 
 function Row({
@@ -65,7 +67,7 @@ function Section({ children, className }: { children: React.ReactNode; className
   );
 }
 
-export function ProfileModule({ member, userEmail, stats }: ProfileModuleProps) {
+export function ProfileModule({ member, userEmail, stats, storeListing = null }: ProfileModuleProps) {
   const t = useTranslations();
   const { family, role, isSuperAdmin } = useApp();
   const { theme, setTheme } = useTheme();
@@ -162,7 +164,12 @@ export function ProfileModule({ member, userEmail, stats }: ProfileModuleProps) 
             </button>
           </div>
           <Row icon={HelpCircle} label={t('profile.helpSupport')} href="/dashboard/settings#support" />
-          <Row icon={Star} label={t('profile.rateTheApp')} onClick={() => window.open('https://apps.apple.com/', '_blank', 'noopener,noreferrer')} />
+          {/* Shown only once a real store listing is configured (INT-O01, the
+              owner's decision): it opened the App Store's front page, which
+              lists no Bubaly app. noopener, as INT-L01 requires. */}
+          {storeListing && (
+            <Row icon={Star} label={t('profile.rateTheApp')} onClick={() => window.open(storeListing, '_blank', 'noopener,noreferrer')} />
+          )}
         </Section>
       </div>
 

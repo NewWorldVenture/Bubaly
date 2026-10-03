@@ -1,3 +1,4 @@
+import { refuseOverAIAllowance } from '@/lib/server/ai-access';
 import { NextRequest, NextResponse } from 'next/server';
 import { getTranslations } from '@/lib/i18n/server';
 import { requireUserContext } from '@/lib/supabase/auth';
@@ -135,6 +136,11 @@ export async function POST(req: NextRequest) {
 Costs/planned are whole US dollars. Keep itinerary day numbers between 1 and ${range.length}; if there are no dated days, return an empty itinerary. Use at most 30 activities, 60 itinerary items, and 9 budget entries. These are suggestions and cost estimates, not verified prices, availability, or bookings. Balance activities with downtime for kids.`;
     const user = `Trip: ${trip.title}. Destination: ${trip.destination ?? 'unspecified'}. Type: ${trip.kind}. Nights: ${nights}. Travelers: ${m.length} (${hasChildren ? 'includes children' : 'adults'}). Budget: ${trip.budget_cents ? `$${trip.budget_cents / 100}` : 'flexible'}. ${body.prompt ? `Preferences: ${body.prompt}` : ''}`;
 
+    // F19: a member's own AI request, so it counts against the family's monthly
+    // allowance (the owner's decision of 2026-10-02). Build and concierge are
+    // separate requests, each checked once; recommendations calls no model.
+    const overAllowance = await refuseOverAIAllowance(ctx, supabase);
+    if (overAllowance) return overAllowance;
     let plan: VacationAIPlan;
     try {
       const built = await withAiRequest(
@@ -289,6 +295,11 @@ Costs/planned are whole US dollars. Keep itinerary day numbers between 1 and ${r
   if (action === 'concierge') {
     const message = body.message?.trim();
     if (!message) return NextResponse.json({ error: t('ai.emptyMessage') }, { status: 400 });
+    // F19: a member's own AI request, so it counts against the family's monthly
+    // allowance (the owner's decision of 2026-10-02). Build and concierge are
+    // separate requests, each checked once; recommendations calls no model.
+    const overAllowance = await refuseOverAIAllowance(ctx, supabase);
+    if (overAllowance) return overAllowance;
 
     let conversationId = body.conversationId;
     if (!conversationId) {

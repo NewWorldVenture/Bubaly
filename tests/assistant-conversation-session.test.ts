@@ -61,7 +61,7 @@ describe('assistant response transport', () => {
     const events: unknown[] = [];
     const result = await consumeAssistantStream(new ReadableStream({ start(controller) { for (const byte of wire) controller.enqueue(new Uint8Array([byte])); controller.close(); } }), event => events.push(event));
     expect(result.completed).toBe(true);
-    expect(events).toEqual([{ type: 'delta', text: 'Olá 👋' }, { type: 'error', error: 'Not saved' }, { type: 'done', content: 'Olá 👋', persisted: false }]);
+    expect(events).toEqual([{ type: 'delta', text: 'Olá 👋' }, { type: 'error', error: 'Not saved' }, { type: 'done', content: 'Olá 👋', persisted: false, requestId: null }]);
   });
 
   it('does not mistake transport EOF for successfully completed generation', async () => {

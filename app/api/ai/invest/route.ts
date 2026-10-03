@@ -1,4 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server';
+import { refuseOverAIAllowance } from '@/lib/server/ai-access';
 import { getTranslations } from '@/lib/i18n/server';
 import { createServer } from '@/lib/supabase/server';
 import { settleAll } from '@/lib/supabase/settle';
@@ -121,6 +122,9 @@ export async function POST(req: NextRequest) {
     }
 
     const { system, user } = buildInvestCoachPrompt({ childName, assetName, assetDescription, riskLevel, portfolioValueCents, holdingsCount });
+    // F19: the monthly AI allowance the plans sell, checked before the model runs.
+    const overAllowance = await refuseOverAIAllowance(ctx, supabase);
+    if (overAllowance) return overAllowance;
     const coaching = await withAiRequest(
       scopeFromUserContext(ctx, supabase),
       { feature: 'invest.mentor', text: 'Explain an investing concept' },

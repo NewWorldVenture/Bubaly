@@ -17,7 +17,8 @@ import 'server-only';
 import type { SupabaseClient } from '@supabase/supabase-js';
 import type { Database } from '@/lib/database.types';
 import { resolveProvider, describeAIError, type AIMessage, type AIProvider, type ToolSpec } from '@/lib/ai/provider';
-import { withAiRequest } from '@/lib/ai/observability';
+import { AiRequestDuplicate, AiRequestNotFiled, withAiRequest } from '@/lib/ai/observability';
+import { assistantTurnRequestKey } from '@/lib/ai/assistant-turn-replay';
 import { buildAssistantTools } from '@/lib/assistant/tools';
 import { wrapToolsWithTrust } from '@/lib/assistant/trust-wrapper';
 import { buildActionTools, mergeToolSets } from '@/lib/ai/action-tools';
@@ -75,6 +76,17 @@ export type AssistantTurnInput = {
   intent?: IntentKey;
   /** Where the person is in the app — narrows classification and lets slices focus. */
   pageContext?: { module?: string; entityIds?: string[] } | null;
+  /**
+   * The send's retry key (`Idempotency-Key`), stored on the turn's request row.
+   * A second attempt with the same key never reaches the model: the route
+   * replays or refuses it first, and an attempt that races past that check is
+   * stopped by the unique index (`AiRequestDuplicate`).
+   */
+  clientRequestId?: string | null;
+  /** What the stream says, in the reader's language, when it was such a race. */
+  alreadyAnswering?: string;
+  /** What the stream says when the turn's request could not be recorded. */
+  notRecorded?: string;
 };
 
 export type ExecutedAssistantAction = { name: string; args: Record<string, unknown>; result: unknown };
@@ -375,13 +387,20 @@ export async function persistAssistantTurn(
     familyId: string; conversationId: string; message: string; assistantContent: string; actions: ExecutedAssistantAction[]; model: string;
     /** The turn's cards and runs (0250 `structured_content`), so the conversation re-opens with its outcomes. */
     structured?: StructuredContent | null;
+    /**
+     * The turn's `ai_requests` row (0250 `request_id`). It binds this exchange
+     * to its request exactly: a spoken answer and a retried send find the
+     * answer by this id, never by time or position in the conversation.
+     */
+    requestId?: string | null;
   },
 ): Promise<{ ok: true } | { ok: false; error: string }> {
   const { familyId, conversationId, message, assistantContent, actions, model } = args;
   const rows: MessageInsert[] = [
-    { family_id: familyId, conversation_id: conversationId, role: 'user', content: message },
+    { family_id: familyId, conversation_id: conversationId, role: 'user', content: message, request_id: args.requestId ?? null },
     {
       family_id: familyId, conversation_id: conversationId, role: 'assistant', content: assistantContent, model,
+      request_id: args.requestId ?? null,
       tool_calls: actions.length ? (actions.map((a) => ({ name: a.name, args: a.args })) as unknown as MessageInsert['tool_calls']) : null,
       // Summaries only: raw results can carry transaction rows or a signed
       // document URL, and a conversation row outlives the moment it was shown.
@@ -457,7 +476,7 @@ export async function runAssistantTurn(input: AssistantTurnInput, prepared: Prep
     // `createRequest` silently coerces an unknown one to 'concierge' — which
     // would file every assistant turn under the concierge planner, a different
     // surface entirely. The `feature` string is what names this one.
-    { feature: 'assistant.turn', text: 'Assistant turn', conversationId: input.conversationId },
+    { feature: 'assistant.turn', text: 'Assistant turn', conversationId: input.conversationId, clientRequestId: turnKey(input) },
     async (obs) => {
       const result = await provider.runTools({ system, messages, tools, maxTokens: ASSISTANT_MAX_TOKENS });
       obs.used(provider.model, result.usage);
@@ -466,7 +485,7 @@ export async function runAssistantTurn(input: AssistantTurnInput, prepared: Prep
       const { cards, runIds } = await collectOutcomes(input, prepared, actions);
       const persisted = await persistAssistantTurn(input.supabase, {
         familyId: input.familyId, conversationId: input.conversationId, message: input.message,
-        assistantContent: content, actions, model: provider.model, structured: toStructuredContent(cards, runIds),
+        assistantContent: content, actions, model: provider.model, structured: toStructuredContent(cards, runIds), requestId: obs.requestId,
       });
       // Partial, not failed: the family got their answer, the conversation did
       // not keep it.
@@ -508,99 +527,121 @@ export function createAssistantStream(input: AssistantTurnInput, prepared: Prepa
       // returning a ReadableStream resolves before a single token exists — every
       // row would read `completed` for a turn that had not begun. The chat route
       // solves it the same way.
-      await withAiRequest(
-        prepared.scope,
-        { feature: 'assistant.stream', text: 'Assistant stream', conversationId: input.conversationId },
-        async (obs) => {
-          const send = (e: unknown) => {
-            if (!connected) return;
-            try { controller.enqueue(encoder.encode(`data: ${JSON.stringify(e)}\n\n`)); }
-            catch { connected = false; } // cancel can precede the async start settling
-          };
-          let content = '';
-          let responseError: string | undefined;
-          const actions: ExecutedAssistantAction[] = [];
-          const cards: ResultCard[] = [];
-          const runIds: string[] = [];
-          // The card follows its action on the wire, so a client that renders as
-          // it reads shows the line first and the card the moment it exists. The
-          // approval read is the only await; the provider generator waits for it.
-          const pushAction = async (name: string, args: Record<string, unknown>, result: unknown) => {
-            actions.push({ name, args, result });
-            send({ type: 'action', name, ...summarizeToolResult(result) });
-            const outcome = outcomeOfAction(name, args, result, prepared.cardContext);
-            if (outcome.card) { cards.push(outcome.card); send({ type: 'card', card: outcome.card }); }
-            if (outcome.runId) {
-              if (!runIds.includes(outcome.runId)) runIds.push(outcome.runId);
-              send({ type: 'run', runId: outcome.runId, href: runHref(outcome.runId), status: outcome.runStatus ?? 'queued', summary: summarizeToolResult(result).summary });
-            }
-            const approvalId = approvalIdFromToolResult(result);
-            if (approvalId) {
-              const card = await approvalCardFor(input.supabase, { familyId: input.familyId, role: input.role, approvalId });
-              if (card) { cards.push(card); send({ type: 'card', card }); }
-            }
-          };
-          try {
-            for await (const ev of provider.runToolsStream({ system, messages, tools, maxTokens: ASSISTANT_MAX_TOKENS })) {
-              if (ev.type === 'delta') { content += ev.text; send({ type: 'delta', text: ev.text }); }
-              else await pushAction(ev.name, ev.args, ev.result);
-            }
-            // `runToolsStream` yields deltas and actions, never a usage total — only
-            // the JSON transport's `ToolRunResult` carries one. So the row gets the
-            // model that answered and no token counts, which is the honest record
-            // rather than a zero that reads like a free turn.
-            obs.used(provider.model, undefined);
-          } catch (streamErr) {
-            console.error('[assistant-engine] stream error:', streamErr);
-            if (!content && actions.length === 0) {
-              try {
-                const result = await provider.runTools({ system, messages, tools, maxTokens: ASSISTANT_MAX_TOKENS });
-                // The turn recovered and the family gets a whole answer, so this
-                // settles `completed`. The stream break is in the log, not the row:
-                // a status of `failed` would describe a turn nobody experienced as
-                // one. The fallback DOES carry usage.
-                obs.used(provider.model, result.usage);
-                for (const a of result.actions) {
-                  if (!actions.some((x) => x.name === a.name && JSON.stringify(x.args) === JSON.stringify(a.args))) await pushAction(a.name, a.args, a.result);
-                }
-                if (result.text) { content = result.text; send({ type: 'delta', text: result.text }); }
-              } catch (fallbackErr) {
-                console.error('[assistant-engine] fallback error:', fallbackErr);
-                // Both attempts failed and the family got nothing. One `used` for a
-                // model that was reached twice undercounts the attempts, but neither
-                // returned a usage total to count — naming the model that was
-                // failing is the diagnostic worth keeping.
-                obs.used(provider.model, undefined);
-                obs.failed(fallbackErr);
-                send({ type: 'error', error: describeAIError(fallbackErr).message });
-                if (connected) controller.close();
-                return;
+      try {
+        await withAiRequest(
+          prepared.scope,
+          { feature: 'assistant.stream', text: 'Assistant stream', conversationId: input.conversationId, clientRequestId: turnKey(input) },
+          async (obs) => {
+            const send = (e: unknown) => {
+              if (!connected) return;
+              try { controller.enqueue(encoder.encode(`data: ${JSON.stringify(e)}\n\n`)); }
+              catch { connected = false; } // cancel can precede the async start settling
+            };
+            let content = '';
+            let responseError: string | undefined;
+            const actions: ExecutedAssistantAction[] = [];
+            const cards: ResultCard[] = [];
+            const runIds: string[] = [];
+            // The card follows its action on the wire, so a client that renders as
+            // it reads shows the line first and the card the moment it exists. The
+            // approval read is the only await; the provider generator waits for it.
+            const pushAction = async (name: string, args: Record<string, unknown>, result: unknown) => {
+              actions.push({ name, args, result });
+              send({ type: 'action', name, ...summarizeToolResult(result) });
+              const outcome = outcomeOfAction(name, args, result, prepared.cardContext);
+              if (outcome.card) { cards.push(outcome.card); send({ type: 'card', card: outcome.card }); }
+              if (outcome.runId) {
+                if (!runIds.includes(outcome.runId)) runIds.push(outcome.runId);
+                send({ type: 'run', runId: outcome.runId, href: runHref(outcome.runId), status: outcome.runStatus ?? 'queued', summary: summarizeToolResult(result).summary });
               }
-            } else {
-              // Text reached the family before the stream broke. The tokens were
-              // spent and the answer is half an answer: `partially_completed`.
+              const approvalId = approvalIdFromToolResult(result);
+              if (approvalId) {
+                const card = await approvalCardFor(input.supabase, { familyId: input.familyId, role: input.role, approvalId });
+                if (card) { cards.push(card); send({ type: 'card', card }); }
+              }
+            };
+            try {
+              for await (const ev of provider.runToolsStream({ system, messages, tools, maxTokens: ASSISTANT_MAX_TOKENS })) {
+                if (ev.type === 'delta') { content += ev.text; send({ type: 'delta', text: ev.text }); }
+                else await pushAction(ev.name, ev.args, ev.result);
+              }
+              // `runToolsStream` yields deltas and actions, never a usage total — only
+              // the JSON transport's `ToolRunResult` carries one. So the row gets the
+              // model that answered and no token counts, which is the honest record
+              // rather than a zero that reads like a free turn.
               obs.used(provider.model, undefined);
-              obs.failed(streamErr, { partial: true });
-              responseError = describeAIError(streamErr).message;
-              send({ type: 'error', error: responseError });
+            } catch (streamErr) {
+              console.error('[assistant-engine] stream error:', streamErr);
+              if (!content && actions.length === 0) {
+                try {
+                  const result = await provider.runTools({ system, messages, tools, maxTokens: ASSISTANT_MAX_TOKENS });
+                  // The turn recovered and the family gets a whole answer, so this
+                  // settles `completed`. The stream break is in the log, not the row:
+                  // a status of `failed` would describe a turn nobody experienced as
+                  // one. The fallback DOES carry usage.
+                  obs.used(provider.model, result.usage);
+                  for (const a of result.actions) {
+                    if (!actions.some((x) => x.name === a.name && JSON.stringify(x.args) === JSON.stringify(a.args))) await pushAction(a.name, a.args, a.result);
+                  }
+                  if (result.text) { content = result.text; send({ type: 'delta', text: result.text }); }
+                } catch (fallbackErr) {
+                  console.error('[assistant-engine] fallback error:', fallbackErr);
+                  // Both attempts failed and the family got nothing. One `used` for a
+                  // model that was reached twice undercounts the attempts, but neither
+                  // returned a usage total to count — naming the model that was
+                  // failing is the diagnostic worth keeping.
+                  obs.used(provider.model, undefined);
+                  obs.failed(fallbackErr);
+                  send({ type: 'error', error: describeAIError(fallbackErr).message });
+                  if (connected) controller.close();
+                  return;
+                }
+              } else {
+                // Text reached the family before the stream broke. The tokens were
+                // spent and the answer is half an answer: `partially_completed`.
+                obs.used(provider.model, undefined);
+                obs.failed(streamErr, { partial: true });
+                responseError = describeAIError(streamErr).message;
+                send({ type: 'error', error: responseError });
+              }
             }
-          }
 
-          const assistantContent = finalizeAssistantContent(content, actions);
-          const persisted = await persistAssistantTurn(input.supabase, {
-            familyId: input.familyId, conversationId: input.conversationId, message: input.message,
-            assistantContent, actions, model: provider.model, structured: toStructuredContent(cards, runIds, responseError),
-          });
-          if (!persisted.ok) {
-            // The answer was streamed and then not saved: the family will meet this
-            // as a conversation missing its last exchange. Partial, not failed.
-            obs.failed(new Error(`Turn not persisted: ${persisted.error}`), { partial: true });
-            send({ type: 'error', error: persisted.error });
-          }
-          send({ type: 'done', content: assistantContent, persisted: persisted.ok });
-          if (connected) controller.close();
-        },
-      );
+            const assistantContent = finalizeAssistantContent(content, actions);
+            const persisted = await persistAssistantTurn(input.supabase, {
+              familyId: input.familyId, conversationId: input.conversationId, message: input.message,
+              assistantContent, actions, model: provider.model, structured: toStructuredContent(cards, runIds, responseError), requestId: obs.requestId,
+            });
+            if (!persisted.ok) {
+              // The answer was streamed and then not saved: the family will meet this
+              // as a conversation missing its last exchange. Partial, not failed.
+              obs.failed(new Error(`Turn not persisted: ${persisted.error}`), { partial: true });
+              send({ type: 'error', error: persisted.error });
+            }
+            // The turn's request id lets the client speak this answer as part of
+            // the same, already-counted exchange (F19: one spoken exchange, one
+            // request). Null when the row could not be filed.
+            send({ type: 'done', content: assistantContent, persisted: persisted.ok, requestId: obs.requestId });
+            if (connected) controller.close();
+          },
+        );
+      } catch (err) {
+        // Another attempt with this send's key filed the turn first, or the
+        // turn could not be recorded (keyed: an earlier attempt's outcome is
+        // unknown). Either way this attempt ran nothing and counts nothing.
+        if (!(err instanceof AiRequestDuplicate) && !(err instanceof AiRequestNotFiled)) throw err;
+        if (!connected) return;
+        const error = err instanceof AiRequestDuplicate
+          ? input.alreadyAnswering ?? 'This message is already being answered.'
+          : input.notRecorded ?? 'This message could not be recorded. Try again.';
+        try {
+          controller.enqueue(encoder.encode(`data: ${JSON.stringify({ type: 'error', error })}\n\n`));
+          controller.close();
+        } catch { connected = false; }
+      }
     },
   });
+}
+
+function turnKey(input: AssistantTurnInput): string | null {
+  return input.clientRequestId ? assistantTurnRequestKey(input.clientRequestId) : null;
 }

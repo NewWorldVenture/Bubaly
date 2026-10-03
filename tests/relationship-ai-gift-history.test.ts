@@ -5,6 +5,13 @@ import type { RelationshipGiftRecord } from '@/lib/relationship/gifts';
 const mocks = vi.hoisted(() => ({
   context: vi.fn(), server: vi.fn(), provider: vi.fn(), complete: vi.fn(), rate: vi.fn(), audit: vi.fn(),
 }));
+// F19 meters every AI route against the monthly allowance. These tests are
+// about other behaviour, so the family is on Basic, whose allowance is
+// unlimited: the real check runs and passes without a usage count.
+vi.mock('@/lib/server/plan', async (importOriginal) => ({
+  ...(await importOriginal<typeof import('@/lib/server/plan')>()),
+  resolveFamilyPlanLevel: async () => 1,
+}));
 vi.mock('@/lib/supabase/auth', () => ({ requireUserContext: mocks.context }));
 vi.mock('@/lib/supabase/server', () => ({ createServer: mocks.server }));
 vi.mock('@/lib/ai/provider', async (importOriginal) => ({

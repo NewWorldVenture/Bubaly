@@ -1,4 +1,13 @@
 import { describe, it, expect, vi, afterEach } from 'vitest';
+
+// F19: on a capped plan the request row is the meter, so withAiRequest refuses
+// when it cannot be filed. This file is about other behaviour and its fake
+// database files no row, so the family is on Basic, whose allowance is
+// unlimited: an unfiled request is bookkeeping there, as it always was.
+vi.mock('@/lib/server/plan', async (importOriginal) => ({
+  ...(await importOriginal<typeof import('@/lib/server/plan')>()),
+  resolveFamilyPlanLevel: async () => 1,
+}));
 import { OpenAIProvider, type ToolSpec, type StreamEvent } from '@/lib/ai/provider';
 
 // Build a fake streaming Response whose body yields the given SSE chunks.
@@ -158,7 +167,7 @@ describe('createAssistantStream card / run / approval events', () => {
     expect(events[0]).toEqual({ type: 'action', name: 'meals_planWeek', ok: true, summary: 'Planned 2 dinners' });
     expect(events[1]).toMatchObject({ type: 'card', card: { kind: 'meal_plan', title: 'Planned 2 dinners' } });
     expect((events[1].card as { days: unknown[] }).days).toHaveLength(2);
-    expect(events[4]).toEqual({ type: 'done', content: 'Dinners are planned.', persisted: true });
+    expect(events[4]).toEqual({ type: 'done', content: 'Dinners are planned.', persisted: true, requestId: null });
 
     expect(inserts).toHaveLength(1);
     const assistantRow = inserts[0].rows[1];

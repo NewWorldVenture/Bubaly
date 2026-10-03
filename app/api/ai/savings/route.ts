@@ -1,4 +1,5 @@
 import { NextResponse } from 'next/server';
+import { withinAIAllowance, AIAllowanceSpent } from '@/lib/server/ai-access';
 import { getTranslations } from '@/lib/i18n/server';
 import { createServer } from '@/lib/supabase/server';
 import { refuseUnlessEntitled } from '@/lib/server/route-feature-gate';
@@ -112,6 +113,8 @@ export async function POST() {
   if (fallback.length === 0) fallback.push({ title: 'On track', detail: 'No overspending or unused subscriptions detected. Set category budgets to unlock sharper suggestions.' });
 
   try {
+    // F19: past the monthly AI allowance, give the answer this route gives without AI.
+    if (!(await withinAIAllowance(ctx, supabase))) throw new AIAllowanceSpent();
     const result = await withAiRequest(
       scopeFromUserContext(ctx, supabase),
       { feature: 'finances.savings', text: 'Savings suggestions' },
@@ -145,7 +148,11 @@ export async function POST() {
       },
     );
     return NextResponse.json(result);
-  } catch {
-    return NextResponse.json({ summary: 'AI is not configured — here are data-driven suggestions from your finances.', suggestions: fallback, wastedMonthlyCents: wasted });
+  } catch (err) {
+    // Say which of the two it was: past the monthly allowance is not "not configured".
+    const summary = err instanceof AIAllowanceSpent
+      ? tr('aiSavings.allowanceSpentSuggestions')
+      : tr('aiSavings.notConfiguredSuggestions');
+    return NextResponse.json({ summary, suggestions: fallback, wastedMonthlyCents: wasted });
   }
 }

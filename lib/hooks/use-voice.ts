@@ -162,8 +162,10 @@ export function useVoice(opts: { onError?: (msg: string, info?: VoiceErrorInfo) 
   }, []);
 
   /** Speak the given text aloud via OpenAI TTS, falling back to the browser
-   *  speech synthesizer if the server route is unavailable. */
-  const speak = useCallback(async (text: string) => {
+   *  speech synthesizer if the server route is unavailable. `exchangeId` is
+   *  the assistant turn's request id: speaking that turn is part of the same,
+   *  already-counted exchange (F19), so the server does not count it again. */
+  const speak = useCallback(async (text: string, exchangeId?: string | null) => {
     if (!text.trim()) return;
     stopSpeaking();
     const request = new AbortController();
@@ -174,7 +176,7 @@ export function useVoice(opts: { onError?: (msg: string, info?: VoiceErrorInfo) 
       const res = await fetch('/api/ai/voice/speak', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ text, voice }),
+        body: JSON.stringify({ text, voice, ...(exchangeId ? { exchangeId } : {}) }),
         signal: request.signal,
       });
       if (!current()) return;

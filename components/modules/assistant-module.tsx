@@ -488,6 +488,7 @@ function AssistantSession() {
     setHighlightId(null);
 
     const userMsg: Message = { role: 'user', content: msg, id: generateId() };
+    const turnKey = crypto.randomUUID();
     const replyId = generateId();
     pendingSend.current = { controller: ticket.controller, replyId };
     // Add the user turn + an empty assistant bubble we fill as the stream arrives.
@@ -504,7 +505,9 @@ function AssistantSession() {
     try {
       const res = await fetch('/api/ai', {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json', Accept: 'text/event-stream', 'X-Bubaly-Family-Id': family.id },
+        // One key per send, kept by any retry of it: the server answers a repeat
+        // with the saved reply instead of counting a second turn (F19).
+        headers: { 'Content-Type': 'application/json', Accept: 'text/event-stream', 'X-Bubaly-Family-Id': family.id, 'Idempotency-Key': turnKey },
         body: JSON.stringify({ conversationId, message: msg }),
         signal: ticket.controller.signal,
       });
@@ -515,6 +518,8 @@ function AssistantSession() {
         return;
       }
       let finalText = '';
+      // The turn's request id: the spoken answer rides on this exchange (F19).
+      let exchangeId: string | null = null;
       let failed = false;
       const result = await consumeAssistantStream(res.body, (ev) => {
           if (!ticket.current()) return;
@@ -528,6 +533,7 @@ function AssistantSession() {
           else if (ev.type === 'error') { failed = true; patchReply((m) => ({ ...m, error: ev.error })); }
           else if (ev.type === 'done') {
             finalText = ev.content || finalText;
+            exchangeId = ev.requestId;
             if (!ev.persisted) failed = true;
             patchReply((m) => ({ ...m, content: ev.content || m.content,
               ...(!ev.persisted ? { error: m.error || t('mobileAssistant.notSaved') } : {}) }));
@@ -539,7 +545,7 @@ function AssistantSession() {
         patchReply((m) => ({ ...m, error: m.error || t('assistantModule.session.interrupted') }));
       }
       // Speak the reply aloud when voice output is enabled on this device.
-      if (!failed && finalText.trim() && voice.shouldSpeak()) void voice.speak(finalText);
+      if (!failed && finalText.trim() && voice.shouldSpeak()) void voice.speak(finalText, exchangeId);
     } catch (error) {
       if (!ticket.current()) return;
       console.error('[assistant] request failed', error);
