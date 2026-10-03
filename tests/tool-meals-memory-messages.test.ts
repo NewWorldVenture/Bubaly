@@ -146,7 +146,8 @@ describe('registration', () => {
 
 describe('meals.setSlot', () => {
   it('accepts the legacy create_meal_plan_entry shape and plans the slot', async () => {
-    const db = createInMemorySupabase<SupabaseClient<Database>>();
+    const db = createInMemorySupabase<SupabaseClient<Database>>({ userId: 'auth-user-1' });
+    db.seed('family_members', [{ id: 'member-1', family_id: 'fam-1', user_id: 'auth-user-1', role: 'parent', is_active: true }]);
     const tool = getTool('create_meal_plan_entry')!;
     const res = await run(tool, scopeWith(db), { meal_name: 'Tacos', plan_date: '2026-09-07', meal_type: 'dinner' });
     expect(res.ok).toBe(true);
