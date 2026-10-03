@@ -31,6 +31,12 @@ export type IcsEvent = {
    * that keys by UID alone must look here before letting one overwrite the other.
    */
   recurrenceId?: string | null;
+  /**
+   * EXDATE values as ISO instants: occurrences of this series the source has
+   * removed outright (no replacement VEVENT). A line may carry several,
+   * comma-separated, and a VEVENT may carry several lines.
+   */
+  exceptionDates?: string[];
 };
 
 export type IcsCalendarOptions = {
@@ -102,6 +108,12 @@ export function buildVevent(ev: IcsEvent, dtstamp: string): string[] {
   if (ev.description) emit(lines, 'DESCRIPTION', escapeIcsText(ev.description));
   if (ev.location) emit(lines, 'LOCATION', escapeIcsText(ev.location));
   if (ev.recurrenceRule) emit(lines, 'RRULE', ev.recurrenceRule);
+  if (ev.exceptionDates?.length) {
+    // The occurrences this series has given up travel with it, so a subscriber
+    // does not render the slot a moved or cancelled occurrence left behind.
+    if (ev.allDay) lines.push(`EXDATE;VALUE=DATE:${ev.exceptionDates.map(toIcsDate).join(',')}`);
+    else emit(lines, 'EXDATE', ev.exceptionDates.map(toIcsUtc).join(','));
+  }
   emit(lines, 'STATUS', (ev.status ?? 'confirmed').toUpperCase());
   lines.push('END:VEVENT');
   return lines;
@@ -218,6 +230,7 @@ export function parseICS(text: string): IcsEvent[] {
           recurrenceRule: cur.recurrenceRule ?? null,
           status: cur.status,
           recurrenceId: cur.recurrenceId ?? null,
+          exceptionDates: cur.exceptionDates ?? [],
         });
       }
       cur = null;
@@ -253,6 +266,12 @@ export function parseICS(text: string): IcsEvent[] {
         break;
       case 'RECURRENCE-ID':
         cur.recurrenceId = parseIcsDate(value, tzid).iso;
+        break;
+      case 'EXDATE':
+        cur.exceptionDates = [
+          ...(cur.exceptionDates ?? []),
+          ...value.split(',').map((v) => v.trim()).filter(Boolean).map((v) => parseIcsDate(v, tzid).iso),
+        ];
         break;
       case 'RRULE':
         cur.recurrenceRule = value;

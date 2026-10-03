@@ -56,6 +56,13 @@ export interface FeedEventRow {
   all_day: boolean;
   recurrence: RecurrenceFreq;
   category: 'general';
+  /**
+   * Instants of occurrences a series has given up — the RECURRENCE-IDs of its
+   * moved and cancelled occurrences in the same feed, and its EXDATEs — so the
+   * expander does not render the original slot beside the exception. Empty for
+   * a stand-alone event or an exception row.
+   */
+  exception_dates: string[];
 }
 
 /**
@@ -87,6 +94,7 @@ export function mapIcsEventToRow(ev: IcsEvent, familyId: string, feedId: string)
     all_day: ev.allDay ?? false,
     recurrence: icsRruleToRecurrence(ev.recurrenceRule),
     category: 'general',
+    exception_dates: [...(ev.exceptionDates ?? [])],
   };
 }
 
@@ -113,17 +121,24 @@ export type FeedRowPlan = {
  * and the whole series vanished from the family calendar. A cancelled event is
  * not a row; it is a removal.
  *
- * Known limit, stated: the app's recurrence model has no exception dates, so
- * the master still renders the ORIGINAL slot of a moved or cancelled
- * occurrence alongside the exception. That is a duplicate on one week, where
- * the previous behaviour lost the series or the exception outright.
+ * The series master carries the occurrences it has given up: the RECURRENCE-ID
+ * of every exception in the feed — moved or cancelled — and its own EXDATEs.
+ * The expander (lib/calendar/recurrence.ts) then leaves those slots empty, so a
+ * moved practice appears once, at its new time, and a cancelled one not at all.
+ * An exception whose master is not in this feed is a stand-alone row.
  */
 export function planFeedRows(events: IcsEvent[], familyId: string, feedId: string): FeedRowPlan {
   const live = new Map<string, FeedEventRow>();
   const cancelled = new Set<string>();
+  const givenUp = new Map<string, Set<string>>();
   for (const ev of events) {
     if (!ev.uid || !ev.startsAt) continue;
     const key = feedExternalUid(ev);
+    if (ev.recurrenceId) {
+      const dates = givenUp.get(ev.uid) ?? new Set<string>();
+      dates.add(ev.recurrenceId);
+      givenUp.set(ev.uid, dates);
+    }
     if (ev.status === 'cancelled') {
       live.delete(key);
       cancelled.add(key);
@@ -131,6 +146,10 @@ export function planFeedRows(events: IcsEvent[], familyId: string, feedId: strin
     }
     cancelled.delete(key);
     live.set(key, mapIcsEventToRow(ev, familyId, feedId));
+  }
+  for (const [uid, dates] of givenUp) {
+    const master = live.get(uid);
+    if (master) master.exception_dates = [...new Set([...master.exception_dates, ...dates])].sort();
   }
   return { rows: [...live.values()], cancelled: [...cancelled] };
 }

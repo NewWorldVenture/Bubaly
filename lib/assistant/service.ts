@@ -172,7 +172,7 @@ type EventRow = AgendaEvent & {
 async function readEvents(
   supabase: Client, familyId: string, window: { from: string; to: string }, timezone: string,
 ): Promise<AgendaEvent[]> {
-  const columns = 'id, title, starts_at, ends_at, all_day, recurrence, recurrence_until';
+  const columns = 'id, title, starts_at, ends_at, all_day, recurrence, recurrence_until, exception_dates';
   const [single, series] = await settleAll([
     supabase.from('calendar_events').select(columns)
       .eq('family_id', familyId).eq('recurrence', 'none')
