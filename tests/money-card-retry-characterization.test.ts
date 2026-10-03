@@ -10,8 +10,10 @@ import { syntheticProvider } from './helpers/synthetic-issuing-provider';
 // named "reproduces" describe a defect candidate; "preserves" describe the
 // existing multiple-card contract any repair must keep; "repaired (B)" pin what
 // attempt identity (issueCard's count-based key, lib/stripe/issuing.ts)
-// changed on purpose. Its interleavings live in
-// tests/money-card-attempt-identity.test.ts.
+// changed on purpose, and "repaired (stale guard)" what the count the view
+// sends (expectedCount) changed. Their interleavings live in
+// tests/money-card-attempt-identity.test.ts and
+// tests/money-card-stale-order.test.ts.
 //
 // Sealed: no network, no real Stripe SDK, no real database client. The provider
 // is an in-process double with Stripe's documented idempotency semantics
@@ -92,9 +94,10 @@ const FAMILY = 'family-synthetic';
 const ACCOUNT = 'acct_synthetic';
 const T0 = Date.UTC(2026, 9, 1, 12, 0, 0);
 // What the two UI entry points send (components/wallet/money-cards-view.tsx):
-// the row's Virtual button and the physical order dialog with a limit entered.
-const VIRTUAL = { childWalletId: 'wallet-a', type: 'virtual', spendLimitCents: null, spendWindow: 'per_authorization' } as const;
-const PHYSICAL = { childWalletId: 'wallet-a', type: 'physical', spendLimitCents: 2500, spendWindow: 'daily' } as const;
+// the row's Virtual button and the physical order dialog with a limit entered,
+// from a view showing no card of that type for the child.
+const VIRTUAL = { childWalletId: 'wallet-a', type: 'virtual', spendLimitCents: null, spendWindow: 'per_authorization', expectedCount: 0 } as const;
+const PHYSICAL = { childWalletId: 'wallet-a', type: 'physical', spendLimitCents: 2500, spendWindow: 'daily', expectedCount: 0 } as const;
 
 let db: ReturnType<typeof createInMemorySupabase>;
 let provider: ReturnType<typeof syntheticProvider>;
@@ -179,37 +182,37 @@ afterEach(() => {
 afterAll(() => network.restore());
 
 describe('card issuance reaching the server more than once', () => {
-  it.each([VIRTUAL, PHYSICAL])('reproduces: one $type order sent again (a remounted view re-click) issues a second live card', async input => {
+  it.each([VIRTUAL, PHYSICAL])('repaired (stale guard): one $type order sent again after its card is mirrored (a remounted view re-click, still showing the old count) is refused, one live card', async input => {
     const first = await issueCardAction(input);
     vi.setSystemTime(T0 + 1);
     const second = await issueCardAction(input);
 
-    expect(first.ok && second.ok).toBe(true);
-    if (!first.ok || !second.ok) return;
-    expect(first.data?.cardId).not.toBe(second.data?.cardId);
-    // The key carries the attempt now (the mirrored count), not the clock, but
-    // the first card was mirrored before the re-click arrived: the count moved,
-    // so the provider still cannot tell it from a second order. Telling them
-    // apart needs the view to send the count it saw (not implemented).
-    expect(provider.log.cardKeys).toEqual([cardKey(input.type, 0), cardKey(input.type, 1)]);
-    expect(provider.log.cardOutcomes).toEqual(['created', 'created']);
-    expect(provider.active(input.type)).toHaveLength(2);
-    expect(mirrorCards().map(row => row.type)).toEqual([input.type, input.type]);
-    expect(audits('card_issued')).toHaveLength(2);
+    // Before the guard the re-click read the moved count (1), took a new key
+    // and the provider issued a second live card. The view sends the count it
+    // showed (0), which the mirror has moved past: refused before the provider.
+    expect(first.ok).toBe(true);
+    expect(second).toEqual({ ok: false, error: 'translated:wallet.refreshToTryAgain' });
+    expect(provider.log.cardKeys).toEqual([cardKey(input.type, 0)]);
+    expect(provider.log.cardOutcomes).toEqual(['created']);
+    expect(provider.active(input.type)).toHaveLength(1);
+    expect(mirrorCards().map(row => row.type)).toEqual([input.type]);
+    expect(audits('card_issued')).toHaveLength(1);
     // The cardholder is created once (stable key + lookup) and reused.
     expect(provider.log.cardholderKeys).toEqual(['cardholder-member-a']);
     expect(provider.cardholders).toHaveLength(1);
   });
 
-  it('repaired (B): the same order sent again within one millisecond, after the first card is mirrored, is a new attempt — no clock collision, a second live card', async () => {
+  it('repaired (B): the next order sent within one millisecond against the up-to-date count, after the first card is mirrored, is a new attempt — no clock collision, a second live card', async () => {
     const first = await issueCardAction(VIRTUAL);
-    const second = await issueCardAction(VIRTUAL);
+    const second = await issueCardAction({ ...VIRTUAL, expectedCount: 1 });
 
     // Before B the shared clock key replayed one card and the second mirror
     // insert's 23505 reached the parent as "That already exists". The key no
     // longer reads the clock: the first card was mirrored before the second
-    // order read the count, so it is a new attempt (the re-click case above).
-    // Orders that overlap before the first is mirrored share one key: see
+    // order read the count, so it is a new attempt. Sent from a view that
+    // shows the first card (1) it is deliberate and issues; sent against the
+    // old count (0) it is the stale re-click above, refused. Orders that
+    // overlap before the first is mirrored share one key: see
     // tests/money-card-attempt-identity.test.ts.
     expect(first.ok && second.ok).toBe(true);
     if (!first.ok || !second.ok) return;
@@ -309,7 +312,8 @@ describe('card issuance reaching the server more than once', () => {
   });
 
   it('preserves: deliberate later orders each issue their own card — several virtual and physical cards per child, one cardholder', async () => {
-    const orders = [VIRTUAL, PHYSICAL, VIRTUAL, { ...VIRTUAL, childWalletId: 'wallet-b' }];
+    // Each is made from a view that shows the cards issued before it.
+    const orders = [VIRTUAL, PHYSICAL, { ...VIRTUAL, expectedCount: 1 }, { ...VIRTUAL, childWalletId: 'wallet-b' }];
     for (const [step, input] of orders.entries()) {
       vi.setSystemTime(T0 + step * 60_000);
       expect((await issueCardAction(input)).ok).toBe(true);

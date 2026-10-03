@@ -178,9 +178,11 @@ test('a remounted view of the same owner keeps an in-flight order pending, then 
   expect(await read(page)).toMatchObject({ successes: ['moneyCardsView.virtualCardCreated'], refreshes: 2 });
   // A deliberate new order after the first settled still goes out: several cards per child.
   await virtual(page).click();
+  // Each carries the count of child-a's virtual cards the view shows (this
+  // fixture's refresh does not re-read the list).
   expect((await read(page)).calls.map(call => call.args)).toEqual([
-    { childWalletId: 'child-a', type: 'virtual', spendLimitCents: null, spendWindow: 'per_authorization' },
-    { childWalletId: 'child-a', type: 'virtual', spendLimitCents: null, spendWindow: 'per_authorization' },
+    { childWalletId: 'child-a', type: 'virtual', spendLimitCents: null, spendWindow: 'per_authorization', expectedCount: 1 },
+    { childWalletId: 'child-a', type: 'virtual', spendLimitCents: null, spendWindow: 'per_authorization', expectedCount: 1 },
   ]);
   await complete(page, 1, 'refusal');
   expect(requests).toEqual([]);

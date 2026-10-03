@@ -32,6 +32,8 @@ const mock = vi.hoisted(() => ({
   treasury: vi.fn(), cardholder: vi.fn(), issueCard: vi.fn(), freezeCard: vi.fn(), controls: vi.fn(),
   trust: vi.fn(), roleOf: vi.fn(), stripe: vi.fn(), publishableKey: vi.fn(), audit: vi.fn(),
   forbiddenClient: vi.fn(), stripeModuleLoads: 0, stripeInitializations: 0,
+  // Stands in for the library's stale-order error, which the action detects by class.
+  StaleCardOrderError: class StaleCardOrderError extends Error {},
 }));
 // Every provider/server factory is replaced outright: no importOriginal/importActual.
 vi.mock('@/lib/supabase/auth', () => ({ requireUserContext: mock.requireUserContext }));
@@ -39,7 +41,7 @@ vi.mock('@/lib/supabase/server', () => ({ createServiceClient: mock.createServic
 vi.mock('@/lib/stripe/capabilities', () => ({ getMoneyCapabilities: mock.capabilities }));
 vi.mock('@/lib/stripe/connect', () => ({ ensureConnectedAccount: mock.ensureAccount, createOnboardingLink: mock.link, syncConnectedAccount: mock.sync }));
 vi.mock('@/lib/stripe/treasury', () => ({ ensureFinancialAccount: mock.treasury }));
-vi.mock('@/lib/stripe/issuing', () => ({ ensureCardholder: mock.cardholder, issueCard: mock.issueCard, setCardFrozen: mock.freezeCard, updateCardControls: mock.controls }));
+vi.mock('@/lib/stripe/issuing', () => ({ ensureCardholder: mock.cardholder, issueCard: mock.issueCard, setCardFrozen: mock.freezeCard, updateCardControls: mock.controls, StaleCardOrderError: mock.StaleCardOrderError }));
 vi.mock('@/lib/stripe', () => ({ getStripe: mock.stripe }));
 vi.mock('@/lib/stripe/settings', () => ({ effectivePublishableKey: mock.publishableKey }));
 vi.mock('@/lib/trust/server', () => ({ evaluateTrust: mock.trust, roleOf: mock.roleOf }));
@@ -62,7 +64,7 @@ import { evaluateAction, type Decision, type Policy, type TrustRole } from '@/li
 const family = 'family-synthetic-a';
 const memberId = 'manager-member-synthetic';
 const service = { from: mock.from };
-const input = { childWalletId: 'wallet-synthetic', type: 'virtual' as const, spendLimitCents: 5000, spendWindow: 'monthly' };
+const input = { childWalletId: 'wallet-synthetic', type: 'virtual' as const, spendLimitCents: 5000, spendWindow: 'monthly', expectedCount: 0 };
 const detail = 'synthetic provider detail must not reach the result';
 type QueryReply = { data: Record<string, unknown> | null; error: unknown; rejection?: unknown };
 let context: { user: { id: string }; active: { familyId: string; role: TrustRole; member: { id: string } } };
@@ -293,8 +295,8 @@ describe('card capability, lookup and orchestration boundaries', () => {
     expect(mock.trust).not.toHaveBeenCalled(); noInstrumentEffects();
   });
   it.each([
-    { childWalletId: 'wallet-synthetic', type: 'virtual' as const, spendLimitCents: null, spendWindow: 'per_authorization' },
-    { childWalletId: 'wallet-synthetic', type: 'physical' as const, spendLimitCents: 5000, spendWindow: 'daily' },
+    { childWalletId: 'wallet-synthetic', type: 'virtual' as const, spendLimitCents: null, spendWindow: 'per_authorization', expectedCount: 0 },
+    { childWalletId: 'wallet-synthetic', type: 'physical' as const, spendLimitCents: 5000, spendWindow: 'daily', expectedCount: 3 },
   ])('preserves scoped helper/audit payloads, mirror id and ordering for %j', async request => {
     context.active.familyId = 'family-synthetic-b';
     replies.stripe_connected_accounts.data = { stripe_account_id: 'acct_synthetic_b', card_issuing_enabled: true };
@@ -316,6 +318,7 @@ describe('card capability, lookup and orchestration boundaries', () => {
     expect(mock.issueCard).toHaveBeenCalledExactlyOnceWith(service, {
       familyId: 'family-synthetic-b', childWalletId: request.childWalletId, cardholderRowId: 'holder-row', stripeCardholderId: 'ich_synthetic',
       accountId: 'acct_synthetic_b', type: request.type, spendLimitCents: request.spendLimitCents, spendWindow: request.spendWindow, userId: context.user.id,
+      expectedCount: request.expectedCount,
     });
     expect(mock.audit).toHaveBeenCalledExactlyOnceWith(service, {
       family_id: 'family-synthetic-b', actor_user_id: context.user.id, action: 'card_issued',
@@ -335,6 +338,25 @@ describe('card capability, lookup and orchestration boundaries', () => {
     expect(await issueCardAction(input)).toEqual({ ok: false, error: 'translated:money.couldNotIssueTheCard' });
     if (stage === 'cardholder') expect(mock.issueCard).not.toHaveBeenCalled();
     expect(mock.audit).not.toHaveBeenCalled(); expect(mock.revalidate).not.toHaveBeenCalled();
+  });
+  it('answers a stale-order refusal from issueCard with "refresh to try again", without audit, refresh or failure log', async () => {
+    mock.issueCard.mockRejectedValue(new mock.StaleCardOrderError(detail));
+    expect(await issueCardAction(input)).toEqual({ ok: false, error: 'translated:wallet.refreshToTryAgain' });
+    expect(mock.issueCard).toHaveBeenCalledTimes(1);
+    expect(mock.audit).not.toHaveBeenCalled(); expect(mock.revalidate).not.toHaveBeenCalled();
+    expect(console.error).not.toHaveBeenCalled();
+  });
+  it.each([
+    ['an error named like it', Object.assign(new Error(detail), { name: 'StaleCardOrderError' })],
+    ['an error whose message reads like it', new Error('Card order made against 0 existing cards; 1 are mirrored')],
+  ])('keeps the generic refusal for %s that is not the stale-order class', async (_label, error) => {
+    mock.issueCard.mockRejectedValue(error);
+    expect(await issueCardAction(input)).toEqual({ ok: false, error: 'translated:money.couldNotIssueTheCard' });
+    expect(mock.audit).not.toHaveBeenCalled(); expect(mock.revalidate).not.toHaveBeenCalled();
+  });
+  it.each([-1, 0.5, Number.NaN, Number.POSITIVE_INFINITY, '0', null, undefined])('refuses an expectedCount of %j before service, Trust or provider access', async expectedCount => {
+    expect(await issueCardAction({ ...input, expectedCount } as unknown as typeof input)).toEqual({ ok: false, error: 'translated:money.couldNotIssueTheCard' });
+    noEffects();
   });
   it('preserves safe classified permission errors without leaking detail', async () => {
     replies.child_wallets.error = { code: '42501', message: detail };
