@@ -372,6 +372,192 @@ test.describe('form errors: what an invalid, refused and recovered submit expose
         });
       }
 
+      // ── The toast stack and the corner buttons: the trade-off, measured ──
+      // Quick capture (components/app/quick-capture.tsx) and the AI orb
+      // (components/app/ai-orb.tsx) are fixed at the right edge: from lg at
+      // bottom 1.5rem and 6rem, right 1.5rem; below lg at bottom 5rem and 9rem
+      // (plus the safe area), right 1rem. The toast stack sits in that corner
+      // from lg and bottom-centre above the tab bar below it, so while a notice
+      // shows it can sit over either. These cases put up one short notice, one
+      // long one (German, the longest the contact form can be made to say) and
+      // three at once on /dashboard/contacts with no dialog open, and record:
+      // every control a toast's box intersects, what a pointer at each corner
+      // button's centre lands on, and that each button is still reached and
+      // opened from the keyboard.
+      //
+      // CORNER is the pointer half as it is today, the KNOWN overlap disclosed
+      // on #778, written down rather than hidden: it is what a real pointer
+      // hits, so a placement fix that clears the corner changes these rows
+      // (to nothing covered and the button itself under the pointer) and has
+      // to change this table with it; so does any change that makes it worse.
+      // The keyboard half holds whatever the placement.
+      type CornerState = 'short' | 'long' | 'stacked';
+      const CORNER_NAMES = {
+        en: { capture: 'Quick capture', ai: 'Ask the AI assistant', aiSheet: 'AI assistant', ask: 'Ask Bubaly' },
+        de: { capture: 'Schnellerfassung', ai: 'Den KI-Assistenten fragen', aiSheet: 'KI-Assistent', ask: 'Bubaly fragen' },
+      } as const;
+      const TOASTS = '.pointer-events-none.fixed > [role="alert"], .pointer-events-none.fixed > [role="status"]';
+      /** Every visible control outside the stack a toast's box intersects, and what a pointer at each named button's centre lands on ("toast" when it is a toast, with the toast's own button if it is one). */
+      const cornerReport = (page: Page, names: { capture: string; ai: string }) => page.evaluate(async ({ selector, capture, ai }) => {
+        // Where a long notice wraps, and so where its Dismiss falls, waits on
+        // the web font.
+        await document.fonts.ready;
+        const toasts = Array.from(document.querySelectorAll(selector));
+        const stack = toasts[0]?.parentElement ?? null;
+        const boxes = toasts.map((t) => t.getBoundingClientRect());
+        const nameOf = (el: Element) => (el.getAttribute('aria-label') || el.textContent || (el as HTMLInputElement).name || el.tagName).replace(/\s+/g, ' ').trim();
+        const covered = new Set<string>();
+        for (const el of Array.from(document.querySelectorAll('button, input, a[href], textarea, select'))) {
+          if (stack?.contains(el)) continue;
+          const b = el.getBoundingClientRect();
+          if (!b.width || !b.height || getComputedStyle(el).visibility === 'hidden') continue;
+          if (boxes.some((t) => t.left < b.right && t.right > b.left && t.top < b.bottom && t.bottom > b.top)) covered.add(nameOf(el));
+        }
+        const pointerAt = (name: string) => {
+          const target = Array.from(document.querySelectorAll('button')).find((b) => b.getAttribute('aria-label') === name)!;
+          const b = target.getBoundingClientRect();
+          const hit = document.elementFromPoint(b.left + b.width / 2, b.top + b.height / 2);
+          const button = hit?.closest('button');
+          const label = button ? (button.getAttribute('aria-label') || button.textContent?.trim() || '') : null;
+          return hit && stack?.contains(hit) ? (label ? `toast: ${label}` : 'toast') : label;
+        };
+        return { covered: [...covered].sort(), capture: pointerAt(capture), ai: pointerAt(ai) };
+      }, { selector: TOASTS, ...names });
+
+      /** Raises `state` from the contact dialog on /dashboard/contacts, holds the notices by hovering them, and closes the dialog. */
+      async function raiseNotices(page: Page, state: CornerState) {
+        let dialog: Locator;
+        let name: Locator;
+        if (state === 'long') {
+          await signIn(page, '/dashboard/contacts');
+          // As a reader would: the language picker, then Deutsch.
+          await page.getByRole('button', { name: 'Change language' }).click();
+          await page.getByRole('option', { name: /Deutsch/ }).first().click();
+          await page.getByRole('button', { name: 'Kontakt hinzufügen', exact: true }).first().click();
+          dialog = page.getByRole('dialog', { name: 'Neuer Kontakt' });
+          await expect(dialog).toBeVisible();
+          name = dialog.getByRole('textbox', { name: 'Vollständiger Name' });
+          // A write that comes back with no row: errors.thatChangeWasNotSaved,
+          // the longest notice this form gives, and localized.
+          await page.route('**/rest/v1/family_contacts*', (route) => (route.request().method() === 'POST'
+            ? route.fulfill({ status: 201, contentType: 'application/json', body: '[]' })
+            : route.continue()));
+          await name.fill('Robin Probe');
+          await name.press('Enter');
+          await expect(page.getByRole('alert').filter({ hasText: /^Diese Änderung wurde nicht gespeichert/ })).toHaveCount(1);
+        } else {
+          ({ dialog } = await openNewContact(page));
+          name = dialog.getByRole('textbox', { name: 'Full name' });
+          await name.press('Enter');
+          await expect(alertsReading(page, COPY.nameRequired)).toHaveCount(1);
+          if (state === 'stacked') {
+            await name.fill('Robin Probe');
+            await refuseContactWrites(page);
+            await name.press('Enter');
+            await expect(alertsReading(page, COPY.duplicate)).toHaveCount(1);
+            await name.press('Enter');
+            await expect(alertsReading(page, COPY.duplicate)).toHaveCount(2);
+          }
+        }
+        // Hovering the stack holds every notice past its lifetime; the
+        // pointer stays there, and the report below reads what is under each
+        // corner button's centre by elementFromPoint, not by moving it.
+        const notices = page.locator(TOASTS);
+        await notices.last().hover();
+        await page.keyboard.press('Escape');
+        await expect(dialog).toBeHidden();
+        await expect(notices).toHaveCount(state === 'stacked' ? 3 : 1);
+        return notices;
+      }
+
+      const CORNER_VIEWPORTS: ReadonlyArray<readonly [number, number]> = width === 1280 ? [[1024, 768], [1280, 800], [1440, 900]] : [[390, 844]];
+      const QC = CORNER_NAMES.en.capture, AI = CORNER_NAMES.en.ai, DE = CORNER_NAMES.de;
+      const CORNER: Record<string, { covered: string[]; capture: string | null; ai: string | null }> = {
+        // From lg: one notice sits over Quick capture; a long one or three
+        // reach up over the AI orb as well. Neither button can be clicked
+        // until the notices go.
+        '1024x768 short': { covered: [QC], capture: 'toast', ai: AI },
+        '1024x768 long': { covered: [DE.ai, DE.capture], capture: 'toast', ai: 'toast' },
+        '1024x768 stacked': { covered: [AI, QC], capture: 'toast', ai: 'toast' },
+        '1280x800 short': { covered: [QC], capture: 'toast', ai: AI },
+        '1280x800 long': { covered: [DE.ai, DE.capture], capture: 'toast', ai: 'toast' },
+        '1280x800 stacked': { covered: [AI, QC], capture: 'toast', ai: 'toast' },
+        '1440x900 short': { covered: [QC], capture: 'toast', ai: AI },
+        '1440x900 long': { covered: [DE.ai, DE.capture], capture: 'toast', ai: 'toast' },
+        '1440x900 stacked': { covered: [AI, QC], capture: 'toast', ai: 'toast' },
+        // Below lg the full-width stack ends level with Quick capture's foot:
+        // a tap there lands on the notice's own Dismiss. A long notice or
+        // three reach the orb, and the language bar at the foot of this short
+        // page is under them too.
+        '390x844 short': { covered: [QC], capture: 'toast: Dismiss', ai: AI },
+        '390x844 long': { covered: [DE.ai, DE.capture, 'Sprache ändern'], capture: 'toast', ai: 'toast: Ausblenden' },
+        '390x844 stacked': { covered: [AI, 'Change language', QC], capture: 'toast', ai: 'toast' },
+      };
+
+      test.describe('the toast stack and the corner buttons', () => {
+        // These cases refuse the contact write with page.route. Locally, 3 of
+        // the first ~60 runs saved it anyway: the route never saw the POST.
+        // The cause was not pinned down; Playwright documents that page.route
+        // may miss requests from a page a service worker controls, and
+        // public/sw.js takes control during these tests. The worker has no
+        // part in where a notice sits, so it is kept out (none missed in 32
+        // runs since).
+        test.use({ serviceWorkers: 'block' });
+        for (const [w, h] of CORNER_VIEWPORTS) {
+          for (const state of ['short', 'long', 'stacked'] as const) {
+            test(`${w}x${h}, ${state}: what the notices cover, what a pointer hits, and the keyboard path to both corner buttons`, async ({ page }) => {
+              await page.setViewportSize({ width: w, height: h });
+              const names = CORNER_NAMES[state === 'long' ? 'de' : 'en'];
+              const notices = await raiseNotices(page, state);
+              const count = await notices.count();
+
+              const report = await cornerReport(page, names);
+              expect(report).toEqual(CORNER[`${w}x${h} ${state}`]);
+
+              // The keyboard path, taken while the notices still show: each
+              // corner button takes focus, Tab and Shift+Tab move between
+              // them, and Enter opens what it names.
+              const capture = page.getByRole('button', { name: names.capture, exact: true });
+              const ai = page.getByRole('button', { name: names.ai, exact: true });
+              await capture.focus();
+              await expect(capture).toBeFocused();
+              await page.keyboard.press('Tab');
+              await expect(ai).toBeFocused();
+              await page.keyboard.press('Shift+Tab');
+              await expect(capture).toBeFocused();
+              await page.keyboard.press('Enter');
+              const captureDialog = page.getByRole('dialog', { name: names.capture });
+              await expect(captureDialog).toBeVisible();
+              await page.keyboard.press('Escape');
+              await expect(captureDialog).toBeHidden();
+              await expect(capture).toBeFocused();
+              await expect(notices).toHaveCount(count);
+              await page.keyboard.press('Tab');
+              await expect(ai).toBeFocused();
+              await page.keyboard.press('Enter');
+              if (w >= 1024) {
+                // From lg the orb goes to the assistant page.
+                // A server-rendered navigation, given signIn's allowance.
+                await expect(page).toHaveURL(/\/dashboard\/assistant$/, { timeout: 60_000 });
+                const composer = page.getByRole('textbox', { name: names.ask });
+                if (w > 1024) await expect(composer).toBeVisible();
+                // KNOWN, and not the toast's: at 1024 the assistant page's
+                // three columns (components/assistant/workspace.tsx,
+                // lg:grid-cols-[320px_1fr_330px] in a 688px main) leave the
+                // middle one, and the composer in it, 0px wide. Reported on
+                // #778; this flips when that layout is fixed.
+                else await expect(composer).toBeHidden();
+              } else {
+                // Below lg it opens the assistant over the page.
+                const sheet = page.getByRole('dialog', { name: names.aiSheet });
+                await expect(sheet).toBeVisible();
+                await expect(sheet.getByRole('textbox', { name: names.ask })).toBeVisible();
+              }
+            });
+          }
+        }
+      });
+
       // ── Paperwork: native `required`, a server action ──
 
       async function openComposer(page: Page) {
