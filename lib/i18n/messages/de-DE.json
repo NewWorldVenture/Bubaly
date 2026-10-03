@@ -16630,5 +16630,6 @@
   "ai.couldNotConfirmYourPlan": "Bubaly konnte Ihren Tarif gerade nicht bestätigen. Versuchen Sie es gleich noch einmal.",
   "ai.couldNotCheckThisMonthsUsage": "Bubaly konnte die Nutzung in diesem Monat nicht prüfen. Versuchen Sie es gleich noch einmal.",
   "ai.notFound": "Nicht gefunden.",
-  "ai.featureIsNotAvailableForYourFamily": "{feature} ist für Ihre Familie nicht verfügbar."
+  "ai.featureIsNotAvailableForYourFamily": "{feature} ist für Ihre Familie nicht verfügbar.",
+  "ai.thatAnswerWasNotSaved": "Bubaly hat diese Nachricht beantwortet, konnte die Antwort aber nicht speichern. Was Bubaly dabei getan hat, ist bereits geschehen. Prüfen Sie das, bevor Sie erneut fragen."
 }

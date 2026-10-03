@@ -31,6 +31,14 @@ const state = vi.hoisted(() => ({
    */
   fault: null as null | 'collision-unreadable' | 'insert-error',
   faulted: false,
+  /** The turn's ai_messages INSERT fails (after the model and its tools ran). */
+  messagesFault: false,
+  /** Holds the wrapper's settling update on ai_requests: the window after the exchange is saved. */
+  settleGate: null as Promise<void> | null,
+  /** The stream runs a tool (an action event) before its text. */
+  withTool: false,
+  /** The stream breaks after its text reached the family. */
+  breakStream: false,
 }));
 
 const FAMILY = 'fam-1';
@@ -71,6 +79,13 @@ class Query {
   private async run(): Promise<{ data: Row[] | null; error: { code?: string; message: string } | null; count?: number }> {
     await Promise.resolve();
     const rows = tableOf(this.name);
+    if (this.name === 'ai_messages' && this.op === 'insert' && state.messagesFault) {
+      return { data: null, error: { code: '08006', message: 'connection failure' } };
+    }
+    if (this.name === 'ai_requests' && this.op === 'update' && state.settleGate
+      && ['completed', 'partially_completed', 'failed'].includes(String((this.payload as Row).status))) {
+      await state.settleGate;
+    }
     if (this.name === 'ai_requests' && this.op === 'insert' && state.fault) {
       state.faulted = true;
       return state.fault === 'collision-unreadable'
@@ -164,7 +179,12 @@ const provider = vi.hoisted(() => ({}) as Record<string, unknown>);
 Object.assign(provider, {
   model: 'test-model',
   runTools: async () => { await model(); return { text: state.answer ?? ANSWER, actions: [], usage: { promptTokens: 1, completionTokens: 1 } }; },
-  async *runToolsStream() { await model(); yield { type: 'delta' as const, text: state.answer ?? ANSWER }; },
+  async *runToolsStream() {
+    await model();
+    if (state.withTool) yield { type: 'action' as const, name: 'add_task', args: { title: 'Buy milk' }, result: { ok: true, summary: 'Added Buy milk' } };
+    yield { type: 'delta' as const, text: state.answer ?? ANSWER };
+    if (state.breakStream) throw new Error('upstream connection reset');
+  },
 });
 // Preparation (classifier + context) is the costly half before the model; a
 // replay must not reach it either.
@@ -224,6 +244,10 @@ beforeEach(() => {
   state.answer = null;
   state.fault = null;
   state.faulted = false;
+  state.messagesFault = false;
+  state.settleGate = null;
+  state.withTool = false;
+  state.breakStream = false;
   vi.spyOn(console, 'error').mockImplementation(() => {});
 });
 afterEach(() => { vi.restoreAllMocks(); });
@@ -406,9 +430,18 @@ describe('a retry of an attempt that has not answered', () => {
     expect(tableOf('ai_requests')).toHaveLength(10);
   });
 
-  it('completed but its answer was not saved: 409 turn_answered, not a second run', async () => {
+  it('answered but its answer was not saved: 409 turn_unsaved, not a second run', async () => {
     const { POST } = await import('@/app/api/ai/route');
     priorRow('partially_completed');
+    const res = await POST(send({ key: 'send-0001-abcdef' }));
+    expect(res.status).toBe(409);
+    expect((await res.json() as { code: string }).code).toBe('turn_unsaved');
+    expect(state.providerCalls).toBe(0);
+  });
+
+  it('control: completed with no saved exchange (a turn filed before exchanges carried its id) stays 409 turn_answered', async () => {
+    const { POST } = await import('@/app/api/ai/route');
+    priorRow('completed');
     const res = await POST(send({ key: 'send-0001-abcdef' }));
     expect(res.status).toBe(409);
     expect((await res.json() as { code: string }).code).toBe('turn_answered');
@@ -570,7 +603,7 @@ describe('a replay returns its own turn’s answer, never a neighbour’s', () =
     );
     const res = await POST(send({ key: 'send-0001-abcdef' }));
     expect(res.status).toBe(409);
-    expect((await res.json() as { code: string }).code).toBe('turn_answered');
+    expect((await res.json() as { code: string }).code).toBe('turn_unsaved');
     expect(state.providerCalls).toBe(0);
   });
 
@@ -689,5 +722,159 @@ describe('two NEW sends racing at 9 of 10 (F19, 0477)', () => {
     expect(refusals[0]).toMatchObject({ limit: 10, error: 'ai.yourFamilyUsedItsMonthlyAllowance' });
     expect(state.providerCalls).toBe(1);
     expect(tableOf('ai_requests')).toHaveLength(10);
+  });
+});
+
+// #875 review 5970538108. Two windows where a retry met an answered turn and
+// could not get its answer: (1) the exchange could not be saved after the
+// tools ran, yet the row settled `completed`; (2) the exchange was saved but
+// the row was not settled yet (the process died, or the retry arrived before
+// the wrapper finished). The saved exchange now decides, and nothing reruns.
+describe('a retry after the answer was saved, or failed to save', () => {
+  const KEY = 'send-0001-abcdef';
+  function turnRow(status: string, feature = 'chat.assistant') {
+    tableOf('ai_requests').push({
+      id: 'turn-1', family_id: FAMILY, requested_by: 'user-1', feature, conversation_id: CONV,
+      client_request_id: `assistant:${KEY}`, status, created_at: tick(), completed_at: status === 'executing' ? null : tick(),
+    });
+  }
+  function savedPair(opts: { message?: string; conversationId?: string; cutOff?: boolean } = {}) {
+    tableOf('ai_messages').push(
+      { id: 'm1', family_id: FAMILY, conversation_id: opts.conversationId ?? CONV, role: 'user', content: opts.message ?? 'Plan dinner', request_id: 'turn-1', created_at: tick() },
+      {
+        id: 'm2', family_id: FAMILY, conversation_id: opts.conversationId ?? CONV, role: 'assistant', content: ANSWER, request_id: 'turn-1', created_at: tick(),
+        structured_content: opts.cutOff ? { version: 1, cards: [], runIds: [], responseError: 'The stream broke.' } : null,
+      },
+    );
+  }
+
+  it('/api/ai/chat: the exchange fails to save after a tool ran; the row is partial and the retry is 409 turn_unsaved with nothing rerun', async () => {
+    const { POST } = await import('@/app/api/ai/chat/route');
+    state.withTool = true;
+    state.messagesFault = true;
+    const first = events(await (await POST(sendChat(KEY))).text());
+    expect(first.map((e) => e.type)).toEqual(['action', 'delta', 'error', 'done']);
+    expect(first.at(-1)).toMatchObject({ persisted: false });
+    await vi.waitFor(() => expect(tableOf('ai_requests').find((r) => r.feature === 'chat.assistant')?.status).toBe('partially_completed'));
+
+    state.messagesFault = false;
+    const retry = await POST(sendChat(KEY));
+    expect(retry.status).toBe(409);
+    expect(await retry.json()).toMatchObject({ code: 'turn_unsaved', error: 'ai.thatAnswerWasNotSaved' });
+    expect(state.providerCalls).toBe(1);
+    expect(state.effects).toBe(1);
+    expect(tableOf('ai_requests').filter((r) => r.feature === 'chat.assistant')).toHaveLength(1);
+  });
+
+  it('/api/ai/chat: a retry in the window after the exchange is saved and before the row settles replays the answer', async () => {
+    const { POST } = await import('@/app/api/ai/chat/route');
+    let release!: () => void;
+    state.settleGate = new Promise<void>((r) => { release = r; });
+    const first = events(await (await POST(sendChat(KEY))).text());
+    expect(first.at(-1)).toMatchObject({ type: 'done', persisted: true });
+    const row = tableOf('ai_requests').find((r) => r.feature === 'chat.assistant')!;
+    expect(row.status).toBe('executing');
+
+    const retry = await POST(sendChat(KEY));
+    expect(retry.status).toBe(200);
+    const replay = events(await retry.text());
+    expect(replay).toEqual([
+      { type: 'delta', text: ANSWER },
+      { type: 'done', content: ANSWER, persisted: true, requestId: row.id },
+    ]);
+    expect(state.providerCalls).toBe(1);
+    release();
+    await vi.waitFor(() => expect(row.status).toBe('completed'));
+  });
+
+  it('/api/ai/chat: a cut-off answer retried before its row settles replays as cut off, not as a whole answer', async () => {
+    const { POST } = await import('@/app/api/ai/chat/route');
+    state.breakStream = true;
+    let release!: () => void;
+    state.settleGate = new Promise<void>((r) => { release = r; });
+    const first = events(await (await POST(sendChat(KEY))).text());
+    expect(first.map((e) => e.type)).toEqual(['delta', 'error', 'done']);
+    const row = tableOf('ai_requests').find((r) => r.feature === 'chat.assistant')!;
+    expect(row.status).toBe('executing');
+
+    const replay = events(await (await POST(sendChat(KEY))).text());
+    expect(replay.map((e) => e.type)).toEqual(['delta', 'error', 'done']);
+    expect(replay[1]).toMatchObject({ error: 'ai.thatAnswerWasCutOff' });
+    expect(state.providerCalls).toBe(1);
+    release();
+    await vi.waitFor(() => expect(row.status).toBe('partially_completed'));
+  });
+
+  it('/api/ai stream: the same window replays the cut-off answer as cut off', async () => {
+    const { POST } = await import('@/app/api/ai/route');
+    state.breakStream = true;
+    let release!: () => void;
+    state.settleGate = new Promise<void>((r) => { release = r; });
+    const first = events(await (await POST(send({ key: KEY, json: false }))).text());
+    expect(first.map((e) => e.type)).toEqual(['delta', 'error', 'done']);
+    const replay = events(await (await POST(send({ key: KEY, json: false }))).text());
+    expect(replay.map((e) => e.type)).toEqual(['delta', 'error', 'done']);
+    expect(state.providerCalls).toBe(1);
+    release();
+  });
+
+  it.each(['executing', 'queued'])('%s with its exchange saved (the process died before settling): replayed, no model', async (status) => {
+    const { POST } = await import('@/app/api/ai/route');
+    seed(9);
+    turnRow(status, 'assistant.turn');
+    savedPair();
+    const res = await POST(send({ key: KEY }));
+    expect(res.status).toBe(200);
+    expect(await res.json()).toMatchObject({ content: ANSWER, replayed: true, requestId: 'turn-1' });
+    expect(state.providerCalls).toBe(0);
+    expect(tableOf('ai_requests')).toHaveLength(10);
+  });
+
+  it('an unsettled turn whose saved answer was cut off replays as cut off', async () => {
+    const { POST } = await import('@/app/api/ai/chat/route');
+    turnRow('executing');
+    savedPair({ cutOff: true });
+    const replay = events(await (await POST(sendChat(KEY))).text());
+    expect(replay.map((e) => e.type)).toEqual(['delta', 'error', 'done']);
+    expect(replay[1]).toMatchObject({ error: 'ai.thatAnswerWasCutOff' });
+    expect(state.providerCalls).toBe(0);
+  });
+
+  it('failed over a saved answer (the stream broke, the fallback answered): replayed, not "did not finish"', async () => {
+    const { POST } = await import('@/app/api/ai/chat/route');
+    turnRow('failed');
+    savedPair();
+    const res = await POST(sendChat(KEY));
+    expect(res.status).toBe(200);
+    expect(events(await res.text()).at(-1)).toMatchObject({ type: 'done', content: ANSWER, requestId: 'turn-1' });
+    expect(state.providerCalls).toBe(0);
+  });
+
+  it('negative control: unsettled with no saved exchange is still 409 turn_in_progress', async () => {
+    const { POST } = await import('@/app/api/ai/chat/route');
+    turnRow('executing');
+    const res = await POST(sendChat(KEY));
+    expect(res.status).toBe(409);
+    expect((await res.json() as { code: string }).code).toBe('turn_in_progress');
+    expect(state.providerCalls).toBe(0);
+  });
+
+  it('negative control: an unsettled turn\'s saved exchange for different words is a mismatch, not a replay', async () => {
+    const { POST } = await import('@/app/api/ai/chat/route');
+    turnRow('executing');
+    savedPair({ message: 'Something else entirely' });
+    const res = await POST(sendChat(KEY));
+    expect(res.status).toBe(409);
+    expect((await res.json() as { code: string }).code).toBe('client_request_id_conflict');
+    expect(state.providerCalls).toBe(0);
+  });
+
+  it('negative control: an exchange saved in another conversation does not answer an unsettled turn', async () => {
+    const { POST } = await import('@/app/api/ai/chat/route');
+    turnRow('executing');
+    savedPair({ conversationId: OTHER_CONV });
+    const res = await POST(sendChat(KEY));
+    expect(res.status).toBe(409);
+    expect((await res.json() as { code: string }).code).toBe('turn_in_progress');
   });
 });

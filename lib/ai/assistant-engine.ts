@@ -529,6 +529,7 @@ export function createAssistantStream(input: AssistantTurnInput, prepared: Prepa
           async (obs) => {
             const send = (e: unknown) => controller.enqueue(encoder.encode(`data: ${JSON.stringify(e)}\n\n`));
             let content = '';
+            let responseError: string | undefined;
             const actions: ExecutedAssistantAction[] = [];
             const cards: ResultCard[] = [];
             const runIds: string[] = [];
@@ -591,14 +592,17 @@ export function createAssistantStream(input: AssistantTurnInput, prepared: Prepa
                 // spent and the answer is half an answer: `partially_completed`.
                 obs.used(provider.model, undefined);
                 obs.failed(streamErr, { partial: true });
-                send({ type: 'error', error: describeAIError(streamErr).message });
+                // Saved with the answer, so a retry that finds this exchange
+                // before the row settles still knows it was cut off.
+                responseError = describeAIError(streamErr).message;
+                send({ type: 'error', error: responseError });
               }
             }
 
             const assistantContent = finalizeAssistantContent(content, actions);
             const persisted = await persistAssistantTurn(input.supabase, {
               familyId: input.familyId, conversationId: input.conversationId, message: input.message,
-              assistantContent, actions, model: provider.model, structured: toStructuredContent(cards, runIds), requestId: obs.requestId,
+              assistantContent, actions, model: provider.model, structured: toStructuredContent(cards, runIds, responseError), requestId: obs.requestId,
             });
             if (!persisted.ok) {
               // The answer was streamed and then not saved: the family will meet this

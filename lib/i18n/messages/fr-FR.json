@@ -16630,5 +16630,6 @@
   "ai.couldNotConfirmYourPlan": "Bubaly n'a pas pu confirmer votre offre pour le moment. Réessayez dans un instant.",
   "ai.couldNotCheckThisMonthsUsage": "Bubaly n'a pas pu vérifier l'utilisation de ce mois-ci. Réessayez dans un instant.",
   "ai.notFound": "Introuvable.",
-  "ai.featureIsNotAvailableForYourFamily": "{feature} n'est pas disponible pour votre famille."
+  "ai.featureIsNotAvailableForYourFamily": "{feature} n'est pas disponible pour votre famille.",
+  "ai.thatAnswerWasNotSaved": "Bubaly a répondu à ce message mais n'a pas pu enregistrer la réponse. Ce qu'il a fait a déjà eu lieu : vérifiez avant de redemander."
 }

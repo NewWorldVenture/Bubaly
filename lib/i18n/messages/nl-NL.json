@@ -16630,5 +16630,6 @@
   "ai.couldNotConfirmYourPlan": "Bubaly kon je abonnement nu niet bevestigen. Probeer het zo opnieuw.",
   "ai.couldNotCheckThisMonthsUsage": "Bubaly kon het gebruik van deze maand niet controleren. Probeer het zo opnieuw.",
   "ai.notFound": "Niet gevonden.",
-  "ai.featureIsNotAvailableForYourFamily": "{feature} is niet beschikbaar voor je gezin."
+  "ai.featureIsNotAvailableForYourFamily": "{feature} is niet beschikbaar voor je gezin.",
+  "ai.thatAnswerWasNotSaved": "Bubaly heeft dit bericht beantwoord, maar kon het antwoord niet opslaan. Wat Bubaly heeft gedaan, is al gebeurd. Controleer dat voordat je het opnieuw vraagt."
 }

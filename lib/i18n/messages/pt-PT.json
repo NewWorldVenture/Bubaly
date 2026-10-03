@@ -16630,5 +16630,6 @@
   "ai.couldNotConfirmYourPlan": "O Bubaly não conseguiu confirmar o seu plano neste momento. Tente novamente daqui a pouco.",
   "ai.couldNotCheckThisMonthsUsage": "O Bubaly não conseguiu verificar a utilização deste mês. Tente novamente daqui a pouco.",
   "ai.notFound": "Não encontrado.",
-  "ai.featureIsNotAvailableForYourFamily": "{feature} não está disponível para a sua família."
+  "ai.featureIsNotAvailableForYourFamily": "{feature} não está disponível para a sua família.",
+  "ai.thatAnswerWasNotSaved": "O Bubaly respondeu a esta mensagem, mas não conseguiu guardar a resposta. O que fez já aconteceu, por isso verifique antes de voltar a perguntar."
 }
