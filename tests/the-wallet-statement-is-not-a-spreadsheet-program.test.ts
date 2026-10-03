@@ -64,6 +64,37 @@ describe('a description someone else wrote is text, not a formula', () => {
   });
 });
 
+describe('a formula cannot start a cell anywhere a spreadsheet may start one', () => {
+  // Excel in the semicolon locales the app ships (de-DE, fr-FR, it-IT, nl-NL,
+  // es-ES, pt-PT) splits a .csv at `;`, and its text-import wizard splits at
+  // tab, so a cell also begins after either — not only where this CSV puts one.
+  // A gift giver's name is free text ("Gift received from <name>"), so
+  // `x;=cmd|…` reached a cell of its own past a first-character-only guard.
+  const splitOn = (line: string, sep: string) => line.split(sep);
+
+  it.each([
+    ['a semicolon', 'Gift received from x;=HYPERLINK("https://example.test")', ';'],
+    ['a tab', 'Lunch\t+1+1', '\t'],
+    ['a semicolon then a tab', 'x;\t=1+1', '\t'],
+  ])('after %s, the next cell is text', (_label, description, sep) => {
+    const line = toStatementCsv([row({ description })]).split('\r\n')[1];
+    for (const cell of splitOn(line, sep).slice(1)) expect(cell).not.toMatch(/^\s*[=+\-@]/);
+  });
+
+  it('after a line break inside the cell, the next line is text too', () => {
+    const line = toStatementCsv([row({ description: 'first\n=1+1' })]).split('\r\n')[1];
+    expect(line).toContain("\n'=1+1");
+  });
+
+  it('leading spaces do not hide a formula from a reader that trims them', () => {
+    expect(dataLine(row({ description: '  =1+1' }))[COL.description]).toBe("'  =1+1");
+  });
+
+  it('the guard says nothing about an ordinary semicolon or tab', () => {
+    expect(dataLine(row({ description: 'Books; pens\tand paper' }))[COL.description]).toBe('Books; pens\tand paper');
+  });
+});
+
 describe('everything else is left exactly as it was', () => {
   it('an ordinary description and name are untouched', () => {
     const line = dataLine(row({ description: 'Corner Books', childName: 'Mia' }));
