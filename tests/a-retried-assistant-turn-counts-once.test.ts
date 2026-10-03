@@ -24,6 +24,12 @@ const state = vi.hoisted(() => ({
   gate: null as Promise<void> | null,
   /** What the model answers; a test that needs two distinguishable turns sets it. */
   answer: null as string | null,
+  /**
+   * 'collision-unreadable': the ai_requests INSERT hits the unique key and the
+   * read-back of the original row fails. 'insert-error': the INSERT fails.
+   */
+  fault: null as null | 'collision-unreadable' | 'insert-error',
+  faulted: false,
 }));
 
 const FAMILY = 'fam-1';
@@ -64,6 +70,16 @@ class Query {
   private async run(): Promise<{ data: Row[] | null; error: { code?: string; message: string } | null; count?: number }> {
     await Promise.resolve();
     const rows = tableOf(this.name);
+    if (this.name === 'ai_requests' && this.op === 'insert' && state.fault) {
+      state.faulted = true;
+      return state.fault === 'collision-unreadable'
+        ? { data: null, error: { code: '23505', message: 'duplicate key value violates unique constraint "uq_ai_requests_client_request"' } }
+        : { data: null, error: { code: '08006', message: 'connection failure' } };
+    }
+    // After the collision, the original row cannot be read back.
+    if (this.name === 'ai_requests' && this.op === 'select' && !this.head && state.faulted && state.fault === 'collision-unreadable') {
+      return { data: null, error: { code: '57014', message: 'canceling statement due to statement timeout' } };
+    }
     if (this.op === 'insert' || this.op === 'upsert') {
       const out: Row[] = [];
       for (const raw of this.payload as Row[]) {
@@ -198,6 +214,8 @@ beforeEach(() => {
   state.user = { id: 'user-1', email: 'parent@example.com' };
   state.gate = null;
   state.answer = null;
+  state.fault = null;
+  state.faulted = false;
   vi.spyOn(console, 'error').mockImplementation(() => {});
 });
 afterEach(() => { vi.restoreAllMocks(); });
@@ -498,5 +516,55 @@ describe('a replay returns its own turn’s answer, never a neighbour’s', () =
       const saved = tableOf('ai_messages').filter((m) => m.request_id === r.id);
       expect(saved.map((m) => m.role).sort()).toEqual(['assistant', 'user']);
     }
+  });
+});
+
+// #788 review 5964206145 (item 3): a keyed duplicate whose original row could
+// not be read back left the earlier attempt's outcome unknown, and on Basic and
+// Plus the turn ran again. A keyed send now fails closed on every plan, before
+// the model; unkeyed sends on a paid plan keep running unrecorded, as before.
+describe('a keyed send whose request cannot be recorded runs nothing, on every plan', () => {
+  it.each([[0, 'Free'], [1, 'Basic'], [2, 'Plus']])('plan %i (%s), JSON: 503, no model call', async (level) => {
+    const { POST } = await import('@/app/api/ai/route');
+    state.planLevel = level as number;
+    state.fault = 'collision-unreadable';
+    const res = await POST(send({ key: 'send-0001-abcdef' }));
+    expect(res.status).toBe(503);
+    expect(state.providerCalls).toBe(0);
+    expect(state.effects).toBe(0);
+  });
+
+  it('paid plan, stream: an error event, no model call', async () => {
+    const { POST } = await import('@/app/api/ai/route');
+    state.planLevel = 2;
+    state.fault = 'collision-unreadable';
+    const ev = events(await (await POST(send({ key: 'send-0001-abcdef', json: false }))).text());
+    expect(ev).toEqual([{ type: 'error', error: 'ai.accountContextIsTemporarilyUnavailable' }]);
+    expect(state.providerCalls).toBe(0);
+  });
+
+  it('paid plan, /api/ai/chat: an error event, no model call', async () => {
+    const { POST } = await import('@/app/api/ai/chat/route');
+    state.planLevel = 2;
+    state.fault = 'insert-error';
+    const ev = events(await (await POST(sendChat('send-0001-abcdef'))).text());
+    expect(ev).toEqual([{ type: 'error', error: 'ai.accountContextIsTemporarilyUnavailable' }]);
+    expect(state.providerCalls).toBe(0);
+  });
+
+  it('control: an unkeyed send on a paid plan whose filing fails still runs, as before', async () => {
+    const { POST } = await import('@/app/api/ai/route');
+    state.planLevel = 2;
+    state.fault = 'insert-error';
+    const res = await POST(send());
+    expect(res.status).toBe(200);
+    expect(state.providerCalls).toBe(1);
+  });
+
+  it('control: an unkeyed send on Free whose filing fails is refused, as before', async () => {
+    const { POST } = await import('@/app/api/ai/route');
+    state.fault = 'insert-error';
+    expect((await POST(send())).status).not.toBe(200);
+    expect(state.providerCalls).toBe(0);
   });
 });

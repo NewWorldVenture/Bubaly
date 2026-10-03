@@ -17,7 +17,7 @@ import 'server-only';
 import type { SupabaseClient } from '@supabase/supabase-js';
 import type { Database } from '@/lib/database.types';
 import { resolveProvider, describeAIError, type AIMessage, type AIProvider, type ToolSpec } from '@/lib/ai/provider';
-import { AiRequestDuplicate, withAiRequest } from '@/lib/ai/observability';
+import { AiRequestDuplicate, AiRequestNotFiled, withAiRequest } from '@/lib/ai/observability';
 import { assistantTurnRequestKey } from '@/lib/ai/assistant-turn-replay';
 import { buildAssistantTools } from '@/lib/assistant/tools';
 import { wrapToolsWithTrust } from '@/lib/assistant/trust-wrapper';
@@ -84,6 +84,8 @@ export type AssistantTurnInput = {
   clientRequestId?: string | null;
   /** What the stream says, in the reader's language, when it was such a race. */
   alreadyAnswering?: string;
+  /** What the stream says when the turn's request could not be recorded. */
+  notRecorded?: string;
 };
 
 export type ExecutedAssistantAction = { name: string; args: Record<string, unknown>; result: unknown };
@@ -610,10 +612,14 @@ export function createAssistantStream(input: AssistantTurnInput, prepared: Prepa
           },
         );
       } catch (err) {
-        // Another attempt with this send's key filed the turn first; this one
-        // ran nothing and counts nothing.
-        if (!(err instanceof AiRequestDuplicate)) throw err;
-        controller.enqueue(encoder.encode(`data: ${JSON.stringify({ type: 'error', error: input.alreadyAnswering ?? 'This message is already being answered.' })}\n\n`));
+        // Another attempt with this send's key filed the turn first, or the
+        // turn could not be recorded (keyed: an earlier attempt's outcome is
+        // unknown). Either way this attempt ran nothing and counts nothing.
+        if (!(err instanceof AiRequestDuplicate) && !(err instanceof AiRequestNotFiled)) throw err;
+        const error = err instanceof AiRequestDuplicate
+          ? input.alreadyAnswering ?? 'This message is already being answered.'
+          : input.notRecorded ?? 'This message could not be recorded. Try again.';
+        controller.enqueue(encoder.encode(`data: ${JSON.stringify({ type: 'error', error })}\n\n`));
         controller.close();
       }
     },

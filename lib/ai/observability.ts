@@ -110,6 +110,12 @@ export async function withAiRequest<T>(
     console.error('[ai-observability] could not open a request row', { feature: spec.feature, err });
     return null;
   });
+  // With a retry key the row is also the idempotency record. A filing that
+  // failed — including a key collision whose original row could not be read
+  // back — leaves an earlier attempt's outcome unknown, so the body must not
+  // run on ANY plan: running it could repeat that attempt's effects (#788
+  // review 5964206145). Unkeyed calls keep the plan-based rule below.
+  if (!opened?.ok && spec.clientRequestId) throw new AiRequestNotFiled(spec.feature);
   if (!opened?.ok && await allowanceDependsOnTheRow(scope)) {
     // The row is not only diagnostics: on a capped plan it IS the meter (F19).
     // `monthlyAllowance` counts these rows, so a model call made without one

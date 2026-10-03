@@ -4,7 +4,7 @@ import { getTranslations } from '@/lib/i18n/server';
 import { createServer } from '@/lib/supabase/server';
 import { settleAll } from '@/lib/supabase/settle';
 import { requireUserContext } from '@/lib/supabase/auth';
-import { AiRequestDuplicate, withAiRequest } from '@/lib/ai/observability';
+import { AiRequestDuplicate, AiRequestNotFiled, withAiRequest } from '@/lib/ai/observability';
 import { scopeFromUserContext } from '@/lib/services/scope';
 import { resolveProvider, describeAIError, isAIConfigured, type AIMessage } from '@/lib/ai/provider';
 import { finalizeAssistantContent, summarizeToolResult } from '@/lib/ai/assistant-engine';
@@ -278,8 +278,10 @@ export async function POST(req: NextRequest) {
         } catch (err) {
           // Another attempt with this send's key filed the turn first; this
           // one ran nothing and counts nothing.
-          if (!(err instanceof AiRequestDuplicate)) throw err;
-          send({ type: 'error', error: t('ai.thisMessageIsAlreadyBeingAnswered') });
+          // Or the turn could not be recorded: keyed, an earlier attempt's
+          // outcome is unknown, so nothing ran (fail closed).
+          if (!(err instanceof AiRequestDuplicate) && !(err instanceof AiRequestNotFiled)) throw err;
+          send({ type: 'error', error: t(err instanceof AiRequestDuplicate ? 'ai.thisMessageIsAlreadyBeingAnswered' : 'ai.accountContextIsTemporarilyUnavailable') });
           controller.close();
         }
       },

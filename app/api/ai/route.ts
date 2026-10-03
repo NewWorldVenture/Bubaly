@@ -30,7 +30,7 @@ import { rateLimitDb } from '@/lib/server/rate-limit-db';
 import { parseAIChatRequest, parseAssistantTurnKey } from '@/lib/ai/chat-request';
 import { findPriorTurn } from '@/lib/ai/assistant-turn-replay';
 import { answerPriorTurn } from '@/lib/ai/assistant-turn-answer';
-import { AiRequestDuplicate } from '@/lib/ai/observability';
+import { AiRequestDuplicate, AiRequestNotFiled } from '@/lib/ai/observability';
 import { MAX_PROVIDER_JSON_BYTES, readBoundedRequestJson } from '@/lib/server/bounded-request-body';
 import { describeActionError } from '@/lib/supabase/errors';
 import { buildAssistantTools } from '@/lib/assistant/tools';
@@ -250,6 +250,7 @@ export async function POST(req: NextRequest) {
       supabase, familyId, userId: ctx.user.id, role: ctx.active.role,
       familyName: ctx.active.family.name, tz, conversationId, message,
       clientRequestId: turnKey.key, alreadyAnswering: tr('ai.thisMessageIsAlreadyBeingAnswered'),
+      notRecorded: tr('ai.accountContextIsTemporarilyUnavailable'),
     };
     const prepared = await prepareAssistantTurn(input);
     if (!prepared.ok) return NextResponse.json({ error: prepared.error }, { status: 500 });
@@ -263,6 +264,11 @@ export async function POST(req: NextRequest) {
         // above and this one's filing; this attempt ran nothing.
         if (err instanceof AiRequestDuplicate) {
           return NextResponse.json({ error: tr('ai.thisMessageIsAlreadyBeingAnswered'), code: 'turn_in_progress', requestId: err.requestId }, { status: 409 });
+        }
+        // The turn could not be recorded: on a keyed send that leaves an
+        // earlier attempt's outcome unknown, so nothing ran (fail closed).
+        if (err instanceof AiRequestNotFiled) {
+          return NextResponse.json({ error: tr('ai.accountContextIsTemporarilyUnavailable'), code: 'unavailable' }, { status: 503 });
         }
         throw err;
       }
