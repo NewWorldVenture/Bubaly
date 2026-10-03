@@ -142,7 +142,10 @@ export async function POST(req: NextRequest) {
       canManage
         ? supabase.from('medication_schedules').select('time_of_day, days_of_week, starts_on, ends_on, medications(name, member_id, is_active)').eq('family_id', familyId).lte('starts_on', today).limit(40)
         : withheld<MedicationScheduleRow>(),
-      supabase.from('maintenance_tasks').select('title, due_at, status, completed_at').eq('family_id', familyId).in('status', ['todo', 'in_progress']).is('completed_at', null).not('due_at', 'is', null).lte('due_at', `${horizon}T23:59:59.999Z`).order('due_at').limit(20),
+      // Open is a matter of `status`: on an open row `completed_at` is when a
+      // repeating task was last done (lib/home/maintenance-rollover.ts), so it
+      // is not filtered null here any more.
+      supabase.from('maintenance_tasks').select('title, due_at, status, completed_at').eq('family_id', familyId).in('status', ['todo', 'in_progress']).not('due_at', 'is', null).lte('due_at', `${horizon}T23:59:59.999Z`).order('due_at').limit(20),
       supabase.from('home_warranties').select('name, expires_on').eq('family_id', familyId).not('expires_on', 'is', null).lte('expires_on', horizon).order('expires_on').limit(20),
       supabase.from('vacations').select('title, destination, start_date, end_date, status').eq('family_id', familyId).not('status', 'in', '("completed","cancelled")').not('start_date', 'is', null).limit(20),
       supabase.from('pantry_items').select('name, expires_at').eq('family_id', familyId).not('expires_at', 'is', null).lte('expires_at', horizon).order('expires_at').limit(25),

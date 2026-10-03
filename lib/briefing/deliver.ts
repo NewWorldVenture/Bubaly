@@ -138,8 +138,12 @@ export async function readMorningBrief(scope: ServiceScope, target: MorningTarge
       .eq('family_id', familyId).neq('status', 'paid').lte('due_date', horizon).order('due_date').limit(20),
     db.from('medication_schedules').select('time_of_day, days_of_week, starts_on, ends_on, medications(name, member_id, is_active)')
       .eq('family_id', familyId).lte('starts_on', dayKey).limit(40),
+    // Open is a matter of `status`: on an open row `completed_at` is when a
+    // repeating task was last done (lib/home/maintenance-rollover.ts), not a
+    // sign it is closed — filtering it null hid every such task after its
+    // first completion.
     db.from('maintenance_tasks').select('title, due_at, status, completed_at')
-      .eq('family_id', familyId).in('status', ['todo', 'in_progress']).is('completed_at', null)
+      .eq('family_id', familyId).in('status', ['todo', 'in_progress'])
       .not('due_at', 'is', null).lte('due_at', `${horizon}T23:59:59.999Z`).order('due_at').limit(20),
     db.from('home_warranties').select('name, expires_on')
       .eq('family_id', familyId).not('expires_on', 'is', null).lte('expires_on', horizon).order('expires_on').limit(20),
