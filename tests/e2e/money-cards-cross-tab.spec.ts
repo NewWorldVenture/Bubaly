@@ -484,3 +484,86 @@ test('repaired: an up-to-date tab sends, for each order, that child\'s count of 
   expect(await read(page)).toMatchObject({ errors: [], refreshes: 3 });
   expect(log).toHaveLength(3);
 });
+
+// An order that never settles (a request lost in flight) used to keep its
+// control disabled until a reload. With the attempt key (#882) and the
+// expected-count guard (#903), a re-click cannot become a second card: it
+// shares the first order's key while that is in flight, and is refused as
+// stale once the first card is mirrored. So an ORDER claim expires after 60 s
+// and the view re-reads; freeze and controls claims have no such server
+// dedupe and do not expire.
+test.describe('an order claim that never settles', () => {
+  test('repaired: a Virtual order that never settles re-enables after 60 s and the view re-reads; the re-click is a new call', async ({ page }) => {
+    await page.clock.install();
+    const log = await server(page.context());
+    await fixture(page, 'tab-1');
+    await virtual(page).click();
+    await expect(virtual(page)).toBeDisabled();
+    await page.clock.fastForward(59_000);
+    await settle(page);
+    await expect(virtual(page)).toBeDisabled();
+    expect((await read(page)).refreshes).toBe(0);
+
+    await page.clock.fastForward(1_000);
+    await settle(page);
+    await expect(virtual(page)).toBeEnabled();
+    expect(await read(page)).toMatchObject({ successes: [], errors: [], refreshes: 1 });
+
+    await virtual(page).click();
+    expect(await received(log, 2)).toEqual([
+      { tab: 'tab-1', action: 'issueCardAction', args: VIRTUAL_INPUT },
+      { tab: 'tab-1', action: 'issueCardAction', args: VIRTUAL_INPUT },
+    ]);
+  });
+
+  test('repaired: the physical order dialog that never settles re-enables Order after 60 s and the view re-reads', async ({ page }) => {
+    await page.clock.install();
+    await server(page.context());
+    await fixture(page, 'tab-1');
+    await physical(page).click();
+    await order(page).click();
+    await expect(order(page)).toBeDisabled();
+    await page.clock.fastForward(60_000);
+    await settle(page);
+    await expect(order(page)).toBeEnabled();
+    expect((await read(page)).refreshes).toBe(1);
+  });
+
+  test('preserves: an order that settles before 60 s leaves no expiry behind (one refresh, from its own answer)', async ({ page }) => {
+    await page.clock.install();
+    await server(page.context());
+    await fixture(page, 'tab-1');
+    await virtual(page).click();
+    await page.clock.fastForward(10_000);
+    await complete(page, 0, 'success');
+    expect(await read(page)).toMatchObject({ successes: ['moneyCardsView.virtualCardCreated'], refreshes: 1 });
+    await page.clock.fastForward(120_000);
+    await settle(page);
+    expect((await read(page)).refreshes).toBe(1);
+  });
+
+  test('preserves: an answer that arrives after the claim expired is still presented once', async ({ page }) => {
+    await page.clock.install();
+    await server(page.context());
+    await fixture(page, 'tab-1');
+    await virtual(page).click();
+    await page.clock.fastForward(60_000);
+    await settle(page);
+    expect((await read(page)).refreshes).toBe(1);
+    await complete(page, 0, 'success');
+    expect(await read(page)).toMatchObject({ successes: ['moneyCardsView.virtualCardCreated'], errors: [], refreshes: 2 });
+  });
+
+  test('preserves: a freeze that never settles stays disabled after 60 s (no server-side dedupe for freezes)', async ({ page }) => {
+    await page.clock.install();
+    await server(page.context());
+    await fixture(page, 'tab-1', { ...PROPS, cards: [ISSUED] });
+    const freeze = page.getByRole('button', { name: 'Freeze', exact: true });
+    await freeze.click();
+    await expect(freeze).toBeDisabled();
+    await page.clock.fastForward(120_000);
+    await settle(page);
+    await expect(freeze).toBeDisabled();
+    expect((await read(page)).refreshes).toBe(0);
+  });
+});
