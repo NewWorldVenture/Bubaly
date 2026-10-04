@@ -14,7 +14,7 @@ import type { Database } from '@/lib/database.types';
 import type Stripe from 'stripe';
 import { randomUUID } from 'node:crypto';
 import { getStripe } from '@/lib/stripe';
-import { reserveCardAuth, releaseCardHold, creditCardRefund, settleCardCapture, closeCardAuth } from '@/lib/wallet/server';
+import { cardHoldRef, reserveCardAuth, releaseCardHold, creditCardRefund, settleCardCapture, closeCardAuth } from '@/lib/wallet/server';
 
 type DB = SupabaseClient<Database>;
 const STALE_EVENT_MS = 10 * 60 * 1000;
@@ -192,9 +192,12 @@ export async function handleAuthorizationRequest(
     if (pre) {
       decision = pre;
     } else {
+      // A merchant raising an authorization it already holds sends another
+      // request for the same id, asking for the increase; it is held under a
+      // key of its own so it is balance-checked like the first (cardHoldRef).
       const reserved = await reserveCardAuth(supabase, {
-        familyId: card.family_id, childWalletId: card.child_wallet_id,
-        amountCents: amount, authId: auth.id, description: merchantName ?? 'Card hold',
+        familyId: card.family_id, childWalletId: card.child_wallet_id, amountCents: amount,
+        holdRef: cardHoldRef(auth.id, auth.request_history?.length ?? 0), description: merchantName ?? 'Card hold',
       });
       decision = reserved ? { approve: true, reason: 'approved' } : { approve: false, reason: 'insufficient_spend_balance' };
     }
@@ -387,8 +390,10 @@ export async function handleAuthorizationUpdated(
   if (!['reversed', 'expired', 'closed'].includes(auth.status)) return;
   const cardId = typeof auth.card === 'string' ? auth.card : auth.card?.id;
   const card = cardId ? await cardForAuthorization(supabase, cardId) : null;
-  // No card mirror means no hold of ours to settle against; release by id as before.
-  if (!card) { await releaseCardHold(supabase, auth.id); return; }
+  // Each request it had (the first, and any increase) may hold money.
+  const requests = Math.max(auth.request_history?.length ?? 0, 1);
+  // No card mirror means no hold of ours to settle against; release each request's hold by its key.
+  if (!card) { await releaseCardHold(supabase, auth.id, requests); return; }
   for (const txn of auth.transactions ?? []) {
     const amount = Math.trunc(txn.amount ?? 0);
     if (txn.type !== 'capture' || amount >= 0) continue;
@@ -400,5 +405,5 @@ export async function handleAuthorizationUpdated(
     // A capture that could not be posted keeps the hold: Stripe retries the event.
     if (!settled.ok) throw new Error(settled.error ?? 'Card spend persistence failed');
   }
-  await closeCardAuth(supabase, { familyId: card.family_id, childWalletId: card.child_wallet_id, authorizationId: auth.id });
+  await closeCardAuth(supabase, { familyId: card.family_id, childWalletId: card.child_wallet_id, authorizationId: auth.id, requests });
 }

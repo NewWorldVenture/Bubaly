@@ -251,11 +251,13 @@ describe('with the database functions (wallet_settle_card_capture, wallet_close_
 
 describe('end to end against an emulation of the two functions', () => {
   // The SQL is proven on PostgreSQL by docs/audit/a-card-hold-follows-what-was-captured-check.sql.
-  // Here a small emulation with the same contract (idempotent on the capture,
-  // the live hold cancelled and the remainder re-held under `<auth>#remainder`,
-  // the close releasing both) runs the handlers on the primary path, results
+  // Here a small emulation with the same contract (idempotent on the capture;
+  // every live hold of the authorization — keyed by its id, or by its id then
+  // `#` — cancelled and the remainder re-held under `<auth>#remainder`; the
+  // close releasing them all) runs the handlers on the primary path, results
   // and all, rather than on the fallback.
-  const live = (ref: string) => ledger().filter((r) => (r.stripe_ref === ref || r.stripe_ref === `${ref}#remainder`) && r.status === 'processing');
+  const live = (ref: string) => ledger().filter((r) =>
+    (r.stripe_ref === ref || String(r.stripe_ref ?? '').startsWith(`${ref}#`)) && r.status === 'processing');
   function emulated() {
     store({
       wallet_settle_card_capture: (args, mem) => {
@@ -290,6 +292,23 @@ describe('end to end against an emulation of the two functions', () => {
     await deliver('issuing_authorization.updated', authorization({ transactions: [capture({ amount: -1_200 })] }));
     expect(live('iauth_1')).toEqual([]);
     expect(spendableCents()).toBe(5_000 - 1_200);
+  });
+
+  it('a merchant\'s increase is drawn down with the first hold, and what is left is released at the close', async () => {
+    emulated();
+    // The $20 hold, and a $10 increase the merchant was approved for later
+    // (held under its own key: an-incremental-authorization-is-balance-checked.test.ts).
+    ledger().push({ id: 'txn-increase', family_id: FAMILY, child_wallet_id: WALLET, bucket_id: 'bucket-spend', type: 'card_spend', status: 'processing', direction: 'debit', amount_cents: 1_000, stripe_ref: 'iauth_1#request-1' });
+    expect(spendableCents()).toBe(2_000);
+
+    await deliver('issuing_transaction.created', capture({ amount: -2_500 }));
+    // $25 of the $30 held is captured; $5 stays held for a later capture or the close.
+    expect(live('iauth_1').map((r) => [r.stripe_ref, r.amount_cents])).toEqual([['iauth_1#remainder', 500]]);
+    expect(spendableCents()).toBe(5_000 - 2_500 - 500);
+
+    await deliver('issuing_authorization.updated', authorization({ transactions: [capture({ amount: -2_500 })] }));
+    expect(live('iauth_1')).toEqual([]);
+    expect(spendableCents()).toBe(5_000 - 2_500);
   });
 
   it('a close that arrives first posts the capture, releases the hold, and the late capture changes nothing', async () => {

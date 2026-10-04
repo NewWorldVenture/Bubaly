@@ -145,20 +145,40 @@ export type CreditResult = {
 // decision that spends.
 
 /**
- * Atomically reserve a hold for a card authorization. Under a per-child lock the
- * DB re-checks the spendable balance and, if sufficient, writes a `processing`
- * debit keyed by the authorization id — so concurrent authorizations can't each
- * approve against the same balance (audit PAY-1). Returns whether the hold was
- * placed (i.e. whether to approve). Idempotent on the authorization id.
+ * The key one card authorization request is held under.
+ *
+ * A merchant can raise an authorization it already holds (a hotel, a car rental,
+ * a fuel pump). Stripe sends that as another request for the SAME authorization,
+ * asking for the additional amount, so each request needs a key of its own:
+ * `wallet_reserve_card_auth` (0155) answers "already reserved" to a live hold
+ * under the key it is given, without a balance check, and under the
+ * authorization id that approved every increase unchecked and never held it.
+ *
+ * The first request keeps the authorization id, as every hold placed before
+ * this did. A later one is `<authorization>#request-<n>`, n being how many
+ * requests Stripe had already decided (`request_history`); a redelivery of the
+ * same request carries the same history, so it gets the same key.
+ */
+export function cardHoldRef(authorizationId: string, priorRequests: number): string {
+  return priorRequests > 0 ? `${authorizationId}#request-${priorRequests}` : authorizationId;
+}
+
+/**
+ * Atomically reserve a hold for one card authorization request. Under a
+ * per-child lock the DB re-checks the spendable balance and, if sufficient,
+ * writes a `processing` debit keyed by `holdRef` (cardHoldRef) — so concurrent
+ * authorizations can't each approve against the same balance (audit PAY-1).
+ * Returns whether the hold was placed (i.e. whether to approve). Idempotent on
+ * the request.
  */
 export async function reserveCardAuth(supabase: DB, params: {
-  familyId: string; childWalletId: string; amountCents: number; authId: string; description: string;
+  familyId: string; childWalletId: string; amountCents: number; holdRef: string; description: string;
 }): Promise<boolean> {
   const { data, error } = await supabase.rpc('wallet_reserve_card_auth', {
     p_family: params.familyId,
     p_child_wallet: params.childWalletId,
     p_amount: Math.max(0, Math.trunc(params.amountCents)),
-    p_auth_id: params.authId,
+    p_auth_id: params.holdRef,
     p_description: params.description,
   });
   if (error) {
@@ -169,18 +189,26 @@ export async function reserveCardAuth(supabase: DB, params: {
 }
 
 /**
- * Release a card authorization hold (status → 'cancelled') so it stops reducing
- * the spendable balance. Called on capture (the real debit replaces it) and on
- * authorization reversal/expiry. Idempotent: only `processing` holds are touched.
+ * Release a card authorization's holds (status → 'cancelled') so they stop
+ * reducing the spendable balance: the first request's, any remainder 0487 kept
+ * after a partial capture, and each later request's increase, `requests` being
+ * how many requests the authorization had. A capture does not know that count
+ * and releases the first request's hold and the remainder; the close, which
+ * does, releases them all. Called where the 0487 functions are not on the
+ * database (settleCardCapture's and closeCardAuth's fallbacks), and for an
+ * authorization with no card mirror. Idempotent: only `processing` holds are
+ * touched.
  */
-export async function releaseCardHold(supabase: DB, authId: string): Promise<void> {
+export async function releaseCardHold(supabase: DB, authId: string, requests = 1): Promise<void> {
+  const refs = [authId, `${authId}#remainder`];
+  for (let n = 1; n < requests; n++) refs.push(cardHoldRef(authId, n));
   // Rows deliberately not checked: capture and reversal can both call this, and
   // the `status = 'processing'` filter is what makes the second call a no-op.
   // Zero rows means the hold is already released. Audit C1-S9-64.
   const { error } = await supabase
     .from('wallet_transactions')
     .update({ status: 'cancelled' })
-    .eq('stripe_ref', authId)
+    .in('stripe_ref', refs)
     .eq('type', 'card_spend')
     .eq('status', 'processing');
   if (error) throw new Error(walletFailure(error, 'Could not release the card authorization hold.'));
@@ -192,7 +220,7 @@ const warnedPreHoldSettlement = new Set<string>();
 function warnPreHoldSettlement(fn: string): void {
   if (warnedPreHoldSettlement.has(fn)) return;
   warnedPreHoldSettlement.add(fn);
-  console.warn(`[wallet] ${fn} is not on this database (0487 not applied): card holds are settled the pre-0487 way, the whole hold released by the first capture`);
+  console.warn(`[wallet] ${fn} is not on this database (0487 not applied): card holds are settled the pre-0487 way, the first capture releasing the authorization's hold whole (a merchant's increases wait for the close)`);
 }
 
 /**
@@ -205,7 +233,8 @@ function warnPreHoldSettlement(fn: string): void {
  * delivery changes nothing, holds included.
  *
  * A database without that function (a deploy ahead of its migration) gets what
- * this did before: the debit, then the whole hold released.
+ * this did before: the debit, then the authorization's hold released, all but a
+ * merchant's later increases, which the close releases (releaseCardHold).
  */
 export async function settleCardCapture(supabase: DB, params: {
   familyId: string; childWalletId: string; amountCents: number; description: string; stripeRef: string;
@@ -237,20 +266,22 @@ export async function settleCardCapture(supabase: DB, params: {
 }
 
 /**
- * Release what is left of an authorization's hold once it will not be captured
+ * Release what is left of an authorization's holds once it will not be captured
  * any further (closed, expired, reversed), under the same lock
  * (wallet_close_card_auth), so it cannot interleave with a capture that is
- * re-holding a remainder. Idempotent. Without the function: releaseCardHold.
+ * re-holding a remainder. The function releases every hold of the authorization;
+ * without it, releaseCardHold releases each of its `requests` requests' holds.
+ * Idempotent.
  */
 export async function closeCardAuth(supabase: DB, params: {
-  familyId: string; childWalletId: string; authorizationId: string;
+  familyId: string; childWalletId: string; authorizationId: string; requests: number;
 }): Promise<void> {
   const { data, error } = await supabase.rpc('wallet_close_card_auth', {
     p_family: params.familyId, p_child_wallet: params.childWalletId, p_auth_id: params.authorizationId,
   });
   if (error && isMissingFunctionError(error)) {
     warnPreHoldSettlement('wallet_close_card_auth');
-    return releaseCardHold(supabase, params.authorizationId);
+    return releaseCardHold(supabase, params.authorizationId, params.requests);
   }
   if (error) throw new Error(walletFailure(error, 'Could not release the card authorization hold.'));
   const result = walletRpcResult(data);
@@ -270,7 +301,7 @@ export async function debitCardSpend(supabase: DB, params: {
 
   // Idempotency: skip if this Stripe transaction already produced a debit. The
   // filter is the database key's (completed card_spend rows), so its partial
-  // index serves the lookup; a hold is keyed by the authorization id instead.
+  // index serves the lookup; a hold is keyed by its authorization instead.
   const { data: dupe, error: dupeError } = await supabase
     .from('wallet_transactions').select('id')
     .eq('stripe_ref', params.stripeRef).eq('type', 'card_spend').eq('status', 'completed').maybeSingle();

@@ -5,7 +5,8 @@
 -- repository candidate, not an instruction to apply anything to production.
 --
 -- An approved Issuing authorization holds money: wallet_reserve_card_auth (0155)
--- writes a `processing` card_spend keyed by the authorization id, and every
+-- writes a `processing` card_spend keyed by the authorization id (a later
+-- request's by a key of its own: EVERY HOLD below), and every
 -- spend decision counts it. Two paths released that hold too early, each able
 -- to leave a child's Spend negative:
 --
@@ -34,13 +35,25 @@
 -- included; a close with nothing live releases nothing. A capture whose debit
 -- was posted WITHOUT this function (the lib/wallet/server.ts fallback, while a
 -- database lacks it) is settled against its hold the first time it comes
--- through here, and only against holds that existed when it was posted.
+-- through here, and only against holds that existed when it was posted and
+-- that the fallback itself releases: the first request's and the remainder. An
+-- increase it left held may still be captured, so it waits for a later
+-- capture or the close; that way the error is money held, never money freed.
 --
--- THE REMAINDER IS KEYED `<authorization>#remainder`, not by the authorization
--- id. wallet_reserve_card_auth (0155) answers "already reserved" to ANY live
--- hold keyed by the authorization id, without a balance check. Keyed that way,
--- a remainder would let an incremental authorization after a partial capture
--- through unchecked. Keyed apart, reserve behaves exactly as before this file.
+-- THE REMAINDER IS KEYED `<authorization>#remainder`. What a capture left is
+-- not a request, so it takes no request's key: wallet_reserve_card_auth (0155)
+-- answers "already reserved" to ANY live hold under the key it is given,
+-- without a balance check, and no request's answer may depend on a remainder.
+--
+-- EVERY HOLD OF AN AUTHORIZATION. A merchant can raise an authorization it
+-- already holds (a hotel, a car rental): Stripe sends another request for the
+-- same authorization, asking for the increase. The app holds each request
+-- under a key of its own (lib/wallet/server.ts, cardHoldRef): the first under
+-- the authorization id, a later one under `<authorization>#request-<n>`, so
+-- 0155 balance-checks every increase. Both functions here therefore draw down
+-- and release every live hold whose key is the authorization id or begins with
+-- it and `#` (the remainder included), compared with starts_with: no pattern
+-- characters, so `_` in an id matches only itself.
 --
 -- LOCK ORDER. Each function takes the child wallet FOR KEY SHARE before the
 -- spend bucket FOR UPDATE. wallet_credit_child_ledger and wallet_transfer (0205)
@@ -51,8 +64,8 @@
 -- order cannot deadlock against those either.
 --
 -- Not changed here: wallet_reserve_card_auth, including 0342's note that a
--- request replayed after capture places a fresh hold; partial reversals and
--- incremental authorizations of a still-pending authorization.
+-- request replayed after capture places a fresh hold; partial reversals of a
+-- still-pending authorization.
 --
 -- Service-role only, as 0456 requires of every function the webhook calls.
 -- Agents must NOT apply this to production (docs/PENDING_PROD_MIGRATIONS.md).
@@ -77,6 +90,7 @@ declare
   v_drawn     bigint;
   v_held      bigint := 0;
   v_hold_ids  uuid[];
+  v_fallback  boolean := false;
   v_remainder bigint := 0;
   v_desc      text := coalesce(nullif(p_description, ''), 'Card purchase');
 begin
@@ -109,9 +123,11 @@ begin
       return jsonb_build_object('ok', true, 'transaction_id', v_existing.id, 'idempotent', true,
                                 'released_cents', 0, 'remainder_cents', 0);
     end if;
-    -- Posted without this function: settle it against the holds that existed
-    -- when it was posted (never one placed after it), once.
+    -- Posted without this function: settle it, once, against the holds that
+    -- existed when it was posted (never one placed after it) and that the
+    -- fallback releases (see the header).
     v_drawn := v_existing.amount_cents;
+    v_fallback := true;
   else
     if v_bucket is null then
       return jsonb_build_object('ok', false, 'reason', 'no_spend_bucket');
@@ -126,13 +142,16 @@ begin
   end if;
 
   if v_auth is not null then
-    -- The live hold for this authorization in this child's Spend bucket: the
-    -- one its approval placed, and any remainder an earlier capture left.
+    -- The live holds for this authorization in this child's Spend bucket: the
+    -- one its first request placed, each increase a later request placed, and
+    -- any remainder an earlier capture left.
     with live as (
       update public.wallet_transactions
          set status = 'cancelled',
              metadata = metadata || jsonb_build_object('settled_by', p_txn_id)
-       where stripe_ref in (v_auth, v_auth || '#remainder') and type = 'card_spend' and status = 'processing'
+       where (stripe_ref = v_auth or starts_with(stripe_ref, v_auth || '#'))
+         and (not v_fallback or stripe_ref in (v_auth, v_auth || '#remainder'))
+         and type = 'card_spend' and status = 'processing'
          and family_id = p_family and bucket_id = v_bucket
          and (v_existing.created_at is null or created_at <= v_existing.created_at)
       returning id, amount_cents
@@ -207,7 +226,8 @@ begin
   with live as (
     update public.wallet_transactions
        set status = 'cancelled'
-     where stripe_ref in (p_auth_id, p_auth_id || '#remainder') and type = 'card_spend' and status = 'processing'
+     where (stripe_ref = p_auth_id or starts_with(stripe_ref, p_auth_id || '#'))
+       and type = 'card_spend' and status = 'processing'
        and family_id = p_family and bucket_id = v_bucket
     returning amount_cents
   )

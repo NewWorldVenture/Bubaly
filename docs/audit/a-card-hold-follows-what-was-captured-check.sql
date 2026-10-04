@@ -9,9 +9,12 @@
 -- 0487 moves both steps into the database:
 --   wallet_settle_card_capture  child wallet FOR KEY SHARE, spend bucket FOR
 --                               UPDATE; post the capture once, cancel the live
---                               hold, hold the uncaptured remainder again under
+--                               holds, hold the uncaptured remainder again under
 --                               `<authorization>#remainder`;
 --   wallet_close_card_auth      same locks; release what is left.
+-- An authorization's holds are every live card_spend keyed by its id or by its
+-- id then `#`: the remainder, and each later request's increase, which the app
+-- holds under `<authorization>#request-<n>` so 0155 balance-checks it.
 --
 -- PART 1 — THE RACES. Two real connections each, through dblink. A HOLDER runs
 --   the first step inside an open transaction; the RACER sends the second call
@@ -36,11 +39,16 @@
 --   already posted staying a success after its bucket is gone; reserve after a
 --   partial capture (a replay is balance-checked, an increment that fits is
 --   held and drawn by the next capture); another child's hold; the audit row;
---   client roles.
+--   client roles; a merchant's increments before any capture (each checked and
+--   held under its own key, then drawn down or released with the rest); and a
+--   hold whose key only LOOKS like the authorization's (a longer id, or `_` in
+--   another character's place) left alone; and a fallback-posted capture
+--   settled only against the holds that fallback releases, never an increase.
 --
 --   It also replays the pre-0487 statements (debit, then release the whole
 --   hold) on a bucket of their own, to show the arithmetic of the defect next
---   to 0487's result for the same capture. That pair documents the difference;
+--   to 0487's result for the same capture, and shows 0155 answering an
+--   increase keyed by the authorization id "already reserved" with no hold. That pair documents the difference;
 --   it does not test 0487 by itself. The evidence that this probe can fail is
 --   the mutation recorded on the PR: a settle that re-holds nothing fails
 --   races 1 and 3.
@@ -302,6 +310,8 @@ values ('00000000-0000-4000-8000-0000000c4873', 'Card Hold Shape', '00000000-000
 do $probe$
 declare
   fam constant uuid := '00000000-0000-4000-8000-0000000c4873';
+  -- Every message is appended as text: after `text[] ||` an untyped literal is
+  -- read as an array and raises `malformed array literal` instead of itself.
   failures text[] := '{}';
   r jsonb;
   m uuid; w uuid; b uuid;
@@ -310,8 +320,8 @@ declare
   i int;
   got bigint;
 begin
-  -- Sixteen children, each with $150 in Spend (index = scenario).
-  for i in 1..16 loop
+  -- Twenty children, each with $150 in Spend (index = scenario).
+  for i in 1..20 loop
     insert into public.family_members (family_id, display_name, role, is_active)
     values (fam, 'Shape ' || i, 'child', true) returning id into m;
     insert into public.child_wallets (family_id, member_id) values (fam, m) returning id into w;
@@ -328,7 +338,7 @@ begin
     failures := failures || format('full capture answered %s', r);
   end if;
   if (select count(*) from public.wallet_audit_logs where entity_id = wallets[1] and action = 'card_spend' and metadata->>'stripeRef' = 'shape1_cap') <> 1 then
-    failures := failures || 'a full capture did not write exactly one card_spend audit row naming its transaction';
+    failures := failures || 'a full capture did not write exactly one card_spend audit row naming its transaction'::text;
   end if;
 
   -- 2. A partial capture: $40 of $100 leaves $60 held, and a second capture takes it.
@@ -389,31 +399,32 @@ begin
      or public.wallet_settle_card_capture(fam, wallets[8], 'shape8_cap', null, 0, 'x')->>'reason' is distinct from 'invalid_amount'
      or public.wallet_settle_card_capture(fam, wallets[8], '', null, 100, 'x')->>'reason' is distinct from 'missing_transaction'
      or public.wallet_close_card_auth(fam, wallets[8], '')->>'reason' is distinct from 'missing_authorization' then
-    failures := failures || 'a refusal did not name its reason';
+    failures := failures || 'a refusal did not name its reason'::text;
   end if;
   if exists (select 1 from public.wallet_transactions where stripe_ref = 'shape8_cap') then
-    failures := failures || 'a refused capture wrote a row';
+    failures := failures || 'a refused capture wrote a row'::text;
   end if;
   perform public.wallet_settle_card_capture(fam, wallets[8], 'shape8_posted', null, 100, 'x');
   update public.wallet_buckets set kind = 'save' where id = buckets[8];
   if (public.wallet_settle_card_capture(fam, wallets[8], 'shape8_posted', null, 100, 'x')->>'ok')::boolean is not true then
-    failures := failures || 'a capture already posted was refused once its spend bucket had gone';
+    failures := failures || 'a capture already posted was refused once its spend bucket had gone'::text;
   end if;
 
   -- 9. After a partial capture, reserve is balance-checked again: a replayed
   --    $100 request does not fit the $50 left and places nothing; a $30
-  --    increment fits, and the next capture draws down both.
+  --    increment (the app's second request) fits, and the next capture draws
+  --    down both.
   perform public.wallet_reserve_card_auth(fam, wallets[9], 10000, 'shape9_auth', 'Gas');
   perform public.wallet_settle_card_capture(fam, wallets[9], 'shape9_cap', 'shape9_auth', 4000, 'Gas');
   if public.wallet_reserve_card_auth(fam, wallets[9], 10000, 'shape9_auth', 'Gas') then
-    failures := failures || 'a $100 request after a $40 partial capture was approved against the $50 left';
+    failures := failures || 'a $100 request after a $40 partial capture was approved against the $50 left'::text;
   end if;
-  if not public.wallet_reserve_card_auth(fam, wallets[9], 3000, 'shape9_auth', 'Gas') then
-    failures := failures || 'a $30 increment that fits was declined';
+  if not public.wallet_reserve_card_auth(fam, wallets[9], 3000, 'shape9_auth#request-1', 'Gas') then
+    failures := failures || 'a $30 increment that fits was declined'::text;
   end if;
   perform public.wallet_settle_card_capture(fam, wallets[9], 'shape9_cap2', 'shape9_auth', 9000, 'Gas');
   select coalesce(sum(amount_cents), 0) into got from public.wallet_transactions
-   where stripe_ref in ('shape9_auth', 'shape9_auth#remainder') and status = 'processing';
+   where stripe_ref like 'shape9%' and type = 'card_spend' and status = 'processing';
   if got <> 0 then failures := failures || format('a $90 capture left %s cents of the remainder and increment held', got); end if;
 
   -- 10. A debit the fallback posted (no hold_settled mark) is settled against
@@ -455,7 +466,7 @@ begin
      or has_function_privilege('authenticated', 'public.wallet_settle_card_capture(uuid, uuid, text, text, bigint, text)', 'execute')
      or has_function_privilege('anon', 'public.wallet_close_card_auth(uuid, uuid, text)', 'execute')
      or has_function_privilege('authenticated', 'public.wallet_close_card_auth(uuid, uuid, text)', 'execute') then
-    failures := failures || 'a client role can execute a card-hold function';
+    failures := failures || 'a client role can execute a card-hold function'::text;
   end if;
 
   -- 15. The pre-0487 statements on a bucket of their own (see the header):
@@ -471,11 +482,93 @@ begin
     failures := failures || format('the pre-0487 statements left %s cents spendable, not the 11000 that releasing the whole hold produces', got);
   end if;
 
+  -- 16. A merchant raising an authorization before any capture (a hotel).
+  --     $40 held; under the authorization id, 0155 answers a $200 increase
+  --     "already reserved" and holds nothing (the defect, shown not tested);
+  --     under the app's key it is checked against the $110 left and declined,
+  --     a $30 one is held once however often it is delivered, and a $70
+  --     capture draws down both, leaving nothing held.
+  perform public.wallet_reserve_card_auth(fam, wallets[16], 4000, 'shape16_auth', 'Hotel');
+  if not public.wallet_reserve_card_auth(fam, wallets[16], 20000, 'shape16_auth', 'Hotel')
+     or (select count(*) from public.wallet_transactions where bucket_id = buckets[16] and status = 'processing') <> 1 then
+    failures := failures || '0155 no longer answers an increase under the authorization id "already reserved" with no hold: re-read the app''s keying (cardHoldRef)'::text;
+  end if;
+  if public.wallet_reserve_card_auth(fam, wallets[16], 20000, 'shape16_auth#request-1', 'Hotel') then
+    failures := failures || 'a $200 increase was approved against the $110 left'::text;
+  end if;
+  if not public.wallet_reserve_card_auth(fam, wallets[16], 3000, 'shape16_auth#request-2', 'Hotel')
+     or not public.wallet_reserve_card_auth(fam, wallets[16], 3000, 'shape16_auth#request-2', 'Hotel') then
+    failures := failures || 'a $30 increase that fits was declined'::text;
+  end if;
+  select coalesce(sum(amount_cents), 0) into got from public.wallet_transactions
+   where bucket_id = buckets[16] and type = 'card_spend' and status = 'processing';
+  if got <> 7000 then failures := failures || format('the $40 hold and a $30 increase delivered twice hold %s cents, not 7000', got); end if;
+  r := public.wallet_settle_card_capture(fam, wallets[16], 'shape16_cap', 'shape16_auth', 7000, 'Hotel');
+  select coalesce(sum(amount_cents), 0) into got from public.wallet_transactions
+   where bucket_id = buckets[16] and type = 'card_spend' and status = 'processing';
+  if (r->>'released_cents')::bigint is distinct from 7000 or got <> 0 then
+    failures := failures || format('a $70 capture of a $40 hold and its $30 increase answered %s and left %s cents held', r, got);
+  end if;
+  select coalesce(sum(case when direction = 'credit' then amount_cents else -amount_cents end), 0) into got
+    from public.wallet_transactions where bucket_id = buckets[16] and status in ('completed', 'processing');
+  if got <> 8000 then failures := failures || format('after the $70 stay %s cents are spendable, not 8000', got); end if;
+
+  -- 17. A partial capture across the first hold and an increase: $50 of $70
+  --     leaves $20 held; a further $10 increase is held; the close releases
+  --     the $30, once.
+  perform public.wallet_reserve_card_auth(fam, wallets[17], 4000, 'shape17_auth', 'Car');
+  perform public.wallet_reserve_card_auth(fam, wallets[17], 3000, 'shape17_auth#request-1', 'Car');
+  r := public.wallet_settle_card_capture(fam, wallets[17], 'shape17_cap', 'shape17_auth', 5000, 'Car');
+  if (r->>'released_cents')::bigint is distinct from 7000 or (r->>'remainder_cents')::bigint is distinct from 2000 then
+    failures := failures || format('a $50 capture of $40 + $30 held answered %s, not 7000 released and 2000 re-held', r);
+  end if;
+  perform public.wallet_reserve_card_auth(fam, wallets[17], 1000, 'shape17_auth#request-2', 'Car');
+  r := public.wallet_close_card_auth(fam, wallets[17], 'shape17_auth');
+  if (r->>'released_cents')::bigint is distinct from 3000 then
+    failures := failures || format('the close after a partial capture and a later increase answered %s, not 3000', r);
+  end if;
+  if (public.wallet_close_card_auth(fam, wallets[17], 'shape17_auth')->>'released_cents')::bigint is distinct from 0
+     or exists (select 1 from public.wallet_transactions where bucket_id = buckets[17] and type = 'card_spend' and status = 'processing') then
+    failures := failures || 'a hold of the closed authorization is still live, or a second close released more'::text;
+  end if;
+
+  -- 18. Holds whose keys only look like the authorization's are not its own:
+  --     a longer id (`shape18_auth2`), and `_` in another character's place
+  --     (`shape18Xauth#request-1`, which LIKE 'shape18_auth#%' would match).
+  perform public.wallet_reserve_card_auth(fam, wallets[18], 2000, 'shape18_auth', 'Books');
+  perform public.wallet_reserve_card_auth(fam, wallets[18], 1000, 'shape18_auth2', 'Books');
+  perform public.wallet_reserve_card_auth(fam, wallets[18], 1500, 'shape18Xauth#request-1', 'Books');
+  perform public.wallet_settle_card_capture(fam, wallets[18], 'shape18_cap', 'shape18_auth', 1000, 'Books');
+  perform public.wallet_close_card_auth(fam, wallets[18], 'shape18_auth');
+  select coalesce(sum(amount_cents), 0) into got from public.wallet_transactions
+   where bucket_id = buckets[18] and stripe_ref in ('shape18_auth2', 'shape18Xauth#request-1') and status = 'processing';
+  if got <> 2500 then failures := failures || format('settling and closing shape18_auth released holds of other authorizations (%s of 2500 cents still held)', got); end if;
+  if exists (select 1 from public.wallet_transactions where bucket_id = buckets[18] and stripe_ref like 'shape18\_auth%' and stripe_ref <> 'shape18_auth2' and status = 'processing') then
+    failures := failures || 'a hold of the closed shape18_auth is still live'::text;
+  end if;
+
+  -- 19. A debit the fallback posted is settled only against what the fallback
+  --     releases. $100 held and a $50 increase; the fallback posted the $100
+  --     capture and released the $100 hold, and the event comes back once
+  --     0487 is there: the $50 increase may still be captured, so it stays.
+  perform public.wallet_reserve_card_auth(fam, wallets[19], 10000, 'shape19_auth', 'Hotel');
+  perform public.wallet_reserve_card_auth(fam, wallets[19], 5000, 'shape19_auth#request-1', 'Hotel');
+  insert into public.wallet_transactions (family_id, child_wallet_id, bucket_id, type, status, direction, amount_cents, description, stripe_ref, metadata, created_at)
+  values (fam, wallets[19], buckets[19], 'card_spend', 'completed', 'debit', 10000, 'Hotel', 'shape19_cap', '{"source":"issuing"}', now() + interval '1 second');
+  update public.wallet_transactions set status = 'cancelled'
+   where stripe_ref in ('shape19_auth', 'shape19_auth#remainder') and type = 'card_spend' and status = 'processing';
+  r := public.wallet_settle_card_capture(fam, wallets[19], 'shape19_cap', 'shape19_auth', 10000, 'Hotel');
+  select coalesce(sum(amount_cents), 0) into got from public.wallet_transactions
+   where bucket_id = buckets[19] and type = 'card_spend' and status = 'processing';
+  if (r->>'released_cents')::bigint is distinct from 0 or got <> 5000 then
+    failures := failures || format('settling a fallback-posted $100 capture answered %s and left %s cents held, not the $50 increase (5000)', r, got);
+  end if;
+
   if array_length(failures, 1) is not null then
     raise exception E'a card hold does not follow what was captured (0487):\n  - %',
       array_to_string(failures, E'\n  - ');
   end if;
-  raise notice 'a-card-hold-follows-what-was-captured: OK (full, partial, over and forced captures, a capture after the close, duplicates, a fallback-posted debit settled once and never against a later hold, a refund sharing the id, refusals, reserve balance-checked after a partial capture, another child''s hold, the audit row and client roles; a $40 capture of a $100 hold leaves $50 where the pre-0487 statements leave $110)';
+  raise notice 'a-card-hold-follows-what-was-captured: OK (full, partial, over and forced captures, a capture after the close, duplicates, a fallback-posted debit settled once and never against a later hold, a refund sharing the id, refusals, reserve balance-checked after a partial capture, another child''s hold, the audit row and client roles, a merchant''s increases checked, held and released with the rest, a fallback-posted capture never freeing an increase, and lookalike keys left alone; a $40 capture of a $100 hold leaves $50 where the pre-0487 statements leave $110)';
 end $probe$;
 
 rollback;
