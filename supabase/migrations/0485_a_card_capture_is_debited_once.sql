@@ -18,9 +18,13 @@
 -- and debitCardSpend reads back the capture the first wrote and answers
 -- success. It is narrower than "one card_spend per stripe_ref" on purpose:
 --   - an authorization's HOLD is also a card_spend, keyed by the authorization
---     id, and 0155/0342 record that a replay after capture places a fresh one;
---     holds are 'processing' and are released to 'cancelled', never completed,
---     so `status = 'completed'` leaves every hold out;
+--     id, and 0155/0342 record that a replay after capture places a fresh one.
+--     0155's header allows a hold to move processing -> completed/cancelled,
+--     but no code completes one: wallet_reserve_card_auth writes it as
+--     'processing', releaseCardHold cancels it, and the capture is its own
+--     row under the transaction id. `status = 'completed'` leaves every hold
+--     out. A future path that completed holds would have to keep to one
+--     completed row per authorization id, or it would meet this key;
 --   - a SPEND REQUEST is a card_spend with no stripe_ref (0342's
 --     wallet_debit_spend_bucket), held as 'requires_parent_approval' and then
 --     completed by wallet_decide_spend; `stripe_ref is not null` leaves those
@@ -39,8 +43,13 @@
 -- `create unique index` blocks writes to wallet_transactions while it builds;
 -- on a large production table the owner may prefer the CONCURRENTLY form of
 -- the same statement, run on its own and outside a transaction, as 0321
--- describes. Agents must NOT apply this to production
--- (docs/PENDING_PROD_MIGRATIONS.md).
+-- describes.
+-- If a CONCURRENTLY build fails (an existing duplicate, a cancelled
+-- statement), it leaves an INVALID index of this name behind, and a rerun of
+-- this file's `if not exists` then skips it and enforces nothing. Drop it
+-- before retrying; `select indexrelid::regclass from pg_index where not
+-- indisvalid;` lists invalid indexes.
+-- Agents must NOT apply this to production (docs/PENDING_PROD_MIGRATIONS.md).
 
 create unique index if not exists uq_wallet_txn_card_capture_ref
   on public.wallet_transactions (stripe_ref)

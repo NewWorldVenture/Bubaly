@@ -32,6 +32,11 @@
 --   select stripe_ref from public.wallet_transactions
 --    where type = 'card_refund' and stripe_ref is not null
 --    group by 1 having count(*) > 1;
+-- If a CONCURRENTLY build fails (an existing duplicate, a cancelled
+-- statement), it leaves an INVALID index of this name behind, and a rerun of
+-- this file's `if not exists` then skips it and enforces nothing. Drop it
+-- before retrying; `select indexrelid::regclass from pg_index where not
+-- indisvalid;` lists invalid indexes.
 -- Agents must NOT apply this to production (docs/PENDING_PROD_MIGRATIONS.md).
 
 create unique index if not exists uq_wallet_txn_card_refund_ref
