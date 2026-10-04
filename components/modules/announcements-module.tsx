@@ -7,6 +7,7 @@ import { useRealtimeQuery } from '@/lib/hooks/use-realtime-query';
 import { createClient } from '@/lib/supabase/client';
 import { describeDbError, wroteNoRows } from '@/lib/supabase/errors';
 import { useToast } from '@/components/ui/toast';
+import { useConfirm } from '@/components/ui/confirm';
 import { Modal } from '@/components/ui/modal';
 import { Input, Textarea, Field } from '@/components/ui/input';
 import { Avatar } from '@/components/ui/avatar';
@@ -25,6 +26,7 @@ type Read = Tables<'announcement_reads'>;
 export function AnnouncementsModule() {
   const { fmtDateTime } = useFormat();
   const t = useTranslations();
+  const askConfirm = useConfirm();
   const { familyId, userId, role, members, selfMember } = useApp();
   const admin = isAdmin(role);
   const { success, error: toastError } = useToast();
@@ -129,9 +131,10 @@ export function AnnouncementsModule() {
     else if (wroteNoRows(updated)) toastError(t('errors.thatChangeWasNotSaved'));
   }
 
-  async function remove(id: string) {
+  async function remove(a: Announcement) {
+    if (!(await askConfirm({ title: t('confirm.deleteNamed', { name: a.title }), body: t('confirm.cannotBeUndone') }))) return;
     const supabase = createClient();
-    const { data: removed, error: err } = await supabase.from('family_announcements').delete().eq('id', id).select('id');
+    const { data: removed, error: err } = await supabase.from('family_announcements').delete().eq('id', a.id).select('id');
     if (err) toastError(describeDbError(err));
     else if (wroteNoRows(removed)) toastError(t('errors.thatChangeWasNotSaved'));
     else success(t('announcementsModule.announcementRemoved'));
@@ -185,7 +188,7 @@ export function AnnouncementsModule() {
                       <button onClick={() => togglePin(a)} title={a.is_pinned ? t('dialogTitle.unpin') : t('dialogTitle.pin')} className="rounded-lg p-1.5 text-muted hover:bg-elevated hover:text-fg">
                         {a.is_pinned ? <PinOff className="h-4 w-4" /> : <Pin className="h-4 w-4" />}
                       </button>
-                      <button onClick={() => remove(a.id)} title={t('announcements.delete')} className="rounded-lg p-1.5 text-muted hover:bg-elevated hover:text-danger">
+                      <button onClick={() => remove(a)} title={t('announcements.delete')} className="rounded-lg p-1.5 text-muted hover:bg-elevated hover:text-danger">
                         <Trash2 className="h-4 w-4" />
                       </button>
                     </div>

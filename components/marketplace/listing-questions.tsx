@@ -111,6 +111,7 @@ function AnswerForm({ question, answererId, onAnswered, onError }: {
   question: Question; answererId: string | null; onAnswered: () => void; onError: (m: string) => void;
 }) {
   const t = useTranslations();
+  const { familyId } = useApp();
   const [answer, setAnswer] = useState('');
   const [busy, setBusy] = useState(false);
   async function submit(e: React.FormEvent) {
@@ -121,7 +122,7 @@ function AnswerForm({ question, answererId, onAnswered, onError }: {
     // answer was reported as posted. Audit C1-S9-84.
     const { data: answered, error } = await createClient().from('marketplace_questions')
       .update({ answer: answer.trim(), answered_at: new Date().toISOString(), answered_by: answererId })
-      .eq('id', question.id).select('id');
+      .eq('id', question.id).eq('family_id', familyId).select('id');
     setBusy(false);
     if (error) { onError(describeDbError(error)); return; }
     if (wroteNoRows(answered)) { onError(t('errors.thatChangeWasNotSaved')); return; }
