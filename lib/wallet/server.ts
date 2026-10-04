@@ -9,7 +9,7 @@
 import type { SupabaseClient } from '@supabase/supabase-js';
 import type { Database, Json, WalletTxnType } from '@/lib/database.types';
 import { allocate, normalizeSplit, type Split } from '@/lib/wallet/ledger';
-import { describeActionError } from '@/lib/supabase/errors';
+import { describeActionError, isMissingFunctionError } from '@/lib/supabase/errors';
 import { settleAll } from '@/lib/supabase/settle';
 import { readAll } from '@/lib/supabase/read-all';
 import { logWalletAudit } from '@/lib/server/audit';
@@ -184,6 +184,77 @@ export async function releaseCardHold(supabase: DB, authId: string): Promise<voi
     .eq('type', 'card_spend')
     .eq('status', 'processing');
   if (error) throw new Error(walletFailure(error, 'Could not release the card authorization hold.'));
+}
+
+// Said once per process, so an operator can see the fix is not in effect yet
+// without a line per card purchase.
+const warnedPreHoldSettlement = new Set<string>();
+function warnPreHoldSettlement(fn: string): void {
+  if (warnedPreHoldSettlement.has(fn)) return;
+  warnedPreHoldSettlement.add(fn);
+  console.warn(`[wallet] ${fn} is not on this database (0487 not applied): card holds are settled the pre-0487 way, the whole hold released by the first capture`);
+}
+
+/**
+ * Post one Issuing capture and draw its authorization's hold down by what it
+ * captured, as ONE statement under the spend bucket's row lock
+ * (wallet_settle_card_capture): the capture's debit, the live hold cancelled,
+ * and whatever it did not capture held again. The first capture used to free the
+ * whole hold, so when a merchant captured less than it authorized, the part
+ * Stripe could still capture was spendable. Idempotent on the capture: a second
+ * delivery changes nothing, holds included.
+ *
+ * A database without that function (a deploy ahead of its migration) gets what
+ * this did before: the debit, then the whole hold released.
+ */
+export async function settleCardCapture(supabase: DB, params: {
+  familyId: string; childWalletId: string; amountCents: number; description: string; stripeRef: string;
+  authorizationId: string | null;
+}): Promise<{ ok: boolean; txnId?: string; error?: string }> {
+  const amount = Math.trunc(params.amountCents);
+  if (amount <= 0) return { ok: false, error: 'Amount must be greater than 0' };
+  const { data, error } = await supabase.rpc('wallet_settle_card_capture', {
+    p_family: params.familyId, p_child_wallet: params.childWalletId, p_txn_id: params.stripeRef,
+    p_auth_id: params.authorizationId, p_amount: amount, p_description: params.description,
+  });
+  if (error && isMissingFunctionError(error)) {
+    warnPreHoldSettlement('wallet_settle_card_capture');
+    const debit = await debitCardSpend(supabase, {
+      familyId: params.familyId, childWalletId: params.childWalletId, amountCents: amount,
+      description: params.description, stripeRef: params.stripeRef,
+    });
+    if (!debit.ok) return debit;
+    if (params.authorizationId) await releaseCardHold(supabase, params.authorizationId);
+    return debit;
+  }
+  if (error) return { ok: false, error: walletFailure(error, 'Could not post that card spend.') };
+  const result = walletRpcResult(data);
+  if (!result.ok) {
+    console.error('[wallet] card capture refused', { stripeRef: params.stripeRef, reason: result.reason });
+    return { ok: false, error: 'Could not post that card spend.' };
+  }
+  return { ok: true, txnId: result.transaction_id };
+}
+
+/**
+ * Release what is left of an authorization's hold once it will not be captured
+ * any further (closed, expired, reversed), under the same lock
+ * (wallet_close_card_auth), so it cannot interleave with a capture that is
+ * re-holding a remainder. Idempotent. Without the function: releaseCardHold.
+ */
+export async function closeCardAuth(supabase: DB, params: {
+  familyId: string; childWalletId: string; authorizationId: string;
+}): Promise<void> {
+  const { data, error } = await supabase.rpc('wallet_close_card_auth', {
+    p_family: params.familyId, p_child_wallet: params.childWalletId, p_auth_id: params.authorizationId,
+  });
+  if (error && isMissingFunctionError(error)) {
+    warnPreHoldSettlement('wallet_close_card_auth');
+    return releaseCardHold(supabase, params.authorizationId);
+  }
+  if (error) throw new Error(walletFailure(error, 'Could not release the card authorization hold.'));
+  const result = walletRpcResult(data);
+  if (!result.ok) throw new Error(`Could not release the card authorization hold (${result.reason ?? 'refused'}).`);
 }
 
 /**

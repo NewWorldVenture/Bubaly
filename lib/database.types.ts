@@ -2823,6 +2823,19 @@ export interface Database {
       wallet_decide_spend: { Args: { p_family_id: string; p_approval_id: string; p_decision: string; p_note?: string | null; p_actor_id?: string | null }; Returns: Json };
       wallet_decide_allowance: { Args: { p_family_id: string; p_approval_id: string; p_decision: string; p_note?: string | null; p_actor_id?: string | null }; Returns: Json };
       wallet_fund_goal: { Args: { p_family_id: string; p_goal_id: string; p_amount: number; p_actor_id: string }; Returns: Json };
+      // A card capture and the hold it draws down, under the spend bucket's row
+      // lock (0487). jsonb {ok, reason, transaction_id, idempotent,
+      // released_cents, remainder_cents}.
+      wallet_settle_card_capture: {
+        Args: { p_family: string; p_child_wallet: string; p_txn_id: string; p_auth_id: string | null; p_amount: number; p_description: string };
+        Returns: Json;
+      };
+      // What is left of an authorization's hold released, under the same lock.
+      // jsonb {ok, reason, released_cents}.
+      wallet_close_card_auth: {
+        Args: { p_family: string; p_child_wallet: string; p_auth_id: string };
+        Returns: Json;
+      };
       // A spend decided and written under the spend bucket's row lock (0342).
       // jsonb {ok, reason, transaction_id, status, available, idempotent}: the
       // committed + held ledger is totalled inside the lock, so two concurrent

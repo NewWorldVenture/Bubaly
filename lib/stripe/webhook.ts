@@ -14,7 +14,7 @@ import type { Database } from '@/lib/database.types';
 import type Stripe from 'stripe';
 import { randomUUID } from 'node:crypto';
 import { getStripe } from '@/lib/stripe';
-import { reserveCardAuth, releaseCardHold, debitCardSpend, creditCardRefund } from '@/lib/wallet/server';
+import { reserveCardAuth, releaseCardHold, creditCardRefund, settleCardCapture, closeCardAuth } from '@/lib/wallet/server';
 
 type DB = SupabaseClient<Database>;
 const STALE_EVENT_MS = 10 * 60 * 1000;
@@ -259,19 +259,18 @@ export async function handleTransactionCreated(
   // back — a $20 purchase refunded in full left the child $40 down.
   const amount = Math.trunc(txn.amount ?? 0);
   if (amount < 0) {
+    // The debit and the hold it draws down move together: the hold keeps what
+    // this capture did not take, for a later capture or the authorization's close.
+    // Only a CAPTURE draws a hold down. A refund with a negative amount (a refund
+    // reversed) is money out, but it is not the authorization being spent, and
+    // Stripe's link from a refund to an authorization is not exact.
     const merchant = txn.merchant_data?.name ?? 'Card purchase';
-    const debit = await debitCardSpend(supabase, {
+    const debit = await settleCardCapture(supabase, {
       familyId: card.family_id, childWalletId: card.child_wallet_id,
       amountCents: -amount, description: merchant, stripeRef: txn.id,
+      authorizationId: txn.type === 'capture' ? authId : null,
     });
     if (!debit.ok) throw new Error(debit.error ?? 'Card spend persistence failed');
-    // The captured debit now represents the spend; drop the pending hold. Only
-    // a CAPTURE does: the sign says which way money moves, the type says what
-    // the transaction is. A refund with a negative amount (a refund reversed,
-    // which Stripe documents) is debited above but must leave the purchase's
-    // hold alone — arriving before its capture, releasing it freed the held
-    // money while the capture was still to come.
-    if (authId && txn.type === 'capture') await releaseCardHold(supabase, authId);
   } else if (amount > 0) {
     // A refund leaves the purchase's hold alone. Only the capture replaces it
     // (or issuing_authorization.updated, when the authorization closes). Stripe
@@ -366,14 +365,40 @@ export async function handleIssuingCardUpdated(supabase: DB, card: Stripe.Issuin
 }
 
 /**
- * Handle issuing_authorization.updated — release the hold when an authorization
- * will no longer be captured (reversed / expired / closed). No-op if already
- * released by the capture path (only `processing` holds are touched).
+ * Handle issuing_authorization.updated — when an authorization is closed,
+ * reversed or expired, release what is left of its hold.
+ *
+ * Its captures are settled FIRST. Stripe closes an authorization when it is
+ * captured and does not order this event before issuing_transaction.created, so
+ * releasing the hold on its own made the held money spendable again before the
+ * capture debited it: a second purchase approved in that gap overdrew Spend. The
+ * authorization carries its transactions, and settling one is idempotent on its
+ * id, so whichever event arrives first posts the capture and the other changes
+ * nothing. Only captures are settled here; every other transaction posts through
+ * its own event and never touches a hold.
+ *
+ * `expired` is released as it always was, although Stripe allows a merchant to
+ * capture an expired authorization late; such a capture is debited when it
+ * arrives, with no hold left to draw down.
  */
 export async function handleAuthorizationUpdated(
   supabase: DB, auth: Stripe.Issuing.Authorization,
 ): Promise<void> {
-  if (['reversed', 'expired', 'closed'].includes(auth.status)) {
-    await releaseCardHold(supabase, auth.id);
+  if (!['reversed', 'expired', 'closed'].includes(auth.status)) return;
+  const cardId = typeof auth.card === 'string' ? auth.card : auth.card?.id;
+  const card = cardId ? await cardForAuthorization(supabase, cardId) : null;
+  // No card mirror means no hold of ours to settle against; release by id as before.
+  if (!card) { await releaseCardHold(supabase, auth.id); return; }
+  for (const txn of auth.transactions ?? []) {
+    const amount = Math.trunc(txn.amount ?? 0);
+    if (txn.type !== 'capture' || amount >= 0) continue;
+    const settled = await settleCardCapture(supabase, {
+      familyId: card.family_id, childWalletId: card.child_wallet_id, amountCents: -amount,
+      description: txn.merchant_data?.name ?? auth.merchant_data?.name ?? 'Card purchase',
+      stripeRef: txn.id, authorizationId: auth.id,
+    });
+    // A capture that could not be posted keeps the hold: Stripe retries the event.
+    if (!settled.ok) throw new Error(settled.error ?? 'Card spend persistence failed');
   }
+  await closeCardAuth(supabase, { familyId: card.family_id, childWalletId: card.child_wallet_id, authorizationId: auth.id });
 }
