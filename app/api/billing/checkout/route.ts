@@ -9,6 +9,7 @@ import { getStripeSettings, effectiveSecretKey } from '@/lib/stripe/settings';
 import { serviceFeeAddInvoiceItems } from '@/lib/stripe/service-fee';
 import { isAdmin } from '@/lib/constants/roles';
 import { canChangeSubscriptionInPlace } from '@/lib/billing/plans';
+import { checkNewSubscription } from '@/lib/billing/one-subscription';
 import { reviewBillingPath } from '@/lib/billing/review-selection';
 import { enforceRequestRateLimit } from '@/lib/server/request-rate-limit';
 import { readBoundedRequestJson } from '@/lib/server/bounded-request-body';
@@ -75,24 +76,18 @@ export async function POST(req: NextRequest) {
     // mark the family canceled while it was still paying for the other. A
     // plan change belongs to change-plan, which updates the live subscription
     // in place after the billing review. The local row can trail the webhook
-    // by seconds, so a known Stripe customer is also asked directly.
+    // by seconds, so Stripe is also asked, below, once the customer is known.
     const { data: localSub, error: localSubError } = await supabase
       .from('subscriptions').select('status, provider_ref').eq('family_id', familyId).maybeSingle();
     if (localSubError) {
       console.error('[billing-checkout] Subscription read failed', localSubError);
       return NextResponse.json({ error: t('checkout.billingAccountStatusIsTemporarily') }, { status: 503 });
     }
-    let live = canChangeSubscriptionInPlace(localSub);
-    if (!live && existing?.customer_ref) {
-      const listed = await stripe.subscriptions.list({ customer: existing.customer_ref, status: 'all', limit: 20 });
-      live = listed.data.some((sub) => canChangeSubscriptionInPlace({ status: sub.status, provider_ref: sub.id }));
-    }
-    if (live) {
-      return NextResponse.json(
-        { error: t('checkout.alreadySubscribed'), code: 'subscription_exists', review: reviewBillingPath(canonicalStripePlan(plan)) },
-        { status: 409 },
-      );
-    }
+    const alreadySubscribed = () => NextResponse.json(
+      { error: t('checkout.alreadySubscribed'), code: 'subscription_exists', review: reviewBillingPath(canonicalStripePlan(plan)) },
+      { status: 409 },
+    );
+    if (canChangeSubscriptionInPlace(localSub)) return alreadySubscribed();
 
     let customerId = existing?.customer_ref ?? null;
 
@@ -117,6 +112,14 @@ export async function POST(req: NextRequest) {
       }
       customerId = written.customerRef;
     }
+
+    // Asked of the customer this Checkout charges, after the row said no: a
+    // subscription Stripe holds that the webhook has not written yet, or an
+    // older session of theirs still payable, would be a second subscription.
+    // See lib/billing/one-subscription.ts.
+    const single = await checkNewSubscription(stripe, customerId);
+    if (!single.ok && single.reason === 'subscribed') return alreadySubscribed();
+    if (!single.ok) return NextResponse.json({ error: t('checkout.billingAccountStatusIsTemporarily') }, { status: 503 });
 
     // PAY-5: build success/cancel URLs from the trusted configured base, not the
     // caller-controlled Origin header (only fall back to it when unset in dev).

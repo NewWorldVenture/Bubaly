@@ -3746,6 +3746,7 @@
   "certifiedDevices.stepPinBody": "Accès guidé sur iPad, épinglage d'écran sur Android. Le mur reste le mur.",
   "certifiedDevices.stepSignIn": "Se connecter sur la tablette",
   "certifiedDevices.stepSignInBody": "L'écran affiche les informations d'un seul foyer : la tablette se connecte comme n'importe quel appareil.",
+  "changePlan.aPlanIsAlreadyBeingConfirmed": "Votre nouvelle formule est en cours de confirmation. Actualisez dans un instant avant de choisir à nouveau, pour ne pas être facturé deux fois.",
   "changePlan.billingAccountStatusIsTemporarily": "Le statut du compte de facturation est temporairement indisponible.",
   "changePlan.couldNotChangeThePlan": "Impossible de changer de formule. Veuillez réessayer.",
   "changePlan.couldNotSaveTheBilling": "Impossible d’enregistrer le compte de facturation. Veuillez réessayer.",

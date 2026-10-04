@@ -3905,6 +3905,7 @@
   "certifiedDevices.stepPinBody": "Guided Access on iPad, screen pinning on Android. The wall stays the wall.",
   "certifiedDevices.stepSignIn": "Sign in on the tablet",
   "certifiedDevices.stepSignInBody": "The display shows one household's own information, so the tablet signs in like any other device.",
+  "changePlan.aPlanIsAlreadyBeingConfirmed": "Your new plan is still being confirmed. Refresh in a moment before choosing again, so you’re not charged twice.",
   "changePlan.billingAccountStatusIsTemporarily": "Billing account status is temporarily unavailable.",
   "changePlan.couldNotChangeThePlan": "Could not change the plan. Please try again.",
   "changePlan.couldNotSaveTheBilling": "Could not save the billing account. Please try again.",

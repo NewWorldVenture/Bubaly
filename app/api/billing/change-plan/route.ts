@@ -7,6 +7,7 @@ import { stripeFromKey, STRIPE_PLANS } from '@/lib/stripe';
 import { getStripeSettings, effectiveSecretKey } from '@/lib/stripe/settings';
 import { isAdmin } from '@/lib/constants/roles';
 import { canChangeSubscriptionInPlace, slugToStripePlan } from '@/lib/billing/plans';
+import { checkNewSubscription } from '@/lib/billing/one-subscription';
 import { canonicalStripePlan, isStripePlanKey, verifyStripePlanPrice } from '@/lib/billing/price-catalog';
 import { rememberStripeCustomer } from '@/lib/billing/customer-ref';
 import { enforceRequestRateLimit } from '@/lib/server/request-rate-limit';
@@ -179,6 +180,18 @@ export async function POST(req: NextRequest) {
       }
       customerId = written.customerRef;
     }
+
+    // The row said no live subscription, but it trails Stripe by a webhook: a
+    // parent who has just paid lands back here before it arrives, and picking a
+    // plan again opened a second Checkout and a second subscription, billed
+    // alongside the first (/api/billing/checkout already asked; this route, which
+    // the billing page uses, did not). An older session of theirs that is still
+    // payable would do the same. See lib/billing/one-subscription.ts.
+    const single = await checkNewSubscription(stripe, customerId);
+    if (!single.ok && single.reason === 'subscribed') {
+      return NextResponse.json({ error: t('changePlan.aPlanIsAlreadyBeingConfirmed'), code: 'subscription_exists' }, { status: 409 });
+    }
+    if (!single.ok) return NextResponse.json({ error: t('changePlan.subscriptionStatusIsTemporarilyUnavailable') }, { status: 503 });
 
     // PAY-5: trusted configured base first, not the caller-controlled Origin header.
     const origin = process.env.NEXT_PUBLIC_APP_URL ?? req.headers.get('origin') ?? 'http://localhost:3000';

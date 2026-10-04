@@ -9,6 +9,9 @@ import { getUserContext, requireUserContext } from '@/lib/supabase/auth';
 
 const mocks = vi.hoisted(() => ({
   retrievePrice: vi.fn(), createCustomer: vi.fn(), createCheckout: vi.fn(), retrieveSubscription: vi.fn(), updateSubscription: vi.fn(), listSubscriptions: vi.fn(),
+  // The customer's open Checkout sessions, which both routes close before opening
+  // another (tests/a-family-is-never-subscribed-twice.test.ts). None by default.
+  listSessions: vi.fn(), expireSession: vi.fn(), retrieveSession: vi.fn(),
   constructEvent: vi.fn(), recordEvent: vi.fn(), markProcessed: vi.fn(), markError: vi.fn(),
   role: 'parent', trace: [] as string[], writes: [] as { table: string; operation: string; value: unknown; options?: unknown }[],
   rows: {} as Record<string, Record<string, unknown> | null>,
@@ -105,7 +108,7 @@ vi.mock('@/lib/supabase/server', () => {
 vi.mock('@/lib/stripe', async () => {
   const { default: prices } = await import('@/lib/constants/family-prices.json');
   const stripe = { prices: { retrieve: mocks.retrievePrice }, customers: { create: mocks.createCustomer },
-    checkout: { sessions: { create: mocks.createCheckout } }, subscriptions: { retrieve: mocks.retrieveSubscription, update: mocks.updateSubscription, list: mocks.listSubscriptions },
+    checkout: { sessions: { create: mocks.createCheckout, list: mocks.listSessions, expire: mocks.expireSession, retrieve: mocks.retrieveSession } }, subscriptions: { retrieve: mocks.retrieveSubscription, update: mocks.updateSubscription, list: mocks.listSubscriptions },
     webhooks: { constructEvent: mocks.constructEvent } };
   return { getStripe: () => stripe, stripeFromKey: () => stripe, constructWebhookEvent: mocks.constructEvent, STRIPE_PLANS: {
     basic_monthly: prices.stripePrices.basic_monthly.id, basic_annual: prices.stripePrices.basic_annual.id,
@@ -156,6 +159,7 @@ beforeEach(() => {
   mocks.retrieveSubscription.mockReset().mockResolvedValue({ id: 'sub-existing', status: 'active', cancel_at_period_end: false, items: { data: [{ id: 'si-fixture', price: { id: PRICES.stripePrices.basic_monthly.id } }] } });
   mocks.updateSubscription.mockReset().mockImplementation(async () => { mocks.trace.push('subscription-update'); return {}; });
   mocks.listSubscriptions.mockReset().mockResolvedValue({ data: [] });
+  mocks.listSessions.mockReset().mockResolvedValue({ data: [], has_more: false });
   mocks.recordEvent.mockResolvedValue({ outcome: 'claimed', claimToken: 'claim-fixture' });
   vi.spyOn(console, 'error').mockImplementation(() => {});
 });
