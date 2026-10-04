@@ -6,11 +6,13 @@ import { createServer } from '@/lib/supabase/server';
 import { refuseUnlessEntitled } from '@/lib/server/route-feature-gate';
 import { resolveProvider, isAIConfigured } from '@/lib/ai/provider';
 import { withAiRequest } from '@/lib/ai/observability';
-import { scopeFromUserContext, todayKeyFor } from '@/lib/services/scope';
+import { scopeFromUserContext, todayKeyFor, hourInTz } from '@/lib/services/scope';
 import { isMissingTableError } from '@/lib/supabase/errors';
 import { enforceAIRateLimit } from '@/lib/server/ai-rate-limit';
 import { MAX_PROVIDER_JSON_BYTES, readBoundedRequestJsonOrEmpty } from '@/lib/server/bounded-request-body';
 import { expiringSoon } from '@/lib/pantry/logic';
+import { instantCalendarBounds } from '@/lib/briefing/calendar-window';
+import { readCalendarOccurrences } from '@/lib/calendar/occurrences';
 import {
   buildChefSystem, buildChefUser, parseChefReply, fallbackChefReply, type ChefContext,
 } from '@/lib/food/chef';
@@ -51,13 +53,14 @@ export async function POST(req: Request) {
   );
   const now = new Date();
   const weekAhead = new Date(now.getTime() + 7 * 86400000).toISOString();
+  const chefTimezone = ctx.active.family.timezone || 'UTC';
 
   // Gather real family context in parallel.
   const [recipesRes, pantryRes, eventsRes, leftoverRes] = await settleAll([
     supabase.from('family_recipes').select('name').eq('family_id', familyId).order('is_favorite', { ascending: false }).limit(40),
     supabase.from('pantry_items').select('name, expires_at').eq('family_id', familyId).limit(200),
-    supabase.from('calendar_events').select('title, starts_at, category').eq('family_id', familyId)
-      .gte('starts_at', now.toISOString()).lte('starts_at', weekAhead).order('starts_at').limit(40),
+    // Series included, so the week's recurring commitments shape the plan (lib/calendar/occurrences.ts).
+    readCalendarOccurrences(supabase, familyId, instantCalendarBounds(now.toISOString(), weekAhead, chefTimezone), chefTimezone, { columns: ['title', 'starts_at', 'category'], limit: 40 }),
     supabase.from('leftover_inventory').select('name, source_meal, use_by').eq('family_id', familyId).eq('status', 'fresh').limit(20),
   ]);
 
@@ -70,10 +73,14 @@ export async function POST(req: Request) {
   // fine and stayed quiet about food that was not.
   const expiringItems = expiringSoon(pantry, 7, todayKeyFor(ctx)).map((p) => p.name).slice(0, 15);
 
-  // Busy evenings (events after 4pm) become "keep it quick" signals.
-  const dayShort = (iso: string) => new Date(iso).toLocaleDateString('en-US', { weekday: 'short' });
+  // Busy evenings (events after 4pm) become "keep it quick" signals — on the
+  // FAMILY's clock. `getHours()` is the host's hour, so on a UTC server a 6pm
+  // Californian practice read as 1am and was never a busy night, and its
+  // weekday was tomorrow's.
+  const tz = ctx.active.family.timezone || 'UTC';
+  const dayShort = (iso: string) => new Date(iso).toLocaleDateString('en-US', { weekday: 'short', timeZone: tz });
   const busyNights = (eventsRes.data ?? [])
-    .filter((e) => new Date(e.starts_at).getHours() >= 16)
+    .filter((e) => hourInTz(new Date(e.starts_at), tz) >= 16)
     .map((e) => `${dayShort(e.starts_at)}: ${e.title}`)
     .slice(0, 10);
 

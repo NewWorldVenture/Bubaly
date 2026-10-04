@@ -2,6 +2,7 @@
 // standards-based ICS / RSS feeds (family-curated local calendars). All pure +
 // unit-tested; network fetching happens in the API route.
 import type { NormalizedEvent } from './normalize';
+import { instantForLocalTime, isValidTimezone } from '@/lib/time/zoned';
 
 const toCents = (n: unknown): number | null => {
   const v = typeof n === 'number' ? n : typeof n === 'string' ? parseFloat(n) : NaN;
@@ -65,18 +66,67 @@ function unescapeICS(v: string): string {
   return v.replace(/\\n/gi, ' ').replace(/\\,/g, ',').replace(/\\;/g, ';').replace(/\\\\/g, '\\').trim();
 }
 
-/** Parse an ICS DTSTART value (with or without TZID/VALUE params) to ISO. */
-export function parseICSDate(val: string): string | null {
+/**
+ * Parse an ICS DTSTART/DTEND value to an ISO instant, with the TZID the content
+ * line carried.
+ *
+ *   20260625T180000Z            → 2026-06-25T18:00:00Z
+ *   20260625T180000 + TZID      → the instant at which the clock in that zone
+ *                                 reads 18:00 (a library's "Saturday story time
+ *                                 at 10" is published in its own zone; read as
+ *                                 UTC it showed hours off). A reading the zone
+ *                                 skips at spring-forward resolves to the first
+ *                                 minute that exists, as the rest of the app does.
+ *   20260625T180000, no TZID    → read as UTC. Before, this came back WITHOUT a
+ *                                 zone and `new Date()` then read it in the
+ *                                 runtime's zone — UTC on the server that runs
+ *                                 the discovery route, so the instant is the
+ *                                 same there and now does not depend on where
+ *                                 the code runs.
+ *   20260625                    → midnight UTC of that date.
+ *
+ * A TZID this runtime does not know (Windows names) falls back to the floating
+ * rule rather than dropping the event; this is discovery, not the family's own
+ * calendar, and an event an hour off beats one missing. The limit is stated.
+ */
+export function parseICSDate(val: string, tzid: string | null = null): string | null {
   const v = val.trim();
   // 20260625T180000Z  | 20260625T180000 | 20260625
   let m = v.match(/^(\d{4})(\d{2})(\d{2})T(\d{2})(\d{2})(\d{2})(Z?)$/);
   if (m) {
     const [, y, mo, d, h, mi, s, z] = m;
-    return z === 'Z' ? `${y}-${mo}-${d}T${h}:${mi}:${s}Z` : `${y}-${mo}-${d}T${h}:${mi}:${s}`;
+    if (!z && tzid && isValidTimezone(tzid)) {
+      const at = instantForLocalTime(+y, +mo, +d, +h * 60 + +mi, tzid);
+      if (at) return new Date(at.getTime() + +s * 1000).toISOString().replace('.000Z', 'Z');
+    }
+    return `${y}-${mo}-${d}T${h}:${mi}:${s}Z`;
   }
   m = v.match(/^(\d{4})(\d{2})(\d{2})$/);
-  if (m) return `${m[1]}-${m[2]}-${m[3]}T00:00:00`;
+  if (m) return `${m[1]}-${m[2]}-${m[3]}T00:00:00Z`;
   return null;
+}
+
+/**
+ * The value starts at the first `:` outside double quotes: a quoted parameter
+ * may carry a colon (`TZID="(UTC-05:00) Eastern Time (US & Canada)"`), and the
+ * first colon blindly made the parameter the value.
+ */
+function splitContentLine(line: string): { key: string; tzid: string | null; value: string } | null {
+  let quoted = false;
+  let colon = -1;
+  for (let i = 0; i < line.length; i += 1) {
+    const ch = line[i];
+    if (ch === '"') quoted = !quoted;
+    else if (ch === ':' && !quoted) { colon = i; break; }
+  }
+  if (colon === -1) return null;
+  const [rawKey, ...params] = line.slice(0, colon).split(';');
+  let tzid: string | null = null;
+  for (const param of params) {
+    const zone = param.match(/^TZID=(.+)$/i);
+    if (zone) tzid = zone[1].replace(/^"(.*)"$/, '$1');
+  }
+  return { key: rawKey.toUpperCase(), tzid, value: line.slice(colon + 1) };
 }
 
 export function parseICS(text: string, source = 'feed'): NormalizedEvent[] {
@@ -87,7 +137,7 @@ export function parseICS(text: string, source = 'feed'): NormalizedEvent[] {
     if (line === 'BEGIN:VEVENT') { cur = {}; continue; }
     if (line === 'END:VEVENT') {
       if (cur && (cur.SUMMARY || cur.summary)) {
-        const start = cur.DTSTART != null ? parseICSDate(cur.DTSTART) : null;
+        const start = cur.DTSTART != null ? parseICSDate(cur.DTSTART, cur['DTSTART;TZID'] ?? null) : null;
         events.push({
           source, external_id: cur.UID || null,
           title: unescapeICS(cur.SUMMARY ?? 'Event'),
@@ -96,7 +146,7 @@ export function parseICS(text: string, source = 'feed'): NormalizedEvent[] {
           venue_name: cur.LOCATION ? unescapeICS(cur.LOCATION) : null,
           address: cur.LOCATION ? unescapeICS(cur.LOCATION) : null,
           city: null, region: null, postal_code: null, latitude: null, longitude: null,
-          starts_at: start, ends_at: cur.DTEND ? parseICSDate(cur.DTEND) : null,
+          starts_at: start, ends_at: cur.DTEND ? parseICSDate(cur.DTEND, cur['DTEND;TZID'] ?? null) : null,
           url: cur.URL || null, image_url: null,
           price_min_cents: null, price_max_cents: null, currency: 'USD',
           distance_miles: null, is_family_friendly: /family|kid|children/i.test(`${cur.SUMMARY} ${cur.CATEGORIES ?? ''}`),
@@ -105,12 +155,12 @@ export function parseICS(text: string, source = 'feed'): NormalizedEvent[] {
       cur = null; continue;
     }
     if (!cur) continue;
-    const idx = line.indexOf(':');
-    if (idx === -1) continue; // malformed line, skip
-    const keyPart = line.slice(0, idx);
-    const value = line.slice(idx + 1);
-    const key = keyPart.split(';')[0].toUpperCase(); // drop params like ;TZID=...
+    const parsed = splitContentLine(line);
+    if (!parsed) continue; // malformed line, skip
+    const { key, tzid, value } = parsed;
     cur[key] = value;
+    // The zone a date was published in travels beside it; other parameters are dropped.
+    if (tzid && (key === 'DTSTART' || key === 'DTEND')) cur[`${key};TZID`] = tzid;
   }
   return events;
 }

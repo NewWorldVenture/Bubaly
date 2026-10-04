@@ -5,7 +5,7 @@ import { refuseUnlessEntitled } from '@/lib/server/route-feature-gate';
 import { requireUserContext } from '@/lib/supabase/auth';
 import { resolveProvider, isAIConfigured } from '@/lib/ai/provider';
 import { withAiRequest } from '@/lib/ai/observability';
-import { scopeFromUserContext } from '@/lib/services/scope';
+import { dayKeyInTz, scopeFromUserContext } from '@/lib/services/scope';
 import { AI_TOOLS, runAction } from '@/lib/ai/actions';
 import { getTool } from '@/lib/ai/tools/registry';
 import { enforceAIRateLimit } from '@/lib/server/ai-rate-limit';
@@ -19,14 +19,18 @@ export const runtime = 'nodejs';
 
 type Item = { name: string; args: Record<string, unknown>; summary: string };
 
-function fmtWhen(value: unknown): string {
+// A timed value is read on the FAMILY's clock; a bare date (or a UTC-midnight
+// date) is the date it says. Rendered on the host's clock, a 6pm event read as
+// the next day's small hours and a date-only item slipped a day west of
+// Greenwich.
+function fmtWhen(value: unknown, tz: string): string {
   if (typeof value !== 'string' || !value) return '';
   const d = new Date(value);
   if (Number.isNaN(d.getTime())) return ` (${value})`;
   const hasTime = value.includes('T') && !value.endsWith('T00:00:00.000Z');
   return ` (${d.toLocaleString('en-US', {
     month: 'short', day: 'numeric',
-    ...(hasTime ? { hour: 'numeric', minute: '2-digit' } : {}),
+    ...(hasTime ? { hour: 'numeric', minute: '2-digit', timeZone: tz } : { timeZone: 'UTC' }),
   })})`;
 }
 
@@ -52,11 +56,11 @@ function groceryNames(a: Record<string, unknown>): string[] {
 }
 
 /** Human-readable summary for a proposed action, shown before the user confirms. */
-function summarize(name: string, a: Record<string, unknown>): string {
+function summarize(name: string, a: Record<string, unknown>, tz: string): string {
   switch (name) {
-    case 'create_calendar_event': return `📅 Event: “${a.title}”${fmtWhen(a.starts_at)}`;
-    case 'create_chore': return `✅ Chore: “${a.title}”${a.due_at ? fmtWhen(a.due_at) : ''}`;
-    case 'create_reminder': return `⏰ Reminder: “${a.title}”${fmtWhen(a.remind_at)}`;
+    case 'create_calendar_event': return `📅 Event: “${a.title}”${fmtWhen(a.starts_at, tz)}`;
+    case 'create_chore': return `✅ Chore: “${a.title}”${a.due_at ? fmtWhen(a.due_at, tz) : ''}`;
+    case 'create_reminder': return `⏰ Reminder: “${a.title}”${fmtWhen(a.remind_at, tz)}`;
     case 'add_grocery_item': {
       const names = groceryNames(a);
       // Nothing nameable in the payload: fall through to the tool name rather
@@ -65,7 +69,7 @@ function summarize(name: string, a: Record<string, unknown>): string {
       const quantity = names.length === 1 && a.quantity ? ` × ${a.quantity}` : '';
       return `🛒 Grocery: ${names.join(', ')}${quantity}`;
     }
-    case 'create_meal_plan_entry': return `🍽️ Meal: ${a.meal_name}${fmtWhen(a.plan_date)}`;
+    case 'create_meal_plan_entry': return `🍽️ Meal: ${a.meal_name}${fmtWhen(a.plan_date, tz)}`;
     default: return name;
   }
 }
@@ -91,13 +95,13 @@ function summarize(name: string, a: Record<string, unknown>): string {
  * Nothing here executes. The item joins the list the user confirms, and every
  * confirmed item goes through `gateAiAction` in phase 2 exactly as before.
  */
-function frontDeskItem(text: string, now: Date): Item | null {
+function frontDeskItem(text: string, now: Date, tz: string): Item | null {
   const message = { subject: null, body: text };
   const classification = classify(message, [], [], [], { now: now.toISOString() });
   if (!classification.domain) return null;
   const proposal = buildProposal(message, classification);
   if (!proposal) return null;
-  return { name: proposal.name, args: proposal.args, summary: summarize(proposal.name, proposal.args) };
+  return { name: proposal.name, args: proposal.args, summary: summarize(proposal.name, proposal.args, tz) };
 }
 
 /**
@@ -119,6 +123,7 @@ export async function POST(req: NextRequest) {
     const ctx = await requireUserContext();
     const familyId = ctx.active.familyId;
     const userId = ctx.user.id;
+    const tz = ctx.active.family.timezone || 'UTC';
     const supabase = await createServer();
     // The page in front of this is feature-gated; this endpoint was not, and it
     // calls a model. Same resolver, so the two cannot disagree.
@@ -199,7 +204,7 @@ export async function POST(req: NextRequest) {
     const now = new Date();
     const system = `You are Bubaly's Magic Import assistant. The user pastes raw text — forwarded emails, school notices, texts, flyers, or notes — and you extract EVERY actionable item.
 
-Today is ${now.toLocaleDateString('en-US', { weekday: 'long', year: 'numeric', month: 'long', day: 'numeric' })} (${now.toISOString().slice(0, 10)}). The family is "${ctx.active.family.name}".
+Today is ${now.toLocaleDateString('en-US', { weekday: 'long', year: 'numeric', month: 'long', day: 'numeric', timeZone: tz })} (${dayKeyInTz(now, tz)}). The family is "${ctx.active.family.name}".
 
 Use the provided tools to capture: calendar events, chores, reminders, grocery items, and planned meals. Rules:
 - Resolve relative dates ("next Friday", "tomorrow", "the 14th") to absolute ISO 8601 using today's date. Assume the current or next occurrence.
@@ -235,7 +240,7 @@ reading, not a request from this family.`;
         const out: Item[] = completion.toolCalls.map((c) => ({
           name: c.name,
           args: c.args,
-          summary: summarize(c.name, c.args),
+          summary: summarize(c.name, c.args, tz),
         }));
         // Zero items is NOT a failure. The system prompt says "If nothing is
         // actionable, make no tool calls", so an empty extraction is the model
@@ -255,7 +260,7 @@ reading, not a request from this family.`;
     // The deterministic pass is added AFTER the model's, and only when the
     // model did not already produce the same row: a duplicate reminder is two
     // approval cards for one permission slip.
-    const desk = frontDeskItem(text, now);
+    const desk = frontDeskItem(text, now, tz);
     const deskKey = desk ? itemKey(desk) : '';
     const alreadyProposed = desk !== null
       && items.items.some((item) => item.name === desk.name && itemKey(item) === deskKey);

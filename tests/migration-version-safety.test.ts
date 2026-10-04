@@ -500,7 +500,12 @@ describe('Supabase migration filename safety', () => {
     // makes a chat read receipt or reaction its reader's own (DB-RPC-M02).
     // 0464 makes an invited guest read-only on the eight household resources
     // /family/permissions shows them as read-only on (ROLE-M03).
-    expect(audit.nextVersion).toBe('0465');
+    // 0471 adds the per-recipient admin digest delivery store, and 0474
+    // (reserved for #710) withdraws an admin removed after a digest was
+    // frozen. This literal tracks the checked-in high-water mark, not
+    // migration allocation: 0465-0470 remain NWV's, 0472 Support's, and 0473
+    // the coordinator's.
+    expect(audit.nextVersion).toBe('0475');
   });
 
   it('flags a newly introduced collision instead of silently accepting it', () => {

@@ -87,7 +87,7 @@ beforeEach(() => {
   // `.limit()`, so the chain has to stay chainable to the end and only resolve
   // when awaited. A stub that resolves at `.limit()` breaks on the `.eq()`.
   const chain: Record<string, unknown> = {};
-  for (const m of ['select', 'gte', 'order', 'limit', 'eq', 'in']) chain[m] = () => chain;
+  for (const m of ['select', 'gte', 'order', 'limit', 'eq', 'in', 'abortSignal', 'maybeSingle']) chain[m] = () => chain;
   chain.then = (onF: (v: unknown) => unknown) => Promise.resolve({ data: LOGS, error: null }).then(onF);
   mocks.createServer.mockResolvedValue({ from: () => chain });
   mocks.resolveProvider.mockResolvedValue({ model: 'test-model', complete: mocks.complete });

@@ -48,6 +48,21 @@ describe('health reports the secrets whose absence silently kills a subsystem', 
     expect(report.checks.features?.missing).toEqual(['CRON_SECRET', 'CHILD_LOGIN_SECRET']);
   });
 
+  it('reports an unset RESEND_WEBHOOK_SECRET, whose absence refuses every bounce and complaint', () => {
+    // `verify()` in app/api/webhooks/resend/route.ts returns false when the
+    // secret is unset, so Resend's bounce and complaint events are answered 401
+    // and the suppression list never learns them — the next campaign re-mails
+    // every address that bounced. That behaviour is run, not asserted, in
+    // tests/resend-webhook-execution.test.ts; this checks the endpoint says so.
+    const env = { ...Object.fromEntries(FEATURE_ENV.map((n) => [n, 'set'])), RESEND_WEBHOOK_SECRET: undefined };
+    const features = checkFeatureEnv(env);
+    expect(features.missing).toEqual(['RESEND_WEBHOOK_SECRET']);
+    const report = buildHealthReport(healthyEnv, ok, ok, new Date(), ok, features);
+    expect(report.checks.features?.missing).toContain('RESEND_WEBHOOK_SECRET');
+    expect(report.status).toBe('degraded');
+    expect(report.httpStatus).toBe(200);
+  });
+
   it('reports presence only — no secret VALUE can reach the response', () => {
     const r = checkFeatureEnv({ CRON_SECRET: 'super-secret-value', CHILD_LOGIN_SECRET: undefined });
     expect(JSON.stringify(r)).not.toContain('super-secret-value');
@@ -157,13 +172,16 @@ function envReadLines(name: string): string[] {
  * is the same asymmetry the translation catalogue had, where orphaned keys were
  * guarded and missing ones were not.
  *
- * It has already cost this codebase twice. `RESEND_API_KEY` gates every outbound
- * email and was absent from this list until an audit pass put it there
+ * It has already cost this codebase three times. `RESEND_API_KEY` gates every
+ * outbound email and was absent from this list until an audit pass put it there
  * (audit/claude-4.md raised it). `VAPID_PRIVATE_KEY` and the native signing keys
  * gate web and native push and were absent until this one. The native names then
  * MOVED — the legacy `FCM_SERVER_KEY` endpoint was retired for FCM v1 and APNs —
  * and a list that names a retired secret reports a subsystem as configured while
  * its real credential is unset, which is the same failure one indirection later.
+ * `RESEND_WEBHOOK_SECRET` was the third: it gates the bounce and complaint
+ * ingress of the same email subsystem `RESEND_API_KEY` sends through, and sat
+ * ten lines below it in .env.example while absent here (ENV-C472B8258F2A).
  *
  * So: a closed list of the gates, each carrying the evidence that it meets the
  * criteria in `lib/health/status.ts` — absence silently disables a whole shipped
@@ -173,6 +191,7 @@ function envReadLines(name: string): string[] {
 const SUBSYSTEM_GATES: { name: string; subsystem: string; silentBecause: string }[] = [
   { name: 'CRON_SECRET', subsystem: 'all 24 scheduled jobs', silentBecause: 'hasCronAuthorization fails closed, so every job answers 401 and nothing logs an error' },
   { name: 'RESEND_API_KEY', subsystem: 'every outbound email', silentBecause: 'lib/email.ts reports success when it is unset, so rows are marked delivered for mail never sent' },
+  { name: 'RESEND_WEBHOOK_SECRET', subsystem: 'bounce and complaint suppression (Resend webhook ingress)', silentBecause: 'verify() in app/api/webhooks/resend/route.ts returns false when it is unset, so every bounce and complaint is answered 401 and the suppression list never learns it' },
   { name: 'CHILD_LOGIN_SECRET', subsystem: 'child sign-in', silentBecause: 'no child in any family can sign in and nothing says so' },
   { name: 'VAPID_PRIVATE_KEY', subsystem: 'web push', silentBecause: 'ensureVapid() false counts every webpush device as skipped, not failed' },
   { name: 'FCM_PRIVATE_KEY', subsystem: 'native Android push (FCM v1)', silentBecause: "nativePushConfigured().fcm false makes sendNativePush answer 'unconfigured', which the sender counts as skipped, not failed" },

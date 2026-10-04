@@ -140,7 +140,7 @@ function MiniCalendar({ current, onSelect }: { current: Date; onSelect: (d: Date
         </div>
       </div>
       <div className="grid grid-cols-7 gap-0.5 text-center">
-        {['S','M','T','W','T','F','S'].map((d, i) => (
+        {['M','T','W','T','F','S','S'].map((d, i) => (
           <div key={i} className="py-1 text-[10px] font-semibold text-muted">{d}</div>
         ))}
         {days.map((d, i) => {
@@ -428,7 +428,14 @@ export function CalendarModule() {
 
   // Navigation honours the active view (day → ±1 day, week → ±1 week, month → ±1 month).
   function navStep(dir: -1 | 1) {
-    if (view === 'month') { setWeekOffset((w) => w + dir * 4); return; }
+    if (view === 'month') {
+      // Four weeks can still be the same month. The grid's month comes from
+      // its Monday, so choose the first Monday inside the adjacent month;
+      // the Monday before its first could put the label in the old month.
+      const targetMonday = wallWeekStart(addWallDays(wallMonthStart(monday, dir), 6));
+      setWeekOffset(weeksBetween(weekStart(clock.wallNow()), targetMonday));
+      return;
+    }
     if (view === 'day') {
       setMobileDayIndex((i) => {
         const ni = i + dir;

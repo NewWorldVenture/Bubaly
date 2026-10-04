@@ -21,7 +21,7 @@
 import { describe, expect, it } from 'vitest';
 import { readFileSync } from 'node:fs';
 import { createFormat } from '@/lib/utils/format';
-import { findLadders } from '../scripts/audit-time-ago-ladders.mjs';
+import { BARE_TO_LOCALE, findLadders } from '../scripts/audit-time-ago-ladders.mjs';
 
 const NOW = new Date('2026-01-10T12:00:00Z');
 const ago = (code: string, minutes: number, opts = {}) =>
@@ -162,18 +162,18 @@ describe('private time-ago ladders only go down', () => {
     expect(scanner, 'the known miss must stay named in the scanner').toContain('lib/sleep/coach.ts');
   });
 
-  // I18N-002 CLOSED except for the one site that cannot be fixed without a migration.
-  // Eighteen were converted; `lib/emails/chore-reminder.tsx` is an EMAIL, and a family's
-  // language choice lives only in a cookie a cron cannot read (I18N-001). It is counted
-  // here rather than exempted, so it stays visible as blocked work rather than
-  // disappearing into a passing test.
-  it('has one browser-locale date left, and it is the one blocked on I18N-001', () => {
+  // I18N-002 CLOSED. Eighteen were converted, and the last — `lib/emails/chore-reminder.tsx`,
+  // an EMAIL a cron renders — now names 'en-US' and the family's zone like the other
+  // email templates do, so its date no longer follows whichever machine ran the cron.
+  // The family's LANGUAGE in emails is still blocked on I18N-001 (the choice lives in a
+  // cookie a cron cannot read) and is tracked there, not by this count.
+  it('has no browser-locale date left', () => {
     const left = of('browser-locale');
     expect(left.map((f) => f.file), 'toLocaleDateString()/toLocaleTimeString() with no locale '
       + 'follows the BROWSER, not the family\'s Bubaly choice — so a family reading Bubaly in '
       + 'German on an en-US laptop gets American dates. Use useFormat() in a client component '
-      + 'or await getFormat() in a server one; the number may only fall.')
-      .toEqual(['lib/emails/chore-reminder.tsx']);
+      + 'or await getFormat() in a server one; this list stays empty.')
+      .toEqual([]);
   });
 
   // Positive control. All four classifications come from one instrument, so if it
@@ -181,8 +181,15 @@ describe('private time-ago ladders only go down', () => {
   // pass. Plant one of each and require them to be seen.
   it('the instrument sees each of the four shapes', () => {
     expect(found.length).toBeGreaterThan(0);
-    for (const kind of ['ladder-localised', 'composite-duration', 'browser-locale']) {
+    for (const kind of ['ladder-localised', 'composite-duration']) {
       expect(of(kind).length, `${kind} must be detected somewhere`).toBeGreaterThan(0);
     }
+    // No live browser-locale site is left to be detected, so this shape is proved on
+    // planted lines: the bare call, the `undefined` spelling, the `[]` spelling — and
+    // not a call that names a locale.
+    for (const planted of ['new Date(x).toLocaleDateString()', 'd.toLocaleTimeString(undefined, { hour: "numeric" })', 'd.toLocaleDateString([], { month: "short" })']) {
+      expect(BARE_TO_LOCALE.test(planted), planted).toBe(true);
+    }
+    expect(BARE_TO_LOCALE.test("new Date(x).toLocaleDateString('en-US', { month: 'short', timeZone })")).toBe(false);
   });
 });

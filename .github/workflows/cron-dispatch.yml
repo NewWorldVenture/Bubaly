@@ -21,6 +21,19 @@ name: Cron dispatch
 # is being billed or delivered; raising delivery needs a scheduler that keeps
 # its word (Vercel Pro's native sub-daily crons) rather than a different cron
 # string here. See scripts/cron-dispatch.mjs for the per-route shortfall.
+#
+# Catch-up: a tick that arrives hours late used to evaluate only its own last
+# five minutes, so every sub-daily firing in the gap was lost. The tick now asks
+# the Actions API for the previous successful SCHEDULED run of this workflow and
+# passes its start as CRON_SINCE; the dispatcher evaluates every minute since
+# then (never less than five, capped at a day, daily routes left to Vercel, one
+# call per route however many of its minutes fell in the gap). If the lookup
+# fails the tick still dispatches its five-minute window, then fails itself so
+# it cannot become the next boundary. This recovers the firing, not the rate —
+# see the dispatcher header. If no scheduled tick has ever succeeded, the
+# workflow-token lookup paginates the complete 24-hour history and probes for
+# older history; one boundary is handed to the dispatcher, which clamps it to
+# 24 hours and calls each idempotent sweep once.
 # On Vercel Pro, move the schedules back into vercel.json and disable this.
 
 on:
@@ -35,6 +48,8 @@ on:
 
 permissions:
   contents: read
+  # Listing this workflow's own runs (the catch-up boundary) needs actions: read.
+  actions: read
 
 concurrency:
   group: cron-dispatch
@@ -53,6 +68,7 @@ jobs:
           # this sparse checkout has to fetch it alongside the script it runs.
           sparse-checkout: |
             scripts/cron-dispatch.mjs
+            scripts/cron-run-history.mjs
             .nvmrc
           sparse-checkout-cone-mode: false
           fetch-depth: 1
@@ -61,10 +77,20 @@ jobs:
         with:
           node-version-file: .nvmrc
 
+      - name: Find the previous successful tick (catch-up boundary)
+        id: previous
+        env:
+          # This workflow token needs the actions: read permission above.
+          GH_TOKEN: ${{ github.token }}
+          REPO: ${{ github.repository }}
+          RUN_ID: ${{ github.run_id }}
+        run: node scripts/cron-run-history.mjs
+
       - name: Validate configuration and dispatch due routes
         env:
           CRON_SECRET: ${{ secrets.CRON_SECRET }}
           CRON_BASE_URL: ${{ vars.CRON_BASE_URL }}
+          CRON_SINCE: ${{ steps.previous.outputs.since }}
           ROUTE: ${{ github.event.inputs.route }}
         run: |
           if [ -n "$ROUTE" ]; then
@@ -72,3 +98,13 @@ jobs:
           else
             node scripts/cron-dispatch.mjs
           fi
+
+      - name: A tick that could not find its boundary is not one
+        # Dispatch first so a failed lookup never skips the normal five-minute
+        # sweep. Only after that do we fail this run: otherwise the next tick
+        # could use this fallback run as its boundary and lose the gap. A run
+        # that could not read history is never treated as successful coverage.
+        if: github.event_name == 'schedule' && steps.previous.outputs.lookup == 'failed'
+        run: |
+          echo "::error::The catch-up boundary could not be read. This tick dispatched its fixed five-minute window and is marked failed on purpose, so it is not taken as the next tick's boundary."
+          exit 1

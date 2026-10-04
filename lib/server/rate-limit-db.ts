@@ -31,7 +31,7 @@ export async function rateLimitDb(
       p_limit: safeLimit,
       p_window_seconds: safeWindowSeconds,
     });
-    if (error || !data) return unavailable();
+    if (error || !data || (Array.isArray(data) && data.length !== 1)) return unavailable();
     const row = Array.isArray(data) ? data[0] : data;
     if (!row || typeof row.allowed !== 'boolean') return unavailable();
     const parsedRetryAfter = Number(row.retry_after);

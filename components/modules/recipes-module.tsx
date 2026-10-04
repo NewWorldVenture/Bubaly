@@ -36,9 +36,31 @@ interface Ingredient { name: string; quantity: string; unit: string; }
  *  real words pass through, junk is dropped. */
 function scaleQuantity(quantity: string | null | undefined, multiplier: number): string {
   if (!quantity) return '';
-  const n = parseFloat(quantity);
-  if (Number.isFinite(n)) return (n * multiplier).toFixed(1).replace(/\.0$/, '');
-  return /^\s*nan\s*$/i.test(quantity) ? '' : quantity.trim();
+  const original = quantity.trim();
+  if (/^nan$/i.test(original)) return '';
+  if (multiplier === 1) return original;
+
+  // Saved measures also contain fractions. Only scale an entire recognized
+  // quantity; ranges and descriptive amounts must not lose their suffixes.
+  const decimal = /^[+-]?(?:\d+(?:\.\d*)?|\.\d+)$/.test(original);
+  const fraction = original.match(/^([+-]?)(?:(\d+)\s+)?(\d+)\s*\/\s*(\d+)$/);
+  const unicode = original.match(/^([+-]?)(\d*)\s*([¼½¾⅐⅑⅒⅓⅔⅕⅖⅗⅘⅙⅚⅛⅜⅝⅞])$/);
+  const fractions: Record<string, number> = {
+    '¼': 1 / 4, '½': 1 / 2, '¾': 3 / 4, '⅐': 1 / 7, '⅑': 1 / 9,
+    '⅒': 1 / 10, '⅓': 1 / 3, '⅔': 2 / 3, '⅕': 1 / 5, '⅖': 2 / 5,
+    '⅗': 3 / 5, '⅘': 4 / 5, '⅙': 1 / 6, '⅚': 5 / 6,
+    '⅛': 1 / 8, '⅜': 3 / 8, '⅝': 5 / 8, '⅞': 7 / 8,
+  };
+  let amount = decimal ? Number(original) : NaN;
+  if (fraction && Number(fraction[4]) !== 0) {
+    amount = (Number(fraction[2] || 0) + Number(fraction[3]) / Number(fraction[4]))
+      * (fraction[1] === '-' ? -1 : 1);
+  } else if (unicode) {
+    amount = (Number(unicode[2] || 0) + fractions[unicode[3]]) * (unicode[1] === '-' ? -1 : 1);
+  }
+  const scaled = amount * multiplier;
+  // Remove floating-point arithmetic noise without rounding to tenths.
+  return Number.isFinite(scaled) ? String(Number(scaled.toPrecision(15))) : original;
 }
 interface InstructionStep { step: number; text: string; }
 
@@ -315,9 +337,10 @@ export function RecipesModule() {
 
       {/* Recipe grid */}
       {filtered.length === 0 ? (
-        <EmptyState icon={ChefHat} title={tr('recipes.noRecipesYet')}
-          description={tr('recipesModule.addYourFamilySFavorite')}
-          action={<Button onClick={() => setAddOpen(true)}><Plus className="h-4 w-4" /> {tr('recipes.addFirstRecipe')}</Button>} />
+        <EmptyState icon={ChefHat}
+          title={recipes.length === 0 ? tr('recipes.noRecipesYet') : tr('dashboardRecipesDiscoverDiscoverClient.noRecipesFoundTryAnotherSearch')}
+          description={recipes.length === 0 ? tr('recipesModule.addYourFamilySFavorite') : undefined}
+          action={recipes.length === 0 ? <Button onClick={() => setAddOpen(true)}><Plus className="h-4 w-4" /> {tr('recipes.addFirstRecipe')}</Button> : undefined} />
       ) : (
         <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4">
           {filtered.map((recipe) => {
