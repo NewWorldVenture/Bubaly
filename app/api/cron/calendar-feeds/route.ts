@@ -38,7 +38,7 @@ export async function GET(req: NextRequest) {
     try {
       const r = await syncFeed(supabase, feed);
       if (r.ok) { synced += 1; imported += r.imported; }
-      else if (r.busy) busy += 1;
+      else if (r.busy || r.takenOver) busy += 1;
       else failed += 1;
     } catch (e) {
       failed += 1;

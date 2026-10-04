@@ -73,7 +73,7 @@ describe('renewalSuggestions', () => {
     expect(out.map((o) => o.sourceId)).toEqual(['r1', 'r2', 'r3']);
     expect(out[0].confidence).toBe(95);
     expect(out[0].actionType).toBe('create_reminder');
-    expect(out[0].dedupeKey).toBe('renewal:r1');
+    expect(out[0].dedupeKey).toBe('renewal:r1:2026-06-29');
   });
 });
 
@@ -326,12 +326,12 @@ describe('momentPrepSuggestions (Friction #4 — fold reversible prep into autop
     expect(reminder).toBeTruthy();
     expect(reminder!.confidence).toBeGreaterThanOrEqual(90); // auto-executes
     expect(confidenceTier(reminder!.confidence)).toBe('auto');
-    expect(reminder!.dedupeKey).toBe('moment-leaveby:e1');
+    expect(reminder!.dedupeKey).toBe('moment-leaveby:e1:2026-06-25');
     expect(typeof reminder!.payload.at).toBe('string');
 
     expect(grocery).toBeTruthy();
     expect(confidenceTier(grocery!.confidence)).toBe('auto');
-    expect(grocery!.dedupeKey).toBe('moment-shop:e1');
+    expect(grocery!.dedupeKey).toBe('moment-shop:e1:2026-06-25');
     expect(grocery!.payload.items).toEqual(expect.arrayContaining(['Water bottles']));
   });
 
