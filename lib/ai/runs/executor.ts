@@ -199,6 +199,21 @@ export class RunLeaseLostError extends Error {
 }
 
 /**
+ * A run-state write the database refused (a connection lost, a statement
+ * timed out, a policy denied it). The slice must stop here: `runGraphWith`
+ * has no record of the transition it just asked for, so carrying on would
+ * append events and move steps as if the run were in a state it is not, and
+ * report a result nothing persisted (review 5981689801 on #901). The thrown
+ * slice is the recovery pass's to pick up, exactly as a thrown tool is.
+ */
+export class RunWriteFailedError extends Error {
+  constructor(public readonly runId: string, public readonly reason: string) {
+    super(`The run ${runId} could not be written: ${reason}`);
+    this.name = 'RunWriteFailedError';
+  }
+}
+
+/**
  * How many independent steps run at once. Four is the cap §4.3 of the
  * implementation map specifies: enough for parallel retrieval to be worth it,
  * low enough that one run cannot exhaust the connection pool for a household.
@@ -1299,15 +1314,21 @@ export function createExecutorPort(db: SupabaseClient<Database>, opts: ExecutorP
       // `claim_ai_runs` has since handed to another worker. The per-pass
       // refresh in `runGraphWith` catches most of that; this catches the write
       // that races the refresh. Zero rows is the lease being gone, and the
-      // slice must stop, so it is a throw and not a logged failure.
+      // slice must stop, so it is a throw and not a logged failure. So is a
+      // write the database refused outright: the store logs it and answers
+      // `ok: false`, and a slice that read that as "written" would go on to
+      // append events and finish steps for a state that never landed.
       if (run.lease_owner) {
         const written = await updateRunHeldBy(db, run.id, run.family_id, run.lease_owner, patch);
-        if (written.ok && !written.data) throw new RunLeaseLostError(run.id, run.lease_owner);
+        if (!written.ok) throw new RunWriteFailedError(run.id, written.error);
+        if (!written.data) throw new RunLeaseLostError(run.id, run.lease_owner);
         return;
       }
       // An unleased run (the kick-less paths and the tests that drive the
-      // graph without a claim) keeps the id-and-family write.
-      await storeUpdateRun(systemScope(run), run.id, patch, { db });
+      // graph without a claim) keeps the id-and-family write — and the same
+      // refusal to carry on past a write that did not land.
+      const written = await storeUpdateRun(systemScope(run), run.id, patch, { db });
+      if (!written.ok) throw new RunWriteFailedError(run.id, written.error);
     },
     async updateStep(run, stepId, patch) {
       await storeUpdateStep(systemScope(run), stepId, patch, { db });

@@ -51,7 +51,7 @@ vi.mock('@/lib/supabase/server', () => ({
   createServer: async () => { throw new Error('the test hands the port its own client'); },
 }));
 
-const { createExecutorPort, runGraphWith, RunLeaseLostError } = await import('@/lib/ai/runs/executor');
+const { createExecutorPort, runGraphWith, RunLeaseLostError, RunWriteFailedError } = await import('@/lib/ai/runs/executor');
 type ExecutorPort = import('@/lib/ai/runs/executor').ExecutorPort;
 type RunSnapshot = import('@/lib/ai/runs/executor').RunSnapshot;
 
@@ -142,9 +142,40 @@ function seed(runOver: Row, steps: Row[] = [step()]) {
 }
 
 /** The real production port over the in-memory client, with the tool under the test's control. */
-function worker(tool: () => Promise<ToolOutcome>): ExecutorPort {
-  const real = createExecutorPort(client());
+function worker(tool: () => Promise<ToolOutcome>, over: SupabaseClient<Database> = client()): ExecutorPort {
+  const real = createExecutorPort(over);
   return { ...real, runTool: async () => tool() };
+}
+
+/**
+ * The in-memory client with one fault: every UPDATE of `family_automation_runs`
+ * is refused by the database (a connection lost mid-statement), answered the
+ * way supabase-js answers it — `{ data: null, error }`, no throw. Every other
+ * table, and every read of the runs table, is served as before.
+ */
+function runWritesRefused(): SupabaseClient<Database> {
+  const refusal = { data: null, error: { message: 'connection reset by peer', code: '08006', details: '', hint: '' } };
+  return new Proxy(client(), {
+    get(target, prop, receiver) {
+      if (prop !== 'from') return Reflect.get(target, prop, receiver);
+      return (table: string) => {
+        const builder = target.from(table as never) as unknown as Record<string, unknown>;
+        if (table !== 'family_automation_runs') return builder;
+        return new Proxy(builder, {
+          get(b, p, r) {
+            if (p !== 'update') return Reflect.get(b, p, r);
+            return () => {
+              // Every filter and modifier chains; awaiting the chain is the refusal.
+              const stub: Record<string | symbol, unknown> = new Proxy({}, {
+                get: (_target, name) => (name === 'then' ? (resolve: (v: unknown) => unknown) => Promise.resolve(refusal).then(resolve) : () => stub),
+              });
+              return stub;
+            };
+          },
+        });
+      };
+    },
+  }) as SupabaseClient<Database>;
 }
 
 /** A tool the test can hold inside, so the slice is "blocked past its lease" for as long as the test says. */
@@ -226,6 +257,46 @@ describe('a stale worker cannot write another worker\'s run', () => {
     expect(result.status).toBe('ready');
     expect(run()).toMatchObject({ state: 'ready', attempt: 0, lease_owner: null, lease_expires_at: null });
     expect(events()).toContain('followup_scheduled');
+  });
+
+  // Review 5981689801: the fence threw for a lease that was gone, but a write the
+  // database REFUSED came back `ok: false` and the adapter returned normally, so
+  // the slice went on as if the run were parked or reset — appending the
+  // follow-up event, telling the request it was ready, reporting a result —
+  // with nothing persisted. A refused write is a stopped slice, like a lost
+  // lease: the thrown slice is the recovery pass's.
+  it('a run write the database refused ends the slice: the adapter throws, and nothing is written', async () => {
+    seed({ attempt: 4, lease_owner: LEASE_A, lease_expires_at: at(120_000) });
+    const portA = worker(async () => DONE, runWritesRefused());
+    const snapshot = run() as unknown as RunSnapshot;
+
+    await expect(portA.updateRun(snapshot, { state: 'ready', status: 'approved', attempt: 0, lease_owner: null, lease_expires_at: null, run_after: at(0) }))
+      .rejects.toBeInstanceOf(RunWriteFailedError);
+    await expect(portA.updateRun(snapshot, { state: 'ready' })).rejects.toThrow(/^The run 00000000-0000-4000-8000-00000000cc53 could not be written: /);
+    expect(run()).toMatchObject({ state: 'executing', attempt: 4, lease_owner: LEASE_A, lease_expires_at: at(120_000) });
+    // The unleased write is held to the same rule.
+    const unleased = { ...snapshot, lease_owner: null } as RunSnapshot;
+    await expect(portA.updateRun(unleased, { state: 'ready' })).rejects.toBeInstanceOf(RunWriteFailedError);
+  });
+
+  it('a slice whose park could not be written reports no result and commits nothing after it: no follow-up event, the request untouched, the step as it was before the park', async () => {
+    // The full graph: A holds a live lease, completes the first step, finds the
+    // second with too little slice left and parks — and the park is refused.
+    const STEP_2 = '00000000-0000-4000-8000-00000000cc55';
+    seed({ attempt: 4, lease_owner: LEASE_A, lease_expires_at: at(120_000) }, [step(), step({ id: STEP_2, sequence: 1, dependency_ids: [STEP] })]);
+    const portA = worker(async () => { vi.setSystemTime(new Date(NOW.getTime() + 15_000)); return DONE; }, runWritesRefused());
+
+    await expect(runGraphWith(portA, RUN, { budgetMs: 20_000 })).rejects.toBeInstanceOf(RunWriteFailedError);
+    // The run row is exactly as the claim left it: still executing under A's
+    // lease, its budget not handed back, nothing says "ready".
+    expect(run()).toMatchObject({ state: 'executing', status: 'executing', attempt: 4, lease_owner: LEASE_A, lease_expires_at: at(120_000) });
+    // Nothing after the refused write was treated as committed.
+    expect(events()).not.toContain('followup_scheduled');
+    expect(request()).toMatchObject({ status: 'executing' });
+    // What landed before it stands (the first step's completion is the tool's
+    // own, idempotent effect), and the second step was never started.
+    const steps = db.table('ai_plan_steps');
+    expect(steps.find((s) => s.id === STEP_2)).toMatchObject({ status: 'queued', started_at: null });
   });
 
   it('a run with no lease is written the way it always was — the fence is a property of a claim', async () => {
