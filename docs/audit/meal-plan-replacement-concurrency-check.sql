@@ -103,8 +103,15 @@ declare
   v_b_query_sent boolean := false;
   v_a_holds_slot boolean := false;
   v_b_rpc_started boolean := false;
+  v_b_pid_visible boolean := false;
+  v_b_application_matches boolean := false;
+  v_b_query_prefix_matches boolean := false;
   v_b_waited_on_slot boolean := false;
   v_observe_deadline timestamptz;
+  v_b_state text;
+  v_b_wait_event_type text;
+  v_b_wait_event text;
+  v_b_observer_detail text;
   v_sent integer;
   v_final_count integer := 0;
   v_final_meals uuid[];
@@ -177,18 +184,34 @@ begin
   -- a separate deadline so delayed dispatch is reported as B-not-started.
   v_observe_deadline := clock_timestamp() + interval '10 seconds';
   loop
-    select exists (
-      select 1 from pg_stat_activity sa
-      where sa.pid = v_b_pid and sa.application_name = v_app_b
-        and sa.state = 'active'
-        and left(lower(sa.query), length('select public.meal_plan_replace_slots('))
-          = 'select public.meal_plan_replace_slots('
-    ) into v_b_rpc_started;
+    select sa.application_name = v_app_b,
+           sa.state,
+           sa.wait_event_type,
+           sa.wait_event,
+           left(lower(coalesce(sa.query, '')), length('select public.meal_plan_replace_slots('))
+             = 'select public.meal_plan_replace_slots('
+      into v_b_application_matches, v_b_state, v_b_wait_event_type,
+           v_b_wait_event, v_b_query_prefix_matches
+    from pg_stat_activity sa
+    where sa.pid = v_b_pid;
+    v_b_pid_visible := found;
+    if not v_b_pid_visible then
+      v_b_application_matches := false;
+      v_b_state := null;
+      v_b_wait_event_type := null;
+      v_b_wait_event := null;
+      v_b_query_prefix_matches := false;
+    end if;
+    -- This dedicated connection has no other query outstanding; PID + app
+    -- identity + active state is the start gate. Query text is diagnostic only.
+    v_b_rpc_started := v_b_pid_visible
+      and coalesce(v_b_application_matches, false)
+      and coalesce(v_b_state = 'active', false);
     exit when v_b_rpc_started or clock_timestamp() >= v_observe_deadline;
     perform pg_sleep(0.01);
   end loop;
 
-  -- Once B is visibly inside the RPC, require it to wait on the exact hashed
+  -- Once B's dedicated backend is active, require it to wait on the exact hashed
   -- advisory key held by A. pg_blocking_pids ties the pending lock to A's
   -- stable backend PID instead of inferring contention from timing alone.
   if v_b_rpc_started then
@@ -210,6 +233,34 @@ begin
       perform pg_sleep(0.01);
     end loop;
   end if;
+
+  -- Refresh sanitized metadata before releasing A. Do not log the PID, app
+  -- name, or full query; the booleans and state fields distinguish a missing
+  -- backend from a query-prefix mismatch or an RPC waiting elsewhere.
+  select sa.application_name = v_app_b,
+         sa.state,
+         sa.wait_event_type,
+         sa.wait_event,
+         left(lower(coalesce(sa.query, '')), length('select public.meal_plan_replace_slots('))
+           = 'select public.meal_plan_replace_slots('
+    into v_b_application_matches, v_b_state, v_b_wait_event_type,
+         v_b_wait_event, v_b_query_prefix_matches
+  from pg_stat_activity sa
+  where sa.pid = v_b_pid;
+  v_b_pid_visible := found;
+  if not v_b_pid_visible then
+    v_b_application_matches := false;
+    v_b_state := null;
+    v_b_wait_event_type := null;
+    v_b_wait_event := null;
+    v_b_query_prefix_matches := false;
+  end if;
+  v_b_observer_detail := format(
+    'B startup gate matched=%s; B-not-started-within-window=%s; pid_visible=%s; app_matches=%s; state=%s; wait_event_type=%s; wait_event=%s; RPC-prefix-matched=%s',
+    v_b_rpc_started, not v_b_rpc_started, v_b_pid_visible,
+    coalesce(v_b_application_matches, false), coalesce(v_b_state, '<missing>'),
+    coalesce(v_b_wait_event_type, '<none>'), coalesce(v_b_wait_event, '<none>'),
+    coalesce(v_b_query_prefix_matches, false));
 
   perform dblink_exec('meal_replace_a', 'commit');
   v_a_in_transaction := false;
@@ -246,7 +297,7 @@ begin
   v_detail := format(
     'A held slot key=%s; %s; B waited on A exact slot advisory=%s; A replaced=%s; B replaced=%s; final rows=%s; final meal is B=%s; distinct receipts=%s',
     v_a_holds_slot,
-    case when v_b_rpc_started then 'B entered the RPC before A commit' else 'B-not-started before A commit' end,
+    v_b_observer_detail,
     v_b_waited_on_slot,
     coalesce(v_result_a->>'replaced', '<no result>'),
     coalesce(v_result_b->>'replaced', '<no result>'),
