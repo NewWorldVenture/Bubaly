@@ -1,4 +1,5 @@
 import { addDaysToDayKey, dayKeyInTz, zonedDayBoundsMs, zonedTimeMs } from '@/lib/services/scope';
+import { allDayBusyInterval } from '@/lib/calendar/event-dates';
 // Pure calendar scheduling engine — no I/O, fully unit-tested. Powers the AI
 // "find a time everyone is free" feature. The context lens is supported by the
 // engine via the optional in-memory `context` event property; it needs no DB
@@ -45,14 +46,9 @@ export function busyIntervals(events: BusyEvent[], contexts: CalendarContext[] |
     if (Number.isNaN(start)) continue;
     let end: number;
     if (e.all_day) {
-      // All-day events block the whole local day — the FAMILY's, not the host's.
-      // `setHours(0, 0, 0, 0)` put the block on the server's day, so on a UTC
-      // host a Californian family's all-day event blocked 17:00 the previous
-      // afternoon to 17:00 that day. `zonedDayBoundsMs` also keeps the block a
-      // real local day across the 23- and 25-hour DST days, which `+ DAY_MS`
-      // would not.
-      const bounds = zonedDayBoundsMs(dayKeyInTz(new Date(start), tz), tz);
-      out.push({ start: bounds.start, end: bounds.end });
+      // A stored all-day DATE names the family's day without an instant offset.
+      // Resolve both date boundaries there so DST keeps the full 23/25-hour day.
+      out.push(allDayBusyInterval(e, tz));
       continue;
     }
     const rawEnd = e.ends_at ? new Date(e.ends_at).getTime() : start + 30 * 60 * 1000;

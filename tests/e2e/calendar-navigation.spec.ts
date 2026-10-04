@@ -7,6 +7,7 @@ const scripts = reactBrowserScripts('development');
 const sourceFiles = [
   'components/modules/calendar-module.tsx', 'lib/time/wall-clock.ts',
   'lib/time/zoned.ts', 'lib/calendar/recurrence.ts',
+  'lib/calendar/occurrences.ts', 'lib/calendar/event-dates.ts', 'lib/briefing/calendar-window.ts',
 ];
 const sources = Object.fromEntries(sourceFiles.map(file => [
   '@/' + file.replace(/\.tsx?$/, ''),
@@ -16,7 +17,7 @@ const sources = Object.fromEntries(sourceFiles.map(file => [
 ]));
 const browserErrors = new WeakMap<Page, string[]>();
 
-type CalendarConfig = { day: string; zone?: string; events?: { id: string; title: string; starts_at: string; recurrence: string }[] };
+type CalendarConfig = { day: string; zone?: string; events?: { id: string; title: string; starts_at: string; recurrence: string; all_day?: boolean }[] };
 declare global { interface Window { __calendarNavigation: { errors: string[]; reactVersion: string } } }
 test.use({ timezoneId: 'Asia/Tokyo' });
 
@@ -53,10 +54,42 @@ async function start(page: Page, config: CalendarConfig) {
     const blank = () => null;
     const pass = props => React.createElement('div', null, props.children);
     const stub = new Proxy({ __esModule: true, default: pass }, { get: (obj, key) => key in obj ? obj[key] : blank });
+    const calendarDb = { from: () => {
+      let rows = (config.events || []).map(row => ({ family_id: 'synthetic-family', all_day: false, ends_at: null, recurrence_until: null, ...row }));
+      let offset = 0; let limit = 1000;
+      const query = {
+        select: () => query,
+        eq: (column, value) => { rows = rows.filter(row => row[column] === value); return query; },
+        neq: (column, value) => { rows = rows.filter(row => row[column] != null && row[column] !== value); return query; },
+        lte: (column, value) => { rows = rows.filter(row => Date.parse(row[column]) <= Date.parse(value)); return query; },
+        or: filter => {
+          if (filter === 'recurrence.is.null,recurrence.eq.none') rows = rows.filter(row => !row.recurrence || row.recurrence === 'none');
+          else if (filter.startsWith('recurrence_until.')) rows = rows.filter(row => !row.recurrence_until || Date.parse(row.recurrence_until) >= Date.parse(filter.split('.gte.')[1]));
+          else {
+            const windows = [...filter.matchAll(/and\\(all_day.eq.(false|true),starts_at.gte.([^,]+),starts_at.lt.([^)]+)\\)/g)];
+            rows = rows.filter(row => windows.some(match => row.all_day === (match[1] === 'true') && Date.parse(row.starts_at) >= Date.parse(match[2]) && Date.parse(row.starts_at) < Date.parse(match[3])));
+          }
+          return query;
+        },
+        order: () => { rows.sort((a, b) => a.starts_at.localeCompare(b.starts_at) || a.id.localeCompare(b.id)); return query; },
+        limit: value => { limit = value; return query; },
+        range: (from, to) => { offset = from; limit = to - from + 1; return query; },
+        then: resolve => resolve({ data: rows.slice(offset, offset + limit), count: rows.length, error: null }),
+      };
+      return query;
+    } };
     const mocks = {
       react: React,
       '@/components/app/app-context': { useApp: () => ({ familyId: 'synthetic-family', userId: 'synthetic-user', members: [], selfMember: null }) },
-      '@/lib/hooks/use-realtime-query': { useRealtimeQuery: () => ({ data: config.events || [], loading: false, error: null, refresh: () => {} }) },
+      '@/lib/hooks/use-realtime-query': { useRealtimeQuery: ({ fetcher, deps }) => {
+        const [result, setResult] = React.useState({ data: [], loading: true, error: null });
+        React.useEffect(() => {
+          let active = true;
+          Promise.resolve(fetcher(calendarDb)).then(reply => { if (active) setResult({ data: reply.data || [], loading: false, error: reply.error }); });
+          return () => { active = false; };
+        }, deps);
+        return { ...result, refresh: () => {} };
+      } },
       '@/components/ui/toast': { useToast: () => ({ success: () => {}, error: () => {} }) },
       '@/components/i18n/locale-provider': { useTranslations: () => key => key },
       '@/lib/utils/cn': { cn: (...args) => args.filter(Boolean).join(' ') },
@@ -165,3 +198,14 @@ test('family recurrence remains on its family date and time after month navigati
   expect(await page.evaluate(() => Intl.DateTimeFormat().resolvedOptions().timeZone)).toBe('Asia/Tokyo');
   expect(await page.evaluate(() => window.__calendarNavigation.errors)).toEqual([]);
 });
+
+for (const day of ['2026-03-08', '2026-11-01']) {
+  test('an imported all-day date stays in its Sunday column on ' + day, async ({ page }) => {
+    await start(page, { day, zone: 'America/New_York', events: [
+      { id: 'synthetic-date', title: 'Synthetic date', starts_at: day + 'T00:00:00.000Z', recurrence: 'none', all_day: true },
+    ] });
+    const column = page.locator('div.border-l').filter({ has: page.getByText(day, { exact: true }) });
+    await expect(column.getByRole('button', { name: 'Synthetic date', exact: true })).toHaveCount(1);
+    await expect(page.locator('#root')).toContainText('calendar.allDay');
+  });
+}

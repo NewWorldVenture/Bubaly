@@ -19,7 +19,7 @@ import {
 import type { ServiceScope } from '@/lib/services/types';
 
 type Call = { table: string; kind: 'select' | 'insert' | 'update' | 'delete'; filters: Record<string, unknown>; payload?: unknown };
-type Reply = { data: unknown; error: unknown };
+type Reply = { data: unknown; error: unknown; count?: number | null };
 
 /**
  * Chainable PostgREST fake. Every builder is thenable so both terminal styles
@@ -35,9 +35,18 @@ function makeDb(respond: (call: Call) => Reply) {
     const b: Record<string, unknown> = {};
     const chain = () => b;
     const filter = (column: string, value: unknown) => { call.filters[column] = value; return b; };
+    let counted = false;
+    const reply = () => {
+      const result = respond(call);
+      const data = call.filters['neq:recurrence'] === 'none' && Array.isArray(result.data)
+        ? result.data.filter((row) => row.recurrence && row.recurrence !== 'none') : result.data;
+      return { ...result, data, ...(counted ? { count: Array.isArray(data) ? data.length : null } : {}) };
+    };
     Object.assign(b, {
-      select: chain, order: chain, limit: chain, ilike: chain, or: chain,
+      select: (_columns: unknown, options?: { count?: string }) => { counted = options?.count === 'exact'; return b; },
+      order: chain, limit: chain, range: chain, ilike: chain, or: chain,
       eq: filter, is: filter, in: filter,
+      neq: (c: string, v: unknown) => filter(`neq:${c}`, v),
       lt: (c: string, v: unknown) => filter(`lt:${c}`, v),
       lte: (c: string, v: unknown) => filter(`lte:${c}`, v),
       gte: (c: string, v: unknown) => filter(`gte:${c}`, v),
@@ -45,9 +54,9 @@ function makeDb(respond: (call: Call) => Reply) {
       insert: (payload: unknown) => { call.kind = 'insert'; call.payload = payload; return b; },
       update: (payload: unknown) => { call.kind = 'update'; call.payload = payload; return b; },
       delete: () => { call.kind = 'delete'; return b; },
-      single: () => Promise.resolve(respond(call)),
-      maybeSingle: () => Promise.resolve(respond(call)),
-      then: (resolve: (value: Reply) => void) => resolve(respond(call)),
+      single: () => Promise.resolve(reply()),
+      maybeSingle: () => Promise.resolve(reply()),
+      then: (resolve: (value: Reply) => void) => resolve(reply()),
     });
     return b;
   };
@@ -244,7 +253,7 @@ describe('findFreeSlots', () => {
       expect(res.data[0].dayKey).toBe('2026-09-07');
     }
     // Every source is read and every source is family-scoped.
-    expect(calls.map((c) => c.table).sort()).toEqual(['calendar_events', 'school_events', 'sports_events']);
+    expect(calls.map((c) => c.table).sort()).toEqual(['calendar_events', 'calendar_events', 'school_events', 'sports_events']);
     expect(calls.every((c) => c.filters.family_id === 'fam-1')).toBe(true);
   });
 
