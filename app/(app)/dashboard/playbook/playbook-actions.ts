@@ -54,6 +54,9 @@ export async function refreshPlaybookAction(): Promise<Result> {
   const couldNotRead = translate(messages, 'playbookActions.couldNotReadEverything');
   const ctx = await requireUserContext();
   const familyId = ctx.active.familyId;
+  // The month a tradition falls in is read in the FAMILY's zone: a New Year's
+  // Eve party at 9pm in California is January on a UTC host.
+  const tz = ctx.active.family.timezone || 'UTC';
   const sb = await createServer();
   const since = new Date(Date.now() - 180 * DAY).toISOString();
   const since3y = new Date(Date.now() - 3 * 365 * DAY).toISOString();
@@ -143,7 +146,7 @@ export async function refreshPlaybookAction(): Promise<Result> {
   for (const t of byTitle.values()) {
     const years = t.yearly ? Math.max(2, t.years.size) : t.years.size;
     if (years < 2) continue;
-    const when = new Date(t.earliest).toLocaleDateString(locale.code, MONTH_FMT);
+    const when = new Date(t.earliest).toLocaleDateString(locale.code, { ...MONTH_FMT, timeZone: tz });
     signals.push({ type: 'tradition', title: t.title, when, years });
   }
 

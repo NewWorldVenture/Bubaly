@@ -14,6 +14,7 @@ import { ProviderControls } from '@/components/sync/provider-controls';
 import { isProviderConfigured, getAdapter } from '@/lib/sync/registry';
 import type { SyncProviderEnum } from '@/lib/database.types';
 import { getTranslations } from '@/lib/i18n/server';
+import { getFormat } from '@/lib/utils/format-server';
 import { AppNotFound } from '@/components/app/app-not-found';
 
 export async function generateMetadata(): Promise<Metadata> {
@@ -114,6 +115,9 @@ export default async function SyncProviderPage({
   const banner = statusKey ? STATUS_MSG[statusKey] : null;
 
   const ctx = await requireUserContext();
+  // "Last synced" is rendered in the FAMILY's zone and locale; a bare
+  // `toLocaleString()` on the server was the host's zone in the host's locale.
+  const { fmtDate } = await getFormat(ctx.active.family.timezone || 'UTC');
   const supabase = await createServer();
   // The VIEWER's accounts. This had no user_id filter, and sync_accounts is
   // readable family-wide, so a spouse's Google connection showed here as
@@ -173,7 +177,7 @@ export default async function SyncProviderPage({
             <p className="mb-2 text-xs text-muted">{accounts!.map((a) => a.display_name ?? a.external_id).join(' · ')}</p>
           )}
           {account.last_synced_at && (
-            <p className="mb-3 text-xs text-muted">{t('dashboardSyncAccounts.lastSynced')} {new Date(account.last_synced_at).toLocaleString()}</p>
+            <p className="mb-3 text-xs text-muted">{t('dashboardSyncAccounts.lastSynced')} {fmtDate(account.last_synced_at, 'MMM d, yyyy h:mm a')}</p>
           )}
           {provider === 'google' ? <GoogleControls /> : <ProviderControls provider={provider} />}
           <p className="mt-3 text-xs text-muted">

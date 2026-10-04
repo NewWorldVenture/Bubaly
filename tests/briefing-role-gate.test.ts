@@ -64,7 +64,7 @@ function queryResult(data: unknown[]) {
   // handled count filters `family_automation_runs` with `.or(...)`, and the
   // route marks the notification rows it rendered read. A method the fake does
   // not offer reads as a 500 from the route rather than as a missing stub.
-  for (const method of ['select', 'eq', 'gte', 'lte', 'gt', 'order', 'limit', 'in', 'neq', 'is', 'not', 'or', 'update']) {
+  for (const method of ['select', 'eq', 'gte', 'lte', 'gt', 'order', 'limit', 'in', 'neq', 'is', 'not', 'or', 'update', 'abortSignal', 'maybeSingle']) {
     query[method] = vi.fn(() => query);
   }
   return query;
