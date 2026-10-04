@@ -15,13 +15,16 @@ export const dynamic = 'force-dynamic';
 
 type EventLite = { title?: string; starts_at?: string; ends_at?: string | null; location?: string | null };
 
-function fmt(e: EventLite): string {
+// In the FAMILY's zone: this text is what the model reasons about and what the
+// family reads back, and rendered on the host's clock a 6pm practice in
+// California was described as a 1am one.
+function fmt(e: EventLite, tz: string): string {
   const start = e.starts_at ? new Date(e.starts_at) : null;
   const end = e.ends_at ? new Date(e.ends_at) : null;
   const when = start
-    ? start.toLocaleString('en-US', { weekday: 'short', month: 'short', day: 'numeric', hour: 'numeric', minute: '2-digit' })
+    ? start.toLocaleString('en-US', { weekday: 'short', month: 'short', day: 'numeric', hour: 'numeric', minute: '2-digit', timeZone: tz })
     : 'unknown time';
-  const until = end ? `–${end.toLocaleTimeString('en-US', { hour: 'numeric', minute: '2-digit' })}` : '';
+  const until = end ? `–${end.toLocaleTimeString('en-US', { hour: 'numeric', minute: '2-digit', timeZone: tz })}` : '';
   const where = e.location ? ` at ${e.location}` : '';
   return `“${e.title ?? 'Untitled'}” (${when}${until})${where}`;
 }
@@ -43,6 +46,7 @@ export async function POST(req: Request) {
   // The page in front of this is feature-gated; this endpoint was not, and it
   // calls a model. Same resolver, so the two cannot disagree.
   const refused = await refuseUnlessEntitled(supabase, ctx.active.familyId, ['/dashboard/conflicts']);
+  const tz = ctx.active.family.timezone || 'UTC';
   if (refused) return refused;
   const limited = await enforceAIRateLimit(supabase, `ai-resolve-conflict:${ctx.user.id}`, { limit: 20 });
   if (!limited.ok) return NextResponse.json(
@@ -78,7 +82,7 @@ export async function POST(req: Request) {
       async (obs) => {
         const completion = await provider.complete({
           system,
-          messages: [{ role: 'user', content: `Event A: ${fmt(a)}\nEvent B: ${fmt(b)}\n\nHow can we resolve this clash?` }],
+          messages: [{ role: 'user', content: `Event A: ${fmt(a, tz)}\nEvent B: ${fmt(b, tz)}\n\nHow can we resolve this clash?` }],
           tools: [],
         });
         obs.used(completion.model ?? 'unknown', completion.usage);

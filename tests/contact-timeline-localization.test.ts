@@ -38,6 +38,8 @@ vi.mock('@/app/(app)/dashboard/contacts/[id]/actions', () => ({
   logInteractionAction: h.log, deleteInteractionAction: h.remove, draftReconnectMessageAction: h.draft,
 }));
 vi.mock('next/cache', () => ({ revalidatePath: vi.fn() }));
+// The delete asks first (a-destructive-click-asks-first); the fixture says yes.
+vi.mock('@/components/ui/confirm', () => ({ useConfirm: () => async () => true }));
 vi.mock('@/lib/i18n/server', async () => {
   const { getMessages: messages, translate: tr } = await import('@/lib/i18n/messages');
   const { localeOrDefault: locale } = await import('@/lib/i18n/locales');
@@ -186,7 +188,10 @@ describe.each(LOCALES)('Contact timeline in %s', (locale) => {
     render([entry()]);
     expect(nodes(h.tree).some((n) => n.type === 'form')).toBe(false);
     const button = find((n) => n.props['aria-label'] === t('contactTimeline.deleteEntry'));
-    (button.props.onClick as () => void)(); await Promise.all(h.work);
+    (button.props.onClick as () => void)();
+    // The handler awaits the question before it starts the transition; let it settle.
+    await new Promise((resolve) => setTimeout(resolve, 0));
+    await Promise.all(h.work);
     expect(h.remove).toHaveBeenCalledWith({ id: 'one', contactId: 'contact-1' });
   });
 

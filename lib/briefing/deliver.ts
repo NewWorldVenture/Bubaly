@@ -41,7 +41,8 @@ import { fail, ok, SERVICE_CODES, type ServiceResult, type ServiceScope } from '
 import { buildBrief, type Brief } from './build';
 import { readBriefDecisions } from './decisions';
 import { medicationsDueOn, weekdayOf, type MedicationScheduleRow } from './sources';
-import { briefingCalendarWindow } from './calendar-window';
+import { briefingCalendarBounds } from './calendar-window';
+import { readCalendarOccurrences } from '@/lib/calendar/occurrences';
 import { settleAll } from '@/lib/supabase/settle';
 
 type DB = SupabaseClient<Database>;
@@ -131,15 +132,16 @@ export async function readMorningBrief(scope: ServiceScope, target: MorningTarge
   const todayDow = weekdayOf(dayKey);
 
   const [events, members, bills, meds, maintenance, warranties, trips, pantry, runs, activity] = await settleAll([
-    db.from('calendar_events').select('title, starts_at, ends_at, all_day, location')
-      .eq('family_id', familyId).or(briefingCalendarWindow(dayKey, tz, 0, 7)).order('starts_at').limit(100),
+    // Series included: the pushed brief lists every week of a weekly event (lib/calendar/occurrences.ts).
+    readCalendarOccurrences(db, familyId, briefingCalendarBounds(dayKey, tz, 0, 7), tz, { columns: ['title', 'starts_at', 'ends_at', 'all_day', 'location'], limit: 100 }),
     db.from('family_members').select('id, display_name').eq('family_id', familyId).eq('is_active', true),
     db.from('bills').select('name, amount, due_date, status')
       .eq('family_id', familyId).neq('status', 'paid').lte('due_date', horizon).order('due_date').limit(20),
     db.from('medication_schedules').select('time_of_day, days_of_week, starts_on, ends_on, medications(name, member_id, is_active)')
       .eq('family_id', familyId).lte('starts_on', dayKey).limit(40),
+    // On an open repeating task, completed_at records the last completion.
     db.from('maintenance_tasks').select('title, due_at, status, completed_at')
-      .eq('family_id', familyId).in('status', ['todo', 'in_progress']).is('completed_at', null)
+      .eq('family_id', familyId).in('status', ['todo', 'in_progress'])
       .not('due_at', 'is', null).lte('due_at', `${horizon}T23:59:59.999Z`).order('due_at').limit(20),
     db.from('home_warranties').select('name, expires_on')
       .eq('family_id', familyId).not('expires_on', 'is', null).lte('expires_on', horizon).order('expires_on').limit(20),
