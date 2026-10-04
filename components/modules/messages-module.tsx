@@ -512,7 +512,7 @@ function MessagesWorkspace() {
     try {
       let message: Message;
       if (submitted.edit) {
-        const { data, error } = await createClient().from('family_messages').update({ content }).eq('id', submitted.edit.id).eq('sender_id', userId).eq('conversation_id', convId).is('deleted_at', null).select('*').single();
+        const { data, error } = await createClient().from('family_messages').update({ content }).eq('id', submitted.edit.id).eq('family_id', familyId).eq('sender_id', userId).eq('conversation_id', convId).is('deleted_at', null).select('*').single();
         if (error || !data) throw error ?? new Error(tr('messagesChat.editFailed'));
         message = data;
       } else message = await insertMessage({
