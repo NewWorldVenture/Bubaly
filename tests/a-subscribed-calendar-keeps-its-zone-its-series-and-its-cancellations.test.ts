@@ -628,7 +628,7 @@ describe('one sync of a feed at a time', () => {
     expect(src).toContain("supabase.rpc(APPLY_SYNC_FUNCTION, { p_feed_id: feedId, p_fence: fence, p_upserts: upserts, p_removals: removals })");
     // …and, only where the function is absent, the check-then-write path, said once.
     expect(src.match(/if \(!\(await holds\(\)\)\) return 'lost';/g), 'the fallback asks the fence once, before its writes').toHaveLength(1);
-    expect(src).toContain('if (!isMissingFunctionError(error)) return { failed: error.message };');
+    expect(src).toContain('if (!isMissingFunctionError(error)) return { failed: error.message, error };');
     expect(src).not.toContain('guard.holds()');
     const cron = readFileSync(join(ROOT, 'app/api/cron/calendar-feeds/route.ts'), 'utf8');
     expect(cron).toContain('else if (r.busy || r.takenOver) busy += 1;');
