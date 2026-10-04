@@ -23,20 +23,19 @@ const LIVE = ['active', 'trialing', 'past_due'];
 /** The slice of the Stripe client the subscription webhook reads with. */
 type SubscriptionReader = Pick<Stripe, 'subscriptions'>;
 
-type SubscriptionPlan =
-  | { ok: true; item: Stripe.SubscriptionItem; plan: string }
-  | { ok: false; reason: string };
-
-/** The one item of a subscription that grants a plan, and that plan, or why there is none. */
-function subscriptionPlan(sub: Stripe.Subscription): SubscriptionPlan {
+/**
+ * The one item of a subscription that grants a plan, and that plan. Throws
+ * when there is none, or more than one: a webhook that cannot place a
+ * subscription on a plan must not acknowledge it.
+ */
+function subscriptionPlan(sub: Stripe.Subscription): { item: Stripe.SubscriptionItem; plan: string } {
   const items = sub.items?.data;
-  if (!Array.isArray(items) || items.length === 0) return { ok: false, reason: 'Subscription price is missing' };
+  if (!Array.isArray(items) || items.length === 0) throw new Error('Subscription price is missing');
   // A partial list cannot establish that exactly one item grants entitlement.
-  if (sub.items.has_more) return { ok: false, reason: 'Subscription items are incomplete' };
-  const recognized: { item: Stripe.SubscriptionItem; plan: string }[] = [];
-  for (const item of items) {
+  if (sub.items.has_more) throw new Error('Subscription items are incomplete');
+  const recognized = items.map(item => {
     const priceId = typeof item?.price?.id === 'string' ? item.price.id : null;
-    if (!priceId) return { ok: false, reason: 'Subscription price is missing' };
+    if (!priceId) throw new Error('Subscription price is missing');
     // Preserve current, historical and environment-configured price mappings.
     const plan = catalogPlanForPrice(priceId) ?? (
       priceId === process.env.STRIPE_PRICE_PLUS_MONTHLY   ? 'plus' :
@@ -47,11 +46,12 @@ function subscriptionPlan(sub: Stripe.Subscription): SubscriptionPlan {
       priceId === process.env.STRIPE_PRICE_FAMILY_MONTHLY ? 'basic' :
       priceId === process.env.STRIPE_PRICE_FAMILY_ANNUAL  ? 'basic_annual' :
       null);
-    if (plan) recognized.push({ item, plan });
-  }
-  if (recognized.length > 1) return { ok: false, reason: 'Subscription plan items are ambiguous' };
-  if (recognized.length === 0) return { ok: false, reason: 'Unknown Stripe subscription price' };
-  return { ok: true, ...recognized[0] };
+    return { item, plan };
+  }).filter(({ plan }) => plan !== null);
+  if (recognized.length > 1) throw new Error('Subscription plan items are ambiguous');
+  const { item, plan } = recognized[0] ?? {};
+  if (!plan) throw new Error('Unknown Stripe subscription price');
+  return { item, plan };
 }
 
 /**
@@ -92,8 +92,13 @@ async function liveSubscriptionsOfFamily(
     if (listed.has_more) console.warn('[stripe webhook] more than 100 subscriptions on one customer; reading the newest', { customer });
     for (const other of listed.data) {
       if (other.id === excludeId || !LIVE.includes(other.status) || other.metadata?.family_id !== familyId) continue;
-      const mapped = subscriptionPlan(other);
-      if (!mapped.ok) { unmapped.push(other.id); continue; }
+      let mapped: { plan: string };
+      try {
+        mapped = subscriptionPlan(other);
+      } catch {
+        unmapped.push(other.id);
+        continue;
+      }
       if (!best || outranks(rank(mapped.plan, other.status), rank(best.plan, best.sub.status))) best = { sub: other, plan: mapped.plan };
     }
   }
@@ -144,9 +149,7 @@ async function persistSubscription(
   const familyId = sub.metadata.family_id;
   if (!familyId) return;
 
-  const mapped = subscriptionPlan(sub);
-  if (!mapped.ok) throw new Error(mapped.reason);
-  const { item, plan } = mapped;
+  const { item, plan } = subscriptionPlan(sub);
 
   // Resolve billing_customer_id + the PRIOR subscription state (to detect a
   // brand-new paid conversion vs. a routine renewal).

@@ -286,6 +286,13 @@ describe('a second live subscription for a family that already has one', () => {
     expect(fake.row).toMatchObject({ provider_ref: 'sub_B', status: 'active' });
   });
 
+  it('on the same plan, follows the one being paid over a trial', async () => {
+    fake.row = { plan: 'plus', status: 'trialing', provider_ref: 'sub_A' };
+    fake.subs[0].status = 'trialing'; fake.subs[1].price = PLUS;
+    expect((await deliver('customer.subscription.created', fake.subs[1])).status).toBe(200);
+    expect(fake.row).toMatchObject({ provider_ref: 'sub_B', status: 'active' });
+  });
+
   it('does not trade an active plan for a higher one that is past due (it grants nothing)', async () => {
     fake.row = { plan: 'basic', status: 'active', provider_ref: 'sub_A' };
     fake.subs[0].price = BASIC;
