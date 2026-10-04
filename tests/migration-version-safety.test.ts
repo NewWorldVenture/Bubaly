@@ -506,9 +506,10 @@ describe('Supabase migration filename safety', () => {
     // migration allocation: 0465-0470 remain NWV's, 0472 Support's, and 0473
     // the coordinator's.
     // Unapplied candidates follow their composed release order: recurring bills
-    // at 0475, then messaging at 0476. Historical/applied migrations and active
+    // at 0475, messaging at 0476, then private approval reads at 0477.
+    // Historical/applied migrations and active
     // external authors' files are unchanged; this is a filename expectation.
-    expect(audit.nextVersion).toBe('0477');
+    expect(audit.nextVersion).toBe('0478');
   });
 
   it('flags a newly introduced collision instead of silently accepting it', () => {

@@ -87,3 +87,17 @@ jobs:
             --postgres-bin "$messaging_pg_bin" \
             --port 55443 \
             --expected-data-dir /var/lib/postgresql/data/pgdata
+
+      - name: Keep private approval drafts to requesters and reviewers
+        shell: bash
+        run: |
+          set -euo pipefail
+          approval_pg_bin="$(dirname "$(command -v psql)")"
+          [[ -x "$approval_pg_bin/createdb" && -x "$approval_pg_bin/dropdb" ]]
+          # Recheck the same dedicated service's exact directory and loopback
+          # port before creating a fresh DB. Run both corrected and old-policy
+          # controls; this step does not depend on opt-in Vitest tests.
+          node scripts/verify-approval-private-read.mjs \
+            --postgres-bin "$approval_pg_bin" \
+            --port 55443 \
+            --expected-data-dir /var/lib/postgresql/data/pgdata
