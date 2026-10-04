@@ -4052,3 +4052,36 @@ access to equal the page's guest row: 8 findings before, 0 after.
 **After applying:** as a guest, open the calendar and try to add an event. It
 should be refused with the permission message. As a parent, add and delete one,
 which should succeed.
+
+## `0491` — a card purchase, a parent's spend or an investment approval deadlocked against a top-up for the same child
+
+`supabase/migrations/0491_a_card_hold_and_a_top_up_do_not_deadlock.sql`
+
+**Severity: medium (money moves correctly, but one side of a collision is aborted).** Claimed in #771 comment 5982113631. This is the residual #954 lists as "A deadlock 0155 can hit". **Not applied; production application is the owner's decision.**
+
+- 0205's credit and transfer lock the child wallet, then the buckets. Three functions took a bucket first, and the wallet second, through their ledger insert's foreign key:
+  - `wallet_reserve_card_auth` (0155);
+  - `wallet_debit_spend_bucket` (0342);
+  - `invest_decide_order` (0447).
+- **Reproduced on PostgreSQL 16** with synthetic rows, against a credit for the same child:
+  - 73 of 78 reserve/credit transactions died `deadlock detected`;
+  - 54 of 63 debit/credit transactions did too;
+  - so did an investment approval.
+- **What a family sees:**
+  - `reserveCardAuth` fails closed, so the purchase is **declined**;
+  - a parent's spend or approval errors;
+  - when Postgres picks the credit as the victim, the allowance, chore reward or gift fails instead.
+- **The fix:** each function takes `FOR KEY SHARE` on the wallet before its bucket. Nothing else changes: each body is restated verbatim from its latest migration with that one lock added, and signatures, grants, owner and comments are kept by `create or replace`. With it, the three and a credit ran 3,894 transactions together with no failure.
+
+`docs/audit/a-card-hold-and-a-top-up-do-not-deadlock-check.sql` arranges the collision deterministically over dblink for each function:
+- a holder takes the wallet;
+- the function parks;
+- the holder runs the real credit.
+
+It fails before the migration with three `deadlock detected` and passes after. Its negative control restores the pre-0491 reserve and requires the deadlock, then restores and verifies the real body.
+
+`docs/audit/wallet-overspend-check.sql` pins the reserve's body by md5. The pin is recomputed for this body, as that probe instructs.
+
+**Deploy order:** either order is safe. No code changes.
+
+**Rollback:** re-run the three `create or replace` statements from 0155, 0342 and 0447. Nothing is lost, but the deadlock returns.

@@ -57,8 +57,9 @@ declare
   -- (checked both ways). If 0155 is ever changed on purpose, read the new body,
   -- then recompute the pin with that query and update this line; the pin firing
   -- is the reminder to do so. (No literal double-dollar appears in this comment
-  -- on purpose: it would end the block it sits in.)
-  pinned_body_md5 constant text := '84527b8413ddea6ddbcfd16abf4e1b34';
+  -- on purpose: it would end the block it sits in.) Recomputed for 0491, which
+  -- restates 0155's body with the child wallet locked before the bucket.
+  pinned_body_md5 constant text := '62db5b22559ea048636e75520e47e466';
   fn_under_test   constant text := 'public.wallet_reserve_card_auth(uuid, uuid, bigint, text, text)';
   body_at_start text;
   body_at_end   text;

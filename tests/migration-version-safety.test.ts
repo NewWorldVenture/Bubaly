@@ -504,8 +504,10 @@ describe('Supabase migration filename safety', () => {
     // (reserved for #710) withdraws an admin removed after a digest was
     // frozen. This literal tracks the checked-in high-water mark, not
     // migration allocation: 0465-0470 remain NWV's, 0472 Support's, and 0473
-    // the coordinator's.
-    expect(audit.nextVersion).toBe('0475');
+    // the coordinator's. 0491 (Surge, #771 comment 5982113631) puts the
+    // child wallet before the bucket in the card hold, the parent's spend and
+    // the investment approval.
+    expect(audit.nextVersion).toBe('0492');
   });
 
   it('flags a newly introduced collision instead of silently accepting it', () => {
