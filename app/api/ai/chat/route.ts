@@ -160,8 +160,14 @@ export async function POST(req: NextRequest) {
     // `delta` chunks as the reply streams, then a final `done` (after persisting).
     const encoder = new TextEncoder();
     let connected = true;
+    // The client's cancellation reaches the provider: `runToolsStream` checks
+    // this signal before every model round and every tool, so a person who
+    // stopped the turn after its first action does not get its second action
+    // written anyway (audit hold on #834, 2026-10-04). What ran before the stop
+    // stands and is persisted below, so the conversation records it.
+    const stopped = new AbortController();
     const stream = new ReadableStream({
-      cancel() { connected = false; },
+      cancel() { connected = false; stopped.abort(); },
       async start(controller) {
         const send = (e: unknown) => {
           if (!connected) return;
@@ -185,7 +191,7 @@ export async function POST(req: NextRequest) {
           send({ type: 'action', name, ...summarize(result) });
         };
         try {
-          for await (const ev of provider.runToolsStream({ system, messages, tools, maxTokens: 1500 })) {
+          for await (const ev of provider.runToolsStream({ system, messages, tools, maxTokens: 1500, signal: stopped.signal })) {
             if (ev.type === 'delta') { content += ev.text; send({ type: 'delta', text: ev.text }); }
             else pushAction(ev.name, ev.args, ev.result);
           }
@@ -198,9 +204,11 @@ export async function POST(req: NextRequest) {
           // Resilience: if streaming failed before producing any text (e.g. a proxy
           // buffered/blocked the SSE response), fall back to a single non-streaming
           // run so the assistant still works. Only surface an error if that fails too.
-          if (!content && actions.length === 0) {
+          // Not when the person stopped the turn: the stream "failed" because they
+          // cut it, and a fallback run would do the work they stopped.
+          if (!content && actions.length === 0 && !stopped.signal.aborted) {
             try {
-              const result = await provider.runTools({ system, messages, tools, maxTokens: 1500 });
+              const result = await provider.runTools({ system, messages, tools, maxTokens: 1500, signal: stopped.signal });
               for (const a of result.actions) if (!actions.some((x) => x.name === a.name && JSON.stringify(x.args) === JSON.stringify(a.args))) pushAction(a.name, a.args, a.result);
               if (result.text) { content = result.text; send({ type: 'delta', text: result.text }); }
             } catch (fallbackErr) {
