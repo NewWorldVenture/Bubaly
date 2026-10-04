@@ -28,6 +28,8 @@ const FILES = [
   'app/(marketing)/security/page.tsx',
   'app/(marketing)/ai/page.tsx',
   'app/(marketing)/mobile/page.tsx',
+  'app/(marketing)/faq/page.tsx',
+  'components/marketing/faq-explorer.tsx',
 ];
 
 const catalogue = JSON.parse(
@@ -62,7 +64,7 @@ const shipped = [...files.matchAll(/'([a-zA-Z][\w]*\.[\w]+)'/g)]
  * reference it would ship it. Scoped to the public-site namespaces for the
  * same reason `shipped` is scoped to the files.
  */
-const MARKETING_KEY_PREFIXES = ['homeHero.', 'handledProof.', 'heroOutcomes.', 'firstBrief.', 'decisionsBand.', 'kitchenMode.', 'switching.', 'socialProof.', 'pricingValue.', 'trustCenter.', 'security.', 'featuresPage.', 'featureCards.', 'mobile.', 'root.meta', 'structuredData.'];
+const MARKETING_KEY_PREFIXES = ['homeHero.', 'handledProof.', 'heroOutcomes.', 'firstBrief.', 'decisionsBand.', 'kitchenMode.', 'switching.', 'socialProof.', 'pricingValue.', 'trustCenter.', 'security.', 'featuresPage.', 'featureCards.', 'mobile.', 'root.meta', 'structuredData.', 'faq.', 'faqExplorer.'];
 const marketingCopy = Object.entries(catalogue)
   .filter(([key]) => MARKETING_KEY_PREFIXES.some((prefix) => key.startsWith(prefix)))
   .map(([key, value]) => `${key}: ${value}`)
