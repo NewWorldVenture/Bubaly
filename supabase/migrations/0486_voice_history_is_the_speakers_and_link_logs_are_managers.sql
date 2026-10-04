@@ -4,10 +4,10 @@
 -- draft with synthetic tests; production access rules unchanged until a
 -- separate approval); slot 0486 allocated in #927 comment 5975262129.
 --
--- READ visibility only. `voice_commands` INSERT/UPDATE/DELETE stay
--- `is_family_member` (any member may file, edit or delete another member's
--- spoken history): a known gap, recorded for separate consideration and
--- deliberately not changed here.
+-- READ visibility only. The `voice_commands` INSERT/UPDATE/DELETE policy
+-- definitions are deliberately left as they are (`is_family_member`); their
+-- effective behaviour is not established by this migration's probe, and
+-- whether they need narrowing is recorded for separate consideration.
 --
 -- `voice_commands.transcript` is a member's spoken command, verbatim
 -- (components/modules/voice-module.tsx → lib/voice/history.ts). Its SELECT

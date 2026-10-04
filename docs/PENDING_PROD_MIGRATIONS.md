@@ -4094,8 +4094,12 @@ Deploy order: either order is safe. No code depends on the new rule.
 
 **Rollback:** recreate both SELECT policies as `using (public.is_family_member(family_id))`.
 
-**Known gap, not changed (writes need a separate decision, #927 5975262129):**
-`voice_commands` INSERT, UPDATE and DELETE stay `is_family_member`. Any member
-can still file a command as another member, or edit or delete another member's
-history. A speaker-or-manager
-write rule was drafted and checked locally (#927 5975230221), and it is held.
+**Write-policy definitions unchanged (writes need a separate decision, #927 5975262129):**
+the `voice_commands` INSERT, UPDATE and DELETE policy *definitions* stay
+`is_family_member`. This migration and its probe establish read visibility only;
+they do not establish effective write behaviour. Postgres applies the SELECT
+policy to the rows an UPDATE or DELETE reads, so the narrower visibility may
+already constrain those statements, while an INSERT's `member_id` and
+`created_by` are still not tied to the caller. Whether the write rules need
+narrowing is for that separate decision. A speaker-or-manager write rule was
+drafted and checked locally (#927 5975230221), and it is held unpublished.
