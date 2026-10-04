@@ -166,6 +166,11 @@ export type FeedRowPlan = {
  * The expander (lib/calendar/recurrence.ts) then leaves those slots empty, so a
  * moved practice appears once, at its new time, and a cancelled one not at all.
  * An exception whose master is not in this feed is a stand-alone row.
+ *
+ * A cancellation may carry only its identity — UID, and RECURRENCE-ID for one
+ * occurrence — with no DTSTART or SUMMARY (RFC 5546 §3.2.5); the sync parses
+ * with `bareCancellations` so such a component reaches the plan, and the plan
+ * does not ask a cancellation for a start.
  */
 export function planFeedRows(events: IcsEvent[], familyId: string, feedId: string): FeedRowPlan {
   const live = new Map<string, FeedEventRow>();
@@ -173,7 +178,10 @@ export function planFeedRows(events: IcsEvent[], familyId: string, feedId: strin
   const givenUp = new Map<string, Set<string>>();
   const cancelledMasters = new Set<string>();
   for (const ev of events) {
-    if (!ev.uid || !ev.startsAt) continue;
+    if (!ev.uid) continue;
+    // A cancellation needs only its identity (RFC 5546 §3.2.5 lets a CANCEL
+    // omit DTSTART); a live event with no start cannot be placed and is skipped.
+    if (ev.status !== 'cancelled' && !ev.startsAt) continue;
     const key = feedExternalUid(ev);
     if (ev.recurrenceId) {
       const dates = givenUp.get(ev.uid) ?? new Set<string>();
