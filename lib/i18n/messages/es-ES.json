@@ -15081,6 +15081,7 @@
   "utilitySavings.addAFewUtilityBills": "Añade antes algunas facturas de suministros para que podamos analizar tus costes.",
   "utilitySavings.tooManyUtilitySavingsRequests": "Demasiadas solicitudes de ahorro en suministros. Inténtalo de nuevo en breve.",
   "utilitySavings.unauthorized": "No autorizado",
+  "vacationDisruption.bookingChanged": "Esa reserva cambió desde que se abrió este formulario, así que no se movió nada. Revisa el viaje y vuelve a informar de la incidencia si todavía hace falta.",
   "vacationDisruption.cancelled": "Cancelado",
   "vacationDisruption.couldNotLoadBookings": "No se pudieron cargar los vuelos y alojamientos de este viaje.",
   "vacationDisruption.couldNotReport": "No se pudo informar de esa incidencia. Inténtalo de nuevo.",

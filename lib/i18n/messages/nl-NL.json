@@ -15079,6 +15079,7 @@
   "utilitySavings.addAFewUtilityBills": "Voeg eerst een paar nutsrekeningen toe zodat we je kosten kunnen analyseren.",
   "utilitySavings.tooManyUtilitySavingsRequests": "Te veel verzoeken om besparing op nutsvoorzieningen. Probeer het zo dadelijk opnieuw.",
   "utilitySavings.unauthorized": "Niet geautoriseerd",
+  "vacationDisruption.bookingChanged": "Die boeking is gewijzigd sinds dit formulier werd geopend, dus er is niets verplaatst. Controleer de reis en meld de verstoring opnieuw als dat nog nodig is.",
   "vacationDisruption.cancelled": "Geannuleerd",
   "vacationDisruption.couldNotLoadBookings": "De vluchten en verblijven van deze reis konden niet worden geladen.",
   "vacationDisruption.couldNotReport": "De verstoring kon niet worden gemeld. Probeer het opnieuw.",

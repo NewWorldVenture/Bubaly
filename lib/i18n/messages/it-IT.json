@@ -15081,6 +15081,7 @@
   "utilitySavings.addAFewUtilityBills": "Aggiungi prima qualche bolletta così possiamo analizzare i tuoi costi.",
   "utilitySavings.tooManyUtilitySavingsRequests": "Troppe richieste di risparmio sulle utenze. Riprova tra poco.",
   "utilitySavings.unauthorized": "Non autorizzato",
+  "vacationDisruption.bookingChanged": "Questa prenotazione è cambiata da quando è stato aperto questo modulo, quindi non è stato spostato nulla. Controlla il viaggio e segnala di nuovo l'imprevisto se serve ancora.",
   "vacationDisruption.cancelled": "Cancellato",
   "vacationDisruption.couldNotLoadBookings": "Non è stato possibile caricare i voli e gli alloggi di questo viaggio.",
   "vacationDisruption.couldNotReport": "Non è stato possibile segnalare l'imprevisto. Riprova.",

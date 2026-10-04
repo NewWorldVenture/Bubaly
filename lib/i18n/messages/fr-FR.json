@@ -15081,6 +15081,7 @@
   "utilitySavings.addAFewUtilityBills": "Ajoutez d’abord quelques factures de services pour que nous puissions analyser vos coûts.",
   "utilitySavings.tooManyUtilitySavingsRequests": "Trop de demandes d’économies sur les services. Veuillez réessayer dans un instant.",
   "utilitySavings.unauthorized": "Non autorisé",
+  "vacationDisruption.bookingChanged": "Cette réservation a changé depuis l'ouverture de ce formulaire, donc rien n'a été déplacé. Vérifiez le voyage, puis signalez à nouveau la perturbation si nécessaire.",
   "vacationDisruption.cancelled": "Annulé",
   "vacationDisruption.couldNotLoadBookings": "Impossible de charger les vols et les hébergements de ce voyage.",
   "vacationDisruption.couldNotReport": "Impossible de signaler cette perturbation. Veuillez réessayer.",

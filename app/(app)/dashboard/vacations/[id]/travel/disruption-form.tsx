@@ -46,10 +46,21 @@ export function DisruptionForm({ vacationId }: { vacationId: string }) {
 
   useEffect(() => { load(); }, [load]);
 
+  /** Re-read the bookings without blanking the form or the receipt. */
+  const refresh = useCallback(() => {
+    listDisruptableBookingsAction(vacationId)
+      .then(setBookings)
+      // Kept as it was: a report against a version that is now stale is refused
+      // by the server and says so, so a failed re-read cannot double a delay.
+      .catch((err) => console.error('[vacations] disruption booking re-read failed', err));
+  }, [vacationId]);
+
   async function submit(event: React.FormEvent) {
     event.preventDefault();
     if (busy) return;
     const [kind, bookingId] = choice.split(':') as [Kind, string];
+    const listed = bookings?.ok ? (kind === 'lodging' ? bookings.lodging : bookings.flights) : [];
+    const version = listed.find((b) => b.id === bookingId)?.version ?? '';
     setBusy(true);
     setIssue(null);
     setResult(null);
@@ -60,6 +71,7 @@ export function DisruptionForm({ vacationId }: { vacationId: string }) {
         bookingId: bookingId ?? '',
         outcome,
         delayMinutes: outcome === 'delayed' ? Number(delay) : 0,
+        version,
       });
       if (res.ok) setResult(res);
       else setIssue(res.error);
@@ -67,6 +79,10 @@ export function DisruptionForm({ vacationId }: { vacationId: string }) {
       setIssue(t('vacationDisruption.couldNotReport'));
     } finally {
       setBusy(false);
+      // Whatever the answer, the booking may have moved (a delay re-times a
+      // flight) or been changed by someone else: re-read it, so the next
+      // report is made against the booking as it now stands.
+      refresh();
     }
   }
 

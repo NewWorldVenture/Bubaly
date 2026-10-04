@@ -14,12 +14,13 @@ import { revalidatePath } from 'next/cache';
 import { getTranslations } from '@/lib/i18n/server';
 import { notify } from '@/lib/services/notifications';
 import { scopeFromUserContext } from '@/lib/services/scope';
-import { reportTripDisruption, type DisruptionRequest, type ReportedDisruption } from '@/lib/services/trips';
+import { BOOKING_CHANGED_CODE, reportTripDisruption, type DisruptionRequest, type ReportedDisruption } from '@/lib/services/trips';
 import { requireUserContext } from '@/lib/supabase/auth';
 import { createServer } from '@/lib/supabase/server';
 import { settleAll } from '@/lib/supabase/settle';
 
-export type DisruptionBooking = { id: string; label: string; detail: string };
+/** `version` is the booking row's `updated_at`: the report is made against it, so the same form cannot apply one delay twice. */
+export type DisruptionBooking = { id: string; label: string; detail: string; version: string };
 
 export type DisruptableBookings =
   | { ok: true; flights: DisruptionBooking[]; lodging: DisruptionBooking[] }
@@ -33,9 +34,9 @@ export async function listDisruptableBookingsAction(vacationId: string): Promise
   const familyId = ctx.active.familyId;
 
   const [flights, lodging] = await settleAll([
-    supabase.from('vacation_flights').select('id, airline, flight_number, depart_airport, arrive_airport, arrive_at, depart_at')
+    supabase.from('vacation_flights').select('id, airline, flight_number, depart_airport, arrive_airport, arrive_at, depart_at, updated_at')
       .eq('family_id', familyId).eq('vacation_id', vacationId).order('depart_at', { ascending: true }).limit(100),
-    supabase.from('vacation_lodging').select('id, name, check_in, check_out')
+    supabase.from('vacation_lodging').select('id, name, check_in, check_out, updated_at')
       .eq('family_id', familyId).eq('vacation_id', vacationId).order('check_in', { ascending: true }).limit(100),
   ]);
   const readError = flights.error ?? lodging.error;
@@ -50,11 +51,13 @@ export async function listDisruptableBookingsAction(vacationId: string): Promise
       id: f.id,
       label: [f.airline, f.flight_number].filter(Boolean).join(' ').trim() || t('vacationDisruption.untitledFlight'),
       detail: [f.depart_airport, f.arrive_airport].filter(Boolean).join(' → ') || (f.depart_at ?? ''),
+      version: f.updated_at,
     })),
     lodging: (lodging.data ?? []).map((l) => ({
       id: l.id,
       label: l.name,
       detail: [l.check_in, l.check_out].filter(Boolean).join(' – '),
+      version: l.updated_at,
     })),
   };
 }
@@ -66,6 +69,8 @@ export type DisruptionActionInput = {
   /** 'delayed' carries `delayMinutes`; 'cancelled' ignores it. */
   outcome: 'delayed' | 'cancelled';
   delayMinutes?: number | null;
+  /** The booking's `version` from `listDisruptableBookingsAction`. */
+  version: string;
 };
 
 export type DisruptionActionResult =
@@ -83,7 +88,7 @@ export type DisruptionActionResult =
 
 export async function reportDisruptionAction(input: DisruptionActionInput): Promise<DisruptionActionResult> {
   const t = await getTranslations();
-  if (!input.vacationId?.trim() || !input.bookingId?.trim()) {
+  if (!input.vacationId?.trim() || !input.bookingId?.trim() || !input.version?.trim()) {
     return { ok: false, error: t('vacationDisruption.pickABooking') };
   }
   const cancelled = input.outcome === 'cancelled';
@@ -97,8 +102,10 @@ export async function reportDisruptionAction(input: DisruptionActionInput): Prom
   const scope = scopeFromUserContext(ctx, supabase);
 
   const request: DisruptionRequest = { kind: input.kind, bookingId: input.bookingId, delayMinutes, cancelled };
-  const res = await reportTripDisruption(scope, input.vacationId, request);
-  if (!res.ok) return { ok: false, error: res.error };
+  const res = await reportTripDisruption(scope, input.vacationId, request, input.version);
+  if (!res.ok) {
+    return { ok: false, error: res.code === BOOKING_CHANGED_CODE ? t('vacationDisruption.bookingChanged') : res.error };
+  }
 
   const { plan, applied, booking } = res.data;
 

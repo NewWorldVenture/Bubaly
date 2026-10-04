@@ -142,6 +142,8 @@ describe('replanDisruption — nothing happened', () => {
 // ── the service half: what actually lands in the tables ──────────────────────
 
 const FAMILY = 'fam-1';
+/** The flight's version, as the form read it. */
+const V0 = '2026-07-01T09:00:00.000Z';
 
 function seeded() {
   const db = createInMemorySupabase({
@@ -157,6 +159,7 @@ function seeded() {
   db.seed('vacation_flights', [{
     id: 'flight-1', family_id: FAMILY, vacation_id: 'trip-1', airline: 'BA', flight_number: '274',
     depart_airport: 'LHR', arrive_airport: 'BCN', depart_at: `${DAY}T11:00:00Z`, arrive_at: `${DAY}T14:00:00Z`, booked: true,
+    updated_at: V0,
   }]);
   db.seed('vacation_reservations', [{
     id: 'res-1', family_id: FAMILY, vacation_id: 'trip-1', kind: 'dining', name: 'Tapas bar',
@@ -196,7 +199,7 @@ function withFailingTable(db: InMemorySupabase, failing: string): unknown {
 describe('reportTripDisruption', () => {
   it('moves the itinerary rows and records the disruption as a note item', async () => {
     const db = seeded();
-    const res = await reportTripDisruption(scopeFor(db), 'trip-1', { kind: 'flight', bookingId: 'flight-1', delayMinutes: 120 });
+    const res = await reportTripDisruption(scopeFor(db), 'trip-1', { kind: 'flight', bookingId: 'flight-1', delayMinutes: 120 }, V0);
     expect(res.ok).toBe(true);
     if (!res.ok) return;
     expect(res.data.applied.shifted).toBe(1);
@@ -220,7 +223,7 @@ describe('reportTripDisruption', () => {
   it('writes nothing at all when the booking is still on time', async () => {
     const db = seeded();
     const before = (db.table('vacation_itinerary_items') as unknown[]).length;
-    const res = await reportTripDisruption(scopeFor(db), 'trip-1', { kind: 'flight', bookingId: 'flight-1', delayMinutes: 0 });
+    const res = await reportTripDisruption(scopeFor(db), 'trip-1', { kind: 'flight', bookingId: 'flight-1', delayMinutes: 0 }, V0);
     expect(res.ok).toBe(true);
     if (!res.ok) return;
     expect(res.data.plan.noop).toBe(true);
@@ -230,7 +233,7 @@ describe('reportTripDisruption', () => {
 
   it('creates the day row a cross-midnight shift lands on rather than dropping the item', async () => {
     const db = seeded();
-    const res = await reportTripDisruption(scopeFor(db), 'trip-1', { kind: 'flight', bookingId: 'flight-1', delayMinutes: 10 * 60 });
+    const res = await reportTripDisruption(scopeFor(db), 'trip-1', { kind: 'flight', bookingId: 'flight-1', delayMinutes: 10 * 60 }, V0);
     expect(res.ok).toBe(true);
     if (!res.ok) return;
     const days = db.table('vacation_itinerary_days') as Record<string, unknown>[];
@@ -243,7 +246,7 @@ describe('reportTripDisruption', () => {
 
   it('refuses a booking that is not on this trip instead of guessing', async () => {
     const db = seeded();
-    const res = await reportTripDisruption(scopeFor(db), 'trip-1', { kind: 'flight', bookingId: 'flight-nope', delayMinutes: 30 });
+    const res = await reportTripDisruption(scopeFor(db), 'trip-1', { kind: 'flight', bookingId: 'flight-nope', delayMinutes: 30 }, V0);
     expect(res.ok).toBe(false);
     if (res.ok) return;
     expect(res.error).toContain('not on this trip');

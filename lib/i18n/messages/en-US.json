@@ -15287,6 +15287,7 @@
   "utilitySavings.addAFewUtilityBills": "Add a few utility bills first so we can analyse your costs.",
   "utilitySavings.tooManyUtilitySavingsRequests": "Too many utility-savings requests. Please try again shortly.",
   "utilitySavings.unauthorized": "Unauthorized",
+  "vacationDisruption.bookingChanged": "That booking changed since this form was opened, so nothing was moved. Check the trip, then report again if it still needs it.",
   "vacationDisruption.cancelled": "Cancelled",
   "vacationDisruption.couldNotLoadBookings": "Could not load this trip's flights and stays.",
   "vacationDisruption.couldNotReport": "Could not report that disruption. Try again.",

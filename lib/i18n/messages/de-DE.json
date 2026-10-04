@@ -15079,6 +15079,7 @@
   "utilitySavings.addAFewUtilityBills": "Fügen Sie zuerst ein paar Versorgungsrechnungen hinzu, damit wir Ihre Kosten analysieren können.",
   "utilitySavings.tooManyUtilitySavingsRequests": "Zu viele Anfragen zu Einsparungen bei Versorgungskosten. Bitte versuchen Sie es in Kürze erneut.",
   "utilitySavings.unauthorized": "Nicht autorisiert",
+  "vacationDisruption.bookingChanged": "Diese Buchung wurde geändert, seit dieses Formular geöffnet wurde, daher wurde nichts verschoben. Prüfen Sie die Reise und melden Sie die Störung erneut, falls nötig.",
   "vacationDisruption.cancelled": "Storniert",
   "vacationDisruption.couldNotLoadBookings": "Die Flüge und Unterkünfte dieser Reise konnten nicht geladen werden.",
   "vacationDisruption.couldNotReport": "Die Störung konnte nicht gemeldet werden. Bitte versuchen Sie es erneut.",

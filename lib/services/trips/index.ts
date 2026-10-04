@@ -948,7 +948,9 @@ export async function createPetCareTasks(
 // 0070 gives neither `vacation_flights` nor `vacation_lodging` a status
 // column, so the DISRUPTION ITSELF is not persisted as a status — what is
 // persisted is its consequence: the shifted itinerary rows, and one `note`
-// itinerary item holding the summary.
+// itinerary item holding the summary. A delayed flight's arrival (else its
+// departure) is moved by the delay too, and every report restamps the booking:
+// that is what makes one report land once (`reportTripDisruption`).
 //
 // TODO(migration M15, owner approval required): `vacation_flights` and
 // `vacation_lodging` need `disruption_status text CHECK (on_time|delayed|
@@ -1022,16 +1024,10 @@ function reservationsFor(snapshot: TripSnapshot, tz: string): ReservationLike[] 
   }));
 }
 
-/** Work out the re-flow WITHOUT writing anything — what the AI tool and the form preview both call. */
-export async function planTripDisruption(
-  scope: ServiceScope,
-  vacationId: string,
-  request: DisruptionRequest,
-): Promise<ServiceResult<TripDisruption>> {
-  const snapshot = await getTrip(scope, vacationId);
-  if (!snapshot.ok) return snapshot;
-  const tz = snapshot.data.trip.timezone || scope.tz;
-  const anchor = anchorFor(snapshot.data, request, tz);
+/** The re-flow for one request against a trip already read. */
+function planFromSnapshot(scope: ServiceScope, snapshot: TripSnapshot, request: DisruptionRequest): ServiceResult<TripDisruption> {
+  const tz = snapshot.trip.timezone || scope.tz;
+  const anchor = anchorFor(snapshot, request, tz);
   if (!anchor.ok) return fail(anchor.error, { code: SERVICE_CODES.invalidInput });
 
   const plan = replanDisruption(
@@ -1044,17 +1040,28 @@ export async function planTripDisruption(
       delayMinutes: request.delayMinutes ?? 0,
       cancelled: request.cancelled ?? false,
     },
-    itineraryFor(snapshot.data),
-    reservationsFor(snapshot.data, tz),
-    { hasYoungChildren: snapshot.data.hasChildren },
+    itineraryFor(snapshot),
+    reservationsFor(snapshot, tz),
+    { hasYoungChildren: snapshot.hasChildren },
   );
 
   return ok({
-    tripId: snapshot.data.trip.id,
-    tripTitle: snapshot.data.trip.title,
+    tripId: snapshot.trip.id,
+    tripTitle: snapshot.trip.title,
     booking: { kind: request.kind, id: request.bookingId, label: anchor.label, day: anchor.day },
     plan,
   });
+}
+
+/** Work out the re-flow WITHOUT writing anything — what the AI tool and the form preview both call. */
+export async function planTripDisruption(
+  scope: ServiceScope,
+  vacationId: string,
+  request: DisruptionRequest,
+): Promise<ServiceResult<TripDisruption>> {
+  const snapshot = await getTrip(scope, vacationId);
+  if (!snapshot.ok) return snapshot;
+  return planFromSnapshot(scope, snapshot.data, request);
 }
 
 export type ReportedDisruption = TripDisruption & {
@@ -1083,30 +1090,154 @@ async function dayIdFor(
   return ok(data?.id ?? null);
 }
 
+/** The version a disruption report is made against: the booking row's `updated_at`. */
+export function bookingVersion(snapshot: TripSnapshot, request: Pick<DisruptionRequest, 'kind' | 'bookingId'>): string | null {
+  const row = request.kind === 'flight'
+    ? snapshot.flights.find((f) => f.id === request.bookingId)
+    : snapshot.lodging.find((l) => l.id === request.bookingId);
+  return row?.updated_at ?? null;
+}
+
+/** The `code` a report made against a stale version fails with, so the form can say it in the reader's language. */
+export const BOOKING_CHANGED_CODE = 'booking_changed';
+const BOOKING_CHANGED = 'That booking changed since this form was opened, so nothing was moved. Check the trip, then report again if it still needs it.';
+
+/**
+ * Claim the booking for this report: one compare-and-set on the version the
+ * reporter saw. A delayed flight's anchored time (arrival, else departure)
+ * moves by the delay, so the next report starts from when it now lands; any
+ * other report only restamps the row. Either way the version changes, so a
+ * second submit of the same form — a double click, a retry after a lost
+ * answer, a second parent with the same page open — matches nothing.
+ *
+ * `updated_at` is written explicitly: 0070's trigger overwrites it with
+ * `now()` anyway, and a stay (whose check-in is a date, not a clock) has no
+ * other column a report should change.
+ */
+async function claimBooking(
+  scope: ServiceScope,
+  vacationId: string,
+  request: DisruptionRequest,
+  snapshot: TripSnapshot,
+  expectedVersion: string,
+): Promise<ServiceResult<{ undo: () => Promise<boolean> }>> {
+  const stampedAt = new Date().toISOString();
+  const table = request.kind === 'flight' ? 'vacation_flights' : 'vacation_lodging';
+  const patch: Record<string, string> = { updated_at: stampedAt };
+  const undoPatch: Record<string, string> = {};
+  const delay = request.cancelled ? 0 : Math.max(0, Math.round(request.delayMinutes ?? 0));
+  if (request.kind === 'flight' && delay > 0) {
+    const flight = snapshot.flights.find((f) => f.id === request.bookingId);
+    const field = flight?.arrive_at ? 'arrive_at' : 'depart_at';
+    const was = flight?.[field];
+    if (was) {
+      patch[field] = new Date(Date.parse(was) + delay * 60_000).toISOString();
+      undoPatch[field] = was;
+    }
+  }
+  const { data, error } = await scope.db
+    .from(table)
+    .update(patch as never)
+    .eq('id', request.bookingId)
+    .eq('family_id', scope.familyId)
+    .eq('vacation_id', vacationId)
+    .eq('updated_at', expectedVersion)
+    .select('id, updated_at');
+  if (error) {
+    console.error('[service:trips] disruption booking claim failed', error);
+    return fail(describeDbError(error, 'Could not record the disruption on the booking.'), { code: SERVICE_CODES.db });
+  }
+  if (wroteNoRows(data)) return fail(BOOKING_CHANGED, { code: BOOKING_CHANGED_CODE });
+  const claimedVersion = (data as { updated_at: string }[])[0].updated_at;
+
+  return ok({
+    // Put the booking back as the reporter found it, so the report can be
+    // made again. Guarded on the version this claim wrote: if anyone has
+    // touched the row since, theirs stands.
+    undo: async () => {
+      const { data: undone, error: undoError } = await scope.db
+        .from(table)
+        .update({ ...undoPatch, updated_at: new Date().toISOString() } as never)
+        .eq('id', request.bookingId)
+        .eq('family_id', scope.familyId)
+        .eq('updated_at', claimedVersion)
+        .select('id');
+      if (undoError || wroteNoRows(undone)) {
+        console.error('[service:trips] disruption booking claim could not be undone', undoError);
+        return false;
+      }
+      return true;
+    },
+  });
+}
+
 /**
  * Apply the re-flow: move the family's own itinerary rows and record what
  * happened as a `note` item. Nothing here contacts an airline, a hotel or a
  * restaurant, so nothing here may be described as rebooked — `plan.toRebook`
  * is the list a PERSON still has to work through.
+ *
+ * ONCE PER REPORT. The plan anchors on the booking's time and moves what comes
+ * after it, so before this claimed anything a second report of the same delay
+ * moved the same items again — two hours became four. `expectedVersion` is the
+ * booking's `updated_at` as the reporter saw it (`bookingVersion`); the
+ * booking is claimed against it first, each item moves only from the time the
+ * plan read, and a failure part way puts back what moved and the claim, so a
+ * retry starts from the itinerary the reporter saw.
  */
 export async function reportTripDisruption(
   scope: ServiceScope,
   vacationId: string,
   request: DisruptionRequest,
+  expectedVersion: string,
 ): Promise<ServiceResult<ReportedDisruption>> {
-  const planned = await planTripDisruption(scope, vacationId, request);
+  if (!expectedVersion?.trim()) return fail(BOOKING_CHANGED, { code: BOOKING_CHANGED_CODE });
+  const snapshot = await getTrip(scope, vacationId);
+  if (!snapshot.ok) return snapshot;
+  const planned = planFromSnapshot(scope, snapshot.data, request);
   if (!planned.ok) return planned;
   const { plan, booking } = planned.data;
   if (plan.noop) return ok({ ...planned.data, applied: { shifted: 0, noteItemId: null } });
 
-  const snapshot = await getTrip(scope, vacationId);
-  if (!snapshot.ok) return snapshot;
+  // The version the plan was made from must be the one the reporter saw;
+  // the claim below then makes sure nobody else used it first.
+  if (bookingVersion(snapshot.data, request) !== expectedVersion) return fail(BOOKING_CHANGED, { code: BOOKING_CHANGED_CODE });
+  const claim = await claimBooking(scope, vacationId, request, snapshot.data, expectedVersion);
+  if (!claim.ok) return claim;
+
   const dayIds = new Map(snapshot.data.days.map((d) => [d.day_date, d.id]));
+  const before = new Map(snapshot.data.items.map((i) => [i.id, i]));
+  const moved: { id: string; dayId: string | null; start: string | null; end: string | null; toStart: string | null }[] = [];
+
+  // Put back every item this report moved, then the booking. Each step is
+  // guarded on the value this report wrote, so a later edit by someone else
+  // is left alone rather than overwritten with the old plan.
+  const rollBack = async (cause: string): Promise<ServiceResult<never>> => {
+    let complete = true;
+    for (const m of moved.reverse()) {
+      const { data: restored, error } = await scope.db
+        .from('vacation_itinerary_items')
+        .update({ day_id: m.dayId, start_time: m.start, end_time: m.end })
+        .eq('id', m.id)
+        .eq('family_id', scope.familyId)
+        .eq('start_time', m.toStart as string)
+        .select('id');
+      if (error || wroteNoRows(restored)) complete = false;
+    }
+    if (!(await claim.data.undo())) complete = false;
+    return fail(
+      complete
+        ? `${cause} Nothing was changed, so the report can be made again.`
+        : `${cause} Part of the itinerary may already have moved — check the trip before reporting again.`,
+      { code: SERVICE_CODES.db },
+    );
+  };
 
   let shifted = 0;
   for (const move of plan.shiftedItems) {
     const target = await dayIdFor(scope, vacationId, move.toDay, dayIds);
-    if (!target.ok) return target;
+    if (!target.ok) return rollBack('Could not make room on the itinerary for the new day.');
+    const was = before.get(move.id);
     const patch: Updatable<'vacation_itinerary_items'> = {
       start_time: move.toStart,
       end_time: move.toEnd,
@@ -1115,25 +1246,29 @@ export async function reportTripDisruption(
     // `shifted` is reported back as how much of the itinerary moved, and it was
     // incremented for items that matched nothing (deleted since the plan was
     // read). Counted only when a row moved; the rest of the disruption goes on.
-    // Audit C1-S9-65.
-    const { data: shiftedRow, error } = await scope.db
+    // Audit C1-S9-65. Moved only FROM the time the plan read: a row someone
+    // re-timed since is theirs, not this report's to push again.
+    let query = scope.db
       .from('vacation_itinerary_items')
       .update(patch)
       .eq('id', move.id)
       .eq('family_id', scope.familyId)
-      .eq('vacation_id', vacationId)
-      .select('id');
+      .eq('vacation_id', vacationId);
+    if (move.fromStart) query = query.eq('start_time', move.fromStart);
+    const { data: shiftedRow, error } = await query.select('id');
     if (error) {
       console.error('[service:trips] itinerary shift failed', error);
-      return fail(describeDbError(error, 'Could not move the itinerary.'), { code: SERVICE_CODES.db });
+      return rollBack('Could not move the itinerary.');
     }
     if (!wroteNoRows(shiftedRow)) shifted += 1;
+    // Remembered so a failure further on can put it back.
+    if (!wroteNoRows(shiftedRow)) moved.push({ id: move.id, dayId: was?.day_id ?? null, start: was?.start_time ?? null, end: was?.end_time ?? null, toStart: move.toStart });
   }
 
   // The record of the disruption itself. `vacation_itinerary_items` already
   // has a `note` kind and a `notes` column, so this needs no new schema.
   const anchorDayId = await dayIdFor(scope, vacationId, booking.day, dayIds);
-  if (!anchorDayId.ok) return anchorDayId;
+  if (!anchorDayId.ok) return rollBack('Could not record the disruption on the itinerary.');
   const { data: note, error: noteError } = await scope.db
     .from('vacation_itinerary_items')
     .insert({
@@ -1151,7 +1286,7 @@ export async function reportTripDisruption(
     .maybeSingle();
   if (noteError) {
     console.error('[service:trips] disruption note create failed', noteError);
-    return fail(describeDbError(noteError, 'Could not record the disruption on the itinerary.'), { code: SERVICE_CODES.db });
+    return rollBack('Could not record the disruption on the itinerary.');
   }
 
   await recordActivitySafely(scope, {

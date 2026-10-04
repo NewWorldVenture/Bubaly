@@ -15080,6 +15080,7 @@
   "utilitySavings.addAFewUtilityBills": "Adicione primeiro algumas faturas de serviços para podermos analisar os seus custos.",
   "utilitySavings.tooManyUtilitySavingsRequests": "Demasiados pedidos de poupança em serviços. Tente novamente em breve.",
   "utilitySavings.unauthorized": "Não autorizado",
+  "vacationDisruption.bookingChanged": "Essa reserva mudou desde que este formulário foi aberto, por isso nada foi movido. Verifique a viagem e comunique novamente a perturbação se ainda for preciso.",
   "vacationDisruption.cancelled": "Cancelado",
   "vacationDisruption.couldNotLoadBookings": "Não foi possível carregar os voos e as estadias desta viagem.",
   "vacationDisruption.couldNotReport": "Não foi possível comunicar essa perturbação. Tente novamente.",
