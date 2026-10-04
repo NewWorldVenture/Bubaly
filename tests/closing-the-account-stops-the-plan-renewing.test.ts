@@ -18,7 +18,9 @@ const fake = vi.hoisted(() => ({
   key: 'sk_test_synthetic' as string | null,
   subs: [] as { id: string; status: string; customer: string; metadata: Record<string, string>; cancel_at_period_end: boolean }[],
   updateFails: false,
+  readFails: false,
   stripeCalls: 0,
+  updates: 0,
   closed: false,
   reopened: false,
 }));
@@ -38,7 +40,7 @@ vi.mock('@/lib/supabase/server', () => {
       const builder = {
         select: () => builder, eq: () => builder,
         maybeSingle: async () => {
-          if (table === 'subscriptions') return { data: fake.row, error: null };
+          if (table === 'subscriptions') return fake.readFails ? { data: null, error: { message: 'synthetic read failure' } } : { data: fake.row, error: null };
           if (table === 'billing_customers') return { data: fake.billingCustomerRef ? { customer_ref: fake.billingCustomerRef } : null, error: null };
           return { data: null, error: null };
         },
@@ -65,6 +67,7 @@ vi.mock('@/lib/stripe', () => {
     subscriptions: {
       update: async (id: string, params: { cancel_at_period_end: boolean }) => {
         fake.stripeCalls += 1;
+        fake.updates += 1;
         if (fake.updateFails) throw new Error('synthetic Stripe outage');
         const s = fake.subs.find((x) => x.id === id)!;
         s.cancel_at_period_end = params.cancel_at_period_end;
@@ -88,7 +91,7 @@ beforeEach(() => {
   fake.billingCustomerRef = 'cus_a';
   fake.key = 'sk_test_synthetic';
   fake.subs = [{ id: 'sub_A', status: 'active', customer: 'cus_a', metadata: family, cancel_at_period_end: false }];
-  fake.updateFails = false; fake.stripeCalls = 0; fake.closed = false; fake.reopened = false;
+  fake.updateFails = false; fake.readFails = false; fake.stripeCalls = 0; fake.updates = 0; fake.closed = false; fake.reopened = false;
   vi.spyOn(console, 'error').mockImplementation(() => {});
   vi.spyOn(console, 'warn').mockImplementation(() => {});
 });
@@ -113,6 +116,12 @@ describe('closing a family that pays for a plan', () => {
     expect(fake.closed).toBe(false);
   });
 
+  it('stays open when the family\'s billing cannot be read', async () => {
+    fake.readFails = true;
+    expect(await closeAccountAction()).toEqual({ ok: false, error: 'account.couldNotStopThePlanRenewing' });
+    expect(fake.closed).toBe(false);
+  });
+
   it('stays open when the family is billed but no Stripe key is configured to stop it', async () => {
     fake.key = null;
     expect(await closeAccountAction()).toEqual({ ok: false, error: 'account.couldNotStopThePlanRenewing' });
@@ -124,6 +133,7 @@ describe('closing a family that pays for a plan', () => {
     sub('sub_A').cancel_at_period_end = true;
     expect(await closeAccountAction()).toEqual({ ok: true });
     expect(fake.closed).toBe(true);
+    expect(fake.updates).toBe(0);
   });
 });
 
@@ -135,6 +145,13 @@ describe('closing a family that pays for nothing (control)', () => {
     expect(await closeAccountAction()).toEqual({ ok: true });
     expect(fake.closed).toBe(true);
     expect(fake.stripeCalls).toBe(0);
+  });
+
+  it('closes a family whose only subscription has ended, even with no Stripe key configured', async () => {
+    fake.row = { plan: 'plus', status: 'canceled', provider_ref: 'sub_A', cancel_at_period_end: false };
+    fake.key = null;
+    expect(await closeAccountAction()).toEqual({ ok: true });
+    expect(fake.closed).toBe(true);
   });
 
   it('reopening does not restart billing', async () => {
