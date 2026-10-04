@@ -90,7 +90,7 @@ function failUpdate(reply: Record<string, unknown>) {
     const builder = from(name) as unknown as Record<string, unknown>;
     if (name === 'allowance_rules') {
       const settle = { then: (resolve: (v: unknown) => unknown) => Promise.resolve({ data: null, count: null, status: 500, statusText: 'Error', ...reply }).then(resolve) };
-      builder.update = () => { const chain = { eq: () => chain, select: () => settle }; return chain; };
+      builder.update = () => { const chain = { eq: () => chain, not: () => chain, select: () => settle }; return chain; };
     }
     return builder;
   };
@@ -110,7 +110,9 @@ describe('editing an allowance keeps its paused or active state', () => {
   it('an active allowance that is edited stays active', async () => {
     expect(await saveAllowanceRuleAction({ id: 'rule-active', childWalletId: 'wallet-b', amountCents: 1_500, cadence: 'weekly' })).toEqual({ ok: true });
 
-    expect(rule('rule-active')).toMatchObject({ amount_cents: 1_500, next_run_on: '2026-10-05', is_active: true });
+    // Same cadence, so the payday it was due on stands (it used to be re-dated
+    // to 2026-10-05 here; see an-allowance-edit-keeps-its-payday.test.ts).
+    expect(rule('rule-active')).toMatchObject({ amount_cents: 1_500, next_run_on: '2026-09-30', is_active: true });
   });
 
   it('an edit does not write the active flag at all, so it cannot undo a pause made meanwhile in another tab', async () => {
