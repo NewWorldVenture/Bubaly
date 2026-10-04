@@ -17,27 +17,51 @@ alter table public.meal_plan_write_receipts enable row level security;
 alter table public.meal_plan_write_receipts force row level security;
 revoke all on public.meal_plan_write_receipts from public, anon, authenticated, service_role;
 
+-- SELECT ... FOR SHARE needs UPDATE privilege on the locked relation, which
+-- authenticated clients do not have for family_members. Keep the narrow trigger
+-- SECURITY DEFINER with a fixed search_path; authorization remains bound to auth.uid().
 create or replace function public.meal_plan_slot_write_guard()
 returns trigger
 language plpgsql
+security definer
 set search_path = pg_catalog, public
 as $$
 declare
+  v_family_ids uuid[];
+  v_family_id uuid;
+  v_actor_role public.member_role;
   v_old_key text;
   v_new_key text;
   v_slot_key text;
 begin
   if auth.uid() is not null then
-    if (tg_op <> 'INSERT' and exists (
-          select 1 from public.family_members fm where fm.family_id = old.family_id
-            and fm.user_id = auth.uid() and fm.is_active and fm.role = 'guest'
-        ))
-       or (tg_op <> 'DELETE' and exists (
-          select 1 from public.family_members fm where fm.family_id = new.family_id
-            and fm.user_id = auth.uid() and fm.is_active and fm.role = 'guest'
-        )) then
-      raise exception 'A guest can view the household but not change its meal plan' using errcode = '42501';
+    if tg_op = 'INSERT' then
+      v_family_ids := array[new.family_id];
+    elsif tg_op = 'DELETE' then
+      v_family_ids := array[old.family_id];
+    else
+      v_family_ids := array[old.family_id, new.family_id];
     end if;
+
+    -- Direct authenticated table writes are still available to older clients.
+    -- Lock every affected membership in stable order so deactivation, deletion,
+    -- or a guest-role change cannot commit between authorization and this write.
+    for v_family_id in
+      select distinct requested.family_id
+      from unnest(v_family_ids) as requested(family_id)
+      where requested.family_id is not null
+      order by requested.family_id
+    loop
+      select fm.role into v_actor_role
+      from public.family_members fm
+      where fm.family_id = v_family_id and fm.user_id = auth.uid() and fm.is_active
+      for share;
+      if not found then
+        raise exception 'Not an active meal-plan member' using errcode = '42501';
+      elsif v_actor_role = 'guest' then
+        raise exception 'A guest can view the household but not change its meal plan' using errcode = '42501';
+      end if;
+    end loop;
   end if;
   if tg_op <> 'INSERT' then
     v_old_key := old.family_id::text || ':' || old.plan_date::text || ':' || old.meal_type::text;

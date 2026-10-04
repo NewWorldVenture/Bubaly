@@ -16,13 +16,24 @@ BEGIN
   IF p_ok IS DISTINCT FROM true THEN RAISE EXCEPTION '0475 concurrency assertion failed: %', p_label; END IF;
   RAISE NOTICE '0475 PASS %', p_label;
 END $$;
-CREATE FUNCTION public.meal_plan_test_direct_insert(p_plan_date date) RETURNS text
+CREATE FUNCTION public.meal_plan_test_direct_write(p_operation text, p_plan_date date, p_new_plan_date date DEFAULT NULL) RETURNS text
 LANGUAGE plpgsql SECURITY INVOKER AS $$
-DECLARE v_state text;
+DECLARE v_state text; v_rows integer;
 BEGIN
-  INSERT INTO public.meal_plans(family_id, meal_id, plan_date, meal_type, created_by)
-  VALUES ('10000000-0000-0000-0000-000000000001', '30000000-0000-0000-0000-000000000001', p_plan_date, 'dinner', auth.uid());
-  RETURN 'inserted';
+  IF p_operation = 'insert' THEN
+    INSERT INTO public.meal_plans(family_id, meal_id, plan_date, meal_type, created_by)
+    VALUES ('10000000-0000-0000-0000-000000000001', '30000000-0000-0000-0000-000000000001', p_plan_date, 'dinner', auth.uid());
+  ELSIF p_operation = 'update' THEN
+    UPDATE public.meal_plans SET plan_date = p_new_plan_date
+     WHERE family_id = '10000000-0000-0000-0000-000000000001' AND plan_date = p_plan_date AND meal_type = 'dinner';
+  ELSIF p_operation = 'delete' THEN
+    DELETE FROM public.meal_plans
+     WHERE family_id = '10000000-0000-0000-0000-000000000001' AND plan_date = p_plan_date AND meal_type = 'dinner';
+  ELSE
+    RAISE EXCEPTION 'unknown synthetic direct write operation: %', p_operation USING ERRCODE = '22023';
+  END IF;
+  GET DIAGNOSTICS v_rows = ROW_COUNT;
+  RETURN p_operation || ':' || v_rows::text;
 EXCEPTION WHEN OTHERS THEN
   GET STACKED DIAGNOSTICS v_state = RETURNED_SQLSTATE;
   RETURN v_state;
@@ -46,6 +57,65 @@ BEGIN
    WHERE family_id = '10000000-0000-0000-0000-000000000001'
      AND user_id = '20000000-0000-0000-0000-000000000001';
   RETURN 'deactivated';
+END $$;
+CREATE FUNCTION public.meal_plan_test_direct_deactivation_race(
+  p_operation text, p_plan_date date, p_new_plan_date date, p_expected_result text
+) RETURNS text
+LANGUAGE plpgsql AS $$
+DECLARE
+  v_query text;
+  v_result text;
+  v_deactivation text;
+  v_deadline timestamptz;
+  v_a integer := (SELECT pid FROM meal_test_pids WHERE name = 'a');
+  v_b integer := (SELECT pid FROM meal_test_pids WHERE name = 'b');
+BEGIN
+  v_query := format('SELECT public.meal_plan_test_direct_write(%L::text,%L::date,%L::date)',
+    p_operation, p_plan_date, p_new_plan_date);
+  PERFORM public.dblink_exec('meal_a', 'BEGIN');
+  IF public.dblink_send_query('meal_a', v_query) <> 1 THEN
+    RAISE EXCEPTION '0475 failed to dispatch direct %', p_operation;
+  END IF;
+  v_deadline := clock_timestamp() + interval '10 seconds';
+  WHILE public.dblink_is_busy('meal_a') = 1 LOOP
+    IF clock_timestamp() > v_deadline THEN RAISE EXCEPTION '0475 direct % did not finish its write body', p_operation; END IF;
+    PERFORM pg_sleep(0.025);
+  END LOOP;
+  SELECT result INTO v_result FROM public.dblink_get_result('meal_a') AS t(result text);
+  PERFORM 1 FROM public.dblink_get_result('meal_a') AS t(result text);
+  IF v_result <> p_expected_result THEN
+    RAISE EXCEPTION '0475 direct % returned %, expected %', p_operation, v_result, p_expected_result;
+  END IF;
+
+  PERFORM public.dblink_exec('meal_b', 'BEGIN');
+  IF public.dblink_send_query('meal_b', 'SELECT public.meal_plan_test_deactivate_member()') <> 1 THEN
+    RAISE EXCEPTION '0475 failed to dispatch deactivation during direct %', p_operation;
+  END IF;
+  v_deadline := clock_timestamp() + interval '10 seconds';
+  LOOP
+    IF public.dblink_is_busy('meal_b') = 0 THEN
+      RAISE EXCEPTION '0475 membership deactivation passed the direct % before its transaction committed', p_operation;
+    END IF;
+    EXIT WHEN v_a = ANY(pg_blocking_pids(v_b));
+    IF clock_timestamp() > v_deadline THEN
+      RAISE EXCEPTION '0475 direct % did not hold an active membership lock against deactivation', p_operation;
+    END IF;
+    PERFORM pg_sleep(0.025);
+  END LOOP;
+
+  PERFORM public.dblink_exec('meal_a', 'COMMIT');
+  v_deadline := clock_timestamp() + interval '15 seconds';
+  WHILE public.dblink_is_busy('meal_b') = 1 LOOP
+    IF clock_timestamp() > v_deadline THEN RAISE EXCEPTION '0475 deactivation did not resume after direct % committed', p_operation; END IF;
+    PERFORM pg_sleep(0.025);
+  END LOOP;
+  SELECT status INTO v_deactivation FROM public.dblink_get_result('meal_b') AS t(status text);
+  PERFORM 1 FROM public.dblink_get_result('meal_b') AS t(status text);
+  PERFORM public.dblink_exec('meal_b', 'COMMIT');
+  IF v_deactivation <> 'deactivated' THEN
+    RAISE EXCEPTION '0475 deactivation after direct % returned %', p_operation, v_deactivation;
+  END IF;
+  RETURN v_result;
 END $$;
 
 SELECT public.dblink_connect('meal_a', format('host=127.0.0.1 port=%s dbname=bubaly_meal_plan_atomic_ci user=postgres', current_setting('port')));
@@ -123,7 +193,7 @@ END $lock$$query$);
 SELECT public.dblink_exec('meal_a', $$INSERT INTO public.meal_plans(family_id,meal_id,plan_date,meal_type,created_by)
   VALUES ('10000000-0000-0000-0000-000000000001','30000000-0000-0000-0000-000000000001','2026-10-08','dinner',auth.uid())$$);
 SELECT public.meal_plan_test_assert(public.dblink_send_query('meal_b',
-  $$SELECT public.meal_plan_test_direct_insert('2026-10-08')$$) = 1, 'uncoordinated direct insert dispatched');
+  $$SELECT public.meal_plan_test_direct_write('insert','2026-10-08',NULL)$$) = 1, 'uncoordinated direct insert dispatched');
 DO $$
 DECLARE v_deadline timestamptz := clock_timestamp() + interval '10 seconds';
 BEGIN
@@ -224,5 +294,53 @@ SELECT public.meal_plan_test_assert(
   (SELECT is_active FROM public.family_members WHERE family_id='10000000-0000-0000-0000-000000000001'
      AND user_id='20000000-0000-0000-0000-000000000001'),
   'synthetic actor membership restored for later fixture steps');
+
+-- Authenticated direct DML must hold the same active-membership row lock as
+-- the RPCs for each trigger operation, so deactivation cannot overtake it.
+SELECT public.dblink_exec('meal_b', 'RESET ROLE');
+SELECT public.meal_plan_test_assert(
+  public.meal_plan_test_direct_deactivation_race('insert','2026-10-11',NULL,'insert:1') = 'insert:1',
+  'direct INSERT holds membership FOR SHARE until deactivation follows');
+SELECT public.meal_plan_test_assert(
+  NOT (SELECT is_active FROM public.family_members WHERE family_id='10000000-0000-0000-0000-000000000001'
+       AND user_id='20000000-0000-0000-0000-000000000001')
+  AND EXISTS (SELECT 1 FROM public.meal_plans WHERE plan_date='2026-10-11'),
+  'direct INSERT commits before the waiting deactivation');
+SELECT public.meal_plan_test_assert(
+  (SELECT result = '42501' FROM public.dblink('meal_a',
+    $$SELECT public.meal_plan_test_direct_write('insert','2026-10-13',NULL)$$) AS t(result text))
+  AND (SELECT result = 'update:0' FROM public.dblink('meal_a',
+    $$SELECT public.meal_plan_test_direct_write('update','2026-10-11','2026-10-12')$$) AS t(result text))
+  AND (SELECT result = 'delete:0' FROM public.dblink('meal_a',
+    $$SELECT public.meal_plan_test_direct_write('delete','2026-10-11',NULL)$$) AS t(result text))
+  AND EXISTS (SELECT 1 FROM public.meal_plans WHERE plan_date='2026-10-11')
+  AND NOT EXISTS (SELECT 1 FROM public.meal_plans WHERE plan_date IN ('2026-10-12','2026-10-13')),
+  'inactive membership rejects authenticated direct INSERT and hides UPDATE/DELETE targets without changing rows');
+UPDATE public.family_members SET is_active = true
+ WHERE family_id='10000000-0000-0000-0000-000000000001'
+   AND user_id='20000000-0000-0000-0000-000000000001';
+SELECT public.meal_plan_test_assert(
+  public.meal_plan_test_direct_deactivation_race('update','2026-10-11','2026-10-12','update:1') = 'update:1',
+  'direct UPDATE holds membership FOR SHARE until deactivation follows');
+SELECT public.meal_plan_test_assert(
+  NOT (SELECT is_active FROM public.family_members WHERE family_id='10000000-0000-0000-0000-000000000001'
+       AND user_id='20000000-0000-0000-0000-000000000001')
+  AND EXISTS (SELECT 1 FROM public.meal_plans WHERE plan_date='2026-10-12')
+  AND NOT EXISTS (SELECT 1 FROM public.meal_plans WHERE plan_date='2026-10-11'),
+  'direct UPDATE commits before the waiting deactivation');
+UPDATE public.family_members SET is_active = true
+ WHERE family_id='10000000-0000-0000-0000-000000000001'
+   AND user_id='20000000-0000-0000-0000-000000000001';
+SELECT public.meal_plan_test_assert(
+  public.meal_plan_test_direct_deactivation_race('delete','2026-10-12',NULL,'delete:1') = 'delete:1',
+  'direct DELETE holds membership FOR SHARE until deactivation follows');
+SELECT public.meal_plan_test_assert(
+  NOT (SELECT is_active FROM public.family_members WHERE family_id='10000000-0000-0000-0000-000000000001'
+       AND user_id='20000000-0000-0000-0000-000000000001')
+  AND NOT EXISTS (SELECT 1 FROM public.meal_plans WHERE plan_date='2026-10-12'),
+  'direct DELETE commits before the waiting deactivation');
+UPDATE public.family_members SET is_active = true
+ WHERE family_id='10000000-0000-0000-0000-000000000001'
+   AND user_id='20000000-0000-0000-0000-000000000001';
 SELECT public.dblink_disconnect('meal_a');
 SELECT public.dblink_disconnect('meal_b');
