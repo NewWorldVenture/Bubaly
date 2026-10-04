@@ -32,6 +32,7 @@ describe('Anthropic organization identity preflight', () => {
     const [url, init] = fetchImpl.mock.calls[0];
     expect(url).toBe('https://api.anthropic.com/v1/organizations/me');
     expect(init?.method).toBe('GET');
+    expect(init?.redirect).toBe('error');
     expect(new Headers(init?.headers).get('x-api-key')).toBe('synthetic-admin-key');
     expect(new Headers(init?.headers).get('anthropic-version')).toBe('2023-06-01');
   });
@@ -45,6 +46,57 @@ describe('Anthropic organization identity preflight', () => {
     });
 
     expect(result).toEqual({ status: 'organization_mismatch', organizationId: OTHER_ORG, checkedAt: CHECKED_AT });
+  });
+
+  it('verifies the exact active workspace using the same execution key and confined headers', async () => {
+    const workspaceId = 'wrkspc_synthetic';
+    const fetchImpl = vi.fn<typeof fetch>(async (url) => String(url).endsWith('/me') ? okResponse()
+      : Response.json({ type: 'workspace', id: workspaceId, archived_at: null }));
+    expect(await verifyAnthropicOrganization({ apiKey: 'synthetic-execution-key', expectedOrganizationId: EXPECTED_ORG,
+      workspaceId, fetchImpl, now: () => new Date(CHECKED_AT) })).toEqual({
+      status: 'organization_verified', organizationId: EXPECTED_ORG, workspaceId, checkedAt: CHECKED_AT,
+    });
+    expect(fetchImpl).toHaveBeenCalledTimes(2);
+    expect(fetchImpl.mock.calls[1][0]).toBe(`https://api.anthropic.com/v1/organizations/workspaces/${workspaceId}`);
+    for (const [, init] of fetchImpl.mock.calls) {
+      expect(init?.method).toBe('GET');
+      expect(init?.redirect).toBe('error');
+      expect(new Headers(init?.headers).get('x-api-key')).toBe('synthetic-execution-key');
+      expect(new Headers(init?.headers).get('anthropic-workspace-id')).toBe(workspaceId);
+      expect(init?.signal).toBe(fetchImpl.mock.calls[0][1]?.signal);
+    }
+  });
+
+  it.each([
+    [{ type: 'workspace', id: 'wrkspc_other', archived_at: null }, 'workspace_mismatch'],
+    [{ type: 'workspace', id: 'wrkspc_synthetic', archived_at: CHECKED_AT }, 'workspace_unavailable'],
+    [{ type: 'workspace', id: 'wrkspc_synthetic' }, 'workspace_unavailable'],
+    [{ type: 'organization', id: EXPECTED_ORG }, 'invalid_provider_response'],
+  ] as const)('rejects mismatched/archived/invalid workspace proof', async (body, status) => {
+    const fetchImpl = vi.fn<typeof fetch>(async (url) => String(url).endsWith('/me') ? okResponse() : Response.json(body));
+    const result = await verifyAnthropicOrganization({ apiKey: 'synthetic-execution-key', expectedOrganizationId: EXPECTED_ORG,
+      workspaceId: 'wrkspc_synthetic', fetchImpl });
+    expect(result.status).toBe(status);
+    expect(result.workspaceId).toBeUndefined();
+  });
+
+  it('does not probe an invalid workspace or continue after an organization mismatch', async () => {
+    const fetchImpl = vi.fn<typeof fetch>(async () => okResponse(OTHER_ORG));
+    expect((await verifyAnthropicOrganization({ apiKey: 'synthetic-execution-key', expectedOrganizationId: EXPECTED_ORG,
+      workspaceId: 'wrkspc_../outside', fetchImpl })).status).toBe('identity_unconfigured');
+    expect(fetchImpl).not.toHaveBeenCalled();
+    expect((await verifyAnthropicOrganization({ apiKey: 'synthetic-execution-key', expectedOrganizationId: EXPECTED_ORG,
+      workspaceId: 'wrkspc_synthetic', fetchImpl })).status).toBe('organization_mismatch');
+    expect(fetchImpl).toHaveBeenCalledTimes(1);
+  });
+
+  it('fails closed when workspace access is denied without exposing provider diagnostics', async () => {
+    const fetchImpl = vi.fn<typeof fetch>(async (url) => String(url).endsWith('/me') ? okResponse()
+      : new Response('synthetic-private-provider-diagnostic', { status: 404 }));
+    const result = await verifyAnthropicOrganization({ apiKey: 'synthetic-execution-key', expectedOrganizationId: EXPECTED_ORG,
+      workspaceId: 'wrkspc_synthetic', fetchImpl });
+    expect(result.status).toBe('workspace_unavailable');
+    expect(JSON.stringify(result)).not.toContain('synthetic-private-provider-diagnostic');
   });
 
   it('does not call Anthropic if either the API key or expected organization is missing', async () => {

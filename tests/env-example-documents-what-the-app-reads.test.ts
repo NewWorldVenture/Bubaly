@@ -1,5 +1,5 @@
 import { readFileSync } from 'node:fs';
-import { execSync } from 'node:child_process';
+import { execFileSync } from 'node:child_process';
 import { describe, expect, it } from 'vitest';
 
 // MAIN-F-C07. The app read 19 environment variables that .env.example never
@@ -8,7 +8,9 @@ import { describe, expect, it } from 'vitest';
 // "setup required"). Whoever set up a deployment from the template could not
 // know they existed. Each is now documented, and a new read has to be.
 
-const SOURCES = execSync("git ls-files 'app/**' 'lib/**' 'components/**' middleware.ts instrumentation.ts next.config.mjs", { encoding: 'utf8' })
+// Pass pathspecs as arguments: cmd.exe preserves shell single quotes literally
+// and otherwise scans only the explicitly named root files on Windows.
+const SOURCES = execFileSync('git', ['ls-files', 'app/**', 'lib/**', 'components/**', 'middleware.ts', 'instrumentation.ts', 'next.config.mjs'], { encoding: 'utf8' })
   .trim().split('\n').filter((f) => /\.(ts|tsx|mjs|js)$/.test(f) && !f.includes('.test.'));
 
 /** Set by the platform or the runtime, never by whoever fills in the template. */

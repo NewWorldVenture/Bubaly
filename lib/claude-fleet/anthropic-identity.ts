@@ -13,6 +13,8 @@ export const ANTHROPIC_IDENTITY_TIMEOUT_MS = 5_000;
 export type AnthropicIdentityStatus =
   | 'organization_verified'
   | 'organization_mismatch'
+  | 'workspace_mismatch'
+  | 'workspace_unavailable'
   | 'identity_unconfigured'
   | 'auth_rejected'
   | 'rate_limited'
@@ -23,12 +25,15 @@ export type AnthropicIdentityStatus =
 export type AnthropicIdentityResult = {
   status: AnthropicIdentityStatus;
   organizationId?: string;
+  workspaceId?: string;
   checkedAt: string;
 };
 
 export type VerifyAnthropicIdentityOptions = {
   apiKey?: string;
   expectedOrganizationId?: string;
+  /** Worker execution requires a separately verified active workspace. */
+  workspaceId?: string;
   fetchImpl?: typeof fetch;
   timeoutMs?: number;
   now?: () => Date;
@@ -37,6 +42,10 @@ export type VerifyAnthropicIdentityOptions = {
 export function isOrganizationId(value: unknown): value is string {
   return typeof value === 'string'
     && /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(value);
+}
+
+export function isWorkspaceId(value: unknown): value is string {
+  return typeof value === 'string' && /^wrkspc_[A-Za-z0-9]{1,100}$/.test(value);
 }
 
 /**
@@ -48,13 +57,15 @@ export async function verifyAnthropicOrganization(
   options: VerifyAnthropicIdentityOptions,
 ): Promise<AnthropicIdentityResult> {
   const now = options.now ?? (() => new Date());
-  const result = (status: AnthropicIdentityStatus, organizationId?: string): AnthropicIdentityResult => ({
+  const result = (status: AnthropicIdentityStatus, organizationId?: string, workspaceId?: string): AnthropicIdentityResult => ({
     status,
     ...(organizationId ? { organizationId } : {}),
+    ...(workspaceId ? { workspaceId } : {}),
     checkedAt: now().toISOString(),
   });
 
-  if (!options.apiKey?.trim() || !isOrganizationId(options.expectedOrganizationId)) {
+  if (!options.apiKey?.trim() || !isOrganizationId(options.expectedOrganizationId)
+    || (options.workspaceId !== undefined && !isWorkspaceId(options.workspaceId))) {
     return result('identity_unconfigured');
   }
 
@@ -65,10 +76,12 @@ export async function verifyAnthropicOrganization(
   try {
     const response = await fetchImpl(ANTHROPIC_ORGANIZATION_URL, {
       method: 'GET',
+      redirect: 'error',
       headers: {
         'x-api-key': options.apiKey.trim(),
         'anthropic-version': ANTHROPIC_VERSION,
         accept: 'application/json',
+        ...(options.workspaceId ? { 'anthropic-workspace-id': options.workspaceId } : {}),
       },
       signal: controller.signal,
       cache: 'no-store',
@@ -95,7 +108,30 @@ export async function verifyAnthropicOrganization(
 
     const actual = identity.id.toLowerCase();
     const expected = options.expectedOrganizationId.toLowerCase();
-    return result(actual === expected ? 'organization_verified' : 'organization_mismatch', actual);
+    if (actual !== expected) return result('organization_mismatch', actual);
+    if (!options.workspaceId) return result('organization_verified', actual);
+    // Verify access and active state with the same execution credential, under
+    // the original shared deadline. Configured workspace text alone is not proof.
+    const workspaceResponse = await fetchImpl(`https://api.anthropic.com/v1/organizations/workspaces/${options.workspaceId}`, {
+      method: 'GET', redirect: 'error', cache: 'no-store', signal: controller.signal,
+      headers: {
+        'x-api-key': options.apiKey.trim(), 'anthropic-version': ANTHROPIC_VERSION,
+        'anthropic-workspace-id': options.workspaceId, accept: 'application/json',
+      },
+    });
+    if (!workspaceResponse.ok) {
+      if (workspaceResponse.status === 401 || workspaceResponse.status === 403) return result('auth_rejected', actual);
+      if (workspaceResponse.status === 429) return result('rate_limited', actual);
+      return result('workspace_unavailable', actual);
+    }
+    let workspace: unknown;
+    try { workspace = await workspaceResponse.json(); } catch { return result('invalid_provider_response', actual); }
+    if (!workspace || typeof workspace !== 'object') return result('invalid_provider_response', actual);
+    const target = workspace as { type?: unknown; id?: unknown; archived_at?: unknown };
+    if (target.type !== 'workspace' || !isWorkspaceId(target.id)) return result('invalid_provider_response', actual);
+    if (target.id !== options.workspaceId) return result('workspace_mismatch', actual);
+    if (target.archived_at !== null) return result('workspace_unavailable', actual);
+    return result('organization_verified', actual, target.id);
   } catch {
     return result('provider_unreachable');
   } finally {

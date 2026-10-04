@@ -33,7 +33,7 @@ const vercel = JSON.parse(readFileSync(join(ROOT, 'vercel.json'), 'utf8')) as {
  * route did not self-heal in minutes — it lost ~98% of its firings and waited
  * hours for the next tick — while the DAILY routes were the protected ones,
  * because `vercel.json` mirrors every one of them at the same minute and
- * Vercel's scheduler does fire. The seventeen routes with no Vercel equivalent
+ * Vercel's scheduler does fire. The eighteen routes with no Vercel equivalent
  * for their cadence are measured one by one in
  * `a-cron-cadence-is-a-promise-nothing-keeps`.
  *
@@ -127,7 +127,7 @@ describe('a late tick catches up', () => {
     const since = '2026-09-07T03:00:00Z';
     const due = dueRoutes(LATE, SCHEDULES, TICK_MINUTES, since);
     const subDaily = Object.entries(SCHEDULES).filter(([, expr]) => isSubDaily(expr)).map(([route]) => route);
-    expect(subDaily).toHaveLength(17);
+    expect(subDaily).toHaveLength(18);
     expect([...due].sort(), 'every sub-daily route, and no daily one: admin-digest\'s 12:30 is outside this gap').toEqual([...subDaily].sort());
     expect(new Set(due).size).toBe(due.length);
 

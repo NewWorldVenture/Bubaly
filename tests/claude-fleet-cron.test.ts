@@ -7,6 +7,35 @@ afterEach(() => {
 });
 
 describe('Claude fleet cron identity preflight', () => {
+  it('does not start a paid worker merely because workers are enabled', async () => {
+    vi.stubEnv('CRON_SECRET', 'synthetic-cron-secret');
+    vi.stubEnv('CLAUDE_FLEET_WORKERS_ENABLED', 'true');
+    vi.stubEnv('CLAUDE_FLEET_PAID_PROBES_APPROVED', 'false');
+    vi.stubGlobal('fetch', vi.fn());
+    const { GET } = await import('@/app/api/cron/claude-fleet/route');
+    const response = await GET(new Request('https://example.test/api/cron/claude-fleet', {
+      headers: { authorization: 'Bearer synthetic-cron-secret' },
+    }));
+    expect(response.status).toBe(200);
+    expect(await response.json()).toEqual({ ok: true, enabled: false, status: 'paid_probes_not_approved' });
+    expect(fetch).not.toHaveBeenCalled();
+  });
+
+  it('rejects enabled execution with missing bindings before any database or provider call', async () => {
+    vi.stubEnv('CRON_SECRET', 'synthetic-cron-secret');
+    vi.stubEnv('CLAUDE_FLEET_WORKERS_ENABLED', 'true');
+    vi.stubEnv('CLAUDE_FLEET_PAID_PROBES_APPROVED', 'true');
+    vi.stubEnv('CLAUDE_FLEET_ACCOUNT_BINDINGS', '');
+    vi.stubGlobal('fetch', vi.fn());
+    const { GET } = await import('@/app/api/cron/claude-fleet/route');
+    const response = await GET(new Request('https://example.test/api/cron/claude-fleet', {
+      headers: { authorization: 'Bearer synthetic-cron-secret' },
+    }));
+    expect(response.status).toBe(503);
+    expect(await response.json()).toEqual({ ok: false, status: 'worker_unavailable', reason: 'accounts_unconfigured' });
+    expect(fetch).not.toHaveBeenCalled();
+  });
+
   it('rejects an unauthorized caller before reading bindings or contacting Anthropic', async () => {
     vi.stubEnv('CRON_SECRET', 'synthetic-cron-secret');
     vi.stubEnv('CLAUDE_FLEET_PROBES_ENABLED', 'true');
