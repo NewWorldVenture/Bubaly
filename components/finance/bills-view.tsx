@@ -14,7 +14,7 @@ import { Input, Field, Select } from '@/components/ui/input';
 import { SkeletonList, EmptyState, ErrorState } from '@/components/ui/states';
 import { cn } from '@/lib/utils/cn';
 import type { Tables } from '@/lib/database.types';
-import { usd as usdIn, billDueStatus, billPaidPatch, DUE_META, fmtDueDate as fmtDueDateIn } from '@/lib/finance/hub';
+import { usd as usdIn, billDueStatus, billPaidPatch, DUE_META, fmtDueDate as fmtDueDateIn, newBillDueDay, writeBillPatch } from '@/lib/finance/hub';
 import { useLocale, useTranslations } from '@/components/i18n/locale-provider';
 import { describeDbError, wroteNoRows } from '@/lib/supabase/errors';
 import { todayInZone } from '@/lib/schedule/zoned';
@@ -70,7 +70,8 @@ export function BillsView({ mode }: { mode: BillsMode }) {
     // A restrictive RLS policy FILTERS an update/delete rather than raising, so
     // a refused write returns zero rows and no error. `.select('id')` is what
     // makes the difference visible — without it `data` is null either way.
-    const { data: rows, error } = await createClient().from('bills').update(patch).eq('id', b.id).eq('family_id', familyId).select('id');
+    // `writeBillPatch`: on a database without bills.due_day (0488 not applied) the write is repeated without it.
+    const { data: rows, error } = await writeBillPatch(patch, (p) => createClient().from('bills').update(p).eq('id', b.id).eq('family_id', familyId).select('id'));
     if (error) { toastError(describeDbError(error)); return; }
     if (wroteNoRows(rows)) { toastError(t('errors.thatChangeWasNotSaved')); return; }
     success(reopen ? 'Reopened' : 'Marked paid');
@@ -183,11 +184,12 @@ function BillModal({ familyId, userId, defaultAutopay, onClose }: { familyId: st
     e.preventDefault();
     if (!v.name.trim() || !v.amount) return toastError(t('billsView.addANameAndAmount'));
     setSaving(true);
-    const { error } = await createClient().from('bills').insert({
+    const { error } = await writeBillPatch({
       family_id: familyId, name: v.name.trim(), amount: Math.abs(parseFloat(v.amount) || 0),
-      due_date: v.due_date, category: v.category, is_recurring: v.is_recurring, recurrence: v.is_recurring ? v.recurrence : null, autopay: v.autopay,
-      status: 'upcoming', created_by: userId,
-    });
+      due_date: v.due_date, due_day: newBillDueDay(v.due_date, v.is_recurring, v.recurrence),
+      category: v.category, is_recurring: v.is_recurring, recurrence: v.is_recurring ? v.recurrence : null, autopay: v.autopay,
+      status: 'upcoming' as const, created_by: userId,
+    }, (p) => createClient().from('bills').insert(p));
     setSaving(false);
     if (error) return toastError(describeDbError(error));
     success(t('billsView.billAdded'));

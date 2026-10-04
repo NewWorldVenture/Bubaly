@@ -61,7 +61,7 @@ import {
 import { cn } from '@/lib/utils/cn';
 import type { Tables, SubscriptionStatus, AccountType, TransactionType, BudgetPeriod, BillStatus } from '@/lib/database.types';
 import { categoryLabel } from '@/lib/finance/category-label';
-import { billPaidPatch } from '@/lib/finance/hub';
+import { billPaidPatch, newBillDueDay, writeBillPatch } from '@/lib/finance/hub';
 import { useLocale, useTranslations } from '@/components/i18n/locale-provider';
 import { FamilyDeliveredValue } from '@/components/billing/family-delivered-value';
 import type { LocaleCode } from '@/lib/i18n/locales';
@@ -456,12 +456,13 @@ function AddBillModal({ open, onClose, familyId, userId, onDone }: {
     if (!name.trim() || !amount || !dueDate) return;
     setSaving(true);
     const supabase = createClient();
-    const { error } = await supabase.from('bills').insert({
+    const { error } = await writeBillPatch({
       family_id: familyId, created_by: userId,
       name: name.trim(), amount: parseFloat(amount), due_date: dueDate,
+      due_day: newBillDueDay(dueDate, isRecurring, recurrence),
       is_recurring: isRecurring, recurrence: isRecurring ? recurrence : null,
-      status: 'upcoming', category,
-    });
+      status: 'upcoming' as const, category,
+    }, (p) => supabase.from('bills').insert(p));
     setSaving(false);
     if (error) return toastError(describeDbError(error));
     success(tr('billingModule.billAdded'));
@@ -961,7 +962,8 @@ export function BillingModule({ serviceFeeNotice = null }: { serviceFeeNotice?: 
     // (lib/finance/hub.ts). A bill the list no longer holds is paid as before.
     const bill = (bills ?? []).find((b) => b.id === id);
     const patch = bill ? billPaidPatch(bill, clock.todayKey()) : { status: 'paid' as const };
-    const { data: rows, error } = await supabase.from('bills').update(patch).eq('id', id).eq('family_id', familyId).select('id');
+    // `writeBillPatch`: on a database without bills.due_day (0488 not applied) the write is repeated without it.
+    const { data: rows, error } = await writeBillPatch(patch, (p) => supabase.from('bills').update(p).eq('id', id).eq('family_id', familyId).select('id'));
     if (error) return toastError(describeDbError(error));
     if (wroteNoRows(rows)) return toastError(tr('errors.thatChangeWasNotSaved'));
     success(tr('billingModule.billMarkedAsPaid'));
