@@ -23,7 +23,8 @@ import { describe, expect, it } from 'vitest';
 // unconditionally, so both were in fact absent; only one probe could say so.
 //
 // Proven against real PostgreSQL 16.13 before this test was written, by running
-// the actual migration files against a fixture of the ten money tables:
+// the actual migration files against the ten wallet and finance tables covered
+// by 0254/0275 (allowance_rules has its separate 0306 guard):
 //   nothing applied -> 0249 / 0254 / 0275 all "NOT present"
 //   real 0254 applied -> only 0254 flips to "present"   (it discriminates)
 //   real 0275 applied -> 0275 flips too                 (3 guards per table)
@@ -105,9 +106,9 @@ describe('the ledger pre-flight cannot report a migration it did not observe', (
 });
 
 describe('the money boundary is reported as state, not as provenance', () => {
-  it('verdicts every money table the runbook covers', () => {
+  it('verdicts every money table in the current hand-run boundary query', () => {
     for (const t of ['family_wallets', 'child_wallets', 'wallet_buckets', 'wallet_transactions', 'wallet_rules',
-                     'financial_accounts', 'transactions', 'budgets', 'bills', 'savings_goals']) {
+                     'allowance_rules', 'financial_accounts', 'transactions', 'budgets', 'bills', 'savings_goals']) {
       expect(BOUNDARY).toContain(`('${t}')`);
     }
   });

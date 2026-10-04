@@ -74,7 +74,7 @@ select pg_catalog.jsonb_build_object(
     where n.nspname = 'public'
       and p.polcmd in ('a','w','d','*')
       and c.relname = any (array[
-        'family_wallets','child_wallets','wallet_buckets','wallet_transactions','wallet_rules',
+        'family_wallets','child_wallets','wallet_buckets','wallet_transactions','wallet_rules','allowance_rules',
         'financial_accounts','transactions','budgets','bills','savings_goals'])), '[]'::jsonb),
   'coreFunctions', coalesce((select pg_catalog.jsonb_agg(pg_catalog.jsonb_build_object(
     'name', p.proname, 'definition', pg_catalog.pg_get_functiondef(p.oid)) order by p.proname)
@@ -139,9 +139,9 @@ export async function readProductionMigrationState({ projectRef, token, fetchImp
  * An open write on a guarded table is reportable but not exploitable — that is
  * the wallet finding, and LB-016 explains why halting on it adds nothing.
  */
-/** The ten tables the money boundary covers, in the order the SQL lists them. */
+/** The eleven tables the money boundary covers, in the order the SQL lists them. */
 export const MONEY_TABLES = [
-  'family_wallets', 'child_wallets', 'wallet_buckets', 'wallet_transactions', 'wallet_rules',
+  'family_wallets', 'child_wallets', 'wallet_buckets', 'wallet_transactions', 'wallet_rules', 'allowance_rules',
   'financial_accounts', 'transactions', 'budgets', 'bills', 'savings_goals',
 ];
 
