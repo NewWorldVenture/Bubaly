@@ -193,7 +193,7 @@ async function runSync(
   let cancelled: string[];
   let cancelledSeries: string[];
   try {
-    ({ rows, cancelled, cancelledSeries } = planFeedRows(parseICS(icsText), feed.family_id, feed.id));
+    ({ rows, cancelled, cancelledSeries } = planFeedRows(parseICS(icsText, { bareCancellations: true }), feed.family_id, feed.id));
   } catch {
     return failWith('Could not parse the calendar');
   }

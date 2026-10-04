@@ -153,6 +153,11 @@ export type FeedRowPlan = {
  * them in: an exception published beside its cancelled master is not a row,
  * and a cancelled exception of a cancelled series is not a removal of its own.
  *
+ * A cancellation may carry only its identity — UID, and RECURRENCE-ID for one
+ * occurrence — with no DTSTART or SUMMARY (RFC 5546 §3.2.5); the sync parses
+ * with `bareCancellations` so such a component reaches the plan, and the plan
+ * does not ask a cancellation for a start.
+ *
  * Known limit, stated: the app's recurrence model has no exception dates, so
  * the master still renders the ORIGINAL slot of a moved or cancelled
  * occurrence alongside the exception. That is a duplicate on one week, where
@@ -163,7 +168,10 @@ export function planFeedRows(events: IcsEvent[], familyId: string, feedId: strin
   const cancelled = new Set<string>();
   const cancelledMasters = new Set<string>();
   for (const ev of events) {
-    if (!ev.uid || !ev.startsAt) continue;
+    if (!ev.uid) continue;
+    // A cancellation needs only its identity (RFC 5546 §3.2.5 lets a CANCEL
+    // omit DTSTART); a live event with no start cannot be placed and is skipped.
+    if (ev.status !== 'cancelled' && !ev.startsAt) continue;
     const key = feedExternalUid(ev);
     if (ev.status === 'cancelled') {
       live.delete(key);
