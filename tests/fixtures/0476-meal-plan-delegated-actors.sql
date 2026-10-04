@@ -30,7 +30,8 @@ DECLARE
   v_inactive_plan jsonb;
   v_ensure jsonb;
   v_pantry jsonb;
-  v_legacy_meal uuid := '30000000-0000-0000-0000-000000000003';
+  -- 0475's preceding concurrency fixture already owns 300...0003 for Family A.
+  v_legacy_meal uuid := '30000000-0000-0000-0000-000000000004';
   v_state text;
   v_count integer;
 BEGIN

@@ -49,10 +49,19 @@ describe('meal-plan replay exception in the listing status probe', () => {
     );
     const liveBranch = replayBranch(compact(body!));
     const whitelistedBranch = compact(expected!);
+    const compactFunction = compact(body!);
+    const replayWhere = 'wherefamily_id=p_family_idandactor_id=v_actorandrequest_id=p_request_id';
+    const receiptUpdate = 'updatepublic.meal_plan_write_receiptssetresult=v_result';
+    const scopedReceiptUpdate = `${receiptUpdate}${replayWhere};`;
 
     expect(whitelistedBranch).toBe(exactReplayBranch);
     expect(liveBranch).toBe(whitelistedBranch);
     expect(probe).toMatch(/meal_replace_replay_branch\s*=\s*meal_replace_replay_expected/i);
+    expect(compactFunction.indexOf(replayWhere)).toBeLessThan(compactFunction.indexOf(receiptUpdate));
+    expect(compactFunction.indexOf(replayWhere, compactFunction.indexOf(receiptUpdate))).toBeGreaterThan(
+      compactFunction.indexOf(receiptUpdate),
+    );
+    expect(probe).toContain(`position('${scopedReceiptUpdate}' in meal_replace_compact) > 0`);
 
     const returnToken = "returnjsonb_set(v_receipt.result,'{replayed}','true'::jsonb,true);";
     for (const injectedCall of ['v_result:=public.some_mutator();', 'v_result:=some_mutator();']) {

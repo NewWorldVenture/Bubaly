@@ -354,8 +354,7 @@ begin
               + length(meal_replace_replay_branch) - 1
         and position('updatepublic.meal_plan_write_receiptssetresult=v_result' in meal_replace_compact)
             > position('performpg_advisory_xact_lock' in meal_replace_compact)
-        and position('wherefamily_id=p_family_idandactor_id=v_actorandrequest_id=p_request_id' in meal_replace_compact)
-            > position('updatepublic.meal_plan_write_receiptssetresult=v_result' in meal_replace_compact)
+        and position('updatepublic.meal_plan_write_receiptssetresult=v_resultwherefamily_id=p_family_idandactor_id=v_actorandrequest_id=p_request_id;' in meal_replace_compact) > 0
         -- Exactly four direct public-table DML statements are allowed here:
         -- claim receipt, delete/insert the planned slots, and complete receipt.
         -- This keeps the exception from hiding unrelated public writes added
