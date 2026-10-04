@@ -97,7 +97,8 @@ $$;
 
 -- Best-effort rollback of meals created before a later plan-resolution error.
 -- Lock parent rows before checking references so FK key-share locks serialize
--- cleanup against concurrent plan adoption; a committed plan is never nulled.
+-- cleanup against concurrent plan/grocery adoption. Both child FKs use
+-- ON DELETE SET NULL, so references from any family must retain the meal.
 create or replace function public.meal_cleanup_unreferenced_custom(
   p_family_id uuid,
   p_meal_ids uuid[]
@@ -132,21 +133,23 @@ begin
      where m.family_id = p_family_id and m.created_by = v_actor_id and m.id = any(p_meal_ids)
      order by m.id
   loop
-    -- FK inserts take KEY SHARE on the parent. If a plan is committing now,
-    -- wait for it before checking references in the next command snapshot.
+    -- FK inserts take KEY SHARE on the parent. If a plan or grocery item is
+    -- committing now, wait for it before checking references in the next
+    -- command snapshot. These checks are intentionally not family-filtered:
+    -- grocery_items.source_meal_id can point across families.
     perform 1 from public.meals m
      where m.id = v_meal_id and m.family_id = p_family_id and m.created_by = v_actor_id
      for update;
     if not found then continue; end if;
 
-    if exists (select 1 from public.meal_plans p
-      where p.family_id = p_family_id and p.meal_id = v_meal_id) then
+    if exists (select 1 from public.meal_plans p where p.meal_id = v_meal_id)
+       or exists (select 1 from public.grocery_items gi where gi.source_meal_id = v_meal_id) then
       v_retained := v_retained + 1;
     else
       delete from public.meals m
        where m.id = v_meal_id and m.family_id = p_family_id and m.created_by = v_actor_id
-         and not exists (select 1 from public.meal_plans p
-           where p.family_id = p_family_id and p.meal_id = v_meal_id);
+         and not exists (select 1 from public.meal_plans p where p.meal_id = v_meal_id)
+         and not exists (select 1 from public.grocery_items gi where gi.source_meal_id = v_meal_id);
       get diagnostics v_affected = row_count;
       v_deleted := v_deleted + v_affected;
     end if;
@@ -432,7 +435,37 @@ declare
   v_cleanup constant text := 'public.meal_cleanup_unreferenced_custom(uuid, uuid[])';
   v_helper constant text := 'public.meal_ensure_custom_for_actor(uuid, uuid, text, public.meal_type, jsonb, text, text, text, boolean, boolean, boolean, boolean)';
   v_normalize constant text := 'public.meal_normalize_custom_ingredients(jsonb)';
+  v_meal_fk_count integer;
 begin
+  select count(*) into v_meal_fk_count from pg_catalog.pg_constraint c
+   where c.contype = 'f' and c.confrelid = 'public.meals'::regclass;
+  if v_meal_fk_count <> 2
+     or not exists (
+       select 1 from pg_catalog.pg_constraint c
+       join lateral pg_catalog.unnest(c.conkey) with ordinality child_key(attnum, ordinality) on true
+       join lateral pg_catalog.unnest(c.confkey) with ordinality parent_key(attnum, ordinality)
+         on parent_key.ordinality = child_key.ordinality
+       join pg_catalog.pg_attribute child_attr on child_attr.attrelid = c.conrelid and child_attr.attnum = child_key.attnum
+       join pg_catalog.pg_attribute parent_attr on parent_attr.attrelid = c.confrelid and parent_attr.attnum = parent_key.attnum
+       where c.contype = 'f' and c.conrelid = 'public.meal_plans'::regclass
+         and c.confrelid = 'public.meals'::regclass and child_attr.attname = 'meal_id'
+         and parent_attr.attname = 'id' and pg_catalog.cardinality(c.conkey) = 1
+         and pg_catalog.cardinality(c.confkey) = 1 and c.confdeltype = 'n'
+     )
+     or not exists (
+       select 1 from pg_catalog.pg_constraint c
+       join lateral pg_catalog.unnest(c.conkey) with ordinality child_key(attnum, ordinality) on true
+       join lateral pg_catalog.unnest(c.confkey) with ordinality parent_key(attnum, ordinality)
+         on parent_key.ordinality = child_key.ordinality
+       join pg_catalog.pg_attribute child_attr on child_attr.attrelid = c.conrelid and child_attr.attnum = child_key.attnum
+       join pg_catalog.pg_attribute parent_attr on parent_attr.attrelid = c.confrelid and parent_attr.attnum = parent_key.attnum
+       where c.contype = 'f' and c.conrelid = 'public.grocery_items'::regclass
+         and c.confrelid = 'public.meals'::regclass and child_attr.attname = 'source_meal_id'
+         and parent_attr.attname = 'id' and pg_catalog.cardinality(c.conkey) = 1
+         and pg_catalog.cardinality(c.confkey) = 1 and c.confdeltype = 'n'
+     ) then
+    raise exception '0476: update meal cleanup reference checks for the current foreign keys to public.meals';
+  end if;
   if has_function_privilege('anon', v_replace, 'execute')
      or has_function_privilege('authenticated', v_replace, 'execute')
      or not has_function_privilege('service_role', v_replace, 'execute') then

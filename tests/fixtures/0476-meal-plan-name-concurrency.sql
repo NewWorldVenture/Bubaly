@@ -24,6 +24,7 @@ CREATE TEMP TABLE meal_name_race_pids (name text PRIMARY KEY, pid integer NOT NU
 CREATE TEMP TABLE meal_name_race_results (name text PRIMARY KEY, result jsonb NOT NULL);
 CREATE TEMP TABLE meal_cleanup_race_meals (case_name text PRIMARY KEY, id uuid NOT NULL);
 CREATE TEMP TABLE meal_cleanup_race_results (case_name text PRIMARY KEY, result jsonb NOT NULL);
+CREATE TEMP TABLE meal_cleanup_race_lists (case_name text PRIMARY KEY, id uuid NOT NULL);
 CREATE FUNCTION public.meal_name_race_assert(p_ok boolean, p_label text) RETURNS void
 LANGUAGE plpgsql AS $$
 BEGIN
@@ -33,16 +34,26 @@ END $$;
 SELECT public.dblink_connect('meal_name_a', format('host=127.0.0.1 port=%s dbname=%s user=postgres', current_setting('port'), current_database()));
 SELECT public.dblink_connect('meal_name_b', format('host=127.0.0.1 port=%s dbname=%s user=postgres', current_setting('port'), current_database()));
 SELECT public.dblink_connect('meal_name_c', format('host=127.0.0.1 port=%s dbname=%s user=postgres', current_setting('port'), current_database()));
+SELECT public.dblink_connect('meal_name_d', format('host=127.0.0.1 port=%s dbname=%s user=postgres', current_setting('port'), current_database()));
 SELECT public.dblink_exec('meal_name_a', 'SET ROLE service_role');
 SELECT public.dblink_exec('meal_name_b', 'SET ROLE service_role');
 SELECT public.dblink_exec('meal_name_c', 'SET ROLE authenticated');
 SELECT public.dblink_exec('meal_name_c', $$SET request.jwt.claim.sub = '20000000-0000-0000-0000-000000000001'$$);
+SELECT public.dblink_exec('meal_name_d', 'SET ROLE authenticated');
+SELECT public.dblink_exec('meal_name_d', $$SET request.jwt.claim.sub = '20000000-0000-0000-0000-000000000002'$$);
+SELECT public.meal_name_race_assert(
+  public.dblink_exec('meal_name_c', $$INSERT INTO public.grocery_lists(id,family_id,name)
+    VALUES ('50000000-0000-0000-0000-000000000001'::uuid,
+      '10000000-0000-0000-0000-000000000001'::uuid,'Synthetic Family A list')$$) = 'INSERT 0 1',
+  'authenticated Family A creates the synthetic grocery list');
 INSERT INTO meal_name_race_pids
   SELECT 'a', pid FROM public.dblink('meal_name_a', 'SELECT pg_backend_pid()') AS t(pid integer);
 INSERT INTO meal_name_race_pids
   SELECT 'b', pid FROM public.dblink('meal_name_b', 'SELECT pg_backend_pid()') AS t(pid integer);
 INSERT INTO meal_name_race_pids
   SELECT 'c', pid FROM public.dblink('meal_name_c', 'SELECT pg_backend_pid()') AS t(pid integer);
+INSERT INTO meal_name_race_pids
+  SELECT 'd', pid FROM public.dblink('meal_name_d', 'SELECT pg_backend_pid()') AS t(pid integer);
 
 -- A completes the meal-plan RPC but holds its transaction open so its name lock
 -- remains live while B reaches the exact same family/name with another request ID.
@@ -244,6 +255,78 @@ SELECT public.meal_name_race_assert(
          AND p.plan_date='2026-10-23'),
   'cleanup retains a meal adopted by a committed plan; FK does not null the slot');
 
+-- Grocery references are deliberately family-unrestricted and have no
+-- same-family trigger: an authenticated Family A writer can associate a
+-- Family B meal id with its own list. Cleanup for Family B must retain the
+-- referenced meal after waiting for this insert's FK lock.
+INSERT INTO meal_cleanup_race_meals
+  SELECT 'cross-family-grocery', (result->'meal'->>'id')::uuid
+    FROM public.dblink('meal_name_d', $$SELECT public.meal_ensure_custom(
+      '10000000-0000-0000-0000-000000000002','cross-family grocery reference synthetic meal','dinner','[]'::jsonb,
+      null,null,false,false,false)$$) AS t(result jsonb);
+INSERT INTO meal_cleanup_race_lists
+VALUES ('cross-family-grocery', '50000000-0000-0000-0000-000000000001');
+SELECT public.dblink_exec('meal_name_c', 'BEGIN');
+SELECT public.meal_name_race_assert(
+  public.dblink_exec('meal_name_c', format(
+    $$INSERT INTO public.grocery_items(id,family_id,list_id,name,source_meal_id,created_by)
+      VALUES ('60000000-0000-0000-0000-000000000001'::uuid,%L::uuid,%L::uuid,
+        'Synthetic cross-family source meal',%L::uuid,auth.uid())$$,
+    '10000000-0000-0000-0000-000000000001',
+    (SELECT id::text FROM meal_cleanup_race_lists WHERE case_name='cross-family-grocery'),
+    (SELECT id::text FROM meal_cleanup_race_meals WHERE case_name='cross-family-grocery'))
+  ) = 'INSERT 0 1',
+  'authenticated Family A can persist its grocery item referencing a Family B meal');
+SELECT public.meal_name_race_assert(
+  (SELECT source_meal_id = (SELECT id FROM meal_cleanup_race_meals WHERE case_name='cross-family-grocery')
+   FROM public.dblink('meal_name_c',
+     $$SELECT source_meal_id FROM public.grocery_items WHERE id='60000000-0000-0000-0000-000000000001'::uuid$$)
+     AS t(source_meal_id uuid)),
+  'authenticated Family A can read back its own cross-family grocery reference');
+SELECT public.dblink_exec('meal_name_d', 'BEGIN');
+SELECT public.meal_name_race_assert(public.dblink_send_query('meal_name_d', format(
+  $$SELECT public.meal_cleanup_unreferenced_custom(
+    '10000000-0000-0000-0000-000000000002', ARRAY[%L::uuid])$$,
+  (SELECT id::text FROM meal_cleanup_race_meals WHERE case_name='cross-family-grocery'))) = 1,
+  'Family B cleanup dispatched while Family A grocery insert holds the FK lock');
+DO $$
+DECLARE
+  v_deadline timestamptz := clock_timestamp() + interval '10 seconds';
+  v_c integer := (SELECT pid FROM meal_name_race_pids WHERE name = 'c');
+  v_d integer := (SELECT pid FROM meal_name_race_pids WHERE name = 'd');
+BEGIN
+  LOOP
+    IF public.dblink_is_busy('meal_name_d') = 0 THEN
+      RAISE EXCEPTION '0476 cleanup completed before cross-family grocery transaction committed';
+    END IF;
+    EXIT WHEN v_c = ANY(pg_blocking_pids(v_d));
+    IF clock_timestamp() > v_deadline THEN RAISE EXCEPTION '0476 cleanup did not block on cross-family grocery FK lock'; END IF;
+    PERFORM pg_sleep(0.025);
+  END LOOP;
+END $$;
+SELECT public.dblink_exec('meal_name_c', 'COMMIT');
+DO $$
+DECLARE v_deadline timestamptz := clock_timestamp() + interval '15 seconds';
+BEGIN
+  WHILE public.dblink_is_busy('meal_name_d') = 1 LOOP
+    IF clock_timestamp() > v_deadline THEN RAISE EXCEPTION '0476 cleanup did not resume after grocery insert commit'; END IF;
+    PERFORM pg_sleep(0.025);
+  END LOOP;
+END $$;
+INSERT INTO meal_cleanup_race_results
+  SELECT 'cross-family-grocery-cleanup', result FROM public.dblink_get_result('meal_name_d') AS t(result jsonb);
+SELECT count(*) FROM public.dblink_get_result('meal_name_d') AS t(result jsonb);
+SELECT public.dblink_exec('meal_name_d', 'COMMIT');
+SELECT public.meal_name_race_assert(
+  (SELECT result->>'deleted'='0' AND result->>'retained_referenced'='1'
+   FROM meal_cleanup_race_results WHERE case_name='cross-family-grocery-cleanup')
+  AND EXISTS (SELECT 1 FROM public.grocery_items gi
+       WHERE gi.id='60000000-0000-0000-0000-000000000001'
+         AND gi.source_meal_id=(SELECT id FROM meal_cleanup_race_meals WHERE case_name='cross-family-grocery'))
+  AND EXISTS (SELECT 1 FROM public.meals m
+       WHERE m.id=(SELECT id FROM meal_cleanup_race_meals WHERE case_name='cross-family-grocery')),
+  'cleanup retains a cross-family meal referenced by a committed grocery item');
+
 -- Reverse ordering: cleanup locks and deletes an unreferenced meal first. The
 -- plan blocks, then receives a clear authorization/unavailable SQLSTATE after
 -- cleanup commits. It must never succeed with a silently-null meal_id.
@@ -318,6 +401,9 @@ SELECT public.meal_name_race_assert(
 SELECT public.dblink_disconnect('meal_name_a');
 SELECT public.dblink_disconnect('meal_name_b');
 SELECT public.dblink_disconnect('meal_name_c');
+SELECT public.dblink_disconnect('meal_name_d');
+DELETE FROM public.grocery_items WHERE id='60000000-0000-0000-0000-000000000001';
+DELETE FROM public.grocery_lists WHERE id=(SELECT id FROM meal_cleanup_race_lists WHERE case_name='cross-family-grocery');
 DELETE FROM public.meal_plans
  WHERE family_id='10000000-0000-0000-0000-000000000001' AND plan_date IN ('2026-10-20','2026-10-21','2026-10-22');
 DELETE FROM public.meal_plan_write_receipts
@@ -335,7 +421,12 @@ DELETE FROM public.meals
  WHERE family_id='10000000-0000-0000-0000-000000000001'
    AND lower(regexp_replace(btrim(name), '\s+', ' ', 'g')) IN (
      'concurrent synthetic stew','mixed writer synthetic curry',
-     'cleanup adopted synthetic meal','cleanup deleted-first synthetic meal');
+     'cleanup adopted synthetic meal','cleanup deleted-first synthetic meal',
+     'cross-family grocery reference synthetic meal');
+DELETE FROM public.meals
+ WHERE id=(SELECT id FROM meal_cleanup_race_meals WHERE case_name='cross-family-grocery')
+   AND family_id='10000000-0000-0000-0000-000000000002'
+   AND created_by='20000000-0000-0000-0000-000000000002';
 DROP FUNCTION public.meal_name_race_assert(boolean, text);
 DROP FUNCTION public.meal_name_race_try_plan(text, uuid, date);
 COMMIT;

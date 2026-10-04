@@ -70,11 +70,30 @@ CREATE TABLE public.meal_plans (
   created_at timestamptz NOT NULL DEFAULT now(),
   updated_at timestamptz NOT NULL DEFAULT now()
 );
+CREATE TABLE public.grocery_lists (
+  id uuid PRIMARY KEY DEFAULT gen_random_uuid(),
+  family_id uuid NOT NULL REFERENCES public.families(id) ON DELETE CASCADE,
+  name text NOT NULL DEFAULT 'Groceries'
+);
+CREATE TABLE public.grocery_items (
+  id uuid PRIMARY KEY DEFAULT gen_random_uuid(),
+  family_id uuid NOT NULL REFERENCES public.families(id) ON DELETE CASCADE,
+  list_id uuid NOT NULL REFERENCES public.grocery_lists(id) ON DELETE CASCADE,
+  name text NOT NULL,
+  source_meal_id uuid REFERENCES public.meals(id) ON DELETE SET NULL,
+  created_by uuid REFERENCES auth.users(id) ON DELETE SET NULL
+);
 ALTER TABLE public.meals ENABLE ROW LEVEL SECURITY;
 ALTER TABLE public.meal_plans ENABLE ROW LEVEL SECURITY;
+ALTER TABLE public.grocery_lists ENABLE ROW LEVEL SECURITY;
+ALTER TABLE public.grocery_items ENABLE ROW LEVEL SECURITY;
 CREATE POLICY meals_member ON public.meals FOR ALL
   USING (public.is_family_member(family_id)) WITH CHECK (public.is_family_member(family_id));
 CREATE POLICY meal_plans_member ON public.meal_plans FOR ALL
+  USING (public.is_family_member(family_id)) WITH CHECK (public.is_family_member(family_id));
+CREATE POLICY grocery_lists_member ON public.grocery_lists FOR ALL
+  USING (public.is_family_member(family_id)) WITH CHECK (public.is_family_member(family_id));
+CREATE POLICY grocery_items_member ON public.grocery_items FOR ALL
   USING (public.is_family_member(family_id)) WITH CHECK (public.is_family_member(family_id));
 ALTER TABLE public.family_members ENABLE ROW LEVEL SECURITY;
 CREATE POLICY family_members_member ON public.family_members FOR SELECT
@@ -84,6 +103,7 @@ GRANT USAGE ON SCHEMA public, auth TO anon, authenticated, service_role;
 GRANT EXECUTE ON FUNCTION auth.uid() TO anon, authenticated, service_role;
 GRANT EXECUTE ON FUNCTION public.is_family_member(uuid), public.family_role(uuid) TO authenticated, service_role;
 GRANT SELECT, INSERT, UPDATE, DELETE ON public.meals, public.meal_plans TO authenticated;
+GRANT SELECT, INSERT, UPDATE, DELETE ON public.grocery_lists, public.grocery_items TO authenticated;
 GRANT SELECT ON public.family_members TO authenticated;
 
 INSERT INTO public.families VALUES

@@ -3,6 +3,7 @@ import { describe, expect, it } from 'vitest';
 
 const migration = readFileSync('supabase/migrations/0476_meal_plan_delegated_actor_rpcs.sql', 'utf8');
 const mealService = readFileSync('lib/services/meals/index.ts', 'utf8');
+const cleanupConcurrencyFixture = readFileSync('tests/fixtures/0476-meal-plan-name-concurrency.sql', 'utf8');
 
 describe('delegated meal-plan database boundary', () => {
   it('serializes normalized family/name lookup before creating a custom meal', () => {
@@ -41,10 +42,15 @@ describe('delegated meal-plan database boundary', () => {
 
   it('serializes failed-plan cleanup against FK adoption and retains committed references', () => {
     expect(migration).toMatch(/create or replace function public\.meal_cleanup_unreferenced_custom\([\s\S]*?auth\.uid\(\)[\s\S]*?fm\.family_id = p_family_id and fm\.user_id = v_actor_id and fm\.is_active[\s\S]*?created_by = v_actor_id/i);
-    expect(migration).toMatch(/perform 1 from public\.meals m[\s\S]*?for update;[\s\S]*?exists \(select 1 from public\.meal_plans p[\s\S]*?retained_referenced/i);
+    expect(migration).toMatch(/perform 1 from public\.meals m[\s\S]*?for update;[\s\S]*?exists \(select 1 from public\.meal_plans p where p\.meal_id = v_meal_id\)[\s\S]*?exists \(select 1 from public\.grocery_items gi where gi\.source_meal_id = v_meal_id\)[\s\S]*?and not exists \(select 1 from public\.meal_plans p where p\.meal_id = v_meal_id\)[\s\S]*?and not exists \(select 1 from public\.grocery_items gi where gi\.source_meal_id = v_meal_id\)/i);
+    expect(migration).toMatch(/v_meal_fk_count <> 2[\s\S]*?public\.meal_plans[\s\S]*?meal_id[\s\S]*?public\.grocery_items[\s\S]*?source_meal_id[\s\S]*?c\.confdeltype = 'n'/i);
     expect(migration).toMatch(/create or replace function public\.meal_cleanup_unreferenced_custom\([\s\S]*?security definer\s+set search_path = ''/i);
     expect(migration).toMatch(/grant execute on function public\.meal_cleanup_unreferenced_custom\([^;]+ to authenticated/i);
     expect(mealService).toMatch(/meal_cleanup_unreferenced_custom[\s\S]*?p_meal_ids: \[\.\.\.new Set\(createdMealIds\)\]/i);
     expect(mealService).not.toMatch(/from\('meals'\)\.delete\(\)\.eq\('family_id', scope\.familyId\)\.in\('id', createdMealIds\)/i);
+    expect(cleanupConcurrencyFixture).toContain("'10000000-0000-0000-0000-000000000002','cross-family grocery reference synthetic meal'");
+    expect(cleanupConcurrencyFixture).toContain('source_meal_id');
+    expect(cleanupConcurrencyFixture).toContain('authenticated Family A can persist its grocery item referencing a Family B meal');
+    expect(cleanupConcurrencyFixture).toContain('cleanup retains a cross-family meal referenced by a committed grocery item');
   });
 });
