@@ -620,7 +620,11 @@ describe('one sync of a feed at a time', () => {
     // The stamp is fenced.
     expect(src).toContain(".eq('id', feedId).eq('last_status', SYNCING_STATUS).eq('updated_at', fence).select('id')");
     // Every chunk — upserts and removals — goes through guard.apply, which is the function with the fence inside it…
-    expect(src.match(/const applied = await guard\.apply\(/g), 'the upsert chunk and the removal chunk').toHaveLength(2);
+    // On this branch the upsert chunk is written twice at most — once with
+    // exception_dates, once without on a database that lacks the column — and
+    // the removal chunk once; all three through the fence.
+    expect(src.match(/= await guard\.apply\(/g), 'the upsert chunk, its retry without exception_dates, and the removal chunk').toHaveLength(3);
+    expect(src).toContain("isMissingExceptionDatesColumn(applied.error)");
     expect(src).toContain("supabase.rpc(APPLY_SYNC_FUNCTION, { p_feed_id: feedId, p_fence: fence, p_upserts: upserts, p_removals: removals })");
     // …and, only where the function is absent, the check-then-write path, said once.
     expect(src.match(/if \(!\(await holds\(\)\)\) return 'lost';/g), 'the fallback asks the fence once, before its writes').toHaveLength(1);
