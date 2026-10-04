@@ -48,6 +48,7 @@ vi.mock('@/lib/analytics/activation-server', () => ({ recordActivationServer: mo
 vi.mock('next/cache', () => ({ revalidatePath: mocks.revalidatePath }));
 
 import { addCalendarFeed } from '@/app/(app)/dashboard/sync/feeds/actions';
+import { BUSY_MESSAGE, SYNCING_STATUS } from '@/lib/server/calendar-feeds';
 import { feedAddedMessage } from '@/lib/calendar/feeds';
 import { getTranslations } from '@/lib/i18n/server';
 
@@ -224,35 +225,63 @@ describe('a calendar whose first sync fails', () => {
     expect(subscriptions()).toHaveLength(1);
   });
 
-  it('is kept when another member’s add of the same URL synced it while this first fetch was still out', async () => {
-    // The row is visible from its insert until the rollback — the whole first
-    // fetch, up to its 15 s timeout — so a second add of the URL finds it and
-    // syncs it. Undoing "the row I created" must not undo that member's import.
+  // Review on #908: one sync of a feed runs at a time. A second add of the URL
+  // while the first add's fetch is still out finds the row — and is told it is
+  // being synced, instead of running a second sync under the first. It undoes
+  // nothing: the row is the first add's to fill or to take back.
+  it('a second add while the first add’s fetch is still out is told the calendar is being synced; the first add alone decides the row', async () => {
     let answerFirstFetch: (reply: ReturnType<typeof unreachable>) => void = () => {
       throw new Error('the first add has not started its fetch');
     };
-    mocks.fetchPublicCalendarText
-      .mockImplementationOnce(() => new Promise((resolve) => { answerFirstFetch = resolve; }))
-      .mockResolvedValueOnce(reachable());
+    mocks.fetchPublicCalendarText.mockImplementationOnce(() => new Promise((resolve) => { answerFirstFetch = resolve; }));
 
     const first = addCalendarFeed({ name: 'School', url: PASTED });
     await vi.waitFor(() => expect(mocks.fetchPublicCalendarText).toHaveBeenCalledTimes(1));
     const [created, ...none] = subscriptions();
     expect(none).toEqual([]);
+    expect(created.last_status, 'the first add holds the row while its fetch is out').toBe(SYNCING_STATUS);
 
     const second = await addCalendarFeed({ name: 'Kids school', url: PASTED });
-    expect(second).toEqual({ ok: true, imported: 2, alreadySubscribedAs: 'School' });
+    expect(second).toEqual({ ok: false, error: BUSY_MESSAGE });
+    expect(mocks.fetchPublicCalendarText, 'the second add fetched nothing').toHaveBeenCalledTimes(1);
+    expect(subscriptions().map((f) => f.id), 'and undid nothing').toEqual([created.id]);
+    expect(importedEvents()).toEqual([]);
 
+    // The first add's own sync fails; nobody filled the row, so it is taken back.
     answerFirstFetch(unreachable());
-    const firstResult = await first;
+    expect(await first).toEqual({ ok: false, error: PROVIDER_DOWN });
+    expect(subscriptions()).toEqual([]);
 
-    // The first add's own sync did fail, and the calendar IS in the list.
-    expect(firstResult).toEqual({ ok: false, error: savedButNotSynced(PROVIDER_DOWN) });
-    expect(subscriptions().map((f) => f.id)).toEqual([created.id]);
-    expect(importedEvents().map((e) => [e.feed_id, e.external_uid]).sort()).toEqual([
-      [created.id, 'sports-day@school.example'],
-      [created.id, 'term-start@school.example'],
-    ]);
+    // Told to try again, the second member adds it for real.
+    mocks.fetchPublicCalendarText.mockResolvedValueOnce(reachable());
+    expect(await addCalendarFeed({ name: 'Kids school', url: PASTED })).toEqual({ ok: true, imported: 2 });
+    expect(subscriptions().map((f) => f.name)).toEqual(['Kids school']);
+  });
+
+  it('does not take back a row another sync has claimed since its own sync failed', async () => {
+    // The one-round-trip window the old comment left open: this add's sync
+    // failed and released the row, and another member's sync claimed it before
+    // this add's rollback ran. The rollback leaves a `syncing` row alone, and
+    // the add answers that the calendar is saved but this sync of it failed.
+    mocks.fetchPublicCalendarText.mockResolvedValueOnce(unreachable());
+    const realFrom = db.from.bind(db);
+    vi.spyOn(db, 'from').mockImplementation(((table: string) => {
+      const builder = realFrom(table) as unknown as Record<string | symbol, unknown>;
+      if (table !== 'calendar_feeds') return builder;
+      return new Proxy(builder, {
+        get(target, prop, receiver) {
+          if (prop === 'delete') for (const row of subscriptions()) row.last_status = SYNCING_STATUS;
+          const value = Reflect.get(target, prop, receiver);
+          return typeof value === 'function' ? (value as (...a: unknown[]) => unknown).bind(target) : value;
+        },
+      });
+    }) as never);
+
+    const result = await addCalendarFeed({ name: 'School', url: PASTED });
+
+    expect(result).toEqual({ ok: false, error: savedButNotSynced(PROVIDER_DOWN) });
+    expect(subscriptions()).toHaveLength(1);
+    expect(subscriptions()[0].last_status).toBe(SYNCING_STATUS);
   });
 });
 

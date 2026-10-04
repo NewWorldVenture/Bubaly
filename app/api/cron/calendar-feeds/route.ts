@@ -30,10 +30,15 @@ export async function GET(req: NextRequest) {
   let synced = 0;
   let imported = 0;
   let failed = 0;
+  // A feed another sync holds — a member pressed "Sync now" as the cron reached
+  // it — is not a failure: that sync is applying a fresher snapshot than this
+  // one would. Counted apart, so one busy feed does not turn the night red.
+  let busy = 0;
   for (const feed of feeds ?? []) {
     try {
       const r = await syncFeed(supabase, feed);
       if (r.ok) { synced += 1; imported += r.imported; }
+      else if (r.busy) busy += 1;
       else failed += 1;
     } catch (e) {
       failed += 1;
@@ -43,7 +48,7 @@ export async function GET(req: NextRequest) {
 
   const ok = failed === 0;
   return NextResponse.json(
-    { ok, feeds: (feeds ?? []).length, synced, imported, failed },
+    { ok, feeds: (feeds ?? []).length, synced, imported, failed, busy },
     { status: ok ? 200 : 502 },
   );
 }
