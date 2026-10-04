@@ -100,3 +100,33 @@ export async function checkNewSubscription(stripe: OneSubscriptionStripe, custom
     return { ok: false, reason: 'unavailable' };
   }
 }
+
+/**
+ * The family's OTHER live subscriptions that are not already set to end, across
+ * every customer it may have (lib/billing/customer-ref.ts records a race that
+ * leaves a family with two). What cancelling the plan has to stop besides the
+ * one the family's row follows. A customer Stripe no longer has bills nobody;
+ * any other failure throws.
+ */
+export async function otherLiveFamilySubscriptions(
+  stripe: { subscriptions: { list(params: { customer: string; status: 'all'; limit: number }): Promise<{ data: { id: string; status: string; cancel_at_period_end?: boolean | null; metadata?: Record<string, string> | null }[] }> } },
+  customerRefs: (string | null | undefined)[],
+  familyId: string,
+  excludeId: string,
+): Promise<string[]> {
+  const ids: string[] = [];
+  for (const customer of [...new Set(customerRefs.filter((c): c is string => Boolean(c)))]) {
+    let listed: Awaited<ReturnType<typeof stripe.subscriptions.list>>;
+    try {
+      listed = await stripe.subscriptions.list({ customer, status: 'all', limit: PAGE });
+    } catch (error) {
+      if ((error as { code?: string })?.code === 'resource_missing') continue;
+      throw error;
+    }
+    for (const sub of listed.data) {
+      if (sub.id === excludeId || sub.cancel_at_period_end || sub.metadata?.family_id !== familyId) continue;
+      if (canChangeSubscriptionInPlace({ status: sub.status, provider_ref: sub.id })) ids.push(sub.id);
+    }
+  }
+  return ids;
+}

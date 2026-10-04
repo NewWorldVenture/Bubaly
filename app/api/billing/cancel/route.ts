@@ -4,6 +4,7 @@ import { requireUserContext } from '@/lib/supabase/auth';
 import { createServer, createServiceClient } from '@/lib/supabase/server';
 import { wroteNoRows } from '@/lib/supabase/errors';
 import { stripeFromKey } from '@/lib/stripe';
+import { otherLiveFamilySubscriptions } from '@/lib/billing/one-subscription';
 import { getStripeSettings, effectiveSecretKey } from '@/lib/stripe/settings';
 import { isAdmin } from '@/lib/constants/roles';
 import { enforceRequestRateLimit } from '@/lib/server/request-rate-limit';
@@ -62,7 +63,30 @@ export async function POST(req: NextRequest) {
     // environment (getStripe() read only the environment).
     const secretKey = effectiveSecretKey(await getStripeSettings());
     if (!secretKey) return NextResponse.json({ error: t('checkout.billingIsNotSetUp') }, { status: 503 });
-    await stripeFromKey(secretKey).subscriptions.update(sub.provider_ref, { cancel_at_period_end: cancelAtPeriodEnd });
+    const stripe = stripeFromKey(secretKey);
+    const updated = await stripe.subscriptions.update(sub.provider_ref, { cancel_at_period_end: cancelAtPeriodEnd });
+
+    // Cancelling the plan stops EVERYTHING that bills the family for it. A
+    // family Stripe bills for two subscriptions (one started before checkout
+    // refused a second, or in a race it documents) went on paying for the
+    // other one, and when this one ended the webhook followed the one still
+    // billing them. Resuming resumes only the one the row follows. If the
+    // others cannot be read or cancelled the answer says Stripe has changed
+    // and the cancellation is unfinished; asking again finishes it.
+    if (cancelAtPeriodEnd) {
+      try {
+        const { data: bc, error: bcError } = await supabase
+          .from('billing_customers').select('customer_ref').eq('family_id', familyId).maybeSingle();
+        if (bcError) throw bcError;
+        const customer = typeof updated?.customer === 'string' ? updated.customer : updated?.customer?.id;
+        const others = await otherLiveFamilySubscriptions(stripe, [customer, bc?.customer_ref], familyId, sub.provider_ref);
+        for (const id of others) await stripe.subscriptions.update(id, { cancel_at_period_end: true });
+        if (others.length > 0) console.warn('[billing-cancel] also cancelled the family\'s other live subscriptions', { familyId, others });
+      } catch (othersError) {
+        console.error('[billing-cancel] could not cancel the family\'s other live subscriptions', othersError);
+        return NextResponse.json({ error: t('cancel.stripeUpdatedTheSubscriptionBut'), providerUpdated: true }, { status: 503 });
+      }
+    }
 
     // Stripe has already changed by here. A sync matching no rows left the local
     // row saying the opposite of what the family just chose — "cancels at period
