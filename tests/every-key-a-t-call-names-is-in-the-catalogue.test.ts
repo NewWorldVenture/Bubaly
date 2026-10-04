@@ -156,6 +156,9 @@ function forwardedParameter(id: ts.Identifier): { name: string; index: number } 
 
 /** Scan one module's source. Pure: it reads nothing but the string it is given. */
 function scanSource(file: string, source: string): Scan {
+  // File identities are repository paths on every host, including Windows.
+  // Normalize before recording literals, dynamic calls or diagnostics.
+  file = file.replaceAll('\\', '/');
   const sf = ts.createSourceFile(file, source, ts.ScriptTarget.Latest, true,
     file.endsWith('.tsx') ? ts.ScriptKind.TSX : ts.ScriptKind.TS);
   const scan: Scan = { literal: [], dynamic: [], unscannedBindings: [], namespaced: [] };
@@ -303,6 +306,38 @@ describe('every key a t() call names is in the catalogue', () => {
       'invisible to this scan. Use one of those names, or add the new one to TRANSLATOR_NAMES.',
       ...tree.unscannedBindings.map((s) => `  ${s}`),
     ].join('\n')).toEqual([]);
+  });
+
+  it('gives Windows and slash paths the same literal, dynamic and diagnostic identities', () => {
+    const file = 'synthetic/portability-control.tsx';
+    const absent = 'negativeControl.portabilityNotInAnyCatalogue';
+    const present = 'captureShortcuts.layoutUnavailable';
+    expect(CATALOGUE.has(absent)).toBe(false);
+    const source = [
+      'const t = useTranslations();',
+      `const known = t('${present}');`,
+      `const missing = t('${absent}');`,
+      'const dynamic = t(key);',
+      'const unknownTranslator = useTranslations();',
+      `const unknown = unknownTranslator('${present}');`,
+      "const scoped = useTranslations('captureShortcuts');",
+      "const namespace = scoped('layoutUnavailable');",
+    ].join('\n');
+    const slash = scanSource(file, source);
+    const windows = scanSource('synthetic\\portability-control.tsx', source);
+    expect(windows).toEqual(slash);
+    expect(windows.literal).toEqual([
+      { file, line: 2, key: present, shape: 't' },
+      { file, line: 3, key: absent, shape: 't' },
+    ]);
+    expect(missingFrom(windows.literal)).toEqual([{ file, line: 3, key: absent, shape: 't' }]);
+    expect(windows.dynamic).toEqual([{ file, line: 4, shape: 't', expression: 'key' }]);
+    expect(windows.unscannedBindings).toHaveLength(2);
+    expect(windows.namespaced).toHaveLength(1);
+    for (const diagnostic of [...windows.unscannedBindings, ...windows.namespaced]) {
+      expect(diagnostic.startsWith(`${file}:`)).toBe(true);
+      expect(diagnostic).not.toContain('\\');
+    }
   });
 
   // Positive control. A blind scanner finds nothing, and "nothing missing" is then

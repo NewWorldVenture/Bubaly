@@ -75,23 +75,27 @@ describe('a form that writes says it heard you', () => {
     const source = readFileSync(file, 'utf8');
 
     for (const [name, flag] of handlers) {
+      const ownerAware = file === 'components/vacations/trip-packing.tsx' && name === 'add';
+      const guardStatement = ownerAware ? `if (${flag} || !isCurrent()) return;` : `if (${flag}) return;`;
       it(`${file} — ${name} refuses a second submit`, () => {
         const body = bodyOf(source, name);
-        expect(body, `${name} has no re-entrance guard`).toMatch(
-          new RegExp(`if\\s*\\(${flag}\\)\\s*return;`),
+        expect(withoutComments(body), `${name} has no re-entrance guard`).toContain(guardStatement);
+        if (ownerAware) expect(withoutComments(body)).toContain(
+          'const isCurrent = () => editorVersion.current === version && currentOwner.current === owner;',
         );
         expect(body).toContain(`set${flag[0].toUpperCase()}${flag.slice(1)}(true);`);
         // finally, not the happy path: an early `return` on a validation
         // failure must still clear the flag, or the form locks forever.
         expect(body, `${name} clears ${flag} outside a finally`).toMatch(
-          /\} finally \{\s*set\w+\(false\);/,
+          ownerAware ? /\} finally \{\s*if \(isCurrent\(\)\) setSaving\(false\);/ : /\} finally \{\s*set\w+\(false\);/,
         );
       });
 
       it(`${file} — ${name} calls preventDefault before the guard`, () => {
         const body = withoutComments(bodyOf(source, name));
         const prevent = body.indexOf('preventDefault()');
-        const guard = body.indexOf(`if (${flag}) return;`);
+        const guard = body.indexOf(guardStatement);
+        expect(guard, `${name} has no re-entrance guard`).toBeGreaterThan(-1);
         expect(prevent, `${name} never calls preventDefault`).toBeGreaterThan(-1);
         expect(
           prevent < guard,

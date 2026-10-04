@@ -9,6 +9,7 @@ import { Card } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
 import type { SocialPlatform } from '@/lib/social/capabilities';
 import { getLocaleContext, getTranslations } from '@/lib/i18n/server';
+import { getFormat } from '@/lib/utils/format-server';
 import { formatScheduledTime, scheduleDisplayTimezone, scheduleStatusKey } from '@/lib/social/schedule-time';
 import { safeSocialLink } from '@/lib/social/links';
 import { AppNotFound } from '@/components/app/app-not-found';
@@ -31,6 +32,9 @@ export default async function PostDetailPage({ params }: { params: Promise<{ id:
   // Not a row id at all: not found, before a read that would fail on it (B12).
   if (!isUuid(id)) return <AppNotFound backHref="/dashboard/social" />;
   const ctx = await requireUserContext();
+  // The attempt clocks below are rendered in the FAMILY's zone and locale; a bare
+  // `toLocaleString()` on the server was the host's zone in the host's locale.
+  const { fmtDate } = await getFormat(ctx.active.family.timezone || 'UTC');
   const { post, variants, targets, results } = await getPost(ctx.active.familyId, id);
   if (!post) return <AppNotFound backHref="/dashboard/social" />;
   const scheduleMessage = post.scheduled_for ? scheduleStatusKey(post.metadata) : '';
@@ -118,7 +122,7 @@ export default async function PostDetailPage({ params }: { params: Promise<{ id:
                   ? (r.error_message || tr('socialPost.awaitingConfirmation'))
                   : r.error_code ? `${r.error_code}: ${r.error_message ?? ''}`
                   : r.error_message || r.permalink_url || (r.status === 'published' && r.provider_object_id ? 'confirmed' : '—')}</span>
-                <span className="ml-auto text-xs text-muted">{new Date(r.attempted_at).toLocaleString()}</span>
+                <span className="ml-auto text-xs text-muted">{fmtDate(r.attempted_at, 'MMM d, yyyy h:mm a')}</span>
               </div>
             ))}
           </div>

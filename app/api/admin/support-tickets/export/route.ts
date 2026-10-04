@@ -2,7 +2,7 @@ import { NextResponse } from 'next/server';
 import { getTranslations } from '@/lib/i18n/server';
 import { getUser, isSuperAdmin } from '@/lib/supabase/auth';
 import { createServiceClient } from '@/lib/supabase/server';
-import { logAudit } from '@/lib/server/audit';
+import { recordAudit } from '@/lib/server/audit';
 import { readAll } from '@/lib/supabase/read-all';
 import { TICKET_CSV_COLUMNS, ticketsCsv } from '@/lib/admin/tickets-csv';
 
@@ -12,7 +12,8 @@ export const dynamic = 'force-dynamic';
 // The Export button on /admin/support-tickets had no handler. Same gate as the
 // page's actions (super-admin, re-checked: a route handler is not behind the
 // /admin layout), same service-role read. A failed read is a 502, never an
-// empty file that looks like "no tickets". Audit C1-S9-105.
+// empty file that looks like "no tickets"; an audit row that did not land is a
+// 500, never a file nobody recorded. Audit C1-S9-105.
 export async function GET() {
   const t = await getTranslations();
   const noStore = { 'Cache-Control': 'no-store' };
@@ -34,10 +35,20 @@ export async function GET() {
     return NextResponse.json({ error: t('supportTickets.couldNotLoadSupportTickets') }, { status: 502, headers: noStore });
   }
 
-  await logAudit(supabase, {
+  // The audit row is the only record that someone pulled every ticket, with
+  // every requester's name, email and description. It used to be best-effort:
+  // a refused write was a console line under a 200, the file went out and the
+  // ledger said nothing had. Nothing has been sent at this point, so a row that
+  // did not land is a 500 the operator can retry, the way the privacy export
+  // answers a lost trust_audit_logs row (DATA-009, API-AE3E5F465E18).
+  const audit = await recordAudit(supabase, {
     familyId: null, actorId: user.id, action: 'export', resource: 'support_tickets',
     metadata: { rows: data.length, via: 'site_admin' },
   });
+  if (!audit.ok) {
+    console.error('[admin-support-tickets] export audit row was not written; nothing sent', audit.error);
+    return NextResponse.json({ error: 'audit_failed', retryable: true }, { status: 500, headers: noStore });
+  }
   // The instant, not a server-clock "day": which day it is depends on where
   // the operator is.
   const stamp = new Date().toISOString().replace(/[:.]/g, '-');
