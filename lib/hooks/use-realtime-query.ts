@@ -91,6 +91,7 @@ export function useRealtimeQuery<T>({
       if (!isCurrent()) return;
       if (err) throw err;
       const data = rows ?? [];
+      if (!Array.isArray(data)) throw new Error('Could not load data. Please try again.');
       const updatedAt = Date.now();
       if (scope.queryIdentity) writePartitionedCache(scope.queryIdentity, data);
       setState(previous => isCurrent()

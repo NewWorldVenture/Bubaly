@@ -270,6 +270,17 @@ export function keyedProbe<T extends KeyedTable>(
       console.error(`[service:idempotency] duplicate probe failed for ${table}`, error);
       return fail(describeDbError(error, `Could not check for a duplicate ${what}.`), { code: SERVICE_CODES.db });
     }
+    if (data != null) {
+      const row = data as Record<string, unknown>;
+      if (typeof data !== 'object' || Array.isArray(data)
+        || typeof row.id !== 'string' || row.id.trim().length === 0 || typeof row.family_id !== 'string'
+        || typeof row.idempotency_key !== 'string'
+        || row.family_id.toLowerCase() !== scope.familyId.toLowerCase()
+        || row.idempotency_key !== key) {
+        console.error(`[service:idempotency] duplicate probe failed for ${table}`, { error: 'Invalid keyed saved receipt' });
+        return fail(`Could not check for a duplicate ${what}.`, { code: SERVICE_CODES.db });
+      }
+    }
     return ok((data ?? null) as Database['public']['Tables'][T]['Row'] | null);
   };
 }

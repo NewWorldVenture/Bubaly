@@ -35,6 +35,7 @@ import { AppLockSettings } from '@/components/settings/app-lock-settings';
 import { SecurityPanel } from '@/components/settings/security-panel';
 import { PrivacyCenter } from '@/components/settings/privacy-center';
 import { NavigationChoices } from '@/components/settings/navigation-choices';
+import { NotificationEmailPreference } from '@/components/settings/notification-email-preference';
 import { InviteForm } from '@/components/family/invite-form';
 import type { Tables } from '@/lib/database.types';
 import type { MemberRole } from '@/lib/database.types';
@@ -46,6 +47,7 @@ const SETTINGS_TABS = [
   { id: 'family', labelKey: 'settingsModule.tabFamily', icon: Users },
   { id: 'ai', labelKey: 'settingsModule.tabAi', icon: Bot },
   { id: 'navigation', labelKey: 'settingsModule.tabNavigation', icon: Compass },
+  { id: 'notifications', labelKey: 'notifications.notifications', icon: Mail },
   { id: 'calendar', labelKey: 'settingsModule.tabCalendar', icon: RefreshCw },
   { id: 'security', labelKey: 'settingsModule.tabSecurity', icon: Lock },
   { id: 'privacy', labelKey: 'settingsModule.tabPrivacy', icon: FileJson },
@@ -60,12 +62,13 @@ const TAB_BY_HASH: Record<string, SettingsTab> = {
   family: 'family', members: 'family', families: 'family',
   ai: 'ai', bubaly: 'ai', autonomy: 'ai',
   navigation: 'navigation', 'navigation-choices': 'navigation', sidebar: 'navigation',
+  notifications: 'notifications',
   calendar: 'calendar', sync: 'calendar',
   security: 'security', 'app-lock': 'security', 'two-step': 'security',
   privacy: 'privacy', 'privacy-center': 'privacy', export: 'privacy',
 };
 const HASH_BY_TAB: Record<SettingsTab, string> = {
-  profile: 'profile', family: 'members', ai: 'ai', navigation: 'navigation', calendar: 'calendar', security: 'app-lock', privacy: 'privacy',
+  profile: 'profile', family: 'members', ai: 'ai', navigation: 'navigation', notifications: 'notifications', calendar: 'calendar', security: 'app-lock', privacy: 'privacy',
 };
 
 export function SettingsModule({ referralConfig }: { referralConfig?: ReferralConfig } = {}) {
@@ -399,6 +402,8 @@ export function SettingsModule({ referralConfig }: { referralConfig?: ReferralCo
 
       {/* Navigation Choices tab */}
       {tab === 'navigation' && <NavigationChoices />}
+
+      {tab === 'notifications' && <NotificationEmailPreference />}
 
       {/* Calendar tab */}
       {tab === 'calendar' && (

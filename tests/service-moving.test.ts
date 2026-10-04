@@ -195,6 +195,7 @@ describe('addTask', () => {
   it('dates a relative task from move day and never adds the same key twice', async () => {
     const db = makeDb();
     seedMove(db);
+    db.seed('family_members', [{ id: MEMBER, family_id: FAMILY }]);
     const first = await addTask(scopeWith(db), { title: 'Change the address with Netflix', category: 'address', offsetDays: -14, templateKey: 'address-sub-1', assigneeId: MEMBER });
     expect(first.ok && first.data.created).toBe(true);
     expect(first.ok && first.data.task).toMatchObject({ family_id: FAMILY, move_id: MOVE, due_date: '2026-09-19', date_mode: 'relative', offset_days: -14, category: 'address', assignee_id: MEMBER, template_key: 'address-sub-1' });

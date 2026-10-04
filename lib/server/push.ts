@@ -8,12 +8,14 @@
 //
 // Stale Web Push subscriptions (404/410) are pruned automatically.
 import 'server-only';
+import { randomUUID } from 'node:crypto';
 import webpush from 'web-push';
 import type { SupabaseClient } from '@supabase/supabase-js';
 import type { Database } from '@/lib/database.types';
 import { nativePushConfigured, sendNativePush } from '@/lib/server/native-push';
 import { childrenBlockedOn } from '@/lib/notifications/child-channels';
 import { isMissingRelationError } from '@/lib/supabase/errors';
+import { readAll } from '@/lib/supabase/read-all';
 
 type DB = SupabaseClient<Database>;
 
@@ -37,7 +39,7 @@ import { isDeliverablePushEndpoint } from '@/lib/server/push-endpoint';
 export type PushPayload = { title: string; body?: string | null; url?: string | null };
 export type PushResult = {
   sent: number; skipped: number; failed: number; pruned: number;
-  /** Recipient opt-outs, distinct from unconfigured/skipped device attempts. */
+  /** Recipient opt-outs or revoked family access, distinct from skipped device attempts. */
   withheld: number;
 };
 
@@ -339,20 +341,23 @@ export async function dispatchPendingPushes(
   if (cursor && rows.length < limit) rows.push(...await page(limit - rows.length, true));
   if (rows.length === 0) return { notifications: 0, result: { sent: 0, skipped: 0, failed: 0, pruned: 0, withheld: 0 } };
   const last = rows[rows.length - 1];
-  const nextCursor = parsePushCursor({ version: 1, createdAt: last.created_at, id: last.id });
-  if (!nextCursor) throw new Error('Push notification cursor fields are invalid.');
+  const nextPosition = parsePushCursor({ version: 1, createdAt: last.created_at, id: last.id });
+  if (!nextPosition) throw new Error('Push notification cursor fields are invalid.');
+  // A wrap can return to the same position. Change the stored identity even
+  // then, so only one competing snapshot can match the original JSON value.
+  const nextCursor = { ...nextPosition, generation: randomUUID() };
   // Save progress before any external send. A write failure sends nothing;
   // a later delivery failure stays pending and is revisited on wrap-around.
   //
-  // Once a cursor exists the write is a compare-and-set against the value THIS
-  // run read, which is what stops two overlapping workers delivering the same
-  // batch. The plain upsert took the last writer, so both advanced the cursor,
-  // both kept their rows, and every device in the batch buzzed twice. The loser
-  // now matches no row and returns having sent nothing; the winner owns the batch.
+  // Compare the complete stored value, including any generation, while accepting
+  // legacy position-only cursors. Fresh generations fence competing snapshots
+  // of that value even if traversal returns to the same position. They do not
+  // fence another scope, or a later worker reading the new generation before
+  // this worker records delivery; this is not a per-notification send lease.
   //
   // The very first run for a scope has no cursor to compare against and still
   // upserts. Two workers racing that one batch remains possible exactly once per
-  // scope, before any cursor exists; after that the guard holds.
+  // scope, before any cursor exists.
   const stamp = new Date().toISOString();
   if (stored) {
     const { data: claimed, error: claimError } = await supabase.from('app_settings')
@@ -380,20 +385,24 @@ export async function dispatchPendingPushes(
     if (cursorWriteError || saved?.key !== cursorKey) throw new Error('Push cursor write failed.');
   }
 
-  // Cache family member user ids for whole-family notifications.
-  const familyMembers = new Map<string, string[]>();
-  async function membersOf(familyId: string): Promise<string[]> {
+  // Resolve current family access at delivery, including directly addressed
+  // rows that were queued before a member was removed. Pages are a live read;
+  // membership changes during paging or sending are not atomically enforced.
+  const familyMembers = new Map<string, Set<string>>();
+  async function membersOf(familyId: string): Promise<Set<string>> {
     if (familyMembers.has(familyId)) return familyMembers.get(familyId)!;
-    const { data, error } = await supabase
+    const { rows: members, error } = await readAll<{ user_id: string | null }>((from, to) => supabase
       .from('family_members')
       .select('user_id')
       .eq('family_id', familyId)
-      .eq('is_active', true);
+      .eq('is_active', true)
+      .order('id')
+      .range(from, to));
     if (error) {
-      console.error('[push] family_members read failed for fan-out', { familyId, error });
+      console.error('[push] family_members read failed for delivery', { familyId, error });
       throw new Error('Push recipient read failed.');
     }
-    const ids = (data ?? []).map((m) => m.user_id).filter((id): id is string => Boolean(id));
+    const ids = new Set(members.map((m) => m.user_id).filter((id): id is string => Boolean(id)));
     familyMembers.set(familyId, ids);
     return ids;
   }
@@ -405,8 +414,10 @@ export async function dispatchPendingPushes(
   // without this a child is reached by the fan-out even when the family said no.
   const candidates = new Set<string>();
   for (const n of rows) {
-    if (n.user_id) candidates.add(n.user_id);
-    else for (const id of await membersOf(n.family_id)) candidates.add(id);
+    const members = await membersOf(n.family_id);
+    if (n.user_id) {
+      if (members.has(n.user_id)) candidates.add(n.user_id);
+    } else for (const id of members) candidates.add(id);
   }
   const pushBlocked = await blockedPushRecipients(supabase, [...candidates]);
   // Read before any send, like the consent reads above: a failure here sends
@@ -415,8 +426,9 @@ export async function dispatchPendingPushes(
 
   const totals: PushResult = { sent: 0, skipped: 0, failed: 0, pruned: 0, withheld: 0 };
   for (const n of rows) {
-    const addressed = n.user_id ? [n.user_id] : [...new Set(await membersOf(n.family_id))];
-    const recipients = addressed.filter((id) => !pushBlocked.has(id));
+    const members = await membersOf(n.family_id);
+    const addressed = n.user_id ? [n.user_id] : [...members];
+    const recipients = addressed.filter((id) => members.has(id) && !pushBlocked.has(id));
     // Still stamped below even when everyone was filtered out: the notification
     // was handled, and leaving `pushed_at` null would re-consider it every run.
     const url = n.related_type === 'social' ? '/dashboard/social' : '/dashboard/notifications';

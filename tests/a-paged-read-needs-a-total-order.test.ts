@@ -49,12 +49,14 @@ const ROOT = join(__dirname, '..');
 const UNIQUE_KEYS: Record<string, { columns: string[]; why: string }[]> = {
   blog_posts: [{ columns: ['slug'], why: '00100: `slug text NOT NULL UNIQUE`' }],
   checkout_sessions: [{ columns: ['session_id'], why: '0051: `session_id text NOT NULL UNIQUE`' }],
+  family_ai_settings: [{ columns: ['family_id'], why: '0257: line 43, `family_id uuid primary key`' }],
   family_model_dirty: [{ columns: ['family_id'], why: '0134: `family_id uuid primary key`' }],
   marketing_suppressions: [{ columns: ['email'], why: '0021: `email text PRIMARY KEY`' }],
   network_aggregates: [{ columns: ['scope', 'cohort_key', 'metric', 'value'], why: '0135: `unique (scope, cohort_key, metric, value)`' }],
   network_consent: [{ columns: ['family_id'], why: '0132: `family_id uuid primary key`' }],
   network_contributions: [{ columns: ['family_id'], why: '0135: `family_id uuid primary key`' }],
   super_admins: [{ columns: ['email'], why: '0008: `email text PRIMARY KEY`' }],
+  user_preferences: [{ columns: ['user_id'], why: '0002: line 490, `user_id uuid primary key`' }],
 };
 
 function walk(dir: string, out: string[] = []): string[] {
@@ -135,6 +137,14 @@ function pagedReads(): PagedRead[] {
 }
 
 describe('a paged read needs a total order', () => {
+  it('the family consent settings paging key is the table’s declared primary key', () => {
+    const migration = readFileSync(join(ROOT, 'supabase/migrations/0257_family_ai_settings.sql'), 'utf8');
+    const settingsTable = /create table if not exists public\.family_ai_settings\s*\(([\s\S]*?)\n\);/.exec(migration)?.[1];
+    expect(settingsTable, 'the migration must still declare family consent settings').toBeDefined();
+    expect(settingsTable).toMatch(/^\s*family_id\s+uuid\s+primary key\b/m);
+    expect(UNIQUE_KEYS.family_ai_settings.map(key => key.columns)).toEqual([['family_id']]);
+  });
+
   it('finds the call sites at all (guards the guard)', () => {
     // A matcher that silently found nothing would make every rule below vacuous.
     const reads = pagedReads();
@@ -194,6 +204,14 @@ describe('a paged read needs a total order', () => {
         expect(/primary key|unique/i.test(why), `${table} cites no constraint`).toBe(true);
       }
     }
+  });
+
+  it('the preference paging key is the table’s declared primary key', () => {
+    const migration = readFileSync(join(ROOT, 'supabase/migrations/0002_tables.sql'), 'utf8');
+    const preferenceTable = /create table if not exists public\.user_preferences\s*\(([\s\S]*?)\n\);/.exec(migration)?.[1];
+    expect(preferenceTable, 'the migration must still declare the preferences table').toBeDefined();
+    expect(preferenceTable).toMatch(/^\s*user_id\s+uuid\s+primary key\b/m);
+    expect(UNIQUE_KEYS.user_preferences.map(key => key.columns)).toEqual([['user_id']]);
   });
 
   it('counts an .eq() as pinning and a .gte()/.in() as not (guards the matcher)', () => {

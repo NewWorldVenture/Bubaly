@@ -104,6 +104,7 @@ export function WatchlistModule() {
     const { data: updated, error } = await createClient().from('watchlist_titles').update({ status }).eq('id', title.id).select('id');
     if (error) return toastError(describeDbError(error));
     if (wroteNoRows(updated)) return toastError(tr('errors.thatChangeWasNotSaved'));
+    void titles.refresh();
     success(`${title.title}: ${WATCH_STATUSES.find((s) => s.value === status)?.label}`);
   }
 
@@ -112,6 +113,7 @@ export function WatchlistModule() {
     const { data: removed, error } = await createClient().from('watchlist_titles').delete().eq('id', title.id).select('id');
     if (error) return toastError(describeDbError(error));
     if (wroteNoRows(removed)) return toastError(tr('errors.thatChangeWasNotSaved'));
+    void titles.refresh();
     success(tr('watchlistModule.titleRemoved'));
   }
 
