@@ -36,6 +36,7 @@ const state = vi.hoisted(() => ({
   db: null as unknown,
   activeFamilyId: 'family-plus',
   failSubscriptionsRead: false,
+  failTierRead: false,
   superAdmin: false,
 }));
 
@@ -90,18 +91,18 @@ const { POST: onDemand } = await import('@/app/api/autopilot/scan/route');
 function withFailingSubscriptions(db: ReturnType<typeof createInMemorySupabase<DB>>): DB {
   const failing = () => {
     const chain: Row = {};
-    for (const m of ['select', 'eq', 'in', 'is', 'not', 'gte', 'lte', 'order', 'limit', 'maybeSingle', 'single']) {
+    for (const m of ['select', 'eq', 'in', 'is', 'not', 'gte', 'lte', 'order', 'limit', 'abortSignal', 'maybeSingle', 'single']) {
       chain[m] = () => chain;
     }
     chain.then = (resolve: (v: unknown) => unknown) =>
-      Promise.resolve({ data: null, error: new Error('subscriptions read failed') }).then(resolve);
+      Promise.resolve({ data: null, error: new Error('read failed') }).then(resolve);
     return chain;
   };
   return new Proxy(db as object, {
     get(target, prop, receiver) {
       if (prop !== 'from') return Reflect.get(target, prop, receiver);
       return (table: string) =>
-        state.failSubscriptionsRead && table === 'subscriptions'
+        (state.failSubscriptionsRead && table === 'subscriptions') || (state.failTierRead && table === 'app_settings')
           ? failing()
           : (target as DB).from(table as never);
     },
@@ -111,6 +112,7 @@ function withFailingSubscriptions(db: ReturnType<typeof createInMemorySupabase<D
 beforeEach(() => {
   scan.run.mockClear();
   state.failSubscriptionsRead = false;
+  state.failTierRead = false;
   state.superAdmin = false;
   state.activeFamilyId = PLUS;
   vi.stubEnv('CRON_SECRET', 'cron-secret');
@@ -160,6 +162,18 @@ describe('the Autopilot cron runs only for entitled families', () => {
     expect(scan.run).not.toHaveBeenCalled();
     expect(body).toMatchObject({ ok: false, skipped: 0, failures: 2 });
     expect(response.status).toBe(502);
+  });
+
+  it('runs for nobody when the feature tiers cannot be read', async () => {
+    // The catalog default is not the configured tier: an admin can make
+    // Autopilot stricter (Off, say) than its default, and a pass that fell
+    // back to the default would run it for families the admin excluded.
+    state.failTierRead = true;
+
+    const response = await cron(cronRequest() as never);
+
+    expect(scan.run).not.toHaveBeenCalled();
+    expect(response.status).toBe(500);
   });
 
   it('still refuses an unauthorised caller before reading anything', async () => {

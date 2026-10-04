@@ -148,7 +148,7 @@ export async function POST(req: NextRequest) {
     }
     const model = aiConfig.model && /^(gpt-|o\d|chatgpt-)/i.test(aiConfig.model) ? aiConfig.model : 'gpt-4o';
 
-    const prompt = buildPantryChefPrompt(allergies, new Date());
+    const prompt = buildPantryChefPrompt(allergies, new Date(), ctx.active.family.timezone || 'UTC');
     // Recorded like every other AI route, so the call counts against the allowance (F19).
     const aiRes = await withAiRequest(
       scopeFromUserContext(ctx, supabase),

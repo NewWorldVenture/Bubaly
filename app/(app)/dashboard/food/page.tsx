@@ -10,7 +10,7 @@ import { makeDegradeRead } from '@/lib/meals/degrade-read';
 import { cn } from '@/lib/utils/cn';
 import { getLocaleContext, getTranslations } from '@/lib/i18n/server';
 import { addDaysToDayKey, dayKeyInTz } from '@/lib/services/scope';
-import type { LocaleCode } from '@/lib/i18n/locales';
+import { getFormat } from '@/lib/utils/format-server';
 
 export async function generateMetadata(): Promise<Metadata> {
   const t = await getTranslations();
@@ -18,7 +18,6 @@ export async function generateMetadata(): Promise<Metadata> {
 }
 export const dynamic = 'force-dynamic';
 
-const fmtDay = (d: string | null, locale: LocaleCode) => (d ? new Date(d).toLocaleDateString(locale, { month: 'short', day: 'numeric' }) : '');
 
 // Per-query fail-safe so one erroring/not-yet-migrated table (e.g. dining_out)
 // degrades to an empty card instead of crashing the whole hub — and LOGS every
@@ -91,6 +90,10 @@ export default async function FoodPage() {
   const todayIso = dayKeyInTz(now, tz);
   const weekEnd = addDaysToDayKey(todayIso, 6);
   const expSoon = addDaysToDayKey(todayIso, 14);
+  // And the labels: `plan_date` and `expires_at` are DATEs, which the shared
+  // formatter renders in no zone, where `new Date(d).toLocaleDateString(locale)`
+  // parsed them as UTC midnight and rendered them on the host's calendar.
+  const { fmtDate } = await getFormat(tz);
 
   const [
     { data: dinners, count: planCount },
@@ -156,7 +159,7 @@ export default async function FoodPage() {
         {/* 1. Meal Planner */}
         <FeatureCard index={1} title={t('dashboardFood.mealPlanner')} href="/dashboard/meals" icon={CalendarRange} tint="bg-blue-500/15 text-blue-400" count={planCount ?? 0} countLabel={t('dashboardFood.count.dinnersPlannedThisWeek')}>
           {planRows.length === 0 ? <EmptyHint>{t('dashboardFood.noDinnersPlannedYet')}</EmptyHint>
-            : planRows.slice(0, 4).map((p) => <ListRow key={p.plan_date} label={p.meal_id ? (mealName.get(p.meal_id) ?? t('dashboardFood.plannedMeal')) : t('dashboardFood.plannedMeal')} meta={p.plan_date === todayIso ? t('dashboardFood.today') : fmtDay(p.plan_date, locale.code)} dot="bg-blue-400" />)}
+            : planRows.slice(0, 4).map((p) => <ListRow key={p.plan_date} label={p.meal_id ? (mealName.get(p.meal_id) ?? t('dashboardFood.plannedMeal')) : t('dashboardFood.plannedMeal')} meta={p.plan_date === todayIso ? t('dashboardFood.today') : fmtDate(p.plan_date, 'MMM d')} dot="bg-blue-400" />)}
         </FeatureCard>
 
         {/* 2. Recipes */}
@@ -174,7 +177,7 @@ export default async function FoodPage() {
         {/* 4. Pantry Inventory */}
         <FeatureCard index={4} title={t('dashboardFood.pantryInventory')} href="/dashboard/pantry" icon={Boxes} tint="bg-orange-500/15 text-orange-400" count={pantryCount ?? 0} countLabel={t('dashboardFood.count.expiringSoon')}>
           {(pantry ?? []).length === 0 ? <EmptyHint>{t('dashboardFood.nothingExpiringSoon')}</EmptyHint>
-            : (pantry as P[]).map((p) => <ListRow key={p.id} label={p.name} meta={p.expires_at ? fmtDay(p.expires_at, locale.code) : `${p.quantity}${p.unit ? ' ' + p.unit : ''}`} dot="bg-orange-400" />)}
+            : (pantry as P[]).map((p) => <ListRow key={p.id} label={p.name} meta={p.expires_at ? fmtDate(p.expires_at, 'MMM d') : `${p.quantity}${p.unit ? ' ' + p.unit : ''}`} dot="bg-orange-400" />)}
         </FeatureCard>
 
         {/* 5. Family Favorites */}
