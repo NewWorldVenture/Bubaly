@@ -58,7 +58,8 @@ const MONEY_APPROVAL = { id: 'pa-1', kind: 'card_spend', amount_cents: 1250, cre
 const PANTRY = { name: 'Milk', expires_at: '2026-09-08' };
 
 function queryResult(data: unknown[]) {
-  const promise = Promise.resolve({ data, error: null });
+  // A collection answer carries its count, as PostgREST's Content-Range does.
+  const promise = Promise.resolve({ data, error: null, count: data.length });
   const query: Record<string, unknown> = { then: promise.then.bind(promise) };
   // `or` and `update` are here because the route really calls them: the shared
   // handled count filters `family_automation_runs` with `.or(...)`, and the

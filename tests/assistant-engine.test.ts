@@ -24,7 +24,8 @@ function chain(table: string) {
     },
     maybeSingle: () => Promise.resolve({ data: t.error ? null : (t.single ?? null), error: t.error ?? null }),
     single: () => Promise.resolve({ data: t.error ? null : (t.single ?? null), error: t.error ?? null }),
-    then: (onF: (v: { data: Row[] | null; error: unknown }) => unknown) => Promise.resolve({ data: t.error ? null : (t.rows ?? []), error: t.error ?? null }).then(onF),
+    // A collection answer carries its count, as PostgREST's Content-Range does.
+    then: (onF: (v: { data: Row[] | null; error: unknown; count: number | null }) => unknown) => Promise.resolve({ data: t.error ? null : (t.rows ?? []), error: t.error ?? null, count: t.error ? null : (t.rows ?? []).length }).then(onF),
   };
   return c;
 }
