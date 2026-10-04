@@ -19,6 +19,7 @@ const fake = vi.hoisted(() => ({
   billingCustomerRef: 'cus_a' as string | null,
   listFails: false,
   billingReadFails: false,
+  hasMore: false,
   goneCustomers: new Set<string>(),
   updateFailsFor: new Set<string>(),
   updates: [] as { id: string; cancel_at_period_end: boolean }[],
@@ -68,7 +69,7 @@ vi.mock('@/lib/stripe', () => {
       list: async (params: { customer: string }) => {
         if (fake.listFails) throw new Error('synthetic Stripe outage');
         if (fake.goneCustomers.has(params.customer)) throw Object.assign(new Error('No such customer'), { code: 'resource_missing' });
-        return { data: fake.subs.filter((s) => s.customer === params.customer).map((s) => ({ ...s })), has_more: false };
+        return { data: fake.subs.filter((s) => s.customer === params.customer).map((s) => ({ ...s })), has_more: fake.hasMore };
       },
     },
   };
@@ -86,7 +87,7 @@ beforeEach(() => {
   ];
   fake.row = { provider_ref: 'sub_A', status: 'active' };
   fake.billingCustomerRef = 'cus_a';
-  fake.listFails = false; fake.billingReadFails = false; fake.goneCustomers = new Set(); fake.updateFailsFor = new Set(); fake.updates = []; fake.syncs = 0;
+  fake.listFails = false; fake.billingReadFails = false; fake.hasMore = false; fake.goneCustomers = new Set(); fake.updateFailsFor = new Set(); fake.updates = []; fake.syncs = 0;
   vi.spyOn(console, 'error').mockImplementation(() => {});
   vi.spyOn(console, 'warn').mockImplementation(() => {});
 });
@@ -162,6 +163,12 @@ describe('cancelling a family that Stripe bills twice', () => {
     expect(response.status).toBe(503);
     expect(sub('sub_A').cancel_at_period_end).toBe(false);
     expect(fake.syncs).toBe(0);
+  });
+
+  it('changes nothing when Stripe has more subscriptions than one page', async () => {
+    fake.hasMore = true;
+    expect((await cancel(request(false))).status).toBe(503);
+    expect(fake.updates).toEqual([]);
   });
 
   it('changes nothing when the family\'s billing customer cannot be read', async () => {
