@@ -1,8 +1,6 @@
-import { createClient } from '@supabase/supabase-js';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
-import type { Database } from '@/lib/database.types';
 import { googleAdapter } from '@/lib/sync/providers/google-adapter';
-import type { GEvent, GTask } from '@/lib/sync/providers/google';
+import type { GEvent } from '@/lib/sync/providers/google';
 
 // Only credential access and request-local translation are replaced. Provider
 // HTTP, both engines, persisted policy, persistence guards and the real SDK run.
@@ -15,112 +13,7 @@ vi.mock('@/lib/i18n/server', () => ({ getTranslations: async () => (key: string)
 const { runGoogleSync } = await import('@/lib/sync/engine/google');
 const { runProviderSync } = await import('@/lib/sync/engine/generic');
 
-type Row = Record<string, unknown>;
-type Call = { url: URL; method: string; body: Row | null };
-const ACCOUNT = { id: 'account', family_id: 'family', user_id: 'owner', external_id: 'synthetic@example.invalid' };
-const NEXT = 'next-synthetic-cursor';
-const STALE = 'prior-synthetic-cursor';
-const CANCELLED_INSTANCE = { id: 'deleted', status: 'cancelled', recurringEventId: 'series',
-  originalStartTime: { dateTime: '2026-06-21T09:00:00Z' } };
-
-function fixture(events: GEvent[], options: {
-  failedDelete?: boolean; zeroDelete?: boolean; direction?: string; alreadyDeleted?: boolean;
-  tasks?: GTask[]; zeroLiveWrite?: boolean; moveBeforeLiveWrite?: boolean;
-  moveMappingBeforeWrite?: boolean; zeroPushWrite?: boolean;
-} = {}) {
-  const rows: Record<string, Row[]> = {
-    sync_accounts: [{ ...ACCOUNT, provider: 'google', sync_direction: options.direction ?? 'import', metadata: {} }],
-    sync_connections: [{ account_id: ACCOUNT.id, health: 'healthy' }],
-    sync_calendars: [{ id: 'calendar', account_id: ACCOUNT.id, family_id: ACCOUNT.family_id, provider: 'google', external_id: 'primary', sync_token: STALE }],
-    sync_reminder_lists: [{ id: 'list', account_id: ACCOUNT.id, family_id: ACCOUNT.family_id, provider: 'google', external_id: '@default' }],
-    sync_calendar_events: [{ id: 'local', calendar_id: 'calendar', family_id: ACCOUNT.family_id, provider: 'google', external_id: 'deleted', deleted_at: null }],
-    sync_external_mappings: [{ id: 'mapping', family_id: ACCOUNT.family_id, account_id: ACCOUNT.id, provider: 'google', item_type: 'event', external_id: 'deleted', local_id: 'local', metadata: {} },
-      { id: 'foreign-map', family_id: 'another-family', account_id: 'another-account', provider: 'google', item_type: 'event', external_id: 'foreign-only', local_id: 'foreign-local', metadata: {} }],
-    sync_jobs: [], sync_job_runs: [], sync_provider_errors: [], sync_reminders: [],
-  };
-  rows.sync_calendar_events.push({ id: 'foreign-local', family_id: 'another-family', deleted_at: null });
-  if (options.tasks?.length) {
-    rows.sync_reminders.push({ id: 'local-task', family_id: ACCOUNT.family_id, list_id: 'list', provider: 'google',
-      title: 'Synthetic task original', content_hash: null, deleted_at: null, is_completed: false });
-    rows.sync_external_mappings.push({ id: 'task-mapping', family_id: ACCOUNT.family_id, account_id: ACCOUNT.id,
-      provider: 'google', item_type: 'reminder', external_id: 'remote-task', local_id: 'local-task', metadata: {} });
-  }
-  const calls: Call[] = [];
-  const json = (data: unknown, status = 200) => new Response(JSON.stringify(data), {
-    status, headers: { 'Content-Type': 'application/json' },
-  });
-  const fetch: typeof globalThis.fetch = async (input, init) => {
-    const url = new URL(typeof input === 'string' ? input : input instanceof URL ? input.href : input.url);
-    const method = init?.method ?? 'GET';
-    const body = init?.body ? JSON.parse(String(init.body)) as Row : null;
-    calls.push({ url, method, body });
-    if (url.origin === 'https://tasks.googleapis.com') {
-      if (method === 'GET' && url.pathname === '/tasks/v1/lists/%40default/tasks') return json({ items: options.tasks ?? [] });
-      if (options.direction === 'two_way' && method === 'POST' && url.pathname === '/tasks/v1/lists/%40default/tasks') return json({ id: 'exported-task' });
-      throw new Error(`Unexpected synthetic task request: ${method} ${url.pathname}`);
-    }
-    if (url.origin === 'https://www.googleapis.com') {
-      if (options.direction === 'two_way') {
-        if (method === 'POST' && url.pathname === '/calendar/v3/calendars/primary/events') return json({ id: 'exported', etag: 'synthetic-etag' });
-        if (method === 'DELETE' && url.pathname === '/calendar/v3/calendars/primary/events/exported') {
-          return options.alreadyDeleted
-            ? json({ error: { code: 410, errors: [{ domain: 'global', reason: 'deleted' }], message: 'Resource has been deleted' } }, 410)
-            : new Response(null, { status: 204 });
-        }
-      }
-      if (method !== 'GET') throw new Error(`Unexpected outgoing synthetic provider write: ${method}`);
-      if (url.pathname === '/calendar/v3/users/me/calendarList') return json({ items: [{ id: 'primary', summary: 'Synthetic', primary: true, timeZone: 'UTC' }] });
-      if (url.pathname === '/calendar/v3/calendars/primary/events') {
-        expect(url.searchParams.get('showDeleted')).toBe('true');
-        expect(url.searchParams.get('singleEvents')).toBe('false');
-        const mirror = rows.sync_calendars.find(row => row.account_id === ACCOUNT.id);
-        expect(url.searchParams.get('syncToken')).toBe(mirror?.sync_token ?? null);
-        return json({ items: events, nextSyncToken: NEXT });
-      }
-      throw new Error(`Unexpected synthetic provider path: ${url.pathname}`);
-    }
-    if (url.origin !== 'https://sync-fixture.invalid' || !url.pathname.startsWith('/rest/v1/')) {
-      throw new Error(`Unexpected synthetic request: ${url.origin}${url.pathname}`);
-    }
-    const table = url.pathname.slice('/rest/v1/'.length);
-    const tableRows = rows[table];
-    if (!tableRows) throw new Error(`Unexpected synthetic table: ${table}`);
-    if (table === 'sync_calendar_events' && method === 'PATCH' && body?.title && options.moveBeforeLiveWrite) {
-      rows.sync_calendar_events[0].family_id = 'another-family';
-    }
-    if (table === 'sync_external_mappings' && method === 'PATCH' && options.moveMappingBeforeWrite) {
-      rows.sync_external_mappings[0].local_id = 'foreign-local';
-    }
-    const selected = tableRows.filter(row => [...url.searchParams].every(([column, value]) => {
-      if (column === 'select' || column === 'limit') return true;
-      if (!value.startsWith('eq.')) throw new Error(`Unexpected synthetic filter: ${column}=${value}`);
-      return String(row[column]) === value.slice(3);
-    }));
-    let result = url.searchParams.has('limit') ? selected.slice(0, Number(url.searchParams.get('limit'))) : selected;
-    if (method === 'PATCH') {
-      if (table === 'sync_calendar_events' && body?.title && options.zeroLiveWrite) return json(null);
-      if (table === 'sync_calendar_events' && body?.content_hash && !body.title && options.zeroPushWrite) return json(null);
-      if (table === 'sync_calendar_events' && body?.deleted_at) {
-        if (options.failedDelete) return json({ code: '42501', message: 'Synthetic deletion refused', details: null, hint: null }, 403);
-        if (options.zeroDelete) return json(null);
-      }
-      result.forEach(row => Object.assign(row, body));
-    } else if (method === 'POST') {
-      if (!body) throw new Error('Synthetic insert body missing');
-      result = [{ id: `${table}-${tableRows.length}`, ...body }];
-      tableRows.push(...result);
-    } else if (method === 'DELETE') {
-      rows[table] = tableRows.filter(row => !result.includes(row));
-    } else if (method !== 'GET') throw new Error(`Unexpected synthetic database method: ${method}`);
-    const singular = new Headers(init?.headers).get('accept')?.includes('application/vnd.pgrst.object+json');
-    return json(singular ? result[0] ?? null : result);
-  };
-  const db = createClient<Database>('https://sync-fixture.invalid', 'synthetic-test-key', {
-    auth: { persistSession: false, autoRefreshToken: false, detectSessionInUrl: false }, global: { fetch },
-  });
-  vi.stubGlobal('fetch', fetch);
-  return { db, rows, calls };
-}
+import { syncSdkFixture as fixture, ACCOUNT, NEXT, STALE, CANCELLED_INSTANCE } from './helpers/sync-sdk-fixture';
 
 beforeEach(() => vi.spyOn(console, 'error').mockImplementation(() => {}));
 afterEach(() => { vi.unstubAllGlobals(); vi.restoreAllMocks(); });

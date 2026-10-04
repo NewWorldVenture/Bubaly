@@ -20,7 +20,7 @@ import {
   googleTaskToReminderRow, reminderRowToGoogleTask, reminderContentHash,
   GoogleApiError,
 } from '@/lib/sync/providers/google';
-import { requireSyncWrite } from '@/lib/sync/persistence';
+import { createSyncPullItem, ensureSyncPullContainer, requireSyncWrite } from '@/lib/sync/persistence';
 import { loadSyncExecutionPolicy, type SyncExecutionPolicy } from '@/lib/services/sync/policy';
 import { refreshOnboardingCalendar } from '@/lib/services/onboarding-calendar';
 import { systemScopeForFamily } from '@/lib/services/scope';
@@ -125,22 +125,8 @@ async function syncCalendar(admin: Admin, account: Account, accessToken: string,
   if (!primary) return;
 
   // Ensure a local sync_calendar mirror exists for the Google primary calendar.
-  let { data: cal, error: calendarReadError } = await admin
-    .from('sync_calendars')
-    .select('id, sync_token')
-    .eq('family_id', account.family_id).eq('account_id', account.id)
-    .eq('provider', 'google').eq('external_id', primary.id)
-    .maybeSingle();
-  if (calendarReadError) throw new Error('Sync calendar lookup failed');
-  if (!cal) {
-    const { data: created, error: createError } = await admin.from('sync_calendars').insert({
-      family_id: account.family_id, user_id: account.user_id, account_id: account.id,
-      provider: 'google', external_id: primary.id, name: primary.summary ?? 'Google Calendar',
-      timezone: primary.timeZone ?? 'UTC', color: primary.backgroundColor ?? null, is_owned_locally: false,
-    }).select('id, sync_token').single();
-    cal = requireSyncWrite(created, createError, 'calendar creation');
-  }
-  if (!cal) return;
+  const cal = await ensureSyncPullContainer(admin, account, 'google', 'event', primary.id, primary.summary ?? 'Google Calendar',
+    primary.timeZone ?? 'UTC', primary.backgroundColor ?? null);
 
   // Commit the cursor only after this account's calendar and task processing
   // succeeds. A rejected scope or unconfirmed write must remain replayable.
@@ -154,7 +140,7 @@ async function syncCalendar(admin: Admin, account: Account, accessToken: string,
       const row = googleEventToRow(ev);
       if (!row) { result.skipped++; continue; }
 
-      const { data: mapping, error: mappingError } = await admin
+      let { data: mapping, error: mappingError } = await admin
         .from('sync_external_mappings')
         .select('id, family_id, local_id, external_id, metadata')
         .eq('account_id', account.id).eq('provider', 'google').eq('item_type', 'event').eq('external_id', row.external_id)
@@ -175,6 +161,15 @@ async function syncCalendar(admin: Admin, account: Account, accessToken: string,
       }
 
       const remoteHash = eventContentHash(row);
+      if (!mapping) {
+        const admitted = await createSyncPullItem(admin, account, 'google', 'event', cal.id, row.external_id, {
+          uid: row.uid, title: row.title, description: row.description, location: row.location,
+          starts_at: row.starts_at, ends_at: row.ends_at, all_day: row.all_day, recurrence_rule: row.recurrence_rule,
+          status: row.status, etag: row.etag
+        }, remoteHash);
+        if (admitted.created) { result.imported++; continue; }
+        mapping = admitted.mapping;
+      }
 
       if (mapping) {
         const { data: local, error: localError } = await admin.from('sync_calendar_events').select('content_hash, updated_at, deleted_at').eq('id', mapping.local_id).eq('family_id', account.family_id).eq('calendar_id', cal.id).maybeSingle();
@@ -193,6 +188,9 @@ async function syncCalendar(admin: Admin, account: Account, accessToken: string,
           continue;
         }
         if (localHash === remoteHash) { result.skipped++; continue; }
+        // In two-way sync an unchanged remote snapshot must not erase a local
+        // edit. Keep its base hash so the existing push path can export it.
+        if (policy.push && baseHash === remoteHash) { result.skipped++; continue; }
         const { data: updatedEvent, error: eventUpdateError } = await admin.from('sync_calendar_events').update({
           title: row.title, description: row.description, location: row.location,
           starts_at: row.starts_at, ends_at: row.ends_at, all_day: row.all_day,
@@ -204,24 +202,6 @@ async function syncCalendar(admin: Admin, account: Account, accessToken: string,
           .update({ external_etag: row.etag, metadata: hashMeta(remoteHash), last_synced_at: new Date().toISOString() })
           .eq('id', mapping.id).eq('family_id', account.family_id).eq('account_id', account.id).eq('provider', 'google').eq('item_type', 'event').eq('local_id', mapping.local_id).eq('external_id', mapping.external_id).select('id').maybeSingle();
         requireSyncWrite(updatedMapping, mappingUpdateError, 'event mapping update');
-        result.imported++;
-      } else {
-        const { data: inserted, error: insertError } = await admin.from('sync_calendar_events').insert({
-          calendar_id: cal.id, family_id: account.family_id, user_id: account.user_id, provider: 'google',
-          external_id: row.external_id, uid: row.uid, title: row.title, description: row.description, location: row.location,
-          starts_at: row.starts_at, ends_at: row.ends_at, all_day: row.all_day, recurrence_rule: row.recurrence_rule,
-          status: row.status, etag: row.etag, content_hash: remoteHash, sync_status: 'synced',
-          last_synced_at: new Date().toISOString(), metadata: REMOTE_META,
-        }).select('id').single();
-        const event = requireSyncWrite(inserted, insertError, 'event creation');
-        {
-          const { data: mappingRow, error: mappingInsertError } = await admin.from('sync_external_mappings').insert({
-            family_id: account.family_id, account_id: account.id, provider: 'google', item_type: 'event',
-            local_id: event.id, external_id: row.external_id, external_etag: row.etag, metadata: hashMeta(remoteHash),
-            last_synced_at: new Date().toISOString(),
-          }).select('id').maybeSingle();
-          requireSyncWrite(mappingRow, mappingInsertError, 'event mapping creation');
-        }
         result.imported++;
       }
     }
@@ -310,28 +290,14 @@ async function syncCalendar(admin: Admin, account: Account, accessToken: string,
 async function syncTasks(admin: Admin, account: Account, accessToken: string, result: RunResult, policy: Extract<SyncExecutionPolicy, { mode: 'standard' }>) {
   const listId = '@default';
 
-  let { data: list, error: listError } = await admin
-    .from('sync_reminder_lists')
-    .select('id')
-    .eq('family_id', account.family_id).eq('account_id', account.id)
-    .eq('provider', 'google').eq('external_id', listId)
-    .maybeSingle();
-  if (listError) throw new Error('Sync reminder list lookup failed');
-  if (!list) {
-    const { data: created, error: createError } = await admin.from('sync_reminder_lists').insert({
-      family_id: account.family_id, user_id: account.user_id, account_id: account.id,
-      provider: 'google', external_id: listId, name: 'Google Tasks', is_owned_locally: false,
-    }).select('id').single();
-    list = requireSyncWrite(created, createError, 'reminder list creation');
-  }
-  if (!list) return;
+  const list = await ensureSyncPullContainer(admin, account, 'google', 'reminder', listId, 'Google Tasks');
 
   // ----- PULL -----
   if (policy.pull) {
     const tasks = await listTasks(accessToken, listId);
     for (const task of tasks) {
       const row = googleTaskToReminderRow(task);
-      const { data: mapping, error: mappingError } = await admin
+      let { data: mapping, error: mappingError } = await admin
         .from('sync_external_mappings')
         .select('id, family_id, local_id, external_id, metadata')
         .eq('account_id', account.id).eq('provider', 'google').eq('item_type', 'reminder').eq('external_id', row.external_id)
@@ -352,6 +318,13 @@ async function syncTasks(admin: Admin, account: Account, accessToken: string, re
       }
 
       const remoteHash = reminderContentHash(row);
+      if (!mapping) {
+        const admitted = await createSyncPullItem(admin, account, 'google', 'reminder', list.id, row.external_id, {
+          title: row.title, notes: row.notes, due_at: row.due_at, is_completed: row.is_completed, completed_at: row.completed_at
+        }, remoteHash);
+        if (admitted.created) { result.imported++; continue; }
+        mapping = admitted.mapping;
+      }
       if (mapping) {
         const { data: local, error: localError } = await admin.from('sync_reminders').select('content_hash, updated_at, is_completed').eq('id', mapping.local_id).eq('family_id', account.family_id).eq('list_id', list.id).maybeSingle();
         if (localError || !local) throw new Error('Sync local reminder lookup failed');
@@ -363,20 +336,11 @@ async function syncTasks(admin: Admin, account: Account, accessToken: string, re
           result.conflicts++; continue;
         }
         if ((local?.content_hash ?? null) === remoteHash) { result.skipped++; continue; }
+        if (policy.push && baseHash === remoteHash) { result.skipped++; continue; }
         const { data: updatedReminder, error: reminderUpdateError } = await admin.from('sync_reminders').update({ title: row.title, notes: row.notes, due_at: row.due_at, is_completed: row.is_completed, completed_at: row.completed_at, content_hash: remoteHash, sync_status: 'synced', last_synced_at: new Date().toISOString(), metadata: REMOTE_META }).eq('id', mapping.local_id).eq('family_id', account.family_id).eq('list_id', list.id).select('id').maybeSingle();
         requireSyncWrite(updatedReminder, reminderUpdateError, 'reminder update');
         const { data: updatedMapping, error: mappingUpdateError } = await admin.from('sync_external_mappings').update({ metadata: hashMeta(remoteHash), last_synced_at: new Date().toISOString() }).eq('id', mapping.id).eq('family_id', account.family_id).eq('account_id', account.id).eq('provider', 'google').eq('item_type', 'reminder').eq('local_id', mapping.local_id).eq('external_id', mapping.external_id).select('id').maybeSingle();
         requireSyncWrite(updatedMapping, mappingUpdateError, 'reminder mapping update');
-        result.imported++;
-      } else {
-        const { data: inserted, error: insertError } = await admin.from('sync_reminders').insert({
-          list_id: list.id, family_id: account.family_id, user_id: account.user_id, provider: 'google', external_id: row.external_id,
-          title: row.title, notes: row.notes, due_at: row.due_at, is_completed: row.is_completed, completed_at: row.completed_at,
-          content_hash: remoteHash, sync_status: 'synced', last_synced_at: new Date().toISOString(), metadata: REMOTE_META,
-        }).select('id').single();
-        const reminder = requireSyncWrite(inserted, insertError, 'reminder creation');
-        const { data: mappingRow, error: mappingInsertError } = await admin.from('sync_external_mappings').insert({ family_id: account.family_id, account_id: account.id, provider: 'google', item_type: 'reminder', local_id: reminder.id, external_id: row.external_id, metadata: hashMeta(remoteHash), last_synced_at: new Date().toISOString() }).select('id').maybeSingle();
-        requireSyncWrite(mappingRow, mappingInsertError, 'reminder mapping creation');
         result.imported++;
       }
     }

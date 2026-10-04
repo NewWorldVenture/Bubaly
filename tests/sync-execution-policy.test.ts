@@ -45,7 +45,16 @@ beforeEach(() => {
   vi.clearAllMocks();
   mocks.locale = 'en-US';
   vi.spyOn(console, 'error').mockImplementation(() => {});
-  db = createInMemorySupabase();
+  db = createInMemorySupabase({ rpc: {
+    ensure_sync_pull_container: (args, fixture) => {
+      if (args.p_account !== ACCOUNT.id || args.p_family !== ACCOUNT.family_id || args.p_user !== ACCOUNT.user_id) throw new Error('Wrong synthetic sync owner');
+      const table = args.p_kind === 'event' ? 'sync_calendars' : 'sync_reminder_lists';
+      const row = fixture.table(table).find(row => row.account_id === args.p_account && row.family_id === args.p_family
+        && row.provider === args.p_provider && row.external_id === args.p_external);
+      if (!row) throw new Error('Missing synthetic mirror');
+      return { id: row.id, sync_token: row.sync_token ?? null };
+    },
+  } });
   db.seed('families', [{ id: 'ours', timezone: 'UTC' }]);
   mocks.token.mockResolvedValue('access');
   mocks.legacyToken.mockResolvedValue('access');

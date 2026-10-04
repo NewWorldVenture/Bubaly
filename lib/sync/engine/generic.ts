@@ -18,7 +18,7 @@ import type { SyncProviderAdapter } from '@/lib/sync/adapter';
 import { SyncApiError } from '@/lib/sync/adapter';
 import { detectConflict } from '@/lib/sync/conflict';
 import { getProviderAccessToken } from '@/lib/sync/access-token';
-import { requireSyncWrite } from '@/lib/sync/persistence';
+import { createSyncPullItem, ensureSyncPullContainer, requireSyncWrite } from '@/lib/sync/persistence';
 import { loadSyncExecutionPolicy, type SyncExecutionPolicy } from '@/lib/services/sync/policy';
 import { refreshOnboardingCalendar } from '@/lib/services/onboarding-calendar';
 import { systemScopeForFamily } from '@/lib/services/scope';
@@ -112,22 +112,8 @@ async function syncCalendar(admin: Admin, account: Account, adapter: SyncProvide
   const primary = calendars.find((c) => c.primary) ?? calendars[0];
   if (!primary) return;
 
-  let { data: cal, error: calendarReadError } = await admin
-    .from('sync_calendars')
-    .select('id, sync_token')
-    .eq('family_id', account.family_id).eq('account_id', account.id)
-    .eq('provider', provider).eq('external_id', primary.externalId)
-    .maybeSingle();
-  if (calendarReadError) throw new Error('Sync calendar lookup failed');
-  if (!cal) {
-    const { data: created, error: createError } = await admin.from('sync_calendars').insert({
-      family_id: account.family_id, user_id: account.user_id, account_id: account.id,
-      provider, external_id: primary.externalId, name: primary.name,
-      timezone: primary.timezone ?? 'UTC', color: primary.color, is_owned_locally: false,
-    }).select('id, sync_token').single();
-    cal = requireSyncWrite(created, createError, 'calendar creation');
-  }
-  if (!cal) return;
+  const cal = await ensureSyncPullContainer(admin, account, provider, 'event', primary.externalId, primary.name,
+    primary.timezone ?? 'UTC', primary.color ?? null);
 
   // Defer the cursor until all scoped calendar/task work succeeds, so a
   // rejected mapping or unconfirmed database write cannot skip the batch.
@@ -138,7 +124,7 @@ async function syncCalendar(admin: Admin, account: Account, adapter: SyncProvide
     if (pull.expired) pull = await adapter.pullEvents(accessToken, primary.externalId, null); // cursor expired → full resync
 
     for (const row of pull.events) {
-      const { data: mapping, error: mappingError } = await admin
+      let { data: mapping, error: mappingError } = await admin
         .from('sync_external_mappings')
         .select('id, family_id, local_id, external_id, metadata')
         .eq('account_id', account.id).eq('provider', provider).eq('item_type', 'event').eq('external_id', row.external_id)
@@ -159,6 +145,15 @@ async function syncCalendar(admin: Admin, account: Account, adapter: SyncProvide
       }
 
       const remoteHash = adapter.eventContentHash(row);
+      if (!mapping) {
+        const admitted = await createSyncPullItem(admin, account, provider, 'event', cal.id, row.external_id, {
+          uid: row.uid, title: row.title, description: row.description, location: row.location,
+          starts_at: row.starts_at, ends_at: row.ends_at, all_day: row.all_day, recurrence_rule: row.recurrence_rule,
+          status: row.status, etag: row.etag
+        }, remoteHash);
+        if (admitted.created) { result.imported++; continue; }
+        mapping = admitted.mapping;
+      }
       if (mapping) {
         const { data: local, error: localError } = await admin.from('sync_calendar_events').select('content_hash, updated_at, deleted_at').eq('id', mapping.local_id).eq('family_id', account.family_id).eq('calendar_id', cal.id).maybeSingle();
         if (localError || !local) throw new Error('Sync local event lookup failed');
@@ -176,6 +171,9 @@ async function syncCalendar(admin: Admin, account: Account, adapter: SyncProvide
           continue;
         }
         if (localHash === remoteHash) { result.skipped++; continue; }
+        // Preserve a local-only edit in two-way mode for the existing push
+        // path, retaining the base snapshot until its provider receipt.
+        if (policy.push && baseHash === remoteHash) { result.skipped++; continue; }
         const { data: updatedEvent, error: eventUpdateError } = await admin.from('sync_calendar_events').update({
           title: row.title, description: row.description, location: row.location,
           starts_at: row.starts_at, ends_at: row.ends_at, all_day: row.all_day,
@@ -187,24 +185,6 @@ async function syncCalendar(admin: Admin, account: Account, adapter: SyncProvide
           .update({ external_etag: row.etag, metadata: hashMeta(remoteHash), last_synced_at: new Date().toISOString() })
           .eq('id', mapping.id).eq('family_id', account.family_id).eq('account_id', account.id).eq('provider', provider).eq('item_type', 'event').eq('local_id', mapping.local_id).eq('external_id', mapping.external_id).select('id').maybeSingle();
         requireSyncWrite(updatedMapping, mappingUpdateError, 'event mapping update');
-        result.imported++;
-      } else {
-        const { data: inserted, error: insertError } = await admin.from('sync_calendar_events').insert({
-          calendar_id: cal.id, family_id: account.family_id, user_id: account.user_id, provider,
-          external_id: row.external_id, uid: row.uid, title: row.title, description: row.description, location: row.location,
-          starts_at: row.starts_at, ends_at: row.ends_at, all_day: row.all_day, recurrence_rule: row.recurrence_rule,
-          status: row.status, etag: row.etag, content_hash: remoteHash, sync_status: 'synced',
-          last_synced_at: new Date().toISOString(), metadata: REMOTE_META,
-        }).select('id').single();
-        const event = requireSyncWrite(inserted, insertError, 'event creation');
-        {
-          const { data: mappingRow, error: mappingInsertError } = await admin.from('sync_external_mappings').insert({
-            family_id: account.family_id, account_id: account.id, provider, item_type: 'event',
-            local_id: event.id, external_id: row.external_id, external_etag: row.etag, metadata: hashMeta(remoteHash),
-            last_synced_at: new Date().toISOString(),
-          }).select('id').maybeSingle();
-          requireSyncWrite(mappingRow, mappingInsertError, 'exported event mapping creation');
-        }
         result.imported++;
       }
     }
@@ -289,27 +269,13 @@ async function syncTasks(admin: Admin, account: Account, adapter: SyncProviderAd
   const listId = await adapter.defaultTaskListId(accessToken);
   if (!listId) return;
 
-  let { data: list, error: listError } = await admin
-    .from('sync_reminder_lists')
-    .select('id')
-    .eq('family_id', account.family_id).eq('account_id', account.id)
-    .eq('provider', provider).eq('external_id', listId)
-    .maybeSingle();
-  if (listError) throw new Error('Sync reminder list lookup failed');
-  if (!list) {
-    const { data: created, error: createError } = await admin.from('sync_reminder_lists').insert({
-      family_id: account.family_id, user_id: account.user_id, account_id: account.id,
-      provider, external_id: listId, name: adapter.label + ' Tasks', is_owned_locally: false,
-    }).select('id').single();
-    list = requireSyncWrite(created, createError, 'reminder list creation');
-  }
-  if (!list) return;
+  const list = await ensureSyncPullContainer(admin, account, provider, 'reminder', listId, `${adapter.label} Tasks`);
 
   // ── PULL ──
   if (policy.pull) {
     const tasks = await adapter.listTasks(accessToken, listId);
     for (const row of tasks) {
-      const { data: mapping, error: mappingError } = await admin
+      let { data: mapping, error: mappingError } = await admin
         .from('sync_external_mappings')
         .select('id, family_id, local_id, external_id, metadata')
         .eq('account_id', account.id).eq('provider', provider).eq('item_type', 'reminder').eq('external_id', row.external_id)
@@ -330,6 +296,13 @@ async function syncTasks(admin: Admin, account: Account, adapter: SyncProviderAd
       }
 
       const remoteHash = adapter.reminderContentHash(row);
+      if (!mapping) {
+        const admitted = await createSyncPullItem(admin, account, provider, 'reminder', list.id, row.external_id, {
+          title: row.title, notes: row.notes, due_at: row.due_at, is_completed: row.is_completed, completed_at: row.completed_at
+        }, remoteHash);
+        if (admitted.created) { result.imported++; continue; }
+        mapping = admitted.mapping;
+      }
       if (mapping) {
         const { data: local, error: localError } = await admin.from('sync_reminders').select('content_hash, updated_at, is_completed').eq('id', mapping.local_id).eq('family_id', account.family_id).eq('list_id', list.id).maybeSingle();
         if (localError || !local) throw new Error('Sync local reminder lookup failed');
@@ -341,20 +314,11 @@ async function syncTasks(admin: Admin, account: Account, adapter: SyncProviderAd
           result.conflicts++; continue;
         }
         if ((local?.content_hash ?? null) === remoteHash) { result.skipped++; continue; }
+        if (policy.push && baseHash === remoteHash) { result.skipped++; continue; }
         const { data: updatedReminder, error: reminderUpdateError } = await admin.from('sync_reminders').update({ title: row.title, notes: row.notes, due_at: row.due_at, is_completed: row.is_completed, completed_at: row.completed_at, content_hash: remoteHash, sync_status: 'synced', last_synced_at: new Date().toISOString(), metadata: REMOTE_META }).eq('id', mapping.local_id).eq('family_id', account.family_id).eq('list_id', list.id).select('id').maybeSingle();
         requireSyncWrite(updatedReminder, reminderUpdateError, 'reminder update');
         const { data: updatedMapping, error: mappingUpdateError } = await admin.from('sync_external_mappings').update({ metadata: hashMeta(remoteHash), last_synced_at: new Date().toISOString() }).eq('id', mapping.id).eq('family_id', account.family_id).eq('account_id', account.id).eq('provider', provider).eq('item_type', 'reminder').eq('local_id', mapping.local_id).eq('external_id', mapping.external_id).select('id').maybeSingle();
         requireSyncWrite(updatedMapping, mappingUpdateError, 'reminder mapping update');
-        result.imported++;
-      } else {
-        const { data: inserted, error: insertError } = await admin.from('sync_reminders').insert({
-          list_id: list.id, family_id: account.family_id, user_id: account.user_id, provider, external_id: row.external_id,
-          title: row.title, notes: row.notes, due_at: row.due_at, is_completed: row.is_completed, completed_at: row.completed_at,
-          content_hash: remoteHash, sync_status: 'synced', last_synced_at: new Date().toISOString(), metadata: REMOTE_META,
-        }).select('id').single();
-        const reminder = requireSyncWrite(inserted, insertError, 'reminder creation');
-        const { data: mappingRow, error: mappingInsertError } = await admin.from('sync_external_mappings').insert({ family_id: account.family_id, account_id: account.id, provider, item_type: 'reminder', local_id: reminder.id, external_id: row.external_id, metadata: hashMeta(remoteHash), last_synced_at: new Date().toISOString() }).select('id').maybeSingle();
-        requireSyncWrite(mappingRow, mappingInsertError, 'reminder mapping creation');
         result.imported++;
       }
     }

@@ -116,3 +116,17 @@ jobs:
             --port 55443 \
             --expected-server-port 5432 \
             --expected-data-dir /var/lib/postgresql/data/pgdata
+
+      - name: Persist standard sync pull items and mappings atomically
+        shell: bash
+        run: |
+          set -euo pipefail
+          sync_pull_pg_bin="$(dirname "$(command -v psql)")"
+          [[ -x "$sync_pull_pg_bin/createdb" && -x "$sync_pull_pg_bin/dropdb" ]]
+          # Recheck this dedicated service, replay actual sync/membership SQL,
+          # and prove old separate-write failures plus paired deletion races.
+          node scripts/verify-sync-atomic-pull.mjs \
+            --postgres-bin "$sync_pull_pg_bin" \
+            --port 55443 \
+            --expected-server-port 5432 \
+            --expected-data-dir /var/lib/postgresql/data/pgdata

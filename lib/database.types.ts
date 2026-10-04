@@ -2751,6 +2751,16 @@ export interface Database {
     Views: { [_ in never]: never };
     CompositeTypes: { [_ in never]: never };
     Functions: {
+      ensure_sync_pull_container: {
+        Args: { p_account: string; p_family: string; p_user: string; p_provider: SyncProviderEnum;
+          p_kind: 'event' | 'reminder'; p_external: string; p_name: string; p_timezone: string; p_color: string | null };
+        Returns: Json;
+      };
+      create_sync_pull_item: {
+        Args: { p_account: string; p_family: string; p_user: string; p_provider: SyncProviderEnum;
+          p_kind: 'event' | 'reminder'; p_container: string; p_external: string; p_fields: Json; p_hash: string };
+        Returns: Json;
+      };
       count_family_ai_requests_month: {
         Args: { p_family_id: string; p_month_start: string };
         Returns: number;
