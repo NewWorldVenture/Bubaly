@@ -1,4 +1,4 @@
-import { beforeEach, describe, expect, it, vi } from 'vitest';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import type { ReactElement } from 'react';
 import { createInMemorySupabase, type InMemorySupabase } from './helpers/in-memory-supabase';
 import { moneyFlow } from '@/lib/wallet/flows';
@@ -26,13 +26,14 @@ const WALLET = 'wallet-a';
 const harness = vi.hoisted(() => ({
   db: null as unknown,
   promptInput: null as null | { goals: { weeksToGoal: number | null }[] },
+  timezone: 'UTC',
 }));
 
 vi.mock('@/lib/supabase/server', () => ({ createServer: async () => harness.db, createServiceClient: () => harness.db }));
 vi.mock('@/lib/supabase/auth', () => ({
   requireUserContext: async () => ({
     user: { id: 'user-parent' },
-    active: { familyId: FAMILY, family: { id: FAMILY, name: 'Rivera', timezone: 'UTC' }, role: 'parent', member: { id: 'mem-parent' } },
+    active: { familyId: FAMILY, family: { id: FAMILY, name: 'Rivera', timezone: harness.timezone }, role: 'parent', member: { id: 'mem-parent' } },
   }),
   effectivePlanLevel: async () => 3,
 }));
@@ -71,6 +72,7 @@ let db: InMemorySupabase;
 
 beforeEach(() => {
   vi.spyOn(console, 'error').mockImplementation(() => {});
+  harness.timezone = 'UTC';
   db = createInMemorySupabase();
   harness.db = db;
   harness.promptInput = null;
@@ -129,6 +131,47 @@ describe('the treasury: a refund is spending undone', () => {
     expect(props.thisMonthIn - props.thisMonthOut).toBe(5_000);
     expect(props.wallets[0]).toEqual(expect.objectContaining({ monthlyIn: 5_000, monthlyOut: 0 }));
     expect(props.trend.at(-1)).toEqual(expect.objectContaining({ credits: 5_000, debits: 0 }));
+  });
+});
+
+describe('the treasury month is the family\'s, and a refund nets in that month', () => {
+  // #942 keys "this month" and the trend by the family's zone; this keeps
+  // moneyFlow inside those keys. A refund at 05:00Z on 1 October is still
+  // 30 September in Los Angeles and already 1 October in Tokyo.
+  afterEach(() => { vi.useRealTimers(); });
+  const view = async (timezone: string) => {
+    harness.timezone = timezone;
+    const el = findView(await WalletTreasuryPage());
+    return el!.props as { thisMonthIn: number; thisMonthOut: number; trend: { credits: number; debits: number }[] };
+  };
+
+  beforeEach(() => {
+    vi.useFakeTimers({ toFake: ['Date'] });
+    vi.setSystemTime(new Date('2026-10-15T12:00:00Z'));
+    db.seed('wallet_transactions', [
+      txn('t-topup', 'parent_top_up', 'credit', 5_000, 'bucket-spend', '2026-09-20T12:00:00Z'),
+      txn('t-buy', 'card_spend', 'debit', 2_000, 'bucket-spend', '2026-09-25T12:00:00Z'),
+      txn('t-refund', 'card_refund', 'credit', 2_000, 'bucket-spend', '2026-10-01T05:00:00Z'),
+      txn('t-topup-oct', 'parent_top_up', 'credit', 1_000, 'bucket-spend', '2026-10-10T12:00:00Z'),
+    ]);
+    db.seed('wallet_goals', []);
+  });
+
+  it('Los Angeles: the refund undoes September\'s purchase in September', async () => {
+    const { thisMonthIn, thisMonthOut, trend } = await view('America/Los_Angeles');
+
+    expect(trend.at(-2)).toEqual(expect.objectContaining({ credits: 5_000, debits: 0 }));
+    expect(trend.at(-1)).toEqual(expect.objectContaining({ credits: 1_000, debits: 0 }));
+    expect([thisMonthIn, thisMonthOut]).toEqual([1_000, 0]);
+  });
+
+  it('Tokyo: the same refund lands in October and nets against October\'s out', async () => {
+    const { thisMonthIn, thisMonthOut, trend } = await view('Asia/Tokyo');
+
+    expect(trend.at(-2)).toEqual(expect.objectContaining({ credits: 5_000, debits: 2_000 }));
+    expect(trend.at(-1)).toEqual(expect.objectContaining({ credits: 1_000, debits: -2_000 }));
+    // Net is still October's real change: the $10 top-up and the $20 refund.
+    expect(thisMonthIn - thisMonthOut).toBe(3_000);
   });
 });
 
