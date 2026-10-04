@@ -32,14 +32,34 @@
 -- Verified before: inserting 'moment:<uuid>:<date>' raises 22P02.
 -- Verified after: the same insert succeeds and the dedupe read matches it.
 
-alter table public.notifications
-  alter column related_id type text using related_id::text;
+-- This migration is also replayed against populated schemas during repair
+-- rehearsals. A later policy can depend on related_id's text type, so do not
+-- issue ALTER TYPE again once the conversion has already landed.
+do $migration$
+declare
+  related_id_type text;
+begin
+  select data_type into related_id_type
+  from information_schema.columns
+  where table_schema = 'public'
+    and table_name = 'notifications'
+    and column_name = 'related_id';
+
+  if related_id_type = 'uuid' then
+    alter table public.notifications
+      alter column related_id type text using related_id::text;
+  elsif related_id_type is distinct from 'text' then
+    raise exception '0293 FAILED: notifications.related_id has unexpected type %, expected uuid or text',
+      coalesce(related_id_type, '<missing>');
+  end if;
+end;
+$migration$;
 
 do $$
 begin
   if (select data_type from information_schema.columns
       where table_schema = 'public' and table_name = 'notifications'
-        and column_name = 'related_id') <> 'text' then
+        and column_name = 'related_id') is distinct from 'text' then
     raise exception '0293 FAILED: notifications.related_id is still not text';
   end if;
   raise notice '0293 OK: notifications.related_id is text and can hold a dedupe key.';
