@@ -134,7 +134,9 @@ export default async function MemoriesPage({ searchParams }: { searchParams: Pro
   const shared = sharedWithYou(photos, memberList, myUserId, now);
   const sharedById = new Map(memberList.map((m) => [m.user_id ?? m.id, m]));
   // Delight: photos taken on today's date in past years (from the already-loaded set).
-  const onThisDay = pickOnThisDay(photos.filter((p) => p.url), now, 6);
+  // ... on the FAMILY's today, not the host's (a UTC host is a day ahead from
+  // 5pm in California).
+  const onThisDay = pickOnThisDay(photos.filter((p) => p.url), now, 6, ctx.active.family.timezone || 'UTC');
 
   const HeaderButton = ({ href, icon: Icon, label, primary }: { href: string; icon: typeof Plus; label: string; primary?: boolean }) => (
     <Link href={href} className={cn(

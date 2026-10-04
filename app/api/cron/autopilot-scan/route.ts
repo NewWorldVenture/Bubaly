@@ -56,8 +56,10 @@ export async function GET(req: NextRequest) {
       .from('families').select('id, timezone').order('id').range(from, to), { max: 5000 });
     if (error) throw error;
 
-    // Read once for the whole pass rather than per family.
-    const tiers = await getFeatureTiersByHref(supabase);
+    // Read once for the whole pass rather than per family. An unreadable tier
+    // map fails the pass (the catch below): the catalog default is not the
+    // configured tier, so it cannot decide who Autopilot runs for.
+    const tiers = await getFeatureTiersByHref(supabase, { onUnavailable: 'throw' });
 
     let scanned = 0;
     let autoExecuted = 0;

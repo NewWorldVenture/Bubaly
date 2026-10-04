@@ -1,8 +1,13 @@
 // lib/migrate/parse.ts
-// Dependency-free, isomorphic parsers for the competitor-migration importer.
-// Pure functions (no I/O) so they run in the browser during preview AND are
-// unit-testable. Handle the universal export formats every competitor offers:
-// ICS calendars (Cozi, FamilyWall, Google, Apple, Outlook) and CSV lists.
+// Isomorphic parsers for the competitor-migration importer. Pure functions (no
+// I/O) so they run in the browser during preview AND are unit-testable. Handle
+// the universal export formats every competitor offers: ICS calendars (Cozi,
+// FamilyWall, Google, Apple, Outlook) and CSV lists. The one dependency is
+// lib/time/zoned, which is Intl-only and runs in the browser too: an exported
+// calendar's timed events are usually published in a named zone
+// (`DTSTART;TZID=America/New_York:…`), and reading them as UTC put every one of
+// them hours off on the family's new calendar.
+import { instantForLocalTime, isValidTimezone } from '@/lib/time/zoned';
 
 export type ImportedEvent = {
   title: string;
@@ -20,8 +25,26 @@ function unescapeText(v: string): string {
   return v.replace(/\\n/gi, '\n').replace(/\\,/g, ',').replace(/\\;/g, ';').replace(/\\\\/g, '\\');
 }
 
-/** Parse an ICS DATE or DATE-TIME (optionally with VALUE=DATE / TZID params). */
-function parseIcsDate(raw: string, isDateOnly: boolean): { iso: string; allDay: boolean } | null {
+/**
+ * Parse an ICS DATE or DATE-TIME, with the VALUE=DATE and TZID parameters the
+ * content line carried.
+ *
+ *   DATE            20260620                 → all-day, midnight UTC of that date
+ *   UTC DATE-TIME   20260620T143000Z         → that instant
+ *   zoned DATE-TIME 20260620T143000 + TZID   → the instant at which the clock in
+ *                                              that zone reads 14:30. A reading
+ *                                              the zone skips at spring-forward
+ *                                              resolves to the first minute that
+ *                                              exists, as the rest of the app does.
+ *   floating        20260620T143000, no TZID → read as UTC, as before: there is
+ *                                              no observer to be local to here.
+ *
+ * A TZID this runtime does not know (Windows names such as "Eastern Standard
+ * Time") falls back to the floating rule rather than dropping the event: an
+ * event imported at the wrong hour can be corrected, one that is not imported
+ * is lost. The limit is stated rather than hidden.
+ */
+function parseIcsDate(raw: string, isDateOnly: boolean, tzid: string | null): { iso: string; allDay: boolean } | null {
   const v = raw.trim();
   // Date-only: YYYYMMDD
   if (isDateOnly || /^\d{8}$/.test(v)) {
@@ -32,12 +55,41 @@ function parseIcsDate(raw: string, isDateOnly: boolean): { iso: string; allDay: 
   // Date-time: YYYYMMDDTHHMMSS(Z)?
   const m = /^(\d{4})(\d{2})(\d{2})T(\d{2})(\d{2})(\d{2})(Z)?$/.exec(v);
   if (!m) return null;
-  const [, y, mo, d, h, mi, s] = m;
-  // Treat both UTC ("Z") and naive/TZID datetimes as UTC for a deterministic
-  // result (naive values are approximated; documented in the UI).
+  const [, y, mo, d, h, mi, s, z] = m;
+  if (!z && tzid && isValidTimezone(tzid)) {
+    const at = instantForLocalTime(+y, +mo, +d, +h * 60 + +mi, tzid);
+    if (at) return { iso: new Date(at.getTime() + +s * 1000).toISOString(), allDay: false };
+  }
   const date = new Date(Date.UTC(+y, +mo - 1, +d, +h, +mi, +s));
   if (Number.isNaN(date.getTime())) return null;
   return { iso: date.toISOString(), allDay: false };
+}
+
+/**
+ * Split a content line into name, parameters and value. The value starts at
+ * the first `:` outside double quotes: a parameter value may carry a colon when
+ * quoted (`TZID="(UTC-05:00) Eastern Time (US & Canada)"`, Outlook's form), and
+ * taking the first colon blindly made the parameter the value and lost the
+ * event.
+ */
+function splitContentLine(line: string): { name: string; isDateOnly: boolean; tzid: string | null; value: string } | null {
+  let quoted = false;
+  let colon = -1;
+  for (let i = 0; i < line.length; i += 1) {
+    const ch = line[i];
+    if (ch === '"') quoted = !quoted;
+    else if (ch === ':' && !quoted) { colon = i; break; }
+  }
+  if (colon === -1) return null;
+  const [rawName, ...params] = line.slice(0, colon).split(';');
+  let tzid: string | null = null;
+  let isDateOnly = false;
+  for (const param of params) {
+    const zone = param.match(/^TZID=(.+)$/i);
+    if (zone) tzid = zone[1].replace(/^"(.*)"$/, '$1');
+    if (/^VALUE=DATE$/i.test(param.trim())) isDateOnly = true;
+  }
+  return { name: rawName.toUpperCase(), isDateOnly, tzid, value: line.slice(colon + 1).trim() };
 }
 
 /** Parse an .ics document into events. Robust to line-folding and CRLF. */
@@ -63,25 +115,21 @@ export function parseICS(text: string): ImportedEvent[] {
     }
     if (!cur) continue;
 
-    const colon = line.indexOf(':');
-    if (colon === -1) continue;
-    const rawName = line.slice(0, colon);
-    const value = line.slice(colon + 1).trim();
-    const name = rawName.split(';')[0].toUpperCase();
-    const params = rawName.toUpperCase();
-    const isDateOnly = params.includes('VALUE=DATE');
+    const parsed = splitContentLine(line);
+    if (!parsed) continue;
+    const { name, isDateOnly, tzid, value } = parsed;
 
     switch (name) {
       case 'SUMMARY': cur.title = unescapeText(value) || 'Untitled event'; break;
       case 'LOCATION': cur.location = unescapeText(value) || null; break;
       case 'DESCRIPTION': cur.description = unescapeText(value) || null; break;
       case 'DTSTART': {
-        const p = parseIcsDate(value, isDateOnly);
+        const p = parseIcsDate(value, isDateOnly, tzid);
         if (p) { cur.startsAt = p.iso; cur.allDay = p.allDay; }
         break;
       }
       case 'DTEND': {
-        const p = parseIcsDate(value, isDateOnly);
+        const p = parseIcsDate(value, isDateOnly, tzid);
         if (p) cur.endsAt = p.iso;
         break;
       }

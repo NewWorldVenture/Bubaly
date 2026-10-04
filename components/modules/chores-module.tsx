@@ -12,7 +12,7 @@ import { useDismissOnEscape } from '@/lib/hooks/use-dismiss-on-escape';
 import { dayKeyIn } from '@/lib/time/zoned';
 import { useRealtimeQuery } from '@/lib/hooks/use-realtime-query';
 import { createClient } from '@/lib/supabase/client';
-import { createChoreAction, deleteChoreAssignmentAction, setChoreStatusAction } from '@/app/(app)/dashboard/chores/actions';
+import { createChoreAction, deleteChoreAssignmentAction, respawnChoreAssignmentAction, setChoreStatusAction } from '@/app/(app)/dashboard/chores/actions';
 import { newSubmissionId, submissionSettled } from '@/lib/utils/submission-id';
 import { describeDbError, wroteNoRows } from '@/lib/supabase/errors';
 import { useToast } from '@/components/ui/toast';
@@ -177,10 +177,17 @@ export function ChoresModule() {
     const { data: approved, error } = await supabase.from('chore_assignments').update({
       // approved_by is a FK to family_members(id), not auth.users — use the member id.
       status: 'approved', approved_at: new Date().toISOString(), approved_by: selfMemberId, points_awarded: a.chore?.points ?? 0,
-    }).eq('id', a.id).select('id');
+    }).eq('id', a.id).eq('family_id', familyId).select('id');
     setBusy(null);
     if (error) return toastError(describeDbError(error));
     if (wroteNoRows(approved)) return toastError(tr('errors.thatChangeWasNotSaved'));
+    // A recurring chore comes back: the service creates the child's next
+    // assignment (keyed, so a repeat is harmless). Its failure is logged, not
+    // shown — the approval stands either way.
+    if (a.chore && a.chore.recurrence !== 'none') {
+      const next = await respawnChoreAssignmentAction(a.id);
+      if (!next.ok) console.error('[chores] next assignment of a recurring chore was not created', next.error);
+    }
     success(tr('choresModule.approvedPlusPoints', { points: a.chore?.points ?? 0 })); void refresh();
   }
 

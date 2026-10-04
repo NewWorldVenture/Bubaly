@@ -28,9 +28,13 @@ export function normalizeAllergies(...raw: Array<string | null | undefined>): st
   return [...new Set(terms)];
 }
 
-/** Vision prompt: identify what's in the photo and propose allergy-safe dinners. */
-export function buildPantryChefPrompt(allergies: string[], now: Date = new Date()): string {
-  const today = now.toLocaleDateString('en-US', { weekday: 'long', month: 'long', day: 'numeric' });
+/**
+ * Vision prompt: identify what's in the photo and propose allergy-safe dinners.
+ * "Today" is the FAMILY's day (`tz`): rendered on the host's clock, a family in
+ * California planning dinner at 8pm was told it was tomorrow.
+ */
+export function buildPantryChefPrompt(allergies: string[], now: Date, tz: string): string {
+  const today = now.toLocaleDateString('en-US', { weekday: 'long', month: 'long', day: 'numeric', timeZone: tz });
   const allergyLine = allergies.length
     ? `The family has these allergies/intolerances — NEVER suggest a recipe containing them or their common derivatives: ${allergies.join(', ')}.`
     : 'No known family allergies were provided.';
