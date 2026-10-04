@@ -76,8 +76,9 @@ export async function runGoogleSync(admin: Admin, account: Account): Promise<Run
       Object.assign(result, imported.data);
     } else {
       const accessToken = await getValidAccessToken(admin, account.id);
-      await syncCalendar(admin, account, accessToken, result, policy);
+      const commitCalendarCursor = await syncCalendar(admin, account, accessToken, result, policy);
       await syncTasks(admin, account, accessToken, result, policy);
+      await commitCalendarCursor?.();
     }
 
     const { data: finishedRun, error: runFinishError } = await admin.from('sync_job_runs').update({
@@ -127,7 +128,8 @@ async function syncCalendar(admin: Admin, account: Account, accessToken: string,
   let { data: cal, error: calendarReadError } = await admin
     .from('sync_calendars')
     .select('id, sync_token')
-    .eq('family_id', account.family_id).eq('provider', 'google').eq('external_id', primary.id)
+    .eq('family_id', account.family_id).eq('account_id', account.id)
+    .eq('provider', 'google').eq('external_id', primary.id)
     .maybeSingle();
   if (calendarReadError) throw new Error('Sync calendar lookup failed');
   if (!cal) {
@@ -140,6 +142,9 @@ async function syncCalendar(admin: Admin, account: Account, accessToken: string,
   }
   if (!cal) return;
 
+  // Commit the cursor only after this account's calendar and task processing
+  // succeeds. A rejected scope or unconfirmed write must remain replayable.
+  let nextCursor: string | null = null;
   // ----- PULL -----
   if (policy.pull) {
     let pull = await pullEvents(accessToken, primary.id, { syncToken: cal.sync_token });
@@ -151,10 +156,11 @@ async function syncCalendar(admin: Admin, account: Account, accessToken: string,
 
       const { data: mapping, error: mappingError } = await admin
         .from('sync_external_mappings')
-        .select('id, local_id, metadata')
+        .select('id, family_id, local_id, external_id, metadata')
         .eq('account_id', account.id).eq('provider', 'google').eq('item_type', 'event').eq('external_id', row.external_id)
         .maybeSingle();
       if (mappingError) throw new Error('Sync event mapping lookup failed');
+    if (mapping && mapping.family_id !== account.family_id) throw new Error('Sync event mapping scope unavailable');
 
       if (row.cancelled) {
         if (mapping) {
@@ -171,7 +177,7 @@ async function syncCalendar(admin: Admin, account: Account, accessToken: string,
       const remoteHash = eventContentHash(row);
 
       if (mapping) {
-        const { data: local, error: localError } = await admin.from('sync_calendar_events').select('content_hash, updated_at, deleted_at').eq('id', mapping.local_id).maybeSingle();
+        const { data: local, error: localError } = await admin.from('sync_calendar_events').select('content_hash, updated_at, deleted_at').eq('id', mapping.local_id).eq('family_id', account.family_id).eq('calendar_id', cal.id).maybeSingle();
         if (localError || !local) throw new Error('Sync local event lookup failed');
         const baseHash = (mapping.metadata as { lastHash?: string } | null)?.lastHash ?? null;
         const localHash = local?.content_hash ?? null;
@@ -192,11 +198,11 @@ async function syncCalendar(admin: Admin, account: Account, accessToken: string,
           starts_at: row.starts_at, ends_at: row.ends_at, all_day: row.all_day,
           recurrence_rule: row.recurrence_rule, status: row.status, etag: row.etag,
           content_hash: remoteHash, sync_status: 'synced', last_synced_at: new Date().toISOString(), metadata: REMOTE_META,
-        }).eq('id', mapping.local_id).select('id').maybeSingle();
+        }).eq('id', mapping.local_id).eq('family_id', account.family_id).eq('calendar_id', cal.id).select('id').maybeSingle();
         requireSyncWrite(updatedEvent, eventUpdateError, 'event update');
         const { data: updatedMapping, error: mappingUpdateError } = await admin.from('sync_external_mappings')
           .update({ external_etag: row.etag, metadata: hashMeta(remoteHash), last_synced_at: new Date().toISOString() })
-          .eq('id', mapping.id).select('id').maybeSingle();
+          .eq('id', mapping.id).eq('family_id', account.family_id).eq('account_id', account.id).eq('provider', 'google').eq('item_type', 'event').eq('local_id', mapping.local_id).eq('external_id', mapping.external_id).select('id').maybeSingle();
         requireSyncWrite(updatedMapping, mappingUpdateError, 'event mapping update');
         result.imported++;
       } else {
@@ -220,37 +226,41 @@ async function syncCalendar(admin: Admin, account: Account, accessToken: string,
       }
     }
 
-    if (!pull.gone && pull.nextSyncToken) {
+    if (!pull.gone && pull.nextSyncToken) nextCursor = pull.nextSyncToken;
+  }
+  const commitCursor = async () => {
+    if (nextCursor) {
       const { data: cursor, error: cursorError } = await admin.from('sync_calendars')
-        .update({ sync_token: pull.nextSyncToken, last_synced_at: new Date().toISOString(), sync_status: 'synced' })
-        .eq('id', cal.id).select('id').maybeSingle();
+        .update({ sync_token: nextCursor, last_synced_at: new Date().toISOString(), sync_status: 'synced' })
+        .eq('id', cal.id).eq('family_id', account.family_id).eq('account_id', account.id)
+        .eq('provider', 'google').eq('external_id', primary.id).select('id').maybeSingle();
       requireSyncWrite(cursor, cursorError, 'calendar cursor persistence');
     }
-
-  }
-  if (!policy.push) return;
+  };
+  if (!policy.push) return commitCursor;
 
   // ----- PUSH (locally-owned events on this calendar) -----
   const { data: locals, error: localsError } = await admin
     .from('sync_calendar_events')
     .select('id, title, description, location, starts_at, ends_at, all_day, recurrence_rule, timezone, content_hash, deleted_at')
-    .eq('calendar_id', cal.id).eq('provider', 'internal').limit(500);
+    .eq('family_id', account.family_id).eq('calendar_id', cal.id).eq('provider', 'internal').limit(500);
   if (localsError) throw new Error('Sync local event list failed');
 
   for (const ev of locals ?? []) {
     const { data: mapping, error: mappingError } = await admin
       .from('sync_external_mappings')
-      .select('id, external_id, metadata')
+      .select('id, family_id, local_id, external_id, metadata')
       .eq('account_id', account.id).eq('provider', 'google').eq('item_type', 'event').eq('local_id', ev.id)
       .maybeSingle();
     if (mappingError) throw new Error('Sync event mapping lookup failed');
+    if (mapping && mapping.family_id !== account.family_id) throw new Error('Sync event mapping scope unavailable');
     const localHash = ev.content_hash ?? eventContentHash(ev);
 
     try {
       if (ev.deleted_at && mapping) {
         await deleteEvent(accessToken, primary.id, mapping.external_id);
         const { data: removed, error: removeError } = await admin.from('sync_external_mappings').delete()
-          .eq('id', mapping.id).select('id').maybeSingle();
+          .eq('id', mapping.id).eq('family_id', account.family_id).eq('account_id', account.id).eq('provider', 'google').eq('item_type', 'event').eq('local_id', mapping.local_id).eq('external_id', mapping.external_id).select('id').maybeSingle();
         requireSyncWrite(removed, removeError, 'event mapping deletion');
         result.exported++;
       } else if (!mapping && !ev.deleted_at) {
@@ -262,23 +272,26 @@ async function syncCalendar(admin: Admin, account: Account, accessToken: string,
         requireSyncWrite(mappingRow, mappingInsertError, 'exported event mapping creation');
         const { data: updatedEvent, error: eventUpdateError } = await admin.from('sync_calendar_events')
           .update({ content_hash: localHash, sync_status: 'synced', last_synced_at: new Date().toISOString() })
-          .eq('id', ev.id).select('id').maybeSingle();
+          .eq('id', ev.id).eq('family_id', account.family_id).eq('calendar_id', cal.id).select('id').maybeSingle();
         requireSyncWrite(updatedEvent, eventUpdateError, 'exported event update');
         result.exported++;
       } else if (mapping && (mapping.metadata as { lastHash?: string } | null)?.lastHash !== localHash) {
         const updated = await patchEvent(accessToken, primary.id, mapping.external_id, rowToGoogleEvent(ev));
         const { data: updatedMapping, error: mappingUpdateError } = await admin.from('sync_external_mappings')
           .update({ external_etag: updated.etag, metadata: hashMeta(localHash), last_synced_at: new Date().toISOString() })
-          .eq('id', mapping.id).select('id').maybeSingle();
+          .eq('id', mapping.id).eq('family_id', account.family_id).eq('account_id', account.id).eq('provider', 'google').eq('item_type', 'event').eq('local_id', mapping.local_id).eq('external_id', mapping.external_id).select('id').maybeSingle();
         requireSyncWrite(updatedMapping, mappingUpdateError, 'exported event mapping update');
         const { data: updatedEvent, error: eventUpdateError } = await admin.from('sync_calendar_events')
-          .update({ content_hash: localHash, sync_status: 'synced' }).eq('id', ev.id).select('id').maybeSingle();
+          .update({ content_hash: localHash, sync_status: 'synced' }).eq('id', ev.id).eq('family_id', account.family_id).eq('calendar_id', cal.id).select('id').maybeSingle();
         requireSyncWrite(updatedEvent, eventUpdateError, 'exported event update');
         result.exported++;
       } else {
         result.skipped++;
       }
     } catch (e) {
+      // Provider item failures retain their existing recorded/continue path;
+      // database or scope failures must fail the run and retain its cursor.
+      if (!(e instanceof GoogleApiError)) throw e;
       // Per-item failure: record and continue so one bad event can't abort the run.
       await logSyncProviderError(admin, {
         family_id: account.family_id, account_id: account.id, provider: 'google', code: 'push_event',
@@ -288,6 +301,7 @@ async function syncCalendar(admin: Admin, account: Account, accessToken: string,
       result.skipped++;
     }
   }
+  return commitCursor;
 }
 
 // ---------------------------------------------------------------------------
@@ -299,7 +313,8 @@ async function syncTasks(admin: Admin, account: Account, accessToken: string, re
   let { data: list, error: listError } = await admin
     .from('sync_reminder_lists')
     .select('id')
-    .eq('family_id', account.family_id).eq('provider', 'google').eq('external_id', listId)
+    .eq('family_id', account.family_id).eq('account_id', account.id)
+    .eq('provider', 'google').eq('external_id', listId)
     .maybeSingle();
   if (listError) throw new Error('Sync reminder list lookup failed');
   if (!list) {
@@ -318,16 +333,17 @@ async function syncTasks(admin: Admin, account: Account, accessToken: string, re
       const row = googleTaskToReminderRow(task);
       const { data: mapping, error: mappingError } = await admin
         .from('sync_external_mappings')
-        .select('id, local_id, metadata')
+        .select('id, family_id, local_id, external_id, metadata')
         .eq('account_id', account.id).eq('provider', 'google').eq('item_type', 'reminder').eq('external_id', row.external_id)
         .maybeSingle();
       if (mappingError) throw new Error('Sync reminder mapping lookup failed');
+    if (mapping && mapping.family_id !== account.family_id) throw new Error('Sync reminder mapping scope unavailable');
 
       if (row.deleted) {
         if (mapping) {
           const { data: deleted, error: deleteError } = await admin.from('sync_reminders')
             .update({ deleted_at: new Date().toISOString(), metadata: REMOTE_META })
-            .eq('id', mapping.local_id).select('id').maybeSingle();
+            .eq('id', mapping.local_id).eq('family_id', account.family_id).eq('list_id', list.id).select('id').maybeSingle();
           requireSyncWrite(deleted, deleteError, 'deleted reminder update');
           result.imported++;
         }
@@ -337,7 +353,7 @@ async function syncTasks(admin: Admin, account: Account, accessToken: string, re
 
       const remoteHash = reminderContentHash(row);
       if (mapping) {
-        const { data: local, error: localError } = await admin.from('sync_reminders').select('content_hash, updated_at, is_completed').eq('id', mapping.local_id).maybeSingle();
+        const { data: local, error: localError } = await admin.from('sync_reminders').select('content_hash, updated_at, is_completed').eq('id', mapping.local_id).eq('family_id', account.family_id).eq('list_id', list.id).maybeSingle();
         if (localError || !local) throw new Error('Sync local reminder lookup failed');
         const baseHash = (mapping.metadata as { lastHash?: string } | null)?.lastHash ?? null;
         const verdict = detectConflict({ baseHash, localHash: local?.content_hash ?? null, remoteHash, localUpdatedAt: local?.updated_at, remoteUpdatedAt: task.updated, localCompleted: local?.is_completed, remoteCompleted: row.is_completed });
@@ -347,9 +363,9 @@ async function syncTasks(admin: Admin, account: Account, accessToken: string, re
           result.conflicts++; continue;
         }
         if ((local?.content_hash ?? null) === remoteHash) { result.skipped++; continue; }
-        const { data: updatedReminder, error: reminderUpdateError } = await admin.from('sync_reminders').update({ title: row.title, notes: row.notes, due_at: row.due_at, is_completed: row.is_completed, completed_at: row.completed_at, content_hash: remoteHash, sync_status: 'synced', last_synced_at: new Date().toISOString(), metadata: REMOTE_META }).eq('id', mapping.local_id).select('id').maybeSingle();
+        const { data: updatedReminder, error: reminderUpdateError } = await admin.from('sync_reminders').update({ title: row.title, notes: row.notes, due_at: row.due_at, is_completed: row.is_completed, completed_at: row.completed_at, content_hash: remoteHash, sync_status: 'synced', last_synced_at: new Date().toISOString(), metadata: REMOTE_META }).eq('id', mapping.local_id).eq('family_id', account.family_id).eq('list_id', list.id).select('id').maybeSingle();
         requireSyncWrite(updatedReminder, reminderUpdateError, 'reminder update');
-        const { data: updatedMapping, error: mappingUpdateError } = await admin.from('sync_external_mappings').update({ metadata: hashMeta(remoteHash), last_synced_at: new Date().toISOString() }).eq('id', mapping.id).select('id').maybeSingle();
+        const { data: updatedMapping, error: mappingUpdateError } = await admin.from('sync_external_mappings').update({ metadata: hashMeta(remoteHash), last_synced_at: new Date().toISOString() }).eq('id', mapping.id).eq('family_id', account.family_id).eq('account_id', account.id).eq('provider', 'google').eq('item_type', 'reminder').eq('local_id', mapping.local_id).eq('external_id', mapping.external_id).select('id').maybeSingle();
         requireSyncWrite(updatedMapping, mappingUpdateError, 'reminder mapping update');
         result.imported++;
       } else {
@@ -372,37 +388,39 @@ async function syncTasks(admin: Admin, account: Account, accessToken: string, re
   const { data: locals, error: localsError } = await admin
     .from('sync_reminders')
     .select('id, title, notes, due_at, is_completed, content_hash, deleted_at')
-    .eq('list_id', list.id).eq('provider', 'internal').limit(500);
+    .eq('family_id', account.family_id).eq('list_id', list.id).eq('provider', 'internal').limit(500);
   if (localsError) throw new Error('Sync local reminder list failed');
 
   for (const rem of locals ?? []) {
-    const { data: mapping, error: mappingError } = await admin.from('sync_external_mappings').select('id, external_id, metadata').eq('account_id', account.id).eq('provider', 'google').eq('item_type', 'reminder').eq('local_id', rem.id).maybeSingle();
+    const { data: mapping, error: mappingError } = await admin.from('sync_external_mappings').select('id, family_id, local_id, external_id, metadata').eq('account_id', account.id).eq('provider', 'google').eq('item_type', 'reminder').eq('local_id', rem.id).maybeSingle();
     if (mappingError) throw new Error('Sync reminder mapping lookup failed');
+    if (mapping && mapping.family_id !== account.family_id) throw new Error('Sync reminder mapping scope unavailable');
     const localHash = rem.content_hash ?? reminderContentHash(rem);
     try {
       if (rem.deleted_at && mapping) {
         await deleteTask(accessToken, listId, mapping.external_id);
-        const { data: removed, error: removeError } = await admin.from('sync_external_mappings').delete().eq('id', mapping.id).select('id').maybeSingle();
+        const { data: removed, error: removeError } = await admin.from('sync_external_mappings').delete().eq('id', mapping.id).eq('family_id', account.family_id).eq('account_id', account.id).eq('provider', 'google').eq('item_type', 'reminder').eq('local_id', mapping.local_id).eq('external_id', mapping.external_id).select('id').maybeSingle();
         requireSyncWrite(removed, removeError, 'reminder mapping deletion');
         result.exported++;
       } else if (!mapping && !rem.deleted_at) {
         const created = await insertTask(accessToken, listId, reminderRowToGoogleTask(rem));
         const { data: mappingRow, error: mappingInsertError } = await admin.from('sync_external_mappings').insert({ family_id: account.family_id, account_id: account.id, provider: 'google', item_type: 'reminder', local_id: rem.id, external_id: created.id, metadata: hashMeta(localHash), last_synced_at: new Date().toISOString() }).select('id').maybeSingle();
         requireSyncWrite(mappingRow, mappingInsertError, 'exported reminder mapping creation');
-        const { data: updatedReminder, error: reminderUpdateError } = await admin.from('sync_reminders').update({ content_hash: localHash, sync_status: 'synced' }).eq('id', rem.id).select('id').maybeSingle();
+        const { data: updatedReminder, error: reminderUpdateError } = await admin.from('sync_reminders').update({ content_hash: localHash, sync_status: 'synced' }).eq('id', rem.id).eq('family_id', account.family_id).eq('list_id', list.id).select('id').maybeSingle();
         requireSyncWrite(updatedReminder, reminderUpdateError, 'exported reminder update');
         result.exported++;
       } else if (mapping && (mapping.metadata as { lastHash?: string } | null)?.lastHash !== localHash) {
         await patchTask(accessToken, listId, mapping.external_id, reminderRowToGoogleTask(rem));
-        const { data: updatedMapping, error: mappingUpdateError } = await admin.from('sync_external_mappings').update({ metadata: hashMeta(localHash), last_synced_at: new Date().toISOString() }).eq('id', mapping.id).select('id').maybeSingle();
+        const { data: updatedMapping, error: mappingUpdateError } = await admin.from('sync_external_mappings').update({ metadata: hashMeta(localHash), last_synced_at: new Date().toISOString() }).eq('id', mapping.id).eq('family_id', account.family_id).eq('account_id', account.id).eq('provider', 'google').eq('item_type', 'reminder').eq('local_id', mapping.local_id).eq('external_id', mapping.external_id).select('id').maybeSingle();
         requireSyncWrite(updatedMapping, mappingUpdateError, 'exported reminder mapping update');
-        const { data: updatedReminder, error: reminderUpdateError } = await admin.from('sync_reminders').update({ content_hash: localHash, sync_status: 'synced' }).eq('id', rem.id).select('id').maybeSingle();
+        const { data: updatedReminder, error: reminderUpdateError } = await admin.from('sync_reminders').update({ content_hash: localHash, sync_status: 'synced' }).eq('id', rem.id).eq('family_id', account.family_id).eq('list_id', list.id).select('id').maybeSingle();
         requireSyncWrite(updatedReminder, reminderUpdateError, 'exported reminder update');
         result.exported++;
       } else {
         result.skipped++;
       }
     } catch (e) {
+      if (!(e instanceof GoogleApiError)) throw e;
       await logSyncProviderError(admin, { family_id: account.family_id, account_id: account.id, provider: 'google', code: 'push_task', message_redacted: redact(e instanceof Error ? e.message : String(e)), http_status: e instanceof GoogleApiError ? e.status : null });
       result.skipped++;
     }
