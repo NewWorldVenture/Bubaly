@@ -128,7 +128,8 @@ export default async function MemoriesPage({ searchParams }: { searchParams: Pro
     photosByAlbum.set(p.album_id, arr);
   }
 
-  const timeline = buildTimeline(highlights, new Date(), 12, locale.code, tr);
+  // The family's "Today" / "Yesterday" / "Last Thursday", not the host's.
+  const timeline = buildTimeline(highlights, now, 12, locale.code, tr, tz);
   const stats = memoryStats({ photos: photoCount ?? 0, videos: videoCount ?? 0, albums: albumCount ?? 0, memories: memoriesCount ?? 0 });
   const shared = sharedWithYou(photos, memberList, myUserId, now);
   const sharedById = new Map(memberList.map((m) => [m.user_id ?? m.id, m]));
