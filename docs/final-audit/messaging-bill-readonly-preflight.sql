@@ -1,5 +1,5 @@
 -- PREPARED ONLY: no hosted execution or production acceptance is recorded.
--- Before applying the selected bill/chat/AI privacy candidates, a human with approved
+-- Before applying the selected bill/chat/AI privacy/sync candidates, a human with approved
 -- catalog access can run this inside a READ ONLY transaction. Save its metadata
 -- output with the exact release commit and compare to that candidate's clean
 -- synthetic replay. Absence before a candidate applies is expected; wrong
@@ -29,7 +29,8 @@ left join pg_attrdef d on d.adrelid = c.oid and d.adnum = a.attnum
 where n.nspname = 'public' and c.relname in
   ('families','family_members','family_model_dirty','family_conversations','family_messages','bills',
    'approval_requests','ai_requests','ai_request_context','family_automation_runs',
-   'ai_tool_calls','ai_plans','ai_plan_steps','ai_run_events')
+   'ai_tool_calls','ai_plans','ai_plan_steps','ai_run_events',
+   'sync_accounts','sync_external_mappings','sync_change_logs','sync_calendars','sync_calendar_events','sync_reminder_lists','sync_reminders')
 order by c.relname, a.attnum;
 
 select c.relname as table_name, k.conname as constraint_name, k.contype,
@@ -40,7 +41,8 @@ join pg_namespace n on n.oid = c.relnamespace
 where n.nspname = 'public' and c.relname in
   ('families','family_members','family_model_dirty','family_conversations','family_messages','bills',
    'approval_requests','ai_requests','ai_request_context','family_automation_runs',
-   'ai_tool_calls','ai_plans','ai_plan_steps','ai_run_events')
+   'ai_tool_calls','ai_plans','ai_plan_steps','ai_run_events',
+   'sync_accounts','sync_external_mappings','sync_change_logs','sync_calendars','sync_calendar_events','sync_reminder_lists','sync_reminders')
 order by c.relname, k.conname;
 
 select c.relname as table_name, ic.relname as index_name,
@@ -50,7 +52,8 @@ select c.relname as table_name, ic.relname as index_name,
 from pg_index i join pg_class c on c.oid = i.indrelid
 join pg_class ic on ic.oid = i.indexrelid join pg_namespace n on n.oid = c.relnamespace
 where n.nspname = 'public' and c.relname in ('family_members','family_conversations','bills','approval_requests','ai_requests',
-  'ai_request_context','family_automation_runs','ai_tool_calls','ai_plans','ai_plan_steps','ai_run_events')
+  'ai_request_context','family_automation_runs','ai_tool_calls','ai_plans','ai_plan_steps','ai_run_events',
+  'sync_accounts','sync_external_mappings','sync_change_logs','sync_calendars','sync_calendar_events','sync_reminder_lists','sync_reminders')
 order by c.relname, ic.relname;
 
 select tablename, policyname, permissive, roles, cmd, qual, with_check
@@ -58,6 +61,7 @@ from pg_policies where schemaname = 'public' and tablename in
   ('families','family_members','family_model_dirty','family_conversations','family_messages',
    'approval_requests','ai_requests','ai_request_context','family_automation_runs',
    'ai_tool_calls','ai_plans','ai_plan_steps','ai_run_events',
+   'sync_accounts','sync_external_mappings','sync_change_logs','sync_calendars','sync_calendar_events','sync_reminder_lists','sync_reminders',
    'family_wallets','child_wallets','wallet_buckets','wallet_transactions','wallet_rules',
    'allowance_rules','financial_accounts','transactions','budgets','bills','savings_goals')
 order by tablename, policyname;
@@ -76,7 +80,8 @@ join pg_proc p on p.oid = t.tgfoid join pg_namespace pn on pn.oid = p.pronamespa
 where n.nspname = 'public' and c.relname in
   ('families','family_members','family_model_dirty','family_conversations','family_messages','bills',
    'approval_requests','ai_requests','ai_request_context','family_automation_runs',
-   'ai_tool_calls','ai_plans','ai_plan_steps','ai_run_events')
+   'ai_tool_calls','ai_plans','ai_plan_steps','ai_run_events',
+   'sync_accounts','sync_external_mappings','sync_change_logs','sync_calendars','sync_calendar_events','sync_reminder_lists','sync_reminders')
 order by c.relname, t.tgname;
 
 -- All overloads/default argument counts, including retired one-argument RPCs.
@@ -92,9 +97,10 @@ select n.nspname as schema_name, p.proname,
 from pg_proc p join pg_namespace n on n.oid = p.pronamespace
 cross join pg_roles r
 where p.prokind = 'f' and r.rolname in ('anon','authenticated','service_role')
-  and (n.nspname = 'messaging_private' or (n.nspname = 'public' and p.proname in
+  and (n.nspname in ('messaging_private','sync_pull_private') or (n.nspname = 'public' and p.proname in
        ('ensure_family_conversation','send_family_message','find_family_message',
-        'mark_conversation_read','is_family_member','can_manage_family','is_family_admin','mark_model_dirty','count_family_ai_requests_month')))
+        'mark_conversation_read','is_family_member','can_manage_family','is_family_admin','mark_model_dirty','count_family_ai_requests_month',
+        'ensure_sync_pull_container','create_sync_pull_item')))
 order by n.nspname,p.proname,identity_arguments,r.rolname;
 
 select n.nspname as schema_name,p.proname,
@@ -117,7 +123,8 @@ from pg_class c join pg_namespace n on n.oid = c.relnamespace
 join pg_attribute a on a.attrelid=c.oid and a.attnum > 0 and not a.attisdropped
 cross join pg_roles r
 where n.nspname='public' and c.relname in ('family_conversations','family_messages','bills','approval_requests','ai_requests',
-  'ai_request_context','family_automation_runs','ai_tool_calls','ai_plans','ai_plan_steps','ai_run_events')
+  'ai_request_context','family_automation_runs','ai_tool_calls','ai_plans','ai_plan_steps','ai_run_events',
+  'sync_accounts','sync_external_mappings','sync_change_logs','sync_calendars','sync_calendar_events','sync_reminder_lists','sync_reminders')
   and r.rolname in ('anon','authenticated','service_role')
 order by c.relname,r.rolname,a.attnum;
 
@@ -126,7 +133,7 @@ select coalesce(n.nspname,'*') as schema_name,pg_get_userbyid(d.defaclrole) as o
        a.privilege_type,a.is_grantable
 from pg_default_acl d left join pg_namespace n on n.oid=d.defaclnamespace
 cross join lateral aclexplode(d.defaclacl) a
-where d.defaclnamespace=0 or n.nspname in ('public','messaging_private')
+where d.defaclnamespace=0 or n.nspname in ('public','messaging_private','sync_pull_private')
 order by schema_name,owner,d.defaclobjtype,grantee,a.privilege_type;
 
 -- These aggregates require the ordinary preexisting message tables. Missing

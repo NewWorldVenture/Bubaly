@@ -12,6 +12,14 @@ acceptance; all historical prerequisites still need reconciliation in order.
 | 0476 | `0476_preserve_messaging_participants.sql` | Preserve recorded audiences; separate empty canonical chat; validate real lifecycle triggers, grants and retired overloads. |
 | 0477 | `0477_approval_requests_private_read.sql` | Active requester/manager approval reads through real member identity. |
 | 0478 | `0478_ai_copy_private_read_and_quota.sql` | Restrictive AI-copy reads and count-only active-family UTC usage RPC. |
+| 0479 | `0479_sync_atomic_pull.sql` | Service-only account/container admission and atomic new event/reminder mapping pairs; retry lock errors retain replay. |
+
+Standard calendar/reminder sync also requires the two 0479 RPCs before the
+corresponding application source is enabled. Missing RPCs fail visibly and
+retain the cursor; there is no separate-item/map fallback. Require actual
+catalog/FK/default-grant compatibility and the standalone deletion/race
+contract before rollout. This protects new pairs only; existing-item updates,
+cursor batches and outbound provider effects remain separate transactions.
 
 The capped Free-plan application gate now requires
 `count_family_ai_requests_month`. Missing, malformed or unavailable receipts
