@@ -177,7 +177,7 @@ export function ChoresModule() {
     const { data: approved, error } = await supabase.from('chore_assignments').update({
       // approved_by is a FK to family_members(id), not auth.users — use the member id.
       status: 'approved', approved_at: new Date().toISOString(), approved_by: selfMemberId, points_awarded: a.chore?.points ?? 0,
-    }).eq('id', a.id).select('id');
+    }).eq('id', a.id).eq('family_id', familyId).select('id');
     setBusy(null);
     if (error) return toastError(describeDbError(error));
     if (wroteNoRows(approved)) return toastError(tr('errors.thatChangeWasNotSaved'));
