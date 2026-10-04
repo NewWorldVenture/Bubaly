@@ -61,6 +61,17 @@ export type ToolDefinition<I = unknown, O = unknown> = {
    * again. Return null when the call is inherently repeatable.
    */
   idempotencyFrom?: (input: I, scope: ServiceScope) => string | null;
+  /**
+   * The natural key names the WHOLE thing the call creates — two calls with
+   * the same key would write the same row — so inside a run two sibling steps
+   * that share it may collapse to one write (lib/ai/tools/execute.ts). Only a
+   * key that carries every input a person could tell apart qualifies: a budget
+   * keyed by its category alone does not, because a second step with another
+   * amount would replay the first step's result and never apply its own
+   * (review 5981509057 on #906). Without this flag a run keys the step, and
+   * the natural key stays what it was: a duplicate guard for a retried call.
+   */
+  identityKey?: true;
   /** One line a family member reads without context: "Added soccer at 9:00 AM Saturday". */
   summarize: (input: I, output: O) => string;
   /** What approving this would cause. Shown on the approval card (§31). */

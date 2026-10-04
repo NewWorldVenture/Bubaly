@@ -139,6 +139,9 @@ export const calendarTools: ToolDefinition[] = [
     }),
     output: eventOutput,
     idempotencyFrom: (input, scope) => createEventIdentity(input, scope.tz),
+    // `createEventIdentity` carries everything that makes one event (title, start,
+    // person, place, shape), so two steps sharing it ARE one event.
+    identityKey: true,
     summarize: (_input, output) => `Added ${output.title} at ${output.when}`,
     resource: (output) => ({ table: 'calendar_events', id: output.id }),
     execute: async (scope, input) => {

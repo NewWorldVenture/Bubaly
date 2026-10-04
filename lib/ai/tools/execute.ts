@@ -200,7 +200,12 @@ function resolveIdempotencyKey(scope: ServiceScope, tool: ToolDefinition, input:
   if (supplied) return supplied;
 
   if (scope.runId || scope.stepId || scope.requestId) {
-    const natural = tool.idempotencyFrom?.(input, scope) ?? null;
+    // Only a key the tool declares an IDENTITY (every input a person could tell
+    // apart is in it) may collapse two steps of one run; a natural key that
+    // omits an input — a budget keyed by its category, not its amount — would
+    // hand the second step the first one's result and never apply its own.
+    // Those tools keep the step key, as every tool did before #906.
+    const natural = tool.identityKey ? tool.idempotencyFrom?.(input, scope) ?? null : null;
     // Deliberately keyed by the run/request and NOT the step: the duplicate a
     // plan actually produces is two steps creating the same thing.
     if (natural) return makeKey([scope.familyId, scope.runId ?? scope.requestId ?? null, tool.name, natural]);

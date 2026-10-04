@@ -12,11 +12,16 @@
 // meal twice left two dinners in one slot").
 //
 // Now the executor hands the step key in as the FALLBACK. Within a run a tool
-// with a natural key is keyed by it, so sibling steps collapse to one write and
-// a retried step still finds its own receipt (same arguments, same natural
-// key); a tool with no natural key keeps the step key, so two notes are still
-// two notes and a retried note is still one. The resolved key is also what the
-// services see, so the row-level duplicate guard (0256) and the ledger agree.
+// whose natural key is an IDENTITY (`identityKey: true` — every input a person
+// could tell apart is in it) is keyed by it, so sibling steps collapse to one
+// write and a retried step still finds its own receipt (same arguments, same
+// natural key); every other tool keeps the step key, so two notes are still
+// two notes, a retried note is still one, and two budget steps for one
+// category with two amounts are two writes (review 5981509057: the budget key
+// omits the amount, so collapsing them would mark the second step successful
+// with the first one's result and never apply its amount). The resolved key is
+// also what the services see, so the row-level duplicate guard (0256) and the
+// ledger agree.
 //
 // What "the same thing" means for a calendar create is the tool's to say, and
 // `createEventIdentity` (lib/ai/tools/calendar.ts) says it: one spelling of the
@@ -434,6 +439,57 @@ describe('two steps whose tool has no natural key', () => {
   });
 });
 
+describe('a natural key that is not an identity does not collapse two steps (review 5981509057)', () => {
+  // `finances.updateBudget` is keyed by its category alone, deliberately: a
+  // retried step must find its receipt however the model respelled the amount.
+  // That key must not make two DIFFERENT budget steps one write — the second
+  // would replay the first one's result and never set its own amount.
+  const BUDGET = { id: 'budget-1', family_id: FAMILY, category: 'Groceries', amount: 400, period: 'monthly', created_at: NOW.toISOString(), updated_at: NOW.toISOString() };
+  const budgets = () => {
+    let amount = BUDGET.amount;
+    return makeFamilyDb((call) => {
+      if (call.table !== 'budgets') return null;
+      if (call.kind === 'update') { amount = (call.payload as { amount: number }).amount; return { data: { ...BUDGET, amount }, error: null }; }
+      return { data: { ...BUDGET, amount }, error: null };
+    });
+  };
+  // The step of an approved plan: the gate was passed at approval, as `runToolStep` records it.
+  const setBudget = (amount: number, step: string) => executeTool(scope, 'finances.updateBudget', { category: 'Groceries', amount }, { ...asStep(step, 'finances.updateBudget'), skipTrust: true });
+
+  it('two budget steps for one category with two amounts are two writes, each with its own amount', async () => {
+    family = budgets();
+    scope = scopeWith(family.db);
+    const [first, second] = await Promise.all([setBudget(500, STEP_A), setBudget(650, STEP_B)]);
+    expect(first).toMatchObject({ status: 'ok' });
+    expect(second).toMatchObject({ status: 'ok' });
+    const updates = family.calls.filter((c) => c.table === 'budgets' && c.kind === 'update').map((c) => (c.payload as { amount: number }).amount);
+    expect(updates.sort()).toEqual([500, 650]);
+    expect(ledger.rows).toHaveLength(2);
+    expect(ledger.rows.map((r) => r.idempotency_key).sort()).toEqual([
+      stepIdempotencyKey(FAMILY, RUN, STEP_A, 'finances.updateBudget'), stepIdempotencyKey(FAMILY, RUN, STEP_B, 'finances.updateBudget'),
+    ].sort());
+    expect((second as { data?: { amount?: number } }).data?.amount, 'the second step reports the amount it set, not the first one\'s').toBe(650);
+  });
+
+  it('a retried budget step is still one write', async () => {
+    family = budgets();
+    scope = scopeWith(family.db);
+    await setBudget(500, STEP_A);
+    const again = await setBudget(500, STEP_A);
+    expect(again).toMatchObject({ status: 'ok' });
+    expect(family.calls.filter((c) => c.table === 'budgets' && c.kind === 'update')).toHaveLength(1);
+    expect(ledger.rows).toHaveLength(1);
+  });
+
+  it('only the calendar create declares its natural key an identity', () => {
+    const tools = readFileSync(join(ROOT, 'lib/ai/tools/calendar.ts'), 'utf8');
+    expect(tools.match(/identityKey: true,/g)).toHaveLength(1);
+    for (const file of ['finances', 'groceries', 'home', 'inventory', 'meals', 'memory', 'messages', 'moving', 'documents']) {
+      expect(readFileSync(join(ROOT, `lib/ai/tools/${file}.ts`), 'utf8'), `${file} keeps the step key`).not.toContain('identityKey');
+    }
+  });
+});
+
 describe('a caller that supplies its own key still wins outright', () => {
   it('the chat route\'s message key is taken as given, natural key or not', async () => {
     const KEY = 'message-7:create-soccer';
@@ -454,9 +510,10 @@ describe('the shape of the fix', () => {
     expect(executor).not.toMatch(/\bidempotencyKey: opts\.idempotencyKey,/);
   });
 
-  it('within a run the natural key is taken first, the fallback only when there is none', () => {
+  it('within a run an identity key is taken first, the fallback for every other tool', () => {
     const resolve = exec.slice(exec.indexOf('function resolveIdempotencyKey'), exec.indexOf('type Reservation ='));
     expect(resolve).toContain('if (supplied) return supplied;');
+    expect(resolve).toContain('const natural = tool.identityKey ? tool.idempotencyFrom?.(input, scope) ?? null : null;');
     expect(resolve).toContain('if (natural) return makeKey([scope.familyId, scope.runId ?? scope.requestId ?? null, tool.name, natural]);');
     expect(resolve).toContain('return opts.fallbackIdempotencyKey ?? scopeKey(scope, tool.name, input);');
     expect(at(resolve, 'if (natural)')).toBeLessThan(at(resolve, 'opts.fallbackIdempotencyKey ??'));
