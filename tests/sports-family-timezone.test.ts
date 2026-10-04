@@ -39,22 +39,26 @@ function scope(tz:string,rows:SportsEventRow[],errorBranch?:'single'|'series'):S
     const method=init?.method??(input instanceof Request?input.method:'GET');
     receipts.push({method,path:url.pathname,query:[...url.searchParams]});
     // The transport contract of the shared series-aware read (lib/calendar/
-    // occurrences.ts): two GETs, both family-scoped and ordered by start. The
-    // one-off read carries the window as an `or` of one `and(...)` clause plus
-    // the no-series clause and the service's own cap; the series read selects
-    // every series that started by the window's end and has not ended before
-    // its start, one row past its ceiling.
+    // occurrences.ts): two GETs, both family-scoped, ordered by start then id,
+    // each asking for an exact count (so a response the server cut short is a
+    // failed read, not a prefix). The one-off read carries the window as an
+    // `or` of one `and(...)` clause plus the no-series clause and the service's
+    // own cap; the series read selects every series that started by the
+    // window's end and has not ended before its start — unbounded, and paged
+    // on with range() only when the count says the answer was cut, which a
+    // stand-in that answers everything it holds never does.
     const series=url.searchParams.get('recurrence')==='neq.none';
     try {
       expect(url.origin).toBe('https://sports-proof.invalid');expect(url.pathname).toBe('/rest/v1/sports_events');expect(method).toBe('GET');expect(receipts.length).toBeLessThanOrEqual(2);
-      expect(url.searchParams.get('family_id')).toBe('eq.'+FAMILY);expect(url.searchParams.get('select')).toBe('*');expect(url.searchParams.get('order')).toBe('starts_at.asc');
+      expect(url.searchParams.get('family_id')).toBe('eq.'+FAMILY);expect(url.searchParams.get('select')).toBe('*');expect(url.searchParams.get('order')).toBe('starts_at.asc,id.asc');
+      expect(new Headers(init?.headers).get('prefer')).toContain('count=exact');
       const ors=url.searchParams.getAll('or');
       if(series) {
-        expect(url.searchParams.get('limit')).toBe('2001');
+        expect(url.searchParams.get('limit')).toBeNull();expect(url.searchParams.get('offset')).toBeNull();
         expect(url.searchParams.get('starts_at')).toMatch(/^lte\./);
         expect(ors).toEqual([expect.stringMatching(/^\(recurrence_until\.is\.null,recurrence_until\.gte\..+\)$/)]);
       } else {
-        expect(url.searchParams.get('limit')).toBe('500');
+        expect(url.searchParams.get('limit')).toBe('500');expect(url.searchParams.get('offset')).toBeNull();
         expect(url.searchParams.get('recurrence')).toBeNull();expect(url.searchParams.get('starts_at')).toBeNull();
         expect(ors).toEqual([expect.stringMatching(/^\(and\(starts_at\.gte\..+,starts_at\.lt\..+\)\)$/),'(recurrence.is.null,recurrence.eq.none)']);
       }
@@ -62,7 +66,7 @@ function scope(tz:string,rows:SportsEventRow[],errorBranch?:'single'|'series'):S
     if(errorBranch===(series?'series':'single')) return new Response(JSON.stringify({code:'42501',message:'synthetic denied'}),{status:403,headers:{'content-type':'application/json'}});
     const data=rows.filter(row=>{
       for(const [key,predicate] of url.searchParams) {
-        if(key==='select'||key==='limit'||key==='order') continue;
+        if(key==='select'||key==='limit'||key==='offset'||key==='order') continue;
         // PostgREST wraps an `or` in parentheses; the in-memory helper's parser reads what is inside.
         if(key==='or') {if(!orPredicate(predicate.slice(1,-1))(row)) return false; continue;}
         const dot=predicate.indexOf('.'),op=predicate.slice(0,dot),wanted=predicate.slice(dot+1);
