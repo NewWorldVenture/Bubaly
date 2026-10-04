@@ -1,5 +1,11 @@
 # Final Production Audit
 
+## Composed source publication — 2026-10-04 22:36 UTC
+
+- [Draft #969](https://github.com/NewWorldVenture/Bubaly/pull/969), **Preserve chat audiences, calendar dates and recurring bill anchors**, now publishes composition `a31bd045f1b20b149a29e3dc8cb08600a90d80b7`, including verified source merge `e96ced0974ee7ed5bfd2836eb5251fd9c725d9e3` and the authoritative ledger checkpoint below. The publishing worktree is clean; application/test/workflow source is byte-equivalent to that verified merge. The expected audit-only conflict preserved all newer root checkpoints. No new PR or separate author-branch push was created.
+- Publication verification passes the Supabase query audit (**494 tables, 141 functions, 147 API routes**) and all ten declared i18n surfaces. GitHub reports #969 mergeable and its dedicated **PostgreSQL messaging roles and concurrent writes** check IN PROGRESS, with finance-operation SQL passing. Hosted checks for this composed head remain unconfirmed. A further Actions-run inventory read hit GitHub REST rate limiting; no repeated REST polling or full-CI success claim follows that failed read. This does not change the independently verified all-four-job #965 CI pass below.
+- Main and production were not changed. Hosted migration/catalog compatibility, public-media/AI-ledger privacy limits, and #779 live account/project/database/snapshot bindings remain open. Source publication is not production acceptance. Closure remains **344/14,538 (2.37%)**, with unchanged Register B IDs/statuses and Production Ready **NO**.
+
 ## Participant-preserving messaging composition — 2026-10-04 22:33 UTC
 
 - The verified source is committed in isolated merge `e96ced0974ee7ed5bfd2836eb5251fd9c725d9e3`, with parents main `7e19a9f` and bill/calendar `17c14c98`. Its worktree is clean. The coordinator is composing this into existing draft #969; the authoritative ledger resolves the expected audit-only merge conflict without discarding the newer checkpoints. No author branch was pushed separately.
