@@ -77,7 +77,12 @@ function db() {
   }) as never;
 }
 function json(value: unknown, status = 200) {
-  return new Response(JSON.stringify(value), { status, headers: { 'content-type': 'application/json' } });
+  // A collection carries the Content-Range PostgREST sends for an exact-count
+  // request (`first-last/total`); the shared calendar read refuses an answer
+  // without it. The rows here are the whole collection, so the total is theirs.
+  const headers: Record<string, string> = { 'content-type': 'application/json' };
+  if (Array.isArray(value) && status === 200) headers['content-range'] = value.length ? `0-${value.length - 1}/${value.length}` : '*/0';
+  return new Response(JSON.stringify(value), { status, headers });
 }
 const generate = () => generateFamilyNotifications(db(), FAMILY);
 const documentWrites = () => writes.filter(r => r.related_type === 'documents');

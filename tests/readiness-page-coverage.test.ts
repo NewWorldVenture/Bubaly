@@ -269,6 +269,30 @@ describe('readiness page source coverage', () => {
     expect(html).not.toContain('Everything ahead looks handled.');
   });
 
+  // The two-read calendar window asks for an exact count and refuses an answer
+  // without one (lib/calendar/occurrences.ts, recheck 5981632558 on #923). The
+  // page must carry that refusal as a week it could not read — never as the
+  // smaller week the uncounted rows would have made.
+  it.each([null, -1, 0.5])('a series read whose count is not a count (%s) is a failed week, not a smaller one', async (count) => {
+    series = { data: [], count, error: null };
+    week = result(Array.from({ length: 8 }, (_, i) => event(i)));
+    const html = await render();
+    expect(html).toContain('Weekly visible calendar could not be read');
+    expect(html).toContain('Workload balance is unknown');
+    expect(html).toContain(COVERAGE_BANNER);
+    expect(html).not.toContain('carrying a heavy load');
+    expect(html).not.toContain('The week is under control.');
+    expect(html).not.toContain('Everything ahead looks handled.');
+  });
+
+  it('a one-off read whose count is not a count is a failed tomorrow', async () => {
+    tomorrow = { data: [event(0)], count: null, error: null };
+    const html = await render();
+    expect(html).toContain('visible calendar could not be read; conflicts and assignments are unknown');
+    expect(html).not.toContain('You&#x27;re set for tomorrow.');
+    expect(html).toContain(COVERAGE_BANNER);
+  });
+
   it('does not turn a failed tomorrow read into a clear tomorrow', async () => {
     tomorrow = { data: null, count: null, error: new Error('Unavailable') };
     const html = await render();

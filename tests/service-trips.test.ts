@@ -93,7 +93,8 @@ function makeStore(seed: Record<string, Row[]> = {}, opts: { failTables?: string
       update: (payload: unknown) => { op.kind = 'update'; op.payload = payload; return b; },
       delete: () => { op.kind = 'delete'; return b; },
       single, maybeSingle: single,
-      then: (resolve: (value: { data: unknown; error: unknown }) => void) => resolve(run()),
+      // A collection answer carries its count, as PostgREST's Content-Range does.
+      then: (resolve: (value: { data: unknown; error: unknown; count?: number }) => void) => { const r = run(); resolve(Array.isArray(r.data) ? { ...r, count: r.data.length } : r); },
     });
     return b;
   };

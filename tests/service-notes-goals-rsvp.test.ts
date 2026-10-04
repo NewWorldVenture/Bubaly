@@ -53,7 +53,8 @@ function makeDb(respond: (call: Call, index: number) => Reply) {
       upsert: (payload: unknown) => { call.kind = 'upsert'; call.payload = payload; return b; },
       single: () => Promise.resolve(respond(call, index)),
       maybeSingle: () => Promise.resolve(respond(call, index)),
-      then: (resolve: (value: Reply) => void) => resolve(respond(call, index)),
+      // A collection answer carries its count, as PostgREST's Content-Range does.
+      then: (resolve: (value: Reply & { count?: number }) => void) => { const r = respond(call, index); resolve(Array.isArray(r.data) ? { ...r, count: r.data.length } : r); },
     });
     return b;
   };

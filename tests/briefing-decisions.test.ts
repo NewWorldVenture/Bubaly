@@ -261,7 +261,8 @@ vi.mock('@/lib/server/bounded-request-body', () => ({
 import { POST } from '@/app/api/ai/briefing/route';
 
 function queryResult(data: unknown[] | null, error: unknown = null) {
-  const promise = Promise.resolve({ data, error });
+  // A collection answer carries its count, as PostgREST's Content-Range does.
+  const promise = Promise.resolve({ data, error, count: Array.isArray(data) ? data.length : null });
   const query: Record<string, unknown> = { then: promise.then.bind(promise) };
   // `or` and `update` are part of the surface the route really uses: the shared
   // handled count filters `family_automation_runs` with `.or(...)`, and the
