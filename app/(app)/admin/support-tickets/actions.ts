@@ -7,6 +7,8 @@ import { getUser, isSuperAdmin } from '@/lib/supabase/auth';
 import { describeActionError } from '@/lib/supabase/errors';
 import { emailSchema } from '@/lib/validation';
 import type { Database } from '@/lib/database.types';
+import { ADMIN_ZONE } from '@/lib/admin/clock';
+import { dayKeyIn } from '@/lib/time/zoned';
 
 type ActionResult = { ok: true } | { ok: false; error: string };
 type AdminClient = ReturnType<typeof createServiceClient>;
@@ -103,8 +105,9 @@ export async function createTicketAction(formData: FormData): Promise<ActionResu
 
   // Do not derive a unique identifier from count + 1: concurrent admins can
   // observe the same count and collide on support_tickets.ticket_number.
-  const now = new Date();
-  const dateStr = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}${String(now.getDate()).padStart(2, '0')}`;
+  // The stamp's day is the admin zone's (lib/admin/clock.ts), not the host's.
+  const day = dayKeyIn(new Date(), ADMIN_ZONE);
+  const dateStr = `${day.slice(0, 4)}-${day.slice(5, 7)}${day.slice(8, 10)}`;
   const ticket_number = `TKT-${dateStr}-${crypto.randomUUID().replaceAll('-', '').slice(0, 10).toUpperCase()}`;
 
   const { error } = await guarded.supabase.from('support_tickets').insert({

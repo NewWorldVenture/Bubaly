@@ -4,9 +4,22 @@ const DAY = 86_400_000;
 
 const atMidnight = (d: Date) => new Date(d.getFullYear(), d.getMonth(), d.getDate());
 
-/** Whole days until a trip starts. Negative once it has started/passed. null if no date. */
-export function daysUntil(startDate: string | null | undefined, today: Date = new Date()): number | null {
+/**
+ * Whole days until a trip starts. Negative once it has started/passed. null if
+ * no date.
+ *
+ * `today` is the FAMILY's day key (YYYY-MM-DD) from a server caller — a Date
+ * there is the HOST's calendar, tomorrow from 5pm in California on a UTC host —
+ * or a Date from a browser, whose local midnight is the reader's own.
+ */
+export function daysUntil(startDate: string | null | undefined, today: Date | string = new Date()): number | null {
   if (!startDate) return null;
+  if (typeof today === 'string') {
+    const a = Date.parse(`${startDate}T00:00:00Z`);
+    const b = Date.parse(`${today}T00:00:00Z`);
+    if (!Number.isFinite(a) || !Number.isFinite(b)) return null;
+    return Math.round((a - b) / DAY);
+  }
   const start = new Date(startDate + 'T00:00:00');
   if (Number.isNaN(start.getTime())) return null;
   return Math.round((start.getTime() - atMidnight(today).getTime()) / DAY);
@@ -52,7 +65,7 @@ export function dateRange(start: string, end: string, maxDays = 60): string[] {
 export function countdownLabel(
   tr: (key: string, params?: Record<string, string | number>) => string,
   startDate: string | null | undefined,
-  today: Date = new Date(),
+  today: Date | string = new Date(),
 ): string {
   const d = daysUntil(startDate, today);
   if (d === null) return tr('tripCountdown.noDatesYet');
