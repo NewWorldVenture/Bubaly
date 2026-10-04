@@ -2751,6 +2751,12 @@ export interface Database {
     Views: { [_ in never]: never };
     CompositeTypes: { [_ in never]: never };
     Functions: {
+      meal_plan_replace_slots: { Args: { p_family_id: string; p_request_id: string; p_entries: Json }; Returns: Json };
+      meal_plan_remove_slot: { Args: { p_family_id: string; p_request_id: string; p_plan_id: string }; Returns: Json };
+      meal_plan_replace_slots_for_actor: { Args: { p_family_id: string; p_actor_id: string; p_request_id: string; p_entries: Json }; Returns: Json };
+      meal_plan_remove_slot_for_actor: { Args: { p_family_id: string; p_actor_id: string; p_request_id: string; p_plan_id: string }; Returns: Json };
+      meal_ensure_custom: { Args: { p_family_id: string; p_name: string; p_meal_type: MealType; p_ingredients: Json; p_recipe_url: string | null; p_image_url: string | null; p_has_ingredients: boolean; p_has_recipe_url: boolean; p_has_image_url: boolean }; Returns: Json };
+      meal_cleanup_unreferenced_custom: { Args: { p_family_id: string; p_meal_ids: string[] }; Returns: Json };
       finance_record_transaction_operation: {
         Args: { p_tool_call_id: string; p_family_id: string; p_actor_user_id: string | null; p_actor_member_id: string | null; p_actor_kind: AiActorKind; p_expected_inputs: Json; p_intent: Json; p_transaction: Json };
         Returns: Json;

@@ -25,11 +25,12 @@ vi.mock('@/lib/services/meals', async (importOriginal) => {
 import { planMealAction, removeMealPlanAction } from '@/app/(app)/dashboard/meals/actions';
 
 type Row = Record<string, unknown>;
-type RecordedRequest = { method: string; table: string; query: string };
+type RecordedRequest = { method: string; table: string; query: string; body: Row | Row[] | null };
 const FAMILY = 'family-one', OTHER = 'family-two', DAY = '2026-09-28';
 let tables: Record<string, Row[]>;
 let requests: RecordedRequest[];
-let emptyInsertReceipt: boolean;
+let failNextPlanRpc: boolean;
+let nextPlanId: number;
 
 function actor(role: 'parent' | 'adult' | 'teen' | 'child' | 'caregiver' | 'guest') {
   mocks.context.mockResolvedValue({
@@ -50,10 +51,57 @@ async function transport(input: RequestInfo | URL, init?: RequestInit): Promise<
     throw new Error('Unexpected synthetic transport destination');
   }
   const table = url.pathname.slice('/rest/v1/'.length), method = request.method;
-  if (!Object.hasOwn(tables, table)) throw new Error(`Unexpected table: ${table}`);
-  requests.push({ method, table, query: url.search });
   const raw = await request.text();
   const body: Row | Row[] | null = raw ? JSON.parse(raw) : null;
+  requests.push({ method, table, query: url.search, body });
+  if (table.startsWith('rpc/')) {
+    const rpc = table.slice('rpc/'.length), args = body as Row;
+    const rpcError = (code: string, message: string) => Response.json({ code, message, details: null, hint: null }, { status: 400 });
+    if (rpc === 'meal_plan_replace_slots') {
+      if (failNextPlanRpc) {
+        failNextPlanRpc = false;
+        return rpcError('40001', 'synthetic atomic write failure');
+      }
+      const entries = args.p_entries as Row[];
+      const familyId = args.p_family_id;
+      if (!Array.isArray(entries) || typeof familyId !== 'string') return rpcError('22023', 'invalid synthetic request');
+      const planned = entries.map((entry) => {
+        const meal = tables.meals.find((row) => row.id === entry.meal_id && row.family_id === familyId);
+        return meal && {
+          id: `plan-${++nextPlanId}`, family_id: familyId, meal_id: meal.id,
+          plan_date: entry.plan_date, meal_type: entry.meal_type, created_by: 'auth-actor',
+        };
+      });
+      if (planned.some((row) => !row)) return rpcError('42501', 'meal unavailable to family');
+      const slots = new Set(entries.map((entry) => `${entry.plan_date}|${entry.meal_type}`));
+      const old = tables.meal_plans.filter((row) => row.family_id === familyId && slots.has(`${row.plan_date}|${row.meal_type}`));
+      tables.meal_plans = tables.meal_plans.filter((row) => !(row.family_id === familyId && slots.has(`${row.plan_date}|${row.meal_type}`)));
+      tables.meal_plans.push(...planned as Row[]);
+      return Response.json({ planned, replaced: old.length, replayed: false }, { status: 200 });
+    }
+    if (rpc === 'meal_plan_remove_slot') {
+      const index = tables.meal_plans.findIndex((row) => row.id === args.p_plan_id && row.family_id === args.p_family_id);
+      if (index < 0) return rpcError('P0002', 'planned meal not found');
+      const [row] = tables.meal_plans.splice(index, 1);
+      return Response.json({ id: args.p_plan_id, plan_date: row!.plan_date, meal_type: row!.meal_type, replayed: false }, { status: 200 });
+    }
+    if (rpc === 'meal_ensure_custom') {
+      const familyId = args.p_family_id;
+      const name = typeof args.p_name === 'string' ? args.p_name : '';
+      if (typeof familyId !== 'string' || !name) return rpcError('22023', 'invalid synthetic custom meal');
+      let meal = tables.meals.find((row) => row.family_id === familyId && row.name === name && row.meal_type === args.p_meal_type);
+      const created = !meal;
+      if (!meal) {
+        meal = { id: `meal-${tables.meals.length + 1}`, family_id: familyId, name, meal_type: args.p_meal_type,
+          ingredients: args.p_ingredients ?? [], recipe_url: args.p_recipe_url ?? null, image_url: args.p_image_url ?? null,
+          created_by: 'auth-actor' };
+        tables.meals.push(meal);
+      }
+      return Response.json({ meal, created }, { status: 200 });
+    }
+    return rpcError('42883', `Unexpected synthetic RPC: ${rpc}`);
+  }
+  if (!Object.hasOwn(tables, table)) throw new Error(`Unexpected table: ${table}`);
   const matches = (row: Row) => [...url.searchParams].every(([key, value]) => {
     if (['select', 'order', 'limit', 'offset'].includes(key)) return true;
     if (value.startsWith('eq.')) return String(row[key]) === value.slice(3);
@@ -68,13 +116,8 @@ async function transport(input: RequestInfo | URL, init?: RequestInit): Promise<
     rows = tables[table].filter(matches);
     tables[table] = tables[table].filter((row) => !matches(row));
   } else if (method === 'POST' && body) {
-    if (emptyInsertReceipt && table === 'meal_plans') {
-      emptyInsertReceipt = false;
-      rows = [];
-    } else {
-      rows = (Array.isArray(body) ? body : [body]).map((row) => ({ ...row }));
-      tables[table].push(...rows);
-    }
+    rows = (Array.isArray(body) ? body : [body]).map((row) => ({ ...row }));
+    tables[table].push(...rows);
   } else throw new Error(`Unexpected method: ${method}`);
   const selected = method === 'GET' || request.headers.get('prefer')?.includes('return=representation');
   if (!selected) return new Response(null, { status: method === 'DELETE' ? 204 : 201 });
@@ -86,7 +129,8 @@ beforeEach(() => {
   vi.clearAllMocks();
   mocks.locale = 'en-US';
   requests = [];
-  emptyInsertReceipt = false;
+  failNextPlanRpc = false;
+  nextPlanId = 0;
   tables = {
     meals: [
       { id: 'rice', family_id: FAMILY, name: 'Rice', ingredients: [] },
@@ -174,12 +218,13 @@ describe('a guest cannot change a saved meal placement', () => {
     const before = structuredClone(tables);
     expect(await removeMealPlanAction('foreign-plan')).toMatchObject({ ok: false });
     expect(tables).toEqual(before);
-    expect(new URLSearchParams(requests[0].query).get('family_id')).toBe(`eq.${FAMILY}`);
+    const removeRequest = requests.find((request) => request.table === 'rpc/meal_plan_remove_slot');
+    expect(removeRequest?.body).toMatchObject({ p_family_id: FAMILY, p_plan_id: 'foreign-plan' });
     expect(mocks.revalidate).not.toHaveBeenCalled();
   });
 
-  it('retains captured-row restoration after an empty insert receipt', async () => {
-    emptyInsertReceipt = true;
+  it('leaves the previous slot intact when the atomic plan RPC fails', async () => {
+    failNextPlanRpc = true;
     expect(await plan()).toMatchObject({ ok: false });
     expect(tables.meal_plans.find((row) => row.id === 'prior')).toMatchObject({ meal_id: 'rice' });
     expect(tables.meal_plans.find((row) => row.id === 'foreign-plan')).toMatchObject({ meal_id: 'private' });

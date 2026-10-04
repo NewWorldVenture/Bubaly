@@ -43,6 +43,7 @@ function lastLine() {
 beforeEach(() => {
   vi.clearAllMocks();
   db = createInMemorySupabase<SupabaseClient<Database>>({
+    userId: 'user-1',
     defaults: {
       audit_logs: { resource_id: null, metadata: null },
       todo_items: { is_done: false, completed_at: null, assigned_to_id: null },

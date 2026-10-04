@@ -37,14 +37,14 @@ async function mealScope() {
  * the same date and meal type — which the raw insert did, leaving two dinners on
  * one Tuesday with nothing to say which the family meant.
  */
-export async function planMealAction(input: PlanEntryInput): Promise<MealPlanActionResult> {
+export async function planMealAction(input: PlanEntryInput, requestId?: string): Promise<MealPlanActionResult> {
   const t = await getTranslations();
   if (!input || !input.date) return { ok: false, error: t('actions.pickAMealAndA') };
   const scope = await mealScope();
   if (scope.role === 'guest') return { ok: false, error: t('actionRefusal.notAllowed') };
 
   try {
-    const result = await setSlot(scope, input);
+    const result = await setSlot(scope, input, requestId);
     if (!result.ok) return { ok: false, error: result.error };
 
     revalidatePath(PATH);
@@ -70,14 +70,14 @@ export async function createMealAction(input: MealLibraryInput): Promise<{ ok: t
   }
 }
 
-export async function removeMealPlanAction(planId: string): Promise<{ ok: true; id: string } | { ok: false; error: string }> {
+export async function removeMealPlanAction(planId: string, requestId?: string): Promise<{ ok: true; id: string } | { ok: false; error: string }> {
   const t = await getTranslations();
   if (!planId) return { ok: false, error: t('actions.thatPlannedMealCouldNot') };
   const scope = await mealScope();
   if (scope.role === 'guest') return { ok: false, error: t('actionRefusal.notAllowed') };
 
   try {
-    const result = await removeSlot(scope, planId);
+    const result = await removeSlot(scope, planId, requestId);
     if (!result.ok) return { ok: false, error: result.error };
 
     revalidatePath(PATH);

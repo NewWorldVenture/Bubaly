@@ -66,10 +66,163 @@ export type InMemoryOptions = {
  * An explicit `rpc` option still wins, which is how a test says "this call
  * fails" or supplies rows the backing table does not hold.
  */
-const BUILT_IN_RPC: Record<string, (args: Record<string, unknown>, db: InMemorySupabase) => unknown> = {
+type RpcHandler = (args: Record<string, unknown>, db: InMemorySupabase) => unknown;
+
+function normalizedMealName(value: unknown): string {
+  return typeof value === 'string' ? value.trim().replace(/\s+/g, ' ').toLowerCase() : '';
+}
+
+function normalizedMealIngredients(value: unknown): { name: string; qty: string | null; unit: string | null }[] {
+  if (!Array.isArray(value)) return [];
+  return value.flatMap((line) => {
+    if (typeof line === 'string') {
+      const name = line.trim();
+      return name ? [{ name, qty: null, unit: null }] : [];
+    }
+    if (!line || typeof line !== 'object' || Array.isArray(line)) return [];
+    const row = line as Row;
+    const name = typeof row.name === 'string' ? row.name.trim() : '';
+    if (!name) return [];
+    const qty = row.quantity ?? row.qty;
+    const unit = typeof row.unit === 'string' ? row.unit.trim() || null : null;
+    return [{ name, qty: typeof qty === 'number' ? String(qty) : typeof qty === 'string' ? qty.trim() || null : null, unit }];
+  });
+}
+
+function ensureMeal(args: Record<string, unknown>, db: InMemorySupabase, actorId: unknown) {
+  const familyId = args.p_family_id;
+  const name = typeof args.p_name === 'string' ? args.p_name.trim() : '';
+  const mealType = typeof args.p_meal_type === 'string' ? args.p_meal_type : 'dinner';
+  if (typeof familyId !== 'string' || !name) throw new Error('Invalid synthetic custom meal');
+  const hasIngredients = args.p_has_ingredients === true;
+  const hasRecipeUrl = args.p_has_recipe_url === true;
+  const hasImageUrl = args.p_has_image_url === true;
+  const hasNotes = args.p_has_notes === true;
+  const ingredients = hasIngredients ? args.p_ingredients : [];
+  const recipeUrl = hasRecipeUrl && typeof args.p_recipe_url === 'string' ? args.p_recipe_url.trim() || null : null;
+  const imageUrl = hasImageUrl && typeof args.p_image_url === 'string' ? args.p_image_url.trim() || null : null;
+  const notes = hasNotes && typeof args.p_notes === 'string' ? args.p_notes.trim() || null : null;
+  const existing = db.table('meals').find((meal) => meal.family_id === familyId
+    && normalizedMealName(meal.name) === normalizedMealName(name) && meal.meal_type === mealType
+    && (!hasIngredients || JSON.stringify(normalizedMealIngredients(meal.ingredients)) === JSON.stringify(normalizedMealIngredients(ingredients)))
+    && (!hasRecipeUrl || (meal.recipe_url ?? null) === recipeUrl)
+    && (!hasImageUrl || (meal.image_url ?? null) === imageUrl)
+    && (!hasNotes || (meal.notes ?? null) === notes));
+  if (existing) return { meal: { ...existing }, created: false };
+  const meal = db.withDefaults('meals', {
+    family_id: familyId, name, meal_type: mealType, ingredients: ingredients ?? [],
+    recipe_url: recipeUrl, image_url: imageUrl, notes, created_by: typeof actorId === 'string' ? actorId : null,
+  });
+  db.table('meals').push(meal);
+  return { meal: { ...meal }, created: true };
+}
+
+function replaceMealSlots(args: Record<string, unknown>, db: InMemorySupabase, actorId: unknown) {
+  const familyId = args.p_family_id;
+  const entries = args.p_entries;
+  if (typeof familyId !== 'string' || !Array.isArray(entries) || entries.length === 0) throw new Error('Invalid synthetic meal plan');
+  const normalized = entries.map((value) => {
+    if (!value || typeof value !== 'object' || Array.isArray(value)) throw new Error('Invalid synthetic meal-plan entry');
+    const entry = value as Row;
+    const meal = db.table('meals').find((row) => row.id === entry.meal_id && row.family_id === familyId);
+    if (!meal) throw new Error('Meal is unavailable to this family');
+    return { plan_date: entry.plan_date, meal_type: entry.meal_type ?? 'dinner', meal_id: meal.id };
+  });
+  const slots = new Set(normalized.map((entry) => `${entry.plan_date}|${entry.meal_type}`));
+  const plans = db.table('meal_plans');
+  const replaced = plans.filter((row) => row.family_id === familyId && slots.has(`${row.plan_date}|${row.meal_type}`)).length;
+  db.replace('meal_plans', plans.filter((row) => !(row.family_id === familyId && slots.has(`${row.plan_date}|${row.meal_type}`))));
+  const planned = normalized.map((entry) => db.withDefaults('meal_plans', {
+    family_id: familyId, ...entry, created_by: typeof actorId === 'string' ? actorId : null,
+  }));
+  db.table('meal_plans').push(...planned);
+  return { planned: planned.map((row) => ({ ...row })), replaced, replayed: false };
+}
+
+function removeMealSlot(args: Record<string, unknown>, db: InMemorySupabase) {
+  const familyId = args.p_family_id;
+  const planId = args.p_plan_id;
+  const plans = db.table('meal_plans');
+  const row = plans.find((plan) => plan.id === planId && plan.family_id === familyId);
+  if (!row) throw new Error('Planned meal not found');
+  db.replace('meal_plans', plans.filter((plan) => plan !== row));
+  return { id: planId, plan_date: row.plan_date, meal_type: row.meal_type, replayed: false };
+}
+
+function delegatedPlan(args: Record<string, unknown>, db: InMemorySupabase) {
+  const familyId = args.p_family_id;
+  const actorId = args.p_actor_id;
+  const entries = args.p_entries;
+  if (typeof familyId !== 'string' || typeof actorId !== 'string' || !Array.isArray(entries)) throw new Error('Invalid synthetic delegated plan');
+  let createdMeals = 0;
+  const resolved = entries.map((value) => {
+    if (!value || typeof value !== 'object' || Array.isArray(value)) throw new Error('Invalid synthetic delegated entry');
+    const entry = value as Row;
+    let mealId = typeof entry.meal_id === 'string' ? entry.meal_id : null;
+    if (mealId) {
+      if (!db.table('meals').some((meal) => meal.id === mealId && meal.family_id === familyId)) throw new Error('Meal is unavailable to this family');
+    } else {
+      let name = typeof entry.meal_name === 'string' ? entry.meal_name : '';
+      let ingredients = entry.ingredients ?? [];
+      let recipeUrl = entry.recipe_url ?? null;
+      let imageUrl = entry.image_url ?? null;
+      let notes = entry.notes ?? null;
+      let hasIngredients = Object.hasOwn(entry, 'ingredients');
+      let hasRecipeUrl = Object.hasOwn(entry, 'recipe_url');
+      let hasImageUrl = Object.hasOwn(entry, 'image_url');
+      let hasNotes = Object.hasOwn(entry, 'notes');
+      if (typeof entry.recipe_id === 'string') {
+        const recipe = db.table('family_recipes').find((row) => row.id === entry.recipe_id && row.family_id === familyId);
+        if (!recipe) throw new Error('Recipe is unavailable to this family');
+        name = String(recipe.name ?? '');
+        ingredients = recipe.ingredients ?? [];
+        recipeUrl = recipe.source_url ?? null;
+        imageUrl = recipe.photo_url ?? null;
+        notes = null;
+        hasIngredients = hasRecipeUrl = hasImageUrl = true;
+        hasNotes = false;
+      }
+      const ensured = ensureMeal({
+        p_family_id: familyId, p_name: name, p_meal_type: entry.meal_type ?? 'dinner',
+        p_ingredients: ingredients, p_recipe_url: recipeUrl, p_image_url: imageUrl, p_notes: notes,
+        p_has_ingredients: hasIngredients, p_has_recipe_url: hasRecipeUrl,
+        p_has_image_url: hasImageUrl, p_has_notes: hasNotes,
+      }, db, actorId);
+      if (ensured.created) createdMeals++;
+      mealId = String(ensured.meal.id);
+    }
+    return { plan_date: entry.plan_date, meal_type: entry.meal_type ?? 'dinner', meal_id: mealId };
+  });
+  const result = replaceMealSlots({ p_family_id: familyId, p_entries: resolved }, db, actorId);
+  return { ...result, created_meals: createdMeals };
+}
+
+const BUILT_IN_RPC: Record<string, RpcHandler> = {
   family_allergies: (args, db) => db.table('medical_profiles')
     .filter((row) => row.family_id === args.p_family_id)
     .map((row) => ({ member_id: row.member_id, allergies: row.allergies ?? null })),
+  meal_ensure_custom: (args, db) => ensureMeal(args, db, db.authUserId),
+  meal_plan_replace_slots: (args, db) => replaceMealSlots(args, db, db.authUserId),
+  meal_plan_remove_slot: (args, db) => removeMealSlot(args, db),
+  meal_plan_replace_slots_for_actor: (args, db) => delegatedPlan(args, db),
+  meal_plan_remove_slot_for_actor: (args, db) => removeMealSlot(args, db),
+  meal_cleanup_unreferenced_custom: (args, db) => {
+    const familyId = args.p_family_id;
+    const ids = Array.isArray(args.p_meal_ids) ? args.p_meal_ids : [];
+    let deleted = 0, retained = 0;
+    for (const id of new Set(ids)) {
+      const meal = db.table('meals').find((row) => row.id === id && row.family_id === familyId);
+      if (!meal) continue;
+      const referenced = db.table('meal_plans').some((row) => row.meal_id === id)
+        || db.table('grocery_items').some((row) => row.source_meal_id === id);
+      if (referenced) retained++;
+      else {
+        db.replace('meals', db.table('meals').filter((row) => row !== meal));
+        deleted++;
+      }
+    }
+    return { deleted, retained_referenced: retained };
+  },
 };
 
 function pgError(code: string, message: string): PostgrestError {
@@ -476,6 +629,7 @@ export class InMemorySupabase {
 
   /** The server's per-response row ceiling, or undefined for no cap. */
   get maxRows(): number | undefined { return this.options.maxRows; }
+  get authUserId(): string | null { return this.options.userId ?? null; }
 
   from(table: string): QueryBuilder {
     this.log.push({ table });

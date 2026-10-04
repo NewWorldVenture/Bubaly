@@ -146,7 +146,33 @@ describe('registration', () => {
 
 describe('meals.setSlot', () => {
   it('accepts the legacy create_meal_plan_entry shape and plans the slot', async () => {
-    const db = createInMemorySupabase<SupabaseClient<Database>>();
+    const db = createInMemorySupabase<SupabaseClient<Database>>({
+      rpc: {
+        meal_ensure_custom: (args, memory) => {
+          const meal = memory.withDefaults('meals', {
+            family_id: args.p_family_id, name: args.p_name, meal_type: args.p_meal_type,
+            recipe_url: args.p_recipe_url, image_url: args.p_image_url,
+            ingredients: args.p_ingredients, created_by: 'auth-user-1',
+          });
+          memory.table('meals').push(meal);
+          return { meal, created: true };
+        },
+        meal_plan_replace_slots: (args, memory) => {
+          const familyId = args.p_family_id;
+          const entries = args.p_entries as { meal_id: string; plan_date: string; meal_type: string }[];
+          const slots = new Set(entries.map((entry) => `${entry.plan_date}|${entry.meal_type}`));
+          const oldRows = memory.table('meal_plans');
+          const replaced = oldRows.filter((row) => row.family_id === familyId && slots.has(`${row.plan_date}|${row.meal_type}`)).length;
+          memory.replace('meal_plans', oldRows.filter((row) => row.family_id !== familyId || !slots.has(`${row.plan_date}|${row.meal_type}`)));
+          const planned = entries.map((entry) => memory.withDefaults('meal_plans', {
+            family_id: familyId, meal_id: entry.meal_id, plan_date: entry.plan_date,
+            meal_type: entry.meal_type, created_by: 'auth-user-1',
+          }));
+          memory.table('meal_plans').push(...planned);
+          return { planned, replaced, replayed: false };
+        },
+      },
+    });
     const tool = getTool('create_meal_plan_entry')!;
     const res = await run(tool, scopeWith(db), { meal_name: 'Tacos', plan_date: '2026-09-07', meal_type: 'dinner' });
     expect(res.ok).toBe(true);

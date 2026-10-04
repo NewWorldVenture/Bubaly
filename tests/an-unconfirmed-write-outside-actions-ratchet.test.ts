@@ -69,7 +69,6 @@ const BASELINE = new Map<string, number>([
   ['lib/server/profiles.ts', 1],
   ['lib/server/push.ts', 3],
   ['lib/services/approvals/index.ts', 2],
-  ['lib/services/meals/index.ts', 1],
   ['lib/social/account-tokens.ts', 4],
   ['lib/stripe/treasury.ts', 1],
   ['lib/stripe/webhook.ts', 1],
@@ -146,12 +145,14 @@ describe('the unconfirmed-write class outside server actions only shrinks (C1-S9
     expect(missing, 'an unconfirmed write with no stated reason beside it').toEqual([]);
   });
 
-  it('the baseline total matches what finalaudit.md records', () => {
+  it('the source baseline reflects the currently counted paths', () => {
+    // 50 since PR #890's receipt-backed meal writes removed the last counted
+    // unconfirmed write from lib/services/meals/index.ts.
     // 51 since the merge with main (Audit C1-S9-89): the twin edge prune.
     // 52 since the merge with main's #581 (Audit C1-S9-92): the AEO retirement.
     // 51 since PR #548 merged main at 2eb62151 (finalaudit.md Q73): the network
     // prune's two branches are one chunked delete.
     const total = [...BASELINE.values()].reduce((a, b) => a + b, 0);
-    expect(total).toBe(51);
+    expect(total).toBe(50);
   });
 });

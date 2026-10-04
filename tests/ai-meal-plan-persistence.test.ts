@@ -31,7 +31,7 @@ const request = (overrides: Record<string, unknown> = {}) => new Request('https:
 
 beforeEach(() => {
   vi.clearAllMocks();
-  db = createInMemorySupabase<SupabaseClient<Database>>({ defaults: {
+  db = createInMemorySupabase<SupabaseClient<Database>>({ userId: 'user-one', defaults: {
     meals: { ingredients: [], recipe_url: null, image_url: null, meal_type: 'dinner' },
     meal_plans: { idempotency_key: null },
   } });
