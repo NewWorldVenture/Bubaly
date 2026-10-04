@@ -21,6 +21,7 @@ import type { Format } from '@/lib/utils/format';
 import { isManager } from '@/lib/constants/roles';
 import { uploadFamilyDocument, getDocumentSignedUrl, removeFamilyDocument } from '@/lib/storage/documents';
 import { MANUAL_CATEGORY, WARRANTY_CATEGORY } from '@/lib/home/asset-detail';
+import { writeMaintenanceCompletion } from '@/lib/home/maintenance-rollover';
 import type { Tables } from '@/lib/database.types';
 import { preOpenWindow } from '@/lib/utils/open-url';
 import { useTranslations } from '@/components/i18n/locale-provider';
@@ -77,7 +78,7 @@ export function HomeModule() {
   const { fmtRelative } = useFormat();
   const tr = useTranslations();
   const askConfirm = useConfirm();
-  const { familyId, userId, role } = useApp();
+  const { familyId, userId, role, family } = useApp();
   const manager = isManager(role);
   const { success, error: toastError } = useToast();
   const [openAsset, setOpenAsset] = useState(false);
@@ -168,10 +169,14 @@ export function HomeModule() {
 
   async function completeTask(id: string) {
     const supabase = createClient();
-    // Under RLS a refused row comes back with no error and zero rows, which this used to report as done. Audit C1-S9-82.
-    const { data: updated, error } = await supabase.from('maintenance_tasks').update({
-      status: 'done', completed_at: new Date().toISOString(),
-    }).eq('id', id).select('id');
+    const task = (tasks ?? []).find((item) => item.id === id);
+    if (!task || task.family_id !== familyId) return toastError(tr('errors.thatChangeWasNotSaved'));
+    const now = new Date().toISOString();
+    // Recurring work rolls forward and stays open. The write also compares the
+    // displayed schedule so a stale tab cannot overwrite another member's edit.
+    const { data: updated, error } = await writeMaintenanceCompletion(
+      supabase, familyId, task, now, family.timezone || 'UTC',
+    );
     if (error) return toastError(describeDbError(error));
     if (wroteNoRows(updated)) return toastError(tr('errors.thatChangeWasNotSaved'));
     success(tr('homeModule.taskCompleted'));

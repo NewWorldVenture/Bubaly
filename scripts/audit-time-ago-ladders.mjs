@@ -64,7 +64,9 @@ const SUBMINUTE_LITERAL = /(['"`])(?:just now|now|Just now|Now)\1/;
  * thing spelled so it looks deliberate. Both follow the BROWSER, not the family's
  * Bubaly choice.
  */
-const BARE_TO_LOCALE = /toLocale(?:Date|Time)String\(\s*(?:\)|undefined|\[\s*\])/;
+// Exported for the test's positive control: with no live site left to detect, the
+// instrument proves it still sees the shape on a planted line.
+export const BARE_TO_LOCALE = /toLocale(?:Date|Time)String\(\s*(?:\)|undefined|\[\s*\])/;
 
 const files = execSync(
   "git ls-files 'app/**/*.ts' 'app/**/*.tsx' 'components/**/*.ts' 'components/**/*.tsx' 'lib/**/*.ts' 'lib/**/*.tsx'",

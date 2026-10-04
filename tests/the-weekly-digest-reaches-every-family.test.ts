@@ -84,6 +84,10 @@ vi.mock('@/lib/supabase/server', () => ({
         order: () => b,
         limit: () => b,
         gte: () => b, lte: () => b,
+        // The calendar read (lib/calendar/occurrences.ts) filters series by
+        // `neq` and an `or` on recurrence_until; this fake holds no events, so
+        // the filters only need to chain.
+        neq: () => b, or: () => b,
         eq: (c: string, v: unknown) => { filters[c] = v; return b; },
         in: (c: string, v: unknown[]) => { filters[c === 'role' ? 'roles' : c] = v; return b; },
         range: (from: number, to: number) => { filters.range = [from, to]; return b; },

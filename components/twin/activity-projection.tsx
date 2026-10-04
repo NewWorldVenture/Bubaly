@@ -11,6 +11,7 @@ import {
   Loader2, Save, Trash2, CircleCheck, CircleAlert, CircleX,
 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
+import { useConfirm } from '@/components/ui/confirm';
 import { useToast } from '@/components/ui/toast';
 import { cn } from '@/lib/utils/cn';
 import {
@@ -49,6 +50,7 @@ export function ActivityProjection({
   saved: SavedSim[];
 }) {
   const t = useTranslations();
+  const askConfirm = useConfirm();
   const router = useRouter();
   const { success, error: toastError } = useToast();
   const [pending, startTransition] = useTransition();
@@ -89,9 +91,10 @@ export function ActivityProjection({
       success(t('activityProjection.scenarioSaved')); router.refresh();
     });
   }
-  function remove(id: string) {
+  async function remove(s: SavedSim) {
+    if (!(await askConfirm({ title: t('confirm.deleteNamed', { name: s.activityName }), body: t('confirm.cannotBeUndone') }))) return;
     startTransition(async () => {
-      const res = await deleteSimulationAction(id);
+      const res = await deleteSimulationAction(s.id);
       if (!res.ok) { toastError(res.error); return; }
       router.refresh();
     });
@@ -180,7 +183,7 @@ export function ActivityProjection({
                   s.verdict === 'clear' ? 'bg-emerald-400' : s.verdict === 'tight' ? 'bg-amber-400' : 'bg-rose-400')} />
                 <span className="min-w-0 flex-1 truncate">{s.activityName}</span>
                 <span className="shrink-0 text-xs text-muted">{s.weeklyHours}h/wk</span>
-                <button type="button" onClick={() => remove(s.id)} disabled={pending} aria-label={t('activityProjection.deleteScenario')}
+                <button type="button" onClick={() => void remove(s)} disabled={pending} aria-label={t('activityProjection.deleteScenario')}
                   className="shrink-0 rounded-lg p-1 text-muted transition hover:bg-elevated hover:text-rose-400 disabled:opacity-50">
                   <Trash2 className="h-3.5 w-3.5" />
                 </button>

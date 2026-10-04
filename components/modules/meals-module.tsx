@@ -347,7 +347,7 @@ export function MealsModule() {
     // purpose: a member's first vote has no prior ballot, so zero rows is the
     // ordinary answer. Audit C1-S9-83.
     const { error: clearError } = await sb.from('meal_vote_ballots')
-      .delete().eq('vote_id', voteData.vote.id).eq('member_id', selfId);
+      .delete().eq('vote_id', voteData.vote.id).eq('member_id', selfId).eq('family_id', familyId);
     if (clearError) return toastError(describeDbError(clearError));
     const { error } = await sb.from('meal_vote_ballots').insert({
       vote_id: voteData.vote.id, option_id: optionId, family_id: familyId, member_id: selfId, choice: 'yes',
