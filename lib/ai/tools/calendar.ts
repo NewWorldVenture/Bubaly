@@ -18,6 +18,8 @@ import {
   createEvent, deleteEvent, findConflicts, findFreeSlots, busyEvenings, rescheduleAfter, rsvpToEvent, searchEvents, updateEvent,
 } from '@/lib/services/calendar';
 import { scopeNow } from '@/lib/services/scope';
+import { fromLocalInput } from '@/lib/time/local-input';
+import { dayKeyIn } from '@/lib/time/zoned';
 import { fail, ok, SERVICE_CODES } from '@/lib/services/types';
 import type { EventCategory, RecurrenceFreq } from '@/lib/database.types';
 import { describeDbError } from '@/lib/supabase/errors';
@@ -26,6 +28,74 @@ import { defineTool, describeWhen, plural, type ToolDefinition } from './types';
 
 const CATEGORIES = ['general', 'school', 'sports', 'appointment', 'medication', 'maintenance', 'birthday', 'holiday', 'other'] as const;
 const RECURRENCES = ['none', 'daily', 'weekly', 'monthly', 'yearly'] as const;
+
+/** One spelling of a name or a place: trimmed, lowercased, inner whitespace collapsed. */
+const normalizeWords = (value: string | null | undefined): string => (value ?? '').trim().toLowerCase().replace(/\s+/g, ' ');
+
+/**
+ * The instant a `starts_at` names, spelled one way.
+ *
+ * The model is prompted for "ISO 8601 in the family timezone", and it obliges in
+ * several dialects for one moment: `2026-09-12T09:00:00` (no offset), the same
+ * wall clock with the family's offset, and the same moment as `Z`. A key built
+ * from the raw string calls those three different events. An offset-less string
+ * is resolved on the family's clock (`scope.tz`), the way the prompt promised
+ * the model it would be read; anything with an offset is already an instant.
+ * An all-day event is keyed by its day, because the clock part of an all-day
+ * start is noise. A string that is no time at all is kept as typed so the
+ * service, not the key, is what rejects it.
+ */
+export function canonicalStart(startsAt: string, allDay: boolean, timeZone: string): string {
+  const typed = startsAt.trim();
+  // A bare date is that day's midnight on the family's clock, not UTC's: as a
+  // day key it must stay the day that was typed.
+  const wall = /^\d{4}-\d{2}-\d{2}$/.test(typed) ? `${typed}T00:00:00` : typed;
+  const resolved = fromLocalInput(wall, timeZone) ?? wall;
+  const ms = Date.parse(resolved);
+  if (!Number.isFinite(ms)) return typed;
+  return allDay ? dayKeyIn(new Date(ms), timeZone) : new Date(ms).toISOString();
+}
+
+/**
+ * The fields that make two `calendar.createEvent` calls the same event, and so
+ * one write within a run (`resolveIdempotencyKey`, lib/ai/tools/execute.ts).
+ *
+ * Same event: the same title (one spelling), starting at the same instant (one
+ * spelling, see `canonicalStart`), for the same person, at the same place, with
+ * the same shape — timed or all-day, one-off or the same recurrence. A plan
+ * that says "soccer Saturday 9" twice means one event; a plan that puts soccer
+ * on Saturday 9 for Mia AND for Leo means two, and so does practice at the
+ * field and a meeting at school that happen to share a title and an hour.
+ *
+ * Not part of the identity: `ends_at`, `description` and `category`. Two steps
+ * that differ only in a default-vs-explicit end, a longer blurb or a guessed
+ * category are the model describing one event twice, which is exactly the
+ * duplicate this key exists to collapse.
+ *
+ * The assignee is keyed by id when the model has one and by the normalized
+ * name otherwise, so the same person spelled two ways is one person; an id and
+ * a name for the same member are two keys, which errs toward writing twice —
+ * the recoverable direction.
+ */
+export function createEventIdentity(
+  input: {
+    title: string; starts_at: string; all_day?: boolean | null; location?: string | null;
+    assignee?: string | null; assignee_id?: string | null; recurrence?: string | null;
+  },
+  timeZone: string,
+): string {
+  const allDay = input.all_day ?? false;
+  const who = input.assignee_id ? `id:${input.assignee_id}` : normalizeWords(input.assignee);
+  return [
+    'calendar.createEvent',
+    normalizeWords(input.title),
+    canonicalStart(input.starts_at, allDay, timeZone),
+    allDay ? 'all-day' : 'timed',
+    who,
+    normalizeWords(input.location),
+    input.recurrence ?? 'none',
+  ].join(':');
+}
 
 const eventOutput = z.object({
   id: z.string(),
@@ -68,7 +138,7 @@ export const calendarTools: ToolDefinition[] = [
       recurrence: z.enum(RECURRENCES).nullish(),
     }),
     output: eventOutput,
-    idempotencyFrom: (input) => `calendar.createEvent:${input.title.trim().toLowerCase()}:${input.starts_at}`,
+    idempotencyFrom: (input, scope) => createEventIdentity(input, scope.tz),
     summarize: (_input, output) => `Added ${output.title} at ${output.when}`,
     resource: (output) => ({ table: 'calendar_events', id: output.id }),
     execute: async (scope, input) => {

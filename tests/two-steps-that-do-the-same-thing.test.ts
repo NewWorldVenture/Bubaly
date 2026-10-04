@@ -18,6 +18,16 @@
 // two notes and a retried note is still one. The resolved key is also what the
 // services see, so the row-level duplicate guard (0256) and the ledger agree.
 //
+// What "the same thing" means for a calendar create is the tool's to say, and
+// `createEventIdentity` (lib/ai/tools/calendar.ts) says it: one spelling of the
+// title, one spelling of the start instant (the model writes one moment as
+// `...T09:00:00`, `...T09:00:00-04:00` and `...T13:00:00Z`; a raw-string key
+// called those three events), the same person, the same place, the same
+// shape (timed or all-day, one-off or the same recurrence). An end, a blurb or
+// a category are not identity: a plan that describes one event twice with a
+// longer description is still one event. The cases under "what makes two
+// calendar creates the same event" pin both directions.
+//
 // These cases drive the REAL `executeTool`, the real registry tools and the
 // real services against two fakes — the caller's client and the service-role
 // ledger with 0250's unique key — the way tests/tool-execute.test.ts does.
@@ -41,6 +51,7 @@ vi.mock('@/lib/supabase/server', () => ({
 
 const { executeTool } = await import('@/lib/ai/tools/execute');
 const { getTool } = await import('@/lib/ai/tools/registry');
+const { canonicalStart, createEventIdentity } = await import('@/lib/ai/tools/calendar');
 
 const ROOT = join(__dirname, '..');
 const FAMILY = 'fam-1';
@@ -189,7 +200,7 @@ describe('two steps that do the same thing', () => {
     expect(ledger.rows).toHaveLength(1);
     // The one receipt belongs to the step that wrote, under the run's natural key.
     expect(ledger.rows[0]).toMatchObject({ run_id: RUN, plan_step_id: STEP_A, state: 'succeeded', attempt: 1 });
-    expect(ledger.rows[0].idempotency_key).toBe(makeKey([FAMILY, RUN, 'calendar.createEvent', `calendar.createEvent:soccer:${SOCCER.starts_at}`]));
+    expect(ledger.rows[0].idempotency_key).toBe(makeKey([FAMILY, RUN, 'calendar.createEvent', 'calendar.createEvent:soccer:2026-09-06T13:00:00.000Z:timed:::none']));
     expect(ledger.rows[0].idempotency_key).not.toBe(stepIdempotencyKey(FAMILY, RUN, STEP_A, 'calendar.createEvent'));
   });
 
@@ -254,6 +265,145 @@ describe('two steps that do the same thing', () => {
     expect(executions).toHaveBeenCalledTimes(1);
     expect(inserts(family.calls, 'calendar_events')).toHaveLength(1);
     expect(ledger.rows).toHaveLength(1);
+  });
+});
+
+describe('what makes two calendar creates the same event', () => {
+  const TZ = 'America/New_York';
+  const create = (input: Record<string, unknown>, step: string) => executeTool(scope, 'calendar.createEvent', input, asStep(step, 'calendar.createEvent'));
+  const STEP_C = 'step-c';
+  const MEMBERS = [
+    { id: 'member-mia', family_id: FAMILY, user_id: null, display_name: 'Mia', role: 'child', birthday: null, is_active: true, color: null, avatar_url: null, created_at: NOW.toISOString(), updated_at: NOW.toISOString() },
+    { id: 'member-leo', family_id: FAMILY, user_id: null, display_name: 'Leo', role: 'child', birthday: null, is_active: true, color: null, avatar_url: null, created_at: NOW.toISOString(), updated_at: NOW.toISOString() },
+  ];
+  /** A family with two children: the roster read by name, and the service's own "is this id one of ours" check by id. */
+  const withMembers = () => {
+    family = makeFamilyDb((call) => {
+      if (call.table !== 'family_members') return null;
+      if (call.filters.id !== undefined) return { data: MEMBERS.find((m) => m.id === call.filters.id) ?? null, error: null };
+      return { data: MEMBERS, error: null };
+    });
+    scope = scopeWith(family.db);
+  };
+
+  it('one moment written three ways — Z, the family offset, no offset at all — is one event', async () => {
+    // September in New York is EDT, four hours behind UTC: all three name 13:00Z.
+    const z = await create({ ...SOCCER, starts_at: '2026-09-06T13:00:00Z' }, STEP_A);
+    const offset = await create({ ...SOCCER, starts_at: '2026-09-06T09:00:00-04:00' }, STEP_B);
+    const naive = await create({ ...SOCCER, starts_at: '2026-09-06T09:00:00' }, STEP_C);
+
+    for (const r of [z, offset, naive]) {
+      expect(r.status).toBe('ok');
+      expect(r.status === 'ok' && r.data).toMatchObject({ id: 'event-1' });
+    }
+    expect(inserts(family.calls, 'calendar_events')).toHaveLength(1);
+    expect(ledger.rows).toHaveLength(1);
+  });
+
+  it('an end, a description or a category are not identity: describing one event twice is one event', async () => {
+    await create(SOCCER, STEP_A);
+    const fuller = await create({ ...SOCCER, ends_at: '2026-09-06T14:30:00Z', description: 'Bring the orange slices', category: 'general' }, STEP_B);
+
+    expect(fuller.status).toBe('ok');
+    expect(fuller.status === 'ok' && fuller.data).toMatchObject({ id: 'event-1' });
+    expect(inserts(family.calls, 'calendar_events')).toHaveLength(1);
+  });
+
+  it('the same title and hour for two different people are two events', async () => {
+    withMembers();
+    await create({ ...SOCCER, assignee_id: 'member-mia' }, STEP_A);
+    const leo = await create({ ...SOCCER, assignee_id: 'member-leo' }, STEP_B);
+
+    expect(leo.status).toBe('ok');
+    expect(leo.status === 'ok' && leo.data).toMatchObject({ id: 'event-2' });
+    expect(inserts(family.calls, 'calendar_events')).toHaveLength(2);
+    expect(new Set(ledger.rows.map((r) => r.idempotency_key)).size).toBe(2);
+  });
+
+  it('a person named two ways is one person; two people named are two events', async () => {
+    withMembers();
+    await create({ ...SOCCER, assignee: 'Mia' }, STEP_A);
+    const again = await create({ ...SOCCER, assignee: '  mia ' }, STEP_B);
+    const leo = await create({ ...SOCCER, assignee: 'Leo' }, STEP_C);
+
+    expect(again.status === 'ok' && again.data).toMatchObject({ id: 'event-1' });
+    expect(leo.status === 'ok' && leo.data).toMatchObject({ id: 'event-2' });
+    expect(inserts(family.calls, 'calendar_events')).toHaveLength(2);
+    expect(ledger.rows).toHaveLength(2);
+  });
+
+  it('the same title and hour at two places are two events; one place spelled two ways is one', async () => {
+    await create({ ...SOCCER, location: 'The Field' }, STEP_A);
+    const same = await create({ ...SOCCER, location: ' the  field' }, STEP_B);
+    const school = await create({ ...SOCCER, location: 'School gym' }, STEP_C);
+
+    expect(same.status === 'ok' && same.data).toMatchObject({ id: 'event-1' });
+    expect(school.status === 'ok' && school.data).toMatchObject({ id: 'event-2' });
+    expect(inserts(family.calls, 'calendar_events')).toHaveLength(2);
+  });
+
+  it('a one-off and a weekly series that start together are two events', async () => {
+    await create(SOCCER, STEP_A);
+    const weekly = await create({ ...SOCCER, recurrence: 'weekly' }, STEP_B);
+
+    expect(weekly.status).toBe('ok');
+    expect(weekly.status === 'ok' && weekly.data).toMatchObject({ id: 'event-2' });
+    expect(inserts(family.calls, 'calendar_events')).toHaveLength(2);
+  });
+
+  it('an all-day event and a timed one on the same morning are two events; an all-day day written two ways is one', async () => {
+    await create(SOCCER, STEP_A);
+    const allDay = await create({ ...SOCCER, starts_at: '2026-09-06', all_day: true }, STEP_B);
+    const allDayAgain = await create({ ...SOCCER, starts_at: '2026-09-06T00:00:00', all_day: true }, STEP_C);
+
+    expect(allDay.status === 'ok' && allDay.data).toMatchObject({ id: 'event-2' });
+    expect(allDayAgain.status === 'ok' && allDayAgain.data).toMatchObject({ id: 'event-2' });
+    expect(inserts(family.calls, 'calendar_events')).toHaveLength(2);
+  });
+
+  describe('canonicalStart', () => {
+    it('reads an offset-less start on the family clock, not the server\'s', () => {
+      expect(canonicalStart('2026-09-06T09:00:00', false, TZ)).toBe('2026-09-06T13:00:00.000Z');
+      // The same wall clock in January is EST, five hours behind.
+      expect(canonicalStart('2026-01-10T09:00:00', false, TZ)).toBe('2026-01-10T14:00:00.000Z');
+      expect(canonicalStart('2026-09-06T09:00:00', false, 'Asia/Tokyo')).toBe('2026-09-06T00:00:00.000Z');
+    });
+
+    it('spells any instant the one way', () => {
+      expect(canonicalStart('2026-09-06T13:00:00Z', false, TZ)).toBe('2026-09-06T13:00:00.000Z');
+      expect(canonicalStart('2026-09-06T09:00:00-04:00', false, TZ)).toBe('2026-09-06T13:00:00.000Z');
+      expect(canonicalStart('2026-09-06T15:00:00+02:00', false, TZ)).toBe('2026-09-06T13:00:00.000Z');
+      expect(canonicalStart(' 2026-09-06T13:00Z ', false, TZ)).toBe('2026-09-06T13:00:00.000Z');
+    });
+
+    it('keys an all-day start by the family day, and a bare date by the day that was typed', () => {
+      expect(canonicalStart('2026-09-06', true, TZ)).toBe('2026-09-06');
+      expect(canonicalStart('2026-09-06T00:00:00', true, TZ)).toBe('2026-09-06');
+      expect(canonicalStart('2026-09-06T04:00:00Z', true, TZ)).toBe('2026-09-06');
+      // Midnight UTC is still the evening before in New York.
+      expect(canonicalStart('2026-09-06T00:00:00Z', true, TZ)).toBe('2026-09-05');
+    });
+
+    it('keeps a string that is no time at all as typed, so the service is what rejects it', () => {
+      expect(canonicalStart(' next Saturday ', false, TZ)).toBe('next Saturday');
+    });
+  });
+
+  describe('createEventIdentity', () => {
+    it('is title, instant, shape, person, place and recurrence — nothing else', () => {
+      expect(createEventIdentity({ title: '  Soccer  practice ', starts_at: '2026-09-06T09:00:00' }, TZ))
+        .toBe('calendar.createEvent:soccer practice:2026-09-06T13:00:00.000Z:timed:::none');
+      expect(createEventIdentity({ title: 'Soccer', starts_at: '2026-09-06T09:00:00', all_day: true, assignee_id: 'member-mia', location: ' The  Field ', recurrence: 'weekly' }, TZ))
+        .toBe('calendar.createEvent:soccer:2026-09-06:all-day:id:member-mia:the field:weekly');
+      expect(createEventIdentity({ title: 'Soccer', starts_at: '2026-09-06T09:00:00', assignee: ' Mia ' }, TZ))
+        .toBe('calendar.createEvent:soccer:2026-09-06T13:00:00.000Z:timed:mia::none');
+    });
+
+    it('does not see the end, the description or the category', () => {
+      const base = { title: 'Soccer', starts_at: '2026-09-06T09:00:00' };
+      const key = createEventIdentity(base, TZ);
+      expect(createEventIdentity({ ...base, ends_at: '2026-09-06T11:00:00', description: 'Bring water', category: 'sports' } as typeof base, TZ)).toBe(key);
+    });
   });
 });
 
