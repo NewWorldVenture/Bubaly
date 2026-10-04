@@ -1,3 +1,10 @@
+## Live audit and candidate checkpoint — 2026-10-04 14:46 UTC
+
+- Production deployment [6842427488](https://github.com/NewWorldVenture/Bubaly/deployments/6842427488) succeeded for audit-only main `bb10f98a348fb9315f7a07babc6f0e58c3fbb41b`; `/api/build-info` reports that SHA. Application source remains #946 merge `2cf7fdee651eaa0e8ef97a0789e317e6c91bf4b8`.
+- #958 now uses migration 0477 at exact head `6e309ee29b4d0e1297d9c235c3fed4aae6085343`, after #834’s open 0475/0476 reservations. Two disposable synthetic PostgreSQL 17 replays and the memory-text RLS probe passed; exact-head repository CI remains queued. Hold #958 until #834 is resolved and lower versions are ordered; no production migration was applied.
+- #957’s Mobile check passed; Typecheck/Lint/Test/Build, Database/RLS and E2E are still pending. Main CI run [37208317078](https://github.com/NewWorldVenture/Bubaly/actions/runs/37208317078) now has E2E, Database/RLS and Mobile passed; Typecheck/Lint/Test/Build is still running. No merge gate was bypassed.
+- Guardian’s synthetic one-case repro shows a provider rejection plus notification insert error still returns 200 and marks the callback processed with `push_sent=false` and `sms_sent=false`. Source path: `app/api/guardian/escalate/route.ts` swallows notification/SMS/call errors and persists aggregate booleans; the existing receipt-aware SMS helper is not used there. A durable per-channel retry fix is being explored separately to avoid lost or duplicate alerts. Storage review also found that Storage deletion needs both SELECT and DELETE, so denying reads before metadata exists can strand failed-upload cleanup; broader flow changes and a local database probe remain outstanding.
+
 ## Parallel candidate and migration-order checkpoint — 2026-10-04 14:42 UTC
 
 - Production deployment [6842356344](https://github.com/NewWorldVenture/Bubaly/deployments/6842356344) succeeded for audit-only main `ad760cbceb5ac2018cc9ecc0c215dba7a4f0d0c5`; `/api/build-info` reports that SHA and `/` is 200. Application source remains the #946 merge `2cf7fdee651eaa0e8ef97a0789e317e6c91bf4b8`.
