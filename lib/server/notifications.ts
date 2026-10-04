@@ -306,17 +306,24 @@ export async function generateFamilyNotifications(supabase: DB, familyId: string
     });
   }
 
-  // Rich family reminders (the /dashboard/reminders service) — these never
-  // notified before. Fire when the effective time (due minus the early-reminder
-  // lead) is within the window; dedup permanently per reminder.
+  // Rich family reminders (the /dashboard/reminders service). Fire when the
+  // effective time (due minus the early-reminder lead) is within the window.
+  // The dedup below is permanent and keyed by `related_id`, so the key names
+  // the OCCURRENCE (lib/reminders/notify.ts): a recurring reminder's row rolls
+  // its `remind_at` forward each time it is completed and stays active, and a
+  // snoozed one comes due again at `snoozed_until` — keyed by the row alone,
+  // a daily medication reminder reminded once, ever, and a snooze never came
+  // back. Snoozed rows are read by the time they come back, active ones by
+  // their due time.
+  const reminderHorizon = reminderFetchHorizonIso(now);
   const { data: famReminders } = await supabase.from('family_reminders')
-    .select('id, title, remind_at, status, early_reminder_minutes, member_id')
-    .eq('family_id', familyId).eq('status', 'active').not('remind_at', 'is', null)
-    .gte('remind_at', nowIso).lte('remind_at', reminderFetchHorizonIso(now));
+    .select('id, title, remind_at, status, early_reminder_minutes, member_id, recurrence, snoozed_until')
+    .eq('family_id', familyId).in('status', ['active', 'snoozed']).not('remind_at', 'is', null)
+    .or(`and(status.eq.active,remind_at.gte.${nowIso},remind_at.lte.${reminderHorizon}),and(status.eq.snoozed,snoozed_until.gte.${nowIso},snoozed_until.lte.${reminderHorizon})`);
   for (const n of dueFamilyReminderNotices((famReminders ?? []) as FamilyReminderRow[], now)) {
     const r = (famReminders ?? []).find((x) => x.id === n.id)!;
     candidates.push({
-      type: 'system', related_type: 'family_reminders', related_id: `fr:${n.id}`,
+      type: 'system', related_type: 'family_reminders', related_id: n.key,
       user_id: r.member_id ? userByMember.get(r.member_id) ?? null : null,
       title: `Reminder: ${n.title}`,
       body: `Due ${timeLabel(n.remindAtIso, tz)}`,

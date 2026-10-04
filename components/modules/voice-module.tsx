@@ -11,6 +11,7 @@ import { useRealtimeQuery } from '@/lib/hooks/use-realtime-query';
 import { createClient } from '@/lib/supabase/client';
 import { describeDbError, wroteNoRows } from '@/lib/supabase/errors';
 import { useToast } from '@/components/ui/toast';
+import { useConfirm } from '@/components/ui/confirm';
 import { Button } from '@/components/ui/button';
 import { Textarea } from '@/components/ui/input';
 import { SkeletonList, ErrorState } from '@/components/ui/states';
@@ -56,6 +57,7 @@ export function VoiceModule() {
 function VoiceCaptureSession() {
   const clock = useFamilyClock();
   const tr = useTranslations();
+  const askConfirm = useConfirm();
   // One time-ago, and it follows the reader. Its tail called
   // toLocaleDateString(undefined, …) — the BROWSER's locale, not the family's.
   const { fmtTimeAgo } = useFormat();
@@ -180,6 +182,7 @@ function VoiceCaptureSession() {
   }
 
   async function remove(c: VoiceCommand) {
+    if (!(await askConfirm({ title: tr('confirm.deleteNamed', { name: c.transcript }), body: tr('confirm.cannotBeUndone') }))) return;
     const sb = createClient();
     // Family-scoped in the house style, and read back: under RLS a refused row
     // comes back with no error and zero rows, which this used to report as done.
