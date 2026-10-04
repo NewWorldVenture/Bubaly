@@ -27,10 +27,12 @@ Passwords"** card.
   username. Loading skeleton, empty, and error states; toasts throughout.
 
 ## Seed
-- `supabase/seed_credentials_all_families.sql` — seeds ~13 realistic entries for
-  **every family** (all profiles), covering every category. Idempotent via a
-  `[seed:vault]` marker in `notes`. Run it in the Supabase SQL editor, then open
-  `/dashboard/passwords`.
+- `supabase/seed_credentials_all_families.sql` is a legacy-named **local demo
+  fixture only**. It seeds only the exact synthetic `The Patel Family` row from
+  `supabase/seed.sql` and refuses to proceed unless that fixture's ID and name
+  both match. It performs data-only operations on that fixture's credentials;
+  it does not create tables or change RLS policies. Do not run it against a
+  hosted Supabase project or production SQL Editor.
 
 ## Security notes / limitations
 - Secrets are stored as text behind family RLS and **masked in the UI by
