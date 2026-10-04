@@ -1,3 +1,4 @@
+import { createHash } from 'node:crypto';
 import { NextRequest, NextResponse } from 'next/server';
 import { getTranslations } from '@/lib/i18n/server';
 import { createServiceClient } from '@/lib/supabase/server';
@@ -9,6 +10,7 @@ import {
   buildAdminDigest, digestSubject, renderAdminDigestHtml, summarizeDigestDelivery, type DigestRow,
 } from '@/lib/admin/digest';
 import { adminDigestEngineEnabled, runAdminDigestEngineForRoute } from '@/lib/admin/digest-engine-route';
+import { adminDigestSlot } from '@/lib/admin/digest-occurrence';
 
 export const runtime = 'nodejs';
 export const dynamic = 'force-dynamic';
@@ -33,7 +35,22 @@ export async function GET(req: NextRequest) {
     return NextResponse.json(body, { status });
   }
 
-  const since = new Date(Date.now() - 24 * 60 * 60 * 1000).toISOString();
+  // The occurrence this tick belongs to — the owner's decided policy
+  // (docs/admin-digest-route-integration.md §2): the most recent 12:30 UTC slot
+  // at or before now, and the 24 h that END at it. Every tick for one slot —
+  // Vercel's and the GitHub dispatcher's at the same minute, a dispatch hours
+  // late, the retry a 502 invites — reads the same window, renders the same
+  // bytes and sends each admin under the same key, so the provider folds the
+  // repeat: that is the dedupe for a mirrored tick. Resend honours a key for
+  // 24 h while the payload is identical, which is a fold at the provider, not a
+  // durable record of what was sent — the delivery engine above is that record,
+  // behind its flag. Before this, the window was `now - 24h` and the label the
+  // clock's date, so two ticks a minute apart rendered different bytes and
+  // every super admin got two digests a day.
+  const slot = adminDigestSlot(new Date());
+  const since = slot.window.start;
+  const until = slot.window.end;
+  const keyFor = (to: string) => `admin-digest/${createHash('sha256').update(`${slot.occurrenceId}|${to}`).digest('hex')}`;
 
   // The whole 24h window, paged — not `.limit(500)`.
   //
@@ -63,6 +80,7 @@ export async function GET(req: NextRequest) {
     .from('admin_notifications')
     .select('kind, title, created_at')
     .gte('created_at', since)
+    .lt('created_at', until)
     .order('created_at', { ascending: false })
     .order('title')
     .order('id')
@@ -96,12 +114,13 @@ export async function GET(req: NextRequest) {
   }
 
   const appUrl = (process.env.NEXT_PUBLIC_APP_URL || 'https://www.bubaly.com').replace(/\/$/, '');
-  const dateLabel = new Date().toLocaleDateString('en-US', { month: 'short', day: 'numeric' });
+  // Labelled by the SLOT's date, in the zone the slot is defined in, so every tick renders the same bytes.
+  const dateLabel = slot.slot.toLocaleDateString('en-US', { month: 'short', day: 'numeric', timeZone: 'UTC' });
   const html = renderAdminDigestHtml(digest, { appUrl, dateLabel, recent: rows });
   const subject = digestSubject(digest, dateLabel);
 
   const delivery = await Promise.all(
-    emails.map((to) => sendEmail({ to, subject, html }).catch(() => ({ ok: false }))),
+    emails.map((to) => sendEmail({ to, subject, html, idempotencyKey: keyFor(to) }).catch(() => ({ ok: false }))),
   );
   const summary = summarizeDigestDelivery(delivery);
 
@@ -110,5 +129,6 @@ export async function GET(req: NextRequest) {
     recipients: emails.length,
     total: digest.total,
     headline: digest.headline,
+    occurrence: slot.occurrenceId,
   }, { status: summary.ok ? 200 : 502 });
 }
