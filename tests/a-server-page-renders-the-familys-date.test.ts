@@ -87,6 +87,18 @@ describe('the emails date themselves in the family\'s zone', () => {
     expect(html(React.createElement(NotificationDigestEmail, { name: 'Daniel', items, timeZone: 'UTC' }))).toContain('Sunday, October 4');
   });
 
+  it("a digest spanning families in different zones carries no family's date", () => {
+    // The sender passes null when the recipient's families keep different
+    // zones (digestTimeZone); the greeting then names no day rather than the
+    // first family's. The two-family case against the real sender is in
+    // tests/notification-email-membership.test.ts.
+    const items = [{ title: 'Soccer moved', body: null, icon: '📅' }];
+    const out = html(React.createElement(NotificationDigestEmail, { name: 'Daniel', items, timeZone: null }));
+    expect(out).not.toContain('October 3');
+    expect(out).not.toContain('October 4');
+    expect(out).toContain("here's what's coming up.");
+  });
+
   it('a chore due Sunday evening in California is due Sunday, not Monday', () => {
     // 02:00Z Monday the 5th is 7pm Sunday the 4th in Los Angeles.
     const chores = [{ title: 'Dishes', points: 5, dueAt: '2026-10-05T02:00:00.000Z' }];
@@ -101,10 +113,12 @@ describe('every caller hands the email its family\'s zone', () => {
     expect(src).toContain("const tz = family.timezone || 'UTC';");
     expect(src).toContain('timeZone: tz,');
   });
-  it('the notification digest reads each family\'s zone once per batch and dates each recipient\'s digest in it', () => {
+  it('the notification digest reads each family\'s zone once per batch and dates a digest only in a zone every family in it shares', () => {
     const src = read('lib/server/notification-emails.ts');
     expect(src).toContain("supabase.from('families').select('id, timezone').in('id', chunk)");
-    expect(src).toContain("timeZone: zoneByFamily.get(notifs[0].family_id) ?? 'UTC'");
+    // Not the first row's family's zone: a recipient can be in several families.
+    expect(src).toContain("timeZone: digestTimeZone(notifs, zoneByFamily)");
+    expect(src).not.toContain('notifs[0].family_id');
     // A failed zone read dates in UTC and says so; it does not hold the digests.
     expect(src).toContain("dating digests in UTC");
   });
