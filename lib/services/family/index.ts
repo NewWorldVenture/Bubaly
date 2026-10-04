@@ -12,11 +12,11 @@
 // `lib/members/age.ts ageOn` is the single implementation of "how old is this
 // member today" shared with the client surfaces.
 import 'server-only';
-import { ageOn } from '@/lib/members/age';
+import { ageOnDay } from '@/lib/members/age';
 import { isManager, type MemberRole } from '@/lib/constants/roles';
 import type { Json, Tables } from '@/lib/database.types';
 import { describeDbError } from '@/lib/supabase/errors';
-import { scopeNow } from '../scope';
+import { dayKeyInTz, scopeNow } from '../scope';
 import { fail, ok, SERVICE_CODES, type ServiceResult, type ServiceScope } from '../types';
 
 export type FamilyMember = {
@@ -36,14 +36,16 @@ export type FamilyMember = {
   avatarUrl: string | null;
 };
 
-function toMember(row: Tables<'family_members'>, today: Date): FamilyMember {
+// `todayKey` is the FAMILY's day (dayKeyInTz), so an age turns over at the
+// family's midnight rather than the host's.
+function toMember(row: Tables<'family_members'>, todayKey: string): FamilyMember {
   return {
     id: row.id,
     userId: row.user_id,
     displayName: row.display_name,
     role: row.role,
     birthday: row.birthday,
-    age: ageOn(row.birthday, today),
+    age: ageOnDay(row.birthday, todayKey),
     isActive: row.is_active,
     canManage: isManager(row.role),
     hasLogin: row.user_id !== null,
@@ -73,7 +75,7 @@ export async function getMembers(
     console.error('[service:family] member read failed', error);
     return fail(describeDbError(error, 'Could not load your family members.'), { code: SERVICE_CODES.db });
   }
-  const today = scopeNow(scope);
+  const today = dayKeyInTz(scopeNow(scope), scope.tz);
   return ok((data ?? []).map((row) => toMember(row, today)));
 }
 
@@ -90,7 +92,7 @@ export async function getMember(scope: ServiceScope, memberId: string): Promise<
     return fail(describeDbError(error, 'Could not load that family member.'), { code: SERVICE_CODES.db });
   }
   if (!data) return fail('That family member could not be found.', { code: SERVICE_CODES.notFound });
-  return ok(toMember(data, scopeNow(scope)));
+  return ok(toMember(data, dayKeyInTz(scopeNow(scope), scope.tz)));
 }
 
 /**
