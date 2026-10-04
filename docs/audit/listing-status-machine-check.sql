@@ -126,6 +126,16 @@ declare
   st text;
   failures int := 0;
   swept int := 0;   -- how many read-then-write SECURITY DEFINER functions step 2 examined
+  meal_replace_oid oid;
+  meal_replace_src text;
+  meal_replace_compact text;
+  meal_replace_replay_branch text;
+  meal_replace_replay_start integer;
+  meal_replace_replay_return integer;
+  meal_replace_replay_end integer;
+  meal_slot_guard_src text;
+  meal_slot_guard_compact text;
+  meal_replace_lock_covered boolean := false;
   -- The negative control's own listing. Its id is database-generated on purpose:
   -- the control introduces no UUID that could collide with another probe's rows
   -- in the shared database run-probes.sh drives every probe through.
@@ -255,10 +265,112 @@ begin
 
   -- 2. No other read-then-write SECURITY DEFINER function may drop both
   --    mechanisms either. This is the sweep that found this one, kept so the
-  --    next such function is caught at replay rather than by a buyer.
+  --    next such function is caught at replay rather than by a buyer. The meal
+  --    slot writer has a different, explicit concurrency contract: it claims a
+  --    unique receipt, locks every affected family/date/type key in stable order
+  --    with transaction-scoped advisory locks before reading or replacing slots,
+  --    and the direct-write trigger takes those same keys. Recognize that one
+  --    function only while the live definition and receipt primary key still
+  --    prove the complete pattern; otherwise it stays in this generic sweep.
   declare
     bare text[];
   begin
+    meal_replace_oid := to_regprocedure('public.meal_plan_replace_slots(uuid,text,jsonb)');
+    if meal_replace_oid is not null then
+      select lower(p.prosrc) into meal_replace_src
+      from pg_proc p where p.oid = meal_replace_oid;
+      -- Strip the function's line comments before compacting so the positional
+      -- checks below describe executable tokens, not explanatory prose.
+      meal_replace_compact := regexp_replace(
+        regexp_replace(meal_replace_src, '--[^\n]*', '', 'g'),
+        '[[:space:]]+', '', 'g');
+      meal_replace_replay_start := position('ifv_claimed=0then' in meal_replace_compact);
+      meal_replace_replay_return := position(
+        'returnjsonb_set(v_receipt.result,''{replayed}'',''true''::jsonb,true);'
+        in substring(meal_replace_compact from meal_replace_replay_start));
+      meal_replace_replay_end := position('endif;' in substring(
+        meal_replace_compact from meal_replace_replay_start + meal_replace_replay_return));
+      meal_replace_replay_branch := case
+        when meal_replace_replay_start > 0 and meal_replace_replay_return > 0
+         and meal_replace_replay_end > 0
+        then substring(meal_replace_compact from meal_replace_replay_start
+          for meal_replace_replay_return + meal_replace_replay_end + 5)
+        else ''
+      end;
+      select lower(p.prosrc) into meal_slot_guard_src
+      from pg_proc p
+      where p.oid = to_regprocedure('public.meal_plan_slot_write_guard()');
+      meal_slot_guard_compact := regexp_replace(
+        regexp_replace(meal_slot_guard_src, '--[^\n]*', '', 'g'),
+        '[[:space:]]+', '', 'g');
+
+      meal_replace_lock_covered := coalesce(
+        meal_replace_src is not null
+        and meal_slot_guard_src is not null
+        and position('forv_slotin' in meal_replace_compact) > 0
+        and position('forv_slotinselectdistinct(e.value->>''plan_date'')::dateasplan_date,e.value->>''meal_type''asmeal_typefromjsonb_array_elements(p_entries)eorderbyplan_date,meal_typeloop' in meal_replace_compact) > 0
+        and position('orderbyplan_date,meal_type' in meal_replace_compact)
+            > position('forv_slotin' in meal_replace_compact)
+        and position('performpg_advisory_xact_lock(hashtextextended(''meal-plan-slot:''||p_family_id::text||'':''||v_slot.plan_date::text||'':''||v_slot.meal_type,0));' in meal_replace_compact)
+            > position('orderbyplan_date,meal_type' in meal_replace_compact)
+        and position('performpg_advisory_xact_lock(hashtextextended(''meal-plan-slot:''||p_family_id::text||'':''||v_slot.plan_date::text||'':''||v_slot.meal_type,0));' in meal_replace_compact)
+            < position('selectcount(*)intov_replaced' in meal_replace_compact)
+        and position('selectcount(*)intov_replaced' in meal_replace_compact)
+            < position('deletefrompublic.meal_plans' in meal_replace_compact)
+        and position('deletefrompublic.meal_plans' in meal_replace_compact)
+            < position('insertintopublic.meal_plans' in meal_replace_compact)
+        and position('selectcount(*)intov_replacedfrompublic.meal_planspjoin(selectdistinct(e.value->>''plan_date'')::dateasplan_date,e.value->>''meal_type''asmeal_typefromjsonb_array_elements(p_entries)e)slotsonp.plan_date=slots.plan_dateandp.meal_type::text=slots.meal_typewherep.family_id=p_family_id;' in meal_replace_compact) > 0
+        and position('deletefrompublic.meal_planspusing(selectdistinct(e.value->>''plan_date'')::dateasplan_date,e.value->>''meal_type''asmeal_typefromjsonb_array_elements(p_entries)e)slotswherep.family_id=p_family_idandp.plan_date=slots.plan_dateandp.meal_type::text=slots.meal_type;' in meal_replace_compact) > 0
+        and position('insertintopublic.meal_plans(family_id,meal_id,plan_date,meal_type,created_by)selectp_family_id,(e.value->>''meal_id'')::uuid,(e.value->>''plan_date'')::date,(e.value->>''meal_type'')::public.meal_type,v_actorfromjsonb_array_elements(p_entries)e;' in meal_replace_compact) > 0
+        and position('insertintopublic.meal_plans' in meal_replace_compact)
+            < position('updatepublic.meal_plan_write_receiptssetresult=v_result' in meal_replace_compact)
+        and position('insertintopublic.meal_plan_write_receipts(family_id,actor_id,request_id,operation,payload_hash)' in meal_replace_compact) > 0
+        and position('values(p_family_id,v_actor,p_request_id,''replace'',v_hash)' in meal_replace_compact)
+            > position('insertintopublic.meal_plan_write_receipts' in meal_replace_compact)
+        and position('onconflictdonothing' in meal_replace_compact)
+            > position('values(p_family_id,v_actor,p_request_id,''replace'',v_hash)' in meal_replace_compact)
+        and position('getdiagnosticsv_claimed=row_count' in meal_replace_compact)
+            > position('onconflictdonothing' in meal_replace_compact)
+        and position('getdiagnosticsv_claimed=row_count' in meal_replace_compact)
+            < position('ifv_claimed=0then' in meal_replace_compact)
+        and position('select*intov_receiptfrompublic.meal_plan_write_receiptswherefamily_id=p_family_idandactor_id=v_actorandrequest_id=p_request_id;' in meal_replace_replay_branch) > 0
+        and position('ifnotfoundorv_receipt.operation<>''replace''orv_receipt.payload_hash<>v_hashorv_receipt.resultisnullthen' in meal_replace_replay_branch)
+            > position('select*intov_receiptfrompublic.meal_plan_write_receipts' in meal_replace_replay_branch)
+        and position('returnjsonb_set(v_receipt.result,''{replayed}'',''true''::jsonb,true);' in meal_replace_replay_branch)
+            > position('ifnotfoundorv_receipt.operation' in meal_replace_replay_branch)
+        and position('updatepublic.' in meal_replace_replay_branch) = 0
+        and position('deletefrompublic.' in meal_replace_replay_branch) = 0
+        and right(meal_replace_replay_branch, 6) = 'endif;'
+        and position('performpg_advisory_xact_lock' in meal_replace_compact)
+            > position('ifv_claimed=0then' in meal_replace_compact)
+              + length(meal_replace_replay_branch) - 1
+        and position('updatepublic.meal_plan_write_receiptssetresult=v_result' in meal_replace_compact)
+            > position('performpg_advisory_xact_lock' in meal_replace_compact)
+        and position('wherefamily_id=p_family_idandactor_id=v_actorandrequest_id=p_request_id' in meal_replace_compact)
+            > position('updatepublic.meal_plan_write_receiptssetresult=v_result' in meal_replace_compact)
+        and position('forv_slot_keyin' in meal_slot_guard_compact) > 0
+        and position('forv_slot_keyinselectdistinctkfrompg_catalog.unnest(array[v_old_key,v_new_key])askeys(k)wherekisnotnullorderbykloop' in meal_slot_guard_compact) > 0
+        and position('orderbyk' in meal_slot_guard_compact)
+            > position('forv_slot_keyin' in meal_slot_guard_compact)
+        and position('performpg_advisory_xact_lock(hashtextextended(''meal-plan-slot:''||v_slot_key,0));' in meal_slot_guard_compact)
+            > position('orderbyk' in meal_slot_guard_compact)
+        and position('iftg_op<>''insert''thenv_old_key:=old.family_id::text||'':''||old.plan_date::text||'':''||old.meal_type::text;endif;' in meal_slot_guard_compact) > 0
+        and position('iftg_op<>''delete''thenv_new_key:=new.family_id::text||'':''||new.plan_date::text||'':''||new.meal_type::text;endif;' in meal_slot_guard_compact) > 0
+        and exists (
+          select 1 from pg_trigger t
+          where t.tgrelid = to_regclass('public.meal_plans')
+            and t.tgfoid = to_regprocedure('public.meal_plan_slot_write_guard()')
+            and not t.tgisinternal
+            and t.tgtype = 31
+        )
+        and exists (
+          select 1 from pg_constraint c
+          where c.conrelid = to_regclass('public.meal_plan_write_receipts')
+            and c.contype = 'p'
+            and pg_get_constraintdef(c.oid) = 'PRIMARY KEY (family_id, actor_id, request_id)'
+        ), false);
+    end if;
+
     -- How many functions the sweep below examines, so the closing notice carries
     -- the live number rather than the header's dated one.
     select count(*) into swept
@@ -271,7 +383,8 @@ begin
     where n.nspname = 'public' and p.prokind = 'f' and p.prosecdef
       and p.prosrc ~* 'select .* into ' and p.prosrc ~* 'update public\.'
       and p.prosrc !~* 'for update'
-      and p.prosrc !~* 'update public\.[a-z_]+[^;]*where[^;]*status\s*(=|in)';
+      and p.prosrc !~* 'update public\.[a-z_]+[^;]*where[^;]*status\s*(=|in)'
+      and not (p.oid = meal_replace_oid and meal_replace_lock_covered);
     if array_length(bare, 1) > 0 then
       raise warning 'BREACH: % function(s) read a row then update it with neither a row lock nor a predicated write: %',
         array_length(bare, 1), array_to_string(bare, ', ');

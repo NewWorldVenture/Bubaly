@@ -184,6 +184,110 @@ SELECT public.meal_plan_test_assert(
 SELECT public.meal_plan_test_assert((SELECT count(*) = 1 FROM public.meal_plans WHERE plan_date='2026-10-07'),
   'same-request race leaves exactly one row in the slot');
 
+-- Distinct request ids must serialize on the slot key, not on the receipt key.
+-- A completes its replacement but keeps the transaction open; B must be
+-- observed waiting on the exact same family/date/type advisory key before A
+-- commits. B then replaces A's row and both durable receipts remain distinct.
+INSERT INTO public.meals(id, family_id, name, meal_type, ingredients)
+VALUES ('30000000-0000-0000-0000-000000000002',
+        '10000000-0000-0000-0000-000000000001',
+        'Synthetic distinct-request race meal B', 'dinner', '[]'::jsonb);
+
+SELECT public.dblink_exec('meal_a', 'BEGIN');
+SELECT public.meal_plan_test_assert(public.dblink_send_query('meal_a',
+  $$SELECT public.meal_plan_replace_slots(
+      '10000000-0000-0000-0000-000000000001','distinct-slot-request-a',
+      '[{"meal_id":"30000000-0000-0000-0000-000000000001","plan_date":"2026-10-14","meal_type":"dinner"}]'::jsonb)$$) = 1,
+  'first distinct-request replacement dispatched');
+DO $$
+DECLARE v_deadline timestamptz := clock_timestamp() + interval '10 seconds';
+BEGIN
+  WHILE public.dblink_is_busy('meal_a') = 1 LOOP
+    IF clock_timestamp() > v_deadline THEN RAISE EXCEPTION '0475 timed out waiting for first distinct-request replacement'; END IF;
+    PERFORM pg_sleep(0.01);
+  END LOOP;
+END $$;
+INSERT INTO public.meal_plan_test_results(label, result)
+  SELECT 'distinct-a', result FROM public.dblink_get_result('meal_a') AS t(result jsonb);
+SELECT count(*) FROM public.dblink_get_result('meal_a') AS t(result jsonb);
+DO $$
+DECLARE
+  v_lock bigint := hashtextextended('meal-plan-slot:10000000-0000-0000-0000-000000000001:2026-10-14:dinner', 0);
+  v_a integer := (SELECT pid FROM meal_test_pids WHERE name = 'a');
+BEGIN
+  IF NOT EXISTS (
+    SELECT 1 FROM pg_locks l
+    WHERE l.pid = v_a AND l.locktype = 'advisory' AND l.granted AND l.objsubid = 1
+      AND l.classid::bigint = ((v_lock >> 32) & 4294967295::bigint)
+      AND l.objid::bigint = (v_lock & 4294967295::bigint)
+  ) THEN
+    RAISE EXCEPTION '0475 first distinct-request replacement did not retain the exact slot advisory lock';
+  END IF;
+END $$;
+
+SELECT public.meal_plan_test_assert(public.dblink_send_query('meal_b',
+  $$SELECT public.meal_plan_replace_slots(
+      '10000000-0000-0000-0000-000000000001','distinct-slot-request-b',
+      '[{"meal_id":"30000000-0000-0000-0000-000000000002","plan_date":"2026-10-14","meal_type":"dinner"}]'::jsonb)$$) = 1,
+  'second distinct-request replacement dispatched');
+DO $$
+DECLARE
+  v_lock bigint := hashtextextended('meal-plan-slot:10000000-0000-0000-0000-000000000001:2026-10-14:dinner', 0);
+  v_a integer := (SELECT pid FROM meal_test_pids WHERE name = 'a');
+  v_b integer := (SELECT pid FROM meal_test_pids WHERE name = 'b');
+  v_deadline timestamptz := clock_timestamp() + interval '10 seconds';
+BEGIN
+  LOOP
+    EXIT WHEN EXISTS (
+      SELECT 1 FROM pg_locks l JOIN pg_stat_activity sa ON sa.pid = l.pid
+      WHERE l.pid = v_b AND sa.wait_event_type = 'Lock' AND sa.wait_event = 'advisory'
+        AND l.locktype = 'advisory' AND NOT l.granted AND l.objsubid = 1
+        AND l.classid::bigint = ((v_lock >> 32) & 4294967295::bigint)
+        AND l.objid::bigint = (v_lock & 4294967295::bigint)
+    );
+    IF clock_timestamp() > v_deadline THEN
+      RAISE EXCEPTION '0475 second distinct request did not wait on A''s exact slot lock before commit (A pid %, B pid %)', v_a, v_b;
+    END IF;
+    PERFORM pg_sleep(0.01);
+  END LOOP;
+END $$;
+
+SELECT public.dblink_exec('meal_a', 'COMMIT');
+DO $$
+DECLARE v_deadline timestamptz := clock_timestamp() + interval '15 seconds';
+BEGIN
+  WHILE public.dblink_is_busy('meal_b') = 1 LOOP
+    IF clock_timestamp() > v_deadline THEN RAISE EXCEPTION '0475 second distinct request did not finish after A committed'; END IF;
+    PERFORM pg_sleep(0.01);
+  END LOOP;
+END $$;
+INSERT INTO public.meal_plan_test_results(label, result)
+  SELECT 'distinct-b', result FROM public.dblink_get_result('meal_b') AS t(result jsonb);
+SELECT count(*) FROM public.dblink_get_result('meal_b') AS t(result jsonb);
+SELECT public.dblink_exec('meal_b', 'COMMIT');
+SELECT public.meal_plan_test_assert(
+  (SELECT (result->>'replaced')::integer = 0 AND (result->>'replayed')::boolean = false
+     FROM public.meal_plan_test_results WHERE label = 'distinct-a')
+  AND (SELECT (result->>'replaced')::integer = 1 AND (result->>'replayed')::boolean = false
+     FROM public.meal_plan_test_results WHERE label = 'distinct-b')
+  AND (SELECT result->'planned'->0->>'meal_id' = '30000000-0000-0000-0000-000000000001'
+     FROM public.meal_plan_test_results WHERE label = 'distinct-a')
+  AND (SELECT result->'planned'->0->>'meal_id' = '30000000-0000-0000-0000-000000000002'
+     FROM public.meal_plan_test_results WHERE label = 'distinct-b'),
+  'both distinct requests complete and B replaces A''s slot');
+SELECT public.meal_plan_test_assert(
+  (SELECT count(*) = 1 FROM public.meal_plans
+   WHERE family_id = '10000000-0000-0000-0000-000000000001'
+     AND plan_date = '2026-10-14' AND meal_type = 'dinner')
+  AND (SELECT meal_id = '30000000-0000-0000-0000-000000000002' FROM public.meal_plans
+       WHERE family_id = '10000000-0000-0000-0000-000000000001'
+         AND plan_date = '2026-10-14' AND meal_type = 'dinner')
+  AND (SELECT count(*) = 2 FROM public.meal_plan_write_receipts
+       WHERE family_id = '10000000-0000-0000-0000-000000000001'
+         AND actor_id = '20000000-0000-0000-0000-000000000001'
+         AND request_id IN ('distinct-slot-request-a', 'distinct-slot-request-b')),
+  'distinct same-slot requests leave exactly one B row and two separate receipts');
+
 -- A direct authenticated INSERT that started before A commits must see the
 -- committed occupant after acquiring the slot advisory lock and be rejected.
 SELECT public.dblink_exec('meal_a', 'BEGIN');
