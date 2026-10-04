@@ -50,6 +50,15 @@ CREATE TABLE public.meals (
   created_at timestamptz NOT NULL DEFAULT now(),
   updated_at timestamptz NOT NULL DEFAULT now()
 );
+CREATE TABLE public.family_recipes (
+  id uuid PRIMARY KEY DEFAULT gen_random_uuid(),
+  family_id uuid NOT NULL REFERENCES public.families(id) ON DELETE CASCADE,
+  name text NOT NULL,
+  ingredients jsonb NOT NULL DEFAULT '[]'::jsonb,
+  source_url text,
+  photo_url text,
+  created_by uuid REFERENCES auth.users(id) ON DELETE SET NULL
+);
 CREATE TABLE public.meal_plans (
   id uuid PRIMARY KEY DEFAULT gen_random_uuid(),
   family_id uuid NOT NULL REFERENCES public.families(id) ON DELETE CASCADE,
@@ -90,6 +99,9 @@ INSERT INTO public.family_members VALUES
 INSERT INTO public.meals(id, family_id, name) VALUES
   ('30000000-0000-0000-0000-000000000001', '10000000-0000-0000-0000-000000000001', 'Family A meal'),
   ('30000000-0000-0000-0000-000000000002', '10000000-0000-0000-0000-000000000002', 'Family B secret');
+INSERT INTO public.family_recipes(id, family_id, name, ingredients, source_url, photo_url, created_by) VALUES
+  ('32000000-0000-0000-0000-000000000001', '10000000-0000-0000-0000-000000000001', 'Family A recipe', '[{"name":"beans","quantity":"2 cups","unit":null}]', 'https://recipes.example/a', null, '20000000-0000-0000-0000-000000000001'),
+  ('32000000-0000-0000-0000-000000000002', '10000000-0000-0000-0000-000000000002', 'Family B secret recipe', '[]', null, null, '20000000-0000-0000-0000-000000000002');
 -- Legacy duplicates are intentional: 0475 must preserve them until explicitly replaced.
 INSERT INTO public.meal_plans(id, family_id, meal_id, plan_date, meal_type, created_by) VALUES
   ('40000000-0000-0000-0000-000000000001', '10000000-0000-0000-0000-000000000001', '30000000-0000-0000-0000-000000000001', '2026-10-04', 'dinner', '20000000-0000-0000-0000-000000000001'),

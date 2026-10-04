@@ -1,4 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server';
+import { randomUUID } from 'node:crypto';
 import { getTranslations } from '@/lib/i18n/server';
 import { createServer, createServiceClient } from '@/lib/supabase/server';
 import { requireUserContext } from '@/lib/supabase/auth';
@@ -56,21 +57,31 @@ export async function POST(req: NextRequest) {
         .slice(0, 50)
         .map((name) => ({ name: name.trim() }));
 
-      const { data: meal, error: mealError } = await supabase.from('meals').insert({
-        family_id: familyId, created_by: userId, name: title, meal_type: 'dinner',
-        ingredients: ingredients as never,
-        notes: typeof plan.steps === 'string' ? plan.steps.slice(0, 2000) : null,
-      }).select('id').single();
-      if (mealError || !meal?.id) {
-        console.error('[ai/pantry-chef] meal create failed', mealError);
-        return NextResponse.json({ error: t('pantryChef.couldNotSaveThatRecipe') }, { status: 500 });
-      }
-      const { error: planError } = await supabase.from('meal_plans').insert({
-        family_id: familyId, created_by: userId, meal_id: meal.id,
-        plan_date: planDate, meal_type: 'dinner',
+      // One service-role RPC revalidates this actor's active family membership
+      // and creates/reuses the meal + replaces its plan slot in one transaction.
+      // This also shares the family/name lock with ordinary planner writes.
+      const service = createServiceClient();
+      const { data: receipt, error: planError } = await service.rpc('meal_plan_replace_slots_for_actor', {
+        p_family_id: familyId,
+        p_actor_id: userId,
+        p_request_id: `pantry-chef:${randomUUID()}`,
+        p_entries: [{
+          plan_date: planDate,
+          meal_type: 'dinner',
+          meal_name: title,
+          ingredients,
+          notes: typeof plan.steps === 'string' ? plan.steps.slice(0, 2000) : null,
+        }],
       });
-      if (planError) {
-        console.error('[ai/pantry-chef] meal plan insert failed', planError);
+      const planned = receipt && typeof receipt === 'object' && !Array.isArray(receipt)
+        ? (receipt as { planned?: unknown }).planned : null;
+      if (planError || !Array.isArray(planned) || planned.length !== 1
+        || !planned[0] || typeof planned[0] !== 'object'
+        || (planned[0] as { family_id?: unknown }).family_id !== familyId
+        || (planned[0] as { plan_date?: unknown }).plan_date !== planDate
+        || (planned[0] as { meal_type?: unknown }).meal_type !== 'dinner'
+        || !(planned[0] as { meal_id?: unknown }).meal_id) {
+        console.error('[ai/pantry-chef] atomic meal plan failed or returned an invalid receipt', planError);
         return NextResponse.json({ error: t('pantryChef.couldNotAddThatRecipe') }, { status: 500 });
       }
       return NextResponse.json({ planned: true, planDate });

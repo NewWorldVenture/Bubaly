@@ -504,8 +504,9 @@ describe('Supabase migration filename safety', () => {
     // (reserved for #710) withdraws an admin removed after a digest was
     // frozen. This literal tracks the checked-in high-water mark, not
     // migration allocation: 0465-0470 remain NWV's, 0472 Support's, and 0473
-    // the coordinator's.
-    expect(audit.nextVersion).toBe('0475');
+    // the coordinator's. Migration 0475 supplies atomic meal-plan slots;
+    // the actor-bound RPC fix is the next file, 0476.
+    expect(audit.nextVersion).toBe('0477');
   });
 
   it('flags a newly introduced collision instead of silently accepting it', () => {

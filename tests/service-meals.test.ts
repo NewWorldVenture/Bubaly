@@ -90,9 +90,25 @@ const MEAL = (id: string, name: string, ingredients: unknown[] = []) => ({
 afterEach(() => vi.restoreAllMocks());
 
 function memoryDb() {
+  let nextMeal = 0;
   return createInMemorySupabase<SupabaseClient<Database>>({ defaults: {
     meals: { ingredients: [], recipe_url: null, image_url: null, meal_type: 'dinner' },
     meal_plans: { meal_id: null, idempotency_key: null },
+  }, rpc: {
+    meal_ensure_custom: (args, db) => {
+      const normalize = (value: unknown) => String(value ?? '').trim().toLowerCase().replace(/\s+/g, ' ');
+      const matches = db.table('meals').find((row) => row.family_id === args.p_family_id
+        && normalize(row.name) === normalize(args.p_name) && row.meal_type === args.p_meal_type
+        && (args.p_has_ingredients !== true || JSON.stringify(row.ingredients) === JSON.stringify(args.p_ingredients))
+        && (args.p_has_recipe_url !== true || (row.recipe_url ?? null) === (args.p_recipe_url ?? null))
+        && (args.p_has_image_url !== true || (row.image_url ?? null) === (args.p_image_url ?? null)));
+      if (matches) return { meal: matches, created: false };
+      const meal = { ...MEAL(`meal-${++nextMeal}`, String(args.p_name), args.p_ingredients as unknown[]),
+        family_id: args.p_family_id, meal_type: args.p_meal_type, recipe_url: args.p_recipe_url ?? null,
+        image_url: args.p_image_url ?? null };
+      db.table('meals').push(meal);
+      return { meal, created: true };
+    },
   } });
 }
 
@@ -167,12 +183,13 @@ describe('ensureMealByName', () => {
   });
 
   it('reuses an existing dish case-insensitively instead of inserting', async () => {
-    const { db, calls } = makeDb(() => ({ data: [MEAL('meal-1', 'Tacos')], error: null }));
+    const { db, calls } = makeDb(() => ({ data: { meal: MEAL('meal-1', 'Tacos'), created: false }, error: null }));
     const res = await ensureMealByName(scopeWith(db), { name: 'tacos' });
     expect(res.ok && !res.data.created && res.data.meal.id === 'meal-1').toBe(true);
     expect(calls).toHaveLength(1);
-    expect(calls[0].filters.family_id).toBe('fam-1');
-    expect(calls[0].filters['ilike:name']).toBe('tacos');
+    expect(calls[0].table).toBe('rpc:meal_ensure_custom');
+    expect(calls[0].filters.p_family_id).toBe('fam-1');
+    expect(calls[0].filters.p_name).toBe('tacos');
   });
 
   it('creates the dish with the auth user id in created_by', async () => {
@@ -216,6 +233,31 @@ describe('planWeek / setSlot atomic persistence', () => {
       [{ date: '2026-09-07', mealName: 'Tacos' }, { date: '2026-09-07', mealName: 'Curry' }]];
     for (const input of invalid) expect(await planWeek(scopeWith(db), input as never)).toMatchObject({ ok: false, code: 'invalid_input' });
     expect(calls).toHaveLength(0);
+  });
+
+  it('uses reference-aware transactional cleanup when a later entry fails to resolve', async () => {
+    const { db, calls } = makeDb((call) => {
+      if (call.table === 'rpc:meal_ensure_custom') {
+        return { data: { meal: MEAL('created-during-plan', 'New family dish'), created: true }, error: null };
+      }
+      if (call.table === 'family_recipes') return { data: null, error: null };
+      if (call.table === 'rpc:meal_cleanup_unreferenced_custom') {
+        return { data: { deleted: 0, retained_referenced: 1 }, error: null };
+      }
+      return { data: null, error: null };
+    });
+
+    const result = await planWeek(scopeWith(db), [
+      { date: '2026-09-07', mealName: 'New family dish' },
+      { date: '2026-09-08', recipeId: 'missing-recipe' },
+    ]);
+
+    expect(result).toMatchObject({ ok: false, code: 'not_found' });
+    expect(calls.find((call) => call.table === 'rpc:meal_cleanup_unreferenced_custom')?.filters).toEqual({
+      p_family_id: 'fam-1', p_meal_ids: ['created-during-plan'],
+    });
+    expect(calls.some((call) => call.table === 'meals' && call.kind === 'delete')).toBe(false);
+    expect(calls.some((call) => call.table === 'rpc:meal_plan_replace_slots')).toBe(false);
   });
 
   it('replaces the precise requested slots through the atomic RPC and confirms the stored meal details', async () => {

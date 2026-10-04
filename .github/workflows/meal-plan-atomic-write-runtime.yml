@@ -5,7 +5,10 @@ on:
     paths:
       - '.github/workflows/meal-plan-atomic-write-runtime.yml'
       - 'supabase/migrations/0475_meal_plan_slot_writes_are_atomic.sql'
+      - 'supabase/migrations/0476_meal_plan_delegated_actor_rpcs.sql'
       - 'tests/fixtures/0475-meal-plan-*'
+      - 'tests/fixtures/0476-meal-plan-*'
+      - 'tests/meal-plan-delegated-actor-rpc.test.ts'
       - 'lib/services/meals/**'
       - 'app/(app)/dashboard/meals/actions.ts'
       - 'lib/database.types.ts'
@@ -59,6 +62,7 @@ jobs:
           }
           pg < tests/fixtures/0475-meal-plan-bootstrap.sql
           pg < supabase/migrations/0475_meal_plan_slot_writes_are_atomic.sql
+          pg < supabase/migrations/0476_meal_plan_delegated_actor_rpcs.sql
 
       - name: Verify rollback, authorization, receipts and legacy duplicate handling
         shell: bash
@@ -80,6 +84,20 @@ jobs:
             --set=VERBOSITY=terse --set=SHOW_CONTEXT=never \
             < tests/fixtures/0475-meal-plan-concurrency.sql
 
+      - name: Verify delegated actor authorization, receipts and custom-meal races
+        shell: bash
+        run: |
+          set -euo pipefail
+          docker exec -i "$MEAL_PLAN_ATOMIC_CONTAINER" psql -X --quiet --output=/dev/null \
+            --file=- --no-password --host=/var/run/postgresql --username=postgres \
+            --dbname=bubaly_meal_plan_atomic_ci --set=ON_ERROR_STOP=1 \
+            --set=VERBOSITY=terse --set=SHOW_CONTEXT=never \
+            < tests/fixtures/0476-meal-plan-delegated-actors.sql
+          docker exec -i "$MEAL_PLAN_ATOMIC_CONTAINER" psql -X --quiet --output=/dev/null \
+            --file=- --no-password --host=/var/run/postgresql --username=postgres \
+            --dbname=bubaly_meal_plan_atomic_ci --set=ON_ERROR_STOP=1 \
+            --set=VERBOSITY=terse --set=SHOW_CONTEXT=never \
+            < tests/fixtures/0476-meal-plan-name-concurrency.sql
       - name: Remove only this run's synthetic database container
         if: always()
         shell: bash
