@@ -4,6 +4,7 @@
 // server component stays a thin data-fetch + render shell.
 
 import { createFormat } from '@/lib/utils/format';
+import { dayKeyIn } from '@/lib/time/zoned';
 import { DEFAULT_LOCALE, type LocaleCode } from '@/lib/i18n/locales';
 
 import type { ComponentType } from 'react';
@@ -46,9 +47,19 @@ export type MemberLite = {
 
 const DAY_MS = 86_400_000;
 
-/** Whole-day difference between two instants, using local midnight boundaries. */
-function calendarDaysAgo(iso: string, now: Date): number {
+/**
+ * Whole-day difference between two instants. With a zone, both sides are day
+ * KEYS in it (the family's calendar, which is what a server page must count
+ * on); without one, local midnight boundaries — the reader's own day in a
+ * browser, and the HOST's on a server, where from 5pm in California
+ * Greenwich's "Today" is the family's tomorrow.
+ */
+function calendarDaysAgo(iso: string, now: Date, timeZone?: string): number {
   const then = new Date(iso);
+  if (timeZone) {
+    const key = (d: Date) => Date.parse(`${dayKeyIn(d, timeZone)}T00:00:00Z`);
+    return Math.round((key(now) - key(then)) / DAY_MS);
+  }
   const a = new Date(now.getFullYear(), now.getMonth(), now.getDate()).getTime();
   const b = new Date(then.getFullYear(), then.getMonth(), then.getDate()).getTime();
   return Math.round((a - b) / DAY_MS);
@@ -64,9 +75,12 @@ export function relativeDay(
   now: Date,
   locale: LocaleCode = DEFAULT_LOCALE,
   t?: Translate,
+  timeZone?: string,
 ): string {
-  const days = calendarDaysAgo(iso, now);
-  const fmt = createFormat(locale);
+  const days = calendarDaysAgo(iso, now, timeZone);
+  // The weekday and the date are the family's too: the formatter bound to the
+  // zone renders the instant on the family's calendar.
+  const fmt = createFormat(locale, undefined, timeZone);
   if (days === 0) return t ? t('calendar.today') : 'Today';
   if (days === 1) return t ? t('completedByBubaly.yesterday') : 'Yesterday';
   if (days >= 2 && days <= 6) {
@@ -100,11 +114,12 @@ export function buildTimeline(
   limit = 12,
   locale: LocaleCode = DEFAULT_LOCALE,
   t?: Translate,
+  timeZone?: string,
 ): TimelineRow[] {
   return [...highlights]
     .sort((a, b) => (a.created_at < b.created_at ? 1 : a.created_at > b.created_at ? -1 : 0))
     .slice(0, limit)
-    .map((album) => ({ album, relative: relativeDay(album.created_at, now, locale, t) }));
+    .map((album) => ({ album, relative: relativeDay(album.created_at, now, locale, t, timeZone) }));
 }
 
 export type StatRow = {

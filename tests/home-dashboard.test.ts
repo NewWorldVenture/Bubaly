@@ -59,28 +59,30 @@ describe('usd', () => {
 });
 
 describe('ageFromBirthday', () => {
-  const now = new Date('2026-06-15T00:00:00Z');
+  // A day KEY — the family's day — not an instant: the home page renders on a UTC
+  // host (tests/a-server-side-age-and-days-ago-read-the-familys-day.test.ts).
+  const today = '2026-06-15';
   it('computes whole-year age', () => {
-    expect(ageFromBirthday('2011-01-01', now)).toBe(15);
-    expect(ageFromBirthday('2011-12-31', now)).toBe(14); // birthday not yet reached
+    expect(ageFromBirthday('2011-01-01', today)).toBe(15);
+    expect(ageFromBirthday('2011-12-31', today)).toBe(14); // birthday not yet reached
   });
   it('returns null for missing/bad input', () => {
-    expect(ageFromBirthday(null, now)).toBeNull();
-    expect(ageFromBirthday('nope', now)).toBeNull();
+    expect(ageFromBirthday(null, today)).toBeNull();
+    expect(ageFromBirthday('nope', today)).toBeNull();
   });
 });
 
 describe('memberTagline', () => {
-  const now = new Date('2026-06-15T00:00:00Z');
+  const today = '2026-06-15';
   it('says Me for the current user', () => {
-    expect(memberTagline({ user_id: 'u1', role: 'parent', birthday: null }, 'u1', now)).toBe('Me');
+    expect(memberTagline({ user_id: 'u1', role: 'parent', birthday: null }, 'u1', today)).toBe('Me');
   });
   it('shows age for young members', () => {
-    expect(memberTagline({ user_id: null, role: 'child', birthday: '2018-01-01' }, 'u1', now)).toBe('8 yrs');
+    expect(memberTagline({ user_id: null, role: 'child', birthday: '2018-01-01' }, 'u1', today)).toBe('8 yrs');
   });
   it('falls back to a short role label', () => {
-    expect(memberTagline({ user_id: 'u2', role: 'adult', birthday: null }, 'u1', now)).toBe('Adult');
-    expect(memberTagline({ user_id: 'u3', role: 'parent', birthday: '1985-01-01' }, 'u1', now)).toBe('Parent');
+    expect(memberTagline({ user_id: 'u2', role: 'adult', birthday: null }, 'u1', today)).toBe('Adult');
+    expect(memberTagline({ user_id: 'u3', role: 'parent', birthday: '1985-01-01' }, 'u1', today)).toBe('Parent');
   });
 });
 
