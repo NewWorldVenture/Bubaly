@@ -42,7 +42,10 @@ begin
   insert into public.family_members (family_id, user_id, display_name, role, is_active) values
     (fam, mom, 'Mom', 'parent', true), (fam, kid, 'Kid', 'child', true), (fam, dad, 'Dad', 'parent', true)
   on conflict (family_id, user_id) do update set is_active = true;
-  insert into public.family_conversations (family_id, name, kind) values (fam, 'Family', 'group') returning id into conv;
+  -- A recorded audience keeps this legacy chat readable to all three actors;
+  -- an empty roster is creator-only after 0476 and cannot exercise receipts.
+  insert into public.family_conversations (family_id, name, kind, member_ids)
+    values (fam, 'Family', 'group', array[mom, kid, dad]) returning id into conv;
   -- Seeded by the server (no session), as a message Mom and Dad have read and Dad has 👍'd.
   insert into public.family_messages (conversation_id, family_id, sender_id, sender_name, content, kind, read_by, reactions)
     values (conv, fam, mom, 'Mom', 'Home by 10.', 'text', array[mom, dad],

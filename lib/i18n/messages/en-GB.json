@@ -1,8 +1,1 @@
-{
-  "bills.confirmPaymentSchedule": "Confirm bill schedule",
-  "bills.scheduleNeeded": "Choose when this bill repeats before marking it paid.",
-  "bills.dayOfMonth": "Day of month",
-  "bills.chooseRecurrence": "Choose a recurrence",
-  "bills.chooseDay": "Choose a day",
-  "bills.scheduleUnavailable": "Recurring bill schedules are not available yet. This change was not saved."
-}
+{}

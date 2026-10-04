@@ -1,8 +1,1 @@
-{
-  "bills.confirmPaymentSchedule": "Confirmar el calendario de la factura",
-  "bills.scheduleNeeded": "Elige cuándo se repite esta factura antes de marcarla como pagada.",
-  "bills.dayOfMonth": "Día del mes",
-  "bills.chooseRecurrence": "Elegir una frecuencia",
-  "bills.chooseDay": "Elegir un día",
-  "bills.scheduleUnavailable": "Los calendarios de facturas recurrentes aún no están disponibles. Este cambio no se guardó."
-}
+{}

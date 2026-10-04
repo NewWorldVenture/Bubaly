@@ -21,7 +21,8 @@ begin
     on conflict (id) do nothing;
   insert into public.families (id, name, created_by) values (fam, 'Chat family', uPar);
   insert into public.family_members (family_id, user_id, display_name, role, is_active) values (fam, uA, 'A', 'teen', true);
-  insert into public.family_conversations (family_id, name, kind) values (fam, 'Family Chat', 'group') returning id into conv;
+  insert into public.family_conversations (family_id, name, kind, member_ids)
+    values (fam, 'Family Chat', 'group', array[uPar, uA]) returning id into conv;
   insert into public.family_messages (conversation_id, family_id, sender_id, sender_name, content, kind)
     values (conv, fam, uPar, 'Mom', 'Home by 10.', 'text') returning id into parentMsg;
 
