@@ -3,11 +3,12 @@
 import { Download } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { useTranslations } from '@/components/i18n/locale-provider';
+import { csvDocument } from '@/lib/csv/spreadsheet-cell';
 
 function downloadCsv(filename: string, header: string[], rows: (string | number)[][]) {
-  const lines = [header, ...rows]
-    .map((row) => row.map((cell) => `"${String(cell).replace(/"/g, '""')}"`).join(','))
-    .join('\n');
+  // Typed text (names, families, titles) is written as text a spreadsheet will
+  // not run; numbers stay numbers (lib/csv/spreadsheet-cell.ts).
+  const lines = csvDocument([header, ...rows]);
   const blob = new Blob([lines], { type: 'text/csv;charset=utf-8;' });
   const url = URL.createObjectURL(blob);
   const a = document.createElement('a');

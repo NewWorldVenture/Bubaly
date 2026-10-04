@@ -95,12 +95,39 @@ describe('ICS parsing', () => {
     const out = parseICS(ics, 'cityfeed');
     expect(out).toHaveLength(2);
     expect(out[0].title).toBe('Farmers Market');
-    expect(out[0].starts_at).toBe('2026-06-25T09:00:00');
+    // 09:00 in Chicago on a June morning is 14:00Z. It used to come back as a
+    // zone-less '2026-06-25T09:00:00', which the discovery route's clock then
+    // read as 09:00 UTC — five hours early on every weekend card.
+    expect(out[0].starts_at).toBe('2026-06-25T14:00:00Z');
+    expect(out[0].ends_at).toBe('2026-06-25T13:00:00Z');
     expect(out[0].venue_name).toBe('Downtown Plaza');
     expect(out[0].description).toContain('produce, crafts');
     expect(out[0].is_family_friendly).toBe(true);
-    expect(out[1].starts_at).toBe('2026-06-27T00:00:00');
+    expect(out[1].starts_at).toBe('2026-06-27T00:00:00Z');
     expect(parseICSDate('20260625T180000Z')).toBe('2026-06-25T18:00:00Z');
+  });
+
+  it('reads a published zone the way the family calendar does', () => {
+    expect(parseICSDate('20260115T090000', 'America/Chicago')).toBe('2026-01-15T15:00:00Z');
+    expect(parseICSDate('20260625T090000', 'America/Chicago')).toBe('2026-06-25T14:00:00Z');
+    expect(parseICSDate('20260625T090015', 'Europe/London')).toBe('2026-06-25T08:00:15Z');
+    // A reading Chicago skips at spring-forward (2026-03-08, 02:00 → 03:00) is the first minute that exists.
+    expect(parseICSDate('20260308T023000', 'America/Chicago')).toBe('2026-03-08T08:00:00Z');
+  });
+
+  it('a floating time is read as UTC, the same instant the server always made of it, and a zone it does not know falls back to that', () => {
+    expect(parseICSDate('20260625T180000')).toBe('2026-06-25T18:00:00Z');
+    expect(parseICSDate('20260625T180000', 'Central Standard Time')).toBe('2026-06-25T18:00:00Z');
+    expect(parseICSDate('not a date')).toBeNull();
+  });
+
+  it('a quoted zone name with a colon in it is a parameter, so the event is kept', () => {
+    const out = parseICS([
+      'BEGIN:VCALENDAR', 'BEGIN:VEVENT', 'SUMMARY:Story time',
+      'DTSTART;TZID="(UTC-06:00) Central Time (US & Canada)":20260625T100000', 'END:VEVENT', 'END:VCALENDAR',
+    ].join('\r\n'), 'lib');
+    expect(out).toHaveLength(1);
+    expect(out[0].starts_at).toBe('2026-06-25T10:00:00Z');
   });
 });
 
