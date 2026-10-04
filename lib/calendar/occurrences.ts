@@ -96,41 +96,51 @@ const SERIES_READ_MAX = 2000;
  * PostgREST's `db-max-rows` caps ONE response — 1,000 rows on a hosted Supabase
  * project, and this repository sets no override — and does so silently: a
  * 1,001-row answer arrives as 1,000 rows and no error. So neither read here
- * trusts a single response. Each asks for an exact count and pages through
- * `.range()` in pages of that size until the count is reached; a server that
- * stops short of its own count (a lower cap, a row gone between pages) is a
- * failed read, never a prefix that passes for the whole window. Before this, the
- * series read asked for 2,001 rows and called only an answer above 2,000
- * oversized, so a household with 1,001–2,000 series read as its first 1,000.
- * (Review 5981467603 on #923.)
+ * trusts a single response. Each asks for an exact count; the first request is
+ * unbounded (one request answers a household under the cap, as before), and
+ * when the server answered fewer rows than it counted the read goes on with
+ * `.range()` from where the answer stopped, in pages of READ_PAGE, until the
+ * count is reached. A server that stops short of its own count — a page that
+ * adds nothing, or one that repeats rows already read — is a failed read,
+ * never a prefix that passes for the whole window. Before this, the series read
+ * asked for 2,001 rows and called only an answer above 2,000 oversized, so a
+ * household with 1,001–2,000 series read as its first 1,000. (Review
+ * 5981467603 on #923.) An answer that carries no count at all is taken whole:
+ * the production client always asks for one, and the stand-ins that answer
+ * without one answer everything they hold.
  */
 const READ_PAGE = 1000;
 
-type PageResult = { data: unknown[] | null; error: { message: string } | null; count: number | null };
+type PageResult = { data: unknown[] | null; error: { message: string } | null; count?: number | null };
 
-async function readPaged<T>(
-  page: (from: number, to: number) => PromiseLike<PageResult>,
+async function readPaged<T extends { id: unknown }>(
+  whole: () => PromiseLike<PageResult>,
+  more: (from: number, to: number) => PromiseLike<PageResult>,
   max: number,
   what: string,
 ): Promise<{ rows: T[]; error: null } | { rows: null; error: { message: string } }> {
   const oversized = { rows: null, error: { message: `More than ${max} ${what}; the window cannot be read whole` } } as const;
   const rows: T[] = [];
-  for (let from = 0; ; from += READ_PAGE) {
-    const res = await page(from, from + READ_PAGE - 1);
+  const seen = new Set<string>();
+  for (;;) {
+    const res = await (rows.length === 0 ? whole() : more(rows.length, rows.length + READ_PAGE - 1));
     if (res.error) return { rows: null, error: res.error };
     const got = (res.data ?? []) as T[];
-    // A stand-in that returns no `count` field at all reads as `null`: no count.
     const total = res.count ?? null;
     if (total !== null && total > max) return oversized;
-    rows.push(...got);
-    if (total !== null) {
-      if (rows.length >= total) break;
-      if (got.length === 0) return { rows: null, error: { message: `The database answered ${rows.length} of the ${total} ${what} it counted; the window cannot be read whole` } };
-    } else {
-      // No count: a short page is the end; a full page may be the cap, so read on.
-      if (rows.length > max) return oversized;
-      if (got.length < READ_PAGE) break;
+    let added = 0;
+    for (const r of got) {
+      if (seen.has(String(r.id))) continue;
+      seen.add(String(r.id));
+      rows.push(r);
+      added += 1;
     }
+    if (total === null) {
+      if (rows.length > max) return oversized;
+      break;
+    }
+    if (rows.length >= total) break;
+    if (added === 0) return { rows: null, error: { message: `The database answered ${rows.length} of the ${total} ${what} it counted; the window cannot be read whole` } };
   }
   return { rows, error: null };
 }
@@ -142,7 +152,7 @@ const earlier = (a: string, b: string) => (a < b ? a : b);
 const later = (a: string, b: string) => (a > b ? a : b);
 
 /** The builder the core drives: a `select` already applied, the rest added here. */
-type WindowQuery = PromiseLike<{ data: unknown; error: { message: string } | null; count: number | null }> & {
+type WindowQuery = PromiseLike<{ data: unknown; error: { message: string } | null; count?: number | null }> & {
   eq(column: string, value: string): WindowQuery;
   neq(column: string, value: string): WindowQuery;
   lte(column: string, value: string): WindowQuery;
@@ -162,9 +172,9 @@ type WindowReads<R> = { singles: R[]; series: R[]; error: null } | { singles: nu
  * master whose first occurrence falls in the window would appear twice), and
  * every series row that could reach the window — started by `latest`, not
  * ended before `earliest`. `neq` excludes a null recurrence as SQL does. Each
- * read is paged against its exact count (see READ_PAGE); the `select` the caller
- * hands in must ask for that count, and the order carries `id` as a tiebreaker
- * so pages do not overlap on equal starts. Both lists are filtered here as well
+ * read is checked against its exact count and paged when the answer was cut
+ * (see READ_PAGE); the `select` the caller hands in must ask for that count, and
+ * the order carries `id` as a tiebreaker so pages do not overlap on equal starts. Both lists are filtered here as well
  * as in the query, so a row the database (or a stand-in for it) answers out of
  * place is still counted once.
  */
@@ -200,8 +210,8 @@ async function readWindowRows<R extends WindowRow>(args: {
   const singlesRead: Promise<{ rows: R[]; error: null } | { rows: null; error: { message: string } }> =
     args.singlesLimit !== undefined
       ? Promise.resolve(singlesBase().limit(args.singlesLimit)).then((r) => (r.error ? { rows: null, error: r.error } : { rows: (r.data ?? []) as R[], error: null }))
-      : readPaged<R>((from, to) => singlesBase().range(from, to) as unknown as PromiseLike<PageResult>, Number.POSITIVE_INFINITY, 'one-off events');
-  const seriesRead = readPaged<R>((from, to) => seriesBase().range(from, to) as unknown as PromiseLike<PageResult>, SERIES_READ_MAX, 'recurring events');
+      : readPaged<R>(() => singlesBase() as unknown as PromiseLike<PageResult>, (from, to) => singlesBase().range(from, to) as unknown as PromiseLike<PageResult>, Number.POSITIVE_INFINITY, 'one-off events');
+  const seriesRead = readPaged<R>(() => seriesBase() as unknown as PromiseLike<PageResult>, (from, to) => seriesBase().range(from, to) as unknown as PromiseLike<PageResult>, SERIES_READ_MAX, 'recurring events');
   const [singles, series] = await Promise.all([singlesRead, seriesRead]);
   if (singles.error) return { singles: null, series: null, error: singles.error };
   if (series.error) return { singles: null, series: null, error: series.error };

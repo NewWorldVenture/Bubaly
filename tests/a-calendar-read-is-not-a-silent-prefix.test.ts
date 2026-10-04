@@ -14,8 +14,9 @@ import { createInMemorySupabase } from './helpers/in-memory-supabase';
  * in lib/calendar/occurrences.ts asked for 2,001 rows and called only an answer
  * above 2,000 oversized, so a household with 1,001–2,000 series read as its
  * first 1,000 and the planner, the conflict check and the reminders lost the
- * rest (review 5981467603 on #923). Both reads now page against an exact count
- * and fail closed when the server stops short of it.
+ * rest (review 5981467603 on #923). Both reads now ask for an exact count,
+ * page on from where a cut answer stopped, and fail closed when the server
+ * stops short of its own count.
  *
  * The fake's `maxRows` is that cap, applied the way the server applies it.
  */
@@ -69,10 +70,31 @@ describe('a calendar read is not a silent prefix', () => {
     expect(res.data?.map((r) => r.title)).toContain('Event 1001');
   });
 
-  it('fails closed when the server stops short of its own count, instead of answering a prefix', async () => {
+  it('a project with a lower cap is read in more, smaller pages, still whole', async () => {
     const res = await readCalendarOccurrences(client(household(many(1001, series), 500)), FAMILY, WEEK, TZ);
+    expect(res.error).toBeNull();
+    expect(res.count).toBe(1001);
+    expect(res.data?.map((r) => r.title)).toContain('Event 1001');
+  });
+
+  it('a household under the cap is read in one request per table read', async () => {
+    const db = household([...many(3, series), ...many(2, single).map((r) => ({ ...r, id: id(100 + Number(String(r.title).slice(6))) }))], 1000);
+    const requests: string[] = [];
+    const counted = { from: (table: string) => { requests.push(table); return db.from(table); } } as unknown as SupabaseClient<Database>;
+    const res = await readCalendarOccurrences(counted, FAMILY, WEEK, TZ);
+    expect(res.error).toBeNull();
+    expect(res.count).toBe(5);
+    expect(requests).toEqual(['calendar_events', 'calendar_events']);
+  });
+
+  it('fails closed when the server stops short of its own count, instead of answering a prefix', async () => {
+    // A server that counts 1,001 rows but answers the same first page whatever
+    // range is asked for: the read must not grow by repeating what it has.
+    const db = household(many(1001, series), 1000);
+    const stuck = { from: (table: string) => { const b = db.from(table) as unknown as { range: (from: number, to: number) => unknown }; b.range = () => b; return b; } } as unknown as SupabaseClient<Database>;
+    const res = await readCalendarOccurrences(stuck, FAMILY, WEEK, TZ);
     expect(res.data).toBeNull();
-    expect(res.error?.message).toMatch(/answered .* of the 1001 recurring events it counted; the window cannot be read whole/);
+    expect(res.error?.message).toBe('The database answered 1000 of the 1001 recurring events it counted; the window cannot be read whole');
   });
 
   it('fails closed past the ceiling without reading the rest', async () => {

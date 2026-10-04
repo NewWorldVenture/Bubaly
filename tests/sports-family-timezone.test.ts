@@ -44,9 +44,9 @@ function scope(tz:string,rows:SportsEventRow[],errorBranch?:'single'|'series'):S
     // failed read, not a prefix). The one-off read carries the window as an
     // `or` of one `and(...)` clause plus the no-series clause and the service's
     // own cap; the series read selects every series that started by the
-    // window's end and has not ended before its start, in pages of 1,000 from
-    // offset 0 — one page here, since this stand-in answers fewer than that
-    // and sends no count.
+    // window's end and has not ended before its start — unbounded, and paged
+    // on with range() only when the count says the answer was cut, which a
+    // stand-in that answers everything it holds never does.
     const series=url.searchParams.get('recurrence')==='neq.none';
     try {
       expect(url.origin).toBe('https://sports-proof.invalid');expect(url.pathname).toBe('/rest/v1/sports_events');expect(method).toBe('GET');expect(receipts.length).toBeLessThanOrEqual(2);
@@ -54,7 +54,7 @@ function scope(tz:string,rows:SportsEventRow[],errorBranch?:'single'|'series'):S
       expect(new Headers(init?.headers).get('prefer')).toContain('count=exact');
       const ors=url.searchParams.getAll('or');
       if(series) {
-        expect(url.searchParams.get('limit')).toBe('1000');expect(url.searchParams.get('offset')).toBe('0');
+        expect(url.searchParams.get('limit')).toBeNull();expect(url.searchParams.get('offset')).toBeNull();
         expect(url.searchParams.get('starts_at')).toMatch(/^lte\./);
         expect(ors).toEqual([expect.stringMatching(/^\(recurrence_until\.is\.null,recurrence_until\.gte\..+\)$/)]);
       } else {
