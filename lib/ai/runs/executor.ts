@@ -46,7 +46,7 @@ import {
 } from './states';
 import {
   appendEvent as storeAppendEvent, heartbeatRun, loadPlanSteps, loadRunActor, loadRunById,
-  updateRequest, updateRun as storeUpdateRun, updateStep as storeUpdateStep,
+  updateRequest, updateRun as storeUpdateRun, updateRunHeldBy, updateStep as storeUpdateStep,
   type RunEventInput, type RunRow, type StepRow,
 } from './store';
 import { parseVerificationSpec, runVerification, type VerificationOutcome } from './verify';
@@ -184,6 +184,19 @@ export type RunGraphResult = {
   pending: number;
   awaitingApproval: number;
 };
+
+/**
+ * Thrown by the production port when a run write fenced on this worker's lease
+ * matched no row: another worker holds the run now. The slice stops where it
+ * is — nothing it would write after this is its to write — and the caller's
+ * throw path (`releaseRun`, itself fenced on the lease) is a no-op.
+ */
+export class RunLeaseLostError extends Error {
+  constructor(readonly runId: string, readonly leaseOwner: string) {
+    super(`The lease on run ${runId} is no longer this worker's; another worker has claimed it.`);
+    this.name = 'RunLeaseLostError';
+  }
+}
 
 /**
  * How many independent steps run at once. Four is the cap §4.3 of the
@@ -389,6 +402,10 @@ export async function runGraphWith(port: ExecutorPort, runId: string, opts?: { b
   if (initial.paused_at || initial.state === 'paused') return { status: 'paused', ...empty };
 
   let run = initial;
+  // The lease this slice was claimed with, fixed for the whole slice. A refresh
+  // below that shows another lease is not a new fact about OUR run — it is the
+  // end of our authority over it.
+  const lease = initial.lease_owner;
 
   // Cancellation wins over everything, including a run mid-flight whose worker
   // died: the executor never resumes work a person has stopped (§45).
@@ -463,6 +480,19 @@ export async function runGraphWith(port: ExecutorPort, runId: string, opts?: { b
   // below hands the budget back when, and only when, this slice left more
   // steps satisfied than it found. A slice that completed nothing keeps the
   // charge, which is what still lets a run that never progresses terminate.
+  //
+  // The reset is reached only through a claim, so it cannot reach a run that
+  // was ALREADY at the ceiling when this shipped: an `executing` row with an
+  // expired lease and `attempt >= max_attempts` is dead-lettered by
+  // `claim_ai_runs`' recovery arm (0263) before any claim, satisfied steps or
+  // not (tests/a-stale-worker-cannot-write-another-workers-run.test.ts, "a run
+  // already at the ceiling"). Those rows are not repaired here, deliberately: a
+  // once-only repair needs a marker the row does not have, and without one a
+  // run that completed a step long ago and has died five times since would
+  // earn a new budget every time it ran out, so nothing broken would ever
+  // dead-letter. Their way back is a person asking again — resume, re-run a
+  // step, a decision — which hands the budget back (store.ts, freshBudget, the
+  // follow-up to this change).
   const satisfiedAtStart = countSatisfied(steps);
   const progressed = () => countSatisfied(steps) > satisfiedAtStart;
 
@@ -485,6 +515,14 @@ export async function runGraphWith(port: ExecutorPort, runId: string, opts?: { b
     // rather than after it finishes.
     const refreshed = await port.loadRun(runId);
     if (refreshed.ok && refreshed.data) {
+      // The lease was ours when this slice began. If it is someone else's now,
+      // this worker blocked past its lease — inside a tool, typically — and
+      // `claim_ai_runs` recovered the run and leased it to another worker, who
+      // may be executing right now. Adopting the refreshed row would adopt THEIR
+      // lease, and every write below (a park, a reset of the attempt budget, a
+      // cleared lease) would land on their run. So the slice ends here, with no
+      // write: the row's progress is theirs to record (review on #901).
+      if (lease && refreshed.data.lease_owner !== lease) return summarize('lease_lost', steps);
       run = refreshed.data;
       if (run.cancel_requested_at) return finalizeCancelled(port, run, steps);
       if (run.paused_at || run.state === 'paused') {
@@ -1255,6 +1293,20 @@ export function createExecutorPort(db: SupabaseClient<Database>, opts: ExecutorP
       return ok(res.data as StepSnapshot[]);
     },
     async updateRun(run, patch) {
+      // A leased run is written through the fence: the write lands only while
+      // `lease_owner` is still the lease this slice claimed with, so a worker
+      // that blocked past its lease cannot park, reset or release a run that
+      // `claim_ai_runs` has since handed to another worker. The per-pass
+      // refresh in `runGraphWith` catches most of that; this catches the write
+      // that races the refresh. Zero rows is the lease being gone, and the
+      // slice must stop, so it is a throw and not a logged failure.
+      if (run.lease_owner) {
+        const written = await updateRunHeldBy(db, run.id, run.family_id, run.lease_owner, patch);
+        if (written.ok && !written.data) throw new RunLeaseLostError(run.id, run.lease_owner);
+        return;
+      }
+      // An unleased run (the kick-less paths and the tests that drive the
+      // graph without a claim) keeps the id-and-family write.
       await storeUpdateRun(systemScope(run), run.id, patch, { db });
     },
     async updateStep(run, stepId, patch) {
