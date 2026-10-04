@@ -11,6 +11,7 @@ import type { MomentDeparture } from '@/lib/moments/prep';
 import { loadScheduleIntelligence } from '@/lib/schedule/intelligence-server';
 import { loadMomentPrep } from '@/app/(app)/dashboard/moment-actions';
 import { dayKeyInTz, addDaysToDayKey, zonedDayBoundsMs } from '@/lib/services/scope';
+import { localPartsAt } from '@/lib/time/zoned';
 
 export async function generateMetadata(): Promise<Metadata> {
   const t = await getTranslations();
@@ -93,7 +94,9 @@ export default async function Page() {
     const holidayInDays = holiday?.starts_at ? Math.max(0, Math.round((Date.parse(holiday.starts_at) - now.getTime()) / DAY)) : null;
 
     const sig: MomentSignals = {
-      hour: now.getHours(), dow: now.getDay(),
+      // The family's hour and weekday, not the host's: at 5pm in California a
+      // UTC host is on tomorrow's midnight and the evening signals never fired.
+      hour: localPartsAt(now, tz).hour, dow: new Date(`${todayIso}T00:00:00Z`).getUTCDay(),
       birthdayInDays, birthdayName,
       tripInDays, tripLabel: trip?.title ?? null,
       holidayInDays, holidayLabel: holiday?.title ?? null,

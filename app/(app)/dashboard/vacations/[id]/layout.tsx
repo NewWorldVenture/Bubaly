@@ -5,6 +5,7 @@ import { createServer } from '@/lib/supabase/server';
 import { TripTabs } from '@/components/vacations/trip-tabs';
 import { VACATION_KINDS, VACATION_STATUSES, lookup } from '@/lib/vacations/meta';
 import { countdownLabel } from '@/lib/vacations/dates';
+import { dayKeyInTz } from '@/lib/services/scope';
 import { getTranslations } from '@/lib/i18n/server';
 import { ErrorState } from '@/components/ui/states';
 import { AppNotFound } from '@/components/app/app-not-found';
@@ -14,7 +15,9 @@ export default async function TripLayout({
 }: { children: React.ReactNode; params: Promise<{ id: string }> }) {
   const t = await getTranslations();
   const { id } = await params;
-  await requireFeature('/dashboard/vacations');
+  const ctx = await requireFeature('/dashboard/vacations');
+  // The countdown counts from the FAMILY's day, not the host's.
+  const todayKey = dayKeyInTz(new Date(), ctx.active.family.timezone || 'UTC');
   const supabase = await createServer();
   // `notFound()` is a statement that this trip does not exist, and it is a
   // LAYOUT — so a refused read 404s every page under the trip at once. Kept for
@@ -43,7 +46,7 @@ export default async function TripLayout({
           <div>
             <h1 className="flex items-center gap-2 text-2xl font-bold">{kind.emoji} {trip.title}</h1>
             <p className="mt-0.5 text-sm text-muted">
-              {trip.destination ? `${trip.destination} · ` : ''}{countdownLabel(t, trip.start_date)}
+              {trip.destination ? `${trip.destination} · ` : ''}{countdownLabel(t, trip.start_date, todayKey)}
             </p>
           </div>
           {status && <span className={`rounded-full px-3 py-1 text-xs font-medium ${status.tone}`}>{t(`tripStatus.${status.value}`)}</span>}

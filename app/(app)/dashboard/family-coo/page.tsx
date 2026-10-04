@@ -20,7 +20,6 @@ export async function generateMetadata(): Promise<Metadata> {
 }
 export const dynamic = 'force-dynamic';
 
-const DAYS = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'];
 
 export default async function FamilyCooPage() {
   const tr = await getTranslations();
@@ -30,7 +29,9 @@ export default async function FamilyCooPage() {
   // Greenwich's clock and Greenwich's Today to a family that is not there.
   // Binding also puts the month names and AM/PM into the reader's language.
   const tz = ctx.active.family.timezone || 'UTC';
-  const { fmtRelative } = await getFormat(tz);
+  // `fmtDate` too: an event's weekday was an English array indexed by the HOST's
+  // `getDay()`; the bound formatter gives the family's weekday, in their language.
+  const { fmtRelative, fmtDate } = await getFormat(tz);
   const familyId = ctx.active.familyId;
   const supabase = await createServer();
   const now = new Date().toISOString();
@@ -145,10 +146,9 @@ export default async function FamilyCooPage() {
           {events && events.length > 0 ? (
             <ul className="space-y-2.5">
               {events.map((e) => {
-                const d = new Date(e.starts_at);
                 return (
                   <li key={e.id} className="flex items-center gap-3 text-sm">
-                    <span className="w-10 shrink-0 text-xs text-muted">{DAYS[d.getDay()]}</span>
+                    <span className="w-10 shrink-0 text-xs text-muted">{fmtDate(e.starts_at, 'EEE')}</span>
                     <span className="min-w-0 flex-1 truncate">{e.title}</span>
                   </li>
                 );

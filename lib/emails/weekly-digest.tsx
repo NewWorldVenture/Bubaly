@@ -82,7 +82,7 @@ export function WeeklyDigestEmail({
 
         <hr style={{ borderColor: '#23364e', margin: '32px 0' }} />
         <p style={{ color: '#94a0b8', fontSize: 12 }}>
-          &copy; {today.getFullYear()} Bubaly &middot; You&apos;re receiving this because you&apos;re a family admin.
+          &copy; {today.getUTCFullYear()} Bubaly &middot; You&apos;re receiving this because you&apos;re a family admin.
         </p>
       </body>
     </html>
