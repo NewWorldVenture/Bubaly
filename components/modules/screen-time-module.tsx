@@ -99,7 +99,7 @@ export function ScreenTimeModule() {
       };
       // Under RLS a refused row comes back with no error and zero rows, which this used to report as done. Audit C1-S9-86.
       const { data: saved, error } = form.id
-        ? await supabase.from('screen_time_entries').update(row).eq('id', form.id).select('id')
+        ? await supabase.from('screen_time_entries').update(row).eq('id', form.id).eq('family_id', familyId).select('id')
         : await supabase.from('screen_time_entries').insert({ ...row, family_id: familyId, logged_by: userId }).select('id');
       if (error) return toastError(describeDbError(error));
       if (wroteNoRows(saved)) return toastError(t('errors.thatChangeWasNotSaved'));
