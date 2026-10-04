@@ -13,12 +13,14 @@ create table public.families (
 );
 create schema auth;
 create table auth.users (id uuid primary key, email text);
+alter table public.families add foreign key(created_by) references auth.users(id) on delete set null;
+create type public.member_role as enum ('parent','adult','teen','child','caregiver','guest');
 create table public.family_members (
   id uuid primary key default gen_random_uuid(),
   family_id uuid not null references public.families(id) on delete cascade,
-  user_id uuid references auth.users(id) on delete set null,
-  display_name text not null, role text not null, is_active boolean not null default true,
-  avatar_url text
+  user_id uuid references auth.users(id) on delete cascade,
+  display_name text not null, role public.member_role not null, is_active boolean not null default true,
+  avatar_url text, unique(family_id,user_id)
 );
 create table public.family_conversations (
   id uuid primary key default gen_random_uuid(),
@@ -94,6 +96,8 @@ create policy families_delete on public.families for delete
 grant usage on schema public, auth to authenticated, anon, service_role;
 grant execute on all functions in schema auth, public to authenticated, anon, service_role;
 grant select on public.family_members to authenticated, anon;
+grant update, delete on public.family_members to authenticated;
+create policy fm_delete on public.family_members for delete using(public.can_manage_family(family_id));
 grant select, delete on public.families to authenticated;
 grant all on public.family_conversations, public.family_messages to authenticated, anon, service_role;
 grant all on public.families, public.family_members, auth.users to service_role;
@@ -102,7 +106,7 @@ grant all on public.families, public.family_members, auth.users to service_role;
 create function public.update_conversation_last_message() returns trigger
 language plpgsql security definer set search_path = '' as $$
 begin
-  update public.family_conversations set last_message_at = new.created_at
+  update public.family_conversations set last_message_at = new.created_at, updated_at = now()
     where id = new.conversation_id;
   return new;
 end $$;
@@ -112,6 +116,18 @@ create trigger trg_update_conversation_last_message after insert on public.famil
 \ir ../../supabase/migrations/0367_a_message_is_its_senders.sql
 \ir ../../supabase/migrations/0368_a_conversation_is_not_anyones_to_wipe.sql
 \ir ../../supabase/migrations/0463_a_read_receipt_is_the_readers_own.sql
+-- Exercise the actual membership lifecycle, not a trigger-free stand-in.
+-- This remains a focused synthetic schema rather than an all-migrations replay.
+create function public.set_updated_at() returns trigger language plpgsql as $$
+begin new.updated_at = now(); return new; end $$;
+\ir ../../supabase/migrations/0134_model_dirty.sql
+\ir ../../supabase/migrations/0211_family_members_update_rls.sql
+\ir ../../supabase/migrations/0249_model_dirty_delete_safe.sql
+\ir ../../supabase/migrations/0283_assistant_links.sql
+\ir ../../supabase/migrations/0299_family_keeps_a_manager.sql
+\ir ../../supabase/migrations/0343_only_a_parent_mints_or_revokes_an_assistant_key.sql
+\ir ../../supabase/migrations/0419_a_departed_parent_keeps_no_assistant_key.sql
+\ir ../../supabase/migrations/0458_only_the_server_links_a_login_to_a_member.sql
 
 create schema fixture;
 create table fixture.ids (key text primary key, id uuid not null unique);
@@ -243,6 +259,9 @@ returns uuid language sql security invoker set search_path = '' as $$
 $$;
 \ir ../../supabase/migrations/0476_preserve_messaging_participants.sql
 \ir ../../supabase/migrations/0476_preserve_messaging_participants.sql
+select fixture.assert_true((select count(*)=2 from pg_trigger where tgrelid='public.family_members'::regclass
+  and tgname in ('trg_family_members_scope_lock','trg_family_members_parent_lock') and tgenabled='O'),
+  'both membership parent-order triggers survive repeated application');
 
 -- No migration rewrites, promotes, archives or deletes any existing history.
 select fixture.assert_true(not exists (
@@ -622,6 +641,96 @@ do $$ begin
   reset role;
 end $$;
 update public.family_members set is_active = true where id = fixture.id('bob-member');
+
+-- Ordinary membership deactivation still runs the dirty marker and assistant
+-- retirement, and leaves another manager for the deferred main0299 constraint.
+do $$ begin
+  perform set_config('request.jwt.claim.sub',fixture.id('bob')::text,true);
+  set local role authenticated;
+  perform fixture.expect_blocked($q$update public.family_members set role='parent' where id=fixture.id('bob-member')$q$,
+    'a child cannot promote their own membership');
+  reset role;
+  perform set_config('request.jwt.claim.sub',fixture.id('parent')::text,true);
+  set local role authenticated;
+  perform fixture.expect_blocked($q$update public.family_members set display_name='Foreign mutation' where id=fixture.id('cross-member')$q$,
+    'a primary-family parent cannot edit a foreign membership');
+  reset role;
+  perform fixture.assert_true((select display_name='Other family' from public.family_members where id=fixture.id('cross-member')),
+    'the foreign membership remains present and unchanged');
+  perform set_config('request.jwt.claim.sub','',true);
+  update public.family_members set is_active=false where id=fixture.id('parent-member');
+  perform set_config('request.jwt.claim.sub',fixture.id('parent')::text,true);
+  set local role authenticated;
+  perform fixture.expect_blocked($q$update public.family_members set is_active=true where id=fixture.id('parent-member')$q$,
+    'an inactive parent cannot reactivate their own membership');
+  reset role;
+  perform fixture.assert_true((select not is_active from public.family_members where id=fixture.id('parent-member')),
+    'inactive-parent refusal is checked against an actual retained row');
+  perform set_config('request.jwt.claim.sub','',true);
+  update public.family_members set is_active=true where id=fixture.id('parent-member');
+end $$;
+
+-- Preserve server-side onboarding's linked-member insert/upsert path.
+do $$ begin
+  begin
+    perform set_config('request.jwt.claim.sub','',true);
+    insert into auth.users(id,email) values('ab000000-0000-4000-8000-000000000099','synthetic-server@example.invalid');
+    delete from public.family_model_dirty where family_id=fixture.id('family');
+    set local role service_role;
+    insert into public.family_members(family_id,user_id,display_name,role)
+      values(fixture.id('family'),'ab000000-0000-4000-8000-000000000099','Synthetic server owner','parent')
+      on conflict(family_id,user_id) do update set display_name=excluded.display_name,is_active=true;
+    insert into public.family_members(family_id,user_id,display_name,role)
+      values(fixture.id('family'),'ab000000-0000-4000-8000-000000000099','Synthetic reconciled owner','parent')
+      on conflict(family_id,user_id) do update set display_name=excluded.display_name,is_active=true;
+    reset role;
+    perform fixture.assert_true((select count(*)=1 from public.family_members where user_id='ab000000-0000-4000-8000-000000000099'
+      and display_name='Synthetic reconciled owner'),'server onboarding can insert and reconcile a linked membership');
+    perform fixture.assert_true((select count(*)=1 from public.family_model_dirty where family_id=fixture.id('family')),
+      'server membership upsert retains its required dirty mark');
+    set constraints trg_family_keeps_a_manager immediate;
+    raise exception 'Restore server onboarding control' using errcode='ZX004';
+  exception when sqlstate 'ZX004' then null;
+  end;
+end $$;
+
+do $$ declare affected integer; begin
+  begin
+    insert into public.assistant_links(family_id,user_id,label,token_hash,token_prefix)
+      values(fixture.id('family'),fixture.id('parent'),'Synthetic lifecycle key','synthetic-lifecycle-hash','synthetic');
+    delete from public.family_model_dirty where family_id=fixture.id('family');
+    perform set_config('request.jwt.claim.sub',fixture.id('parent')::text,true);
+    set local role authenticated;
+    update public.family_members set is_active=false where id=fixture.id('parent-member');
+    get diagnostics affected=row_count;
+    perform fixture.assert_true(affected=1,'authenticated manager actually deactivates a member');
+    reset role;
+    perform fixture.assert_true((select count(*)=1 from public.family_model_dirty where family_id=fixture.id('family')),
+      'deactivation inserts its missing dirty marker');
+    perform fixture.assert_true((select count(*)=1 from public.assistant_links where token_hash='synthetic-lifecycle-hash' and revoked_at is not null),
+      'deactivation retires the departed parent assistant key');
+    set constraints trg_family_keeps_a_manager immediate;
+    raise exception 'Restore lifecycle control' using errcode='ZX002';
+  exception when sqlstate 'ZX002' then null;
+  end;
+end $$;
+
+-- Account/FK maintenance uses main's CASCADE membership edge and keeps a
+-- surviving manager; it must not acquire a global family lock or lose a mark.
+do $$ begin
+  begin
+    perform set_config('request.jwt.claim.sub','',true);
+    delete from public.family_model_dirty where family_id=fixture.id('family');
+    delete from auth.users where id=fixture.id('parent');
+    perform fixture.assert_true((select count(*)=0 from public.family_members where id=fixture.id('parent-member')),
+      'auth-account cleanup cascades the membership');
+    perform fixture.assert_true((select count(*)=1 from public.family_model_dirty where family_id=fixture.id('family')),
+      'auth-account membership cascade creates its required dirty marker');
+    set constraints trg_family_keeps_a_manager immediate;
+    raise exception 'Restore auth maintenance control' using errcode='ZX003';
+  exception when sqlstate 'ZX003' then null;
+  end;
+end $$;
 
 -- Exercise actual authenticated parent cleanup, including the old message
 -- with a mismatched family stamp. Roll back only this deletion afterward so

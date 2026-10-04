@@ -24,11 +24,12 @@ assert.equal(normalized(actualDirectory), normalized(options['expected-data-dir'
 const databases = new Set();
 const sessions = new Set();
 let serial = 0;
+let completedChecks = 0;
 
 function session(db, label) {
   const app = `messaging-synthetic-${process.pid}-${++serial}-${label}`;
   const child = spawn(executable('psql'), [
-    ...connection, '-d', db, '-X', '-qAt', '-v', 'ON_ERROR_STOP=1',
+    ...connection, '-d', db, '-X', '-qAt', '-v', 'ON_ERROR_STOP=1', '-v', 'VERBOSITY=verbose',
   ], { env: { ...process.env, PGAPPNAME: app }, stdio: ['pipe', 'pipe', 'pipe'] });
   let output = '', errors = '', pending = null;
   child.stdout.on('data', chunk => { output += chunk; finish(); });
@@ -62,8 +63,8 @@ function session(db, label) {
   return api;
 }
 
-const actor = (who = 'alice', role = 'authenticated') => `
-  begin; set local statement_timeout = '12s'; set local deadlock_timeout = '100ms';
+const actor = (who = 'alice', role = 'authenticated', deadlockTimeout = '100ms') => `
+  begin; set local statement_timeout = '12s'; set local deadlock_timeout = '${deadlockTimeout}';
   select set_config('request.jwt.claim.sub', ${role === 'service_role' ? "''" : `fixture.id('${who}')::text`}, true);
   set local role ${role};`;
 const send = text => `select (public.send_family_message(fixture.id('family'), fixture.id('mixed'),
@@ -72,10 +73,11 @@ const directUpdate = `update public.family_messages set content = 'synthetic upd
   where id = fixture.id('mixed-message');`;
 const directDelete = `delete from public.family_conversations where id = fixture.id('mixed');`;
 const parentDelete = `delete from public.families where id = fixture.id('family');`;
-async function waiting(db, target) {
+async function waiting(db, target, blocker) {
   const deadline = Date.now() + 8000;
   while (Date.now() < deadline) {
-    if (command(db, `select count(*) from pg_stat_activity where application_name = '${target.app}' and wait_event_type = 'Lock';`) === '1') return;
+    if (command(db, `select count(*) from pg_stat_activity where application_name = '${target.app}' and wait_event_type = 'Lock'
+      ${blocker ? `and (select pid from pg_stat_activity where application_name='${blocker.app}')=any(pg_blocking_pids(pid))` : ''};`) === '1') return;
     await new Promise(resolve => setTimeout(resolve, 25));
   }
   throw new Error('Expected a real lock wait: ' + target.app);
@@ -106,11 +108,61 @@ async function check(label, work) {
       create policy families_delete on public.families for delete to authenticated using(public.is_family_admin(id));
       grant select,delete on public.families to authenticated;`);
     await work(db);
+    completedChecks++;
     console.log('PASS ' + label);
   } finally {
     for (const client of [...sessions]) client.close();
     execFileSync(executable('dropdb'), [...connection, '--force', db]);
     databases.delete(db);
+  }
+}
+
+// A scheduling-only BEFORE ROW barrier runs after the actual UPDATE/DELETE has
+// locked its member row, before the production parent-admission/AFTER triggers.
+// It changes no data and is installed only in this runner's disposable DB.
+function pauseMembership(db) {
+  command(db, `create function fixture.pause_membership() returns trigger
+    language plpgsql security definer set search_path='' as $$
+    begin
+      if old.id=fixture.id('parent-member') then perform pg_advisory_xact_lock(4917476); end if;
+      if tg_op='DELETE' then return old; end if; return new;
+    end $$;
+    create trigger synthetic_pause_membership before update or delete on public.family_members
+      for each row execute function fixture.pause_membership();
+    delete from public.family_model_dirty where family_id=fixture.id('family');`);
+}
+const deactivateParent = `update public.family_members set is_active=false where id=fixture.id('parent-member');`;
+async function membershipDeletionRace(db, { unprotected = false, role = 'authenticated', accountCascade = false } = {}) {
+  pauseMembership(db);
+  if (unprotected) command(db, `drop trigger trg_family_members_scope_lock on public.family_members;
+    drop trigger trg_family_members_parent_lock on public.family_members;`);
+  const gate = session(db, 'membership-scheduling-gate'), mutation = session(db, 'ordinary-membership-mutation'), deletion = session(db, 'queued-parent-delete');
+  await gate.run('begin; select pg_advisory_xact_lock(4917476);');
+  const operation = accountCascade ? `delete from auth.users where id=fixture.id('parent');` : deactivateParent;
+  const pendingMutation = mutation.run(actor('parent', role) + operation + 'commit;').catch(error => error);
+  await waiting(db, mutation, gate);
+  const pendingDeletion = deletion.run(actor('parent', 'authenticated', '10s') + parentDelete + 'commit;').catch(error => error);
+  await waiting(db, deletion, mutation);
+  await gate.run('commit;');
+  const mutationResult = await pendingMutation, deletionResult = await pendingDeletion;
+  if (unprotected) {
+    assert(mutationResult instanceof Error && /40P01: deadlock detected/.test(mutationResult.message), String(mutationResult));
+    assert(/mark_model_dirty\(\)|family_model_dirty/.test(mutationResult.message), mutationResult.message);
+    assert(!(deletionResult instanceof Error), String(deletionResult));
+    assert.equal(command(db, `select count(*) from public.families where id=fixture.id('family');`), '0');
+  } else if (role === 'authenticated') {
+    assert(!(mutationResult instanceof Error), String(mutationResult));
+    assert(deletionResult instanceof Error && /42501: An active household member is required/.test(deletionResult.message), String(deletionResult));
+    assert(!/40P01|deadlock detected/.test(deletionResult.message), deletionResult.message);
+    assert.equal(command(db, `select is_active from public.family_members where id=fixture.id('parent-member');`), 'f');
+    assert.equal(command(db, `select count(*) from public.family_model_dirty where family_id=fixture.id('family');`), '1');
+    assert.equal(command(db, `select count(*) from public.families where id=fixture.id('family');`), '1');
+  } else {
+    assert(mutationResult instanceof Error && /55P03: Household is changing\. Retry the membership change\./.test(mutationResult.message), String(mutationResult));
+    assert(!/40P01|deadlock detected/.test(mutationResult.message), mutationResult.message);
+    assert(!(deletionResult instanceof Error), String(deletionResult));
+    assert.equal(command(db, `select count(*) from public.families where id=fixture.id('family');`), '0');
+    if (accountCascade) assert.equal(command(db, `select count(*) from auth.users where id=fixture.id('parent');`), '1');
   }
 }
 
@@ -233,7 +285,53 @@ try {
     assert.equal(command(db, `select count(*) from public.family_messages where family_id=${target}
       and content='synthetic family B order';`), '1');
   });
-  console.log('All 17 synthetic concurrency checks passed; temporary databases removed.');
+  await check('unprotected main lifecycle reproduces the original ordinary UPDATE dirty-marker deadlock',
+    db => membershipDeletionRace(db, { unprotected: true }));
+  await check('ordinary authenticated membership UPDATE linearizes before queued parent deletion and preserves its dirty mark',
+    db => membershipDeletionRace(db));
+  await check('inverted service membership UPDATE receives a retry lock error rather than deadlocking',
+    db => membershipDeletionRace(db, { role: 'service_role' }));
+  await check('auth-account FK membership cascade receives a retry lock error under inverted parent deletion',
+    db => membershipDeletionRace(db, { role: 'service_role', accountCascade: true }));
+  await check('explicitly inverted authenticated manual row lock receives a retry lock error', async db => {
+    command(db, `delete from public.family_model_dirty where family_id=fixture.id('family');`);
+    const first = session(db, 'manual-member-first'), deletion = session(db, 'manual-parent-second');
+    await first.run(actor('parent') + `select id from public.family_members where id=fixture.id('parent-member') for update;`);
+    const pending = deletion.run(actor('parent', 'authenticated', '10s') + parentDelete + 'commit;').catch(error => error);
+    await waiting(db, deletion, first);
+    const result = await first.run(deactivateParent + 'commit;').catch(error => error);
+    assert(result instanceof Error && /55P03: Household is changing\. Retry the membership change\./.test(result.message), String(result));
+    assert(!(await pending instanceof Error));
+    assert.equal(command(db, `select count(*) from public.families where id=fixture.id('family');`), '0');
+  });
+  await check('concurrent authenticated self-edits serialize without actor read-lock upgrades', async db => {
+    const first = session(db, 'self-edit-first'), second = session(db, 'self-edit-second');
+    await first.run(actor('parent') + `update public.family_members set display_name='First synthetic edit' where id=fixture.id('parent-member');`);
+    const pending = second.run(actor('parent') + `update public.family_members set display_name='Second synthetic edit' where id=fixture.id('parent-member'); commit;`);
+    await waiting(db, second, first);
+    await first.run('commit;'); await pending;
+    assert.equal(command(db, `select display_name from public.family_members where id=fixture.id('parent-member');`), 'Second synthetic edit');
+  });
+  await check('service membership write does not lock an unrelated family deletion', async db => {
+    command(db, `update public.family_members set role='parent' where id=fixture.id('cross-member');
+      delete from public.family_model_dirty where family_id=fixture.id('family');`);
+    const first = session(db, 'service-target-family'), other = session(db, 'unrelated-family-delete');
+    await first.run(actor('parent', 'service_role') + `update public.family_members set display_name='Synthetic server edit' where id=fixture.id('parent-member');`);
+    await other.run(actor('cross') + `delete from public.families where id=fixture.id('other-family'); commit;`);
+    assert.equal(command(db, `select count(*) from public.families where id=fixture.id('other-family');`), '0');
+    await first.run('commit;');
+    assert.equal(command(db, `select count(*) from public.family_model_dirty where family_id=fixture.id('family');`), '1');
+  });
+  await check('family deletion first gives a late authenticated membership edit a retry without partial mutation', async db => {
+    const deletion = session(db, 'family-delete-first'), late = session(db, 'late-membership-edit');
+    const original = command(db, `select display_name from public.family_members where id=fixture.id('alice-member');`);
+    await deletion.run(actor('parent') + parentDelete);
+    const result = await late.run(actor() + `update public.family_members set display_name='Late synthetic edit' where id=fixture.id('alice-member'); commit;`).catch(error => error);
+    assert(result instanceof Error && /55P03: Household is changing\. Retry the membership change\./.test(result.message), String(result));
+    await deletion.run('rollback;');
+    assert.equal(command(db, `select display_name from public.family_members where id=fixture.id('alice-member');`), original);
+  });
+  console.log(`All ${completedChecks} synthetic concurrency checks passed; temporary databases removed.`);
 } finally {
   for (const client of [...sessions]) client.close();
   for (const db of databases) execFileSync(executable('dropdb'), [...connection, '--force', db]);

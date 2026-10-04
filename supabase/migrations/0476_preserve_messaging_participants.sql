@@ -105,6 +105,59 @@ drop trigger if exists trg_family_delete_scope_lock on public.families;
 create trigger trg_family_delete_scope_lock before delete on public.families
   for each statement execute function messaging_private.lock_authenticated_scope();
 
+-- Membership writes also dirty the household model (0134/0249). Its FK insert
+-- needs a family KEY SHARE lock, so ordinary client writes must take family
+-- parents before their member row. Do not SHARE-lock the actor here: concurrent
+-- self-edits would both need to upgrade that membership lock to a write lock.
+-- NOWAIT also makes an externally prelocked membership transaction retry if
+-- another transaction already holds the family; ordinary UPDATE-first writers
+-- still admit their family before taking any membership row lock.
+create or replace function messaging_private.lock_membership_scope()
+returns trigger language plpgsql security definer set search_path = '' as $$
+begin
+  if auth.uid() is not null then
+    perform f.id from public.families f where exists (
+      select 1 from public.family_members m
+      where m.family_id = f.id and m.user_id = auth.uid() and m.is_active
+    ) order by f.id for key share of f nowait;
+  end if;
+  return null;
+exception when lock_not_available then
+  raise exception 'Household is changing. Retry the membership change.' using errcode = '55P03';
+end;
+$$;
+revoke all on function messaging_private.lock_membership_scope() from public, anon, authenticated, service_role;
+
+drop trigger if exists trg_family_members_scope_lock on public.family_members;
+create trigger trg_family_members_scope_lock before insert or update or delete on public.family_members
+  for each statement execute function messaging_private.lock_membership_scope();
+
+-- Service writes and auth/FK maintenance have no authenticated caller scope.
+-- Admit their actual old/new family parents without waiting after a member row
+-- is already locked. An inverted external lock order receives 55P03 and can
+-- retry the transaction; it must not deadlock or lose the required dirty mark.
+-- A family cascade sees its deleted parent absent and continues normally.
+create or replace function messaging_private.lock_membership_parents()
+returns trigger language plpgsql security definer set search_path = '' as $$
+declare old_family uuid; new_family uuid;
+begin
+  if tg_op <> 'INSERT' then old_family := old.family_id; end if;
+  if tg_op <> 'DELETE' then new_family := new.family_id; end if;
+  perform f.id from public.families f
+    where f.id = old_family or f.id = new_family
+    order by f.id for key share of f nowait;
+  if tg_op = 'DELETE' then return old; end if;
+  return new;
+exception when lock_not_available then
+  raise exception 'Household is changing. Retry the membership change.' using errcode = '55P03';
+end;
+$$;
+revoke all on function messaging_private.lock_membership_parents() from public, anon, authenticated, service_role;
+
+drop trigger if exists trg_family_members_parent_lock on public.family_members;
+create trigger trg_family_members_parent_lock before insert or update or delete on public.family_members
+  for each row execute function messaging_private.lock_membership_parents();
+
 create or replace function messaging_private.conversation_guard()
 returns trigger language plpgsql security definer set search_path = '' as $$
 declare actor public.family_members;
