@@ -55,8 +55,27 @@ import {
 import type { LocaleCode } from '@/lib/i18n/locales';
 import { dayKeyInZone, zonedTimeMs } from '@/lib/schedule/zoned';
 import { readAllAsQuery } from '@/lib/supabase/read-all';
+import { isMissingBillDueDay } from './bills';
+import { billCadence, MONTH_BASED_CADENCES } from './bill-schedule';
 
 type Client = SupabaseClient<Database>;
+
+async function readTimelineBills(supabase: Client, familyId: string) {
+  const columns = 'name, amount, due_date, is_recurring, recurrence, status, category, autopay';
+  const first = await supabase.from('bills').select(`${columns}, due_day`).eq('family_id', familyId).limit(1000);
+  if (!isMissingBillDueDay(first.error)) return first;
+  const legacy = await supabase.from('bills').select(columns).eq('family_id', familyId).limit(1000);
+  if (legacy.error) return legacy;
+  const needsAnchor = (legacy.data ?? []).some((row) => {
+    const cadence = billCadence(row as unknown as TimelineBill);
+    return cadence && MONTH_BASED_CADENCES.has(cadence);
+  });
+  // The current due date remains visible in the bill lists. A forecast cannot
+  // promise future monthly dates when this database cannot retain their anchor.
+  return needsAnchor
+    ? { data: null, error: new Error('Recurring bill anchors are unavailable; the full money forecast cannot be built yet.') }
+    : legacy;
+}
 
 /** Statuses under which a plan still commits money the forecast must carry. */
 export const OPEN_VACATION_STATUSES = ['planning', 'booked'] as const;
@@ -215,9 +234,7 @@ export async function loadMoneyTimelineInput(
   const horizonEndIso = new Date(zonedTimeMs(shiftFamilyDay(horizonEndKey, 1, tz), 0, 0, tz)).toISOString();
 
   const [billsQ, goalsQ, acctQ, eventsQ, subsQ, vacQ, vacBudgetQ, vacSpendQ, movesQ, projectsQ] = await settleAll([
-    supabase.from('bills')
-      .select('name, amount, due_date, is_recurring, recurrence, status, category, autopay')
-      .eq('family_id', familyId).limit(1000),
+    readTimelineBills(supabase, familyId),
     supabase.from('savings_goals')
       .select('name, target_amount, current_amount, target_date')
       .eq('family_id', familyId).limit(500),
@@ -263,7 +280,7 @@ export async function loadMoneyTimelineInput(
     ['subscriptions_tracked', subsQ], ['vacations', vacQ], ['vacation_budgets', vacBudgetQ], ['vacation_expenses', vacSpendQ],
     ['moves', movesQ], ['home_projects', projectsQ],
   ];
-  const failed = reads.find(([, q]) => q.error && !isMissingTableError(q.error));
+  const failed = reads.find(([table, q]) => q.error && (table === 'bills' || !isMissingTableError(q.error)));
   if (failed) {
     console.error('[finance/timeline] money timeline read failed', { table: failed[0], error: failed[1].error });
     throw failed[1].error;

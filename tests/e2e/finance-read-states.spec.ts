@@ -9,9 +9,12 @@ import { reactBrowserScripts } from './helpers/react-browser';
 const { react, reactDom } = reactBrowserScripts('development');
 const sources = Object.fromEntries([
   'components/finance/budgets-view.tsx', 'components/finance/bills-view.tsx',
+  'components/finance/bill-payment-modal.tsx',
   'components/finance/payments-view.tsx', 'components/finance/savings-view.tsx',
   'components/ui/states.tsx', 'components/ui/states-client.tsx', 'components/ui/button.tsx',
   'components/ui/input.tsx', 'components/app/page-header.tsx', 'lib/finance/hub.ts',
+  // New bill imports must resolve even while this fixture forbids writes.
+  'lib/finance/bills.ts', 'lib/finance/bill-schedule.ts',
   // hub.ts reads the locale catalogue for its default currency locale.
   'lib/i18n/locales.ts',
   // And periodStart reads the READER's local day key from here. hub.ts used to

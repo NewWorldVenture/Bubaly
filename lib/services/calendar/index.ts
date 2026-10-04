@@ -17,6 +17,9 @@
 import 'server-only';
 import { detectConflicts, type ConflictEvent, type EventConflict } from '@/lib/home/conflicts';
 import { freeGaps, mergeIntervals, type Interval } from '@/lib/calendar/scheduling';
+import { allDayBusyInterval } from '@/lib/calendar/event-dates';
+import { instantCalendarBounds } from '@/lib/briefing/calendar-window';
+import { readCalendarOccurrences } from '@/lib/calendar/occurrences';
 import type { EventCategory, Insertable, RecurrenceFreq, Tables, Updatable } from '@/lib/database.types';
 import { describeDbError } from '@/lib/supabase/errors';
 import { settleAll } from '@/lib/supabase/settle';
@@ -555,10 +558,17 @@ export async function findFreeSlots(scope: ServiceScope, input: FindFreeSlotsInp
   const fromIso = new Date(fromMs).toISOString();
   const toIso = new Date(toMs).toISOString();
   const members = input.memberIds?.filter(Boolean) ?? [];
+  const calendarBounds = instantCalendarBounds(fromIso, new Date(toMs - 1).toISOString(), scope.tz);
+  const firstDate = `${calendarBounds.allDayFromDay}T00:00:00.000Z`;
+  const endDate = `${calendarBounds.allDayToDay}T00:00:00.000Z`;
 
   const [calendar, school, sports] = await settleAll([
-    scope.db.from('calendar_events').select('starts_at, ends_at, all_day, assignee_id')
-      .eq('family_id', scope.familyId).gte('starts_at', fromIso).lte('starts_at', toIso),
+    readCalendarOccurrences(scope.db, scope.familyId, calendarBounds, scope.tz, {
+      columns: ['starts_at', 'ends_at', 'all_day', 'assignee_id'],
+      singlesFilter: `and(all_day.eq.false,starts_at.gte.${fromIso},starts_at.lt.${toIso}),`
+        + `and(all_day.eq.true,starts_at.gte.${firstDate},starts_at.lt.${endDate}),`
+        + `and(all_day.eq.true,starts_at.lt.${firstDate},ends_at.gt.${firstDate})`,
+    }),
     scope.db.from('school_events').select('starts_at, ends_at, member_id')
       .eq('family_id', scope.familyId).gte('starts_at', fromIso).lte('starts_at', toIso),
     scope.db.from('sports_events').select('starts_at, ends_at, member_id')
@@ -579,10 +589,7 @@ export async function findFreeSlots(scope: ServiceScope, input: FindFreeSlotsInp
     const start = Date.parse(startsAt);
     if (!Number.isFinite(start)) return;
     if (allDay) {
-      // An all-day row blocks the family-local day it falls on, not a UTC day.
-      const key = dayKeyInTz(new Date(start), scope.tz);
-      const dayStart = zonedTimeMs(key, 0, 0, scope.tz);
-      busy.push({ start: dayStart, end: dayStart + 24 * 3600_000 });
+      busy.push(allDayBusyInterval({ starts_at: startsAt, ends_at: endsAt, all_day: true }, scope.tz));
       return;
     }
     const parsedEnd = endsAt ? Date.parse(endsAt) : Number.NaN;

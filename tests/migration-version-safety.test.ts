@@ -505,7 +505,10 @@ describe('Supabase migration filename safety', () => {
     // frozen. This literal tracks the checked-in high-water mark, not
     // migration allocation: 0465-0470 remain NWV's, 0472 Support's, and 0473
     // the coordinator's.
-    expect(audit.nextVersion).toBe('0475');
+    // Unapplied candidates follow their composed release order: recurring bills
+    // at 0475, then messaging at 0476. Historical/applied migrations and active
+    // external authors' files are unchanged; this is a filename expectation.
+    expect(audit.nextVersion).toBe('0477');
   });
 
   it('flags a newly introduced collision instead of silently accepting it', () => {

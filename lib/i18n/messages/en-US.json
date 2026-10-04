@@ -16714,5 +16714,11 @@
   "medicationsModule.noMedicinesPrescribedToYou": "No medicines have been prescribed to you.",
   "medicationsModule.yourOwnMedicinesOnly": "You see the medicines prescribed to you. A parent or adult manages the family's prescriptions.",
   "mealsPlanner.addMealToLibrary": "Add meal to library",
-  "mealsPlanner.noSavedChoices": "No saved meals or recipes yet. Create a new meal below to start planning."
+  "mealsPlanner.noSavedChoices": "No saved meals or recipes yet. Create a new meal below to start planning.",
+  "bills.confirmPaymentSchedule": "Confirm bill schedule",
+  "bills.scheduleNeeded": "Choose when this bill repeats before marking it paid.",
+  "bills.dayOfMonth": "Day of month",
+  "bills.chooseRecurrence": "Choose a recurrence",
+  "bills.chooseDay": "Choose a day",
+  "bills.scheduleUnavailable": "Recurring bill schedules are not available yet. This change was not saved."
 }

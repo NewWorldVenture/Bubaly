@@ -1,7 +1,7 @@
 'use client';
 
 import { useMemo, useState } from 'react';
-import { useFamilyCalendarToday } from '@/components/i18n/use-format';
+import { useFamilyCalendarToday, useFamilyClock } from '@/components/i18n/use-format';
 import { FileText, Plus, Trash2, Check, RotateCcw, Repeat, Bell } from 'lucide-react';
 import { useApp } from '@/components/app/app-context';
 import { useRealtimeQuery } from '@/lib/hooks/use-realtime-query';
@@ -14,7 +14,9 @@ import { Input, Field, Select } from '@/components/ui/input';
 import { SkeletonList, EmptyState, ErrorState } from '@/components/ui/states';
 import { cn } from '@/lib/utils/cn';
 import type { Tables } from '@/lib/database.types';
-import { usd as usdIn, billDueStatus, DUE_META, fmtDueDate as fmtDueDateIn } from '@/lib/finance/hub';
+import { usd as usdIn, billDueStatus, billPaidPatch, billDateForAnchorDay, newBillDueDay, BILL_CADENCES, DUE_META, fmtDueDate as fmtDueDateIn } from '@/lib/finance/hub';
+import { isMissingBillDueDay, saveBillPayment } from '@/lib/finance/bills';
+import { BillPaymentModal } from '@/components/finance/bill-payment-modal';
 import { useLocale, useTranslations } from '@/components/i18n/locale-provider';
 import { describeDbError, wroteNoRows } from '@/lib/supabase/errors';
 import { todayInZone } from '@/lib/schedule/zoned';
@@ -33,6 +35,7 @@ const MODE_META: Record<BillsMode, { title: string; desc: string; icon: typeof F
 export function BillsView({ mode }: { mode: BillsMode }) {
   // Date-only helpers read local calendar fields: give them the FAMILY's day (TIME-003).
   const familyToday = useFamilyCalendarToday();
+  const clock = useFamilyClock();
   const t = useTranslations();
   // Money and dates follow the reader; the currency stays the money's own.
   const locale = useLocale();
@@ -48,6 +51,7 @@ export function BillsView({ mode }: { mode: BillsMode }) {
   });
 
   const [form, setForm] = useState(false);
+  const [paymentBill, setPaymentBill] = useState<Bill | null>(null);
   const bills = useMemo(() => rows ?? [], [rows]);
 
   const visible = useMemo(() => {
@@ -59,14 +63,16 @@ export function BillsView({ mode }: { mode: BillsMode }) {
   const totalDue = useMemo(() => visible.filter((b) => b.status !== 'paid').reduce((s, b) => s + Number(b.amount), 0), [visible]);
 
   async function markPaid(b: Bill) {
-    const next = b.status === 'paid' ? 'upcoming' : 'paid';
+    const reopen = b.status === 'paid';
+    if (!reopen && !billPaidPatch(b, clock.todayKey())) { setPaymentBill(b); return; }
     // A restrictive RLS policy FILTERS an update/delete rather than raising, so
     // a refused write returns zero rows and no error. `.select('id')` is what
     // makes the difference visible — without it `data` is null either way.
-    const { data: rows, error } = await createClient().from('bills').update({ status: next }).eq('id', b.id).eq('family_id', familyId).select('id');
-    if (error) { toastError(describeDbError(error)); return; }
-    if (wroteNoRows(rows)) { toastError(t('errors.thatChangeWasNotSaved')); return; }
-    success(next === 'paid' ? 'Marked paid' : 'Reopened');
+    const { data: rows, error } = await saveBillPayment(createClient(), familyId, b, clock.todayKey(), undefined, reopen);
+    if (error) { toastError(isMissingBillDueDay(error) ? t('bills.scheduleUnavailable') : describeDbError(error)); return; }
+    if (wroteNoRows(rows)) { toastError(t('errors.thatChangeWasNotSaved')); void refresh(); return; }
+    success(reopen ? 'Reopened' : 'Marked paid');
+    void refresh();
   }
   async function toggleAutopay(b: Bill) {
     const { data: rows, error } = await createClient().from('bills').update({ autopay: !b.autopay }).eq('id', b.id).eq('family_id', familyId).select('id');
@@ -159,6 +165,7 @@ export function BillsView({ mode }: { mode: BillsMode }) {
       )}
 
       {form && <BillModal familyId={familyId} userId={userId} defaultAutopay={mode === 'autopay'} onClose={() => setForm(false)} />}
+      {paymentBill && <BillPaymentModal key={paymentBill.id} bill={paymentBill} familyId={familyId} onClose={() => setPaymentBill(null)} onDone={() => { void refresh(); }} />}
     </div>
   );
 }
@@ -168,19 +175,25 @@ function BillModal({ familyId, userId, defaultAutopay, onClose }: { familyId: st
   const { family } = useApp();
   const { success, error: toastError } = useToast();
   const [saving, setSaving] = useState(false);
-  const [v, setV] = useState({ name: '', amount: '', due_date: todayInZone(family?.timezone ?? 'UTC'), category: 'Utilities', is_recurring: true, autopay: defaultAutopay });
+  const [v, setV] = useState(() => {
+    const dueDate = todayInZone(family?.timezone ?? 'UTC');
+    return { name: '', amount: '', due_date: dueDate, due_day: String(newBillDueDay(dueDate, true, 'monthly') ?? ''), category: 'Utilities', is_recurring: true, recurrence: 'monthly', autopay: defaultAutopay };
+  });
+  const needsDay = v.is_recurring && ['monthly', 'quarterly', 'yearly'].includes(v.recurrence);
 
   async function submit(e: React.FormEvent) {
     e.preventDefault();
     if (!v.name.trim() || !v.amount) return toastError(t('billsView.addANameAndAmount'));
     setSaving(true);
+    const dueDay = needsDay ? Number(v.due_day) : null;
     const { error } = await createClient().from('bills').insert({
       family_id: familyId, name: v.name.trim(), amount: Math.abs(parseFloat(v.amount) || 0),
       due_date: v.due_date, category: v.category, is_recurring: v.is_recurring, autopay: v.autopay,
+      recurrence: v.is_recurring ? v.recurrence : null, ...(dueDay !== null ? { due_day: dueDay } : {}),
       status: 'upcoming', created_by: userId,
     });
     setSaving(false);
-    if (error) return toastError(describeDbError(error));
+    if (error) return toastError(isMissingBillDueDay(error) ? t('bills.scheduleUnavailable') : describeDbError(error));
     success(t('billsView.billAdded'));
     onClose();
   }
@@ -191,8 +204,19 @@ function BillModal({ familyId, userId, defaultAutopay, onClose }: { familyId: st
         <Field label={t('bills.billName')}>{(id) => <Input id={id} value={v.name} onChange={(e) => setV({ ...v, name: e.target.value })} placeholder={t('billsView.electricBill')} required autoFocus />}</Field>
         <div className="grid grid-cols-2 gap-3">
           <Field label={t('bills.amount')}>{(id) => <Input id={id} type="number" inputMode="decimal" step="0.01" value={v.amount} onChange={(e) => setV({ ...v, amount: e.target.value })} placeholder="120.00" required />}</Field>
-          <Field label={t('bills.dueDate')}>{(id) => <Input id={id} type="date" value={v.due_date} onChange={(e) => setV({ ...v, due_date: e.target.value })} />}</Field>
+          <Field label={t('bills.dueDate')}>{(id) => <Input id={id} type="date" value={v.due_date} onChange={(e) => setV({ ...v, due_date: e.target.value, due_day: String(newBillDueDay(e.target.value, true, 'monthly') ?? '') })} required />}</Field>
         </div>
+        {v.is_recurring && <Field label={t('billing.recurrence')}>{(id) => (
+          <Select id={id} value={v.recurrence} onChange={(e) => setV({ ...v, recurrence: e.target.value })}>
+            {BILL_CADENCES.map((c) => <option key={c} value={c}>{t(`billing.${c}`)}</option>)}
+          </Select>
+        )}</Field>}
+        {needsDay && <Field label={t('bills.dayOfMonth')} required>{(id) => (
+          <Select id={id} value={v.due_day} onChange={(e) => setV({ ...v, due_day: e.target.value, due_date: billDateForAnchorDay(v.due_date, Number(e.target.value)) ?? v.due_date })} required>
+            <option value="" disabled>{t('bills.chooseDay')}</option>
+            {Array.from({ length: 31 }, (_, i) => i + 1).map((day) => <option key={day} value={day}>{day}</option>)}
+          </Select>
+        )}</Field>}
         <Field label={t('bills.category')}>{(id) => <Select id={id} value={v.category} onChange={(e) => setV({ ...v, category: e.target.value })}>{CATEGORIES.map((c) => <option key={c} value={c}>{c}</option>)}</Select>}</Field>
         <div className="flex items-center gap-4">
           <label className="flex items-center gap-2 text-sm"><input type="checkbox" checked={v.is_recurring} onChange={(e) => setV({ ...v, is_recurring: e.target.checked })} /> {t('bills.recurring')}</label>

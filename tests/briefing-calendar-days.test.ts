@@ -267,7 +267,7 @@ describe('all-day calendar rows in the actual briefing readers', () => {
   it.each(['point within an interval', 'simultaneous points'])('API keeps %s visible without inventing a timed clash', async kind => {
     family('UTC', '2026-09-09T12:00:00.000Z');
     const point = row('Point entry', '2026-09-09T09:30:00.000Z', false, '2026-09-09T09:30:00.000Z');
-    db.seed('calendar_events', [point, kind === 'simultaneous points' ? { ...point, title: 'Other point' }
+    db.seed('calendar_events', [point, kind === 'simultaneous points' ? { ...point, id: 'other-point', title: 'Other point' }
       : row('Appointment', '2026-09-09T09:00:00.000Z', false, '2026-09-09T10:00:00.000Z')]);
     const body = await api(); expect(body.briefing.schedule).toHaveLength(2); expect(body.briefing.conflicts).toEqual([]);
     expect(calendarInput().find(e => e.title === 'Point entry')).toMatchObject({ start: point.starts_at, end: point.ends_at });

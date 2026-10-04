@@ -31,6 +31,12 @@ export function billDueStatus(bill: BillLike, now: Date = new Date()): DueStatus
   return 'upcoming';
 }
 
+export {
+  BILL_CADENCES, MONTH_BASED_CADENCES, billCadence, isBillAnchorDay,
+  billAnchorDay, newBillDueDay, billDateForAnchorDay, nextBillDueDate, billPaidPatch,
+  type BillCadence, type RecurringBillLike, type BillScheduleChoice, type BillPaidPatch,
+} from './bill-schedule';
+
 export const DUE_META: Record<DueStatus, { label: string; tint: string }> = {
   paid: { label: 'Paid', tint: 'bg-emerald-500/15 text-emerald-300' },
   overdue: { label: 'Overdue', tint: 'bg-rose-500/15 text-rose-300' },

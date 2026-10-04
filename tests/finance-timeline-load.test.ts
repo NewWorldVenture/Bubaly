@@ -1,5 +1,6 @@
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import type { SupabaseClient } from '@supabase/supabase-js';
+import { createClient } from '@supabase/supabase-js';
 import type { Database } from '@/lib/database.types';
 import { loadMoneyTimeline, loadMoneyTimelineInput, planCommitments } from '@/lib/finance/timeline-load';
 
@@ -149,5 +150,57 @@ describe('loadMoneyTimelineInput read boundary', () => {
     expect(timeline.scenarioOutflow).toBe(900);
     expect(timeline.lowestBalance).toBe(100);
     expect(seen.filter((t) => t === 'bills')).toHaveLength(1);
+  });
+});
+
+describe('bill anchors in the timeline read', () => {
+  afterEach(() => vi.restoreAllMocks());
+  const row = { name: 'Synthetic rent', amount: 100, due_date: '2026-02-28', due_day: 31, is_recurring: true, recurrence: 'monthly', status: 'upcoming', category: null, autopay: false };
+  function transport(bill: object, refusal?: { code: string; message: string }) {
+    const selects: string[] = [];
+    const client = createClient<Database>('https://synthetic-timeline.invalid', 'synthetic-key', {
+      auth: { persistSession: false, autoRefreshToken: false }, global: { fetch: async (input) => {
+        const url = new URL(String(input));
+        const table = url.pathname.split('/').at(-1);
+        if (table !== 'bills') return new Response('[]', { headers: { 'Content-Type': 'application/json' } });
+        expect(url.searchParams.get('family_id')).toBe('eq.family-1');
+        const select = url.searchParams.get('select') ?? '';
+        selects.push(select);
+        if (refusal && select.includes('due_day')) return new Response(JSON.stringify(refusal), { status: 400, headers: { 'Content-Type': 'application/json' } });
+        const projection = Object.fromEntries(select.split(',').map((name) => [name.trim(), bill[name.trim() as keyof typeof bill]]));
+        return new Response(JSON.stringify([projection]), { headers: { 'Content-Type': 'application/json' } });
+      } },
+    });
+    return { client, selects };
+  }
+
+  it('selects the persisted day and forecasts March 31 from the clamped February row', async () => {
+    const db = transport(row);
+    const timeline = await loadMoneyTimeline(db.client, 'family-1', 'UTC', new Date('2026-02-23T00:00:00Z'));
+    expect(db.selects).toHaveLength(1);
+    expect(db.selects[0]).toContain('due_day');
+    expect(timeline.weeks.flatMap((week) => week.moments).map((moment) => moment.date)).toEqual(['2026-02-28', '2026-03-31', '2026-04-30']);
+  });
+
+  it('reports an incomplete forecast on an older schema with monthly commitments', async () => {
+    vi.spyOn(console, 'error').mockImplementation(() => {});
+    const db = transport(row, { code: 'PGRST204', message: "Could not find the 'due_day' column of 'bills' in the schema cache" });
+    await expect(loadMoneyTimeline(db.client, 'family-1', 'UTC', NOW)).rejects.toThrow(/anchors are unavailable/);
+    expect(db.selects).toHaveLength(2);
+    expect(db.selects[1]).not.toContain('due_day');
+  });
+
+  it.each([{ is_recurring: false, recurrence: null }, { is_recurring: true, recurrence: 'weekly' }])('can read an older schema when the bill needs no month anchor', async (over) => {
+    const db = transport({ ...row, ...over }, { code: '42703', message: 'column bills.due_day does not exist' });
+    const input = await loadMoneyTimelineInput(db.client, 'family-1', 'UTC', NOW);
+    expect(input.bills).toHaveLength(1);
+    expect(db.selects).toHaveLength(2);
+  });
+
+  it.each([{ code: '42501', message: 'due_day permission denied' }, { code: '42703', message: 'column bills.amount does not exist' }])('does not retry a different read refusal', async (refusal) => {
+    vi.spyOn(console, 'error').mockImplementation(() => {});
+    const db = transport(row, refusal);
+    await expect(loadMoneyTimelineInput(db.client, 'family-1', 'UTC', NOW)).rejects.toMatchObject(refusal);
+    expect(db.selects).toHaveLength(1);
   });
 });

@@ -37,7 +37,7 @@ export type OccurrencesResult<C extends keyof EventRow> =
   | { data: null; count: null; error: { message: string } };
 
 export type OccurrencesOptions<C extends keyof EventRow> = {
-  columns: readonly C[];
+  columns?: readonly C[];
   /** Applied after the merge, to the sorted occurrences. */
   limit?: number;
   /** Only this member's events (the digital twin reads one person's load). */
@@ -52,6 +52,48 @@ export type OccurrencesOptions<C extends keyof EventRow> = {
 
 /** More series than a household could have; a read past it is a failed read, never a silent prefix. */
 const SERIES_READ_MAX = 2000;
+const SINGLE_READ_MAX = 20_000;
+const READ_PAGE = 1000;
+
+type PageResult = { data: unknown[] | null; count: number | null; error: { message: string } | null };
+
+/** Exact counts distinguish a complete collection from a server-capped page. */
+async function readCountedRows(
+  first: () => PromiseLike<PageResult>,
+  more: (from: number, to: number) => PromiseLike<PageResult>,
+  max: number,
+  label: string,
+): Promise<{ data: unknown[] | null; error: { message: string } | null }> {
+  const fail = (reason: string) => ({ data: null, error: { message: `${reason}; the calendar window cannot be read whole` } });
+  const rows: unknown[] = [];
+  const seen = new Set<string>();
+  let total: number | null = null;
+  try {
+    for (;;) {
+      const result = await (rows.length === 0 ? first() : more(rows.length, rows.length + READ_PAGE - 1));
+      if (result.error) return { data: null, error: result.error };
+      if (typeof result.count !== 'number' || !Number.isSafeInteger(result.count) || result.count < 0) {
+        return fail(`No usable count of ${label}`);
+      }
+      if (total === null) total = result.count;
+      else if (result.count !== total) return fail(`The count of ${label} changed from ${total} to ${result.count}`);
+      if (total > max) return fail(`More than ${max} ${label}`);
+      if (!Array.isArray(result.data)) return fail(`The ${label} page was unavailable`);
+      for (const row of result.data) {
+        const id = row && typeof row === 'object' && 'id' in row ? row.id : null;
+        if (typeof id !== 'string' || !id) return fail(`A ${label} row had no identity`);
+        if (seen.has(id)) return fail(`The ${label} read repeated a row`);
+        seen.add(id);
+        rows.push(row);
+      }
+      if (rows.length > total) return fail(`The ${label} read answered more rows than it counted`);
+      if (rows.length === total) return { data: rows, error: null };
+      if (result.data.length === 0) return fail(`The ${label} read stopped at ${rows.length} of ${total} rows`);
+    }
+  } catch (cause) {
+    return fail(cause instanceof Error ? cause.message : String(cause));
+  }
+}
 
 const isSeries = (row: { recurrence: string | null }) => !!row.recurrence && row.recurrence !== 'none';
 
@@ -68,14 +110,14 @@ const later = (a: string, b: string) => (a > b ? a : b);
  * failed read is returned as the error it was, so a caller that treats an
  * unreadable calendar as "unavailable, never an empty day" still can.
  */
-export async function readCalendarOccurrences<C extends keyof EventRow>(
+export async function readCalendarOccurrences<C extends keyof EventRow = keyof EventRow>(
   db: Db,
   familyId: string,
   bounds: CalendarWindowBounds,
   timezone: string,
-  opts: OccurrencesOptions<C>,
+  opts: OccurrencesOptions<C> = {},
 ): Promise<OccurrencesResult<C>> {
-  const columns = [...new Set<string>([...opts.columns, ...RECURRENCE_COLUMNS])].join(', ');
+  const columns = opts.columns ? [...new Set<string>([...opts.columns, ...RECURRENCE_COLUMNS])].join(', ') : '*';
   const dayStart = `${bounds.allDayFromDay}T00:00:00.000Z`;
   const dayEnd = `${bounds.allDayToDay}T00:00:00.000Z`;
   const scoped = <Q extends { eq: (column: string, value: string) => Q }>(query: Q): Q =>
@@ -85,27 +127,29 @@ export async function readCalendarOccurrences<C extends keyof EventRow>(
   // window filter, series excluded (a master whose first occurrence falls in
   // the window is the series read's to produce, once); and every series that
   // could reach the window — started by its end, not ended before its start.
-  // `neq` excludes a null recurrence as SQL does. One row past the ceiling is
-  // read so a household past it is a failed read, not a prefix.
+  // `neq` excludes a null recurrence as SQL does. Count each collection and
+  // page by rows actually received, including a unique ID to break start ties.
   const latest = later(bounds.timedTo, dayEnd);
   const earliest = earlier(bounds.timedFrom, dayStart);
-  const singlesQuery = scoped(db
+  const singlesQuery = () => scoped(db
     .from('calendar_events')
-    .select(columns)
+    .select(columns, { count: 'exact' })
     .eq('family_id', familyId))
     .or(opts.singlesFilter ?? calendarWindowFilter(bounds))
     .or('recurrence.is.null,recurrence.eq.none')
-    .order('starts_at');
-  const seriesQuery = scoped(db
+    .order('starts_at').order('id');
+  const seriesQuery = () => scoped(db
     .from('calendar_events')
-    .select(columns)
+    .select(columns, { count: 'exact' })
     .eq('family_id', familyId))
     .neq('recurrence', 'none')
     .lte('starts_at', latest)
     .or(`recurrence_until.is.null,recurrence_until.gte.${earliest}`)
-    .order('starts_at')
-    .limit(SERIES_READ_MAX + 1);
-  const [singles, series] = await Promise.all([singlesQuery, seriesQuery]);
+    .order('starts_at').order('id');
+  const [singles, series] = await Promise.all([
+    readCountedRows(() => singlesQuery().limit(READ_PAGE), (from, to) => singlesQuery().range(from, to), SINGLE_READ_MAX, 'one-off events'),
+    readCountedRows(() => seriesQuery().limit(READ_PAGE), (from, to) => seriesQuery().range(from, to), SERIES_READ_MAX, 'recurring events'),
+  ]);
   if (singles.error) return { data: null, count: null, error: singles.error };
   if (series.error) return { data: null, count: null, error: series.error };
   const seriesRows = ((series.data ?? []) as unknown as CalendarOccurrence<C>[]).filter(isSeries);

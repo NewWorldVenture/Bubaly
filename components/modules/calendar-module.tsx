@@ -6,7 +6,9 @@ import { useMemo, useState, useEffect, useRef } from 'react';
 import { ChevronLeft, ChevronRight, Plus, MapPin, RefreshCw, Filter, Check, Sparkles, Eye, EyeOff, Users, Columns } from 'lucide-react';
 import { useApp } from '@/components/app/app-context';
 import { useRealtimeQuery } from '@/lib/hooks/use-realtime-query';
-import { expandEventsInZone } from '@/lib/calendar/recurrence';
+import { readCalendarOccurrences } from '@/lib/calendar/occurrences';
+import { instantCalendarBounds } from '@/lib/briefing/calendar-window';
+import { calendarEventDayKey } from '@/lib/calendar/event-dates';
 import { BusynessHeatmap } from '@/components/calendar/busyness-heatmap';
 import { describeDbError } from '@/lib/supabase/errors';
 import { createCalendarEventAction, updateCalendarEventAction } from '@/app/(app)/dashboard/calendar/actions';
@@ -309,25 +311,13 @@ export function CalendarModule() {
     if (gridRef.current) gridRef.current.scrollTop = HOUR_HEIGHT * 1;
   }, []);
 
-  const { data: rawData, loading, error, refresh } = useRealtimeQuery<Event>({
-    table: 'calendar_events', familyId, deps: [familyId, windowStart.toISOString()],
-    // In-window events PLUS every recurring series that started before the
-    // window's end — expandEvents below turns those into the occurrences that
-    // actually fall inside the grid (a weekly event created in June must show
-    // on every July Monday, not vanish after its first week).
-    fetcher: (supabase) =>
-      supabase.from('calendar_events').select('*').eq('family_id', familyId)
-        .lt('starts_at', windowEnd.toISOString())
-        .or(`starts_at.gte.${windowStart.toISOString()},recurrence.neq.none`)
-        .order('starts_at'),
+  const { data, loading, error, refresh } = useRealtimeQuery<Event>({
+    table: 'calendar_events', familyId, deps: [familyId, windowStart.toISOString(), windowEnd.toISOString(), clock.timeZone],
+    // The grid and briefs share counted reads, timed recurrence on the family
+    // clock, and all-day recurrence on stored calendar dates.
+    fetcher: (supabase) => readCalendarOccurrences(supabase, familyId,
+      instantCalendarBounds(windowStart.toISOString(), new Date(windowEnd.getTime() - 1).toISOString(), clock.timeZone), clock.timeZone),
   });
-
-  // Recurring rules → concrete occurrences inside the visible window, stepped
-  // on the family's wall clock (a weekly 09:00 stays 09:00 across their DST).
-  const data = useMemo(
-    () => expandEventsInZone(rawData, windowStart, windowEnd, clock.timeZone),
-    [rawData, windowStart, windowEnd, clock.timeZone],
-  );
 
   const memberById = useMemo(() => new Map(members.map(m => [m.id, m])), [members]);
 
@@ -358,7 +348,7 @@ export function CalendarModule() {
   const allDayByDay = useMemo(() => {
     const map = new Map<string, Event[]>();
     for (const e of allDay) {
-      const key = clock.dayKeyOf(e.starts_at);
+      const key = calendarEventDayKey(e, clock.timeZone);
       if (!map.has(key)) map.set(key, []);
       map.get(key)!.push(e);
     }
@@ -369,7 +359,7 @@ export function CalendarModule() {
   const eventsByDay = useMemo(() => {
     const map = new Map<string, Event[]>();
     for (const e of filtered) {
-      const key = clock.dayKeyOf(e.starts_at);
+      const key = calendarEventDayKey(e, clock.timeZone);
       if (!map.has(key)) map.set(key, []);
       map.get(key)!.push(e);
     }
@@ -383,15 +373,19 @@ export function CalendarModule() {
     const dayStart = clock.dayStart(0, now);
     const weekEnd = clock.dayStart(7, now);
     return [...data].filter(e => {
+      if (e.all_day) {
+        const key = calendarEventDayKey(e, clock.timeZone);
+        return key >= clock.dayKeyOf(dayStart.toISOString()) && key < clock.dayKeyOf(weekEnd.toISOString());
+      }
       const d = new Date(e.starts_at);
-      return d >= dayStart && d <= weekEnd;
+      return d >= dayStart && d < weekEnd;
     }).sort((a, b) => new Date(a.starts_at).getTime() - new Date(b.starts_at).getTime()).slice(0, 8);
   }, [data, clock]);
 
   const upcomingByDay = useMemo(() => {
     const map = new Map<string, Event[]>();
     for (const e of upcoming) {
-      const key = clock.dayKeyOf(e.starts_at);
+      const key = calendarEventDayKey(e, clock.timeZone);
       if (!map.has(key)) map.set(key, []);
       map.get(key)!.push(e);
     }

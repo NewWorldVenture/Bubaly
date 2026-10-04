@@ -1231,9 +1231,9 @@ export interface Database {
         Partial<{ category: string; amount: number; period: BudgetPeriod }>
       >;
       bills: T<
-        { id: string; family_id: string; name: string; amount: number; due_date: string; is_recurring: boolean; recurrence: string | null; status: BillStatus; category: string | null; autopay: boolean; created_by: string | null } & Stamps,
-        { id?: string; family_id: string; name: string; amount: number; due_date: string; is_recurring?: boolean; recurrence?: string | null; status?: BillStatus; category?: string | null; autopay?: boolean; created_by?: string | null },
-        Partial<{ name: string; amount: number; due_date: string; is_recurring: boolean; recurrence: string | null; status: BillStatus; category: string | null; autopay: boolean }>
+        { id: string; family_id: string; name: string; amount: number; due_date: string; due_day?: number | null; is_recurring: boolean; recurrence: string | null; status: BillStatus; category: string | null; autopay: boolean; created_by: string | null } & Stamps,
+        { id?: string; family_id: string; name: string; amount: number; due_date: string; due_day?: number | null; is_recurring?: boolean; recurrence?: string | null; status?: BillStatus; category?: string | null; autopay?: boolean; created_by?: string | null },
+        Partial<{ name: string; amount: number; due_date: string; due_day: number | null; is_recurring: boolean; recurrence: string | null; status: BillStatus; category: string | null; autopay: boolean }>
       >;
       savings_goals: T<
         { id: string; family_id: string; name: string; target_amount: number; current_amount: number; target_date: string | null; emoji: string | null; created_by: string | null } & Stamps,
@@ -1373,7 +1373,7 @@ export interface Database {
       >;
       // ── Core Platform (0014) ──────────────────────────────────
       family_conversations: T<
-        { id: string; family_id: string; name: string | null; kind: string; avatar_emoji: string | null; description: string | null; is_archived: boolean; member_ids: string[]; participant_ids: string[]; created_by: string | null; last_message_at: string | null; created_at: string; updated_at: string },
+        { id: string; family_id: string; name: string | null; kind: string; avatar_emoji: string | null; description: string | null; is_archived: boolean; is_family_chat: boolean; member_ids: string[]; participant_ids: string[]; created_by: string | null; last_message_at: string | null; created_at: string; updated_at: string },
         { id?: string; family_id: string; name?: string | null; kind?: string; avatar_emoji?: string | null; description?: string | null; is_archived?: boolean; member_ids?: string[]; participant_ids?: string[]; created_by?: string | null },
         Partial<{ name: string | null; avatar_emoji: string | null; description: string | null; is_archived: boolean; member_ids: string[]; participant_ids: string[]; last_message_at: string | null }>
       >;
@@ -2799,6 +2799,9 @@ export interface Database {
       rate_limit_hit: { Args: { p_key: string; p_limit: number; p_window_seconds: number }; Returns: { allowed: boolean; retry_after: number }[] };
       rate_limit_prune: { Args: Record<string, never>; Returns: undefined };
       mark_conversation_read: { Args: { p_conversation_id: string }; Returns: undefined };
+      ensure_family_conversation: { Args: { p_family_id: string; p_member_id?: string | null; p_user_id?: string | null }; Returns: string };
+      send_family_message: { Args: { p_family_id: string; p_conversation_id: string; p_member_id: string | null; p_user_id: string | null; p_content: string; p_kind?: string; p_reply_to_id?: string | null }; Returns: Database['public']['Tables']['family_messages']['Row'] };
+      find_family_message: { Args: { p_family_id: string; p_conversation_id: string; p_member_id: string | null; p_user_id: string | null; p_content: string; p_kind: string; p_reply_to_id: string | null; p_since: string }; Returns: Database['public']['Tables']['family_messages']['Row'][] };
       marketplace_create_circle: { Args: { p_family: string; p_name: string; p_emoji?: string }; Returns: string };
       marketplace_join_circle: { Args: { p_family: string; p_code: string }; Returns: string };
       marketplace_leave_circle: { Args: { p_family: string; p_circle: string }; Returns: undefined };

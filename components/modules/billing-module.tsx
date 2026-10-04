@@ -61,6 +61,9 @@ import {
 import { cn } from '@/lib/utils/cn';
 import type { Tables, SubscriptionStatus, AccountType, TransactionType, BudgetPeriod, BillStatus } from '@/lib/database.types';
 import { categoryLabel } from '@/lib/finance/category-label';
+import { billPaidPatch, billDateForAnchorDay, newBillDueDay } from '@/lib/finance/hub';
+import { isMissingBillDueDay, saveBillPayment } from '@/lib/finance/bills';
+import { BillPaymentModal } from '@/components/finance/bill-payment-modal';
 import { useLocale, useTranslations } from '@/components/i18n/locale-provider';
 import { FamilyDeliveredValue } from '@/components/billing/family-delivered-value';
 import type { LocaleCode } from '@/lib/i18n/locales';
@@ -446,23 +449,27 @@ function AddBillModal({ open, onClose, familyId, userId, onDone }: {
   const [dueDate, setDueDate] = useState('');
   const [isRecurring, setIsRecurring] = useState(false);
   const [recurrence, setRecurrence] = useState('monthly');
+  const [anchorDay, setAnchorDay] = useState('');
   const [category, setCategory] = useState('Other');
 
-  function reset() { setName(''); setAmount(''); setDueDate(''); setIsRecurring(false); setRecurrence('monthly'); setCategory('Other'); }
+  const needsDay = isRecurring && ['monthly', 'quarterly', 'yearly'].includes(recurrence);
+  function reset() { setName(''); setAmount(''); setDueDate(''); setIsRecurring(false); setRecurrence('monthly'); setAnchorDay(''); setCategory('Other'); }
 
   async function submit(e: React.FormEvent) {
     e.preventDefault();
     if (!name.trim() || !amount || !dueDate) return;
     setSaving(true);
     const supabase = createClient();
+    const dueDay = needsDay ? Number(anchorDay) : null;
     const { error } = await supabase.from('bills').insert({
       family_id: familyId, created_by: userId,
       name: name.trim(), amount: parseFloat(amount), due_date: dueDate,
       is_recurring: isRecurring, recurrence: isRecurring ? recurrence : null,
+      ...(dueDay !== null ? { due_day: dueDay } : {}),
       status: 'upcoming', category,
     });
     setSaving(false);
-    if (error) return toastError(describeDbError(error));
+    if (error) return toastError(isMissingBillDueDay(error) ? tr('bills.scheduleUnavailable') : describeDbError(error));
     success(tr('billingModule.billAdded'));
     reset(); onClose(); onDone();
   }
@@ -472,7 +479,7 @@ function AddBillModal({ open, onClose, familyId, userId, onDone }: {
       <form onSubmit={submit} className="space-y-4">
         <Field label={tr('billing.billName')} required>{(id) => <Input id={id} value={name} onChange={(e) => setName(e.target.value)} placeholder={tr('billing.eGMortgage')} required />}</Field>
         <Field label={tr('billing.amount')} required>{(id) => <Input id={id} type="number" inputMode="decimal" step="0.01" min="0.01" value={amount} onChange={(e) => setAmount(e.target.value)} placeholder="0.00" required />}</Field>
-        <Field label={tr('billing.dueDate')} required>{(id) => <Input id={id} type="date" value={dueDate} onChange={(e) => setDueDate(e.target.value)} required />}</Field>
+        <Field label={tr('billing.dueDate')} required>{(id) => <Input id={id} type="date" value={dueDate} onChange={(e) => { setDueDate(e.target.value); setAnchorDay(String(newBillDueDay(e.target.value, true, 'monthly') ?? '')); }} required />}</Field>
         <Field label={tr('billing.category')}>{(id) => (
           <Select id={id} value={category} onChange={(e) => setCategory(e.target.value)}>
             {EXPENSE_CATEGORIES.map((c) => <option key={c} value={c}>{categoryLabel(tr, c)}</option>)}
@@ -493,6 +500,12 @@ function AddBillModal({ open, onClose, familyId, userId, onDone }: {
             </Select>
           )}</Field>
         )}
+        {needsDay && <Field label={tr('bills.dayOfMonth')} required>{(id) => (
+          <Select id={id} value={anchorDay} onChange={(e) => { setAnchorDay(e.target.value); setDueDate(billDateForAnchorDay(dueDate, Number(e.target.value)) ?? dueDate); }} required>
+            <option value="" disabled>{tr('bills.chooseDay')}</option>
+            {Array.from({ length: 31 }, (_, i) => i + 1).map((day) => <option key={day} value={day}>{day}</option>)}
+          </Select>
+        )}</Field>}
         <Button type="submit" className="w-full" loading={saving}>{tr('billing.addBill')}</Button>
       </form>
     </Modal>
@@ -548,6 +561,7 @@ function AddSavingsGoalModal({ open, onClose, familyId, userId, onDone }: {
 export function BillingModule({ serviceFeeNotice = null }: { serviceFeeNotice?: string | null } = {}) {
   const { fmtDate } = useFormat();
   const clock = useFamilyClock();
+  const [paymentBill, setPaymentBill] = useState<Bill | null>(null);
   const tr = useTranslations();
   const askConfirm = useConfirm();
   // Money follows the reader's locale; the currency does not.
@@ -952,11 +966,12 @@ export function BillingModule({ serviceFeeNotice = null }: { serviceFeeNotice?: 
     void refreshBills();
   }
 
-  async function markBillPaid(id: string) {
+  async function markBillPaid(bill: Bill) {
+    if (!billPaidPatch(bill, clock.todayKey())) { setPaymentBill(bill); return; }
     const supabase = createClient();
-    const { data: rows, error } = await supabase.from('bills').update({ status: 'paid' }).eq('id', id).eq('family_id', familyId).select('id');
-    if (error) return toastError(describeDbError(error));
-    if (wroteNoRows(rows)) return toastError(tr('errors.thatChangeWasNotSaved'));
+    const { data: rows, error } = await saveBillPayment(supabase, familyId, bill, clock.todayKey());
+    if (error) return toastError(isMissingBillDueDay(error) ? tr('bills.scheduleUnavailable') : describeDbError(error));
+    if (wroteNoRows(rows)) { toastError(tr('errors.thatChangeWasNotSaved')); void refreshBills(); return; }
     success(tr('billingModule.billMarkedAsPaid'));
     void refreshBills();
   }
@@ -1358,7 +1373,7 @@ export function BillingModule({ serviceFeeNotice = null }: { serviceFeeNotice?: 
               <p className="text-sm font-bold shrink-0">{fmtCurrency(b.amount)}</p>
               <div className="flex gap-1">
                 {b.status !== 'paid' && (
-                  <button onClick={() => markBillPaid(b.id)} className="p-1.5 rounded-lg text-muted hover:text-emerald-400 hover:bg-surface/40" title={tr('billing.markPaid')}>
+                  <button onClick={() => markBillPaid(b)} className="p-1.5 rounded-lg text-muted hover:text-emerald-400 hover:bg-surface/40" title={tr('billing.markPaid')}>
                     <CheckCircle2 className="h-4 w-4" />
                   </button>
                 )}
@@ -1712,6 +1727,7 @@ export function BillingModule({ serviceFeeNotice = null }: { serviceFeeNotice?: 
       <AddTransactionModal open={showAddTransaction} onClose={() => setShowAddTransaction(false)} familyId={familyId} userId={userId} accounts={accounts} onDone={() => void refreshTransactions()} />
       <AddBudgetModal open={showAddBudget} onClose={() => setShowAddBudget(false)} familyId={familyId} userId={userId} onDone={() => void refreshBudgets()} />
       <AddBillModal open={showAddBill} onClose={() => setShowAddBill(false)} familyId={familyId} userId={userId} onDone={() => void refreshBills()} />
+      {paymentBill && <BillPaymentModal key={paymentBill.id} bill={paymentBill} familyId={familyId} onClose={() => setPaymentBill(null)} onDone={() => { void refreshBills(); }} />}
       <AddSavingsGoalModal open={showAddGoal} onClose={() => setShowAddGoal(false)} familyId={familyId} userId={userId} onDone={() => void refreshGoals()} />
     </div>
   );
