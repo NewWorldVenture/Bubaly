@@ -151,7 +151,7 @@ export async function loadRunAction(runId: string): Promise<RunActionResult<RunV
   if (!runId) return { ok: true, data: null };
   const ctx = await requireUserContext();
   const supabase = await createServer();
-  const detail = await loadRunDetail(supabase, ctx.active.familyId, runId, { viewerRole: ctx.active.role });
+  const detail = await loadRunDetail(supabase, ctx.active.familyId, runId, { viewerRole: ctx.active.role, viewerUserId: ctx.user.id });
   if (!detail.ok) return { ok: false, error: detail.error, code: detail.code };
   return { ok: true, data: detail.data ? toRunView(detail.data, ctx.active.familyId, isManager(ctx.active.role)) : null };
 }

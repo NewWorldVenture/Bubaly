@@ -4052,3 +4052,87 @@ access to equal the page's guest row: 8 findings before, 0 after.
 **After applying:** as a guest, open the calendar and try to add an event. It
 should be refused with the permission message. As a parent, add and delete one,
 which should succeed.
+
+## `0480` — any family member could read another member's AI requests and answers
+
+`supabase/migrations/0480_a_request_text_is_its_requesters.sql`
+
+**Severity: high (a child could read a sibling's or a parent's private request
+to the concierge, and their answers to its questions, through the Data API).
+Deploy order: migration and code together, migration first.** Reported in #892
+comment 5973332041.
+
+Two columns of `ai_requests` hold a member's own words, verbatim:
+- `request_text`: what they typed to the concierge, or a routine's configured
+  prompt.
+- `clarifications`: the planner's questions and the member's **answers**.
+
+The row is readable by every family member (0250 `ai_requests_select`), and no
+column grant narrowed it. Reproduced on the replayed schema: a `child` session
+selected a `teen`'s request text and clarification answers. The run page showed
+them the same way, because `family_automation_runs` is family-readable and the
+page read the request with the viewer's session.
+
+0480 makes the fix at the column level, not with a row policy:
+- `authenticated` keeps SELECT on every column of `ai_requests` except
+  `request_text` and `clarifications`. The F19 meter counts the family's rows
+  through a member's session, and the policies on plans, steps, context and run
+  events read `id` / `requested_by` as the member. Both are unchanged.
+- `anon` loses SELECT on the table. It had no policy, so it read nothing anyway.
+- `public.ai_request_words(uuid[])` returns the two columns only to the requester
+  or a family manager (`can_manage_family`). It is SECURITY DEFINER with
+  `search_path` pinned, and only `authenticated` and `service_role` may execute
+  it. A routine's row names no member, so only a manager reads its prompt.
+
+The service role (planner, intake, the super-admin activity page) is unaffected.
+
+**Code deployed before this migration:** the run page and trust activity call
+`ai_request_words`, which does not exist yet. The run still opens without the
+words, but trust activity fails closed ("could not read what it looked at").
+**Migration deployed before the code:** a member session's `select('*')` on
+`ai_requests` is refused, so the run page would not open. **Apply both together,
+migration first.**
+
+**The run page follows the request (#927 comment 5973640023).** For a run
+started from a request, everything the model wrote from it — the plan's
+objective and reasoning, its steps, the run's events, approvals and
+`summary` (where a clarifying question is kept) — is shown only to a viewer
+`ai_request_words` answers for. The decision is made in `loadRunDetail`, so it
+is decided from who the viewer is (a manager, or the person who filed the
+request), so it holds when a caller passes the service client, and a failed
+words read costs only the words (a pending approval stays in front of the
+parent who decides it). A sibling sees that the run exists and its state, as
+"Your request"; a failed run's error is withheld from them too.
+
+**Deploy order with the other unapplied migrations.** 0480 is numbered above
+0475–0479, which other branches hold and may merge later. Apply migrations in
+version order. If 0480 is already applied when a lower one lands,
+`supabase db push` refuses it unless run with `--include-all`. 0480 and 0477
+(F19) work in either order (0477 grants `metered` by name).
+
+**Still open (a product decision, not in this change):**
+`family_automation_runs.summary` is family-readable in the table itself, and
+so is `approval_requests` (title, summary and the step's `input_json`), which
+the executor files for a step that needs approval. Home,
+Needs you, the display kiosk, the briefing and the autopilot and
+family-automation pages list it across the family, and a summary can repeat the
+request. Withholding it changes those surfaces.
+
+`docs/audit/a-request-text-is-its-requesters-check.sql` covers 9 assertions:
+- the sibling is refused on the text and on the answers;
+- the ledger and the meter count are intact;
+- the requester and the manager are served the text and the answers;
+- another family and anon get nothing;
+- plans are intact;
+- the column grant is exact;
+- negative control: with the column granted back, the sibling reads the words.
+
+It reports 5 failures against the schema before 0480 and passes after.
+
+**Rollback:** `grant select on public.ai_requests to authenticated; drop function if exists public.ai_request_words(uuid[]);`, together with
+reverting the application change.
+
+**After applying:** as a teen, ask the concierge something that needs a
+clarifying question, answer it, and open the run. The question and the answer
+show. As a child in the same family, open that run: it shows "Your request"
+without the words or the answer. As a parent, both show.

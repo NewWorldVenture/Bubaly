@@ -48,6 +48,7 @@ import { HIGH_STAKES_AI_DOMAINS, type AutonomyBehavior } from '@/lib/trust/engin
 import { settingsFromRow } from '@/lib/ai/family-settings';
 import { AI_CATEGORIES } from '@/lib/ai/categories';
 import { loadRecentToolCalls, type ToolCallLedgerRow } from '@/lib/ai/runs/store';
+import { readRequestWords } from '@/lib/ai/runs/request-text';
 import { settle } from '@/lib/supabase/settle';
 
 /** One line of "what Bubaly did", with the run it belongs to. Never the arguments. */
@@ -206,11 +207,17 @@ export async function loadTrustActivity(
   const requestIds = contextRows.map((row) => row.request_id).filter(Boolean);
   const requestById = new Map<string, { requestText: string | null; intent: string | null }>();
   if (requestIds.length > 0) {
-    const { data: requests, error: requestsError } = await db
-      .from('ai_requests')
-      .select('id, request_text, interpreted_intent')
-      .eq('family_id', scope.familyId)
-      .in('id', requestIds);
+    // The words come only through `ai_request_words` (0480): a member's session
+    // cannot select `request_text`. These context rows are already the
+    // requester's own or the manager's (0250), the same rule the function applies.
+    const [{ data: requests, error: requestsError }, words] = await Promise.all([
+      db
+        .from('ai_requests')
+        .select('id, interpreted_intent')
+        .eq('family_id', scope.familyId)
+        .in('id', requestIds),
+      readRequestWords(db, requestIds),
+    ]);
     if (requestsError) {
       console.error('[trust/activity] request read failed', requestsError);
       return fail(describeDbError(requestsError, 'Bubaly could not read what it looked at.'), {
@@ -218,8 +225,13 @@ export async function loadTrustActivity(
         retryable: true,
       });
     }
-    for (const row of (requests ?? []) as { id: string; request_text: string | null; interpreted_intent: string | null }[]) {
-      requestById.set(row.id, { requestText: row.request_text, intent: row.interpreted_intent });
+    // The words are optional here — the tab already reads "A request from your
+    // family" without them — so a failed words read costs only the words, not
+    // the dials and the ledger (#927 review). These context rows are already
+    // the requester's or a manager's, so nothing is shown that should not be.
+    if (!words.ok) console.error('[trust/activity] request words read failed', words.error);
+    for (const row of (requests ?? []) as { id: string; interpreted_intent: string | null }[]) {
+      requestById.set(row.id, { requestText: words.ok ? words.words.get(row.id)?.requestText ?? null : null, intent: row.interpreted_intent });
     }
   }
 

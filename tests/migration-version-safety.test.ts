@@ -504,8 +504,10 @@ describe('Supabase migration filename safety', () => {
     // (reserved for #710) withdraws an admin removed after a digest was
     // frozen. This literal tracks the checked-in high-water mark, not
     // migration allocation: 0465-0470 remain NWV's, 0472 Support's, and 0473
-    // the coordinator's.
-    expect(audit.nextVersion).toBe('0475');
+    // the coordinator's. 0480 (Surge, #892 comment 5973332041) withdraws
+    // ai_requests.request_text from member sessions; 0475/0476 are messaging's,
+    // 0477 F19's (#892), 0478 Meals' and 0479 Daniel's.
+    expect(audit.nextVersion).toBe('0481');
   });
 
   it('flags a newly introduced collision instead of silently accepting it', () => {

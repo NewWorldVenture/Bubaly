@@ -237,10 +237,29 @@ test.describe('authenticated first-value journey', () => {
           .insert({ family_id: familyId, user_id: null, display_name: 'Probe co-parent', role: 'parent' })
           .select('id').single();
         if (standInError) throw standInError;
+        // 0480 (#927): a request's own words are its requester's and a manager's.
+        // Filed with no requester (a routine's shape), so only a manager may read
+        // them — and no member session may select the columns at all.
+        const words = 'E2E-0480 private request words';
+        const { data: privateRequest, error: privateRequestError } = await service.from('ai_requests')
+          .insert({ family_id: familyId, requested_by: null, kind: 'routine', request_text: words, status: 'queued',
+            clarifications: [{ question: 'When?', answer: 'E2E-0480 private answer' }] })
+          .select('id').single();
+        if (privateRequestError) throw privateRequestError;
         const { error: childRoleError } = await service.from('family_members')
           .update({ role: 'child' }).eq('id', membership.id);
         if (childRoleError) throw childRoleError;
         try {
+          const { error: wordsError } = await member.from('ai_requests')
+            .select('request_text, clarifications').eq('id', privateRequest.id);
+          expect(wordsError?.code, 'No member session may select a request\'s words (0480)').toBe('42501');
+          const { data: ledger, error: ledgerError } = await member.from('ai_requests')
+            .select('id, kind').eq('id', privateRequest.id);
+          expect(ledgerError, 'The rest of the request stays family-readable (the F19 meter counts it)').toBeNull();
+          expect(ledger).toHaveLength(1);
+          const { data: childWords, error: childWordsError } = await member.rpc('ai_request_words', { p_request_ids: [privateRequest.id] });
+          expect(childWordsError).toBeNull();
+          expect(childWords, 'A child who did not file the request gets none of its words').toEqual([]);
           const { error: mintError } = await member.from('wallet_transactions').insert(credit);
           expect(mintError?.code, 'Children cannot mint completed wallet credits').toBe('42501');
           const { data: changed, error: changeError } = await member.from('wallet_transactions')
@@ -269,6 +288,16 @@ test.describe('authenticated first-value journey', () => {
             .delete().eq('id', standInManager.id);
           if (standInCleanupError) throw standInCleanupError;
         }
+        const { data: managerWords, error: managerWordsError } = await member.rpc('ai_request_words', { p_request_ids: [privateRequest.id] });
+        expect(managerWordsError).toBeNull();
+        expect(managerWords, 'A manager reads the words and answers through ai_request_words').toEqual([
+          expect.objectContaining({ id: privateRequest.id, request_text: words }),
+        ]);
+        expect(JSON.stringify(managerWords)).toContain('E2E-0480 private answer');
+        // Removed: a queued request row in the test family would count toward its
+        // F19 allowance and could be picked up by a sweep on a persistent project.
+        const { error: privateCleanupError } = await service.from('ai_requests').delete().eq('id', privateRequest.id);
+        if (privateCleanupError) throw privateCleanupError;
         const { data: managerChange, error: managerError } = await member.from('wallet_transactions')
           .update({ amount_cents: 125 }).eq('id', transaction.id).select('amount_cents').single();
         expect(managerError).toBeNull();
