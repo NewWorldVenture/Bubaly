@@ -129,9 +129,13 @@ describe('a run a person asks for again', () => {
     const controls = readFileSync(join(ROOT, 'lib/ai/runs/controls.ts'), 'utf8');
     const approvals = readFileSync(join(ROOT, 'lib/services/approvals/index.ts'), 'utf8');
 
-    // Each `updateRun(... { state: 'ready', ... })` patch, split at the call so
-    // a patch is checked against its own fields and nobody else's.
-    const readyPatches = (src: string) => src.split('updateRun(').slice(1).filter((chunk) => /state: 'ready',/.test(chunk.split('}, { db })')[0]));
+    // Each `updateRunAsObserved(... { state: 'ready', ... })` patch, split at
+    // the call so a patch is checked against its own fields and nobody else's.
+    // The observed compare-and-set, not the plain `updateRun`: a re-entry
+    // writes from the snapshot it loaded, and two of them (or one and a claim)
+    // can hold the same snapshot (review 5973301004;
+    // tests/a-stale-fold-cannot-re-arm-a-claimed-run.test.ts).
+    const readyPatches = (src: string) => src.split('updateRunAsObserved(').slice(1).filter((chunk) => /state: 'ready',/.test(chunk.split('}, { db })')[0]));
     const controlPatches = readyPatches(controls);
     const approvalPatches = readyPatches(approvals);
     expect(controlPatches, 'resume, re-run a step, edit a step').toHaveLength(3);
@@ -139,5 +143,9 @@ describe('a run a person asks for again', () => {
     for (const patch of [...controlPatches, ...approvalPatches]) {
       expect(patch.split('}, { db })')[0]).toContain('...freshBudget()');
     }
+    // And no re-entry write to `ready` is left on the unconditioned path.
+    const bareReady = (src: string) => src.split('updateRun(').slice(1).filter((chunk) => /state: 'ready',/.test(chunk.split('}, { db })')[0]));
+    expect(bareReady(controls), 'controls: every ready write is conditioned').toHaveLength(0);
+    expect(bareReady(approvals), 'approvals: every ready write is conditioned').toHaveLength(0);
   });
 });

@@ -22,7 +22,7 @@ import { describeDbError, wroteNoRows } from '@/lib/supabase/errors';
 import { fail, ok, SERVICE_CODES, type ServiceResult, type ServiceScope } from '@/lib/services/types';
 import { canTransitionRun, isTerminalRunState, legacyStatusFor, type RunState, type StepState } from './states';
 import {
-  appendEvent, freshBudget, ledgerClient, loadPlanSteps, loadRun, savePlan, updateRequest, updateRun, updateStep,
+  appendEvent, freshBudget, ledgerClient, loadPlanSteps, loadRun, savePlan, updateRequest, updateRun, updateRunAsObserved, updateStep,
   type PlanStepInput, type RunRow, type StepRow, type StoreOpts,
 } from './store';
 
@@ -116,7 +116,11 @@ export async function resumeRun(scope: ServiceScope, runId: string, opts?: Contr
 
   if (run.state !== 'paused') return fail('That run is not paused.', { code: SERVICE_CODES.invalidInput });
 
-  const updated = await updateRun(scope, runId, {
+  // Conditioned on the run as this call loaded it (store.ts,
+  // updateRunAsObserved): a second resume from another tab, or a claim, that
+  // landed between the read and this write is not overwritten — the run is
+  // simply no longer paused, which is what the caller is told.
+  const updated = await updateRunAsObserved(scope, runId, run, {
     state: 'ready',
     status: legacyStatusFor('ready'),
     paused_at: null,
@@ -125,6 +129,7 @@ export async function resumeRun(scope: ServiceScope, runId: string, opts?: Contr
     ...freshBudget(),
   }, { db });
   if (!updated.ok) return updated;
+  if (!updated.data) return fail('That run is not paused.', { code: SERVICE_CODES.invalidInput });
 
   await appendEvent(scope, runId, { eventType: 'resumed', message: 'Resumed - Bubaly will pick this up again shortly.' }, { db });
   if (run.request_id) await updateRequest(scope, run.request_id, { status: 'ready', error: null }, { db });
@@ -224,6 +229,15 @@ export type RerunResult = { rerun: boolean; state: StepState; detail: string };
  * A `failed` ledger row has its attempt bumped so the executor's idempotency
  * ledger takes it over and the retry really re-executes.
  */
+/**
+ * A person's re-entry found the run changed between its read and its write: a
+ * worker claimed it, another tab moved it, a decision folded in. The write was
+ * conditioned on what the person saw (store.ts, updateRunAsObserved) and so
+ * did not land; what they asked for is already in motion or already moot, and
+ * the run shows which.
+ */
+const MOVED_ON = 'That run changed while this was being asked; nothing was overwritten. Check the run and try again if it still needs it.';
+
 export async function rerunStep(
   scope: ServiceScope,
   runId: string,
@@ -309,7 +323,11 @@ export async function rerunStep(
     }
   }
 
-  const resumed = await updateRun(scope, runId, {
+  // Conditioned on the run as this call loaded it. A worker that claimed the
+  // run meanwhile reloads the steps every pass and will pick up the step just
+  // re-queued; writing `ready`, a fresh budget and this snapshot's lease over
+  // its claim is what must not happen.
+  const resumed = await updateRunAsObserved(scope, runId, run, {
     state: 'ready',
     status: legacyStatusFor('ready'),
     run_after: new Date().toISOString(),
@@ -318,6 +336,7 @@ export async function rerunStep(
     ...freshBudget(),
   }, { db });
   if (!resumed.ok) return resumed;
+  if (!resumed.data) return fail(MOVED_ON, { code: SERVICE_CODES.invalidInput, retryable: true });
 
   await appendEvent(scope, runId, {
     eventType: 'step_retried',
@@ -419,7 +438,10 @@ export async function editStepInput(
   }, { db });
   if (!saved.ok) return saved;
 
-  const repointed = await updateRun(scope, runId, {
+  // Conditioned on the run as this call loaded it. When the run moved first,
+  // the new plan version stays saved but unreferenced — a version the run
+  // never pointed at — rather than being pointed at over a live claim.
+  const repointed = await updateRunAsObserved(scope, runId, run, {
     plan_id: saved.data.planId,
     state: 'ready',
     status: legacyStatusFor('ready'),
@@ -430,6 +452,7 @@ export async function editStepInput(
     ...freshBudget(),
   }, { db });
   if (!repointed.ok) return repointed;
+  if (!repointed.data) return fail(MOVED_ON, { code: SERVICE_CODES.invalidInput, retryable: true });
 
   await appendEvent(scope, runId, {
     eventType: 'planned',
