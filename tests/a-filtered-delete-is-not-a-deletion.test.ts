@@ -194,26 +194,18 @@ const KNOWN_UNFIXED: string[] = [
   // left the listing in place and then deleted its photo from storage — data
   // loss, not merely a wrong toast.
   //
-  // The SECOND measurement, on the merge of main's 0344-0380 (#579) into PR #548:
-  // main's C1-K pass narrowed writes on 32 more tables, and
-  // docs/audit/gated-write-tables-check.sql's `recorded` list grew with them
-  // (108 -> 140), which is what turned these twelve file/verb/table sites
-  // (27 call sites) from "not gated" into "gated and silent or unscoped". They
-  // are main's call sites on main's newly gated tables, recorded here exactly as
-  // the header above says a new measurement is — read, named, and tolerated
-  // until each is fixed — rather than swept in a merge commit. Each still has to
-  // MATCH (a fixed one must be deleted here), and the rule is enforced on every
-  // other site.
-  'components/marketplace/listing-questions.tsx update marketplace_questions',
-  'components/modules/chores-module.tsx update chore_assignments',
-  'components/modules/meals-module.tsx delete meal_vote_ballots',
-  'components/modules/messages-module.tsx update family_messages',
-  'components/modules/screen-time-module.tsx update screen_time_entries',
-  'components/modules/voting-module.tsx delete family_poll_votes',
-  'components/modules/watchlist-module.tsx delete watchlist_votes',
-  'components/modules/watchlist-module.tsx update watchlist_votes',
-  'app/(app)/dashboard/workload/actions.ts update chore_assignments',
-  'app/(app)/marketplace/handoff/actions.ts update marketplace_handoffs',
+  // The SECOND measurement, on the merge of main's 0344-0380 (#579) into PR #548,
+  // named ten more file/verb/table sites (fourteen call sites) that main's C1-K
+  // pass had turned from "not gated" into "gated and silent or unscoped". Those
+  // are fixed too: eight already read the row back and only needed
+  // `.eq('family_id', …)` (listing-questions, chores approve, messages' three
+  // updates, screen-time, watchlist's two, marketplace handoff's two by the
+  // order's family); the meal-ballot and poll-vote clears are scoped by family
+  // beside their member filter; and the workload rebalance reads back
+  // `.select('id')` instead of confirming by `count`, the one shape the guard
+  // recognises. The list is empty, and the rule is enforced on every site. A new
+  // measurement adds entries here the way the header says — read, named,
+  // tolerated until fixed — never swept in a merge commit.
 ]
 
 /** `file verb table`, the shape KNOWN_UNFIXED records. */
@@ -316,6 +308,12 @@ describe.each([
 ])('$name scanner path portability', ({ root, paths }) => {
   const knownFile = 'components/modules/messages-module.tsx';
   const knownKey = `${knownFile} update family_messages`;
+  // A FIXTURE exemption, not the live list: these cases are about whether every
+  // spelling of a path lands on the same `file verb table` key, so that an entry
+  // in KNOWN_UNFIXED matches exactly one site and nothing beside it. The live
+  // list is empty today, which would make every assertion below vacuous; the
+  // fixture keeps the mechanism under test while it is.
+  const EXEMPT = [knownKey];
   const windows = [
     `sb.from('family_messages').update({ body: '${'x'.repeat(400)}' }).eq('id', id);`,
     "sb.from('medications').delete().eq('id', id);",
@@ -349,11 +347,11 @@ describe.each([
       { file: knownFile, table: 'medications', verb: 'delete', window: windows[1] },
       { file: knownFile, table: 'medications', verb: 'update', window: windows[2] },
     ].sort((a, b) => GATED.indexOf(a.table) - GATED.indexOf(b.table)));
-    expect(hits.filter((hit) => KNOWN_UNFIXED.includes(siteKey(hit))).map(siteKey)).toEqual([knownKey]);
-    const unscoped = hits.filter((hit) => !ownershipFiltered(hit.window) && !KNOWN_UNFIXED.includes(siteKey(hit)));
+    expect(hits.filter((hit) => EXEMPT.includes(siteKey(hit))).map(siteKey)).toEqual([knownKey]);
+    const unscoped = hits.filter((hit) => !ownershipFiltered(hit.window) && !EXEMPT.includes(siteKey(hit)));
     expect(unscoped.map(siteKey)).toEqual([`${knownFile} delete medications`]);
     const silent = hits.filter((hit) => !/\.select\(/.test(hit.window) && /\.eq\('id'/.test(hit.window)
-      && !KNOWN_UNFIXED.includes(siteKey(hit)));
+      && !EXEMPT.includes(siteKey(hit)));
     expect(silent).toEqual(unscoped);
   });
 
@@ -372,14 +370,14 @@ describe.each([
     const hits = gatedWrites([paths.resolve(root, file)], () => source, root, paths);
     expect(hits).toHaveLength(3);
     expect(hits.every((hit) => hit.file === file)).toBe(true);
-    expect(hits.some((hit) => KNOWN_UNFIXED.includes(siteKey(hit)))).toBe(false);
+    expect(hits.some((hit) => EXEMPT.includes(siteKey(hit)))).toBe(false);
     expect(hits.filter((hit) => !ownershipFiltered(hit.window))).toHaveLength(2);
   });
 
   it('keeps a wrong verb unexempt even at a recorded file and table', () => {
     const hits = gatedWrites([knownFile], () => "const sb = createServer(); sb.from('family_messages').delete().eq('id', id);", root, paths);
     expect(hits.map(siteKey)).toEqual([`${knownFile} delete family_messages`]);
-    expect(KNOWN_UNFIXED.includes(siteKey(hits[0]))).toBe(false);
+    expect(EXEMPT.includes(siteKey(hits[0]))).toBe(false);
   });
 
   it('keeps outside-root writes unexempt instead of slicing them into a known file', () => {
@@ -389,14 +387,14 @@ describe.each([
     expect(file.slice(root.length + 1).split(paths.sep).join('/')).toBe(knownFile);
     const hits = gatedWrites([file], () => source, root, paths);
     expect(hits.map((hit) => hit.file)).toEqual(Array(3).fill(`../peer/${knownFile}`));
-    expect(hits.some((hit) => KNOWN_UNFIXED.includes(siteKey(hit)))).toBe(false);
+    expect(hits.some((hit) => EXEMPT.includes(siteKey(hit)))).toBe(false);
   });
 
   it('does not confuse a shared root prefix with containment', () => {
     const file = paths.join(`${root}-other`, knownFile);
     const hits = gatedWrites([file], () => source, root, paths);
     expect(hits.map((hit) => hit.file)).toEqual(Array(3).fill(`../repo-other/${knownFile}`));
-    expect(hits.some((hit) => KNOWN_UNFIXED.includes(siteKey(hit)))).toBe(false);
+    expect(hits.some((hit) => EXEMPT.includes(siteKey(hit)))).toBe(false);
   });
 
   it('still makes a repaired known site stale rather than exempt forever', () => {

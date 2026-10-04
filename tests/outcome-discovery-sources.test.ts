@@ -48,8 +48,11 @@ afterEach(() => { vi.restoreAllMocks(); vi.useRealTimers(); });
 
 describe('page snapshots use actual family-scoped records', () => {
   it('counts the full Home day beyond its eight visible event rows and excludes another family', async () => {
-    db.seed('calendar_events', Array.from({ length: 10 }, (_, i) => ({ id: `event-${i}`, family_id: 'ours', title: 'Class', starts_at: '2026-09-09T17:00:00Z', ends_at: '2026-09-09T18:00:00Z' })));
-    db.seed('calendar_events', [{ id: 'foreign', family_id: 'theirs', title: 'Private', starts_at: '2026-09-09T17:00:00Z' }]);
+    // Rows as the table holds them: `all_day` is NOT NULL (0002) and the
+    // series-aware read (lib/calendar/occurrences.ts) selects timed and
+    // all-day rows by different bounds, so a row with neither is on no window.
+    db.seed('calendar_events', Array.from({ length: 10 }, (_, i) => ({ id: `event-${i}`, family_id: 'ours', title: 'Class', starts_at: '2026-09-09T17:00:00Z', ends_at: '2026-09-09T18:00:00Z', all_day: false })));
+    db.seed('calendar_events', [{ id: 'foreign', family_id: 'theirs', title: 'Private', starts_at: '2026-09-09T17:00:00Z', all_day: false }]);
     db.seed('todo_items', [{ id: 'todo', family_id: 'ours', title: 'Form', is_done: false, due_date: '2026-09-08' }]);
     db.seed('grocery_items', [{ id: 'milk', family_id: 'ours', is_checked: false }, { id: 'foreign', family_id: 'theirs', is_checked: false }]);
     expect(snapshot(await Home())).toEqual({ eventsToday: 10, overdueTasks: 1, openGrocery: 1, birthdaysSoon: 1 });
