@@ -157,7 +157,7 @@ export async function POST(req: NextRequest) {
           // map let other calendar spellings fall back to the tasks policy.
           const tool = getTool(item.name);
           if (!tool) {
-            return { summary: item.summary, ok: false, blocked: true, error: 'That action is not available.' };
+            return { summary: item.summary, ok: false, blocked: true, error: t('import.thatActionIsNotAvailable') };
           }
           // The shared AI gate (lib/trust/ai-gate.ts), same as chat and the
           // tool registry. Magic Import used to call the bare engine, so a

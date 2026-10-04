@@ -7684,6 +7684,7 @@
   "immunizationsModule.trackVaccinesAndNextDue": "Sigue las vacunas y sus próximas fechas: viene bien para el colegio, los campamentos y los formularios de viaje.",
   "immunizationsModule.recordUpdated": "Registro actualizado",
   "immunizationsModule.immunizationAdded": "Vacuna añadida",
+  "import.thatActionIsNotAvailable": "Esa acción no está disponible.",
   "import.thatTextIsTooLong": "Ese texto es demasiado largo (8000 caracteres como máximo).",
   "import.tooManyImportsPleaseTry": "Demasiadas importaciones. Inténtalo de nuevo en breve.",
   "inbox.actionItems": "Acciones pendientes",

@@ -7684,6 +7684,7 @@
   "immunizationsModule.trackVaccinesAndNextDue": "Suivez les vaccins et leurs prochaines échéances — pratique pour l’école, les colonies et les formulaires de voyage.",
   "immunizationsModule.recordUpdated": "Fiche mise à jour",
   "immunizationsModule.immunizationAdded": "Vaccin ajouté",
+  "import.thatActionIsNotAvailable": "Cette action n’est pas disponible.",
   "import.thatTextIsTooLong": "Ce texte est trop long (8 000 caractères maximum).",
   "import.tooManyImportsPleaseTry": "Trop d’imports. Veuillez réessayer dans un instant.",
   "inbox.actionItems": "Actions à mener",

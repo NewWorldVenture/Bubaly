@@ -7862,6 +7862,7 @@
   "immunizationsModule.trackVaccinesAndNextDue": "Track vaccines and next-due dates — handy for school, camp, and travel forms.",
   "immunizationsModule.recordUpdated": "Record updated",
   "immunizationsModule.immunizationAdded": "Immunization added",
+  "import.thatActionIsNotAvailable": "That action is not available.",
   "import.thatTextIsTooLong": "That text is too long (8,000 char max).",
   "import.tooManyImportsPleaseTry": "Too many imports. Please try again shortly.",
   "inbox.actionItems": "Action Items",
