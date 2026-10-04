@@ -65,7 +65,7 @@ export const CAPABILITIES: Record<SyncProvider, ProviderCapabilities> = {
       read: true,
       write: true,
       mechanism: 'caldav',
-      limitation: 'Requires an app-specific password for CalDAV. A public ICS feed is also available to subscribe.',
+      limitation: 'Requires an app-specific password for CalDAV.',
     },
     reminder: NONE('Apple Reminders VTODO sync is not enabled yet; Apple Calendar sync remains available.'),
     note: NONE('Apple Notes has no public API. Notes stay internal to bubaly.'),
@@ -75,7 +75,7 @@ export const CAPABILITIES: Record<SyncProvider, ProviderCapabilities> = {
       read: false,
       write: true,
       mechanism: 'ics',
-      limitation: 'Alexa can subscribe to a published ICS feed (one-way, bubaly -> Alexa). There is no API to read an Amazon calendar back.',
+      limitation: 'One-way (bubaly -> Alexa) through a published ICS feed, which is not switched on yet: no feed link is issued today. There is no API to read an Amazon calendar back.',
     },
     reminder: NONE(
       'Amazon has no public reminder-write API. Writing Alexa reminders requires a custom Alexa Skill with account linking (not yet enabled).',
