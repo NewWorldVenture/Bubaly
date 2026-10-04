@@ -62,7 +62,9 @@ const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
  * Several generators make the value unique per recipient or per occurrence so
  * the dedupe key stays distinct: `${approvalId}:${memberId}` (approval
  * reminders), `${documentId}:${memberId}` (deadline reminders),
- * `${dateId}:${year}` (relationship dates), `fr:${id}` (family reminders).
+ * `${dateId}:${year}` (relationship dates), `fr:${id}`, `fr:${id}:${remindAt}`
+ * or `fr:${id}:snoozed:${until}` (family reminders — one-off, a recurring
+ * occurrence, a snooze).
  * Only a segment that really looks like a uuid is treated as an id — a
  * composite key must never be pasted into a URL as though it were one.
  */

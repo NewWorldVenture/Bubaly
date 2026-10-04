@@ -1,5 +1,6 @@
 import { describe, it, expect } from 'vitest';
 import { reconcileLedger, anomalyLabel, type ReconTxn } from '@/lib/wallet/reconcile';
+import { at } from './helpers/source-order';
 
 const NOW = new Date('2026-06-26T12:00:00Z');
 
@@ -213,5 +214,468 @@ describe('reconcileLedger — unattributed money', () => {
     const r = reconcileLedger(txns, NOW);
     expect(r.anomalies).toHaveLength(0);
     expect(r.unattributedCents).toBe(0);
+  });
+});
+
+// ── What a reversal has to be to undo its original ───────────────────────────
+//
+// A reversal undoes its original only when it is the one counted reversal of a
+// counted original, in the same wallet, pointing the other way, for the same
+// cents. The checks above covered the last of those (and a missing original).
+// Each case below passed every check and reported a healthy ledger while the
+// wallet's derived balance was wrong — no balance went negative, so nothing
+// else fired either.
+describe('reconcileLedger — reversal integrity', () => {
+  const kinds = (r: ReturnType<typeof reconcileLedger>) => r.anomalies.map((a) => a.kind);
+
+  it('flags an original reversed twice — the money comes back out a second time', () => {
+    const txns: ReconTxn[] = [
+      txn({ id: 'a', direction: 'credit', amount_cents: 1000 }),
+      txn({ id: 'b', direction: 'credit', amount_cents: 5000, type: 'allowance' }),
+      txn({ id: 'r1', direction: 'debit', amount_cents: 1000, type: 'reversal', reverses_id: 'a' }),
+      txn({ id: 'r2', direction: 'debit', amount_cents: 1000, type: 'reversal', reverses_id: 'a' }),
+    ];
+    const r = reconcileLedger(txns, NOW);
+    expect(kinds(r)).toEqual(['duplicate_reversal']);
+    const found = r.anomalies[0];
+    expect(found.severity).toBe('high');
+    expect(found.childWalletId).toBe('w1');
+    expect(found.amountCents).toBe(1000);
+    expect(found.detail).toContain('a');
+    expect(found.detail).toContain('r1');
+    expect(found.detail).toContain('r2');
+    expect(r.healthy).toBe(false);
+    expect(r.reversalCount).toBe(2);
+  });
+
+  it('reports a triple reversal once, for the cents reversed beyond the first', () => {
+    const txns: ReconTxn[] = [
+      txn({ id: 'a', direction: 'credit', amount_cents: 700 }),
+      txn({ id: 'b', direction: 'credit', amount_cents: 5000, type: 'allowance' }),
+      txn({ id: 'r1', direction: 'debit', amount_cents: 700, type: 'reversal', reverses_id: 'a' }),
+      txn({ id: 'r2', direction: 'debit', amount_cents: 700, type: 'reversal', reverses_id: 'a' }),
+      txn({ id: 'r3', direction: 'debit', amount_cents: 700, type: 'reversal', reverses_id: 'a' }),
+    ];
+    const r = reconcileLedger(txns, NOW);
+    expect(kinds(r)).toEqual(['duplicate_reversal']);
+    expect(r.anomalies[0].amountCents).toBe(1400);
+  });
+
+  it('does not count a reversal that never completed as a second one', () => {
+    for (const status of ['pending', 'failed', 'cancelled']) {
+      const txns: ReconTxn[] = [
+        txn({ id: 'a', direction: 'credit', amount_cents: 1000 }),
+        txn({ id: 'r1', direction: 'debit', amount_cents: 1000, type: 'reversal', reverses_id: 'a' }),
+        txn({ id: 'r2', direction: 'debit', amount_cents: 1000, type: 'reversal', reverses_id: 'a', status, created_at: NOW.toISOString() }),
+      ];
+      const r = reconcileLedger(txns, NOW);
+      expect(kinds(r)).toEqual([]);
+      expect(r.healthy).toBe(true);
+    }
+  });
+
+  it('does not treat reversals of two different originals as duplicates', () => {
+    const txns: ReconTxn[] = [
+      txn({ id: 'a', direction: 'credit', amount_cents: 1000 }),
+      txn({ id: 'b', direction: 'credit', amount_cents: 1000 }),
+      txn({ id: 'ra', direction: 'debit', amount_cents: 1000, type: 'reversal', reverses_id: 'a' }),
+      txn({ id: 'rb', direction: 'debit', amount_cents: 1000, type: 'reversal', reverses_id: 'b' }),
+    ];
+    const r = reconcileLedger(txns, NOW);
+    expect(kinds(r)).toEqual([]);
+  });
+
+  it('accepts reversing a reversal — each original is undone exactly once', () => {
+    const txns: ReconTxn[] = [
+      txn({ id: 'a', direction: 'credit', amount_cents: 1000 }),
+      txn({ id: 'r1', direction: 'debit', amount_cents: 1000, type: 'reversal', reverses_id: 'a' }),
+      txn({ id: 'r2', direction: 'credit', amount_cents: 1000, type: 'reversal', reverses_id: 'r1' }),
+    ];
+    const r = reconcileLedger(txns, NOW);
+    expect(kinds(r)).toEqual([]);
+    expect(r.healthy).toBe(true);
+  });
+
+  it('flags a reversal booked to a different wallet than its original', () => {
+    // w1 keeps the 1000¢ it should have lost; w2 loses 1000¢ it never received.
+    // Neither goes negative, so before this check the ledger read healthy.
+    const txns: ReconTxn[] = [
+      txn({ id: 'a', child_wallet_id: 'w1', direction: 'credit', amount_cents: 1000 }),
+      txn({ id: 'b', child_wallet_id: 'w2', direction: 'credit', amount_cents: 5000, type: 'allowance' }),
+      txn({ id: 'r', child_wallet_id: 'w2', direction: 'debit', amount_cents: 1000, type: 'reversal', reverses_id: 'a' }),
+    ];
+    const r = reconcileLedger(txns, NOW);
+    expect(kinds(r)).toEqual(['reversal_wallet_mismatch']);
+    const found = r.anomalies[0];
+    expect(found.severity).toBe('high');
+    expect(found.childWalletId).toBe('w2');
+    expect(found.detail).toContain('w1');
+    expect(found.detail).toContain('w2');
+    expect(r.healthy).toBe(false);
+  });
+
+  it('flags a reversal that moves in the same direction as its original', () => {
+    // A credit "reversed" by another credit pays the child twice instead of zero.
+    const txns: ReconTxn[] = [
+      txn({ id: 'a', direction: 'credit', amount_cents: 1000 }),
+      txn({ id: 'r', direction: 'credit', amount_cents: 1000, type: 'reversal', reverses_id: 'a' }),
+    ];
+    const r = reconcileLedger(txns, NOW);
+    expect(kinds(r)).toEqual(['reversal_direction_mismatch']);
+    expect(r.anomalies[0].severity).toBe('high');
+    expect(r.anomalies[0].detail).toContain('credit');
+    expect(r.healthy).toBe(false);
+  });
+
+  it('flags a debit reversed by a debit too', () => {
+    const txns: ReconTxn[] = [
+      txn({ id: 'top', direction: 'credit', amount_cents: 5000 }),
+      txn({ id: 'a', direction: 'debit', amount_cents: 400, type: 'card_spend' }),
+      txn({ id: 'r', direction: 'debit', amount_cents: 400, type: 'reversal', reverses_id: 'a' }),
+    ];
+    const r = reconcileLedger(txns, NOW);
+    expect(kinds(r)).toEqual(['reversal_direction_mismatch']);
+  });
+
+  it('flags a completed reversal of an original that never counted', () => {
+    // The original added nothing to the balance, so the reversal takes away
+    // money that was never there — including an original marked `reversed`,
+    // which stops counting AND has its reversal counted: undone twice.
+    for (const status of ['pending', 'failed', 'cancelled', 'reversed', 'requires_parent_approval', 'processing']) {
+      const txns: ReconTxn[] = [
+        txn({ id: 'top', direction: 'credit', amount_cents: 5000, type: 'allowance' }),
+        txn({ id: 'a', direction: 'credit', amount_cents: 1000, status, created_at: NOW.toISOString() }),
+        txn({ id: 'r', direction: 'debit', amount_cents: 1000, type: 'reversal', reverses_id: 'a' }),
+      ];
+      const r = reconcileLedger(txns, NOW);
+      expect(kinds(r), status).toEqual(['reversal_of_uncounted']);
+      expect(r.anomalies[0].severity).toBe('high');
+      expect(r.anomalies[0].detail).toContain(status);
+      expect(r.healthy).toBe(false);
+    }
+  });
+
+  it('does not flag a reversal that has not completed against an original that has not either', () => {
+    const txns: ReconTxn[] = [
+      txn({ id: 'a', direction: 'credit', amount_cents: 1000, status: 'pending', created_at: NOW.toISOString() }),
+      txn({ id: 'r', direction: 'debit', amount_cents: 1000, type: 'reversal', reverses_id: 'a', status: 'pending', created_at: NOW.toISOString() }),
+    ];
+    const r = reconcileLedger(txns, NOW);
+    expect(kinds(r)).toEqual([]);
+  });
+
+  it('flags a completed reversal that names no original as critical — its money moves, nothing explains it', () => {
+    // reverses_id is ON DELETE SET NULL, so this is exactly what a reversal
+    // looks like after its original row is deleted: the original's effect is
+    // gone and the reversal's still counts. The ledger's own rule (0088) is
+    // that a correction points at what it corrects.
+    const txns: ReconTxn[] = [
+      txn({ id: 'top', direction: 'credit', amount_cents: 5000 }),
+      txn({ id: 'r', direction: 'debit', amount_cents: 1000, type: 'reversal', reverses_id: null }),
+    ];
+    const r = reconcileLedger(txns, NOW);
+    expect(kinds(r)).toEqual(['unanchored_reversal']);
+    expect(r.anomalies[0].severity).toBe('high');
+    expect(r.anomalies[0].amountCents).toBe(1000);
+    expect(r.healthy).toBe(false);
+    expect(r.reversalCount).toBe(1);
+  });
+
+  it('a reversal with no original that never completed is a warning — it moves nothing', () => {
+    const r = reconcileLedger([
+      txn({ id: 'top', amount_cents: 5000 }),
+      txn({ id: 'r', direction: 'debit', amount_cents: 1000, type: 'reversal', reverses_id: null, status: 'failed' }),
+    ], NOW);
+    expect(kinds(r)).toEqual(['unanchored_reversal']);
+    expect(r.anomalies[0].severity).toBe('medium');
+    expect(r.healthy).toBe(true);
+  });
+
+  it('treats an omitted reverses_id the same as a null one', () => {
+    const { reverses_id: _omit, ...row } = txn({ id: 'r', direction: 'debit', amount_cents: 300, type: 'reversal' });
+    const r = reconcileLedger([txn({ id: 'top', amount_cents: 5000 }), row], NOW);
+    expect(kinds(r)).toEqual(['unanchored_reversal']);
+  });
+
+  it('reports every way one reversal is wrong, not only the first', () => {
+    const txns: ReconTxn[] = [
+      txn({ id: 'b', child_wallet_id: 'w2', direction: 'credit', amount_cents: 9000 }),
+      txn({ id: 'a', child_wallet_id: 'w1', direction: 'credit', amount_cents: 1000, status: 'failed' }),
+      txn({ id: 'r', child_wallet_id: 'w2', direction: 'credit', amount_cents: 800, type: 'reversal', reverses_id: 'a' }),
+    ];
+    const r = reconcileLedger(txns, NOW);
+    expect(kinds(r).sort()).toEqual([
+      'reversal_direction_mismatch', 'reversal_mismatch', 'reversal_of_uncounted', 'reversal_wallet_mismatch',
+    ]);
+  });
+
+  it('leaves a single correct reversal healthy with nothing to report', () => {
+    const txns: ReconTxn[] = [
+      txn({ id: 'a', direction: 'credit', amount_cents: 1000 }),
+      txn({ id: 'r', direction: 'debit', amount_cents: 1000, type: 'reversal', reverses_id: 'a' }),
+    ];
+    const r = reconcileLedger(txns, NOW);
+    expect(r.anomalies).toEqual([]);
+    expect(r.healthy).toBe(true);
+  });
+
+  it('labels each new kind for the operator', () => {
+    expect(anomalyLabel('duplicate_reversal')).toBe('Transaction reversed more than once');
+    expect(anomalyLabel('reversal_wallet_mismatch')).toBe('Reversal in a different wallet');
+    expect(anomalyLabel('reversal_direction_mismatch')).toBe('Reversal in the same direction');
+    expect(anomalyLabel('reversal_of_uncounted')).toBe('Reversal of an uncounted transaction');
+    expect(anomalyLabel('unanchored_reversal')).toBe('Reversal with no original');
+  });
+});
+
+// ── A reversal chain has to end at a real transaction ────────────────────────
+//
+// Review 5971795342 on #911: two completed reversals that name each other as
+// their original each passed every check above — opposite directions, equal
+// cents, same wallet, a completed "original", one reversal per original — so
+// the ledger read healthy while neither row undid anything that happened.
+// Following `reverses_id` from any reversal must reach a transaction that is
+// not itself a reversal; a chain that comes back on itself never does.
+describe('reconcileLedger — reversal cycles', () => {
+  const kinds = (r: ReturnType<typeof reconcileLedger>) => r.anomalies.map((a) => a.kind);
+  const cycles = (r: ReturnType<typeof reconcileLedger>) => r.anomalies.filter((a) => a.kind === 'reversal_cycle');
+
+  it('flags two reversals that reverse each other (the reviewer’s rows)', () => {
+    const r = reconcileLedger([
+      txn({ id: 'a', type: 'reversal', reverses_id: 'b', direction: 'credit', amount_cents: 1000 }),
+      txn({ id: 'b', type: 'reversal', reverses_id: 'a', direction: 'debit', amount_cents: 1000 }),
+    ], NOW);
+    expect(kinds(r)).toEqual(['reversal_cycle']);
+    expect(r.anomalies[0].severity).toBe('high');
+    expect(r.anomalies[0].detail).toContain('a');
+    expect(r.anomalies[0].detail).toContain('b');
+    expect(r.healthy).toBe(false);
+    expect(r.reversalCount).toBe(2);
+  });
+
+  it('flags a longer loop once, not once per member', () => {
+    const r = reconcileLedger([
+      txn({ id: 'top', amount_cents: 9000 }),
+      txn({ id: 'r1', type: 'reversal', reverses_id: 'r3', direction: 'debit', amount_cents: 500 }),
+      txn({ id: 'r2', type: 'reversal', reverses_id: 'r1', direction: 'credit', amount_cents: 500 }),
+      txn({ id: 'r3', type: 'reversal', reverses_id: 'r2', direction: 'debit', amount_cents: 500 }),
+    ], NOW);
+    expect(cycles(r)).toHaveLength(1);
+    for (const id of ['r1', 'r2', 'r3']) expect(cycles(r)[0].detail).toContain(id);
+    // r1 −500, r2 +500, r3 −500: the loop moves 500¢ out that nothing explains.
+    expect(cycles(r)[0].amountCents).toBe(-500);
+  });
+
+  it('flags a reversal that names itself', () => {
+    const r = reconcileLedger([
+      txn({ id: 'top', amount_cents: 9000 }),
+      txn({ id: 'self', type: 'reversal', reverses_id: 'self', direction: 'debit', amount_cents: 300 }),
+    ], NOW);
+    expect(cycles(r)).toHaveLength(1);
+    expect(cycles(r)[0].detail).toContain('self');
+  });
+
+  it('names a reversal that chains into a loop with that loop, and reports nothing for it separately', () => {
+    const r = reconcileLedger([
+      txn({ id: 'top', amount_cents: 9000 }),
+      txn({ id: 'a', type: 'reversal', reverses_id: 'b', direction: 'credit', amount_cents: 1000 }),
+      txn({ id: 'b', type: 'reversal', reverses_id: 'a', direction: 'debit', amount_cents: 1000 }),
+      txn({ id: 'tail', type: 'reversal', reverses_id: 'a', direction: 'debit', amount_cents: 1000 }),
+    ], NOW);
+    expect(cycles(r)).toHaveLength(1);
+    expect(cycles(r)[0].detail).toContain('tail');
+    // `tail` and `b` both reverse `a`: that is a real duplicate, still reported as one.
+    expect(kinds(r).sort()).toEqual(['duplicate_reversal', 'reversal_cycle']);
+  });
+
+  it('reports two separate loops separately', () => {
+    const r = reconcileLedger([
+      txn({ id: 'a', type: 'reversal', reverses_id: 'b', direction: 'credit', amount_cents: 1000 }),
+      txn({ id: 'b', type: 'reversal', reverses_id: 'a', direction: 'debit', amount_cents: 1000 }),
+      txn({ id: 'c', child_wallet_id: 'w2', type: 'reversal', reverses_id: 'd', direction: 'credit', amount_cents: 200 }),
+      txn({ id: 'd', child_wallet_id: 'w2', type: 'reversal', reverses_id: 'c', direction: 'debit', amount_cents: 200 }),
+    ], NOW);
+    expect(cycles(r).map((a) => a.childWalletId).sort()).toEqual(['w1', 'w2']);
+  });
+
+  it('leaves a long acyclic chain of reversals healthy', () => {
+    // A purchase undone, the undo undone, and that undone again: every link
+    // reaches `a`, a real transaction, so there is nothing to report.
+    const r = reconcileLedger([
+      txn({ id: 'a', direction: 'credit', amount_cents: 1000 }),
+      txn({ id: 'r1', type: 'reversal', reverses_id: 'a', direction: 'debit', amount_cents: 1000 }),
+      txn({ id: 'r2', type: 'reversal', reverses_id: 'r1', direction: 'credit', amount_cents: 1000 }),
+      txn({ id: 'r3', type: 'reversal', reverses_id: 'r2', direction: 'debit', amount_cents: 1000 }),
+    ], NOW);
+    expect(r.anomalies).toEqual([]);
+    expect(r.healthy).toBe(true);
+  });
+
+  it('does not call a chain that ends at a missing or unnamed original a loop', () => {
+    const r = reconcileLedger([
+      txn({ id: 'top', amount_cents: 9000 }),
+      txn({ id: 'r1', type: 'reversal', reverses_id: 'gone', direction: 'debit', amount_cents: 100 }),
+      txn({ id: 'r2', type: 'reversal', reverses_id: 'r1', direction: 'credit', amount_cents: 100 }),
+      txn({ id: 'u1', type: 'reversal', reverses_id: null, direction: 'debit', amount_cents: 100 }),
+      txn({ id: 'u2', type: 'reversal', reverses_id: 'u1', direction: 'credit', amount_cents: 100 }),
+    ], NOW);
+    expect(cycles(r)).toEqual([]);
+    expect(kinds(r).sort()).toEqual(['orphan_reversal', 'unanchored_reversal']);
+  });
+
+  it('ends a chain at the first transaction that is not a reversal, whatever that row points at', () => {
+    // `adj` is a real (non-reversal) transaction that happens to carry a
+    // reverses_id; the chain from `r` stops there, so this is no loop.
+    const r = reconcileLedger([
+      txn({ id: 'adj', type: 'adjustment', reverses_id: 'r', direction: 'credit', amount_cents: 1000 }),
+      txn({ id: 'r', type: 'reversal', reverses_id: 'adj', direction: 'debit', amount_cents: 1000 }),
+    ], NOW);
+    expect(cycles(r)).toEqual([]);
+    expect(r.healthy).toBe(true);
+  });
+
+  it('labels the kind for the operator', () => {
+    expect(anomalyLabel('reversal_cycle')).toBe('Reversals that reverse each other');
+  });
+});
+
+// ── Self-review of #911 ──────────────────────────────────────────────────────
+describe('reconcileLedger — reversal checks, second pass', () => {
+  const kinds = (r: ReturnType<typeof reconcileLedger>) => r.anomalies.map((a) => a.kind);
+
+  it('flags a reversal booked to a different bucket of the same wallet', () => {
+    // wallet_buckets is UNIQUE (child_wallet_id, kind), so wallet + kind is the bucket.
+    // Save keeps the 1000¢ it should have lost; Spend loses 1000¢ it never got;
+    // neither goes negative.
+    const r = reconcileLedger([
+      txn({ id: 'top', bucket_kind: 'spend', amount_cents: 5000 }),
+      txn({ id: 'a', bucket_kind: 'save', direction: 'credit', amount_cents: 1000 }),
+      txn({ id: 'r', bucket_kind: 'spend', direction: 'debit', amount_cents: 1000, type: 'reversal', reverses_id: 'a' }),
+    ], NOW);
+    expect(kinds(r)).toEqual(['reversal_bucket_mismatch']);
+    expect(r.anomalies[0].severity).toBe('high');
+    expect(r.anomalies[0].detail).toContain('save');
+    expect(r.anomalies[0].detail).toContain('spend');
+    expect(r.healthy).toBe(false);
+  });
+
+  it('a bucket mismatch on a reversal that never completed is a warning', () => {
+    const r = reconcileLedger([
+      txn({ id: 'a', bucket_kind: 'save', direction: 'credit', amount_cents: 1000 }),
+      txn({ id: 'r', bucket_kind: 'spend', direction: 'debit', amount_cents: 1000, type: 'reversal', reverses_id: 'a', status: 'failed' }),
+    ], NOW);
+    expect(kinds(r)).toEqual(['reversal_bucket_mismatch']);
+    expect(r.anomalies[0].severity).toBe('medium');
+  });
+
+  it('a reversal in another wallet is reported as that, not also as another bucket', () => {
+    const r = reconcileLedger([
+      txn({ id: 'top', child_wallet_id: 'w2', bucket_kind: 'spend', amount_cents: 5000 }),
+      txn({ id: 'a', child_wallet_id: 'w1', bucket_kind: 'save', direction: 'credit', amount_cents: 1000 }),
+      txn({ id: 'r', child_wallet_id: 'w2', bucket_kind: 'spend', direction: 'debit', amount_cents: 1000, type: 'reversal', reverses_id: 'a' }),
+    ], NOW);
+    expect(kinds(r)).toEqual(['reversal_wallet_mismatch']);
+  });
+
+  it('does not compare buckets across wallets (that is the wallet check), or when neither row has one', () => {
+    const r = reconcileLedger([
+      txn({ id: 'a', bucket_kind: null, direction: 'credit', amount_cents: 1000 }),
+      txn({ id: 'r', bucket_kind: null, direction: 'debit', amount_cents: 1000, type: 'reversal', reverses_id: 'a' }),
+    ], NOW);
+    expect(kinds(r)).toEqual([]);
+  });
+
+  it('an original put back by reversing its reversal can be reversed again — that is not a duplicate', () => {
+    // a +1000; r1 undoes it; r2 undoes r1 (a stands again); r3 undoes a. Net 0, correct.
+    const r = reconcileLedger([
+      txn({ id: 'a', direction: 'credit', amount_cents: 1000 }),
+      txn({ id: 'r1', type: 'reversal', reverses_id: 'a', direction: 'debit', amount_cents: 1000 }),
+      txn({ id: 'r2', type: 'reversal', reverses_id: 'r1', direction: 'credit', amount_cents: 1000 }),
+      txn({ id: 'r3', type: 'reversal', reverses_id: 'a', direction: 'debit', amount_cents: 1000 }),
+    ], NOW);
+    expect(r.anomalies).toEqual([]);
+    expect(r.healthy).toBe(true);
+  });
+
+  it('still flags a second reversal when the first was not undone', () => {
+    const r = reconcileLedger([
+      txn({ id: 'top', amount_cents: 9000 }),
+      txn({ id: 'a', direction: 'credit', amount_cents: 1000 }),
+      txn({ id: 'r1', type: 'reversal', reverses_id: 'a', direction: 'debit', amount_cents: 1000 }),
+      txn({ id: 'r2', type: 'reversal', reverses_id: 'r1', direction: 'credit', amount_cents: 1000, status: 'failed' }),
+      txn({ id: 'r3', type: 'reversal', reverses_id: 'a', direction: 'debit', amount_cents: 1000 }),
+    ], NOW);
+    expect(kinds(r)).toEqual(['duplicate_reversal']);
+  });
+
+  it('reports a duplicate for the cents the extra reversals moved, keeping the oldest as the real one', () => {
+    // Rows arrive newest first, as the reconciliation page reads them.
+    const r = reconcileLedger([
+      txn({ id: 'top', amount_cents: 20000 }),
+      txn({ id: 'r2', type: 'reversal', reverses_id: 'a', direction: 'debit', amount_cents: 5000, created_at: '2026-06-25T15:00:00Z' }),
+      txn({ id: 'r1', type: 'reversal', reverses_id: 'a', direction: 'debit', amount_cents: 1000, created_at: '2026-06-25T13:00:00Z' }),
+      txn({ id: 'a', direction: 'credit', amount_cents: 1000, created_at: '2026-06-25T12:00:00Z' }),
+    ], NOW);
+    const dup = r.anomalies.find((x) => x.kind === 'duplicate_reversal')!;
+    expect(dup.amountCents).toBe(5000);
+    expect(at(dup.detail, 'r1')).toBeLessThan(at(dup.detail, 'r2'));
+  });
+
+  it('a wrong reversal that never completed is a warning, not a critical — it moves no money', () => {
+    for (const status of ['failed', 'cancelled', 'pending']) {
+      const r = reconcileLedger([
+        txn({ id: 'top', child_wallet_id: 'w2', amount_cents: 5000 }),
+        txn({ id: 'a', child_wallet_id: 'w1', direction: 'credit', amount_cents: 1000 }),
+        txn({ id: 'r', child_wallet_id: 'w2', type: 'reversal', reverses_id: 'a', direction: 'credit', amount_cents: 1000, status, created_at: NOW.toISOString() }),
+      ], NOW);
+      expect(kinds(r).sort(), status).toEqual(['reversal_direction_mismatch', 'reversal_wallet_mismatch']);
+      expect(r.anomalies.every((x) => x.severity === 'medium'), status).toBe(true);
+      expect(r.healthy, status).toBe(true);
+    }
+  });
+
+  it('the same wrong reversal, completed, is critical', () => {
+    const r = reconcileLedger([
+      txn({ id: 'top', child_wallet_id: 'w2', amount_cents: 5000 }),
+      txn({ id: 'a', child_wallet_id: 'w1', direction: 'credit', amount_cents: 1000 }),
+      txn({ id: 'r', child_wallet_id: 'w2', type: 'reversal', reverses_id: 'a', direction: 'credit', amount_cents: 1000 }),
+    ], NOW);
+    expect(r.anomalies.every((x) => x.severity === 'high')).toBe(true);
+  });
+
+  it('a loop of reversals none of which completed is a warning', () => {
+    const r = reconcileLedger([
+      txn({ id: 'a', type: 'reversal', reverses_id: 'b', direction: 'credit', amount_cents: 1000, status: 'pending', created_at: NOW.toISOString() }),
+      txn({ id: 'b', type: 'reversal', reverses_id: 'a', direction: 'debit', amount_cents: 1000, status: 'pending', created_at: NOW.toISOString() }),
+    ], NOW);
+    expect(kinds(r)).toEqual(['reversal_cycle']);
+    expect(r.anomalies[0].severity).toBe('medium');
+    expect(r.healthy).toBe(true);
+  });
+
+  it('says which way the money went when a debit that never counted is reversed', () => {
+    const r = reconcileLedger([
+      txn({ id: 'top', amount_cents: 5000 }),
+      txn({ id: 'a', type: 'card_spend', direction: 'debit', amount_cents: 400, status: 'failed' }),
+      txn({ id: 'r', type: 'reversal', reverses_id: 'a', direction: 'credit', amount_cents: 400 }),
+    ], NOW);
+    const found = r.anomalies.find((x) => x.kind === 'reversal_of_uncounted')!;
+    expect(found.detail).toContain('gives back money the original never took');
+  });
+
+  it('keeps a very long loop report readable: the first ids, then a count', () => {
+    const feeders = Array.from({ length: 30 }, (_, i) => txn({ id: `f${String(i).padStart(2, '0')}`, type: 'reversal', reverses_id: 'a', direction: 'debit', amount_cents: 1, status: 'failed' }));
+    const r = reconcileLedger([
+      txn({ id: 'a', type: 'reversal', reverses_id: 'b', direction: 'credit', amount_cents: 1000 }),
+      txn({ id: 'b', type: 'reversal', reverses_id: 'a', direction: 'debit', amount_cents: 1000 }),
+      ...feeders,
+    ], NOW);
+    const loop = r.anomalies.find((x) => x.kind === 'reversal_cycle')!;
+    expect(loop.detail).toContain('and 20 more');
+    expect(loop.detail.length).toBeLessThan(400);
+  });
+
+  it('labels the bucket kind for the operator', () => {
+    expect(anomalyLabel('reversal_bucket_mismatch')).toBe('Reversal in a different bucket');
   });
 });
