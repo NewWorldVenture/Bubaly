@@ -35,7 +35,7 @@ export function CloseAccountCard() {
         <div className="min-w-0 flex-1">
           <h3 className="text-sm font-bold text-fg">{t('closeAccount.closeAccount')}</h3>
           <p className="mt-1 text-xs leading-5 text-muted">
-            {t('closeAccount.takeABreakAnytimeClosingLocks')} <strong>{t('closeAccount.keepsAllYourData')}</strong> {t('closeAccount.reopenWheneverYouLikeAndPick')}
+            {t('closeAccount.takeABreakAnytimeClosingLocks')} <strong>{t('closeAccount.keepsAllYourData')}</strong> {t('closeAccount.reopenWheneverYouLikeAndPick')} {t('closeAccount.yourPaidPlanWontRenew')}
           </p>
           <Button variant="outline" size="sm" onClick={close} disabled={busy} aria-busy={busy}
             className="mt-3 border-danger/40 text-danger hover:bg-danger/10">
