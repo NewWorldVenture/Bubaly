@@ -16,6 +16,7 @@ const IDENTIFIER = /^[A-Za-z0-9][A-Za-z0-9_.-]{0,127}$/;
 const COMMAND_TIMEOUT_MS = 30_000;
 const OUTPUT_LIMIT_BYTES = 65_536;
 const ASSOCIATION_LIMIT_BYTES = 2_048;
+const DENIED_SUBNETS = ['127.0.0.0/8', '10.0.0.0/8', '172.16.0.0/12', '192.168.0.0/16', '169.254.0.0/16', '::1/128', 'fc00::/7', 'fe80::/10'];
 export const MINIMUM_CLAUDE_CODE_VERSION = '2.1.268';
 
 type CommandLogs = AsyncIterable<{ stream: string; data: unknown }> & { close?: () => void };
@@ -94,8 +95,42 @@ function brokerPolicy(apiKey: string, workspaceId: string): NetworkPolicy {
     },
     // A domain-only allowlist denies unnamed destinations and raw TCP access.
     // Do not deny 0/0: denied subnets override the allowed Anthropic domain too.
-    subnets: { allow: [], deny: ['127.0.0.0/8', '10.0.0.0/8', '172.16.0.0/12', '192.168.0.0/16', '169.254.0.0/16', '::1/128', 'fc00::/7', 'fe80::/10'] },
+    subnets: { allow: [], deny: [...DENIED_SUBNETS] },
   };
+}
+
+function record(value: unknown): value is Record<string, unknown> {
+  return !!value && typeof value === 'object' && !Array.isArray(value);
+}
+
+/**
+ * SDK 3.5.1 exposes injected header names with '<redacted>' values, never the
+ * request's credential/workspace values. Verify its full returned structure;
+ * successful trusted creation applies the exact server-bound request values.
+ * DNS/header case and set order are immaterial, but additional/missing rules,
+ * destinations, transformations, headers or subnet permissions fail closed.
+ */
+function hasObservedBrokerPolicy(observed: NetworkPolicy | undefined): boolean {
+  if (!record(observed) || Object.keys(observed).sort().join(',') !== 'allow,subnets'
+    || !record(observed.allow) || !record(observed.subnets)) return false;
+  const domains = Object.keys(observed.allow);
+  if (domains.length !== 1 || domains[0].toLowerCase() !== 'api.anthropic.com') return false;
+  const rules = observed.allow[domains[0]];
+  if (!Array.isArray(rules) || rules.length !== 1 || !record(rules[0])
+    || Object.keys(rules[0]).join(',') !== 'transform') return false;
+  const transforms = rules[0].transform;
+  if (!Array.isArray(transforms) || transforms.length !== 1 || !record(transforms[0])
+    || Object.keys(transforms[0]).join(',') !== 'headers' || !record(transforms[0].headers)) return false;
+  const headers = transforms[0].headers;
+  const headerNames = Object.keys(headers);
+  if (headerNames.map((name) => name.toLowerCase()).sort().join(',') !== 'anthropic-workspace-id,host,x-api-key'
+    || !headerNames.every((name) => headers[name] === '<redacted>')) return false;
+  const subnets = observed.subnets;
+  if (!Object.keys(subnets).every((key) => key === 'allow' || key === 'deny')
+    || (subnets.allow !== undefined && (!Array.isArray(subnets.allow) || subnets.allow.length !== 0))
+    || !Array.isArray(subnets.deny) || subnets.deny.length !== DENIED_SUBNETS.length
+    || !subnets.deny.every((cidr) => typeof cidr === 'string')) return false;
+  return [...subnets.deny].sort().join(',') === [...DENIED_SUBNETS].sort().join(',');
 }
 
 async function confirmedStop(session: ClaudeFleetSdkSession, signal?: AbortSignal): Promise<void> {
@@ -238,8 +273,8 @@ export function createVercelClaudeWorkerAdapter(options: AdapterOptions): Claude
         session = sandbox.currentSession();
         await requireClaim(signal);
         // Missing/downgraded broker policy is never replaced with in-VM credentials.
-        if (session.status !== 'running' || JSON.stringify(sandbox.networkPolicy) !== JSON.stringify(policy)
-          || JSON.stringify(session.networkPolicy) !== JSON.stringify(policy)) throw new Error('sandbox_broker_unavailable');
+        if (session.status !== 'running' || !hasObservedBrokerPolicy(sandbox.networkPolicy)
+          || !hasObservedBrokerPolicy(session.networkPolicy)) throw new Error('sandbox_broker_unavailable');
         const setup = async (cmd: string, args: string[], cwd?: string) => {
           await requireClaim(signal);
           return runBounded(session!, { cmd, args, cwd, timeoutMs: 5_000 }, signal, ASSOCIATION_LIMIT_BYTES, options.apiKey);

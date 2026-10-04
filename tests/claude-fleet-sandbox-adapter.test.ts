@@ -1,6 +1,7 @@
 import { createHash } from 'node:crypto';
 import { Readable } from 'node:stream';
 import { describe, expect, it, vi } from 'vitest';
+import { Sandbox } from '@vercel/sandbox';
 import {
   createVercelClaudeWorkerAdapter,
   stopVercelSandboxById,
@@ -21,6 +22,32 @@ const BINDING = {
 const PATHS = claudeWorkerPaths(BINDING.alias);
 const INPUT = { jobId: 'synthetic-job', binding: BINDING, paths: PATHS };
 const SIGNAL = new AbortController().signal;
+const DENIED_SUBNETS = ['127.0.0.0/8', '10.0.0.0/8', '172.16.0.0/12', '192.168.0.0/16', '169.254.0.0/16', '::1/128', 'fc00::/7', 'fe80::/10'];
+
+/** Real SDK getters reconstruct injected headers from names with redacted values. */
+function observedBrokerPolicy(
+  overrides: Partial<Extract<NonNullable<ConstructorParameters<typeof Sandbox>[0]['sandbox']['networkPolicy']>, { mode: 'custom' }>> = {},
+) {
+  const networkPolicy = {
+    mode: 'custom' as const, allowedDomains: ['api.anthropic.com'], allowedCIDRs: [], deniedCIDRs: DENIED_SUBNETS,
+    injectionRules: [{ domain: 'api.anthropic.com', headerNames: ['Host', 'x-api-key', 'anthropic-workspace-id'] }],
+    ...overrides,
+  };
+  // Construction/getters are local; no client or live SDK operation is supplied.
+  const sdkSandbox = new Sandbox({
+    routes: [],
+    sandbox: {
+      name: 'fleet-synthetic', persistent: false, currentSessionId: 'session-synthetic',
+      status: 'running', createdAt: 0, updatedAt: 0, networkPolicy,
+    },
+    session: {
+      id: 'session-synthetic', memory: 2048, vcpus: 1, region: 'iad1', timeout: 30_000,
+      status: 'running', requestedAt: 0, createdAt: 0, updatedAt: 0, cwd: '/vercel/sandbox', networkPolicy,
+    },
+  });
+  expect(sdkSandbox.currentSession().networkPolicy).toEqual(sdkSandbox.networkPolicy);
+  return sdkSandbox.networkPolicy;
+}
 const COMMAND: ClaudeWorkerCommand = {
   cmd: 'claude', args: ['auth', 'status'], cwd: PATHS.worktreePath,
   env: { CLAUDE_CONFIG_DIR: PATHS.configDirectory }, timeoutMs: 1_000, maxOutputBytes: 65_536,
@@ -63,8 +90,8 @@ function fixture() {
     currentSession: () => sandbox,
   };
   const sdk = {
-    create: vi.fn<ClaudeFleetSandboxSdk['create']>(async (options) => {
-      sandbox.networkPolicy = options.networkPolicy; events.push('create'); return sandbox;
+    create: vi.fn<ClaudeFleetSandboxSdk['create']>(async () => {
+      sandbox.networkPolicy = observedBrokerPolicy(); events.push('create'); return sandbox;
     }),
     get: vi.fn<ClaudeFleetSandboxSdk['get']>(async () => sandbox),
   };
@@ -82,6 +109,73 @@ function previousSession(): ConfirmedClaudeWorkerSession {
 }
 
 describe('Vercel Claude worker Sandbox adapter', () => {
+  it('accepts the actual SDK redacted broker observation without exposing request-side credentials', async () => {
+    const f = fixture();
+    const opened = await createVercelClaudeWorkerAdapter(f.options).open(INPUT, SIGNAL);
+    expect(f.sandbox.networkPolicy).toMatchObject({
+      allow: { 'api.anthropic.com': [{ transform: [{ headers: { Host: '<redacted>', 'x-api-key': '<redacted>', 'anthropic-workspace-id': '<redacted>' } }] }] },
+    });
+    expect(JSON.stringify(f.sandbox.networkPolicy)).not.toContain(KEY);
+    expect(opened.executionAuth.credentialBindingId).toBe(BINDING.credentialBindingId);
+  });
+
+  it('accepts equivalent DNS/header case, header/subnet order and omitted empty allowed CIDRs', async () => {
+    const f = fixture();
+    f.sdk.create.mockImplementation(async () => {
+      f.sandbox.networkPolicy = observedBrokerPolicy({
+        allowedDomains: ['API.ANTHROPIC.COM'], allowedCIDRs: undefined, deniedCIDRs: [...DENIED_SUBNETS].reverse(),
+        injectionRules: [{ domain: 'API.ANTHROPIC.COM', headerNames: ['ANTHROPIC-WORKSPACE-ID', 'X-API-KEY', 'host'] }],
+      });
+      return f.sandbox;
+    });
+    await expect(createVercelClaudeWorkerAdapter(f.options).open(INPUT, SIGNAL)).resolves.toMatchObject({ sandboxId: 'fleet-synthetic' });
+  });
+
+  it('rejects missing or widened broker metadata before any command', async () => {
+    const altered: Array<[string, ClaudeFleetSdkSandbox['networkPolicy']]> = [
+      ['missing', undefined],
+      ['allow all', 'allow-all'],
+      ['extra domain', observedBrokerPolicy({ allowedDomains: ['api.anthropic.com', 'example.com'] })],
+      ['missing workspace header', observedBrokerPolicy({ injectionRules: [{ domain: 'api.anthropic.com', headerNames: ['Host', 'x-api-key'] }] })],
+      ['extra header', observedBrokerPolicy({ injectionRules: [{ domain: 'api.anthropic.com', headerNames: ['Host', 'x-api-key', 'anthropic-workspace-id', 'authorization'] }] })],
+      ['duplicate header case', observedBrokerPolicy({ injectionRules: [{ domain: 'api.anthropic.com', headerNames: ['Host', 'host', 'x-api-key', 'anthropic-workspace-id'] }] })],
+      ['conditional injection', observedBrokerPolicy({ injectionRules: [{ domain: 'api.anthropic.com', headerNames: ['Host', 'x-api-key', 'anthropic-workspace-id'], match: { method: ['GET'] } }] })],
+      ['forwarding', observedBrokerPolicy({ forwardRules: [{ domain: 'api.anthropic.com', forwardURL: 'https://example.com' }] })],
+      ['extra injection rule', observedBrokerPolicy({ injectionRules: [
+        { domain: 'api.anthropic.com', headerNames: ['Host', 'x-api-key', 'anthropic-workspace-id'] },
+        { domain: 'api.anthropic.com', headerNames: ['x-api-key'] },
+      ] })],
+      ['allowed subnet', observedBrokerPolicy({ allowedCIDRs: ['0.0.0.0/0'] })],
+      ['missing denied subnet', observedBrokerPolicy({ deniedCIDRs: DENIED_SUBNETS.slice(1) })],
+      ['duplicate denied subnet', observedBrokerPolicy({ deniedCIDRs: [...DENIED_SUBNETS.slice(1), DENIED_SUBNETS[1]] })],
+      ['unredacted values', {
+        allow: { 'api.anthropic.com': [{ transform: [{ headers: { Host: 'api.anthropic.com', 'x-api-key': KEY, 'anthropic-workspace-id': WORKSPACE } }] }] },
+        subnets: { allow: [], deny: DENIED_SUBNETS },
+      }],
+    ];
+    for (const [description, policy] of altered) {
+      const f = fixture();
+      f.sdk.create.mockImplementation(async () => { f.sandbox.networkPolicy = policy; return f.sandbox; });
+      await expect(createVercelClaudeWorkerAdapter(f.options).open(INPUT, SIGNAL), description).rejects.toThrow('sandbox_open_failed');
+      expect(f.sandbox.runCommand, description).not.toHaveBeenCalled();
+      expect(f.sandbox.stop, description).toHaveBeenCalledOnce();
+    }
+  });
+
+  it.each(['sandbox', 'session'])('independently rejects a downgraded %s policy despite a correct companion observation', async (target) => {
+    const f = fixture();
+    f.sdk.create.mockImplementation(async () => {
+      f.sandbox.networkPolicy = target === 'session' ? 'allow-all' : observedBrokerPolicy();
+      return {
+        name: f.sandbox.name, tags: f.sandbox.tags,
+        networkPolicy: target === 'sandbox' ? 'allow-all' : observedBrokerPolicy(),
+        currentSession: () => f.sandbox,
+      };
+    });
+    await expect(createVercelClaudeWorkerAdapter(f.options).open(INPUT, SIGNAL)).rejects.toThrow('sandbox_open_failed');
+    expect(f.sandbox.runCommand).not.toHaveBeenCalled();
+    expect(f.sandbox.stop).toHaveBeenCalledOnce();
+  });
   it('creates only from the reviewed snapshot, scopes egress, and fences before every command', async () => {
     const f = fixture();
     const opened = await createVercelClaudeWorkerAdapter(f.options).open(INPUT, SIGNAL);
@@ -174,10 +268,10 @@ describe('Vercel Claude worker Sandbox adapter', () => {
     const f = fixture();
     const resumableRun = vi.fn(async () => { throw new Error('facade_would_resume'); });
     const currentSession = vi.fn(() => f.sandbox);
-    f.sdk.create.mockImplementation(async (options) => {
-      f.sandbox.networkPolicy = options.networkPolicy;
+    f.sdk.create.mockImplementation(async () => {
+      f.sandbox.networkPolicy = observedBrokerPolicy();
       return {
-        name: f.sandbox.name, tags: f.sandbox.tags, networkPolicy: options.networkPolicy,
+        name: f.sandbox.name, tags: f.sandbox.tags, networkPolicy: observedBrokerPolicy(),
         currentSession,
         runCommand: resumableRun,
       };
@@ -194,8 +288,8 @@ describe('Vercel Claude worker Sandbox adapter', () => {
   it('stops a late sandbox if creation finishes after cancellation', async () => {
     const f = fixture();
     const controller = new AbortController();
-    f.sdk.create.mockImplementation(async (options) => {
-      f.sandbox.networkPolicy = options.networkPolicy;
+    f.sdk.create.mockImplementation(async () => {
+      f.sandbox.networkPolicy = observedBrokerPolicy();
       controller.abort();
       return f.sandbox;
     });

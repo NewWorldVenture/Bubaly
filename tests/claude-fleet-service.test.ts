@@ -334,9 +334,14 @@ describe('Claude fleet supervisor integration with two real synthetic SQLite cli
     await first.quarantine(job.id, job.claimToken!, 'execution_uncertain');
     if (mode === 'false') vi.mocked(dependencies.stopSandbox).mockResolvedValue(false);
     else vi.mocked(dependencies.stopSandbox).mockRejectedValue(new Error('private stop error'));
-    expect(await cancelFleetJob(second, job.id, dependencies)).toMatchObject({ status: 'quarantined' });
+    expect(await cancelFleetJob(second, job.id, dependencies)).toMatchObject({ status: 'quarantined', error: 'cancel_uncertain' });
     await submit('synthetic:next');
     expect(await first.claim({ maxConcurrency: 2, leaseMs: 10_000 })).toBeNull();
+    await first.setPaused(true);
+    vi.mocked(dependencies.stopSandbox).mockResolvedValue(true);
+    expect(await tick()).toEqual({ status: 'idle' });
+    expect(dependencies.stopSandbox).toHaveBeenCalledTimes(2);
+    expect(await first.get(job.id)).toMatchObject({ status: 'cancelled', sandboxId: job.sandboxId });
   });
 
   it('bounds an unresponsive cancellation stop and keeps the uncertain slot', async () => {

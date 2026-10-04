@@ -283,6 +283,10 @@ export class ClaudeFleetStore {
         await tx.execute({ sql: `UPDATE claude_fleet_jobs SET status = 'cancelled', updated_at = ?, finished_at = ?, lease_expires_at = NULL, claim_token = NULL WHERE id = ?`, args: [now, now, jobId] });
       } else if (job.status === 'running') {
         await tx.execute({ sql: "UPDATE claude_fleet_jobs SET status = 'cancel_requested', updated_at = ? WHERE id = ?", args: [now, jobId] });
+      } else if (job.status === 'quarantined') {
+        // Persist intent before attempting an external stop, including when creation lost its response.
+        // Keep the uncertain execution slot and all resource evidence until exact stop confirmation.
+        await tx.execute({ sql: "UPDATE claude_fleet_jobs SET error = 'cancel_uncertain', updated_at = ? WHERE id = ?", args: [now, jobId] });
       }
       return this.readJob(tx, jobId);
     });

@@ -184,6 +184,23 @@ describe('durable Claude fleet store using separate SQLite clients', () => {
     expect(await first.get(job.id)).toMatchObject({ status: 'cancelled' });
   });
 
+  it.each([true, false])('records cancellation intent for an already quarantined job with known Sandbox %s', async (knownSandbox) => {
+    await first.submit('quarantined-cancel', payload());
+    const claim = (await first.claim(options))!;
+    await first.markDispatched(claim.id, claim.claimToken!);
+    if (knownSandbox) await first.attachSandbox(claim.id, claim.claimToken!, 'sandbox_quarantined');
+    await first.quarantine(claim.id, claim.claimToken!, 'execution_uncertain');
+    const before = (await first.get(claim.id))!;
+    const cancelled = await second.requestCancel(claim.id);
+    expect(cancelled).toMatchObject({
+      status: 'quarantined', error: 'cancel_uncertain', claimToken: before.claimToken,
+      dispatchStartedAt: before.dispatchStartedAt, sandboxId: before.sandboxId,
+      leaseExpiresAt: before.leaseExpiresAt, finishedAt: null,
+    });
+    await first.submit('quarantined-cancel:next', payload());
+    expect(await first.claim(options)).toBeNull();
+  });
+
   it('retries only safe pre-dispatch failures and limits attempts', async () => {
     await first.submit('bounded-retry', payload());
     for (let attempt = 1; attempt <= 3; attempt++) {
