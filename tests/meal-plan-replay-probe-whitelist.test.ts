@@ -62,6 +62,13 @@ describe('meal-plan replay exception in the listing status probe', () => {
       compactFunction.indexOf(receiptUpdate),
     );
     expect(probe).toContain(`position('${scopedReceiptUpdate}' in meal_replace_compact) > 0`);
+    expect(compactFunction).toContain(scopedReceiptUpdate);
+
+    const wrongRequestPredicate = compactFunction.replace(
+      scopedReceiptUpdate,
+      `${receiptUpdate}wherefamily_id=p_family_idandactor_id=v_actorandrequest_id=p_other_request_id;`,
+    );
+    expect(wrongRequestPredicate).not.toContain(scopedReceiptUpdate);
 
     const returnToken = "returnjsonb_set(v_receipt.result,'{replayed}','true'::jsonb,true);";
     for (const injectedCall of ['v_result:=public.some_mutator();', 'v_result:=some_mutator();']) {
