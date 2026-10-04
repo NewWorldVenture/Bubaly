@@ -5,6 +5,8 @@ import { describe, expect, it } from 'vitest';
 import {
   auditMigrationVersions,
   KNOWN_DUPLICATE_MIGRATIONS,
+  RETIRED_HIGH_WATER,
+  RETIRED_MIGRATION_VERSIONS,
 } from '../scripts/audit-migration-versions.mjs';
 
 describe('Supabase migration filename safety', () => {
@@ -502,14 +504,52 @@ describe('Supabase migration filename safety', () => {
     // /family/permissions shows them as read-only on (ROLE-M03).
     // 0471 adds the per-recipient admin digest delivery store, and 0474
     // (reserved for #710) withdraws an admin removed after a digest was
-    // frozen. This literal tracks the checked-in high-water mark, not
-    // migration allocation: 0465-0470 remain NWV's, 0472 Support's, and 0473
-    // the coordinator's.
-    // Unapplied candidates follow their composed release order: recurring bills
-    // at 0475, messaging at 0476, then private approval reads at 0477.
-    // Historical/applied migrations and active
-    // external authors' files are unchanged; this is a filename expectation.
+    // frozen. This literal tracks the checked-in high-water mark. Numbers
+    // retired below 0474 cannot be reused; unpublished candidates land in order:
+    // recurring bills 0475, messaging 0476, private approval reads 0477.
     expect(audit.nextVersion).toBe('0478');
+  });
+
+  // A hole below the high-water mark is not a free number: `supabase db push`
+  // refuses a file numbered below the last version production recorded, so a
+  // branch that lands one after a higher number cannot be released in order.
+  // The holes are retired and a new migration takes the next number, with no
+  // gap left behind it.
+  it('lands every migration in release order: no retired hole filled, no number skipped', () => {
+    expect(audit.filledHoles).toEqual([]);
+    expect(audit.skippedVersions).toEqual([]);
+  });
+
+  it('retires exactly the numbers below the mark that no file holds', () => {
+    const held = new Set(
+      (audit.entries as { version: string }[]).map(({ version }) => version.slice(0, 4)),
+    );
+    const holes: string[] = [];
+    for (let generation = 1; generation <= RETIRED_HIGH_WATER; generation += 1) {
+      const version = String(generation).padStart(4, '0');
+      if (!held.has(version)) holes.push(version);
+    }
+    expect([...RETIRED_MIGRATION_VERSIONS]).toEqual(holes);
+  });
+
+  it('refuses a late branch that takes a retired number, or one that skips a number', () => {
+    const directory = mkdtempSync(join(tmpdir(), 'bubaly-migrations-'));
+    try {
+      writeFileSync(join(directory, '0001_first.sql'), 'select 1;');
+      writeFileSync(join(directory, '0003_third.sql'), 'select 1;');
+      const options = { retired: ['0002'], highWater: 3 };
+      expect(auditMigrationVersions(directory, options).filledHoles).toEqual([]);
+
+      writeFileSync(join(directory, '0002_reserved_long_ago.sql'), 'select 1;');
+      expect(auditMigrationVersions(directory, options).filledHoles).toEqual([
+        '0002_reserved_long_ago.sql',
+      ]);
+
+      writeFileSync(join(directory, '0005_saved_a_number.sql'), 'select 1;');
+      expect(auditMigrationVersions(directory, options).skippedVersions).toEqual(['0004']);
+    } finally {
+      rmSync(directory, { recursive: true, force: true });
+    }
   });
 
   it('flags a newly introduced collision instead of silently accepting it', () => {

@@ -153,7 +153,7 @@ const SEO_PAGES = [
   ['/how-it-works', 'How Bubaly Works — Your AI Family Operating System', 'Set it up once and let Bubaly run the logistics: ask the AI assistant in plain language and it creates real events, lists, chores, and reminders.'],
   ['/ai', 'The Bubaly AI Assistant — It Takes Action, Not Just Chats', 'Bubaly’s AI assistant turns plain-language requests into real calendar events, chores, meal plans, grocery lists, and reminders for your whole family.'],
   ['/pricing', 'Pricing — The AI Family Operating System | Bubaly', 'Start free, no credit card required. See Bubaly’s plans for families who want the whole household in one shared, AI-driven system.'],
-  ['/mobile', 'Bubaly on Mobile — Your Family OS Everywhere', 'Bubaly is an installable app with native iOS and Android companions — your family operating system on every device.'],
+  ['/mobile', 'Bubaly on Mobile — Your Family OS Everywhere', 'Bubaly installs from the browser on iPhone, iPad and Android — your family operating system on every device, no app store needed.'],
   ['/security', 'Security & Privacy — Bubaly', 'Every family’s data is isolated with row-level security; documents are private and served via short-lived signed URLs. Privacy is a feature, not a footnote.'],
   ['/faq', 'FAQ & Family Knowledge Center — Bubaly', 'Answers to the questions families ask about organizing family life with an AI Family Operating System — privacy, roles, the AI assistant, pricing, and more.'],
   ['/blog', 'The Bubaly Blog — Tips, Stories & Insights for Modern Families', 'Practical advice for organizing family life: parenting, meals, money, school, wellness, travel, and the AI Family Operating System.'],

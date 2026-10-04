@@ -1,6 +1,7 @@
 import { existsSync, readFileSync } from 'node:fs';
 import { resolve } from 'node:path';
 import { describe, expect, it } from 'vitest';
+import { RETIRED_CLAIMS } from '@/lib/marketing/retired-claims';
 
 // Every public-site source that carries copy or sample data. Files that a
 // later stage of the public-site plan creates are listed already and skipped
@@ -8,6 +9,9 @@ import { describe, expect, it } from 'vitest';
 // app/(marketing)/security/page.tsx joined with the Trust Center stage, which
 // is what removed the claims that page used to carry.
 const FILES = [
+  // The generator that seeded the admin stores (0229). Its rows still feed
+  // public pages, so what it would write is held to the same list.
+  'scripts/generate-marketing-seed.mjs',
   'components/marketing/visual-mocks.tsx',
   'components/marketing/reference-showcases.tsx',
   'components/marketing/hero-outcomes.tsx',
@@ -104,18 +108,10 @@ const FORBIDDEN = [
   /\$\d[^\n]{0,60}(Cozi|FamilyWall|OurHome|FamCal|Skylight)/,
   /(nanny|babysitter|housekeeper|personal assistant)[^\n]{0,40}(\$|per hour|an hour)/i,
   /(\$|per hour|an hour)[^\n]{0,40}(nanny|babysitter|housekeeper)/i,
-  // Retired 2026-10-04, each because the code says otherwise: no store-listed
-  // native apps (the Expo companion is unpublished), no free plan for a new
-  // family (an expired trial locks, lib/server/entitlement.ts), a trial that is
-  // Family Basic and so unmetered, no bounty or acknowledgments page (both
-  // "planned" in lib/marketing/trust-ledger.ts), Apple and Outlook arriving as
-  // published links rather than two-way sync, and no offline write queue.
-  /native (iOS|Android)|native companion|companion apps/i,
-  /free (starter )?plan/i,
-  /10 AI requests|ten assistant requests/i,
-  /rewards researchers|acknowledge?ments page/i,
-  /two-way sync with Google, Apple/i,
-  /changes will sync|sync the moment you/i,
+  // Retired 2026-10-04, each because the code says otherwise. One list, shared
+  // with the readers of the admin-edited stores, which refuse a row that still
+  // states one (lib/marketing/retired-claims.ts says why each is retired).
+  ...RETIRED_CLAIMS,
 ];
 
 describe('public marketing claims', () => {
