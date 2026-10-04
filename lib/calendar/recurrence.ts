@@ -122,6 +122,7 @@ export function expandEventsInZone<T extends RecurrableEvent>(
     const durationMs = e.ends_at ? new Date(e.ends_at).getTime() - start.getTime() : null;
     const base = localPartsAt(start, timezone);
     const minutes = base.hour * 60 + base.minute;
+    const subMinuteMs = start.getUTCSeconds() * 1000 + start.getUTCMilliseconds();
     const from = firstStep(base, e.recurrence, windowStart, timezone);
 
     for (let i = 0; i < MAX_OCCURRENCES; i += 1) {
@@ -133,6 +134,8 @@ export function expandEventsInZone<T extends RecurrableEvent>(
       // event happens at 3:00 rather than vanishing for that day.
       const cursor = instantForLocalTime(local.year, local.month, local.day, minutes, timezone);
       if (!cursor) continue;
+      // Keep source precision within the resolver-selected local minute.
+      cursor.setTime(cursor.getTime() + subMinuteMs);
       if (cursor >= seriesEnd) break;   // the sequence is monotone in n
       if (cursor >= windowStart) {
         out.push({

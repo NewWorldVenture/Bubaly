@@ -73,6 +73,15 @@ export const FEATURE_ENV = [
   // the dedupe then suppresses the retry. Env-only across five read sites, no
   // stored fallback, so absence here does prove it is unconfigured.
   'RESEND_API_KEY',
+  // Provider ingress for the same subsystem. Resend's bounce, complaint, open
+  // and click events land at app/api/webhooks/resend/route.ts, where `verify()`
+  // returns false when this is unset, so every delivery is answered 401 —
+  // correctly fail-closed, and invisible: the suppression list never learns a
+  // bounce or complaint, so the next campaign mails the addresses that bounced
+  // last time while the counters show none. Env-only at its one gating read
+  // site (the admin readiness tile reads the same `process.env`), no stored
+  // fallback.
+  'RESEND_WEBHOOK_SECRET',
   'CHILD_LOGIN_SECRET',
   'INTERNAL_SECRET',
   'CONTACT_CENTER_INBOUND_SECRET',

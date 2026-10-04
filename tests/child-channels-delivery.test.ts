@@ -10,10 +10,20 @@
 // REACH a child, not what a child may be told. Turning push off stops the phone
 // buzzing; it does not erase the notice from the in-app list the child opens.
 import { readFileSync } from 'node:fs';
-import { describe, expect, it, vi } from 'vitest';
+import { afterEach, describe, expect, it, vi } from 'vitest';
 import type { SupabaseClient } from '@supabase/supabase-js';
 import type { Database } from '@/lib/database.types';
 import { childrenBlockedOn } from '@/lib/notifications/child-channels';
+import { dispatchPendingPushes } from '@/lib/server/push';
+import { notificationId, pushDispatchDb } from './helpers/push-dispatch-db';
+
+const delivery = vi.hoisted(() => ({ native: vi.fn() }));
+vi.mock('@/lib/server/native-push', () => ({
+  sendNativePush: delivery.native,
+  nativePushConfigured: () => ({ fcm: true, apns: false }),
+}));
+vi.mock('web-push', () => ({ default: { setVapidDetails: vi.fn(), sendNotification: vi.fn() } }));
+afterEach(() => vi.restoreAllMocks());
 
 type Member = { user_id: string | null; family_id: string; role: string; is_active: boolean };
 type Setting = { family_id: string; child_channels: unknown };
@@ -21,25 +31,34 @@ type Setting = { family_id: string; child_channels: unknown };
 function makeDb(members: Member[], settings: Setting[], fail?: 'members' | 'settings') {
   const from = (table: string) => {
     const filters: Record<string, unknown> = {};
+    let order: string | null = null;
+    let range: [number, number] | null = null;
+    const page = <T extends Record<string, unknown>>(rows: T[]) => {
+      const ordered = order ? [...rows].sort((a, b) => String(a[order!]).localeCompare(String(b[order!]))) : rows;
+      return range ? ordered.slice(range[0], range[1] + 1) : ordered;
+    };
     const b: Record<string, unknown> = {};
     Object.assign(b, {
       select: () => b,
       eq: (c: string, v: unknown) => { filters[c] = v; return b; },
       in: (c: string, v: unknown[]) => { filters[c] = v; return b; },
+      order: (column: string) => { order = column; return b; },
+      range: (from: number, to: number) => { range = [from, to]; return b; },
       then: (resolve: (r: { data: unknown; error: unknown }) => void) => {
         if (table === 'family_members') {
           if (fail === 'members') return resolve({ data: null, error: { message: 'boom' } });
           const want = (filters.user_id ?? []) as string[];
           return resolve({
-            data: members.filter((m) => m.user_id && want.includes(m.user_id)
+            data: page(members.map((m, i) => ({ ...m, id: `member-${i}` })).filter((m) => m.user_id && want.includes(m.user_id)
               && m.role === filters.role && m.is_active === filters.is_active)
+              .map((m) => ({ id: m.id, user_id: m.user_id, family_id: m.family_id })))
               .map((m) => ({ user_id: m.user_id, family_id: m.family_id })),
             error: null,
           });
         }
         if (fail === 'settings') return resolve({ data: null, error: { message: 'boom' } });
         const want = (filters.family_id ?? []) as string[];
-        return resolve({ data: settings.filter((s) => want.includes(s.family_id)), error: null });
+        return resolve({ data: page(settings.filter((s) => want.includes(s.family_id))), error: null });
       },
     });
     return b;
@@ -112,15 +131,33 @@ describe('a family can say how Bubaly may reach its children', () => {
 });
 
 describe('both delivery paths consult it', () => {
-  it('push filters the whole-family fan-out, not just addressed notices', () => {
+  it.each(['addressed', 'broadcast'])('push applies child consent to %s notifications and preserves permitted delivery', async shape => {
     // A whole-family notification has user_id null and fans out to every active
     // member, so filtering only the addressed case would reach a child anyway —
     // by the widest path, and the one a family notices most.
-    const src = readFileSync('lib/server/push.ts', 'utf8');
-    expect(src).toContain("childrenBlockedOn(supabase, 'push'");
-    expect(src).toContain('addressed.filter((id) => !pushBlocked.has(id))');
-    // The candidate set is built from BOTH shapes before the filter runs.
-    expect(src).toMatch(/if \(n\.user_id\) candidates\.add\(n\.user_id\);\s*\n\s*else for \(const id of await membersOf/);
+    delivery.native.mockReset().mockResolvedValue('sent');
+    const now = new Date('2026-10-02T12:00:00Z');
+    const notifications = (shape === 'broadcast' ? [null] : ALL).map((user_id, index) => ({
+      id: notificationId(index + 1), family_id: 'fam-1', user_id,
+      title: 'Synthetic reminder', body: 'Synthetic family content',
+      pushed_at: null, created_at: now.toISOString(), send_at: now.toISOString(),
+    }));
+    const f = pushDispatchDb({
+      notifications, family_members: [CHILD, TEEN, PARENT],
+      family_ai_settings: [{ family_id: 'fam-1', child_channels: { push: false } }],
+      user_preferences: [],
+      push_devices: ALL.map(user_id => ({
+        id: user_id, user_id, provider: 'fcm', enabled: true, token: `synthetic-${user_id}`,
+      })),
+    });
+    expect(await dispatchPendingPushes(f.db, { now })).toEqual({
+      notifications: notifications.length,
+      result: { sent: 2, skipped: 0, failed: 0, pruned: 0, withheld: 1 },
+    });
+    expect(delivery.native.mock.calls.map(call => call[1])).toEqual(['synthetic-auth-teen', 'synthetic-auth-parent']);
+    expect(f.tables.push_deliveries.map(row => row.device_id)).toEqual(['auth-teen', 'auth-parent']);
+    // Withholding handles the queued notice rather than retrying it forever.
+    expect(f.stamps).toEqual(notifications.map(notification => notification.id));
   });
 
   it('push still stamps pushed_at when everyone was filtered out', () => {

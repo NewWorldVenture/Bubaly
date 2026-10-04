@@ -56,7 +56,13 @@ beforeEach(() => {
   twilio.sms.length = 0;
   twilio.calls.length = 0;
   process.env.GUARDIAN_INTERNAL_SECRET = SECRET;
-  db = createInMemorySupabase<DB>({ uniques: { guardian_callback_events: [['event_id']] } });
+  db = createInMemorySupabase<DB>({
+    uniques: { guardian_callback_events: [['event_id']] },
+    // 0181's column defaults. The claim insert relies on `status` defaulting to
+    // 'processing', and the release keys on it; a fixture without the default
+    // held a status-less row that the real table can never contain.
+    defaults: { guardian_callback_events: { status: 'processing', processed_at: null, error: null } },
+  });
   db.seed('family_members', HOUSEHOLD.map((m) => ({ ...m, family_id: FAMILY, is_active: true })));
   db.seed('profiles', HOUSEHOLD.map((m) => ({ id: m.user_id, phone: phoneOf(m.user_id) })));
   state.db = db;
@@ -149,11 +155,15 @@ describe('a failed phone lookup is retried, not recorded as nobody to call (CALL
     expect(twilio.calls).toEqual([]);
     expect(real.table('notifications')).toEqual([]);
     expect(real.table('guardian_escalations')).toEqual([]);
-    expect((real.table('guardian_callback_events') as { status: string }[]).map((r) => r.status)).toEqual(['error']);
+    // "Leaves the claim retryable" used to mean a row marked `error`, which
+    // claimGuardianCallback reclaims only after ten minutes — so this test aged
+    // the row by hand before retrying, and in production the caller's retry
+    // inside that window was answered `{ ok: true, duplicate: true }` with
+    // nobody told. Nothing has been sent at this point, so the claim is now
+    // given back outright, and the retry below needs no help.
+    expect(real.table('guardian_callback_events'), 'the claim was given back, not parked as an error').toEqual([]);
 
     failProfiles = false;
-    // An errored claim is reclaimed once it is stale (lib/guardian/callbacks.ts).
-    for (const row of real.table('guardian_callback_events') as { received_at?: string }[]) row.received_at = '2000-01-01T00:00:00.000Z';
     const retry = await escalate('critical', commId);
     expect(retry.status).toBe(200);
     expect(twilio.sms.sort()).toEqual([phoneOf('u-parent'), phoneOf('u-adult')].sort());

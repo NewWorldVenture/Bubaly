@@ -53,6 +53,11 @@ vi.mock('@/lib/supabase/server', () => ({
       let range: [number, number] | null = null;
       const b: Row = {};
       const settle = () => {
+        // Healthy recipients in this suite are adults. The real child-channel
+        // helper still reads membership; its empty result needs no settings.
+        if (table === 'family_members') return { data: [], error: null };
+        // No saved email preference keeps the recipient's default opt-in.
+        if (table === 'user_preferences') return { data: [], error: null };
         if (table === 'chore_assignments') {
           if (state.assignmentsError) return { data: null, error: state.assignmentsError };
           const all = state.assignments;
@@ -80,7 +85,7 @@ function seed(n: number) {
   state.assignments = Array.from({ length: n }, (_, i) => ({
     id: `a-${i}`, member_id: `mem-${i}`, due_at: '2026-09-20T00:00:00Z', family_id: 'fam-1',
     chores: { title: 'Dishes', points: 5 },
-    family_members: { display_name: `Member ${i}`, user_id: `user-${i}` },
+    family_members: { display_name: `Member ${i}`, user_id: `user-${i}`, is_active: true, family_id: 'fam-1' },
   }));
   state.users = Array.from({ length: n }, (_, i) => ({ id: `user-${i}`, email: `member${i}@example.test` }));
 }

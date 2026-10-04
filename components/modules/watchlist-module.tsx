@@ -86,8 +86,8 @@ export function WatchlistModule() {
     const existing = votes.data.find((v) => v.title_id === title.id && v.member_id === myMemberId);
     const { data: voted, error } = existing
       ? existing.vote === vote
-        ? await supabase.from('watchlist_votes').delete().eq('id', existing.id).select('id')
-        : await supabase.from('watchlist_votes').update({ vote }).eq('id', existing.id).select('id')
+        ? await supabase.from('watchlist_votes').delete().eq('id', existing.id).eq('family_id', familyId).select('id')
+        : await supabase.from('watchlist_votes').update({ vote }).eq('id', existing.id).eq('family_id', familyId).select('id')
       // The votes on screen arrive by realtime and can be a moment behind; a
       // second tap before the first vote arrived inserted again and was
       // refused as a duplicate, leaving the old vote (B11, P-26). One vote per
@@ -104,6 +104,7 @@ export function WatchlistModule() {
     const { data: updated, error } = await createClient().from('watchlist_titles').update({ status }).eq('id', title.id).select('id');
     if (error) return toastError(describeDbError(error));
     if (wroteNoRows(updated)) return toastError(tr('errors.thatChangeWasNotSaved'));
+    void titles.refresh();
     success(`${title.title}: ${WATCH_STATUSES.find((s) => s.value === status)?.label}`);
   }
 
@@ -112,6 +113,7 @@ export function WatchlistModule() {
     const { data: removed, error } = await createClient().from('watchlist_titles').delete().eq('id', title.id).select('id');
     if (error) return toastError(describeDbError(error));
     if (wroteNoRows(removed)) return toastError(tr('errors.thatChangeWasNotSaved'));
+    void titles.refresh();
     success(tr('watchlistModule.titleRemoved'));
   }
 
