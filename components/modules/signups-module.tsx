@@ -25,7 +25,8 @@ import {
   type OpportunityLike, type UrgencyBucket,
 } from '@/lib/opportunities/deadlines';
 import type { Tables, OpportunityStatus } from '@/lib/database.types';
-import { useLocale, useTranslations } from '@/components/i18n/locale-provider';
+import { useTranslations } from '@/components/i18n/locale-provider';
+import { useFamilyClock, useFormat } from '@/components/i18n/use-format';
 import { useConfirm } from '@/components/ui/confirm';
 import { safeWebLink } from '@/lib/utils/safe-link';
 
@@ -45,18 +46,14 @@ const STATUS_STYLES: Record<OpportunityStatus, string> = {
   missed: 'text-rose-300 bg-rose-500/10 border-rose-500/30',
 };
 
-function todayKey(): string {
-  const d = new Date();
-  return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
-}
-
 const blank = {
   id: '', member_id: '', title: '', category: 'camp', url: '', cost: '',
   opens_at: '', deadline: '', status: 'interested' as OpportunityStatus, notes: '',
 };
 
 export function SignupsModule() {
-  const locale = useLocale();
+  const format = useFormat();
+  const clock = useFamilyClock();
   const t = useTranslations();
   const askConfirm = useConfirm();
   const { familyId, userId, members, role } = useApp();
@@ -75,7 +72,8 @@ export function SignupsModule() {
   });
 
   const memberName = (id: string | null) => members.find((m) => m.id === id)?.display_name ?? null;
-  const tk = todayKey();
+  // The FAMILY's today (TIME-003), not the phone's.
+  const tk = clock.todayKey();
 
   const visible = useMemo(() => {
     let list = opps ?? [];
@@ -142,7 +140,8 @@ export function SignupsModule() {
     success(t('signupsModule.signupDeleted'));
   }
 
-  const fmtDate = (key: string | null) => key ? new Date(`${key}T00:00:00`).toLocaleDateString(locale.code, { month: 'short', day: 'numeric', year: 'numeric' }) : null;
+  // A sign-up date is a DATE, rendered as written (TIME-003).
+  const fmtDate = (key: string | null) => key ? format.fmtDate(key, 'MMM d, yyyy') : null;
   const countdownLabel = (o: Opportunity) => {
     const d = daysToDeadline(o as OpportunityLike, tk);
     if (d == null) return null;

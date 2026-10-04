@@ -67,7 +67,7 @@ async function fixture(page:Page) {
       react:React,'react-dom':ReactDOM,'lucide-react':window.LucideReact,
       'next/link':{__esModule:true,default:({href,children,...props})=>h('a',{...props,href},children)},
       '@/components/app/app-context':{useApp:()=>({familyId:'family-A',userId:'user-A'})},
-      '@/components/i18n/locale-provider':{useTranslations:()=>translate,useLocale:()=>({code:'en-US'})},
+      '@/components/i18n/locale-provider':{useTranslations:()=>translate,useLocale:()=>({code:'en-US'}),useFamilyTimeZone:()=>undefined},
       '@/components/ui/toast':{useToast:()=>({success:x=>p.notices.push(x),error:x=>p.notices.push(x)})},
       '@/lib/hooks/use-realtime-query':{useRealtimeQuery:opts=>({data:opts.table==='family_communications'?rows:[],loading:false,error:null,refresh:()=>{p.refreshes++;}})},
       '@/lib/supabase/client':{createClient:()=>db},

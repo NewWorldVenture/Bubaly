@@ -15,7 +15,8 @@ import { useApp } from '@/components/app/app-context';
 import { useRealtimeQuery } from '@/lib/hooks/use-realtime-query';
 import { useToast } from '@/components/ui/toast';
 import type { Tables } from '@/lib/database.types';
-import { buildMomentPrep, momentWhen as momentWhenIn, type PrepDomain, type MomentEvent } from '@/lib/moments/prep';
+import { buildMomentPrep, type PrepDomain, type MomentEvent } from '@/lib/moments/prep';
+import { useMomentWhen } from '@/components/moments/use-moment-when';
 import { upcomingBirthdayEvents } from '@/lib/moments/birthdays';
 import { weatherAdvisory, dayKey } from '@/lib/moments/weather';
 import { reminderTimeFor } from '@/lib/moments/reminders';
@@ -23,6 +24,7 @@ import { findOverlaps } from '@/lib/moments/conflicts';
 import { useDefaultForecast } from '@/components/moments/use-default-forecast';
 import { createMomentReminderAction } from '@/app/(app)/dashboard/moment-actions';
 import { useLocale, useTranslations } from '@/components/i18n/locale-provider';
+import { useFamilyCalendarToday, useFamilyClock, useFormat } from '@/components/i18n/use-format';
 
 type Event = Tables<'calendar_events'>;
 
@@ -37,8 +39,16 @@ const HORIZON_MS = 36 * 3600 * 1000;
 
 export function HomeMomentCard() {
   const locale = useLocale();
+  // The family's clock and Today/Tomorrow (TIME-003).
+  const clock = useFamilyClock();
+  // The family's calendar day, for which birthday is today/tomorrow (TIME-003):
+  // memoized on the family's day key, so any render after the family's midnight
+  // selects for the new day. Nothing here schedules that render: an idle screen
+  // keeps yesterday's selection until something else re-renders it.
+  const familyToday = useFamilyCalendarToday();
+  const format = useFormat();
   // The date follows the reader and the words come from the catalogue.
-  const momentWhen = (startsAt: string, allDay: boolean) => momentWhenIn(startsAt, allDay, new Date(), locale.code, t);
+  const momentWhen = useMomentWhen();
   const t = useTranslations();
   const { familyId, members } = useApp();
   const { success, error: toastError } = useToast();
@@ -68,7 +78,7 @@ export function HomeMomentCard() {
       id: e.id, title: e.title, category: e.category, location: e.location,
       starts_at: e.starts_at, all_day: e.all_day, description: e.description,
     }));
-    const merged = [...evs, ...upcomingBirthdayEvents(members, new Date(), 2)]
+    const merged = [...evs, ...upcomingBirthdayEvents(members, familyToday, 2)]
       .sort((a, b) => a.starts_at.localeCompare(b.starts_at));
     for (const e of merged) {
       if (new Date(e.starts_at).getTime() - Date.now() > HORIZON_MS) break;
@@ -76,7 +86,7 @@ export function HomeMomentCard() {
       if (prep.items.length > 0) return { event: e, prep };
     }
     return null;
-  }, [rows, members]);
+  }, [rows, members, familyToday]);
 
   // The single best reminder to offer inline: the leave-by time, else the first
   // step that can become a reminder (nudged the evening before / 2h out).
@@ -130,7 +140,7 @@ export function HomeMomentCard() {
             {prep.leaveByISO && (
               <span className="inline-flex items-center gap-1 rounded-lg bg-elevated px-2 py-1 text-xs font-semibold">
                 <Clock className="h-3.5 w-3.5 text-brand-text" />
-                {t('homeMoment.leave')} {new Date(prep.leaveByISO).toLocaleTimeString(locale.code, { hour: 'numeric', minute: '2-digit' })}
+                {t('homeMoment.leave')} {format.fmtTime(prep.leaveByISO)}
               </span>
             )}
             {steps.filter((s) => s.domain !== 'time').slice(0, 3).map((s) => {

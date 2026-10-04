@@ -6,11 +6,15 @@ import { revalidatePath } from 'next/cache';
 import { requireUserContext } from '@/lib/supabase/auth';
 import { createServer, createServiceClient } from '@/lib/supabase/server';
 import { scopeFromUserContext } from '@/lib/services/scope';
+import type { ServiceScope } from '@/lib/services/types';
+import { respawnChoreAssignment } from '@/lib/services/tasks';
 import { isManager } from '@/lib/constants/roles';
 import { validateChoreSubmission, generateChorePlan, type ChorePlanItem } from '@/lib/chores/ai';
 import { computeReward, canAutoApprove, type ChoreReward, type Difficulty } from '@/lib/chores/logic';
 import { applyCompletionRewards, logChoreEvent } from '@/lib/chores/server';
 import { wroteNoRows, describeActionError } from '@/lib/supabase/errors';
+import { assertAIAccess } from '@/lib/server/ai-access';
+import { familyDetailsBaseSchema } from '@/lib/validation';
 
 const BUCKET = 'chore-proof';
 const MAX_FILE = 50 * 1024 * 1024;
@@ -256,7 +260,7 @@ export async function submitProofAction(formData: FormData): Promise<{ ok: boole
       // session (the submitter). Route the reward finalization through the service
       // role so it credits the immutable ledger under the manager-only wallet RLS
       // (0217) — the child's session must never be the authority for a money credit.
-      await finalizeApproval(service, { familyId, tz, assignment, chore, submissionId: submission.id, score: verdict.quality_score, actorId: assignment.member_id, auto: true });
+      await finalizeApproval(service, { familyId, tz, assignment, chore, submissionId: submission.id, score: verdict.quality_score, actorId: assignment.member_id, auto: true, scope: scopeFromUserContext(ctx, service) });
     } catch {
       await setSubmissionStatus(service, familyId, submission.id, 'parent_review');
       // The payout above ran as the service role, so its repair does too: a
@@ -291,7 +295,7 @@ export async function submitProofAction(formData: FormData): Promise<{ ok: boole
 /** Shared approval finalizer: sets reward, flips status, applies gamification. */
 async function finalizeApproval(
   supabase: Awaited<ReturnType<typeof createServer>>,
-  args: { familyId: string; tz: string; assignment: Record<string, unknown>; chore: Record<string, unknown>; submissionId: string; score: number; actorId: string | null; auto: boolean; pointsOverride?: number | null; cashOverride?: number | null },
+  args: { familyId: string; tz: string; scope: ServiceScope; assignment: Record<string, unknown>; chore: Record<string, unknown>; submissionId: string; score: number; actorId: string | null; auto: boolean; pointsOverride?: number | null; cashOverride?: number | null },
 ) {
   const reward = computeReward(rewardConfig(args.chore), args.score);
   const points = args.pointsOverride ?? reward.points;
@@ -358,6 +362,23 @@ async function finalizeApproval(
     familyId: args.familyId, assignmentId: args.assignment.id as string, submissionId: args.submissionId,
     actorId: args.actorId, action: args.auto ? 'auto_approve' : 'approve', pointsAwarded: points, cashCents,
   });
+
+  // A recurring chore comes back: approving this assignment creates the
+  // child's next one (lib/services/tasks `respawnChoreAssignment`, keyed by
+  // THIS assignment so a repeat is harmless). After the payout, so a reward
+  // failure's rollback never leaves a next assignment behind; its own failure
+  // is logged, not thrown — the approval and the payout stand, and the
+  // push-scan cron's `respawnMissingChoreAssignments` creates the successor
+  // under the same key within two hours.
+  const respawn = await respawnChoreAssignment(args.scope, {
+    assignment: { id: args.assignment.id as string, chore_id: args.assignment.chore_id as string, member_id: args.assignment.member_id as string, due_at: (args.assignment.due_at as string | null) ?? null },
+    recurrence: args.chore.recurrence as string | null | undefined,
+  });
+  if (!respawn.ok) {
+    console.error('[chore approval] next assignment of a recurring chore was not created', {
+      assignmentId: args.assignment.id, familyId: args.familyId, error: respawn.error,
+    });
+  }
 }
 
 /** Parent approves a submission, optionally overriding the AI's reward. */
@@ -394,7 +415,7 @@ export async function approveSubmissionAction(formData: FormData): Promise<Missi
   }
   try {
     await finalizeApproval(supabase, {
-      familyId, tz, assignment, chore, submissionId, score, actorId: ctx.active.member.id, auto: false,
+      familyId, tz, assignment, chore, submissionId, score, actorId: ctx.active.member.id, auto: false, scope: scopeFromUserContext(ctx, supabase),
       pointsOverride: intVal(formData, 'points'), cashOverride: intVal(formData, 'cash_cents'),
     });
   } catch (err) {
@@ -584,10 +605,33 @@ export async function createChoreAction(formData: FormData): Promise<MissionActi
   return { ok: true };
 }
 
+/**
+ * The ages a family can give at all: the onboarding shape (whole years 0–21, at
+ * most 20 of them). A server action's arguments are whatever the request
+ * carried, and these are written into the model's prompt.
+ */
+const PLAN_AGES = familyDetailsBaseSchema.shape.childAges;
+
 /** AI chore-plan generator — returns suggestions for the parent to review. */
 export async function generatePlanAction(prompt: string, kidAges: number[]): Promise<{ items: ChorePlanItem[]; error?: string }> {
   const t = await getTranslations();
   const ctx = await requireUserContext();
-  if (!prompt.trim()) return { items: [], error: t('actions.describeWhatYouWantFirst') };
-  return generateChorePlan(scopeFromUserContext(ctx, await createServer()), prompt, kidAges);
+  if (typeof prompt !== 'string' || !prompt.trim()) return { items: [], error: t('actions.describeWhatYouWantFirst') };
+  const ages = PLAN_AGES.safeParse(kidAges ?? []);
+  // The plan builder never sends ages, so only a hand-made request is refused
+  // here, and a generic answer is the honest one (#730).
+  if (!ages.success) return { items: [], error: t('hubActions.invalidRequest') };
+
+  const supabase = await createServer();
+  // A draft is a paid model call for a Family+ feature. Every other AI surface
+  // asks this gate before it opens a request row or asks a model, and this one
+  // asked neither: a Free family, a family with the feature off, or one past
+  // its monthly allowance was answered anyway (#730). Its refusal is already
+  // the family's answer.
+  const access = await assertAIAccess(ctx, { db: supabase, featureKey: 'family-missions' });
+  if (!access.ok) return { items: [], error: access.error };
+
+  const plan = await generateChorePlan(scopeFromUserContext(ctx, supabase), prompt, ages.data);
+  if (plan.providerFailure) return { items: [], error: t('ai.aiIsTemporarilyUnavailable') };
+  return plan.error === undefined ? { items: plan.items } : { items: plan.items, error: plan.error };
 }

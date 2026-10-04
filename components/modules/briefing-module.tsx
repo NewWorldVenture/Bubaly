@@ -1,7 +1,6 @@
 'use client';
 
 import { useState, useEffect, useMemo, useSyncExternalStore } from 'react';
-import { localDayKey, localDayKeyOf } from '@/lib/time/local-day';
 import Link from 'next/link';
 import { useApp } from '@/components/app/app-context';
 import { useRealtimeQuery } from '@/lib/hooks/use-realtime-query';
@@ -25,6 +24,7 @@ import {
   type BriefingData, type BriefingResponse,
 } from '@/lib/briefing/cache-isolation';
 import { useLocale, useTranslations } from '@/components/i18n/locale-provider';
+import { useFamilyClock, useFormat } from '@/components/i18n/use-format';
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 
@@ -650,6 +650,8 @@ function KitchenMode({ onExit, todayEvents, members, urgentReminders, now }: {
   now: Date;
 }) {
   const tr = useTranslations();
+  const format = useFormat();
+  const familyClock = useFamilyClock();
   const locale = useLocale();
   function memberStatus(memberId: string): { label: string; active: boolean; next: boolean } {
     const current = todayEvents.find(e => {
@@ -661,15 +663,16 @@ function KitchenMode({ onExit, todayEvents, members, urgentReminders, now }: {
     if (current) return { label: current.title, active: true, next: false };
     const next = todayEvents.find(e => e.assignee_id === memberId && new Date(e.starts_at) > now);
     if (next) {
-      const t = new Date(next.starts_at).toLocaleTimeString(locale.code, { hour: 'numeric', minute: '2-digit' });
+      const t = format.fmtTime(next.starts_at);
       return { label: tr('briefingView.nextEvent', { title: next.title, time: t }), active: false, next: true };
     }
     return { label: tr('briefingView.available'), active: false, next: false };
   }
 
   const upcoming = todayEvents.filter(e => new Date(e.starts_at) > now).slice(0, 5);
-  const clockStr = now.toLocaleTimeString(locale.code, { hour: 'numeric', minute: '2-digit' });
-  const dayStr   = now.toLocaleDateString(locale.code, { weekday: 'long', month: 'long', day: 'numeric' });
+  // The kitchen shows the FAMILY's clock and day (TIME-003).
+  const clockStr = format.fmtTime(now);
+  const dayStr   = format.fmtDate(now, 'EEEE, MMMM d');
 
   return (
     <div className="fixed inset-0 z-50 bg-[#07070d] flex flex-col overflow-hidden pt-[var(--safe-top)] pb-[var(--safe-bottom)]">
@@ -729,7 +732,7 @@ function KitchenMode({ onExit, todayEvents, members, urgentReminders, now }: {
             ) : (
               <div className="space-y-3">
                 {upcoming.map((e, i) => {
-                  const parts = new Intl.DateTimeFormat(locale.code, { hour: 'numeric', minute: '2-digit' }).formatToParts(new Date(e.starts_at));
+                  const parts = new Intl.DateTimeFormat(locale.code, { hour: 'numeric', minute: '2-digit', timeZone: familyClock.timeZone }).formatToParts(new Date(e.starts_at));
                   const clock = parts.filter(part => part.type !== 'dayPeriod').map(part => part.value).join('').trim();
                   const period = parts.find(part => part.type === 'dayPeriod')?.value;
                   return (
@@ -780,6 +783,8 @@ type BriefingModuleProps = {
 
 export function BriefingModule(props: BriefingModuleProps = {}) {
   const tr = useTranslations();
+  // The FAMILY's day keys the cache and the briefing (TIME-003).
+  const familyClock = useFamilyClock();
   const locale = useLocale();
   const context = useApp();
   const [tab, setTab] = useState<TabType>('morning');
@@ -794,7 +799,7 @@ export function BriefingModule(props: BriefingModuleProps = {}) {
   // reader's day now, so a Greenwich cache key would hold yesterday's briefing
   // through the gap between the two midnights — up to twelve hours of showing a
   // brief the page itself considers stale.
-  const contextKey = briefingContextKey(context, localDayKey(now), locale.code);
+  const contextKey = briefingContextKey(context, familyClock.dayKeyOf(now), locale.code);
 
   useEffect(() => {
     try {
@@ -818,7 +823,6 @@ function ScopedBriefingModule({ recap, relationships, preview = false, contextKe
 }) {
   const tr = useTranslations();
   const { familyId, members } = useApp();
-  const locale = useLocale();
   const [session] = useState(() => createBriefingSession());
   const state = useSyncExternalStore(session.subscribe, session.getSnapshot, session.getSnapshot);
   const active = tab === 'kitchen' ? null : state[tab];
@@ -840,7 +844,9 @@ function ScopedBriefingModule({ recap, relationships, preview = false, contextKe
   // else's. Both sides move together: the key built here and the keys it is
   // compared against below, because a local key measured against a Greenwich one
   // is the same defect in a different place.
-  const today = localDayKey(now);
+  const familyClock = useFamilyClock();
+  const format = useFormat();
+  const today = familyClock.dayKeyOf(now);
 
   useEffect(() => () => session.clear(), [session]);
 
@@ -872,16 +878,16 @@ function ScopedBriefingModule({ recap, relationships, preview = false, contextKe
 
   const todayEvents = useMemo(() => {
     const list = (rawEvents ?? []) as CalEvent[];
-    return list.filter(e => localDayKeyOf(e.starts_at) === today).sort((a, b) => a.starts_at.localeCompare(b.starts_at));
-  }, [rawEvents, today]);
+    return list.filter(e => familyClock.dayKeyOf(e.starts_at) === today).sort((a, b) => a.starts_at.localeCompare(b.starts_at));
+  }, [rawEvents, today, familyClock]);
   const urgentReminders = useMemo(() => {
     const list = (rawReminders ?? []) as ReminderRow[];
-    return list.filter(r => { const d = localDayKeyOf(r.remind_at); return d !== null && d <= today; }).slice(0, 6);
-  }, [rawReminders, today]);
+    return list.filter(r => { const d = r.remind_at ? familyClock.dayKeyOf(r.remind_at) : ''; return d !== '' && d <= today; }).slice(0, 6);
+  }, [rawReminders, today, familyClock]);
   const kitchenError = eventsError || remindersError;
   const refreshKitchen = () => { void refreshEvents(); void refreshReminders(); };
 
-  const fmtTime = (iso: string) => new Date(iso).toLocaleTimeString(locale.code, { hour: 'numeric', minute: '2-digit' });
+  const fmtTime = (iso: string) => format.fmtTime(iso);
 
   const TABS: { id: TabType; label: string; icon: React.ReactNode }[] = [
     { id: 'morning', label: tr('briefingView.morningTab'),      icon: <Sun className="h-4 w-4" /> },

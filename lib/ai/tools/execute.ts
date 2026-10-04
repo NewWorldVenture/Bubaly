@@ -196,10 +196,12 @@ function resolveIdempotencyKey(scope: ServiceScope, tool: ToolDefinition, input:
 }
 
 type Reservation =
-  | { status: 'reserved'; id: string }
+  | { status: 'reserved'; id: string; attempt: number }
   | { status: 'duplicate'; id: string; outputs: Json | null }
   | { status: 'in_progress' }
   | { status: 'error'; error: string };
+
+type ToolCallIdentity = { id: string; familyId: string; key: string; toolName: string; attempt: number };
 
 async function reserveCall(
   ledger: DB,
@@ -226,7 +228,7 @@ async function reserveCall(
   };
 
   const { data, error } = await ledger.from('ai_tool_calls').insert(row).select('id').single();
-  if (!error && data) return { status: 'reserved', id: data.id };
+  if (!error && data) return { status: 'reserved', id: data.id, attempt: row.attempt };
 
   if (!isUniqueViolation(error)) {
     console.error('[tool-exec] could not reserve a tool call', error);
@@ -236,13 +238,20 @@ async function reserveCall(
   // Someone already holds this key. 0250's semantics decide what that means.
   const { data: existing, error: readError } = await ledger
     .from('ai_tool_calls')
-    .select('id, state, attempt, locked_at, outputs')
+    .select('id, tool_name, state, attempt, locked_at, outputs')
     .eq('family_id', scope.familyId)
     .eq('idempotency_key', key)
     .maybeSingle();
   if (readError || !existing) {
     console.error('[tool-exec] could not read the conflicting tool call', readError);
     return { status: 'error', error: describeDbError(readError, 'Bubaly could not confirm whether that already happened.') };
+  }
+
+  // Other server-owned operations share this ledger. A matching key is not
+  // authority to replay their result or reclaim their reservation.
+  if (existing.tool_name !== tool.name) {
+    console.error('[tool-exec] conflicting receipt does not belong to the requested tool');
+    return { status: 'error', error: 'Bubaly could not confirm that this saved action belongs to the requested tool, so nothing was done.' };
   }
 
   if (existing.state === 'succeeded') return { status: 'duplicate', id: existing.id, outputs: existing.outputs };
@@ -260,6 +269,9 @@ async function reserveCall(
     .from('ai_tool_calls')
     .update({ state: 'reserved', attempt: existing.attempt + 1, locked_at: nowIso, error: null, outputs: null, finished_at: null })
     .eq('id', existing.id)
+    .eq('family_id', scope.familyId)
+    .eq('idempotency_key', key)
+    .eq('tool_name', tool.name)
     .eq('state', existing.state)
     .eq('attempt', existing.attempt)
     .select('id')
@@ -269,13 +281,13 @@ async function reserveCall(
     return { status: 'error', error: describeDbError(takeError, 'Bubaly could not record that action, so it did not run.') };
   }
   if (!taken) return { status: 'in_progress' };
-  return { status: 'reserved', id: taken.id };
+  return { status: 'reserved', id: taken.id, attempt: existing.attempt + 1 };
 }
 
 /** Close out a ledger row. Never throws: the household write already happened. */
 async function finalizeCall(
   ledger: DB,
-  toolCallId: string,
+  identity: ToolCallIdentity,
   patch: { state: 'succeeded' | 'failed'; outputs?: Json | null; error?: string | null; durationMs: number; resource?: { table: string; id: string | null } | null },
 ): Promise<void> {
   // Never throws — the household write already happened — but a finalize that
@@ -295,11 +307,16 @@ async function finalizeCall(
       resource_table: patch.resource?.table ?? null,
       resource_id: patch.resource?.id ?? null,
     })
-    .eq('id', toolCallId)
+    .eq('id', identity.id)
+    .eq('family_id', identity.familyId)
+    .eq('idempotency_key', identity.key)
+    .eq('tool_name', identity.toolName)
+    // A stale but live worker must not finish the newer attempt's receipt.
+    .eq('attempt', identity.attempt)
     .select('id');
   if (error || wroteNoRows(finalized)) {
     console.error('[tool-exec] could not finalize the tool call ledger row; a stale retry may re-execute it', {
-      toolCallId, state: patch.state, error: error ?? 'no rows updated',
+      toolCallId: identity.id, state: patch.state, error: error ?? 'no rows updated',
     });
   }
 }
@@ -716,6 +733,9 @@ export async function executeTool(
   }
 
   // ── 5. Execute ───────────────────────────────────────────────────────────
+  const identity: ToolCallIdentity = {
+    id: reservation.id, familyId: callScope.familyId, key, toolName: tool.name, attempt: reservation.attempt,
+  };
   const startedAt = Date.now();
   const result = await runService({
     ...callScope,
@@ -724,7 +744,7 @@ export async function executeTool(
   const durationMs = Date.now() - startedAt;
 
   if (!result.ok) {
-    await finalizeCall(ledger, reservation.id, { state: 'failed', error: result.error, durationMs });
+    await finalizeCall(ledger, identity, { state: 'failed', error: result.error, durationMs });
     return { status: 'error', error: result.error, retryable: result.retryable ?? false, toolCallId: reservation.id };
   }
 
@@ -734,7 +754,7 @@ export async function executeTool(
     // it failed would invite a retry that duplicates the row. The caller is
     // told honestly that the result could not be read.
     console.error(`[tool-exec] ${tool.name} returned an unexpected shape`, validated.error.issues);
-    await finalizeCall(ledger, reservation.id, {
+    await finalizeCall(ledger, identity, {
       state: 'succeeded',
       outputs: { result: result.data as Json, verified: null, detail: 'output failed schema validation' } as unknown as Json,
       error: `output schema mismatch: ${issueSummary(validated.error)}`,
@@ -770,7 +790,7 @@ export async function executeTool(
     if (verified === false) console.error(`[tool-exec] ${tool.name} could not be verified: ${verificationDetail}`);
   }
 
-  await finalizeCall(ledger, reservation.id, {
+  await finalizeCall(ledger, identity, {
     state: 'succeeded',
     outputs: { result: output as Json, verified: verified ?? null, detail: verificationDetail } as unknown as Json,
     durationMs,

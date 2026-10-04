@@ -32,6 +32,9 @@ vi.mock('react', async (original) => {
   }
   return {
     ...await original<typeof import('react')>(),
+    // The shared formatter reads the reader's zone through this (TIME-003);
+    // components here run as plain functions, so answer with the client snapshot.
+    useSyncExternalStore: (_subscribe: unknown, getSnapshot: () => unknown) => getSnapshot(),
     useMemo: memo,
     useCallback: (callback: unknown, deps?: readonly unknown[]) => memo(() => callback, deps),
     useState: (initial: unknown) => {
@@ -67,7 +70,7 @@ vi.mock('next/navigation', () => ({ useSearchParams: () => new URLSearchParams(m
 vi.mock('@/components/i18n/locale-provider', async () => {
   const { getMessages, translate } = await import('@/lib/i18n/messages');
   const { localeOrDefault } = await import('@/lib/i18n/locales');
-  return {
+  return { useFamilyTimeZone: () => undefined,
     useTranslations: () => (key: string, params?: Record<string, string | number>) => translate(getMessages(mock.locale), key, params),
     useLocale: () => localeOrDefault(mock.locale),
   };

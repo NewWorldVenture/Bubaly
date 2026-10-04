@@ -38,19 +38,21 @@ import { filesMatching, perFile, unconfirmedWritesIn } from './helpers/unconfirm
 // → 44/29 (C1-S9-84: everything outside components/modules/ — vacations,
 // family views, meals views, marketplace answers) → 26/20 (C1-S9-85:
 // contacts, journal, marketplace, pets, planning, reminders, family tree,
-// behavior, binder) → 8/7 (C1-S9-86: the last thirteen modules). Every entry
-// left is DELIBERATE, and says so beside the write — see the last case below.
+// behavior, binder) → 8/7 (C1-S9-86: the last thirteen modules) → 7/6 (the
+// messages read-receipt fallback reads its row back: a receipt that did not
+// land is logged, not shown, which is more than the silence it kept before,
+// and the gated-write guard's tolerated list is empty). Every entry left is
+// DELIBERATE, and says so beside the write — see the last case below.
 const BASELINE = new Map<string, number>([
   ['components/modules/career-module.tsx', 1],
   ['components/modules/meals-module.tsx', 1],
-  ['components/modules/messages-module.tsx', 1],
   ['components/modules/notifications-module.tsx', 1],
   ['components/modules/routines-panel.tsx', 1],
   ['components/modules/voting-module.tsx', 2],
   ['components/modules/weather-module.tsx', 1],
 ]);
 
-const COMPONENT_FILES = () => filesMatching("grep -rlE '\\.(update|delete)\\(' components --include='*.ts' --include='*.tsx'");
+const COMPONENT_FILES = () => filesMatching(['components'], /\.(update|delete)\(/);
 
 describe('the unconfirmed-write class in components/ only shrinks (C1-S9-77)', () => {
   const found = perFile(COMPONENT_FILES().flatMap(unconfirmedWritesIn));
@@ -83,9 +85,10 @@ describe('the unconfirmed-write class in components/ only shrinks (C1-S9-77)', (
     expect(stale, 'BASELINE lists files with no unconfirmed writes left — remove them').toEqual([]);
   });
 
-  it('the baseline total matches what finalaudit.md records', () => {
+  it('the baseline total matches the burn-down record above (finalaudit.md records 8 in 7 at C1-S9-86; one fewer since)', () => {
     const total = [...BASELINE.values()].reduce((a, b) => a + b, 0);
-    expect(total).toBe(8);
+    expect(total).toBe(7);
+    expect(BASELINE.size).toBe(6);
   });
 
   // C1-S9-86: the burn-down is finished. What is left is a register of writes

@@ -24,40 +24,66 @@ export function CardRevealModal({ cardId, childName, onClose }: {
 
   useEffect(() => {
     let cancelled = false;
+    const ownedElements: Array<{ destroy(): void }> = [];
+    function destroyElements() {
+      // Drain ownership first: a failing destroy must not strand siblings or
+      // cause a second cleanup attempt when the effect later unmounts.
+      for (const element of ownedElements.splice(0)) {
+        try {
+          element.destroy();
+        } catch {
+          // Provider errors may contain reveal credentials; never log them.
+          console.error('[card-reveal] Could not destroy a display Element.');
+        }
+      }
+    }
     async function run() {
+      setState('loading');
+      setError(null);
       try {
         const prep = await prepareCardRevealAction(cardId);
+        if (cancelled) return;
         if (!prep.ok || !prep.data) throw new Error(prep.ok ? 'Missing data' : prep.error);
         const { stripeCardId, publishableKey, stripeAccount } = prep.data;
 
         const { loadStripe } = await import('@stripe/stripe-js');
+        if (cancelled) return;
         const stripe = await loadStripe(publishableKey, { stripeAccount });
+        if (cancelled) return;
         if (!stripe) throw new Error('Stripe.js failed to load.');
 
         const nonceResult = await stripe.createEphemeralKeyNonce({ issuingCard: stripeCardId });
+        if (cancelled) return;
         if (!nonceResult.nonce) throw new Error('Could not start a secure session.');
 
         const keyRes = await createCardRevealAction({ cardId, nonce: nonceResult.nonce });
-        if (!keyRes.ok || !keyRes.data) throw new Error(keyRes.ok ? 'Missing key' : keyRes.error);
         if (cancelled) return;
+        if (!keyRes.ok || !keyRes.data) throw new Error(keyRes.ok ? 'Missing key' : keyRes.error);
 
         // The Issuing display Elements authenticate directly with the ephemeral
         // key + nonce — the PAN renders inside Stripe-hosted iframes.
         const auth = { issuingCard: stripeCardId, ephemeralKeySecret: keyRes.data.ephemeralKeySecret, nonce: nonceResult.nonce };
         const elements = stripe.elements();
         const style = { base: { color: '#fff', fontSize: '16px', fontFamily: 'ui-monospace, monospace' } };
-        elements.create('issuingCardNumberDisplay', { ...auth, style }).mount(numberRef.current!);
-        elements.create('issuingCardExpiryDisplay', { ...auth, style }).mount(expiryRef.current!);
-        elements.create('issuingCardCvcDisplay', { ...auth, style }).mount(cvcRef.current!);
+        const number = elements.create('issuingCardNumberDisplay', { ...auth, style });
+        ownedElements.push(number);
+        number.mount(numberRef.current!);
+        const expiry = elements.create('issuingCardExpiryDisplay', { ...auth, style });
+        ownedElements.push(expiry);
+        expiry.mount(expiryRef.current!);
+        const cvc = elements.create('issuingCardCvcDisplay', { ...auth, style });
+        ownedElements.push(cvc);
+        cvc.mount(cvcRef.current!);
         setState('ready');
       } catch (e) {
+        destroyElements();
         if (cancelled) return;
         setError(e instanceof Error ? e.message : tr('cardRevealModal.couldNotRevealTheCard'));
         setState('error');
       }
     }
     void run();
-    return () => { cancelled = true; };
+    return () => { cancelled = true; destroyElements(); };
   }, [cardId, tr]);
 
   return (

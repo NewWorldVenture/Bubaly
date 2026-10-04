@@ -150,7 +150,7 @@ export async function decideInvestOrderAction(input: { orderId: string; approve:
       title: `Fill invest order ${(order.amount_cents / 100).toFixed(2)}`,
       context: { amountCents: order.amount_cents }, openApproval: false,
     });
-    if (decision.effect === 'deny') return { ok: false, error: householdPolicyBlocked(t, decision) };
+    if (decision.effect !== 'allow') return { ok: false, error: householdPolicyBlocked(t, decision) };
   }
 
   const { data, error } = await supabase.rpc('invest_decide_order', {

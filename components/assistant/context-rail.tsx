@@ -10,7 +10,8 @@
 import { CalendarDays } from 'lucide-react';
 import { ErrorState, SkeletonText } from '@/components/ui/states';
 import { cn } from '@/lib/utils/cn';
-import { useLocale, useTranslations } from '@/components/i18n/locale-provider';
+import { useTranslations } from '@/components/i18n/locale-provider';
+import { useFormat } from '@/components/i18n/use-format';
 
 export type GlanceItem = { icon: React.ComponentType<{ className?: string }>; value: string; label: string };
 export type UpcomingEvent = { id: string; title: string; starts_at: string; all_day: boolean };
@@ -32,7 +33,7 @@ export type ContextRailProps = {
 };
 
 export function ContextRail({ glance, upcoming, activity, prompts, loading = false, error = null, onRetry, onAsk, className }: ContextRailProps) {
-  const locale = useLocale();
+  const { fmtDate, fmtTime } = useFormat();
   const t = useTranslations();
   return (
     <div className={cn('space-y-5', className)}>
@@ -69,8 +70,8 @@ export function ContextRail({ glance, upcoming, activity, prompts, loading = fal
                   <div className="min-w-0">
                     <p className="truncate text-sm font-semibold">{e.title}</p>
                     <p className="text-xs text-muted">
-                      {d.toLocaleDateString(locale.code, { weekday: 'short', month: 'short', day: 'numeric' })}
-                      {!e.all_day && ` · ${d.toLocaleTimeString(locale.code, { hour: 'numeric', minute: '2-digit' })}`}
+                      {fmtDate(d, 'EEE, MMM d')}
+                      {!e.all_day && ` · ${fmtTime(d)}`}
                     </p>
                   </div>
                 </li>

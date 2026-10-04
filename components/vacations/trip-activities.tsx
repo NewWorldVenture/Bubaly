@@ -5,12 +5,14 @@ import { TripCrudSection, type FieldDef } from './shared';
 import { dollars as dollarsIn } from '@/lib/vacations/meta';
 import type { Tables } from '@/lib/database.types';
 import { useLocale, useTranslations } from '@/components/i18n/locale-provider';
-import type { LocaleCode } from '@/lib/i18n/locales';
+import { useFormat } from '@/components/i18n/use-format';
+import type { Format } from '@/lib/utils/format';
 
 type Activity = Tables<'vacation_activities'>;
 type Reservation = Tables<'vacation_reservations'>;
 
-const fmtDTIn = (locale: LocaleCode) => (s: string | null) => (s ? new Date(s).toLocaleString(locale, { month: 'short', day: 'numeric', hour: 'numeric', minute: '2-digit' }) : 'Unscheduled');
+// In the family's zone (TIME-003), through the shared formatter.
+const fmtDTWith = (fmtDate: Format['fmtDate']) => (s: string | null) => (s ? fmtDate(s, 'MMM d, h:mm a') : 'Unscheduled');
 
 const activityFields: FieldDef[] = [
   { name: 'name', label: 'Activity', type: 'text', required: true },
@@ -41,7 +43,7 @@ export function TripActivities({ vacationId }: { vacationId: string }) {
   const locale = useLocale();
   // Money follows the reader; the currency stays the money's own.
   const dollars = (cents: number | null | undefined) => dollarsIn(cents, locale.code);
-  const fmtDT = fmtDTIn(locale.code);
+  const fmtDT = fmtDTWith(useFormat().fmtDate);
   const t = useTranslations();
   return (
     <div className="space-y-8">

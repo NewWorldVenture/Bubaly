@@ -23,9 +23,8 @@ import { AiInsight } from '@/components/ai/ai-insight';
 import { cn } from '@/lib/utils/cn';
 import type { Tables } from '@/lib/database.types';
 import { preOpenWindow } from '@/lib/utils/open-url';
-import { useLocale, useTranslations } from '@/components/i18n/locale-provider';
-import type { LocaleCode } from '@/lib/i18n/locales';
-import { createFormat } from '@/lib/utils/format';
+import { useTranslations } from '@/components/i18n/locale-provider';
+import { useFormat } from '@/components/i18n/use-format';
 import { openOnKey } from '@/lib/ui/a11y';
 
 type Document = Tables<'documents'>;
@@ -43,19 +42,6 @@ function fmtSize(bytes: number | null): string {
   return `${(bytes / GB).toFixed(1)} GB`;
 }
 function fmtGb(bytes: number): string { return `${(bytes / GB).toFixed(1)} GB`; }
-const fmtDateIn = (locale: LocaleCode) => (iso: string): string => {
-  return new Date(iso).toLocaleDateString(locale, { month: 'short', day: 'numeric', year: 'numeric' });
-};
-/**
- * Delegates to the shared `fmtTimeAgo` (lib/utils/format.ts).
- *
- * It took a locale, which made it LOOK converted — but every rung was an English
- * literal ("just now", "3 hours ago", "Yesterday") and the locale reached only the fallback date. That is the
- * defect the hardcoded-locale scan cannot see, and "it accepts a LocaleCode" is not
- * evidence against it.
- */
-const timeAgoIn = (locale: LocaleCode) => (iso: string): string =>
-  createFormat(locale).fmtTimeAgo(iso, { absoluteAfterDays: 7, absoluteWithYear: true });
 
 // ── File-type detection → icon + color, and coarse storage group ────────────
 type FileMeta = { Icon: typeof FileText; color: string; tint: string };
@@ -123,9 +109,10 @@ type SortKey = (typeof SORTS)[number]['value'];
 const PAGE_SIZE = 10;
 
 export function DocumentsModule() {
-  const locale = useLocale();
-  const fmtDate = fmtDateIn(locale.code);
-  const timeAgo = timeAgoIn(locale.code);
+  // Through the family's zone (TIME-003): the shared `fmtDate` / `fmtTimeAgo`.
+  const format = useFormat();
+  const fmtDate = (iso: string): string => format.fmtDate(iso, 'MMM d, yyyy');
+  const timeAgo = (iso: string): string => format.fmtTimeAgo(iso, { absoluteAfterDays: 7, absoluteWithYear: true });
   const tr = useTranslations();
   const { familyId, userId, members } = useApp();
   const { success, error: toastError } = useToast();

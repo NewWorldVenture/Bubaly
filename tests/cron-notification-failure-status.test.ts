@@ -3,7 +3,7 @@ import fs from 'node:fs';
 
 const routes = [
   ['notifications', 'app/api/cron/notifications/route.ts', 'generationFailures + pushDispatchFailures + pushed.result.failed + pushed.result.skipped + emailDeliveryFailures + emailed.failed'],
-  ['push-scan', 'app/api/cron/push-scan/route.ts', 'generationFailures + pushDispatchFailures + pushed.result.failed + pushed.result.skipped'],
+  ['push-scan', 'app/api/cron/push-scan/route.ts', 'generationFailures + respawnFailures + pushDispatchFailures + pushed.result.failed + pushed.result.skipped'],
 ] as const;
 
 describe('notification cron failure status contracts', () => {

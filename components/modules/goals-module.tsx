@@ -1,6 +1,6 @@
 'use client';
 
-import { useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { openOnKey } from '@/lib/ui/a11y';
 import { Target, Plus, Trash2, CheckCircle2, Loader2 } from 'lucide-react';
 import { useApp } from '@/components/app/app-context';
@@ -18,7 +18,7 @@ import { Badge } from '@/components/ui/badge';
 import { Modal } from '@/components/ui/modal';
 import { Input, Field, Textarea } from '@/components/ui/input';
 import { SkeletonList, EmptyState, ErrorState } from '@/components/ui/states';
-import { fmtDate } from '@/lib/utils/format';
+import { useFormat } from '@/components/i18n/use-format';
 import { cn } from '@/lib/utils/cn';
 import type { Tables } from '@/lib/database.types';
 import { useTranslations } from '@/components/i18n/locale-provider';
@@ -111,11 +111,13 @@ export function GoalsModule() {
 
       {(open || editing) && (
         <GoalModal
+          key={`${familyId}:${userId}:${editing?.id ?? 'new'}`}
           goal={editing}
           familyId={familyId}
           userId={userId}
           onClose={() => { setOpen(false); setEditing(null); }}
-          onSaved={() => { setOpen(false); setEditing(null); void refresh(); }}
+          onSaved={() => { setOpen(false); setEditing(null); }}
+          onCommitted={() => { void refresh(); }}
         />
       )}
     </div>
@@ -129,6 +131,7 @@ function GoalCard({ goal, pending, onEdit, onDelete, onProgress }: {
   onDelete: (id: string) => void;
   onProgress: (g: Goal, progress: number) => void;
 }) {
+  const { fmtDate } = useFormat();
   const t = useTranslations();
   return (
     <Card className={cn('flex flex-col gap-3', goal.is_complete && 'opacity-70')}>
@@ -186,13 +189,22 @@ function GoalCard({ goal, pending, onEdit, onDelete, onProgress }: {
   );
 }
 
-function GoalModal({ goal, familyId, userId, onClose, onSaved }: {
+function GoalModal({ goal, familyId, userId, onClose, onSaved, onCommitted }: {
   goal: Goal | null; familyId: string; userId: string;
-  onClose: () => void; onSaved: () => void;
+  onClose: () => void; onSaved: () => void; onCommitted: () => void;
 }) {
   const t = useTranslations();
   const { success, error: toastError } = useToast();
   const [loading, setLoading] = useState(false);
+  const active = useRef(true);
+  useEffect(() => {
+    active.current = true;
+    return () => { active.current = false; };
+  }, []);
+  function close() {
+    active.current = false;
+    onClose();
+  }
 
   async function onSubmit(e: React.FormEvent<HTMLFormElement>) {
     e.preventDefault();
@@ -212,18 +224,21 @@ function GoalModal({ goal, familyId, userId, onClose, onSaved }: {
         description: String(form.get('description') ?? '').trim() || null,
         targetDate,
       });
-      if (!res.ok) { toastError(res.error); return; }
-      success(goal ? 'Goal updated' : 'Goal created');
-      onSaved();
+      if (!res.ok) { if (active.current) toastError(res.error); return; }
+      if (active.current) {
+        success(goal ? 'Goal updated' : 'Goal created');
+        onSaved();
+      }
+      onCommitted();
     } catch (err) {
-      toastError(describeDbError(err));
+      if (active.current) toastError(describeDbError(err));
     } finally {
-      setLoading(false);
+      if (active.current) setLoading(false);
     }
   }
 
   return (
-    <Modal open onClose={onClose} title={goal ? t('dialogTitle.editGoal') : t('dialogTitle.newFamilyGoal')}>
+    <Modal open onClose={close} title={goal ? t('dialogTitle.editGoal') : t('dialogTitle.newFamilyGoal')}>
       <form onSubmit={onSubmit} className="space-y-4">
         <Field label={t('goals.goal')} required>
           {(id) => <Input id={id} name="title" defaultValue={goal?.title ?? ''} placeholder={t('goals.saveForAFamilyVacation')} autoFocus />}
@@ -235,7 +250,7 @@ function GoalModal({ goal, familyId, userId, onClose, onSaved }: {
           {(id) => <Input id={id} name="target_date" type="date" defaultValue={goal?.target_date ?? ''} />}
         </Field>
         <div className="flex justify-end gap-2 pt-2">
-          <Button type="button" variant="ghost" onClick={onClose}>{t('goals.cancel')}</Button>
+          <Button type="button" variant="ghost" onClick={close}>{t('goals.cancel')}</Button>
           <Button type="submit" loading={loading}>{goal ? 'Save' : 'Create goal'}</Button>
         </div>
       </form>

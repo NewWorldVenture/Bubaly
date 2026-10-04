@@ -120,7 +120,7 @@ vi.mock('@/lib/supabase/client', () => ({
 }));
 vi.mock('@/components/i18n/locale-provider', async () => {
   const { SOURCE_MESSAGES, translate } = await import('@/lib/i18n/messages');
-  return { useTranslations: () => (key: string, params?: Record<string, string | number>) => translate(SOURCE_MESSAGES, key, params) };
+  return { useFamilyTimeZone: () => undefined, useTranslations: () => (key: string, params?: Record<string, string | number>) => translate(SOURCE_MESSAGES, key, params) };
 });
 vi.mock('@/components/app/page-header', () => ({
   PageHeader: ({ title, description, action }: Record<string, ReactNode>) => createElement('header', null, title, description, action),

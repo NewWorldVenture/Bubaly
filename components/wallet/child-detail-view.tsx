@@ -23,7 +23,7 @@ import { EmptyState } from '@/components/ui/states';
 import { Avatar } from '@/components/ui/avatar';
 import { cn } from '@/lib/utils/cn';
 import { progressBarA11y } from '@/lib/ui/a11y';
-import { useFormat } from '@/components/i18n/use-format';
+import { useFamilyClock, useFormat } from '@/components/i18n/use-format';
 import { formatCents as formatCentsIn, goalProgress, type BucketKind, type Split } from '@/lib/wallet/ledger';
 import { txnTypeLabel, txnTypeKey, signedAmountCents, groupByDay, toStatementCsv, statementFilename, type ActivityTxn } from '@/lib/wallet/activity';
 import { addFundsAction, requestSpendAction, sendMoneyAction, requestAllowanceAction } from '@/app/(app)/wallet/actions';
@@ -635,6 +635,8 @@ export function ChildDetailView({
   siblings: Sibling[];
 }) {
   const locale = useLocale();
+  const familyClock = useFamilyClock();
+  const format = useFormat();
   // Money follows the reader; the currency stays the money's own.
   const formatCents = (cents: number, currency?: string) =>
     formatCentsIn(cents, currency, locale.code);
@@ -646,7 +648,7 @@ export function ChildDetailView({
   const [requestingAllowance, setRequestingAllowance] = useState(false);
   const [activityExpanded, setActivityExpanded] = useState(false);
 
-  const groups = groupByDay(history);
+  const groups = groupByDay(history, familyClock.timeZone);
   const visibleGroups = activityExpanded ? groups : groups.slice(0, 3);
   const hasMore = groups.length > 3;
 
@@ -831,7 +833,7 @@ export function ChildDetailView({
             {visibleGroups.map((grp) => (
               <div key={grp.date}>
                 <p className="bg-bg/50 px-4 py-1.5 text-[10px] font-bold uppercase tracking-widest text-muted">
-                  {new Date(grp.date + 'T00:00:00').toLocaleDateString(locale.code, { weekday: 'short', month: 'short', day: 'numeric' })}
+                  {format.fmtDate(grp.date, 'EEE, MMM d')}
                 </p>
                 {grp.txns.map((tx) => <TxnRow key={tx.id} tx={tx as HistoryTxn} />)}
               </div>

@@ -6,7 +6,6 @@ import { ActionError, useActionError } from '@/components/ui/action-error';
 import { KeyRound, Plus, Pencil, Trash2, MapPin } from 'lucide-react';
 import { saveRentalAction, deleteRentalAction } from '@/app/(app)/dashboard/auto/actions';
 import { RENTAL_STATUSES } from '@/lib/auto/renewals';
-import { fmtDate } from '@/lib/utils/format';
 import type { Tables } from '@/lib/database.types';
 import { Card } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
@@ -24,7 +23,7 @@ const toLocal = (iso: string | null) => (iso ? new Date(iso).toISOString().slice
 
 export function RentalsClient({ rentals }: { rentals: Rental[] }) {
   const t = useTranslations();
-  const { fmtMoney } = useFormat();
+  const { fmtDate, fmtMoney } = useFormat();
   const [open, setOpen] = useState(false);
   const [editing, setEditing] = useState<Rental | null>(null);
   const [pending, start] = useTransition();

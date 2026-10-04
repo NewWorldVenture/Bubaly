@@ -33,6 +33,7 @@ import { isManager } from '@/lib/constants/roles';
 import { createServer } from '@/lib/supabase/server';
 import {
   completeChoreAssignment, createChore, deleteChoreAssignment, setChoreProgress,
+  respawnChoreAssignment,
 } from '@/lib/services/tasks';
 import { ALREADY_SAVED, makeKey } from '@/lib/services/idempotency';
 import { scopeFromUserContext } from '@/lib/services/scope';
@@ -223,5 +224,50 @@ export async function createChoreAction(input: CreateChoreActionInput): Promise<
   } catch (err) {
     console.error('[chore-action] create failed', err);
     return { ok: false, error: describeActionError(err, t('actions.couldNotAddThatChore')) };
+  }
+}
+
+/**
+ * After the board approves an assignment of a RECURRING chore, create the next
+ * one (lib/services/tasks `respawnChoreAssignment`). Manager-only, like the
+ * approval itself, and only for an assignment that IS approved — a child must
+ * not be able to mint assignments by naming one. The board's approval is its
+ * one direct write; this keeps the write that follows it on the service side,
+ * where the 0256 key makes a repeat harmless.
+ */
+export async function respawnChoreAssignmentAction(assignmentId: string): Promise<ChoreActionResult> {
+  const t = await getTranslations();
+  if (!assignmentId) return { ok: false, error: t('actions.thatChoreCouldNotBe') };
+  const { ctx, scope } = await choreScope();
+  const refused = await refuseUnlessManager(ctx.active.role);
+  if (refused) return { ok: false, error: refused };
+
+  try {
+    const { data: assignment, error: assignmentError } = await scope.db
+      .from('chore_assignments')
+      .select('id, chore_id, member_id, due_at, status, approved_at')
+      .eq('id', assignmentId)
+      .eq('family_id', scope.familyId)
+      .maybeSingle();
+    if (assignmentError) return { ok: false, error: describeActionError(assignmentError, t('actions.couldNotUpdateThatChore')) };
+    if (!assignment || (assignment.status !== 'approved' && !assignment.approved_at)) {
+      return { ok: false, error: t('actions.thatChoreCouldNotBe') };
+    }
+    const { data: chore, error: choreError } = await scope.db
+      .from('chores')
+      .select('id, recurrence')
+      .eq('id', assignment.chore_id)
+      .eq('family_id', scope.familyId)
+      .maybeSingle();
+    if (choreError) return { ok: false, error: describeActionError(choreError, t('actions.couldNotUpdateThatChore')) };
+    if (!chore) return { ok: false, error: t('actions.thatChoreCouldNotBe') };
+
+    const result = await respawnChoreAssignment(scope, { assignment, recurrence: chore.recurrence });
+    if (!result.ok) return { ok: false, error: result.error };
+    revalidatePath(PATH);
+    return { ok: true, id: result.data.assignment?.id ?? assignment.id };
+  } catch (err) {
+    console.error('[chore-action] respawn failed', err);
+    return { ok: false, error: describeActionError(err, t('actions.couldNotUpdateThatChore')) };
   }
 }

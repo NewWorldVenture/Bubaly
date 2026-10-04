@@ -1,7 +1,7 @@
 'use client';
 
 // Multi-store shopping lists built on existing grocery_lists + grocery_items tables
-import { useEffect, useMemo, useState, useId } from 'react';
+import { useEffect, useMemo, useState, useId, useRef } from 'react';
 import {
   ShoppingBag, Plus, Trash2, Check, Search, X, ChevronDown, ChevronUp,
   ShoppingCart, Pencil, Archive, Loader2, Copy, ExternalLink, PackageCheck,
@@ -232,24 +232,27 @@ export function ShoppingModule() {
             const isActive = list.id === activeListId;
             const listItems = /* approximate */ items.filter((i) => i.list_id === list.id);
             return (
-              <button key={list.id} onClick={() => setActiveListId(list.id)}
+              <div key={list.id}
                 className={cn(
-                  'group flex w-full items-center gap-2.5 rounded-xl px-3 py-2.5 text-left transition',
+                  'group flex w-full items-center rounded-xl text-left transition',
                   isActive ? 'bg-brand/15 text-brand-text' : 'hover:bg-elevated/40 text-muted',
                 )}>
-                <span className="text-lg">{(list as Record<string, unknown>).list_icon as string ?? '🛒'}</span>
-                <div className="flex-1 min-w-0">
-                  <p className={cn('truncate text-sm font-medium', isActive && 'text-brand-text font-bold')}>{list.name}</p>
-                  <p className="text-[10px]">{activeListId === list.id ? `${totalCount} items` : ''}</p>
-                </div>
+                <button type="button" onClick={() => setActiveListId(list.id)}
+                  className="flex min-w-0 flex-1 items-center gap-2.5 px-3 py-2.5 text-left">
+                  <span className="text-lg">{(list as Record<string, unknown>).list_icon as string ?? '🛒'}</span>
+                  <div className="flex-1 min-w-0">
+                    <p className={cn('truncate text-sm font-medium', isActive && 'text-brand-text font-bold')}>{list.name}</p>
+                    <p className="text-[10px]">{activeListId === list.id ? `${totalCount} items` : ''}</p>
+                  </div>
+                </button>
                 {isActive && (
-                  <button onClick={(e) => { e.stopPropagation(); setEditingList(list); }}
+                  <button type="button" onClick={() => setEditingList(list)}
                     aria-label={t('shopping.editList')}
-                    className="opacity-100 sm:opacity-0 sm:group-hover:opacity-100 focus-visible:opacity-100 coarse:opacity-100 rounded p-1 hover:bg-black/10">
+                    className="mr-3 opacity-100 sm:opacity-0 sm:group-hover:opacity-100 focus-visible:opacity-100 coarse:opacity-100 rounded p-1 hover:bg-black/10">
                     <Pencil className="h-3 w-3" />
                   </button>
                 )}
-              </button>
+              </div>
             );
           })}
           <button onClick={() => setNewListOpen(true)}
@@ -437,9 +440,10 @@ export function ShoppingModule() {
 
       {/* New list modal */}
       {newListOpen && (
-        <NewListModal familyId={familyId} userId={userId}
+        <NewListModal key={`${familyId}:${userId}`} familyId={familyId} userId={userId}
           onClose={() => setNewListOpen(false)}
-          onCreated={(id) => { setActiveListId(id); setNewListOpen(false); void refreshLists(); }} />
+          onCreated={(id) => { setActiveListId(id); setNewListOpen(false); }}
+          onCommitted={() => { void refreshLists(); }} />
       )}
 
       {/* Bought → pantry (+ the purchase, only when someone typed an amount) */}
@@ -452,18 +456,20 @@ export function ShoppingModule() {
 
       {/* Edit list modal */}
       {editingList && (
-        <EditListModal list={editingList}
+        <EditListModal key={`${familyId}:${userId}:${editingList.id}`} list={editingList}
           onClose={() => setEditingList(null)}
-          onSaved={() => { setEditingList(null); void refreshLists(); }}
+          onSaved={() => setEditingList(null)}
+          onCommitted={() => { void refreshLists(); }}
           onArchive={() => { archiveList(editingList.id); setEditingList(null); }} />
       )}
     </div>
   );
 }
 
-function NewListModal({ familyId, userId, onClose, onCreated }: {
+function NewListModal({ familyId, userId, onClose, onCreated, onCommitted }: {
   familyId: string; userId: string;
   onClose: () => void; onCreated: (id: string) => void;
+  onCommitted: () => void;
 }) {
   const a11yId = useId();
   const t = useTranslations();
@@ -472,6 +478,9 @@ function NewListModal({ familyId, userId, onClose, onCreated }: {
   const [name, setName] = useState('');
   const [icon, setIcon] = useState('🛒');
   const [preset, setPreset] = useState<typeof STORE_PRESETS[number]>(STORE_PRESETS[0]);
+  const active = useRef(true);
+  useEffect(() => { active.current = true; return () => { active.current = false; }; }, []);
+  function close() { active.current = false; onClose(); }
 
   function selectPreset(p: typeof STORE_PRESETS[number]) {
     setPreset(p);
@@ -493,17 +502,19 @@ function NewListModal({ familyId, userId, onClose, onCreated }: {
         family_id: familyId, name: trimmed, created_by: userId,
         list_icon: icon, store: preset.store,
       }).select('id').single();
-      if (error || !data) { toastError(describeDbError(error)); return; }
-      onCreated(data.id);
+      if (error || !data) { if (active.current) toastError(describeDbError(error)); return; }
+      if (active.current) { active.current = false; onCreated(data.id); }
+      // A closed request can still commit; refresh its result without changing the newer dialog.
+      onCommitted();
     } catch (err) {
-      toastError(describeDbError(err));
+      if (active.current) toastError(describeDbError(err));
     } finally {
-      setLoading(false);
+      if (active.current) setLoading(false);
     }
   }
 
   return (
-    <Modal open onClose={onClose} title={t('shopping.newShoppingList')}>
+    <Modal open onClose={close} title={t('shopping.newShoppingList')}>
       <form onSubmit={create} className="space-y-4">
         <div>
           <span id={`${a11yId}-f1`} className="mb-2 block text-sm font-medium">{t('shopping.quickStartFromStore')}</span>
@@ -534,7 +545,7 @@ function NewListModal({ familyId, userId, onClose, onCreated }: {
           )}
         </Field>
         <div className="flex justify-end gap-2 pt-1">
-          <Button type="button" variant="ghost" onClick={onClose}>{t('shopping.cancel')}</Button>
+          <Button type="button" variant="ghost" onClick={close}>{t('shopping.cancel')}</Button>
           <Button type="submit" loading={loading}>{t('shopping.createList')}</Button>
         </div>
       </form>
@@ -542,14 +553,18 @@ function NewListModal({ familyId, userId, onClose, onCreated }: {
   );
 }
 
-function EditListModal({ list, onClose, onSaved, onArchive }: {
+function EditListModal({ list, onClose, onSaved, onCommitted, onArchive }: {
   list: GroceryList; onClose: () => void; onSaved: () => void; onArchive: () => void;
+  onCommitted: () => void;
 }) {
   const t = useTranslations();
   const { error: toastError } = useToast();
   const [loading, setLoading] = useState(false);
   const [name, setName] = useState(list.name);
   const [icon, setIcon] = useState((list as Record<string, unknown>).list_icon as string ?? '🛒');
+  const active = useRef(true);
+  useEffect(() => { active.current = true; return () => { active.current = false; }; }, []);
+  function close() { active.current = false; onClose(); }
 
   async function save(e: React.FormEvent) {
     e.preventDefault();
@@ -562,18 +577,20 @@ function EditListModal({ list, onClose, onSaved, onArchive }: {
       const supabase = createClient();
       // Under RLS a refused row comes back with no error and zero rows, which this used to report as done. Audit C1-S9-83.
       const { data: updated, error } = await supabase.from('grocery_lists').update({ name: trimmed, list_icon: icon }).eq('id', list.id).select('id');
-      if (error) { toastError(describeDbError(error)); return; }
-      if (wroteNoRows(updated)) { toastError(t('errors.thatChangeWasNotSaved')); return; }
-      onSaved();
+      if (error) { if (active.current) toastError(describeDbError(error)); return; }
+      if (wroteNoRows(updated)) { if (active.current) toastError(t('errors.thatChangeWasNotSaved')); return; }
+      if (active.current) { active.current = false; onSaved(); }
+      // Keep confirmed old writes visible without closing a newer edit/create draft.
+      onCommitted();
     } catch (err) {
-      toastError(describeDbError(err));
+      if (active.current) toastError(describeDbError(err));
     } finally {
-      setLoading(false);
+      if (active.current) setLoading(false);
     }
   }
 
   return (
-    <Modal open onClose={onClose} title={t('shopping.editList')}>
+    <Modal open onClose={close} title={t('shopping.editList')}>
       <form onSubmit={save} className="space-y-4">
         <Field label={t('shopping.listName')}>
           {(id) => <Input id={id} value={name} onChange={(e) => setName(e.target.value)} autoFocus />}
@@ -595,7 +612,7 @@ function EditListModal({ list, onClose, onSaved, onArchive }: {
             <Archive className="h-4 w-4" /> {t('shopping.archive')}
           </Button>
           <div className="flex gap-2">
-            <Button type="button" variant="ghost" onClick={onClose}>{t('shopping.cancel')}</Button>
+            <Button type="button" variant="ghost" onClick={close}>{t('shopping.cancel')}</Button>
             <Button type="submit" loading={loading}>{t('shopping.save')}</Button>
           </div>
         </div>

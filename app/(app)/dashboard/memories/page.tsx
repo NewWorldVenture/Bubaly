@@ -17,7 +17,8 @@ import {
 } from '@/lib/memories/memories';
 import { pickOnThisDay } from '@/lib/memories/on-this-day';
 import { getLocaleContext, getTranslations } from '@/lib/i18n/server';
-import type { LocaleCode } from '@/lib/i18n/locales';
+import { getFormat } from '@/lib/utils/format-server';
+import type { Format } from '@/lib/utils/format';
 import { FamilyMediaImg } from '@/components/media/family-media-img';
 
 export async function generateMetadata(): Promise<Metadata> {
@@ -35,13 +36,18 @@ const TABS: { key: TabKey; label: string; icon: typeof ImageIcon }[] = [
   { key: 'stories', label: 'Stories', icon: BookOpen },
 ];
 
-function fmtDay(iso: string, locale: LocaleCode): string {
-  return new Date(iso).toLocaleDateString(locale, { month: 'short', day: 'numeric', year: 'numeric' });
+// Rendered through the formatter the page binds to the FAMILY's zone, not with
+// `toLocaleDateString(locale, …)`, which on the server renders in the host's.
+type FmtDate = Format['fmtDate'];
+function fmtDay(iso: string, fmtDate: FmtDate): string {
+  return fmtDate(iso, 'MMM d, yyyy');
 }
-function fmtEventRange(start: string, end: string | null, locale: LocaleCode): string {
-  const s = new Date(start).toLocaleDateString(locale, { month: 'short', day: 'numeric', year: 'numeric' });
-  if (!end || end.slice(0, 10) === start.slice(0, 10)) return s;
-  return `${new Date(start).toLocaleDateString(locale, { month: 'short', day: 'numeric' })} – ${new Date(end).toLocaleDateString(locale, { month: 'short', day: 'numeric', year: 'numeric' })}`;
+function fmtEventRange(start: string, end: string | null, fmtDate: FmtDate): string {
+  const s = fmtDate(start, 'MMM d, yyyy');
+  // Same day in the family's zone — compared on the rendered day, so an event
+  // that crosses Greenwich's midnight but not the family's stays one day.
+  if (!end || fmtDate(end, 'MMM d, yyyy') === s) return s;
+  return `${fmtDate(start, 'MMM d')} – ${fmtDate(end, 'MMM d, yyyy')}`;
 }
 
 const EVENT_ICON: Record<string, typeof Cake> = { birthday: Cake, holiday: Cake, school: GraduationCap, sports: GraduationCap };
@@ -68,6 +74,9 @@ export default async function MemoriesPage({ searchParams }: { searchParams: Pro
   const now = new Date();
   const yearStart = new Date(now.getFullYear(), 0, 1).toISOString();
   const nowIso = now.toISOString();
+  // Every date this page prints is the family's, not the host's.
+  const tz = ctx.active.family.timezone || 'UTC';
+  const { fmtDate } = await getFormat(tz);
 
   const [
     albumsRes,
@@ -124,7 +133,9 @@ export default async function MemoriesPage({ searchParams }: { searchParams: Pro
   const shared = sharedWithYou(photos, memberList, myUserId, now);
   const sharedById = new Map(memberList.map((m) => [m.user_id ?? m.id, m]));
   // Delight: photos taken on today's date in past years (from the already-loaded set).
-  const onThisDay = pickOnThisDay(photos.filter((p) => p.url), now, 6);
+  // ... on the FAMILY's today, not the host's (a UTC host is a day ahead from
+  // 5pm in California).
+  const onThisDay = pickOnThisDay(photos.filter((p) => p.url), now, 6, ctx.active.family.timezone || 'UTC');
 
   const HeaderButton = ({ href, icon: Icon, label, primary }: { href: string; icon: typeof Plus; label: string; primary?: boolean }) => (
     <Link href={href} className={cn(
@@ -193,7 +204,7 @@ export default async function MemoriesPage({ searchParams }: { searchParams: Pro
                 <div className="flex w-28 shrink-0 flex-col">
                   <div className="flex items-center gap-2">
                     <span className="grid h-4 w-4 place-items-center rounded-full border-2 border-brand"><span className="h-1.5 w-1.5 rounded-full bg-brand" /></span>
-                    <span className="text-sm font-semibold">{new Date(row.album.created_at).toLocaleDateString(locale.code, { month: 'short', day: 'numeric', year: 'numeric' })}</span>
+                    <span className="text-sm font-semibold">{fmtDate(row.album.created_at, 'MMM d, yyyy')}</span>
                   </div>
                   <span className="ml-6 text-xs text-muted">{row.relative}</span>
                 </div>
@@ -281,7 +292,7 @@ export default async function MemoriesPage({ searchParams }: { searchParams: Pro
                           <div className="absolute inset-x-0 bottom-0 bg-gradient-to-t from-black/70 to-transparent p-3">
                             <p className="truncate text-sm font-semibold text-white">{a.name}</p>
                             <div className="mt-0.5 flex items-center justify-between text-[11px] text-white/80">
-                              <span>{fmtDay(a.created_at, locale.code)}</span>
+                              <span>{fmtDay(a.created_at, fmtDate)}</span>
                               <span className="inline-flex items-center gap-1 rounded-md bg-black/40 px-1.5 py-0.5"><ImageIcon className="h-3 w-3" />{a.photo_count}</span>
                             </div>
                           </div>
@@ -389,7 +400,7 @@ export default async function MemoriesPage({ searchParams }: { searchParams: Pro
                       <span className="grid h-9 w-9 shrink-0 place-items-center rounded-xl bg-brand/10 text-brand-text"><Icon className="h-4 w-4" /></span>
                       <span className="min-w-0 flex-1">
                         <span className="block truncate text-sm font-medium">{e.title}</span>
-                        <span className="block truncate text-xs text-muted">{fmtEventRange(e.starts_at, e.ends_at, locale.code)}</span>
+                        <span className="block truncate text-xs text-muted">{fmtEventRange(e.starts_at, e.ends_at, fmtDate)}</span>
                       </span>
                     </Link>
                   );

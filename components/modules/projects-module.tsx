@@ -1,6 +1,6 @@
 'use client';
 
-import { useMemo, useState } from 'react';
+import { useLayoutEffect, useMemo, useRef, useState } from 'react';
 import { Hammer, Plus, Check, Pencil, Trash2, Wallet, CalendarClock, FileText, Package, Wand2, ShoppingCart, ExternalLink, ArrowRight, XCircle, Users, Sparkles } from 'lucide-react';
 import Link from 'next/link';
 import { useApp } from '@/components/app/app-context';
@@ -22,23 +22,25 @@ import {
 } from '@/lib/projects/planner';
 import { compareQuotes as rankQuotes } from '@/lib/services/providers/compare';
 import { useLocale, useTranslations } from '@/components/i18n/locale-provider';
-import type { LocaleCode } from '@/lib/i18n/locales';
+import { useFamilyClock, useFormat, useFamilyCalendarToday } from '@/components/i18n/use-format';
 import { useConfirm } from '@/components/ui/confirm';
 import { safeWebLink } from '@/lib/utils/safe-link';
 
 type Project = Tables<'home_projects'>;
+type ProjectEditorInstance = { id: number };
 type Material = Tables<'project_materials'>;
 type Quote = Tables<'project_quotes'>;
 type Contractor = Pick<Tables<'home_contractors'>, 'id' | 'name' | 'company' | 'trade' | 'phone' | 'is_preferred'>;
 
-const fmtDateIn = (locale: LocaleCode) => (d: string) => new Date(`${d.slice(0, 10)}T00:00:00`).toLocaleDateString(locale, { month: 'short', day: 'numeric' });
 const dollarsToCents = (v: FormDataEntryValue | null) => { const raw = String(v ?? '').trim(); if (!raw) return null; const n = Number(raw.replace(/[^0-9.]/g, '')); return Number.isFinite(n) ? Math.round(n * 100) : null; };
 const centsToDollars = (c: number | null | undefined) => (c === null || c === undefined ? '' : String(c / 100));
 const PRIORITY_STYLE: Record<HomeProjectPriority, string> = { high: 'border-rose-500/30 bg-rose-500/10 text-rose-200', medium: 'border-amber-500/30 bg-amber-500/10 text-amber-200', low: 'border-border bg-surface/60 text-muted' };
 
 export function ProjectsModule() {
   const locale = useLocale();
-  const fmtDate = fmtDateIn(locale.code);
+  const { fmtDate: fmt } = useFormat();
+  const fmtDate = (d: string) => fmt(d.slice(0, 10), 'MMM d');
+  const clock = useFamilyClock();
   const tr = useTranslations();
   const askConfirm = useConfirm();
   // Money follows the reader; the currency stays the money's own.
@@ -67,11 +69,51 @@ export function ProjectsModule() {
     deps: [familyId],
   });
 
-  const [projectForm, setProjectForm] = useState<{ open: boolean; project: Project | null }>({ open: false, project: null });
+  const [projectForm, setProjectForm] = useState<{ open: boolean; project: Project | null; instance: ProjectEditorInstance | null }>({ open: false, project: null, instance: null });
   const [openId, setOpenId] = useState<string | null>(null);
   const [showDone, setShowDone] = useState(false);
+  const owner = useMemo(() => ({ active: false, familyId, userId }), [familyId, userId]);
+  const currentOwner = useRef(owner);
+  currentOwner.current = owner;
+  const currentEditor = useRef<ProjectEditorInstance | null>(null);
+  const editorSequence = useRef(0);
+  const editorOpen = useRef(false);
+  useLayoutEffect(() => {
+    owner.active = true;
+    currentEditor.current = null; editorOpen.current = false;
+    setProjectForm({ open: false, project: null, instance: null }); setOpenId(null);
+    return () => { owner.active = false; };
+  }, [owner]);
+  const isCurrentOwner = () => owner.active && currentOwner.current === owner;
+  const isCurrentEditor = (instance: ProjectEditorInstance) => isCurrentOwner() && editorOpen.current && currentEditor.current === instance;
+  function openProjectForm(project: Project | null) {
+    if (!isCurrentOwner()) return;
+    const instance = { id: ++editorSequence.current };
+    currentEditor.current = instance; editorOpen.current = true;
+    setProjectForm({ open: true, project, instance });
+  }
+  function closeProjectForm(instance: ProjectEditorInstance) {
+    if (!isCurrentEditor(instance)) return;
+    editorOpen.current = false;
+    setProjectForm({ open: false, project: null, instance });
+  }
+  async function projectSaved(id: string, instance: ProjectEditorInstance) {
+    if (!isCurrentOwner()) return;
+    const ownsEditor = isCurrentEditor(instance);
+    if (ownsEditor) { closeProjectForm(instance); setOpenId(id); }
+    // Closed editors still refresh confirmed writes for this mounted context.
+    const confirmation = await projects.refreshAndConfirm();
+    if (!isCurrentOwner() || !ownsEditor || currentEditor.current !== instance) return;
+    if (!confirmation.ok) {
+      if (confirmation.reason !== 'superseded') toastError(tr('projectsModule.couldNotLoadYourProjects'));
+      return;
+    }
+    success(tr('projectsModule.projectSaved'));
+  }
 
-  const today = useMemo(() => new Date(), []);
+  // The FAMILY's wall clock (TIME-003): the helpers below read local fields,
+  // so handing them this makes their "today" the family's day, not the phone's.
+  const today = useFamilyCalendarToday();
   const summary = useMemo(() => projectsSummary(projects.data, materials.data, quotes.data, today), [projects.data, materials.data, quotes.data, today]);
   const nameOf = (id: string | null) => members.find((m) => m.id === id)?.display_name ?? null;
   const openProject = projects.data.find((p) => p.id === openId) ?? null;
@@ -86,10 +128,18 @@ export function ProjectsModule() {
 
   async function deleteProject(p: Project) {
     if (!(await askConfirm({ title: tr('confirm.deleteNamed', { name: p.title }), body: tr('projects.deleteProjectBody') }))) return;
+    if (!isCurrentOwner()) return;
     const { data: deleted, error } = await createClient().from('home_projects').delete().eq('id', p.id).select('id');
+    if (!isCurrentOwner()) return;
     if (error) return toastError(describeDbError(error));
     if (wroteNoRows(deleted)) return toastError(tr('errors.thatChangeWasNotSaved'));
     setOpenId(null);
+    const confirmation = await projects.refreshAndConfirm();
+    if (!isCurrentOwner()) return;
+    if (!confirmation.ok) {
+      if (confirmation.reason !== 'superseded') toastError(tr('projectsModule.couldNotLoadYourProjects'));
+      return;
+    }
     success(tr('projectsModule.projectDeleted'));
   }
 
@@ -141,7 +191,7 @@ export function ProjectsModule() {
           <div className="flex flex-wrap items-center gap-2">
             <AiInsight kind="projects" iconOnly />
             <Link href="/dashboard/home" className="inline-flex items-center gap-1 rounded-xl border border-border px-3 py-2 text-sm text-muted hover:text-fg coarse:min-h-11"><Users className="h-4 w-4" /> {tr('projects.contractors')}</Link>
-            <Button onClick={() => setProjectForm({ open: true, project: null })}><Plus className="h-4 w-4" /> {tr('projects.newProject')}</Button>
+            <Button onClick={() => openProjectForm(null)}><Plus className="h-4 w-4" /> {tr('projects.newProject')}</Button>
           </div>
         }
       />
@@ -170,7 +220,7 @@ export function ProjectsModule() {
       </div>
 
       {projects.data.length === 0 ? (
-        <EmptyState icon={Hammer} title={tr('projects.noProjectsYet')} description={tr('projectsModule.startWithTheThingYou')} action={<Button onClick={() => setProjectForm({ open: true, project: null })}><Plus className="h-4 w-4" /> {tr('projects.firstProject')}</Button>} />
+        <EmptyState icon={Hammer} title={tr('projects.noProjectsYet')} description={tr('projectsModule.startWithTheThingYou')} action={<Button onClick={() => openProjectForm(null)}><Plus className="h-4 w-4" /> {tr('projects.firstProject')}</Button>} />
       ) : (
         <div className="grid gap-4 lg:grid-cols-4">
           {BOARD.map((col) => {
@@ -193,19 +243,20 @@ export function ProjectsModule() {
         </div>
       )}
 
-      {projectForm.open && (
-        <ProjectForm familyId={familyId} userId={userId} members={members} contractors={contractors.data} project={projectForm.project} defaultOwner={selfMember?.id ?? null}
-          onClose={() => setProjectForm({ open: false, project: null })} onSaved={(id) => { setProjectForm({ open: false, project: null }); setOpenId(id); success(tr('projectsModule.projectSaved')); }} />
+      {projectForm.open && projectForm.instance && (
+        <ProjectForm key={projectForm.instance.id} familyId={familyId} userId={userId} members={members} contractors={contractors.data} project={projectForm.project} defaultOwner={selfMember?.id ?? null}
+          canWrite={() => isCurrentEditor(projectForm.instance!)}
+          onClose={() => closeProjectForm(projectForm.instance!)} onSaved={(id) => projectSaved(id, projectForm.instance!)} />
       )}
       {openProject && (
         <ProjectDetail project={openProject} familyId={familyId} userId={userId} members={members} contractors={contractors.data} materials={materials.data.filter((m) => m.project_id === openProject.id)} quotes={quotes.data.filter((q) => q.project_id === openProject.id)} today={today}
-          onClose={() => setOpenId(null)} onEdit={() => setProjectForm({ open: true, project: openProject })} onStatus={(s) => setStatus(openProject, s)} onDelete={() => deleteProject(openProject)} />
+          onClose={() => setOpenId(null)} onEdit={() => openProjectForm(openProject)} onStatus={(s) => setStatus(openProject, s)} onDelete={() => deleteProject(openProject)} />
       )}
     </div>
   );
 }
 
-function ProjectForm({ familyId, userId, members, contractors, project, defaultOwner, onClose, onSaved }: { familyId: string; userId: string; members: { id: string; display_name: string }[]; contractors: Contractor[]; project: Project | null; defaultOwner: string | null; onClose: () => void; onSaved: (id: string) => void }) {
+function ProjectForm({ familyId, userId, members, contractors, project, defaultOwner, canWrite, onClose, onSaved }: { familyId: string; userId: string; members: { id: string; display_name: string }[]; contractors: Contractor[]; project: Project | null; defaultOwner: string | null; canWrite: () => boolean; onClose: () => void; onSaved: (id: string) => Promise<void> }) {
   const tr = useTranslations();
   const { error: toastError } = useToast();
   const [loading, setLoading] = useState(false);
@@ -214,16 +265,20 @@ function ProjectForm({ familyId, userId, members, contractors, project, defaultO
   const [diy, setDiy] = useState(project?.is_diy ?? true);
   const [kind, setKind] = useState<HomeProjectKind>(project?.kind ?? 'repair');
   const [applied, setApplied] = useState<ScopeTemplate | null>(null);
+  const active = useRef(false);
+  const pending = useRef(false);
+  useLayoutEffect(() => { active.current = true; return () => { active.current = false; }; }, []);
   const suggestions = useMemo(() => (project ? [] : suggestScope(`${title} ${description}`).slice(0, 3)), [title, description, project]);
 
   function applyTemplate(t: ScopeTemplate) { setKind(t.kind); setDiy(t.diy); setApplied(t); }
 
   async function onSubmit(e: React.FormEvent<HTMLFormElement>) {
     e.preventDefault();
+    if (!active.current || pending.current || !canWrite()) return;
     const f = new FormData(e.currentTarget);
     const name = title.trim();
     if (!name) return toastError(tr('projectsModule.nameTheProject'));
-    setLoading(true);
+    pending.current = true; setLoading(true);
     const payload = {
       title: name, description: description.trim() || null, room: String(f.get('room') ?? '').trim() || null, kind, is_diy: diy,
       priority: String(f.get('priority') ?? 'medium') as HomeProjectPriority, status: String(f.get('status') ?? (project ? 'planning' : 'idea')) as HomeProjectStatus,
@@ -231,19 +286,28 @@ function ProjectForm({ familyId, userId, members, contractors, project, defaultO
       target_start: String(f.get('target_start') ?? '') || null, target_end: String(f.get('target_end') ?? '') || null,
       owner_id: String(f.get('owner_id') ?? '') || null, contractor_id: String(f.get('contractor_id') ?? '') || null, notes: String(f.get('notes') ?? '').trim() || null,
     };
-    const supabase = createClient();
-    const { data, error } = project
-      ? await supabase.from('home_projects').update(payload).eq('id', project.id).select('id').single()
-      : await supabase.from('home_projects').insert({ family_id: familyId, created_by: userId, ...payload }).select('id').single();
-    if (error) { setLoading(false); return toastError(describeDbError(error)); }
-    if (!project && applied) {
-      // Starter materials from the matched template — a failed insert is
-      // reported, the project itself is already saved.
-      const { error: matError } = await supabase.from('project_materials').insert(applied.materials.map((m) => ({ family_id: familyId, project_id: data.id, name: m.name, quantity: m.quantity, unit: m.unit ?? null, est_cost_cents: m.estCents, created_by: userId })));
-      if (matError) toastError(describeDbError(matError));
+    try {
+      const supabase = createClient();
+      const { data, error } = project
+        ? await supabase.from('home_projects').update(payload).eq('id', project.id).select('id').single()
+        : await supabase.from('home_projects').insert({ family_id: familyId, created_by: userId, ...payload }).select('id').single();
+      if (error) { if (active.current && canWrite()) toastError(describeDbError(error)); return; }
+      if (!data?.id) { if (active.current && canWrite()) toastError(tr('errors.thatChangeWasNotSaved')); return; }
+      if (!project && applied) {
+        // Starter materials from the matched template — a failed insert is
+        // reported, the project itself is already saved.
+        const { error: matError } = await supabase.from('project_materials').insert(applied.materials.map((m) => ({ family_id: familyId, project_id: data.id, name: m.name, quantity: m.quantity, unit: m.unit ?? null, est_cost_cents: m.estCents, created_by: userId })));
+        if (active.current && canWrite()) {
+          if (matError) toastError(describeDbError(matError));
+        }
+      }
+      await onSaved(data.id);
+    } catch (error) {
+      if (active.current && canWrite()) toastError(describeDbError(error));
+    } finally {
+      pending.current = false;
+      if (active.current && canWrite()) setLoading(false);
     }
-    setLoading(false);
-    onSaved(data.id);
   }
 
   return (
@@ -301,7 +365,8 @@ function ProjectDetail({ project, familyId, userId, members, contractors, materi
   onClose: () => void; onEdit: () => void; onStatus: (s: HomeProjectStatus) => void; onDelete: () => void;
 }) {
   const locale = useLocale();
-  const fmtDate = fmtDateIn(locale.code);
+  const { fmtDate: fmt } = useFormat();
+  const fmtDate = (d: string) => fmt(d.slice(0, 10), 'MMM d');
   const tr = useTranslations();
   const askConfirm = useConfirm();
   // Money follows the reader; the currency stays the money's own.
@@ -553,6 +618,7 @@ function MaterialForm({ familyId, userId, projectId, material, onClose, onSaved 
 }
 
 function QuoteForm({ familyId, userId, projectId, contractors, quote, onClose, onSaved }: { familyId: string; userId: string; projectId: string; contractors: Contractor[]; quote: Quote | null; onClose: () => void; onSaved: () => void }) {
+  const clock = useFamilyClock();
   const tr = useTranslations();
   const { error: toastError } = useToast();
   const [loading, setLoading] = useState(false);
@@ -572,7 +638,7 @@ function QuoteForm({ familyId, userId, projectId, contractors, quote, onClose, o
     const payload = {
       contractor_id: contractorId || null, contractor_name: contractorName, amount_cents: amount ?? 0, includes_materials: includesMaterials,
       lead_time_days: String(f.get('lead_time_days') ?? '') ? Math.max(0, Number(f.get('lead_time_days'))) : null, valid_until: String(f.get('valid_until') ?? '') || null,
-      status, received_on: status === 'requested' ? null : (String(f.get('received_on') ?? '') || isoDate(new Date())), notes: String(f.get('notes') ?? '').trim() || null,
+      status, received_on: status === 'requested' ? null : (String(f.get('received_on') ?? '') || clock.todayKey()), notes: String(f.get('notes') ?? '').trim() || null,
     };
     const supabase = createClient();
     // Under RLS a refused row comes back with no error and zero rows, which this used to report as done. Audit C1-S9-79.
@@ -596,7 +662,7 @@ function QuoteForm({ familyId, userId, projectId, contractors, quote, onClose, o
           <Field label={tr('projects.leadTimeDays')}>{(id) => <Input id={id} name="lead_time_days" type="number" min={0} defaultValue={quote?.lead_time_days ?? ''} />}</Field>
         </div>
         <div className="grid grid-cols-2 gap-3">
-          <Field label={tr('projects.receivedOn')}>{(id) => <Input id={id} name="received_on" type="date" defaultValue={quote?.received_on ?? isoDate(new Date())} />}</Field>
+          <Field label={tr('projects.receivedOn')}>{(id) => <Input id={id} name="received_on" type="date" defaultValue={quote?.received_on ?? clock.todayKey()} />}</Field>
           <Field label={tr('projects.validUntil')}>{(id) => <Input id={id} name="valid_until" type="date" defaultValue={quote?.valid_until ?? ''} />}</Field>
         </div>
         <button type="button" aria-pressed={includesMaterials} onClick={() => setIncludesMaterials(!includesMaterials)} className={cn('rounded-full border px-3 py-1.5 text-sm coarse:min-h-11', includesMaterials ? 'border-brand bg-brand/15 text-brand-text' : 'border-border text-muted')}><Package className="mr-1 inline h-3.5 w-3.5" />{tr('projects.includesMaterials')}</button>

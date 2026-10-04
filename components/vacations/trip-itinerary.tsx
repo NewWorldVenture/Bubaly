@@ -11,7 +11,7 @@ import { Modal } from '@/components/ui/modal';
 import { Input, Textarea, Field, Select } from '@/components/ui/input';
 import { Button } from '@/components/ui/button';
 import { ErrorState, LoadingBlock, EmptyState } from '@/components/ui/states';
-import { fmtDate } from '@/lib/utils/format';
+import { useFormat } from '@/components/i18n/use-format';
 import { ITEM_KINDS, DAY_PARTS, dollars as dollarsIn, lookup } from '@/lib/vacations/meta';
 import { dateRange } from '@/lib/vacations/dates';
 import { detectConflicts, type ItemLike } from '@/lib/vacations/conflicts';
@@ -25,6 +25,7 @@ type Item = Tables<'vacation_itinerary_items'>;
 const blankItem = (day_id: string, day_part: string) => ({ id: '', day_id, day_part, kind: 'activity', title: '', location: '', start_time: '', end_time: '', cost: '', booked: false, notes: '' });
 
 export function TripItinerary({ vacationId }: { vacationId: string }) {
+  const { fmtDate } = useFormat();
   const t = useTranslations();
   const locale = useLocale();
   // Money follows the reader; the currency stays the money's own.

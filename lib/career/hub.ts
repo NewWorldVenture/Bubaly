@@ -97,7 +97,8 @@ export function pipelineStats(apps: ApplicationLike[], profile: Pick<ProfileLike
   const applied = mine.filter((a) => a.stage !== 'saved');
   const responded = applied.filter((a) => ['screening', 'interview', 'offer', 'accepted'].includes(a.stage));
   const interviewed = applied.filter((a) => ['interview', 'offer', 'accepted'].includes(a.stage));
-  const weekAgo = isoDate(new Date(today.getTime() - 7 * DAY_MS));
+  // Seven calendar days back, not 7 × 24 hours: a DST week is an hour short or long.
+  const weekAgo = isoDate(new Date(today.getFullYear(), today.getMonth(), today.getDate() - 7));
   const appliedThisWeek = applied.filter((a) => a.applied_on && a.applied_on > weekAgo && a.applied_on <= isoDate(today)).length;
   const responseDays = responded.map((a) => (a.applied_on && a.last_activity_on ? dayDiff(a.applied_on, a.last_activity_on) : null)).filter((d): d is number => d !== null && d >= 0);
   return {

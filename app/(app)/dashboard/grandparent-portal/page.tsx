@@ -7,7 +7,8 @@ import {
   buildGrandparentDigest, digestSummary, celebrationCountdown, orderHouseholds,
   type HouseholdRef,
 } from '@/lib/grandparent/digest';
-import { daysUntilNext } from '@/lib/celebrations/dates';
+import { daysUntilNextOn } from '@/lib/celebrations/dates';
+import { dayKeyInTz } from '@/lib/services/scope';
 import { fmtDate } from '@/lib/utils/format';
 import { Avatar } from '@/components/ui/avatar';
 import { ErrorState } from '@/components/ui/states';
@@ -43,10 +44,16 @@ export default async function GrandparentPortalPage() {
   // Each household is read and rendered independently and a failure is confined
   // to its own card: one family's outage must not blank out the others, and it
   // must not look like that family simply has nothing to share.
+  // The countdowns are counted from the FAMILY's day. The page renders on a
+  // UTC host, where "today" is tomorrow from 5pm in California, and every
+  // birthday and family date was a day off — today's read "in 364 days". The
+  // reader's active family's zone stands for the reader's day across every
+  // household card: a grandparent looks at all of them from one place.
+  const todayKey = dayKeyInTz(new Date(), ctx.active.family.timezone || 'UTC');
   const sections = await Promise.all(
     households.map(async (household) => ({
       household,
-      body: await householdBody(supabase, t, household),
+      body: await householdBody(supabase, t, household, todayKey),
     })),
   );
 
@@ -87,7 +94,7 @@ export default async function GrandparentPortalPage() {
  * resolved before it is rendered (React 18 cannot render a promise child), and
  * so a test can render the page and see every card.
  */
-async function householdBody(supabase: Supabase, t: Translate, household: HouseholdRef) {
+async function householdBody(supabase: Supabase, t: Translate, household: HouseholdRef, todayKey: string) {
   const familyId = household.familyId;
 
   const [
@@ -141,11 +148,11 @@ async function householdBody(supabase: Supabase, t: Translate, household: Househ
     ...(members ?? []).filter((m) => m.birthday).map((m) => ({
       title: t('dashboardGrandparentPortal.someonesBirthday', { name: m.display_name }),
       date: m.birthday as string,
-      daysUntil: daysUntilNext(m.birthday as string) ?? 999,
+      daysUntil: daysUntilNextOn(m.birthday as string, todayKey) ?? 999,
     })),
     ...(dates ?? []).map((d) => ({
       title: d.title, date: d.event_date,
-      daysUntil: daysUntilNext(d.event_date) ?? 999,
+      daysUntil: daysUntilNextOn(d.event_date, todayKey) ?? 999,
     })),
   ];
 

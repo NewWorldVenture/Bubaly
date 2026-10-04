@@ -19,22 +19,19 @@ import {
   WATCH_KINDS, WATCH_SERVICES, WATCH_STATUSES, AGE_RATINGS, TIME_PRESETS, kindMeta, serviceLabel, ratingMinAge,
   ageOn, pickTonight, watchlistAudienceAges, watchlistSummary,
 } from '@/lib/watchlist/picker';
-import { useLocale, useTranslations } from '@/components/i18n/locale-provider';
-import type { LocaleCode } from '@/lib/i18n/locales';
+import { useTranslations } from '@/components/i18n/locale-provider';
+import { useFamilyClock, useFormat, useFamilyCalendarToday } from '@/components/i18n/use-format';
 import { useConfirm } from '@/components/ui/confirm';
 
 type Title = Tables<'watchlist_titles'>;
 type Vote = Tables<'watchlist_votes'>;
 type Session = Tables<'watch_sessions'>;
 
-const todayIso = () => new Date().toISOString().slice(0, 10);
-const fmtDateIn = (locale: LocaleCode) => (d: string): string => {
-  return new Date(`${d.slice(0, 10)}T00:00:00`).toLocaleDateString(locale, { month: 'short', day: 'numeric' });
-};
 
 export function WatchlistModule() {
-  const locale = useLocale();
-  const fmtDate = fmtDateIn(locale.code);
+  const { fmtDate: fmt } = useFormat();
+  const fmtDate = (d: string) => fmt(d.slice(0, 10), 'MMM d');
+  const clock = useFamilyClock();
   const tr = useTranslations();
   const askConfirm = useConfirm();
   const { familyId, userId, members, selfMember } = useApp();
@@ -65,7 +62,9 @@ export function WatchlistModule() {
   const [form, setForm] = useState<{ open: boolean; title: Title | null }>({ open: false, title: null });
   const [watchedForm, setWatchedForm] = useState<Title | null>(null);
 
-  const today = useMemo(() => new Date(), []);
+  // The FAMILY's wall clock (TIME-003): the helpers below read local fields,
+  // so handing them this makes their "today" the family's day, not the phone's.
+  const today = useFamilyCalendarToday();
   const myMemberId = selfMember?.id ?? null;
   const ages = useMemo(() => watchlistAudienceAges(audience, members, today), [members, audience, today]);
   const tonight = useMemo(() => pickTonight(titles.data, votes.data, { audienceIds: audience, audienceAges: ages, availableMinutes: minutes, service }), [titles.data, votes.data, audience, ages, minutes, service]);
@@ -87,8 +86,8 @@ export function WatchlistModule() {
     const existing = votes.data.find((v) => v.title_id === title.id && v.member_id === myMemberId);
     const { data: voted, error } = existing
       ? existing.vote === vote
-        ? await supabase.from('watchlist_votes').delete().eq('id', existing.id).select('id')
-        : await supabase.from('watchlist_votes').update({ vote }).eq('id', existing.id).select('id')
+        ? await supabase.from('watchlist_votes').delete().eq('id', existing.id).eq('family_id', familyId).select('id')
+        : await supabase.from('watchlist_votes').update({ vote }).eq('id', existing.id).eq('family_id', familyId).select('id')
       // The votes on screen arrive by realtime and can be a moment behind; a
       // second tap before the first vote arrived inserted again and was
       // refused as a duplicate, leaving the old vote (B11, P-26). One vote per
@@ -105,6 +104,7 @@ export function WatchlistModule() {
     const { data: updated, error } = await createClient().from('watchlist_titles').update({ status }).eq('id', title.id).select('id');
     if (error) return toastError(describeDbError(error));
     if (wroteNoRows(updated)) return toastError(tr('errors.thatChangeWasNotSaved'));
+    void titles.refresh();
     success(`${title.title}: ${WATCH_STATUSES.find((s) => s.value === status)?.label}`);
   }
 
@@ -113,10 +113,12 @@ export function WatchlistModule() {
     const { data: removed, error } = await createClient().from('watchlist_titles').delete().eq('id', title.id).select('id');
     if (error) return toastError(describeDbError(error));
     if (wroteNoRows(removed)) return toastError(tr('errors.thatChangeWasNotSaved'));
+    void titles.refresh();
     success(tr('watchlistModule.titleRemoved'));
   }
 
   async function deleteSession(session: Session) {
+    if (!(await askConfirm({ title: tr('confirm.removeNamed', { name: session.title_name }), body: tr('confirm.cannotBeUndone') }))) return;
     const { data: removed2, error } = await createClient().from('watch_sessions').delete().eq('id', session.id).select('id');
     if (error) return toastError(describeDbError(error));
     if (wroteNoRows(removed2)) return toastError(tr('errors.thatChangeWasNotSaved'));
@@ -367,6 +369,7 @@ function WatchedForm({ familyId, userId, title, members, defaultAudience, onClos
   familyId: string; userId: string; title: Title; members: Tables<'family_members'>[]; defaultAudience: string[]; onClose: () => void; onSaved: () => void;
 }) {
   const tr = useTranslations();
+  const { todayKey } = useFamilyClock();
   const { error: toastError } = useToast();
   const [loading, setLoading] = useState(false);
   const [who, setWho] = useState<string[]>(defaultAudience);
@@ -377,7 +380,7 @@ function WatchedForm({ familyId, userId, title, members, defaultAudience, onClos
     setLoading(true);
     const supabase = createClient();
     const { error } = await supabase.from('watch_sessions').insert({
-      family_id: familyId, title_id: title.id, title_name: title.title, watched_on: String(f.get('watched_on') ?? '') || todayIso(),
+      family_id: familyId, title_id: title.id, title_name: title.title, watched_on: String(f.get('watched_on') ?? '') || todayKey(),
       member_ids: who, rating: f.get('rating') ? Number(f.get('rating')) : null, minutes: title.runtime_min,
       notes: String(f.get('notes') ?? '').trim() || null, created_by: userId,
     });
@@ -394,7 +397,7 @@ function WatchedForm({ familyId, userId, title, members, defaultAudience, onClos
     <Modal open title={tr('watchlist.weWatchedTitle', { name: title.title })} onClose={onClose}>
       <form onSubmit={onSubmit} className="space-y-4">
         <div className="grid grid-cols-2 gap-3">
-          <Field label={tr('watchlist.when')}>{(id) => <Input id={id} name="watched_on" type="date" defaultValue={todayIso()} />}</Field>
+          <Field label={tr('watchlist.when')}>{(id) => <Input id={id} name="watched_on" type="date" defaultValue={todayKey()} />}</Field>
           <Field label={tr('watchlist.familyRating')}>{(id) => <Select id={id} name="rating" defaultValue="4"><option value="">{tr('watchlist.noRating')}</option>{[5, 4, 3, 2, 1].map((r) => <option key={r} value={r}>{'★'.repeat(r)}</option>)}</Select>}</Field>
         </div>
         <div>

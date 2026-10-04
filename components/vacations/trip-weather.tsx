@@ -8,7 +8,7 @@ import { useToast } from '@/components/ui/toast';
 import { Input } from '@/components/ui/input';
 import { Button } from '@/components/ui/button';
 import { ErrorState, EmptyState, LoadingBlock } from '@/components/ui/states';
-import { fmtDate } from '@/lib/utils/format';
+import { useFormat } from '@/components/i18n/use-format';
 import { weatherCodeMeta, cToF, tripWeatherAdvice, type WeatherDayLike } from '@/lib/vacations/weather';
 import type { Tables } from '@/lib/database.types';
 import { useTranslations } from '@/components/i18n/locale-provider';
@@ -19,6 +19,7 @@ type Weather = Tables<'vacation_weather_snapshots'>;
 const SEV_TONE = ['', 'text-blue-300 bg-blue-500/10', 'text-amber-300 bg-amber-500/10', 'text-rose-300 bg-rose-500/10'];
 
 export function TripWeather({ vacationId }: { vacationId: string }) {
+  const { fmtDate } = useFormat();
   const t = useTranslations();
   const { familyId } = useApp();
   const { success, error: toastError } = useToast();

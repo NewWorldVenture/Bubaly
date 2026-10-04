@@ -3770,6 +3770,7 @@
   "checkInView.checkedIn": "Ingecheckt",
   "checkInView.couldNotLoadFamilyCheck": "Kon de check-ins van het gezin niet laden. Ververs en probeer het opnieuw.",
   "checkInView.delete": "Verwijderen",
+  "checkInView.deleteCheckInQ": "Deze check-in verwijderen?",
   "checkInView.letEveryoneKnowYouRe": "Laat iedereen met één tik weten dat je veilig bent.",
   "checkInView.tapAStatusAboveTo": "Tik hierboven op een status om je eerste check-in te plaatsen.",
   "checkout.billingAccountStatusIsTemporarily": "De status van het factureringsaccount is tijdelijk niet beschikbaar.",
@@ -5886,8 +5887,9 @@
   "eventDetail.scheduleCheck": "Agendacheck",
   "eventDetailModal.aiPrepChecklist": "AI-voorbereidingslijst",
   "eventDetailModal.delete": "Verwijderen",
+  "eventDetailModal.deleteEventQ": "Dit evenement verwijderen?",
+  "eventDetailModal.deleteSeriesQ": "De hele terugkerende reeks verwijderen?",
   "eventDetailModal.edit": "Bewerken",
-  "eventDetailModal.keep": "Behouden",
   "eventDetailModal.noRsvpsYetBeTheFirst": "Nog geen reacties — wees de eerste die antwoordt.",
   "eventDetailModal.couldNotLoadRsvps": "De reacties konden niet worden geladen. Sluit het evenement en open het opnieuw om het nog eens te proberen.",
   "eventDetailModal.yourRsvp": "Jouw reactie",
@@ -8444,6 +8446,7 @@
   "language.deckClearForToday": "Stapel klaar voor vandaag 🎉",
   "language.deleteGoal": "Doel verwijderen",
   "language.deleteSession": "Sessie verwijderen",
+  "language.deleteSessionQ": "Deze oefensessie verwijderen?",
   "language.editGoal": "Doel bewerken",
   "language.exampleSentence": "Voorbeeldzin",
   "language.familyBest": "Gezinsrecord: {n}",
@@ -13369,6 +13372,7 @@
   "sleep.consistency": "Consistentie",
   "sleep.debtThisWeek": "{time} slaaptekort deze week",
   "sleep.deleteNight": "Nacht {date} verwijderen",
+  "sleep.deleteNightQ": "De nacht van {date} verwijderen?",
   "sleep.energyToday": "Energie vandaag",
   "sleep.exercised": "🏃 Gesport",
   "sleep.familyMember": "Gezinslid",
@@ -16610,5 +16614,7 @@
   "blogBlogSearch.searchUnavailable": "Zoeken is nu niet beschikbaar. Probeer het zo meteen opnieuw.",
   "coach.onlyYourOwnHealth": "Je kunt de coach vragen stellen over je eigen gezondheid. Een ouder of volwassene kan vragen stellen over andere gezinsleden.",
   "medicationsModule.noMedicinesPrescribedToYou": "Er zijn jou geen medicijnen voorgeschreven.",
-  "medicationsModule.yourOwnMedicinesOnly": "Je ziet de medicijnen die jou zijn voorgeschreven. Een ouder of volwassene beheert de voorschriften van het gezin."
+  "medicationsModule.yourOwnMedicinesOnly": "Je ziet de medicijnen die jou zijn voorgeschreven. Een ouder of volwassene beheert de voorschriften van het gezin.",
+  "mealsPlanner.addMealToLibrary": "Maaltijd aan bibliotheek toevoegen",
+  "mealsPlanner.noSavedChoices": "Er zijn nog geen opgeslagen maaltijden of recepten. Maak hieronder een nieuwe maaltijd om te beginnen met plannen."
 }

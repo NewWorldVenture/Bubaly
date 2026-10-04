@@ -3,6 +3,7 @@
 // No Supabase/React; the immutable ledger rows are the input.
 import type { WalletTxnType } from '@/lib/database.types';
 import { localDayKeyOf } from '@/lib/time/local-day';
+import { dayKeyIn, isValidTimezone } from '@/lib/time/zoned';
 
 const TYPE_LABEL: Record<string, string> = {
   gift_received: 'Gift', parent_top_up: 'Top-up', allowance: 'Allowance', chore_reward: 'Chore reward',
@@ -59,7 +60,8 @@ export function filterTxns<T extends ActivityTxn>(txns: T[], f: ActivityFilter):
 
 /** Group transactions by calendar day (YYYY-MM-DD), newest day first, and keep
  *  each day's rows in their incoming (newest-first) order. */
-export function groupByDay<T extends ActivityTxn>(txns: T[]): Array<{ date: string; txns: T[] }> {
+export function groupByDay<T extends ActivityTxn>(txns: T[], timeZone?: string): Array<{ date: string; txns: T[] }> {
+  const zone = timeZone && isValidTimezone(timeZone) ? timeZone : undefined;
   const map = new Map<string, T[]>();
   for (const t of txns) {
     // The READER's day, not Greenwich's. `.slice(0, 10)` on an ISO timestamp is
@@ -69,7 +71,9 @@ export function groupByDay<T extends ActivityTxn>(txns: T[]): Array<{ date: stri
     // reader, so `localDayKeyOf` is the right answer and no zone has to be
     // threaded; `lib/time/local-day.ts` exists for exactly this and carries no
     // server-only import.
-    const day = localDayKeyOf(t.created_at) ?? t.created_at.slice(0, 10);
+    // TIME-003: the FAMILY's day when the caller passes its zone.
+    const at = new Date(t.created_at);
+    const day = (zone && !Number.isNaN(at.getTime()) ? dayKeyIn(at, zone) : localDayKeyOf(t.created_at)) ?? t.created_at.slice(0, 10);
     const arr = map.get(day) ?? [];
     arr.push(t);
     map.set(day, arr);
@@ -93,6 +97,24 @@ type CsvTxn = ActivityTxn & { childName?: string | null };
 function csvField(value: string | number): string {
   const s = String(value);
   return /[",\n\r]/.test(s) ? `"${s.replace(/"/g, '""')}"` : s;
+}
+
+/** A cell somebody typed — a merchant's name, a spend request's words, a gift
+ *  giver's name inside "Gift received from …", a child's name. Where a cell
+ *  begins with = + - @ a spreadsheet reads a FORMULA, so `=HYPERLINK(…)` in a
+ *  description became a live link in the parent's spreadsheet. A cell begins
+ *  at the start of the field — and, for Excel in the semicolon locales the app
+ *  ships (de-DE, fr-FR, …) or a tab-splitting import, after any `;`, tab or line
+ *  break inside it — and a reader that trims may skip leading spaces first. An
+ *  apostrophe at each of those places makes what follows text, as the
+ *  support-ticket export does for the first character (lib/admin/tickets-csv.ts,
+ *  C1-S9-105). Only `[ \u00a0]` counts as leading space: `\s` would swallow a
+ *  tab and let the cell after it start with `=`. Only for text: the Amount and
+ *  Balance cells are the app's own signed numbers and "-0.50" has to stay
+ *  something a spreadsheet can sum. */
+function spreadsheetText(value: string): string {
+  const guarded = value.replace(/(^|[;\t\r\n])([ \u00a0]*)(?=[=+\-@])/g, "$1'$2");
+  return /^[\t\r]/.test(guarded) ? `'${guarded}` : guarded;
 }
 
 /** Dollars string with sign, from signed cents: 12345 → "123.45", -50 → "-0.50". */
@@ -136,8 +158,8 @@ export function toStatementCsv(txns: CsvTxn[]): string {
       date,
       time,
       txnTypeLabel(t.type),
-      t.description ?? '',
-      t.childName ?? '',
+      spreadsheetText(t.description ?? ''),
+      spreadsheetText(t.childName ?? ''),
       t.direction === 'credit' ? 'in' : 'out',
       dollars(signedAmountCents(t)),
       t.status.replace(/_/g, ' '),

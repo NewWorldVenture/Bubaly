@@ -18,7 +18,13 @@ import {
 } from '@/app/(app)/dashboard/contacts/[id]/actions';
 import { cn } from '@/lib/utils/cn';
 import { useLocale, useTranslations } from '@/components/i18n/locale-provider';
+import { useFamilyClock, useFormat } from '@/components/i18n/use-format';
+import type { Format } from '@/lib/utils/format';
+
+/** A birthday as a DATE in a leap year, so Feb 29 exists. */
+const birthdayKey = (month: number, day: number) => `2000-${String(month).padStart(2, '0')}-${String(day).padStart(2, '0')}`;
 import { ErrorState } from '@/components/ui/states';
+import { useConfirm } from '@/components/ui/confirm';
 
 type Tone = 'warm' | 'brief' | 'playful';
 const TONES: { key: Tone; labelKey: string }[] = [
@@ -45,11 +51,12 @@ export function ContactTimelineReadError() {
   return <ErrorState message={t('contactTimeline.historyUnavailable')} onRetry={() => router.refresh()} />;
 }
 
-/** Stored calendar dates have no time zone; format them without shifting days. */
-function displayDate(value: string, locale: string): string {
+/** Stored calendar dates have no time zone; the shared formatter renders a
+ *  DATE as written, without shifting its day (TIME-003). */
+function displayDate(value: string, fmtDate: Format['fmtDate']): string {
   const date = new Date(`${value}T00:00:00Z`);
   if (!/^\d{4}-\d{2}-\d{2}$/.test(value) || !Number.isFinite(date.getTime()) || date.toISOString().slice(0, 10) !== value) return value;
-  return date.toLocaleDateString(locale, { year: 'numeric', month: 'short', day: 'numeric', timeZone: 'UTC' });
+  return fmtDate(value, 'MMM d, yyyy');
 }
 
 export function ContactTimelineModule({
@@ -61,7 +68,10 @@ export function ContactTimelineModule({
   interactionIds: string[];
 }) {
   const tr = useTranslations();
+  const askConfirm = useConfirm();
   const locale = useLocale().code;
+  const format = useFormat();
+  const clock = useFamilyClock();
   // Inline rather than a toast: this component is rendered on its own in
   // tests and does not otherwise depend on <ToastProvider>, and the reason a
   // delete or a log failed belongs beside the timeline it failed on.
@@ -72,9 +82,10 @@ export function ContactTimelineModule({
   const hs = HEALTH_STYLE[health.status];
   const loggedIds = new Set(interactionIds);
 
-  const remove = (entryId: string) => {
-    const rawId = entryId.replace(/^int-/, '');
-    setBusyId(entryId);
+  const remove = async (e: TimelineEntry) => {
+    if (!(await askConfirm({ title: tr('confirm.deleteNamed', { name: e.title }), body: tr('confirm.cannotBeUndone') }))) return;
+    const rawId = e.id.replace(/^int-/, '');
+    setBusyId(e.id);
     setActionError(null);
     startTransition(async () => {
       // The action returns void and THROWS on failure; without a catch the
@@ -101,7 +112,7 @@ export function ContactTimelineModule({
           <h1 className="text-2xl font-black sm:text-3xl">{contact.name}</h1>
           <p className="mt-1 text-sm text-muted">
             {[contact.relationship, contact.organization, contact.specialty].filter(Boolean).join(' · ') || tr('contactTimeline.familyContact')}
-            {contact.birthday_month && contact.birthday_day ? ` · 🎂 ${new Date(Date.UTC(2000, contact.birthday_month - 1, contact.birthday_day)).toLocaleDateString(locale, { month: 'short', day: 'numeric', timeZone: 'UTC' })}` : ''}
+            {contact.birthday_month && contact.birthday_day ? ` · 🎂 ${format.fmtDate(birthdayKey(contact.birthday_month, contact.birthday_day), 'MMM d')}` : ''}
           </p>
         </div>
         <button
@@ -162,7 +173,7 @@ export function ContactTimelineModule({
             className="mt-3 h-10 w-full rounded-xl border border-border bg-bg px-3 text-sm text-fg outline-none ring-brand/50 placeholder:text-muted focus:ring-2"
           />
           <div className="mt-2 flex flex-col gap-2 sm:flex-row">
-            <input name="occurred_on" type="date" aria-label={tr('fieldName.date')} defaultValue={new Date().toISOString().slice(0, 10)}
+            <input name="occurred_on" type="date" aria-label={tr('fieldName.date')} defaultValue={clock.todayKey()}
               className="h-10 rounded-xl border border-border bg-bg px-3 text-sm text-fg outline-none ring-brand/50 focus:ring-2" />
             <input name="amount" type="number" inputMode="decimal" step="0.01" min="0" placeholder={tr('contactTimeline.giftsOptional')}
               className="h-10 w-36 rounded-xl border border-border bg-bg px-3 text-sm text-fg outline-none ring-brand/50 placeholder:text-muted focus:ring-2" />
@@ -202,11 +213,11 @@ export function ContactTimelineModule({
                     <div className="flex items-start justify-between gap-2">
                       <div className="min-w-0">
                         <p className="text-sm font-semibold">{e.title}{e.amount != null ? ` · ${new Intl.NumberFormat(locale, { style: 'currency', currency: 'USD' }).format(e.amount)}` : ''}</p>
-                        <p className="text-[11px] text-muted">{displayDate(e.date, locale)}</p>
+                        <p className="text-[11px] text-muted">{displayDate(e.date, format.fmtDate)}</p>
                       </div>
                       {deletable && (
                         <button
-                          onClick={() => remove(e.id)}
+                          onClick={() => void remove(e)}
                           disabled={pending && busyId === e.id}
                           aria-label={tr('contactTimeline.deleteEntry')}
                           className="rounded-lg p-1.5 text-muted transition hover:bg-elevated hover:text-rose-400 disabled:opacity-50"

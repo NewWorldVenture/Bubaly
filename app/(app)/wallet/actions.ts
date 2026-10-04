@@ -144,7 +144,7 @@ export async function addFundsAction(input: { childWalletId: string; amountCents
     title: `Add funds ${(amount / 100).toFixed(2)}`,
     context: { amountCents: amount }, openApproval: false,
   });
-  if (decision.effect === 'deny') return { ok: false, error: householdPolicyBlocked(t, decision) };
+  if (decision.effect !== 'allow') return { ok: false, error: householdPolicyBlocked(t, decision) };
 
   const split = normalizeSplit(rule?.split as Partial<Split> | null);
   const parts = allocate(amount, split);
@@ -311,16 +311,45 @@ export async function saveAllowanceRuleAction(input: {
   // offers the edit on a paused allowance too, so correcting a paused child's
   // amount quietly restarted the payments. Pausing and resuming is
   // toggleAllowanceRuleAction's job; only a NEW rule starts active.
-  const { data: saved, error } = input.id
-    ? await supabase.from('allowance_rules')
-        .update({ amount_cents: amount, cadence: input.cadence, next_run_on: next })
-        .eq('id', input.id).eq('family_id', familyId)
-        .select('id')
-    : await supabase.from('allowance_rules')
-        .insert({ family_id: familyId, child_wallet_id: input.childWalletId, amount_cents: amount, cadence: input.cadence, is_active: true, next_run_on: next, created_by: ctx.user.id })
-        .select('id');
-  if (error) return actionFailure(error, t('actions.couldNotSaveThatAllowance'));
-  if (input.id && wroteNoRows(saved)) return { ok: false, error: t('actions.couldNotSaveThatAllowance') };
+  //
+  // An edit that keeps the cadence keeps the payday, too. Every edit used to
+  // re-date the rule from today, so raising a weekly allowance the day before
+  // it was due paid it a week later instead (one payment fewer), and a monthly
+  // one edited a few days early went nearly two months between payments —
+  // while the row went on showing the old "next" date until the save. This
+  // guarded write changes only the amount, and only where the cadence is the
+  // one being saved, the allowance is running, and a date is already set — the
+  // conditions are in the write itself, so an undated rule is never half-saved
+  // (amount written, date still to come) if the write that dates it then fails.
+  // It matches nothing when the cadence changed (a weekly date means nothing to
+  // a monthly rule), when the rule has no date yet, when it is paused (its date
+  // is from before the pause, and keeping it would make resuming pay at once —
+  // `is_active` is filtered on here, never written), or when the row is not
+  // this family's to write; each of those takes the full update below, which
+  // re-dates from today and still fails when it, too, matches nothing.
+  let keptPayday = false;
+  if (input.id) {
+    const { data: kept, error: keepError } = await supabase.from('allowance_rules')
+      .update({ amount_cents: amount })
+      .eq('id', input.id).eq('family_id', familyId).eq('cadence', input.cadence)
+      .eq('is_active', true)
+      .not('next_run_on', 'is', null)
+      .select('id');
+    if (keepError) return actionFailure(keepError, t('actions.couldNotSaveThatAllowance'));
+    keptPayday = !wroteNoRows(kept);
+  }
+  if (!keptPayday) {
+    const { data: saved, error } = input.id
+      ? await supabase.from('allowance_rules')
+          .update({ amount_cents: amount, cadence: input.cadence, next_run_on: next })
+          .eq('id', input.id).eq('family_id', familyId)
+          .select('id')
+      : await supabase.from('allowance_rules')
+          .insert({ family_id: familyId, child_wallet_id: input.childWalletId, amount_cents: amount, cadence: input.cadence, is_active: true, next_run_on: next, created_by: ctx.user.id })
+          .select('id');
+    if (error) return actionFailure(error, t('actions.couldNotSaveThatAllowance'));
+    if (input.id && wroteNoRows(saved)) return { ok: false, error: t('actions.couldNotSaveThatAllowance') };
+  }
 
   revalidatePath('/wallet');
   return { ok: true };
@@ -418,9 +447,14 @@ export async function runDueAllowancesAction(): Promise<Result & { ranCount?: nu
     // read and this update used to be claimed and paid anyway. In the same
     // statement, the pause and the claim cannot both win: a paused rule matches
     // nothing and is skipped like one another run claimed.
+    //
+    // So is the amount this run read — it is the amount credited below. An
+    // amount-only edit keeps the rule's date (saveAllowanceRuleAction), so one
+    // that commits after the read would otherwise be claimed and paid at the old
+    // figure; with it the claim misses and the rule stays due for the next run.
     const { data: advancedRule, error: advanceError } = await supabase.from('allowance_rules')
       .update({ next_run_on: next, last_run_on: today })
-      .eq('id', rule.id).eq('family_id', familyId).eq('is_active', true).lte('next_run_on', today)
+      .eq('id', rule.id).eq('family_id', familyId).eq('is_active', true).eq('amount_cents', rule.amount_cents).lte('next_run_on', today)
       .select('id').maybeSingle();
     if (advanceError) return actionFailure(advanceError, t('wallet.couldNotUpdateAnAllowanceSchedule'));
     if (!advancedRule) continue; // another run claimed this rule — do not double-pay
@@ -503,7 +537,7 @@ export async function fundGoalAction(input: { goalId: string; amountCents: numbe
     title: `Fund goal "${goal.title}" ${(amount / 100).toFixed(2)}`,
     context: { amountCents: amount }, openApproval: false,
   });
-  if (decision.effect === 'deny') return { ok: false, error: householdPolicyBlocked(t, decision) };
+  if (decision.effect !== 'allow') return { ok: false, error: householdPolicyBlocked(t, decision) };
 
   const result = await fundGoal(supabase, {
     familyId, goalId: input.goalId, amountCents: amount, actorId: ctx.user.id,
@@ -562,7 +596,7 @@ export async function approveGiftAction(input: { giftPaymentId: string }): Promi
     title: `Approve gift ${(gift.amount_cents / 100).toFixed(2)}`,
     context: { amountCents: gift.amount_cents }, openApproval: false,
   });
-  if (decision.effect === 'deny') return { ok: false, error: householdPolicyBlocked(t, decision) };
+  if (decision.effect !== 'allow') return { ok: false, error: householdPolicyBlocked(t, decision) };
 
   const res = await approveGift(supabase, familyId, gift.id, ctx.user.id);
   if (!res.ok) return { ok: false, error: res.error };
@@ -949,7 +983,7 @@ export async function decideSpendRequestAction(input: {
       title: `Approve spend ${((txn.amount_cents ?? 0) / 100).toFixed(2)}`,
       context: { amountCents: txn.amount_cents ?? 0 }, openApproval: false,
     });
-    if (decision.effect === 'deny') return { ok: false, error: householdPolicyBlocked(t, decision) };
+    if (decision.effect !== 'allow') return { ok: false, error: householdPolicyBlocked(t, decision) };
 
   }
   const decision = await decideSpend(supabase, {
@@ -989,7 +1023,7 @@ export async function sendMoneyAction(input: {
     title: `Transfer ${(amount / 100).toFixed(2)} between wallets`,
     context: { amountCents: amount }, openApproval: false,
   });
-  if (decision.effect === 'deny') return { ok: false, error: householdPolicyBlocked(t, decision) };
+  if (decision.effect !== 'allow') return { ok: false, error: householdPolicyBlocked(t, decision) };
 
   const transfer = await transferWallets(supabase, {
     familyId, fromChildWalletId: input.fromChildWalletId, toChildWalletId: input.toChildWalletId,
@@ -1074,7 +1108,7 @@ export async function decideAllowanceRequestAction(input: {
       title: `Approve allowance request ${(amount / 100).toFixed(2)}`,
       context: { amountCents: amount }, openApproval: false,
     });
-    if (decision.effect === 'deny') return { ok: false, error: householdPolicyBlocked(t, decision) };
+    if (decision.effect !== 'allow') return { ok: false, error: householdPolicyBlocked(t, decision) };
 
   }
   const decision = await decideAllowance(supabase, {

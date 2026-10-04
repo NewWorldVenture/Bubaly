@@ -7,14 +7,16 @@ import { describeDbError } from '@/lib/supabase/errors';
 import { settle, describeReadError } from '@/lib/supabase/settle';
 import { deleteCalendarEventAction } from '@/app/(app)/dashboard/calendar/actions';
 import { useToast } from '@/components/ui/toast';
+import { useConfirm } from '@/components/ui/confirm';
 import { Modal } from '@/components/ui/modal';
 import { AiInsight } from '@/components/ai/ai-insight';
 import { EventScheduleInsights } from '@/components/calendar/event-detail';
 import { Avatar } from '@/components/ui/avatar';
 import { cn } from '@/lib/utils/cn';
 import type { Tables } from '@/lib/database.types';
-import { useLocale, useTranslations } from '@/components/i18n/locale-provider';
-import type { LocaleCode } from '@/lib/i18n/locales';
+import { useTranslations } from '@/components/i18n/locale-provider';
+import { useFormat } from '@/components/i18n/use-format';
+import type { Format } from '@/lib/utils/format';
 
 type Event = Tables<'calendar_events'>;
 type Member = Tables<'family_members'>;
@@ -26,12 +28,11 @@ const OPTIONS: { value: 'accepted' | 'declined' | 'maybe'; label: string; icon: 
   { value: 'declined', label: "Can't", icon: X, cls: 'bg-rose-500/15 text-rose-300 border-rose-500/40' },
 ];
 
-const fmtRangeIn = (locale: LocaleCode) => (e: Event): string => {
-  const s = new Date(e.starts_at);
-  if (e.all_day) return s.toLocaleDateString(locale, { weekday: 'long', month: 'long', day: 'numeric' }) + ' · All day';
-  const opts: Intl.DateTimeFormatOptions = { hour: 'numeric', minute: '2-digit', hour12: true };
-  const date = s.toLocaleDateString(locale, { weekday: 'long', month: 'long', day: 'numeric' });
-  const time = s.toLocaleTimeString(locale, opts) + (e.ends_at ? ` – ${new Date(e.ends_at).toLocaleTimeString(locale, opts)}` : '');
+// In the FAMILY's zone (TIME-003), through the shared formatter.
+const fmtRangeWith = ({ fmtDate, fmtTime }: Format) => (e: Event): string => {
+  if (e.all_day) return fmtDate(e.starts_at, 'EEEE, MMMM d') + ' · All day';
+  const date = fmtDate(e.starts_at, 'EEEE, MMMM d');
+  const time = fmtTime(e.starts_at) + (e.ends_at ? ` – ${fmtTime(e.ends_at)}` : '');
   return `${date} · ${time}`;
 };
 
@@ -39,18 +40,20 @@ export function EventDetailModal({ event, members, selfMemberId, familyId, onClo
   event: Event; members: Member[]; selfMemberId: string | null; familyId: string; onClose: () => void;
   onEdit?: (event: Event) => void; onDeleted?: () => void;
 }) {
-  const locale = useLocale();
-  const fmtRange = fmtRangeIn(locale.code);
+  const fmtRange = fmtRangeWith(useFormat());
   const t = useTranslations();
+  const askConfirm = useConfirm();
   const { error: toastError } = useToast();
   const [rsvps, setRsvps] = useState<Rsvp[]>([]);
   const [rsvpError, setRsvpError] = useState<string | null>(null);
   const [saving, setSaving] = useState(false);
-  const [confirmDelete, setConfirmDelete] = useState(false);
   const [deleting, setDeleting] = useState(false);
 
   async function deleteEvent() {
     if (deleting) return;
+    // For a recurring event this removes the SERIES, and the question says so.
+    const question = event.recurrence !== 'none' ? t('eventDetailModal.deleteSeriesQ') : t('eventDetailModal.deleteEventQ');
+    if (!(await askConfirm({ title: question, body: t('confirm.cannotBeUndone') }))) return;
     setDeleting(true);
     try {
       // Through the service, which filters `family_id` as well as `id`. The
@@ -172,38 +175,20 @@ export function EventDetailModal({ event, members, selfMemberId, familyId, onClo
         </div>
 
         {/* Edit / delete — any family member (family-scoped RLS governs). Delete
-            uses a two-tap confirm; for a recurring event it removes the SERIES. */}
+            asks first through the shared confirm; for a recurring event it removes the SERIES. */}
         {(onEdit || onDeleted) && (
           <div className="flex items-center justify-end gap-2 border-t border-border pt-3">
-            {confirmDelete ? (
-              <>
-                <span className="mr-auto text-xs text-danger">
-                  {event.recurrence !== 'none' ? 'Delete the whole recurring series?' : 'Delete this event?'}
-                </span>
-                <button type="button" onClick={() => setConfirmDelete(false)} disabled={deleting}
-                  className="rounded-lg border border-border px-3 py-1.5 text-xs font-semibold text-muted transition hover:bg-elevated">
-                  {t('eventDetailModal.keep')}
-                </button>
-                <button type="button" onClick={() => void deleteEvent()} disabled={deleting}
-                  className="rounded-lg bg-danger px-3 py-1.5 text-xs font-semibold text-danger-fg transition hover:opacity-90 disabled:opacity-60">
-                  {deleting ? 'Deleting…' : 'Delete'}
-                </button>
-              </>
-            ) : (
-              <>
-                {onDeleted && (
-                  <button type="button" onClick={() => setConfirmDelete(true)}
-                    className="inline-flex items-center gap-1.5 rounded-lg border border-border px-3 py-1.5 text-xs font-semibold text-muted transition hover:border-danger/50 hover:text-danger">
-                    <Trash2 className="h-3.5 w-3.5" /> {t('eventDetailModal.delete')}
-                  </button>
-                )}
-                {onEdit && (
-                  <button type="button" onClick={() => onEdit(event)}
-                    className="inline-flex items-center gap-1.5 rounded-lg border border-border px-3 py-1.5 text-xs font-semibold transition hover:bg-elevated">
-                    <Pencil className="h-3.5 w-3.5" /> {t('eventDetailModal.edit')}
-                  </button>
-                )}
-              </>
+            {onDeleted && (
+              <button type="button" onClick={() => void deleteEvent()} disabled={deleting}
+                className="inline-flex items-center gap-1.5 rounded-lg border border-border px-3 py-1.5 text-xs font-semibold text-muted transition hover:border-danger/50 hover:text-danger disabled:opacity-60">
+                <Trash2 className="h-3.5 w-3.5" /> {t('eventDetailModal.delete')}
+              </button>
+            )}
+            {onEdit && (
+              <button type="button" onClick={() => onEdit(event)}
+                className="inline-flex items-center gap-1.5 rounded-lg border border-border px-3 py-1.5 text-xs font-semibold transition hover:bg-elevated">
+                <Pencil className="h-3.5 w-3.5" /> {t('eventDetailModal.edit')}
+              </button>
             )}
           </div>
         )}

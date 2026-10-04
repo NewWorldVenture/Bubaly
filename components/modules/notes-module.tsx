@@ -1,7 +1,7 @@
 'use client';
 
 // Enhanced notes: color coding, checklists, categories, grid/list view, search
-import { useMemo, useState, useId } from 'react';
+import { useMemo, useState, useId, useEffect, useRef } from 'react';
 import {
   StickyNote, Plus, Trash2, Pin, PinOff, Search, X, Copy, List, LayoutGrid,
   CheckSquare, Square, Palette, Clock, FileText, Sparkles, User,
@@ -20,7 +20,7 @@ import { Button } from '@/components/ui/button';
 import { Modal } from '@/components/ui/modal';
 import { Input, Field, Textarea } from '@/components/ui/input';
 import { SkeletonList, EmptyState, ErrorState } from '@/components/ui/states';
-import { fmtRelative } from '@/lib/utils/format';
+import { useFormat } from '@/components/i18n/use-format';
 import { cn } from '@/lib/utils/cn';
 import { stopAnd } from '@/lib/ui/a11y';
 import { formatInsightsForNote, type NotesInsights } from '@/lib/notes/ai';
@@ -87,6 +87,7 @@ function renderChecklist(body: string) {
 }
 
 export function NotesModule() {
+  const { fmtRelative } = useFormat();
   const t = useTranslations();
   const askConfirm = useConfirm();
   const { familyId } = useApp();
@@ -245,7 +246,7 @@ export function NotesModule() {
         <NoteModal
           note={editing}
           onClose={() => { setAddOpen(false); setEditing(null); }}
-          onSaved={() => { setAddOpen(false); setEditing(null); void refresh(); }}
+          onSaved={() => { void refresh(); }}
         />
       )}
     </div>
@@ -259,6 +260,7 @@ function NoteGroup({ notes, view, onOpen, onTogglePin, onDelete, onDuplicate }: 
   onDelete: (id: string) => void;
   onDuplicate: (n: Note) => void;
 }) {
+  const { fmtRelative } = useFormat();
   const t = useTranslations();
   const askConfirm = useConfirm();
   if (view === 'list') {
@@ -391,6 +393,15 @@ function NoteModal({ note, onClose, onSaved }: {
   const a11yId = useId();
   const { success, error: toastError } = useToast();
   const [loading, setLoading] = useState(false);
+  const active = useRef(true);
+  useEffect(() => {
+    active.current = true;
+    return () => { active.current = false; };
+  }, []);
+  function close() {
+    active.current = false;
+    onClose();
+  }
   // Local only, and it stays local: there is no `notes.color` column for the
   // save below to write it to. See the note on `noteColor` above.
   const [selectedColor, setSelectedColor] = useState((note as Record<string, unknown> | null)?.color as string ?? 'default');
@@ -438,17 +449,30 @@ function NoteModal({ note, onClose, onSaved }: {
     const body = bodyValue.trim() || null;
     if (!body && !title) return toastError(t('notesModule.noteMustHaveContent'));
     setLoading(true);
-    const res = await saveNoteAction(note?.id ?? null, { title, body: body ?? '' });
-    setLoading(false);
-    if (!res.ok) return toastError(res.error);
-    success(t(note ? 'notesModule.noteSaved' : 'notesModule.noteCreated'));
-    onSaved();
+    try {
+      const res = await saveNoteAction(note?.id ?? null, { title, body: body ?? '' });
+      if (!res.ok) {
+        if (active.current) toastError(res.error);
+        return;
+      }
+      if (active.current) {
+        close();
+        success(t(note ? 'notesModule.noteSaved' : 'notesModule.noteCreated'));
+      }
+      // A save already requested may commit after Cancel; still refresh it,
+      // without letting that closed instance dismiss a newly opened draft.
+      onSaved();
+    } catch (err) {
+      if (active.current) toastError(describeDbError(err, t('actions.couldNotSaveThatNote')));
+    } finally {
+      if (active.current) setLoading(false);
+    }
   }
 
   const currentColor = NOTE_COLORS.find((c) => c.id === selectedColor) ?? NOTE_COLORS[0];
 
   return (
-    <Modal open onClose={onClose} title={note ? t('dialogTitle.editNote') : t('dialogTitle.newNote')}>
+    <Modal open onClose={close} title={note ? t('dialogTitle.editNote') : t('dialogTitle.newNote')}>
       <form onSubmit={onSubmit} className="space-y-4">
         {/* Color picker */}
         <div className="flex items-center gap-2">
@@ -532,7 +556,7 @@ function NoteModal({ note, onClose, onSaved }: {
         </div>
 
         <div className="flex justify-end gap-2 pt-2">
-          <Button type="button" variant="ghost" onClick={onClose}>{t('notes.cancel')}</Button>
+          <Button type="button" variant="ghost" onClick={close}>{t('notes.cancel')}</Button>
           <Button type="submit" loading={loading}>{note ? 'Save' : 'Create Note'}</Button>
         </div>
       </form>

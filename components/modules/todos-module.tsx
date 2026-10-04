@@ -1,6 +1,6 @@
 'use client';
 
-import { useMemo, useRef, useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import {
   CheckSquare, Plus, Trash2, Check, Flag, Calendar as CalendarIcon, Search, X,
   Pencil, Loader2, ListChecks, Sparkles, User as UserIcon,
@@ -22,8 +22,9 @@ import { SkeletonList, ErrorState, EmptyState } from '@/components/ui/states';
 import { Avatar } from '@/components/ui/avatar';
 import { cn } from '@/lib/utils/cn';
 import type { Tables } from '@/lib/database.types';
-import { useLocale, useTranslations } from '@/components/i18n/locale-provider';
-import type { LocaleCode } from '@/lib/i18n/locales';
+import { useTranslations } from '@/components/i18n/locale-provider';
+import { useFamilyClock, useFormat } from '@/components/i18n/use-format';
+import type { Format } from '@/lib/utils/format';
 
 type TodoList = Tables<'todo_lists'>;
 type TodoItem = Tables<'todo_items'>;
@@ -54,21 +55,16 @@ const DONUT = {
   completed: { labelKey: 'todosModule.donut.completed', hex: '#22c55e' },
 };
 
-function ymd(d: Date): string {
-  return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
-}
-
-const dueLabelIn = (locale: LocaleCode) => (due: string, todayStr: string, tomorrowStr: string): string => {
+const dueLabelWith = (fmtDate: Format['fmtDate']) => (due: string, todayStr: string, tomorrowStr: string): string => {
   if (due === todayStr) return 'Today';
   if (due === tomorrowStr) return 'Tomorrow';
-  // due is 'YYYY-MM-DD' — render without TZ surprises.
-  const [y, m, d] = due.split('-').map(Number);
-  return new Date(y, m - 1, d).toLocaleDateString(locale, { month: 'short', day: 'numeric' });
+  // due is 'YYYY-MM-DD', a DATE: the formatter renders it as written.
+  return fmtDate(due, 'MMM d');
 };
 
 export function TodosModule() {
-  const locale = useLocale();
-  const dueLabel = dueLabelIn(locale.code);
+  const dueLabel = dueLabelWith(useFormat().fmtDate);
+  const clock = useFamilyClock();
   const tr = useTranslations();
   const { familyId, members, selfMember } = useApp();
   const { success, error: toastError } = useToast();
@@ -110,10 +106,12 @@ export function TodosModule() {
   const listById = useMemo(() => new Map(lists.map((l) => [l.id, l])), [lists]);
   const memberById = useMemo(() => new Map(members.map((m) => [m.id, m])), [members]);
 
-  const now = new Date();
-  const todayStr = ymd(now);
-  const tomorrowStr = ymd(new Date(now.getTime() + 86400000));
-  const weekEndStr = ymd(new Date(now.getTime() + 7 * 86400000));
+  // The family's today (TIME-003), stepped by calendar day so a DST change
+  // cannot land "tomorrow" on the same date or skip one.
+  const wall = clock.wallToday();
+  const todayStr = clock.wallKey(wall);
+  const tomorrowStr = clock.wallKey(clock.addDays(wall, 1));
+  const weekEndStr = clock.wallKey(clock.addDays(wall, 7));
 
   const active = useMemo(() => items.filter((i) => !i.is_done), [items]);
   const completed = useMemo(() => items.filter((i) => i.is_done), [items]);
@@ -506,7 +504,7 @@ export function TodosModule() {
           item={editingItem ?? undefined}
           onNewList={() => setNewListOpen(true)}
           onClose={() => { setAddOpen(false); setEditingItem(null); }}
-          onSaved={() => { setAddOpen(false); setEditingItem(null); void refreshItems(); }} />
+          onSaved={() => { void refreshItems(); }} />
       )}
     </div>
   );
@@ -629,6 +627,17 @@ function ItemModal({ familyId, selfId, lists, members, item, onClose, onSaved, o
   const [dueDate, setDueDate] = useState(item?.due_date ?? '');
   const [assignedTo, setAssignedTo] = useState(item?.assigned_to_id ?? '');
   const [listId, setListId] = useState(item?.list_id ?? lists[0]?.id ?? '');
+  // A closed editor's request may still save. Refresh that row, but never let
+  // its late response close another editor or change the new draft's UI.
+  const active = useRef(true);
+  useEffect(() => {
+    active.current = true;
+    return () => { active.current = false; };
+  }, []);
+  function close() {
+    active.current = false;
+    onClose();
+  }
   // One id for this composition of this task, held across every retry of it. The
   // modal unmounts on save and on close, so the next New Task mints a new one and
   // two children each needing "Pack the kit" both get a row; a Save pressed again
@@ -660,19 +669,21 @@ function ItemModal({ familyId, selfId, lists, members, item, onClose, onSaved, o
         // message names, and it no longer matches these fields. That save is
         // settled; a further Save is a new task, which the message offers.
         if (submissionSettled(result)) submissionId.current = newSubmissionId();
+        if (!active.current) return;
         toastError(result.error);
         return;
       }
+      if (active.current) close();
       onSaved();
     } catch (err) {
-      toastError(describeDbError(err));
+      if (active.current) toastError(describeDbError(err));
     } finally {
-      setLoading(false);
+      if (active.current) setLoading(false);
     }
   }
 
   return (
-    <Modal open onClose={onClose} title={item ? tr('dialogTitle.editTask') : tr('dialogTitle.newTask')}>
+    <Modal open onClose={close} title={item ? tr('dialogTitle.editTask') : tr('dialogTitle.newTask')}>
       <form onSubmit={save} className="space-y-4">
         <Field label={tr('todos.title')} required>
           {(id) => <Input id={id} value={title} onChange={(e) => setTitle(e.target.value)} placeholder={tr('todos.whatNeedsToBeDone')} autoFocus />}
@@ -715,7 +726,7 @@ function ItemModal({ familyId, selfId, lists, members, item, onClose, onSaved, o
           )}
         </Field>
         <div className="flex justify-end gap-2 pt-1">
-          <Button type="button" variant="ghost" onClick={onClose}>{tr('todos.cancel')}</Button>
+          <Button type="button" variant="ghost" onClick={close}>{tr('todos.cancel')}</Button>
           <Button type="submit" loading={loading}>{item ? 'Save' : 'Add Task'}</Button>
         </div>
       </form>

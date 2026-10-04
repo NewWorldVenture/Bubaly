@@ -8,7 +8,7 @@ import { useMemo, useState } from 'react';
 import { Camera, Quote, Plane, Award, BookHeart, Star, Search, X } from 'lucide-react';
 import { MiniEmpty } from '@/components/family/shell';
 import { DeleteButton } from '@/components/family/record-actions';
-import { fmtDate } from '@/lib/utils/format';
+import { useFormat } from '@/components/i18n/use-format';
 import { filterMemories, type SearchableMemory } from '@/lib/family/memory-search';
 import { useTranslations } from '@/components/i18n/locale-provider';
 
@@ -22,6 +22,7 @@ export function MemoryTimeline({ memories, nameById }: {
   memories: TimelineMemory[];
   nameById: Record<string, string>;
 }) {
+  const { fmtDate } = useFormat();
   const t = useTranslations();
   const [query, setQuery] = useState('');
   const [favoritesOnly, setFavoritesOnly] = useState(false);

@@ -2,6 +2,7 @@ import type { Metadata } from 'next';
 import Link from 'next/link';
 import { Layout, ExternalLink } from 'lucide-react';
 import { createServiceClient } from '@/lib/supabase/server';
+import { settle } from '@/lib/supabase/settle';
 import { Card } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
 import { EmptyState, ErrorState } from '@/components/ui/states';
@@ -17,9 +18,9 @@ const inputCls = 'h-10 w-full rounded-xl border border-border bg-surface/60 px-3
 export default async function LandingPagesPage() {
   const t = await getTranslations();
   const supabase = createServiceClient();
-  const { data: pages, error: pagesError } = await supabase.from('marketing_landing_pages').select('*').is('deleted_at', null).order('created_at', { ascending: false });
+  const { data: pages, error: pagesError } = await settle(supabase.from('marketing_landing_pages').select('*').is('deleted_at', null).order('created_at', { ascending: false }));
   if (pagesError) {
-    console.error('[admin-marketing-landing-pages] landing page read failed', pagesError);
+    console.error('[admin-marketing-landing-pages] landing page read failed');
     return <AdminLandingPagesReadError />;
   }
 

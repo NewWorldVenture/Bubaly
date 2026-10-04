@@ -21,7 +21,9 @@ import { GifPicker } from '@/components/messages/gif-picker';
 import { Avatar } from '@/components/ui/avatar';
 import { SkeletonList, EmptyState } from '@/components/ui/states';
 import { roleLabel } from '@/lib/constants/roles';
-import { fmtDate, firstName } from '@/lib/utils/format';
+import { firstName } from '@/lib/utils/format';
+import { useFamilyClock, useFormat, type FamilyClock } from '@/components/i18n/use-format';
+import type { Format } from '@/lib/utils/format';
 import { cn } from '@/lib/utils/cn';
 import {
   convMatchesTab, previewText, shortTime as shortTimeIn, summarizeConversations, type ConvTab,
@@ -45,12 +47,12 @@ const CONV_TABS: { key: ConvTab; labelKey: string }[] = [
   { key: 'announcement', labelKey: 'messagesModule.tab.announcement' },
 ];
 
-function timeGroup(iso: string): string {
-  const d = new Date(iso);
-  const now = new Date();
-  const diff = (now.getTime() - d.getTime()) / 86400000;
-  if (diff < 1) return 'Today';
-  if (diff < 2) return 'Yesterday';
+// Grouped by the FAMILY's calendar day (TIME-003) — "Today" is today where the
+// family is, not the last 24 hours on whatever clock the phone keeps.
+function timeGroup(iso: string, fmtDate: Format['fmtDate'], clock: FamilyClock): string {
+  const day = clock.dayKeyOf(iso);
+  if (day === clock.todayKey()) return 'Today';
+  if (day === clock.wallKey(clock.addDays(clock.wallToday(), -1))) return 'Yesterday';
   return fmtDate(iso, 'MMMM d, yyyy');
 }
 
@@ -83,6 +85,8 @@ async function createConversation(payload: ConvInsert) {
 }
 
 export function MessagesModule() {
+  const { fmtDate } = useFormat();
+  const clock = useFamilyClock();
   const tr = useTranslations();
   // The date follows the reader and the words come from the catalogue.
   const locale = useLocale();
@@ -228,15 +232,18 @@ export function MessagesModule() {
       if (!rpcErr) return;
       const unread = (data ?? []).filter((m) => !(m.read_by ?? []).includes(userId)).slice(-100);
       for (const m of unread) {
-        // Best-effort fallback for read receipts when the RPC is unavailable;
-        // logged, and deliberately not confirmed row by row. Audit C1-S9-81.
-        const { error } = await settle(supabase.from('family_messages')
+        // Best-effort fallback for read receipts when the RPC is unavailable.
+        // Scoped by family and read back like every other write on this gated
+        // table; a receipt that did not land is logged, not shown — it is
+        // nobody's claim, so there is nothing to tell the reader. Audit C1-S9-81.
+        const { data: marked, error } = await settle(supabase.from('family_messages')
           .update({ read_by: [...(m.read_by ?? []), userId] })
-          .eq('id', m.id));
+          .eq('id', m.id).eq('family_id', familyId).select('id'));
         if (error) { console.error('[messages] read-receipt fallback failed', { message: error.message }); break; }
+        if (wroteNoRows(marked)) { console.warn('[messages] read receipt did not land', { id: m.id }); break; }
       }
     })();
-  }, [userId, toastError]);
+  }, [familyId, userId, toastError]);
 
   useEffect(() => {
     if (!activeConv) return;
@@ -512,7 +519,7 @@ export function MessagesModule() {
     for (const k of Object.keys(updated)) { if (!updated[k].length) delete updated[k]; }
     setMsgMenu(null);
     // Under RLS a refused row comes back with no error and zero rows, which this used to report as done. Audit C1-S9-81.
-    const { data: updated2, error } = await createClient().from('family_messages').update({ reactions: updated }).eq('id', msg.id).select('id');
+    const { data: updated2, error } = await createClient().from('family_messages').update({ reactions: updated }).eq('id', msg.id).eq('family_id', familyId).select('id');
     if (error) toastError(describeDbError(error));
     else if (wroteNoRows(updated2)) toastError(tr('errors.thatChangeWasNotSaved'));
   }
@@ -520,7 +527,7 @@ export function MessagesModule() {
   // ── Delete message ──────────────────────────────────────────
   async function deleteMessage(id: string) {
     setMsgMenu(null);
-    const { data: updated3, error } = await createClient().from('family_messages').update({ deleted_at: new Date().toISOString() }).eq('id', id).eq('sender_id', userId).select('id');
+    const { data: updated3, error } = await createClient().from('family_messages').update({ deleted_at: new Date().toISOString() }).eq('id', id).eq('sender_id', userId).eq('family_id', familyId).select('id');
     if (error) toastError(describeDbError(error));
     else if (wroteNoRows(updated3)) toastError(tr('errors.thatChangeWasNotSaved'));
   }
@@ -528,7 +535,7 @@ export function MessagesModule() {
   // ── Pin message ─────────────────────────────────────────────
   async function pinMessage(msg: Message) {
     setMsgMenu(null);
-    const { data: updated4, error } = await createClient().from('family_messages').update({ is_pinned: !msg.is_pinned }).eq('id', msg.id).select('id');
+    const { data: updated4, error } = await createClient().from('family_messages').update({ is_pinned: !msg.is_pinned }).eq('id', msg.id).eq('family_id', familyId).select('id');
     if (error) toastError(describeDbError(error));
     else if (wroteNoRows(updated4)) toastError(tr('errors.thatChangeWasNotSaved'));
   }
@@ -563,7 +570,7 @@ export function MessagesModule() {
   const media = useFamilyMediaUrls(messages.map((m) => m.attachment_url));
 
   const grouped = messages.reduce<{ label: string; msgs: Message[] }[]>((acc, msg) => {
-    const label = timeGroup(msg.created_at);
+    const label = timeGroup(msg.created_at, fmtDate, clock);
     const last = acc[acc.length - 1];
     if (!last || last.label !== label) acc.push({ label, msgs: [msg] });
     else last.msgs.push(msg);

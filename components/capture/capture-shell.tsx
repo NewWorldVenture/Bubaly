@@ -15,6 +15,7 @@ import type { CaptureKind } from '@/lib/capture/parse';
 import { CaptureShortcuts } from '@/components/capture/capture-shortcuts';
 import { describeDbError } from '@/lib/supabase/errors';
 import { useLocale, useTranslations } from '@/components/i18n/locale-provider';
+import { useFamilyClock } from '@/components/i18n/use-format';
 import { DocumentCapture } from '@/components/capture/document-capture';
 import { documentLinkCandidates } from '@/lib/capture/document-link';
 
@@ -58,6 +59,7 @@ export function CaptureShell({ initialShortcuts = null, initialText = '' }: {
    */
   initialText?: string;
 }) {
+  const clock = useFamilyClock();
   const t = useTranslations();
   const locale = useLocale().code;
   const router = useRouter();
@@ -149,7 +151,7 @@ export function CaptureShell({ initialShortcuts = null, initialText = '' }: {
     // instead of just navigating to an empty page.
     if (kind) {
       try {
-        const res = await saveCapture(createClient(), { kind, text: value, familyId, userId, memberId: selfMember?.id ?? null, isCurrent: () => isCurrent() && lifetime.current.pending === attempt });
+        const res = await saveCapture(createClient(), { kind, text: value, familyId, userId, memberId: selfMember?.id ?? null, timeZone: clock.timeZone, isCurrent: () => isCurrent() && lifetime.current.pending === attempt });
         if (!isCurrent()) return;
         lifetime.current.settled = true;
         setCreated({ ...res, destination: route.destination });

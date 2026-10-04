@@ -15,21 +15,24 @@ import { Button } from '@/components/ui/button';
 import { Avatar } from '@/components/ui/avatar';
 import { SkeletonList, ErrorState, EmptyState } from '@/components/ui/states';
 import { AiInsight } from '@/components/ai/ai-insight';
-import { fmtDate } from '@/lib/utils/format';
+import { useFormat } from '@/components/i18n/use-format';
 import {
   SCREEN_CATEGORIES, categoryMeta, formatMinutes, minutesOnDate, minutesInWindow,
   categoryBreakdown, balanceScore, limitProgress, underLimitStreak, type ScreenEntryLike,
 } from '@/lib/screen-time/insights';
 import type { Tables } from '@/lib/database.types';
 import { useTranslations } from '@/components/i18n/locale-provider';
+import { useFamilyClock } from '@/components/i18n/use-format';
 
 type Entry = Tables<'screen_time_entries'>;
 type Limit = Tables<'screen_time_limits'>;
 
-const today = () => new Date().toISOString().slice(0, 10);
-const blank = () => ({ id: '', member_id: '', entry_date: today(), minutes: '30', category: 'entertainment', device: '', note: '' });
+// Days are the FAMILY's (TIME-003): `toISOString().slice(0, 10)` was Greenwich's.
+const blank = (today: string) => ({ id: '', member_id: '', entry_date: today, minutes: '30', category: 'entertainment', device: '', note: '' });
 
 export function ScreenTimeModule() {
+  const clock = useFamilyClock();
+  const { fmtDate } = useFormat();
   const t = useTranslations();
   const { familyId, userId, members, role } = useApp();
   // A daily limit is set ON a child BY a parent: only a manager sets one (the
@@ -96,7 +99,7 @@ export function ScreenTimeModule() {
       };
       // Under RLS a refused row comes back with no error and zero rows, which this used to report as done. Audit C1-S9-86.
       const { data: saved, error } = form.id
-        ? await supabase.from('screen_time_entries').update(row).eq('id', form.id).select('id')
+        ? await supabase.from('screen_time_entries').update(row).eq('id', form.id).eq('family_id', familyId).select('id')
         : await supabase.from('screen_time_entries').insert({ ...row, family_id: familyId, logged_by: userId }).select('id');
       if (error) return toastError(describeDbError(error));
       if (wroteNoRows(saved)) return toastError(t('errors.thatChangeWasNotSaved'));
@@ -149,7 +152,7 @@ export function ScreenTimeModule() {
         <h1 className="flex items-center gap-2 text-base font-semibold"><MonitorSmartphone className="h-4 w-4 text-brand-text" /> {t('screenTime.screenTimeBalance')}</h1>
         <div className="flex items-center gap-2">
           <AiInsight kind="screen_time" iconOnly />
-          <Button onClick={() => setForm(blank())}><Plus className="h-4 w-4" /> {t('screenTime.logTime')}</Button>
+          <Button onClick={() => setForm(blank(clock.todayKey()))}><Plus className="h-4 w-4" /> {t('screenTime.logTime')}</Button>
         </div>
       </div>
 
@@ -158,7 +161,7 @@ export function ScreenTimeModule() {
         {memberIds.map((mid) => {
           const mEntries = all.filter((e) => e.member_id === mid) as ScreenEntryLike[];
           const m = memberById.get(mid);
-          const usedToday = minutesOnDate(mEntries, today());
+          const usedToday = minutesOnDate(mEntries, clock.todayKey());
           const week = minutesInWindow(mEntries, 7);
           const limit = limitByMember.get(mid) ?? 0;
           const prog = limitProgress(usedToday, limit);

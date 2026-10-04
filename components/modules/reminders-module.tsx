@@ -16,6 +16,7 @@ import { describeDbError, isMissingRelationError, wroteNoRows } from '@/lib/supa
 import { createReminderAction, deleteReminderAction, snoozeReminderAction } from '@/app/(app)/dashboard/reminders/actions';
 import { newSubmissionId } from '@/lib/utils/submission-id';
 import { useToast } from '@/components/ui/toast';
+import { useConfirm } from '@/components/ui/confirm';
 import { PageHeader } from '@/components/app/page-header';
 import { AiInsight } from '@/components/ai/ai-insight';
 import { Button } from '@/components/ui/button';
@@ -23,7 +24,7 @@ import { Modal } from '@/components/ui/modal';
 import { Input, Field, Textarea } from '@/components/ui/input';
 import { Badge } from '@/components/ui/badge';
 import { SkeletonList, ErrorState, EmptyState } from '@/components/ui/states';
-import { fmtDate, fmtRelative } from '@/lib/utils/format';
+import { useFormat } from '@/components/i18n/use-format';
 import { cn } from '@/lib/utils/cn';
 import {
   EARLY_REMINDER_OPTIONS, parseTags, formatTags, normalizeSubtasks, newSubtask, subtaskProgress, nextRemindAt,
@@ -109,7 +110,9 @@ function earlyText(tr: Tr, plural: Plural, minutes: number | null | undefined): 
 }
 
 export function RemindersModule() {
+  const { fmtDate } = useFormat();
   const tr = useTranslations();
+  const askConfirm = useConfirm();
   const plural = usePlural();
   const { familyId, userId, members } = useApp();
   const { success, error: toastError } = useToast();
@@ -249,7 +252,9 @@ export function RemindersModule() {
     });
   }
 
-  function deleteReminder(id: string) {
+  async function deleteReminder(reminder: Reminder) {
+    if (!(await askConfirm({ title: tr('confirm.deleteNamed', { name: reminder.title }), body: tr('confirm.cannotBeUndone') }))) return;
+    const id = reminder.id;
     return run(`delete:${id}`, async () => {
       // Through the service, family-scoped where this filtered `id` alone. The
       // editor and the recurrence respawn above cannot follow yet — they write
@@ -598,7 +603,7 @@ export function RemindersModule() {
                     className="rounded-lg p-1.5 text-muted hover:bg-elevated hover:text-fg">
                     <Edit2 className="h-4 w-4" />
                   </button>
-                  <button onClick={() => deleteReminder(reminder.id)} disabled={isPending(`delete:${reminder.id}`)} aria-label={tr('reminders.deleteReminder')}
+                  <button onClick={() => void deleteReminder(reminder)} disabled={isPending(`delete:${reminder.id}`)} aria-label={tr('reminders.deleteReminder')}
                     className="rounded-lg p-1.5 text-muted transition hover:bg-elevated hover:text-danger disabled:opacity-50">
                     {isPending(`delete:${reminder.id}`) ? <Loader2 className="h-4 w-4 animate-spin" /> : <Trash2 className="h-4 w-4" />}
                   </button>
