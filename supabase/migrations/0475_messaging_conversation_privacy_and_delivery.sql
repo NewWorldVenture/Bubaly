@@ -363,6 +363,16 @@ returns trigger language plpgsql security definer set search_path = '' as $$
 declare m public.family_members;
 begin
   if auth.uid() is null then return old; end if;
+  -- A session that bypasses row security — a superuser or a BYPASSRLS role: the
+  -- Database job's boundary probes, an operator at psql — is not a member
+  -- deleting a family through the app, and may carry a JWT claim left over
+  -- from an earlier `set role` in the same session. The guard is for the app's
+  -- callers; `families_delete` already gates them, and this trigger only holds
+  -- the admin's membership lock across the cascade. Read on session_user: this
+  -- function is security definer, so current_user is its owner here.
+  if exists (select 1 from pg_catalog.pg_roles r where r.rolname = session_user and (r.rolsuper or r.rolbypassrls)) then
+    return old;
+  end if;
   -- Match families_delete's parent-only is_family_admin policy and retain the
   -- admin's membership lock until every cascading conversation/message delete finishes.
   select fm.* into m from public.family_members fm
