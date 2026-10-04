@@ -1,14 +1,12 @@
+import { lastUtcDays } from '@/lib/admin/clock';
+
 /** Real cumulative-count-by-day area chart from a list of actual creation timestamps. */
 export function GrowthChart({ timestamps, days = 30 }: { timestamps: string[]; days?: number }) {
-  const now = new Date();
-  const dates = timestamps.map((t) => new Date(t));
-  const points: number[] = [];
-  for (let i = days - 1; i >= 0; i--) {
-    const cutoff = new Date(now);
-    cutoff.setDate(cutoff.getDate() - i);
-    cutoff.setHours(23, 59, 59, 999);
-    points.push(dates.filter((d) => d <= cutoff).length);
-  }
+  // Cumulative count at the END of each of the last `days` whole admin-zone
+  // days (lib/admin/clock.ts). The rolling host-midnight cutoffs this replaced
+  // drew a different curve on every host.
+  const dates = timestamps.map((t) => new Date(t).getTime());
+  const points = lastUtcDays(days).map((w) => dates.filter((t) => t < w.end).length);
   const max = Math.max(...points, 1);
   const w = 600, h = 160;
   const path = points

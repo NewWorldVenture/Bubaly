@@ -18,6 +18,7 @@ import {
 import { pickOnThisDay } from '@/lib/memories/on-this-day';
 import { getLocaleContext, getTranslations } from '@/lib/i18n/server';
 import { getFormat } from '@/lib/utils/format-server';
+import { dayKeyInTz, zonedDayBoundsMs } from '@/lib/services/scope';
 import type { Format } from '@/lib/utils/format';
 import { FamilyMediaImg } from '@/components/media/family-media-img';
 
@@ -72,11 +73,13 @@ export default async function MemoriesPage({ searchParams }: { searchParams: Pro
   const supabase = await createServer();
 
   const now = new Date();
-  const yearStart = new Date(now.getFullYear(), 0, 1).toISOString();
   const nowIso = now.toISOString();
-  // Every date this page prints is the family's, not the host's.
+  // Every date this page prints is the family's, not the host's — and so is
+  // the year the counts are over: `new Date(now.getFullYear(), 0, 1)` was the
+  // HOST's 1 January at the host's midnight.
   const tz = ctx.active.family.timezone || 'UTC';
   const { fmtDate } = await getFormat(tz);
+  const yearStart = new Date(zonedDayBoundsMs(`${dayKeyInTz(now, tz).slice(0, 4)}-01-01`, tz).start).toISOString();
 
   const [
     albumsRes,

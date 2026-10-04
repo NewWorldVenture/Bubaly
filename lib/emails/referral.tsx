@@ -66,7 +66,7 @@ export function ReferralEmail({
 
         <hr style={{ borderColor: '#23364e', margin: '32px 0' }} />
         <p style={{ color: '#94a0b8', fontSize: 12 }}>
-          &copy; {new Date().getFullYear()} Bubaly &middot; You&apos;re receiving this because {inviterName} sent you their referral code.
+          &copy; {new Date().getUTCFullYear()} Bubaly &middot; You&apos;re receiving this because {inviterName} sent you their referral code.
         </p>
       </body>
     </html>

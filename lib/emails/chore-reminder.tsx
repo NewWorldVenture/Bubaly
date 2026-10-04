@@ -69,7 +69,7 @@ export function ChoreReminderEmail({
         </a>
 
         <hr style={{ borderColor: '#23364e', margin: '32px 0' }} />
-        <p style={{ color: '#94a0b8', fontSize: 12 }}>© {new Date().getFullYear()} Bubaly</p>
+        <p style={{ color: '#94a0b8', fontSize: 12 }}>© {new Date().getUTCFullYear()} Bubaly</p>
       </body>
     </html>
   );
