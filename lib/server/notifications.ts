@@ -336,7 +336,8 @@ export async function generateFamilyNotifications(supabase: DB, familyId: string
     .select('id, taken_at')
     .eq('family_id', familyId).not('taken_at', 'is', null)
     .order('taken_at', { ascending: false }).limit(400);
-  const memoryNotice = onThisDayNotice(datedPhotos ?? [], now);
+  // `tz`: the family's day, not the host's — see pickOnThisDay.
+  const memoryNotice = onThisDayNotice(datedPhotos ?? [], now, tz);
   if (memoryNotice) {
     candidates.push({
       type: 'system', related_type: 'family_photos', related_id: memoryNotice.relatedId,

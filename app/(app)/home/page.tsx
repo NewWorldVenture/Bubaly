@@ -53,7 +53,7 @@ import { DoOneThingCard } from '@/components/outcomes/do-one-thing-card';
 import { OutcomesStrip } from '@/components/outcomes/outcomes-strip';
 import { countFromResult, countMatchingResult } from '@/lib/outcomes/discovery';
 import { FIRST_VALUE_MILESTONE } from '@/lib/analytics/activation';
-import { nextBirthdayDate, daysUntil } from '@/lib/moments/birthdays';
+import { birthdayCountdown } from '@/lib/moments/birthdays';
 import { getLocaleContext, getTranslations } from '@/lib/i18n/server';
 import { WidgetBoundary } from '@/components/ui/widget-boundary';
 import { instantCalendarBounds } from '@/lib/briefing/calendar-window';
@@ -247,10 +247,9 @@ export default async function HomePage() {
   const memberById = new Map(memberList.map((m) => [m.id, m]));
   const birthdaysSoon = countMatchingResult({ data: memberList, count: memberCount, error: membersError }, (member) => {
     if (!member.birthday) return false;
-    const next = nextBirthdayDate(member.birthday, now);
-    if (!next) return false;
-    const days = daysUntil(next, now);
-    return days >= 0 && days <= 14;
+    // Counted from the family's day (`todayKey`), not the host's.
+    const days = birthdayCountdown(member.birthday, todayKey)?.days;
+    return days !== undefined && days >= 0 && days <= 14;
   });
   const outcomeSnapshot = {
     eventsToday: countFromResult({ count: todayEventsCount, error: todayEventsError }),
