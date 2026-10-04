@@ -121,12 +121,22 @@ export type FeedRowPlan = {
   /** The rows to upsert: every live event, one per `external_uid`. */
   rows: FeedEventRow[];
   /**
-   * The `external_uid`s the source says are CANCELLED (STATUS:CANCELLED), to be
-   * removed from the family's calendar if an earlier sync imported them. A
-   * cancelled series master names the whole series; a cancelled exception
-   * names that one occurrence.
+   * Exact `external_uid`s the source says are CANCELLED (STATUS:CANCELLED) and
+   * that name ONE row: a cancelled exception of a series that is itself still
+   * live. Removed from the family's calendar if an earlier sync imported them.
    */
   cancelled: string[];
+  /**
+   * The bare UIDs of cancelled series masters — a cancelled VEVENT with no
+   * RECURRENCE-ID. Each names the WHOLE series: the master's own row and every
+   * exception's, `uid` and each `uid␟recurrenceId`, whether published in this
+   * snapshot or imported by an earlier sync. The sync resolves those keys
+   * against what it has stored (`seriesKeys`); the plan cannot name rows it
+   * has never seen. Review on #908: the first cut named only the bare UID, the
+   * removal matched exact keys, and a cancelled series left its moved
+   * occurrences on the calendar for good.
+   */
+  cancelledSeries: string[];
 };
 
 /**
@@ -138,7 +148,10 @@ export type FeedRowPlan = {
  * per UID" let a rescheduled occurrence — the last VEVENT with that UID in
  * most exports — overwrite the weekly master with a one-off at the new time,
  * and the whole series vanished from the family calendar. A cancelled event is
- * not a row; it is a removal.
+ * not a row; it is a removal — of one row for a cancelled exception, of the
+ * whole series for a cancelled master, whichever order the publisher wrote
+ * them in: an exception published beside its cancelled master is not a row,
+ * and a cancelled exception of a cancelled series is not a removal of its own.
  *
  * Known limit, stated: the app's recurrence model has no exception dates, so
  * the master still renders the ORIGINAL slot of a moved or cancelled
@@ -148,18 +161,44 @@ export type FeedRowPlan = {
 export function planFeedRows(events: IcsEvent[], familyId: string, feedId: string): FeedRowPlan {
   const live = new Map<string, FeedEventRow>();
   const cancelled = new Set<string>();
+  const cancelledMasters = new Set<string>();
   for (const ev of events) {
     if (!ev.uid || !ev.startsAt) continue;
     const key = feedExternalUid(ev);
     if (ev.status === 'cancelled') {
       live.delete(key);
-      cancelled.add(key);
+      (ev.recurrenceId ? cancelled : cancelledMasters).add(key);
       continue;
     }
     cancelled.delete(key);
+    cancelledMasters.delete(key);
     live.set(key, mapIcsEventToRow(ev, familyId, feedId));
   }
-  return { rows: [...live.values()], cancelled: [...cancelled] };
+  for (const uid of cancelledMasters) {
+    const prefix = `${uid}${EXCEPTION_KEY_SEPARATOR}`;
+    for (const key of [...live.keys()]) if (key.startsWith(prefix)) live.delete(key);
+    for (const key of [...cancelled]) if (key.startsWith(prefix)) cancelled.delete(key);
+  }
+  return { rows: [...live.values()], cancelled: [...cancelled], cancelledSeries: [...cancelledMasters] };
+}
+
+/**
+ * Of the keys a feed has stored, the ones that belong to a cancelled series:
+ * the master's own (`uid`) and each exception's (`uid␟recurrenceId`). The
+ * separator cannot occur in a stored UID (`feedExternalUid` strips it), so the
+ * first one splits a key into its UID and its RECURRENCE-ID, and a stand-alone
+ * event whose UID merely begins with the series' UID is not matched. Exact
+ * keys, for an exact `.in()` removal: a UID may carry LIKE's own wildcards
+ * (`%`, `_`), so a pattern match on a prefix is not safe against it.
+ */
+export function seriesKeys(storedKeys: Iterable<string>, cancelledSeries: readonly string[]): string[] {
+  const series = new Set(cancelledSeries);
+  const matched: string[] = [];
+  for (const key of storedKeys) {
+    const at = key.indexOf(EXCEPTION_KEY_SEPARATOR);
+    if (series.has(at === -1 ? key : key.slice(0, at))) matched.push(key);
+  }
+  return matched;
 }
 
 /** The rows half of `planFeedRows`, for callers that only write. */
