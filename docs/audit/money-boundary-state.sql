@@ -26,7 +26,7 @@
 -- table absent) before being committed.
 
 with money_tables(t) as (
-  values ('family_wallets'),('child_wallets'),('wallet_buckets'),('wallet_transactions'),('wallet_rules'),
+  values ('family_wallets'),('child_wallets'),('wallet_buckets'),('wallet_transactions'),('wallet_rules'),('allowance_rules'),
          ('financial_accounts'),('transactions'),('budgets'),('bills'),('savings_goals')
 ), pol as (
   select m.t,

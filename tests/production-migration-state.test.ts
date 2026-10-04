@@ -1,7 +1,7 @@
 import { at } from './helpers/source-order';
 import { readFileSync } from 'node:fs';
 import { describe, expect, it, vi } from 'vitest';
-import { CATALOG_QUERY, baselineBlockedMessage, hasUnrecordedBaseline, moneyWriteVerdict, readProductionMigrationState } from '../scripts/audit-production-migration-state.mjs';
+import { CATALOG_QUERY, MONEY_TABLES, baselineBlockedMessage, hasUnrecordedBaseline, moneyWriteVerdict, readProductionMigrationState } from '../scripts/audit-production-migration-state.mjs';
 
 const projectRef = 'abcdefghijklmnopqrst';
 const token = 'test-management-token';
@@ -172,6 +172,15 @@ describe('money write verdict', () => {
     expect(CATALOG_QUERY).toContain("'moneyWritePolicies'");
     expect(CATALOG_QUERY).not.toMatch(/'usingExpr'|'checkExpr'|'qual',\s*qual/);
   });
+
+  it('includes allowance_rules in automated and hand-run money inventories', () => {
+    const boundary = readFileSync('docs/audit/money-boundary-state.sql', 'utf8');
+    const diagnostic = readFileSync('docs/audit/money-policy-diagnostic.sql', 'utf8');
+    expect(MONEY_TABLES).toContain('allowance_rules');
+    expect(CATALOG_QUERY).toContain("'wallet_rules','allowance_rules'");
+    expect(boundary).toContain("('wallet_rules'),('allowance_rules')");
+    expect(diagnostic).toContain("'wallet_rules','allowance_rules'");
+  });
 });
 
 // Two states reported as CLEAN by a policy-only rule. Both were reachable by
@@ -179,8 +188,7 @@ describe('money write verdict', () => {
 // result as a stronger guarantee than the data supported.
 describe('money write verdict — the states a policy-only rule cannot see', () => {
   const tables = (over: Record<string, boolean> = {}) =>
-    ['family_wallets', 'child_wallets', 'wallet_buckets', 'wallet_transactions', 'wallet_rules',
-     'financial_accounts', 'transactions', 'budgets', 'bills', 'savings_goals']
+    MONEY_TABLES
       .map((name) => ({ name, rls: over[name] ?? true }));
 
   const gated = (table: string) => ([
@@ -219,16 +227,43 @@ describe('money write verdict — the states a policy-only rule cannot see', () 
     expect(verdict.noWritePolicy.length).toBeGreaterThan(0); // the rest are not "guarded"
   });
 
-  // What production actually returned on 2026-09-11, through the hand-run query:
-  // all ten present, RLS on, three guards each, zero ungated writes.
-  it('agrees with the production reading that closed the boundary', () => {
-    const rows = ['family_wallets', 'child_wallets', 'wallet_buckets', 'wallet_transactions', 'wallet_rules',
-                  'financial_accounts', 'transactions', 'budgets', 'bills', 'savings_goals'].flatMap(gated);
-    const verdict = moneyWriteVerdict({ tables: tables(), moneyWritePolicies: rows });
+  it('detects the 0088 allowance open write until the 0306 guards are present', () => {
+    const allowanceWrite = {
+      table: 'allowance_rules', name: 'Members manage allowance_rules', command: 'ALL',
+      permissive: true, managerGated: false,
+    };
+    const before0306 = moneyWriteVerdict({ tables: tables(), moneyWritePolicies: [allowanceWrite] });
+    expect(before0306.openWrites).toEqual(['allowance_rules.Members manage allowance_rules (ALL)']);
+    expect(before0306.unguarded).toEqual(['allowance_rules']);
+    expect(before0306.exploitable).toBe(true);
+    expect(before0306.verdicts.allowance_rules).toBe('OPEN - non-manager can write');
+
+    const guards0306 = ['INSERT', 'UPDATE', 'DELETE'].map((command) => ({
+      table: 'allowance_rules', name: `allowance_rules_manager_${command.toLowerCase()}_guard`,
+      command, permissive: false, managerGated: true,
+    }));
+    const after0306 = moneyWriteVerdict({ tables: tables(), moneyWritePolicies: [allowanceWrite, ...guards0306] });
+    expect(after0306.openWrites).toEqual(['allowance_rules.Members manage allowance_rules (ALL)']);
+    expect(after0306.unguarded).toEqual([]);
+    expect(after0306.exploitable).toBe(false);
+    expect(after0306.verdicts.allowance_rules).toBe('closed by restrictive guard');
+  });
+
+  // This is a synthetic representation of the dated 2026-09-11 production
+  // evidence. The then-current inventory contained ten tables and omitted
+  // allowance_rules; it cannot establish that table's 0306 guards in production.
+  it('keeps the historical ten-table production reading from implying allowance coverage', () => {
+    const historicalTables = MONEY_TABLES.filter((table) => table !== 'allowance_rules');
+    const rows = historicalTables.flatMap(gated);
+    const verdict = moneyWriteVerdict({
+      tables: historicalTables.map((name) => ({ name, rls: true })),
+      moneyWritePolicies: rows,
+    });
     expect(verdict.exploitable).toBe(false);
     expect(verdict.rlsDisabled).toEqual([]);
-    expect(verdict.absent).toEqual([]);
-    expect(Object.values(verdict.verdicts).every((v) => String(v).startsWith('CLOSED'))).toBe(true);
+    expect(verdict.absent).toEqual(['allowance_rules']);
+    expect(verdict.verdicts.allowance_rules).toBe('table absent');
+    expect(historicalTables.every((table) => String(verdict.verdicts[table]).startsWith('CLOSED'))).toBe(true);
   });
 
   // A snapshot taken before the table list existed cannot answer the RLS
