@@ -184,7 +184,8 @@ export class ClaudeFleetStore {
     return this.write(async (tx) => {
       const now = this.now();
       // A lost worker may still be executing. Preserve its slot until someone proves it stopped.
-      await tx.execute({ sql: `UPDATE claude_fleet_jobs SET status = 'quarantined', error = 'execution_uncertain', updated_at = ?
+      await tx.execute({ sql: `UPDATE claude_fleet_jobs SET status = 'quarantined',
+        error = CASE WHEN status = 'cancel_requested' THEN 'cancel_uncertain' ELSE 'execution_uncertain' END, updated_at = ?
         WHERE status IN ('claimed', 'running', 'cancel_requested') AND lease_expires_at <= ? AND dispatch_started_at IS NOT NULL`, args: [now, now] });
       await tx.execute({ sql: `UPDATE claude_fleet_jobs SET status = CASE WHEN attempts >= ? THEN 'failed' ELSE 'queued' END,
         error = CASE WHEN attempts >= ? THEN 'attempts_exhausted' ELSE 'lease_expired_before_dispatch' END,

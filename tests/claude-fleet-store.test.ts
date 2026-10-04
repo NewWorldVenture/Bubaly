@@ -145,6 +145,18 @@ describe('durable Claude fleet store using separate SQLite clients', () => {
     expect(await first.failBeforeDispatch(job.id, job.claimToken!, 'setup_failed')).toBe(false);
   });
 
+  it('preserves cancellation intent when an expired dispatched lease is recovered', async () => {
+    const job = await running();
+    await second.requestCancel(job.id);
+    await second.submit('after-cancel-expiry', payload());
+    now += options.leaseMs;
+    expect(await first.claim({ ...options, maxConcurrency: 1 })).toBeNull();
+    expect(await second.get(job.id)).toMatchObject({ status: 'quarantined', error: 'cancel_uncertain' });
+    expect(await second.listActive()).toHaveLength(1);
+    expect(await first.confirmCancelled(job.id, job.claimToken!, job.sandboxId!)).toBe(true);
+    expect(await second.claim({ ...options, maxConcurrency: 1 })).not.toBeNull();
+  });
+
   it('does not dispatch after a concurrent pre-dispatch cancellation', async () => {
     const submitted = await first.submit('cancel-before', payload());
     const job = (await first.claim(options))!;
