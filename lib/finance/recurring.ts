@@ -1,11 +1,13 @@
-// lib/finance/recurring.ts — pure, tested helpers for a recurring bill: its
-// cadence, its next due date, and what "Mark paid" writes.
+// lib/finance/recurring.ts — pure, tested helpers for a series that repeats:
+// a recurring bill's cadence, its next due date and what "Mark paid" writes,
+// and where a subscription's next charge falls.
 //
 // Day keys in, day keys out, stepped on UTC fields only, so nothing here reads
 // the calendar of the machine it runs on. That is why this is not in
-// lib/finance/hub.ts: the forecast loader (lib/finance/timeline-load.ts) runs
-// on the server, and hub.ts's due-status helpers read local calendar fields,
-// which are the family's day only in the family's browser
+// lib/finance/hub.ts: the forecast loader (lib/finance/timeline-load.ts) and
+// the autopilot engine (lib/autopilot/engine.ts) run on the server, and
+// hub.ts's due-status helpers read local calendar fields, which are the
+// family's day only in the family's browser
 // (tests/a-server-path-does-not-read-the-hosts-calendar.test.ts).
 
 import { isMissingRelationError } from '@/lib/supabase/errors';
@@ -180,4 +182,46 @@ export async function writeBillPatch<P extends object, W extends (p: P) => Promi
   delete rest.due_day;
   // The same row without the one column this database lacks.
   return (await write(rest as P)) as Awaited<ReturnType<W>>;
+}
+
+// ── Subscriptions ───────────────────────────────────────────────────────────
+
+/** The cadence a subscription is billed on: the module's four plus the forecast's aliases; anything else reads as monthly, as the forecast does. */
+export function subscriptionCadence(cadence: string | null | undefined): BillCadence {
+  return (cadence ? CADENCES[cadence.toLowerCase()] : undefined) ?? 'monthly';
+}
+
+/**
+ * The first occurrence of the series anchored at `anchor` that falls ON OR
+ * AFTER `today` — `anchor` itself while it has not passed. Null when `anchor`
+ * is not a calendar day. (`nextBillDueDate` is the strictly-after sibling a
+ * payment needs; a charge still coming today is still coming.)
+ */
+export function nextOccurrenceOnOrAfter(anchor: string, cadence: BillCadence, today: string): string | null {
+  const start = parseDayKey(anchor);
+  if (!start) return null;
+  const from = anchor.slice(0, 10);
+  const floor = parseDayKey(today) ? today.slice(0, 10) : from;
+  if (from >= floor) return from;
+  for (let n = 1; n <= 5000; n += 1) {
+    const next = stepFrom(start, cadence, n);
+    if (next >= floor) return next;
+  }
+  return null;
+}
+
+/**
+ * Where a subscription's next charge falls TODAY.
+ *
+ * `subscriptions_tracked.next_charge` is typed in by hand and nothing rolls
+ * it, so after its first cycle it is a date in the past. The autopilot's
+ * "charge in N days" heads-up (lib/autopilot/engine.ts) measured against it
+ * and never fired again, and the Subscriptions module said "Next on" about a
+ * day already gone. Projected onto the cadence the stored date is the
+ * series' anchor — the 14th stays the 14th — which is how the forecast
+ * (lib/finance/timeline.ts) has always walked it.
+ */
+export function projectedNextCharge(nextCharge: string | null | undefined, cadence: string | null | undefined, today: string): string | null {
+  if (!nextCharge) return null;
+  return nextOccurrenceOnOrAfter(nextCharge.slice(0, 10), subscriptionCadence(cadence), today);
 }
