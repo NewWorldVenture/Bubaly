@@ -55,6 +55,48 @@ describe('parseICS', () => {
   it('returns nothing for an empty calendar', () => {
     expect(parseICS('BEGIN:VCALENDAR\nEND:VCALENDAR')).toHaveLength(0);
   });
+
+  // A calendar exported from Google, Apple or Outlook publishes timed events in
+  // a named zone. Reading `DTSTART;TZID=America/New_York:20260906T090000` as
+  // 09:00 UTC put a 9 am practice at 5 am on the family's new calendar — every
+  // timed event of the import, hours off, which is the one thing a family
+  // switching providers checks first.
+  describe('a timed event published in a named zone', () => {
+    const zoned = (dtstart: string, dtend?: string) => parseICS([
+      'BEGIN:VCALENDAR', 'BEGIN:VEVENT', 'SUMMARY:Practice', `DTSTART;${dtstart}`, ...(dtend ? [`DTEND;${dtend}`] : []), 'END:VEVENT', 'END:VCALENDAR',
+    ].join('\n'))[0];
+
+    it('lands at the hour the zone meant, in summer and in winter', () => {
+      expect(zoned('TZID=America/New_York:20260906T090000', 'TZID=America/New_York:20260906T100000'))
+        .toMatchObject({ startsAt: '2026-09-06T13:00:00.000Z', endsAt: '2026-09-06T14:00:00.000Z', allDay: false });
+      expect(zoned('TZID=America/New_York:20260115T090000').startsAt).toBe('2026-01-15T14:00:00.000Z');
+      expect(zoned('TZID=Europe/London:20260906T090000').startsAt).toBe('2026-09-06T08:00:00.000Z');
+    });
+
+    it('reads a reading the zone skips at spring-forward as the first minute that exists', () => {
+      // New York jumps from 02:00 to 03:00 on 2026-03-08; 02:30 never happens.
+      expect(zoned('TZID=America/New_York:20260308T023000').startsAt).toBe('2026-03-08T07:00:00.000Z');
+    });
+
+    it('a quoted zone name with a colon in it is a parameter, not the value', () => {
+      // Outlook's form. The zone is not an IANA name, so the reading falls back
+      // to the floating rule — but the event is now imported at all: the first
+      // colon used to split inside the parameter and the event was dropped.
+      const e = zoned('TZID="(UTC-05:00) Eastern Time (US & Canada)":20260906T090000');
+      expect(e).toBeDefined();
+      expect(e.startsAt).toBe('2026-09-06T09:00:00.000Z');
+    });
+
+    it('a zone this runtime does not know falls back to the floating reading — the stated limit', () => {
+      expect(zoned('TZID=Eastern Standard Time:20260906T090000').startsAt).toBe('2026-09-06T09:00:00.000Z');
+    });
+
+    it('leaves UTC, floating and all-day values exactly as before', () => {
+      expect(parseICS(ICS)[0].startsAt).toBe('2024-05-14T17:30:00.000Z');
+      expect(zoned('VALUE=DATE:20261005')).toMatchObject({ startsAt: '2026-10-05T00:00:00.000Z', allDay: true });
+      expect(parseICS('BEGIN:VEVENT\nSUMMARY:Floating\nDTSTART:20260906T090000\nEND:VEVENT')[0].startsAt).toBe('2026-09-06T09:00:00.000Z');
+    });
+  });
 });
 
 describe('parseCSV', () => {

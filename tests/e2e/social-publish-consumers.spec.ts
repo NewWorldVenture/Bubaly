@@ -81,7 +81,9 @@ async function fixture(page: Page, locale: 'en-US' | 'fr-FR' = 'en-US') {
     'lucide-react': new Proxy({}, { get: () => () => null }),
     '@/lib/i18n/server': { getTranslations: async () => (key: string) => catalogue[key] ?? key, getLocaleContext: async () => ({ locale: { code: locale } }) },
     '@/components/i18n/locale-provider': { useTranslations: () => (key: string) => catalogue[key] ?? key },
-    '@/lib/supabase/auth': { requireUserContext: async () => ({ active: { familyId: 'family' }, user: { id: 'user' } }) },
+    // The context carries the active family as the app does: the detail page
+    // renders its dates in the family's zone, not the host's.
+    '@/lib/supabase/auth': { requireUserContext: async () => ({ active: { familyId: 'family', family: { timezone: 'UTC' } }, user: { id: 'user' } }) },
     '@/lib/supabase/server': { createServer: async () => sdk },
     '@/lib/social/access': { requireSocialPermission: async () => {} },
     '@/lib/social/x-oauth': {}, '@/lib/social/account-tokens': {},

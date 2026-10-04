@@ -96,7 +96,7 @@ function override(method: 'insert' | 'update', reply: Record<string, unknown>) {
     const answer = { data: null, count: null, status: 500, statusText: 'Error', ...reply };
     const settle = { then: (resolve: (v: unknown) => unknown) => Promise.resolve(answer).then(resolve) };
     if (method === 'insert') builder.insert = () => ({ select: () => settle });
-    if (method === 'update') builder.update = () => { const chain = { eq: () => chain, select: () => settle }; return chain; };
+    if (method === 'update') builder.update = () => { const chain = { eq: () => chain, not: () => chain, select: () => settle }; return chain; };
     return builder;
   };
 }

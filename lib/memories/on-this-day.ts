@@ -6,6 +6,8 @@
 // first. No I/O, so it's deterministic and unit-tested; a client reads
 // family_photos and renders whatever this returns (nothing on an ordinary day).
 
+import { dayKeyIn } from '@/lib/time/zoned';
+
 export type DatedPhoto = {
   id: string;
   taken_at: string | null;
@@ -19,6 +21,12 @@ export type OnThisDayPhoto<T extends DatedPhoto = DatedPhoto> = T & {
   yearsAgo: number;
   label: string;
 };
+
+/** `YYYY-MM-DD` of an instant in `timeZone`, or in the runtime's own zone when none is given. */
+function calendarKey(d: Date, timeZone?: string): string {
+  if (timeZone) return dayKeyIn(d, timeZone);
+  return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
+}
 
 /** "1 year ago" / "5 years ago". */
 export function yearsAgoLabel(years: number): string {
@@ -35,17 +43,24 @@ export function pickOnThisDay<T extends DatedPhoto>(
   photos: T[],
   now: Date = new Date(),
   max = 8,
+  timeZone?: string,
 ): OnThisDayPhoto<T>[] {
-  const m = now.getMonth();
-  const d = now.getDate();
-  const y = now.getFullYear();
+  // "Today" and each photo's day are read in the SAME calendar: the family's
+  // when a zone is given (a server page, the notification engine), the
+  // reader's own otherwise. A UTC host read Greenwich's day for both, so from
+  // 5pm in California the memories page and the "On this day" ping were a day
+  // ahead — tomorrow's photos tonight, today's never.
+  const todayKey = calendarKey(now, timeZone);
+  const y = Number(todayKey.slice(0, 4));
+  const monthDay = todayKey.slice(5);
   const out: OnThisDayPhoto<T>[] = [];
   for (const p of photos ?? []) {
     if (!p.taken_at) continue;
     const t = new Date(p.taken_at);
     if (Number.isNaN(t.getTime())) continue;
-    if (t.getMonth() !== m || t.getDate() !== d) continue;
-    const yearsAgo = y - t.getFullYear();
+    const takenKey = calendarKey(t, timeZone);
+    if (takenKey.slice(5) !== monthDay) continue;
+    const yearsAgo = y - Number(takenKey.slice(0, 4));
     if (yearsAgo < 1) continue; // today or the future never counts as a memory
     out.push({ ...p, yearsAgo, label: yearsAgoLabel(yearsAgo) });
   }
@@ -61,10 +76,10 @@ export type OnThisDayNotice = { title: string; body: string; relatedId: string }
  * permanent related_id dedup fires this at most once per day — and naturally
  * again when the same date comes around with matches in a future year.
  */
-export function onThisDayNotice(photos: DatedPhoto[], now: Date = new Date()): OnThisDayNotice | null {
-  const matches = pickOnThisDay(photos, now, 50);
+export function onThisDayNotice(photos: DatedPhoto[], now: Date = new Date(), timeZone?: string): OnThisDayNotice | null {
+  const matches = pickOnThisDay(photos, now, 50, timeZone);
   if (matches.length === 0) return null;
-  const key = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}-${String(now.getDate()).padStart(2, '0')}`;
+  const key = calendarKey(now, timeZone);
   return {
     relatedId: `onthisday:${key}`,
     title: `📸 On this day ${matches[0].label}`,
