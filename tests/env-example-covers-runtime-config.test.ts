@@ -90,6 +90,12 @@ function envNamesPossiblyReadBy(paths: string[]): Set<string> {
   for (const path of paths) {
     const source = withoutComments(readFileSync(path, 'utf8'));
     for (const match of source.matchAll(/process\.env\.([A-Z0-9_]+)/g)) found.add(match[1]);
+    // Injectable config helpers read a parameter defaulted to process.env.
+    // Count those reads in the reverse scan too, so real optional defaults are
+    // not incorrectly reported as orphaned configuration.
+    if (/\benv\s*(?::[^=\n]+)?=\s*process\.env\b/.test(source)) {
+      for (const match of source.matchAll(/\benv\.([A-Z0-9_]+)/g)) found.add(match[1]);
+    }
     if (!/process\.env\[/.test(source)) continue;
     for (const match of source.matchAll(/['"]([A-Z][A-Z0-9_]{3,})['"]/g)) found.add(match[1]);
   }
