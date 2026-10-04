@@ -39,6 +39,12 @@ const MAX_URL_TTL_SECONDS = 15 * 60;
 const MAX_ROWS = 500;
 
 
+/** How a sensitive document appears on a trip every member can see. */
+const TRAVEL_DOC_KIND_TITLE: Record<VacDocKind, string> = {
+  passport: 'Passport', id: 'ID', visa: 'Visa', ticket: 'Ticket', boarding_pass: 'Boarding pass',
+  hotel_confirmation: 'Hotel confirmation', rental_confirmation: 'Rental confirmation', insurance: 'Insurance',
+  itinerary: 'Itinerary', medical: 'Medical document', other: 'Travel document',
+};
 const DOC_KINDS: VacDocKind[] = ['passport', 'id', 'visa', 'ticket', 'boarding_pass', 'hotel_confirmation', 'rental_confirmation', 'insurance', 'itinerary', 'medical', 'other'];
 
 // One definition, in `lib/documents/sensitivity` so the browser can honour it
@@ -237,7 +243,12 @@ export async function linkToVacation(scope: ServiceScope, input: LinkToVacationI
       vacation_id: input.vacationId,
       document_id: input.documentId,
       kind,
-      title: input.title?.trim() || doc.data.title,
+      // `vacation_documents` is every member's (0070, "Members manage …"), and
+      // a sensitive document's own title is the managers' (`documents_select`).
+      // Linked without a title of the parent's choosing, a sensitive document
+      // shows on the trip as what it is for — "Passport" — not as what it is
+      // called ("Custody agreement", "Passport — Dana, no. 123456789").
+      title: input.title?.trim() || (isSensitiveDocument(doc.data) ? TRAVEL_DOC_KIND_TITLE[kind] : doc.data.title),
       member_id: input.memberId ?? doc.data.member_id,
       expires_on: input.expiresOn ?? (doc.data.expires_at ? doc.data.expires_at.slice(0, 10) : null),
       created_by: scope.userId,

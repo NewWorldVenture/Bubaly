@@ -165,7 +165,10 @@ describe('linkToVacation', () => {
   it('creates the link with kind inferred, member and expiry copied from the document', async () => {
     const { db, calls } = makeDb(respond(null));
     const res = await linkToVacation(scopeWith(db), { documentId: 'd-5', vacationId: 'v-1' });
-    expect(res).toMatchObject({ ok: true, data: { created: true, link: { kind: 'passport', member_id: 'member-2', expires_on: '2028-01-01', title: 'Ava passport' } } });
+    // A passport is a sensitive document, and `vacation_documents` is every
+    // member's: the trip shows it by its kind, with whose it is carried by
+    // member_id (the-activity-feed-does-not-republish-private-records).
+    expect(res).toMatchObject({ ok: true, data: { created: true, link: { kind: 'passport', member_id: 'member-2', expires_on: '2028-01-01', title: 'Passport' } } });
     const insert = calls.find((c) => c.kind === 'insert');
     expect(insert?.payload).toMatchObject({ family_id: 'fam-1', vacation_id: 'v-1', document_id: 'd-5', created_by: 'auth-1' });
     expect(calls.filter((c) => c.kind === 'select').every((c) => c.filters.family_id === 'fam-1')).toBe(true);

@@ -13,7 +13,9 @@ import { createInMemorySupabase } from './helpers/in-memory-supabase';
 // who is not a manager, and `documents_select` does the same for sensitive
 // documents. The feed titles carried the very thing those rules hide —
 // "Remembered Medication: Sertraline 50mg", "Opened \"Custody agreement\"" —
-// so a child read it on the agents page. And any member could close any
+// so a child read it on the agents page — and a sensitive document linked to
+// a trip copied its own title into `vacation_documents`, which every member
+// reads. And any member could close any
 // entry, though "done" counts toward the time Bubaly saved the household.
 
 const FAMILY = 'fam-1';
@@ -85,6 +87,18 @@ describe('a sensitive document is not named in the feed', () => {
     expect((await readDocument(scope(), 'doc-private')).ok).toBe(true);
     expect((await linkToVacation(scope(), { documentId: 'doc-private', vacationId: 'trip-1' })).ok).toBe(true);
     expect(feed()).toEqual(['Opened a private document', 'Attached a private document to Lisbon']);
+  });
+
+  it('a private document linked to a trip shows there by its kind, not its title', async () => {
+    expect((await linkToVacation(scope(), { documentId: 'doc-private', vacationId: 'trip-1' })).ok).toBe(true);
+    const link = (db.table('vacation_documents') as Record<string, unknown>[])[0];
+    expect(link.title).toBe('Travel document');
+  });
+
+  it('control: an ordinary document keeps its title on the trip, and a title the parent types is kept', async () => {
+    expect((await linkToVacation(scope(), { documentId: 'doc-plain', vacationId: 'trip-1' })).ok).toBe(true);
+    expect((await linkToVacation(scope(), { documentId: 'doc-private', vacationId: 'trip-1', title: 'Court papers for the border' })).ok).toBe(true);
+    expect((db.table('vacation_documents') as Record<string, unknown>[]).map((r) => r.title)).toEqual(['Soccer schedule', 'Court papers for the border']);
   });
 
   it('control: an ordinary document is still named', async () => {
