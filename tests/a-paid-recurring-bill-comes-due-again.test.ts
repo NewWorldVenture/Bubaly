@@ -267,11 +267,11 @@ describe('0475 and its writers', () => {
   });
   it('both Mark paid buttons and both add forms write through the fallback, and the forms record the anchor day', () => {
     const view = read('components/finance/bills-view.tsx');
-    expect(view).toContain("(p) => createClient().from('bills').update(p).eq('id', b.id).eq('family_id', familyId).eq('due_date', b.due_date).eq('status', b.status).select('id'),");
+    expect(view).toContain("(p) => createClient().from('bills').update(p).eq('id', b.id).eq('family_id', familyId).eq('due_date', b.due_date).eq('status', b.status)\n        .eq('is_recurring', b.is_recurring).filter('recurrence', b.recurrence === null ? 'is' : 'eq', b.recurrence).select('id'),");
     expect(view).toContain('due_day: newBillDueDay(v.due_date, v.is_recurring, v.recurrence),');
     expect(view).toContain("}, (p) => createClient().from('bills').insert(p));");
     const module_ = read('components/modules/billing-module.tsx');
-    expect(module_).toContain("? supabase.from('bills').update(p).eq('id', id).eq('family_id', familyId).eq('due_date', bill.due_date).eq('status', bill.status).select('id')");
+    expect(module_).toContain("? supabase.from('bills').update(p).eq('id', id).eq('family_id', familyId).eq('due_date', bill.due_date).eq('status', bill.status)\n          .eq('is_recurring', bill.is_recurring).filter('recurrence', bill.recurrence === null ? 'is' : 'eq', bill.recurrence).select('id')");
     expect(module_).toContain(": supabase.from('bills').update(p).eq('id', id).eq('family_id', familyId).select('id')),");
     expect(module_).toContain('due_day: newBillDueDay(dueDate, isRecurring, recurrence),');
     expect(module_).toContain("}, (p) => supabase.from('bills').insert(p));");

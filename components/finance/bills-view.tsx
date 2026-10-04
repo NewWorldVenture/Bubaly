@@ -81,9 +81,12 @@ export function BillsView({ mode }: { mode: BillsMode }) {
     // The write is a compare-and-set on the row this button saw: two clicks on a
     // stale list (or two people) would otherwise each roll the bill a month, and
     // an occurrence would be skipped. The second finds no row and is told so.
+    // The cadence the patch was stepped by is part of what was seen: a bill
+    // whose cadence changed under the button is not rolled on the old one.
     const { data: rows, error } = await writeBillPatch(
       patch,
-      (p) => createClient().from('bills').update(p).eq('id', b.id).eq('family_id', familyId).eq('due_date', b.due_date).eq('status', b.status).select('id'),
+      (p) => createClient().from('bills').update(p).eq('id', b.id).eq('family_id', familyId).eq('due_date', b.due_date).eq('status', b.status)
+        .eq('is_recurring', b.is_recurring).filter('recurrence', b.recurrence === null ? 'is' : 'eq', b.recurrence).select('id'),
       { confirmClampedDay: (refusal) => askConfirm(dueDayNotKeptQuestion(refusal, t, fmtDueDate, locale.code)) },
     );
     if (isDueDayNotKept(error)) { toastError(t('bills.dueDayNeedsDatabaseUpdate', { day: error.day })); return; }

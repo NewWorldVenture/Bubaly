@@ -43,9 +43,20 @@ export const MONTH_BASED_CADENCES: ReadonlySet<BillCadence> = new Set<BillCadenc
  * is on — rather than silently treated as a one-off that a payment closes.
  */
 export function billCadence(bill: Pick<RecurringBillLike, 'is_recurring' | 'recurrence'>): BillCadence | null {
-  const named = bill.recurrence ? CADENCES[bill.recurrence.toLowerCase()] ?? null : null;
+  const named = namedCadence(bill.recurrence);
   if (named) return named;
   return bill.is_recurring ? 'monthly' : null;
+}
+
+/**
+ * A stored cadence name, read the way a person would: case and surrounding
+ * space ignored. Only the table's own names count: `recurrence` is free text,
+ * and a plain lookup also answers for `constructor`, `toString` and the rest
+ * of Object.prototype (a function, not a cadence).
+ */
+function namedCadence(name: string | null | undefined): BillCadence | null {
+  const key = name?.trim().toLowerCase() ?? '';
+  return Object.hasOwn(CADENCES, key) ? CADENCES[key] : null;
 }
 
 const DAY_KEY = /^(\d{4})-(\d{2})-(\d{2})/;
@@ -118,10 +129,36 @@ export function nextBillDueDate(dueDate: string, cadence: BillCadence, today: st
   const day = isAnchorDay(anchorDay) ? anchorDay : anchor[2];
   const due = dueDate.slice(0, 10);
   const floor = parseDayKey(today) && today.slice(0, 10) > due ? today.slice(0, 10) : due;
-  // Day keys compare as text. 5000 weekly steps is close to a century.
-  for (let n = 1; n <= 5000; n += 1) {
+  return firstStepAfter(anchor, cadence, floor, day, false);
+}
+
+/**
+ * The first occurrence of the series anchored at `anchor`, one step or more
+ * from it, that falls after `floor` (or on it, when `onFloor`). It starts at
+ * the last step that cannot be past the floor rather than walking from the
+ * anchor, so a series whose date went stale decades ago is caught up in a
+ * step or two: a walk with a cap left a weekly bill a century stale with no
+ * next date, and Mark paid then closed it for good.
+ */
+function firstStepAfter(anchor: [number, number, number], cadence: BillCadence, floor: string, day: number, onFloor: boolean): string | null {
+  const end = parseDayKey(floor);
+  if (!end) return null;
+  let start: number;
+  if (cadence === 'weekly' || cadence === 'biweekly') {
+    // Occurrence n is n periods of days on: below floor(days / period) it is
+    // before the floor.
+    const days = Math.round((Date.UTC(...end) - Date.UTC(...anchor)) / 86_400_000);
+    start = Math.floor(days / (cadence === 'weekly' ? 7 : 14));
+  } else {
+    // Occurrence n falls in the month n periods on: below floor(months /
+    // period) that month is before the floor's.
+    const months = (end[0] - anchor[0]) * 12 + (end[1] - anchor[1]);
+    start = Math.floor(months / (cadence === 'monthly' ? 1 : cadence === 'quarterly' ? 3 : 12));
+  }
+  // From there the floor is passed within two steps; three is a margin.
+  for (let n = Math.max(1, start); n <= Math.max(1, start) + 3; n += 1) {
     const next = stepFrom(anchor, cadence, n, day);
-    if (next > floor) return next;
+    if (onFloor ? next >= floor : next > floor) return next;
   }
   return null;
 }
@@ -326,7 +363,7 @@ export function dueDayNotKeptQuestion(
 
 /** The cadence a subscription is billed on: the module's four plus the forecast's aliases; anything else reads as monthly, as the forecast does. */
 export function subscriptionCadence(cadence: string | null | undefined): BillCadence {
-  return (cadence ? CADENCES[cadence.toLowerCase()] : undefined) ?? 'monthly';
+  return namedCadence(cadence) ?? 'monthly';
 }
 
 /**
@@ -341,11 +378,7 @@ export function nextOccurrenceOnOrAfter(anchor: string, cadence: BillCadence, to
   const from = anchor.slice(0, 10);
   const floor = parseDayKey(today) ? today.slice(0, 10) : from;
   if (from >= floor) return from;
-  for (let n = 1; n <= 5000; n += 1) {
-    const next = stepFrom(start, cadence, n);
-    if (next >= floor) return next;
-  }
-  return null;
+  return firstStepAfter(start, cadence, floor, start[2], true);
 }
 
 /**
