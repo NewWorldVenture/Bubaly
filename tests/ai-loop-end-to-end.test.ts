@@ -73,11 +73,13 @@ const db: InMemorySupabase = createInMemorySupabase({
   },
 });
 const client = db as unknown as SupabaseClient<Database>;
+// The continuation worker uses the privileged role, which has no auth.uid().
+const serviceClient = db.asRole('service_role') as unknown as SupabaseClient<Database>;
 
 // The executor, the continuation and the intake resolve the service client
 // themselves; every one of them must land on the same in-memory tables.
 vi.mock('@/lib/supabase/server', () => ({
-  createServiceClient: () => client,
+  createServiceClient: () => serviceClient,
   createServer: async () => client,
 }));
 
@@ -180,7 +182,7 @@ describe('Ask Bubaly → plan → run → household rows → run page (scripted 
 
   it('executes the run through the real executor, tools and services, and parks at the follow-up', async () => {
     const { continueRun } = await import('@/lib/ai/runs/continue');
-    const result = await continueRun(runId, { budgetMs: 60_000, db: client });
+    const result = await continueRun(runId, { budgetMs: 60_000, db: serviceClient });
     expect(result.claimed).toBe(true);
     expect(result.failed).toBe(0);
 
@@ -242,7 +244,7 @@ describe('Ask Bubaly → plan → run → household rows → run page (scripted 
   it('refuses to run the follow-up before it is due: a second continuation claims nothing', async () => {
     const { continueRun } = await import('@/lib/ai/runs/continue');
     const before = db.table('ai_tool_calls').length;
-    const again = await continueRun(runId, { budgetMs: 60_000, db: client });
+    const again = await continueRun(runId, { budgetMs: 60_000, db: serviceClient });
     expect(again.claimed).toBe(false);
     expect(again.status).toBe('scheduled_followup');
     expect(db.table('ai_tool_calls')).toHaveLength(before);
@@ -257,7 +259,7 @@ describe('Ask Bubaly → plan → run → household rows → run page (scripted 
 
     const { continueRun } = await import('@/lib/ai/runs/continue');
     const before = db.table('ai_tool_calls').length;
-    const result = await continueRun(runId, { budgetMs: 60_000, db: client });
+    const result = await continueRun(runId, { budgetMs: 60_000, db: serviceClient });
     expect(result.claimed).toBe(true);
     expect(result.status).toBe('completed');
 
@@ -275,7 +277,7 @@ describe('Ask Bubaly → plan → run → household rows → run page (scripted 
     expect(events[events.length - 1]).toBe('run_completed');
 
     // A completed run is never picked up again.
-    const once = await continueRun(runId, { budgetMs: 60_000, db: client });
+    const once = await continueRun(runId, { budgetMs: 60_000, db: serviceClient });
     expect(once.claimed).toBe(false);
     expect(once.status).toBe('completed');
   });
@@ -314,7 +316,7 @@ describe('Ask Bubaly → plan → run → household rows → run page (scripted 
       id: forged, family_id: FAMILY, plan_id: planId, request_id: null, requested_by_member_id: PARENT,
       run_type: 'concierge', state: 'ready', status: 'ready', created_by: USER, run_after: NOW.toISOString(),
     });
-    const first = await continueRun(forged, { budgetMs: 60_000, db: client });
+    const first = await continueRun(forged, { budgetMs: 60_000, db: serviceClient });
     expect(first.status).not.toBe('completed');
     expect(['blocked', 'failed']).toContain(db.table('family_automation_runs').find((r) => r.id === forged)?.state);
 
@@ -323,7 +325,7 @@ describe('Ask Bubaly → plan → run → household rows → run page (scripted 
       id: mismatched, family_id: FAMILY, plan_id: planId, request_id: requestId, requested_by_member_id: CHILD,
       run_type: 'concierge', state: 'ready', status: 'ready', created_by: USER, run_after: NOW.toISOString(),
     });
-    await continueRun(mismatched, { budgetMs: 60_000, db: client });
+    await continueRun(mismatched, { budgetMs: 60_000, db: serviceClient });
     expect(['blocked', 'failed']).toContain(db.table('family_automation_runs').find((r) => r.id === mismatched)?.state);
     expect(db.table('ai_tool_calls')).toHaveLength(ledgerBefore);
   });

@@ -17,6 +17,7 @@ import {
   isDayKey,
   parseIngredients,
   planWeek,
+  removeSlot,
   setSlot,
   weekDayKeys,
 } from '@/lib/services/meals';
@@ -96,20 +97,6 @@ function memoryDb() {
 }
 
 /** Intercept one public builder operation while retaining real filter/readback behavior. */
-function intercept(db: ReturnType<typeof memoryDb>, tableName: string,
-  operation: 'insert' | 'delete' | 'select', handle: (builder: Record<string, unknown>, args: unknown[]) => void) {
-  const realFrom = db.from.bind(db);
-  vi.spyOn(db, 'from').mockImplementation(((table: string) => {
-    const builder = realFrom(table);
-    if (table === tableName) {
-      const target = builder as unknown as Record<string, unknown>;
-      const original = target[operation] as (...args: unknown[]) => unknown;
-      target[operation] = (...args: unknown[]) => { const result = original.apply(builder, args); handle(target, args); return result; };
-    }
-    return builder;
-  }) as typeof db.from);
-}
-
 describe('pure helpers', () => {
   it('produces seven consecutive UTC-safe day keys', () => {
     expect(weekDayKeys('2026-09-07')).toEqual([
@@ -199,134 +186,156 @@ describe('ensureMealByName', () => {
   });
 });
 
-describe('planWeek / setSlot persistence', () => {
-  const previous = (id = 'previous', mealType = 'dinner', date = '2026-09-07') => ({
-    id, family_id: 'fam-1', meal_id: 'old-meal', plan_date: date, meal_type: mealType, created_by: 'auth-user-1',
+describe('planWeek / setSlot atomic persistence', () => {
+  const plannedRow = (overrides: Record<string, unknown> = {}) => ({
+    id: 'planned-1', family_id: 'fam-1', meal_id: 'tacos', plan_date: '2026-09-07', meal_type: 'dinner',
+    created_by: 'auth-user-1', idempotency_key: null, created_at: NOW.toISOString(), updated_at: NOW.toISOString(), ...overrides,
   });
-  const deny = (builder: Record<string, unknown>) => {
-    builder.then = (resolve: (value: Reply) => void) => resolve({ data: null, error: { code: '42501', message: 'permission denied' } });
-  };
+  const plannedSlot = { id: 'planned-1', date: '2026-09-07', mealType: 'dinner', mealId: 'tacos', name: 'Tacos',
+    ingredients: [{ name: 'tortilla', quantity: '8', unit: null }] };
+  const entries = [{ date: '2026-09-07', mealType: 'dinner' as const, mealId: 'tacos' }];
+
+  function atomicDb(options: { rpcData?: unknown; rpcError?: unknown; readback?: unknown[] } = {}) {
+    const saved = options.readback ?? [plannedRow()];
+    return makeDb((call) => {
+      if (call.table === 'meals' && call.filters.id === 'tacos') return { data: MEAL('tacos', 'Tacos', [{ name: 'tortilla', qty: '8' }]), error: null };
+      if (call.table === 'meals' && Array.isArray(call.filters.id)) return { data: [MEAL('tacos', 'Tacos', [{ name: 'tortilla', qty: '8' }])], error: null };
+      if (call.table === 'rpc:meal_plan_replace_slots') return { data: Object.hasOwn(options, 'rpcData') ? options.rpcData : { planned: [plannedRow()], replaced: 1, replayed: false }, error: options.rpcError ?? null };
+      if (call.table === 'rpc:meal_plan_remove_slot') return { data: Object.hasOwn(options, 'rpcData') ? options.rpcData : { id: 'planned-1', plan_date: '2026-09-07', meal_type: 'dinner', replayed: false }, error: options.rpcError ?? null };
+      if (call.table === 'meal_plans') return { data: saved, error: null };
+      return { data: null, error: null };
+    });
+  }
 
   it('rejects malformed entries, conflicting sources, invalid links and duplicate slots before writes', async () => {
-    const db = memoryDb();
+    const { db, calls } = makeDb(() => ({ data: null, error: null }));
     const invalid = [[], [null], [{ date: 'monday', mealName: 'Tacos' }], [{ date: '2026-09-07' }],
       [{ date: '2026-09-07', mealId: 'a', mealName: 'Tacos' }], [{ date: '2026-09-07', recipeId: 'r', ingredients: [] }],
       [{ date: '2026-09-07', mealName: 42 }], [{ date: '2026-09-07', mealName: 'Tacos', ingredients: [null] }],
       [{ date: '2026-09-07', mealName: 'Tacos', recipeUrl: 'javascript:alert(1)' }],
       [{ date: '2026-09-07', mealName: 'Tacos' }, { date: '2026-09-07', mealName: 'Curry' }]];
-    for (const entries of invalid) expect(await planWeek(scopeWith(db), entries as never)).toMatchObject({ ok: false, code: 'invalid_input' });
-    expect(db.log).toHaveLength(0);
+    for (const input of invalid) expect(await planWeek(scopeWith(db), input as never)).toMatchObject({ ok: false, code: 'invalid_input' });
+    expect(calls).toHaveLength(0);
   });
 
-  it('replaces exact slots, preserves unrelated and foreign rows, and returns persisted ingredient details', async () => {
-    const db = memoryDb();
-    db.seed('meals', [MEAL('tacos', 'Tacos', [{ name: 'tortilla', qty: '8', unit: null }])]);
-    db.seed('meal_plans', [previous(), previous('unrelated', 'lunch'), { ...previous('foreign'), family_id: 'other' }]);
-    const result = await planWeek(scopeWith(db, { actorKind: 'ai' }), [
-      { date: '2026-09-07', mealType: 'dinner', mealId: 'tacos' },
-      { date: '2026-09-09', mealType: 'lunch', mealName: 'Curry', ingredients: [{ name: 'rice', quantity: '1/2', unit: 'cup' }] },
-    ]);
-    expect(result.ok, result.ok ? '' : result.error).toBe(true);
-    if (!result.ok) return;
-    expect(result.data).toMatchObject({ replaced: 1, createdMeals: 1, planned: [
-      { date: '2026-09-07', mealType: 'dinner', name: 'Tacos', ingredients: [{ name: 'tortilla', quantity: '8', unit: null }] },
-      { date: '2026-09-09', mealType: 'lunch', name: 'Curry', ingredients: [{ name: 'rice', quantity: '1/2', unit: 'cup' }] },
-    ] });
-    expect(db.table('meal_plans').map((row) => row.id)).toEqual(expect.arrayContaining(['unrelated', 'foreign', ...result.data.planned.map((slot) => slot.id)]));
-    expect(db.table('meal_plans')).toHaveLength(4);
-    expect(db.table('agent_activity')).toHaveLength(1);
-  });
-
-  it('restores captured IDs after a later meal-type deletion fails', async () => {
-    const db = memoryDb();
-    db.seed('meals', [MEAL('tacos', 'Tacos')]);
-    db.seed('meal_plans', [previous(), previous('lunch-old', 'lunch')]);
-    let deletes = 0;
-    intercept(db, 'meal_plans', 'delete', (builder) => { if (++deletes === 2) deny(builder); });
-    const result = await planWeek(scopeWith(db), [
-      { date: '2026-09-07', mealType: 'dinner', mealId: 'tacos' },
-      { date: '2026-09-07', mealType: 'lunch', mealId: 'tacos' },
-    ]);
-    expect(result.ok).toBe(false);
-    expect(db.table('meal_plans')).toHaveLength(2);
-    expect(db.table('meal_plans')).toEqual(expect.arrayContaining([
-      expect.objectContaining(previous()), expect.objectContaining(previous('lunch-old', 'lunch')),
-    ]));
-  });
-
-  it('restores previous slots and removes unreferenced created dishes after an insert failure', async () => {
-    const db = memoryDb();
-    db.seed('meal_plans', [previous()]);
-    let inserts = 0;
-    intercept(db, 'meal_plans', 'insert', (builder) => { if (++inserts === 1) deny(builder); });
-    const result = await planWeek(scopeWith(db), [{ date: '2026-09-07', mealName: 'Curry' }]);
-    expect(result.ok).toBe(false);
-    expect(db.table('meal_plans')).toEqual([expect.objectContaining(previous())]);
-    expect(db.table('meals')).toHaveLength(0);
-    expect(db.table('agent_activity')).toHaveLength(0);
-  });
-
-  it('refuses equal-count but incorrect insert receipts and restores the previous slot', async () => {
-    const db = memoryDb();
-    db.seed('meals', [MEAL('tacos', 'Tacos')]);
-    db.seed('meal_plans', [previous()]);
-    let inserts = 0;
-    intercept(db, 'meal_plans', 'insert', (builder) => {
-      if (++inserts !== 1) return;
-      const originalThen = builder.then as (resolve: (reply: Reply) => void) => unknown;
-      builder.then = (resolve: (reply: Reply) => void) => originalThen.call(builder, (reply) => resolve({ ...reply,
-        data: (reply.data as Record<string, unknown>[]).map((row) => ({ ...row, meal_id: 'wrong' })),
-      }));
+  it('replaces the precise requested slots through the atomic RPC and confirms the stored meal details', async () => {
+    const { db, calls } = atomicDb();
+    const result = await planWeek(scopeWith(db, { actorKind: 'ai' }), entries, 'retryable-request');
+    expect(result).toMatchObject({ ok: true, data: { replaced: 1, createdMeals: 0, planned: [plannedSlot] } });
+    expect(calls.find((call) => call.table === 'rpc:meal_plan_replace_slots')?.filters).toEqual({
+      p_family_id: 'fam-1', p_request_id: 'retryable-request',
+      p_entries: [{ meal_id: 'tacos', plan_date: '2026-09-07', meal_type: 'dinner' }],
     });
-    expect((await setSlot(scopeWith(db), { date: '2026-09-07', mealId: 'tacos' })).ok).toBe(false);
-    expect(db.table('meal_plans')).toEqual([expect.objectContaining(previous())]);
+    expect(calls.some((call) => call.table === 'meal_plans' && (call.kind === 'insert' || call.kind === 'delete'))).toBe(false);
   });
 
-  it('reports missing persisted rows despite a successful insert receipt', async () => {
-    const db = memoryDb();
-    db.seed('meals', [MEAL('tacos', 'Tacos')]);
-    intercept(db, 'meal_plans', 'insert', (builder) => {
-      const originalThen = builder.then as (resolve: (reply: Reply) => void) => unknown;
-      builder.then = (resolve: (reply: Reply) => void) => originalThen.call(builder, (reply) => {
-        db.table('meal_plans').splice(0); resolve(reply);
-      });
+  it('uses a stable receipt key derived from the scoped AI request on retry', async () => {
+    const { db, calls } = atomicDb();
+    const scope = scopeWith(db, { actorKind: 'ai', requestId: 'originating-request' });
+    const first = await planWeek(scope, entries);
+    const second = await planWeek(scope, entries);
+    expect(first.ok).toBe(true);
+    expect(second.ok).toBe(true);
+    const requestIds = calls.filter((call) => call.table === 'rpc:meal_plan_replace_slots').map((call) => call.filters.p_request_id);
+    expect(requestIds).toHaveLength(2);
+    expect(requestIds[0]).toBe(requestIds[1]);
+  });
+
+  it('keeps the request key fixed when the scoped retry payload changes', async () => {
+    const { db, calls } = atomicDb();
+    const scope = scopeWith(db, { actorKind: 'ai', idempotencyKey: 'tool-call-key' });
+    await planWeek(scope, entries);
+    await planWeek(scope, [{ ...entries[0], date: '2026-09-08' }]);
+    const requestIds = calls.filter((call) => call.table === 'rpc:meal_plan_replace_slots').map((call) => call.filters.p_request_id);
+    expect(requestIds).toHaveLength(2);
+    expect(requestIds[0]).toBe(requestIds[1]);
+  });
+
+  it('reports an unknown RPC result without compensating or deleting newly resolved dishes', async () => {
+    const { db, calls } = atomicDb({ rpcError: { message: 'connection lost after commit' } });
+    const result = await planWeek(scopeWith(db), entries, 'lost-response-key');
+    expect(result).toMatchObject({ ok: false, code: 'db', error: expect.stringContaining('Refresh') });
+    expect(calls.filter((call) => call.table === 'meal_plans' && (call.kind === 'insert' || call.kind === 'delete'))).toEqual([]);
+    expect(calls.some((call) => call.table === 'rpc:meal_plan_replace_slots')).toBe(true);
+  });
+
+  it.each([
+    ['null response', null], ['missing planned rows', { replaced: 0, replayed: false }],
+    ['non-array planned rows', { planned: {}, replaced: 0, replayed: false }],
+    ['empty planned rows', { planned: [], replaced: 0, replayed: false }],
+    ['negative replaced count', { planned: [plannedRow()], replaced: -1, replayed: false }],
+    ['fractional replaced count', { planned: [plannedRow()], replaced: 1.5, replayed: false }],
+    ['missing replay state', { planned: [plannedRow()], replaced: 1 }],
+    ['wrong family', { planned: [plannedRow({ family_id: 'foreign' })], replaced: 1, replayed: false }],
+    ['wrong actor', { planned: [plannedRow({ created_by: 'other-user' })], replaced: 1, replayed: false }],
+    ['wrong meal', { planned: [plannedRow({ meal_id: 'other-meal' })], replaced: 1, replayed: false }],
+    ['wrong date', { planned: [plannedRow({ plan_date: '2026-09-08' })], replaced: 1, replayed: false }],
+    ['wrong meal type', { planned: [plannedRow({ meal_type: 'snack' })], replaced: 1, replayed: false }],
+    ['empty ID', { planned: [plannedRow({ id: '' })], replaced: 1, replayed: false }],
+  ])('refuses malformed or mismatched atomic receipt: %s', async (_label, rpcData) => {
+    const { db, calls } = atomicDb({ rpcData });
+    const result = await planWeek(scopeWith(db), entries, 'malformed-result');
+    expect(result).toMatchObject({ ok: false, code: 'db', error: expect.stringContaining('Refresh') });
+    expect(calls.some((call) => call.table === 'rpc:meal_plan_replace_slots')).toBe(true);
+    expect(calls.some((call) => call.table === 'agent_activity' || call.table === 'audit_logs')).toBe(false);
+  });
+
+  it('does not report success or perform rollback if the post-commit confirmation differs', async () => {
+    const { db, calls } = atomicDb({ readback: [] });
+    const result = await planWeek(scopeWith(db), entries, 'readback-mismatch');
+    expect(result).toMatchObject({ ok: false, code: 'db', error: expect.stringContaining('Refresh') });
+    expect(calls.some((call) => call.table === 'meal_plans' && (call.kind === 'insert' || call.kind === 'delete'))).toBe(false);
+    expect(calls.some((call) => call.table === 'audit_logs')).toBe(false);
+  });
+
+  it('setSlot exposes the same persisted ID and replacement status as planWeek', async () => {
+    const result = await setSlot(scopeWith(atomicDb().db), entries[0], 'stable-slot-request');
+    expect(result).toMatchObject({ ok: true, data: { ...plannedSlot, replaced: true } });
+  });
+
+  it('removeSlot requires a valid exact-ID receipt and records activity only on first commit', async () => {
+    const { db, calls } = atomicDb();
+    const result = await removeSlot(scopeWith(db), 'planned-1', 'remove-request');
+    expect(result).toEqual({ ok: true, data: { id: 'planned-1' } });
+    expect(calls.find((call) => call.table === 'rpc:meal_plan_remove_slot')?.filters).toMatchObject({
+      p_family_id: 'fam-1', p_request_id: 'remove-request', p_plan_id: 'planned-1',
     });
-    expect((await setSlot(scopeWith(db), { date: '2026-09-07', mealId: 'tacos' })).ok).toBe(false);
-    expect(db.table('agent_activity')).toHaveLength(0);
+    expect(calls.filter((call) => call.table === 'audit_logs')).toHaveLength(1);
+
+    const bad = atomicDb({ rpcData: { id: 'somebody-elses-plan', replayed: false } });
+    expect(await removeSlot(scopeWith(bad.db), 'planned-1', 'bad-remove')).toMatchObject({ ok: false, code: 'db' });
+
+    const changedTarget = atomicDb();
+    const keyedScope = scopeWith(changedTarget.db, { idempotencyKey: 'remove-tool-call' });
+    await removeSlot(keyedScope, 'planned-1');
+    await removeSlot(keyedScope, 'different-plan');
+    const requestIds = changedTarget.calls.filter((call) => call.table === 'rpc:meal_plan_remove_slot').map((call) => call.filters.p_request_id);
+    expect(requestIds).toHaveLength(2);
+    expect(requestIds[0]).toBe(requestIds[1]);
   });
 
-  it('does not erase a competing newer row while compensating for a failed insertion', async () => {
-    const db = memoryDb();
-    db.seed('meals', [MEAL('tacos', 'Tacos')]);
-    db.seed('meal_plans', [previous()]);
-    let inserts = 0;
-    intercept(db, 'meal_plans', 'insert', (builder) => {
-      if (++inserts !== 1) return;
-      db.seed('meal_plans', [{ ...previous('newer'), meal_id: 'newer-meal' }]);
-      deny(builder);
-    });
-    const result = await setSlot(scopeWith(db), { date: '2026-09-07', mealId: 'tacos' });
-    expect(result).toMatchObject({ ok: false, error: expect.stringContaining('refresh') });
-    expect(db.table('meal_plans')).toEqual([expect.objectContaining({ id: 'newer', meal_id: 'newer-meal' })]);
+  it.each([
+    ['missing date', { id: 'planned-1', meal_type: 'dinner', replayed: false }],
+    ['null date', { id: 'planned-1', plan_date: null, meal_type: 'dinner', replayed: false }],
+    ['numeric date', { id: 'planned-1', plan_date: 20260907, meal_type: 'dinner', replayed: false }],
+    ['impossible date', { id: 'planned-1', plan_date: '2026-02-30', meal_type: 'dinner', replayed: false }],
+    ['missing type', { id: 'planned-1', plan_date: '2026-09-07', replayed: false }],
+    ['null type', { id: 'planned-1', plan_date: '2026-09-07', meal_type: null, replayed: false }],
+    ['numeric type', { id: 'planned-1', plan_date: '2026-09-07', meal_type: 3, replayed: false }],
+    ['unknown type', { id: 'planned-1', plan_date: '2026-09-07', meal_type: 'brunch', replayed: false }],
+  ])('removeSlot refuses incomplete receipt fields: %s before recording activity', async (_label, rpcData) => {
+    const { db, calls } = atomicDb({ rpcData });
+    expect(await removeSlot(scopeWith(db), 'planned-1', 'incomplete-remove')).toMatchObject({ ok: false, code: 'db' });
+    expect(calls.some((call) => call.table === 'rpc:meal_plan_remove_slot')).toBe(true);
+    expect(calls.some((call) => call.table === 'agent_activity' || call.table === 'audit_logs')).toBe(false);
   });
 
-  it('stops before clearing when a snapshot read fails', async () => {
-    const db = memoryDb();
-    db.seed('meal_plans', [previous()]);
-    intercept(db, 'meal_plans', 'select', (builder) => deny(builder));
-    expect((await setSlot(scopeWith(db), { date: '2026-09-07', mealName: 'Curry' })).ok).toBe(false);
-    expect(db.table('meal_plans')).toEqual([expect.objectContaining(previous())]);
+  it('rejects a non-string remove request ID before calling the RPC', async () => {
+    const { db, calls } = atomicDb();
+    expect(await removeSlot(scopeWith(db), 'planned-1', 42 as never)).toMatchObject({ ok: false, code: 'invalid_input' });
+    expect(calls.some((call) => call.table === 'rpc:meal_plan_remove_slot')).toBe(false);
   });
-
-  it('setSlot reports replacement and returns its persisted ID', async () => {
-    const db = memoryDb();
-    db.seed('meal_plans', [previous()]);
-    const result = await setSlot(scopeWith(db), { date: '2026-09-07', mealName: 'Tacos' });
-    expect(result.ok, result.ok ? '' : result.error).toBe(true);
-    if (result.ok) expect(result.data).toMatchObject({ id: db.table('meal_plans')[0].id, date: '2026-09-07', mealType: 'dinner', name: 'Tacos', replaced: true });
-  });
-});
-describe('getMealPlan', () => {
+});describe('getMealPlan', () => {
   it('joins dishes onto the week and sorts by day then meal', async () => {
     const { db, calls } = makeDb((call) => {
       if (call.table === 'meal_plans') {

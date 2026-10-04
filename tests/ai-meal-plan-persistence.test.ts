@@ -31,10 +31,11 @@ const request = (overrides: Record<string, unknown> = {}) => new Request('https:
 
 beforeEach(() => {
   vi.clearAllMocks();
-  db = createInMemorySupabase<SupabaseClient<Database>>({ defaults: {
+  db = createInMemorySupabase<SupabaseClient<Database>>({ userId: 'user-one', defaults: {
     meals: { ingredients: [], recipe_url: null, image_url: null, meal_type: 'dinner' },
     meal_plans: { idempotency_key: null },
   } });
+  db.seed('family_members', [{ id: 'member-one', family_id: FAMILY, user_id: 'user-one', role: 'parent', is_active: true }]);
   db.seed('meals', [
     { id: 'rice-old', family_id: FAMILY, name: 'Rice', ingredients: [{ name: 'brown rice', qty: '1', unit: 'cup' }] },
     { id: 'soup', family_id: FAMILY, name: 'Soup', ingredients: [{ name: 'carrots', qty: '2', unit: null }] },
