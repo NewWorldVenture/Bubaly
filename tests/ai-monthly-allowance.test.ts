@@ -20,21 +20,16 @@ vi.mock('@/lib/server/feature-tiers', () => ({
   getFeatureTiersByHref: vi.fn(),
 }));
 
-/** A db whose `ai_requests` count answers with whatever this test wants. */
-function db(count: number | null, error: unknown = null) {
+/** The count-only transport. A raw private-row read fails the test. */
+function db(count: unknown, error: unknown = null) {
   const calls: { table: string; filters: Array<[string, unknown]> }[] = [];
-  const make = (table: string) => {
-    const entry = { table, filters: [] as Array<[string, unknown]> };
-    calls.push(entry);
-    const chain: Record<string, unknown> = {
-      select: () => chain,
-      eq: (col: string, val: unknown) => { entry.filters.push([col, val]); return chain; },
-      gte: (col: string, val: unknown) => { entry.filters.push([col, val]); return chain; },
-      then: (resolve: (v: unknown) => unknown) => resolve({ count, error }),
-    };
-    return chain;
-  };
-  return { client: { from: (t: string) => make(t) } as never, calls };
+  return { client: {
+    from: () => { throw new Error('Quota must not read private request rows'); },
+    rpc: async (name: string, args: Record<string, unknown>) => {
+      calls.push({ table: name, filters: Object.entries(args) });
+      return { data: count, error };
+    },
+  } as never, calls };
 }
 
 const ctx = (email = 'parent@example.com') => ({
@@ -84,11 +79,11 @@ describe('the Free plan gets the ten requests it was sold', () => {
     const { assertAIAccess, AI_ASSISTANT_FEATURE_KEY } = await import('@/lib/server/ai-access');
     const { client, calls } = db(1);
     await assertAIAccess(ctx(), { db: client, now: NOW, featureKey: AI_ASSISTANT_FEATURE_KEY });
-    const query = calls.find((c) => c.table === 'ai_requests');
-    expect(query, 'no ai_requests count was issued').toBeTruthy();
+    const query = calls.find((c) => c.table === 'count_family_ai_requests_month');
+    expect(query, 'no protected household count was issued').toBeTruthy();
     const columns = query!.filters.map(([c]) => c);
-    expect(columns).toContain('family_id');
-    expect(columns).toContain('created_at');
+    expect(columns).toContain('p_family_id');
+    expect(columns).toContain('p_month_start');
     expect(columns, 'a kind filter would exclude every assistant turn').not.toContain('kind');
   });
 
@@ -96,7 +91,7 @@ describe('the Free plan gets the ten requests it was sold', () => {
     const { assertAIAccess, AI_ASSISTANT_FEATURE_KEY } = await import('@/lib/server/ai-access');
     const { client, calls } = db(1);
     await assertAIAccess(ctx(), { db: client, now: NOW, featureKey: AI_ASSISTANT_FEATURE_KEY });
-    const since = calls.find((c) => c.table === 'ai_requests')!.filters.find(([c]) => c === 'created_at')![1];
+    const since = calls.find((c) => c.table === 'count_family_ai_requests_month')!.filters.find(([c]) => c === 'p_month_start')![1];
     expect(since).toBe('2026-09-01T00:00:00.000Z');
   });
 });
@@ -108,7 +103,7 @@ describe('the plans above Free are unlimited, and cost nothing to check', () => 
     const { client, calls } = db(9999);
     const access = await assertAIAccess(ctx(), { db: client, now: NOW, featureKey: AI_ASSISTANT_FEATURE_KEY });
     expect(access).toMatchObject({ ok: true, monthlyAllowance: null, monthlyUsed: null });
-    expect(calls.some((c) => c.table === 'ai_requests'), 'an unlimited plan should not pay for a count').toBe(false);
+    expect(calls, 'an unlimited plan should not pay for a count').toEqual([]);
   });
 
   it('treats a super-admin as unlimited whatever their family plan', async () => {
@@ -116,6 +111,49 @@ describe('the plans above Free are unlimited, and cost nothing to check', () => 
     const { client } = db(9999);
     const access = await assertAIAccess(ctx('daniel.hughen@gmail.com'), { db: client, now: NOW, featureKey: AI_ASSISTANT_FEATURE_KEY });
     expect(access).toMatchObject({ ok: true, monthlyAllowance: null });
+  });
+});
+
+describe('private requests keep household quota enforceable', () => {
+  it('denies a child when siblings and system requests exhausted the household allowance', async () => {
+    const { assertAIAccess, AI_ASSISTANT_FEATURE_KEY } = await import('@/lib/server/ai-access');
+    const { client, calls } = db(11);
+    const child = { user: { id: 'child-user', email: 'child@example.test' }, memberships: [],
+      active: { familyId: 'fam-1', role: 'child', family: { name: 'Fam' } } } as never;
+    expect(await assertAIAccess(child, { db: client, now: NOW, featureKey: AI_ASSISTANT_FEATURE_KEY }))
+      .toMatchObject({ ok: false, status: 429, code: 'allowance_exceeded' });
+    expect(calls[0].filters).toContainEqual(['p_family_id', 'fam-1']);
+  });
+
+  it.each([null, undefined, '0', {}, [], -1, 0.5, NaN, Infinity, Number.MAX_SAFE_INTEGER + 1])
+    ('fails closed on an invalid count receipt (%j)', async receipt => {
+      const { assertAIAccess, AI_ASSISTANT_FEATURE_KEY } = await import('@/lib/server/ai-access');
+      expect(await assertAIAccess(ctx(), { db: db(receipt).client, now: NOW, featureKey: AI_ASSISTANT_FEATURE_KEY }))
+        .toMatchObject({ ok: false, status: 403, code: 'unavailable' });
+    });
+
+  it('fails closed when the unapplied RPC is missing', async () => {
+    const { assertAIAccess, AI_ASSISTANT_FEATURE_KEY } = await import('@/lib/server/ai-access');
+    expect(await assertAIAccess(ctx(), { db: db(null, { code: 'PGRST202', message: 'RPC missing' }).client,
+      now: NOW, featureKey: AI_ASSISTANT_FEATURE_KEY })).toMatchObject({ ok: false, code: 'unavailable' });
+  });
+
+  it('fails closed on a rejected transport without a private-row fallback', async () => {
+    const { assertAIAccess, AI_ASSISTANT_FEATURE_KEY } = await import('@/lib/server/ai-access');
+    const client = { rpc: async () => { throw new Error('Synthetic count transport failure'); },
+      from: () => { throw new Error('Forbidden private-row fallback'); } } as never;
+    expect(await assertAIAccess(ctx(), { db: client, now: NOW, featureKey: AI_ASSISTANT_FEATURE_KEY }))
+      .toMatchObject({ ok: false, code: 'unavailable' });
+  });
+
+  it.each([
+    ['2026-10-31T23:59:59-04:00', '2026-11-01T00:00:00.000Z'],
+    ['2028-02-29T12:00:00Z', '2028-02-01T00:00:00.000Z'],
+  ])('keeps the UTC month boundary at %s', async (at, expected) => {
+    const { assertAIAccess, AI_ASSISTANT_FEATURE_KEY } = await import('@/lib/server/ai-access');
+    const { client, calls } = db(0);
+    await assertAIAccess(ctx(), { db: client, now: new Date(at), featureKey: AI_ASSISTANT_FEATURE_KEY });
+    expect(calls[0].filters).toContainEqual(['p_month_start', expected]);
   });
 });
 

@@ -506,8 +506,9 @@ describe('Supabase migration filename safety', () => {
     // (reserved for #710) withdraws an admin removed after a digest was
     // frozen. This literal tracks the checked-in high-water mark. Numbers
     // retired below 0474 cannot be reused; unpublished candidates land in order:
-    // recurring bills 0475, messaging 0476, private approval reads 0477.
-    expect(audit.nextVersion).toBe('0478');
+    // recurring bills 0475, messaging 0476, private approval reads 0477,
+    // and private AI copies with aggregate quota accounting 0478.
+    expect(audit.nextVersion).toBe('0479');
   });
 
   // A hole below the high-water mark is not a free number: `supabase db push`

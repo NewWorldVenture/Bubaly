@@ -2751,6 +2751,10 @@ export interface Database {
     Views: { [_ in never]: never };
     CompositeTypes: { [_ in never]: never };
     Functions: {
+      count_family_ai_requests_month: {
+        Args: { p_family_id: string; p_month_start: string };
+        Returns: number;
+      };
       finance_record_transaction_operation: {
         Args: { p_tool_call_id: string; p_family_id: string; p_actor_user_id: string | null; p_actor_member_id: string | null; p_actor_kind: AiActorKind; p_expected_inputs: Json; p_intent: Json; p_transaction: Json };
         Returns: Json;
