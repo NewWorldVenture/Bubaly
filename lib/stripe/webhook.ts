@@ -265,8 +265,13 @@ export async function handleTransactionCreated(
       amountCents: -amount, description: merchant, stripeRef: txn.id,
     });
     if (!debit.ok) throw new Error(debit.error ?? 'Card spend persistence failed');
-    // The captured debit now represents the spend; drop the pending hold.
-    if (authId) await releaseCardHold(supabase, authId);
+    // The captured debit now represents the spend; drop the pending hold. Only
+    // a CAPTURE does: the sign says which way money moves, the type says what
+    // the transaction is. A refund with a negative amount (a refund reversed,
+    // which Stripe documents) is debited above but must leave the purchase's
+    // hold alone — arriving before its capture, releasing it freed the held
+    // money while the capture was still to come.
+    if (authId && txn.type === 'capture') await releaseCardHold(supabase, authId);
   } else if (amount > 0) {
     // A refund leaves the purchase's hold alone. Only the capture replaces it
     // (or issuing_authorization.updated, when the authorization closes). Stripe

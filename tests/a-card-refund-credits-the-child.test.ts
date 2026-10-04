@@ -414,6 +414,37 @@ describe('the database keys the conflict handling relies on', () => {
   });
 });
 
+describe('a refund reversed (type refund, negative amount)', () => {
+  // Owner review 5979998503. Stripe documents that an Issuing transaction of
+  // type `refund` can carry a NEGATIVE amount: a refund reversed. The amount's
+  // sign decides which way money moves, so it is debited. But it is not the
+  // authorization being captured, and only a capture may release its hold:
+  // classified by sign alone, a reversal that arrived before its capture freed
+  // the held money while the capture was still to come.
+  const reversal = () => issuingTransaction({ id: 'ipi_reversal', type: 'refund', amount: -500 });
+
+  it('arriving before its capture, is debited and leaves the purchase\'s hold held', async () => {
+    expect((await deliver(reversal())).status).toBe(200);
+
+    expect(byRef('ipi_reversal')).toEqual([
+      expect.objectContaining({ type: 'card_spend', status: 'completed', direction: 'debit', amount_cents: 500, bucket_id: 'bucket-spend' }),
+    ]);
+    expect(byRef('iauth_1')).toEqual([expect.objectContaining({ id: 'txn-hold', status: 'processing', amount_cents: 2_000 })]);
+    // $50, less the $5 reversal, less the $20 still held.
+    expect(spendableCents()).toBe(5_000 - 500 - 2_000);
+  });
+
+  it('then the capture releases the hold, and the ledger ends where both events put it', async () => {
+    await deliver(reversal());
+    expect((await deliver(issuingTransaction({}))).status).toBe(200);
+
+    expect(byRef('ipi_capture')).toEqual([expect.objectContaining({ type: 'card_spend', status: 'completed', amount_cents: 2_000 })]);
+    expect(byRef('iauth_1')).toEqual([expect.objectContaining({ id: 'txn-hold', status: 'cancelled' })]);
+    expect(spendCents()).toBe(5_000 - 500 - 2_000);
+    expect(spendableCents()).toBe(5_000 - 500 - 2_000);
+  });
+});
+
 describe('a purchase is still a purchase', () => {
   it('a capture is one completed card_spend debit and releases its hold', async () => {
     expect((await deliver(issuingTransaction({}))).status).toBe(200);
