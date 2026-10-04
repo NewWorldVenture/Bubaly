@@ -4100,8 +4100,11 @@ Retiring a hole does not delete anything. These migration files remain on their 
 | 0489 | a_notification_is_written_once_per_occurrence | claude/a-notification-is-written-once-per-occurrence-20261004, claude/notifications-on-meals-composition-20261004 |
 | 0490 | a_calendar_feed_sync_writes_only_while_it_holds_its_claim | claude/apple-sync-series-master-20261003, claude/calendar-feed-fidelity-20261003, claude/calendar-recurrence-exceptions-20261003, claude/google-sync-exception-dates-20261003, claude/outlook-series-mirror-20261003, claude/outlook-series-push-20261003 |
 | 0491 | a_card_hold_and_a_top_up_do_not_deadlock | claude/wallet-lock-order-45d8k6 |
+| 0491 | preserve_recurring_bill_anchor | codex/audit-goal-followups-20261004 |
 
-The colliding pairs are 0475 (meal-plan slot writes, messaging privacy), 0476 (meal-plan delegated actors, messaging notifications) and 0477 (AI request admission, family-memory text). The month-end bill, calendar feed and messaging lanes land their migrations in that order as 0475, 0476, 0477 and 0478 (from 0488, 0490 and 0475/0476).
+The colliding pairs are 0475 (meal-plan slot writes, messaging privacy), 0476 (meal-plan delegated actors, messaging notifications), 0477 (AI request admission, family-memory text) and 0491. Two published candidates hold 0491, neither allocation confirmed: #964 at 6e250a00b928970982855fc1e856ea6d5ceba09d (card hold and top-up deadlock, closed unmerged) and draft #969 at 854a990bd24906976231024eeb6c5943ae977da7 (recurring bill anchor). #969 also covers the month-end bill and calendar items below.
+
+The landing map for this session's lanes is owner-directed: the repository owner chose it in the Claude session on 2026-10-04. It lands the month-end bill, calendar feed and messaging migrations in that order as 0475, 0476, 0477 and 0478 (from 0488, 0490 and 0475/0476). The audit coordinator has asked the owner to confirm it across sessions (#968, 5984812135), so treat it as the proposed allocation until the migrations are on main.
 
 ## `0471` and `0474` — the admin digest's delivery store, and a removed admin is not sent it
 
