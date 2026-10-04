@@ -305,7 +305,7 @@ export function FaqExplorer({ topics, popular }: { topics: FaqTopic[]; popular: 
       {!searching && (
         <nav aria-label={t('faqExplorer.browseByTopic')} className="mt-16">
           <h2 className="text-center text-xs font-semibold uppercase tracking-[0.2em] text-white/65">{t('faqExplorer.browseByTopic')}</h2>
-          <ul className="mt-6 grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
+          <ul className="mt-6 grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-3">
             {topics.map((topic) => {
               const Icon = ICONS[topic.icon];
               return (
@@ -334,7 +334,7 @@ export function FaqExplorer({ topics, popular }: { topics: FaqTopic[]; popular: 
       )}
 
       {/* Reading: side nav + every answer */}
-      <div className={cn('grid gap-10 lg:grid-cols-[240px_minmax(0,1fr)] lg:gap-14', searching ? 'mt-10' : 'mt-20')}>
+      <div className={cn('grid grid-cols-1 gap-10 lg:grid-cols-[240px_minmax(0,1fr)] lg:gap-14', searching ? 'mt-10' : 'mt-20')}>
         <aside className="hidden lg:block">
           <nav aria-label={t('faqExplorer.topicsNav')} className="sticky top-24">
             <p className="px-3 text-xs font-semibold uppercase tracking-[0.2em] text-white/65">{t('faqExplorer.topicsNav')}</p>

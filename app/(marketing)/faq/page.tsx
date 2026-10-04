@@ -227,7 +227,7 @@ export default async function FAQPage() {
       {/* Still stuck — the people and pages behind the answers */}
       <Container className="py-20">
         <section aria-labelledby="faq-help-heading" className="rounded-3xl border border-white/8 bg-white/[0.025] p-6 sm:p-10">
-          <div className="grid gap-10 lg:grid-cols-[minmax(0,0.9fr)_minmax(0,1.1fr)] lg:items-center lg:gap-14">
+          <div className="grid grid-cols-1 gap-10 lg:grid-cols-[minmax(0,0.9fr)_minmax(0,1.1fr)] lg:items-center lg:gap-14">
             <div>
               <h2 id="faq-help-heading" className="text-balance text-3xl font-black tracking-tight sm:text-4xl">{t('faq.helpTitle')}</h2>
               <p className="mt-4 text-lg leading-8 text-white/65">{t('faq.helpBody')}</p>
@@ -241,7 +241,7 @@ export default async function FAQPage() {
                 </a>
               </div>
             </div>
-            <ul className="grid gap-4 sm:grid-cols-2">
+            <ul className="grid grid-cols-1 gap-4 sm:grid-cols-2">
               {HELP_CARDS.map(({ href, icon: Icon, title, body }) => (
                 <li key={href}>
                   <Link href={href} className="group flex h-full flex-col rounded-2xl border border-white/8 bg-white/[0.03] p-5 transition hover:-translate-y-0.5 hover:border-violet-400/35 hover:bg-white/[0.05]">
