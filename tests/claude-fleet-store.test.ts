@@ -1,5 +1,5 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
-import { createClient, type Client } from '@libsql/client';
+import { createClient, type Client, type TransactionMode } from '@libsql/client';
 import { mkdtemp, rm } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
@@ -68,7 +68,7 @@ describe('durable Claude fleet store using separate SQLite clients', () => {
   async function advanceClockAfterWriteContention(nextTime: number) {
     const held = await clients[1].transaction('write');
     const acquire = clients[0].transaction.bind(clients[0]);
-    return vi.spyOn(clients[0], 'transaction').mockImplementationOnce(async (mode) => {
+    return vi.spyOn(clients[0], 'transaction').mockImplementationOnce(async (mode?: TransactionMode) => {
       try {
         // This acquisition hits a real SQLite lock held by the other client.
         return await acquire(mode);
@@ -344,7 +344,7 @@ describe('durable Claude fleet store using separate SQLite clients', () => {
     const nextTime = boundary === 'lease expiry' ? claim.leaseExpiresAt! : Date.parse('2026-10-05T00:00:00.010Z');
     const acquire = clients[0].transaction.bind(clients[0]);
     let budgetRead = false;
-    vi.spyOn(clients[0], 'transaction').mockImplementationOnce(async (mode) => {
+    vi.spyOn(clients[0], 'transaction').mockImplementationOnce(async (mode?: TransactionMode) => {
       const tx = await acquire(mode);
       const execute = tx.execute.bind(tx);
       tx.execute = async (statement) => {
