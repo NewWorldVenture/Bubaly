@@ -8,7 +8,7 @@ import { createServer } from '@/lib/supabase/server';
 import { MomentsView } from '@/components/moments/moments-view';
 import { MomentOrganizer, type OrganizerMoment } from '@/components/moments/moment-organizer';
 import { activeMoments, type MomentSignals } from '@/lib/moments/organizer';
-import { nextBirthdayDate, daysUntil } from '@/lib/moments/birthdays';
+import { birthdayCountdown } from '@/lib/moments/birthdays';
 import type { MomentDeparture } from '@/lib/moments/prep';
 import { loadScheduleIntelligence } from '@/lib/schedule/intelligence-server';
 import { loadMomentPrep } from '@/app/(app)/dashboard/moment-actions';
@@ -84,10 +84,12 @@ export default async function Page() {
     // Soonest upcoming birthday.
     let birthdayInDays: number | null = null;
     let birthdayName: string | null = null;
+    // Counted from the family's day (`todayIso`), not the host's: at 5pm in
+    // California a UTC host is already on tomorrow, and a birthday today read
+    // as 364 days away.
     for (const m of members.data ?? []) {
-      const next = m.birthday ? nextBirthdayDate(m.birthday, now) : null;
-      if (!next) continue;
-      const d = daysUntil(next, now);
+      const d = m.birthday ? birthdayCountdown(m.birthday, todayIso)?.days : undefined;
+      if (d === undefined) continue;
       if (birthdayInDays === null || d < birthdayInDays) { birthdayInDays = d; birthdayName = (m.display_name ?? '').split(' ')[0] || null; }
     }
     const trip = (trips.data ?? [])[0];

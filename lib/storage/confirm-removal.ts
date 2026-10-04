@@ -51,9 +51,17 @@ export async function removeConfirmed(bucket: RemovableBucket, path: string): Pr
   const name = path.slice(cut + 1);
   const listed = await bucket.list(folder, { search: name, limit: 100 });
   if (listed.error) return { error: describeActionError(listed.error) };
+  // Only a well-formed list response can confirm absence. A malformed success
+  // response must not let callers delete the row that protects the object.
+  if (
+    !Array.isArray(listed.data) ||
+    listed.data.some((object) => !object || typeof object.name !== 'string' || object.name.length === 0)
+  ) {
+    return { error: 'The file could not be removed.' };
+  }
   // `search` is a prefix match, so the name is compared exactly: a neighbouring
   // `<name>.bak` must not be mistaken for this object.
-  return listed.data?.some((object) => object.name === name)
+  return listed.data.some((object) => object.name === name)
     ? { error: 'The file could not be removed.' }
     : { error: null };
 }
