@@ -6405,7 +6405,7 @@
   "faq.helpPricingTitle": "Abonnementen en prijzen",
   "faq.helpPricingBody": "Family Basic en Family+ naast elkaar.",
   "faqExplorer.searchLabel": "Zoeken in de veelgestelde vragen",
-  "faqExplorer.searchPlaceholder": "Zoek een vraag – probeer ‘proefperiode’, ‘agenda’ of ‘kinderen’",
+  "faqExplorer.searchPlaceholder": "Zoek in de vragen…",
   "faqExplorer.clearSearch": "Zoekopdracht wissen",
   "faqExplorer.resultCount.one": "{count} antwoord past bij ‘{query}’",
   "faqExplorer.resultCount.other": "{count} antwoorden passen bij ‘{query}’",

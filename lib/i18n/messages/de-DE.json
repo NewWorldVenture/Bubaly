@@ -6405,7 +6405,7 @@
   "faq.helpPricingTitle": "Tarife & Preise",
   "faq.helpPricingBody": "Family Basic und Family+ im direkten Vergleich.",
   "faqExplorer.searchLabel": "FAQ durchsuchen",
-  "faqExplorer.searchPlaceholder": "Fragen durchsuchen – z. B. „Testphase“, „Kalender“ oder „Kinder“",
+  "faqExplorer.searchPlaceholder": "Fragen durchsuchen…",
   "faqExplorer.clearSearch": "Suche löschen",
   "faqExplorer.resultCount.one": "{count} Antwort passt zu „{query}“",
   "faqExplorer.resultCount.other": "{count} Antworten passen zu „{query}“",

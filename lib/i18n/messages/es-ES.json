@@ -6405,7 +6405,7 @@
   "faq.helpPricingTitle": "Planes y precios",
   "faq.helpPricingBody": "Family Basic y Family+, uno al lado del otro.",
   "faqExplorer.searchLabel": "Buscar en las preguntas frecuentes",
-  "faqExplorer.searchPlaceholder": "Busca preguntas: prueba con «prueba», «calendario» o «niños»",
+  "faqExplorer.searchPlaceholder": "Buscar preguntas…",
   "faqExplorer.clearSearch": "Borrar búsqueda",
   "faqExplorer.resultCount.one": "{count} respuesta coincide con «{query}»",
   "faqExplorer.resultCount.other": "{count} respuestas coinciden con «{query}»",

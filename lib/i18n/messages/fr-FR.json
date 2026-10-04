@@ -6405,7 +6405,7 @@
   "faq.helpPricingTitle": "Forfaits et tarifs",
   "faq.helpPricingBody": "Family Basic et Family+, côte à côte.",
   "faqExplorer.searchLabel": "Rechercher dans la FAQ",
-  "faqExplorer.searchPlaceholder": "Rechercher une question – essayez « essai », « calendrier » ou « enfants »",
+  "faqExplorer.searchPlaceholder": "Rechercher une question…",
   "faqExplorer.clearSearch": "Effacer la recherche",
   "faqExplorer.resultCount.one": "{count} réponse correspond à « {query} »",
   "faqExplorer.resultCount.other": "{count} réponses correspondent à « {query} »",

@@ -6405,7 +6405,7 @@
   "faq.helpPricingTitle": "Piani e prezzi",
   "faq.helpPricingBody": "Family Basic e Family+ a confronto.",
   "faqExplorer.searchLabel": "Cerca nelle FAQ",
-  "faqExplorer.searchPlaceholder": "Cerca tra le domande – prova «prova», «calendario» o «bambini»",
+  "faqExplorer.searchPlaceholder": "Cerca tra le domande…",
   "faqExplorer.clearSearch": "Cancella ricerca",
   "faqExplorer.resultCount.one": "{count} risposta corrisponde a «{query}»",
   "faqExplorer.resultCount.other": "{count} risposte corrispondono a «{query}»",

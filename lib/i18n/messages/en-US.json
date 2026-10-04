@@ -6574,7 +6574,7 @@
   "faq.helpPricingTitle": "Plans & pricing",
   "faq.helpPricingBody": "Family Basic and Family+, side by side.",
   "faqExplorer.searchLabel": "Search the FAQ",
-  "faqExplorer.searchPlaceholder": "Search questions — try “trial”, “calendar” or “kids”",
+  "faqExplorer.searchPlaceholder": "Search questions…",
   "faqExplorer.clearSearch": "Clear search",
   "faqExplorer.resultCount.one": "{count} answer matches “{query}”",
   "faqExplorer.resultCount.other": "{count} answers match “{query}”",

@@ -33,9 +33,10 @@ const ICONS: Record<FaqIcon, LucideIcon> = {
   knowledge: BookOpen,
 };
 
-// Matches the header that sits over the page: a heading counts as "current"
-// once it has scrolled up under the header and until it is 40% down the view.
-const SCROLL_SPY_MARGIN = '-96px 0px -60% 0px';
+// The reading line for the side nav's scroll-spy, in px from the viewport top:
+// below the sticky header with room to spare, so a section counts as current
+// once its top has reached roughly where the eye starts reading.
+const SCROLL_SPY_LINE = 160;
 
 /** Case- and accent-insensitive form used for matching, never for display. */
 function fold(text: string): string {
@@ -194,21 +195,30 @@ export function FaqExplorer({ topics, popular }: { topics: FaqTopic[]; popular: 
     return () => window.removeEventListener('keydown', onKey);
   }, []);
 
-  // Scroll-spy for the side nav.
+  // Scroll-spy for the side nav: the current topic is the last one whose
+  // section has started above the reading line. Measured from positions on
+  // every scroll rather than from heading intersections, because a deep link
+  // lands mid-section and never sees its section's heading cross anything.
   useEffect(() => {
-    if (typeof IntersectionObserver === 'undefined') return;
-    const observer = new IntersectionObserver(
-      (entries) => {
-        const shown = entries.filter((entry) => entry.isIntersecting);
-        if (shown.length > 0) setActiveTopic(shown[0].target.id.replace(/^topic-/, ''));
-      },
-      { rootMargin: SCROLL_SPY_MARGIN },
-    );
-    for (const topic of visible) {
-      const heading = document.getElementById(`topic-${topic.id}`);
-      if (heading) observer.observe(heading);
-    }
-    return () => observer.disconnect();
+    let frame = 0;
+    const measure = () => {
+      frame = 0;
+      let current = visible[0]?.id ?? '';
+      for (const topic of visible) {
+        const section = document.getElementById(`topic-${topic.id}`)?.closest('section');
+        if (section && section.getBoundingClientRect().top <= SCROLL_SPY_LINE) current = topic.id;
+      }
+      setActiveTopic(current);
+    };
+    const onScroll = () => { if (!frame) frame = requestAnimationFrame(measure); };
+    measure();
+    window.addEventListener('scroll', onScroll, { passive: true });
+    window.addEventListener('resize', onScroll);
+    return () => {
+      if (frame) cancelAnimationFrame(frame);
+      window.removeEventListener('scroll', onScroll);
+      window.removeEventListener('resize', onScroll);
+    };
   }, [visible]);
 
   const copyLink = async (id: string) => {
@@ -243,7 +253,7 @@ export function FaqExplorer({ topics, popular }: { topics: FaqTopic[]; popular: 
       <div className="mx-auto mt-10 max-w-2xl">
         <form role="search" onSubmit={(event) => event.preventDefault()} className="relative">
           <label htmlFor="faq-search" className="sr-only">{t('faqExplorer.searchLabel')}</label>
-          <Search className="pointer-events-none absolute left-5 top-1/2 h-5 w-5 -translate-y-1/2 text-white/50" aria-hidden />
+          <Search className="pointer-events-none absolute left-5 top-1/2 z-10 h-5 w-5 -translate-y-1/2 text-white/60" aria-hidden />
           <input
             ref={searchRef}
             id="faq-search"
