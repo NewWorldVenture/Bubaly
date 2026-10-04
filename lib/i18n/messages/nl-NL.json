@@ -16717,5 +16717,11 @@
   "medicationsModule.noMedicinesPrescribedToYou": "Er zijn jou geen medicijnen voorgeschreven.",
   "medicationsModule.yourOwnMedicinesOnly": "Je ziet de medicijnen die jou zijn voorgeschreven. Een ouder of volwassene beheert de voorschriften van het gezin.",
   "mealsPlanner.addMealToLibrary": "Maaltijd aan bibliotheek toevoegen",
-  "mealsPlanner.noSavedChoices": "Er zijn nog geen opgeslagen maaltijden of recepten. Maak hieronder een nieuwe maaltijd om te beginnen met plannen."
+  "mealsPlanner.noSavedChoices": "Er zijn nog geen opgeslagen maaltijden of recepten. Maak hieronder een nieuwe maaltijd om te beginnen met plannen.",
+  "bills.confirmPaymentSchedule": "Rekeningschema bevestigen",
+  "bills.scheduleNeeded": "Kies wanneer deze rekening terugkomt voordat je deze als betaald markeert.",
+  "bills.dayOfMonth": "Dag van de maand",
+  "bills.chooseRecurrence": "Kies een frequentie",
+  "bills.chooseDay": "Kies een dag",
+  "bills.scheduleUnavailable": "Schema’s voor terugkerende rekeningen zijn nog niet beschikbaar. Deze wijziging is niet opgeslagen."
 }

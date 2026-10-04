@@ -16717,5 +16717,11 @@
   "medicationsModule.noMedicinesPrescribedToYou": "Non ti è stato prescritto alcun farmaco.",
   "medicationsModule.yourOwnMedicinesOnly": "Vedi i farmaci che ti sono stati prescritti. Un genitore o un adulto gestisce le prescrizioni della famiglia.",
   "mealsPlanner.addMealToLibrary": "Aggiungi il pasto alla raccolta",
-  "mealsPlanner.noSavedChoices": "Non ci sono ancora pasti o ricette salvati. Crea un nuovo pasto qui sotto per iniziare a pianificare."
+  "mealsPlanner.noSavedChoices": "Non ci sono ancora pasti o ricette salvati. Crea un nuovo pasto qui sotto per iniziare a pianificare.",
+  "bills.confirmPaymentSchedule": "Conferma il calendario della bolletta",
+  "bills.scheduleNeeded": "Scegli quando si ripete questa bolletta prima di segnarla come pagata.",
+  "bills.dayOfMonth": "Giorno del mese",
+  "bills.chooseRecurrence": "Scegli una frequenza",
+  "bills.chooseDay": "Scegli un giorno",
+  "bills.scheduleUnavailable": "I calendari delle bollette ricorrenti non sono ancora disponibili. Questa modifica non è stata salvata."
 }

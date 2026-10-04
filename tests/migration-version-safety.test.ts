@@ -505,7 +505,9 @@ describe('Supabase migration filename safety', () => {
     // frozen. This literal tracks the checked-in high-water mark, not
     // migration allocation: 0465-0470 remain NWV's, 0472 Support's, and 0473
     // the coordinator's.
-    expect(audit.nextVersion).toBe('0475');
+    // 0491 reserves the recurring-bill anchor above observed unmerged allocations
+    // through 0490. Gaps remain reserved; no applied history was renumbered.
+    expect(audit.nextVersion).toBe('0492');
   });
 
   it('flags a newly introduced collision instead of silently accepting it', () => {

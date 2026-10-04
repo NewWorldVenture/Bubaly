@@ -16717,5 +16717,11 @@
   "medicationsModule.noMedicinesPrescribedToYou": "Aucun médicament ne vous a été prescrit.",
   "medicationsModule.yourOwnMedicinesOnly": "Vous voyez les médicaments qui vous sont prescrits. Un parent ou un adulte gère les prescriptions de la famille.",
   "mealsPlanner.addMealToLibrary": "Ajouter le repas à la bibliothèque",
-  "mealsPlanner.noSavedChoices": "Aucun repas ni recette enregistré pour le moment. Créez un nouveau repas ci-dessous pour commencer à planifier."
+  "mealsPlanner.noSavedChoices": "Aucun repas ni recette enregistré pour le moment. Créez un nouveau repas ci-dessous pour commencer à planifier.",
+  "bills.confirmPaymentSchedule": "Confirmer le calendrier de la facture",
+  "bills.scheduleNeeded": "Choisissez quand cette facture se répète avant de la marquer comme payée.",
+  "bills.dayOfMonth": "Jour du mois",
+  "bills.chooseRecurrence": "Choisir une fréquence",
+  "bills.chooseDay": "Choisir un jour",
+  "bills.scheduleUnavailable": "Les calendriers des factures récurrentes ne sont pas encore disponibles. Cette modification n’a pas été enregistrée."
 }

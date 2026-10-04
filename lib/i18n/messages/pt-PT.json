@@ -16717,5 +16717,11 @@
   "medicationsModule.noMedicinesPrescribedToYou": "Não lhe foi receitado nenhum medicamento.",
   "medicationsModule.yourOwnMedicinesOnly": "Vê os medicamentos que lhe foram receitados. Um pai, uma mãe ou um adulto gere as receitas da família.",
   "mealsPlanner.addMealToLibrary": "Adicionar refeição à biblioteca",
-  "mealsPlanner.noSavedChoices": "Ainda não há refeições nem receitas guardadas. Crie uma nova refeição abaixo para começar a planear."
+  "mealsPlanner.noSavedChoices": "Ainda não há refeições nem receitas guardadas. Crie uma nova refeição abaixo para começar a planear.",
+  "bills.confirmPaymentSchedule": "Confirmar o calendário da fatura",
+  "bills.scheduleNeeded": "Escolha quando esta fatura se repete antes de a marcar como paga.",
+  "bills.dayOfMonth": "Dia do mês",
+  "bills.chooseRecurrence": "Escolher uma frequência",
+  "bills.chooseDay": "Escolher um dia",
+  "bills.scheduleUnavailable": "Os calendários de faturas recorrentes ainda não estão disponíveis. Esta alteração não foi guardada."
 }

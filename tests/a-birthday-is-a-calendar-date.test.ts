@@ -57,7 +57,7 @@ describe('nothing reads a birthday as an instant', () => {
   it('uses parseBirthday / ageOn / nextBirthday, not new Date(birthday)', () => {
     const tree = ['app', 'components', 'lib'].flatMap(files);
     expect(tree.length).toBeGreaterThan(500);
-    const sites = tree.filter((f) => !EXEMPT.has(f))
+    const sites = tree.filter((f) => !EXEMPT.has(f.replaceAll('\\', '/')))
       .filter((f) => /new Date\((\w+\.)?(birthday|birth_date|dob|date_of_birth)\)/.test(readFileSync(f, 'utf8')));
     expect(sites).toEqual([]);
   });

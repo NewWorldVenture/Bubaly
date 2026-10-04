@@ -16717,5 +16717,11 @@
   "medicationsModule.noMedicinesPrescribedToYou": "Ihnen wurden keine Medikamente verschrieben.",
   "medicationsModule.yourOwnMedicinesOnly": "Sie sehen die Medikamente, die Ihnen verschrieben wurden. Ein Elternteil oder Erwachsener verwaltet die Verschreibungen der Familie.",
   "mealsPlanner.addMealToLibrary": "Mahlzeit zur Bibliothek hinzufügen",
-  "mealsPlanner.noSavedChoices": "Noch keine gespeicherten Mahlzeiten oder Rezepte. Erstellen Sie unten eine neue Mahlzeit, um mit der Planung zu beginnen."
+  "mealsPlanner.noSavedChoices": "Noch keine gespeicherten Mahlzeiten oder Rezepte. Erstellen Sie unten eine neue Mahlzeit, um mit der Planung zu beginnen.",
+  "bills.confirmPaymentSchedule": "Rechnungsplan bestätigen",
+  "bills.scheduleNeeded": "Wähle vor dem Bezahlen aus, wann sich diese Rechnung wiederholt.",
+  "bills.dayOfMonth": "Tag des Monats",
+  "bills.chooseRecurrence": "Wiederholung auswählen",
+  "bills.chooseDay": "Tag auswählen",
+  "bills.scheduleUnavailable": "Wiederkehrende Rechnungspläne sind noch nicht verfügbar. Diese Änderung wurde nicht gespeichert."
 }
