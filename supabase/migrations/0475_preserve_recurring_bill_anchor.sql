@@ -1,6 +1,7 @@
 -- Preserve the owner-selected monthly day even when February clamps a due date.
--- Generated with Supabase CLI, then assigned 0491 above observed reservations
--- through 0490. This is an unapplied source reservation, not remote history.
+-- Generated with Supabase CLI; the unapplied candidate was originally 0491.
+-- Candidate release order now starts at 0475 after checked-in main 0474.
+-- This source order is not evidence of the hosted migration catalog.
 -- Never backfill from due_date: a legacy February 28 may mean day 28, 29, 30 or 31.
 alter table public.bills add column if not exists due_day smallint;
 
