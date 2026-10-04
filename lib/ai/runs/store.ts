@@ -579,6 +579,53 @@ export async function updateRunWhereState(
   return ok((data ?? []).length > 0);
 }
 
+/** The run as a person's re-entry found it: what its write is conditioned on. */
+export type RunObservation = Pick<RunRow, 'state' | 'attempt' | 'lease_owner'>;
+
+/**
+ * Compare-and-set on the run as the caller OBSERVED it — state, attempt and
+ * lease together, not the state alone.
+ *
+ * `updateRunWhereState` guards the answer path against a double-submitted
+ * answer. The writes that put a run back in the queue because a person asked
+ * — an approval decision folding into its run, resume, re-run a step, edit a
+ * step — need the wider guard. Each loads the run, decides from that snapshot,
+ * and writes `ready`, a fresh budget and a cleared lease. Two of them can hold
+ * the same snapshot: two final approval folds on one run. The first puts the
+ * run in the queue; a worker claims it (`executing`, attempt charged, a live
+ * lease); the second, still holding the snapshot that said
+ * `awaiting_approval`, wrote `ready`, zeroed the attempt and cleared the
+ * worker's live lease through the plain `updateRun`, which matches on id and
+ * family alone (review on #917, 5973301004). Conditioned on every field the
+ * snapshot showed, that second write matches nothing once anything has moved
+ * — including a run that is `executing` before and after under two different
+ * workers, which the state alone would not tell apart. `false` is "someone
+ * else moved this run first", and the caller leaves the run where that
+ * someone put it.
+ */
+export async function updateRunAsObserved(
+  scope: ServiceScope,
+  runId: string,
+  observed: RunObservation,
+  patch: Database['public']['Tables']['family_automation_runs']['Update'],
+  opts?: StoreOpts,
+): Promise<ServiceResult<boolean>> {
+  const base = ledgerClient(scope, opts)
+    .from('family_automation_runs')
+    .update(patch)
+    .eq('id', runId)
+    .eq('family_id', scope.familyId)
+    .eq('state', observed.state)
+    .eq('attempt', observed.attempt);
+  const fenced = observed.lease_owner === null ? base.is('lease_owner', null) : base.eq('lease_owner', observed.lease_owner);
+  const { data, error } = await fenced.select('id');
+  if (error) {
+    console.error('[ai/runs] failed to update the run as observed', error);
+    return fail(describeDbError(error, 'Bubaly could not update that run.'), { code: SERVICE_CODES.db, retryable: true });
+  }
+  return ok((data ?? []).length > 0);
+}
+
 // ─── Leases ─────────────────────────────────────────────────────────────────
 
 /** `attempt` is the value AFTER the claim charged it, so a caller that hands the run back unexecuted can give the charge back. */
@@ -612,6 +659,23 @@ export async function claimRuns(
     return fail(describeDbError(readError, 'Bubaly could not read the claimed runs.'), { code: SERVICE_CODES.db, retryable: true });
   }
   return ok((rows ?? []).map((r) => ({ id: r.id, familyId: r.family_id, leaseOwner: r.lease_owner, attempt: r.attempt })));
+}
+
+/**
+ * The attempt budget a person's own re-entry hands back.
+ *
+ * `attempt` counts the slices in a row that completed nothing; at
+ * `max_attempts` the run is abandoned (`claim_ai_runs`' recovery arm) and
+ * `claimRun` refuses to lease it. Resume, re-run a step, edit a step and an
+ * approval decision (lib/services/approvals) each put the run back to `ready`
+ * because a member of the family asked for it, and each one tells them Bubaly
+ * will pick it up. Written without this, a run that had spent its budget was
+ * promised that and then refused by the kick and dead-lettered by the next
+ * tick, with nothing a person could do about it. A human asking again is a
+ * new budget, the way a slice that made progress is (executor.ts, budgetReset).
+ */
+export function freshBudget(): Pick<Database['public']['Tables']['family_automation_runs']['Update'], 'attempt'> {
+  return { attempt: 0 };
 }
 
 /**

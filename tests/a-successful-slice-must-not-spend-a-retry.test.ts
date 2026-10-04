@@ -171,15 +171,24 @@ describe('a successful slice must not spend a retry (Q40)', () => {
     expect(fifth.ok && fifth.data.claimed, 'attempt 4 of 5 should still be claimable').toBe(true);
   });
 
-  it('the only reset is the progress park in the executor', () => {
-    // The budget is handed back in exactly one place, and that place is guarded
-    // by progress. A reset anywhere else — a store helper, a control, the intake
-    // — would stop genuinely stuck runs from ever dead-lettering, which is the
-    // half of Q40 that argued against a bare reset.
-    for (const rel of ['lib/ai/runs/store.ts', 'lib/ai/runs/continue.ts', 'lib/ai/runs/controls.ts', 'lib/ai/runs/intake.ts']) {
+  it('the budget is handed back by two named helpers and nothing else: progress, and a person asking again', () => {
+    // Two resets, each guarded. The executor's `budgetReset` is guarded by
+    // progress; the store's `freshBudget` is guarded by WHO writes — only the
+    // controls a member of the family invokes (resume, re-run a step, edit a
+    // step) and an approval decision spread it. A bare `attempt: 0` anywhere
+    // else — the intake, the kick, a park — would stop genuinely stuck runs
+    // from ever dead-lettering, which is the half of Q40 that argued against a
+    // bare reset. The person's re-entry is the one case that argument does not
+    // reach: a human asking again is a new budget by definition
+    // (tests/a-run-a-person-asks-for-again-gets-its-attempts-back.test.ts).
+    for (const rel of ['lib/ai/runs/continue.ts', 'lib/ai/runs/controls.ts', 'lib/ai/runs/intake.ts', 'lib/services/approvals/index.ts', 'app/api/cron/ai-runs/route.ts']) {
       const src = readFileSync(join(ROOT, rel), 'utf8');
-      expect(src, `${rel} resets attempt — the reset belongs to the executor's park alone`).not.toMatch(/attempt:\s*0\b/);
+      expect(src, `${rel} resets attempt — the reset belongs to budgetReset and freshBudget alone`).not.toMatch(/attempt:\s*0\b/);
     }
+    const store = readFileSync(join(ROOT, 'lib/ai/runs/store.ts'), 'utf8');
+    expect(store.match(/attempt:\s*0\b/g), 'one reset, in freshBudget').toHaveLength(1);
+    expect(store).toContain('export function freshBudget()');
+    expect(store).toContain('return { attempt: 0 };');
     const executor = readFileSync(join(ROOT, 'lib/ai/runs/executor.ts'), 'utf8');
     expect(executor.match(/attempt:\s*0\b/g), 'one reset, in budgetReset').toHaveLength(1);
     expect(executor).toContain('function budgetReset(progressed: boolean)');

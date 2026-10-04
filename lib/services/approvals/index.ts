@@ -55,7 +55,7 @@ import { getTranslations } from '@/lib/i18n/server';
 import { kickRun } from '@/lib/ai/runs/continue';
 import { isTerminalRunState, legacyStatusFor, type RunState, type StepState } from '@/lib/ai/runs/states';
 import {
-  appendEvent, ledgerClient, loadPlanSteps, loadRun, updateRequest, updateRun, updateStep, type StepRow,
+  appendEvent, freshBudget, ledgerClient, loadPlanSteps, loadRun, updateRequest, updateRun, updateRunAsObserved, updateStep, type StepRow,
 } from '@/lib/ai/runs/store';
 import {
   availableWriteBackKinds, reminderLeadAt, writeBackTitle, type WriteBackKind,
@@ -462,15 +462,29 @@ async function foldIntoRun(
     return ok({ resumedRunId: null, runId, released: gated.length });
   }
 
-  const resumed = await updateRun(scope, runId, {
+  // A person decided, so the run gets its attempt budget back along with its
+  // place in the queue: at the ceiling the kick below would refuse it and the
+  // next tick would abandon it, decision and all (controls.ts, freshBudget).
+  //
+  // Conditioned on the run AS THIS FOLD LOADED IT. Two final decisions can fold
+  // into one run together; the first puts it in the queue and a worker claims
+  // it, and the second — still holding the snapshot that said
+  // `awaiting_approval` — must not write `ready`, a zero attempt and a cleared
+  // lease over that worker's live claim. Zero rows means the other fold (or
+  // the worker) got there first: the steps this decision released are already
+  // in the graph the running slice reloads every pass, so there is nothing
+  // left for this fold to do and no kick to send.
+  const resumed = await updateRunAsObserved(scope, runId, run.data, {
     state: 'ready',
     status: legacyStatusFor('ready'),
     run_after: nowIso,
     error: null,
     lease_owner: null,
     lease_expires_at: null,
+    ...freshBudget(),
   }, { db });
   if (!resumed.ok) return resumed;
+  if (!resumed.data) return ok({ resumedRunId: null, runId, released: gated.length });
   if (run.data.request_id) await updateRequest(scope, run.data.request_id, { status: 'ready', error: null }, { db });
   kickRun(runId);
   return ok({ resumedRunId: runId, runId, released: gated.length });
