@@ -1,12 +1,12 @@
 'use client';
 
 import Link from 'next/link';
-import { useMemo, useState } from 'react';
+import { useMemo, useRef, useState } from 'react';
 import {
   Users, Plus, Phone, Mail, MapPin, Star, Trash2, Edit2,
   Search, User, Stethoscope, GraduationCap, Trophy, Home,
   AlertTriangle, HeartPulse, Smile, Briefcase, ChevronRight,
-  X, Copy, ExternalLink,
+  X, Copy, ExternalLink, Loader2,
 } from 'lucide-react';
 import { useApp } from '@/components/app/app-context';
 import { useRealtimeQuery } from '@/lib/hooks/use-realtime-query';
@@ -425,6 +425,10 @@ function ContactModal({ contact, familyId, userId, onClose, onSaved }: {
   const format = useFormat();
   const { success, error: toastError } = useToast();
   const [loading, setLoading] = useState(false);
+  // Refuses a second submit while one is in flight. The submit stays
+  // focusable (aria-disabled) while saving, so this, not `disabled`, is what
+  // stops a repeated Enter (A11Y-001).
+  const submitting = useRef(false);
   const months = useMemo(() => {
     // Month names from DATES, which the shared formatter renders as written.
     return Array.from({ length: 12 }, (_, month) => format.fmtDate(`2000-${String(month + 1).padStart(2, '0')}-01`, 'MMMM'));
@@ -432,6 +436,7 @@ function ContactModal({ contact, familyId, userId, onClose, onSaved }: {
 
   async function onSubmit(e: React.FormEvent<HTMLFormElement>) {
     e.preventDefault();
+    if (submitting.current) return;
     const form = new FormData(e.currentTarget);
     const payload = contactPayload(form);
     // ── Validation ──
@@ -442,6 +447,7 @@ function ContactModal({ contact, familyId, userId, onClose, onSaved }: {
     if (payload.phone_alt && !isValidPhone(payload.phone_alt)) return toastError(t('contactsModule.theAlternatePhoneNumberLooks'));
     if (payload.birthday_day != null && (payload.birthday_day < 1 || payload.birthday_day > 31)) return toastError(t('contactsModule.birthdayDayMustBeBetween'));
 
+    submitting.current = true;
     setLoading(true);
     try {
       const supabase = createClient();
@@ -456,6 +462,7 @@ function ContactModal({ contact, familyId, userId, onClose, onSaved }: {
     } catch (err) {
       toastError(describeDbError(err));
     } finally {
+      submitting.current = false;
       setLoading(false);
     }
   }
@@ -548,7 +555,17 @@ function ContactModal({ contact, familyId, userId, onClose, onSaved }: {
 
         <div className="flex justify-end gap-2 pt-2">
           <Button type="button" variant="ghost" onClick={onClose}>{t('contacts.cancel')}</Button>
-          <Button type="submit" loading={loading}>{t(contact ? 'family.saveChanges' : 'contacts.addContact')}</Button>
+          {/* aria-disabled, not the shared Button's `loading` (which sets
+              `disabled`): a natively disabled submit drops the keyboard focus
+              that pressed it to <body>, outside this dialog. */}
+          <Button
+            type="submit"
+            aria-disabled={loading || undefined}
+            className="aria-disabled:cursor-not-allowed aria-disabled:opacity-50 aria-disabled:shadow-none"
+          >
+            {loading && <Loader2 className="h-4 w-4 animate-spin" aria-hidden />}
+            {t(contact ? 'family.saveChanges' : 'contacts.addContact')}
+          </Button>
         </div>
       </form>
     </Modal>

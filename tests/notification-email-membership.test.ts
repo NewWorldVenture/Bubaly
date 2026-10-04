@@ -1,16 +1,18 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { createClient, type SupabaseClient } from '@supabase/supabase-js';
 import type { ReactElement } from 'react';
+import { renderToStaticMarkup } from 'react-dom/server';
 import type { Database } from '@/lib/database.types';
 
 type Notice = { id: string; family_id: string; user_id: string | null; type: string; title: string; body: string; sent_at: string | null; send_at: string; created_at: string };
 type Member = { id: string; family_id: string; user_id: string | null; role: string; is_active: boolean };
-type Digest = { name: string; items: { title: string; body: string | null; icon: string }[] };
+type Digest = { name: string; items: { title: string; body: string | null; icon: string }[]; timeZone: string | null };
 const h = vi.hoisted(() => ({
   notices: [] as Notice[], members: [] as Member[], prefs: [] as { user_id: string; email_enabled: boolean }[],
   settings: [] as { family_id: string; child_channels: Record<string, boolean> }[],
+  families: [] as { id: string; timezone: string | null }[],
   users: [] as { id: string; email: string | null }[],
-  sends: [] as { to: string; props: Digest; subject: string }[], ackIds: [] as string[],
+  sends: [] as { to: string; props: Digest; subject: string; react: ReactElement<Digest> }[], ackIds: [] as string[],
   calls: [] as { table: string; method: string; query: string }[],
   cap: 1000, failRosterOffset: null as number | null, failPrefsOffset: null as number | null,
   failTable: '', failAccounts: false, failResolve: false,
@@ -22,9 +24,11 @@ vi.mock('@/lib/server/list-all-auth-users', () => ({
   listAllAuthUsers: async () => ({ users: h.users, error: h.failAccounts ? { message: 'Synthetic account failure' } : null }),
 }));
 vi.mock('@/lib/email', () => ({
+  // The digest template links back to the app; the two-family cases render it.
+  APP_URL: 'https://synthetic.invalid',
   emailEnabled: () => h.emailConfigured,
   sendReactEmail: async (input: { to: string; subject: string; react: ReactElement<Digest> }) => {
-    h.sends.push({ to: input.to, subject: input.subject, props: input.react.props });
+    h.sends.push({ to: input.to, subject: input.subject, props: input.react.props, react: input.react });
     return h.emailResult;
   },
 }));
@@ -83,6 +87,10 @@ function db(): SupabaseClient<Database> {
         if (q.get('order') === 'family_id.asc') rows.sort((a, b) => String(a.family_id).localeCompare(String(b.family_id)));
         const offset = Number(q.get('offset') ?? 0);
         rows = rows.slice(offset, offset + Math.min(Number(q.get('limit') ?? 1000), h.cap));
+      } else if (table === 'families') {
+        // The digest's date line reads each family's zone (#942). An absent row
+        // dates that family's digest in an explicit UTC.
+        rows = h.families.filter(f => idsIn(q.get('id')).includes(f.id));
       } else throw new Error('Unexpected table');
       // Honor actual SELECT: unselected family metadata cannot accidentally
       // make a broken projection pass authorization or mixed-digest tests.
@@ -94,7 +102,7 @@ function db(): SupabaseClient<Database> {
 }
 
 beforeEach(() => {
-  h.notices = [notice()]; h.members = [member()]; h.prefs = []; h.settings = [];
+  h.notices = [notice()]; h.members = [member()]; h.prefs = []; h.settings = []; h.families = [];
   h.users = [{ id: USER, email: 'synthetic@synthetic.invalid' }];
   h.sends = []; h.ackIds = []; h.calls = []; h.cap = 1000; h.failRosterOffset = null; h.failPrefsOffset = null; h.failTable = ''; h.failAccounts = false; h.failResolve = false;
   h.emailConfigured = true; h.emailResult = { ok: true };
@@ -279,5 +287,57 @@ describe('queued email preference completeness controls', () => {
     const calls = h.calls.filter(c => c.table === 'user_preferences');
     expect(calls.filter(c => new URLSearchParams(c.query).get('offset') === '0').map(c => idsIn(new URLSearchParams(c.query).get('user_id')).length)).toEqual([100, 1]);
     expect(calls.filter(c => idsIn(new URLSearchParams(c.query).get('user_id')).length === 100).map(c => new URLSearchParams(c.query).get('offset'))).toEqual(['0', '40', '80', '100']);
+  });
+});
+
+// A user can belong to several families, and one digest holds all of their
+// permitted rows. Its date line is a FAMILY's day, so it was wrong whenever the
+// families kept different zones: the sender dated the whole digest in the
+// first row's family's zone, and the other family's rows could carry the wrong
+// calendar day (review finding on #942). Saturday 3 October, 5:30pm in Los
+// Angeles is already Sunday 4 October in Kiritimati.
+describe('a recipient in two families gets one digest, dated in no single family\'s zone', () => {
+  const LA = 'America/Los_Angeles', KIRITIMATI = 'Pacific/Kiritimati';
+  const render = (el: ReactElement) => renderToStaticMarkup(el).replace(/&#x27;/g, "'");
+  beforeEach(() => {
+    vi.useFakeTimers({ toFake: ['Date'] }); vi.setSystemTime('2026-10-04T00:30:00.000Z');
+    h.members = [member({ id: uuid(200), family_id: FAMILY }), member({ id: uuid(201), family_id: OTHER })];
+    h.notices = [notice({ id: uuid(300), family_id: FAMILY }), notice({ id: uuid(301), family_id: OTHER })];
+  });
+  afterEach(() => vi.useRealTimers());
+
+  it('two families in different zones: one digest, settled once, with no date line at all', async () => {
+    h.families = [{ id: FAMILY, timezone: LA }, { id: OTHER, timezone: KIRITIMATI }];
+    expect(await deliverNotificationEmails(db())).toEqual({ sent: 1, failed: 0, skipped: 0 });
+    expect(h.sends.map(s => s.to)).toEqual(['synthetic@synthetic.invalid']);
+    expect(h.sends[0].props.timeZone).toBeNull();
+    const html = render(h.sends[0].react);
+    expect(html).not.toContain('October 3'); // Los Angeles's day — the first row's family
+    expect(html).not.toContain('October 4'); // Kiritimati's, and Greenwich's
+    expect(html).toContain("here's what's coming up.");
+    expect(html).toContain('Synthetic household title');
+    expect([...h.ackIds].sort()).toEqual([uuid(300), uuid(301)]);
+  });
+  it('the order of the rows does not pick the zone', async () => {
+    h.notices.reverse();
+    h.families = [{ id: FAMILY, timezone: LA }, { id: OTHER, timezone: KIRITIMATI }];
+    await deliverNotificationEmails(db());
+    expect(h.sends[0].props.timeZone).toBeNull();
+  });
+  it('two families in the same zone: dated in it', async () => {
+    h.families = [{ id: FAMILY, timezone: LA }, { id: OTHER, timezone: LA }];
+    expect(await deliverNotificationEmails(db())).toEqual({ sent: 1, failed: 0, skipped: 0 });
+    expect(h.sends[0].props.timeZone).toBe(LA);
+    expect(render(h.sends[0].react)).toContain('Saturday, October 3');
+  });
+  it("one family: dated in its own, and a zone the batch could not read is an explicit UTC", async () => {
+    h.notices = [notice({ id: uuid(300), family_id: FAMILY })];
+    h.families = [{ id: FAMILY, timezone: KIRITIMATI }];
+    await deliverNotificationEmails(db());
+    expect(h.sends[0].props.timeZone).toBe(KIRITIMATI);
+    expect(render(h.sends[0].react)).toContain('Sunday, October 4');
+    h.sends = []; h.ackIds = []; h.notices = [notice({ id: uuid(300), family_id: FAMILY })]; h.families = [];
+    await deliverNotificationEmails(db());
+    expect(h.sends[0].props.timeZone).toBe('UTC');
   });
 });

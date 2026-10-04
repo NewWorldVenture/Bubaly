@@ -10,6 +10,7 @@ import { detectConflicts, quickFixMoveAfter, type TimedEvent } from '@/lib/famil
 import { ConflictResolver, type ConflictView } from '@/components/family/conflict-resolver';
 import { getLocaleContext, getTranslations } from '@/lib/i18n/server';
 import type { LocaleCode } from '@/lib/i18n/locales';
+import { dayKeyInTz } from '@/lib/services/scope';
 import { ErrorState } from '@/components/ui/states';
 
 export async function generateMetadata(): Promise<Metadata> {
@@ -18,14 +19,17 @@ export async function generateMetadata(): Promise<Metadata> {
 }
 export const dynamic = 'force-dynamic';
 
-function whenLabel(startsAt: string, endsAt: string | null, locale: LocaleCode): string {
+// `tz` is the family's zone. Without it every clock here was the HOST's — a
+// 5:30pm practice in Los Angeles read "Sun, Oct 4, 12:30 AM" from a UTC host,
+// and `toDateString()` decided "same day" on the host's calendar too.
+function whenLabel(startsAt: string, endsAt: string | null, locale: LocaleCode, tz: string): string {
   const s = new Date(startsAt);
-  const start = s.toLocaleString(locale, { weekday: 'short', month: 'short', day: 'numeric', hour: 'numeric', minute: '2-digit' });
+  const start = s.toLocaleString(locale, { weekday: 'short', month: 'short', day: 'numeric', hour: 'numeric', minute: '2-digit', timeZone: tz });
   if (!endsAt) return start;
   const e = new Date(endsAt);
-  const sameDay = s.toDateString() === e.toDateString();
-  const end = e.toLocaleTimeString(locale, { hour: 'numeric', minute: '2-digit' });
-  return sameDay ? `${start} – ${end}` : `${start} → ${e.toLocaleString(locale, { weekday: 'short', month: 'short', day: 'numeric', hour: 'numeric', minute: '2-digit' })}`;
+  const sameDay = dayKeyInTz(s, tz) === dayKeyInTz(e, tz);
+  const end = e.toLocaleTimeString(locale, { hour: 'numeric', minute: '2-digit', timeZone: tz });
+  return sameDay ? `${start} – ${end}` : `${start} → ${e.toLocaleString(locale, { weekday: 'short', month: 'short', day: 'numeric', hour: 'numeric', minute: '2-digit', timeZone: tz })}`;
 }
 
 /** The soonest events to consider, and the most overlaps worth showing at once.
@@ -40,10 +44,10 @@ export default async function ConflictsPage() {
   const ctx = await requireFeature('/dashboard/conflicts');
   const supabase = await createServer();
   const familyId = ctx.active.familyId;
+  const tz = ctx.active.family.timezone || 'UTC';
 
   const now = new Date();
   const in14 = new Date(now.getTime() + 14 * 24 * 3_600_000);
-  const tz = ctx.active.family.timezone || 'UTC';
 
   // A failed read here is not "no conflicts". `detectConflicts([])` returns an
   // empty list, which this page renders as the all-clear — the one answer a
@@ -84,7 +88,7 @@ export default async function ConflictsPage() {
     const ev = (e: TimedEvent) => ({
       id: e.id,
       title: e.title,
-      whenLabel: whenLabel(e.starts_at, e.ends_at, locale.code),
+      whenLabel: whenLabel(e.starts_at, e.ends_at, locale.code, tz),
       location: e.location ?? null,
       assignee: e.assignee_id ? nameById.get(e.assignee_id) ?? null : null,
     });
@@ -99,7 +103,7 @@ export default async function ConflictsPage() {
             label: qf.label,
             startsAtIso: qf.startsAtIso,
             endsAtIso: qf.endsAtIso,
-            newWhenLabel: whenLabel(qf.startsAtIso, qf.endsAtIso, locale.code),
+            newWhenLabel: whenLabel(qf.startsAtIso, qf.endsAtIso, locale.code, tz),
           }
         : null,
       aiPayload: {
