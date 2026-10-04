@@ -36,7 +36,7 @@
 import { readFileSync } from 'node:fs';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { createInMemorySupabase, type InMemorySupabase, type Row } from './helpers/in-memory-supabase';
-import { SCHEDULES, dueRoutes } from '../scripts/cron-dispatch.mjs';
+import { OCCURRENCE_SAFE_DAILY, SCHEDULES, dueRoutes } from '../scripts/cron-dispatch.mjs';
 import { CONCURRENT_KEY_WAIT_BUDGET_MS } from '@/lib/server/email';
 
 type ProviderMode = 'accept' | 'refuse' | 'network-error' | 'accept-then-timeout';
@@ -296,10 +296,16 @@ describe('fixture', () => {
     expect(SCHEDULES[ROUTE]).toBe('30 12 * * *');
     const vercel = JSON.parse(readFileSync('vercel.json', 'utf8')) as { crons: { path: string; schedule: string }[] };
     expect(vercel.crons.find((c) => c.path === ROUTE)?.schedule).toBe('30 12 * * *');
-    // The dispatcher's five-minute look-back selects the route for a tick at 12:30–12:34, and only then.
+    // The dispatcher's five-minute look-back selects the route for a tick at 12:30–12:34 —
+    // and, because this route is occurrence-safe (OCCURRENCE_SAFE_DAILY), for any later tick
+    // whose catch-up window reaches back over 12:30. A tick with no boundary looks back five
+    // minutes only: that is the owner's `--dry-run --at 12:35` (review 5979998496), and it is
+    // not the dispatcher's real tick, which carries the previous successful run's start.
     expect(dueRoutes(new Date('2026-09-30T12:30:00Z'))).toContain(ROUTE);
     expect(dueRoutes(new Date('2026-09-30T12:34:00Z'))).toContain(ROUTE);
     expect(dueRoutes(new Date('2026-09-30T12:35:00Z'))).not.toContain(ROUTE);
+    expect(dueRoutes(new Date('2026-09-30T12:35:00Z'), SCHEDULES, undefined, '2026-09-30T12:00:00Z')).toContain(ROUTE);
+    expect(OCCURRENCE_SAFE_DAILY.has(ROUTE)).toBe(true);
   });
 });
 
@@ -592,10 +598,15 @@ describe('admin-digest replay: one occurrence, one key per admin, the provider f
     expect(next.body).toMatchObject({ ok: true, sent: 2, failed: 0, occurrence: 'admin-digest:2026-09-30T12:30:00.000Z' });
     expect(delivered(), 'admin-2 delivered one tick late; admin-1 folded, not sent twice').toEqual(each(1));
     expect(keysFor(SECOND)).toHaveLength(1);
-    // What makes that tick happen: a 502 fails the dispatcher run, and only a success is a boundary.
+    // What makes that tick happen: a 502 fails the dispatcher run, only a success is a
+    // boundary, and the dispatcher's due-route selection for a 12:35 tick whose boundary is
+    // the last success before 12:30 includes this route — the real path, not the fixed
+    // five-minute window the owner's dry run exercised (review 5979998496).
     const dispatcher = readFileSync('scripts/cron-dispatch.mjs', 'utf8');
     expect(dispatcher).toContain('if (failed) { console.error(`${failed} of ${results.length} cron route(s) failed.`); process.exitCode = 1; }');
     expect(readFileSync('scripts/cron-run-history.mjs', 'utf8')).toContain("workflowRunsUrl({ repo, status: 'success', apiBaseUrl })");
+    expect(dueRoutes(new Date('2026-09-30T12:35:00Z'), SCHEDULES, undefined, '2026-09-30T12:00:00Z'), 'the next tick, with the failed run not a boundary').toContain(ROUTE);
+    expect(dueRoutes(new Date('2026-09-30T12:35:00Z')), 'the same tick evaluated over the fixed five minutes alone would not call it').not.toContain(ROUTE);
   });
 
   // ── what is durable here, and what is not (review 5978490501) ─────────────

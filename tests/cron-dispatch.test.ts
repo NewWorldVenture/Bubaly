@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import { readFileSync } from 'node:fs';
-import { CATCH_UP_MAX_MINUTES, SCHEDULES, TICK_MINUTES, parseCron, matchesAt, dueRoutes, isSubDaily, tickWindow } from '../scripts/cron-dispatch.mjs';
+import { CATCH_UP_MAX_MINUTES, OCCURRENCE_SAFE_DAILY, SCHEDULES, TICK_MINUTES, parseCron, matchesAt, dueRoutes, isSubDaily, tickWindow } from '../scripts/cron-dispatch.mjs';
 
 const vercel = JSON.parse(readFileSync('vercel.json', 'utf8')) as { crons: { path: string; schedule: string }[] };
 
@@ -177,9 +177,30 @@ describe('catch-up: dueRoutes with a boundary', () => {
     // Weekly is "at most daily" too: chore-reminders, Sunday 18:00.
     expect(dueRoutes(new Date('2026-09-06T20:00:00Z'), SCHEDULES, TICK_MINUTES, '2026-09-06T17:00:00Z')).not.toContain('/api/cron/chore-reminders');
     expect(dueRoutes(new Date('2026-09-06T18:02:00Z'))).toContain('/api/cron/chore-reminders');
-    // The case a-mirrored-cron-must-be-idempotent names: admin-digest at 12:30 must
-    // not be replayed by a 15:00 tick on top of Vercel's own 12:30 run.
-    expect(dueRoutes(new Date('2026-09-12T15:00:00Z'), SCHEDULES, TICK_MINUTES, '2026-09-12T12:00:00Z')).not.toContain('/api/cron/admin-digest');
+    // admin-digest is the one daily route the catch-up DOES call again — by name,
+    // because a second call within its occurrence sends nothing more (below).
+    // Taken out of that set, it is left to Vercel like every other daily route.
+    expect(dueRoutes(new Date('2026-09-12T15:00:00Z'), SCHEDULES, TICK_MINUTES, '2026-09-12T12:00:00Z', new Set())).not.toContain('/api/cron/admin-digest');
+  });
+
+  it('a daily route a second call cannot double is caught up within its occurrence (review 5979998496 on #946)', () => {
+    expect([...OCCURRENCE_SAFE_DAILY]).toEqual(['/api/cron/admin-digest']);
+    // The owner's reproduction: `--dry-run --at 2026-10-03T12:35:00Z` with no boundary
+    // evaluates the fixed five minutes, (12:30, 12:35], and 12:30 is not in it.
+    expect(dueRoutes(new Date('2026-10-03T12:35:00Z'))).not.toContain('/api/cron/admin-digest');
+    // The dispatcher's real tick carries the previous SUCCESSFUL run's start. A run
+    // in which the digest answered 502 failed, so that boundary predates 12:30 —
+    // and the route is called again, for the same occurrence (the latest 12:30).
+    expect(dueRoutes(new Date('2026-10-03T12:35:00Z'), SCHEDULES, TICK_MINUTES, '2026-10-03T12:00:00Z')).toContain('/api/cron/admin-digest');
+    expect(dueRoutes(new Date('2026-10-03T15:00:00Z'), SCHEDULES, TICK_MINUTES, '2026-10-03T12:00:00Z')).toContain('/api/cron/admin-digest');
+    // Once, however many of its minutes the window holds — two slots in one window
+    // are one call, which the route resolves to the later slot (the residual).
+    expect(dueRoutes(new Date('2026-10-04T13:00:00Z'), SCHEDULES, TICK_MINUTES, '2026-10-03T12:00:00Z').filter((r) => r === '/api/cron/admin-digest')).toHaveLength(1);
+    // The other daily routes are not admitted by association.
+    const caughtUp = dueRoutes(new Date('2026-10-03T15:00:00Z'), SCHEDULES, TICK_MINUTES, '2026-10-03T10:00:00Z');
+    expect(caughtUp).toContain('/api/cron/admin-digest');
+    expect(caughtUp).not.toContain('/api/cron/notifications'); // 11:00 is in the window and it is daily
+    expect(caughtUp).not.toContain('/api/cron/automations');   // 13:00 too
   });
 
   it('the rule that keeps a route out of catch-up is the rule vercel.json mirrors it by', () => {

@@ -51,9 +51,19 @@ export async function GET(req: NextRequest) {
   // tick with nothing sent for that admin and both ticks answering 502. That
   // gap is retained, and closed by the scheduler, not by a receipt: the GitHub
   // dispatcher exits non-zero on a 502, a failed run is not a catch-up boundary
-  // (scripts/cron-run-history.mjs), so the next tick re-covers 12:30 and calls
-  // this route again — under the same key, which is now free. One dispatcher
-  // tick late, at most, as GitHub delivers it.
+  // (scripts/cron-run-history.mjs), and this route is the one daily route the
+  // dispatcher's catch-up calls again (OCCURRENCE_SAFE_DAILY in
+  // scripts/cron-dispatch.mjs — daily routes are otherwise evaluated over the
+  // fixed five minutes only, so without that admission the next tick never
+  // called it; review 5979998496). The next tick's window reaches back over
+  // 12:30 and calls this route again — under the same key, which is now free.
+  // One dispatcher tick late, at most, as GitHub delivers it.
+  //
+  // The residual, stated: the catch-up recovers a slot only while its
+  // occurrence is live. If no tick arrives before the next 12:30, that tick
+  // resolves to the NEWER slot and the missed occurrence is not sent — one
+  // digest lost, not duplicated. The engine behind the flag keeps a receipt per
+  // admin per occurrence and is the durable answer to that.
   //
   // What is and is not durable here. Resend honours a key for 24 h while the
   // payload is identical; an occurrence is live for at most 24 h (every tick

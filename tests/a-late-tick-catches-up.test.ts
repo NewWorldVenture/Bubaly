@@ -43,8 +43,12 @@ const vercel = JSON.parse(readFileSync(join(ROOT, 'vercel.json'), 'utf8')) as {
  * route that was due AT MOST ONCE, however many of its minutes fell in the gap.
  * The daily routes are deliberately NOT caught up: Vercel fired them on time, so
  * a catch-up hours later would be a second daily run on top of Vercel's — for
- * `admin-digest` a second email (`a-mirrored-cron-must-be-idempotent`). They
- * keep the five-minute window exactly as before.
+ * `admin-digest`, once, a second email (`a-mirrored-cron-must-be-idempotent`).
+ * They keep the five-minute window exactly as before. The one exception is
+ * admitted by name (OCCURRENCE_SAFE_DAILY): admin-digest now resolves every
+ * call to its slot and sends under one key per occurrence, so a second call
+ * within the occurrence sends nothing more, and the catch-up is how a tick whose
+ * digest failed gets it delivered (tests/cron-dispatch.test.ts).
  *
  * WHAT CHANGES AND WHAT DOES NOT. A firing is no longer lost: the next tick,
  * whenever it comes, calls the route once. The RATE is unchanged — a route asked
@@ -124,7 +128,7 @@ describe('a late tick catches up', () => {
     const due = dueRoutes(LATE, SCHEDULES, TICK_MINUTES, since);
     const subDaily = Object.entries(SCHEDULES).filter(([, expr]) => isSubDaily(expr)).map(([route]) => route);
     expect(subDaily).toHaveLength(17);
-    expect([...due].sort()).toEqual([...subDaily].sort());
+    expect([...due].sort(), 'every sub-daily route, and no daily one: admin-digest\'s 12:30 is outside this gap').toEqual([...subDaily].sort());
     expect(new Set(due).size).toBe(due.length);
 
     // Non-vacuity: daily routes WERE due in the gap. They were left to Vercel,
@@ -141,6 +145,10 @@ describe('a late tick catches up', () => {
       expect(due).not.toContain(route);
       expect(byPath.get(route), `${route} is left to Vercel but Vercel fires it at a different minute`).toBe((SCHEDULES as Record<string, string>)[route]);
     }
+    // The one daily route the catch-up calls again (OCCURRENCE_SAFE_DAILY) was
+    // not due in this gap, so this gap says nothing about it; the window that
+    // holds its slot is pinned in tests/cron-dispatch.test.ts.
+    expect(dailyDueInGap).not.toContain('/api/cron/admin-digest');
   });
 
   it('recovers the firing, not the rate', () => {
