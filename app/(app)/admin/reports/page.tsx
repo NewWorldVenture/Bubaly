@@ -11,6 +11,7 @@ import { fmtMoney } from '@/lib/utils/format';
 import { planMonthlyCents, planName } from '@/lib/constants/plans';
 import { subscriptionRevenue } from '@/lib/admin/subscription-revenue';
 import { getTranslations, getLocaleContext } from '@/lib/i18n/server';
+import { ADMIN_ZONE, inWindow, lastUtcDays, lastUtcMonths } from '@/lib/admin/clock';
 import { StrategyMetricTiles } from '@/components/admin/strategy-metric-tiles';
 import { loadStrategyMetrics } from '@/lib/metric/strategy-server';
 
@@ -28,15 +29,13 @@ function fmtBytes(bytes: number): string {
   return `${v.toFixed(v >= 100 || i === 0 ? 0 : 1)} ${units[i]}`;
 }
 
+// Months in the admin zone, not the host's (lib/admin/clock.ts).
 function monthBuckets<T extends { created_at: string }>(rows: T[], valueOf: (r: T) => number, locale: string) {
-  return Array.from({ length: 6 }, (_, i) => {
-    const d = new Date(new Date().getFullYear(), new Date().getMonth() - (5 - i), 1);
-    const start = d.getTime();
-    const end = new Date(d.getFullYear(), d.getMonth() + 1, 1).getTime();
+  return lastUtcMonths(6).map((w) => {
     const value = rows
-      .filter((r) => { const t = new Date(r.created_at).getTime(); return t >= start && t < end; })
+      .filter((r) => inWindow(r.created_at, w))
       .reduce((sum, r) => sum + valueOf(r), 0);
-    return { label: d.toLocaleDateString(locale, { month: 'short' }), value };
+    return { label: new Date(w.start).toLocaleDateString(locale, { month: 'short', timeZone: ADMIN_ZONE }), value };
   });
 }
 
@@ -152,14 +151,13 @@ export default async function AdminReportsPage() {
   for (const s of activeSubs) planBuckets.set(planLabel(s.plan), (planBuckets.get(planLabel(s.plan)) ?? 0) + 1);
   const subSegments = [...planBuckets.entries()].map(([label, value]) => ({ label, value, color: planColors[label] ?? '#64748b' }));
 
-  const activityByDay = Array.from({ length: 14 }, (_, i) => {
-    const dayStart = Date.now() - (13 - i) * MS_DAY;
-    const d = new Date(dayStart);
-    return {
-      label: d.toLocaleDateString(locale, { day: 'numeric' }),
-      value: (activity ?? []).filter((a) => { const t = new Date(a.created_at).getTime(); return t >= dayStart && t < dayStart + MS_DAY; }).length,
-    };
-  });
+  // Whole days in the admin zone, ending today. The rolling 24-hour windows
+  // this replaced were labelled with the day-of-month their START fell on in
+  // the host's zone, which named a day no window matched.
+  const activityByDay = lastUtcDays(14).map((w) => ({
+    label: new Date(w.start).toLocaleDateString(locale, { day: 'numeric', timeZone: ADMIN_ZONE }),
+    value: (activity ?? []).filter((a) => inWindow(a.created_at, w)).length,
+  }));
   const maxActivity = Math.max(...activityByDay.map((a) => a.value), 1);
 
   // Each tile answers from ITS OWN read, because `?? 0` cannot tell "no

@@ -17,6 +17,7 @@ import { Sparkline, Gauge, Donut, Bars } from '@/components/admin/charts';
 import { fmtMoney, fmtDate } from '@/lib/utils/format';
 import { planMonthlyCents, planName } from '@/lib/constants/plans';
 import { getTranslations, getLocaleContext } from '@/lib/i18n/server';
+import { ADMIN_ZONE, inWindow, lastUtcMonths, utcMonthStartIso } from '@/lib/admin/clock';
 
 export const metadata: Metadata = { title: 'Admin Dashboard', robots: { index: false } };
 // Live, cross-family data via the service-role client — always render fresh.
@@ -42,7 +43,8 @@ export default async function AdminDashboardPage() {
   // entirely by the super-admin check in admin/layout.tsx.
   const supabase = createServiceClient();
   const now = Date.now();
-  const monthStart = new Date(new Date().getFullYear(), new Date().getMonth(), 1).toISOString();
+  // "This month" starts in the admin zone, not the host's (lib/admin/clock.ts).
+  const monthStart = utcMonthStartIso();
   const thirtyDaysAgo = new Date(now - 30 * MS_DAY).toISOString();
 
   // Lifted out of the settled batch because their SHAPE differs, not because
@@ -201,14 +203,11 @@ export default async function AdminDashboardPage() {
   const totalFamiliesForDonut = (families ?? []).length;
 
   // ── Revenue overview (last 6 months of new MRR) ──
-  const months = Array.from({ length: 6 }, (_, i) => {
-    const d = new Date(new Date().getFullYear(), new Date().getMonth() - (5 - i), 1);
-    const start = d.getTime();
-    const end = new Date(d.getFullYear(), d.getMonth() + 1, 1).getTime();
+  const months = lastUtcMonths(6).map((w) => {
     const cents = (subscriptions ?? [])
-      .filter((s) => { const t = new Date(s.created_at).getTime(); return t >= start && t < end; })
+      .filter((s) => inWindow(s.created_at, w))
       .reduce((sum, s) => sum + planMonthlyCents(s.plan), 0);
-    return { label: d.toLocaleDateString(locale, { month: 'short' }), cents };
+    return { label: new Date(w.start).toLocaleDateString(locale, { month: 'short', timeZone: ADMIN_ZONE }), cents };
   });
   const maxRevenue = Math.max(...months.map((m) => m.cents), 1);
 
