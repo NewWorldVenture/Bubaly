@@ -1,5 +1,11 @@
 # Final Production Audit
 
+## Release gate refresh — 2026-10-04 10:24 UTC
+
+- GitHub reports 98 open PRs: 97 drafts. Thirty-seven target `main` (36 drafts plus #834); the remaining 61 target other PR branches and are drafts. #834 is the only non-draft and remains DIRTY with a failing Database/RLS boundary check (`An active family admin is required`). No PR was merged or retargeted; the draft, stacked, conflict, and failing-check states do not provide a safe bulk promotion path.
+- The latest GitHub Production deployment is successful: deployment 6839720816 for `main` SHA `a0d86dd34caea36c4e1c360a36cfc55ddb460458`, completed 2026-10-04 10:18:47 UTC. Public `https://www.bubaly.com/` and `/login` return 200; unauthenticated `/dashboard/meals` returns 307. Changes since app-source SHA `933236e3cfe6e9616d4fc1e76e7161109ba779be` are confined to `finalaudit.md`; no PR application code was promoted.
+- Current-main CI run 37194824143 has Database/RLS and Mobile passing; Core and E2E were still running at this checkpoint. The audit's prior app-source run 37191876381 passed all four jobs on SHA `75571eac`, which contains the same app source as `933236e3`.
+- Production is serving current `main`, but full audit readiness remains **NO**. No production configuration, database migration, or money movement was performed.
 <!-- jimmy-coordination:begin 2026-09-30 -->
 ## Audit Status
 
