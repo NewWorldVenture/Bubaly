@@ -35,6 +35,18 @@ vi.mock('web-push', () => ({
 // Consent resolution is a separate concern with its own tests; stub it so these
 // cases are about the prune counter and nothing else.
 vi.mock('@/lib/notifications/child-channels', () => ({ childrenBlockedOn: mocks.blocked }));
+// The SSRF guard (C3-S5-03) resolves each endpoint's host before POSTing, and
+// this file's device points at a real push host — so, unstubbed, every case
+// below made a live DNS lookup with a 3 s timeout. When the runner's lookup
+// failed, the device was skipped as undeliverable, nothing was deleted, and
+// the first assertion read `expected [] to deeply equal [ 'device-1' ]` on a
+// change that touched none of this. These cases are about the prune counter;
+// the guard has its own tests (push-endpoint-ssrf-guard). Stubbed exactly as
+// the other push tests stub it.
+vi.mock('@/lib/server/push-endpoint', () => ({
+  isDeliverablePushEndpoint: async () => true,
+  __resetPushEndpointCache: () => {},
+}));
 
 type DeleteOutcome = { error: { code: string; message: string } | null };
 
