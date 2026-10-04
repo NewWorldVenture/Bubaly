@@ -459,6 +459,121 @@ try {
   end $$;`);
   console.log('PASS: authenticated conversation/family cascades serialize and clean up child messages.');
 
+  const familyAdminDeleteRace = async ({ name, familyId, conversationId, messageId, membershipChange, changeFirst, expectedMembership }) => {
+    const tag = name.toUpperCase().replace(/[^A-Z0-9]+/g, '_');
+    sql(`insert into public.families(id, name, created_by) values ('${familyId}', '${name}', '${aliceId}');
+      insert into public.family_conversations(id, family_id, name, kind, participant_ids, created_by)
+        values ('${conversationId}', '${familyId}', '${name}', 'group',
+          array(select id from public.family_members where family_id='${familyId}'), '${aliceId}');
+      insert into public.family_messages(id, family_id, conversation_id, sender_id, content)
+        values ('${messageId}', '${familyId}', '${conversationId}', '${aliceId}', '${name}');`);
+
+    if (!changeFirst) {
+      const deleteFirst = startConcurrentSql(`begin;
+        set local role authenticated;
+        set local request.jwt.claim.sub='${aliceId}';
+        delete from public.families where id='${familyId}';
+        select pg_backend_pid() as backend_pid \\gset
+        \\echo ${tag}_DELETE_LOCK_HELD=:backend_pid
+        select pg_sleep(3);
+        commit;`, `${tag}_DELETE_LOCK_HELD`);
+      const deleteOutcome = deleteFirst.done.then(value => ({ ok: true, value }), error => ({ ok: false, error }));
+      let membershipUpdate;
+      try {
+        await deleteFirst.ready;
+        membershipUpdate = startConcurrentSql(`begin;
+          select pg_backend_pid() as backend_pid \\gset
+          \\echo ${tag}_MEMBERSHIP_UPDATE_STARTED=:backend_pid
+          update public.family_members set ${membershipChange} where family_id='${familyId}' and user_id='${aliceId}';
+          commit;`, `${tag}_MEMBERSHIP_UPDATE_STARTED`);
+        const updateOutcome = membershipUpdate.done.then(value => ({ ok: true, value }), error => ({ ok: false, error }));
+        const updatePid = await membershipUpdate.ready;
+        const order = await Promise.race([
+          waitForBackendLock(updatePid, `${name} membership update to wait for family deletion`).then(() => 'blocked'),
+          updateOutcome.then(() => 'finished'),
+        ]);
+        if (order !== 'blocked') throw new Error(`${name} did not retain the admin membership lock through family deletion.`);
+        const outcomes = await Promise.all([deleteOutcome, updateOutcome]);
+        if (outcomes.some(outcome => !outcome.ok)) throw outcomes.find(outcome => !outcome.ok).error;
+      } catch (error) {
+        await Promise.all([deleteOutcome, membershipUpdate?.done.then(value => ({ ok: true, value }), err => ({ ok: false, error: err }))].filter(Boolean));
+        throw error;
+      }
+      sql(`do $$ begin
+        if exists(select 1 from public.families where id='${familyId}')
+          or exists(select 1 from public.family_conversations where id='${conversationId}')
+          or exists(select 1 from public.family_messages where id='${messageId}')
+          or exists(select 1 from public.family_members where family_id='${familyId}') then
+          raise exception '${name} delete-first ordering did not commit its complete family cascade'; end if;
+      end $$;`);
+    } else {
+      const updateFirst = startConcurrentSql(`begin;
+        update public.family_members set ${membershipChange} where family_id='${familyId}' and user_id='${aliceId}';
+        select pg_backend_pid() as backend_pid \\gset
+        \\echo ${tag}_MEMBERSHIP_LOCK_HELD=:backend_pid
+        select pg_sleep(3);
+        commit;`, `${tag}_MEMBERSHIP_LOCK_HELD`);
+      const updateOutcome = updateFirst.done.then(value => ({ ok: true, value }), error => ({ ok: false, error }));
+      let deleteAfter;
+      try {
+        await updateFirst.ready;
+        deleteAfter = startConcurrentSql(`begin;
+          set local role authenticated;
+          set local request.jwt.claim.sub='${aliceId}';
+          select pg_backend_pid() as backend_pid \\gset
+          \\echo ${tag}_DELETE_STARTED=:backend_pid
+          delete from public.families where id='${familyId}';
+          commit;`, `${tag}_DELETE_STARTED`);
+        const deleteOutcome = deleteAfter.done.then(value => ({ ok: true, value }), error => ({ ok: false, error }));
+        const deletePid = await deleteAfter.ready;
+        const order = await Promise.race([
+          waitForBackendLock(deletePid, `${name} family delete to wait for admin membership update`).then(() => 'blocked'),
+          deleteOutcome.then(() => 'finished'),
+        ]);
+        if (order !== 'blocked') throw new Error(`${name} family delete completed before the in-flight admin update.`);
+        const updateResult = await updateOutcome;
+        if (!updateResult.ok) throw updateResult.error;
+        const deleteResult = await deleteOutcome;
+        if (deleteResult.ok) throw new Error(`${name} family delete was accepted after its admin membership changed.`);
+        if (!String(deleteResult.error.stderr ?? '').includes('An active family admin is required')) throw deleteResult.error;
+      } catch (error) {
+        await Promise.all([updateOutcome, deleteAfter?.done.then(value => ({ ok: true, value }), err => ({ ok: false, error: err }))].filter(Boolean));
+        throw error;
+      }
+      sql(`do $$ begin
+        if not exists(select 1 from public.families where id='${familyId}')
+          or not exists(select 1 from public.family_conversations where id='${conversationId}')
+          or not exists(select 1 from public.family_messages where id='${messageId}')
+          or not exists(select 1 from public.family_members where family_id='${familyId}' and user_id='${aliceId}' and ${expectedMembership}) then
+          raise exception '${name} update-first ordering did not preserve the family and its changed membership'; end if;
+      end $$;
+      delete from public.families where id='${familyId}';`);
+    }
+    const ordering = changeFirst ? 'membership-update-first' : 'family-delete-first';
+    console.log(`PASS: two-session family delete vs ${name} (${ordering}) serializes correctly.`);
+  };
+
+  await familyAdminDeleteRace({
+    name: 'admin deactivation', familyId: '00000000-0000-4000-8000-0000000047f6',
+    conversationId: '00000000-0000-4000-8000-0000000047d1', messageId: '00000000-0000-4000-8000-0000000047d5',
+    membershipChange: 'is_active=false', changeFirst: false, expectedMembership: 'is_active=false and role=\'parent\'',
+  });
+  await familyAdminDeleteRace({
+    name: 'admin deactivation', familyId: '00000000-0000-4000-8000-0000000047f7',
+    conversationId: '00000000-0000-4000-8000-0000000047d2', messageId: '00000000-0000-4000-8000-0000000047d6',
+    membershipChange: 'is_active=false', changeFirst: true, expectedMembership: 'is_active=false and role=\'parent\'',
+  });
+  await familyAdminDeleteRace({
+    name: 'admin demotion', familyId: '00000000-0000-4000-8000-0000000047f8',
+    conversationId: '00000000-0000-4000-8000-0000000047d3', messageId: '00000000-0000-4000-8000-0000000047d7',
+    membershipChange: "role='adult'", changeFirst: false, expectedMembership: 'is_active=true and role=\'adult\'',
+  });
+  await familyAdminDeleteRace({
+    name: 'admin demotion', familyId: '00000000-0000-4000-8000-0000000047f9',
+    conversationId: '00000000-0000-4000-8000-0000000047d4', messageId: '00000000-0000-4000-8000-0000000047d8',
+    membershipChange: "role='adult'", changeFirst: true, expectedMembership: 'is_active=true and role=\'adult\'',
+  });
+
   // Service-role maintenance has auth.uid() = NULL and keeps its prior bypass.
   sql(`insert into public.families(id, name, created_by) values
       ('00000000-0000-4000-8000-0000000047f5', 'Service cascade', '${aliceId}');
