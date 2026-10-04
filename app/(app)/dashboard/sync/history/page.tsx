@@ -8,6 +8,7 @@ import { Badge } from '@/components/ui/badge';
 import { ErrorState } from '@/components/ui/states';
 import { PROVIDER_LABELS, type SyncProvider } from '@/lib/sync/capabilities';
 import { getTranslations } from '@/lib/i18n/server';
+import { getFormat } from '@/lib/utils/format-server';
 
 export async function generateMetadata(): Promise<Metadata> {
   const t = await getTranslations();
@@ -18,6 +19,9 @@ export const dynamic = 'force-dynamic';
 export default async function SyncHistoryPage() {
   const t = await getTranslations();
   const ctx = await requireUserContext();
+  // Each entry's clock is the FAMILY's; a bare `toLocaleString()` on the server
+  // was the host's zone in the host's locale.
+  const { fmtDate } = await getFormat(ctx.active.family.timezone || 'UTC');
   const supabase = await createServer();
 
   const [runsRes, auditRes] = await settleAll([
@@ -83,7 +87,7 @@ export default async function SyncHistoryPage() {
                   {a.provider ? `${PROVIDER_LABELS[(a.provider as SyncProvider)] ?? a.provider}` : '—'}
                   {a.item_type ? ` · ${a.item_type}` : ''}
                 </span>
-                <span className="ml-auto shrink-0 text-xs text-muted">{new Date(a.created_at).toLocaleString()}</span>
+                <span className="ml-auto shrink-0 text-xs text-muted">{fmtDate(a.created_at, 'MMM d, yyyy h:mm a')}</span>
               </div>
             ))}
           </div>
