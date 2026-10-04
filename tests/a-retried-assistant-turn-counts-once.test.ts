@@ -66,6 +66,10 @@ class Query {
   in(col: string, vs: unknown[]) { this.filters.push((r) => vs.includes(r[col])); return this; }
   gte(col: string, v: string) { this.filters.push((r) => String(r[col]) >= v); return this; }
   lte(col: string, v: string) { this.filters.push((r) => String(r[col]) <= v); return this; }
+  // The chat snapshot reads the calendar through lib/calendar/occurrences (PostgREST `or`
+  // filters for singles and series). No test here seeds calendar rows, so it narrows nothing.
+  or(_expr: string) { return this; }
+  neq(col: string, v: unknown) { this.filters.push((r) => r[col] != null && r[col] !== v); return this; }
   order(col: string, opts?: { ascending?: boolean }) { this.ordered = { col, asc: opts?.ascending !== false }; return this; }
   limit(n: number) { this.max = n; return this; }
   async maybeSingle() { const r = await this.run(); return { data: r.data?.[0] ?? null, error: r.error }; }
