@@ -189,7 +189,7 @@ SELECT public.meal_plan_test_assert((SELECT count(*) = 1 FROM public.meal_plans 
 -- observed waiting on the exact same family/date/type advisory key before A
 -- commits. B then replaces A's row and both durable receipts remain distinct.
 INSERT INTO public.meals(id, family_id, name, meal_type, ingredients)
-VALUES ('30000000-0000-0000-0000-000000000002',
+VALUES ('30000000-0000-0000-0000-000000000003',
         '10000000-0000-0000-0000-000000000001',
         'Synthetic distinct-request race meal B', 'dinner', '[]'::jsonb);
 
@@ -228,7 +228,7 @@ END $$;
 SELECT public.meal_plan_test_assert(public.dblink_send_query('meal_b',
   $$SELECT public.meal_plan_replace_slots(
       '10000000-0000-0000-0000-000000000001','distinct-slot-request-b',
-      '[{"meal_id":"30000000-0000-0000-0000-000000000002","plan_date":"2026-10-14","meal_type":"dinner"}]'::jsonb)$$) = 1,
+      '[{"meal_id":"30000000-0000-0000-0000-000000000003","plan_date":"2026-10-14","meal_type":"dinner"}]'::jsonb)$$) = 1,
   'second distinct-request replacement dispatched');
 DO $$
 DECLARE
@@ -272,14 +272,14 @@ SELECT public.meal_plan_test_assert(
      FROM public.meal_plan_test_results WHERE label = 'distinct-b')
   AND (SELECT result->'planned'->0->>'meal_id' = '30000000-0000-0000-0000-000000000001'
      FROM public.meal_plan_test_results WHERE label = 'distinct-a')
-  AND (SELECT result->'planned'->0->>'meal_id' = '30000000-0000-0000-0000-000000000002'
+  AND (SELECT result->'planned'->0->>'meal_id' = '30000000-0000-0000-0000-000000000003'
      FROM public.meal_plan_test_results WHERE label = 'distinct-b'),
   'both distinct requests complete and B replaces A''s slot');
 SELECT public.meal_plan_test_assert(
   (SELECT count(*) = 1 FROM public.meal_plans
    WHERE family_id = '10000000-0000-0000-0000-000000000001'
      AND plan_date = '2026-10-14' AND meal_type = 'dinner')
-  AND (SELECT meal_id = '30000000-0000-0000-0000-000000000002' FROM public.meal_plans
+  AND (SELECT meal_id = '30000000-0000-0000-0000-000000000003' FROM public.meal_plans
        WHERE family_id = '10000000-0000-0000-0000-000000000001'
          AND plan_date = '2026-10-14' AND meal_type = 'dinner')
   AND (SELECT count(*) = 2 FROM public.meal_plan_write_receipts

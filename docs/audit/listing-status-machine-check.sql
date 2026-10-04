@@ -308,7 +308,7 @@ begin
         meal_replace_src is not null
         and meal_slot_guard_src is not null
         and position('forv_slotin' in meal_replace_compact) > 0
-        and position('forv_slotinselectdistinct(e.value->>''plan_date'')::dateasplan_date,e.value->>''meal_type''asmeal_typefromjsonb_array_elements(p_entries)eorderbyplan_date,meal_typeloop' in meal_replace_compact) > 0
+        and position('forv_slotinselectdistinct(e.value->>''plan_date'')::dateasplan_date,e.value->>''meal_type''asmeal_typefromjsonb_array_elements(p_entries)eorderbyplan_date,meal_typeloopperformpg_advisory_xact_lock(hashtextextended(''meal-plan-slot:''||p_family_id::text||'':''||v_slot.plan_date::text||'':''||v_slot.meal_type,0));endloop;' in meal_replace_compact) > 0
         and position('orderbyplan_date,meal_type' in meal_replace_compact)
             > position('forv_slotin' in meal_replace_compact)
         and position('performpg_advisory_xact_lock(hashtextextended(''meal-plan-slot:''||p_family_id::text||'':''||v_slot.plan_date::text||'':''||v_slot.meal_type,0));' in meal_replace_compact)
@@ -338,8 +338,7 @@ begin
             > position('select*intov_receiptfrompublic.meal_plan_write_receipts' in meal_replace_replay_branch)
         and position('returnjsonb_set(v_receipt.result,''{replayed}'',''true''::jsonb,true);' in meal_replace_replay_branch)
             > position('ifnotfoundorv_receipt.operation' in meal_replace_replay_branch)
-        and position('updatepublic.' in meal_replace_replay_branch) = 0
-        and position('deletefrompublic.' in meal_replace_replay_branch) = 0
+        and regexp_count(meal_replace_replay_branch, '(insertinto|deletefrom|update|mergeinto|truncatetable|truncate)') = 0
         and right(meal_replace_replay_branch, 6) = 'endif;'
         and position('performpg_advisory_xact_lock' in meal_replace_compact)
             > position('ifv_claimed=0then' in meal_replace_compact)
@@ -348,10 +347,19 @@ begin
             > position('performpg_advisory_xact_lock' in meal_replace_compact)
         and position('wherefamily_id=p_family_idandactor_id=v_actorandrequest_id=p_request_id' in meal_replace_compact)
             > position('updatepublic.meal_plan_write_receiptssetresult=v_result' in meal_replace_compact)
-        and position('forv_slot_keyin' in meal_slot_guard_compact) > 0
-        and position('forv_slot_keyinselectdistinctkfrompg_catalog.unnest(array[v_old_key,v_new_key])askeys(k)wherekisnotnullorderbykloop' in meal_slot_guard_compact) > 0
-        and position('orderbyk' in meal_slot_guard_compact)
-            > position('forv_slot_keyin' in meal_slot_guard_compact)
+        -- Exactly four direct public-table DML statements are allowed here:
+        -- claim receipt, delete/insert the planned slots, and complete receipt.
+        -- This keeps the exception from hiding unrelated public writes added
+        -- to the SECURITY DEFINER function later.
+        and regexp_count(meal_replace_compact, '(insertinto|deletefrom|update|mergeinto|truncatetable|truncate)') = 4
+        and regexp_count(meal_replace_compact, 'insertintopublic\.') = 2
+        and regexp_count(meal_replace_compact, 'deletefrompublic\.') = 1
+        and regexp_count(meal_replace_compact, 'updatepublic\.') = 1
+        and position('execute' in meal_replace_compact) = 0
+        and position('callpublic.' in meal_replace_compact) = 0
+        and position('performpublic.' in meal_replace_compact) = 0
+        and position('selectpublic.' in meal_replace_compact) = 0
+        and position('forv_slot_keyinselectdistinctkfrompg_catalog.unnest(array[v_old_key,v_new_key])askeys(k)wherekisnotnullorderbykloopperformpg_advisory_xact_lock(hashtextextended(''meal-plan-slot:''||v_slot_key,0));endloop;' in meal_slot_guard_compact) > 0
         and position('performpg_advisory_xact_lock(hashtextextended(''meal-plan-slot:''||v_slot_key,0));' in meal_slot_guard_compact)
             > position('orderbyk' in meal_slot_guard_compact)
         and position('iftg_op<>''insert''thenv_old_key:=old.family_id::text||'':''||old.plan_date::text||'':''||old.meal_type::text;endif;' in meal_slot_guard_compact) > 0
@@ -361,6 +369,7 @@ begin
           where t.tgrelid = to_regclass('public.meal_plans')
             and t.tgfoid = to_regprocedure('public.meal_plan_slot_write_guard()')
             and not t.tgisinternal
+            and t.tgenabled in ('O', 'A')
             and t.tgtype = 31
         )
         and exists (
