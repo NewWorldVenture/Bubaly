@@ -1177,21 +1177,23 @@ describe('an accepted autopilot suggestion is not offered again (C1-S9-59)', () 
   });
 });
 
-describe('the rebalance was already confirmed, by the other route (C1-S9-59)', () => {
-  it('uses count: exact and bails on zero', () => {
+describe('the rebalance is confirmed by the rows it moved (C1-S9-59)', () => {
+  it('reads the update back and bails on zero rows before the audit row', () => {
     const body = actionBody(workload, 'export async function moveAssignmentAction');
-    expect(body).toContain("{ count: 'exact' }");
-    expect(body).toContain('if (!count) return { ok: false');
-    // No `.select()` on the UPDATE and none needed: `Prefer: count=exact` is
-    // answered whether or not a representation was requested. Scoped to the
-    // update statement, because the member existence read above it legitimately
-    // selects — an assertion over the whole body would have been about that read.
-    const update = body.slice(at(body, "from('chore_assignments')"));
-    expect(stripComments(update)).not.toContain('.select(');
+    // It used to confirm by `count: 'exact'`, which says the same thing by the
+    // other route; the readback is the one shape the gated-write guard
+    // (a-filtered-delete-is-not-a-deletion) recognises, so the site no longer
+    // needs a tolerated-list entry there. Scoped to the update statement, because
+    // the member existence read above it legitimately selects.
+    const update = stripComments(body.slice(at(body, "from('chore_assignments')")));
+    expect(update).toMatch(/\.in\('status', \['todo', 'in_progress'\]\)\s*\.select\('id'\)/);
+    expect(update).not.toContain("{ count: 'exact' }");
+    expect(at(body, 'if (wroteNoRows(moved))')).toBeLessThan(at(body, 'await logAudit('));
   });
 
-  it('says so in the file, because a grep for .select() reads it as unconfirmed', () => {
-    expect(workload).toContain('Confirmed by COUNT rather than by `.select()`');
+  it('stays family-scoped while it does so', () => {
+    const body = actionBody(workload, 'export async function moveAssignmentAction');
+    expect(body).toContain(".eq('family_id', ctx.active.familyId)");
   });
 });
 

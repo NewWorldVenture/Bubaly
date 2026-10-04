@@ -11,6 +11,7 @@
 
 import { buildMomentPrep, momentWhen, type MomentEvent, type MomentCategory } from '@/lib/moments/prep';
 import { upcomingBirthdayEvents, type BirthdayMember } from '@/lib/moments/birthdays';
+import { dayKeyIn } from '@/lib/time/zoned';
 
 export type MomentNotice = { relatedId: string; title: string; body: string };
 
@@ -40,13 +41,34 @@ export function imminentMomentNotices(
   timeZone?: string,
 ): MomentNotice[] {
   const horizon = now.getTime() + horizonHours * 3600_000;
-  const merged: MomentEvent[] = [...(events ?? []), ...upcomingBirthdayEvents(members ?? [], now, 1)];
+  // The birthdays are counted from the FAMILY's day when the zone is known:
+  // on the UTC cron, the host's "today" is tomorrow from 5pm in California,
+  // and a birthday "tomorrow" was announced a day early and today's not at all.
+  const merged: MomentEvent[] = [...(events ?? []), ...upcomingBirthdayEvents(members ?? [], now, 1, timeZone)];
+  // An all-day moment is a DAY, and its start is a zone-less
+  // 'YYYY-MM-DDT00:00:00' (lib/moments/birthdays.ts says why). `Date.parse`
+  // reads that as the HOST's midnight, so the "still counts through its day"
+  // test below was Greenwich's on the cron: the family's 3 October, parsed as
+  // 3 October 00:00Z, was already more than a day old at 5:30pm in California,
+  // and today's birthday ping never went out. With the zone known, an all-day
+  // moment is kept by its DAY: from the family's today through the day the
+  // horizon ends on. Without one, the local reading stands as before.
+  const todayKey = timeZone ? dayKeyIn(now, timeZone) : null;
+  const horizonKey = timeZone ? dayKeyIn(new Date(horizon), timeZone) : null;
   const out: { at: number; notice: MomentNotice }[] = [];
   for (const e of merged) {
-    const t = Date.parse(e.starts_at);
-    if (Number.isNaN(t) || t > horizon) continue;
-    // Timed events must still be ahead; all-day events count through their day.
-    if (e.all_day ? t < now.getTime() - 86_400_000 : t < now.getTime()) continue;
+    let t: number;
+    if (e.all_day && todayKey && horizonKey) {
+      const day = e.starts_at.slice(0, 10);
+      if (!/^\d{4}-\d{2}-\d{2}$/.test(day) || day < todayKey || day > horizonKey) continue;
+      // Ordering only: the day as a zone-free instant.
+      t = Date.parse(`${day}T00:00:00Z`);
+    } else {
+      t = Date.parse(e.starts_at);
+      if (Number.isNaN(t) || t > horizon) continue;
+      // Timed events must still be ahead; all-day events count through their day.
+      if (e.all_day ? t < now.getTime() - 86_400_000 : t < now.getTime()) continue;
+    }
 
     const prep = buildMomentPrep(e, { now, timeZone });
     if (prep.category === 'general') continue;

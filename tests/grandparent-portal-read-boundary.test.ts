@@ -38,7 +38,7 @@ describe('grandparent-portal read boundary', () => {
   // half-truth this file exists to prevent.
   it('reads every household the member belongs to, one at a time', () => {
     expect(page).toContain('ctx.memberships.map((m) => ({ familyId: m.familyId, familyName: m.family.name }))');
-    expect(page).toContain('async function householdBody(supabase: Supabase, t: Translate, household: HouseholdRef)');
+    expect(page).toContain('async function householdBody(supabase: Supabase, t: Translate, household: HouseholdRef, todayKey: string)');
     expect(page).toContain('const familyId = household.familyId;');
   });
 
@@ -50,7 +50,7 @@ describe('grandparent-portal read boundary', () => {
     expect(guardIdx).toBeGreaterThan(bodyIdx);
     // Every household is rendered, so a failing one renders its own notice
     // beside the others rather than replacing them.
-    expect(page).toContain('body: await householdBody(supabase, t, household),');
+    expect(page).toContain('body: await householdBody(supabase, t, household, todayKey),');
     expect(page).toContain('{sections.map(({ household, body }) => (');
   });
 });

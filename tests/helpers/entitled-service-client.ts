@@ -27,7 +27,9 @@ export function entitledServiceClient(plan = 'plus'): SupabaseClient<Database> {
   const from = (table: string) => {
     const result = resultFor(table);
     const chain: Record<string, unknown> = {};
-    for (const method of ['select', 'eq', 'in', 'is', 'not', 'gte', 'lte', 'neq', 'order', 'limit', 'maybeSingle', 'single']) {
+    // `abortSignal` because the feature-tier read is bounded by one, as the
+    // real client allows; without it the read fails and the gate rightly answers 503.
+    for (const method of ['select', 'eq', 'in', 'is', 'not', 'gte', 'lte', 'neq', 'order', 'limit', 'abortSignal', 'maybeSingle', 'single']) {
       chain[method] = () => chain;
     }
     chain.then = (resolve: (value: unknown) => unknown) => Promise.resolve(result).then(resolve);
