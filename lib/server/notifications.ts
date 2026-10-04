@@ -443,9 +443,17 @@ export async function generateFamilyNotifications(supabase: DB, familyId: string
       .select('type, related_id, user_id, created_at')
       .eq('family_id', familyId)
       .in('related_id', chunk), 50);
-    // A failed dedup read leaves `seen` empty, so every candidate would pass the
-    // filter and re-insert as a duplicate — log it so that spam is diagnosable.
-    if (existingErr) console.error('[notifications] dedup read failed', { familyId, error: existingErr });
+    // A failed dedup read would leave `seen` empty, so every candidate would
+    // pass the filter and be written again. 0489's index refuses the keyed
+    // duplicates, but a row outside the index (a legacy key, a type the index
+    // does not cover) has only this read between it and a second copy. So the
+    // read failing is this family's tick failing: nothing is written, the cron
+    // counts the family among its generation failures, and the next tick reads
+    // again (review 5981509002 on #936).
+    if (existingErr) {
+      console.error('[notifications] dedup read failed', { familyId, error: existingErr });
+      throw new Error(`[notifications] the dedup read failed for family ${familyId}; nothing was written this tick: ${existingErr.message}`);
+    }
     const keyOf = (type: string, relatedId: string, userId: string | null) => `${type}:${relatedId}:${userId ?? 'all'}`;
     const seen = new Set((existing ?? []).map((e) => keyOf(e.type, e.related_id ?? '', e.user_id)));
     // The newest row under each key, for the legacy question: "was THIS occurrence announced under the old key?"

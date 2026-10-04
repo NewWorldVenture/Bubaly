@@ -153,6 +153,48 @@ describe('two engine runs for one family write an occurrence once', () => {
   });
 });
 
+describe('the dedupe read failing is the tick failing, not a tick that writes everything again (review 5981509002)', () => {
+  /** The in-memory client with every READ of `notifications` refused; the inserts are left alone. */
+  function readsRefused(): DB {
+    const target = db as unknown as { from: (table: string) => Record<string, unknown> };
+    const refusal = { data: null, error: { message: 'canceling statement due to statement timeout', code: '57014' }, count: null };
+    return new Proxy(target, {
+      get(t, prop, receiver) {
+        if (prop !== 'from') return Reflect.get(t, prop, receiver);
+        return (table: string) => {
+          const builder = t.from(table);
+          if (table !== 'notifications') return builder;
+          return new Proxy(builder, {
+            get(b, p) {
+              if (p !== 'select') return Reflect.get(b, p);
+              return () => {
+                const stub: Record<string | symbol, unknown> = new Proxy({}, {
+                  get: (_s, name) => (name === 'then' ? (resolve: (v: unknown) => unknown) => Promise.resolve(refusal).then(resolve) : () => stub),
+                });
+                return stub;
+              };
+            },
+          });
+        };
+      },
+    }) as unknown as DB;
+  }
+
+  it('nothing is written and the family\'s tick fails, so the cron counts it and the next tick reads again', async () => {
+    withRenewal();
+    await expect(generate(readsRefused())).rejects.toThrow(/the dedup read failed for family .*; nothing was written this tick: canceling statement due to statement timeout/);
+    expect(db.table('notifications'), 'not one row, keyed or not').toEqual([]);
+    // The next tick, with its read answered, writes the occurrence once.
+    expect(await generate()).toBe(1);
+    expect(notices('renewals')).toEqual([{ key: RENEWAL_KEY, user_id: 'u-parent' }]);
+  });
+
+  it('control: with the read answered, the same household writes its notice', async () => {
+    withRenewal();
+    expect(await generate()).toBe(1);
+  });
+});
+
 describe('notify() under the same index', () => {
   const brief = { type: 'system' as const, title: 'Your morning brief', body: 'Two things today.', relatedType: 'briefs', relatedId: 'brief:2026-10-03' };
 
