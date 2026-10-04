@@ -1,5 +1,36 @@
 # Production release status and historical feature inventory
 
+## Unapplied #969 composition and rollout dependencies — 2026-10-04
+
+The current source candidate includes main `d4ec0b65` and these consecutive
+unapplied generations. This inventory is not hosted catalog or migration-ledger
+acceptance; all historical prerequisites still need reconciliation in order.
+
+| Generation | Source file | Release dependency |
+|---|---|---|
+| 0475 | `0475_preserve_recurring_bill_anchor.sql` | Nullable 1–31 bill anchors; no default or historical backfill. |
+| 0476 | `0476_preserve_messaging_participants.sql` | Preserve recorded audiences; separate empty canonical chat; validate real lifecycle triggers, grants and retired overloads. |
+| 0477 | `0477_approval_requests_private_read.sql` | Active requester/manager approval reads through real member identity. |
+| 0478 | `0478_ai_copy_private_read_and_quota.sql` | Restrictive AI-copy reads and count-only active-family UTC usage RPC. |
+
+The capped Free-plan application gate now requires
+`count_family_ai_requests_month`. Missing, malformed or unavailable receipts
+fail closed. Verify the actual RPC, effective ACLs and prerequisite schema
+before enabling that application source; deploying it ahead of its database
+contract would refuse capped Free requests. The count remains separate from
+request insertion and does not provide an atomic quota reservation.
+
+Active Claude [#970](https://github.com/NewWorldVenture/Bubaly/pull/970) at
+`c4142fe2a` proposes a different bill implementation and a distinct migration
+at the same generation 0475. The unchanged strict migration guard
+rejects a combined inventory with both 0475 files. Review and compose one bill
+source, then assign dependent unapplied numbers in actual release order before
+landing either overlapping candidate. The active author branch and applied
+historical migrations are unchanged. Prepared read-only metadata checks are in
+`docs/final-audit/messaging-bill-readonly-preflight.sql`; no hosted execution is
+recorded. See `finalaudit.md` for exact source, synthetic proofs and remaining
+production limits.
+
 > **Status correction, 2026-10-03** (blocked-rows eligibility review;
 > evidence in `docs/final-audit/blocked-rows-eligibility-20261003.md`).
 > The connectivity paragraph below is historical. The `Supabase production
