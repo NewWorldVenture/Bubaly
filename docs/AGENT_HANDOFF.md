@@ -3198,8 +3198,15 @@ Last updated: 2026-06-26 — Session 3: Family Treasury, Send Money, frictionles
 >    `STRIPE_MONEY_WEBHOOK_SECRET` (new — for the /api/webhooks/money endpoint; if unset it falls back
 >    to `STRIPE_WEBHOOK_SECRET`). No client-exposed Stripe keys are needed for this layer.
 > 4. **Stripe webhook**: add endpoint `https://www.bubaly.com/api/webhooks/money` subscribed to
->    `issuing_authorization.request`, `issuing_transaction.created`, `account.updated`. Copy its
->    signing secret into `STRIPE_MONEY_WEBHOOK_SECRET`. (Real-time auth requires the .request event.)
+>    `issuing_authorization.request`, `issuing_authorization.created`,
+>    `issuing_authorization.updated`, `issuing_transaction.created`, `issuing_card.created`,
+>    `issuing_card.updated`, `account.updated` (every type the route's `HANDLED_EVENT_TYPES`
+>    lists; `tests/a-hold-stripe-declined-for-us-is-released.test.ts` keeps this line in step).
+>    Copy its signing secret into `STRIPE_MONEY_WEBHOOK_SECRET`. (Real-time auth requires the
+>    .request event; `.updated` and `.created` release the hold of an authorization that closes,
+>    is reversed or expires, and of each request Stripe declined, including one it declined
+>    itself when our answer missed its 2 seconds; one the card network overrode waits for the
+>    close. Corrected 2026-10-04: this step listed only three events.)
 > 5. **Flip feature flags** (service role, `feature_flags` table) in dependency order as capabilities
 >    are approved: `stripe_connect_enabled` → `stripe_treasury_enabled` / `stripe_issuing_enabled` →
 >    `physical_cards_enabled` / `custom_card_designs_enabled` / `stripe_payments_enabled`. Until flipped,

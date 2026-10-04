@@ -42,11 +42,16 @@ event** (`stripe events resend <id>`) → still 200 but **no double-apply** (ded
 
 ## Stripe Issuing (wallet) — `/api/webhooks/money`
 
-Same pattern with `STRIPE_MONEY_WEBHOOK_SECRET`; trigger the issuing events the wallet relies on
-(`issuing_authorization.request`, `.created`, `issuing_transaction.created`). **Verify:** an
-authorization reserves/holds against the child's SPEND balance exactly once; capture reconciles the
-hold; a replayed authorization does **not** double-reserve (this is the money-integrity path — pairs
-with migrations 0155/0217).
+Same pattern with `STRIPE_MONEY_WEBHOOK_SECRET`. The endpoint must be subscribed to every event the
+route handles (`HANDLED_EVENT_TYPES` in `app/api/webhooks/money/route.ts`):
+`issuing_authorization.request`, `issuing_authorization.created`, `issuing_authorization.updated`,
+`issuing_transaction.created`, `issuing_card.created`, `issuing_card.updated`, `account.updated`.
+Trigger the authorization and transaction ones. **Verify:** an authorization reserves/holds against
+the child's SPEND balance exactly once; capture reconciles the hold; a replayed authorization does
+**not** double-reserve (this is the money-integrity path — pairs with migrations 0155/0217); a
+closed, reversed or expired authorization releases its hold; and so does each request Stripe
+declined, including one it declined itself on timeout (a purchase declined that way arrives as a
+closed `.created`); a decline the card network overrode waits for the close.
 
 ## Resend (email) — `/api/webhooks/resend`
 

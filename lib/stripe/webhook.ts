@@ -14,7 +14,7 @@ import type { Database } from '@/lib/database.types';
 import type Stripe from 'stripe';
 import { randomUUID } from 'node:crypto';
 import { getStripe } from '@/lib/stripe';
-import { cardHoldRef, reserveCardAuth, releaseCardHold, creditCardRefund, settleCardCapture, closeCardAuth } from '@/lib/wallet/server';
+import { cardHoldRef, reserveCardAuth, releaseCardHold, releaseRequestHold, creditCardRefund, settleCardCapture, closeCardAuth } from '@/lib/wallet/server';
 
 type DB = SupabaseClient<Database>;
 const STALE_EVENT_MS = 10 * 60 * 1000;
@@ -178,6 +178,9 @@ export async function handleAuthorizationRequest(
   const card = cardId ? await cardForAuthorization(supabase, cardId) : null;
 
   const amount = auth.pending_request?.amount ?? auth.amount ?? 0;
+  // Requests Stripe had already decided; this one is next in its history.
+  const priorRequests = auth.request_history?.length ?? 0;
+  const holdRef = cardHoldRef(auth.id, priorRequests);
   const merchantCategory = auth.merchant_data?.category ?? null;
   const merchantName = auth.merchant_data?.name ?? null;
 
@@ -197,7 +200,7 @@ export async function handleAuthorizationRequest(
       // key of its own so it is balance-checked like the first (cardHoldRef).
       const reserved = await reserveCardAuth(supabase, {
         familyId: card.family_id, childWalletId: card.child_wallet_id, amountCents: amount,
-        holdRef: cardHoldRef(auth.id, auth.request_history?.length ?? 0), description: merchantName ?? 'Card hold',
+        holdRef, description: merchantName ?? 'Card hold',
       });
       decision = reserved ? { approve: true, reason: 'approved' } : { approve: false, reason: 'insufficient_spend_balance' };
     }
@@ -210,6 +213,8 @@ export async function handleAuthorizationRequest(
     else await stripe.issuing.authorizations.decline(auth.id, {}, opts);
   } catch (e) {
     console.error('[money] authorization response failed', e);
+    // An approval that failed came after a hold was reserved for it.
+    if (decision.approve) await releaseIfStripeDeclined(supabase, stripe, auth, priorRequests, holdRef, amount, opts);
     throw new Error('Stripe authorization response failed');
   }
 
@@ -238,6 +243,65 @@ export async function handleAuthorizationRequest(
       console.error('[money] card authorization was decided but not recorded',
         { authorizationId: auth.id, outcome: decision.approve ? 'approved' : 'declined' }, auditError);
     }
+  }
+}
+
+/** An authorization Stripe will not capture any further. */
+const TERMINAL_AUTHORIZATION = ['reversed', 'expired', 'closed'];
+
+/**
+ * Whether Stripe declined this request in a way that holds nothing that can
+ * still be captured. Not `network_fallback`: Stripe declined but the card
+ * network decided, and when it approved, Stripe's docs say to treat it as
+ * approved — it may still be captured. Such a hold stays while the
+ * authorization is open and is released by its close like any other, so the
+ * wait is bounded.
+ */
+function declinedForGood(entry: Stripe.Issuing.Authorization['request_history'][number]): boolean {
+  return entry.approved === false && entry.reason !== 'network_fallback';
+}
+
+/**
+ * Our approve call failed after this request's hold was reserved. Most often it
+ * came after Stripe's 2-second window, and Stripe decided by the account's
+ * timeout setting. Ask Stripe what it decided, because the authorization's own
+ * `.created` may already have been handled before the hold committed, so
+ * nothing else would release it:
+ *   - the authorization is over (closed, reversed, expired): settle and release
+ *     exactly as its own event does (handleAuthorizationUpdated);
+ *   - this request (the next entry in its `request_history`, matched by the
+ *     amount it asked for) was declined for good: release this request's hold
+ *     only, so an increase never frees the purchase it raised.
+ * Approved by the timeout setting, undecided, not recognisably this request, or
+ * unknown because Stripe cannot be asked: the hold stays, for the
+ * authorization's own events to settle. Money held, never money freed. Nothing
+ * here may replace the caller's error.
+ */
+async function releaseIfStripeDeclined(
+  supabase: DB, stripe: ReturnType<typeof getStripe>, auth: Stripe.Issuing.Authorization,
+  priorRequests: number, holdRef: string, amount: number, opts: Stripe.RequestOptions | undefined,
+): Promise<void> {
+  let current: Stripe.Issuing.Authorization;
+  try {
+    current = await stripe.issuing.authorizations.retrieve(auth.id, {}, opts);
+  } catch (e) {
+    console.error('[money] could not ask Stripe how it decided; the hold stays', { authorizationId: auth.id, holdRef }, e);
+    return;
+  }
+  try {
+    if (TERMINAL_AUTHORIZATION.includes(current.status)) {
+      await handleAuthorizationUpdated(supabase, current);
+      return;
+    }
+    const decided = current.request_history?.[priorRequests];
+    if (!decided || !declinedForGood(decided) || decided.amount !== amount) return;
+    if (await releaseRequestHold(supabase, holdRef, amount) > 0) {
+      console.warn('[money] Stripe declined a request we had reserved for; its hold is released',
+        { authorizationId: auth.id, holdRef, reason: decided.reason });
+    }
+  } catch (e) {
+    console.error('[money] Stripe declined a request we had reserved for, and its hold could not be released',
+      { authorizationId: auth.id, holdRef }, e);
   }
 }
 
@@ -368,8 +432,16 @@ export async function handleIssuingCardUpdated(supabase: DB, card: Stripe.Issuin
 }
 
 /**
- * Handle issuing_authorization.updated — when an authorization is closed,
- * reversed or expired, release what is left of its hold.
+ * Handle issuing_authorization.updated, and .created — when an authorization is
+ * closed, reversed or expired, release what is left of its hold. Stripe sends
+ * `.created` for every authorization; for one it decided itself (our answer
+ * came too late) it is the only notice, and one it declined arrives already
+ * closed and is released here like any other.
+ *
+ * First, whatever the status, the hold of each request Stripe declined for good
+ * is released by its key and amount (an increase declined while the
+ * authorization stays open). A `network_fallback` decline is not one of those:
+ * its hold waits for the close.
  *
  * Its captures are settled FIRST. Stripe closes an authorization when it is
  * captured and does not order this event before issuing_transaction.created, so
@@ -387,11 +459,19 @@ export async function handleIssuingCardUpdated(supabase: DB, card: Stripe.Issuin
 export async function handleAuthorizationUpdated(
   supabase: DB, auth: Stripe.Issuing.Authorization,
 ): Promise<void> {
-  if (!['reversed', 'expired', 'closed'].includes(auth.status)) return;
+  // A request Stripe declined holds nothing it can capture, whatever the
+  // authorization's status: release its hold by its key now. An increase
+  // declined on an authorization still pending (by Stripe's timeout, or after
+  // our approve call failed early) would otherwise wait for the close.
+  const history = auth.request_history ?? [];
+  for (let i = 0; i < history.length; i++) {
+    if (declinedForGood(history[i])) await releaseRequestHold(supabase, cardHoldRef(auth.id, i), history[i].amount);
+  }
+  if (!TERMINAL_AUTHORIZATION.includes(auth.status)) return;
   const cardId = typeof auth.card === 'string' ? auth.card : auth.card?.id;
   const card = cardId ? await cardForAuthorization(supabase, cardId) : null;
   // Each request it had (the first, and any increase) may hold money.
-  const requests = Math.max(auth.request_history?.length ?? 0, 1);
+  const requests = Math.max(history.length, 1);
   // No card mirror means no hold of ours to settle against; release each request's hold by its key.
   if (!card) { await releaseCardHold(supabase, auth.id, requests); return; }
   for (const txn of auth.transactions ?? []) {

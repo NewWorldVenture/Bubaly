@@ -214,6 +214,29 @@ export async function releaseCardHold(supabase: DB, authId: string, requests = 1
   if (error) throw new Error(walletFailure(error, 'Could not release the card authorization hold.'));
 }
 
+/**
+ * Release ONE request's hold, by its key (cardHoldRef), and nothing else of the
+ * authorization: for a request Stripe declined after we had reserved for it.
+ * An increase declined that way must not free the purchase it was raising.
+ * Idempotent: only a `processing` hold is touched. Answers how many holds it
+ * released, so a caller reports a release only when one happened (zero: an
+ * earlier event released it, or a capture's settle folded it into a remainder).
+ */
+export async function releaseRequestHold(supabase: DB, holdRef: string, amountCents: number): Promise<number> {
+  // The amount is what the request asked for: Stripe's record of the decline
+  // and our hold must agree on it, as well as on the key, before money moves.
+  const { data, error } = await supabase
+    .from('wallet_transactions')
+    .update({ status: 'cancelled' })
+    .eq('stripe_ref', holdRef)
+    .eq('type', 'card_spend')
+    .eq('status', 'processing')
+    .eq('amount_cents', Math.max(0, Math.trunc(amountCents)))
+    .select('id');
+  if (error) throw new Error(walletFailure(error, 'Could not release the card authorization hold.'));
+  return data?.length ?? 0;
+}
+
 // Said once per process, so an operator can see the fix is not in effect yet
 // without a line per card purchase.
 const warnedPreHoldSettlement = new Set<string>();
