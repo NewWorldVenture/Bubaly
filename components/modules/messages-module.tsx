@@ -1,6 +1,6 @@
 'use client';
 
-import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react';
 import {
   MessageCircle, Plus, Send, Smile, Paperclip, Reply, Pin, Trash2,
   MoreHorizontal, CheckCheck, ArrowLeft, Search, X, Camera, Loader2,
@@ -62,26 +62,10 @@ type ConvInsert = {
   member_ids: string[]; participant_ids: string[];
 };
 
-/**
- * Insert a conversation, tolerating databases where the participant_ids column
- * hasn't been migrated yet (0017): on a schema error we retry without it so the
- * flow keeps working, just without account-less-member tracking.
- */
+/** Missing participant schema is an error; never retry with a different audience. */
 async function createConversation(payload: ConvInsert) {
   const supabase = createClient();
-  let res = await supabase.from('family_conversations').insert(payload).select('*').single();
-  if (res.error && /participant_ids|schema cache|column/i.test(res.error.message)) {
-    const legacy: Omit<ConvInsert, 'participant_ids'> = {
-      family_id: payload.family_id,
-      name: payload.name,
-      kind: payload.kind,
-      avatar_emoji: payload.avatar_emoji,
-      created_by: payload.created_by,
-      member_ids: payload.member_ids,
-    };
-    res = await supabase.from('family_conversations').insert(legacy).select('*').single();
-  }
-  return res;
+  return supabase.from('family_conversations').insert(payload).select('*').single();
 }
 
 export function MessagesModule() {
@@ -138,17 +122,57 @@ export function MessagesModule() {
   const fileRef = useRef<HTMLInputElement>(null);
   const imageRef = useRef<HTMLInputElement>(null);
   const searchRef = useRef<HTMLInputElement>(null);
+  const conversationsRequest = useRef(0);
+  const messagesRequest = useRef(0);
+  const summariesRequest = useRef(0);
+  const writeScope = JSON.stringify([familyId, userId, activeConv?.id ?? null]);
+  const currentWriteScope = useRef(writeScope);
+  const sendRequest = useRef(0);
+  const uploadRequest = useRef(0);
+  const recordingRequest = useRef(0);
+
+  useLayoutEffect(() => {
+    currentWriteScope.current = writeScope;
+    sendRequest.current++;
+    uploadRequest.current++;
+    recordingRequest.current++;
+    setSending(false);
+    setUploadingFile(false);
+    setText('');
+    setReplyTo(null);
+    setShowGifPicker(false);
+    discardRef.current = true;
+    if (recTimerRef.current) { clearInterval(recTimerRef.current); recTimerRef.current = null; }
+    if (recorderRef.current?.state === 'recording') recorderRef.current.stop();
+    setRecording(false);
+    setRecSeconds(0);
+  }, [writeScope]);
 
   const myName = selfMember?.display_name ?? 'You';
 
+  useEffect(() => {
+    conversationsRequest.current++;
+    messagesRequest.current++;
+    summariesRequest.current++;
+    setConversations([]);
+    setActiveConv(null);
+    setMessages([]);
+    setSummaries({ lastByConv: new Map(), unreadByConv: new Map() });
+    setReplyTo(null);
+    setText('');
+    setLoadingConvs(true);
+  }, [familyId, userId]);
+
   // ── Load conversations ──────────────────────────────────────
   const loadConversations = useCallback(async () => {
+    const request = ++conversationsRequest.current;
     const supabase = createClient();
     const { data, error } = await supabase
       .from('family_conversations')
       .select('*')
       .eq('family_id', familyId)
       .order('last_message_at', { ascending: false, nullsFirst: false });
+    if (request !== conversationsRequest.current) return;
     if (error) {
       // Fail visibly instead of showing an empty inbox on a failed load — an empty
       // list here would make the user think they have no conversations.
@@ -159,42 +183,24 @@ export function MessagesModule() {
     const rows = data ?? [];
     setConversations(rows);
     setLoadingConvs(false);
-    // auto-select first or Family Chat
-    if (!activeConv && rows.length > 0) {
-      const group = rows.find((c) => c.kind === 'group' && !c.name?.includes('DM')) ?? rows[0];
-      setActiveConv(group);
-    }
-  }, [familyId]); // eslint-disable-line react-hooks/exhaustive-deps
+    setActiveConv((current) => rows.find((c) => c.id === current?.id)
+      ?? rows.find((c) => c.is_family_chat) ?? rows[0] ?? null);
+  }, [familyId, toastError]);
 
-  useEffect(() => { void loadConversations(); }, [loadConversations]);
+  useEffect(() => { void loadConversations(); }, [loadConversations, userId]);
 
   // ── Ensure Family Chat exists ───────────────────────────────
   useEffect(() => {
+    let cancelled = false;
     (async () => {
       const supabase = createClient();
-      const { data, error } = await supabase
-        .from('family_conversations')
-        .select('id')
-        .eq('family_id', familyId)
-        .eq('kind', 'group')
-        .limit(1);
-      // If the existence check itself failed, don't treat that as "no chat" and
-      // create a DUPLICATE Family Chat — bail out and let the next load retry.
-      if (error) return;
-      if (!data?.length) {
-        await createConversation({
-          family_id: familyId,
-          name: tr('messagesModule.familyChat'),
-          kind: 'group',
-          avatar_emoji: '👨‍👩‍👧‍👦',
-          created_by: userId,
-          member_ids: members.map((m) => m.user_id).filter(Boolean) as string[],
-          participant_ids: members.map((m) => m.id),
-        });
-        void loadConversations();
-      }
+      const { data, error } = await supabase.rpc('ensure_family_conversation', { p_family_id: familyId });
+      if (cancelled) return;
+      if (error || !data) { toastError(describeDbError(error, tr('messagesModule.couldNotCreateConversation'))); return; }
+      void loadConversations();
     })();
-  }, [familyId, userId, members, loadConversations, tr]);
+    return () => { cancelled = true; };
+  }, [familyId, userId, loadConversations, tr, toastError]);
 
   // ── Load messages for active conv ──────────────────────────
   // `toastError` is in the deps because it IS a dependency — this callback
@@ -203,15 +209,18 @@ export function MessagesModule() {
   // for exactly this), so the identity is stable and adding it cannot make
   // this callback — or the effects that depend on it — re-run per toast.
   const loadMessages = useCallback(async (convId: string) => {
+    const request = ++messagesRequest.current;
     setLoadingMsgs(true);
     const supabase = createClient();
     const { data, error } = await supabase
       .from('family_messages')
       .select('*')
+      .eq('family_id', familyId)
       .eq('conversation_id', convId)
       .is('deleted_at', null)
       .order('created_at', { ascending: true })
       .limit(200);
+    if (request !== messagesRequest.current) return;
     if (error) {
       // Surface the failure rather than blanking the thread (which reads as
       // "no messages") — keep whatever is already on screen.
@@ -230,8 +239,16 @@ export function MessagesModule() {
     void (async () => {
       const { error: rpcErr } = await supabase.rpc('mark_conversation_read', { p_conversation_id: convId });
       if (!rpcErr) return;
+      if (request !== messagesRequest.current) return;
+      // Only an absent RPC permits the legacy merge. Authorization/transport
+      // failures are not an invitation to repeat the same write row by row.
+      if (!['PGRST202', '42883'].includes(rpcErr.code ?? '')) {
+        console.warn('[messages] read receipt RPC failed', { code: rpcErr.code });
+        return;
+      }
       const unread = (data ?? []).filter((m) => !(m.read_by ?? []).includes(userId)).slice(-100);
       for (const m of unread) {
+        if (request !== messagesRequest.current) return;
         // Best-effort fallback for read receipts when the RPC is unavailable.
         // Scoped by family and read back like every other write on this gated
         // table; a receipt that did not land is logged, not shown — it is
@@ -246,22 +263,28 @@ export function MessagesModule() {
   }, [familyId, userId, toastError]);
 
   useEffect(() => {
-    if (!activeConv) return;
+    messagesRequest.current++;
+    setMessages([]);
+    setReplyTo(null);
+    if (!activeConv || activeConv.family_id !== familyId) return;
     void loadMessages(activeConv.id);
-  }, [activeConv, loadMessages]);
+  }, [activeConv?.id, familyId, loadMessages]); // eslint-disable-line react-hooks/exhaustive-deps
 
   // ── Realtime for messages ───────────────────────────────────
   useEffect(() => {
-    if (!activeConv) return;
+    if (!activeConv || activeConv.family_id !== familyId) return;
+    let cancelled = false;
     const supabase = createClient();
     const ch = ownChannel(supabase, `msgs:${activeConv.id}`)
       .on('postgres_changes', {
         event: 'INSERT', schema: 'public', table: 'family_messages',
         filter: `conversation_id=eq.${activeConv.id}`,
       }, (payload) => {
+        const row = payload.new as Message;
+        if (cancelled || row.family_id !== familyId || row.conversation_id !== activeConv.id || row.deleted_at) return;
         setMessages((prev) => {
-          if (prev.some((m) => m.id === (payload.new as Message).id)) return prev;
-          return [...prev, payload.new as Message];
+          if (prev.some((m) => m.id === row.id)) return prev;
+          return [...prev, row];
         });
         setTimeout(() => bottomRef.current?.scrollIntoView({ behavior: 'smooth' }), 50);
       })
@@ -269,32 +292,41 @@ export function MessagesModule() {
         event: 'UPDATE', schema: 'public', table: 'family_messages',
         filter: `conversation_id=eq.${activeConv.id}`,
       }, (payload) => {
-        setMessages((prev) => prev.map((m) => m.id === (payload.new as Message).id ? payload.new as Message : m));
+        const row = payload.new as Message;
+        if (cancelled || row.family_id !== familyId || row.conversation_id !== activeConv.id) return;
+        setMessages((prev) => row.deleted_at
+          ? prev.filter((m) => m.id !== row.id)
+          : prev.map((m) => m.id === row.id ? row : m));
       })
       .on('postgres_changes', {
         event: 'DELETE', schema: 'public', table: 'family_messages',
       }, (payload) => {
-        setMessages((prev) => prev.filter((m) => m.id !== (payload.old as { id: string }).id));
+        const row = payload.old as Partial<Message>;
+        if (cancelled || (row.family_id && row.family_id !== familyId)
+          || (row.conversation_id && row.conversation_id !== activeConv.id)) return;
+        setMessages((prev) => prev.filter((m) => m.id !== row.id));
       })
       .subscribe();
-    return () => { void supabase.removeChannel(ch); };
-  }, [activeConv]);
+    return () => { cancelled = true; void supabase.removeChannel(ch); };
+  }, [activeConv?.id, familyId, userId]); // eslint-disable-line react-hooks/exhaustive-deps
 
   // ── Realtime for conversations ──────────────────────────────
   useEffect(() => {
+    let cancelled = false;
     const supabase = createClient();
     const ch = ownChannel(supabase, `convs:${familyId}`)
       .on('postgres_changes', { event: '*', schema: 'public', table: 'family_conversations', filter: `family_id=eq.${familyId}` },
-        () => { void loadConversations(); })
+        () => { if (!cancelled) void loadConversations(); })
       .subscribe();
-    return () => { void supabase.removeChannel(ch); };
-  }, [familyId, loadConversations]);
+    return () => { cancelled = true; void supabase.removeChannel(ch); };
+  }, [familyId, userId, loadConversations]);
 
   // ── Per-conversation previews + unread counts ───────────────
   // One bounded scan of the family's recent messages powers every row's last
   // message preview and unread badge. Refreshed whenever conversations change
   // (the last-message trigger bumps family_conversations on every send).
   const loadSummaries = useCallback(async () => {
+    const request = ++summariesRequest.current;
     const supabase = createClient();
     const { data, error } = await supabase
       .from('family_messages')
@@ -303,6 +335,7 @@ export function MessagesModule() {
       .is('deleted_at', null)
       .order('created_at', { ascending: false })
       .limit(400);
+    if (request !== summariesRequest.current) return;
     if (error) {
       // Previews/unread badges are an enhancement over the conversation list;
       // on a failed load, surface it and keep the prior summaries rather than
@@ -317,17 +350,20 @@ export function MessagesModule() {
 
   // ── Presence: who in the family is online right now ─────────
   useEffect(() => {
+    let cancelled = false;
+    setOnlineIds(new Set());
     const supabase = createClient();
     const ch = supabase.channel(`presence:family:${familyId}`, { config: { presence: { key: userId } } });
     ch.on('presence', { event: 'sync' }, () => {
+      if (cancelled) return;
       const state = ch.presenceState() as Record<string, Array<{ user_id?: string }>>;
       const ids = new Set<string>();
       Object.values(state).forEach((arr) => arr.forEach((p) => { if (p.user_id) ids.add(p.user_id); }));
       setOnlineIds(ids);
     }).subscribe(async (status) => {
-      if (status === 'SUBSCRIBED') await ch.track({ user_id: userId, at: Date.now() });
+      if (!cancelled && status === 'SUBSCRIBED') await ch.track({ user_id: userId, at: Date.now() });
     });
-    return () => { void supabase.removeChannel(ch); };
+    return () => { cancelled = true; void supabase.removeChannel(ch); };
   }, [familyId, userId]);
 
   // ── Per-conversation mute (device-local preference) ─────────
@@ -354,6 +390,8 @@ export function MessagesModule() {
     if (!content || !activeConv || sending) return;
     if (content.length > 4000) { toastError(tr('validation.messageTooLong', { max: 4000 })); return; }
     const prevReplyTo = replyTo;
+    const request = ++sendRequest.current;
+    const isCurrent = () => currentWriteScope.current === writeScope && request === sendRequest.current;
     setSending(true);
     setText('');
     setReplyTo(null);
@@ -368,6 +406,7 @@ export function MessagesModule() {
         kind: 'text',
         reply_to_id: prevReplyTo?.id ?? null,
       });
+      if (!isCurrent()) return;
       if (error) {
         // Restore the unsent message so the user doesn't lose their text.
         toastError(describeDbError(error));
@@ -377,11 +416,12 @@ export function MessagesModule() {
         inputRef.current?.focus();
       }
     } catch (err) {
+      if (!isCurrent()) return;
       toastError(describeDbError(err));
       setText(content);
       setReplyTo(prevReplyTo);
     } finally {
-      setSending(false);
+      if (isCurrent()) setSending(false);
     }
   }
 
@@ -390,6 +430,8 @@ export function MessagesModule() {
   // and the (remote, Giphy-hosted) attachment_url — no storage upload needed.
   async function sendGif(url: string, title: string) {
     if (!activeConv || sending) return;
+    const request = ++sendRequest.current;
+    const isCurrent = () => currentWriteScope.current === writeScope && request === sendRequest.current;
     setShowGifPicker(false);
     setSending(true);
     try {
@@ -403,11 +445,11 @@ export function MessagesModule() {
         kind: 'image',
         attachment_url: url,
       });
-      if (error) toastError(describeDbError(error));
+      if (isCurrent() && error) toastError(describeDbError(error));
     } catch (err) {
-      toastError(describeDbError(err));
+      if (isCurrent()) toastError(describeDbError(err));
     } finally {
-      setSending(false);
+      if (isCurrent()) setSending(false);
     }
   }
 
@@ -417,12 +459,21 @@ export function MessagesModule() {
     if (!activeConv || uploadingFile) return;
     // 25 MB cap mirrors the storage bucket limit; fail fast with a clear message.
     if (file.size > 25 * 1024 * 1024) { toastError(tr('validation.fileTooLarge', { max: 25 })); return; }
+    const request = ++uploadRequest.current;
+    const isCurrent = () => currentWriteScope.current === writeScope && request === uploadRequest.current;
     setUploadingFile(true);
     try {
       const supabase = createClient();
       const path = familyMediaPath(familyId, 'messages', file.name);
       const { data: stored, error: upErr } = await supabase.storage.from('family-media').upload(path, file, { upsert: false });
-      if (upErr || !stored) { toastError(describeDbError(upErr)); return; }
+      if (upErr || !stored) { if (isCurrent()) toastError(describeDbError(upErr)); return; }
+      const rollbackUpload = async () => {
+        const rollback = await supabase.storage.from('family-media').remove([stored.path]);
+        if (rollback.error || !rollback.data?.some((object) => object.name === stored.path)) {
+          console.error('[messages] attachment rollback not confirmed', { path: stored.path, error: rollback.error });
+        }
+      };
+      if (!isCurrent()) { await rollbackUpload(); return; }
       const { data: { publicUrl } } = supabase.storage.from('family-media').getPublicUrl(stored.path);
       const isImage = file.type.startsWith('image/');
       const isAudio = file.type.startsWith('audio/');
@@ -445,16 +496,13 @@ export function MessagesModule() {
         // rollback that quietly failed leaves an unreferenced object behind —
         // and a discarded result cannot be distinguished from a refusal
         // (SEC-015), so it is logged rather than dropped.
-        const rollback = await supabase.storage.from('family-media').remove([stored.path]);
-        if (rollback.error || !rollback.data?.some((object) => object.name === stored.path)) {
-          console.error('[messages] attachment rollback not confirmed', { path: stored.path, error: rollback.error });
-        }
-        toastError(describeDbError(insErr));
+        await rollbackUpload();
+        if (isCurrent()) toastError(describeDbError(insErr));
       }
     } catch (err) {
-      toastError(describeDbError(err));
+      if (isCurrent()) toastError(describeDbError(err));
     } finally {
-      setUploadingFile(false);
+      if (isCurrent()) setUploadingFile(false);
     }
   }
 
@@ -474,15 +522,22 @@ export function MessagesModule() {
       toastError(tr('messagesModule.voiceRecordingIsnTSupported'));
       return;
     }
+    const recordingScope = writeScope;
+    const request = ++recordingRequest.current;
+    const isCurrent = () => currentWriteScope.current === recordingScope && request === recordingRequest.current;
     try {
       const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
+      if (!isCurrent()) { stream.getTracks().forEach((t) => t.stop()); return; }
       const rec = new MediaRecorder(stream);
+      let timer: ReturnType<typeof setInterval> | null = null;
       chunksRef.current = [];
       discardRef.current = false;
-      rec.ondataavailable = (e) => { if (e.data.size) chunksRef.current.push(e.data); };
+      rec.ondataavailable = (e) => { if (isCurrent() && e.data.size) chunksRef.current.push(e.data); };
       rec.onstop = async () => {
         stream.getTracks().forEach((t) => t.stop());
-        if (recTimerRef.current) { clearInterval(recTimerRef.current); recTimerRef.current = null; }
+        if (timer) clearInterval(timer);
+        if (recTimerRef.current === timer) recTimerRef.current = null;
+        if (!isCurrent()) return;
         setRecording(false);
         setRecSeconds(0);
         if (discardRef.current) { chunksRef.current = []; return; }
@@ -497,16 +552,24 @@ export function MessagesModule() {
       rec.start();
       setRecording(true);
       setRecSeconds(0);
-      recTimerRef.current = setInterval(() => setRecSeconds((s) => s + 1), 1000);
+      timer = setInterval(() => { if (isCurrent()) setRecSeconds((s) => s + 1); }, 1000);
+      recTimerRef.current = timer;
     } catch {
-      toastError(tr('messagesModule.microphoneAccessWasBlocked'));
+      if (isCurrent()) toastError(tr('messagesModule.microphoneAccessWasBlocked'));
     }
   }
   function stopRecording(discard = false) {
     discardRef.current = discard;
     recorderRef.current?.stop();
   }
-  useEffect(() => () => { if (recTimerRef.current) clearInterval(recTimerRef.current); }, []);
+  useLayoutEffect(() => () => {
+    sendRequest.current++;
+    uploadRequest.current++;
+    recordingRequest.current++;
+    discardRef.current = true;
+    if (recTimerRef.current) { clearInterval(recTimerRef.current); recTimerRef.current = null; }
+    if (recorderRef.current?.state === 'recording') recorderRef.current.stop();
+  }, []);
 
   // ── React to message ─────────────────────────────────────────
   async function reactTo(msg: Message, emoji: string) {
@@ -520,6 +583,7 @@ export function MessagesModule() {
     setMsgMenu(null);
     // Under RLS a refused row comes back with no error and zero rows, which this used to report as done. Audit C1-S9-81.
     const { data: updated2, error } = await createClient().from('family_messages').update({ reactions: updated }).eq('id', msg.id).eq('family_id', familyId).select('id');
+    if (currentWriteScope.current !== writeScope) return;
     if (error) toastError(describeDbError(error));
     else if (wroteNoRows(updated2)) toastError(tr('errors.thatChangeWasNotSaved'));
   }
@@ -528,6 +592,7 @@ export function MessagesModule() {
   async function deleteMessage(id: string) {
     setMsgMenu(null);
     const { data: updated3, error } = await createClient().from('family_messages').update({ deleted_at: new Date().toISOString() }).eq('id', id).eq('sender_id', userId).eq('family_id', familyId).select('id');
+    if (currentWriteScope.current !== writeScope) return;
     if (error) toastError(describeDbError(error));
     else if (wroteNoRows(updated3)) toastError(tr('errors.thatChangeWasNotSaved'));
   }
@@ -536,13 +601,15 @@ export function MessagesModule() {
   async function pinMessage(msg: Message) {
     setMsgMenu(null);
     const { data: updated4, error } = await createClient().from('family_messages').update({ is_pinned: !msg.is_pinned }).eq('id', msg.id).eq('family_id', familyId).select('id');
+    if (currentWriteScope.current !== writeScope) return;
     if (error) toastError(describeDbError(error));
     else if (wroteNoRows(updated4)) toastError(tr('errors.thatChangeWasNotSaved'));
   }
 
   function selectConversation(conv: Conversation) {
-    setActiveConv(conv);
     setMobileShowThread(true);
+    if (activeConv?.id === conv.id) return;
+    setActiveConv(conv);
     setMessages([]);
   }
 
@@ -553,7 +620,7 @@ export function MessagesModule() {
     if (unreadOnly && !(summaries.unreadByConv.get(c.id) ?? 0)) return false;
     if (!q) return true;
     const last = summaries.lastByConv.get(c.id);
-    return (c.name ?? '').toLowerCase().includes(q) ||
+    return (c.is_family_chat ? tr('messagesModule.familyChat') : c.name ?? '').toLowerCase().includes(q) ||
       (last ? previewText(last, userId).toLowerCase().includes(q) : false);
   });
   const archivedCount = conversations.filter((c) => c.is_archived).length;
@@ -577,19 +644,18 @@ export function MessagesModule() {
     return acc;
   }, []);
 
-  // Resolve the active conversation's roster by family_member id (preferred) or
-  // legacy user_id, so account-less members appear as full participants.
+  // Preserve both recorded legacy audiences; the new canonical chat includes
+  // the current active household instead of presenting a stale creation roster.
   const activeParticipants: Tables<'family_members'>[] = !activeConv
     ? []
-    : (activeConv.participant_ids?.length
-        ? activeConv.participant_ids.map((id) => members.find((m) => m.id === id))
-        : (activeConv.member_ids ?? []).map((uid) => members.find((m) => m.user_id === uid))
-      ).filter(Boolean) as Tables<'family_members'>[];
+    : members.filter((m) => activeConv.is_family_chat ? m.is_active
+      : activeConv.participant_ids.includes(m.id) || Boolean(m.user_id && activeConv.member_ids.includes(m.user_id))
+        || (!activeConv.participant_ids.length && !activeConv.member_ids.length && m.user_id === activeConv.created_by));
 
   if (loadingConvs) return <SkeletonList />;
 
   const memberCount = activeConv
-    ? (activeConv.participant_ids?.length || activeConv.member_ids?.length || activeParticipants.length || members.length)
+    ? (activeParticipants.length || activeConv.participant_ids?.length || activeConv.member_ids?.length)
     : 0;
   const isMuted = activeConv ? mutedIds.has(activeConv.id) : false;
 
@@ -686,7 +752,7 @@ export function MessagesModule() {
                   <div className="min-w-0 flex-1">
                     <div className="flex items-center justify-between gap-2">
                       <p className={cn('truncate text-sm font-semibold', isActive && 'text-brand-text')}>
-                        {conv.name ?? 'Direct Message'}
+                        {conv.is_family_chat ? tr('messagesModule.familyChat') : conv.name ?? 'Direct Message'}
                       </p>
                       {last && <span className="shrink-0 text-[11px] text-muted">{shortTime(last.created_at)}</span>}
                     </div>
@@ -738,7 +804,7 @@ export function MessagesModule() {
                 {activeConv.avatar_emoji ?? '💬'}
               </div>
               <div className="min-w-0 flex-1">
-                <p className="truncate text-sm font-bold">{activeConv.name ?? 'Direct Message'}</p>
+                <p className="truncate text-sm font-bold">{activeConv.is_family_chat ? tr('messagesModule.familyChat') : activeConv.name ?? 'Direct Message'}</p>
                 <p className="truncate text-[11px] text-muted">
                   {activeConv.kind === 'direct'
                     ? (onlineIds.has(activeParticipants.find((m) => m.user_id !== userId)?.user_id ?? '') ? 'Active now' : 'Direct message')
@@ -1067,7 +1133,7 @@ export function MessagesModule() {
                 {activeConv.avatar_emoji ?? (activeConv.kind === 'direct' ? '💬' : '👨‍👩‍👧‍👦')}
               </div>
               <div className="min-w-0">
-                <p className="truncate font-semibold">{activeConv.name ?? 'Direct Message'}</p>
+                <p className="truncate font-semibold">{activeConv.is_family_chat ? tr('messagesModule.familyChat') : activeConv.name ?? 'Direct Message'}</p>
                 <p className="text-xs text-muted">
                   {activeConv.kind === 'direct' ? tr('messages.directMessage') : memberCount === 1 ? tr('messages.familyGroupOne') : tr('messages.familyGroupMany', { n: memberCount })}
                 </p>
@@ -1099,7 +1165,7 @@ export function MessagesModule() {
               <button onClick={() => setNewConvOpen(true)} className="text-xs font-semibold text-brand-text">{tr('messages.addMembers')}</button>
             </div>
             <div className="space-y-2.5">
-              {(activeParticipants.length ? activeParticipants : members).map((m) => {
+              {activeParticipants.map((m) => {
                 const online = m.user_id ? onlineIds.has(m.user_id) : false;
                 const isSelf = m.user_id === userId;
                 return (

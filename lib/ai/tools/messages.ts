@@ -46,7 +46,7 @@ export const messageTools: ToolDefinition[] = [
     }),
     idempotencyFrom: (input) => {
       const text = (input.content ?? input.message ?? '').trim().toLowerCase();
-      return text ? `messages.sendFamilyMessage:${input.conversation_id ?? 'family'}:${text}` : null;
+      return text ? `messages.sendFamilyMessage:${JSON.stringify([input.conversation_id ?? 'family', input.reply_to_id ?? null, text])}` : null;
     },
     summarize: (_input, output) => `Sent to the family chat: "${excerpt(output.content)}"`,
     consequences: (input) => [`Everyone in the chat will see: "${excerpt(input?.content ?? input?.message ?? '', 120)}"`, 'A sent message cannot be unsent.'],

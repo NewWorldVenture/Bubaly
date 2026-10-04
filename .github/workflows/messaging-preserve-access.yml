@@ -1,0 +1,89 @@
+name: Messaging participant SQL contract
+
+on:
+  pull_request:
+  push:
+    branches: [main]
+
+permissions:
+  contents: read
+
+concurrency:
+  group: messaging-sql-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  postgres-contract:
+    name: PostgreSQL messaging roles and concurrent writes
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    services:
+      postgres:
+        image: postgres:17
+        env:
+          POSTGRES_USER: postgres
+          POSTGRES_DB: postgres
+          POSTGRES_PASSWORD: messaging-ci-only-not-a-production-secret
+          PGDATA: /var/lib/postgresql/data/pgdata
+        ports:
+          - '127.0.0.1:55443:5432'
+        options: >-
+          --log-driver none
+          --health-cmd "pg_isready -U postgres -d postgres"
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 12
+    env:
+      PGPASSWORD: messaging-ci-only-not-a-production-secret
+      PGCONNECT_TIMEOUT: '5'
+    steps:
+      - name: Check out the candidate
+        uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
+        with:
+          persist-credentials: false
+
+      - name: Require the dedicated disposable PostgreSQL service
+        env:
+          MESSAGING_PG_CONTAINER: ${{ job.services.postgres.id }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          [[ "$CI" == true && "$GITHUB_ACTIONS" == true ]]
+          [[ "$MESSAGING_PG_CONTAINER" =~ ^[0-9a-f]{64}$ ]]
+          [[ "$(docker inspect --type container --format '{{.Id}}' "$MESSAGING_PG_CONTAINER")" == "$MESSAGING_PG_CONTAINER" ]]
+          [[ "$(docker inspect --type container --format '{{.Config.Image}}' "$MESSAGING_PG_CONTAINER")" == postgres:17 ]]
+          [[ "$(docker inspect --type container --format '{{.State.Running}}' "$MESSAGING_PG_CONTAINER")" == true ]]
+          [[ "$(docker inspect --type container --format '{{.HostConfig.LogConfig.Type}}' "$MESSAGING_PG_CONTAINER")" == none ]]
+          docker inspect --type container --format '{{range .Config.Env}}{{println .}}{{end}}' "$MESSAGING_PG_CONTAINER" \
+            | grep -Fxq 'PGDATA=/var/lib/postgresql/data/pgdata'
+          [[ "$(docker port "$MESSAGING_PG_CONTAINER" 5432/tcp)" == '127.0.0.1:55443' ]]
+          [[ "$(docker exec "$MESSAGING_PG_CONTAINER" psql -X -qAt -U postgres -d postgres -c 'show server_version_num')" =~ ^17[0-9]{4}$ ]]
+
+      - name: Use the declared Node release
+        uses: actions/setup-node@v4
+        with:
+          node-version-file: .nvmrc
+
+      - name: Install PostgreSQL clients
+        shell: bash
+        run: |
+          set -euo pipefail
+          sudo apt-get update -qq
+          sudo apt-get install -y --no-install-recommends postgresql-client
+          for client in psql createdb dropdb; do
+            command -v "$client"
+          done
+          psql --version
+
+      - name: Exercise actual SQL roles and separate concurrent sessions
+        shell: bash
+        run: |
+          set -euo pipefail
+          messaging_pg_bin="$(dirname "$(command -v psql)")"
+          [[ -x "$messaging_pg_bin/createdb" && -x "$messaging_pg_bin/dropdb" ]]
+          # The runner independently compares SHOW data_directory with this
+          # fixed service path before creating any fresh synthetic database.
+          node scripts/verify-messaging-preserve-access.mjs \
+            --postgres-bin "$messaging_pg_bin" \
+            --port 55443 \
+            --expected-data-dir /var/lib/postgresql/data/pgdata

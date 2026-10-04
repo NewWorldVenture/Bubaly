@@ -1,14 +1,12 @@
-// Behavioural tests for the messages service: the family chat is found or
-// created once with everyone in it, messages carry the auth user id and the
-// sender's real name, announcements set BOTH author columns from the scope,
-// and a retried run does not post twice.
+// Service boundary tests complement the real-role PostgreSQL fixture. A
+// privileged executor must carry the actual actor to the atomic send RPC;
+// missing schema never falls back to a different audience or a raw insert.
 import { describe, it, expect } from 'vitest';
 import type { SupabaseClient } from '@supabase/supabase-js';
 import type { Database } from '@/lib/database.types';
 import {
   createAnnouncement,
   ensureFamilyConversation,
-  FAMILY_CONVERSATION_NAME,
   sendFamilyMessage,
 } from '@/lib/services/messages';
 import type { ServiceScope } from '@/lib/services/types';
@@ -37,7 +35,12 @@ function makeDb(respond: (call: Call) => Reply) {
     });
     return b;
   };
-  return { db: { from } as unknown as SupabaseClient<Database>, calls };
+  const rpc = (name: string, args: Record<string, unknown> = {}) => {
+    const call: Call = { table: `rpc:${name}`, kind: 'select', filters: args };
+    calls.push(call);
+    return Promise.resolve(respond(call));
+  };
+  return { db: { from, rpc } as unknown as SupabaseClient<Database>, calls };
 }
 
 const NOW = new Date('2026-09-05T12:00:00Z');
@@ -60,79 +63,188 @@ const MESSAGE = (overrides: Partial<Record<string, unknown>> = {}) => ({
   reactions: {}, read_by: [], is_pinned: false, deleted_at: null, created_at: NOW.toISOString(), ...overrides,
 });
 
+const CONVERSATION = (overrides: Record<string, unknown> = {}) => ({
+  id: 'conv-1', is_family_chat: false, is_archived: false,
+  participant_ids: ['member-1', 'member-2'], member_ids: ['auth-user-1'], created_by: 'auth-user-1', ...overrides,
+});
+
+function successfulReply(call: Call): Reply {
+  if (call.table === 'family_members') return { data: MEMBERS[0], error: null };
+  if (call.table === 'family_conversations') return { data: CONVERSATION(), error: null };
+  if (call.table === 'rpc:ensure_family_conversation') return { data: 'conv-canonical', error: null };
+  if (call.table === 'rpc:send_family_message') return { data: MESSAGE({ conversation_id: call.filters.p_conversation_id }), error: null };
+  return { data: null, error: null };
+}
+
 describe('ensureFamilyConversation', () => {
-  it('reuses the oldest open group chat', async () => {
-    const { db, calls } = makeDb(() => ({ data: { id: 'conv-1' }, error: null }));
+  it('uses the canonical RPC without looking up or adopting a legacy group', async () => {
+    const { db, calls } = makeDb(successfulReply);
     const res = await ensureFamilyConversation(scopeWith(db));
-    expect(res).toMatchObject({ ok: true, data: { id: 'conv-1', created: false } });
-    expect(calls).toHaveLength(1);
-    expect(calls[0].filters).toMatchObject({ family_id: 'fam-1', kind: 'group', is_archived: false });
+    expect(res).toEqual({ ok: true, data: { id: 'conv-canonical' } });
+    expect(calls.find((c) => c.table === 'rpc:ensure_family_conversation')?.filters)
+      .toEqual({ p_family_id: 'fam-1', p_member_id: 'member-1', p_user_id: 'auth-user-1' });
+    expect(calls.some((c) => c.table === 'family_conversations')).toBe(false);
+    expect(calls.some((c) => c.kind === 'insert' || c.kind === 'update')).toBe(false);
   });
 
-  it('creates the chat with account holders in member_ids and everyone in participant_ids', async () => {
-    const { db, calls } = makeDb((call) => {
-      if (call.table === 'family_members') return { data: MEMBERS, error: null };
-      if (call.kind === 'insert') return { data: { id: 'conv-new' }, error: null };
-      return { data: null, error: null };
-    });
+  it('fails visibly when the canonical schema is missing without a legacy retry', async () => {
+    const { db, calls } = makeDb((call) => call.table.startsWith('rpc:')
+      ? { data: null, error: { code: 'PGRST202', message: 'function ensure_family_conversation not found in schema cache' } }
+      : successfulReply(call));
     const res = await ensureFamilyConversation(scopeWith(db));
-    expect(res).toMatchObject({ ok: true, data: { id: 'conv-new', created: true } });
-    const insert = calls.find((c) => c.kind === 'insert');
-    expect(insert?.table).toBe('family_conversations');
-    expect(insert?.payload).toMatchObject({
-      family_id: 'fam-1', name: FAMILY_CONVERSATION_NAME, kind: 'group',
-      member_ids: ['auth-user-1'], participant_ids: ['member-1', 'member-2'], created_by: 'auth-user-1',
-    });
+    expect(res).toMatchObject({ ok: false, code: 'db' });
+    expect(calls.filter((c) => c.table.startsWith('rpc:'))).toHaveLength(1);
+    expect(calls.some((c) => c.table === 'family_conversations')).toBe(false);
   });
 });
 
 describe('sendFamilyMessage', () => {
-  it('posts into the family chat with the auth user id and the member\'s display name', async () => {
-    const { db, calls } = makeDb((call) => {
-      if (call.table === 'family_conversations') return { data: { id: 'conv-1' }, error: null };
-      if (call.table === 'family_members') return { data: MEMBERS[0], error: null };
-      if (call.table === 'family_messages' && call.kind === 'insert') return { data: MESSAGE(), error: null };
-      return { data: null, error: null };
-    });
+  it('carries the exact family and actor to the atomic RPC and keeps shared activity text-free', async () => {
+    const { db, calls } = makeDb(successfulReply);
     const res = await sendFamilyMessage(scopeWith(db, { actorKind: 'ai' }), { content: '  Dinner at 6!  ' });
     expect(res.ok).toBe(true);
-    const insert = calls.find((c) => c.table === 'family_messages' && c.kind === 'insert');
-    expect(insert?.payload).toEqual({
-      conversation_id: 'conv-1', family_id: 'fam-1', sender_id: 'auth-user-1', sender_name: 'Dana',
-      content: 'Dinner at 6!', kind: 'text', reply_to_id: null,
+    expect(calls.find((c) => c.table === 'rpc:send_family_message')?.filters).toEqual({
+      p_conversation_id: 'conv-canonical', p_family_id: 'fam-1', p_member_id: 'member-1', p_user_id: 'auth-user-1',
+      p_content: 'Dinner at 6!', p_kind: 'text', p_reply_to_id: null,
     });
-    expect(calls.find((c) => c.table === 'agent_activity')?.payload).toMatchObject({ agent: 'comms_assistant', href: '/dashboard/messages' });
+    expect(calls.some((c) => c.table === 'family_messages' && c.kind === 'insert')).toBe(false);
+    const activity = calls.filter((c) => ['agent_activity', 'audit_logs'].includes(c.table));
+    expect(activity).toHaveLength(2);
+    expect(JSON.stringify(activity)).not.toContain('Dinner at 6!');
+    expect(calls.find((c) => c.table === 'agent_activity')?.payload).toMatchObject({ title: 'Sent a message' });
   });
 
-  it('signs as Bubaly when no person is behind the call', async () => {
-    const { db, calls } = makeDb((call) => {
-      if (call.table === 'family_conversations') return { data: { id: 'conv-1' }, error: null };
-      if (call.table === 'family_messages' && call.kind === 'insert') return { data: MESSAGE({ sender_id: null, sender_name: 'Bubaly' }), error: null };
-      return { data: null, error: null };
-    });
+  it('carries an explicit null system actor only into the canonical chat', async () => {
+    const { db, calls } = makeDb(successfulReply);
     const res = await sendFamilyMessage(scopeWith(db, { userId: null, memberId: null, role: 'system', actorKind: 'system' }), { content: 'Trash day tomorrow' });
     expect(res.ok).toBe(true);
-    expect(calls.find((c) => c.table === 'family_messages' && c.kind === 'insert')?.payload).toMatchObject({ sender_id: null, sender_name: 'Bubaly' });
+    expect(calls.find((c) => c.table === 'rpc:send_family_message')?.filters).toMatchObject({ p_member_id: null, p_user_id: null, p_conversation_id: 'conv-canonical' });
+    expect(calls.some((c) => c.table === 'family_members')).toBe(false);
+  });
+
+  it.each([
+    { label: 'inactive member', member: { ...MEMBERS[0], is_active: false } },
+    { label: 'another user\'s member row', member: { ...MEMBERS[0], user_id: 'someone-else' } },
+  ])('refuses $label before opening or writing a chat', async ({ member }) => {
+    const { db, calls } = makeDb((call) => call.table === 'family_members' ? { data: member, error: null } : successfulReply(call));
+    expect(await sendFamilyMessage(scopeWith(db), { content: 'hello' })).toMatchObject({ ok: false, code: 'denied' });
+    expect(calls.map((c) => c.table)).toEqual(['family_members']);
+    expect(calls[0].filters).toEqual({ id: 'member-1', family_id: 'fam-1' });
+  });
+
+  it.each([
+    { userId: null, memberId: null, role: 'parent', actorKind: 'ai' },
+    { userId: 'auth-user-1', memberId: null },
+  ] as Partial<ServiceScope>[])('refuses an unverified actor before any query: %j', async (extra) => {
+    const { db, calls } = makeDb(successfulReply);
+    expect(await sendFamilyMessage(scopeWith(db, extra), { content: 'hello' })).toMatchObject({ ok: false, code: 'denied' });
+    expect(calls).toHaveLength(0);
+  });
+
+  it.each(['parent', 'adult', 'child'] as const)('does not let a %s send into an unrelated private thread', async (role) => {
+    const { db, calls } = makeDb((call) => call.table === 'family_conversations'
+      ? { data: CONVERSATION({ participant_ids: ['member-other'], member_ids: ['user-other'] }), error: null } : successfulReply(call));
+    expect(await sendFamilyMessage(scopeWith(db, { role }), { content: 'hello', conversationId: 'private' })).toMatchObject({ ok: false, code: 'denied' });
+    expect(calls.some((c) => c.table.startsWith('rpc:'))).toBe(false);
+  });
+
+  it.each([
+    { participant_ids: ['member-1'], member_ids: ['user-other'] },
+    { participant_ids: ['member-other'], member_ids: ['auth-user-1'] },
+    { participant_ids: [], member_ids: [], created_by: 'auth-user-1' },
+  ])('preserves each recorded legacy audience or the empty-roster creator: %j', async (roster) => {
+    const { db } = makeDb((call) => call.table === 'family_conversations'
+      ? { data: CONVERSATION(roster), error: null } : successfulReply(call));
+    expect((await sendFamilyMessage(scopeWith(db), { content: 'hello', conversationId: 'conv-1' })).ok).toBe(true);
+  });
+
+  it('refuses a null system actor in an existing private thread', async () => {
+    const { db, calls } = makeDb(successfulReply);
+    expect(await sendFamilyMessage(scopeWith(db, { userId: null, memberId: null, actorKind: 'system', role: 'system' }),
+      { content: 'hello', conversationId: 'conv-1' })).toMatchObject({ ok: false, code: 'denied' });
+    expect(calls.some((c) => c.table.startsWith('rpc:'))).toBe(false);
+  });
+
+  it('refuses an archived conversation without sending', async () => {
+    const { db, calls } = makeDb((call) => call.table === 'family_conversations'
+      ? { data: CONVERSATION({ is_archived: true }), error: null } : successfulReply(call));
+    expect(await sendFamilyMessage(scopeWith(db), { content: 'hello', conversationId: 'conv-1' })).toMatchObject({ ok: false, code: 'denied' });
+    expect(calls.some((c) => c.table.startsWith('rpc:'))).toBe(false);
   });
 
   it('refuses a conversation that is not this family\'s', async () => {
-    const { db, calls } = makeDb(() => ({ data: null, error: null }));
+    const { db, calls } = makeDb((call) => call.table === 'family_conversations' ? { data: null, error: null } : successfulReply(call));
     const res = await sendFamilyMessage(scopeWith(db), { content: 'hi', conversationId: 'conv-other' });
     expect(res).toMatchObject({ ok: false, code: 'not_found' });
-    expect(calls[0].filters).toMatchObject({ family_id: 'fam-1', id: 'conv-other' });
+    expect(calls.find((c) => c.table === 'family_conversations')?.filters).toEqual({ family_id: 'fam-1', id: 'conv-other' });
     expect(calls.some((c) => c.kind === 'insert')).toBe(false);
   });
 
   it('returns the message a retried run already sent instead of sending again', async () => {
     const { db, calls } = makeDb((call) => {
-      if (call.table === 'family_conversations') return { data: { id: 'conv-1' }, error: null };
-      if (call.table === 'family_messages' && call.kind === 'select') return { data: MESSAGE(), error: null };
-      return { data: null, error: null };
+      if (call.table === 'rpc:find_family_message') return { data: [MESSAGE()], error: null };
+      return successfulReply(call);
     });
     const res = await sendFamilyMessage(scopeWith(db, { runId: 'run-1', stepId: 'step-2' }), { content: 'Dinner at 6!' });
     expect(res.ok && res.data.id === 'msg-1').toBe(true);
-    const probe = calls.find((c) => c.table === 'family_messages');
-    expect(probe?.filters).toMatchObject({ family_id: 'fam-1', conversation_id: 'conv-1', content: 'Dinner at 6!', sender_id: 'auth-user-1', deleted_at: null });
+    const probe = calls.find((c) => c.table === 'rpc:find_family_message');
+    expect(probe?.filters).toEqual({ p_family_id: 'fam-1', p_conversation_id: 'conv-canonical', p_content: 'Dinner at 6!', p_kind: 'text', p_reply_to_id: null, p_member_id: 'member-1', p_user_id: 'auth-user-1', p_since: '2026-09-05T11:50:00.000Z' });
+    expect(calls.some((c) => c.table === 'family_messages')).toBe(false);
+    expect(calls.some((c) => c.table === 'rpc:send_family_message')).toBe(false);
+  });
+
+  it.each(['another-thread', 'deleted-parent'])('rejects an unavailable reply parent (%s) before the send RPC', async (replyToId) => {
+    const { db, calls } = makeDb(successfulReply);
+    expect(await sendFamilyMessage(scopeWith(db), { content: 'hello', conversationId: 'conv-1', replyToId }))
+      .toMatchObject({ ok: false, code: 'not_found' });
+    expect(calls.find((c) => c.table === 'family_messages')?.filters)
+      .toEqual({ family_id: 'fam-1', conversation_id: 'conv-1', id: replyToId, deleted_at: null });
+    expect(calls.some((c) => c.table === 'rpc:send_family_message')).toBe(false);
+  });
+
+  it.each([
+    { kind: 'text', replyToId: 'reply-2' },
+    { kind: 'announcement', replyToId: null },
+  ])('does not suppress same-text intent with a different kind or reply: %j', async ({ kind, replyToId }) => {
+    const old = MESSAGE({ reply_to_id: 'reply-1' });
+    const { db, calls } = makeDb((call) => {
+      if (call.table === 'family_messages') return { data: { id: replyToId }, error: null };
+      if (call.table === 'rpc:find_family_message') return {
+        data: call.filters.p_kind === old.kind && call.filters.p_reply_to_id === old.reply_to_id ? [old] : [], error: null,
+      };
+      return successfulReply(call);
+    });
+    expect((await sendFamilyMessage(scopeWith(db, { requestId: 'req-new' }), { content: 'Dinner at 6!', kind, replyToId })).ok).toBe(true);
+    expect(calls.filter((c) => c.table === 'rpc:send_family_message')).toHaveLength(1);
+  });
+
+  it.each(['42501', 'PGRST202'])('never falls back to a raw retry read when the authorized probe fails (%s)', async (code) => {
+    const { db, calls } = makeDb((call) => call.table === 'rpc:find_family_message'
+      ? { data: null, error: { code, message: 'Authorized retry probe unavailable' } } : successfulReply(call));
+    expect(await sendFamilyMessage(scopeWith(db, { requestId: 'req-probe' }), { content: 'hello', conversationId: 'conv-1' }))
+      .toMatchObject({ ok: false, code: 'db' });
+    expect(calls.some((c) => c.table === 'family_messages' || c.table === 'rpc:send_family_message')).toBe(false);
+  });
+
+  it('treats a zero-row retry result as no match and sends the new intent', async () => {
+    const { db, calls } = makeDb((call) => call.table === 'rpc:find_family_message'
+      ? { data: [], error: null } : successfulReply(call));
+    expect((await sendFamilyMessage(scopeWith(db, { requestId: 'req-new' }), { content: 'hello' })).ok).toBe(true);
+    expect(calls.filter((c) => c.table === 'rpc:send_family_message')).toHaveLength(1);
+  });
+
+  it('surfaces revocation between the preliminary read and atomic RPC; no insert fallback', async () => {
+    const { db, calls } = makeDb((call) => call.table === 'rpc:send_family_message'
+      ? { data: null, error: { code: '42501', message: 'An active household member is required' } } : successfulReply(call));
+    expect(await sendFamilyMessage(scopeWith(db), { content: 'hello', conversationId: 'conv-1' })).toMatchObject({ ok: false, code: 'db' });
+    expect(calls.filter((c) => c.table === 'rpc:send_family_message')).toHaveLength(1);
+    expect(calls.some((c) => c.kind === 'insert')).toBe(false);
+  });
+
+  it('does not bypass a missing atomic-send RPC on an older database', async () => {
+    const { db, calls } = makeDb((call) => call.table === 'rpc:send_family_message'
+      ? { data: null, error: { code: 'PGRST202', message: 'schema cache missing send_family_message' } } : successfulReply(call));
+    expect(await sendFamilyMessage(scopeWith(db), { content: 'hello', conversationId: 'conv-1' })).toMatchObject({ ok: false, code: 'db' });
     expect(calls.some((c) => c.kind === 'insert')).toBe(false);
   });
 
