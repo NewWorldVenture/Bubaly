@@ -504,13 +504,14 @@ describe('Supabase migration filename safety', () => {
     // (reserved for #710) withdraws an admin removed after a digest was
     // frozen. 0482 (reserved on #699, 5971513705) gives a recurring event the
     // occurrences it has given up; 0483 (reserved on #699, 5971963705) gives
-    // a series mirrored from a provider the same. This literal tracks the
-    // checked-in high-water mark, not migration allocation: 0465-0470 remain
-    // NWV's, 0472 Support's, 0473 the coordinator's, 0475-0476 messaging's,
-    // 0477 Surge's, 0478 Meals', 0479 Q40's (#904, which moves this pin to
-    // 0480 on its own branch), 0480 unassigned, 0481 the unpublished Meals
-    // fixture's.
-    expect(audit.nextVersion).toBe('0484');
+    // a series mirrored from a provider the same; 0490 (reserved on #699 for
+    // #908) is the function that writes a calendar feed sync's chunk only while
+    // the sync holds its claim. This literal tracks the checked-in high-water
+    // mark, not migration allocation: 0465-0470 remain NWV's, 0472 Support's,
+    // 0473 the coordinator's, 0475-0476 messaging's, 0477 Surge's, 0478 Meals',
+    // 0479 Q40's (#904, which moves this pin to 0480 on its own branch), 0480
+    // unassigned, 0481 the unpublished Meals fixture's.
+    expect(audit.nextVersion).toBe('0491');
   });
 
   it('flags a newly introduced collision instead of silently accepting it', () => {
