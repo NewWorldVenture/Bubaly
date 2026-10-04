@@ -34,9 +34,15 @@ const db = createInMemorySupabase({
 });
 const realClient = db as unknown as SupabaseClient<Database>;
 
-// The referral row's metadata write can be made to fail, once: the credit
-// exists at Stripe and its id never reaches the row.
+// The write that records a credit's id on the referral row can be made to fail,
+// once: the credit exists at Stripe and its id never reaches the row.
 let failNextRewardRecord = false;
+// Runs just before the next credit-id write: what another run did meanwhile.
+let beforeNextRewardRecord: null | (() => void) = null;
+const recordsACreditId = (metadata: unknown) => {
+  const reward = (metadata as { reward?: Record<string, unknown> } | null)?.reward ?? {};
+  return Boolean(reward.referrer_txn || reward.referred_txn);
+};
 const client = new Proxy(realClient, {
   get(target, prop, receiver) {
     if (prop !== 'from') return Reflect.get(target, prop, receiver);
@@ -47,7 +53,12 @@ const client = new Proxy(realClient, {
         get(b, p, r) {
           if (p !== 'update') return Reflect.get(b, p, r);
           return (values: Record<string, unknown>) => {
-            if (failNextRewardRecord && 'metadata' in values && !('status' in values)) {
+            if (beforeNextRewardRecord && 'metadata' in values && !('status' in values) && recordsACreditId(values.metadata)) {
+              const meanwhile = beforeNextRewardRecord;
+              beforeNextRewardRecord = null;
+              meanwhile();
+            }
+            if (failNextRewardRecord && 'metadata' in values && !('status' in values) && recordsACreditId(values.metadata)) {
               failNextRewardRecord = false;
               const refused = { data: null, error: { message: 'synthetic: the row write was refused' } };
               const chain = { eq: () => chain, select: () => chain, maybeSingle: async () => refused };
@@ -61,7 +72,11 @@ const client = new Proxy(realClient, {
   },
 }) as SupabaseClient<Database>;
 
-type Txn = { id: string; customer: string; amount: number; metadata: Record<string, string> };
+type Txn = { id: string; customer: string; amount: number; metadata: Record<string, string>; created: number };
+
+const CONVERTED_AT = '2026-09-01T00:00:00Z';
+const AFTER_CONVERSION = Date.parse('2026-09-07T00:00:00Z') / 1000;
+const LONG_BEFORE = Date.parse('2026-01-01T00:00:00Z') / 1000;
 
 function fakeStripe() {
   const txns: Txn[] = [];
@@ -73,6 +88,10 @@ function fakeStripe() {
     /** Stripe made the next credit for this customer, but the answer never arrived. */
     loseNextAnswerFor: new Set<string>(),
     listFails: false,
+    /** Customers Stripe no longer has: listing their history answers resource_missing. */
+    gone: new Set<string>(),
+    /** Stripe answers one page claiming more, with nothing on it. */
+    emptyPageWithMore: false,
     pagesListed: 0,
     forgetKeys: () => keys.clear(),
   };
@@ -87,19 +106,24 @@ function fakeStripe() {
         const key = options?.idempotencyKey;
         if (key && keys.has(key)) return { id: keys.get(key)! };
         n += 1;
-        const txn = { id: `cbtxn_${n}`, customer: id, amount: params.amount, metadata: params.metadata ?? {} };
+        const txn = { id: `cbtxn_${n}`, customer: id, amount: params.amount, metadata: params.metadata ?? {}, created: AFTER_CONVERSION + n };
         txns.push(txn);
         if (key) keys.set(key, txn.id);
         if (control.loseNextAnswerFor.delete(id)) throw new Error('synthetic: connection reset after Stripe answered');
         return { id: txn.id };
       },
       // Newest first, `starting_after` paging, as Stripe lists them.
-      async listBalanceTransactions(id: string, params?: { limit?: number; starting_after?: string }) {
+      async listBalanceTransactions(id: string, params?: { limit?: number; starting_after?: string; created?: { gte?: number } }) {
         control.pagesListed += 1;
         if (control.listFails) throw new Error('synthetic Stripe outage');
-        const all = txns.filter((t) => t.customer === id).reverse();
-        const start = params?.starting_after ? all.findIndex((t) => t.id === params.starting_after) + 1 : 0;
+        if (control.gone.has(id)) throw Object.assign(new Error('No such customer'), { code: 'resource_missing' });
         const limit = params?.limit ?? 10;
+        // Stripe refuses a page size outside 1..100 with a 400.
+        if (!Number.isInteger(limit) || limit < 1 || limit > 100) throw Object.assign(new Error('Invalid limit'), { code: 'parameter_invalid_integer' });
+        if (control.emptyPageWithMore) return { data: [], has_more: true };
+        const gte = params?.created?.gte ?? Number.NEGATIVE_INFINITY;
+        const all = txns.filter((t) => t.customer === id && t.created >= gte).reverse();
+        const start = params?.starting_after ? all.findIndex((t) => t.id === params.starting_after) + 1 : 0;
         const data = all.slice(start, start + limit).map((t) => ({ id: t.id, amount: t.amount, metadata: t.metadata }));
         return { data, has_more: start + limit < all.length };
       },
@@ -111,7 +135,7 @@ function fakeStripe() {
 function seed() {
   db.seed('referrals', [{
     id: REFERRAL_ID, code: 'SMITH-7K4Q', referrer_family_id: REFERRER, referred_family_id: REFERRED,
-    status: 'converted', converted_at: '2026-09-01T00:00:00Z', referrer_reward_cents: 1000, referred_reward_cents: 1000,
+    status: 'converted', converted_at: CONVERTED_AT, referrer_reward_cents: 1000, referred_reward_cents: 1000,
   }]);
   db.seed('billing_customers', [
     { family_id: REFERRER, customer_ref: 'cus_referrer' },
@@ -125,7 +149,7 @@ beforeAll(() => {
   vi.spyOn(console, 'error').mockImplementation(() => {});
 });
 afterAll(() => { vi.restoreAllMocks(); });
-beforeEach(() => { db.reset(); failNextRewardRecord = false; });
+beforeEach(() => { db.reset(); failNextRewardRecord = false; beforeNextRewardRecord = null; });
 
 describe('a credit Stripe made is not made again by a late retry', () => {
   it('when the answer was lost: the renewal months later records the credit Stripe already holds', async () => {
@@ -165,7 +189,7 @@ describe('a credit Stripe made is not made again by a late retry', () => {
     failNextRewardRecord = true;
     await rewardReferral(client, REFERRAL_ID, { stripe });
     // A year of invoices drew on the balance since.
-    for (let i = 0; i < 150; i++) control.txns.push({ id: `cbtxn_inv_${i}`, customer: 'cus_referrer', amount: 100, metadata: {} });
+    for (let i = 0; i < 150; i++) control.txns.push({ id: `cbtxn_inv_${i}`, customer: 'cus_referrer', amount: 100, metadata: {}, created: AFTER_CONVERSION + 1000 + i });
     control.forgetKeys();
     expect(await rewardReferral(client, REFERRAL_ID, { stripe })).toEqual({ outcome: 'rewarded', referralId: REFERRAL_ID });
     expect(control.credits('cus_referrer')).toHaveLength(1);
@@ -179,8 +203,8 @@ describe('what is not mistaken for this credit', () => {
     const { stripe, control } = fakeStripe();
     // The referrer was credited for an earlier referral, and once as the referred side of another.
     control.txns.push(
-      { id: 'cbtxn_old', customer: 'cus_referrer', amount: -1000, metadata: { referral_id: OTHER_REFERRAL, family_id: REFERRER, side: 'referrer' } },
-      { id: 'cbtxn_side', customer: 'cus_referrer', amount: -1000, metadata: { referral_id: REFERRAL_ID, family_id: REFERRER, side: 'referred' } },
+      { id: 'cbtxn_old', customer: 'cus_referrer', amount: -1000, metadata: { referral_id: OTHER_REFERRAL, family_id: REFERRER, side: 'referrer' }, created: AFTER_CONVERSION },
+      { id: 'cbtxn_side', customer: 'cus_referrer', amount: -1000, metadata: { referral_id: REFERRAL_ID, family_id: REFERRER, side: 'referred' }, created: AFTER_CONVERSION },
     );
     expect(await rewardReferral(client, REFERRAL_ID, { stripe })).toEqual({ outcome: 'rewarded', referralId: REFERRAL_ID });
     expect(control.credits('cus_referrer')).toHaveLength(3);
@@ -211,11 +235,100 @@ describe('when Stripe cannot say whether the credit exists', () => {
     expect(row().status).toBe('converted');
   });
 
-  it('credits nobody when the history is longer than it will page through', async () => {
+  it('credits nobody when the history since the conversion is longer than it will page through', async () => {
     seed();
     const { stripe, control } = fakeStripe();
-    for (let i = 0; i < 5_000; i++) control.txns.push({ id: `cbtxn_inv_${i}`, customer: 'cus_referrer', amount: 100, metadata: {} });
+    for (let i = 0; i < 5_000; i++) control.txns.push({ id: `cbtxn_inv_${i}`, customer: 'cus_referrer', amount: 100, metadata: {}, created: AFTER_CONVERSION + i });
     expect(await rewardReferral(client, REFERRAL_ID, { stripe })).toMatchObject({ outcome: 'credit_failed', side: 'referrer' });
     expect(control.credits('cus_referrer')).toHaveLength(0);
+  });
+
+  it('credits nobody when Stripe says there is more but sends an empty page', async () => {
+    seed();
+    const { stripe, control } = fakeStripe();
+    control.emptyPageWithMore = true;
+    expect(await rewardReferral(client, REFERRAL_ID, { stripe })).toMatchObject({ outcome: 'credit_failed', side: 'referrer' });
+    expect(control.credits('cus_referrer')).toHaveLength(0);
+  });
+});
+
+describe('the lookup reads only what can hold this credit', () => {
+  it('a long history from before the conversion does not block a first credit', async () => {
+    seed();
+    const { stripe, control } = fakeStripe();
+    for (let i = 0; i < 5_000; i++) control.txns.push({ id: `cbtxn_inv_${i}`, customer: 'cus_referrer', amount: 100, metadata: {}, created: LONG_BEFORE + i });
+    expect(await rewardReferral(client, REFERRAL_ID, { stripe })).toEqual({ outcome: 'rewarded', referralId: REFERRAL_ID });
+    expect(control.credits('cus_referrer')).toHaveLength(1);
+  });
+
+  it('finds a credit on the tenth page', async () => {
+    seed();
+    const { stripe, control } = fakeStripe();
+    failNextRewardRecord = true;
+    await rewardReferral(client, REFERRAL_ID, { stripe });
+    for (let i = 0; i < 950; i++) control.txns.push({ id: `cbtxn_inv_${i}`, customer: 'cus_referrer', amount: 100, metadata: {}, created: AFTER_CONVERSION + 1000 + i });
+    control.forgetKeys();
+    expect(await rewardReferral(client, REFERRAL_ID, { stripe })).toEqual({ outcome: 'rewarded', referralId: REFERRAL_ID });
+    expect(control.credits('cus_referrer')).toHaveLength(1);
+  });
+});
+
+describe('a family whose Stripe customer changed between attempts', () => {
+  it('finds the credit on the customer the first attempt used', async () => {
+    seed();
+    db.table('billing_customers').find((r) => r.family_id === REFERRER)!.customer_ref = 'cus_referrer_first';
+    const { stripe, control } = fakeStripe();
+    control.loseNextAnswerFor.add('cus_referrer_first');
+    expect(await rewardReferral(client, REFERRAL_ID, { stripe })).toMatchObject({ outcome: 'credit_failed', side: 'referrer' });
+    expect(rewardRecordFrom(row().metadata).referrer_customer).toBe('cus_referrer_first');
+    // checkout.session.completed later stores a different customer for the family.
+    db.table('billing_customers').find((r) => r.family_id === REFERRER)!.customer_ref = 'cus_referrer';
+    control.forgetKeys();
+    expect(await rewardReferral(client, REFERRAL_ID, { stripe })).toEqual({ outcome: 'rewarded', referralId: REFERRAL_ID });
+    expect(control.credits('cus_referrer_first')).toHaveLength(1);
+    expect(control.credits('cus_referrer')).toHaveLength(0);
+  });
+
+  it('credits the current customer when the first one is gone from Stripe', async () => {
+    seed();
+    db.table('billing_customers').find((r) => r.family_id === REFERRER)!.customer_ref = 'cus_referrer_first';
+    const { stripe, control } = fakeStripe();
+    control.listFails = true; // the first attempt never reached a credit
+    await rewardReferral(client, REFERRAL_ID, { stripe });
+    control.listFails = false;
+    expect(rewardRecordFrom(row().metadata).referrer_customer ?? null).toBeNull();
+    // A first attempt that did record its customer, which Stripe then deleted:
+    db.table('referrals')[0].metadata = { reward: { referrer_customer: 'cus_deleted' } };
+    control.gone.add('cus_deleted');
+    db.table('billing_customers').find((r) => r.family_id === REFERRER)!.customer_ref = 'cus_referrer';
+    expect(await rewardReferral(client, REFERRAL_ID, { stripe })).toEqual({ outcome: 'rewarded', referralId: REFERRAL_ID });
+    expect(control.credits('cus_referrer')).toHaveLength(1);
+  });
+
+  it('when the event\'s customer stood in for a missing billing row, a lost answer is not credited twice', async () => {
+    seed();
+    db.table('billing_customers').splice(db.table('billing_customers').findIndex((r) => r.family_id === REFERRED), 1);
+    const { stripe, control } = fakeStripe();
+    control.loseNextAnswerFor.add('cus_from_sub');
+    expect(await rewardConvertedReferral(client, REFERRED, { stripe, referredCustomerRef: 'cus_from_sub' })).toMatchObject({ outcome: 'credit_failed', side: 'referred' });
+    control.forgetKeys();
+    expect(await rewardConvertedReferral(client, REFERRED, { stripe, referredCustomerRef: 'cus_from_sub' })).toEqual({ outcome: 'rewarded', referralId: REFERRAL_ID });
+    expect(control.credits('cus_from_sub')).toHaveLength(1);
+  });
+});
+
+describe('a run that finishes second', () => {
+  it('does not write its stale copy of the record over a row another run has rewarded', async () => {
+    seed();
+    const { stripe } = fakeStripe();
+    const finished = { reward: { referrer_txn: 'cbtxn_other_run_1', referred_txn: 'cbtxn_other_run_2' } };
+    beforeNextRewardRecord = () => {
+      const r = row();
+      r.status = 'rewarded';
+      r.metadata = finished;
+    };
+    expect(await rewardReferral(client, REFERRAL_ID, { stripe })).toMatchObject({ outcome: 'persist_failed' });
+    expect(row().status).toBe('rewarded');
+    expect(row().metadata).toEqual(finished);
   });
 });

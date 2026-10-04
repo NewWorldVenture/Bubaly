@@ -272,6 +272,15 @@ export type ReferralRewardRecord = {
   /** Set when a side had nothing to credit (a zero reward in the config). */
   referrer_skipped?: string | null;
   referred_skipped?: string | null;
+  /**
+   * The Stripe customer a side's credit was last attempted on, written BEFORE
+   * the attempt. The family's customer can change between attempts (two
+   * checkouts racing, or the event's customer standing in before
+   * billing_customers is written), and a retry has to look for the credit where
+   * it may already have been made. Present only once an attempt has been made.
+   */
+  referrer_customer?: string | null;
+  referred_customer?: string | null;
 };
 
 export function rewardRecordFrom(metadata: unknown): ReferralRewardRecord {
@@ -280,7 +289,10 @@ export function rewardRecordFrom(metadata: unknown): ReferralRewardRecord {
   if (!raw || typeof raw !== 'object') return {};
   const r = raw as Record<string, unknown>;
   const s = (v: unknown) => (typeof v === 'string' && v ? v : null);
-  return { referrer_txn: s(r.referrer_txn), referred_txn: s(r.referred_txn), referrer_skipped: s(r.referrer_skipped), referred_skipped: s(r.referred_skipped) };
+  const record: ReferralRewardRecord = { referrer_txn: s(r.referrer_txn), referred_txn: s(r.referred_txn), referrer_skipped: s(r.referrer_skipped), referred_skipped: s(r.referred_skipped) };
+  if (s(r.referrer_customer)) record.referrer_customer = s(r.referrer_customer);
+  if (s(r.referred_customer)) record.referred_customer = s(r.referred_customer);
+  return record;
 }
 
 /** Is this side settled — credited (a Stripe id on file) or deliberately skipped? */

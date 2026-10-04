@@ -40,7 +40,10 @@ function fakeStripe(opts: { deleted?: Set<string>; failFor?: Set<string> } = {})
         return { id: `cbtxn_${n}` };
       },
       // What a retry reads before crediting (tests/a-referral-is-credited-once.test.ts).
-      async listBalanceTransactions(id) {
+      async listBalanceTransactions(id, params) {
+        // Stripe refuses a page size outside 1..100 with a 400.
+        const limit = params?.limit ?? 10;
+        if (!Number.isInteger(limit) || limit < 1 || limit > 100) throw new Error('Invalid limit');
         return { data: credits.filter((c) => c.customer === id).reverse().map((c) => ({ id: c.id, metadata: c.metadata ?? null })), has_more: false };
       },
     },
