@@ -62,8 +62,12 @@ begin
   values (v_actor, 'meal-race-' || replace(v_actor::text, '-', '') || '@example.test');
   insert into public.families (id, name, created_by)
   values (v_family, 'Synthetic meal replacement race', v_actor);
+  -- Full migration replay runs 0003's on_family_created trigger, which already
+  -- inserts the creator as a family member. The focused 0475 bootstrap omits
+  -- that trigger, so retain this fallback but make it safe in both schemas.
   insert into public.family_members (family_id, user_id, display_name, role, is_active)
-  values (v_family, v_actor, 'Race Parent', 'parent', true);
+  values (v_family, v_actor, 'Race Parent', 'parent', true)
+  on conflict do nothing;
   insert into public.meals (id, family_id, name, meal_type, ingredients)
   values
     (v_meal_a, v_family, 'Synthetic race meal A', 'dinner', '[]'::jsonb),
