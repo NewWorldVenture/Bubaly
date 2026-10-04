@@ -132,6 +132,13 @@ export async function GET(req: NextRequest) {
         .eq('id', rule.id)
         .eq('family_id', rule.family_id)
         .eq('is_active', true)
+        // The amount this run read is the amount it will credit. An amount-only
+        // edit keeps the rule's date, so one that commits after the read would
+        // otherwise be claimed and paid at the old figure. With this the claim
+        // misses, the rule stays due, and the next run pays the new amount.
+        // (No semicolons in this comment: the claim guard reads the statement
+        // up to its first one.)
+        .eq('amount_cents', rule.amount_cents)
         .lte('next_run_on', today)
         .select('id')
         .maybeSingle();
