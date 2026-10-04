@@ -144,7 +144,8 @@ async function syncCalendar(admin: Admin, account: Account, adapter: SyncProvide
         if (mapping) {
           const { data: deleted, error: deleteError } = await admin.from('sync_calendar_events')
             .update({ deleted_at: new Date().toISOString(), sync_status: 'synced', metadata: REMOTE_META })
-            .eq('id', mapping.local_id).select('id').maybeSingle();
+            .eq('id', mapping.local_id).eq('family_id', account.family_id)
+            .eq('calendar_id', cal.id).select('id').maybeSingle();
           requireSyncWrite(deleted, deleteError, 'cancelled event update');
           result.imported++;
         } else result.skipped++;
