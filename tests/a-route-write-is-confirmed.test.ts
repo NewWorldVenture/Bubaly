@@ -483,7 +483,11 @@ describe('sync, server and social writes (C1-S9-68)', () => {
   it('the feed status stamp treats zero rows as unsaved — the settings action runs it on the user client', () => {
     const fn = block(read('lib/server/calendar-feeds.ts'), 'async function stampFeed(');
     expect(fn).toContain('if (error || wroteNoRows(data)) {');
-    expect(fn).toContain("return new Error('Calendar feed status update failed');");
+    // Zero rows is unsaved (`'failed'`) — unless the row shows the claim has moved
+    // on, which is a takeover the fenced stamp reports as `'lost'`, never as saved.
+    expect(fn).toContain("return 'failed';");
+    expect(fn).toContain(".eq('last_status', SYNCING_STATUS).eq('updated_at', fence).select('id')");
+    expect(fn).not.toContain("return 'stamped';\n  }\n  if (");
   });
 
   it('the push prunes stay ungated on rows, and say what that depends on', () => {

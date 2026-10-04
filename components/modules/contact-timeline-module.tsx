@@ -24,6 +24,7 @@ import type { Format } from '@/lib/utils/format';
 /** A birthday as a DATE in a leap year, so Feb 29 exists. */
 const birthdayKey = (month: number, day: number) => `2000-${String(month).padStart(2, '0')}-${String(day).padStart(2, '0')}`;
 import { ErrorState } from '@/components/ui/states';
+import { useConfirm } from '@/components/ui/confirm';
 
 type Tone = 'warm' | 'brief' | 'playful';
 const TONES: { key: Tone; labelKey: string }[] = [
@@ -67,6 +68,7 @@ export function ContactTimelineModule({
   interactionIds: string[];
 }) {
   const tr = useTranslations();
+  const askConfirm = useConfirm();
   const locale = useLocale().code;
   const format = useFormat();
   const clock = useFamilyClock();
@@ -80,9 +82,10 @@ export function ContactTimelineModule({
   const hs = HEALTH_STYLE[health.status];
   const loggedIds = new Set(interactionIds);
 
-  const remove = (entryId: string) => {
-    const rawId = entryId.replace(/^int-/, '');
-    setBusyId(entryId);
+  const remove = async (e: TimelineEntry) => {
+    if (!(await askConfirm({ title: tr('confirm.deleteNamed', { name: e.title }), body: tr('confirm.cannotBeUndone') }))) return;
+    const rawId = e.id.replace(/^int-/, '');
+    setBusyId(e.id);
     setActionError(null);
     startTransition(async () => {
       // The action returns void and THROWS on failure; without a catch the
@@ -214,7 +217,7 @@ export function ContactTimelineModule({
                       </div>
                       {deletable && (
                         <button
-                          onClick={() => remove(e.id)}
+                          onClick={() => void remove(e)}
                           disabled={pending && busyId === e.id}
                           aria-label={tr('contactTimeline.deleteEntry')}
                           className="rounded-lg p-1.5 text-muted transition hover:bg-elevated hover:text-rose-400 disabled:opacity-50"
