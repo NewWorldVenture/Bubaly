@@ -21,7 +21,7 @@ import { getMembers, getPreferences } from '@/lib/services/family';
 import { listTransactions } from '@/lib/services/finances';
 import { listOpen as listOpenGroceries } from '@/lib/services/groceries';
 import { listMemories } from '@/lib/services/memory';
-import { listRoutines } from '@/lib/services/routines';
+import { listAllRoutines } from '@/lib/services/routines';
 import { listClasses, listEventsBetween } from '@/lib/services/school';
 import { dayKeyInTz, scopeNow } from '@/lib/services/scope';
 import { listPracticesBetween, listTeams } from '@/lib/services/sports';
@@ -176,7 +176,7 @@ async function readSection(scope: ServiceScope, key: ExportSectionKey): Promise<
       return { ok: true, data: { data: { teams: teams.data, events: practices.data }, count: teams.data.length + practices.data.length } };
     }
     case 'routines': {
-      const r = await listRoutines(scope, { includeDisabled: true });
+      const r = await listAllRoutines(scope);
       return r.ok ? { ok: true, data: { data: r.data, count: r.data.length } } : r;
     }
     case 'finances': {
