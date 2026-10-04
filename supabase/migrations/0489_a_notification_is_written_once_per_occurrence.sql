@@ -61,28 +61,62 @@
 -- no key are not touched. Re-applying this file (LB-016 §4) finds no group with
 -- more than one unread row and changes nothing.
 --
--- WHAT CHANGES FOR A MEMBER, exactly: only rows that are exact unread copies of
--- an older unread row — same family, type, key and recipient — move from unread
--- to read. The member's unread count drops by the number of such copies and by
--- nothing else; the copy they keep unread is the first one written; no title,
--- body, time or recipient changes; nothing is removed from their history. The
--- pre-flight above lists every such group before anything runs. This file is a
--- repository candidate: it is not to be run against any existing dataset until
--- that listing has been reviewed and the execution hold on #699 is lifted.
+-- WHAT CHANGES FOR A MEMBER, exactly: only rows that share their key with an
+-- older unread row — same family, type, key and recipient, whatever their title
+-- or body says — move from unread to read. The member's unread count drops by
+-- the number of such rows and by nothing else; the row they keep unread is the
+-- first one written, and it is that row's text they see (a later row under the
+-- key may read differently: see WHAT CHANGES FOR A WATCHER); no title, body,
+-- time or recipient changes on any row; nothing is removed from their history.
+-- The pre-flight above lists every such group before anything runs. This file
+-- is a repository candidate: it is not to be run against any existing dataset
+-- until that listing has been reviewed and the execution hold on #699 is lifted.
 --
--- THE TRIGGER CHANGE IS THE INDEX'S OWN. `marketplace_log_price_change()` is
--- re-created here, not in a file of its own, because the two cannot be applied
--- apart: with the index and without the ON CONFLICT clause a second price drop
--- on a saved listing fails the seller's UPDATE (23505 raised inside the
--- trigger); with the clause and without the index the clause is inert. The
--- function body is otherwise 0191's, statement for statement; the probe asserts
--- what it still does (every change logged, a read watcher told again, a rise
--- telling nobody).
+-- THE TRIGGER CHANGE IS THE INDEX'S OWN, AND COMES FIRST. `marketplace_log_
+-- price_change()` is re-created in this file, not in one of its own, because
+-- the clause and the index belong to one invariant: with the index and without
+-- the clause, a second price drop on a saved listing while the first notice is
+-- unread raises 23505 inside the trigger and fails the seller's UPDATE; with the
+-- clause and without the index the clause is inert and the trigger is 0191's.
+-- The function is replaced BEFORE the index is created, so no state this file
+-- can leave has the index without the clause. The body is otherwise 0191's,
+-- statement for statement (`diff -w` against 0191: the clause and a comment).
 --
--- Verified on a replayed database: before, two inserts of one key both land;
--- after, the second is refused with 23505 naming the index, the family-wide
--- pair likewise, a key whose first row is read takes a second, and a listing
--- saved by another family can drop its price twice.
+-- WHAT CHANGES FOR A WATCHER, exactly. 0191 wrote a notice for every drop, so
+-- a watcher who had not read the first drop's notice got a second one with the
+-- second drop's prices. Under the index the second notice is not written: the
+-- watcher keeps ONE unread notice, and it carries the FIRST drop's prices until
+-- they read it; the next drop after they have read it is announced with its own
+-- prices. Rows under one key are therefore not copies of one another, and the
+-- probe pins which text survives. marketplace_price_history is unchanged: every
+-- change is logged — drop, rise, or on a completed listing — because 0191's
+-- logging comes before its notice condition. A rise, and a drop on a listing
+-- that is no longer available, notify nobody, as in 0191; the probe asserts
+-- both with every notice read, so the index cannot stand in for the rule, and
+-- proves the rise rule is live by removing it in a rolled-back mutant.
+--
+-- HOW THIS FILE IS APPLIED, AND WHAT A PARTIAL APPLICATION LEAVES. The replay
+-- (docs/audit/pg-bootstrap.sh) and the repair rehearsal (docs/audit/rehearse-
+-- ledger-repair.sh) run each file with `psql -v ON_ERROR_STOP=1 -f`, without
+-- --single-transaction, and this file opens no transaction of its own: its
+-- statements are applied and committed one at a time, and it is NOT
+-- all-or-nothing. It is ordered so that every prefix is a safe state. After 1
+-- alone: the clause is inert and the trigger behaves as 0191's. After 1 and 2:
+-- the duplicates are read (the intended end state) and no index stands yet, so
+-- the race remains until the file is run again. After 1, 2 and 3: complete.
+-- 4 fails the file — and stops the replay — if the index is missing or an
+-- unread duplicate remains; running the file again completes it, and 2 and 3
+-- change nothing once it is complete (LB-016 §4: CI re-applies every migration
+-- onto the schema it just built, and the probe re-applies this one twice).
+--
+-- Verified on a replayed database, and in the probe docs/audit/
+-- a-notification-is-written-once-per-occurrence-check.sql: before, two inserts
+-- of one key both land; after, the second is refused with 23505 naming the
+-- index, the family-wide pair likewise, a key whose first row is read takes a
+-- second, a listing saved by another family drops its price twice; the repair
+-- keeps every row and leaves the oldest of each group unread; applied twice
+-- more over seeded duplicates, the file does what this header says and then
+-- nothing.
 
 -- 1. The price-drop trigger steps aside where the index refuses it.
 create or replace function public.marketplace_log_price_change()
