@@ -21,7 +21,7 @@ function makeDb(respond: (call: Call) => Reply) {
     const chain = () => b;
     const filter = (column: string, value: unknown) => { call.filters[column] = value; return b; };
     Object.assign(b, {
-      select: chain, order: chain, limit: chain,
+      select: chain, order: chain, limit: chain, range: chain,
       eq: filter, is: filter, in: filter,
       neq: (c: string, v: unknown) => filter(`neq:${c}`, v),
       lte: (c: string, v: unknown) => filter(`lte:${c}`, v),
