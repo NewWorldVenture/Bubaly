@@ -1,5 +1,107 @@
 # Final Production Audit
 
+## Current release and audit checkpoint — 2026-10-03 10:44 UTC
+
+**PRODUCTION READY: NO. Independently verified audit-row closure: 344 / 14,505 = 2.371596%, rounded to 2.37%. Remaining: 14,161 rows (97.63%). Overall product completion is not established by this ledger.**
+
+This additive checkpoint answers the current status request. It supersedes earlier current-state summaries where the evidence below is newer, while retaining their chronology, raw results, owner objections and scope limits. Every existing inventory row, permanent ID, status, severity, evidence cell and generated finding-index byte is retained. This update awards zero new closure credit and changes no application code or production state.
+
+### Independently recounted inventory and lineage
+
+The recount reads the actual Register B table between its anchored heading and `Inventory and evidence rules`, splits unescaped Markdown separators, validates permanent IDs, and totals each row's status once. It excludes finding-index rows, prose mentions and repeated table headers. All three snapshots below were parsed independently; candidate numbers are no longer only the PR author's report.
+
+| Ledger snapshot | Unique IDs | Not started | In progress | PASS | FIXED + PASS | Blocked | Closed / total |
+|---|---:|---:|---:|---:|---:|---:|---:|
+| Main `d4612dc9` | 14,360 | 11,877 | 2,132 | 185 | 157 | 9 | 342 / 14,360 = 2.38% |
+| Canonical draft #771 `59b9dd52` | 14,470 | 11,831 | 2,286 | 185 | 159 | 9 | 344 / 14,470 = 2.38% |
+| Incremental draft #842 `d1afa3c9` — this update's base | 14,505 | 11,737 | 2,415 | 185 | 159 | 9 | 344 / 14,505 = 2.37% |
+
+- Exact base: `d1afa3c96323137404a7358994f565d0bed1e5ad`; ledger blob `a47a5678dafe8cdb8d04b5892dcc763fa1068dc7`; SHA256 `986e293216349d3b7c8e06935a88a0c53459c4b9e7cfce6a16c8bca4b464e56f`. Local bytes match the published #842 receipt. Zero duplicate IDs in each snapshot.
+- #842 has 40 commits above canonical #771 `59b9dd52023fe935090550e5ddd46758c90b98bf`, changing only `finalaudit.md`. This docs-only branch starts at #842 and targets `codex/finalaudit-current-fixes-20261002`; it preserves all 40 commits rather than creating a competing ledger from main or #771. Main's ledger blob is `e9b908fa5c0742cbd3623f65d3afbc13ad713151`; #771's is `c9895834c171ef9e6d73e95ca7e000baf6eab93d`.
+- Relative to #771, #842 adds 35 inventory obligations; the status buckets change by 94 fewer NOT STARTED and 129 more IN PROGRESS, with no additional closures. Relative to main it has 145 more obligations and two more scoped closure records. Those two tally-tool closures remain candidate evidence on the unmerged #808/#810/#813 stack; they are not proof the repair is on main or deployed.
+- `185 + 159 = 344` closed; `11,737 + 2,415 + 9 = 14,161` unclosed. Blocked rows receive zero credit; partial work receives no fractional credit. The 2,768 non-NOT-STARTED rows (19.08%) include partial and blocked work and are not a completion metric. Historical phrases such as "Overall Completion ... 2.37%" mean the adopted inventory closure formula only. File/function/control/flow rows overlap in scope and have unequal effort; no product-level percentage or delivery-date estimate follows from them. Session A and older weighted audit schemes are separate denominators and must not be added or averaged into Register B.
+
+### What remains, grouped without double counting
+
+| Inventory areas | Not started | In progress | Blocked | Unclosed |
+|---|---:|---:|---:|---:|
+| Rendered controls | 6,554 | 2 | 0 | 6,556 |
+| Support and test-source obligations | 1,707 | 247 | 0 | 1,954 |
+| Services and libraries | 1,228 | 176 | 0 | 1,404 |
+| Incomplete-source inventory | 974 | 0 | 0 | 974 |
+| Database, migrations and seeds | 476 | 633 | 0 | 1,109 |
+| Pages, routes, components, mobile, layout and roles | 451 | 589 | 0 | 1,040 |
+| APIs, actions and complete flows | 140 | 655 | 0 | 795 |
+| Other security, operations, integrations and upstream obligations | 207 | 113 | 9 | 329 |
+| **Total** | **11,737** | **2,415** | **9** | **14,161** |
+
+Unclosed severity labels: 5 Critical, 252 High, 349 Medium, 7 Low and 13,548 Unassessed. These count obligations, not distinct vulnerabilities: the Critical set includes overlapping family-media library/storage/security records and the retained migration-reference obligation. Labels are preserved, with no severity reassessment in this docs-only pass.
+
+The nine explicitly BLOCKED rows comprise four environment obligations (`CHILD_LOGIN_SECRET`, `CRON_SECRET`, `GUARDIAN_INTERNAL_SECRET`, `MARKETING_UNSUB_SECRET`), three upstream production migration/release-history obligations (`MAIN-F5`, `MAIN-F-001`, `MAIN-F-C08`), and two inbound-email/provider configuration obligations (`MAIN-F6`, `MAIN-F-E06`). A release blocker can also sit in IN PROGRESS; nine is not the total number of release risks.
+
+### Source merged, hosted tests, production applied — separate evidence
+
+**Source merged, live GitHub verification:** #847 merged as `2003485fe225771662b2adc12df4bf7362b47e77`; #848 as `74f5e063ecb800d5df7a7723a315ee765e7efe44`; #846 as current main `d4612dc9e57da89b4e679db8dd36fd7921a6a0eb`. These are source merges only. Main [CI 37085758759](https://github.com/NewWorldVenture/Bubaly/actions/runs/37085758759) passes Web, database migration replay/RLS probes and E2E (1,918 passed); Mobile fails. The Mobile job log independently confirms HIGH `braces` / `GHSA-vfj7-8cjw-p6xm`. No fixed version is established by this checkpoint. The separate dated node-forge exception does not cover braces and is not expanded here.
+
+**Hosted tests, live GitHub verification:** the following records refer to each exact published head, not a composed release. Web means the combined Typecheck/Lint/Test/Build job. PASS in this table is a CI-job conclusion, not a Register B status transition. The listed candidate PRs are open and unmerged; #834 is ready-for-review rather than draft, while the others are drafts at this check.
+
+| PR | Published head | Hosted run | Web | Database | E2E | Mobile |
+|---|---|---|---|---|---|---|
+| [#771](https://github.com/NewWorldVenture/Bubaly/pull/771) | `59b9dd52` | [CI 37051439951](https://github.com/NewWorldVenture/Bubaly/actions/runs/37051439951) | PASS | PASS | PASS | FAILURE |
+| [#842](https://github.com/NewWorldVenture/Bubaly/pull/842) | `d1afa3c9` | [CI 37104287573](https://github.com/NewWorldVenture/Bubaly/actions/runs/37104287573) | PASS | PASS | PASS | FAILURE |
+| [#788](https://github.com/NewWorldVenture/Bubaly/pull/788) | `e952627e` | [CI 37088070014](https://github.com/NewWorldVenture/Bubaly/actions/runs/37088070014) | PASS | PASS | PASS | FAILURE |
+| [#804](https://github.com/NewWorldVenture/Bubaly/pull/804) | `e4d0c7a8` | [CI 37007878265](https://github.com/NewWorldVenture/Bubaly/actions/runs/37007878265) | PASS | PASS | PASS | PASS |
+| [#834](https://github.com/NewWorldVenture/Bubaly/pull/834) | `3a36ee6b` | [CI 37042690272](https://github.com/NewWorldVenture/Bubaly/actions/runs/37042690272) | FAILURE | FAILURE | PASS | FAILURE |
+| [#845](https://github.com/NewWorldVenture/Bubaly/pull/845) | `637fa7a2` | [CI 37086599611](https://github.com/NewWorldVenture/Bubaly/actions/runs/37086599611) | PASS | PASS | PASS | FAILURE |
+| [#849](https://github.com/NewWorldVenture/Bubaly/pull/849) | `05ab389c` | [CI 37083739679](https://github.com/NewWorldVenture/Bubaly/actions/runs/37083739679) | PASS | PASS | PASS | PASS |
+| [#850](https://github.com/NewWorldVenture/Bubaly/pull/850) | `bcda00b8` | [CI 37085899680](https://github.com/NewWorldVenture/Bubaly/actions/runs/37085899680) | FAILURE | PASS | PASS | FAILURE |
+| [#851](https://github.com/NewWorldVenture/Bubaly/pull/851) | `ee7fe2d5` | [CI 37085925007](https://github.com/NewWorldVenture/Bubaly/actions/runs/37085925007) | PASS | PASS | PASS | FAILURE |
+| [#852](https://github.com/NewWorldVenture/Bubaly/pull/852) | `167bd432` | [CI 37085935540](https://github.com/NewWorldVenture/Bubaly/actions/runs/37085935540) | PASS | PASS | PASS | FAILURE |
+| [#853](https://github.com/NewWorldVenture/Bubaly/pull/853) | `4f15aa98` | [CI 37086313860](https://github.com/NewWorldVenture/Bubaly/actions/runs/37086313860) | PASS | PASS | PASS | FAILURE |
+| [#854](https://github.com/NewWorldVenture/Bubaly/pull/854) | `9fb97ce6` | [CI 37087896520](https://github.com/NewWorldVenture/Bubaly/actions/runs/37087896520) | PASS | PASS | PASS | FAILURE |
+| [#855](https://github.com/NewWorldVenture/Bubaly/pull/855) | `cad83a23` | [CI 37088025830](https://github.com/NewWorldVenture/Bubaly/actions/runs/37088025830) | FAILURE | PASS | PASS | FAILURE |
+| [#856](https://github.com/NewWorldVenture/Bubaly/pull/856) | `678480d3` | [CI 37090042897](https://github.com/NewWorldVenture/Bubaly/actions/runs/37090042897) | PASS | PASS | PASS | FAILURE |
+| [#857](https://github.com/NewWorldVenture/Bubaly/pull/857) | `ab2fdf89` | [CI 37090544730](https://github.com/NewWorldVenture/Bubaly/actions/runs/37090544730) | FAILURE | PASS | PASS | FAILURE |
+| [#858](https://github.com/NewWorldVenture/Bubaly/pull/858) | `8425c077` | [CI 37092147733](https://github.com/NewWorldVenture/Bubaly/actions/runs/37092147733) | FAILURE | PASS | PASS | FAILURE |
+| [#859](https://github.com/NewWorldVenture/Bubaly/pull/859) | `480a34f7` | [CI 37092686828](https://github.com/NewWorldVenture/Bubaly/actions/runs/37092686828) | FAILURE | PASS | PASS | FAILURE |
+| [#860](https://github.com/NewWorldVenture/Bubaly/pull/860) | `c3f1866d` | [CI 37094778280](https://github.com/NewWorldVenture/Bubaly/actions/runs/37094778280) | FAILURE | PASS | PASS | FAILURE |
+| [#861](https://github.com/NewWorldVenture/Bubaly/pull/861) | `ea93d648` | [CI 37094974829](https://github.com/NewWorldVenture/Bubaly/actions/runs/37094974829) | FAILURE | PASS | PASS | FAILURE |
+| [#862](https://github.com/NewWorldVenture/Bubaly/pull/862) | `e5651069` | [CI 37096179626](https://github.com/NewWorldVenture/Bubaly/actions/runs/37096179626) | FAILURE | PASS | PASS | FAILURE |
+| [#863](https://github.com/NewWorldVenture/Bubaly/pull/863) | `6ef0ca53` | [CI 37097314610](https://github.com/NewWorldVenture/Bubaly/actions/runs/37097314610) | FAILURE | PASS | PASS | FAILURE |
+| [#864](https://github.com/NewWorldVenture/Bubaly/pull/864) | `f273dea3` | [CI 37098645748](https://github.com/NewWorldVenture/Bubaly/actions/runs/37098645748) | FAILURE | PASS | FAILURE | FAILURE |
+| [#865](https://github.com/NewWorldVenture/Bubaly/pull/865) | `9901c63c` | [CI 37099110664](https://github.com/NewWorldVenture/Bubaly/actions/runs/37099110664) | PASS | PASS | PASS | FAILURE |
+| [#866](https://github.com/NewWorldVenture/Bubaly/pull/866) | `f1bc6511` | [CI 37101306228](https://github.com/NewWorldVenture/Bubaly/actions/runs/37101306228) | FAILURE | PASS | PASS | FAILURE |
+| [#867](https://github.com/NewWorldVenture/Bubaly/pull/867) | `bc32dd5f` | [CI 37102569137](https://github.com/NewWorldVenture/Bubaly/actions/runs/37102569137) | PASS | PASS | PASS | FAILURE |
+| [#868](https://github.com/NewWorldVenture/Bubaly/pull/868) | `ac05de21` | [CI 37102823681](https://github.com/NewWorldVenture/Bubaly/actions/runs/37102823681) | FAILURE | PASS | PASS | FAILURE |
+
+- #842's exact-head E2E log has 1,909 passed. Its Mobile dependency audit fails; the overall CI conclusion is failure despite the other three successful jobs. #771's latest three successful jobs likewise do not make its complete CI green.
+- Repaired #845 now passes Web/DB/E2E on `637fa7a2`; its earlier failure is retained as history. #853/#854 each have 1,931 E2E passed and 1 skipped, plus dedicated Messaging verification success ([37086313911](https://github.com/NewWorldVenture/Bubaly/actions/runs/37086313911), [37087896719](https://github.com/NewWorldVenture/Bubaly/actions/runs/37087896719)); Mobile still fails. These are successors to #834's failed Web/database run, not evidence that the original #834 run passed.
+- #854 retains the independently reviewed P2 audience-display issue: a creator-only legacy conversation with empty participant/member arrays falls back to the household count and roster. This audit rechecked the exact source at [lines 883–894](https://github.com/NewWorldVenture/Bubaly/blob/9fb97ce66f83dc4391a3d3fe8e61b98e27181123/components/modules/messages-module.tsx#L883-L894) and [line 1426](https://github.com/NewWorldVenture/Bubaly/blob/9fb97ce66f83dc4391a3d3fe8e61b98e27181123/components/modules/messages-module.tsx#L1426). Correct the audience label/roster and prove the creator-only case before acceptance. This is a misleading UI audience representation; no broader data-access exploit is claimed from these lines.
+- #788's Web/DB/E2E success does not settle the pending independent semantic and composition acceptance. #849 and the earlier #804 exception candidate have all-four successful runs at their own heads/times; neither establishes current main's Mobile dependency gate is clear.
+- Newer #850, #855, #857–#864, #866 and #868 fail the Web job; they need exact-head diagnosis/repair and a fresh full gate before integration acceptance. #864 additionally has 1,922 E2E passed and one failed saved-schedule consumer case at `social-publish-consumers.spec.ts:269` (including its retry); cause/repair is not newly established here. #868 has DB success and 2,286 E2E passed / 3 skipped while Web and Mobile fail. #867 has Web/DB success and 1,909 E2E passed while Mobile fails. Passing focused suites cannot override these hosted failures.
+
+**Production applied, bounded read-only check:** Vercel `list_deployments` again returns 403 for project `prj_z6gfMs2a8xGJ4ExbBDshtraYLQyi`, team `team_bKCixUVdMKcUYd7gLk12RLeL`, scope `newworldventure`: "Not authorized ... re-authenticate to this scope or use a token with access to this scope." No successful reconnection, current deployment-to-commit mapping or production acceptance is established. #842's Vercel comment says its deployment was ignored; that is not a release receipt.
+
+Supabase metadata on the connected Bubaly project `ltcxlbipiihclxwioyqj` was read again during this checkpoint. History has no entries for the six targeted versions `0177`, `0293`, `0367`, `0463`, `0475`, `0476`; this is a bounded query, not a claim that every later migration is absent. Catalog checks independently show `notifications.related_id` remains `uuid`, the selected `calendar_events`, `chores`, `grocery_items` and `reminders` tables lack `idempotency_key`, and the messaging effects `messaging_private`, `family_conversation_preferences`, `family_conversations.is_family_chat`, `family_messages.edited_at` and `family_messages.idempotency_key` are absent. Thus both history reconciliation and required schema effects remain open. Disposable CI database replay is not production application. Previously observed missing prerequisites and main-used fields remain release concerns; do not execute the historical blanket migration instructions below.
+
+The ledger's missing `CRON_SECRET` and other environment/provider configuration evidence remains dated historical production evidence, with no fresh Vercel configuration clearance. Cron delivery remains unverified. No secret values were requested or read, and this checkpoint performs no migration, schema, bucket-privacy, security, credential, provider or deployment mutation.
+
+### Author-reported evidence and remaining acceptance work
+
+The detailed earlier records remain the authority for exact local receipts and their limits. This checkpoint did not replay private application fixtures, provider calls, Auth/session flows, money/medical paths or the held source69 union. In particular:
+
+- The source69 private composition `5ece40` strict-type success and prospective 1,156/69 arithmetic are reported evidence; the full unit/build/browser/workflow union remains HOLD. #868's reported 300 focused fixture cases and #867's focused repair results do not prove that whole composition passes.
+- The accepted original idempotency receipt reproduction is reported as 8 desired failures plus 11 controls, after earlier zero-case loader failures. All raw history is retained. The latest [ownership claim](https://github.com/NewWorldVenture/Bubaly/pull/771#issuecomment-5966503049), created 06:50:23 UTC, follows published #842 and names an isolated three-file authoring scope; no published repaired head or 19-case repair PASS was established in the checked PR inventory. The original reminder due-collection 22-case packet remains UNEXECUTED in the published #842 record. These states are not retrospectively upgraded.
+- Prior raw38 qualifications, SDK/Auth fixture eligibility limits, CI-exception owner objections and the #705/#674 holds remain intact. Source review, exact-head hosted gates, independent semantic/composition review, production schema/config reconciliation, deployed-build verification and full cross-role application regression are separate remaining gates. Private Claude session activity is unknown; visible PRs/comments do not establish that all bots are working.
+
+### Verification and publication boundary
+
+This isolated clone reads the existing candidate's committed objects and changes only `finalaudit.md`; other checkouts and their uncommitted changes are untouched. No tracked `AGENTS.md` or `.agents/skills` was present in this checkout or the source candidate checkout. Historical audit coordination and current inventory/evidence rules were inspected; the user's docs-only draft scope controls publication, so no main push, merge or deployment is part of this task.
+
+The unmodified #842 baseline and edited checkpoint each pass 608 document checks on Node 24.21.0: 595 migration-reference, 3 finding-tally, 6 page-register and 4 migration-version-safety checks. Independent byte comparison retains every original row/evidence cell and the full historical document; generated finding-index output matches its retained block exactly, and whitespace is clean. The older standalone `docs/audit/tally-cross-check.py` returns exit 2 on both baseline and checkpoint with identical output: its prose-tally pattern does not match. That inherited check is not reported as a pass, and its unmerged #808/#810/#813 repair scope is preserved. Remote commit/blob and one-file draft-diff verification belong to the publication receipt. No full application regression is claimed from document checks.
+
+---
+
 <!-- jimmy-coordination:begin 2026-09-30 -->
 ## Audit Status
 
