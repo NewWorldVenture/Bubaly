@@ -1,5 +1,13 @@
 # Final Production Audit
 
+## Owner history decision and audit composition checkpoint — 2026-10-04 21:52 UTC
+
+- The owner selected **preserve existing participant access; create an empty Family Chat**. Historical conversations must not be adopted into a family-wide channel or expose their history to future members. The parallel messaging repair will implement this policy in an isolated candidate; no hosted schema, Storage setting or existing conversation was changed.
+- A fresh independent Register B recount confirms **14,538 unique IDs = 11,700 NOT STARTED + 2,485 IN PROGRESS + 185 PASS + 159 FIXED + PASS + 9 BLOCKED**. The current summary's stale 11,701/2,484 split is corrected below. No IDs or statuses were changed by this reconciliation; historical dated tallies remain intact. Closure remains **344/14,538 (2.37%)** with zero blocked credit.
+- [Draft #969](https://github.com/NewWorldVenture/Bubaly/pull/969) is published at `57b9f3fdd7a88bd1b6c58cec4acc44f87d528d76`. Read-only review of active Claude [draft #968](https://github.com/NewWorldVenture/Bubaly/pull/968), exact head `309bb8b3b78d0ddc78faedf6868adeb4933744d4`, found no new SQL file or direct namespace-0491 collision. Its new migration-order guard nonetheless rejects #969's filename set: a disposable fixture containing all 450 filenames from #969 plus the exact #968 guard exits 1 for skipped generations 0475–0490. The two next-version tests also disagree (0475 versus 0492). This is a reproduced future composition failure, not a failure of #969's current filename guard. Actual merge-order composition must reconcile the unmerged reservations and next-version assertion before release; no filler migration, applied migration rename or active branch edit was made.
+- #968 also introduces a register-derived audit counter and qualifies historical evidence on 125 existing rows without adding IDs or changing statuses. Its counter reports the same counts above and detects the former current-summary drift in #969. The unchanged counter from later observed #968 head `bcc8edd4303cee8dfdf7964453ba547bc40c6358` passes this corrected authoritative ledger with no problems, duplicate IDs or unknown statuses. Composition must preserve both newer #965/#969 checkpoints and that historical qualification. The reproduced migration finding is [published on #969](https://github.com/NewWorldVenture/Bubaly/pull/969#issuecomment-5984796221); the candidate's unchanged document/migration tests pass **602/602** after this update. No audit closure credit or production-readiness change is claimed.
+- [Draft #965](https://github.com/NewWorldVenture/Bubaly/pull/965) is published at `03441018585b40adfa5e92b214450b1bfbc2bacb`; fresh [CI 37237232566](https://github.com/NewWorldVenture/Bubaly/actions/runs/37237232566) is pending at this checkpoint. Issue #779 remains open pending configured project/account/database/snapshot bindings and deployed acceptance. No live worker is claimed connected; production configuration, hosted migrations and metered provider/Sandbox execution remain untouched.
+
 ## Bubaly #779 dispatch admission repair and release evidence — 2026-10-04 21:41 UTC
 
 - The current isolated candidate for [draft PR #965](https://github.com/NewWorldVenture/Bubaly/pull/965) includes dispatch repair `291a27dcb950135b24ee7f3bf494acc89c878d86`, latest-main integration `171e5f1a200089299b38dac8e6fc87c18e51467b`, and test typing correction `1a56c19b340132446c2d34ddfc370a3ce2751286`. Main integrated here is `7e19a9f950f58a44956063da0f38f15eab95d7fd`. The shared dirty checkout and active Claude branches remain untouched.
@@ -482,8 +490,8 @@ The TLS problem was a missing Node system-CA setting, not a reason to disable ce
 ## Current reconciled audit counts
 
 - Total Audit Items: **14,538**. Prior count explanations are preserved in the dated status summary below.
-- Not Started: **11,701**. Prior count explanations are preserved in the dated status summary below.
-- In Progress: **2,484**. Prior count explanations are preserved in the dated status summary below.
+- Not Started: **11,700**. Independently recounted from Register B on 2026-10-04; prior dated tallies remain below.
+- In Progress: **2,485**. Independently recounted from Register B on 2026-10-04; prior dated tallies remain below.
 - Passed: **185**. Prior count explanations are preserved in the dated status summary below.
 - Fixed + Passed: **159**. Prior count explanations are preserved in the dated status summary below.
 - Blocked: **9**. Prior count explanations are preserved in the dated status summary below.
