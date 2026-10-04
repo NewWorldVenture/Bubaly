@@ -143,6 +143,43 @@ export async function listRoutines(scope: ServiceScope, opts?: { db?: DB; includ
   return ok((data ?? []).map((row) => toRoutine(row as RuleRow)));
 }
 
+/**
+ * All scheduled routines for a data export, including paused routines.
+ * The dashboard's 100-row window is not a complete download. Page by the
+ * unique ID so equal timestamps and deletions do not shift an offset, and
+ * keep the caller's client/family predicate on every page. An empty page,
+ * rather than a short page, finishes the read: PostgREST can enforce a
+ * smaller server-side cap than the requested page size.
+ *
+ * This is a live read, like the other export sections, not a database snapshot.
+ */
+export async function listAllRoutines(scope: ServiceScope, opts?: { db?: DB }): Promise<ServiceResult<Routine[]>> {
+  const db = opts?.db ?? scope.db;
+  const routines: Routine[] = [];
+  let cursor: string | undefined;
+  for (;;) {
+    let query = db.from('family_automation_rules')
+      .select('*')
+      .eq('family_id', scope.familyId)
+      .not('schedule_kind', 'is', null)
+      .order('id', { ascending: true })
+      .limit(500);
+    if (cursor) query = query.gt('id', cursor);
+    const { data, error } = await query;
+    if (error) {
+      console.error('[service:routines] export list failed', error);
+      return fail(describeDbError(error, 'Could not read your routines.'), { code: SERVICE_CODES.db });
+    }
+    if (!data?.length) return ok(routines);
+    const nextCursor = data[data.length - 1].id;
+    if (!nextCursor || nextCursor === cursor) {
+      return fail('Could not finish reading your routines.', { code: SERVICE_CODES.db });
+    }
+    routines.push(...data.map((row) => toRoutine(row as RuleRow)));
+    cursor = nextCursor;
+  }
+}
+
 /** Pause or resume a routine. Manager-only, like creating one. */
 export async function setRoutineEnabled(scope: ServiceScope, routineId: string, enabled: boolean, opts?: { db?: DB }): Promise<ServiceResult<Routine>> {
   if (!isManager(scope.role)) {
