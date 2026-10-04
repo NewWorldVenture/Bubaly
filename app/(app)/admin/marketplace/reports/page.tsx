@@ -11,6 +11,8 @@ import {
 } from '@/lib/marketplace/reports';
 import { cn } from '@/lib/utils/cn';
 import { getTranslations } from '@/lib/i18n/server';
+import { getFormat } from '@/lib/utils/format-server';
+import { ADMIN_ZONE } from '@/lib/admin/clock';
 
 type Params = { searchParams: Promise<{ status?: string }> };
 
@@ -38,6 +40,9 @@ const STATUS_CHIP: Record<string, string> = {
  *  the service role, oversees every family, open reports first. */
 export default async function AdminMarketplaceReportsPage({ searchParams }: Params) {
   const tr = await getTranslations();
+  // A report's day is the admin zone's; a bare `toLocaleDateString()` was the
+  // host's zone in the host's locale.
+  const { fmtDate } = await getFormat(ADMIN_ZONE);
   const sp = await searchParams;
   const filter: ReportFilter = isReportFilter(sp.status) ? sp.status : 'all';
   const admin = createServiceClient();
@@ -143,7 +148,7 @@ export default async function AdminMarketplaceReportsPage({ searchParams }: Para
                     {listing && <span className="text-xs capitalize text-muted">{listing.status}</span>}
                   </div>
                   <p className="mt-1 text-xs text-muted">
-                    Reported by {familyOf.get(r.family_id) ?? 'a family'} · {new Date(r.created_at).toLocaleDateString()}
+                    Reported by {familyOf.get(r.family_id) ?? 'a family'} · {fmtDate(r.created_at, 'MMM d, yyyy')}
                   </p>
                   {r.details && <p className="mt-1 text-sm text-fg/90">“{r.details}”</p>}
                   {r.resolution && <p className="mt-1 text-xs text-emerald-600 dark:text-emerald-400">Resolution: {r.resolution}</p>}

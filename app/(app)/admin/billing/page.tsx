@@ -13,6 +13,7 @@ import { fmtMoney, fmtDate } from '@/lib/utils/format';
 import { planMonthlyCents, planName } from '@/lib/constants/plans';
 import { subscriptionRevenue } from '@/lib/admin/subscription-revenue';
 import { getTranslations, getLocaleContext } from '@/lib/i18n/server';
+import { ADMIN_ZONE, inWindow, lastUtcMonths } from '@/lib/admin/clock';
 
 export const metadata: Metadata = { title: 'Admin · Billing', robots: { index: false } };
 export const dynamic = 'force-dynamic';
@@ -73,13 +74,11 @@ export default async function AdminBillingPage() {
   const planSegments = [...planBuckets.entries()].map(([label, value], i) => ({ label, value, color: PLAN_COLORS[i % PLAN_COLORS.length] }));
 
   // New MRR added over the last 6 months — real, from subscription created_at.
-  const trend = Array.from({ length: 6 }, (_, i) => {
-    const d = new Date(new Date().getFullYear(), new Date().getMonth() - (5 - i), 1);
-    const start = d.getTime();
-    const end = new Date(d.getFullYear(), d.getMonth() + 1, 1).getTime();
-    const value = rows.filter((s) => { const t = new Date(s.created_at).getTime(); return t >= start && t < end; })
+  // Months in the admin zone, not the host's (lib/admin/clock.ts).
+  const trend = lastUtcMonths(6).map((w) => {
+    const value = rows.filter((s) => inWindow(s.created_at, w))
       .reduce((sum, s) => sum + planMonthlyCents(s.plan), 0);
-    return { label: d.toLocaleDateString(locale, { month: 'short' }), value };
+    return { label: new Date(w.start).toLocaleDateString(locale, { month: 'short', timeZone: ADMIN_ZONE }), value };
   });
   const maxTrend = Math.max(...trend.map((t) => t.value), 1);
 
