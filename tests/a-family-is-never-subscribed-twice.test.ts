@@ -22,6 +22,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { POST as checkout } from '@/app/api/billing/checkout/route';
 import { POST as changePlan } from '@/app/api/billing/change-plan/route';
 import { checkNewSubscription } from '@/lib/billing/one-subscription';
+import { at } from './helpers/source-order';
 
 type Session = { id: string; mode: string; status: 'open' | 'complete' | 'expired'; customer: string };
 
@@ -181,7 +182,7 @@ describe.each([['checkout', checkout], ['change-plan', changePlan]] as const)('%
     fake.sessions = [{ id: 'cs-old', mode: 'subscription', status: 'open', customer: 'cus-a' }];
     expect((await route(request('plus_monthly'))).status).toBe(200);
     expect(fake.sessions.find((s) => s.id === 'cs-old')!.status).toBe('expired');
-    expect(fake.trace.indexOf('expire:cs-old')).toBeLessThan(fake.trace.indexOf('create:cs-new-1'));
+    expect(at(fake.trace, 'expire:cs-old')).toBeLessThan(at(fake.trace, 'create:cs-new-1'));
     expect(fake.sessions.filter((s) => s.status === 'open').map((s) => s.id)).toEqual(['cs-new-1']);
   });
 
@@ -270,8 +271,8 @@ describe.each([['checkout', checkout], ['change-plan', changePlan]] as const)('%
   it('asks about the customer it will charge when the family has none yet', async () => {
     fake.rows.billing_customers = null;
     expect((await route(request('plus_monthly'))).status).toBe(200);
-    expect(fake.trace.indexOf('customer')).toBeLessThan(fake.trace.indexOf('sessions.list:cus-new'));
-    expect(fake.trace.indexOf('subscriptions.list:cus-new')).toBeLessThan(fake.trace.indexOf('create:cs-new-1'));
+    expect(at(fake.trace, 'customer')).toBeLessThan(at(fake.trace, 'sessions.list:cus-new'));
+    expect(at(fake.trace, 'subscriptions.list:cus-new')).toBeLessThan(at(fake.trace, 'create:cs-new-1'));
   });
 });
 
