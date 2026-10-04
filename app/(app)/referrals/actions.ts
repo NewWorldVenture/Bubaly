@@ -14,6 +14,7 @@ import {
 } from '@/lib/referrals/server';
 import { REFERRAL_EMAIL_POLICY, REFERRAL_HOME_CARD_DISMISSED_KEY, referralLink } from '@/lib/referrals/core';
 import { mergeNotificationPrefs } from '@/lib/preferences/notification-prefs';
+import { enforceRequestRateLimit } from '@/lib/server/request-rate-limit';
 
 /**
  * The catalogue key for each way applying a code can fail. `applyReferralCode`
@@ -65,10 +66,17 @@ export async function sendReferralEmailAction(rawEmail: string): Promise<SendRef
   }
 
   const service = createServiceClient();
+  const familyId = ctx.active.familyId;
+  // A burst limit in front of the daily one. The daily limit holds under a
+  // race on its own (recordReferralEmailInvite recounts after writing), but
+  // every racer past it still costs a write, a recount and a rollback; this
+  // turns a burst away before any of that, per family, durably.
+  const limited = await enforceRequestRateLimit(service, `referral-email:${familyId}`, { limit: 5, windowMs: 60_000 });
+  if (!limited.ok) return { ok: false, reason: t('inboxActions.tooManyRequestsRightNow') };
+
   const config = await getReferralConfig(service);
   if (!config.enabled) return { ok: false, reason: t('referralActions.programPaused') };
 
-  const familyId = ctx.active.familyId;
   const code = await getOrCreateReferralCode(familyId, { familyName: ctx.active.family.name, userId: ctx.user.id });
   const sentAt = new Date();
   const record = await recordReferralEmailInvite(service, { referrerFamilyId: familyId, code, email, config, now: sentAt });

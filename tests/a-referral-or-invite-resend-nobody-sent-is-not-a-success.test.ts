@@ -15,11 +15,17 @@ const state = vi.hoisted(() => ({
   result: { ok: true, skipped: true } as { ok: boolean; skipped?: boolean },
   rollbacks: 0,
   audits: 0,
+  limited: false,
+  sends: 0,
 }));
 
 vi.mock('next/cache', () => ({ revalidatePath: () => {} }));
 vi.mock('@/lib/i18n/server', () => ({ getTranslations: async () => (key: string) => key }));
-vi.mock('@/lib/email', () => ({ APP_URL: 'https://www.bubaly.com', sendReactEmail: async () => state.result }));
+vi.mock('@/lib/email', () => ({ APP_URL: 'https://www.bubaly.com', sendReactEmail: async () => { state.sends++; return state.result; } }));
+// The per-family burst limit in front of the referral email; its own behaviour is the limiter's.
+vi.mock('@/lib/server/request-rate-limit', () => ({
+  enforceRequestRateLimit: async () => (state.limited ? { ok: false, retryAfter: 30 } : { ok: true }),
+}));
 vi.mock('@/lib/emails/referral', () => ({ ReferralEmail: () => null }));
 vi.mock('@/lib/emails/invite', () => ({ InviteEmail: () => null }));
 vi.mock('@/lib/supabase/auth', () => ({
@@ -60,6 +66,8 @@ vi.mock('@/lib/supabase/server', () => ({
 beforeEach(() => {
   state.rollbacks = 0;
   state.audits = 0;
+  state.limited = false;
+  state.sends = 0;
 });
 
 describe('a send nobody received is not a success', () => {
@@ -76,6 +84,16 @@ describe('a send nobody received is not a success', () => {
     const { sendReferralEmailAction } = await import('@/app/(app)/referrals/actions');
     const res = await sendReferralEmailAction('friend@example.test');
     expect(res.ok).toBe(true);
+    expect(state.rollbacks).toBe(0);
+  });
+
+  it('the referral email: a burst past the per-family limit is refused before anything is recorded or sent', async () => {
+    state.result = { ok: true };
+    state.limited = true;
+    const { sendReferralEmailAction } = await import('@/app/(app)/referrals/actions');
+    const res = await sendReferralEmailAction('friend@example.test');
+    expect(res).toEqual({ ok: false, reason: 'inboxActions.tooManyRequestsRightNow' });
+    expect(state.sends).toBe(0);
     expect(state.rollbacks).toBe(0);
   });
 
