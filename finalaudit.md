@@ -4,7 +4,7 @@
 ## Audit Status
 
 - Started: 2026-09-12 (existing Register B); Daniel adopted the complete `Final_Audit.txt` target on 2026-09-30.
-- Last Updated: 2026-10-04 06:15 UTC. Register B was last recounted at 05:22 UTC: 14,538 unique obligations; 11,701 NOT STARTED, 2,484 IN PROGRESS, 185 PASS, 159 FIXED + PASS, and 9 BLOCKED. This update refreshed PR and deployment state only. GitHub has 109 open PRs (108 drafts): 45 target main and 64 target other PR branches. Main is 77d73ae2e999c0b61b9c8ed9220f22bcbe95a973 after the audit-only #842 merge. The latest successful Vercel Production deployment remains 6837080916 on app SHA 9d33d076dd133b058e8c6b20bbbcaa8983958b9f; the audit merge changed only finalaudit.md, and www.bubaly.com returns HTTP 200. Production is live, but overall audit readiness remains NO; no production configuration, migration, or money movement was performed.
+- Last Updated: 2026-10-04 06:19 UTC. Register B was last recounted at 05:22 UTC: 14,538 unique obligations; 11,701 NOT STARTED, 2,484 IN PROGRESS, 185 PASS, 159 FIXED + PASS, and 9 BLOCKED. GitHub has 109 open PRs (108 drafts): 45 target main and 64 target other PR branches. Main is ac7cd1dfc95c1629a48811405071ec9fab8df01b after the audit-only #949 merge. Latest successful Production deployment is 6837614860 on app SHA 77d73ae2e999c0b61b9c8ed9220f22bcbe95a973 (06:14:45 UTC); #949 changed only finalaudit.md, and www.bubaly.com returns HTTP 200. Production is live, but overall audit readiness remains NO; no production configuration, migration, or money movement was performed.
 
 ## Prior release gate snapshot — 2026-10-04 05:22 UTC, Codex/root
 
@@ -57415,6 +57415,16 @@ The audit branch itself was refreshed in commit b398a6e847521c6e0ef48528fd4f407c
 
 PR #842 merged at 06:12:22 UTC as main commit 77d73ae2e999c0b61b9c8ed9220f22bcbe95a973. Its only changed file was finalaudit.md; it contained no application source changes. The current main app source therefore matches the previously deployed application source at 9d33d076dd133b058e8c6b20bbbcaa8983958b9f.
 
-The latest GitHub Production deployment remains 6837080916 on 9d33d076dd133b058e8c6b20bbbcaa8983958b9f with success status. The PR Vercel check reports success with an ignored build step, so no new deployment was created for the documentation-only commit. A fresh HTTP HEAD request to https://www.bubaly.com/ returned 200. No Vercel production action or application deployment was performed in this pass.
+After #842 merged, GitHub recorded Production deployment 6837614860 on 77d73ae2e999c0b61b9c8ed9220f22bcbe95a973 as successful at 06:14:45 UTC. The PR Vercel preview check reported success with an ignored build step; the production deployment is separately confirmed by the GitHub deployment record. A fresh HTTP HEAD request to https://www.bubaly.com/ returned 200. No application source changed.
 
 This verifies that the existing production app remains live after the audit-ledger merge. It does not close the family role-escalation, possible gift-link cross-family disclosure, webhook concurrency, or remaining PR/integration gates. Overall production readiness remains NO.
+
+## Post-#949 main and production status — 2026-10-04 06:19 UTC
+
+PR #949 merged at 06:17:36 UTC as main commit ac7cd1dfc95c1629a48811405071ec9fab8df01b. Its only changed file was finalaudit.md. Thus the current main application source remains the same as the last deployed application source.
+
+The latest successful Vercel Production deployment is 6837614860 on 77d73ae2e999c0b61b9c8ed9220f22bcbe95a973 at 06:14:45 UTC. No later production deployment is listed after the #949 documentation merge; its Vercel preview status says the build was ignored. A fresh HTTP HEAD request to https://www.bubaly.com/ returned 200. Production is serving the unchanged app source; it does not include the latest audit text in its deployment artifact.
+
+PR #949 CI run 37182296836 remained in progress at this snapshot. Mobile passed and Database boundary probes passed; Core and E2E were still running. The PR changed only finalaudit.md. No branch protection or repository rulesets enforce required status checks.
+
+GitHub inventory remains 109 open PRs: 108 drafts, 45 targeting main, 64 based on other PR branches. #834 is still the sole non-draft targeting main; it remains DIRTY and its Database/migration replay/RLS check fails. No product PR is being represented as merged. Overall production readiness remains NO.
