@@ -61,6 +61,7 @@ import {
 import { cn } from '@/lib/utils/cn';
 import type { Tables, SubscriptionStatus, AccountType, TransactionType, BudgetPeriod, BillStatus } from '@/lib/database.types';
 import { categoryLabel } from '@/lib/finance/category-label';
+import { billPaidPatch, newBillDueDay, writeBillPatch } from '@/lib/finance/recurring';
 import { useLocale, useTranslations } from '@/components/i18n/locale-provider';
 import { FamilyDeliveredValue } from '@/components/billing/family-delivered-value';
 import type { LocaleCode } from '@/lib/i18n/locales';
@@ -455,12 +456,13 @@ function AddBillModal({ open, onClose, familyId, userId, onDone }: {
     if (!name.trim() || !amount || !dueDate) return;
     setSaving(true);
     const supabase = createClient();
-    const { error } = await supabase.from('bills').insert({
+    const { error } = await writeBillPatch({
       family_id: familyId, created_by: userId,
       name: name.trim(), amount: parseFloat(amount), due_date: dueDate,
+      due_day: newBillDueDay(dueDate, isRecurring, recurrence),
       is_recurring: isRecurring, recurrence: isRecurring ? recurrence : null,
-      status: 'upcoming', category,
-    });
+      status: 'upcoming' as const, category,
+    }, (p) => supabase.from('bills').insert(p));
     setSaving(false);
     if (error) return toastError(describeDbError(error));
     success(tr('billingModule.billAdded'));
@@ -954,7 +956,20 @@ export function BillingModule({ serviceFeeNotice = null }: { serviceFeeNotice?: 
 
   async function markBillPaid(id: string) {
     const supabase = createClient();
-    const { data: rows, error } = await supabase.from('bills').update({ status: 'paid' }).eq('id', id).eq('family_id', familyId).select('id');
+    // A one-off is paid; a recurring bill rolls to its next due date (in the
+    // family's day) and stays open — marked `paid` it left every "due soon"
+    // reader for good, and a monthly bill was reminded about once, ever
+    // (lib/finance/recurring.ts). A bill the list no longer holds is paid as before.
+    const bill = (bills ?? []).find((b) => b.id === id);
+    const patch = bill ? billPaidPatch(bill, clock.todayKey()) : { status: 'paid' as const };
+    // `writeBillPatch`: on a database without bills.due_day (0475 not applied) the write is repeated without it.
+    // A compare-and-set on the row this button saw (due date and status): two
+    // clicks on a stale list would otherwise each roll the bill a month and skip
+    // an occurrence; the second finds no row and is told so. A bill the list no
+    // longer holds has nothing to compare against and is paid by id, as before.
+    const { data: rows, error } = await writeBillPatch(patch, (p) => (bill
+      ? supabase.from('bills').update(p).eq('id', id).eq('family_id', familyId).eq('due_date', bill.due_date).eq('status', bill.status).select('id')
+      : supabase.from('bills').update(p).eq('id', id).eq('family_id', familyId).select('id')));
     if (error) return toastError(describeDbError(error));
     if (wroteNoRows(rows)) return toastError(tr('errors.thatChangeWasNotSaved'));
     success(tr('billingModule.billMarkedAsPaid'));

@@ -12,6 +12,8 @@ const sources = Object.fromEntries([
   'components/finance/payments-view.tsx', 'components/finance/savings-view.tsx',
   'components/ui/states.tsx', 'components/ui/states-client.tsx', 'components/ui/button.tsx',
   'components/ui/input.tsx', 'components/app/page-header.tsx', 'lib/finance/hub.ts',
+  // bills-view's Mark paid and add form write what lib/finance/recurring.ts decides.
+  'lib/finance/recurring.ts',
   // hub.ts reads the locale catalogue for its default currency locale.
   'lib/i18n/locales.ts',
   // And periodStart reads the READER's local day key from here. hub.ts used to

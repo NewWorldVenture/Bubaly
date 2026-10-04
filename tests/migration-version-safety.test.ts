@@ -504,12 +504,14 @@ describe('Supabase migration filename safety', () => {
     // /family/permissions shows them as read-only on (ROLE-M03).
     // 0471 adds the per-recipient admin digest delivery store, and 0474
     // (reserved for #710) withdraws an admin removed after a digest was
-    // frozen. This literal tracks the checked-in high-water mark. The numbers
-    // once allocated below it and never used (0465-0470 to NWV, 0472 to
-    // Support, 0473 to the coordinator) are retired, not held: production
-    // cannot apply them after 0474, so work that held one takes the next free
-    // number when it lands (RETIRED_MIGRATION_VERSIONS).
-    expect(audit.nextVersion).toBe('0475');
+    // frozen. 0475 adds bills.due_day, the day a month-end bill keeps
+    // through a short month (#932). This literal tracks the checked-in
+    // high-water mark. The numbers once allocated below it and never used
+    // (0465-0470 to NWV, 0472 to Support, 0473 to the coordinator) are
+    // retired, not held: production cannot apply them after 0474, so work that
+    // held one takes the next free number when it lands
+    // (RETIRED_MIGRATION_VERSIONS).
+    expect(audit.nextVersion).toBe('0476');
   });
 
   // A hole below the high-water mark is not a free number: `supabase db push`

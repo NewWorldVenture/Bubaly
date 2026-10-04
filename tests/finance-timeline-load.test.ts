@@ -7,9 +7,12 @@ import { loadMoneyTimeline, loadMoneyTimelineInput, planCommitments } from '@/li
 // is thenable, resolving to the supplied PostgREST-shaped `{ data, error }`.
 // Mirrors the loader's calls (`from(t).select().eq().in().gte().lte().lt().order().limit()`).
 type Reply = { data: unknown; error: unknown };
-function chain(result: Reply) {
+/** A table's answer: one reply for every call, or one per call in order (the pre-0475 retry asks `bills` twice). */
+type Answer = Reply | ((call: number) => Reply);
+function chain(result: Reply, onSelect?: (columns: string) => void) {
   const c: Record<string, unknown> = {};
-  for (const m of ['select', 'eq', 'neq', 'in', 'gte', 'gt', 'lte', 'lt', 'order', 'limit']) c[m] = () => c;
+  for (const m of ['eq', 'neq', 'in', 'gte', 'gt', 'lte', 'lt', 'order', 'limit']) c[m] = () => c;
+  c.select = (columns: string) => { onSelect?.(columns); return c; };
   // `.range()` slices, so a paged read reaches an empty page and stops. Without
   // that a stub returning all rows to every call would page to its ceiling.
   c.range = (from: number, to: number) => ({
@@ -21,9 +24,16 @@ function chain(result: Reply) {
   return c;
 }
 
-function fakeSupabase(results: Record<string, Reply>, seen: string[] = []): SupabaseClient<Database> {
+function fakeSupabase(results: Record<string, Answer>, seen: string[] = [], selects: Record<string, string[]> = {}): SupabaseClient<Database> {
+  const calls: Record<string, number> = {};
   return {
-    from: (table: string) => { seen.push(table); return chain(results[table] ?? { data: [], error: null }); },
+    from: (table: string) => {
+      seen.push(table);
+      const n = (calls[table] = (calls[table] ?? 0) + 1);
+      const answer = results[table];
+      const reply = typeof answer === 'function' ? answer(n) : answer ?? { data: [], error: null };
+      return chain(reply, (columns) => { (selects[table] ??= []).push(columns); });
+    },
   } as unknown as SupabaseClient<Database>;
 }
 
@@ -140,6 +150,46 @@ describe('loadMoneyTimelineInput read boundary', () => {
     const trip = timeline.weeks.find((w) => w.weekStart === '2026-02-09')!.moments.find((m) => m.kind === 'plan');
     expect(trip).toMatchObject({ label: 'Spring break', kind: 'plan', source: 'vacation', amount: 1000, date: '2026-02-14' });
     expect(timeline.lowestBalance).toBe(5000 - 3000 - 1000);
+  });
+
+  // Review 5981518473 / 5981566086 on #932: the forecast steps a month-end bill
+  // by `due_day` (0475), but this loader's projection omitted the column, so a
+  // row already clamped to Feb 28 with its anchor 31 recorded forecast March 28
+  // in production however right the pure builder was. The projection carries
+  // the column; a database that has not applied 0475 refuses it and is asked
+  // once more without it.
+  it('reads each bill\'s anchor day, so a clamped month-end row forecasts the month end again', async () => {
+    const selects: Record<string, string[]> = {};
+    const supabase = fakeSupabase({
+      bills: { data: [{ name: 'Rent', amount: 1000, due_date: '2026-02-28', due_day: 31, is_recurring: true, recurrence: 'monthly', status: 'upcoming', category: null, autopay: false }], error: null },
+    }, [], selects);
+    const input = await loadMoneyTimelineInput(supabase, 'fam-1', TZ, new Date('2026-02-20T00:00:00Z'));
+    expect(selects.bills).toEqual(['name, amount, due_date, due_day, is_recurring, recurrence, status, category, autopay']);
+    expect(input.bills).toEqual([expect.objectContaining({ due_date: '2026-02-28', due_day: 31 })]);
+    const timeline = await loadMoneyTimeline(supabase, 'fam-1', TZ, new Date('2026-02-20T00:00:00Z'));
+    const rent = timeline.weeks.flatMap((w) => w.moments).filter((m) => m.label === 'Rent').map((m) => m.date);
+    expect(rent).toContain('2026-03-31');
+    expect(rent).not.toContain('2026-03-28');
+  });
+
+  it('a database without 0475 is asked once more without the column, and steps the bill from its due date\'s day', async () => {
+    const selects: Record<string, string[]> = {};
+    const warn = vi.spyOn(console, 'warn').mockImplementation(() => undefined);
+    const supabase = fakeSupabase({
+      bills: (call) => (call === 1
+        ? { data: null, error: { code: 'PGRST204', message: "Could not find the 'due_day' column of 'bills' in the schema cache" } }
+        : { data: [{ name: 'Rent', amount: 1000, due_date: '2026-02-28', is_recurring: true, recurrence: 'monthly', status: 'upcoming', category: null, autopay: false }], error: null }),
+    }, [], selects);
+    const input = await loadMoneyTimelineInput(supabase, 'fam-1', TZ, new Date('2026-02-20T00:00:00Z'));
+    expect(selects.bills).toEqual([
+      'name, amount, due_date, due_day, is_recurring, recurrence, status, category, autopay',
+      'name, amount, due_date, is_recurring, recurrence, status, category, autopay',
+    ]);
+    expect(input.bills).toEqual([expect.objectContaining({ due_date: '2026-02-28' })]);
+    expect(warn).toHaveBeenCalledWith(expect.stringContaining('0475_a_month_end_bill_keeps_its_day'));
+    // Any other refusal is the loader's failure, as before.
+    const refused = fakeSupabase({ bills: { data: null, error: { code: '42501', message: 'permission denied for table bills' } } });
+    await expect(loadMoneyTimelineInput(refused, 'fam-1', TZ, new Date('2026-02-20T00:00:00Z'))).rejects.toMatchObject({ code: '42501' });
   });
 
   it('passes a scenario through to the brain without re-reading', async () => {

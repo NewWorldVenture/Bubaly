@@ -1,7 +1,7 @@
 'use client';
 
 import { useMemo, useState } from 'react';
-import { useFamilyCalendarToday } from '@/components/i18n/use-format';
+import { useFamilyCalendarToday, useFamilyClock } from '@/components/i18n/use-format';
 import { FileText, Plus, Trash2, Check, RotateCcw, Repeat, Bell } from 'lucide-react';
 import { useApp } from '@/components/app/app-context';
 import { useRealtimeQuery } from '@/lib/hooks/use-realtime-query';
@@ -15,6 +15,7 @@ import { SkeletonList, EmptyState, ErrorState } from '@/components/ui/states';
 import { cn } from '@/lib/utils/cn';
 import type { Tables } from '@/lib/database.types';
 import { usd as usdIn, billDueStatus, DUE_META, fmtDueDate as fmtDueDateIn } from '@/lib/finance/hub';
+import { billPaidPatch, newBillDueDay, writeBillPatch } from '@/lib/finance/recurring';
 import { useLocale, useTranslations } from '@/components/i18n/locale-provider';
 import { describeDbError, wroteNoRows } from '@/lib/supabase/errors';
 import { todayInZone } from '@/lib/schedule/zoned';
@@ -33,6 +34,7 @@ const MODE_META: Record<BillsMode, { title: string; desc: string; icon: typeof F
 export function BillsView({ mode }: { mode: BillsMode }) {
   // Date-only helpers read local calendar fields: give them the FAMILY's day (TIME-003).
   const familyToday = useFamilyCalendarToday();
+  const clock = useFamilyClock();
   const t = useTranslations();
   // Money and dates follow the reader; the currency stays the money's own.
   const locale = useLocale();
@@ -59,14 +61,24 @@ export function BillsView({ mode }: { mode: BillsMode }) {
   const totalDue = useMemo(() => visible.filter((b) => b.status !== 'paid').reduce((s, b) => s + Number(b.amount), 0), [visible]);
 
   async function markPaid(b: Bill) {
-    const next = b.status === 'paid' ? 'upcoming' : 'paid';
+    // Reopening a one-off puts it back as upcoming. Marking paid writes what
+    // `billPaidPatch` decides: paid for a one-off; for a recurring bill the
+    // due date rolls to the next occurrence (in the family's day) and the row
+    // stays open — marked `paid` it left every "due soon" reader for good, and
+    // a monthly bill was reminded about once, ever (lib/finance/recurring.ts).
+    const reopen = b.status === 'paid';
+    const patch = reopen ? { status: 'upcoming' as const } : billPaidPatch(b, clock.todayKey());
     // A restrictive RLS policy FILTERS an update/delete rather than raising, so
     // a refused write returns zero rows and no error. `.select('id')` is what
     // makes the difference visible — without it `data` is null either way.
-    const { data: rows, error } = await createClient().from('bills').update({ status: next }).eq('id', b.id).eq('family_id', familyId).select('id');
+    // `writeBillPatch`: on a database without bills.due_day (0475 not applied) the write is repeated without it.
+    // The write is a compare-and-set on the row this button saw: two clicks on a
+    // stale list (or two people) would otherwise each roll the bill a month, and
+    // an occurrence would be skipped. The second finds no row and is told so.
+    const { data: rows, error } = await writeBillPatch(patch, (p) => createClient().from('bills').update(p).eq('id', b.id).eq('family_id', familyId).eq('due_date', b.due_date).eq('status', b.status).select('id'));
     if (error) { toastError(describeDbError(error)); return; }
     if (wroteNoRows(rows)) { toastError(t('errors.thatChangeWasNotSaved')); return; }
-    success(next === 'paid' ? 'Marked paid' : 'Reopened');
+    success(reopen ? 'Reopened' : 'Marked paid');
   }
   async function toggleAutopay(b: Bill) {
     const { data: rows, error } = await createClient().from('bills').update({ autopay: !b.autopay }).eq('id', b.id).eq('family_id', familyId).select('id');
@@ -168,17 +180,20 @@ function BillModal({ familyId, userId, defaultAutopay, onClose }: { familyId: st
   const { family } = useApp();
   const { success, error: toastError } = useToast();
   const [saving, setSaving] = useState(false);
-  const [v, setV] = useState({ name: '', amount: '', due_date: todayInZone(family?.timezone ?? 'UTC'), category: 'Utilities', is_recurring: true, autopay: defaultAutopay });
+  // A recurring bill needs a cadence, or nothing can roll it to its next due
+  // date once it is paid; the Billing module's form has always recorded one.
+  const [v, setV] = useState({ name: '', amount: '', due_date: todayInZone(family?.timezone ?? 'UTC'), category: 'Utilities', is_recurring: true, recurrence: 'monthly', autopay: defaultAutopay });
 
   async function submit(e: React.FormEvent) {
     e.preventDefault();
     if (!v.name.trim() || !v.amount) return toastError(t('billsView.addANameAndAmount'));
     setSaving(true);
-    const { error } = await createClient().from('bills').insert({
+    const { error } = await writeBillPatch({
       family_id: familyId, name: v.name.trim(), amount: Math.abs(parseFloat(v.amount) || 0),
-      due_date: v.due_date, category: v.category, is_recurring: v.is_recurring, autopay: v.autopay,
-      status: 'upcoming', created_by: userId,
-    });
+      due_date: v.due_date, due_day: newBillDueDay(v.due_date, v.is_recurring, v.recurrence),
+      category: v.category, is_recurring: v.is_recurring, recurrence: v.is_recurring ? v.recurrence : null, autopay: v.autopay,
+      status: 'upcoming' as const, created_by: userId,
+    }, (p) => createClient().from('bills').insert(p));
     setSaving(false);
     if (error) return toastError(describeDbError(error));
     success(t('billsView.billAdded'));
@@ -198,6 +213,17 @@ function BillModal({ familyId, userId, defaultAutopay, onClose }: { familyId: st
           <label className="flex items-center gap-2 text-sm"><input type="checkbox" checked={v.is_recurring} onChange={(e) => setV({ ...v, is_recurring: e.target.checked })} /> {t('bills.recurring')}</label>
           <label className="flex items-center gap-2 text-sm"><input type="checkbox" checked={v.autopay} onChange={(e) => setV({ ...v, autopay: e.target.checked })} /> {t('bills.autoPay')}</label>
         </div>
+        {v.is_recurring && (
+          <Field label={t('billing.recurrence')}>{(id) => (
+            <Select id={id} value={v.recurrence} onChange={(e) => setV({ ...v, recurrence: e.target.value })}>
+              <option value="weekly">{t('billing.weekly')}</option>
+              <option value="biweekly">{t('billing.biweekly')}</option>
+              <option value="monthly">{t('billing.monthly')}</option>
+              <option value="quarterly">{t('billing.quarterly')}</option>
+              <option value="yearly">{t('billing.yearly')}</option>
+            </Select>
+          )}</Field>
+        )}
         <div className="flex justify-end gap-2 pt-2">
           <Button type="button" variant="outline" onClick={onClose}>{t('bills.cancel')}</Button>
           <Button type="submit" loading={saving} disabled={!v.name.trim() || !v.amount}>Add</Button>
