@@ -21,6 +21,7 @@ import { asWallClockIn, isValidTimezone } from '@/lib/time/zoned';
 import { addDaysToDayKey, dayKeyInTz, systemScopeForFamily, zonedDayBoundsMs } from '@/lib/services/scope';
 import { readInChunks } from '@/lib/supabase/chunked-in';
 import { readAll } from '@/lib/supabase/read-all';
+import { insertNotificationRows } from '@/lib/notifications/insert-once';
 
 type DB = SupabaseClient<Database>;
 type NotificationMember = Pick<Tables<'family_members'>, 'id' | 'user_id' | 'display_name' | 'role' | 'birthday'>;
@@ -406,7 +407,24 @@ export async function generateFamilyNotifications(supabase: DB, familyId: string
     }
   }
 
-  // ── Generic items: dedup permanently against notifications for the same item.
+  // ── Medication doses recur daily. The key names the dose day
+  //    (`<medication>:<day>`, see MedReminder), so a day's reminder is one
+  //    occurrence of the permanent dedupe below and tomorrow's is the next; it
+  //    used to be the bare medication id with a separate same-day read here,
+  //    which is the one shape 0489's one-row-per-occurrence index could not
+  //    hold. First in the list, so a household with more candidates than the
+  //    cap still hears about its doses.
+  // A dose slot belongs to the family's clock. Reading it on the cron's clock
+  // matches no logged dose at all for a household outside UTC, so every dose
+  // already taken looks pending and the family is reminded to take it again.
+  const familyZone = scope?.tz && isValidTimezone(scope.tz) ? scope.tz : null;
+  const medNow = familyZone ? asWallClockIn(now, familyZone) : now;
+  candidates.unshift(...medicationDueReminders(meds ?? [], medSchedules ?? [], medDoses ?? [], userByMember, managerLites, medNow, familyZone));
+
+  // ── Every candidate: dedup permanently against notifications for the same
+  //    occurrence. 0489 stands behind this read with a unique index over
+  //    (family_id, type, related_id, user_id) for unread rows, so two runs that
+  //    both read "not yet announced" cannot both write (see the insert below).
   let rows: NotificationRow[] = [];
   if (candidates.length > 0) {
     // The legacy keys too (see Candidate.legacy): one read answers both questions.
@@ -444,35 +462,11 @@ export async function generateFamilyNotifications(supabase: DB, familyId: string
     };
     rows = candidates
       .filter((c) => !seen.has(keyOf(c.type, c.related_id, c.user_id)) && !announcedUnderLegacyKey(c))
-      .slice(0, 100)
+      .slice(0, 150)
       .map((c) => toRow(familyId, c));
   }
 
-  // ── Medication doses recur daily, so they dedup against TODAY's medication_due
-  //    notifications only (related_id stays the medication's real uuid).
-  let medRows: NotificationRow[] = [];
-  // A dose slot belongs to the family's clock. Reading it on the cron's clock
-  // matches no logged dose at all for a household outside UTC, so every dose
-  // already taken looks pending and the family is reminded to take it again.
-  const familyZone = scope?.tz && isValidTimezone(scope.tz) ? scope.tz : null;
-  const medNow = familyZone ? asWallClockIn(now, familyZone) : now;
-  const medReminders = medicationDueReminders(meds ?? [], medSchedules ?? [], medDoses ?? [], userByMember, managerLites, medNow, familyZone);
-  if (medReminders.length > 0) {
-    const { data: existingMed, error: existingMedErr } = await supabase
-      .from('notifications')
-      .select('related_id, user_id')
-      .eq('family_id', familyId)
-      .eq('type', 'medication_due')
-      .gte('created_at', todayStartIso);
-    // Same duplicate-spam risk as above for daily medication-due reminders.
-    if (existingMedErr) console.error('[notifications] medication dedup read failed', { familyId, error: existingMedErr });
-    const seenMed = new Set((existingMed ?? []).map((e) => `${e.related_id}:${e.user_id ?? 'all'}`));
-    medRows = medReminders
-      .filter((r) => !seenMed.has(`${r.related_id}:${r.user_id ?? 'all'}`))
-      .map((r) => toRow(familyId, r));
-  }
-
-  const allRows = [...rows, ...medRows].slice(0, 150);
+  const allRows = rows;
   if (allRows.length === 0) return 0;
 
   // The last writer that bypassed the quiet-hours window. It is NOT routed
@@ -496,9 +490,13 @@ export async function generateFamilyNotifications(supabase: DB, familyId: string
     console.error('[notifications] could not read the family for quiet hours', { familyId });
   }
 
-  const { error } = await supabase.from('notifications').insert(allRows);
-  if (error) throw new Error(error.message);
-  return allRows.length;
+  // One batch, as before — and when the index refuses it because a concurrent
+  // run wrote one of these occurrences between the dedupe read above and now,
+  // the rows are written one at a time around that one (insertNotificationRows).
+  const written = await insertNotificationRows(allRows, (batch) => supabase.from('notifications').insert(batch).select('id'));
+  if (written.error) throw new Error(written.error.message);
+  if (written.refused > 0) console.warn('[notifications] occurrences already written by a concurrent run', { familyId, refused: written.refused });
+  return written.written;
 }
 
 type NotificationRow = {

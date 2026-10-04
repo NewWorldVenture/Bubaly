@@ -3,7 +3,8 @@
 // "dose due today" reminders for the notification engine. Reuses the tested
 // dosesForDay expansion so schedule math isn't duplicated.
 
-import { dosesForDay, shortTime, type ScheduleLike, type DoseStatus } from '@/lib/medications/adherence';
+import { dosesForDay, localDateKey, shortTime, type ScheduleLike, type DoseStatus } from '@/lib/medications/adherence';
+import { zonedDayBoundsMs } from '@/lib/services/scope';
 
 export interface MedLite {
   id: string;
@@ -21,10 +22,26 @@ export interface DoseLogLite {
 export interface MedReminder {
   type: 'medication_due';
   related_type: 'medications';
-  related_id: string;   // medication id (a real uuid) — same-day deduped by the engine
+  /**
+   * `<medication id>:<dose day>` — the family's day this reminder is about, so a
+   * day's reminder is ONE occurrence (the engine's permanent dedupe, and 0489's
+   * index behind it, hold it to one row) and tomorrow's is the next. Before
+   * this the key was the bare medication id, and the engine kept a separate
+   * same-day read for medications alone; a key that names the day lets them
+   * dedupe like every other candidate.
+   */
+  related_id: string;
   user_id: string | null;
   title: string;
   body: string;
+  /**
+   * The bare medication id these rows carried before the key named the day,
+   * and the instant this day began in the family's zone: a row under the old
+   * key from this day counts as today's reminder, already sent, so the first
+   * run with the dated key does not remind the family twice (see
+   * Candidate.legacy in lib/server/notifications.ts).
+   */
+  legacy: { related_id: string; since: string };
 }
 
 /**
@@ -55,6 +72,11 @@ export function medicationDueReminders(
     schedulesByMed.set(s.medication_id, arr);
   }
 
+  // The day `dosesForDay` reads the schedules against, as it reads it, and the
+  // instant that day began where the family lives.
+  const dayKey = localDateKey(now);
+  const dayStartIso = new Date(zonedDayBoundsMs(dayKey, timezone || 'UTC').start).toISOString();
+
   const out: MedReminder[] = [];
   for (const med of meds) {
     if (!med.is_active) continue;
@@ -70,7 +92,11 @@ export function medicationDueReminders(
     const title = `Medication due: ${med.name}`;
     const body = `${med.dosage ? `${med.dosage} · ` : ''}${count} dose${count > 1 ? 's' : ''} today — next at ${shortTime(nextTime)}`;
 
-    const base = { type: 'medication_due' as const, related_type: 'medications' as const, related_id: med.id, title, body };
+    const base = {
+      type: 'medication_due' as const, related_type: 'medications' as const,
+      related_id: `${med.id}:${dayKey}`, title, body,
+      legacy: { related_id: med.id, since: dayStartIso },
+    };
 
     if (med.member_id) {
       const userId = userByMember.get(med.member_id);

@@ -25,6 +25,7 @@
 // key today, so no notification is currently deferred; the day a settings
 // surface writes it, delivery honours it with no change here.
 import 'server-only';
+import { insertNotificationRows } from '@/lib/notifications/insert-once';
 import type { Json, NotificationType, Tables } from '@/lib/database.types';
 import { isManager } from '@/lib/constants/roles';
 import { DIGEST_NOTIFICATION_TYPES, type NotificationPriority } from '@/lib/notifications/priority';
@@ -212,9 +213,7 @@ export async function notify(scope: ServiceScope, input: NotifyInput): Promise<S
   const { sendAt: resolvedSendAt, deferred: wasDeferred } =
     await deliveryTimeFor(scope, { sendAt: input.sendAt, urgent: input.urgent });
 
-  let deferred = 0;
   const rows = targets.map((userId) => {
-    if (wasDeferred) deferred += 1;
     return {
       family_id: scope.familyId,
       user_id: userId,
@@ -227,12 +226,16 @@ export async function notify(scope: ServiceScope, input: NotifyInput): Promise<S
     };
   });
 
-  const { data, error } = await writer.from('notifications').insert(rows).select('id');
-  if (error) {
-    console.error('[service:notifications] insert failed', error);
-    return fail(describeDbError(error, 'Could not send that notification.'), { code: SERVICE_CODES.db });
+  // 0489's index stands behind the duplicate guard above: a copy another writer
+  // landed between that read and this insert is refused, not written twice, and
+  // counts as a duplicate here exactly like one the read had seen.
+  const written = await insertNotificationRows(rows, (batch) => writer.from('notifications').insert(batch).select('id'));
+  if (written.error) {
+    console.error('[service:notifications] insert failed', written.error);
+    return fail(describeDbError(written.error, 'Could not send that notification.'), { code: SERVICE_CODES.db });
   }
-  return ok({ created: (data ?? []).length, ids: (data ?? []).map((r) => r.id), duplicates, skippedMemberIds, deferred });
+  const created = written.ids.length;
+  return ok({ created, ids: written.ids, duplicates: duplicates + written.refused, skippedMemberIds, deferred: wasDeferred ? created : 0 });
 }
 
 /**

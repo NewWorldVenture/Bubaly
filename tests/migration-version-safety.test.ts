@@ -504,8 +504,10 @@ describe('Supabase migration filename safety', () => {
     // (reserved for #710) withdraws an admin removed after a digest was
     // frozen. This literal tracks the checked-in high-water mark, not
     // migration allocation: 0465-0470 remain NWV's, 0472 Support's, and 0473
-    // the coordinator's.
-    expect(audit.nextVersion).toBe('0475');
+    // the coordinator's. 0489 (reserved on #699 for the once-per-occurrence
+    // notifications unit) puts a partial unique index behind the engine's and
+    // notify()'s dedupe reads.
+    expect(audit.nextVersion).toBe('0490');
   });
 
   it('flags a newly introduced collision instead of silently accepting it', () => {

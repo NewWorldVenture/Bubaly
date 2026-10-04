@@ -17,7 +17,13 @@ describe('medicationDueReminders', () => {
   it('notifies the assigned member for a pending dose today', () => {
     const out = medicationDueReminders([med({})], [sched({})], [], userByMember, managers, now);
     expect(out).toHaveLength(1);
-    expect(out[0]).toMatchObject({ type: 'medication_due', related_type: 'medications', related_id: 'm1', user_id: 'u-kid' });
+    // The key names the dose DAY: one occurrence a day, deduped like every other
+    // candidate; the bare id it used to be is carried as the legacy key, counted
+    // from the start of that day (0489).
+    expect(out[0]).toMatchObject({
+      type: 'medication_due', related_type: 'medications', related_id: 'm1:2026-06-21', user_id: 'u-kid',
+      legacy: { related_id: 'm1', since: '2026-06-21T00:00:00.000Z' },
+    });
     expect(out[0].title).toBe('Medication due: Amoxicillin');
     expect(out[0].body).toContain('500 mg');
     expect(out[0].body).toContain('next at 08:00');

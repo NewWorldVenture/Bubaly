@@ -28,9 +28,19 @@ type Reply = { data: unknown; error: PostgrestError | null; count: number | null
 type Op = 'select' | 'insert' | 'update' | 'upsert' | 'delete';
 type Predicate = (row: Row) => boolean;
 
+/**
+ * A unique index as the fake enforces it: a column list, or the list with the
+ * two things a partial index adds — `where` (rows outside the predicate are not
+ * indexed, so they neither clash nor are clashed with) and `nullsNotDistinct`
+ * (Postgres 15's `NULLS NOT DISTINCT`: two NULLs in a key column are the same
+ * key; by default, as in Postgres, they are not). `name` is what the 23505
+ * message names.
+ */
+export type UniqueSpec = string[] | { columns: string[]; where?: (row: Row) => boolean; nullsNotDistinct?: boolean; name?: string };
+
 export type InMemoryOptions = {
   /** Per-table unique column sets; a violating insert answers 23505 like Postgres. */
-  uniques?: Record<string, string[][]>;
+  uniques?: Record<string, UniqueSpec[]>;
   /** Per-table column defaults applied on insert when the row leaves the column unset (what the migrations' `default` clauses do). */
   defaults?: Record<string, Row>;
   /** RPC handlers by function name. Unknown functions answer an error. */
@@ -409,10 +419,14 @@ class QueryBuilder implements PromiseLike<Reply> {
   }
 
   private uniqueViolation(row: Row, existing: Row[]): PostgrestError | null {
-    for (const columns of this.db.uniquesFor(this.tableName)) {
-      if (columns.some((c) => row[c] === null || row[c] === undefined)) continue;
-      const clash = existing.find((other) => other !== row && columns.every((c) => looseEq(other[c], row[c])));
-      if (clash) return pgError('23505', `duplicate key value violates unique constraint "${this.tableName}_${columns.join('_')}_key"`);
+    for (const spec of this.db.uniquesFor(this.tableName)) {
+      const { columns, where, nullsNotDistinct = false, name } = Array.isArray(spec) ? { columns: spec } : spec;
+      if (where && !where(row)) continue;
+      const isNull = (v: unknown) => v === null || v === undefined;
+      if (!nullsNotDistinct && columns.some((c) => isNull(row[c]))) continue;
+      const same = (a: unknown, b: unknown) => (isNull(a) && isNull(b) ? nullsNotDistinct : looseEq(a, b));
+      const clash = existing.find((other) => other !== row && (!where || where(other)) && columns.every((c) => same(other[c], row[c])));
+      if (clash) return pgError('23505', `duplicate key value violates unique constraint "${name ?? `${this.tableName}_${columns.join('_')}_key`}"`);
     }
     return null;
   }
@@ -423,14 +437,20 @@ class QueryBuilder implements PromiseLike<Reply> {
       case 'select':
         return this.shape(this.matching());
       case 'insert': {
+        // One statement: every row lands or none does, as in Postgres. A row is
+        // checked against the table AND the rows before it in the same batch, and
+        // nothing is written until all of them have passed — so a refused batch
+        // leaves the table as it was, and a caller that then writes the batch one
+        // row at a time (lib/notifications/insert-once.ts) sees exactly the rows
+        // the database would refuse, not its own half-written batch.
         const inserted: Row[] = [];
         for (const raw of this.payload) {
           const row = this.db.withDefaults(this.tableName, raw);
-          const violation = this.uniqueViolation(row, table);
+          const violation = this.uniqueViolation(row, [...table, ...inserted]);
           if (violation) return { data: null, error: violation, count: null, status: 409, statusText: 'Conflict' };
-          table.push(row);
           inserted.push(row);
         }
+        table.push(...inserted);
         return this.written(inserted);
       }
       case 'upsert': {
@@ -517,7 +537,7 @@ export class InMemorySupabase {
    */
   reset(): void { this.tables.clear(); this.log.length = 0; }
 
-  uniquesFor(name: string): string[][] { return this.options.uniques?.[name] ?? []; }
+  uniquesFor(name: string): UniqueSpec[] { return this.options.uniques?.[name] ?? []; }
 
   /** The defaults every migration in this repository gives its tables: a uuid id and timestamps. */
   withDefaults(table: string, raw: Row): Row {
