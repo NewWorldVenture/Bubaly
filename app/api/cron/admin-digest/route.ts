@@ -41,12 +41,25 @@ export async function GET(req: NextRequest) {
   // Vercel's and the GitHub dispatcher's at the same minute, a dispatch hours
   // late, the retry a 502 invites — reads the same window, renders the same
   // bytes and sends each admin under the same key, so the provider folds the
-  // repeat: that is the dedupe for a mirrored tick. Resend honours a key for
-  // 24 h while the payload is identical, which is a fold at the provider, not a
-  // durable record of what was sent — the delivery engine above is that record,
-  // behind its flag. Before this, the window was `now - 24h` and the label the
-  // clock's date, so two ticks a minute apart rendered different bytes and
-  // every super admin got two digests a day.
+  // repeat: that is the dedupe for a mirrored tick. Two ticks whose sends
+  // OVERLAP are the provider's 409 `concurrent_idempotent_requests` for the
+  // second; `sendEmail` waits for the first to settle and asks again under the
+  // same key, so the second is folded if the first was accepted and sent if
+  // the first failed — the recipient gets this occurrence's digest on this
+  // tick either way, not on a later one.
+  //
+  // What is and is not durable here. Resend honours a key for 24 h while the
+  // payload is identical; an occurrence is live for at most 24 h (every tick
+  // until the next 12:30 slot belongs to it), so no tick of one occurrence can
+  // find its key expired. That is a fold at the provider, not a record of what
+  // was sent: this path writes no per-recipient receipt, a retry after a 502
+  // re-attempts every admin and relies on the fold for those already sent, and
+  // a provider that lost its key store would send again. The delivery engine
+  // above is the durable record — one receipt per admin per occurrence, and a
+  // retry that attempts only the unaccepted — behind its flag, because it needs
+  // migrations 0471/0474; this path needs none. Before this, the window was
+  // `now - 24h` and the label the clock's date, so two ticks a minute apart
+  // rendered different bytes and every super admin got two digests a day.
   const slot = adminDigestSlot(new Date());
   const since = slot.window.start;
   const until = slot.window.end;

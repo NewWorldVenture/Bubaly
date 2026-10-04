@@ -19,14 +19,21 @@
 // the database (tests/helpers/in-memory-supabase.ts, with `maxRows` standing in for
 // PostgREST's db-max-rows), the clock (Date only), translations (identity), and
 // Resend, which is a stub for global `fetch` that COUNTS what it is asked to send
-// and what it accepts. Any other outbound URL fails the test. Nothing is sent.
+// and what it accepts, keeps a key store as Resend does (a fold on the same bytes,
+// 409 invalid_idempotent_request on different bytes, 24 h retention), and answers
+// 409 concurrent_idempotent_requests for a key whose first request is still in
+// flight. Any other outbound URL fails the test. Nothing is sent.
 import { readFileSync } from 'node:fs';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { createInMemorySupabase, type InMemorySupabase, type Row } from './helpers/in-memory-supabase';
 import { SCHEDULES, dueRoutes } from '../scripts/cron-dispatch.mjs';
 
 type ProviderMode = 'accept' | 'refuse' | 'network-error' | 'accept-then-timeout';
-type Attempt = { to: string; subject: string; html: string; idempotencyKey: string | null; accepted: boolean; folded: boolean };
+type Attempt = {
+  to: string; subject: string; html: string; idempotencyKey: string | null; accepted: boolean; folded: boolean;
+  /** Answered 409 concurrent_idempotent_requests: another request under this key was in flight. */
+  concurrent: boolean;
+};
 
 const state = vi.hoisted(() => ({
   db: null as unknown,
@@ -46,7 +53,17 @@ const state = vi.hoisted(() => ({
   /** Replaces the recipient lookup's result (the only way to reach the empty-recipient branch). */
   recipientsOverride: null as string[] | null,
   /** The fake provider's key store: what Resend keeps for 24 h per Idempotency-Key. */
-  keys: new Map<string, { payload: string; id: string }>(),
+  keys: new Map<string, { payload: string; id: string; storedAt: number }>(),
+  /** One-shot answers for a recipient, consumed before `mode`, so the FIRST request can fail while the next is accepted. */
+  once: {} as Record<string, ProviderMode[]>,
+  /** Keys with a request in flight: a second request under one of them is 409 concurrent_idempotent_requests, as at Resend. */
+  inFlight: new Set<string>(),
+  /**
+   * Holds the FIRST request for one recipient open at the provider until another
+   * request under the same key has been answered 409 — the overlap two workers
+   * produce, made deterministic.
+   */
+  hold: null as null | { to: string; taken: boolean; released: boolean; gate: Promise<void>; release: () => void },
 }));
 
 vi.mock('@/lib/i18n/server', () => ({ getTranslations: async () => (key: string) => key }));
@@ -85,28 +102,54 @@ async function fakeResend(input: unknown, init?: RequestInit): Promise<Response>
   expect(init?.signal, 'every provider call carries a deadline').toBeInstanceOf(AbortSignal);
   const body = JSON.parse(String(init?.body)) as { to: string; subject: string; html: string };
   const idempotencyKey = headers.get('idempotency-key');
+  const attempt = (a: Pick<Attempt, 'accepted' | 'folded'> & Partial<Pick<Attempt, 'concurrent'>>) =>
+    state.attempts.push({ to: body.to, subject: body.subject, html: body.html, idempotencyKey, concurrent: false, ...a });
   // Resend's idempotency, as documented: a key it has accepted answers a repeat of the
   // SAME payload with the original result and sends nothing; a DIFFERENT payload under
-  // a used key is a 409. Keys are kept for 24 h; this fake keeps them for the test.
+  // a used key is a 409 invalid_idempotent_request; a request under a key whose first
+  // request is still IN FLIGHT is a 409 concurrent_idempotent_requests. Keys are kept
+  // for 24 h from acceptance; this fake forgets them on the Date the test sets.
   const payload = String(init?.body);
+  if (idempotencyKey && state.inFlight.has(idempotencyKey)) {
+    attempt({ accepted: false, folded: false, concurrent: true });
+    const h = state.hold;
+    if (h && h.taken && !h.released && h.to === body.to) { h.released = true; h.release(); }
+    return new Response(JSON.stringify({ name: 'concurrent_idempotent_requests', message: 'synthetic' }), { status: 409 });
+  }
+  const stored = idempotencyKey ? state.keys.get(idempotencyKey) : undefined;
+  if (stored && Date.now() - stored.storedAt >= 24 * 60 * 60 * 1000) state.keys.delete(idempotencyKey!);
   const prior = idempotencyKey ? state.keys.get(idempotencyKey) : undefined;
   if (prior) {
     if (prior.payload === payload) {
-      state.attempts.push({ to: body.to, subject: body.subject, html: body.html, idempotencyKey, accepted: true, folded: true });
+      attempt({ accepted: true, folded: true });
       return new Response(JSON.stringify({ id: prior.id }), { status: 200 });
     }
-    state.attempts.push({ to: body.to, subject: body.subject, html: body.html, idempotencyKey, accepted: false, folded: false });
+    attempt({ accepted: false, folded: false });
     return new Response(JSON.stringify({ name: 'invalid_idempotent_request' }), { status: 409 });
   }
-  const mode = state.mode[body.to] ?? 'accept';
-  const accepted = mode === 'accept' || mode === 'accept-then-timeout';
-  state.attempts.push({ to: body.to, subject: body.subject, html: body.html, idempotencyKey, accepted, folded: false });
-  if (accepted && idempotencyKey) state.keys.set(idempotencyKey, { payload, id: `msg_${state.attempts.length}` });
-  if (mode === 'refuse') return new Response(JSON.stringify({ name: 'validation_error' }), { status: 422 });
-  if (mode === 'network-error') throw new TypeError('fetch failed');
-  // The fake provider accepted it (a real one would go on to deliver it), but the 15 s deadline fired before the answer arrived.
-  if (mode === 'accept-then-timeout') throw new DOMException('The operation was aborted due to timeout', 'TimeoutError');
-  return new Response(JSON.stringify({ id: `msg_${state.attempts.length}` }), { status: 200 });
+  if (idempotencyKey) state.inFlight.add(idempotencyKey);
+  try {
+    const h = state.hold;
+    if (h && !h.taken && h.to === body.to) { h.taken = true; await h.gate; }
+    const mode = state.once[body.to]?.shift() ?? state.mode[body.to] ?? 'accept';
+    const accepted = mode === 'accept' || mode === 'accept-then-timeout';
+    attempt({ accepted, folded: false });
+    if (accepted && idempotencyKey) state.keys.set(idempotencyKey, { payload, id: `msg_${state.attempts.length}`, storedAt: Date.now() });
+    if (mode === 'refuse') return new Response(JSON.stringify({ name: 'validation_error' }), { status: 422 });
+    if (mode === 'network-error') throw new TypeError('fetch failed');
+    // The fake provider accepted it (a real one would go on to deliver it), but the 15 s deadline fired before the answer arrived.
+    if (mode === 'accept-then-timeout') throw new DOMException('The operation was aborted due to timeout', 'TimeoutError');
+    return new Response(JSON.stringify({ id: `msg_${state.attempts.length}` }), { status: 200 });
+  } finally {
+    if (idempotencyKey) state.inFlight.delete(idempotencyKey);
+  }
+}
+
+/** Hold the first request for `to` open at the provider until a second request under its key has been answered 409. */
+function holdFirstRequestFor(to: string) {
+  let release!: () => void;
+  const gate = new Promise<void>((resolve) => { release = resolve; });
+  state.hold = { to, taken: false, released: false, gate, release };
 }
 
 // ── the database client the handler receives ──────────────────────────────────
@@ -198,6 +241,8 @@ const accepted = () => count((a) => a.accepted);
 const delivered = () => count((a) => a.accepted && !a.folded);
 /** Repeats the fake provider folded onto an earlier acceptance, per recipient. */
 const folded = () => count((a) => a.folded);
+/** Requests answered 409 concurrent_idempotent_requests, per recipient. */
+const heldOff = () => count((a) => a.concurrent);
 /** The idempotency keys seen for one recipient, de-duplicated. */
 const keysFor = (to: string) => [...new Set(state.attempts.filter((a) => a.to === to).map((a) => a.idempotencyKey))];
 const each = (n: number) => Object.fromEntries(recipients().map((r) => [alias(r), n]));
@@ -208,14 +253,17 @@ beforeEach(() => {
   process.env.CRON_SECRET = CRON;
   process.env.RESEND_API_KEY = RESEND_KEY;
   process.env.SUPER_ADMIN_EMAILS = '';
-  state.attempts = []; state.mode = {}; state.strayNetwork = []; state.reads = {}; state.writes = []; state.keys = new Map();
+  state.attempts = []; state.mode = {}; state.once = {}; state.strayNetwork = []; state.reads = {}; state.writes = []; state.keys = new Map();
+  state.inFlight = new Set(); state.hold = null;
   state.failRead = null; state.barrier = null; state.recipientsOverride = null;
   freshDb();
   vi.stubGlobal('fetch', vi.fn(fakeResend));
   vi.spyOn(console, 'error').mockImplementation(() => {});
   vi.spyOn(console, 'info').mockImplementation(() => {});
+  vi.spyOn(console, 'warn').mockImplementation(() => {});
 });
 afterEach(() => {
+  expect(state.inFlight, 'every provider request settled').toEqual(new Set());
   expect(state.strayNetwork, 'no call may leave the process').toEqual([]);
   vi.unstubAllGlobals();
   vi.restoreAllMocks();
@@ -430,11 +478,105 @@ describe('admin-digest replay: one occurrence, one key per admin, the provider f
     expect(await a.json()).toMatchObject({ ok: true, sent: 2 });
     expect(await b.json()).toMatchObject({ ok: true, sent: 2 });
     expect(attempted()).toEqual(each(2));
-    // The fake serialises the two requests, as the provider's key store does; a real race
-    // between two in-flight sends under one key is the provider's to resolve, not shown here.
+    // Their sends did not overlap at the provider (each answers before the other asks), so the
+    // second of each pair is a plain fold. The overlapping case is the next two.
+    expect(heldOff()).toEqual(each(0));
     expect(delivered()).toEqual(each(1));
     expect(folded()).toEqual(each(1));
     expect(state.writes).toEqual([]); // no claim row exists to lose a race on — the key is the claim
+  });
+
+  // ── overlapping sends: the provider's 409 concurrent_idempotent_requests (review 5978490501) ──
+  it('OVERLAPPING SENDS, first accepted: the second worker is told the key is in flight, waits, asks again and is folded — both report sent 2, one delivery', async () => {
+    happen('2026-09-30T08:00:00Z', 'Signup Alpha');
+    vi.setSystemTime(new Date('2026-09-30T12:30:00Z'));
+    barrierOn('super_admins', 2);
+    holdFirstRequestFor(SECOND); // the first worker's send to admin-2 is still in flight when the second worker's arrives
+    const [a, b] = await Promise.all([call(), call()]);
+    expect([a.status, b.status]).toEqual([200, 200]);
+    expect(await a.json()).toMatchObject({ ok: true, sent: 2, failed: 0 });
+    expect(await b.json()).toMatchObject({ ok: true, sent: 2, failed: 0 });
+    // admin-2: the held send (accepted), the overlapping one (409), its second ask (folded).
+    expect(heldOff()).toEqual({ 'admin-1': 0, 'admin-2': 1 });
+    expect(attempted()).toEqual({ 'admin-1': 2, 'admin-2': 3 });
+    expect(delivered()).toEqual(each(1));
+    expect(folded()).toEqual(each(1));
+    const asks = state.attempts.filter((x) => x.to === SECOND);
+    expect(new Set(asks.map((x) => x.idempotencyKey)).size, 'the second ask carries the same key').toBe(1);
+    expect(new Set(asks.map((x) => x.html)).size, 'and the same bytes').toBe(1);
+    expect(state.writes).toEqual([]);
+  });
+
+  it("OVERLAPPING SENDS, first FAILS: the second worker's second ask finds the key free and SENDS — the admin gets this occurrence's digest on this tick, not a later one", async () => {
+    // The review's case: before, the 409 was reported as a failure, so when the in-flight
+    // request then failed nobody had sent, and nothing retried until the next tick.
+    happen('2026-09-30T08:00:00Z', 'Signup Alpha');
+    vi.setSystemTime(new Date('2026-09-30T12:30:00Z'));
+    barrierOn('super_admins', 2);
+    holdFirstRequestFor(SECOND);
+    state.once[SECOND] = ['network-error']; // the held request, once released, dies on the wire
+    const results = await Promise.all([call(), call()]);
+    const bodies = await Promise.all(results.map((r) => r.json() as Promise<Record<string, unknown>>));
+    const statuses = results.map((r) => r.status).sort();
+    expect(statuses, 'the worker whose request died reports it; the other delivered everything').toEqual([200, 502]);
+    const failedWorker = bodies.find((x) => x.ok === false)!;
+    const okWorker = bodies.find((x) => x.ok === true)!;
+    expect(failedWorker).toMatchObject({ ok: false, sent: 1, failed: 1 });
+    expect(okWorker).toMatchObject({ ok: true, sent: 2, failed: 0 });
+    expect(heldOff()).toEqual({ 'admin-1': 0, 'admin-2': 1 });
+    expect(delivered(), 'admin-2 was delivered ON THIS TICK, by the worker that waited').toEqual(each(1));
+    expect(folded()).toEqual({ 'admin-1': 1, 'admin-2': 0 });
+
+    // The 502 invites a retry; it folds for both (the key store now holds admin-2's accepted send).
+    const retry = await runAt('2026-09-30T12:30:00Z');
+    expect(retry.status).toBe(200);
+    expect(delivered()).toEqual(each(1));
+    expect(folded()).toEqual({ 'admin-1': 2, 'admin-2': 1 });
+    expect(state.writes).toEqual([]);
+  });
+
+  // ── what is durable here, and what is not (review 5978490501) ─────────────
+  describe('receipt semantics of the flag-off path', () => {
+    it("the provider's 24-hour key retention outlives the occurrence: the last tick that can still belong to it (12:29:59 next day) is folded; the next slot is a new key", async () => {
+      happen('2026-09-30T08:00:00Z', 'Signup Alpha');
+      const first = await runAt('2026-09-30T12:30:00Z');
+      expect(first.body).toMatchObject({ ok: true, sent: 2, occurrence: 'admin-digest:2026-09-30T12:30:00.000Z' });
+      // 23 h 59 min 59 s later: still the 30 September occurrence, and the keys stored at 12:30 are still kept.
+      const lastTick = await runAt('2026-10-01T12:29:59Z');
+      expect(lastTick.body).toMatchObject({ ok: true, sent: 2, failed: 0, occurrence: 'admin-digest:2026-09-30T12:30:00.000Z' });
+      expect(delivered()).toEqual(each(1));
+      expect(folded()).toEqual(each(1));
+      // One second on, a new occurrence: a new key, and (with nothing new in its window) no email at all.
+      const next = await runAt('2026-10-01T12:30:00Z');
+      expect(next.body).toMatchObject({ ok: true, sent: 0, total: 0 });
+      happen('2026-10-01T09:00:00Z', 'Signup Echo');
+      const nextWithNews = await runAt('2026-10-01T12:30:30Z');
+      expect(nextWithNews.body).toMatchObject({ ok: true, sent: 2, occurrence: 'admin-digest:2026-10-01T12:30:00.000Z' });
+      expect(keysFor(SECOND)).toHaveLength(2);
+      expect(delivered()).toEqual(each(2));
+    });
+
+    it('CONTROL: had the key been forgotten within the occurrence, the same tick would have sent again — the fold is the provider\'s memory, not ours', async () => {
+      happen('2026-09-30T08:00:00Z', 'Signup Alpha');
+      await runAt('2026-09-30T12:30:00Z');
+      state.keys.clear(); // a provider that lost its key store
+      const again = await runAt('2026-09-30T12:31:00Z');
+      expect(again.body).toMatchObject({ ok: true, sent: 2 });
+      expect(delivered(), 'a second copy each: nothing of ours knew the first was sent').toEqual(each(2));
+      expect(state.writes).toEqual([]);
+    });
+
+    it('nothing is written on any path: no receipt, no claim, no occurrence row — the delivery engine (flag-gated, 0471/0474) is the durable record', async () => {
+      happen('2026-09-30T08:00:00Z', 'Signup Alpha');
+      state.mode[SECOND] = 'refuse';
+      await runAt('2026-09-30T12:30:00Z'); // partial failure
+      state.mode = {};
+      await runAt('2026-09-30T12:30:00Z'); // retry: re-attempts every admin, the fold does the rest
+      expect(attempted()).toEqual(each(2));
+      expect(delivered()).toEqual(each(1));
+      expect(state.writes).toEqual([]);
+      expect(Object.keys(state.reads).sort()).toEqual(['admin_notifications', 'super_admins']);
+    });
   });
 
   for (const failure of ['refuse', 'network-error'] as const) {
