@@ -7,6 +7,7 @@
 // reminder, cake→grocery, plan, photos) with zero new prep logic. Tested.
 
 import type { MomentEvent } from '@/lib/moments/prep';
+import { dayKeyIn } from '@/lib/time/zoned';
 
 export type BirthdayMember = {
   id: string;
@@ -117,6 +118,45 @@ export function daysUntil(target: Date, now: Date = new Date()): number {
   return dayIndexOf(target) - dayIndexOf(now);
 }
 
+/** Whole days from one `YYYY-MM-DD` to another — day keys in, a count out, no zone anywhere. */
+export function daysBetweenDayKeys(fromKey: string, toKey: string): number | null {
+  const parse = (key: string) => {
+    const m = /^(\d{4})-(\d{2})-(\d{2})$/.exec(key);
+    return m ? Date.UTC(Number(m[1]), Number(m[2]) - 1, Number(m[3])) : Number.NaN;
+  };
+  const a = parse(fromKey);
+  const b = parse(toKey);
+  if (!Number.isFinite(a) || !Number.isFinite(b)) return null;
+  return Math.round((b - a) / 86_400_000);
+}
+
+/**
+ * How far away a member's next birthday is FROM THE FAMILY'S DAY, as a day key
+ * and a count of days (0 = today), with the age they turn when the birth year
+ * is known.
+ *
+ * This is the server surface's version of `nextBirthdayDate` + `daysUntil`:
+ * those read `now`'s LOCAL calendar parts, which on a page rendered by a UTC
+ * host means Greenwich's today. From 5pm in California that is tomorrow, so a
+ * child whose birthday is today was shown as "in 364 days" on the home page
+ * and the agents, moments and outcomes pages, and the 14-day "birthdays soon"
+ * count missed the one that mattered. Day key in, day key out — the caller
+ * supplies `dayKeyInTz(now, family.timezone)`, and no instant is involved.
+ */
+export function birthdayCountdown(
+  birthday: string,
+  todayKey: string,
+): { dayKey: string; days: number; turning: number | null } | null {
+  const dayKey = nextBirthdayDayKey(birthday, todayKey);
+  if (!dayKey) return null;
+  const days = daysBetweenDayKeys(todayKey, dayKey);
+  if (days === null) return null;
+  const parsed = parseBirthday(birthday);
+  const year = Number.parseInt(dayKey.slice(0, 4), 10);
+  const turning = parsed?.year && Number.isFinite(year) && year - parsed.year > 0 ? year - parsed.year : null;
+  return { dayKey, days, turning };
+}
+
 /**
  * Synthetic MomentEvents for members whose next birthday is within `withinDays`.
  * Sorted soonest first. `turning` age is folded into the title when the birth
@@ -126,17 +166,34 @@ export function upcomingBirthdayEvents(
   members: BirthdayMember[],
   now: Date = new Date(),
   withinDays = 30,
+  timeZone?: string,
 ): MomentEvent[] {
+  // With a zone, "today" is the FAMILY's day at `now` and the whole
+  // computation is day keys (birthdayCountdown): a server job must not count
+  // from the host's calendar. Without one, the reader's own local day, as
+  // before — right for a component rendered in front of that reader.
+  const todayKey = timeZone ? dayKeyIn(now, timeZone) : null;
   const out: { event: MomentEvent; days: number }[] = [];
   for (const m of members ?? []) {
     if (m.is_active === false || !m.birthday) continue;
-    const next = nextBirthdayDate(m.birthday, now);
-    if (!next) continue;
-    const days = daysUntil(next, now);
+    let days: number;
+    let turning: number | null;
+    let startsAt: string;
+    if (todayKey) {
+      const countdown = birthdayCountdown(m.birthday, todayKey);
+      if (!countdown) continue;
+      ({ days, turning } = countdown);
+      startsAt = `${countdown.dayKey}T00:00:00`;
+    } else {
+      const next = nextBirthdayDate(m.birthday, now);
+      if (!next) continue;
+      days = daysUntil(next, now);
+      const parsed = parseBirthday(m.birthday);
+      turning = parsed?.year ? next.getFullYear() - parsed.year : null;
+      startsAt = birthdayDayISO(next);
+    }
     if (days < 0 || days > withinDays) continue;
-    const parsed = parseBirthday(m.birthday);
     const first = m.display_name.split(' ')[0] || m.display_name;
-    const turning = parsed?.year ? next.getFullYear() - parsed.year : null;
     const title = turning && turning > 0 ? `${first} turns ${turning}` : `${first}'s birthday`;
     out.push({
       event: {
@@ -144,7 +201,7 @@ export function upcomingBirthdayEvents(
         title,
         category: 'birthday',
         location: null,
-        starts_at: birthdayDayISO(next),
+        starts_at: startsAt,
         all_day: true,
         description: 'Family birthday',
       },

@@ -512,7 +512,7 @@ function MessagesWorkspace() {
     try {
       let message: Message;
       if (submitted.edit) {
-        const { data, error } = await createClient().from('family_messages').update({ content }).eq('id', submitted.edit.id).eq('sender_id', userId).eq('conversation_id', convId).is('deleted_at', null).select('*').single();
+        const { data, error } = await createClient().from('family_messages').update({ content }).eq('id', submitted.edit.id).eq('family_id', familyId).eq('sender_id', userId).eq('conversation_id', convId).is('deleted_at', null).select('*').single();
         if (error || !data) throw error ?? new Error(tr('messagesChat.editFailed'));
         message = data;
       } else message = await insertMessage({
@@ -727,7 +727,7 @@ function MessagesWorkspace() {
   // ── Delete message ──────────────────────────────────────────
   async function deleteMessage(id: string) {
     setMsgMenu(null);
-    const { data: updated3, error } = await createClient().from('family_messages').update({ deleted_at: new Date().toISOString() }).eq('id', id).eq('sender_id', userId).select('*');
+    const { data: updated3, error } = await createClient().from('family_messages').update({ deleted_at: new Date().toISOString() }).eq('id', id).eq('sender_id', userId).eq('family_id', familyId).select('*');
     if (error) toastError(describeDbError(error));
     else if (wroteNoRows(updated3)) toastError(tr('errors.thatChangeWasNotSaved'));
     else if (updated3?.[0]) acceptMessage(updated3[0]);
@@ -736,7 +736,7 @@ function MessagesWorkspace() {
   // ── Pin message ─────────────────────────────────────────────
   async function pinMessage(msg: Message) {
     setMsgMenu(null);
-    const { data: updated4, error } = await createClient().from('family_messages').update({ is_pinned: !msg.is_pinned }).eq('id', msg.id).is('deleted_at', null).select('*');
+    const { data: updated4, error } = await createClient().from('family_messages').update({ is_pinned: !msg.is_pinned }).eq('id', msg.id).eq('family_id', familyId).is('deleted_at', null).select('*');
     if (error) toastError(describeDbError(error));
     else if (wroteNoRows(updated4)) toastError(tr('errors.thatChangeWasNotSaved'));
     else if (updated4?.[0]) acceptMessage(updated4[0]);

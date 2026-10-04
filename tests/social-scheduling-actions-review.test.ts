@@ -10,7 +10,8 @@ const state = vi.hoisted(() => ({
   fault: null as null | { table: string; operation: string; after?: boolean; throw?: boolean; data?: unknown },
 }));
 vi.mock('@/lib/supabase/server', () => ({ createServer: async () => state.db }));
-vi.mock('@/lib/supabase/auth', () => ({ requireUserContext: async () => ({ active: { familyId: '11111111-1111-4111-8111-111111111111' }, user: { id: '22222222-2222-4222-8222-222222222222' } }) }));
+// `family.timezone`: the post page dates each attempt in the family's zone.
+vi.mock('@/lib/supabase/auth', () => ({ requireUserContext: async () => ({ active: { familyId: '11111111-1111-4111-8111-111111111111', family: { timezone: 'UTC' } }, user: { id: '22222222-2222-4222-8222-222222222222' } }) }));
 vi.mock('@/lib/social/access', () => ({ requireSocialPermission: state.permission }));
 vi.mock('@/lib/i18n/server', () => ({ getTranslations: async () => (key: string) => key, getLocaleContext: async () => ({ locale: { code: 'en-US' } }) }));
 vi.mock('next/cache', () => ({ revalidatePath: vi.fn() }));
