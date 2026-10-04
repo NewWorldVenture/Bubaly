@@ -27,6 +27,26 @@ EXCEPTION WHEN OTHERS THEN
   GET STACKED DIAGNOSTICS v_state = RETURNED_SQLSTATE;
   RETURN v_state;
 END $$;
+CREATE FUNCTION public.meal_plan_test_replace_state(p_request_id text, p_plan_date date) RETURNS text
+LANGUAGE plpgsql SECURITY INVOKER AS $$
+DECLARE v_state text;
+BEGIN
+  PERFORM public.meal_plan_replace_slots('10000000-0000-0000-0000-000000000001', p_request_id,
+    jsonb_build_array(jsonb_build_object('meal_id','30000000-0000-0000-0000-000000000001',
+      'plan_date',p_plan_date,'meal_type','dinner')));
+  RETURN 'accepted';
+EXCEPTION WHEN OTHERS THEN
+  GET STACKED DIAGNOSTICS v_state = RETURNED_SQLSTATE;
+  RETURN v_state;
+END $$;
+CREATE FUNCTION public.meal_plan_test_deactivate_member() RETURNS text
+LANGUAGE plpgsql AS $$
+BEGIN
+  UPDATE public.family_members SET is_active = false
+   WHERE family_id = '10000000-0000-0000-0000-000000000001'
+     AND user_id = '20000000-0000-0000-0000-000000000001';
+  RETURN 'deactivated';
+END $$;
 
 SELECT public.dblink_connect('meal_a', format('host=127.0.0.1 port=%s dbname=bubaly_meal_plan_atomic_ci user=postgres', current_setting('port')));
 SELECT public.dblink_connect('meal_b', format('host=127.0.0.1 port=%s dbname=bubaly_meal_plan_atomic_ci user=postgres', current_setting('port')));
@@ -129,5 +149,80 @@ SELECT public.meal_plan_test_assert((SELECT status = '23505' FROM public.meal_pl
   'direct writer rechecks occupancy after waiting on the slot lock');
 SELECT public.meal_plan_test_assert((SELECT count(*) = 1 FROM public.meal_plans WHERE plan_date='2026-10-08'),
   'racing direct insert cannot create a duplicate slot');
+
+-- Authorization is held to transaction end. A membership deactivation that
+-- starts after the RPC checked the active row must wait for the accepted write;
+-- after deactivation commits, a new write must be denied.
+SELECT public.dblink_exec('meal_a', 'BEGIN');
+SELECT public.meal_plan_test_assert(public.dblink_send_query('meal_a',
+  $$SELECT public.meal_plan_replace_slots('10000000-0000-0000-0000-000000000001','membership-lock-write',
+    '[{"meal_id":"30000000-0000-0000-0000-000000000001","plan_date":"2026-10-09","meal_type":"dinner"}]'::jsonb)$$) = 1,
+  'authenticated write dispatched while membership is active');
+DO $$
+DECLARE v_deadline timestamptz := clock_timestamp() + interval '10 seconds';
+BEGIN
+  WHILE public.dblink_is_busy('meal_a') = 1 LOOP
+    IF clock_timestamp() > v_deadline THEN RAISE EXCEPTION '0475 timed out waiting for authorized write'; END IF;
+    PERFORM pg_sleep(0.025);
+  END LOOP;
+END $$;
+INSERT INTO public.meal_plan_test_results(label, result)
+  SELECT 'membership-write', result FROM public.dblink_get_result('meal_a') AS t(result jsonb);
+SELECT count(*) FROM public.dblink_get_result('meal_a') AS t(result jsonb);
+
+SELECT public.dblink_exec('meal_b', 'RESET ROLE');
+SELECT public.dblink_exec('meal_b', 'BEGIN');
+SELECT public.meal_plan_test_assert(public.dblink_send_query('meal_b',
+  $$SELECT public.meal_plan_test_deactivate_member()$$) = 1,
+  'membership deactivation dispatched in an independent session');
+DO $$
+DECLARE
+  v_deadline timestamptz := clock_timestamp() + interval '10 seconds';
+  v_a integer := (SELECT pid FROM meal_test_pids WHERE name = 'a');
+  v_b integer := (SELECT pid FROM meal_test_pids WHERE name = 'b');
+BEGIN
+  LOOP
+    IF public.dblink_is_busy('meal_b') = 0 THEN
+      RAISE EXCEPTION '0475 membership deactivation completed while the meal RPC held FOR SHARE';
+    END IF;
+    EXIT WHEN v_a = ANY(pg_blocking_pids(v_b));
+    IF clock_timestamp() > v_deadline THEN RAISE EXCEPTION '0475 membership deactivation did not block on the active membership row'; END IF;
+    PERFORM pg_sleep(0.025);
+  END LOOP;
+END $$;
+SELECT public.dblink_exec('meal_a', 'COMMIT');
+DO $$
+DECLARE v_deadline timestamptz := clock_timestamp() + interval '15 seconds';
+BEGIN
+  WHILE public.dblink_is_busy('meal_b') = 1 LOOP
+    IF clock_timestamp() > v_deadline THEN RAISE EXCEPTION '0475 membership deactivation did not resume after meal write commit'; END IF;
+    PERFORM pg_sleep(0.025);
+  END LOOP;
+END $$;
+INSERT INTO public.meal_plan_test_results(label, status)
+  SELECT 'membership-deactivation', result FROM public.dblink_get_result('meal_b') AS t(result text);
+SELECT count(*) FROM public.dblink_get_result('meal_b') AS t(result text);
+SELECT public.meal_plan_test_assert(
+  (SELECT result->'planned'->0->>'plan_date' = '2026-10-09' FROM public.meal_plan_test_results WHERE label='membership-write')
+  AND (SELECT status = 'deactivated' FROM public.meal_plan_test_results WHERE label='membership-deactivation'),
+  'the already-authorized write commits before the waiting deactivation');
+SELECT public.dblink_exec('meal_b', 'COMMIT');
+SELECT public.meal_plan_test_assert(
+  NOT (SELECT is_active FROM public.family_members WHERE family_id='10000000-0000-0000-0000-000000000001'
+       AND user_id='20000000-0000-0000-0000-000000000001')
+  AND (SELECT count(*) = 1 FROM public.meal_plans WHERE plan_date='2026-10-09'),
+  'deactivation commits after the in-flight write');
+SELECT public.meal_plan_test_assert(
+  (SELECT result = '42501' FROM public.dblink('meal_a',
+    $$SELECT public.meal_plan_test_replace_state('membership-write-after-revoke','2026-10-10')$$) AS t(result text))
+  AND NOT EXISTS (SELECT 1 FROM public.meal_plans WHERE plan_date='2026-10-10'),
+  'a new authenticated write after committed deactivation is rejected');
+UPDATE public.family_members SET is_active = true
+ WHERE family_id='10000000-0000-0000-0000-000000000001'
+   AND user_id='20000000-0000-0000-0000-000000000001';
+SELECT public.meal_plan_test_assert(
+  (SELECT is_active FROM public.family_members WHERE family_id='10000000-0000-0000-0000-000000000001'
+     AND user_id='20000000-0000-0000-0000-000000000001'),
+  'synthetic actor membership restored for later fixture steps');
 SELECT public.dblink_disconnect('meal_a');
 SELECT public.dblink_disconnect('meal_b');

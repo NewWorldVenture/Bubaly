@@ -1,8 +1,8 @@
 // The meal planner writes through the service.
 //
-// The sharpest case: dropping a meal into a slot used to be a raw INSERT, so
-// planning Tuesday dinner twice left two dinners on one Tuesday with nothing to
-// say which the family meant. `setSlot` replaces what is in the slot.
+// Meal plans now resolve dishes and persist slots through receipt-returning
+// RPCs. The in-memory client models those RPCs while this suite checks the
+// service/action contract and the rows visible after the write.
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import type { SupabaseClient } from '@supabase/supabase-js';
 import type { Database } from '@/lib/database.types';
@@ -24,6 +24,7 @@ const plans = (familyId = FAMILY) => db.table('meal_plans').filter((r) => r.fami
 beforeEach(() => {
   vi.clearAllMocks();
   db = createInMemorySupabase<SupabaseClient<Database>>({
+    userId: 'user-1',
     defaults: { meal_plans: { meal_id: null, idempotency_key: null }, meals: { description: null, ingredients: [], image_url: null, recipe_url: null } },
   });
   db.seed('meals', [

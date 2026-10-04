@@ -86,6 +86,7 @@ set search_path = pg_catalog, public
 as $$
 declare
   v_actor uuid := auth.uid();
+  v_actor_role public.member_role;
   v_hash text;
   v_receipt public.meal_plan_write_receipts%rowtype;
   v_claimed integer;
@@ -96,11 +97,15 @@ declare
   v_rows jsonb;
   v_result jsonb;
 begin
-  if v_actor is null
-     or not exists (select 1 from public.family_members fm where fm.family_id = p_family_id
-       and fm.user_id = v_actor and fm.is_active and fm.role <> 'guest')
-     or exists (select 1 from public.family_members fm where fm.family_id = p_family_id
-       and fm.user_id = v_actor and fm.is_active and fm.role = 'guest') then
+  if v_actor is null then
+    raise exception 'Not a member of this family' using errcode = '42501';
+  end if;
+  -- Serialize authorization with membership changes: a concurrent removal or
+  -- guest-role change waits until this write commits, or wins before this read.
+  select fm.role into v_actor_role from public.family_members fm
+   where fm.family_id = p_family_id and fm.user_id = v_actor and fm.is_active
+   for share;
+  if not found or v_actor_role = 'guest' then
     raise exception 'Not a member of this family' using errcode = '42501';
   end if;
   if p_request_id is null or length(p_request_id) not between 1 and 128
@@ -197,17 +202,20 @@ set search_path = pg_catalog, public
 as $$
 declare
   v_actor uuid := auth.uid();
+  v_actor_role public.member_role;
   v_hash text;
   v_receipt public.meal_plan_write_receipts%rowtype;
   v_claimed integer;
   v_row public.meal_plans%rowtype;
   v_result jsonb;
 begin
-  if v_actor is null
-     or not exists (select 1 from public.family_members fm where fm.family_id = p_family_id
-       and fm.user_id = v_actor and fm.is_active and fm.role <> 'guest')
-     or exists (select 1 from public.family_members fm where fm.family_id = p_family_id
-       and fm.user_id = v_actor and fm.is_active and fm.role = 'guest') then
+  if v_actor is null then
+    raise exception 'Not a member of this family' using errcode = '42501';
+  end if;
+  select fm.role into v_actor_role from public.family_members fm
+   where fm.family_id = p_family_id and fm.user_id = v_actor and fm.is_active
+   for share;
+  if not found or v_actor_role = 'guest' then
     raise exception 'Not a member of this family' using errcode = '42501';
   end if;
   if p_request_id is null or length(p_request_id) not between 1 and 128 or p_plan_id is null then
