@@ -4072,6 +4072,37 @@ gaps. `npm run db:audit:migrations` fails on either, and work that once held a
 number takes the next free one when it lands. Nothing below changes what is
 already applied: production's ledger records `0001`–`0176`.
 
+### Published branch candidates that are not on main (2026-10-04)
+
+Retiring a hole does not delete anything. These migration files remain on their branches as published candidates, read from all 604 branches on 2026-10-04. Several of them collide with each other. None is on main, and if one lands it takes the next free number then. Names are given without the file extension.
+
+| Number | Candidate | Branches |
+|---|---|---|
+| 0465 | a_child_reads_only_their_own_prescriptions | claude/f-g09-child-prescriptions |
+| 0466 | a_members_language_is_kept_on_their_profile | claude/i18n-001-member-language |
+| 0472 | a_babysitter_payment_names_its_own_familys_sitter_and_event | claude/babysitter-payment-reference-guard-7q6vtf |
+| 0475 | meal_plan_slot_writes_are_atomic | codex/meal-atomic-writes-20261003 |
+| 0475 | messaging_conversation_privacy_and_delivery | claude/f19-messaging-composition-45d8k6, codex/chat-834-ci-replay-repair-20261003, codex/chat-canonical-history-20261003, codex/chat-messaging-goal-20261002 |
+| 0476 | meal_plan_delegated_actor_rpcs | codex/meal-atomic-writes-20261003 |
+| 0476 | messaging_notifications_preferences | claude/f19-messaging-composition-45d8k6, codex/chat-834-ci-replay-repair-20261003, codex/chat-canonical-history-20261003, codex/chat-messaging-goal-20261002 |
+| 0477 | ai_requests_admission_is_atomic | claude/f19-atomic-admission-45d8k6 |
+| 0477 | family_memory_sensitive_text_read_rls | codex/family-facts-private-text-20261004 |
+| 0478 | meal_plan_slot_writes_are_atomic | claude/notifications-on-meals-composition-20261004, codex/final-meal-composition-20261003, codex/meal-receipt-row-lock-20261003, codex/meal-stable-retry-ui-20261003 |
+| 0479 | a_run_with_no_attempts_left_is_abandoned_not_reclaimed | claude/ai-runs-claim-ceiling-20261003, claude/ai-runs-human-restart-budget-20261003 |
+| 0480 | a_request_text_is_its_requesters | claude/ai-request-text-privacy-45d8k6 |
+| 0482 | a_series_remembers_the_occurrences_it_gave_up | claude/calendar-recurrence-exceptions-20261003, claude/google-sync-exception-dates-20261003, claude/outlook-series-mirror-20261003, claude/outlook-series-push-20261003 |
+| 0483 | a_mirrored_series_remembers_the_occurrences_its_source_gave_up | claude/google-sync-exception-dates-20261003, claude/outlook-series-mirror-20261003, claude/outlook-series-push-20261003 |
+| 0484 | a_card_refund_is_credited_once | claude/card-hold-reconcile-7q6vtf, claude/card-hold-settles-7q6vtf, claude/card-hold-timeout-release-7q6vtf, claude/issuing-refund-credits-7q6vtf |
+| 0485 | a_card_capture_is_debited_once | claude/card-hold-reconcile-7q6vtf, claude/card-hold-settles-7q6vtf, claude/card-hold-timeout-release-7q6vtf, claude/issuing-refund-credits-7q6vtf |
+| 0486 | voice_history_is_the_speakers_and_link_logs_are_managers | claude/voice-link-privacy-45d8k6 |
+| 0487 | a_card_hold_follows_what_was_captured | claude/card-hold-reconcile-7q6vtf, claude/card-hold-settles-7q6vtf, claude/card-hold-timeout-release-7q6vtf |
+| 0488 | a_month_end_bill_keeps_its_day | claude/a-paid-recurring-bill-comes-due-again-20261003, claude/a-subscriptions-next-charge-rolls-on-20261003 |
+| 0489 | a_notification_is_written_once_per_occurrence | claude/a-notification-is-written-once-per-occurrence-20261004, claude/notifications-on-meals-composition-20261004 |
+| 0490 | a_calendar_feed_sync_writes_only_while_it_holds_its_claim | claude/apple-sync-series-master-20261003, claude/calendar-feed-fidelity-20261003, claude/calendar-recurrence-exceptions-20261003, claude/google-sync-exception-dates-20261003, claude/outlook-series-mirror-20261003, claude/outlook-series-push-20261003 |
+| 0491 | a_card_hold_and_a_top_up_do_not_deadlock | claude/wallet-lock-order-45d8k6 |
+
+The colliding pairs are 0475 (meal-plan slot writes, messaging privacy), 0476 (meal-plan delegated actors, messaging notifications) and 0477 (AI request admission, family-memory text). The month-end bill, calendar feed and messaging lanes land their migrations in that order as 0475, 0476, 0477 and 0478 (from 0488, 0490 and 0475/0476).
+
 ## `0471` and `0474` — the admin digest's delivery store, and a removed admin is not sent it
 
 `supabase/migrations/0471_an_admin_digest_reaches_each_admin_once.sql`,
