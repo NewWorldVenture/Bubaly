@@ -61,7 +61,7 @@ import {
 import { cn } from '@/lib/utils/cn';
 import type { Tables, SubscriptionStatus, AccountType, TransactionType, BudgetPeriod, BillStatus } from '@/lib/database.types';
 import { categoryLabel } from '@/lib/finance/category-label';
-import { billPaidPatch, dueDayNotKeptQuestion, isDueDayNotKept, newBillDueDay, writeBillPatch } from '@/lib/finance/recurring';
+import { billPaidPatch, dueDayNotKeptQuestion, isDueDayNotKept, newBillDueDay, whereBillIsAsSeen, writeBillPatch } from '@/lib/finance/recurring';
 import { useLocale, useTranslations } from '@/components/i18n/locale-provider';
 import { FamilyDeliveredValue } from '@/components/billing/family-delivered-value';
 import type { LocaleCode } from '@/lib/i18n/locales';
@@ -967,16 +967,16 @@ export function BillingModule({ serviceFeeNotice = null }: { serviceFeeNotice?: 
     // day. When only that column could (a 31st bill rolling to Feb 28) the
     // person is asked whether to move it to Feb 28 and keep the 28th from now
     // on; yes writes that date, no leaves the bill as it was and says why.
-    // A compare-and-set on the row this button saw (due date, status and the
-    // cadence the patch was stepped by): two clicks on a stale list would
-    // otherwise each roll the bill a month and skip an occurrence; the second
-    // finds no row and is told so. A bill the list no longer holds has nothing
-    // to compare against and is paid by id, as before.
+    // A compare-and-set on the row this button saw (due date, status, and the
+    // cadence and anchor day the patch was stepped by; `whereBillIsAsSeen`):
+    // two clicks on a stale list would otherwise each roll the bill a month
+    // and skip an occurrence; the second finds no row and is told so. A bill
+    // the list no longer holds has nothing to compare against and is paid by
+    // id, as before.
     const { data: rows, error } = await writeBillPatch(
       patch,
       (p) => (bill
-        ? supabase.from('bills').update(p).eq('id', id).eq('family_id', familyId).eq('due_date', bill.due_date).eq('status', bill.status)
-          .eq('is_recurring', bill.is_recurring).filter('recurrence', bill.recurrence === null ? 'is' : 'eq', bill.recurrence).select('id')
+        ? whereBillIsAsSeen(supabase.from('bills').update(p).eq('id', id).eq('family_id', familyId), bill).select('id')
         : supabase.from('bills').update(p).eq('id', id).eq('family_id', familyId).select('id')),
       { confirmClampedDay: (refusal) => askConfirm(dueDayNotKeptQuestion(refusal, tr, fmtDate, locale.code)) },
     );

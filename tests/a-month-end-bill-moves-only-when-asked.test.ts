@@ -1,7 +1,7 @@
 import { readdirSync, readFileSync, statSync } from 'node:fs';
 import { join } from 'node:path';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
-import { billPaidPatch, dueDayNotKeptQuestion, isDueDayNotKept, writeBillPatch, type DueDayNotKept } from '@/lib/finance/recurring';
+import { billPaidPatch, dueDayNotKeptQuestion, isDueDayNotKept, whereBillIsAsSeen, writeBillPatch, type DueDayNotKept } from '@/lib/finance/recurring';
 import { bodyOf } from './helpers/source-order';
 import { createInMemorySupabase, type Row } from './helpers/in-memory-supabase';
 import { wroteNoRows } from '@/lib/supabase/errors';
@@ -43,7 +43,7 @@ const bill = (due_date: string, recurrence = 'monthly'): Bill => {
 
 /**
  * "Mark paid" as both buttons write it: the patch, by id and family,
- * compare-and-set on the due date and status the button saw. `hasDueDay`
+ * compare-and-set on the row the button saw (`whereBillIsAsSeen`). `hasDueDay`
  * false is production's database. `answer`, when given, is the person's reply
  * to the question; absent, there is no one to ask.
  */
@@ -54,7 +54,7 @@ function markPaid(db: Db, seen: Bill, today: string, hasDueDay: boolean, answer?
   const result = writeBillPatch(billPaidPatch(seen, today), (p): PromiseLike<Written> => {
     attempts.push({ ...p });
     if (!hasDueDay && 'due_day' in p) return Promise.resolve({ data: null, error: MISSING_COLUMN });
-    return db.from('bills').update(p).eq('id', seen.id).eq('family_id', FAMILY).eq('due_date', seen.due_date).eq('status', seen.status).select('id') as PromiseLike<Written>;
+    return whereBillIsAsSeen(db.from('bills').update(p).eq('id', seen.id).eq('family_id', FAMILY), seen).select('id') as PromiseLike<Written>;
   }, options);
   return { attempts, asked, result };
 }

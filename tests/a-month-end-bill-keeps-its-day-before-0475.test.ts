@@ -1,7 +1,7 @@
 import { readFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
-import { billPaidPatch, isDueDayNotKept, newBillDueDay, nextBillDueDate, writeBillPatch, type DueDayNotKept } from '@/lib/finance/recurring';
+import { billPaidPatch, isDueDayNotKept, newBillDueDay, nextBillDueDate, whereBillIsAsSeen, writeBillPatch, type DueDayNotKept } from '@/lib/finance/recurring';
 import { buildCashflowTimeline } from '@/lib/finance/timeline';
 import { at, bodyOf } from './helpers/source-order';
 import { createInMemorySupabase, type Row } from './helpers/in-memory-supabase';
@@ -49,7 +49,7 @@ const bill = (due_date: string, recurrence: string): Bill => {
 /**
  * "Mark paid" exactly as both buttons write it (pinned in
  * a-paid-recurring-bill-comes-due-again.test.ts): the patch, by id and family,
- * compare-and-set on the due date and status the button saw. `hasDueDay`
+ * compare-and-set on the row the button saw (`whereBillIsAsSeen`). `hasDueDay`
  * false is a database that has not applied 0475: PostgREST refuses any write
  * naming the column (PGRST204) before running it, and every other write lands.
  */
@@ -58,7 +58,7 @@ function markPaid(db: ReturnType<typeof createInMemorySupabase>, seen: Bill, tod
   const result = writeBillPatch(billPaidPatch(seen, today), (p): PromiseLike<Written> => {
     attempts.push({ ...p });
     if (!hasDueDay && 'due_day' in p) return Promise.resolve({ data: null, error: MISSING_COLUMN });
-    return db.from('bills').update(p).eq('id', seen.id).eq('family_id', FAMILY).eq('due_date', seen.due_date).eq('status', seen.status).select('id') as PromiseLike<Written>;
+    return whereBillIsAsSeen(db.from('bills').update(p).eq('id', seen.id).eq('family_id', FAMILY), seen).select('id') as PromiseLike<Written>;
   });
   return { attempts, result };
 }

@@ -34,27 +34,31 @@ export interface RecurringBillLike {
 export const MONTH_BASED_CADENCES: ReadonlySet<BillCadence> = new Set<BillCadence>(['monthly', 'quarterly', 'yearly']);
 
 /**
- * The cadence a bill repeats on, or null for a one-off.
+ * The cadence a bill repeats on, or null for a one-off. Mark paid and the
+ * forecast (lib/finance/timeline.ts) both read it, so the date a payment rolls
+ * a bill to is the next date the forecast shows for it.
  *
- * `recurrence` wins. A bill flagged `is_recurring` with NO cadence is what the
- * Bill Manager's add form wrote until it gained a cadence field (the Billing
- * module's form always recorded one). Such a bill is read as monthly — the
- * cadence that form now defaults to, and the one nearly every household bill
- * is on — rather than silently treated as a one-off that a payment closes.
+ * A bill repeats when it is flagged `is_recurring`; both add forms write a
+ * cadence only for a flagged bill, so an unflagged one is a one-off whatever
+ * its `recurrence` says. A flagged bill with NO cadence is what the Bill
+ * Manager's add form wrote until it gained a cadence field (the Billing
+ * module's form always recorded one), and one with a name that is not a
+ * cadence came from neither form. Both are read as monthly — the cadence that
+ * form now defaults to, and the one nearly every household bill is on —
+ * rather than as a one-off that a payment closes and the forecast shows once.
  */
 export function billCadence(bill: Pick<RecurringBillLike, 'is_recurring' | 'recurrence'>): BillCadence | null {
-  const named = namedCadence(bill.recurrence);
-  if (named) return named;
-  return bill.is_recurring ? 'monthly' : null;
+  if (!bill.is_recurring) return null;
+  return namedCadence(bill.recurrence) ?? 'monthly';
 }
 
 /**
  * A stored cadence name, read the way a person would: case and surrounding
  * space ignored. Only the table's own names count: `recurrence` is free text,
  * and a plain lookup also answers for `constructor`, `toString` and the rest
- * of Object.prototype (a function, not a cadence).
+ * of Object.prototype (a function, not a cadence). Null when it names none.
  */
-function namedCadence(name: string | null | undefined): BillCadence | null {
+export function namedCadence(name: string | null | undefined): BillCadence | null {
   const key = name?.trim().toLowerCase() ?? '';
   return Object.hasOwn(CADENCES, key) ? CADENCES[key] : null;
 }
@@ -188,6 +192,32 @@ export function billPaidPatch(bill: RecurringBillLike, today: string): BillPaidP
   const next = nextBillDueDate(bill.due_date, cadence, today, anchorDay);
   if (!next) return { status: 'paid' };
   return anchorDay !== null ? { status: 'upcoming', due_date: next, due_day: anchorDay } : { status: 'upcoming', due_date: next };
+}
+
+/** What `whereBillIsAsSeen` needs of a query builder: PostgREST's generic `filter`. */
+interface BillFilterable { filter(column: string, operator: string, value: unknown): this }
+
+/**
+ * Narrows a Mark paid write to the bill exactly as the button saw it: the due
+ * date and status (two clicks on one stale row would otherwise roll it twice
+ * and skip an occurrence), and everything the patch was stepped by — the
+ * cadence (`is_recurring`, `recurrence`) and the anchor day (`due_day`). A
+ * bill edited under the button matches no row, writes nothing, and the button
+ * says the change was not saved.
+ *
+ * `due_day` is compared only when the row was read with it. A database
+ * without 0475 has no such column to filter on, and its rows come back
+ * without the key; a row read with it carries a number or null. Both Mark
+ * paid buttons and the tests write through this one function.
+ */
+export function whereBillIsAsSeen<Q extends BillFilterable>(
+  query: Q,
+  seen: Pick<RecurringBillLike, 'due_date' | 'status' | 'is_recurring' | 'recurrence' | 'due_day'>,
+): Q {
+  const same = (q: Q, column: string, value: unknown) => q.filter(column, value === null || value === undefined ? 'is' : 'eq', value ?? null);
+  let q = same(same(same(same(query, 'due_date', seen.due_date), 'status', seen.status), 'is_recurring', seen.is_recurring), 'recurrence', seen.recurrence);
+  if (seen.due_day !== undefined) q = same(q, 'due_day', seen.due_day);
+  return q;
 }
 
 /** PostgREST (PGRST204) or Postgres (42703) refusing `bills.due_day` on a database that has not applied 0475. */

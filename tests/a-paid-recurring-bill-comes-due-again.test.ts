@@ -1,7 +1,7 @@
 import { readFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { describe, expect, it, vi } from 'vitest';
-import { billAnchorDay, billCadence, billPaidPatch, DUE_DAY_NOT_KEPT, isDueDayNotKept, isMissingDueDayColumn, MONTH_BASED_CADENCES, newBillDueDay, nextBillDueDate, writeBillPatch } from '@/lib/finance/recurring';
+import { billAnchorDay, billCadence, billPaidPatch, DUE_DAY_NOT_KEPT, isDueDayNotKept, isMissingDueDayColumn, MONTH_BASED_CADENCES, newBillDueDay, nextBillDueDate, whereBillIsAsSeen, writeBillPatch } from '@/lib/finance/recurring';
 import { buildCashflowTimeline } from '@/lib/finance/timeline';
 import { at, bodyOf } from './helpers/source-order';
 import { createInMemorySupabase } from './helpers/in-memory-supabase';
@@ -38,10 +38,10 @@ describe('billCadence', () => {
     expect(billCadence({ is_recurring: true, recurrence: 'fortnightly' })).toBe('biweekly');
     expect(billCadence({ is_recurring: true, recurrence: 'annually' })).toBe('yearly');
   });
-  it('a one-off has none, and a recorded cadence on an unflagged row still counts', () => {
+  it('a one-off has none, even with a cadence recorded: the forecast reads it as a one-off too, and both forms write a cadence only for a flagged bill', () => {
     expect(billCadence({ is_recurring: false, recurrence: null })).toBeNull();
     expect(billCadence({ is_recurring: null, recurrence: null })).toBeNull();
-    expect(billCadence({ is_recurring: false, recurrence: 'weekly' })).toBe('weekly');
+    expect(billCadence({ is_recurring: false, recurrence: 'weekly' })).toBeNull();
   });
   it('a bill flagged recurring with no cadence — what the Bill Manager wrote — reads as monthly', () => {
     expect(billCadence({ is_recurring: true, recurrence: null })).toBe('monthly');
@@ -210,7 +210,7 @@ describe('two "Mark paid" clicks on one stale row roll the bill once (review 598
   const BILL = '00000000-0000-4000-8000-00000000b188';
   const snapshot = { id: BILL, family_id: FAMILY, name: 'Rent', amount: 1000, due_date: '2026-01-31', due_day: null, is_recurring: true, recurrence: 'monthly', status: 'upcoming' as const, category: null, autopay: false };
   const markPaid = (db: ReturnType<typeof createInMemorySupabase>, seen: typeof snapshot) =>
-    writeBillPatch(billPaidPatch(seen, '2026-01-31'), (p) => db.from('bills').update(p).eq('id', seen.id).eq('family_id', FAMILY).eq('due_date', seen.due_date).eq('status', seen.status).select('id'));
+    writeBillPatch(billPaidPatch(seen, '2026-01-31'), (p) => whereBillIsAsSeen(db.from('bills').update(p).eq('id', seen.id).eq('family_id', FAMILY), seen).select('id'));
 
   it('the first click rolls Jan 31 to Feb 28 with its anchor; the second, on the same snapshot, writes nothing', async () => {
     const db = createInMemorySupabase();
@@ -226,7 +226,7 @@ describe('two "Mark paid" clicks on one stale row roll the bill once (review 598
     db.seed('bills', [snapshot]);
     await markPaid(db, snapshot);
     const fresh = db.table('bills')[0] as typeof snapshot;
-    const res = await writeBillPatch(billPaidPatch(fresh, '2026-02-28'), (p) => db.from('bills').update(p).eq('id', fresh.id).eq('family_id', FAMILY).eq('due_date', fresh.due_date).eq('status', fresh.status).select('id'));
+    const res = await writeBillPatch(billPaidPatch(fresh, '2026-02-28'), (p) => whereBillIsAsSeen(db.from('bills').update(p).eq('id', fresh.id).eq('family_id', FAMILY), fresh).select('id'));
     expect(wroteNoRows(res.data as unknown[] | null)).toBe(false);
     expect(db.table('bills')[0]).toMatchObject({ due_date: '2026-03-31', due_day: 31 });
   });
@@ -267,11 +267,11 @@ describe('0475 and its writers', () => {
   });
   it('both Mark paid buttons and both add forms write through the fallback, and the forms record the anchor day', () => {
     const view = read('components/finance/bills-view.tsx');
-    expect(view).toContain("(p) => createClient().from('bills').update(p).eq('id', b.id).eq('family_id', familyId).eq('due_date', b.due_date).eq('status', b.status)\n        .eq('is_recurring', b.is_recurring).filter('recurrence', b.recurrence === null ? 'is' : 'eq', b.recurrence).select('id'),");
+    expect(view).toContain("(p) => whereBillIsAsSeen(createClient().from('bills').update(p).eq('id', b.id).eq('family_id', familyId), b).select('id'),");
     expect(view).toContain('due_day: newBillDueDay(v.due_date, v.is_recurring, v.recurrence),');
     expect(view).toContain("}, (p) => createClient().from('bills').insert(p));");
     const module_ = read('components/modules/billing-module.tsx');
-    expect(module_).toContain("? supabase.from('bills').update(p).eq('id', id).eq('family_id', familyId).eq('due_date', bill.due_date).eq('status', bill.status)\n          .eq('is_recurring', bill.is_recurring).filter('recurrence', bill.recurrence === null ? 'is' : 'eq', bill.recurrence).select('id')");
+    expect(module_).toContain("? whereBillIsAsSeen(supabase.from('bills').update(p).eq('id', id).eq('family_id', familyId), bill).select('id')");
     expect(module_).toContain(": supabase.from('bills').update(p).eq('id', id).eq('family_id', familyId).select('id')),");
     expect(module_).toContain('due_day: newBillDueDay(dueDate, isRecurring, recurrence),');
     expect(module_).toContain("}, (p) => supabase.from('bills').insert(p));");
@@ -292,7 +292,7 @@ describe('both Mark paid buttons write the patch, in the family\'s day', () => {
   });
   it('the Billing module', () => {
     const src = read('components/modules/billing-module.tsx');
-    expect(src).toContain("import { billPaidPatch, dueDayNotKeptQuestion, isDueDayNotKept, newBillDueDay, writeBillPatch } from '@/lib/finance/recurring';");
+    expect(src).toContain("import { billPaidPatch, dueDayNotKeptQuestion, isDueDayNotKept, newBillDueDay, whereBillIsAsSeen, writeBillPatch } from '@/lib/finance/recurring';");
     const body = bodyOf(src, 'async function markBillPaid(id: string) {', "success(tr('billingModule.billMarkedAsPaid'));");
     expect(body).toContain('billPaidPatch(bill, clock.todayKey())');
     expect(body).toMatch(/await writeBillPatch\(\s*patch,\s*\(p\) =>/);

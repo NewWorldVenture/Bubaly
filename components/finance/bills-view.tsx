@@ -16,7 +16,7 @@ import { SkeletonList, EmptyState, ErrorState } from '@/components/ui/states';
 import { cn } from '@/lib/utils/cn';
 import type { Tables } from '@/lib/database.types';
 import { usd as usdIn, billDueStatus, DUE_META, fmtDueDate as fmtDueDateIn } from '@/lib/finance/hub';
-import { billPaidPatch, dueDayNotKeptQuestion, isDueDayNotKept, newBillDueDay, writeBillPatch } from '@/lib/finance/recurring';
+import { billPaidPatch, dueDayNotKeptQuestion, isDueDayNotKept, newBillDueDay, whereBillIsAsSeen, writeBillPatch } from '@/lib/finance/recurring';
 import { useLocale, useTranslations } from '@/components/i18n/locale-provider';
 import { describeDbError, wroteNoRows } from '@/lib/supabase/errors';
 import { todayInZone } from '@/lib/schedule/zoned';
@@ -81,12 +81,12 @@ export function BillsView({ mode }: { mode: BillsMode }) {
     // The write is a compare-and-set on the row this button saw: two clicks on a
     // stale list (or two people) would otherwise each roll the bill a month, and
     // an occurrence would be skipped. The second finds no row and is told so.
-    // The cadence the patch was stepped by is part of what was seen: a bill
-    // whose cadence changed under the button is not rolled on the old one.
+    // What the patch was stepped by (cadence and anchor day) is part of what
+    // was seen: a bill edited under the button is not rolled on the old values
+    // (`whereBillIsAsSeen`).
     const { data: rows, error } = await writeBillPatch(
       patch,
-      (p) => createClient().from('bills').update(p).eq('id', b.id).eq('family_id', familyId).eq('due_date', b.due_date).eq('status', b.status)
-        .eq('is_recurring', b.is_recurring).filter('recurrence', b.recurrence === null ? 'is' : 'eq', b.recurrence).select('id'),
+      (p) => whereBillIsAsSeen(createClient().from('bills').update(p).eq('id', b.id).eq('family_id', familyId), b).select('id'),
       { confirmClampedDay: (refusal) => askConfirm(dueDayNotKeptQuestion(refusal, t, fmtDueDate, locale.code)) },
     );
     if (isDueDayNotKept(error)) { toastError(t('bills.dueDayNeedsDatabaseUpdate', { day: error.day })); return; }

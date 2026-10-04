@@ -3,9 +3,9 @@ import { createClient } from '@supabase/supabase-js';
 import type { Database, Tables } from '@/lib/database.types';
 import {
   billAnchorDay, billCadence, billPaidPatch, isDueDayNotKept, isMissingDueDayColumn, newBillDueDay,
-  nextBillDueDate, projectedNextCharge, subscriptionCadence, writeBillPatch, type DueDayNotKept,
+  nextBillDueDate, projectedNextCharge, subscriptionCadence, whereBillIsAsSeen, writeBillPatch, type DueDayNotKept,
 } from '@/lib/finance/recurring';
-import { buildCashflowTimeline } from '@/lib/finance/timeline';
+import { buildCashflowTimeline, monthlyEquivalent } from '@/lib/finance/timeline';
 
 /**
  * A RECURRING BILL ROLLS RIGHT FROM ANY ROW THE TABLE CAN HOLD.
@@ -139,6 +139,9 @@ function store(initial: Tables<'bills'>, options: { oldSchema?: boolean; error?:
       if (options.error || (options.oldSchema && 'due_day' in patch)) return new Response(JSON.stringify({
         code: options.error ?? 'PGRST204', message: options.error ? 'write denied' : "Could not find the 'due_day' column of 'bills' in the schema cache",
       }), { status: 400, headers: { 'Content-Type': 'application/json' } });
+      if (options.oldSchema && url.searchParams.has('due_day')) return new Response(JSON.stringify({
+        code: '42703', message: 'column bills.due_day does not exist',
+      }), { status: 400, headers: { 'Content-Type': 'application/json' } });
       const matches = [...url.searchParams].filter(([key]) => key !== 'select').every(([key, filter]) => {
         const value = row[key as keyof typeof row];
         return filter === 'is.null' ? value === null : filter === `eq.${String(value)}`;
@@ -150,14 +153,20 @@ function store(initial: Tables<'bills'>, options: { oldSchema?: boolean; error?:
   return { client, requests, current: () => row };
 }
 
+/** A row as a database without 0475 returns it: no `due_day` key at all. */
+const readBefore0475 = (row: Tables<'bills'>): Tables<'bills'> => {
+  const { due_day: _absent, ...rest } = row;
+  return rest as Tables<'bills'>;
+};
+
 /**
  * Mark paid exactly as both buttons write it (components/finance/bills-view.tsx,
  * components/modules/billing-module.tsx; the chain is pinned in
  * a-paid-recurring-bill-comes-due-again.test.ts).
  */
 function markPaid(client: ReturnType<typeof store>['client'], seen: Tables<'bills'>, today: string, confirmClampedDay?: (refusal: DueDayNotKept) => Promise<boolean>) {
-  return writeBillPatch(billPaidPatch(seen, today), (p) => client.from('bills').update(p).eq('id', seen.id).eq('family_id', FAMILY).eq('due_date', seen.due_date).eq('status', seen.status)
-    .eq('is_recurring', seen.is_recurring).filter('recurrence', seen.recurrence === null ? 'is' : 'eq', seen.recurrence).select('id'), confirmClampedDay ? { confirmClampedDay } : {});
+  return writeBillPatch(billPaidPatch(seen, today), (p) => whereBillIsAsSeen(client.from('bills').update(p).eq('id', seen.id).eq('family_id', FAMILY), seen).select('id'),
+    confirmClampedDay ? { confirmClampedDay } : {});
 }
 
 describe('Mark paid through supabase-js', () => {
@@ -191,8 +200,33 @@ describe('Mark paid through supabase-js', () => {
     expect(db.current().due_date).toBe('2026-01-31');
   });
 
+  it('does not roll a bill on an anchor day it no longer has: an edit to due_day alone', async () => {
+    // The button saw Feb 28 anchored on the 31st; the row has since been
+    // anchored on the 30th. Rolled from what it saw it would land on Mar 31.
+    const seen = bill({ due_date: '2026-02-28', due_day: 31 });
+    const edited = bill({ due_date: '2026-02-28', due_day: 30 });
+    const db = store(edited);
+    const result = await markPaid(db.client, seen, '2026-02-28');
+    expect(result.data).toEqual([]);
+    expect(db.current()).toEqual(edited);
+    expect(db.requests[0].url.searchParams.get('due_day')).toBe('eq.31');
+    // The row as it now is rolls on its own anchor.
+    const fresh = await markPaid(db.client, edited, '2026-02-28');
+    expect(fresh.data).toEqual([{ id: 'bill-1' }]);
+    expect(db.current()).toMatchObject({ due_date: '2026-03-30', due_day: 30 });
+  });
+
+  it('a row read without due_day (no 0475) is not compared on it: the filter would name a column that is not there', async () => {
+    const original = readBefore0475(bill({ due_date: '2026-01-15' }));
+    const db = store(original, { oldSchema: true });
+    const result = await markPaid(db.client, original, '2026-01-15');
+    expect(result.error).toBeNull();
+    expect(db.requests.map((r) => r.url.searchParams.has('due_day'))).toEqual([false, false]);
+    expect(db.current()).toMatchObject({ due_date: '2026-02-15' });
+  });
+
   it('without 0475, holds back a roll only the column could keep, in one request, leaving the row as it was', async () => {
-    const original = bill();
+    const original = readBefore0475(bill());
     const db = store(original, { oldSchema: true });
     const result = await markPaid(db.client, original, '2026-01-31');
     expect(isDueDayNotKept(result.error)).toBe(true);
@@ -202,18 +236,20 @@ describe('Mark paid through supabase-js', () => {
 
   it('without 0475, a schedule whose date carries its day rolls (#969 refuses the monthly one; see above)', async () => {
     for (const over of [{ is_recurring: false, recurrence: null }, { recurrence: 'weekly' }]) {
-      const db = store(bill(over), { oldSchema: true });
-      const result = await markPaid(db.client, bill(over), '2026-01-31');
+      const row = readBefore0475(bill(over));
+      const db = store(row, { oldSchema: true });
+      const result = await markPaid(db.client, row, '2026-01-31');
       expect(result.error).toBeNull();
       expect(result.data).toEqual([{ id: 'bill-1' }]);
       expect(db.requests).toHaveLength(1);
       expect(db.requests[0].patch).not.toHaveProperty('due_day');
     }
-    const fifteenth = bill({ due_date: '2026-01-15' });
+    const fifteenth = readBefore0475(bill({ due_date: '2026-01-15' }));
     const db = store(fifteenth, { oldSchema: true });
     expect((await markPaid(db.client, fifteenth, '2026-01-15')).error).toBeNull();
     expect(db.requests.map((r) => 'due_day' in r.patch)).toEqual([true, false]);
-    expect(db.current()).toMatchObject({ due_date: '2026-02-15', due_day: null });
+    expect(db.current()).toMatchObject({ due_date: '2026-02-15' });
+    expect(db.current()).not.toHaveProperty('due_day');
   });
 
   it('returns a denied write as it came, without retrying', async () => {
@@ -222,5 +258,48 @@ describe('Mark paid through supabase-js', () => {
     expect(result.error).toMatchObject({ code: '42501' });
     expect(db.requests).toHaveLength(1);
     expect(isMissingDueDayColumn({ code: '42501', message: 'due_day denied' })).toBe(false);
+  });
+});
+
+describe('Mark paid and the forecast read a stored bill the same way', () => {
+  // The writer used to read cadence its own way (any name it knew, on any
+  // row; a flagged bill with none was monthly) while the forecast only
+  // lowercased, required the flag, and showed anything else once at $0 a
+  // month. Both now read billCadence, so the date a payment rolls a bill to is
+  // the next date the forecast shows, for every row the table can hold.
+  const rows: Array<[string, Partial<Tables<'bills'>>]> = [
+    ['a padded alias', { recurrence: ' Fortnightly ' }],
+    ['a capitalised name', { recurrence: 'MONTHLY' }],
+    ['a flagged bill with no cadence (the Bill Manager wrote these)', { recurrence: null }],
+    ['a flagged bill with an empty cadence', { recurrence: '' }],
+    ['a flagged bill whose cadence is no cadence', { recurrence: 'semimonthly' }],
+    ['a flagged bill named after Object.prototype', { recurrence: 'constructor' }],
+    ['an unflagged bill with a cadence', { is_recurring: false, recurrence: 'monthly' }],
+    ['an unflagged bill with none', { is_recurring: false, recurrence: null }],
+  ];
+  const forecast = (row: Tables<'bills'>) => buildCashflowTimeline({
+    bills: [row], goals: [], events: [], startingBalance: 1000, now: new Date('2026-01-31T00:00:00Z'), horizonWeeks: 12,
+  }).weeks.flatMap((w) => w.moments).map((m) => m.date);
+
+  it.each(rows)('%s', (_label, over) => {
+    const row = bill(over);
+    const patch = billPaidPatch(row, row.due_date);
+    const dates = forecast(row);
+    expect(dates[0]).toBe('2026-01-31');
+    if (billCadence(row) === null) {
+      expect(patch).toEqual({ status: 'paid' });
+      expect(dates).toEqual(['2026-01-31']);
+      expect(monthlyEquivalent(row)).toBe(0);
+    } else {
+      expect(patch).toMatchObject({ status: 'upcoming' });
+      expect(dates[1]).toBe((patch as { due_date: string }).due_date);
+      expect(monthlyEquivalent(row)).toBeGreaterThan(0);
+    }
+  });
+
+  it('each is read as', () => {
+    expect(rows.map(([, over]) => billCadence(bill(over)))).toEqual(['biweekly', 'monthly', 'monthly', 'monthly', 'monthly', 'monthly', null, null]);
+    expect(monthlyEquivalent(bill({ recurrence: ' Fortnightly ' }))).toBeCloseTo(100 * 26 / 12);
+    expect(monthlyEquivalent(bill({ recurrence: null }))).toBe(100);
   });
 });
