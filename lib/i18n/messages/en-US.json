@@ -16692,5 +16692,7 @@
   "blogBlogSearch.searchUnavailable": "Search isn’t available right now. Try again in a moment.",
   "coach.onlyYourOwnHealth": "You can ask the coach about your own health. A parent or adult can ask about other members of the family.",
   "medicationsModule.noMedicinesPrescribedToYou": "No medicines have been prescribed to you.",
-  "medicationsModule.yourOwnMedicinesOnly": "You see the medicines prescribed to you. A parent or adult manages the family's prescriptions."
+  "medicationsModule.yourOwnMedicinesOnly": "You see the medicines prescribed to you. A parent or adult manages the family's prescriptions.",
+  "mealsPlanner.addMealToLibrary": "Add meal to library",
+  "mealsPlanner.noSavedChoices": "No saved meals or recipes yet. Create a new meal below to start planning."
 }

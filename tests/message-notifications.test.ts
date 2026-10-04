@@ -21,7 +21,7 @@ const row = (id: number, fields: PushFixtureRow = {}): PushFixtureRow => ({
 const fixture = (rows: PushFixtureRow[]) => pushDispatchDb({
   notifications: rows,
   push_devices: [{ id: 'device', user_id: 'recipient', enabled: true, provider: 'webpush', endpoint: 'https://push.example.test/device', p256dh: 'key', auth: 'auth' }],
-  family_members: [], family_ai_settings: [], user_preferences: [],
+  family_members: [{ id: 'member', family_id: 'family', user_id: 'recipient', role: 'parent', is_active: true }], family_ai_settings: [], user_preferences: [],
 });
 
 beforeEach(() => {

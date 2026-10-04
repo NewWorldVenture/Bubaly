@@ -16,6 +16,7 @@ declare
   md uuid := '00000000-0000-4000-8000-0000000047a4';
   dm uuid := '00000000-0000-4000-8000-0000000047c1';
   subgroup uuid := '00000000-0000-4000-8000-0000000047c2';
+  inactive_subgroup uuid := '00000000-0000-4000-8000-0000000047c5';
   whole uuid := '00000000-0000-4000-8000-0000000047c3';
   foreign_conv uuid := '00000000-0000-4000-8000-0000000047c4';
   first_msg uuid := '00000000-0000-4000-8000-0000000047b1';
@@ -29,6 +30,10 @@ begin
     raise exception 'Canonical chat did not reuse the full-family group atomically'; end if;
   if exists(select 1 from public.family_conversations where id = subgroup and is_family_chat) then
     raise exception 'A subgroup with stale whole-family member_ids was promoted to family-wide visibility'; end if;
+  if not exists(select 1 from public.family_conversations where id = whole and is_family_chat) then
+    raise exception 'A complete persisted family roster was not preserved as the canonical chat'; end if;
+  if exists(select 1 from public.family_conversations where id = inactive_subgroup and is_family_chat) then
+    raise exception 'A roster covering only currently active members was promoted'; end if;
   conversation := public.create_family_conversation(fam, array[ma, mb], 'Duplicate DM', 'direct');
   if conversation.id <> dm then raise exception 'Legacy DM was not reused'; end if;
   conversation := public.create_family_conversation(fam, array[mb, ma], 'Reordered DM', 'direct');
@@ -72,6 +77,10 @@ begin
     raise exception 'BREACH: operation identity changed';
   exception when insufficient_privilege then null; end;
   begin
+    update public.family_messages set family_id = other_fam where id = message.id;
+    raise exception 'BREACH: message moved to another household';
+  exception when insufficient_privilege then null; end;
+  begin
     insert into public.family_messages(family_id, conversation_id, sender_id, content) values(fam, foreign_conv, a, 'Cross family');
     raise exception 'BREACH: message and conversation families disagree';
   exception when check_violation then null; end;
@@ -105,6 +114,26 @@ begin
   insert into public.family_messages(family_id, conversation_id, sender_id, content, created_at)
     select fam, whole, a, 'History ' || n, '2026-01-01'::timestamptz + n * interval '1 second' from generate_series(1, 450) n;
 end $$;
+
+-- An inactive account returns after migration. Its old membership row cannot
+-- turn an active-only subgroup into a history-visible household conversation.
+reset role;
+update public.family_members set is_active = true where id = '00000000-0000-4000-8000-0000000047a5';
+set local role authenticated;
+set local request.jwt.claim.sub = '00000000-0000-4000-8000-000000004755';
+do $$ begin
+  if exists(select 1 from public.family_conversations where id = '00000000-0000-4000-8000-0000000047c5')
+    or exists(select 1 from public.family_messages where conversation_id = '00000000-0000-4000-8000-0000000047c5') then
+    raise exception 'BREACH: reactivated member can read old subgroup history'; end if;
+  if not exists(select 1 from public.family_conversations where id = '00000000-0000-4000-8000-0000000047c3') then
+    raise exception 'Control: a complete-roster family chat did not remain available after reactivation'; end if;
+  begin
+    insert into public.family_messages(family_id, conversation_id, sender_id, content)
+      values ('00000000-0000-4000-8000-0000000047f1', '00000000-0000-4000-8000-0000000047c5', auth.uid(), 'Reactivated outsider');
+    raise exception 'BREACH: reactivated member sent into old subgroup';
+  exception when insufficient_privilege then null; end;
+end $$;
+set local request.jwt.claim.sub = '00000000-0000-4000-8000-000000004751';
 
 set local request.jwt.claim.sub = '00000000-0000-4000-8000-000000004752';
 do $$

@@ -4,7 +4,7 @@ import { getTranslations } from '@/lib/i18n/server';
 import { createServiceClient } from '@/lib/supabase/server';
 import { listAllAuthUsers } from '@/lib/server/list-all-auth-users';
 import { readAll } from '@/lib/supabase/read-all';
-import { settleAll } from '@/lib/supabase/settle';
+import { settle, settleAll } from '@/lib/supabase/settle';
 import { sendReactEmail } from '@/lib/email';
 import { WeeklyDigestEmail } from '@/lib/emails/weekly-digest';
 import * as React from 'react';
@@ -141,6 +141,19 @@ export async function GET(req: NextRequest) {
     if (!adminMember?.user_id) { skipped++; return; }
     const adminEmail = emailByUserId.get(adminMember.user_id);
     if (!adminEmail) { skipped++; return; }
+
+    // This is a personal notification preference. An absent row keeps the
+    // default opt-in; an unavailable read is not permission to send. Keep the
+    // failure local to this family, matching the other per-family reads above.
+    const { data: preference, error: preferenceError } = await settle(supabase
+      .from('user_preferences').select('email_enabled')
+      .eq('user_id', adminMember.user_id).maybeSingle());
+    if (preferenceError) {
+      console.error(`[weekly-digest] Email preference read failed for ${family.id}:`, preferenceError);
+      failed++;
+      return;
+    }
+    if (preference && !preference.email_enabled) { skipped++; return; }
 
     const { ok, skipped: notSent } = await sendReactEmail({
       to: adminEmail,

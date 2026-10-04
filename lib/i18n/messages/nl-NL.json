@@ -16692,5 +16692,7 @@
   "blogBlogSearch.searchUnavailable": "Zoeken is nu niet beschikbaar. Probeer het zo meteen opnieuw.",
   "coach.onlyYourOwnHealth": "Je kunt de coach vragen stellen over je eigen gezondheid. Een ouder of volwassene kan vragen stellen over andere gezinsleden.",
   "medicationsModule.noMedicinesPrescribedToYou": "Er zijn jou geen medicijnen voorgeschreven.",
-  "medicationsModule.yourOwnMedicinesOnly": "Je ziet de medicijnen die jou zijn voorgeschreven. Een ouder of volwassene beheert de voorschriften van het gezin."
+  "medicationsModule.yourOwnMedicinesOnly": "Je ziet de medicijnen die jou zijn voorgeschreven. Een ouder of volwassene beheert de voorschriften van het gezin.",
+  "mealsPlanner.addMealToLibrary": "Maaltijd aan bibliotheek toevoegen",
+  "mealsPlanner.noSavedChoices": "Er zijn nog geen opgeslagen maaltijden of recepten. Maak hieronder een nieuwe maaltijd om te beginnen met plannen."
 }

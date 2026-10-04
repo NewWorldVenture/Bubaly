@@ -123,7 +123,7 @@ export async function readAll<T, E = { message: string }>(
       return { rows, error: { message: cause instanceof Error ? cause.message : String(cause) }, truncated: false };
     }
     if (error) return { rows, error, truncated: false };
-    if (!data) return { rows, error: new Error('The data page was unavailable'), truncated: false };
+    if (!Array.isArray(data)) return { rows, error: new Error('The data page was unavailable'), truncated: false };
     if (data.length === 0) return { rows, error: null, truncated: false };
 
     rows.push(...data);

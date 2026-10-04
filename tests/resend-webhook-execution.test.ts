@@ -152,6 +152,22 @@ describe('signed Resend suppression and durable receipt execution', () => {
     expect(f.attempts).toEqual([]);
   });
 
+  it.each(['email.bounced', 'email.complained'])('answers 401 to a correctly signed %s when RESEND_WEBHOOK_SECRET is unset, and persists nothing', async (type) => {
+    // /api/health lists this secret for exactly this reason: with it unset,
+    // verify() refuses every delivery, so no bounce or complaint ever reaches
+    // the suppression list and the next campaign mails the addresses that
+    // bounced. Fail-closed is right; the point here is that it is also total.
+    const f = fixture();
+    vi.stubEnv('RESEND_WEBHOOK_SECRET', '');
+    const response = await POST(signedRequest(type));
+    expect(response.status).toBe(401);
+    expect(await response.json()).toEqual({ error: 'resend.invalidSignature' });
+    expect(mocks.createServiceClient, 'no database client is even created before the signature gate').not.toHaveBeenCalled();
+    expect(f.attempts).toEqual([]);
+    expect(f.db.table('resend_webhook_events')).toHaveLength(0);
+    expect(f.suppressions()).toHaveLength(0);
+  });
+
   it.each([
     null, [], 42, true, 'email.complained', {}, { type: null },
     { type: 'email.complained', data: null },

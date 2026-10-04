@@ -516,7 +516,7 @@ export function ChoresModule() {
 
       {addOpen && manager && (
         <NewChoreModal familyId={familyId} userId={userId} members={members} prefill={prefill}
-          onClose={() => setAddOpen(false)} onSaved={() => { setAddOpen(false); void refresh(); }} />
+          onClose={() => setAddOpen(false)} onSaved={() => { void refresh(); }} />
       )}
       {templatesOpen && (
         <TemplatesModal onClose={() => setTemplatesOpen(false)}
@@ -762,6 +762,19 @@ function NewChoreModal({ familyId, userId, members, prefill, onClose, onSaved }:
   const tr = useTranslations();
   const { error: toastError } = useToast();
   const [loading, setLoading] = useState(false);
+  const context = useMemo(() => ({ familyId, userId }), [familyId, userId]);
+  const currentContext = useRef(context);
+  currentContext.current = context;
+  const active = useRef(true);
+  useEffect(() => {
+    active.current = true;
+    return () => { active.current = false; };
+  }, []);
+  function close() {
+    // Fence pending callbacks immediately, before React unmounts this dialog.
+    active.current = false;
+    onClose();
+  }
   // One id per open modal, so a retry after a failed save is the SAME chore and
   // a second Add (a new modal) is a different one. The modal is mounted only
   // while `addOpen`, so closing and reopening mints a fresh id. The one failure
@@ -788,6 +801,7 @@ function NewChoreModal({ familyId, userId, members, prefill, onClose, onSaved }:
     if (!memberId) return toastError(tr('choresModule.pickWhoThisChoreIs'));
     if (!Number.isFinite(points) || points < 0 || points > 1000) return toastError(tr('choresModule.rewardMustBeBetween0'));
 
+    const isCurrent = () => active.current && currentContext.current === context;
     setLoading(true);
     try {
       // One call. `createChore` creates the chore and its assignment together and
@@ -798,6 +812,7 @@ function NewChoreModal({ familyId, userId, members, prefill, onClose, onSaved }:
         dueAt: due_at, assigneeId: memberId, submissionId: submissionId.current,
       });
       if (!result.ok) {
+        if (!isCurrent()) return;
         // `already_saved`: an earlier Add of this modal landed as the chore the
         // message names, and it no longer matches these fields. That save is
         // settled; a further Add is a new chore, which the message offers.
@@ -805,16 +820,19 @@ function NewChoreModal({ familyId, userId, members, prefill, onClose, onSaved }:
         toastError(result.error);
         return;
       }
+      // A dispatched action may commit after closing. Refresh that confirmed
+      // save without letting its old dialog close a newer composition.
       onSaved();
+      if (isCurrent()) close();
     } catch (err) {
-      toastError(describeDbError(err));
+      if (isCurrent()) toastError(describeDbError(err));
     } finally {
-      setLoading(false);
+      if (isCurrent()) setLoading(false);
     }
   }
 
   return (
-    <Modal open title={tr('chores.addChore')} onClose={onClose}>
+    <Modal open title={tr('chores.addChore')} onClose={close}>
       <form onSubmit={onSubmit} className="space-y-4">
         <input type="hidden" name="icon" defaultValue={prefill?.icon ?? ''} />
         <Field label={tr('chores.title')} required>
@@ -847,7 +865,7 @@ function NewChoreModal({ familyId, userId, members, prefill, onClose, onSaved }:
           )}
         </Field>
         <div className="flex justify-end gap-2 pt-1">
-          <Button type="button" variant="ghost" onClick={onClose}>{tr('chores.cancel')}</Button>
+          <Button type="button" variant="ghost" onClick={close}>{tr('chores.cancel')}</Button>
           <Button type="submit" loading={loading}>{loading ? 'Saving…' : 'Add Chore'}</Button>
         </div>
       </form>

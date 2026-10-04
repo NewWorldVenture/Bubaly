@@ -57,7 +57,7 @@ export function WishlistsModule() {
   const [form, setForm] = useState(blank);
   const [saving, setSaving] = useState(false);
 
-  const { data: wishes, loading, error } = useRealtimeQuery<Wish>({
+  const { data: wishes, loading, error, refresh } = useRealtimeQuery<Wish>({
     table: 'wishlist_items', familyId, deps: [familyId],
     fetcher: (sb) => sb.from('wishlist_items').select('*').eq('family_id', familyId),
   });
@@ -97,6 +97,7 @@ export function WishlistsModule() {
     setSaving(false);
     if (err) { toastError(describeDbError(err)); return; }
     if (wroteNoRows(saved)) { toastError(t('errors.thatChangeWasNotSaved')); return; }
+    void refresh();
     success(form.id ? 'Wish updated' : 'Added to your wish list');
     setModalOpen(false);
   }
@@ -108,6 +109,7 @@ export function WishlistsModule() {
     const { data: removed, error: err } = await sb.from('wishlist_items').delete().eq('id', w.id).select('id');
     if (err) { toastError(describeDbError(err)); return; }
     if (wroteNoRows(removed)) { toastError(t('errors.thatChangeWasNotSaved')); return; }
+    void refresh();
     success(t('wishlistsModule.removed'));
   }
 

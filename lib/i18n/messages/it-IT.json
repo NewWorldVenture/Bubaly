@@ -16692,5 +16692,7 @@
   "blogBlogSearch.searchUnavailable": "La ricerca non è disponibile in questo momento. Riprova tra poco.",
   "coach.onlyYourOwnHealth": "Puoi chiedere al coach della tua salute. Un genitore o un adulto può chiedere degli altri membri della famiglia.",
   "medicationsModule.noMedicinesPrescribedToYou": "Non ti è stato prescritto alcun farmaco.",
-  "medicationsModule.yourOwnMedicinesOnly": "Vedi i farmaci che ti sono stati prescritti. Un genitore o un adulto gestisce le prescrizioni della famiglia."
+  "medicationsModule.yourOwnMedicinesOnly": "Vedi i farmaci che ti sono stati prescritti. Un genitore o un adulto gestisce le prescrizioni della famiglia.",
+  "mealsPlanner.addMealToLibrary": "Aggiungi il pasto alla raccolta",
+  "mealsPlanner.noSavedChoices": "Non ci sono ancora pasti o ricette salvati. Crea un nuovo pasto qui sotto per iniziare a pianificare."
 }
