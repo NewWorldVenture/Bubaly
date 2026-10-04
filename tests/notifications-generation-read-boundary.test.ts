@@ -11,7 +11,8 @@ function chain(result: { data: unknown; error: unknown }) {
     select: () => c, eq: () => c, neq: () => c, gte: () => c, lte: () => c, in: () => c,
     is: () => c, not: () => c, or: () => c, ilike: () => c, order: () => c, limit: () => c, range: () => c,
     maybeSingle: () => Promise.resolve(result),
-    then: (onF: (v: unknown) => unknown) => Promise.resolve(result).then(onF),
+    // A collection answer carries its count, as PostgREST's Content-Range does.
+    then: (onF: (v: unknown) => unknown) => Promise.resolve(Array.isArray(result.data) ? { ...result, count: result.data.length } : result).then(onF),
   };
   return c;
 }

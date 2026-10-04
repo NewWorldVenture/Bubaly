@@ -29,7 +29,8 @@ function makeDb(respond: (call: Call) => Reply) {
       not: (c: string, op: string, v: unknown) => filter(`not:${c}:${op}`, v),
       // A window arrives as one PostgREST `or`; a read may add more than one.
       or: (expression: string) => { call.filters.or = [...((call.filters.or as string[] | undefined) ?? []), expression]; return b; },
-      then: (resolve: (value: Reply) => void) => resolve(respond(call)),
+      // A collection answer carries its count, as PostgREST's Content-Range does.
+      then: (resolve: (value: Reply & { count?: number }) => void) => { const r = respond(call); resolve(Array.isArray(r.data) ? { ...r, count: r.data.length } : r); },
     });
     return b;
   };
