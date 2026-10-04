@@ -1,7 +1,6 @@
 import { fileURLToPath } from 'node:url';
 import { buildContentSecurityPolicy } from './lib/security/csp.mjs';
 import { parseBuildRevision } from './lib/build-identity.mjs';
-import { fileURLToPath } from 'node:url';
 
 // Next's bundled react-dom client, production and development, stable and
 // experimental: where scripts/react-hydration-replay-fix.cjs applies.
