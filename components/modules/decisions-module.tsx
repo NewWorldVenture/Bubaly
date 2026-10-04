@@ -97,6 +97,7 @@ export function DecisionsModule() {
       .update({ decided_option_id: optionId, status: 'decided' }).eq('id', selected.id).select('id');
     if (error) { toastError(describeDbError(error)); return; }
     if (wroteNoRows(updated)) { toastError(t('errors.thatChangeWasNotSaved')); return; }
+    void refreshDecisions();
     success(t('decisionsModule.decisionRecorded'));
   }
 

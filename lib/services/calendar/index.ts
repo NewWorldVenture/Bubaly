@@ -147,6 +147,24 @@ export async function createEvent(
       } : undefined,
     },
     async (key) => {
+      if (wanted.assignee_id != null) {
+        const { data: assignee, error: assigneeError } = await scope.db
+          .from('family_members')
+          .select('id,family_id')
+          .eq('family_id', scope.familyId)
+          .eq('id', wanted.assignee_id)
+          .maybeSingle();
+
+        if (assigneeError) {
+          return fail(describeDbError(assigneeError, 'Could not check that event assignee.'), { code: SERVICE_CODES.db });
+        }
+        if (!assignee || typeof assignee !== 'object' || Array.isArray(assignee)
+          || typeof assignee.id !== 'string' || typeof assignee.family_id !== 'string'
+          || !sameId(assignee.id, wanted.assignee_id) || !sameId(assignee.family_id, scope.familyId)) {
+          return fail('Choose an assignee from your family.', { code: SERVICE_CODES.invalidInput });
+        }
+      }
+
       const { data, error } = await scope.db
         .from('calendar_events')
         .insert({
@@ -244,6 +262,27 @@ export async function createEvents(
     if (seen.data.length > 0) return ok(seen.data);
   }
 
+  const assigneeIds = rows
+    .map((row) => row.assignee_id)
+    .filter((id): id is string => id != null)
+    .filter((id, index, ids) => ids.findIndex((other) => sameId(other, id)) === index);
+  if (assigneeIds.length) {
+    const { data: members, error: memberError } = await scope.db
+      .from('family_members')
+      .select('id, family_id')
+      .eq('family_id', scope.familyId)
+      .in('id', assigneeIds);
+    if (memberError) {
+      return fail(describeDbError(memberError, 'Could not check those assignees.'), { code: SERVICE_CODES.db });
+    }
+    if (!Array.isArray(members) || !members.every((member) => member && typeof member === 'object'
+      && !Array.isArray(member) && typeof member.id === 'string' && typeof member.family_id === 'string'
+      && sameId(member.family_id, scope.familyId) && assigneeIds.some((id) => sameId(member.id, id)))
+      || !assigneeIds.every((id) => members.some((member) => sameId(member.id, id)))) {
+      return fail('Choose assignees from your family.', { code: SERVICE_CODES.invalidInput });
+    }
+  }
+
   const { data, error } = await scope.db.from('calendar_events').insert(rows).select('*');
   if (error || !data) {
     // On a keyed batch this is what losing the race looks like: the winner's
@@ -300,6 +339,9 @@ export async function deleteEvents(scope: ServiceScope, eventIds: string[]): Pro
     return fail(describeDbError(error, 'Could not undo those events.'), { code: SERVICE_CODES.db });
   }
 
+  if (data != null && !Array.isArray(data)) {
+    return fail('Could not confirm those events were removed.', { code: SERVICE_CODES.db });
+  }
   const removed = data ?? [];
   // The batch create records a line; without this its Undo left none, so the
   // trail showed a week going onto the calendar and never coming off.
@@ -352,6 +394,24 @@ export async function updateEvent(scope: ServiceScope, eventId: string, patch: U
   // first, an extra round trip on every edit to guard a shape no caller sends.
   if (update.starts_at && update.ends_at && Date.parse(update.ends_at) < Date.parse(update.starts_at)) {
     return fail('An event cannot end before it starts.', { code: SERVICE_CODES.invalidInput });
+  }
+
+  if (update.assignee_id != null) {
+    const { data: assignee, error: assigneeError } = await scope.db
+      .from('family_members')
+      .select('id,family_id')
+      .eq('family_id', scope.familyId)
+      .eq('id', update.assignee_id)
+      .maybeSingle();
+
+    if (assigneeError) {
+      return fail(describeDbError(assigneeError, 'Could not check that event assignee.'), { code: SERVICE_CODES.db });
+    }
+    if (!assignee || typeof assignee !== 'object' || Array.isArray(assignee)
+      || typeof assignee.id !== 'string' || typeof assignee.family_id !== 'string'
+      || !sameId(assignee.id, update.assignee_id) || !sameId(assignee.family_id, scope.familyId)) {
+      return fail('Choose an assignee from your family.', { code: SERVICE_CODES.invalidInput });
+    }
   }
 
   const { data, error } = await scope.db

@@ -5,7 +5,7 @@
 // notifications must be trustworthy, so this is rule-based, not AI-generated.
 import type { SupabaseClient } from '@supabase/supabase-js';
 import { settle, settleAll, describeReadError } from '@/lib/supabase/settle';
-import type { Database, NotificationType } from '@/lib/database.types';
+import type { Database, NotificationType, Tables } from '@/lib/database.types';
 import { renewalReminders, opportunityReminders } from '@/lib/notifications/deadline-reminders';
 import { approvalReminders, type ApprovalInput } from '@/lib/notifications/approval-reminders';
 import type { NeedsReader } from '@/lib/home/needs-sources';
@@ -20,8 +20,10 @@ import { deliveryTimeFor } from '@/lib/services/notifications';
 import { asWallClockIn, isValidTimezone } from '@/lib/time/zoned';
 import { addDaysToDayKey, dayKeyInTz, systemScopeForFamily, zonedDayBoundsMs } from '@/lib/services/scope';
 import { readInChunks } from '@/lib/supabase/chunked-in';
+import { readAll } from '@/lib/supabase/read-all';
 
 type DB = SupabaseClient<Database>;
+type NotificationMember = Pick<Tables<'family_members'>, 'id' | 'user_id' | 'display_name' | 'role' | 'birthday'>;
 
 type Candidate = {
   type: NotificationType;
@@ -127,12 +129,23 @@ export async function generateFamilyNotifications(supabase: DB, familyId: string
   const renewalMaxKey = addDaysToDayKey(todayKey, 90);
   const signupMaxKey = addDaysToDayKey(todayKey, 7);
 
+  // The roster defines audiences for every category. A failed or truncated
+  // roster must not turn an unresolved recipient into a family broadcast.
+  // Stop only on an empty page: a short page can be the server's row cap.
+  const roster = await readAll<NotificationMember>((from, to) => supabase
+    .from('family_members').select('id, user_id, display_name, role, birthday')
+    .eq('family_id', familyId).eq('is_active', true).order('id').range(from, to));
+  if (roster.error) {
+    console.error('[notifications] generation roster read failed', { familyId, error: roster.error });
+    throw new Error(`Could not read the notification roster for ${familyId}: ${describeReadError(roster.error)}`);
+  }
+
   const [scope, sourceResults] = await Promise.all([
     // Read once: the medication match needs the family's zone before the
     // reminders are built, and quiet hours needs the same scope after.
     systemScopeForFamily(supabase, familyId),
     settleAll([
-      supabase.from('family_members').select('id, user_id, display_name, role, birthday').eq('family_id', familyId).eq('is_active', true),
+      Promise.resolve({ data: roster.rows, error: null }),
       supabase.from('calendar_events').select('id, title, starts_at, all_day, location, assignee_id').eq('family_id', familyId).gte('starts_at', nowIso).lte('starts_at', in48),
       supabase.from('chore_assignments').select('id, due_at, member_id, chore_id, status').eq('family_id', familyId).in('status', ['todo', 'in_progress']).not('due_at', 'is', null).lte('due_at', in24).gte('due_at', nowIso),
       supabase.from('school_events').select('id, title, starts_at, member_id, event_type').eq('family_id', familyId).gte('starts_at', nowIso).lte('starts_at', in48),
@@ -184,6 +197,9 @@ export async function generateFamilyNotifications(supabase: DB, familyId: string
   const userByMember = new Map((members ?? []).map((m) => [m.id, m.user_id]));
   const managers = (members ?? []).filter((m) => m.role === 'parent' || m.role === 'adult');
   const managerLites = managers.map((m) => ({ id: m.id, user_id: m.user_id }));
+  // A manager profile without a login has no private notification audience.
+  // Keep other builders' recipient policies separate; documents never broadcast.
+  const documentManagers = managers.filter((m) => typeof m.user_id === 'string' && m.user_id.trim().length > 0);
 
   // Resolve chore titles.
   const choreIds = [...new Set((chores ?? []).map((c) => c.chore_id))];
@@ -241,13 +257,12 @@ export async function generateFamilyNotifications(supabase: DB, familyId: string
 
   // Expiring documents → notify managers (one per manager so each is alerted).
   for (const d of docs ?? []) {
-    const when = d.expires_at ? new Date(d.expires_at).toLocaleDateString('en-US', { month: 'short', day: 'numeric' }) : 'soon';
-    if (managers.length === 0) {
-      candidates.push({ type: 'document_expiry', related_type: 'documents', related_id: d.id, user_id: null, title: `Document expiring: ${d.title}`, body: `Expires ${when}` });
-    } else {
-      for (const m of managers) {
-        candidates.push({ type: 'document_expiry', related_type: 'documents', related_id: `${d.id}:${m.id}`, user_id: m.user_id, title: `Document expiring: ${d.title}`, body: `Expires ${when}` });
-      }
+    // `documents.expires_at` is a DATE (0002_tables.sql). Parsed, that is UTC
+    // midnight; rendered on the host's clock a US server said "Oct 7" about a
+    // passport that expires on the 8th. A date is rendered as the date it is.
+    const when = d.expires_at ? new Date(d.expires_at).toLocaleDateString('en-US', { month: 'short', day: 'numeric', timeZone: 'UTC' }) : 'soon';
+    for (const m of documentManagers) {
+      candidates.push({ type: 'document_expiry', related_type: 'documents', related_id: `${d.id}:${m.id}`, user_id: m.user_id, title: `Document expiring: ${d.title}`, body: `Expires ${when}` });
     }
   }
 
@@ -290,17 +305,24 @@ export async function generateFamilyNotifications(supabase: DB, familyId: string
     });
   }
 
-  // Rich family reminders (the /dashboard/reminders service) — these never
-  // notified before. Fire when the effective time (due minus the early-reminder
-  // lead) is within the window; dedup permanently per reminder.
+  // Rich family reminders (the /dashboard/reminders service). Fire when the
+  // effective time (due minus the early-reminder lead) is within the window.
+  // The dedup below is permanent and keyed by `related_id`, so the key names
+  // the OCCURRENCE (lib/reminders/notify.ts): a recurring reminder's row rolls
+  // its `remind_at` forward each time it is completed and stays active, and a
+  // snoozed one comes due again at `snoozed_until` — keyed by the row alone,
+  // a daily medication reminder reminded once, ever, and a snooze never came
+  // back. Snoozed rows are read by the time they come back, active ones by
+  // their due time.
+  const reminderHorizon = reminderFetchHorizonIso(now);
   const { data: famReminders } = await supabase.from('family_reminders')
-    .select('id, title, remind_at, status, early_reminder_minutes, member_id')
-    .eq('family_id', familyId).eq('status', 'active').not('remind_at', 'is', null)
-    .gte('remind_at', nowIso).lte('remind_at', reminderFetchHorizonIso(now));
+    .select('id, title, remind_at, status, early_reminder_minutes, member_id, recurrence, snoozed_until')
+    .eq('family_id', familyId).in('status', ['active', 'snoozed']).not('remind_at', 'is', null)
+    .or(`and(status.eq.active,remind_at.gte.${nowIso},remind_at.lte.${reminderHorizon}),and(status.eq.snoozed,snoozed_until.gte.${nowIso},snoozed_until.lte.${reminderHorizon})`);
   for (const n of dueFamilyReminderNotices((famReminders ?? []) as FamilyReminderRow[], now)) {
     const r = (famReminders ?? []).find((x) => x.id === n.id)!;
     candidates.push({
-      type: 'system', related_type: 'family_reminders', related_id: `fr:${n.id}`,
+      type: 'system', related_type: 'family_reminders', related_id: n.key,
       user_id: r.member_id ? userByMember.get(r.member_id) ?? null : null,
       title: `Reminder: ${n.title}`,
       body: `Due ${timeLabel(n.remindAtIso, tz)}`,
@@ -314,7 +336,8 @@ export async function generateFamilyNotifications(supabase: DB, familyId: string
     .select('id, taken_at')
     .eq('family_id', familyId).not('taken_at', 'is', null)
     .order('taken_at', { ascending: false }).limit(400);
-  const memoryNotice = onThisDayNotice(datedPhotos ?? [], now);
+  // `tz`: the family's day, not the host's — see pickOnThisDay.
+  const memoryNotice = onThisDayNotice(datedPhotos ?? [], now, tz);
   if (memoryNotice) {
     candidates.push({
       type: 'system', related_type: 'family_photos', related_id: memoryNotice.relatedId,

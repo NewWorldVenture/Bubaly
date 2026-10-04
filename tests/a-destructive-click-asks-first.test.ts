@@ -95,33 +95,40 @@ const ADOPTED: [string, string, string][] = [
   ['components/guardian/rules-editor.tsx', 'handleDelete', 'rulesEditor.deleteRuleQ'],
   ['components/modules/health-module.tsx', 'deleteSymptom', 'health.deleteSymptomQ'],
   ['components/modules/language-module.tsx', 'deleteCard', 'language.deleteCardQ'],
+  // The second pass: everything that destroys a record a person COMPOSED — an
+  // event, a reminder, an announcement, a celebration, a weekend plan, a voice
+  // command, a contact's timeline entry, a twin scenario, a safety check-in, a
+  // nutrition entry, a night's sleep, a practice or watch session, a trip item.
+  // Most ask through the generic question with the record's own name in it; a
+  // record with no name of its own gets a question of its own.
+  ['components/modules/event-detail-modal.tsx', 'deleteEvent', 'eventDetailModal.deleteEventQ'],
+  ['components/modules/reminders-module.tsx', 'deleteReminder', 'confirm.deleteNamed'],
+  ['components/modules/announcements-module.tsx', 'remove', 'confirm.deleteNamed'],
+  ['components/modules/celebrations-module.tsx', 'remove', 'confirm.deleteNamed'],
+  ['components/modules/weekend-module.tsx', 'removePlan', 'confirm.removeNamed'],
+  ['components/modules/voice-module.tsx', 'remove', 'confirm.deleteNamed'],
+  ['components/modules/contact-timeline-module.tsx', 'remove', 'confirm.deleteNamed'],
+  ['components/twin/activity-projection.tsx', 'remove', 'confirm.deleteNamed'],
+  ['components/family/check-in-view.tsx', 'remove', 'checkInView.deleteCheckInQ'],
+  ['components/meals/nutrition-view.tsx', 'remove', 'confirm.removeNamed'],
+  ['components/modules/sleep-module.tsx', 'deleteLog', 'sleep.deleteNightQ'],
+  ['components/modules/language-module.tsx', 'deleteSession', 'language.deleteSessionQ'],
+  ['components/modules/watchlist-module.tsx', 'deleteSession', 'confirm.removeNamed'],
+  ['components/modules/trips-module.tsx', 'removeItem', 'confirm.removeNamed'],
 ];
 
-// Still unconfirmed, and deliberately so for now: each deletes a row a person
-// re-enters in one tap — a city, a packing item, a gift idea, a vote — or is a
-// toggle the scan reads as a delete because it clears a row to write another
-// (`vote`, `castVote`, `logDose`). Striking one off means it now asks.
+// Still unconfirmed, and deliberately so: each deletes a row a person re-enters
+// in one tap — a city, a packing item, a gift idea, a leftover — or is a toggle
+// the scan reads as a delete because it clears a row to write another (`vote`,
+// `castVote`, `logDose`). Nothing here destroys something a person composed;
+// those fourteen moved to ADOPTED above. Striking one off means it now asks.
 const STILL_UNCONFIRMED = [
-  'components/family/check-in-view.tsx::remove',
-  'components/meals/nutrition-view.tsx::remove',
-  'components/modules/announcements-module.tsx::remove',
-  'components/modules/celebrations-module.tsx::remove',
-  'components/modules/contact-timeline-module.tsx::remove',
-  'components/modules/event-detail-modal.tsx::deleteEvent',
   'components/modules/kitchen-dashboard.tsx::remove',
-  'components/modules/language-module.tsx::deleteSession',
   'components/modules/medications-module.tsx::logDose',
   'components/modules/relationship-module.tsx::removeGift',
-  'components/modules/reminders-module.tsx::deleteReminder',
-  'components/modules/sleep-module.tsx::deleteLog',
-  'components/modules/trips-module.tsx::removeItem',
-  'components/modules/voice-module.tsx::remove',
   'components/modules/voting-module.tsx::vote',
   'components/modules/watchlist-module.tsx::castVote',
-  'components/modules/watchlist-module.tsx::deleteSession',
   'components/modules/weather-module.tsx::removeCity',
-  'components/modules/weekend-module.tsx::removePlan',
-  'components/twin/activity-projection.tsx::remove',
   'components/vacations/trip-packing.tsx::remove',
 ];
 
@@ -217,10 +224,11 @@ describe('a destructive click asks first', () => {
 
   it('asks in the reader’s language, never a bare literal', () => {
     // The primitive takes already-localised strings, so every adopted call site
-    // must pass a t() lookup rather than a literal.
+    // must pass a t() lookup rather than a literal — with or without the
+    // record's name interpolated into it.
     for (const [file, , key] of ADOPTED) {
       const source = readFileSync(file, 'utf8');
-      expect(source).toMatch(new RegExp(`\\b(?:t|tr)\\('${key.replace('.', '\\.')}'\\)`));
+      expect(source).toMatch(new RegExp(`\\b(?:t|tr)\\('${key.replace('.', '\\.')}'(?:,\\s*\\{[^}]*\\})?\\)`));
     }
   });
 

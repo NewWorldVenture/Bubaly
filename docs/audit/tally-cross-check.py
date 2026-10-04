@@ -33,7 +33,8 @@ GENERATED = re.compile(
     r'(?P<rows>\d+) finding rows, (?P<ids>\d+) distinct ids\. (?P<tally>[^*]+)\*')
 PROSE = re.compile(
     r'derives the tally from the\s*\n?>?\s*document itself: '
-    r'\*\*(?P<tally>.+?)\*\* — (?P<rows>\d+) rows', re.S)
+    r'\*\*(?P<tally>.+?)\*\* — '
+    r'(?:(?P<ids>\d+) distinct ids over )?(?P<rows>\d+) rows', re.S)
 
 
 def buckets(text: str) -> dict:
@@ -61,14 +62,31 @@ def buckets(text: str) -> dict:
         if not m:
             raise ValueError(f'unparseable tally bucket: {part!r}')
         name = m.group(1).strip().replace('’', "'")
-        out['BLANK' if name == '—' else name] = int(m.group(2))
+        key = 'BLANK' if name == '—' else name
+        if key in out:
+            raise ValueError(f'duplicate tally bucket: {key!r}')
+        out[key] = int(m.group(2))
     return out
 
 
 def main() -> int:
-    doc = open(DOC, encoding='utf-8').read()
+    try:
+        with open(DOC, encoding='utf-8') as source:
+            doc = source.read()
+    except (OSError, UnicodeError) as exc:
+        print(f'CANNOT COMPARE: {DOC} could not be read as UTF-8 '
+              f'({type(exc).__name__}). Nothing was checked.', file=sys.stderr)
+        return 2
 
-    gen, prose = GENERATED.search(doc), PROSE.search(doc)
+    generated = list(GENERATED.finditer(doc))
+    written = list(PROSE.finditer(doc))
+    if len(generated) > 1 or len(written) > 1:
+        print(f'CANNOT COMPARE: ambiguous tally metadata ({len(generated)} '
+              f'generated records, {len(written)} prose records). Nothing was '
+              'checked; the document must identify one of each.', file=sys.stderr)
+        return 2
+    gen = generated[0] if generated else None
+    prose = written[0] if written else None
     # Neither half may be assumed. A missing prose tally with a present generated
     # one is exactly what "somebody reworded the header" looks like, and reporting
     # AGREE off one side would be agreement with nothing.
@@ -90,15 +108,40 @@ def main() -> int:
               'below would be {} == {} and would pass over nothing.', file=sys.stderr)
         return 2
 
-    g_rows, p_rows = int(gen.group('rows')), int(prose.group('rows'))
+    try:
+        g_rows, p_rows = int(gen.group('rows')), int(prose.group('rows'))
+        g_ids = int(gen.group('ids'))
+        p_ids = int(prose.group('ids')) if prose.group('ids') is not None else None
+    except ValueError:
+        print('CANNOT COMPARE: a row or distinct-id count could not be parsed. '
+              'Nothing was checked.', file=sys.stderr)
+        return 2
+    # Zero totals are not a comparison of evidence, and distinct IDs cannot
+    # outnumber rows. The legacy prose omits IDs; do not invent that count.
+    if (g_rows <= 0 or p_rows <= 0 or not 0 < g_ids <= g_rows or
+            (p_ids is not None and not 0 < p_ids <= p_rows)):
+        print('CANNOT COMPARE: row and distinct-id counts must be positive, '
+              'with no more distinct ids than rows. Nothing was checked.',
+              file=sys.stderr)
+        return 2
     problems = []
     if g_rows != p_rows:
         problems.append(f'row count: generated {g_rows}, prose {p_rows}')
-    if sum(g.values()) != g_rows:
-        problems.append(f'the generated buckets sum to {sum(g.values())} but it claims {g_rows} rows')
-    for key in sorted(set(g) | set(p)):
-        if g.get(key) != p.get(key):
-            problems.append(f'{key}: generated {g.get(key, "absent")}, prose {p.get(key, "absent")}')
+    if p_ids is not None and g_ids != p_ids:
+        problems.append(f'distinct-id count: generated {g_ids}, prose {p_ids}')
+    try:
+        if sum(g.values()) != g_rows:
+            problems.append(f'the generated buckets sum to {sum(g.values())} but it claims {g_rows} rows')
+        if sum(p.values()) != p_rows:
+            problems.append(f'the prose buckets sum to {sum(p.values())} but it claims {p_rows} rows')
+        for key in sorted(set(g) | set(p)):
+            if g.get(key) != p.get(key):
+                problems.append(f'{key}: generated {g.get(key, "absent")}, prose {p.get(key, "absent")}')
+    except ValueError:
+        # Individual counts can parse while their sum exceeds Python's display
+        # limit. The comparison already found disagreement; retain that result
+        # without dumping oversized numeric details or changing global policy.
+        problems.append('bucket counts disagree, but their numeric details cannot be displayed')
 
     # Named before any tally arithmetic: "N rows this parser could not classify"
     # is a different and worse fact than "the two counts differ by N", and the

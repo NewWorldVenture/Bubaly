@@ -106,15 +106,27 @@ async function readWindowFeed(admin: Admin, window: { start: string; end: string
       return { rows, error: cause };
     }
     if (error) return { rows, error };
-    if (!data) return { rows, error: new Error('The data page was unavailable') };
+    if (!Array.isArray(data)) return { rows, error: new Error('The data page was unavailable') };
+    // A short page may be PostgREST's response cap; only an empty page proves the end.
+    if (data.length === 0) return { rows, error: null };
+    if (data.some((r) => !r || typeof r.id !== 'string' || !r.id
+      || typeof r.created_at !== 'string' || !r.created_at
+      || typeof r.kind !== 'string' || typeof r.title !== 'string')) {
+      return { rows, error: new Error('The data page was malformed') };
+    }
+    const last = data[data.length - 1];
+    if (cursor && !(last.created_at < cursor.createdAt
+      || (last.created_at === cursor.createdAt && last.id < cursor.id))) {
+      return { rows, error: new Error('The data page did not advance the cursor') };
+    }
+    const before = rows.length;
     for (const r of data) {
       if (seen.has(r.id)) continue;
       seen.add(r.id);
       rows.push({ kind: r.kind, title: r.title, created_at: r.created_at });
     }
     if (rows.length > FEED_MAX) return { rows, error: new Error(`more than ${FEED_MAX} notifications in one window`) };
-    if (data.length < FEED_PAGE) return { rows, error: null };
-    const last = data[data.length - 1];
+    if (rows.length === before) return { rows, error: new Error('The data page repeated previously read rows') };
     cursor = { createdAt: last.created_at, id: last.id };
   }
 }

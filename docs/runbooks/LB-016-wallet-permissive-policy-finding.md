@@ -307,6 +307,16 @@ and `tests/migration-version-safety.test.ts` fails if a duplicate returns.
 
 ### 4.3 The procedure
 
+> **2026-10-03:** this procedure's premise no longer holds. Production's
+> ledger records `0001`–`0176` and `requiresBaselineReview` is `false` (the
+> `Supabase production migrations` workflow, run 84 on `d25e39ea`, 2026-10-02),
+> so there is no replay from `0004` to run and the conflict with
+> `docs/PENDING_PROD_MIGRATIONS.md` over such a replay (DEPLOY-003) is moot.
+> What remains is the ordered forward apply from `0177`, which is held by
+> `0177`'s statement timeout (PROD-DB-0177) and is the owner's dispatch. The
+> steps below are kept as the record of what was planned when the ledger
+> stopped at `0003`; §4.4's window warning still applies to any ordered apply.
+
 1. **Pre-flight.** Run `docs/audit/migration-ledger-state.sql` — read-only. It
    reports what the ledger holds, how far ahead the schema is, and whether the
    three hand-applied migrations (`0249`, `0254`, `0275`) show as

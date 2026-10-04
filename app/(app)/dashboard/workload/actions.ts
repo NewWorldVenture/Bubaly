@@ -4,7 +4,7 @@ import { requireUserContext } from '@/lib/supabase/auth';
 import { getTranslations } from '@/lib/i18n/server';
 import { createServer } from '@/lib/supabase/server';
 import { logAudit } from '@/lib/server/audit';
-import { describeActionError } from '@/lib/supabase/errors';
+import { describeActionError, wroteNoRows } from '@/lib/supabase/errors';
 import { isManager } from '@/lib/constants/roles';
 
 type Result = { ok: true } | { ok: false; error: string };
@@ -28,19 +28,20 @@ export async function moveAssignmentAction(assignmentId: string, toMemberId: str
   if (targetReadError) return { ok: false, error: describeActionError(targetReadError, t('actions.couldNotCheckThatRefresh')) };
   if (!target) return { ok: false, error: t('actions.thatFamilyMemberWasNot') };
 
-  // Confirmed by COUNT rather than by `.select()`: `count: 'exact'` sends
-  // `Prefer: count=exact`, and PostgREST answers with the number of rows the
-  // filter matched whether or not a representation was asked for. `if (!count)`
-  // below is the same bail as `wroteNoRows` elsewhere, reached by the other of
-  // the two routes — worth saying, because a consistency sweep grepping for
-  // `.select('id')` reads this line as unconfirmed and it is not. Audit C1-S9-59.
-  const { error, count } = await supabase.from('chore_assignments')
-    .update({ member_id: toMemberId }, { count: 'exact' })
+  // Confirmed by reading back the rows the filter matched: under RLS a row the
+  // caller may not move is filtered, not refused, and answers no error and zero
+  // rows. This used to confirm by `count: 'exact'`, which says the same thing
+  // by the other route; `.select('id')` is the house shape the gated-write guard
+  // (tests/a-filtered-delete-is-not-a-deletion.test.ts) recognises, so the site
+  // no longer needs a line in its tolerated list. Audit C1-S9-59.
+  const { data: moved, error } = await supabase.from('chore_assignments')
+    .update({ member_id: toMemberId })
     .eq('id', assignmentId)
     .eq('family_id', ctx.active.familyId)
-    .in('status', ['todo', 'in_progress']);
+    .in('status', ['todo', 'in_progress'])
+    .select('id');
   if (error) return { ok: false, error: describeActionError(error) };
-  if (!count) return { ok: false, error: t('actions.thatChoreIsNoLonger') };
+  if (wroteNoRows(moved)) return { ok: false, error: t('actions.thatChoreIsNoLonger') };
 
   await logAudit(supabase, {
     familyId: ctx.active.familyId, actorId: ctx.user.id, action: 'update',

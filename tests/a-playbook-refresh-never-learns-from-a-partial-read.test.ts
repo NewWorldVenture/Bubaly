@@ -117,7 +117,8 @@ beforeEach(() => {
     calendar_events: { rows: [] },
     vacations: { rows: [] },
   };
-  mocks.requireUserContext.mockResolvedValue({ user: { id: 'user-1' }, active: { familyId: 'fam-1' } });
+  // `family.timezone`: the action dates a tradition's month in the family's zone.
+  mocks.requireUserContext.mockResolvedValue({ user: { id: 'user-1' }, active: { familyId: 'fam-1', family: { timezone: 'UTC' } } });
   mocks.createServer.mockResolvedValue({ from });
 });
 

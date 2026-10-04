@@ -107,6 +107,7 @@ describe('a retried write leaves one row', () => {
 
     // todo_items needs its list; the fake answers `ensureTodoList` from this row.
     rows.set('todo_lists', [{ id: 'list-1', family_id: 'fam-1', archived_at: null }]);
+    rows.set('family_members', [{ id: 'member-1', family_id: 'fam-1' }]);
     const todoInput = { title: 'Pack the kit', dueDate: '2026-09-15' };
     const todo = await createTodo(stepScope(db), todoInput);
     const todoAgain = await createTodo(stepScope(db), todoInput);
