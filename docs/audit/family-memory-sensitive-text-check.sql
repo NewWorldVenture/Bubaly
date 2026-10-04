@@ -9,20 +9,35 @@
 begin;
 
 do $$
+declare
+  test_case record;
 begin
   if to_regclass('public.family_facts') is null
      or to_regclass('public.family_playbook_suggestions') is null then
     raise exception 'memory-sensitive-text SKIP: memory tables are missing';
   end if;
-  if public.family_memory_text_is_sensitive('other', 'Meal', 'Taco night', 'Tuesday') then
-    raise exception 'memory-sensitive-text FAIL: benign family text was classified as sensitive';
-  end if;
-  if not public.family_memory_text_is_sensitive('other', 'Meal', 'Taco night', 'synthetic password marker') then
-    raise exception 'memory-sensitive-text FAIL: note-only marker was not classified';
-  end if;
-  if not public.family_memory_text_is_sensitive('other', 'Meal', 'Taco night', 'synthetic passport number marker') then
-    raise exception 'memory-sensitive-text FAIL: evidence-only marker was not classified';
-  end if;
+  for test_case in
+    select * from (values
+      ('other', 'Meal', 'Taco night', 'Tuesday', false),
+      ('other', 'Meal', 'Taco night', 'synthetic password marker', true),
+      ('other', 'Meal', 'Taco night', 'synthetic passport number marker', true),
+      ('other', 'Meal', 'Taco night', 'synthetic diabetes marker', true),
+      ('other', 'synthetic epilepsy marker', 'Taco night', 'ordinary note', true),
+      ('other', 'Meal', 'synthetic depression marker', 'ordinary note', true),
+      ('other', 'Meal', 'Taco night', 'synthetic therapy marker', true),
+      ('other', 'synthetic diagnosis marker', 'Taco night', 'ordinary note', true),
+      ('other', 'Meal', 'Taco night', 'synthetic pregnancy marker', true),
+      ('other', 'Family note', 'Taco night', 'Tuesday pickup', false),
+      ('other', 'Family note', 'movie night', 'weekend plan', false)
+    ) as cases(category, label, value, context, expected)
+  loop
+    if public.family_memory_text_is_sensitive(
+      test_case.category, test_case.label, test_case.value, test_case.context
+    ) is distinct from test_case.expected then
+      raise exception 'memory-sensitive-text FAIL: classification mismatch for synthetic case label=%, value=%, context=%',
+        test_case.label, test_case.value, test_case.context;
+    end if;
+  end loop;
 end
 $$;
 

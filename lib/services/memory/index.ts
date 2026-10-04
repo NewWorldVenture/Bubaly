@@ -69,7 +69,10 @@ export const AI_FACT_SOURCES: MemorySource[] = ['ai_conversation', 'ai_inferred'
  */
 export const SENSITIVE_MEMORY_CATEGORIES: FactCategory[] = ['medical', 'account'];
 
-const SENSITIVE_TERMS = /\b(ssn|social security|passport (?:no|number)|password|passcode|pin\b|bank|routing|account number|card number|credit card|iban|allerg(?:y|ies|ic)|diagnos|prescription|medication|therap|hiv|pregnan|salary)\b/i;
+// Keep this English lexical heuristic aligned with
+// 0477_family_memory_sensitive_text_read_rls.sql. It catches common terms,
+// but cannot identify every sensitive disclosure, euphemism, or language.
+const SENSITIVE_TERMS = /\b(ssn|social security|passport (?:no|number)|password|passcode|pin\b|bank|routing|account number|card number|credit card|iban|allerg(?:y|ies|ic)|diagnos\w*|prescription|medication|therap\w*|hiv|pregnan\w*|diabet\w*|epilep\w*|depress\w*|salary)\b/i;
 
 /**
  * True when a memory should not be written by the assistant: the category is

@@ -80,6 +80,22 @@ describe('isSensitiveMemory', () => {
     expect(isSensitiveMemory({ category: 'other', key: 'Wifi', content: 'password is hunter2' })).toBe(true);
     expect(isSensitiveMemory({ category: 'preference', key: "Doesn't eat", content: 'mushrooms' })).toBe(false);
   });
+
+  it('catches common health terms and their word forms in otherwise ordinary memory', () => {
+    for (const content of [
+      'diabetes', 'epilepsy', 'depression',
+      'therapy', 'diagnosis', 'pregnancy',
+      'diabetic', 'epileptic', 'depressed', 'therapies', 'diagnoses', 'pregnant',
+    ]) {
+      expect(isSensitiveMemory({ category: 'other', key: 'Family note', content })).toBe(true);
+    }
+  });
+
+  it('keeps unrelated ordinary text clear of the health-term heuristic', () => {
+    for (const content of ['Taco night', 'Tuesday pickup', 'family movie night']) {
+      expect(isSensitiveMemory({ category: 'other', key: 'Family note', content })).toBe(false);
+    }
+  });
 });
 
 describe('rememberFact — from a person', () => {

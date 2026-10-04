@@ -8,6 +8,8 @@
 -- sensitive row from non-managers, while parent/adult managers retain review
 -- access. This is SELECT-only and does not change memory creation, dismissal,
 -- or update behavior.
+-- Its English lexical heuristic catches common terms, but is not exhaustive
+-- for euphemisms, misspellings, obfuscation, or other languages.
 
 create or replace function public.family_memory_text_is_sensitive(
   p_category text,
@@ -23,11 +25,11 @@ set search_path = pg_catalog
 as $function$
   select coalesce(p_category in ('medical', 'account'), false)
     or pg_catalog.concat_ws(' ', p_label, p_value, p_context) ~*
-      $pattern$\y(ssn|social security|passport (no|number)|password|passcode|pin|bank|routing|account number|card number|credit card|iban|allerg(y|ies|ic)|diagnos|prescription|medication|therap|hiv|pregnan|salary)\y$pattern$;
+      $pattern$\y(ssn|social security|passport (no|number)|password|passcode|pin|bank|routing|account number|card number|credit card|iban|allerg(y|ies|ic)|diagnos\w*|prescription|medication|therap\w*|hiv|pregnan\w*|diabet\w*|epilep\w*|depress\w*|salary)\y$pattern$;
 $function$;
 
 comment on function public.family_memory_text_is_sensitive(text, text, text, text) is
-  'Pure classifier used by memory SELECT RLS; mirrors the family-memory category and sensitive-term rule across label, value, and free-text context.';
+  'Pure classifier used by memory SELECT RLS; English lexical heuristic for common sensitive terms across label, value, and free-text context; not comprehensive.';
 
 -- Supabase grants EXECUTE to client roles by default. The policy needs this
 -- pure predicate for authenticated requests; anon has no need to call it.
