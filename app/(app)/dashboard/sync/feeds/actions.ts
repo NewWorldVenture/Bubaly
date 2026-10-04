@@ -138,7 +138,7 @@ export async function addCalendarFeed(input: { name: string; url: string; color?
     // not yet landed — is not unsynced-and-abandoned, so the delete leaves a
     // `syncing` row alone, and this add answers feedSavedButNotSynced.
     let leftBehind = false;
-    if (createdHere && !result.busy) {
+    if (createdHere && !result.busy && !result.takenOver) {
       const { data: removed, error: removeError } = await supabase
         .from('calendar_feeds')
         .delete()

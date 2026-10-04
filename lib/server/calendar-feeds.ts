@@ -8,9 +8,11 @@
 // made here. One sync of a feed runs at a time (`claimFeed`): the nightly cron
 // and a member's "Sync now" could otherwise interleave, and the one holding the
 // OLDER snapshot delete what the newer one had just written, or write back what
-// it had just removed (review on #908). Used by both the dashboard server
-// actions and the nightly cron. Accepts any Supabase client (RLS-scoped server
-// client for user actions, service client for cron).
+// it had just removed (review on #908). The claim is FENCED: a sync that lost
+// its claim to a stale takeover is refused at its next write and cannot stamp
+// the new holder's result (audit note of 2026-10-04 07:33 UTC). Used by both
+// the dashboard server actions and the nightly cron. Accepts any Supabase
+// client (RLS-scoped server client for user actions, service client for cron).
 
 import type { SupabaseClient } from '@supabase/supabase-js';
 import { parseICS } from '@/lib/sync/ics';
@@ -21,8 +23,19 @@ import { readAll } from '@/lib/supabase/read-all';
 
 export type FeedSyncResult =
   | { ok: true; imported: number }
-  /** `busy`: another sync of this feed holds it; nothing was fetched or written. Try again shortly. */
-  | { ok: false; error: string; busy?: true };
+  | {
+    ok: false;
+    error: string;
+    /** Another sync of this feed holds it; nothing was fetched or written. Try again shortly. */
+    busy?: true;
+    /**
+     * This sync held the feed, outlived CLAIM_STALE_MS, and another sync took
+     * the claim. It stopped at its next write boundary and left the feed's
+     * status to the new holder, whose snapshot is at least as new. Not a
+     * failure of the feed; the cron counts it with `busy`.
+     */
+    takenOver?: true;
+  };
 
 /** The `last_status` a feed carries while a sync holds it. */
 export const SYNCING_STATUS = 'syncing';
@@ -31,12 +44,25 @@ export const SYNCING_STATUS = 'syncing';
  * dies without stamping a result — a process killed mid-upsert — leaves the
  * feed `syncing`; past this the next sync treats that as abandoned. The fetch
  * times out at 15 s and the writes are chunked, so a live sync is minutes at
- * most.
+ * most; a worker still running at ten minutes is one the platform's own
+ * function deadline should already have ended. Should one survive anyway, the
+ * takeover is FENCED (see `claimFeed`): it is refused at its next write and
+ * cannot stamp the new holder's result.
  */
 export const CLAIM_STALE_MS = 10 * 60 * 1000;
 export const BUSY_MESSAGE = 'This calendar is already being synced; try again in a moment';
+export const TAKEN_OVER_MESSAGE = 'Another sync took over this calendar';
 
-type Settle = (patch: Record<string, unknown>) => Promise<Error | null>;
+/** The outcome of writing a result onto the feed: `lost` is a fence that no longer matches. */
+type Stamped = 'stamped' | 'lost' | 'failed';
+type Guard = {
+  /** Writes the result and releases the claim — only while this sync still holds it. */
+  settle: (patch: Record<string, unknown>) => Promise<Stamped>;
+  /** True while this sync's claim is still the one on the row. Asked before every write. */
+  holds: () => Promise<boolean>;
+  /** The result for a claim another sync has taken; this sync stops and stamps nothing. */
+  lost: () => FeedSyncResult;
+};
 
 /**
  * Re-syncs a single feed row: claim → fetch → parse → upsert → remove what the
@@ -51,16 +77,23 @@ export async function syncFeed(
   const claim = await claimFeed(supabase, feed.id);
   if (claim === 'busy') return { ok: false, error: BUSY_MESSAGE, busy: true };
   if (claim === 'failed') return { ok: false, error: 'Calendar feed status could not be saved' };
+  const { fence } = claim;
 
   // Every path below settles the claim by stamping a result. A throw would not,
   // and would leave the feed held until the stale cutoff; release it as an
-  // error instead, and let the throw reach the caller as before.
+  // error instead, and let the throw reach the caller as before. Every stamp
+  // carries the fence, so a claim another sync has since taken is never
+  // overwritten — not by a result, not by this release.
   let settled = false;
-  const settle: Settle = (patch) => { settled = true; return stampFeed(supabase, feed.id, patch); };
+  const guard: Guard = {
+    settle: (patch) => { settled = true; return stampFeed(supabase, feed.id, patch, fence); },
+    holds: () => holdsClaim(supabase, feed.id, fence),
+    lost: () => { settled = true; return { ok: false, error: TAKEN_OVER_MESSAGE, takenOver: true }; },
+  };
   try {
-    return await runSync(supabase, feed, settle);
+    return await runSync(supabase, feed, guard);
   } finally {
-    if (!settled) await stampFeed(supabase, feed.id, { last_status: 'error', last_error: 'The sync did not finish' });
+    if (!settled) await stampFeed(supabase, feed.id, { last_status: 'error', last_error: 'The sync did not finish' }, fence);
   }
 }
 
@@ -73,13 +106,29 @@ export async function syncFeed(
  * compare-and-set on the stale timestamp. No new column: `updated_at` (kept by
  * the table's trigger, and written here too so the claim's age is explicit)
  * dates the claim, and the result stamp that ends every sync releases it.
+ *
+ * The claim's own `updated_at`, as the row holds it after the write, is the
+ * FENCE: every later write of this sync compares against it. A takeover writes
+ * the row and so moves it, after which the sync that lost is refused at its
+ * next write boundary (`holdsClaim`) and its stamps match nothing (`stampFeed`).
+ * What it wrote before noticing stands — upserts of its own snapshot, removals
+ * of what that snapshot cancelled — and the new holder's pass, over a snapshot
+ * at least as new, and the next sync after it, bring the feed to the source's
+ * state. The window between a holder's check and its write is the one PostgREST
+ * leaves open; closing it needs the write and the check in one statement, a
+ * database function this unit does not add.
  */
-async function claimFeed(supabase: SupabaseClient, feedId: string): Promise<'claimed' | 'busy' | 'failed'> {
+async function claimFeed(supabase: SupabaseClient, feedId: string): Promise<{ fence: string } | 'busy' | 'failed'> {
   const now = new Date();
   const mark = { last_status: SYNCING_STATUS, updated_at: now.toISOString() };
-  const idle = await supabase.from('calendar_feeds').update(mark).eq('id', feedId).neq('last_status', SYNCING_STATUS).select('id');
+  const fenceOf = (rows: unknown): { fence: string } | 'failed' => {
+    const row = Array.isArray(rows) ? (rows[0] as { updated_at?: unknown } | undefined) : undefined;
+    if (typeof row?.updated_at !== 'string') { console.error(`Calendar feed claim for ${feedId} returned no stamp`); return 'failed'; }
+    return { fence: row.updated_at };
+  };
+  const idle = await supabase.from('calendar_feeds').update(mark).eq('id', feedId).neq('last_status', SYNCING_STATUS).select('id, updated_at');
   if (idle.error) { console.error(`Calendar feed claim failed for ${feedId}:`, idle.error); return 'failed'; }
-  if (!wroteNoRows(idle.data)) return 'claimed';
+  if (!wroteNoRows(idle.data)) return fenceOf(idle.data);
 
   // Nothing idle to take: the feed is held, or is not ours to update (RLS
   // matches nothing without an error — the silence stampFeed guards against).
@@ -88,38 +137,43 @@ async function claimFeed(supabase: SupabaseClient, feedId: string): Promise<'cla
   if (held.last_status !== SYNCING_STATUS) {
     // Released between the attempt and this read: once more. A second miss on an
     // idle row is a row this client may not update.
-    const again = await supabase.from('calendar_feeds').update(mark).eq('id', feedId).neq('last_status', SYNCING_STATUS).select('id');
+    const again = await supabase.from('calendar_feeds').update(mark).eq('id', feedId).neq('last_status', SYNCING_STATUS).select('id, updated_at');
     if (again.error) { console.error(`Calendar feed claim failed for ${feedId}:`, again.error); return 'failed'; }
-    return wroteNoRows(again.data) ? 'failed' : 'claimed';
+    return wroteNoRows(again.data) ? 'failed' : fenceOf(again.data);
   }
   const heldSince = typeof held.updated_at === 'string' ? Date.parse(held.updated_at) : NaN;
   if (Number.isNaN(heldSince) || now.getTime() - heldSince < CLAIM_STALE_MS) return 'busy';
   const cutoff = new Date(now.getTime() - CLAIM_STALE_MS).toISOString();
-  const stale = await supabase.from('calendar_feeds').update(mark).eq('id', feedId).eq('last_status', SYNCING_STATUS).lt('updated_at', cutoff).select('id');
+  const stale = await supabase.from('calendar_feeds').update(mark).eq('id', feedId).eq('last_status', SYNCING_STATUS).lt('updated_at', cutoff).select('id, updated_at');
   if (stale.error) { console.error(`Calendar feed stale-claim takeover failed for ${feedId}:`, stale.error); return 'failed'; }
-  return wroteNoRows(stale.data) ? 'busy' : 'claimed';
+  return wroteNoRows(stale.data) ? 'busy' : fenceOf(stale.data);
+}
+
+/** True while `fence` is still the claim on the row: `syncing`, stamped at exactly that instant. */
+async function holdsClaim(supabase: SupabaseClient, feedId: string, fence: string): Promise<boolean> {
+  const { data, error } = await supabase.from('calendar_feeds').select('last_status, updated_at').eq('id', feedId).maybeSingle();
+  if (error || !data) { console.error(`Calendar feed claim check failed for ${feedId}:`, error ?? 'no row'); return false; }
+  return data.last_status === SYNCING_STATUS && data.updated_at === fence;
 }
 
 async function runSync(
   supabase: SupabaseClient,
   feed: { id: string; family_id: string; url: string },
-  settle: Settle,
+  guard: Guard,
 ): Promise<FeedSyncResult> {
+  /** A failure, stamped on the feed — unless the claim is no longer ours, in which case the new holder's result stands. */
+  const failWith = async (message: string): Promise<FeedSyncResult> => {
+    const stamped = await guard.settle({ last_status: 'error', last_error: message });
+    if (stamped === 'lost') return guard.lost();
+    return { ok: false, error: stamped === 'failed' ? 'Calendar feed status could not be saved' : message };
+  };
+
   let icsText: string;
   const fetched = await fetchPublicCalendarText(feed.url);
-  if (!fetched.ok) {
-    const stampError = await settle({ last_status: 'error', last_error: fetched.error });
-    if (stampError) return { ok: false, error: 'Calendar feed status could not be saved' };
-    return { ok: false, error: fetched.error };
-  }
+  if (!fetched.ok) return failWith(fetched.error);
   icsText = fetched.text;
 
-  if (!icsText.includes('BEGIN:VCALENDAR')) {
-    const msg = 'URL is not a valid ICS calendar';
-    const stampError = await settle({ last_status: 'error', last_error: msg });
-    if (stampError) return { ok: false, error: 'Calendar feed status could not be saved' };
-    return { ok: false, error: msg };
-  }
+  if (!icsText.includes('BEGIN:VCALENDAR')) return failWith('URL is not a valid ICS calendar');
 
   let rows;
   let cancelled: string[];
@@ -127,22 +181,21 @@ async function runSync(
   try {
     ({ rows, cancelled, cancelledSeries } = planFeedRows(parseICS(icsText), feed.family_id, feed.id));
   } catch {
-    const msg = 'Could not parse the calendar';
-    const stampError = await settle({ last_status: 'error', last_error: msg });
-    if (stampError) return { ok: false, error: 'Calendar feed status could not be saved' };
-    return { ok: false, error: msg };
+    return failWith('Could not parse the calendar');
   }
 
   let imported = 0;
   for (let i = 0; i < rows.length; i += 200) {
+    // The fence, before every write: a claim taken over while this sync was on
+    // the network, or between chunks, stops it here with nothing more written.
+    if (!(await guard.holds())) return guard.lost();
     const chunk = rows.slice(i, i + 200);
     const { error } = await supabase
       .from('calendar_events')
       .upsert(chunk, { onConflict: 'feed_id,external_uid' });
     if (error) {
       console.error(`Calendar feed event upsert failed for ${feed.id}:`, error);
-      const stampError = await settle({ last_status: 'error', last_error: 'Could not save calendar events' });
-      return { ok: false, error: stampError ? 'Calendar feed status could not be saved' : 'Could not save calendar events' };
+      return failWith('Could not save calendar events');
     }
     imported += chunk.length;
   }
@@ -169,12 +222,12 @@ async function runSync(
       .range(from, to));
     if (error) {
       console.error(`Calendar feed key read failed for ${feed.id}:`, error);
-      const stampError = await settle({ last_status: 'error', last_error: 'Could not read calendar events' });
-      return { ok: false, error: stampError ? 'Calendar feed status could not be saved' : 'Could not read calendar events' };
+      return failWith('Could not read calendar events');
     }
     removals.push(...seriesKeys((stored ?? []).map((r) => r.external_uid).filter((k): k is string => k != null), cancelledSeries));
   }
   for (let i = 0; i < removals.length; i += 200) {
+    if (!(await guard.holds())) return guard.lost();
     const chunk = removals.slice(i, i + 200);
     const { error } = await supabase
       .from('calendar_events')
@@ -184,34 +237,50 @@ async function runSync(
       .select('id');
     if (error) {
       console.error(`Calendar feed cancellation removal failed for ${feed.id}:`, error);
-      const stampError = await settle({ last_status: 'error', last_error: 'Could not remove cancelled events' });
-      return { ok: false, error: stampError ? 'Calendar feed status could not be saved' : 'Could not remove cancelled events' };
+      return failWith('Could not remove cancelled events');
     }
   }
 
-  const stampError = await settle({
+  const stamped = await guard.settle({
     last_status: 'ok', last_error: null, event_count: imported,
     last_synced_at: new Date().toISOString(),
   });
-  if (stampError) return { ok: false, error: 'Calendar feed status could not be saved' };
+  if (stamped === 'lost') return guard.lost();
+  if (stamped === 'failed') return { ok: false, error: 'Calendar feed status could not be saved' };
   return { ok: true, imported };
 }
 
+/**
+ * Writes a result onto the feed — only while `fence` is still the claim. The
+ * compare-and-set on (`syncing`, the claim's own stamp) is what keeps a sync
+ * that lost its claim from overwriting the new holder's status, or from
+ * "releasing" a claim that is no longer its own.
+ */
 async function stampFeed(
   supabase: SupabaseClient,
   feedId: string,
   patch: Record<string, unknown>,
-): Promise<Error | null> {
+  fence: string,
+): Promise<Stamped> {
   // `syncFeed` is called from the settings action with the USER's client as
   // well as from the cron, so RLS can make this match nothing without an error —
   // and "last synced" then never moves while the sync reports success. Zero rows
-  // is the same unsaved status as an error. Audit C1-S9-68.
-  const { data, error } = await supabase.from('calendar_feeds').update(patch).eq('id', feedId).select('id');
+  // is the same unsaved status as an error (Audit C1-S9-68) — unless the row
+  // shows the claim has moved on, which is a takeover, not a failure to save.
+  const { data, error } = await supabase.from('calendar_feeds').update(patch)
+    .eq('id', feedId).eq('last_status', SYNCING_STATUS).eq('updated_at', fence).select('id');
   if (error || wroteNoRows(data)) {
+    if (!error) {
+      const { data: row } = await supabase.from('calendar_feeds').select('last_status, updated_at').eq('id', feedId).maybeSingle();
+      if (row && !(row.last_status === SYNCING_STATUS && row.updated_at === fence)) {
+        console.warn(`Calendar feed ${feedId}: another sync took over this claim; its result stands`);
+        return 'lost';
+      }
+    }
     console.error(`Calendar feed status update failed for ${feedId}:`, error ?? 'no rows updated');
-    return new Error('Calendar feed status update failed');
+    return 'failed';
   }
-  return null;
+  return 'stamped';
 }
 
 /** Re-syncs every feed for a family (used after add, and by cron per-family). */
