@@ -17,7 +17,7 @@ export async function generateMetadata(): Promise<Metadata> {
 
 // Catalogue keys, resolved in the component: `t` does not exist at module scope.
 const POINTS = [
-  { icon: Smartphone, title: 'mobile.iosAndAndroid', description: 'mobile.nativeCompanionAppsBuiltWith' },
+  { icon: Smartphone, title: 'mobile.iosAndAndroid', description: 'mobile.runsInTheBrowserOnEvery' },
   { icon: Bell, title: 'mobile.pushNotifications', description: 'mobile.getNudgedOnYourPhone' },
   { icon: WifiOff, title: 'mobile.offlineFriendly', description: 'mobile.recentlyViewedScreensKeepWorking' },
   { icon: RefreshCw, title: 'mobile.realTimeSync', description: 'mobile.checkOffAGroceryItem' },

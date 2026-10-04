@@ -142,7 +142,7 @@ export const VALUE_TIERS: ValueTierCopy[] = [
     },
     outcomes: [
       { label: "The whole family's calendar, lists and messages in one place", labelKey: 'planOutcomes.trialOnePlace' },
-      { label: 'Ten assistant requests a month to try the routine work', labelKey: 'planOutcomes.trialTenRequests' },
+      { label: 'Unlimited assistant requests while the trial lasts', labelKey: 'planOutcomes.trialUnlimitedRequests' },
       { label: 'Full Family Basic for five days, no card', labelKey: 'planOutcomes.trialFiveDays' },
     ],
   },
@@ -158,7 +158,7 @@ export const VALUE_TIERS: ValueTierCopy[] = [
       handles: 'pricingValue.basicHandles',
     },
     outcomes: [
-      { label: 'Your day prepared before you look: the Daily Brief, meals and the grocery list', labelKey: 'planOutcomes.basicBriefPrepared' },
+      { label: 'Meals planned and the grocery list built before you look', labelKey: 'planOutcomes.basicMealsPrepared' },
       { label: 'School flyers and forms turned into events and reminders', labelKey: 'planOutcomes.basicPaperwork' },
       { label: 'Reminders, chores and the kitchen display kept current for everyone', labelKey: 'planOutcomes.basicKitchen' },
     ],
