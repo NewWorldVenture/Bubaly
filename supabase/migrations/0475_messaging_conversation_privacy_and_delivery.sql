@@ -12,16 +12,27 @@ create unique index if not exists family_message_operation_once
 create index if not exists family_messages_history_cursor
   on public.family_messages(conversation_id, created_at desc, id desc) where deleted_at is null;
 
--- Adopt an existing household-wide group only, never an arbitrary subgroup.
+-- Adopt an existing household-wide group only when its persisted roster proves
+-- it covered every membership row at migration time. Inactive memberships count:
+-- a member may reactivate later, and promoting a subgroup would expose its old
+-- history to them. A familiar name or a roster matching only today's active
+-- members is not proof of household-wide intent.
 with candidates as (
   select c.id, row_number() over (partition by c.family_id order by c.created_at, c.id) as rank
   from public.family_conversations c where c.kind = 'group' and not c.is_archived and not c.is_family_chat
     and not exists (select 1 from public.family_conversations f where f.family_id = c.family_id and f.is_family_chat)
-    and ((cardinality(c.participant_ids) = 0 and cardinality(c.member_ids) = 0 and lower(c.name) in ('family', 'family chat'))
-      or (exists (select 1 from public.family_members m where m.family_id = c.family_id and m.is_active)
-        and not exists (select 1 from public.family_members m where m.family_id = c.family_id and m.is_active
-          and not ((cardinality(c.participant_ids) > 0 and m.id = any(c.participant_ids))
-            or (cardinality(c.participant_ids) = 0 and m.user_id is not null and m.user_id = any(c.member_ids))))))
+    and exists (select 1 from public.family_members m where m.family_id = c.family_id)
+    and (
+      (cardinality(c.participant_ids) > 0
+        and not exists (select 1 from unnest(c.participant_ids) roster(id) where roster.id is null)
+        and array(select distinct m.id from public.family_members m where m.family_id = c.family_id order by m.id)
+          = array(select distinct roster.id from unnest(c.participant_ids) roster(id) order by roster.id))
+      or (cardinality(c.participant_ids) = 0 and cardinality(c.member_ids) > 0
+        and not exists (select 1 from public.family_members m where m.family_id = c.family_id and m.user_id is null)
+        and not exists (select 1 from unnest(c.member_ids) roster(user_id) where roster.user_id is null)
+        and array(select distinct m.user_id from public.family_members m where m.family_id = c.family_id order by m.user_id)
+          = array(select distinct roster.user_id from unnest(c.member_ids) roster(user_id) order by roster.user_id))
+    )
 )
 update public.family_conversations c set is_family_chat = true from candidates x where x.id = c.id and x.rank = 1;
 
@@ -259,7 +270,12 @@ begin
     end if;
   end if;
   if auth.uid() is not null and (tg_op = 'INSERT' or new.sender_name is distinct from old.sender_name or new.sender_avatar is distinct from old.sender_avatar) then
-    select * into m from public.family_members where family_id = new.family_id and user_id = new.sender_id and is_active order by id limit 1;
+    -- FOR SHARE conflicts with the FOR NO KEY UPDATE lock taken by an
+    -- is_active update. A send that wins this lock is ordered before removal;
+    -- a removal that commits first makes this lookup recheck and reject.
+    select fm.* into m from public.family_members fm
+      where fm.family_id = new.family_id and fm.user_id = new.sender_id and fm.is_active
+      order by fm.id limit 1 for share of fm;
     if not found then raise exception 'The sender must be an active household member' using errcode = '42501'; end if;
     new.sender_name := m.display_name; new.sender_avatar := m.avatar_url;
   end if;
