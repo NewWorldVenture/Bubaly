@@ -12,7 +12,7 @@ import { Input, Textarea, Field, Select } from '@/components/ui/input';
 import { Button } from '@/components/ui/button';
 import { SkeletonList, ErrorState, EmptyState } from '@/components/ui/states';
 import { AiInsight } from '@/components/ai/ai-insight';
-import { fmtDate } from '@/lib/utils/format';
+import { useFormat } from '@/components/i18n/use-format';
 import { tallyPoll, voterCount, memberSelections, isPollClosed, type VoteLike, type OptionLike } from '@/lib/voting/polls';
 import { facilitateConsensus, budgetCapForCategory, type ConsensusOption } from '@/lib/voting/consensus';
 import { WhyThis } from '@/components/ai/why-this';
@@ -50,6 +50,7 @@ const parseTags = (s: string): string[] =>
 const CURRENCY = 'USD';
 
 export function VotingModule() {
+  const { fmtDate } = useFormat();
   const tr = useTranslations();
   const locale = useLocale();
   const money = (cents: number) => formatCents(cents, CURRENCY, locale.code);
@@ -161,7 +162,7 @@ export function VotingModule() {
     // is the vote the member asked for, already there.
     try {
       if (mine.has(optionId)) {
-        const { error: unErr } = await supabase.from('family_poll_votes').delete().eq('option_id', optionId).eq('member_id', meId);
+        const { error: unErr } = await supabase.from('family_poll_votes').delete().eq('option_id', optionId).eq('member_id', meId).eq('family_id', familyId);
         if (unErr) toastError(describeDbError(unErr));
         return;
       }
@@ -169,7 +170,7 @@ export function VotingModule() {
         // Clear the prior selection first; if this fails, do NOT insert or the
         // single-choice poll ends up with two votes for this member. None to
         // clear is the ordinary answer. Audit C1-S9-81.
-        const { error: clearErr } = await supabase.from('family_poll_votes').delete().eq('poll_id', poll.id).eq('member_id', meId);
+        const { error: clearErr } = await supabase.from('family_poll_votes').delete().eq('poll_id', poll.id).eq('member_id', meId).eq('family_id', familyId);
         if (clearErr) return toastError(describeDbError(clearErr));
       }
       // Unconfirmed like the two deletes above: an insert either inserts or

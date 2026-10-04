@@ -7,6 +7,7 @@ import { useRealtimeQuery } from '@/lib/hooks/use-realtime-query';
 import { createClient } from '@/lib/supabase/client';
 import { describeDbError, wroteNoRows } from '@/lib/supabase/errors';
 import { useToast } from '@/components/ui/toast';
+import { useConfirm } from '@/components/ui/confirm';
 import { Modal } from '@/components/ui/modal';
 import { Input, Textarea, Field, Select } from '@/components/ui/input';
 import { Button } from '@/components/ui/button';
@@ -19,7 +20,8 @@ import {
   upcomingCelebrations, countdownLabel, type CelebrationInput, type CelebrationKind,
 } from '@/lib/celebrations/dates';
 import type { Tables } from '@/lib/database.types';
-import { useLocale, useTranslations } from '@/components/i18n/locale-provider';
+import { useTranslations } from '@/components/i18n/locale-provider';
+import { useFormat } from '@/components/i18n/use-format';
 
 type FamilyDate = Tables<'family_dates'>;
 
@@ -34,8 +36,9 @@ const KIND_TINT: Record<CelebrationKind, string> = {
 };
 
 export function CelebrationsModule() {
-  const locale = useLocale();
+  const format = useFormat();
   const t = useTranslations();
+  const askConfirm = useConfirm();
   const { familyId, userId, role, members } = useApp();
   const admin = isAdmin(role);
   const { success, error: toastError } = useToast();
@@ -79,10 +82,11 @@ export function CelebrationsModule() {
     setTitle(''); setDate(''); setKind('birthday'); setShowAdd(false);
   }
 
-  async function remove(id: string) {
+  async function remove(c: { id: string; title: string }) {
+    if (!(await askConfirm({ title: t('confirm.deleteNamed', { name: c.title }), body: t('confirm.cannotBeUndone') }))) return;
     const supabase = createClient();
     // Under RLS a refused row comes back with no error and zero rows, which this used to report as done. Audit C1-S9-86.
-    const { data: removed2, error } = await supabase.from('family_dates').delete().eq('id', id.replace(/^d-/, '')).select('id');
+    const { data: removed2, error } = await supabase.from('family_dates').delete().eq('id', c.id.replace(/^d-/, '')).select('id');
     if (error) toastError(describeDbError(error)); else if (wroteNoRows(removed2)) toastError(t('errors.thatChangeWasNotSaved')); else success(t('celebrationsModule.removed'));
   }
 
@@ -116,12 +120,12 @@ export function CelebrationsModule() {
                 <div className={`grid h-11 w-11 shrink-0 place-items-center rounded-full ${KIND_TINT[c.kind]}`}><Icon className="h-5 w-5" /></div>
                 <div className="min-w-0 flex-1">
                   <p className="truncate font-semibold">{c.title}{c.turning ? <span className="ml-1 text-sm font-normal text-muted">{t('celebrations.turning')} {c.turning}</span> : null}</p>
-                  <p className="text-xs text-muted">{new Date(c.nextDate + 'T00:00:00').toLocaleDateString(locale.code, { weekday: 'long', month: 'long', day: 'numeric' })}</p>
+                  <p className="text-xs text-muted">{format.fmtDate(c.nextDate, 'EEEE, MMMM d')}</p>
                 </div>
                 {who && <Avatar name={who.display_name} color={who.color} size={32} />}
                 <span className={`shrink-0 text-sm font-semibold ${soon ? 'text-brand-text' : 'text-muted'}`}>{countdownLabel(c.daysUntil)}</span>
                 {admin && c.id.startsWith('d-') && (
-                  <button aria-label={t('a11y.delete')} onClick={() => remove(c.id)} className="rounded-lg p-1.5 text-muted hover:bg-elevated hover:text-danger"><Trash2 className="h-4 w-4" /></button>
+                  <button aria-label={t('a11y.delete')} onClick={() => remove(c)} className="rounded-lg p-1.5 text-muted hover:bg-elevated hover:text-danger"><Trash2 className="h-4 w-4" /></button>
                 )}
               </li>
             );

@@ -32,6 +32,7 @@ import { PhotoFrame } from './photo-frame';
 import { useFamilyMediaUrls } from '@/lib/storage/use-family-media';
 import { HintsTicker } from './hints-ticker';
 import { useLocale, useTranslations } from '@/components/i18n/locale-provider';
+import { useFormat } from '@/components/i18n/use-format';
 import { WidgetBoundary } from '@/components/ui/widget-boundary';
 
 const KIOSK_FALLBACK = (
@@ -361,14 +362,14 @@ function Empty({ icon: Icon, text }: { icon: typeof Calendar; text: string }) {
 
 
 function MonthCalendar({ cal }: { cal: DisplayData['calendar'] }) {
-  const locale = useLocale();
+  const { fmtDate } = useFormat();
   const first = new Date(cal.year, cal.month, 1).getDay();
   const days = new Date(cal.year, cal.month + 1, 0).getDate();
   const cells: (number | null)[] = [...Array(first).fill(null), ...Array.from({ length: days }, (_, i) => i + 1)];
   const eventSet = new Set(cal.eventDays);
   return (
     <div>
-      <p className="mb-2 text-center text-sm font-semibold text-white">{new Date(cal.year, cal.month, 1).toLocaleDateString(locale.code, { month: 'long', year: 'numeric' })}</p>
+      <p className="mb-2 text-center text-sm font-semibold text-white">{fmtDate(`${cal.year}-${String(cal.month + 1).padStart(2, '0')}-01`, 'MMMM yyyy')}</p>
       <div className="grid grid-cols-7 gap-1 text-center text-[11px]">
         {['S', 'M', 'T', 'W', 'T', 'F', 'S'].map((d, i) => <span key={i} className="text-white/40">{d}</span>)}
         {cells.map((d, i) => (

@@ -53,9 +53,11 @@ import { DoOneThingCard } from '@/components/outcomes/do-one-thing-card';
 import { OutcomesStrip } from '@/components/outcomes/outcomes-strip';
 import { countFromResult, countMatchingResult } from '@/lib/outcomes/discovery';
 import { FIRST_VALUE_MILESTONE } from '@/lib/analytics/activation';
-import { nextBirthdayDate, daysUntil } from '@/lib/moments/birthdays';
+import { birthdayCountdown } from '@/lib/moments/birthdays';
 import { getLocaleContext, getTranslations } from '@/lib/i18n/server';
 import { WidgetBoundary } from '@/components/ui/widget-boundary';
+import { instantCalendarBounds } from '@/lib/briefing/calendar-window';
+import { readCalendarOccurrences } from '@/lib/calendar/occurrences';
 
 export async function generateMetadata(): Promise<Metadata> {
   const t = await getTranslations();
@@ -176,7 +178,7 @@ export default async function HomePage() {
   // "10:00 PM". Bound here, after `tz` exists, because that is the whole fix.
   // `getFormat(tz)` is exactly this over a second `getLocaleContext()`; built
   // from the one already read above, it costs no await.
-  const { fmtTime, fmtMoney } = createFormat(locale.code, (key, params) => translate(catalogue, key, params), tz);
+  const { fmtTime, fmtDate, fmtMoney } = createFormat(locale.code, (key, params) => translate(catalogue, key, params), tz);
   const todayKey = dayKeyInTz(now, tz);
   const dayBounds = zonedDayBoundsMs(todayKey, tz);
   const todayStart = new Date(dayBounds.start);
@@ -209,12 +211,13 @@ export default async function HomePage() {
   ] = await settleAll([
     supabase.from('family_members').select('id, display_name, color, role, birthday, user_id', { count: 'exact' })
       .eq('family_id', familyId).eq('is_active', true).order('created_at').limit(12),
-    supabase.from('calendar_events').select('id, title, starts_at, ends_at, all_day, location, assignee_id', { count: 'exact' })
-      .eq('family_id', familyId).gte('starts_at', todayStart.toISOString()).lt('starts_at', todayEnd.toISOString())
-      .order('starts_at').limit(8),
-    supabase.from('calendar_events').select('id, title, starts_at, ends_at, all_day, assignee_id')
-      .eq('family_id', familyId).gte('starts_at', todayEnd.toISOString())
-      .lte('starts_at', new Date(Date.now() + 30 * 86400000).toISOString()).order('starts_at').limit(5),
+    // Series included: a weekly practice is on Today every week, not only the
+    // week it was created, and `count` is every occurrence while the list shows
+    // eight (lib/calendar/occurrences.ts).
+    readCalendarOccurrences(supabase, familyId, instantCalendarBounds(todayStart.toISOString(), new Date(todayEnd.getTime() - 1).toISOString(), tz), tz,
+      { columns: ['id', 'title', 'starts_at', 'ends_at', 'all_day', 'location', 'assignee_id'], limit: 8 }),
+    readCalendarOccurrences(supabase, familyId, instantCalendarBounds(todayEnd.toISOString(), new Date(Date.now() + 30 * 86400000).toISOString(), tz), tz,
+      { columns: ['id', 'title', 'starts_at', 'ends_at', 'all_day', 'assignee_id'], limit: 5 }),
     supabase.from('todo_items').select('id, title, due_date, is_done, assigned_to_id')
       .eq('family_id', familyId).eq('is_done', false).order('due_date', { ascending: true, nullsFirst: false }).limit(6),
     supabase.from('chore_assignments').select('id, status, member_id, chore_id, due_at')
@@ -244,10 +247,9 @@ export default async function HomePage() {
   const memberById = new Map(memberList.map((m) => [m.id, m]));
   const birthdaysSoon = countMatchingResult({ data: memberList, count: memberCount, error: membersError }, (member) => {
     if (!member.birthday) return false;
-    const next = nextBirthdayDate(member.birthday, now);
-    if (!next) return false;
-    const days = daysUntil(next, now);
-    return days >= 0 && days <= 14;
+    // Counted from the family's day (`todayKey`), not the host's.
+    const days = birthdayCountdown(member.birthday, todayKey)?.days;
+    return days !== undefined && days >= 0 && days <= 14;
   });
   const outcomeSnapshot = {
     eventsToday: countFromResult({ count: todayEventsCount, error: todayEventsError }),
@@ -631,13 +633,15 @@ export default async function HomePage() {
         <div className="space-y-2.5">
           {(upcomingEvents ?? []).length === 0 && <EmptyRow>{tr('home.nothingOnTheHorizonYet')}</EmptyRow>}
           {((upcomingEvents ?? []) as { id: string; title: string; starts_at: string; all_day: boolean; assignee_id: string | null }[]).map((e) => {
-            const d = new Date(e.starts_at);
             const owner = e.assignee_id ? memberById.get(e.assignee_id) : undefined;
             return (
               <Link key={e.id} href="/dashboard/calendar" className="flex min-h-[44px] items-center gap-3 rounded-xl focus-ring">
                 <div className="grid h-11 w-11 shrink-0 place-items-center rounded-xl bg-elevated text-center">
-                  <span className="text-[9px] font-bold uppercase text-muted leading-none">{d.toLocaleDateString(locale.code, { month: 'short' })}</span>
-                  <span className="text-sm font-black leading-none">{d.getDate()}</span>
+                  {/* The badge's month and day are the FAMILY's (`fmtDate` is bound to
+                      `tz`), not the host's: `d.getDate()` on a UTC host put a 7pm
+                      Californian event on tomorrow's square. */}
+                  <span className="text-[9px] font-bold uppercase text-muted leading-none">{fmtDate(e.starts_at, 'MMM')}</span>
+                  <span className="text-sm font-black leading-none">{fmtDate(e.starts_at, 'd')}</span>
                 </div>
                 <div className="min-w-0 flex-1">
                   <p className="truncate text-sm font-semibold">{e.title}</p>
@@ -713,7 +717,8 @@ export default async function HomePage() {
               // Branching on `due === 'Today'` made the highlight a hostage of
               // the copy: translate the label and the badge silently goes grey.
               const dueToday = t.due_date != null && t.due_date === todayIso;
-              const due = t.due_date ? (dueToday ? 'Today' : new Date(t.due_date).toLocaleDateString(locale.code, { month: 'short', day: 'numeric' })) : null;
+              // `due_date` is a DATE: `fmtDate` renders a day key in no zone at all.
+              const due = t.due_date ? (dueToday ? 'Today' : fmtDate(t.due_date, 'MMM d')) : null;
               return (
                 <div key={t.id} className="flex items-center gap-3">
                   <span className="h-4 w-4 shrink-0 rounded-full border-2 border-emerald-400/60" />
@@ -802,7 +807,7 @@ export default async function HomePage() {
             <div className="grid grid-cols-2 gap-3 sm:grid-cols-4">
               {((photos ?? []) as { id: string; url: string | null; thumbnail_url: string | null; caption: string | null; taken_at: string | null; created_at: string }[]).map((p) => {
                 const src = p.thumbnail_url || p.url;
-                const when = new Date(p.taken_at || p.created_at).toLocaleDateString(locale.code, { month: 'short', day: 'numeric' });
+                const when = fmtDate(p.taken_at || p.created_at, 'MMM d');
                 return (
                   <Link key={p.id} href="/dashboard/memories" className="group relative aspect-square overflow-hidden rounded-xl bg-elevated">
                     {/* Signed per viewer, not the stored public URL, and not through the

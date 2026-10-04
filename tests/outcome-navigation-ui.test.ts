@@ -30,7 +30,7 @@ vi.mock('@/components/app/app-context', () => ({
 }));
 vi.mock('@/components/i18n/locale-provider', async () => {
   const { SOURCE_MESSAGES, translate } = await import('@/lib/i18n/messages');
-  return { useTranslations: () => (key: string, vars?: Record<string, string | number>) => translate(SOURCE_MESSAGES, key, vars) };
+  return { useFamilyTimeZone: () => undefined, useTranslations: () => (key: string, vars?: Record<string, string | number>) => translate(SOURCE_MESSAGES, key, vars) };
 });
 
 type Node = ReactElement<Record<string, unknown>>;

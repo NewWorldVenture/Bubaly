@@ -6,7 +6,7 @@ import { useMemo, useState, useEffect, useRef } from 'react';
 import { ChevronLeft, ChevronRight, Plus, MapPin, RefreshCw, Filter, Check, Sparkles, Eye, EyeOff, Users, Columns } from 'lucide-react';
 import { useApp } from '@/components/app/app-context';
 import { useRealtimeQuery } from '@/lib/hooks/use-realtime-query';
-import { expandEvents } from '@/lib/calendar/recurrence';
+import { expandEventsInZone } from '@/lib/calendar/recurrence';
 import { BusynessHeatmap } from '@/components/calendar/busyness-heatmap';
 import { describeDbError } from '@/lib/supabase/errors';
 import { createCalendarEventAction, updateCalendarEventAction } from '@/app/(app)/dashboard/calendar/actions';
@@ -25,8 +25,9 @@ import { FindTimeModal } from './find-time-modal';
 import { RoutinesPanel } from './routines-panel';
 import { cn } from '@/lib/utils/cn';
 import type { Tables } from '@/lib/database.types';
-import { useLocale, useTranslations } from '@/components/i18n/locale-provider';
-import { localDayKey, localDayKeyOf, shiftLocalDay } from '@/lib/time/local-day';
+import { useTranslations } from '@/components/i18n/locale-provider';
+import { useFamilyClock, useFormat, type FamilyClock } from '@/components/i18n/use-format';
+import { addWallDays, wallDaysInMonth, wallKey, wallMonthStart, wallParts, wallWeekStart } from '@/lib/time/wall-clock';
 import { fromLocalInput, toLocalInput } from '@/lib/time/local-input';
 
 type Event = Tables<'calendar_events'>;
@@ -80,29 +81,32 @@ function OutlookGlyph({ size = 13 }: { size?: number }) {
   );
 }
 
-function weekStart(offset = 0): Date {
-  const d = new Date();
-  const day = (d.getDay() + 6) % 7;
-  d.setDate(d.getDate() - day + offset * 7);
-  d.setHours(0, 0, 0, 0);
-  return d;
+// The grid is built from WALL READINGS (lib/time/wall-clock.ts): Dates whose UTC
+// fields read the FAMILY's calendar, so day, week and month arithmetic is the
+// family's wherever the phone is (TIME-003), and no device's daylight saving can
+// move one of its midnights. They are turned back into real instants with
+// `clock.toInstant` before they bound a query, and labelled by `wallKey`.
+function weekStart(wallNow: Date, offset = 0): Date {
+  return wallWeekStart(wallNow, offset);
+}
+
+// Whole weeks from one wall-reading Monday to another: wall readings carry no
+// DST, so the difference is an exact multiple of seven days.
+function weeksBetween(fromMonday: Date, toMonday: Date): number {
+  return Math.round((toMonday.getTime() - fromMonday.getTime()) / (7 * 86400000));
 }
 
 function daysOfWeek(monday: Date) {
-  return Array.from({ length: 7 }, (_, i) => {
-    const d = new Date(monday);
-    d.setDate(monday.getDate() + i);
-    return d;
-  });
+  return Array.from({ length: 7 }, (_, i) => addWallDays(monday, i));
 }
 
 function fmtHour(h: number) {
   return h === 12 ? '12 PM' : h < 12 ? `${h} AM` : `${h - 12} PM`;
 }
 
-function eventTop(e: Event): number {
-  const d = new Date(e.starts_at);
-  return ((d.getHours() - 6) * 60 + d.getMinutes()) * (HOUR_HEIGHT / 60);
+function eventTop(e: Event, clock: FamilyClock): number {
+  const { hour, minute } = wallParts(clock.wallOf(e.starts_at));
+  return ((hour - 6) * 60 + minute) * (HOUR_HEIGHT / 60);
 }
 
 function eventHeight(e: Event): number {
@@ -113,37 +117,36 @@ function eventHeight(e: Event): number {
 
 // Mini calendar for the right sidebar
 function MiniCalendar({ current, onSelect }: { current: Date; onSelect: (d: Date) => void }) {
-  const locale = useLocale();
   const tr = useTranslations();
-  const [month, setMonth] = useState(() => new Date(current.getFullYear(), current.getMonth(), 1));
-  const today = new Date(); today.setHours(0, 0, 0, 0);
+  const { fmtDate } = useFormat();
+  const clock = useFamilyClock();
+  const [month, setMonth] = useState(() => wallMonthStart(current));
+  const familyToday = clock.wallToday();
 
   const days = useMemo(() => {
-    const first = new Date(month); first.setDate(1);
-    const startOffset = (first.getDay() + 6) % 7;
+    const startOffset = (wallParts(month).weekday + 6) % 7;
     const cells: (Date | null)[] = Array(startOffset).fill(null);
-    const daysInMonth = new Date(month.getFullYear(), month.getMonth() + 1, 0).getDate();
-    for (let i = 1; i <= daysInMonth; i++) cells.push(new Date(month.getFullYear(), month.getMonth(), i));
+    for (let i = 0; i < wallDaysInMonth(month); i++) cells.push(addWallDays(month, i));
     return cells;
   }, [month]);
 
   return (
     <div className="w-full">
       <div className="mb-3 flex items-center justify-between">
-        <span className="text-sm font-semibold">{month.toLocaleDateString(locale.code, { month: 'long', year: 'numeric' })}</span>
+        <span className="text-sm font-semibold">{fmtDate(clock.wallKey(month), 'MMMM yyyy')}</span>
         <div className="flex gap-1">
-          <button aria-label={tr('a11y.previous')} onClick={() => setMonth(new Date(month.getFullYear(), month.getMonth() - 1, 1))} className="rounded p-1 hover:bg-elevated"><ChevronLeft className="h-3.5 w-3.5" /></button>
-          <button aria-label={tr('a11y.next')} onClick={() => setMonth(new Date(month.getFullYear(), month.getMonth() + 1, 1))} className="rounded p-1 hover:bg-elevated"><ChevronRight className="h-3.5 w-3.5" /></button>
+          <button aria-label={tr('a11y.previous')} onClick={() => setMonth(wallMonthStart(month, -1))} className="rounded p-1 hover:bg-elevated"><ChevronLeft className="h-3.5 w-3.5" /></button>
+          <button aria-label={tr('a11y.next')} onClick={() => setMonth(wallMonthStart(month, 1))} className="rounded p-1 hover:bg-elevated"><ChevronRight className="h-3.5 w-3.5" /></button>
         </div>
       </div>
       <div className="grid grid-cols-7 gap-0.5 text-center">
-        {['S','M','T','W','T','F','S'].map((d, i) => (
+        {['M','T','W','T','F','S','S'].map((d, i) => (
           <div key={i} className="py-1 text-[10px] font-semibold text-muted">{d}</div>
         ))}
         {days.map((d, i) => {
           if (!d) return <div key={i} />;
-          const isToday = d.getTime() === today.getTime();
-          const isSelected = d.toDateString() === current.toDateString();
+          const isToday = d.getTime() === familyToday.getTime();
+          const isSelected = wallKey(d) === wallKey(current);
           return (
             <button key={i} onClick={() => onSelect(d)}
               className={cn('rounded py-1 text-xs transition hover:bg-elevated',
@@ -151,7 +154,7 @@ function MiniCalendar({ current, onSelect }: { current: Date; onSelect: (d: Date
                 isToday && !isSelected && 'font-bold text-brand-text',
                 !isSelected && !isToday && 'text-fg',
               )}>
-              {d.getDate()}
+              {wallParts(d).day}
             </button>
           );
         })}
@@ -174,13 +177,13 @@ function MonthGrid({ gridDays, monthAnchor, eventsByDay, todayStr, onSelect }: {
       </div>
       <div className="grid flex-1 auto-rows-fr grid-cols-7">
         {gridDays.map((d, i) => {
-          const dStr = localDayKey(d);
-          const inMonth = d.getMonth() === monthAnchor.getMonth();
+          const dStr = wallKey(d);
+          const inMonth = wallParts(d).month === wallParts(monthAnchor).month;
           const isToday = dStr === todayStr;
           const evs = eventsByDay.get(dStr) ?? [];
           return (
             <div key={i} className={cn('min-h-[88px] overflow-hidden border-l border-t border-border p-1', !inMonth && 'bg-surface/30')}>
-              <div className={cn('mb-1 flex h-6 w-6 items-center justify-center rounded-full text-xs', isToday ? 'bg-brand font-bold text-white' : inMonth ? 'text-fg' : 'text-muted')}>{d.getDate()}</div>
+              <div className={cn('mb-1 flex h-6 w-6 items-center justify-center rounded-full text-xs', isToday ? 'bg-brand font-bold text-white' : inMonth ? 'text-fg' : 'text-muted')}>{wallParts(d).day}</div>
               <div className="space-y-0.5">
                 {evs.slice(0, 3).map((e) => (
                   <button key={`${e.id}-${e.starts_at}`} onClick={() => onSelect(e)}
@@ -200,8 +203,9 @@ function MonthGrid({ gridDays, monthAnchor, eventsByDay, todayStr, onSelect }: {
 }
 
 export function CalendarModule() {
-  const locale = useLocale();
   const tr = useTranslations();
+  const { fmtDate, fmtTime } = useFormat();
+  const clock = useFamilyClock();
   const { familyId, userId, members, selfMember } = useApp();
   const [open, setOpen] = useState(false);
   const [findOpen, setFindOpen] = useState(false);
@@ -259,30 +263,25 @@ export function CalendarModule() {
   // Entra app yet, or promise a connection the server cannot complete.
   const [outlookStatus, setOutlookStatus] = useState<{ configured: boolean; connected: boolean } | null>(null);
   const [syncing, setSyncing] = useState(false);
-  const [mobileDayIndex, setMobileDayIndex] = useState(() => {
-    const now = new Date();
-    return (now.getDay() + 6) % 7; // 0=Mon
-  });
+  const [mobileDayIndex, setMobileDayIndex] = useState(() => (wallParts(clock.wallNow()).weekday + 6) % 7); // 0=Mon
   const { success, error: toastError } = useToast();
   const gridRef = useRef<HTMLDivElement>(null);
 
-  const monday = useMemo(() => weekStart(weekOffset), [weekOffset]);
+  const monday = useMemo(() => weekStart(clock.wallNow(), weekOffset), [clock, weekOffset]);
   const days = useMemo(() => daysOfWeek(monday), [monday]);
 
   // Month grid window — also the fetch window, so week / day / month all share
   // one query (it always covers the visible week too).
-  const monthAnchor = useMemo(() => new Date(monday.getFullYear(), monday.getMonth(), 1), [monday]);
-  const monthGridStart = useMemo(() => {
-    const f = new Date(monthAnchor);
-    f.setDate(1 - ((f.getDay() + 6) % 7));
-    f.setHours(0, 0, 0, 0);
-    return f;
-  }, [monthAnchor]);
+  const monthAnchor = useMemo(() => wallMonthStart(monday), [monday]);
+  const monthGridStart = useMemo(() => wallWeekStart(monthAnchor), [monthAnchor]);
   const monthGridDays = useMemo(
-    () => Array.from({ length: 42 }, (_, i) => { const d = new Date(monthGridStart); d.setDate(d.getDate() + i); return d; }),
+    () => Array.from({ length: 42 }, (_, i) => addWallDays(monthGridStart, i)),
     [monthGridStart],
   );
-  const fetchEnd = useMemo(() => { const d = new Date(monthGridStart); d.setDate(d.getDate() + 42); return d; }, [monthGridStart]);
+  const fetchEnd = useMemo(() => addWallDays(monthGridStart, 42), [monthGridStart]);
+  // The same window as real instants — the family's midnights, not the phone's.
+  const windowStart = useMemo(() => clock.toInstant(monthGridStart), [clock, monthGridStart]);
+  const windowEnd = useMemo(() => clock.toInstant(fetchEnd), [clock, fetchEnd]);
 
   useEffect(() => {
     let active = true; // no provider status lands after unmount (MAIN-F-D09)
@@ -311,22 +310,23 @@ export function CalendarModule() {
   }, []);
 
   const { data: rawData, loading, error, refresh } = useRealtimeQuery<Event>({
-    table: 'calendar_events', familyId, deps: [familyId, monthGridStart.toISOString()],
+    table: 'calendar_events', familyId, deps: [familyId, windowStart.toISOString()],
     // In-window events PLUS every recurring series that started before the
     // window's end — expandEvents below turns those into the occurrences that
     // actually fall inside the grid (a weekly event created in June must show
     // on every July Monday, not vanish after its first week).
     fetcher: (supabase) =>
       supabase.from('calendar_events').select('*').eq('family_id', familyId)
-        .lt('starts_at', fetchEnd.toISOString())
-        .or(`starts_at.gte.${monthGridStart.toISOString()},recurrence.neq.none`)
+        .lt('starts_at', windowEnd.toISOString())
+        .or(`starts_at.gte.${windowStart.toISOString()},recurrence.neq.none`)
         .order('starts_at'),
   });
 
-  // Recurring rules → concrete occurrences inside the visible window.
+  // Recurring rules → concrete occurrences inside the visible window, stepped
+  // on the family's wall clock (a weekly 09:00 stays 09:00 across their DST).
   const data = useMemo(
-    () => expandEvents(rawData, monthGridStart, fetchEnd),
-    [rawData, monthGridStart, fetchEnd],
+    () => expandEventsInZone(rawData, windowStart, windowEnd, clock.timeZone),
+    [rawData, windowStart, windowEnd, clock.timeZone],
   );
 
   const memberById = useMemo(() => new Map(members.map(m => [m.id, m])), [members]);
@@ -348,54 +348,55 @@ export function CalendarModule() {
   const timedByDay = useMemo(() => {
     const map = new Map<string, Event[]>();
     for (const e of timed) {
-      const key = localDayKeyOf(e.starts_at) ?? '';
+      const key = clock.dayKeyOf(e.starts_at);
       if (!map.has(key)) map.set(key, []);
       map.get(key)!.push(e);
     }
     return map;
-  }, [timed]);
+  }, [timed, clock]);
 
   const allDayByDay = useMemo(() => {
     const map = new Map<string, Event[]>();
     for (const e of allDay) {
-      const key = localDayKeyOf(e.starts_at) ?? '';
+      const key = clock.dayKeyOf(e.starts_at);
       if (!map.has(key)) map.set(key, []);
       map.get(key)!.push(e);
     }
     return map;
-  }, [allDay]);
+  }, [allDay, clock]);
 
   // Combined per-day map (month chips + day list).
   const eventsByDay = useMemo(() => {
     const map = new Map<string, Event[]>();
     for (const e of filtered) {
-      const key = localDayKeyOf(e.starts_at) ?? '';
+      const key = clock.dayKeyOf(e.starts_at);
       if (!map.has(key)) map.set(key, []);
       map.get(key)!.push(e);
     }
     return map;
-  }, [filtered]);
+  }, [filtered, clock]);
 
   // Upcoming events for sidebar (next 7 days)
-  const today = new Date(); today.setHours(0, 0, 0, 0);
+  const familyToday = clock.wallToday();
   const upcoming = useMemo(() => {
-    const now = new Date(); now.setHours(0, 0, 0, 0);
-    const weekEnd = new Date(now.getTime() + 7 * 86400000);
+    const now = new Date();
+    const dayStart = clock.dayStart(0, now);
+    const weekEnd = clock.dayStart(7, now);
     return [...data].filter(e => {
       const d = new Date(e.starts_at);
-      return d >= now && d <= weekEnd;
+      return d >= dayStart && d <= weekEnd;
     }).sort((a, b) => new Date(a.starts_at).getTime() - new Date(b.starts_at).getTime()).slice(0, 8);
-  }, [data]);
+  }, [data, clock]);
 
   const upcomingByDay = useMemo(() => {
     const map = new Map<string, Event[]>();
     for (const e of upcoming) {
-      const key = localDayKeyOf(e.starts_at) ?? '';
+      const key = clock.dayKeyOf(e.starts_at);
       if (!map.has(key)) map.set(key, []);
       map.get(key)!.push(e);
     }
     return [...map.entries()];
-  }, [upcoming]);
+  }, [upcoming, clock]);
 
   async function syncGoogle() {
     setSyncing(true);
@@ -427,7 +428,14 @@ export function CalendarModule() {
 
   // Navigation honours the active view (day → ±1 day, week → ±1 week, month → ±1 month).
   function navStep(dir: -1 | 1) {
-    if (view === 'month') { setWeekOffset((w) => w + dir * 4); return; }
+    if (view === 'month') {
+      // Four weeks can still be the same month. The grid's month comes from
+      // its Monday, so choose the first Monday inside the adjacent month;
+      // the Monday before its first could put the label in the old month.
+      const targetMonday = wallWeekStart(addWallDays(wallMonthStart(monday, dir), 6));
+      setWeekOffset(weeksBetween(weekStart(clock.wallNow()), targetMonday));
+      return;
+    }
     if (view === 'day') {
       setMobileDayIndex((i) => {
         const ni = i + dir;
@@ -441,11 +449,12 @@ export function CalendarModule() {
   }
   function goToday() {
     setWeekOffset(0);
-    setMobileDayIndex((new Date().getDay() + 6) % 7);
+    setMobileDayIndex((wallParts(clock.wallNow()).weekday + 6) % 7);
   }
 
-  const todayStr = localDayKey(today);
-  const nowMins = new Date().getHours() * 60 + new Date().getMinutes();
+  const todayStr = clock.todayKey();
+  const wallClock = wallParts(clock.wallNow());
+  const nowMins = wallClock.hour * 60 + wallClock.minute;
   const nowTop = (nowMins - 6 * 60) * (HOUR_HEIGHT / 60);
 
   // Columns rendered by the time-grid: one day in day-view, the week otherwise.
@@ -453,7 +462,7 @@ export function CalendarModule() {
 
   // Mobile day data
   const mobileDay = days[mobileDayIndex];
-  const mobileDayStr = mobileDay ? localDayKey(mobileDay) : '';
+  const mobileDayStr = mobileDay ? wallKey(mobileDay) : '';
   const mobileDayTimed = timedByDay.get(mobileDayStr) ?? [];
   const mobileDayAllDay = allDayByDay.get(mobileDayStr) ?? [];
 
@@ -476,7 +485,7 @@ export function CalendarModule() {
         };
       })
     : gridColumns.map((d) => {
-        const dStr = localDayKey(d);
+        const dStr = wallKey(d);
         return {
           key: dStr,
           date: d,
@@ -490,12 +499,14 @@ export function CalendarModule() {
   if (loading) return <SkeletonList />;
   if (error) return <ErrorState message={error} onRetry={refresh} />;
 
+  // Grid Dates are wall-clock Dates, so they are labelled by the day they READ
+  // (a DATE key), never converted as if they were instants.
   const dateLabel = view === 'month'
-    ? monthAnchor.toLocaleDateString(locale.code, { month: 'long', year: 'numeric' })
+    ? fmtDate(clock.wallKey(monthAnchor), 'MMMM yyyy')
     : view === 'day' || splitActive
       // Split view compares members on one day, so label the focused day, not the week span.
-      ? days[mobileDayIndex].toLocaleDateString(locale.code, { weekday: 'long', month: 'short', day: 'numeric', year: 'numeric' })
-      : `${days[0].toLocaleDateString(locale.code, { month: 'short', day: 'numeric' })} – ${days[6].toLocaleDateString(locale.code, { month: 'short', day: 'numeric', year: 'numeric' })}`;
+      ? fmtDate(clock.wallKey(days[mobileDayIndex]), 'EEEE, MMM d, yyyy')
+      : `${fmtDate(clock.wallKey(days[0]), 'MMM d')} – ${fmtDate(clock.wallKey(days[6]), 'MMM d, yyyy')}`;
 
   // "Calendars" list: every member + a synthetic whole-family entry.
   const calendarRows = [
@@ -652,10 +663,10 @@ export function CalendarModule() {
             </button>
             <div className="text-center">
               <div className="text-xs font-semibold uppercase tracking-wide text-muted">
-                {mobileDay.toLocaleDateString(locale.code, { weekday: 'long' })}
+                {fmtDate(mobileDayStr, 'EEEE')}
               </div>
               <div className={cn('text-lg font-bold', mobileDayStr === todayStr ? 'text-brand-text' : 'text-fg')}>
-                {mobileDay.toLocaleDateString(locale.code, { month: 'short', day: 'numeric' })}
+                {fmtDate(mobileDayStr, 'MMM d')}
               </div>
             </div>
             <button aria-label={tr('a11y.next')} onClick={() => setMobileDayIndex(i => (i + 1) % 7)} className="rounded-lg p-1.5 hover:bg-elevated transition">
@@ -689,8 +700,8 @@ export function CalendarModule() {
                 <div key={`${e.id}-${e.starts_at}`} onClick={() => setSelected(e)} onKeyDown={(ev) => openOnKey(ev, e)} role="button" tabIndex={0} className={cn('focus-ring cursor-pointer rounded-lg border p-3 transition hover:brightness-110', CATEGORY_COLORS[e.category] ?? CATEGORY_COLORS.other)}>
                   <div className="flex items-center justify-between gap-2">
                     <span className="text-xs font-semibold">
-                      {new Date(e.starts_at).toLocaleTimeString(locale.code, { hour: 'numeric', minute: '2-digit', hour12: true })}
-                      {e.ends_at && ` – ${new Date(e.ends_at).toLocaleTimeString(locale.code, { hour: 'numeric', minute: '2-digit', hour12: true })}`}
+                      {fmtTime(e.starts_at)}
+                      {e.ends_at && ` – ${fmtTime(e.ends_at)}`}
                     </span>
                     {member && <Avatar name={member.display_name} color={member.color} size={18} />}
                   </div>
@@ -724,10 +735,10 @@ export function CalendarModule() {
                     ) : (
                       <>
                         <span className={cn('text-[10px] font-semibold uppercase tracking-wide', col.isToday ? 'text-brand-text' : 'text-muted')}>
-                          {col.date.toLocaleDateString(locale.code, { weekday: 'short' })}
+                          {fmtDate(clock.wallKey(col.date), 'EEE')}
                         </span>
                         <span className={cn('flex h-7 w-7 items-center justify-center rounded-full text-sm font-bold', col.isToday ? 'bg-brand text-white' : 'text-fg')}>
-                          {col.date.getDate()}
+                          {wallParts(col.date).day}
                         </span>
                       </>
                     )}
@@ -774,7 +785,7 @@ export function CalendarModule() {
 
                       {/* Events */}
                       {dayEvents.map(e => {
-                        const top = eventTop(e);
+                        const top = eventTop(e, clock);
                         const height = eventHeight(e);
                         const member = e.assignee_id ? memberById.get(e.assignee_id) : null;
                         if (top < 0 || top > HOURS.length * HOUR_HEIGHT) return null;
@@ -783,7 +794,7 @@ export function CalendarModule() {
                             className={cn('focus-ring absolute z-10 overflow-hidden rounded-md border p-1.5 text-[10px] cursor-pointer hover:brightness-110 transition', CATEGORY_COLORS[e.category] ?? CATEGORY_COLORS.other)}
                             title={e.title}>
                             <div className="flex items-start justify-between gap-1">
-                              <span className="font-semibold leading-tight truncate">{new Date(e.starts_at).toLocaleTimeString(locale.code, { hour: 'numeric', minute: '2-digit', hour12: true })}</span>
+                              <span className="font-semibold leading-tight truncate">{fmtTime(e.starts_at)}</span>
                               {height > 30 && member && <Avatar name={member.display_name} color={member.color} size={14} />}
                             </div>
                             {height > 24 && <div className="mt-0.5 truncate font-medium leading-tight">{e.title}</div>}
@@ -839,9 +850,9 @@ export function CalendarModule() {
       <div className="module-sidebar hidden lg:flex lg:flex-col gap-4">
         <div className="sidebar-card">
           <MiniCalendar current={days[mobileDayIndex]} onSelect={(d) => {
-            const offset = Math.round((d.getTime() - weekStart(0).getTime()) / (7 * 86400000));
+            const offset = weeksBetween(weekStart(clock.wallNow(), 0), wallWeekStart(d));
             setWeekOffset(offset);
-            setMobileDayIndex((d.getDay() + 6) % 7);
+            setMobileDayIndex((wallParts(d).weekday + 6) % 7);
           }} />
         </div>
 
@@ -853,14 +864,13 @@ export function CalendarModule() {
           {upcomingByDay.length === 0 ? (
             <p className="text-xs text-muted">{tr('calendar.nothingComingUp')}</p>
           ) : upcomingByDay.map(([day, events]) => {
-            const d = new Date(day);
             const isToday2 = day === todayStr;
-            const isTomorrow = day === shiftLocalDay(today, 1);
-            const label = isToday2 ? 'Today' : isTomorrow ? 'Tomorrow' : d.toLocaleDateString(locale.code, { weekday: 'short', month: 'short', day: 'numeric' });
+            const isTomorrow = day === wallKey(clock.addDays(familyToday, 1));
+            const label = isToday2 ? 'Today' : isTomorrow ? 'Tomorrow' : fmtDate(day, 'EEE, MMM d');
             return (
               <div key={day} className="mb-3">
                 <div className="mb-1 text-[10px] font-semibold text-muted">
-                  {label} &bull; {d.toLocaleDateString(locale.code, { month: 'short', day: 'numeric' })}
+                  {label} &bull; {fmtDate(day, 'MMM d')}
                 </div>
                 {events.map(e => (
                   <div key={`${e.id}-${e.starts_at}`} onClick={() => setSelected(e)} onKeyDown={(ev) => openOnKey(ev, e)} role="button" tabIndex={0} className="focus-ring mb-1 flex cursor-pointer items-start gap-2 rounded-lg p-1.5 hover:bg-elevated transition">
@@ -868,7 +878,7 @@ export function CalendarModule() {
                     <div className="min-w-0">
                       {!e.all_day && (
                         <div className="text-[10px] font-semibold text-muted">
-                          {new Date(e.starts_at).toLocaleTimeString(locale.code, { hour: 'numeric', minute: '2-digit', hour12: true })}
+                          {fmtTime(e.starts_at)}
                         </div>
                       )}
                       <div className="truncate text-xs font-medium">{e.title}</div>
@@ -898,7 +908,7 @@ export function CalendarModule() {
           </label>
           {splitByMember && (
             <p className="mb-1.5 px-1 text-[10px] leading-4 text-muted">
-              {tr('calendar.eachVisibleMemberGetsAColumn')} {mobileDay.toLocaleDateString(locale.code, { weekday: 'long', month: 'short', day: 'numeric' })}{tr('calendar.toggleMembersBelowToShowOr')}
+              {tr('calendar.eachVisibleMemberGetsAColumn')} {fmtDate(mobileDayStr, 'EEEE, MMM d')}{tr('calendar.toggleMembersBelowToShowOr')}
             </p>
           )}
           <div className="max-h-64 space-y-0.5 overflow-y-auto pr-1">
@@ -935,7 +945,7 @@ export function CalendarModule() {
         </div>
 
         {/* Routines — detected + saved recurring-routine templates */}
-        <RoutinesPanel events={data} weekStartMonday={monday} onApplied={refresh} />
+        <RoutinesPanel events={data} weekStartMonday={monday} timeZone={clock.timeZone} onApplied={refresh} />
 
         {/* Share Calendar */}
         <div className="sidebar-card">
@@ -966,6 +976,9 @@ function NewEventModal({ existing, onClose, onSaved }: {
   existing?: Event | null; onClose: () => void; onSaved: () => void;
 }) {
   const tr = useTranslations();
+  // The box reads and writes the FAMILY's wall clock, both ends in one zone, so
+  // the time typed is the time the grid shows (TIME-003).
+  const { timeZone } = useFamilyClock();
   const { error: toastError } = useToast();
   const [loading, setLoading] = useState(false);
   const [errors, setErrors] = useState<Record<string, string>>({});
@@ -995,8 +1008,18 @@ function NewEventModal({ existing, onClose, onSaved }: {
     };
     const parsed = eventSchema.safeParse(input);
     if (!parsed.success) { setErrors(fieldErrors(parsed.error)); return; }
+    // The boxes hold naive wall clocks on the FAMILY's clock. `fromLocalInput`
+    // resolves them on the same clock the prefill above rendered them with, so
+    // Save on an untouched form stores the instants it opened with instead of
+    // re-applying this reader's offset. Compare those instants: `new Date()` on
+    // the naive text would read it on the device's clock, where a time the
+    // device skips (its own DST gap) moves (#688 comment 5922125002).
+    // `eventSchema` already rejected a blank start, so the `?? ''` is for the
+    // type and cannot fire.
+    const startsAt = fromLocalInput(parsed.data.starts_at, timeZone) ?? '';
+    const endsAt = fromLocalInput(parsed.data.ends_at, timeZone) ?? null;
     // End must be after start when both are provided.
-    if (parsed.data.ends_at && new Date(parsed.data.ends_at) <= new Date(parsed.data.starts_at)) {
+    if (endsAt && new Date(endsAt) <= new Date(startsAt)) {
       setErrors({ ends_at: tr('calendarModule.endAfterStart') });
       return;
     }
@@ -1006,13 +1029,8 @@ function NewEventModal({ existing, onClose, onSaved }: {
       const recurrence = String(form.get('recurrence') ?? 'none');
       const fields = {
         title: parsed.data.title,
-        // The box holds a naive wall clock; `fromLocalInput` resolves it on the
-        // same clock the prefill above rendered it with, so Save on an untouched
-        // form stores the instant it opened with instead of re-applying this
-        // reader's offset. `eventSchema` already rejected a blank start, so the
-        // `?? ''` is for the type and cannot fire.
-        startsAt: fromLocalInput(parsed.data.starts_at) ?? '',
-        endsAt: fromLocalInput(parsed.data.ends_at) ?? null,
+        startsAt,
+        endsAt,
         category: parsed.data.category,
         location: parsed.data.location ?? null,
         description: parsed.data.description ?? null,
@@ -1056,10 +1074,10 @@ function NewEventModal({ existing, onClose, onSaved }: {
         </Field>
         <div className="grid grid-cols-2 gap-3">
           <Field label={tr('calendar.starts')} error={errors.starts_at} required>
-            {(id) => <Input id={id} name="starts_at" type="datetime-local" defaultValue={toLocalInput(existing?.starts_at ?? null)} />}
+            {(id) => <Input id={id} name="starts_at" type="datetime-local" defaultValue={toLocalInput(existing?.starts_at ?? null, timeZone)} />}
           </Field>
           <Field label={tr('calendar.ends')} error={errors.ends_at}>
-            {(id) => <Input id={id} name="ends_at" type="datetime-local" defaultValue={toLocalInput(existing?.ends_at ?? null)} />}
+            {(id) => <Input id={id} name="ends_at" type="datetime-local" defaultValue={toLocalInput(existing?.ends_at ?? null, timeZone)} />}
           </Field>
         </div>
         <Field label={tr('calendar.location')}>

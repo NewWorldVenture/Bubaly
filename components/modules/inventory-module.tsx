@@ -1,6 +1,6 @@
 'use client';
 
-import { useMemo, useState } from 'react';
+import { useId, useMemo, useState } from 'react';
 import {
   PackageSearch, Plus, Search, MapPin, Trash2, Pencil, Handshake, ArrowRightLeft, ShieldCheck, Boxes, AlertTriangle, Camera, Check, CheckCircle2, ChevronRight, DoorOpen,
 } from 'lucide-react';
@@ -8,6 +8,7 @@ import { useApp } from '@/components/app/app-context';
 import { familyMediaPath } from '@/lib/storage/family-media';
 import { useRealtimeQuery } from '@/lib/hooks/use-realtime-query';
 import { createClient } from '@/lib/supabase/client';
+import { readInventoryItems } from '@/lib/inventory/read-items';
 import { describeDbError, wroteNoRows } from '@/lib/supabase/errors';
 import { useToast } from '@/components/ui/toast';
 import { PageHeader } from '@/components/app/page-header';
@@ -23,6 +24,7 @@ import {
   searchItems, lentOut, warrantyAlerts, valueSummary, inventorySummary, lastConfirmed,
 } from '@/lib/inventory/finder';
 import { useLocale, useTranslations, usePlural } from '@/components/i18n/locale-provider';
+import { useFamilyClock, useFormat, useFamilyCalendarToday } from '@/components/i18n/use-format';
 import type { LocaleCode } from '@/lib/i18n/locales';
 import { formatCents } from '@/lib/wallet/ledger';
 import { useConfirm } from '@/components/ui/confirm';
@@ -38,16 +40,16 @@ type Move = Tables<'inventory_moves'>;
 // to the whole unit, as they always were here, so the cents are rounded away
 // BEFORE formatting rather than by a second formatter.
 const CURRENCY = 'USD';
+const ITEMS_PER_PAGE = 120;
 const moneyIn = (locale: LocaleCode) => (cents: number) => formatCents(Math.round(cents / 100) * 100, CURRENCY, locale);
-const todayIso = () => new Date().toISOString().slice(0, 10);
-const fmtDateIn = (locale: LocaleCode) => (d: string): string => {
-  return new Date(d.length <= 10 ? `${d}T00:00:00` : d).toLocaleDateString(locale, { month: 'short', day: 'numeric' });
-};
 
 export function InventoryModule() {
   const locale = useLocale();
   const money = moneyIn(locale.code);
-  const fmtDate = fmtDateIn(locale.code);
+  const { fmtDate: fmt } = useFormat();
+  // A DATE column is its own day; a timestamp is read in the family's zone.
+  const fmtDate = (d: string) => fmt(d, 'MMM d');
+  const clock = useFamilyClock();
   const tr = useTranslations();
   const plural = usePlural();
   const askConfirm = useConfirm();
@@ -61,7 +63,8 @@ export function InventoryModule() {
   });
   const items = useRealtimeQuery<Item>({
     table: 'inventory_items', familyId,
-    fetcher: (s) => s.from('inventory_items').select('*').eq('family_id', familyId).order('updated_at', { ascending: false }),
+    // Stable IDs prevent shifting offsets; concurrent edits still are not a snapshot.
+    fetcher: (s) => readInventoryItems(s, familyId),
     deps: [familyId],
   });
   const moves = useRealtimeQuery<Move>({
@@ -80,7 +83,9 @@ export function InventoryModule() {
   const [moveFor, setMoveFor] = useState<Item | null>(null);
   const [lendFor, setLendFor] = useState<Item | null>(null);
 
-  const today = useMemo(() => new Date(), []);
+  // The FAMILY's wall clock (TIME-003): the helpers below read local fields,
+  // so handing them this makes their "today" the family's day, not the phone's.
+  const today = useFamilyCalendarToday();
   const owned = useMemo(() => items.data.filter((i) => i.status !== 'disposed'), [items.data]);
   const hits = useMemo(() => searchItems(items.data, locations.data, query), [items.data, locations.data, query]);
   const tree = useMemo(() => locationTree(locations.data), [locations.data]);
@@ -96,6 +101,14 @@ export function InventoryModule() {
       (categoryFilter === 'all' || i.category === categoryFilter) &&
       (statusFilter === 'all' ? i.status !== 'disposed' : i.status === statusFilter));
   }, [items.data, hits, query, locationFilter, categoryFilter, statusFilter]);
+  // Expansion belongs to this filter/context instance, so returning to an old
+  // filter does not restore a larger page from a previous browse.
+  const browseScope = useMemo(() => ({ familyId, userId, query, locationFilter, categoryFilter, statusFilter }),
+    [familyId, userId, query, locationFilter, categoryFilter, statusFilter]);
+  const [browse, setBrowse] = useState<{ scope: object; limit: number } | null>(null);
+  const visibleLimit = browse?.scope === browseScope ? browse.limit : ITEMS_PER_PAGE;
+  const visibleItems = filtered.slice(0, visibleLimit);
+  const itemsListId = useId();
   const memberName = (id: string | null) => members.find((m) => m.id === id)?.display_name ?? null;
 
   async function deleteItem(item: Item) {
@@ -272,8 +285,9 @@ export function InventoryModule() {
           ) : filtered.length === 0 ? (
             <p className="rounded-2xl border border-dashed border-border px-4 py-8 text-center text-sm text-muted">{tr('inventory.noItemsMatchTheseFilters')}</p>
           ) : (
-            <ul className="grid gap-2 md:grid-cols-2">
-              {filtered.slice(0, 120).map((item) => {
+            <div className="space-y-3">
+            <ul id={itemsListId} className="grid gap-2 md:grid-cols-2">
+              {visibleItems.map((item) => {
                 const confirmed = lastConfirmed(moves.data, item.id);
                 return (
                   <li key={item.id} className="group flex items-center gap-3 rounded-2xl border border-border bg-surface/40 px-3 py-2.5">
@@ -298,6 +312,13 @@ export function InventoryModule() {
                 );
               })}
             </ul>
+            {visibleItems.length < filtered.length && (
+              <Button variant="secondary" aria-controls={itemsListId} onClick={() => setBrowse((current) => ({
+                scope: browseScope,
+                limit: (current?.scope === browseScope ? current.limit : ITEMS_PER_PAGE) + ITEMS_PER_PAGE,
+              }))}>{tr('more.more')}</Button>
+            )}
+            </div>
           )}
         </div>
       </div>
@@ -539,6 +560,7 @@ function MoveForm({ familyId, userId, memberId, item, locations, onClose, onSave
 
 function LendForm({ item, onClose, onSaved }: { item: Item; onClose: () => void; onSaved: () => void }) {
   const tr = useTranslations();
+  const { todayKey } = useFamilyClock();
   const { error: toastError } = useToast();
   const [loading, setLoading] = useState(false);
 
@@ -548,7 +570,7 @@ function LendForm({ item, onClose, onSaved }: { item: Item; onClose: () => void;
     const to = String(f.get('lent_to') ?? '').trim();
     if (!to) return toastError(tr('inventoryModule.whoHasIt'));
     setLoading(true);
-    const { data: lent, error } = await createClient().from('inventory_items').update({ status: 'lent', lent_to: to, lent_on: String(f.get('lent_on') ?? '') || todayIso() }).eq('id', item.id).select('id');
+    const { data: lent, error } = await createClient().from('inventory_items').update({ status: 'lent', lent_to: to, lent_on: String(f.get('lent_on') ?? '') || todayKey() }).eq('id', item.id).select('id');
     setLoading(false);
     if (error) return toastError(describeDbError(error));
     if (wroteNoRows(lent)) return toastError(tr('errors.thatChangeWasNotSaved'));
@@ -560,7 +582,7 @@ function LendForm({ item, onClose, onSaved }: { item: Item; onClose: () => void;
       <form onSubmit={onSubmit} className="space-y-4">
         <div className="grid grid-cols-2 gap-3">
           <Field label="To" required>{(id) => <Input id={id} name="lent_to" autoFocus placeholder={tr('inventory.theNguyensNextDoor')} />}</Field>
-          <Field label={tr('inventory.since')}>{(id) => <Input id={id} name="lent_on" type="date" defaultValue={todayIso()} />}</Field>
+          <Field label={tr('inventory.since')}>{(id) => <Input id={id} name="lent_on" type="date" defaultValue={todayKey()} />}</Field>
         </div>
         <div className="flex justify-end gap-2 pt-1">
           <Button type="button" variant="ghost" onClick={onClose}>{tr('inventory.cancel')}</Button>

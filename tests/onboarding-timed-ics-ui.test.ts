@@ -27,7 +27,7 @@ vi.mock('@/components/ui/toast', () => ({ useToast: () => ({ error: mock.error }
 vi.mock('@/components/i18n/locale-provider', async () => {
   const { getMessages, translate } = await import('@/lib/i18n/messages');
   const { localeOrDefault } = await import('@/lib/i18n/locales');
-  return {
+  return { useFamilyTimeZone: () => undefined,
     useLocale: () => localeOrDefault(mock.locale),
     useTranslations: () => (key: string, params?: Record<string, string | number>) => translate(getMessages(mock.locale), key, params),
   };

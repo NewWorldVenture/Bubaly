@@ -60,7 +60,7 @@ vi.mock('next/link', async () => {
 vi.mock('@/components/ui/toast', () => ({ useToast: () => ({ error: mock.toast, success: mock.toast }) }));
 vi.mock('@/components/i18n/locale-provider', async () => {
   const { getMessages } = await import('@/lib/i18n/messages');
-  return { useTranslations: () => (key: string, params?: Record<string, string>) => Object.entries(params ?? {})
+  return { useFamilyTimeZone: () => undefined, useTranslations: () => (key: string, params?: Record<string, string>) => Object.entries(params ?? {})
     .reduce((text, [name, value]) => text.replace(`{${name}}`, value), getMessages(mock.locale)[key] ?? key) };
 });
 vi.mock('@/components/auth/legal-consent', () => ({ LegalConsent: () => null }));

@@ -10,14 +10,15 @@ import { useToast } from '@/components/ui/toast';
 import { ROLE_LABEL_KEYS, INVITABLE_ROLES, type MemberRole } from '@/lib/constants/roles';
 import { adminCreateUserAction, adminCreateFamilyAction } from '@/app/(app)/admin/actions';
 import { useTranslations } from '@/components/i18n/locale-provider';
+import { csvDocument } from '@/lib/csv/spreadsheet-cell';
 
 type ExportRow = { name: string; email: string; family: string; role: string; plan: string; status: string; joined: string };
 
 function downloadCsv(rows: ExportRow[]) {
   const header = ['Name', 'Email', 'Family', 'Role', 'Plan', 'Status', 'Joined'];
-  const lines = [header, ...rows.map((r) => [r.name, r.email, r.family, r.role, r.plan, r.status, r.joined])]
-    .map((row) => row.map((cell) => `"${String(cell).replace(/"/g, '""')}"`).join(','))
-    .join('\n');
+  // Names, emails and family names are typed by users: csvDocument writes them
+  // as text a spreadsheet will not run (lib/csv/spreadsheet-cell.ts).
+  const lines = csvDocument([header, ...rows.map((r) => [r.name, r.email, r.family, r.role, r.plan, r.status, r.joined])]);
   const blob = new Blob([lines], { type: 'text/csv;charset=utf-8;' });
   const url = URL.createObjectURL(blob);
   const a = document.createElement('a');

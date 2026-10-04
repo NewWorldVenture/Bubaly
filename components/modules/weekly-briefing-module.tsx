@@ -7,7 +7,8 @@ import {
 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { cn } from '@/lib/utils/cn';
-import { useLocale, useTranslations } from '@/components/i18n/locale-provider';
+import { useTranslations } from '@/components/i18n/locale-provider';
+import { useFamilyClock, useFormat } from '@/components/i18n/use-format';
 
 // ─── Types (mirror the /api/ai/weekly-briefing JSON contract) ──────────────────
 
@@ -328,16 +329,18 @@ function WeeklyContent({ data }: { data: WeeklyBriefingData }) {
 // ─── Main export ───────────────────────────────────────────────────────────────
 
 export function WeeklyBriefingModule() {
-  const locale = useLocale();
+  const format = useFormat();
+  const clock = useFamilyClock();
   const t = useTranslations();
   const [data, setData] = useState<WeeklyBriefingData | null>(null);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [generatedAt, setGeneratedAt] = useState<string | null>(null);
 
-  // Cache key is the Monday-agnostic look-ahead start (today's UTC date) so a
-  // generated briefing persists across the day without re-billing the AI call.
-  const weekKey = new Date().toISOString().slice(0, 10);
+  // Cache key is the Monday-agnostic look-ahead start (the family's today,
+  // TIME-003) so a generated briefing persists across the day without
+  // re-billing the AI call.
+  const weekKey = clock.todayKey();
   const storageKey = `fos_weekly_briefing_${weekKey}`;
 
   useEffect(() => {
@@ -373,7 +376,7 @@ export function WeeklyBriefingModule() {
     }
   }, [storageKey, t]);
 
-  const fmtTime = (iso: string) => new Date(iso).toLocaleString(locale.code, { month: 'short', day: 'numeric', hour: 'numeric', minute: '2-digit' });
+  const fmtTime = (iso: string) => format.fmtDate(iso, 'MMM d, h:mm a');
 
   return (
     <div className="space-y-6">

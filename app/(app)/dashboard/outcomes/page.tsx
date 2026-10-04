@@ -9,7 +9,7 @@ import { ActivationBeacon } from '@/components/analytics/activation-beacon';
 import {
   OUTCOMES, buildOutcomePlan, outcomeUrgencyCount, outcomeFromParam, type OutcomeContext,
 } from '@/lib/outcomes/launcher';
-import { nextBirthdayDate, daysUntil } from '@/lib/moments/birthdays';
+import { birthdayCountdown } from '@/lib/moments/birthdays';
 import { loadFamilyContext } from '@/lib/reasoning/context';
 import { reasoningInsights } from '@/lib/reasoning/insights';
 import { RelationshipInsights } from '@/components/reasoning/relationship-insights';
@@ -50,10 +50,9 @@ export default async function OutcomesPage({ searchParams }: { searchParams?: Pr
 
   const birthdaysSoon = countMatchingResult(membersRes, (m) => {
     if (!m.birthday) return false;
-    const next = nextBirthdayDate(m.birthday, now);
-    if (!next) return false;
-    const d = daysUntil(next, now);
-    return d >= 0 && d <= 14;
+    // Counted from the family's day (`todayKey`), not the host's.
+    const d = birthdayCountdown(m.birthday, todayKey)?.days;
+    return d !== undefined && d >= 0 && d <= 14;
   });
 
   const counts = { eventsToday: countFromResult(eventsRes), overdueTasks: countFromResult(overdueRes), openGrocery: countFromResult(groceryRes), birthdaysSoon };

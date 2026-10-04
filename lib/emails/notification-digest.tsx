@@ -5,12 +5,20 @@ export type DigestItem = { title: string; body: string | null; icon: string };
 
 /** Daily roll-up of a member's pending Bubaly notifications. */
 export function NotificationDigestEmail({
-  name, items,
+  name, items, timeZone,
 }: {
   name: string;
   items: DigestItem[];
+  /**
+   * The recipient's family's IANA zone. Rendered by a cron on a UTC host, so
+   * without it the date line was Greenwich's — tomorrow's, from 5pm in
+   * California. The sender passes an explicit 'UTC' when it could not read one,
+   * and null when the digest spans families in different zones: then no one
+   * family's day applies and the greeting carries no date at all.
+   */
+  timeZone: string | null;
 }) {
-  const today = new Date().toLocaleDateString('en-US', { weekday: 'long', month: 'long', day: 'numeric' });
+  const today = timeZone ? new Date().toLocaleDateString('en-US', { weekday: 'long', month: 'long', day: 'numeric', timeZone }) : null;
   const count = items.length;
 
   return (
@@ -25,7 +33,7 @@ export function NotificationDigestEmail({
         <h1 style={{ fontSize: 22, fontWeight: 700, marginBottom: 4 }}>
           {count} thing{count > 1 ? 's' : ''} need{count > 1 ? '' : 's'} your attention
         </h1>
-        <p style={{ color: '#94a0b8', marginBottom: 28 }}>Hi {name} — here&apos;s what&apos;s coming up for {today}.</p>
+        <p style={{ color: '#94a0b8', marginBottom: 28 }}>Hi {name} — here&apos;s what&apos;s coming up{today ? ` for ${today}` : ''}.</p>
 
         <div style={{ background: '#091019', border: '1px solid #23364e', borderRadius: 16, overflow: 'hidden', marginBottom: 28 }}>
           {items.slice(0, 20).map((it, i) => (

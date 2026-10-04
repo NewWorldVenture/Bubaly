@@ -90,6 +90,10 @@ describe('related ids become deep links', () => {
     // `${documentId}:${memberId}`; family reminders: `fr:${id}`.
     expect(entityIdFrom(`${id}:${member}`)).toBe(id);
     expect(entityIdFrom(`fr:${id}`)).toBe(id);
+    // …and the per-occurrence forms a recurring or snoozed reminder writes,
+    // whose ISO instant carries colons of its own.
+    expect(entityIdFrom(`fr:${id}:2026-10-06T20:00:00.000Z`)).toBe(id);
+    expect(entityIdFrom(`fr:${id}:snoozed:2026-10-05T10:00:00.000Z`)).toBe(id);
     expect(entityIdFrom(`${id}:2026`)).toBe(id);
     expect(entityIdFrom(id)).toBe(id);
   });

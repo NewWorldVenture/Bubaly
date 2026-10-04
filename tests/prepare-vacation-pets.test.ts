@@ -51,6 +51,9 @@ function seeded() {
     { id: 'pet-other', family_id: 'fam-2', name: 'Someone else', species: 'dog', notes: null, vet_name: null, vet_phone: null, is_active: true },
   ]);
   db.seed('todo_lists', [{ id: 'list-1', family_id: FAMILY, name: 'Family', is_default: true }]);
+  // Pet tasks default to the acting member as assignee; createTodo verifies
+  // that member's family binding before it writes the tasks.
+  db.seed('family_members', [{ id: 'mem-1', family_id: FAMILY, user_id: 'user-1', role: 'parent', is_active: true }]);
   return db;
 }
 

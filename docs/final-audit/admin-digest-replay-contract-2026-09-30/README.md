@@ -22,7 +22,7 @@ No test executed the handler before this change.
 | `tests/admin-digest.test.ts` | `buildAdminDigest`, `buildHeadline`, `digestSubject`, `renderAdminDigestHtml`, `summarizeDigestDelivery` | pure-function unit tests |
 | `tests/admin-digest.test.ts` | The route's source text contains `readAll<DigestRow>(`, `{ max: 20_000 }`, `if (feedError)` before `buildAdminDigest(` with `{ status: 502 }`, and `summary.ok ? 200 : 502` | static source checks |
 | `tests/a-mirrored-cron-must-be-idempotent.test.ts` | Lists admin-digest in `KNOWN_DOUBLE_SEND`: both schedulers name `30 12 * * *`, and the route source has no dedupe marker | static; schedules and source text |
-| `tests/a-late-tick-drops-a-cron.test.ts` | The dispatcher's 5-minute look-back (mentions the admin-digest duplicate) | dispatcher only |
+| `tests/a-late-tick-catches-up.test.ts` (then `a-late-tick-drops-a-cron`) | The dispatcher's 5-minute look-back (mentions the admin-digest duplicate); since 2026-10-03 the catch-up window, which leaves daily routes such as admin-digest to Vercel | dispatcher only |
 
 **Gaps before this change:**
 - Paging, the truncation → 502 path and the partial-failure → 502 mapping were pinned only as source text, never run.

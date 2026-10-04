@@ -19,14 +19,13 @@ import {
   ZONE_KINDS, SCORE_LABEL_KEYS, zoneKindMeta, zoneHealth, missionsForZone, weeklyPlan, declutterSummary, missionPoints, isoDate, dayDiff,
 } from '@/lib/declutter/missions';
 import { useLocale, useTranslations, usePlural } from '@/components/i18n/locale-provider';
-import type { LocaleCode } from '@/lib/i18n/locales';
+import { useFamilyClock, useFormat, useFamilyCalendarToday } from '@/components/i18n/use-format';
 import { useConfirm } from '@/components/ui/confirm';
 
 type Zone = Tables<'declutter_zones'>;
 type Mission = Tables<'declutter_missions'>;
 type Session = Tables<'declutter_sessions'>;
 
-const fmtDateIn = (locale: LocaleCode) => (d: string) => new Date(`${d.slice(0, 10)}T00:00:00`).toLocaleDateString(locale, { weekday: 'short', month: 'short', day: 'numeric' });
 const HEALTH_STYLE = {
   fresh: 'border-emerald-500/30 bg-emerald-500/10 text-emerald-200',
   due: 'border-amber-500/30 bg-amber-500/10 text-amber-200',
@@ -46,7 +45,9 @@ const HEALTH_KEY = { fresh: 'declutterModule.health.fresh', due: 'declutterModul
 
 export function DeclutterModule() {
   const locale = useLocale();
-  const fmtDate = fmtDateIn(locale.code);
+  const { fmtDate: fmt } = useFormat();
+  const fmtDate = (d: string) => fmt(d.slice(0, 10), 'EEE, MMM d');
+  const clock = useFamilyClock();
   const tr = useTranslations();
   const plural = usePlural();
   const askConfirm = useConfirm();
@@ -76,9 +77,12 @@ export function DeclutterModule() {
   const [showArchived, setShowArchived] = useState(false);
   const [planning, setPlanning] = useState(false);
 
-  const today = useMemo(() => new Date(), []);
+  // The FAMILY's wall clock (TIME-003): the helpers below read local fields,
+  // so handing them this makes their "today" the family's day, not the phone's.
+  const today = useFamilyCalendarToday();
   const todayIso = isoDate(today);
   const activeZones = useMemo(() => zones.data.filter((z) => z.is_active), [zones.data]);
+  const visibleZones = showArchived ? zones.data : activeZones;
   const summary = useMemo(() => declutterSummary(zones.data, missions.data, sessions.data, today), [zones.data, missions.data, sessions.data, today]);
   const plan = useMemo(() => weeklyPlan(zones.data, missions.data, members.map((m) => m.id), today, 2, locale.code), [zones.data, missions.data, members, today, locale.code]);
   const nameOf = (id: string | null) => members.find((m) => m.id === id)?.display_name ?? null;
@@ -232,11 +236,11 @@ export function DeclutterModule() {
             <h2 className="text-sm font-semibold">{tr('declutter.zones')}</h2>
             {zones.data.some((z) => !z.is_active) && <button onClick={() => setShowArchived((v) => !v)} className="text-xs text-muted hover:text-fg">{showArchived ? 'Hide' : 'Show'} archived</button>}
           </div>
-          {activeZones.length === 0 ? (
+          {visibleZones.length === 0 ? (
             <EmptyState icon={Sparkle} title={tr('declutter.noZonesYet')} description={tr('declutterModule.aZoneIsAnySpot')} action={<Button onClick={() => setZoneForm({ open: true, zone: null })}><Plus className="h-4 w-4" /> {tr('declutter.addAZone')}</Button>} />
           ) : (
             <ul className="space-y-2">
-              {(showArchived ? zones.data : activeZones).map((z) => {
+              {visibleZones.map((z) => {
                 const h = zoneHealth(z, today);
                 const meta = zoneKindMeta(z.kind);
                 const openHere = open.filter((m) => m.zone_id === z.id).length;
@@ -330,7 +334,7 @@ export function DeclutterModule() {
                 {sessions.data.slice(0, 6).map((s) => (
                   <li key={s.id} className="rounded-xl border border-border bg-surface/60 px-3 py-2 text-sm">
                     <p className="font-medium">{s.minutes} min{zoneOf(s.zone_id) ? ` · ${zoneOf(s.zone_id)?.name}` : ''}</p>
-                    <p className="text-xs text-muted">{new Date(s.started_at).toLocaleDateString(locale.code, { month: 'short', day: 'numeric' })}{s.member_id ? ` · ${nameOf(s.member_id)}` : ''} · {s.items_removed} {tr('declutter.itemsOut')}{s.missions_done ? ` · ${plural('declutter.missionCount', s.missions_done)}` : ''}</p>
+                    <p className="text-xs text-muted">{fmt(s.started_at, 'MMM d')}{s.member_id ? ` · ${nameOf(s.member_id)}` : ''} · {s.items_removed} {tr('declutter.itemsOut')}{s.missions_done ? ` · ${plural('declutter.missionCount', s.missions_done)}` : ''}</p>
                   </li>
                 ))}
               </ul>
@@ -411,6 +415,7 @@ function MissionForm({ familyId, userId, zones, members, mission, zoneId, preset
   familyId: string; userId: string; zones: Zone[]; members: { id: string; display_name: string }[]; mission: Mission | null; zoneId?: string;
   preset?: { title: string; minutes: number; points: number }; defaultAssignee: string | null; onClose: () => void; onSaved: () => void;
 }) {
+  const clock = useFamilyClock();
   const tr = useTranslations();
   const { error: toastError } = useToast();
   const [loading, setLoading] = useState(false);
@@ -449,7 +454,7 @@ function MissionForm({ familyId, userId, zones, members, mission, zoneId, preset
         <div className="grid grid-cols-3 gap-3">
           <Field label={tr('declutter.minutes')}>{(id) => <Input id={id} name="minutes" type="number" min={5} max={60} step={5} defaultValue={mission?.minutes ?? preset?.minutes ?? 15} />}</Field>
           <Field label={tr('declutter.points')}>{(id) => <Input id={id} name="points" type="number" min={0} max={100} defaultValue={mission?.points ?? preset?.points ?? 5} />}</Field>
-          <Field label={tr('declutter.when')}>{(id) => <Input id={id} name="scheduled_for" type="date" defaultValue={mission?.scheduled_for ?? isoDate(new Date())} />}</Field>
+          <Field label={tr('declutter.when')}>{(id) => <Input id={id} name="scheduled_for" type="date" defaultValue={mission?.scheduled_for ?? clock.todayKey()} />}</Field>
         </div>
         <Field label="Who">{(id) => <Select id={id} name="assignee_id" defaultValue={mission?.assignee_id ?? defaultAssignee ?? ''}><option value="">{tr('declutter.anyone')}</option>{members.map((m) => <option key={m.id} value={m.id}>{m.display_name}</option>)}</Select>}</Field>
         <Field label={tr('declutter.notes')}>{(id) => <Textarea id={id} name="notes" defaultValue={mission?.notes ?? ''} rows={2} />}</Field>

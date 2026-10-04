@@ -69,11 +69,15 @@ export function topEarners(members: MemberLike[], assignments: AssignmentLike[])
 export const totalFamilyPoints = (assignments: AssignmentLike[]): number =>
   assignments.reduce((sum, a) => sum + (isCompleted(a.status) ? a.points_awarded ?? a.chore?.points ?? 0 : 0), 0);
 
-/** Local YYYY-MM-DD for an ISO timestamp (or null). */
-function localDay(iso: string | null): string | null {
+/**
+ * YYYY-MM-DD for an ISO timestamp (or null): the day in `timeZone` when one is
+ * given, else the runtime's local day.
+ */
+function localDay(iso: string | null, timeZone?: string): string | null {
   if (!iso) return null;
   const d = new Date(iso);
   if (Number.isNaN(d.getTime())) return null;
+  if (timeZone) return dayKeyIn(d, timeZone);
   const y = d.getFullYear();
   const m = String(d.getMonth() + 1).padStart(2, '0');
   const day = String(d.getDate()).padStart(2, '0');
@@ -106,12 +110,18 @@ export function streakDays(days: Iterable<string>, today: string): number {
 
 export type StreakRow = { member: MemberLike; days: number };
 
-/** Per-member day-streak, ranked by length (then name), only live streaks > 0. */
-export function streaksByMember(members: MemberLike[], assignments: AssignmentLike[], today: string): StreakRow[] {
+/**
+ * Per-member day-streak, ranked by length (then name), only live streaks > 0.
+ *
+ * `today` and the completion days must be on the same calendar: pass the
+ * family's zone with the family's today (TIME-003), so an approval at 17:30 in
+ * Los Angeles counts on the family's day, not the phone's.
+ */
+export function streaksByMember(members: MemberLike[], assignments: AssignmentLike[], today: string, timeZone?: string): StreakRow[] {
   const daysByMember = new Map<string, Set<string>>();
   for (const a of assignments) {
     if (!isCompleted(a.status)) continue;
-    const day = localDay(a.approved_at ?? a.submitted_at);
+    const day = localDay(a.approved_at ?? a.submitted_at, timeZone);
     if (!day) continue;
     if (!daysByMember.has(a.member_id)) daysByMember.set(a.member_id, new Set());
     daysByMember.get(a.member_id)!.add(day);

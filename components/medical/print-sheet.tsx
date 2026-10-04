@@ -3,8 +3,9 @@
 import { parseISO } from 'date-fns';
 import { Printer, X } from 'lucide-react';
 import type { Tables, RecordKind } from '@/lib/database.types';
-import { useLocale, useTranslations } from '@/components/i18n/locale-provider';
-import type { LocaleCode } from '@/lib/i18n/locales';
+import { useTranslations } from '@/components/i18n/locale-provider';
+import { useFamilyClock, useFormat } from '@/components/i18n/use-format';
+import type { Format } from '@/lib/utils/format';
 import { ageOn } from '@/lib/utils/birthday';
 
 type Provider = Tables<'health_providers'>;
@@ -22,15 +23,18 @@ const SHEET_KEYS = {
 // parseISO reads a date-only string ('2015-03-04', how a birthday is stored)
 // as that calendar day in local time. `new Date()` reads it as UTC midnight,
 // which west of Greenwich is the evening before: the sheet printed March 3.
-const formatDateIn = (locale: LocaleCode) => (iso: string | null): string => {
+// Through the shared formatter (TIME-003), which renders a DATE as written and
+// an instant in the family's zone.
+const formatDateWith = (fmtDate: Format['fmtDate']) => (iso: string | null): string => {
   if (!iso) return '—';
   const d = parseISO(iso);
   if (Number.isNaN(d.getTime())) return '—';
-  return d.toLocaleDateString(locale, { year: 'numeric', month: 'long', day: 'numeric' });
+  return fmtDate(iso, 'MMMM d, yyyy') || '—';
 };
 
-function ageFrom(birthday: string | null): string {
-  const age = ageOn(birthday, new Date());
+/** `today` is the family's calendar day (clock.calendarToday()), not the device's. */
+function ageFrom(birthday: string | null, today: Date): string {
+  const age = ageOn(birthday, today);
   return age === null ? '' : `${age}`;
 }
 
@@ -65,8 +69,7 @@ function SheetShell({
   onClose: () => void;
   children: React.ReactNode;
 }) {
-  const locale = useLocale();
-  const formatDate = formatDateIn(locale.code);
+  const formatDate = formatDateWith(useFormat().fmtDate);
   const t = useTranslations();
   return (
     <div className="print-sheet fixed inset-0 z-[120] overflow-y-auto bg-white">
@@ -174,10 +177,10 @@ export function CheckInSheet({
   medications: Medication[];
   onClose: () => void;
 }) {
-  const locale = useLocale();
-  const formatDate = formatDateIn(locale.code);
+  const formatDate = formatDateWith(useFormat().fmtDate);
   const t = useTranslations();
-  const age = ageFrom(member.birthday);
+  const clock = useFamilyClock();
+  const age = ageFrom(member.birthday, clock.calendarToday());
   const primary = providers.find((p) => p.is_primary) ?? providers[0] ?? null;
   const medList = medications.length
     ? medications.map((m) => [m.name, m.dosage].filter(Boolean).join(' ')).join(', ')

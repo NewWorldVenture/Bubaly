@@ -28,6 +28,7 @@ import type { HabitCoaching } from '@/lib/habits/ai';
 import { HABIT_PRESETS, PRESET_CATEGORIES, presetToHabit, presetTarget, dayProgress, doneDates, hydrationNudge, type HabitPreset } from '@/lib/habits/presets';
 import { ageOn } from '@/lib/members/age';
 import { useTranslations } from '@/components/i18n/locale-provider';
+import { useFamilyClock } from '@/components/i18n/use-format';
 
 type Habit = Tables<'habits'>;
 type HabitLog = Tables<'habit_logs'>;
@@ -53,7 +54,9 @@ export function HabitsModule() {
   const t = useTranslations();
   const { familyId, userId, members, selfMember } = useApp();
   const { success, error: toastError } = useToast();
-  const [today, setToday] = useState(() => toISODate(new Date()));
+  // The FAMILY's day and hour (TIME-003).
+  const clock = useFamilyClock();
+  const [today, setToday] = useState(() => clock.todayKey());
   const [editing, setEditing] = useState<Habit | null>(null);
   const [addOpen, setAddOpen] = useState(false);
   const [coachOpen, setCoachOpen] = useState(false);
@@ -73,7 +76,7 @@ export function HabitsModule() {
     return () => { owner.active = false; };
   }, [owner]);
   useEffect(() => {
-    const updateDay = () => setToday(toISODate(new Date()));
+    const updateDay = () => setToday(clock.todayKey());
     const timer = window.setInterval(updateDay, 60_000);
     window.addEventListener('focus', updateDay);
     window.addEventListener('online', updateDay);
@@ -84,7 +87,7 @@ export function HabitsModule() {
       window.removeEventListener('online', updateDay);
       document.removeEventListener('visibilitychange', updateDay);
     };
-  }, []);
+  }, [clock]);
 
   const habitsQ = useRealtimeQuery<Habit>({
     table: 'habits',
@@ -160,8 +163,8 @@ export function HabitsModule() {
 
   function currentHabit(habit: Habit, checkDay = false): Habit | null {
     if (!canMutate()) return null;
-    if (checkDay && latest.current.today !== toISODate(new Date())) {
-      setToday(toISODate(new Date()));
+    if (checkDay && latest.current.today !== clock.todayKey()) {
+      setToday(clock.todayKey());
       return null;
     }
     const current = latest.current.habits.find(row => row.id === habit.id && row.family_id === familyId && row.is_active);
@@ -343,6 +346,7 @@ function HabitCard({ habit, today, logDates, progress, memberName, onToggle, onC
   disabled: boolean; habit: Habit; today: string; logDates: string[]; progress: { count: number; target: number; pct: number; done: boolean } | null; memberName?: string;
   onToggle: () => void; onCount: (delta: number) => void; onEdit: () => void; onArchive: () => void;
 }) {
+  const clock = useFamilyClock();
   const t = useTranslations();
   const c = colorOf(habit.color);
   const h: HabitLike = { cadence: habit.cadence, target_per_period: habit.target_per_period, weekdays: habit.weekdays };
@@ -351,7 +355,7 @@ function HabitCard({ habit, today, logDates, progress, memberName, onToggle, onC
   const rate = Math.round(completionRate(h, logDates, today, 30) * 100);
   const cells = heatmap(h, logDates, today, 28);
   const done = progress ? progress.done : isDoneToday(logDates, today);
-  const nudge = progress ? hydrationNudge(progress, new Date().getHours()) : null;
+  const nudge = progress ? hydrationNudge(progress, clock.hourNow()) : null;
 
   return (
     <div className={cn('group flex flex-col rounded-2xl border-2 p-4', c.soft, c.ring)}>

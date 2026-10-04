@@ -40,6 +40,7 @@ type SendReactArgs = {
   subject: string;
   react: ReactElement;
   replyTo?: string;
+  idempotencyKey?: string;
 };
 
 /**
@@ -53,6 +54,7 @@ export async function sendReactEmail({
   subject,
   react,
   replyTo,
+  idempotencyKey,
 }: SendReactArgs): Promise<{ ok: boolean; skipped?: boolean }> {
   if (!emailEnabled()) {
     console.info(`[email skipped — no RESEND_API_KEY] to=${to} subject="${subject}"`);
@@ -68,13 +70,17 @@ export async function sendReactEmail({
   // down with it — one bad key returned 500 from /api/cron/weekly-digest
   // part-way through the run, abandoning every family after the first.
   try {
-    const { error } = await getResend().emails.send({
+    const payload = {
       from: FROM_EMAIL,
       to,
       subject,
       react,
       ...(replyTo ? { replyTo } : {}),
-    });
+    };
+    const sender = getResend().emails;
+    const { error } = idempotencyKey
+      ? await sender.send(payload, { idempotencyKey })
+      : await sender.send(payload);
 
     if (error) {
       console.error('[email failed]', error);

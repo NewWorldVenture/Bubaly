@@ -12,7 +12,7 @@ import { useDismissOnEscape } from '@/lib/hooks/use-dismiss-on-escape';
 import { dayKeyIn } from '@/lib/time/zoned';
 import { useRealtimeQuery } from '@/lib/hooks/use-realtime-query';
 import { createClient } from '@/lib/supabase/client';
-import { createChoreAction, deleteChoreAssignmentAction, setChoreStatusAction } from '@/app/(app)/dashboard/chores/actions';
+import { createChoreAction, deleteChoreAssignmentAction, respawnChoreAssignmentAction, setChoreStatusAction } from '@/app/(app)/dashboard/chores/actions';
 import { newSubmissionId, submissionSettled } from '@/lib/utils/submission-id';
 import { describeDbError, wroteNoRows } from '@/lib/supabase/errors';
 import { useToast } from '@/components/ui/toast';
@@ -35,7 +35,8 @@ import {
 } from '@/lib/chores/dashboard';
 import type { Tables, Updatable } from '@/lib/database.types';
 import { useLocale, useTranslations } from '@/components/i18n/locale-provider';
-import type { LocaleCode } from '@/lib/i18n/locales';
+import { useFamilyClock, useFormat, type FamilyClock } from '@/components/i18n/use-format';
+import type { Format } from '@/lib/utils/format';
 
 type Chore = Tables<'chores'>;
 type Reward = Tables<'rewards'>;
@@ -56,18 +57,19 @@ const DUE_TONE: Record<string, string> = {
   overdue: 'text-rose-400', today: 'text-amber-400', soon: 'text-amber-300', normal: 'text-muted', none: 'text-muted',
 };
 
-const timeAgoIn = (locale: LocaleCode) => (iso: string | null): string => {
+// "Today" and the clock are the FAMILY's (TIME-003).
+const timeAgoWith = (format: Format, clock: FamilyClock) => (iso: string | null): string => {
   if (!iso) return '';
   const d = new Date(iso);
-  const now = new Date();
-  const sameDay = d.toDateString() === now.toDateString();
-  const time = d.toLocaleTimeString(locale, { hour: 'numeric', minute: '2-digit' });
-  return sameDay ? `Today, ${time}` : `${d.toLocaleDateString(locale, { month: 'short', day: 'numeric' })}, ${time}`;
+  const sameDay = clock.dayKeyOf(d) === clock.todayKey();
+  const time = format.fmtTime(d);
+  return sameDay ? `Today, ${time}` : `${format.fmtDate(d, 'MMM d')}, ${time}`;
 };
 
 export function ChoresModule() {
-  const locale = useLocale();
-  const timeAgo = timeAgoIn(locale.code);
+  const format = useFormat();
+  const clock = useFamilyClock();
+  const timeAgo = timeAgoWith(format, clock);
   const tr = useTranslations();
   const { familyId, userId, role, members, selfMember } = useApp();
   const router = useRouter();
@@ -109,21 +111,20 @@ export function ChoresModule() {
   // Point-window filter for the leaderboard/points widgets.
   const windowed = useMemo(() => {
     if (pointsWindow === 'all') return data;
-    const since = new Date();
-    since.setHours(0, 0, 0, 0);
-    since.setDate(since.getDate() - (pointsWindow === 'week' ? 7 : 30));
+    // From the FAMILY's midnight, N calendar days back (TIME-003).
+    const since = clock.dayStart(-(pointsWindow === 'week' ? 7 : 30));
     return data.filter((a) => {
       if (!isCompleted(a.status)) return true; // active rows unaffected by the window
       const ts = a.approved_at ?? a.submitted_at;
       return ts ? new Date(ts) >= since : true;
     });
-  }, [data, pointsWindow]);
+  }, [data, pointsWindow, clock]);
 
   const asgLike = (rows: Assignment[]): AssignmentLike[] => rows.map((a) => ({ ...a, chore: a.chore }));
 
   const earners = useMemo(() => topEarners(members, asgLike(windowed)), [members, windowed]);
   const pointsMap = useMemo(() => pointsByMember(asgLike(windowed)), [windowed]);
-  const streaks = useMemo(() => streaksByMember(members, asgLike(data), new Date().toLocaleDateString('en-CA')), [members, data]);
+  const streaks = useMemo(() => streaksByMember(members, asgLike(data), clock.todayKey(), clock.timeZone), [members, data, clock]);
   const familyPoints = useMemo(() => totalFamilyPoints(asgLike(windowed)), [windowed]);
   const progress = useMemo(() => rewardsProgress(members, asgLike(data), rewards ?? []), [members, data, rewards]);
 
@@ -176,10 +177,17 @@ export function ChoresModule() {
     const { data: approved, error } = await supabase.from('chore_assignments').update({
       // approved_by is a FK to family_members(id), not auth.users — use the member id.
       status: 'approved', approved_at: new Date().toISOString(), approved_by: selfMemberId, points_awarded: a.chore?.points ?? 0,
-    }).eq('id', a.id).select('id');
+    }).eq('id', a.id).eq('family_id', familyId).select('id');
     setBusy(null);
     if (error) return toastError(describeDbError(error));
     if (wroteNoRows(approved)) return toastError(tr('errors.thatChangeWasNotSaved'));
+    // A recurring chore comes back: the service creates the child's next
+    // assignment (keyed, so a repeat is harmless). Its failure is logged, not
+    // shown — the approval stands either way.
+    if (a.chore && a.chore.recurrence !== 'none') {
+      const next = await respawnChoreAssignmentAction(a.id);
+      if (!next.ok) console.error('[chores] next assignment of a recurring chore was not created', next.error);
+    }
     success(tr('choresModule.approvedPlusPoints', { points: a.chore?.points ?? 0 })); void refresh();
   }
 
@@ -515,7 +523,7 @@ export function ChoresModule() {
 
       {addOpen && manager && (
         <NewChoreModal familyId={familyId} userId={userId} members={members} prefill={prefill}
-          onClose={() => setAddOpen(false)} onSaved={() => { setAddOpen(false); void refresh(); }} />
+          onClose={() => setAddOpen(false)} onSaved={() => { void refresh(); }} />
       )}
       {templatesOpen && (
         <TemplatesModal onClose={() => setTemplatesOpen(false)}
@@ -696,13 +704,13 @@ function CompletedGrid({ rows, memberById }: { rows: Assignment[]; memberById: M
 
 function CompletedCard({ a, member }: { a: Assignment; member?: Tables<'family_members'> }) {
   const tr = useTranslations();
-  const locale = useLocale();
+  const format = useFormat();
   return (
     <div className="flex items-center gap-3 rounded-xl border border-border bg-surface/40 px-3 py-2.5">
       <CheckCircle2 className="h-4 w-4 shrink-0 text-emerald-400" />
       <div className="min-w-0 flex-1">
         <div className="truncate text-sm font-medium">{a.chore?.title ?? '—'}</div>
-        <div className="text-[11px] text-muted">{member?.display_name ?? 'Someone'} · {a.approved_at ? new Date(a.approved_at).toLocaleDateString(locale.code, { month: 'short', day: 'numeric' }) : 'Done'}</div>
+        <div className="text-[11px] text-muted">{member?.display_name ?? 'Someone'} · {a.approved_at ? format.fmtDate(a.approved_at, 'MMM d') : 'Done'}</div>
       </div>
       <span className="flex shrink-0 items-center gap-1 text-xs font-semibold text-amber-400"><Star className="h-3.5 w-3.5 fill-amber-400" /> {tr('choresModule.nPts', { count: a.points_awarded ?? a.chore?.points ?? 0 })}</span>
     </div>
@@ -761,6 +769,19 @@ function NewChoreModal({ familyId, userId, members, prefill, onClose, onSaved }:
   const tr = useTranslations();
   const { error: toastError } = useToast();
   const [loading, setLoading] = useState(false);
+  const context = useMemo(() => ({ familyId, userId }), [familyId, userId]);
+  const currentContext = useRef(context);
+  currentContext.current = context;
+  const active = useRef(true);
+  useEffect(() => {
+    active.current = true;
+    return () => { active.current = false; };
+  }, []);
+  function close() {
+    // Fence pending callbacks immediately, before React unmounts this dialog.
+    active.current = false;
+    onClose();
+  }
   // One id per open modal, so a retry after a failed save is the SAME chore and
   // a second Add (a new modal) is a different one. The modal is mounted only
   // while `addOpen`, so closing and reopening mints a fresh id. The one failure
@@ -787,6 +808,7 @@ function NewChoreModal({ familyId, userId, members, prefill, onClose, onSaved }:
     if (!memberId) return toastError(tr('choresModule.pickWhoThisChoreIs'));
     if (!Number.isFinite(points) || points < 0 || points > 1000) return toastError(tr('choresModule.rewardMustBeBetween0'));
 
+    const isCurrent = () => active.current && currentContext.current === context;
     setLoading(true);
     try {
       // One call. `createChore` creates the chore and its assignment together and
@@ -797,6 +819,7 @@ function NewChoreModal({ familyId, userId, members, prefill, onClose, onSaved }:
         dueAt: due_at, assigneeId: memberId, submissionId: submissionId.current,
       });
       if (!result.ok) {
+        if (!isCurrent()) return;
         // `already_saved`: an earlier Add of this modal landed as the chore the
         // message names, and it no longer matches these fields. That save is
         // settled; a further Add is a new chore, which the message offers.
@@ -804,16 +827,19 @@ function NewChoreModal({ familyId, userId, members, prefill, onClose, onSaved }:
         toastError(result.error);
         return;
       }
+      // A dispatched action may commit after closing. Refresh that confirmed
+      // save without letting its old dialog close a newer composition.
       onSaved();
+      if (isCurrent()) close();
     } catch (err) {
-      toastError(describeDbError(err));
+      if (isCurrent()) toastError(describeDbError(err));
     } finally {
-      setLoading(false);
+      if (isCurrent()) setLoading(false);
     }
   }
 
   return (
-    <Modal open title={tr('chores.addChore')} onClose={onClose}>
+    <Modal open title={tr('chores.addChore')} onClose={close}>
       <form onSubmit={onSubmit} className="space-y-4">
         <input type="hidden" name="icon" defaultValue={prefill?.icon ?? ''} />
         <Field label={tr('chores.title')} required>
@@ -846,7 +872,7 @@ function NewChoreModal({ familyId, userId, members, prefill, onClose, onSaved }:
           )}
         </Field>
         <div className="flex justify-end gap-2 pt-1">
-          <Button type="button" variant="ghost" onClick={onClose}>{tr('chores.cancel')}</Button>
+          <Button type="button" variant="ghost" onClick={close}>{tr('chores.cancel')}</Button>
           <Button type="submit" loading={loading}>{loading ? 'Saving…' : 'Add Chore'}</Button>
         </div>
       </form>

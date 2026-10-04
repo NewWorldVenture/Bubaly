@@ -24,7 +24,8 @@ import {
   TRIP_STATUS_LABELS, TRIP_STATUS_KEYS, TRIP_ITEM_KIND_KEYS, TRIP_ITEM_ADD_KEYS, type TripLike, type TripItemLike, type TripItemKind,
 } from '@/lib/trips/planner';
 import type { Tables, TripStatus } from '@/lib/database.types';
-import { useLocale, useTranslations } from '@/components/i18n/locale-provider';
+import { useTranslations } from '@/components/i18n/locale-provider';
+import { useFamilyClock, useFormat } from '@/components/i18n/use-format';
 import { useConfirm } from '@/components/ui/confirm';
 
 type Trip = Tables<'trips'>;
@@ -42,18 +43,14 @@ const KIND_ICON: Record<TripItemKind, typeof Luggage> = {
 };
 const KIND_ORDER: TripItemKind[] = ['packing', 'todo', 'reservation', 'document'];
 
-function todayKey(): string {
-  const d = new Date();
-  return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
-}
-
 const blankTrip = {
   id: '', name: '', destination: '', start_date: '', end_date: '',
   status: 'planning' as TripStatus, traveler_ids: [] as string[], notes: '',
 };
 
 export function TripsModule() {
-  const locale = useLocale();
+  const format = useFormat();
+  const clock = useFamilyClock();
   const tr = useTranslations();
   const askConfirm = useConfirm();
   const { familyId, userId, members, role } = useApp();
@@ -83,7 +80,8 @@ export function TripsModule() {
   });
 
   const memberName = (id: string | null) => members.find((m) => m.id === id)?.display_name ?? null;
-  const tk = todayKey();
+  // The FAMILY's today (TIME-003), not the phone's.
+  const tk = clock.todayKey();
 
   const itemsByTrip = useMemo(() => {
     const map = new Map<string, TripItem[]>();
@@ -171,6 +169,7 @@ export function TripsModule() {
     if (wroteNoRows(rows)) toastError(tr('errors.thatChangeWasNotSaved'));
   }
   async function removeItem(it: TripItem) {
+    if (!(await askConfirm({ title: tr('confirm.removeNamed', { name: it.label }), body: tr('confirm.cannotBeUndone') }))) return;
     const sb = createClient();
     const { data: rows, error: err } = await sb.from('trip_items').delete().eq('id', it.id).eq('family_id', familyId).select('id');
     if (err) { toastError(describeDbError(err)); return; }
@@ -179,10 +178,10 @@ export function TripsModule() {
 
   const fmtRange = (t: Trip) => {
     if (!t.start_date) return 'Dates TBD';
-    const opt: Intl.DateTimeFormatOptions = { month: 'short', day: 'numeric' };
-    const s = new Date(`${t.start_date}T00:00:00`).toLocaleDateString(locale.code, opt);
+    // Trip dates are DATES, rendered as written (TIME-003).
+    const s = format.fmtDate(t.start_date, 'MMM d');
     if (!t.end_date) return s;
-    const e = new Date(`${t.end_date}T00:00:00`).toLocaleDateString(locale.code, { ...opt, year: 'numeric' });
+    const e = format.fmtDate(t.end_date, 'MMM d, yyyy');
     return `${s} – ${e}`;
   };
 

@@ -9,7 +9,7 @@ import type { SmsReplyStatus } from '@/lib/contact-center/sms-reply-status';
 const state = vi.hoisted(() => ({ messages: {} as Record<string, string>, locale: 'en-US' as string, rows: [] as unknown[], readError: false,
   context: vi.fn(), statuses: vi.fn(), columns: '', calls: [] as string[] }));
 vi.mock('next/navigation', () => ({ useRouter: () => ({ refresh: vi.fn() }) }));
-vi.mock('@/components/i18n/locale-provider', async () => { const { localeOrDefault } = await import('@/lib/i18n/locales'); return { useTranslations: () => (key: string) => state.messages[key] ?? key, useLocale: () => localeOrDefault(state.locale) }; });
+vi.mock('@/components/i18n/locale-provider', async () => { const { localeOrDefault } = await import('@/lib/i18n/locales'); return { useFamilyTimeZone: () => undefined, useTranslations: () => (key: string) => state.messages[key] ?? key, useLocale: () => localeOrDefault(state.locale) }; });
 vi.mock('@/lib/i18n/server', () => ({ getTranslations: async () => (key: string) => state.messages[key] ?? key }));
 vi.mock('@/lib/supabase/auth', () => ({ requirePlanLevel: state.context }));
 vi.mock('@/lib/contact-center/sms-reply-status', () => ({ readSmsReplyStatuses: state.statuses }));

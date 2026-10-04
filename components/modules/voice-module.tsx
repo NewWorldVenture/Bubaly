@@ -11,6 +11,7 @@ import { useRealtimeQuery } from '@/lib/hooks/use-realtime-query';
 import { createClient } from '@/lib/supabase/client';
 import { describeDbError, wroteNoRows } from '@/lib/supabase/errors';
 import { useToast } from '@/components/ui/toast';
+import { useConfirm } from '@/components/ui/confirm';
 import { Button } from '@/components/ui/button';
 import { Textarea } from '@/components/ui/input';
 import { SkeletonList, ErrorState } from '@/components/ui/states';
@@ -23,7 +24,7 @@ import { recordVoiceCommand } from '@/lib/voice/history';
 import type { CaptureKind } from '@/lib/capture/parse';
 import type { Tables } from '@/lib/database.types';
 import { useTranslations } from '@/components/i18n/locale-provider';
-import { useFormat } from '@/components/i18n/use-format';
+import { useFamilyClock, useFormat } from '@/components/i18n/use-format';
 
 type VoiceCommand = Tables<'voice_commands'>;
 
@@ -54,7 +55,9 @@ export function VoiceModule() {
 }
 
 function VoiceCaptureSession() {
+  const clock = useFamilyClock();
   const tr = useTranslations();
+  const askConfirm = useConfirm();
   // One time-ago, and it follows the reader. Its tail called
   // toLocaleDateString(undefined, …) — the BROWSER's locale, not the family's.
   const { fmtTimeAgo } = useFormat();
@@ -115,7 +118,7 @@ function VoiceCaptureSession() {
       if (!route.text) { journey.abandon(); toastError(tr('voiceModule.didntCatchACommand')); return; }
       sb = createClient();
       const res = await saveCapture(sb, {
-        kind: route.kind, text: route.text, familyId, userId, memberId: selfMember?.id ?? null, isCurrent,
+        kind: route.kind, text: route.text, familyId, userId, memberId: selfMember?.id ?? null, isCurrent, timeZone: clock.timeZone,
       });
       if (!isCurrent()) return;
       // Log the command to the family's voice history (best-effort — a logging
@@ -179,6 +182,7 @@ function VoiceCaptureSession() {
   }
 
   async function remove(c: VoiceCommand) {
+    if (!(await askConfirm({ title: tr('confirm.deleteNamed', { name: c.transcript }), body: tr('confirm.cannotBeUndone') }))) return;
     const sb = createClient();
     // Family-scoped in the house style, and read back: under RLS a refused row
     // comes back with no error and zero rows, which this used to report as done.

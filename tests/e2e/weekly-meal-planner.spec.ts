@@ -50,6 +50,7 @@ const entry = collect('components/modules/meals-module.tsx');
 const origin = 'https://weekly-meals-fixture.invalid';
 type Row = Record<string, unknown>;
 type ActionKind = 'plan' | 'create' | 'remove' | 'grocery';
+type GroceryToggleMode = 'success' | 'transport' | 'refuse' | 'lost-response';
 type ActionMode = 'success' | 'hold' | 'reject' | 'throw' | 'wrong-slot' | 'missing-slot' | 'lost-response' | 'duplicate-slot';
 type ApiMode = 'success' | 'hold' | 'reject' | 'not-written' | 'zero-count' | 'no-rows' | 'wrong-row' | 'duplicate-row';
 type Call = { kind: ActionKind; input: Row | string; familyId: string };
@@ -62,7 +63,7 @@ type Probe = {
   captureClick: (label: string) => void; captureSubmit: () => void; fireCaptured: (count: number) => void;
   apiMode: ApiMode; apiCalls: Row[]; api: (input: Row) => Promise<{ status: number; body: Row }>;
   finishApi: (mode?: ApiMode) => void;
-  toastLifetime: number | null;
+  toastLifetime: number | null; groceryToggleMode?: GroceryToggleMode; groceryCheckCalls?: Array<{id:string;checked:boolean}>;
 };
 declare global { interface Window { __weeklyMeals: Probe } }
 
@@ -113,8 +114,8 @@ async function fixture(page: Page, options: { familyId?: string; timezone?: stri
     const translate = (key, vars = {}) => Object.entries(vars).reduce((text, [name,value]) => text.split('{' + name + '}').join(String(value)), messages[key] || key);
     function from(table) {
       const filters = [];
-      let limit = Infinity;
-      const builder = { select() { return this; }, order() { return this; }, limit(value) { limit = value; return this; },
+      let limit = Infinity; const orders = [];
+      const builder = { select() { return this; }, order(column, options = {}) { orders.push({column, ...options}); return this; }, limit(value) { limit = value; return this; },
         eq(column,value) { filters.push(['eq',column,value]); return this; },
         gte(column,value) { filters.push(['gte',column,value]); return this; },
         lte(column,value) { filters.push(['lte',column,value]); return this; },
@@ -124,7 +125,15 @@ async function fixture(page: Page, options: { familyId?: string; timezone?: stri
           const isJoin = table === 'meals' && filters.some(([op]) => op === 'in');
           const fail = p.readErrors[isJoin ? 'meal-join' : table];
           const rows = (p.tables[table] || []).filter(row => filters.every(([op,column,value]) => op === 'eq' ? row[column] === value
-            : op === 'gte' ? row[column] >= value : op === 'lte' ? row[column] <= value : value.includes(row[column]))).slice(0,limit);
+            : op === 'gte' ? row[column] >= value : op === 'lte' ? row[column] <= value : value.includes(row[column]))).sort((a,b) => {
+            for (const ordering of orders) {
+              const x=a[ordering.column], y=b[ordering.column];
+              if (x === y) continue;
+              if (x == null || y == null) return x == null ? (ordering.nullsFirst === true ? -1 : 1) : (ordering.nullsFirst === true ? 1 : -1);
+              const cmp=String(x).localeCompare(String(y)); if (cmp) return ordering.ascending === false ? -cmp : cmp;
+            }
+            return 0;
+          }).slice(0,limit);
           return Promise.resolve(fail ? {data:null,error:{message:'Fixture read unavailable',code:'XX000'}} : {data:structuredClone(rows),error:null}).then(resolve,reject);
         },
       };
@@ -194,14 +203,24 @@ async function fixture(page: Page, options: { familyId?: string; timezone?: stri
       react:React, 'react-dom':ReactDOM, 'lucide-react':window.LucideReact,
       'next/link':{default:({children,...props})=>h('a',props,children)},
       '@/components/app/app-context':{useApp:()=>({familyId:p.familyId,userId:'user-A',family:{id:p.familyId,name:p.familyId,timezone:p.timezone},members:[],selfMember:null,role:'parent',planLevel:2})},
-      '@/components/i18n/locale-provider':{useTranslations:()=>translate,useLocale:()=> ({code:'en-US'})},
+      '@/components/i18n/locale-provider':{useTranslations:()=>translate,useLocale:()=> ({code:'en-US'}),useFamilyTimeZone:()=>undefined},
       '@/components/ui/toast':{useToast:()=>({success:message=>p.notices.push({kind:'success',message}),error:message=>p.notices.push({kind:'error',message})})},
       '@capacitor/core':{Capacitor:{isNativePlatform:()=>false}}, '@capacitor/haptics':{},
       '@/components/ai/ai-insight':{AiInsight:()=>null},
       '@/lib/supabase/client':{createClient:()=>db},
       '@/lib/offline/cache-scope':{useAuthenticatedCacheScope:()=>null,isAuthenticatedCacheScopeCurrent:()=>true},
       '@/app/(app)/dashboard/meals/actions':{planMealAction:input=>action('plan',input),createMealAction:input=>action('create',input),removeMealPlanAction:input=>action('remove',input)},
-      '@/app/(app)/dashboard/grocery/actions':{addMealPlanToGroceryListAction:input=>action('grocery',input),setGroceryItemCheckedAction:async()=>({ok:true})},
+      '@/app/(app)/dashboard/grocery/actions':{addMealPlanToGroceryListAction:input=>action('grocery',input),setGroceryItemCheckedAction:async(id,checked)=>{
+        p.groceryCheckCalls ||= []; p.groceryCheckCalls.push({id,checked});
+        const mode=p.groceryToggleMode || 'success';
+        if(mode==='transport') throw new Error('Synthetic grocery transport unavailable');
+        if(mode==='refuse') return {ok:false,error:'Synthetic grocery change refused'};
+        const row=p.tables.grocery_items.find(row=>row.id===id && row.family_id===p.familyId);
+        if(!row) return {ok:false,error:'Synthetic item missing'};
+        row.is_checked=checked;
+        if(mode==='lost-response') throw new Error('Synthetic grocery response lost after commit');
+        return {ok:true,id};
+      }},
     };
     function load(id) {
       if (id in mocks) return mocks[id]; if (loaded[id]) return loaded[id].exports;
@@ -560,7 +579,7 @@ for (const width of [280,320]) {
 
 test('standalone meal creation preserves ingredient rows and submits once', async ({page}) => {
   await fixture(page);
-  const trigger=page.getByRole('button',{name:'Add Meal',exact:true});
+  const trigger=page.getByRole('button',{name:'Add meal to library',exact:true});
   await trigger.click();
   await dialog(page).getByRole('textbox',{name:/^Meal name/}).fill('Garden pasta');
   await dialog(page).getByRole('textbox',{name:'Ingredient 1',exact:true}).fill('Pasta');
@@ -586,12 +605,12 @@ test('standalone meal creation preserves ingredient rows and submits once', asyn
 
 test('standalone pending creation is retired when the family changes', async ({page}) => {
   await fixture(page);
-  await page.getByRole('button',{name:'Add Meal',exact:true}).click();
+  await page.getByRole('button',{name:'Add meal to library',exact:true}).click();
   await dialog(page).getByRole('textbox',{name:/^Meal name/}).fill('Old family dish');
   await page.evaluate(()=>{window.__weeklyMeals.modes.create='hold';});
   await save(page).click();
   await page.evaluate(()=>window.__weeklyMeals.render({familyId:'family-B'}));
-  await page.getByRole('button',{name:'Add Meal',exact:true}).click();
+  await page.getByRole('button',{name:'Add meal to library',exact:true}).click();
   const name=dialog(page).getByRole('textbox',{name:/^Meal name/});
   await name.fill('New family draft');
   await finish(page);
@@ -601,7 +620,7 @@ test('standalone pending creation is retired when the family changes', async ({p
 
 test('standalone saved meal retries its failed library read without creating it again', async ({page}) => {
   await fixture(page);
-  await page.getByRole('button',{name:'Add Meal',exact:true}).click();
+  await page.getByRole('button',{name:'Add meal to library',exact:true}).click();
   await dialog(page).getByRole('textbox',{name:/^Meal name/}).fill('Saved beans');
   await page.evaluate(()=>{window.__weeklyMeals.modes.create='hold';});
   await save(page).click();
@@ -769,4 +788,161 @@ test('dismisses a hovered save notification after reopening a dinner and replace
   expect(plans.filter(row=>row.plan_date==='2026-09-08' && row.meal_type==='dinner')).toHaveLength(1);
   expect(plans.find(row=>row.id==='existing-lunch')?.meal_id).toBe('meal-tacos');
   expect(await calls(page)).toHaveLength(3);
+});
+const carouselCaseNames = new Set([
+  'check then uncheck survives actual query reload',
+  'reported refusal gives feedback without changing the item',
+  'transport failure gives feedback and contains the rejection',
+  'lost-response failure gives feedback and contains the rejection',
+  'unmatched search does not report the saved recipe library is empty',
+  'truly empty recipe library has the ordinary empty state',
+  'clearing an unmatched search restores the saved recipe unchanged',
+  'ordered read keeps recently cooked first and sorts uncooked recipes by name',
+  'saved meal picker follows alphabetical library order',
+  'deleting selected last dinner keeps remaining carousel name and date consistent',
+  'same-week refresh removing selected dinner keeps remaining carousel usable',
+  'empty selected week keeps seven choices and truthful sidebar',
+  'remaining first selection survives removal without hiding its dish',
+  'keeps dinner navigation and indicators consistent after shrinking three dinners to two',
+]);
+const carouselBrowserEvents = new WeakMap<Page, string[]>();
+test.beforeEach(async ({page}, testInfo) => {
+  if (!carouselCaseNames.has(testInfo.title)) return;
+  const events: string[] = [];
+  carouselBrowserEvents.set(page, events);
+  page.on('console', message => {
+    if (message.type() === 'error' || message.type() === 'warning') events.push(`${message.type()}: ${message.text()}`);
+  });
+  page.on('pageerror', error => events.push(`pageerror: ${error.message}`));
+  page.on('requestfailed', request => events.push(`requestfailed: ${request.url()} ${request.failure()?.errorText}`));
+});
+test.afterEach(async ({page}) => {
+  const events = carouselBrowserEvents.get(page);
+  if (events) expect(events).toEqual([]);
+});
+
+const carouselMeals = [
+  {id:'meal-tacos',family_id:'family-A',name:'Lime tacos',ingredients:[],meal_type:'dinner',image_url:null,recipe_url:'https://recipe.invalid/tacos'},
+  {id:'meal-curry',family_id:'family-A',name:'Coconut curry',ingredients:[],meal_type:'dinner',image_url:null,recipe_url:'https://recipe.invalid/curry'},
+];
+const carouselPlans = [
+ {id:'first-dinner',family_id:'family-A',meal_id:'meal-tacos',plan_date:'2026-09-07',meal_type:'dinner'},
+ {id:'last-dinner',family_id:'family-A',meal_id:'meal-curry',plan_date:'2026-09-08',meal_type:'dinner'},
+];
+const dinnerCard=(page:Page)=>page.locator('.module-sidebar .sidebar-card').first();
+test('unsafe stored dinner recipe URLs do not render as clickable links',async({page})=>{
+ for(const recipeUrl of ['javascript:alert(1)','data:text/html,unsafe','file:///etc/passwd','https://user:pass@recipe.invalid/path']){
+  await page.setViewportSize({width:1280,height:900});
+  await fixture(page,{meals:[{...carouselMeals[0],recipe_url:recipeUrl}],plans:[carouselPlans[0]]});
+  await expect(dinnerCard(page)).toContainText('Lime tacos');
+  await expect(dinnerCard(page).getByRole('link',{name:'View recipe'})).toHaveCount(0);
+ }
+});
+test('safe stored dinner recipe URLs render normalized web links',async({page})=>{
+ await page.setViewportSize({width:1280,height:900});
+ await fixture(page,{meals:[{...carouselMeals[0],recipe_url:'https://recipe.invalid/path'}],plans:[carouselPlans[0]]});
+ await expect(dinnerCard(page).getByRole('link',{name:'View recipe'})).toHaveAttribute('href','https://recipe.invalid/path');
+});
+test('deleting selected last dinner keeps remaining carousel name and date consistent',async({page})=>{
+ await page.setViewportSize({width:1280,height:900});await fixture(page,{plans:carouselPlans,meals:carouselMeals});
+ const card=dinnerCard(page);await expect(card).toContainText('Lime tacos');await card.getByRole('button',{name:'Next dinner'}).click();await expect(card).toContainText('Coconut curry');
+ await page.getByRole('button',{name:/Remove meal: Dinner, Tuesday/}).click();
+ await expect(slot(page,'Tuesday')).toContainText('Choose a meal');await expect(slot(page,'Monday')).toContainText('Lime tacos');
+ await expect(card).toContainText('Lime tacos');await expect(card).toContainText('Monday');await expect(card.getByRole('link',{name:'View recipe'})).toHaveAttribute('href','https://recipe.invalid/tacos');
+});
+test('same-week refresh removing selected dinner keeps remaining carousel usable',async({page})=>{
+ await page.setViewportSize({width:1280,height:900});await fixture(page,{plans:carouselPlans,meals:carouselMeals});const card=dinnerCard(page);
+ await card.getByRole('button',{name:'Next dinner'}).click();await expect(card).toContainText('Coconut curry');
+ await page.evaluate(()=>{window.__weeklyMeals.tables.meal_plans=window.__weeklyMeals.tables.meal_plans.filter(row=>row.id!=='last-dinner');window.dispatchEvent(new Event('online'));});
+ await expect(slot(page,'Tuesday')).toContainText('Choose a meal');await expect(card).toContainText('Lime tacos');
+});
+test('empty selected week keeps seven choices and truthful sidebar',async({page})=>{
+ await fixture(page);await expect(page.getByRole('button',{name:/Dinner for /})).toHaveCount(7);await expect(dinnerCard(page)).toContainText('No dinners planned this week yet');
+ await page.getByRole('button',{name:'Next week',exact:true}).click();await expect(page.getByRole('button',{name:/Dinner for /})).toHaveCount(7);
+ await page.getByRole('button',{name:'This Week',exact:true}).click();await expect(slot(page,'Monday')).toContainText('Choose a meal');
+});
+test('remaining first selection survives removal without hiding its dish',async({page})=>{
+ await page.setViewportSize({width:1280,height:900});await fixture(page,{plans:carouselPlans,meals:carouselMeals});
+ await page.getByRole('button',{name:/Remove meal: Dinner, Tuesday/}).click();await expect(dinnerCard(page)).toContainText('Lime tacos');await expect(dinnerCard(page)).toContainText('Monday');
+});
+test('keeps dinner navigation and indicators consistent after shrinking three dinners to two',async({page})=>{
+  await page.setViewportSize({width:1280,height:900});
+  await fixture(page,{meals:carouselMeals,plans:[...carouselPlans,{id:'third-dinner',family_id:'family-A',meal_id:'meal-tacos',plan_date:'2026-09-09',meal_type:'dinner'}]});
+  const card=dinnerCard(page);
+  await card.getByRole('button',{name:'Next dinner'}).click();await card.getByRole('button',{name:'Next dinner'}).click();
+  await expect(card).toContainText('Wednesday');
+  await page.getByRole('button',{name:/Remove meal: Dinner, Wednesday/}).click();
+  await expect(card).toContainText('Coconut curry');await expect(card).toContainText('Tuesday');
+  await expect(card.getByRole('link',{name:'View recipe'})).toHaveAttribute('href','https://recipe.invalid/curry');
+  await expect(card.locator('span.bg-brand')).toHaveCount(1);
+  await card.getByRole('button',{name:'Next dinner'}).click();await expect(card).toContainText('Lime tacos');await expect(card).toContainText('Monday');
+  await expect(card.getByRole('link',{name:'View recipe'})).toHaveAttribute('href','https://recipe.invalid/tacos');
+  await card.getByRole('button',{name:'Previous dinner'}).click();await expect(card).toContainText('Coconut curry');await expect(card).toContainText('Tuesday');
+  await expect(card.locator('span.bg-brand')).toHaveCount(1);
+});
+const libraryRecipes=(page:Page)=>page.locator('.module-main .group .truncate.text-sm.font-semibold');
+async function recipesTab(page:Page){await page.getByRole('button',{name:'Recipes',exact:true}).click();}
+test('unmatched search does not report the saved recipe library is empty',async({page})=>{
+ await fixture(page);await recipesTab(page);await expect(page.getByText('Tomato soup',{exact:true})).toBeVisible();
+ await page.getByPlaceholder('Search recipes…').fill('zzzz-not-a-recipe');
+ const tables=await page.evaluate(()=>window.__weeklyMeals.tables.family_recipes.filter(r=>r.family_id==='family-A'));
+ expect(tables).toHaveLength(1);await expect(page.getByRole('heading',{name:'No meals match your search.',exact:true})).toBeVisible();await expect(page.getByRole('heading',{name:'No recipes yet',exact:true})).toHaveCount(0);await expect(page.getByText('Saved recipes will appear here.',{exact:true})).toHaveCount(0);
+});
+test('truly empty recipe library has the ordinary empty state',async({page})=>{
+ await fixture(page);await page.evaluate(()=>{window.__weeklyMeals.tables.family_recipes=[];window.dispatchEvent(new Event('online'));});
+ await recipesTab(page);await expect(page.getByRole('heading',{name:'No recipes yet',exact:true})).toBeVisible();
+});
+test('clearing an unmatched search restores the saved recipe unchanged',async({page})=>{
+ await fixture(page);await recipesTab(page);const search=page.getByPlaceholder('Search recipes…');await search.fill('zzzz-not-a-recipe');await search.fill(' tomato ');
+ await expect(page.getByText('Tomato soup',{exact:true})).toBeVisible();await search.fill('');await expect(page.getByText('Tomato soup',{exact:true})).toBeVisible();
+ expect((await page.evaluate(()=>window.__weeklyMeals.tables.family_recipes.filter(r=>r.family_id==='family-A')))[0].id).toBe('recipe-soup');
+});
+test('ordered read keeps recently cooked first and sorts uncooked recipes by name',async({page})=>{
+ await fixture(page);await page.evaluate(()=>{
+ const base=window.__weeklyMeals.tables.family_recipes[0];window.__weeklyMeals.tables.family_recipes=[
+ {...base,id:'older',name:'Older cooked',last_made_at:'2026-09-01T12:00:00Z'},
+ {...base,id:'zebra',name:'Zebra uncooked',last_made_at:null},
+ {...base,id:'recent',name:'Recent cooked',last_made_at:'2026-09-11T12:00:00Z'},
+ {...base,id:'apple',name:'Apple uncooked',last_made_at:null},
+ ];window.dispatchEvent(new Event('online'));});await recipesTab(page);
+ await expect(libraryRecipes(page)).toHaveText(['Recent cooked','Older cooked','Apple uncooked','Zebra uncooked']);
+});
+test('saved meal picker follows alphabetical library order',async({page})=>{
+ await fixture(page,{meals:[
+ {id:'z',family_id:'family-A',name:'Zucchini dinner',ingredients:[],meal_type:'dinner',image_url:null,recipe_url:null},
+ {id:'a',family_id:'family-A',name:'Apple dinner',ingredients:[],meal_type:'dinner',image_url:null,recipe_url:null},
+ ]});await slot(page).click();await expect(dialog(page).getByRole('button',{name:/Apple dinner|Zucchini dinner/})).toHaveText(['🍽️Apple dinner','🍽️Zucchini dinner']);
+});
+async function groceryToggleFixture(page:Page,mode:GroceryToggleMode='success') {
+ await fixture(page);
+ await page.evaluate(mode=>{
+  const p=window.__weeklyMeals;p.groceryToggleMode=mode;
+  p.tables.grocery_items=[{id:'rice',family_id:'family-A',list_id:'list-A',name:'Synthetic rice',quantity:'1 cup',is_checked:false,created_at:'2026-09-12T12:00:00Z'}];
+  window.dispatchEvent(new Event('online'));
+ },mode);
+ await page.getByRole('button',{name:'Groceries',exact:true}).click();
+ await expect(page.locator('.module-main').getByRole('button',{name:/Synthetic rice/})).toBeVisible();
+}
+test('check then uncheck survives actual query reload',async({page})=>{
+ await groceryToggleFixture(page);const item=page.locator('.module-main').getByRole('button',{name:/Synthetic rice/});
+ await item.click();await expect(item.getByText('Synthetic rice',{exact:true})).toHaveClass(/line-through/);
+ expect(await page.evaluate(()=>window.__weeklyMeals.tables.grocery_items[0].is_checked)).toBe(true);
+ await item.click();await expect(item.getByText('Synthetic rice',{exact:true})).not.toHaveClass(/line-through/);
+ expect(await page.evaluate(()=>window.__weeklyMeals.tables.grocery_items[0].is_checked)).toBe(false);
+});
+test('reported refusal gives feedback without changing the item',async({page})=>{
+ await groceryToggleFixture(page,'refuse');await page.locator('.module-main').getByRole('button',{name:/Synthetic rice/}).click();
+ await expect.poll(async()=> (await notices(page)).length).toBe(1);expect(await page.evaluate(()=>window.__weeklyMeals.tables.grocery_items[0].is_checked)).toBe(false);
+});
+for(const mode of ['transport','lost-response'] as const)test(`${mode} failure gives feedback and contains the rejection`,async({page})=>{
+ await groceryToggleFixture(page,mode);await page.locator('.module-main').getByRole('button',{name:/Synthetic rice/}).click();
+ await expect.poll(async()=> (await notices(page)).length).toBe(1);
+ expect(await page.evaluate(()=>window.__weeklyMeals.errors)).toEqual([]);expect(await notices(page,'success')).toEqual([]);
+ expect(await page.evaluate(()=>window.__weeklyMeals.groceryCheckCalls)).toEqual([{id:'rice',checked:true}]);
+ expect(await page.evaluate(()=>window.__weeklyMeals.tables.grocery_items[0].is_checked)).toBe(mode==='lost-response');
+ if(mode==='lost-response'){
+  await page.evaluate(()=>window.dispatchEvent(new Event('online')));
+  await expect(page.locator('.module-main').getByText('Synthetic rice',{exact:true})).toHaveClass(/line-through/);
+  expect(await page.evaluate(()=>window.__weeklyMeals.groceryCheckCalls?.length)).toBe(1);
+ }
 });

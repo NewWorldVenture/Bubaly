@@ -19,11 +19,12 @@ import { PageHeader } from '@/components/app/page-header';
 import { AiInsight } from '@/components/ai/ai-insight';
 import { cn } from '@/lib/utils/cn';
 import {
-  dosesForDay, doseSlotInstant, adherenceRate, doseStatusCounts, shortTime, localDateKey,
+  dosesForDay, doseSlotInstant, adherenceRate, doseStatusCounts, shortTime,
   DAY_LABELS, type ScheduleLike, type DueDose,
 } from '@/lib/medications/adherence';
 import type { Tables, DoseStatus } from '@/lib/database.types';
 import { useTranslations } from '@/components/i18n/locale-provider';
+import { useFamilyClock } from '@/components/i18n/use-format';
 import { useConfirm } from '@/components/ui/confirm';
 
 type Medication = Tables<'medications'>;
@@ -103,7 +104,9 @@ export function MedicationsModule() {
   const [readbackBlocked, setReadbackBlocked] = useState(false);
   const savingMed = busy === 'medication';
   const savingSchedule = busy === 'schedule';
-  const [dayKey, setDayKey] = useState(() => localDateKey(new Date()));
+  // The FAMILY's day (TIME-003); dose slots below already resolve in its zone.
+  const clock = useFamilyClock();
+  const [dayKey, setDayKey] = useState(() => clock.todayKey());
   const owner = useMemo(() => ({ active: false, pending: false, familyId, userId, role }), [familyId, userId, role]);
   const currentOwner = useRef(owner);
   currentOwner.current = owner;
@@ -129,7 +132,7 @@ export function MedicationsModule() {
   }, [owner]);
 
   useEffect(() => {
-    const updateDay = () => setDayKey(localDateKey(new Date()));
+    const updateDay = () => setDayKey(clock.todayKey());
     const timer = window.setInterval(updateDay, 60_000);
     window.addEventListener('focus', updateDay);
     window.addEventListener('online', updateDay);
@@ -140,7 +143,7 @@ export function MedicationsModule() {
       window.removeEventListener('online', updateDay);
       document.removeEventListener('visibilitychange', updateDay);
     };
-  }, []);
+  }, [clock]);
 
   // Adherence window lower bound (ISO) for the dose log query.
   const windowStart = useMemo(() => {
@@ -272,14 +275,14 @@ export function MedicationsModule() {
   // ── Dose logging ──────────────────────────────────────────
   async function logDose(due: DueDose, status: DoseStatus) {
     if (!canMutate()) return;
-    const currentDay = localDateKey(new Date());
+    const currentDay = clock.todayKey();
     if (latest.current.dayKey !== currentDay || !due.slotKey.startsWith(`${currentDay}T`)) {
       setDayKey(currentDay);
       return;
     }
     const med = latest.current.meds.find((m) => m.id === due.medicationId && m.family_id === familyId && m.is_active);
     const schedule = latest.current.schedules.find((s) => s.id === due.scheduleId && s.medication_id === med?.id && s.family_id === familyId);
-    const currentSlot = schedule && dosesForDay([schedule], [], new Date(), familyZone).find((slot) => slot.slotKey === due.slotKey);
+    const currentSlot = schedule && dosesForDay([schedule], [], clock.calendarToday(), familyZone).find((slot) => slot.slotKey === due.slotKey);
     if (!med || !currentSlot || (med.member_id && !latest.current.members.some((m) => m.id === med.member_id && m.family_id === familyId))) {
       toastError(t('medicationsModule.doseChanged'));
       return;
@@ -376,7 +379,7 @@ export function MedicationsModule() {
     const opening = {};
     currentScheduleOpening.current = opening;
     setScheduleOpening(opening);
-    setScheduleFor(m); setScheduleForm({ ...blankSchedule, starts_on: localDateKey(new Date()) });
+    setScheduleFor(m); setScheduleForm({ ...blankSchedule, starts_on: clock.todayKey() });
   }
 
   async function saveSchedule(e: React.FormEvent) {

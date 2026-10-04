@@ -18,8 +18,8 @@ import { PageHeader } from '@/components/app/page-header';
 import { AiInsight } from '@/components/ai/ai-insight';
 import { cn } from '@/lib/utils/cn';
 import type { Tables, GameResult } from '@/lib/database.types';
-import { useLocale, useTranslations } from '@/components/i18n/locale-provider';
-import { parseCalendarDate } from '@/lib/utils/calendar-date';
+import { useTranslations } from '@/components/i18n/locale-provider';
+import { useFamilyClock, useFormat } from '@/components/i18n/use-format';
 
 type SportsEvent = Tables<'sports_events'>;
 type Team = Tables<'teams'>;
@@ -35,7 +35,8 @@ const SPORT_EMOJIS: Record<string, string> = { Soccer: '⚽', Basketball: '🏀'
 const RESULT_OPTIONS = ['win', 'loss', 'tie'] as const;
 
 export function SportsModule() {
-  const locale = useLocale();
+  const format = useFormat();
+  const clock = useFamilyClock();
   const tr = useTranslations();
   const { familyId, userId, members } = useApp();
   const { success, error: toastError } = useToast();
@@ -53,8 +54,9 @@ export function SportsModule() {
 
   // --- Date helpers ---
   const now = useMemo(() => new Date().toISOString(), []);
-  const monthStart = useMemo(() => { const d = new Date(); d.setDate(1); d.setHours(0, 0, 0, 0); return d.toISOString(); }, []);
-  const monthEnd = useMemo(() => { const d = new Date(); d.setMonth(d.getMonth() + 1, 0); d.setHours(23, 59, 59, 999); return d.toISOString(); }, []);
+  // The FAMILY's month (TIME-003): a game counts toward the month it was
+  // played in at home, whatever the phone's zone.
+  const monthKey = clock.todayKey().slice(0, 7);
 
   // --- Realtime queries ---
   const { data: events, loading: eventsLoading, error: eventsError, refresh: refreshEvents } = useRealtimeQuery<SportsEvent>({
@@ -80,7 +82,7 @@ export function SportsModule() {
   // --- Derived data ---
   const upcoming = useMemo(() => events.filter((e) => e.starts_at >= now).slice(0, 5), [events, now]);
   const upcomingGames = useMemo(() => events.filter((e) => e.starts_at >= now && (e.event_type === 'game' || e.event_type === 'tournament')).slice(0, 3), [events, now]);
-  const gamesThisMonth = useMemo(() => gameResults.filter((g) => g.date >= monthStart && g.date <= monthEnd), [gameResults, monthStart, monthEnd]);
+  const gamesThisMonth = useMemo(() => gameResults.filter((g) => !!g.date && clock.dayKeyOf(g.date).slice(0, 7) === monthKey), [gameResults, monthKey, clock]);
   const activeSports = useMemo(() => [...new Set(activeTeams.map((t) => t.sport).filter(Boolean))], [activeTeams]);
   const recentResults = useMemo(() => gameResults.slice(0, 5), [gameResults]);
 
@@ -285,8 +287,8 @@ export function SportsModule() {
                           </td>
                           <td className="px-4 py-3.5"><span className="text-fg">{e.sport || 'Sports'}</span></td>
                           <td className="px-4 py-3.5">
-                            <p className="font-medium">{d.toLocaleDateString(locale.code, { month: 'short', day: 'numeric' })}</p>
-                            <p className="text-xs text-muted">{d.toLocaleTimeString(locale.code, { hour: 'numeric', minute: '2-digit' })}</p>
+                            <p className="font-medium">{format.fmtDate(d, 'MMM d')}</p>
+                            <p className="text-xs text-muted">{format.fmtTime(d)}</p>
                           </td>
                           <td className="px-4 py-3.5 text-muted text-xs">{e.location || '—'}</td>
                           <td className="px-4 py-3.5">
@@ -358,13 +360,12 @@ export function SportsModule() {
                   const isTie = r.result === 'tie';
                   const label = isWin ? 'W' : isTie ? 'T' : 'L';
                   const scoreStr = r.our_score != null && r.their_score != null ? `${r.our_score}-${r.their_score}` : '—';
-                  const d = parseCalendarDate(r.date);
                   return (
                     <div key={r.id} className="flex items-center gap-3">
                       <div className={cn('grid h-9 w-9 shrink-0 place-items-center rounded-lg text-sm font-black', isWin ? 'bg-emerald-500/20 text-emerald-300' : isTie ? 'bg-yellow-500/20 text-yellow-300' : 'bg-red-500/20 text-red-400')}>{label}</div>
                       <div className="flex-1 min-w-0">
                         <p className="text-sm font-semibold">{team?.team_name ?? 'Unknown'} vs {r.opponent}</p>
-                        <p className="text-xs text-muted">{team?.sport ?? 'Sports'} &middot; {d?.toLocaleDateString(locale.code, { month: 'short', day: 'numeric' })}</p>
+                        <p className="text-xs text-muted">{team?.sport ?? 'Sports'} &middot; {r.date ? format.fmtDate(r.date, 'MMM d') : ''}</p>
                       </div>
                       <p className="text-sm font-bold tabular-nums">{scoreStr}</p>
                     </div>
@@ -390,9 +391,9 @@ export function SportsModule() {
                 return (
                   <div key={e.id} className="flex items-start gap-3">
                     <div className="grid h-10 w-10 shrink-0 place-items-center rounded-lg bg-violet-500 text-center text-white">
-                      <div><p className="text-[9px] font-bold uppercase">{d.toLocaleDateString(locale.code, { month: 'short' })}</p><p className="text-sm font-black leading-none">{d.getDate()}</p></div>
+                      <div><p className="text-[9px] font-bold uppercase">{format.fmtDate(d, 'MMM')}</p><p className="text-sm font-black leading-none">{format.fmtDate(d, 'd')}</p></div>
                     </div>
-                    <div><p className="text-sm font-semibold">{e.title}</p><p className="text-xs text-muted">{d.toLocaleTimeString(locale.code, { hour: 'numeric', minute: '2-digit' })}</p></div>
+                    <div><p className="text-sm font-semibold">{e.title}</p><p className="text-xs text-muted">{format.fmtTime(d)}</p></div>
                   </div>
                 );
               })}

@@ -46,7 +46,7 @@ vi.mock('@/lib/i18n/server', async () => {
 });
 vi.mock('@/components/i18n/locale-provider', async () => {
   const { SOURCE_MESSAGES: en, translate: tr } = await import('@/lib/i18n/messages');
-  return { useTranslations: () => (key: string, params?: Record<string, string | number>) => tr(en, key, params) };
+  return { useFamilyTimeZone: () => undefined, useTranslations: () => (key: string, params?: Record<string, string | number>) => tr(en, key, params) };
 });
 // quick-actions is a client component; these are the three hooks it needs a
 // provider for. Nothing here is clicked, so they only have to exist.

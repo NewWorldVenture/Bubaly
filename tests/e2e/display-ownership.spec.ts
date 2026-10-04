@@ -1,6 +1,7 @@
 import fs from 'node:fs';
 import path from 'node:path';
 import ts from 'typescript';
+import { parseISO } from 'date-fns';
 import { expect, test, type Page } from '@playwright/test';
 import type { DisplayData } from '../../components/display/display-grid';
 import type { DisplaySettings } from '../../lib/display/ambient';
@@ -39,8 +40,15 @@ const ownerEntries = Object.fromEntries([
   ['@/lib/auth/session', 'lib/auth/session.ts'],
   ['@/shared/auth/refresh-fetch', 'shared/auth/refresh-fetch.ts'],
 ].map(([id, file]) => [id, collectOwner(file)]));
+// date-fns's real parseISO, through the same loader (DISPLAY-TZ-01). A stand-in
+// that read every string with `new Date` put a date-only value at UTC midnight,
+// where date-fns puts it at local midnight: west of UTC the calendar's
+// '2026-09-01' heading became August.
+const parseIsoModule = collectOwner(require.resolve('date-fns/parseISO'));
 const sources = Object.fromEntries([
   'lib/display/ambient.ts', 'lib/display/tiles.ts', 'lib/display/calendar.ts', 'lib/onboarding/ics-time.ts',
+  // The family clock (TIME-003): the real shared formatter and the zone helpers it reads.
+  'components/i18n/use-format.ts', 'lib/utils/format.ts', 'lib/time/zoned.ts', 'lib/time/local-day.ts', 'lib/time/wall-clock.ts',
   'lib/i18n/locales.ts',
   'components/display/setup-card.tsx', 'components/display/display-grid.tsx',
   'components/display/display-shell-client.tsx',
@@ -62,6 +70,7 @@ type Props = {
 type Write = { family_id: string; updated_by: string; tiles: Tile[]; settings: DisplaySettings };
 type DisplayProbe = {
   localeCode: string;
+  parseISO: (value: string) => Date;
   props: Props; writes: Write[]; stored: Record<string, Write>; notices: Array<{ kind: string; message: string }>;
   render: (patch?: Partial<Props>) => void;
   finish: (index: number, message?: string, thrown?: boolean) => void;
@@ -128,9 +137,14 @@ test.beforeEach(async ({ page }) => {
         error: message => p.notices.push({ kind: 'error', message }),
       }) },
       '@/components/ui/avatar': { Avatar: empty },
-      '@/components/i18n/locale-provider': { useTranslations: () => translation, useLocale: () => load('lib/i18n/locales.ts').localeOrDefault(p.localeCode) },
-      '@/lib/utils/format': { fmtTime: value => String(value) },
+      '@/components/i18n/locale-provider': { useTranslations: () => translation, useLocale: () => load('lib/i18n/locales.ts').localeOrDefault(p.localeCode), useFamilyTimeZone: () => undefined },
       '@/lib/utils/cn': { cn: (...parts) => parts.flat().filter(Boolean).join(' ') },
+      // The real lib/utils/format.ts runs here (TIME-003, through useFormat);
+      // date-fns is its one npm import and every pattern reached maps to Intl.
+      // parseISO is the real one: a date-only value is a LOCAL date.
+      'date-fns': { parseISO: loadOwner(${JSON.stringify(parseIsoModule)}).parseISO, format: value => new Date(value).toISOString(),
+        isToday: value => value.toDateString() === new Date().toDateString(),
+        isTomorrow: value => { const day = new Date(); day.setDate(day.getDate() + 1); return value.toDateString() === day.toDateString(); } },
       '@/lib/constants/navigation': { ALL_SERVICES_CATALOG: [], ALL_SERVICES_BY_HREF: new Map() },
       '@/lib/display/imagery': { recipeImage: () => '', mealImage: () => '', AMBIENT_FALLBACK_PHOTOS: [] },
       './ask-tile': { AskTile: empty }, './handled-today-tile': { HandledTodayTile: empty },
@@ -161,6 +175,12 @@ test.beforeEach(async ({ page }) => {
         if (Object.prototype.hasOwnProperty.call(ownerEntries, id)) return loadOwner(ownerEntries[id]);
         if (id === './family-media-ref') return load('lib/storage/family-media-ref.ts');
         if (id === '@/lib/offline/cache') return load('lib/offline/cache.ts');
+        // The family clock (TIME-003): the real shared formatter and its helpers.
+        if (id === '@/components/i18n/use-format') return load('components/i18n/use-format.ts');
+        if (id === '@/lib/utils/format') return load('lib/utils/format.ts');
+        if (id === '@/lib/time/zoned') return load('lib/time/zoned.ts');
+        if (id === '@/lib/time/local-day') return load('lib/time/local-day.ts');
+        if (id === '@/lib/time/wall-clock') return load('lib/time/wall-clock.ts');
         if (Object.prototype.hasOwnProperty.call(requires, id)) return requires[id];
         throw new Error('Unexpected import ' + id);
       };
@@ -168,6 +188,7 @@ test.beforeEach(async ({ page }) => {
       modules[file] = module.exports;
       return module.exports;
     }
+    p.parseISO = requires['date-fns'].parseISO;
     p.props = {
       familyId: 'family-A', userId: 'user-A',
       initialTiles: [{ id: 'A', widget: 'schedule', size: 'sm' }],
@@ -433,6 +454,47 @@ test('family timezone formats event times and timed dates while preserving all-d
   await expect(page.getByText('Timed next date', { exact: true }).locator('..')).toContainText('11 sept.');
   await expect(page.getByText('All-day next date', { exact: true }).locator('..')).toContainText('12 sept.');
 });
+
+// DISPLAY-TZ-01: the harness parses dates the way date-fns does, whatever the
+// viewer's offset. CI runs in UTC, so the zones are emulated: UTC, +14, -11 and
+// a DST zone west of UTC.
+const sample = (d: Date) => [d.getFullYear(), d.getMonth(), d.getDate(), d.getHours(), d.getMinutes()];
+const PARSED = {
+  dateOnly: [2026, 8, 1, 0, 0], localTime: [2026, 8, 1, 0, 30],
+  utc: Date.UTC(2026, 8, 1, 0, 30), offset: Date.UTC(2026, 7, 31, 22, 30),
+};
+
+test('the expected parses are date-fns\'s own', () => {
+  expect({
+    dateOnly: sample(parseISO('2026-09-01')), localTime: sample(parseISO('2026-09-01T00:30')),
+    utc: parseISO('2026-09-01T00:30:00Z').getTime(), offset: parseISO('2026-09-01T00:30:00+02:00').getTime(),
+  }).toEqual(PARSED);
+});
+
+for (const timezoneId of ['UTC', 'Pacific/Kiritimati', 'Pacific/Pago_Pago', 'America/Los_Angeles']) {
+  test.describe(`viewer in ${timezoneId}`, () => {
+    test.use({ timezoneId });
+
+    test('date-only and local timestamps parse to local time; an offset is absolute', async ({ page }) => {
+      expect(await page.evaluate(() => Intl.DateTimeFormat().resolvedOptions().timeZone)).toBe(timezoneId);
+      const parsed = await page.evaluate(() => {
+        const parse = window.__displayProbe.parseISO;
+        const sample = (d: Date) => [d.getFullYear(), d.getMonth(), d.getDate(), d.getHours(), d.getMinutes()];
+        return {
+          dateOnly: sample(parse('2026-09-01')), localTime: sample(parse('2026-09-01T00:30')),
+          utc: parse('2026-09-01T00:30:00Z').getTime(), offset: parse('2026-09-01T00:30:00+02:00').getTime(),
+        };
+      });
+      expect(parsed).toEqual(PARSED);
+    });
+
+    test('the calendar heading names the month it was given', async ({ page }) => {
+      await refresh(page, { initialTiles: layout('calendar') });
+      await expect(page.getByText('September 2026', { exact: true })).toBeVisible();
+      await expect(page.getByText('August 2026', { exact: true })).toHaveCount(0);
+    });
+  });
+}
 
 test('timezone fallback is visible and invalid input renders safely in UTC', async ({ page }) => {
   const data = await page.evaluate(() => ({ ...window.__displayProbe.props.data, timezone: 'Invalid/Fixture', timezoneFallback: true }));

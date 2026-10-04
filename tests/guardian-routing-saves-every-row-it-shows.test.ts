@@ -66,6 +66,8 @@ vi.mock('@/components/ui/toast', () => ({
 vi.mock('@/components/i18n/locale-provider', () => ({
   useTranslations: () => (key: string) => key,
   useLocale: () => 'en-US',
+  // No family bound: formatters fall back to the reader's zone (TIME-003).
+  useFamilyTimeZone: () => undefined,
 }));
 
 const { RoutingSettings } = await import('@/components/guardian/routing-settings');

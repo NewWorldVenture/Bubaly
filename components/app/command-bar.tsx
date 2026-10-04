@@ -38,6 +38,7 @@ import { moduleFromPathname } from '@/lib/concierge/suggested-prompts';
 import { MicButton } from '@/components/voice/mic-button';
 import { useLockBodyScroll } from '@/lib/hooks/use-lock-body-scroll';
 import { useTranslations } from '@/components/i18n/locale-provider';
+import { useFamilyClock } from '@/components/i18n/use-format';
 import { useDialogBehavior } from '@/lib/a11y/use-dialog-behavior';
 
 // The router works on English identifiers; what a person reads comes from the
@@ -68,6 +69,7 @@ const TOAST_ANSWER_CHARS = 160;
 const RECORD_DEBOUNCE_MS = 220;
 
 export function CommandBar() {
+  const clock = useFamilyClock();
   const t = useTranslations();
   const router = useRouter();
   const pathname = usePathname();
@@ -183,7 +185,7 @@ export function CommandBar() {
     // capture → write a real row, with Undo (saveCapture returns the result or throws)
     setBusy(true);
     try {
-      const res = await saveCapture(createClient(), { kind: r.captureKind, text: r.text, familyId, userId, memberId: selfMember?.id ?? null });
+      const res = await saveCapture(createClient(), { kind: r.captureKind, text: r.text, familyId, userId, memberId: selfMember?.id ?? null, timeZone: clock.timeZone });
       setOpen(false);
       success(
         res.count > 1 ? t('commandBar.itemsAdded', { count: res.count }) : labelOf(r),
@@ -194,7 +196,7 @@ export function CommandBar() {
     } finally {
       setBusy(false);
     }
-  }, [busy, router, pathname, familyId, userId, selfMember, success, toast, toastError, t, labelOf]);
+  }, [busy, router, pathname, familyId, userId, selfMember, success, toast, toastError, t, labelOf, clock.timeZone]);
 
   // Speaking fills the bar rather than firing blind: the same ranked list a
   // typed query produces is shown, so the person still chooses the outcome.

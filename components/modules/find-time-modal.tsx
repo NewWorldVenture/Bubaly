@@ -13,7 +13,8 @@ import { Modal } from '@/components/ui/modal';
 import { Input } from '@/components/ui/input';
 import { Button } from '@/components/ui/button';
 import { cn } from '@/lib/utils/cn';
-import { useLocale, useTranslations } from '@/components/i18n/locale-provider';
+import { useTranslations } from '@/components/i18n/locale-provider';
+import { useFormat } from '@/components/i18n/use-format';
 
 type Member = ReturnType<typeof useApp>['members'][number];
 type Slot = { startISO: string; endISO: string };
@@ -38,8 +39,8 @@ const WINDOWS = [
 export function FindTimeModal({
   members, selfMemberId, onClose, onScheduled,
 }: { members: Member[]; selfMemberId: string | null; onClose: () => void; onScheduled: () => void }) {
-  const locale = useLocale();
   const tr = useTranslations();
+  const { fmtDate, fmtTime } = useFormat();
   const { success, error: toastError } = useToast();
 
   const [selectedMembers, setSelectedMembers] = useState<string[]>(
@@ -131,11 +132,10 @@ export function FindTimeModal({
   }
 
   const fmtSlot = (s: Slot) => {
-    const start = new Date(s.startISO);
-    const end = new Date(s.endISO);
-    const day = start.toLocaleDateString(locale.code, { weekday: 'short', month: 'short', day: 'numeric' });
-    const t = (d: Date) => d.toLocaleTimeString(locale.code, { hour: 'numeric', minute: '2-digit', hour12: true });
-    return { day, time: `${t(start)} – ${t(end)}` };
+    // The family's day and clock (TIME-003): a slot is offered as it will read
+    // on the calendar it lands on.
+    const day = fmtDate(s.startISO, 'EEE, MMM d');
+    return { day, time: `${fmtTime(s.startISO)} – ${fmtTime(s.endISO)}` };
   };
 
   return (

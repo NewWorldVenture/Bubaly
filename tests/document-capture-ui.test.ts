@@ -25,7 +25,7 @@ vi.mock('react', async (original) => ({
     }
   },
 }));
-vi.mock('@/components/i18n/locale-provider', () => ({ useTranslations: () => (key: string) => translate(getMessages(state.locale), key), useLocale: () => localeOrDefault(state.locale) }));
+vi.mock('@/components/i18n/locale-provider', () => ({ useFamilyTimeZone: () => undefined, useTranslations: () => (key: string) => translate(getMessages(state.locale), key), useLocale: () => localeOrDefault(state.locale) }));
 vi.mock('@/lib/capture/document-upload', async (original) => ({ ...await original<typeof import('@/lib/capture/document-upload')>(), uploadCapturedDocument: state.upload }));
 vi.mock('next/navigation', () => ({ useRouter: () => ({ push: vi.fn(), back: vi.fn(), refresh: state.refresh }) }));
 vi.mock('@/components/app/app-context', () => ({ useApp: () => ({ familyId: state.familyId, userId: state.userId, selfMember: { id: 'member-1' } }) }));

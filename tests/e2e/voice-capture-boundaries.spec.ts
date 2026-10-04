@@ -37,6 +37,8 @@ const SOURCE_FILES = [
   // runs here: createFormat builds Intl objects from the locale code, and the
   // `date-fns` entry in `mocks` below covers the one npm import it carries.
   'components/i18n/use-format.ts', 'lib/utils/format.ts', 'lib/i18n/locales.ts',
+  // The family clock (TIME-003): the shared formatter and the zone helpers it reads.
+  'lib/time/local-day.ts', 'lib/time/wall-clock.ts',
 ];
 const MOCKED = [
   '@/components/app/app-context', '@/lib/supabase/client', '@/components/ui/toast',
@@ -44,6 +46,8 @@ const MOCKED = [
   '@/components/app/page-header', '@/lib/utils/cn', '@/lib/analytics/use-journey',
   '@/components/i18n/locale-provider', '@/lib/hooks/use-realtime-query',
   '@/lib/hooks/use-speech-recognition', '@/lib/database.types',
+  // Removing a command asks first (a-destructive-click-asks-first); the harness answers yes.
+  '@/components/ui/confirm',
 ];
 const sources = Object.fromEntries(SOURCE_FILES.map(file => [`@/${file.replace(/\.tsx?$/, '')}`, ts.transpileModule(
   process.env.CAPTURE_VOICE_BASELINE === '1' && file === 'components/modules/voice-module.tsx'
@@ -123,6 +127,7 @@ async function fixture(page: Page) {
       '@/lib/hooks/use-realtime-query': { useRealtimeQuery: () => ({ data: [], loading: false, error: null, refresh() {} }) },
       '@/lib/supabase/client': { createClient: () => { if (p.throwClient) { p.throwClient = false; throw new Error('Fixture client construction failed'); } return db; } },
       '@/components/ui/toast': { useToast: () => ({ success: (message, action) => { p.toasts.push(message); if (action) p.undo = action.onClick; }, error: message => p.toasts.push(message) }) },
+      '@/components/ui/confirm': { useConfirm: () => async () => true },
       '@/components/ui/button': { Button: props => { if (React.Children.toArray(props.children).includes(tr('voice.runCommand'))) p.run = props.onClick; const { variant, ...rest } = props; return React.createElement('button', rest); } },
       '@/components/ui/input': { Textarea: props => React.createElement('textarea', props) },
       '@/components/ui/states': { SkeletonList: () => null, ErrorState: () => null },
@@ -132,7 +137,7 @@ async function fixture(page: Page) {
       // useFormat() calls useLocale() and reads locale.code off it, so this has
       // to hand back the whole Locale record. A () => 'en-US' stub would leave
       // code undefined and Intl would throw somewhere far from here.
-      '@/components/i18n/locale-provider': { useTranslations: () => tr, useLocale: () => load('@/lib/i18n/locales').localeOrDefault('en-US') },
+      '@/components/i18n/locale-provider': { useTranslations: () => tr, useLocale: () => load('@/lib/i18n/locales').localeOrDefault('en-US'), useFamilyTimeZone: () => undefined },
       // The real lib/utils/format.ts runs, and date-fns is the one npm module it
       // imports; the in-page loader has no bundler. Only parseISO is reached at
       // runtime here - every pattern this fixture formats is Intl-mapped inside

@@ -12,7 +12,7 @@ import { Input, Textarea, Field, Select } from '@/components/ui/input';
 import { Button } from '@/components/ui/button';
 import { SkeletonList, ErrorState, EmptyState } from '@/components/ui/states';
 import { AiInsight } from '@/components/ai/ai-insight';
-import { fmtDate } from '@/lib/utils/format';
+import { useFormat } from '@/components/i18n/use-format';
 import { groupByTrip } from '@/lib/vacations/memories';
 import { uploadFamilyDocument, getDocumentSignedUrl, removeFamilyDocument, DOCUMENT_MAX_BYTES, DOCUMENT_MAX_MB } from '@/lib/storage/documents';
 import type { Tables } from '@/lib/database.types';
@@ -25,6 +25,7 @@ type VacationLite = { id: string; title: string };
 const blank = (tz: string) => ({ title: '', memory_date: todayInZone(tz), note: '', location: '', vacation_id: '', member_id: '', file: null as File | null });
 
 export function TripMemoriesModule() {
+  const { fmtDate } = useFormat();
   const t = useTranslations();
   const { familyId, userId, members, family } = useApp();
   const { success, error: toastError } = useToast();
