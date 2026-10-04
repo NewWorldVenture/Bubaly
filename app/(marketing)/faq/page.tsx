@@ -36,7 +36,7 @@ type FaqSection = { id: string; label: string; blurb: string; icon: FaqIcon; ite
 // assistant to lib/trust/engine.ts and Settings → Bubaly AI, privacy to the
 // Trust Center's own copy (several answers ARE the Trust Center's keys, so the
 // two pages cannot drift apart). tests/marketing-faq-nav-and-tabs.test.ts pins
-// the claims that have been wrong before — a "free Starter plan" new families
+// the claims that have been wrong before — a free "Starter" tier new families
 // never get — and tests/marketing-claims-contract.test.ts reads this file too.
 //
 // Module-level data holds catalogue KEYS only; the page resolves them below.

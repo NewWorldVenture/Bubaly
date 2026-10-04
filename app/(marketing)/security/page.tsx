@@ -118,7 +118,7 @@ const DISCLOSURE_STEPS: [string, string][] = [
   ['security.ack24', 'security.weConfirmReceiptOfEvery'],
   ['security.triage48', 'security.ourSecurityTeamAssessesSeverity'],
   ['security.safeHarborPolicy', 'security.researchersActingInGoodFaith'],
-  ['security.creditRecognition', 'security.researchersAreCreditedOnOur'],
+  ['security.keptInTheLoop', 'security.weKeepYouUpdatedUntil'],
 ];
 
 const AI_STATEMENTS = ['trustCenter.ai1', 'trustCenter.ai2', 'trustCenter.ai3', 'trustCenter.ai4', 'trustCenter.ai5', 'trustCenter.ai6'] as const;
