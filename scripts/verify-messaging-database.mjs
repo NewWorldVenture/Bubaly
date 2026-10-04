@@ -315,7 +315,125 @@ try {
     if (select is_active from public.family_members where id='${memberId}')
       then raise exception 'Removal-first lock ordering unexpectedly reactivated the member'; end if;
   end $$;`);
-  console.log('PASS: two-session message/deactivation races serialize in both lock orderings.');
+
+  // The same active-member ordering applies to every authenticated UPDATE
+  // (content, receipts, reactions, and pins) and hard DELETE, not just INSERT.
+  // Use separate messages for delete-first and delete-after-removal fixtures.
+  sql(`update public.family_members set is_active=true where id='${memberId}';
+    insert into public.family_messages(id, family_id, conversation_id, sender_id, content) values
+      ('00000000-0000-4000-8000-0000000047b6', '${familyId}', '${wholeChatId}', '${aliceId}', 'Delete before removal'),
+      ('00000000-0000-4000-8000-0000000047b7', '${familyId}', '${wholeChatId}', '${aliceId}', 'Delete after removal');`);
+  const membershipWriteRace = async ({ name, writeFirstSql, writeAfterSql, firstStateCheck, deniedStateCheck }) => {
+    const tag = name.toUpperCase().replace(/[^A-Z0-9]+/g, '_');
+    sql(`update public.family_members set is_active=true where id='${memberId}';`);
+    const writeFirst = startConcurrentSql(`begin;
+      set local role authenticated;
+      set local request.jwt.claim.sub='${aliceId}';
+      ${writeFirstSql};
+      select pg_backend_pid() as backend_pid \\gset
+      \\echo ${tag}_WRITE_LOCK_HELD=:backend_pid
+      select pg_sleep(3);
+      commit;`, `${tag}_WRITE_LOCK_HELD`);
+    const writeFirstOutcome = writeFirst.done.then(value => ({ ok: true, value }), error => ({ ok: false, error }));
+    let revokeAfter;
+    try {
+      await writeFirst.ready;
+      revokeAfter = startConcurrentSql(`begin;
+        select pg_backend_pid() as backend_pid \\gset
+        \\echo ${tag}_REVOKE_STARTED=:backend_pid
+        update public.family_members set is_active=false where id='${memberId}';
+        commit;`, `${tag}_REVOKE_STARTED`);
+      const revokeOutcome = revokeAfter.done.then(value => ({ ok: true, value }), error => ({ ok: false, error }));
+      const revokePid = await revokeAfter.ready;
+      const order = await Promise.race([
+        waitForBackendLock(revokePid, `${name} deactivation to wait for the message write`).then(() => 'blocked'),
+        revokeOutcome.then(() => 'finished'),
+      ]);
+      if (order !== 'blocked') throw new Error(`${name} did not serialize before membership deactivation.`);
+      const outcomes = await Promise.all([writeFirstOutcome, revokeOutcome]);
+      if (outcomes.some(outcome => !outcome.ok)) throw outcomes.find(outcome => !outcome.ok).error;
+    } catch (error) {
+      await Promise.all([writeFirstOutcome, revokeAfter?.done.then(value => ({ ok: true, value }), err => ({ ok: false, error: err }))].filter(Boolean));
+      throw error;
+    }
+    sql(`do $$ begin
+      if not coalesce((${firstStateCheck}), false) then raise exception '${name} write-first ordering lost its committed mutation'; end if;
+      if (select is_active from public.family_members where id='${memberId}')
+        then raise exception '${name} write-first ordering did not complete the later deactivation'; end if;
+    end $$;
+    update public.family_members set is_active=true where id='${memberId}';`);
+
+    // Reverse the order. A deactivation that owns the membership row first
+    // must make this write wait, then fail its active-member check.
+    const revokeFirst = startConcurrentSql(`begin;
+      update public.family_members set is_active=false where id='${memberId}';
+      select pg_advisory_xact_lock(834, ${name === 'content edit' ? 3 : 4});
+      select pg_backend_pid() as backend_pid \\gset
+      \\echo ${tag}_REVOKE_LOCK_HELD=:backend_pid
+      select pg_sleep(3);
+      commit;`, `${tag}_REVOKE_LOCK_HELD`);
+    const revokeFirstOutcome = revokeFirst.done.then(value => ({ ok: true, value }), error => ({ ok: false, error }));
+    let writeAfter;
+    try {
+      await revokeFirst.ready;
+      writeAfter = startConcurrentSql(`begin;
+        set local role authenticated;
+        set local request.jwt.claim.sub='${aliceId}';
+        select pg_backend_pid() as backend_pid \\gset
+        \\echo ${tag}_WRITE_AFTER_STARTED=:backend_pid
+        ${writeAfterSql};
+        commit;`, `${tag}_WRITE_AFTER_STARTED`);
+      const writeAfterOutcome = writeAfter.done.then(value => ({ ok: true, value }), error => ({ ok: false, error }));
+      const writePid = await writeAfter.ready;
+      const order = await Promise.race([
+        waitForBackendLock(writePid, `${name} to wait for the in-flight deactivation`).then(() => 'blocked'),
+        writeAfterOutcome.then(() => 'finished'),
+      ]);
+      if (order !== 'blocked') throw new Error(`${name} completed before the in-flight deactivation released its row lock.`);
+      const revokeOutcome = await revokeFirstOutcome;
+      if (!revokeOutcome.ok) throw revokeOutcome.error;
+      const outcome = await writeAfterOutcome;
+      if (outcome.ok) throw new Error(`${name} after committed membership deactivation was accepted.`);
+      if (!String(outcome.error.stderr ?? '').includes('An active household member is required')) throw outcome.error;
+    } catch (error) {
+      await Promise.all([revokeFirstOutcome, writeAfter?.done.then(value => ({ ok: true, value }), err => ({ ok: false, error: err }))].filter(Boolean));
+      throw error;
+    }
+    sql(`do $$ begin
+      if not coalesce((${deniedStateCheck}), false) then raise exception '${name} after-removal write changed or removed the message'; end if;
+      if (select is_active from public.family_members where id='${memberId}')
+        then raise exception '${name} removal-first ordering unexpectedly reactivated the member'; end if;
+    end $$;`);
+    console.log(`PASS: two-session ${name} and membership-removal races serialize in both lock orderings.`);
+  };
+
+  await membershipWriteRace({
+    name: 'content edit',
+    writeFirstSql: "update public.family_messages set content='Edited before removal' where id='00000000-0000-4000-8000-0000000047b1'",
+    writeAfterSql: "update public.family_messages set content='Edited after removal' where id='00000000-0000-4000-8000-0000000047b1'",
+    firstStateCheck: "(select content = 'Edited before removal' from public.family_messages where id='00000000-0000-4000-8000-0000000047b1')",
+    deniedStateCheck: "(select content = 'Edited before removal' from public.family_messages where id='00000000-0000-4000-8000-0000000047b1')",
+  });
+  await membershipWriteRace({
+    name: 'hard delete',
+    writeFirstSql: "delete from public.family_messages where id='00000000-0000-4000-8000-0000000047b6'",
+    writeAfterSql: "delete from public.family_messages where id='00000000-0000-4000-8000-0000000047b7'",
+    firstStateCheck: "not exists (select 1 from public.family_messages where id='00000000-0000-4000-8000-0000000047b6')",
+    deniedStateCheck: "exists (select 1 from public.family_messages where id='00000000-0000-4000-8000-0000000047b7')",
+  });
+  // Service-role maintenance has auth.uid() = NULL and keeps its prior bypass.
+  sql(`insert into public.family_messages(id, family_id, conversation_id, sender_id, content)
+      values ('00000000-0000-4000-8000-0000000047b8', '${familyId}', '${wholeChatId}', '${aliceId}', 'Service write');
+    set role service_role;
+    set request.jwt.claim.sub='';
+    update public.family_messages set content='Service edit' where id='00000000-0000-4000-8000-0000000047b8';
+    delete from public.family_messages where id='00000000-0000-4000-8000-0000000047b8';
+    reset role;
+    do $$ begin
+      if exists(select 1 from public.family_messages where id='00000000-0000-4000-8000-0000000047b8') then
+        raise exception 'Service-role delete behavior changed'; end if;
+    end $$;`);
+  console.log('PASS: service-role message update/delete remains available without an authenticated membership lock.');
   console.log(`Messaging database checks passed on disposable PostgreSQL at 127.0.0.1:${port}.`);
 } catch (error) {
   if (error.stderr) console.error(String(error.stderr));

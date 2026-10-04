@@ -77,6 +77,10 @@ begin
     raise exception 'BREACH: operation identity changed';
   exception when insufficient_privilege then null; end;
   begin
+    update public.family_messages set family_id = other_fam where id = message.id;
+    raise exception 'BREACH: message moved to another household';
+  exception when insufficient_privilege then null; end;
+  begin
     insert into public.family_messages(family_id, conversation_id, sender_id, content) values(fam, foreign_conv, a, 'Cross family');
     raise exception 'BREACH: message and conversation families disagree';
   exception when check_violation then null; end;

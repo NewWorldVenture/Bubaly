@@ -260,6 +260,19 @@ create or replace function messaging_private.message_guard()
 returns trigger language plpgsql security definer set search_path = '' as $$
 declare c public.family_conversations; parent public.family_messages; path text; m public.family_members;
 begin
+  if auth.uid() is not null and tg_op = 'UPDATE' then
+    -- Every authenticated message mutation (content, receipts, reactions, and
+    -- pins) must serialize with membership removal, not only a new send. Use
+    -- OLD.family_id because authenticated writers cannot move messages between
+    -- households; the sender guard below independently normalizes identity.
+    if new.family_id is distinct from old.family_id or new.conversation_id is distinct from old.conversation_id then
+      raise exception 'A message cannot move between households or conversations' using errcode = '42501';
+    end if;
+    select fm.* into m from public.family_members fm
+      where fm.family_id = old.family_id and fm.user_id = auth.uid() and fm.is_active
+      order by fm.id limit 1 for share of fm;
+    if not found then raise exception 'An active household member is required' using errcode = '42501'; end if;
+  end if;
   select * into c from public.family_conversations where id = new.conversation_id;
   if not found or c.family_id <> new.family_id then raise exception 'A message must belong to its conversation household' using errcode = '23514'; end if;
   if tg_op = 'INSERT' and c.is_archived then raise exception 'Unarchive this conversation before sending a message' using errcode = '42501'; end if;
@@ -304,6 +317,26 @@ drop trigger if exists trg_family_message_integrity on public.family_messages;
 create trigger trg_family_message_integrity before insert or update on public.family_messages
   for each row execute function messaging_private.message_guard();
 -- Existing sender and per-person read/reaction triggers (0367, 0463) stay active.
+create or replace function messaging_private.message_delete_membership_guard()
+returns trigger language plpgsql security definer set search_path = '' as $$
+declare m public.family_members;
+begin
+  -- Preserve server-side deletion behavior. Authenticated hard deletes need the
+  -- same ordering guarantee as updates; there is no UPDATE trigger on DELETE.
+  -- Foreign-key cascades run this trigger nested under the trusted parent
+  -- deletion and must still clean up messages for inactive/removed members.
+  if auth.uid() is null or pg_trigger_depth() > 1 then return old; end if;
+  select fm.* into m from public.family_members fm
+    where fm.family_id = old.family_id and fm.user_id = auth.uid() and fm.is_active
+    order by fm.id limit 1 for share of fm;
+  if not found then raise exception 'An active household member is required' using errcode = '42501'; end if;
+  return old;
+end;
+$$;
+revoke all on function messaging_private.message_delete_membership_guard() from public, anon, authenticated;
+drop trigger if exists trg_family_message_delete_membership_guard on public.family_messages;
+create trigger trg_family_message_delete_membership_guard before delete on public.family_messages
+  for each row execute function messaging_private.message_delete_membership_guard();
 alter table public.family_messages enable row level security;
 revoke all on public.family_messages from anon, authenticated;
 grant select, insert, update, delete on public.family_messages to authenticated;
