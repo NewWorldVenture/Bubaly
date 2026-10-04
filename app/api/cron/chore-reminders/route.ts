@@ -116,15 +116,18 @@ export async function GET(req: NextRequest) {
   // whole run, so nobody gets a chore reminder rather than one family losing
   // its name from the copy.
   const familyIds = [...new Set([...byMember.values()].map((bucket) => bucket.familyId))];
-  const { data: families, error: familiesError } = await readInChunks<{ id: string; name: string }, { message: string }>(
+  // `timezone` too: the email prints each chore's due DAY, which is the
+  // family's, not the UTC host's.
+  const { data: families, error: familiesError } = await readInChunks<{ id: string; name: string; timezone: string | null }, { message: string }>(
     familyIds,
-    (chunk) => supabase.from('families').select('id, name').in('id', chunk),
+    (chunk) => supabase.from('families').select('id, name, timezone').in('id', chunk),
   );
   if (familiesError) {
     console.error('Cron chore family read error:', familiesError);
     return NextResponse.json({ error: t('choreReminders.choreReminderProcessingFailed') }, { status: 500 });
   }
   const familyNameById = new Map(families.map((f) => [f.id, f.name]));
+  const familyZoneById = new Map(families.map((f) => [f.id, f.timezone || 'UTC']));
 
   // Patch family names back in
   for (const bucket of byMember.values()) {
@@ -187,14 +190,14 @@ export async function GET(req: NextRequest) {
   let unserved = 0;
   const startedAt = Date.now();
 
-  const remind = async ({ userId, memberName, familyName, chores }: MemberBucket) => {
+  const remind = async ({ userId, memberName, familyId, familyName, chores }: MemberBucket) => {
     if (emailBlocked.has(userId)) { skipped++; return; }
     const email = emailByUserId.get(userId);
     if (!email) { skipped++; return; }
     const { ok, skipped: notSent } = await sendReactEmail({
       to: email,
       subject: `${chores.length} chore${chores.length !== 1 ? 's' : ''} coming up this week`,
-      react: React.createElement(ChoreReminderEmail, { memberName, familyName, chores }),
+      react: React.createElement(ChoreReminderEmail, { memberName, familyName, chores, timeZone: familyZoneById.get(familyId) ?? 'UTC' }),
     });
     // No provider: sendReactEmail answers ok with `skipped`, and nothing was sent.
     if (notSent) skipped++;

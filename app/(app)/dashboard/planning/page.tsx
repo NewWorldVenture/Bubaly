@@ -11,16 +11,12 @@ import { cn } from '@/lib/utils/cn';
 import { getLocaleContext, getTranslations } from '@/lib/i18n/server';
 import { getFormat } from '@/lib/utils/format-server';
 import { addDaysToDayKey, dayKeyInTz } from '@/lib/services/scope';
-import type { LocaleCode } from '@/lib/i18n/locales';
 
 export async function generateMetadata(): Promise<Metadata> {
   const t = await getTranslations();
   return { title: t('dashboardPlanning.planningAmpOrganization') };
 }
 export const dynamic = 'force-dynamic';
-
-const fmtDay = (d: string | null, locale: LocaleCode) =>
-  d ? new Date(d).toLocaleDateString(locale, { month: 'short', day: 'numeric' }) : '';
 
 // Per-query fail-safe: a single domain erroring (e.g. a table not yet migrated on
 // this database, or a slow/failed count) degrades that one card to empty instead
@@ -94,7 +90,10 @@ export default async function PlanningPage() {
   // The same zone the day key uses, for the clock printed on each event. It was
   // the bare `fmtTime` import, which renders in the RUNTIME's zone — the server's
   // here — so this page selected the family's day and then timed it in UTC.
-  const { fmtTime } = await getFormat(tz);
+  // `fmtDate` too: the day labels below were `toLocaleDateString(locale, …)`,
+  // which on the server is the HOST's day. A DATE column (`due_date`) renders in
+  // no zone at all; an instant renders in the family's.
+  const { fmtTime, fmtDate } = await getFormat(tz);
 
   const [
     { data: events, count: eventCount },
@@ -163,25 +162,25 @@ export default async function PlanningPage() {
         {/* 1. Calendar */}
         <FeatureCard index={1} title={tr('dashboardPlanning.calendar')} href="/dashboard/calendar" icon={CalendarIcon} tint="bg-blue-500/15 text-blue-400" count={eventCount ?? 0} countLabel="upcoming events">
           {(events ?? []).length === 0 ? <EmptyHint>{tr('dashboardPlanning.noUpcomingEvents')}</EmptyHint>
-            : (events as Ev[]).map((e) => <ListRow key={e.id} label={e.title} meta={e.all_day ? fmtDay(e.starts_at, locale.code) : fmtTime(e.starts_at)} dot="bg-blue-400" />)}
+            : (events as Ev[]).map((e) => <ListRow key={e.id} label={e.title} meta={e.all_day ? fmtDate(e.starts_at, 'MMM d') : fmtTime(e.starts_at)} dot="bg-blue-400" />)}
         </FeatureCard>
 
         {/* 2. Tasks */}
         <FeatureCard index={2} title={tr('dashboardPlanning.tasks')} href="/dashboard/todos" icon={CheckSquare} tint="bg-emerald-500/15 text-emerald-400" count={taskCount ?? 0} countLabel="open tasks">
           {(tasks ?? []).length === 0 ? <EmptyHint>{tr('dashboardPlanning.noOpenTasks')}</EmptyHint>
-            : (tasks as Td[]).map((t) => <ListRow key={t.id} label={t.title} meta={t.due_date === todayIso ? 'Today' : fmtDay(t.due_date, locale.code)} dot="bg-emerald-400" />)}
+            : (tasks as Td[]).map((t) => <ListRow key={t.id} label={t.title} meta={t.due_date === todayIso ? 'Today' : fmtDate(t.due_date, 'MMM d')} dot="bg-emerald-400" />)}
         </FeatureCard>
 
         {/* 3. Reminders */}
         <FeatureCard index={3} title={tr('dashboardPlanning.reminders')} href="/dashboard/reminders" icon={BellRing} tint="bg-amber-500/15 text-amber-400" count={reminderCount ?? 0} countLabel="active reminders">
           {(reminders ?? []).length === 0 ? <EmptyHint>{tr('dashboardPlanning.noActiveReminders')}</EmptyHint>
-            : (reminders as Rm[]).map((r) => <ListRow key={r.id} label={r.title} meta={r.remind_at ? fmtDay(r.remind_at, locale.code) : ''} dot="bg-amber-400" />)}
+            : (reminders as Rm[]).map((r) => <ListRow key={r.id} label={r.title} meta={r.remind_at ? fmtDate(r.remind_at, 'MMM d') : ''} dot="bg-amber-400" />)}
         </FeatureCard>
 
         {/* 4. Notes */}
         <FeatureCard index={4} title={tr('dashboardPlanning.notes')} href="/dashboard/notes" icon={StickyNote} tint="bg-violet-500/15 text-violet-400" count={noteCount ?? 0} countLabel="notes">
           {(notes ?? []).length === 0 ? <EmptyHint>{tr('dashboardPlanning.noNotesYet')}</EmptyHint>
-            : (notes as Nt[]).map((n) => <ListRow key={n.id} label={(n.title ?? n.body ?? 'Untitled').slice(0, 60)} meta={fmtDay(n.updated_at, locale.code)} dot="bg-violet-400" />)}
+            : (notes as Nt[]).map((n) => <ListRow key={n.id} label={(n.title ?? n.body ?? 'Untitled').slice(0, 60)} meta={fmtDate(n.updated_at, 'MMM d')} dot="bg-violet-400" />)}
         </FeatureCard>
 
         {/* 5. Documents */}
@@ -199,7 +198,7 @@ export default async function PlanningPage() {
         {/* 7. Milestones */}
         <FeatureCard index={7} title={tr('dashboardPlanning.milestones')} href="/dashboard/celebrations" icon={Award} tint="bg-fuchsia-500/15 text-fuchsia-400" count={milestoneCount ?? 0} countLabel="upcoming milestones">
           {(milestones ?? []).length === 0 ? <EmptyHint>{tr('dashboardPlanning.noUpcomingMilestones')}</EmptyHint>
-            : (milestones as Ms[]).map((m) => <ListRow key={m.id} label={m.title} meta={fmtDay(m.milestone_date, locale.code)} dot="bg-fuchsia-400" />)}
+            : (milestones as Ms[]).map((m) => <ListRow key={m.id} label={m.title} meta={fmtDate(m.milestone_date, 'MMM d')} dot="bg-fuchsia-400" />)}
         </FeatureCard>
 
         {/* 8. Family Wall */}

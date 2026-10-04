@@ -137,6 +137,10 @@ describe('the screen and the action agree about who may do these', () => {
   it('checks the role in the action, where the money write already checks it', () => {
     const actions = read('app/(app)/dashboard/chores/actions.ts');
     expect(actions).toContain('refuseUnlessManager');
-    expect((actions.match(/refuseUnlessManager\(ctx\.active\.role\)/g) ?? [])).toHaveLength(2);
+    // Three: add, remove, and the respawn that follows the board's approval of
+    // a recurring chore (`respawnChoreAssignmentAction`), which creates an
+    // assignment and is gated like the add it resembles.
+    expect((actions.match(/refuseUnlessManager\(ctx\.active\.role\)/g) ?? [])).toHaveLength(3);
+    expect(actions).toContain('export async function respawnChoreAssignmentAction');
   });
 });
