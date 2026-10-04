@@ -99,6 +99,24 @@ function csvField(value: string | number): string {
   return /[",\n\r]/.test(s) ? `"${s.replace(/"/g, '""')}"` : s;
 }
 
+/** A cell somebody typed — a merchant's name, a spend request's words, a gift
+ *  giver's name inside "Gift received from …", a child's name. Where a cell
+ *  begins with = + - @ a spreadsheet reads a FORMULA, so `=HYPERLINK(…)` in a
+ *  description became a live link in the parent's spreadsheet. A cell begins
+ *  at the start of the field — and, for Excel in the semicolon locales the app
+ *  ships (de-DE, fr-FR, …) or a tab-splitting import, after any `;`, tab or line
+ *  break inside it — and a reader that trims may skip leading spaces first. An
+ *  apostrophe at each of those places makes what follows text, as the
+ *  support-ticket export does for the first character (lib/admin/tickets-csv.ts,
+ *  C1-S9-105). Only `[ \u00a0]` counts as leading space: `\s` would swallow a
+ *  tab and let the cell after it start with `=`. Only for text: the Amount and
+ *  Balance cells are the app's own signed numbers and "-0.50" has to stay
+ *  something a spreadsheet can sum. */
+function spreadsheetText(value: string): string {
+  const guarded = value.replace(/(^|[;\t\r\n])([ \u00a0]*)(?=[=+\-@])/g, "$1'$2");
+  return /^[\t\r]/.test(guarded) ? `'${guarded}` : guarded;
+}
+
 /** Dollars string with sign, from signed cents: 12345 → "123.45", -50 → "-0.50". */
 function dollars(cents: number): string {
   const sign = cents < 0 ? '-' : '';
@@ -140,8 +158,8 @@ export function toStatementCsv(txns: CsvTxn[]): string {
       date,
       time,
       txnTypeLabel(t.type),
-      t.description ?? '',
-      t.childName ?? '',
+      spreadsheetText(t.description ?? ''),
+      spreadsheetText(t.childName ?? ''),
       t.direction === 'credit' ? 'in' : 'out',
       dollars(signedAmountCents(t)),
       t.status.replace(/_/g, ' '),
