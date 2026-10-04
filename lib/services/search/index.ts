@@ -41,6 +41,7 @@ import { isManager } from '@/lib/constants/roles';
 import { rankHits, type SearchHit, type SearchKind } from '@/lib/search/rank';
 import { isSensitiveDocument } from '@/lib/documents/sensitivity';
 import { describeDbError } from '@/lib/supabase/errors';
+import { isSensitiveMemory } from '../memory';
 import { fail, ok, SERVICE_CODES, type ServiceResult, type ServiceScope } from '../types';
 
 /** Below this a query matches half the house; the caller gets an invalid-input refusal. */
@@ -173,6 +174,9 @@ export async function searchHousehold(
   const family = scope.familyId;
   const money = canSearchMoney(scope);
   const sensitiveDocs = canSeeSensitiveDocuments(scope);
+  // Match recallFacts: system memory work may read sensitive facts, while its
+  // existing money and document search restrictions remain separate.
+  const sensitiveMemory = scope.role === 'system' || isManager(scope.role);
 
   const sources: Array<{ table: string; run: () => Promise<SourceOutcome> }> = [
     {
@@ -327,15 +331,24 @@ export async function searchHousehold(
         .or(orExpression(['label', 'value', 'notes'], pattern))
         .order('updated_at', { ascending: false })
         .limit(PER_SOURCE_LIMIT),
-      (rows) => rows.map((row) => ({
-        kind: 'fact' as const,
-        id: String(row.id),
-        title: str(row, 'label') ?? 'Untitled memory',
-        snippet: snippetFrom([str(row, 'value'), str(row, 'notes')]),
-        table: 'family_facts',
-        occurredAt: str(row, 'updated_at') ?? str(row, 'created_at'),
-        href: '/dashboard/knowledge',
-      }))),
+      (rows) => rows
+        // Filter the full stored memory before its title/notes become a search
+        // hit. Search must not bypass the memory service's visibility rule.
+        .filter((row) => sensitiveMemory || !isSensitiveMemory({
+          category: str(row, 'category'),
+          key: str(row, 'label') ?? '',
+          content: str(row, 'value') ?? '',
+          notes: str(row, 'notes'),
+        }))
+        .map((row) => ({
+          kind: 'fact' as const,
+          id: String(row.id),
+          title: str(row, 'label') ?? 'Untitled memory',
+          snippet: snippetFrom([str(row, 'value'), str(row, 'notes')]),
+          table: 'family_facts',
+          occurredAt: str(row, 'updated_at') ?? str(row, 'created_at'),
+          href: '/dashboard/knowledge',
+        }))),
     },
   ];
 

@@ -76,9 +76,12 @@ const SENSITIVE_TERMS = /\b(ssn|social security|passport (?:no|number)|password|
  * sensitive, or the words are, whatever category was chosen. Exported so the
  * tool and the service refuse on the same rule.
  */
-export function isSensitiveMemory(input: { category?: string | null; key: string; content: string }): boolean {
+export function isSensitiveMemory(input: {
+  category?: string | null; key: string; content: string;
+  notes?: string | null; evidence?: string | null;
+}): boolean {
   if (input.category && (SENSITIVE_MEMORY_CATEGORIES as string[]).includes(input.category)) return true;
-  return SENSITIVE_TERMS.test(`${input.key} ${input.content}`);
+  return SENSITIVE_TERMS.test(`${input.key} ${input.content} ${input.notes ?? ''} ${input.evidence ?? ''}`);
 }
 
 function isCategory(value: unknown): value is FactCategory {
@@ -169,10 +172,10 @@ export async function rememberFact(scope: ServiceScope, input: RememberInput): P
   // whatever it claims, because there was nobody there to ask.
   const fromPerson = (input.source === 'user' || input.source === 'import') && scope.actorKind !== 'system';
   // The assistant never gets to decide a medical or account fact is true.
-  if (!fromPerson && isSensitiveMemory({ category, key, content })) {
+  if (!fromPerson && isSensitiveMemory({ category, key, content, notes: input.note })) {
     return fail('Medical and account details are only saved when a person enters them directly.', { code: SERVICE_CODES.denied });
   }
-  if (fromPerson && scope.actorKind === 'ai' && isSensitiveMemory({ category, key, content })) {
+  if (fromPerson && scope.actorKind === 'ai' && isSensitiveMemory({ category, key, content, notes: input.note })) {
     return fail('Medical and account details are only saved when a person enters them directly.', { code: SERVICE_CODES.denied });
   }
   // And the ROLE rule, which is a different question from the two above: those
@@ -192,7 +195,7 @@ export async function rememberFact(scope: ServiceScope, input: RememberInput): P
   // is a known, stated gap (0385's header says why the regex is not translated
   // into RLS): this keeps the app's own write paths in agreement with each
   // other, it is not what stops a member who bypasses them.
-  if (!canManage(scope) && isSensitiveMemory({ category, key, content })) {
+  if (!canManage(scope) && isSensitiveMemory({ category, key, content, notes: input.note })) {
     return fail('Only a parent or adult can file a memory as medical or account information.', { code: SERVICE_CODES.denied });
   }
 
@@ -458,9 +461,9 @@ async function rememberUnconfirmed(
 export type RecallInput = { query?: string | null; category?: FactCategory | string | null; memberId?: string | null; limit?: number; complete?: boolean };
 
 /** Shared visibility rule for recall and review; expiry is handled separately. */
-function filterVisibleMemories<T extends Pick<FamilyFact, 'category' | 'label' | 'value'>>(scope: ServiceScope, rows: T[]): T[] {
+function filterVisibleMemories<T extends Pick<FamilyFact, 'category' | 'label' | 'value'> & { notes?: string | null; evidence?: string | null }>(scope: ServiceScope, rows: T[]): T[] {
   const canSeeSensitive = scope.role === 'system' || isManager(scope.role);
-  return rows.filter((f) => canSeeSensitive || !isSensitiveMemory({ category: f.category, key: f.label, content: f.value }));
+  return rows.filter((f) => canSeeSensitive || !isSensitiveMemory({ category: f.category, key: f.label, content: f.value, notes: f.notes, evidence: f.evidence }));
 }
 
 /**
@@ -1038,7 +1041,8 @@ export async function updateFact(
   const nextCategory = patch.category ?? existing.data.category;
   const nextLabel = patch.label ?? existing.data.label;
   const nextValue = patch.value ?? existing.data.value;
-  if (!canManage(scope) && isSensitiveMemory({ category: nextCategory, key: nextLabel, content: nextValue })) {
+  const nextNotes = patch.notes !== undefined ? patch.notes : existing.data.notes;
+  if (!canManage(scope) && isSensitiveMemory({ category: nextCategory, key: nextLabel, content: nextValue, notes: nextNotes })) {
     return fail('Only a parent or adult can file a memory as medical or account information.', { code: SERVICE_CODES.denied });
   }
 

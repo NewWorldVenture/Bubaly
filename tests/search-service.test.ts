@@ -170,6 +170,75 @@ describe('searchHousehold — who may search what', () => {
   });
 });
 
+describe('searchHousehold — sensitive family memory', () => {
+  const sensitiveFields = ['category', 'label', 'value', 'notes'] as const;
+  const restrictedRoles = ['teen', 'child', 'caregiver', 'guest'] as const;
+  const sensitiveFact = (field: typeof sensitiveFields[number]) => ({
+    id: `fact-sensitive-${field}`,
+    family_id: FAMILY,
+    category: field === 'category' ? 'account' : 'other',
+    label: field === 'label' ? 'Furnace password' : 'Furnace configuration',
+    value: field === 'value' ? 'passport number SYNTHETIC_ONLY' : 'Ordinary fixture value',
+    notes: field === 'notes' ? 'prescription SYNTHETIC_ONLY' : null,
+    updated_at: '2026-06-01T00:00:00Z',
+  });
+
+  it.each(restrictedRoles.flatMap(role => sensitiveFields.map(field => ({ role, field }))))(
+    'withholds memory sensitive only in $field from a $role before returning snippets or ranking hits',
+    async ({ role, field }) => {
+      const before = await searchHousehold(scopeFor(role), 'furnace');
+      expect(before.ok).toBe(true);
+      if (!before.ok) return;
+
+      db.seed('family_facts', [
+        sensitiveFact(field),
+        { id: 'fact-foreign', family_id: OTHER_FAMILY, category: 'other', label: 'Furnace', value: 'Ordinary neighbouring fixture', notes: null },
+      ]);
+      const stored = structuredClone(db.table('family_facts'));
+      const after = await searchHousehold(scopeFor(role), 'furnace');
+      expect(after.ok).toBe(true);
+      if (!after.ok) return;
+
+      // The benign fact and every other source keep the same titles, snippets,
+      // ranking, error evidence and money/document visibility as before.
+      expect(after.data).toEqual(before.data);
+      expect(after.data.hits.map(hit => hit.id)).toContain('fact-1');
+      expect(after.data.hits.map(hit => hit.id)).not.toContain(`fact-sensitive-${field}`);
+      expect(after.data.hits.map(hit => hit.id)).not.toContain('fact-foreign');
+      expect(db.table('family_facts')).toEqual(stored);
+    },
+  );
+
+  it.each(['parent', 'adult', 'system'] as const)(
+    'preserves sensitive memory visibility for %s without changing its other search permissions',
+    async role => {
+      const before = await searchHousehold(scopeFor(role), 'furnace');
+      expect(before.ok).toBe(true);
+      if (!before.ok) return;
+
+      db.seed('family_facts', [
+        ...sensitiveFields.map(sensitiveFact),
+        { ...sensitiveFact('notes'), id: 'fact-foreign', family_id: OTHER_FAMILY },
+      ]);
+      const result = await searchHousehold(scopeFor(role), 'furnace');
+      expect(result.ok).toBe(true);
+      if (!result.ok) return;
+
+      for (const field of sensitiveFields) {
+        const hit = result.data.hits.find(hit => hit.id === `fact-sensitive-${field}`);
+        expect(hit).toMatchObject({ kind: 'fact', table: 'family_facts', href: '/dashboard/knowledge' });
+      }
+      expect(result.data.hits.find(hit => hit.id === 'fact-sensitive-notes')?.snippet).toContain('prescription SYNTHETIC_ONLY');
+      expect(result.data.hits.map(hit => hit.id)).toContain('fact-1');
+      expect(result.data.hits.map(hit => hit.id)).not.toContain('fact-foreign');
+      expect(result.data.hits.filter(hit => !hit.id.startsWith('fact-sensitive-'))).toEqual(before.data.hits);
+      expect(result.data.searched).toEqual(before.data.searched);
+      expect(result.data.partial).toEqual(before.data.partial);
+      expect(result.data.withheld).toEqual(before.data.withheld);
+    },
+  );
+});
+
 describe('searchHousehold — the query itself', () => {
   it('refuses a query too short to mean anything', async () => {
     const result = await searchHousehold(scopeFor('parent'), 'f');
