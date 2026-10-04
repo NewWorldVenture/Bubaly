@@ -20,26 +20,37 @@ import { beforeEach, describe, expect, it, vi } from 'vitest';
 import PRICES from '@/lib/constants/family-prices.json';
 import { POST as webhook } from '@/app/api/webhooks/stripe/route';
 
-type Sub = { id: string; status: string; customer: string; metadata: Record<string, string>; price: string; cancel_at_period_end?: boolean };
+type Sub = {
+  id: string; status: string; customer: string; metadata: Record<string, string>; price: string;
+  created?: number; ended_at?: number | null; cancel_at_period_end?: boolean;
+};
+type Note = { kind: string; title: string; body?: string | null; relatedType?: string | null; relatedId?: string | null; meta?: Record<string, unknown>; is_read: boolean };
 
 const fake = vi.hoisted(() => ({
   row: null as null | Record<string, unknown>,
+  billingCustomerRef: 'cus_a' as string | null,
   writes: [] as { table: string; op: string; value: Record<string, unknown> }[],
-  alerts: [] as { kind: string; title: string; relatedType?: string | null; relatedId?: string | null; meta?: Record<string, unknown> }[],
-  unreadDuplicateAlert: false,
-  subs: [] as { id: string; status: string; customer: string; metadata: Record<string, string>; price: string; cancel_at_period_end?: boolean }[],
+  notes: [] as { kind: string; title: string; body?: string | null; relatedType?: string | null; relatedId?: string | null; meta?: Record<string, unknown>; is_read: boolean }[],
+  subs: [] as { id: string; status: string; customer: string; metadata: Record<string, string>; price: string; created?: number; ended_at?: number | null; cancel_at_period_end?: boolean }[],
   event: null as null | { id: string; type: string; data: { object: unknown } },
   listFails: false,
+  goneCustomers: new Set<string>(),
+  retrieveFails: new Map<string, string>(),
+  retrieved: [] as string[],
   processed: 0,
   errored: 0,
 }));
 
 const PLUS = PRICES.stripePrices.plus_monthly.id;
 const BASIC = PRICES.stripePrices.basic_monthly.id;
+const T0 = 1_780_000_000; // the first subscription began
+const T1 = T0 + 86_400 * 30; // the second began, a month later
+const T2 = T0 + 86_400 * 60; // the first ended
 
 function stripeSub(s: Sub) {
   return {
     id: s.id, status: s.status, customer: s.customer, metadata: s.metadata, cancel_at_period_end: s.cancel_at_period_end ?? false,
+    created: s.created ?? T0, ended_at: s.ended_at ?? null, canceled_at: s.ended_at ?? null,
     items: { has_more: false, data: [{ id: `si_${s.id}`, price: { id: s.price }, current_period_end: 1_900_000_000 }] },
   };
 }
@@ -49,12 +60,16 @@ vi.mock('@/lib/stripe', () => {
   const stripe = {
     subscriptions: {
       retrieve: async (id: string) => {
+        fake.retrieved.push(id);
+        const code = fake.retrieveFails.get(id);
+        if (code) throw Object.assign(new Error(`synthetic: ${code}`), { code });
         const s = fake.subs.find((x) => x.id === id);
         if (!s) throw Object.assign(new Error('No such subscription'), { code: 'resource_missing' });
         return stripeSub(s);
       },
       list: async (params: { customer: string }) => {
         if (fake.listFails) throw new Error('synthetic Stripe outage');
+        if (fake.goneCustomers.has(params.customer)) throw Object.assign(new Error('No such customer'), { code: 'resource_missing' });
         return { data: fake.subs.filter((s) => s.customer === params.customer).map(stripeSub), has_more: false };
       },
     },
@@ -72,9 +87,7 @@ vi.mock('@/lib/stripe/webhook', () => ({
 vi.mock('@/lib/referrals/server', () => ({ markReferralConverted: async () => {}, rewardConvertedReferral: async () => null }));
 vi.mock('@/lib/marketing/automation-events', () => ({ fireAutomationEvent: async () => {} }));
 vi.mock('@/lib/admin/notify', () => ({
-  recordAdminNotification: async (_db: unknown, input: { kind: string; title: string; relatedType?: string | null; relatedId?: string | null; meta?: Record<string, unknown> }) => {
-    fake.alerts.push(input);
-  },
+  recordAdminNotification: async (_db: unknown, input: Omit<Note, 'is_read'>) => { fake.notes.push({ ...input, is_read: false }); },
 }));
 vi.mock('@/lib/supabase/server', () => {
   const db = {
@@ -86,10 +99,17 @@ vi.mock('@/lib/supabase/server', () => {
         is: () => builder, in: () => builder, order: () => builder, limit: () => builder,
         maybeSingle: async () => {
           if (table === 'subscriptions') return { data: fake.row, error: null };
-          if (table === 'billing_customers') return { data: { id: 'bc-a' }, error: null };
+          if (table === 'billing_customers') return { data: { id: 'bc-a', customer_ref: fake.billingCustomerRef }, error: null };
           if (table === 'families') return { data: { name: 'Synthetic family' }, error: null };
           if (table === 'admin_notifications') {
-            return { data: fake.unreadDuplicateAlert ? { id: 'note-1' } : null, error: null };
+            // Honours every filter the route sends, so a query that drops one is caught.
+            const hit = fake.notes.find((n) => (!('related_type' in filters) || n.relatedType === filters.related_type)
+              && (!('related_id' in filters) || n.relatedId === filters.related_id)
+              && (!('is_read' in filters) || n.is_read === filters.is_read));
+            const unfiltered = !('related_type' in filters) || !('related_id' in filters) || !('is_read' in filters);
+            // A query missing a filter matches the first note of any kind, as PostgREST would.
+            const any = unfiltered ? fake.notes[0] : hit;
+            return { data: any ? { id: 'note' } : null, error: null };
           }
           return { data: null, error: null };
         },
@@ -122,10 +142,11 @@ function deliver(type: string, sub: Sub) {
 }
 const family = { family_id: 'family-a' };
 const subscriptionWrites = () => fake.writes.filter((w) => w.table === 'subscriptions');
-const duplicateAlerts = () => fake.alerts.filter((a) => a.relatedType === 'subscription_duplicate');
+const duplicateAlerts = () => fake.notes.filter((n) => n.relatedType === 'subscription_duplicate');
 
 beforeEach(() => {
-  fake.writes = []; fake.alerts = []; fake.unreadDuplicateAlert = false; fake.listFails = false; fake.processed = 0; fake.errored = 0;
+  fake.writes = []; fake.notes = []; fake.listFails = false; fake.processed = 0; fake.errored = 0;
+  fake.goneCustomers = new Set(); fake.retrieveFails = new Map(); fake.retrieved = []; fake.billingCustomerRef = 'cus_a';
   vi.spyOn(console, 'warn').mockImplementation(() => {});
   vi.spyOn(console, 'error').mockImplementation(() => {});
 });
@@ -134,8 +155,8 @@ describe('the subscription the row follows ends while another still bills the fa
   beforeEach(() => {
     fake.row = { plan: 'plus', status: 'active', provider_ref: 'sub_A' };
     fake.subs = [
-      { id: 'sub_A', status: 'canceled', customer: 'cus_a', metadata: family, price: PLUS },
-      { id: 'sub_B', status: 'active', customer: 'cus_a', metadata: family, price: BASIC },
+      { id: 'sub_A', status: 'canceled', customer: 'cus_a', metadata: family, price: PLUS, created: T0, ended_at: T2 },
+      { id: 'sub_B', status: 'active', customer: 'cus_a', metadata: family, price: BASIC, created: T1 },
     ];
   });
 
@@ -144,8 +165,45 @@ describe('the subscription the row follows ends while another still bills the fa
     expect(fake.row).toMatchObject({ provider_ref: 'sub_B', status: 'active', plan: 'basic' });
     expect(subscriptionWrites().some((w) => w.value.status === 'canceled')).toBe(false);
     expect(duplicateAlerts()).toHaveLength(1);
-    expect(duplicateAlerts()[0].relatedId).toBe('family-a');
-    expect(duplicateAlerts()[0].meta).toMatchObject({ subscriptions: expect.arrayContaining(['sub_A', 'sub_B']) });
+    expect(duplicateAlerts()[0]).toMatchObject({ relatedId: 'family-a', meta: { subscriptions: ['sub_A', 'sub_B'] } });
+    // Not the kind the bell and the digest read as a new paid plan.
+    expect(duplicateAlerts()[0].kind).not.toBe('subscription');
+    // The switch does not re-read the subscription it replaces.
+    expect(fake.retrieved).toEqual(['sub_A']);
+  });
+
+  it.each(['canceled', 'unpaid', 'incomplete_expired'])('treats a followed subscription that is %s as ended', async (status) => {
+    fake.subs[0].status = status;
+    expect((await deliver('customer.subscription.updated', fake.subs[0])).status).toBe(200);
+    expect(fake.row).toMatchObject({ provider_ref: 'sub_B', status: 'active' });
+  });
+
+  it('finds the other subscription on the family\'s second Stripe customer', async () => {
+    fake.subs[1].customer = 'cus_b';
+    fake.billingCustomerRef = 'cus_b';
+    expect((await deliver('customer.subscription.deleted', fake.subs[0])).status).toBe(200);
+    expect(fake.row).toMatchObject({ provider_ref: 'sub_B', status: 'active' });
+  });
+
+  it('adopts the live one for a family whose row has no subscription yet', async () => {
+    fake.row = { plan: 'free', status: 'active', provider_ref: null };
+    expect((await deliver('customer.subscription.deleted', fake.subs[0])).status).toBe(200);
+    expect(fake.row).toMatchObject({ provider_ref: 'sub_B', status: 'active', plan: 'basic' });
+  });
+
+  it('is an ordinary switch, with no alert, when the other one began after this one ended', async () => {
+    fake.subs[1].created = T2 + 86_400; // resubscribed; the old deletion is processed late
+    expect((await deliver('customer.subscription.deleted', fake.subs[0])).status).toBe(200);
+    expect(fake.row).toMatchObject({ provider_ref: 'sub_B', status: 'active' });
+    expect(duplicateAlerts()).toHaveLength(0);
+  });
+
+  it('records the end, and says what is still billing, when the other one maps to no plan', async () => {
+    fake.subs[1].price = 'price_unknown_synthetic';
+    expect((await deliver('customer.subscription.deleted', fake.subs[0])).status).toBe(200);
+    expect(fake.row).toMatchObject({ provider_ref: 'sub_A', status: 'canceled' });
+    expect(duplicateAlerts()).toHaveLength(1);
+    expect(duplicateAlerts()[0].body).toContain('sub_B');
   });
 
   it('writes the family canceled when nothing else bills them (control)', async () => {
@@ -157,6 +215,12 @@ describe('the subscription the row follows ends while another still bills the fa
 
   it('does not adopt a live subscription that belongs to another family', async () => {
     fake.subs[1].metadata = { family_id: 'family-b' };
+    expect((await deliver('customer.subscription.deleted', fake.subs[0])).status).toBe(200);
+    expect(fake.row).toMatchObject({ provider_ref: 'sub_A', status: 'canceled' });
+  });
+
+  it('reads a customer Stripe no longer has as billing nobody', async () => {
+    fake.goneCustomers.add('cus_a');
     expect((await deliver('customer.subscription.deleted', fake.subs[0])).status).toBe(200);
     expect(fake.row).toMatchObject({ provider_ref: 'sub_A', status: 'canceled' });
   });
@@ -173,20 +237,30 @@ describe('a second live subscription for a family that already has one', () => {
   beforeEach(() => {
     fake.row = { plan: 'plus', status: 'active', provider_ref: 'sub_A' };
     fake.subs = [
-      { id: 'sub_A', status: 'active', customer: 'cus_a', metadata: family, price: PLUS },
-      { id: 'sub_B', status: 'active', customer: 'cus_a', metadata: family, price: BASIC },
+      { id: 'sub_A', status: 'active', customer: 'cus_a', metadata: family, price: PLUS, created: T0 },
+      { id: 'sub_B', status: 'active', customer: 'cus_a', metadata: family, price: BASIC, created: T1 },
     ];
   });
 
-  it('keeps the row on the plan it already pays for, and says so once', async () => {
+  it('keeps the row on the plan it already pays for, and says so once while unread', async () => {
     expect((await deliver('customer.subscription.created', fake.subs[1])).status).toBe(200);
     expect(fake.row).toMatchObject({ provider_ref: 'sub_A', plan: 'plus' });
     expect(duplicateAlerts()).toHaveLength(1);
     // B renews a month later; the row does not flip and nobody is told twice.
-    fake.unreadDuplicateAlert = true;
     expect((await deliver('customer.subscription.updated', fake.subs[1])).status).toBe(200);
     expect(fake.row).toMatchObject({ provider_ref: 'sub_A', plan: 'plus' });
     expect(duplicateAlerts()).toHaveLength(1);
+    // Once someone has read it, a family still paying twice is raised again.
+    fake.notes[0].is_read = true;
+    expect((await deliver('customer.subscription.updated', fake.subs[1])).status).toBe(200);
+    expect(duplicateAlerts()).toHaveLength(2);
+  });
+
+  it('is not silenced by another family\'s unread alert, or by an unrelated note', async () => {
+    fake.notes.push({ kind: 'info', title: 'Billed twice: another family', relatedType: 'subscription_duplicate', relatedId: 'family-b', is_read: false });
+    fake.notes.push({ kind: 'info', title: 'Something else', relatedType: 'other', relatedId: 'family-a', is_read: false });
+    expect((await deliver('customer.subscription.created', fake.subs[1])).status).toBe(200);
+    expect(duplicateAlerts().filter((n) => n.relatedId === 'family-a')).toHaveLength(1);
   });
 
   it('keeps the recorded one on a tie', async () => {
@@ -205,6 +279,35 @@ describe('a second live subscription for a family that already has one', () => {
     expect(duplicateAlerts()).toHaveLength(1);
   });
 
+  it('on the same plan, follows the one being paid over the one past due', async () => {
+    fake.row = { plan: 'plus', status: 'past_due', provider_ref: 'sub_A' };
+    fake.subs[0].status = 'past_due'; fake.subs[1].price = PLUS;
+    expect((await deliver('customer.subscription.created', fake.subs[1])).status).toBe(200);
+    expect(fake.row).toMatchObject({ provider_ref: 'sub_B', status: 'active' });
+  });
+
+  it('does not trade an active plan for a higher one that is past due (it grants nothing)', async () => {
+    fake.row = { plan: 'basic', status: 'active', provider_ref: 'sub_A' };
+    fake.subs[0].price = BASIC;
+    fake.subs[1] = { ...fake.subs[1], price: PLUS, status: 'past_due' };
+    expect((await deliver('customer.subscription.updated', fake.subs[1])).status).toBe(200);
+    expect(fake.row).toMatchObject({ provider_ref: 'sub_A', status: 'active', plan: 'basic' });
+  });
+
+  it('asks Stripe to retry, writing nothing, when it cannot read the recorded one', async () => {
+    fake.retrieveFails.set('sub_A', 'rate_limit');
+    expect((await deliver('customer.subscription.created', fake.subs[1])).status).toBe(500);
+    expect(subscriptionWrites()).toEqual([]);
+    expect(duplicateAlerts()).toHaveLength(0);
+  });
+
+  it('is an ordinary switch when Stripe no longer has the recorded one', async () => {
+    fake.retrieveFails.set('sub_A', 'resource_missing');
+    expect((await deliver('customer.subscription.created', fake.subs[1])).status).toBe(200);
+    expect(fake.row).toMatchObject({ provider_ref: 'sub_B', plan: 'basic' });
+    expect(duplicateAlerts()).toHaveLength(0);
+  });
+
   it('is an ordinary switch when the recorded one has in fact ended at Stripe (control)', async () => {
     fake.subs[0].status = 'canceled'; // its deletion event has not arrived yet
     expect((await deliver('customer.subscription.created', fake.subs[1])).status).toBe(200);
@@ -216,5 +319,6 @@ describe('a second live subscription for a family that already has one', () => {
     expect((await deliver('customer.subscription.updated', fake.subs[0])).status).toBe(200);
     expect(fake.row).toMatchObject({ provider_ref: 'sub_A', plan: 'plus' });
     expect(duplicateAlerts()).toHaveLength(0);
+    expect(fake.retrieved).toEqual(['sub_A']);
   });
 });
