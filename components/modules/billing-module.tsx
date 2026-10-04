@@ -963,7 +963,14 @@ export function BillingModule({ serviceFeeNotice = null }: { serviceFeeNotice?: 
     const bill = (bills ?? []).find((b) => b.id === id);
     const patch = bill ? billPaidPatch(bill, clock.todayKey()) : { status: 'paid' as const };
     // `writeBillPatch`: on a database without bills.due_day (0488 not applied) the write is repeated without it.
-    const { data: rows, error } = await writeBillPatch(patch, (p) => supabase.from('bills').update(p).eq('id', id).eq('family_id', familyId).select('id'));
+    // A compare-and-set on the row this button saw (due date and status): two
+    // clicks on a stale list would otherwise each roll the bill a month and skip
+    // an occurrence; the second finds no row and is told so. A bill the list no
+    // longer holds has nothing to compare against and is paid by id, as before.
+    const { data: rows, error } = await writeBillPatch(patch, (p) => {
+      const q = supabase.from('bills').update(p).eq('id', id).eq('family_id', familyId);
+      return (bill ? q.eq('due_date', bill.due_date).eq('status', bill.status) : q).select('id');
+    });
     if (error) return toastError(describeDbError(error));
     if (wroteNoRows(rows)) return toastError(tr('errors.thatChangeWasNotSaved'));
     success(tr('billingModule.billMarkedAsPaid'));

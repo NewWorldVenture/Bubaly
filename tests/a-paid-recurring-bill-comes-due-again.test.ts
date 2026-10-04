@@ -1,9 +1,11 @@
 import { readFileSync } from 'node:fs';
 import { join } from 'node:path';
-import { describe, expect, it } from 'vitest';
+import { describe, expect, it, vi } from 'vitest';
 import { billAnchorDay, billCadence, billPaidPatch, isMissingDueDayColumn, MONTH_BASED_CADENCES, newBillDueDay, nextBillDueDate, writeBillPatch } from '@/lib/finance/hub';
 import { buildCashflowTimeline } from '@/lib/finance/timeline';
 import { bodyOf } from './helpers/source-order';
+import { createInMemorySupabase } from './helpers/in-memory-supabase';
+import { wroteNoRows } from '@/lib/supabase/errors';
 
 /**
  * A RECURRING BILL, MARKED PAID, NEVER CAME DUE AGAIN.
@@ -171,8 +173,15 @@ describe('writeBillPatch — a database that has not applied 0488', () => {
     expect(ok.seen).toEqual([{ status: 'upcoming', due_date: '2026-02-28', due_day: 31 }]);
 
     const behind = writes([{ error: missing }, { error: null }]);
+    const warn = vi.spyOn(console, 'warn').mockImplementation(() => undefined);
     expect(await writeBillPatch({ status: 'upcoming', due_date: '2026-02-28', due_day: 31 }, behind.write)).toEqual({ error: null });
     expect(behind.seen, 'the same row, without the one column').toEqual([{ status: 'upcoming', due_date: '2026-02-28', due_day: 31 }, { status: 'upcoming', due_date: '2026-02-28' }]);
+    // What that database cannot keep is said, not papered over (review 5981566086):
+    // the row lands on the 28th with nowhere to record the 31, and once 0488
+    // arrives it records 28 — the case `billPaidPatch` pins above as "a pre-0488
+    // row records the day of its current due date, which is all it knows".
+    expect(warn).toHaveBeenCalledWith(expect.stringMatching(/LOSES its original day.*0488 has no backfill/));
+    warn.mockRestore();
   });
   it('does not retry any other refusal, nor a write that never carried the column', async () => {
     const refused = { error: { code: '42501', message: 'permission denied' } };
@@ -182,6 +191,37 @@ describe('writeBillPatch — a database that has not applied 0488', () => {
     const plain = writes([{ error: missing }, { error: null }]);
     expect(await writeBillPatch({ status: 'paid' }, plain.write)).toEqual({ error: missing });
     expect(plain.seen).toHaveLength(1);
+  });
+});
+
+describe('two "Mark paid" clicks on one stale row roll the bill once (review 5981518473)', () => {
+  // Both buttons write exactly this (pinned below): the patch, by id and
+  // family, AND by the due date and status the button saw. The first click
+  // lands; the second, carrying the same stale snapshot, matches no row and is
+  // told "that change was not saved" instead of rolling the bill a second month.
+  const FAMILY = '00000000-0000-4000-8000-00000000fa88';
+  const BILL = '00000000-0000-4000-8000-00000000b188';
+  const snapshot = { id: BILL, family_id: FAMILY, name: 'Rent', amount: 1000, due_date: '2026-01-31', due_day: null, is_recurring: true, recurrence: 'monthly', status: 'upcoming' as const, category: null, autopay: false };
+  const markPaid = (db: ReturnType<typeof createInMemorySupabase>, seen: typeof snapshot) =>
+    writeBillPatch(billPaidPatch(seen, '2026-01-31'), (p) => db.from('bills').update(p).eq('id', seen.id).eq('family_id', FAMILY).eq('due_date', seen.due_date).eq('status', seen.status).select('id'));
+
+  it('the first click rolls Jan 31 to Feb 28 with its anchor; the second, on the same snapshot, writes nothing', async () => {
+    const db = createInMemorySupabase();
+    db.seed('bills', [snapshot]);
+    const [first, second] = await Promise.all([markPaid(db, snapshot), markPaid(db, snapshot)]);
+    const outcomes = [first, second].map((r) => (r.error ? 'error' : wroteNoRows(r.data as unknown[] | null) ? 'no-row' : 'written')).sort();
+    expect(outcomes).toEqual(['no-row', 'written']);
+    expect(db.table('bills')[0]).toMatchObject({ due_date: '2026-02-28', due_day: 31, status: 'upcoming' });
+  });
+
+  it('a click on the row as it now is rolls it on: the compare-and-set admits a fresh snapshot', async () => {
+    const db = createInMemorySupabase();
+    db.seed('bills', [snapshot]);
+    await markPaid(db, snapshot);
+    const fresh = db.table('bills')[0] as typeof snapshot;
+    const res = await writeBillPatch(billPaidPatch(fresh, '2026-02-28'), (p) => db.from('bills').update(p).eq('id', fresh.id).eq('family_id', FAMILY).eq('due_date', fresh.due_date).eq('status', fresh.status).select('id'));
+    expect(wroteNoRows(res.data as unknown[] | null)).toBe(false);
+    expect(db.table('bills')[0]).toMatchObject({ due_date: '2026-03-31', due_day: 31 });
   });
 });
 
@@ -212,11 +252,12 @@ describe('0488 and its writers', () => {
   });
   it('both Mark paid buttons and both add forms write through the fallback, and the forms record the anchor day', () => {
     const view = read('components/finance/bills-view.tsx');
-    expect(view).toContain("await writeBillPatch(patch, (p) => createClient().from('bills').update(p).eq('id', b.id).eq('family_id', familyId).select('id'))");
+    expect(view).toContain("await writeBillPatch(patch, (p) => createClient().from('bills').update(p).eq('id', b.id).eq('family_id', familyId).eq('due_date', b.due_date).eq('status', b.status).select('id'))");
     expect(view).toContain('due_day: newBillDueDay(v.due_date, v.is_recurring, v.recurrence),');
     expect(view).toContain("}, (p) => createClient().from('bills').insert(p));");
     const module_ = read('components/modules/billing-module.tsx');
-    expect(module_).toContain("await writeBillPatch(patch, (p) => supabase.from('bills').update(p).eq('id', id).eq('family_id', familyId).select('id'))");
+    expect(module_).toContain("const q = supabase.from('bills').update(p).eq('id', id).eq('family_id', familyId);");
+    expect(module_).toContain("return (bill ? q.eq('due_date', bill.due_date).eq('status', bill.status) : q).select('id');");
     expect(module_).toContain('due_day: newBillDueDay(dueDate, isRecurring, recurrence),');
     expect(module_).toContain("}, (p) => supabase.from('bills').insert(p));");
   });

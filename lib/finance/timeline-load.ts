@@ -41,6 +41,7 @@ import type { SupabaseClient } from '@supabase/supabase-js';
 import { settleAll } from '@/lib/supabase/settle';
 import type { Database } from '@/lib/database.types';
 import { isMissingTableError } from '@/lib/supabase/errors';
+import { isMissingDueDayColumn } from '@/lib/finance/hub';
 import { monthlyCostCents } from './subscriptions';
 import {
   buildCashflowTimeline,
@@ -199,6 +200,23 @@ export function planCommitments(rows: {
  * rather than read again here, and it is required rather than defaulted: a
  * silent 'UTC' would hand a Los Angeles household Greenwich's week.
  */
+const BILL_COLUMNS = 'name, amount, due_date, due_day, is_recurring, recurrence, status, category, autopay';
+const BILL_COLUMNS_BEFORE_0488 = 'name, amount, due_date, is_recurring, recurrence, status, category, autopay';
+
+/**
+ * The bills the forecast steps, with each one's anchor day (`due_day`, 0488).
+ * On a database that has not applied 0488 the column is refused (PGRST204 /
+ * 42703); the read is repeated without it, once, with a warning naming the
+ * migration, and every bill steps from its due date's own day — which is all
+ * that database knows.
+ */
+async function readBills(supabase: SupabaseClient<Database>, familyId: string): Promise<{ data: unknown[] | null; error: unknown }> {
+  const first = await supabase.from('bills').select(BILL_COLUMNS).eq('family_id', familyId).limit(1000);
+  if (!first.error || !isMissingDueDayColumn(first.error)) return first;
+  console.warn('bills.due_day is not in this database yet (migration 0488_a_month_end_bill_keeps_its_day has not been applied); the forecast steps each bill from its due date\'s day until it is.');
+  return supabase.from('bills').select(BILL_COLUMNS_BEFORE_0488).eq('family_id', familyId).limit(1000);
+}
+
 export async function loadMoneyTimelineInput(
   supabase: Client,
   familyId: string,
@@ -215,9 +233,12 @@ export async function loadMoneyTimelineInput(
   const horizonEndIso = new Date(zonedTimeMs(shiftFamilyDay(horizonEndKey, 1, tz), 0, 0, tz)).toISOString();
 
   const [billsQ, goalsQ, acctQ, eventsQ, subsQ, vacQ, vacBudgetQ, vacSpendQ, movesQ, projectsQ] = await settleAll([
-    supabase.from('bills')
-      .select('name, amount, due_date, is_recurring, recurrence, status, category, autopay')
-      .eq('family_id', familyId).limit(1000),
+    // `due_day` (0488) is the anchor a month-end bill steps by; without it the
+    // forecast steps a clamped Feb 28 row by the 28th for good (review
+    // 5981518473 on #932). A database that has not applied 0488 refuses the
+    // column, and the read is repeated without it: that database holds no
+    // anchor to lose.
+    readBills(supabase, familyId),
     supabase.from('savings_goals')
       .select('name, target_amount, current_amount, target_date')
       .eq('family_id', familyId).limit(500),

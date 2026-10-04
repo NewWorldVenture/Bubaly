@@ -71,7 +71,10 @@ export function BillsView({ mode }: { mode: BillsMode }) {
     // a refused write returns zero rows and no error. `.select('id')` is what
     // makes the difference visible — without it `data` is null either way.
     // `writeBillPatch`: on a database without bills.due_day (0488 not applied) the write is repeated without it.
-    const { data: rows, error } = await writeBillPatch(patch, (p) => createClient().from('bills').update(p).eq('id', b.id).eq('family_id', familyId).select('id'));
+    // The write is a compare-and-set on the row this button saw: two clicks on a
+    // stale list (or two people) would otherwise each roll the bill a month, and
+    // an occurrence would be skipped. The second finds no row and is told so.
+    const { data: rows, error } = await writeBillPatch(patch, (p) => createClient().from('bills').update(p).eq('id', b.id).eq('family_id', familyId).eq('due_date', b.due_date).eq('status', b.status).select('id'));
     if (error) { toastError(describeDbError(error)); return; }
     if (wroteNoRows(rows)) { toastError(t('errors.thatChangeWasNotSaved')); return; }
     success(reopen ? 'Reopened' : 'Marked paid');

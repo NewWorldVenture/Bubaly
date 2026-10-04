@@ -180,9 +180,14 @@ export function isMissingDueDayColumn(error: unknown): boolean {
 /**
  * Runs `write(patch)`; on a database without `bills.due_day` runs it once more
  * without that column, with a warning naming the migration — so a deploy
- * ahead of 0488 pays and adds bills exactly as before (the month-end bill then
- * steps from its clamped date until the column arrives). Any other refusal is
- * returned as it came.
+ * ahead of 0488 pays and adds bills exactly as before. What that database
+ * CANNOT do is keep a month-end bill's day: rolled from Jan 31 it lands on
+ * Feb 28 with nowhere to record the 31, so it steps from the 28th thereafter
+ * and, once 0488 arrives, records 28 as its anchor (`billAnchorDay` reads the
+ * due date's day when `due_day` is null; the migration has no backfill). That
+ * loss is stated here and in the warning rather than papered over: the one
+ * way to keep the day is to apply 0488 before the first roll (review
+ * 5981566086 on #932). Any other refusal is returned as it came.
  */
 export async function writeBillPatch<P extends object, W extends (p: P) => PromiseLike<{ error: unknown }>>(
   patch: P,
@@ -190,7 +195,7 @@ export async function writeBillPatch<P extends object, W extends (p: P) => Promi
 ): Promise<Awaited<ReturnType<W>>> {
   const first = (await write(patch)) as Awaited<ReturnType<W>>;
   if (!first.error || !('due_day' in patch) || !isMissingDueDayColumn(first.error)) return first;
-  console.warn('bills.due_day is not in this database yet (migration 0488_a_month_end_bill_keeps_its_day has not been applied); writing without it, so a month-end bill steps from its clamped date until it is.');
+  console.warn('bills.due_day is not in this database yet (migration 0488_a_month_end_bill_keeps_its_day has not been applied); writing without it. A month-end bill rolled on this database LOSES its original day: it steps from its clamped date, and once the column arrives it records that date\'s day, not the day it was created on. 0488 has no backfill that could recover it.');
   const rest = { ...patch } as Record<string, unknown>;
   delete rest.due_day;
   // The same row without the one column this database lacks.
