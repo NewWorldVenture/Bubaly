@@ -1,8 +1,11 @@
-// lib/wallet/server.ts — server-side wallet money movement. The ONE place that
-// writes credits into the immutable ledger: allocates an amount across a child's
-// buckets per their split rule and inserts one `completed` credit per bucket.
-// Reused by parent top-ups, allowance runs, and chore rewards so every credit
-// path is identical and auditable.
+// lib/wallet/server.ts — server-side wallet money movement. `creditChildWallet`
+// is the one place NEW money enters the immutable ledger: it allocates an amount
+// across a child's buckets per their split rule and inserts one `completed`
+// credit per bucket. Reused by parent top-ups, allowance runs, and chore rewards
+// so every credit path is identical and auditable. The card writers below are
+// the exception by design: a card spend leaves Spend, and a card refund
+// (`creditCardRefund`) returns to Spend unsplit, because it undoes a purchase
+// rather than adding money.
 import type { SupabaseClient } from '@supabase/supabase-js';
 import type { Database, Json, WalletTxnType } from '@/lib/database.types';
 import { allocate, normalizeSplit, type Split } from '@/lib/wallet/ledger';
@@ -194,9 +197,12 @@ export async function debitCardSpend(supabase: DB, params: {
   const amount = Math.trunc(params.amountCents);
   if (amount <= 0) return { ok: false, error: 'Amount must be greater than 0' };
 
-  // Idempotency: skip if this Stripe authorization already produced a debit.
+  // Idempotency: skip if this Stripe transaction already produced a debit. The
+  // filter is the database key's (completed card_spend rows), so its partial
+  // index serves the lookup; a hold is keyed by the authorization id instead.
   const { data: dupe, error: dupeError } = await supabase
-    .from('wallet_transactions').select('id').eq('stripe_ref', params.stripeRef).eq('type', 'card_spend').maybeSingle();
+    .from('wallet_transactions').select('id')
+    .eq('stripe_ref', params.stripeRef).eq('type', 'card_spend').eq('status', 'completed').maybeSingle();
   if (dupeError) return { ok: false, error: walletFailure(dupeError, 'Could not verify that card spend.') };
   if (dupe) return { ok: true, txnId: dupe.id };
 
@@ -215,13 +221,91 @@ export async function debitCardSpend(supabase: DB, params: {
     })
     .select('id')
     .single();
-  if (error) return { ok: false, error: walletFailure(error, 'Could not post that card spend.') };
+  if (error) {
+    // The same two statements as the refund below, with the same race: two
+    // claims of one capture that overlap both pass the select. The database key
+    // (uq_wallet_txn_card_capture_ref, one completed card_spend per stripe_ref)
+    // refuses the second insert with 23505; that is the first one's debit,
+    // already written, so answer it as the success it is — never a second debit.
+    if ((error as { code?: string }).code === '23505') {
+      const { data: written, error: rereadError } = await supabase
+        .from('wallet_transactions').select('id')
+        .eq('stripe_ref', params.stripeRef).eq('type', 'card_spend').eq('status', 'completed').maybeSingle();
+      if (rereadError) return { ok: false, error: walletFailure(rereadError, 'Could not verify that card spend.') };
+      if (written) return { ok: true, txnId: written.id };
+    }
+    return { ok: false, error: walletFailure(error, 'Could not post that card spend.') };
+  }
 
   await logWalletAudit(supabase, {
     family_id: params.familyId, actor_user_id: null, action: 'card_spend',
     entity_type: 'child_wallets', entity_id: params.childWalletId,
     detail: `${params.description} (${amount}c)`, metadata: { stripeRef: params.stripeRef },
   }, 'card spend');
+  return { ok: true, txnId: row.id };
+}
+
+/**
+ * Post a card refund as a CREDIT to the child's SPEND bucket. Used by the
+ * Issuing webhook when Stripe reports a refund — an `issuing.transaction` whose
+ * amount is positive. It goes straight to Spend rather than through
+ * `creditChildWallet`'s split: a refund is the purchase undone, so it lands
+ * where that purchase's debit was, not divided across Save, Give and Invest as
+ * new money would be. Immutable and idempotent on the Stripe ref, like the debit.
+ */
+export async function creditCardRefund(supabase: DB, params: {
+  familyId: string; childWalletId: string; amountCents: number; description: string; stripeRef: string;
+  /** The purchase's authorization, when Stripe links the refund to one — kept so
+   *  reconciliation can match a refund to what it undoes. */
+  authorizationId?: string | null;
+}): Promise<{ ok: boolean; txnId?: string; error?: string }> {
+  const amount = Math.trunc(params.amountCents);
+  if (amount <= 0) return { ok: false, error: 'Amount must be greater than 0' };
+
+  // Idempotency: skip if this Stripe transaction already produced a refund.
+  const { data: dupe, error: dupeError } = await supabase
+    .from('wallet_transactions').select('id').eq('stripe_ref', params.stripeRef).eq('type', 'card_refund').maybeSingle();
+  if (dupeError) return { ok: false, error: walletFailure(dupeError, 'Could not verify that card refund.') };
+  if (dupe) return { ok: true, txnId: dupe.id };
+
+  const { data: bucket, error: bucketError } = await supabase
+    .from('wallet_buckets').select('id')
+    .eq('family_id', params.familyId).eq('child_wallet_id', params.childWalletId).eq('kind', 'spend').maybeSingle();
+  if (bucketError) return { ok: false, error: walletFailure(bucketError, 'Could not load the wallet Spend bucket.') };
+  if (!bucket?.id) return { ok: false, error: 'The wallet Spend bucket is unavailable.' };
+
+  const { data: row, error } = await supabase
+    .from('wallet_transactions')
+    .insert({
+      family_id: params.familyId, child_wallet_id: params.childWalletId, bucket_id: bucket.id,
+      type: 'card_refund', status: 'completed', direction: 'credit', amount_cents: amount,
+      description: params.description, stripe_ref: params.stripeRef,
+      metadata: { source: 'issuing', authorization: params.authorizationId ?? null },
+    })
+    .select('id')
+    .single();
+  if (error) {
+    // The select above and this insert are two statements, so two deliveries of
+    // one refund that overlap can both pass the select. The database key
+    // (uq_wallet_txn_card_refund_ref, one card_refund per stripe_ref) refuses
+    // the second insert with 23505; that is the first one's refund, already
+    // written, so answer it as the success it is rather than a failure Stripe
+    // would retry — and never as a second credit.
+    if ((error as { code?: string }).code === '23505') {
+      const { data: written, error: rereadError } = await supabase
+        .from('wallet_transactions').select('id').eq('stripe_ref', params.stripeRef).eq('type', 'card_refund').maybeSingle();
+      // A read-back that fails is the failure to report, not the 23505 behind it.
+      if (rereadError) return { ok: false, error: walletFailure(rereadError, 'Could not verify that card refund.') };
+      if (written) return { ok: true, txnId: written.id };
+    }
+    return { ok: false, error: walletFailure(error, 'Could not post that card refund.') };
+  }
+
+  await logWalletAudit(supabase, {
+    family_id: params.familyId, actor_user_id: null, action: 'card_refund',
+    entity_type: 'child_wallets', entity_id: params.childWalletId,
+    detail: `${params.description} (${amount}c)`, metadata: { stripeRef: params.stripeRef },
+  }, 'card refund');
   return { ok: true, txnId: row.id };
 }
 

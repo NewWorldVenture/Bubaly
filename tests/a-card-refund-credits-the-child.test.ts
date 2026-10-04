@@ -1,0 +1,464 @@
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
+import { readFileSync } from 'node:fs';
+import { join } from 'node:path';
+import Stripe from 'stripe';
+import { createInMemorySupabase, type InMemorySupabase, type Row } from './helpers/in-memory-supabase';
+
+/**
+ * A merchant refund on a child's card took the money out a second time.
+ *
+ * Stripe sends every Issuing transaction as `issuing_transaction.created`, with
+ * `type: 'capture' | 'refund'` and an `amount` that is "reflected in your
+ * balance": negative for a capture, positive for a refund. The handler took
+ * `Math.abs(txn.amount)` and posted a `card_spend` DEBIT for anything non-zero,
+ * so a $20 refund of a $20 purchase left the child $40 down instead of even.
+ * `card_refund` was in the enum and the activity labels; nothing wrote it.
+ *
+ * These go through the real `/api/webhooks/money` route with events signed by
+ * stripe-node's own test signer (no network, no Stripe account), the real
+ * handlers and the real wallet helpers, against an in-memory store. Only the
+ * service client and the translator are replaced.
+ */
+
+const SECRET = 'whsec_test_refund_credits_the_child';
+const FAMILY = 'family-1';
+const WALLET = 'wallet-a';
+const harness = vi.hoisted(() => ({ db: null as unknown }));
+
+vi.mock('@/lib/supabase/server', () => ({ createServiceClient: () => harness.db, createServer: async () => harness.db }));
+vi.mock('@/lib/i18n/server', async () => {
+  const { SOURCE_MESSAGES, translate } = await import('@/lib/i18n/messages');
+  return { getTranslations: async () => (key: string, params?: Record<string, string | number>) => translate(SOURCE_MESSAGES, key, params) };
+});
+
+const { POST } = await import('@/app/api/webhooks/money/route');
+
+let db: InMemorySupabase;
+let events = 0;
+
+beforeEach(() => {
+  vi.stubEnv('STRIPE_MONEY_WEBHOOK_SECRET', SECRET);
+  vi.spyOn(console, 'error').mockImplementation(() => {});
+  db = createInMemorySupabase({ uniques: { stripe_webhook_events: [['stripe_event_id']] } });
+  harness.db = db;
+  db.seed('stripe_issuing_cards', [
+    { id: 'card-row-1', family_id: FAMILY, child_wallet_id: WALLET, stripe_card_id: 'ic_child', is_frozen: false, blocked_categories: [], status: 'active' },
+  ]);
+  db.seed('wallet_buckets', [
+    { id: 'bucket-spend', family_id: FAMILY, child_wallet_id: WALLET, kind: 'spend' },
+    { id: 'bucket-save', family_id: FAMILY, child_wallet_id: WALLET, kind: 'save' },
+  ]);
+  db.seed('wallet_rules', [{ family_id: FAMILY, child_wallet_id: WALLET, split: { spend: 0, save: 100, give: 0, invest: 0 } }]);
+  db.seed('wallet_transactions', [
+    // $50 in Spend, and the $20 hold the purchase's authorization reserved.
+    { id: 'txn-topup', family_id: FAMILY, child_wallet_id: WALLET, bucket_id: 'bucket-spend', type: 'parent_top_up', status: 'completed', direction: 'credit', amount_cents: 5_000, stripe_ref: null },
+    { id: 'txn-hold', family_id: FAMILY, child_wallet_id: WALLET, bucket_id: 'bucket-spend', type: 'card_spend', status: 'processing', direction: 'debit', amount_cents: 2_000, stripe_ref: 'iauth_1' },
+  ]);
+  db.seed('stripe_webhook_events', []);
+  db.seed('wallet_audit_logs', []);
+});
+
+afterEach(() => { vi.restoreAllMocks(); vi.unstubAllEnvs(); });
+
+function issuingTransaction(over: Partial<Stripe.Issuing.Transaction>): Stripe.Issuing.Transaction {
+  return {
+    id: 'ipi_capture', object: 'issuing.transaction', amount: -2_000, currency: 'usd', type: 'capture',
+    card: 'ic_child', authorization: 'iauth_1', merchant_data: { name: 'Corner Books' },
+    ...over,
+  } as unknown as Stripe.Issuing.Transaction;
+}
+
+async function deliver(txn: Stripe.Issuing.Transaction, eventId = `evt_${++events}`): Promise<Response> {
+  const payload = JSON.stringify({
+    id: eventId, object: 'event', type: 'issuing_transaction.created', created: 1_790_000_000,
+    api_version: '2026-05-27.dahlia', livemode: false, data: { object: txn },
+  });
+  const signature = Stripe.webhooks.generateTestHeaderString({ payload, secret: SECRET });
+  return POST(new Request('https://bubaly.test/api/webhooks/money', {
+    method: 'POST', body: payload, headers: { 'stripe-signature': signature, 'content-type': 'application/json' },
+  }) as never);
+}
+
+const ledger = () => db.table('wallet_transactions') as Row[];
+/** What the child can spend: completed rows in the Spend bucket, credits minus debits. */
+const spendCents = () => ledger()
+  .filter((r) => r.bucket_id === 'bucket-spend' && r.status === 'completed')
+  .reduce((sum, r) => sum + (r.direction === 'credit' ? Number(r.amount_cents) : -Number(r.amount_cents)), 0);
+const byRef = (ref: string) => ledger().filter((r) => r.stripe_ref === ref);
+/** What the next authorization is decided against: wallet_reserve_card_auth
+ *  totals `completed` AND `processing`, so a live hold counts against Spend. */
+const spendableCents = () => ledger()
+  .filter((r) => r.bucket_id === 'bucket-spend' && (r.status === 'completed' || r.status === 'processing'))
+  .reduce((sum, r) => sum + (r.direction === 'credit' ? Number(r.amount_cents) : -Number(r.amount_cents)), 0);
+
+describe('a refund gives the money back', () => {
+  it('a $20 purchase then its $20 refund leaves the child where they started', async () => {
+    expect((await deliver(issuingTransaction({}))).status).toBe(200);
+    expect(spendCents()).toBe(3_000);
+
+    expect((await deliver(issuingTransaction({ id: 'ipi_refund', type: 'refund', amount: 2_000 }))).status).toBe(200);
+
+    expect(spendCents()).toBe(5_000);
+  });
+
+  it('is written as one completed card_refund credit in Spend, keyed by the refund transaction', async () => {
+    await deliver(issuingTransaction({}));
+    await deliver(issuingTransaction({ id: 'ipi_refund', type: 'refund', amount: 2_000 }));
+
+    expect(byRef('ipi_refund')).toEqual([
+      expect.objectContaining({
+        family_id: FAMILY, child_wallet_id: WALLET, bucket_id: 'bucket-spend',
+        type: 'card_refund', status: 'completed', direction: 'credit', amount_cents: 2_000,
+      }),
+    ]);
+  });
+
+  it('goes back to Spend whatever the allocation rule says — it is the purchase undone, not new money', async () => {
+    // The family's split sends every new credit to Save. A refund is not a new
+    // credit: it reverses a Spend debit, so it lands where that debit was.
+    await deliver(issuingTransaction({ id: 'ipi_refund', type: 'refund', amount: 1_500, authorization: null }));
+
+    expect(byRef('ipi_refund').map((r) => r.bucket_id)).toEqual(['bucket-spend']);
+    expect(ledger().filter((r) => r.bucket_id === 'bucket-save')).toEqual([]);
+  });
+
+  it('a partial refund gives back exactly the refunded cents', async () => {
+    await deliver(issuingTransaction({}));
+    await deliver(issuingTransaction({ id: 'ipi_refund', type: 'refund', amount: 750 }));
+
+    expect(spendCents()).toBe(3_750);
+  });
+
+  it('is credited once when Stripe redelivers the same event', async () => {
+    await deliver(issuingTransaction({}));
+    const refund = issuingTransaction({ id: 'ipi_refund', type: 'refund', amount: 2_000 });
+    expect((await deliver(refund, 'evt_refund')).status).toBe(200);
+    expect((await deliver(refund, 'evt_refund')).status).toBe(200);
+
+    expect(byRef('ipi_refund')).toHaveLength(1);
+    expect(spendCents()).toBe(5_000);
+  });
+
+  it('is credited once even if the same refund transaction arrives under a second event id', async () => {
+    await deliver(issuingTransaction({}));
+    await deliver(issuingTransaction({ id: 'ipi_refund', type: 'refund', amount: 2_000 }), 'evt_a');
+    await deliver(issuingTransaction({ id: 'ipi_refund', type: 'refund', amount: 2_000 }), 'evt_b');
+
+    expect(byRef('ipi_refund')).toHaveLength(1);
+    expect(spendCents()).toBe(5_000);
+  });
+
+  it('is in the wallet audit trail as a refund', async () => {
+    await deliver(issuingTransaction({ id: 'ipi_refund', type: 'refund', amount: 2_000 }));
+
+    expect(db.table('wallet_audit_logs')).toEqual([
+      expect.objectContaining({ family_id: FAMILY, action: 'card_refund', entity_id: WALLET }),
+    ]);
+  });
+});
+
+describe('a refund leaves the purchase\'s hold to the purchase', () => {
+  // Review of #925 (finding 1): a refund also released its authorization's
+  // hold. Stripe does not promise event order, so a refund processed before
+  // its capture cancelled the $20 hold AND credited $20 — spendable went from
+  // $30 to $70, a $70 authorization was approved, and the late capture left
+  // Spend at -$20. Only the capture replaces the hold; a refund leaves it.
+  it('a refund that arrives before its capture does not free the held money as well', async () => {
+    expect(spendableCents()).toBe(3_000);
+
+    expect((await deliver(issuingTransaction({ id: 'ipi_refund', type: 'refund', amount: 2_000 }))).status).toBe(200);
+
+    expect(byRef('iauth_1')).toEqual([expect.objectContaining({ id: 'txn-hold', status: 'processing' })]);
+    expect(spendableCents()).toBe(5_000);
+
+    expect((await deliver(issuingTransaction({}))).status).toBe(200);
+
+    expect(byRef('iauth_1')).toEqual([expect.objectContaining({ id: 'txn-hold', status: 'cancelled' })]);
+    expect(spendableCents()).toBe(5_000);
+    expect(spendCents()).toBe(5_000);
+  });
+
+  it('records which authorization a refund belongs to, so it can be matched to its purchase', async () => {
+    await deliver(issuingTransaction({ id: 'ipi_refund', type: 'refund', amount: 2_000 }));
+    await deliver(issuingTransaction({ id: 'ipi_unlinked', type: 'refund', amount: 500, authorization: null }));
+
+    expect(byRef('ipi_refund')[0].metadata).toEqual({ source: 'issuing', authorization: 'iauth_1' });
+    expect(byRef('ipi_unlinked')[0].metadata).toEqual({ source: 'issuing', authorization: null });
+  });
+});
+
+describe('two overlapping deliveries of one refund', () => {
+  // Review 4174926185 on #925: the duplicate check is a select and then an
+  // insert, so two refund events for one Stripe transaction that overlap both
+  // pass the select. The database key (a unique index on stripe_ref for
+  // card_refund rows, reserved in #699) makes the second insert fail with
+  // 23505; this store is given the same key here. The second delivery must
+  // then read the refund the first wrote and answer success — not 500, and
+  // not a second credit.
+  it('are credited once, and both are acknowledged', async () => {
+    db = createInMemorySupabase({ uniques: {
+      stripe_webhook_events: [['stripe_event_id']],
+      wallet_transactions: [['stripe_ref', 'type']],
+    } });
+    harness.db = db;
+    db.seed('stripe_issuing_cards', [
+      { id: 'card-row-1', family_id: FAMILY, child_wallet_id: WALLET, stripe_card_id: 'ic_child', is_frozen: false, blocked_categories: [], status: 'active' },
+    ]);
+    db.seed('wallet_buckets', [{ id: 'bucket-spend', family_id: FAMILY, child_wallet_id: WALLET, kind: 'spend' }]);
+    db.seed('wallet_transactions', [
+      { id: 'txn-topup', family_id: FAMILY, child_wallet_id: WALLET, bucket_id: 'bucket-spend', type: 'parent_top_up', status: 'completed', direction: 'credit', amount_cents: 5_000, stripe_ref: null },
+      { id: 'txn-capture', family_id: FAMILY, child_wallet_id: WALLET, bucket_id: 'bucket-spend', type: 'card_spend', status: 'completed', direction: 'debit', amount_cents: 2_000, stripe_ref: 'ipi_capture' },
+    ]);
+    db.seed('stripe_webhook_events', []);
+    db.seed('wallet_audit_logs', []);
+    let refundInserts = 0;
+    const from = db.from.bind(db);
+    (db as unknown as { from: (name: string) => unknown }).from = (name: string) => {
+      const builder = from(name) as unknown as Record<string, (...args: unknown[]) => unknown>;
+      if (name === 'wallet_transactions') {
+        const insert = builder.insert.bind(builder);
+        builder.insert = (row: unknown) => {
+          if ((row as Row).type === 'card_refund') refundInserts += 1;
+          return insert(row);
+        };
+      }
+      return builder;
+    };
+    const refund = issuingTransaction({ id: 'ipi_refund', type: 'refund', amount: 2_000, authorization: null });
+
+    const [first, second] = await Promise.all([deliver(refund, 'evt_a'), deliver(refund, 'evt_b')]);
+
+    // Both got past the select: the overlap really happened.
+    expect(refundInserts).toBe(2);
+    expect([first.status, second.status]).toEqual([200, 200]);
+    expect(byRef('ipi_refund')).toHaveLength(1);
+    expect(spendCents()).toBe(3_000 + 2_000);
+  });
+});
+
+describe('a refused refund insert that is not a duplicate', () => {
+  it('is not mistaken for one: a 23505 with no refund to read back still fails, so Stripe retries', async () => {
+    const from = db.from.bind(db);
+    (db as unknown as { from: (name: string) => unknown }).from = (name: string) => {
+      const builder = from(name) as unknown as Record<string, (...args: unknown[]) => unknown>;
+      if (name === 'wallet_transactions') {
+        builder.insert = () => {
+          const settle = { then: (resolve: (v: unknown) => unknown) => Promise.resolve({ data: null, error: { code: '23505', message: 'duplicate key value violates unique constraint "some_other_key"', details: null, hint: null } }).then(resolve) };
+          const chain = { select: () => ({ single: () => settle }) };
+          return chain;
+        };
+      }
+      return builder;
+    };
+
+    const res = await deliver(issuingTransaction({ id: 'ipi_refund', type: 'refund', amount: 2_000, authorization: null }));
+
+    expect(res.status).toBe(500);
+    expect(byRef('ipi_refund')).toEqual([]);
+  });
+});
+
+describe('two overlapping deliveries of one capture', () => {
+  // The debit side of review 4174926185. debitCardSpend checks for the capture
+  // with a select and then inserts, exactly as the refund did, so two claims of
+  // one capture that overlap (two event ids, or recordEvent reclaiming a claim
+  // its first holder is still running) both pass the select. With no key the
+  // child is debited twice: one $20 purchase leaves Spend at $10, not $30. The
+  // database key (0485: a unique index on stripe_ref for completed card_spend
+  // rows) makes the second insert fail with 23505. This store has no partial
+  // keys, so it is given the wider (stripe_ref, type) key; no test here writes
+  // a second card_spend under one ref, so the two refuse the same inserts. The
+  // migration's own predicate is pinned at the end of this file. The second
+  // delivery must read back the capture the first wrote and answer success.
+  function storeWithTheKey() {
+    db = createInMemorySupabase({ uniques: {
+      stripe_webhook_events: [['stripe_event_id']],
+      wallet_transactions: [['stripe_ref', 'type']],
+    } });
+    harness.db = db;
+    db.seed('stripe_issuing_cards', [
+      { id: 'card-row-1', family_id: FAMILY, child_wallet_id: WALLET, stripe_card_id: 'ic_child', is_frozen: false, blocked_categories: [], status: 'active' },
+    ]);
+    db.seed('wallet_buckets', [{ id: 'bucket-spend', family_id: FAMILY, child_wallet_id: WALLET, kind: 'spend' }]);
+    db.seed('wallet_transactions', [
+      { id: 'txn-topup', family_id: FAMILY, child_wallet_id: WALLET, bucket_id: 'bucket-spend', type: 'parent_top_up', status: 'completed', direction: 'credit', amount_cents: 5_000, stripe_ref: null },
+      { id: 'txn-hold', family_id: FAMILY, child_wallet_id: WALLET, bucket_id: 'bucket-spend', type: 'card_spend', status: 'processing', direction: 'debit', amount_cents: 2_000, stripe_ref: 'iauth_1' },
+    ]);
+    db.seed('stripe_webhook_events', []);
+    db.seed('wallet_audit_logs', []);
+  }
+
+  it('are debited once, and both are acknowledged', async () => {
+    storeWithTheKey();
+    let captureInserts = 0;
+    const from = db.from.bind(db);
+    (db as unknown as { from: (name: string) => unknown }).from = (name: string) => {
+      const builder = from(name) as unknown as Record<string, (...args: unknown[]) => unknown>;
+      if (name === 'wallet_transactions') {
+        const insert = builder.insert.bind(builder);
+        builder.insert = (row: unknown) => {
+          if ((row as Row).type === 'card_spend') captureInserts += 1;
+          return insert(row);
+        };
+      }
+      return builder;
+    };
+
+    const [first, second] = await Promise.all([deliver(issuingTransaction({}), 'evt_a'), deliver(issuingTransaction({}), 'evt_b')]);
+
+    // Both got past the select: the overlap really happened.
+    expect(captureInserts).toBe(2);
+    expect([first.status, second.status]).toEqual([200, 200]);
+    expect(byRef('ipi_capture')).toEqual([expect.objectContaining({ type: 'card_spend', status: 'completed', direction: 'debit', amount_cents: 2_000 })]);
+    expect(byRef('iauth_1')).toEqual([expect.objectContaining({ id: 'txn-hold', status: 'cancelled' })]);
+    expect(spendCents()).toBe(5_000 - 2_000);
+    expect(spendableCents()).toBe(5_000 - 2_000);
+    // The winner's audit row, and only the winner's.
+    expect((db.table('wallet_audit_logs') as Row[]).filter((r) => r.action === 'card_spend')).toHaveLength(1);
+  });
+
+  it('a 23505 with no capture to read back still fails, so Stripe retries and the hold stays', async () => {
+    const from = db.from.bind(db);
+    (db as unknown as { from: (name: string) => unknown }).from = (name: string) => {
+      const builder = from(name) as unknown as Record<string, (...args: unknown[]) => unknown>;
+      if (name === 'wallet_transactions') {
+        builder.insert = () => {
+          const settle = { then: (resolve: (v: unknown) => unknown) => Promise.resolve({ data: null, error: { code: '23505', message: 'duplicate key value violates unique constraint "some_other_key"', details: null, hint: null } }).then(resolve) };
+          return { select: () => ({ single: () => settle }) };
+        };
+      }
+      return builder;
+    };
+
+    const res = await deliver(issuingTransaction({}));
+
+    expect(res.status).toBe(500);
+    expect(byRef('ipi_capture')).toEqual([]);
+    expect(byRef('iauth_1')).toEqual([expect.objectContaining({ id: 'txn-hold', status: 'processing' })]);
+  });
+});
+
+describe('the conflict read-back answers only for what the key covers', () => {
+  /** Every wallet_transactions insert is refused with a 23505, as if another
+   *  delivery's row held the key; with `readBack`, the select after it fails. */
+  function refuseInserts(readBack: 'works' | 'fails') {
+    let inserted = false;
+    const from = db.from.bind(db);
+    (db as unknown as { from: (name: string) => unknown }).from = (name: string) => {
+      const builder = from(name) as unknown as Record<string, (...args: unknown[]) => unknown>;
+      if (name === 'wallet_transactions') {
+        builder.insert = () => {
+          inserted = true;
+          const settle = { then: (resolve: (v: unknown) => unknown) => Promise.resolve({ data: null, error: { code: '23505', message: 'duplicate key value violates unique constraint', details: null, hint: null } }).then(resolve) };
+          return { select: () => ({ single: () => settle }) };
+        };
+        if (inserted && readBack === 'fails') {
+          builder.maybeSingle = () => Promise.resolve({ data: null, error: { code: '57014', message: 'canceling statement due to statement timeout', details: null, hint: null } });
+        }
+      }
+      return builder;
+    };
+  }
+  const logged = (code: string) => vi.mocked(console.error).mock.calls.some((call) => call.some((arg) => (arg as { code?: string } | null)?.code === code));
+
+  it('a capture: a same-ref card_spend that is not completed is not the debit, so it fails and the hold stays', async () => {
+    db.seed('wallet_transactions', [
+      { id: 'txn-odd', family_id: FAMILY, child_wallet_id: WALLET, bucket_id: 'bucket-spend', type: 'card_spend', status: 'processing', direction: 'debit', amount_cents: 2_000, stripe_ref: 'ipi_capture' },
+    ]);
+    refuseInserts('works');
+
+    const res = await deliver(issuingTransaction({}));
+
+    expect(res.status).toBe(500);
+    expect(byRef('ipi_capture').filter((r) => r.status === 'completed')).toEqual([]);
+    expect(byRef('iauth_1')).toEqual([expect.objectContaining({ id: 'txn-hold', status: 'processing' })]);
+  });
+
+  it('a capture: a read-back that fails is the failure reported, and the hold stays', async () => {
+    refuseInserts('fails');
+
+    const res = await deliver(issuingTransaction({}));
+
+    expect(res.status).toBe(500);
+    expect(logged('57014')).toBe(true);
+    expect(byRef('iauth_1')).toEqual([expect.objectContaining({ id: 'txn-hold', status: 'processing' })]);
+  });
+
+  it('a refund: a read-back that fails is the failure reported, and nothing is credited', async () => {
+    refuseInserts('fails');
+
+    const res = await deliver(issuingTransaction({ id: 'ipi_refund', type: 'refund', amount: 2_000, authorization: null }));
+
+    expect(res.status).toBe(500);
+    expect(logged('57014')).toBe(true);
+    expect(byRef('ipi_refund')).toEqual([]);
+  });
+});
+
+describe('the database keys the conflict handling relies on', () => {
+  // The store above cannot express a partial key, so pin the migrations' own:
+  // a typo in either predicate would leave the 23505 path dead in production.
+  const statement = (file: string) => readFileSync(join(process.cwd(), 'supabase/migrations', file), 'utf8')
+    .replace(/--.*$/gm, '').replace(/\s+/g, ' ').trim();
+
+  it('0484: one card_refund per stripe_ref', () => {
+    expect(statement('0484_a_card_refund_is_credited_once.sql')).toBe(
+      "create unique index if not exists uq_wallet_txn_card_refund_ref on public.wallet_transactions (stripe_ref) where type = 'card_refund' and stripe_ref is not null;",
+    );
+  });
+
+  it('0485: one completed card_spend per stripe_ref, leaving holds and spend requests out', () => {
+    expect(statement('0485_a_card_capture_is_debited_once.sql')).toBe(
+      "create unique index if not exists uq_wallet_txn_card_capture_ref on public.wallet_transactions (stripe_ref) where type = 'card_spend' and status = 'completed' and stripe_ref is not null;",
+    );
+  });
+});
+
+describe('a purchase is still a purchase', () => {
+  it('a capture is one completed card_spend debit and releases its hold', async () => {
+    expect((await deliver(issuingTransaction({}))).status).toBe(200);
+
+    expect(byRef('ipi_capture')).toEqual([
+      expect.objectContaining({ type: 'card_spend', status: 'completed', direction: 'debit', amount_cents: 2_000, bucket_id: 'bucket-spend' }),
+    ]);
+    expect(byRef('iauth_1')).toEqual([expect.objectContaining({ id: 'txn-hold', status: 'cancelled' })]);
+    expect(spendCents()).toBe(3_000);
+  });
+
+  it('a zero-amount transaction writes nothing and is acknowledged', async () => {
+    expect((await deliver(issuingTransaction({ id: 'ipi_zero', amount: 0 }))).status).toBe(200);
+
+    expect(byRef('ipi_zero')).toEqual([]);
+  });
+
+  it('a refund whose duplicate check cannot be read is not credited blind — it fails so Stripe retries', async () => {
+    const from = db.from.bind(db);
+    (db as unknown as { from: (name: string) => unknown }).from = (name: string) => {
+      const builder = from(name) as unknown as Record<string, (...args: unknown[]) => unknown>;
+      if (name !== 'wallet_transactions') return builder;
+      let inserting = false;
+      const insert = builder.insert.bind(builder);
+      const select = builder.select.bind(builder);
+      builder.insert = (...args: unknown[]) => { inserting = true; return insert(...args); };
+      builder.select = (...args: unknown[]) => {
+        if (inserting) return select(...args);
+        const chain = { eq: () => chain, maybeSingle: async () => ({ data: null, error: { code: '57014', message: 'canceling statement due to statement timeout', details: null, hint: null } }) };
+        return chain;
+      };
+      return builder;
+    };
+
+    const res = await deliver(issuingTransaction({ id: 'ipi_refund', type: 'refund', amount: 2_000, authorization: null }));
+
+    expect(res.status).toBe(500);
+    expect(byRef('ipi_refund')).toEqual([]);
+  });
+
+  it('a refund on a card we do not know fails loudly so Stripe retries, and writes nothing', async () => {
+    const res = await deliver(issuingTransaction({ id: 'ipi_refund', type: 'refund', amount: 2_000, card: 'ic_unknown' }));
+
+    expect(res.status).toBe(500);
+    expect(byRef('ipi_refund')).toEqual([]);
+    expect(spendCents()).toBe(5_000);
+  });
+});

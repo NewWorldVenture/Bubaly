@@ -1,0 +1,56 @@
+-- 0485: a card capture is debited once.
+--
+-- Number reserved by the coordinator on #699 (5974392907) for #925's capture
+-- extension (#771 5974374817), the debit side of owner review 4174926185.
+-- Filename coordination only: this file is a repository candidate, not an
+-- instruction to apply anything to production.
+--
+-- lib/wallet/server.ts debitCardSpend posts one completed `card_spend` debit
+-- per Stripe Issuing capture, keyed by `stripe_ref` (the transaction id). Its
+-- duplicate check is a select and then an insert, so two deliveries of one
+-- capture that overlap (two event ids for one transaction, or recordEvent
+-- reclaiming a claim the first holder is still running) can both pass the
+-- select and both debit the child: one $20 purchase took $40. 0484 closed the
+-- same race for refunds; 0342 records that wallet_transactions had no unique
+-- index on stripe_ref at all.
+--
+-- This index makes the key the database's: the second insert fails with 23505,
+-- and debitCardSpend reads back the capture the first wrote and answers
+-- success. It is narrower than "one card_spend per stripe_ref" on purpose:
+--   - an authorization's HOLD is also a card_spend, keyed by the authorization
+--     id, and 0155/0342 record that a replay after capture places a fresh one.
+--     0155's header allows a hold to move processing -> completed/cancelled,
+--     but no code completes one: wallet_reserve_card_auth writes it as
+--     'processing', releaseCardHold cancels it, and the capture is its own
+--     row under the transaction id. `status = 'completed'` leaves every hold
+--     out. A future path that completed holds would have to keep to one
+--     completed row per authorization id, or it would meet this key;
+--   - a SPEND REQUEST is a card_spend with no stripe_ref (0342's
+--     wallet_debit_spend_bucket), held as 'requires_parent_approval' and then
+--     completed by wallet_decide_spend; `stripe_ref is not null` leaves those
+--     out;
+--   - a card_refund is another type and is never compared with a capture
+--     here; 0484 keys refunds on their own.
+--
+-- APPLY NOTE. Unlike 0484's card_refund, completed captures already exist, so
+-- an existing duplicate (the very race this closes) makes the build fail.
+-- Confirm first that no two completed captures share a stripe_ref:
+--   select stripe_ref from public.wallet_transactions
+--    where type = 'card_spend' and status = 'completed' and stripe_ref is not null
+--    group by 1 having count(*) > 1;
+-- Any row it returns is a child debited twice for one purchase. Correcting
+-- that is an operator decision on production data, outside this file. A plain
+-- `create unique index` blocks writes to wallet_transactions while it builds;
+-- on a large production table the owner may prefer the CONCURRENTLY form of
+-- the same statement, run on its own and outside a transaction, as 0321
+-- describes.
+-- If a CONCURRENTLY build fails (an existing duplicate, a cancelled
+-- statement), it leaves an INVALID index of this name behind, and a rerun of
+-- this file's `if not exists` then skips it and enforces nothing. Drop it
+-- before retrying; `select indexrelid::regclass from pg_index where not
+-- indisvalid;` lists invalid indexes.
+-- Agents must NOT apply this to production (docs/PENDING_PROD_MIGRATIONS.md).
+
+create unique index if not exists uq_wallet_txn_card_capture_ref
+  on public.wallet_transactions (stripe_ref)
+  where type = 'card_spend' and status = 'completed' and stripe_ref is not null;
