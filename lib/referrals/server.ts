@@ -2,7 +2,8 @@ import 'server-only';
 import type { SupabaseClient } from '@supabase/supabase-js';
 import type { Database } from '@/lib/database.types';
 import { createServiceClient } from '@/lib/supabase/server';
-import { getStripe } from '@/lib/stripe';
+import { stripeFromKey } from '@/lib/stripe';
+import { effectiveSecretKey, getStripeSettings } from '@/lib/stripe/settings';
 import { wroteNoRows } from '@/lib/supabase/errors';
 import {
   DEFAULT_REFERRAL_CONFIG, resolveReferralConfig, generateReferralCode, normalizeCode,
@@ -212,7 +213,7 @@ export async function markReferralConverted(service: DB, referredFamilyId: strin
 
 /**
  * The slice of the Stripe client the reward needs. Narrow so a test can hand
- * in a recorder; the real client (`getStripe()`) satisfies it structurally.
+ * in a recorder; the real client (`stripeFromKey(...)`) satisfies it structurally.
  */
 export type StripeCustomerCredits = {
   customers: {
@@ -373,7 +374,10 @@ export async function rewardReferral(service: DB, referralId: string, deps: Rewa
     let currency: string;
     let txnId: string | null = null;
     try {
-      stripe = deps.stripe ?? getStripe();
+      // The key the billing routes use: Super Admin → Stripe Setup first, then
+      // the environment. getStripe() read only the environment, so a deployment
+      // configured in Stripe Setup alone failed every reward.
+      stripe = deps.stripe ?? stripeFromKey(effectiveSecretKey(await getStripeSettings()));
       const customer = await stripe.customers.retrieve(customerRef);
       if (customer.deleted) {
         console.warn('[referrals/reward] Stripe customer is deleted; leaving converted', { referralId, side, familyId });
