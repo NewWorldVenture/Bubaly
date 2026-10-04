@@ -14,6 +14,47 @@ BEGIN
   RAISE NOTICE '0475 PASS %', p_label;
 END $$;
 
+-- Model a compromised authenticated role that was temporarily granted CREATE
+-- on public. Its exact uuid[] overload would outrank pg_catalog.unnest(anyarray)
+-- if a SECURITY DEFINER trigger left the built-in call unqualified. Then use a
+-- BYPASSRLS service-role write to prove the trigger itself still rejects an
+-- actor with no active membership, rather than letting RLS mask the result.
+GRANT CREATE ON SCHEMA public TO authenticated;
+SELECT public.meal_plan_test_assert(
+  has_schema_privilege('authenticated', 'public', 'CREATE'),
+  'synthetic authenticated role has the explicitly granted public CREATE privilege');
+SET ROLE authenticated;
+CREATE FUNCTION public.unnest(uuid[]) RETURNS SETOF uuid
+LANGUAGE sql IMMUTABLE AS $$ SELECT NULL::uuid WHERE false $$;
+RESET ROLE;
+REVOKE CREATE ON SCHEMA public FROM authenticated;
+SELECT public.meal_plan_test_assert(
+  to_regprocedure('public.unnest(uuid[])') IS NOT NULL
+    AND has_function_privilege('authenticated', to_regprocedure('public.unnest(uuid[])'), 'EXECUTE'),
+  'authenticated-created overload remains present after CREATE privilege is revoked');
+GRANT INSERT ON public.meal_plans TO service_role;
+SET ROLE service_role;
+SELECT set_config('request.jwt.claim.sub', '20000000-0000-0000-0000-000000000002', false);
+DO $$
+DECLARE v_state text;
+BEGIN
+  BEGIN
+    INSERT INTO public.meal_plans(family_id, meal_id, plan_date, meal_type, created_by)
+    VALUES ('10000000-0000-0000-0000-000000000001',
+      '30000000-0000-0000-0000-000000000001', '2026-10-20', 'dinner', auth.uid());
+  EXCEPTION WHEN insufficient_privilege THEN v_state := SQLSTATE;
+  END;
+  PERFORM public.meal_plan_test_assert(
+    v_state = '42501',
+    'unqualified public.unnest shadow cannot skip SECURITY DEFINER membership validation');
+END $$;
+RESET ROLE;
+REVOKE INSERT ON public.meal_plans FROM service_role;
+SELECT public.meal_plan_test_assert(
+  NOT EXISTS (SELECT 1 FROM public.meal_plans WHERE plan_date = '2026-10-20'),
+  'shadow-function attempt leaves no meal-plan row');
+DROP FUNCTION public.unnest(uuid[]);
+
 CREATE FUNCTION public.meal_plan_test_reject_insert() RETURNS trigger
 LANGUAGE plpgsql AS $$
 BEGIN

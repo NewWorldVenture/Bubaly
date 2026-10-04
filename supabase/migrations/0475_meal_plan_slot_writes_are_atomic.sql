@@ -48,7 +48,7 @@ begin
     -- or a guest-role change cannot commit between authorization and this write.
     for v_family_id in
       select distinct requested.family_id
-      from unnest(v_family_ids) as requested(family_id)
+      from pg_catalog.unnest(v_family_ids) as requested(family_id)
       where requested.family_id is not null
       order by requested.family_id
     loop
@@ -72,7 +72,7 @@ begin
 
   -- Stable order for moves between slots avoids opposite-direction update deadlocks.
   for v_slot_key in
-    select distinct k from unnest(array[v_old_key, v_new_key]) as keys(k)
+    select distinct k from pg_catalog.unnest(array[v_old_key, v_new_key]) as keys(k)
     where k is not null order by k
   loop
     perform pg_advisory_xact_lock(hashtextextended('meal-plan-slot:' || v_slot_key, 0));
