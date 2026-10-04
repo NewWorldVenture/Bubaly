@@ -18,6 +18,7 @@ import {
 import { pickOnThisDay } from '@/lib/memories/on-this-day';
 import { getLocaleContext, getTranslations } from '@/lib/i18n/server';
 import { getFormat } from '@/lib/utils/format-server';
+import { dayKeyInTz, zonedDayBoundsMs } from '@/lib/services/scope';
 import type { Format } from '@/lib/utils/format';
 import { FamilyMediaImg } from '@/components/media/family-media-img';
 
@@ -72,11 +73,13 @@ export default async function MemoriesPage({ searchParams }: { searchParams: Pro
   const supabase = await createServer();
 
   const now = new Date();
-  const yearStart = new Date(now.getFullYear(), 0, 1).toISOString();
   const nowIso = now.toISOString();
-  // Every date this page prints is the family's, not the host's.
+  // Every date this page prints is the family's, not the host's — and so is
+  // the year the counts are over: `new Date(now.getFullYear(), 0, 1)` was the
+  // HOST's 1 January at the host's midnight.
   const tz = ctx.active.family.timezone || 'UTC';
   const { fmtDate } = await getFormat(tz);
+  const yearStart = new Date(zonedDayBoundsMs(`${dayKeyInTz(now, tz).slice(0, 4)}-01-01`, tz).start).toISOString();
 
   const [
     albumsRes,
@@ -128,7 +131,8 @@ export default async function MemoriesPage({ searchParams }: { searchParams: Pro
     photosByAlbum.set(p.album_id, arr);
   }
 
-  const timeline = buildTimeline(highlights, new Date(), 12, locale.code, tr);
+  // The family's "Today" / "Yesterday" / "Last Thursday", not the host's.
+  const timeline = buildTimeline(highlights, now, 12, locale.code, tr, tz);
   const stats = memoryStats({ photos: photoCount ?? 0, videos: videoCount ?? 0, albums: albumCount ?? 0, memories: memoriesCount ?? 0 });
   const shared = sharedWithYou(photos, memberList, myUserId, now);
   const sharedById = new Map(memberList.map((m) => [m.user_id ?? m.id, m]));

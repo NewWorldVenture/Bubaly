@@ -46,7 +46,7 @@ import { ReferralHomeCard } from '@/components/referrals/referral-home-card';
 import { getReferralConfigResult } from '@/lib/referrals/server';
 import { REFERRAL_HOME_CARD_DISMISSED_KEY } from '@/lib/referrals/core';
 import {
-  summarizeMonthFinances, usd as usdIn, memberTagline, weekStrip, isoDate, type HomeTxn,
+  summarizeMonthFinances, usd as usdIn, memberTagline, weekStrip, type HomeTxn,
 } from '@/lib/home/home-data';
 import { pickFirstThing, type FirstThing } from '@/lib/outcomes/launcher';
 import { DoOneThingCard } from '@/components/outcomes/do-one-thing-card';
@@ -226,7 +226,10 @@ export default async function HomePage() {
     supabase.from('meal_plans').select('plan_date, meal_id, meal_type')
       .eq('family_id', familyId).eq('meal_type', 'dinner').gte('plan_date', weekStartIso).lte('plan_date', weekEndIso),
     supabase.from('transactions').select('type, amount, date')
-      .eq('family_id', familyId).gte('date', isoDate(monthStart)).limit(1000),
+      // `date` is a DATE column: the family's first of the month as a day key.
+      // `isoDate(monthStart)` re-read the family's midnight instant in the host's
+      // calendar, which east of Greenwich is the last day of the previous month.
+      .eq('family_id', familyId).gte('date', `${todayKey.slice(0, 7)}-01`).limit(1000),
     supabase.from('family_photos').select('id, url, thumbnail_url, caption, taken_at, created_at')
       .eq('family_id', familyId).order('created_at', { ascending: false }).limit(4),
     supabase.from('family_messages').select('id, sender_id, sender_name, sender_avatar, content, created_at, read_by')
@@ -681,7 +684,7 @@ export default async function HomePage() {
                 <Avatar name={m.display_name} color={m.color ?? undefined} size={52} className="rounded-full" />
                 <div className="min-w-0">
                   <p className="truncate text-xs font-semibold">{firstName(m.display_name)}</p>
-                  <p className="truncate text-[10px] text-muted">{memberTagline(m, ctx.user.id, now)}</p>
+                  <p className="truncate text-[10px] text-muted">{memberTagline(m, ctx.user.id, todayKey)}</p>
                 </div>
               </div>
             ))}

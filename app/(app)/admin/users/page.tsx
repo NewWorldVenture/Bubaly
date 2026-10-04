@@ -19,6 +19,7 @@ import { RoleDonut } from '@/components/admin/role-donut';
 import { AlertTriangle } from 'lucide-react';
 import type { Tables } from '@/lib/database.types';
 import { getTranslations } from '@/lib/i18n/server';
+import { utcMonthStartIso } from '@/lib/admin/clock';
 
 export const metadata: Metadata = { title: 'Users & Families', robots: { index: false } };
 export const dynamic = 'force-dynamic';
@@ -157,8 +158,8 @@ export default async function AdminUsersPage({ searchParams }: Params) {
   });
 
   // Stats (computed over the full dataset, not the filtered/paginated view).
-  const now = new Date();
-  const monthStart = new Date(now.getFullYear(), now.getMonth(), 1);
+  // "This month" starts in the admin zone, not the host's (lib/admin/clock.ts).
+  const monthStart = new Date(utcMonthStartIso());
   const totalUsers = enriched.length;
   const activeUsers = enriched.filter((u) => u.hasAccount).length;
   const newThisMonth = enriched.filter((u) => new Date(u.joinedAt) >= monthStart).length;

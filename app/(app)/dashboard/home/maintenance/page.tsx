@@ -2,6 +2,7 @@ import type { Metadata } from 'next';
 import { getTranslations } from '@/lib/i18n/server';
 import { requirePlanLevel } from '@/lib/supabase/auth';
 import { getAssets } from '@/lib/home/queries';
+import { dayKeyInTz } from '@/lib/services/scope';
 import {
   assetAgeYears, lifeRemaining, currentSeason, SEASONAL_CHECKLIST,
   DEFAULT_CADENCES, TYPICAL_LIFESPAN_YEARS,
@@ -17,7 +18,8 @@ export const dynamic = 'force-dynamic';
 export default async function MaintenancePage() {
   const ctx = await requirePlanLevel(1);
   const assets = await getAssets(ctx.active.familyId);
-  const season = currentSeason();
+  // The season on the family's calendar, not the host's.
+  const season = currentSeason(dayKeyInTz(new Date(), ctx.active.family.timezone || 'UTC'));
 
   const views: AssetView[] = assets.map((a) => {
     const life = lifeRemaining(a);

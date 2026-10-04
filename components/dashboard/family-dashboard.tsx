@@ -10,7 +10,7 @@ import { isManager } from '@/lib/constants/roles';
 import type { UserContext } from '@/lib/supabase/auth';
 import { Avatar } from '@/components/ui/avatar';
 import { DashboardWeather } from '@/components/dashboard/dashboard-weather';
-import { fmtTime, firstName } from '@/lib/utils/format';
+import { createFormat, firstName } from '@/lib/utils/format';
 import { cn } from '@/lib/utils/cn';
 import { getLocaleContext, getTranslations } from '@/lib/i18n/server';
 import { dayPhase, phaseGreeting } from '@/lib/home/time-of-day';
@@ -72,6 +72,10 @@ export async function FamilyDashboard({ ctx }: { ctx: UserContext }) {
   // A SERVER component, so the locale comes from the request rather than from a
   // hook — useLocale() here is a build error, which is how this was caught.
   const { locale } = await getLocaleContext();
+  // A formatter bound to the FAMILY's zone: the bare `fmtTime` and the
+  // `toLocaleDateString(locale.code, …)` / `d.getDate()` badge rendered each
+  // event's clock and day in the host's zone.
+  const { fmtTime, fmtDate } = createFormat(locale.code, undefined, ctx.active.family.timezone || 'UTC');
   const familyId = ctx.active.familyId;
   const supabase = await createServer();
   const { start, end, in7, in14, weekStart, weekEnd } = dayBounds(ctx.active.family.timezone || 'UTC');
@@ -168,8 +172,8 @@ export async function FamilyDashboard({ ctx }: { ctx: UserContext }) {
   type MealRow = { plan_date: string; meal_type: string; meal_id: string | null };
   const mealMap: Record<number, MealRow> = {};
   for (const p of (weekPlans ?? []) as MealRow[]) {
-    const d = new Date(p.plan_date + 'T00:00:00');
-    const idx = (d.getDay() + 6) % 7;
+    // A DATE's weekday, read in no zone at all (UTC in, UTC out).
+    const idx = (new Date(p.plan_date + 'T00:00:00Z').getUTCDay() + 6) % 7;
     if (!mealMap[idx]) mealMap[idx] = p;
   }
 
@@ -265,13 +269,12 @@ export async function FamilyDashboard({ ctx }: { ctx: UserContext }) {
           {upcomingEvents && upcomingEvents.length > 0 ? (
             <ul className="space-y-3">
               {upcomingEvents.map((e, i) => {
-                const d = new Date(e.starts_at);
                 return (
                   <li key={e.id} className="flex items-center gap-3">
                     <div className={cn('grid h-11 w-11 shrink-0 place-items-center rounded-lg text-center text-fg', ACCENT[i % ACCENT.length])}>
                       <div>
-                        <p className="text-[9px] font-bold uppercase">{d.toLocaleDateString(locale.code, { month: 'short' })}</p>
-                        <p className="text-base font-black leading-none">{d.getDate()}</p>
+                        <p className="text-[9px] font-bold uppercase">{fmtDate(e.starts_at, 'MMM')}</p>
+                        <p className="text-base font-black leading-none">{fmtDate(e.starts_at, 'd')}</p>
                       </div>
                     </div>
                     <div className="min-w-0 flex-1">
