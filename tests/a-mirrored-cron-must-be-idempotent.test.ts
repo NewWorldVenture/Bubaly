@@ -33,11 +33,16 @@ const dispatcher = readFileSync(join(ROOT, 'scripts/cron-dispatch.mjs'), 'utf8')
  * funnels through `notify()`, which filters already-notified recipients before
  * inserting.
  *
- * `admin-digest` is the exception, and because both schedules are the identical
- * `30 12 * * *`, the exception is not a rare retry — it is **every day**. Its
- * window is `Date.now() - 24h` and nothing records that a digest was sent, so
- * two runs at the same minute both find the same activity and both send. Every
- * super admin receives two identical emails daily.
+ * `admin-digest` WAS the exception, and because both schedules are the identical
+ * `30 12 * * *`, the exception was not a rare retry — it was **every day**. Its
+ * window was `Date.now() - 24h` and nothing recorded that a digest was sent, so
+ * two runs at the same minute both found the same activity and both sent. Every
+ * super admin received two identical emails daily. It now reads the owner's
+ * decided occurrence (the 24 h ending at the 12:30 slot), renders the same
+ * bytes on every tick and sends each admin under one idempotency key per
+ * occurrence, which the provider folds (tests/admin-digest-replay-contract.
+ * test.ts). The backlog below is empty; the rules stay so the next entry has
+ * somewhere to go.
  *
  * Deliberately NOT a scan for a dedupe marker across all 24 routes. That was
  * tried: ten routes show no marker in their own `route.ts` because the
@@ -50,13 +55,7 @@ const dispatcher = readFileSync(join(ROOT, 'scripts/cron-dispatch.mjs'), 'utf8')
  * Routes known to break the dispatcher's idempotency claim. A backlog, not a
  * licence: it may only SHRINK, and the rules below fail if an entry is stale.
  */
-const KNOWN_DOUBLE_SEND: { path: string; why: string; fix: string }[] = [
-  {
-    path: '/api/cron/admin-digest',
-    why: 'window is Date.now() - 24h and no run is recorded, so two dispatches at the same minute both send',
-    fix: 'persist a high-water mark (last_digested_at) and derive `since` from it',
-  },
-];
+const KNOWN_DOUBLE_SEND: { path: string; why: string; fix: string }[] = [];
 
 /** The dedupe mechanisms a route can use to survive a second dispatch. */
 const IDEMPOTENCY = /notify\(|onConflict|\.lte\('next_run_on|claimed|sent_at|dedupe|already|processed/;
@@ -109,6 +108,14 @@ describe('a mirrored cron must survive being dispatched twice', () => {
       expect(why.length, `${path} does not say how it double-sends`).toBeGreaterThan(30);
       expect(fix.length, `${path} does not say what would fix it`).toBeGreaterThan(20);
     }
+  });
+
+  it('the admin digest, the entry this list was written for, carries its dedupe and reads one occurrence', () => {
+    const source = readFileSync(join(ROOT, 'app/api/cron/admin-digest/route.ts'), 'utf8');
+    expect(IDEMPOTENCY.test(source)).toBe(true);
+    expect(source).toContain('const slot = adminDigestSlot(new Date());');
+    expect(source).toContain("idempotencyKey: keyFor(to)");
+    expect(source, 'the rolling window is back').not.toContain('Date.now() - 24 * 60 * 60 * 1000');
   });
 
   it('recognises the dedupe shapes it looks for (calibrates the matcher)', () => {

@@ -26,7 +26,7 @@ import { createInMemorySupabase, type InMemorySupabase, type Row } from './helpe
 import { SCHEDULES, dueRoutes } from '../scripts/cron-dispatch.mjs';
 
 type ProviderMode = 'accept' | 'refuse' | 'network-error' | 'accept-then-timeout';
-type Attempt = { to: string; subject: string; html: string; idempotencyKey: string | null; accepted: boolean };
+type Attempt = { to: string; subject: string; html: string; idempotencyKey: string | null; accepted: boolean; folded: boolean };
 
 const state = vi.hoisted(() => ({
   db: null as unknown,
@@ -45,6 +45,8 @@ const state = vi.hoisted(() => ({
   barrier: null as null | { table: string; parties: number; arrived: number; attemptsAtRelease: number | null; release: () => void; gate: Promise<void> },
   /** Replaces the recipient lookup's result (the only way to reach the empty-recipient branch). */
   recipientsOverride: null as string[] | null,
+  /** The fake provider's key store: what Resend keeps for 24 h per Idempotency-Key. */
+  keys: new Map<string, { payload: string; id: string }>(),
 }));
 
 vi.mock('@/lib/i18n/server', () => ({ getTranslations: async () => (key: string) => key }));
@@ -82,9 +84,24 @@ async function fakeResend(input: unknown, init?: RequestInit): Promise<Response>
   expect(headers.get('authorization')).toBe(`Bearer ${RESEND_KEY}`);
   expect(init?.signal, 'every provider call carries a deadline').toBeInstanceOf(AbortSignal);
   const body = JSON.parse(String(init?.body)) as { to: string; subject: string; html: string };
+  const idempotencyKey = headers.get('idempotency-key');
+  // Resend's idempotency, as documented: a key it has accepted answers a repeat of the
+  // SAME payload with the original result and sends nothing; a DIFFERENT payload under
+  // a used key is a 409. Keys are kept for 24 h; this fake keeps them for the test.
+  const payload = String(init?.body);
+  const prior = idempotencyKey ? state.keys.get(idempotencyKey) : undefined;
+  if (prior) {
+    if (prior.payload === payload) {
+      state.attempts.push({ to: body.to, subject: body.subject, html: body.html, idempotencyKey, accepted: true, folded: true });
+      return new Response(JSON.stringify({ id: prior.id }), { status: 200 });
+    }
+    state.attempts.push({ to: body.to, subject: body.subject, html: body.html, idempotencyKey, accepted: false, folded: false });
+    return new Response(JSON.stringify({ name: 'invalid_idempotent_request' }), { status: 409 });
+  }
   const mode = state.mode[body.to] ?? 'accept';
   const accepted = mode === 'accept' || mode === 'accept-then-timeout';
-  state.attempts.push({ to: body.to, subject: body.subject, html: body.html, idempotencyKey: headers.get('idempotency-key'), accepted });
+  state.attempts.push({ to: body.to, subject: body.subject, html: body.html, idempotencyKey, accepted, folded: false });
+  if (accepted && idempotencyKey) state.keys.set(idempotencyKey, { payload, id: `msg_${state.attempts.length}` });
   if (mode === 'refuse') return new Response(JSON.stringify({ name: 'validation_error' }), { status: 422 });
   if (mode === 'network-error') throw new TypeError('fetch failed');
   // The fake provider accepted it (a real one would go on to deliver it), but the 15 s deadline fired before the answer arrived.
@@ -175,8 +192,14 @@ const count = (pick: (a: Attempt) => boolean) => {
 };
 /** Provider calls the handler made, per recipient. */
 const attempted = () => count(() => true);
-/** Messages the FAKE provider accepted, per recipient: this test's stand-in for delivery, not demonstrated inbox delivery. */
+/** Messages the FAKE provider accepted, per recipient — a folded repeat included, since the provider answers it 200. */
 const accepted = () => count((a) => a.accepted);
+/** Messages the FAKE provider would go on to DELIVER, per recipient: accepted and not a fold of an earlier one. This test's stand-in for delivery, not demonstrated inbox delivery. */
+const delivered = () => count((a) => a.accepted && !a.folded);
+/** Repeats the fake provider folded onto an earlier acceptance, per recipient. */
+const folded = () => count((a) => a.folded);
+/** The idempotency keys seen for one recipient, de-duplicated. */
+const keysFor = (to: string) => [...new Set(state.attempts.filter((a) => a.to === to).map((a) => a.idempotencyKey))];
 const each = (n: number) => Object.fromEntries(recipients().map((r) => [alias(r), n]));
 
 const saved = { ...process.env };
@@ -185,7 +208,7 @@ beforeEach(() => {
   process.env.CRON_SECRET = CRON;
   process.env.RESEND_API_KEY = RESEND_KEY;
   process.env.SUPER_ADMIN_EMAILS = '';
-  state.attempts = []; state.mode = {}; state.strayNetwork = []; state.reads = {}; state.writes = [];
+  state.attempts = []; state.mode = {}; state.strayNetwork = []; state.reads = {}; state.writes = []; state.keys = new Map();
   state.failRead = null; state.barrier = null; state.recipientsOverride = null;
   freshDb();
   vi.stubGlobal('fetch', vi.fn(fakeResend));
@@ -215,7 +238,7 @@ describe('fixture', () => {
   });
 });
 
-describe('admin-digest replay: current main, observed (not endorsed)', () => {
+describe('admin-digest replay: one occurrence, one key per admin, the provider folds the repeat', () => {
   // ── refusal and the no-op branches ─────────────────────────────────────────
   it('refuses every unauthorised call with 401 before touching the database or the provider', async () => {
     happen('2026-09-30T08:00:00Z', 'Signup Alpha');
@@ -332,38 +355,71 @@ describe('admin-digest replay: current main, observed (not endorsed)', () => {
   }
 
   // ── replay: the same occurrence, again ─────────────────────────────────────
-  it('SEQUENTIAL REPEAT: a second call for the same 12:30 occurrence sends every admin the identical digest again — 4 attempted, 4 accepted, nothing written', async () => {
+  it('SEQUENTIAL REPEAT: a second call for the same 12:30 occurrence attempts every admin again under the SAME key with the SAME bytes — the provider folds it: 4 attempted, 2 delivered, nothing written', async () => {
     happen('2026-09-30T08:00:00Z', 'Signup Alpha');
     happen('2026-09-30T09:00:00Z', 'Paid Bravo', 'subscription');
     const first = await runAt('2026-09-30T12:30:00Z');
     const second = await runAt('2026-09-30T12:30:00Z');
     for (const r of [first, second]) {
       expect(r.status).toBe(200);
-      expect(r.body).toMatchObject({ ok: true, sent: 2, failed: 0, recipients: 2, total: 2 });
+      // `sent` counts provider acceptances; a fold IS an acceptance (the provider answers 200 with the first result).
+      expect(r.body).toMatchObject({ ok: true, sent: 2, failed: 0, recipients: 2, total: 2, occurrence: 'admin-digest:2026-09-30T12:30:00.000Z' });
     }
     expect(attempted()).toEqual(each(2));
-    expect(accepted()).toEqual(each(2));
+    expect(delivered()).toEqual(each(1));
+    expect(folded()).toEqual(each(1));
     const [a, b] = state.attempts.filter((x) => x.to === SECOND);
     expect(a.subject).toBe(b.subject);
     expect(a.html).toBe(b.html);
-    expect(state.attempts.every((x) => x.idempotencyKey === null)).toBe(true);
+    expect(a.idempotencyKey).toBe(b.idempotencyKey);
+    expect(keysFor(SECOND)).toHaveLength(1);
+    // One key per (occurrence, recipient): the two admins never share one.
+    expect(new Set(state.attempts.map((x) => x.idempotencyKey)).size).toBe(2);
+    expect(state.attempts.every((x) => /^admin-digest\/[0-9a-f]{64}$/.test(x.idempotencyKey ?? ''))).toBe(true);
     expect(state.writes).toEqual([]);
   });
 
-  it('SEQUENTIAL REPEAT inside the dispatcher window: Vercel at 12:30 and GitHub at 12:33 both send; the second digest re-reports the first one’s rows', async () => {
+  it('THE MIRRORED MINUTE: Vercel at 12:30 and GitHub at 12:33 read the same window and render the same bytes; the second is folded, and the 12:31 signup waits for the next slot', async () => {
     happen('2026-09-30T08:00:00Z', 'Signup Alpha');
     const vercel = await runAt('2026-09-30T12:30:00Z');
     happen('2026-09-30T12:31:00Z', 'Signup Charlie');
     const github = await runAt('2026-09-30T12:33:00Z');
     expect(vercel.body).toMatchObject({ ok: true, sent: 2, total: 1 });
-    expect(github.body).toMatchObject({ ok: true, sent: 2, total: 2 });
-    expect(accepted()).toEqual(each(2));
+    expect(github.body).toMatchObject({ ok: true, sent: 2, total: 1 }); // Charlie is after the slot: next occurrence's
+    expect(delivered()).toEqual(each(1));
+    expect(folded()).toEqual(each(1));
     const second = state.attempts.filter((x) => x.to === SECOND);
-    expect(second[0].html).toContain('Signup Alpha');
-    expect(second[1].html).toContain('Signup Alpha'); // reported twice
+    expect(second[0].html).toBe(second[1].html);
+    expect(second[1].html).toContain('Signup Alpha');
+    expect(second[1].html).not.toContain('Signup Charlie');
+    // The label is the slot's date, not the clock's: identical on every tick.
+    expect(second[0].subject).toBe(second[1].subject);
+    // The next day's slot is a new occurrence, a new key, and Charlie's digest.
+    const next = await runAt('2026-10-01T12:30:00Z');
+    expect(next.body).toMatchObject({ ok: true, sent: 2, total: 1, occurrence: 'admin-digest:2026-10-01T12:30:00.000Z' });
+    expect(keysFor(SECOND)).toHaveLength(2);
+    expect(delivered()).toEqual(each(2));
+    expect(state.attempts.at(-1)!.html).toContain('Signup Charlie');
   });
 
-  it('CONCURRENT: two workers that both finish reading before either sends each email every admin — 4 attempted, 4 accepted', async () => {
+  it('A LATE DISPATCH past midnight: a GitHub tick at 02:00Z the next day is still the 30 September occurrence — same window, same label, same bytes, folded', async () => {
+    happen('2026-09-30T08:00:00Z', 'Signup Alpha');
+    const onTime = await runAt('2026-09-30T12:30:00Z');
+    happen('2026-09-30T15:00:00Z', 'Signup Delta');
+    // 13½ hours late and on the clock's NEXT day: a label from the clock would read "Oct 1" and
+    // change the bytes, which the provider would refuse under the used key (409) — not fold.
+    const late = await runAt('2026-10-01T02:00:00Z');
+    expect(onTime.body).toMatchObject({ ok: true, sent: 2, total: 1, occurrence: 'admin-digest:2026-09-30T12:30:00.000Z' });
+    expect(late.body).toMatchObject({ ok: true, sent: 2, failed: 0, total: 1, occurrence: 'admin-digest:2026-09-30T12:30:00.000Z' });
+    expect(delivered()).toEqual(each(1));
+    expect(folded()).toEqual(each(1));
+    const [a, b] = state.attempts.filter((x) => x.to === SECOND);
+    expect(a.subject).toBe(b.subject);
+    expect(b.subject).toContain('Sep 30');
+    expect(b.subject).not.toContain('Oct 1');
+  });
+
+  it('CONCURRENT: two workers that both finish reading before either sends attempt every admin twice; the provider accepts one of each pair and folds the other', async () => {
     happen('2026-09-30T08:00:00Z', 'Signup Alpha');
     vi.setSystemTime(new Date('2026-09-30T12:30:00Z'));
     barrierOn('super_admins', 2); // the first page of the last read before the send fan-out
@@ -374,30 +430,34 @@ describe('admin-digest replay: current main, observed (not endorsed)', () => {
     expect(await a.json()).toMatchObject({ ok: true, sent: 2 });
     expect(await b.json()).toMatchObject({ ok: true, sent: 2 });
     expect(attempted()).toEqual(each(2));
-    expect(accepted()).toEqual(each(2));
-    expect(state.writes).toEqual([]); // no claim row exists to lose a race on
+    // The fake serialises the two requests, as the provider's key store does; a real race
+    // between two in-flight sends under one key is the provider's to resolve, not shown here.
+    expect(delivered()).toEqual(each(1));
+    expect(folded()).toEqual(each(1));
+    expect(state.writes).toEqual([]); // no claim row exists to lose a race on — the key is the claim
   });
 
   for (const failure of ['refuse', 'network-error'] as const) {
-    it(`ONE RECIPIENT FAILS (${failure}) AFTER ANOTHER SUCCEEDS: 502 {sent 1, failed 1}; the retry re-sends to the admin who already had it`, async () => {
+    it(`ONE RECIPIENT FAILS (${failure}) AFTER ANOTHER SUCCEEDS: 502 {sent 1, failed 1}; the retry attempts both, and the admin who already had it is folded`, async () => {
       happen('2026-09-30T08:00:00Z', 'Signup Alpha');
       state.mode[SECOND] = failure;
       const failed = await runAt('2026-09-30T12:30:00Z');
       expect(failed.status).toBe(502);
       expect(failed.body).toMatchObject({ ok: false, sent: 1, failed: 1, skipped: 0, recipients: 2, total: 1 });
       expect(attempted()).toEqual(each(1));
-      expect(accepted()).toEqual({ 'admin-1': 1, 'admin-2': 0 });
+      expect(delivered()).toEqual({ 'admin-1': 1, 'admin-2': 0 });
 
       state.mode = {};
       const retry = await runAt('2026-09-30T12:30:00Z'); // what the 502 invites
       expect(retry.status).toBe(200);
       expect(attempted()).toEqual(each(2));
-      expect(accepted()).toEqual({ 'admin-1': 2, 'admin-2': 1 });
-      expect(state.writes).toEqual([]); // no per-recipient receipt tells the retry who already has it
+      expect(delivered()).toEqual(each(1)); // admin-1's second copy folded; admin-2's first copy delivered
+      expect(folded()).toEqual({ 'admin-1': 1, 'admin-2': 0 });
+      expect(state.writes).toEqual([]); // no per-recipient receipt — the provider's key store is what tells the retry
     });
   }
 
-  it('ACCEPTED BEFORE A TIMEOUT: the provider accepts both, the handler reports one failure and 502; the retry gives BOTH admins a second copy', async () => {
+  it('ACCEPTED BEFORE A TIMEOUT: the provider accepts both, the handler reports one failure and 502; the retry is folded for BOTH admins', async () => {
     happen('2026-09-30T08:00:00Z', 'Signup Alpha');
     state.mode[SECOND] = 'accept-then-timeout';
     const first = await runAt('2026-09-30T12:30:00Z');
@@ -408,17 +468,34 @@ describe('admin-digest replay: current main, observed (not endorsed)', () => {
     state.mode = {};
     await runAt('2026-09-30T12:30:00Z');
     expect(attempted()).toEqual(each(2));
-    expect(accepted()).toEqual(each(2));
-    // No Idempotency-Key was sent on either attempt, so the provider could not have folded the retry.
-    expect(state.attempts.map((x) => x.idempotencyKey)).toEqual([null, null, null, null]);
+    // The same key on the retry, so the provider folds the ambiguous send instead of delivering a second copy.
+    expect(delivered()).toEqual(each(1));
+    expect(folded()).toEqual(each(1));
+    expect(keysFor(SECOND)).toHaveLength(1);
+  });
+
+  it('A CHANGED PAYLOAD under a used key is refused by the provider, not sent: the route reports the failure', async () => {
+    happen('2026-09-30T08:00:00Z', 'Signup Alpha');
+    await runAt('2026-09-30T12:30:00Z');
+    // Simulate a payload drift the policy forbids (a row back-dated into the frozen window).
+    happen('2026-09-30T08:30:00Z', 'Signup Backdated');
+    const drifted = await runAt('2026-09-30T12:30:00Z');
+    expect(drifted.status).toBe(502);
+    expect(drifted.body).toMatchObject({ ok: false, sent: 0, failed: 2 });
+    expect(delivered()).toEqual(each(1));
+    expect(folded()).toEqual(each(0));
   });
 
   it('PARTIAL DELIVERY STATUS: 502 whenever any recipient fails, 200 only when none does; the body always carries the per-run counts', async () => {
-    happen('2026-09-30T08:00:00Z', 'Signup Alpha');
+    // Three OCCURRENCES (three days), because within one occurrence a provider that has accepted a key
+    // answers its repeat with the first result — a refusal cannot be injected into a folded send.
     const results: { status: number; body: Record<string, unknown> }[] = [];
-    for (const modes of [{}, { [SECOND]: 'refuse' }, Object.fromEntries(recipients().map((r) => [r, 'refuse']))] as Record<string, ProviderMode>[]) {
-      state.mode = modes;
-      results.push(await runAt('2026-09-30T12:30:00Z'));
+    const days = ['2026-09-30', '2026-10-01', '2026-10-02'];
+    const modes = [{}, { [SECOND]: 'refuse' }, Object.fromEntries(recipients().map((r) => [r, 'refuse']))] as Record<string, ProviderMode>[];
+    for (const [i, day] of days.entries()) {
+      happen(`${day}T08:00:00Z`, `Signup ${i}`);
+      state.mode = modes[i];
+      results.push(await runAt(`${day}T12:30:00Z`));
     }
     expect(results.map((r) => r.status)).toEqual([200, 502, 502]);
     expect(results.map(({ body: { ok, sent, failed, skipped } }) => ({ ok, sent, failed, skipped }))).toEqual([
@@ -426,16 +503,19 @@ describe('admin-digest replay: current main, observed (not endorsed)', () => {
       { ok: false, sent: 1, failed: 1, skipped: 0 },
       { ok: false, sent: 0, failed: 2, skipped: 0 },
     ]);
-    // Three runs of one occurrence: 6 attempts, 3 accepted — admin-1 twice, admin-2 once.
+    // Three occurrences: 6 attempts, nothing folded; admin-1 delivered twice (days 1 and 2), admin-2 once (day 1).
     expect(state.attempts).toHaveLength(6);
-    expect(accepted()).toEqual({ 'admin-1': 2, 'admin-2': 1 });
+    expect(folded()).toEqual(each(0));
+    expect(delivered()).toEqual({ 'admin-1': 2, 'admin-2': 1 });
   });
 });
 
 // ── Promoted from the desired contract (docs/final-audit/admin-digest-replay-contract-2026-09-30) ──
-// C6 failed on main at 231e8140 and passes since #685. Only C6 is promoted: C1–C5 (one digest per
-// occurrence, retry only the unaccepted recipient, same key and frozen payload on an ambiguous send,
-// no row in two digests) are still unmet and stay in the evidence folder as failing contract cases.
+// C6 failed on main at 231e8140 and passes since #685. The cases above now cover the rest of the
+// contract AS THE PROVIDER'S KEY STORE MEETS IT: one occurrence per slot, one key per admin per
+// occurrence, frozen bytes, a folded repeat (C1, C2, C4, C5). C3 as written — the retry ATTEMPTS only
+// the unaccepted recipient — needs a durable per-recipient record, which is the delivery engine's
+// (flag-gated, migrations 0471/0474); here the retry attempts both and the provider folds one.
 describe('admin-digest contract (promoted)', () => {
   it('C6 a run that could not read its recipient list does not report a clean success', async () => {
     happen('2026-09-30T08:00:00Z', 'Signup Alpha');
