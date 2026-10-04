@@ -504,8 +504,9 @@ describe('Supabase migration filename safety', () => {
     // (reserved for #710) withdraws an admin removed after a digest was
     // frozen. This literal tracks the checked-in high-water mark, not
     // migration allocation: 0465-0470 remain NWV's, 0472 Support's, and 0473
-    // the coordinator's.
-    expect(audit.nextVersion).toBe('0475');
+    // the coordinator's. 0486 (Surge, #927 comment 5975262129) makes voice
+    // history the speaker's and the linked-assistant log the managers'.
+    expect(audit.nextVersion).toBe('0487');
   });
 
   it('flags a newly introduced collision instead of silently accepting it', () => {

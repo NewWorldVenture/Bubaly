@@ -4052,3 +4052,50 @@ access to equal the page's guest row: 8 findings before, 0 after.
 **After applying:** as a guest, open the calendar and try to add an event. It
 should be refused with the permission message. As a parent, add and delete one,
 which should succeed.
+
+## `0486` — any family member could read every other member's spoken commands and the linked-assistant log
+
+`supabase/migrations/0486_voice_history_is_the_speakers_and_link_logs_are_managers.sql`
+
+**Severity: medium (a member's own words, read by every member through the Data
+API and the Voice page).** Proposed in #771 comment 5973585839. Approved as an
+audit draft with synthetic tests in #927 comment 5975179712. **Production access
+rules stay unchanged pending separate approval.**
+
+- `voice_commands.transcript`, a member's spoken command verbatim, was
+  `is_family_member`-readable. The Voice page listed the family's last 20
+  commands to anyone. It is now readable by the speaker or a household manager.
+  "The speaker" is `is_self_member(member_id)`, or `created_by = auth.uid()`
+  when the row names no member.
+- `assistant_link_events.utterance`, what someone said to a linked home
+  assistant, is now readable by managers only. No app surface reads it. It is
+  written with the service role, and that is unchanged.
+
+No application change is needed:
+- the Voice page's copy is already personal ("Recent commands");
+- its delete already reports a refused row;
+- realtime follows RLS.
+
+`docs/audit/voice-history-and-link-log-privacy-check.sql` uses synthetic data
+and is rolled back. It checks:
+- speaker and manager read the commands;
+- a sibling, a teen and another family's parent do not;
+- only managers read the link log;
+- members still file their own commands, and the service still writes link
+  events;
+- negative control: the old policies restore the leak.
+
+It fails before the migration, with exactly the four leaks, and passes after.
+Over the local Data API: a child reading a sibling's command or the link log
+got `200` with the text before, and `200 []` after. The parent's reads and the
+child's own filing are unchanged.
+
+Deploy order: either order is safe. No code depends on the new rule.
+
+**Rollback:** recreate both SELECT policies as `using (public.is_family_member(family_id))`.
+
+**Known gap, not changed (writes need a separate decision, #927 5975262129):**
+`voice_commands` INSERT, UPDATE and DELETE stay `is_family_member`. Any member
+can still file a command as another member, or edit or delete another member's
+history. A speaker-or-manager
+write rule was drafted and checked locally (#927 5975230221), and it is held.
