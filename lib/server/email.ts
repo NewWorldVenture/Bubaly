@@ -70,6 +70,13 @@ type SendArgs = {
    * is not exactly-once.
    */
   idempotencyKey?: string;
+  /**
+   * Extra message headers, passed to the provider as given. The Contact
+   * Center's auto-reply marks itself `Auto-Submitted: auto-replied` (RFC 3834)
+   * so the other side's responder does not answer it. Absent, the request body
+   * is byte-for-byte what it was, so existing idempotency keys keep matching.
+   */
+  headers?: Readonly<Record<string, string>>;
 };
 
 /** Each ask's own deadline, as it always was. */
@@ -134,7 +141,7 @@ function assertIdempotencyKey(key: unknown): asserts key is string {
   }
 }
 
-export async function sendEmail({ to, subject, html, replyTo, from, idempotencyKey }: SendArgs): Promise<SendEmailResult> {
+export async function sendEmail({ to, subject, html, replyTo, from, idempotencyKey, headers: extraHeaders }: SendArgs): Promise<SendEmailResult> {
   // Before anything else, so a malformed key is a visible bug in every
   // environment, and never becomes a provider 400 or a silently changed header.
   if (idempotencyKey !== undefined) assertIdempotencyKey(idempotencyKey);
@@ -143,7 +150,7 @@ export async function sendEmail({ to, subject, html, replyTo, from, idempotencyK
     return { ok: true, skipped: true };
   }
   // The same bytes on every ask: the key's promise holds only while they are identical.
-  const body = JSON.stringify({ from: from || FROM_EMAIL, to, subject, html, reply_to: replyTo });
+  const body = JSON.stringify({ from: from || FROM_EMAIL, to, subject, html, reply_to: replyTo, ...(extraHeaders ? { headers: extraHeaders } : {}) });
   const headers = {
     authorization: `Bearer ${process.env.RESEND_API_KEY}`,
     'content-type': 'application/json',

@@ -21,6 +21,7 @@ import {
   routeInboundToPlanner, fileInboundPaperwork,
 } from '@/lib/contact-center/server';
 import { runConcierge } from '@/lib/contact-center/concierge';
+import { AUTO_REPLY_HEADERS, autoReplyRefusal } from '@/lib/contact-center/auto-reply-guard';
 // Aliased: this file already has a MAX_BODY, and it is a different limit —
 // that one bounds the whole REQUEST (1 MB), this one bounds the body FIELD a
 // receipt will accept (8 KB). Importing it unaliased silently swapped the
@@ -256,7 +257,15 @@ export async function POST(req: NextRequest) {
 
   if (urgentOutcome === 'failed') return new NextResponse('Urgent delivery state temporarily unavailable', { status: 503 });
   // Auto-reply acknowledges intake; it does not assert that the fallback text arrived.
-  if (channel?.ai_concierge_enabled !== false && result.intent !== 'spam' && from) {
+  //
+  // Never to automatic mail, and never twice. An out-of-office, a bounce, a
+  // list or another family's acknowledgement answered by ours answers back,
+  // and the two traded mail (and concierge calls) for as long as both stayed
+  // up (`autoReplyRefusal`, RFC 3834). A provider redelivery of a message
+  // already filed (`inserted === false`) was acknowledged when it first came.
+  const refusal = autoReplyRefusal(fields, from);
+  if (refusal) console.info('[contact-center] no auto-reply', { familyId, reason: refusal });
+  if (channel?.ai_concierge_enabled !== false && result.intent !== 'spam' && from && !refusal && filed.inserted !== false) {
     try {
       const reply = filed.escalated ? (await getTranslations())('contactUrgent.replySaved') : result.reply;
       // Keep replies on the family's thread while respecting the configured
@@ -269,6 +278,7 @@ export async function POST(req: NextRequest) {
         replyTo: familyAddress,
         subject: subject ? `Re: ${subject}` : `Message received — ${familyLabel}`,
         html: `<p>${reply.replace(/&/g, '&amp;').replace(/</g, '&lt;')}</p><p style="color:#888;font-size:12px">— ${escapedFamilyLabel} via ${familyAddress}</p>`,
+        headers: AUTO_REPLY_HEADERS,
       });
       if (sent.ok && !sent.skipped) {
         await recordOutboundMessage(admin, { familyId, channel: 'email', to: from, body: reply });
