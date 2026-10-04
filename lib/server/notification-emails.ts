@@ -8,7 +8,7 @@ import type { SupabaseClient } from '@supabase/supabase-js';
 import type { Database } from '@/lib/database.types';
 import { sendReactEmail, emailEnabled } from '@/lib/email';
 import { NotificationDigestEmail } from '@/lib/emails/notification-digest';
-import { iconForType, groupByUser } from '@/lib/notifications/digest';
+import { iconForType, groupByUser, digestTimeZone } from '@/lib/notifications/digest';
 import * as React from 'react';
 import { listAllAuthUsers } from './list-all-auth-users';
 import { childrenBlockedOn } from '@/lib/notifications/child-channels';
@@ -77,7 +77,10 @@ export async function deliverNotificationEmails(supabase: DB): Promise<Notificat
   // from 5pm in California. One batched read for every family in the batch; a
   // failed read is logged and dates those digests in an explicit UTC rather
   // than holding the digests themselves, which is the one thing a cosmetic
-  // lookup must not do.
+  // lookup must not do. A recipient can belong to several families and one
+  // digest holds all of their rows, so it is dated only when every family in
+  // it keeps the same zone (digestTimeZone) — never in the first row's
+  // family's zone over another family's rows.
   const familyIds = [...new Set(permitted.map((n) => n.family_id))];
   const { data: familyZones, error: familyZonesError } = await readInChunks<{ id: string; timezone: string | null }, { message: string }>(
     familyIds,
@@ -167,7 +170,7 @@ export async function deliverNotificationEmails(supabase: DB): Promise<Notificat
     const { ok, skipped: notSent } = await sendReactEmail({
       to: meta.email,
       subject: `${notifs.length} family update${notifs.length > 1 ? 's' : ''} · Bubaly`,
-      react: React.createElement(NotificationDigestEmail, { name: meta.name, items, timeZone: zoneByFamily.get(notifs[0].family_id) ?? 'UTC' }),
+      react: React.createElement(NotificationDigestEmail, { name: meta.name, items, timeZone: digestTimeZone(notifs, zoneByFamily) }),
       // Same recipient and row set reuse one request key. The provider may
       // reject an in-flight or changed-payload replay; keep those rows pending.
       // This does not cover changed row sets, partial acknowledgements or keys
