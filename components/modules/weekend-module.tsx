@@ -8,6 +8,7 @@ import { createClient } from '@/lib/supabase/client';
 import { settle } from '@/lib/supabase/settle';
 import { describeDbError, wroteNoRows } from '@/lib/supabase/errors';
 import { useToast } from '@/components/ui/toast';
+import { useConfirm } from '@/components/ui/confirm';
 import { Input, Select } from '@/components/ui/input';
 import { Button } from '@/components/ui/button';
 import { SkeletonList, ErrorState, EmptyState } from '@/components/ui/states';
@@ -41,6 +42,7 @@ export function WeekendModule() {
   const fmtDay = (key: string) => format.fmtDate(key, 'EEEE, MMM d');
   const fmtTime = (iso: string | null) => (iso ? format.fmtTime(iso) : 'Time TBA');
   const t = useTranslations();
+  const askConfirm = useConfirm();
   const { familyId, userId } = useApp();
   const { success, error: toastError } = useToast();
 
@@ -123,7 +125,8 @@ export function WeekendModule() {
     else if (wroteNoRows(planned)) toastError(t('errors.thatChangeWasNotSaved'));
     else success(existing ? 'Updated' : 'Saved to plans');
   }
-  async function removePlan(id: string) {
+  async function removePlan(id: string, title: string) {
+    if (!(await askConfirm({ title: t('confirm.removeNamed', { name: title }), body: t('confirm.cannotBeUndone') }))) return;
     // Under RLS a refused row comes back with no error and zero rows, which this used to report as done. Audit C1-S9-81.
     const { data: removed2, error } = await createClient().from('weekend_plans').delete().eq('id', id).select('id');
     if (error) toastError(describeDbError(error)); else if (wroteNoRows(removed2)) toastError(t('errors.thatChangeWasNotSaved')); else success(t('weekendModule.removed'));
@@ -239,7 +242,7 @@ export function WeekendModule() {
                       {PLAN_STATUSES.map((s) => <option key={s.value} value={s.value}>{s.label}</option>)}
                     </select>
                     <span className={`rounded-full px-2 py-0.5 text-[10px] font-medium ${st.tone}`}>{st.label}</span>
-                    <button onClick={() => removePlan(plan.id)} className="text-xs text-muted hover:text-danger">{t('weekend.remove')}</button>
+                    <button onClick={() => removePlan(plan.id, event.title)} className="text-xs text-muted hover:text-danger">{t('weekend.remove')}</button>
                   </div>
                 </li>
               );

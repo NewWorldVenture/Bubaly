@@ -22,7 +22,8 @@ import { BRIEFING_RESPONSE_LIMITS, parseBriefingResponse } from '@/lib/briefing/
 import { fenceUntrustedBlock, UNTRUSTED_CONTENT_RULE } from '@/lib/ai/safety/untrusted';
 import { dayKeyInTz, zonedDayBoundsMs, scopeFromUserContext } from '@/lib/services/scope';
 import { withAiRequest } from '@/lib/ai/observability';
-import { briefingCalendarWindow } from '@/lib/briefing/calendar-window';
+import { briefingCalendarBounds } from '@/lib/briefing/calendar-window';
+import { readCalendarOccurrences } from '@/lib/calendar/occurrences';
 
 function normalizeBriefTimezone(candidate: string): string {
   try {
@@ -126,8 +127,10 @@ export async function POST(req: NextRequest) {
       { data: agentActivity },
     ] = await settleAll([
       supabase.from('family_members').select('id, display_name, role').eq('family_id', familyId).eq('is_active', true),
-      supabase.from('calendar_events').select('title, starts_at, ends_at, all_day, location, category, assignee_id').eq('family_id', familyId).or(briefingCalendarWindow(today, tz, 0, 1)).order('starts_at'),
-      supabase.from('calendar_events').select('title, starts_at, all_day, category').eq('family_id', familyId).or(briefingCalendarWindow(today, tz, 1, 7)).order('starts_at').limit(8),
+      // Series included: a weekly practice is on today's list every week, not
+      // only the week it was created (lib/calendar/occurrences.ts).
+      readCalendarOccurrences(supabase, familyId, briefingCalendarBounds(today, tz, 0, 1), tz, { columns: ['title', 'starts_at', 'ends_at', 'all_day', 'location', 'category', 'assignee_id'] }),
+      readCalendarOccurrences(supabase, familyId, briefingCalendarBounds(today, tz, 1, 7), tz, { columns: ['title', 'starts_at', 'all_day', 'category'], limit: 8 }),
       supabase.from('chore_assignments').select('status, due_at, member_id').eq('family_id', familyId).in('status', ['todo', 'in_progress']).lte('due_at', todayEnd),
       supabase.from('school_events').select('title, starts_at, event_type, notes, member_id').eq('family_id', familyId).gte('starts_at', todayStart).lte('starts_at', weekEnd).order('starts_at').limit(10),
       supabase.from('sports_events').select('title, starts_at, sport, team, location, member_id').eq('family_id', familyId).gte('starts_at', todayStart).lte('starts_at', weekEnd).order('starts_at').limit(10),
