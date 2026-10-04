@@ -181,7 +181,8 @@ begin
       select 1 from pg_stat_activity sa
       where sa.pid = v_b_pid and sa.application_name = v_app_b
         and sa.state = 'active'
-        and sa.query ~* '^\s*select\s+public\.meal_plan_replace_slots\s*\('
+        and left(lower(sa.query), length('select public.meal_plan_replace_slots('))
+          = 'select public.meal_plan_replace_slots('
     ) into v_b_rpc_started;
     exit when v_b_rpc_started or clock_timestamp() >= v_observe_deadline;
     perform pg_sleep(0.01);

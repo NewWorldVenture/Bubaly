@@ -7,7 +7,7 @@ describe('meal-plan replacement race observer', () => {
   it('waits for B to enter the RPC, then proves it waits on A’s exact advisory lock', () => {
     const dispatch = probe.indexOf('v_sent := dblink_send_query');
     const bPid = probe.indexOf("dblink('meal_replace_b', 'select pg_backend_pid()')");
-    const activeRpc = probe.indexOf("sa.query ~* '^\\s*select\\s+public\\.meal_plan_replace_slots\\s*\\('");
+    const activeRpc = probe.indexOf("left(lower(sa.query), length('select public.meal_plan_replace_slots('))");
     const exactWait = probe.indexOf("sa.wait_event_type = 'Lock' and sa.wait_event = 'advisory'");
 
     expect(bPid).toBeGreaterThan(-1);
