@@ -511,11 +511,14 @@ describe('admin-digest replay: one occurrence, one key per admin, the provider f
 });
 
 // ── Promoted from the desired contract (docs/final-audit/admin-digest-replay-contract-2026-09-30) ──
-// C6 failed on main at 231e8140 and passes since #685. The cases above now cover the rest of the
-// contract AS THE PROVIDER'S KEY STORE MEETS IT: one occurrence per slot, one key per admin per
-// occurrence, frozen bytes, a folded repeat (C1, C2, C4, C5). C3 as written — the retry ATTEMPTS only
-// the unaccepted recipient — needs a durable per-recipient record, which is the delivery engine's
-// (flag-gated, migrations 0471/0474); here the retry attempts both and the provider folds one.
+// C6 failed on main at 231e8140 and passes since #685. The cases above state what the flag-off
+// path now does AS THE PROVIDER'S KEY STORE MEETS IT: one occurrence per slot, one key per admin
+// per occurrence, frozen bytes, a folded repeat. The evidence folder's C1–C5 still FAIL against
+// this route, deliberately left so: its fixture counts provider ACCEPTANCES and keeps no key
+// store, so a folded repeat counts there as a second acceptance. Meeting C1–C5 as written — a
+// retry that ATTEMPTS only the unaccepted recipient, with nothing re-sent to the provider at
+// all — needs a durable per-recipient record, which is the delivery engine's (flag-gated,
+// migrations 0471/0474).
 describe('admin-digest contract (promoted)', () => {
   it('C6 a run that could not read its recipient list does not report a clean success', async () => {
     happen('2026-09-30T08:00:00Z', 'Signup Alpha');
