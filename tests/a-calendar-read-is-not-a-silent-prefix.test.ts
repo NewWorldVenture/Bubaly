@@ -16,7 +16,9 @@ import { createInMemorySupabase } from './helpers/in-memory-supabase';
  * first 1,000 and the planner, the conflict check and the reminders lost the
  * rest (review 5981467603 on #923). Both reads now ask for an exact count,
  * page on from where a cut answer stopped, and fail closed when the server
- * stops short of its own count.
+ * stops short of its own count — or answers with no count a read could trust
+ * (the recheck 5981632558: a missing count, or one that changes between pages,
+ * accepted a prefix as the whole).
  *
  * The fake's `maxRows` is that cap, applied the way the server applies it.
  */
@@ -95,6 +97,46 @@ describe('a calendar read is not a silent prefix', () => {
     const res = await readCalendarOccurrences(stuck, FAMILY, WEEK, TZ);
     expect(res.data).toBeNull();
     expect(res.error?.message).toBe('The database answered 1000 of the 1001 recurring events it counted; the window cannot be read whole');
+  });
+
+  // Recheck 5981632558: a response with no count is not a whole answer, it is an
+  // answer nobody can check. supabase-js reports a missing or unparsable
+  // Content-Range as `count: null` with no error, and a cap of 500 under 1,001
+  // rows then looked like 500 rows, complete.
+  it.each([null, undefined, -1, 0.5, Number.NaN])('fails closed when the answer carries no usable count (%s)', async (count) => {
+    const db = household(many(1001, series), 500);
+    const uncounted = { from: (table: string) => {
+      const b = db.from(table) as unknown as { then: (resolve: (v: unknown) => unknown, reject?: (e: unknown) => unknown) => unknown };
+      const then = b.then.bind(b);
+      b.then = (resolve, reject) => then((v: unknown) => resolve({ ...(v as object), count }), reject);
+      return b;
+    } } as unknown as SupabaseClient<Database>;
+    const res = await readCalendarOccurrences(uncounted, FAMILY, WEEK, TZ);
+    expect(res.data).toBeNull();
+    expect(res.count).toBeNull();
+    // Both reads are refused; the one-off read's refusal is the one reported.
+    expect(res.error?.message).toBe(`The database answered without a usable count of the one-off events (${String(count)}); the window cannot be read whole`);
+  });
+
+  it('fails closed when the count changes between pages, instead of skipping the rows that moved', async () => {
+    // Page one: 1,500 series counted, 1,000 answered. Rows 1–499 are deleted
+    // before page two, which is asked from offset 1,000 and so answers the one
+    // row left past it, counting 1,001. 1,001 rows read against a count of
+    // 1,001 looked complete while rows 1,001–1,499 were never read.
+    const db = household(many(1500, series), 1000);
+    let pages = 0;
+    const shifting = { from: (table: string) => {
+      const b = db.from(table) as unknown as { range: (from: number, to: number) => unknown };
+      const range = b.range.bind(b);
+      b.range = (from: number, to: number) => {
+        if (pages++ === 0) db.replace('calendar_events', db.table('calendar_events').filter((row) => Number(String(row.id).slice(-12)) >= 500));
+        return range(from, to);
+      };
+      return b;
+    } } as unknown as SupabaseClient<Database>;
+    const res = await readCalendarOccurrences(shifting, FAMILY, WEEK, TZ);
+    expect(res.data).toBeNull();
+    expect(res.error?.message).toBe('The count of recurring events changed from 1500 to 1001 while the window was being read; the window cannot be read whole');
   });
 
   it('fails closed past the ceiling without reading the rest', async () => {

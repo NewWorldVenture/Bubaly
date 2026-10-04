@@ -94,18 +94,26 @@ const SERIES_READ_MAX = 2000;
  * unbounded (one request answers a household under the cap, as before), and
  * when the server answered fewer rows than it counted the read goes on with
  * `.range()` from where the answer stopped, in pages of READ_PAGE, until the
- * count is reached. A server that stops short of its own count — a page that
- * adds nothing, or one that repeats rows already read — is a failed read,
- * never a prefix that passes for the whole window. Before this, the series read
- * asked for 2,001 rows and called only an answer above 2,000 oversized, so a
- * household with 1,001–2,000 series read as its first 1,000. (Review
- * 5981467603 on #923.) An answer that carries no count at all is taken whole:
- * the production client always asks for one, and the stand-ins that answer
- * without one answer everything they hold.
+ * count is reached.
+ *
+ * The count is the only thing that tells a whole answer from a cut one, so it
+ * is held to what a count can be: a safe non-negative integer, the same on
+ * every page. An answer without one (a missing or unparsable Content-Range,
+ * which supabase-js reports as `count: null` with no error), a count that
+ * changes between pages (rows added or removed under the read, so offsets no
+ * longer mean what they did), a page that adds nothing or repeats rows already
+ * read, or more rows than were counted — each is a FAILED read, never a prefix
+ * that passes for the whole window. Before this, the series read asked for
+ * 2,001 rows and called only an answer above 2,000 oversized, so a household
+ * with 1,001–2,000 series read as its first 1,000. (Review 5981467603 and the
+ * recheck 5981632558 on #923.)
  */
 const READ_PAGE = 1000;
 
-type PageResult = { data: unknown[] | null; error: { message: string } | null; count?: number | null };
+type PageResult = { data: unknown[] | null; error: { message: string } | null; count?: unknown };
+
+/** What a count can be: a safe non-negative integer. `null`, NaN, a fraction or a negative are not counts. */
+const isCount = (n: unknown): n is number => typeof n === 'number' && Number.isSafeInteger(n) && n >= 0;
 
 async function readPaged<T extends { id: unknown }>(
   whole: () => PromiseLike<PageResult>,
@@ -113,28 +121,35 @@ async function readPaged<T extends { id: unknown }>(
   max: number,
   what: string,
 ): Promise<{ rows: T[]; error: null } | { rows: null; error: { message: string } }> {
-  const oversized = { rows: null, error: { message: `More than ${max} ${what}; the window cannot be read whole` } } as const;
+  const refuse = (message: string) => ({ rows: null, error: { message: `${message}; the window cannot be read whole` } }) as const;
   const rows: T[] = [];
   const seen = new Set<string>();
+  let total: number | null = null;
   for (;;) {
     const res = await (rows.length === 0 ? whole() : more(rows.length, rows.length + READ_PAGE - 1));
     if (res.error) return { rows: null, error: res.error };
-    const got = (res.data ?? []) as T[];
-    const total = res.count ?? null;
-    if (total !== null && total > max) return oversized;
+    if (!isCount(res.count)) return refuse(`The database answered without a usable count of the ${what} (${String(res.count)})`);
+    if (total === null) total = res.count;
+    else if (res.count !== total) return refuse(`The count of ${what} changed from ${total} to ${res.count} while the window was being read`);
+    if (total > max) return refuse(`More than ${max} ${what}`);
     let added = 0;
-    for (const r of got) {
-      if (seen.has(String(r.id))) continue;
-      seen.add(String(r.id));
+    const page = new Set<string>();
+    for (const r of (res.data ?? []) as T[]) {
+      // A row an EARLIER page already answered is the server repeating itself
+      // (an offset it ignored), not a new row; within one page every row is
+      // taken as it came. A row without an id cannot be recognised as a repeat.
+      const key = r.id == null ? null : String(r.id);
+      if (key !== null) {
+        if (seen.has(key)) continue;
+        page.add(key);
+      }
       rows.push(r);
       added += 1;
     }
-    if (total === null) {
-      if (rows.length > max) return oversized;
-      break;
-    }
-    if (rows.length >= total) break;
-    if (added === 0) return { rows: null, error: { message: `The database answered ${rows.length} of the ${total} ${what} it counted; the window cannot be read whole` } };
+    for (const key of page) seen.add(key);
+    if (rows.length > total) return refuse(`The database answered ${rows.length} ${what} but counted ${total}`);
+    if (rows.length === total) break;
+    if (added === 0) return refuse(`The database answered ${rows.length} of the ${total} ${what} it counted`);
   }
   return { rows, error: null };
 }
