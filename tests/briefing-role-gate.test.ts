@@ -10,6 +10,7 @@
 // gets all three.
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { entitledServiceClient } from './helpers/entitled-service-client';
+import { createInMemorySupabase } from './helpers/in-memory-supabase';
 import { NextRequest } from 'next/server';
 
 const mocks = vi.hoisted(() => ({
@@ -57,7 +58,12 @@ const MED_SCHEDULE = {
 const MONEY_APPROVAL = { id: 'pa-1', kind: 'card_spend', amount_cents: 1250, created_at: '2026-09-07T10:30:00Z' };
 const PANTRY = { name: 'Milk', expires_at: '2026-09-08' };
 
-function queryResult(data: unknown[]) {
+function queryResult(data: unknown[], calendar = false) {
+  if (calendar) {
+    const db = createInMemorySupabase();
+    db.seed('calendar_events', data as Record<string, unknown>[]);
+    return db.from('calendar_events');
+  }
   const promise = Promise.resolve({ data, error: null });
   const query: Record<string, unknown> = { then: promise.then.bind(promise) };
   // `or` and `update` are here because the route really calls them: the shared
@@ -111,7 +117,7 @@ describe('the brief a child reads', () => {
     vi.useFakeTimers();
     vi.setSystemTime(NOW);
     mocks.createServer.mockResolvedValue({ from: mocks.from });
-    mocks.from.mockImplementation((table: string) => queryResult(familyTables(table)));
+    mocks.from.mockImplementation((table: string) => queryResult(familyTables(table), table === 'calendar_events'));
     mocks.enforceAIRateLimit.mockResolvedValue({ ok: true });
     mocks.isAIConfigured.mockResolvedValue(false);
   });
