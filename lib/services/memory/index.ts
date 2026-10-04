@@ -115,6 +115,18 @@ function mayChangeFact(scope: ServiceScope, fact: Pick<FamilyFact, 'member_id' |
   return Boolean(scope.userId) && fact.created_by === scope.userId;
 }
 
+/**
+ * Whether the activity feed may name this fact. `agent_activity` is readable by
+ * every member (0127) and the agents page lists it to all of them, while 0264
+ * hides `medical` and `account` facts from anyone who is not a manager — so a
+ * feed title carrying the label or value republished exactly what the table
+ * keeps from a child ("Remembered Medication: Sertraline 50mg"). A fact the
+ * sensitive rule catches is announced without its label or content.
+ */
+function feedMayName(fact: { category?: string | null; key: string; content: string; notes?: string | null }): boolean {
+  return !isSensitiveMemory(fact);
+}
+
 export function isAiFact(fact: Pick<FamilyFact, 'source'>): boolean {
   return fact.source === 'ai_conversation' || fact.source === 'ai_inferred';
 }
@@ -374,7 +386,7 @@ async function rememberConfirmed(
       console.error('[service:memory] fact update failed', error);
       return fail(describeDbError(error, 'Could not update that memory.'), { code: SERVICE_CODES.db });
     }
-    await recordActivitySafely(scope, { action: 'update', agent: 'memory', title: `Updated what I remember about ${input.key}`, href: '/dashboard/knowledge', memberId: input.memberId });
+    await recordActivitySafely(scope, { action: 'update', agent: 'memory', title: feedMayName({ category: input.category, key: input.key, content: input.content, notes: input.note }) ? `Updated what I remember about ${input.key}` : 'Updated a private detail', href: '/dashboard/knowledge', memberId: input.memberId });
     return ok({ kind: 'fact', fact: data, updated: true });
   }
 
@@ -402,7 +414,7 @@ async function rememberConfirmed(
     console.error('[service:memory] fact insert failed', error);
     return fail(describeDbError(error, 'Could not save that memory.'), { code: SERVICE_CODES.db });
   }
-  await recordActivitySafely(scope, { action: 'create', agent: 'memory', title: `Remembered ${input.key}: ${input.content}`, href: '/dashboard/knowledge', memberId: input.memberId });
+  await recordActivitySafely(scope, { action: 'create', agent: 'memory', title: feedMayName({ category: input.category, key: input.key, content: input.content, notes: input.note }) ? `Remembered ${input.key}: ${input.content}` : 'Remembered a private detail', href: '/dashboard/knowledge', memberId: input.memberId });
   return ok({ kind: 'fact', fact: data, updated: false });
 }
 
@@ -842,7 +854,7 @@ export async function confirmFact(scope: ServiceScope, suggestionId: string): Pr
     return fail(updateError ? describeDbError(updateError, 'Could not confirm that memory.') : 'Could not confirm that memory.', { code: SERVICE_CODES.db });
   }
 
-  await recordActivitySafely(scope, { action: 'confirm', agent: 'memory', title: `Confirmed: ${fact.label} — ${fact.value}`, href: '/dashboard/knowledge', memberId: fact.member_id });
+  await recordActivitySafely(scope, { action: 'confirm', agent: 'memory', title: feedMayName({ category: fact.category, key: fact.label, content: fact.value, notes: fact.notes }) ? `Confirmed: ${fact.label} — ${fact.value}` : 'Confirmed a private detail', href: '/dashboard/knowledge', memberId: fact.member_id });
   return ok({ fact, alreadyAccepted: false });
 }
 
@@ -882,7 +894,7 @@ export async function forgetFact(
 
   const { data: fact, error: readError } = await scope.db
     .from('family_facts')
-    .select('id, label, member_id, notes, created_by')
+    .select('id, label, member_id, notes, created_by, category, value')
     .eq('family_id', scope.familyId)
     .eq('id', id)
     .maybeSingle();
@@ -907,7 +919,7 @@ export async function forgetFact(
     console.error('[service:memory] fact delete matched no row', { familyId: scope.familyId, factId: id });
     return fail('Could not forget that.', { code: SERVICE_CODES.db });
   }
-  await recordActivitySafely(scope, { action: 'delete', agent: 'memory', title: `Forgot ${fact.label}`, href: '/dashboard/knowledge', memberId: fact.member_id });
+  await recordActivitySafely(scope, { action: 'delete', agent: 'memory', title: feedMayName({ category: fact.category, key: fact.label, content: fact.value, notes: fact.notes }) ? `Forgot ${fact.label}` : 'Forgot a private detail', href: '/dashboard/knowledge', memberId: fact.member_id });
   return ok({ kind: 'fact', label: fact.label });
 }
 
@@ -1068,9 +1080,11 @@ export async function updateFact(
   await recordActivitySafely(scope, {
     agent: 'memory',
     action: 'update',
-    title: input.pinned !== undefined && Object.keys(patch).length === 1
-      ? `${input.pinned ? 'Pinned' : 'Unpinned'} ${data.label}`
-      : `Updated what I remember about ${data.label}`,
+    title: !feedMayName({ category: data.category, key: data.label, content: data.value, notes: data.notes })
+      ? (input.pinned !== undefined && Object.keys(patch).length === 1 ? `${input.pinned ? 'Pinned' : 'Unpinned'} a private detail` : 'Updated a private detail')
+      : input.pinned !== undefined && Object.keys(patch).length === 1
+        ? `${input.pinned ? 'Pinned' : 'Unpinned'} ${data.label}`
+        : `Updated what I remember about ${data.label}`,
     href: '/dashboard/knowledge',
     memberId: data.member_id,
     resourceId: data.id,

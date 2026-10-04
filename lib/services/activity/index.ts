@@ -24,6 +24,7 @@ import { type TrailAction } from '@/lib/activity/trail';
 import type { Json, Tables } from '@/lib/database.types';
 import { describeDbError } from '@/lib/supabase/errors';
 import { fail, ok, SERVICE_CODES, type ServiceResult, type ServiceScope } from '../types';
+import { isManager } from '@/lib/constants/roles';
 
 export type ActivityKind = 'insight' | 'recommendation' | 'action' | 'handoff';
 export type ActivitySeverity = 'info' | 'attention' | 'action';
@@ -185,13 +186,34 @@ export async function setActivityStatus(
   activityId: string,
   status: ActivityStatus,
 ): Promise<ServiceResult<{ id: string }>> {
-  const { data, error } = await scope.db
+  // Who may close an entry. The feed is the household's: an entry about the
+  // whole family, or about someone else, is a parent's or adult's to mark done
+  // or dismiss — and "done" is what lib/metric/time-saved-server.ts counts as
+  // time Bubaly saved. Anyone may close an entry about themselves.
+  if (scope.role !== 'system' && !isManager(scope.role)) {
+    const { data: entry, error: readError } = await scope.db
+      .from('agent_activity')
+      .select('id, member_id')
+      .eq('id', activityId)
+      .eq('family_id', scope.familyId)
+      .maybeSingle();
+    if (readError) {
+      console.error('[service:activity] entry read failed', readError);
+      return fail(describeDbError(readError, 'Could not update that activity.'), { code: SERVICE_CODES.db });
+    }
+    if (!entry) return fail('That activity could not be found.', { code: SERVICE_CODES.notFound });
+    if (!scope.memberId || entry.member_id !== scope.memberId) {
+      return fail('Only a parent or adult can close an entry about the household or someone else.', { code: SERVICE_CODES.denied });
+    }
+  }
+  let update = scope.db
     .from('agent_activity')
     .update({ status })
     .eq('id', activityId)
-    .eq('family_id', scope.familyId)
-    .select('id')
-    .maybeSingle();
+    .eq('family_id', scope.familyId);
+  // The same rule in the write itself, so an entry re-pointed in between is not closed.
+  if (scope.role !== 'system' && !isManager(scope.role)) update = update.eq('member_id', scope.memberId as string);
+  const { data, error } = await update.select('id').maybeSingle();
 
   if (error) {
     console.error('[service:activity] status update failed', error);
