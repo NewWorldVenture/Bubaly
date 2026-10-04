@@ -26,6 +26,8 @@ describe('renewalReminders', () => {
     // The id AND the expiry it is about: "Mark renewed" rolls the date and
     // keeps the row, so keyed by the row alone next year's reminder is deduped away.
     expect(rows[0].related_id).toBe('r1:2026-07-01');
+    // The key it stood under before, and the start of this occurrence's window (expiry minus its lead).
+    expect(rows[0].legacy).toEqual({ related_id: 'r1', since: '2026-06-01T00:00:00.000Z' });
     expect(rows[0].title).toBe('Renewal due: Passport');
     expect(rows[0].body).toContain('Jul 1');
   });

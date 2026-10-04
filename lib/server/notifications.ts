@@ -32,6 +32,13 @@ type Candidate = {
   related_type: string;
   related_id: string;
   user_id: string | null; // null = whole family
+  /**
+   * An older key this same occurrence may already be recorded under, and the
+   * instant from which such a row counts (see DeadlineReminder.legacy). The
+   * dedupe below honours it, so a key that learned to name the occurrence does
+   * not re-announce what the old key had already announced for this one.
+   */
+  legacy?: { related_id: string; since: string };
 };
 
 const HOUR = 3600_000;
@@ -263,7 +270,12 @@ export async function generateFamilyNotifications(supabase: DB, familyId: string
     const when = d.expires_at ? new Date(d.expires_at).toLocaleDateString('en-US', { month: 'short', day: 'numeric' }) : 'soon';
     const expiryDay = String(d.expires_at ?? '').slice(0, 10);
     for (const m of documentManagers) {
-      candidates.push({ type: 'document_expiry', related_type: 'documents', related_id: `${d.id}:${expiryDay}:${m.id}`, user_id: m.user_id, title: `Document expiring: ${d.title}`, body: `Expires ${when}` });
+      candidates.push({
+        type: 'document_expiry', related_type: 'documents', related_id: `${d.id}:${expiryDay}:${m.id}`, user_id: m.user_id, title: `Document expiring: ${d.title}`, body: `Expires ${when}`,
+        // Before the key carried the expiry it was `${document}:${manager}`; a row
+        // under that key from inside this expiry's 14-day window is this occurrence.
+        legacy: expiryDay ? { related_id: `${d.id}:${m.id}`, since: `${addDaysToDayKey(expiryDay, -14)}T00:00:00.000Z` } : undefined,
+      });
     }
   }
 
@@ -393,7 +405,8 @@ export async function generateFamilyNotifications(supabase: DB, familyId: string
   // ── Generic items: dedup permanently against notifications for the same item.
   let rows: NotificationRow[] = [];
   if (candidates.length > 0) {
-    const relatedIds = [...new Set(candidates.map((c) => c.related_id))];
+    // The legacy keys too (see Candidate.legacy): one read answers both questions.
+    const relatedIds = [...new Set(candidates.flatMap((c) => (c.legacy ? [c.related_id, c.legacy.related_id] : [c.related_id])))];
     // Batched, because a PostgREST filter travels in the QUERY STRING and these
     // ids are not uuids — `related_id` carries a composite dedupe key such as
     // `moment:<eventId>:<date>`, about 60 characters once url-encoded. A few
@@ -402,18 +415,31 @@ export async function generateFamilyNotifications(supabase: DB, familyId: string
     // empty and re-inserts every candidate. Observed exactly that, every run.
     // 50 per batch keeps the longest URL near 3 KB.
     const { data: existing, error: existingErr } = await readInChunks<
-      { type: string; related_id: string | null; user_id: string | null }, { message: string }
+      { type: string; related_id: string | null; user_id: string | null; created_at: string | null }, { message: string }
     >(relatedIds, (chunk) => supabase
       .from('notifications')
-      .select('type, related_id, user_id')
+      .select('type, related_id, user_id, created_at')
       .eq('family_id', familyId)
       .in('related_id', chunk), 50);
     // A failed dedup read leaves `seen` empty, so every candidate would pass the
     // filter and re-insert as a duplicate — log it so that spam is diagnosable.
     if (existingErr) console.error('[notifications] dedup read failed', { familyId, error: existingErr });
-    const seen = new Set((existing ?? []).map((e) => `${e.type}:${e.related_id}:${e.user_id ?? 'all'}`));
+    const keyOf = (type: string, relatedId: string, userId: string | null) => `${type}:${relatedId}:${userId ?? 'all'}`;
+    const seen = new Set((existing ?? []).map((e) => keyOf(e.type, e.related_id ?? '', e.user_id)));
+    // The newest row under each key, for the legacy question: "was THIS occurrence announced under the old key?"
+    const newestAt = new Map<string, number>();
+    for (const e of existing ?? []) {
+      const k = keyOf(e.type, e.related_id ?? '', e.user_id);
+      const at = Date.parse(e.created_at ?? '');
+      if (Number.isFinite(at) && at > (newestAt.get(k) ?? -Infinity)) newestAt.set(k, at);
+    }
+    const announcedUnderLegacyKey = (c: Candidate) => {
+      if (!c.legacy) return false;
+      const at = newestAt.get(keyOf(c.type, c.legacy.related_id, c.user_id));
+      return at !== undefined && at >= Date.parse(c.legacy.since);
+    };
     rows = candidates
-      .filter((c) => !seen.has(`${c.type}:${c.related_id}:${c.user_id ?? 'all'}`))
+      .filter((c) => !seen.has(keyOf(c.type, c.related_id, c.user_id)) && !announcedUnderLegacyKey(c))
       .slice(0, 100)
       .map((c) => toRow(familyId, c));
   }

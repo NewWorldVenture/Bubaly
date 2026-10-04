@@ -21,6 +21,14 @@ import { createInMemorySupabase } from './helpers/in-memory-supabase';
  * Both keys now carry the expiry they are about. This runs the REAL engine
  * over the in-memory Supabase, renews between ticks the way the module does,
  * and moves the clock a year.
+ *
+ * And the rows already written under the OLD keys are honoured (audit note of
+ * 2026-10-04 07:34 UTC): a renewal announced under its bare id inside this
+ * occurrence's window is not announced again on the first run with the dated
+ * key; one announced under the bare id a year ago (the previous occurrence) is.
+ * Each candidate names the legacy key it may already stand under and the
+ * instant from which such a row counts; the engine's one dedupe read answers
+ * both.
  */
 
 type DB = SupabaseClient<Database>;
@@ -87,5 +95,61 @@ describe('a renewed renewal is reminded about again', () => {
   it('the dated keys still deep-link to the row', () => {
     expect(entityIdFrom(`${RENEWAL}:2027-10-13`)).toBe(RENEWAL);
     expect(entityIdFrom(`${DOCUMENT}:2027-10-08:${PARENT}`)).toBe(DOCUMENT);
+  });
+});
+
+describe('rows written under the old keys are honoured (audit 2026-10-04 07:34)', () => {
+  const legacyRow = (over: Record<string, unknown>) => ({
+    id: `legacy-${Math.random().toString(36).slice(2)}`, family_id: FAMILY, user_id: 'u-parent', type: 'document_expiry',
+    title: 'Renewal due: Car insurance', body: 'old', is_read: false, pushed_at: null, send_at: null, ...over,
+  });
+
+  it('a renewal announced under its bare id INSIDE this occurrence\'s window is not announced again on the first dated run', async () => {
+    // The old engine wrote this two days ago, inside the two-week lead of the 13 October expiry.
+    db.seed('notifications', [legacyRow({ related_type: 'renewals', related_id: RENEWAL, created_at: '2026-10-01T08:00:00.000Z' })]);
+    expect(await generate(), 'only the passport is new').toBe(1);
+    expect(notices('renewals').map((n) => n.key)).toEqual([RENEWAL]);
+    // Next year is a new occurrence: the dated key, announced.
+    Object.assign(db.table('renewals').find((r) => r.id === RENEWAL)!, { expires_at: rollForward('2026-10-13', 12) });
+    vi.setSystemTime(YEAR_TWO);
+    expect(await generate()).toBe(1);
+    expect(notices('renewals').map((n) => n.key)).toEqual([RENEWAL, `${RENEWAL}:2027-10-13`]);
+  });
+
+  it('a renewal announced under its bare id a YEAR ago — the previous occurrence — is announced now', async () => {
+    db.seed('notifications', [legacyRow({ related_type: 'renewals', related_id: RENEWAL, created_at: '2025-10-01T08:00:00.000Z' })]);
+    expect(await generate()).toBe(2);
+    expect(notices('renewals').map((n) => n.key)).toEqual([RENEWAL, `${RENEWAL}:2026-10-13`]);
+  });
+
+  it('the boundary is the start of the lead window: a legacy row the day before it does not count, one on it does', async () => {
+    // Expires 13 Oct, lead 14 days: the window opens 29 Sep.
+    db.seed('notifications', [legacyRow({ related_type: 'renewals', related_id: RENEWAL, created_at: '2026-09-28T23:59:59.000Z' })]);
+    expect(await generate()).toBe(2);
+    db.seed('notifications', [legacyRow({ related_type: 'renewals', related_id: `${RENEWAL}-b`, created_at: '2026-09-29T00:00:00.000Z' })]);
+    db.seed('renewals', [{ id: `${RENEWAL}-b`, family_id: FAMILY, title: 'Home insurance', expires_at: '2026-10-13', reminder_days: 14, status: 'active' }]);
+    expect(await generate(), 'the second renewal is already announced for this occurrence').toBe(0);
+  });
+
+  it('a legacy row for ANOTHER manager does not stand in for this one', async () => {
+    db.seed('family_members', [{ id: 'other-parent', family_id: FAMILY, user_id: 'u-other', role: 'parent', is_active: true, display_name: 'Other', birthday: null }]);
+    db.seed('notifications', [legacyRow({ related_type: 'renewals', related_id: RENEWAL, user_id: 'u-other', created_at: '2026-10-01T08:00:00.000Z' })]);
+    await generate();
+    expect(notices('renewals').filter((n) => n.user_id === 'u-parent').map((n) => n.key)).toEqual([`${RENEWAL}:2026-10-13`]);
+    expect(notices('renewals').filter((n) => n.user_id === 'u-other').map((n) => n.key)).toEqual([RENEWAL]);
+  });
+
+  it('a document announced under `${document}:${manager}` inside its 14-day window is not announced again; a year-old one is', async () => {
+    db.seed('notifications', [legacyRow({ type: 'document_expiry', related_type: 'documents', related_id: `${DOCUMENT}:${PARENT}`, created_at: '2026-10-02T08:00:00.000Z' })]);
+    expect(await generate(), 'only the renewal is new').toBe(1);
+    expect(notices('documents').map((n) => n.key)).toEqual([`${DOCUMENT}:${PARENT}`]);
+
+    db = createInMemorySupabase<DB>();
+    db.seed('families', [{ id: FAMILY, timezone: 'UTC' }]);
+    db.seed('family_members', [{ id: PARENT, family_id: FAMILY, user_id: 'u-parent', role: 'parent', is_active: true, display_name: 'Parent', birthday: null }]);
+    db.seed('documents', [{ id: DOCUMENT, family_id: FAMILY, title: 'Passport', expires_at: '2026-10-08T00:00:00.000Z', is_secure: false, category: 'identity' }]);
+    db.seed('notifications', [legacyRow({ type: 'document_expiry', related_type: 'documents', related_id: `${DOCUMENT}:${PARENT}`, created_at: '2025-10-02T08:00:00.000Z' })]);
+    expect(await generate()).toBe(1);
+    expect(notices('documents').map((n) => n.key)).toEqual([`${DOCUMENT}:${PARENT}`, `${DOCUMENT}:2026-10-08:${PARENT}`]);
   });
 });

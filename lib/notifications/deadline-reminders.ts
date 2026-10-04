@@ -29,6 +29,24 @@ export interface DeadlineReminder {
   user_id: string | null;
   title: string;
   body: string;
+  /**
+   * The key this occurrence may ALREADY have been announced under, before the
+   * key carried the expiry, and the instant from which such a row counts as
+   * this occurrence's. Rows written under the old key (the renewal's id alone)
+   * are still in the table; without this the first run after the change would
+   * announce every renewal already inside its window a second time (audit note
+   * of 2026-10-04 07:34 UTC on #936). A legacy row created before `since` —
+   * the start of this occurrence's lead window — belongs to an earlier year
+   * and does not count.
+   */
+  legacy?: { related_id: string; since: string };
+}
+
+/** `YYYY-MM-DD` moved by `days`, in UTC arithmetic on a date-only value (no zone, no DST). */
+function dayKeyPlus(key: string, days: number): string {
+  const [y, m, d] = key.slice(0, 10).split('-').map((part) => Number.parseInt(part, 10));
+  if (!Number.isFinite(y) || !Number.isFinite(m) || !Number.isFinite(d)) return key;
+  return new Date(Date.UTC(y, m - 1, d + days)).toISOString().slice(0, 10);
 }
 
 function fmtDate(key: string): string {
@@ -64,6 +82,9 @@ export function renewalReminders(renewals: RenewalInput[], managers: ManagerLite
       type: 'document_expiry', related_type: 'renewals', related_id: `${r.id}:${r.expires_at}`,
       title: `Renewal due: ${r.title}`,
       body: `Expires ${fmtDate(r.expires_at)} · ${daysLabel(d)}`,
+      // Announced under the bare id before this key existed: a row from inside
+      // this occurrence's own window (expiry minus its lead) is this occurrence.
+      legacy: { related_id: r.id, since: `${dayKeyPlus(r.expires_at, -r.reminder_days)}T00:00:00.000Z` },
     }));
   }
   return out;
