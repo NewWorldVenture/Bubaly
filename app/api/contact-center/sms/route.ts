@@ -15,7 +15,7 @@ import { captureInboundWithUrgency, attemptUrgentDelivery } from '@/lib/contact-
 import { runConcierge } from '@/lib/contact-center/concierge';
 import { autoReplyText, classifyIntent, summarizeInbound } from '@/lib/contact-center/routing';
 import { safeContactText } from '@/lib/contact-center/text';
-import { attachSmsReply, prepareSmsReply, reserveSmsReply, type SmsReplyReceipt } from '@/lib/contact-center/sms-reply';
+import { attachSmsReply, prepareSmsReply, reserveSmsReply, smsReplyLoopSuppression, type SmsReplyReceipt } from '@/lib/contact-center/sms-reply';
 import { captureSmsIngress, readSmsIngress, readLegacySmsReplyForIngress, readLegacyUrgentForIngress, type SmsIngressReceipt } from '@/lib/contact-center/sms-ingress';
 import { appBaseUrl } from '@/lib/server/app-url';
 
@@ -157,9 +157,12 @@ export async function POST(req: NextRequest) {
         const candidate = await runConcierge({ channel: 'sms', from: from ?? undefined, text: body, familyLabel, signal });
         signal.throwIfAborted();
         const { locale } = await getLocaleContext();
+        // Never into a loop: not to another Contact Center number, and not past
+        // a few acknowledgements a day to one number (`smsReplyLoopSuppression`).
         const suppression = channel.ai_concierge_enabled === false ? 'disabled'
           : candidate.intent === 'spam' ? 'spam'
-          : !from || !/^\+[1-9]\d{6,14}$/.test(from) ? 'unsupported_recipient' : null;
+          : !from || !/^\+[1-9]\d{6,14}$/.test(from) ? 'unsupported_recipient'
+          : await smsReplyLoopSuppression(admin, { familyId, from }, signal);
         const reply = suppression ? null : candidate.intent === 'urgent'
           ? (await getTranslations())('contactUrgent.replySaved')
           : candidate.reply || autoReplyText(candidate.intent, familyLabel);

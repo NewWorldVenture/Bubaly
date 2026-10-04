@@ -18,7 +18,7 @@ const deliveryStatus = z.enum(['queued', 'sending', 'sent', 'delivered', 'undeli
 const deliverySchema = z.object({ providerSid: sid, status: deliveryStatus, observedAt: timestamp }).strict();
 const phone = z.string().regex(/^\+[1-9]\d{7,14}$/);
 const intent = z.enum(['urgent', 'appointment', 'delivery', 'sales', 'spam', 'personal', 'school', 'sports', 'other']);
-const suppression = z.enum(['disabled', 'spam', 'unsupported_recipient']);
+const suppression = z.enum(['disabled', 'spam', 'unsupported_recipient', 'bubaly_sender', 'repeat_sender']);
 const bindingSchema = z.object({
   familyId: uuid, channelId: uuid, smsSid: sid,
   from: z.string().min(1).max(64).regex(/^[^\x00-\x1f\x7f]+$/).nullable(),
@@ -42,7 +42,7 @@ const inputsSchema = z.object({ version: z.literal(1), policyVersion: z.literal(
 const outputsSchema = z.object({
   version: z.literal(1), revision: uuid, phase: z.enum(['queued', 'emission_reserved', 'suppressed', 'legacy_unknown']),
   inboundId: uuid.nullable(), outboundId: uuid.nullable(), emissionToken: uuid.nullable(), emissionReservedAt: timestamp.nullable(),
-  reason: z.enum(['disabled', 'spam', 'unsupported_recipient', 'reassigned', 'legacy', 'unsupported_content']).nullable(),
+  reason: z.enum(['disabled', 'spam', 'unsupported_recipient', 'bubaly_sender', 'repeat_sender', 'reassigned', 'legacy', 'unsupported_content']).nullable(),
   emissionAccountSid: accountSid.optional(), delivery: deliverySchema.optional(),
 }).strict();
 type Inputs = z.infer<typeof inputsSchema>;
@@ -175,6 +175,44 @@ async function currentReceipt(admin: Admin, receipt: SmsReplyReceipt, signal: Ab
   const current = await read(admin, bindingSchema.parse(receipt.binding), signal);
   if (!current || current.id !== receipt.id || !sameCandidate(current.candidate, candidateSchema.parse(receipt.candidate))) return unavailable();
   return current;
+}
+
+/** Acknowledgements one family sends one number in a day before it stops answering. */
+export const SMS_REPLIES_PER_SENDER_PER_DAY = 3;
+
+/**
+ * Whether an acknowledgement to `from` would feed a loop. Every inbound SMS is
+ * a new SID and got its own reply, so a long-code autoresponder (an
+ * appointment bot's "unrecognised reply", another family's own Contact Center
+ * number) and a family number could trade texts indefinitely: a paid SMS and
+ * a concierge call each way, each pass. Short codes never get here — the
+ * E.164 check already suppresses them as `unsupported_recipient`.
+ *
+ * `bubaly_sender`: the sender is a Contact Center number itself.
+ * `repeat_sender`: this family has already acknowledged this number
+ * SMS_REPLIES_PER_SENDER_PER_DAY times in the last 24 hours (its own outbound
+ * rows). An unreadable count is treated as reached: a lost acknowledgement is
+ * the cheap failure, a loop is not.
+ */
+export async function smsReplyLoopSuppression(admin: Admin, input: { familyId: string; from: string; now?: Date },
+  signal?: AbortSignal): Promise<'bubaly_sender' | 'repeat_sender' | null> {
+  const since = new Date((input.now ?? new Date()).getTime() - 24 * 60 * 60_000).toISOString();
+  // One read after the other: a Contact Center number needs no count.
+  const channel = await bounded(signal, current => admin.from('family_contact_channels').select('family_id')
+    .eq('phone_number', input.from).limit(1).abortSignal(current));
+  if (channel.error) {
+    console.error('[contact-center] SMS reply loop check failed; not replying', channel.error);
+    return 'repeat_sender';
+  }
+  if ((channel.data ?? []).length > 0) return 'bubaly_sender';
+  const replies = await bounded(signal, current => admin.from('family_inbox_messages').select('id')
+    .eq('family_id', input.familyId).eq('channel', 'sms').eq('direction', 'outbound').eq('to_addr', input.from)
+    .gte('occurred_at', since).limit(SMS_REPLIES_PER_SENDER_PER_DAY).abortSignal(current));
+  if (replies.error) {
+    console.error('[contact-center] SMS reply loop check failed; not replying', replies.error);
+    return 'repeat_sender';
+  }
+  return (replies.data ?? []).length >= SMS_REPLIES_PER_SENDER_PER_DAY ? 'repeat_sender' : null;
 }
 
 /** Freeze the first committed reply before intake; historical captures remain held. */
