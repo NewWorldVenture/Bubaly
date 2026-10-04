@@ -28,8 +28,12 @@ name: Cron dispatch
 # passes its start as CRON_SINCE; the dispatcher evaluates every minute since
 # then (never less than five, capped at a day, daily routes left to Vercel, one
 # call per route however many of its minutes fell in the gap). If the lookup
-# fails the tick still runs with its five-minute window and says so. This
-# recovers the firing, not the rate — see the dispatcher header.
+# fails the tick still dispatches its five-minute window, then fails itself so
+# it cannot become the next boundary. This recovers the firing, not the rate —
+# see the dispatcher header. If no scheduled tick has ever succeeded, the
+# workflow-token lookup paginates the complete 24-hour history and probes for
+# older history; one boundary is handed to the dispatcher, which clamps it to
+# 24 hours and calls each idempotent sweep once.
 # On Vercel Pro, move the schedules back into vercel.json and disable this.
 
 on:
@@ -64,6 +68,7 @@ jobs:
           # this sparse checkout has to fetch it alongside the script it runs.
           sparse-checkout: |
             scripts/cron-dispatch.mjs
+            scripts/cron-run-history.mjs
             .nvmrc
           sparse-checkout-cone-mode: false
           fetch-depth: 1
@@ -75,28 +80,11 @@ jobs:
       - name: Find the previous successful tick (catch-up boundary)
         id: previous
         env:
-          # The job's GITHUB_TOKEN; `gh` reads it from GH_TOKEN.
+          # This workflow token needs the actions: read permission above.
           GH_TOKEN: ${{ github.token }}
           REPO: ${{ github.repository }}
           RUN_ID: ${{ github.run_id }}
-        run: |
-          # The previous SCHEDULED success, not any success: a manual single-route
-          # run dispatches one route, so taking it as the boundary would skip every
-          # other route due since the real previous tick. The current run is
-          # excluded by id. The dispatcher never narrows below its fixed window, so
-          # a boundary that is too recent costs nothing, and one that is too old is
-          # capped there. Failure here must not fail the tick: the dispatcher then
-          # runs its fixed five-minute window exactly as it did before catch-up.
-          since="$(gh api \
-            "repos/${REPO}/actions/workflows/cron-dispatch.yml/runs?status=success&event=schedule&per_page=5" \
-            --jq "[.workflow_runs[] | select(.id != ${RUN_ID})][0].run_started_at // empty" 2>/dev/null)" || since=''
-          if [[ "$since" =~ ^[0-9]{4}-[0-9]{2}-[0-9]{2}T[0-9]{2}:[0-9]{2}:[0-9]{2}Z$ ]]; then
-            echo "Previous successful tick started at ${since}; catching up from there."
-          else
-            echo "No usable previous tick (got '${since:0:80}'); dispatching with the fixed five-minute window."
-            since=''
-          fi
-          echo "since=${since}" >> "$GITHUB_OUTPUT"
+        run: node scripts/cron-run-history.mjs
 
       - name: Validate configuration and dispatch due routes
         env:
@@ -110,3 +98,13 @@ jobs:
           else
             node scripts/cron-dispatch.mjs
           fi
+
+      - name: A tick that could not find its boundary is not one
+        # Dispatch first so a failed lookup never skips the normal five-minute
+        # sweep. Only after that do we fail this run: otherwise the next tick
+        # could use this fallback run as its boundary and lose the gap. A run
+        # that could not read history is never treated as successful coverage.
+        if: github.event_name == 'schedule' && steps.previous.outputs.lookup == 'failed'
+        run: |
+          echo "::error::The catch-up boundary could not be read. This tick dispatched its fixed five-minute window and is marked failed on purpose, so it is not taken as the next tick's boundary."
+          exit 1
