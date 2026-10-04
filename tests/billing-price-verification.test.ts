@@ -394,8 +394,11 @@ describe('subscription webhook price history', () => {
   const known = Object.entries(PRICES.stripePrices).flatMap(([plan, entry]) => [entry.id, ...entry.previousIds].map(id => ({ id, slug: plan.replace('_monthly', '') })));
   function event(priceId: string) {
     vi.stubEnv('STRIPE_WEBHOOK_SECRET', 'synthetic-webhook-secret');
+    // The subscription the family's row already follows (the suite default):
+    // a second live one would be a family paying twice
+    // (tests/a-family-paying-twice-is-noticed.test.ts), not a price mapping.
     const subscription = {
-      id: 'sub-fixture', metadata: { family_id: 'family-a' }, customer: 'cus-fixture', items: { data: [subscriptionItem(priceId)], has_more: false },
+      id: 'sub-existing', metadata: { family_id: 'family-a' }, customer: 'cus-fixture', items: { data: [subscriptionItem(priceId)], has_more: false },
       status: 'active', cancel_at_period_end: false,
     };
     mocks.constructEvent.mockReturnValue({ id: 'evt-fixture', type: 'customer.subscription.updated', data: { object: subscription } });

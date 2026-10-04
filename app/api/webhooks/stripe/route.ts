@@ -7,6 +7,7 @@ import { settleAll } from '@/lib/supabase/settle';
 import { markReferralConverted, rewardConvertedReferral } from '@/lib/referrals/server';
 import { isNewPaidConversion, isChurn } from '@/lib/billing/conversion';
 import { catalogPlanForPrice } from '@/lib/billing/price-catalog';
+import { planLevel } from '@/lib/constants/plans';
 import { rememberStripeCustomer } from '@/lib/billing/customer-ref';
 import { recordEvent, markEventProcessed, markEventError } from '@/lib/stripe/webhook';
 import { fireAutomationEvent } from '@/lib/marketing/automation-events';
@@ -17,7 +18,60 @@ import type Stripe from 'stripe';
 export const runtime = 'nodejs';
 const MAX_WEBHOOK_BODY_BYTES = 256_000;
 
-async function persistSubscription(supabase: ReturnType<typeof createServiceClient>, sub: Stripe.Subscription) {
+const LIVE = ['active', 'trialing', 'past_due'];
+
+/** The slice of the Stripe client the subscription webhook reads with. */
+type SubscriptionReader = Pick<Stripe, 'subscriptions'>;
+
+/**
+ * Another subscription of this customer that still bills THIS family, if there
+ * is one. Read from Stripe, because the row holds one subscription per family.
+ */
+async function anotherLiveSubscription(
+  stripe: SubscriptionReader, customerRef: string, familyId: string, excludeId: string,
+): Promise<Stripe.Subscription | null> {
+  const listed = await stripe.subscriptions.list({ customer: customerRef, status: 'all', limit: 100 });
+  return listed.data.find((other) => other.id !== excludeId
+    && LIVE.includes(other.status)
+    && other.metadata?.family_id === familyId) ?? null;
+}
+
+/**
+ * Tell a Super Admin that Stripe is billing one family for two subscriptions,
+ * so one can be refunded or cancelled. Once while it is unread: every renewal
+ * of either subscription comes through here.
+ */
+async function alertTwoSubscriptions(
+  supabase: ReturnType<typeof createServiceClient>, familyId: string, subscriptionIds: string[],
+): Promise<void> {
+  const { data: open, error: openError } = await supabase
+    .from('admin_notifications')
+    .select('id')
+    .eq('related_type', 'subscription_duplicate')
+    .eq('related_id', familyId)
+    .eq('is_read', false)
+    .limit(1)
+    .maybeSingle();
+  // A refused read alerts again rather than staying silent.
+  if (open && !openError) return;
+  const { recordAdminNotification } = await import('@/lib/admin/notify');
+  const { data: fam } = await supabase.from('families').select('name').eq('id', familyId).maybeSingle();
+  await recordAdminNotification(supabase, {
+    kind: 'subscription',
+    title: `Two live subscriptions: ${fam?.name ?? 'a family'}`,
+    body: `Stripe is billing this family for ${subscriptionIds.join(' and ')}. Refund or cancel the one they did not mean to keep.`,
+    url: '/admin/subscriptions',
+    relatedType: 'subscription_duplicate', relatedId: familyId,
+    meta: { subscriptions: subscriptionIds },
+  });
+}
+
+async function persistSubscription(
+  supabase: ReturnType<typeof createServiceClient>,
+  sub: Stripe.Subscription,
+  stripe: () => SubscriptionReader,
+  replacing: string | null = null,
+) {
   const familyId = sub.metadata.family_id;
   if (!familyId) return;
 
@@ -60,11 +114,46 @@ async function persistSubscription(supabase: ReturnType<typeof createServiceClie
   // before checkout refused one (PAY-DOUBLE-001). An event about a subscription
   // that has ENDED must not overwrite a DIFFERENT subscription the row records
   // as live, or the family reads as canceled while it is still paying.
-  const LIVE = ['active', 'trialing', 'past_due'];
   if (priorSub?.provider_ref && priorSub.provider_ref !== sub.id
     && LIVE.includes(priorSub.status) && !LIVE.includes(sub.status)) {
     console.warn('[stripe webhook] ignored an ended subscription that is not the family\'s live one', { familyId, ended: sub.id });
     return;
+  }
+
+  // The subscription the row follows has ended. If Stripe is still billing this
+  // family for another one (one started before checkout refused a second, or
+  // in a race it documents), the row follows that one: writing `canceled` here
+  // left a family billed every month with no plan. A failed read throws, so
+  // Stripe retries and nothing is written.
+  const customerRef = typeof sub.customer === 'string' ? sub.customer : sub.customer?.id ?? null;
+  if (!LIVE.includes(sub.status) && (!priorSub?.provider_ref || priorSub.provider_ref === sub.id) && customerRef) {
+    const other = await anotherLiveSubscription(stripe(), customerRef, familyId, sub.id);
+    if (other) {
+      console.warn('[stripe webhook] the followed subscription ended while another still bills the family', { familyId, ended: sub.id, live: other.id });
+      await alertTwoSubscriptions(supabase, familyId, [sub.id, other.id]);
+      return persistSubscription(supabase, other, stripe, sub.id);
+    }
+  }
+
+  // A second live subscription for a family whose row follows another one that
+  // Stripe confirms is still live: the family is paying twice. The row stays on
+  // the higher plan (the recorded one on a tie) instead of flipping with each
+  // renewal, and someone is told so one can be refunded. If the recorded one
+  // has in fact ended, its deletion event is late and this is an ordinary switch.
+  if (LIVE.includes(sub.status) && priorSub?.provider_ref && priorSub.provider_ref !== sub.id
+    && priorSub.provider_ref !== replacing && LIVE.includes(priorSub.status)) {
+    let recorded: Stripe.Subscription | null;
+    try {
+      recorded = await stripe().subscriptions.retrieve(priorSub.provider_ref);
+    } catch (error) {
+      if ((error as { code?: string })?.code !== 'resource_missing') throw error;
+      recorded = null;
+    }
+    if (recorded && LIVE.includes(recorded.status)) {
+      console.warn('[stripe webhook] a family has two live subscriptions', { familyId, recorded: recorded.id, other: sub.id });
+      await alertTwoSubscriptions(supabase, familyId, [recorded.id, sub.id]);
+      if (planLevel(plan) <= planLevel(priorSub.plan)) return;
+    }
   }
 
   // Since Basil, periods belong to items. Persist the SAME item's plan and
@@ -167,14 +256,18 @@ async function persistSubscription(supabase: ReturnType<typeof createServiceClie
 // active (PAY-ORDER-001). The event says only that something changed; what the
 // row records is the subscription's state now, read from Stripe. An event for
 // no Bubaly family is left as it came, since nothing is written for it.
-async function currentSubscription(settings: StripeSettings | null, fromEvent: Stripe.Subscription): Promise<Stripe.Subscription> {
-  if (!fromEvent.metadata?.family_id) return fromEvent;
+function subscriptionReader(settings: StripeSettings | null): SubscriptionReader {
   const secretKey = effectiveSecretKey(settings);
   // Without the key the current state cannot be read, and writing the payload
   // instead is the bug. Failing here returns 500, so Stripe retries once the
   // key is configured.
   if (!secretKey) throw new Error('Stripe secret key is not configured; the subscription\'s current state cannot be read');
-  return stripeFromKey(secretKey).subscriptions.retrieve(fromEvent.id);
+  return stripeFromKey(secretKey);
+}
+
+async function currentSubscription(settings: StripeSettings | null, fromEvent: Stripe.Subscription): Promise<Stripe.Subscription> {
+  if (!fromEvent.metadata?.family_id) return fromEvent;
+  return subscriptionReader(settings).subscriptions.retrieve(fromEvent.id);
 }
 
 export async function POST(req: NextRequest) {
@@ -226,7 +319,7 @@ export async function POST(req: NextRequest) {
       case 'customer.subscription.created':
       case 'customer.subscription.updated':
       case 'customer.subscription.deleted': {
-        await persistSubscription(supabase, await currentSubscription(settings, event.data.object as Stripe.Subscription));
+        await persistSubscription(supabase, await currentSubscription(settings, event.data.object as Stripe.Subscription), () => subscriptionReader(settings));
         break;
       }
 
