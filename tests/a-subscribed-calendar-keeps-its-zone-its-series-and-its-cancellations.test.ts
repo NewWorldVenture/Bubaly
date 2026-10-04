@@ -59,11 +59,33 @@ import { buildFeedRows, feedExternalUid, planFeedRows, seriesKeys } from '@/lib/
 const mocks = vi.hoisted(() => ({ fetchPublicCalendarText: vi.fn() }));
 vi.mock('@/lib/server/public-calendar-fetch', () => ({ fetchPublicCalendarText: mocks.fetchPublicCalendarText }));
 
-import { BUSY_MESSAGE, CLAIM_STALE_MS, SYNCING_STATUS, TAKEN_OVER_MESSAGE, syncFeed } from '@/lib/server/calendar-feeds';
+import { APPLY_SYNC_FUNCTION, APPLY_SYNC_MIGRATION, BUSY_MESSAGE, CLAIM_STALE_MS, SYNCING_STATUS, TAKEN_OVER_MESSAGE, resetApplySyncWarningForTests, syncFeed } from '@/lib/server/calendar-feeds';
 
 const ROOT = join(__dirname, '..');
 const FAMILY = 'fam-1';
 const FEED = { id: 'feed-1', family_id: FAMILY, url: 'https://club.example/team.ics' };
+
+/**
+ * 0490's `calendar_feed_apply_sync`, as the fake runs it: the fence is checked
+ * and the chunk written in one step, with nothing between them. Upserts land on
+ * (feed_id, external_uid) like the real conflict target; removals are this
+ * feed's rows under the named keys.
+ */
+const applySyncFunction = (args: Record<string, unknown>, db: InMemorySupabase): string => {
+  const feed = db.table('calendar_feeds').find((r) => r.id === args.p_feed_id);
+  if (!feed || feed.last_status !== SYNCING_STATUS || feed.updated_at !== args.p_fence) return 'lost';
+  const events = db.table('calendar_events');
+  for (const row of (args.p_upserts as Row[]) ?? []) {
+    const existing = events.find((r) => r.feed_id === args.p_feed_id && r.external_uid === row.external_uid);
+    if (existing) Object.assign(existing, row);
+    else events.push(db.withDefaults('calendar_events', { ...row, feed_id: args.p_feed_id }));
+  }
+  const removals = new Set((args.p_removals as string[]) ?? []);
+  for (let i = events.length - 1; i >= 0; i -= 1) {
+    if (events[i].feed_id === args.p_feed_id && removals.has(events[i].external_uid as string)) events.splice(i, 1);
+  }
+  return 'applied';
+};
 
 /** A VCALENDAR from VEVENT bodies, CRLF-terminated as a server would send it. */
 const ics = (...vevents: string[][]) => [
@@ -429,17 +451,23 @@ describe('a sync against the family calendar', () => {
     expect(db.table('calendar_events').find((r) => r.id === 'ev-concert'), 'nothing was removed').toBeDefined();
   });
 
-  it('removes only through a statement scoped to this feed and confirmed to have run', () => {
+  it('removes only through a statement scoped to this feed and confirmed to have run — on both write paths', () => {
     const src = readFileSync(join(ROOT, 'lib/server/calendar-feeds.ts'), 'utf8');
-    const removal = src.slice(src.indexOf('.delete()'), src.indexOf("Could not remove cancelled events"));
-    expect(removal).toContain(".eq('feed_id', feed.id)");
-    expect(removal).toContain(".in('external_uid', chunk)");
+    // The fallback path (no 0490): the direct statement, as before.
+    const removal = src.slice(src.indexOf('.delete()'), src.indexOf('if (deleteError) return'));
+    expect(removal).toContain(".eq('feed_id', feedId)");
+    expect(removal).toContain(".in('external_uid', removals)");
     expect(removal).toContain(".select('id')");
     // The upsert's conflict target is unchanged: the index 0285 built.
     expect(src).toContain("onConflict: 'feed_id,external_uid'");
     // A cancelled series is resolved to exact stored keys, never a pattern.
     expect(removal).not.toContain('.like(');
     expect(src).toContain('seriesKeys(');
+    // The function path (0490): the same scope and the same conflict target, in SQL.
+    const sql = readFileSync(join(ROOT, 'supabase/migrations/0490_a_calendar_feed_sync_writes_only_while_it_holds_its_claim.sql'), 'utf8');
+    expect(sql).toContain('where feed_id = p_feed_id and external_uid = any(p_removals);');
+    expect(sql).toContain('on conflict (feed_id, external_uid) do update set');
+    expect(sql).not.toContain(' like ');
   });
 });
 
@@ -457,7 +485,8 @@ describe('one sync of a feed at a time', () => {
   const snapshot = (...vevents: string[][]) => ({ ok: true as const, url: FEED.url, text: ics(...vevents) });
 
   beforeEach(() => {
-    db = createInMemorySupabase({ uniques: { calendar_events: [['feed_id', 'external_uid']] } });
+    // The primary path: 0490's function is in the database.
+    db = createInMemorySupabase({ uniques: { calendar_events: [['feed_id', 'external_uid']] }, rpc: { [APPLY_SYNC_FUNCTION]: applySyncFunction } });
     db.seed('calendar_feeds', [{ ...FEED, name: 'Team', last_status: 'ok', last_error: null, last_synced_at: '2026-09-01T00:00:00.000Z', event_count: 1, updated_at: '2026-09-01T00:00:00.000Z' }]);
     db.seed('calendar_events', [{ id: 'ev-concert', family_id: FAMILY, feed_id: FEED.id, external_uid: 'concert', title: 'Autumn concert', starts_at: '2026-09-20T18:00:00.000Z', recurrence: 'none' }]);
     mocks.fetchPublicCalendarText.mockReset();
@@ -584,14 +613,129 @@ describe('one sync of a feed at a time', () => {
     expect(readFileSync(join(ROOT, 'app/(app)/dashboard/sync/feeds/actions.ts'), 'utf8')).toContain('if (createdHere && !result.busy && !result.takenOver) {');
   });
 
-  it('claims with a compare-and-set on the one row, fences every later write on the claim\'s stamp, and the cron does not count a busy feed as a failure', () => {
+  it('claims with a compare-and-set on the one row, writes every chunk through the fenced function (or asks the fence first where it is absent), stamps by compare-and-set, and the cron does not count a busy feed as a failure', () => {
     const src = readFileSync(join(ROOT, 'lib/server/calendar-feeds.ts'), 'utf8');
     expect(src).toContain(".update(mark).eq('id', feedId).neq('last_status', SYNCING_STATUS).select('id, updated_at')");
     expect(src).toContain(".eq('last_status', SYNCING_STATUS).lt('updated_at', cutoff).select('id, updated_at')");
-    // The stamp is fenced; the write boundaries ask first.
+    // The stamp is fenced.
     expect(src).toContain(".eq('id', feedId).eq('last_status', SYNCING_STATUS).eq('updated_at', fence).select('id')");
-    expect(src.match(/if \(!\(await guard\.holds\(\)\)\) return guard\.lost\(\);/g), 'before the upsert chunk and before the removal chunk').toHaveLength(2);
+    // Every chunk — upserts and removals — goes through guard.apply, which is the function with the fence inside it…
+    // On this branch the upsert chunk is written twice at most — once with
+    // exception_dates, once without on a database that lacks the column — and
+    // the removal chunk once; all three through the fence.
+    expect(src.match(/= await guard\.apply\(/g), 'the upsert chunk, its retry without exception_dates, and the removal chunk').toHaveLength(3);
+    expect(src).toContain("isMissingExceptionDatesColumn(applied.error)");
+    expect(src).toContain("supabase.rpc(APPLY_SYNC_FUNCTION, { p_feed_id: feedId, p_fence: fence, p_upserts: upserts, p_removals: removals })");
+    // …and, only where the function is absent, the check-then-write path, said once.
+    expect(src.match(/if \(!\(await holds\(\)\)\) return 'lost';/g), 'the fallback asks the fence once, before its writes').toHaveLength(1);
+    expect(src).toContain('if (!isMissingFunctionError(error)) return { failed: error.message, error };');
+    expect(src).not.toContain('guard.holds()');
     const cron = readFileSync(join(ROOT, 'app/api/cron/calendar-feeds/route.ts'), 'utf8');
     expect(cron).toContain('else if (r.busy || r.takenOver) busy += 1;');
+  });
+
+  // ── review 5979503104: the fence is checked AT the write, not before it ─────
+  it('a sync whose claim is taken over between its fence check and its write (the window the function closes) writes nothing', async () => {
+    // The takeover lands at the instant the function is entered — after any
+    // check a client could have made, before the write. The function checks and
+    // writes in one step, so the loser's chunk is refused whole.
+    mocks.fetchPublicCalendarText.mockResolvedValue(snapshot(MASTER, CONCERT_OFF));
+    let stamp = '';
+    let applies = 0;
+    const racedDb = createInMemorySupabase({
+      uniques: { calendar_events: [['feed_id', 'external_uid']] },
+      rpc: { [APPLY_SYNC_FUNCTION]: (args, d) => { applies += 1; if (applies === 1) stamp = takeOver(); return applySyncFunction(args, d); } },
+    });
+    for (const table of ['calendar_feeds', 'calendar_events']) racedDb.replace(table, db.table(table));
+    db = racedDb;
+    expect(await syncFeed(client(), FEED)).toEqual(TAKEN_OVER);
+    expect(applies, 'the loser asked once and stopped').toBe(1);
+    expect(feedEvents().map((r) => r.external_uid), 'nothing of the loser\'s snapshot reached the calendar: no series, the concert still there').toEqual(['concert']);
+    expect(feedRow(), 'the holder\'s claim is untouched').toMatchObject({ last_status: SYNCING_STATUS, updated_at: stamp });
+  });
+
+  it('a lost removal chunk is refused whole as well: the upserts before it stand, the removal does not happen', async () => {
+    mocks.fetchPublicCalendarText.mockResolvedValue(snapshot(CONCERT, MASTER_OFF));
+    db.seed('calendar_events', [{ id: 'ev-series', family_id: FAMILY, feed_id: FEED.id, external_uid: 'series', title: 'Practice', starts_at: '2026-09-05T13:00:00.000Z', recurrence: 'weekly' }]);
+    let stamp = '';
+    const handler = db as unknown as { options: { rpc: Record<string, typeof applySyncFunction> } };
+    handler.options.rpc[APPLY_SYNC_FUNCTION] = (args, d) => { if ((args.p_removals as string[]).length > 0) stamp = takeOver(); return applySyncFunction(args, d); };
+    expect(await syncFeed(client(), FEED)).toEqual(TAKEN_OVER);
+    expect(feedEvents().map((r) => r.external_uid).sort()).toEqual(['concert', 'series']);
+    expect(feedRow()).toMatchObject({ last_status: SYNCING_STATUS, updated_at: stamp });
+  });
+
+  it('a function that fails answers as a failed save, stamped on the feed', async () => {
+    mocks.fetchPublicCalendarText.mockResolvedValue(snapshot(CONCERT));
+    const handler = db as unknown as { options: { rpc: Record<string, (args: Record<string, unknown>, d: InMemorySupabase) => unknown> } };
+    handler.options.rpc[APPLY_SYNC_FUNCTION] = () => { throw new Error('Synthetic database failure'); };
+    expect(await syncFeed(client(), FEED)).toEqual({ ok: false, error: 'Could not save calendar events' });
+    expect(feedRow()).toMatchObject({ last_status: 'error', last_error: 'Could not save calendar events' });
+  });
+});
+
+// A database that does not have 0490 yet: the RPC answers "no such function" and
+// the sync takes the path it took before — a fence check before each chunk's
+// write — and says so once. Everything else is identical.
+describe('without 0490, a sync checks the fence before each chunk and says so once', () => {
+  let db: InMemorySupabase;
+  const client = () => db as unknown as SupabaseClient<Database>;
+  const feedEvents = () => db.table('calendar_events').filter((r) => r.feed_id === FEED.id) as Row[];
+  const feedRow = () => db.table('calendar_feeds').find((r) => r.id === FEED.id) as Row;
+  const snapshot = (...vevents: string[][]) => ({ ok: true as const, url: FEED.url, text: ics(...vevents) });
+  const minutesAgo = (m: number) => new Date(Date.now() - m * 60_000).toISOString();
+
+  beforeEach(() => {
+    db = createInMemorySupabase({ uniques: { calendar_events: [['feed_id', 'external_uid']] } }); // no rpc: 42883
+    db.seed('calendar_feeds', [{ ...FEED, name: 'Team', last_status: 'ok', last_error: null, last_synced_at: null, event_count: 0, updated_at: '2026-09-01T00:00:00.000Z' }]);
+    db.seed('calendar_events', [{ id: 'ev-concert', family_id: FAMILY, feed_id: FEED.id, external_uid: 'concert', title: 'Autumn concert', starts_at: '2026-09-20T18:00:00.000Z', recurrence: 'none' }]);
+    mocks.fetchPublicCalendarText.mockReset();
+    resetApplySyncWarningForTests();
+  });
+  afterEach(() => vi.restoreAllMocks());
+
+  it('syncs exactly as with the function, and names the migration once per process', async () => {
+    const warn = vi.spyOn(console, 'warn').mockImplementation(() => {});
+    mocks.fetchPublicCalendarText.mockResolvedValue(snapshot(MASTER, CONCERT_OFF));
+    expect(await syncFeed(client(), FEED)).toEqual({ ok: true, imported: 1 });
+    expect(feedEvents().map((r) => r.external_uid)).toEqual(['series']);
+    expect(feedRow()).toMatchObject({ last_status: 'ok', event_count: 1 });
+    expect(await syncFeed(client(), FEED), 'a second sync, same path').toEqual({ ok: true, imported: 1 });
+    const said = warn.mock.calls.filter((c) => String(c[0]).includes(APPLY_SYNC_MIGRATION));
+    expect(said, 'once, naming 0490').toHaveLength(1);
+    expect(String(said[0][0])).toContain(APPLY_SYNC_FUNCTION);
+  });
+
+  it('a claim taken over while the sync is on the network still writes nothing (the check before the chunk)', async () => {
+    vi.spyOn(console, 'warn').mockImplementation(() => {});
+    let publish!: (value: ReturnType<typeof snapshot>) => void;
+    mocks.fetchPublicCalendarText.mockImplementationOnce(() => new Promise((resolve) => { publish = resolve; }));
+    const a = syncFeed(client(), FEED);
+    await new Promise((resolve) => setTimeout(resolve, 0));
+    const stamp = new Date(Date.now() + 1).toISOString();
+    Object.assign(feedRow(), { last_status: SYNCING_STATUS, updated_at: stamp });
+    publish(snapshot(MASTER, CONCERT_OFF));
+    expect(await a).toEqual({ ok: false, error: TAKEN_OVER_MESSAGE, takenOver: true });
+    expect(feedEvents().map((r) => r.external_uid)).toEqual(['concert']);
+    expect(feedRow()).toMatchObject({ last_status: SYNCING_STATUS, updated_at: stamp });
+    // The next sync, once that claim is stale, settles the feed.
+    mocks.fetchPublicCalendarText.mockResolvedValue(snapshot(MASTER, CONCERT_OFF));
+    Object.assign(feedRow(), { updated_at: minutesAgo(CLAIM_STALE_MS / 60_000 + 1) });
+    expect(await syncFeed(client(), FEED)).toEqual({ ok: true, imported: 1 });
+    expect(feedEvents().map((r) => r.external_uid)).toEqual(['series']);
+  });
+
+  it('the migration is the function the code calls, security invoker, locking the feed row before it writes', () => {
+    const sql = readFileSync(join(ROOT, `supabase/migrations/${APPLY_SYNC_MIGRATION}`), 'utf8');
+    expect(sql).toContain(`create or replace function public.${APPLY_SYNC_FUNCTION}(`);
+    expect(sql).toContain('security invoker');
+    expect(sql).toMatch(/where id = p_feed_id and last_status = 'syncing' and updated_at = p_fence\s+for update;/);
+    expect(sql).toContain("return 'lost';");
+    expect(sql).toContain('on conflict (feed_id, external_uid) do update set');
+    expect(sql).toContain('where feed_id = p_feed_id and external_uid = any(p_removals);');
+    expect(sql).toContain("return 'applied';");
+    const probe = readFileSync(join(ROOT, 'docs/audit/a-calendar-feed-sync-writes-only-while-it-holds-its-claim-check.sql'), 'utf8');
+    expect(probe).toContain("expected lost");
+    expect(probe).toContain('a stale upsert landed after the takeover');
   });
 });
