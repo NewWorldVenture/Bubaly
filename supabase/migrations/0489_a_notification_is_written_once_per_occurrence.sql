@@ -61,6 +61,24 @@
 -- no key are not touched. Re-applying this file (LB-016 §4) finds no group with
 -- more than one unread row and changes nothing.
 --
+-- WHAT CHANGES FOR A MEMBER, exactly: only rows that are exact unread copies of
+-- an older unread row — same family, type, key and recipient — move from unread
+-- to read. The member's unread count drops by the number of such copies and by
+-- nothing else; the copy they keep unread is the first one written; no title,
+-- body, time or recipient changes; nothing is removed from their history. The
+-- pre-flight above lists every such group before anything runs. This file is a
+-- repository candidate: it is not to be run against any existing dataset until
+-- that listing has been reviewed and the execution hold on #699 is lifted.
+--
+-- THE TRIGGER CHANGE IS THE INDEX'S OWN. `marketplace_log_price_change()` is
+-- re-created here, not in a file of its own, because the two cannot be applied
+-- apart: with the index and without the ON CONFLICT clause a second price drop
+-- on a saved listing fails the seller's UPDATE (23505 raised inside the
+-- trigger); with the clause and without the index the clause is inert. The
+-- function body is otherwise 0191's, statement for statement; the probe asserts
+-- what it still does (every change logged, a read watcher told again, a rise
+-- telling nobody).
+--
 -- Verified on a replayed database: before, two inserts of one key both land;
 -- after, the second is refused with 23505 naming the index, the family-wide
 -- pair likewise, a key whose first row is read takes a second, and a listing

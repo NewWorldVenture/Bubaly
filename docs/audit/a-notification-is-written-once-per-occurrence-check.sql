@@ -25,7 +25,10 @@
 --      is the occurrence, not the medication/renewal                    -> asserted
 --   6  a row with no key is outside the index: two land                 -> asserted
 --   7  a listing saved by another family drops its price twice while the
---      first notice is unread: both updates go through, one notice stands -> asserted
+--      first notice is unread: both updates go through, one notice stands;
+--      both changes are logged in marketplace_price_history as before; a
+--      watcher who has READ the notice is told of the next drop; a rise
+--      notifies nobody (0191's own rule, untouched)                        -> asserted
 --
 -- Negative control, first: a key written once lands and reads back as written,
 -- so a refusal below is the index's and not a grant's, a CHECK's or a trigger's.
@@ -153,6 +156,25 @@ begin
   end if;
   if (select price_cents from public.marketplace_listings where id = listing) <> 9000 then
     raise exception '0489 FAIL: the second price change did not land';
+  end if;
+  -- The rest of 0191 is untouched: every change is still logged, drop or not.
+  select count(*) into n from public.marketplace_price_history where listing_id = listing;
+  if n <> 2 then
+    raise exception '0489 FAIL: expected two price-history rows after two changes, found % (the trigger''s logging changed)', n;
+  end if;
+  -- …and a watcher who has READ the notice is told of the next drop, as before:
+  -- the index covers unread rows only, so the trigger''s insert lands again.
+  update public.notifications set is_read = true where family_id = watcher and related_id = listing::text;
+  update public.marketplace_listings set price_cents = 8000 where id = listing;
+  select count(*) into n from public.notifications where family_id = watcher and related_id = listing::text;
+  if n <> 2 then
+    raise exception '0489 FAIL: a watcher who read the first notice should be told of the next drop (found % rows)', n;
+  end if;
+  -- …and a rise, or a change to a sold listing, still notifies nobody (0191's own rule).
+  update public.marketplace_listings set price_cents = 9500 where id = listing;
+  select count(*) into n from public.notifications where family_id = watcher and related_id = listing::text;
+  if n <> 2 then
+    raise exception '0489 FAIL: a price rise notified the watcher (found % rows)', n;
   end if;
 
   raise notice '0489 OK: one unread row per occurrence, by name; read rows and keyless rows are outside it; the price-drop trigger steps aside.';
