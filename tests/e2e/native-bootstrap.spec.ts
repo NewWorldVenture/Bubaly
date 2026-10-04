@@ -15,7 +15,7 @@ const redirectModule = ts.transpileModule(fs.readFileSync('lib/auth/redirect.ts'
   compilerOptions: { target: ts.ScriptTarget.ES2020, module: ts.ModuleKind.CommonJS },
 }).outputText;
 
-type Stage = 'none' | 'imports' | 'status' | 'splash' | 'back' | 'url';
+type Stage = 'none' | 'imports' | 'status' | 'splash' | 'back' | 'url' | 'launch';
 type NativeProbe = {
   native: boolean;
   heldStage: Stage;
@@ -31,6 +31,8 @@ type NativeProbe = {
   backs: number;
   exits: number;
   pushes: string[];
+  launchUrl: string | null;
+  launchReads: number;
   resume: () => void;
   emitBack: (canGoBack: boolean) => void;
   emitUrl: (url: string) => void;
@@ -59,7 +61,7 @@ test.beforeEach(async ({ page }) => {
     const probe: NativeProbe = {
       native: true, heldStage: 'none', failureStage: 'none', removalFails: false,
       moduleCalls: 0, statusCalls: 0, splashCalls: 0, backAdds: 0, urlAdds: 0,
-      backRemoves: 0, urlRemoves: 0, backs: 0, exits: 0, pushes: [],
+      backRemoves: 0, urlRemoves: 0, backs: 0, exits: 0, pushes: [], launchUrl: null, launchReads: 0,
       resume: () => { pending.splice(0).forEach((resolve) => resolve()); },
       emitBack: () => {}, emitUrl: () => {}, loadModule: () => undefined,
       mount: () => {}, unmount: () => {},
@@ -88,6 +90,7 @@ test.beforeEach(async ({ page }) => {
               return probe.removalFails ? Promise.reject(new Error('Plugin removal failed')) : Promise.resolve();
             } });
           },
+          getLaunchUrl: () => { probe.launchReads += 1; return result('launch', probe.launchUrl ? { url: probe.launchUrl } : undefined); },
           exitApp: () => { probe.exits += 1; return Promise.resolve(); },
         },
       },
@@ -141,16 +144,8 @@ for (const stage of ['status', 'splash'] as const) {
   });
 }
 
-test('unmount while first listener resolves removes it and suppresses queued callbacks', async ({ page }) => {
-  await page.evaluate(() => { window.__nativeProbe.heldStage = 'back'; });
-  await mount(page);
-  await expect.poll(() => page.evaluate(() => window.__nativeProbe.backAdds)).toBe(1);
-  await page.evaluate(() => { const p = window.__nativeProbe; p.unmount(); p.emitBack(true); p.emitBack(false); p.resume(); });
-  await settle(page);
-  expect(await page.evaluate(() => { const p = window.__nativeProbe; return [p.backRemoves, p.urlAdds, p.backs, p.exits]; })).toEqual([1, 0, 0, 0]);
-});
 
-test('unmount between listener registrations removes both handles and ignores late URLs', async ({ page }) => {
+test('unmount during URL registration removes the handle and ignores late URLs', async ({ page }) => {
   await page.evaluate(() => { window.__nativeProbe.heldStage = 'url'; });
   await mount(page);
   await expect.poll(() => page.evaluate(() => window.__nativeProbe.urlAdds)).toBe(1);
@@ -158,7 +153,7 @@ test('unmount between listener registrations removes both handles and ignores la
     const p = window.__nativeProbe; p.unmount(); p.emitBack(true); p.emitUrl('https://www.bubaly.com/dashboard?tab=week'); p.resume();
   });
   await settle(page);
-  expect(await page.evaluate(() => { const p = window.__nativeProbe; return { removals: [p.backRemoves, p.urlRemoves], backs: p.backs, pushes: p.pushes }; })).toEqual({ removals: [1, 1], backs: 0, pushes: [] });
+  expect(await page.evaluate(() => { const p = window.__nativeProbe; return { removals: [p.backRemoves, p.urlRemoves], backs: p.backs, pushes: p.pushes }; })).toEqual({ removals: [0, 1], backs: 0, pushes: [] });
 });
 
 test('normal setup preserves navigation behavior and cleans up once on unmount', async ({ page }) => {
@@ -170,19 +165,19 @@ test('normal setup preserves navigation behavior and cleans up once on unmount',
     p.emitUrl('https://www.bubaly.com/dashboard/calendar?view=week#today');
     p.emitUrl('not a url'); p.emitUrl('https://www.bubaly.com/');
   });
-  expect(await page.evaluate(() => { const p = window.__nativeProbe; return [p.backs, p.exits, p.pushes]; })).toEqual([1, 1, ['/dashboard/calendar?view=week#today']]);
+  expect(await page.evaluate(() => { const p = window.__nativeProbe; return [p.backs, p.exits, p.pushes]; })).toEqual([0, 0, ['/dashboard/calendar?view=week#today']]);
   await page.evaluate(() => { const p = window.__nativeProbe; p.unmount(); p.emitBack(true); p.emitUrl('https://www.bubaly.com/dashboard/notes'); });
-  expect(await page.evaluate(() => { const p = window.__nativeProbe; return [p.backRemoves, p.urlRemoves, p.backs, p.pushes]; })).toEqual([1, 1, 1, ['/dashboard/calendar?view=week#today']]);
+  expect(await page.evaluate(() => { const p = window.__nativeProbe; return [p.backRemoves, p.urlRemoves, p.backs, p.pushes]; })).toEqual([0, 1, 0, ['/dashboard/calendar?view=week#today']]);
 });
 
-test('second-listener failure releases the first listener and makes its callbacks inert', async ({ page }) => {
+test('URL-listener failure leaves no active navigation', async ({ page }) => {
   const errors: string[] = [];
   page.on('pageerror', (error) => errors.push(error.message));
   await page.evaluate(() => { window.__nativeProbe.failureStage = 'url'; });
   await mount(page);
   await settle(page);
   await page.evaluate(() => window.__nativeProbe.emitBack(true));
-  expect(await page.evaluate(() => { const p = window.__nativeProbe; return [p.backAdds, p.backRemoves, p.backs]; })).toEqual([1, 1, 0]);
+  expect(await page.evaluate(() => { const p = window.__nativeProbe; return [p.backAdds, p.backRemoves, p.backs]; })).toEqual([0, 0, 0]);
   expect(errors).toEqual([]);
 });
 
@@ -200,7 +195,7 @@ test('optional status-bar failure preserves other native behavior', async ({ pag
   page.on('pageerror', (error) => errors.push(error.message));
   await page.evaluate(() => { window.__nativeProbe.failureStage = 'status'; });
   await mount(page); await settle(page);
-  expect(await page.evaluate(() => { const p = window.__nativeProbe; return [p.splashCalls, p.backAdds, p.urlAdds]; })).toEqual([1, 1, 1]);
+  expect(await page.evaluate(() => { const p = window.__nativeProbe; return [p.splashCalls, p.backAdds, p.urlAdds]; })).toEqual([1, 0, 1]);
   expect(errors).toEqual([]);
 });
 
@@ -210,7 +205,7 @@ test('listener removal failures are handled without allowing stale navigation', 
   await mount(page); await settle(page);
   await page.evaluate(() => { const p = window.__nativeProbe; p.removalFails = true; p.unmount(); p.emitBack(true); p.emitUrl('https://www.bubaly.com/dashboard'); });
   await settle(page);
-  expect(await page.evaluate(() => { const p = window.__nativeProbe; return [p.backRemoves, p.urlRemoves, p.backs, p.pushes]; })).toEqual([1, 1, 0, []]);
+  expect(await page.evaluate(() => { const p = window.__nativeProbe; return [p.backRemoves, p.urlRemoves, p.backs, p.pushes]; })).toEqual([0, 1, 0, []]);
   expect(errors).toEqual([]);
 });
 
@@ -244,3 +239,74 @@ for (const [name, url, target] of [
     expect(await page.evaluate(() => window.__nativeProbe.pushes)).toEqual([target]);
   });
 }
+
+test('cold launch reads its callback without an appUrlOpen event', async ({ page }) => {
+  await page.evaluate(() => { window.__nativeProbe.launchUrl = 'https://www.bubaly.com/auth/callback?code=cold-code'; });
+  await mount(page); await settle(page);
+  expect(await page.evaluate(() => window.__nativeProbe.pushes)).toEqual(['/auth/callback?code=cold-code']);
+});
+
+test('a newer live callback supersedes the delayed cold launch', async ({ page }) => {
+  await page.evaluate(() => {
+    const p = window.__nativeProbe; p.heldStage = 'launch'; p.launchUrl = 'https://www.bubaly.com/auth/callback?code=old-code';
+  });
+  await mount(page);
+  await expect.poll(() => page.evaluate(() => window.__nativeProbe.launchReads)).toBe(1);
+  await page.evaluate(() => {
+    const p = window.__nativeProbe; p.emitUrl('https://www.bubaly.com/auth/callback?code=new-code'); p.resume();
+  });
+  await settle(page);
+  expect(await page.evaluate(() => window.__nativeProbe.pushes)).toEqual(['/auth/callback?code=new-code']);
+});
+
+test('duplicate launch and live callbacks exchange only once', async ({ page }) => {
+  await page.evaluate(() => { window.__nativeProbe.launchUrl = 'https://www.bubaly.com/auth/callback?code=one-use-code'; });
+  await mount(page); await settle(page);
+  await page.evaluate(() => window.__nativeProbe.emitUrl('https://www.bubaly.com/auth/callback?code=one-use-code'));
+  expect(await page.evaluate(() => window.__nativeProbe.pushes)).toEqual(['/auth/callback?code=one-use-code']);
+});
+
+test('unmount during launch URL lookup cannot navigate a replacement tree', async ({ page }) => {
+  await page.evaluate(() => {
+    const p = window.__nativeProbe; p.heldStage = 'launch'; p.launchUrl = 'https://www.bubaly.com/auth/callback?code=old-code';
+  });
+  await mount(page);
+  await expect.poll(() => page.evaluate(() => window.__nativeProbe.launchReads)).toBe(1);
+  await page.evaluate(() => { const p = window.__nativeProbe; p.unmount(); p.resume(); });
+  await settle(page);
+  expect(await page.evaluate(() => window.__nativeProbe.pushes)).toEqual([]);
+});
+
+test('failed launch lookup leaves the live callback listener usable', async ({ page }) => {
+  await page.evaluate(() => { window.__nativeProbe.failureStage = 'launch'; });
+  await mount(page); await settle(page);
+  await page.evaluate(() => window.__nativeProbe.emitUrl('https://www.bubaly.com/auth/callback?code=live-code'));
+  expect(await page.evaluate(() => window.__nativeProbe.pushes)).toEqual(['/auth/callback?code=live-code']);
+});
+
+test('ordinary navigation links remain usable after an earlier visit', async ({ page }) => {
+  await mount(page); await settle(page);
+  await page.evaluate(() => {
+    const p = window.__nativeProbe;
+    p.emitUrl('https://www.bubaly.com/dashboard/calendar');
+    p.emitUrl('https://www.bubaly.com/dashboard/notes');
+    p.emitUrl('https://www.bubaly.com/dashboard/calendar');
+  });
+  expect(await page.evaluate(() => window.__nativeProbe.pushes)).toEqual([
+    '/dashboard/calendar', '/dashboard/notes', '/dashboard/calendar',
+  ]);
+});
+
+test('a live callback during listener registration prevents stale launch adoption', async ({ page }) => {
+  await page.evaluate(() => {
+    const p = window.__nativeProbe; p.heldStage = 'url'; p.launchUrl = 'https://www.bubaly.com/auth/callback?code=old-code';
+  });
+  await mount(page);
+  await expect.poll(() => page.evaluate(() => window.__nativeProbe.urlAdds)).toBe(1);
+  await page.evaluate(() => {
+    const p = window.__nativeProbe; p.emitUrl('https://www.bubaly.com/auth/callback?code=new-code'); p.resume();
+  });
+  await settle(page);
+  expect(await page.evaluate(() => window.__nativeProbe.pushes)).toEqual(['/auth/callback?code=new-code']);
+  expect(await page.evaluate(() => window.__nativeProbe.launchReads)).toBe(0);
+});

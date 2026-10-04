@@ -1,5 +1,21 @@
 # Persistent sessions
 
+## Current audit checkpoint, 2026-10-02
+
+Hosted run [37063130617](https://github.com/NewWorldVenture/Bubaly/actions/runs/37063130617)
+passed 1,930 browser cases against disposable Supabase with the real durable
+session flag enabled. Its auth sources and fixtures match main `d25e39eac`.
+See [LB-005 evidence and remaining requirements](LB-005-authenticated-e2e.md).
+Production policy and physical-device acceptance remain unverified.
+
+The native bootstrap now lives in the root layout, so signed-out login and
+callback screens receive native returns. It registers the live listener before
+reading `App.getLaunchUrl`, ignores an older launch receipt after a newer live
+return, and suppresses repeated auth callbacks. Ordinary navigation links stay
+repeatable. The root Android back handler remains the only hardware-back owner.
+Controlled Chromium/React plugin tests exercise these races; they do not verify
+OS universal-link registration, provider return, or WebView cookie persistence.
+
 Users should remain signed in across navigation, browser/app restarts, and temporary network or storage failures. Explicit local sign-out, a revoked refresh token, or another definitive authentication rejection must still end that session. An outage must not grant access to protected data or be represented as a signed-out account.
 
 ## Application behavior

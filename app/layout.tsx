@@ -3,6 +3,7 @@ import './globals.css';
 import { ThemeScript } from '@/components/theme/theme-script';
 import { ToastProvider } from '@/components/ui/toast';
 import { AndroidBackHandler } from '@/components/app/android-back-handler';
+import { NativeBootstrap } from '@/components/native/native-bootstrap';
 import { LAUNCH_SCREENS, launchScreenHref, launchScreenMedia } from '@/lib/pwa/launch-screens';
 import { LocaleProvider } from '@/components/i18n/locale-provider';
 import { ROOT_CHROME_SCOPE, scopeMessages } from '@/lib/i18n/scopes';
@@ -90,6 +91,7 @@ export default async function RootLayout({ children }: { children: React.ReactNo
       </head>
       <body className="font-sans antialiased">
         <AndroidBackHandler />
+        <NativeBootstrap />
         <LocaleProvider locale={locale} source={source} messages={chrome}>
           <ToastProvider>{children}</ToastProvider>
         </LocaleProvider>

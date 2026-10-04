@@ -174,7 +174,7 @@ describe('a sanitizer returns what it checked (SEC-014)', () => {
       for (let i = 0; i < lines.length; i++) {
         const m = /(?:router\.(?:push|replace)|NextResponse\.redirect|[^.\w]redirect)\(\s*([A-Za-z_$][\w$.]*)\s*[),]/.exec(lines[i]);
         if (!m) continue;
-        const key = `${file}|${m[1]}`;
+        const key = `${file.replace(/\\/g, '/')}|${m[1]}`;
         seen.add(key);
         if (!(key in TRUSTED)) unaudited.push(`${file}:${i + 1} — navigates to \`${m[1]}\`, whose provenance is not recorded`);
       }
