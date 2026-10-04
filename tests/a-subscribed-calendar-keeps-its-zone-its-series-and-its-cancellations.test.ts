@@ -59,7 +59,7 @@ import { buildFeedRows, feedExternalUid, planFeedRows, seriesKeys } from '@/lib/
 const mocks = vi.hoisted(() => ({ fetchPublicCalendarText: vi.fn() }));
 vi.mock('@/lib/server/public-calendar-fetch', () => ({ fetchPublicCalendarText: mocks.fetchPublicCalendarText }));
 
-import { BUSY_MESSAGE, CLAIM_STALE_MS, SYNCING_STATUS, syncFeed } from '@/lib/server/calendar-feeds';
+import { BUSY_MESSAGE, CLAIM_STALE_MS, SYNCING_STATUS, TAKEN_OVER_MESSAGE, syncFeed } from '@/lib/server/calendar-feeds';
 
 const ROOT = join(__dirname, '..');
 const FAMILY = 'fam-1';
@@ -519,11 +519,79 @@ describe('one sync of a feed at a time', () => {
     expect(feedRow()).toMatchObject({ last_status: 'error', last_error: 'URL is not a valid ICS calendar' });
   });
 
-  it('claims with a compare-and-set on the one row, and the cron does not count a busy feed as a failure', () => {
+  // ── the claim is fenced (audit note of 2026-10-04 07:33 UTC) ────────────────
+  const TAKEN_OVER = { ok: false, error: TAKEN_OVER_MESSAGE, takenOver: true };
+  /** What another sync's stale takeover does to the row: the same mark, a newer stamp. */
+  const takeOver = () => { const stamp = new Date(Date.now() + 1).toISOString(); Object.assign(feedRow(), { last_status: SYNCING_STATUS, updated_at: stamp }); return stamp; };
+
+  it('a sync whose claim was taken over while it was on the network writes nothing and leaves the status to the new holder', async () => {
+    let publish!: (value: ReturnType<typeof snapshot>) => void;
+    mocks.fetchPublicCalendarText.mockImplementationOnce(() => new Promise((resolve) => { publish = resolve; }));
+    const a = syncFeed(client(), FEED);
+    await tick();
+    const stamp = takeOver(); // ten minutes have passed for the row; another sync took the claim
+    publish(snapshot(MASTER, CONCERT_OFF)); // A's snapshot would upsert the series and remove the concert
+    expect(await a).toEqual(TAKEN_OVER);
+    expect(feedEvents().map((r) => r.external_uid), 'nothing of A\'s reached the calendar').toEqual(['concert']);
+    expect(feedRow(), 'the new holder\'s claim is untouched: no result, no "did not finish"').toMatchObject({ last_status: SYNCING_STATUS, updated_at: stamp });
+  });
+
+  it('a sync that lost its claim cannot stamp a failure over the new holder either', async () => {
+    let publish!: (value: { ok: false; error: string }) => void;
+    mocks.fetchPublicCalendarText.mockImplementationOnce(() => new Promise((resolve) => { publish = resolve; }));
+    const a = syncFeed(client(), FEED);
+    await tick();
+    const stamp = takeOver();
+    publish({ ok: false, error: 'Synthetic provider failure' });
+    expect(await a).toEqual(TAKEN_OVER);
+    expect(feedRow()).toMatchObject({ last_status: SYNCING_STATUS, last_error: null, updated_at: stamp });
+  });
+
+  it('a sync that lost its claim between its upsert and its removals stops there: what it upserted stands, nothing is removed, and the next sync settles the feed', async () => {
+    // The takeover lands while A reads the stored keys for a cancelled series —
+    // after its upsert, before its removals. A proxy performs it on that read.
+    mocks.fetchPublicCalendarText.mockResolvedValue(snapshot(CONCERT, MASTER_OFF));
+    let stamp = '';
+    const proxied = new Proxy(client(), {
+      get(target, prop, receiver) {
+        if (prop !== 'from') return Reflect.get(target, prop, receiver);
+        return (table: string) => {
+          const builder = (target as unknown as { from: (t: string) => Record<string, unknown> }).from(table);
+          if (table !== 'calendar_events') return builder;
+          return new Proxy(builder, {
+            get(b, p, r) {
+              const value = Reflect.get(b, p, r);
+              if (p !== 'select' || typeof value !== 'function') return value;
+              return (...args: unknown[]) => { if (args[0] === 'external_uid') stamp = takeOver(); return (value as (...a: unknown[]) => unknown).apply(b, args); };
+            },
+          });
+        };
+      },
+    });
+    db.seed('calendar_events', [{ id: 'ev-series', family_id: FAMILY, feed_id: FEED.id, external_uid: 'series', title: 'Practice', starts_at: '2026-09-05T13:00:00.000Z', recurrence: 'weekly' }]);
+    expect(await syncFeed(proxied as unknown as SupabaseClient<Database>, FEED)).toEqual(TAKEN_OVER);
+    expect(feedEvents().map((r) => r.external_uid).sort(), 'the concert was upserted before the takeover; the cancelled series was NOT removed by the loser').toEqual(['concert', 'series']);
+    expect(feedRow()).toMatchObject({ last_status: SYNCING_STATUS, updated_at: stamp });
+    // The holder's own sync (here: the next one, once that claim is stale) applies the same snapshot and removes it.
+    Object.assign(feedRow(), { updated_at: minutesAgo(CLAIM_STALE_MS / 60_000 + 1) });
+    expect(await syncFeed(client(), FEED)).toEqual({ ok: true, imported: 1 });
+    expect(feedEvents().map((r) => r.external_uid)).toEqual(['concert']);
+    expect(feedRow()).toMatchObject({ last_status: 'ok' });
+  });
+
+  it('the cron counts a taken-over feed with the busy ones, and the add action does not roll back a feed another sync took over', () => {
+    expect(readFileSync(join(ROOT, 'app/api/cron/calendar-feeds/route.ts'), 'utf8')).toContain('else if (r.busy || r.takenOver) busy += 1;');
+    expect(readFileSync(join(ROOT, 'app/(app)/dashboard/sync/feeds/actions.ts'), 'utf8')).toContain('if (createdHere && !result.busy && !result.takenOver) {');
+  });
+
+  it('claims with a compare-and-set on the one row, fences every later write on the claim\'s stamp, and the cron does not count a busy feed as a failure', () => {
     const src = readFileSync(join(ROOT, 'lib/server/calendar-feeds.ts'), 'utf8');
-    expect(src).toContain(".update(mark).eq('id', feedId).neq('last_status', SYNCING_STATUS).select('id')");
-    expect(src).toContain(".eq('last_status', SYNCING_STATUS).lt('updated_at', cutoff).select('id')");
+    expect(src).toContain(".update(mark).eq('id', feedId).neq('last_status', SYNCING_STATUS).select('id, updated_at')");
+    expect(src).toContain(".eq('last_status', SYNCING_STATUS).lt('updated_at', cutoff).select('id, updated_at')");
+    // The stamp is fenced; the write boundaries ask first.
+    expect(src).toContain(".eq('id', feedId).eq('last_status', SYNCING_STATUS).eq('updated_at', fence).select('id')");
+    expect(src.match(/if \(!\(await guard\.holds\(\)\)\) return guard\.lost\(\);/g), 'before the upsert chunk and before the removal chunk').toHaveLength(2);
     const cron = readFileSync(join(ROOT, 'app/api/cron/calendar-feeds/route.ts'), 'utf8');
-    expect(cron).toContain('else if (r.busy) busy += 1;');
+    expect(cron).toContain('else if (r.busy || r.takenOver) busy += 1;');
   });
 });
