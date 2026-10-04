@@ -46,6 +46,8 @@ const MOCKED = [
   '@/components/app/page-header', '@/lib/utils/cn', '@/lib/analytics/use-journey',
   '@/components/i18n/locale-provider', '@/lib/hooks/use-realtime-query',
   '@/lib/hooks/use-speech-recognition', '@/lib/database.types',
+  // Removing a command asks first (a-destructive-click-asks-first); the harness answers yes.
+  '@/components/ui/confirm',
 ];
 const sources = Object.fromEntries(SOURCE_FILES.map(file => [`@/${file.replace(/\.tsx?$/, '')}`, ts.transpileModule(
   process.env.CAPTURE_VOICE_BASELINE === '1' && file === 'components/modules/voice-module.tsx'
@@ -125,6 +127,7 @@ async function fixture(page: Page) {
       '@/lib/hooks/use-realtime-query': { useRealtimeQuery: () => ({ data: [], loading: false, error: null, refresh() {} }) },
       '@/lib/supabase/client': { createClient: () => { if (p.throwClient) { p.throwClient = false; throw new Error('Fixture client construction failed'); } return db; } },
       '@/components/ui/toast': { useToast: () => ({ success: (message, action) => { p.toasts.push(message); if (action) p.undo = action.onClick; }, error: message => p.toasts.push(message) }) },
+      '@/components/ui/confirm': { useConfirm: () => async () => true },
       '@/components/ui/button': { Button: props => { if (React.Children.toArray(props.children).includes(tr('voice.runCommand'))) p.run = props.onClick; const { variant, ...rest } = props; return React.createElement('button', rest); } },
       '@/components/ui/input': { Textarea: props => React.createElement('textarea', props) },
       '@/components/ui/states': { SkeletonList: () => null, ErrorState: () => null },

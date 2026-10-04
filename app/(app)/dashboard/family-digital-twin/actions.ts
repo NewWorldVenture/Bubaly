@@ -13,6 +13,8 @@ import {
 import { readAll } from '@/lib/supabase/read-all';
 import { escapeLike } from '@/lib/supabase/escape-like';
 import { wroteNoRows, describeActionError } from '@/lib/supabase/errors';
+import { instantCalendarBounds } from '@/lib/briefing/calendar-window';
+import { readCalendarOccurrences } from '@/lib/calendar/occurrences';
 
 // Decision Simulator server action (Digital Twin, pillar #2). Assembles the real
 // household context for the proposed decision and runs the pure simulator. All
@@ -51,14 +53,10 @@ export async function simulateDecisionAction(input: SimFormInput): Promise<SimRe
     }
     const now = new Date();
     const in120 = new Date(now.getTime() + 120 * 86_400_000).toISOString();
-    const { data } = await supabase
-      .from('calendar_events')
-      .select('id, title, starts_at, ends_at, all_day')
-      .eq('family_id', familyId)
-      .eq('assignee_id', input.memberId)
-      .gte('starts_at', now.toISOString())
-      .lte('starts_at', in120)
-      .limit(500);
+    // Series included: a weekly commitment is in the member's load every week (lib/calendar/occurrences.ts).
+    const twinTimezone = ctx.active.family.timezone || 'UTC';
+    const { data } = await readCalendarOccurrences(supabase, familyId, instantCalendarBounds(now.toISOString(), in120, twinTimezone), twinTimezone,
+      { columns: ['id', 'title', 'starts_at', 'ends_at', 'all_day'], assigneeId: input.memberId, limit: 500 });
     const memberEvents: SimEvent[] = (data ?? []).map((e) => ({
       id: e.id, title: e.title, startsAt: e.starts_at, endsAt: e.ends_at, allDay: e.all_day,
     }));
@@ -131,9 +129,9 @@ export async function projectActivityAction(input: ActivityProjectionInput): Pro
   // Member's upcoming events (schedule/load), budgets (cost), vacations (conflicts).
   const costCents = Math.round((input.costDollars ?? 0) * 100);
   const [{ data: evRows }, { data: budgetRows }, { data: vacRows }] = await Promise.all([
-    settle(supabase.from('calendar_events').select('id, title, starts_at, ends_at, all_day')
-      .eq('family_id', familyId).eq('assignee_id', input.memberId)
-      .gte('starts_at', now.toISOString()).lte('starts_at', in180).limit(500)),
+    // Series included: a weekly commitment counts every week of the six months (lib/calendar/occurrences.ts).
+    settle(readCalendarOccurrences(supabase, familyId, instantCalendarBounds(now.toISOString(), in180, ctx.active.family.timezone || 'UTC'), ctx.active.family.timezone || 'UTC',
+      { columns: ['id', 'title', 'starts_at', 'ends_at', 'all_day'], assigneeId: input.memberId, limit: 500 })),
     input.costCategory
       ? supabase.from('budgets').select('category, amount, period').eq('family_id', familyId)
       : Promise.resolve({ data: [] as { category: string; amount: number; period: string }[] }),

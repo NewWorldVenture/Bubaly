@@ -21,6 +21,9 @@ vi.mock('@/lib/server/push-endpoint', () => ({
 }));
 vi.mock('@/lib/supabase/server', () => ({ createServiceClient: () => cron.db }));
 vi.mock('@/lib/server/notifications', () => ({ generateFamilyNotifications: vi.fn().mockResolvedValue(0) }));
+// The chore respawn sweep is the push-scan route's other per-family collaborator; out of scope here, like generation.
+vi.mock('@/lib/services/tasks', () => ({ respawnMissingChoreAssignments: vi.fn().mockResolvedValue({ ok: true, data: { respawned: 0, skipped: 0, failed: 0 } }) }));
+vi.mock('@/lib/services/scope', async (importOriginal) => ({ ...(await importOriginal<typeof import('@/lib/services/scope')>()), systemScopeForFamily: vi.fn().mockResolvedValue({ familyId: 'family', tz: 'UTC' }) }));
 vi.mock('@/lib/server/notification-emails', () => ({ deliverNotificationEmails: async () => ({ sent: 0, failed: 0, skipped: 0 }) }));
 vi.mock('@/lib/briefing/deliver', () => ({ deliverMorningBriefs: async () => ({ delivered: 0, families: 0, skipped: 0, failed: 0 }) }));
 vi.mock('@/lib/services/approvals', () => ({ expireStale: async () => ({ expired: 0, blockedRuns: 0 }), remindPendingApprovals: async () => ({ reminded: 0, families: 0 }) }));
