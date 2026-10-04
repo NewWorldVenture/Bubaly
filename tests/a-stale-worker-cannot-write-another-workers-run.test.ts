@@ -1,0 +1,222 @@
+// A worker that blocked past its lease cannot write the run another worker now
+// holds (review on #901, 5971497737).
+//
+// `attempt` is the run's abandonment budget, and #901 hands it back when a slice
+// makes progress. The hand-back is written by the worker, through the
+// executor's port, and the production port used to write it the way a person's
+// control does — filtered by run id and family, nothing else. A worker's
+// authority over the row is not its membership, it is its LEASE, and a lease
+// can be lost mid-slice: the executor checks its budget before each step but
+// awaits `runTool` without a deadline, so a tool can outlive the lease.
+//
+// The interleaving the review described, driven here through the real
+// `createExecutorPort` over the in-memory client and the predicate-for-predicate
+// stand-in for `claim_ai_runs` (tests/helpers/claim-ai-runs.ts):
+//
+//   worker A claims the run at attempt 4 with lease A and blocks inside a tool;
+//   A's lease expires;
+//   the next tick's `claim_ai_runs` recovers the row and leases it to worker B
+//     at attempt 5 with lease B;
+//   A's tool returns, A sees the progress it made, and A parks.
+//
+// Before: A's park wrote `attempt: 0`, `lease_owner: null` over B's live lease.
+// A third worker could claim the run while B was still executing it, and the
+// budget B was spending was gone. Two things close it. The slice fixes the
+// lease it was claimed with and ends, writing nothing, when the per-pass
+// refresh shows another lease (`lease_lost`); and every run write the
+// production port makes for a leased run is fenced on that lease
+// (`updateRunHeldBy`), so the write that races the refresh lands nowhere and
+// stops the slice (`RunLeaseLostError`). The owner's own writes pass the fence,
+// which the third case shows. Step and timeline writes are not fenced — the
+// step table carries no lease — and the one such write A still makes here (its
+// completed step) is benign: B's execution of the same step carries the same
+// step-scoped idempotency key, so the tool's effect cannot double.
+//
+// The last case is the second review (4173803806): the hand-back is reached
+// only through a claim, so a run that was ALREADY at the ceiling when this
+// shipped — `executing`, lease expired, `attempt >= max_attempts`, satisfied
+// steps or not — is dead-lettered by the recovery arm before any claim, and
+// nothing here repairs it. That is deliberate (executor.ts explains why a
+// once-only repair is not available without a marker); a person asking again
+// is the way back, and the follow-up change gives that ask a fresh budget.
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
+import type { SupabaseClient } from '@supabase/supabase-js';
+import type { Database } from '@/lib/database.types';
+import type { ToolOutcome } from '@/lib/ai/tools/types';
+import { createInMemorySupabase, type InMemorySupabase, type Row } from './helpers/in-memory-supabase';
+import { ABANDONED, claimAiRuns } from './helpers/claim-ai-runs';
+
+vi.mock('@/lib/supabase/server', () => ({
+  createServiceClient: () => { throw new Error('the test hands the port its own client'); },
+  createServer: async () => { throw new Error('the test hands the port its own client'); },
+}));
+
+const { createExecutorPort, runGraphWith, RunLeaseLostError } = await import('@/lib/ai/runs/executor');
+type ExecutorPort = import('@/lib/ai/runs/executor').ExecutorPort;
+type RunSnapshot = import('@/lib/ai/runs/executor').RunSnapshot;
+
+const FAMILY = '00000000-0000-4000-8000-00000000fa05';
+const USER = '00000000-0000-4000-8000-0000000000a5';
+const PARENT = '00000000-0000-4000-8000-00000000ae05';
+const REQUEST = '00000000-0000-4000-8000-00000000cc51';
+const PLAN = '00000000-0000-4000-8000-00000000cc52';
+const RUN = '00000000-0000-4000-8000-00000000cc53';
+const STEP = '00000000-0000-4000-8000-00000000cc54';
+const LEASE_A = '00000000-0000-4000-8000-00000000aaaa';
+const LEASE_B = '00000000-0000-4000-8000-00000000bbbb';
+const NOW = new Date('2026-10-03T12:00:00.000Z');
+const CEILING = 5;
+
+const DONE: ToolOutcome = { status: 'ok', data: { id: 'ev-1' }, summary: 'Added the dentist.', toolCallId: 'call-1', verified: true };
+let db: InMemorySupabase;
+const client = () => db as unknown as SupabaseClient<Database>;
+const run = () => db.table('family_automation_runs').find((r) => r.id === RUN) as Row;
+const request = () => db.table('ai_requests').find((r) => r.id === REQUEST) as Row;
+const events = () => db.table('ai_run_events').map((e) => String(e.event_type));
+const at = (offsetMs: number) => new Date(NOW.getTime() + offsetMs).toISOString();
+
+function step(over: Row = {}): Row {
+  return {
+    id: STEP, family_id: FAMILY, plan_id: PLAN, sequence: 0, step_type: 'act', tool_name: 'calendar.createEvent',
+    description: 'Add the dentist', input_json: { title: 'Dentist' }, dependency_ids: [], condition: null,
+    status: 'queued', approval_required: false, approval_id: null, risk_level: 'low', retry_count: 0, max_retries: 2,
+    result_json: null, error: null, started_at: null, completed_at: null, ...over,
+  };
+}
+
+/** A household with one run of one plan, the way `scopeFor` wants to find it. */
+function seed(runOver: Row, steps: Row[] = [step()]) {
+  db.seed('families', [{ id: FAMILY, name: 'Fixture', timezone: 'UTC', created_by: USER }]);
+  db.seed('family_members', [{ id: PARENT, family_id: FAMILY, user_id: USER, display_name: 'Dan', role: 'parent', is_active: true }]);
+  db.seed('ai_requests', [{ id: REQUEST, family_id: FAMILY, requested_by: USER, requested_by_member_id: PARENT, kind: 'concierge', request_text: 'Add the dentist', status: 'executing', error: null }]);
+  db.seed('ai_plans', [{ id: PLAN, family_id: FAMILY, request_id: REQUEST, version: 1, status: 'approved', risk_level: 'low' }]);
+  db.seed('ai_plan_steps', steps);
+  db.seed('family_automation_runs', [{
+    id: RUN, family_id: FAMILY, run_type: 'concierge_plan', plan_id: PLAN, request_id: REQUEST, requested_by_member_id: PARENT,
+    state: 'executing', status: 'executing', progress: {}, max_attempts: CEILING, cancel_requested_at: null, paused_at: null,
+    started_at: at(-10 * 60_000), completed_at: null, error: null, summary: null, run_after: at(-10 * 60_000), created_by: USER,
+    ...runOver,
+  }]);
+}
+
+/** The real production port over the in-memory client, with the tool under the test's control. */
+function worker(tool: () => Promise<ToolOutcome>): ExecutorPort {
+  const real = createExecutorPort(client());
+  return { ...real, runTool: async () => tool() };
+}
+
+/** A tool the test can hold inside, so the slice is "blocked past its lease" for as long as the test says. */
+function heldTool() {
+  let enter!: () => void;
+  let release!: () => void;
+  const entered = new Promise<void>((resolve) => { enter = resolve; });
+  const released = new Promise<void>((resolve) => { release = resolve; });
+  const tool = async (): Promise<ToolOutcome> => { enter(); await released; return DONE; };
+  return { tool, entered, release };
+}
+
+beforeEach(() => {
+  vi.useFakeTimers({ toFake: ['Date'] });
+  vi.setSystemTime(NOW);
+  db = createInMemorySupabase({ userId: USER });
+  vi.spyOn(console, 'error').mockImplementation(() => undefined);
+});
+afterEach(() => { vi.useRealTimers(); vi.restoreAllMocks(); });
+
+describe('a stale worker cannot write another worker\'s run', () => {
+  it('A returns from its tool after the next tick leased the run to B: A ends with lease_lost and B keeps its lease, its attempt and its state', async () => {
+    // A claimed at attempt 4 with lease A, and the lease has already run out:
+    // A is inside a tool that outlived it.
+    seed({ attempt: 4, lease_owner: LEASE_A, lease_expires_at: at(-60_000) });
+    const held = heldTool();
+    const sliceA = runGraphWith(worker(held.tool), RUN, { budgetMs: 60_000 });
+    await held.entered;
+    expect(run()).toMatchObject({ state: 'executing', attempt: 4, lease_owner: LEASE_A });
+
+    // The next tick. The recovery arm sees an `executing` run with a lease in
+    // the past and puts it back in the queue (attempt 4 < 5); the claiming pass
+    // leases it to B at attempt 5, in the same call.
+    expect(claimAiRuns({ p_limit: 10, p_lease_seconds: 120 }, db)).toEqual([RUN]);
+    const leaseB = run().lease_owner;
+    expect(leaseB).toBeTruthy();
+    expect(leaseB).not.toBe(LEASE_A);
+    expect(run()).toMatchObject({ state: 'executing', attempt: 5, lease_expires_at: at(120_000) });
+
+    // A's tool comes back with a success. A's step is done, A's slice made
+    // progress — and that progress is B's run now.
+    held.release();
+    const result = await sliceA;
+    expect(result.status).toBe('lease_lost');
+
+    // B's row, untouched: no park, no reset of the budget, no cleared lease.
+    expect(run()).toMatchObject({ state: 'executing', status: 'executing', attempt: 5, lease_owner: leaseB, lease_expires_at: at(120_000), run_after: at(0) });
+    expect(events(), 'A recorded no park and no finish').not.toContain('followup_scheduled');
+    expect(events()).not.toContain('run_completed');
+    expect(request().status, 'and did not move the request either').toBe('executing');
+    // A's one unfenced write — its completed step — is the benign one: B's
+    // own execution of that step carries the same idempotency key.
+    expect(db.table('ai_plan_steps')[0]).toMatchObject({ id: STEP, status: 'completed' });
+  });
+
+  it('the write itself is fenced: a park carrying a lease the row no longer has lands nowhere and ends the slice', async () => {
+    // The write that races the refresh: A's snapshot still says lease A, the
+    // row says lease B. The refresh would have caught this a moment later; the
+    // fence catches it now.
+    seed({ attempt: 5, lease_owner: LEASE_B, lease_expires_at: at(120_000) });
+    const portA = worker(async () => DONE);
+    const staleSnapshot: RunSnapshot = { ...(run() as unknown as RunSnapshot), lease_owner: LEASE_A };
+
+    await expect(portA.updateRun(staleSnapshot, { state: 'ready', status: 'approved', attempt: 0, lease_owner: null, lease_expires_at: null, run_after: at(0) }))
+      .rejects.toBeInstanceOf(RunLeaseLostError);
+    expect(run()).toMatchObject({ state: 'executing', attempt: 5, lease_owner: LEASE_B, lease_expires_at: at(120_000) });
+  });
+
+  it('the owner passes the fence: the same park, written by the worker that holds the lease, lands with the budget handed back', async () => {
+    // Non-vacuity, and the reason the fence is on the lease and not a ban on
+    // writes. A holds a live lease, completes the first step, finds the second
+    // (which waited on the first) with too little slice left, and parks:
+    // `ready`, lease cleared, `attempt` back to 0 for the progress.
+    const STEP_2 = '00000000-0000-4000-8000-00000000cc55';
+    seed({ attempt: 4, lease_owner: LEASE_A, lease_expires_at: at(120_000) }, [step(), step({ id: STEP_2, sequence: 1, dependency_ids: [STEP] })]);
+    const portA = worker(async () => { vi.setSystemTime(new Date(NOW.getTime() + 15_000)); return DONE; });
+
+    const result = await runGraphWith(portA, RUN, { budgetMs: 20_000 });
+    expect(result.status).toBe('ready');
+    expect(run()).toMatchObject({ state: 'ready', attempt: 0, lease_owner: null, lease_expires_at: null });
+    expect(events()).toContain('followup_scheduled');
+  });
+
+  it('a run with no lease is written the way it always was — the fence is a property of a claim', async () => {
+    // The paths that drive the graph without a lease (and the suites that do)
+    // keep the id-and-family write.
+    seed({ state: 'ready', status: 'approved', attempt: 0, lease_owner: null, lease_expires_at: null });
+    const result = await runGraphWith(worker(async () => DONE), RUN, { budgetMs: 60_000 });
+    expect(result.status).toBe('completed');
+    expect(run()).toMatchObject({ state: 'completed', lease_owner: null });
+  });
+
+  it('a run already at the ceiling when this shipped is dead-lettered by the recovery arm before any claim, satisfied steps or not (review 4173803806)', () => {
+    // Pre-#901 accounting charged every claim, so a run that completed work
+    // across healthy slices and then died once at its fifth claim sits here:
+    // `executing`, lease run out, attempt 5 of 5, three steps done.
+    seed(
+      { attempt: CEILING, lease_owner: LEASE_A, lease_expires_at: at(-60_000) },
+      [
+        step({ id: '00000000-0000-4000-8000-00000000cc61', sequence: 0, status: 'completed', completed_at: at(-50 * 60_000) }),
+        step({ id: '00000000-0000-4000-8000-00000000cc62', sequence: 1, status: 'completed', completed_at: at(-40 * 60_000) }),
+        step({ id: '00000000-0000-4000-8000-00000000cc63', sequence: 2, status: 'completed', completed_at: at(-30 * 60_000) }),
+        step({ id: '00000000-0000-4000-8000-00000000cc64', sequence: 3, status: 'queued', dependency_ids: ['00000000-0000-4000-8000-00000000cc63'] }),
+      ],
+    );
+
+    // The recovery arm runs before the claiming pass, and its test is the
+    // counter alone. Nothing is claimed, so no slice runs, so the hand-back
+    // in `runGraphWith` is never reached for this row.
+    expect(claimAiRuns({ p_limit: 10 }, db)).toEqual([]);
+    expect(run()).toMatchObject({ state: 'failed', status: 'failed', error: ABANDONED, attempt: CEILING, lease_owner: null });
+    // Its three finished steps are still finished — what it did is kept; what
+    // is lost is the automatic way back. That way back is a person's, in the
+    // change that follows this one.
+    expect(db.table('ai_plan_steps').filter((s) => s.status === 'completed')).toHaveLength(3);
+  });
+});

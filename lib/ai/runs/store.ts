@@ -717,6 +717,44 @@ export async function heartbeatRun(
 }
 
 /**
+ * Write to a run only while the lease the caller claimed with is still the
+ * row's lease.
+ *
+ * `updateRun` filters by id and family. That is right for a person's control
+ * (pause, cancel: their authority is their membership) and wrong for a worker,
+ * whose authority over the row is its lease, and a lease can be lost
+ * mid-slice. Worker A claims at attempt 4 and blocks inside a tool past its
+ * lease; `claim_ai_runs` recovers the row and leases it to worker B at attempt
+ * 5; A's tool returns, A sees the progress it made and parks — and through the
+ * unfenced path that park zeroed `attempt` and nulled `lease_owner` over B's
+ * LIVE lease, so a third claim could start while B was still executing and the
+ * abandonment budget was gone (review on #901, 5971497737). Fenced on
+ * `lease_owner`, A's park matches nothing. `false` is that answer: the run is
+ * no longer this worker's to write, and the executor stops on it
+ * (`RunLeaseLostError`).
+ */
+export async function updateRunHeldBy(
+  db: SupabaseClient<Database>,
+  runId: string,
+  familyId: string,
+  leaseOwner: string,
+  patch: Database['public']['Tables']['family_automation_runs']['Update'],
+): Promise<ServiceResult<boolean>> {
+  const { data, error } = await db
+    .from('family_automation_runs')
+    .update(patch)
+    .eq('id', runId)
+    .eq('family_id', familyId)
+    .eq('lease_owner', leaseOwner)
+    .select('id');
+  if (error) {
+    console.error('[ai/runs] failed to update the leased run', error);
+    return fail(describeDbError(error, 'Bubaly could not update that run.'), { code: SERVICE_CODES.db, retryable: true });
+  }
+  return ok((data ?? []).length > 0);
+}
+
+/**
  * How long after a thrown slice its run becomes recoverable.
  *
  * Longer than any one worker invocation — the cron tick is boxed at 85 s and an
