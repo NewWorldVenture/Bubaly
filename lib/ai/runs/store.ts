@@ -827,21 +827,56 @@ export async function heartbeatRun(
   return !!data;
 }
 
-/** Hand the run back so the next invocation can pick it up immediately. */
+/**
+ * How long after a thrown slice its run becomes recoverable.
+ *
+ * Longer than any one worker invocation — the cron tick is boxed at 85 s and an
+ * interactive slice at its budget plus a minute — so the invocation that just
+ * failed the run can never claim it again in its next wave, and shorter than
+ * the dispatcher's five-minute cadence, so the NEXT tick does. Without the
+ * delay a fast, repeatable throw was re-claimed wave after wave inside one tick
+ * and burnt every attempt in seconds (review on #900).
+ */
+export const RELEASE_RETRY_DELAY_MS = 120_000;
+
+/**
+ * Hand a run whose slice THREW to the recovery pass, so a later `claim_ai_runs`
+ * picks it up — the next tick's, not this one's.
+ *
+ * This is the throw path only. When a slice parks or finishes, the executor
+ * moves the run itself (to `ready`, `awaiting_approval`, a terminal state) and
+ * clears the lease in the same write, so the guard below matches nothing.
+ *
+ * It used to null `lease_owner` and `lease_expires_at` and leave the run in
+ * `executing`, and that stranded the run for good: `claim_ai_runs` (0250, 0263)
+ * recovers an `executing` run only while its lease is NOT NULL and in the past,
+ * and selects candidates only from `ready` and `scheduled_followup`; `claimRun`
+ * wants the same two states. An `executing` run with no lease belonged to
+ * nobody and was never looked at again — the family saw "working on it" for
+ * ever — while the cron's comment said the recovery pass would retry it. So the
+ * lease is SHORTENED to RELEASE_RETRY_DELAY_MS from now, not removed: the row
+ * keeps the exact shape the recovery pass looks for, and that pass — not this
+ * helper — decides between `ready` and, once `attempt` has reached
+ * `max_attempts`, the dead-letter `failed` with its steps, request and
+ * timeline reconciled (0263). Re-implementing that here would have been a
+ * second, drifting copy.
+ */
 export async function releaseRun(
   db: SupabaseClient<Database>,
   runId: string,
   leaseOwner: string,
 ): Promise<void> {
-  // Rows deliberately not checked: filtered on `lease_owner`, so zero rows means
-  // the lease was already taken over or expired — not ours to release.
-  // Audit C1-S9-66.
+  // Rows deliberately not checked: filtered on our own `lease_owner` and on
+  // `executing`, so zero rows means the lease was already taken over or expired,
+  // or the executor already moved the run — not ours to release, and nothing to
+  // report. Audit C1-S9-66.
   const { error } = await db
     .from('family_automation_runs')
-    .update({ lease_owner: null, lease_expires_at: null })
+    .update({ lease_expires_at: new Date(Date.now() + RELEASE_RETRY_DELAY_MS).toISOString() })
     .eq('id', runId)
-    .eq('lease_owner', leaseOwner);
-  if (error) console.error('[ai/runs] failed to release the lease', error);
+    .eq('lease_owner', leaseOwner)
+    .eq('state', 'executing');
+  if (error) console.error('[ai/runs] failed to hand the run back to the recovery pass; its lease will run out on its own', error);
 }
 
 // ─── Events ─────────────────────────────────────────────────────────────────

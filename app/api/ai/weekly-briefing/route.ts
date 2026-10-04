@@ -1,5 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { refuseOverAIAllowance, admissionRefusalResponse } from '@/lib/server/ai-access';
+import { instantCalendarBounds } from '@/lib/briefing/calendar-window';
+import { readCalendarOccurrences } from '@/lib/calendar/occurrences';
 import { getTranslations } from '@/lib/i18n/server';
 import { createServer } from '@/lib/supabase/server';
 import { settleAll } from '@/lib/supabase/settle';
@@ -63,7 +65,8 @@ export async function POST(req: NextRequest) {
       { data: recapEvents },
     ] = await settleAll([
       supabase.from('family_members').select('id, display_name, role').eq('family_id', familyId).eq('is_active', true),
-      supabase.from('calendar_events').select('title, starts_at, ends_at, location, category, assignee_id').eq('family_id', familyId).gte('starts_at', w.aheadStart).lte('starts_at', w.aheadEnd).order('starts_at').limit(60),
+      // Series included, so the week grid shows every week of a weekly event (lib/calendar/occurrences.ts).
+      readCalendarOccurrences(supabase, familyId, instantCalendarBounds(w.aheadStart, w.aheadEnd, tz), tz, { columns: ['title', 'starts_at', 'ends_at', 'location', 'category', 'assignee_id'], limit: 60 }),
       supabase.from('school_events').select('title, starts_at, event_type, notes, member_id').eq('family_id', familyId).gte('starts_at', w.aheadStart).lte('starts_at', w.aheadEnd).order('starts_at').limit(20),
       supabase.from('sports_events').select('title, starts_at, sport, team, location, member_id').eq('family_id', familyId).gte('starts_at', w.aheadStart).lte('starts_at', w.aheadEnd).order('starts_at').limit(20),
       supabase.from('appointments').select('title, starts_at, provider, location, member_id').eq('family_id', familyId).gte('starts_at', w.aheadStart).lte('starts_at', w.aheadEnd).order('starts_at').limit(15),
@@ -72,7 +75,7 @@ export async function POST(req: NextRequest) {
       supabase.from('grocery_items').select('name, category').eq('family_id', familyId).eq('is_checked', false).limit(20),
       supabase.from('reminders').select('title, notes, remind_at').eq('family_id', familyId).eq('is_done', false).lte('remind_at', w.aheadEnd).order('remind_at').limit(12),
       supabase.from('chore_assignments').select('status, due_at, member_id').eq('family_id', familyId).gte('due_at', w.recapStart).lte('due_at', w.recapEnd),
-      supabase.from('calendar_events').select('title, starts_at, category').eq('family_id', familyId).gte('starts_at', w.recapStart).lte('starts_at', w.recapEnd).order('starts_at').limit(40),
+      readCalendarOccurrences(supabase, familyId, instantCalendarBounds(w.recapStart, w.recapEnd, tz), tz, { columns: ['title', 'starts_at', 'category'], limit: 40 }),
     ]);
 
     const memberMap = new Map((members ?? []).map((m) => [m.id, m]));
@@ -116,7 +119,7 @@ export async function POST(req: NextRequest) {
     const aheadRate = choreCompletionRate((choresDueAhead ?? []).map((c) => ({ status: c.status })));
 
     const context = `
-WEEK OF: ${weekRangeLabel(w)} (generated ${now.toLocaleDateString('en-US', { weekday: 'long', month: 'long', day: 'numeric' })})
+WEEK OF: ${weekRangeLabel(w)} (generated ${now.toLocaleDateString('en-US', { weekday: 'long', month: 'long', day: 'numeric', timeZone: tz })})
 FAMILY: ${ctx.active.family.name}
 MEMBERS: ${(members ?? []).map((m) => `${m.display_name} (${m.role})`).join(', ') || 'none'}
 GENERATING FOR: ${ctx.active.member?.display_name ?? 'family'}

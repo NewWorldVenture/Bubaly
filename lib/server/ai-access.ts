@@ -119,17 +119,23 @@ export async function assertAIAccess(
   // ten callers that pass neither argument read exactly as they did.
   const label = opts.label ?? FEATURE_CATALOG_BY_KEY[featureKey]?.label ?? 'Ask Bubaly';
 
+  const superAdmin = isSuperAdminEmail(ctx.user.email);
   let tiers: Record<string, string>;
   try {
-    tiers = await getResolvedFeatureTiers(opts.db);
+    tiers = await getResolvedFeatureTiers(opts.db, { onUnavailable: 'throw' });
   } catch (error) {
-    // A settings outage must not open the gate: the catalog default is the
-    // documented offer, so fall back to it explicitly rather than to "allow".
-    console.error('[ai-access] feature tier read failed; using catalog defaults', error);
-    tiers = { [featureKey]: FEATURE_CATALOG_BY_KEY[featureKey]?.defaultTier ?? 'basic' };
+    // An unreadable tier map is not the published offer: an admin can make a
+    // feature stricter than its catalog default (free → Plus, or Off), and the
+    // default would open what the admin closed. Answer as for an unreadable
+    // plan. A super administrator passes every tier, so for them the tier does
+    // not decide anything and the catalog default stands in.
+    console.error('[ai-access] feature tier read failed', error);
+    if (!superAdmin) {
+      return { ok: false, status: 403, code: 'unavailable', error: 'Bubaly could not confirm your plan right now. Try again in a moment.' };
+    }
+    tiers = {};
   }
   const tier = (tiers[featureKey] ?? FEATURE_CATALOG_BY_KEY[featureKey]?.defaultTier ?? 'basic') as 'off' | 'free' | 'basic' | 'plus';
-  const superAdmin = isSuperAdminEmail(ctx.user.email);
 
   if (tier === 'off' && !superAdmin) {
     return { ok: false, status: 404, code: 'feature_off', feature: label, error: 'Not found.' };

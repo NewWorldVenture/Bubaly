@@ -84,6 +84,9 @@ beforeEach(() => {
         order: () => query,
         range: () => Promise.resolve({ data: [], error: null }),
         neq: () => query,
+        // The feature-tier read behind the route gate.
+        abortSignal: () => query,
+        maybeSingle: () => query,
         then: (resolve: (value: { data: unknown[]; error: null }) => unknown) =>
           Promise.resolve({ data: [], error: null }).then(resolve),
       };
