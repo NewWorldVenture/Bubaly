@@ -33,8 +33,14 @@ begin
     raise exception 'Legacy history entered the new canonical chat'; end if;
   if exists(select 1 from public.family_conversations where id = subgroup and is_family_chat) then
     raise exception 'A subgroup with stale whole-family member_ids was promoted to family-wide visibility'; end if;
-  if not exists(select 1 from public.family_conversations where id = whole and is_family_chat) then
-    raise exception 'A complete persisted family roster was not preserved as the canonical chat'; end if;
+  -- This branch adopts no existing conversation as the canonical chat, whole
+  -- roster or not (0475 here creates a new, empty one); the parent's assertion
+  -- that `whole` is promoted does not apply to it. `whole` must stay an ordinary
+  -- group with its history and roster intact:
+  if exists(select 1 from public.family_conversations where id = whole and is_family_chat) then
+    raise exception 'A whole-roster legacy group was promoted to the canonical chat; this branch preserves it as it was'; end if;
+  if not exists(select 1 from public.family_conversations where id = whole and not is_archived) then
+    raise exception 'The whole-roster legacy group did not survive the migration'; end if;
   if exists(select 1 from public.family_conversations where id = inactive_subgroup and is_family_chat) then
     raise exception 'A roster covering only currently active members was promoted'; end if;
   conversation := public.create_family_conversation(fam, array[ma, mb], 'Duplicate DM', 'direct');
