@@ -1,3 +1,7 @@
+## Production refresh — 2026-10-04 14:00 UTC
+
+- At 13:59 UTC, canonical production build-info returned HTTP 200 with revision c05e67a7fc5fca9c425fd60990ae2dbfad0c91c6. Live smoke checks returned 200 for home/login and 307 to login for unauthenticated meals. That deployed checkpoint changes only finalaudit.md relative to the #955 merge; the application source on production is unchanged. Current main has since advanced to 3b0a344ab, another ledger-only update.
+- At 14:00 UTC, #946 E2E remained in progress; #834 messaging privacy/concurrency verification had failed and its DB/RLS, E2E, Mobile, typecheck/build and finance SQL gates remained pending. Neither candidate is merge-ready.
 ## Main merge and production checkpoint — 2026-10-04 13:58 UTC
 
 - The audit-only checkpoint c05e67a7fc5fca9c425fd60990ae2dbfad0c91c6 was pushed to main; it changes only this ledger. At 13:56 UTC, the canonical production GET /api/build-info returned HTTP 200 with revision 1b933a19d45af3396237c14c45e684e70f790ad2 (the #955 merge). The audit commit did not change application code or trigger a newer production application revision. Production readiness remains **NO**.
