@@ -11,6 +11,8 @@ import { isMissingTableError } from '@/lib/supabase/errors';
 import { enforceAIRateLimit } from '@/lib/server/ai-rate-limit';
 import { MAX_PROVIDER_JSON_BYTES, readBoundedRequestJsonOrEmpty } from '@/lib/server/bounded-request-body';
 import { expiringSoon } from '@/lib/pantry/logic';
+import { instantCalendarBounds } from '@/lib/briefing/calendar-window';
+import { readCalendarOccurrences } from '@/lib/calendar/occurrences';
 import {
   buildChefSystem, buildChefUser, parseChefReply, fallbackChefReply, type ChefContext,
 } from '@/lib/food/chef';
@@ -51,13 +53,14 @@ export async function POST(req: Request) {
   );
   const now = new Date();
   const weekAhead = new Date(now.getTime() + 7 * 86400000).toISOString();
+  const chefTimezone = ctx.active.family.timezone || 'UTC';
 
   // Gather real family context in parallel.
   const [recipesRes, pantryRes, eventsRes, leftoverRes] = await settleAll([
     supabase.from('family_recipes').select('name').eq('family_id', familyId).order('is_favorite', { ascending: false }).limit(40),
     supabase.from('pantry_items').select('name, expires_at').eq('family_id', familyId).limit(200),
-    supabase.from('calendar_events').select('title, starts_at, category').eq('family_id', familyId)
-      .gte('starts_at', now.toISOString()).lte('starts_at', weekAhead).order('starts_at').limit(40),
+    // Series included, so the week's recurring commitments shape the plan (lib/calendar/occurrences.ts).
+    readCalendarOccurrences(supabase, familyId, instantCalendarBounds(now.toISOString(), weekAhead, chefTimezone), chefTimezone, { columns: ['title', 'starts_at', 'category'], limit: 40 }),
     supabase.from('leftover_inventory').select('name, source_meal, use_by').eq('family_id', familyId).eq('status', 'fresh').limit(20),
   ]);
 

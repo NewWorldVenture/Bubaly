@@ -14,6 +14,8 @@ import { rateLimitDb } from '@/lib/server/rate-limit-db';
 import { rateLimit } from '@/lib/server/rate-limit';
 import { parseAIChatRequest } from '@/lib/ai/chat-request';
 import { MAX_PROVIDER_JSON_BYTES, readBoundedRequestJson } from '@/lib/server/bounded-request-body';
+import { instantCalendarBounds } from '@/lib/briefing/calendar-window';
+import { readCalendarOccurrences } from '@/lib/calendar/occurrences';
 import { describeActionError, wroteNoRows } from '@/lib/supabase/errors';
 
 export const runtime = 'nodejs';
@@ -86,6 +88,7 @@ export async function POST(req: NextRequest) {
 
     // Conversation history (text turns), plus a live family snapshot.
     const nowIso = new Date().toISOString();
+    const chatTimezone = ctx.active.family.timezone || 'UTC';
     const [
       { data: history, error: historyError },
       { data: members, error: membersError },
@@ -95,7 +98,10 @@ export async function POST(req: NextRequest) {
     ] = await settleAll([
       supabase.from('ai_messages').select('role, content').eq('conversation_id', conversationId).order('created_at', { ascending: true }).limit(40),
       supabase.from('family_members').select('id, display_name, role').eq('family_id', familyId).eq('is_active', true),
-      supabase.from('calendar_events').select('title, starts_at, category').eq('family_id', familyId).gte('starts_at', nowIso).order('starts_at').limit(12),
+      // The next twelve things on the calendar, series included; bounded to a
+      // month ahead, which is as far as "what's coming up" reaches
+      // (lib/calendar/occurrences.ts).
+      readCalendarOccurrences(supabase, familyId, instantCalendarBounds(nowIso, new Date(Date.now() + 30 * 86400000).toISOString(), chatTimezone), chatTimezone, { columns: ['title', 'starts_at', 'category'], limit: 12 }),
       supabase.from('chore_assignments').select('status').eq('family_id', familyId).in('status', ['todo', 'in_progress']),
       supabase.from('meals').select('name, meal_type').eq('family_id', familyId).limit(5),
     ]);
