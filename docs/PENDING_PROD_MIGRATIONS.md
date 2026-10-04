@@ -4098,11 +4098,22 @@ started from a request, everything the model wrote from it — the plan's
 objective and reasoning, its steps, the run's events, approvals and
 `summary` (where a clarifying question is kept) — is shown only to a viewer
 `ai_request_words` answers for. The decision is made in `loadRunDetail`, so it
-holds even when a server action passes the service client. A sibling sees that
-the run exists and its state, as "Your request".
+is decided from who the viewer is (a manager, or the person who filed the
+request), so it holds when a caller passes the service client, and a failed
+words read costs only the words (a pending approval stays in front of the
+parent who decides it). A sibling sees that the run exists and its state, as
+"Your request"; a failed run's error is withheld from them too.
+
+**Deploy order with the other unapplied migrations.** 0480 is numbered above
+0475–0479, which other branches hold and may merge later. Apply migrations in
+version order. If 0480 is already applied when a lower one lands,
+`supabase db push` refuses it unless run with `--include-all`. 0480 and 0477
+(F19) work in either order (0477 grants `metered` by name).
 
 **Still open (a product decision, not in this change):**
-`family_automation_runs.summary` is family-readable in the table itself. Home,
+`family_automation_runs.summary` is family-readable in the table itself, and
+so is `approval_requests` (title, summary and the step's `input_json`), which
+the executor files for a step that needs approval. Home,
 Needs you, the display kiosk, the briefing and the autopilot and
 family-automation pages list it across the family, and a summary can repeat the
 request. Withholding it changes those surfaces.

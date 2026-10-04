@@ -160,14 +160,17 @@ describe('loadTrustActivity read boundary', () => {
     expect(err.mock.calls.map((c) => String(c[0]))).toContain('[trust/activity] request read failed');
   });
 
-  it('fails closed when the request words cannot be read (0480)', async () => {
+  it('a failed words read costs only the words, not the tab (0480, #927 review)', async () => {
     const err = vi.spyOn(console, 'error').mockImplementation(() => {});
     const db = fakeDb(repliesWith({ 'rpc:ai_request_words': { data: null, error: { message: 'timeout' } } }));
 
     const res = await loadTrustActivity(scopeFor(db, 'parent'));
 
-    expect(res.ok).toBe(false);
-    expect(err.mock.calls.map((c) => String(c[0]))).toContain('[trust/activity] request read failed');
+    expect(res.ok).toBe(true);
+    if (!res.ok) return;
+    expect(res.data.toolCalls.length).toBeGreaterThan(0);
+    expect(res.data.contextReads[0]).toMatchObject({ requestId: 'req-1', requestText: '', intent: 'plan_meals' });
+    expect(err.mock.calls.map((c) => String(c[0]))).toContain('[trust/activity] request words read failed');
   });
 
   it('never selects request_text through the member session (0480 withholds the column)', async () => {

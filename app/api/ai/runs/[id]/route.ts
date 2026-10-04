@@ -24,7 +24,7 @@ export async function GET(req: NextRequest, { params }: { params: Promise<{ id: 
     const { id } = await params;
     if (!id) return NextResponse.json({ error: t('runs.runNotFound'), code: 'not_found' }, { status: 404 });
 
-    const detail = await loadRunDetail(supabase, ctx.active.familyId, id, { viewerRole: ctx.active.role });
+    const detail = await loadRunDetail(supabase, ctx.active.familyId, id, { viewerRole: ctx.active.role, viewerUserId: ctx.user.id });
     if (!detail.ok) return NextResponse.json({ error: detail.error, code: detail.code ?? 'db' }, { status: detail.retryable ? 503 : 500 });
     if (!detail.data) return NextResponse.json({ error: t('runs.runNotFound'), code: 'not_found' }, { status: 404 });
     return NextResponse.json(toRunView(detail.data, ctx.active.familyId, isManager(ctx.active.role)));

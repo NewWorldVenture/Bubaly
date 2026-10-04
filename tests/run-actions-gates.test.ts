@@ -138,7 +138,7 @@ describe('loadRunAction', () => {
     const result = await loadRunAction('run-1');
     expect(result.ok).toBe(true);
     if (!result.ok || !result.data) return;
-    expect(loadRunDetail.mock.calls[0].slice(1)).toEqual(['fam-1', 'run-1', { viewerRole: 'parent' }]);
+    expect(loadRunDetail.mock.calls[0].slice(1)).toEqual(['fam-1', 'run-1', { viewerRole: 'parent', viewerUserId: 'user-1' }]);
     expect(result.data).toMatchObject({ id: 'run-1', familyId: 'fam-1', state: 'executing', objective: 'Weekend', reasoningSummary: 'Two free slots.', requestText: 'Organize our weekend' });
     expect(result.data.steps).toEqual([{ id: 'step-1', sequence: 0, description: 'Look at the calendar', status: 'completed', error: null }]);
     expect(result.data.events).toEqual([{ id: 'ev-1', type: 'step_completed', message: 'Looked.', at: '2026-09-05T10:00:01Z', stepId: 'step-1', actor: 'ai', metrics: null }]);

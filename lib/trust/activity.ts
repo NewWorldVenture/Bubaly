@@ -218,14 +218,18 @@ export async function loadTrustActivity(
         .in('id', requestIds),
       readRequestWords(db, requestIds),
     ]);
-    const readError = requestsError ?? (words.ok ? null : words.error);
-    if (readError) {
-      console.error('[trust/activity] request read failed', readError);
-      return fail(describeDbError(readError, 'Bubaly could not read what it looked at.'), {
+    if (requestsError) {
+      console.error('[trust/activity] request read failed', requestsError);
+      return fail(describeDbError(requestsError, 'Bubaly could not read what it looked at.'), {
         code: SERVICE_CODES.db,
         retryable: true,
       });
     }
+    // The words are optional here — the tab already reads "A request from your
+    // family" without them — so a failed words read costs only the words, not
+    // the dials and the ledger (#927 review). These context rows are already
+    // the requester's or a manager's, so nothing is shown that should not be.
+    if (!words.ok) console.error('[trust/activity] request words read failed', words.error);
     for (const row of (requests ?? []) as { id: string; interpreted_intent: string | null }[]) {
       requestById.set(row.id, { requestText: words.ok ? words.words.get(row.id)?.requestText ?? null : null, intent: row.interpreted_intent });
     }

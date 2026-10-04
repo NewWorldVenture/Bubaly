@@ -14,6 +14,7 @@
 import 'server-only';
 import type { SupabaseClient } from '@supabase/supabase-js';
 import type { Database, Json } from '@/lib/database.types';
+import { settle } from '@/lib/supabase/settle';
 
 type DB = SupabaseClient<Database>;
 
@@ -36,7 +37,8 @@ export type RequestWordsRead = { ok: true; words: Map<string, RequestWords> } | 
 export async function readRequestWords(db: DB, ids: readonly string[]): Promise<RequestWordsRead> {
   const wanted = [...new Set(ids.filter(Boolean))];
   if (wanted.length === 0) return { ok: true, words: new Map() };
-  const { data, error } = await db.rpc('ai_request_words', { p_request_ids: wanted });
+  // A transport rejection is a failed read like any other: it costs only the words.
+  const { data, error } = await settle(db.rpc('ai_request_words', { p_request_ids: wanted }));
   if (error) return { ok: false, error };
   const words = new Map<string, RequestWords>();
   for (const row of data ?? []) {

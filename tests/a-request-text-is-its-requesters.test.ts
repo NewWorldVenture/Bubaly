@@ -28,8 +28,8 @@ const SENTINEL = 'SENTINEL-0480-PRIVATE';
  * model-written text repeats the request. The store applies no RLS, so this is
  * also the service-client path a server action can take.
  */
-function asViewer(viewer: string, opts: { planned?: boolean; requestId?: string | null } = {}) {
-  const store = createInMemorySupabase({ userId: viewer });
+function asViewer(viewer: string, opts: { planned?: boolean; requestId?: string | null; wordsFail?: boolean; noAuthUser?: boolean } = {}) {
+  const store = createInMemorySupabase({ userId: opts.noAuthUser ? null : viewer });
   store.seed('family_members', [
     { id: 'm-teen', family_id: FAMILY, user_id: REQUESTER, role: 'teen', is_active: true, display_name: 'Teen' },
     { id: 'm-child', family_id: FAMILY, user_id: SIBLING, role: 'child', is_active: true, display_name: 'Child' },
@@ -40,7 +40,8 @@ function asViewer(viewer: string, opts: { planned?: boolean; requestId?: string 
   const requestId = opts.requestId === undefined ? 'req-1' : opts.requestId;
   store.seed('family_automation_runs', [{
     id: 'run-1', family_id: FAMILY, request_id: requestId, plan_id: planned ? 'plan-1' : null, run_type: 'concierge_plan',
-    state: 'completed', status: 'completed', progress: {}, summary: planned ? `${SENTINEL} summary` : null, created_at: '2026-10-03T10:00:00Z',
+    state: planned ? 'failed' : 'completed', status: 'completed', progress: {}, summary: planned ? `${SENTINEL} summary` : null,
+    error: planned ? `${SENTINEL} error` : null, created_at: '2026-10-03T10:00:00Z',
   }]);
   if (planned) {
     store.seed('ai_plans', [{ id: 'plan-1', family_id: FAMILY, request_id: requestId, objective: `${SENTINEL} objective`, reasoning_summary: `${SENTINEL} reasoning`, risk_level: 'low' }]);
@@ -58,16 +59,18 @@ function asViewer(viewer: string, opts: { planned?: boolean; requestId?: string 
       builder.select = (columns?: string, opts?: unknown) => { selects.push(columns ?? '*'); return select(columns, opts); };
       return builder;
     },
-    rpc: (name: string, args: Record<string, unknown>) => store.rpc(name, args),
+    rpc: (name: string, args: Record<string, unknown>) => opts.wordsFail && name === 'ai_request_words'
+      ? Promise.resolve({ data: null, error: { code: '57014', message: 'canceling statement due to statement timeout' } })
+      : store.rpc(name, args),
     auth: store.auth,
   } as unknown as SupabaseClient<Database>;
   return { client, selects };
 }
 
-async function openRun(viewer: string, viewerRole: string, opts: { planned?: boolean; requestId?: string | null } = {}) {
+async function openRun(viewer: string, viewerRole: string, opts: { planned?: boolean; requestId?: string | null; wordsFail?: boolean; noAuthUser?: boolean } = {}) {
   const { loadRunDetail, toRunView } = await import('@/lib/ai/runs/detail');
   const { client, selects } = asViewer(viewer, opts);
-  const detail = await loadRunDetail(client, FAMILY, 'run-1', { viewerRole: viewerRole as never });
+  const detail = await loadRunDetail(client, FAMILY, 'run-1', { viewerRole: viewerRole as never, viewerUserId: viewer });
   if (!detail.ok || !detail.data) throw new Error(`the run did not open: ${JSON.stringify(detail)}`);
   return { detail: detail.data, view: toRunView(detail.data, FAMILY, viewerRole === 'parent'), selects };
 }
@@ -125,11 +128,33 @@ describe('what the model wrote from the request follows the request (#927 commen
     expect(view.steps).toHaveLength(1);
   });
 
+  it('a failed words read costs only the words: the manager still sees the plan, steps and events (#927 review)', async () => {
+    const { detail, view } = await openRun(PARENT, 'parent', { planned: true, wordsFail: true });
+    expect(view.requestText).toBeNull();
+    expect(view.objective).toBe(`${SENTINEL} objective`);
+    expect(view.steps).toHaveLength(1);
+    expect(view.events).toHaveLength(1);
+    expect(detail.plan).not.toBeNull();
+  });
+
+  it('a failed words read does not reveal anything to a sibling either', async () => {
+    const { view } = await openRun(SIBLING, 'child', { planned: true, wordsFail: true });
+    expect(JSON.stringify(view)).not.toContain(SENTINEL);
+  });
+
+  it('a client with no signed-in user (the service client: ai_request_words answers nothing) still shows a manager the run (#927 review)', async () => {
+    const { detail, view } = await openRun(PARENT, 'parent', { planned: true, noAuthUser: true });
+    expect(detail.plan).not.toBeNull();
+    expect(view.steps).toHaveLength(1);
+    expect(view.requestText).toBeNull();
+  });
+
   it('a sibling sees the run exists and its state, and not one model-written word of it', async () => {
     const { detail, view } = await openRun(SIBLING, 'child', { planned: true });
     expect(view).toMatchObject({ id: 'run-1', state: expect.any(String), objective: 'Your request', reasoningSummary: null, requestText: null, steps: [], events: [], approvals: [] });
     expect(detail.plan).toBeNull();
     expect(detail.run.summary).toBeNull();
+    expect(detail.run.error, 'a failed run\'s error can quote the request too (#927 review)').toBeNull();
     expect(JSON.stringify(view)).not.toContain(SENTINEL);
     expect(JSON.stringify(detail)).not.toContain(SENTINEL);
   });

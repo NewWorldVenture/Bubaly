@@ -51,6 +51,12 @@ export type RunDetailView = {
 export type LoadRunDetailOptions = {
   /** The viewer's role decides `canEdit` on the approval cards; omit for a read that renders no controls. */
   viewerRole?: string | null;
+  /**
+   * The viewer's auth user id. With the role, it decides whether the parts of
+   * a run the model wrote from its request are shown (0480): a manager, or the
+   * person who filed the request. Omitted, only a manager sees them.
+   */
+  viewerUserId?: string | null;
   eventLimit?: number;
 };
 
@@ -72,11 +78,14 @@ export async function loadRunDetail(
   if (!core.data) return ok(null);
   const { run, plan, steps, events } = core.data;
 
-  const [{ data: request, error: requestError }, { data: approvalRows, error: approvalError }] = await Promise.all([
+  // The request's own words come through `ai_request_words` (0480), read
+  // alongside the rest: it needs only the run's request id.
+  const [{ data: request, error: requestError }, { data: approvalRows, error: approvalError }, wordsRead] = await Promise.all([
     run.request_id
-      ? db.from('ai_requests').select(MEMBER_REQUEST_COLUMNS).eq('id', run.request_id).eq('family_id', familyId).maybeSingle()
+      ? settle(db.from('ai_requests').select(MEMBER_REQUEST_COLUMNS).eq('id', run.request_id).eq('family_id', familyId).maybeSingle())
       : Promise.resolve({ data: null, error: null }),
     settle(db.from('approval_requests').select('*').eq('family_id', familyId).eq('run_id', runId).order('created_at', { ascending: true })),
+    run.request_id ? readRequestWords(db, [run.request_id]) : Promise.resolve(null),
   ]);
   const readError = requestError ?? approvalError;
   if (readError) {
@@ -84,15 +93,12 @@ export async function loadRunDetail(
     return fail(describeDbError(readError, 'Bubaly could not open that run.'), { code: SERVICE_CODES.db, retryable: true });
   }
 
-  // The person's own words and answers (0480): only the requester or a manager
-  // reads them. Anyone else in the family still opens the run, as "Your
-  // request", without the words. A failed read is the same — the words are not
-  // needed to show the run.
+  // A failed or empty words read costs only the words: the run is shown by its
+  // plan's objective, or "Your request". It decides nothing else below.
   let words: RequestWords | null = null;
-  if (request && run.request_id) {
-    const read = await readRequestWords(db, [run.request_id]);
-    if (read.ok) words = read.words.get(run.request_id) ?? null;
-    else console.error('[ai/runs] failed to read the request words', read.error);
+  if (wordsRead && run.request_id) {
+    if (wordsRead.ok) words = wordsRead.words.get(run.request_id) ?? null;
+    else console.error('[ai/runs] failed to read the request words', wordsRead.error);
   }
 
   const approvals = (approvalRows ?? []) as ApprovalRow[];
@@ -108,18 +114,22 @@ export async function loadRunDetail(
   const canEdit = isManager(opts.viewerRole);
 
   // Everything the model wrote FROM the request can repeat it: the plan's
-  // objective and reasoning, its steps, the run's events and summary (where a
-  // clarifying question is kept), and the approvals the plan opened (#927
-  // comment 5973640023). So they follow the request: a run started from a
-  // request shows them only to a viewer `ai_request_words` answered for — its
-  // requester or a manager. Anyone else in the family still sees that the run
-  // exists, its state and when it ran. Decided here rather than left to RLS
-  // because a server action may hand this function the service client.
-  // A failed words read hides them too (fail closed).
-  const mayRead = !run.request_id || words !== null;
+  // objective and reasoning, its steps, the run's events, error and summary
+  // (where a clarifying question is kept), and the approvals the plan opened
+  // (#927 comment 5973640023). So they follow the request's own rule — its
+  // requester or a manager — decided from who the viewer IS, not from whether
+  // the words read answered: a failed read must not hide a pending approval
+  // from the parent who has to decide it (#927 review). Anyone else in the
+  // family still sees that the run exists, its state and when it ran.
+  // Decided here as well as by RLS because a caller may pass the service
+  // client, which RLS does not narrow.
+  const requestedBy = (request as { requested_by?: string | null } | null)?.requested_by ?? null;
+  const mayRead = !run.request_id
+    || isManager(opts.viewerRole)
+    || (!!opts.viewerUserId && requestedBy === opts.viewerUserId);
 
   return ok({
-    run: mayRead ? run : { ...run, summary: null },
+    run: mayRead ? run : { ...run, summary: null, error: null },
     request: request
       ? { ...(request as unknown as Omit<RequestRow, 'request_text' | 'clarifications'>), request_text: words?.requestText ?? '', clarifications: words?.clarifications ?? [] } as RequestRow
       : null,

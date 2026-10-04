@@ -294,6 +294,10 @@ test.describe('authenticated first-value journey', () => {
           expect.objectContaining({ id: privateRequest.id, request_text: words }),
         ]);
         expect(JSON.stringify(managerWords)).toContain('E2E-0480 private answer');
+        // Removed: a queued request row in the test family would count toward its
+        // F19 allowance and could be picked up by a sweep on a persistent project.
+        const { error: privateCleanupError } = await service.from('ai_requests').delete().eq('id', privateRequest.id);
+        if (privateCleanupError) throw privateCleanupError;
         const { data: managerChange, error: managerError } = await member.from('wallet_transactions')
           .update({ amount_cents: 125 }).eq('id', transaction.id).select('amount_cents').single();
         expect(managerError).toBeNull();

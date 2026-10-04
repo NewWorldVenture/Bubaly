@@ -72,7 +72,7 @@ export default async function RunDetailPage({ params }: { params: Promise<{ id: 
     return <RunUnavailable message={access.error} />;
   }
 
-  const detail = await loadRunDetail(supabase, familyId, id, { viewerRole: ctx.active.role });
+  const detail = await loadRunDetail(supabase, familyId, id, { viewerRole: ctx.active.role, viewerUserId: ctx.user.id });
   if (!detail.ok) return <RunUnavailable message={detail.error} />;
   if (!detail.data) return <AppNotFound backHref="/dashboard/concierge/runs" />;
 
@@ -116,7 +116,7 @@ export default async function RunDetailPage({ params }: { params: Promise<{ id: 
     if (actor.active.familyId !== familyId) return { ok: false, error: t('runs.thatRunCouldNotBe'), code: 'not_found' };
     if (!edits || typeof edits !== 'object' || Array.isArray(edits)) return { ok: false, error: t('runs.nothingToChange'), code: 'invalid_input' };
 
-    const current = await loadRunDetail(db, familyId, runId, { viewerRole: actor.active.role });
+    const current = await loadRunDetail(db, familyId, runId, { viewerRole: actor.active.role, viewerUserId: actor.user.id });
     if (!current.ok) return { ok: false, error: current.error, code: current.code };
     const step = current.data?.steps.find((s) => s.id === stepId);
     if (!step) return { ok: false, error: t('runs.thatStepIsNotPart'), code: 'not_found' };

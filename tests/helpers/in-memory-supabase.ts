@@ -70,16 +70,24 @@ const BUILT_IN_RPC: Record<string, (args: Record<string, unknown>, db: InMemoryS
   family_allergies: (args, db) => db.table('medical_profiles')
     .filter((row) => row.family_id === args.p_family_id)
     .map((row) => ({ member_id: row.member_id, allergies: row.allergies ?? null })),
-  // 0480: a request's words and answers, for the user who filed it or an active
-  // parent/adult of its family (`can_manage_family`); every other request is absent.
+  // 0480: a request's words and answers — exactly the SQL rule: the caller is an
+  // ACTIVE member of the request's family (`is_family_member`), and either filed
+  // it or is an active parent/adult there (`can_manage_family`). Every other
+  // request is absent. A member with `is_active` unset counts as inactive, as
+  // `is_active` (not `is_active is not false`) does in Postgres.
   ai_request_words: (args, db) => {
     const uid = db.userId;
     if (!uid) return [];
     const ids = new Set((args.p_request_ids as string[] | undefined) ?? []);
-    const manages = (familyId: unknown) => db.table('family_members').some((m) =>
-      m.family_id === familyId && m.user_id === uid && m.is_active !== false && (m.role === 'parent' || m.role === 'adult'));
+    const membership = (familyId: unknown) => db.table('family_members')
+      .find((m) => m.family_id === familyId && m.user_id === uid && m.is_active === true);
     return db.table('ai_requests')
-      .filter((r) => ids.has(r.id as string) && (r.requested_by === uid || manages(r.family_id)))
+      .filter((r) => {
+        if (!ids.has(r.id as string)) return false;
+        const me = membership(r.family_id);
+        if (!me) return false;
+        return r.requested_by === uid || me.role === 'parent' || me.role === 'adult';
+      })
       .map((r) => ({ id: r.id, request_text: r.request_text, clarifications: r.clarifications ?? [] }));
   },
 };
