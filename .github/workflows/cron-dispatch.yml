@@ -28,18 +28,12 @@ name: Cron dispatch
 # passes its start as CRON_SINCE; the dispatcher evaluates every minute since
 # then (never less than five, capped at a day, daily routes left to Vercel, one
 # call per route however many of its minutes fell in the gap). If the lookup
-# FAILS the tick still dispatches its five-minute window, says so, and then
-# marks itself failed on purpose: only a `status=success` run is taken as a
-# boundary, and a tick that did not know where the previous one stopped must
-# not become the place the next one starts from — the minutes before it would
-# be lost for good (review on #699, 5969190760). A lookup that succeeds and
-# finds no previous scheduled run at all (the first tick ever) is not a
-# failure: it starts the chain. A lookup that finds previous scheduled runs
-# but no success among them — a history of ticks that failed or were cancelled
-# — is not the first tick either: it catches up from the oldest of them, since
-# no successful tick has covered the minutes after that start (review on #902,
-# 5971121597). This recovers the firing, not the rate — see the dispatcher
-# header.
+# fails the tick still dispatches its five-minute window, then fails itself so
+# it cannot become the next boundary. This recovers the firing, not the rate —
+# see the dispatcher header. If no scheduled tick has ever succeeded, the
+# workflow-token lookup paginates the complete 24-hour history and probes for
+# older history; one boundary is handed to the dispatcher, which clamps it to
+# 24 hours and calls each idempotent sweep once.
 # On Vercel Pro, move the schedules back into vercel.json and disable this.
 
 on:
@@ -74,6 +68,7 @@ jobs:
           # this sparse checkout has to fetch it alongside the script it runs.
           sparse-checkout: |
             scripts/cron-dispatch.mjs
+            scripts/cron-run-history.mjs
             .nvmrc
           sparse-checkout-cone-mode: false
           fetch-depth: 1
@@ -85,93 +80,11 @@ jobs:
       - name: Find the previous successful tick (catch-up boundary)
         id: previous
         env:
-          # The job's GITHUB_TOKEN; `gh` reads it from GH_TOKEN.
+          # This workflow token needs the actions: read permission above.
           GH_TOKEN: ${{ github.token }}
           REPO: ${{ github.repository }}
           RUN_ID: ${{ github.run_id }}
-        run: |
-          # The previous SCHEDULED success, not any success: a manual single-route
-          # run dispatches one route, so taking it as the boundary would skip every
-          # other route due since the real previous tick. The current run is
-          # excluded by id. The dispatcher never narrows below its fixed window, so
-          # a boundary that is too recent costs nothing, and one that is too old is
-          # capped there.
-          #
-          # Failure here must not stop the dispatch: the dispatcher then runs its
-          # fixed five-minute window exactly as it did before catch-up. But it must
-          # not be forgotten either. Three outcomes look alike and are not. The API
-          # answered and there has never been a scheduled run before this one: the
-          # first tick ever, which starts the chain. The API answered, there are
-          # previous scheduled runs, and none of them succeeded — a 09:07 whose own
-          # lookup failed, a tick that died on a blank CRON_SECRET, a run cancelled
-          # by concurrency: history, not a first tick, and every minute since the
-          # OLDEST of those runs is a minute no successful tick has covered, so the
-          # tick catches up from there (over-covering, never under-covering: a run
-          # that failed on purpose did dispatch its own five minutes, and the
-          # routes are idempotent sweeps; the dispatcher caps the window at a day)
-          # (review on #902, 5971121597). And the API did NOT answer — a 403, an
-          # outage, an unexpected shape, or previous runs none of whose starts is
-          # usable. That one is recorded as `lookup=failed`, and the last step
-          # turns it into a failed run, because only a successful run is ever
-          # taken as a boundary: a tick that did not know where the previous one
-          # stopped would otherwise become the place the next one starts from, and
-          # every minute before it would be lost for good.
-          lookup=ok
-          since=''
-          # Two questions, in order. `status=success` is a filter the API applies
-          # over the whole history, not this page, so an empty first answer means
-          # no scheduled run of this workflow has ever succeeded — and only then
-          # is the second question asked: were there scheduled runs at all? One
-          # answer per outcome, so the look-alikes cannot be confused: `none`
-          # means no run; a timestamp is the boundary; anything else — a selected
-          # run whose start is null or missing, a body of another shape (jq's own
-          # error on a body without `workflow_runs` fails the command, like a 403
-          # does) — is unusable.
-          if answer="$(gh api \
-            "repos/${REPO}/actions/workflows/cron-dispatch.yml/runs?status=success&event=schedule&per_page=5" \
-            --jq '([.workflow_runs[] | select(.id != (env.RUN_ID | tonumber))][0]) as $run
-                  | if $run == null then "none"
-                    elif ($run.run_started_at | type) == "string" then $run.run_started_at
-                    else "unusable" end')"; then
-            found='Previous successful tick started at'
-            if [[ "$answer" == none ]]; then
-              # No scheduled success ever. The oldest previous scheduled run with
-              # a usable start, whatever its conclusion, or `none` when there is
-              # no previous run, or `unusable` when there are runs but no start.
-              if answer="$(gh api \
-                "repos/${REPO}/actions/workflows/cron-dispatch.yml/runs?event=schedule&per_page=100" \
-                --jq '[.workflow_runs[] | select(.id != (env.RUN_ID | tonumber))] as $runs
-                      | if ($runs | length) == 0 then "none"
-                        else ([$runs[] | select((.run_started_at | type) == "string") | .run_started_at] | sort | .[0]) // "unusable" end')"; then
-                found='No scheduled tick has succeeded yet; the oldest recorded one started at'
-              else
-                echo "The previous-tick lookup failed; dispatching the fixed five-minute window, and this tick will not be a boundary."
-                lookup=failed
-                answer=''
-              fi
-            fi
-            if [[ "$lookup" == failed ]]; then
-              :
-            elif [[ "$answer" == none ]]; then
-              echo "No previous scheduled tick is recorded; this one starts the chain with the fixed five-minute window."
-            elif [[ "$answer" =~ ^[0-9]{4}-[0-9]{2}-[0-9]{2}T[0-9]{2}:[0-9]{2}:[0-9]{2}Z$ ]] \
-              && started="$(date -u -d "$answer" +%s 2>/dev/null)" && (( started <= $(date -u +%s) )); then
-              # The same two tests the dispatcher's tickWindow applies — a real
-              # timestamp, not in the future — so a boundary this step accepts
-              # is one the dispatcher will use, never one it silently ignores
-              # while the run goes on to finish green.
-              since="$answer"
-              echo "${found} ${since}; catching up from there."
-            else
-              echo "The previous tick's start was unusable (got '${answer:0:80}'); dispatching the fixed five-minute window, and this tick will not be a boundary."
-              lookup=failed
-            fi
-          else
-            echo "The previous-tick lookup failed; dispatching the fixed five-minute window, and this tick will not be a boundary."
-            lookup=failed
-          fi
-          echo "since=${since}" >> "$GITHUB_OUTPUT"
-          echo "lookup=${lookup}" >> "$GITHUB_OUTPUT"
+        run: node scripts/cron-run-history.mjs
 
       - name: Validate configuration and dispatch due routes
         env:
@@ -187,15 +100,11 @@ jobs:
           fi
 
       - name: A tick that could not find its boundary is not one
-        # After the dispatch, so the routes due this tick were still called. The
-        # run is then failed on purpose: the boundary step takes only a run with
-        # status=success as a boundary, so a green run here would be the next
-        # tick's boundary and the gap before it could never be caught up. The
-        # next green tick catches up from the last real success instead — or,
-        # while no tick has ever succeeded, from the oldest recorded tick, this
-        # one included — repeating this tick's five minutes for routes that are
-        # idempotent sweeps, losing nothing.
-        if: steps.previous.outputs.lookup == 'failed'
+        # Dispatch first so a failed lookup never skips the normal five-minute
+        # sweep. Only after that do we fail this run: otherwise the next tick
+        # could use this fallback run as its boundary and lose the gap. A run
+        # that could not read history is never treated as successful coverage.
+        if: github.event_name == 'schedule' && steps.previous.outputs.lookup == 'failed'
         run: |
           echo "::error::The catch-up boundary could not be read. This tick dispatched its fixed five-minute window and is marked failed on purpose, so it is not taken as the next tick's boundary."
           exit 1

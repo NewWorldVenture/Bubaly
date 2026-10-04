@@ -41,7 +41,8 @@ import { fail, ok, SERVICE_CODES, type ServiceResult, type ServiceScope } from '
 import { buildBrief, type Brief } from './build';
 import { readBriefDecisions } from './decisions';
 import { medicationsDueOn, weekdayOf, type MedicationScheduleRow } from './sources';
-import { briefingCalendarWindow } from './calendar-window';
+import { briefingCalendarBounds } from './calendar-window';
+import { readCalendarOccurrences } from '@/lib/calendar/occurrences';
 import { settleAll } from '@/lib/supabase/settle';
 
 type DB = SupabaseClient<Database>;
@@ -131,8 +132,8 @@ export async function readMorningBrief(scope: ServiceScope, target: MorningTarge
   const todayDow = weekdayOf(dayKey);
 
   const [events, members, bills, meds, maintenance, warranties, trips, pantry, runs, activity] = await settleAll([
-    db.from('calendar_events').select('title, starts_at, ends_at, all_day, location')
-      .eq('family_id', familyId).or(briefingCalendarWindow(dayKey, tz, 0, 7)).order('starts_at').limit(100),
+    // Series included: the pushed brief lists every week of a weekly event (lib/calendar/occurrences.ts).
+    readCalendarOccurrences(db, familyId, briefingCalendarBounds(dayKey, tz, 0, 7), tz, { columns: ['title', 'starts_at', 'ends_at', 'all_day', 'location'], limit: 100 }),
     db.from('family_members').select('id, display_name').eq('family_id', familyId).eq('is_active', true),
     db.from('bills').select('name, amount, due_date, status')
       .eq('family_id', familyId).neq('status', 'paid').lte('due_date', horizon).order('due_date').limit(20),
