@@ -64,10 +64,12 @@ declare
   n int;
   seen text[];
 begin
+  -- Lists are compared in byte order (collate "C"): the database's default
+  -- collation differs between CI and a developer's machine.
   -- ── As the CHILD ──
   perform set_config('request.jwt.claims', child, true);
   perform set_config('role', 'authenticated', true);
-  select array_agg(transcript order by transcript) into seen from public.voice_commands where family_id = fam;
+  select array_agg(transcript order by transcript collate "C") into seen from public.voice_commands where family_id = fam;
   -- 1, 2
   if seen is distinct from array['VL-PROBE child: add slime to the list'] then
     failures := array_append(failures, format('the child should read exactly their own command; read %s', seen));
@@ -83,7 +85,7 @@ begin
 
   -- ── As the TEEN ──
   perform set_config('request.jwt.claims', teen, true);
-  select array_agg(transcript order by transcript) into seen from public.voice_commands where family_id = fam;
+  select array_agg(transcript order by transcript collate "C") into seen from public.voice_commands where family_id = fam;
   -- 2, 4
   if seen is distinct from array['VL-PROBE teen without a member row', 'VL-PROBE teen: remind me about the counsellor'] then
     failures := array_append(failures, format('the teen should read their own two commands (one filed without a member row); read %s', seen));
