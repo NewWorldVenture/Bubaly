@@ -48,7 +48,6 @@ export default async function ConflictsPage() {
 
   const now = new Date();
   const in14 = new Date(now.getTime() + 14 * 24 * 3_600_000);
-  const tz = ctx.active.family.timezone || 'UTC';
 
   // A failed read here is not "no conflicts". `detectConflicts([])` returns an
   // empty list, which this page renders as the all-clear — the one answer a
