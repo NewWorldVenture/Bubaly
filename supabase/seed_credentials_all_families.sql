@@ -54,7 +54,10 @@ begin
   -- Clean up only this fixture's prior demo rows. User-created rows are untouched.
   delete from public.family_credentials
    where family_id = fixture_family_id
-     and coalesce(notes, '') like '%[seed:vault-fixture]%';
+     and (
+       coalesce(notes, '') like '%[seed:vault-fixture]%'
+       or coalesce(notes, '') like '%[seed:vault]%'
+     );
 
   for i in 1..array_length(cat, 1) loop
     insert into public.family_credentials

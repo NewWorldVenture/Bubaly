@@ -43,12 +43,14 @@ describe('seed credential safety', () => {
     expect(executable.match(/public\.families/gi)).toHaveLength(1);
 
     // A seed must never replace migrations 0296/0391's schema or RLS boundary.
-    expect(executable).not.toMatch(/\b(?:create|alter|drop|truncate|grant|revoke)\s+(?:table|index|policy|trigger|function|schema|type|extension|view|sequence)\b/i);
+    // Check the entire executable source, including the anonymous DO body, so
+    // CREATE OR REPLACE, ALTER POLICY, and other DDL cannot hide in PL/pgSQL.
+    expect(executable).not.toMatch(/\b(?:create|alter|drop|truncate|grant|revoke)\b/i);
     expect(executable).not.toMatch(/\b(?:enable|disable)\s+row\s+level\s+security\b/i);
-    expect(executable).not.toMatch(/\b(?:create|drop)\s+policy\b/i);
+    expect(executable).not.toMatch(/\bcreate\s+or\s+replace\b|\balter\s+policy\b/i);
 
     // Cleanup, insert, and the diagnostic read must all stay in the same fixture.
-    expect(executable).toMatch(/delete\s+from\s+public\.family_credentials[\s\S]*?where family_id = fixture_family_id[\s\S]*?\[seed:vault-fixture\]/i);
+    expect(executable).toMatch(/delete\s+from\s+public\.family_credentials\s+where family_id = fixture_family_id\s+and\s*\(\s*coalesce\(notes, ''\) like '%\[seed:vault-fixture\]%'\s+or coalesce\(notes, ''\) like '%\[seed:vault\]%'\s*\)/i);
     expect(executable).toMatch(/insert\s+into\s+public\.family_credentials[\s\S]*?fixture_family_id/i);
     expect(executable).toMatch(/from\s+public\.family_credentials\s+where family_id = '11111111-1111-1111-1111-111111111111'::uuid[\s\S]*?\[seed:vault-fixture\]/i);
     expect(executable).not.toMatch(/family_id\s*=\s*f\.id/i);
