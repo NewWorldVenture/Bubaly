@@ -25,7 +25,7 @@ const vercel = JSON.parse(readFileSync(join(ROOT, 'vercel.json'), 'utf8')) as {
  * MINIMUM observed gap of 104 minutes and a median of 209. Not one gap in 83
  * consecutive pairs was the 5 minutes the workflow asks for.
  *
- * So for the fourteen routes below, the cadence in SCHEDULES is an intention
+ * So for the eighteen routes below, the cadence in SCHEDULES is an intention
  * and the cadence in vercel.json is the guarantee, and they differ by 2× to
  * 288×. `/api/cron/close-auctions` asks for every five minutes and is guaranteed `0 10`:
  * an auction that ends at 10:05 can stay open almost a full day. This is not a
@@ -97,6 +97,9 @@ const DISPATCHER_DEPENDENT: Record<string, number> = {
   '/api/cron/marketing-social': 96,
   '/api/cron/family-routines': 96,
   '/api/cron/feedback-github-sync': 24,
+  // Fleet preflights are requested hourly by the existing dispatcher; the
+  // daily-safe Vercel registration guarantees only one preflight per day.
+  '/api/cron/claude-fleet': 24,
   '/api/cron/push-scan': 12,
   '/api/cron/provider-sync': 6,
   '/api/cron/marketing-providers': 4,
