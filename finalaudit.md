@@ -1,3 +1,11 @@
+## Parallel candidate and migration-order checkpoint — 2026-10-04 14:42 UTC
+
+- Production deployment [6842356344](https://github.com/NewWorldVenture/Bubaly/deployments/6842356344) succeeded for audit-only main `ad760cbceb5ac2018cc9ecc0c215dba7a4f0d0c5`; `/api/build-info` reports that SHA and `/` is 200. Application source remains the #946 merge `2cf7fdee651eaa0e8ef97a0789e317e6c91bf4b8`.
+- The live open-PR inventory is 92 total: 31 target `main` (28 drafts and non-drafts #834, #957, #958), with 61 stacked. #834 remains active Claude work at head `951b98ae534974c5e7be421641d2997f046c33f7`; its branch uses migrations 0475 and 0476 and is not being edited. Latest checks are still pending except `finance-operation-sql`; an earlier exact run failed Typecheck/Lint/Test/Build and the messaging privacy/concurrency/lifecycle check. No merge is safe yet.
+- Seed-safety PR #957 is head `ed7a726001644df80ceef3fbfe677527403cae54`; Mobile passed, while Typecheck/Lint/Test/Build, Database/RLS and E2E remain pending. Do not merge until all required exact-head jobs pass.
+- Family-memory RLS PR #958 is head `2fdcaed8a04a2cfe75a35a960e697ce20de62136`; its synthetic PostgreSQL 17 boundary probe passed locally, while all four required CI jobs remain queued. A version collision was found with #834’s 0475/0476 migrations. The candidate is being reallocated to 0477 and must not merge ahead of #834’s lower versions; no production database or configuration was touched.
+- Main run [37208317078](https://github.com/NewWorldVenture/Bubaly/actions/runs/37208317078) still has Database/RLS and Mobile passed; unit tests and E2E are in progress. No gates were bypassed and no audit closure count or overall completion percentage is inferred.
+
 ## Retry, release, and queue checkpoint — 2026-10-04 14:35 UTC
 
 - Production deployment [6842303609](https://github.com/NewWorldVenture/Bubaly/deployments/6842303609) succeeded on current main `163f31504690404f03c58d2fe5fb1d3d5dfbffde`; `/api/build-info` reports that revision, `/` and `/login` return 200, and unauthenticated `/dashboard/meals` redirects with 307. Application source is still #946 merge `2cf7fdee651eaa0e8ef97a0789e317e6c91bf4b8`; this was an audit-only checkpoint.
