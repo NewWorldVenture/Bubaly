@@ -1,6 +1,6 @@
 'use client';
 
-import { useMemo, useState } from 'react';
+import { useId, useMemo, useState } from 'react';
 import {
   PackageSearch, Plus, Search, MapPin, Trash2, Pencil, Handshake, ArrowRightLeft, ShieldCheck, Boxes, AlertTriangle, Camera, Check, CheckCircle2, ChevronRight, DoorOpen,
 } from 'lucide-react';
@@ -8,6 +8,7 @@ import { useApp } from '@/components/app/app-context';
 import { familyMediaPath } from '@/lib/storage/family-media';
 import { useRealtimeQuery } from '@/lib/hooks/use-realtime-query';
 import { createClient } from '@/lib/supabase/client';
+import { readInventoryItems } from '@/lib/inventory/read-items';
 import { describeDbError, wroteNoRows } from '@/lib/supabase/errors';
 import { useToast } from '@/components/ui/toast';
 import { PageHeader } from '@/components/app/page-header';
@@ -39,6 +40,7 @@ type Move = Tables<'inventory_moves'>;
 // to the whole unit, as they always were here, so the cents are rounded away
 // BEFORE formatting rather than by a second formatter.
 const CURRENCY = 'USD';
+const ITEMS_PER_PAGE = 120;
 const moneyIn = (locale: LocaleCode) => (cents: number) => formatCents(Math.round(cents / 100) * 100, CURRENCY, locale);
 
 export function InventoryModule() {
@@ -61,7 +63,8 @@ export function InventoryModule() {
   });
   const items = useRealtimeQuery<Item>({
     table: 'inventory_items', familyId,
-    fetcher: (s) => s.from('inventory_items').select('*').eq('family_id', familyId).order('updated_at', { ascending: false }),
+    // Stable IDs prevent shifting offsets; concurrent edits still are not a snapshot.
+    fetcher: (s) => readInventoryItems(s, familyId),
     deps: [familyId],
   });
   const moves = useRealtimeQuery<Move>({
@@ -98,6 +101,14 @@ export function InventoryModule() {
       (categoryFilter === 'all' || i.category === categoryFilter) &&
       (statusFilter === 'all' ? i.status !== 'disposed' : i.status === statusFilter));
   }, [items.data, hits, query, locationFilter, categoryFilter, statusFilter]);
+  // Expansion belongs to this filter/context instance, so returning to an old
+  // filter does not restore a larger page from a previous browse.
+  const browseScope = useMemo(() => ({ familyId, userId, query, locationFilter, categoryFilter, statusFilter }),
+    [familyId, userId, query, locationFilter, categoryFilter, statusFilter]);
+  const [browse, setBrowse] = useState<{ scope: object; limit: number } | null>(null);
+  const visibleLimit = browse?.scope === browseScope ? browse.limit : ITEMS_PER_PAGE;
+  const visibleItems = filtered.slice(0, visibleLimit);
+  const itemsListId = useId();
   const memberName = (id: string | null) => members.find((m) => m.id === id)?.display_name ?? null;
 
   async function deleteItem(item: Item) {
@@ -274,8 +285,9 @@ export function InventoryModule() {
           ) : filtered.length === 0 ? (
             <p className="rounded-2xl border border-dashed border-border px-4 py-8 text-center text-sm text-muted">{tr('inventory.noItemsMatchTheseFilters')}</p>
           ) : (
-            <ul className="grid gap-2 md:grid-cols-2">
-              {filtered.slice(0, 120).map((item) => {
+            <div className="space-y-3">
+            <ul id={itemsListId} className="grid gap-2 md:grid-cols-2">
+              {visibleItems.map((item) => {
                 const confirmed = lastConfirmed(moves.data, item.id);
                 return (
                   <li key={item.id} className="group flex items-center gap-3 rounded-2xl border border-border bg-surface/40 px-3 py-2.5">
@@ -300,6 +312,13 @@ export function InventoryModule() {
                 );
               })}
             </ul>
+            {visibleItems.length < filtered.length && (
+              <Button variant="secondary" aria-controls={itemsListId} onClick={() => setBrowse((current) => ({
+                scope: browseScope,
+                limit: (current?.scope === browseScope ? current.limit : ITEMS_PER_PAGE) + ITEMS_PER_PAGE,
+              }))}>{tr('more.more')}</Button>
+            )}
+            </div>
           )}
         </div>
       </div>

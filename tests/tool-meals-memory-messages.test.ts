@@ -233,7 +233,7 @@ describe('groceries.addFromMealPlan', () => {
         case 'meal_plans':
           return { data: [{ meal_id: 'meal-1', plan_date: '2026-09-08' }], error: null };
         case 'meals':
-          return { data: [{ id: 'meal-1', name: 'Tacos', ingredients: [{ name: 'tortillas', qty: '8' }, { name: 'onion', qty: '1' }] }], error: null };
+          return { data: [{ id: 'meal-1', family_id: 'fam-1', name: 'Tacos', ingredients: [{ name: 'tortillas', qty: '8' }, { name: 'onion', qty: '1' }] }], error: null };
         case 'pantry_items':
           return { data: [{ name: 'Onions', quantity: 3 }], error: null };
         // A household with nothing recorded answers with NO ROWS. The `default`
@@ -261,6 +261,10 @@ describe('groceries.addFromMealPlan', () => {
       meals: [{ id: 'meal-1', name: 'Tacos', date: '2026-09-08' }],
     });
     expect(calls[0].filters).toMatchObject({ family_id: 'fam-1', 'gte:plan_date': '2026-09-07', 'lte:plan_date': '2026-09-13' });
+    // Both the plan expansion and pre-insert ownership check read this family's meal.
+    const mealReads = calls.filter((call) => call.table === 'meals');
+    expect(mealReads).toHaveLength(2);
+    for (const read of mealReads) expect(read.filters).toMatchObject({ family_id: 'fam-1', id: ['meal-1'] });
     expect(calls.find((c) => c.table === 'grocery_items' && c.kind === 'insert')?.payload).toMatchObject([{ source_meal_id: 'meal-1' }]);
     expect(tool.summarize({}, res.data)).toBe('Added 1 item to the shopping list for 1 planned meal (1 in the pantry)');
   });

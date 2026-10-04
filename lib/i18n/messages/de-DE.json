@@ -16610,5 +16610,7 @@
   "blogBlogSearch.searchUnavailable": "Die Suche ist gerade nicht verfügbar. Versuche es gleich noch einmal.",
   "coach.onlyYourOwnHealth": "Sie können den Coach zu Ihrer eigenen Gesundheit fragen. Ein Elternteil oder Erwachsener kann nach anderen Familienmitgliedern fragen.",
   "medicationsModule.noMedicinesPrescribedToYou": "Ihnen wurden keine Medikamente verschrieben.",
-  "medicationsModule.yourOwnMedicinesOnly": "Sie sehen die Medikamente, die Ihnen verschrieben wurden. Ein Elternteil oder Erwachsener verwaltet die Verschreibungen der Familie."
+  "medicationsModule.yourOwnMedicinesOnly": "Sie sehen die Medikamente, die Ihnen verschrieben wurden. Ein Elternteil oder Erwachsener verwaltet die Verschreibungen der Familie.",
+  "mealsPlanner.addMealToLibrary": "Mahlzeit zur Bibliothek hinzufügen",
+  "mealsPlanner.noSavedChoices": "Noch keine gespeicherten Mahlzeiten oder Rezepte. Erstellen Sie unten eine neue Mahlzeit, um mit der Planung zu beginnen."
 }

@@ -16610,5 +16610,7 @@
   "blogBlogSearch.searchUnavailable": "La recherche est indisponible pour le moment. Réessayez dans un instant.",
   "coach.onlyYourOwnHealth": "Vous pouvez interroger le coach sur votre propre santé. Un parent ou un adulte peut poser des questions sur les autres membres de la famille.",
   "medicationsModule.noMedicinesPrescribedToYou": "Aucun médicament ne vous a été prescrit.",
-  "medicationsModule.yourOwnMedicinesOnly": "Vous voyez les médicaments qui vous sont prescrits. Un parent ou un adulte gère les prescriptions de la famille."
+  "medicationsModule.yourOwnMedicinesOnly": "Vous voyez les médicaments qui vous sont prescrits. Un parent ou un adulte gère les prescriptions de la famille.",
+  "mealsPlanner.addMealToLibrary": "Ajouter le repas à la bibliothèque",
+  "mealsPlanner.noSavedChoices": "Aucun repas ni recette enregistré pour le moment. Créez un nouveau repas ci-dessous pour commencer à planifier."
 }

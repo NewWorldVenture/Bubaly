@@ -156,10 +156,16 @@ export async function saveDashboardSettingsAction(input: { allowChildCustomizati
   const t = await getTranslations();
   const ctx = await requireUserContext();
   if (!isManager(ctx.active.role)) return { ok: false, error: t('customizeActions.onlyAParentGuardianCan2') };
+  // Server Action input is serialized at runtime: coercing "false" would
+  // persist true and turn child customization on instead of rejecting it.
+  if (input === null || typeof input !== 'object' || Array.isArray(input)
+    || typeof input.allowChildCustomization !== 'boolean' || typeof input.lockToFamilyDefault !== 'boolean') {
+    return { ok: false, error: t('errors.thatChangeWasNotSaved') };
+  }
   const familyId = ctx.active.familyId;
   const supabase = await createServer();
   const { error } = await supabase.from('family_dashboard_settings').upsert(
-    { family_id: familyId, allow_child_customization: !!input.allowChildCustomization, lock_to_family_default: !!input.lockToFamilyDefault, updated_by: ctx.user.id },
+    { family_id: familyId, allow_child_customization: input.allowChildCustomization, lock_to_family_default: input.lockToFamilyDefault, updated_by: ctx.user.id },
     { onConflict: 'family_id' },
   );
   if (error) return { ok: false, error: describeActionError(error) };
