@@ -46,7 +46,7 @@ function scope(tz:string,rows:SportsEventRow[],errorBranch?:'single'|'series'):S
     // own cap; the series read selects every series that started by the
     // window's end and has not ended before its start — unbounded, and paged
     // on with range() only when the count says the answer was cut, which a
-    // stand-in that answers everything it holds never does.
+    // stand-in that answers everything it holds and counts it never does.
     const series=url.searchParams.get('recurrence')==='neq.none';
     try {
       expect(url.origin).toBe('https://sports-proof.invalid');expect(url.pathname).toBe('/rest/v1/sports_events');expect(method).toBe('GET');expect(receipts.length).toBeLessThanOrEqual(2);
@@ -76,7 +76,8 @@ function scope(tz:string,rows:SportsEventRow[],errorBranch?:'single'|'series'):S
       }
       return true;
     });
-    return new Response(JSON.stringify(data),{status:200,headers:{'content-type':'application/json'}});
+    // PostgREST answers an exact-count request with Content-Range `first-last/total`; the shared read refuses an answer without it.
+    return new Response(JSON.stringify(data),{status:200,headers:{'content-type':'application/json','content-range':data.length?`0-${data.length-1}/${data.length}`:'*/0'}});
   };
   const db=createClient('https://sports-proof.invalid','synthetic-anon-not-a-secret',{accessToken:async()=>null,global:{fetch:inertFetch},auth:{persistSession:false,autoRefreshToken:false,detectSessionInUrl:false}});
   return {db:db as ServiceScope['db'],familyId:FAMILY,userId:null,memberId:MEMBER,role:'parent',actorKind:'member',tz};
