@@ -2898,6 +2898,7 @@
   "bills.category": "Categoría",
   "bills.delete": "Eliminar",
   "bills.dueDate": "Fecha límite",
+  "bills.dueDayNeedsDatabaseUpdate": "Esta factura vence el día {day} de cada mes y el mes siguiente es más corto. Ese día no se puede conservar hasta que se aplique una actualización de la base de datos, así que la factura se ha dejado como estaba y no se ha marcado como pagada.",
   "bills.recurring": "Recurrente",
   "bills.toggleAutoPay": "Alternar pago automático",
   "billsView.addANameAndAmount": "Añade un nombre y un importe",

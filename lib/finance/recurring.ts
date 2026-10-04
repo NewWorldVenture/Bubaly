@@ -160,24 +160,102 @@ export function isMissingDueDayColumn(error: unknown): boolean {
 }
 
 /**
- * Runs `write(patch)`; on a database without `bills.due_day` runs it once more
- * without that column, with a warning naming the migration — so a deploy
- * ahead of 0475 pays and adds bills exactly as before. What that database
- * CANNOT do is keep a month-end bill's day: rolled from Jan 31 it lands on
- * Feb 28 with nowhere to record the 31, so it steps from the 28th thereafter
- * and, once 0475 arrives, records 28 as its anchor (`billAnchorDay` reads the
- * due date's day when `due_day` is null; the migration has no backfill). That
- * loss is stated here and in the warning rather than papered over: the one
- * way to keep the day is to apply 0475 before the first roll (review
- * 5981566086 on #932). Any other refusal is returned as it came.
+ * What `writeBillPatch` answers, instead of writing, when a bill's day of
+ * month could be kept only in `bills.due_day` and the database has no such
+ * column yet (0475 not applied). Not a database error: nothing was sent.
+ */
+export const DUE_DAY_NOT_KEPT = 'BUBALY_DUE_DAY_NOT_KEPT';
+
+export interface DueDayNotKept {
+  code: typeof DUE_DAY_NOT_KEPT;
+  message: string;
+  /** The day of month the bill is anchored on: the day a short month would lose. */
+  day: number;
+  /** Where the bill would have rolled to, clamped to that month's last day. */
+  dueDate: string | null;
+}
+
+export function isDueDayNotKept(error: unknown): error is DueDayNotKept {
+  return typeof error === 'object' && error !== null && (error as { code?: unknown }).code === DUE_DAY_NOT_KEPT;
+}
+
+/**
+ * The anchor day a patch records that its own due date does not already say,
+ * or null when leaving `due_day` out loses nothing: there is none, or the due
+ * date falls on that very day (every new bill; every roll into a month long
+ * enough for its day). Non-null exactly when the roll was CLAMPED: a 31st
+ * bill landing on Feb 28 or Apr 30, a 29th or 30th bill on Feb 28, a 29 Feb
+ * yearly bill on 28 Feb of a common year.
+ */
+function dayOnlyDueDayCarries(patch: object): number | null {
+  const { due_day: day, due_date: date } = patch as { due_day?: unknown; due_date?: unknown };
+  if (day === null || day === undefined) return null;
+  const onDate = typeof date === 'string' ? parseDayKey(date)?.[2] ?? null : null;
+  if (onDate !== null && onDate === day) return null;
+  return isAnchorDay(day) ? day : null;
+}
+
+/**
+ * Runs `write(patch)`. On a database without `bills.due_day` (PGRST204 /
+ * 42703: 0475 not applied, which is production for now) it does one of two
+ * things, and never a third:
+ *
+ * - When the due date already carries the day (`dayOnlyDueDayCarries` is
+ *   null) it writes once more without the column. Nothing is lost: on that
+ *   database `billAnchorDay` reads the day from `due_date`, and it is the
+ *   same day. A new bill, a weekly bill, a bill on the 15th, and a 31st bill
+ *   rolling into March all go this way, so every other bill rolls exactly as
+ *   it would with 0475.
+ * - When only the column could carry it (a 31st bill rolling to Feb 28) it
+ *   writes NOTHING and answers `DueDayNotKept`. Both Mark paid buttons tell
+ *   the person, in their language, that the bill's day cannot be kept until
+ *   the database update is applied and that the bill was left as it was.
+ *
+ * Why refuse rather than roll. The roll would store Feb 28, and a 0176-era
+ * `bills` row (id, family_id, name, amount, due_date, is_recurring,
+ * recurrence, status, category, autopay, created_by, created_at, updated_at)
+ * has nowhere else to hold the 31: at Feb 28 it cannot tell a 28th bill from
+ * a clamped 31st, it would step to Mar 28 for ever, and 0475 could not
+ * recover the day afterwards. The alternatives were weighed:
+ *   (a) Carrying the day in an existing column. `recurrence` is the only free
+ *       text that is not the person's own words (`name`, `category`), but it
+ *       is not read through one parser: the Billing module prints it to the
+ *       person as stored, and the forecast matches it by exact name
+ *       (lib/finance/timeline.ts, where an unknown cadence is a one-off and
+ *       costs nothing a month), as does any client already deployed. An
+ *       encoding such as 'monthly@31' would show on screen and drop the bill
+ *       out of the forecast. `status` is an enum; `amount`, `due_date` and
+ *       the stamps mean what they say.
+ *   (b) Another durable signal without a migration. None exists: nothing
+ *       records the series' first date, Mark paid keeps no payment history,
+ *       and keeping the day in another table would be a second, non-atomic
+ *       write under different row-level security that every reader of
+ *       `bills` would have to join, and could itself be lost.
+ *   (c) Failing closed for exactly the case at risk. It is narrow (a bill on
+ *       the 29th, 30th or 31st rolling into a shorter month), it is said to
+ *       the person rather than hidden, and it loses nothing: the bill stays
+ *       as it was, still due and still on every list, and rolls with its day
+ *       once 0475 is applied.
+ * (c) is the only one that never loses the day silently, so it is this.
+ *
+ * Any other refusal is returned as it came, and a patch that never carried
+ * the column is never retried.
  */
 export async function writeBillPatch<P extends object, W extends (p: P) => PromiseLike<{ error: unknown }>>(
   patch: P,
   write: W,
-): Promise<Awaited<ReturnType<W>>> {
+): Promise<Awaited<ReturnType<W>> | { data: null; error: DueDayNotKept }> {
   const first = (await write(patch)) as Awaited<ReturnType<W>>;
   if (!first.error || !('due_day' in patch) || !isMissingDueDayColumn(first.error)) return first;
-  console.warn('bills.due_day is not in this database yet (migration 0475_a_month_end_bill_keeps_its_day has not been applied); writing without it. A month-end bill rolled on this database LOSES its original day: it steps from its clamped date, and once the column arrives it records that date\'s day, not the day it was created on. 0475 has no backfill that could recover it.');
+  const unkept = dayOnlyDueDayCarries(patch);
+  if (unkept !== null) {
+    const rolledTo = (patch as { due_date?: unknown }).due_date;
+    const dueDate = typeof rolledTo === 'string' ? rolledTo : null;
+    const message = `bills.due_day is not in this database yet (migration 0475_a_month_end_bill_keeps_its_day has not been applied). This bill is anchored on day ${unkept} and would roll to ${dueDate ?? 'a shorter month'}, where only that column could keep the day, so nothing was written. Apply 0475 and the bill rolls with its day kept.`;
+    console.warn(message);
+    return { data: null, error: { code: DUE_DAY_NOT_KEPT, message, day: unkept, dueDate } };
+  }
+  console.warn('bills.due_day is not in this database yet (migration 0475_a_month_end_bill_keeps_its_day has not been applied); writing without it. This due date falls on the bill\'s own day, so the date alone carries it and nothing is lost.');
   const rest = { ...patch } as Record<string, unknown>;
   delete rest.due_day;
   // The same row without the one column this database lacks.

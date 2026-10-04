@@ -3062,6 +3062,7 @@
   "bills.category": "Category",
   "bills.delete": "Delete",
   "bills.dueDate": "Due date",
+  "bills.dueDayNeedsDatabaseUpdate": "This bill is due on day {day} of each month, and the next month is shorter. That day can't be kept until a database update is applied, so the bill was left as it was and not marked paid.",
   "bills.recurring": "Recurring",
   "bills.toggleAutoPay": "Toggle Auto Pay",
   "billsView.addANameAndAmount": "Add a name and amount",

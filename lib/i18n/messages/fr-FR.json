@@ -2898,6 +2898,7 @@
   "bills.category": "Catégorie",
   "bills.delete": "Supprimer",
   "bills.dueDate": "Date d'échéance",
+  "bills.dueDayNeedsDatabaseUpdate": "Cette facture est due le {day} de chaque mois, et le mois suivant est plus court. Ce jour ne pourra être conservé qu'après l'application d'une mise à jour de la base de données. La facture a donc été laissée telle quelle et n'a pas été marquée comme payée.",
   "bills.recurring": "Récurrent",
   "bills.toggleAutoPay": "Activer ou désactiver le prélèvement",
   "billsView.addANameAndAmount": "Ajoutez un nom et un montant",

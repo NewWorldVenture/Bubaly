@@ -1,7 +1,7 @@
 import { readFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { describe, expect, it, vi } from 'vitest';
-import { billAnchorDay, billCadence, billPaidPatch, isMissingDueDayColumn, MONTH_BASED_CADENCES, newBillDueDay, nextBillDueDate, writeBillPatch } from '@/lib/finance/recurring';
+import { billAnchorDay, billCadence, billPaidPatch, DUE_DAY_NOT_KEPT, isDueDayNotKept, isMissingDueDayColumn, MONTH_BASED_CADENCES, newBillDueDay, nextBillDueDate, writeBillPatch } from '@/lib/finance/recurring';
 import { buildCashflowTimeline } from '@/lib/finance/timeline';
 import { at, bodyOf } from './helpers/source-order';
 import { createInMemorySupabase } from './helpers/in-memory-supabase';
@@ -140,7 +140,8 @@ describe('billPaidPatch — what "Mark paid" writes', () => {
     // The persisted row, paid on Mar 1: back on the 31st, still remembering it.
     expect(billPaidPatch({ status: 'upcoming', due_date: '2026-02-28', due_day: 31, is_recurring: true, recurrence: 'monthly' }, '2026-03-01'))
       .toEqual({ status: 'upcoming', due_date: '2026-03-31', due_day: 31 });
-    // A row from before 0475 that already sits on Feb 28 knows only the 28th: that is recorded, and stepped by.
+    // A row with no recorded day that sits on Feb 28 is a 28th bill: no roll ever clamps one there without
+    // recording the day (before 0475 such a roll is refused, see writeBillPatch), so the 28th is recorded and stepped by.
     expect(billPaidPatch({ status: 'upcoming', due_date: '2026-02-28', is_recurring: true, recurrence: 'monthly' }, '2026-03-01'))
       .toEqual({ status: 'upcoming', due_date: '2026-03-28', due_day: 28 });
     expect(billPaidPatch({ status: 'upcoming', due_date: '2026-11-30', is_recurring: true, recurrence: 'quarterly' }, '2026-12-01'))
@@ -167,20 +168,26 @@ describe('writeBillPatch — a database that has not applied 0475', () => {
     expect(isMissingDueDayColumn({ code: '23514', message: 'violates check constraint bills_due_day_check' })).toBe(false);
     expect(isMissingDueDayColumn(null)).toBe(false);
   });
-  it('writes once when the column is there, and once more without it when it is not', async () => {
+  it('writes once when the column is there, and once more without it when it is not and the due date carries the day', async () => {
     const ok = writes([{ error: null }]);
     expect(await writeBillPatch({ status: 'upcoming', due_date: '2026-02-28', due_day: 31 }, ok.write)).toEqual({ error: null });
     expect(ok.seen).toEqual([{ status: 'upcoming', due_date: '2026-02-28', due_day: 31 }]);
 
     const behind = writes([{ error: missing }, { error: null }]);
     const warn = vi.spyOn(console, 'warn').mockImplementation(() => undefined);
-    expect(await writeBillPatch({ status: 'upcoming', due_date: '2026-02-28', due_day: 31 }, behind.write)).toEqual({ error: null });
-    expect(behind.seen, 'the same row, without the one column').toEqual([{ status: 'upcoming', due_date: '2026-02-28', due_day: 31 }, { status: 'upcoming', due_date: '2026-02-28' }]);
-    // What that database cannot keep is said, not papered over (review 5981566086):
-    // the row lands on the 28th with nowhere to record the 31, and once 0475
-    // arrives it records 28 — the case `billPaidPatch` pins above as "a pre-0475
-    // row records the day of its current due date, which is all it knows".
-    expect(warn).toHaveBeenCalledWith(expect.stringMatching(/LOSES its original day.*0475 has no backfill/));
+    expect(await writeBillPatch({ status: 'upcoming', due_date: '2026-03-31', due_day: 31 }, behind.write)).toEqual({ error: null });
+    expect(behind.seen, 'the same row, without the one column').toEqual([{ status: 'upcoming', due_date: '2026-03-31', due_day: 31 }, { status: 'upcoming', due_date: '2026-03-31' }]);
+    expect(warn).toHaveBeenCalledWith(expect.stringMatching(/0475_a_month_end_bill_keeps_its_day.*nothing is lost/));
+    warn.mockRestore();
+  });
+  it('refuses, without writing, a roll whose day only the missing column could keep (review 5981566086: the day is not lost)', async () => {
+    const behind = writes([{ error: missing }, { error: null }]);
+    const warn = vi.spyOn(console, 'warn').mockImplementation(() => undefined);
+    const res = await writeBillPatch({ status: 'upcoming', due_date: '2026-02-28', due_day: 31 }, behind.write);
+    expect(behind.seen, 'only the first, refused attempt').toEqual([{ status: 'upcoming', due_date: '2026-02-28', due_day: 31 }]);
+    expect(isDueDayNotKept(res.error)).toBe(true);
+    expect(res).toMatchObject({ data: null, error: { code: DUE_DAY_NOT_KEPT, day: 31, dueDate: '2026-02-28' } });
+    expect(warn).toHaveBeenCalledWith(expect.stringMatching(/0475_a_month_end_bill_keeps_its_day.*day 31.*2026-02-28.*nothing was written/));
     warn.mockRestore();
   });
   it('does not retry any other refusal, nor a write that never carried the column', async () => {
@@ -285,7 +292,7 @@ describe('both Mark paid buttons write the patch, in the family\'s day', () => {
   });
   it('the Billing module', () => {
     const src = read('components/modules/billing-module.tsx');
-    expect(src).toContain("import { billPaidPatch, newBillDueDay, writeBillPatch } from '@/lib/finance/recurring';");
+    expect(src).toContain("import { billPaidPatch, isDueDayNotKept, newBillDueDay, writeBillPatch } from '@/lib/finance/recurring';");
     const body = bodyOf(src, 'async function markBillPaid(id: string) {', "success(tr('billingModule.billMarkedAsPaid'));");
     expect(body).toContain('billPaidPatch(bill, clock.todayKey())');
     expect(body).toContain('writeBillPatch(patch, (p) =>');

@@ -2898,6 +2898,7 @@
   "bills.category": "Kategorie",
   "bills.delete": "Löschen",
   "bills.dueDate": "Fälligkeitsdatum",
+  "bills.dueDayNeedsDatabaseUpdate": "Diese Rechnung ist jeden Monat am {day}. fällig, und der nächste Monat ist kürzer. Dieser Tag kann erst nach einem Datenbank-Update beibehalten werden, deshalb wurde die Rechnung unverändert gelassen und nicht als bezahlt markiert.",
   "bills.recurring": "Wiederkehrend",
   "bills.toggleAutoPay": "Lastschrift umschalten",
   "billsView.addANameAndAmount": "Fügen Sie Namen und Betrag hinzu",

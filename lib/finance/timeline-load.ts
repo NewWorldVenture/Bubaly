@@ -197,8 +197,10 @@ const BILL_COLUMNS_BEFORE_0475 = 'name, amount, due_date, is_recurring, recurren
  * The bills the forecast steps, with each one's anchor day (`due_day`, 0475).
  * On a database that has not applied 0475 the column is refused (PGRST204 /
  * 42703); the read is repeated without it, once, with a warning naming the
- * migration, and every bill steps from its due date's own day — which is all
- * that database knows.
+ * migration, and every bill steps from its due date's own day. On that
+ * database the due date's day IS the bill's day: a Mark paid that would clamp
+ * it to a shorter month is refused rather than written (lib/finance/recurring.ts
+ * `writeBillPatch`), so a bill due on the 31st still sits on a 31st.
  */
 async function readBills(supabase: SupabaseClient<Database>, familyId: string): Promise<{ data: unknown[] | null; error: unknown }> {
   const first = await supabase.from('bills').select(BILL_COLUMNS).eq('family_id', familyId).limit(1000);

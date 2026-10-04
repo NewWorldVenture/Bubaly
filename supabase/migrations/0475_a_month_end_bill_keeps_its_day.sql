@@ -16,6 +16,12 @@
 -- add forms write it for a new recurring bill. No default, no backfill, no
 -- index, no policy or function change; RLS is untouched.
 --
+-- No backfill is needed, either. Until this column exists the app writes a
+-- bill without it only when the due date already falls on the bill's own day,
+-- and refuses to roll a bill into a month too short for its day rather than
+-- clamp it (lib/finance/recurring.ts `writeBillPatch`), so no row reaching this
+-- migration holds a clamped date whose original day was lost.
+--
 -- Re-runnable: the column is added only if absent, and the check is named and
 -- added only if absent, so replaying this file onto a schema that already has
 -- it (docs/audit/rehearse-ledger-repair.sh) changes nothing.

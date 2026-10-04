@@ -4125,3 +4125,28 @@ a digest frozen before their removal. Both are proven in CI's Database job by
 
 **After applying:** nothing visible changes until the digest route is
 switched to the per-recipient engine; the route keeps its current behaviour.
+
+## `0475` — a month-end bill lost its day to a short month (#932)
+
+`supabase/migrations/0475_a_month_end_bill_keeps_its_day.sql`
+
+**Severity: low (a bill's due date). Deploy order: any; the app is written for
+both sides of it.** One nullable, checked column, `bills.due_day` (1–31): the
+day of month a monthly, quarterly or yearly bill is anchored on. No default, no
+backfill, no index, no policy or function change. It re-applies cleanly onto a
+schema that already has it.
+
+"Mark paid" now rolls a recurring bill to its next due date instead of closing
+it. A bill due on the 31st rolls to Feb 28 and must come back on Mar 31, and at
+Feb 28 the row alone cannot say so. Until 0475 is applied the app writes every
+roll whose due date falls on the bill's own day exactly as it would with the
+column, and REFUSES the one roll it cannot keep (a bill on the 29th, 30th or
+31st rolling into a shorter month): the bill is left as it was and the person
+is told, in their language, that its day can't be kept until a database update
+is applied. Applying 0475 lifts that refusal; nothing else changes.
+`docs/audit/a-month-end-bill-keeps-its-day-check.sql` proves the column's
+shape, its single check, and that a bill inserted without it reads null.
+
+**After applying:** mark paid a monthly bill due on the 31st of a month that is
+followed by a shorter one. It moves to the last day of the next month with no
+message; mark it paid again and it is back on the 31st.
