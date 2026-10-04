@@ -92,6 +92,38 @@ export const SCHEDULES = {
 export const TICK_MINUTES = 5;
 
 /**
+ * Daily routes the catch-up may call again within their occurrence.
+ *
+ * The catch-up leaves daily routes to Vercel (isSubDaily) because, for most of
+ * them, a call hours after the slot is a SECOND daily run on top of Vercel's. A
+ * route belongs here only when a second call for the same slot provably does
+ * nothing more than the first: it derives its occurrence from the SLOT — the
+ * most recent of its minutes at or before the call — not from the clock, and
+ * every send it makes carries that occurrence in an idempotency key the
+ * provider holds for longer than the occurrence lives. admin-digest reads the
+ * 24 h ending at the latest 12:30 UTC slot, renders the same bytes on every
+ * call, and sends each admin under `admin-digest/sha256(occurrence|to)`, which
+ * Resend folds for 24 h (app/api/cron/admin-digest/route.ts,
+ * tests/admin-digest-replay-contract.test.ts).
+ *
+ * What it buys: the route's own recovery. Its sends can fail after the first
+ * request outlived the keyed wait; the route answers 502, this script exits
+ * non-zero, a failed run is not a catch-up boundary (cron-run-history.mjs), so
+ * the NEXT tick's window reaches back over 12:30 and — with the route in this
+ * set — calls it again, under the same key, for the same occurrence. Without
+ * this set that tick evaluated the route over the fixed five minutes only and
+ * never called it (review 5979998496 on #946: `--dry-run --at 12:35` omitted it).
+ *
+ * What it does not buy, stated: a slot is caught up only while its occurrence is
+ * live. A window that reaches back over TWO of a route's slots calls the route
+ * once (dueRoutes), and the route resolves that call to the LATER slot; the
+ * earlier occurrence is not recovered, exactly as before. The cap
+ * (CATCH_UP_MAX_MINUTES, 24 h) keeps that to one missed occurrence at most.
+ * The durable per-recipient record is the delivery engine behind its flag.
+ */
+export const OCCURRENCE_SAFE_DAILY = new Set(['/api/cron/admin-digest']);
+
+/**
  * How far back a tick may look for firings it missed — the catch-up window.
  *
  * The workflow hands the dispatcher the start of its previous successful
@@ -159,9 +191,11 @@ export function matchesAt(expr, date) {
  * schedules Vercel Hobby accepts, so vercel.json mirrors each of them at the
  * same minute (pinned in tests/cron-dispatch.test.ts) and Vercel does fire them.
  * Catching one up hours later would be a second daily run on top of the one
- * Vercel sent: a wasted call for most routes, a second email for admin-digest
- * (tests/a-mirrored-cron-must-be-idempotent.test.ts). Inside the fixed
- * TICK_MINUTES window they are evaluated exactly as before.
+ * Vercel sent: a wasted call for most routes — and, until #946, a second email
+ * for admin-digest (tests/a-mirrored-cron-must-be-idempotent.test.ts). A daily
+ * route a second call cannot double is admitted by name instead
+ * (OCCURRENCE_SAFE_DAILY). Inside the fixed TICK_MINUTES window every daily
+ * route is evaluated exactly as before.
  * @param {string | ReturnType<typeof parseCron>} expr
  */
 export function isSubDaily(expr) {
@@ -201,13 +235,15 @@ export function tickWindow(now, since, tickMinutes = TICK_MINUTES, capMinutes = 
  * Routes whose schedule fired in the tick's window, each at most once.
  * Sub-daily routes are evaluated over the catch-up window (tickWindow); routes
  * that fire at most daily only over the fixed (now - tickMinutes, now], because
- * Vercel already fired them (isSubDaily).
+ * Vercel already fired them (isSubDaily) — except the ones a second call within
+ * the occurrence cannot double (OCCURRENCE_SAFE_DAILY), which are caught up too.
  * @param {Date} now
  * @param {Record<string, string>} [schedules]
  * @param {number} [tickMinutes]
  * @param {Date | string | null} [since]
+ * @param {Set<string>} [occurrenceSafe]
  */
-export function dueRoutes(now, schedules = SCHEDULES, tickMinutes = TICK_MINUTES, since = null) {
+export function dueRoutes(now, schedules = SCHEDULES, tickMinutes = TICK_MINUTES, since = null, occurrenceSafe = OCCURRENCE_SAFE_DAILY) {
   const fixedStart = now.getTime() - tickMinutes * 60_000;
   const catchUpStart = tickWindow(now, since, tickMinutes).start.getTime();
   const latest = new Date(now.getTime());
@@ -215,7 +251,7 @@ export function dueRoutes(now, schedules = SCHEDULES, tickMinutes = TICK_MINUTES
   const due = [];
   for (const [route, expr] of Object.entries(schedules)) {
     const parsed = parseCron(expr);
-    const start = isSubDaily(parsed) ? catchUpStart : fixedStart;
+    const start = isSubDaily(parsed) || occurrenceSafe.has(route) ? catchUpStart : fixedStart;
     for (let t = latest.getTime(); t > start; t -= 60_000) {
       if (matchesAt(parsed, new Date(t))) { due.push(route); break; }
     }

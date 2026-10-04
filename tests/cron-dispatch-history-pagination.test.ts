@@ -86,7 +86,13 @@ describe('cron history pagination', () => {
     const routes = dueRoutes(NOW, SCHEDULES, TICK_MINUTES, result.since);
     expect(routes.length).toBeGreaterThan(0);
     expect(new Set(routes).size).toBe(routes.length);
-    expect(routes).not.toContain('/api/cron/admin-digest');
+    // A day-long window holds one 12:30; admin-digest — the one daily route the
+    // catch-up calls again, because a second call within its occurrence sends
+    // nothing more (OCCURRENCE_SAFE_DAILY) — is therefore due, once. The other
+    // daily routes in that day stay Vercel's.
+    expect(routes.filter((r) => r === '/api/cron/admin-digest')).toHaveLength(1);
+    expect(routes).not.toContain('/api/cron/notifications');
+    expect(routes).not.toContain('/api/cron/calendar-feeds');
   });
 
   it('uses the previous successful scheduled run without scanning the failed-history pages', async () => {

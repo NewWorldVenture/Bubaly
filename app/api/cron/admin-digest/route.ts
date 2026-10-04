@@ -1,3 +1,4 @@
+import { createHash } from 'node:crypto';
 import { NextRequest, NextResponse } from 'next/server';
 import { getTranslations } from '@/lib/i18n/server';
 import { createServiceClient } from '@/lib/supabase/server';
@@ -9,6 +10,7 @@ import {
   buildAdminDigest, digestSubject, renderAdminDigestHtml, summarizeDigestDelivery, type DigestRow,
 } from '@/lib/admin/digest';
 import { adminDigestEngineEnabled, runAdminDigestEngineForRoute } from '@/lib/admin/digest-engine-route';
+import { adminDigestSlot } from '@/lib/admin/digest-occurrence';
 
 export const runtime = 'nodejs';
 export const dynamic = 'force-dynamic';
@@ -33,7 +35,52 @@ export async function GET(req: NextRequest) {
     return NextResponse.json(body, { status });
   }
 
-  const since = new Date(Date.now() - 24 * 60 * 60 * 1000).toISOString();
+  // The occurrence this tick belongs to — the owner's decided policy
+  // (docs/admin-digest-route-integration.md §2): the most recent 12:30 UTC slot
+  // at or before now, and the 24 h that END at it. Every tick for one slot —
+  // Vercel's and the GitHub dispatcher's at the same minute, a dispatch hours
+  // late, the retry a 502 invites — reads the same window, renders the same
+  // bytes and sends each admin under the same key, so the provider folds the
+  // repeat: that is the dedupe for a mirrored tick. Two ticks whose sends
+  // OVERLAP are the provider's 409 `concurrent_idempotent_requests` for the
+  // second; `sendEmail` waits for the first to settle and asks again under the
+  // same key, so the second is folded if the first was accepted and sent if
+  // the first failed — the recipient gets this occurrence's digest on this
+  // tick either way. The waiting is bounded (CONCURRENT_KEY_WAIT_BUDGET_MS from
+  // the first 409); a first request that outlives it and THEN fails leaves this
+  // tick with nothing sent for that admin and both ticks answering 502. That
+  // gap is retained, and closed by the scheduler, not by a receipt: the GitHub
+  // dispatcher exits non-zero on a 502, a failed run is not a catch-up boundary
+  // (scripts/cron-run-history.mjs), and this route is the one daily route the
+  // dispatcher's catch-up calls again (OCCURRENCE_SAFE_DAILY in
+  // scripts/cron-dispatch.mjs — daily routes are otherwise evaluated over the
+  // fixed five minutes only, so without that admission the next tick never
+  // called it; review 5979998496). The next tick's window reaches back over
+  // 12:30 and calls this route again — under the same key, which is now free.
+  // One dispatcher tick late, at most, as GitHub delivers it.
+  //
+  // The residual, stated: the catch-up recovers a slot only while its
+  // occurrence is live. If no tick arrives before the next 12:30, that tick
+  // resolves to the NEWER slot and the missed occurrence is not sent — one
+  // digest lost, not duplicated. The engine behind the flag keeps a receipt per
+  // admin per occurrence and is the durable answer to that.
+  //
+  // What is and is not durable here. Resend honours a key for 24 h while the
+  // payload is identical; an occurrence is live for at most 24 h (every tick
+  // until the next 12:30 slot belongs to it), so no tick of one occurrence can
+  // find its key expired. That is a fold at the provider, not a record of what
+  // was sent: this path writes no per-recipient receipt, a retry after a 502
+  // re-attempts every admin and relies on the fold for those already sent, and
+  // a provider that lost its key store would send again. The delivery engine
+  // above is the durable record — one receipt per admin per occurrence, and a
+  // retry that attempts only the unaccepted — behind its flag, because it needs
+  // migrations 0471/0474; this path needs none. Before this, the window was
+  // `now - 24h` and the label the clock's date, so two ticks a minute apart
+  // rendered different bytes and every super admin got two digests a day.
+  const slot = adminDigestSlot(new Date());
+  const since = slot.window.start;
+  const until = slot.window.end;
+  const keyFor = (to: string) => `admin-digest/${createHash('sha256').update(`${slot.occurrenceId}|${to}`).digest('hex')}`;
 
   // The whole 24h window, paged — not `.limit(500)`.
   //
@@ -63,6 +110,7 @@ export async function GET(req: NextRequest) {
     .from('admin_notifications')
     .select('kind, title, created_at')
     .gte('created_at', since)
+    .lt('created_at', until)
     .order('created_at', { ascending: false })
     .order('title')
     .order('id')
@@ -96,14 +144,13 @@ export async function GET(req: NextRequest) {
   }
 
   const appUrl = (process.env.NEXT_PUBLIC_APP_URL || 'https://www.bubaly.com').replace(/\/$/, '');
-  // Explicitly UTC: the digest has no family, and a label that followed the
-  // host's zone would name a different day from one cron host to the next.
-  const dateLabel = new Date().toLocaleDateString('en-US', { month: 'short', day: 'numeric', timeZone: 'UTC' });
+  // Labelled by the SLOT's date, in the zone the slot is defined in, so every tick renders the same bytes.
+  const dateLabel = slot.slot.toLocaleDateString('en-US', { month: 'short', day: 'numeric', timeZone: 'UTC' });
   const html = renderAdminDigestHtml(digest, { appUrl, dateLabel, recent: rows });
   const subject = digestSubject(digest, dateLabel);
 
   const delivery = await Promise.all(
-    emails.map((to) => sendEmail({ to, subject, html }).catch(() => ({ ok: false }))),
+    emails.map((to) => sendEmail({ to, subject, html, idempotencyKey: keyFor(to) }).catch(() => ({ ok: false }))),
   );
   const summary = summarizeDigestDelivery(delivery);
 
@@ -112,5 +159,6 @@ export async function GET(req: NextRequest) {
     recipients: emails.length,
     total: digest.total,
     headline: digest.headline,
+    occurrence: slot.occurrenceId,
   }, { status: summary.ok ? 200 : 502 });
 }
