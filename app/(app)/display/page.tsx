@@ -261,10 +261,13 @@ function birthdayMonthDay(raw: string | null): string | null {
 }
 
 /** "05-15" → "May 15" (safe; returns "" on a malformed pair). */
+// A month-and-day has no instant in it, so it is built and rendered in one
+// explicit zone rather than the host's: the two cancel out in any zone, where
+// local-midnight-in, host-zone-out only happened to.
 function formatBirthday(mmdd: string, locale: LocaleCode): string {
-  const d = new Date(`2000-${mmdd}T00:00:00`);
+  const d = new Date(`2000-${mmdd}T00:00:00Z`);
   return Number.isFinite(d.getTime())
-    ? d.toLocaleDateString(locale, { month: 'short', day: 'numeric' })
+    ? d.toLocaleDateString(locale, { month: 'short', day: 'numeric', timeZone: 'UTC' })
     : '';
 }
 
