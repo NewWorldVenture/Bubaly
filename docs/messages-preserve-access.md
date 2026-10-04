@@ -1,8 +1,9 @@
 # Messaging participant preservation candidate
 
 The owner selected preservation of existing participant access and a new, empty
-Family Chat. This source candidate follows main `7e19a9f` and the recurring-bill
-source at `17c14c98`. It has not been applied to a hosted database.
+Family Chat. The composed source includes main `d4ec0b65`, the recurring-bill candidate at
+0475, participant preservation at 0476 and private approval reads at 0477.
+It has not been applied to a hosted database.
 
 `supabase/migrations/0476_preserve_messaging_participants.sql` follows the
 unapplied bill migration at generation 0475 in the composed release candidate.
@@ -74,6 +75,14 @@ deletes, including callers active in multiple households. The tradeoff is
 contention across those active households. Service calls without `auth.uid()`
 lock only their explicit target family before its acting membership.
 
+Membership lifecycle guards acquire authenticated active-household parent
+locks before membership rows. Privileged/FK/manual inversions use nonblocking
+admission of actual old/new parents and return SQLSTATE 55P03 when the household
+is changing; callers must retry the transaction. They preserve real dirty-marker
+updates and do not swallow deadlocks or authorization errors. The focused fixture
+includes the actual lifecycle triggers and membership identity constraints, but
+does not establish compatibility with every migration or the hosted catalog.
+
 The browser rejects obsolete thread loads and removed-channel callbacks after
 family, user or thread changes. It also rejects events stamped for a different
 family or conversation. Read-receipt fallback is limited to an absent RPC;
@@ -108,9 +117,13 @@ node scripts/verify-messaging-preserve-access.mjs --postgres-bin '<postgres-bin>
 ```
 
 The dedicated workflow `.github/workflows/messaging-preserve-access.yml` runs
-the fixture and 17 two-session cases in a disposable PostgreSQL 17 service,
+the fixture and 25 separate-session checks in a disposable PostgreSQL 17 service,
 independently checks its container and data directory, and uses the declared
-Node release. It has not yet run on the hosted CI service for this candidate.
+Node release. The checks include a failing old-policy deadlock control and real
+membership dirty-marker/auth-user-cascade behavior. The earlier 17-check source
+passed hosted CI at `745f181dd`; this expanded composition still needs fresh CI.
+A second standalone SQL step exercises requester/manager approval reads, with
+an old-policy failure control; it does not rely on an opt-in Vitest test.
 
 The browser suite `tests/e2e/messaging-preserve-access.spec.ts` mounts the real
 React module and Supabase SDK with synthetic transport and channel events. It
