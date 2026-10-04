@@ -1,4 +1,5 @@
 import { canonicalZone, shiftedDay, validDay } from '@/lib/onboarding/ics-time';
+import type { CalendarWindowBounds } from '@/lib/briefing/calendar-window';
 
 export function displayTimezone(raw: unknown): { timezone: string; timezoneFallback: boolean } {
   try { return { timezone: canonicalZone(typeof raw === 'string' ? raw : ''), timezoneFallback: false }; }
@@ -40,6 +41,11 @@ export function displayCalendarWindow(firstDay: string, endDay: string, timezone
   if (!validDay(firstDay) || !validDay(endDay) || endDay <= firstDay) throw new RangeError('Invalid display calendar window');
   const formatter = dateFormatter(displayTimezone(timezone).timezone);
   return { firstDay, endDay, start: dayBoundary(firstDay, formatter), end: dayBoundary(endDay, formatter) };
+}
+
+/** A display window as the shared occurrences read takes it (lib/calendar/occurrences.ts). */
+export function displayCalendarBounds(window: DisplayCalendarWindow): CalendarWindowBounds {
+  return { timedFrom: window.start.toISOString(), timedTo: window.end.toISOString(), allDayFromDay: window.firstDay, allDayToDay: window.endDay };
 }
 
 export function familyDisplayCalendar(now: Date, rawTimezone: unknown) {
