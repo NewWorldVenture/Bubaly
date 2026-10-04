@@ -1,6 +1,7 @@
 import { createHash } from 'node:crypto';
 import { readFileSync } from 'node:fs';
 import { describe, expect, it } from 'vitest';
+import { at } from './helpers/source-order';
 
 const migration = readFileSync('supabase/migrations/0475_meal_plan_slot_writes_are_atomic.sql', 'utf8');
 const probe = readFileSync('docs/audit/listing-status-machine-check.sql', 'utf8');
@@ -57,10 +58,9 @@ describe('meal-plan replay exception in the listing status probe', () => {
     expect(whitelistedBranch).toBe(exactReplayBranch);
     expect(liveBranch).toBe(whitelistedBranch);
     expect(probe).toMatch(/meal_replace_replay_branch\s*=\s*meal_replace_replay_expected/i);
-    expect(compactFunction.indexOf(replayWhere)).toBeLessThan(compactFunction.indexOf(receiptUpdate));
-    expect(compactFunction.indexOf(replayWhere, compactFunction.indexOf(receiptUpdate))).toBeGreaterThan(
-      compactFunction.indexOf(receiptUpdate),
-    );
+    const receiptUpdateAt = at(compactFunction, receiptUpdate);
+    expect(at(compactFunction, replayWhere)).toBeLessThan(receiptUpdateAt);
+    expect(at(compactFunction.slice(receiptUpdateAt), replayWhere)).toBeGreaterThan(0);
     expect(probe).toContain(`position('${scopedReceiptUpdate}' in meal_replace_compact) > 0`);
     expect(compactFunction).toContain(scopedReceiptUpdate);
 
