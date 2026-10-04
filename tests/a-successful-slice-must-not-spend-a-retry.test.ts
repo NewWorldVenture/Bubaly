@@ -5,6 +5,7 @@ import type { SupabaseClient } from '@supabase/supabase-js';
 import type { Database } from '@/lib/database.types';
 import { createInMemorySupabase, type InMemorySupabase } from './helpers/in-memory-supabase';
 import { claimRun, releaseRun } from '@/lib/ai/runs/store';
+import { claimAiRunsMigration } from './helpers/claim-ai-runs';
 
 const ROOT = join(__dirname, '..');
 const FAMILY = '00000000-0000-4000-8000-00000000fa01';
@@ -47,8 +48,10 @@ const RUN = '00000000-0000-4000-8000-00000000ru01';
  * (run-executor.test.ts pins that through the real `runGraphWith`). A slice that
  * completed nothing keeps the charge, which is what still lets a run that never
  * progresses terminate — the proof Q40 asked for is the first case below. The
- * second half — the same ceiling inside `claim_ai_runs` — is a migration, and
- * is still open; the last case pins that the two claim paths still disagree.
+ * second half — the same ceiling inside `claim_ai_runs`, so that a run the
+ * one-row path refuses is abandoned by the cron rather than claimed for ever —
+ * is the migration the last case pins (tests/a-run-with-no-attempts-left-is-
+ * abandoned.test.ts drives it).
  *
  * This file drives the REAL `claimRun` against the in-memory PostgREST stand-in
  * — real filters, the real compare-and-set on `attempt` — with the park written
@@ -185,23 +188,31 @@ describe('a successful slice must not spend a retry (Q40)', () => {
     expect(executor.match(/budgetReset\(/g)?.length).toBe(4);
   });
 
-  it('the two claim paths still disagree — the second half of Q40 is a migration and is still open', () => {
-    // store.claimRun refuses at the ceiling; the cron RPC has no such filter in
-    // its claiming pass, so a run past max_attempts is unreachable by every
-    // human-initiated path while the cron keeps moving it. With the budget now
-    // spent only on slices that made no progress, that is much harder to reach
-    // — but the inconsistency itself is unchanged and still a bug.
-    const rpc = readFileSync(join(ROOT, 'supabase/migrations/0250_ai_runtime_core.sql'), 'utf8');
-    const claimPass = rpc.slice(rpc.indexOf('with candidates as'), rpc.indexOf('returning r.id'));
-    expect(claimPass, 'the claiming pass gained an attempt ceiling — re-check this finding').not.toMatch(/attempt\s*<\s*.*max_attempts/);
-    expect(claimPass, 'the claiming pass no longer increments attempt').toMatch(/attempt = r\.attempt \+ 1/);
+  it('the two claim paths agree: the cron abandons a run at the ceiling claimRun refuses at (Q40, second half)', () => {
+    // store.claimRun refuses at the ceiling. The cron RPC's claiming pass had no
+    // such filter, so a run past max_attempts was unreachable by every
+    // human-initiated path while the cron kept moving it — and its dead-letter
+    // arm never reached a parked run, because that arm only ran for an expired
+    // lease on an `executing` row. The current definition closes both.
+    const { sql } = claimAiRunsMigration(ROOT);
+    const recovery = sql.slice(sql.indexOf('with recovered as'), sql.indexOf('returning id, state'));
+    expect(recovery, 'a queued run at the ceiling is abandoned').toMatch(/state in \('ready','scheduled_followup'\)\s+and attempt >= max_attempts/);
+    const claimPass = sql.slice(sql.indexOf('with candidates as'), sql.indexOf('returning r.id'));
+    expect(claimPass, 'the claiming pass has the ceiling').toMatch(/and attempt < max_attempts/);
+    expect(claimPass, 'and still increments attempt').toMatch(/attempt = r\.attempt \+ 1/);
+    const store = readFileSync(join(ROOT, 'lib/ai/runs/store.ts'), 'utf8');
+    expect(store, 'the one-row path keeps its ceiling').toMatch(/run\.attempt < run\.max_attempts/);
 
-    // And the counter it spends is the one the recovery pass calls abandonment.
-    expect(rpc).toMatch(/case when attempt >= max_attempts then 'failed'/);
-    expect(rpc).toContain('Run abandoned after the maximum number of attempts.');
+    // And the counter both paths stop at is the one the recovery arm calls abandonment.
+    expect(sql).toMatch(/case when attempt >= max_attempts then 'failed'/);
+    expect(sql).toContain('Run abandoned after the maximum number of attempts.');
 
-    // Per-step retries are a different column entirely, which is the evidence
+    // The premise, kept as history: 0250's original claiming pass had no ceiling,
+    // and per-step retries were always a different column, which is the evidence
     // that run-level `attempt` was never meant to be the retry mechanism.
-    expect(rpc).toMatch(/max_retries/);
+    const original = readFileSync(join(ROOT, 'supabase/migrations/0250_ai_runtime_core.sql'), 'utf8');
+    const originalPass = original.slice(original.indexOf('with candidates as'), original.indexOf('returning r.id'));
+    expect(originalPass).not.toMatch(/attempt\s*<\s*.*max_attempts/);
+    expect(original).toMatch(/max_retries/);
   });
 });

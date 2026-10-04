@@ -10,8 +10,8 @@
 // awaits `runTool` without a deadline, so a tool can outlive the lease.
 //
 // The interleaving the review described, driven here through the real
-// `createExecutorPort` over the in-memory client and a predicate-for-predicate
-// stand-in for `claim_ai_runs` (0263):
+// `createExecutorPort` over the in-memory client and the predicate-for-predicate
+// stand-in for `claim_ai_runs` (tests/helpers/claim-ai-runs.ts):
 //
 //   worker A claims the run at attempt 4 with lease A and blocks inside a tool;
 //   A's lease expires;
@@ -43,8 +43,8 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import type { SupabaseClient } from '@supabase/supabase-js';
 import type { Database } from '@/lib/database.types';
 import type { ToolOutcome } from '@/lib/ai/tools/types';
-import { randomUUID } from 'node:crypto';
 import { createInMemorySupabase, type InMemorySupabase, type Row } from './helpers/in-memory-supabase';
+import { ABANDONED, claimAiRuns } from './helpers/claim-ai-runs';
 
 vi.mock('@/lib/supabase/server', () => ({
   createServiceClient: () => { throw new Error('the test hands the port its own client'); },
@@ -68,48 +68,6 @@ const NOW = new Date('2026-10-03T12:00:00.000Z');
 const CEILING = 5;
 
 const DONE: ToolOutcome = { status: 'ok', data: { id: 'ev-1' }, summary: 'Added the dentist.', toolCallId: 'call-1', verified: true };
-const ABANDONED = 'Run abandoned after the maximum number of attempts.';
-
-/**
- * `claim_ai_runs` as 0263 writes it, predicate for predicate (the same stand-in
- * tests/a-run-that-threw-is-not-stranded.test.ts drives the cron with): the
- * recovery pass over `executing` rows whose lease is NOT NULL and past — back
- * to `ready`, or `failed` once `attempt >= max_attempts` — then the candidates
- * from `ready` and `scheduled_followup`, each leased with one more attempt.
- * Rows are the live table objects.
- */
-function claimAiRuns(args: Record<string, unknown>, store: InMemorySupabase): string[] {
-  const limit = Math.max(1, Math.min(Number(args.p_limit ?? 10), 50));
-  const leaseSeconds = Math.max(30, Math.min(Number(args.p_lease_seconds ?? 120), 900));
-  const now = Date.now();
-  const rows = store.table('family_automation_runs') as Array<Row & { id: string }>;
-  for (const r of rows) {
-    if (r.state !== 'executing' || r.lease_expires_at == null || Date.parse(String(r.lease_expires_at)) >= now) continue;
-    const dead = Number(r.attempt) >= Number(r.max_attempts);
-    Object.assign(r, {
-      state: dead ? 'failed' : 'ready',
-      status: dead ? 'failed' : r.status,
-      error: dead ? (r.error ?? ABANDONED) : r.error,
-      completed_at: dead ? new Date(now).toISOString() : r.completed_at,
-      lease_owner: null, lease_expires_at: null, run_after: new Date(now).toISOString(),
-    });
-  }
-  const candidates = rows
-    .filter((r) => (r.state === 'ready' || r.state === 'scheduled_followup')
-      && Date.parse(String(r.run_after)) <= now
-      && (r.lease_expires_at == null || Date.parse(String(r.lease_expires_at)) < now)
-      && r.cancel_requested_at == null)
-    .sort((a, b) => String(a.run_after).localeCompare(String(b.run_after)))
-    .slice(0, limit);
-  for (const r of candidates) {
-    Object.assign(r, {
-      state: 'executing', attempt: Number(r.attempt) + 1, lease_owner: randomUUID(),
-      lease_expires_at: new Date(now + leaseSeconds * 1000).toISOString(), started_at: r.started_at ?? new Date(now).toISOString(),
-    });
-  }
-  return candidates.map((r) => r.id);
-}
-
 let db: InMemorySupabase;
 const client = () => db as unknown as SupabaseClient<Database>;
 const run = () => db.table('family_automation_runs').find((r) => r.id === RUN) as Row;
