@@ -38,9 +38,19 @@
 -- file. A deploy may precede its migration; nothing breaks, the window simply
 -- stays open until the function is there.
 --
+-- THE FAMILY IS THE FEED'S. The function runs as its caller, and the caller's
+-- RLS admits a calendar_events row for any family the caller belongs to. That
+-- is one check too few: an account in two households could sync feed A with a
+-- row labelled family B, and B's other members would see an event from A's
+-- feed (review 5981467749 on #908). So the family is read from the locked feed
+-- row and written on every row of the chunk; a row that names another family
+-- is refused with 42501 before anything is written, and a row that names none
+-- takes the feed's.
+--
 -- Verified on a replayed database: a chunk under the live fence lands (upserts
 -- and removals), the same chunk under a moved fence answers `lost` and changes
--- no row, and the lock ordering above holds under two sessions
+-- no row, an authenticated member of two families cannot label a row for the
+-- other one, and the lock ordering above holds under two sessions
 -- (docs/audit/a-calendar-feed-sync-writes-only-while-it-holds-its-claim-check.sql).
 
 create or replace function public.calendar_feed_apply_sync(
@@ -57,9 +67,12 @@ as $$
 declare
   v_columns text;
   v_updates text;
+  v_family  uuid;
 begin
   -- The claim, locked: this sync's and nobody else's, or nothing is written.
-  perform 1 from public.calendar_feeds
+  -- The feed's family comes out of the same locked row: it is the only family
+  -- any row of this chunk may belong to.
+  select family_id into v_family from public.calendar_feeds
     where id = p_feed_id and last_status = 'syncing' and updated_at = p_fence
     for update;
   if not found then
@@ -67,26 +80,36 @@ begin
   end if;
 
   if p_upserts is not null and jsonb_typeof(p_upserts) = 'array' and jsonb_array_length(p_upserts) > 0 then
-    -- The columns the rows carry, as table columns (an unknown key raises 42703).
+    -- A row's family is the feed's, full stop. The caller's own RLS admits a
+    -- row for any family the caller belongs to, which is not the same thing:
+    -- an account in two households could label feed A's rows for family B and
+    -- show B's members an event from A's feed. A row that names another family
+    -- is refused as a privilege error; a row that names none takes the feed's.
+    if exists (select 1 from jsonb_array_elements(p_upserts) e
+                where e ? 'family_id' and nullif(e->>'family_id', '')::uuid is distinct from v_family) then
+      raise exception 'calendar_feed_apply_sync: a row names a family other than the feed''s' using errcode = '42501';
+    end if;
+    -- The columns the rows carry, as table columns (an unknown key raises 42703);
+    -- the identity columns and the family are written from the locked feed.
     select string_agg(format('%I', k), ', ' order by k),
            string_agg(format('%I = excluded.%I', k, k), ', ' order by k)
       into v_columns, v_updates
       from (select distinct jsonb_object_keys(e) as k
               from jsonb_array_elements(p_upserts) e) keys
-     where k not in ('id', 'feed_id', 'external_uid', 'created_at');
+     where k not in ('id', 'feed_id', 'family_id', 'external_uid', 'created_at');
     if v_columns is null then
       raise exception 'calendar_feed_apply_sync: rows carry no columns to write' using errcode = '22023';
     end if;
     execute format(
-      'insert into public.calendar_events (feed_id, external_uid, %1$s)
-         select %2$L::uuid, r.external_uid, %3$s
+      'insert into public.calendar_events (feed_id, family_id, external_uid, %1$s)
+         select %2$L::uuid, %5$L::uuid, r.external_uid, %3$s
            from jsonb_populate_recordset(null::public.calendar_events, $1) r
        on conflict (feed_id, external_uid) do update set %4$s',
       v_columns, p_feed_id,
       (select string_agg(format('r.%I', k), ', ' order by k)
          from (select distinct jsonb_object_keys(e) as k from jsonb_array_elements(p_upserts) e) keys
-        where k not in ('id', 'feed_id', 'external_uid', 'created_at')),
-      v_updates)
+        where k not in ('id', 'feed_id', 'family_id', 'external_uid', 'created_at')),
+      v_updates, v_family)
     using p_upserts;
   end if;
 
@@ -100,7 +123,7 @@ end
 $$;
 
 comment on function public.calendar_feed_apply_sync(uuid, timestamptz, jsonb, text[]) is
-  'One chunk of a calendar feed sync, written only while the caller holds the feed''s claim (last_status = syncing, updated_at = p_fence): locks the feed row, upserts the rows on (feed_id, external_uid), deletes the named keys of this feed, answers applied; or writes nothing and answers lost. Security invoker: the caller''s own RLS governs it.';
+  'One chunk of a calendar feed sync, written only while the caller holds the feed''s claim (last_status = syncing, updated_at = p_fence): locks the feed row, upserts the rows on (feed_id, external_uid) with the feed''s own family_id (a row naming another family is refused, 42501), deletes the named keys of this feed, answers applied; or writes nothing and answers lost. Security invoker: the caller''s own RLS governs it.';
 
 do $$
 begin

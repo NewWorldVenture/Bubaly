@@ -18,6 +18,12 @@
 --      the removals (scope is the feed, not the key)                        -> asserted
 --   6  a chunk naming a column the table lacks is refused (42703), not
 --      silently dropped                                                     -> asserted
+--   7  AS AN AUTHENTICATED MEMBER OF TWO FAMILIES (set local role, the
+--      member's claim): a chunk for family A's feed whose row is labelled
+--      family B is refused (42501) and B gains no row — the caller's RLS
+--      would have admitted it (review 5981467749 on #908)                 -> asserted
+--   8  the same member's row that names no family lands under the feed's
+--      family, which the function takes from the locked feed row          -> asserted
 --
 -- Not shown here: the row lock serializing an in-flight chunk against a
 -- concurrent takeover. That needs two sessions; the unit test drives the same
@@ -36,6 +42,9 @@ declare
   feed     uuid := 'a4900000-0000-4000-8000-000000000011';
   other    uuid := 'a4900000-0000-4000-8000-000000000012';
   fence    timestamptz := '2026-10-04T12:00:00.123456+00:00';
+  famb     uuid := 'a4900000-0000-4000-8000-0000000000f2';
+  dad      uuid := 'a4900000-0000-4000-8000-000000000002';
+  feedb    uuid := 'a4900000-0000-4000-8000-000000000013';
   answer   text;
   n        int;
   title_now text;
@@ -126,7 +135,43 @@ begin
     null; -- 42703, as the header says
   end;
 
-  raise notice '0490 OK: a chunk is written under the live fence only; a taken-over or released claim writes nothing; removals stay in their feed; an unknown column is refused.';
+  -- 7. a member of two families cannot label feed A's rows for family B.
+  --    Mom is in A (she created it) and, from here, in B too. Under her own
+  --    role and claim the function runs with HER RLS: A's feed is hers to lock,
+  --    B's events are hers to insert — and the function must still refuse.
+  insert into auth.users (id, email) values (dad, 'fence-dad@example.test') on conflict (id) do nothing;
+  insert into public.families (id, name, created_by) values (famb, 'Fence B', dad) on conflict (id) do nothing;
+  insert into public.family_members (family_id, user_id, display_name, role, is_active)
+    values (famb, mom, 'Mom (also here)', 'parent', true);
+  insert into public.calendar_feeds (id, family_id, name, url, last_status, updated_at) values
+    (feedb, famb, 'B team', 'https://example.test/b.ics', 'ok', fence);
+  update public.calendar_feeds set last_status = 'syncing' where id = feed returning updated_at into fence;
+  execute 'set local role authenticated';
+  perform set_config('request.jwt.claim.sub', mom::text, true);
+  begin
+    perform public.calendar_feed_apply_sync(feed, fence,
+      jsonb_build_array(jsonb_build_object('family_id', famb, 'title', 'Smuggled', 'starts_at', '2026-10-14T19:00:00Z', 'all_day', false, 'recurrence', 'none', 'category', 'general', 'external_uid', 'smuggled')),
+      array[]::text[]);
+    raise exception '0490 FAIL: a row labelled for family B was written through family A''s feed';
+  exception when insufficient_privilege then
+    null; -- 42501, as the header says
+  end;
+  -- 8. a row that names no family takes the feed's.
+  select public.calendar_feed_apply_sync(feed, fence,
+    jsonb_build_array(jsonb_build_object('title', 'Unlabelled', 'starts_at', '2026-10-15T19:00:00Z', 'all_day', false, 'recurrence', 'none', 'category', 'general', 'external_uid', 'unlabelled')),
+    array[]::text[]) into answer;
+  if answer <> 'applied' then
+    raise exception '0490 FAIL: a member''s own chunk under the live fence answered %, expected applied', answer;
+  end if;
+  execute 'reset role';
+  if exists (select 1 from public.calendar_events where family_id = famb) then
+    raise exception '0490 FAIL: family B gained a row from family A''s feed';
+  end if;
+  if not exists (select 1 from public.calendar_events where feed_id = feed and external_uid = 'unlabelled' and family_id = fam) then
+    raise exception '0490 FAIL: a row that named no family did not land under the feed''s family';
+  end if;
+
+  raise notice '0490 OK: a chunk is written under the live fence only; a taken-over or released claim writes nothing; removals stay in their feed; an unknown column is refused; every row is the feed''s family''s, whoever calls.';
 end $probe$;
 
 rollback;
