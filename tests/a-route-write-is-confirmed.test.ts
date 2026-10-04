@@ -349,8 +349,15 @@ describe('services log what they cannot undo (C1-S9-65)', () => {
     });
   }
 
-  it('rollbacks of rows this call created compare counts exactly', () => {
-    expect(meals).toContain('else if ((removed?.length ?? 0) !== createdMealIds.length) {');
+  it('meal rollback validates its reference-aware cleanup receipt', () => {
+    const cleanup = block(meals, 'const removeCreatedMeals = async () => {');
+    expect(cleanup).toContain("rpc('meal_cleanup_unreferenced_custom'");
+    expect(cleanup).toContain('p_meal_ids: [...new Set(createdMealIds)]');
+    expect(cleanup).toContain('!Number.isSafeInteger(result.deleted)');
+    expect(cleanup).toContain('!Number.isSafeInteger(result.retained_referenced)');
+    expect(cleanup).toContain('(result.deleted as number) + (result.retained_referenced as number) > new Set(createdMealIds).size');
+    expect(cleanup).toContain('rollback of created meals returned an invalid receipt');
+    expect(cleanup).toContain('retained created meals already adopted by a plan');
     expect(trips).toContain('else if ((removed?.length ?? 0) !== ids.length) {');
   });
 
@@ -370,10 +377,20 @@ describe('services that stay ungated on rows say why (C1-S9-65)', () => {
     expect(code(approvals)).not.toMatch(/\.filter\('metadata->>approval_id', 'eq', row\.id\)\s*\.select\(/);
   });
 
-  it('the meal-plan rollback clear, which a readback confirms', () => {
-    expect(meals).toContain('`readTargetRows()` below RE-READS');
-    const w = meals.slice(at(meals, "const { error } = await scope.db.from('meal_plans').delete()"));
-    expect(w.slice(0, w.indexOf(';'))).not.toContain('.select(');
+  it('meal-plan writes use atomic receipts and confirm the saved plan', () => {
+    const plan = block(meals, 'export async function planWeek(');
+    expect(plan).toContain("rpc('meal_plan_replace_slots'");
+    expect(plan).toContain('if (error || !result || typeof result !== \'object\' || Array.isArray(result))');
+    expect(plan).toContain('const savedSlots = await loadSlots(scope, [...new Set(rows.map((row) => row.plan_date))]);');
+    expect(plan).toContain('planned.length !== rows.length');
+    expect(plan).not.toMatch(/\.from\('meal_plans'\)\s*\.(?:insert|delete)\(/);
+
+    // The return type includes an object shape, so use the remainder of the
+    // file instead of the brace-counting block helper.
+    const remove = meals.slice(at(meals, 'export async function removeSlot('));
+    expect(remove).toContain("rpc('meal_plan_remove_slot'");
+    expect(remove).toContain('(data as { id?: unknown }).id !== planId');
+    expect(remove).toContain("Could not confirm whether the planned meal was cleared.");
   });
 });
 
