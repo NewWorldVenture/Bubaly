@@ -23,7 +23,8 @@ function makeDb(tables: Record<string, TableSpec>) {
   const writes: { table: string; kind: 'insert' | 'update' | 'delete'; payload?: unknown }[] = [];
   const from = (table: string) => {
     const spec = tables[table] ?? {};
-    const reply = () => ({ data: spec.error ? null : (spec.rows ?? []), error: spec.error ?? null });
+    // A collection answer carries its count, as PostgREST's Content-Range does.
+    const reply = () => ({ data: spec.error ? null : (spec.rows ?? []), error: spec.error ?? null, count: spec.error ? null : (spec.rows ?? []).length });
     const one = () => ({ data: spec.error ? null : (spec.rows?.[0] ?? null), error: spec.error ?? null });
     const proxy: unknown = new Proxy({}, {
       get(_t, prop: string) {

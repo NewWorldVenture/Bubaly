@@ -92,8 +92,76 @@ export type OccurrencesOptions<C extends keyof EventRow> = {
   refine?: (query: OccurrenceFilters) => OccurrenceFilters;
 };
 
-/** More series than a household could have; a read past it is a failed read, never a silent prefix. */
+/** More series than a household could have; a window past it is a failed read, never a silent prefix. */
 const SERIES_READ_MAX = 2000;
+
+/**
+ * PostgREST's `db-max-rows` caps ONE response — 1,000 rows on a hosted Supabase
+ * project, and this repository sets no override — and does so silently: a
+ * 1,001-row answer arrives as 1,000 rows and no error. So neither read here
+ * trusts a single response. Each asks for an exact count; the first request is
+ * unbounded (one request answers a household under the cap, as before), and
+ * when the server answered fewer rows than it counted the read goes on with
+ * `.range()` from where the answer stopped, in pages of READ_PAGE, until the
+ * count is reached.
+ *
+ * The count is the only thing that tells a whole answer from a cut one, so it
+ * is held to what a count can be: a safe non-negative integer, the same on
+ * every page. An answer without one (a missing or unparsable Content-Range,
+ * which supabase-js reports as `count: null` with no error), a count that
+ * changes between pages (rows added or removed under the read, so offsets no
+ * longer mean what they did), a page that adds nothing or repeats rows already
+ * read, or more rows than were counted — each is a FAILED read, never a prefix
+ * that passes for the whole window. Before this, the series read asked for
+ * 2,001 rows and called only an answer above 2,000 oversized, so a household
+ * with 1,001–2,000 series read as its first 1,000. (Review 5981467603 and the
+ * recheck 5981632558 on #923.)
+ */
+const READ_PAGE = 1000;
+
+type PageResult = { data: unknown[] | null; error: { message: string } | null; count?: unknown };
+
+/** What a count can be: a safe non-negative integer. `null`, NaN, a fraction or a negative are not counts. */
+const isCount = (n: unknown): n is number => typeof n === 'number' && Number.isSafeInteger(n) && n >= 0;
+
+async function readPaged<T extends { id: unknown }>(
+  whole: () => PromiseLike<PageResult>,
+  more: (from: number, to: number) => PromiseLike<PageResult>,
+  max: number,
+  what: string,
+): Promise<{ rows: T[]; error: null } | { rows: null; error: { message: string } }> {
+  const refuse = (message: string) => ({ rows: null, error: { message: `${message}; the window cannot be read whole` } }) as const;
+  const rows: T[] = [];
+  const seen = new Set<string>();
+  let total: number | null = null;
+  for (;;) {
+    const res = await (rows.length === 0 ? whole() : more(rows.length, rows.length + READ_PAGE - 1));
+    if (res.error) return { rows: null, error: res.error };
+    if (!isCount(res.count)) return refuse(`The database answered without a usable count of the ${what} (${String(res.count)})`);
+    if (total === null) total = res.count;
+    else if (res.count !== total) return refuse(`The count of ${what} changed from ${total} to ${res.count} while the window was being read`);
+    if (total > max) return refuse(`More than ${max} ${what}`);
+    let added = 0;
+    const page = new Set<string>();
+    for (const r of (res.data ?? []) as T[]) {
+      // A row an EARLIER page already answered is the server repeating itself
+      // (an offset it ignored), not a new row; within one page every row is
+      // taken as it came. A row without an id cannot be recognised as a repeat.
+      const key = r.id == null ? null : String(r.id);
+      if (key !== null) {
+        if (seen.has(key)) continue;
+        page.add(key);
+      }
+      rows.push(r);
+      added += 1;
+    }
+    for (const key of page) seen.add(key);
+    if (rows.length > total) return refuse(`The database answered ${rows.length} ${what} but counted ${total}`);
+    if (rows.length === total) break;
+    if (added === 0) return refuse(`The database answered ${rows.length} of the ${total} ${what} it counted`);
+  }
+  return { rows, error: null };
+}
 
 /** A row that stands for a series: one record, an occurrence per step. */
 export const isSeries = (row: { recurrence: string | null }): boolean => !!row.recurrence && row.recurrence !== 'none';
@@ -102,13 +170,14 @@ const earlier = (a: string, b: string) => (a < b ? a : b);
 const later = (a: string, b: string) => (a > b ? a : b);
 
 /** The builder the core drives: a `select` already applied, the rest added here. */
-type WindowQuery = PromiseLike<{ data: unknown; error: { message: string } | null }> & {
+type WindowQuery = PromiseLike<{ data: unknown; error: { message: string } | null; count?: number | null }> & {
   eq(column: string, value: string): WindowQuery;
   neq(column: string, value: string): WindowQuery;
   lte(column: string, value: string): WindowQuery;
   or(filter: string): WindowQuery;
   order(column: string): WindowQuery;
   limit(count: number): WindowQuery;
+  range(from: number, to: number): WindowQuery;
 };
 
 type WindowRow = { id: string; starts_at: string; recurrence: string | null };
@@ -120,10 +189,12 @@ type WindowReads<R> = { singles: R[]; series: R[]; error: null } | { singles: nu
  * together: the one-off rows the window filter selects (series excluded, or a
  * master whose first occurrence falls in the window would appear twice), and
  * every series row that could reach the window — started by `latest`, not
- * ended before `earliest`. `neq` excludes a null recurrence as SQL does. One
- * row past the ceiling is read so a household past it is a failed read, not a
- * prefix. Both lists are filtered here as well as in the query, so a row the
- * database (or a stand-in for it) answers out of place is still counted once.
+ * ended before `earliest`. `neq` excludes a null recurrence as SQL does. Each
+ * read is checked against its exact count and paged when the answer was cut
+ * (see READ_PAGE); the `select` the caller hands in must ask for that count, and
+ * the order carries `id` as a tiebreaker so pages do not overlap on equal starts. Both lists are filtered here as well
+ * as in the query, so a row the database (or a stand-in for it) answers out of
+ * place is still counted once.
  */
 async function readWindowRows<R extends WindowRow>(args: {
   select: () => WindowQuery;
@@ -141,25 +212,28 @@ async function readWindowRows<R extends WindowRow>(args: {
     const own = args.scope ? query.eq(args.scope.column, args.scope.value) : query;
     return args.refine ? (args.refine(own as unknown as OccurrenceFilters) as unknown as WindowQuery) : own;
   };
-  const singlesBase = scoped(args.select().eq('family_id', args.familyId))
+  const singlesBase = () => scoped(args.select().eq('family_id', args.familyId))
     .or(args.singlesFilter)
     .or('recurrence.is.null,recurrence.eq.none')
-    .order('starts_at');
-  const singlesQuery = args.singlesLimit !== undefined ? singlesBase.limit(args.singlesLimit) : singlesBase;
-  const seriesQuery = scoped(args.select().eq('family_id', args.familyId))
+    .order('starts_at')
+    .order('id');
+  const seriesBase = () => scoped(args.select().eq('family_id', args.familyId))
     .neq('recurrence', 'none')
     .lte('starts_at', args.latest)
     .or(`recurrence_until.is.null,recurrence_until.gte.${args.earliest}`)
     .order('starts_at')
-    .limit(SERIES_READ_MAX + 1);
-  const [singles, series] = await Promise.all([singlesQuery, seriesQuery]);
+    .order('id');
+  // A caller that wants the nearest `singlesLimit` one-offs asks for exactly
+  // that many; everything else is read whole.
+  const singlesRead: Promise<{ rows: R[]; error: null } | { rows: null; error: { message: string } }> =
+    args.singlesLimit !== undefined
+      ? Promise.resolve(singlesBase().limit(args.singlesLimit)).then((r) => (r.error ? { rows: null, error: r.error } : { rows: (r.data ?? []) as R[], error: null }))
+      : readPaged<R>(() => singlesBase() as unknown as PromiseLike<PageResult>, (from, to) => singlesBase().range(from, to) as unknown as PromiseLike<PageResult>, Number.POSITIVE_INFINITY, 'one-off events');
+  const seriesRead = readPaged<R>(() => seriesBase() as unknown as PromiseLike<PageResult>, (from, to) => seriesBase().range(from, to) as unknown as PromiseLike<PageResult>, SERIES_READ_MAX, 'recurring events');
+  const [singles, series] = await Promise.all([singlesRead, seriesRead]);
   if (singles.error) return { singles: null, series: null, error: singles.error };
   if (series.error) return { singles: null, series: null, error: series.error };
-  const seriesRows = ((series.data ?? []) as R[]).filter(isSeries);
-  if (seriesRows.length > SERIES_READ_MAX) {
-    return { singles: null, series: null, error: { message: `More than ${SERIES_READ_MAX} recurring events; the window cannot be read whole` } };
-  }
-  return { singles: ((singles.data ?? []) as R[]).filter((row) => !isSeries(row)), series: seriesRows, error: null };
+  return { singles: singles.rows.filter((row) => !isSeries(row)), series: series.rows.filter(isSeries), error: null };
 }
 
 /** One-offs and occurrences together, in `starts_at` order, cut at `limit`; `count` is the total before the cut. */
@@ -190,7 +264,7 @@ export async function readCalendarOccurrences<C extends keyof EventRow = keyof E
   const dayStart = `${bounds.allDayFromDay}T00:00:00.000Z`;
   const dayEnd = `${bounds.allDayToDay}T00:00:00.000Z`;
   const read = await readWindowRows<CalendarOccurrence<C>>({
-    select: () => db.from('calendar_events').select(columns) as unknown as WindowQuery,
+    select: () => db.from('calendar_events').select(columns, { count: 'exact' }) as unknown as WindowQuery,
     familyId,
     singlesFilter: opts.singlesFilter ?? calendarWindowFilter(bounds),
     latest: later(bounds.timedTo, dayEnd),
@@ -257,7 +331,7 @@ export async function readSportsOccurrences<C extends keyof SportsRow = keyof Sp
 ): Promise<SportsOccurrencesResult<C>> {
   const columns = opts.columns ? [...new Set<string>([...opts.columns, ...SPORTS_RECURRENCE_COLUMNS])].join(', ') : '*';
   const read = await readWindowRows<SportsOccurrence<C>>({
-    select: () => db.from('sports_events').select(columns) as unknown as WindowQuery,
+    select: () => db.from('sports_events').select(columns, { count: 'exact' }) as unknown as WindowQuery,
     familyId,
     singlesFilter: timedWindowFilter(bounds),
     latest: bounds.timedTo,

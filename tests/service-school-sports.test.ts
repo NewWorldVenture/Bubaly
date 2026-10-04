@@ -21,7 +21,7 @@ function makeDb(respond: (call: Call) => Reply) {
     const chain = () => b;
     const filter = (column: string, value: unknown) => { call.filters[column] = value; return b; };
     Object.assign(b, {
-      select: chain, order: chain, limit: chain,
+      select: chain, order: chain, limit: chain, range: chain,
       eq: filter, is: filter, in: filter,
       neq: (c: string, v: unknown) => filter(`neq:${c}`, v),
       lte: (c: string, v: unknown) => filter(`lte:${c}`, v),
@@ -29,7 +29,8 @@ function makeDb(respond: (call: Call) => Reply) {
       not: (c: string, op: string, v: unknown) => filter(`not:${c}:${op}`, v),
       // A window arrives as one PostgREST `or`; a read may add more than one.
       or: (expression: string) => { call.filters.or = [...((call.filters.or as string[] | undefined) ?? []), expression]; return b; },
-      then: (resolve: (value: Reply) => void) => resolve(respond(call)),
+      // A collection answer carries its count, as PostgREST's Content-Range does.
+      then: (resolve: (value: Reply & { count?: number }) => void) => { const r = respond(call); resolve(Array.isArray(r.data) ? { ...r, count: r.data.length } : r); },
     });
     return b;
   };

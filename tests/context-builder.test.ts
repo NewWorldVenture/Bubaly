@@ -36,7 +36,8 @@ function makeDb(tables: Record<string, TableSpec>) {
       const all = spec.rows ?? [];
       return window ? all.slice(window.from, window.to + 1) : all;
     };
-    const reply = () => ({ data: spec.error ? null : rows(), error: spec.error ?? null });
+    // The count is the whole collection, before the page — as Content-Range reports it.
+    const reply = () => ({ data: spec.error ? null : rows(), error: spec.error ?? null, count: spec.error ? null : (spec.rows ?? []).length });
     const one = () => ({ data: spec.error ? null : (spec.rows?.[0] ?? null), error: spec.error ?? null });
     const builder: Record<string, unknown> = {};
     const proxy: unknown = new Proxy(builder, {
