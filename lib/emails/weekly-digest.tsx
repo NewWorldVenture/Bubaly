@@ -2,19 +2,26 @@ import * as React from 'react';
 import { APP_URL } from '@/lib/email';
 
 export function WeeklyDigestEmail({
-  familyName, adminName, events, openChores, mealsPlanned, memberCount, compareLine = null,
+  familyName, adminName, events, openChores, mealsPlanned, memberCount, compareLine = null, timeZone,
 }: {
   familyName: string;
   adminName: string;
+  /** `date` is a DAY KEY (YYYY-MM-DD) in the family's zone, not an instant. */
   events: { title: string; date: string }[];
   openChores: number;
   mealsPlanned: number;
   memberCount: number;
   /** "Families like yours …" — present only for benchmark-consenting families whose cohort cleared the floor. */
   compareLine?: string | null;
+  /**
+   * The family's IANA zone. This email is rendered by a cron on a UTC host, so
+   * without it "Week of …" was Greenwich's date — tomorrow's, from 5pm in
+   * California — and the host's in any other deployment.
+   */
+  timeZone: string;
 }) {
   const today = new Date();
-  const weekLabel = today.toLocaleDateString('en-US', { month: 'long', day: 'numeric' });
+  const weekLabel = today.toLocaleDateString('en-US', { month: 'long', day: 'numeric', timeZone });
 
   return (
     <html lang="en">
@@ -50,7 +57,8 @@ export function WeeklyDigestEmail({
             {events.slice(0, 5).map((e, i) => (
               <div key={i} style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '12px 20px', borderBottom: i < Math.min(events.length, 5) - 1 ? '1px solid #23364e' : undefined }}>
                 <p style={{ margin: 0, fontWeight: 500 }}>{e.title}</p>
-                <p style={{ margin: 0, fontSize: 12, color: '#94a0b8' }}>{new Date(e.date).toLocaleDateString('en-US', { weekday: 'short', month: 'short', day: 'numeric' })}</p>
+                <p style={{ margin: 0, fontSize: 12, color: '#94a0b8' }}>{/* A day key parses as UTC midnight; rendered in UTC it is that day in every zone. */}
+                {new Date(e.date).toLocaleDateString('en-US', { weekday: 'short', month: 'short', day: 'numeric', timeZone: 'UTC' })}</p>
               </div>
             ))}
           </div>

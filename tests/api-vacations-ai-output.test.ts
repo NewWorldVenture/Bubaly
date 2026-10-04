@@ -59,6 +59,8 @@ function from(table: string) {
     in: () => query,
     single: () => { single = true; return query; },
     maybeSingle: () => { single = true; return query; },
+    // The feature-tier read behind the route gate.
+    abortSignal: () => query,
     insert: (rows: unknown) => write('insert', rows),
     upsert: (rows: unknown) => write('upsert', rows),
     update: (rows: unknown) => write('update', rows),

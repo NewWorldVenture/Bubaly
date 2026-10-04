@@ -5,10 +5,18 @@ export function ChoreReminderEmail({
   memberName,
   chores,
   familyName,
+  timeZone,
 }: {
   memberName: string;
+  /** `dueAt` is an instant (chore_assignments.due_at is timestamptz). */
   chores: { title: string; points: number; dueAt?: string | null }[];
   familyName: string;
+  /**
+   * The family's IANA zone. A due date rendered with no zone on the cron's UTC
+   * host was Greenwich's day — a chore due Sunday evening in California read
+   * "Due Monday".
+   */
+  timeZone: string;
 }) {
   return (
     <html lang="en">
@@ -35,7 +43,7 @@ export function ChoreReminderEmail({
             }}>
               <div>
                 <p style={{ margin: 0, fontWeight: 600 }}>{c.title}</p>
-                {c.dueAt && <p style={{ margin: 0, fontSize: 12, color: '#94a0b8' }}>Due {new Date(c.dueAt).toLocaleDateString()}</p>}
+                {c.dueAt && <p style={{ margin: 0, fontSize: 12, color: '#94a0b8' }}>Due {new Date(c.dueAt).toLocaleDateString('en-US', { month: 'short', day: 'numeric', timeZone })}</p>}
               </div>
               <span style={{ background: '#7c5dff22', color: '#7c5dff', borderRadius: 8, padding: '4px 10px', fontSize: 13, fontWeight: 700 }}>
                 +{c.points} pts
