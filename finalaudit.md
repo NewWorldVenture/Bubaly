@@ -347,9 +347,10 @@ The TLS problem was a missing Node system-CA setting, not a reason to disable ce
 
 ## Current reconciled audit counts
 
+- Recounted row by row on 2026-10-04 from Register B itself (`node scripts/audit-register-counts.mjs`; `tests/the-audit-summary-counts-its-register.test.ts` now fails when this section and the rows disagree). The register holds 14,538 unique IDs with no duplicates and no unrecognised status. The previous 11,701 NOT STARTED / 2,484 IN PROGRESS tally predated LIBRARY-2E628A2A31CE's evidenced move from NOT STARTED to IN PROGRESS; the 15:39 UTC checkpoint already carried 11,700 / 2,485, and the rows confirm it.
 - Total Audit Items: **14,538**. Prior count explanations are preserved in the dated status summary below.
-- Not Started: **11,701**. Prior count explanations are preserved in the dated status summary below.
-- In Progress: **2,484**. Prior count explanations are preserved in the dated status summary below.
+- Not Started: **11,700**. Prior count explanations are preserved in the dated status summary below.
+- In Progress: **2,485**. Prior count explanations are preserved in the dated status summary below.
 - Passed: **185**. Prior count explanations are preserved in the dated status summary below.
 - Fixed + Passed: **159**. Prior count explanations are preserved in the dated status summary below.
 - Blocked: **9**. Prior count explanations are preserved in the dated status summary below.
