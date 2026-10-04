@@ -271,7 +271,7 @@ function queryResult(data: unknown[]) {
   // notifications in: `listUnread` scopes with `.or(user_id…)` and the route
   // marks the rows it rendered read. The fake has to offer every method the
   // route really calls, or a missing one reads as a route failure.
-  for (const method of ['select', 'eq', 'gte', 'lte', 'gt', 'order', 'limit', 'in', 'neq', 'is', 'not', 'or', 'update']) {
+  for (const method of ['select', 'eq', 'gte', 'lte', 'gt', 'order', 'limit', 'in', 'neq', 'is', 'not', 'or', 'update', 'abortSignal', 'maybeSingle']) {
     query[method] = vi.fn(() => query);
   }
   return query;
@@ -409,7 +409,10 @@ describe('Daily Brief route schema boundary', () => {
     vi.spyOn(console, 'error').mockImplementation(() => {});
     const error = new Error('Mock request boundary failure');
     if (boundary === 'authorization') mocks.requireUserContext.mockRejectedValue(error);
-    else mocks.from.mockImplementation(() => { throw error; });
+    // Every SOURCE read throws. The feature-tier read behind the route gate
+    // answers: it is not a source, and an unreadable tier map is the gate's
+    // own failure (503), tested in tests/feature-tier-read-deadline.test.ts.
+    else mocks.from.mockImplementation((table: string) => { if (table === 'app_settings') return queryResult([]); throw error; });
 
     const response = await requestBriefing();
     expect(response.status).toBe(500);

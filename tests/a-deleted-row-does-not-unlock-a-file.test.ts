@@ -232,16 +232,18 @@ describe('a deleted row does not unlock a file (SEC-015)', () => {
       const source = readFileSync(file, 'utf8');
       if (!/\.remove\(\s*\[/.test(source) && !/removeConfirmed\(/.test(source)) continue;
       if (!/storage/.test(source)) continue;
+      // Keep the inventory stable on Windows, where `path.join` emits `\\`.
+      const accountedPath = file.replace(/\\/g, '/');
       // A file counts as removing from storage whether it calls `.remove([...])`
       // itself or delegates to the shared rule; the three storage helpers now do
       // the latter, and a staleness check that only looked for the former
       // reported all three as gone.
-      if (/removeConfirmed\(/.test(source)) seen.add(file);
+      if (/removeConfirmed\(/.test(source)) seen.add(accountedPath);
       const lines = source.split('\n');
       for (let i = 0; i < lines.length; i++) {
         if (!/\.remove\(\s*\[/.test(lines[i])) continue;
-        seen.add(file);
-        if (!(file in ACCOUNTED)) unaccounted.push(`${file}:${i + 1} — a storage remove with no recorded handling`);
+        seen.add(accountedPath);
+        if (!(accountedPath in ACCOUNTED)) unaccounted.push(`${accountedPath}:${i + 1} — a storage remove with no recorded handling`);
       }
     }
     expect(unaccounted, unaccounted.join('\n')).toEqual([]);
@@ -285,6 +287,20 @@ describe('a deleted row does not unlock a file (SEC-015)', () => {
     // Both entry points, one behaviour.
     const refusing = { remove: async () => ({ data: [], error: null }), list: async () => ({ data: [{ name: NAME }], error: null }) } as RemovableBucket;
     expect((await removeConfirmed(refusing, KEY)).error).toBeTruthy();
+  });
+
+  it.each([
+    ['null list data', null],
+    ['an entry with no name', [{}]],
+    ['an entry with a null name', [{ name: null }]],
+    ['an entry with an empty name', [{ name: '' }]],
+    ['a null entry', [null]],
+  ])('fails closed when the storage list response has %s', async (_description, data) => {
+    const malformed = {
+      remove: async () => ({ data: [], error: null }),
+      list: async () => ({ data, error: null }),
+    } as unknown as RemovableBucket;
+    expect((await removeConfirmed(malformed, KEY)).error).toBe('The file could not be removed.');
   });
 
   it('the policy this depends on really does find the row', () => {

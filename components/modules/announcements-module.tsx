@@ -1,12 +1,13 @@
 'use client';
 
-import { useEffect, useMemo, useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import { Megaphone, Plus, Pin, PinOff, Trash2, Check, Users } from 'lucide-react';
 import { useApp } from '@/components/app/app-context';
 import { useRealtimeQuery } from '@/lib/hooks/use-realtime-query';
 import { createClient } from '@/lib/supabase/client';
 import { describeDbError, wroteNoRows } from '@/lib/supabase/errors';
 import { useToast } from '@/components/ui/toast';
+import { useConfirm } from '@/components/ui/confirm';
 import { Modal } from '@/components/ui/modal';
 import { Input, Textarea, Field } from '@/components/ui/input';
 import { Avatar } from '@/components/ui/avatar';
@@ -25,6 +26,7 @@ type Read = Tables<'announcement_reads'>;
 export function AnnouncementsModule() {
   const { fmtDateTime } = useFormat();
   const t = useTranslations();
+  const askConfirm = useConfirm();
   const { familyId, userId, role, members, selfMember } = useApp();
   const admin = isAdmin(role);
   const { success, error: toastError } = useToast();
@@ -58,7 +60,23 @@ export function AnnouncementsModule() {
   const [title, setTitle] = useState('');
   const [body, setBody] = useState('');
   const [pinned, setPinned] = useState(false);
-  const [saving, setSaving] = useState(false);
+  const composer = useMemo(() => ({ familyId, userId, active: false, instance: 0, revision: 0, pending: null as symbol | null }), [familyId, userId]);
+  const currentComposer = useRef(composer);
+  currentComposer.current = composer;
+  const [pending, setPending] = useState<{ owner: typeof composer; instance: number; token: symbol } | null>(null);
+  const saving = pending?.owner === composer && pending.instance === composer.instance && pending.token === composer.pending;
+
+  useEffect(() => {
+    composer.active = true;
+    return () => { composer.active = false; composer.instance += 1; composer.pending = null; };
+  }, [composer]);
+
+  function showComposer(open: boolean) {
+    composer.instance += 1;
+    composer.pending = null;
+    setPending(null);
+    setShowCompose(open);
+  }
 
   // Auto-mark unread announcements as read for the current member.
   useEffect(() => {
@@ -75,17 +93,34 @@ export function AnnouncementsModule() {
 
   async function post(e: React.FormEvent) {
     e.preventDefault();
-    if (!title.trim()) return;
-    setSaving(true);
-    const supabase = createClient();
-    const { error: err } = await supabase.from('family_announcements').insert({
-      family_id: familyId, author_id: userId, author_member_id: selfMember?.id ?? null,
-      title: title.trim(), body: body.trim() || null, is_pinned: pinned,
-    });
-    setSaving(false);
-    if (err) return toastError(describeDbError(err));
-    success(t('announcementsModule.announcementPosted'));
-    setTitle(''); setBody(''); setPinned(false); setShowCompose(false);
+    if (!title.trim() || !composer.active || composer.pending) return;
+    const token = Symbol('announcement post');
+    const { instance, revision } = composer;
+    composer.pending = token;
+    setPending({ owner: composer, instance, token });
+    const ownsDraft = () => composer.active && currentComposer.current === composer
+      && composer.instance === instance && composer.pending === token && composer.revision === revision;
+    try {
+      const supabase = createClient();
+      const { error: err } = await supabase.from('family_announcements').insert({
+        family_id: familyId, author_id: userId, author_member_id: selfMember?.id ?? null,
+        title: title.trim(), body: body.trim() || null, is_pinned: pinned,
+      });
+      if (!ownsDraft()) return;
+      if (err) return toastError(describeDbError(err));
+      success(t('announcementsModule.announcementPosted'));
+      setTitle(''); setBody(''); setPinned(false); showComposer(false);
+    } catch (cause) {
+      if (ownsDraft()) toastError(describeDbError(cause));
+    } finally {
+      // An old completion must not release a newer composer's pending post.
+      if (composer.pending === token) {
+        composer.pending = null;
+        if (composer.active && currentComposer.current === composer) {
+          setPending(previous => previous?.token === token ? null : previous);
+        }
+      }
+    }
   }
 
   async function togglePin(a: Announcement) {
@@ -96,9 +131,10 @@ export function AnnouncementsModule() {
     else if (wroteNoRows(updated)) toastError(t('errors.thatChangeWasNotSaved'));
   }
 
-  async function remove(id: string) {
+  async function remove(a: Announcement) {
+    if (!(await askConfirm({ title: t('confirm.deleteNamed', { name: a.title }), body: t('confirm.cannotBeUndone') }))) return;
     const supabase = createClient();
-    const { data: removed, error: err } = await supabase.from('family_announcements').delete().eq('id', id).select('id');
+    const { data: removed, error: err } = await supabase.from('family_announcements').delete().eq('id', a.id).select('id');
     if (err) toastError(describeDbError(err));
     else if (wroteNoRows(removed)) toastError(t('errors.thatChangeWasNotSaved'));
     else success(t('announcementsModule.announcementRemoved'));
@@ -112,7 +148,7 @@ export function AnnouncementsModule() {
         action={
           <div className="flex items-center gap-2">
             <AiInsight kind="announcements" iconOnly />
-            {admin && <Button onClick={() => setShowCompose(true)}><Plus className="h-4 w-4" /> New</Button>}
+            {admin && <Button onClick={() => showComposer(true)}><Plus className="h-4 w-4" /> New</Button>}
           </div>
         }
       />
@@ -152,7 +188,7 @@ export function AnnouncementsModule() {
                       <button onClick={() => togglePin(a)} title={a.is_pinned ? t('dialogTitle.unpin') : t('dialogTitle.pin')} className="rounded-lg p-1.5 text-muted hover:bg-elevated hover:text-fg">
                         {a.is_pinned ? <PinOff className="h-4 w-4" /> : <Pin className="h-4 w-4" />}
                       </button>
-                      <button onClick={() => remove(a.id)} title={t('announcements.delete')} className="rounded-lg p-1.5 text-muted hover:bg-elevated hover:text-danger">
+                      <button onClick={() => remove(a)} title={t('announcements.delete')} className="rounded-lg p-1.5 text-muted hover:bg-elevated hover:text-danger">
                         <Trash2 className="h-4 w-4" />
                       </button>
                     </div>
@@ -164,16 +200,16 @@ export function AnnouncementsModule() {
         </ul>
       )}
 
-      <Modal open={showCompose} onClose={() => setShowCompose(false)} title={t('announcements.newAnnouncement')}>
+      <Modal open={showCompose} onClose={() => showComposer(false)} title={t('announcements.newAnnouncement')}>
         <form onSubmit={post} className="space-y-4">
-          <Field label={t('announcements.title')} required>{(id) => <Input id={id} value={title} onChange={(e) => setTitle(e.target.value)} placeholder={t('announcements.eGEarlyDismissalFriday')} required />}</Field>
-          <Field label={t('announcements.details')}>{(id) => <Textarea id={id} value={body} onChange={(e) => setBody(e.target.value)} rows={4} placeholder={t('announcements.addAnyDetails')} />}</Field>
+          <Field label={t('announcements.title')} required>{(id) => <Input id={id} value={title} onChange={(e) => { composer.revision += 1; setTitle(e.target.value); }} placeholder={t('announcements.eGEarlyDismissalFriday')} required />}</Field>
+          <Field label={t('announcements.details')}>{(id) => <Textarea id={id} value={body} onChange={(e) => { composer.revision += 1; setBody(e.target.value); }} rows={4} placeholder={t('announcements.addAnyDetails')} />}</Field>
           <label className="flex items-center gap-2 text-sm">
-            <input type="checkbox" checked={pinned} onChange={(e) => setPinned(e.target.checked)} className="h-4 w-4 accent-[var(--brand)]" />
+            <input type="checkbox" checked={pinned} onChange={(e) => { composer.revision += 1; setPinned(e.target.checked); }} className="h-4 w-4 accent-[var(--brand)]" />
             {t('announcements.pinToTop')}
           </label>
           <div className="flex justify-end gap-2">
-            <Button type="button" variant="ghost" onClick={() => setShowCompose(false)}>{t('announcements.cancel')}</Button>
+            <Button type="button" variant="ghost" onClick={() => showComposer(false)}>{t('announcements.cancel')}</Button>
             <Button type="submit" loading={saving}><Check className="h-4 w-4" /> {t('announcements.post')}</Button>
           </div>
         </form>

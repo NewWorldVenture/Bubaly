@@ -9,6 +9,10 @@ export type FamilyReminderRow = {
   status: string;
   early_reminder_minutes: number | null;
   member_id: string | null;
+  /** 'none' or a cadence; a recurring reminder is one row whose `remind_at` rolls forward on completion. */
+  recurrence?: string | null;
+  /** Set while `status` is 'snoozed': when the person asked to be reminded again. */
+  snoozed_until?: string | null;
 };
 
 export type ReminderNotice = {
@@ -18,6 +22,17 @@ export type ReminderNotice = {
   remindAtIso: string;
   /** When this notice becomes due = remind_at minus the early lead time. */
   effectiveAtIso: string;
+  /**
+   * The dedupe key the notification row carries as `related_id`. The caller
+   * dedupes PERMANENTLY on it, so it has to name the OCCURRENCE, not just the
+   * reminder: a one-off keeps the key it always had (`fr:<id>`); a recurring
+   * reminder's row rolls its `remind_at` forward each time it is completed, so
+   * its key carries that instant; a snooze is a new occurrence at
+   * `snoozed_until`. Keyed by the row alone, the first notice stood in for
+   * every one after it — a daily medication reminder reminded once, ever, and
+   * a snoozed reminder never came back.
+   */
+  key: string;
 };
 
 const DAY_MS = 86_400_000;
@@ -36,13 +51,29 @@ export function dueFamilyReminderNotices(
   const start = now.getTime();
   const out: ReminderNotice[] = [];
   for (const r of rows) {
-    if (r.status !== 'active' || !r.remind_at) continue;
+    if (!r.remind_at) continue;
+    if (r.status === 'snoozed') {
+      // A snooze is "remind me again at this time": due exactly then, with no
+      // early lead (the person has already been told once).
+      if (!r.snoozed_until) continue;
+      const until = Date.parse(r.snoozed_until);
+      if (Number.isNaN(until)) continue;
+      if (until >= start && until <= start + windowMs) {
+        out.push({ id: r.id, title: r.title, remindAtIso: r.snoozed_until, effectiveAtIso: r.snoozed_until, key: `fr:${r.id}:snoozed:${r.snoozed_until}` });
+      }
+      continue;
+    }
+    if (r.status !== 'active') continue;
     const due = Date.parse(r.remind_at);
     if (Number.isNaN(due)) continue;
     const lead = r.early_reminder_minutes != null && r.early_reminder_minutes >= 0 ? r.early_reminder_minutes * 60_000 : 0;
     const effective = due - lead;
     if (effective >= start && effective <= start + windowMs) {
-      out.push({ id: r.id, title: r.title, remindAtIso: r.remind_at, effectiveAtIso: new Date(effective).toISOString() });
+      const recurring = !!r.recurrence && r.recurrence !== 'none';
+      out.push({
+        id: r.id, title: r.title, remindAtIso: r.remind_at, effectiveAtIso: new Date(effective).toISOString(),
+        key: recurring ? `fr:${r.id}:${r.remind_at}` : `fr:${r.id}`,
+      });
     }
   }
   return out;

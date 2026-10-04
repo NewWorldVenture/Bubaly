@@ -82,7 +82,8 @@ async function detail() { return html(await DetailPage({ params: Promise.resolve
 
 beforeEach(() => {
   vi.clearAllMocks(); boundary.locale = 'en-US';
-  boundary.auth.mockReset().mockResolvedValue({ active: { familyId }, user: { id: userId } });
+  // `family.timezone`: the post page dates each attempt in the family's zone.
+  boundary.auth.mockReset().mockResolvedValue({ active: { familyId, family: { timezone: 'UTC' } }, user: { id: userId } });
   boundary.feed.mockReset().mockResolvedValue([]); boundary.inbox.mockReset().mockResolvedValue({ comments: [], messages: [] });
   boundary.post.mockReset(); setPost(); boundary.calendar.mockReset().mockResolvedValue([]); boundary.accounts.mockReset().mockResolvedValue([{ ...baseAccount }]);
   boundary.settings.mockReset().mockResolvedValue({ data: { default_timezone: 'America/New_York' }, error: null });

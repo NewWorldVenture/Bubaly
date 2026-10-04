@@ -19,10 +19,13 @@
 -- product (`/kid-login` is whitelisted in middleware.ts), so that policy lets a
 -- minor turn off autopay on the mortgage or delete a budget.
 --
--- So this matches on the policy EXPRESSION instead. Every row it returns is a
--- write a non-manager can currently make against the household's money.
+-- So this matches on the policy EXPRESSION instead. The first result is a list
+-- of permissive write candidates, not a final access verdict: a restrictive
+-- manager guard may still block a candidate. Read the second result too;
+-- only a missing/incomplete backstop makes a listed policy open.
 --
--- WHAT A GOOD RESULT LOOKS LIKE: zero rows.
+-- WHAT A GOOD RESULT LOOKS LIKE: zero candidates, or every candidate's table
+-- reports `guarded` in the second result.
 
 select
   c.relname                                   as table_name,
@@ -38,7 +41,7 @@ join pg_class c     on c.oid = p.polrelid
 join pg_namespace n on n.oid = c.relnamespace
 where n.nspname = 'public'
   and c.relname = any (array[
-    'family_wallets','child_wallets','wallet_buckets','wallet_transactions','wallet_rules',
+    'family_wallets','child_wallets','wallet_buckets','wallet_transactions','wallet_rules','allowance_rules',
     'financial_accounts','transactions','budgets','bills','savings_goals'])
   -- Permissive policies OR together, so any one of them can grant a write on
   -- its own. Restrictive ones AND, so they can only ever take access away and
@@ -48,7 +51,9 @@ where n.nspname = 'public'
   -- migration 0267's header for why narrowing reads is a product decision
   -- rather than a security fix.
   and p.polcmd in ('a','w','d','*')
-  -- The actual test: does this policy require manager role?
+ -- This first result is a policy candidate list, not a final access verdict:
+ -- a restrictive manager guard can still block a row below. Read the second
+ -- result too; only a missing/incomplete backstop makes a listed policy open.
   and coalesce(pg_get_expr(p.polqual, p.polrelid), '') || ' ' ||
       coalesce(pg_get_expr(p.polwithcheck, p.polrelid), '') not like '%can_manage_family%'
 order by c.relname, p.polcmd, p.polname;
@@ -111,7 +116,7 @@ select
   end                                                            as verdict
 from (
   select unnest(array[
-    'family_wallets','child_wallets','wallet_buckets','wallet_transactions','wallet_rules',
+    'family_wallets','child_wallets','wallet_buckets','wallet_transactions','wallet_rules','allowance_rules',
     'financial_accounts','transactions','budgets','bills','savings_goals']) as table_name
 ) t
 -- to_regclass resolves against the search_path and returns exactly one oid, so

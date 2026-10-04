@@ -78,11 +78,12 @@ async function Unavailable({ message, retryHref }: { message: string; retryHref:
   );
 }
 
-function whenLabel(iso: string, locale: string): string {
+// `tz` is the family's zone: without it a run's clock was the host's.
+function whenLabel(iso: string, locale: string, tz: string): string {
   const ms = Date.parse(iso);
   if (!Number.isFinite(ms)) return '';
   try {
-    return new Date(ms).toLocaleString(locale, { month: 'short', day: 'numeric', hour: 'numeric', minute: '2-digit' });
+    return new Date(ms).toLocaleString(locale, { month: 'short', day: 'numeric', hour: 'numeric', minute: '2-digit', timeZone: tz });
   } catch {
     return new Date(ms).toISOString().slice(0, 16).replace('T', ' ');
   }
@@ -97,6 +98,7 @@ export default async function RunHistoryPage({ searchParams }: { searchParams: P
   const selfHref = historyHref(filter, before);
 
   const ctx = await requireFeature('/dashboard/concierge/runs');
+  const tz = ctx.active.family.timezone || 'UTC';
   const supabase = await createServer();
   const familyId = ctx.active.familyId;
 
@@ -179,7 +181,7 @@ export default async function RunHistoryPage({ searchParams }: { searchParams: P
                     <StatusBadge state={item.state} />
                     {item.startedByRoutine && <span className="text-xs text-muted">{t('dashboardConciergeRuns.startedByARoutine')}</span>}
                     <span className="ml-auto text-xs tabular-nums text-muted">
-                      <time dateTime={item.finishedAt ?? item.createdAt}>{whenLabel(item.finishedAt ?? item.createdAt, locale.code)}</time>
+                      <time dateTime={item.finishedAt ?? item.createdAt}>{whenLabel(item.finishedAt ?? item.createdAt, locale.code, tz)}</time>
                     </span>
                   </div>
                   <p className="mt-1.5 text-sm font-semibold text-fg">{item.title ?? t('runHistory.aRequestFromYourFamily')}</p>

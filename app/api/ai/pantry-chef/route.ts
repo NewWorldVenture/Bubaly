@@ -141,7 +141,7 @@ export async function POST(req: NextRequest) {
     }
     const model = aiConfig.model && /^(gpt-|o\d|chatgpt-)/i.test(aiConfig.model) ? aiConfig.model : 'gpt-4o';
 
-    const prompt = buildPantryChefPrompt(allergies, new Date());
+    const prompt = buildPantryChefPrompt(allergies, new Date(), ctx.active.family.timezone || 'UTC');
     const aiRes = await fetchWithDeadline('https://api.openai.com/v1/chat/completions', {
       method: 'POST',
       headers: { 'content-type': 'application/json', authorization: `Bearer ${apiKey}` },

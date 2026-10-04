@@ -50,10 +50,10 @@ export async function readBoundedRequestBytes(req: Request, maxBytes: number): P
 
   if (!req.body) return { ok: true, bytes: new Uint8Array() };
 
-  const reader = req.body.getReader();
   const chunks: Uint8Array[] = [];
   let total = 0;
   try {
+    const reader = req.body.getReader();
     while (true) {
       const { done, value } = await reader.read();
       if (done) break;

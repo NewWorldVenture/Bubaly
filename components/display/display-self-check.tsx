@@ -24,7 +24,7 @@
 // The runner is a plain function over an injected environment so the outcomes
 // are unit-tested (tests/display-setup-page.test.ts) without a browser.
 
-import { useCallback, useState } from 'react';
+import { useCallback, useRef, useState } from 'react';
 import { AlertTriangle, CheckCircle2, CircleDashed, Loader2, PlayCircle, XCircle } from 'lucide-react';
 import { createWakeLock, type WakeLockDocumentLike, type WakeLockNavigatorLike } from '@/lib/display/wake-lock';
 import { isBundleStaleByAge, isStaleBundleError, shouldHardReload } from '@/lib/display/recover';
@@ -146,8 +146,12 @@ export function DisplaySelfCheck() {
   const [results, setResults] = useState<Partial<Record<SelfCheckId, SelfCheckResult>>>({});
   const [running, setRunning] = useState<SelfCheckId | null>(null);
   const [busy, setBusy] = useState(false);
+  // Refuses a second run before the busy render lands (a held Enter repeats).
+  const runningRef = useRef(false);
 
   const run = useCallback(async () => {
+    if (runningRef.current) return;
+    runningRef.current = true;
     setBusy(true);
     setResults({});
     setRunning(SELF_CHECK_IDS[0]);
@@ -165,6 +169,7 @@ export function DisplaySelfCheck() {
     );
     setRunning(null);
     setBusy(false);
+    runningRef.current = false;
   }, []);
 
   return (
@@ -174,11 +179,14 @@ export function DisplaySelfCheck() {
           <h2 className="text-lg font-semibold">{t('displaySetup.testThisDisplay')}</h2>
           <p className="mt-1 text-sm text-muted">{t('displaySetup.testIntro')}</p>
         </div>
+        {/* aria-disabled, not disabled: a natively disabled button drops the
+            keyboard focus that pressed it to <body>, and the next Tab then
+            skips past it (UI-WF-024). The run itself refuses a second press. */}
         <button
           type="button"
           onClick={() => void run()}
-          disabled={busy}
-          className="inline-flex min-h-11 items-center gap-2 rounded-full bg-brand px-4 py-2 text-sm font-semibold text-brand-fg transition hover:opacity-90 focus-ring disabled:opacity-60"
+          aria-disabled={busy || undefined}
+          className="inline-flex min-h-11 items-center gap-2 rounded-full bg-brand px-4 py-2 text-sm font-semibold text-brand-fg transition hover:opacity-90 focus-ring aria-disabled:opacity-60"
         >
           {busy ? <Loader2 className="h-4 w-4 animate-spin" aria-hidden /> : <PlayCircle className="h-4 w-4" aria-hidden />}
           {t('displaySetup.runTheChecks')}

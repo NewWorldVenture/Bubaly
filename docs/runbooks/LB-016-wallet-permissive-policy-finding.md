@@ -54,6 +54,11 @@ still open: §4. It is why that workflow run is red. A red
 `Supabase production migrations` check does **not** mean the money finding is
 back — check `moneyWrites` in the run's log before assuming it does.
 
+**Scope of this dated all-clear:** the historical auditor enumerated ten tables
+and omitted `allowance_rules`. Its no-finding result applies to that inventory;
+production had not recorded 0306, so it does not establish allowance-rule
+write safety. See §0.2 before reading this as a broader production claim.
+
 ### 0.1 Correction (2026-09-11): the all-clear above is narrower than it reads
 
 An operator ran the §4.3 pre-flight against production and it did **not** return
@@ -95,6 +100,13 @@ all of those states.
 
 That query was run against production. Every one of the ten money tables:
 
+> Historical scope: the 2026-09-11 audit inventory omitted `allowance_rules`, so
+> this result says nothing about allowance-rule writes. Migration 0088's
+> family-member policy permits those writes; 0306 adds restrictive manager
+> guards, but it is not recorded as applied in production. Use the current
+> money boundary query for allowance status; do not extend this dated ten-table
+> result to that table.
+
 ```
 table_exists true · rls_enabled true · restrictive_guards 3 · permissive_writes 3
 ungated_permissive_writes 0 · offending_policies NULL
@@ -103,7 +115,9 @@ verdict: CLOSED - every write is manager-gated
 
 Three guards on **both** the wallet and the finance group is `0275`'s signature
 (`0254` reaches the wallet group only), so `0254` and `0275` are both present in
-the schema. **There is no live money finding, and the §4 repair is unblocked.**
+the schema as of that dated reading. This established a historical result for
+the audited tables only; it is not a current all-money clear or a result for
+`allowance_rules`.
 
 `moneyWriteVerdict` now reports this same way rather than by omission: it reads
 `tables[].rls`, lists `rlsDisabled` / `noWritePolicy` / `absent` explicitly, and
@@ -306,6 +320,16 @@ Every group has since been renamed to a unique version preserving apply order
 and `tests/migration-version-safety.test.ts` fails if a duplicate returns.
 
 ### 4.3 The procedure
+
+> **2026-10-03:** this procedure's premise no longer holds. Production's
+> ledger records `0001`–`0176` and `requiresBaselineReview` is `false` (the
+> `Supabase production migrations` workflow, run 84 on `d25e39ea`, 2026-10-02),
+> so there is no replay from `0004` to run and the conflict with
+> `docs/PENDING_PROD_MIGRATIONS.md` over such a replay (DEPLOY-003) is moot.
+> What remains is the ordered forward apply from `0177`, which is held by
+> `0177`'s statement timeout (PROD-DB-0177) and is the owner's dispatch. The
+> steps below are kept as the record of what was planned when the ledger
+> stopped at `0003`; §4.4's window warning still applies to any ordered apply.
 
 1. **Pre-flight.** Run `docs/audit/migration-ledger-state.sql` — read-only. It
    reports what the ledger holds, how far ahead the schema is, and whether the
