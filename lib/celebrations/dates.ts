@@ -39,6 +39,28 @@ export function daysUntilNext(date: string, from: Date = new Date()): number | n
   return Math.round((next.getTime() - today.getTime()) / 86400000);
 }
 
+/**
+ * Days until the next annual occurrence of a date, counted FROM A DAY KEY
+ * (0 = today) — the server surface's `daysUntilNext`.
+ *
+ * `daysUntilNext` reads `from`'s local calendar parts, which on a page a UTC
+ * host renders is Greenwich's today: from 5pm in California the grandparent
+ * portal counted every birthday and family date from tomorrow, so today's was
+ * "in 364 days". The caller hands in `dayKeyInTz(now, family.timezone)` and no
+ * instant is involved. An impossible date (29 Feb in a common year) normalises
+ * forward to 1 Mar, as `new Date(y, m - 1, d)` always has.
+ */
+export function daysUntilNextOn(date: string, todayKey: string): number | null {
+  const p = parseMonthDay(date);
+  const t = /^(\d{4})-(\d{2})-(\d{2})$/.exec(todayKey);
+  if (!p || !t) return null;
+  const today = Date.UTC(Number(t[1]), Number(t[2]) - 1, Number(t[3]));
+  let next = Date.UTC(Number(t[1]), p.m - 1, p.d);
+  if (next < today) next = Date.UTC(Number(t[1]) + 1, p.m - 1, p.d);
+  if (!Number.isFinite(today) || !Number.isFinite(next)) return null;
+  return Math.round((next - today) / 86400000);
+}
+
 /** Resolve a list of inputs into upcoming celebrations within `withinDays`. */
 export function upcomingCelebrations(
   items: CelebrationInput[],

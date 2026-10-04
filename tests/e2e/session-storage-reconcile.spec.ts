@@ -33,7 +33,7 @@ function collect(filename: string): string {
 const entries = Object.fromEntries([
   'lib/supabase/client.ts', 'lib/auth/cache-session.ts', 'lib/auth/session-change.ts',
   'lib/offline/cache.ts', 'components/auth/session-keeper.tsx',
-  'lib/auth/browser-session-storage.ts',
+  'lib/auth/browser-session-storage.ts', 'lib/offline/cache-scope.tsx', 'lib/hooks/use-realtime-query.ts',
 ].map(file => [file, collect(file)]));
 const origin = 'https://session-reconcile-fixture.invalid';
 const provider = 'https://reconcile-fixture.supabase.co';
@@ -53,6 +53,8 @@ type Probe = {
   setReadFailure: (fail: boolean) => void; reconcile: () => Promise<void>;
   holdNextPositiveReceipt: () => void; releasePositiveReceipt: () => void; positiveReceiptHeld: boolean;
   realtimeMatchesCookie: () => boolean;
+  mountRows: (user: 'a' | 'b') => void; visibleRows: () => string[];
+  holdNextSdkGetSession: () => void; releaseSdkGetSession: () => void; sdkGetSessionHeld: boolean;
   refreshes: number; events: string[]; errors: string[];
 };
 declare global { interface Window { __storageReconcile: Probe } }
@@ -62,7 +64,7 @@ async function install(context: BrowserContext) {
   await context.route('**/*', async route => {
     const url = new URL(route.request().url());
     if (url.origin === origin) {
-      await route.fulfill({ contentType: 'text/html', body: '<!doctype html><html><body><main id="root"></main></body></html>' }); return;
+      await route.fulfill({ contentType: 'text/html', body: '<!doctype html><html><body><main id="root"></main><main id="rows"></main></body></html>' }); return;
     }
     if (url.origin !== provider) throw new Error(`Unexpected fixture destination: ${url.origin}`);
     const headers = { 'access-control-allow-origin': origin, 'access-control-allow-headers': '*', 'access-control-allow-methods': 'GET,POST,OPTIONS' };
@@ -89,9 +91,9 @@ async function load(page: Page, transport: Transport = 'both') {
     if (${JSON.stringify(transport)} === 'broadcast-only') Object.defineProperty(window, 'localStorage', { configurable: true, get() { throw new Error('Fixture storage denied'); } });
     const sources = ${JSON.stringify(modules)}, entries = ${JSON.stringify(entries)}, loaded = {};
     const process = { env: { NEXT_PUBLIC_SUPABASE_URL: ${JSON.stringify(provider)}, NEXT_PUBLIC_SUPABASE_ANON_KEY: 'synthetic-public-anon' } };
-    const p = window.__storageReconcile = { refreshes: 0, events: [], errors: [], readHeld: false, removalHeld: false, sessionReadHeld: false };
+    const p = window.__storageReconcile = { refreshes: 0, events: [], errors: [], readHeld: false, removalHeld: false, sessionReadHeld: false, sdkGetSessionHeld: false };
     window.addEventListener('unhandledrejection', event => p.errors.push(String(event.reason)));
-    const mocks = { react: React, sdk: window.supabase, 'next/navigation': { useRouter: () => router }, '@/lib/native/capacitor': { isNative: () => false } };
+    const mocks = { react: React, sdk: window.supabase, 'next/navigation': { useRouter: () => router }, '@/lib/native/capacitor': { isNative: () => false }, '@/components/i18n/locale-provider': { useTranslations: () => key => key } };
     const router = { refresh: () => { p.refreshes += 1; } };
     function load(id) {
       if (id in mocks) return mocks[id];
@@ -128,6 +130,8 @@ async function load(page: Page, transport: Transport = 'both') {
     const store = load(entries['lib/auth/cache-session.ts']);
     const changes = load(entries['lib/auth/session-change.ts']);
     const cache = load(entries['lib/offline/cache.ts']);
+    const Boundary = load(entries['lib/offline/cache-scope.tsx']).AuthenticatedCacheBoundary;
+    const useRealtimeQuery = load(entries['lib/hooks/use-realtime-query.ts']).useRealtimeQuery;
     const Keeper = load(entries['components/auth/session-keeper.tsx']).SessionKeeper;
     client.auth.onAuthStateChange(event => p.events.push(event));
     p.signIn = async user => {
@@ -139,6 +143,18 @@ async function load(page: Page, transport: Transport = 'both') {
       root ??= ReactDOM.createRoot(document.getElementById('root'));
       ReactDOM.flushSync(() => root.render(React.createElement(Keeper, { userId: user === 'a' ? ${JSON.stringify(A)} : ${JSON.stringify(B)} })));
     };
+    const privateRows = [{ id: 'family-a-private-row', label: 'Synthetic family A private data' }];
+    function FamilyRows() {
+      const result = useRealtimeQuery({ table: 'synthetic_private_rows', familyId: 'family-a', fetcher: async () => ({ data: privateRows, error: null }) });
+      return React.createElement('ul', { 'data-testid': 'family-rows' }, ...result.data.map(row => React.createElement('li', { key: row.id, 'data-row-id': row.id }, row.label)));
+    }
+    let rowsRoot;
+    p.mountRows = user => {
+      rowsRoot ??= ReactDOM.createRoot(document.getElementById('rows'));
+      const access = { userId: user === 'a' ? ${JSON.stringify(A)} : ${JSON.stringify(B)}, familyId: user === 'a' ? 'family-a' : 'family-b', memberId: 'synthetic-member', membershipUpdatedAt: '2026-10-03T00:00:00.000Z', role: 'parent', isSuperAdmin: false, planLevel: 1, featureTiers: {} };
+      ReactDOM.flushSync(() => rowsRoot.render(React.createElement(Boundary, { access }, React.createElement(FamilyRows))));
+    };
+    p.visibleRows = () => Array.from(document.querySelectorAll('[data-testid="family-rows"] [data-row-id]'), row => row.getAttribute('data-row-id'));
     p.clearCookies = () => {
       for (const item of document.cookie.split(';')) {
         const name = item.trim().split('=')[0];
@@ -178,6 +194,19 @@ async function load(page: Page, transport: Transport = 'both') {
     p.releasePositiveReceipt = () => releasePositiveReceipt();
     p.holdNextSessionRead = () => { holdSessionRead = true; p.sessionReadHeld = false; };
     p.releaseSessionRead = () => releaseSessionRead();
+    let releaseSdkGetSession;
+    p.holdNextSdkGetSession = () => {
+      const original = client.auth.getSession.bind(client.auth);
+      client.auth.getSession = async (...args) => {
+        client.auth.getSession = original;
+        const result = await original(...args);
+        p.sdkGetSessionHeld = true;
+        await new Promise(resolve => { releaseSdkGetSession = resolve; });
+        return result;
+      };
+      p.sdkGetSessionHeld = false;
+    };
+    p.releaseSdkGetSession = () => releaseSdkGetSession();
     p.setReadFailure = fail => { readFailure = fail; };
     p.reconcile = () => store.refreshCacheSession({ force: true });
     p.realtimeMatchesCookie = () => client.realtime.accessTokenValue === storage.captureBrowserSessionSnapshot()?.accessToken;
@@ -384,5 +413,48 @@ for (const decision of ['logout', 'newer B', 'rotate A'] as const) {
     // A server-tree refresh follows an actual storage/auth notification; this
     // receipt-only control tests the cache/realtime owner before that signal.
     expect(await second.evaluate(() => window.__storageReconcile.errors)).toEqual([]);
+  });
+}
+
+for (const decision of ['logout', 'newer B', 'rotate A', 'unchanged A'] as const) {
+  test(`React family query ${decision === 'rotate A' || decision === 'unchanged A' ? 'keeps' : 'hides'} cached A rows while peer ${decision} getSession is held`, async ({ context, page }) => {
+    await install(context); await load(page, 'storage-only');
+    await page.evaluate(async () => {
+      const p = window.__storageReconcile;
+      await p.signIn('a'); p.mount('a'); p.mountRows('a');
+    });
+    await expect.poll(() => page.evaluate(() => window.__storageReconcile.snapshot().identity?.userId)).toBe(A);
+    await expect.poll(() => page.evaluate(() => window.__storageReconcile.visibleRows())).toEqual(['family-a-private-row']);
+
+    const peer = await context.newPage(); await load(peer, 'storage-only');
+    await page.evaluate(() => window.__storageReconcile.holdNextSdkGetSession());
+    if (decision === 'logout') await peer.evaluate(() => window.__storageReconcile.clearCookies());
+    else if (decision === 'newer B') await peer.evaluate(() => window.__storageReconcile.signIn('b'));
+    else if (decision === 'rotate A') await peer.evaluate(() => window.__storageReconcile.signIn('a'));
+    await peer.evaluate(() => window.__storageReconcile.notify());
+
+    await expect.poll(() => page.evaluate(() => window.__storageReconcile.sdkGetSessionHeld)).toBe(true);
+    if (decision === 'logout' || decision === 'newer B') {
+      await expect.poll(() => page.evaluate(() => window.__storageReconcile.visibleRows())).toEqual([]);
+      expect(await page.evaluate(() => window.__storageReconcile.snapshot().status)).toBe('unavailable');
+    } else {
+      expect(await page.evaluate(() => window.__storageReconcile.visibleRows())).toEqual(['family-a-private-row']);
+      expect(await page.evaluate(() => window.__storageReconcile.snapshot())).toMatchObject({ status: 'ready', identity: { userId: A } });
+    }
+    expect(await page.evaluate(() => window.__storageReconcile.sdkGetSessionHeld)).toBe(true);
+
+    await page.evaluate(() => window.__storageReconcile.releaseSdkGetSession());
+    if (decision === 'logout') {
+      await expect.poll(() => page.evaluate(() => window.__storageReconcile.snapshot().status)).toBe('signed-out');
+      expect(await page.evaluate(() => window.__storageReconcile.visibleRows())).toEqual([]);
+    } else if (decision === 'newer B') {
+      await expect.poll(() => page.evaluate(() => window.__storageReconcile.snapshot().identity?.userId)).toBe(B);
+      expect(await page.evaluate(() => window.__storageReconcile.visibleRows())).toEqual([]);
+    } else {
+      await expect.poll(() => page.evaluate(() => window.__storageReconcile.snapshot().status)).toBe('ready');
+      expect(await page.evaluate(() => window.__storageReconcile.snapshot().identity?.userId)).toBe(A);
+      expect(await page.evaluate(() => window.__storageReconcile.visibleRows())).toEqual(['family-a-private-row']);
+    }
+    expect(await page.evaluate(() => window.__storageReconcile.errors)).toEqual([]);
   });
 }

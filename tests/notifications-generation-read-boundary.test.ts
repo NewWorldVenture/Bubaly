@@ -9,7 +9,7 @@ import { generateFamilyNotifications } from '@/lib/server/notifications';
 function chain(result: { data: unknown; error: unknown }) {
   const c: Record<string, unknown> = {
     select: () => c, eq: () => c, neq: () => c, gte: () => c, lte: () => c, in: () => c,
-    is: () => c, not: () => c, or: () => c, ilike: () => c, order: () => c, limit: () => c,
+    is: () => c, not: () => c, or: () => c, ilike: () => c, order: () => c, limit: () => c, range: () => c,
     maybeSingle: () => Promise.resolve(result),
     then: (onF: (v: unknown) => unknown) => Promise.resolve(result).then(onF),
   };
@@ -58,6 +58,13 @@ describe('generateFamilyNotifications source read boundary', () => {
     const supabase = fakeSupabase(new Set(['families']));
 
     await expect(generateFamilyNotifications(supabase, 'fam-1')).rejects.toThrow(/timezone/i);
+  });
+
+  it('refuses generation when the roster cannot establish recipients', async () => {
+    vi.spyOn(console, 'error').mockImplementation(() => {});
+    const supabase = fakeSupabase(new Set(['family_members']));
+
+    await expect(generateFamilyNotifications(supabase, 'fam-1')).rejects.toThrow(/roster/i);
   });
 
   it('a family row with no timezone set still uses the default, which is not the same thing', async () => {
