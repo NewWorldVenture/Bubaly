@@ -320,9 +320,16 @@ try {
   // (content, receipts, reactions, and pins) and hard DELETE, not just INSERT.
   // Use separate messages for delete-first and delete-after-removal fixtures.
   sql(`update public.family_members set is_active=true where id='${memberId}';
+    insert into public.family_conversations(id, family_id, name, kind, participant_ids, created_by) values
+      ('00000000-0000-4000-8000-0000000047c6', '${familyId}', 'Delete before removal', 'group',
+        array['00000000-0000-4000-8000-0000000047a1','00000000-0000-4000-8000-0000000047a2']::uuid[], '${aliceId}'),
+      ('00000000-0000-4000-8000-0000000047c7', '${familyId}', 'Delete after removal', 'group',
+        array['00000000-0000-4000-8000-0000000047a1','00000000-0000-4000-8000-0000000047a2']::uuid[], '${aliceId}');
     insert into public.family_messages(id, family_id, conversation_id, sender_id, content) values
       ('00000000-0000-4000-8000-0000000047b6', '${familyId}', '${wholeChatId}', '${aliceId}', 'Delete before removal'),
-      ('00000000-0000-4000-8000-0000000047b7', '${familyId}', '${wholeChatId}', '${aliceId}', 'Delete after removal');`);
+      ('00000000-0000-4000-8000-0000000047b7', '${familyId}', '${wholeChatId}', '${aliceId}', 'Delete after removal'),
+      ('00000000-0000-4000-8000-0000000047b9', '${familyId}', '00000000-0000-4000-8000-0000000047c6', '${aliceId}', 'Cascade delete before removal'),
+      ('00000000-0000-4000-8000-0000000047bc', '${familyId}', '00000000-0000-4000-8000-0000000047c7', '${aliceId}', 'Cascade delete after removal');`);
   const membershipWriteRace = async ({ name, writeFirstSql, writeAfterSql, firstStateCheck, deniedStateCheck }) => {
     const tag = name.toUpperCase().replace(/[^A-Z0-9]+/g, '_');
     sql(`update public.family_members set is_active=true where id='${memberId}';`);
@@ -421,19 +428,64 @@ try {
     firstStateCheck: "not exists (select 1 from public.family_messages where id='00000000-0000-4000-8000-0000000047b6')",
     deniedStateCheck: "exists (select 1 from public.family_messages where id='00000000-0000-4000-8000-0000000047b7')",
   });
+  await membershipWriteRace({
+    name: 'conversation cascade delete',
+    writeFirstSql: "delete from public.family_conversations where id='00000000-0000-4000-8000-0000000047c6'",
+    writeAfterSql: "delete from public.family_conversations where id='00000000-0000-4000-8000-0000000047c7'",
+    firstStateCheck: "not exists (select 1 from public.family_conversations where id='00000000-0000-4000-8000-0000000047c6') and not exists (select 1 from public.family_messages where id='00000000-0000-4000-8000-0000000047b9')",
+    deniedStateCheck: "exists (select 1 from public.family_conversations where id='00000000-0000-4000-8000-0000000047c7') and exists (select 1 from public.family_messages where id='00000000-0000-4000-8000-0000000047bc')",
+  });
+
+  // An authenticated parent deletion is allowed only while its admin membership
+  // remains active; the family guard holds that lock through child cleanup.
+  sql(`insert into public.families(id, name, created_by) values
+      ('00000000-0000-4000-8000-0000000047f4', 'Authenticated cascade', '${aliceId}');
+    insert into public.family_conversations(id, family_id, name, kind, participant_ids, created_by)
+      values ('00000000-0000-4000-8000-0000000047c8', '00000000-0000-4000-8000-0000000047f4', 'Authenticated cascade', 'group',
+        array(select id from public.family_members where family_id='00000000-0000-4000-8000-0000000047f4'), '${aliceId}');
+    insert into public.family_messages(id, family_id, conversation_id, sender_id, content)
+      values ('00000000-0000-4000-8000-0000000047be', '00000000-0000-4000-8000-0000000047f4',
+        '00000000-0000-4000-8000-0000000047c8', '${aliceId}', 'Authenticated family cascade');`);
+  sql(`begin;
+    set local role authenticated;
+    set local request.jwt.claim.sub='${aliceId}';
+    delete from public.families where id='00000000-0000-4000-8000-0000000047f4';
+    commit;`);
+  sql(`do $$ begin
+    if exists(select 1 from public.families where id='00000000-0000-4000-8000-0000000047f4')
+      or exists(select 1 from public.family_conversations where id='00000000-0000-4000-8000-0000000047c8')
+      or exists(select 1 from public.family_messages where id='00000000-0000-4000-8000-0000000047be') then
+      raise exception 'Authenticated family cascade did not clean up its conversations/messages'; end if;
+  end $$;`);
+  console.log('PASS: authenticated conversation/family cascades serialize and clean up child messages.');
+
   // Service-role maintenance has auth.uid() = NULL and keeps its prior bypass.
-  sql(`insert into public.family_messages(id, family_id, conversation_id, sender_id, content)
+  sql(`insert into public.families(id, name, created_by) values
+      ('00000000-0000-4000-8000-0000000047f5', 'Service cascade', '${aliceId}');
+    insert into public.family_conversations(id, family_id, name, kind, participant_ids, created_by)
+      values ('00000000-0000-4000-8000-0000000047c9', '00000000-0000-4000-8000-0000000047f5', 'Service cascade', 'group',
+        array(select id from public.family_members where family_id='00000000-0000-4000-8000-0000000047f5'), '${aliceId}');
+    insert into public.family_messages(id, family_id, conversation_id, sender_id, content)
+      values ('00000000-0000-4000-8000-0000000047bf', '00000000-0000-4000-8000-0000000047f5',
+        '00000000-0000-4000-8000-0000000047c9', '${aliceId}', 'Service family cascade');
+    insert into public.family_messages(id, family_id, conversation_id, sender_id, content)
       values ('00000000-0000-4000-8000-0000000047b8', '${familyId}', '${wholeChatId}', '${aliceId}', 'Service write');
+    begin;
     set role service_role;
     set request.jwt.claim.sub='';
     update public.family_messages set content='Service edit' where id='00000000-0000-4000-8000-0000000047b8';
     delete from public.family_messages where id='00000000-0000-4000-8000-0000000047b8';
-    reset role;
-    do $$ begin
+    delete from public.families where id='00000000-0000-4000-8000-0000000047f5';
+    commit;`);
+  sql(`do $$ begin
+      if exists(select 1 from public.families where id='00000000-0000-4000-8000-0000000047f5')
+        or exists(select 1 from public.family_conversations where id='00000000-0000-4000-8000-0000000047c9')
+        or exists(select 1 from public.family_messages where id='00000000-0000-4000-8000-0000000047bf') then
+        raise exception 'Service-role family cascade did not clean up its conversations/messages'; end if;
       if exists(select 1 from public.family_messages where id='00000000-0000-4000-8000-0000000047b8') then
         raise exception 'Service-role delete behavior changed'; end if;
     end $$;`);
-  console.log('PASS: service-role message update/delete remains available without an authenticated membership lock.');
+  console.log('PASS: service-role message writes and family cascade cleanup remain available without a user lock.');
   console.log(`Messaging database checks passed on disposable PostgreSQL at 127.0.0.1:${port}.`);
 } catch (error) {
   if (error.stderr) console.error(String(error.stderr));

@@ -120,6 +120,10 @@ begin
   end if;
   reset role;
 
+  -- The simulated former member has no delete authority; clear its JWT before
+  -- database-owner cleanup so the family cascade uses the no-user path.
+  perform set_config('request.jwt.claim.sub', '', true);
+  perform set_config('request.jwt.claims', '', true);
   delete from public.families where id = fam;
   delete from auth.users where id in (uPar, uEx);
 

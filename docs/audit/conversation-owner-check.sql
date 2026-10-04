@@ -47,6 +47,9 @@ begin
   select count(*) into n from public.family_messages where conversation_id = conv;
   if n <> 1 then raise warning 'CONTROL FAILED: the Family Chat lost its messages (%)', n; failures := failures + 1; end if;
 
+  -- Clear the simulated authenticated actor before database-owner cleanup.
+  perform set_config('request.jwt.claim.sub', '', true);
+  perform set_config('request.jwt.claims', '', true);
   delete from public.families where id = fam;
   delete from auth.users where id in (uPar, uKid);
 
