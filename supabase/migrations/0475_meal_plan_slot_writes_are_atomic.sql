@@ -18,6 +18,7 @@ create table if not exists public.meal_plan_write_receipts (
 do $$
 declare
   v_columns text[];
+  v_defaults text[];
   v_primary_key text[];
   v_constraints text[];
   v_policy name;
@@ -42,6 +43,15 @@ begin
     raise exception 'meal_plan_write_receipts has an incompatible column contract';
   end if;
 
+  select array_agg(a.attname || ':' || pg_catalog.pg_get_expr(d.adbin, d.adrelid) order by a.attnum)
+    into v_defaults
+  from pg_catalog.pg_attrdef d
+  join pg_catalog.pg_attribute a on a.attrelid = d.adrelid and a.attnum = d.adnum
+  where d.adrelid = 'public.meal_plan_write_receipts'::regclass;
+  if v_defaults is distinct from array['created_at:now()']::text[] then
+    raise exception 'meal_plan_write_receipts has an incompatible default contract';
+  end if;
+
   select array_agg(a.attname order by k.ordinality) into v_primary_key
   from pg_catalog.pg_constraint c
   cross join lateral unnest(c.conkey) with ordinality as k(attnum, ordinality)
@@ -64,7 +74,8 @@ begin
          join pg_catalog.pg_attribute ra on ra.attrelid = rr.oid and ra.attnum = rk.attnum
          where rr.oid = c.confrelid
          group by rn.nspname, rr.relname) ||
-        ':delete=' || c.confdeltype::text || ':validated=' || c.convalidated::text ||
+        ':update=' || c.confupdtype::text || ':delete=' || c.confdeltype::text ||
+        ':validated=' || c.convalidated::text ||
         ':deferrable=' || c.condeferrable::text
       else c.conname || ':' || c.contype::text || ':' ||
         pg_catalog.pg_get_constraintdef(c.oid, true) ||
@@ -74,8 +85,8 @@ begin
   from pg_catalog.pg_constraint c
   where c.conrelid = 'public.meal_plan_write_receipts'::regclass;
   if v_constraints is distinct from array[
-    'meal_plan_write_receipts_actor_id_fkey:f:actor_id->auth.users(id):delete=c:validated=true:deferrable=false',
-    'meal_plan_write_receipts_family_id_fkey:f:family_id->public.families(id):delete=c:validated=true:deferrable=false',
+    'meal_plan_write_receipts_actor_id_fkey:f:actor_id->auth.users(id):update=a:delete=c:validated=true:deferrable=false',
+    'meal_plan_write_receipts_family_id_fkey:f:family_id->public.families(id):update=a:delete=c:validated=true:deferrable=false',
     'meal_plan_write_receipts_operation_check:c:CHECK (operation = ANY (ARRAY[''replace''::text, ''remove''::text])):validated=true:deferrable=false',
     'meal_plan_write_receipts_payload_hash_check:c:CHECK (payload_hash ~ ''^[0-9a-f]{64}$''::text):validated=true:deferrable=false',
     'meal_plan_write_receipts_pkey:p:PRIMARY KEY (family_id, actor_id, request_id):validated=true:deferrable=false',

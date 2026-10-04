@@ -117,6 +117,59 @@ jobs:
             --set=VERBOSITY=terse --set=SHOW_CONTEXT=never \
             < tests/fixtures/0476-meal-plan-name-concurrency.sql
 
+      - name: Reject altered receipt defaults and foreign-key update actions
+        shell: bash
+        run: |
+          set -euo pipefail
+          docker exec "$MEAL_PLAN_ATOMIC_CONTAINER" psql -X --quiet \
+            --no-password --host=/var/run/postgresql --username=postgres \
+            --dbname=bubaly_meal_plan_atomic_ci --set=ON_ERROR_STOP=1 \
+            --command="alter table public.meal_plan_write_receipts alter column created_at set default '2000-01-01 00:00:00+00'::timestamptz"
+          if docker exec -i "$MEAL_PLAN_ATOMIC_CONTAINER" psql -X --quiet --output=/dev/null \
+            --file=- --no-password --host=/var/run/postgresql --username=postgres \
+            --dbname=bubaly_meal_plan_atomic_ci --set=ON_ERROR_STOP=1 \
+            --set=VERBOSITY=terse --set=SHOW_CONTEXT=never \
+            < supabase/migrations/0475_meal_plan_slot_writes_are_atomic.sql \
+            > incompatible-replay.log 2>&1; then
+            echo 'Migration unexpectedly accepted an altered created_at default' >&2
+            exit 1
+          fi
+          grep -F 'meal_plan_write_receipts has an incompatible default contract' incompatible-replay.log
+
+          docker exec "$MEAL_PLAN_ATOMIC_CONTAINER" psql -X --quiet \
+            --no-password --host=/var/run/postgresql --username=postgres \
+            --dbname=bubaly_meal_plan_atomic_ci --set=ON_ERROR_STOP=1 \
+            --command='alter table public.meal_plan_write_receipts alter column created_at drop default'
+          if docker exec -i "$MEAL_PLAN_ATOMIC_CONTAINER" psql -X --quiet --output=/dev/null \
+            --file=- --no-password --host=/var/run/postgresql --username=postgres \
+            --dbname=bubaly_meal_plan_atomic_ci --set=ON_ERROR_STOP=1 \
+            --set=VERBOSITY=terse --set=SHOW_CONTEXT=never \
+            < supabase/migrations/0475_meal_plan_slot_writes_are_atomic.sql \
+            > incompatible-replay.log 2>&1; then
+            echo 'Migration unexpectedly accepted a missing created_at default' >&2
+            exit 1
+          fi
+          grep -F 'meal_plan_write_receipts has an incompatible default contract' incompatible-replay.log
+
+          docker exec "$MEAL_PLAN_ATOMIC_CONTAINER" psql -X --quiet \
+            --no-password --host=/var/run/postgresql --username=postgres \
+            --dbname=bubaly_meal_plan_atomic_ci --set=ON_ERROR_STOP=1 \
+            --command='alter table public.meal_plan_write_receipts alter column created_at set default now(); alter table public.meal_plan_write_receipts drop constraint meal_plan_write_receipts_actor_id_fkey; alter table public.meal_plan_write_receipts add constraint meal_plan_write_receipts_actor_id_fkey foreign key (actor_id) references auth.users(id) on update cascade on delete cascade'
+          if docker exec -i "$MEAL_PLAN_ATOMIC_CONTAINER" psql -X --quiet --output=/dev/null \
+            --file=- --no-password --host=/var/run/postgresql --username=postgres \
+            --dbname=bubaly_meal_plan_atomic_ci --set=ON_ERROR_STOP=1 \
+            --set=VERBOSITY=terse --set=SHOW_CONTEXT=never \
+            < supabase/migrations/0475_meal_plan_slot_writes_are_atomic.sql \
+            > incompatible-replay.log 2>&1; then
+            echo 'Migration unexpectedly accepted an ON UPDATE CASCADE receipt foreign key' >&2
+            exit 1
+          fi
+          grep -F 'meal_plan_write_receipts has incompatible constraints' incompatible-replay.log
+          docker exec "$MEAL_PLAN_ATOMIC_CONTAINER" psql -X --quiet \
+            --no-password --host=/var/run/postgresql --username=postgres \
+            --dbname=bubaly_meal_plan_atomic_ci --set=ON_ERROR_STOP=1 \
+            --command='alter table public.meal_plan_write_receipts drop constraint meal_plan_write_receipts_actor_id_fkey; alter table public.meal_plan_write_receipts add constraint meal_plan_write_receipts_actor_id_fkey foreign key (actor_id) references auth.users(id) on delete cascade'
+
       - name: Reject an incompatible same-name receipt constraint
         shell: bash
         run: |
