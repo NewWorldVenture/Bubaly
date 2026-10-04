@@ -106,6 +106,10 @@ const LOOKALIKE = ['UID:series#2026-09-12T14:00:00.000Z', 'SUMMARY:Unrelated tal
 const LOOKALIKE_UID = 'series#2026-09-12T14:00:00.000Z';
 /** The 12 September occurrence cancelled outright: under the old key this shared `LOOKALIKE_UID`. */
 const CANCELLED_MOVED_WEEK = ['UID:series', 'SUMMARY:Soccer practice', 'RECURRENCE-ID:20260912T140000Z', 'DTSTART:20260912T140000Z', 'STATUS:CANCELLED'];
+/** A CANCEL as RFC 5546 §3.2.5 allows it: the identity of the occurrence, nothing else. */
+const BARE_CANCELLED_WEEK = ['UID:series', 'RECURRENCE-ID:20260919T140000Z', 'STATUS:CANCELLED'];
+/** The whole series cancelled by its bare UID. */
+const BARE_MASTER_OFF = ['UID:series', 'STATUS:CANCELLED'];
 
 const byUid = (events: ReturnType<typeof parseICS>, uid: string) => events.filter((e) => e.uid === uid);
 
@@ -221,6 +225,35 @@ describe('a recurring series and its exceptions', () => {
     expect(rows[0].title).toBe('Autumn concert');
   });
 
+  // Review 5981467749 on #908: RFC 5546 §3.2.5 lets a CANCEL carry only the
+  // identity of what it cancels. The parser dropped such a component for want
+  // of DTSTART and SUMMARY, and the plan skipped it for want of a start, so a
+  // minimal, valid cancellation left the imported occurrence (or series) in
+  // place. The sync parses with `bareCancellations`; the other readers do not.
+  it('a cancellation that carries only its identity cancels the occurrence it names, or the whole series when it names the master', () => {
+    const events = parseICS(ics(MASTER, BARE_CANCELLED_WEEK), { bareCancellations: true });
+    expect(byUid(events, 'series').map((e) => [e.status, e.recurrenceId, e.startsAt])).toEqual([
+      [undefined, null, '2026-09-05T14:00:00.000Z'],
+      ['cancelled', '2026-09-19T14:00:00.000Z', '2026-09-19T14:00:00.000Z'],
+    ]);
+    const { rows, cancelled, cancelledSeries } = planFeedRows(events, FAMILY, FEED.id);
+    expect(rows.map((r) => r.external_uid)).toEqual(['series']);
+    expect(cancelled).toEqual(['series\u001F2026-09-19T14:00:00.000Z']);
+    expect(cancelledSeries).toEqual([]);
+
+    const whole = planFeedRows(parseICS(ics(BARE_MASTER_OFF, CONCERT), { bareCancellations: true }), FAMILY, FEED.id);
+    expect(whole.rows.map((r) => r.external_uid)).toEqual(['concert']);
+    expect(whole.cancelled).toEqual([]);
+    expect(whole.cancelledSeries).toEqual(['series']);
+  });
+
+  it('without the option a component that cannot be placed is still dropped, and a live event with no start never becomes a row', () => {
+    expect(byUid(parseICS(ics(MASTER, BARE_CANCELLED_WEEK, BARE_MASTER_OFF)), 'series')).toHaveLength(1);
+    const noStart = ['UID:floating', 'SUMMARY:No start'];
+    expect(parseICS(ics(noStart), { bareCancellations: true })).toEqual([]);
+    expect(planFeedRows([{ uid: 'floating', title: 'No start', startsAt: '' }], FAMILY, FEED.id).rows).toEqual([]);
+  });
+
   it('buildFeedRows is the rows half of the plan, and the key is one function', () => {
     const events = parseICS(ics(MASTER, MOVED, CONCERT_OFF));
     expect(buildFeedRows(events, FAMILY, FEED.id)).toEqual(planFeedRows(events, FAMILY, FEED.id).rows);
@@ -286,6 +319,22 @@ describe('a sync against the family calendar', () => {
     expect(ids).not.toContain('ev-concert');
     expect(feedEvents().map((r) => r.external_uid)).toEqual(['series']);
     expect(feedRow()).toMatchObject({ last_status: 'ok', event_count: 1 });
+  });
+
+  it('removes an imported occurrence the source cancels with nothing but its identity, and the series when the master is', async () => {
+    db.seed('calendar_events', [
+      { id: 'ev-master', family_id: FAMILY, feed_id: FEED.id, external_uid: 'series', title: 'Soccer practice', starts_at: '2026-09-05T14:00:00.000Z', recurrence: 'weekly' },
+      { id: 'ev-week', family_id: FAMILY, feed_id: FEED.id, external_uid: 'series\u001F2026-09-19T14:00:00.000Z', title: 'Soccer practice', starts_at: '2026-09-19T14:00:00.000Z', recurrence: 'none' },
+      { id: 'ev-concert', family_id: FAMILY, feed_id: FEED.id, external_uid: 'concert', title: 'Autumn concert', starts_at: '2026-09-20T18:00:00.000Z', recurrence: 'none' },
+    ]);
+    reachable(ics(MASTER, BARE_CANCELLED_WEEK, CONCERT));
+    expect(await syncFeed(client(), FEED)).toEqual({ ok: true, imported: 2 });
+    expect(feedEvents().map((r) => r.id).sort()).toEqual(['ev-concert', 'ev-master']);
+
+    reachable(ics(BARE_MASTER_OFF, CONCERT));
+    expect(await syncFeed(client(), FEED)).toEqual({ ok: true, imported: 1 });
+    expect(feedEvents().map((r) => r.id)).toEqual(['ev-concert']);
+    expect(readFileSync(join(ROOT, 'lib/server/calendar-feeds.ts'), 'utf8'), 'the sync is the one reader that keeps bare cancellations').toContain('parseICS(icsText, { bareCancellations: true })');
   });
 
   // Review 5971622223 on #908: under the old `uid#recurrenceId` key, a

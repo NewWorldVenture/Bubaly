@@ -192,7 +192,19 @@ function splitContentLine(line: string): { name: string; tzid: string | null; va
   return { name: rawName.toUpperCase(), tzid, value: line.slice(colon + 1) };
 }
 
-export function parseICS(text: string): IcsEvent[] {
+export type ParseIcsOptions = {
+  /**
+   * Keep a STATUS:CANCELLED component that carries only its identity: a UID,
+   * and a RECURRENCE-ID when it cancels one occurrence. RFC 5546 §3.2.5 lets a
+   * CANCEL omit DTSTART and SUMMARY, and a feed sync needs exactly that identity
+   * to remove what an earlier sync imported. Off by default: every other reader
+   * wants events it can place, and a cancellation it cannot place is nothing to
+   * it. Such an event's `startsAt` is its RECURRENCE-ID when it has one, else ''.
+   */
+  bareCancellations?: boolean;
+};
+
+export function parseICS(text: string, opts: ParseIcsOptions = {}): IcsEvent[] {
   // Unfold: a CRLF (or LF) followed by space/tab continues the previous line.
   const unfolded = text.replace(/\r\n/g, '\n').replace(/\n[ \t]/g, '');
   const lines = unfolded.split('\n');
@@ -206,13 +218,15 @@ export function parseICS(text: string): IcsEvent[] {
       continue;
     }
     if (line === 'END:VEVENT') {
-      if (cur && cur.uid && cur.startsAt && cur.title) {
+      const placeable = !!(cur && cur.uid && cur.startsAt && cur.title);
+      const bareCancellation = !!(cur && cur.uid && cur.status === 'cancelled' && opts.bareCancellations);
+      if (cur && (placeable || bareCancellation)) {
         events.push({
-          uid: cur.uid,
-          title: cur.title,
+          uid: cur.uid as string,
+          title: cur.title ?? '',
           description: cur.description ?? null,
           location: cur.location ?? null,
-          startsAt: cur.startsAt,
+          startsAt: cur.startsAt ?? cur.recurrenceId ?? '',
           endsAt: cur.endsAt ?? null,
           allDay: cur.allDay ?? false,
           recurrenceRule: cur.recurrenceRule ?? null,
