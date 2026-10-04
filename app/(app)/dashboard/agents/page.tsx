@@ -9,7 +9,7 @@ import { AgentsModule } from '@/components/modules/agents-module';
 import { runAllAgents, type AgentContext, type AgentItem } from '@/lib/agents/roster';
 import { loadFamilyContext } from '@/lib/reasoning/context';
 import { reasoningInsights } from '@/lib/reasoning/insights';
-import { nextBirthdayDate, daysUntil } from '@/lib/moments/birthdays';
+import { birthdayCountdown } from '@/lib/moments/birthdays';
 import type { Tables } from '@/lib/database.types';
 import { ErrorState } from '@/components/ui/states';
 import { addDaysToDayKey, dayKeyInTz } from '@/lib/services/scope';
@@ -149,8 +149,9 @@ export default async function AgentsPage() {
 
   const birthdaysSoon = (members.data ?? []).filter((m) => {
     if (!m.birthday) return false;
-    const next = nextBirthdayDate(m.birthday, now);
-    return next ? daysUntil(next, now) >= 0 && daysUntil(next, now) <= 14 : false;
+    // Counted from the family's day (`todayKey`), not the host's.
+    const days = birthdayCountdown(m.birthday, todayKey)?.days;
+    return days !== undefined && days >= 0 && days <= 14;
   }).length;
 
   const context: AgentContext = {
