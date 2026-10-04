@@ -29,7 +29,10 @@ function fixture() {
   const calls: { table: string; method: string; args: unknown[] }[] = [];
   let calendarIndex = 0;
   const boundary = { from(table: string) {
-    const kind = table === 'calendar_events' ? ['events', 'upcoming', 'monthEvents'][calendarIndex++ % 3]
+    // Each calendar window is now two reads issued together — the one-offs and
+    // the series (lib/calendar/occurrences.ts) — so a window owns two
+    // consecutive calendar_events calls, in the page's order of windows.
+    const kind = table === 'calendar_events' ? ['events', 'events', 'upcoming', 'upcoming', 'monthEvents', 'monthEvents'][calendarIndex++ % 6]
       : table === 'family_reminders' ? 'reminders' : table;
     const target = db.from(table);
     const proxy: typeof target = new Proxy(target, { get(object, property) {
@@ -102,6 +105,17 @@ describe('actual kitchen page family-calendar loading', () => {
     expect(data.calendar.eventDays).toEqual([11, 12]);
     expect(data.meals).toEqual([{ type: 'dinner', name: 'Family dinner' }]);
     expect(data.handled).toMatchObject({ status: 'ok', count: 2 });
+    expect(data.loadStatus).toEqual({ events: 'ok', upcoming: 'ok', monthEvents: 'ok', reminders: 'ok' });
+  });
+
+  it('shows this week\'s occurrence of a weekly series on today, next week\'s under upcoming, and marks every week of the month', async () => {
+    // Saturdays 14:00Z since 15 August; today is Saturday 12 September (UTC).
+    const f = fixture();
+    f.db.seed('calendar_events', [event('practice', '2026-08-15T14:00:00Z', '2026-08-15T15:00:00Z', { recurrence: 'weekly', recurrence_until: null })]);
+    const data = await f.read();
+    expect(data.events.map(item => [item.id, item.starts_at])).toEqual([['practice', iso('2026-09-12T14:00:00Z')]]);
+    expect(data.upcoming.map(item => item.starts_at)).toEqual([iso('2026-09-19T14:00:00Z')]);
+    expect(data.calendar.eventDays).toEqual([5, 12, 19, 26]);
     expect(data.loadStatus).toEqual({ events: 'ok', upcoming: 'ok', monthEvents: 'ok', reminders: 'ok' });
   });
 

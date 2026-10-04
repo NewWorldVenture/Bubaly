@@ -12,6 +12,8 @@ import { getFormat } from '@/lib/utils/format-server';
 import { getTranslations } from '@/lib/i18n/server';
 import { titleWithoutDoubledBrand } from '@/lib/marketing/seo';
 import { dayKeyInTz, zonedDayBoundsMs } from '@/lib/services/scope';
+import { instantCalendarBounds } from '@/lib/briefing/calendar-window';
+import { readCalendarOccurrences } from '@/lib/calendar/occurrences';
 
 export async function generateMetadata(): Promise<Metadata> {
   const t = await getTranslations();
@@ -45,7 +47,8 @@ export default async function KidsPage() {
   const [myTasksRes, doneRes, eventsRes] = await settleAll([
     supabase.from('chore_assignments').select('id, chore_id, status, due_at').eq('family_id', familyId).eq('member_id', me.id).in('status', ['todo', 'in_progress']).order('due_at').limit(10),
     supabase.from('chore_assignments').select('points_awarded').eq('family_id', familyId).eq('member_id', me.id).in('status', ['done', 'approved']),
-    supabase.from('calendar_events').select('id, title, starts_at, all_day').eq('family_id', familyId).gte('starts_at', start.toISOString()).lt('starts_at', end.toISOString()).order('starts_at').limit(6),
+    // Series included: the weekly practice is on the child's day every week (lib/calendar/occurrences.ts).
+    readCalendarOccurrences(supabase, familyId, instantCalendarBounds(start.toISOString(), new Date(end.getTime() - 1).toISOString(), tz), tz, { columns: ['id', 'title', 'starts_at', 'all_day'], limit: 6 }),
   ]);
 
   // A dropped error would tell the child "All done! 🎉 No jobs left today." and

@@ -7,6 +7,7 @@ import { useRealtimeQuery } from '@/lib/hooks/use-realtime-query';
 import { createClient } from '@/lib/supabase/client';
 import { describeDbError, wroteNoRows } from '@/lib/supabase/errors';
 import { useToast } from '@/components/ui/toast';
+import { useConfirm } from '@/components/ui/confirm';
 import { PageHeader } from '@/components/app/page-header';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -23,6 +24,7 @@ const ORDER = ['safe', 'on_my_way', 'arrived', 'need_help'] as const;
 
 export function CheckInView() {
   const t = useTranslations();
+  const askConfirm = useConfirm();
   // "30m ago" on a safety surface follows the reader.
   const locale = useLocale();
   const relTime = (iso: string) => relTimeIn(iso, new Date(), locale.code);
@@ -63,14 +65,15 @@ export function CheckInView() {
     setPlace(''); setNote('');
   }
 
-  async function remove(id: string) {
+  async function remove(c: CheckIn) {
+    if (!(await askConfirm({ title: t('checkInView.deleteCheckInQ'), body: t('confirm.cannotBeUndone') }))) return;
     // RLS filters a DELETE rather than refusing it, so without `.select('id')`
     // a row this member may not remove returns `error: null` and the module
     // reports success over a record that is still there. 0431 establishes a
     // check-in's "self" by created_by as well as member_id, so another member's
     // check-in is filtered out rather than refused. Audit C1-S9-84.
     const { data: removed, error } = await createClient().from('safety_check_ins').delete()
-      .eq('id', id).eq('family_id', familyId).select('id');
+      .eq('id', c.id).eq('family_id', familyId).select('id');
     if (error) toastError(describeDbError(error));
     else if (wroteNoRows(removed)) toastError(t('errors.thatChangeWasNotSaved'));
   }
@@ -122,7 +125,7 @@ export function CheckInView() {
                     {c.latitude != null && <a href={`https://maps.google.com/?q=${c.latitude},${c.longitude}`} target="_blank" rel="noreferrer" className="ml-1 inline-flex items-center gap-0.5 text-brand-text"><MapPin className="h-3 w-3" /> map</a>}
                   </p>
                 </div>
-                {mine && <button onClick={() => remove(c.id)} className="rounded-lg p-1.5 text-muted/40 opacity-0 transition hover:text-danger group-hover:opacity-100" aria-label={t('checkInView.delete')}><Trash2 className="h-4 w-4" /></button>}
+                {mine && <button onClick={() => remove(c)} className="rounded-lg p-1.5 text-muted/40 opacity-0 transition hover:text-danger group-hover:opacity-100" aria-label={t('checkInView.delete')}><Trash2 className="h-4 w-4" /></button>}
               </div>
             );
           })}
