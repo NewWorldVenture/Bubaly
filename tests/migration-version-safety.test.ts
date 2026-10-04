@@ -502,9 +502,11 @@ describe('Supabase migration filename safety', () => {
     // /family/permissions shows them as read-only on (ROLE-M03).
     // 0471 adds the per-recipient admin digest delivery store, and 0474
     // (reserved for #710) withdraws an admin removed after a digest was
-    // frozen. This literal tracks the checked-in high-water mark, not
-    // migration allocation: 0465-0470 remain NWV's, 0472 Support's, and 0473
-    // the coordinator's.
+    // frozen. 0472 makes a babysitter payment name only its own family's
+    // babysitter and event, and keeps a named one from moving to another
+    // family (#701's database half). This literal tracks the checked-in
+    // high-water mark, not migration allocation: 0465-0470 remain NWV's, 0472
+    // Support's, and 0473 the coordinator's.
     expect(audit.nextVersion).toBe('0475');
   });
 
