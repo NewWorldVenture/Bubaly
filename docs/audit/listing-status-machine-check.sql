@@ -129,6 +129,7 @@ declare
   meal_replace_oid oid;
   meal_replace_src text;
   meal_replace_compact text;
+  meal_replace_replay_expected text;
   meal_replace_replay_branch text;
   meal_replace_replay_start integer;
   meal_replace_replay_return integer;
@@ -284,6 +285,11 @@ begin
       meal_replace_compact := regexp_replace(
         regexp_replace(meal_replace_src, '--[^\n]*', '', 'g'),
         '[[:space:]]+', '', 'g');
+      -- The replay branch is deliberately whitelisted as a complete statement
+      -- sequence. Marker-only checks miss assignment expressions such as
+      -- `v_result := public.some_mutator()` or an unqualified call resolved via
+      -- this SECURITY DEFINER function's public search_path.
+      meal_replace_replay_expected := $meal_replay$ifv_claimed=0thenselect*intov_receiptfrompublic.meal_plan_write_receiptswherefamily_id=p_family_idandactor_id=v_actorandrequest_id=p_request_id;ifnotfoundorv_receipt.operation<>'replace'orv_receipt.payload_hash<>v_hashorv_receipt.resultisnullthenraiseexception'meal-planrequestidwasalreadyusedforadifferentorincompleterequest'usingerrcode='22023';endif;returnjsonb_set(v_receipt.result,'{replayed}','true'::jsonb,true);endif;$meal_replay$;
       meal_replace_replay_start := position('ifv_claimed=0then' in meal_replace_compact);
       meal_replace_replay_return := position(
         'returnjsonb_set(v_receipt.result,''{replayed}'',''true''::jsonb,true);'
@@ -338,6 +344,7 @@ begin
             > position('select*intov_receiptfrompublic.meal_plan_write_receipts' in meal_replace_replay_branch)
         and position('returnjsonb_set(v_receipt.result,''{replayed}'',''true''::jsonb,true);' in meal_replace_replay_branch)
             > position('ifnotfoundorv_receipt.operation' in meal_replace_replay_branch)
+        and meal_replace_replay_branch = meal_replace_replay_expected
         and regexp_count(meal_replace_replay_branch, '(insertinto|deletefrom|update|mergeinto|truncatetable|truncate)') = 0
         and right(meal_replace_replay_branch, 6) = 'endif;'
         and position('performpg_advisory_xact_lock' in meal_replace_compact)

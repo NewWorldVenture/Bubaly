@@ -1,0 +1,53 @@
+import { readFileSync } from 'node:fs';
+import { describe, expect, it } from 'vitest';
+
+const migration = readFileSync('supabase/migrations/0475_meal_plan_slot_writes_are_atomic.sql', 'utf8');
+const probe = readFileSync('docs/audit/listing-status-machine-check.sql', 'utf8');
+const exactReplayBranch = compact(`
+  if v_claimed = 0 then
+    select * into v_receipt from public.meal_plan_write_receipts
+      where family_id = p_family_id and actor_id = v_actor and request_id = p_request_id;
+    if not found or v_receipt.operation <> 'replace' or v_receipt.payload_hash <> v_hash or v_receipt.result is null then
+      raise exception 'Meal-plan request ID was already used for a different or incomplete request' using errcode = '22023';
+    end if;
+    return jsonb_set(v_receipt.result, '{replayed}', 'true'::jsonb, true);
+  end if;
+`);
+
+function compact(source: string) {
+  return source.replace(/--[^\n]*/g, '').replace(/[\s]+/g, '').toLowerCase();
+}
+
+function replayBranch(source: string) {
+  const start = source.indexOf('ifv_claimed=0then');
+  const returnToken = "returnjsonb_set(v_receipt.result,'{replayed}','true'::jsonb,true);";
+  const returnAt = source.indexOf(returnToken, start);
+  const endAt = source.indexOf('endif;', returnAt + returnToken.length);
+  if (start < 0 || returnAt < 0 || endAt < 0) return '';
+  return source.slice(start, endAt + 'endif;'.length);
+}
+
+describe('meal-plan replay exception in the listing status probe', () => {
+  it('accepts only the exact receipt-read, validation, and return branch', () => {
+    const functionSql = migration.match(
+      /create or replace function public\.meal_plan_replace_slots\([\s\S]*?\n\$\$;/i,
+    )?.[0];
+    const body = functionSql?.match(/\bas\s+\$\$([\s\S]*?)\$\$;/i)?.[1];
+    const expected = probe.match(/meal_replace_replay_expected\s*:=\s*\$meal_replay\$([\s\S]*?)\$meal_replay\$/i)?.[1];
+
+    expect(body).toBeTruthy();
+    expect(expected).toBeTruthy();
+    const liveBranch = replayBranch(compact(body!));
+    const whitelistedBranch = compact(expected!);
+
+    expect(whitelistedBranch).toBe(exactReplayBranch);
+    expect(liveBranch).toBe(whitelistedBranch);
+    expect(probe).toMatch(/meal_replace_replay_branch\s*=\s*meal_replace_replay_expected/i);
+
+    const returnToken = "returnjsonb_set(v_receipt.result,'{replayed}','true'::jsonb,true);";
+    for (const injectedCall of ['v_result:=public.some_mutator();', 'v_result:=some_mutator();']) {
+      const mutatedBranch = replayBranch(compact(body!).replace(returnToken, `${injectedCall}${returnToken}`));
+      expect(mutatedBranch).not.toBe(whitelistedBranch);
+    }
+  });
+});
