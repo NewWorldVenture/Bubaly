@@ -4,7 +4,7 @@ import { describe, expect, it } from 'vitest';
 
 const migration = readFileSync('supabase/migrations/0475_meal_plan_slot_writes_are_atomic.sql', 'utf8');
 const probe = readFileSync('docs/audit/listing-status-machine-check.sql', 'utf8');
-const expectedFunctionSha256 = 'd1b4017075ed6a19471653c320cf3dfe134728246e4596d880e1c671f35ae8ad';
+const expectedFunctionSha256 = '1bbe55de480b5da025755f4a3e41bfba1a89d784c50329d6b63594641e1adb5f';
 const exactReplayBranch = compact(`
   if v_claimed = 0 then
     select * into v_receipt from public.meal_plan_write_receipts
@@ -21,7 +21,7 @@ function compact(source: string) {
 }
 
 function functionSha256(source: string) {
-  return createHash('sha256').update(compact(source), 'utf8').digest('hex');
+  return createHash('sha256').update(source, 'utf8').digest('hex');
 }
 
 function replayBranch(source: string) {
@@ -45,7 +45,7 @@ describe('meal-plan replay exception in the listing status probe', () => {
     expect(expected).toBeTruthy();
     expect(functionSha256(body!)).toBe(expectedFunctionSha256);
     expect(probe).toMatch(
-      /encode\(sha256\(convert_to\(meal_replace_compact,\s*'UTF8'\)\),\s*'hex'\)\s*=\s*'d1b4017075ed6a19471653c320cf3dfe134728246e4596d880e1c671f35ae8ad'/i,
+      /encode\(sha256\(convert_to\(meal_replace_raw_src,\s*'UTF8'\)\),\s*'hex'\)\s*=\s*'1bbe55de480b5da025755f4a3e41bfba1a89d784c50329d6b63594641e1adb5f'/i,
     );
     const liveBranch = replayBranch(compact(body!));
     const whitelistedBranch = compact(expected!);
@@ -65,6 +65,14 @@ describe('meal-plan replay exception in the listing status probe', () => {
     for (const injectedStatement of ['perform some_mutator(p_family_id);', 'call some_mutator(p_family_id);']) {
       const mutatedBody = body!.replace(claimMarker, `  ${injectedStatement}\n${claimMarker}`);
       expect(functionSha256(mutatedBody)).not.toBe(expectedFunctionSha256);
+    }
+
+    for (const [original, replacement] of [
+      ["'meal-plan-slot:'", "'MEAL-PLAN-SLOT:'"],
+      ["'meal-plan-slot:'", "'meal-plan- slot:'"],
+    ] as const) {
+      expect(body).toContain(original);
+      expect(functionSha256(body!.replace(original, replacement))).not.toBe(expectedFunctionSha256);
     }
   });
 });

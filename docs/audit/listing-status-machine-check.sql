@@ -127,6 +127,7 @@ declare
   failures int := 0;
   swept int := 0;   -- how many read-then-write SECURITY DEFINER functions step 2 examined
   meal_replace_oid oid;
+  meal_replace_raw_src text;
   meal_replace_src text;
   meal_replace_compact text;
   meal_replace_replay_expected text;
@@ -278,8 +279,9 @@ begin
   begin
     meal_replace_oid := to_regprocedure('public.meal_plan_replace_slots(uuid,text,jsonb)');
     if meal_replace_oid is not null then
-      select lower(p.prosrc) into meal_replace_src
+      select p.prosrc into meal_replace_raw_src
       from pg_proc p where p.oid = meal_replace_oid;
+      meal_replace_src := lower(meal_replace_raw_src);
       -- Strip the function's line comments before compacting so the positional
       -- checks below describe executable tokens, not explanatory prose.
       meal_replace_compact := regexp_replace(
@@ -362,11 +364,11 @@ begin
         and regexp_count(meal_replace_compact, 'insertintopublic\.') = 2
         and regexp_count(meal_replace_compact, 'deletefrompublic\.') = 1
         and regexp_count(meal_replace_compact, 'updatepublic\.') = 1
-        -- Fingerprint the complete normalized SECURITY DEFINER body. This
+        -- Fingerprint the exact pg_proc.prosrc bytes. This
         -- constrains unqualified PERFORM/CALL and assignment-form calls across
         -- the entire RPC, including before receipt claim or slot locks.
-        and encode(sha256(convert_to(meal_replace_compact, 'UTF8')), 'hex')
-            = 'd1b4017075ed6a19471653c320cf3dfe134728246e4596d880e1c671f35ae8ad'
+        and encode(sha256(convert_to(meal_replace_raw_src, 'UTF8')), 'hex')
+            = '1bbe55de480b5da025755f4a3e41bfba1a89d784c50329d6b63594641e1adb5f'
         and position('execute' in meal_replace_compact) = 0
         and position('callpublic.' in meal_replace_compact) = 0
         and position('performpublic.' in meal_replace_compact) = 0
