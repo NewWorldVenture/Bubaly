@@ -1,3 +1,4 @@
+import { fileURLToPath } from 'node:url';
 import { buildContentSecurityPolicy } from './lib/security/csp.mjs';
 import { parseBuildRevision } from './lib/build-identity.mjs';
 import { fileURLToPath } from 'node:url';

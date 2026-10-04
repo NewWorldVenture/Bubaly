@@ -25,6 +25,30 @@ issued signed media URLs retain their existing expiry semantics.
 See [the buildout verification record](chat-messaging-buildout.md) and the dedicated
 `Messaging verification` CI workflow. The historical baseline below is unchanged.
 
+> **Status correction, 2026-10-03** (blocked-rows eligibility review;
+> evidence in `docs/final-audit/blocked-rows-eligibility-20261003.md`).
+> The connectivity paragraph below is historical. The `Supabase production
+> migrations` workflow links again: run 84 on main `d25e39ea` (2026-10-02
+> 12:11 UTC) passed `supabase link`, `supabase migration list --linked` and
+> `node scripts/audit-production-migration-state.mjs --enforce-history`,
+> reading **192 ledger rows, `0001`–`0176`**, 444 public tables, 1,002
+> policies, `requiresBaselineReview: false`, and every money table "closed by
+> restrictive guard". So the ledger no longer records only `0001`–`0003`,
+> `0004` is recorded, and the replay-from-`0004` procedure in LB-016 §4.3 no
+> longer applies (DEPLOY-003 is moot on that point). The blocker is `0177`
+> (PROD-DB-0177): before the 2026-09-27 dispatch-only gate a push to main ran
+> the apply step itself, and every such run (64, `35465574540`, 2026-09-19,
+> and the ledger's `533554be` / `7e54596d` / `671c5f6a`) was cancelled inside
+> `0177`'s single `DO` block by the 120 s statement timeout (`SQLSTATE 57014`)
+> after its `families(created_by)` cleanup was skipped on
+> `family_model_dirty_family_id_fkey`, so nothing from `0177` on is applied.
+> No `workflow_dispatch` with `apply=true` has been run.
+> "Apply ordered migrations" runs only on `workflow_dispatch` with
+> `apply=true`; a push to main verifies and never applies. Run 84's own
+> failure is the later schema-verification step, HTTP 401 from PostgREST on
+> all 52 checks: PostgREST rejects the `SUPABASE_SERVICE_ROLE_KEY` the workflow
+> holds, so that repository secret needs replacing; the owner's action.
+
 **Current status (2026-09-05; main `01881fb279589d7a90acb8302817bb385fbe036d`).**
 **This baseline is stale — see "Migrations added since this document's stated
 baseline" at the end for the thirty-one migrations (`0255`-`0285`) that landed after

@@ -1686,7 +1686,7 @@
       "consumers": [
         {
           "path": "lib/marketing/unsubscribe.ts",
-          "line": 9,
+          "line": 28,
           "kind": "environment-read"
         },
         {
@@ -1724,7 +1724,7 @@
       "consumers": [
         {
           "path": "lib/marketing/unsubscribe.ts",
-          "line": 8,
+          "line": 28,
           "kind": "environment-read"
         }
       ],
@@ -1733,7 +1733,7 @@
         "observation": "Signing falls back through INTERNAL_SECRET and SUPABASE_SERVICE_ROLE_KEY. A NODE_ENV-conditioned error branch exists when all are absent; no fallback secret values are reproduced.",
         "evidence": {
           "path": "lib/marketing/unsubscribe.ts",
-          "line": 8
+          "line": 28
         }
       },
       "configuredState": "not-inspected"
@@ -2710,7 +2710,7 @@
         },
         {
           "path": "lib/marketing/unsubscribe.ts",
-          "line": 12,
+          "line": 36,
           "kind": "environment-read"
         }
       ],
@@ -4081,7 +4081,7 @@
         },
         {
           "path": "lib/marketing/unsubscribe.ts",
-          "line": 10,
+          "line": 30,
           "kind": "environment-read"
         },
         {

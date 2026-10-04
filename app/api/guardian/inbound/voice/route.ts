@@ -14,7 +14,7 @@ import {
 import { twilioRefusal, verifyTwilioRequest } from '@/lib/server/twilio-ingress';
 import { formatPhone } from '@/lib/guardian/phone';
 import { detectScamFromText } from '@/lib/guardian/scam';
-import { claimGuardianCallback, isValidGuardianEventId, markGuardianCallbackProcessed } from '@/lib/guardian/callbacks';
+import { claimGuardianCallback, isValidGuardianEventId, markGuardianCallbackProcessed, releaseGuardianCallback } from '@/lib/guardian/callbacks';
 import { readBoundedRequestFormData } from '@/lib/server/bounded-request-body';
 import { wroteNoRows } from '@/lib/supabase/errors';
 import type { Database } from '@/lib/database.types';
@@ -85,7 +85,10 @@ export async function POST(req: NextRequest) {
     console.error('[guardian-voice] Guardian number lookup failed', { to, error: profileError });
     // NOT `finish()`: that calls markGuardianCallbackProcessed, which is
     // precisely what must not happen here. The event has to stay unconsumed so
-    // Twilio retries it once the duplicate is resolved.
+    // Twilio retries it once the duplicate is resolved — and "unconsumed"
+    // includes the claim: held, it made that retry a 'settled' duplicate for
+    // ten minutes, hung up on, and lost.
+    await releaseGuardianCallback(supabase, 'inbound_voice', callSid);
     return new NextResponse(
       wrapTwiml(twimlSay('Sorry, we cannot take this call right now. Please try again shortly.')),
       { status: 503, headers: { 'content-type': 'application/xml; charset=utf-8' } },
@@ -120,6 +123,9 @@ export async function POST(req: NextRequest) {
       callSid,
     });
   } catch {
+    // Nothing has been written yet (the pipeline only reads), so the retry may
+    // take the call from the start.
+    await releaseGuardianCallback(supabase, 'inbound_voice', callSid);
     return new NextResponse('Guardian routing unavailable', { status: 503 });
   }
 

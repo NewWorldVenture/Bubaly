@@ -36,7 +36,8 @@ describe('a push run after the first still sends', () => {
     const f = pushDispatchDb({
       notifications: [row(1, '2026-09-28T11:00:00.000000+00:00')],
       push_devices: [{ id: 'web', user_id: 'healthy', enabled: true, provider: 'webpush', endpoint: 'https://push.example.test/d', p256dh: 'k', auth: 'a' }],
-      family_members: [], family_ai_settings: [], user_preferences: [],
+      family_members: [{ family_id: 'family-a', user_id: 'healthy', role: 'parent', is_active: true }],
+      family_ai_settings: [], user_preferences: [],
     });
     const first = await dispatchPendingPushes(f.db, { now: NOW });
     expect(first.result.sent).toBe(1);

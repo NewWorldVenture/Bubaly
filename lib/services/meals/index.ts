@@ -502,8 +502,8 @@ export async function planWeek(scope: ServiceScope, entries: PlanEntryInput[]): 
     const { data: deleted, error } = await scope.db.from('meal_plans').delete()
       .eq('family_id', scope.familyId).eq('meal_type', group.mealType).in('plan_date', group.dates)
       .in('id', captured.map((row) => row.id)).select('*');
-    if (error || !deleted || deleted.length !== captured.length
-      || captured.some((row) => !deleted.some((saved) => saved.id === row.id && saved.meal_id === row.meal_id))) {
+    if (error || !Array.isArray(deleted) || deleted.length !== captured.length
+      || captured.some((row) => !deleted.some((saved) => saved?.id === row.id && saved.meal_id === row.meal_id))) {
       return failure('Could not update the meal plan.');
     }
   }
@@ -512,9 +512,9 @@ export async function planWeek(scope: ServiceScope, entries: PlanEntryInput[]): 
 
   const { data: inserted, error: insertError } = await scope.db.from('meal_plans').insert(rows).select('*');
   const matchesRows = (actual: MealPlanRow[]) => actual.length === rows.length && rows.every((row) =>
-    actual.some((saved) => saved.id === row.id && saved.family_id === row.family_id && saved.meal_id === row.meal_id
+    actual.some((saved) => saved?.id === row.id && saved.family_id === row.family_id && saved.meal_id === row.meal_id
       && saved.plan_date === row.plan_date && saved.meal_type === row.meal_type && saved.created_by === row.created_by));
-  if (insertError || !inserted || !matchesRows(inserted)) {
+  if (insertError || !Array.isArray(inserted) || !matchesRows(inserted)) {
     console.error('[service:meals] plan insert failed', insertError ?? new Error('meal plan insert returned an incomplete result'));
     return failure(describeDbError(insertError, 'Could not save the meal plan.'), true);
   }

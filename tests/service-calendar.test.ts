@@ -80,7 +80,10 @@ const EVENT_ROW = {
 
 describe('createEvent', () => {
   it('writes the auth user id into created_by and the member id into assignee_id', async () => {
-    const { db, calls } = makeDb(() => ({ data: EVENT_ROW, error: null }));
+    const { db, calls } = makeDb((call) => ({
+      data: call.table === 'family_members' ? { id: 'member-2', family_id: 'fam-1' } : EVENT_ROW,
+      error: null,
+    }));
     const res = await createEvent(scopeWith(db), {
       title: '  Dentist  ',
       startsAt: '2026-09-07T14:00:00Z',
@@ -141,7 +144,7 @@ describe('createEvent', () => {
   });
 
   it('returns the existing row instead of a duplicate when an idempotency key repeats', async () => {
-    const { db, calls } = makeDb((call) => (call.kind === 'select' ? { data: EVENT_ROW, error: null } : { data: EVENT_ROW, error: null }));
+    const { db, calls } = makeDb(() => ({ data: { ...EVENT_ROW, idempotency_key: 'retry-1' }, error: null }));
     const res = await createEvent(scopeWith(db, { idempotencyKey: 'retry-1' }), {
       title: 'Dentist', startsAt: '2026-09-07T14:00:00Z',
     });

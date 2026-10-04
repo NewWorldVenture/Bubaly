@@ -19,7 +19,7 @@ import { nextRemindAt } from '@/lib/reminders/details';
 import type { Tables } from '@/lib/database.types';
 import { describeDbError } from '@/lib/supabase/errors';
 import { recordActivitySafely } from '../activity';
-import { keyedProbe, withIdempotency } from '../idempotency';
+import { keyedProbe, sameId, sameInstant, withIdempotency, type KeyedCreateOptions } from '../idempotency';
 import { scopeNow } from '../scope';
 import { fail, ok, SERVICE_CODES, type ServiceResult, type ServiceScope } from '../types';
 
@@ -46,7 +46,34 @@ export type CreateReminderInput = {
   aiSuggested?: boolean;
 };
 
-export async function createReminder(scope: ServiceScope, input: CreateReminderInput): Promise<ServiceResult<FamilyReminder>> {
+/** The composition this create writes, excluding lifecycle and actor columns. */
+type ReminderContent = Pick<FamilyReminder,
+  'title' | 'notes' | 'kind' | 'remind_at' | 'location_name' | 'recurrence' | 'priority'
+  | 'assigned_to_id' | 'member_id' | 'ai_suggested' | 'tags'>;
+
+/** Compare the saved row with the normalized requested composition, without logging its text. */
+function reminderDrift(stored: FamilyReminder, wanted: ReminderContent): string[] {
+  const drift: string[] = [];
+  if (stored.title !== wanted.title) drift.push('title');
+  if ((stored.notes ?? null) !== wanted.notes) drift.push('notes');
+  if (stored.kind !== wanted.kind) drift.push('kind');
+  if (!sameInstant(stored.remind_at, wanted.remind_at)) drift.push('remind_at');
+  if ((stored.location_name ?? null) !== wanted.location_name) drift.push('location_name');
+  if (stored.recurrence !== wanted.recurrence) drift.push('recurrence');
+  if (stored.priority !== wanted.priority) drift.push('priority');
+  if (!sameId(stored.assigned_to_id, wanted.assigned_to_id)) drift.push('assigned_to_id');
+  if (!sameId(stored.member_id, wanted.member_id)) drift.push('member_id');
+  if (stored.ai_suggested !== wanted.ai_suggested) drift.push('ai_suggested');
+  const storedTags = stored.tags ?? [];
+  if (storedTags.length !== wanted.tags.length || storedTags.some((tag, i) => tag !== wanted.tags[i])) drift.push('tags');
+  return drift;
+}
+
+export async function createReminder(
+  scope: ServiceScope,
+  input: CreateReminderInput,
+  opts: KeyedCreateOptions = {},
+): Promise<ServiceResult<FamilyReminder>> {
   const title = input.title?.trim() ?? '';
   if (!title) return fail('A reminder needs a title.', { code: SERVICE_CODES.invalidInput });
 
@@ -78,6 +105,20 @@ export async function createReminder(scope: ServiceScope, input: CreateReminderI
     return fail('A reminder needs a time — even a repeating one needs its first occurrence.', { code: SERVICE_CODES.invalidInput });
   }
 
+  const wanted: ReminderContent = {
+    title,
+    notes: input.notes?.trim() || null,
+    kind,
+    remind_at: remindAt,
+    location_name: input.locationName?.trim() || null,
+    recurrence,
+    priority,
+    assigned_to_id: input.assignedToUserId ?? null,
+    member_id: input.memberId ?? null,
+    ai_suggested: input.aiSuggested ?? scope.actorKind === 'ai',
+    tags: input.tags ?? [],
+  };
+
   return withIdempotency<FamilyReminder>(
     scope,
     {
@@ -86,26 +127,40 @@ export async function createReminder(scope: ServiceScope, input: CreateReminderI
       // 0256: the retried call finds the row it wrote, not a same-titled
       // reminder somebody set by hand at the same minute.
       find: keyedProbe(scope, 'family_reminders', 'reminder'),
+      // A browser composition opts in; operation-key callers retain their saved outcome.
+      changedRetry: opts.rejectChangedRetry ? {
+        drift: (stored) => reminderDrift(stored, wanted),
+        message: () => 'An earlier try already saved this reminder. Nothing was added or changed this time.',
+        id: (stored) => stored.id,
+      } : undefined,
     },
     async (key) => {
+      if (input.memberId != null) {
+        const { data: members, error: memberError } = await scope.db
+          .from('family_members')
+          .select('id,family_id')
+          .eq('family_id', scope.familyId)
+          .eq('id', input.memberId)
+          .limit(1);
+        if (memberError) {
+          return fail(describeDbError(memberError, 'Could not verify that reminder member.'), { code: SERVICE_CODES.db });
+        }
+        const member = Array.isArray(members) ? members[0] : null;
+        if (!member || typeof member !== 'object' || Array.isArray(member)
+          || typeof member.id !== 'string' || typeof member.family_id !== 'string'
+          || !sameId(member.id, input.memberId) || !sameId(member.family_id, scope.familyId)) {
+          return fail('That reminder member could not be verified in this family.', { code: SERVICE_CODES.denied });
+        }
+      }
+
       const { data, error } = await scope.db
         .from('family_reminders')
         .insert({
           family_id: scope.familyId,
-          title,
-          notes: input.notes?.trim() || null,
-          kind,
-          remind_at: remindAt,
-          location_name: input.locationName?.trim() || null,
-          recurrence,
-          priority,
+          ...wanted,
           status: 'active',
           // created_by / assigned_to_id → auth.users; member_id → family_members.
           created_by: scope.userId,
-          assigned_to_id: input.assignedToUserId ?? null,
-          member_id: input.memberId ?? null,
-          ai_suggested: input.aiSuggested ?? scope.actorKind === 'ai',
-          tags: input.tags ?? [],
           idempotency_key: key,
         })
         .select('*')
@@ -265,6 +320,9 @@ export async function listDue(
   if (error) {
     console.error('[service:reminders] due read failed', error);
     return fail(describeDbError(error, 'Could not load your reminders.'), { code: SERVICE_CODES.db });
+  }
+  if (data != null && !Array.isArray(data)) {
+    return fail('Could not load your reminders.', { code: SERVICE_CODES.db });
   }
 
   const due = (data ?? []).filter((row) => {
