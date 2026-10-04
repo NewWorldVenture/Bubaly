@@ -7,6 +7,7 @@ import { useRealtimeQuery } from '@/lib/hooks/use-realtime-query';
 import { createClient } from '@/lib/supabase/client';
 import { describeDbError, wroteNoRows } from '@/lib/supabase/errors';
 import { useToast } from '@/components/ui/toast';
+import { useConfirm } from '@/components/ui/confirm';
 import { PageHeader } from '@/components/app/page-header';
 import { Button } from '@/components/ui/button';
 import { Modal } from '@/components/ui/modal';
@@ -23,6 +24,7 @@ type Log = Tables<'nutrition_logs'>;
 
 export function NutritionView() {
   const t = useTranslations();
+  const askConfirm = useConfirm();
   const { fmtNumber } = useFormat();
   const { familyId, userId, members, selfMember } = useApp();
   const { success, error: toastError } = useToast();
@@ -42,12 +44,13 @@ export function NutritionView() {
   const totals = useMemo(() => dailyTotals(logs, today, member || undefined), [logs, today, member]);
   const byMeal = useMemo(() => groupByMeal(todayLogs), [todayLogs]);
 
-  async function remove(id: string) {
+  async function remove(l: Log) {
+    if (!(await askConfirm({ title: t('confirm.removeNamed', { name: l.item }), body: t('confirm.cannotBeUndone') }))) return;
     // RLS filters this delete rather than refusing it, so the silent path was a
     // removal that did not happen and said nothing at all — this function had no
     // success toast either, which made the no-op completely invisible. Audit C1-S9-84.
     const { data: removed, error } = await createClient().from('nutrition_logs').delete()
-      .eq('id', id).eq('family_id', familyId).select('id');
+      .eq('id', l.id).eq('family_id', familyId).select('id');
     if (error) toastError(describeDbError(error));
     else if (wroteNoRows(removed)) toastError(t('errors.thatChangeWasNotSaved'));
   }
@@ -94,7 +97,7 @@ export function NutritionView() {
                       <p className="truncate text-sm font-semibold">{l.item}</p>
                       <p className="truncate text-xs text-muted">{l.calories} cal · P {Number(l.protein_g)}g · C {Number(l.carbs_g)}g · F {Number(l.fat_g)}g{l.water_ml ? ` · 💧 ${l.water_ml}ml` : ''}</p>
                     </div>
-                    <button onClick={() => remove(l.id)} className="rounded-lg p-1.5 text-muted/40 opacity-0 transition hover:text-danger group-hover:opacity-100" aria-label={t('nutritionView.delete')}><Trash2 className="h-4 w-4" /></button>
+                    <button onClick={() => remove(l)} className="rounded-lg p-1.5 text-muted/40 opacity-0 transition hover:text-danger group-hover:opacity-100" aria-label={t('nutritionView.delete')}><Trash2 className="h-4 w-4" /></button>
                   </div>
                 ))}
               </div>

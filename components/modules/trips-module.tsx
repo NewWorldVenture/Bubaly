@@ -169,6 +169,7 @@ export function TripsModule() {
     if (wroteNoRows(rows)) toastError(tr('errors.thatChangeWasNotSaved'));
   }
   async function removeItem(it: TripItem) {
+    if (!(await askConfirm({ title: tr('confirm.removeNamed', { name: it.label }), body: tr('confirm.cannotBeUndone') }))) return;
     const sb = createClient();
     const { data: rows, error: err } = await sb.from('trip_items').delete().eq('id', it.id).eq('family_id', familyId).select('id');
     if (err) { toastError(describeDbError(err)); return; }
