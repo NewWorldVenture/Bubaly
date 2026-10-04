@@ -125,9 +125,10 @@ export function MealsModule() {
   scopeRef.current = scope;
   const mounted = useRef(false), pickerSequence = useRef(0);
   const groceryIntent = useRef<object | null>(null), removeIntent = useRef<object | null>(null);
+  const removeRequest = useRef<{ scope: object; planId: string; requestId: string } | null>(null);
   useLayoutEffect(() => { mounted.current = true; return () => { mounted.current = false; }; }, []);
   useLayoutEffect(() => {
-    groceryIntent.current = null; removeIntent.current = null;
+    groceryIntent.current = null; removeIntent.current = null; removeRequest.current = null;
     setAddCell(null); setNewMealOpen(false); setAutoPlanOpen(false);
     setAddingPlan(false); setRemovingPlan(null); setLastAdd(null); setDinnerIdx(0); setSkipPantry(false);
   }, [scope]);
@@ -280,16 +281,21 @@ export function MealsModule() {
 
   async function removePlan(id: string) {
     if (!isCurrentScope() || removeIntent.current) return;
+    if (!removeRequest.current || removeRequest.current.scope !== scope || removeRequest.current.planId !== id) {
+      removeRequest.current = { scope, planId: id, requestId: crypto.randomUUID() };
+    }
+    const request = removeRequest.current;
     const intent = {}; removeIntent.current = intent; setRemovingPlan(id);
     const current = () => isCurrentScope() && removeIntent.current === intent;
     try {
-      const result = await removeMealPlanAction(id);
+      const result = await removeMealPlanAction(id, request.requestId);
       if (!current()) return;
       if (!result.ok) { toastError(result.error); return; }
       if (result.id !== id) { toastError(tr('mealsPlanner.removeUnconfirmed')); return; }
       const readback = await refreshAndConfirm();
       if (!current()) return;
       if (!readback.ok || plansRef.current.some(plan => plan.id === id)) { toastError(tr('mealsPlanner.removeUnconfirmed')); return; }
+      if (removeRequest.current === request) removeRequest.current = null;
       success(tr('mealsPlanner.removed'));
     } catch (err) { if (current()) toastError(describeDbError(err, tr('mealsPlanner.removeUnconfirmed'))); }
     finally { if (current()) { removeIntent.current = null; setRemovingPlan(null); } }
@@ -659,7 +665,7 @@ export function MealsModule() {
 
       {/* Add-to-cell picker */}
       {addCell?.scope === scope && (
-        <MealPicker key={addCell.id} date={addCell.date} mealType={addCell.type}
+        <MealPicker key={addCell.id} familyId={familyId} userId={userId} date={addCell.date} mealType={addCell.type}
           title={tr('mealsPlanner.forDay', { meal: mealLabel(addCell.type), date: dayLabel(addCell.date) })}
           library={library} recipes={recipes} choicesLoading={libraryLoading || recipesLoading}
           choicesError={libraryError || recipesError} retryChoices={() => { void reloadLibrary(); void refreshRecipes(); }}
@@ -1005,9 +1011,9 @@ function CustomMealFields({ name, setName, ingredients, setIngredients }: {
   );
 }
 
-function MealPicker({ date, mealType, title, library, recipes, choicesLoading, choicesError, retryChoices,
+function MealPicker({ familyId, userId, date, mealType, title, library, recipes, choicesLoading, choicesError, retryChoices,
   isScopeCurrent, refreshAndConfirm, readSlot, onClose, onSaved }: {
-  date: string; mealType: MealType; title: string; library: Meal[]; recipes: Recipe[];
+  familyId: string; userId: string; date: string; mealType: MealType; title: string; library: Meal[]; recipes: Recipe[];
   choicesLoading: boolean; choicesError: string | null; retryChoices: () => void;
   isScopeCurrent: () => boolean; refreshAndConfirm: () => Promise<QueryRefreshConfirmation>;
   readSlot: (slot: PlanSlot) => boolean; onClose: () => void; onSaved: () => void;
@@ -1019,6 +1025,7 @@ function MealPicker({ date, mealType, title, library, recipes, choicesLoading, c
   const [saving, setSaving] = useState(false), [failure, setFailure] = useState<string | null>(null);
   const [saved, setSaved] = useState<PlanSlot | null>(null);
   const alive = useRef(false), closed = useRef(false), pending = useRef(false), attempt = useRef(0), receipt = useRef<PlanSlot | null>(null);
+  const requestRef = useRef<{ scope: string; fingerprint: string; requestId: string } | null>(null);
   const onCloseRef = useRef(onClose); onCloseRef.current = onClose;
   useLayoutEffect(() => { alive.current = true; return () => { alive.current = false; }; }, []);
   const close = useCallback(() => { closed.current = true; attempt.current++; onCloseRef.current(); }, []);
@@ -1038,8 +1045,14 @@ function MealPicker({ date, mealType, title, library, recipes, choicesLoading, c
     const current = () => alive.current && !closed.current && isScopeCurrent() && attempt.current === id;
     try {
       if (!receipt.current) {
-        const result = await planMealAction({ date, mealType, ...(custom ? { mealName: name.trim(), ingredients: ingredientPayload(ingredients) }
-          : selected?.kind === 'recipe' ? { recipeId: selected.id } : { mealId: selected!.id }) });
+        const input = { date, mealType, ...(custom ? { mealName: name.trim(), ingredients: ingredientPayload(ingredients) }
+          : selected?.kind === 'recipe' ? { recipeId: selected.id } : { mealId: selected!.id }) };
+        const scopeKey = JSON.stringify([familyId, userId]);
+        const fingerprint = JSON.stringify(input);
+        if (!requestRef.current || requestRef.current.scope !== scopeKey || requestRef.current.fingerprint !== fingerprint) {
+          requestRef.current = { scope: scopeKey, fingerprint, requestId: crypto.randomUUID() };
+        }
+        const result = await planMealAction(input, requestRef.current.requestId);
         if (!current()) return;
         if (!result.ok) { setFailure(result.error); return; }
         const slot = result.slot;

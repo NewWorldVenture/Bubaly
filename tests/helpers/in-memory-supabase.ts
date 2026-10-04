@@ -47,6 +47,8 @@ export type InMemoryOptions = {
   rpc?: Record<string, (args: Record<string, unknown>, db: InMemorySupabase) => unknown | Promise<unknown>>;
   /** Auth user id for `auth.getUser()`. */
   userId?: string | null;
+  /** Database role; service-role clients intentionally return null auth.getUser(). */
+  role?: 'authenticated' | 'service_role' | 'anon';
   /**
    * PostgREST's `db-max-rows` — the server's own ceiling on ONE response,
    * 1,000 on a default Supabase project.
@@ -80,7 +82,100 @@ const BUILT_IN_RPC: Record<string, (args: Record<string, unknown>, db: InMemoryS
   family_allergies: (args, db) => db.table('medical_profiles')
     .filter((row) => row.family_id === args.p_family_id)
     .map((row) => ({ member_id: row.member_id, allergies: row.allergies ?? null })),
+  meal_plan_replace_slots: async (args, db) => replaceMealPlanSlots(args, db,
+    await mealPlanActor(db, args.p_family_id, 'authenticated')),
+  meal_plan_remove_slot: async (args, db) => removeMealPlanSlot(args, db,
+    await mealPlanActor(db, args.p_family_id, 'authenticated')),
+  meal_plan_replace_slots_for_actor: async (args, db) => replaceMealPlanSlots(args, db,
+    await mealPlanActor(db, args.p_family_id, 'service_role', args.p_actor_id)),
+  meal_plan_remove_slot_for_actor: async (args, db) => removeMealPlanSlot(args, db,
+    await mealPlanActor(db, args.p_family_id, 'service_role', args.p_actor_id)),
 };
+
+type MealPlanReceipt = { operation: 'replace' | 'remove'; payload: string; result: unknown };
+const mealPlanReceipts = new WeakMap<Map<string, Row[]>, Map<string, MealPlanReceipt>>();
+
+async function mealPlanActor(db: InMemorySupabase, family: unknown,
+  expected: 'authenticated' | 'service_role', delegated?: unknown): Promise<string> {
+  if (db.role !== expected) throw new Error(`RPC unavailable to ${db.role} role`);
+  if (typeof family !== 'string' || !family) throw new Error('Invalid family');
+  const { data } = await db.auth.getUser();
+  const actor = expected === 'service_role' ? delegated : data.user?.id;
+  if (typeof actor !== 'string' || !actor) throw new Error('Not signed in');
+  const membership = db.table('family_members').find((row) => row.family_id === family && row.user_id === actor);
+  if (!membership || membership.is_active !== true || membership.role === 'guest') throw new Error('Not an active non-guest member');
+  return actor;
+}
+
+function validMealDay(day: unknown): day is string {
+  if (typeof day !== 'string' || !/^\d{4}-\d{2}-\d{2}$/.test(day)) return false;
+  const time = Date.parse(`${day}T00:00:00Z`);
+  return Number.isFinite(time) && new Date(time).toISOString().slice(0, 10) === day;
+}
+
+function readMealRequest(db: InMemorySupabase, family: string, actor: string, request: string) {
+  return mealPlanReceipts.get(db.receiptIdentity)?.get(`${family}:${actor}:${request}`);
+}
+
+function saveMealRequest(db: InMemorySupabase, family: string, actor: string, request: string,
+  operation: MealPlanReceipt['operation'], payload: string, result: unknown) {
+  let receipts = mealPlanReceipts.get(db.receiptIdentity);
+  if (!receipts) { receipts = new Map(); mealPlanReceipts.set(db.receiptIdentity, receipts); }
+  receipts.set(`${family}:${actor}:${request}`, { operation, payload, result: structuredClone(result) });
+}
+
+function requestId(value: unknown): string {
+  if (typeof value !== 'string' || value.length < 1 || value.length > 128) throw new Error('Invalid request ID');
+  return value;
+}
+
+async function replaceMealPlanSlots(args: Record<string, unknown>, db: InMemorySupabase, actor: string) {
+  const family = args.p_family_id as string;
+  const request = requestId(args.p_request_id);
+  if (!Array.isArray(args.p_entries) || args.p_entries.length === 0) throw new Error('Invalid meal-plan entries');
+  const entries = args.p_entries.map((raw) => {
+    if (!raw || typeof raw !== 'object' || Array.isArray(raw)) throw new Error('Invalid meal-plan entry');
+    const entry = raw as Row;
+    if (typeof entry.meal_id !== 'string' || !entry.meal_id || !validMealDay(entry.plan_date)
+      || !['breakfast', 'lunch', 'dinner', 'snack'].includes(String(entry.meal_type))) throw new Error('Invalid meal-plan entry');
+    if (!db.table('meals').some((meal) => meal.id === entry.meal_id && meal.family_id === family)) throw new Error('Foreign meal');
+    return { meal_id: entry.meal_id, plan_date: entry.plan_date, meal_type: entry.meal_type as string };
+  });
+  const slots = entries.map((entry) => `${entry.plan_date}:${entry.meal_type}`);
+  if (new Set(slots).size !== slots.length) throw new Error('Duplicate meal-plan slot');
+  const payload = JSON.stringify(entries);
+  const prior = readMealRequest(db, family, actor, request);
+  if (prior) {
+    if (prior.operation !== 'replace' || prior.payload !== payload) throw new Error('Request payload mismatch');
+    return { ...(prior.result as Row), replayed: true };
+  }
+  const plans = db.table('meal_plans');
+  const removed = plans.filter((row) => row.family_id === family && slots.includes(`${row.plan_date}:${row.meal_type}`));
+  const planned = entries.map((entry) => db.withDefaults('meal_plans', { family_id: family, ...entry, created_by: actor }));
+  db.replace('meal_plans', [...plans.filter((row) => !removed.includes(row)), ...planned]);
+  const result = { planned, replaced: removed.length, replayed: false };
+  saveMealRequest(db, family, actor, request, 'replace', payload, result);
+  return result;
+}
+
+async function removeMealPlanSlot(args: Record<string, unknown>, db: InMemorySupabase, actor: string) {
+  const family = args.p_family_id as string;
+  const request = requestId(args.p_request_id);
+  if (typeof args.p_plan_id !== 'string' || !args.p_plan_id) throw new Error('Invalid planned meal ID');
+  const payload = JSON.stringify({ id: args.p_plan_id });
+  const prior = readMealRequest(db, family, actor, request);
+  if (prior) {
+    if (prior.operation !== 'remove' || prior.payload !== payload) throw new Error('Request payload mismatch');
+    return { ...(prior.result as Row), replayed: true };
+  }
+  const plans = db.table('meal_plans');
+  const index = plans.findIndex((row) => row.id === args.p_plan_id && row.family_id === family);
+  if (index < 0) throw new Error('Planned meal not found in this family');
+  const [row] = plans.splice(index, 1);
+  const result = { id: row.id, plan_date: row.plan_date, meal_type: row.meal_type, replayed: false };
+  saveMealRequest(db, family, actor, request, 'remove', payload, result);
+  return result;
+}
 
 function pgError(code: string, message: string): PostgrestError {
   return { code, message, details: null, hint: null };
@@ -488,11 +583,19 @@ class QueryBuilder implements PromiseLike<Reply> {
 }
 
 export class InMemorySupabase {
-  private readonly tables = new Map<string, Row[]>();
+  private readonly tables: Map<string, Row[]>;
   /** Every builder created, in order — a test can assert what was touched. */
   readonly log: { table: string }[] = [];
 
-  constructor(private readonly options: InMemoryOptions = {}) {}
+  constructor(private readonly options: InMemoryOptions = {}, sharedTables?: Map<string, Row[]>) {
+    this.tables = sharedTables ?? new Map<string, Row[]>();
+  }
+
+  get role(): NonNullable<InMemoryOptions['role']> { return this.options.role ?? 'authenticated'; }
+  get receiptIdentity(): Map<string, Row[]> { return this.tables; }
+  asRole(role: NonNullable<InMemoryOptions['role']>, userId: string | null = null): InMemorySupabase {
+    return new InMemorySupabase({ ...this.options, role, userId }, this.tables);
+  }
 
   /** The server's per-response row ceiling, or undefined for no cap. */
   get maxRows(): number | undefined { return this.options.maxRows; }
@@ -503,6 +606,9 @@ export class InMemorySupabase {
   }
 
   async rpc(name: string, args: Record<string, unknown> = {}): Promise<Reply> {
+    if (/^meal_plan_(replace_slots|remove_slot)_internal$/.test(name)) {
+      return { data: null, error: pgError('42501', 'permission denied for internal meal-plan function'), count: null, status: 403, statusText: 'Forbidden' };
+    }
     const handler = this.options.rpc?.[name] ?? BUILT_IN_RPC[name];
     if (!handler) return { data: null, error: pgError('42883', `function ${name} does not exist`), count: null, status: 404, statusText: 'Not Found' };
     try {
@@ -514,7 +620,7 @@ export class InMemorySupabase {
   }
 
   readonly auth = {
-    getUser: async () => ({ data: { user: this.options.userId ? { id: this.options.userId } : null }, error: null }),
+    getUser: async () => ({ data: { user: this.role === 'authenticated' && this.options.userId ? { id: this.options.userId } : null }, error: null }),
   };
 
   /** Direct access for seeding and assertions. Rows are live objects. */
@@ -535,7 +641,7 @@ export class InMemorySupabase {
    * household per case. The mocked `createServiceClient` closes over a single
    * client, so tests cannot simply build a new one between cases.
    */
-  reset(): void { this.tables.clear(); this.log.length = 0; }
+  reset(): void { this.tables.clear(); mealPlanReceipts.delete(this.tables); this.log.length = 0; }
 
   uniquesFor(name: string): UniqueSpec[] { return this.options.uniques?.[name] ?? []; }
 

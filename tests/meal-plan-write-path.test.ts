@@ -24,8 +24,10 @@ const plans = (familyId = FAMILY) => db.table('meal_plans').filter((r) => r.fami
 beforeEach(() => {
   vi.clearAllMocks();
   db = createInMemorySupabase<SupabaseClient<Database>>({
+    userId: 'user-1',
     defaults: { meal_plans: { meal_id: null, idempotency_key: null }, meals: { description: null, ingredients: [], image_url: null, recipe_url: null } },
   });
+  db.seed('family_members', [{ id: 'member-1', family_id: FAMILY, user_id: 'user-1', role: 'parent', is_active: true }]);
   db.seed('meals', [
     { id: 'tacos', family_id: FAMILY, name: 'Tacos' },
     { id: 'curry', family_id: FAMILY, name: 'Curry' },

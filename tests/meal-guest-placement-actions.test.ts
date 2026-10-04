@@ -25,13 +25,19 @@ vi.mock('@/lib/services/meals', async (importOriginal) => {
 import { planMealAction, removeMealPlanAction } from '@/app/(app)/dashboard/meals/actions';
 
 type Row = Record<string, unknown>;
-type RecordedRequest = { method: string; table: string; query: string };
+type RecordedRequest = { method: string; table: string; query: string; body?: Row | Row[] | null };
 const FAMILY = 'family-one', OTHER = 'family-two', DAY = '2026-09-28';
 let tables: Record<string, Row[]>;
 let requests: RecordedRequest[];
-let emptyInsertReceipt: boolean;
+let malformedReplaceReceipt: boolean;
+let activeMembership = { role: 'parent', is_active: true };
+let nextSyntheticPlan = 0;
 
 function actor(role: 'parent' | 'adult' | 'teen' | 'child' | 'caregiver' | 'guest') {
+  activeMembership = { role, is_active: true };
+  if (tables?.family_members) {
+    tables.family_members = [{ id: 'member-actor', family_id: FAMILY, user_id: 'auth-actor', ...activeMembership }];
+  }
   mocks.context.mockResolvedValue({
     user: { id: 'auth-actor' },
     active: {
@@ -50,10 +56,51 @@ async function transport(input: RequestInfo | URL, init?: RequestInit): Promise<
     throw new Error('Unexpected synthetic transport destination');
   }
   const table = url.pathname.slice('/rest/v1/'.length), method = request.method;
-  if (!Object.hasOwn(tables, table)) throw new Error(`Unexpected table: ${table}`);
-  requests.push({ method, table, query: url.search });
   const raw = await request.text();
   const body: Row | Row[] | null = raw ? JSON.parse(raw) : null;
+  if (table.startsWith('rpc/')) {
+    const name = table.slice('rpc/'.length);
+    requests.push({ method, table: `rpc:${name}`, query: url.search, body });
+    if (method !== 'POST' || !body || Array.isArray(body)) throw new Error(`Unexpected RPC request: ${name}`);
+    if (activeMembership.is_active !== true || activeMembership.role === 'guest'
+      || !tables.family_members.some((member) => member.family_id === body.p_family_id
+        && member.user_id === 'auth-actor' && member.is_active === true && member.role !== 'guest')) {
+      return Response.json({ message: 'Not an active non-guest member' }, { status: 400 });
+    }
+    if (body.p_family_id !== FAMILY) return Response.json({ message: 'Not an active family member' }, { status: 400 });
+    if (name === 'meal_plan_replace_slots') {
+      if (malformedReplaceReceipt) {
+        malformedReplaceReceipt = false;
+        return Response.json({}, { status: 200 });
+      }
+      if (!Array.isArray(body.p_entries) || body.p_entries.length === 0) return Response.json({ message: 'Invalid entries' }, { status: 400 });
+      const entries = body.p_entries as Row[];
+      if (entries.some((entry) => !entry || typeof entry.meal_id !== 'string'
+        || !tables.meals.some((meal) => meal.id === entry.meal_id && meal.family_id === FAMILY)
+        || typeof entry.plan_date !== 'string' || !/^\d{4}-\d{2}-\d{2}$/.test(entry.plan_date)
+        || !['breakfast', 'lunch', 'dinner', 'snack'].includes(String(entry.meal_type)))) {
+        return Response.json({ message: 'Invalid or foreign meal-plan entry' }, { status: 400 });
+      }
+      const slots = new Set(entries.map((entry) => `${entry.plan_date}:${entry.meal_type}`));
+      const removed = tables.meal_plans.filter((row) => row.family_id === FAMILY && slots.has(`${row.plan_date}:${row.meal_type}`));
+      tables.meal_plans = tables.meal_plans.filter((row) => !removed.includes(row));
+      const planned = entries.map((entry) => ({
+        id: `synthetic-plan-${++nextSyntheticPlan}`, family_id: FAMILY, meal_id: entry.meal_id,
+        plan_date: entry.plan_date, meal_type: entry.meal_type, created_by: 'auth-actor',
+      }));
+      tables.meal_plans.push(...planned);
+      return Response.json({ planned, replaced: removed.length, replayed: false });
+    }
+    if (name === 'meal_plan_remove_slot') {
+      const index = tables.meal_plans.findIndex((row) => row.id === body.p_plan_id && row.family_id === FAMILY);
+      if (index < 0) return Response.json({ message: 'Planned meal not found' }, { status: 400 });
+      const [removed] = tables.meal_plans.splice(index, 1);
+      return Response.json({ id: removed.id, plan_date: removed.plan_date, meal_type: removed.meal_type, replayed: false });
+    }
+    throw new Error(`Unexpected RPC: ${name}`);
+  }
+  if (!Object.hasOwn(tables, table)) throw new Error(`Unexpected table: ${table}`);
+  requests.push({ method, table, query: url.search, body });
   const matches = (row: Row) => [...url.searchParams].every(([key, value]) => {
     if (['select', 'order', 'limit', 'offset'].includes(key)) return true;
     if (value.startsWith('eq.')) return String(row[key]) === value.slice(3);
@@ -68,13 +115,8 @@ async function transport(input: RequestInfo | URL, init?: RequestInit): Promise<
     rows = tables[table].filter(matches);
     tables[table] = tables[table].filter((row) => !matches(row));
   } else if (method === 'POST' && body) {
-    if (emptyInsertReceipt && table === 'meal_plans') {
-      emptyInsertReceipt = false;
-      rows = [];
-    } else {
-      rows = (Array.isArray(body) ? body : [body]).map((row) => ({ ...row }));
-      tables[table].push(...rows);
-    }
+    rows = (Array.isArray(body) ? body : [body]).map((row) => ({ ...row }));
+    tables[table].push(...rows);
   } else throw new Error(`Unexpected method: ${method}`);
   const selected = method === 'GET' || request.headers.get('prefer')?.includes('return=representation');
   if (!selected) return new Response(null, { status: method === 'DELETE' ? 204 : 201 });
@@ -86,7 +128,9 @@ beforeEach(() => {
   vi.clearAllMocks();
   mocks.locale = 'en-US';
   requests = [];
-  emptyInsertReceipt = false;
+  malformedReplaceReceipt = false;
+  nextSyntheticPlan = 0;
+  activeMembership = { role: 'parent', is_active: true };
   tables = {
     meals: [
       { id: 'rice', family_id: FAMILY, name: 'Rice', ingredients: [] },
@@ -99,6 +143,7 @@ beforeEach(() => {
       { id: 'foreign-plan', family_id: OTHER, meal_id: 'private', plan_date: DAY, meal_type: 'dinner', created_by: 'other' },
     ],
     audit_logs: [],
+    family_members: [],
   };
   actor('parent');
   vi.stubGlobal('fetch', mocks.network);
@@ -174,15 +219,18 @@ describe('a guest cannot change a saved meal placement', () => {
     const before = structuredClone(tables);
     expect(await removeMealPlanAction('foreign-plan')).toMatchObject({ ok: false });
     expect(tables).toEqual(before);
-    expect(new URLSearchParams(requests[0].query).get('family_id')).toBe(`eq.${FAMILY}`);
+    expect(requests.find((request) => request.table === 'rpc:meal_plan_remove_slot')?.body)
+      .toMatchObject({ p_family_id: FAMILY, p_plan_id: 'foreign-plan' });
     expect(mocks.revalidate).not.toHaveBeenCalled();
   });
 
-  it('retains captured-row restoration after an empty insert receipt', async () => {
-    emptyInsertReceipt = true;
+  it('does not claim success or issue table compensation after an unknown atomic receipt', async () => {
+    malformedReplaceReceipt = true;
     expect(await plan()).toMatchObject({ ok: false });
     expect(tables.meal_plans.find((row) => row.id === 'prior')).toMatchObject({ meal_id: 'rice' });
     expect(tables.meal_plans.find((row) => row.id === 'foreign-plan')).toMatchObject({ meal_id: 'private' });
+    expect(requests.some((request) => request.table === 'rpc:meal_plan_replace_slots')).toBe(true);
+    expect(requests.filter((request) => request.table === 'meal_plans' && request.method !== 'GET')).toEqual([]);
     expect(mocks.revalidate).not.toHaveBeenCalled();
   });
 });

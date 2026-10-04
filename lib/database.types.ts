@@ -2751,6 +2751,10 @@ export interface Database {
     Views: { [_ in never]: never };
     CompositeTypes: { [_ in never]: never };
     Functions: {
+      meal_plan_replace_slots: { Args: { p_family_id: string; p_request_id: string; p_entries: Json }; Returns: Json };
+      meal_plan_remove_slot: { Args: { p_family_id: string; p_request_id: string; p_plan_id: string }; Returns: Json };
+      meal_plan_replace_slots_for_actor: { Args: { p_family_id: string; p_actor_id: string; p_request_id: string; p_entries: Json }; Returns: Json };
+      meal_plan_remove_slot_for_actor: { Args: { p_family_id: string; p_actor_id: string; p_request_id: string; p_plan_id: string }; Returns: Json };
       finance_record_transaction_operation: {
         Args: { p_tool_call_id: string; p_family_id: string; p_actor_user_id: string | null; p_actor_member_id: string | null; p_actor_kind: AiActorKind; p_expected_inputs: Json; p_intent: Json; p_transaction: Json };
         Returns: Json;

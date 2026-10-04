@@ -1,6 +1,6 @@
 import { readFileSync } from 'node:fs';
 import { describe, expect, it } from 'vitest';
-import { at } from './helpers/source-order';
+import { at, between } from './helpers/source-order';
 
 /**
  * Audit C1-S9-62 — the first tranche of the unconfirmed-write class OUTSIDE
@@ -370,10 +370,28 @@ describe('services that stay ungated on rows say why (C1-S9-65)', () => {
     expect(code(approvals)).not.toMatch(/\.filter\('metadata->>approval_id', 'eq', row\.id\)\s*\.select\(/);
   });
 
-  it('the meal-plan rollback clear, which a readback confirms', () => {
-    expect(meals).toContain('`readTargetRows()` below RE-READS');
-    const w = meals.slice(at(meals, "const { error } = await scope.db.from('meal_plans').delete()"));
-    expect(w.slice(0, w.indexOf(';'))).not.toContain('.select(');
+  it('meal-plan replacement is atomic and only claims a save after validating its receipt', () => {
+    const rpc = at(meals, "scope.db.rpc('meal_plan_replace_slots'");
+    const validation = at(meals, 'if (!Array.isArray(rows) || rows.length !== resolved.data.length');
+    const readback = at(meals, 'const savedSlots = await loadSlots(');
+    expect(validation).toBeGreaterThan(rpc);
+    expect(readback).toBeGreaterThan(validation);
+
+    const replace = between(meals, 'export async function planWeek(', 'export async function setSlot(');
+    const receiptGuard = between(replace,
+      'if (!Array.isArray(rows) || rows.length !== resolved.data.length', 'const savedSlots = await loadSlots(');
+    expect(receiptGuard).toContain('row.family_id !== scope.familyId');
+    expect(receiptGuard).toContain('row.created_by !== scope.userId');
+    expect(receiptGuard).toContain('row.meal_id');
+    expect(replace).not.toContain(".from('meal_plans').delete()");
+    expect(replace).toContain('`meal-replace:${makeKey');
+
+    const migration = read('supabase/migrations/0478_meal_plan_slot_writes_are_atomic.sql');
+    expect(migration).toContain('create table if not exists public.meal_plan_write_receipts');
+    expect(migration).toContain('primary key (family_id, actor_id, request_id)');
+    expect(migration).toContain('v_receipt.payload_hash <> v_hash or v_receipt.result is null');
+    expect(migration).toContain("return jsonb_set(v_receipt.result, '{replayed}', 'true'::jsonb, true);");
+    expect(migration).toContain('update public.meal_plan_write_receipts set result = v_result');
   });
 });
 

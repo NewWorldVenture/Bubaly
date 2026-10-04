@@ -105,9 +105,12 @@ const db: InMemorySupabase = createInMemorySupabase({
   },
 });
 const client = db as unknown as SupabaseClient<Database>;
+// Continuation uses a service-role client with NULL auth.uid(); the actor is
+// delegated through the separately resolved executor scope.
+const serviceClient = db.asRole('service_role') as unknown as SupabaseClient<Database>;
 
 vi.mock('@/lib/supabase/server', () => ({
-  createServiceClient: () => client,
+  createServiceClient: () => serviceClient,
   createServer: async () => client,
 }));
 
@@ -389,7 +392,7 @@ describe('AI eval scenarios', () => {
       for (const tool of scenario.prohibitedTools) expect(tools, `${scenario.id} must never use ${tool}`).not.toContain(tool);
 
       const runId = result.data.runId as string;
-      await continueRun(runId, { budgetMs: 60_000, db: client });
+      await continueRun(runId, { budgetMs: 60_000, db: serviceClient });
       const run = db.table('family_automation_runs').find((r) => r.id === runId);
       const failed = db.table('ai_plan_steps')
         .filter((s) => s.plan_id === planId && s.status !== 'completed')

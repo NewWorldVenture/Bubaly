@@ -500,13 +500,14 @@ describe('Supabase migration filename safety', () => {
     // makes a chat read receipt or reaction its reader's own (DB-RPC-M02).
     // 0464 makes an invited guest read-only on the eight household resources
     // /family/permissions shows them as read-only on (ROLE-M03).
-    // 0471 adds the per-recipient admin digest delivery store, and 0474
+    // 0471 adds the per-recipient admin digest delivery store, 0474
     // (reserved for #710) withdraws an admin removed after a digest was
-    // frozen. This literal tracks the checked-in high-water mark, not
-    // migration allocation: 0465-0470 remain NWV's, 0472 Support's, and 0473
-    // the coordinator's. 0489 (reserved on #699 for the once-per-occurrence
-    // notifications unit) puts a partial unique index behind the engine's and
-    // notify()'s dedupe reads.
+    // frozen; 0478 adds atomic meal-plan slot writes (#897); 0489 (reserved on
+    // #699 for the once-per-occurrence notifications unit, #956) puts a partial
+    // unique index behind the engine's and notify()'s dedupe reads. This literal
+    // tracks the checked-in high-water mark, not migration allocation:
+    // 0465-0470 remain NWV's, 0472 Support's, 0473 the coordinator's, and the
+    // numbers between 0478 and 0489 are assigned to other tracked work.
     expect(audit.nextVersion).toBe('0490');
   });
 
