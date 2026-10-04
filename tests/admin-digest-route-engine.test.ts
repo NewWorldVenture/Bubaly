@@ -80,13 +80,24 @@ afterEach(() => {
 });
 
 describe('the flag', () => {
-  it('unset: the route behaves exactly as before; the delivery store is never touched and no key is sent', async () => {
+  it('unset: the delivery store is never touched; each send carries the occurrence\'s provider key, not the engine\'s, and a mirrored tick folds at Resend', async () => {
     delete process.env.ADMIN_DIGEST_DELIVERY_ENGINE;
     const r = await tick('2026-09-30T12:31:00Z');
     expect(r.status).toBe(200);
+    expect(r.body).toMatchObject({ ok: true, occurrence: OCC });
     expect(store.calls).toEqual([]);
     expect(resend.requests).toHaveLength(everyone().length);
-    expect(resend.requests.every((q) => q.key === null)).toBe(true);
+    // The flag-off path's own key (sha256 of occurrence|address), so the two
+    // paths can never fold into each other's sends; one key per address.
+    expect(resend.requests.every((q) => /^admin-digest\/[0-9a-f]{64}$/.test(q.key ?? ''))).toBe(true);
+    expect(new Set(resend.requests.map((q) => q.key)).size).toBe(everyone().length);
+    for (const q of resend.requests) expect(q.key).not.toBe(keyFor(q.to));
+    // The dispatcher's mirrored tick, and one hours late: the same slot, the same bytes, the same key — nothing more arrives.
+    await tick('2026-09-30T12:31:30Z');
+    await tick('2026-09-30T18:48:37Z');
+    expect(store.calls).toEqual([]);
+    expect(resend.requests).toHaveLength(everyone().length * 3);
+    for (const a of everyone()) expect(resend.deliveredTo(a)).toBe(1);
   });
 
   it('any value but "1" is off', async () => {
