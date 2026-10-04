@@ -502,11 +502,13 @@ describe('Supabase migration filename safety', () => {
     // /family/permissions shows them as read-only on (ROLE-M03).
     // 0471 adds the per-recipient admin digest delivery store, and 0474
     // (reserved for #710) withdraws an admin removed after a digest was
-    // frozen. 0475 keeps sensitive free-text memory rows behind the manager
-    // boundary on direct authenticated reads. This literal tracks the checked-
-    // in high-water mark, not migration allocation: 0465-0470 remain NWV's,
-    // 0472 Support's, and 0473 the coordinator's.
-    expect(audit.nextVersion).toBe('0476');
+    // frozen. 0475 and 0476 are reserved by the still-open messaging PR #834;
+    // 0477 keeps sensitive free-text memory rows behind the manager boundary
+    // on direct authenticated reads and must merge after those migrations.
+    // This literal tracks the checked-in high-water mark, not migration
+    // allocation: 0465-0470 remain NWV's, 0472 Support's, and 0473 the
+    // coordinator's.
+    expect(audit.nextVersion).toBe('0478');
   });
 
   it('flags a newly introduced collision instead of silently accepting it', () => {
