@@ -56,7 +56,6 @@ const DECLARED: Record<string, string> = {
   'lib/marketplace/handoff.ts': 'suggestedMeetTimes(now) is called only by components/marketplace/handoff-panel.tsx (client); the server imports the code helpers.',
   'lib/trips/departure.ts': 'trafficFactorForTime\'s dow/hour defaults are used only by components/modules/trip-intel-module.tsx (client).',
   // ── fixes in flight ──
-  'app/api/ai/chef/route.ts': 'busy evenings by `getHours() >= 16` on the host — fixed on #932 (hourInTz); delete this line when it lands.',
   'lib/ai/insights.ts': 'the celebration planner\'s 60-day window takes the host\'s year; a day off only around New Year\'s midnight on the host. The data bundle does not carry the zone yet; tracked.',
 };
 
