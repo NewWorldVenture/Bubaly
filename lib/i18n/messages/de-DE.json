@@ -3746,7 +3746,7 @@
   "certifiedDevices.stepPinBody": "Geführter Zugriff auf dem iPad, Bildschirmfixierung auf Android. Die Wand bleibt die Wand.",
   "certifiedDevices.stepSignIn": "Auf dem Tablet anmelden",
   "certifiedDevices.stepSignInBody": "Das Display zeigt die Daten eines Haushalts, deshalb meldet sich das Tablet wie jedes andere Gerät an.",
-  "changePlan.aPlanIsAlreadyBeingConfirmed": "Ihr neuer Tarif wird noch bestätigt. Aktualisieren Sie die Seite gleich, bevor Sie erneut wählen, damit Ihnen nichts doppelt berechnet wird.",
+  "changePlan.aPlanIsAlreadyBeingConfirmed": "Ihr neuer Tarif wird noch bestätigt. Aktualisieren Sie die Seite in einem Moment, bevor Sie erneut wählen, damit Ihnen nichts doppelt berechnet wird. Wenn das weiterhin passiert, wenden Sie sich bitte an den Support.",
   "changePlan.billingAccountStatusIsTemporarily": "Der Status des Abrechnungskontos ist vorübergehend nicht verfügbar.",
   "changePlan.couldNotChangeThePlan": "Der Tarif konnte nicht geändert werden. Bitte versuchen Sie es erneut.",
   "changePlan.couldNotSaveTheBilling": "Das Abrechnungskonto konnte nicht gespeichert werden. Bitte versuchen Sie es erneut.",

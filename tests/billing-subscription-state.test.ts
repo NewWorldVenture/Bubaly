@@ -394,6 +394,34 @@ describe('Billing subscription rendering and purchase callbacks', () => {
   });
 });
 
+// Every Checkout the server opens closes the family's older open ones
+// (tests/a-family-is-never-subscribed-twice.test.ts), so a second choice made
+// while Stripe's page is still loading must not reach the server: it would
+// close the session the browser is heading to.
+describe('a choice made while the browser is leaving for Checkout', () => {
+  it('starts no second Checkout, and answers again once the moment has passed', async () => {
+    vi.stubGlobal('window', { location: { href: '/dashboard/billing' } });
+    mock.fetch.mockResolvedValue({ ok: true, json: async () => ({ ok: true, changed: false, mode: 'checkout', url: 'https://checkout.example.test/first' }) });
+    moduleTree(); await settle();
+    const choose = (plan: string) => {
+      const picker = nodes(moduleTree()).find((node) => typeof node.props.onChoose === 'function');
+      expect(picker, 'a Free family is offered the plans').toBeDefined();
+      (picker!.props.onChoose as (plan: string) => void)(plan);
+    };
+    choose('plus_monthly'); await settle();
+    expect(window.location.href).toBe('https://checkout.example.test/first');
+    choose('basic_monthly'); await settle();
+    expect(mock.fetch).toHaveBeenCalledTimes(1);
+    // A page the back button restores from the cache keeps this state; it must
+    // not stay inert.
+    const now = vi.spyOn(Date, 'now').mockReturnValue(Date.now() + 10_001);
+    try {
+      choose('basic_monthly'); await settle();
+      expect(mock.fetch).toHaveBeenCalledTimes(2);
+    } finally { now.mockRestore(); }
+  });
+});
+
 describe('explicit selected-plan review', () => {
   const plans = ['basic_monthly', 'basic_annual', 'plus_monthly', 'plus_annual'] as const;
   function review(tree: ReactNode) { return nodes(tree).find((node) => typeof node.props.onConfirm === 'function'); }

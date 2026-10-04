@@ -3747,7 +3747,7 @@
   "certifiedDevices.stepPinBody": "Acesso guiado no iPad, fixação de ecrã no Android. A parede continua a ser a parede.",
   "certifiedDevices.stepSignIn": "Iniciar sessão no tablet",
   "certifiedDevices.stepSignInBody": "O ecrã mostra a informação de um só agregado, por isso o tablet inicia sessão como qualquer outro dispositivo.",
-  "changePlan.aPlanIsAlreadyBeingConfirmed": "O seu novo plano ainda está a ser confirmado. Atualize daqui a pouco antes de escolher de novo, para não ser cobrado duas vezes.",
+  "changePlan.aPlanIsAlreadyBeingConfirmed": "O seu novo plano ainda está a ser confirmado. Atualize a página daqui a pouco antes de escolher de novo, para não ser cobrado duas vezes. Se isto continuar a acontecer, contacte o suporte.",
   "changePlan.billingAccountStatusIsTemporarily": "O estado da conta de faturação está temporariamente indisponível.",
   "changePlan.couldNotChangeThePlan": "Não foi possível alterar o plano. Tente novamente.",
   "changePlan.couldNotSaveTheBilling": "Não foi possível guardar a conta de faturação. Tente novamente.",

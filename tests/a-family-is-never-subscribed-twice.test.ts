@@ -185,6 +185,15 @@ describe.each([['checkout', checkout], ['change-plan', changePlan]] as const)('%
     expect(fake.sessions.filter((s) => s.status === 'open').map((s) => s.id)).toEqual(['cs-new-1']);
   });
 
+  it('closes every older open session, not only the newest', async () => {
+    fake.sessions = [
+      { id: 'cs-oldest', mode: 'subscription', status: 'open', customer: 'cus-a' },
+      { id: 'cs-old', mode: 'subscription', status: 'open', customer: 'cus-a' },
+    ];
+    expect((await route(request('plus_monthly'))).status).toBe(200);
+    expect(fake.sessions.map((s) => [s.id, s.status])).toEqual([['cs-oldest', 'expired'], ['cs-old', 'expired'], ['cs-new-1', 'open']]);
+  });
+
   it('a second choice leaves only the newest session payable, and once that is paid nothing new starts', async () => {
     expect((await route(request('basic_monthly'))).status).toBe(200);
     expect((await route(request('plus_monthly'))).status).toBe(200);
@@ -284,10 +293,14 @@ describe('checkNewSubscription', () => {
     expect(await checkNewSubscription(stripeFor({}), 'cus-a')).toEqual({ ok: true });
   });
 
-  it.each(['unpaid', 'paused', 'incomplete', 'incomplete_expired', 'canceled'])('does not count a %s subscription as one a Checkout would duplicate', async (status) => {
-    // The same three statuses the in-place change accepts; anything else is a
-    // subscription the family is not being billed for, so a new one is not a
-    // second charge.
+  it.each(['unpaid', 'paused', 'incomplete', 'incomplete_expired', 'canceled'])('does not, today, count a %s subscription as one a Checkout would duplicate', async (status) => {
+    // The same three statuses the in-place change accepts, and the same set
+    // /api/billing/checkout counted before this check existed. Not all of the
+    // rest is harmless: Stripe keeps raising invoices on an `unpaid` one, and an
+    // `incomplete` one can still turn `active` once its first payment clears. But
+    // counting them would leave such a family with no way to subscribe here at
+    // all (the in-place change refuses them too), so that is the owner's call,
+    // and this pins today's answer.
     expect(await checkNewSubscription(stripeFor({ subscriptions: [{ id: 'sub-x', status }] }), 'cus-a')).toEqual({ ok: true });
   });
 

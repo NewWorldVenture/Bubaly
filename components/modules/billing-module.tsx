@@ -74,6 +74,9 @@ type Bill = Tables<'bills'>;
 type SavingsGoal = Tables<'savings_goals'>;
 
 // ── Stripe helpers ──────────────────────────────────────────────────────────
+/** How long a plan choice is ignored after this page sent the browser to Stripe Checkout. */
+const LEAVING_FOR_CHECKOUT_MS = 10_000;
+
 const STATUS_CONFIG: Record<SubscriptionStatus, { labelKey: string; tone: 'success' | 'warning' | 'danger' | 'neutral'; icon: React.ReactNode }> = {
   trialing: { labelKey: 'billingModule.status.trialing', tone: 'neutral', icon: <Clock className="h-4 w-4" /> },
   active: { labelKey: 'billingModule.status.active', tone: 'success', icon: <CheckCircle2 className="h-4 w-4" /> },
@@ -568,6 +571,12 @@ export function BillingModule({ serviceFeeNotice = null }: { serviceFeeNotice?: 
   const renderedReviewOwner = useRef<typeof reviewOwner | null>(reviewOwner);
   renderedReviewOwner.current = reviewOwner;
   const reviewInFlight = useRef<typeof reviewAccount | null>(null);
+  // When this page last sent the browser to Stripe Checkout. Every Checkout the
+  // server opens closes the family's older open ones (lib/billing/one-subscription.ts),
+  // so a second choice while Stripe's page is still loading would close the very
+  // session the browser is heading to. Time-bound rather than a flag, so a page
+  // the back button restores from the cache answers again.
+  const leftForCheckoutAt = useRef(0);
   const [payingReview, setPayingReview] = useState<typeof reviewAccount | null>(null);
   type PendingReadback = { account: typeof reviewAccount; plan: ReviewPlan; providerRef: string | null };
   const waitingReadback = useRef<PendingReadback | null>(null);
@@ -661,12 +670,13 @@ export function BillingModule({ serviceFeeNotice = null }: { serviceFeeNotice?: 
   const changePlan = useCallback((plan: StripePlan) => {
     if (!admin || !isCurrentReady()) return;
     if (reviewInFlight.current === reviewAccount || waitingReadback.current?.account === reviewAccount) return;
+    if (Date.now() - leftForCheckoutAt.current < LEAVING_FOR_CHECKOUT_MS) return;
     startTransition(async () => {
       try {
         const res = await fetch('/api/billing/change-plan', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ plan }) });
         const json = await res.json();
         if (!res.ok) { toastError(json.error ?? tr('billingModule.couldNotChangeThePlan')); return; }
-        if (json.url) { window.location.href = json.url; return; }       // Free → Checkout
+        if (json.url) { leftForCheckoutAt.current = Date.now(); window.location.href = json.url; return; } // Free → Checkout
         if (json.changed) { success(tr('billingModule.planUpdatedYourNextInvoice')); }
         else if (json.message) { success(json.message); }
         await loadSub();
@@ -681,6 +691,7 @@ export function BillingModule({ serviceFeeNotice = null }: { serviceFeeNotice?: 
     const current = () => currentAccount() && renderedReviewOwner.current === reviewOwner && isCurrentReady();
     if (!reviewPlan || !isReviewPlan(plan) || !admin || !current() || reviewInFlight.current === reviewAccount) return;
     if (waitingReadback.current?.account === reviewAccount) return;
+    if (Date.now() - leftForCheckoutAt.current < LEAVING_FOR_CHECKOUT_MS) return;
     if (canChangeSubscriptionInPlace(subscription) && !subscription.cancel_at_period_end && slugToStripePlan(subscription.plan) === plan) return;
     reviewInFlight.current = reviewAccount;
     setPayingReview(reviewAccount);
@@ -707,7 +718,7 @@ export function BillingModule({ serviceFeeNotice = null }: { serviceFeeNotice?: 
       }
       if (!current()) return;
       if (!res.ok) { toastError(json.error ?? tr('billingModule.couldNotChangeThePlan')); return; }
-      if (json.url) { window.location.href = json.url; return; }
+      if (json.url) { leftForCheckoutAt.current = Date.now(); window.location.href = json.url; return; }
       success(tr('billingReview.alreadyCurrent'));
       await loadSub();
     } catch {

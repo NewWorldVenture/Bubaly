@@ -3746,7 +3746,7 @@
   "certifiedDevices.stepPinBody": "Accesso guidato su iPad, blocco schermo su Android. Il muro resta il muro.",
   "certifiedDevices.stepSignIn": "Accedi dal tablet",
   "certifiedDevices.stepSignInBody": "Lo schermo mostra le informazioni di una sola famiglia, quindi il tablet accede come qualsiasi altro dispositivo.",
-  "changePlan.aPlanIsAlreadyBeingConfirmed": "Il tuo nuovo piano è ancora in fase di conferma. Aggiorna tra un momento prima di scegliere di nuovo, così non ti viene addebitato due volte.",
+  "changePlan.aPlanIsAlreadyBeingConfirmed": "Il tuo nuovo piano è ancora in fase di conferma. Aggiorna la pagina tra un momento prima di scegliere di nuovo, così non ti viene addebitato due volte. Se continua a succedere, contatta l’assistenza.",
   "changePlan.billingAccountStatusIsTemporarily": "Lo stato dell’account di fatturazione non è temporaneamente disponibile.",
   "changePlan.couldNotChangeThePlan": "Impossibile cambiare il piano. Riprova.",
   "changePlan.couldNotSaveTheBilling": "Impossibile salvare l’account di fatturazione. Riprova.",
