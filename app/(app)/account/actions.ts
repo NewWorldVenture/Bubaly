@@ -52,7 +52,11 @@ async function stopRenewals(admin: ReturnType<typeof createServiceClient>, famil
   try {
     const stripe = stripeFromKey(secretKey);
     let customer: string | undefined;
-    if (live && !live.cancel_at_period_end) {
+    if (live) {
+      // Asked even when the row says it is already ending: the row can trail
+      // Stripe (a resume whose local sync failed, a renewal turned back on in
+      // the billing portal), and setting it again is harmless. The answer also
+      // names the customer to look for other subscriptions under.
       const updated = await stripe.subscriptions.update(live.provider_ref, { cancel_at_period_end: true });
       customer = typeof updated.customer === 'string' ? updated.customer : updated.customer?.id;
     }

@@ -18,6 +18,8 @@ const fake = vi.hoisted(() => ({
   key: 'sk_test_synthetic' as string | null,
   subs: [] as { id: string; status: string; customer: string; metadata: Record<string, string>; cancel_at_period_end: boolean }[],
   updateFails: false,
+  updateFailsFor: new Set<string>(),
+  syncs: 0,
   readFails: false,
   stripeCalls: 0,
   updates: 0,
@@ -51,6 +53,7 @@ vi.mock('@/lib/supabase/server', () => {
               if (table === 'families') {
                 if (value.closed_at) fake.closed = true; else fake.reopened = true;
               }
+              if (table === 'subscriptions') fake.syncs += 1;
               return { data: [{ id: 'row' }], error: null };
             },
           };
@@ -68,7 +71,7 @@ vi.mock('@/lib/stripe', () => {
       update: async (id: string, params: { cancel_at_period_end: boolean }) => {
         fake.stripeCalls += 1;
         fake.updates += 1;
-        if (fake.updateFails) throw new Error('synthetic Stripe outage');
+        if (fake.updateFails || fake.updateFailsFor.has(id)) throw new Error('synthetic Stripe outage');
         const s = fake.subs.find((x) => x.id === id)!;
         s.cancel_at_period_end = params.cancel_at_period_end;
         return { ...s };
@@ -91,7 +94,7 @@ beforeEach(() => {
   fake.billingCustomerRef = 'cus_a';
   fake.key = 'sk_test_synthetic';
   fake.subs = [{ id: 'sub_A', status: 'active', customer: 'cus_a', metadata: family, cancel_at_period_end: false }];
-  fake.updateFails = false; fake.readFails = false; fake.stripeCalls = 0; fake.updates = 0; fake.closed = false; fake.reopened = false;
+  fake.updateFails = false; fake.updateFailsFor = new Set(); fake.syncs = 0; fake.readFails = false; fake.stripeCalls = 0; fake.updates = 0; fake.closed = false; fake.reopened = false;
   vi.spyOn(console, 'error').mockImplementation(() => {});
   vi.spyOn(console, 'warn').mockImplementation(() => {});
 });
@@ -100,6 +103,37 @@ describe('closing a family that pays for a plan', () => {
   it('stops the plan renewing, then closes', async () => {
     expect(await closeAccountAction()).toEqual({ ok: true });
     expect(sub('sub_A').cancel_at_period_end).toBe(true);
+    expect(fake.closed).toBe(true);
+    expect(fake.syncs, 'the family\'s row says the plan is ending too').toBe(1);
+  });
+
+  it('finds another subscription on the family\'s second Stripe customer', async () => {
+    fake.subs.push({ id: 'sub_B', status: 'active', customer: 'cus_b', metadata: family, cancel_at_period_end: false });
+    fake.billingCustomerRef = 'cus_b';
+    expect(await closeAccountAction()).toEqual({ ok: true });
+    expect(sub('sub_B').cancel_at_period_end).toBe(true);
+  });
+
+  it('also looks on the customer of the plan it stopped', async () => {
+    fake.subs.push({ id: 'sub_B', status: 'active', customer: 'cus_a', metadata: family, cancel_at_period_end: false });
+    fake.billingCustomerRef = 'cus_other';
+    expect(await closeAccountAction()).toEqual({ ok: true });
+    expect(sub('sub_B').cancel_at_period_end).toBe(true);
+  });
+
+  it('stays open when another subscription cannot be stopped', async () => {
+    fake.subs.push({ id: 'sub_B', status: 'active', customer: 'cus_a', metadata: family, cancel_at_period_end: false });
+    fake.updateFailsFor.add('sub_B');
+    expect(await closeAccountAction()).toEqual({ ok: false, error: 'account.couldNotStopThePlanRenewing' });
+    expect(fake.closed).toBe(false);
+  });
+
+  it('stops a duplicate still billing a family whose followed plan has ended', async () => {
+    fake.row = { plan: 'plus', status: 'canceled', provider_ref: 'sub_A', cancel_at_period_end: false };
+    sub('sub_A').status = 'canceled';
+    fake.subs.push({ id: 'sub_B', status: 'active', customer: 'cus_a', metadata: family, cancel_at_period_end: false });
+    expect(await closeAccountAction()).toEqual({ ok: true });
+    expect(sub('sub_B').cancel_at_period_end).toBe(true);
     expect(fake.closed).toBe(true);
   });
 
@@ -128,12 +162,13 @@ describe('closing a family that pays for a plan', () => {
     expect(fake.closed).toBe(false);
   });
 
-  it('does not ask Stripe again for a plan already set to end', async () => {
+  it('does not trust a row that says the plan is already ending: Stripe may have it renewing', async () => {
+    // A resume whose local sync failed, or a renewal turned back on in the portal.
     fake.row = { ...fake.row, cancel_at_period_end: true };
-    sub('sub_A').cancel_at_period_end = true;
+    sub('sub_A').cancel_at_period_end = false;
     expect(await closeAccountAction()).toEqual({ ok: true });
+    expect(sub('sub_A').cancel_at_period_end).toBe(true);
     expect(fake.closed).toBe(true);
-    expect(fake.updates).toBe(0);
   });
 });
 

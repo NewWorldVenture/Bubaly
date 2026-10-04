@@ -63,9 +63,9 @@ vi.mock('@/lib/stripe', async () => {
     getStripe: () => { throw new Error('getStripe() reads only STRIPE_SECRET_KEY; billing routes must not use it'); },
     stripeFromKey: (key: string) => {
       mocks.keysUsed.push(key);
-      // `list`: cancelling also reads the family's other live subscriptions
+      // `retrieve` and `list`: cancelling also stops the family's other live subscriptions
       // (tests/cancelling-stops-every-subscription.test.ts); there are none here.
-      return { billingPortal: { sessions: { create: mocks.portal } }, subscriptions: { update: mocks.update, list: async () => ({ data: [], has_more: false }) } };
+      return { billingPortal: { sessions: { create: mocks.portal } }, subscriptions: { update: mocks.update, retrieve: async (id: string) => ({ id, customer: 'cus_fixture' }), list: async () => ({ data: [], has_more: false }) } };
     },
   };
 });

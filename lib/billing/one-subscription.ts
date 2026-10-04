@@ -106,10 +106,10 @@ export async function checkNewSubscription(stripe: OneSubscriptionStripe, custom
  * every customer it may have (lib/billing/customer-ref.ts records a race that
  * leaves a family with two). What cancelling the plan has to stop besides the
  * one the family's row follows. A customer Stripe no longer has bills nobody;
- * any other failure throws.
+ * any other failure, or a page it did not read to the end, throws.
  */
 export async function otherLiveFamilySubscriptions(
-  stripe: { subscriptions: { list(params: { customer: string; status: 'all'; limit: number }): Promise<{ data: { id: string; status: string; cancel_at_period_end?: boolean | null; metadata?: Record<string, string> | null }[] }> } },
+  stripe: { subscriptions: { list(params: { customer: string; status: 'all'; limit: number }): Promise<{ data: { id: string; status: string; cancel_at_period_end?: boolean | null; metadata?: Record<string, string> | null }[]; has_more?: boolean }> } },
   customerRefs: (string | null | undefined)[],
   familyId: string,
   excludeId: string,
@@ -123,6 +123,8 @@ export async function otherLiveFamilySubscriptions(
       if ((error as { code?: string })?.code === 'resource_missing') continue;
       throw error;
     }
+    // A page not read could hold a subscription that still bills the family.
+    if (listed.has_more) throw new Error('more subscriptions than one page; cannot tell which still bill the family');
     for (const sub of listed.data) {
       if (sub.id === excludeId || sub.cancel_at_period_end || sub.metadata?.family_id !== familyId) continue;
       if (canChangeSubscriptionInPlace({ status: sub.status, provider_ref: sub.id })) ids.push(sub.id);

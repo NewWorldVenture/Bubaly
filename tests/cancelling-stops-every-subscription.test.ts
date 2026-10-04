@@ -18,6 +18,8 @@ const fake = vi.hoisted(() => ({
   row: { provider_ref: 'sub_A', status: 'active' } as Record<string, unknown> | null,
   billingCustomerRef: 'cus_a' as string | null,
   listFails: false,
+  billingReadFails: false,
+  goneCustomers: new Set<string>(),
   updateFailsFor: new Set<string>(),
   updates: [] as { id: string; cancel_at_period_end: boolean }[],
   syncs: 0,
@@ -39,7 +41,7 @@ vi.mock('@/lib/supabase/server', () => {
         select: () => builder, eq: () => builder,
         maybeSingle: async () => {
           if (table === 'subscriptions') return { data: fake.row, error: null };
-          if (table === 'billing_customers') return { data: { customer_ref: fake.billingCustomerRef }, error: null };
+          if (table === 'billing_customers') return fake.billingReadFails ? { data: null, error: { message: 'synthetic read failure' } } : { data: { customer_ref: fake.billingCustomerRef }, error: null };
           return { data: null, error: null };
         },
         update: () => {
@@ -62,8 +64,10 @@ vi.mock('@/lib/stripe', () => {
         s.cancel_at_period_end = params.cancel_at_period_end;
         return { ...s };
       },
+      retrieve: async (id: string) => ({ ...fake.subs.find((x) => x.id === id)! }),
       list: async (params: { customer: string }) => {
         if (fake.listFails) throw new Error('synthetic Stripe outage');
+        if (fake.goneCustomers.has(params.customer)) throw Object.assign(new Error('No such customer'), { code: 'resource_missing' });
         return { data: fake.subs.filter((s) => s.customer === params.customer).map((s) => ({ ...s })), has_more: false };
       },
     },
@@ -82,7 +86,7 @@ beforeEach(() => {
   ];
   fake.row = { provider_ref: 'sub_A', status: 'active' };
   fake.billingCustomerRef = 'cus_a';
-  fake.listFails = false; fake.updateFailsFor = new Set(); fake.updates = []; fake.syncs = 0;
+  fake.listFails = false; fake.billingReadFails = false; fake.goneCustomers = new Set(); fake.updateFailsFor = new Set(); fake.updates = []; fake.syncs = 0;
   vi.spyOn(console, 'error').mockImplementation(() => {});
   vi.spyOn(console, 'warn').mockImplementation(() => {});
 });
@@ -138,22 +142,45 @@ describe('cancelling a family that Stripe bills twice', () => {
     expect(sub('sub_B').cancel_at_period_end).toBe(false);
   });
 
-  it('says the cancellation is not finished when the others cannot be read, and a retry completes it', async () => {
+  it('changes nothing the family sees when the others cannot be read, so pressing Cancel again finishes it', async () => {
     fake.listFails = true;
     const response = await cancel(request(false));
     expect(response.status).toBe(503);
-    expect(await response.json()).toMatchObject({ providerUpdated: true });
+    expect(await response.json()).toEqual({ error: 'cancel.subscriptionStatusIsTemporarilyUnavailable' });
+    expect(sub('sub_A').cancel_at_period_end).toBe(false);
     expect(sub('sub_B').cancel_at_period_end).toBe(false);
+    expect(fake.syncs).toBe(0);
     fake.listFails = false;
+    expect((await cancel(request(false))).status).toBe(200);
+    expect(sub('sub_A').cancel_at_period_end).toBe(true);
+    expect(sub('sub_B').cancel_at_period_end).toBe(true);
+  });
+
+  it('changes nothing the family sees when another one cannot be cancelled', async () => {
+    fake.updateFailsFor.add('sub_B');
+    const response = await cancel(request(false));
+    expect(response.status).toBe(503);
+    expect(sub('sub_A').cancel_at_period_end).toBe(false);
+    expect(fake.syncs).toBe(0);
+  });
+
+  it('changes nothing when the family\'s billing customer cannot be read', async () => {
+    fake.billingReadFails = true;
+    expect((await cancel(request(false))).status).toBe(503);
+    expect(fake.updates).toEqual([]);
+  });
+
+  it('reads a customer Stripe no longer has as billing nobody', async () => {
+    fake.billingCustomerRef = 'cus_gone';
+    fake.goneCustomers.add('cus_gone');
     expect((await cancel(request(false))).status).toBe(200);
     expect(sub('sub_B').cancel_at_period_end).toBe(true);
   });
 
-  it('says the cancellation is not finished when another one cannot be cancelled', async () => {
-    fake.updateFailsFor.add('sub_B');
-    const response = await cancel(request(false));
-    expect(response.status).toBe(503);
-    expect(fake.syncs).toBe(0);
+  it.each(['trialing', 'past_due'])('stops another subscription that is %s', async (status) => {
+    sub('sub_B').status = status;
+    expect((await cancel(request(false))).status).toBe(200);
+    expect(sub('sub_B').cancel_at_period_end).toBe(true);
   });
 
   it('cancels the one subscription of an ordinary family (control)', async () => {
