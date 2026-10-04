@@ -3534,6 +3534,8 @@
   "captureShortcuts.watchlistHint": "Filmavond",
   "captureShortcuts.watchlistLabel": "Kijklijst",
   "captureShortcuts.weatherHint": "Weersverwachting bekijken",
+  "cardHolds.reconcileFailed": "Afstemming van kaartreserveringen mislukt",
+  "cardHolds.unauthorized": "Niet geautoriseerd",
   "cardReveal.cardDetailsFor": "Kaartgegevens van {name}",
   "cardRevealModal.cardNumber": "Kaartnummer",
   "cardRevealModal.couldNotRevealTheCard": "Kan de kaart niet tonen.",

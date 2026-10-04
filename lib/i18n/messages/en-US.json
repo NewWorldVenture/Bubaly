@@ -3693,6 +3693,8 @@
   "captureShortcuts.watchlistHint": "Movie night",
   "captureShortcuts.watchlistLabel": "Watchlist",
   "captureShortcuts.weatherHint": "Check forecast",
+  "cardHolds.reconcileFailed": "Card hold reconcile failed",
+  "cardHolds.unauthorized": "Unauthorized",
   "cardReveal.cardDetailsFor": "{name}'s card details",
   "cardRevealModal.cardNumber": "Card number",
   "cardRevealModal.couldNotRevealTheCard": "Could not reveal the card.",

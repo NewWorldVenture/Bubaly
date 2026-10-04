@@ -51,6 +51,7 @@ export const SCHEDULES = {
   '/api/cron/notifications': '0 11 * * *',
   '/api/cron/push-scan': '0 */2 * * *',
   '/api/cron/calendar-feeds': '0 5 * * *',
+  '/api/cron/card-holds': '40 4 * * *',
   '/api/cron/automations': '0 13 * * *',
   // Podcasts publish on their own schedule and a family expects new episodes to
   // be there, not to have to ask for them. Six-hourly is often enough that a

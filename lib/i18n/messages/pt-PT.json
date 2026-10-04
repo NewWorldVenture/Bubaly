@@ -3535,6 +3535,8 @@
   "captureShortcuts.watchlistHint": "Noite de cinema",
   "captureShortcuts.watchlistLabel": "Lista para ver",
   "captureShortcuts.weatherHint": "Consultar a previsão",
+  "cardHolds.reconcileFailed": "A reconciliação das cativações do cartão falhou",
+  "cardHolds.unauthorized": "Não autorizado",
   "cardReveal.cardDetailsFor": "Dados do cartão de {name}",
   "cardRevealModal.cardNumber": "Número do cartão",
   "cardRevealModal.couldNotRevealTheCard": "Não foi possível mostrar o cartão.",

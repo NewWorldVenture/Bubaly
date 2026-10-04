@@ -3534,6 +3534,8 @@
   "captureShortcuts.watchlistHint": "Serata cinema",
   "captureShortcuts.watchlistLabel": "Da guardare",
   "captureShortcuts.weatherHint": "Controlla le previsioni",
+  "cardHolds.reconcileFailed": "Riconciliazione dei blocchi sulla carta non riuscita",
+  "cardHolds.unauthorized": "Non autorizzato",
   "cardReveal.cardDetailsFor": "Dati della carta di {name}",
   "cardRevealModal.cardNumber": "Numero della carta",
   "cardRevealModal.couldNotRevealTheCard": "Impossibile visualizzare la carta.",

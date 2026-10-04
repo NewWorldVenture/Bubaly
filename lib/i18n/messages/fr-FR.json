@@ -3534,6 +3534,8 @@
   "captureShortcuts.watchlistHint": "Soirée cinéma",
   "captureShortcuts.watchlistLabel": "Liste à regarder",
   "captureShortcuts.weatherHint": "Consulter les prévisions",
+  "cardHolds.reconcileFailed": "Le rapprochement des blocages de carte a échoué",
+  "cardHolds.unauthorized": "Non autorisé",
   "cardReveal.cardDetailsFor": "Détails de la carte de {name}",
   "cardRevealModal.cardNumber": "Numéro de carte",
   "cardRevealModal.couldNotRevealTheCard": "Impossible d’afficher la carte.",

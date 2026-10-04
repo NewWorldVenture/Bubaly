@@ -3534,6 +3534,8 @@
   "captureShortcuts.watchlistHint": "Filmabend",
   "captureShortcuts.watchlistLabel": "Merkliste",
   "captureShortcuts.weatherHint": "Wettervorhersage ansehen",
+  "cardHolds.reconcileFailed": "Abgleich der Kartenreservierungen fehlgeschlagen",
+  "cardHolds.unauthorized": "Nicht autorisiert",
   "cardReveal.cardDetailsFor": "Kartendaten von {name}",
   "cardRevealModal.cardNumber": "Kartennummer",
   "cardRevealModal.couldNotRevealTheCard": "Die Karte konnte nicht angezeigt werden.",

@@ -25,6 +25,10 @@
       "schedule": "0 5 * * *"
     },
     {
+      "path": "/api/cron/card-holds",
+      "schedule": "40 4 * * *"
+    },
+    {
       "path": "/api/cron/checkout-abandoned",
       "schedule": "0 14 * * *"
     },
