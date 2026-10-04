@@ -364,12 +364,14 @@ async function finalizeApproval(
   });
 
   // A recurring chore comes back: approving this assignment creates the
-  // child's next one (lib/services/tasks `respawnChoreAssignment`, keyed so a
-  // repeat is harmless). After the payout, so a reward failure's rollback
-  // never leaves a next assignment behind; its own failure is logged, not
-  // thrown — the approval and the payout stand.
+  // child's next one (lib/services/tasks `respawnChoreAssignment`, keyed by
+  // THIS assignment so a repeat is harmless). After the payout, so a reward
+  // failure's rollback never leaves a next assignment behind; its own failure
+  // is logged, not thrown — the approval and the payout stand, and the
+  // push-scan cron's `respawnMissingChoreAssignments` creates the successor
+  // under the same key within two hours.
   const respawn = await respawnChoreAssignment(args.scope, {
-    assignment: { chore_id: args.assignment.chore_id as string, member_id: args.assignment.member_id as string, due_at: (args.assignment.due_at as string | null) ?? null },
+    assignment: { id: args.assignment.id as string, chore_id: args.assignment.chore_id as string, member_id: args.assignment.member_id as string, due_at: (args.assignment.due_at as string | null) ?? null },
     recurrence: args.chore.recurrence as string | null | undefined,
   });
   if (!respawn.ok) {
