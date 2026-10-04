@@ -48,6 +48,7 @@ import { generatePrepPlans, type HorizonSignal } from './prep';
 import { nextBirthdayDayKey } from '@/lib/moments/birthdays';
 import { addDaysToDayKey, dayKeyInTz } from '@/lib/services/scope';
 import { describeActionError } from '@/lib/supabase/errors';
+import { isSensitiveDocument } from '@/lib/documents/sensitivity';
 
 type DB = SupabaseClient<Database>;
 
@@ -76,7 +77,7 @@ export async function runPrepGeneration(
   const [trips, members, docs] = await settleAll([
     sb.from('vacations').select('id, title, start_date').eq('family_id', familyId).gte('start_date', todayKey).lte('start_date', in120),
     sb.from('family_members').select('id, display_name, birthday').eq('family_id', familyId).not('birthday', 'is', null),
-    sb.from('documents').select('id, title, expires_at').eq('family_id', familyId).not('expires_at', 'is', null).gte('expires_at', todayKey).lte('expires_at', in60),
+    sb.from('documents').select('id, title, expires_at, is_secure, category').eq('family_id', familyId).not('expires_at', 'is', null).gte('expires_at', todayKey).lte('expires_at', in60),
   ]);
 
   const firstErr = [trips, members, docs].find((r) => r.error)?.error;
@@ -92,7 +93,17 @@ export async function runPrepGeneration(
     const next = m.birthday ? nextBirthdayDayKey(m.birthday, todayKey) : null;
     if (next) signals.push({ id: m.id, kind: 'birthday', title: `${m.display_name}'s Birthday`, date: next });
   }
-  for (const d of docs.data ?? []) if (d.expires_at) signals.push({ id: d.id, kind: 'doc_expiry', title: d.title ?? 'Document', date: d.expires_at });
+  // `prep_plans` is every member's (0131), and a sensitive document's title is
+  // the managers' (`documents_select`). This runs on the service client (the
+  // model-refresh cron) or a parent's session — both read every document — so
+  // the plan names a sensitive one only as what it is: "Renew: a private
+  // document". Plans are upserted on their signal, so one already written
+  // with the title is renamed on the next run.
+  for (const d of docs.data ?? []) {
+    if (!d.expires_at) continue;
+    const title = isSensitiveDocument(d) ? 'a private document' : d.title ?? 'Document';
+    signals.push({ id: d.id, kind: 'doc_expiry', title, date: d.expires_at });
+  }
 
   const plans = generatePrepPlans(signals, todayKey);
   if (plans.length === 0) return { ok: true, plans: 0 };
