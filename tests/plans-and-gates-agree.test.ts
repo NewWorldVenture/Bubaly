@@ -122,15 +122,29 @@ describe('the quota is enforced where the money is spent', () => {
   // `kind = 'concierge'`, and the assistant records its turns under the default
   // kind 'feature' (lib/ai/observability.ts), so the meter read zero no matter
   // how much a family used Bubaly — a limit that could never be reached.
+  // Request rows are now private to their requester/reviewer, so the protected
+  // RPC must count all household rows rather than a caller's visible subset.
   it('counts every AI request, not one kind of it', () => {
     const access = read('lib/server/ai-access.ts');
-    const countQuery = /from\('ai_requests'\)[\s\S]*?;/.exec(access);
-    expect(countQuery, 'the monthly usage query is gone').toBeTruthy();
+    const rpcCall = /opts\.db\.rpc\('count_family_ai_requests_month',\s*\{([\s\S]*?)\}\)/.exec(access);
+    expect(rpcCall, 'the protected household usage RPC is gone').toBeTruthy();
+    expect(rpcCall![1]).toContain('p_family_id: familyId');
+    expect(rpcCall![1]).toContain('p_month_start: monthStartIso');
+    expect(access, 'a raw request-row count would omit private sibling and system requests')
+      .not.toMatch(/\.from\(\s*['"]ai_requests['"]\s*\)/);
+
+    const migration = read('supabase/migrations/0478_ai_copy_private_read_and_quota.sql');
+    const rpcBody = /create or replace function public\.count_family_ai_requests_month\([\s\S]*?security definer[\s\S]*?as \$\$([\s\S]*?)\$\$;/i.exec(migration);
+    expect(rpcBody, 'the qualified protected count function is gone').toBeTruthy();
+    expect(rpcBody![1]).toContain("current_setting('role', true)");
+    expect(rpcBody![1]).toContain('public.is_family_member(p_family_id)');
+    const countQuery = /return\s*\(select count\(\*\) from public\.ai_requests\s+where ([\s\S]*?)\);/i.exec(rpcBody![1]);
+    expect(countQuery, 'the RPC no longer counts the actual AI request table').toBeTruthy();
     expect(
-      /\.eq\(\s*'kind'/.test(countQuery![0]),
+      /\bkind\b/i.test(countQuery![0]),
       'the monthly usage count filters on kind again — the assistant files "feature" rows and would not be counted',
     ).toBe(false);
-    expect(countQuery![0]).toContain("eq('family_id'");
-    expect(countQuery![0]).toContain('monthStartIso');
+    expect(countQuery![1].replace(/\s+/g, ' ').trim(), 'usage must include every household request in the UTC window')
+      .toBe('family_id = p_family_id and created_at >= p_month_start and created_at < month_end');
   });
 });
