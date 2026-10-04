@@ -35,4 +35,17 @@ describe('meal-plan replacement race observer', () => {
     expect(sanitizedDetail).not.toContain('sa.query');
     expect(probe).toMatch(/v_ok\s*:=\s*v_a_holds_slot\s+and v_b_rpc_started\s+and v_b_waited_on_slot/i);
   });
+
+  it('refreshes cached activity statistics before each observer read', () => {
+    const activityLocks = [...probe.matchAll(
+      /perform pg_stat_clear_snapshot\(\);\s+select exists\s+\(\s+select 1\s+from pg_locks l join pg_stat_activity sa/gi,
+    )];
+    const activityRows = [...probe.matchAll(
+      /perform pg_stat_clear_snapshot\(\);\s+select sa\.application_name = v_app_b,[\s\S]*?from pg_stat_activity sa\s+where sa\.pid = v_b_pid;/gi,
+    )];
+
+    expect(activityLocks).toHaveLength(2);
+    expect(activityRows).toHaveLength(2);
+    expect(probe.match(/perform pg_stat_clear_snapshot\(\);/g)).toHaveLength(4);
+  });
 });

@@ -151,6 +151,9 @@ begin
 
   -- The first RPC must still hold this exact transaction-scoped advisory key
   -- when it returns but before we commit its explicit dblink transaction.
+  -- pg_stat_activity is transaction-cached by default, so refresh before each
+  -- observation to avoid hiding sessions that connected after an earlier read.
+  perform pg_stat_clear_snapshot();
   select exists (
     select 1
     from pg_locks l join pg_stat_activity sa on sa.pid = l.pid
@@ -184,6 +187,7 @@ begin
   -- a separate deadline so delayed dispatch is reported as B-not-started.
   v_observe_deadline := clock_timestamp() + interval '10 seconds';
   loop
+    perform pg_stat_clear_snapshot();
     select sa.application_name = v_app_b,
            sa.state,
            sa.wait_event_type,
@@ -217,6 +221,7 @@ begin
   if v_b_rpc_started then
     v_observe_deadline := clock_timestamp() + interval '10 seconds';
     loop
+      perform pg_stat_clear_snapshot();
       select exists (
         select 1
         from pg_locks l join pg_stat_activity sa on sa.pid = l.pid
@@ -237,6 +242,7 @@ begin
   -- Refresh sanitized metadata before releasing A. Do not log the PID, app
   -- name, or full query; the booleans and state fields distinguish a missing
   -- backend from a query-prefix mismatch or an RPC waiting elsewhere.
+  perform pg_stat_clear_snapshot();
   select sa.application_name = v_app_b,
          sa.state,
          sa.wait_event_type,
