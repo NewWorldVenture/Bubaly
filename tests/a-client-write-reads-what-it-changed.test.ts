@@ -269,10 +269,10 @@ describe('access, defaults and undo say only what landed (C1-S9-83)', () => {
     expect(at(decisions, 'if (results.some((x) => wroteNoRows(x.data)))')).toBeLessThan(at(decisions, "success(t('decisionsModule.scoresSavedToTheDecision'))"));
   });
 
-  it("meals: the prior-ballot clear stays unconfirmed on purpose — a first vote has none", () => {
+  it("meals: the prior-ballot clear stays unconfirmed on purpose — a first vote has none — and is scoped by family", () => {
     const src = readFileSync('components/modules/meals-module.tsx', 'utf8');
     const fn = bodyOf(src, 'async function castVote(', '\n  }\n');
-    expect(fn).toContain(".delete().eq('vote_id', voteData.vote.id).eq('member_id', selfId);");
+    expect(fn).toContain(".delete().eq('vote_id', voteData.vote.id).eq('member_id', selfId).eq('family_id', familyId);");
     expect(fn).toContain('Audit C1-S9-83');
   });
 });
