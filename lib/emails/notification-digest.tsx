@@ -5,12 +5,18 @@ export type DigestItem = { title: string; body: string | null; icon: string };
 
 /** Daily roll-up of a member's pending Bubaly notifications. */
 export function NotificationDigestEmail({
-  name, items,
+  name, items, timeZone,
 }: {
   name: string;
   items: DigestItem[];
+  /**
+   * The recipient's family's IANA zone. Rendered by a cron on a UTC host, so
+   * without it the date line was Greenwich's — tomorrow's, from 5pm in
+   * California. The sender passes an explicit 'UTC' when it could not read one.
+   */
+  timeZone: string;
 }) {
-  const today = new Date().toLocaleDateString('en-US', { weekday: 'long', month: 'long', day: 'numeric' });
+  const today = new Date().toLocaleDateString('en-US', { weekday: 'long', month: 'long', day: 'numeric', timeZone });
   const count = items.length;
 
   return (

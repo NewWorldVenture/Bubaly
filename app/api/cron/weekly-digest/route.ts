@@ -165,6 +165,8 @@ export async function GET(req: NextRequest) {
         openChores: openChores ?? 0,
         mealsPlanned: mealsPlanned ?? 0,
         memberCount: members?.length ?? 0,
+        // The "Week of …" date is the family's, not the UTC host's.
+        timeZone: tz,
         // One "families like yours" line, only for families opted into benchmarks
         // and only from the k-anonymized rows the nightly aggregation persisted.
         compareLine: renderCompareLine(await loadCompareLine(supabase, family.id), t),

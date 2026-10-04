@@ -176,7 +176,7 @@ export default async function HomePage() {
   // "10:00 PM". Bound here, after `tz` exists, because that is the whole fix.
   // `getFormat(tz)` is exactly this over a second `getLocaleContext()`; built
   // from the one already read above, it costs no await.
-  const { fmtTime, fmtMoney } = createFormat(locale.code, (key, params) => translate(catalogue, key, params), tz);
+  const { fmtTime, fmtDate, fmtMoney } = createFormat(locale.code, (key, params) => translate(catalogue, key, params), tz);
   const todayKey = dayKeyInTz(now, tz);
   const dayBounds = zonedDayBoundsMs(todayKey, tz);
   const todayStart = new Date(dayBounds.start);
@@ -631,13 +631,15 @@ export default async function HomePage() {
         <div className="space-y-2.5">
           {(upcomingEvents ?? []).length === 0 && <EmptyRow>{tr('home.nothingOnTheHorizonYet')}</EmptyRow>}
           {((upcomingEvents ?? []) as { id: string; title: string; starts_at: string; all_day: boolean; assignee_id: string | null }[]).map((e) => {
-            const d = new Date(e.starts_at);
             const owner = e.assignee_id ? memberById.get(e.assignee_id) : undefined;
             return (
               <Link key={e.id} href="/dashboard/calendar" className="flex min-h-[44px] items-center gap-3 rounded-xl focus-ring">
                 <div className="grid h-11 w-11 shrink-0 place-items-center rounded-xl bg-elevated text-center">
-                  <span className="text-[9px] font-bold uppercase text-muted leading-none">{d.toLocaleDateString(locale.code, { month: 'short' })}</span>
-                  <span className="text-sm font-black leading-none">{d.getDate()}</span>
+                  {/* The badge's month and day are the FAMILY's (`fmtDate` is bound to
+                      `tz`), not the host's: `d.getDate()` on a UTC host put a 7pm
+                      Californian event on tomorrow's square. */}
+                  <span className="text-[9px] font-bold uppercase text-muted leading-none">{fmtDate(e.starts_at, 'MMM')}</span>
+                  <span className="text-sm font-black leading-none">{fmtDate(e.starts_at, 'd')}</span>
                 </div>
                 <div className="min-w-0 flex-1">
                   <p className="truncate text-sm font-semibold">{e.title}</p>
@@ -713,7 +715,8 @@ export default async function HomePage() {
               // Branching on `due === 'Today'` made the highlight a hostage of
               // the copy: translate the label and the badge silently goes grey.
               const dueToday = t.due_date != null && t.due_date === todayIso;
-              const due = t.due_date ? (dueToday ? 'Today' : new Date(t.due_date).toLocaleDateString(locale.code, { month: 'short', day: 'numeric' })) : null;
+              // `due_date` is a DATE: `fmtDate` renders a day key in no zone at all.
+              const due = t.due_date ? (dueToday ? 'Today' : fmtDate(t.due_date, 'MMM d')) : null;
               return (
                 <div key={t.id} className="flex items-center gap-3">
                   <span className="h-4 w-4 shrink-0 rounded-full border-2 border-emerald-400/60" />
@@ -802,7 +805,7 @@ export default async function HomePage() {
             <div className="grid grid-cols-2 gap-3 sm:grid-cols-4">
               {((photos ?? []) as { id: string; url: string | null; thumbnail_url: string | null; caption: string | null; taken_at: string | null; created_at: string }[]).map((p) => {
                 const src = p.thumbnail_url || p.url;
-                const when = new Date(p.taken_at || p.created_at).toLocaleDateString(locale.code, { month: 'short', day: 'numeric' });
+                const when = fmtDate(p.taken_at || p.created_at, 'MMM d');
                 return (
                   <Link key={p.id} href="/dashboard/memories" className="group relative aspect-square overflow-hidden rounded-xl bg-elevated">
                     {/* Signed per viewer, not the stored public URL, and not through the

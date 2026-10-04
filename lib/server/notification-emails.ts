@@ -12,7 +12,7 @@ import { iconForType, groupByUser } from '@/lib/notifications/digest';
 import * as React from 'react';
 import { listAllAuthUsers } from './list-all-auth-users';
 import { childrenBlockedOn } from '@/lib/notifications/child-channels';
-import { readAllInChunks } from '@/lib/supabase/chunked-in';
+import { readAllInChunks, readInChunks } from '@/lib/supabase/chunked-in';
 
 type DB = SupabaseClient<Database>;
 export type NotificationEmailResult = { sent: number; failed: number; skipped: number };
@@ -71,6 +71,20 @@ export async function deliverNotificationEmails(supabase: DB): Promise<Notificat
   const permitted = pending.filter((n) => currentPairs.has(`${n.family_id}:${n.user_id}`));
   const withheldIds = pending.filter((n) => !currentPairs.has(`${n.family_id}:${n.user_id}`)).map((n) => n.id);
   const byUser = groupByUser(permitted);
+
+  // The digest's date line is the recipient's FAMILY's day. This runs from a
+  // cron on a UTC host, so with no zone it was Greenwich's date — tomorrow's,
+  // from 5pm in California. One batched read for every family in the batch; a
+  // failed read is logged and dates those digests in an explicit UTC rather
+  // than holding the digests themselves, which is the one thing a cosmetic
+  // lookup must not do.
+  const familyIds = [...new Set(permitted.map((n) => n.family_id))];
+  const { data: familyZones, error: familyZonesError } = await readInChunks<{ id: string; timezone: string | null }, { message: string }>(
+    familyIds,
+    (chunk) => supabase.from('families').select('id, timezone').in('id', chunk),
+  );
+  if (familyZonesError) console.error('[notification-email] family timezone read failed; dating digests in UTC', familyZonesError);
+  const zoneByFamily = new Map((familyZones ?? []).map((f) => [f.id, f.timezone || 'UTC']));
   const userIds = [...byUser.keys()];
 
   // Respect the per-user email toggle (default on).
@@ -153,7 +167,7 @@ export async function deliverNotificationEmails(supabase: DB): Promise<Notificat
     const { ok, skipped: notSent } = await sendReactEmail({
       to: meta.email,
       subject: `${notifs.length} family update${notifs.length > 1 ? 's' : ''} · Bubaly`,
-      react: React.createElement(NotificationDigestEmail, { name: meta.name, items }),
+      react: React.createElement(NotificationDigestEmail, { name: meta.name, items, timeZone: zoneByFamily.get(notifs[0].family_id) ?? 'UTC' }),
       // Same recipient and row set reuse one request key. The provider may
       // reject an in-flight or changed-payload replay; keep those rows pending.
       // This does not cover changed row sets, partial acknowledgements or keys
