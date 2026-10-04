@@ -252,7 +252,8 @@ describe('proposals go through the approval spine', () => {
 describe('magic import proposes the same thing', () => {
   it('runs the classifier beside the model', () => {
     expect(importRoute).toContain("from '@/lib/front-desk/school-sports'");
-    expect(importRoute).toContain('const desk = frontDeskItem(text, now);');
+    // The family's zone rides along so the item's summary is dated on their clock.
+    expect(importRoute).toContain('const desk = frontDeskItem(text, now, tz);');
   });
 
   it('does not double up on a row the model already proposed', () => {

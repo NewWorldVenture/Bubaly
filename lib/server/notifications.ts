@@ -267,7 +267,10 @@ export async function generateFamilyNotifications(supabase: DB, familyId: string
   // a passport renewed and given its new date is a new occurrence, and keyed
   // by document and manager alone it was never announced again.
   for (const d of docs ?? []) {
-    const when = d.expires_at ? new Date(d.expires_at).toLocaleDateString('en-US', { month: 'short', day: 'numeric' }) : 'soon';
+    // `documents.expires_at` is a DATE (0002_tables.sql). Parsed, that is UTC
+    // midnight; rendered on the host's clock a US server said "Oct 7" about a
+    // passport that expires on the 8th. A date is rendered as the date it is.
+    const when = d.expires_at ? new Date(d.expires_at).toLocaleDateString('en-US', { month: 'short', day: 'numeric', timeZone: 'UTC' }) : 'soon';
     const expiryDay = String(d.expires_at ?? '').slice(0, 10);
     for (const m of documentManagers) {
       candidates.push({
@@ -349,7 +352,8 @@ export async function generateFamilyNotifications(supabase: DB, familyId: string
     .select('id, taken_at')
     .eq('family_id', familyId).not('taken_at', 'is', null)
     .order('taken_at', { ascending: false }).limit(400);
-  const memoryNotice = onThisDayNotice(datedPhotos ?? [], now);
+  // `tz`: the family's day, not the host's — see pickOnThisDay.
+  const memoryNotice = onThisDayNotice(datedPhotos ?? [], now, tz);
   if (memoryNotice) {
     candidates.push({
       type: 'system', related_type: 'family_photos', related_id: memoryNotice.relatedId,
