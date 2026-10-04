@@ -222,6 +222,10 @@ export type StripeCustomerCredits = {
       params: { amount: number; currency: string; description?: string; metadata?: Record<string, string> },
       options?: { idempotencyKey?: string },
     ): Promise<{ id: string }>;
+    listBalanceTransactions(
+      id: string,
+      params?: { limit?: number; starting_after?: string },
+    ): Promise<{ data: { id: string; metadata?: Record<string, string> | null }[]; has_more: boolean }>;
   };
 };
 
@@ -242,6 +246,35 @@ export type RewardDeps = {
   now?: Date;
 };
 
+/** Pages of a customer's balance history read before giving up (100 each). */
+const REWARD_LOOKUP_PAGES = 10;
+
+/**
+ * The credit this referral already made to this side's customer, if Stripe
+ * holds one. The idempotency key does not cover a retry on its own: Stripe keeps
+ * keys for about 24 hours, and a side left owed (Stripe made the credit but the
+ * answer was lost, or its id never reached the row) is retried by the referred
+ * family's next subscription event, usually the renewal a month or a year later.
+ * Each credit carries `referral_id` and `side` metadata (below), which is what
+ * this matches. Throws when Stripe cannot be asked, or when the history is
+ * longer than it reads, so the caller credits nobody rather than guessing.
+ */
+async function existingRewardCredit(
+  stripe: StripeCustomerCredits, customerRef: string, referralId: string, side: ReferralRewardSide,
+): Promise<string | null> {
+  let startingAfter: string | undefined;
+  for (let page = 0; page < REWARD_LOOKUP_PAGES; page++) {
+    const listed = await stripe.customers.listBalanceTransactions(customerRef, {
+      limit: 100, ...(startingAfter ? { starting_after: startingAfter } : {}),
+    });
+    const found = listed.data.find((txn) => txn.metadata?.referral_id === referralId && txn.metadata?.side === side);
+    if (found) return found.id;
+    if (!listed.has_more || listed.data.length === 0) return null;
+    startingAfter = listed.data[listed.data.length - 1].id;
+  }
+  throw new Error(`more than ${REWARD_LOOKUP_PAGES * 100} balance transactions; cannot tell whether this referral was already credited`);
+}
+
 async function customerRefForFamily(service: DB, familyId: string): Promise<{ ref: string | null; error: unknown }> {
   const { data, error } = await service.from('billing_customers').select('customer_ref').eq('family_id', familyId).maybeSingle();
   return { ref: data?.customer_ref ?? null, error };
@@ -253,7 +286,10 @@ async function customerRefForFamily(service: DB, familyId: string): Promise<{ re
  *
  * Idempotent for webhook retries: a 'rewarded' row is a no-op; a side already
  * credited (its balance-transaction id is on the row's metadata) is skipped;
- * each Stripe call carries a per-side idempotency key. A family with no
+ * a side whose credit Stripe already holds but the row never recorded takes
+ * that credit's id instead of a second one (existingRewardCredit); and each
+ * Stripe call carries a per-side idempotency key for deliveries that overlap
+ * within Stripe's 24 hours. A family with no
  * Stripe customer yet leaves the row 'converted' for the next event to retry.
  * A negative customer balance is a credit that Stripe applies to the next
  * invoice automatically.
@@ -319,7 +355,8 @@ export async function rewardReferral(service: DB, referralId: string, deps: Rewa
         console.warn('[referrals/reward] Stripe customer is deleted; leaving converted', { referralId, side, familyId });
         return { outcome: 'missing_customer', referralId, side };
       }
-      const txn = await stripe.customers.createBalanceTransaction(
+      const prior = await existingRewardCredit(stripe, customerRef, referralId, side);
+      const txn = prior ? { id: prior } : await stripe.customers.createBalanceTransaction(
         customerRef,
         {
           amount: -Math.round(amount),

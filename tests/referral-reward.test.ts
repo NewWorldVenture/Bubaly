@@ -23,7 +23,7 @@ const db = createInMemorySupabase({
 });
 const client = db as unknown as SupabaseClient<Database>;
 
-type Credit = { customer: string; amount: number; currency: string; idempotencyKey?: string; metadata?: Record<string, string> };
+type Credit = { id: string; customer: string; amount: number; currency: string; idempotencyKey?: string; metadata?: Record<string, string> };
 
 function fakeStripe(opts: { deleted?: Set<string>; failFor?: Set<string> } = {}) {
   const credits: Credit[] = [];
@@ -35,9 +35,13 @@ function fakeStripe(opts: { deleted?: Set<string>; failFor?: Set<string> } = {})
       },
       async createBalanceTransaction(id, params, options) {
         if (opts.failFor?.has(id)) throw new Error('Stripe is having a moment');
-        credits.push({ customer: id, amount: params.amount, currency: params.currency, idempotencyKey: options?.idempotencyKey, metadata: params.metadata });
         n += 1;
+        credits.push({ id: `cbtxn_${n}`, customer: id, amount: params.amount, currency: params.currency, idempotencyKey: options?.idempotencyKey, metadata: params.metadata });
         return { id: `cbtxn_${n}` };
+      },
+      // What a retry reads before crediting (tests/a-referral-is-credited-once.test.ts).
+      async listBalanceTransactions(id) {
+        return { data: credits.filter((c) => c.customer === id).reverse().map((c) => ({ id: c.id, metadata: c.metadata ?? null })), has_more: false };
       },
     },
   };
