@@ -129,6 +129,43 @@ function contentDrift(stored: TodoItem, wanted: TodoContent): string[] {
   return drift;
 }
 
+/** A task's member reference must share its server-derived family scope. */
+async function checkTodoAssignee(scope: ServiceScope, memberId: string | null): Promise<ServiceResult<null>> {
+  if (memberId === null) return ok(null);
+  if (typeof memberId !== 'string' || !memberId.trim()) {
+    return fail('That task assignee could not be found.', { code: SERVICE_CODES.notFound });
+  }
+  try {
+    const { data, error } = await scope.db.from('family_members')
+      .select('id, family_id').eq('id', memberId).eq('family_id', scope.familyId).maybeSingle();
+    if (error) return fail(describeDbError(error, 'Could not verify that task assignee.'), { code: SERVICE_CODES.db });
+    if (!data || typeof data !== 'object' || Array.isArray(data) || data.id !== memberId || data.family_id !== scope.familyId) {
+      return fail('That task assignee could not be found.', { code: SERVICE_CODES.notFound });
+    }
+    return ok(null);
+  } catch (error) {
+    return fail(describeDbError(error, 'Could not verify that task assignee.'), { code: SERVICE_CODES.db });
+  }
+}
+
+/** An explicit task list must share the task's server-derived family scope. */
+async function checkTodoList(scope: ServiceScope, listId: string): Promise<ServiceResult<{ id: string }>> {
+  if (typeof listId !== 'string' || !listId.trim()) {
+    return fail('That task list could not be found.', { code: SERVICE_CODES.notFound });
+  }
+  try {
+    const { data, error } = await scope.db.from('todo_lists')
+      .select('id, family_id').eq('id', listId).eq('family_id', scope.familyId).maybeSingle();
+    if (error) return fail(describeDbError(error, 'Could not verify that task list.'), { code: SERVICE_CODES.db });
+    if (!data || typeof data !== 'object' || Array.isArray(data) || data.id !== listId || data.family_id !== scope.familyId) {
+      return fail('That task list could not be found.', { code: SERVICE_CODES.notFound });
+    }
+    return ok({ id: data.id });
+  } catch (error) {
+    return fail(describeDbError(error, 'Could not verify that task list.'), { code: SERVICE_CODES.db });
+  }
+}
+
 export async function createTodo(
   scope: ServiceScope,
   input: CreateTodoInput,
@@ -140,11 +177,14 @@ export async function createTodo(
     return fail('A due date must look like 2026-09-05.', { code: SERVICE_CODES.invalidInput });
   }
 
-  const list = input.listId ? { ok: true as const, data: { id: input.listId } } : await ensureTodoList(scope);
+  const assigneeId = input.assigneeId !== undefined ? input.assigneeId : scope.memberId;
+  const assignee = await checkTodoAssignee(scope, assigneeId ?? null);
+  if (!assignee.ok) return assignee;
+
+  const list = input.listId ? await checkTodoList(scope, input.listId) : await ensureTodoList(scope);
   if (!list.ok) return list;
 
   const priority = input.priority && TODO_PRIORITIES.includes(input.priority) ? input.priority : 'medium';
-  const assigneeId = input.assigneeId !== undefined ? input.assigneeId : scope.memberId;
   const wanted: TodoContent = {
     list_id: list.data.id,
     title,
@@ -216,6 +256,13 @@ export async function completeTodo(scope: ServiceScope, todoId: string, done = t
   }
   if (!data) return fail('That task could not be found.', { code: SERVICE_CODES.notFound });
 
+  if (Array.isArray(data) || typeof data !== 'object'
+    || typeof data.id !== 'string' || !data.id.trim()
+    || typeof data.family_id !== 'string' || !data.family_id.trim()
+    || !sameId(data.id, todoId) || !sameId(data.family_id, scope.familyId)) {
+    return fail('Could not update that task.', { code: SERVICE_CODES.db });
+  }
+
   await recordActivitySafely(scope, {
     agent: 'tasks',
     action: 'update',
@@ -229,6 +276,8 @@ export async function completeTodo(scope: ServiceScope, todoId: string, done = t
 
 /** `memberId` is a `family_members.id`; null unassigns. */
 export async function assignTodo(scope: ServiceScope, todoId: string, memberId: string | null): Promise<ServiceResult<TodoItem>> {
+  const assignee = await checkTodoAssignee(scope, memberId);
+  if (!assignee.ok) return assignee;
   const { data, error } = await scope.db
     .from('todo_items')
     .update({ assigned_to_id: memberId })
@@ -289,6 +338,11 @@ export async function updateTodo(scope: ServiceScope, todoId: string, patch: Upd
 
   if (Object.keys(update).length === 0) {
     return fail('Nothing to change on that task.', { code: SERVICE_CODES.invalidInput });
+  }
+
+  if (patch.assigneeId !== undefined) {
+    const assignee = await checkTodoAssignee(scope, patch.assigneeId);
+    if (!assignee.ok) return assignee;
   }
 
   const { data, error } = await scope.db
@@ -367,6 +421,9 @@ export async function searchTodos(scope: ServiceScope, input: SearchTodosInput =
   if (error) {
     console.error('[service:tasks] to-do search failed', error);
     return fail(describeDbError(error, 'Could not load your tasks.'), { code: SERVICE_CODES.db });
+  }
+  if (data != null && !Array.isArray(data)) {
+    return fail('Could not load your tasks.', { code: SERVICE_CODES.db });
   }
   return ok(data ?? []);
 }
@@ -628,6 +685,25 @@ export async function assignChore(
   }
   if (!chore) return fail('That chore could not be found.', { code: SERVICE_CODES.notFound });
 
+  const { data: assignee, error: assigneeError } = await scope.db
+    .from('family_members')
+    .select('id, family_id')
+    .eq('id', input.memberId)
+    .eq('family_id', scope.familyId)
+    .maybeSingle();
+  if (assigneeError) {
+    console.error('[service:tasks] chore assignee lookup failed', assigneeError);
+    return fail(describeDbError(assigneeError, 'Could not load that family member.'), { code: SERVICE_CODES.db });
+  }
+  if (
+    !assignee || typeof assignee !== 'object' || Array.isArray(assignee)
+    || typeof assignee.id !== 'string' || typeof assignee.family_id !== 'string'
+    || assignee.id.toLowerCase() !== input.memberId.toLowerCase()
+    || assignee.family_id.toLowerCase() !== scope.familyId.toLowerCase()
+  ) {
+    return fail('That person could not be found in this family.', { code: SERVICE_CODES.notFound });
+  }
+
   const { data, error } = await scope.db
     .from('chore_assignments')
     .insert({
@@ -812,6 +888,9 @@ export async function listOpenChores(
   if (error) {
     console.error('[service:tasks] open chores read failed', error);
     return fail(describeDbError(error, 'Could not load the chore board.'), { code: SERVICE_CODES.db });
+  }
+  if (data != null && !Array.isArray(data)) {
+    return fail('Could not load the chore board.', { code: SERVICE_CODES.db });
   }
   return ok(data ?? []);
 }

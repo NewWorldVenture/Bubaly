@@ -15,7 +15,7 @@ import { formatPhone } from '@/lib/guardian/phone';
 import { detectScamFromText } from '@/lib/guardian/scam';
 import type { MemberProfile } from '@/lib/guardian/pipeline';
 import { isNextScreeningTurn } from '@/lib/guardian/screening-turn';
-import { claimGuardianCallback, isValidGuardianEventId, markGuardianCallbackProcessed } from '@/lib/guardian/callbacks';
+import { claimGuardianCallback, isValidGuardianEventId, markGuardianCallbackProcessed, releaseGuardianCallback } from '@/lib/guardian/callbacks';
 import { readBoundedRequestFormData } from '@/lib/server/bounded-request-body';
 import { wroteNoRows } from '@/lib/supabase/errors';
 import { appBaseUrl } from '@/lib/server/app-url';
@@ -79,6 +79,10 @@ export async function POST(req: NextRequest) {
 
   if (sessionError) {
     console.error('[guardian/screen] session read failed; letting Twilio fall back', { sessionId, error: sessionError.message });
+    // Falling back only works if the fallback can take this turn: held, the
+    // claim made it a 'settled' duplicate for ten minutes, said goodbye, and
+    // hung up. Nothing has been written yet, so give it back.
+    await releaseGuardianCallback(supabase, 'screening_gather', callbackId);
     return new NextResponse('', { status: 503 });
   }
 
@@ -134,6 +138,7 @@ export async function POST(req: NextRequest) {
       .select('member_id').eq('id', sess.communication_id).eq('family_id', sess.family_id).maybeSingle();
     if (commError) {
       console.error('[guardian/screen] communication read failed; letting Twilio fall back', { sessionId, error: commError.message });
+      await releaseGuardianCallback(supabase, 'screening_gather', callbackId);
       return new NextResponse('', { status: 503 });
     }
     calledMemberId = (comm as { member_id?: string | null } | null)?.member_id ?? null;
@@ -142,6 +147,7 @@ export async function POST(req: NextRequest) {
   const { data: profileRows, error: profileError } = await (calledMemberId ? profiles.eq('member_id', calledMemberId) : profiles).limit(2);
   if (profileError) {
     console.error('[guardian/screen] member profile read failed; letting Twilio fall back', { sessionId, error: profileError.message });
+    await releaseGuardianCallback(supabase, 'screening_gather', callbackId);
     return new NextResponse('', { status: 503 });
   }
   // Without a named member, only an unambiguous profile is used.

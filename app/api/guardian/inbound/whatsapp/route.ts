@@ -11,7 +11,7 @@ import { runDecisionPipeline } from '@/lib/guardian/pipeline';
 import { detectScamWithAI } from '@/lib/guardian/scam-ai';
 import { twilioRefusal, verifyTwilioRequest } from '@/lib/server/twilio-ingress';
 import { formatPhone } from '@/lib/guardian/phone';
-import { claimGuardianCallback, isValidGuardianEventId, markGuardianCallbackProcessed } from '@/lib/guardian/callbacks';
+import { claimGuardianCallback, isValidGuardianEventId, markGuardianCallbackProcessed, releaseGuardianCallback } from '@/lib/guardian/callbacks';
 import { readBoundedRequestFormData } from '@/lib/server/bounded-request-body';
 
 export const runtime = 'nodejs';
@@ -70,6 +70,9 @@ export async function POST(req: NextRequest) {
   // reason somewhere a person can find.
   if (profileError) {
     console.error('[guardian-whatsapp] Guardian number lookup failed', { to, error: profileError });
+    // The claim has to go back too. Held, it made the retry this 503 asks for
+    // a 'settled' duplicate for ten minutes — acknowledged, and lost.
+    await releaseGuardianCallback(supabase, 'inbound_whatsapp', smsSid);
     return new NextResponse('', { status: 503 });
   }
 
@@ -92,6 +95,9 @@ export async function POST(req: NextRequest) {
       initialTranscript: body,
     });
   } catch {
+    // Nothing has been written yet (the pipeline only reads), so the retry may
+    // take the event from the start.
+    await releaseGuardianCallback(supabase, 'inbound_whatsapp', smsSid);
     return new NextResponse('Guardian routing unavailable', { status: 503 });
   }
 
