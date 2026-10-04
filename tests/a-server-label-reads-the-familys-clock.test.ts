@@ -91,7 +91,7 @@ describe('each repaired site carries the zone', () => {
     const toIso = bodyOf(src, 'function toIso(date: string, time: string | null, tz: string)', 'allDay: !time };');
     expect(toIso).toContain('instantForLocalTime(');
     expect(toIso).not.toContain('new Date(`${date}');
-    expect(src).toContain('toIso(r.date as string, (r.time as string) ?? null, tz)');
+    expect(src).toContain('toIso(date, textOrNull(r.time), tz)');
     expect(src).toContain('fmtSummary(r.title as string, iso, allDay, location, tz)');
     expect(src).toContain("weekday: 'short', month: 'short', day: 'numeric', timeZone: tz,");
   });
