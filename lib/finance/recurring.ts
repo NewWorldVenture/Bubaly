@@ -10,8 +10,6 @@
 // family's day only in the family's browser
 // (tests/a-server-path-does-not-read-the-hosts-calendar.test.ts).
 
-import { isMissingRelationError } from '@/lib/supabase/errors';
-
 // ── Recurring bills ──────────────────────────────────────────────────────────
 
 export type BillCadence = 'weekly' | 'biweekly' | 'monthly' | 'quarterly' | 'yearly';
@@ -220,10 +218,20 @@ export function whereBillIsAsSeen<Q extends BillFilterable>(
   return q;
 }
 
-/** PostgREST (PGRST204) or Postgres (42703) refusing `bills.due_day` on a database that has not applied 0475. */
+/**
+ * PostgREST (PGRST204) or Postgres (42703) refusing `bills.due_day` itself on
+ * a database that has not applied 0475 — and nothing else. Only those two
+ * codes say a COLUMN is missing, and the message must name exactly that column
+ * of `bills`: not `due_day_backup`, not a missing `due_day_history` table, not
+ * a permission error that happens to mention the schema cache. Anything else
+ * is returned as it came; the retry without the column is for this one case.
+ */
 export function isMissingDueDayColumn(error: unknown): boolean {
-  const message = typeof error === 'object' && error && 'message' in error ? String((error as { message: unknown }).message) : '';
-  return isMissingRelationError(error) && /due_day/i.test(message);
+  if (!error || typeof error !== 'object') return false;
+  const { code, message } = error as { code?: unknown; message?: unknown };
+  if (code !== 'PGRST204' && code !== '42703') return false;
+  const text = typeof message === 'string' ? message : '';
+  return /'due_day'|"due_day"|\bbills\.due_day\b/i.test(text) && /\bbills\b/i.test(text);
 }
 
 /**

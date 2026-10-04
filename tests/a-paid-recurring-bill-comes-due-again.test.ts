@@ -167,6 +167,13 @@ describe('writeBillPatch — a database that has not applied 0475', () => {
     expect(isMissingDueDayColumn({ code: 'PGRST204', message: "Could not find the 'autopay' column" })).toBe(false);
     expect(isMissingDueDayColumn({ code: '23514', message: 'violates check constraint bills_due_day_check' })).toBe(false);
     expect(isMissingDueDayColumn(null)).toBe(false);
+    // Review 5985629019: only the exact column of bills, under a missing-column code.
+    expect(isMissingDueDayColumn({ code: '42703', message: 'column bills.due_day does not exist' })).toBe(true);
+    expect(isMissingDueDayColumn({ code: 'PGRST204', message: "Could not find the 'due_day_backup' column of 'bills' in the schema cache" })).toBe(false);
+    expect(isMissingDueDayColumn({ code: '42703', message: 'column bills.due_day_backup does not exist' })).toBe(false);
+    expect(isMissingDueDayColumn({ code: '42P01', message: 'relation "due_day_history" does not exist' })).toBe(false);
+    expect(isMissingDueDayColumn({ code: '42501', message: 'permission denied by due_day schema cache guard' })).toBe(false);
+    expect(isMissingDueDayColumn({ code: '42703', message: 'column "due_day" of relation "subscriptions" does not exist' })).toBe(false);
   });
   it('writes once when the column is there, and once more without it when it is not and the due date carries the day', async () => {
     const ok = writes([{ error: null }]);
