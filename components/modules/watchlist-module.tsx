@@ -118,6 +118,7 @@ export function WatchlistModule() {
   }
 
   async function deleteSession(session: Session) {
+    if (!(await askConfirm({ title: tr('confirm.removeNamed', { name: session.title_name }), body: tr('confirm.cannotBeUndone') }))) return;
     const { data: removed2, error } = await createClient().from('watch_sessions').delete().eq('id', session.id).select('id');
     if (error) return toastError(describeDbError(error));
     if (wroteNoRows(removed2)) return toastError(tr('errors.thatChangeWasNotSaved'));
