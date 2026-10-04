@@ -160,12 +160,10 @@ describe('each page renders through the formatter bound to the family\'s zone', 
 });
 
 // ── The ratchet ─────────────────────────────────────────────────────────────
-// Server files (no 'use client') under the family-facing app tree and the email
-// templates. The admin tree is excluded ON PURPOSE and for now: its ~8 sites are
-// the next unit, and the case at the end fails the moment that exclusion stops
-// excluding anything, so it cannot outlive its reason.
+// Server files (no 'use client') under the whole app tree — the admin pages
+// included, which answer in an explicit zone (lib/admin/clock.ts) — and the
+// email templates.
 const ROOTS = ['app/(app)', 'lib/emails'];
-const EXCLUDED = ['app/(app)/admin'];
 
 function walk(dir: string): string[] {
   return readdirSync(dir).flatMap((name) => {
@@ -209,17 +207,16 @@ function hostZoneRenders(src: string, label = ''): string[] {
   return out;
 }
 
-const serverFiles = ROOTS.flatMap((root) => walk(join(ROOT, root)))
+const inScope = ROOTS.flatMap((root) => walk(join(ROOT, root)))
   .map((f) => f.slice(ROOT.length + 1).split('\\').join('/'))
   .filter((rel) => !/^\s*['"]use client['"]/m.test(read(rel)));
-const inScope = serverFiles.filter((rel) => !EXCLUDED.some((ex) => rel.startsWith(`${ex}/`)));
-const excluded = serverFiles.filter((rel) => EXCLUDED.some((ex) => rel.startsWith(`${ex}/`)));
 
 describe('no family-facing server page or email renders a date in the host\'s zone', () => {
   it('finds the server files (a scan that finds none proves nothing)', () => {
     expect(inScope.length).toBeGreaterThan(100);
     expect(inScope).toContain('app/(app)/home/page.tsx');
     expect(inScope).toContain('lib/emails/weekly-digest.tsx');
+    expect(inScope).toContain('app/(app)/admin/reports/page.tsx');
     expect(inScope.some((f) => f.endsWith('-actions.ts'))).toBe(true);
   });
   it('recognises every shape it claims to, and nothing it does not', () => {
@@ -247,9 +244,5 @@ describe('no family-facing server page or email renders a date in the host\'s zo
   it('every Date render in scope names a timeZone or goes through the bound formatter', () => {
     const offenders = inScope.flatMap((rel) => hostZoneRenders(stripComments(read(rel)), `${rel}:`));
     expect(offenders, 'bind getFormat(tz) / createFormat(…, tz) and use fmtDate, or pass timeZone: tz (an explicit UTC for a DATE-only value)').toEqual([]);
-  });
-  it('the admin tree is excluded on purpose, and the exclusion still excludes something — delete both when its unit lands', () => {
-    const offenders = excluded.flatMap((rel) => hostZoneRenders(stripComments(read(rel)), `${rel}:`));
-    expect(offenders.length).toBeGreaterThan(0);
   });
 });

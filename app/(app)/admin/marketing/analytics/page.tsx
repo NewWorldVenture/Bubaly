@@ -8,6 +8,7 @@ import { fmtMoney } from '@/lib/utils/format';
 import { getMarketingCustomersWithError, summarizeCustomers } from '@/lib/marketing/customers';
 import { planMonthlyCents } from '@/lib/constants/plans';
 import { getTranslations, getLocaleContext } from '@/lib/i18n/server';
+import { ADMIN_ZONE, inWindow, lastUtcMonths } from '@/lib/admin/clock';
 
 export const metadata: Metadata = { title: 'Marketing · Analytics', robots: { index: false } };
 export const dynamic = 'force-dynamic';
@@ -32,12 +33,10 @@ export default async function AnalyticsPage() {
   const m = summarizeCustomers(customers);
 
   // Customer acquisition — last 6 months from real family.created_at.
-  const acq = Array.from({ length: 6 }, (_, i) => {
-    const d = new Date(new Date().getFullYear(), new Date().getMonth() - (5 - i), 1);
-    const start = d.getTime();
-    const end = new Date(d.getFullYear(), d.getMonth() + 1, 1).getTime();
-    const value = customers.filter((c) => { const t = new Date(c.createdAt).getTime(); return t >= start && t < end; }).length;
-    return { label: d.toLocaleDateString(locale, { month: 'short' }), value };
+  // Months in the admin zone, not the host's (lib/admin/clock.ts).
+  const acq = lastUtcMonths(6).map((w) => {
+    const value = customers.filter((c) => inWindow(c.createdAt, w)).length;
+    return { label: new Date(w.start).toLocaleDateString(locale, { month: 'short', timeZone: ADMIN_ZONE }), value };
   });
   const maxAcq = Math.max(...acq.map((a) => a.value), 1);
 

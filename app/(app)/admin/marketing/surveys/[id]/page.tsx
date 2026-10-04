@@ -11,6 +11,8 @@ import {
 } from '@/lib/marketing/surveys';
 import { SurveyControls } from './survey-controls';
 import { getTranslations } from '@/lib/i18n/server';
+import { getFormat } from '@/lib/utils/format-server';
+import { ADMIN_ZONE } from '@/lib/admin/clock';
 import { AppNotFound } from '@/components/app/app-not-found';
 
 export const metadata: Metadata = { title: 'Survey · Marketing', robots: { index: false } };
@@ -20,6 +22,9 @@ const SITE_URL = process.env.NEXT_PUBLIC_SITE_URL ?? 'https://www.bubaly.com';
 
 export default async function SurveyDetailPage({ params }: { params: Promise<{ id: string }> }) {
   const t = await getTranslations();
+  // A response's clock is rendered in the admin zone and NAMES it; a bare
+  // `toLocaleString()` was the host's zone in the host's locale.
+  const { fmtDate } = await getFormat(ADMIN_ZONE);
   const { id } = await params;
   const supabase = createServiceClient();
   const { data: survey, error: surveyError } = await supabase.from('surveys').select('*').eq('id', id).is('deleted_at', null).maybeSingle();
@@ -115,7 +120,7 @@ export default async function SurveyDetailPage({ params }: { params: Promise<{ i
                 <span className="inline-flex h-8 w-8 shrink-0 items-center justify-center rounded-lg bg-elevated text-sm font-bold">{r.score ?? '–'}</span>
                 <div className="min-w-0 flex-1">
                   {r.comment && <p className="text-sm">{r.comment}</p>}
-                  <p className="text-xs text-muted">{r.respondent_email ?? 'Anonymous'} · {new Date(r.submitted_at).toLocaleString()}</p>
+                  <p className="text-xs text-muted">{r.respondent_email ?? 'Anonymous'} · {fmtDate(r.submitted_at, 'MMM d, yyyy h:mm:ss a z')}</p>
                 </div>
               </div>
             ))}
