@@ -12,6 +12,13 @@ access and DNS control, which no agent has.
 Verified against production on 2026-09-13: `POST /api/contact-center/email`
 answers **401**, which is the correct fail-closed state for "secret not set".
 
+**Status on 2026-10-03** (blocked-rows eligibility review, MAIN-F6 / MAIN-F-E06):
+step 1 is done — production's `/api/health` does not list
+`CONTACT_CENTER_INBOUND_SECRET` among its missing feature secrets. Step 2 is
+not: public DNS still answers `bubaly.com MX 10 mx1.improvmx.com / 20
+mx2.improvmx.com` (SPF `include:spf.improvmx.com`), a forwarding service, not an
+inbound-parse provider aimed at the webhook. Step 3 cannot run until it is.
+
 ---
 
 ## 1. Set the shared secret
@@ -42,10 +49,26 @@ open so the route can be exercised without one. `docs/architecture/environment-r
 previously recorded this behaviour as `conditional-unverified`; it is now read
 from the route and confirmed against the live 401.
 
-The secret may be presented either way — pick whichever your provider supports:
+The secret may be presented three ways. Pick the first your provider supports:
 
-- query string: `?key=<secret>`
-- header: `x-inbound-secret: <secret>`
+1. header: `x-inbound-secret: <secret>` — for providers that can set a custom
+   header (Cloudflare Email Workers, your own relay).
+2. HTTP Basic credentials in the webhook URL:
+   `https://inbound:<secret>@www.bubaly.com/api/contact-center/email` — for
+   providers that cannot set a header but accept `user:password@` in the URL.
+   Postmark documents this form for its webhooks (cited for the URL form only:
+   Postmark's inbound JSON uses `TextBody`, `HtmlBody` and `MessageID`, which
+   are not in the §2 field table, so the route would need those names added
+   before Postmark is chosen); for any other provider, confirm with the §3
+   credential check that it sends `Authorization: Basic` for such a URL before
+   moving MX. The username is ignored; the secret is the password. The provider
+   sends it as an `Authorization: Basic` header, so it never appears in the
+   request line that access logs record.
+3. query string: `?key=<secret>` — last resort. It works, and the route warns
+   on every request that uses it, because a secret in a URL is written to every
+   access log and proxy log along the path (MAIN-F-E06). With 2 available, a
+   provider that cannot set a header no longer has to use this form; whether to
+   remove it is the owner's decision, recorded under SEC-011.
 
 ## 2. Point MX at an inbound-parse provider
 
@@ -61,11 +84,14 @@ providers work without a custom mapping:
 | body | `text`, `body-plain`, `stripped-text`, `plain`, then `html`, `body-html` |
 | id | `Message-Id`, `message-id`, `messageId` |
 
-Point the provider's inbound route at:
+Point the provider's inbound route at (see §1 for which form):
 
 ```
-https://www.bubaly.com/api/contact-center/email?key=<secret>
+https://inbound:<secret>@www.bubaly.com/api/contact-center/email
 ```
+
+or, where the provider can set headers, at the bare URL with
+`x-inbound-secret: <secret>`. Use `?key=<secret>` only if it can do neither.
 
 Then set the `bubaly.com` MX records to that provider's inbound hosts, at
 whatever priorities they specify.
@@ -87,8 +113,14 @@ curl -s -o /dev/null -w '%{http_code}\n' -X POST \
 # appears in that family's Contact Center inbox.
 ```
 
-A 401 after setting the secret means the provider is not presenting it — check
-whether it forwards the query string, and fall back to the header if not.
+**Credential check, before MX moves:** point the provider's test-webhook or
+"send test" feature at the URL from §2 with any non-`@bubaly.com` `to`
+address. `200 {"ok":true,"skipped":"no bubaly recipient"}` means the
+credentials arrived (that path reads nothing from the database); `401` means
+they did not. A 401 after setting the secret means the provider is not
+presenting it — check that it sends the credentials you configured (Basic
+credentials arrive as an `Authorization` header; some providers drop a query
+string on redirect).
 
 ### Expected non-error responses
 

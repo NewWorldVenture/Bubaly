@@ -132,7 +132,7 @@ export async function confirmHandoffAction(orderId: string): Promise<Result<{ co
   const { data: confirmed, error } = await sb.from('marketplace_handoffs').update({
     status: 'confirmed', confirmed_at: new Date().toISOString(), confirm_code: code,
     calendar_event_id: calendarEventId,
-  }).eq('order_id', orderId).eq('status', 'proposed').select('id');
+  }).eq('order_id', orderId).eq('family_id', order.family_id).eq('status', 'proposed').select('id');
   if (error) return actionFailure('confirm the pickup', t('handoff.couldNotConfirmThePickup'), error);
   if (wroteNoRows(confirmed)) return { ok: false, error: t('handoff.couldNotConfirmThePickup') };
 
@@ -153,7 +153,7 @@ export async function cancelHandoffAction(orderId: string): Promise<Result> {
   // cancelled" over a hand-off that just finished, and the two of them would be
   // reading opposite outcomes of the same meeting. Audit C1-S9-59.
   const { data: cancelled, error } = await sb.from('marketplace_handoffs').update({ status: 'cancelled' })
-    .eq('order_id', orderId).in('status', ['proposed', 'confirmed']).select('id');
+    .eq('order_id', orderId).eq('family_id', order.family_id).in('status', ['proposed', 'confirmed']).select('id');
   if (error) return actionFailure('cancel the pickup', t('handoff.couldNotCancelThePickup'), error);
   if (wroteNoRows(cancelled)) return { ok: false, error: t('handoff.couldNotCancelThePickup') };
   revalidatePath('/marketplace/orders');

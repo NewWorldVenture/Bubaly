@@ -8,7 +8,7 @@ import { createServiceClient } from '@/lib/supabase/server';
 import { sendSms, initiateCall, isTwilioConfigured } from '@/lib/guardian/twilio';
 import { formatPhone } from '@/lib/guardian/phone';
 import { MAX_SMALL_JSON_BYTES, readBoundedRequestJson } from '@/lib/server/bounded-request-body';
-import { claimGuardianCallback, markGuardianCallbackError, markGuardianCallbackProcessed } from '@/lib/guardian/callbacks';
+import { claimGuardianCallback, markGuardianCallbackError, markGuardianCallbackProcessed, releaseGuardianCallback } from '@/lib/guardian/callbacks';
 import { guardianEscalationEventId, guardianEscalationSchema } from '@/lib/guardian/escalation';
 import { appBaseUrl } from '@/lib/server/app-url';
 import { isManager } from '@/lib/constants/roles';
@@ -55,14 +55,20 @@ export async function POST(req: NextRequest) {
     .eq('family_id', familyId)
     .eq('is_active', true);
   if (membersError) {
-    await markGuardianCallbackError(supabase, callbackId, 'Unable to load family members for escalation.');
+    // Nothing has been sent, so the claim goes back rather than to `error`: an
+    // `error` row is reclaimable only after ten minutes, and inside that window
+    // the caller's retry was answered `{ ok: true, duplicate: true }` — an
+    // emergency escalation reported as handled when nobody had been told.
+    console.error('[guardian] escalation could not load family members; releasing the claim for a retry', membersError);
+    await releaseGuardianCallback(supabase, 'emergency_escalation', callbackId);
     return NextResponse.json({ error: tr('escalate.unableToProcessEscalation') }, { status: 500 });
   }
 
   // Every read the alert depends on happens before anything is sent. A failed
   // phone lookup used to read as "no phones": nobody was texted or called, and
   // the escalation was recorded as handled. Failing here, with nothing sent yet,
-  // leaves the claim retryable without sending any alert twice.
+  // releases the claim, so a retry can take it at once without any alert being
+  // sent twice. (Marking it `error` did not do that: see the members read.)
   const userIds = (members ?? [])
     .map((member) => (member as { user_id: string | null }).user_id)
     .filter((id): id is string => !!id);
@@ -70,7 +76,8 @@ export async function POST(req: NextRequest) {
   if (isTwilioConfigured() && userIds.length > 0) {
     const { data: profiles, error: profilesError } = await supabase.from('profiles').select('id, phone').in('id', userIds);
     if (profilesError) {
-      await markGuardianCallbackError(supabase, callbackId, 'Unable to load member phone numbers for escalation.');
+      console.error('[guardian] escalation could not load member phone numbers; releasing the claim for a retry', profilesError);
+      await releaseGuardianCallback(supabase, 'emergency_escalation', callbackId);
       return NextResponse.json({ error: tr('escalate.unableToProcessEscalation') }, { status: 500 });
     }
     phoneMap = new Map((profiles ?? []).map((p: { id: string; phone?: string | null }) => [p.id, p.phone]));
@@ -156,6 +163,9 @@ export async function POST(req: NextRequest) {
     call_attempted: callAttempted,
   });
   if (escalationError) {
+    // Deliberately `error`, not a release: the alerts above have gone out, and
+    // the ten minutes before an `error` row can be reclaimed is what keeps an
+    // immediate retry from texting and calling every manager a second time.
     await markGuardianCallbackError(supabase, callbackId, 'Unable to record escalation.');
     return NextResponse.json({ error: tr('escalate.unableToProcessEscalation') }, { status: 500 });
   }

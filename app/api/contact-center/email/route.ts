@@ -4,8 +4,9 @@
 // local-part, file it into the unified inbox, run the AI concierge, and (best
 // effort) send a courteous auto-reply. Accepts multipart/form-data OR JSON.
 //
-// Auth: fail-closed. Requires CONTACT_CENTER_INBOUND_SECRET (as ?key= or the
-// x-inbound-secret header). Without the secret set, rejects in production so the
+// Auth: fail-closed. Requires CONTACT_CENTER_INBOUND_SECRET, presented as the
+// x-inbound-secret header, as the password of HTTP Basic credentials, or as
+// ?key= (see `authorized`). Without the secret set, rejects in production so the
 // endpoint is never an open relay; permitted in dev for local testing.
 
 import { NextRequest, NextResponse } from 'next/server';
@@ -44,21 +45,44 @@ export const dynamic = 'force-dynamic';
 
 const MAX_BODY = 1024 * 1024; // inbound emails can carry a lot of text
 
+// The password of HTTP Basic credentials (RFC 7617), for providers that cannot
+// set a custom header but can carry `user:password@` in the webhook URL
+// (Postmark documents this; confirm it for any other provider before moving
+// MX, with the runbook's §3 check). The URL form is only how the provider is
+// CONFIGURED: what it sends is an `Authorization: Basic` header, so the secret
+// travels outside the request line that access logs record. Any username; the
+// secret is the password. No colon, or an empty password, is no credential.
+function basicAuthPassword(authorization: string | null): string | null {
+  const match = /^Basic\s+([A-Za-z0-9+/=]+)\s*$/i.exec(authorization ?? '');
+  if (!match) return null;
+  const decoded = Buffer.from(match[1], 'base64').toString('utf8');
+  const colon = decoded.indexOf(':');
+  if (colon < 0) return null;
+  const password = decoded.slice(colon + 1);
+  return password === '' ? null : password;
+}
+
 function authorized(req: NextRequest): boolean {
   const secret = process.env.CONTACT_CENTER_INBOUND_SECRET;
   if (!secret) return process.env.NODE_ENV !== 'production';
   const header = req.headers.get('x-inbound-secret');
+  const basic = basicAuthPassword(req.headers.get('authorization'));
   const query = new URL(req.url).searchParams.get('key');
   // The query-string form still works, because the provider's webhook is
   // configured outside this repository and silently breaking inbound mail is
   // worse than the leak. It is not silent either way: a secret in a URL is
   // written to every access log, proxy log, and Referer along the path, so
   // taking that route says so, once per request, in the operator's own logs.
-  // Removing it is an operator action — see docs. Audit C3-S5-08 (F-E06).
-  if (!header && query) {
-    console.warn('[contact-center] inbound secret arrived in the query string; move the provider to the x-inbound-secret header');
+  // A provider that cannot set a header can use Basic credentials instead
+  // (above), so no provider needs this form. Removing it is an operator
+  // action — see docs/runbooks/family-contact-center-routing.md. Audit
+  // C3-S5-08 (F-E06).
+  if (!header && !basic && query) {
+    console.warn('[contact-center] inbound secret arrived in the query string; move the provider to the x-inbound-secret header or to Basic credentials in the webhook URL');
   }
-  const provided = header ?? query;
+  // The first credential presented decides; a wrong one is not rescued by a
+  // right one further down the list.
+  const provided = header ?? basic ?? query;
   // Constant-time, by HMAC digest (lib/server/secret-equals). Audit C3-S5-08.
   return secretEquals(provided, secret);
 }

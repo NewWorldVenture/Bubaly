@@ -38,8 +38,11 @@ const vercel = JSON.parse(readFileSync(join(ROOT, 'vercel.json'), 'utf8')) as {
  * needs sub-daily cadence, without giving it a scheduler that delivers one,
  * fails here with the deficit named.
  *
- * Companion: `a-late-tick-drops-a-cron` covers the mechanism (a fixed 5-minute
- * look-back anchored to when the dispatcher ran). This file covers the size.
+ * Companion: `a-late-tick-catches-up` covers the mechanism (a look-back that
+ * was a fixed 5 minutes anchored to when the dispatcher ran, and since
+ * 2026-10-03 reaches back to the previous successful tick — one call per route,
+ * so a lost firing comes back but the rate below does not move). This file
+ * covers the size.
  */
 
 /** Firings per week for a 5-field UTC cron expression. */

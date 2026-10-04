@@ -74,6 +74,49 @@ export async function claimGuardianCallback(
   return data ? 'claimed' : 'settled';
 }
 
+/**
+ * Give a claim back after a failure that happened BEFORE any side effect, so
+ * the retry the route is about to ask for can take it.
+ *
+ * The voice and WhatsApp routes answer 503 when the Guardian number cannot be
+ * looked up or the decision pipeline fails, and each says in its own comment
+ * that the event must stay unconsumed so Twilio retries it. The claim said
+ * otherwise: it stayed `processing` with a fresh `received_at`, so the retry
+ * hit the unique key, could not reclaim it for ten minutes, was 'settled', and
+ * was acknowledged with nothing processed — the one answer that loses the
+ * event. The SMS lane already makes a confirmed pre-completion failure
+ * reclaimable at once (releaseGuardianSms); this is the same rule here.
+ *
+ * The row is deleted rather than marked `error`, because claimGuardianCallback
+ * reclaims an `error` row only after the same ten minutes — the escalation
+ * route records `error` after it has already sent messages, and that window
+ * is what keeps a retry from sending them again. Only the row this worker
+ * holds, still `processing` and of this callback type, is removed. Answers
+ * whether it was, and says so on the console when it was not, because then the
+ * next retry inside ten minutes will be acknowledged without being processed.
+ */
+export async function releaseGuardianCallback(
+  client: CallbackClient,
+  callbackType: string,
+  eventId: string,
+): Promise<boolean> {
+  const { data, error } = await client
+    .from('guardian_callback_events')
+    .delete()
+    .eq('event_id', eventId)
+    .eq('callback_type', callbackType)
+    .eq('status', 'processing')
+    .select('event_id');
+  if (error || !data || data.length === 0) {
+    console.error(
+      `[guardian-callbacks] could not release ${callbackType} ${eventId}; a retry inside ten minutes will be acknowledged without being processed`,
+      error ?? 'no held row',
+    );
+    return false;
+  }
+  return true;
+}
+
 export async function markGuardianCallbackProcessed(client: CallbackClient, eventId: string): Promise<void> {
   await client.from('guardian_callback_events').update({
     status: 'processed',
