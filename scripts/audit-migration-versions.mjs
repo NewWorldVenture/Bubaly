@@ -21,6 +21,31 @@ const DEFAULT_MIGRATIONS_DIR = resolve(ROOT, 'supabase', 'migrations');
 // entries to make a red audit go green — give the new migration a free number.
 export const KNOWN_DUPLICATE_MIGRATIONS = Object.freeze({})
 
+// Production applies migrations with `supabase db push`, in version order, and
+// the CLI refuses a local file numbered below the last version the remote
+// ledger records ("Found local migration files to be inserted before the last
+// migration on remote database") unless it is given --include-all, which the
+// production workflow does not pass and should not. So a number below the
+// checked-in high-water mark that no file holds is not free. A branch that
+// reserved one and lands after a higher number has landed cannot be released
+// in order; that is how 0475/0476 came to be claimed twice (#834 and #890),
+// 0477 by #958 behind them, and 0488/0489/0490 by three branches that each had
+// to wait on the lower ones.
+//
+// The holes below are retired, the reservations that left them released: work
+// that once held one of these numbers takes the next free number when it lands.
+// Above the mark the sequence has no gaps, so a migration cannot skip a number
+// to save it for later and make a new hole. Never add to this list to quiet a
+// red audit — renumber the migration instead.
+export const RETIRED_HIGH_WATER = 474
+export const RETIRED_MIGRATION_VERSIONS = Object.freeze([
+  '0166', '0167', '0287', '0288', '0289', '0334', '0337', '0392', '0393', '0394',
+  '0395', '0396', '0397', '0398', '0399', '0400', '0401', '0402', '0403', '0404',
+  '0405', '0412', '0413', '0417', '0421', '0422', '0423', '0424', '0425', '0427',
+  '0431', '0436', '0437', '0445', '0446', '0465', '0466', '0467', '0468', '0469',
+  '0470', '0472', '0473',
+])
+
 export function readMigrationInventory(directory = DEFAULT_MIGRATIONS_DIR) {
   return readdirSync(directory)
     .filter((name) => name.endsWith('.sql'))
@@ -32,7 +57,10 @@ export function readMigrationInventory(directory = DEFAULT_MIGRATIONS_DIR) {
     .sort((left, right) => left.name.localeCompare(right.name));
 }
 
-export function auditMigrationVersions(directory = DEFAULT_MIGRATIONS_DIR) {
+export function auditMigrationVersions(
+  directory = DEFAULT_MIGRATIONS_DIR,
+  { retired = RETIRED_MIGRATION_VERSIONS, highWater = RETIRED_HIGH_WATER } = {},
+) {
   const entries = readMigrationInventory(directory);
   const byVersion = new Map();
 
@@ -61,7 +89,20 @@ export function auditMigrationVersions(directory = DEFAULT_MIGRATIONS_DIR) {
     .filter(Number.isFinite);
   const nextVersion = String(Math.max(0, ...versions) + 1).padStart(4, '0');
 
-  return { entries, duplicates, unexpectedDuplicates, nextVersion };
+  // A file in a retired hole, or a generation above the mark that leaves the
+  // one before it empty. Both are compared on the first four digits, the
+  // generation the ledger orders by.
+  const retiredSet = new Set(retired);
+  const filledHoles = entries
+    .filter(({ version }) => retiredSet.has(version.slice(0, 4)))
+    .map(({ name }) => name);
+  const generations = new Set(versions);
+  const skippedVersions = [];
+  for (let generation = highWater + 1; generation < Number(nextVersion); generation += 1) {
+    if (!generations.has(generation)) skippedVersions.push(String(generation).padStart(4, '0'));
+  }
+
+  return { entries, duplicates, unexpectedDuplicates, nextVersion, filledHoles, skippedVersions };
 }
 
 function runCli() {
@@ -78,6 +119,19 @@ function runCli() {
       console.error(`  ${duplicate.version}: ${duplicate.names.join(', ')}`);
     }
     console.error('Assign a new unused numeric prefix; do not rename applied historical migrations without an owner-approved reconciliation plan.');
+    process.exitCode = 1;
+    return;
+  }
+
+  if (audit.filledHoles.length > 0 || audit.skippedVersions.length > 0) {
+    console.error('\nMigration audit failed: a migration is numbered out of release order.');
+    for (const name of audit.filledHoles) {
+      console.error(`  ${name} takes a retired number below ${String(RETIRED_HIGH_WATER).padStart(4, '0')}; production cannot apply it after a higher one.`);
+    }
+    for (const version of audit.skippedVersions) {
+      console.error(`  ${version} is skipped; a later migration may not leave a hole below it.`);
+    }
+    console.error(`Rename the migration to the next free number (${audit.nextVersion} after the highest file, or the first skipped one).`);
     process.exitCode = 1;
     return;
   }
