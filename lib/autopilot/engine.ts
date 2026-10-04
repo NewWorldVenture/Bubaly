@@ -155,7 +155,12 @@ export function renewalSuggestions(s: FamilySnapshot): SuggestionDraft[] {
         sourceKind: 'renewals',
         sourceId: r.id,
         memberId: null,
-        dedupeKey: `renewal:${r.id}`,
+        // The scan keeps any prior row under a key — open, done or dismissed
+        // (lib/autopilot/scan.ts: "respect prior state") — so a key has to name
+        // the OCCURRENCE. "Mark renewed" rolls `expires_at` a year on and keeps
+        // the row; keyed by the row alone, this nudge came once, ever. Same
+        // rule the insurance and refill nudges below already follow.
+        dedupeKey: `renewal:${r.id}:${isoDay(r.expiresOn)}`,
         expiresAt: `${isoDay(r.expiresOn)}T23:59:59Z`,
       };
     });
@@ -166,9 +171,9 @@ export function appointmentSuggestions(s: FamilySnapshot): SuggestionDraft[] {
     .filter((a) => !a.hasReminder)
     // `starts_at` is timestamptz: resolve the instant on the family's wall
     // before asking how many of THEIR days away it is.
-    .map((a) => ({ a, d: daysUntil(s.today, localDay(s, a.startsAt)) }))
+    .map((a) => ({ a, day: localDay(s, a.startsAt), d: daysUntil(s.today, localDay(s, a.startsAt)) }))
     .filter(({ d }) => d >= 0 && d <= 1)
-    .map(({ a, d }) => ({
+    .map(({ a, day, d }) => ({
       kind: 'appointment',
       title: d === 0 ? `${a.title} is today` : `${a.title} is tomorrow`,
       detail: 'No reminder is set yet — want one?',
@@ -180,7 +185,9 @@ export function appointmentSuggestions(s: FamilySnapshot): SuggestionDraft[] {
       sourceKind: 'appointments',
       sourceId: a.id,
       memberId: a.memberId,
-      dedupeKey: `appt:${a.id}`,
+      // Keyed by the occurrence's day: a weekly series is one id every week,
+      // and the scan keeps a prior key for good.
+      dedupeKey: `appt:${a.id}:${day}`,
       expiresAt: `${isoDay(a.startsAt)}T23:59:59Z`,
     }));
 }
@@ -223,7 +230,9 @@ export function birthdaySuggestions(s: FamilySnapshot): SuggestionDraft[] {
         sourceKind: 'family_members',
         sourceId: b.memberId,
         memberId: b.memberId,
-        dedupeKey: `birthday:${b.memberId}`,
+        // A birthday comes back every year; keyed by the member alone this
+        // nudge came once, ever. The key names the birthday it is about.
+        dedupeKey: `birthday:${b.memberId}:${isoDay(new Date(Date.parse(`${s.today}T00:00:00Z`) + d * DAY_MS).toISOString())}`,
         expiresAt: null,
       };
     });
@@ -619,7 +628,9 @@ export function momentPrepSuggestions(s: FamilySnapshot): SuggestionDraft[] {
         actionType: 'create_reminder', actionLabel: 'Reminder set',
         payload: { title: `Leave for ${e.title}`, at: prep.leaveByISO },
         sourceKind: 'calendar_events', sourceId: e.id, memberId: e.memberId,
-        dedupeKey: `moment-leaveby:${e.id}`, expiresAt: e.startsAt,
+        // The occurrence's day, not just the event: a recurring event is one
+        // id every time, and the scan keeps a prior key for good.
+        dedupeKey: `moment-leaveby:${e.id}:${localDay(s, e.startsAt)}`, expiresAt: e.startsAt,
       });
     }
 
@@ -635,7 +646,7 @@ export function momentPrepSuggestions(s: FamilySnapshot): SuggestionDraft[] {
         actionType: 'add_groceries', actionLabel: 'Added to list',
         payload: { items },
         sourceKind: 'calendar_events', sourceId: e.id, memberId: e.memberId,
-        dedupeKey: `moment-shop:${e.id}`, expiresAt: e.startsAt,
+        dedupeKey: `moment-shop:${e.id}:${localDay(s, e.startsAt)}`, expiresAt: e.startsAt,
       });
     }
   }

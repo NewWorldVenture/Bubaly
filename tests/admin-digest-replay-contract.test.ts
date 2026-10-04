@@ -4,7 +4,7 @@
 // Before this file the route had no executable coverage: tests/admin-digest.test.ts
 // unit-tests the pure helpers and pins the handler's source text (paging,
 // `{ status: 502 }`, `summary.ok ? 200 : 502`), and the two scheduler guards
-// (a-mirrored-cron-must-be-idempotent, a-late-tick-drops-a-cron) read vercel.json
+// (a-mirrored-cron-must-be-idempotent, a-late-tick-catches-up) read vercel.json
 // and the dispatcher. Nothing ran the handler. This file does.
 //
 // It is a CHARACTERIZATION: every assertion is today's behaviour, including the

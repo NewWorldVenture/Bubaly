@@ -3852,6 +3852,7 @@
   "checkInView.checkedIn": "Enregistré",
   "checkInView.couldNotLoadFamilyCheck": "Impossible de charger les points de contact de la famille. Actualisez et réessayez.",
   "checkInView.delete": "Supprimer",
+  "checkInView.deleteCheckInQ": "Supprimer ce check-in ?",
   "checkInView.letEveryoneKnowYouRe": "Faites savoir à tout le monde que vous êtes en sécurité, en un geste.",
   "checkInView.tapAStatusAboveTo": "Appuyez sur un statut ci-dessus pour publier votre premier point.",
   "checkout.billingAccountStatusIsTemporarily": "Le statut du compte de facturation est temporairement indisponible.",
@@ -5968,8 +5969,9 @@
   "eventDetail.scheduleCheck": "Vérification du planning",
   "eventDetailModal.aiPrepChecklist": "Check-list de préparation IA",
   "eventDetailModal.delete": "Supprimer",
+  "eventDetailModal.deleteEventQ": "Supprimer cet événement ?",
+  "eventDetailModal.deleteSeriesQ": "Supprimer toute la série récurrente ?",
   "eventDetailModal.edit": "Modifier",
-  "eventDetailModal.keep": "Conserver",
   "eventDetailModal.noRsvpsYetBeTheFirst": "Aucune réponse pour l'instant — soyez le premier à répondre.",
   "eventDetailModal.couldNotLoadRsvps": "Impossible de charger les réponses. Fermez puis rouvrez l'événement pour réessayer.",
   "eventDetailModal.yourRsvp": "Votre réponse",
@@ -8526,6 +8528,7 @@
   "language.deckClearForToday": "Paquet terminé pour aujourd'hui 🎉",
   "language.deleteGoal": "Supprimer l'objectif",
   "language.deleteSession": "Supprimer la session",
+  "language.deleteSessionQ": "Supprimer cette session d’entraînement ?",
   "language.editGoal": "Modifier l'objectif",
   "language.exampleSentence": "Phrase d'exemple",
   "language.familyBest": "Record familial : {n}",
@@ -13453,6 +13456,7 @@
   "sleep.consistency": "Régularité",
   "sleep.debtThisWeek": "{time} de dette de sommeil cette semaine",
   "sleep.deleteNight": "Supprimer la nuit du {date}",
+  "sleep.deleteNightQ": "Supprimer la nuit du {date} ?",
   "sleep.energyToday": "Énergie du jour",
   "sleep.exercised": "🏃 A fait du sport",
   "sleep.familyMember": "Membre de la famille",
@@ -16692,5 +16696,7 @@
   "blogBlogSearch.searchUnavailable": "La recherche est indisponible pour le moment. Réessayez dans un instant.",
   "coach.onlyYourOwnHealth": "Vous pouvez interroger le coach sur votre propre santé. Un parent ou un adulte peut poser des questions sur les autres membres de la famille.",
   "medicationsModule.noMedicinesPrescribedToYou": "Aucun médicament ne vous a été prescrit.",
-  "medicationsModule.yourOwnMedicinesOnly": "Vous voyez les médicaments qui vous sont prescrits. Un parent ou un adulte gère les prescriptions de la famille."
+  "medicationsModule.yourOwnMedicinesOnly": "Vous voyez les médicaments qui vous sont prescrits. Un parent ou un adulte gère les prescriptions de la famille.",
+  "mealsPlanner.addMealToLibrary": "Ajouter le repas à la bibliothèque",
+  "mealsPlanner.noSavedChoices": "Aucun repas ni recette enregistré pour le moment. Créez un nouveau repas ci-dessous pour commencer à planifier."
 }

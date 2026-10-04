@@ -3,11 +3,12 @@ import { getTranslations } from '@/lib/i18n/server';
 import { createServiceClient } from '@/lib/supabase/server';
 import { listAllAuthUsers } from '@/lib/server/list-all-auth-users';
 import { readAll } from '@/lib/supabase/read-all';
-import { readInChunks } from '@/lib/supabase/chunked-in';
+import { readAllInChunks, readInChunks } from '@/lib/supabase/chunked-in';
 import { sendReactEmail } from '@/lib/email';
 import { ChoreReminderEmail } from '@/lib/emails/chore-reminder';
 import * as React from 'react';
 import { hasCronAuthorization } from '@/lib/server/cron-auth';
+import { childrenBlockedOn } from '@/lib/notifications/child-channels';
 
 // Runs every Sunday at 18:00 UTC via Vercel Cron.
 // Finds every family member who has open chore assignments due this week and emails them.
@@ -40,10 +41,13 @@ export async function GET(req: NextRequest) {
   // Every one, not the first thousand: an unbounded select stops at PostgREST's
   // row ceiling and reports nothing, so the reminders past it would simply never
   // be sent. See lib/supabase/read-all.ts.
+  type ReminderMember = {
+    display_name: string; user_id: string | null; is_active: boolean; family_id: string;
+  };
   type AssignmentRow = {
     id: string; member_id: string; due_at: string | null; family_id: string;
     chores: { title: string; points: number } | { title: string; points: number }[] | null;
-    family_members: { display_name: string; user_id: string | null } | { display_name: string; user_id: string | null }[] | null;
+    family_members: ReminderMember | ReminderMember[] | null;
   };
   // The embedded relations are adapted here rather than typed through readAll:
   // lib/database.types.ts is hand-authored and declares no relationships, so
@@ -52,7 +56,7 @@ export async function GET(req: NextRequest) {
   const { rows: assignments, error } = await readAll<AssignmentRow>(async (from, to) => {
     const page = await supabase
       .from('chore_assignments')
-      .select('id, member_id, due_at, family_id, chores(title, points), family_members!member_id(display_name, user_id)')
+      .select('id, member_id, due_at, family_id, chores(title, points), family_members!member_id(display_name, user_id, is_active, family_id)')
       .in('status', ['todo', 'in_progress'])
       .not('due_at', 'is', null)
       .lte('due_at', weekEnd)
@@ -70,6 +74,7 @@ export async function GET(req: NextRequest) {
   type MemberBucket = {
     userId: string;
     memberName: string;
+    familyId: string;
     familyName: string;
     chores: { title: string; points: number; dueAt: string | null }[];
   };
@@ -78,13 +83,16 @@ export async function GET(req: NextRequest) {
   for (const a of assignments ?? []) {
     const member = Array.isArray(a.family_members) ? a.family_members[0] : a.family_members;
     const chore = Array.isArray(a.chores) ? a.chores[0] : a.chores;
-    if (!member?.user_id || !chore) continue;
+    // The service client can still resolve a departed member's account. Only
+    // current membership in this assignment's family permits a reminder.
+    if (!member?.user_id || member.is_active !== true || member.family_id !== a.family_id || !chore) continue;
 
     if (!byMember.has(a.member_id)) {
       // Fetch family name separately since chore_assignments doesn't join families
       byMember.set(a.member_id, {
         userId: member.user_id,
         memberName: member.display_name,
+        familyId: a.family_id,
         familyName: '',
         chores: [],
       });
@@ -102,30 +110,60 @@ export async function GET(req: NextRequest) {
 
   // Fetch family names
   // Batched: the assignments read above is paged and unbounded, so this id list
-  // is every family with an open chore. One `.in()` carrying a thousand uuids
+  // is every family with an accepted recipient. One `.in()` carrying a thousand uuids
   // builds a URL of roughly 40 KB — past the gateway's request-line limit the
   // read fails outright, and the branch below turns that into a 500 for the
   // whole run, so nobody gets a chore reminder rather than one family losing
   // its name from the copy.
-  const familyIds = [...new Set((assignments ?? []).map((a) => a.family_id))];
-  const { data: families, error: familiesError } = await readInChunks<{ id: string; name: string }, { message: string }>(
+  const familyIds = [...new Set([...byMember.values()].map((bucket) => bucket.familyId))];
+  // `timezone` too: the email prints each chore's due DAY, which is the
+  // family's, not the UTC host's.
+  const { data: families, error: familiesError } = await readInChunks<{ id: string; name: string; timezone: string | null }, { message: string }>(
     familyIds,
-    (chunk) => supabase.from('families').select('id, name').in('id', chunk),
+    (chunk) => supabase.from('families').select('id, name, timezone').in('id', chunk),
   );
   if (familiesError) {
     console.error('Cron chore family read error:', familiesError);
     return NextResponse.json({ error: t('choreReminders.choreReminderProcessingFailed') }, { status: 500 });
   }
   const familyNameById = new Map(families.map((f) => [f.id, f.name]));
+  const familyZoneById = new Map(families.map((f) => [f.id, f.timezone || 'UTC']));
 
   // Patch family names back in
-  for (const a of assignments ?? []) {
-    const bucket = byMember.get(a.member_id);
-    if (bucket && !bucket.familyName) bucket.familyName = familyNameById.get(a.family_id) ?? 'your family';
+  for (const bucket of byMember.values()) {
+    bucket.familyName = familyNameById.get(bucket.familyId) ?? 'your family';
   }
 
   // Fetch emails
-  const userIds = [...byMember.values()].map((v) => v.userId);
+  const userIds = [...new Set([...byMember.values()].map((v) => v.userId))];
+  // Scheduled reminder emails respect the recipient's notification preference.
+  // Page every bounded ID batch: a capped first page can omit an opt-out.
+  const { data: preferences, error: preferencesError } = await readAllInChunks<
+    { user_id: string; email_enabled: boolean | null }, { message: string }
+  >(userIds, (chunk, from, to) => supabase
+    .from('user_preferences')
+    .select('user_id, email_enabled')
+    .in('user_id', chunk)
+    .order('user_id')
+    .range(from, to));
+  if (preferencesError) {
+    console.error('Cron chore email preference read error:', preferencesError);
+    return NextResponse.json({ error: t('choreReminders.choreReminderProcessingFailed') }, { status: 500 });
+  }
+  // An absent row keeps the default opt-in; existing false/null rows opt out,
+  // matching notification digest delivery.
+  const preferenceBlocked = new Set((preferences ?? []).filter((p) => !p.email_enabled).map((p) => p.user_id));
+  // A weekly chore email reaches a child directly, so the same parental
+  // channel decision used by notification email delivery applies here too.
+  // Resolve it before any send: an unavailable setting must not allow a batch.
+  let emailBlocked: Set<string>;
+  try {
+    emailBlocked = await childrenBlockedOn(supabase, 'email', userIds);
+    for (const userId of preferenceBlocked) emailBlocked.add(userId);
+  } catch (error) {
+    console.error('Cron chore child email permission read error:', error);
+    return NextResponse.json({ error: t('choreReminders.choreReminderProcessingFailed') }, { status: 500 });
+  }
   // Every auth user, not GoTrue's default first 50 — `listUsers()` with no
   // arguments is ONE page. The filter below narrows to the members who have a
   // reminder due, but it can only narrow what was read: a member past the first
@@ -152,13 +190,14 @@ export async function GET(req: NextRequest) {
   let unserved = 0;
   const startedAt = Date.now();
 
-  const remind = async ({ userId, memberName, familyName, chores }: MemberBucket) => {
+  const remind = async ({ userId, memberName, familyId, familyName, chores }: MemberBucket) => {
+    if (emailBlocked.has(userId)) { skipped++; return; }
     const email = emailByUserId.get(userId);
     if (!email) { skipped++; return; }
     const { ok, skipped: notSent } = await sendReactEmail({
       to: email,
       subject: `${chores.length} chore${chores.length !== 1 ? 's' : ''} coming up this week`,
-      react: React.createElement(ChoreReminderEmail, { memberName, familyName, chores }),
+      react: React.createElement(ChoreReminderEmail, { memberName, familyName, chores, timeZone: familyZoneById.get(familyId) ?? 'UTC' }),
     });
     // No provider: sendReactEmail answers ok with `skipped`, and nothing was sent.
     if (notSent) skipped++;

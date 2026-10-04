@@ -95,7 +95,8 @@ beforeEach(() => {
     userId: 'user-1',
   });
   seedHousehold();
-  mocks.requireUserContext.mockResolvedValue({ user: { id: 'user-1' }, active: { familyId: FAMILY } });
+  // `family.timezone`: the action dates a tradition's month in the family's zone.
+  mocks.requireUserContext.mockResolvedValue({ user: { id: 'user-1' }, active: { familyId: FAMILY, family: { timezone: 'UTC' } } });
   mocks.createServer.mockResolvedValue(db);
 });
 

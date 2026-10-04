@@ -21,6 +21,10 @@ import {
 } from '../idempotency';
 import { fail, ok, SERVICE_CODES, type ServiceResult, type ServiceScope } from '../types';
 import { escapeLike } from '@/lib/supabase/escape-like';
+import { readAllInChunks } from '@/lib/supabase/chunked-in';
+import { makeKey } from '../idempotency';
+import { scopeNow } from '../scope';
+import { choreRepeats, nextChoreDueAt } from '@/lib/chores/respawn';
 import { getTranslations } from '@/lib/i18n/server';
 
 export type TodoList = Tables<'todo_lists'>;
@@ -129,6 +133,43 @@ function contentDrift(stored: TodoItem, wanted: TodoContent): string[] {
   return drift;
 }
 
+/** A task's member reference must share its server-derived family scope. */
+async function checkTodoAssignee(scope: ServiceScope, memberId: string | null): Promise<ServiceResult<null>> {
+  if (memberId === null) return ok(null);
+  if (typeof memberId !== 'string' || !memberId.trim()) {
+    return fail('That task assignee could not be found.', { code: SERVICE_CODES.notFound });
+  }
+  try {
+    const { data, error } = await scope.db.from('family_members')
+      .select('id, family_id').eq('id', memberId).eq('family_id', scope.familyId).maybeSingle();
+    if (error) return fail(describeDbError(error, 'Could not verify that task assignee.'), { code: SERVICE_CODES.db });
+    if (!data || typeof data !== 'object' || Array.isArray(data) || data.id !== memberId || data.family_id !== scope.familyId) {
+      return fail('That task assignee could not be found.', { code: SERVICE_CODES.notFound });
+    }
+    return ok(null);
+  } catch (error) {
+    return fail(describeDbError(error, 'Could not verify that task assignee.'), { code: SERVICE_CODES.db });
+  }
+}
+
+/** An explicit task list must share the task's server-derived family scope. */
+async function checkTodoList(scope: ServiceScope, listId: string): Promise<ServiceResult<{ id: string }>> {
+  if (typeof listId !== 'string' || !listId.trim()) {
+    return fail('That task list could not be found.', { code: SERVICE_CODES.notFound });
+  }
+  try {
+    const { data, error } = await scope.db.from('todo_lists')
+      .select('id, family_id').eq('id', listId).eq('family_id', scope.familyId).maybeSingle();
+    if (error) return fail(describeDbError(error, 'Could not verify that task list.'), { code: SERVICE_CODES.db });
+    if (!data || typeof data !== 'object' || Array.isArray(data) || data.id !== listId || data.family_id !== scope.familyId) {
+      return fail('That task list could not be found.', { code: SERVICE_CODES.notFound });
+    }
+    return ok({ id: data.id });
+  } catch (error) {
+    return fail(describeDbError(error, 'Could not verify that task list.'), { code: SERVICE_CODES.db });
+  }
+}
+
 export async function createTodo(
   scope: ServiceScope,
   input: CreateTodoInput,
@@ -140,11 +181,14 @@ export async function createTodo(
     return fail('A due date must look like 2026-09-05.', { code: SERVICE_CODES.invalidInput });
   }
 
-  const list = input.listId ? { ok: true as const, data: { id: input.listId } } : await ensureTodoList(scope);
+  const assigneeId = input.assigneeId !== undefined ? input.assigneeId : scope.memberId;
+  const assignee = await checkTodoAssignee(scope, assigneeId ?? null);
+  if (!assignee.ok) return assignee;
+
+  const list = input.listId ? await checkTodoList(scope, input.listId) : await ensureTodoList(scope);
   if (!list.ok) return list;
 
   const priority = input.priority && TODO_PRIORITIES.includes(input.priority) ? input.priority : 'medium';
-  const assigneeId = input.assigneeId !== undefined ? input.assigneeId : scope.memberId;
   const wanted: TodoContent = {
     list_id: list.data.id,
     title,
@@ -216,6 +260,13 @@ export async function completeTodo(scope: ServiceScope, todoId: string, done = t
   }
   if (!data) return fail('That task could not be found.', { code: SERVICE_CODES.notFound });
 
+  if (Array.isArray(data) || typeof data !== 'object'
+    || typeof data.id !== 'string' || !data.id.trim()
+    || typeof data.family_id !== 'string' || !data.family_id.trim()
+    || !sameId(data.id, todoId) || !sameId(data.family_id, scope.familyId)) {
+    return fail('Could not update that task.', { code: SERVICE_CODES.db });
+  }
+
   await recordActivitySafely(scope, {
     agent: 'tasks',
     action: 'update',
@@ -229,6 +280,8 @@ export async function completeTodo(scope: ServiceScope, todoId: string, done = t
 
 /** `memberId` is a `family_members.id`; null unassigns. */
 export async function assignTodo(scope: ServiceScope, todoId: string, memberId: string | null): Promise<ServiceResult<TodoItem>> {
+  const assignee = await checkTodoAssignee(scope, memberId);
+  if (!assignee.ok) return assignee;
   const { data, error } = await scope.db
     .from('todo_items')
     .update({ assigned_to_id: memberId })
@@ -289,6 +342,11 @@ export async function updateTodo(scope: ServiceScope, todoId: string, patch: Upd
 
   if (Object.keys(update).length === 0) {
     return fail('Nothing to change on that task.', { code: SERVICE_CODES.invalidInput });
+  }
+
+  if (patch.assigneeId !== undefined) {
+    const assignee = await checkTodoAssignee(scope, patch.assigneeId);
+    if (!assignee.ok) return assignee;
   }
 
   const { data, error } = await scope.db
@@ -367,6 +425,9 @@ export async function searchTodos(scope: ServiceScope, input: SearchTodosInput =
   if (error) {
     console.error('[service:tasks] to-do search failed', error);
     return fail(describeDbError(error, 'Could not load your tasks.'), { code: SERVICE_CODES.db });
+  }
+  if (data != null && !Array.isArray(data)) {
+    return fail('Could not load your tasks.', { code: SERVICE_CODES.db });
   }
   return ok(data ?? []);
 }
@@ -628,6 +689,25 @@ export async function assignChore(
   }
   if (!chore) return fail('That chore could not be found.', { code: SERVICE_CODES.notFound });
 
+  const { data: assignee, error: assigneeError } = await scope.db
+    .from('family_members')
+    .select('id, family_id')
+    .eq('id', input.memberId)
+    .eq('family_id', scope.familyId)
+    .maybeSingle();
+  if (assigneeError) {
+    console.error('[service:tasks] chore assignee lookup failed', assigneeError);
+    return fail(describeDbError(assigneeError, 'Could not load that family member.'), { code: SERVICE_CODES.db });
+  }
+  if (
+    !assignee || typeof assignee !== 'object' || Array.isArray(assignee)
+    || typeof assignee.id !== 'string' || typeof assignee.family_id !== 'string'
+    || assignee.id.toLowerCase() !== input.memberId.toLowerCase()
+    || assignee.family_id.toLowerCase() !== scope.familyId.toLowerCase()
+  ) {
+    return fail('That person could not be found in this family.', { code: SERVICE_CODES.notFound });
+  }
+
   const { data, error } = await scope.db
     .from('chore_assignments')
     .insert({
@@ -647,6 +727,161 @@ export async function assignChore(
   return ok(data);
 }
 
+/** The key under which the assignment that follows `finished` is created: one successor per finished assignment, whoever asks and whenever. */
+export const respawnKeyFor = (familyId: string, finishedAssignmentId: string) => makeKey(['tasks.respawnChore', familyId, finishedAssignmentId]);
+
+/**
+ * The next assignment of a recurring chore, once one of its assignments is
+ * approved (or done, for a chore that needs no approval).
+ *
+ * A chore with a cadence was ONE assignment: approval closed it and nothing
+ * created the next, so a daily "make your bed" was done once, ever, and the
+ * board's Daily tab emptied after day one. This creates the following
+ * assignment for the same child, due per `nextChoreDueAt`, unless they
+ * already have an open one for the chore.
+ *
+ * It is keyed by the FINISHED assignment (`respawnKeyFor`) through 0256's
+ * unique index — not by the due time it computes. The due time depends on the
+ * clock (an assignment with no due time steps from now; a daily one steps past
+ * midnight), so two approvals of one assignment arriving together, or on either
+ * side of a boundary, computed two due times, two keys, and two next
+ * assignments (audit note of 2026-10-04 07:45 UTC on #935). The finished
+ * assignment is the one fact every path and every instant agree on: the
+ * missions screen, the board, a double tap and the repair sweep all ask for
+ * "the successor of asg-123" and the index answers once. A refused insert whose
+ * key is already in the table reports `respawned: false` rather than failing.
+ * `{ assignment: null }` when the chore does not repeat.
+ */
+export async function respawnChoreAssignment(
+  scope: ServiceScope,
+  input: { assignment: { id: string; chore_id: string; member_id: string; due_at: string | null }; recurrence: string | null | undefined },
+): Promise<ServiceResult<{ assignment: ChoreAssignment | null; respawned: boolean }>> {
+  const dueAt = nextChoreDueAt(input.assignment.due_at, input.recurrence, scopeNow(scope).toISOString());
+  if (!dueAt) return ok({ assignment: null, respawned: false });
+
+  const { data: open, error: openError } = await scope.db
+    .from('chore_assignments')
+    .select('id')
+    .eq('family_id', scope.familyId)
+    .eq('chore_id', input.assignment.chore_id)
+    .eq('member_id', input.assignment.member_id)
+    .in('status', ['todo', 'in_progress'])
+    .limit(1);
+  if (openError) {
+    console.error('[service:tasks] open assignment lookup failed', openError);
+    return fail(describeDbError(openError, 'Could not check that chore.'), { code: SERVICE_CODES.db });
+  }
+  if (open && open.length > 0) return ok({ assignment: null, respawned: false });
+
+  const idempotencyKey = respawnKeyFor(scope.familyId, input.assignment.id);
+  const created = await assignChore(scope, { choreId: input.assignment.chore_id, memberId: input.assignment.member_id, dueAt, idempotencyKey });
+  if (created.ok) return ok({ assignment: created.data, respawned: true });
+
+  // `assignChore` folds every write error into one message. The one that is
+  // not a failure here is 0256 refusing a key already written — by the other
+  // approval screen, by this one a moment ago, or by the repair sweep.
+  const { data: existing } = await scope.db
+    .from('chore_assignments')
+    .select('id')
+    .eq('family_id', scope.familyId)
+    .eq('idempotency_key', idempotencyKey)
+    .maybeSingle();
+  if (existing) return ok({ assignment: null, respawned: false });
+  return created;
+}
+
+const OPEN_STATUSES = ['todo', 'in_progress'] as const;
+const FINISHED_STATUSES = ['approved', 'done'] as const;
+
+/**
+ * The durable half of the respawn: every recurring chore whose child has
+ * finished their latest assignment and has no open one gets its successor.
+ *
+ * `respawnChoreAssignment` runs inside the approval and the completion, after
+ * the payout, and its failure is logged rather than thrown — the approval
+ * stands. Before this, that log line was the end of it: a database hiccup at
+ * that moment and the chore silently stopped repeating (audit note of
+ * 2026-10-04 07:45 UTC on #935). This sweep finds exactly that state — a
+ * finished latest assignment with nothing open after it — and asks for the
+ * successor under the same key the approval would have used
+ * (`respawnKeyFor(finished.id)`), so it creates nothing the approval already
+ * created and nothing twice itself. The push-scan cron runs it for every
+ * family every two hours. An assignment that is only submitted is waiting for
+ * its approval, which respawns it; a member who has left the family gets
+ * nothing new.
+ */
+export async function respawnMissingChoreAssignments(
+  scope: ServiceScope,
+): Promise<ServiceResult<{ respawned: number; skipped: number; failed: number }>> {
+  const { data: chores, error: choresError } = await scope.db
+    .from('chores')
+    .select('id, recurrence')
+    .eq('family_id', scope.familyId)
+    .eq('is_active', true)
+    .not('recurrence', 'is', null)
+    .neq('recurrence', 'none');
+  if (choresError) {
+    console.error('[service:tasks] recurring chore read failed', choresError);
+    return fail(describeDbError(choresError, 'Could not load the recurring chores.'), { code: SERVICE_CODES.db });
+  }
+  const recurring = (chores ?? []).filter((c) => choreRepeats(c.recurrence));
+  if (recurring.length === 0) return ok({ respawned: 0, skipped: 0, failed: 0 });
+
+  const { data: members, error: membersError } = await scope.db
+    .from('family_members')
+    .select('id')
+    .eq('family_id', scope.familyId)
+    .eq('is_active', true);
+  if (membersError) {
+    console.error('[service:tasks] member read failed', membersError);
+    return fail(describeDbError(membersError, 'Could not load the family members.'), { code: SERVICE_CODES.db });
+  }
+  const active = new Set((members ?? []).map((m) => m.id));
+
+  type Row = Pick<ChoreAssignment, 'id' | 'chore_id' | 'member_id' | 'due_at' | 'status' | 'approved_at' | 'submitted_at' | 'created_at'>;
+  const { data: assignments, error: assignmentsError } = await readAllInChunks<Row, { message: string }>(
+    recurring.map((c) => c.id),
+    (chunk, from, to) => scope.db
+      .from('chore_assignments')
+      .select('id, chore_id, member_id, due_at, status, approved_at, submitted_at, created_at')
+      .eq('family_id', scope.familyId)
+      .in('chore_id', chunk)
+      .in('status', [...OPEN_STATUSES, ...FINISHED_STATUSES])
+      .order('id')
+      .range(from, to),
+  );
+  if (assignmentsError) {
+    console.error('[service:tasks] assignment read failed', assignmentsError);
+    return fail(describeDbError(assignmentsError, 'Could not load the chore assignments.'), { code: SERVICE_CODES.db });
+  }
+
+  // Per (chore, child): anything open means nothing to do; otherwise the latest finished one is the predecessor.
+  const finishedAt = (a: Row) => Date.parse(a.approved_at ?? a.submitted_at ?? a.created_at ?? '') || 0;
+  const byPair = new Map<string, { open: boolean; latest: Row | null }>();
+  for (const a of assignments ?? []) {
+    const key = `${a.chore_id}\u001F${a.member_id}`;
+    const entry = byPair.get(key) ?? { open: false, latest: null };
+    if ((OPEN_STATUSES as readonly string[]).includes(a.status)) entry.open = true;
+    else if (!entry.latest || finishedAt(a) > finishedAt(entry.latest)) entry.latest = a;
+    byPair.set(key, entry);
+  }
+  const recurrenceOf = new Map(recurring.map((c) => [c.id, c.recurrence]));
+
+  let respawned = 0;
+  let skipped = 0;
+  let failed = 0;
+  for (const { open, latest } of byPair.values()) {
+    if (open || !latest || !active.has(latest.member_id)) { skipped += 1; continue; }
+    const res = await respawnChoreAssignment(scope, {
+      assignment: { id: latest.id, chore_id: latest.chore_id, member_id: latest.member_id, due_at: latest.due_at },
+      recurrence: recurrenceOf.get(latest.chore_id),
+    });
+    if (!res.ok) { failed += 1; console.error('[service:tasks] respawn sweep could not create a successor', { assignmentId: latest.id, error: res.error }); continue; }
+    if (res.data.respawned) respawned += 1; else skipped += 1;
+  }
+  return ok({ respawned, skipped, failed });
+}
+
 /**
  * Mark an assignment done.
  *
@@ -654,6 +889,12 @@ export async function assignChore(
  * the parent approving it is what awards the points, and skipping that step
  * would let a child bank rewards unilaterally. Points and rewards themselves
  * stay in `lib/chores/server.ts`.
+ *
+ * A chore that needs NO approval settles here, so here is where a recurring
+ * one comes back: `respawnChoreAssignment` creates the child's next
+ * assignment once this one is done (an approved one is respawned by the
+ * approval instead). Its failure is logged, not returned — the completion
+ * stands.
  */
 export async function completeChoreAssignment(scope: ServiceScope, assignmentId: string): Promise<ServiceResult<ChoreAssignment>> {
   const { data: assignment, error: readError } = await scope.db
@@ -670,7 +911,7 @@ export async function completeChoreAssignment(scope: ServiceScope, assignmentId:
 
   const { data: chore, error: choreError } = await scope.db
     .from('chores')
-    .select('requires_approval, title')
+    .select('requires_approval, title, recurrence')
     .eq('id', assignment.chore_id)
     .eq('family_id', scope.familyId)
     .maybeSingle();
@@ -705,6 +946,15 @@ export async function completeChoreAssignment(scope: ServiceScope, assignmentId:
     memberId: data.member_id,
     resourceId: data.id,
   });
+  if (status === 'done') {
+    const respawn = await respawnChoreAssignment(scope, {
+      assignment: { id: data.id, chore_id: data.chore_id, member_id: data.member_id, due_at: data.due_at },
+      recurrence: chore?.recurrence,
+    });
+    if (!respawn.ok) {
+      console.error('[service:tasks] next assignment of a recurring chore was not created', { assignmentId, error: respawn.error });
+    }
+  }
   return ok(data);
 }
 
@@ -812,6 +1062,9 @@ export async function listOpenChores(
   if (error) {
     console.error('[service:tasks] open chores read failed', error);
     return fail(describeDbError(error, 'Could not load the chore board.'), { code: SERVICE_CODES.db });
+  }
+  if (data != null && !Array.isArray(data)) {
+    return fail('Could not load the chore board.', { code: SERVICE_CODES.db });
   }
   return ok(data ?? []);
 }

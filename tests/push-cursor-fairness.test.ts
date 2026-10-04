@@ -20,6 +20,10 @@ const row = (id: number, fields: PushFixtureRow = {}): PushFixtureRow => ({
   pushed_at: null, send_at: NOW.toISOString(), created_at: NOW.toISOString(), ...fields,
 });
 const cursor = (id: number, createdAt = NOW.toISOString()) => ({ version: 1, id: notificationId(id), createdAt });
+const storedCursor = (id: number, createdAt = NOW.toISOString()) => ({
+  ...cursor(id, createdAt),
+  generation: expect.stringMatching(/^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i),
+});
 function fixture(rows: PushFixtureRow[]) {
   return pushDispatchDb({
     notifications: rows,
@@ -27,7 +31,11 @@ function fixture(rows: PushFixtureRow[]) {
       { id: 'web', user_id: 'healthy', enabled: true, provider: 'webpush', endpoint: 'https://push.example.test/device', p256dh: 'key', auth: 'auth' },
       { id: 'native', user_id: 'unconfigured', enabled: true, provider: 'fcm', token: 'fixture-token' },
     ],
-    family_members: [], family_ai_settings: [], user_preferences: [],
+    // These delivery fixtures represent eligible recipients. Missing or
+    // revoked membership is independently tested in push-family-membership.
+    family_members: ['family-a', 'family-b'].flatMap(family_id =>
+      ['healthy', 'unconfigured'].map(user_id => ({ family_id, user_id, role: 'parent', is_active: true }))),
+    family_ai_settings: [], user_preferences: [],
   });
 }
 
@@ -44,11 +52,11 @@ describe('bounded pending-push traversal', () => {
   it('reaches a healthy notification beyond 200 unresolved native deliveries and wraps to retry earlier rows', async () => {
     const f = fixture(Array.from({ length: 201 }, (_, index) => row(index + 1, { user_id: index < 200 ? 'unconfigured' : 'healthy' })).reverse());
     expect(await dispatchPendingPushes(f.db, { now: NOW })).toMatchObject({ notifications: 200, result: { skipped: 200, sent: 0 } });
-    expect(f.tables.app_settings[0].value).toEqual(cursor(200));
+    expect(f.tables.app_settings[0].value).toEqual(storedCursor(200));
     const second = await dispatchPendingPushes(f.db, { now: NOW });
     expect(second).toMatchObject({ notifications: 200, result: { skipped: 199, sent: 1 } });
     expect(f.stamps).toEqual([notificationId(201)]);
-    expect(f.tables.app_settings[0].value).toEqual(cursor(199));
+    expect(f.tables.app_settings[0].value).toEqual(storedCursor(199));
     const third = await dispatchPendingPushes(f.db, { now: NOW });
     expect(third).toMatchObject({ notifications: 200, result: { skipped: 200, sent: 0 } });
     expect(provider.send).toHaveBeenCalledTimes(1);
@@ -62,7 +70,7 @@ describe('bounded pending-push traversal', () => {
     provider.send.mockRejectedValue(new Error('temporary provider outage'));
     for (const [id, createdAt] of [[9, earlier], [2, later], [3, later], [9, earlier]] as const) {
       expect((await dispatchPendingPushes(f.db, { now: NOW, limit: 1 })).result.failed).toBe(1);
-      expect(f.tables.app_settings[0].value).toEqual(cursor(id, createdAt));
+      expect(f.tables.app_settings[0].value).toEqual(storedCursor(id, createdAt));
     }
     expect(provider.send.mock.calls.map(call => JSON.parse(call[1]).title)).toEqual(['notice 9', 'notice 2', 'notice 3', 'notice 9']);
     expect(f.stamps).toEqual([]);
@@ -76,9 +84,9 @@ describe('bounded pending-push traversal', () => {
     }
     expect(provider.send.mock.calls.map(call => JSON.parse(call[1]).title)).toEqual(['notice 1', 'notice 1', 'notice 2', 'notice 3', 'notice 1', 'notice 2']);
     expect(f.tables.app_settings).toEqual(expect.arrayContaining([
-      expect.objectContaining({ key: GLOBAL, value: cursor(2) }),
-      expect.objectContaining({ key: 'push_dispatch_cursor:v1:family:family-a', value: cursor(1) }),
-      expect.objectContaining({ key: 'push_dispatch_cursor:v1:family:family-b', value: cursor(2) }),
+      expect.objectContaining({ key: GLOBAL, value: storedCursor(2) }),
+      expect.objectContaining({ key: 'push_dispatch_cursor:v1:family:family-a', value: storedCursor(1) }),
+      expect.objectContaining({ key: 'push_dispatch_cursor:v1:family:family-b', value: storedCursor(2) }),
     ]));
   });
 

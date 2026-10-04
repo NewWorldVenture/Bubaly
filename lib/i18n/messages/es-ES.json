@@ -3852,6 +3852,7 @@
   "checkInView.checkedIn": "Registrado",
   "checkInView.couldNotLoadFamilyCheck": "Error al cargar los registros de la familia. Actualiza y vuelve a intentarlo.",
   "checkInView.delete": "Eliminar",
+  "checkInView.deleteCheckInQ": "¿Eliminar este check-in?",
   "checkInView.letEveryoneKnowYouRe": "Avisa a todos de que estás bien con un solo toque.",
   "checkInView.tapAStatusAboveTo": "Toca un estado de arriba para publicar tu primer registro.",
   "checkout.billingAccountStatusIsTemporarily": "El estado de la cuenta de facturación no está disponible temporalmente.",
@@ -5968,8 +5969,9 @@
   "eventDetail.scheduleCheck": "Revisión de agenda",
   "eventDetailModal.aiPrepChecklist": "Lista de preparación de IA",
   "eventDetailModal.delete": "Eliminar",
+  "eventDetailModal.deleteEventQ": "¿Eliminar este evento?",
+  "eventDetailModal.deleteSeriesQ": "¿Eliminar toda la serie recurrente?",
   "eventDetailModal.edit": "Editar",
-  "eventDetailModal.keep": "Conservar",
   "eventDetailModal.noRsvpsYetBeTheFirst": "Todavía no hay confirmaciones: sé el primero en responder.",
   "eventDetailModal.couldNotLoadRsvps": "No se han podido cargar las respuestas. Cierra y vuelve a abrir el evento para intentarlo de nuevo.",
   "eventDetailModal.yourRsvp": "Tu confirmación",
@@ -8526,6 +8528,7 @@
   "language.deckClearForToday": "Baraja terminada por hoy 🎉",
   "language.deleteGoal": "Eliminar objetivo",
   "language.deleteSession": "Eliminar sesión",
+  "language.deleteSessionQ": "¿Eliminar esta sesión de práctica?",
   "language.editGoal": "Editar objetivo",
   "language.exampleSentence": "Frase de ejemplo",
   "language.familyBest": "Récord familiar: {n}",
@@ -13453,6 +13456,7 @@
   "sleep.consistency": "Constancia",
   "sleep.debtThisWeek": "{time} de deuda de sueño esta semana",
   "sleep.deleteNight": "Eliminar la noche {date}",
+  "sleep.deleteNightQ": "¿Eliminar la noche del {date}?",
   "sleep.energyToday": "Energía hoy",
   "sleep.exercised": "🏃 Hizo ejercicio",
   "sleep.familyMember": "Miembro de la familia",
@@ -16692,5 +16696,7 @@
   "blogBlogSearch.searchUnavailable": "La búsqueda no está disponible ahora mismo. Vuelve a intentarlo en un momento.",
   "coach.onlyYourOwnHealth": "Puedes preguntar al coach sobre tu propia salud. Un padre, una madre o un adulto puede preguntar por otros miembros de la familia.",
   "medicationsModule.noMedicinesPrescribedToYou": "No te han recetado ningún medicamento.",
-  "medicationsModule.yourOwnMedicinesOnly": "Ves los medicamentos que te han recetado. Un padre, una madre o un adulto gestiona las recetas de la familia."
+  "medicationsModule.yourOwnMedicinesOnly": "Ves los medicamentos que te han recetado. Un padre, una madre o un adulto gestiona las recetas de la familia.",
+  "mealsPlanner.addMealToLibrary": "Añadir comida a la biblioteca",
+  "mealsPlanner.noSavedChoices": "Aún no hay comidas ni recetas guardadas. Crea una comida nueva abajo para empezar a planificar."
 }

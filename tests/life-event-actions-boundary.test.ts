@@ -98,6 +98,10 @@ beforeEach(() => {
   // an assertion the real column would pass. Same precedent as the routing
   // test's defaults for family_inbox_messages.
   db = createInMemorySupabase({ defaults: { moves: { status: 'planning' } } });
+  // createTodo now verifies the server-derived assignee belongs to this
+  // family before inserting. Model scope().memberId so these launch tests can
+  // reach their intended success/rollback paths instead of failing the guard.
+  db.seed('family_members', [{ id: MEMBER, family_id: FAMILY, user_id: USER, role: 'parent', is_active: true }]);
 });
 
 describe('the pure halves of a launch', () => {

@@ -142,13 +142,33 @@ describe('the assistant and the concierge are gated separately', () => {
     expect(access).toMatchObject({ ok: false, code: 'plan_required' });
   });
 
-  it('falls back to the catalog default when the settings read fails', async () => {
+  it('reads the tiers for an access decision, so a failed read is not answered with defaults', async () => {
+    const { assertAIAccess } = await import('@/lib/server/ai-access');
+    const { client } = db(0);
+    await assertAIAccess(ctx(), { db: client, now: NOW });
+    expect(getResolvedFeatureTiers).toHaveBeenCalledWith(client, { onUnavailable: 'throw' });
+  });
+
+  it('answers "could not confirm" when the settings read fails, never the catalog default', async () => {
+    // It used to fall back to the catalog default ('ai-assistant' is free
+    // there). But an admin can make a feature stricter than its default, and
+    // the default would then grant it on a failed lookup. The answer is the
+    // one an unreadable plan gets.
     getResolvedFeatureTiers.mockRejectedValue(new Error('settings down'));
     const { assertAIAccess, AI_ASSISTANT_FEATURE_KEY } = await import('@/lib/server/ai-access');
     const { client } = db(0);
     const access = await assertAIAccess(ctx(), { db: client, now: NOW, featureKey: AI_ASSISTANT_FEATURE_KEY });
-    // 'ai-assistant' defaults to free in the catalog, so a settings outage must
-    // not close a door the published plan leaves open.
+    expect(access).toMatchObject({ ok: false, status: 403, code: 'unavailable' });
+  });
+
+  it('still lets a super administrator through when the settings read fails', async () => {
+    // A super administrator passes every tier, so the tier decides nothing.
+    vi.stubEnv('SUPER_ADMIN_EMAILS', 'operator@example.test');
+    getResolvedFeatureTiers.mockRejectedValue(new Error('settings down'));
+    const { assertAIAccess, AI_ASSISTANT_FEATURE_KEY } = await import('@/lib/server/ai-access');
+    const { client } = db(0);
+    const access = await assertAIAccess(ctx('operator@example.test'), { db: client, now: NOW, featureKey: AI_ASSISTANT_FEATURE_KEY });
     expect(access.ok).toBe(true);
+    vi.unstubAllEnvs();
   });
 });

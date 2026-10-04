@@ -17,6 +17,7 @@
 import 'server-only';
 import type { SupabaseClient } from '@supabase/supabase-js';
 import type { Database } from '@/lib/database.types';
+import { readAllInChunks } from '@/lib/supabase/chunked-in';
 
 type DB = SupabaseClient<Database>;
 export type DeliveryChannel = 'push' | 'email';
@@ -42,12 +43,18 @@ export async function childrenBlockedOn(
   const wanted = [...new Set(userIds.filter(Boolean))];
   if (wanted.length === 0) return blocked;
 
-  const { data: members, error: membersError } = await supabase
+  // Permission requires the complete answer: one capped response can omit a
+  // blocked child. Bound filter URLs and read each chunk through an empty page.
+  const { data: members, error: membersError } = await readAllInChunks<{
+    user_id: string | null; family_id: string;
+  }>(wanted, (chunk, from, to) => supabase
     .from('family_members')
     .select('user_id, family_id')
-    .in('user_id', wanted)
+    .in('user_id', chunk)
     .eq('role', 'child')
-    .eq('is_active', true);
+    .eq('is_active', true)
+    .order('id')
+    .range(from, to));
   if (membersError) {
     console.error('[child-channels] member read failed', { channel, error: membersError });
     throw new Error('Child channel membership read failed.');
@@ -55,10 +62,14 @@ export async function childrenBlockedOn(
   if (!members?.length) return blocked;
 
   const familyIds = [...new Set(members.map((m) => m.family_id))];
-  const { data: settings, error: settingsError } = await supabase
+  const { data: settings, error: settingsError } = await readAllInChunks<{
+    family_id: string; child_channels: unknown;
+  }>(familyIds, (chunk, from, to) => supabase
     .from('family_ai_settings')
     .select('family_id, child_channels')
-    .in('family_id', familyIds);
+    .in('family_id', chunk)
+    .order('family_id')
+    .range(from, to));
   if (settingsError) {
     console.error('[child-channels] settings read failed', { channel, error: settingsError });
     throw new Error('Child channel settings read failed.');

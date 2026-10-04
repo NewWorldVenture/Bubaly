@@ -43,7 +43,11 @@ beforeEach(() => {
   vi.useFakeTimers({ toFake: ['Date'] });
   vi.setSystemTime(NOW);
   vi.spyOn(console, 'error').mockImplementation(() => {});
-  vi.stubGlobal('fetch', () => { throw new Error('External network is forbidden'); });
+  // Retain the hosted-test backstop; an external immutable seal already owns
+  // fetch in the independent review harness and must not be replaced.
+  if (Object.getOwnPropertyDescriptor(globalThis, 'fetch')?.configurable !== false) {
+    vi.stubGlobal('fetch', () => { throw new Error('External network is forbidden'); });
+  }
   h.calls = []; h.rows = []; h.failRoster = false; h.meds = [{ ...med }]; h.doses = [];
   h.members = [
     { id: 'manager-1', user_id: 'user-parent', role: 'parent', display_name: 'Parent', birthday: null },
@@ -72,7 +76,17 @@ beforeEach(() => {
       }
       let result: unknown[];
       if (table === 'families') result = [{ id: FAMILY, name: 'Synthetic family', timezone: 'UTC' }];
-      else if (table === 'family_members') result = h.members;
+      else if (table === 'family_members') {
+        expect(url.searchParams.get('family_id')).toBe(`eq.${FAMILY}`);
+        expect(url.searchParams.get('is_active')).toBe('eq.true');
+        let roster = [...h.members];
+        if (url.searchParams.get('order') === 'id.asc') roster.sort((a, b) => a.id.localeCompare(b.id));
+        const offset = Number(url.searchParams.get('offset') ?? 0);
+        const limit = Number(url.searchParams.get('limit') ?? Infinity);
+        const columns = (url.searchParams.get('select') ?? '*').split(',');
+        result = roster.slice(offset, offset + limit).map(member => columns.includes('*') ? member
+          : Object.fromEntries(columns.map(column => [column, member[column as keyof Member] ?? null])));
+      }
       else if (table === 'medications') result = h.meds;
       else if (table === 'medication_schedules') result = [schedule];
       else if (table === 'medication_doses') result = h.doses;
@@ -120,7 +134,7 @@ describe('private medication recipients through the actual generator and SDK', (
   it('keeps a linked child prescription private when the recipient roster read fails', async () => {
     h.members[3].user_id = 'user-target-child';
     h.failRoster = true;
-    await generateFamilyNotifications(h.db!, FAMILY);
+    await expect(generateFamilyNotifications(h.db!, FAMILY)).rejects.toThrow(/roster/i);
     expect(h.calls.some(call => call.table === 'family_members')).toBe(true);
     expect(await unread('user-sibling')).toEqual([]);
     expect(h.rows).toEqual([]);
@@ -130,7 +144,9 @@ describe('private medication recipients through the actual generator and SDK', (
   it('can deliver privately on a later scan after recipient resolution recovers', async () => {
     h.members[3].user_id = 'user-target-child';
     h.failRoster = true;
-    expect(await generateFamilyNotifications(h.db!, FAMILY)).toBe(0);
+    await expect(generateFamilyNotifications(h.db!, FAMILY)).rejects.toThrow(/roster/i);
+    expect(h.rows).toEqual([]);
+    expect(h.calls.filter(call => call.method === 'POST')).toEqual([]);
     h.failRoster = false;
     expect(await generateFamilyNotifications(h.db!, FAMILY)).toBe(1);
     expect(h.rows.map(row => row.user_id)).toEqual(['user-target-child']);
