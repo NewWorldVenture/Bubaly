@@ -63,8 +63,8 @@ begin
   insert into public.families (id, name, created_by)
   values (v_family, 'Synthetic meal replacement race', v_actor);
   -- Full migration replay runs 0003's on_family_created trigger, which already
-  -- inserts the creator as a family member. The focused 0475 bootstrap omits
-  -- that trigger, so retain this fallback but make it safe in both schemas.
+  -- inserts the creator as a family member. Keep this seed idempotent when that
+  -- provisioner has already created the same membership.
   insert into public.family_members (family_id, user_id, display_name, role, is_active)
   values (v_family, v_actor, 'Race Parent', 'parent', true)
   on conflict do nothing;
@@ -93,6 +93,8 @@ declare
   v_app_a text := 'meal_replace_a_' || replace(current_setting('bubaly.meal_race.family'), '-', '');
   v_app_b text := 'meal_replace_b_' || replace(current_setting('bubaly.meal_race.family'), '-', '');
   v_lock_key bigint;
+  v_a_pid integer;
+  v_b_pid integer;
   v_result_a jsonb;
   v_result_b jsonb;
   v_a_connected boolean := false;
@@ -100,8 +102,9 @@ declare
   v_a_in_transaction boolean := false;
   v_b_query_sent boolean := false;
   v_a_holds_slot boolean := false;
+  v_b_rpc_started boolean := false;
   v_b_waited_on_slot boolean := false;
-  v_waited_ms integer := 0;
+  v_observe_deadline timestamptz;
   v_sent integer;
   v_final_count integer := 0;
   v_final_meals uuid[];
@@ -123,6 +126,11 @@ begin
 
   perform dblink_connect('meal_replace_a', v_conn || ' application_name=' || v_app_a);
   v_a_connected := true;
+  select t.pid into v_a_pid
+  from dblink('meal_replace_a', 'select pg_backend_pid()') as t(pid integer);
+  if v_a_pid is null then
+    raise exception 'first dblink backend PID could not be captured';
+  end if;
   perform dblink_exec('meal_replace_a', format('set "request.jwt.claim.sub" = %L', v_actor::text));
   perform dblink_exec('meal_replace_a', 'set role authenticated');
   perform dblink_exec('meal_replace_a', 'set statement_timeout = ''20s''');
@@ -139,7 +147,7 @@ begin
   select exists (
     select 1
     from pg_locks l join pg_stat_activity sa on sa.pid = l.pid
-    where sa.application_name = v_app_a
+    where l.pid = v_a_pid and sa.application_name = v_app_a
       and l.locktype = 'advisory' and l.granted and l.objsubid = 1
       and l.classid::bigint = ((v_lock_key >> 32) & 4294967295::bigint)
       and l.objid::bigint = (v_lock_key & 4294967295::bigint)
@@ -148,6 +156,11 @@ begin
 
   perform dblink_connect('meal_replace_b', v_conn || ' application_name=' || v_app_b);
   v_b_connected := true;
+  select t.pid into v_b_pid
+  from dblink('meal_replace_b', 'select pg_backend_pid()') as t(pid integer);
+  if v_b_pid is null then
+    raise exception 'second dblink backend PID could not be captured';
+  end if;
   perform dblink_exec('meal_replace_b', format('set "request.jwt.claim.sub" = %L', v_actor::text));
   perform dblink_exec('meal_replace_b', 'set role authenticated');
   perform dblink_exec('meal_replace_b', 'set statement_timeout = ''20s''');
@@ -159,24 +172,43 @@ begin
   end if;
   v_b_query_sent := true;
 
-  -- Observe B waiting on the same hashed advisory key A still owns. A timeout
-  -- never counts as a pass; after 10s the holder is released and the verdict is
-  -- recorded as failed, so this probe cannot strand a remote transaction.
-  while v_waited_ms < 10000 loop
+  -- dblink_send_query only confirms dispatch, not that the remote backend has
+  -- started executing. First observe this exact backend running the RPC; keep
+  -- a separate deadline so delayed dispatch is reported as B-not-started.
+  v_observe_deadline := clock_timestamp() + interval '10 seconds';
+  loop
     select exists (
-      select 1
-      from pg_locks l join pg_stat_activity sa on sa.pid = l.pid
-      where sa.application_name = v_app_b
-        and sa.wait_event_type = 'Lock' and sa.wait_event = 'advisory'
-        and l.locktype = 'advisory' and not l.granted and l.objsubid = 1
-        and l.classid::bigint = ((v_lock_key >> 32) & 4294967295::bigint)
-        and l.objid::bigint = (v_lock_key & 4294967295::bigint)
-        and l.database = (select oid from pg_database where datname = current_database())
-    ) into v_b_waited_on_slot;
-    exit when v_b_waited_on_slot;
+      select 1 from pg_stat_activity sa
+      where sa.pid = v_b_pid and sa.application_name = v_app_b
+        and sa.state = 'active'
+        and sa.query ~* '^\s*select\s+public\.meal_plan_replace_slots\s*\('
+    ) into v_b_rpc_started;
+    exit when v_b_rpc_started or clock_timestamp() >= v_observe_deadline;
     perform pg_sleep(0.01);
-    v_waited_ms := v_waited_ms + 10;
   end loop;
+
+  -- Once B is visibly inside the RPC, require it to wait on the exact hashed
+  -- advisory key held by A. pg_blocking_pids ties the pending lock to A's
+  -- stable backend PID instead of inferring contention from timing alone.
+  if v_b_rpc_started then
+    v_observe_deadline := clock_timestamp() + interval '10 seconds';
+    loop
+      select exists (
+        select 1
+        from pg_locks l join pg_stat_activity sa on sa.pid = l.pid
+        where l.pid = v_b_pid and sa.application_name = v_app_b
+          and sa.state = 'active'
+          and sa.wait_event_type = 'Lock' and sa.wait_event = 'advisory'
+          and l.locktype = 'advisory' and not l.granted and l.objsubid = 1
+          and l.classid::bigint = ((v_lock_key >> 32) & 4294967295::bigint)
+          and l.objid::bigint = (v_lock_key & 4294967295::bigint)
+          and l.database = (select oid from pg_database where datname = current_database())
+          and v_a_pid = any(pg_blocking_pids(v_b_pid))
+      ) into v_b_waited_on_slot;
+      exit when v_b_waited_on_slot or clock_timestamp() >= v_observe_deadline;
+      perform pg_sleep(0.01);
+    end loop;
+  end if;
 
   perform dblink_exec('meal_replace_a', 'commit');
   v_a_in_transaction := false;
@@ -201,6 +233,7 @@ begin
      and r.request_id in (v_request_a, v_request_b);
 
   v_ok := v_a_holds_slot
+      and v_b_rpc_started
       and v_b_waited_on_slot
       and v_result_a is not null and v_result_a->>'replayed' = 'false'
       and (v_result_a->>'replaced')::integer = 0
@@ -210,8 +243,10 @@ begin
       and v_final_meals[1] = v_meal_b
       and v_receipt_count = 2;
   v_detail := format(
-    'A held slot key=%s; B waited before A commit=%s; A replaced=%s; B replaced=%s; final rows=%s; final meal is B=%s; distinct receipts=%s',
-    v_a_holds_slot, v_b_waited_on_slot,
+    'A held slot key=%s; %s; B waited on A exact slot advisory=%s; A replaced=%s; B replaced=%s; final rows=%s; final meal is B=%s; distinct receipts=%s',
+    v_a_holds_slot,
+    case when v_b_rpc_started then 'B entered the RPC before A commit' else 'B-not-started before A commit' end,
+    v_b_waited_on_slot,
     coalesce(v_result_a->>'replaced', '<no result>'),
     coalesce(v_result_b->>'replaced', '<no result>'),
     v_final_count, coalesce(v_final_meals[1] = v_meal_b, false), v_receipt_count);
