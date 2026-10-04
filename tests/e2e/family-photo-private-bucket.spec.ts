@@ -1,6 +1,7 @@
 import { createClient } from '@supabase/supabase-js';
 import { expect, test } from '@playwright/test';
 import { createOwnedAccount, type OwnedAccount } from './helpers/durable-session';
+import { familyPhotoRowCount, observeFamilyPhotoUpload } from './helpers/family-photo-diagnostics';
 
 // SEC-001, end to end on the disposable Supabase this job starts, with every
 // migration applied (0459 among them, so `family-media` is private here).
@@ -35,6 +36,7 @@ test.describe('a family photo in a private bucket', () => {
     let owner: OwnedAccount | null = null;
     let stranger: OwnedAccount | null = null;
     const stored: string[] = [];
+    let diagnostics: ReturnType<typeof observeFamilyPhotoUpload> | undefined;
     try {
       owner = await createOwnedAccount(provider, serviceKey);
       stranger = await createOwnedAccount(provider, serviceKey);
@@ -47,15 +49,25 @@ test.describe('a family photo in a private bucket', () => {
 
       await page.getByRole('button', { name: 'Upload', exact: true }).click();
       await page.locator('input[type="file"][accept="image/*,video/*"]').setInputFiles({ name: 'sec001.png', mimeType: 'image/png', buffer: PIXEL });
+      diagnostics = observeFamilyPhotoUpload(page, provider, record => {
+        console.log('[family-photo-diagnostics]', JSON.stringify(record));
+      });
+      diagnostics.report('upload-click-start');
       await page.getByRole('button', { name: 'Upload 1 file', exact: true }).click();
+      diagnostics.report('upload-click-complete');
 
       // The row the upload wrote, and the reference it stores.
       await expect.poll(async () => {
-        const { data } = await admin.from('family_photos').select('storage_path').eq('family_id', owner!.familyId);
-        return data?.length ?? 0;
+        const result = await diagnostics!.read(() => admin.from('family_photos').select('storage_path').eq('family_id', owner!.familyId));
+        return familyPhotoRowCount(result);
       }, { timeout: 60_000 }).toBe(1);
-      const { data: rows } = await admin.from('family_photos').select('url, storage_path').eq('family_id', owner.familyId);
+      diagnostics.report('persistence-confirmed');
+      const result = await diagnostics.read(() => admin.from('family_photos').select('url, storage_path').eq('family_id', owner!.familyId));
+      expect(familyPhotoRowCount(result), 'the photo reference read succeeds with one row').toBe(1);
+      const rows = result.data;
       const row = rows![0] as { url: string; storage_path: string };
+      expect(typeof row?.url === 'string' && typeof row?.storage_path === 'string', 'the photo reference has the required fields').toBe(true);
+      diagnostics.report('row-read-complete');
       stored.push(row.storage_path);
       expect(row.storage_path.startsWith(`${owner.familyId}/photos/`)).toBe(true);
 
@@ -70,7 +82,7 @@ test.describe('a family photo in a private bucket', () => {
 
       // 2. The stored URL answers nothing to a request without a session.
       const direct = await fetch(row.url);
-      expect(direct.status, `GET ${row.url} with no session`).toBe(400);
+      expect(direct.status, 'the stored reference refuses a request with no session').toBe(400);
 
       // 3. A parent of another family cannot sign it.
       const other = createClient(provider, anonKey, { auth: { persistSession: false, autoRefreshToken: false } });
@@ -79,7 +91,12 @@ test.describe('a family photo in a private bucket', () => {
       const signed = await other.storage.from('family-media').createSignedUrl(row.storage_path, 60);
       expect(signed.data?.signedUrl ?? null, 'another family was given a signed URL for this photo').toBeNull();
       expect(signed.error).not.toBeNull();
+      diagnostics.report('body-complete');
+    } catch (error) {
+      diagnostics?.report('body-failed');
+      throw error;
     } finally {
+      diagnostics?.dispose();
       if (stored.length) await admin.storage.from('family-media').remove(stored);
       if (owner) await admin.from('family_photos').delete().eq('family_id', owner.familyId);
       await owner?.dispose();

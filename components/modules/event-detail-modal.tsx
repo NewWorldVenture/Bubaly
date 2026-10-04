@@ -7,6 +7,7 @@ import { describeDbError } from '@/lib/supabase/errors';
 import { settle, describeReadError } from '@/lib/supabase/settle';
 import { deleteCalendarEventAction } from '@/app/(app)/dashboard/calendar/actions';
 import { useToast } from '@/components/ui/toast';
+import { useConfirm } from '@/components/ui/confirm';
 import { Modal } from '@/components/ui/modal';
 import { AiInsight } from '@/components/ai/ai-insight';
 import { EventScheduleInsights } from '@/components/calendar/event-detail';
@@ -41,15 +42,18 @@ export function EventDetailModal({ event, members, selfMemberId, familyId, onClo
 }) {
   const fmtRange = fmtRangeWith(useFormat());
   const t = useTranslations();
+  const askConfirm = useConfirm();
   const { error: toastError } = useToast();
   const [rsvps, setRsvps] = useState<Rsvp[]>([]);
   const [rsvpError, setRsvpError] = useState<string | null>(null);
   const [saving, setSaving] = useState(false);
-  const [confirmDelete, setConfirmDelete] = useState(false);
   const [deleting, setDeleting] = useState(false);
 
   async function deleteEvent() {
     if (deleting) return;
+    // For a recurring event this removes the SERIES, and the question says so.
+    const question = event.recurrence !== 'none' ? t('eventDetailModal.deleteSeriesQ') : t('eventDetailModal.deleteEventQ');
+    if (!(await askConfirm({ title: question, body: t('confirm.cannotBeUndone') }))) return;
     setDeleting(true);
     try {
       // Through the service, which filters `family_id` as well as `id`. The
@@ -171,38 +175,20 @@ export function EventDetailModal({ event, members, selfMemberId, familyId, onClo
         </div>
 
         {/* Edit / delete — any family member (family-scoped RLS governs). Delete
-            uses a two-tap confirm; for a recurring event it removes the SERIES. */}
+            asks first through the shared confirm; for a recurring event it removes the SERIES. */}
         {(onEdit || onDeleted) && (
           <div className="flex items-center justify-end gap-2 border-t border-border pt-3">
-            {confirmDelete ? (
-              <>
-                <span className="mr-auto text-xs text-danger">
-                  {event.recurrence !== 'none' ? 'Delete the whole recurring series?' : 'Delete this event?'}
-                </span>
-                <button type="button" onClick={() => setConfirmDelete(false)} disabled={deleting}
-                  className="rounded-lg border border-border px-3 py-1.5 text-xs font-semibold text-muted transition hover:bg-elevated">
-                  {t('eventDetailModal.keep')}
-                </button>
-                <button type="button" onClick={() => void deleteEvent()} disabled={deleting}
-                  className="rounded-lg bg-danger px-3 py-1.5 text-xs font-semibold text-danger-fg transition hover:opacity-90 disabled:opacity-60">
-                  {deleting ? 'Deleting…' : 'Delete'}
-                </button>
-              </>
-            ) : (
-              <>
-                {onDeleted && (
-                  <button type="button" onClick={() => setConfirmDelete(true)}
-                    className="inline-flex items-center gap-1.5 rounded-lg border border-border px-3 py-1.5 text-xs font-semibold text-muted transition hover:border-danger/50 hover:text-danger">
-                    <Trash2 className="h-3.5 w-3.5" /> {t('eventDetailModal.delete')}
-                  </button>
-                )}
-                {onEdit && (
-                  <button type="button" onClick={() => onEdit(event)}
-                    className="inline-flex items-center gap-1.5 rounded-lg border border-border px-3 py-1.5 text-xs font-semibold transition hover:bg-elevated">
-                    <Pencil className="h-3.5 w-3.5" /> {t('eventDetailModal.edit')}
-                  </button>
-                )}
-              </>
+            {onDeleted && (
+              <button type="button" onClick={() => void deleteEvent()} disabled={deleting}
+                className="inline-flex items-center gap-1.5 rounded-lg border border-border px-3 py-1.5 text-xs font-semibold text-muted transition hover:border-danger/50 hover:text-danger disabled:opacity-60">
+                <Trash2 className="h-3.5 w-3.5" /> {t('eventDetailModal.delete')}
+              </button>
+            )}
+            {onEdit && (
+              <button type="button" onClick={() => onEdit(event)}
+                className="inline-flex items-center gap-1.5 rounded-lg border border-border px-3 py-1.5 text-xs font-semibold transition hover:bg-elevated">
+                <Pencil className="h-3.5 w-3.5" /> {t('eventDetailModal.edit')}
+              </button>
             )}
           </div>
         )}
