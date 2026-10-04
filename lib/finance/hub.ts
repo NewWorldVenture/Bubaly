@@ -3,6 +3,7 @@
 // No Supabase/React. Amounts are dollars (numeric), matching the finance tables.
 
 import { DEFAULT_LOCALE, type LocaleCode } from '@/lib/i18n/locales';
+import { isMissingRelationError } from '@/lib/supabase/errors';
 import { localDayKey } from '@/lib/time/local-day';
 
 /**
@@ -40,7 +41,15 @@ const CADENCES: Record<string, BillCadence> = {
   monthly: 'monthly', quarterly: 'quarterly', yearly: 'yearly', annually: 'yearly',
 };
 
-export interface RecurringBillLike extends BillLike { is_recurring?: boolean | null; recurrence?: string | null }
+export interface RecurringBillLike extends BillLike {
+  is_recurring?: boolean | null;
+  recurrence?: string | null;
+  /** The day of month a month-based series is anchored on (0488); null reads it from `due_date`. */
+  due_day?: number | null;
+}
+
+/** The cadences that step by months, and so can lose their day to a short month. */
+export const MONTH_BASED_CADENCES: ReadonlySet<BillCadence> = new Set<BillCadence>(['monthly', 'quarterly', 'yearly']);
 
 /**
  * The cadence a bill repeats on, or null for a one-off.
@@ -71,17 +80,35 @@ function parseDayKey(key: string): [number, number, number] | null {
 
 const dayKeyOf = (ms: number) => new Date(ms).toISOString().slice(0, 10);
 
+const isAnchorDay = (day: unknown): day is number => typeof day === 'number' && Number.isInteger(day) && day >= 1 && day <= 31;
+
 /**
- * The anchor stepped `n` periods on. A month step keeps the anchor's day of
- * month and clamps to a shorter month, so a bill due on the 31st falls on
- * Feb 28 and is back on Mar 31 — it is stepped from the anchor each time, not
- * from the clamped date.
+ * The day of month a bill's month-based series is anchored on: the recorded
+ * `due_day` (0488), else the day of `due_date`. Null when neither is a day.
  */
-function stepFrom([y, mo, d]: [number, number, number], cadence: BillCadence, n: number): string {
+export function billAnchorDay(bill: Pick<RecurringBillLike, 'due_date' | 'due_day'>): number | null {
+  if (isAnchorDay(bill.due_day)) return bill.due_day;
+  return parseDayKey(bill.due_date)?.[2] ?? null;
+}
+
+/** The `due_day` a NEW bill is written with: the day of its due date for a month-based recurring bill, else null. */
+export function newBillDueDay(dueDate: string, isRecurring: boolean, recurrence: string | null | undefined): number | null {
+  if (!isRecurring) return null;
+  const cadence = billCadence({ is_recurring: true, recurrence });
+  return cadence && MONTH_BASED_CADENCES.has(cadence) ? parseDayKey(dueDate)?.[2] ?? null : null;
+}
+
+/**
+ * The anchor stepped `n` periods on. A month step keeps the series' day of
+ * month (`day`, the anchor day; the date's own day when none is recorded) and
+ * clamps to a shorter month, so a bill due on the 31st falls on Feb 28 and is
+ * back on Mar 31. A week step counts days from the date itself.
+ */
+function stepFrom([y, mo, d]: [number, number, number], cadence: BillCadence, n: number, day = d): string {
   if (cadence === 'weekly' || cadence === 'biweekly') return dayKeyOf(Date.UTC(y, mo, d + n * (cadence === 'weekly' ? 7 : 14)));
   const months = n * (cadence === 'monthly' ? 1 : cadence === 'quarterly' ? 3 : 12);
   const lastDay = new Date(Date.UTC(y, mo + months + 1, 0)).getUTCDate();
-  return dayKeyOf(Date.UTC(y, mo + months, Math.min(d, lastDay)));
+  return dayKeyOf(Date.UTC(y, mo + months, Math.min(day, lastDay)));
 }
 
 /**
@@ -94,21 +121,30 @@ function stepFrom([y, mo, d]: [number, number, number], cadence: BillCadence, n:
  * occurrence still ahead: marking a stale bill paid means "I am up to date",
  * not "I owe every month in between" (the forecast makes the same jump, see
  * lib/finance/timeline.ts). Null when `dueDate` is not a calendar day.
+ *
+ * `anchorDay` is the day the month-based series is anchored on (0488's
+ * `due_day`). `dueDate` is the PERSISTED date, and after one roll that is the
+ * clamped one: a bill due on the 31st sits on Feb 28, and stepped from that
+ * date's own day it would come back on the 28th for ever — the month-end
+ * cadence lost (audit note of 2026-10-04 07:45 UTC). Stepped by the anchor
+ * day it is back on Mar 31. Without an anchor day the date's own day is used,
+ * which is what every row written before 0488 has.
  */
-export function nextBillDueDate(dueDate: string, cadence: BillCadence, today: string): string | null {
+export function nextBillDueDate(dueDate: string, cadence: BillCadence, today: string, anchorDay?: number | null): string | null {
   const anchor = parseDayKey(dueDate);
   if (!anchor) return null;
+  const day = isAnchorDay(anchorDay) ? anchorDay : anchor[2];
   const due = dueDate.slice(0, 10);
   const floor = parseDayKey(today) && today.slice(0, 10) > due ? today.slice(0, 10) : due;
   // Day keys compare as text. 5000 weekly steps is close to a century.
   for (let n = 1; n <= 5000; n += 1) {
-    const next = stepFrom(anchor, cadence, n);
+    const next = stepFrom(anchor, cadence, n, day);
     if (next > floor) return next;
   }
   return null;
 }
 
-export type BillPaidPatch = { status: 'paid' } | { status: 'upcoming'; due_date: string };
+export type BillPaidPatch = { status: 'paid' } | { status: 'upcoming'; due_date: string; due_day?: number };
 
 /**
  * What "Mark paid" writes.
@@ -120,11 +156,45 @@ export type BillPaidPatch = { status: 'paid' } | { status: 'upcoming'; due_date:
  * `status <> 'paid'`; a monthly bill was reminded about exactly once. The
  * forecast (lib/finance/timeline.ts) already treats a paid recurring bill as
  * still owing its later occurrences; this makes the list agree with it.
+ *
+ * A month-based bill also writes its anchor day (`due_day`, 0488): the day it
+ * is stepped by, recorded the first time it rolls so the day survives the
+ * clamp to a short month. A row from before 0488 records the day of its
+ * current due date, which is all it knows.
  */
 export function billPaidPatch(bill: RecurringBillLike, today: string): BillPaidPatch {
   const cadence = billCadence(bill);
-  const next = cadence ? nextBillDueDate(bill.due_date, cadence, today) : null;
-  return next ? { status: 'upcoming', due_date: next } : { status: 'paid' };
+  if (!cadence) return { status: 'paid' };
+  const anchorDay = MONTH_BASED_CADENCES.has(cadence) ? billAnchorDay(bill) : null;
+  const next = nextBillDueDate(bill.due_date, cadence, today, anchorDay);
+  if (!next) return { status: 'paid' };
+  return anchorDay !== null ? { status: 'upcoming', due_date: next, due_day: anchorDay } : { status: 'upcoming', due_date: next };
+}
+
+/** PostgREST (PGRST204) or Postgres (42703) refusing `bills.due_day` on a database that has not applied 0488. */
+export function isMissingDueDayColumn(error: unknown): boolean {
+  const message = typeof error === 'object' && error && 'message' in error ? String((error as { message: unknown }).message) : '';
+  return isMissingRelationError(error) && /due_day/i.test(message);
+}
+
+/**
+ * Runs `write(patch)`; on a database without `bills.due_day` runs it once more
+ * without that column, with a warning naming the migration — so a deploy
+ * ahead of 0488 pays and adds bills exactly as before (the month-end bill then
+ * steps from its clamped date until the column arrives). Any other refusal is
+ * returned as it came.
+ */
+export async function writeBillPatch<P extends object, W extends (p: P) => PromiseLike<{ error: unknown }>>(
+  patch: P,
+  write: W,
+): Promise<Awaited<ReturnType<W>>> {
+  const first = (await write(patch)) as Awaited<ReturnType<W>>;
+  if (!first.error || !('due_day' in patch) || !isMissingDueDayColumn(first.error)) return first;
+  console.warn('bills.due_day is not in this database yet (migration 0488_a_month_end_bill_keeps_its_day has not been applied); writing without it, so a month-end bill steps from its clamped date until it is.');
+  const rest = { ...patch } as Record<string, unknown>;
+  delete rest.due_day;
+  // The same row without the one column this database lacks.
+  return (await write(rest as P)) as Awaited<ReturnType<W>>;
 }
 
 // ── Subscriptions ───────────────────────────────────────────────────────────

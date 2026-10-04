@@ -1,7 +1,8 @@
 import { readFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { describe, expect, it } from 'vitest';
-import { billCadence, billPaidPatch, nextBillDueDate } from '@/lib/finance/hub';
+import { billAnchorDay, billCadence, billPaidPatch, isMissingDueDayColumn, MONTH_BASED_CADENCES, newBillDueDay, nextBillDueDate, writeBillPatch } from '@/lib/finance/hub';
+import { buildCashflowTimeline } from '@/lib/finance/timeline';
 import { bodyOf } from './helpers/source-order';
 
 /**
@@ -58,12 +59,27 @@ describe('nextBillDueDate', () => {
     expect(nextBillDueDate('2026-03-01', 'monthly', '2026-10-03')).toBe('2026-11-01');
     expect(nextBillDueDate('2025-10-03', 'yearly', '2026-10-03'), 'due today a year on').toBe('2027-10-03');
   });
-  it('clamps a month-end anchor to a short month and comes back to it', () => {
+  it('clamps a month-end anchor to a short month and comes back to it — from the PERSISTED clamped date, by the anchor day (audit 2026-10-04 07:45)', () => {
     expect(nextBillDueDate('2026-01-31', 'monthly', '2026-02-01')).toBe('2026-02-28');
-    // Stepped from the anchor, not from Feb 28: March is the 31st again.
-    expect(nextBillDueDate('2026-01-31', 'monthly', '2026-02-28')).toBe('2026-03-31');
+    // The row now HOLDS Feb 28. Stepped from that date's own day it would come
+    // back on the 28th for ever (the audit's finding: the old test handed the
+    // original anchor back in); stepped by the anchor day it is Mar 31 again.
+    expect(nextBillDueDate('2026-02-28', 'monthly', '2026-02-28')).toBe('2026-03-28');
+    expect(nextBillDueDate('2026-02-28', 'monthly', '2026-02-28', 31)).toBe('2026-03-31');
+    expect(nextBillDueDate('2026-03-31', 'monthly', '2026-04-01', 31)).toBe('2026-04-30');
+    expect(nextBillDueDate('2026-04-30', 'monthly', '2026-05-01', 31)).toBe('2026-05-31');
+    // A 30th bill stays a 30th bill through February.
+    expect(nextBillDueDate('2026-02-28', 'monthly', '2026-03-01', 30)).toBe('2026-03-30');
     expect(nextBillDueDate('2026-11-30', 'quarterly', '2026-12-01')).toBe('2027-02-28');
+    expect(nextBillDueDate('2027-02-28', 'quarterly', '2027-03-01', 30)).toBe('2027-05-30');
     expect(nextBillDueDate('2024-02-29', 'yearly', '2024-03-01')).toBe('2025-02-28');
+    expect(nextBillDueDate('2025-02-28', 'yearly', '2025-03-01', 29), 'back on the 29th in the next leap year').toBe('2026-02-28');
+    expect(nextBillDueDate('2027-02-28', 'yearly', '2027-03-01', 29)).toBe('2028-02-29');
+    // A week step counts days from the date itself; the anchor day is a month-based notion.
+    expect(nextBillDueDate('2026-10-02', 'weekly', '2026-10-03', 31)).toBe('2026-10-09');
+    // A day that is not one is ignored.
+    expect(nextBillDueDate('2026-02-28', 'monthly', '2026-03-01', 0)).toBe('2026-03-28');
+    expect(nextBillDueDate('2026-02-28', 'monthly', '2026-03-01', 32)).toBe('2026-03-28');
   });
   it('steps weekly and biweekly bills by days', () => {
     expect(nextBillDueDate('2026-10-02', 'weekly', '2026-10-03')).toBe('2026-10-09');
@@ -77,6 +93,25 @@ describe('nextBillDueDate', () => {
   });
 });
 
+describe('billAnchorDay and newBillDueDay (0488)', () => {
+  it('the recorded day wins; without one the due date\'s day is the anchor', () => {
+    expect(billAnchorDay({ due_date: '2026-02-28', due_day: 31 })).toBe(31);
+    expect(billAnchorDay({ due_date: '2026-02-28', due_day: null })).toBe(28);
+    expect(billAnchorDay({ due_date: '2026-02-28' })).toBe(28);
+    expect(billAnchorDay({ due_date: 'soon', due_day: null })).toBeNull();
+    expect(billAnchorDay({ due_date: '2026-02-28', due_day: 40 }), 'an impossible day is ignored').toBe(28);
+  });
+  it('a new month-based recurring bill records the day of its due date; a weekly one or a one-off records nothing', () => {
+    expect(newBillDueDay('2026-01-31', true, 'monthly')).toBe(31);
+    expect(newBillDueDay('2026-01-31', true, 'quarterly')).toBe(31);
+    expect(newBillDueDay('2026-01-31', true, null), 'flagged recurring with no cadence reads as monthly').toBe(31);
+    expect(newBillDueDay('2026-01-31', true, 'weekly')).toBeNull();
+    expect(newBillDueDay('2026-01-31', false, 'monthly')).toBeNull();
+    expect(newBillDueDay('not a day', true, 'monthly')).toBeNull();
+    expect([...MONTH_BASED_CADENCES].sort()).toEqual(['monthly', 'quarterly', 'yearly']);
+  });
+});
+
 describe('billPaidPatch — what "Mark paid" writes', () => {
   const today = '2026-10-03';
   it('a one-off is paid and stays paid', () => {
@@ -84,16 +119,106 @@ describe('billPaidPatch — what "Mark paid" writes', () => {
   });
   it('a recurring bill rolls to its next due date and stays open', () => {
     expect(billPaidPatch({ due_date: '2026-10-01', status: 'overdue', is_recurring: true, recurrence: 'monthly' }, today))
-      .toEqual({ status: 'upcoming', due_date: '2026-11-01' });
+      .toEqual({ status: 'upcoming', due_date: '2026-11-01', due_day: 1 });
     expect(billPaidPatch({ due_date: '2026-10-02', status: 'upcoming', is_recurring: true, recurrence: 'weekly' }, today))
       .toEqual({ status: 'upcoming', due_date: '2026-10-09' });
   });
   it('a bill the Bill Manager flagged recurring without a cadence rolls monthly rather than closing', () => {
     expect(billPaidPatch({ due_date: '2026-10-01', status: 'upcoming', is_recurring: true, recurrence: null }, today))
-      .toEqual({ status: 'upcoming', due_date: '2026-11-01' });
+      .toEqual({ status: 'upcoming', due_date: '2026-11-01', due_day: 1 });
   });
   it('a recurring bill whose due date is not a day falls back to paid rather than throwing', () => {
     expect(billPaidPatch({ due_date: 'soon', status: 'upcoming', is_recurring: true, recurrence: 'monthly' }, today)).toEqual({ status: 'paid' });
+  });
+
+  it('a month-based bill writes the anchor day the first time it rolls, so the day survives the clamp (audit 2026-10-04 07:45)', () => {
+    // Jan 31 paid on Feb 1: the row goes to Feb 28 AND remembers 31.
+    expect(billPaidPatch({ status: 'upcoming', due_date: '2026-01-31', is_recurring: true, recurrence: 'monthly' }, '2026-02-01'))
+      .toEqual({ status: 'upcoming', due_date: '2026-02-28', due_day: 31 });
+    // The persisted row, paid on Mar 1: back on the 31st, still remembering it.
+    expect(billPaidPatch({ status: 'upcoming', due_date: '2026-02-28', due_day: 31, is_recurring: true, recurrence: 'monthly' }, '2026-03-01'))
+      .toEqual({ status: 'upcoming', due_date: '2026-03-31', due_day: 31 });
+    // A row from before 0488 that already sits on Feb 28 knows only the 28th: that is recorded, and stepped by.
+    expect(billPaidPatch({ status: 'upcoming', due_date: '2026-02-28', is_recurring: true, recurrence: 'monthly' }, '2026-03-01'))
+      .toEqual({ status: 'upcoming', due_date: '2026-03-28', due_day: 28 });
+    expect(billPaidPatch({ status: 'upcoming', due_date: '2026-11-30', is_recurring: true, recurrence: 'quarterly' }, '2026-12-01'))
+      .toEqual({ status: 'upcoming', due_date: '2027-02-28', due_day: 30 });
+  });
+  it('a weekly bill carries no anchor day, and a one-off none at all', () => {
+    expect(billPaidPatch({ status: 'upcoming', due_date: '2026-10-02', is_recurring: true, recurrence: 'weekly' }, '2026-10-03'))
+      .toEqual({ status: 'upcoming', due_date: '2026-10-09' });
+    expect(billPaidPatch({ status: 'upcoming', due_date: '2026-10-02', is_recurring: false, recurrence: null }, '2026-10-03')).toEqual({ status: 'paid' });
+  });
+});
+
+describe('writeBillPatch — a database that has not applied 0488', () => {
+  const missing = { code: 'PGRST204', message: "Could not find the 'due_day' column of 'bills' in the schema cache" };
+  const writes = (answers: { error: unknown }[]) => {
+    const seen: unknown[] = [];
+    const write = async (p: unknown) => { seen.push(p); return answers[seen.length - 1] ?? { error: null }; };
+    return { seen, write };
+  };
+  it('names the column the database lacks, and nothing else', () => {
+    expect(isMissingDueDayColumn(missing)).toBe(true);
+    expect(isMissingDueDayColumn({ code: '42703', message: 'column "due_day" of relation "bills" does not exist' })).toBe(true);
+    expect(isMissingDueDayColumn({ code: 'PGRST204', message: "Could not find the 'autopay' column" })).toBe(false);
+    expect(isMissingDueDayColumn({ code: '23514', message: 'violates check constraint bills_due_day_check' })).toBe(false);
+    expect(isMissingDueDayColumn(null)).toBe(false);
+  });
+  it('writes once when the column is there, and once more without it when it is not', async () => {
+    const ok = writes([{ error: null }]);
+    expect(await writeBillPatch({ status: 'upcoming', due_date: '2026-02-28', due_day: 31 }, ok.write)).toEqual({ error: null });
+    expect(ok.seen).toEqual([{ status: 'upcoming', due_date: '2026-02-28', due_day: 31 }]);
+
+    const behind = writes([{ error: missing }, { error: null }]);
+    expect(await writeBillPatch({ status: 'upcoming', due_date: '2026-02-28', due_day: 31 }, behind.write)).toEqual({ error: null });
+    expect(behind.seen, 'the same row, without the one column').toEqual([{ status: 'upcoming', due_date: '2026-02-28', due_day: 31 }, { status: 'upcoming', due_date: '2026-02-28' }]);
+  });
+  it('does not retry any other refusal, nor a write that never carried the column', async () => {
+    const refused = { error: { code: '42501', message: 'permission denied' } };
+    const other = writes([refused, { error: null }]);
+    expect(await writeBillPatch({ status: 'upcoming', due_date: '2026-02-28', due_day: 31 }, other.write)).toEqual(refused);
+    expect(other.seen).toHaveLength(1);
+    const plain = writes([{ error: missing }, { error: null }]);
+    expect(await writeBillPatch({ status: 'paid' }, plain.write)).toEqual({ error: missing });
+    expect(plain.seen).toHaveLength(1);
+  });
+});
+
+describe('the forecast steps a month-end bill the same way (lib/finance/timeline.ts)', () => {
+  const NOW = new Date('2026-01-15T12:00:00.000Z');
+  const dates = (bill: Record<string, unknown>) => buildCashflowTimeline({
+    bills: [{ name: 'Card', amount: 100, status: 'upcoming', category: null, is_recurring: true, recurrence: 'monthly', ...bill } as never],
+    goals: [], events: [], startingBalance: 1000, now: NOW,
+  }).weeks.flatMap((w) => w.moments).filter((m) => m.label === 'Card').map((m) => m.date);
+  it('a bill due on the 31st forecasts Feb 28 and Mar 31 — not Mar 3, and not the 28th thereafter', () => {
+    expect(dates({ due_date: '2026-01-31' })).toEqual(['2026-01-31', '2026-02-28', '2026-03-31']);
+  });
+  it('the persisted clamped row with its anchor day forecasts the same series', () => {
+    expect(dates({ due_date: '2026-02-28', due_day: 31 })).toEqual(['2026-02-28', '2026-03-31']);
+    expect(dates({ due_date: '2026-02-28' }), 'without the anchor day: the 28th, as the list would say').toEqual(['2026-02-28', '2026-03-28']);
+  });
+});
+
+describe('0488 and its writers', () => {
+  it('the migration adds one nullable, checked column and nothing else', () => {
+    const sql = read('supabase/migrations/0488_a_month_end_bill_keeps_its_day.sql');
+    expect(sql).toContain('alter table public.bills add column if not exists due_day smallint');
+    expect(sql).toContain('check (due_day between 1 and 31)');
+    expect(sql).toMatch(/comment on column public\.bills\.due_day/);
+    const statements = sql.split('\n').filter((l) => !l.trim().startsWith('--')).join('\n');
+    expect(statements).not.toMatch(/create (unique )?index|create policy|create (or replace )?function|update public\.bills|default/i);
+    expect(read('lib/database.types.ts')).toContain('due_date: string; due_day: number | null; is_recurring: boolean;');
+  });
+  it('both Mark paid buttons and both add forms write through the fallback, and the forms record the anchor day', () => {
+    const view = read('components/finance/bills-view.tsx');
+    expect(view).toContain("await writeBillPatch(patch, (p) => createClient().from('bills').update(p).eq('id', b.id).eq('family_id', familyId).select('id'))");
+    expect(view).toContain('due_day: newBillDueDay(v.due_date, v.is_recurring, v.recurrence),');
+    expect(view).toContain("}, (p) => createClient().from('bills').insert(p));");
+    const module_ = read('components/modules/billing-module.tsx');
+    expect(module_).toContain("await writeBillPatch(patch, (p) => supabase.from('bills').update(p).eq('id', id).eq('family_id', familyId).select('id'))");
+    expect(module_).toContain('due_day: newBillDueDay(dueDate, isRecurring, recurrence),');
+    expect(module_).toContain("}, (p) => supabase.from('bills').insert(p));");
   });
 });
 
@@ -103,17 +228,19 @@ describe('both Mark paid buttons write the patch, in the family\'s day', () => {
     expect(src).toContain("import { useFamilyCalendarToday, useFamilyClock } from '@/components/i18n/use-format';");
     const body = bodyOf(src, 'async function markPaid(b: Bill) {', "success(reopen ? 'Reopened' : 'Marked paid');");
     expect(body).toContain('billPaidPatch(b, clock.todayKey())');
-    expect(body).toContain('.update(patch)');
+    expect(body).toContain('writeBillPatch(patch, (p) =>');
+    expect(body).toContain('.update(p)');
     expect(body, 'the old flat write is gone').not.toContain("update({ status: next })");
     // Reopening a one-off is still a plain status flip.
     expect(body).toContain("reopen ? { status: 'upcoming' as const } : billPaidPatch");
   });
   it('the Billing module', () => {
     const src = read('components/modules/billing-module.tsx');
-    expect(src).toContain("import { billPaidPatch } from '@/lib/finance/hub';");
+    expect(src).toContain("import { billPaidPatch, newBillDueDay, writeBillPatch } from '@/lib/finance/hub';");
     const body = bodyOf(src, 'async function markBillPaid(id: string) {', "success(tr('billingModule.billMarkedAsPaid'));");
     expect(body).toContain('billPaidPatch(bill, clock.todayKey())');
-    expect(body).toContain('.update(patch)');
+    expect(body).toContain('writeBillPatch(patch, (p) =>');
+    expect(body).toContain('.update(p)');
     expect(body).not.toContain("update({ status: 'paid' })");
   });
   it('the Bill Manager\'s add form records a cadence for a recurring bill', () => {

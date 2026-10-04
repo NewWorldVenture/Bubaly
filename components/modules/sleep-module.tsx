@@ -82,6 +82,7 @@ export function SleepModule() {
   const maxMinutes = Math.max(summary.target.max * 60, ...fortnight.map((l) => l.duration_min), 1);
 
   async function deleteLog(log: Log) {
+    if (!(await askConfirm({ title: t('sleep.deleteNightQ', { date: format.fmtDate(log.sleep_date, 'MMM d, yyyy') }), body: t('confirm.cannotBeUndone') }))) return;
     // RLS filters a DELETE rather than refusing it, so without `.select('id')`
     // a row this member may not remove returns `error: null` and the module
     // reports success over a record that is still there.
