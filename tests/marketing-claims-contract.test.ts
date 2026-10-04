@@ -30,6 +30,10 @@ const FILES = [
   'app/(marketing)/mobile/page.tsx',
   'app/(marketing)/faq/page.tsx',
   'components/marketing/faq-explorer.tsx',
+  'app/(marketing)/pricing/pricing-content.tsx',
+  'lib/marketing/value.ts',
+  'app/(marketing)/terms/page.tsx',
+  'app/(marketing)/privacy/page.tsx',
 ];
 
 const catalogue = JSON.parse(
@@ -64,7 +68,7 @@ const shipped = [...files.matchAll(/'([a-zA-Z][\w]*\.[\w]+)'/g)]
  * reference it would ship it. Scoped to the public-site namespaces for the
  * same reason `shipped` is scoped to the files.
  */
-const MARKETING_KEY_PREFIXES = ['homeHero.', 'handledProof.', 'heroOutcomes.', 'firstBrief.', 'decisionsBand.', 'kitchenMode.', 'switching.', 'socialProof.', 'pricingValue.', 'trustCenter.', 'security.', 'featuresPage.', 'featureCards.', 'mobile.', 'root.meta', 'structuredData.', 'faq.', 'faqExplorer.'];
+const MARKETING_KEY_PREFIXES = ['homeHero.', 'handledProof.', 'heroOutcomes.', 'firstBrief.', 'decisionsBand.', 'kitchenMode.', 'switching.', 'socialProof.', 'pricingValue.', 'trustCenter.', 'security.', 'featuresPage.', 'featureCards.', 'mobile.', 'root.meta', 'structuredData.', 'faq.', 'faqExplorer.', 'pricingContent.', 'planOutcomes.', 'offlineBanner.'];
 const marketingCopy = Object.entries(catalogue)
   .filter(([key]) => MARKETING_KEY_PREFIXES.some((prefix) => key.startsWith(prefix)))
   .map(([key, value]) => `${key}: ${value}`)
@@ -100,6 +104,18 @@ const FORBIDDEN = [
   /\$\d[^\n]{0,60}(Cozi|FamilyWall|OurHome|FamCal|Skylight)/,
   /(nanny|babysitter|housekeeper|personal assistant)[^\n]{0,40}(\$|per hour|an hour)/i,
   /(\$|per hour|an hour)[^\n]{0,40}(nanny|babysitter|housekeeper)/i,
+  // Retired 2026-10-04, each because the code says otherwise: no store-listed
+  // native apps (the Expo companion is unpublished), no free plan for a new
+  // family (an expired trial locks, lib/server/entitlement.ts), a trial that is
+  // Family Basic and so unmetered, no bounty or acknowledgments page (both
+  // "planned" in lib/marketing/trust-ledger.ts), Apple and Outlook arriving as
+  // published links rather than two-way sync, and no offline write queue.
+  /native (iOS|Android)|native companion|companion apps/i,
+  /free (starter )?plan/i,
+  /10 AI requests|ten assistant requests/i,
+  /rewards researchers|acknowledge?ments page/i,
+  /two-way sync with Google, Apple/i,
+  /changes will sync|sync the moment you/i,
 ];
 
 describe('public marketing claims', () => {

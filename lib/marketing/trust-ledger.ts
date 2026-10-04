@@ -40,7 +40,7 @@ export type TrustLedgerRow = {
 export const ROADMAP_ROW_KEYS = ['soc2_bubaly', 'pen_test', 'bug_bounty', 'status_page', 'data_region'] as const;
 
 /** The date a person last read every row against the code. Shown on the page. */
-export const LAST_REVIEWED = '2026-09-07';
+export const LAST_REVIEWED = '2026-10-04';
 
 export const TRUST_LEDGER: TrustLedgerRow[] = [
   {
@@ -89,9 +89,10 @@ export const TRUST_LEDGER: TrustLedgerRow[] = [
     evidence: ['tests/csp-header.test.ts', 'tests/e2e/csp.spec.ts'],
   },
   { key: 'audit_log', labelKey: 'trustCenter.rowAudit', status: 'in_place' },
-  // Export is by request (privacy policy, "Your rights"); items and member
-  // profiles are deleted in the app, whole accounts on request. The label says
-  // "on request" for that reason — a self-serve export does not exist yet.
+  // Export is self-serve: Settings → Privacy downloads a JSON file of what the
+  // reader's role can see (app/api/privacy/export). Items and member profiles
+  // are deleted in the app; a whole account is deleted on request, by a person
+  // (privacyCenter.deletionHelp) — so only deletion says "on request".
   { key: 'export_delete', labelKey: 'trustCenter.rowExport', status: 'in_place' },
   { key: 'no_training', labelKey: 'trustCenter.rowNoTraining', status: 'in_place' },
   { key: 'tls', labelKey: 'trustCenter.rowTls', status: 'provider' },

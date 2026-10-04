@@ -54,23 +54,24 @@ const plusSavings  = Math.round((1 - PLUS_ANNUAL_CENTS  / (PLUS_MONTHLY_CENTS  *
 // ── Feature lists ──────────────────────────────────────────────────────────
 const FREE_FEATURES = [
   { section: 'pricingContent.familyOrganization', items: ['pricingContent.sharedFamilyCalendar', 'pricingContent.sharedShoppingLists', 'pricingContent.sharedToDoLists', 'pricingContent.sharedRecipes', 'pricingContent.familyMessenger', 'pricingContent.familyContactBook'] },
-  { section: 'pricingContent.familyMembers',      items: ['pricingContent.upTo5FamilyMembers'] },
+  { section: 'pricingContent.familyMembers',      items: ['pricingContent.unlimitedFamilyMembers'] },
   { section: 'pricingContent.platforms',           items: ['Web', 'iPhone', 'pricingContent.android', 'iPad'] },
   { section: 'pricingContent.basicFeatures',      items: ['pricingContent.calendarSync', 'pricingContent.basicReminders', 'pricingContent.sharedNotes', 'pricingContent.sharedPhotos', 'pricingContent.sharedDocuments'] },
-  { section: 'AI',                  items: ['pricingContent.tenAiRequestsMonth'] },
+  { section: 'AI',                  items: ['pricingContent.unlimitedAiDuringTrial'] },
 ];
 
 const BASIC_FEATURES = [
   { section: 'pricingContent.unlimitedFamilyMembers', items: ['pricingContent.parents', 'pricingContent.kids', 'pricingContent.grandparents', 'pricingContent.caregivers'] },
-  { section: 'pricingContent.familyHub',               items: ['pricingContent.chores', 'pricingContent.rewards', 'pricingContent.mealPlanning', 'pricingContent.groceryPlanning', 'pricingContent.schoolHub', 'pricingContent.sportsHub'] },
+  { section: 'pricingContent.familyHub',               items: ['pricingContent.chores', 'pricingContent.mealPlanning', 'pricingContent.groceryPlanning', 'pricingContent.schoolHub'] },
   { section: 'pricingContent.unlimitedStorage',        items: ['pricingContent.photos', 'pricingContent.videos', 'pricingContent.documents'] },
   { section: 'pricingContent.kitchenDisplayMode',     items: ['iPad', 'pricingContent.androidTablet', 'pricingContent.browser', 'pricingContent.smartDisplay'] },
-  { section: 'AI Features (Unlimited)', items: ['pricingContent.aiDailyBriefing', 'pricingContent.aiMealPlanning', 'pricingContent.aiGroceryBuilder', 'pricingContent.aiScheduleAssistant'] },
+  { section: 'AI Features (Unlimited)', items: ['pricingContent.aiMealPlanning', 'pricingContent.aiGroceryBuilder', 'pricingContent.aiScheduleAssistant'] },
+  { section: 'pricingContent.aiConcierge', items: ['pricingContent.whatSHappeningToday', 'pricingContent.whatDoTheKidsNeed', 'pricingContent.whatFormsAreDue', 'pricingContent.whatSForDinner', 'pricingContent.whoCanPickUpJackson'] },
   { section: 'pricingContent.smartImports',            items: ['pricingContent.uploadSchoolFlyersPdfsScreenshots', 'pricingContent.aiAutoCreatesCalendarEvents'] },
 ];
 
 const PLUS_FEATURES = [
-  { section: 'pricingContent.aiConcierge', items: ['pricingContent.whatSHappeningToday', 'pricingContent.whatDoTheKidsNeed', 'pricingContent.whatFormsAreDue', 'pricingContent.whatSForDinner', 'pricingContent.whoCanPickUpJackson'] },
+  { section: 'pricingContent.familyHub',            items: ['pricingContent.rewards', 'pricingContent.sportsHub'] },
   { section: 'pricingContent.aiSchoolAssistant',  items: ['pricingContent.schoolEmails', 'pricingContent.permissionSlips', 'pricingContent.assignments', 'pricingContent.deadlines'] },
   { section: 'pricingContent.aiSportsAssistant',  items: ['pricingContent.teamSchedules', 'pricingContent.scheduleChanges', 'pricingContent.gameUpdates', 'pricingContent.practiceReminders'] },
   { section: 'pricingContent.aiFamilyBriefings',  items: ['pricingContent.morningEveningDailyBriefing', 'pricingContent.weeklyUpcomingConflictsSchoolDeadlines'] },
@@ -577,7 +578,7 @@ export function PricingContent({
             ctaHref={`/signup?plan=basic&billing=${period}`}
             featured
             badge="MOST POPULAR"
-            prelude={tr('pricingContent.everythingInYourTrialPlus')}
+            prelude={tr('pricingContent.familyBasicAlsoIncludes')}
             featureSections={BASIC_FEATURES}
           />
 
