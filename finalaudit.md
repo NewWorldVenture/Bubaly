@@ -1,3 +1,10 @@
+## Verified CI and pending PR checkpoint — 2026-10-04 14:50 UTC
+
+- The post-#946 main CI run [37208317078](https://github.com/NewWorldVenture/Bubaly/actions/runs/37208317078) completed successfully on app-source `2cf7fdee651eaa0e8ef97a0789e317e6c91bf4b8`: Typecheck/Lint/Test/Build, Database/RLS, Mobile and E2E all passed. Production currently serves audit-only main `d8e3c855ad3939060759070868e59a405e53dd39` (deployment [6842466942](https://github.com/NewWorldVenture/Bubaly/deployments/6842466942)); `/api/build-info` matches.
+- #957 remains open at `ed7a726001644df80ceef3fbfe677527403cae54`; Mobile passed while its other three required CI jobs are pending. #958 is open at `6e309ee29b4d0e1297d9c235c3fed4aae6085343`, versioned 0477 behind #834’s 0475/0476; its exact-head jobs are queued. An independent review found missing common condition terms in the classifier, so SQL and TypeScript coverage is being widened with regression cases before merge review.
+- #834 remains active Claude work at `951b98ae534974c5e7be421641d2997f046c33f7`; latest checks show messaging, mobile and finance pass, with Typecheck, Database/RLS and E2E pending. No branch changes or merge were made by this audit.
+- Guardian’s lost-alert repro and Storage’s cleanup/access findings remain unmerged. A safe Guardian repair needs durable per-channel receipts and an actual retry/reconciliation worker; an early Storage read deny would also block cleanup of a file with no metadata row. No production configuration, database, migration, or money action was performed; no closure count was added.
+
 ## Live audit and candidate checkpoint — 2026-10-04 14:46 UTC
 
 - Production deployment [6842427488](https://github.com/NewWorldVenture/Bubaly/deployments/6842427488) succeeded for audit-only main `bb10f98a348fb9315f7a07babc6f0e58c3fbb41b`; `/api/build-info` reports that SHA. Application source remains #946 merge `2cf7fdee651eaa0e8ef97a0789e317e6c91bf4b8`.
