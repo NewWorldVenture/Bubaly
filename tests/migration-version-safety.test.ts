@@ -504,12 +504,13 @@ describe('Supabase migration filename safety', () => {
     // (reserved for #710) withdraws an admin removed after a digest was
     // frozen. 0484 (reserved on #699, 5974208357) makes a card refund a
     // ledger row the database writes once, and 0485 (5974392907) a card
-    // capture the same. This literal tracks the checked-in
+    // capture the same. 0487 (5979394236) settles a card capture against its
+    // authorization's hold. This literal tracks the checked-in
     // high-water mark, not migration allocation: 0465-0470 remain NWV's, 0472
     // Support's, 0473 the coordinator's, 0475-0476 messaging's, 0477 Surge's,
     // 0478 Meals', 0479 Q40's, 0480 #927's, 0481 the unpublished Meals
-    // fixture's, 0482 #913's and 0483 #918's.
-    expect(audit.nextVersion).toBe('0486');
+    // fixture's, 0482 #913's, 0483 #918's and 0486 #941's.
+    expect(audit.nextVersion).toBe('0488');
   });
 
   it('flags a newly introduced collision instead of silently accepting it', () => {
