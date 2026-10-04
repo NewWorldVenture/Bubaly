@@ -4052,3 +4052,42 @@ access to equal the page's guest row: 8 findings before, 0 after.
 **After applying:** as a guest, open the calendar and try to add an event. It
 should be refused with the permission message. As a parent, add and delete one,
 which should succeed.
+
+## Numbering from `0475` on — retired holes, and the order a release applies
+
+Production applies migrations with `supabase db push`, in version order, and
+the CLI refuses a file numbered below the last version the remote ledger
+records unless it is given `--include-all`, which the production workflow does
+not pass. So a number below main's high-water mark that no file holds cannot
+be released after a higher one. Branches had been reserving such numbers ahead
+of landing, and they collided: #834 and #890 both held `0475`/`0476`, #958
+waited on `0477` behind them, and `0482`–`0490` were spread over branches that
+each had to wait on the lower ones. All of those PRs closed unmerged.
+
+As of 2026-10-04 the 43 holes at or below `0474` are **retired**
+(`RETIRED_MIGRATION_VERSIONS` in `scripts/audit-migration-versions.mjs`): no
+file may take one, and the reservations that left them — `0465`–`0470`,
+`0472`, `0473` among them — are released. Above `0474` the sequence has no
+gaps. `npm run db:audit:migrations` fails on either, and work that once held a
+number takes the next free one when it lands. Nothing below changes what is
+already applied: production's ledger records `0001`–`0176`.
+
+## `0471` and `0474` — the admin digest's delivery store, and a removed admin is not sent it
+
+`supabase/migrations/0471_an_admin_digest_reaches_each_admin_once.sql`,
+`supabase/migrations/0474_a_removed_admin_is_not_sent_the_digest.sql`
+
+**Severity: low until a route uses it. Deploy order: `0471`, then `0474`.**
+`0471` creates `admin_digest_deliveries` and the four functions behind
+`lib/admin/digest-delivery.ts` (freeze, claim, begin send, complete): one row
+per (occurrence, recipient), frozen before anything is sent, so a second tick
+or a retry does not send the digest again. `0474` extends `0471` without
+rewriting it: eligibility (the code allowlist plus `super_admins`) is decided
+at dispatch admission inside `admin_digest_begin_send`, and a recipient no
+longer eligible becomes the terminal status `withdrawn` instead of being sent
+a digest frozen before their removal. Both are proven in CI's Database job by
+`docs/audit/an-admin-digest-reaches-each-admin-once-check.sql` and
+`docs/audit/a-removed-admin-is-not-sent-the-digest-check.sql`.
+
+**After applying:** nothing visible changes until the digest route is
+switched to the per-recipient engine; the route keeps its current behaviour.
