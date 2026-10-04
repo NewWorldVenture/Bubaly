@@ -17,7 +17,8 @@ import { AutoRefresh } from '@/components/display/auto-refresh';
 // from client modules. Guarded by tests/display-server-safety.test.ts.
 import { DEFAULT_TILES, resolveTiles, type Tile } from '@/lib/display/tiles';
 import { normalizeSettings, type DisplaySettings } from '@/lib/display/ambient';
-import { displayCalendarFilter, displayEventDays, displayReminderTime, eventOverlapsWindow, familyDisplayCalendar } from '@/lib/display/calendar';
+import { displayCalendarFilter, displayEventDays, displayReminderTime, eventOverlapsWindow, familyDisplayCalendar, displayCalendarBounds } from '@/lib/display/calendar';
+import { readCalendarOccurrences } from '@/lib/calendar/occurrences';
 import type { DisplayData } from '@/components/display/display-grid';
 import type { HandledToday } from '@/components/display/handled-today-tile';
 import { DisplayShellClient } from '@/components/display/display-shell-client';
@@ -135,10 +136,13 @@ async function loadDisplay(
 
   const results = await Promise.all([
     settle(supabase.from('family_members').select('*').eq('family_id', familyId).eq('is_active', true).order('created_at')),
-    settle(supabase.from('calendar_events').select('id, title, starts_at, ends_at, all_day, location, assignee_id')
-      .eq('family_id', familyId).or(displayCalendarFilter(calendar.todayWindow)).order('starts_at')),
-    settle(supabase.from('calendar_events').select('id, title, starts_at, ends_at, all_day, location, assignee_id')
-      .eq('family_id', familyId).or(displayCalendarFilter(calendar.upcomingWindow)).order('starts_at').limit(12)),
+    // Series included: the weekly practice is on the kitchen display every week,
+    // not only the week it was created (lib/calendar/occurrences.ts). One-offs
+    // keep the display's own overlap filter; a series is expanded from its rule.
+    settle(readCalendarOccurrences(supabase, familyId, displayCalendarBounds(calendar.todayWindow), calendar.timezone,
+      { columns: ['id', 'title', 'starts_at', 'ends_at', 'all_day', 'location', 'assignee_id'], singlesFilter: displayCalendarFilter(calendar.todayWindow) })),
+    settle(readCalendarOccurrences(supabase, familyId, displayCalendarBounds(calendar.upcomingWindow), calendar.timezone,
+      { columns: ['id', 'title', 'starts_at', 'ends_at', 'all_day', 'location', 'assignee_id'], singlesFilter: displayCalendarFilter(calendar.upcomingWindow), limit: 12 })),
     settle(supabase.from('chore_assignments').select('id, status, member_id, chore_id, due_at')
       .eq('family_id', familyId).in('status', ['todo', 'in_progress', 'submitted'])
       .lt('due_at', end.toISOString()).order('due_at')),
@@ -151,8 +155,8 @@ async function loadDisplay(
     settle(supabase.from('notes').select('id, title, body').eq('family_id', familyId).eq('is_pinned', true).order('updated_at', { ascending: false }).limit(6)),
     settle(supabase.from('family_recipes').select('name, category, photo_url').eq('family_id', familyId)
       .order('is_favorite', { ascending: false }).order('last_made_at', { ascending: false, nullsFirst: false }).limit(6)),
-    settle(supabase.from('calendar_events').select('starts_at, ends_at, all_day')
-      .eq('family_id', familyId).or(displayCalendarFilter(calendar.monthWindow))),
+    settle(readCalendarOccurrences(supabase, familyId, displayCalendarBounds(calendar.monthWindow), calendar.timezone,
+      { columns: ['starts_at', 'ends_at', 'all_day'], singlesFilter: displayCalendarFilter(calendar.monthWindow) })),
     settle(supabase.from('display_layouts').select('tiles, settings').eq('family_id', familyId).maybeSingle()),
     settle(supabase.from('family_photos').select('url, thumbnail_url')
       .eq('family_id', familyId).not('url', 'is', null)
