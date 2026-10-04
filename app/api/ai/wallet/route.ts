@@ -13,6 +13,7 @@ import { buildWalletCoachPrompt, parseWalletCoach, type CoachChild, type CoachGo
 import { enforceAIRateLimit } from '@/lib/server/ai-rate-limit';
 import { readAllAsQuery } from '@/lib/supabase/read-all';
 import { logWalletAudit } from '@/lib/server/audit';
+import { admitDailyAIUse } from '@/lib/server/ai-daily-admission';
 
 // POST /api/ai/wallet — the AI Family Financial Coach. Gated by wallet tier
 // (Free has no coach; Basic limited; Plus unlimited). Computes balances + goal
@@ -66,6 +67,14 @@ export async function POST() {
           { status: 429 },
         );
       }
+      // One request per observed count: concurrent ones cannot all pass it.
+      // The family coach and the child coach count the same rows, so they
+      // share the key.
+      const admitted = await admitDailyAIUse({ countedAction: 'ai_coach_call', familyId, usedToday });
+      if (!admitted.ok) return NextResponse.json(
+        { error: tr('wallet.tooManyAiMoneyCoach') },
+        { status: 429, headers: { 'Retry-After': String(admitted.retryAfter) } },
+      );
     }
 
     const [

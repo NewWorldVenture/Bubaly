@@ -10,6 +10,7 @@ import { isMissingRelationError } from '@/lib/supabase/errors';
 import { logAudit } from '@/lib/server/audit';
 import { enforceAIRateLimit } from '@/lib/server/ai-rate-limit';
 import { upcomingDates, formatCountdown, milestoneLabel, type RelDate } from '@/lib/relationship/dates';
+import { admitDailyAIUse } from '@/lib/server/ai-daily-admission';
 import {
   buildRelationshipDigestPrompt, parseRelationshipDigest, suggestGiftsFromWishlist,
   buildRelationshipGiftHistory, RELATIONSHIP_GIFT_HISTORY_LIMIT,
@@ -63,6 +64,12 @@ export async function POST() {
         { status: 429 },
       );
     }
+    // One request per observed count: concurrent ones cannot all pass it.
+    const admitted = await admitDailyAIUse({ countedAction: AI_AUDIT_ACTION, familyId, usedToday });
+    if (!admitted.ok) return NextResponse.json(
+      { error: t('relationship.tooManyRelationshipHelperRequests') },
+      { status: 429, headers: { 'Retry-After': String(admitted.retryAfter) } },
+    );
 
     const [{ data: profile, error: profileErr }, { data: dateRows, error: datesErr }] = await settleAll([
       supabase.from('relationship_profile')

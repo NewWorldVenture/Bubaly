@@ -14,6 +14,7 @@ import { enforceAIRateLimit } from '@/lib/server/ai-rate-limit';
 import { MAX_PROVIDER_JSON_BYTES, readBoundedRequestJsonOrEmpty } from '@/lib/server/bounded-request-body';
 import { logWalletAudit } from '@/lib/server/audit';
 import { readAllAsQuery } from '@/lib/supabase/read-all';
+import { admitDailyAIUse } from '@/lib/server/ai-daily-admission';
 
 // POST /api/ai/invest — the kids' EDUCATIONAL Money Mentor. Same tier gating +
 // per-day metering as the wallet coach. Explains an investing concept; never
@@ -58,6 +59,12 @@ export async function POST(req: NextRequest) {
       if (count >= dailyLimit) {
         return NextResponse.json({ error: t('invest.mentorDailyLimitReached', { limit: dailyLimit }) }, { status: 429 });
       }
+      // One request per observed count: concurrent ones cannot all pass it.
+      const admitted = await admitDailyAIUse({ countedAction: 'ai_invest_call', familyId, usedToday: count });
+      if (!admitted.ok) return NextResponse.json(
+        { error: t('invest.tooManyMoneyMentorRequests') },
+        { status: 429, headers: { 'Retry-After': String(admitted.retryAfter) } },
+      );
     }
 
     const boundedBody = await readBoundedRequestJsonOrEmpty(req, MAX_PROVIDER_JSON_BYTES);

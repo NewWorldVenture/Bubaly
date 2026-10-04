@@ -6,7 +6,7 @@ const mocks = vi.hoisted(() => ({
   context: vi.fn(), server: vi.fn(), provider: vi.fn(), complete: vi.fn(), rate: vi.fn(), audit: vi.fn(),
 }));
 vi.mock('@/lib/supabase/auth', () => ({ requireUserContext: mocks.context }));
-vi.mock('@/lib/supabase/server', () => ({ createServer: mocks.server }));
+vi.mock('@/lib/supabase/server', () => ({ createServer: mocks.server, createServiceClient: () => ({ service: true }) }));
 vi.mock('@/lib/ai/provider', async (importOriginal) => ({
   describeAIError: (await importOriginal<typeof import('@/lib/ai/provider')>()).describeAIError,
   resolveProvider: mocks.provider,
