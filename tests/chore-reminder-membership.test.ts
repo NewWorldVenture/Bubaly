@@ -194,7 +194,7 @@ describe('weekly chore reminder membership through the actual GET and SDK', () =
   it('does not fold an assignment from another family into a valid member bucket', async () => {
     h.assignments = [assignment('a-active'), assignment('b-other-family', { family_id: FOREIGN })];
     expect(await run()).toEqual({ status: 200, body: { sent: 1, failed: 0, skipped: 0 } });
-    expect(h.sends[0].props).toEqual({ memberName: 'Synthetic member', familyName: 'Synthetic family', chores: [{ title: 'Synthetic chore a-active', points: 12, dueAt: '2026-10-03T12:00:00Z' }] });
+    expect(h.sends[0].props).toEqual({ memberName: 'Synthetic member', familyName: 'Synthetic family', chores: [{ title: 'Synthetic chore a-active', points: 12, dueAt: '2026-10-03T12:00:00Z' }], timeZone: 'UTC' });
   });
 
   it('uses the accepted family name when a rejected foreign assignment sorts first', async () => {
@@ -225,7 +225,7 @@ describe('weekly chore reminder membership through the actual GET and SDK', () =
   it.each(['object', 'array'])('preserves an active linked recipient with an %s embed', async shape => {
     h.assignments[0].family_members = shape === 'array' ? [member()] : member();
     expect(await run()).toEqual({ status: 200, body: { sent: 1, failed: 0, skipped: 0 } });
-    expect(h.sends).toEqual([{ to: 'member@synthetic.invalid', props: { memberName: 'Synthetic member', familyName: 'Synthetic family', chores: [{ title: 'Synthetic chore assignment-1', points: 12, dueAt: '2026-10-03T12:00:00Z' }] } }]);
+    expect(h.sends).toEqual([{ to: 'member@synthetic.invalid', props: { memberName: 'Synthetic member', familyName: 'Synthetic family', chores: [{ title: 'Synthetic chore assignment-1', points: 12, dueAt: '2026-10-03T12:00:00Z' }], timeZone: 'UTC' } }]);
   });
 
   it('preserves grouping multiple chores for the same current member into one email', async () => {

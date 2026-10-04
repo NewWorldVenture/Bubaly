@@ -118,7 +118,7 @@ export async function POST(req: NextRequest) {
     const aheadRate = choreCompletionRate((choresDueAhead ?? []).map((c) => ({ status: c.status })));
 
     const context = `
-WEEK OF: ${weekRangeLabel(w)} (generated ${now.toLocaleDateString('en-US', { weekday: 'long', month: 'long', day: 'numeric' })})
+WEEK OF: ${weekRangeLabel(w)} (generated ${now.toLocaleDateString('en-US', { weekday: 'long', month: 'long', day: 'numeric', timeZone: tz })})
 FAMILY: ${ctx.active.family.name}
 MEMBERS: ${(members ?? []).map((m) => `${m.display_name} (${m.role})`).join(', ') || 'none'}
 GENERATING FOR: ${ctx.active.member?.display_name ?? 'family'}
