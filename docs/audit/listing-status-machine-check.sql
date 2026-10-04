@@ -362,6 +362,11 @@ begin
         and regexp_count(meal_replace_compact, 'insertintopublic\.') = 2
         and regexp_count(meal_replace_compact, 'deletefrompublic\.') = 1
         and regexp_count(meal_replace_compact, 'updatepublic\.') = 1
+        -- Fingerprint the complete normalized SECURITY DEFINER body. This
+        -- constrains unqualified PERFORM/CALL and assignment-form calls across
+        -- the entire RPC, including before receipt claim or slot locks.
+        and encode(sha256(convert_to(meal_replace_compact, 'UTF8')), 'hex')
+            = 'd1b4017075ed6a19471653c320cf3dfe134728246e4596d880e1c671f35ae8ad'
         and position('execute' in meal_replace_compact) = 0
         and position('callpublic.' in meal_replace_compact) = 0
         and position('performpublic.' in meal_replace_compact) = 0

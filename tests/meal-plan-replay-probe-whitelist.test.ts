@@ -1,8 +1,10 @@
+import { createHash } from 'node:crypto';
 import { readFileSync } from 'node:fs';
 import { describe, expect, it } from 'vitest';
 
 const migration = readFileSync('supabase/migrations/0475_meal_plan_slot_writes_are_atomic.sql', 'utf8');
 const probe = readFileSync('docs/audit/listing-status-machine-check.sql', 'utf8');
+const expectedFunctionSha256 = 'd1b4017075ed6a19471653c320cf3dfe134728246e4596d880e1c671f35ae8ad';
 const exactReplayBranch = compact(`
   if v_claimed = 0 then
     select * into v_receipt from public.meal_plan_write_receipts
@@ -16,6 +18,10 @@ const exactReplayBranch = compact(`
 
 function compact(source: string) {
   return source.replace(/--[^\n]*/g, '').replace(/[\s]+/g, '').toLowerCase();
+}
+
+function functionSha256(source: string) {
+  return createHash('sha256').update(compact(source), 'utf8').digest('hex');
 }
 
 function replayBranch(source: string) {
@@ -37,6 +43,10 @@ describe('meal-plan replay exception in the listing status probe', () => {
 
     expect(body).toBeTruthy();
     expect(expected).toBeTruthy();
+    expect(functionSha256(body!)).toBe(expectedFunctionSha256);
+    expect(probe).toMatch(
+      /encode\(sha256\(convert_to\(meal_replace_compact,\s*'UTF8'\)\),\s*'hex'\)\s*=\s*'d1b4017075ed6a19471653c320cf3dfe134728246e4596d880e1c671f35ae8ad'/i,
+    );
     const liveBranch = replayBranch(compact(body!));
     const whitelistedBranch = compact(expected!);
 
@@ -48,6 +58,13 @@ describe('meal-plan replay exception in the listing status probe', () => {
     for (const injectedCall of ['v_result:=public.some_mutator();', 'v_result:=some_mutator();']) {
       const mutatedBranch = replayBranch(compact(body!).replace(returnToken, `${injectedCall}${returnToken}`));
       expect(mutatedBranch).not.toBe(whitelistedBranch);
+    }
+
+    const claimMarker = '  insert into public.meal_plan_write_receipts';
+    expect(body).toContain(claimMarker);
+    for (const injectedStatement of ['perform some_mutator(p_family_id);', 'call some_mutator(p_family_id);']) {
+      const mutatedBody = body!.replace(claimMarker, `  ${injectedStatement}\n${claimMarker}`);
+      expect(functionSha256(mutatedBody)).not.toBe(expectedFunctionSha256);
     }
   });
 });
