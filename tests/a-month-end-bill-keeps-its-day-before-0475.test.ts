@@ -22,7 +22,9 @@ import { createInMemorySupabase, type Row } from './helpers/in-memory-supabase';
  * That one roll is refused, the bill is left exactly as it was, and the person
  * is told why in their language. Nothing is clamped silently; every other bill
  * rolls normally. lib/finance/recurring.ts `writeBillPatch` says why the anchor
- * could not be carried in any column the old table has.
+ * could not be carried in any column the old table has. (A Mark paid button
+ * may instead ask the person whether to move the bill to the shorter day:
+ * a-month-end-bill-moves-only-when-asked.test.ts. These calls ask no one.)
  */
 
 const ROOT = join(__dirname, '..');

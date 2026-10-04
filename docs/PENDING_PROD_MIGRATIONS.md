@@ -4140,13 +4140,17 @@ schema that already has it.
 it. A bill due on the 31st rolls to Feb 28 and must come back on Mar 31, and at
 Feb 28 the row alone cannot say so. Until 0475 is applied the app writes every
 roll whose due date falls on the bill's own day exactly as it would with the
-column, and REFUSES the one roll it cannot keep (a bill on the 29th, 30th or
-31st rolling into a shorter month): the bill is left as it was and the person
-is told, in their language, that its day can't be kept until a database update
-is applied. Applying 0475 lifts that refusal; nothing else changes.
+column, and never silently clamps the one roll it cannot keep (a bill on the
+29th, 30th or 31st rolling into a shorter month). Both Mark paid buttons ask
+the person, in their language, whether to mark it paid and move it to the
+shorter month's last day, due on that day from then on. Yes writes that date
+(the person chose the new day); no leaves the bill as it was and says its day
+can't be kept until a database update is applied. Anything that marks a bill
+paid with no one to ask only refuses. Applying 0475 removes the question: the
+bill moves to the short month's last day and comes back to its own day after.
 `docs/audit/a-month-end-bill-keeps-its-day-check.sql` proves the column's
 shape, its single check, and that a bill inserted without it reads null.
 
 **After applying:** mark paid a monthly bill due on the 31st of a month that is
 followed by a shorter one. It moves to the last day of the next month with no
-message; mark it paid again and it is back on the 31st.
+question; mark it paid again and it is back on the 31st.

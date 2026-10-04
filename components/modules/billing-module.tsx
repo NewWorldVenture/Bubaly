@@ -61,7 +61,7 @@ import {
 import { cn } from '@/lib/utils/cn';
 import type { Tables, SubscriptionStatus, AccountType, TransactionType, BudgetPeriod, BillStatus } from '@/lib/database.types';
 import { categoryLabel } from '@/lib/finance/category-label';
-import { billPaidPatch, isDueDayNotKept, newBillDueDay, writeBillPatch } from '@/lib/finance/recurring';
+import { billPaidPatch, dueDayNotKeptQuestion, isDueDayNotKept, newBillDueDay, writeBillPatch } from '@/lib/finance/recurring';
 import { useLocale, useTranslations } from '@/components/i18n/locale-provider';
 import { FamilyDeliveredValue } from '@/components/billing/family-delivered-value';
 import type { LocaleCode } from '@/lib/i18n/locales';
@@ -964,15 +964,20 @@ export function BillingModule({ serviceFeeNotice = null }: { serviceFeeNotice?: 
     const patch = bill ? billPaidPatch(bill, clock.todayKey()) : { status: 'paid' as const };
     // `writeBillPatch`: on a database without bills.due_day (0475 not applied)
     // the write is repeated without it when the due date carries the bill's
-    // day, and refused when only that column could (a 31st bill rolling to
-    // Feb 28): the bill is left as it was and the person is told why.
+    // day. When only that column could (a 31st bill rolling to Feb 28) the
+    // person is asked whether to move it to Feb 28 and keep the 28th from now
+    // on; yes writes that date, no leaves the bill as it was and says why.
     // A compare-and-set on the row this button saw (due date and status): two
     // clicks on a stale list would otherwise each roll the bill a month and skip
     // an occurrence; the second finds no row and is told so. A bill the list no
     // longer holds has nothing to compare against and is paid by id, as before.
-    const { data: rows, error } = await writeBillPatch(patch, (p) => (bill
-      ? supabase.from('bills').update(p).eq('id', id).eq('family_id', familyId).eq('due_date', bill.due_date).eq('status', bill.status).select('id')
-      : supabase.from('bills').update(p).eq('id', id).eq('family_id', familyId).select('id')));
+    const { data: rows, error } = await writeBillPatch(
+      patch,
+      (p) => (bill
+        ? supabase.from('bills').update(p).eq('id', id).eq('family_id', familyId).eq('due_date', bill.due_date).eq('status', bill.status).select('id')
+        : supabase.from('bills').update(p).eq('id', id).eq('family_id', familyId).select('id')),
+      { confirmClampedDay: (refusal) => askConfirm(dueDayNotKeptQuestion(refusal, tr, fmtDate, locale.code)) },
+    );
     if (isDueDayNotKept(error)) return toastError(tr('bills.dueDayNeedsDatabaseUpdate', { day: error.day }));
     if (error) return toastError(describeDbError(error));
     if (wroteNoRows(rows)) return toastError(tr('errors.thatChangeWasNotSaved'));

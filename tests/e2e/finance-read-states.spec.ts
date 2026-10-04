@@ -85,6 +85,8 @@ test.beforeEach(async ({ page }) => {
         useFamilyTimeZone: () => undefined },
       '@/components/ui/toast': { useToast: () => ({ success() {}, error() {} }) },
       '@/components/ui/modal': { Modal: () => { throw new Error('Unexpected form write workflow'); } },
+      // bills-view asks before moving a month-end bill (a write); never on a read.
+      '@/components/ui/confirm': { useConfirm: () => () => { throw new Error('Unexpected financial write'); } },
       '@/lib/supabase/client': { createClient: () => { throw new Error('Unexpected financial write'); } },
       // Named rather than left as {}: this spec exercises read states only, and
       // every one of these throws for the same reason the client and Modal mocks

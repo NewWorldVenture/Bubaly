@@ -195,10 +195,21 @@ function dayOnlyDueDayCarries(patch: object): number | null {
   return isAnchorDay(day) ? day : null;
 }
 
+export interface WriteBillPatchOptions {
+  /**
+   * Asks the person whether to move the bill to the clamped date and keep
+   * that day from then on. Called only when the roll would be clamped AND the
+   * database cannot record the original day; resolves true to proceed. Only a
+   * button a person is looking at passes it: without it (a server path, an AI
+   * tool, the autopilot) the roll is refused, never clamped.
+   */
+  confirmClampedDay?: (refusal: DueDayNotKept) => Promise<boolean>;
+}
+
 /**
  * Runs `write(patch)`. On a database without `bills.due_day` (PGRST204 /
- * 42703: 0475 not applied, which is production for now) it does one of two
- * things, and never a third:
+ * 42703: 0475 not applied, which is production for now) it does one of three
+ * things, and never silently loses a bill's day:
  *
  * - When the due date already carries the day (`dayOnlyDueDayCarries` is
  *   null) it writes once more without the column. Nothing is lost: on that
@@ -206,17 +217,24 @@ function dayOnlyDueDayCarries(patch: object): number | null {
  *   same day. A new bill, a weekly bill, a bill on the 15th, and a 31st bill
  *   rolling into March all go this way, so every other bill rolls exactly as
  *   it would with 0475.
- * - When only the column could carry it (a 31st bill rolling to Feb 28) it
- *   writes NOTHING and answers `DueDayNotKept`. Both Mark paid buttons tell
- *   the person, in their language, that the bill's day cannot be kept until
- *   the database update is applied and that the bill was left as it was.
+ * - When only the column could carry it (a 31st bill rolling to Feb 28) and
+ *   the caller can ask (`confirmClampedDay`), the person is asked whether to
+ *   mark it paid and move it to Feb 28, due on the 28th from then on. Yes:
+ *   it is written on that date without the column, through the same `write`,
+ *   so the caller's compare-and-set still decides; a bill that moved while
+ *   the question was open matches no row. The person chose the new day, so
+ *   nothing was lost behind their back.
+ * - Otherwise (they said no, or there is no one to ask) it writes NOTHING and
+ *   answers `DueDayNotKept`. Both Mark paid buttons then tell the person, in
+ *   their language, that the bill's day cannot be kept until the database
+ *   update is applied and that the bill was left as it was.
  *
- * Why refuse rather than roll. The roll would store Feb 28, and a 0176-era
- * `bills` row (id, family_id, name, amount, due_date, is_recurring,
- * recurrence, status, category, autopay, created_by, created_at, updated_at)
- * has nowhere else to hold the 31: at Feb 28 it cannot tell a 28th bill from
- * a clamped 31st, it would step to Mar 28 for ever, and 0475 could not
- * recover the day afterwards. The alternatives were weighed:
+ * Why not simply roll. The roll would store Feb 28, and a 0176-era `bills`
+ * row (id, family_id, name, amount, due_date, is_recurring, recurrence,
+ * status, category, autopay, created_by, created_at, updated_at) has nowhere
+ * else to hold the 31: at Feb 28 it cannot tell a 28th bill from a clamped
+ * 31st, it would step to Mar 28 for ever, and 0475 could not recover the day
+ * afterwards. The alternatives were weighed:
  *   (a) Carrying the day in an existing column. `recurrence` is the only free
  *       text that is not the person's own words (`name`, `category`), but it
  *       is not read through one parser: the Billing module prints it to the
@@ -232,11 +250,11 @@ function dayOnlyDueDayCarries(patch: object): number | null {
  *       write under different row-level security that every reader of
  *       `bills` would have to join, and could itself be lost.
  *   (c) Failing closed for exactly the case at risk. It is narrow (a bill on
- *       the 29th, 30th or 31st rolling into a shorter month), it is said to
- *       the person rather than hidden, and it loses nothing: the bill stays
- *       as it was, still due and still on every list, and rolls with its day
- *       once 0475 is applied.
- * (c) is the only one that never loses the day silently, so it is this.
+ *       the 29th, 30th or 31st rolling into a shorter month) and loses
+ *       nothing, but alone it would leave a 31st bill impossible to mark paid
+ *       in five months of every twelve until 0475 is applied.
+ * So (c), with the one way past it in the person's hands: they may choose
+ * the shorter day, knowingly, and nobody chooses it for them.
  *
  * Any other refusal is returned as it came, and a patch that never carried
  * the column is never retried.
@@ -244,22 +262,64 @@ function dayOnlyDueDayCarries(patch: object): number | null {
 export async function writeBillPatch<P extends object, W extends (p: P) => PromiseLike<{ error: unknown }>>(
   patch: P,
   write: W,
+  options: WriteBillPatchOptions = {},
 ): Promise<Awaited<ReturnType<W>> | { data: null; error: DueDayNotKept }> {
   const first = (await write(patch)) as Awaited<ReturnType<W>>;
   if (!first.error || !('due_day' in patch) || !isMissingDueDayColumn(first.error)) return first;
+  // The same row without the one column this database lacks.
+  const rest = { ...patch } as Record<string, unknown>;
+  delete rest.due_day;
   const unkept = dayOnlyDueDayCarries(patch);
   if (unkept !== null) {
     const rolledTo = (patch as { due_date?: unknown }).due_date;
     const dueDate = typeof rolledTo === 'string' ? rolledTo : null;
     const message = `bills.due_day is not in this database yet (migration 0475_a_month_end_bill_keeps_its_day has not been applied). This bill is anchored on day ${unkept} and would roll to ${dueDate ?? 'a shorter month'}, where only that column could keep the day, so nothing was written. Apply 0475 and the bill rolls with its day kept.`;
+    const refusal: DueDayNotKept = { code: DUE_DAY_NOT_KEPT, message, day: unkept, dueDate };
+    if (dueDate && options.confirmClampedDay && (await options.confirmClampedDay(refusal))) {
+      console.warn(`bills.due_day is not in this database yet (migration 0475_a_month_end_bill_keeps_its_day has not been applied). The person chose to mark this bill paid and move it from day ${unkept} to ${dueDate}, keeping that date's day from now on; writing without the column.`);
+      return (await write(rest as P)) as Awaited<ReturnType<W>>;
+    }
     console.warn(message);
-    return { data: null, error: { code: DUE_DAY_NOT_KEPT, message, day: unkept, dueDate } };
+    return { data: null, error: refusal };
   }
   console.warn('bills.due_day is not in this database yet (migration 0475_a_month_end_bill_keeps_its_day has not been applied); writing without it. This due date falls on the bill\'s own day, so the date alone carries it and nothing is lost.');
-  const rest = { ...patch } as Record<string, unknown>;
-  delete rest.due_day;
-  // The same row without the one column this database lacks.
   return (await write(rest as P)) as Awaited<ReturnType<W>>;
+}
+
+/** What the Mark paid buttons ask through the shared confirm dialog (components/ui/confirm.tsx). */
+export interface DueDayQuestion {
+  title: string;
+  body: string;
+  confirmLabel: string;
+  cancelLabel: string;
+  /** Moving a bill is not a delete: the proceed button is not painted red. */
+  destructive: false;
+}
+
+/**
+ * The question for a `DueDayNotKept` refusal: mark it paid and move it to the
+ * clamped date, due on that date's day from then on? `formatDay` renders a
+ * day key the way the asking module renders its due dates; `locale` names the
+ * short month in the reader's language (a calendar month of a day key, so no
+ * zone is involved).
+ */
+export function dueDayNotKeptQuestion(
+  refusal: DueDayNotKept,
+  t: (key: string, params?: Record<string, string | number>) => string,
+  formatDay: (dayKey: string) => string,
+  locale: string,
+): DueDayQuestion {
+  const target = refusal.dueDate ? parseDayKey(refusal.dueDate) : null;
+  const month = target
+    ? new Intl.DateTimeFormat(locale, { month: 'long', timeZone: 'UTC' }).format(new Date(Date.UTC(target[0], target[1], 1)))
+    : '';
+  return {
+    title: t('bills.moveToShorterMonthTitle', { date: refusal.dueDate ? formatDay(refusal.dueDate) : '' }),
+    body: t('bills.moveToShorterMonthBody', { day: refusal.day, month, newDay: target?.[2] ?? refusal.day }),
+    confirmLabel: t('bills.moveToShorterMonthConfirm'),
+    cancelLabel: t('bills.moveToShorterMonthCancel'),
+    destructive: false,
+  };
 }
 
 // ── Subscriptions ───────────────────────────────────────────────────────────

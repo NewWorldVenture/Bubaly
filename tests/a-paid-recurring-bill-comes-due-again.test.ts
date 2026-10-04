@@ -267,12 +267,12 @@ describe('0475 and its writers', () => {
   });
   it('both Mark paid buttons and both add forms write through the fallback, and the forms record the anchor day', () => {
     const view = read('components/finance/bills-view.tsx');
-    expect(view).toContain("await writeBillPatch(patch, (p) => createClient().from('bills').update(p).eq('id', b.id).eq('family_id', familyId).eq('due_date', b.due_date).eq('status', b.status).select('id'))");
+    expect(view).toContain("(p) => createClient().from('bills').update(p).eq('id', b.id).eq('family_id', familyId).eq('due_date', b.due_date).eq('status', b.status).select('id'),");
     expect(view).toContain('due_day: newBillDueDay(v.due_date, v.is_recurring, v.recurrence),');
     expect(view).toContain("}, (p) => createClient().from('bills').insert(p));");
     const module_ = read('components/modules/billing-module.tsx');
     expect(module_).toContain("? supabase.from('bills').update(p).eq('id', id).eq('family_id', familyId).eq('due_date', bill.due_date).eq('status', bill.status).select('id')");
-    expect(module_).toContain(": supabase.from('bills').update(p).eq('id', id).eq('family_id', familyId).select('id')));");
+    expect(module_).toContain(": supabase.from('bills').update(p).eq('id', id).eq('family_id', familyId).select('id')),");
     expect(module_).toContain('due_day: newBillDueDay(dueDate, isRecurring, recurrence),');
     expect(module_).toContain("}, (p) => supabase.from('bills').insert(p));");
   });
@@ -284,7 +284,7 @@ describe('both Mark paid buttons write the patch, in the family\'s day', () => {
     expect(src).toContain("import { useFamilyCalendarToday, useFamilyClock } from '@/components/i18n/use-format';");
     const body = bodyOf(src, 'async function markPaid(b: Bill) {', "success(reopen ? 'Reopened' : 'Marked paid');");
     expect(body).toContain('billPaidPatch(b, clock.todayKey())');
-    expect(body).toContain('writeBillPatch(patch, (p) =>');
+    expect(body).toMatch(/await writeBillPatch\(\s*patch,\s*\(p\) =>/);
     expect(body).toContain('.update(p)');
     expect(body, 'the old flat write is gone').not.toContain("update({ status: next })");
     // Reopening a one-off is still a plain status flip.
@@ -292,10 +292,10 @@ describe('both Mark paid buttons write the patch, in the family\'s day', () => {
   });
   it('the Billing module', () => {
     const src = read('components/modules/billing-module.tsx');
-    expect(src).toContain("import { billPaidPatch, isDueDayNotKept, newBillDueDay, writeBillPatch } from '@/lib/finance/recurring';");
+    expect(src).toContain("import { billPaidPatch, dueDayNotKeptQuestion, isDueDayNotKept, newBillDueDay, writeBillPatch } from '@/lib/finance/recurring';");
     const body = bodyOf(src, 'async function markBillPaid(id: string) {', "success(tr('billingModule.billMarkedAsPaid'));");
     expect(body).toContain('billPaidPatch(bill, clock.todayKey())');
-    expect(body).toContain('writeBillPatch(patch, (p) =>');
+    expect(body).toMatch(/await writeBillPatch\(\s*patch,\s*\(p\) =>/);
     expect(body).toContain('.update(p)');
     expect(body).not.toContain("update({ status: 'paid' })");
   });

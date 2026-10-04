@@ -10,12 +10,13 @@ import { useToast } from '@/components/ui/toast';
 import { PageHeader } from '@/components/app/page-header';
 import { Button } from '@/components/ui/button';
 import { Modal } from '@/components/ui/modal';
+import { useConfirm } from '@/components/ui/confirm';
 import { Input, Field, Select } from '@/components/ui/input';
 import { SkeletonList, EmptyState, ErrorState } from '@/components/ui/states';
 import { cn } from '@/lib/utils/cn';
 import type { Tables } from '@/lib/database.types';
 import { usd as usdIn, billDueStatus, DUE_META, fmtDueDate as fmtDueDateIn } from '@/lib/finance/hub';
-import { billPaidPatch, isDueDayNotKept, newBillDueDay, writeBillPatch } from '@/lib/finance/recurring';
+import { billPaidPatch, dueDayNotKeptQuestion, isDueDayNotKept, newBillDueDay, writeBillPatch } from '@/lib/finance/recurring';
 import { useLocale, useTranslations } from '@/components/i18n/locale-provider';
 import { describeDbError, wroteNoRows } from '@/lib/supabase/errors';
 import { todayInZone } from '@/lib/schedule/zoned';
@@ -42,6 +43,7 @@ export function BillsView({ mode }: { mode: BillsMode }) {
   const fmtDueDate = (iso: string) => fmtDueDateIn(iso, locale.code);
   const { familyId, userId } = useApp();
   const { success, error: toastError } = useToast();
+  const askConfirm = useConfirm();
   const meta = MODE_META[mode];
 
   const { data: rows, loading, error: readError, stale, refresh } = useRealtimeQuery<Bill>({
@@ -73,12 +75,17 @@ export function BillsView({ mode }: { mode: BillsMode }) {
     // makes the difference visible — without it `data` is null either way.
     // `writeBillPatch`: on a database without bills.due_day (0475 not applied)
     // the write is repeated without it when the due date carries the bill's
-    // day, and refused when only that column could (a 31st bill rolling to
-    // Feb 28): the bill is left as it was and the person is told why.
+    // day. When only that column could (a 31st bill rolling to Feb 28) the
+    // person is asked whether to move it to Feb 28 and keep the 28th from now
+    // on; yes writes that date, no leaves the bill as it was and says why.
     // The write is a compare-and-set on the row this button saw: two clicks on a
     // stale list (or two people) would otherwise each roll the bill a month, and
     // an occurrence would be skipped. The second finds no row and is told so.
-    const { data: rows, error } = await writeBillPatch(patch, (p) => createClient().from('bills').update(p).eq('id', b.id).eq('family_id', familyId).eq('due_date', b.due_date).eq('status', b.status).select('id'));
+    const { data: rows, error } = await writeBillPatch(
+      patch,
+      (p) => createClient().from('bills').update(p).eq('id', b.id).eq('family_id', familyId).eq('due_date', b.due_date).eq('status', b.status).select('id'),
+      { confirmClampedDay: (refusal) => askConfirm(dueDayNotKeptQuestion(refusal, t, fmtDueDate, locale.code)) },
+    );
     if (isDueDayNotKept(error)) { toastError(t('bills.dueDayNeedsDatabaseUpdate', { day: error.day })); return; }
     if (error) { toastError(describeDbError(error)); return; }
     if (wroteNoRows(rows)) { toastError(t('errors.thatChangeWasNotSaved')); return; }
