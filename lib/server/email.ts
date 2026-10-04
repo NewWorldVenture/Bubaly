@@ -62,8 +62,9 @@ type SendArgs = {
    * helper waits and asks again with the same key and bytes (`CONCURRENT_KEY_RETRY_DELAYS_MS`,
    * bounded): once the other request has settled, the provider either folds this
    * one onto it (accepted: `{ ok: true }`, nothing sent twice) or, if the other
-   * failed and the key is free, sends it. Still in flight after the last wait is
-   * `{ ok: false, reason: 'in_progress' }`, for the caller's own retry to settle.
+   * failed and the key is free, sends it. Still in flight when the budget is
+   * spent is `{ ok: false, reason: 'in_progress' }`, for the caller's own retry
+   * to settle.
    *
    * A durable record of what was sent is still the caller's job; the key alone
    * is not exactly-once.
@@ -71,14 +72,30 @@ type SendArgs = {
   idempotencyKey?: string;
 };
 
+/** Each ask's own deadline, as it always was. */
+const SEND_DEADLINE_MS = 15_000;
+
 /**
- * How long to wait, in turn, for another request under the same key to settle
- * before asking the provider again. Four asks within about four seconds: a
- * provider answer takes well under a second, and a request that is still in
- * flight after this is for the caller's own retry, not for this helper to sit
- * on inside a scheduler's deadline.
+ * The wait between asks while another request under the same key is in flight:
+ * backing off to two seconds and staying there. The schedule does not bound the
+ * waiting; `CONCURRENT_KEY_WAIT_BUDGET_MS` does.
  */
 export const CONCURRENT_KEY_RETRY_DELAYS_MS: readonly number[] = [250, 500, 1000, 2000];
+
+/**
+ * The whole of the waiting, counted from the moment the provider first said
+ * another request under this key was in flight: no further ask starts once the
+ * next wait plus a minimum ask would pass it, and every later ask's own deadline
+ * is clipped to what is left of it. So a keyed call lasts at most its first ask
+ * (15 s, as before) plus this budget — bounded in wall time, not in asks. A
+ * provider answer takes well under a second; a request still in flight after
+ * eight seconds is for the caller's own retry, not for this helper to sit on
+ * inside a scheduler's deadline.
+ */
+export const CONCURRENT_KEY_WAIT_BUDGET_MS = 8_000;
+
+/** An ask is not started with less than this of the budget left for its answer. */
+const MIN_ASK_MS = 1_000;
 
 /** Why a send was not accepted, where the provider said. */
 export type SendFailureReason =
@@ -132,21 +149,28 @@ export async function sendEmail({ to, subject, html, replyTo, from, idempotencyK
     'content-type': 'application/json',
     ...(idempotencyKey !== undefined ? { 'idempotency-key': idempotencyKey } : {}),
   };
+  /** When the provider first said another request under this key was in flight; null until then. */
+  let waitingSince: number | null = null;
   for (let ask = 0; ; ask += 1) {
-    const res = await fetchWithDeadline('https://api.resend.com/emails', { method: 'POST', headers, body }, 15_000);
+    const budgetLeft = waitingSince === null ? Infinity : waitingSince + CONCURRENT_KEY_WAIT_BUDGET_MS - Date.now();
+    const res = await fetchWithDeadline(
+      'https://api.resend.com/emails', { method: 'POST', headers, body }, Math.max(1, Math.min(SEND_DEADLINE_MS, budgetLeft)),
+    );
     if (res.ok) return { ok: true };
     const bounded = await readBoundedResponseText(res, 64 * 1024);
     const text = bounded.ok ? bounded.text : '[provider error response exceeded 64 KiB]';
     const name = res.status === 409 && idempotencyKey !== undefined ? providerErrorName(text) : null;
     if (name === 'concurrent_idempotent_requests') {
       // Another request under this key is in flight; its outcome decides ours.
-      const wait = CONCURRENT_KEY_RETRY_DELAYS_MS[ask];
-      if (wait !== undefined) {
+      waitingSince ??= Date.now();
+      const wait = CONCURRENT_KEY_RETRY_DELAYS_MS[Math.min(ask, CONCURRENT_KEY_RETRY_DELAYS_MS.length - 1)];
+      const left = waitingSince + CONCURRENT_KEY_WAIT_BUDGET_MS - Date.now();
+      if (wait + MIN_ASK_MS <= left) {
         console.warn(`[email] another request under this idempotency key is in flight; asking again in ${wait} ms`);
         await sleep(wait);
         continue;
       }
-      console.error('[email failed]', res.status, text, `(still in flight after ${CONCURRENT_KEY_RETRY_DELAYS_MS.length} waits)`);
+      console.error('[email failed]', res.status, text, `(still in flight after ${ask + 1} asks over ${CONCURRENT_KEY_WAIT_BUDGET_MS} ms)`);
       return { ok: false, reason: 'in_progress' };
     }
     console.error('[email failed]', res.status, text);

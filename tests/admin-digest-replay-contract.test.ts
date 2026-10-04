@@ -1,5 +1,21 @@
-// What GET /api/cron/admin-digest ACTUALLY does when a scheduler replays it.
-// Audit rows API-96040DFB5635 (the endpoint) and JOB-EF2453D9F633 (the job).
+// What GET /api/cron/admin-digest does when a scheduler replays it — the contract
+// of the FLAG-OFF path, the one production runs. Audit rows API-96040DFB5635 (the
+// endpoint) and JOB-EF2453D9F633 (the job).
+//
+// This file began as a characterization of the double send (every assertion
+// today's behaviour, wrong included; the desired contract kept as failing
+// reproductions in docs/final-audit/admin-digest-replay-contract-2026-09-30/).
+// It now states the contract the route MEETS: one occurrence per 12:30 slot, one
+// key per admin per occurrence, frozen bytes, a repeat folded by the provider, an
+// overlapping send that waits for the key's other request and asks again. And it
+// states, by name, what the path does NOT do: write a receipt. The fold is the
+// provider's memory; a retry re-attempts every admin; a first request that
+// outlives the waiter's budget and then fails leaves this tick with nothing for
+// that admin, and the NEXT dispatcher tick — a failed run is not a catch-up
+// boundary — is what delivers it. The evidence folder's C1–C5 (a retry that
+// attempts only the unaccepted admin, nothing re-sent to the provider at all) are
+// the delivery engine's, behind its flag and its migrations, and still fail here
+// by design.
 //
 // Before this file the route had no executable coverage: tests/admin-digest.test.ts
 // unit-tests the pure helpers and pins the handler's source text (paging,
@@ -7,17 +23,11 @@
 // (a-mirrored-cron-must-be-idempotent, a-late-tick-catches-up) read vercel.json
 // and the dispatcher. Nothing ran the handler. This file does.
 //
-// It is a CHARACTERIZATION: every assertion is today's behaviour, including the
-// behaviour that is wrong. A test passing here is not a claim that the route is
-// right. The desired contract, and minimal reproductions that FAIL against it, are
-// in docs/final-audit/admin-digest-replay-contract-2026-09-30/ (not collected by
-// `npm test`, run with the command in that folder's README).
-//
 // What is real: the route handler, lib/server/cron-auth.ts, lib/supabase/read-all.ts
 // paging, lib/feedback/notify.ts's recipient lookup, lib/constants/super-admins.ts,
 // lib/admin/digest.ts, and lib/server/email.ts down to its `fetch`. What is fake:
 // the database (tests/helpers/in-memory-supabase.ts, with `maxRows` standing in for
-// PostgREST's db-max-rows), the clock (Date only), translations (identity), and
+// PostgREST's db-max-rows), the clock (Date; and the waits, where a test says so), translations (identity), and
 // Resend, which is a stub for global `fetch` that COUNTS what it is asked to send
 // and what it accepts, keeps a key store as Resend does (a fold on the same bytes,
 // 409 invalid_idempotent_request on different bytes, 24 h retention), and answers
@@ -27,6 +37,7 @@ import { readFileSync } from 'node:fs';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { createInMemorySupabase, type InMemorySupabase, type Row } from './helpers/in-memory-supabase';
 import { SCHEDULES, dueRoutes } from '../scripts/cron-dispatch.mjs';
+import { CONCURRENT_KEY_WAIT_BUDGET_MS } from '@/lib/server/email';
 
 type ProviderMode = 'accept' | 'refuse' | 'network-error' | 'accept-then-timeout';
 type Attempt = {
@@ -63,7 +74,7 @@ const state = vi.hoisted(() => ({
    * request under the same key has been answered 409 — the overlap two workers
    * produce, made deterministic.
    */
-  hold: null as null | { to: string; taken: boolean; released: boolean; gate: Promise<void>; release: () => void },
+  hold: null as null | { to: string; taken: boolean; released: boolean; releaseOn: 'overlap' | 'manual'; gate: Promise<void>; release: () => void },
 }));
 
 vi.mock('@/lib/i18n/server', () => ({ getTranslations: async () => (key: string) => key }));
@@ -113,7 +124,7 @@ async function fakeResend(input: unknown, init?: RequestInit): Promise<Response>
   if (idempotencyKey && state.inFlight.has(idempotencyKey)) {
     attempt({ accepted: false, folded: false, concurrent: true });
     const h = state.hold;
-    if (h && h.taken && !h.released && h.to === body.to) { h.released = true; h.release(); }
+    if (h && h.taken && !h.released && h.releaseOn === 'overlap' && h.to === body.to) { h.released = true; h.release(); }
     return new Response(JSON.stringify({ name: 'concurrent_idempotent_requests', message: 'synthetic' }), { status: 409 });
   }
   const stored = idempotencyKey ? state.keys.get(idempotencyKey) : undefined;
@@ -145,12 +156,18 @@ async function fakeResend(input: unknown, init?: RequestInit): Promise<Response>
   }
 }
 
-/** Hold the first request for `to` open at the provider until a second request under its key has been answered 409. */
-function holdFirstRequestFor(to: string) {
+/**
+ * Hold the first request for `to` open at the provider: until a second request
+ * under its key has been answered 409 (`overlap`), or until the test says so
+ * (`manual` — the request that outlives the waiter).
+ */
+function holdFirstRequestFor(to: string, releaseOn: 'overlap' | 'manual' = 'overlap') {
   let release!: () => void;
   const gate = new Promise<void>((resolve) => { release = resolve; });
-  state.hold = { to, taken: false, released: false, gate, release };
+  state.hold = { to, taken: false, released: false, releaseOn, gate, release };
 }
+/** Fake the waits too (the clock already is), so a waiter's whole budget passes in no real time. */
+function fakeWaits() { vi.useFakeTimers({ toFake: ['Date', 'setTimeout', 'clearTimeout'] }); }
 
 // ── the database client the handler receives ──────────────────────────────────
 function clientOver(inner: InMemorySupabase) {
@@ -489,10 +506,13 @@ describe('admin-digest replay: one occurrence, one key per admin, the provider f
   // ── overlapping sends: the provider's 409 concurrent_idempotent_requests (review 5978490501) ──
   it('OVERLAPPING SENDS, first accepted: the second worker is told the key is in flight, waits, asks again and is folded — both report sent 2, one delivery', async () => {
     happen('2026-09-30T08:00:00Z', 'Signup Alpha');
+    fakeWaits();
     vi.setSystemTime(new Date('2026-09-30T12:30:00Z'));
     barrierOn('super_admins', 2);
     holdFirstRequestFor(SECOND); // the first worker's send to admin-2 is still in flight when the second worker's arrives
-    const [a, b] = await Promise.all([call(), call()]);
+    const pending = Promise.all([call(), call()]);
+    await vi.advanceTimersByTimeAsync(CONCURRENT_KEY_WAIT_BUDGET_MS);
+    const [a, b] = await pending;
     expect([a.status, b.status]).toEqual([200, 200]);
     expect(await a.json()).toMatchObject({ ok: true, sent: 2, failed: 0 });
     expect(await b.json()).toMatchObject({ ok: true, sent: 2, failed: 0 });
@@ -511,11 +531,14 @@ describe('admin-digest replay: one occurrence, one key per admin, the provider f
     // The review's case: before, the 409 was reported as a failure, so when the in-flight
     // request then failed nobody had sent, and nothing retried until the next tick.
     happen('2026-09-30T08:00:00Z', 'Signup Alpha');
+    fakeWaits();
     vi.setSystemTime(new Date('2026-09-30T12:30:00Z'));
     barrierOn('super_admins', 2);
     holdFirstRequestFor(SECOND);
     state.once[SECOND] = ['network-error']; // the held request, once released, dies on the wire
-    const results = await Promise.all([call(), call()]);
+    const pending = Promise.all([call(), call()]);
+    await vi.advanceTimersByTimeAsync(CONCURRENT_KEY_WAIT_BUDGET_MS);
+    const results = await pending;
     const bodies = await Promise.all(results.map((r) => r.json() as Promise<Record<string, unknown>>));
     const statuses = results.map((r) => r.status).sort();
     expect(statuses, 'the worker whose request died reports it; the other delivered everything').toEqual([200, 502]);
@@ -533,6 +556,46 @@ describe('admin-digest replay: one occurrence, one key per admin, the provider f
     expect(delivered()).toEqual(each(1));
     expect(folded()).toEqual({ 'admin-1': 2, 'admin-2': 1 });
     expect(state.writes).toEqual([]);
+  });
+
+  it("DELAYED FAILURE (review 5978855451): the first request outlives the waiter's budget and THEN fails — nothing reaches admin-2 on this tick, both ticks answer 502, and the NEXT dispatcher tick delivers it under the same key", async () => {
+    // The retained gap, stated: the waiter is bounded in wall time, so a request
+    // that is still in flight when the budget is spent is left to its own fate.
+    // If it then fails, this tick sent nothing to that admin and wrote nothing
+    // that says so. The recovery is the scheduler's: a 502 fails the dispatcher
+    // run, a failed run is not a catch-up boundary, so the next tick re-covers
+    // 12:30 and calls the route again — one tick late, as GitHub delivers it.
+    happen('2026-09-30T08:00:00Z', 'Signup Alpha');
+    fakeWaits();
+    vi.setSystemTime(new Date('2026-09-30T12:30:00Z'));
+    barrierOn('super_admins', 2);
+    holdFirstRequestFor(SECOND, 'manual'); // held past every ask the waiter makes
+    state.once[SECOND] = ['network-error']; // and then it dies on the wire
+    const pending = Promise.all([call(), call()]);
+    await vi.advanceTimersByTimeAsync(CONCURRENT_KEY_WAIT_BUDGET_MS + 2_000); // the waiter's budget, spent
+    const asksWhileHeld = heldOff()['admin-2'];
+    expect(asksWhileHeld, 'the waiter asked more than once and was told "in flight" every time').toBeGreaterThanOrEqual(3);
+    expect(state.hold!.released).toBe(false);
+    expect(delivered()).toEqual({ 'admin-1': 1, 'admin-2': 0 });
+    state.hold!.release(); // now the first request settles — as a failure
+    const results = await pending;
+    expect(results.map((r) => r.status)).toEqual([502, 502]);
+    const bodies = await Promise.all(results.map((r) => r.json() as Promise<Record<string, unknown>>));
+    for (const b of bodies) expect(b).toMatchObject({ ok: false, sent: 1, failed: 1, occurrence: 'admin-digest:2026-09-30T12:30:00.000Z' });
+    expect(heldOff()['admin-2'], 'the waiter stopped asking once the budget was spent, before the first request settled').toBe(asksWhileHeld);
+    expect(delivered(), 'this tick: admin-2 got nothing').toEqual({ 'admin-1': 1, 'admin-2': 0 });
+    expect(state.writes, 'and nothing durable says so').toEqual([]);
+
+    // The next dispatcher tick, five minutes on: still the 30 September occurrence, the same key, now free.
+    const next = await runAt('2026-09-30T12:35:00Z');
+    expect(next.status).toBe(200);
+    expect(next.body).toMatchObject({ ok: true, sent: 2, failed: 0, occurrence: 'admin-digest:2026-09-30T12:30:00.000Z' });
+    expect(delivered(), 'admin-2 delivered one tick late; admin-1 folded, not sent twice').toEqual(each(1));
+    expect(keysFor(SECOND)).toHaveLength(1);
+    // What makes that tick happen: a 502 fails the dispatcher run, and only a success is a boundary.
+    const dispatcher = readFileSync('scripts/cron-dispatch.mjs', 'utf8');
+    expect(dispatcher).toContain('if (failed) { console.error(`${failed} of ${results.length} cron route(s) failed.`); process.exitCode = 1; }');
+    expect(readFileSync('scripts/cron-run-history.mjs', 'utf8')).toContain("workflowRunsUrl({ repo, status: 'success', apiBaseUrl })");
   });
 
   // ── what is durable here, and what is not (review 5978490501) ─────────────

@@ -17,13 +17,16 @@
 //     timeout are one request and the caller's decision. The one answer it
 //     does not take as final is 409 `concurrent_idempotent_requests`: another
 //     request under the SAME key is in flight at the provider, and its outcome
-//     decides this one's. The helper waits (CONCURRENT_KEY_RETRY_DELAYS_MS, in
-//     turn) and asks again with the same key and bytes: folded if the other was
-//     accepted, sent if the other failed and freed the key, and
-//     `{ ok: false, reason: 'in_progress' }` if it never settled while we waited
-//     (review on #946: the mirrored cron tick, where reporting the 409 as a
-//     failure left the recipient's delivery to the OTHER request, which could
-//     itself fail — nobody sent, nothing retried until the next tick);
+//     decides this one's. The helper waits (CONCURRENT_KEY_RETRY_DELAYS_MS,
+//     backing off to two seconds) and asks again with the same key and bytes:
+//     folded if the other was accepted, sent if the other failed and freed the
+//     key, and `{ ok: false, reason: 'in_progress' }` once the waiting has
+//     spent CONCURRENT_KEY_WAIT_BUDGET_MS, counted from the first 409 — the
+//     bound is wall time, not a number of asks, and each later ask's own
+//     deadline is clipped to what is left (reviews 5978490501 and 5978855451 on
+//     #946: the mirrored cron tick, where reporting the 409 as a failure left
+//     the recipient's delivery to the OTHER request, which could itself fail —
+//     nobody sent, nothing retried until the next tick);
 //   - it rejects a malformed key BEFORE any network call (and before the
 //     no-RESEND_API_KEY skip), so a bad key is a visible bug, not a 400 later;
 //   - every other non-2xx is `{ ok: false }` with a reason: 409
@@ -37,11 +40,11 @@
 //
 // Hermetic: global fetch is a stub; nothing is sent.
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
-import { CONCURRENT_KEY_RETRY_DELAYS_MS, sendEmail } from '@/lib/server/email';
+import { CONCURRENT_KEY_RETRY_DELAYS_MS, CONCURRENT_KEY_WAIT_BUDGET_MS, sendEmail } from '@/lib/server/email';
 import { FROM_EMAIL } from '@/lib/email';
 
-type Seen = { url: string; headers: Record<string, string>; body: string; hasSignal: boolean };
-type Mode = 'accept' | 'accept-then-timeout' | 'network-error' | 'concurrent' | 500 | 400 | 409 | 'resend';
+type Seen = { url: string; headers: Record<string, string>; body: string; hasSignal: boolean; at: number };
+type Mode = 'accept' | 'accept-then-timeout' | 'network-error' | 'concurrent' | { slowMs: number } | 500 | 400 | 409 | 'resend';
 
 let seen: Seen[];
 let mode: Mode[];
@@ -62,8 +65,10 @@ beforeEach(() => {
   vi.stubGlobal('fetch', vi.fn(async (input: unknown, init?: RequestInit) => {
     const headers = Object.fromEntries(new Headers(init?.headers).entries());
     const body = String(init?.body);
-    seen.push({ url: String(input), headers, body, hasSignal: init?.signal instanceof AbortSignal });
+    seen.push({ url: String(input), headers, body, hasSignal: init?.signal instanceof AbortSignal, at: Date.now() });
     const m = mode.shift() ?? 'resend';
+    // A slow answer: the provider takes this long to say so (the fake clock moves; nothing is awaited).
+    if (typeof m === 'object') { vi.setSystemTime(Date.now() + m.slowMs); return new Response(JSON.stringify({ name: 'concurrent_idempotent_requests' }), { status: 409 }); }
     const key = headers['idempotency-key'];
     if (m === 'network-error') throw new TypeError('fetch failed');
     // Another request under this key is in flight at the provider.
@@ -198,30 +203,55 @@ describe('sendEmail with a caller-supplied key', () => {
       expect(accepted.get(key)?.body).toBe(seen[0].body);
     });
 
-    it('asks once per wait in the schedule and then gives up as in_progress, never re-keying and never sending', async () => {
+    it('asks on the schedule — backing off to two seconds and staying there — until the budget would be passed, then gives up as in_progress, never re-keying and never sending', async () => {
       vi.useFakeTimers();
-      mode = Array<Mode>(CONCURRENT_KEY_RETRY_DELAYS_MS.length + 1).fill('concurrent');
+      vi.setSystemTime(new Date('2026-09-30T12:30:00Z'));
+      mode = Array<Mode>(20).fill('concurrent'); // in flight for as long as anyone asks
       const p = asking(sendEmail({ ...args, idempotencyKey: key }));
-      await vi.advanceTimersByTimeAsync(0);
-      let asks = 1;
-      for (const wait of CONCURRENT_KEY_RETRY_DELAYS_MS) {
-        expect(seen).toHaveLength(asks);
-        await vi.advanceTimersByTimeAsync(wait - 1);
-        expect(seen, `no ask before the ${wait} ms wait is up`).toHaveLength(asks);
-        await vi.advanceTimersByTimeAsync(1);
-        asks += 1;
-        expect(seen).toHaveLength(asks);
-      }
+      await vi.advanceTimersByTimeAsync(CONCURRENT_KEY_WAIT_BUDGET_MS * 2);
       await expect(p).resolves.toEqual({ ok: false, reason: 'in_progress' });
-      expect(seen).toHaveLength(CONCURRENT_KEY_RETRY_DELAYS_MS.length + 1);
+      // 0, +250, +500, +1000, +2000, +2000 — and not the ask that would have ended past the budget.
+      const t0 = seen[0].at;
+      expect(seen.map((x) => x.at - t0)).toEqual([0, 250, 750, 1750, 3750, 5750]);
+      expect(seen.at(-1)!.at - t0 + 2000 + 1000, 'the next ask would not have had a second left inside the budget').toBeGreaterThan(CONCURRENT_KEY_WAIT_BUDGET_MS);
       expect(new Set(seen.map((x) => x.headers['idempotency-key']))).toEqual(new Set([key]));
       expect(new Set(seen.map((x) => x.body)).size).toBe(1);
       expect(delivered).toBe(0);
     });
 
-    it('is bounded to about four seconds in all, inside a scheduler tick\'s deadline', () => {
-      expect(CONCURRENT_KEY_RETRY_DELAYS_MS.reduce((a, b) => a + b, 0)).toBeLessThanOrEqual(4_000);
-      expect(CONCURRENT_KEY_RETRY_DELAYS_MS.length).toBeGreaterThanOrEqual(3);
+    it('is bounded in WALL TIME, not in asks: a slow 409 spends the budget, and no further ask starts without a second left for its answer', async () => {
+      // The review's point: four delays bound nothing when each ask may itself take 15 s.
+      vi.useFakeTimers();
+      vi.setSystemTime(new Date('2026-09-30T12:30:00Z'));
+      mode = ['concurrent', { slowMs: CONCURRENT_KEY_WAIT_BUDGET_MS - 1_000 }, 'concurrent', 'concurrent'];
+      const p = asking(sendEmail({ ...args, idempotencyKey: key }));
+      await vi.advanceTimersByTimeAsync(CONCURRENT_KEY_WAIT_BUDGET_MS * 2);
+      await expect(p).resolves.toEqual({ ok: false, reason: 'in_progress' });
+      // The first 409 at t0; the second ask at +250 took seven seconds to be answered; 7.25 s + 500 ms + a 1 s ask > 8 s: no third ask.
+      expect(seen).toHaveLength(2);
+      expect(seen[1].at - seen[0].at).toBe(250);
+      expect(delivered).toBe(0);
+    });
+
+    it("the other request outlives the budget and THEN fails: this call has answered in_progress; the caller's next call finds the key free and sends", async () => {
+      // The retained gap, and its recovery: nothing of this call's reaches the
+      // recipient; the scheduler's retry does, under the same key.
+      vi.useFakeTimers();
+      vi.setSystemTime(new Date('2026-09-30T12:30:00Z'));
+      mode = Array<Mode>(20).fill('concurrent');
+      const first = asking(sendEmail({ ...args, idempotencyKey: key }));
+      await vi.advanceTimersByTimeAsync(CONCURRENT_KEY_WAIT_BUDGET_MS * 2);
+      await expect(first).resolves.toEqual({ ok: false, reason: 'in_progress' });
+      expect(delivered).toBe(0);
+      mode = []; // the other request has now failed: no key stored, nothing in flight
+      await expect(sendEmail({ ...args, idempotencyKey: key })).resolves.toEqual({ ok: true });
+      expect(delivered).toBe(1);
+      expect(accepted.get(key)?.body).toBe(seen[0].body);
+    });
+
+    it('the budget and the schedule are what the route header promises: eight seconds, backing off to two', () => {
+      expect(CONCURRENT_KEY_WAIT_BUDGET_MS).toBe(8_000);
+      expect(CONCURRENT_KEY_RETRY_DELAYS_MS).toEqual([250, 500, 1000, 2000]);
     });
 
     it('without a key a 409 of that name is asked once and rejected: there is no key for another request to hold', async () => {

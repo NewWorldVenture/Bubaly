@@ -46,7 +46,14 @@ export async function GET(req: NextRequest) {
   // second; `sendEmail` waits for the first to settle and asks again under the
   // same key, so the second is folded if the first was accepted and sent if
   // the first failed — the recipient gets this occurrence's digest on this
-  // tick either way, not on a later one.
+  // tick either way. The waiting is bounded (CONCURRENT_KEY_WAIT_BUDGET_MS from
+  // the first 409); a first request that outlives it and THEN fails leaves this
+  // tick with nothing sent for that admin and both ticks answering 502. That
+  // gap is retained, and closed by the scheduler, not by a receipt: the GitHub
+  // dispatcher exits non-zero on a 502, a failed run is not a catch-up boundary
+  // (scripts/cron-run-history.mjs), so the next tick re-covers 12:30 and calls
+  // this route again — under the same key, which is now free. One dispatcher
+  // tick late, at most, as GitHub delivers it.
   //
   // What is and is not durable here. Resend honours a key for 24 h while the
   // payload is identical; an occurrence is live for at most 24 h (every tick
