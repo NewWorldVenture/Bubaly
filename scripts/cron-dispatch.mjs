@@ -79,8 +79,8 @@ export const SCHEDULES = {
   // the shortest the dispatcher ticks, and /api/cron/ai-runs boxes its own
   // work at 85 s so it never trips the dispatcher's 120 s abort.
   '/api/cron/ai-runs': '*/5 * * * *',
-  // Read-only provider organization preflight; disabled unless explicitly
-  // enabled in server-side environment configuration.
+  // Shared fleet tick for fixed read-only workers, or organization-only preflight.
+  // Worker dispatch requires both server execution and paid-probe approval gates.
   '/api/cron/claude-fleet': '0 * * * *',
   // Routines fire on the family's own clock ("every Sunday at 5pm"), so the
   // worker has to be asked often enough that a 17:00 schedule fires at 17:00

@@ -34,6 +34,7 @@ describe('durable Claude fleet store using separate SQLite clients', () => {
   });
 
   afterEach(async () => {
+    vi.restoreAllMocks();
     for (const client of clients ?? []) {
       client.close();
       expect(client.closed).toBe(true);
@@ -62,6 +63,24 @@ describe('durable Claude fleet store using separate SQLite clients', () => {
       sandboxId: job.sandboxId!, stoppedSandboxId: job.sandboxId!, sessionId: 'session_synthetic',
       snapshotId: 'snapshot_synthetic', result: 'Synthetic probe verified',
     })).toBe(true);
+  }
+
+  async function advanceClockAfterWriteContention(nextTime: number) {
+    const held = await clients[1].transaction('write');
+    const acquire = clients[0].transaction.bind(clients[0]);
+    return vi.spyOn(clients[0], 'transaction').mockImplementationOnce(async (mode) => {
+      try {
+        // This acquisition hits a real SQLite lock held by the other client.
+        return await acquire(mode);
+      } catch (error) {
+        expect(error).toMatchObject({ code: 'SQLITE_BUSY' });
+        throw error;
+      } finally {
+        now = nextTime;
+        await held.rollback();
+        held.close();
+      }
+    });
   }
 
   it('initialization starts paused and is idempotent without resetting the pause switch', async () => {
@@ -289,6 +308,64 @@ describe('durable Claude fleet store using separate SQLite clients', () => {
     const fresh = (await second.claim(options))!;
     expect(fresh.id).toBe(pending.id);
     expect(await second.markDispatched(fresh.id, fresh.claimToken!, { dailyBudgetUsd: 0.05 })).toBe(true);
+  });
+
+  it('refreshes dispatch admission after write contention instead of admitting an expired lease', async () => {
+    await first.submit('dispatch-contention:expiry', payload());
+    const claim = (await first.claim(options))!;
+    const transaction = await advanceClockAfterWriteContention(claim.leaseExpiresAt!);
+    expect(await first.markDispatched(claim.id, claim.claimToken!)).toBe(false);
+    expect(transaction.mock.calls.length).toBeGreaterThanOrEqual(2);
+    expect(await first.get(claim.id)).toMatchObject({ status: 'claimed', dispatchStartedAt: null });
+    const recovered = (await second.claim(options))!;
+    expect(recovered).toMatchObject({ id: claim.id, status: 'claimed', attempts: 2 });
+    expect(recovered.claimToken).not.toBe(claim.claimToken);
+  });
+
+  it('charges dispatch admission to the current UTC day after write contention', async () => {
+    now = Date.parse('2026-10-04T23:59:59.990Z');
+    await first.submit('dispatch-contention:midnight-one', payload('AccountOne'));
+    await second.submit('dispatch-contention:midnight-two', payload('AccountTwo'));
+    const one = (await first.claim(options))!;
+    const two = (await second.claim(options))!;
+    const nextDay = Date.parse('2026-10-05T00:00:00.010Z');
+    const transaction = await advanceClockAfterWriteContention(nextDay);
+    expect(await first.markDispatched(one.id, one.claimToken!, { dailyBudgetUsd: 0.05 })).toBe(true);
+    expect(transaction.mock.calls.length).toBeGreaterThanOrEqual(2);
+    expect(await first.get(one.id)).toMatchObject({ dispatchStartedAt: nextDay, updatedAt: nextDay });
+    expect(await second.markDispatched(two.id, two.claimToken!, { dailyBudgetUsd: 0.05 })).toBe(false);
+    expect((await first.list()).filter((job) => job.dispatchStartedAt !== null)).toHaveLength(1);
+  });
+
+  it.each(['lease expiry', 'UTC midnight'])('rechecks dispatch admission when %s passes during the budget read', async (boundary) => {
+    if (boundary === 'UTC midnight') now = Date.parse('2026-10-04T23:59:59.990Z');
+    await first.submit('dispatch-budget-read', payload());
+    const claim = (await first.claim(options))!;
+    const nextTime = boundary === 'lease expiry' ? claim.leaseExpiresAt! : Date.parse('2026-10-05T00:00:00.010Z');
+    const acquire = clients[0].transaction.bind(clients[0]);
+    let budgetRead = false;
+    vi.spyOn(clients[0], 'transaction').mockImplementationOnce(async (mode) => {
+      const tx = await acquire(mode);
+      const execute = tx.execute.bind(tx);
+      tx.execute = async (statement) => {
+        const result = await execute(statement);
+        const sql = typeof statement === 'string' ? statement : statement.sql;
+        if (sql.includes('SUM(CAST(json_extract')) {
+          budgetRead = true;
+          now = nextTime;
+        }
+        return result;
+      };
+      return tx;
+    });
+    expect(await first.markDispatched(claim.id, claim.claimToken!)).toBe(false);
+    expect(budgetRead).toBe(true);
+    expect(await first.get(claim.id)).toMatchObject({ status: 'claimed', dispatchStartedAt: null });
+    if (boundary === 'UTC midnight') {
+      // A fresh attempt reads the new day's budget and records the correct reservation.
+      expect(await first.markDispatched(claim.id, claim.claimToken!)).toBe(true);
+      expect(await first.get(claim.id)).toMatchObject({ dispatchStartedAt: nextTime, updatedAt: nextTime });
+    }
   });
 
   it('pauses pre-dispatch admission and stop cancels only safe pending work', async () => {

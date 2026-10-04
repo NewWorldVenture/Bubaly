@@ -210,18 +210,22 @@ export class ClaudeFleetStore {
   async markDispatched(jobId: string, claimToken: string, options: { dailyBudgetUsd?: number } = {}): Promise<boolean> {
     const dailyBudgetUsd = options.dailyBudgetUsd ?? 0.25;
     if (!Number.isFinite(dailyBudgetUsd) || dailyBudgetUsd <= 0 || dailyBudgetUsd > 1) throw new FleetStoreError('invalid_request');
-    const now = this.now();
-    const current = new Date(now);
-    const dayStart = Date.UTC(current.getUTCFullYear(), current.getUTCMonth(), current.getUTCDate());
     return this.write(async (tx) => {
+      // Lock acquisition and confirmed-busy retries may cross a lease or UTC day boundary.
+      const current = new Date(this.now());
+      const dayStart = Date.UTC(current.getUTCFullYear(), current.getUTCMonth(), current.getUTCDate());
+      const dayEnd = dayStart + 86_400_000;
       // Reservations survive completion/cancellation/quarantine. Billing uncertainty never refunds a cap.
       const spent = await tx.execute({ sql: `SELECT COALESCE(SUM(CAST(json_extract(payload_json, '$.maxBudgetUsd') AS REAL)), 0) AS budget
-        FROM claude_fleet_jobs WHERE dispatch_started_at >= ? AND dispatch_started_at < ?`, args: [dayStart, dayStart + 86_400_000] });
+        FROM claude_fleet_jobs WHERE dispatch_started_at >= ? AND dispatch_started_at < ?`, args: [dayStart, dayEnd] });
       const job = await this.readJob(tx, jobId);
       if (!job || Number(spent.rows[0].budget) + job.payload.maxBudgetUsd > dailyBudgetUsd + Number.EPSILON) return false;
+      const admittedAt = this.now();
+      // A delayed read cannot authorize a different day's budget; leave this claim undispatched.
+      if (admittedAt < dayStart || admittedAt >= dayEnd) return false;
       const result = await tx.execute({ sql: `UPDATE claude_fleet_jobs SET status = 'running', dispatch_started_at = ?, updated_at = ?
         WHERE id = ? AND claim_token = ? AND status = 'claimed' AND dispatch_started_at IS NULL AND lease_expires_at > ?
-        AND EXISTS (SELECT 1 FROM claude_fleet_settings WHERE id = 1 AND schema_version = 1 AND paused = 0)`, args: [now, now, jobId, claimToken, now] });
+        AND EXISTS (SELECT 1 FROM claude_fleet_settings WHERE id = 1 AND schema_version = 1 AND paused = 0)`, args: [admittedAt, admittedAt, jobId, claimToken, admittedAt] });
       return result.rowsAffected === 1;
     });
   }
