@@ -20,6 +20,19 @@
 // failures, with the same two tests the dispatcher's tickWindow applies, so a
 // boundary the step accepts is one the dispatcher will use.
 //
+// And "found nothing" is asked twice (review on #902, 5971121597). The
+// success-only query is a filter over the whole history, so its empty answer
+// means no scheduled run has EVER succeeded — which is true of a first tick and
+// just as true of a workflow whose every tick so far failed or was cancelled:
+// a 09:07 whose own lookup failed and failed itself, a tick that died on a
+// blank CRON_SECRET. Treating that as the first tick dispatched five minutes,
+// finished green, and became the next boundary, so 09:07 to 12:07 was never
+// caught up. Now a `none` from the first query asks the second: previous
+// scheduled runs of any conclusion. No run at all starts the chain; runs with
+// no success among them make the OLDEST usable start the boundary, since no
+// successful tick has covered a minute after it (over-covering, never
+// under-covering); runs with no usable start are a failed lookup.
+//
 // The step is shell inside YAML, so this runs that shell, byte for byte as the
 // workflow carries it, under the same `bash -eo pipefail` the runner uses, with
 // PATH reduced to one directory of our own: a fake `gh` that answers from a
@@ -250,6 +263,71 @@ describe('three runs: the chain that the review described', () => {
     const r = boundaryStep({ workflow_runs: [C, manual, B, A] });
     expect(r.outputs).toEqual({ since: '2026-10-03T09:07:00Z', lookup: 'ok' });
     expect(tickWindow(noon, r.outputs.since).start.toISOString()).toBe('2026-10-03T09:07:00.000Z');
+  });
+});
+
+describe('a history of ticks that never succeeded is not a first tick (review 5971121597)', () => {
+  // The current run shows up in the unfiltered list as in progress.
+  const current: Run = { id: CURRENT_RUN, conclusion: null, event: 'schedule', run_started_at: '2026-10-03T12:07:00Z' };
+  const ended = (id: number, run_started_at: string | null | undefined, conclusion = 'failure'): Run =>
+    run_started_at === undefined ? { id, conclusion, event: 'schedule' } : { id, conclusion, event: 'schedule', run_started_at };
+  const noon = new Date('2026-10-03T12:07:00Z');
+
+  it("the review's chain: a 09:07 that failed and no success before it — the 12:07 tick catches up from 09:07 instead of starting the chain", () => {
+    const r = boundaryStep({ workflow_runs: [current, ended(2, '2026-10-03T09:07:00Z')] });
+    expect(r.exit).toBe(0);
+    expect(r.outputs).toEqual({ since: '2026-10-03T09:07:00Z', lookup: 'ok' });
+    expect(r.stdout).toContain('No scheduled tick has succeeded yet; the oldest recorded one started at 2026-10-03T09:07:00Z');
+    expect(r.stdout, 'what the success-only lookup used to say here').not.toContain('starts the chain');
+    const window = tickWindow(noon, r.outputs.since);
+    expect(window.start.toISOString()).toBe('2026-10-03T09:07:00.000Z');
+    expect(window.minutes).toBe(3 * 60);
+    expect(window.note).toBeNull();
+  });
+
+  it('several failed and cancelled ticks: the OLDEST usable start is the boundary, so no minute one of them owned is skipped', () => {
+    const r = boundaryStep({ workflow_runs: [
+      current,
+      ended(4, '2026-10-03T11:02:00Z', 'cancelled'),
+      ended(3, '2026-10-03T09:07:00Z'),
+      ended(2, null),
+      ended(1, '2026-10-03T06:02:00Z', 'cancelled'),
+    ] });
+    expect(r.exit).toBe(0);
+    expect(r.outputs).toEqual({ since: '2026-10-03T06:02:00Z', lookup: 'ok' });
+  });
+
+  it('a manual run is not history for this purpose: event=schedule filters it out of both questions', () => {
+    // A green single-route run between two failed ticks neither becomes the
+    // boundary (first question) nor counts as the first tick (second).
+    const r = boundaryStep({ workflow_runs: [current, success(3, '2026-10-03T11:00:00Z', 'workflow_dispatch'), ended(2, '2026-10-03T09:07:00Z')] });
+    expect(r.outputs).toEqual({ since: '2026-10-03T09:07:00Z', lookup: 'ok' });
+  });
+
+  it('previous scheduled runs none of whose starts is usable: a failed lookup, not the start of the chain', () => {
+    const r = boundaryStep({ workflow_runs: [current, ended(2, null), ended(1, undefined)] });
+    expect(r.exit).toBe(0);
+    expect(r.outputs).toEqual(FAILED);
+    expect(r.stdout).toContain('this tick will not be a boundary');
+    expect(r.stdout).not.toContain('starts the chain');
+  });
+
+  it('once any tick has succeeded, the success is the boundary whatever failed before or after it', () => {
+    // The failure at 09:07 sits inside the catch-up from 03:00 anyway.
+    const r = boundaryStep({ workflow_runs: [current, ended(2, '2026-10-03T09:07:00Z'), success(1, '2026-10-03T03:00:00Z')] });
+    expect(r.outputs).toEqual({ since: '2026-10-03T03:00:00Z', lookup: 'ok' });
+    expect(r.stdout).toContain('Previous successful tick started at 2026-10-03T03:00:00Z');
+  });
+
+  it('the first tick ever still starts the chain: the second question is what tells it from failed history', () => {
+    const r = boundaryStep({ workflow_runs: [current] });
+    expect(r.outputs).toEqual(CHAIN_START);
+    expect(r.stdout).toContain('starts the chain');
+    // Asked in order: successes over the whole history first, every scheduled
+    // run only when there was none.
+    const shell = stepShell(BOUNDARY_STEP);
+    expect(at(shell, 'event=schedule&per_page=100')).toBeGreaterThan(at(shell, 'status=success&event=schedule&per_page=5'));
+    expect(between(shell, 'if [[ "$answer" == none ]]; then', 'event=schedule&per_page=100')).not.toContain('starts the chain');
   });
 });
 
