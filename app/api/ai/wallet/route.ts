@@ -10,6 +10,7 @@ import { resolveFamilyPlanLevel } from '@/lib/server/plan';
 import { walletTierForPlanLevel, aiCoachLevel, AI_COACH_DAILY_LIMIT } from '@/lib/wallet/tiers';
 import { balanceFromLedger, bucketBalances, weeksToGoal, type LedgerEntry, type BucketKind } from '@/lib/wallet/ledger';
 import { buildWalletCoachPrompt, parseWalletCoach, type CoachChild, type CoachGoal } from '@/lib/wallet/coach';
+import { moneyFlow } from '@/lib/wallet/flows';
 import { enforceAIRateLimit } from '@/lib/server/ai-rate-limit';
 import { readAllAsQuery } from '@/lib/supabase/read-all';
 import { logWalletAudit } from '@/lib/server/audit';
@@ -79,7 +80,7 @@ export async function POST() {
       supabase.from('wallet_buckets').select('id, kind').eq('family_id', familyId),
       // Money, so a quietly truncated read is a wrong balance, not a short
       // list. `.limit(3000)` never was 3,000 — PostgREST caps at db-max-rows.
-      readAllAsQuery((from, to) => supabase.from('wallet_transactions').select('child_wallet_id, bucket_id, status, direction, amount_cents, created_at').eq('family_id', familyId).order('id').range(from, to), { max: 3000 }),
+      readAllAsQuery((from, to) => supabase.from('wallet_transactions').select('child_wallet_id, bucket_id, type, status, direction, amount_cents, created_at').eq('family_id', familyId).order('id').range(from, to), { max: 3000 }),
       supabase.from('family_members').select('id, display_name').eq('family_id', familyId),
       supabase.from('wallet_goals').select('child_wallet_id, title, saved_cents, target_cents').eq('family_id', familyId).eq('status', 'active').limit(50),
     ]);
@@ -116,8 +117,11 @@ export async function POST() {
       const arr = entriesByChild.get(t.child_wallet_id) ?? [];
       arr.push({ direction: t.direction, amount_cents: t.amount_cents, status: t.status, bucket_kind: t.bucket_id ? bucketKindById.get(t.bucket_id) ?? null : null });
       entriesByChild.set(t.child_wallet_id, arr);
-      if (t.direction === 'credit' && t.status === 'completed' && Date.parse(t.created_at) >= since) {
-        recentCreditByChild.set(t.child_wallet_id, (recentCreditByChild.get(t.child_wallet_id) ?? 0) + t.amount_cents);
+      // New money only: a card refund is a purchase undone, not a contribution,
+      // so it must not shorten a goal's forecast (lib/wallet/flows.ts).
+      const { inCents } = moneyFlow(t);
+      if (inCents > 0 && t.status === 'completed' && Date.parse(t.created_at) >= since) {
+        recentCreditByChild.set(t.child_wallet_id, (recentCreditByChild.get(t.child_wallet_id) ?? 0) + inCents);
       }
     }
 

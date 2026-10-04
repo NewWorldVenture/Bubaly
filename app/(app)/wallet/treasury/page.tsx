@@ -5,6 +5,7 @@ import { settleAll } from '@/lib/supabase/settle';
 import { createServer } from '@/lib/supabase/server';
 import { isManager } from '@/lib/constants/roles';
 import { balanceFromLedger, bucketBalances, type LedgerEntry, type BucketKind } from '@/lib/wallet/ledger';
+import { moneyFlow } from '@/lib/wallet/flows';
 import { WalletActivation } from '@/components/wallet/wallet-activation';
 import { TreasuryView, type TreasuryChild } from '@/components/wallet/treasury-view';
 import { ErrorState } from '@/components/ui/states';
@@ -74,8 +75,10 @@ export default async function WalletTreasuryPage() {
   let thisMonthIn = 0, thisMonthOut = 0;
   for (const t of txns ?? []) {
     if (t.created_at < monthStart || t.status !== 'completed') continue;
-    if (t.direction === 'credit') thisMonthIn += t.amount_cents;
-    else thisMonthOut += t.amount_cents;
+    // A card refund nets against out, not in (lib/wallet/flows.ts).
+    const flow = moneyFlow(t);
+    thisMonthIn += flow.inCents;
+    thisMonthOut += flow.outCents;
   }
 
   const children: TreasuryChild[] = (childWallets ?? []).map((cw) => {
@@ -86,8 +89,8 @@ export default async function WalletTreasuryPage() {
     const childGoals = (goals ?? []).filter((g) => g.child_wallet_id === cw.id);
     const activeGoals = childGoals.filter((g) => g.status !== 'reached');
     const monthlyTxns = (txns ?? []).filter((t) => t.child_wallet_id === cw.id && t.created_at >= monthStart && t.status === 'completed');
-    const monthlyIn = monthlyTxns.filter((t) => t.direction === 'credit').reduce((s, t) => s + t.amount_cents, 0);
-    const monthlyOut = monthlyTxns.filter((t) => t.direction === 'debit').reduce((s, t) => s + t.amount_cents, 0);
+    const monthlyIn = monthlyTxns.reduce((s, t) => s + moneyFlow(t).inCents, 0);
+    const monthlyOut = monthlyTxns.reduce((s, t) => s + moneyFlow(t).outCents, 0);
     return {
       id: cw.id,
       name: member?.display_name ?? 'Child',
@@ -118,8 +121,9 @@ export default async function WalletTreasuryPage() {
     for (const t of txns ?? []) {
       const ds = t.created_at.slice(0, 10);
       if (ds < start || ds > end || t.status !== 'completed') continue;
-      if (t.direction === 'credit') credits += t.amount_cents;
-      else debits += t.amount_cents;
+      const flow = moneyFlow(t);
+      credits += flow.inCents;
+      debits += flow.outCents;
     }
     trend.push({ label: d.toLocaleDateString(locale.code, { month: 'short' }), credits, debits });
   }
