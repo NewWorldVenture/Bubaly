@@ -52,10 +52,9 @@
 --      column DEFAULT relied on instead of a literal, as `status='executed'`
 --      (which `lib/metric/completed-plans.ts` counts as a handled plan), or
 --      born stamped `approved_by = <the parent>`;
---   2. a child can still READ the table — the autopilot panel, /display, /home
---      and /dashboard/needs-you all render for whoever is signed in, and
---      narrowing SELECT is a product decision nobody has taken. If that changes
---      this line fails on purpose;
+--   2. since 0478, a child reads their own server-written run but not a
+--      sibling's private summary. A manager still reads the review queue.
+--      Removing only 0478's read guard reproduces the sibling disclosure;
 --   3. a MANAGER can still insert the two rows `tests/e2e/authenticated.spec.ts`
 --      requires to be allowed (`status='pending'` and `status='executed'`, with
 --      `trigger_type='plan_accepted'`), and 0255's own pins still refuse a
@@ -128,12 +127,19 @@ values (:'PL', :'FR', :'UK', 'Whatever the child wants booked', 'booked');
 
 -- The genuine article, written the way planAcceptedAction writes it — with the
 -- SERVICE client, so the fixture is the row the autopilot panel is FOR. The
--- child must still be able to read it after this migration.
+-- sibling's unrelated child must not read it after the 0478 privacy repair.
 insert into public.family_automation_runs
   (id, family_id, created_by, trigger_type, status, state, requested_by_member_id, summary, metadata)
 values (:'RN', :'FR', :'UP', 'plan_accepted', 'pending', 'awaiting_approval', :'MS',
         'Waiting for approval: book the school trip',
         jsonb_build_object('plan_id', :'PL'::uuid, 'approval_id', :'AP'::uuid));
+
+-- Positive read control: a genuine server-written run for the signed-in child.
+-- No linked AI request/plan is present, matching the supported legacy shape.
+insert into public.family_automation_runs
+  (id, family_id, created_by, trigger_type, status, state, requested_by_member_id, summary)
+values ('00000000-0000-4000-8000-000000032908', :'FR', :'UK', 'plan_accepted',
+        'pending', 'awaiting_approval', :'MK', 'Synthetic child-owned run');
 
 grant select, insert, update, delete on public.family_automation_runs to authenticated;
 grant select, insert, update, delete on public.approval_requests       to authenticated;
@@ -153,6 +159,7 @@ declare
   plan      constant uuid := '00000000-0000-4000-8000-000000032906';
   run_row   constant uuid := '00000000-0000-4000-8000-000000032907';
   parent_m  uuid;
+  private_read_guard text;
   forged    constant jsonb := jsonb_build_object(
     'plan_id',     '00000000-0000-4000-8000-000000032906',
     'approval_id', '00000000-0000-4000-8000-000000032905',
@@ -226,17 +233,53 @@ begin
       failures := array_append(failures, 'a child''s pre-approved run INSERT reached a unique index, so RLS did not refuse it');
   end;
 
-  -- 5. Reads stay open, deliberately. The server-written row from the fixture
-  --    is the one the autopilot panel exists to show; a child seeing zero rows
-  --    here would mean SELECT had been narrowed, which is a product decision
-  --    nobody has taken.
-  select count(*) into n from public.family_automation_runs where family_id = fam;
-  if n < 1 then
-    failures := array_append(failures, 'a child can no longer READ family_automation_runs — the autopilot panel, /display, /home and /dashboard/needs-you render for whoever is signed in; that is a change of decision, update finalaudit.md and this probe');
+  -- 5. 0478 protects private copies while preserving the requester's own run.
+  select count(*) into n from public.family_automation_runs where id = run_row;
+  if n <> 0 then
+    failures := array_append(failures, 'an unrelated child reads the sibling''s private server-written run');
+  end if;
+  select count(*) into n from public.family_automation_runs
+    where id = '00000000-0000-4000-8000-000000032908';
+  if n <> 1 then
+    failures := array_append(failures, 'the active child cannot read their own server-written run');
+  end if;
+
+  -- Prove that the read test detects the original disclosure. Restore exactly
+  -- the captured predicate before continuing the independent write controls.
+  perform set_config('role','postgres', true);
+  select pg_get_expr(polqual, polrelid) into private_read_guard from pg_policy
+    where polrelid = 'public.family_automation_runs'::regclass
+      and polname = 'family_automation_runs_private_read_guard'
+      and polcmd = 'r' and not polpermissive;
+  if private_read_guard is null then
+    raise exception '0478 private run read guard is missing; privacy control cannot run';
+  end if;
+  drop policy family_automation_runs_private_read_guard on public.family_automation_runs;
+  perform set_config('role','authenticated', true);
+  select count(*) into n from public.family_automation_runs where id = run_row;
+  if n <> 1 then
+    failures := array_append(failures, 'without 0478''s read guard the sibling disclosure does not reproduce');
+  end if;
+  perform set_config('role','postgres', true);
+  execute format('create policy family_automation_runs_private_read_guard on public.family_automation_runs as restrictive for select to authenticated using (%s)', private_read_guard);
+  perform set_config('role','authenticated', true);
+  select count(*) into n from public.family_automation_runs where id = run_row;
+  if n <> 0 then
+    failures := array_append(failures, 'the restored 0478 read guard no longer refuses the sibling summary');
+  end if;
+  select count(*) into n from public.family_automation_runs
+    where id = '00000000-0000-4000-8000-000000032908';
+  if n <> 1 then
+    failures := array_append(failures, 'the restored 0478 read guard no longer permits the child''s own run');
   end if;
 
   -- ── As the parent: the positive controls ────────────────────────────────
   perform set_config('request.jwt.claim.sub', parent_u::text, true);
+  select count(*) into n from public.family_automation_runs
+    where id in (run_row, '00000000-0000-4000-8000-000000032908');
+  if n <> 2 then
+    failures := array_append(failures, 'the manager cannot read both genuine server-written runs for review');
+  end if;
 
   -- 6. The two rows tests/e2e/authenticated.spec.ts asserts a member may still
   --    insert. That member is the family's creator, provisioned 'parent' by
@@ -438,7 +481,7 @@ begin
   if array_length(failures, 1) is not null then
     raise exception E'a run in the approval queue is not authored by a manager or the server:\n  - %', array_to_string(failures, E'\n  - ');
   end if;
-  raise notice 'automation-runs-pin-what-a-member-may-queue: OK (a child cannot file a run into the parent''s queue by any of the four routes, reads are untouched, a manager and the service role still can, and the negative control reproduced the forged decision record; 0390: a manager cannot drop or redirect a queued run''s approval_id or plan_id while an unrelated metadata key still lands, and its negative control reproduced the scrub)';
+  raise notice 'automation-runs-pin-what-a-member-may-queue: OK (a child cannot file a run into the parent''s queue by any of the four routes; 0478 permits their own run, refuses sibling private summaries and preserves manager review, with the old-read disclosure control reproduced; a manager and the service role still write, and the negative control reproduced the forged decision record; 0390: a manager cannot drop or redirect a queued run''s approval_id or plan_id while an unrelated metadata key still lands, and its negative control reproduced the scrub)';
 end $$;
 
 rollback;

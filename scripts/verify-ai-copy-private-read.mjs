@@ -68,9 +68,10 @@ export function aiCopyBaseline(root = ROOT) {
   ].join('\n');
 }
 
-export function verifyAiCopyPrivateRead({ postgresBin, port, expectedDataDir, root = ROOT }) {
+export function verifyAiCopyPrivateRead({ postgresBin, port, expectedServerPort = port, expectedDataDir, root = ROOT }) {
   if (!postgresBin || !isAbsolute(postgresBin) || !expectedDataDir || !isAbsolute(expectedDataDir)
-    || !/^\d{1,5}$/.test(String(port)) || Number(port) < 1 || Number(port) > 65535) {
+    || !/^\d{1,5}$/.test(String(port)) || Number(port) < 1 || Number(port) > 65535
+    || !/^\d{1,5}$/.test(String(expectedServerPort)) || Number(expectedServerPort) < 1 || Number(expectedServerPort) > 65535) {
     throw new Error('Explicit PostgreSQL bin directory, loopback port and expected data directory are required.');
   }
   const connection = ['-h', '127.0.0.1', '-p', String(port), '-U', 'postgres'];
@@ -85,7 +86,9 @@ export function verifyAiCopyPrivateRead({ postgresBin, port, expectedDataDir, ro
   requireSuccess(identity, 'Could not identify synthetic PostgreSQL cluster');
   const [actualDir, actualPort, serverVersion] = identity.stdout.trim().split(/\r?\n/);
   const normalize = (path) => resolve(path).replaceAll('\\', '/');
-  if (normalize(actualDir) !== normalize(expectedDataDir) || actualPort !== String(port)) {
+  // Docker's loopback published port can differ from PostgreSQL's internal port.
+  // Verify both explicitly; never infer the server port from an observed value.
+  if (!actualDir || !serverVersion || normalize(actualDir) !== normalize(expectedDataDir) || actualPort !== String(expectedServerPort)) {
     throw new Error('PostgreSQL data directory or port did not match; no database was created.');
   }
   const database = `synthetic_ai_copy_${randomUUID().replaceAll('-', '')}`;
@@ -118,7 +121,7 @@ export function verifyAiCopyPrivateRead({ postgresBin, port, expectedDataDir, ro
     }
     const hash = (content) => createHash('sha256').update(content).digest('hex');
     return {
-      runtime: process.version, serverVersion, host: '127.0.0.1', port: String(port),
+      runtime: process.version, serverVersion, host: '127.0.0.1', port: String(port), serverPort: actualPort,
       corrected: 'PASS, migration replayed twice, ROLLBACK',
       assertionCount,
       oldPolicy: 'expected private-request and inactive-owner assertion failures',
@@ -144,8 +147,8 @@ export function verifyAiCopyPrivateRead({ postgresBin, port, expectedDataDir, ro
 if (process.argv[1] && resolve(process.argv[1]) === fileURLToPath(import.meta.url)) {
   const options = {};
   for (let i = 2; i < process.argv.length; i += 2) {
-    const key = { '--postgres-bin': 'postgresBin', '--port': 'port', '--expected-data-dir': 'expectedDataDir' }[process.argv[i]];
-    if (!key || !process.argv[i + 1]) throw new Error('Expected --postgres-bin, --port and --expected-data-dir arguments.');
+    const key = { '--postgres-bin': 'postgresBin', '--port': 'port', '--expected-server-port': 'expectedServerPort', '--expected-data-dir': 'expectedDataDir' }[process.argv[i]];
+    if (!key || !process.argv[i + 1]) throw new Error('Expected --postgres-bin, --port, optional --expected-server-port and --expected-data-dir arguments.');
     options[key] = process.argv[i + 1];
   }
   console.log(JSON.stringify(verifyAiCopyPrivateRead(options), null, 2));
