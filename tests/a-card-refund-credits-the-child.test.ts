@@ -1,4 +1,6 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
+import { readFileSync } from 'node:fs';
+import { join } from 'node:path';
 import Stripe from 'stripe';
 import { createInMemorySupabase, type InMemorySupabase, type Row } from './helpers/in-memory-supabase';
 
@@ -262,10 +264,12 @@ describe('two overlapping deliveries of one capture', () => {
   // one capture that overlap (two event ids, or recordEvent reclaiming a claim
   // its first holder is still running) both pass the select. With no key the
   // child is debited twice: one $20 purchase leaves Spend at $10, not $30. The
-  // database key (a unique index on stripe_ref for completed card_spend rows,
-  // requested on #699) makes the second insert fail with 23505; this store is
-  // given the same key. The second delivery must then read back the capture
-  // the first wrote and answer success, not 500.
+  // database key (0485: a unique index on stripe_ref for completed card_spend
+  // rows) makes the second insert fail with 23505. This store has no partial
+  // keys, so it is given the wider (stripe_ref, type) key; no test here writes
+  // a second card_spend under one ref, so the two refuse the same inserts. The
+  // migration's own predicate is pinned at the end of this file. The second
+  // delivery must read back the capture the first wrote and answer success.
   function storeWithTheKey() {
     db = createInMemorySupabase({ uniques: {
       stripe_webhook_events: [['stripe_event_id']],
@@ -309,6 +313,8 @@ describe('two overlapping deliveries of one capture', () => {
     expect(byRef('iauth_1')).toEqual([expect.objectContaining({ id: 'txn-hold', status: 'cancelled' })]);
     expect(spendCents()).toBe(5_000 - 2_000);
     expect(spendableCents()).toBe(5_000 - 2_000);
+    // The winner's audit row, and only the winner's.
+    expect((db.table('wallet_audit_logs') as Row[]).filter((r) => r.action === 'card_spend')).toHaveLength(1);
   });
 
   it('a 23505 with no capture to read back still fails, so Stripe retries and the hold stays', async () => {
@@ -329,6 +335,82 @@ describe('two overlapping deliveries of one capture', () => {
     expect(res.status).toBe(500);
     expect(byRef('ipi_capture')).toEqual([]);
     expect(byRef('iauth_1')).toEqual([expect.objectContaining({ id: 'txn-hold', status: 'processing' })]);
+  });
+});
+
+describe('the conflict read-back answers only for what the key covers', () => {
+  /** Every wallet_transactions insert is refused with a 23505, as if another
+   *  delivery's row held the key; with `readBack`, the select after it fails. */
+  function refuseInserts(readBack: 'works' | 'fails') {
+    let inserted = false;
+    const from = db.from.bind(db);
+    (db as unknown as { from: (name: string) => unknown }).from = (name: string) => {
+      const builder = from(name) as unknown as Record<string, (...args: unknown[]) => unknown>;
+      if (name === 'wallet_transactions') {
+        builder.insert = () => {
+          inserted = true;
+          const settle = { then: (resolve: (v: unknown) => unknown) => Promise.resolve({ data: null, error: { code: '23505', message: 'duplicate key value violates unique constraint', details: null, hint: null } }).then(resolve) };
+          return { select: () => ({ single: () => settle }) };
+        };
+        if (inserted && readBack === 'fails') {
+          builder.maybeSingle = () => Promise.resolve({ data: null, error: { code: '57014', message: 'canceling statement due to statement timeout', details: null, hint: null } });
+        }
+      }
+      return builder;
+    };
+  }
+  const logged = (code: string) => vi.mocked(console.error).mock.calls.some((call) => call.some((arg) => (arg as { code?: string } | null)?.code === code));
+
+  it('a capture: a same-ref card_spend that is not completed is not the debit, so it fails and the hold stays', async () => {
+    db.seed('wallet_transactions', [
+      { id: 'txn-odd', family_id: FAMILY, child_wallet_id: WALLET, bucket_id: 'bucket-spend', type: 'card_spend', status: 'processing', direction: 'debit', amount_cents: 2_000, stripe_ref: 'ipi_capture' },
+    ]);
+    refuseInserts('works');
+
+    const res = await deliver(issuingTransaction({}));
+
+    expect(res.status).toBe(500);
+    expect(byRef('ipi_capture').filter((r) => r.status === 'completed')).toEqual([]);
+    expect(byRef('iauth_1')).toEqual([expect.objectContaining({ id: 'txn-hold', status: 'processing' })]);
+  });
+
+  it('a capture: a read-back that fails is the failure reported, and the hold stays', async () => {
+    refuseInserts('fails');
+
+    const res = await deliver(issuingTransaction({}));
+
+    expect(res.status).toBe(500);
+    expect(logged('57014')).toBe(true);
+    expect(byRef('iauth_1')).toEqual([expect.objectContaining({ id: 'txn-hold', status: 'processing' })]);
+  });
+
+  it('a refund: a read-back that fails is the failure reported, and nothing is credited', async () => {
+    refuseInserts('fails');
+
+    const res = await deliver(issuingTransaction({ id: 'ipi_refund', type: 'refund', amount: 2_000, authorization: null }));
+
+    expect(res.status).toBe(500);
+    expect(logged('57014')).toBe(true);
+    expect(byRef('ipi_refund')).toEqual([]);
+  });
+});
+
+describe('the database keys the conflict handling relies on', () => {
+  // The store above cannot express a partial key, so pin the migrations' own:
+  // a typo in either predicate would leave the 23505 path dead in production.
+  const statement = (file: string) => readFileSync(join(process.cwd(), 'supabase/migrations', file), 'utf8')
+    .replace(/--.*$/gm, '').replace(/\s+/g, ' ').trim();
+
+  it('0484: one card_refund per stripe_ref', () => {
+    expect(statement('0484_a_card_refund_is_credited_once.sql')).toBe(
+      "create unique index if not exists uq_wallet_txn_card_refund_ref on public.wallet_transactions (stripe_ref) where type = 'card_refund' and stripe_ref is not null;",
+    );
+  });
+
+  it('0485: one completed card_spend per stripe_ref, leaving holds and spend requests out', () => {
+    expect(statement('0485_a_card_capture_is_debited_once.sql')).toBe(
+      "create unique index if not exists uq_wallet_txn_card_capture_ref on public.wallet_transactions (stripe_ref) where type = 'card_spend' and status = 'completed' and stripe_ref is not null;",
+    );
   });
 });
 

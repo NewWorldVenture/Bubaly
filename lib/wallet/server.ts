@@ -197,9 +197,12 @@ export async function debitCardSpend(supabase: DB, params: {
   const amount = Math.trunc(params.amountCents);
   if (amount <= 0) return { ok: false, error: 'Amount must be greater than 0' };
 
-  // Idempotency: skip if this Stripe authorization already produced a debit.
+  // Idempotency: skip if this Stripe transaction already produced a debit. The
+  // filter is the database key's (completed card_spend rows), so its partial
+  // index serves the lookup; a hold is keyed by the authorization id instead.
   const { data: dupe, error: dupeError } = await supabase
-    .from('wallet_transactions').select('id').eq('stripe_ref', params.stripeRef).eq('type', 'card_spend').maybeSingle();
+    .from('wallet_transactions').select('id')
+    .eq('stripe_ref', params.stripeRef).eq('type', 'card_spend').eq('status', 'completed').maybeSingle();
   if (dupeError) return { ok: false, error: walletFailure(dupeError, 'Could not verify that card spend.') };
   if (dupe) return { ok: true, txnId: dupe.id };
 
@@ -228,7 +231,8 @@ export async function debitCardSpend(supabase: DB, params: {
       const { data: written, error: rereadError } = await supabase
         .from('wallet_transactions').select('id')
         .eq('stripe_ref', params.stripeRef).eq('type', 'card_spend').eq('status', 'completed').maybeSingle();
-      if (!rereadError && written) return { ok: true, txnId: written.id };
+      if (rereadError) return { ok: false, error: walletFailure(rereadError, 'Could not verify that card spend.') };
+      if (written) return { ok: true, txnId: written.id };
     }
     return { ok: false, error: walletFailure(error, 'Could not post that card spend.') };
   }
@@ -290,7 +294,9 @@ export async function creditCardRefund(supabase: DB, params: {
     if ((error as { code?: string }).code === '23505') {
       const { data: written, error: rereadError } = await supabase
         .from('wallet_transactions').select('id').eq('stripe_ref', params.stripeRef).eq('type', 'card_refund').maybeSingle();
-      if (!rereadError && written) return { ok: true, txnId: written.id };
+      // A read-back that fails is the failure to report, not the 23505 behind it.
+      if (rereadError) return { ok: false, error: walletFailure(rereadError, 'Could not verify that card refund.') };
+      if (written) return { ok: true, txnId: written.id };
     }
     return { ok: false, error: walletFailure(error, 'Could not post that card refund.') };
   }
