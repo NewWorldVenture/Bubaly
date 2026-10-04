@@ -44,6 +44,7 @@ test('CI failure evidence has only the DOM/screenshot allowlist and explicit pri
   assert.deepEqual(paths.filter((path) => path.startsWith('!')), [
     '!test-results/**/trace.zip',
     '!test-results/*durable-session*/**',
+    '!test-results/*family-messaging-authenticated*/**',
     '!test-results/**/storageState*',
     '!test-results/**/storage-state*',
     '!test-results/**/auth.json',

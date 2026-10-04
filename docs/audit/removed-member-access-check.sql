@@ -48,7 +48,7 @@ begin
 
   insert into public.family_albums (family_id, name) values (fam, 'Holidays');
   insert into public.family_contacts (family_id, name) values (fam, 'Pediatrician');
-  insert into public.family_conversations (family_id) values (fam) returning id into conv;
+  insert into public.family_conversations (family_id, member_ids) values (fam, array[uPar, uEx]) returning id into conv;
   insert into public.family_messages (family_id, conversation_id) values (fam, conv);
   insert into public.family_photos (family_id, storage_path) values (fam, fam || '/beach.jpg');
   insert into public.family_recipes (family_id, name) values (fam, 'Pancakes');
@@ -68,6 +68,16 @@ begin
       raise warning 'CONTROL FAILED: an active member cannot read % (rows: %)', t, n;
       failures := failures + 1;
     end if;
+    if t = 'family_conversations' then
+      -- 0475 makes family_id immutable through column grants. Prove that the
+      -- replacement mutable-column write really works before testing removal.
+      update public.family_conversations set name = name where family_id = fam;
+      get diagnostics n = row_count;
+      if n <> 1 then
+        raise warning 'CONTROL FAILED: an active participating manager cannot update the conversation';
+        failures := failures + 1;
+      end if;
+    end if;
   end loop;
   reset role;
 
@@ -81,7 +91,11 @@ begin
       raise warning 'BREACH: a removed member still reads % (rows: %)', t, n;
       failures := failures + 1;
     end if;
-    execute format('update public.%I set family_id = family_id where family_id = $1', t) using fam;
+    if t = 'family_conversations' then
+      update public.family_conversations set name = name where family_id = fam;
+    else
+      execute format('update public.%I set family_id = family_id where family_id = $1', t) using fam;
+    end if;
     get diagnostics n = row_count;
     if n <> 0 then
       raise warning 'BREACH: a removed member still writes % (rows: %)', t, n;
@@ -106,6 +120,10 @@ begin
   end if;
   reset role;
 
+  -- The simulated former member has no delete authority; clear its JWT before
+  -- database-owner cleanup so the family cascade uses the no-user path.
+  perform set_config('request.jwt.claim.sub', '', true);
+  perform set_config('request.jwt.claims', '', true);
   delete from public.families where id = fam;
   delete from auth.users where id in (uPar, uEx);
 

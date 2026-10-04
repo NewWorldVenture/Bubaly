@@ -30,13 +30,14 @@ describe('dashboard modules keep prior state on failed read (A-05)', () => {
 
   it('assistant conversation list keeps prior history on error', () => {
     const load = assistant.slice(assistant.indexOf('loadConversations'), assistant.indexOf('loadConversation ='));
-    expect(load).toContain("const { data, error } = await supabase.from('ai_conversations')");
+    expect(load).toContain("const { data, error } = await settle(supabase.from('ai_conversations')");
     expect(at(load, 'if (error) return;')).toBeLessThan(at(load, 'setConversations(data ?? [])'));
   });
 
   it('assistant message load does not switch into a misleading greeting on error', () => {
     const load = assistant.slice(assistant.indexOf('const loadConversation ='));
-    expect(load).toContain("const { data, error } = await supabase.from('ai_messages')");
+    expect(load).toContain("supabase.from('ai_messages')");
+    expect(load).toContain('const { data, error } = await settle(query)');
     // Error bail must come before setConvId + the greeting fallback.
     expect(at(load, 'if (error) return;')).toBeLessThan(at(load, 'setConvId(id)'));
   });

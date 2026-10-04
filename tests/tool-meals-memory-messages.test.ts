@@ -381,7 +381,8 @@ describe('messages tools', () => {
 
   it('sends to the family chat under either spelling of the text argument', async () => {
     const { db, calls } = makeDb((call) => {
-      if (call.table === 'family_conversations') return { data: { id: 'conv-1' }, error: null };
+      if (call.table === 'rpc:ensure_family_conversation') return { data: 'conv-1', error: null };
+      if (call.table === 'family_conversations') return { data: { id: 'conv-1', is_family_chat: true, is_archived: false }, error: null };
       if (call.table === 'family_members') return { data: MEMBERS[0], error: null };
       if (call.table === 'family_messages' && call.kind === 'insert') {
         return { data: { ...(call.payload as Record<string, unknown>), id: 'msg-1', sender_avatar: null, attachment_url: null, attachment_name: null, attachment_mime: null, reactions: {}, read_by: [], is_pinned: false, deleted_at: null, created_at: NOW.toISOString() }, error: null };

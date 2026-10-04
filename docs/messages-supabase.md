@@ -1,101 +1,100 @@
-# Messages — Supabase wiring & seed
+# Family Messenger setup and verification
 
-The `/dashboard/messages` page (Family Messenger) redesigned to match the product
-mock: a page header, a tabbed conversation list with previews + unread badges, a
-message thread, and an **About this chat** panel (members with presence, shared
-photos).
+`/dashboard/messages` is Bubaly's internal family chat, not carrier SMS. It uses
+authenticated Supabase database, private Storage and Realtime connections. The
+chat buildout requires migrations 0475 and 0476 before the matching application
+release. Production migration execution remains human-owned; see
+[production rollout requirements](PENDING_PROD_MIGRATIONS.md).
 
-## Page & components
+## Implementation
 
-| Concern | File |
+| Concern | Source |
 | --- | --- |
 | Route | `app/(app)/dashboard/messages/page.tsx` |
-| UI module | `components/modules/messages-module.tsx` |
-| Pure helpers (tested) | `lib/messages/overview.ts` |
-| Unit tests | `tests/messages-overview.test.ts` |
+| Conversation UI | `components/modules/messages-module.tsx` |
+| Thread ownership and reconciliation | `lib/messages/thread-state.ts` |
+| Preview and grouping helpers | `lib/messages/overview.ts` |
+| Server and AI sends | `lib/services/messages/index.ts` |
+| Private media resolution | `lib/storage/use-family-media.ts` |
+| Notification destination | `lib/notifications/actions.ts` |
 
-`lib/messages/overview.ts` holds the deterministic, unit-tested logic:
-`convMatchesTab`, `previewText`, `isUnread`, `shortTime`, `summarizeConversations`.
+`family_conversations` stores kind, metadata, archive state and participants.
+`is_family_chat` identifies the canonical whole-family conversation. A nonempty
+`participant_ids` roster is authoritative; legacy `member_ids` is the fallback.
+Active household membership is required in addition to private-thread membership.
+An adult role alone does not grant access to somebody else's private thread.
 
-## Supabase tables (existing, RLS-enabled)
+`family_messages` stores text/media, reply targets, reactions, receipts, pins,
+soft-deletion and edit timestamps. `idempotency_key` identifies a send operation;
+two separate messages with identical words are not duplicates. RLS and triggers
+validate the conversation/family/sender boundary. Only senders edit/delete their
+messages; users can modify only their own receipt or reaction entries.
 
-- **`family_conversations`** — one row per chat. `kind ∈ (group, direct,
-  announcement, channel)`, `avatar_emoji`, `description`, `is_archived`,
-  `member_ids` (auth user ids), `participant_ids` (family_member ids),
-  `last_message_at` (kept current by an `AFTER INSERT` trigger on messages).
-- **`family_messages`** — one row per message. `kind ∈ (text, image, file,
-  voice, poll, announcement)`, `content`, `attachment_*`, `reactions` (jsonb
-  `{emoji: [userId]}`), `read_by` (uuid[]), `is_pinned`, `reply_to_id`,
-  `deleted_at` (soft delete), `created_at`.
+`family_conversation_preferences` stores each participant's durable mute choice.
+New messages create recipient-only, content-free in-app notifications, excluding
+the sender and muted people. Viewing messages settles their notices; muting
+withdraws unread notices without pretending the messages were read. These notices
+are deliberately excluded from email and push dispatch.
 
-RLS on both tables is family-scoped via `public.is_family_member(family_id)` for
-SELECT/INSERT/UPDATE/DELETE. No public or anonymous access.
+## Supported controls
 
-## What's wired (no mock data)
+- Family, direct and subgroup creation with atomic canonical/DM deduplication.
+- Newest-first history loading, older pages, confirmed sends without a realtime
+  echo, retry reconciliation, and reconnect recovery.
+- Per-thread drafts/replies/edits, multiline keyboard composition, reactions,
+  viewed-message receipts, deletion and pins.
+- Conversation and message search; message search returns the latest 100 matches
+  and asks for refinement. Photos and pinned messages have separate full-history
+  pagination rather than depending on the currently loaded thread window.
+- Images, files, GIFs and recorded voice messages with retry/discard behavior and
+  microphone cleanup on cancel, navigation or unmount.
+- Conversation settings, participant management, confirmed group leave and
+  shared archive/restore. Archived conversations preserve readable history and
+  reject new sends. The canonical family chat cannot be left in the UI.
+- Responsive desktop/mobile layouts in light and dark themes.
 
-- Read conversations + messages (realtime `postgres_changes` for both).
-- Per-row **last-message preview** + **unread badge** — one bounded scan
-  (`summarizeConversations`), refreshed on every conversation change.
-- **Tabs** All / Direct / Groups / Announcements + **filter** (unread-only,
-  show-archived) + **View archived**.
-- Send text; send **image/file** (Supabase Storage bucket `family-media`, with
-  orphan-cleanup on failed insert); **reactions**, **reply**, **pin**,
-  **soft-delete** (own messages).
-- **Presence** — a realtime presence channel powers the green "online" dots and
-  "Active now".
-- **About panel** — group info/description, member roster with roles + presence,
-  **Shared Photos** (image messages in the thread), and actions: Add (new chat),
-  Search (focus), **Mute** (device-local, persisted), Settings (→ members).
-- **New Message** — multi-select people / smart groups / DM de-duplication.
+Voice/video calls are not provided by this messenger.
 
-Actions that require infra we don't have yet (voice/video calling, GIF picker,
-voice messages) surface an honest toast rather than failing silently.
+## Storage and realtime
 
-## Migration
+New uploaded objects use
+`{family_id}/messages/{conversation_id}/{sender_user_id}/{unique_filename}` in the
+private `family-media` bucket. A sender can access their staged upload; recipients
+need access to the conversation and a live message referencing the object.
+Legacy references are authorized through their message rows. Media is rendered
+through authenticated signed URLs, not a raw public Storage URL.
 
-`supabase/migrations/0108_messages_enhance.sql` (additive, idempotent):
+Database changes use independently owned channels. Typing broadcasts use private
+`messages:{conversation_id}` topics with participant authorization. Hosted
+Realtime caches channel authorization until token refresh/expiry, so SQL access
+revocation is not immediate eviction of an already-connected socket. Previously
+issued signed URLs retain their expiry semantics. Verify private-channel settings
+and disable public Realtime access during the operator-managed rollout.
 
-- adds `family_conversations.description` and `family_conversations.is_archived`
-- widens the `kind` check to include `announcement` + `channel`
-- adds list/scan indexes
+## Local seed and verification
 
-Apply locally with `npm run db:push` (or `supabase migration up`). Apply to prod
-via the Supabase dashboard / your normal migration flow **before** running the
-seed, since the seed writes `announcement` + `is_archived` rows.
+`supabase/seed_messages_one_family.sql` creates 520 tagged example messages across
+the canonical chat, themed groups, announcements, archived history and DMs. It
+preserves installed RLS policies. Reruns replace tagged messages, reuse matching
+conversations, and can update their metadata, including the canonical chat.
+**Use a disposable local database only; this is not a production-data-safe seed.**
+Review the target family/account resolution near the top before running it.
 
-## Seed (520 rows)
+The dedicated verifier creates and removes its own loopback-only PostgreSQL
+cluster. It exercises actual migrations, role boundaries, privacy, notification
+and group lifecycles, concurrency, migration reapplication and repeated seeds:
 
-`supabase/seed_messages_one_family.sql` seeds **520 `family_messages`** across
-~13 conversations for one family (default: the active family of
-`newworldventurellc@gmail.com`, `92298eb2-1a9e-4bdc-9361-677b6c01b499` — change
-`v_fam`/`v_email` at the top if needed).
-
-Coverage: every conversation kind (group / direct / **announcement** /
-archived), every message kind (text / image / file / announcement), reactions,
-pinned, **read + unread** (drives unread badges), and timestamps spanning ~12
-days including **today** (so the Today divider renders).
-
-It first re-asserts family-scoped RLS on both tables (drift-safe), then reuses
-existing seed conversations (matched by family + name + creator) and replaces
-messages tagged `sender_avatar = 'seed:messages'` — so it is **idempotent** and
-never touches your real conversations.
-
-### Run it
-
-```bash
-npm run db:seed:messages
-# or:
-psql "$SUPABASE_DB_URL" -f supabase/seed_messages_one_family.sql
-# or: paste into the Supabase SQL editor and Run
+```powershell
+node scripts/verify-messaging-database.mjs --bin "C:/Program Files/PostgreSQL/17/bin"
 ```
 
-### Verify
+On Linux, pass the installed version's bin directory, for example
+`--bin /usr/lib/postgresql/16/bin`. No production URL or credentials are accepted.
 
-Open `/dashboard/messages` and hard-refresh. You should see the conversation
-list with previews + unread badges, working tabs, a full thread with reactions
-and a file/photo card, and the About panel with members + shared photos.
+The controlled browser fixtures use the real React components and production
+stylesheet but replace transport boundaries. They complement database probes;
+neither alone proves a hosted multi-user session. See the current evidence and
+remaining release checks in [the buildout record](chat-messaging-buildout.md).
 
-## Environment
-
-No new environment variables. Uses the existing Supabase client/anon config and
-the `family-media` storage bucket already used by Photos.
+No new application environment variables are required. Existing authenticated
+Supabase configuration and the private `family-media` bucket are used.

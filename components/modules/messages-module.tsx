@@ -5,13 +5,14 @@ import {
   MessageCircle, Plus, Send, Smile, Paperclip, Reply, Pin, Trash2,
   MoreHorizontal, CheckCheck, ArrowLeft, Search, X, Camera, Loader2,
   Check, Info, Settings, UserPlus, SlidersHorizontal, Mic,
-  Image as ImageIcon, BellOff, Archive, ChevronRight, FileText, Download,
+  Image as ImageIcon, BellOff, Archive, ChevronRight, FileText, Download, Pencil, RefreshCw, LogOut,
 } from 'lucide-react';
 import { useApp } from '@/components/app/app-context';
-import { familyMediaPath } from '@/lib/storage/family-media';
-import { createClient } from '@/lib/supabase/client';
+import { familyMediaPath, removeFamilyMedia } from '@/lib/storage/family-media';
 import { settle } from '@/lib/supabase/settle';
+import { createClient } from '@/lib/supabase/client';
 import { describeDbError, wroteNoRows } from '@/lib/supabase/errors';
+import { escapeLike } from '@/lib/supabase/escape-like';
 import { useToast } from '@/components/ui/toast';
 import { Button } from '@/components/ui/button';
 import { AiInsight } from '@/components/ai/ai-insight';
@@ -28,11 +29,13 @@ import { cn } from '@/lib/utils/cn';
 import {
   convMatchesTab, previewText, shortTime as shortTimeIn, summarizeConversations, type ConvTab,
 } from '@/lib/messages/overview';
-import type { Tables, MemberRole } from '@/lib/database.types';
+import type { Tables, MemberRole, Insertable } from '@/lib/database.types';
 import { useLocale, useTranslations } from '@/components/i18n/locale-provider';
 import { ownChannel } from '@/lib/realtime/own-channel';
 import { useFamilyMediaUrls } from '@/lib/storage/use-family-media';
 import { FamilyMediaImg } from '@/components/media/family-media-img';
+import type { RealtimeChannel } from '@supabase/supabase-js';
+import { clearConfirmedDraft, createThreadOwner, mergeThreadRows, reconcileLatestThreadRows, messageReadByOthers, shouldSendOnEnter, type ThreadDraft } from '@/lib/messages/thread-state';
 
 type Conversation = Tables<'family_conversations'>;
 type Message = Tables<'family_messages'>;
@@ -62,46 +65,77 @@ type ConvInsert = {
   member_ids: string[]; participant_ids: string[];
 };
 
-/**
- * Insert a conversation, tolerating databases where the participant_ids column
- * hasn't been migrated yet (0017): on a schema error we retry without it so the
- * flow keeps working, just without account-less-member tracking.
- */
+/** Validate membership and deduplicate direct chats in one database transaction. */
 async function createConversation(payload: ConvInsert) {
   const supabase = createClient();
-  let res = await supabase.from('family_conversations').insert(payload).select('*').single();
-  if (res.error && /participant_ids|schema cache|column/i.test(res.error.message)) {
-    const legacy: Omit<ConvInsert, 'participant_ids'> = {
-      family_id: payload.family_id,
-      name: payload.name,
-      kind: payload.kind,
-      avatar_emoji: payload.avatar_emoji,
-      created_by: payload.created_by,
-      member_ids: payload.member_ids,
-    };
-    res = await supabase.from('family_conversations').insert(legacy).select('*').single();
-  }
-  return res;
+  return supabase.rpc('create_family_conversation', {
+    p_family_id: payload.family_id, p_participant_ids: payload.participant_ids,
+    p_name: payload.name, p_kind: payload.kind, p_avatar_emoji: payload.avatar_emoji ?? undefined,
+  });
 }
 
 export function MessagesModule() {
+  const { familyId, userId } = useApp();
+  return <MessagesWorkspace key={`${familyId}:${userId}`} />;
+}
+
+function MessagesWorkspace() {
   const { fmtDate } = useFormat();
   const clock = useFamilyClock();
   const tr = useTranslations();
   // The date follows the reader and the words come from the catalogue.
   const locale = useLocale();
   const shortTime = (iso: string) => shortTimeIn(iso, new Date(), locale.code, tr);
-  const { familyId, userId, members, selfMember } = useApp();
+  const { familyId, userId, members, selfMember, role } = useApp();
   const { error: toastError } = useToast();
 
   const [conversations, setConversations] = useState<Conversation[]>([]);
   const [loadingConvs, setLoadingConvs] = useState(true);
   const [activeConv, setActiveConv] = useState<Conversation | null>(null);
+  const activeConvId = activeConv?.id;
+  const activeConversationRef = useRef(activeConv);
+  activeConversationRef.current = activeConv;
   const [messages, setMessages] = useState<Message[]>([]);
   const [loadingMsgs, setLoadingMsgs] = useState(false);
   const [text, setText] = useState('');
   const [sending, setSending] = useState(false);
   const [replyTo, setReplyTo] = useState<Message | null>(null);
+  const [editMessage, setEditMessage] = useState<Message | null>(null);
+  const [hasOlder, setHasOlder] = useState(false);
+  const [loadingOlder, setLoadingOlder] = useState(false);
+  const [loadError, setLoadError] = useState<string | null>(null);
+  const [connection, setConnection] = useState('CONNECTING');
+  const [pageVisible, setPageVisible] = useState(true);
+  const [wide, setWide] = useState(false);
+  const [nearBottom, setNearBottom] = useState(true);
+  const [threadSearch, setThreadSearch] = useState('');
+  const [searchResults, setSearchResults] = useState<Message[]>([]);
+  const [searching, setSearching] = useState(false);
+  const [settingsOpen, setSettingsOpen] = useState(false);
+  const [historyGallery, setHistoryGallery] = useState<'photos' | 'pinned' | null>(null);
+  const [conversationAction, setConversationAction] = useState<'archive' | 'leave' | null>(null);
+  const [changingConversation, setChangingConversation] = useState(false);
+  const [replyParents, setReplyParents] = useState<Map<string, Message>>(new Map());
+  const [viewingHistory, setViewingHistory] = useState(false);
+  const historyRef = useRef(false);
+  historyRef.current = viewingHistory;
+  const [typingIds, setTypingIds] = useState<string[]>([]);
+  const typingChannel = useRef<RealtimeChannel | null>(null);
+  const owner = useRef(createThreadOwner());
+  const drafts = useRef(new Map<string, ThreadDraft<Message>>());
+  const draftRef = useRef<ThreadDraft<Message>>({ text: '', reply: null, edit: null });
+  draftRef.current = { text, reply: replyTo, edit: editMessage };
+  const alive = useRef(true);
+  const threadRef = useRef<HTMLDivElement>(null);
+  const liveRows = useRef(new Map<string, Message>());
+  const hardDeleted = useRef(new Set<string>());
+  const messagesRef = useRef(messages);
+  messagesRef.current = messages;
+  const listRequest = useRef(0);
+  const summaryRequest = useRef(0);
+  const readPending = useRef(false);
+  const sendIds = useRef(new Map<string, string>());
+  const PAGE_SIZE = 50;
   const [showPicker, setShowPicker] = useState(false);
   const [showGifPicker, setShowGifPicker] = useState(false);
   const [newConvOpen, setNewConvOpen] = useState(false);
@@ -131,24 +165,52 @@ export function MessagesModule() {
     { lastByConv: new Map(), unreadByConv: new Map() },
   );
   const [onlineIds, setOnlineIds] = useState<Set<string>>(new Set());
+  const [mutedIds, setMutedIds] = useState(new Set<string>());
+  const [muteLoading, setMuteLoading] = useState(false);
   const [showAbout, setShowAbout] = useState(false); // mobile drawer for the About panel
-  const [mutedIds, setMutedIds] = useState<Set<string>>(new Set());
   const bottomRef = useRef<HTMLDivElement>(null);
-  const inputRef = useRef<HTMLInputElement>(null);
+  const inputRef = useRef<HTMLTextAreaElement>(null);
   const fileRef = useRef<HTMLInputElement>(null);
   const imageRef = useRef<HTMLInputElement>(null);
   const searchRef = useRef<HTMLInputElement>(null);
+  const threadSearchRef = useRef<HTMLInputElement>(null);
 
   const myName = selfMember?.display_name ?? 'You';
 
+  useEffect(() => {
+    alive.current = true;
+    const ownership = owner.current;
+    const media = window.matchMedia('(min-width: 768px)');
+    const update = () => { setWide(media.matches); setPageVisible(document.visibilityState === 'visible'); };
+    update();
+    media.addEventListener('change', update);
+    document.addEventListener('visibilitychange', update);
+    return () => { alive.current = false; ownership.select(null); media.removeEventListener('change', update); document.removeEventListener('visibilitychange', update); };
+  }, []);
+
+  useEffect(() => {
+    if (!msgMenu && !showPicker && !showGifPicker && !showAbout) return;
+    const dismiss = (event: KeyboardEvent) => { if (event.key === 'Escape') { setMsgMenu(null); setShowPicker(false); setShowGifPicker(false); setShowAbout(false); inputRef.current?.focus(); } };
+    window.addEventListener('keydown', dismiss);
+    return () => window.removeEventListener('keydown', dismiss);
+  }, [msgMenu, showPicker, showGifPicker, showAbout]);
+
+  function conversationName(conv: Conversation) {
+    if (conv.kind !== 'direct') return conv.name || tr('messagesModule.familyChat');
+    const other = members.find((member) => member.user_id !== userId && (conv.participant_ids?.length ? conv.participant_ids.includes(member.id) : member.user_id && conv.member_ids?.includes(member.user_id)));
+    return other?.display_name || conv.name || tr('messages.directMessage');
+  }
+
   // ── Load conversations ──────────────────────────────────────
   const loadConversations = useCallback(async () => {
+    const request = ++listRequest.current;
     const supabase = createClient();
     const { data, error } = await supabase
       .from('family_conversations')
       .select('*')
       .eq('family_id', familyId)
       .order('last_message_at', { ascending: false, nullsFirst: false });
+    if (!alive.current || request !== listRequest.current) return;
     if (error) {
       // Fail visibly instead of showing an empty inbox on a failed load — an empty
       // list here would make the user think they have no conversations.
@@ -159,12 +221,18 @@ export function MessagesModule() {
     const rows = data ?? [];
     setConversations(rows);
     setLoadingConvs(false);
-    // auto-select first or Family Chat
-    if (!activeConv && rows.length > 0) {
-      const group = rows.find((c) => c.kind === 'group' && !c.name?.includes('DM')) ?? rows[0];
-      setActiveConv(group);
+    const selected = owner.current.capture().conversationId;
+    if (selected) {
+      const current = rows.find((conv) => conv.id === selected);
+      setActiveConv(current ?? null);
+      if (!current) { owner.current.select(null); setMessages([]); setText(''); setReplyTo(null); setEditMessage(null); }
+    } else if (rows.length > 0) {
+      const requested = rows.find((conv) => conv.id === new URLSearchParams(window.location.search).get('conversation'));
+      const group = requested ?? rows.find((conv) => conv.is_family_chat && !conv.is_archived) ?? rows.find((conv) => !conv.is_archived);
+      if (requested) { setMobileShowThread(true); setShowArchived(requested.is_archived); }
+      if (group) { owner.current.select(group.id); setActiveConv(group); setShowArchived(Boolean(group.is_archived)); }
     }
-  }, [familyId]); // eslint-disable-line react-hooks/exhaustive-deps
+  }, [familyId, toastError]);
 
   useEffect(() => { void loadConversations(); }, [loadConversations]);
 
@@ -172,29 +240,12 @@ export function MessagesModule() {
   useEffect(() => {
     (async () => {
       const supabase = createClient();
-      const { data, error } = await supabase
-        .from('family_conversations')
-        .select('id')
-        .eq('family_id', familyId)
-        .eq('kind', 'group')
-        .limit(1);
-      // If the existence check itself failed, don't treat that as "no chat" and
-      // create a DUPLICATE Family Chat — bail out and let the next load retry.
-      if (error) return;
-      if (!data?.length) {
-        await createConversation({
-          family_id: familyId,
-          name: tr('messagesModule.familyChat'),
-          kind: 'group',
-          avatar_emoji: '👨‍👩‍👧‍👦',
-          created_by: userId,
-          member_ids: members.map((m) => m.user_id).filter(Boolean) as string[],
-          participant_ids: members.map((m) => m.id),
-        });
-        void loadConversations();
-      }
+      const { error } = await supabase.rpc('ensure_family_conversation', { p_family_id: familyId });
+      if (!alive.current) return;
+      if (error) toastError(describeDbError(error));
+      else void loadConversations();
     })();
-  }, [familyId, userId, members, loadConversations, tr]);
+  }, [familyId, loadConversations, toastError]);
 
   // ── Load messages for active conv ──────────────────────────
   // `toastError` is in the deps because it IS a dependency — this callback
@@ -202,80 +253,108 @@ export function MessagesModule() {
   // `[push]` (see the comment in components/ui/toast.tsx, which says it exists
   // for exactly this), so the identity is stable and adding it cannot make
   // this callback — or the effects that depend on it — re-run per toast.
-  const loadMessages = useCallback(async (convId: string) => {
-    setLoadingMsgs(true);
+  const loadMessages = useCallback(async (convId: string, older = false, quiet = false) => {
+    if (owner.current.capture().conversationId !== convId) return;
+    if (!older && quiet && historyRef.current) return;
+    const ticket = owner.current.begin(older ? 'older' : 'history');
+    const eventBaseline = new Map(liveRows.current);
+    if (older) setLoadingOlder(true); else if (!quiet) setLoadingMsgs(true);
+    setLoadError(null);
     const supabase = createClient();
-    const { data, error } = await supabase
+    const oldest = messagesRef.current[0];
+    // Reconnect repairs a bounded newest window. Asking for every loaded row
+    // can exceed PostgREST's cap and misclassify older history as deleted.
+    const count = PAGE_SIZE;
+    let query = supabase
       .from('family_messages')
       .select('*')
+      .eq('family_id', familyId)
       .eq('conversation_id', convId)
-      .is('deleted_at', null)
-      .order('created_at', { ascending: true })
-      .limit(200);
+      .order('created_at', { ascending: false })
+      .order('id', { ascending: false });
+    if (older && oldest) query = query.or(`created_at.lt.${oldest.created_at},and(created_at.eq.${oldest.created_at},id.lt.${oldest.id})`);
+    const { data, error } = await settle(query.limit(count + 1));
+    if (!alive.current || !owner.current.accepts(ticket)) return;
     if (error) {
       // Surface the failure rather than blanking the thread (which reads as
       // "no messages") — keep whatever is already on screen.
       toastError(describeDbError(error));
+      setLoadError(describeDbError(error));
       setLoadingMsgs(false);
+      setLoadingOlder(false);
       return;
     }
-    setMessages(data ?? []);
+    const scroll = threadRef.current;
+    const previousHeight = scroll?.scrollHeight ?? 0;
+    if (!quiet || messagesRef.current.length <= count) setHasOlder((data?.length ?? 0) > count);
+    const arrivedDuringLoad = [...liveRows.current.values()].filter((row) => eventBaseline.get(row.id) !== row);
+    setMessages((current) => mergeThreadRows(
+      older ? mergeThreadRows(current, (data ?? []).slice(0, count), convId) : reconcileLatestThreadRows(current, (data ?? []).slice(0, count), convId),
+      arrivedDuringLoad, convId,
+    ).filter((row) => !hardDeleted.current.has(row.id)));
     setLoadingMsgs(false);
-    setTimeout(() => bottomRef.current?.scrollIntoView({ behavior: 'smooth' }), 100);
-    // Mark as read — APPEND me to read_by, never replace it. The old
-    // update({ read_by: [me] }) overwrote the array and erased every other
-    // reader's receipt. Preferred path is the 0163 RPC (single set-based
-    // append); pre-migration we fall back to a correct per-row merge over the
-    // rows just loaded.
-    void (async () => {
-      const { error: rpcErr } = await supabase.rpc('mark_conversation_read', { p_conversation_id: convId });
-      if (!rpcErr) return;
-      const unread = (data ?? []).filter((m) => !(m.read_by ?? []).includes(userId)).slice(-100);
-      for (const m of unread) {
-        // Best-effort fallback for read receipts when the RPC is unavailable;
-        // logged, and deliberately not confirmed row by row. Audit C1-S9-81.
-        const { error } = await settle(supabase.from('family_messages')
-          .update({ read_by: [...(m.read_by ?? []), userId] })
-          .eq('id', m.id));
-        if (error) { console.error('[messages] read-receipt fallback failed', { message: error.message }); break; }
-      }
-    })();
-  }, [userId, toastError]);
+    setLoadingOlder(false);
+    requestAnimationFrame(() => {
+      if (!owner.current.accepts(ticket)) return;
+      if (older && scroll) scroll.scrollTop += scroll.scrollHeight - previousHeight;
+      else if (!quiet) bottomRef.current?.scrollIntoView({ behavior: 'instant', block: 'end' });
+    });
+  }, [familyId, toastError]);
 
   useEffect(() => {
-    if (!activeConv) return;
-    void loadMessages(activeConv.id);
-  }, [activeConv, loadMessages]);
+    if (!activeConvId) return;
+    void loadMessages(activeConvId);
+  }, [activeConvId, loadMessages]);
 
   // ── Realtime for messages ───────────────────────────────────
   useEffect(() => {
     if (!activeConv) return;
+    const convId = activeConv.id;
+    const ticket = owner.current.capture();
     const supabase = createClient();
+    setConnection('CONNECTING');
+    const receive = (message: Message) => {
+      if (!alive.current || !owner.current.current(ticket)) return;
+      liveRows.current.set(message.id, message);
+      if (historyRef.current && !messagesRef.current.some((row) => row.id === message.id)) { void loadSummaries(); return; }
+      setMessages((current) => mergeThreadRows(current, [message], convId));
+      const scroll = threadRef.current;
+      if (scroll && scroll.scrollHeight - scroll.scrollTop - scroll.clientHeight < 120) requestAnimationFrame(() => { if (owner.current.current(ticket)) bottomRef.current?.scrollIntoView({ behavior: 'smooth', block: 'end' }); });
+      void loadSummaries();
+    };
     const ch = ownChannel(supabase, `msgs:${activeConv.id}`)
       .on('postgres_changes', {
         event: 'INSERT', schema: 'public', table: 'family_messages',
         filter: `conversation_id=eq.${activeConv.id}`,
       }, (payload) => {
-        setMessages((prev) => {
-          if (prev.some((m) => m.id === (payload.new as Message).id)) return prev;
-          return [...prev, payload.new as Message];
-        });
-        setTimeout(() => bottomRef.current?.scrollIntoView({ behavior: 'smooth' }), 50);
+        receive(payload.new as Message);
       })
       .on('postgres_changes', {
         event: 'UPDATE', schema: 'public', table: 'family_messages',
         filter: `conversation_id=eq.${activeConv.id}`,
       }, (payload) => {
-        setMessages((prev) => prev.map((m) => m.id === (payload.new as Message).id ? payload.new as Message : m));
+        receive(payload.new as Message);
       })
       .on('postgres_changes', {
         event: 'DELETE', schema: 'public', table: 'family_messages',
       }, (payload) => {
-        setMessages((prev) => prev.filter((m) => m.id !== (payload.old as { id: string }).id));
+        if (!owner.current.current(ticket)) return;
+        const id = (payload.old as { id: string }).id;
+        hardDeleted.current.add(id);
+        liveRows.current.delete(id);
+        setMessages((prev) => prev.filter((m) => m.id !== id));
+        void loadSummaries();
       })
-      .subscribe();
-    return () => { void supabase.removeChannel(ch); };
-  }, [activeConv]);
+      .subscribe((status) => {
+        if (!owner.current.current(ticket)) return;
+        setConnection(status);
+        if (status === 'SUBSCRIBED') { void loadMessages(convId, false, true); void loadSummaries(); }
+      });
+    const recover = () => { if (document.visibilityState === 'visible' && owner.current.current(ticket)) { void loadMessages(convId, false, true); void loadSummaries(); } };
+    window.addEventListener('online', recover);
+    document.addEventListener('visibilitychange', recover);
+    return () => { window.removeEventListener('online', recover); document.removeEventListener('visibilitychange', recover); void supabase.removeChannel(ch); };
+  }, [activeConv?.id, loadMessages]); // eslint-disable-line react-hooks/exhaustive-deps
 
   // ── Realtime for conversations ──────────────────────────────
   useEffect(() => {
@@ -288,18 +367,12 @@ export function MessagesModule() {
   }, [familyId, loadConversations]);
 
   // ── Per-conversation previews + unread counts ───────────────
-  // One bounded scan of the family's recent messages powers every row's last
-  // message preview and unread badge. Refreshed whenever conversations change
-  // (the last-message trigger bumps family_conversations on every send).
+  // The membership-scoped overview returns exact unread counts across history.
   const loadSummaries = useCallback(async () => {
+    const request = ++summaryRequest.current;
     const supabase = createClient();
-    const { data, error } = await supabase
-      .from('family_messages')
-      .select('conversation_id, content, kind, attachment_name, sender_name, sender_id, created_at, read_by')
-      .eq('family_id', familyId)
-      .is('deleted_at', null)
-      .order('created_at', { ascending: false })
-      .limit(400);
+    const { data, error } = await supabase.rpc('family_conversation_overview', { p_family_id: familyId });
+    if (!alive.current || request !== summaryRequest.current) return;
     if (error) {
       // Previews/unread badges are an enhancement over the conversation list;
       // on a failed load, surface it and keep the prior summaries rather than
@@ -307,15 +380,90 @@ export function MessagesModule() {
       toastError(describeDbError(error));
       return;
     }
-    setSummaries(summarizeConversations(data ?? [], userId));
-  }, [familyId, userId, toastError]);
+    const next: ReturnType<typeof summarizeConversations> = { lastByConv: new Map(), unreadByConv: new Map() };
+    for (const row of data ?? []) {
+      if (row.last_message) next.lastByConv.set(row.conversation_id, row.last_message as unknown as Message);
+      next.unreadByConv.set(row.conversation_id, Number(row.unread_count));
+    }
+    setSummaries(next);
+  }, [familyId, toastError]);
 
   useEffect(() => { void loadSummaries(); }, [conversations, loadSummaries]);
+
+  useEffect(() => {
+    if (!activeConvId) return;
+    const ticket = owner.current.begin('preference');
+    const isCurrent = () => alive.current && owner.current.accepts(ticket);
+    setMuteLoading(true);
+    void settle(createClient().from('family_conversation_preferences').select('*').eq('conversation_id', activeConvId).eq('user_id', userId).maybeSingle()).then(({ data, error }) => {
+      if (!isCurrent()) return;
+      setMuteLoading(false);
+      if (error) { toastError(describeDbError(error)); return; }
+      setMutedIds((current) => { const next = new Set(current); if (data?.muted) next.add(activeConvId); else next.delete(activeConvId); return next; });
+    });
+  }, [activeConvId, userId, toastError]);
+
+  async function toggleMute() {
+    if (!activeConvId || muteLoading) return;
+    const convId = activeConvId;
+    setMuteLoading(true);
+    const { data, error } = await createClient().from('family_conversation_preferences').upsert({ conversation_id: convId, user_id: userId, muted: !mutedIds.has(convId) }, { onConflict: 'conversation_id,user_id' }).select('*').single();
+    if (!alive.current) return;
+    if (owner.current.capture().conversationId === convId) setMuteLoading(false);
+    if (error || !data) { toastError(describeDbError(error)); return; }
+    setMutedIds((current) => { const next = new Set(current); if (data.muted) next.add(convId); else next.delete(convId); return next; });
+  }
+
+  const threadVisible = pageVisible && (wide || mobileShowThread) && !showAbout && !historyGallery && !settingsOpen && !conversationAction;
+  useEffect(() => {
+    if (!activeConvId) return;
+    const ticket = owner.current.capture();
+    const supabase = createClient();
+    const typers = new Map<string, number>();
+    const publish = () => { if (owner.current.current(ticket)) setTypingIds([...typers].filter(([, at]) => at > Date.now() - 6000).map(([id]) => id)); };
+    const channel = supabase.channel(`messages:${activeConvId}`, { config: { private: true } })
+      .on('broadcast', { event: 'typing' }, ({ payload }: { payload: { user_id?: string; typing?: boolean } }) => {
+        if (!payload.user_id || payload.user_id === userId || !members.some((member) => member.user_id === payload.user_id)) return;
+        if (payload.typing) typers.set(payload.user_id, Date.now()); else typers.delete(payload.user_id);
+        publish();
+      }).subscribe();
+    typingChannel.current = channel;
+    const timer = setInterval(publish, 1500);
+    return () => { typingChannel.current = null; clearInterval(timer); setTypingIds([]); void supabase.removeChannel(channel); };
+  }, [activeConvId, userId, members]);
+
+  useEffect(() => {
+    const channel = typingChannel.current;
+    if (!channel) return;
+    const send = (typing: boolean) => { void channel.send({ type: 'broadcast', event: 'typing', payload: { user_id: userId, typing } }); };
+    const timer = setTimeout(() => send(Boolean(text.trim()) && threadVisible), 250);
+    const expiry = setTimeout(() => send(false), 4000);
+    return () => { clearTimeout(timer); clearTimeout(expiry); send(false); };
+  }, [text, threadVisible, userId, activeConv?.id]);
+  useEffect(() => {
+    const newest = messages[messages.length - 1];
+    if (!activeConvId || !newest || viewingHistory || !threadVisible || !nearBottom || loadingMsgs || readPending.current || !messages.some((row) => !row.deleted_at && row.sender_id !== userId && !row.read_by?.includes(userId))) return;
+    const ticket = owner.current.capture();
+    const isCurrent = () => alive.current && owner.current.current(ticket);
+    readPending.current = true;
+    void settle(createClient().rpc('mark_conversation_read_through', { p_conversation_id: activeConvId, p_message_id: newest.id })).then(({ error }) => {
+      if (!isCurrent()) return;
+      readPending.current = false;
+      if (error) { toastError(describeDbError(error)); return; }
+      setMessages((rows) => rows.map((row) => {
+        if (row.created_at > newest.created_at || (row.created_at === newest.created_at && row.id > newest.id)) return row;
+        const read = { ...row, read_by: [...new Set([...(row.read_by ?? []), userId])] };
+        liveRows.current.set(row.id, read);
+        return read;
+      }));
+      void loadSummaries();
+    });
+  }, [messages, activeConvId, threadVisible, nearBottom, loadingMsgs, userId, toastError, loadSummaries, viewingHistory]);
 
   // ── Presence: who in the family is online right now ─────────
   useEffect(() => {
     const supabase = createClient();
-    const ch = supabase.channel(`presence:family:${familyId}`, { config: { presence: { key: userId } } });
+    const ch = supabase.channel(`presence:family:${familyId}`, { config: { private: true, presence: { key: userId } } });
     ch.on('presence', { event: 'sync' }, () => {
       const state = ch.presenceState() as Record<string, Array<{ user_id?: string }>>;
       const ids = new Set<string>();
@@ -327,58 +475,69 @@ export function MessagesModule() {
     return () => { void supabase.removeChannel(ch); };
   }, [familyId, userId]);
 
-  // ── Per-conversation mute (device-local preference) ─────────
-  useEffect(() => {
-    try {
-      const raw = localStorage.getItem(`muted-convs:${familyId}`);
-      if (raw) setMutedIds(new Set(JSON.parse(raw) as string[]));
-    } catch { /* ignore */ }
-  }, [familyId]);
+  function acceptMessage(message: Message) {
+    if (!alive.current) return;
+    if (owner.current.capture().conversationId === message.conversation_id) {
+      liveRows.current.set(message.id, message);
+      setMessages((rows) => mergeThreadRows(rows, [message], message.conversation_id));
+    }
+    void loadSummaries();
+    void loadConversations();
+  }
 
-  const toggleMute = useCallback((convId: string) => {
-    setMutedIds((prev) => {
-      const next = new Set(prev);
-      if (next.has(convId)) next.delete(convId); else next.add(convId);
-      try { localStorage.setItem(`muted-convs:${familyId}`, JSON.stringify([...next])); } catch { /* ignore */ }
-      return next;
-    });
-  }, [familyId]);
+  async function insertMessage(payload: Insertable<'family_messages'> & { id: string }): Promise<Message> {
+    const supabase = createClient();
+    const response = await supabase.from('family_messages').insert(payload).select('*').single();
+    if (response.data && !response.error) return response.data;
+    // The write can commit before the response is lost. Reconcile by the same
+    // client-generated id, and retain that id on retry to prevent duplicate sends.
+    const check = await supabase.from('family_messages').select('*').eq('id', payload.id).eq('family_id', familyId).maybeSingle();
+    if (check.data && !check.error) return check.data;
+    throw response.error ?? check.error ?? new Error(tr('messagesChat.sendUnconfirmed'));
+  }
 
   // ── Send message ───────────────────────────────────────────
   async function sendMessage(e: React.FormEvent) {
     e.preventDefault();
     const content = text.trim();
-    if (!content || !activeConv || sending) return;
+    if (!content || !activeConv || sending || (activeConv.is_archived && !editMessage)) return;
     if (content.length > 4000) { toastError(tr('validation.messageTooLong', { max: 4000 })); return; }
-    const prevReplyTo = replyTo;
+    const convId = activeConv.id;
+    const ticket = owner.current.capture();
+    const submitted = draftRef.current;
+    const key = JSON.stringify([convId, content, submitted.reply?.id, submitted.edit?.id]);
+    const id = sendIds.current.get(key) ?? crypto.randomUUID();
+    sendIds.current.set(key, id);
     setSending(true);
-    setText('');
-    setReplyTo(null);
     try {
-      const supabase = createClient();
-      const { error } = await supabase.from('family_messages').insert({
-        conversation_id: activeConv.id,
+      let message: Message;
+      if (submitted.edit) {
+        const { data, error } = await createClient().from('family_messages').update({ content }).eq('id', submitted.edit.id).eq('sender_id', userId).eq('conversation_id', convId).is('deleted_at', null).select('*').single();
+        if (error || !data) throw error ?? new Error(tr('messagesChat.editFailed'));
+        message = data;
+      } else message = await insertMessage({
+        id, conversation_id: convId,
         family_id: familyId,
         sender_id: userId,
         sender_name: myName,
         content,
         kind: 'text',
-        reply_to_id: prevReplyTo?.id ?? null,
+        reply_to_id: submitted.reply?.conversation_id === convId ? submitted.reply.id : null,
       });
-      if (error) {
-        // Restore the unsent message so the user doesn't lose their text.
-        toastError(describeDbError(error));
-        setText(content);
-        setReplyTo(prevReplyTo);
-      } else {
+      acceptMessage(message);
+      sendIds.current.delete(key);
+      const isCurrent = owner.current.capture().conversationId === convId;
+      const next = clearConfirmedDraft(isCurrent ? draftRef.current : drafts.current.get(convId) ?? submitted, submitted);
+      drafts.current.set(convId, next);
+      if (isCurrent && alive.current) {
+        setText(next.text); setReplyTo(next.reply); setEditMessage(next.edit);
         inputRef.current?.focus();
+        requestAnimationFrame(() => { if (owner.current.current(ticket)) bottomRef.current?.scrollIntoView({ behavior: 'smooth', block: 'end' }); });
       }
     } catch (err) {
-      toastError(describeDbError(err));
-      setText(content);
-      setReplyTo(prevReplyTo);
+      if (alive.current) toastError(describeDbError(err));
     } finally {
-      setSending(false);
+      if (alive.current) setSending(false);
     }
   }
 
@@ -386,73 +545,97 @@ export function MessagesModule() {
   // GIFs reuse the image render path: a family_messages row with kind 'image'
   // and the (remote, Giphy-hosted) attachment_url — no storage upload needed.
   async function sendGif(url: string, title: string) {
+    if (activeConv?.is_archived) return;
     if (!activeConv || sending) return;
     setShowGifPicker(false);
+    const convId = activeConv.id;
+    const reply = replyTo?.conversation_id === convId ? replyTo.id : null;
+    const key = JSON.stringify([convId, url, reply]);
+    const id = sendIds.current.get(key) ?? crypto.randomUUID();
+    sendIds.current.set(key, id);
     setSending(true);
     try {
-      const supabase = createClient();
-      const { error } = await supabase.from('family_messages').insert({
-        conversation_id: activeConv.id,
+      const message = await insertMessage({
+        id, conversation_id: convId,
         family_id: familyId,
         sender_id: userId,
         sender_name: myName,
         content: title || 'GIF',
         kind: 'image',
         attachment_url: url,
+        reply_to_id: reply,
       });
-      if (error) toastError(describeDbError(error));
+      acceptMessage(message);
+      sendIds.current.delete(key);
+      if (owner.current.capture().conversationId === convId) setReplyTo(null);
     } catch (err) {
       toastError(describeDbError(err));
     } finally {
-      setSending(false);
+      if (alive.current) setSending(false);
     }
   }
 
   // ── Send image/file ─────────────────────────────────────────
   const [uploadingFile, setUploadingFile] = useState(false);
+  type AttachmentAttempt = { file: File; convId: string; replyId: string | null; id: string; path: string; uploaded: boolean };
+  const [failedAttachment, setFailedAttachment] = useState<AttachmentAttempt | null>(null);
+  const uploadLock = useRef(false);
   async function sendFile(file: File) {
-    if (!activeConv || uploadingFile) return;
+    if (activeConv?.is_archived) return;
+    if (!activeConv || uploadLock.current || recording || requestingMic.current) return;
     // 25 MB cap mirrors the storage bucket limit; fail fast with a clear message.
     if (file.size > 25 * 1024 * 1024) { toastError(tr('validation.fileTooLarge', { max: 25 })); return; }
+    const attempt = failedAttachment?.file === file ? failedAttachment : {
+      file, convId: activeConv.id, replyId: replyTo?.conversation_id === activeConv.id ? replyTo.id : null,
+      id: crypto.randomUUID(), path: familyMediaPath(familyId, `messages/${activeConv.id}/${userId}`, file.name), uploaded: false,
+    };
+    uploadLock.current = true;
     setUploadingFile(true);
     try {
       const supabase = createClient();
-      const path = familyMediaPath(familyId, 'messages', file.name);
-      const { data: stored, error: upErr } = await supabase.storage.from('family-media').upload(path, file, { upsert: false });
-      if (upErr || !stored) { toastError(describeDbError(upErr)); return; }
-      const { data: { publicUrl } } = supabase.storage.from('family-media').getPublicUrl(stored.path);
+      if (!attempt.uploaded) {
+        const { data: stored, error: upErr } = await supabase.storage.from('family-media').upload(attempt.path, file, { upsert: false, contentType: file.type || 'application/octet-stream' });
+        if ((upErr || !stored) && String((upErr as { statusCode?: string } | null)?.statusCode) !== '409' && !/already exists/i.test(upErr?.message ?? '')) throw upErr ?? new Error(tr('messagesChat.uploadUnconfirmed'));
+        attempt.uploaded = true;
+      }
       const isImage = file.type.startsWith('image/');
       const isAudio = file.type.startsWith('audio/');
       const kind = isImage ? 'image' : isAudio ? 'audio' : 'file';
-      const { error: insErr } = await supabase.from('family_messages').insert({
-        conversation_id: activeConv.id,
+      const message = await insertMessage({
+        id: attempt.id, conversation_id: attempt.convId,
         family_id: familyId,
         sender_id: userId,
         sender_name: myName,
         content: isImage || isAudio ? null : file.name,
         kind,
-        attachment_url: publicUrl,
+        attachment_url: attempt.path,
         attachment_name: file.name,
         attachment_mime: file.type,
+        reply_to_id: attempt.replyId,
       });
-      if (insErr) {
-        // Roll back the orphaned upload if the message row failed to insert.
-        // Best-effort: the person is told about the insert failure, which is the
-        // part that concerns them. But `family-media` is a public bucket, so a
-        // rollback that quietly failed leaves an unreferenced object behind —
-        // and a discarded result cannot be distinguished from a refusal
-        // (SEC-015), so it is logged rather than dropped.
-        const rollback = await supabase.storage.from('family-media').remove([stored.path]);
-        if (rollback.error || !rollback.data?.some((object) => object.name === stored.path)) {
-          console.error('[messages] attachment rollback not confirmed', { path: stored.path, error: rollback.error });
-        }
-        toastError(describeDbError(insErr));
-      }
+      acceptMessage(message);
+      if (alive.current) { setFailedAttachment(null); if (owner.current.capture().conversationId === attempt.convId) setReplyTo(null); }
     } catch (err) {
-      toastError(describeDbError(err));
+      if (alive.current) { setFailedAttachment(attempt); toastError(describeDbError(err)); }
     } finally {
-      setUploadingFile(false);
+      uploadLock.current = false;
+      if (alive.current) setUploadingFile(false);
     }
+  }
+
+  async function discardAttachment() {
+    if (!failedAttachment || uploadingFile) return;
+    const attempt = failedAttachment;
+    const supabase = createClient();
+    // Never remove media belonging to a committed message after a lost response.
+    const check = await settle(supabase.from('family_messages').select('*').eq('id', attempt.id).maybeSingle());
+    if (check.error) { toastError(describeDbError(check.error)); return; }
+    if (check.data) acceptMessage(check.data);
+    else if (attempt.uploaded) {
+      const removal = await removeFamilyMedia(supabase, attempt.path);
+      if (removal.error) { toastError(describeDbError(removal.error)); return; }
+    }
+    if (alive.current) setFailedAttachment(null);
   }
 
   // ── Record voice message ─────────────────────────────────────
@@ -464,15 +647,23 @@ export function MessagesModule() {
   const chunksRef = useRef<Blob[]>([]);
   const recTimerRef = useRef<ReturnType<typeof setInterval> | null>(null);
   const discardRef = useRef(false);
+  const requestingMic = useRef(false);
+  const streamRef = useRef<MediaStream | null>(null);
+  const [micPending, setMicPending] = useState(false);
 
   async function startRecording() {
-    if (recording || uploadingFile || !activeConv) return;
+    if (recording || requestingMic.current || uploadingFile || sending || !activeConv || activeConv.is_archived) return;
     if (typeof navigator === 'undefined' || !navigator.mediaDevices || typeof MediaRecorder === 'undefined') {
       toastError(tr('messagesModule.voiceRecordingIsnTSupported'));
       return;
     }
+    const ticket = owner.current.capture();
+    requestingMic.current = true;
+    setMicPending(true);
     try {
       const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
+      if (!alive.current || !owner.current.current(ticket) || activeConversationRef.current?.is_archived) { stream.getTracks().forEach((track) => track.stop()); return; }
+      streamRef.current = stream;
       const rec = new MediaRecorder(stream);
       chunksRef.current = [];
       discardRef.current = false;
@@ -480,9 +671,10 @@ export function MessagesModule() {
       rec.onstop = async () => {
         stream.getTracks().forEach((t) => t.stop());
         if (recTimerRef.current) { clearInterval(recTimerRef.current); recTimerRef.current = null; }
-        setRecording(false);
-        setRecSeconds(0);
-        if (discardRef.current) { chunksRef.current = []; return; }
+        recorderRef.current = null;
+        streamRef.current = null;
+        if (alive.current) { setRecording(false); setRecSeconds(0); }
+        if (discardRef.current || !alive.current || !owner.current.current(ticket)) { chunksRef.current = []; return; }
         const type = rec.mimeType || 'audio/webm';
         const blob = new Blob(chunksRef.current, { type });
         chunksRef.current = [];
@@ -490,58 +682,170 @@ export function MessagesModule() {
         const ext = (type.split('/')[1] || 'webm').split(';')[0];
         await sendFile(new File([blob], `voice-${Date.now()}.${ext}`, { type }));
       };
+      rec.onerror = () => { stopRecording(true); if (alive.current) toastError(tr('messagesChat.recordingFailed')); };
       recorderRef.current = rec;
       rec.start();
       setRecording(true);
       setRecSeconds(0);
-      recTimerRef.current = setInterval(() => setRecSeconds((s) => s + 1), 1000);
+      const started = Date.now();
+      recTimerRef.current = setInterval(() => {
+        const seconds = Math.floor((Date.now() - started) / 1000);
+        setRecSeconds(seconds);
+        if (seconds >= 300) stopRecording(false);
+      }, 1000);
     } catch {
-      toastError(tr('messagesModule.microphoneAccessWasBlocked'));
+      streamRef.current?.getTracks().forEach((track) => track.stop());
+      streamRef.current = null;
+      if (alive.current && owner.current.current(ticket)) toastError(tr('messagesModule.microphoneAccessWasBlocked'));
+    } finally {
+      requestingMic.current = false;
+      if (alive.current) setMicPending(false);
     }
   }
   function stopRecording(discard = false) {
     discardRef.current = discard;
-    recorderRef.current?.stop();
+    if (recorderRef.current?.state === 'recording') recorderRef.current.stop();
+    streamRef.current?.getTracks().forEach((track) => track.stop());
   }
-  useEffect(() => () => { if (recTimerRef.current) clearInterval(recTimerRef.current); }, []);
+  useEffect(() => { if (activeConv?.is_archived) stopRecording(true); }, [activeConv?.is_archived]);
+  useEffect(() => () => {
+    discardRef.current = true;
+    if (recTimerRef.current) clearInterval(recTimerRef.current);
+    if (recorderRef.current?.state === 'recording') recorderRef.current.stop();
+    streamRef.current?.getTracks().forEach((track) => track.stop());
+  }, []);
 
   // ── React to message ─────────────────────────────────────────
   async function reactTo(msg: Message, emoji: string) {
-    const current = (msg.reactions as Record<string, string[]>) ?? {};
-    const existing = current[emoji] ?? [];
-    const updated = existing.includes(userId)
-      ? { ...current, [emoji]: existing.filter((u) => u !== userId) }
-      : { ...current, [emoji]: [...existing, userId] };
-    // remove keys with empty arrays
-    for (const k of Object.keys(updated)) { if (!updated[k].length) delete updated[k]; }
+    if (msg.deleted_at) return;
     setMsgMenu(null);
-    // Under RLS a refused row comes back with no error and zero rows, which this used to report as done. Audit C1-S9-81.
-    const { data: updated2, error } = await createClient().from('family_messages').update({ reactions: updated }).eq('id', msg.id).select('id');
+    const { data, error } = await createClient().rpc('toggle_family_message_reaction', { p_message_id: msg.id, p_emoji: emoji });
     if (error) toastError(describeDbError(error));
-    else if (wroteNoRows(updated2)) toastError(tr('errors.thatChangeWasNotSaved'));
+    else if (data) acceptMessage(data);
   }
 
   // ── Delete message ──────────────────────────────────────────
   async function deleteMessage(id: string) {
     setMsgMenu(null);
-    const { data: updated3, error } = await createClient().from('family_messages').update({ deleted_at: new Date().toISOString() }).eq('id', id).eq('sender_id', userId).select('id');
+    const { data: updated3, error } = await createClient().from('family_messages').update({ deleted_at: new Date().toISOString() }).eq('id', id).eq('sender_id', userId).select('*');
     if (error) toastError(describeDbError(error));
     else if (wroteNoRows(updated3)) toastError(tr('errors.thatChangeWasNotSaved'));
+    else if (updated3?.[0]) acceptMessage(updated3[0]);
   }
 
   // ── Pin message ─────────────────────────────────────────────
   async function pinMessage(msg: Message) {
     setMsgMenu(null);
-    const { data: updated4, error } = await createClient().from('family_messages').update({ is_pinned: !msg.is_pinned }).eq('id', msg.id).select('id');
+    const { data: updated4, error } = await createClient().from('family_messages').update({ is_pinned: !msg.is_pinned }).eq('id', msg.id).is('deleted_at', null).select('*');
     if (error) toastError(describeDbError(error));
     else if (wroteNoRows(updated4)) toastError(tr('errors.thatChangeWasNotSaved'));
+    else if (updated4?.[0]) acceptMessage(updated4[0]);
   }
 
   function selectConversation(conv: Conversation) {
+    if (owner.current.capture().conversationId === conv.id) { setMobileShowThread(true); return; }
+    const previous = owner.current.capture().conversationId;
+    if (previous) drafts.current.set(previous, draftRef.current);
+    stopRecording(true);
+    owner.current.select(conv.id);
+    liveRows.current.clear();
+    hardDeleted.current.clear();
+    readPending.current = false;
+    const draft = drafts.current.get(conv.id) ?? { text: '', reply: null, edit: null };
+    setText(draft.text); setReplyTo(draft.reply); setEditMessage(draft.edit);
+    setMsgMenu(null); setShowPicker(false); setShowGifPicker(false); setThreadSearch(''); setSearchResults([]);
+    setHasOlder(false); setLoadingOlder(false); setLoadError(null); setNearBottom(true); setShowAbout(false);
+    setHistoryGallery(null); setConversationAction(null); setSettingsOpen(false); setReplyParents(new Map());
+    setShowArchived(Boolean(conv.is_archived));
+    setViewingHistory(false); historyRef.current = false;
     setActiveConv(conv);
     setMobileShowThread(true);
     setMessages([]);
+    messagesRef.current = [];
   }
+
+  useEffect(() => {
+    if (!activeConvId || !threadSearch.trim()) { setSearchResults([]); setSearching(false); return; }
+    const ticket = owner.current.begin('search');
+    const controller = new AbortController();
+    setSearching(true);
+    const timer = setTimeout(() => {
+      void createClient().from('family_messages').select('*').eq('family_id', familyId).eq('conversation_id', activeConvId)
+        .is('deleted_at', null).ilike('content', `%${escapeLike(threadSearch.trim())}%`)
+        .order('created_at', { ascending: false }).limit(100).abortSignal(controller.signal).then(({ data, error }) => {
+          if (controller.signal.aborted || !owner.current.accepts(ticket)) return;
+          setSearching(false);
+          if (error) toastError(describeDbError(error));
+          else setSearchResults(data ?? []);
+        }, (error) => {
+          if (controller.signal.aborted || !owner.current.accepts(ticket)) return;
+          setSearching(false); toastError(describeDbError(error));
+        });
+    }, 250);
+    return () => { clearTimeout(timer); controller.abort(); };
+  }, [activeConvId, familyId, threadSearch, toastError]);
+
+  async function jumpToMessage(message: Message) {
+    const ticket = owner.current.begin('jump');
+    setThreadSearch(''); setShowAbout(false);
+    if (!messagesRef.current.some((row) => row.id === message.id)) {
+      const { data, error } = await createClient().from('family_messages').select('*').eq('conversation_id', message.conversation_id)
+        .or(`created_at.lt.${message.created_at},and(created_at.eq.${message.created_at},id.lte.${message.id})`).order('created_at', { ascending: false }).order('id', { ascending: false }).limit(PAGE_SIZE + 1);
+      if (!owner.current.accepts(ticket)) return;
+      if (error) { toastError(describeDbError(error)); return; }
+      setMessages(mergeThreadRows([], (data ?? []).slice(0, PAGE_SIZE), message.conversation_id));
+      setViewingHistory(true); historyRef.current = true;
+      setHasOlder((data?.length ?? 0) > PAGE_SIZE);
+    }
+    requestAnimationFrame(() => { if (owner.current.accepts(ticket)) document.getElementById(`message-${message.id}`)?.scrollIntoView({ block: 'center' }); });
+  }
+
+  async function archiveConversation() {
+    if (!activeConv || changingConversation) return;
+    const ticket = owner.current.capture();
+    setChangingConversation(true);
+    try {
+      const { data, error } = await createClient().from('family_conversations').update({ is_archived: !activeConv.is_archived }).eq('id', activeConv.id).eq('family_id', familyId).select('*').single();
+      if (error || !data) throw error ?? new Error(tr('errors.thatChangeWasNotSaved'));
+      if (owner.current.current(ticket)) { setActiveConv(data); setShowArchived(Boolean(data.is_archived)); setConversationAction(null); }
+      void loadConversations();
+    } catch (error) { toastError(describeDbError(error)); }
+    finally { if (alive.current) setChangingConversation(false); }
+  }
+
+  async function leaveConversation() {
+    if (!activeConv || changingConversation || activeConv.is_family_chat || activeConv.kind === 'direct') return;
+    const ticket = owner.current.capture();
+    const conversationId = activeConv.id;
+    setChangingConversation(true);
+    try {
+      const { error } = await createClient().rpc('leave_family_conversation', { p_conversation_id: conversationId });
+      if (error) throw error;
+      drafts.current.delete(conversationId);
+      if (owner.current.current(ticket)) {
+        stopRecording(true); owner.current.select(null); setActiveConv(null); setMessages([]); messagesRef.current = [];
+        liveRows.current.clear(); hardDeleted.current.clear(); setReplyParents(new Map());
+        setFailedAttachment((attempt) => attempt?.convId === conversationId ? null : attempt);
+        setText(''); setReplyTo(null); setEditMessage(null); setShowAbout(false); setConversationAction(null); setMobileShowThread(false);
+      }
+      setConversations((rows) => rows.filter((row) => row.id !== conversationId));
+      void loadConversations();
+    } catch (error) { toastError(describeDbError(error)); }
+    finally { if (alive.current) setChangingConversation(false); }
+  }
+
+  // Quoted messages can predate the current page. Fetch only missing parents,
+  // under the same conversation RLS, without treating them as loaded history.
+  useEffect(() => {
+    const ids = [...new Set(messages.map((message) => message.reply_to_id).filter((id): id is string => Boolean(id)))].filter((id) => !messages.some((message) => message.id === id));
+    if (!activeConvId || !ids.length) { setReplyParents(new Map()); return; }
+    const ticket = owner.current.begin('reply-parents');
+    const controller = new AbortController();
+    void settle(createClient().from('family_messages').select('*').eq('conversation_id', activeConvId).in('id', ids).abortSignal(controller.signal)).then(({ data, error }) => {
+      if (!error && !controller.signal.aborted && owner.current.accepts(ticket)) setReplyParents(new Map((data ?? []).map((message) => [message.id, message])));
+    });
+    return () => controller.abort();
+  }, [activeConvId, messages]);
 
   const q = search.trim().toLowerCase();
   const filtered = conversations.filter((c) => {
@@ -550,7 +854,7 @@ export function MessagesModule() {
     if (unreadOnly && !(summaries.unreadByConv.get(c.id) ?? 0)) return false;
     if (!q) return true;
     const last = summaries.lastByConv.get(c.id);
-    return (c.name ?? '').toLowerCase().includes(q) ||
+      return conversationName(c).toLowerCase().includes(q) ||
       (last ? previewText(last, userId).toLowerCase().includes(q) : false);
   });
   const archivedCount = conversations.filter((c) => c.is_archived).length;
@@ -558,7 +862,7 @@ export function MessagesModule() {
 
   // Photos shared in the active conversation → the "Shared Photos" rail.
   const sharedPhotos = useMemo(
-    () => messages.filter((m) => m.kind === 'image' && m.attachment_url).slice(-6).reverse(),
+    () => messages.filter((m) => !m.deleted_at && m.kind === 'image' && m.attachment_url).slice(-6).reverse(),
     [messages],
   );
   // SEC-001: attachments are private conversations. Every image, file and voice
@@ -588,7 +892,7 @@ export function MessagesModule() {
   const memberCount = activeConv
     ? (activeConv.participant_ids?.length || activeConv.member_ids?.length || activeParticipants.length || members.length)
     : 0;
-  const isMuted = activeConv ? mutedIds.has(activeConv.id) : false;
+  const canManageConversation = activeConv && (activeConv.created_by === userId || role === 'parent' || role === 'adult');
 
   return (
     <div className="flex h-[calc(100dvh-var(--topbar-height)-1rem-4rem-var(--safe-bottom))] flex-col gap-4 lg:h-[calc(100dvh-var(--topbar-height)-1rem)]">
@@ -600,11 +904,12 @@ export function MessagesModule() {
         </div>
         <div className="flex items-center gap-2">
           <Button onClick={() => setNewConvOpen(true)}><Plus className="h-4 w-4" /> {tr('messages.newMessage')}</Button>
-          <div className="relative hidden sm:block">
+          <div className="relative min-w-0 flex-1 sm:flex-none">
             <Search className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted" />
             <input ref={searchRef} value={search} onChange={(e) => setSearch(e.target.value)}
               placeholder={tr('messages.searchMessages')}
-              className="h-11 w-56 rounded-xl border border-border bg-surface/60 pl-9 pr-3 text-sm outline-none focus:border-brand" />
+              aria-label={tr('messagesChat.searchConversations')}
+              className="h-11 w-full sm:w-56 rounded-xl border border-border bg-surface/60 pl-9 pr-3 text-sm outline-none focus:border-brand" />
           </div>
         </div>
       </div>
@@ -624,7 +929,7 @@ export function MessagesModule() {
           <div className="flex flex-1 items-center gap-1 overflow-x-auto scrollbar-none">
             {CONV_TABS.map((t) => (
               <button key={t.key} onClick={() => setTab(t.key)}
-                className={cn('shrink-0 rounded-lg px-3 py-1.5 text-xs font-semibold transition',
+                aria-pressed={tab === t.key} className={cn('shrink-0 rounded-lg px-3 py-1.5 text-xs font-semibold transition',
                   tab === t.key ? 'bg-brand/15 text-brand-text' : 'text-muted hover:bg-elevated hover:text-fg')}>
                 {tr(t.labelKey)}
               </button>
@@ -638,7 +943,7 @@ export function MessagesModule() {
             </button>
             {filterOpen && (
               <>
-                <button className="fixed inset-0 z-10 cursor-default" aria-hidden onClick={() => setFilterOpen(false)} />
+                  <button className="fixed inset-0 z-10 cursor-default" aria-hidden tabIndex={-1} onClick={() => setFilterOpen(false)} />
                 <div className="absolute right-0 z-20 mt-1 w-44 overflow-hidden rounded-xl border border-border bg-elevated py-1 shadow-glass">
                   <button onClick={() => { setUnreadOnly((v) => !v); setFilterOpen(false); }}
                     className="flex w-full items-center justify-between px-4 py-2 text-sm hover:bg-surface">
@@ -683,7 +988,7 @@ export function MessagesModule() {
                   <div className="min-w-0 flex-1">
                     <div className="flex items-center justify-between gap-2">
                       <p className={cn('truncate text-sm font-semibold', isActive && 'text-brand-text')}>
-                        {conv.name ?? 'Direct Message'}
+                        {conversationName(conv)}
                       </p>
                       {last && <span className="shrink-0 text-[11px] text-muted">{shortTime(last.created_at)}</span>}
                     </div>
@@ -691,7 +996,6 @@ export function MessagesModule() {
                       <p className={cn('truncate text-xs', unread ? 'font-medium text-fg' : 'text-muted')}>
                         {last ? previewText(last, userId) : 'No messages yet'}
                       </p>
-                      {mutedIds.has(conv.id) && <BellOff className="h-3 w-3 shrink-0 text-muted/60" />}
                       {unread > 0 && (
                         <span className="grid h-5 min-w-[1.25rem] shrink-0 place-items-center rounded-full bg-brand px-1.5 text-[11px] font-bold text-brand-fg">
                           {unread > 99 ? '99+' : unread}
@@ -735,7 +1039,7 @@ export function MessagesModule() {
                 {activeConv.avatar_emoji ?? '💬'}
               </div>
               <div className="min-w-0 flex-1">
-                <p className="truncate text-sm font-bold">{activeConv.name ?? 'Direct Message'}</p>
+                <p className="truncate text-sm font-bold">{conversationName(activeConv)}</p>
                 <p className="truncate text-[11px] text-muted">
                   {activeConv.kind === 'direct'
                     ? (onlineIds.has(activeParticipants.find((m) => m.user_id !== userId)?.user_id ?? '') ? 'Active now' : 'Direct message')
@@ -764,8 +1068,21 @@ export function MessagesModule() {
                 className="rounded-lg p-1.5 text-muted hover:text-fg"><Info className="h-4 w-4" /></button>
             </div>
 
+            {connection !== 'SUBSCRIBED' && <div role="status" className="flex items-center justify-between gap-2 bg-elevated px-4 py-2 text-xs text-muted"><span>{connection === 'CONNECTING' ? tr('messagesChat.connecting') : tr('messagesChat.interrupted')}</span><button type="button" onClick={() => void loadMessages(activeConv.id, false, true)} className="rounded p-2 hover:text-fg" aria-label={tr('messagesChat.refresh')}><RefreshCw className="h-4 w-4" /></button></div>}
+            <div className="flex items-center gap-2 border-b border-border px-4 py-2">
+              <Search className="h-4 w-4 shrink-0 text-muted" />
+              <input ref={threadSearchRef} value={threadSearch} onChange={(event) => setThreadSearch(event.target.value)} aria-label={tr('messagesChat.searchThread')} placeholder={tr('messagesChat.searchThread')} className="min-w-0 flex-1 bg-transparent text-sm outline-none" />
+              {threadSearch && <button type="button" onClick={() => setThreadSearch('')} aria-label={tr('messagesChat.clearSearch')}><X className="h-4 w-4" /></button>}
+            </div>
+            {viewingHistory && <button type="button" onClick={() => { setViewingHistory(false); historyRef.current = false; setMessages([]); messagesRef.current = []; void loadMessages(activeConv.id); }} className="border-b border-border px-4 py-2 text-sm text-brand-text">{tr('messagesChat.latest')}</button>}
+            {threadSearch && <div className="max-h-56 overflow-y-auto border-b border-border p-3" aria-label={tr('messagesChat.searchResults')} aria-live="polite">
+              {searching ? <p className="text-sm text-muted">{tr('messagesChat.searching')}</p> : searchResults.length === 0 ? <p className="text-sm text-muted">{tr('messagesChat.noMatches')}</p> : <>{searchResults.length === 100 && <p className="text-xs text-muted">{tr('messagesChat.searchLimit')}</p>}{searchResults.map((message) => <button type="button" key={message.id} onClick={() => void jumpToMessage(message)} className="block w-full rounded-lg px-2 py-2 text-left hover:bg-elevated"><span className="block text-xs text-muted">{message.sender_name} · {fmtDate(message.created_at, 'MMM d, h:mm a')}</span><span className="block truncate text-sm">{message.content}</span></button>)}</>}
+            </div>}
+
             {/* Messages */}
-            <div className="flex-1 overflow-y-auto overscroll-contain px-4 py-4 space-y-1">
+            <div ref={threadRef} onScroll={(event) => { const node = event.currentTarget; setNearBottom(node.scrollHeight - node.scrollTop - node.clientHeight < 120); }} aria-label={tr('messagesChat.messageList')} className="min-h-0 flex-1 overflow-y-auto overscroll-contain px-4 py-4 space-y-1">
+              {loadError && <div role="alert" className="rounded-xl border border-danger/40 p-3 text-sm"><p>{loadError}</p><button type="button" onClick={() => void loadMessages(activeConv.id)} className="mt-2 font-semibold">{tr('messagesChat.retryLoad')}</button></div>}
+              {hasOlder && <div className="text-center"><Button variant="ghost" disabled={loadingOlder} onClick={() => void loadMessages(activeConv.id, true)}>{loadingOlder ? tr('messagesChat.loadingOlder') : tr('messagesChat.loadOlder')}</Button></div>}
               {loadingMsgs ? (
                 <SkeletonList />
               ) : messages.length === 0 ? (
@@ -786,12 +1103,11 @@ export function MessagesModule() {
                       const prevMsg = msgs[i - 1];
                       const sameSender = prevMsg?.sender_id === msg.sender_id;
                       const reactions = (msg.reactions as Record<string, string[]>) ?? {};
-                      const replyMsg = msg.reply_to_id ? messages.find((m) => m.id === msg.reply_to_id) : null;
+                      const replyMsg = msg.reply_to_id ? messages.find((m) => m.id === msg.reply_to_id) ?? replyParents.get(msg.reply_to_id) : null;
 
                       return (
-                        <div key={msg.id}
-                          className={cn('group relative flex', isMine ? 'flex-row-reverse' : 'flex-row', !sameSender && 'mt-3')}
-                          onMouseLeave={() => setMsgMenu((prev) => prev === msg.id ? null : prev)}>
+                        <div key={msg.id} id={`message-${msg.id}`}
+                          className={cn('group relative flex', isMine ? 'flex-row-reverse' : 'flex-row', !sameSender && 'mt-3')}>
 
                           {/* Avatar */}
                           {!isMine && !sameSender && (
@@ -817,7 +1133,7 @@ export function MessagesModule() {
                                 isMine ? 'border-r-2 border-l-0 text-right' : '',
                               )}>
                                 <span className="font-semibold text-brand-text/80">{replyMsg.sender_name}</span>
-                                <p className="truncate">{replyMsg.content}</p>
+                                <p className="truncate">{replyMsg.deleted_at ? tr('messages.messageDeleted') : replyMsg.content || previewText(replyMsg, userId)}</p>
                               </div>
                             )}
 
@@ -870,22 +1186,24 @@ export function MessagesModule() {
                                     className="mb-1 h-10 w-56 max-w-full" aria-label={tr('messages.voiceMessage')} />
                                 )}
                                 {/* Text */}
-                                {msg.content && <span>{msg.content}</span>}
+                                {msg.is_pinned && <span className="mb-1 flex items-center gap-1 text-[11px]"><Pin className="h-3 w-3" /> {tr('messagesChat.pinned')}</span>}
+                                {msg.content && <span className="whitespace-pre-wrap break-words [overflow-wrap:anywhere]">{msg.content}</span>}
 
                                 {/* Timestamp inside bubble */}
                                 <span className={cn('ml-2 text-[10px] opacity-60', isMine ? 'text-brand-fg' : 'text-muted')}>
                                   {fmtDate(msg.created_at, 'h:mm a')}
-                                  {isMine && <CheckCheck className="ml-0.5 inline h-3 w-3" />}
+                                  {msg.edited_at && <span> · {tr('messagesChat.edited')}</span>}
+                                  {isMine && (messageReadByOthers(msg.read_by, msg.sender_id) ? <span title={tr('messagesChat.read')} aria-label={tr('messagesChat.read')}><CheckCheck className="ml-0.5 inline h-3 w-3" /></span> : <span title={tr('messagesChat.sent')} aria-label={tr('messagesChat.sent')}><Check className="ml-0.5 inline h-3 w-3" /></span>)}
                                 </span>
                               </div>
                             )}
 
                             {/* Reactions */}
-                            {Object.keys(reactions).length > 0 && (
+                            {!msg.deleted_at && Object.keys(reactions).length > 0 && (
                               <div className="mt-0.5 flex flex-wrap gap-1">
                                 {Object.entries(reactions).map(([emoji, users]) =>
                                   users.length > 0 ? (
-                                    <button key={emoji} onClick={() => reactTo(msg, emoji)}
+                                    <button key={emoji} onClick={() => reactTo(msg, emoji)} aria-label={tr('messagesChat.reactionCount', { emoji, count: users.length })} aria-pressed={users.includes(userId)}
                                       className={cn(
                                         'flex items-center gap-1 rounded-full border px-2 py-0.5 text-xs transition',
                                         users.includes(userId)
@@ -901,44 +1219,45 @@ export function MessagesModule() {
                           </div>
 
                           {/* Hover actions */}
-                          <div className={cn(
-                            'absolute top-0 flex items-center gap-0.5 opacity-0 transition-opacity group-hover:opacity-100',
-                            isMine ? 'right-[calc(100%-0.5rem)] -translate-x-1' : 'left-[calc(100%-0.5rem)] translate-x-1',
-                          )}>
+                          {!msg.deleted_at && <div className="relative flex items-start gap-0.5 px-1">
                             {REACTIONS.slice(0, 3).map((emoji) => (
-                              <button key={emoji} onClick={() => reactTo(msg, emoji)}
-                                className="rounded-full bg-elevated px-1.5 py-0.5 text-sm hover:bg-border transition">
+                              <button key={emoji} onClick={() => reactTo(msg, emoji)} aria-label={tr('messagesChat.react', { emoji })}
+                                className="hidden xl:block rounded-full bg-elevated px-1.5 py-0.5 text-sm hover:bg-border transition">
                                 {emoji}
                               </button>
                             ))}
-                            <button aria-label={tr('a11y.reply')} onClick={() => setReplyTo(msg)}
-                              className="rounded-full bg-elevated p-1.5 text-muted hover:text-fg transition">
+                            <button aria-label={tr('a11y.reply')} onClick={() => { setReplyTo(msg); setEditMessage(null); inputRef.current?.focus(); }}
+                              className="hidden xl:block rounded-full bg-elevated p-1.5 text-muted hover:text-fg transition">
                               <Reply className="h-3.5 w-3.5" />
                             </button>
-                            <button aria-label={tr('a11y.moreActions')} aria-haspopup="menu" onClick={() => setMsgMenu(msgMenu === msg.id ? null : msg.id)}
-                              className="rounded-full bg-elevated p-1.5 text-muted hover:text-fg transition">
+                            <button aria-label={tr('a11y.moreActions')} aria-expanded={msgMenu === msg.id} onClick={() => setMsgMenu(msgMenu === msg.id ? null : msg.id)}
+                              className="rounded-full bg-elevated p-2.5 text-muted hover:text-fg transition focus-visible:ring-2 focus-visible:ring-brand">
                               <MoreHorizontal className="h-3.5 w-3.5" />
                             </button>
                             {/* Dropdown */}
                             {msgMenu === msg.id && (
                               <div className={cn(
                                 'absolute top-7 z-20 rounded-xl border border-border bg-elevated shadow-xl min-w-[140px]',
-                                isMine ? 'right-0' : 'left-0',
+                                isMine ? 'left-0' : 'right-0',
                               )}>
+                                <div className="flex border-b border-border p-1">{REACTIONS.map((emoji) => <button type="button" key={emoji} aria-label={tr('messagesChat.react', { emoji })} onClick={() => void reactTo(msg, emoji)} className="rounded p-1.5 hover:bg-surface">{emoji}</button>)}</div>
                                 <button onClick={() => pinMessage(msg)} className="flex w-full items-center gap-2 px-3 py-2 text-xs hover:bg-surface/40">
                                   <Pin className="h-3.5 w-3.5" /> {msg.is_pinned ? 'Unpin' : 'Pin'}
                                 </button>
-                                <button onClick={() => setReplyTo(msg)} className="flex w-full items-center gap-2 px-3 py-2 text-xs hover:bg-surface/40">
+                                <button onClick={() => { setReplyTo(msg); setEditMessage(null); setMsgMenu(null); inputRef.current?.focus(); }} className="flex w-full items-center gap-2 px-3 py-2 text-xs hover:bg-surface/40">
                                   <Reply className="h-3.5 w-3.5" /> {tr('messages.reply')}
                                 </button>
                                 {isMine && (
+                                  <>
+                                  {msg.kind === 'text' && <button type="button" onClick={() => { setEditMessage(msg); setReplyTo(null); setText(msg.content ?? ''); setMsgMenu(null); inputRef.current?.focus(); }} className="flex w-full items-center gap-2 px-3 py-2 text-xs hover:bg-surface/40"><Pencil className="h-3.5 w-3.5" /> {tr('messagesChat.edit')}</button>}
                                   <button onClick={() => deleteMessage(msg.id)} className="flex w-full items-center gap-2 px-3 py-2 text-xs text-danger hover:bg-surface/40">
                                     <Trash2 className="h-3.5 w-3.5" /> {tr('messages.delete')}
                                   </button>
+                                  </>
                                 )}
                               </div>
                             )}
-                          </div>
+                          </div>}
                         </div>
                       );
                     })}
@@ -956,13 +1275,19 @@ export function MessagesModule() {
                   {tr('messages.replyingTo')} <span className="font-semibold text-brand-text">{replyTo.sender_name}</span>:{' '}
                   <span>{replyTo.content?.slice(0, 60)}</span>
                 </span>
-                <button onClick={() => setReplyTo(null)} className="text-muted hover:text-fg">✕</button>
+                <button onClick={() => setReplyTo(null)} aria-label={tr('messagesChat.cancelReply')} className="text-muted hover:text-fg">✕</button>
               </div>
             )}
 
+            {editMessage && <div className="flex items-center justify-between gap-2 border-t border-brand/20 bg-brand/5 px-4 py-2 text-xs"><span>{tr('messagesChat.editing')}</span><button type="button" aria-label={tr('messagesChat.cancelEdit')} onClick={() => { setEditMessage(null); setText(''); }}><X className="h-4 w-4" /></button></div>}
+            {failedAttachment?.convId === activeConv.id && <div role="alert" className="flex flex-wrap items-center gap-2 border-t border-border px-4 py-2 text-xs"><span className="flex-1">{tr('messagesChat.attachmentUnconfirmed', { name: failedAttachment.file.name })}</span><button type="button" disabled={uploadingFile} onClick={() => void sendFile(failedAttachment.file)} className="font-semibold">{tr('messagesChat.retryAttachment')}</button><button type="button" disabled={uploadingFile} onClick={() => void discardAttachment()} className="text-muted">{tr('messagesChat.discard')}</button></div>}
+            {typingIds.length > 0 && <p role="status" className="px-4 py-1 text-xs text-muted">{tr('messagesChat.typing', { names: typingIds.map((id) => members.find((member) => member.user_id === id)?.display_name).filter(Boolean).join(', ') })}</p>}
+
             {/* Input */}
-            <form onSubmit={sendMessage} className="flex items-center gap-2 border-t border-border bg-surface/50 px-4 py-3">
-              <div className="flex flex-1 items-center gap-2 rounded-2xl border border-border bg-elevated px-3 py-1.5 focus-within:border-brand/50">
+            {activeConv.is_archived && <p role="status" className="border-t border-border px-4 py-2 text-xs text-muted">{tr('messagesChat.archivedReadOnly')}</p>}
+            <form onSubmit={sendMessage} className="flex shrink-0 items-end gap-2 border-t border-border bg-surface/50 px-3 py-2 sm:px-4 sm:py-3">
+              <fieldset disabled={Boolean(activeConv.is_archived && !editMessage)} className="contents">
+              <div className="flex min-w-0 flex-1 flex-wrap items-center gap-1 rounded-2xl border border-border bg-elevated px-3 py-1.5 focus-within:border-brand/50">
                 {/* Hidden file inputs */}
                 <input ref={fileRef} type="file" accept="application/pdf,.doc,.docx,.xls,.xlsx,.txt,image/*"
                   className="hidden" onChange={(e) => { if (e.target.files?.[0]) sendFile(e.target.files[0]); e.target.value = ''; }} />
@@ -970,29 +1295,30 @@ export function MessagesModule() {
                   className="hidden" onChange={(e) => { if (e.target.files?.[0]) sendFile(e.target.files[0]); e.target.value = ''; }} />
 
                 {/* Text input */}
-                <input ref={inputRef} value={text} onChange={(e) => setText(e.target.value)}
-                  onKeyDown={(e) => { if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); void sendMessage(e as unknown as React.FormEvent); } }}
+                <textarea ref={inputRef} value={text} onChange={(e) => setText(e.target.value)} rows={2} maxLength={4000} disabled={recording || micPending}
+                  onKeyDown={(e) => { if (shouldSendOnEnter({ key: e.key, shiftKey: e.shiftKey, isComposing: e.nativeEvent.isComposing, keyCode: e.keyCode })) { e.preventDefault(); void sendMessage(e); } }}
                   enterKeyHint="send"
+                  aria-label={tr('messages.typeAMessage')}
                   placeholder={tr('messages.typeAMessage')}
-                  className="min-w-0 flex-1 bg-transparent px-1 py-1.5 text-sm placeholder:text-muted focus:outline-none" />
+                  className="max-h-40 min-w-0 basis-full resize-y bg-transparent px-1 py-1.5 text-sm placeholder:text-muted focus:outline-none disabled:opacity-50" />
 
                 {/* Trailing tools */}
-                <button type="button" onClick={() => fileRef.current?.click()} disabled={uploadingFile} aria-label={tr('messages.attachFile')}
+                <button type="button" onClick={() => fileRef.current?.click()} disabled={uploadingFile || recording || micPending || Boolean(editMessage) || Boolean(failedAttachment)} aria-label={tr('messages.attachFile')}
                   className="grid h-8 w-8 shrink-0 place-items-center rounded-full text-muted transition hover:bg-surface hover:text-fg disabled:opacity-50">
                   {uploadingFile ? <Loader2 className="h-4 w-4 animate-spin" /> : <Paperclip className="h-4 w-4" />}
                 </button>
-                <button type="button" onClick={() => imageRef.current?.click()} disabled={uploadingFile} aria-label={tr('messages.sendAPhoto')}
+                <button type="button" onClick={() => imageRef.current?.click()} disabled={uploadingFile || recording || micPending || Boolean(editMessage) || Boolean(failedAttachment)} aria-label={tr('messages.sendAPhoto')}
                   className="grid h-8 w-8 shrink-0 place-items-center rounded-full text-muted transition hover:bg-surface hover:text-fg disabled:opacity-50">
                   <ImageIcon className="h-4 w-4" />
                 </button>
                 <div className="relative">
-                  <button type="button" onClick={() => setShowPicker(!showPicker)} aria-label={tr('messages.emoji')}
+                  <button type="button" disabled={recording || micPending} onClick={() => setShowPicker(!showPicker)} aria-label={tr('messages.emoji')} aria-expanded={showPicker}
                     className="grid h-8 w-8 shrink-0 place-items-center rounded-full text-muted transition hover:bg-surface hover:text-fg">
                     <Smile className="h-4 w-4" />
                   </button>
                   {showPicker && (
-                    <div className="absolute bottom-11 right-0 z-20 rounded-xl border border-border bg-elevated p-2 shadow-xl">
-                      <div className="grid grid-cols-8 gap-1">
+                    <div className="absolute bottom-11 left-0 z-20 rounded-xl border border-border bg-elevated p-2 shadow-xl">
+                      <div className="grid grid-cols-4 gap-1">
                         {QUICK_EMOJIS.map((e) => (
                           <button key={e} type="button" onClick={() => { setText((t) => t + e); setShowPicker(false); inputRef.current?.focus(); }}
                             className="h-8 w-8 rounded-lg text-lg hover:bg-surface transition">{e}</button>
@@ -1002,7 +1328,7 @@ export function MessagesModule() {
                   )}
                 </div>
                 <div className="relative">
-                  <button type="button" onClick={() => { setShowGifPicker((v) => !v); setShowPicker(false); }} aria-label="GIF"
+                  <button type="button" disabled={recording || micPending || sending || Boolean(editMessage)} onClick={() => { setShowGifPicker((v) => !v); setShowPicker(false); }} aria-label="GIF" aria-expanded={showGifPicker}
                     className="grid h-8 shrink-0 place-items-center rounded-full px-2 text-[11px] font-bold text-muted transition hover:bg-surface hover:text-fg">
                     GIF
                   </button>
@@ -1011,7 +1337,7 @@ export function MessagesModule() {
               </div>
 
               {/* Send when typing · recording controls while recording · mic when empty */}
-              {text.trim() ? (
+              {text.trim() && !recording ? (
                 <button type="submit" disabled={sending} aria-label={tr('messages.sendMessage')}
                   className="grid h-11 w-11 shrink-0 place-items-center rounded-full bg-brand text-brand-fg transition hover:opacity-90 disabled:opacity-50">
                   {sending ? <Loader2 className="h-5 w-5 animate-spin" /> : <Send className="h-5 w-5" />}
@@ -1032,11 +1358,12 @@ export function MessagesModule() {
                   </button>
                 </div>
               ) : (
-                <button type="button" onClick={startRecording} disabled={uploadingFile} aria-label={tr('messages.recordVoiceMessage')}
+                <button type="button" onClick={startRecording} disabled={uploadingFile || micPending || sending || Boolean(failedAttachment)} aria-label={tr('messages.recordVoiceMessage')}
                   className="grid h-11 w-11 shrink-0 place-items-center rounded-full bg-brand text-brand-fg transition hover:opacity-90 disabled:opacity-50">
-                  {uploadingFile ? <Loader2 className="h-5 w-5 animate-spin" /> : <Mic className="h-5 w-5" />}
+                  {uploadingFile || micPending ? <Loader2 className="h-5 w-5 animate-spin" /> : <Mic className="h-5 w-5" />}
                 </button>
               )}
+              </fieldset>
             </form>
           </>
         )}
@@ -1064,7 +1391,7 @@ export function MessagesModule() {
                 {activeConv.avatar_emoji ?? (activeConv.kind === 'direct' ? '💬' : '👨‍👩‍👧‍👦')}
               </div>
               <div className="min-w-0">
-                <p className="truncate font-semibold">{activeConv.name ?? 'Direct Message'}</p>
+                <p className="truncate font-semibold">{conversationName(activeConv)}</p>
                 <p className="text-xs text-muted">
                   {activeConv.kind === 'direct' ? tr('messages.directMessage') : memberCount === 1 ? tr('messages.familyGroupOne') : tr('messages.familyGroupMany', { n: memberCount })}
                 </p>
@@ -1074,26 +1401,26 @@ export function MessagesModule() {
           </div>
 
           {/* Actions */}
-          <div className="grid grid-cols-4 gap-1 border-y border-border py-3 text-center text-[11px] text-muted">
-            <button onClick={() => setNewConvOpen(true)} className="flex flex-col items-center gap-1 rounded-lg py-1 hover:text-fg">
-              <UserPlus className="h-5 w-5" /> Add
-            </button>
-            <button onClick={() => { setShowAbout(false); searchRef.current?.focus(); }} className="flex flex-col items-center gap-1 rounded-lg py-1 hover:text-fg">
+          <div className="grid grid-cols-3 gap-1 border-y border-border py-3 text-center text-[11px] text-muted">
+            {canManageConversation && activeConv.kind !== 'direct' && !activeConv.is_family_chat && <button onClick={() => setSettingsOpen(true)} className="flex flex-col items-center gap-1 rounded-lg py-1 hover:text-fg">
+              <UserPlus className="h-5 w-5" /> {tr('messages.addMembers')}
+            </button>}
+            <button onClick={() => { setShowAbout(false); threadSearchRef.current?.focus(); }} className="flex flex-col items-center gap-1 rounded-lg py-1 hover:text-fg">
               <Search className="h-5 w-5" /> {tr('messages.search')}
             </button>
-            <button onClick={() => toggleMute(activeConv.id)} className={cn('flex flex-col items-center gap-1 rounded-lg py-1 hover:text-fg', isMuted && 'text-brand-text')}>
-              <BellOff className="h-5 w-5" /> {isMuted ? 'Unmute' : 'Mute'}
-            </button>
-            <a href="/dashboard/settings#members" className="flex flex-col items-center gap-1 rounded-lg py-1 hover:text-fg">
+            <button type="button" onClick={() => void toggleMute()} disabled={muteLoading} aria-pressed={mutedIds.has(activeConv.id)} className="flex flex-col items-center gap-1 rounded-lg py-1 hover:text-fg disabled:opacity-50"><BellOff className="h-5 w-5" />{mutedIds.has(activeConv.id) ? tr('messagesChat.unmute') : tr('messagesChat.mute')}</button>
+            {canManageConversation && !activeConv.is_family_chat && <button type="button" onClick={() => setConversationAction('archive')} className="flex flex-col items-center gap-1 rounded-lg py-1 hover:text-fg"><Archive className="h-5 w-5" />{activeConv.is_archived ? tr('messagesChat.restore') : tr('messagesChat.archive')}</button>}
+            {canManageConversation && activeConv.kind !== 'direct' && <button type="button" onClick={() => setSettingsOpen(true)} className="flex flex-col items-center gap-1 rounded-lg py-1 hover:text-fg">
               <Settings className="h-5 w-5" /> {tr('messages.settings')}
-            </a>
+            </button>}
+            {!activeConv.is_family_chat && activeConv.kind !== 'direct' && <button type="button" onClick={() => setConversationAction('leave')} className="flex flex-col items-center gap-1 rounded-lg py-1 text-danger"><LogOut className="h-5 w-5" />{tr('messagesChat.leave')}</button>}
           </div>
 
           {/* Members */}
           <div>
             <div className="mb-3 flex items-center justify-between">
               <h3 className="font-semibold">{tr('messages.members')}{activeConv.kind === 'direct' ? Math.max(memberCount, activeParticipants.length) : memberCount})</h3>
-              <button onClick={() => setNewConvOpen(true)} className="text-xs font-semibold text-brand-text">{tr('messages.addMembers')}</button>
+              {canManageConversation && activeConv.kind !== 'direct' && !activeConv.is_family_chat && <button onClick={() => setSettingsOpen(true)} className="text-xs font-semibold text-brand-text">{tr('messages.addMembers')}</button>}
             </div>
             <div className="space-y-2.5">
               {(activeParticipants.length ? activeParticipants : members).map((m) => {
@@ -1109,12 +1436,6 @@ export function MessagesModule() {
                       <p className="truncate text-sm font-medium">{m.display_name}{isSelf && <span className="text-muted"> (You)</span>}</p>
                       <p className="truncate text-xs text-muted">{roleLabel(tr, m.role)}</p>
                     </div>
-                    {!isSelf && (
-                      <button onClick={() => setNewConvOpen(true)} aria-label={tr('itemAction.message', { name: m.display_name })}
-                        className="rounded-lg p-1 text-muted/50 transition hover:text-fg group-hover:text-muted">
-                        <MoreHorizontal className="h-4 w-4" />
-                      </button>
-                    )}
                   </div>
                 );
               })}
@@ -1125,7 +1446,7 @@ export function MessagesModule() {
           <div>
             <div className="mb-3 flex items-center justify-between">
               <h3 className="font-semibold">{tr('messages.sharedPhotos')}</h3>
-              <a href="/dashboard/photos" className="text-xs font-semibold text-brand-text">{tr('messages.viewAll')}</a>
+              <button type="button" onClick={() => setHistoryGallery('photos')} aria-label={tr('messagesChat.allPhotos')} className="text-xs font-semibold text-brand-text">{tr('messagesChat.viewAll')}</button>
             </div>
             {sharedPhotos.length === 0 ? (
               <p className="rounded-xl border border-dashed border-border py-4 text-center text-xs text-muted">
@@ -1142,6 +1463,7 @@ export function MessagesModule() {
               </div>
             )}
           </div>
+          <div><div className="mb-2 flex items-center justify-between gap-2"><h3 className="font-semibold">{tr('messagesChat.pinnedLoaded')}</h3><button type="button" onClick={() => setHistoryGallery('pinned')} aria-label={tr('messagesChat.pinnedHistory')} className="shrink-0 text-xs font-semibold text-brand-text">{tr('messagesChat.viewAll')}</button></div>{messages.filter((message) => message.is_pinned && !message.deleted_at).map((message) => <button key={message.id} type="button" onClick={() => void jumpToMessage(message)} className="mb-1 block w-full rounded-lg border border-border p-2 text-left text-xs"><span className="font-semibold">{message.sender_name}</span><span className="block truncate">{message.content || previewText(message, userId)}</span></button>)}</div>
         </aside>
       )}
       </div>
@@ -1156,13 +1478,15 @@ export function MessagesModule() {
           myName={myName}
           onClose={() => setNewConvOpen(false)}
           onCreated={(conv) => {
-            setActiveConv(conv);
-            setMobileShowThread(true);
+            selectConversation(conv);
             setNewConvOpen(false);
             void loadConversations();
           }}
         />
       )}
+      {settingsOpen && activeConv && <ConversationSettings conversation={activeConv} members={members} userId={userId} onClose={() => setSettingsOpen(false)} onSaved={(conv) => { if (owner.current.capture().conversationId === conv.id) setActiveConv(conv); setSettingsOpen(false); void loadConversations(); }} />}
+      {historyGallery && activeConv && <ConversationHistory key={`${activeConv.id}:${historyGallery}`} conversationId={activeConv.id} kind={historyGallery} userId={userId} onClose={() => setHistoryGallery(null)} onJump={(message) => { setHistoryGallery(null); void jumpToMessage(message); }} />}
+      {conversationAction && activeConv && <Modal open onClose={() => { if (!changingConversation) setConversationAction(null); }} title={tr(conversationAction === 'leave' ? 'messagesChat.leave' : 'messagesChat.confirmArchive')} description={tr(conversationAction === 'leave' ? 'messagesChat.leaveConfirm' : 'messagesChat.archiveConfirm')}><div className="flex justify-end gap-2"><Button type="button" variant="ghost" disabled={changingConversation} onClick={() => setConversationAction(null)}>{tr('messagesChat.cancel')}</Button><Button type="button" loading={changingConversation} onClick={() => void (conversationAction === 'leave' ? leaveConversation() : archiveConversation())}>{tr(conversationAction === 'leave' ? 'messagesChat.leaveAction' : activeConv.is_archived ? 'messagesChat.restore' : 'messagesChat.archive')}</Button></div></Modal>}
     </div>
   );
 }
@@ -1170,6 +1494,76 @@ export function MessagesModule() {
 // ── New Conversation (multi-select, smart groups, two-step) ──────────────────
 
 type Member = Tables<'family_members'>;
+
+/** Pins/photos query the entire accessible history, not just the open page. */
+function ConversationHistory({ conversationId, kind, userId, onClose, onJump }: {
+  conversationId: string; kind: 'photos' | 'pinned'; userId: string; onClose: () => void; onJump: (message: Message) => void;
+}) {
+  const tr = useTranslations();
+  const [rows, setRows] = useState<Message[]>([]);
+  const [more, setMore] = useState(false);
+  const [loading, setLoading] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+  const request = useRef(0);
+  const media = useFamilyMediaUrls(rows.map((row) => row.attachment_url));
+  const load = useCallback(async (cursor?: Message) => {
+    const current = ++request.current;
+    setLoading(true); setError(null);
+    let query = createClient().from('family_messages').select('*').eq('conversation_id', conversationId).is('deleted_at', null);
+    query = kind === 'pinned' ? query.eq('is_pinned', true) : query.eq('kind', 'image');
+    if (cursor) query = query.or(`created_at.lt.${cursor.created_at},and(created_at.eq.${cursor.created_at},id.lt.${cursor.id})`);
+    const { data, error: failure } = await settle(query.order('created_at', { ascending: false }).order('id', { ascending: false }).limit(51));
+    if (current !== request.current) return;
+    setLoading(false);
+    if (failure) { setError(describeDbError(failure)); return; }
+    setMore((data?.length ?? 0) > 50);
+    setRows((previous) => mergeThreadRows(cursor ? previous : [], (data ?? []).slice(0, 50), conversationId).reverse());
+  }, [conversationId, kind]);
+  useEffect(() => { const requests = request; void load(); return () => { requests.current++; }; }, [load]);
+  return <Modal open onClose={onClose} title={tr(kind === 'photos' ? 'messagesChat.allPhotos' : 'messagesChat.pinnedHistory')}>
+    {error && <div role="alert" className="mb-3 text-sm text-danger">{error}<Button type="button" variant="ghost" onClick={() => void load(rows.at(-1))}>{tr('messagesChat.historyRetry')}</Button></div>}
+    {!loading && !error && !rows.length && <p className="py-4 text-sm text-muted">{tr('messagesChat.emptyHistory')}</p>}
+    <div className={kind === 'photos' ? 'grid grid-cols-2 gap-3 sm:grid-cols-3' : 'space-y-2'}>{rows.map((message) => kind === 'photos' ? <a key={message.id} href={media(message.attachment_url) ?? undefined} target="_blank" rel="noreferrer" className="min-w-0 overflow-hidden rounded-xl border border-border"><FamilyMediaImg src={message.attachment_url} alt={message.attachment_name ?? tr('messages.sharedPhotos')} className="aspect-square w-full object-cover" /><span className="block truncate p-2 text-xs">{message.attachment_name || message.sender_name}</span></a> : <button key={message.id} type="button" onClick={() => onJump(message)} className="block w-full rounded-xl border border-border p-3 text-left"><span className="block text-xs font-semibold">{message.sender_name}</span><span className="block whitespace-pre-wrap break-words text-sm [overflow-wrap:anywhere]">{message.content || previewText(message, userId)}</span></button>)}</div>
+    {(loading || more) && <Button type="button" variant="ghost" loading={loading} onClick={() => void load(rows.at(-1))} className="mt-3 w-full">{tr('messagesChat.olderResults')}</Button>}
+  </Modal>;
+}
+
+function ConversationSettings({ conversation, members, userId, onClose, onSaved }: {
+  conversation: Conversation; members: Member[]; userId: string; onClose: () => void; onSaved: (conv: Conversation) => void;
+}) {
+  const { error: toastError } = useToast();
+  const [name, setName] = useState(conversation.name ?? '');
+  const tr = useTranslations();
+  const [description, setDescription] = useState(conversation.description ?? '');
+  const [selected, setSelected] = useState(new Set(conversation.participant_ids ?? []));
+  const [saving, setSaving] = useState(false);
+  async function save(event: React.FormEvent) {
+    event.preventDefault();
+    if (saving || !name.trim()) return;
+    setSaving(true);
+    try {
+      const participants = members.filter((member) => member.is_active && (selected.has(member.id) || member.user_id === userId));
+      const patch = {
+        name: name.trim(), description: description.trim() || null,
+        ...(!conversation.is_family_chat && conversation.kind !== 'direct' ? {
+          participant_ids: participants.map((member) => member.id),
+          member_ids: [...new Set(participants.map((member) => member.user_id).filter((id): id is string => Boolean(id)))],
+        } : {}),
+      };
+      const { data, error } = await createClient().from('family_conversations').update(patch).eq('id', conversation.id).eq('family_id', conversation.family_id).select('*').single();
+      if (error || !data) throw error ?? new Error(tr('messagesChat.settingsFailed'));
+      onSaved(data);
+    } catch (error) { toastError(describeDbError(error)); }
+    finally { setSaving(false); }
+  }
+  return <Modal open onClose={onClose} title={tr('messagesChat.settings')}><form onSubmit={save} className="space-y-4">
+    <label className="block text-sm">{tr('messagesChat.name')}<Input value={name} onChange={(event) => setName(event.target.value)} maxLength={200} required /></label>
+    <label className="block text-sm">{tr('messagesChat.description')}<textarea value={description} onChange={(event) => setDescription(event.target.value)} maxLength={2000} rows={3} className="mt-1 w-full rounded-xl border border-border bg-elevated p-3" /></label>
+    {conversation.is_family_chat ? <p className="text-sm text-muted">{tr('messagesChat.familyRoster')}</p> : <fieldset className="max-h-64 space-y-2 overflow-auto"><legend className="mb-2 text-sm font-semibold">{tr('messagesChat.members')}</legend>{members.filter((member) => member.is_active).map((member) => <label key={member.id} className="flex items-center gap-2 text-sm"><input type="checkbox" checked={selected.has(member.id) || member.user_id === userId} disabled={member.user_id === userId || saving} onChange={(event) => setSelected((current) => { const next = new Set(current); if (event.target.checked) next.add(member.id); else next.delete(member.id); return next; })} />{member.display_name}{member.user_id === userId ? ' (You)' : ''}</label>)}</fieldset>}
+    <p className="text-xs text-muted">{tr('messagesChat.membershipNotice')}</p>
+    <div className="flex justify-end gap-2"><Button variant="ghost" onClick={onClose} type="button">{tr('messagesChat.cancel')}</Button><Button type="submit" loading={saving} disabled={!name.trim()}>{tr('messagesChat.saveSettings')}</Button></div>
+  </form></Modal>;
+}
 
 const CONV_EMOJIS = ['💬', '👨‍👩‍👧‍👦', '🏠', '📅', '🎉', '🛒', '📚', '⚽', '🎮', '🏖️', '❤️', '🍕'];
 
@@ -1271,6 +1665,7 @@ function NewConversation({ familyId, userId, members, conversations, myName, onC
       : [myName, ...selectedMembers.map((m) => firstName(m.display_name))].slice(0, 3).join(', ') +
         (selectedMembers.length > 2 ? ` +${selectedMembers.length - 2}` : ''));
 
+    try {
     const { data, error } = await createConversation({
       family_id: familyId,
       name: convName,
@@ -1284,6 +1679,8 @@ function NewConversation({ familyId, userId, members, conversations, myName, onC
     setLoading(false);
     if (error || !data) { toastError(describeDbError(error, tr('messagesModule.couldNotCreateConversation'))); return; }
     onCreated(data);
+    } catch (error) { toastError(describeDbError(error)); }
+    finally { setLoading(false); }
   }
 
   return (
@@ -1310,6 +1707,7 @@ function NewConversation({ familyId, userId, members, conversations, myName, onC
                 </span>
               ))}
               <input
+                aria-label={tr('messagesChat.findMembers')}
                 value={search}
                 onChange={(e) => setSearch(e.target.value)}
                 placeholder={selectedMembers.length ? tr('uiText.addMore') : tr('uiText.searchPeopleOrGroups')}
@@ -1401,6 +1799,8 @@ function NewConversation({ familyId, userId, members, conversations, myName, onC
             <div className="grid h-14 w-14 shrink-0 place-items-center rounded-2xl bg-brand/15 text-2xl">{emoji}</div>
             <div className="flex-1">
               <Input
+                aria-label={tr('messagesChat.name')}
+                maxLength={200}
                 value={name}
                 onChange={(e) => setName(e.target.value)}
                 placeholder={selectedMembers.length === 1 ? selectedMembers[0].display_name : 'Conversation name (optional)'}

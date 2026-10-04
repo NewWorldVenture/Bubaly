@@ -30,6 +30,7 @@ export function previewText(m: PreviewMsg, selfId: string): string {
   switch (m.kind) {
     case 'image': body = '📷 Photo'; break;
     case 'file': body = `📎 ${m.attachment_name ?? 'File'}`; break;
+    case 'audio':
     case 'voice': body = '🎤 Voice message'; break;
     default: body = (m.content ?? '').replace(/\s+/g, ' ').trim(); break;
   }

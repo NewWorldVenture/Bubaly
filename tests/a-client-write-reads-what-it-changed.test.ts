@@ -96,7 +96,10 @@ describe('a confirmed client write is read, not just requested (C1-S9-77)', () =
     // (C1-S9-85). `[^;]`, not `[\s\S]`: the `.select('id')` must be in the
     // binding's OWN statement, or a storage upload's `data: stored` borrows the
     // next statement's select and is reported as an unread write.
-    const named = [...src.matchAll(/(?:const|let) \{ data: (\w+), error(?:: \w+)? \} = [^;]{0,1200}?\.select\('id'\)/g)].map((m) => m[1]);
+    // A returning full row is equally authoritative: messenger merges it
+    // immediately instead of waiting for a websocket echo of that write.
+    const projection = file.endsWith('/messages-module.tsx') ? '(?:id|\\*)' : 'id';
+    const named = [...src.matchAll(new RegExp(`(?:const|let) \\{ data: (\\w+), error(?:: \\w+)? \\} = [^;]{0,1200}?\\.select\\('${projection}'\\)`, 'g'))].map((m) => m[1]);
     // main spelt the delete handlers it confirmed with the bare `data`
     // (driving-safety-view has no other confirmed write). A file whose only
     // confirmed writes are spelt that way is held to the same reading, rather

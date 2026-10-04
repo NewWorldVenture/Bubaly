@@ -7,6 +7,8 @@ import { withAiRequest } from '@/lib/ai/observability';
 import { scopeFromUserContext } from '@/lib/services/scope';
 import { resolveProvider, describeAIError, isAIConfigured, type AIMessage } from '@/lib/ai/provider';
 import { finalizeAssistantContent, summarizeToolResult } from '@/lib/ai/assistant-engine';
+import { chronologicalMessages } from '@/lib/ai/conversation-session';
+import { toStructuredContent } from '@/lib/ai/result-cards';
 import { buildAssistantTools } from '@/lib/assistant/tools';
 import { wrapToolsWithTrust } from '@/lib/assistant/trust-wrapper';
 import type { Database } from '@/lib/database.types';
@@ -93,7 +95,8 @@ export async function POST(req: NextRequest) {
       { data: chores, error: choresError },
       { data: meals, error: mealsError },
     ] = await settleAll([
-      supabase.from('ai_messages').select('role, content').eq('conversation_id', conversationId).order('created_at', { ascending: true }).limit(40),
+      supabase.from('ai_messages').select('role, content, created_at').eq('conversation_id', conversationId)
+        .eq('family_id', familyId).order('created_at', { ascending: false }).order('id', { ascending: false }).limit(40),
       supabase.from('family_members').select('id, display_name, role').eq('family_id', familyId).eq('is_active', true),
       supabase.from('calendar_events').select('title, starts_at, category').eq('family_id', familyId).gte('starts_at', nowIso).order('starts_at').limit(12),
       supabase.from('chore_assignments').select('status').eq('family_id', familyId).in('status', ['todo', 'in_progress']),
@@ -139,7 +142,7 @@ export async function POST(req: NextRequest) {
     ].join('\n');
 
     const messages: AIMessage[] = [
-      ...((history ?? []).map((m) => ({ role: m.role as 'user' | 'assistant', content: m.content }))),
+      ...chronologicalMessages(history ?? []).map((m) => ({ role: m.role as 'user' | 'assistant', content: m.content })),
       { role: 'user' as const, content: message },
     ];
 
@@ -150,9 +153,15 @@ export async function POST(req: NextRequest) {
     // Stream the run as Server-Sent Events: `action` chips as tools fire,
     // `delta` chunks as the reply streams, then a final `done` (after persisting).
     const encoder = new TextEncoder();
+    let connected = true;
     const stream = new ReadableStream({
+      cancel() { connected = false; },
       async start(controller) {
-        const send = (e: unknown) => controller.enqueue(encoder.encode(`data: ${JSON.stringify(e)}\n\n`));
+        const send = (e: unknown) => {
+          if (!connected) return;
+          try { controller.enqueue(encoder.encode(`data: ${JSON.stringify(e)}\n\n`)); }
+          catch { connected = false; }
+        };
         // §33: the chat assistant is the other surface the row names by name.
         // It catches its own stream errors and falls back, so nothing ever
         // reached a wrapper's catch — a turn the family watched break recorded
@@ -163,6 +172,7 @@ export async function POST(req: NextRequest) {
           { feature: 'chat.assistant', text: 'Assistant chat', kind: 'feature', conversationId },
           async (obs) => {
         let content = '';
+        let responseError: string | undefined;
         const actions: { name: string; args: Record<string, unknown>; result: unknown }[] = [];
         const pushAction = (name: string, args: Record<string, unknown>, result: unknown) => {
           actions.push({ name, args, result });
@@ -182,7 +192,7 @@ export async function POST(req: NextRequest) {
           // Resilience: if streaming failed before producing any text (e.g. a proxy
           // buffered/blocked the SSE response), fall back to a single non-streaming
           // run so the assistant still works. Only surface an error if that fails too.
-          if (!content) {
+          if (!content && actions.length === 0) {
             try {
               const result = await provider.runTools({ system, messages, tools, maxTokens: 1500 });
               for (const a of result.actions) if (!actions.some((x) => x.name === a.name && JSON.stringify(x.args) === JSON.stringify(a.args))) pushAction(a.name, a.args, a.result);
@@ -191,12 +201,13 @@ export async function POST(req: NextRequest) {
               console.error('AI fallback error:', fallbackErr);
               obs.failed(fallbackErr);
               send({ type: 'error', error: describeAIError(fallbackErr).message });
-              controller.close();
+              if (connected) controller.close();
               return;
             }
           } else {
             // We already streamed a partial answer; report the interruption but keep what we have.
-            send({ type: 'error', error: describeAIError(streamErr).message });
+            responseError = describeAIError(streamErr).message;
+            send({ type: 'error', error: responseError });
           }
         }
 
@@ -210,6 +221,7 @@ export async function POST(req: NextRequest) {
             { family_id: familyId, conversation_id: conversationId, role: 'user', content: message },
             {
               family_id: familyId, conversation_id: conversationId, role: 'assistant', content: assistantContent,
+              structured_content: toStructuredContent([], [], responseError),
               tool_calls: actions.length ? (actions.map((a) => ({ name: a.name, args: a.args })) as unknown as Database['public']['Tables']['ai_messages']['Insert']['tool_calls']) : null,
               tool_results: actions.length ? (actions.map((a) => ({ name: a.name, ...summarizeToolResult(a.result) })) as unknown as Database['public']['Tables']['ai_messages']['Insert']['tool_results']) : null,
             },
@@ -246,7 +258,7 @@ export async function POST(req: NextRequest) {
 
         obs.used(provider.model, undefined);
         send({ type: 'done', content: assistantContent, persisted: !persistenceError });
-        controller.close();
+        if (connected) controller.close();
           },
         );
       },
