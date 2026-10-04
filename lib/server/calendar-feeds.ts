@@ -16,9 +16,9 @@
 
 import type { SupabaseClient } from '@supabase/supabase-js';
 import { parseICS } from '@/lib/sync/ics';
-import { planFeedRows, seriesKeys } from '@/lib/calendar/feeds';
+import { planFeedRows, seriesKeys, type FeedEventRow } from '@/lib/calendar/feeds';
 import { fetchPublicCalendarText } from '@/lib/server/public-calendar-fetch';
-import { wroteNoRows } from '@/lib/supabase/errors';
+import { isMissingFunctionError, wroteNoRows } from '@/lib/supabase/errors';
 import { readAll } from '@/lib/supabase/read-all';
 
 export type FeedSyncResult =
@@ -58,11 +58,22 @@ type Stamped = 'stamped' | 'lost' | 'failed';
 type Guard = {
   /** Writes the result and releases the claim — only while this sync still holds it. */
   settle: (patch: Record<string, unknown>) => Promise<Stamped>;
-  /** True while this sync's claim is still the one on the row. Asked before every write. */
+  /** True while this sync's claim is still the one on the row. Asked before every write on the fallback path. */
   holds: () => Promise<boolean>;
   /** The result for a claim another sync has taken; this sync stops and stamps nothing. */
   lost: () => FeedSyncResult;
+  /** Writes one chunk — upserts and removals — only while this sync holds the claim (see applyChunk). */
+  apply: (upserts: FeedEventRow[], removals: string[]) => Promise<Applied>;
 };
+
+/** The outcome of writing a chunk: `lost` is a fence that no longer matched at the moment of the write. */
+type Applied = 'applied' | 'lost' | { failed: string };
+/** The database function 0490 adds; a database without it answers PGRST202 and the fallback path runs. */
+export const APPLY_SYNC_FUNCTION = 'calendar_feed_apply_sync';
+export const APPLY_SYNC_MIGRATION = '0490_a_calendar_feed_sync_writes_only_while_it_holds_its_claim.sql';
+let warnedMissingApply = false;
+/** Tests only: the missing-function warning is said once per process, and a test needs to hear it. */
+export function resetApplySyncWarningForTests(): void { warnedMissingApply = false; }
 
 /**
  * Re-syncs a single feed row: claim → fetch → parse → upsert → remove what the
@@ -89,6 +100,7 @@ export async function syncFeed(
     settle: (patch) => { settled = true; return stampFeed(supabase, feed.id, patch, fence); },
     holds: () => holdsClaim(supabase, feed.id, fence),
     lost: () => { settled = true; return { ok: false, error: TAKEN_OVER_MESSAGE, takenOver: true }; },
+    apply: (upserts, removals) => applyChunk(supabase, feed.id, fence, upserts, removals, () => holdsClaim(supabase, feed.id, fence)),
   };
   try {
     return await runSync(supabase, feed, guard);
@@ -114,9 +126,11 @@ export async function syncFeed(
  * What it wrote before noticing stands — upserts of its own snapshot, removals
  * of what that snapshot cancelled — and the new holder's pass, over a snapshot
  * at least as new, and the next sync after it, bring the feed to the source's
- * state. The window between a holder's check and its write is the one PostgREST
- * leaves open; closing it needs the write and the check in one statement, a
- * database function this unit does not add.
+ * state. The check and the write are ONE transaction where 0490's
+ * `calendar_feed_apply_sync` exists (applyChunk): the function locks the feed
+ * row, requires the fence, and only then writes. Without it, the check and the
+ * write are two PostgREST statements, and that window is the fallback's, said
+ * once in the log.
  */
 async function claimFeed(supabase: SupabaseClient, feedId: string): Promise<{ fence: string } | 'busy' | 'failed'> {
   const now = new Date();
@@ -186,15 +200,14 @@ async function runSync(
 
   let imported = 0;
   for (let i = 0; i < rows.length; i += 200) {
-    // The fence, before every write: a claim taken over while this sync was on
-    // the network, or between chunks, stops it here with nothing more written.
-    if (!(await guard.holds())) return guard.lost();
+    // Every chunk is written under the fence: a claim taken over while this
+    // sync was on the network, or between chunks, stops it here with nothing
+    // more written (applyChunk).
     const chunk = rows.slice(i, i + 200);
-    const { error } = await supabase
-      .from('calendar_events')
-      .upsert(chunk, { onConflict: 'feed_id,external_uid' });
-    if (error) {
-      console.error(`Calendar feed event upsert failed for ${feed.id}:`, error);
+    const applied = await guard.apply(chunk, []);
+    if (applied === 'lost') return guard.lost();
+    if (applied !== 'applied') {
+      console.error(`Calendar feed event upsert failed for ${feed.id}:`, applied.failed);
       return failWith('Could not save calendar events');
     }
     imported += chunk.length;
@@ -227,16 +240,11 @@ async function runSync(
     removals.push(...seriesKeys((stored ?? []).map((r) => r.external_uid).filter((k): k is string => k != null), cancelledSeries));
   }
   for (let i = 0; i < removals.length; i += 200) {
-    if (!(await guard.holds())) return guard.lost();
     const chunk = removals.slice(i, i + 200);
-    const { error } = await supabase
-      .from('calendar_events')
-      .delete()
-      .eq('feed_id', feed.id)
-      .in('external_uid', chunk)
-      .select('id');
-    if (error) {
-      console.error(`Calendar feed cancellation removal failed for ${feed.id}:`, error);
+    const applied = await guard.apply([], chunk);
+    if (applied === 'lost') return guard.lost();
+    if (applied !== 'applied') {
+      console.error(`Calendar feed cancellation removal failed for ${feed.id}:`, applied.failed);
       return failWith('Could not remove cancelled events');
     }
   }
@@ -248,6 +256,64 @@ async function runSync(
   if (stamped === 'lost') return guard.lost();
   if (stamped === 'failed') return { ok: false, error: 'Calendar feed status could not be saved' };
   return { ok: true, imported };
+}
+
+/**
+ * Writes one chunk of a sync — upserts and removals — only while `fence` is
+ * still the claim on the feed row.
+ *
+ * With 0490 applied, that is one transaction in the database:
+ * `calendar_feed_apply_sync` locks the feed row FOR UPDATE, requires
+ * (`syncing`, `fence`), and only then upserts the rows on (feed_id, external_uid)
+ * and deletes this feed's rows under the named keys. A takeover that lands while
+ * a chunk is being applied waits for the chunk to commit, then moves the stamp,
+ * and this sync's next chunk is refused: `lost`, and nothing of it written.
+ *
+ * Without the function (PGRST202 — a deploy ahead of its migration), the path
+ * is the one this unit had before: ask `holds` first, then write. The check and
+ * the write are two statements then, and a sync that pauses between them can
+ * still land one stale chunk after a takeover; that window is named once in the
+ * log, with the migration that closes it. Nothing else differs between the two
+ * paths: the same rows, the same conflict target, the same scope on removals.
+ */
+async function applyChunk(
+  supabase: SupabaseClient,
+  feedId: string,
+  fence: string,
+  upserts: FeedEventRow[],
+  removals: string[],
+  holds: () => Promise<boolean>,
+): Promise<Applied> {
+  const { data, error } = await supabase.rpc(APPLY_SYNC_FUNCTION, { p_feed_id: feedId, p_fence: fence, p_upserts: upserts, p_removals: removals });
+  if (!error) {
+    if (data === 'applied' || data === 'lost') return data;
+    return { failed: `${APPLY_SYNC_FUNCTION} answered ${JSON.stringify(data)}` };
+  }
+  if (!isMissingFunctionError(error)) return { failed: error.message };
+
+  if (!warnedMissingApply) {
+    warnedMissingApply = true;
+    console.warn(`Calendar feed sync: ${APPLY_SYNC_FUNCTION} is not in this database (apply ${APPLY_SYNC_MIGRATION}); writing with a check before each chunk instead`);
+  }
+  if (!(await holds())) return 'lost';
+  if (upserts.length > 0) {
+    const { error: upsertError } = await supabase
+      .from('calendar_events')
+      .upsert(upserts, { onConflict: 'feed_id,external_uid' });
+    if (upsertError) return { failed: upsertError.message };
+  }
+  if (removals.length > 0) {
+    // `.select` confirms the statement ran, not that it matched: a key never
+    // imported deletes nothing, which is the ordinary case and not a failure.
+    const { error: deleteError } = await supabase
+      .from('calendar_events')
+      .delete()
+      .eq('feed_id', feedId)
+      .in('external_uid', removals)
+      .select('id');
+    if (deleteError) return { failed: deleteError.message };
+  }
+  return 'applied';
 }
 
 /**
