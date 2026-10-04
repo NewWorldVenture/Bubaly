@@ -79,6 +79,9 @@ export const SCHEDULES = {
   // the shortest the dispatcher ticks, and /api/cron/ai-runs boxes its own
   // work at 85 s so it never trips the dispatcher's 120 s abort.
   '/api/cron/ai-runs': '*/5 * * * *',
+  // Read-only provider organization preflight; disabled unless explicitly
+  // enabled in server-side environment configuration.
+  '/api/cron/claude-fleet': '0 * * * *',
   // Routines fire on the family's own clock ("every Sunday at 5pm"), so the
   // worker has to be asked often enough that a 17:00 schedule fires at 17:00
   // and not at whatever hour a daily tick happens to land on. Fifteen minutes
