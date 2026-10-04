@@ -1,0 +1,50 @@
+name: Mobile braces depth guard
+
+on:
+  pull_request:
+    paths:
+      - mobile/package.json
+      - mobile/package-lock.json
+      - mobile/vendor/braces/**
+      - mobile/vendor/braces-3.0.3-depth-guard.tgz
+      - mobile/scripts/braces-depth-guard.test.mjs
+      - .github/workflows/mobile-braces-depth-guard.yml
+  push:
+    branches: [main]
+    paths:
+      - mobile/package.json
+      - mobile/package-lock.json
+      - mobile/vendor/braces/**
+      - mobile/vendor/braces-3.0.3-depth-guard.tgz
+      - mobile/scripts/braces-depth-guard.test.mjs
+      - .github/workflows/mobile-braces-depth-guard.yml
+
+permissions:
+  contents: read
+
+jobs:
+  braces-depth-guard:
+    name: Mobile braces guard · install · regressions · typecheck
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: mobile
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version-file: .nvmrc
+          cache: npm
+          cache-dependency-path: mobile/package-lock.json
+
+      - name: Install the locked mobile dependency tree
+        run: npm ci
+
+      - name: Verify braces depth guards and Metro compatibility
+        run: npm run test:braces-depth-guard
+
+      # The typecheck lifecycle runs pretypecheck, which verifies the existing
+      # auth install patch and runs the auth-storage regression suite.
+      - name: Verify auth-storage regressions and TypeScript
+        run: npm run typecheck

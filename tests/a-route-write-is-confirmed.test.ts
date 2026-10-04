@@ -323,7 +323,7 @@ describe('services report a write that matched nothing (C1-S9-65)', () => {
   });
 
   it('a note delete that removed nothing fails', () => {
-    expect(block(notesSvc, 'if (!error && wroteNoRows(deleted)) {')).toContain("return fail('Could not delete that note.'");
+    expect(block(notesSvc, 'if (!error && (!Array.isArray(deleted) || wroteNoRows(deleted))) {')).toContain("return fail('Could not delete that note.'");
   });
 
   it('the itinerary shift counts only items that moved', () => {

@@ -20,13 +20,13 @@ describe('normalizeAllergies', () => {
 describe('buildPantryChefPrompt', () => {
   const now = new Date('2026-07-18T12:00:00Z');
   it('injects the allergy guard when the family has allergies', () => {
-    const p = buildPantryChefPrompt(['peanuts', 'shellfish'], now);
+    const p = buildPantryChefPrompt(['peanuts', 'shellfish'], now, 'UTC');
     expect(p).toContain('NEVER suggest a recipe containing them');
     expect(p).toContain('peanuts, shellfish');
     expect(p).toContain('Return ONLY a JSON array');
   });
   it('states no-known-allergies when none provided', () => {
-    expect(buildPantryChefPrompt([], now)).toContain('No known family allergies');
+    expect(buildPantryChefPrompt([], now, 'UTC')).toContain('No known family allergies');
   });
 });
 

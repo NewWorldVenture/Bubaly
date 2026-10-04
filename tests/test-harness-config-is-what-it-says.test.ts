@@ -64,6 +64,15 @@ describe('the mobile app\'s dependencies are audited (MAIN-F-C10)', () => {
   it('the mobile CI job runs npm audit on production dependencies', () => {
     const mobileJob = ci.slice(ci.indexOf('\n  mobile:'), ci.indexOf('\n  database:'));
     expect(mobileJob).toContain('working-directory: mobile');
-    expect(mobileJob).toMatch(/run: npm audit --omit=dev --audit-level=(high|moderate|critical)\b/);
+    expect(mobileJob).toMatch(/run: node \.\.\/scripts\/audit-npm-advisories\.mjs --omit=dev --audit-level=(high|moderate|critical)\b/);
+  });
+
+  it('accepts nothing but advisories listed by id, each with its package and a reason', () => {
+    const { advisories } = JSON.parse(readFileSync('mobile/npm-audit-allowlist.json', 'utf8'));
+    for (const [id, entry] of Object.entries(advisories as Record<string, { package?: string; reason?: string }>)) {
+      expect(id).toMatch(/^GHSA-[a-z0-9]{4}-[a-z0-9]{4}-[a-z0-9]{4}$/);
+      expect(entry.package).toBeTruthy();
+      expect(entry.reason).toBeTruthy();
+    }
   });
 });

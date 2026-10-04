@@ -61,6 +61,7 @@ beforeEach(() => {
     defaults: { chore_assignments: { status: 'todo' }, chores: { points: 10, requires_approval: true } },
   });
   db.seed('families', [{ id: FAMILY, name: 'Test household', timezone: 'UTC' }]);
+  db.seed('family_members', [{ id: 'member-child', family_id: FAMILY }]);
   db.seed('chores', [{ id: 'chore-1', family_id: FAMILY, title: 'Empty the dishwasher' }]);
   db.seed('chore_assignments', [
     { id: 'assign-1', family_id: FAMILY, chore_id: 'chore-1', member_id: 'member-child', status: 'todo' },
@@ -96,11 +97,17 @@ describe('removing a chore is refused to a member who is not a manager', () => {
 describe('adding a chore is refused to a member who is not a manager', () => {
   it('refuses a child, and no chore is minted', async () => {
     state.role = 'child';
+    db.seed('family_members', [{ id: 'member-sibling', family_id: FAMILY }]);
+    const beforeChores = structuredClone(chores());
+    const beforeAssignments = structuredClone(assignments());
 
     const result = await createChoreAction({ title: 'Sibling does the bins', assigneeId: 'member-sibling' });
 
     expect(result).toMatchObject({ ok: false });
+    expect((result as { error: string }).error).toMatch(/parent\/guardian/i);
     expect(chores()).toHaveLength(1); // only the seeded one
+    expect(chores()).toEqual(beforeChores);
+    expect(assignments()).toEqual(beforeAssignments);
   });
 
   it('lets a parent add one', async () => {
@@ -130,6 +137,10 @@ describe('the screen and the action agree about who may do these', () => {
   it('checks the role in the action, where the money write already checks it', () => {
     const actions = read('app/(app)/dashboard/chores/actions.ts');
     expect(actions).toContain('refuseUnlessManager');
-    expect((actions.match(/refuseUnlessManager\(ctx\.active\.role\)/g) ?? [])).toHaveLength(2);
+    // Three: add, remove, and the respawn that follows the board's approval of
+    // a recurring chore (`respawnChoreAssignmentAction`), which creates an
+    // assignment and is gated like the add it resembles.
+    expect((actions.match(/refuseUnlessManager\(ctx\.active\.role\)/g) ?? [])).toHaveLength(3);
+    expect(actions).toContain('export async function respawnChoreAssignmentAction');
   });
 });

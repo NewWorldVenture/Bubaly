@@ -58,6 +58,7 @@ beforeEach(() => {
     uniques: { todo_items: [['family_id', 'idempotency_key']] },
   });
   db.seed('todo_lists', [{ id: LIST, family_id: FAMILY, name: 'Tasks', created_by: MEMBER }]);
+  db.seed('family_members', [{ id: MEMBER, family_id: FAMILY }]);
   mocks.requireUserContext.mockResolvedValue({
     user: { id: 'user-1' },
     active: {

@@ -5,6 +5,7 @@
   "main": "expo-router/entry",
   "scripts": {
     "postinstall": "node scripts/patch-auth-storage-errors.mjs",
+    "test:braces-depth-guard": "node --test scripts/braces-depth-guard.test.mjs",
     "auth:patch:check": "node scripts/patch-auth-storage-errors.mjs --check",
     "test:auth-storage": "node --test scripts/auth-storage-errors.test.mjs",
     "prestart": "npm run auth:patch:check",
@@ -23,6 +24,7 @@
     "@expo/vector-icons": "^15.0.2",
     "@react-native-async-storage/async-storage": "2.2.0",
     "@supabase/supabase-js": "^2.115.0",
+    "braces": "file:vendor/braces-3.0.3-depth-guard.tgz",
     "expo": "~57.0.20",
     "expo-audio": "~57.0.3",
     "expo-constants": "~57.0.17",
@@ -39,6 +41,9 @@
     "react-native-safe-area-context": "~5.7.0",
     "react-native-screens": "~4.26.0",
     "react-native-url-polyfill": "^4.0.0"
+  },
+  "overrides": {
+    "braces": "$braces"
   },
   "devDependencies": {
     "@types/react": "~19.2.4",
