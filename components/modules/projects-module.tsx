@@ -1,6 +1,6 @@
 'use client';
 
-import { useMemo, useState } from 'react';
+import { useLayoutEffect, useMemo, useRef, useState } from 'react';
 import { Hammer, Plus, Check, Pencil, Trash2, Wallet, CalendarClock, FileText, Package, Wand2, ShoppingCart, ExternalLink, ArrowRight, XCircle, Users, Sparkles } from 'lucide-react';
 import Link from 'next/link';
 import { useApp } from '@/components/app/app-context';
@@ -27,6 +27,7 @@ import { useConfirm } from '@/components/ui/confirm';
 import { safeWebLink } from '@/lib/utils/safe-link';
 
 type Project = Tables<'home_projects'>;
+type ProjectEditorInstance = { id: number };
 type Material = Tables<'project_materials'>;
 type Quote = Tables<'project_quotes'>;
 type Contractor = Pick<Tables<'home_contractors'>, 'id' | 'name' | 'company' | 'trade' | 'phone' | 'is_preferred'>;
@@ -68,9 +69,47 @@ export function ProjectsModule() {
     deps: [familyId],
   });
 
-  const [projectForm, setProjectForm] = useState<{ open: boolean; project: Project | null }>({ open: false, project: null });
+  const [projectForm, setProjectForm] = useState<{ open: boolean; project: Project | null; instance: ProjectEditorInstance | null }>({ open: false, project: null, instance: null });
   const [openId, setOpenId] = useState<string | null>(null);
   const [showDone, setShowDone] = useState(false);
+  const owner = useMemo(() => ({ active: false, familyId, userId }), [familyId, userId]);
+  const currentOwner = useRef(owner);
+  currentOwner.current = owner;
+  const currentEditor = useRef<ProjectEditorInstance | null>(null);
+  const editorSequence = useRef(0);
+  const editorOpen = useRef(false);
+  useLayoutEffect(() => {
+    owner.active = true;
+    currentEditor.current = null; editorOpen.current = false;
+    setProjectForm({ open: false, project: null, instance: null }); setOpenId(null);
+    return () => { owner.active = false; };
+  }, [owner]);
+  const isCurrentOwner = () => owner.active && currentOwner.current === owner;
+  const isCurrentEditor = (instance: ProjectEditorInstance) => isCurrentOwner() && editorOpen.current && currentEditor.current === instance;
+  function openProjectForm(project: Project | null) {
+    if (!isCurrentOwner()) return;
+    const instance = { id: ++editorSequence.current };
+    currentEditor.current = instance; editorOpen.current = true;
+    setProjectForm({ open: true, project, instance });
+  }
+  function closeProjectForm(instance: ProjectEditorInstance) {
+    if (!isCurrentEditor(instance)) return;
+    editorOpen.current = false;
+    setProjectForm({ open: false, project: null, instance });
+  }
+  async function projectSaved(id: string, instance: ProjectEditorInstance) {
+    if (!isCurrentOwner()) return;
+    const ownsEditor = isCurrentEditor(instance);
+    if (ownsEditor) { closeProjectForm(instance); setOpenId(id); }
+    // Closed editors still refresh confirmed writes for this mounted context.
+    const confirmation = await projects.refreshAndConfirm();
+    if (!isCurrentOwner() || !ownsEditor || currentEditor.current !== instance) return;
+    if (!confirmation.ok) {
+      if (confirmation.reason !== 'superseded') toastError(tr('projectsModule.couldNotLoadYourProjects'));
+      return;
+    }
+    success(tr('projectsModule.projectSaved'));
+  }
 
   // The FAMILY's wall clock (TIME-003): the helpers below read local fields,
   // so handing them this makes their "today" the family's day, not the phone's.
@@ -89,10 +128,18 @@ export function ProjectsModule() {
 
   async function deleteProject(p: Project) {
     if (!(await askConfirm({ title: tr('confirm.deleteNamed', { name: p.title }), body: tr('projects.deleteProjectBody') }))) return;
+    if (!isCurrentOwner()) return;
     const { data: deleted, error } = await createClient().from('home_projects').delete().eq('id', p.id).select('id');
+    if (!isCurrentOwner()) return;
     if (error) return toastError(describeDbError(error));
     if (wroteNoRows(deleted)) return toastError(tr('errors.thatChangeWasNotSaved'));
     setOpenId(null);
+    const confirmation = await projects.refreshAndConfirm();
+    if (!isCurrentOwner()) return;
+    if (!confirmation.ok) {
+      if (confirmation.reason !== 'superseded') toastError(tr('projectsModule.couldNotLoadYourProjects'));
+      return;
+    }
     success(tr('projectsModule.projectDeleted'));
   }
 
@@ -144,7 +191,7 @@ export function ProjectsModule() {
           <div className="flex flex-wrap items-center gap-2">
             <AiInsight kind="projects" iconOnly />
             <Link href="/dashboard/home" className="inline-flex items-center gap-1 rounded-xl border border-border px-3 py-2 text-sm text-muted hover:text-fg coarse:min-h-11"><Users className="h-4 w-4" /> {tr('projects.contractors')}</Link>
-            <Button onClick={() => setProjectForm({ open: true, project: null })}><Plus className="h-4 w-4" /> {tr('projects.newProject')}</Button>
+            <Button onClick={() => openProjectForm(null)}><Plus className="h-4 w-4" /> {tr('projects.newProject')}</Button>
           </div>
         }
       />
@@ -173,7 +220,7 @@ export function ProjectsModule() {
       </div>
 
       {projects.data.length === 0 ? (
-        <EmptyState icon={Hammer} title={tr('projects.noProjectsYet')} description={tr('projectsModule.startWithTheThingYou')} action={<Button onClick={() => setProjectForm({ open: true, project: null })}><Plus className="h-4 w-4" /> {tr('projects.firstProject')}</Button>} />
+        <EmptyState icon={Hammer} title={tr('projects.noProjectsYet')} description={tr('projectsModule.startWithTheThingYou')} action={<Button onClick={() => openProjectForm(null)}><Plus className="h-4 w-4" /> {tr('projects.firstProject')}</Button>} />
       ) : (
         <div className="grid gap-4 lg:grid-cols-4">
           {BOARD.map((col) => {
@@ -196,19 +243,20 @@ export function ProjectsModule() {
         </div>
       )}
 
-      {projectForm.open && (
-        <ProjectForm familyId={familyId} userId={userId} members={members} contractors={contractors.data} project={projectForm.project} defaultOwner={selfMember?.id ?? null}
-          onClose={() => setProjectForm({ open: false, project: null })} onSaved={(id) => { setProjectForm({ open: false, project: null }); setOpenId(id); success(tr('projectsModule.projectSaved')); }} />
+      {projectForm.open && projectForm.instance && (
+        <ProjectForm key={projectForm.instance.id} familyId={familyId} userId={userId} members={members} contractors={contractors.data} project={projectForm.project} defaultOwner={selfMember?.id ?? null}
+          canWrite={() => isCurrentEditor(projectForm.instance!)}
+          onClose={() => closeProjectForm(projectForm.instance!)} onSaved={(id) => projectSaved(id, projectForm.instance!)} />
       )}
       {openProject && (
         <ProjectDetail project={openProject} familyId={familyId} userId={userId} members={members} contractors={contractors.data} materials={materials.data.filter((m) => m.project_id === openProject.id)} quotes={quotes.data.filter((q) => q.project_id === openProject.id)} today={today}
-          onClose={() => setOpenId(null)} onEdit={() => setProjectForm({ open: true, project: openProject })} onStatus={(s) => setStatus(openProject, s)} onDelete={() => deleteProject(openProject)} />
+          onClose={() => setOpenId(null)} onEdit={() => openProjectForm(openProject)} onStatus={(s) => setStatus(openProject, s)} onDelete={() => deleteProject(openProject)} />
       )}
     </div>
   );
 }
 
-function ProjectForm({ familyId, userId, members, contractors, project, defaultOwner, onClose, onSaved }: { familyId: string; userId: string; members: { id: string; display_name: string }[]; contractors: Contractor[]; project: Project | null; defaultOwner: string | null; onClose: () => void; onSaved: (id: string) => void }) {
+function ProjectForm({ familyId, userId, members, contractors, project, defaultOwner, canWrite, onClose, onSaved }: { familyId: string; userId: string; members: { id: string; display_name: string }[]; contractors: Contractor[]; project: Project | null; defaultOwner: string | null; canWrite: () => boolean; onClose: () => void; onSaved: (id: string) => Promise<void> }) {
   const tr = useTranslations();
   const { error: toastError } = useToast();
   const [loading, setLoading] = useState(false);
@@ -217,16 +265,20 @@ function ProjectForm({ familyId, userId, members, contractors, project, defaultO
   const [diy, setDiy] = useState(project?.is_diy ?? true);
   const [kind, setKind] = useState<HomeProjectKind>(project?.kind ?? 'repair');
   const [applied, setApplied] = useState<ScopeTemplate | null>(null);
+  const active = useRef(false);
+  const pending = useRef(false);
+  useLayoutEffect(() => { active.current = true; return () => { active.current = false; }; }, []);
   const suggestions = useMemo(() => (project ? [] : suggestScope(`${title} ${description}`).slice(0, 3)), [title, description, project]);
 
   function applyTemplate(t: ScopeTemplate) { setKind(t.kind); setDiy(t.diy); setApplied(t); }
 
   async function onSubmit(e: React.FormEvent<HTMLFormElement>) {
     e.preventDefault();
+    if (!active.current || pending.current || !canWrite()) return;
     const f = new FormData(e.currentTarget);
     const name = title.trim();
     if (!name) return toastError(tr('projectsModule.nameTheProject'));
-    setLoading(true);
+    pending.current = true; setLoading(true);
     const payload = {
       title: name, description: description.trim() || null, room: String(f.get('room') ?? '').trim() || null, kind, is_diy: diy,
       priority: String(f.get('priority') ?? 'medium') as HomeProjectPriority, status: String(f.get('status') ?? (project ? 'planning' : 'idea')) as HomeProjectStatus,
@@ -234,19 +286,28 @@ function ProjectForm({ familyId, userId, members, contractors, project, defaultO
       target_start: String(f.get('target_start') ?? '') || null, target_end: String(f.get('target_end') ?? '') || null,
       owner_id: String(f.get('owner_id') ?? '') || null, contractor_id: String(f.get('contractor_id') ?? '') || null, notes: String(f.get('notes') ?? '').trim() || null,
     };
-    const supabase = createClient();
-    const { data, error } = project
-      ? await supabase.from('home_projects').update(payload).eq('id', project.id).select('id').single()
-      : await supabase.from('home_projects').insert({ family_id: familyId, created_by: userId, ...payload }).select('id').single();
-    if (error) { setLoading(false); return toastError(describeDbError(error)); }
-    if (!project && applied) {
-      // Starter materials from the matched template — a failed insert is
-      // reported, the project itself is already saved.
-      const { error: matError } = await supabase.from('project_materials').insert(applied.materials.map((m) => ({ family_id: familyId, project_id: data.id, name: m.name, quantity: m.quantity, unit: m.unit ?? null, est_cost_cents: m.estCents, created_by: userId })));
-      if (matError) toastError(describeDbError(matError));
+    try {
+      const supabase = createClient();
+      const { data, error } = project
+        ? await supabase.from('home_projects').update(payload).eq('id', project.id).select('id').single()
+        : await supabase.from('home_projects').insert({ family_id: familyId, created_by: userId, ...payload }).select('id').single();
+      if (error) { if (active.current && canWrite()) toastError(describeDbError(error)); return; }
+      if (!data?.id) { if (active.current && canWrite()) toastError(tr('errors.thatChangeWasNotSaved')); return; }
+      if (!project && applied) {
+        // Starter materials from the matched template — a failed insert is
+        // reported, the project itself is already saved.
+        const { error: matError } = await supabase.from('project_materials').insert(applied.materials.map((m) => ({ family_id: familyId, project_id: data.id, name: m.name, quantity: m.quantity, unit: m.unit ?? null, est_cost_cents: m.estCents, created_by: userId })));
+        if (active.current && canWrite()) {
+          if (matError) toastError(describeDbError(matError));
+        }
+      }
+      await onSaved(data.id);
+    } catch (error) {
+      if (active.current && canWrite()) toastError(describeDbError(error));
+    } finally {
+      pending.current = false;
+      if (active.current && canWrite()) setLoading(false);
     }
-    setLoading(false);
-    onSaved(data.id);
   }
 
   return (

@@ -139,6 +139,7 @@ export function LanguageModule() {
   }
 
   async function deleteSession(s: Session) {
+    if (!(await askConfirm({ title: tr('language.deleteSessionQ'), body: tr('confirm.cannotBeUndone') }))) return;
     const { data: removed2, error } = await createClient().from('language_sessions').delete().eq('id', s.id).select('id');
     if (error) return toastError(describeDbError(error));
     if (wroteNoRows(removed2)) return toastError(tr('errors.thatChangeWasNotSaved'));

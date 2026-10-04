@@ -479,6 +479,7 @@ describe('trust gate', () => {
   it("lets a teen's small task through, which ROLE_DEFAULTS alone would deny", async () => {
     const family = makeFamilyDb({
       domain: (call) => {
+        if (call.table === 'family_members') return { data: { id: 'member-1', family_id: 'fam-1' }, error: null };
         if (call.table === 'todo_lists') return { data: { id: 'list-1' }, error: null };
         if (call.table === 'todo_items') {
           return {

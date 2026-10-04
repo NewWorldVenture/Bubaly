@@ -10,6 +10,8 @@ import { TreasuryView, type TreasuryChild } from '@/components/wallet/treasury-v
 import { ErrorState } from '@/components/ui/states';
 import { getLocaleContext, getTranslations } from '@/lib/i18n/server';
 import { readAllAsQuery } from '@/lib/supabase/read-all';
+import { dayKeyInTz, zonedDayBoundsMs } from '@/lib/services/scope';
+import { getFormat } from '@/lib/utils/format-server';
 
 export async function generateMetadata(): Promise<Metadata> {
   const t = await getTranslations();
@@ -70,7 +72,13 @@ export default async function WalletTreasuryPage() {
   }
 
   const now = new Date();
-  const monthStart = new Date(now.getFullYear(), now.getMonth(), 1).toISOString();
+  // "This month" is the FAMILY's month. `now.getFullYear()/getMonth()` are the
+  // host's, so for a household west of UTC the month rolled over on the last
+  // afternoon of the previous one and the trend's labels were the host's too.
+  const tz = ctx.active.family.timezone || 'UTC';
+  const todayKey = dayKeyInTz(now, tz);
+  const { fmtDate } = await getFormat(tz);
+  const monthStart = new Date(zonedDayBoundsMs(`${todayKey.slice(0, 7)}-01`, tz).start).toISOString();
   let thisMonthIn = 0, thisMonthOut = 0;
   for (const t of txns ?? []) {
     if (t.created_at < monthStart || t.status !== 'completed') continue;
@@ -107,21 +115,22 @@ export default async function WalletTreasuryPage() {
   const totalGoalTargets = children.reduce((sum, c) => sum + c.goalTargetCents, 0);
   const totalActiveGoals = children.reduce((sum, c) => sum + c.activeGoals, 0);
 
-  // 6-month monthly trend
+  // 6-month monthly trend, bucketed by the month each transaction landed in
+  // IN THE FAMILY'S ZONE. `Date.UTC` below is zone-free calendar arithmetic on
+  // the month key, never "this is UTC"; the label is a DATE-only key, which the
+  // formatter renders in no zone.
+  const [y, m] = todayKey.split('-').map(Number);
+  const monthKeyOf = (iso: string) => dayKeyInTz(new Date(iso), tz).slice(0, 7);
   const trend: { label: string; credits: number; debits: number }[] = [];
   for (let i = 5; i >= 0; i--) {
-    const d = new Date(now.getFullYear(), now.getMonth() - i, 1);
-    const start = d.toISOString().slice(0, 10);
-    const nextM = new Date(d.getFullYear(), d.getMonth() + 1, 1);
-    const end = new Date(nextM.getTime() - 1).toISOString().slice(0, 10);
+    const key = new Date(Date.UTC(y, m - 1 - i, 1)).toISOString().slice(0, 7);
     let credits = 0, debits = 0;
     for (const t of txns ?? []) {
-      const ds = t.created_at.slice(0, 10);
-      if (ds < start || ds > end || t.status !== 'completed') continue;
+      if (t.status !== 'completed' || monthKeyOf(t.created_at) !== key) continue;
       if (t.direction === 'credit') credits += t.amount_cents;
       else debits += t.amount_cents;
     }
-    trend.push({ label: d.toLocaleDateString(locale.code, { month: 'short' }), credits, debits });
+    trend.push({ label: fmtDate(`${key}-01`, 'MMM'), credits, debits });
   }
 
   return (

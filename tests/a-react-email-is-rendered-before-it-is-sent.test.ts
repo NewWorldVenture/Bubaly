@@ -103,14 +103,14 @@ describe('sendReactEmail renders every template through the real SDK', () => {
     ['weekly digest', () => createElement(WeeklyDigestEmail, {
       familyName: 'The Synthetic Family', adminName: 'Ada',
       events: [{ title: 'Synthetic recital', date: '2026-10-02' }],
-      openChores: 3, mealsPlanned: 5, memberCount: 4,
+      openChores: 3, mealsPlanned: 5, memberCount: 4, timeZone: 'UTC',
     }), ['The Synthetic Family', 'Synthetic recital']],
     ['chore reminder', () => createElement(ChoreReminderEmail, {
       memberName: 'Ada', familyName: 'The Synthetic Family',
-      chores: [{ title: 'Water the synthetic plants', points: 5, dueAt: null }],
+      chores: [{ title: 'Water the synthetic plants', points: 5, dueAt: null }], timeZone: 'UTC',
     }), ['Ada', 'Water the synthetic plants']],
     ['notification digest', () => createElement(NotificationDigestEmail, {
-      name: 'Ada', items: [{ title: 'Synthetic notice', body: 'Nothing real happened.', icon: 'bell' }],
+      name: 'Ada', items: [{ title: 'Synthetic notice', body: 'Nothing real happened.', icon: 'bell' }], timeZone: 'UTC',
     }), ['Synthetic notice', 'Nothing real happened.']],
   ];
 

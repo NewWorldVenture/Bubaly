@@ -49,6 +49,10 @@ beforeEach(() => {
       if (table === failure) return Response.json({ code: '42501', message: 'Synthetic policy failure' }, { status: 503, headers: { 'retry-after': '0' } });
       if (!failure && table === 'guardian_contacts') return Response.json([{ id: CONTACT, family_id: FAMILY, phone: '+15555550200', name: 'Synthetic blocked contact', trust_level: 'blocked', spam_score: 90 }], { headers: { 'content-range': '0-0/1' } });
       if (stages.includes(table as typeof stages[number])) return Response.json([], { headers: { 'content-range': '*/0' } });
+      // A policy failure gives the claim back (releaseGuardianCallback), so the
+      // retry the 503 asks for can take the event. PostgREST answers the delete
+      // with the removed row, as `.select('event_id')` asks.
+      if (table === 'guardian_callback_events' && init.method === 'DELETE') return Response.json([{ event_id: url.searchParams.get('event_id')?.replace(/^eq\./, '') ?? '' }]);
       throw new Error(`Unexpected fixture operation ${init.method ?? 'GET'} ${table}`);
     } },
   });
@@ -73,7 +77,10 @@ describe('existing Guardian callers stop on unavailable policy', () => {
       const response = await deliver(channel);
       expect(response.status).toBe(503);
       expect(await response.text()).not.toMatch(/<(?:Dial|Gather|Record|Hangup)\b/i);
-      expect(calls.every(call => call.method === 'GET')).toBe(true);
+      // The one write a policy failure may make is giving the claim back, so the
+      // retry this 503 asks for is processed rather than acknowledged as a
+      // duplicate; everything else stays a read.
+      expect(calls.filter(call => call.method !== 'GET')).toEqual([{ table: 'guardian_callback_events', method: 'DELETE' }]);
       expect(seam.processed).not.toHaveBeenCalled();
       expect(seam.scam).not.toHaveBeenCalled();
       expect(seam.notify).not.toHaveBeenCalled();
