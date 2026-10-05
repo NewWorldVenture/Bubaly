@@ -12,7 +12,7 @@ import type { NeedsReader } from '@/lib/home/needs-sources';
 import { SOURCE_MESSAGES, translate } from '@/lib/i18n/messages';
 import { detectConflicts, type ConflictEvent } from '@/lib/home/conflicts';
 import { isSeries, readCalendarOccurrences } from '@/lib/calendar/occurrences';
-import { occurrenceDay } from '@/lib/calendar/day';
+import { allDayDate, occurrenceDay } from '@/lib/calendar/day';
 import { instantCalendarBounds } from '@/lib/briefing/calendar-window';
 import { medicationDueReminders } from '@/lib/notifications/medication-reminders';
 import { upcomingRelationship, formatCountdown, milestoneLabel, type RelDate } from '@/lib/relationship/dates';
@@ -73,15 +73,22 @@ const NEEDS_TO_KNOW_READER: NeedsReader = {
 // hour beside it. The rest of this file already resolves `families.timezone`
 // for exactly this reason — see the medication-window note above — and this was
 // the one place the value was not threaded through.
+//
+// An all-day row's date is the one it stores (allDayDate), not its instant on
+// the family's clock: September 22 is stored as 2026-09-22T00:00Z, which is
+// still the 21st in New York, so reading it there called tomorrow's all-day
+// event "today". Its weekday is read at Greenwich for the same reason.
 function timeLabel(iso: string, tz: string, allDay = false): string {
   const d = new Date(iso);
-  const dayKey = dayKeyInTz(d, tz);
+  const dayKey = allDay ? allDayDate(iso) : dayKeyInTz(d, tz);
   const todayKey = dayKeyInTz(new Date(), tz);
   const day = dayKey === todayKey
     ? 'today'
     : dayKey === addDaysToDayKey(todayKey, 1)
       ? 'tomorrow'
-      : d.toLocaleDateString('en-US', { weekday: 'long', timeZone: tz });
+      : allDay
+        ? new Date(`${dayKey}T12:00:00Z`).toLocaleDateString('en-US', { weekday: 'long', timeZone: 'UTC' })
+        : d.toLocaleDateString('en-US', { weekday: 'long', timeZone: tz });
   if (allDay) return day;
   return `${day} at ${d.toLocaleTimeString('en-US', { hour: 'numeric', minute: '2-digit', timeZone: tz })}`;
 }

@@ -43,9 +43,9 @@ const event = (row: Record<string, unknown>) => ({
   ends_at: null, ...row,
 });
 
-function household(rows: Record<string, unknown>[]) {
+function household(rows: Record<string, unknown>[], timezone = LA) {
   const db = createInMemorySupabase();
-  db.seed('families', [{ id: FAMILY, timezone: LA }]);
+  db.seed('families', [{ id: FAMILY, timezone }]);
   db.seed('family_members', [
     { id: PARENT, family_id: FAMILY, user_id: PARENT_USER, display_name: 'Dana', role: 'parent', is_active: true, birthday: null },
     { id: KID, family_id: FAMILY, user_id: null, display_name: 'Sam', role: 'child', is_active: true, birthday: null },
@@ -98,6 +98,42 @@ describe('the reminder engine keys a series occurrence by the family\'s day', ()
     await generateFamilyNotifications(db as unknown as SupabaseClient<Database>, FAMILY);
     const clashes = written(db).filter((n) => n.title === 'Schedule conflict').map((n) => n.related_id);
     expect(clashes).toEqual([`conflict:${[SWIM, RECITAL].sort().join('-')}:2026-03-07:${PARENT}`]);
+  });
+});
+
+describe('an all-day reminder names the day it is stored on', () => {
+  // New York, Monday 21 September 2026, 08:00 EDT. An all-day row is stored at
+  // its date's Greenwich midnight, which is still the previous evening in New
+  // York; reading that instant on the family's clock called Tuesday's all-day
+  // event "today" and Wednesday's "tomorrow".
+  const NY = 'America/New_York';
+  const DRIVE = '00000000-0000-4000-8000-0000000000e4';
+  const TRIP = '00000000-0000-4000-8000-0000000000e5';
+  const DINNER = '00000000-0000-4000-8000-0000000000e6';
+  beforeEach(() => {
+    vi.useFakeTimers();
+    vi.setSystemTime(new Date('2026-09-21T12:00:00.000Z'));
+    vi.spyOn(console, 'error').mockImplementation(() => {});
+  });
+  afterEach(() => {
+    vi.useRealTimers();
+    vi.restoreAllMocks();
+  });
+
+  it('says tomorrow and the weekday for all-day rows, and leaves timed labels as they were', async () => {
+    const db = household([
+      event({ id: DRIVE, title: 'Food drive', starts_at: '2026-09-22T00:00:00.000Z', all_day: true }),
+      event({ id: TRIP, title: 'Field trip', starts_at: '2026-09-23T00:00:00.000Z', all_day: true }),
+      // 20:30 EDT on the 21st, 00:30Z on the 22nd: a timed row is on the family's clock.
+      event({ id: DINNER, title: 'Dinner', starts_at: '2026-09-22T00:30:00.000Z', ends_at: '2026-09-22T01:30:00.000Z' }),
+    ], NY);
+    await generateFamilyNotifications(db as unknown as SupabaseClient<Database>, FAMILY);
+    const bodies = new Map((db.table('notifications') as { type: string; related_id: string; body: string }[])
+      .filter((n) => n.type === 'calendar_event')
+      .map((n) => [n.related_id, n.body]));
+    expect(bodies.get(DRIVE)).toBe('tomorrow');
+    expect(bodies.get(TRIP)).toBe('Wednesday');
+    expect(bodies.get(DINNER)).toBe('today at 8:30 PM');
   });
 });
 
