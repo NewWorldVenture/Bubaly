@@ -151,6 +151,29 @@ try {
   file('supabase/migrations/0475_messaging_conversation_privacy_and_delivery.sql');
   file('supabase/migrations/0476_messaging_notifications_preferences.sql');
   console.log('PASS: both messaging migrations apply again to the existing schema.');
+  // The family-media bucket under the real 0475, each case in a transaction
+  // that is rolled back. Whether the bucket is public is 0459's to decide (and
+  // the owner has deferred it), so 0475 leaves it as found. Storage checks an
+  // allow-list only when it has entries, so NULL and empty lists allow every
+  // type and must not be narrowed to audio; a real list gains the six voice-note
+  // types once; and a bucket that is not there is not created.
+  const m0475 = 'supabase/migrations/0475_messaging_conversation_privacy_and_delivery.sql';
+  const bucketCase = (setup, assertion) => sql(`begin;\n${setup};\n\\i ${m0475}\ndo $$ begin\n  ${assertion}\nend $$;\nrollback;\n`);
+  bucketCase(`update storage.buckets set public = true, allowed_mime_types = null where id = 'family-media'`,
+    `if not exists (select 1 from storage.buckets where id = 'family-media' and public and allowed_mime_types is null) then
+    raise exception '0475 changed a public bucket with no allow-list'; end if;`);
+  bucketCase(`update storage.buckets set public = true, allowed_mime_types = '{}' where id = 'family-media'`,
+    `if not exists (select 1 from storage.buckets where id = 'family-media' and public and allowed_mime_types = '{}') then
+    raise exception '0475 changed a public bucket with an empty allow-list'; end if;`);
+  bucketCase(`update storage.buckets set public = false, allowed_mime_types = array['image/png', 'audio/webm'] where id = 'family-media'`,
+    `if not exists (select 1 from storage.buckets where id = 'family-media' and not public
+      and (select array_agg(t order by t) from unnest(allowed_mime_types) t)
+        = array['audio/mp4', 'audio/mpeg', 'audio/ogg', 'audio/wav', 'audio/webm', 'audio/x-wav', 'image/png']) then
+    raise exception '0475 did not add the voice-note types exactly once to a private bucket''s list'; end if;`);
+  bucketCase(`delete from storage.objects where bucket_id = 'family-media'; delete from storage.buckets where id = 'family-media'`,
+    `if exists (select 1 from storage.buckets where id = 'family-media') then
+    raise exception '0475 created a family-media bucket that was not there'; end if;`);
+  console.log('PASS: 0475 leaves family-media visibility as found, leaves NULL/empty allow-lists alone, adds the audio types once, and creates no bucket.');
   console.log(file('docs/audit/messaging-canonical-history.probe.sql').trim());
   const result = file('docs/audit/messaging-participant-boundaries.probe.sql');
   console.log(result.trim());

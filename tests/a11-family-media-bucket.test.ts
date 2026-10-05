@@ -47,9 +47,15 @@ describe('only 0459 changes whether family-media is public', () => {
     expect(writers).toEqual(['0459_family_media_is_read_by_the_family.sql']);
   });
 
-  it('0475 still adds the voice-note types, only to an existing allow-list', () => {
+  it('0475 still adds the voice-note types, only to an allow-list that has entries', () => {
+    // A textual pin. The cases are EXECUTED against the real 0475 by
+    // scripts/verify-messaging-database.mjs: NULL and empty lists and either
+    // visibility are left as found, a real list gains the six types once, and
+    // a missing bucket is not created.
     const m0475 = readFileSync('supabase/migrations/0475_messaging_conversation_privacy_and_delivery.sql', 'utf8');
     expect(m0475).toContain("'audio/webm'");
-    expect(m0475).toContain("where id = 'family-media' and allowed_mime_types is not null");
+    expect(m0475).toContain("where id = 'family-media' and cardinality(allowed_mime_types) > 0");
+    const verifier = readFileSync('scripts/verify-messaging-database.mjs', 'utf8');
+    expect(verifier).toContain('PASS: 0475 leaves family-media visibility as found');
   });
 });
