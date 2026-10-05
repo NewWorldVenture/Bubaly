@@ -95,7 +95,7 @@ describe('nextBillDueDate', () => {
   });
 });
 
-describe('billAnchorDay and newBillDueDay (0475)', () => {
+describe('billAnchorDay and newBillDueDay (0488)', () => {
   it('the recorded day wins; without one the due date\'s day is the anchor', () => {
     expect(billAnchorDay({ due_date: '2026-02-28', due_day: 31 })).toBe(31);
     expect(billAnchorDay({ due_date: '2026-02-28', due_day: null })).toBe(28);
@@ -141,7 +141,7 @@ describe('billPaidPatch — what "Mark paid" writes', () => {
     expect(billPaidPatch({ status: 'upcoming', due_date: '2026-02-28', due_day: 31, is_recurring: true, recurrence: 'monthly' }, '2026-03-01'))
       .toEqual({ status: 'upcoming', due_date: '2026-03-31', due_day: 31 });
     // A row with no recorded day that sits on Feb 28 is a 28th bill: no roll ever clamps one there without
-    // recording the day (before 0475 such a roll is refused, see writeBillPatch), so the 28th is recorded and stepped by.
+    // recording the day (before 0488 such a roll is refused, see writeBillPatch), so the 28th is recorded and stepped by.
     expect(billPaidPatch({ status: 'upcoming', due_date: '2026-02-28', is_recurring: true, recurrence: 'monthly' }, '2026-03-01'))
       .toEqual({ status: 'upcoming', due_date: '2026-03-28', due_day: 28 });
     expect(billPaidPatch({ status: 'upcoming', due_date: '2026-11-30', is_recurring: true, recurrence: 'quarterly' }, '2026-12-01'))
@@ -154,7 +154,7 @@ describe('billPaidPatch — what "Mark paid" writes', () => {
   });
 });
 
-describe('writeBillPatch — a database that has not applied 0475', () => {
+describe('writeBillPatch — a database that has not applied 0488', () => {
   const missing = { code: 'PGRST204', message: "Could not find the 'due_day' column of 'bills' in the schema cache" };
   const writes = (answers: { error: unknown }[]) => {
     const seen: unknown[] = [];
@@ -184,7 +184,7 @@ describe('writeBillPatch — a database that has not applied 0475', () => {
     const warn = vi.spyOn(console, 'warn').mockImplementation(() => undefined);
     expect(await writeBillPatch({ status: 'upcoming', due_date: '2026-03-31', due_day: 31 }, behind.write)).toEqual({ error: null });
     expect(behind.seen, 'the same row, without the one column').toEqual([{ status: 'upcoming', due_date: '2026-03-31', due_day: 31 }, { status: 'upcoming', due_date: '2026-03-31' }]);
-    expect(warn).toHaveBeenCalledWith(expect.stringMatching(/0475_a_month_end_bill_keeps_its_day.*nothing is lost/));
+    expect(warn).toHaveBeenCalledWith(expect.stringMatching(/0488_a_month_end_bill_keeps_its_day.*nothing is lost/));
     warn.mockRestore();
   });
   it('refuses, without writing, a roll whose day only the missing column could keep (review 5981566086: the day is not lost)', async () => {
@@ -194,7 +194,7 @@ describe('writeBillPatch — a database that has not applied 0475', () => {
     expect(behind.seen, 'only the first, refused attempt').toEqual([{ status: 'upcoming', due_date: '2026-02-28', due_day: 31 }]);
     expect(isDueDayNotKept(res.error)).toBe(true);
     expect(res).toMatchObject({ data: null, error: { code: DUE_DAY_NOT_KEPT, day: 31, dueDate: '2026-02-28' } });
-    expect(warn).toHaveBeenCalledWith(expect.stringMatching(/0475_a_month_end_bill_keeps_its_day.*day 31.*2026-02-28.*nothing was written/));
+    expect(warn).toHaveBeenCalledWith(expect.stringMatching(/0488_a_month_end_bill_keeps_its_day.*day 31.*2026-02-28.*nothing was written/));
     warn.mockRestore();
   });
   it('does not retry any other refusal, nor a write that never carried the column', async () => {
@@ -254,9 +254,9 @@ describe('the forecast steps a month-end bill the same way (lib/finance/timeline
   });
 });
 
-describe('0475 and its writers', () => {
+describe('0488 and its writers', () => {
   it('the migration adds one nullable, checked column and nothing else', () => {
-    const sql = read('supabase/migrations/0475_a_month_end_bill_keeps_its_day.sql');
+    const sql = read('supabase/reserved/0488_a_month_end_bill_keeps_its_day.sql');
     expect(sql).toContain('alter table public.bills add column if not exists due_day smallint;');
     expect(sql).toContain('add constraint bills_due_day_check check (due_day between 1 and 31);');
     expect(sql).toMatch(/comment on column public\.bills\.due_day/);
@@ -265,7 +265,7 @@ describe('0475 and its writers', () => {
     expect(read('lib/database.types.ts')).toContain('due_date: string; due_day: number | null; is_recurring: boolean;');
   });
   it('re-applies onto a schema that already has it (docs/audit/rehearse-ledger-repair.sh): the column and its named check are each added only if absent', () => {
-    const sql = read('supabase/migrations/0475_a_month_end_bill_keeps_its_day.sql');
+    const sql = read('supabase/reserved/0488_a_month_end_bill_keeps_its_day.sql');
     expect(sql).toMatch(/if not exists \(\s*select 1 from pg_constraint\s+where conrelid = 'public\.bills'::regclass\s+and conname = 'bills_due_day_check'\s*\) then/);
     // An unguarded ADD CONSTRAINT would fail the replay with 42710.
     const adds = sql.split('\n').filter((l) => /add constraint/i.test(l) && !l.trim().startsWith('--'));

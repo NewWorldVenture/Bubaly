@@ -24,7 +24,7 @@ export interface RecurringBillLike {
   status: string;
   is_recurring?: boolean | null;
   recurrence?: string | null;
-  /** The day of month a month-based series is anchored on (0475); null reads it from `due_date`. */
+  /** The day of month a month-based series is anchored on (0488); null reads it from `due_date`. */
   due_day?: number | null;
 }
 
@@ -79,7 +79,7 @@ const isAnchorDay = (day: unknown): day is number => typeof day === 'number' && 
 
 /**
  * The day of month a bill's month-based series is anchored on: the recorded
- * `due_day` (0475), else the day of `due_date`. Null when neither is a day.
+ * `due_day` (0488), else the day of `due_date`. Null when neither is a day.
  */
 export function billAnchorDay(bill: Pick<RecurringBillLike, 'due_date' | 'due_day'>): number | null {
   if (isAnchorDay(bill.due_day)) return bill.due_day;
@@ -117,13 +117,13 @@ function stepFrom([y, mo, d]: [number, number, number], cadence: BillCadence, n:
  * not "I owe every month in between" (the forecast makes the same jump, see
  * lib/finance/timeline.ts). Null when `dueDate` is not a calendar day.
  *
- * `anchorDay` is the day the month-based series is anchored on (0475's
+ * `anchorDay` is the day the month-based series is anchored on (0488's
  * `due_day`). `dueDate` is the PERSISTED date, and after one roll that is the
  * clamped one: a bill due on the 31st sits on Feb 28, and stepped from that
  * date's own day it would come back on the 28th for ever — the month-end
  * cadence lost (audit note of 2026-10-04 07:45 UTC). Stepped by the anchor
  * day it is back on Mar 31. Without an anchor day the date's own day is used,
- * which is what every row written before 0475 has.
+ * which is what every row written before 0488 has.
  */
 export function nextBillDueDate(dueDate: string, cadence: BillCadence, today: string, anchorDay?: number | null): string | null {
   const anchor = parseDayKey(dueDate);
@@ -178,9 +178,9 @@ export type BillPaidPatch = { status: 'paid' } | { status: 'upcoming'; due_date:
  * forecast (lib/finance/timeline.ts) already treats a paid recurring bill as
  * still owing its later occurrences; this makes the list agree with it.
  *
- * A month-based bill also writes its anchor day (`due_day`, 0475): the day it
+ * A month-based bill also writes its anchor day (`due_day`, 0488): the day it
  * is stepped by, recorded the first time it rolls so the day survives the
- * clamp to a short month. A row from before 0475 records the day of its
+ * clamp to a short month. A row from before 0488 records the day of its
  * current due date, which is all it knows.
  */
 export function billPaidPatch(bill: RecurringBillLike, today: string): BillPaidPatch {
@@ -204,7 +204,7 @@ interface BillFilterable { filter(column: string, operator: string, value: unkno
  * says the change was not saved.
  *
  * `due_day` is compared only when the row was read with it. A database
- * without 0475 has no such column to filter on, and its rows come back
+ * without 0488 has no such column to filter on, and its rows come back
  * without the key; a row read with it carries a number or null. Both Mark
  * paid buttons and the tests write through this one function.
  */
@@ -220,7 +220,7 @@ export function whereBillIsAsSeen<Q extends BillFilterable>(
 
 /**
  * PostgREST (PGRST204) or Postgres (42703) refusing `bills.due_day` itself on
- * a database that has not applied 0475 — and nothing else. Only those two
+ * a database that has not applied 0488 — and nothing else. Only those two
  * codes say a COLUMN is missing, and the message must name exactly that column
  * of `bills`: not `due_day_backup`, not a missing `due_day_history` table, not
  * a permission error that happens to mention the schema cache. Anything else
@@ -237,7 +237,7 @@ export function isMissingDueDayColumn(error: unknown): boolean {
 /**
  * What `writeBillPatch` answers, instead of writing, when a bill's day of
  * month could be kept only in `bills.due_day` and the database has no such
- * column yet (0475 not applied). Not a database error: nothing was sent.
+ * column yet (0488 not applied). Not a database error: nothing was sent.
  */
 export const DUE_DAY_NOT_KEPT = 'BUBALY_DUE_DAY_NOT_KEPT';
 
@@ -283,7 +283,7 @@ export interface WriteBillPatchOptions {
 
 /**
  * Runs `write(patch)`. On a database without `bills.due_day` (PGRST204 /
- * 42703: 0475 not applied, which is production for now) it does one of three
+ * 42703: 0488 not applied, which is production for now) it does one of three
  * things, and never silently loses a bill's day:
  *
  * - When the due date already carries the day (`dayOnlyDueDayCarries` is
@@ -291,7 +291,7 @@ export interface WriteBillPatchOptions {
  *   database `billAnchorDay` reads the day from `due_date`, and it is the
  *   same day. A new bill, a weekly bill, a bill on the 15th, and a 31st bill
  *   rolling into March all go this way, so every other bill rolls exactly as
- *   it would with 0475.
+ *   it would with 0488.
  * - When only the column could carry it (a 31st bill rolling to Feb 28) and
  *   the caller can ask (`confirmClampedDay`), the person is asked whether to
  *   mark it paid and move it to Feb 28, due on the 28th from then on. Yes:
@@ -308,7 +308,7 @@ export interface WriteBillPatchOptions {
  * row (id, family_id, name, amount, due_date, is_recurring, recurrence,
  * status, category, autopay, created_by, created_at, updated_at) has nowhere
  * else to hold the 31: at Feb 28 it cannot tell a 28th bill from a clamped
- * 31st, it would step to Mar 28 for ever, and 0475 could not recover the day
+ * 31st, it would step to Mar 28 for ever, and 0488 could not recover the day
  * afterwards. The alternatives were weighed:
  *   (a) Carrying the day in an existing column. `recurrence` is the only free
  *       text that is not the person's own words (`name`, `category`), but it
@@ -327,7 +327,7 @@ export interface WriteBillPatchOptions {
  *   (c) Failing closed for exactly the case at risk. It is narrow (a bill on
  *       the 29th, 30th or 31st rolling into a shorter month) and loses
  *       nothing, but alone it would leave a 31st bill impossible to mark paid
- *       in five months of every twelve until 0475 is applied.
+ *       in five months of every twelve until 0488 is applied.
  * So (c), with the one way past it in the person's hands: they may choose
  * the shorter day, knowingly, and nobody chooses it for them.
  *
@@ -348,16 +348,16 @@ export async function writeBillPatch<P extends object, W extends (p: P) => Promi
   if (unkept !== null) {
     const rolledTo = (patch as { due_date?: unknown }).due_date;
     const dueDate = typeof rolledTo === 'string' ? rolledTo : null;
-    const message = `bills.due_day is not in this database yet (migration 0475_a_month_end_bill_keeps_its_day has not been applied). This bill is anchored on day ${unkept} and would roll to ${dueDate ?? 'a shorter month'}, where only that column could keep the day, so nothing was written. Apply 0475 and the bill rolls with its day kept.`;
+    const message = `bills.due_day is not in this database yet (migration 0488_a_month_end_bill_keeps_its_day, reserved and held in supabase/reserved until 0475–0487 land, has not been applied). This bill is anchored on day ${unkept} and would roll to ${dueDate ?? 'a shorter month'}, where only that column could keep the day, so nothing was written. Apply 0488 and the bill rolls with its day kept.`;
     const refusal: DueDayNotKept = { code: DUE_DAY_NOT_KEPT, message, day: unkept, dueDate };
     if (dueDate && options.confirmClampedDay && (await options.confirmClampedDay(refusal))) {
-      console.warn(`bills.due_day is not in this database yet (migration 0475_a_month_end_bill_keeps_its_day has not been applied). The person chose to mark this bill paid and move it from day ${unkept} to ${dueDate}, keeping that date's day from now on; writing without the column.`);
+      console.warn(`bills.due_day is not in this database yet (migration 0488_a_month_end_bill_keeps_its_day, reserved and held in supabase/reserved until 0475–0487 land, has not been applied). The person chose to mark this bill paid and move it from day ${unkept} to ${dueDate}, keeping that date's day from now on; writing without the column.`);
       return (await write(rest as P)) as Awaited<ReturnType<W>>;
     }
     console.warn(message);
     return { data: null, error: refusal };
   }
-  console.warn('bills.due_day is not in this database yet (migration 0475_a_month_end_bill_keeps_its_day has not been applied); writing without it. This due date falls on the bill\'s own day, so the date alone carries it and nothing is lost.');
+  console.warn('bills.due_day is not in this database yet (migration 0488_a_month_end_bill_keeps_its_day, reserved and held in supabase/reserved until 0475–0487 land, has not been applied); writing without it. This due date falls on the bill\'s own day, so the date alone carries it and nothing is lost.');
   return (await write(rest as P)) as Awaited<ReturnType<W>>;
 }
 

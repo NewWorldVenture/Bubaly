@@ -1,7 +1,11 @@
--- 0475: a month-end bill keeps its day. (audit note of 2026-10-04 07:45 UTC on #932)
+-- 0488: a month-end bill keeps its day. (audit note of 2026-10-04 07:45 UTC on #932)
 --
--- The next free version above the checked-in high-water mark (0474).
--- Repository candidate only: not applied anywhere by this change.
+-- RESERVED as 0488 (the bill-anchor reservation in the preserved allocation
+-- map, owner decision of 2026-10-04 on #771) and HELD in supabase/reserved/:
+-- 0475-0487 must land first, so neither the replay nor `supabase db push`
+-- reads this file yet. It moves into supabase/migrations/ as 0488 when the
+-- sequence reaches it. The app works without it (lib/finance/recurring.ts
+-- writeBillPatch). Repository candidate only: not applied anywhere.
 --
 -- `bills.due_date` was the only date a bill had. "Mark paid" rolls a recurring
 -- bill to its next occurrence by stepping from that date, so a bill due on the

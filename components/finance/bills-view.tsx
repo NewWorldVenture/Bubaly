@@ -73,7 +73,7 @@ export function BillsView({ mode }: { mode: BillsMode }) {
     // A restrictive RLS policy FILTERS an update/delete rather than raising, so
     // a refused write returns zero rows and no error. `.select('id')` is what
     // makes the difference visible — without it `data` is null either way.
-    // `writeBillPatch`: on a database without bills.due_day (0475 not applied)
+    // `writeBillPatch`: on a database without bills.due_day (0488 not applied)
     // the write is repeated without it when the due date carries the bill's
     // day. When only that column could (a 31st bill rolling to Feb 28) the
     // person is asked whether to move it to Feb 28 and keep the 28th from now

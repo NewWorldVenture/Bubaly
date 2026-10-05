@@ -9,10 +9,10 @@ import { wroteNoRows } from '@/lib/supabase/errors';
 /**
  * A MONTH-END BILL MOVES TO A SHORTER DAY ONLY WHEN THE PERSON SAYS SO.
  *
- * Production runs without 0475's `bills.due_day`, and there a bill due on the
+ * Production runs without 0488's `bills.due_day`, and there a bill due on the
  * 31st that rolls into February can be stored only as Feb 28, which nothing
  * can later tell from a 28th bill. `writeBillPatch` refuses that roll rather
- * than clamp it silently (a-month-end-bill-keeps-its-day-before-0475.test.ts).
+ * than clamp it silently (a-month-end-bill-keeps-its-day-before-0488.test.ts).
  * Refusal alone would mean a 31st bill cannot be marked paid in five months of
  * every twelve, so the two Mark paid buttons ASK: "mark it paid and move it to
  * Feb 28, due on the 28th from now on?" Confirmed, the bill is written on the
@@ -68,7 +68,7 @@ let warn: ReturnType<typeof vi.spyOn>;
 beforeEach(() => { warn = vi.spyOn(console, 'warn').mockImplementation(() => undefined); });
 afterEach(() => { warn.mockRestore(); });
 
-describe('on a database without 0475, the person is asked before a month-end bill moves', () => {
+describe('on a database without 0488, the person is asked before a month-end bill moves', () => {
   it('confirmed: Jan 31 is marked paid on Feb 28, written once, with no due_day, and is a 28th bill from then on', async () => {
     const db = createInMemorySupabase();
     const rent = bill('2026-01-31');
@@ -85,7 +85,7 @@ describe('on a database without 0475, the person is asked before a month-end bil
     expect(outcome(res)).toBe('written');
     expect(rowOf(db, rent.id)).toMatchObject({ due_date: '2026-02-28', status: 'upcoming' });
     expect(rowOf(db, rent.id)).not.toHaveProperty('due_day');
-    expect(warn).toHaveBeenCalledWith(expect.stringMatching(/0475_a_month_end_bill_keeps_its_day.*chose.*2026-02-28/));
+    expect(warn).toHaveBeenCalledWith(expect.stringMatching(/0488_a_month_end_bill_keeps_its_day.*chose.*2026-02-28/));
 
     // The day the person chose is the day it keeps: Mar 28, and nothing is asked again.
     const next = markPaid(db, { ...rowOf(db, rent.id) }, '2026-03-01', false, yes);
@@ -180,7 +180,7 @@ describe('on a database without 0475, the person is asked before a month-end bil
     expect(rowOf(db, rent.id)).toEqual(before);
   });
 
-  it('with 0475 applied nobody is asked: the roll keeps the 31st', async () => {
+  it('with 0488 applied nobody is asked: the roll keeps the 31st', async () => {
     const db = createInMemorySupabase();
     const rent = bill('2026-01-31');
     db.seed('bills', [rent]);

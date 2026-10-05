@@ -24,7 +24,7 @@ export interface TimelineBill {
   category: string | null;
   /** The money leaves on its own — the bill is covered, nothing to do. */
   autopay?: boolean;
-  /** The day of month a month-based series is anchored on (0475); null reads it from due_date. */
+  /** The day of month a month-based series is anchored on (0488); null reads it from due_date. */
   due_day?: number | null;
 }
 

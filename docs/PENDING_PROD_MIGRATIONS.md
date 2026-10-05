@@ -4068,9 +4068,43 @@ As of 2026-10-04 the 43 holes at or below `0474` are **retired**
 (`RETIRED_MIGRATION_VERSIONS` in `scripts/audit-migration-versions.mjs`): no
 file may take one, and the reservations that left them — `0465`–`0470`,
 `0472`, `0473` among them — are released. Above `0474` the sequence has no
-gaps. `npm run db:audit:migrations` fails on either, and work that once held a
-number takes the next free one when it lands. Nothing below changes what is
-already applied: production's ledger records `0001`–`0176`.
+gaps. `npm run db:audit:migrations` fails on either. Nothing below changes
+what is already applied: production's ledger records `0001`–`0176`.
+
+**Owner decision, 2026-10-04: existing allocations above `0474` are
+preserved.** It is recorded on #771 (5985652062) and was confirmed in the Claude
+session on #970. A branch that holds a reserved number keeps it; the number is
+not reassigned to whichever branch lands first. The preserved map:
+
+| Number | Holder |
+|---|---|
+| 0475, 0476 | messaging (#834): `messaging_conversation_privacy_and_delivery`, `messaging_notifications_preferences` |
+| 0477 | Surge (#892) |
+| 0478 | Meals atomic slot writes |
+| 0479 | Daniel |
+| 0480 | Surge |
+| 0481 | Meals delegated actor |
+| 0482, 0483 | Daniel |
+| 0484, 0485 | Support |
+| 0486 | voice read |
+| 0487 | card hold |
+| 0488 | bill anchor: `a_month_end_bill_keeps_its_day` |
+| 0489 | notification once per occurrence |
+| 0490 | calendar feed claim: `a_calendar_feed_sync_writes_only_while_it_holds_its_claim` |
+
+Still unresolved: #958's `0477` and the two `0491` candidates. Closing those PRs
+did not release the numbers.
+
+A migration whose reserved number is above the next free one cannot be released
+yet, for two reasons:
+- the guard refuses a skipped generation;
+- `supabase db push` refuses an out-of-order one.
+
+Such a file is **held** in `supabase/reserved/`, and its probe in
+`docs/audit/reserved/`. Neither the replay nor `db push` reads those
+directories. The file moves into `supabase/migrations/` under its reserved
+number when the sequence reaches it. Code that uses a held migration must work
+without it. `0488` is held this way; its entry is below.
 
 ### Published branch candidates that are not on main (2026-10-04)
 
@@ -4104,7 +4138,7 @@ Retiring a hole does not delete anything. These migration files remain on their 
 
 The colliding pairs are 0475 (meal-plan slot writes, messaging privacy), 0476 (meal-plan delegated actors, messaging notifications), 0477 (AI request admission, family-memory text) and 0491. Two published candidates hold 0491, neither allocation confirmed: #964 at 6e250a00b928970982855fc1e856ea6d5ceba09d (card hold and top-up deadlock, closed unmerged) and draft #969 at 854a990bd24906976231024eeb6c5943ae977da7 (recurring bill anchor). #969 also covers the month-end bill and calendar items below.
 
-The landing map for this session's lanes is owner-directed: the repository owner chose it in the Claude session on 2026-10-04. It lands the month-end bill, calendar feed and messaging migrations in that order as 0475, 0476, 0477 and 0478 (from 0488, 0490 and 0475/0476). The audit coordinator has asked the owner to confirm it across sessions (#968, 5984812135), so treat it as the proposed allocation until the migrations are on main.
+Historical evidence, superseded: a landing map proposed in the Claude session on 2026-10-04 would have renumbered the month-end bill, calendar feed and messaging migrations to 0475, 0476, 0477 and 0478 (from 0488, 0490 and 0475/0476). The owner did not adopt it; the decision above preserves the original reservations. Under it, messaging lands as `0475`/`0476`, and the bill anchor (`0488`) and feed claim (`0490`) are held in `supabase/reserved/` until their turn.
 
 ## `0471` and `0474` — the admin digest's delivery store, and a removed admin is not sent it
 
@@ -4126,9 +4160,11 @@ a digest frozen before their removal. Both are proven in CI's Database job by
 **After applying:** nothing visible changes until the digest route is
 switched to the per-recipient engine; the route keeps its current behaviour.
 
-## `0475` — a month-end bill lost its day to a short month (#932)
+## `0488` (reserved, held) — a month-end bill lost its day to a short month (#932)
 
-`supabase/migrations/0475_a_month_end_bill_keeps_its_day.sql`
+`supabase/reserved/0488_a_month_end_bill_keeps_its_day.sql` — **held**: reserved as `0488`, not
+in `supabase/migrations/` until `0475`–`0487` have landed, so neither the replay
+nor `db push` applies it. Its probe is held with it in `docs/audit/reserved/`.
 
 **Severity: low (a bill's due date). Deploy order: any; the app is written for
 both sides of it.** One nullable, checked column, `bills.due_day` (1–31): the
@@ -4138,7 +4174,7 @@ schema that already has it.
 
 "Mark paid" now rolls a recurring bill to its next due date instead of closing
 it. A bill due on the 31st rolls to Feb 28 and must come back on Mar 31, and at
-Feb 28 the row alone cannot say so. Until 0475 is applied the app writes every
+Feb 28 the row alone cannot say so. Until 0488 is applied the app writes every
 roll whose due date falls on the bill's own day exactly as it would with the
 column, and never silently clamps the one roll it cannot keep (a bill on the
 29th, 30th or 31st rolling into a shorter month). Both Mark paid buttons ask
@@ -4146,9 +4182,9 @@ the person, in their language, whether to mark it paid and move it to the
 shorter month's last day, due on that day from then on. Yes writes that date
 (the person chose the new day); no leaves the bill as it was and says its day
 can't be kept until a database update is applied. Anything that marks a bill
-paid with no one to ask only refuses. Applying 0475 removes the question: the
+paid with no one to ask only refuses. Applying 0488 removes the question: the
 bill moves to the short month's last day and comes back to its own day after.
-`docs/audit/a-month-end-bill-keeps-its-day-check.sql` proves the column's
+`docs/audit/reserved/a-month-end-bill-keeps-its-day-check.sql` proves the column's
 shape, its single check, and that a bill inserted without it reads null.
 
 **After applying:** mark paid a monthly bill due on the 31st of a month that is

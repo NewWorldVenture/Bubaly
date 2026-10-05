@@ -7,14 +7,14 @@ import { at, bodyOf } from './helpers/source-order';
 import { createInMemorySupabase, type Row } from './helpers/in-memory-supabase';
 
 /**
- * A MONTH-END BILL PAID ON A DATABASE WITHOUT 0475 KEEPS ITS DAY.
+ * A MONTH-END BILL PAID ON A DATABASE WITHOUT 0488 KEEPS ITS DAY.
  *
- * 0475 adds `bills.due_day`, the day a month-based bill is anchored on, so a
+ * 0488 adds `bills.due_day`, the day a month-based bill is anchored on, so a
  * bill due on the 31st rolls to Feb 28 and comes back on Mar 31. Production's
- * ledger stops long before 0475, so the database WITHOUT the column is what
+ * ledger stops long before 0488, so the database WITHOUT the column is what
  * production runs. There, `writeBillPatch` used to repeat the write without
  * the column: a Jan 31 bill was stored as Feb 28, nothing could tell it from a
- * 28th bill, it stepped to Mar 28 for ever, and 0475 could not recover the day
+ * 28th bill, it stepped to Mar 28 for ever, and 0488 could not recover the day
  * later (hold 2 on #932, review 5981566086).
  *
  * Now the column is left out only when the due date carries the day anyway,
@@ -50,7 +50,7 @@ const bill = (due_date: string, recurrence: string): Bill => {
  * "Mark paid" exactly as both buttons write it (pinned in
  * a-paid-recurring-bill-comes-due-again.test.ts): the patch, by id and family,
  * compare-and-set on the row the button saw (`whereBillIsAsSeen`). `hasDueDay`
- * false is a database that has not applied 0475: PostgREST refuses any write
+ * false is a database that has not applied 0488: PostgREST refuses any write
  * naming the column (PGRST204) before running it, and every other write lands.
  */
 function markPaid(db: ReturnType<typeof createInMemorySupabase>, seen: Bill, today: string, hasDueDay: boolean) {
@@ -69,7 +69,7 @@ let warn: ReturnType<typeof vi.spyOn>;
 beforeEach(() => { warn = vi.spyOn(console, 'warn').mockImplementation(() => undefined); });
 afterEach(() => { warn.mockRestore(); });
 
-// [what, due date, cadence, paid on, what happens on a database without 0475]
+// [what, due date, cadence, paid on, what happens on a database without 0488]
 // `refused` carries the day that would be lost and the date it would have been clamped to.
 type Outcome = { rolledTo: string } | { refused: { day: number; wouldBe: string } };
 const CASES: [string, string, string, string, Outcome][] = [
@@ -91,7 +91,7 @@ const CASES: [string, string, string, string, Outcome][] = [
   ['Jan 30, every two weeks', '2026-01-30', 'biweekly', '2026-01-30', { rolledTo: '2026-02-13' }],
 ];
 
-describe('Mark paid on a database without 0475 (production today)', () => {
+describe('Mark paid on a database without 0488 (production today)', () => {
   for (const [what, due, cadence, today, outcome] of CASES) {
     it(what, async () => {
       const db = createInMemorySupabase();
@@ -111,7 +111,7 @@ describe('Mark paid on a database without 0475 (production today)', () => {
         expect(attempts).toEqual([{ status: 'upcoming', due_date: outcome.refused.wouldBe, due_day: outcome.refused.day }]);
         // The bill is exactly as it was: still due on its own day, still open.
         expect(rowOf(db, seen.id)).toEqual(before);
-        expect(warn).toHaveBeenCalledWith(expect.stringContaining('0475_a_month_end_bill_keeps_its_day'));
+        expect(warn).toHaveBeenCalledWith(expect.stringContaining('0488_a_month_end_bill_keeps_its_day'));
       } else {
         expect(res.error).toBeNull();
         expect(res.data).toEqual([{ id: seen.id }]);
@@ -143,13 +143,13 @@ describe('Mark paid on a database without 0475 (production today)', () => {
     });
   });
 
-  it('the refused bill rolls with its day kept once 0475 is applied: Feb 28, then Mar 31', async () => {
+  it('the refused bill rolls with its day kept once 0488 is applied: Feb 28, then Mar 31', async () => {
     const db = createInMemorySupabase();
     const rent = bill('2026-01-31', 'monthly');
     db.seed('bills', [rent]);
     expect(isDueDayNotKept((await markPaid(db, rent, '2026-02-01', false).result).error)).toBe(true);
 
-    // 0475 applied: the same click on the same, untouched row.
+    // 0488 applied: the same click on the same, untouched row.
     await markPaid(db, { ...rowOf(db, rent.id) }, '2026-02-01', true).result;
     expect(rowOf(db, rent.id)).toMatchObject({ due_date: '2026-02-28', due_day: 31 });
     await markPaid(db, { ...rowOf(db, rent.id) }, '2026-03-01', true).result;
@@ -180,7 +180,7 @@ describe('Mark paid on a database without 0475 (production today)', () => {
   });
 });
 
-describe('the same clicks with 0475 applied are unchanged', () => {
+describe('the same clicks with 0488 applied are unchanged', () => {
   for (const [what, due, cadence, today] of CASES) {
     it(what, async () => {
       const db = createInMemorySupabase();

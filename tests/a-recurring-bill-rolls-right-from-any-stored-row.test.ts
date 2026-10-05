@@ -30,9 +30,9 @@ import { buildCashflowTimeline, monthlyEquivalent } from '@/lib/finance/timeline
  *   may be a clamped 31st) and asks. Here the stored day is the anchor:
  *   nothing on main ever rolled `bills.due_date` (its only bill updates were
  *   status, autopay and delete), so a stored day is the day a person typed,
- *   and on a database without 0475 this change never clamps without the
+ *   and on a database without 0488 this change never clamps without the
  *   person's yes (a-month-end-bill-moves-only-when-asked.test.ts).
- * - #969 refuses every month-based payment on a database without 0475. Here
+ * - #969 refuses every month-based payment on a database without 0488. Here
  *   only a roll whose day the due date cannot carry is held back; production's
  *   ledger ends at 0176, and refusing all of them would stop every monthly bill
  *   being marked paid there.
@@ -121,7 +121,7 @@ describe('the schedule', () => {
 /**
  * PostgREST as supabase-js really calls it, over a synthetic transport: each
  * PATCH's filters are applied to one stored row. `oldSchema` refuses a body
- * naming `due_day` the way a database without 0475 does; `overlap` holds two
+ * naming `due_day` the way a database without 0488 does; `overlap` holds two
  * requests until both have arrived.
  */
 function store(initial: Tables<'bills'>, options: { oldSchema?: boolean; error?: string; overlap?: boolean } = {}) {
@@ -153,8 +153,8 @@ function store(initial: Tables<'bills'>, options: { oldSchema?: boolean; error?:
   return { client, requests, current: () => row };
 }
 
-/** A row as a database without 0475 returns it: no `due_day` key at all. */
-const readBefore0475 = (row: Tables<'bills'>): Tables<'bills'> => {
+/** A row as a database without 0488 returns it: no `due_day` key at all. */
+const readBefore0488 = (row: Tables<'bills'>): Tables<'bills'> => {
   const { due_day: _absent, ...rest } = row;
   return rest as Tables<'bills'>;
 };
@@ -216,8 +216,8 @@ describe('Mark paid through supabase-js', () => {
     expect(db.current()).toMatchObject({ due_date: '2026-03-30', due_day: 30 });
   });
 
-  it('a row read without due_day (no 0475) is not compared on it: the filter would name a column that is not there', async () => {
-    const original = readBefore0475(bill({ due_date: '2026-01-15' }));
+  it('a row read without due_day (no 0488) is not compared on it: the filter would name a column that is not there', async () => {
+    const original = readBefore0488(bill({ due_date: '2026-01-15' }));
     const db = store(original, { oldSchema: true });
     const result = await markPaid(db.client, original, '2026-01-15');
     expect(result.error).toBeNull();
@@ -225,8 +225,8 @@ describe('Mark paid through supabase-js', () => {
     expect(db.current()).toMatchObject({ due_date: '2026-02-15' });
   });
 
-  it('without 0475, holds back a roll only the column could keep, in one request, leaving the row as it was', async () => {
-    const original = readBefore0475(bill());
+  it('without 0488, holds back a roll only the column could keep, in one request, leaving the row as it was', async () => {
+    const original = readBefore0488(bill());
     const db = store(original, { oldSchema: true });
     const result = await markPaid(db.client, original, '2026-01-31');
     expect(isDueDayNotKept(result.error)).toBe(true);
@@ -234,9 +234,9 @@ describe('Mark paid through supabase-js', () => {
     expect(db.current()).toEqual(original);
   });
 
-  it('without 0475, a schedule whose date carries its day rolls (#969 refuses the monthly one; see above)', async () => {
+  it('without 0488, a schedule whose date carries its day rolls (#969 refuses the monthly one; see above)', async () => {
     for (const over of [{ is_recurring: false, recurrence: null }, { recurrence: 'weekly' }]) {
-      const row = readBefore0475(bill(over));
+      const row = readBefore0488(bill(over));
       const db = store(row, { oldSchema: true });
       const result = await markPaid(db.client, row, '2026-01-31');
       expect(result.error).toBeNull();
@@ -244,7 +244,7 @@ describe('Mark paid through supabase-js', () => {
       expect(db.requests).toHaveLength(1);
       expect(db.requests[0].patch).not.toHaveProperty('due_day');
     }
-    const fifteenth = readBefore0475(bill({ due_date: '2026-01-15' }));
+    const fifteenth = readBefore0488(bill({ due_date: '2026-01-15' }));
     const db = store(fifteenth, { oldSchema: true });
     expect((await markPaid(db.client, fifteenth, '2026-01-15')).error).toBeNull();
     expect(db.requests.map((r) => 'due_day' in r.patch)).toEqual([true, false]);

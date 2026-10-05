@@ -40,7 +40,6 @@
 import type { SupabaseClient } from '@supabase/supabase-js';
 import { settleAll } from '@/lib/supabase/settle';
 import type { Database } from '@/lib/database.types';
-import { isMissingTableError } from '@/lib/supabase/errors';
 import { isMissingDueDayColumn } from '@/lib/finance/recurring';
 import { monthlyCostCents } from './subscriptions';
 import {
@@ -191,11 +190,30 @@ export function planCommitments(rows: {
 }
 
 const BILL_COLUMNS = 'name, amount, due_date, due_day, is_recurring, recurrence, status, category, autopay';
-const BILL_COLUMNS_BEFORE_0475 = 'name, amount, due_date, is_recurring, recurrence, status, category, autopay';
+const BILL_COLUMNS_BEFORE_0488 = 'name, amount, due_date, is_recurring, recurrence, status, category, autopay';
 
 /**
- * The bills the forecast steps, with each one's anchor day (`due_day`, 0475).
- * On a database that has not applied 0475 the column is refused (PGRST204 /
+ * A TABLE this database does not have (PGRST205 from PostgREST, 42P01 from
+ * Postgres): a plan module whose migration is not applied, read as "no
+ * commitments from that module". Nothing else is. The shared
+ * isMissingTableError also accepts a missing COLUMN (PGRST204, 42703), and
+ * here that would turn a bills read that failed on, say, `autopay` into an
+ * empty list of bills: a complete-looking forecast with the rent missing. A
+ * missing column is a failed read and is thrown like one; the one column the
+ * app is written to live without, `bills.due_day`, is retried in `readBills`
+ * before it gets here.
+ */
+function isMissingTable(error: unknown): boolean {
+  if (!error || typeof error !== 'object') return false;
+  const { code, message } = error as { code?: unknown; message?: unknown };
+  if (code === 'PGRST205' || code === '42P01') return true;
+  // An error without a code is the client's own; only its "no such table" wording counts.
+  return code === undefined && typeof message === 'string' && /could not find the table/i.test(message);
+}
+
+/**
+ * The bills the forecast steps, with each one's anchor day (`due_day`, 0488).
+ * On a database that has not applied 0488 the column is refused (PGRST204 /
  * 42703); the read is repeated without it, once, with a warning naming the
  * migration, and every bill steps from its due date's own day. On that
  * database the due date's day IS the bill's day: a Mark paid that would clamp
@@ -205,8 +223,8 @@ const BILL_COLUMNS_BEFORE_0475 = 'name, amount, due_date, is_recurring, recurren
 async function readBills(supabase: SupabaseClient<Database>, familyId: string): Promise<{ data: unknown[] | null; error: unknown }> {
   const first = await supabase.from('bills').select(BILL_COLUMNS).eq('family_id', familyId).limit(1000);
   if (!first.error || !isMissingDueDayColumn(first.error)) return first;
-  console.warn('bills.due_day is not in this database yet (migration 0475_a_month_end_bill_keeps_its_day has not been applied); the forecast steps each bill from its due date\'s day until it is.');
-  return supabase.from('bills').select(BILL_COLUMNS_BEFORE_0475).eq('family_id', familyId).limit(1000);
+  console.warn('bills.due_day is not in this database yet (migration 0488_a_month_end_bill_keeps_its_day, reserved and held in supabase/reserved until 0475–0487 land, has not been applied); the forecast steps each bill from its due date\'s day until it is.');
+  return supabase.from('bills').select(BILL_COLUMNS_BEFORE_0488).eq('family_id', familyId).limit(1000);
 }
 
 /**
@@ -235,9 +253,9 @@ export async function loadMoneyTimelineInput(
   const horizonEndIso = new Date(zonedTimeMs(shiftFamilyDay(horizonEndKey, 1, tz), 0, 0, tz)).toISOString();
 
   const [billsQ, goalsQ, acctQ, eventsQ, subsQ, vacQ, vacBudgetQ, vacSpendQ, movesQ, projectsQ] = await settleAll([
-    // `due_day` (0475) is the anchor a month-end bill steps by; without it the
+    // `due_day` (0488) is the anchor a month-end bill steps by; without it the
     // forecast steps a clamped Feb 28 row by the 28th for good (review
-    // 5981518473 on #932). A database that has not applied 0475 refuses the
+    // 5981518473 on #932). A database that has not applied 0488 refuses the
     // column, and the read is repeated without it: that database holds no
     // anchor to lose.
     readBills(supabase, familyId),
@@ -286,7 +304,7 @@ export async function loadMoneyTimelineInput(
     ['subscriptions_tracked', subsQ], ['vacations', vacQ], ['vacation_budgets', vacBudgetQ], ['vacation_expenses', vacSpendQ],
     ['moves', movesQ], ['home_projects', projectsQ],
   ];
-  const failed = reads.find(([, q]) => q.error && !isMissingTableError(q.error));
+  const failed = reads.find(([, q]) => q.error && !isMissingTable(q.error));
   if (failed) {
     console.error('[finance/timeline] money timeline read failed', { table: failed[0], error: failed[1].error });
     throw failed[1].error;

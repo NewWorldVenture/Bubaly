@@ -962,7 +962,7 @@ export function BillingModule({ serviceFeeNotice = null }: { serviceFeeNotice?: 
     // (lib/finance/recurring.ts). A bill the list no longer holds is paid as before.
     const bill = (bills ?? []).find((b) => b.id === id);
     const patch = bill ? billPaidPatch(bill, clock.todayKey()) : { status: 'paid' as const };
-    // `writeBillPatch`: on a database without bills.due_day (0475 not applied)
+    // `writeBillPatch`: on a database without bills.due_day (0488 not applied)
     // the write is repeated without it when the due date carries the bill's
     // day. When only that column could (a 31st bill rolling to Feb 28) the
     // person is asked whether to move it to Feb 28 and keep the 28th from now

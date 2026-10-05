@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { readdirSync, readFileSync } from 'node:fs';
+import { existsSync, readdirSync, readFileSync } from 'node:fs';
 import { join } from 'node:path';
 
 // Nine times in two operative documents, a migration was named by a filename
@@ -86,9 +86,15 @@ const MIGRATION_REF = /`(\d{4,5}_[a-z0-9_]*[a-z0-9])(\.sql)?`/g;
  */
 const BARE_REF = /\b(\d{4,5}_[a-z0-9_]*[a-z0-9])(?:\.sql)?\b/g;
 
+// A migration HELD under its reserved number (supabase/reserved/, owner
+// decision of 2026-10-04: a reserved number above the next free one cannot be
+// released in order yet) is a real file a reader can find and apply by name, so
+// a document may point at it. Nothing else outside supabase/migrations/ counts.
+const MIGRATION_DIRS = ['supabase/migrations', 'supabase/reserved'] as const;
+
 function migrationStems(): Set<string> {
   return new Set(
-    readdirSync('supabase/migrations')
+    MIGRATION_DIRS.flatMap((dir) => (existsSync(dir) ? readdirSync(dir) : []))
       .filter((f) => f.endsWith('.sql'))
       .map((f) => f.slice(0, -4)),
   );
@@ -116,7 +122,7 @@ describe('a document that is acted on does not name a migration that is not ther
       .filter((stem) => !onDisk.has(stem));
 
     expect(missing,
-      `${doc} names ${missing.length} migration(s) with no file in supabase/migrations/: ` +
+      `${doc} names ${missing.length} migration(s) with no file in supabase/migrations/ or supabase/reserved/: ` +
       `${missing.join(', ')}. Either the file was renamed or renumbered and the prose did not ` +
       'follow, or it was dropped. Find where it went — do not simply delete the reference, and ' +
       'check whether the NUMBER it cites is now occupied by something else, because that is how ' +
