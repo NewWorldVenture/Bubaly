@@ -4,9 +4,12 @@ import { test, expect, type Page } from '@playwright/test';
 import { reactBrowserScripts } from './helpers/react-browser';
 
 const scripts = reactBrowserScripts('development');
+// The real modules the navigation logic runs on. Anything else the module
+// imports is stubbed with functions that return null, so a date helper missing
+// here fails as "Cannot read properties of null" rather than being exercised.
 const sourceFiles = [
   'components/modules/calendar-module.tsx', 'lib/time/wall-clock.ts',
-  'lib/time/zoned.ts', 'lib/calendar/recurrence.ts',
+  'lib/time/zoned.ts', 'lib/calendar/recurrence.ts', 'lib/calendar/day.ts',
 ];
 const sources = Object.fromEntries(sourceFiles.map(file => [
   '@/' + file.replace(/\.tsx?$/, ''),
