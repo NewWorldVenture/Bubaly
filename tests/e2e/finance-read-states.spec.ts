@@ -12,6 +12,8 @@ const sources = Object.fromEntries([
   'components/finance/payments-view.tsx', 'components/finance/savings-view.tsx',
   'components/ui/states.tsx', 'components/ui/states-client.tsx', 'components/ui/button.tsx',
   'components/ui/input.tsx', 'components/app/page-header.tsx', 'lib/finance/hub.ts',
+  // bills-view's Mark paid and add form write what lib/finance/recurring.ts decides.
+  'lib/finance/recurring.ts',
   // hub.ts reads the locale catalogue for its default currency locale.
   'lib/i18n/locales.ts',
   // And periodStart reads the READER's local day key from here. hub.ts used to
@@ -83,6 +85,8 @@ test.beforeEach(async ({ page }) => {
         useFamilyTimeZone: () => undefined },
       '@/components/ui/toast': { useToast: () => ({ success() {}, error() {} }) },
       '@/components/ui/modal': { Modal: () => { throw new Error('Unexpected form write workflow'); } },
+      // bills-view asks before moving a month-end bill (a write); never on a read.
+      '@/components/ui/confirm': { useConfirm: () => () => { throw new Error('Unexpected financial write'); } },
       '@/lib/supabase/client': { createClient: () => { throw new Error('Unexpected financial write'); } },
       // Named rather than left as {}: this spec exercises read states only, and
       // every one of these throws for the same reason the client and Modal mocks

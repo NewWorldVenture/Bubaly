@@ -1,4 +1,4 @@
-import { mkdtempSync, rmSync, writeFileSync } from 'node:fs';
+import { existsSync, mkdtempSync, readdirSync, rmSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { describe, expect, it } from 'vitest';
@@ -507,8 +507,11 @@ describe('Supabase migration filename safety', () => {
     // frozen. This literal tracks the checked-in high-water mark. The numbers
     // once allocated below it and never used (0465-0470 to NWV, 0472 to
     // Support, 0473 to the coordinator) are retired, not held: production
-    // cannot apply them after 0474, so work that held one takes the next free
-    // number when it lands (RETIRED_MIGRATION_VERSIONS).
+    // cannot apply them after 0474 (RETIRED_MIGRATION_VERSIONS). Above it the
+    // owner kept the existing reservations (2026-10-04, #771): 0475/0476 are
+    // messaging's (#834), 0477 onward belong to named branches, and a reserved
+    // migration that cannot land in order yet is held in supabase/reserved/
+    // (the bill anchor, 0488) — checked below.
     expect(audit.nextVersion).toBe('0475');
   });
 
@@ -520,6 +523,24 @@ describe('Supabase migration filename safety', () => {
   it('lands every migration in release order: no retired hole filled, no number skipped', () => {
     expect(audit.filledHoles).toEqual([]);
     expect(audit.skippedVersions).toEqual([]);
+  });
+
+  // supabase/reserved/ holds a migration whose reserved number is above the
+  // next free one (docs/PENDING_PROD_MIGRATIONS.md, "Numbering from 0475 on").
+  // Neither the replay nor `supabase db push` reads it. A held file must keep a
+  // number above everything released and must not share one with a released
+  // file, or releasing it later would fill a hole or collide.
+  it('holds a reserved migration only above the released sequence, and never beside a released number', () => {
+    const reservedDir = join(__dirname, '..', 'supabase', 'reserved');
+    const held = existsSync(reservedDir) ? readdirSync(reservedDir).filter((name) => name.endsWith('.sql')) : [];
+    const released = new Set((audit.entries as { version: string }[]).map(({ version }) => version.slice(0, 4)));
+    for (const name of held) {
+      const version = name.slice(0, 4);
+      expect(name, 'a held file is named NNNN_name.sql').toMatch(/^\d{4}_[a-z0-9_]+\.sql$/);
+      expect(released.has(version), `${name} shares a number with a released migration`).toBe(false);
+      expect(Number(version), `${name} is not above the released sequence`).toBeGreaterThanOrEqual(Number(audit.nextVersion));
+    }
+    expect(held).toContain('0488_a_month_end_bill_keeps_its_day.sql');
   });
 
   it('retires exactly the numbers below the mark that no file holds', () => {

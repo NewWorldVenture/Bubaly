@@ -1231,9 +1231,9 @@ export interface Database {
         Partial<{ category: string; amount: number; period: BudgetPeriod }>
       >;
       bills: T<
-        { id: string; family_id: string; name: string; amount: number; due_date: string; is_recurring: boolean; recurrence: string | null; status: BillStatus; category: string | null; autopay: boolean; created_by: string | null } & Stamps,
-        { id?: string; family_id: string; name: string; amount: number; due_date: string; is_recurring?: boolean; recurrence?: string | null; status?: BillStatus; category?: string | null; autopay?: boolean; created_by?: string | null },
-        Partial<{ name: string; amount: number; due_date: string; is_recurring: boolean; recurrence: string | null; status: BillStatus; category: string | null; autopay: boolean }>
+        { id: string; family_id: string; name: string; amount: number; due_date: string; due_day: number | null; is_recurring: boolean; recurrence: string | null; status: BillStatus; category: string | null; autopay: boolean; created_by: string | null } & Stamps,
+        { id?: string; family_id: string; name: string; amount: number; due_date: string; due_day?: number | null; is_recurring?: boolean; recurrence?: string | null; status?: BillStatus; category?: string | null; autopay?: boolean; created_by?: string | null },
+        Partial<{ name: string; amount: number; due_date: string; due_day: number | null; is_recurring: boolean; recurrence: string | null; status: BillStatus; category: string | null; autopay: boolean }>
       >;
       savings_goals: T<
         { id: string; family_id: string; name: string; target_amount: number; current_amount: number; target_date: string | null; emoji: string | null; created_by: string | null } & Stamps,
