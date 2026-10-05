@@ -58016,3 +58016,43 @@ Additional #834 review found no coherent merge-safe subset. The PR edits migrati
 ## #769 production promotion confirmed — 2026-10-04 07:52 UTC
 
 Production deployment `6838395119` for current main `c24995aff9c9b307051a1806b6003bc077505273` completed successfully at 07:51:34 UTC. Live checks on the canonical domain returned `/` 200, `/login` 200, and unauthenticated `/dashboard/meals` 307 to `/login?redirect=%2Fdashboard%2Fmeals`. The exact #769 PR-head suite is fully green across Core, Database/RLS, Mobile, and E2E. Main rerun `37186919702` remains in progress (Database and Mobile pass; Core and E2E active). This merge/deployment closes no audit rows; overall audit readiness remains NO.
+## Goal checkpoint: calendar, bills, messaging, migration numbering, production — 2026-10-05 01:50 UTC
+
+Production serves main `82f2db1fcd0dca59179d2b391a76acfd459e480b` (#970), checked on 2026-10-05: `/api/build-info` reports that revision, and `/`, `/login`, `/api/health` and `/sitemap.xml` returned 200. #970 merged after Core, Database/RLS, E2E, Mobile and finance-operation-sql were all green on its head.
+
+What #970 brought (bills):
+- A paid recurring bill comes due again.
+- A month-end bill keeps its day.
+- Any stored cadence spelling is read the same way by the writer and the forecast.
+- The roll is a compare-and-swap on the row as it was seen.
+
+Its anchor column (`bills.due_day`) is created only by `0488_a_month_end_bill_keeps_its_day`. That migration is held in `supabase/reserved/` under the owner's preserved numbering map (#771). Until it is applied:
+- the writer retries without the column on exactly PGRST204/42703, then asks or refuses for a clamped roll;
+- the reader does the same.
+
+This is the acknowledged older-schema limitation: a month-end bill's original day cannot be remembered until 0488 lands.
+
+#971 (draft, not merged) composes two lanes.
+
+Messaging, as 0475/0476:
+- The history decision is #854's: a new canonical chat that adopts no legacy group.
+- #834's tip is included.
+- 0293 is restored byte for byte.
+- There are fallbacks for production's pre-0475 schema.
+- At 39f958fa7, 0475 no longer writes the `family-media` public flag. That stays 0459's decision, deferred by the owner (SEC-001), and only 0459 may write it.
+
+Calendar:
+- DST nights follow RFC 5545 §3.3.5.
+- All-day rows are read as their stored date. At e540cc216 this also covers the reminder body and the "Get ready" label.
+- Paging that repeats a row is refused.
+- The feed-sync claim is held as `0490_a_calendar_feed_sync_writes_only_while_it_holds_its_claim`.
+
+The coordinator's family-media and Family Chat holds are answered on #971. Merging #971 awaits the owner.
+
+Still open, and owner-only:
+- **Production migrations.** The production ledger records 0001–0176. The prod-migrations schema check fails 52 of 52 with HTTP 401, because the stored service-role key is rejected. Replacing that key and applying migrations from 0177 in order are owner actions. Nothing here applied a migration.
+- **`allowance_rules`.** The metadata audit's writable-by-non-managers finding is in `docs/runbooks/LB-016-wallet-permissive-policy-finding.md`.
+- **Family Chat.** On applying 0475, the legacy "Family Chat" becomes a private group beside a new empty canonical chat. The owner has not yet chosen whether to keep that.
+- **Development databases** that ran #834 should re-run 0475 then 0476.
+
+No audit rows are closed by this checkpoint, and overall audit readiness remains NO.
