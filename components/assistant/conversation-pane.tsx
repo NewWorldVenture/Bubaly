@@ -28,12 +28,15 @@ export type ConversationPaneProps = {
   onRename: (id: string, current: string) => void;
   onDelete: (id: string) => void;
   onRetry?: () => void;
+  hasMore?: boolean;
+  loadingMore?: boolean;
+  onLoadMore?: () => void;
   /** The thread (with the module's pinned scroller) and the composer. */
   children?: ReactNode;
   className?: string;
 };
 
-export function ConversationPane({ conversations, activeId, loading = false, error = null, onSelect, onNew, onRename, onDelete, onRetry, children, className }: ConversationPaneProps) {
+export function ConversationPane({ conversations, activeId, loading = false, error = null, onSelect, onNew, onRename, onDelete, onRetry, hasMore, loadingMore, onLoadMore, children, className }: ConversationPaneProps) {
   const t = useTranslations();
   const [open, setOpen] = useState(false);
   const active = conversations.find((c) => c.id === activeId);
@@ -88,6 +91,7 @@ export function ConversationPane({ conversations, activeId, loading = false, err
             ))}
           </ul>
         )}
+        {hasMore && !error && <Button type="button" variant="outline" size="sm" onClick={onLoadMore} disabled={loadingMore} className="mt-2 min-h-11 w-full">{t('assistantModule.session.moreChats')}</Button>}
       </div>
 
       {children}

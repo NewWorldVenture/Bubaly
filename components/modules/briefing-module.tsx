@@ -25,6 +25,7 @@ import {
 } from '@/lib/briefing/cache-isolation';
 import { useLocale, useTranslations } from '@/components/i18n/locale-provider';
 import { useFamilyClock, useFormat } from '@/components/i18n/use-format';
+import { kitchenFetchWindow, kitchenMemberStatus, kitchenToday, kitchenUpcoming } from '@/lib/briefing/kitchen-agenda';
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 
@@ -653,23 +654,20 @@ function KitchenMode({ onExit, todayEvents, members, urgentReminders, now }: {
   const format = useFormat();
   const familyClock = useFamilyClock();
   const locale = useLocale();
+  // An all-day row is on all day: it is never "next at" a time, and it heads
+  // the list (lib/briefing/kitchen-agenda.ts).
   function memberStatus(memberId: string): { label: string; active: boolean; next: boolean } {
-    const current = todayEvents.find(e => {
-      if (e.assignee_id !== memberId) return false;
-      const start = new Date(e.starts_at);
-      const end = e.ends_at ? new Date(e.ends_at) : new Date(start.getTime() + 60 * 60 * 1000);
-      return start <= now && end > now;
-    });
-    if (current) return { label: current.title, active: true, next: false };
-    const next = todayEvents.find(e => e.assignee_id === memberId && new Date(e.starts_at) > now);
-    if (next) {
-      const t = format.fmtTime(next.starts_at);
-      return { label: tr('briefingView.nextEvent', { title: next.title, time: t }), active: false, next: true };
+    const status = kitchenMemberStatus(todayEvents, memberId, now);
+    if (status.kind === 'now') return { label: status.title, active: true, next: false };
+    if (status.kind === 'allDay') return { label: tr('briefingView.allDayEvent', { title: status.title }), active: true, next: false };
+    if (status.kind === 'next') {
+      const t = format.fmtTime(status.startsAt);
+      return { label: tr('briefingView.nextEvent', { title: status.title, time: t }), active: false, next: true };
     }
     return { label: tr('briefingView.available'), active: false, next: false };
   }
 
-  const upcoming = todayEvents.filter(e => new Date(e.starts_at) > now).slice(0, 5);
+  const upcoming = kitchenUpcoming(todayEvents, now, 5);
   // The kitchen shows the FAMILY's clock and day (TIME-003).
   const clockStr = format.fmtTime(now);
   const dayStr   = format.fmtDate(now, 'EEEE, MMMM d');
@@ -732,8 +730,8 @@ function KitchenMode({ onExit, todayEvents, members, urgentReminders, now }: {
             ) : (
               <div className="space-y-3">
                 {upcoming.map((e, i) => {
-                  const parts = new Intl.DateTimeFormat(locale.code, { hour: 'numeric', minute: '2-digit', timeZone: familyClock.timeZone }).formatToParts(new Date(e.starts_at));
-                  const clock = parts.filter(part => part.type !== 'dayPeriod').map(part => part.value).join('').trim();
+                  const parts = e.all_day ? [] : new Intl.DateTimeFormat(locale.code, { hour: 'numeric', minute: '2-digit', timeZone: familyClock.timeZone }).formatToParts(new Date(e.starts_at));
+                  const clock = e.all_day ? tr('calendar.allDay') : parts.filter(part => part.type !== 'dayPeriod').map(part => part.value).join('').trim();
                   const period = parts.find(part => part.type === 'dayPeriod')?.value;
                   return (
                     <div key={i} className="flex items-center gap-5 rounded-2xl bg-surface/40 border border-border p-5">
@@ -860,13 +858,12 @@ function ScopedBriefingModule({ recap, relationships, preview = false, contextKe
   const { data: rawEvents, error: eventsError, refresh: refreshEvents } = useRealtimeQuery<CalEvent>({
     table: 'calendar_events',
     familyId,
-    deps: [contextKey],
-    // rawEvents is only used for TODAY's events (filtered below + KitchenMode); the
-    // weekly/tomorrow briefing data comes from a separate source. Bound to a small
-    // window around today instead of loading the family's entire calendar history.
+    deps: [contextKey, familyClock.timeZone],
+    // TODAY's rows only (KitchenMode); bounded to the family's today, all-day
+    // rows by their own date (kitchenFetchWindow), not the whole history.
     fetcher: (sb) => sb.from('calendar_events').select('*').eq('family_id', familyId)
-      .gte('starts_at', new Date(Date.now() - 86_400_000).toISOString())
-      .lte('starts_at', new Date(Date.now() + 2 * 86_400_000).toISOString())
+      .gte('starts_at', kitchenFetchWindow(today, familyClock.timeZone).from)
+      .lte('starts_at', kitchenFetchWindow(today, familyClock.timeZone).to)
       .order('starts_at', { ascending: true }).limit(200) as never,
   });
   const { data: rawReminders, error: remindersError, refresh: refreshReminders } = useRealtimeQuery<ReminderRow>({
@@ -876,9 +873,11 @@ function ScopedBriefingModule({ recap, relationships, preview = false, contextKe
     fetcher: (sb) => sb.from('reminders').select('*').eq('family_id', familyId).eq('is_done', false) as never,
   });
 
+  // On today's date: a timed row on the family's day, an all-day row on its
+  // own date (the UTC date it is stored on); all-day rows first.
   const todayEvents = useMemo(() => {
     const list = (rawEvents ?? []) as CalEvent[];
-    return list.filter(e => familyClock.dayKeyOf(e.starts_at) === today).sort((a, b) => a.starts_at.localeCompare(b.starts_at));
+    return kitchenToday(list, today, familyClock.timeZone);
   }, [rawEvents, today, familyClock]);
   const urgentReminders = useMemo(() => {
     const list = (rawReminders ?? []) as ReminderRow[];

@@ -7,7 +7,8 @@ import { readAllAsQuery } from '@/lib/supabase/read-all';
 import { ErrorState } from '@/components/ui/states';
 import { cn } from '@/lib/utils/cn';
 import { buildHeatmap, type HeatEvent } from '@/lib/calendar/heatmap';
-import { expandEventsInZone } from '@/lib/calendar/recurrence';
+import { expandForFamily } from '@/lib/calendar/recurrence';
+import { addDays, familyFetchRange } from '@/lib/calendar/day';
 import { useFamilyClock } from '@/components/i18n/use-format';
 import type { Tables } from '@/lib/database.types';
 import { useTranslations } from '@/components/i18n/locale-provider';
@@ -21,6 +22,19 @@ const LEVEL_CLS = [
   'bg-brand',
 ];
 const DOW = ['M', 'T', 'W', 'T', 'F', 'S', 'S'];
+
+/**
+ * The family dates the strip covers — the `WEEKS * 7` ending today — and the
+ * instants a read of them must span. All-day rows are on their own date (the
+ * UTC date they are stored on, lib/calendar/day.ts), timed rows on the family's
+ * day, so the window is the union of the two (familyFetchRange): a read from
+ * the family's midnight missed the first date's all-day rows west of Greenwich.
+ */
+function heatWindow(todayKey: string, timeZone: string) {
+  const fromDay = addDays(todayKey, -(WEEKS * 7 - 1));
+  const toDay = addDays(todayKey, 1);
+  return { fromDay, toDay, range: familyFetchRange(fromDay, toDay, timeZone) };
+}
 
 /**
  * Busy-week heat strip (TimeTree-style heat map, gap #16): the last 8 weeks of
@@ -44,14 +58,15 @@ export function BusynessHeatmap({ familyId }: { familyId: string }) {
   // with advice underneath it — telling a family they are not busy because the
   // query broke. `useRealtimeQuery` is the house pattern and carries the error,
   // the offline fallback and the missing-table degrade that this bypassed.
+  const todayKey = clock.todayKey();
   const { data: rows, error } = useRealtimeQuery<Tables<'calendar_events'>>({
-    table: 'calendar_events', familyId, deps: [familyId],
+    table: 'calendar_events', familyId, deps: [familyId, todayKey, clock.timeZone],
     fetcher: (s) => {
-      const start = new Date(Date.now() - WEEKS * 7 * 86400_000);
+      const { range } = heatWindow(todayKey, clock.timeZone);
       return readAllAsQuery<Tables<'calendar_events'>>((from, to) => s.from('calendar_events').select('*')
         .eq('family_id', familyId)
-        .lt('starts_at', new Date().toISOString())
-        .or(`starts_at.gte.${start.toISOString()},recurrence.neq.none`)
+        .lt('starts_at', range.to.toISOString())
+        .or(`starts_at.gte.${range.from.toISOString()},recurrence.neq.none`)
         // `starts_at` alone is not a total order, and paging a non-total order
         // repeats and skips rows across page boundaries. `id` breaks the ties.
         .order('starts_at').order('id')
@@ -60,14 +75,15 @@ export function BusynessHeatmap({ familyId }: { familyId: string }) {
   });
 
   const report = useMemo(() => {
-    const start = new Date(Date.now() - WEEKS * 7 * 86400_000);
-    // Recurrence stepped, and days bucketed, in the FAMILY's zone (TIME-003).
-    const occurrences = expandEventsInZone(rows, start, new Date(), clock.timeZone);
+    // Recurrence stepped, and days bucketed, in the FAMILY's zone (TIME-003);
+    // all-day rows by their own date.
+    const { fromDay, toDay } = heatWindow(todayKey, clock.timeZone);
+    const occurrences = expandForFamily(rows, fromDay, toDay, clock.timeZone);
     const events: HeatEvent[] = occurrences.map(e => ({
       startsAt: e.starts_at, endsAt: e.ends_at, allDay: e.all_day,
     }));
     return buildHeatmap(events, new Date(), WEEKS, clock.timeZone);
-  }, [rows, clock]);
+  }, [rows, clock, todayKey]);
 
   // Column-per-week grid: pad so the strip starts on a Monday row.
   const firstDow = (new Date(report.days[0]?.date ?? Date.now()).getUTCDay() + 6) % 7;

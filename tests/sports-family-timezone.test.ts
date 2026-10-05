@@ -128,9 +128,9 @@ describe('sports named family-zone preservation controls',()=>{
   const rows=successful(await listPracticesBetween(scope('America/Los_Angeles',[event('2026-10-28T00:00:00.000Z')]),window('2026-11-03T08:00:00.000Z','2026-11-04T08:00:00.000Z')));
   expect(rows.map(r=>[r.starts_at,localClock(r.starts_at,'America/Los_Angeles')])).toEqual([['2026-11-04T01:00:00.000Z','2026-11-03 17:00']]);
  });
- it('preserves the named resolver first-valid-minute spring gap policy',async()=>{
+ it('reads a spring-gap practice with the offset in force before the gap (RFC 5545)',async()=>{
   const rows=successful(await listPracticesBetween(scope('America/New_York',[event('2026-03-01T07:30:00.000Z')]),window('2026-03-08T05:00:00.000Z','2026-03-09T04:00:00.000Z')));
-  expect(rows.map(r=>[r.starts_at,r.ends_at,localClock(r.starts_at,'America/New_York')])).toEqual([['2026-03-08T07:00:00.000Z','2026-03-08T08:00:00.000Z','2026-03-08 03:00']]);
+  expect(rows.map(r=>[r.starts_at,r.ends_at,localClock(r.starts_at,'America/New_York')])).toEqual([['2026-03-08T07:30:00.000Z','2026-03-08T08:30:00.000Z','2026-03-08 03:30']]);
  });
  it('preserves the named resolver first-fold choice for zero-second timestamps',async()=>{
   const rows=successful(await listPracticesBetween(scope('America/New_York',[event('2026-10-25T05:30:00.000Z')]),window('2026-11-01T04:00:00.000Z','2026-11-02T05:00:00.000Z')));

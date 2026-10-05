@@ -2,7 +2,7 @@
 // standards-based ICS / RSS feeds (family-curated local calendars). All pure +
 // unit-tested; network fetching happens in the API route.
 import type { NormalizedEvent } from './normalize';
-import { instantForLocalTime, isValidTimezone } from '@/lib/time/zoned';
+import { instantForIcsLocalTime, isValidTimezone } from '@/lib/time/zoned';
 
 const toCents = (n: unknown): number | null => {
   const v = typeof n === 'number' ? n : typeof n === 'string' ? parseFloat(n) : NaN;
@@ -74,9 +74,10 @@ function unescapeICS(v: string): string {
  *   20260625T180000 + TZID      → the instant at which the clock in that zone
  *                                 reads 18:00 (a library's "Saturday story time
  *                                 at 10" is published in its own zone; read as
- *                                 UTC it showed hours off). A reading the zone
- *                                 skips at spring-forward resolves to the first
- *                                 minute that exists, as the rest of the app does.
+ *                                 UTC it showed hours off). On a DST night RFC
+ *                                 5545 §3.3.5 decides (instantForIcsLocalTime):
+ *                                 a reading shown twice is the FIRST instant, one
+ *                                 skipped takes the offset in force BEFORE the gap.
  *   20260625T180000, no TZID    → read as UTC. Before, this came back WITHOUT a
  *                                 zone and `new Date()` then read it in the
  *                                 runtime's zone — UTC on the server that runs
@@ -96,7 +97,7 @@ export function parseICSDate(val: string, tzid: string | null = null): string | 
   if (m) {
     const [, y, mo, d, h, mi, s, z] = m;
     if (!z && tzid && isValidTimezone(tzid)) {
-      const at = instantForLocalTime(+y, +mo, +d, +h * 60 + +mi, tzid);
+      const at = instantForIcsLocalTime(+y, +mo, +d, +h * 60 + +mi, tzid);
       if (at) return new Date(at.getTime() + +s * 1000).toISOString().replace('.000Z', 'Z');
     }
     return `${y}-${mo}-${d}T${h}:${mi}:${s}Z`;

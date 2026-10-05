@@ -51,6 +51,8 @@ export function useVoice(opts: { onError?: (msg: string, info?: VoiceErrorInfo) 
   const chunksRef = useRef<BlobPart[]>([]);
   const streamRef = useRef<MediaStream | null>(null);
   const audioRef = useRef<HTMLAudioElement | null>(null);
+  const speechRequestRef = useRef<AbortController | null>(null);
+  const speechUrlRef = useRef<string | null>(null);
   const resolveRef = useRef<((text: string | null) => void) | null>(null);
 
   useEffect(() => {
@@ -151,7 +153,10 @@ export function useVoice(opts: { onError?: (msg: string, info?: VoiceErrorInfo) 
 
   /** Stop any in-progress speech playback. */
   const stopSpeaking = useCallback(() => {
+    speechRequestRef.current?.abort();
+    speechRequestRef.current = null;
     if (audioRef.current) { audioRef.current.pause(); audioRef.current.src = ''; audioRef.current = null; }
+    if (speechUrlRef.current) { URL.revokeObjectURL(speechUrlRef.current); speechUrlRef.current = null; }
     if (typeof window !== 'undefined' && 'speechSynthesis' in window) window.speechSynthesis.cancel();
     setStatus((s) => (s === 'speaking' ? 'idle' : s));
   }, []);
@@ -161,29 +166,42 @@ export function useVoice(opts: { onError?: (msg: string, info?: VoiceErrorInfo) 
   const speak = useCallback(async (text: string) => {
     if (!text.trim()) return;
     stopSpeaking();
+    const request = new AbortController();
+    speechRequestRef.current = request;
+    const current = () => speechRequestRef.current === request && !request.signal.aborted;
     setStatus('speaking');
     try {
       const res = await fetch('/api/ai/voice/speak', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ text, voice }),
+        signal: request.signal,
       });
+      if (!current()) return;
       if (res.ok) {
         const buf = await res.arrayBuffer();
+        if (!current()) return;
         const url = URL.createObjectURL(new Blob([buf], { type: 'audio/mpeg' }));
+        speechUrlRef.current = url;
         const audio = new Audio(url);
         audioRef.current = audio;
-        audio.onended = () => { URL.revokeObjectURL(url); setStatus((s) => (s === 'speaking' ? 'idle' : s)); };
-        audio.onerror = () => { URL.revokeObjectURL(url); setStatus((s) => (s === 'speaking' ? 'idle' : s)); };
+        const finished = () => {
+          URL.revokeObjectURL(url);
+          if (speechUrlRef.current === url) speechUrlRef.current = null;
+          if (current()) setStatus((s) => (s === 'speaking' ? 'idle' : s));
+        };
+        audio.onended = finished;
+        audio.onerror = finished;
         await audio.play();
         return;
       }
       // 503/502 → try the browser's built-in synthesizer as a graceful fallback.
       throw new Error('tts unavailable');
     } catch {
+      if (!current()) return;
       if (typeof window !== 'undefined' && 'speechSynthesis' in window) {
         const u = new SpeechSynthesisUtterance(text);
-        u.onend = () => setStatus((s) => (s === 'speaking' ? 'idle' : s));
+        u.onend = () => { if (current()) setStatus((s) => (s === 'speaking' ? 'idle' : s)); };
         window.speechSynthesis.speak(u);
       } else {
         setStatus((s) => (s === 'speaking' ? 'idle' : s));

@@ -20,3 +20,4 @@ number with a released migration and never sits below the released sequence.
 | File | Reserved for | The app without it |
 |---|---|---|
 | `0488_a_month_end_bill_keeps_its_day.sql` | bill anchor (#932) | Mark paid writes without `due_day` whenever the due date carries the bill's day. It asks first, or refuses, only for a month-end roll into a shorter month. |
+| `0490_a_calendar_feed_sync_writes_only_while_it_holds_its_claim.sql` | calendar feed claim (#908) | A sync checks that it still holds its claim before each chunk, then writes: two statements, so a sync that pauses between them can land one stale chunk after a takeover. The first sync without the function logs once, naming 0490, and every sync takes that path. |

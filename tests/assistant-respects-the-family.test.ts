@@ -35,24 +35,64 @@ type Write = { table: string; payload: unknown };
  * a fix whose whole content IS a filter — it would pass just as happily with
  * the archive check deleted. These apply eq/neq/is/gte/lt to real rows.
  */
+/** One PostgREST filter term (`column.op.value`) against a row. */
+function termHolds(row: Row, term: string): boolean {
+  const m = /^([a-z_]+)\.(eq|neq|gte|gt|lte|lt|is)\.(.*)$/.exec(term);
+  if (!m) throw new Error(`fakeDb cannot read the filter term ${term}`);
+  const [, column, op, raw] = m;
+  const value = raw === 'null' ? null : raw === 'true' ? true : raw === 'false' ? false : raw;
+  const cell = row[column] ?? null;
+  switch (op) {
+    case 'is': return cell === value;
+    case 'eq': return cell === value || (cell !== null && String(cell) === String(value));
+    case 'neq': return cell !== null && String(cell) !== String(value);
+    case 'gte': return cell !== null && String(cell) >= String(value);
+    case 'gt': return cell !== null && String(cell) > String(value);
+    case 'lte': return cell !== null && String(cell) <= String(value);
+    default: return cell !== null && String(cell) < String(value);
+  }
+}
+/** Split a PostgREST logic list at its top-level commas. */
+function splitTop(list: string): string[] {
+  const out: string[] = [];
+  let depth = 0;
+  let start = 0;
+  for (let i = 0; i < list.length; i += 1) {
+    if (list[i] === '(') depth += 1;
+    else if (list[i] === ')') depth -= 1;
+    else if (list[i] === ',' && depth === 0) { out.push(list.slice(start, i)); start = i + 1; }
+  }
+  out.push(list.slice(start));
+  return out;
+}
+function groupHolds(row: Row, expr: string): boolean {
+  if (expr.startsWith('and(')) return splitTop(expr.slice(4, -1)).every((t) => groupHolds(row, t));
+  if (expr.startsWith('or(')) return splitTop(expr.slice(3, -1)).some((t) => groupHolds(row, t));
+  return termHolds(row, expr);
+}
+
 function fakeDb(tables: Record<string, Row[]>) {
   const writes: Write[] = [];
   const from = (table: string) => {
     let rows = [...(tables[table] ?? [])];
+    let counted = false;
+    let range: [number, number] | null = null;
     const chain: Record<string, unknown> = {
-      select: () => chain,
+      select: (_columns?: string, opts?: { count?: string }) => { counted = !!opts?.count; return chain; },
       eq: (column: string, value: unknown) => { rows = rows.filter((r) => r[column] === value); return chain; },
       neq: (column: string, value: unknown) => { rows = rows.filter((r) => r[column] !== value); return chain; },
       is: (column: string, value: unknown) => { rows = rows.filter((r) => (r[column] ?? null) === value); return chain; },
       in: (column: string, values: unknown[]) => { rows = rows.filter((r) => values.includes(r[column])); return chain; },
       gte: (column: string, value: unknown) => { rows = rows.filter((r) => String(r[column]) >= String(value)); return chain; },
       lt: (column: string, value: unknown) => { rows = rows.filter((r) => String(r[column]) < String(value)); return chain; },
+      lte: (column: string, value: unknown) => { rows = rows.filter((r) => String(r[column]) <= String(value)); return chain; },
       not: () => chain,
-      // `.or('recurrence_until.is.null,recurrence_until.gte.X')` is a widening
-      // filter over a set the expansion narrows again by `recurrence_until`, so
-      // passing it through here cannot hide a defect: an out-of-date series
-      // still has to be dropped, and a test below insists it is.
-      or: () => chain,
+      // The OR filters the shared calendar read sends — the one-off window
+      // (`and(all_day.eq.false,starts_at.gte.…),and(all_day.eq.true,…)`), the
+      // one-off/series split, and `recurrence_until.is.null,…gte.X` — applied
+      // to the rows, so a one-off on another day is not on today's list.
+      or: (expr: string) => { rows = rows.filter((r) => splitTop(expr).some((t) => groupHolds(r, t))); return chain; },
+      range: (fromRow: number, toRow: number) => { range = [fromRow, toRow]; return chain; },
       order: (column: string) => {
         rows = [...rows].sort((a, b) => String(a[column] ?? '').localeCompare(String(b[column] ?? '')));
         return chain;
@@ -60,7 +100,10 @@ function fakeDb(tables: Record<string, Row[]>) {
       limit: (n: number) => { rows = rows.slice(0, n); return chain; },
       maybeSingle: async () => ({ data: rows[0] ?? null, error: null }),
       single: async () => ({ data: rows[0] ?? null, error: null }),
-      then: (resolve: (v: unknown) => unknown) => Promise.resolve({ data: rows, error: null }).then(resolve),
+      // A counted read answers with its count, as PostgREST's Content-Range does.
+      then: (resolve: (v: unknown) => unknown) => Promise.resolve({
+        data: range ? rows.slice(range[0], range[1] + 1) : rows, error: null, ...(counted ? { count: rows.length } : {}),
+      }).then(resolve),
       update: () => chain,
       insert: (payload: unknown) => {
         writes.push({ table, payload });

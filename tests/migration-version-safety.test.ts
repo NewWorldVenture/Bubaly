@@ -507,12 +507,15 @@ describe('Supabase migration filename safety', () => {
     // frozen. This literal tracks the checked-in high-water mark. The numbers
     // once allocated below it and never used (0465-0470 to NWV, 0472 to
     // Support, 0473 to the coordinator) are retired, not held: production
-    // cannot apply them after 0474 (RETIRED_MIGRATION_VERSIONS). Above it the
-    // owner kept the existing reservations (2026-10-04, #771): 0475/0476 are
-    // messaging's (#834), 0477 onward belong to named branches, and a reserved
-    // migration that cannot land in order yet is held in supabase/reserved/
-    // (the bill anchor, 0488) — checked below.
-    expect(audit.nextVersion).toBe('0475');
+    // cannot apply them after 0474 (RETIRED_MIGRATION_VERSIONS). 0475/0476 are
+    // messaging's (#834) and have landed: 0475 scopes messaging to participants
+    // and adds atomic conversation/read/reaction operations; 0476 adds private
+    // in-app notices and durable mute. Above them the owner kept the existing
+    // reservations (2026-10-04, #771): 0477 onward belong to named branches,
+    // and reserved migrations that cannot land in order yet are held in
+    // supabase/reserved/ (the bill anchor, 0488; the calendar feed claim, 0490)
+    // — checked below.
+    expect(audit.nextVersion).toBe('0477');
   });
 
   // A hole below the high-water mark is not a free number: `supabase db push`
@@ -541,6 +544,7 @@ describe('Supabase migration filename safety', () => {
       expect(Number(version), `${name} is not above the released sequence`).toBeGreaterThanOrEqual(Number(audit.nextVersion));
     }
     expect(held).toContain('0488_a_month_end_bill_keeps_its_day.sql');
+    expect(held).toContain('0490_a_calendar_feed_sync_writes_only_while_it_holds_its_claim.sql');
   });
 
   it('retires exactly the numbers below the mark that no file holds', () => {

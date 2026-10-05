@@ -76,7 +76,8 @@ vi.mock('@/lib/supabase/server', () => ({
         const all = rows();
         const range = filters.range as [number, number] | undefined;
         const page = range ? all.slice(range[0], range[1] + 1) : all;
-        return head ? { data: null, count: page.length, error: null } : { data: page, error: null };
+        // The count is the whole collection, before the page — as Content-Range reports it.
+        return head ? { data: null, count: all.length, error: null } : { data: page, count: all.length, error: null };
       };
       const b: Row = {};
       Object.assign(b, {

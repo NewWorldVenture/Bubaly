@@ -35,13 +35,12 @@ describe("a read receipt and a reaction are the reader's own (DB-RPC-M02)", () =
   });
 
   it("the product's writers only ever change the caller's own entry", () => {
-    // Read receipts: the RPC first, then an append of userId in the fallback.
-    expect(messages).toContain("supabase.rpc('mark_conversation_read', { p_conversation_id: convId })");
-    expect(messages).toContain('.update({ read_by: [...(m.read_by ?? []), userId] })');
-    // Reactions: add or remove userId under one emoji, nothing else.
+    // Both merges are database-atomic and derive the actor from auth.uid().
+    // No client-side snapshot can erase another reader's concurrent entry.
+    expect(messages).toContain(".rpc('mark_conversation_read_through', { p_conversation_id: activeConvId, p_message_id: newest.id })");
+    expect(messages).not.toMatch(/\.update\(\{\s*read_by:/);
     const react = messages.slice(messages.indexOf('async function reactTo('), messages.indexOf('// ── Delete message'));
-    expect(react).toContain('existing.filter((u) => u !== userId)');
-    expect(react).toContain('[...existing, userId]');
-    expect(react).not.toMatch(/reactions:\s*\{\s*\}/);
+    expect(react).toContain(".rpc('toggle_family_message_reaction', { p_message_id: msg.id, p_emoji: emoji })");
+    expect(react).not.toContain('.update(');
   });
 });

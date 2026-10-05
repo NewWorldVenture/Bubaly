@@ -265,7 +265,8 @@ describe('Daily Brief response validation', () => {
 });
 
 function queryResult(data: unknown[]) {
-  const promise = Promise.resolve({ data, error: null });
+  // A collection answer carries its count, as PostgREST's Content-Range does.
+  const promise = Promise.resolve({ data, error: null, count: data.length });
   const query: Record<string, unknown> = { then: promise.then.bind(promise) };
   // `or` and `update` joined the list when the brief started folding the quiet
   // notifications in: `listUnread` scopes with `.or(user_id…)` and the route

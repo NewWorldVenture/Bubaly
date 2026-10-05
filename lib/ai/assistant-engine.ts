@@ -35,6 +35,7 @@ import { isManager, type MemberRole } from '@/lib/constants/roles';
 import type { ServiceScope } from '@/lib/services/types';
 import { describeActionError, wroteNoRows } from '@/lib/supabase/errors';
 import { settleAll } from '@/lib/supabase/settle';
+import { chronologicalMessages } from '@/lib/ai/conversation-session';
 
 type DB = SupabaseClient<Database>;
 type MessageInsert = Database['public']['Tables']['ai_messages']['Insert'];
@@ -228,7 +229,8 @@ export async function prepareAssistantTurn(input: AssistantTurnInput): Promise<
     { data: history, error: historyError },
     { data: members, error: membersError },
   ] = await settleAll([
-    supabase.from('ai_messages').select('role, content').eq('conversation_id', conversationId).order('created_at', { ascending: true }).limit(40),
+    supabase.from('ai_messages').select('role, content, created_at').eq('conversation_id', conversationId)
+      .eq('family_id', familyId).order('created_at', { ascending: false }).order('id', { ascending: false }).limit(40),
     // `user_id` is selected so the acting member can be picked out of the roster
     // — the tool registry scopes writes by `family_members.id`, not by the auth
     // user id. The context builder loads the roster again through the family
@@ -275,7 +277,7 @@ export async function prepareAssistantTurn(input: AssistantTurnInput): Promise<
   const system = buildAssistantSystemPromptFromContext(context.data);
 
   const messages: AIMessage[] = [
-    ...(history ?? []).map((m) => ({ role: m.role as 'user' | 'assistant', content: m.content })),
+    ...chronologicalMessages(history ?? []).map((m) => ({ role: m.role as 'user' | 'assistant', content: m.content })),
     { role: 'user' as const, content: message },
   ];
 
@@ -494,7 +496,12 @@ export async function runAssistantTurn(input: AssistantTurnInput, prepared: Prep
 export function createAssistantStream(input: AssistantTurnInput, prepared: PreparedAssistantTurn): ReadableStream<Uint8Array> {
   const { system, messages, tools, provider } = prepared;
   const encoder = new TextEncoder();
+  // Disconnecting the reader must not throw from enqueue and trigger a second
+  // provider/tool run. Finish the started turn and retain its history so the
+  // person can reopen it to see what actually happened.
+  let connected = true;
   return new ReadableStream<Uint8Array>({
+    cancel() { connected = false; },
     async start(controller) {
       // The wrapper lives INSIDE `start`, not around the call that builds this
       // stream. `withAiRequest` settles when its body resolves, and the function
@@ -505,8 +512,13 @@ export function createAssistantStream(input: AssistantTurnInput, prepared: Prepa
         prepared.scope,
         { feature: 'assistant.stream', text: 'Assistant stream', conversationId: input.conversationId },
         async (obs) => {
-          const send = (e: unknown) => controller.enqueue(encoder.encode(`data: ${JSON.stringify(e)}\n\n`));
+          const send = (e: unknown) => {
+            if (!connected) return;
+            try { controller.enqueue(encoder.encode(`data: ${JSON.stringify(e)}\n\n`)); }
+            catch { connected = false; } // cancel can precede the async start settling
+          };
           let content = '';
+          let responseError: string | undefined;
           const actions: ExecutedAssistantAction[] = [];
           const cards: ResultCard[] = [];
           const runIds: string[] = [];
@@ -540,7 +552,7 @@ export function createAssistantStream(input: AssistantTurnInput, prepared: Prepa
             obs.used(provider.model, undefined);
           } catch (streamErr) {
             console.error('[assistant-engine] stream error:', streamErr);
-            if (!content) {
+            if (!content && actions.length === 0) {
               try {
                 const result = await provider.runTools({ system, messages, tools, maxTokens: ASSISTANT_MAX_TOKENS });
                 // The turn recovered and the family gets a whole answer, so this
@@ -561,7 +573,7 @@ export function createAssistantStream(input: AssistantTurnInput, prepared: Prepa
                 obs.used(provider.model, undefined);
                 obs.failed(fallbackErr);
                 send({ type: 'error', error: describeAIError(fallbackErr).message });
-                controller.close();
+                if (connected) controller.close();
                 return;
               }
             } else {
@@ -569,14 +581,15 @@ export function createAssistantStream(input: AssistantTurnInput, prepared: Prepa
               // spent and the answer is half an answer: `partially_completed`.
               obs.used(provider.model, undefined);
               obs.failed(streamErr, { partial: true });
-              send({ type: 'error', error: describeAIError(streamErr).message });
+              responseError = describeAIError(streamErr).message;
+              send({ type: 'error', error: responseError });
             }
           }
 
           const assistantContent = finalizeAssistantContent(content, actions);
           const persisted = await persistAssistantTurn(input.supabase, {
             familyId: input.familyId, conversationId: input.conversationId, message: input.message,
-            assistantContent, actions, model: provider.model, structured: toStructuredContent(cards, runIds),
+            assistantContent, actions, model: provider.model, structured: toStructuredContent(cards, runIds, responseError),
           });
           if (!persisted.ok) {
             // The answer was streamed and then not saved: the family will meet this
@@ -585,7 +598,7 @@ export function createAssistantStream(input: AssistantTurnInput, prepared: Prepa
             send({ type: 'error', error: persisted.error });
           }
           send({ type: 'done', content: assistantContent, persisted: persisted.ok });
-          controller.close();
+          if (connected) controller.close();
         },
       );
     },

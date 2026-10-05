@@ -1,5 +1,54 @@
 # Production release status and historical feature inventory
 
+## Chat and messaging rollout (2026-10-02)
+
+The messaging buildout adds `0475_messaging_conversation_privacy_and_delivery.sql`
+and `0476_messaging_notifications_preferences.sql` (numbers reserved for #834;
+the owner kept them, so they land in order after 0474). Neither has been applied
+to production by this task, and production migration execution remains a
+human-owned operation under the existing release controls below. Apply them in
+order, 0475 then 0476.
+
+The application does **not** depend on them. On production's schema without
+them, each path that needs a new object falls back to main's behaviour, or hides
+the feature, and logs one console warning naming the missing migration
+(`lib/messages/schema-compat.ts`; a missing object is recognised only by its own
+name: PGRST202/42883 function, PGRST205/42P01 table, PGRST204/42703 column):
+
+| Object (migration) | Used by | Without it |
+| --- | --- | --- |
+| `ensure_family_conversation` (0475) | messages page, messages service | main's family chat: the first group chat (page) / oldest un-archived group (service), created with every member when there is none |
+| `create_family_conversation` (0475) | new conversation | direct insert, as main did (no server-side roster validation or direct-chat de-duplication) |
+| `family_conversation_overview` (0475) | previews, unread badges | main's scan of the 400 most recent messages |
+| `mark_conversation_read_through` (0475) | read receipts | 0163's `mark_conversation_read`, else main's per-row append |
+| `toggle_family_message_reaction` (0475) | reactions | main's read-modify-write of the reactions map |
+| `leave_family_conversation` (0475) | leave a group | hidden (main had no leave) |
+| `family_conversations.is_family_chat` (0475) | service send to a named conversation; default selection | family-wide access as that schema enforces; main's first group chat is opened |
+| `family_messages.idempotency_key` (0475) | service send retries | main's same-words-same-thread-within-ten-minutes probe; insert without the key |
+| private Realtime topics (0475 policies) | typing, presence | typing hidden (main had none); presence on main's public family channel |
+| `family_conversation_preferences` (0476) | mute | main's device-local mute |
+| chat notices (0476 triggers) | in-app notifications | none are created, as on main |
+
+0475 restricts direct/group conversations, messages, media and private realtime
+topics to active participants; adds a canonical whole-family chat and atomic
+creation/read/reaction/leave operations; and validates identity and reply paths.
+The canonical family chat is new: no legacy group is adopted, so a household's
+existing "Family Chat" becomes an ordinary private group visible to its roster,
+beside a new empty family chat. 0476 checks `notifications.related_id` itself
+(uuid converted to text as 0293 does, text kept, anything else refused) and adds
+recipient-only, content-free **in-app** notices and durable per-user mute. Chat
+notices are intentionally excluded from email and push dispatch.
+
+Both migrations pass reapplication, real PostgreSQL role probes, independent-
+session concurrency checks, and repeated message seeds in a disposable local
+database. This is not proof of the production schema or hosted Realtime setup.
+After applying, smoke-test two participants and a same-family nonparticipant,
+private uploads, realtime reconnect, mute and a notification deep link. Previously
+issued signed media URLs retain their existing expiry semantics.
+
+See [the buildout verification record](chat-messaging-buildout.md) and the dedicated
+`Messaging verification` CI workflow. The historical baseline below is unchanged.
+
 > **Status correction, 2026-10-03** (blocked-rows eligibility review;
 > evidence in `docs/final-audit/blocked-rows-eligibility-20261003.md`).
 > The connectivity paragraph below is historical. The `Supabase production
@@ -4104,7 +4153,7 @@ Such a file is **held** in `supabase/reserved/`, and its probe in
 `docs/audit/reserved/`. Neither the replay nor `db push` reads those
 directories. The file moves into `supabase/migrations/` under its reserved
 number when the sequence reaches it. Code that uses a held migration must work
-without it. `0488` is held this way; its entry is below.
+without it. `0488` and `0490` are held this way; their entries are below.
 
 ### Published branch candidates that are not on main (2026-10-04)
 
@@ -4190,3 +4239,33 @@ shape, its single check, and that a bill inserted without it reads null.
 **After applying:** mark paid a monthly bill due on the 31st of a month that is
 followed by a shorter one. It moves to the last day of the next month with no
 question; mark it paid again and it is back on the 31st.
+
+## `0490` (reserved, held) — a calendar feed sync writes only while it holds its claim (#908)
+
+`supabase/reserved/0490_a_calendar_feed_sync_writes_only_while_it_holds_its_claim.sql` — **held**:
+reserved as `0490`, not in `supabase/migrations/` until `0475`–`0489` have
+landed, so neither the replay nor `db push` applies it. Its probe is held with
+it in `docs/audit/reserved/`.
+
+**Severity: low (an imported calendar's rows during a contested sync). Deploy
+order: any; the app is written for both sides of it.** One function,
+`public.calendar_feed_apply_sync(p_feed_id, p_fence, p_upserts, p_removals)`,
+SECURITY INVOKER: no table, column, index or policy change.
+
+One sync of a subscribed calendar runs at a time: `calendar_feeds.last_status`
+= `syncing` is a compare-and-set claim, taken over after ten minutes, and the
+claim's `updated_at` is the fence every later write of that sync compares
+against (lib/server/calendar-feeds.ts). The function locks the feed row, checks
+the fence and writes the chunk in one transaction, and writes every row under
+the feed's own family. Until 0490 is applied the RPC answers PGRST202/42883;
+the sync logs that once, naming 0490 as reserved and held, and checks the fence
+before each chunk's upsert and removal instead. Those are two statements, so a
+sync that pauses between them can still land one stale chunk after a takeover,
+and the next sync corrects it. An imported series is stepped on the family's
+clock, not its publisher's: no column carries the source TZID.
+`docs/audit/reserved/a-calendar-feed-sync-writes-only-while-it-holds-its-claim-check.sql`
+proves the fence, the scope of removals, the 42703 on an unknown column, and
+the family taken from the locked feed row.
+
+**After applying:** sync a subscribed calendar. The log no longer says
+`calendar_feed_apply_sync is not in this database`.

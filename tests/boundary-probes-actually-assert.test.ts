@@ -15,11 +15,20 @@ import { describe, expect, it } from 'vitest';
 // The runner already refuses the third case — an empty glob exits 1 with "the
 // boundary proofs have been deleted" — which is why these two are worth closing
 // too rather than assumed.
+// Messaging's migration-time fixtures require a separate disposable-cluster
+// runner. Its four explicit exceptions below must assert AND remain wired to
+// that runner and CI; a new unregistered .probe.sql does not silently opt out.
 
 const DIR = 'docs/audit';
 const sql = readdirSync(DIR).filter((f) => f.endsWith('.sql'));
 const checks = sql.filter((f) => f.endsWith('-check.sql'));
-const reportOnly = sql.filter((f) => !f.endsWith('-check.sql'));
+const messagingProbes = [
+  'messaging-canonical-history.probe.sql',
+  'messaging-participant-boundaries.probe.sql',
+  'messaging-notification.probe.sql',
+  'messaging-membership-lifecycle.probe.sql',
+];
+const reportOnly = sql.filter((f) => !f.endsWith('-check.sql') && !messagingProbes.includes(f));
 const body = (f: string) => readFileSync(join(DIR, f), 'utf8');
 const assertions = (f: string) => (body(f).match(/raise exception/gi) ?? []).length;
 
@@ -34,13 +43,28 @@ describe('the boundary probes can actually fail', () => {
     }
   });
 
-  it('no assertion is parked in a file the runner never globs', () => {
+  it('no assertion is parked outside the glob or an explicitly verified separate runner', () => {
     for (const f of reportOnly) {
       expect(
         assertions(f),
-        `${f} contains a raise exception but does not end in -check.sql, so run-probes.sh never executes it`,
+        `${f} contains a raise exception but neither ends in -check.sql nor belongs to a verified separate runner`,
       ).toBe(0);
     }
+  });
+
+  it.each(messagingProbes)('%s asserts and is executed by the dedicated messaging runner', (f) => {
+    expect(sql, `${f} was registered but does not exist`).toContain(f);
+    expect(assertions(f), `${f} runs separately but asserts nothing`).toBeGreaterThan(0);
+    const runner = readFileSync('scripts/verify-messaging-database.mjs', 'utf8')
+      .split('\n').filter((line) => !line.trimStart().startsWith('//')).join('\n');
+    expect(runner, `${f} is exempt from the glob only while actually invoked`).toContain(`file('docs/audit/${f}')`);
+    expect(runner).toContain("const file = name => run('psql', [...base, '-f', join(root, name)]);");
+  });
+
+  it('CI invokes the separate messaging database runner on pull requests', () => {
+    const workflow = readFileSync('.github/workflows/messaging-verification.yml', 'utf8');
+    expect(workflow).toMatch(/^on:\r?\n\s+pull_request:/m);
+    expect(workflow).toMatch(/^\s+run: node scripts\/verify-messaging-database\.mjs --bin \/usr\/lib\/postgresql\/\d+\/bin\s*$/m);
   });
 
   it('the runner still refuses to pass with zero probes', () => {

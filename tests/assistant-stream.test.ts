@@ -63,6 +63,44 @@ describe('OpenAIProvider.runToolsStream', () => {
     expect(text).toBe('Saved it.');
     expect(fetchMock).toHaveBeenCalledTimes(2);
   });
+
+  // Audit hold on #834 (2026-10-04): a client that cancelled the stream after
+  // the first streamed action still saw a second write execute. The caller's
+  // signal is now checked before every tool and every model round, and a
+  // stream the caller cut gets no closing-summary call either.
+  it('stops at the caller\'s signal: a cancellation during the first tool means the second tool never runs and no further model call is made', async () => {
+    const fetchMock = vi.fn()
+      // One round, two tool calls; the client cancels while the first one runs.
+      .mockReturnValueOnce(sseResponse([
+        'data: {"choices":[{"delta":{"tool_calls":[{"index":0,"id":"call_1","function":{"name":"add_note","arguments":"{\\"body\\":\\"first\\"}"}}]}}]}\n\n',
+        'data: {"choices":[{"delta":{"tool_calls":[{"index":1,"id":"call_2","function":{"name":"add_note","arguments":"{\\"body\\":\\"second\\"}"}}]}}]}\n\n',
+        'data: [DONE]\n\n',
+      ]));
+    vi.stubGlobal('fetch', fetchMock);
+    const stopped = new AbortController();
+    const ran: string[] = [];
+    const tools: ToolSpec[] = [{
+      name: 'add_note', description: 'x', input_schema: { type: 'object' },
+      execute: async (args) => { ran.push(String((args as { body: string }).body)); stopped.abort(); return { ok: true, summary: 'Saved a note.' }; },
+    }];
+    const provider = new OpenAIProvider('gpt-4o', 'test-key');
+    const events = await collect(provider.runToolsStream({ system: 's', messages: [{ role: 'user', content: 'two notes' }], tools, signal: stopped.signal }));
+
+    expect(ran, 'the tool that was already running finished; the next one never started').toEqual(['first']);
+    expect(events.filter((e) => e.type === 'action')).toHaveLength(1);
+    expect(fetchMock, 'no second round and no closing summary for a stream the caller cut').toHaveBeenCalledTimes(1);
+  });
+
+  it('a signal already aborted before the turn makes no model call at all', async () => {
+    const fetchMock = vi.fn();
+    vi.stubGlobal('fetch', fetchMock);
+    const stopped = new AbortController();
+    stopped.abort();
+    const provider = new OpenAIProvider('gpt-4o', 'test-key');
+    const events = await collect(provider.runToolsStream({ system: 's', messages: [{ role: 'user', content: 'hi' }], tools: [], signal: stopped.signal }));
+    expect(events).toEqual([]);
+    expect(fetchMock).not.toHaveBeenCalled();
+  });
 });
 
 // ─── The engine's card / run / approval events (§53) ─────────────────────────

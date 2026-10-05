@@ -17,8 +17,9 @@
 // changed — and a late-evening one crossed into the neighbouring local day,
 // where a "what's on today" query then missed it entirely.
 import {
-  daysInMonth, instantForLocalTime, localPartsAt, type LocalParts,
+  daysInMonth, instantForIcsLocalTime, localPartsAt, type LocalParts,
 } from '@/lib/time/zoned';
+import { familyFetchRange } from '@/lib/calendar/day';
 
 export interface RecurrableEvent {
   id: string;
@@ -129,10 +130,14 @@ export function expandEventsInZone<T extends RecurrableEvent>(
       const local = steppedLocalDate(base, e.recurrence, from + i);
       if (local === undefined) break;   // a frequency we do not know
       if (local === null) continue;     // a day-of-month this month does not have
-      // The local time itself may not exist on the morning the clocks jump;
-      // instantForLocalTime moves it to the first minute that does, so a 2:30am
-      // event happens at 3:00 rather than vanishing for that day.
-      const cursor = instantForLocalTime(local.year, local.month, local.day, minutes, timezone);
+      // The local time may not exist on the night the clocks jump, or may
+      // happen twice on the night they fall back. RFC 5545 §3.3.5 decides, as
+      // the ICS readers that import these series do (instantForIcsLocalTime):
+      // a time shown twice is its FIRST instant, and a skipped time takes the
+      // offset in force BEFORE the gap — a weekly 2:30am in Chicago is 08:30Z
+      // on 8 March 2026 (shown as 3:30 CDT), keeping its place in the night,
+      // rather than vanishing for that day or sliding to 3:00.
+      const cursor = instantForIcsLocalTime(local.year, local.month, local.day, minutes, timezone);
       if (!cursor) continue;
       // Keep source precision within the resolver-selected local minute.
       cursor.setTime(cursor.getTime() + subMinuteMs);
@@ -148,6 +153,30 @@ export function expandEventsInZone<T extends RecurrableEvent>(
   }
   out.sort((a, b) => a.starts_at.localeCompare(b.starts_at));
   return out;
+}
+
+/**
+ * Expand `events` into the occurrences ON the family dates [fromDay, toDay)
+ * (`YYYY-MM-DD`, `toDay` exclusive): timed rows stepped on the family's wall
+ * clock and kept when they start between the family's midnights; all-day rows
+ * stepped by calendar date and kept when their own date (the UTC date their
+ * instant is stored on, lib/calendar/day.ts) is one of those dates.
+ *
+ * `expandEventsInZone` over the family's midnights is right for a timed row and
+ * wrong for an all-day one: an all-day Saturday is stored at Saturday 00:00Z,
+ * which is Friday afternoon in Los Angeles, so a week window from Monday 00:00
+ * Los Angeles time dropped Monday's all-day rows and kept the next Monday's.
+ */
+export function expandForFamily<T extends RecurrableEvent & { all_day?: boolean | null }>(
+  events: T[], fromDay: string, toDay: string, timezone: string,
+): T[] {
+  const range = familyFetchRange(fromDay, toDay, timezone);
+  const timed = events.filter((e) => !e.all_day);
+  const allDay = events.filter((e) => e.all_day);
+  return [
+    ...expandEventsInZone(timed, range.timedFrom, range.timedTo, timezone),
+    ...expandEventsInZone(allDay, range.allDayFrom, range.allDayTo, 'UTC'),
+  ].sort((a, b) => a.starts_at.localeCompare(b.starts_at));
 }
 
 function runtimeTimezone(): string {

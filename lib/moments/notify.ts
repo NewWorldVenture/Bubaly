@@ -12,6 +12,7 @@
 import { buildMomentPrep, momentWhen, type MomentEvent, type MomentCategory } from '@/lib/moments/prep';
 import { upcomingBirthdayEvents, type BirthdayMember } from '@/lib/moments/birthdays';
 import { dayKeyIn } from '@/lib/time/zoned';
+import { allDayDate } from '@/lib/calendar/day';
 
 export type MomentNotice = { relatedId: string; title: string; body: string };
 
@@ -80,10 +81,14 @@ export function imminentMomentNotices(
     const steps = prep.items.slice(0, 3).map((i) => i.label).join(' · ');
     const body = [leave, steps || null].filter(Boolean).join(' — ') || 'Open Moments for the prep list.';
 
+    // The key's date is the occurrence's day on the FAMILY's wall clock (an
+    // all-day moment's own date): Greenwich's date can give two occurrences of
+    // a daily series one key on a DST night, and the second is never sent.
+    const day = e.all_day ? allDayDate(e.starts_at) : timeZone ? dayKeyIn(new Date(t), timeZone) : e.starts_at.slice(0, 10);
     out.push({
       at: t,
       notice: {
-        relatedId: `moment:${e.id}:${e.starts_at.slice(0, 10)}`,
+        relatedId: `moment:${e.id}:${day}`,
         title: `${EMOJI[prep.category]} Get ready: ${e.title} · ${momentWhen(e.starts_at, e.all_day, now, undefined, undefined, timeZone)}`,
         body,
       },

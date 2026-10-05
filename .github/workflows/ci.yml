@@ -235,6 +235,16 @@ jobs:
       - name: Replay every migration
         run: bash docs/audit/pg-bootstrap.sh
 
+      # 0293 changes notifications.related_id from uuid to text, and 0476 keys
+      # chat notices on it. Rehearse 0293's fresh conversion, 0476 checking the
+      # column itself (uuid converted, text kept, anything else refused), and a
+      # replay of the unchanged 0293 after 0476 has installed its restrictive
+      # policies, using short-lived local databases only.
+      - name: Notification key conversion preserves current messaging policies
+        run: node scripts/verify-notification-key-migration.mjs
+        env:
+          BUBALY_DISPOSABLE_PG: '1'
+
       # Postgres resolves `ON CONFLICT (a, b)` by INDEX INFERENCE, which matches
       # only a unique index over exactly those columns that is neither partial
       # nor an expression index. Nothing else in CI puts the PAIR together: the
@@ -271,14 +281,14 @@ jobs:
       - name: Boundary probes
         run: bash docs/audit/run-probes.sh
 
-      # Production's ledger records only 0001-0003 while its schema carries all
-      # 307 migrations, so recovery means replaying from 0004 over a database
-      # that ALREADY HAS the schema (LB-016 §4). A from-scratch replay cannot
-      # show whether that works: every statement above ran against an empty
-      # database, where `create policy` has nothing to collide with.
+      # The 0001-0003 reset below is a retained legacy replay stress scenario,
+      # not the current production migration history: run 84 on 2026-10-02
+      # recorded 0001-0176. A from-scratch replay cannot show whether older
+      # migrations tolerate a populated schema, where later policies can depend
+      # on their columns.
       #
-      # This re-runs all 307 against the schema this job just built. It is the
-      # only step that proves a migration is idempotent rather than merely
+      # This re-runs every numbered migration against the schema this job just
+      # built. It is the only step that proves a migration is idempotent rather than
       # correct, and it is why it runs LAST: it rewrites the ledger and replays
       # everything, so nothing may depend on the database afterwards.
       #
@@ -287,7 +297,7 @@ jobs:
       # add table` without a guard does. Fix those the way the neighbours do
       # (`drop policy if exists` first, `create or replace trigger`,
       # `if not exists`), not by exempting the file.
-      - name: Migrations re-apply onto an existing schema (LB-016 §4 repair)
+      - name: Legacy migration re-apply stress on an existing schema
         run: bash docs/audit/rehearse-ledger-repair.sh
 
   e2e:
@@ -476,6 +486,7 @@ jobs:
             test-results/**/*.png
             !test-results/**/trace.zip
             !test-results/*durable-session*/**
+            !test-results/*family-messaging-authenticated*/**
             !test-results/**/storageState*
             !test-results/**/storage-state*
             !test-results/**/auth.json

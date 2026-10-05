@@ -16,13 +16,17 @@
 // fastest way to lose a family's trust in the assistant.
 import 'server-only';
 import { detectConflicts, type ConflictEvent, type EventConflict } from '@/lib/home/conflicts';
+import { readCalendarOccurrences } from '@/lib/calendar/occurrences';
+import { allDayDate } from '@/lib/calendar/day';
+import { calendarOpenWindowFilter, instantCalendarBounds } from '@/lib/briefing/calendar-window';
 import { freeGaps, mergeIntervals, type Interval } from '@/lib/calendar/scheduling';
+import { isValidTimezone } from '@/lib/time/zoned';
 import type { EventCategory, Insertable, RecurrenceFreq, Tables, Updatable } from '@/lib/database.types';
 import { describeDbError } from '@/lib/supabase/errors';
 import { settleAll } from '@/lib/supabase/settle';
 import { recordActivitySafely } from '../activity';
 import { keyedProbe, makeKey, sameId, sameInstant, withIdempotency, type KeyedCreateOptions } from '../idempotency';
-import { dayKeyInTz, dayKeysBetween, scopeNow, zonedTimeMs } from '../scope';
+import { dayKeyInTz, dayKeysBetween, scopeNow, zonedDayBoundsMs, zonedTimeMs } from '../scope';
 import { fail, ok, SERVICE_CODES, type ServiceResult, type ServiceScope } from '../types';
 import { escapeLike } from '@/lib/supabase/escape-like';
 import { getTranslations } from '@/lib/i18n/server';
@@ -466,21 +470,80 @@ export type SearchEventsInput = {
   assigneeId?: string | null;
   categories?: EventCategory[];
   limit?: number;
+  /**
+   * Expand a recurring event into the occurrences that fall in the window —
+   * the default, because a weekly practice IS on the calendar every week.
+   * `false` returns the stored rows, a series once at its first start, for a
+   * caller that wants the records themselves (the privacy export).
+   */
+  expandSeries?: boolean;
 };
 
-/** Events in a window, soonest first. The default window is open-ended forward. */
+/**
+ * How far ahead a series is expanded when the window has no end. One-off rows
+ * stay open-ended, as they always were; a series cannot be, and a year covers
+ * every frequency the calendar offers at least once.
+ */
+const SEARCH_SERIES_HORIZON_MS = 366 * 24 * 3600_000;
+
+/** The family's zone for expanding a series; a scope carrying an unusable zone expands on UTC rather than failing the read. */
+function zoneOf(scope: ServiceScope): string {
+  return scope.tz && isValidTimezone(scope.tz) ? scope.tz : 'UTC';
+}
+
+/**
+ * Events in a window, soonest first, series included: a recurring event is
+ * returned once per occurrence in the window, at that occurrence's time. The
+ * default window is open-ended forward.
+ *
+ * This read is the planner's eyes — the assistant's calendar tools, the weekly
+ * schedule slice, the trip planner's conflict check all come through here —
+ * and it used to filter `starts_at`, the FIRST start, by the window. A weekly
+ * commitment created in August was therefore in no plan after August: the
+ * assistant proposed dinners over practice and saw no clash in the week it
+ * was asked about.
+ */
 export async function searchEvents(scope: ServiceScope, input: SearchEventsInput = {}): Promise<ServiceResult<CalendarEvent[]>> {
   const limit = Math.min(Math.max(input.limit ?? 50, 1), 200);
+  const from = isoOrNull(input.from) ?? scopeNow(scope).toISOString();
+  const to = isoOrNull(input.to);
+  if (input.expandSeries === false) return searchEventRows(scope, input, from, to, limit);
+  // A window that ends before it starts holds nothing, as the row read answered.
+  if (to && Date.parse(to) < Date.parse(from)) return ok([]);
+
+  const tz = zoneOf(scope);
+  // `to` is inclusive, as the row read's `lte` was.
+  const bounds = instantCalendarBounds(from, to ?? new Date(Date.parse(from) + SEARCH_SERIES_HORIZON_MS - 1).toISOString(), tz);
+  const res = await readCalendarOccurrences(scope.db, scope.familyId, bounds, tz, {
+    limit,
+    singlesLimit: limit,
+    singlesFilter: to ? undefined : calendarOpenWindowFilter(bounds),
+    assigneeId: input.assigneeId ?? undefined,
+    refine: (query) => {
+      let refined = query;
+      if (input.categories?.length) refined = refined.in('category', input.categories);
+      if (input.query?.trim()) refined = refined.ilike('title', `%${escapeLike(input.query.trim())}%`);
+      return refined;
+    },
+  });
+  if (res.error) {
+    console.error('[service:calendar] search failed', res.error);
+    return fail(describeDbError(res.error, 'Could not load the calendar.'), { code: SERVICE_CODES.db });
+  }
+  return ok(res.data);
+}
+
+/** The stored rows in a window by their own `starts_at`: a series once. */
+async function searchEventRows(
+  scope: ServiceScope, input: SearchEventsInput, from: string, to: string | null, limit: number,
+): Promise<ServiceResult<CalendarEvent[]>> {
   let query = scope.db
     .from('calendar_events')
     .select('*')
     .eq('family_id', scope.familyId)
     .order('starts_at', { ascending: true })
-    .limit(limit);
-
-  const from = isoOrNull(input.from) ?? scopeNow(scope).toISOString();
-  query = query.gte('starts_at', from);
-  const to = isoOrNull(input.to);
+    .limit(limit)
+    .gte('starts_at', from);
   if (to) query = query.lte('starts_at', to);
   if (input.assigneeId) query = query.eq('assignee_id', input.assigneeId);
   if (input.categories?.length) query = query.in('category', input.categories);
@@ -556,9 +619,13 @@ export async function findFreeSlots(scope: ServiceScope, input: FindFreeSlotsInp
   const toIso = new Date(toMs).toISOString();
   const members = input.memberIds?.filter(Boolean) ?? [];
 
+  // Series included: a weekly practice is busy every week, not the week it
+  // was created. `to` is inclusive, as the row read's `lte` was.
+  const tz = zoneOf(scope);
   const [calendar, school, sports] = await settleAll([
-    scope.db.from('calendar_events').select('starts_at, ends_at, all_day, assignee_id')
-      .eq('family_id', scope.familyId).gte('starts_at', fromIso).lte('starts_at', toIso),
+    readCalendarOccurrences(scope.db, scope.familyId, instantCalendarBounds(fromIso, toIso, tz), tz, {
+      columns: ['starts_at', 'ends_at', 'all_day', 'assignee_id'],
+    }),
     scope.db.from('school_events').select('starts_at, ends_at, member_id')
       .eq('family_id', scope.familyId).gte('starts_at', fromIso).lte('starts_at', toIso),
     scope.db.from('sports_events').select('starts_at, ends_at, member_id')
@@ -579,10 +646,13 @@ export async function findFreeSlots(scope: ServiceScope, input: FindFreeSlotsInp
     const start = Date.parse(startsAt);
     if (!Number.isFinite(start)) return;
     if (allDay) {
-      // An all-day row blocks the family-local day it falls on, not a UTC day.
-      const key = dayKeyInTz(new Date(start), scope.tz);
-      const dayStart = zonedTimeMs(key, 0, 0, scope.tz);
-      busy.push({ start: dayStart, end: dayStart + 24 * 3600_000 });
+      // An all-day row is a DATE stored as an instant on that date in UTC, so
+      // the day it blocks is its own date (lib/calendar/day.ts) — the family's
+      // whole local day of that date. Keyed by the family's day of its instant,
+      // a Saturday all-day row in Los Angeles (Saturday 00:00Z, Friday 17:00
+      // there) blocked Friday and left Saturday open.
+      const day = zonedDayBoundsMs(allDayDate(startsAt), scope.tz);
+      if (Number.isFinite(day.start) && Number.isFinite(day.end)) busy.push(day);
       return;
     }
     const parsedEnd = endsAt ? Date.parse(endsAt) : Number.NaN;
@@ -656,9 +726,12 @@ export async function busyEvenings(
 
   const fromIso = new Date(fromMs).toISOString();
   const toIso = new Date(toMs).toISOString();
+  // Series included: a Tuesday practice takes every Tuesday evening.
+  const tz = zoneOf(scope);
   const [calendar, sports] = await settleAll([
-    scope.db.from('calendar_events').select('starts_at, all_day')
-      .eq('family_id', scope.familyId).gte('starts_at', fromIso).lte('starts_at', toIso),
+    readCalendarOccurrences(scope.db, scope.familyId, instantCalendarBounds(fromIso, toIso, tz), tz, {
+      columns: ['starts_at', 'all_day'],
+    }),
     scope.db.from('sports_events').select('starts_at')
       .eq('family_id', scope.familyId).gte('starts_at', fromIso).lte('starts_at', toIso),
   ]);
@@ -672,9 +745,12 @@ export async function busyEvenings(
   const consider = (startsAt: string, allDay: boolean) => {
     const ms = Date.parse(startsAt);
     if (!Number.isFinite(ms)) return;
+    // An all-day commitment consumes the evening of its OWN date (its UTC date,
+    // lib/calendar/day.ts), not the family's day of its stored instant — which
+    // west of Greenwich is the evening before.
+    if (allDay) { keys.add(allDayDate(startsAt)); return; }
     const key = dayKeyInTz(new Date(ms), scope.tz);
-    // An all-day commitment consumes the evening too.
-    if (allDay || ms >= zonedTimeMs(key, eveningHour, 0, scope.tz)) keys.add(key);
+    if (ms >= zonedTimeMs(key, eveningHour, 0, scope.tz)) keys.add(key);
   };
   for (const e of calendar.data ?? []) consider(e.starts_at, e.all_day);
   for (const e of sports.data ?? []) consider(e.starts_at, false);
@@ -751,30 +827,43 @@ export type ResolvedEvent = { id: string; title: string; starts_at: string; fami
  * one weekly lesson are not a question, whereas "game" matching both
  * "Board game night" and "Away game vs Fairview" is, and the caller is told
  * both so they can say which.
+ *
+ * "Next occurrence" has to include a SERIES whose row started months ago: a
+ * weekly swim lesson is one row with an August `starts_at`, and read by that
+ * column alone it was "already happened" from its second week on. The series
+ * is expanded here (lib/calendar/occurrences.ts), and the event handed back
+ * carries the next occurrence's time; one row is still one candidate, so a
+ * lesson that fills the year does not crowd out a differently-named match.
  */
 export async function findEventByTitle(
   db: ServiceScope['db'],
   familyId: string,
   title: string,
   nowIso: string,
+  timezone = 'UTC',
 ): Promise<ServiceResult<ResolvedEvent>> {
   const needle = title.trim();
   if (!needle) return fail('Which event? Give me its name.', { code: SERVICE_CODES.invalidInput });
 
-  const { data, error } = await db
-    .from('calendar_events')
-    .select('id, title, starts_at, family_id')
-    .eq('family_id', familyId)
-    .ilike('title', `%${escapeLike(needle)}%`)
-    .gte('starts_at', nowIso)
-    .order('starts_at', { ascending: true })
-    .limit(RSVP_TITLE_CANDIDATES);
-  if (error) {
-    console.error('[service:calendar] rsvp event lookup failed', error);
-    return fail(describeDbError(error, 'Could not look up that event.'), { code: SERVICE_CODES.db });
+  const tz = isValidTimezone(timezone) ? timezone : 'UTC';
+  const bounds = instantCalendarBounds(nowIso, new Date(Date.parse(nowIso) + SEARCH_SERIES_HORIZON_MS - 1).toISOString(), tz);
+  const res = await readCalendarOccurrences(db, familyId, bounds, tz, {
+    columns: ['id', 'title', 'starts_at', 'family_id'],
+    singlesFilter: calendarOpenWindowFilter(bounds),
+    singlesLimit: RSVP_TITLE_CANDIDATES,
+    refine: (query) => query.ilike('title', `%${escapeLike(needle)}%`),
+  });
+  if (res.error) {
+    console.error('[service:calendar] rsvp event lookup failed', res.error);
+    return fail(describeDbError(res.error, 'Could not look up that event.'), { code: SERVICE_CODES.db });
   }
 
-  const upcoming = (data ?? []) as ResolvedEvent[];
+  // Soonest first, one entry per row: a series' first occurrence stands for it.
+  const nextById = new Map<string, ResolvedEvent>();
+  for (const row of res.data) {
+    if (!nextById.has(row.id)) nextById.set(row.id, { id: row.id, title: row.title, starts_at: row.starts_at, family_id: row.family_id });
+  }
+  const upcoming = [...nextById.values()].slice(0, RSVP_TITLE_CANDIDATES);
   if (!upcoming.length) {
     // Deliberately not falling back to a past event: answering for something
     // that already happened is never what was asked, and reporting it as done
@@ -843,7 +932,7 @@ export async function rsvpToEvent(scope: ServiceScope, input: RsvpInput): Promis
     if (!data) return fail('That event could not be found.', { code: SERVICE_CODES.notFound });
     event = data as ResolvedEvent;
   } else {
-    const found = await findEventByTitle(scope.db, scope.familyId, byTitle as string, scopeNow(scope).toISOString());
+    const found = await findEventByTitle(scope.db, scope.familyId, byTitle as string, scopeNow(scope).toISOString(), scope.tz);
     if (!found.ok) return found;
     event = found.data;
   }
