@@ -16,6 +16,7 @@ import { useFormat } from '@/components/i18n/use-format';
 import { SavingsCoachCard } from '@/components/modules/savings-coach-card';
 import { SubscriptionPriceHistoryReview } from '@/components/modules/subscription-price-history-review';
 import { usd as usdIn } from '@/lib/finance/splits';
+import { projectedNextCharge } from '@/lib/finance/subscription-schedule';
 import {
   CADENCES, SUB_STATUSES, monthlyCostCents, annualCostCents, summarizeSubscriptions, isStale, wastedMonthlyCents, subscriptionUsage,
   type SubLike,
@@ -52,6 +53,7 @@ export function SubscriptionsModule() {
 
 export function SubscriptionsWorkspace({ context, timezone = 'UTC' }: { context: SubscriptionReviewContext; timezone?: string }) {
   const { fmtDate } = useFormat();
+  const todayKey = todayInZone(timezone);
   const t = useTranslations();
   // Money follows the reader; the currency stays the money's own.
   const locale = useLocale();
@@ -171,6 +173,7 @@ export function SubscriptionsWorkspace({ context, timezone = 'UTC' }: { context:
         {all.length === 0 ? (
           <EmptyState icon={RefreshCw} title={t('subscriptions.noSubscriptionsTracked')} description={t('subscriptionsModule.addStreamingAppsAndMemberships')} />
         ) : all.map((s) => {
+          const nextOn = projectedNextCharge(s.next_charge, s.cadence, todayKey);
           const usage = subscriptionUsage(s, usageNow);
           const stale = isStale(s as SubLike, 60, usageNow);
           const canceled = s.status === 'canceled';
@@ -184,7 +187,7 @@ export function SubscriptionsWorkspace({ context, timezone = 'UTC' }: { context:
                 </p>
                 <p className="text-xs text-muted">
                   {categoryLabel(t, s.category)} · {t('subscriptionsModule.pricePer.monthly', { amount: usd(monthlyCostCents(s.cost_cents, s.cadence)) })} · {t('subscriptionsModule.pricePer.yearly', { amount: usd(annualCostCents(s.cost_cents, s.cadence)) })}
-                  {s.next_charge ? ` · ${t('subscriptionsModule.nextOn', { date: fmtDate(s.next_charge) })}` : ''}
+                  {nextOn ? ` · ${t('subscriptionsModule.nextOn', { date: fmtDate(nextOn) })}` : ''}
                   {' · '}{usage.state === 'recorded' ? t('subscriptionsModule.usage.recorded', { date: fmtDate(usage.lastUsed) })
                     : usage.state === 'unknown' ? t('subscriptionsModule.usage.unknown')
                       : usage.state === 'future' ? t('subscriptionsModule.usage.future')
