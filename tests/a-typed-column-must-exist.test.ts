@@ -15,13 +15,22 @@ const ROOT = join(__dirname, '..');
  * compiler actively approves the write, and PostgREST answers PGRST204 in
  * production.
  *
- * There is exactly one today, and `lib/services/finances/index.ts` already
- * documents it in the source that would otherwise write it:
+ * There are two today. One, `transactions.idempotency_key`, is never written,
+ * and `lib/services/finances/index.ts` already documents it in the source that
+ * would otherwise write it:
  *
  *   `idempotency_key` is likewise not written. `lib/database.types.ts` types
  *   the column on this table and NO migration adds it — `0256` gave it only to
  *   its six keyed tables — so writing it would be a PGRST204 against real
  *   schema.
+ *
+ * The other, `bills.due_day`, is created by a migration HELD under its
+ * reserved number (supabase/reserved/0488_…) until 0475–0487 land. Its writer,
+ * writeBillPatch, retries without the column on exactly the missing-column
+ * answer, and readBills does the same for the read. The exception's pin below
+ * checks only that the held file and that documentation are present; the
+ * fallback itself is proven by the bill tests (a-month-end-bill-*,
+ * a-paid-recurring-bill-comes-due-again, finance-timeline-load).
  *
  * That comment is correct and it is not enforcement. It lives in one file, and
  * nothing stops a second writer — a new server action, an AI tool, an import
