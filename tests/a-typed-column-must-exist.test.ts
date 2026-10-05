@@ -1,4 +1,4 @@
-import { readFileSync } from 'node:fs';
+import { existsSync, readFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { describe, expect, it } from 'vitest';
 import { readSchema } from '../scripts/audit-supabase-queries.mjs';
@@ -38,12 +38,15 @@ const migrationColumns: Map<string, Set<string>> = (schema as { columns?: Map<st
   ?? (schema as unknown as Map<string, Set<string>>);
 
 /**
- * Declared in `database.types.ts`, created by no migration, and deliberately
- * never written. Shrinking this list is the point: adding the migration, or
- * removing the field from the types, must remove the entry.
+ * Declared in `database.types.ts` and created by no released migration: either
+ * deliberately never written, or written only through a path that survives the
+ * PGRST204 a database without the column answers. Shrinking this list is the
+ * point: releasing the migration, or removing the field from the types, must
+ * remove the entry.
  */
 const DECLARED_BUT_ABSENT = new Map([
   ['transactions.idempotency_key', 'documented in lib/services/finances/index.ts; 0256 gave the column only to its six keyed tables, so writing it would be PGRST204'],
+  ['bills.due_day', 'created by the held migration supabase/reserved/0488_a_month_end_bill_keeps_its_day.sql (reserved 0488, released when 0475-0487 have landed); every write goes through writeBillPatch (lib/finance/recurring.ts), which retries without the column on exactly that PGRST204/42703 and asks or refuses for a clamped roll, and readBills (lib/finance/timeline-load.ts) retries the read without it'],
 ]);
 
 /** table -> the column names its `Row` type declares. `& Stamps` adds the two timestamps. */
@@ -109,12 +112,18 @@ describe('a typed column must exist', () => {
     expect(stale).toEqual([]);
   });
 
-  it('the one exception is the one the source already documents', () => {
+  it('each exception is one its source already documents', () => {
     // Pinned so the comment and the list cannot drift apart: if that reasoning
     // is ever deleted, this names the file it left.
-    expect([...DECLARED_BUT_ABSENT.keys()]).toEqual(['transactions.idempotency_key']);
+    expect([...DECLARED_BUT_ABSENT.keys()]).toEqual(['transactions.idempotency_key', 'bills.due_day']);
     const finances = readFileSync(join(ROOT, 'lib/services/finances/index.ts'), 'utf8');
     expect(finances).toContain('`idempotency_key` is likewise not written');
     expect(finances).toContain('NO migration adds it');
+    // bills.due_day: the held migration is on disk, and the one writer says it
+    // writes around the column's absence.
+    expect(existsSync(join(ROOT, 'supabase/reserved/0488_a_month_end_bill_keeps_its_day.sql'))).toBe(true);
+    const recurring = readFileSync(join(ROOT, 'lib/finance/recurring.ts'), 'utf8');
+    expect(recurring).toContain('0488_a_month_end_bill_keeps_its_day, reserved and held in supabase/reserved');
+    expect(recurring).toContain('export async function writeBillPatch');
   });
 });
