@@ -2,7 +2,7 @@
 
 ## Unapplied #969 composition and rollout dependencies — 2026-10-04
 
-The current source candidate includes main `d4ec0b65` and these consecutive
+The current source candidate includes main `7dfa47db` and these consecutive
 unapplied generations. This inventory is not hosted catalog or migration-ledger
 acceptance; all historical prerequisites still need reconciliation in order.
 
@@ -28,13 +28,14 @@ before enabling that application source; deploying it ahead of its database
 contract would refuse capped Free requests. The count remains separate from
 request insertion and does not provide an atomic quota reservation.
 
-Active Claude [#970](https://github.com/NewWorldVenture/Bubaly/pull/970) at
-`c4142fe2a` proposes a different bill implementation and a distinct migration
-at the same generation 0475. The unchanged strict migration guard
-rejects a combined inventory with both 0475 files. Review and compose one bill
-source, then assign dependent unapplied numbers in actual release order before
-landing either overlapping candidate. The active author branch and applied
-historical migrations are unchanged. Prepared read-only metadata checks are in
+[Claude #970](https://github.com/NewWorldVenture/Bubaly/pull/970) at
+`246e7cdc65c162801b63017b02375749bde7846f` now passes the thirteen reviewed
+synthetic callback/SDK controls. The combined #969 candidate retains its
+unique subscription UI/autopilot projection while preserving #969's explicit
+legacy bill choices, timestamp compare-and-swap and sole 0475 migration.
+The unchanged strict guard rejects composing both distinct 0475 files;
+#970 is to close as superseded after this combined candidate lands. Its author
+branch/history and applied historical migrations are unchanged. Prepared read-only metadata checks are in
 `docs/final-audit/messaging-bill-readonly-preflight.sql`; no hosted execution is
 recorded. See `finalaudit.md` for exact source, synthetic proofs and remaining
 production limits.

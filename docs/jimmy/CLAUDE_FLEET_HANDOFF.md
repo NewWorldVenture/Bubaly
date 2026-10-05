@@ -1,6 +1,6 @@
 # Jimmy — Claude Fleet Manager Handoff
 
-Bubaly issue [#779](https://github.com/NewWorldVenture/Bubaly/issues/779) starts with identity-isolated, read-only Claude Code probes. The owner selected API/provider authentication and a Vercel worker. Source now supplies a durable queue, Sandbox worker, manager controls, and CLI, disabled until configured and explicitly approved. No real account or worker has been verified. Keep #779 open until the acceptance evidence below exists.
+Bubaly issue [#779](https://github.com/NewWorldVenture/Bubaly/issues/779) starts with identity-isolated, read-only Claude Code probes. The owner selected API/provider authentication and a Vercel worker. The initial code implementation is delivered by [#965](https://github.com/NewWorldVenture/Bubaly/pull/965), merged as `7dfa47db4d54129c3c049efa4630d207124264ef`: a durable queue, Sandbox worker, manager controls, and CLI. Fleet execution remains disabled by default until configured and explicitly approved. No real account or worker has been verified. Operator setup and the live acceptance evidence below remain shipping holds, tracked in `finalaudit.md` separately from implementation closure.
 
 ## Runtime and scope
 
@@ -71,7 +71,7 @@ Status/result/list, pause/stop, and cancellation remain available when paid exec
 
 Local tests use synthetic credentials, SQLite, and injected SDK/provider responses. Two-client file-backed SQLite tests prove atomic claims/admission, reopened persistence, permanent dedupe, stale fencing, retained quarantine slots, exact continuation, and commit-response loss. Worker/adapter tests cover auth/path/session mismatches, result/deadline/output limits, immutable-session cancellation races, and cleanup. Manager/service/CLI tests exercise combined controls and a synthetic end-to-end probe. These tests are not remote execution evidence.
 
-Before closure, record actual submit/status/result/cancel, exact continuation, two-account concurrency, auth/usage failures, timeout, duplicate prevention, restart/lost-response recovery, quarantine, and verified stop. Verify remote queue persistence across deployment restarts and the existing scheduler invoking the correct revision. Reconcile provider/Sandbox costs and snapshot retention. Keep release decisions within CI, branch protection, independent review, and normal rollback.
+Before enabling or shipping fleet execution, record actual submit/status/result/cancel, exact continuation, two-account concurrency, auth/usage failures, timeout, duplicate prevention, restart/lost-response recovery, quarantine, and verified stop. Verify remote queue persistence across deployment restarts and the existing scheduler invoking the correct revision. Reconcile provider/Sandbox costs and snapshot retention. Keep release decisions within CI, branch protection, independent review, and normal rollback.
 
 The intended labels remain unverified:
 
