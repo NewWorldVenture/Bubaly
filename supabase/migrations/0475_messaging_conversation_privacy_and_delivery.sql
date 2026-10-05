@@ -481,9 +481,15 @@ create policy "Family members can update their media" on storage.objects for upd
   with check (bucket_id = 'family-media' and messaging_private.media_access(name, true));
 create policy "Family members can delete their media" on storage.objects for delete to authenticated
   using (bucket_id = 'family-media' and messaging_private.media_access(name, true));
-update storage.buckets set public = false, allowed_mime_types = (select array_agg(distinct t)
-  from unnest(coalesce(allowed_mime_types, '{}') || array['audio/webm', 'audio/ogg', 'audio/mp4', 'audio/mpeg', 'audio/wav', 'audio/x-wav']) t)
-  where id = 'family-media';
+-- Voice notes upload audio. Where the bucket has an allow-list (0418 sets one),
+-- add the recorder's types to it. A NULL list already allows every type, and
+-- appending to it would narrow uploads to audio alone, so it is left as it is.
+-- The bucket's public flag is not this migration's to change: making
+-- family-media private belongs to 0459, which the owner has deferred in
+-- production (SEC-001; kept public on 2026-09-30), so 0475 leaves it as found.
+update storage.buckets set allowed_mime_types = (select array_agg(distinct t)
+  from unnest(allowed_mime_types || array['audio/webm', 'audio/ogg', 'audio/mp4', 'audio/mpeg', 'audio/wav', 'audio/x-wav']) t)
+  where id = 'family-media' and allowed_mime_types is not null;
 
 -- Realtime schema belongs to Supabase. Add policies only, if installed.
 create or replace function messaging_private.can_join_topic(p_topic text)
