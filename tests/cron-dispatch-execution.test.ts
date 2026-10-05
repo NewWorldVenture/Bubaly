@@ -14,10 +14,10 @@ const FIXED_TICK_ROUTES = [
 const SINGLE = [...AT, '--route', '/api/cron/notifications'];
 /** The previous successful tick: about three hours before AT, the median gap GitHub actually delivers. */
 const SINCE = '2026-09-12T08:58:00Z';
-/** Sub-daily and due in (08:58, 12:05]: the fixed six plus the seven a five-minute window would have lost. */
+/** Sub-daily and due in (08:58, 12:05]: the fixed six plus the eight a five-minute window would have lost. */
 const CATCH_UP_ROUTES = [
   ...FIXED_TICK_ROUTES,
-  '/api/cron/checkout-abandoned', '/api/cron/family-routines', '/api/cron/feedback-github-sync',
+  '/api/cron/checkout-abandoned', '/api/cron/claude-fleet', '/api/cron/family-routines', '/api/cron/feedback-github-sync',
   '/api/cron/journey-recovery', '/api/cron/library-feeds', '/api/cron/marketing-social', '/api/cron/push-scan',
 ].sort();
 const SUB_DAILY_ROUTES = Object.entries(SCHEDULES).filter(([, expr]) => isSubDaily(expr)).map(([route]) => route).sort();
@@ -188,7 +188,7 @@ describe('cron dispatcher CLI catch-up from the previous tick', () => {
     const result = cli(AT, { CRON_SINCE: '2026-09-01T00:00:00Z' });
     expect(result.status).toBe(0);
     expect(result.output).toContain('(window 1440 min from 2026-09-11T12:05:00.000Z; catch-up capped at 1440 min (CRON_SINCE 2026-09-01T00:00:00.000Z))');
-    expect(SUB_DAILY_ROUTES).toHaveLength(17);
+    expect(SUB_DAILY_ROUTES).toHaveLength(18);
     // admin-digest is daily, and the only daily route the catch-up calls again: a second
     // call within its occurrence sends nothing more (OCCURRENCE_SAFE_DAILY). 2026-09-11 12:30
     // is inside (2026-09-11 12:05, 2026-09-12 12:05], so it is called — once.
