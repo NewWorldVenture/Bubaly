@@ -64,6 +64,10 @@ begin
   if n <> 1 then raise warning 'CONTROL FAILED: a member could not delete their own message (rows: %)', n; failures := failures + 1; end if;
   reset role;
 
+  -- Clear the simulated actor before owner cleanup or another same-session probe.
+  perform set_config('request.jwt.claim.sub', '', true);
+  perform set_config('request.jwt.claims', '', true);
+
   delete from public.families where id = fam;
   delete from auth.users where id in (uPar, uA);
 

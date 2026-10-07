@@ -34,7 +34,9 @@ function session(db, label) {
   let output = '', errors = '', pending = null;
   child.stdout.on('data', chunk => { output += chunk; finish(); });
   child.stderr.on('data', chunk => { errors += chunk; });
-  child.on('exit', code => {
+  // A process can exit before its stderr pipe is drained. Authorization and
+  // deadlock controls must inspect the complete SQLSTATE diagnostic.
+  child.on('close', code => {
     if (pending) { const job = pending; pending = null; clearTimeout(job.timer); job.reject(new Error(`psql exited ${code}: ${errors}\n${output}`)); }
   });
   function finish() {

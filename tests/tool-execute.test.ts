@@ -53,13 +53,15 @@ function makeDb(respond: (call: Call) => Reply) {
       lte: (c: string, v: unknown) => filter(`lte:${c}`, v),
       gt: (c: string, v: unknown) => filter(`gt:${c}`, v),
       gte: (c: string, v: unknown) => filter(`gte:${c}`, v),
+      neq: (c: string, v: unknown) => filter(`neq:${c}`, v),
       not: (c: string, op: string, v: unknown) => filter(`not:${c}:${op}`, v),
       insert: (payload: unknown) => { call.kind = 'insert'; call.payload = payload; return b; },
       update: (payload: unknown) => { call.kind = 'update'; call.payload = payload; return b; },
       delete: () => { call.kind = 'delete'; return b; },
       single: () => Promise.resolve(respond(call)),
       maybeSingle: () => Promise.resolve(respond(call)),
-      then: (resolve: (value: Reply) => void) => resolve(respond(call)),
+      // A collection answer carries its count, as PostgREST's Content-Range does.
+      then: (resolve: (value: Reply & { count?: number }) => void) => { const r = respond(call); resolve(Array.isArray(r.data) ? { ...r, count: r.data.length } : r); },
     });
     return b;
   };

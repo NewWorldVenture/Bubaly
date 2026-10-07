@@ -36,7 +36,8 @@ function makeDb(tables: Record<string, TableSpec>) {
       const all = spec.rows ?? [];
       return window ? all.slice(window.from, window.to + 1) : all;
     };
-    const reply = () => ({ data: spec.error ? null : rows(), error: spec.error ?? null });
+    // The count is the whole collection, before the page — as Content-Range reports it.
+    const reply = () => ({ data: spec.error ? null : rows(), error: spec.error ?? null, count: spec.error ? null : (spec.rows ?? []).length });
     const one = () => ({ data: spec.error ? null : (spec.rows?.[0] ?? null), error: spec.error ?? null });
     const builder: Record<string, unknown> = {};
     const proxy: unknown = new Proxy(builder, {
@@ -46,6 +47,10 @@ function makeDb(tables: Record<string, TableSpec>) {
         return (...args: unknown[]) => {
           if (['eq', 'neq', 'gte', 'lte', 'gt', 'lt', 'in', 'is', 'ilike', 'not'].includes(prop) && typeof args[0] === 'string') {
             call.filters[`${prop}:${args[0]}`] = args[args.length - 1];
+          }
+          // A window arrives as a PostgREST `or` expression (lib/calendar/occurrences.ts); a read may add more than one.
+          if (prop === 'or' && typeof args[0] === 'string') {
+            call.filters.or = [...((call.filters.or as string[] | undefined) ?? []), args[0]];
           }
           if (prop === 'range' && typeof args[0] === 'number' && typeof args[1] === 'number') {
             window = { from: args[0], to: args[1] };
@@ -202,11 +207,22 @@ describe('fencing and timezone', () => {
     expect(res.data.header.todayKey).toBe('2026-09-04');
     expect(res.data.header.tz).toBe('America/Los_Angeles');
     expect(headerLines(res.data.header)[1]).toContain('Today is 2026-09-04');
-    const eventRead = calls.find((c) => c.table === 'calendar_events' && 'gte:starts_at' in c.filters);
+    // The schedule slice reads the calendar through the series-aware read: the
+    // one-offs by a window carried as an `or`, and the series that could reach it.
+    const eventRead = calls.find((c) => c.table === 'calendar_events' && Array.isArray(c.filters.or));
     expect(eventRead).toBeTruthy();
-    // The window opens at local midnight (07:00Z) or now, whichever is earlier, and closes 7 local days later.
-    expect(eventRead?.filters['gte:starts_at']).toBe('2026-09-04T07:00:00.000Z');
-    expect(eventRead?.filters['lte:starts_at']).toBe('2026-09-11T07:00:00.000Z');
+    // The window opens at local midnight (07:00Z) or now, whichever is earlier,
+    // and closes 7 local days later; `to` is inclusive, so the bound is a
+    // millisecond past it.
+    expect(eventRead?.filters.or).toEqual([
+      expect.stringContaining('starts_at.gte.2026-09-04T07:00:00.000Z,starts_at.lt.2026-09-11T07:00:00.001Z'),
+      'recurrence.is.null,recurrence.eq.none',
+    ]);
+    // The series read reaches every series that started by the window's end —
+    // the later of the timed end and the end of the last family-local DATE,
+    // since an all-day series steps by date.
+    const seriesRead = calls.find((c) => c.table === 'calendar_events' && c.filters['neq:recurrence'] === 'none');
+    expect(seriesRead?.filters['lte:starts_at']).toBe('2026-09-12T00:00:00.000Z');
   });
 });
 

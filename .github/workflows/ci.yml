@@ -235,6 +235,14 @@ jobs:
       - name: Replay every migration
         run: bash docs/audit/pg-bootstrap.sh
 
+      # Exercise the existing typed 0476 conversion and replay the unchanged
+      # 0293 over its restrictive policies in disposable local databases only.
+      - name: Notification key conversion preserves messaging policies
+        run: node scripts/verify-notification-key-migration.mjs
+        env:
+          BUBALY_DISPOSABLE_PG: '1'
+          BUBALY_EXPECTED_PG_DATA_DIR: /var/lib/postgresql/data
+
       # Postgres resolves `ON CONFLICT (a, b)` by INDEX INFERENCE, which matches
       # only a unique index over exactly those columns that is neither partial
       # nor an expression index. Nothing else in CI puts the PAIR together: the
@@ -476,6 +484,7 @@ jobs:
             test-results/**/*.png
             !test-results/**/trace.zip
             !test-results/*durable-session*/**
+            !test-results/*family-messaging-authenticated*/**
             !test-results/**/storageState*
             !test-results/**/storage-state*
             !test-results/**/auth.json

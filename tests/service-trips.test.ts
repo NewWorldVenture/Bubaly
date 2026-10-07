@@ -14,9 +14,10 @@ import {
   syncToCalendar, type TripSnapshot,
 } from '@/lib/services/trips';
 import type { ServiceScope } from '@/lib/services/types';
+import { orPredicate } from './helpers/in-memory-supabase';
 
 type Row = Record<string, unknown>;
-type Op = { table: string; kind: 'select' | 'insert' | 'update' | 'delete' | 'upsert'; filters: Record<string, unknown>; payload?: unknown };
+type Op = { table: string; kind: 'select' | 'insert' | 'update' | 'delete' | 'upsert'; filters: Record<string, unknown>; or: ((row: Row) => boolean)[]; payload?: unknown };
 
 /**
  * A table store that honours the filters the services use, so a test can
@@ -28,7 +29,7 @@ function makeStore(seed: Record<string, Row[]> = {}, opts: { failTables?: string
   const ops: Op[] = [];
   let counter = 0;
   const rowsOf = (table: string) => { if (!tables.has(table)) tables.set(table, []); return tables.get(table)!; };
-  const matches = (row: Row, filters: Record<string, unknown>) => Object.entries(filters).every(([key, value]) => {
+  const matches = (row: Row, op: Op) => op.or.every((predicate) => predicate(row)) && Object.entries(op.filters).every(([key, value]) => {
     const [op, col] = key.includes(':') ? key.split(':') : ['eq', key];
     const actual = row[col] as string | number | null;
     switch (op) {
@@ -44,7 +45,7 @@ function makeStore(seed: Record<string, Row[]> = {}, opts: { failTables?: string
     }
   });
   const from = (table: string) => {
-    const op: Op = { table, kind: 'select', filters: {} };
+    const op: Op = { table, kind: 'select', filters: {}, or: [] };
     ops.push(op);
     const b: Record<string, unknown> = {};
     const chain = () => b;
@@ -52,7 +53,7 @@ function makeStore(seed: Record<string, Row[]> = {}, opts: { failTables?: string
     const run = (): { data: unknown; error: unknown } => {
       if (opts.failTables?.includes(table) && op.kind === 'select') return { data: null, error: { message: `${table} unavailable` } };
       const rows = rowsOf(table);
-      if (op.kind === 'select') return { data: rows.filter((r) => matches(r, op.filters)), error: null };
+      if (op.kind === 'select') return { data: rows.filter((r) => matches(r, op)), error: null };
       if (op.kind === 'insert' || op.kind === 'upsert') {
         if (opts.failInsert?.includes(table)) return { data: null, error: { message: `${table} insert failed` } };
         const payload = (Array.isArray(op.payload) ? op.payload : [op.payload]) as Row[];
@@ -67,11 +68,11 @@ function makeStore(seed: Record<string, Row[]> = {}, opts: { failTables?: string
         return { data: out, error: null };
       }
       if (op.kind === 'update') {
-        const hit = rows.filter((r) => matches(r, op.filters));
+        const hit = rows.filter((r) => matches(r, op));
         for (const r of hit) Object.assign(r, op.payload as Row);
         return { data: hit, error: null };
       }
-      const gone = rows.filter((r) => matches(r, op.filters));
+      const gone = rows.filter((r) => matches(r, op));
       tables.set(table, rows.filter((r) => !gone.includes(r)));
       return { data: gone, error: null };
     };
@@ -84,13 +85,16 @@ function makeStore(seed: Record<string, Row[]> = {}, opts: { failTables?: string
       gte: (c: string, v: unknown) => filter(`gte:${c}`, v),
       lte: (c: string, v: unknown) => filter(`lte:${c}`, v),
       ilike: (c: string, v: unknown) => filter(`ilike:${c}`, v),
+      // The calendar window arrives as one PostgREST `or`; the shared parser reads it.
+      or: (expression: string) => { op.or.push(orPredicate(expression)); return b; },
       not: (c: string) => filter(`notnull:${c}`, true),
       insert: (payload: unknown) => { op.kind = 'insert'; op.payload = payload; return b; },
       upsert: (payload: unknown) => { op.kind = 'upsert'; op.payload = payload; return b; },
       update: (payload: unknown) => { op.kind = 'update'; op.payload = payload; return b; },
       delete: () => { op.kind = 'delete'; return b; },
       single, maybeSingle: single,
-      then: (resolve: (value: { data: unknown; error: unknown }) => void) => resolve(run()),
+      // A collection answer carries its count, as PostgREST's Content-Range does.
+      then: (resolve: (value: { data: unknown; error: unknown; count?: number }) => void) => { const r = run(); resolve(Array.isArray(r.data) ? { ...r, count: r.data.length } : r); },
     });
     return b;
   };

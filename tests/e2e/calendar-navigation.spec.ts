@@ -6,7 +6,7 @@ import { reactBrowserScripts } from './helpers/react-browser';
 const scripts = reactBrowserScripts('development');
 const sourceFiles = [
   'components/modules/calendar-module.tsx', 'lib/time/wall-clock.ts',
-  'lib/time/zoned.ts', 'lib/calendar/recurrence.ts',
+  'lib/time/zoned.ts', 'lib/calendar/recurrence.ts', 'lib/calendar/day.ts',
   'lib/calendar/occurrences.ts', 'lib/calendar/event-dates.ts', 'lib/briefing/calendar-window.ts',
 ];
 const sources = Object.fromEntries(sourceFiles.map(file => [

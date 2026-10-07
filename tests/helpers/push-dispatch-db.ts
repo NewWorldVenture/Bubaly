@@ -48,10 +48,14 @@ function contains(value: unknown, expected: unknown): boolean {
 function matches(row: PushFixtureRow, expression: string): boolean {
   if (expression.startsWith('and(') && expression.endsWith(')')) return clauses(expression.slice(4, -1)).every(part => matches(row, part));
   if (expression.startsWith('or(') && expression.endsWith(')')) return clauses(expression.slice(3, -1)).some(part => matches(row, part));
-  const match = expression.match(/^([a-z_]+)\.(eq|gt|gte|lt|lte)\.(.+)$/);
+  const match = expression.match(/^([a-z_]+)\.(eq|neq|is|gt|gte|lt|lte)\.(.+)$/);
   if (!match) throw new Error(`Unsupported fixture filter: ${expression}`);
+  if (match[2] === 'is' && match[3] === 'null') return row[match[1]] == null;
+  // SQL comparisons with NULL are not true; the explicit IS NULL branch in
+  // the caller's OR is what retains unclassified notification rows.
+  if (row[match[1]] == null) return false;
   const result = compare(match[1], row[match[1]], match[3]);
-  return match[2] === 'eq' ? result === 0 : match[2] === 'gt' ? result > 0 : match[2] === 'gte' ? result >= 0 : match[2] === 'lt' ? result < 0 : result <= 0;
+  return match[2] === 'eq' ? result === 0 : match[2] === 'neq' ? result !== 0 : match[2] === 'gt' ? result > 0 : match[2] === 'gte' ? result >= 0 : match[2] === 'lt' ? result < 0 : result <= 0;
 }
 
 /** Stateful execution fixture: filters, multi-column ordering, limits, keysets and writes all apply. */
@@ -148,6 +152,11 @@ export function pushDispatchDb(tables: Record<string, PushFixtureRow[]>, options
       },
       contains: (key: string, value: unknown) => { filters.push(row => contains(row[key], value)); return query; },
       is: (key: string, value: unknown) => { filters.push(row => row[key] === value); return query; },
+      not: (key: string, operator: string, value: unknown) => {
+        if (operator !== 'is' || value !== null) throw new Error(`Unsupported fixture not filter: ${key}.${operator}.${value}`);
+        filters.push(row => row[key] != null);
+        return query;
+      },
       in: (key: string, values: unknown[]) => { filters.push(row => values.includes(row[key])); return query; },
       gt: (key: string, value: unknown) => { filters.push(row => compare(key, row[key], value) > 0); return query; },
       lte: (key: string, value: unknown) => { filters.push(row => compare(key, row[key], value) <= 0); return query; },

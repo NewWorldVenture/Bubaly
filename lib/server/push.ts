@@ -324,6 +324,9 @@ export async function dispatchPendingPushes(
     let q = supabase.from('notifications')
       .select('id, family_id, user_id, title, body, related_type, related_id, created_at')
       .is('pushed_at', null).lte('send_at', dueAt)
+      // Chat notices have not opted into external delivery. Filter before the
+      // page limit so a busy conversation cannot starve other notifications.
+      .or('related_type.is.null,related_type.neq.family_message')
       .order('created_at', { ascending: true }).order('id', { ascending: true }).limit(size);
     if (opts.familyId) q = q.eq('family_id', opts.familyId);
     if (cursor) {

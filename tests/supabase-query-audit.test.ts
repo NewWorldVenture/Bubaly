@@ -3,6 +3,7 @@ import { spawnSync } from 'node:child_process';
 import { tmpdir } from 'node:os';
 import { join, dirname } from 'node:path';
 import { describe, expect, it } from 'vitest';
+import { at } from './helpers/source-order';
 
 import {
   auditSupabaseQueries,
@@ -38,13 +39,13 @@ describe('supabase query audit', () => {
 
   it('requires runnable RPCs before applying while retaining metadata-only verification', () => {
     const workflow = readFileSync('.github/workflows/supabase-production-migrations.yml', 'utf8').replaceAll('\r\n', '\n');
-    const gate = workflow.indexOf('run: npm run db:audit:queries -- --require-runnable-rpcs');
+    const gate = at(workflow, 'run: npm run db:audit:queries -- --require-runnable-rpcs');
     expect(gate).toBeGreaterThan(0);
-    expect(gate).toBeGreaterThan(workflow.indexOf('run: supabase link'));
+    expect(gate).toBeGreaterThan(at(workflow, 'run: supabase link'));
     expect(workflow).toContain('run: npm run db:audit:queries\n');
     const step = workflow.slice(workflow.lastIndexOf('- name:', gate), gate);
     expect(step).toContain("if: success() && github.event_name == 'workflow_dispatch' && inputs.apply == true");
-    expect(gate).toBeLessThan(workflow.indexOf('run: supabase db push --yes'));
+    expect(gate).toBeLessThan(at(workflow, 'run: supabase db push --yes'));
   });
 
   it('reports no unapproved findings while keeping held dependencies separate', () => {
