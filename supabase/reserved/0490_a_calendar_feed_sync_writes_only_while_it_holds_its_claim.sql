@@ -7,8 +7,10 @@
 -- and moves into supabase/migrations/ under 0490 once every number below it,
 -- 0475-0489, has landed. Its probe is held beside it in docs/audit/reserved/
 -- (run-probes.sh globs docs/audit/*-check.sql only) and moves back with it.
--- The code does not need it: lib/server/calendar-feeds.ts answers PGRST202 /
--- 42883 by logging once and taking the check-then-write path.
+-- Current lib/server/calendar-feeds.ts requires this atomic contract. PGRST202 /
+-- 42883 logs once and refuses event writes; there is no check-then-write fallback.
+-- Holding this file also holds deployment of the dependent feed writer unless
+-- the actual hosted function and its reviewed ACL/catalog contract are verified.
 -- ----------------------------------------------------------------------------
 -- One sync of a calendar feed runs at a time: `calendar_feeds.last_status` is
 -- the claim (`syncing`, taken by a compare-and-set on the one row), a claim
@@ -52,10 +54,10 @@
 -- is an hour off its publisher's between the two zones' DST changes. Carrying
 -- the source zone is a column of its own, not part of this function.
 --
--- A database without this function answers PGRST202 to the RPC; the code then
--- takes the check-then-write path it took before, with one warning naming this
--- file. A deploy may precede its migration; nothing breaks, the window simply
--- stays open until the function is there.
+-- A database without this function answers PGRST202 to the RPC. Current code
+-- refuses the operation with one warning naming this file. Older revisions
+-- used a check-then-write path; that historical fallback is not current release
+-- behavior and must not be treated as permission to deploy without this contract.
 --
 -- THE FAMILY IS THE FEED'S. The function runs as its caller, and the caller's
 -- RLS admits a calendar_events row for any family the caller belongs to. That
