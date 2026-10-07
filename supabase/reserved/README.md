@@ -25,3 +25,7 @@ number with a released migration and never sits below the released sequence.
 | `0492_approval_requests_private_read.sql` | approval privacy | Production policies remain a rollout hold. |
 | `0493_ai_copy_private_read_and_quota.sql` | AI privacy and usage | Missing count RPC refuses capped Free requests. |
 | `0494_sync_atomic_pull.sql` | atomic sync | Missing RPC refuses writes and preserves cursor. |
+
+Production SQL application uses `--require-runnable-rpcs` to refuse a release
+whose called RPCs exist only in held SQL. Ordinary source checks and read-only
+production metadata verification remain available; they do not prove readiness.

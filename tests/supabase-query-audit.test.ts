@@ -1,4 +1,5 @@
-import { mkdtempSync, writeFileSync, mkdirSync } from 'node:fs';
+import { mkdtempSync, writeFileSync, mkdirSync, readFileSync } from 'node:fs';
+import { spawnSync } from 'node:child_process';
 import { tmpdir } from 'node:os';
 import { join, dirname } from 'node:path';
 import { describe, expect, it } from 'vitest';
@@ -13,6 +14,39 @@ import {
 type Finding = { kind: string; detail: string; file: string; line: number; via?: string };
 
 describe('supabase query audit', () => {
+  it('allows the source audit but blocks the production CLI on held RPC dependencies', () => {
+    const run = (args: string[]) => spawnSync(process.execPath,
+      ['scripts/audit-supabase-queries.mjs', ...args], { encoding: 'utf8' });
+    const normal = run([]);
+    expect(normal.error).toBeUndefined();
+    expect(normal.status).toBe(0);
+    expect(normal.stdout).toContain('No unapproved statically named query problems.');
+    expect(normal.stderr).toContain('Approved held RPC dependencies');
+    expect(normal.stderr).not.toContain('Runnable RPC gate failed');
+    const strict = run(['--require-runnable-rpcs']);
+    expect(strict.error).toBeUndefined();
+    expect(strict.status).toBe(1);
+    expect(strict.stderr).toContain('Runnable RPC gate failed: 4 held RPC call site(s)');
+    expect(strict.stderr).toContain('Production migration workflow is blocked');
+    for (const [name, approval] of Object.entries(RESERVED_RPC_DEPENDENCIES) as [string, { sql: string }][]) {
+      expect(strict.stderr).toContain(name);
+      expect(strict.stderr).toContain(approval.sql);
+    }
+    expect(strict.stderr).toContain('Dynamic RPC names not resolved by this static audit');
+    expect(strict.stdout).toContain('production function availability is unverified');
+  });
+
+  it('requires runnable RPCs before applying while retaining metadata-only verification', () => {
+    const workflow = readFileSync('.github/workflows/supabase-production-migrations.yml', 'utf8').replaceAll('\r\n', '\n');
+    const gate = workflow.indexOf('run: npm run db:audit:queries -- --require-runnable-rpcs');
+    expect(gate).toBeGreaterThan(0);
+    expect(gate).toBeGreaterThan(workflow.indexOf('run: supabase link'));
+    expect(workflow).toContain('run: npm run db:audit:queries\n');
+    const step = workflow.slice(workflow.lastIndexOf('- name:', gate), gate);
+    expect(step).toContain("if: success() && github.event_name == 'workflow_dispatch' && inputs.apply == true");
+    expect(gate).toBeLessThan(workflow.indexOf('run: supabase db push --yes'));
+  });
+
   it('reports no unapproved findings while keeping held dependencies separate', () => {
     const { findings, schema, reservedDependencies } = auditSupabaseQueries() as {
       findings: Finding[];

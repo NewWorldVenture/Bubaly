@@ -671,6 +671,7 @@ const LABELS = {
 };
 
 function runCli() {
+  const requireRunnableRpcs = process.argv.includes('--require-runnable-rpcs');
   const { findings, schema, routes, reservedDependencies, unresolvedRpcCalls } = auditSupabaseQueries();
   console.log(
     `Supabase query audit: ${schema.columns.size} tables, ${schema.functions.size} functions, ${routes.length} API routes.`,
@@ -684,6 +685,14 @@ function runCli() {
   if (unresolvedRpcCalls.length) {
     console.warn('\nDynamic RPC names not resolved by this static audit:');
     for (const call of unresolvedRpcCalls) console.warn('  ' + call.detail + ' at ' + call.file + ':' + call.line + ' (unverified; not approved as a held dependency)');
+  }
+
+  // Production must not advance past a caller whose only SQL definition is
+  // held outside the runnable migration ledger. Dynamic names remain explicitly
+  // unverified metadata; this flag makes no claim to resolve those wrappers.
+  if (requireRunnableRpcs && reservedDependencies.length) {
+    console.error(`\nRunnable RPC gate failed: ${reservedDependencies.length} held RPC call site(s) depend on reserved SQL outside the runnable migration schema. Production migration workflow is blocked; review and release the required SQL before proceeding.`);
+    process.exitCode = 1;
   }
 
   if (findings.length === 0) {

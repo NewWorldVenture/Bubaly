@@ -21,6 +21,9 @@ Held files remain in `supabase/reserved/`; normal migration replay and
 actual owners before promotion. No filler migrations or resequencing.
 Failure controls do not prove held privacy policies or production RPCs exist.
 Actual catalog, ACL, FK and migration-ledger acceptance remain rollout gates.
+The production migration workflow checks `--require-runnable-rpcs` before an
+explicit apply request; held dependencies stop SQL application. Metadata-only
+verification remains available. This does not configure Vercel deployment gates.
 Calendar source-zone, finite recurrence and exception fidelity remain open.
 New feed snapshots with timed/complex recurrence, exception identities or
 EXDATE/RDATE refuse before event writes or deletions. Only singles, bare
