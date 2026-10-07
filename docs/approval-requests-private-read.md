@@ -3,7 +3,7 @@ and execution results. The existing family-wide SELECT let unrelated children
 read a private message draft through this separate copy even when the chat's
 participant policies denied them access.
 
-Unapplied source migration `0477_approval_requests_private_read.sql` adds a
+Unapplied source migration `0492_approval_requests_private_read.sql` adds a
 restrictive SELECT guard. Active requesters retain their own rows through the
 requester member's account mapping. Active parents and adults retain review
 access, including ownerless system approvals. Other household members, foreign

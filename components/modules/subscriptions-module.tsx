@@ -16,7 +16,7 @@ import { useFormat } from '@/components/i18n/use-format';
 import { SavingsCoachCard } from '@/components/modules/savings-coach-card';
 import { SubscriptionPriceHistoryReview } from '@/components/modules/subscription-price-history-review';
 import { usd as usdIn } from '@/lib/finance/splits';
-import { projectedNextCharge } from '@/lib/finance/subscription-schedule';
+import { projectedNextCharge } from '@/lib/finance/recurring';
 import {
   CADENCES, SUB_STATUSES, monthlyCostCents, annualCostCents, summarizeSubscriptions, isStale, wastedMonthlyCents, subscriptionUsage,
   type SubLike,
@@ -53,6 +53,7 @@ export function SubscriptionsModule() {
 
 export function SubscriptionsWorkspace({ context, timezone = 'UTC' }: { context: SubscriptionReviewContext; timezone?: string }) {
   const { fmtDate } = useFormat();
+  // The family's day, for where each charge falls now (lib/finance/recurring.ts).
   const todayKey = todayInZone(timezone);
   const t = useTranslations();
   // Money follows the reader; the currency stays the money's own.
@@ -173,6 +174,8 @@ export function SubscriptionsWorkspace({ context, timezone = 'UTC' }: { context:
         {all.length === 0 ? (
           <EmptyState icon={RefreshCw} title={t('subscriptions.noSubscriptionsTracked')} description={t('subscriptionsModule.addStreamingAppsAndMemberships')} />
         ) : all.map((s) => {
+          // Where the charge falls today: the stored date is a hand-typed anchor
+          // nobody rolls, so shown as written it named a day already gone.
           const nextOn = projectedNextCharge(s.next_charge, s.cadence, todayKey);
           const usage = subscriptionUsage(s, usageNow);
           const stale = isStale(s as SubLike, 60, usageNow);

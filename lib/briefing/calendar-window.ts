@@ -92,3 +92,24 @@ export function calendarWindowFilter(bounds: CalendarWindowBounds): string {
   return `and(all_day.eq.false,starts_at.gte.${bounds.timedFrom},starts_at.lt.${bounds.timedTo}),`
     + `and(all_day.eq.true,starts_at.gte.${bounds.allDayFromDay}T00:00:00.000Z,starts_at.lt.${bounds.allDayToDay}T00:00:00.000Z)`;
 }
+
+/**
+ * The same two halves from the window's START on, with no end — the calendar
+ * search with no `to` reads every one-off ahead, as it always did, while its
+ * series are expanded over a bounded horizon.
+ */
+export function calendarOpenWindowFilter(bounds: Pick<CalendarWindowBounds, 'timedFrom' | 'allDayFromDay'>): string {
+  return `and(all_day.eq.false,starts_at.gte.${bounds.timedFrom}),`
+    + `and(all_day.eq.true,starts_at.gte.${bounds.allDayFromDay}T00:00:00.000Z)`;
+}
+
+/** Half-open busy intervals, including commitments already in progress. Missing ends occupy one hour / one all-day date. */
+export function calendarOverlapWindowFilter(bounds: CalendarWindowBounds): string {
+  const fallbackFrom = new Date(Date.parse(bounds.timedFrom) - 3_600_000).toISOString();
+  const dayFrom = `${bounds.allDayFromDay}T00:00:00.000Z`;
+  const dayTo = `${bounds.allDayToDay}T00:00:00.000Z`;
+  return `and(all_day.eq.false,starts_at.lt.${bounds.timedTo},ends_at.gt.${bounds.timedFrom}),`
+    + `and(all_day.eq.false,starts_at.lt.${bounds.timedTo},ends_at.is.null,starts_at.gt.${fallbackFrom}),`
+    + `and(all_day.eq.true,starts_at.lt.${dayTo},ends_at.gt.${dayFrom}),`
+    + `and(all_day.eq.true,starts_at.lt.${dayTo},ends_at.is.null,starts_at.gte.${dayFrom})`;
+}

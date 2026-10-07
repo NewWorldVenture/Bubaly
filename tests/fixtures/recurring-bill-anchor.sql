@@ -4,8 +4,8 @@
 begin;
 create table public.bills (id integer primary key, due_date date not null);
 insert into public.bills values (1, '2026-02-28'), (2, '2026-03-28');
-\ir ../../supabase/migrations/0475_preserve_recurring_bill_anchor.sql
-\ir ../../supabase/migrations/0475_preserve_recurring_bill_anchor.sql
+\ir ../../supabase/reserved/0488_a_month_end_bill_keeps_its_day.sql
+\ir ../../supabase/reserved/0488_a_month_end_bill_keeps_its_day.sql
 do $$
 begin
   if exists (select 1 from public.bills where due_day is not null)

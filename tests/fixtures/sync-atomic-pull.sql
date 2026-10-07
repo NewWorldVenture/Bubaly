@@ -22,6 +22,6 @@ grant all on auth.users to supabase_auth_admin;
 \ir ../../supabase/migrations/0291_sync_log_skips_deleted_family.sql
 \ir ../../supabase/migrations/0346_a_calendar_connection_belongs_to_its_owner.sql
 \ir ../../supabase/migrations/0355_the_sync_engines_tables_are_not_a_members_write.sql
-\ir ../../supabase/migrations/0479_sync_atomic_pull.sql
-\ir ../../supabase/migrations/0479_sync_atomic_pull.sql
+\ir ../../supabase/reserved/0494_sync_atomic_pull.sql
+\ir ../../supabase/reserved/0494_sync_atomic_pull.sql
 select 'sync atomic pull fixture: actual sync schema, role policies and membership lifecycle loaded' as result;

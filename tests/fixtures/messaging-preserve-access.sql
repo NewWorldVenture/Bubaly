@@ -48,6 +48,18 @@ create table public.family_messages (
   is_pinned boolean not null default false, deleted_at timestamptz,
   created_at timestamptz not null default now()
 );
+-- Minimal synthetic Storage/notification schemas support the actual composed
+-- migrations; no provider or existing application database is used.
+create schema storage;
+create table storage.buckets(id text primary key, public boolean not null default false, allowed_mime_types text[]);
+create table storage.objects(id uuid primary key default gen_random_uuid(), bucket_id text references storage.buckets(id), name text);
+alter table storage.objects enable row level security;
+create type public.notification_type as enum ('system');
+create table public.notifications(id uuid primary key default gen_random_uuid(), family_id uuid not null references public.families(id) on delete cascade,
+ user_id uuid references auth.users(id) on delete cascade, type public.notification_type, title text, body text,
+ related_type text, related_id text, is_read boolean not null default false);
+alter table public.notifications enable row level security;
+
 do $$ begin
   if not exists (select 1 from pg_roles where rolname = 'authenticated') then
     create role authenticated nologin;
@@ -93,7 +105,14 @@ create policy families_select on public.families for select
   using (public.is_family_member(id));
 create policy families_delete on public.families for delete
   using (public.is_family_admin(id));
-grant usage on schema public, auth to authenticated, anon, service_role;
+grant usage on schema public, auth, storage to authenticated, anon, service_role;
+grant all on storage.objects,storage.buckets to service_role;
+grant select,insert,update,delete on storage.objects to authenticated;
+grant select on public.notifications to authenticated;
+grant update(is_read) on public.notifications to authenticated;
+grant all on public.notifications to service_role;
+create policy notification_recipient_read on public.notifications for select to authenticated using(user_id=auth.uid());
+create policy notification_recipient_update on public.notifications for update to authenticated using(user_id=auth.uid()) with check(user_id=auth.uid());
 grant execute on all functions in schema auth, public to authenticated, anon, service_role;
 grant select on public.family_members to authenticated, anon;
 grant update, delete on public.family_members to authenticated;
@@ -257,8 +276,10 @@ create function public.ensure_family_conversation(p_family_id uuid)
 returns uuid language sql security invoker set search_path = '' as $$
   select messaging_private.ensure_family_conversation(p_family_id);
 $$;
-\ir ../../supabase/migrations/0476_preserve_messaging_participants.sql
-\ir ../../supabase/migrations/0476_preserve_messaging_participants.sql
+\ir ../../supabase/migrations/0475_messaging_conversation_privacy_and_delivery.sql
+\ir ../../supabase/migrations/0476_messaging_notifications_preferences.sql
+\ir ../../supabase/migrations/0475_messaging_conversation_privacy_and_delivery.sql
+\ir ../../supabase/migrations/0476_messaging_notifications_preferences.sql
 select fixture.assert_true((select count(*)=2 from pg_trigger where tgrelid='public.family_members'::regclass
   and tgname in ('trg_family_members_scope_lock','trg_family_members_parent_lock') and tgenabled='O'),
   'both membership parent-order triggers survive repeated application');
@@ -270,7 +291,7 @@ select fixture.assert_true(not exists (
 ), 'all existing conversation identities, rosters and metadata are preserved');
 select fixture.assert_true(not exists (
   select 1 from public.family_messages m join fixture.legacy_messages old using(id)
-  where to_jsonb(m) is distinct from to_jsonb(old)
+  where (to_jsonb(m) - 'edited_at' - 'idempotency_key') is distinct from to_jsonb(old)
 ), 'all existing history is preserved');
 select fixture.assert_true((select count(*) = 2 from pg_policies
   where schemaname = 'public' and policyname in ('retained_conversation_limit', 'retained_message_limit')
@@ -776,6 +797,49 @@ select fixture.assert_true((select count(*) = 0 from public.family_conversations
 select fixture.assert_true((select count(*) = 0 from public.family_messages where id = fixture.id('cleanup-message')),
   'maintenance FK cascade cleans messages');
 select fixture.assert_true((select count(*) = 2 from public.families), 'cleanup does not reach other synthetic families');
+-- Composed durable operation identity must coexist with explicit actor admission.
+do $$ declare sent public.family_messages; retry public.family_messages; begin
+  perform set_config('request.jwt.claim.sub', fixture.id('alice')::text, true);
+  set local role authenticated;
+  sent := public.send_family_message(fixture.id('family'), fixture.id('mixed'), fixture.id('alice-member'), fixture.id('alice'),
+    'Synthetic durable operation', 'text', null, 'synthetic-durable-operation');
+  select * into retry from public.find_family_message(fixture.id('family'), fixture.id('mixed'), fixture.id('alice-member'), fixture.id('alice'),
+    'Changed retry text', 'text', null, now(), 'synthetic-durable-operation');
+  perform fixture.assert_true(retry.id = sent.id and retry.content='Synthetic durable operation',
+    'actor-authorized durable retry finds its original row despite changed text/window');
+  begin
+    perform public.send_family_message(fixture.id('family'), fixture.id('mixed'), fixture.id('alice-member'), fixture.id('alice'),
+      'Second write under the same key', 'text', null, 'synthetic-durable-operation');
+    raise exception 'Duplicate durable operation wrote a second row';
+  exception when unique_violation then null; end;
+  perform fixture.assert_true((select count(*)=1 from public.family_messages where idempotency_key='synthetic-durable-operation'),
+    'durable operation writes once');
+  begin
+    update public.family_messages set idempotency_key='rewritten-operation' where id=sent.id;
+    raise exception 'Immutable operation key changed';
+  exception when insufficient_privilege then null; end;
+  reset role;
+  perform set_config('request.jwt.claim.sub', '', true);
+end $$;
+
+-- Direct-chat reuse must match the union of both historical rosters.
+do $$ declare existing_id uuid := 'af000000-0000-4000-8000-000000000001'; created public.family_conversations; begin
+  insert into public.family_conversations(id,family_id,name,kind,created_by,participant_ids,member_ids)
+    values(existing_id,fixture.id('family'),'Historical wider direct chat','direct',fixture.id('alice'),
+      array[fixture.id('alice-member'),fixture.id('bob-member')],array[fixture.id('eve')]);
+  perform set_config('request.jwt.claim.sub',fixture.id('alice')::text,true);
+  set local role authenticated;
+  created := public.create_family_conversation(fixture.id('family'),
+    array[fixture.id('alice-member'),fixture.id('bob-member')],'New private direct chat','direct');
+  perform fixture.assert_true(created.id <> existing_id,
+    'A+B request never reuses historical A+B+C recorded audience');
+  perform fixture.assert_true(cardinality(created.member_ids)=0 and cardinality(created.participant_ids)=2,
+    'new direct chat contains exactly the requested audience');
+  reset role;
+  perform set_config('request.jwt.claim.sub','',true);
+  delete from public.family_conversations where id in (existing_id,created.id);
+end $$;
+
 select 'messaging preserve access: real-role participant, history, reply, sender, receipt and cascade assertions PASS' as result;
 -- Opt in only for follow-on two-session tests in the same disposable DB.
 \if :keep_fixture

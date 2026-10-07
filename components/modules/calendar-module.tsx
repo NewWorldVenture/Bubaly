@@ -2,13 +2,12 @@
 
 import Link from 'next/link';
 
-import { useMemo, useState, useEffect, useRef } from 'react';
+import { useCallback, useMemo, useState, useEffect, useRef } from 'react';
 import { ChevronLeft, ChevronRight, Plus, MapPin, RefreshCw, Filter, Check, Sparkles, Eye, EyeOff, Users, Columns } from 'lucide-react';
 import { useApp } from '@/components/app/app-context';
 import { useRealtimeQuery } from '@/lib/hooks/use-realtime-query';
 import { readCalendarOccurrences } from '@/lib/calendar/occurrences';
-import { instantCalendarBounds } from '@/lib/briefing/calendar-window';
-import { calendarEventDayKey } from '@/lib/calendar/event-dates';
+import { addDays as addDateDays, allDayDate, compareOccurrences, familyFetchRange } from '@/lib/calendar/day';
 import { BusynessHeatmap } from '@/components/calendar/busyness-heatmap';
 import { describeDbError } from '@/lib/supabase/errors';
 import { createCalendarEventAction, updateCalendarEventAction } from '@/app/(app)/dashboard/calendar/actions';
@@ -281,9 +280,18 @@ export function CalendarModule() {
     [monthGridStart],
   );
   const fetchEnd = useMemo(() => addWallDays(monthGridStart, 42), [monthGridStart]);
-  // The same window as real instants — the family's midnights, not the phone's.
-  const windowStart = useMemo(() => clock.toInstant(monthGridStart), [clock, monthGridStart]);
-  const windowEnd = useMemo(() => clock.toInstant(fetchEnd), [clock, fetchEnd]);
+  // The grid's dates, and the instants a read of them must span: timed rows
+  // between the family's midnights (not the phone's), all-day rows between the
+  // UTC midnights of the grid's first and last-plus-one dates — an all-day row
+  // is a DATE stored on that date in UTC (lib/calendar/day.ts). The fetch
+  // window is the union, so it starts at the grid's first UTC date west of
+  // Greenwich, where the family's midnight comes after it.
+  const gridFirstDay = useMemo(() => wallKey(monthGridStart), [monthGridStart]);
+  const gridEndDay = useMemo(() => wallKey(fetchEnd), [fetchEnd]);
+  const fetchRange = useMemo(
+    () => familyFetchRange(gridFirstDay, gridEndDay, clock.timeZone),
+    [gridFirstDay, gridEndDay, clock.timeZone],
+  );
 
   useEffect(() => {
     let active = true; // no provider status lands after unmount (MAIN-F-D09)
@@ -312,12 +320,29 @@ export function CalendarModule() {
   }, []);
 
   const { data, loading, error, refresh } = useRealtimeQuery<Event>({
-    table: 'calendar_events', familyId, deps: [familyId, windowStart.toISOString(), windowEnd.toISOString(), clock.timeZone],
-    // The grid and briefs share counted reads, timed recurrence on the family
-    // clock, and all-day recurrence on stored calendar dates.
-    fetcher: (supabase) => readCalendarOccurrences(supabase, familyId,
-      instantCalendarBounds(windowStart.toISOString(), new Date(windowEnd.getTime() - 1).toISOString(), clock.timeZone), clock.timeZone),
+    table: 'calendar_events', familyId, deps: [familyId, gridFirstDay, gridEndDay, clock.timeZone],
+    // In-window events PLUS every recurring series that started before the
+    // window's end — expandEvents below turns those into the occurrences that
+    // actually fall inside the grid (a weekly event created in June must show
+    // on every July Monday, not vanish after its first week).
+    fetcher: (supabase) => readCalendarOccurrences(supabase, familyId, {
+      timedFrom: fetchRange.timedFrom.toISOString(), timedTo: fetchRange.timedTo.toISOString(),
+      allDayFromDay: gridFirstDay, allDayToDay: gridEndDay,
+    }, clock.timeZone),
   });
+
+  // Recurring rules → concrete occurrences ON the grid's dates: timed rows
+  // stepped on the family's wall clock (a weekly 09:00 stays 09:00 across their
+  // DST), all-day rows by their own date.
+
+  // The date an occurrence is drawn on: a timed row on the family's day of its
+  // instant; an all-day row on its own date — the UTC date it is stored on —
+  // which the family's day of its instant is not, west of Greenwich (a
+  // Saturday birthday, Saturday 00:00Z, is Friday 17:00 in Los Angeles).
+  const dayOf = useCallback(
+    (e: Event) => (e.all_day ? allDayDate(e.starts_at) : clock.dayKeyOf(e.starts_at)),
+    [clock],
+  );
 
   const memberById = useMemo(() => new Map(members.map(m => [m.id, m])), [members]);
 
@@ -338,59 +363,57 @@ export function CalendarModule() {
   const timedByDay = useMemo(() => {
     const map = new Map<string, Event[]>();
     for (const e of timed) {
-      const key = clock.dayKeyOf(e.starts_at);
+      const key = dayOf(e);
       if (!map.has(key)) map.set(key, []);
       map.get(key)!.push(e);
     }
     return map;
-  }, [timed, clock]);
+  }, [timed, dayOf]);
 
   const allDayByDay = useMemo(() => {
     const map = new Map<string, Event[]>();
     for (const e of allDay) {
-      const key = calendarEventDayKey(e, clock.timeZone);
+      const key = dayOf(e);
       if (!map.has(key)) map.set(key, []);
       map.get(key)!.push(e);
     }
     return map;
-  }, [allDay, clock]);
+  }, [allDay, dayOf]);
 
   // Combined per-day map (month chips + day list).
   const eventsByDay = useMemo(() => {
     const map = new Map<string, Event[]>();
-    for (const e of filtered) {
-      const key = calendarEventDayKey(e, clock.timeZone);
+    for (const e of [...filtered].sort((a, b) => compareOccurrences(a, b, clock.timeZone))) {
+      const key = dayOf(e);
       if (!map.has(key)) map.set(key, []);
       map.get(key)!.push(e);
     }
     return map;
-  }, [filtered, clock]);
+  }, [filtered, dayOf, clock.timeZone]);
 
-  // Upcoming events for sidebar (next 7 days)
+  // Upcoming events for sidebar: the next seven family dates, today included.
+  // By DATE, not by instant: today's all-day row (today 00:00Z) is before the
+  // family's midnight west of Greenwich, and a date seven days on is after the
+  // last instant east of it. All-day rows head their day.
   const familyToday = clock.wallToday();
+  const todayKeyForUpcoming = clock.todayKey();
   const upcoming = useMemo(() => {
-    const now = new Date();
-    const dayStart = clock.dayStart(0, now);
-    const weekEnd = clock.dayStart(7, now);
-    return [...data].filter(e => {
-      if (e.all_day) {
-        const key = calendarEventDayKey(e, clock.timeZone);
-        return key >= clock.dayKeyOf(dayStart.toISOString()) && key < clock.dayKeyOf(weekEnd.toISOString());
-      }
-      const d = new Date(e.starts_at);
-      return d >= dayStart && d < weekEnd;
-    }).sort((a, b) => new Date(a.starts_at).getTime() - new Date(b.starts_at).getTime()).slice(0, 8);
-  }, [data, clock]);
+    const lastDay = addDateDays(todayKeyForUpcoming, 7);
+    return data.filter(e => {
+      const day = dayOf(e);
+      return day >= todayKeyForUpcoming && day < lastDay;
+    }).sort((a, b) => compareOccurrences(a, b, clock.timeZone)).slice(0, 8);
+  }, [data, dayOf, todayKeyForUpcoming, clock.timeZone]);
 
   const upcomingByDay = useMemo(() => {
     const map = new Map<string, Event[]>();
     for (const e of upcoming) {
-      const key = calendarEventDayKey(e, clock.timeZone);
+      const key = dayOf(e);
       if (!map.has(key)) map.set(key, []);
       map.get(key)!.push(e);
     }
     return [...map.entries()];
-  }, [upcoming, clock]);
+  }, [upcoming, dayOf]);
 
   async function syncGoogle() {
     setSyncing(true);

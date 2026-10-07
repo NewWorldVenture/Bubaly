@@ -14,7 +14,8 @@ const sourceFiles = [
   'components/modules/messages-module.tsx', 'components/ui/toast.tsx',
   'components/ui/button.tsx', 'components/ui/input.tsx',
   'components/ui/states.tsx', 'components/ui/states-client.tsx',
-  'lib/messages/overview.ts', 'lib/realtime/own-channel.ts',
+  'lib/messages/overview.ts', 'lib/messages/thread-state.ts', 'lib/messages/schema-compat.ts',
+  'lib/messages/legacy-schema.ts', 'lib/supabase/escape-like.ts', 'lib/realtime/own-channel.ts',
   'lib/supabase/errors.ts', 'lib/supabase/settle.ts', 'lib/constants/roles.ts',
   'lib/utils/format.ts', 'lib/i18n/locales.ts',
 ];
@@ -75,7 +76,7 @@ declare global {
   }
 }
 const conversation = (id: string, family: string, name: string, canonical = false): Row => ({
-  id, family_id: family, name, kind: 'group', is_family_chat: canonical,
+  id, family_id: family, name: canonical ? 'messagesModule.familyChat' : name, kind: 'group', is_family_chat: canonical,
   avatar_emoji: '💬', description: null, is_archived: false,
   member_ids: [USER_A, USER_B], participant_ids: ['synthetic-member-a', 'synthetic-member-b'],
   created_by: USER_A, last_message_at: null, created_at: WHEN, updated_at: WHEN,
@@ -201,10 +202,12 @@ async function start(page: Page, config: Config) {
         if (!saved) config.conversations[family] = [...(config.conversations[family] || []), clone(canonical)];
         return respond({ data: canonical.id, error: null });
       }
-      if (rpc === 'mark_conversation_read') return respond({ data: null, error: config.readError || null });
+      if (rpc === 'mark_conversation_read_through') return respond({ data: 0, error: config.readError || null });
+      if (rpc === 'family_conversation_overview') return respond({ data: [], error: null });
       if (rpc) throw new Error('Unexpected synthetic messaging RPC: ' + rpc);
       const table = url.pathname.split('/').pop();
       if (table === 'family_conversations' && method === 'GET') return respond({ data: clone(config.conversations[family] || []), error: null });
+      if (table === 'family_conversation_preferences' && method === 'GET') return respond({ data: null, error: null });
       if (table === 'family_messages' && method === 'GET') {
         if (!thread) return respond({ data: [], error: null });
         if (config.deferThread) return hold('thread', family, thread);
@@ -234,7 +237,7 @@ async function start(page: Page, config: Config) {
       channel: topic => {
         const ch = { id: p.channels.length, topic, removed: false, bindings: [],
           on(kind, filter, callback) { this.bindings.push({ kind, filter, callback }); return this; },
-          subscribe() { return this; }, presenceState() { return {}; }, track: async () => {},
+          subscribe() { return this; }, presenceState() { return {}; }, track: async () => {}, send: async () => {},
         };
         p.channels.push(ch); return ch;
       },
@@ -255,7 +258,7 @@ async function start(page: Page, config: Config) {
         'MessageCircle', 'Plus', 'Send', 'Smile', 'Paperclip', 'Reply', 'Pin', 'Trash2',
         'MoreHorizontal', 'CheckCheck', 'ArrowLeft', 'Search', 'X', 'Camera', 'Loader2',
         'Check', 'Info', 'Settings', 'UserPlus', 'SlidersHorizontal', 'Mic', 'Image',
-        'BellOff', 'Archive', 'ChevronRight', 'FileText', 'Download', 'CheckCircle2', 'AlertTriangle',
+        'BellOff', 'Archive', 'ChevronRight', 'FileText', 'Download', 'CheckCircle2', 'AlertTriangle', 'Pencil', 'RefreshCw',
       ].map(name => [name, () => null])),
       'date-fns': { parseISO: value => new Date(value), format: value => new Date(value).toISOString(),
         isToday: value => value.toDateString() === new Date().toDateString(),
@@ -269,7 +272,7 @@ async function start(page: Page, config: Config) {
           addDays: (day, delta) => new Date(day.getTime() + delta * 86400000), wallKey: day => day.toISOString().slice(0, 10) }) },
       '@/lib/utils/cn': { cn: (...values) => values.filter(value => typeof value === 'string').join(' ') },
       '@/lib/supabase/client': { createClient: () => client },
-      '@/lib/storage/family-media': { familyMediaPath: () => { p.mediaWrites++; throw new Error('Unexpected synthetic media write'); } },
+      '@/lib/storage/family-media': { familyMediaPath: () => { p.mediaWrites++; throw new Error('Unexpected synthetic media write'); }, removeFamilyMedia: () => { p.mediaWrites++; throw new Error('Unexpected synthetic media removal'); } },
       '@/lib/storage/use-family-media': { useFamilyMediaUrls: () => () => undefined },
       '@/components/media/family-media-img': { FamilyMediaImg: () => { throw new Error('Unexpected synthetic attachment render'); } },
       '@/components/ai/ai-insight': { AiInsight: () => null },
@@ -422,7 +425,6 @@ test('removed realtime callbacks and mismatched current-channel payloads cannot 
 });
 
 test('a denied read-receipt RPC never falls back to a raw message update', async ({ page }) => {
-  expectedDiagnostics.set(page, ['warning: [messages] read receipt RPC failed {code: 42501}']);
   await start(page, { ...base(), messages: { [CHAT_A]: [{ ...message('unread', FAMILY_A, CHAT_A, 'Unread synthetic message'), read_by: [] }] },
     readError: { code: '42501', message: 'Synthetic authorization denial' } });
   await expect(page.getByText('Unread synthetic message', { exact: true })).toBeVisible();
@@ -430,15 +432,12 @@ test('a denied read-receipt RPC never falls back to a raw message update', async
   expect(await page.evaluate(() => window.__messagingPreserve.calls.filter(c => c.method === 'PATCH'))).toEqual([]);
 });
 
-test('a missing read-receipt RPC uses a family-scoped fallback and preserves other readers', async ({ page }) => {
+test('a missing read-receipt RPC refuses a raw write and preserves other readers', async ({ page }) => {
   await start(page, { ...base(), messages: { [CHAT_A]: [{ ...message('unread-fallback', FAMILY_A, CHAT_A, 'Missing RPC fallback message'), read_by: [USER_B] }] },
     readError: { code: 'PGRST202', message: 'Synthetic missing procedure' } });
   await expect(page.getByText('Missing RPC fallback message', { exact: true })).toBeVisible();
-  await expect.poll(() => page.evaluate(() => window.__messagingPreserve.calls.filter(c => c.method === 'PATCH').length)).toBe(1);
-  const patch = await page.evaluate(() => window.__messagingPreserve.calls.find(c => c.method === 'PATCH')!);
-  expect(patch.family).toBe(FAMILY_A);
-  expect(new URL(patch.url).searchParams.get('id')).toBe('eq.unread-fallback');
-  expect(patch.body).toEqual({ read_by: [USER_B, USER_A] });
+  await expect(page.getByRole('alert')).toBeVisible();
+  expect(await page.evaluate(() => window.__messagingPreserve.calls.filter(c => c.method === 'PATCH'))).toEqual([]);
 });
 
 const sendFixture = (rejectSend: boolean): Config => ({
@@ -482,7 +481,7 @@ async function replyWithPrivateDraft(page: Page) {
     conversation_id: OLD, family_id: FAMILY_A, sender_id: USER_A,
     content: 'Private unsent draft from old scope', reply_to_id: 'old-reply',
   });
-  await expect(page.getByPlaceholder('messages.typeAMessage')).toHaveValue('');
+  await expect(page.getByPlaceholder('messages.typeAMessage')).toHaveValue('Private unsent draft from old scope');
   return id;
 }
 

@@ -37,10 +37,13 @@ it('retains a minute-aligned wall clock across the documented fall-back',()=>{
  const out=expand(e,'2026-11-04T00:00:00Z','2026-11-05T00:00:00Z','America/New_York');
  expect(out).toHaveLength(1);expect(out[0].starts_at).toBe('2026-11-04T23:00:00.000Z');
 });
-it('retains the documented first-existing-minute spring-gap behavior',()=>{
+// RFC 5545 §3.3.5: a skipped time takes the offset in force BEFORE the gap.
+// 02:30 at EST's -5 is 07:30Z, which New York's clock shows as 03:30 EDT (the
+// walk-forward to 03:00, 07:00Z, was the old rule).
+it('resolves a skipped spring-gap time with the offset in force before the gap',()=>{
  const e=event({starts_at:'2026-03-01T07:30:00.000Z',ends_at:null,recurrence:'weekly'});
  const out=expand(e,'2026-03-08T00:00:00Z','2026-03-09T00:00:00Z','America/New_York');
- expect(out).toHaveLength(1);expect(out[0].starts_at).toBe('2026-03-08T07:00:00.000Z');
+ expect(out).toHaveLength(1);expect(out[0].starts_at).toBe('2026-03-08T07:30:00.000Z');
 });
 it('retains short-month skipping rather than calendar-date sliding',()=>{
  const e=event({starts_at:'2026-01-31T12:34:00.000Z',ends_at:null,recurrence:'monthly'});
@@ -54,10 +57,10 @@ it('retains the unknown-frequency refusal',()=>{
  expect(expand(event({recurrence:'unsupported'}))).toEqual([]);
 });
 
-it('preserves nonzero precision within the first valid minute of the spring gap',()=>{
+it('preserves nonzero precision across the spring gap',()=>{
  const e=event({starts_at:'2026-03-01T07:30:42.125Z',ends_at:null,recurrence:'weekly'});
  const out=expand(e,'2026-03-08T00:00:00Z','2026-03-09T00:00:00Z','America/New_York');
- expect(out).toHaveLength(1);expect(out[0].starts_at).toBe('2026-03-08T07:00:42.125Z');
+ expect(out).toHaveLength(1);expect(out[0].starts_at).toBe('2026-03-08T07:30:42.125Z');
 });
 it.each([
  ['zero','2026-10-25T05:30:00.000Z','2026-11-01T05:30:00.000Z'],

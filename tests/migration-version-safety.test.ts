@@ -1,4 +1,4 @@
-import { mkdtempSync, rmSync, writeFileSync } from 'node:fs';
+import { existsSync, mkdtempSync, readdirSync, rmSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { describe, expect, it } from 'vitest';
@@ -504,12 +504,10 @@ describe('Supabase migration filename safety', () => {
     // /family/permissions shows them as read-only on (ROLE-M03).
     // 0471 adds the per-recipient admin digest delivery store, and 0474
     // (reserved for #710) withdraws an admin removed after a digest was
-    // frozen. This literal tracks the checked-in high-water mark. Numbers
-    // retired below 0474 cannot be reused; unpublished candidates land in order:
-    // recurring bills 0475, messaging 0476, private approval reads 0477,
-    // private AI copies with aggregate quota accounting 0478, and atomic
-    // standard sync pull creation 0479.
-    expect(audit.nextVersion).toBe('0480');
+    // Messaging occupies 0475-0476. Preserve main's owner allocation map:
+    // bill anchor 0488 and feed claim 0490 remain held in supabase/reserved.
+    // Approval, AI privacy and atomic sync candidates are held at 0492-0494.
+    expect(audit.nextVersion).toBe('0477');
   });
 
   // A hole below the high-water mark is not a free number: `supabase db push`
@@ -520,6 +518,24 @@ describe('Supabase migration filename safety', () => {
   it('lands every migration in release order: no retired hole filled, no number skipped', () => {
     expect(audit.filledHoles).toEqual([]);
     expect(audit.skippedVersions).toEqual([]);
+  });
+
+  // supabase/reserved/ holds a migration whose reserved number is above the
+  // next free one (docs/PENDING_PROD_MIGRATIONS.md, "Numbering from 0475 on").
+  // Neither the replay nor `supabase db push` reads it. A held file must keep a
+  // number above everything released and must not share one with a released
+  // file, or releasing it later would fill a hole or collide.
+  it('holds a reserved migration only above the released sequence, and never beside a released number', () => {
+    const reservedDir = join(__dirname, '..', 'supabase', 'reserved');
+    const held = existsSync(reservedDir) ? readdirSync(reservedDir).filter((name) => name.endsWith('.sql')) : [];
+    const released = new Set((audit.entries as { version: string }[]).map(({ version }) => version.slice(0, 4)));
+    for (const name of held) {
+      const version = name.slice(0, 4);
+      expect(name, 'a held file is named NNNN_name.sql').toMatch(/^\d{4}_[a-z0-9_]+\.sql$/);
+      expect(released.has(version), `${name} shares a number with a released migration`).toBe(false);
+      expect(Number(version), `${name} is not above the released sequence`).toBeGreaterThanOrEqual(Number(audit.nextVersion));
+    }
+    expect(held).toContain('0488_a_month_end_bill_keeps_its_day.sql');
   });
 
   it('retires exactly the numbers below the mark that no file holds', () => {

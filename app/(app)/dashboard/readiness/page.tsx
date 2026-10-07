@@ -7,6 +7,8 @@ import { createServer } from '@/lib/supabase/server';
 import { computeReadiness, BAND_LABEL, type ReadinessInput } from '@/lib/readiness/score';
 import { assessReadiness, overallReadiness, type ReadinessSignals } from '@/lib/readiness/assess';
 import { calendarReadiness } from '@/lib/readiness/calendar-source';
+import { readCalendarOccurrences } from '@/lib/calendar/occurrences';
+import { briefingCalendarBounds } from '@/lib/briefing/calendar-window';
 import type { Evidence, ReadinessCoverage } from '@/lib/readiness/assess';
 import { ReadinessHorizons } from '@/components/modules/readiness-module';
 import { resolveFamilyPlanLevel } from '@/lib/server/plan';
@@ -110,16 +112,19 @@ export default async function ReadinessPage() {
     if (error || typeof n !== 'number' || !Number.isSafeInteger(n) || n < 0) return { value: 0, known: false };
     return { value: n, known: true };
   };
+  // Both calendar horizons are read series-aware: a weekly practice is on
+  // tomorrow's and this week's calendar in every week, not only the week it
+  // was created. Tomorrow is the family's day; the week is today and the seven
+  // days after it, as the `weekEndStr` bound has always meant.
+  const READINESS_COLUMNS = ['id', 'starts_at', 'ends_at', 'all_day', 'assignee_id'] as const;
   const [
     tomorrowEventsRes, weekEventsRes, dinnerTomorrowRes, overduePrepSteps, billsDueWeek,
     expiringDocsMonth, upcomingTripsMonth, openPrepPlans,
   ] = await Promise.all([
-    settle(supabase.from('calendar_events').select('id, starts_at, ends_at, all_day, assignee_id', { count: 'exact' })
-      .eq('family_id', familyId).gte('starts_at', `${tomorrowKey}T00:00:00Z`).lt('starts_at', `${tomorrowKey}T23:59:59Z`)),
-    // Exact accessible-row count detects both this cap and server-side limits.
-    supabase.from('calendar_events').select('id, starts_at, ends_at, all_day, assignee_id', { count: 'exact' })
-      .eq('family_id', familyId).gte('starts_at', `${todayStr}T00:00:00Z`).lte('starts_at', `${weekEndStr}T23:59:59Z`)
-      .order('starts_at').limit(200),
+    settle(readCalendarOccurrences(supabase, familyId, briefingCalendarBounds(todayStr, tz, 1, 1), tz, { columns: READINESS_COLUMNS })),
+    // `count` is every occurrence in the window and `data` the first 200, so
+    // the coverage check still sees a capped week as partial.
+    settle(readCalendarOccurrences(supabase, familyId, briefingCalendarBounds(todayStr, tz, 0, 8), tz, { columns: READINESS_COLUMNS, limit: 200 })),
     cnt(supabase.from('meal_plans').select('plan_date', { count: 'exact', head: true }).eq('family_id', familyId).eq('plan_date', tomorrowKey).eq('meal_type', 'dinner')),
     cnt(supabase.from('prep_plan_steps').select('id', { count: 'exact', head: true }).eq('family_id', familyId).eq('is_done', false).lt('due_date', todayStr)),
     cnt(supabase.from('bills').select('id', { count: 'exact', head: true }).eq('family_id', familyId).neq('status', 'paid').lte('due_date', weekEndStr)),

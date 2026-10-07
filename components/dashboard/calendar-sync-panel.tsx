@@ -1,6 +1,6 @@
 'use client';
 
-import { useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { RefreshCw, Link2, Trash2, Plus, Check, AlertCircle } from 'lucide-react';
 import { useApp } from '@/components/app/app-context';
 import { useRealtimeQuery } from '@/lib/hooks/use-realtime-query';
@@ -21,6 +21,11 @@ import { useConfirm } from '@/components/ui/confirm';
 type CalendarFeed = Tables<'calendar_feeds'>;
 
 export function CalendarSyncPanel() {
+  const { familyId, userId } = useApp();
+  return <CalendarSyncWorkspace key={`${familyId}:${userId}`} />;
+}
+
+function CalendarSyncWorkspace() {
   const t = useTranslations();
   const askConfirm = useConfirm();
   // The date follows the reader, not the browser: toLocaleDateString() with no
@@ -28,6 +33,9 @@ export function CalendarSyncPanel() {
   const { fmtDate } = useFormat();
   const { familyId } = useApp();
   const { success, error: toastError } = useToast();
+  const alive = useRef(true);
+  const syncRequest = useRef(0);
+  useEffect(() => { alive.current = true; return () => { alive.current = false; }; }, []);
   const [open, setOpen] = useState(false);
   const [providerId, setProviderId] = useState<string | null>(null);
   const [url, setUrl] = useState('');
@@ -54,19 +62,32 @@ export function CalendarSyncPanel() {
     e.preventDefault();
     if (!url.trim()) return;
     setAdding(true);
-    const res = await addCalendarFeed({ name, url });
-    setAdding(false);
-    if (!res.ok) { toastError(res.error); return; }
-    success(feedAddedMessage(res, t));
-    closeModal();
+    try {
+      const res = await addCalendarFeed({ name, url });
+      if (!alive.current) return;
+      if (!res.ok) { toastError(res.error); return; }
+      success(feedAddedMessage(res, t));
+      closeModal();
+    } catch {
+      if (alive.current) toastError(t('errors.thatChangeWasNotSaved'));
+    } finally {
+      if (alive.current) setAdding(false);
+    }
   }
 
   async function sync(feed: CalendarFeed) {
+    const request = ++syncRequest.current;
     setSyncing(feed.id);
-    const res = await syncCalendarFeed(feed.id);
-    setSyncing(null);
-    if (!res.ok) { toastError(res.error); return; }
-    success(t('calendarSync.syncedEventsCount', { count: res.imported ?? 0 }));
+    try {
+      const res = await syncCalendarFeed(feed.id);
+      if (!alive.current || request !== syncRequest.current) return;
+      if (!res.ok) { toastError(res.error); return; }
+      success(t('calendarSync.syncedEventsCount', { count: res.imported ?? 0 }));
+    } catch {
+      if (alive.current && request === syncRequest.current) toastError(t('errors.thatChangeWasNotSaved'));
+    } finally {
+      if (alive.current && request === syncRequest.current) setSyncing(null);
+    }
   }
 
   async function remove(feed: CalendarFeed) {

@@ -18,6 +18,7 @@
 export type LocalParts = { year: number; month: number; day: number; hour: number; minute: number };
 
 export const MINUTES_PER_DAY = 24 * 60;
+const DAY_MS = 24 * 60 * 60 * 1000;
 
 export function isValidTimezone(timezone: string): boolean {
   try {
@@ -126,6 +127,54 @@ export function instantForLocalTime(
     if (instant) return instant;
   }
   return null;
+}
+
+/**
+ * The instant for a local time as RFC 5545 §3.3.5 reads it — the rule for a
+ * calendar's DATE-TIME with a TZID, and so for anything stepped on a calendar's
+ * wall clock (a recurring event's next occurrence).
+ *
+ *   - A reading the zone shows TWICE (the hour repeated when the clocks go
+ *     back) is the FIRST of the two instants: TZID=Europe/London:20261025T013000
+ *     is 00:30Z (01:30 BST), not 01:30Z (01:30 GMT); America/New_York
+ *     2026-11-01 01:30 is 05:30Z (EDT).
+ *   - A reading the zone SKIPS (the hour lost when the clocks go forward) is
+ *     interpreted with the UTC offset in force BEFORE the gap:
+ *     TZID=America/Chicago:20260308T023000 is 08:30Z (02:30 at CST's -6, which
+ *     the clock shows as 03:30 CDT), not 08:00Z; Australia/Sydney 2026-10-04
+ *     02:30 is 16:30Z on the 3rd (02:30 at AEST's +10, shown as 03:30 AEDT).
+ *
+ * That is NOT what `instantForLocalTime` does, deliberately: an ad or a daily
+ * routine set for 02:30 posts at 03:00, the first minute that exists. A
+ * calendar event published at 02:30 keeps its duration and its distance from
+ * the rest of the night, as every RFC 5545 reader does. Both live here so the
+ * two rules are named apart rather than one standing in for the other.
+ *
+ * The offsets in force within two days either side of the reading are the
+ * candidates (that covers half-hour zones and date-line changes); a reading
+ * one or more of them produce exactly is the earliest such instant, and a
+ * reading none produces is a gap, resolved with the offset of the latest
+ * candidate that reads before it. Null only for a reading no zone rule can
+ * place (an unusable zone throws, as `localPartsAt` does).
+ */
+export function instantForIcsLocalTime(
+  year: number, month: number, day: number, minutes: number, timezone: string,
+): Date | null {
+  const wall = Date.UTC(year, month - 1, day, Math.floor(minutes / 60), minutes % 60);
+  if (!Number.isFinite(wall)) return null;
+  const reads = (instant: number) => {
+    const p = localPartsAt(new Date(instant), timezone);
+    return Date.UTC(p.year, p.month - 1, p.day, p.hour, p.minute);
+  };
+  const offsets = new Set([-2, -1, 0, 1, 2].map((days) => offsetMsAt(new Date(wall + days * DAY_MS), timezone)));
+  const candidates = [...offsets].map((offset) => wall - offset).sort((a, b) => a - b);
+  const exact = candidates.find((instant) => reads(instant) === wall);
+  if (exact !== undefined) return new Date(exact);
+  // A gap: the latest candidate that still reads before the requested time is
+  // on the near side of it, and its offset is the one in force before the gap.
+  const before = candidates.filter((instant) => reads(instant) < wall).at(-1);
+  if (before === undefined) return instantForLocalTime(year, month, day, minutes, timezone);
+  return new Date(wall - offsetMsAt(new Date(before), timezone));
 }
 
 /** Days in a month, so "the 31st" means the 28th/29th/30th where that is the end. */

@@ -240,10 +240,11 @@ try {
     });
   }
 
-  for (const [kind, operation] of [['RPC send', send('synthetic parent order')], ['raw message UPDATE', directUpdate], ['raw conversation DELETE', directDelete]]) {
+  for (const [kind, operation] of [['RPC send', send('synthetic parent order')], ['RPC reaction', "select (public.toggle_family_message_reaction(fixture.id('mixed-message'),'👍')).id;"], ['raw message UPDATE', directUpdate], ['raw conversation DELETE', directDelete]]) {
     await check(`${kind} first linearizes before parent-family cascade`, async db => {
       const first = session(db, 'member-first'), parent = session(db, 'parent-second');
       await first.run(actor() + operation);
+      if (kind === 'RPC reaction') assert.equal(await first.run("select reactions->'👍' ? fixture.id('alice')::text from public.family_messages where id=fixture.id('mixed-message');"), 't');
       const pending = parent.run(actor('parent') + parentDelete + 'commit;');
       await waiting(db, parent); await first.run('commit;'); await pending;
       assert.equal(command(db, `select count(*) from public.families where id=fixture.id('family');`), '0');
@@ -256,8 +257,50 @@ try {
       await waiting(db, late); await parent.run('commit;');
       const result = await pending;
       if (kind === 'RPC send') await denied(Promise.resolve(result));
+      else if (kind === 'RPC reaction') {
+        assert(result instanceof Error && /42501: (Message unavailable|An active household member(?:ship)? is required)/.test(result.message), String(result));
+        assert(!/40P01|deadlock detected/.test(result.message), result.message);
+      }
       else if (result instanceof Error) assert(/active household|Household unavailable/.test(result.message), result.message);
       assert.equal(command(db, `select count(*) from public.family_messages where family_id=fixture.id('family');`), '0');
+    });
+  }
+  for (const unprotected of [true, false]) {
+    await check(`reaction SELECT-row/family-delete inversion ${unprotected ? 'original deadlock control' : 'admission prevents deadlock'}`, async db => {
+      // Gate the UPDATE before the normal statement scope trigger. Under the old
+      // RPC the message is already locked here but family admission has not run.
+      command(db, `create function fixture.reaction_update_gate() returns trigger language plpgsql security definer as $$
+        begin perform pg_advisory_xact_lock(834,777); return null; end $$;
+        create trigger aaa_synthetic_reaction_gate before update on public.family_messages for each statement
+          execute function fixture.reaction_update_gate();`);
+      if (unprotected) {
+        command(db, `create or replace function public.toggle_family_message_reaction(p_message_id uuid,p_emoji text)
+          returns public.family_messages language plpgsql security invoker set search_path='' as $$
+          declare result public.family_messages; begin
+            select * into result from public.family_messages where id=p_message_id and deleted_at is null for update;
+            update public.family_messages set reactions=jsonb_set(reactions,array[p_emoji],to_jsonb(array[auth.uid()::text]))
+              where id=p_message_id returning * into result;
+            return result;
+          end $$;`);
+      }
+      const gate=session(db,'reaction-window-gate'), reaction=session(db,'reaction-window'), deletion=session(db,'reaction-window-delete');
+      await gate.run('begin; select pg_advisory_xact_lock(834,777);');
+      const pendingReaction=reaction.run(actor('alice','authenticated','100ms') +
+        `select (public.toggle_family_message_reaction(fixture.id('mixed-message'),'👍')).id; commit;`).catch(error=>error);
+      await waiting(db,reaction,gate);
+      const pendingDeletion=deletion.run(actor('parent','authenticated','10s')+parentDelete+'commit;').catch(error=>error);
+      await waiting(db,deletion,reaction);
+      await gate.run('commit;');
+      const reactionResult=await pendingReaction, deletionResult=await pendingDeletion;
+      if(unprotected) {
+        assert(reactionResult instanceof Error && /40P01: deadlock detected/.test(reactionResult.message),String(reactionResult));
+        assert(!(deletionResult instanceof Error),String(deletionResult));
+      } else {
+        assert(!(reactionResult instanceof Error),String(reactionResult));
+        assert(!(deletionResult instanceof Error),String(deletionResult));
+      }
+      assert.equal(command(db,`select count(*) from public.families where id=fixture.id('family');`),'0');
+      assert.equal(command(db,`select count(*) from public.family_messages where family_id=fixture.id('family');`),'0');
     });
   }
   await check('two parent deletes in different active families follow one lock order', async db => {

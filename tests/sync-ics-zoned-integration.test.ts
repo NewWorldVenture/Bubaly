@@ -1,6 +1,6 @@
 import { createClient } from '@supabase/supabase-js';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
-import { syncFeed } from '@/lib/server/calendar-feeds';
+import { APPLY_SYNC_FUNCTION, syncFeed } from '@/lib/server/calendar-feeds';
 import { appleAdapter, packAppleCredential } from '@/lib/sync/providers/apple';
 import { runProviderSync } from '@/lib/sync/engine/generic';
 import { syncSdkFixture, ACCOUNT, NEXT, STALE } from './helpers/sync-sdk-fixture';
@@ -72,21 +72,23 @@ function feedSdk() {
     const body = init?.body ? JSON.parse(String(init.body)) as Row | Row[] : null;
     calls.push({ url, method, body });
     if (url.origin !== 'https://ics-fixture.invalid') throw new Error(`Unexpected synthetic feed request: ${method} ${url.href}`);
-    if (method === 'POST' && url.pathname === '/rest/v1/calendar_events') {
-      expect(url.searchParams.get('on_conflict')).toBe('feed_id,external_uid');
-      if (!Array.isArray(body)) throw new Error('Expected an SDK event upsert array');
-      for (const incoming of body) {
+    if (method === 'POST' && url.pathname === `/rest/v1/rpc/${APPLY_SYNC_FUNCTION}`) {
+      if (!body || Array.isArray(body)) throw new Error('Expected an atomic SDK chunk object');
+      expect(body.p_feed_id).toBe(FEED.id);
+      expect(body.p_fence).toBe(rows.calendar_feeds[0].updated_at);
+      expect(rows.calendar_feeds[0].last_status).toBe('syncing');
+      for (const incoming of body.p_upserts as Row[]) {
         const existing = rows.calendar_events.find(row => row.feed_id === incoming.feed_id && row.external_uid === incoming.external_uid);
         if (existing) Object.assign(existing, incoming);
         else rows.calendar_events.push({ id: `event-${rows.calendar_events.length}`, ...incoming });
       }
-      return jsonResponse([]);
+      return jsonResponse('applied');
     }
     if (method === 'PATCH' && url.pathname === '/rest/v1/calendar_feeds') {
       expect(url.searchParams.get('id')).toBe(`eq.${FEED.id}`);
       if (!body || Array.isArray(body)) throw new Error('Expected an SDK feed status object');
       Object.assign(rows.calendar_feeds[0], body);
-      return jsonResponse([{ id: FEED.id }]);
+      return jsonResponse([{ ...rows.calendar_feeds[0] }]);
     }
     throw new Error(`Unexpected synthetic feed request: ${method} ${url.pathname}`);
   };
@@ -157,9 +159,9 @@ describe('real feed caller and SDK zoned DATE-TIME payloads', () => {
     mocks.calendarText.mockResolvedValue({ ok: true, url: FEED.url, text });
     expect(await syncFeed(db, FEED)).toEqual({ ok: true, imported: 1 });
     expect(mocks.calendarText).toHaveBeenCalledWith(FEED.url);
-    const write = calls.find(call => call.url.pathname === '/rest/v1/calendar_events');
-    expect(write?.body).toEqual([expect.objectContaining({ family_id: FEED.family_id, feed_id: FEED.id,
-      external_uid: 'zoned-school@synthetic.invalid', starts_at: start, ends_at: end, all_day: false })]);
+    const write = calls.find(call => call.url.pathname === `/rest/v1/rpc/${APPLY_SYNC_FUNCTION}`);
+    expect(write?.body).toMatchObject({ p_feed_id: FEED.id, p_fence: expect.any(String), p_upserts: [expect.objectContaining({ family_id: FEED.family_id, feed_id: FEED.id,
+      external_uid: 'zoned-school@synthetic.invalid', starts_at: start, ends_at: end, all_day: false })], p_removals: [] });
     expect(rows.calendar_events).toHaveLength(1);
     expect(rows.calendar_events[0]).toMatchObject({ id: 'existing-event', starts_at: start, ends_at: end });
     expect(rows.calendar_feeds[0]).toMatchObject({ last_status: 'ok', last_error: null, event_count: 1 });
@@ -170,12 +172,13 @@ describe('real feed caller and SDK zoned DATE-TIME payloads', () => {
     const { db, rows, calls } = feedSdk(), priorEvents = structuredClone(rows.calendar_events);
     mocks.calendarText.mockResolvedValue({ ok: true, url: FEED.url, text });
     expect(await syncFeed(db, FEED)).toEqual({ ok: false, error: 'Could not parse the calendar' });
-    expect(calls.some(call => call.url.pathname === '/rest/v1/calendar_events')).toBe(false);
+    expect(calls.some(call => call.url.pathname === `/rest/v1/rpc/${APPLY_SYNC_FUNCTION}`)).toBe(false);
     expect(rows.calendar_events).toEqual(priorEvents);
     expect(rows.calendar_feeds[0]).toMatchObject({ last_status: 'error', last_error: 'Could not parse the calendar',
       last_synced_at: PRIOR_STAMP, event_count: 1 });
-    expect(calls).toHaveLength(1);
-    expect(calls[0]).toMatchObject({ method: 'PATCH', body: { last_status: 'error', last_error: 'Could not parse the calendar' } });
+    expect(calls).toHaveLength(2);
+    expect(calls[0].body).toMatchObject({ last_status: 'syncing' });
+    expect(calls[1]).toMatchObject({ method: 'PATCH', body: { last_status: 'error', last_error: 'Could not parse the calendar' } });
   });
 
   it('an unreferenced supplied timezone does not alter the existing UTC, DATE or floating compatibility policy', async () => {

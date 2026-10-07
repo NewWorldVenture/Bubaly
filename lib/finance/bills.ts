@@ -1,25 +1,29 @@
 import type { SupabaseClient } from '@supabase/supabase-js';
 import type { Database, Tables } from '@/lib/database.types';
 import { billPaidPatch, type BillScheduleChoice } from './bill-schedule';
+import { whereBillIsAsSeen, writeBillPatch, isMissingDueDayColumn, isDueDayNotKept } from './recurring';
 
-/** The update matches the occurrence the owner saw, including later edits. */
+/** Refuse missing snapshots; every retry keeps the same conditional write. */
 export async function saveBillPayment(
-  client: SupabaseClient<Database>, familyId: string, bill: Tables<'bills'>,
-  today: string, choice?: BillScheduleChoice, reopen = false,
+  client: SupabaseClient<Database>,
+  familyId: string,
+  bill: Tables<'bills'> | null | undefined,
+  today: string,
+  choice?: BillScheduleChoice,
+  reopen = false,
 ) {
+  if (!bill?.updated_at)
+    return { data: null, error: new Error('This bill changed. Refresh before marking it paid.') };
   const patch = reopen ? { status: 'upcoming' as const } : billPaidPatch(bill, today, choice);
-  if (!patch || !bill.updated_at) return { data: null, error: new Error('Confirm this bill’s recurrence and day of month before marking it paid.') };
-  let query = client.from('bills').update(patch).eq('id', bill.id).eq('family_id', familyId)
-    .eq('updated_at', bill.updated_at).eq('due_date', bill.due_date).eq('status', bill.status)
-    .eq('is_recurring', bill.is_recurring);
-  query = bill.recurrence === null ? query.is('recurrence', null) : query.eq('recurrence', bill.recurrence);
-  // Never retry without due_day: that would lose the original anchor forever.
-  return query.select('id');
+  return writeBillPatch(patch, (p) =>
+    whereBillIsAsSeen(
+      client.from('bills').update(p).eq('id', bill.id).eq('family_id', familyId),
+      bill,
+    ).select('id'),
+  );
 }
 
-/** Only the exact column absence permits a read retry on an older schema. */
+/** Both an absent column and a refused unsafe fallback need the update notice. */
 export function isMissingBillDueDay(error: unknown): boolean {
-  if (!error || typeof error !== 'object') return false;
-  const { code, message } = error as { code?: string; message?: string };
-  return (code === '42703' || code === 'PGRST204') && /\bdue_day\b/i.test(message ?? '');
+  return isMissingDueDayColumn(error) || isDueDayNotKept(error);
 }

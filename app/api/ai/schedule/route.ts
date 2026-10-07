@@ -4,6 +4,8 @@ import { requireUserContext } from '@/lib/supabase/auth';
 import { settleAll } from '@/lib/supabase/settle';
 import { createServer } from '@/lib/supabase/server';
 import { findFreeSlots, isCalendarContext, type BusyEvent, type CalendarContext } from '@/lib/calendar/scheduling';
+import { readCalendarBusySource, readCalendarOccurrences } from '@/lib/calendar/occurrences';
+import { instantCalendarBounds } from '@/lib/briefing/calendar-window';
 import { MAX_SMALL_JSON_BYTES, readBoundedRequestJson } from '@/lib/server/bounded-request-body';
 
 // AI scheduling: read the selected family members' calendars (events + school +
@@ -38,17 +40,21 @@ export async function POST(req: NextRequest) {
     const contexts = (body.contexts ?? []).filter(isCalendarContext) as CalendarContext[];
 
     const supabase = await createServer();
-    const fromISO = new Date(windowStart - 24 * 60 * 60 * 1000).toISOString(); // catch spanning events
+    const fromISO = new Date(windowStart).toISOString();
     const toISO = new Date(windowEnd).toISOString();
+    const tz = ctx.active.family.timezone || 'UTC';
 
     const [
       { data: events, error: eventsError },
       { data: school, error: schoolError },
       { data: sports, error: sportsError },
     ] = await settleAll([
-      supabase.from('calendar_events').select('*').eq('family_id', familyId).gte('starts_at', fromISO).lte('starts_at', toISO),
-      supabase.from('school_events').select('starts_at, ends_at, member_id').eq('family_id', familyId).gte('starts_at', fromISO).lte('starts_at', toISO),
-      supabase.from('sports_events').select('starts_at, ends_at, member_id').eq('family_id', familyId).gte('starts_at', fromISO).lte('starts_at', toISO),
+      // Series included: a weekly practice is busy every week, not the week
+      // it was created (lib/calendar/occurrences.ts). Every column, as before,
+      // so a `context` column that is not there yet is simply absent.
+      readCalendarOccurrences(supabase, familyId, instantCalendarBounds(fromISO, toISO, tz), tz, { overlap: true }),
+      readCalendarBusySource(supabase, familyId, 'school_events', fromISO, toISO),
+      readCalendarBusySource(supabase, familyId, 'sports_events', fromISO, toISO),
     ]);
 
     // A free slot is an ASSERTION about what is not in the calendar, so it is
@@ -92,7 +98,7 @@ export async function POST(req: NextRequest) {
     const slots = findFreeSlots(busy, {
       windowStart, windowEnd, durationMin,
       // Working hours and all-day blocking are the FAMILY's local concepts.
-      tz: ctx.active.family.timezone || 'UTC',
+      tz,
       workingHours: body.workingHours,
       contexts: contexts.length > 0 ? contexts : undefined,
       maxSuggestions: Math.min(body.maxSuggestions ?? 6, 12),

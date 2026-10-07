@@ -6,7 +6,7 @@ import { basename, dirname, isAbsolute, join, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
 
 const ROOT = resolve(dirname(fileURLToPath(import.meta.url)), '..');
-const MIGRATION = 'supabase/migrations/0477_approval_requests_private_read.sql';
+const MIGRATION = 'supabase/reserved/0492_approval_requests_private_read.sql';
 const FIXTURE = 'tests/fixtures/approval-requests-private-read.sql';
 
 /** Use actual main schema/policies, rather than a hand-written permissive baseline. */

@@ -19,7 +19,7 @@
 import type { SupabaseClient } from '@supabase/supabase-js';
 import type { Database } from '@/lib/database.types';
 import { expandEventsInZone } from '@/lib/calendar/recurrence';
-import { calendarWindowFilter, type CalendarWindowBounds } from '@/lib/briefing/calendar-window';
+import { calendarOverlapWindowFilter, calendarWindowFilter, type CalendarWindowBounds } from '@/lib/briefing/calendar-window';
 
 type EventRow = Database['public']['Tables']['calendar_events']['Row'];
 type Db = SupabaseClient<Database>;
@@ -36,10 +36,23 @@ export type OccurrencesResult<C extends keyof EventRow> =
   | { data: CalendarOccurrence<C>[]; count: number; error: null }
   | { data: null; count: null; error: { message: string } };
 
+export type OccurrenceFilters = {
+  eq(column: string, value: unknown): OccurrenceFilters;
+  neq(column: string, value: unknown): OccurrenceFilters;
+  in(column: string, values: readonly unknown[]): OccurrenceFilters;
+  ilike(column: string, pattern: string): OccurrenceFilters;
+  not(column: string, operator: string, value: unknown): OccurrenceFilters;
+};
+
 export type OccurrencesOptions<C extends keyof EventRow> = {
   columns?: readonly C[];
   /** Applied after the merge, to the sorted occurrences. */
   limit?: number;
+  /** Read the first N singles completely even when the server's cap is lower. Count is a floor in this mode. */
+  singlesLimit?: number;
+  refine?: (query: OccurrenceFilters) => OccurrenceFilters;
+  /** Include intervals that started before the window and still occupy it. */
+  overlap?: boolean;
   /** Only this member's events (the digital twin reads one person's load). */
   assigneeId?: string;
   /**
@@ -58,47 +71,61 @@ const READ_PAGE = 1000;
 type PageResult = { data: unknown[] | null; count: number | null; error: { message: string } | null };
 
 /** Exact counts distinguish a complete collection from a server-capped page. */
-async function readCountedRows(
+export async function readCountedRows<T = unknown>(
   first: () => PromiseLike<PageResult>,
   more: (from: number, to: number) => PromiseLike<PageResult>,
   max: number,
   label: string,
-): Promise<{ data: unknown[] | null; error: { message: string } | null }> {
+  take?: number,
+): Promise<{ data: T[] | null; error: { message: string } | null }> {
   const fail = (reason: string) => ({ data: null, error: { message: `${reason}; the calendar window cannot be read whole` } });
-  const rows: unknown[] = [];
+  const rows: T[] = [];
   const seen = new Set<string>();
   let total: number | null = null;
+  let target = 0;
   try {
     for (;;) {
-      const result = await (rows.length === 0 ? first() : more(rows.length, rows.length + READ_PAGE - 1));
+      const result = await (rows.length === 0 ? first() : more(rows.length, Math.min(rows.length + READ_PAGE, target) - 1));
       if (result.error) return { data: null, error: result.error };
       if (typeof result.count !== 'number' || !Number.isSafeInteger(result.count) || result.count < 0) {
         return fail(`No usable count of ${label}`);
       }
       if (total === null) total = result.count;
       else if (result.count !== total) return fail(`The count of ${label} changed from ${total} to ${result.count}`);
-      if (total > max) return fail(`More than ${max} ${label}`);
+      target = take === undefined ? total : Math.min(total, take);
+      if (target > max) return fail(`More than ${max} ${label}`);
       if (!Array.isArray(result.data)) return fail(`The ${label} page was unavailable`);
       for (const row of result.data) {
         const id = row && typeof row === 'object' && 'id' in row ? row.id : null;
         if (typeof id !== 'string' || !id) return fail(`A ${label} row had no identity`);
-        if (seen.has(id)) return fail(`The ${label} read repeated a row`);
+        if (seen.has(id)) return fail(`The ${label} read repeated row ${id}`);
         seen.add(id);
-        rows.push(row);
+        rows.push(row as T);
       }
-      if (rows.length > total) return fail(`The ${label} read answered more rows than it counted`);
-      if (rows.length === total) return { data: rows, error: null };
-      if (result.data.length === 0) return fail(`The ${label} read stopped at ${rows.length} of ${total} rows`);
+      if (rows.length > target) return fail(`The ${label} read answered more rows than it counted or requested`);
+      if (rows.length === target) return { data: rows, error: null };
+      if (result.data.length === 0) return fail(`The ${label} read stopped at ${rows.length} of ${target} rows`);
     }
   } catch (cause) {
     return fail(cause instanceof Error ? cause.message : String(cause));
   }
 }
 
-const isSeries = (row: { recurrence: string | null }) => !!row.recurrence && row.recurrence !== 'none';
+export const isSeries = (row: { recurrence: string | null }) => !!row.recurrence && row.recurrence !== 'none';
 
 const earlier = (a: string, b: string) => (a < b ? a : b);
 const later = (a: string, b: string) => (a > b ? a : b);
+
+/** Complete busy intervals from the other calendar sources, including in-progress commitments. */
+export function readCalendarBusySource(db: Db, familyId: string, table: 'school_events' | 'sports_events', from: string, to: string) {
+  const fallbackFrom = new Date(Date.parse(from) - 3_600_000).toISOString();
+  const query = () => db.from(table).select('id, starts_at, ends_at, member_id', { count: 'exact' })
+    .eq('family_id', familyId).lt('starts_at', to)
+    .or(`ends_at.gt.${from},and(ends_at.is.null,starts_at.gt.${fallbackFrom})`)
+    .order('starts_at').order('id');
+  return readCountedRows<{ id: string; starts_at: string; ends_at: string | null; member_id: string | null }>(
+    () => query().limit(READ_PAGE), (first, last) => query().range(first, last), SINGLE_READ_MAX, `${table} busy events`);
+}
 
 /**
  * Every occurrence in the window, in `starts_at` order.
@@ -117,11 +144,18 @@ export async function readCalendarOccurrences<C extends keyof EventRow = keyof E
   timezone: string,
   opts: OccurrencesOptions<C> = {},
 ): Promise<OccurrencesResult<C>> {
+  for (const limit of [opts.limit, opts.singlesLimit]) {
+    if (limit !== undefined && (!Number.isSafeInteger(limit) || limit < 1)) {
+      return { data: null, count: null, error: { message: 'Invalid calendar read limit' } };
+    }
+  }
   const columns = opts.columns ? [...new Set<string>([...opts.columns, ...RECURRENCE_COLUMNS])].join(', ') : '*';
   const dayStart = `${bounds.allDayFromDay}T00:00:00.000Z`;
   const dayEnd = `${bounds.allDayToDay}T00:00:00.000Z`;
-  const scoped = <Q extends { eq: (column: string, value: string) => Q }>(query: Q): Q =>
-    (opts.assigneeId ? query.eq('assignee_id', opts.assigneeId) : query);
+  const scoped = <Q extends { eq: (column: string, value: string) => Q }>(query: Q): Q => {
+    const own = opts.assigneeId ? query.eq('assignee_id', opts.assigneeId) : query;
+    return opts.refine ? opts.refine(own as unknown as OccurrenceFilters) as unknown as Q : own;
+  };
 
   // Two reads, issued together and awaited together: the one-offs by the
   // window filter, series excluded (a master whose first occurrence falls in
@@ -135,19 +169,21 @@ export async function readCalendarOccurrences<C extends keyof EventRow = keyof E
     .from('calendar_events')
     .select(columns, { count: 'exact' })
     .eq('family_id', familyId))
-    .or(opts.singlesFilter ?? calendarWindowFilter(bounds))
+    .or(opts.singlesFilter ?? (opts.overlap ? calendarOverlapWindowFilter(bounds) : calendarWindowFilter(bounds)))
     .or('recurrence.is.null,recurrence.eq.none')
     .order('starts_at').order('id');
-  const seriesQuery = () => scoped(db
+  const seriesQuery = () => {
+    let query = scoped(db
     .from('calendar_events')
     .select(columns, { count: 'exact' })
     .eq('family_id', familyId))
     .neq('recurrence', 'none')
-    .lte('starts_at', latest)
-    .or(`recurrence_until.is.null,recurrence_until.gte.${earliest}`)
-    .order('starts_at').order('id');
+    .lte('starts_at', latest);
+    if (!opts.overlap) query = query.or(`recurrence_until.is.null,recurrence_until.gte.${earliest}`);
+    return query.order('starts_at').order('id');
+  };
   const [singles, series] = await Promise.all([
-    readCountedRows(() => singlesQuery().limit(READ_PAGE), (from, to) => singlesQuery().range(from, to), SINGLE_READ_MAX, 'one-off events'),
+    readCountedRows(() => singlesQuery().limit(Math.min(READ_PAGE, opts.singlesLimit ?? READ_PAGE)), (from, to) => singlesQuery().range(from, to), SINGLE_READ_MAX, 'one-off events', opts.singlesLimit),
     readCountedRows(() => seriesQuery().limit(READ_PAGE), (from, to) => seriesQuery().range(from, to), SERIES_READ_MAX, 'recurring events'),
   ]);
   if (singles.error) return { data: null, count: null, error: singles.error };
@@ -158,10 +194,10 @@ export async function readCalendarOccurrences<C extends keyof EventRow = keyof E
   const timed = seriesRows.filter((row) => !row.all_day);
   const allDay = seriesRows.filter((row) => row.all_day);
   const occurrences = [
-    ...expandEventsInZone(timed, new Date(bounds.timedFrom), new Date(bounds.timedTo), timezone),
+    ...expandEventsInZone(timed, new Date(bounds.timedFrom), new Date(bounds.timedTo), timezone, opts.overlap),
     // An all-day series steps by calendar date; its rows are UTC midnights of
     // the family's dates, so the date window and a UTC clock read them as written.
-    ...expandEventsInZone(allDay, new Date(dayStart), new Date(dayEnd), 'UTC'),
+    ...expandEventsInZone(allDay, new Date(dayStart), new Date(dayEnd), 'UTC', opts.overlap),
   ];
 
   // Both lists are filtered here as well as in the query, so a row the database

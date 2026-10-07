@@ -8,7 +8,7 @@ import { dirname, isAbsolute, join, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
 
 const ROOT = resolve(dirname(fileURLToPath(import.meta.url)), '..');
-const MIGRATION = 'supabase/migrations/0479_sync_atomic_pull.sql';
+const MIGRATION = 'supabase/reserved/0494_sync_atomic_pull.sql';
 const migrationHash = createHash('sha256').update(readFileSync(join(ROOT, MIGRATION))).digest('hex');
 const options = Object.fromEntries(process.argv.slice(2).reduce((pairs, arg, i, args) => {
   if (arg.startsWith('--')) pairs.push([arg.slice(2), args[i + 1]]);

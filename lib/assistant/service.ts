@@ -21,9 +21,10 @@ import { captureSpeech, unknownSpeech, HELP_SPEECH, boundSpeech, boundText, type
 import type { VoiceRoute } from '@/lib/voice/command-router';
 import { splitItems, parseGroceryItem } from '@/lib/capture/parse';
 import { instantForLocalTime } from '@/lib/time/zoned';
-import { expandEventsInZone } from '@/lib/calendar/recurrence';
+import { readCalendarOccurrences } from '@/lib/calendar/occurrences';
+import { instantCalendarBounds } from '@/lib/briefing/calendar-window';
+import { compareOccurrences } from '@/lib/calendar/day';
 import { loadAISettingsFor } from '@/lib/services/ai-settings';
-import { settleAll } from '@/lib/supabase/settle';
 import { wroteNoRows } from '@/lib/supabase/errors';
 
 type Client = SupabaseClient<Database>;
@@ -145,14 +146,8 @@ export function dayWindow(now: Date, timezone: string, offsetDays = 0): { from: 
   return { from: from.toISOString(), to: to.toISOString() };
 }
 
-/** Most series a family may have running at once before the speaker stops looking. */
-const MAX_SERIES = 200;
 /** Most occurrences one spoken answer will consider. */
 const MAX_OCCURRENCES = 50;
-
-type EventRow = AgendaEvent & {
-  id: string; ends_at: string | null; recurrence: string; recurrence_until: string | null;
-};
 
 /**
  * The events inside one window, INCLUDING the occurrences of recurring series.
@@ -164,37 +159,25 @@ type EventRow = AgendaEvent & {
  * afternoon it was created, and never again. What a speaker is asked about all
  * week (the school run, practice, bin day) was precisely what it could not see.
  *
- * Two queries rather than one `.or(...)` with nested groups: the two halves ask
- * genuinely different questions — "did it start in the window" and "could it
- * still be running" — and a PostgREST filter string expressing both is the kind
- * of thing that is wrong in production and right in review.
+ * It is the shared read (lib/calendar/occurrences.ts), as every other calendar
+ * surface's is: one-offs and series both scoped to the family and checked
+ * against their exact counts, timed rows between the family's midnights and
+ * all-day rows by their own date, series stepped on the family's clock. The
+ * speaker's own two queries capped the series at 200 rows and read an all-day
+ * row by the family's day of its UTC instant — the day before, west of
+ * Greenwich. All-day rows head the day.
  */
 async function readEvents(
   supabase: Client, familyId: string, window: { from: string; to: string }, timezone: string,
 ): Promise<AgendaEvent[]> {
-  const columns = 'id, title, starts_at, ends_at, all_day, recurrence, recurrence_until';
-  const [single, series] = await settleAll([
-    supabase.from('calendar_events').select(columns)
-      .eq('family_id', familyId).eq('recurrence', 'none')
-      .gte('starts_at', window.from).lt('starts_at', window.to)
-      .order('starts_at').limit(MAX_OCCURRENCES),
-    // A series reaches the window when it began before the window ends and has
-    // not been ended before the window starts.
-    supabase.from('calendar_events').select(columns)
-      .eq('family_id', familyId).neq('recurrence', 'none')
-      .lt('starts_at', window.to)
-      .or(`recurrence_until.is.null,recurrence_until.gte.${window.from}`)
-      .order('starts_at').limit(MAX_SERIES),
-  ]);
-  if (single.error) throw single.error;
-  if (series.error) throw series.error;
-
-  const rows = [...(single.data ?? []), ...(series.data ?? [])] as unknown as EventRow[];
-  // In the FAMILY's zone, not the runtime's. A server's runtime zone is UTC,
-  // and a weekly 4pm event stepped in UTC drifts an hour the week the clocks
-  // change — enough to move a late event into the wrong local day.
-  return expandEventsInZone(rows, new Date(window.from), new Date(window.to), timezone)
-    .slice(0, MAX_OCCURRENCES)
+  const toInclusive = new Date(Date.parse(window.to) - 1).toISOString();
+  const res = await readCalendarOccurrences(supabase, familyId, instantCalendarBounds(window.from, toInclusive, timezone), timezone, {
+    columns: ['id', 'title', 'starts_at', 'ends_at', 'all_day'],
+    limit: MAX_OCCURRENCES,
+  });
+  if (res.error) throw res.error;
+  return [...res.data]
+    .sort((a, b) => compareOccurrences(a, b, timezone))
     .map(({ title, starts_at, all_day }) => ({ title, starts_at, all_day }));
 }
 

@@ -11,6 +11,9 @@ import { approvalReminders, type ApprovalInput } from '@/lib/notifications/appro
 import type { NeedsReader } from '@/lib/home/needs-sources';
 import { SOURCE_MESSAGES, translate } from '@/lib/i18n/messages';
 import { detectConflicts, type ConflictEvent } from '@/lib/home/conflicts';
+import { isSeries, readCalendarOccurrences } from '@/lib/calendar/occurrences';
+import { allDayDate, occurrenceDay } from '@/lib/calendar/day';
+import { instantCalendarBounds } from '@/lib/briefing/calendar-window';
 import { medicationDueReminders } from '@/lib/notifications/medication-reminders';
 import { upcomingRelationship, formatCountdown, milestoneLabel, type RelDate } from '@/lib/relationship/dates';
 import { dueFamilyReminderNotices, reminderFetchHorizonIso, type FamilyReminderRow } from '@/lib/reminders/notify';
@@ -70,15 +73,22 @@ const NEEDS_TO_KNOW_READER: NeedsReader = {
 // hour beside it. The rest of this file already resolves `families.timezone`
 // for exactly this reason — see the medication-window note above — and this was
 // the one place the value was not threaded through.
+//
+// An all-day row's date is the one it stores (allDayDate), not its instant on
+// the family's clock: September 22 is stored as 2026-09-22T00:00Z, which is
+// still the 21st in New York, so reading it there called tomorrow's all-day
+// event "today". Its weekday is read at Greenwich for the same reason.
 function timeLabel(iso: string, tz: string, allDay = false): string {
   const d = new Date(iso);
-  const dayKey = dayKeyInTz(d, tz);
+  const dayKey = allDay ? allDayDate(iso) : dayKeyInTz(d, tz);
   const todayKey = dayKeyInTz(new Date(), tz);
   const day = dayKey === todayKey
     ? 'today'
     : dayKey === addDaysToDayKey(todayKey, 1)
       ? 'tomorrow'
-      : d.toLocaleDateString('en-US', { weekday: 'long', timeZone: tz });
+      : allDay
+        ? new Date(`${dayKey}T12:00:00Z`).toLocaleDateString('en-US', { weekday: 'long', timeZone: 'UTC' })
+        : d.toLocaleDateString('en-US', { weekday: 'long', timeZone: tz });
   if (allDay) return day;
   return `${day} at ${d.toLocaleTimeString('en-US', { hour: 'numeric', minute: '2-digit', timeZone: tz })}`;
 }
@@ -146,7 +156,12 @@ export async function generateFamilyNotifications(supabase: DB, familyId: string
     systemScopeForFamily(supabase, familyId),
     settleAll([
       Promise.resolve({ data: roster.rows, error: null }),
-      supabase.from('calendar_events').select('id, title, starts_at, all_day, location, assignee_id').eq('family_id', familyId).gte('starts_at', nowIso).lte('starts_at', in48),
+      // Series included, one entry per occurrence: a weekly practice is
+      // reminded every week, not the week it was created. The family's zone
+      // decides which all-day rows belong to the next two days.
+      readCalendarOccurrences(supabase, familyId, instantCalendarBounds(nowIso, in48, tz), tz, {
+        columns: ['id', 'title', 'starts_at', 'all_day', 'location', 'assignee_id'],
+      }),
       supabase.from('chore_assignments').select('id, due_at, member_id, chore_id, status').eq('family_id', familyId).in('status', ['todo', 'in_progress']).not('due_at', 'is', null).lte('due_at', in24).gte('due_at', nowIso),
       supabase.from('school_events').select('id, title, starts_at, member_id, event_type').eq('family_id', familyId).gte('starts_at', nowIso).lte('starts_at', in48),
       supabase.from('sports_events').select('id, title, starts_at, member_id, sport, location').eq('family_id', familyId).gte('starts_at', nowIso).lte('starts_at', in48),
@@ -213,7 +228,18 @@ export async function generateFamilyNotifications(supabase: DB, familyId: string
   for (const e of events ?? []) {
     const target = e.assignee_id ? userByMember.get(e.assignee_id) ?? null : null;
     candidates.push({
-      type: 'calendar_event', related_type: 'calendar_events', related_id: e.id, user_id: target,
+      type: 'calendar_event', related_type: 'calendar_events', user_id: target,
+      // The dedupe below is permanent and keyed by `related_id`. A series is
+      // one row and many dates, so its key carries the occurrence's date —
+      // keyed by the row alone, the first week's reminder would stand in for
+      // every week after it. A one-off keeps its id, and `entityIdFrom`
+      // (lib/notifications/actions.ts) still finds the uuid in front of the colon.
+      // The date is the occurrence's day on the FAMILY's wall clock (an all-day
+      // row's own date), not Greenwich's: a daily 16:30 in Los Angeles is
+      // 00:30Z on Sunday 8 March 2026 (PST) and 23:30Z the same Sunday (PDT),
+      // so Greenwich's date gave Saturday's and Sunday's occurrences one key and
+      // Sunday's reminder was taken for already sent.
+      related_id: isSeries(e) ? `${e.id}:${occurrenceDay(e, tz)}` : e.id,
       title: e.title,
       body: `${timeLabel(e.starts_at, tz, e.all_day)}${e.location ? ` · ${e.location}` : ''}`,
     });
@@ -370,14 +396,26 @@ export async function generateFamilyNotifications(supabase: DB, familyId: string
 
   // Calendar double-bookings → proactively flag whoever is double-booked (or the
   // managers, for a child with no account). Reuses the pure conflict detector.
-  const { data: conflictEvents } = await supabase.from('calendar_events')
-    .select('id, title, starts_at, ends_at, all_day, assignee_id')
-    .eq('family_id', familyId).not('assignee_id', 'is', null)
-    .gte('starts_at', nowIso).lte('starts_at', in14d)
-    .order('starts_at').limit(200);
+  // Series included: a one-off booked over a weekly practice is a clash in the
+  // week it is booked, which is almost never the practice's first week.
+  const conflictRead = await readCalendarOccurrences(supabase, familyId, instantCalendarBounds(nowIso, in14d, tz), tz, {
+    columns: ['id', 'title', 'starts_at', 'ends_at', 'all_day', 'assignee_id'],
+    refine: (query) => query.not('assignee_id', 'is', null),
+    limit: 200,
+  });
+  if (conflictRead.error) console.error('[notifications] conflict read failed', { familyId, error: conflictRead.error });
+  const conflictEvents = conflictRead.data ?? [];
+  const seriesIds = new Set(conflictEvents.filter(isSeries).map((e) => e.id));
   const nameByMember = new Map((members ?? []).map((m) => [m.id, m.display_name]));
-  for (const c of detectConflicts((conflictEvents ?? []) as ConflictEvent[])) {
-    const key = `conflict:${[...c.eventIds].sort().join('-')}`;
+  for (const c of detectConflicts(conflictEvents as ConflictEvent[])) {
+    const ids = [...c.eventIds].sort();
+    // A clash with a series recurs on each of its dates, so its key carries
+    // the date — the family's day of the clash, as the series reminder's key
+    // does; a clash of one-offs keeps the key it has always had, so the ones
+    // already sent are not sent again.
+    const key = ids.some((id) => seriesIds.has(id))
+      ? `conflict:${ids.join('-')}:${occurrenceDay({ starts_at: c.startsAt, all_day: false }, tz)}`
+      : `conflict:${ids.join('-')}`;
     const who = nameByMember.get(c.assigneeId);
     const body = `${who ? `${who}: ` : ''}${c.eventIds.length} events overlap ${timeLabel(c.startsAt, tz)}`;
     const target = userByMember.get(c.assigneeId) ?? null;

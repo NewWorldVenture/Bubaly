@@ -90,6 +90,7 @@ const RELATED_ROUTES: Record<string, (id: string | null) => string> = {
   documents: () => '/dashboard/documents',
   family: () => '/dashboard/family',
   family_photos: () => '/dashboard/photos',
+  family_message: () => '/dashboard/messages',
   family_reminders: () => '/dashboard/reminders',
   feedback_idea: () => '/feedback',
   gift_payments: () => '/wallet',

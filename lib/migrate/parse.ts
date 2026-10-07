@@ -7,7 +7,7 @@
 // calendar's timed events are usually published in a named zone
 // (`DTSTART;TZID=America/New_York:…`), and reading them as UTC put every one of
 // them hours off on the family's new calendar.
-import { instantForLocalTime, isValidTimezone } from '@/lib/time/zoned';
+import { instantForIcsLocalTime, isValidTimezone } from '@/lib/time/zoned';
 
 export type ImportedEvent = {
   title: string;
@@ -32,10 +32,12 @@ function unescapeText(v: string): string {
  *   DATE            20260620                 → all-day, midnight UTC of that date
  *   UTC DATE-TIME   20260620T143000Z         → that instant
  *   zoned DATE-TIME 20260620T143000 + TZID   → the instant at which the clock in
- *                                              that zone reads 14:30. A reading
- *                                              the zone skips at spring-forward
- *                                              resolves to the first minute that
- *                                              exists, as the rest of the app does.
+ *                                              that zone reads 14:30. On a DST
+ *                                              night RFC 5545 §3.3.5 decides
+ *                                              (instantForIcsLocalTime): a reading
+ *                                              shown twice is the FIRST instant,
+ *                                              one skipped takes the offset in
+ *                                              force BEFORE the gap.
  *   floating        20260620T143000, no TZID → read as UTC, as before: there is
  *                                              no observer to be local to here.
  *
@@ -57,7 +59,7 @@ function parseIcsDate(raw: string, isDateOnly: boolean, tzid: string | null): { 
   if (!m) return null;
   const [, y, mo, d, h, mi, s, z] = m;
   if (!z && tzid && isValidTimezone(tzid)) {
-    const at = instantForLocalTime(+y, +mo, +d, +h * 60 + +mi, tzid);
+    const at = instantForIcsLocalTime(+y, +mo, +d, +h * 60 + +mi, tzid);
     if (at) return { iso: new Date(at.getTime() + +s * 1000).toISOString(), allDay: false };
   }
   const date = new Date(Date.UTC(+y, +mo - 1, +d, +h, +mi, +s));

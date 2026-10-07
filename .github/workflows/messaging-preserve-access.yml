@@ -109,7 +109,7 @@ jobs:
           set -euo pipefail
           ai_copy_pg_bin="$(dirname "$(command -v psql)")"
           [[ -x "$ai_copy_pg_bin/createdb" && -x "$ai_copy_pg_bin/dropdb" ]]
-          # The standalone runner verifies this service again, applies 0478
+          # The standalone runner verifies this service again, applies reserved 0493
           # twice and requires both old-policy disclosure controls to fail.
           node scripts/verify-ai-copy-private-read.mjs \
             --postgres-bin "$ai_copy_pg_bin" \

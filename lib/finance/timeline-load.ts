@@ -40,7 +40,7 @@
 import type { SupabaseClient } from '@supabase/supabase-js';
 import { settleAll } from '@/lib/supabase/settle';
 import type { Database } from '@/lib/database.types';
-import { isMissingTableError } from '@/lib/supabase/errors';
+import { isMissingDueDayColumn, billAnchorDay, billCadence, MONTH_BASED_CADENCES } from '@/lib/finance/recurring';
 import { monthlyCostCents } from './subscriptions';
 import {
   buildCashflowTimeline,
@@ -55,27 +55,8 @@ import {
 import type { LocaleCode } from '@/lib/i18n/locales';
 import { dayKeyInZone, zonedTimeMs } from '@/lib/schedule/zoned';
 import { readAllAsQuery } from '@/lib/supabase/read-all';
-import { isMissingBillDueDay } from './bills';
-import { billCadence, MONTH_BASED_CADENCES } from './bill-schedule';
 
 type Client = SupabaseClient<Database>;
-
-async function readTimelineBills(supabase: Client, familyId: string) {
-  const columns = 'name, amount, due_date, is_recurring, recurrence, status, category, autopay';
-  const first = await supabase.from('bills').select(`${columns}, due_day`).eq('family_id', familyId).limit(1000);
-  if (!isMissingBillDueDay(first.error)) return first;
-  const legacy = await supabase.from('bills').select(columns).eq('family_id', familyId).limit(1000);
-  if (legacy.error) return legacy;
-  const needsAnchor = (legacy.data ?? []).some((row) => {
-    const cadence = billCadence(row as unknown as TimelineBill);
-    return cadence && MONTH_BASED_CADENCES.has(cadence);
-  });
-  // The current due date remains visible in the bill lists. A forecast cannot
-  // promise future monthly dates when this database cannot retain their anchor.
-  return needsAnchor
-    ? { data: null, error: new Error('Recurring bill anchors are unavailable; the full money forecast cannot be built yet.') }
-    : legacy;
-}
 
 /** Statuses under which a plan still commits money the forecast must carry. */
 export const OPEN_VACATION_STATUSES = ['planning', 'booked'] as const;
@@ -208,6 +189,49 @@ export function planCommitments(rows: {
   return plans;
 }
 
+const BILL_COLUMNS = 'name, amount, due_date, due_day, is_recurring, recurrence, status, category, autopay';
+const BILL_COLUMNS_BEFORE_0488 = 'name, amount, due_date, is_recurring, recurrence, status, category, autopay';
+
+/**
+ * A TABLE this database does not have (PGRST205 from PostgREST, 42P01 from
+ * Postgres): a plan module whose migration is not applied, read as "no
+ * commitments from that module". Nothing else is. The shared
+ * isMissingTableError also accepts a missing COLUMN (PGRST204, 42703), and
+ * here that would turn a bills read that failed on, say, `autopay` into an
+ * empty list of bills: a complete-looking forecast with the rent missing. A
+ * missing column is a failed read and is thrown like one; the one column the
+ * app is written to live without, `bills.due_day`, is retried in `readBills`
+ * before it gets here.
+ */
+function isMissingTable(error: unknown): boolean {
+  if (!error || typeof error !== 'object') return false;
+  const { code, message } = error as { code?: unknown; message?: unknown };
+  if (code === 'PGRST205' || code === '42P01') return true;
+  // An error without a code is the client's own; only its "no such table" wording counts.
+  return code === undefined && typeof message === 'string' && /could not find the table/i.test(message);
+}
+
+/**
+ * The bills the forecast steps, with each one's anchor day (`due_day`, 0488).
+ * On a database that has not applied 0488 the column is refused (PGRST204 /
+ * 42703); the read is repeated without it, once, with a warning naming the
+ * migration. Ambiguous legacy days and unknown cadences refuse a complete
+ * forecast. Proven date anchors can be projected; writes that could lose them
+ * still refuse until 0488 exists.
+ */
+async function readBills(supabase: SupabaseClient<Database>, familyId: string): Promise<{ data: unknown[] | null; error: unknown }> {
+  const first = await supabase.from('bills').select(BILL_COLUMNS).eq('family_id', familyId).limit(1000);
+  if (!first.error || !isMissingDueDayColumn(first.error)) return first;
+  console.warn('bills.due_day is not in this database yet (migration 0488_a_month_end_bill_keeps_its_day, reserved and held in supabase/reserved until 0475–0487 land, has not been applied); the forecast uses only proven date anchors and refuses ambiguous legacy schedules.');
+  const legacy = await supabase.from('bills').select(BILL_COLUMNS_BEFORE_0488).eq('family_id', familyId).limit(1000);
+  if (legacy.error) return legacy;
+  const ambiguous = (legacy.data ?? []).some(row => {
+    const cadence = billCadence(row);
+    return row.is_recurring && (!cadence || (MONTH_BASED_CADENCES.has(cadence) && billAnchorDay(row) === null));
+  });
+  return ambiguous ? {data:null,error:new Error('Recurring bill anchors are unavailable; confirm the schedule before building the full forecast.')} : legacy;
+}
+
 /**
  * Fetch bills + goals + upcoming events + balances + plan-linked commitments
  * and return the pure brain's input, so a caller can build the timeline as-is
@@ -234,7 +258,12 @@ export async function loadMoneyTimelineInput(
   const horizonEndIso = new Date(zonedTimeMs(shiftFamilyDay(horizonEndKey, 1, tz), 0, 0, tz)).toISOString();
 
   const [billsQ, goalsQ, acctQ, eventsQ, subsQ, vacQ, vacBudgetQ, vacSpendQ, movesQ, projectsQ] = await settleAll([
-    readTimelineBills(supabase, familyId),
+    // `due_day` (0488) is the anchor a month-end bill steps by; without it the
+    // forecast steps a clamped Feb 28 row by the 28th for good (review
+    // 5981518473 on #932). A database that has not applied 0488 refuses the
+    // column, and the read is repeated without it: that database holds no
+    // anchor to lose.
+    readBills(supabase, familyId),
     supabase.from('savings_goals')
       .select('name, target_amount, current_amount, target_date')
       .eq('family_id', familyId).limit(500),
@@ -280,7 +309,7 @@ export async function loadMoneyTimelineInput(
     ['subscriptions_tracked', subsQ], ['vacations', vacQ], ['vacation_budgets', vacBudgetQ], ['vacation_expenses', vacSpendQ],
     ['moves', movesQ], ['home_projects', projectsQ],
   ];
-  const failed = reads.find(([table, q]) => q.error && (table === 'bills' || !isMissingTableError(q.error)));
+  const failed = reads.find(([table, q]) => q.error && (table === 'bills' || !isMissingTable(q.error)));
   if (failed) {
     console.error('[finance/timeline] money timeline read failed', { table: failed[0], error: failed[1].error });
     throw failed[1].error;

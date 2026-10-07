@@ -1,16 +1,12 @@
 # Messaging participant preservation candidate
 
-The owner selected preservation of existing participant access and a new, empty
-Family Chat. The composed source includes main `d4ec0b65`, the recurring-bill candidate at
-0475, participant preservation at 0476 and private approval reads at 0477.
-It has not been applied to a hosted database.
-
-`supabase/migrations/0476_preserve_messaging_participants.sql` follows the
-unapplied bill migration at generation 0475 in the composed release candidate.
-The earlier provisional messaging number 0492 was changed before publication.
-Closed messaging PRs and active authors' migration files were not changed.
-Production catalog and migration history still require separate verification
-before either candidate can be released.
+The owner selected preservation of existing participant access and a new empty
+Family Chat. The current composition uses runnable messaging0475 and0476:
+`supabase/migrations/0475_messaging_conversation_privacy_and_delivery.sql` and
+`supabase/migrations/0476_messaging_notifications_preferences.sql`.
+The old preservation candidate remains an immutable historical receipt; its
+hardening is composed into these actual files rather than a second0476.
+No hosted migration or production catalog acceptance is claimed.
 
 Existing conversations, rosters, messages and metadata are preserved during
 migration. Names, full household rosters and creation order never promote a
@@ -42,9 +38,9 @@ service SQL role may act without a user, and that system actor may send only to
 the canonical chat. A JWT role claim does not grant that authority. An absent
 canonical, send or retry-probe RPC is a visible error, with no raw-read or
 raw-insert retry. Retry reads use the same actor and conversation locks and
-compare the exact sender, text, kind and nullable reply. A deterministic match
-in the ten-minute window is a natural retry check; it is not a durable key or an
-exactly-once guarantee. Shared
+compare the exact sender, text, kind and nullable reply. Explicit retry keys now have a durable unique sender/conversation binding;
+key reuse with a different payload is refused. Keyless legacy retries still use
+a ten-minute natural match and do not promise exactly-once delivery. Shared
 activity descriptions omit message content.
 
 The AI tool's natural key now includes reply identity; a synthetic key comparison
@@ -85,15 +81,16 @@ does not establish compatibility with every migration or the hosted catalog.
 
 The browser rejects obsolete thread loads and removed-channel callbacks after
 family, user or thread changes. It also rejects events stamped for a different
-family or conversation. Read-receipt fallback is limited to an absent RPC;
-authorization and transport errors do not trigger row-by-row retries.
+family or conversation. Read receipts require the authorized RPC; missing functions, authorization
+and transport errors are visible failures without row-by-row retries.
 Failed sends also retain their original family, user and thread scope: obsolete
 responses cannot restore private drafts/replies or release a newer send's busy
 state. GIF, upload, recording and presence callbacks follow that same scope.
 
 The `family-media` bucket remains PUBLIC, as requested. This candidate does not
-make known public attachment URLs private, alter storage policies, configure
-Realtime authorization or prove hosted provider behavior. The wider messaging
+make known public attachment URLs private. The composed SQL adds participant
+Storage and private Realtime policies, but their actual hosted catalog and
+provider enforcement are unverified. The wider messaging
 goal remains subject to those constraints and production verification.
 
 Run the synthetic authorization fixture in an empty disposable PostgreSQL DB:

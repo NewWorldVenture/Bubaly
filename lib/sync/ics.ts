@@ -23,6 +23,15 @@ export type IcsEvent = {
   /** Last modification ISO timestamp (drives DTSTAMP / LAST-MODIFIED). */
   updatedAt?: string | null;
   status?: 'confirmed' | 'tentative' | 'cancelled';
+  /** The original occurrence replaced by this component; resolved with the same strict temporal parser. */
+  recurrenceId?: string | null;
+  /** Presence only: this parser does not implement recurrence date sets. */
+  hasExdates?: boolean;
+  hasRdates?: boolean;
+  hasExrule?: boolean;
+  hasDuration?: boolean;
+  /** Duplicate rules cannot be represented by the single recurrenceRule value. */
+  recurrenceRuleCount?: number;
 };
 
 export type IcsCalendarOptions = {
@@ -152,8 +161,8 @@ function parseDateProperty(value: string, params: Record<string, string>, clock:
 }
 
 /** Parse a UTC/DATE token; legacy floating values keep their UTC assumption. */
-export function parseIcsDate(value: string): { iso: string; allDay: boolean } {
-  return parseDateProperty(value, {}, new IcsClock(), new Set());
+export function parseIcsDate(value: string, tzid?: string | null): { iso: string; allDay: boolean } {
+  return parseDateProperty(value, tzid ? { TZID: tzid } : {}, new IcsClock(), new Set());
 }
 
 function contentLine(line: string): { name: string; value: string; params: Record<string, string> } | null {
@@ -163,13 +172,13 @@ function contentLine(line: string): { name: string; value: string; params: Recor
     else if (line[i] === ':' && !quoted) { colon = i; break; }
   }
   if (colon === -1) {
-    if (/^(DTSTART|DTEND)(?:;|:|$)/i.test(line)) throw new Error('Invalid ICS date property');
+    if (/^(DTSTART|DTEND|RECURRENCE-ID)(?:;|:|$)/i.test(line)) throw new Error('Invalid ICS date property');
     return null;
   }
   const left = line.slice(0, colon);
   const name = left.split(';')[0].toUpperCase();
   const params: Record<string, string> = Object.create(null) as Record<string, string>;
-  if (name === 'DTSTART' || name === 'DTEND') {
+  if (name === 'DTSTART' || name === 'DTEND' || name === 'RECURRENCE-ID') {
     // A quoted parameter may contain semicolons or colons. Do not truncate it
     // into a different zone, and reject duplicate/empty temporal parameters.
     const parts: string[] = [];
@@ -211,7 +220,15 @@ function timezoneDeclarations(lines: readonly string[]): Set<string> {
   return declarations;
 }
 
-export function parseICS(text: string): IcsEvent[] {
+export class UnsupportedIcsRecurrenceError extends Error {}
+
+export type ParseIcsOptions = {
+  bareCancellations?: boolean;
+  /** Validate every component before unplaceable components can be omitted. */
+  validateEvent?: (event: Readonly<Partial<IcsEvent>>) => void;
+};
+
+export function parseICS(text: string, opts: ParseIcsOptions = {}): IcsEvent[] {
   // Unfold: a CRLF (or LF) followed by space/tab continues the previous line.
   const unfolded = text.replace(/\r\n/g, '\n').replace(/\n[ \t]/g, '');
   const lines = unfolded.split('\n');
@@ -227,17 +244,26 @@ export function parseICS(text: string): IcsEvent[] {
       continue;
     }
     if (line === 'END:VEVENT') {
-      if (cur && cur.uid && cur.startsAt && cur.title) {
+      if (cur) opts.validateEvent?.(cur);
+      const placeable = !!(cur && cur.uid && cur.startsAt && cur.title);
+      const cancellation = !!(cur && cur.uid && cur.status === 'cancelled' && opts.bareCancellations);
+      if (cur && (placeable || cancellation)) {
         events.push({
-          uid: cur.uid,
-          title: cur.title,
+          uid: cur.uid as string,
+          title: cur.title ?? '',
           description: cur.description ?? null,
           location: cur.location ?? null,
-          startsAt: cur.startsAt,
+          startsAt: cur.startsAt ?? cur.recurrenceId ?? '',
           endsAt: cur.endsAt ?? null,
           allDay: cur.allDay ?? false,
           recurrenceRule: cur.recurrenceRule ?? null,
           status: cur.status,
+          recurrenceId: cur.recurrenceId ?? null,
+          ...(cur.hasExdates ? { hasExdates: true } : {}),
+          ...(cur.hasRdates ? { hasRdates: true } : {}),
+          ...(cur.hasExrule ? { hasExrule: true } : {}),
+          ...(cur.hasDuration ? { hasDuration: true } : {}),
+          ...(cur.recurrenceRuleCount && cur.recurrenceRuleCount > 1 ? { recurrenceRuleCount: cur.recurrenceRuleCount } : {}),
         });
       }
       cur = null;
@@ -271,7 +297,24 @@ export function parseICS(text: string): IcsEvent[] {
       case 'DTEND':
         cur.endsAt = parseDateProperty(value, params, clock, declaredZones).iso;
         break;
+      case 'RECURRENCE-ID':
+        if (params.RANGE) throw new UnsupportedIcsRecurrenceError('Unsupported ICS recurrence range');
+        cur.recurrenceId = parseDateProperty(value, params, clock, declaredZones).iso;
+        break;
+      case 'DURATION':
+        cur.hasDuration = true;
+        break;
+      case 'EXRULE':
+        cur.hasExrule = true;
+        break;
+      case 'EXDATE':
+        cur.hasExdates = true;
+        break;
+      case 'RDATE':
+        cur.hasRdates = true;
+        break;
       case 'RRULE':
+        cur.recurrenceRuleCount = (cur.recurrenceRuleCount ?? 0) + 1;
         cur.recurrenceRule = value;
         break;
       case 'STATUS':

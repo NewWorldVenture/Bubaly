@@ -94,17 +94,34 @@ begin
     failures := failures + 1;
   end if;
 
-  -- 5. Writes were already family-scoped, and must stay that way.
+  -- 5. Writes were already family-scoped, and must stay that way. Exercise
+  -- the policy instead of requiring the membership helper's name inline:
+  -- 0475 now delegates family + conversation authorization to a private helper.
+  -- The successful own-family INSERT ensures a denial is not a missing grant.
   reset role;
-  if not exists (
-    select 1 from pg_policies
-     where schemaname = 'storage' and tablename = 'objects' and cmd = 'INSERT'
-       and coalesce(with_check, '') like '%family-media%'
-       and coalesce(with_check, '') like '%is_family_member%'
-  ) then
-    raise warning 'BREACH: the INSERT policy on family-media no longer scopes to the uploader''s family';
+  perform set_config('request.jwt.claim.sub', parent_a::text, true);
+  set local role authenticated;
+  insert into storage.objects (bucket_id, name, owner)
+    values ('family-media', family_a::text || '/photos/probe-sec001-own-upload.jpg', parent_a);
+  get diagnostics n = row_count;
+  if n <> 1 then
+    raise warning 'CONTROL FAILED: a member cannot upload into their own family';
     failures := failures + 1;
   end if;
+  reset role;
+  perform set_config('request.jwt.claim.sub', parent_b::text, true);
+  set local role authenticated;
+  begin
+    insert into storage.objects (bucket_id, name, owner)
+      values ('family-media', family_a::text || '/photos/probe-sec001-foreign-upload.jpg', parent_b);
+    raise warning 'BREACH: a member uploaded into another family';
+    failures := failures + 1;
+  exception when insufficient_privilege then null;
+  end;
+  reset role;
+  -- Teardown: clear the simulated member so nothing after this runs as them.
+  perform set_config('request.jwt.claim.sub', '', true);
+  perform set_config('request.jwt.claims', '', true);
 
   if failures > 0 then
     raise exception 'family-media is readable beyond the family: % finding(s)', failures;

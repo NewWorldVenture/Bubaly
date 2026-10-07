@@ -63,6 +63,7 @@ import type { Tables, SubscriptionStatus, AccountType, TransactionType, BudgetPe
 import { categoryLabel } from '@/lib/finance/category-label';
 import { billPaidPatch, billDateForAnchorDay, newBillDueDay } from '@/lib/finance/hub';
 import { isMissingBillDueDay, saveBillPayment } from '@/lib/finance/bills';
+import { writeBillPatch } from '@/lib/finance/recurring';
 import { BillPaymentModal } from '@/components/finance/bill-payment-modal';
 import { useLocale, useTranslations } from '@/components/i18n/locale-provider';
 import { FamilyDeliveredValue } from '@/components/billing/family-delivered-value';
@@ -443,6 +444,8 @@ function AddBillModal({ open, onClose, familyId, userId, onDone }: {
 }) {
   const tr = useTranslations();
   const { success, error: toastError } = useToast();
+  const alive = useRef(true);
+  useEffect(() => { alive.current = true; return () => { alive.current = false; }; }, []);
   const [saving, setSaving] = useState(false);
   const [name, setName] = useState('');
   const [amount, setAmount] = useState('');
@@ -459,19 +462,25 @@ function AddBillModal({ open, onClose, familyId, userId, onDone }: {
     e.preventDefault();
     if (!name.trim() || !amount || !dueDate) return;
     setSaving(true);
-    const supabase = createClient();
-    const dueDay = needsDay ? Number(anchorDay) : null;
-    const { error } = await supabase.from('bills').insert({
-      family_id: familyId, created_by: userId,
-      name: name.trim(), amount: parseFloat(amount), due_date: dueDate,
-      is_recurring: isRecurring, recurrence: isRecurring ? recurrence : null,
-      ...(dueDay !== null ? { due_day: dueDay } : {}),
-      status: 'upcoming', category,
-    });
-    setSaving(false);
-    if (error) return toastError(isMissingBillDueDay(error) ? tr('bills.scheduleUnavailable') : describeDbError(error));
-    success(tr('billingModule.billAdded'));
-    reset(); onClose(); onDone();
+    try {
+      const supabase = createClient();
+      const dueDay = needsDay ? Number(anchorDay) : null;
+      const { error } = await writeBillPatch({
+        family_id: familyId, created_by: userId,
+        name: name.trim(), amount: parseFloat(amount), due_date: dueDate,
+        is_recurring: isRecurring, recurrence: isRecurring ? recurrence : null,
+        ...(dueDay !== null ? { due_day: dueDay } : {}),
+        status: 'upcoming' as const, category,
+      }, p => supabase.from('bills').insert(p));
+      if (!alive.current) return;
+      if (error) return toastError(isMissingBillDueDay(error) ? tr('bills.scheduleUnavailable') : describeDbError(error));
+      success(tr('billingModule.billAdded'));
+      reset(); onClose(); onDone();
+    } catch {
+      if (alive.current) toastError(tr('errors.thatChangeWasNotSaved'));
+    } finally {
+      if (alive.current) setSaving(false);
+    }
   }
 
   return (
@@ -1726,7 +1735,7 @@ export function BillingModule({ serviceFeeNotice = null }: { serviceFeeNotice?: 
       <AddAccountModal open={showAddAccount} onClose={() => setShowAddAccount(false)} familyId={familyId} userId={userId} onDone={() => void refreshAccounts()} />
       <AddTransactionModal open={showAddTransaction} onClose={() => setShowAddTransaction(false)} familyId={familyId} userId={userId} accounts={accounts} onDone={() => void refreshTransactions()} />
       <AddBudgetModal open={showAddBudget} onClose={() => setShowAddBudget(false)} familyId={familyId} userId={userId} onDone={() => void refreshBudgets()} />
-      <AddBillModal open={showAddBill} onClose={() => setShowAddBill(false)} familyId={familyId} userId={userId} onDone={() => void refreshBills()} />
+      <AddBillModal key={`${familyId}:${userId}:${showAddBill}`} open={showAddBill} onClose={() => setShowAddBill(false)} familyId={familyId} userId={userId} onDone={() => void refreshBills()} />
       {paymentBill && <BillPaymentModal key={paymentBill.id} bill={paymentBill} familyId={familyId} onClose={() => setPaymentBill(null)} onDone={() => { void refreshBills(); }} />}
       <AddSavingsGoalModal open={showAddGoal} onClose={() => setShowAddGoal(false)} familyId={familyId} userId={userId} onDone={() => void refreshGoals()} />
     </div>

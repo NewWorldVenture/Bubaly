@@ -1,6 +1,6 @@
 'use client';
 
-import { useMemo, useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import { useFamilyCalendarToday, useFamilyClock } from '@/components/i18n/use-format';
 import { FileText, Plus, Trash2, Check, RotateCcw, Repeat, Bell } from 'lucide-react';
 import { useApp } from '@/components/app/app-context';
@@ -16,6 +16,7 @@ import { cn } from '@/lib/utils/cn';
 import type { Tables } from '@/lib/database.types';
 import { usd as usdIn, billDueStatus, billPaidPatch, billDateForAnchorDay, newBillDueDay, BILL_CADENCES, DUE_META, fmtDueDate as fmtDueDateIn } from '@/lib/finance/hub';
 import { isMissingBillDueDay, saveBillPayment } from '@/lib/finance/bills';
+import { writeBillPatch } from '@/lib/finance/recurring';
 import { BillPaymentModal } from '@/components/finance/bill-payment-modal';
 import { useLocale, useTranslations } from '@/components/i18n/locale-provider';
 import { describeDbError, wroteNoRows } from '@/lib/supabase/errors';
@@ -164,7 +165,7 @@ export function BillsView({ mode }: { mode: BillsMode }) {
         <div className="space-y-2">{visible.map((b) => <Row key={b.id} b={b} />)}</div>
       )}
 
-      {form && <BillModal familyId={familyId} userId={userId} defaultAutopay={mode === 'autopay'} onClose={() => setForm(false)} />}
+      {form && <BillModal key={`${familyId}:${userId}`} familyId={familyId} userId={userId} defaultAutopay={mode === 'autopay'} onClose={() => setForm(false)} />}
       {paymentBill && <BillPaymentModal key={paymentBill.id} bill={paymentBill} familyId={familyId} onClose={() => setPaymentBill(null)} onDone={() => { void refresh(); }} />}
     </div>
   );
@@ -174,6 +175,8 @@ function BillModal({ familyId, userId, defaultAutopay, onClose }: { familyId: st
   const t = useTranslations();
   const { family } = useApp();
   const { success, error: toastError } = useToast();
+  const alive = useRef(true);
+  useEffect(() => { alive.current = true; return () => { alive.current = false; }; }, []);
   const [saving, setSaving] = useState(false);
   const [v, setV] = useState(() => {
     const dueDate = todayInZone(family?.timezone ?? 'UTC');
@@ -185,17 +188,23 @@ function BillModal({ familyId, userId, defaultAutopay, onClose }: { familyId: st
     e.preventDefault();
     if (!v.name.trim() || !v.amount) return toastError(t('billsView.addANameAndAmount'));
     setSaving(true);
-    const dueDay = needsDay ? Number(v.due_day) : null;
-    const { error } = await createClient().from('bills').insert({
-      family_id: familyId, name: v.name.trim(), amount: Math.abs(parseFloat(v.amount) || 0),
-      due_date: v.due_date, category: v.category, is_recurring: v.is_recurring, autopay: v.autopay,
-      recurrence: v.is_recurring ? v.recurrence : null, ...(dueDay !== null ? { due_day: dueDay } : {}),
-      status: 'upcoming', created_by: userId,
-    });
-    setSaving(false);
-    if (error) return toastError(isMissingBillDueDay(error) ? t('bills.scheduleUnavailable') : describeDbError(error));
-    success(t('billsView.billAdded'));
-    onClose();
+    try {
+      const dueDay = needsDay ? Number(v.due_day) : null;
+      const { error } = await writeBillPatch({
+        family_id: familyId, name: v.name.trim(), amount: Math.abs(parseFloat(v.amount) || 0),
+        due_date: v.due_date, category: v.category, is_recurring: v.is_recurring, autopay: v.autopay,
+        recurrence: v.is_recurring ? v.recurrence : null, ...(dueDay !== null ? { due_day: dueDay } : {}),
+        status: 'upcoming' as const, created_by: userId,
+      }, p => createClient().from('bills').insert(p));
+      if (!alive.current) return;
+      if (error) return toastError(isMissingBillDueDay(error) ? t('bills.scheduleUnavailable') : describeDbError(error));
+      success(t('billsView.billAdded'));
+      onClose();
+    } catch {
+      if (alive.current) toastError(t('errors.thatChangeWasNotSaved'));
+    } finally {
+      if (alive.current) setSaving(false);
+    }
   }
 
   return (

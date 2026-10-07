@@ -495,10 +495,50 @@ export function collectConflictTargets() {
   return sites;
 }
 
+/** These exact call sites are approved dependencies, not runnable migrations. */
+export const RESERVED_RPC_DEPENDENCIES = Object.freeze({
+  count_family_ai_requests_month: { caller: 'lib/server/ai-access.ts', sql: 'supabase/reserved/0493_ai_copy_private_read_and_quota.sql' },
+  ensure_sync_pull_container: { caller: 'lib/sync/persistence.ts', sql: 'supabase/reserved/0494_sync_atomic_pull.sql' },
+  create_sync_pull_item: { caller: 'lib/sync/persistence.ts', sql: 'supabase/reserved/0494_sync_atomic_pull.sql' },
+  calendar_feed_apply_sync: { caller: 'lib/server/calendar-feeds.ts', sql: 'supabase/reserved/0490_a_calendar_feed_sync_writes_only_while_it_holds_its_claim.sql' },
+});
+
+/** Audit literals and local string constants; held SQL never enters functions. */
+export function auditRpcCalls(src, file, functions, root = ROOT) {
+  const findings = [], reservedDependencies = [], unresolvedRpcCalls = [];
+  const calls = /\.rpc\(\s*(?:'([A-Za-z0-9_]+)'|"([A-Za-z0-9_]+)"|([A-Za-z_$][\w$]*))/g;
+  let match;
+  while ((match = calls.exec(src))) {
+    const symbol = match[3];
+    const binding = symbol ? new RegExp('\\bconst\\s+' + symbol.replace(/[$]/g, '\\$&') + '\\s*(?::[^=;]+)?=\\s*[\"\']([A-Za-z0-9_]+)[\"\']').exec(src) : null;
+    const name = match[1] ?? match[2] ?? binding?.[1];
+    if (!name) {
+      unresolvedRpcCalls.push({kind:'unresolved-rpc',file,line:src.slice(0,match.index).split('\n').length,detail:symbol});
+      continue;
+    }
+    if (functions.has(name)) continue;
+    const site = { file, line: src.slice(0, match.index).split('\n').length, detail: name };
+    const approved = Object.hasOwn(RESERVED_RPC_DEPENDENCIES, name) ? RESERVED_RPC_DEPENDENCIES[name] : undefined;
+    if (approved?.caller === file) {
+      let candidate = '';
+      try { candidate = stripSql(readFileSync(join(root, approved.sql), 'utf8')); } catch { /* The missing candidate remains a failure below. */ }
+      const definition = new RegExp('create\\s+(?:or\\s+replace\\s+)?function\\s+public\\.' + name + '\\s*\\(', 'i');
+      if (definition.test(candidate)) {
+        reservedDependencies.push({ kind: 'reserved-function', ...site, migration: approved.sql, runnable: false });
+        continue;
+      }
+    }
+    findings.push({ kind: 'missing-function', ...site, ...(approved?.caller === file ? { reservedCandidate: approved.sql } : {}) });
+  }
+  return { findings, reservedDependencies, unresolvedRpcCalls };
+}
+
 export function auditSupabaseQueries() {
   const schema = readSchema();
   const routes = readApiRoutes();
   const findings = [];
+  const reservedDependencies = [];
+  const unresolvedRpcCalls = [];
   const readers = new Map();
 
   const routeMatchers = routes.map((route) => ({
@@ -573,12 +613,10 @@ export function auditSupabaseQueries() {
       }
     }
 
-    const rpcCall = /\.rpc\(\s*'([a-z0-9_]+)'/g;
-    while ((match = rpcCall.exec(src))) {
-      if (!schema.functions.has(match[1])) {
-        findings.push({ kind: 'missing-function', file: rel, line: lineAt(match.index), detail: match[1] });
-      }
-    }
+    const rpcAudit = auditRpcCalls(src, rel, schema.functions);
+    findings.push(...rpcAudit.findings);
+    reservedDependencies.push(...rpcAudit.reservedDependencies);
+    unresolvedRpcCalls.push(...rpcAudit.unresolvedRpcCalls);
 
     const fetchCall = /fetch\(\s*(['`])(\/api\/[^'`]*)\1/g;
     while ((match = fetchCall.exec(src))) {
@@ -620,7 +658,7 @@ export function auditSupabaseQueries() {
     }
   }
 
-  return { findings, schema, routes };
+  return { findings, schema, routes, reservedDependencies, unresolvedRpcCalls };
 }
 
 const LABELS = {
@@ -633,13 +671,25 @@ const LABELS = {
 };
 
 function runCli() {
-  const { findings, schema, routes } = auditSupabaseQueries();
+  const { findings, schema, routes, reservedDependencies, unresolvedRpcCalls } = auditSupabaseQueries();
   console.log(
     `Supabase query audit: ${schema.columns.size} tables, ${schema.functions.size} functions, ${routes.length} API routes.`,
   );
 
+  if (reservedDependencies.length) {
+    console.warn('\nApproved held RPC dependencies (not in the runnable migration schema; deployment is not verified):');
+    for (const held of reservedDependencies) console.warn('  ' + held.detail + ' at ' + held.file + ':' + held.line + ' -> ' + held.migration);
+  }
+
+  if (unresolvedRpcCalls.length) {
+    console.warn('\nDynamic RPC names not resolved by this static audit:');
+    for (const call of unresolvedRpcCalls) console.warn('  ' + call.detail + ' at ' + call.file + ':' + call.line + ' (unverified; not approved as a held dependency)');
+  }
+
   if (findings.length === 0) {
-    console.log('Supabase query audit passed: every table, column, function and route resolves.');
+    console.log(reservedDependencies.length || unresolvedRpcCalls.length
+      ? 'No unapproved statically named query problems. ' + reservedDependencies.length + ' held RPC call site(s), ' + unresolvedRpcCalls.length + ' unresolved dynamic RPC call site(s); production function availability is unverified.'
+      : 'Supabase query audit passed: every table, column, function and route resolves in the repository migration schema.');
     return;
   }
 

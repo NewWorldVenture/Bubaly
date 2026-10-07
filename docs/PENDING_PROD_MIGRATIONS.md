@@ -1,97 +1,38 @@
 # Production release status and historical feature inventory
 
-## Unapplied #969 composition and rollout dependencies — 2026-10-04
+## Current allocation and rollout holds — 2026-10-07
 
-The current source candidate includes main `7dfa47db` and these consecutive
-unapplied generations. This inventory is not hosted catalog or migration-ledger
-acceptance; all historical prerequisites still need reconciliation in order.
+The owner confirmed preservation of main's allocation map. Messaging occupies
+0475–0476. No other candidate is promoted into the runnable sequence. These
+source allocations are not evidence that production applied any migration.
 
 | Generation | Source file | Release dependency |
 |---|---|---|
-| 0475 | `0475_preserve_recurring_bill_anchor.sql` | Nullable 1–31 bill anchors; no default or historical backfill. |
-| 0476 | `0476_preserve_messaging_participants.sql` | Preserve recorded audiences; separate empty canonical chat; validate real lifecycle triggers, grants and retired overloads. |
-| 0477 | `0477_approval_requests_private_read.sql` | Active requester/manager approval reads through real member identity. |
-| 0478 | `0478_ai_copy_private_read_and_quota.sql` | Restrictive AI-copy reads and count-only active-family UTC usage RPC. |
-| 0479 | `0479_sync_atomic_pull.sql` | Service-only account/container admission and atomic new event/reminder mapping pairs; retry lock errors retain replay. |
+| 0475 | `0475_messaging_conversation_privacy_and_delivery.sql` | Original recorded audience unions; separate empty Family Chat; actor locks, idempotent send and participant operations. |
+| 0476 | `0476_messaging_notifications_preferences.sql` | Typed notification keys, private mute preferences and participant delivery. |
+| 0488 held | `0488_a_month_end_bill_keeps_its_day.sql` | Nullable original bill anchors; older-schema writes refuse losing a chosen anchor. |
+| 0490 held | `0490_a_calendar_feed_sync_writes_only_while_it_holds_its_claim.sql` | Atomic fenced feed writes; missing RPC refuses writes. |
+| 0492 held | `0492_approval_requests_private_read.sql` | Requester/manager approval reads; production policies unverified. |
+| 0493 held | `0493_ai_copy_private_read_and_quota.sql` | Private AI copies and count-only usage; missing receipt refuses capped-Free requests. |
+| 0494 held | `0494_sync_atomic_pull.sql` | Service-only admission and atomic item/map creation; missing RPC preserves cursor and refuses writes. |
 
-Standard calendar/reminder sync also requires the two 0479 RPCs before the
-corresponding application source is enabled. Missing RPCs fail visibly and
-retain the cursor; there is no separate-item/map fallback. Require actual
-catalog/FK/default-grant compatibility and the standalone deletion/race
-contract before rollout. This protects new pairs only; existing-item updates,
-cursor batches and outbound provider effects remain separate transactions.
+Held files remain in `supabase/reserved/`; normal migration replay and
+`supabase db push` do not load them. Reserved gaps must be fulfilled by their
+actual owners before promotion. No filler migrations or resequencing.
+Failure controls do not prove held privacy policies or production RPCs exist.
+Actual catalog, ACL, FK and migration-ledger acceptance remain rollout gates.
+Calendar source-zone, finite recurrence and exception fidelity remain open.
+New feed snapshots with timed/complex recurrence, exception identities or
+EXDATE/RDATE refuse before event writes or deletions. Only singles, bare
+cancelled masters and verified all-day exact DAILY/WEEKLY rules are admitted.
+Existing stored lossy series are not repaired by that refusal; reviewed source
+metadata, recurrence storage and data reconciliation are still needed.
 
-The capped Free-plan application gate now requires
-`count_family_ai_requests_month`. Missing, malformed or unavailable receipts
-fail closed. Verify the actual RPC, effective ACLs and prerequisite schema
-before enabling that application source; deploying it ahead of its database
-contract would refuse capped Free requests. The count remains separate from
-request insertion and does not provide an atomic quota reservation.
-
-[Claude #970](https://github.com/NewWorldVenture/Bubaly/pull/970) at
-`246e7cdc65c162801b63017b02375749bde7846f` now passes the thirteen reviewed
-synthetic callback/SDK controls. The combined #969 candidate retains its
-unique subscription UI/autopilot projection while preserving #969's explicit
-legacy bill choices, timestamp compare-and-swap and sole 0475 migration.
-The unchanged strict guard rejects composing both distinct 0475 files;
-#970 is to close as superseded after this combined candidate lands. Its author
-branch/history and applied historical migrations are unchanged. Prepared read-only metadata checks are in
-`docs/final-audit/messaging-bill-readonly-preflight.sql`; no hosted execution is
-recorded. See `finalaudit.md` for exact source, synthetic proofs and remaining
-production limits.
-
-> **Status correction, 2026-10-03** (blocked-rows eligibility review;
-> evidence in `docs/final-audit/blocked-rows-eligibility-20261003.md`).
-> The connectivity paragraph below is historical. The `Supabase production
-> migrations` workflow links again: run 84 on main `d25e39ea` (2026-10-02
-> 12:11 UTC) passed `supabase link`, `supabase migration list --linked` and
-> `node scripts/audit-production-migration-state.mjs --enforce-history`,
-> reading **192 ledger rows, `0001`–`0176`**, 444 public tables, 1,002
-> policies, `requiresBaselineReview: false`, and every money table "closed by
-> restrictive guard". So the ledger no longer records only `0001`–`0003`,
-> `0004` is recorded, and the replay-from-`0004` procedure in LB-016 §4.3 no
-> longer applies (DEPLOY-003 is moot on that point). The blocker is `0177`
-> (PROD-DB-0177): before the 2026-09-27 dispatch-only gate a push to main ran
-> the apply step itself, and every such run (64, `35465574540`, 2026-09-19,
-> and the ledger's `533554be` / `7e54596d` / `671c5f6a`) was cancelled inside
-> `0177`'s single `DO` block by the 120 s statement timeout (`SQLSTATE 57014`)
-> after its `families(created_by)` cleanup was skipped on
-> `family_model_dirty_family_id_fkey`, so nothing from `0177` on is applied.
-> No `workflow_dispatch` with `apply=true` has been run.
-> "Apply ordered migrations" runs only on `workflow_dispatch` with
-> `apply=true`; a push to main verifies and never applies. Run 84's own
-> failure is the later schema-verification step, HTTP 401 from PostgREST on
-> all 52 checks: PostgREST rejects the `SUPABASE_SERVICE_ROLE_KEY` the workflow
-> holds, so that repository secret needs replacing; the owner's action.
-
-**Current status (2026-09-05; main `01881fb279589d7a90acb8302817bb385fbe036d`).**
-**This baseline is stale — see "Migrations added since this document's stated
-baseline" at the end for the thirty-one migrations (`0255`-`0285`) that landed after
-it, three of which gate features already deployed in the app.**
-**Connectivity NO LONGER works, as of 2026-09-13.** The `Supabase production
-migrations` workflow fails before it reads anything, at `supabase link`:
-
-```
-Authorization failed for the access token and project ref pair:
-"Your account does not have the necessary privileges to access this endpoint."
-```
-
-Every apply and verify step after it is **skipped**, so no migration reaches
-production and the audit below cannot refresh itself. This is a regression, not
-the long-standing ledger gate: the 2026-09-07 run got *past* `link` and read the
-real catalogue (441 tables, 978 policies). Something changed for
-`SUPABASE_ACCESS_TOKEN` or `SUPABASE_PROJECT_REF` between those dates — the
-token was rotated or revoked, or its account lost access to the project.
-
-Fixing that alone is **not sufficient**: the baseline gate below still throws by
-design until `0004` is recorded, and repairing the ledger is a credentialed
-operator action (§4). Expect two steps, in that order.
-
-The secret names are `SUPABASE_ACCESS_TOKEN`, `SUPABASE_PROJECT_REF`,
-`SUPABASE_SERVICE_ROLE_KEY`, and `SUPABASE_ANON_KEY`; never include their values
-in this document, logs, or reports. Production's migration ledger records only
-`0001-0003` despite existing schema. A missing ledger entry does **not** establish
-that the corresponding schema or feature is absent.
+#970 merged into main at `82f2db1fcd0dca59179d2b391a76acfd459e480b`.
+Current #969 composition repairs newly reviewed bill regressions and selects
+reviewed #971 messaging/calendar changes without editing its author branch.
+Prior cfa receipts certify that historical source, not this new composition.
+See `finalaudit.md` for evidence and production holds.
 
 ## Wallet mint boundary — the finding, and what closes it
 
@@ -4108,9 +4049,43 @@ As of 2026-10-04 the 43 holes at or below `0474` are **retired**
 (`RETIRED_MIGRATION_VERSIONS` in `scripts/audit-migration-versions.mjs`): no
 file may take one, and the reservations that left them — `0465`–`0470`,
 `0472`, `0473` among them — are released. Above `0474` the sequence has no
-gaps. `npm run db:audit:migrations` fails on either, and work that once held a
-number takes the next free one when it lands. Nothing below changes what is
-already applied: production's ledger records `0001`–`0176`.
+gaps. `npm run db:audit:migrations` fails on either. Nothing below changes
+what is already applied: production's ledger records `0001`–`0176`.
+
+**Owner decision, 2026-10-04: existing allocations above `0474` are
+preserved.** It is recorded on #771 (5985652062) and was confirmed in the Claude
+session on #970. A branch that holds a reserved number keeps it; the number is
+not reassigned to whichever branch lands first. The preserved map:
+
+| Number | Holder |
+|---|---|
+| 0475, 0476 | messaging (#834): `messaging_conversation_privacy_and_delivery`, `messaging_notifications_preferences` |
+| 0477 | Surge (#892) |
+| 0478 | Meals atomic slot writes |
+| 0479 | Daniel |
+| 0480 | Surge |
+| 0481 | Meals delegated actor |
+| 0482, 0483 | Daniel |
+| 0484, 0485 | Support |
+| 0486 | voice read |
+| 0487 | card hold |
+| 0488 | bill anchor: `a_month_end_bill_keeps_its_day` |
+| 0489 | notification once per occurrence |
+| 0490 | calendar feed claim: `a_calendar_feed_sync_writes_only_while_it_holds_its_claim` |
+
+Still unresolved: #958's `0477` and the two `0491` candidates. Closing those PRs
+did not release the numbers.
+
+A migration whose reserved number is above the next free one cannot be released
+yet, for two reasons:
+- the guard refuses a skipped generation;
+- `supabase db push` refuses an out-of-order one.
+
+Such a file is **held** in `supabase/reserved/`, and its probe in
+`docs/audit/reserved/`. Neither the replay nor `db push` reads those
+directories. The file moves into `supabase/migrations/` under its reserved
+number when the sequence reaches it. Code that uses a held migration must work
+without it. `0488` is held this way; its entry is below.
 
 ### Published branch candidates that are not on main (2026-10-04)
 
@@ -4144,7 +4119,7 @@ Retiring a hole does not delete anything. These migration files remain on their 
 
 The colliding pairs are 0475 (meal-plan slot writes, messaging privacy), 0476 (meal-plan delegated actors, messaging notifications), 0477 (AI request admission, family-memory text) and 0491. Two published candidates hold 0491, neither allocation confirmed: #964 at 6e250a00b928970982855fc1e856ea6d5ceba09d (card hold and top-up deadlock, closed unmerged) and draft #969 at 854a990bd24906976231024eeb6c5943ae977da7 (recurring bill anchor). #969 also covers the month-end bill and calendar items below.
 
-The landing map for this session's lanes is owner-directed: the repository owner chose it in the Claude session on 2026-10-04. It lands the month-end bill, calendar feed and messaging migrations in that order as 0475, 0476, 0477 and 0478 (from 0488, 0490 and 0475/0476). The audit coordinator has asked the owner to confirm it across sessions (#968, 5984812135), so treat it as the proposed allocation until the migrations are on main.
+Historical evidence, superseded: a landing map proposed in the Claude session on 2026-10-04 would have renumbered the month-end bill, calendar feed and messaging migrations to 0475, 0476, 0477 and 0478 (from 0488, 0490 and 0475/0476). The owner did not adopt it; the decision above preserves the original reservations. Under it, messaging lands as `0475`/`0476`, and the bill anchor (`0488`) and feed claim (`0490`) are held in `supabase/reserved/` until their turn.
 
 ## `0471` and `0474` — the admin digest's delivery store, and a removed admin is not sent it
 
@@ -4165,3 +4140,27 @@ a digest frozen before their removal. Both are proven in CI's Database job by
 
 **After applying:** nothing visible changes until the digest route is
 switched to the per-recipient engine; the route keeps its current behaviour.
+
+## `0488` (reserved, held) — a month-end bill lost its day to a short month (#932)
+
+`supabase/reserved/0488_a_month_end_bill_keeps_its_day.sql` — **held**: reserved as `0488`, not
+in `supabase/migrations/` until `0475`–`0487` have landed, so neither the replay
+nor `db push` applies it. Its probe is held with it in `docs/audit/reserved/`.
+
+**Rollout hold:** older-schema payments cannot retain an anchor through a
+clamped month. The nullable checked `bills.due_day` column has no default or
+historical backfill; null means the original day is unknown. Month-based
+legacy dates on days28–30 require an explicit day. A stale snapshot or absent
+row stamp refuses before mutation. A missing due_day column may retry only
+when the resulting date itself keeps a proven original anchor; it never
+silently adopts the short month's last day as a new recurring schedule.
+
+The dialog keeps a user's explicit choice, but refuses a payment if the old
+schema would lose that choice. Applying held0488 is required to persist
+month-end anchors durably. The reserved probe checks the column and constraint;
+synthetic browser/unit controls check the actual callbacks and stale-write
+behavior. Neither is production compatibility evidence.
+
+**After approved release:** verify the actual column/default/check and rollout
+prerequisites, then test a31st-day bill through February and back to March31
+using synthetic data in the designated acceptance environment.

@@ -5,6 +5,7 @@
 // overloaded, which weekday is chronically heaviest, and where the calm
 // pockets are. The calendar module renders this as a compact heat strip.
 import { dayKeyIn, isValidTimezone } from '@/lib/time/zoned';
+import { allDayDate } from '@/lib/calendar/day';
 
 export interface HeatEvent {
   startsAt: string;          // ISO
@@ -57,9 +58,10 @@ function levelFor(minutes: number, count: number): 0 | 1 | 2 | 3 | 4 {
  * based (each occurrence lands on its start date, which is how families
  * read a calendar: "what starts that day").
  *
- * With `timeZone` (the family's, TIME-003) "today" and each start day are that
- * zone's calendar days; without it they are Greenwich's, as before. The grid
- * itself is keyed by date either way, so the arithmetic stays on UTC dates.
+ * With `timeZone` (the family's, TIME-003) "today" and each timed start day are
+ * that zone's calendar days; without it they are Greenwich's, as before. An
+ * all-day row is on its own date in both cases. The grid itself is keyed by
+ * date either way, so the arithmetic stays on UTC dates.
  */
 export function buildHeatmap(events: HeatEvent[], today = new Date(), weeks = 8, timeZone?: string): HeatmapReport {
   const dayCount = weeks * 7;
@@ -73,7 +75,9 @@ export function buildHeatmap(events: HeatEvent[], today = new Date(), weeks = 8,
   for (const e of events) {
     const d = new Date(e.startsAt);
     if (isNaN(d.getTime())) continue;
-    const key = zone ? dayKeyIn(d, zone) : dayKey(d);
+    // An all-day row is on its own date — the UTC date it is stored on — on
+    // every clock (lib/calendar/day.ts); a timed row on the family's day.
+    const key = e.allDay ? allDayDate(e.startsAt) : zone ? dayKeyIn(d, zone) : dayKey(d);
     if (key < startKey || key > todayKey) continue;
     const cur = byDay.get(key) ?? { count: 0, minutes: 0 };
     cur.count += 1;

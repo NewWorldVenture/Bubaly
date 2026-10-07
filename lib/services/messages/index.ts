@@ -121,15 +121,15 @@ export async function sendFamilyMessage(scope: ServiceScope, input: SendMessageI
     {
       operation: 'messages.sendFamilyMessage',
       input: { content, conversationId: targetId, kind, replyToId },
-      find: async () => {
-        // This ten-minute natural match is not a durable idempotency key. The
+      find: async (key) => {
+        // A durable operation key identifies the retry. The
         // RPC revalidates the actor under a lock even for service-role reads;
         // a removal after the preliminary read cannot return private history.
         const since = new Date((scope.now ?? new Date()).getTime() - 10 * 60_000).toISOString();
         const { data, error } = await scope.db.rpc('find_family_message', {
           p_family_id: scope.familyId, p_conversation_id: targetId,
           p_member_id: scope.memberId, p_user_id: scope.userId,
-          p_content: content, p_kind: kind, p_reply_to_id: replyToId, p_since: since,
+          p_content: content, p_kind: kind, p_reply_to_id: replyToId, p_since: since, p_idempotency_key: key,
         });
         if (error) {
           console.error('[service:messages] duplicate probe failed', error);
@@ -137,15 +137,26 @@ export async function sendFamilyMessage(scope: ServiceScope, input: SendMessageI
         }
         return ok(data?.[0] ?? null);
       },
+      changedRetry: {
+        drift: (found) => [
+          ...(found.conversation_id !== targetId ? ['conversation_id'] : []),
+          ...(found.content !== content ? ['content'] : []),
+          ...(found.kind !== kind ? ['kind'] : []),
+          ...(found.reply_to_id !== replyToId ? ['reply_to_id'] : []),
+          ...(found.deleted_at ? ['deleted_at'] : []),
+        ],
+        message: () => 'This send was already saved with different content or was deleted. Start a new message to send again.',
+        id: (found) => found.id,
+      },
     },
-    async () => {
+    async (key) => {
       // The actor read above gives useful errors; the RPC rechecks it under a
       // membership lock in the same transaction as INSERT, including service
       // clients that bypass RLS. Missing RPC/schema errors never retry a raw insert.
       const { data, error } = await scope.db.rpc('send_family_message', {
         p_family_id: scope.familyId, p_conversation_id: targetId,
         p_member_id: scope.memberId, p_user_id: scope.userId,
-        p_content: content, p_kind: kind, p_reply_to_id: replyToId,
+        p_content: content, p_kind: kind, p_reply_to_id: replyToId, p_idempotency_key: key,
       });
       if (error || !data) {
         console.error('[service:messages] send failed', error);

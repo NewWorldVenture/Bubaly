@@ -1,3 +1,4 @@
+import { readFileSync } from 'node:fs';
 import { describe, expect, it } from 'vitest';
 import {
   auditSupabaseQueries,
@@ -123,7 +124,6 @@ describe('the call sites this check is meant to cover', () => {
     // refresh needed the same ingest: a 'use server' module may only export
     // async functions, and every export it has is callable from the browser.
     ['lib/library/ingest.ts', 'library_items'],
-    ['lib/server/calendar-feeds.ts', 'calendar_events'],
     ['lib/marketing/automation-events.ts', 'marketing_automation_runs'],
     // lib/contact-center/server.ts used to be the fourth. The Contact Center
     // audit replaced its family_inbox_messages upsert with a lookup and an
@@ -132,6 +132,23 @@ describe('the call sites this check is meant to cover', () => {
     // rather than checking the collector.
   ])('still sees the upsert in %s', (file, table) => {
     expect(sites.some((site) => site.file === file && site.table === table)).toBe(true);
+  });
+
+  it('checks the feed conflict contract in its held atomic RPC instead of inventing a direct upsert', () => {
+    const source = readFileSync('lib/server/calendar-feeds.ts', 'utf8');
+    expect(source).toMatch(/\.rpc\(APPLY_SYNC_FUNCTION,\s*\{\s*p_feed_id:\s*feedId,\s*p_fence:\s*fence,\s*p_upserts:\s*upserts,\s*p_removals:\s*removals/);
+    expect(sites.some(site => site.file === 'lib/server/calendar-feeds.ts' && site.table === 'calendar_events')).toBe(false);
+    const audit = auditSupabaseQueries();
+    const held = audit.reservedDependencies.find(dependency => dependency.file === 'lib/server/calendar-feeds.ts' && dependency.detail === 'calendar_feed_apply_sync');
+    expect(held).toMatchObject({migration:'supabase/reserved/0490_a_calendar_feed_sync_writes_only_while_it_holds_its_claim.sql',runnable:false});
+    expect(audit.schema.functions.has('calendar_feed_apply_sync')).toBe(false);
+    const sql = readFileSync(held!.migration, 'utf8').replace(/--[^\n]*/g, '');
+    const target = /on conflict\s*\(([^)]+)\)\s*do update/i.exec(sql)?.[1];
+    expect(target).toBeDefined();
+    const indexes = audit.schema.uniqueIndexes.get('calendar_events') ?? [];
+    expect(conflictTargetVerdict(target!, indexes)).toEqual({ok:true});
+    // A missing index cannot pass just because the held SQL names a target.
+    expect(conflictTargetVerdict(target!, []).ok).toBe(false);
   });
 
   it('reads the ON CONFLICT statements in SEED_ALL.sql, whose errors the bootstrap swallows', () => {

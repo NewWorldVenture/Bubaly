@@ -105,7 +105,7 @@ describe('sendFamilyMessage', () => {
     expect(res.ok).toBe(true);
     expect(calls.find((c) => c.table === 'rpc:send_family_message')?.filters).toEqual({
       p_conversation_id: 'conv-canonical', p_family_id: 'fam-1', p_member_id: 'member-1', p_user_id: 'auth-user-1',
-      p_content: 'Dinner at 6!', p_kind: 'text', p_reply_to_id: null,
+      p_content: 'Dinner at 6!', p_kind: 'text', p_reply_to_id: null, p_idempotency_key: null,
     });
     expect(calls.some((c) => c.table === 'family_messages' && c.kind === 'insert')).toBe(false);
     const activity = calls.filter((c) => ['agent_activity', 'audit_logs'].includes(c.table));
@@ -182,13 +182,13 @@ describe('sendFamilyMessage', () => {
 
   it('returns the message a retried run already sent instead of sending again', async () => {
     const { db, calls } = makeDb((call) => {
-      if (call.table === 'rpc:find_family_message') return { data: [MESSAGE()], error: null };
+      if (call.table === 'rpc:find_family_message') return { data: [MESSAGE({ conversation_id: call.filters.p_conversation_id })], error: null };
       return successfulReply(call);
     });
     const res = await sendFamilyMessage(scopeWith(db, { runId: 'run-1', stepId: 'step-2' }), { content: 'Dinner at 6!' });
     expect(res.ok && res.data.id === 'msg-1').toBe(true);
     const probe = calls.find((c) => c.table === 'rpc:find_family_message');
-    expect(probe?.filters).toEqual({ p_family_id: 'fam-1', p_conversation_id: 'conv-canonical', p_content: 'Dinner at 6!', p_kind: 'text', p_reply_to_id: null, p_member_id: 'member-1', p_user_id: 'auth-user-1', p_since: '2026-09-05T11:50:00.000Z' });
+    expect(probe?.filters).toEqual({ p_family_id: 'fam-1', p_conversation_id: 'conv-canonical', p_content: 'Dinner at 6!', p_kind: 'text', p_reply_to_id: null, p_member_id: 'member-1', p_user_id: 'auth-user-1', p_since: '2026-09-05T11:50:00.000Z', p_idempotency_key: expect.stringMatching(/^[a-f0-9]{64}$/) });
     expect(calls.some((c) => c.table === 'family_messages')).toBe(false);
     expect(calls.some((c) => c.table === 'rpc:send_family_message')).toBe(false);
   });

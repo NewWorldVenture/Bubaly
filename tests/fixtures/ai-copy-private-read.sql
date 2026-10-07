@@ -96,7 +96,7 @@ insert into public.approval_requests(id,family_id,requested_by_member_id,payload
 update public.ai_requests set requested_by_member_id=fixture.id('alice-member');
 update public.family_automation_runs set requested_by_member_id=fixture.id('alice-member'), created_by=fixture.id('alice');
 update public.ai_tool_calls set requested_by_member_id=fixture.id('alice-member'), request_id='af000000-0000-4000-8000-000000000001', run_id='af000000-0000-4000-8000-000000000006', plan_step_id='af000000-0000-4000-8000-000000000003';
-\ir ../../supabase/migrations/0477_approval_requests_private_read.sql
+\ir ../../supabase/reserved/0492_approval_requests_private_read.sql
 set local role authenticated;
 select set_config('request.jwt.claim.sub',fixture.id('eve')::text,true);
 select fixture.assert_true((select count(*) from public.ai_requests)=1,'baseline child reads private requester text');
@@ -111,8 +111,8 @@ reset role;
 update public.family_members set is_active=true where id=fixture.id('alice-member');
 \if :skip_guard
 \else
-\ir ../../supabase/migrations/0478_ai_copy_private_read_and_quota.sql
-\ir ../../supabase/migrations/0478_ai_copy_private_read_and_quota.sql
+\ir ../../supabase/reserved/0493_ai_copy_private_read_and_quota.sql
+\ir ../../supabase/reserved/0493_ai_copy_private_read_and_quota.sql
 \endif
 \if :skip_guard
 \else

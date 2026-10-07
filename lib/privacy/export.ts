@@ -134,7 +134,7 @@ async function readSection(scope: ServiceScope, key: ExportSectionKey): Promise<
       return r.ok ? { ok: true, data: { data: r.data, count: r.data.length } } : r;
     }
     case 'calendar': {
-      const r = await searchEvents(scope, { from: dayKey(scope, -365), to: dayKey(scope, 365), limit: 200 });
+      const r = await searchEvents(scope, { from: dayKey(scope, -365), to: dayKey(scope, 365), limit: 200, expandSeries: false });
       return r.ok ? { ok: true, data: { data: r.data, count: r.data.length } } : r;
     }
     case 'todos': {

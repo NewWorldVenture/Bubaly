@@ -23,13 +23,13 @@ begin
   where lower(u.email) = lower(v_email) limit 1;
   if v_family is null then select id into v_family from public.families order by created_at limit 1; end if;
   if v_family is null then raise exception 'No families found.'; end if;
-  select array_agg(id) into v_members from public.family_members where family_id = v_family;
+  select array_agg(id) into v_members from public.family_members where family_id = v_family and is_active;
 
   select id into v_convo from public.family_conversations
     where family_id = v_family and name = 'Seed Chat' limit 1;
   if v_convo is null then
-    insert into public.family_conversations (family_id, name, kind, avatar_emoji)
-    values (v_family, 'Seed Chat', 'group', '💬') returning id into v_convo;
+    insert into public.family_conversations (family_id, name, kind, avatar_emoji, participant_ids)
+    values (v_family, 'Seed Chat', 'group', '💬', v_members) returning id into v_convo;
   end if;
 
   delete from public.family_messages where family_id = v_family and content like '%[seed:msg]%';

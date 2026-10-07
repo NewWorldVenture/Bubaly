@@ -44,7 +44,8 @@ function makeDb(respond: (call: Call) => Reply) {
     };
     Object.assign(b, {
       select: (_columns: unknown, options?: { count?: string }) => { counted = options?.count === 'exact'; return b; },
-      order: chain, limit: chain, range: chain, ilike: chain, or: chain,
+      order: chain, limit: chain, range: chain, ilike: chain,
+      or: (expression: string) => { call.filters.or = [...((call.filters.or as string[] | undefined) ?? []), expression]; return b; },
       eq: filter, is: filter, in: filter,
       neq: (c: string, v: unknown) => filter(`neq:${c}`, v),
       lt: (c: string, v: unknown) => filter(`lt:${c}`, v),
@@ -202,7 +203,25 @@ describe('searchEvents', () => {
   it('filters by family and defaults the window to now onwards', async () => {
     const { db, calls } = makeDb(() => ({ data: [EVENT_ROW], error: null }));
     const res = await searchEvents(scopeWith(db), { to: '2026-09-12T00:00:00Z', assigneeId: 'member-2' });
-    expect(res).toMatchObject({ ok: true });
+    expect(res).toMatchObject({ ok: true, data: [EVENT_ROW] });
+    // Two reads — the one-offs by the window, the series that could reach it —
+    // and both are family-scoped and narrowed to the assignee.
+    expect(calls.map((c) => c.table)).toEqual(['calendar_events', 'calendar_events']);
+    for (const call of calls) expect(call.filters).toMatchObject({ family_id: 'fam-1', assignee_id: 'member-2' });
+    const [singles, series] = calls;
+    // The window starts at the scope's `now`, and `to` is inclusive as it always was.
+    expect(singles.filters.or).toEqual([
+      expect.stringContaining(`starts_at.gte.${NOW.toISOString()},starts_at.lt.2026-09-12T00:00:00.001Z`),
+      'recurrence.is.null,recurrence.eq.none',
+    ]);
+    expect(series.filters).toMatchObject({ 'neq:recurrence': 'none', 'lte:starts_at': '2026-09-12T00:00:00.001Z' });
+  });
+
+  it('reads the stored rows, a series once, when asked not to expand', async () => {
+    const { db, calls } = makeDb(() => ({ data: [EVENT_ROW], error: null }));
+    const res = await searchEvents(scopeWith(db), { to: '2026-09-12T00:00:00Z', assigneeId: 'member-2', expandSeries: false });
+    expect(res).toMatchObject({ ok: true, data: [EVENT_ROW] });
+    expect(calls).toHaveLength(1);
     expect(calls[0].filters).toMatchObject({
       family_id: 'fam-1',
       'gte:starts_at': NOW.toISOString(),
@@ -260,7 +279,7 @@ describe('findFreeSlots', () => {
   it('treats school and sports commitments as busy', async () => {
     const { db } = makeDb((call) => {
       if (call.table === 'sports_events') {
-        return { data: [{ starts_at: '2026-09-07T12:00:00.000Z', ends_at: '2026-09-07T14:00:00.000Z', member_id: 'member-2' }], error: null };
+        return { data: [{ id: 'sports-1', starts_at: '2026-09-07T12:00:00.000Z', ends_at: '2026-09-07T14:00:00.000Z', member_id: 'member-2' }], error: null };
       }
       return { data: [], error: null };
     });
@@ -288,9 +307,9 @@ describe('busyEvenings', () => {
         return {
           data: [
             // 23:00Z on the 7th = 19:00 local on the 7th → a busy evening.
-            { starts_at: '2026-09-07T23:00:00.000Z', all_day: false },
+            { id: 'evening', starts_at: '2026-09-07T23:00:00.000Z', all_day: false, recurrence: 'none' },
             // 15:00Z on the 8th = 11:00 local → not an evening.
-            { starts_at: '2026-09-08T15:00:00.000Z', all_day: false },
+            { id: 'daytime', starts_at: '2026-09-08T15:00:00.000Z', all_day: false, recurrence: 'none' },
           ],
           error: null,
         };

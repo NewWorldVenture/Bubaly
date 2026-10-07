@@ -2,7 +2,7 @@ import { readFileSync } from 'node:fs';
 import { describe, expect, it } from 'vitest';
 import { verifyApprovalPrivateRead } from '../scripts/verify-approval-private-read.mjs';
 
-const migration = readFileSync('supabase/migrations/0477_approval_requests_private_read.sql', 'utf8');
+const migration = readFileSync('supabase/reserved/0492_approval_requests_private_read.sql', 'utf8');
 const statements = migration.split('\n').filter((line) => !line.trimStart().startsWith('--')).join('\n');
 
 describe('approval draft read boundary', () => {

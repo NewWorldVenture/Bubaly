@@ -1,6 +1,6 @@
 # Stored AI copies and monthly request counts
 
-Source candidate based on `f593850a47a1865f1076a8650391a382f0c5fc12`; migration `0478_ai_copy_private_read_and_quota.sql` is unapplied. No hosted configuration, migrations or provider calls are part of this change.
+Source candidate based on `f593850a47a1865f1076a8650391a382f0c5fc12`; migration `0493_ai_copy_private_read_and_quota.sql` is unapplied. No hosted configuration, migrations or provider calls are part of this change.
 
 The effective existing policies expose another household member's `ai_requests.request_text` and `family_automation_runs.summary` to unrelated children. The tool receipt policy also permits its original user to read `ai_tool_calls.inputs/outputs` after their household membership becomes inactive. An additive restrictive SELECT boundary now requires active household membership and requester or eligible manager access. Contexts, plans, steps, events and tool receipts must follow visible ancestors within the same household. Requester member IDs resolve through their actual active member row, with user-only legacy ownership retained where the stored member ID is null. Managers retain ownerless routine/system data and approval review; migration 0477 continues protecting approval drafts.
 

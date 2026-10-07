@@ -11,7 +11,7 @@
 //   70-89  → approve: do it, but confirm with the family first
 //   < 70   → ask   : surface as awareness / a question
 
-import { projectedNextCharge } from '@/lib/finance/subscription-schedule';
+import { projectedNextCharge } from '@/lib/finance/recurring';
 import type { LocaleCode } from '@/lib/i18n/locales';
 import { buildMomentPrep } from '@/lib/moments/prep';
 import { dayKeyInZone, zonedTimeMs } from '@/lib/schedule/zoned';
@@ -395,6 +395,10 @@ export function expenseSuggestions(s: FamilySnapshot, locale: LocaleCode, t: Tra
   for (const sub of s.subscriptions) {
     if (sub.status !== 'active' && sub.status !== 'trial') continue;
 
+    // Where the charge falls TODAY, not the day typed in when the subscription
+    // was added (lib/finance/recurring.ts `projectedNextCharge`). Nothing rolls
+    // `next_charge`, so measured against the stored date this heads-up fired
+    // for one cycle and never again; the key below carries the cycle.
     const charge = projectedNextCharge(sub.nextCharge, sub.cadence, s.today);
     if (charge) {
       const d = daysUntil(s.today, charge);

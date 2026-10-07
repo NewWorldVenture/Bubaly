@@ -87,8 +87,8 @@ select fixture.assert_true((select count(*) from public.approval_requests where 
 reset role;
 \if :skip_guard
 \else
-\ir ../../supabase/migrations/0477_approval_requests_private_read.sql
-\ir ../../supabase/migrations/0477_approval_requests_private_read.sql
+\ir ../../supabase/reserved/0492_approval_requests_private_read.sql
+\ir ../../supabase/reserved/0492_approval_requests_private_read.sql
 \endif
 set local role authenticated;
 select fixture.assert_true((select count(*) from public.approval_requests where id='ad000000-0000-4000-8000-000000000001')=0,
