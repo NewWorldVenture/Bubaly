@@ -10,6 +10,7 @@ const sourceFiles = [
   'lib/time/zoned.ts', 'lib/calendar/recurrence.ts', 'lib/calendar/day.ts',
   'lib/calendar/occurrences.ts', 'lib/calendar/event-dates.ts', 'lib/briefing/calendar-window.ts',
   'lib/calendar/display-occurrences.ts', 'lib/calendar/display-spans.ts', 'lib/calendar/source-capability.ts',
+  'lib/calendar/exact-instant.ts', 'lib/onboarding/ics-time.ts',
   'tests/helpers/in-memory-supabase.ts',
 ];
 const sources = Object.fromEntries(sourceFiles.map(file => [
