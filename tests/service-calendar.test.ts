@@ -260,7 +260,7 @@ describe('findConflicts', () => {
 describe('findFreeSlots', () => {
   it('preserves continuous availability through saved native and recurring sports points', async () => {
     const db = createInMemorySupabase({ maxRows: 1 });
-    db.seed('calendar_events', [{ ...EVENT_ROW, starts_at: '2026-11-01T13:00:00.000Z', ends_at: '2026-11-01T13:00:00.000Z' }]);
+    db.seed('calendar_events', [{ ...EVENT_ROW, id: '40000000-0000-4000-8000-000000000001', starts_at: '2026-11-01T13:00:00.000Z', ends_at: '2026-11-01T13:00:00.000Z' }]);
     db.seed('sports_events', [{ id: 'point', family_id: 'fam-1', starts_at: '2026-10-25T13:00:00.000Z', ends_at: '2026-10-25T13:00:00.000Z', member_id: null, recurrence: 'weekly', recurrence_until: null }]);
     const res = await findFreeSlots(scopeWith(db as unknown as SupabaseClient<Database>), {
       durationMin: 120, from: '2026-11-01T13:00:00.000Z', to: '2026-11-01T15:00:00.000Z', workingHours: { startHour: 8, endHour: 10 }, limit: 1,
@@ -334,9 +334,9 @@ describe('busyEvenings', () => {
         return {
           data: [
             // 23:00Z on the 7th = 19:00 local on the 7th → a busy evening.
-            { id: 'evening', family_id: 'fam-1', title: 'Evening commitment', ends_at: null, assignee_id: null, starts_at: '2026-09-07T23:00:00.000Z', all_day: false, recurrence: 'none' },
+            { ...EVENT_ROW, id: '40000000-0000-4000-8000-000000000002', title: 'Evening commitment', ends_at: null, assignee_id: null, starts_at: '2026-09-07T23:00:00.000Z' },
             // 15:00Z on the 8th = 11:00 local → not an evening.
-            { id: 'daytime', family_id: 'fam-1', title: 'Daytime commitment', ends_at: null, assignee_id: null, starts_at: '2026-09-08T15:00:00.000Z', all_day: false, recurrence: 'none' },
+            { ...EVENT_ROW, id: '40000000-0000-4000-8000-000000000003', title: 'Daytime commitment', ends_at: null, assignee_id: null, starts_at: '2026-09-08T15:00:00.000Z' },
           ],
           error: null,
         };

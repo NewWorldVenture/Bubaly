@@ -10,6 +10,8 @@ import { buildHomeNeeds } from '@/lib/home/needs-build';
 import { rankNeedsAttention } from '@/lib/home/needs-attention';
 import { detectConflicts, type ConflictEvent } from '@/lib/home/conflicts';
 import { readCalendarBusySource, readCalendarOccurrences } from '@/lib/calendar/occurrences';
+import { readCalendarAvailability } from '@/lib/calendar/availability';
+import { isValidTimezone } from '@/lib/time/zoned';
 import { briefingCalendarBounds, instantCalendarBounds } from '@/lib/briefing/calendar-window';
 import type { ParentApprovalRow, RenewalRow, DocumentRow, NeedsReader } from '@/lib/home/needs-sources';
 import { SOURCE_MESSAGES, translate } from '@/lib/i18n/messages';
@@ -508,10 +510,11 @@ export function buildAssistantTools(supabase: DB, ctx: AssistantCtx): ToolSpec[]
       execute: async (a) => {
         const date = str(a.date);
         if (!/^\d{4}-\d{2}-\d{2}$/.test(date)) return { ok: false, error: 'date must be YYYY-MM-DD' };
-        const tz = ctx.tz || 'America/New_York';
+        const tz = ctx.tz;
+        if (typeof tz !== 'string' || !tz.trim() || !isValidTimezone(tz)) return toolFailure('find free time', { message: 'Invalid calendar scope' });
         // The family's day: timed rows between its midnights, all-day rows
-        // dated that day, every series stepped onto it (the shared read,
-        // lib/calendar/occurrences.ts). A ±14-hour UTC window around the date
+        // dated that day, every series stepped onto it (the complete qualified
+        // availability domain, including ongoing overlaps). A ±14-hour UTC window around the date
         // read rows by their first start only, so a weekly practice was busy on
         // the day it was created and free every week after.
         let bounds: ReturnType<typeof briefingCalendarBounds>;
@@ -526,12 +529,7 @@ export function buildAssistantTools(supabase: DB, ctx: AssistantCtx): ToolSpec[]
           memberId = matches[0].id;
         }
         const [calendar, school, sports] = await settleAll([
-          readCalendarOccurrences(supabase, ctx.familyId, bounds, tz, {
-            columns: ['title', 'starts_at', 'ends_at', 'all_day', 'assignee_id'],
-            // Availability needs the complete occupied window, including rows
-            // that began yesterday. A truncated agenda cannot prove a free gap.
-            overlap: true,
-          }),
+          readCalendarAvailability(supabase, ctx.familyId, bounds, tz),
           readCalendarBusySource(supabase, ctx.familyId, 'school_events', bounds.timedFrom, bounds.timedTo, tz),
           readCalendarBusySource(supabase, ctx.familyId, 'sports_events', bounds.timedFrom, bounds.timedTo, tz),
         ]);
@@ -539,11 +537,20 @@ export function buildAssistantTools(supabase: DB, ctx: AssistantCtx): ToolSpec[]
         // Unassigned commitments belong to the whole family, including a
         // named member's availability. Filter only after complete scoped reads.
         const selected = (assignee: string | null) => !memberId || !assignee || assignee === memberId;
+        const from = Date.parse(bounds.timedFrom), to = Date.parse(bounds.timedTo);
+        const otherBlocks = (rows: NonNullable<typeof school.data>, title: string, namespace: string) => rows
+          .filter(event => selected(event.member_id))
+          .map(event => {
+            const start = Date.parse(event.starts_at);
+            const end = event.ends_at === null ? start + 3_600_000 : Date.parse(event.ends_at);
+            return { title, all_day:false, start:Math.max(from,start), end:Math.min(to,end), key:JSON.stringify([namespace,event.id,event.starts_at]) };
+          }).filter(event => event.end > event.start);
         const data = [
-          ...(calendar.data ?? []).filter(event => selected(event.assignee_id)),
-          ...(school.data ?? []).filter(event => selected(event.member_id)).map(event => ({ ...event, title: 'School event', all_day: false })),
-          ...(sports.data ?? []).filter(event => selected(event.member_id)).map(event => ({ ...event, title: 'Sports event', all_day: false })),
-        ].sort((a, b) => a.starts_at.localeCompare(b.starts_at) || a.id.localeCompare(b.id));
+          ...(calendar.data ?? []).filter(event => event.occupied && (event.attribution.kind === 'family' || selected(event.attribution.memberId)))
+            .map(event => ({title:event.title,all_day:event.all_day,start:event.interval.start,end:event.interval.end,key:event.occurrenceKey})),
+          ...otherBlocks(school.data ?? [], 'School event', 'school'),
+          ...otherBlocks(sports.data ?? [], 'Sports event', 'sports'),
+        ].sort((a, b) => a.start-b.start || a.key.localeCompare(b.key));
         const fmt = (iso: string | null) => {
           if (!iso) return null;
           try { return new Intl.DateTimeFormat('en-US', { timeZone: tz, weekday: 'short', month: 'short', day: 'numeric', hour: 'numeric', minute: '2-digit' }).format(new Date(iso)); }
@@ -558,13 +565,11 @@ export function buildAssistantTools(supabase: DB, ctx: AssistantCtx): ToolSpec[]
             title: e.title, start: fmtDay(`${date}T00:00:00Z`), end: null, all_day: true,
             starts_at: bounds.allDayFromDay, ends_at: bounds.allDayToDay,
           };
-          const originalStart = Date.parse(e.starts_at);
-          const originalEnd = e.ends_at === null ? originalStart + 3_600_000 : Date.parse(e.ends_at);
-          const startsAt = new Date(Math.max(originalStart, Date.parse(bounds.timedFrom))).toISOString();
-          const endsAt = new Date(Math.min(originalEnd, Date.parse(bounds.timedTo))).toISOString();
+          const startsAt = new Date(e.start).toISOString();
+          const endsAt = new Date(e.end).toISOString();
           return { title: e.title, start: fmt(startsAt), end: fmt(endsAt), all_day: false, starts_at: startsAt, ends_at: endsAt };
         });
-        return { ok: true, date, time_zone: tz, busy, note: busy.length ? 'These are the busy blocks; open time is the gaps between them.' : 'No events that day — the whole day is free.' };
+        return { ok: true, date, time_zone: tz, busy, note: busy.length ? 'These are the busy blocks; open time is the gaps between them.' : 'No busy blocks that day — the whole day is free.' };
       },
     },
 

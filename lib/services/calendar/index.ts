@@ -17,11 +17,11 @@
 import 'server-only';
 import { detectConflicts, type ConflictEvent, type EventConflict } from '@/lib/home/conflicts';
 import { readCalendarOccurrences, readCalendarBusySource, readCountedRows } from '@/lib/calendar/occurrences';
+import { readCalendarAvailability } from '@/lib/calendar/availability';
 import { addDays } from '@/lib/calendar/day';
 import { CALENDAR_SOURCE_ARCHIVE_ENABLED } from '@/lib/calendar/source-capability';
 import { calendarDisplayDay } from '@/lib/calendar/display-spans';
 import { validDay } from '@/lib/onboarding/ics-time';
-import { allDayBusyInterval } from '@/lib/calendar/event-dates';
 import { calendarOpenWindowFilter, instantCalendarBounds } from '@/lib/briefing/calendar-window';
 import { freeGaps, mergeIntervals, type Interval } from '@/lib/calendar/scheduling';
 import { instantForIcsLocalTime, isValidTimezone } from '@/lib/time/zoned';
@@ -658,6 +658,8 @@ export type FindFreeSlotsInput = {
  * whole family being unavailable.
  */
 export async function findFreeSlots(scope: ServiceScope, input: FindFreeSlotsInput): Promise<ServiceResult<FreeSlot[]>> {
+  if (typeof scope.tz !== 'string' || !scope.tz.trim() || !isValidTimezone(scope.tz)
+    || typeof scope.familyId !== 'string' || !scope.familyId.trim()) return fail('That search window could not be understood.', { code: SERVICE_CODES.invalidInput });
   const durationMin = Math.max(Math.round(input.durationMin), 5);
   if (!Number.isFinite(durationMin)) return fail('That duration could not be understood.', { code: SERVICE_CODES.invalidInput });
 
@@ -674,12 +676,9 @@ export async function findFreeSlots(scope: ServiceScope, input: FindFreeSlotsInp
 
   // Series included: a weekly practice is busy every week, not the week it
   // was created. `to` is inclusive, as the row read's `lte` was.
-  const tz = zoneOf(scope);
+  const tz = scope.tz;
   const [calendar, school, sports] = await settleAll([
-    readCalendarOccurrences(scope.db, scope.familyId, instantCalendarBounds(fromIso, toIso, tz), tz, {
-      columns: ['starts_at', 'ends_at', 'all_day', 'assignee_id'],
-      overlap: true,
-    }),
+    readCalendarAvailability(scope.db, scope.familyId, instantCalendarBounds(fromIso, toIso, tz), tz),
     readCalendarBusySource(scope.db, scope.familyId, 'school_events', fromIso, toIso, tz),
     readCalendarBusySource(scope.db, scope.familyId, 'sports_events', fromIso, toIso, tz),
   ]);
@@ -694,19 +693,9 @@ export async function findFreeSlots(scope: ServiceScope, input: FindFreeSlotsInp
   }
 
   const busy: Interval[] = [];
-  const push = (startsAt: string, endsAt: string | null, allDay: boolean) => {
+  const push = (startsAt: string, endsAt: string | null) => {
     const start = Date.parse(startsAt);
     if (!Number.isFinite(start)) return;
-    if (allDay) {
-      // An all-day row is a DATE stored as an instant on that date in UTC, so
-      // the day it blocks is its own date (lib/calendar/day.ts) — the family's
-      // whole local day of that date. Keyed by the family's day of its instant,
-      // a Saturday all-day row in Los Angeles (Saturday 00:00Z, Friday 17:00
-      // there) blocked Friday and left Saturday open.
-      const day = allDayBusyInterval({ starts_at: startsAt, ends_at: endsAt, all_day: true }, tz);
-      if (Number.isFinite(day.start) && Number.isFinite(day.end)) busy.push(day);
-      return;
-    }
     const parsedEnd = endsAt ? Date.parse(endsAt) : Number.NaN;
     if (parsedEnd === start) return; // Explicit points occupy no interval.
     const end = Number.isFinite(parsedEnd) && parsedEnd > start ? parsedEnd : start + DEFAULT_DURATION_MIN * MINUTE_MS;
@@ -714,16 +703,18 @@ export async function findFreeSlots(scope: ServiceScope, input: FindFreeSlotsInp
   };
 
   for (const e of calendar.data ?? []) {
-    if (members.length > 0 && e.assignee_id && !members.includes(e.assignee_id)) continue;
-    push(e.starts_at, e.ends_at, e.all_day);
+    if (!e.occupied || members.length > 0 && e.attribution.kind === 'member' && !members.includes(e.attribution.memberId)) continue;
+    // Source attendee identities are not household membership. Unmapped source
+    // and native unassigned commitments conservatively occupy every member.
+    busy.push(e.interval);
   }
   for (const e of school.data ?? []) {
     if (members.length > 0 && e.member_id && !members.includes(e.member_id)) continue;
-    push(e.starts_at, e.ends_at, false);
+    push(e.starts_at, e.ends_at);
   }
   for (const e of sports.data ?? []) {
     if (members.length > 0 && e.member_id && !members.includes(e.member_id)) continue;
-    push(e.starts_at, e.ends_at, false);
+    push(e.starts_at, e.ends_at);
   }
 
   const hours = input.workingHours ?? { startHour: 8, endHour: 21 };
@@ -786,20 +777,19 @@ export async function busyEvenings(
     }
   } catch { return fail('That window could not be understood.',{code:SERVICE_CODES.invalidInput}); }
   const [calendar,sports]=await settleAll([
-    readCalendarOccurrences(scope.db,scope.familyId,window.bounds,scope.tz,{overlap:true}),
+    readCalendarAvailability(scope.db,scope.familyId,window.bounds,scope.tz),
     readCalendarBusySource(scope.db,scope.familyId,'sports_events',new Date(window.from).toISOString(),new Date(window.to).toISOString(),scope.tz),
   ]);
   if(calendar.error||sports.error)return fail(describeDbError(calendar.error??sports.error,'Could not check the week ahead.'),{code:SERVICE_CODES.db});
   try {
-    validateCalendarRows(scope,calendar.data??[]);
-    const intervals=(calendar.data??[]).map(nativeInterval);
+    const intervals:Interval[]=(calendar.data??[]).filter(row=>row.occupied).map(row=>row.interval);
     for(const row of sports.data??[]){
       if(typeof row.id!=='string'||!row.id.trim())throw new Error('Invalid sports identity');
-      intervals.push(nativeInterval({...row,all_day:false}));
+      const interval=nativeInterval({...row,all_day:false});
+      if(interval.allDay)throw new Error('Invalid sports interval');
+      intervals.push(interval);
     }
-    return ok(evenings.filter(evening=>evening.end>evening.start&&intervals.some(interval=>interval.allDay
-      ? interval.start<=evening.day&&evening.day<interval.end
-      : interval.start<evening.end&&interval.end>evening.start&&interval.end>interval.start)).map(evening=>evening.day));
+    return ok(evenings.filter(evening=>evening.end>evening.start&&intervals.some(interval=>interval.start<evening.end&&interval.end>evening.start&&interval.end>interval.start)).map(evening=>evening.day));
   } catch { return fail('Could not check the week ahead.',{code:SERVICE_CODES.db}); }
 }
 

@@ -58,7 +58,8 @@ function fixture(options:Options={}){
  const unused=(name:string)=>new Proxy({},{get:()=>()=>deny('Unused seam '+name)});
  function load(name:string):any{if(loaded[name])return loaded[name];const entry={exports:{}};loaded[name]=entry.exports;const require=(id:string):any=>{
    const dependency:Record<string,string>={'@/lib/calendar/event-dates':'eventDates','@/lib/briefing/calendar-window':'calendarWindow','@/lib/calendar/occurrences':'occurrences','@/lib/calendar/recurrence':'recurrence','@/lib/time/zoned':'zoned', '@/lib/calendar/day': 'calendarDay', './source-capability': 'sourceCapability'};if(dependency[id])return load(dependency[id]);
-   if (id === '@/lib/calendar/source-capability') return { CALENDAR_SOURCE_ARCHIVE_ENABLED: false };
+   if (id === '@/lib/calendar/availability') return { readCalendarAvailability: () => deny('Unused mutation read seam readCalendarAvailability') };
+if (id === '@/lib/calendar/source-capability') return { CALENDAR_SOURCE_ARCHIVE_ENABLED: false };
     if (id === '@/lib/calendar/display-spans') return { calendarDisplayDay: () => deny('Unused read seam calendarDisplayDay') };
     if (id === '@/lib/onboarding/ics-time') return { validDay: () => deny('Unused read seam validDay') };
     if(id==='server-only')return{};if(id==='node:crypto')return nativeRequire(id);

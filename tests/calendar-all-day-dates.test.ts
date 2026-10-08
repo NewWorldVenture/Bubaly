@@ -10,6 +10,8 @@ import type { ServiceScope } from '@/lib/services/types';
 import { createInMemorySupabase } from './helpers/in-memory-supabase';
 
 const event = (day: string) => ({ starts_at: `${day}T00:00:00.000Z`, ends_at: null, all_day: true });
+const nativeFields = { title: 'Synthetic DATE', description: null, location: null, category: 'general', feed_id: null, external_uid: null, recurrence: 'none', recurrence_until: null,
+  created_by: null, onboarding_key: null, idempotency_key: null, source_recurrence: null, created_at: '2026-01-01T00:00:00Z', updated_at: '2026-01-01T00:00:00Z' };
 
 describe('all-day dates stay on their calendar date', () => {
   it.each(['America/New_York', 'America/Los_Angeles', 'Europe/Amsterdam', 'Asia/Tokyo', 'Asia/Kolkata'])('groups dates without applying the %s offset', (zone) => {
@@ -55,7 +57,7 @@ describe('all-day dates stay on their calendar date', () => {
 describe('the calendar service refuses free slots on an all-day date', () => {
   it.each(['2026-03-08', '2026-11-01'])('reads and blocks the complete %s family day', async (day) => {
     const db = createInMemorySupabase();
-    db.seed('calendar_events', [{ ...event(day), id: 'all-day', family_id: 'family', assignee_id: null }]);
+    db.seed('calendar_events', [{ ...nativeFields, ...event(day), id: '40000000-0000-4000-8000-000000000001', family_id: 'family', assignee_id: null }]);
     const scope: ServiceScope = { db: db as unknown as SupabaseClient<Database>, familyId: 'family', userId: 'user', memberId: 'member',
       role: 'parent', actorKind: 'member', tz: 'America/New_York', now: new Date('2026-01-01T00:00:00Z') };
     const interval = allDayBusyInterval(event(day), scope.tz);
@@ -67,7 +69,7 @@ describe('the calendar service refuses free slots on an all-day date', () => {
 
   it('blocks an all-day recurring date after its first week', async () => {
     const db = createInMemorySupabase();
-    db.seed('calendar_events', [{ ...event('2026-10-25'), id: 'weekly-date', family_id: 'family', assignee_id: null, recurrence: 'weekly', recurrence_until: null }]);
+    db.seed('calendar_events', [{ ...nativeFields, ...event('2026-10-25'), id: '40000000-0000-4000-8000-000000000002', family_id: 'family', assignee_id: null, recurrence: 'weekly', recurrence_until: null }]);
     const scope: ServiceScope = { db: db as unknown as SupabaseClient<Database>, familyId: 'family', userId: 'user', memberId: 'member',
       role: 'parent', actorKind: 'member', tz: 'America/New_York', now: new Date('2026-01-01T00:00:00Z') };
     const interval = allDayBusyInterval(event('2026-11-01'), scope.tz);
@@ -79,7 +81,7 @@ describe('the calendar service refuses free slots on an all-day date', () => {
 
   it('reads a multi-day date that started before the search window', async () => {
     const db = createInMemorySupabase();
-    db.seed('calendar_events', [{ ...event('2026-10-31'), ends_at: '2026-11-03T00:00:00Z', id: 'trip', family_id: 'family', assignee_id: null, recurrence: 'none' }]);
+    db.seed('calendar_events', [{ ...nativeFields, ...event('2026-10-31'), ends_at: '2026-11-03T00:00:00Z', id: '40000000-0000-4000-8000-000000000003', family_id: 'family', assignee_id: null, recurrence: 'none' }]);
     const scope: ServiceScope = { db: db as unknown as SupabaseClient<Database>, familyId: 'family', userId: 'user', memberId: 'member',
       role: 'parent', actorKind: 'member', tz: 'America/New_York', now: new Date('2026-01-01T00:00:00Z') };
     const interval = allDayBusyInterval(event('2026-11-01'), scope.tz);

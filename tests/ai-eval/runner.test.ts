@@ -72,7 +72,7 @@ const TEEN = '00000000-0000-4000-8000-00000000me04';
 const TEEN_USER = '00000000-0000-4000-8000-0000000000a3';
 /** The practice the cancellation scenario asks about. Fixed for the same
  *  reason the trip is: a scripted plan names an id literally. */
-const PRACTICE = '00000000-0000-4000-8000-00000000ev01';
+const PRACTICE = '00000000-0000-4000-8000-00000000ee01';
 /** The trip the vacation scenario prepares for. Fixed, because a scripted plan
  *  carries its `vacation_id` literally — the executor passes `input_json`
  *  through verbatim, which is exactly why a real plan reads the id from the
@@ -154,6 +154,9 @@ function seedHousehold() {
   db.seed('calendar_events', [{
     id: PRACTICE, family_id: FAMILY, title: 'Soccer practice', starts_at: '2026-09-16T20:00:00Z', ends_at: '2026-09-16T21:30:00Z',
     all_day: false, category: 'sports', location: null, assignee_id: CHILD, description: null, created_by: USER,
+    recurrence: 'none', recurrence_until: null, feed_id: null, external_uid: null,
+    onboarding_key: null, idempotency_key: null, source_recurrence: null,
+    created_at: NOW.toISOString(), updated_at: NOW.toISOString(),
   }]);
   // A trip already on file, with its travellers: "prepare for our trip" is
   // asked about a trip the family has, not one Bubaly invents.

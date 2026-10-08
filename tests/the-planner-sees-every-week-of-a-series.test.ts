@@ -337,10 +337,10 @@ describe('the reads are the shared one (source pins)', () => {
       expect(body, fn).not.toContain(".from('calendar_events')");
       const read = bodyOf(service, fn, ']);');
       if (fn === 'export async function findFreeSlots(') {
-        expect(read, fn).toContain('readCalendarOccurrences(scope.db, scope.familyId, instantCalendarBounds(fromIso, toIso, tz), tz');
+        expect(read, fn).toContain('readCalendarAvailability(scope.db, scope.familyId, instantCalendarBounds(fromIso, toIso, tz), tz)');
       } else {
         expect(read, fn).toContain('window=analysisWindow(scope,input,7)');
-        expect(read, fn).toContain('readCalendarOccurrences(scope.db,scope.familyId,window.bounds,scope.tz,{overlap:true})');
+        expect(read, fn).toContain('readCalendarAvailability(scope.db,scope.familyId,window.bounds,scope.tz)');
         expect(read, fn).toContain("readCalendarBusySource(scope.db,scope.familyId,'sports_events',new Date(window.from).toISOString(),new Date(window.to).toISOString(),scope.tz)");
       }
     }

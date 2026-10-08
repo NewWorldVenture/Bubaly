@@ -135,7 +135,9 @@ describe('source pins', () => {
   it('the assistants have no calendar read of their own left', () => {
     const tools = readFileSync(join(ROOT, 'lib/assistant/tools.ts'), 'utf8');
     const service = readFileSync(join(ROOT, 'lib/assistant/service.ts'), 'utf8');
-    expect(tools.match(/readCalendarOccurrences\(/g)).toHaveLength(3);
+    expect(tools.match(/readCalendarOccurrences\(/g)).toHaveLength(2);
+    expect(tools.match(/readCalendarAvailability\(/g)).toHaveLength(1);
+    expect(tools).toContain('readCalendarAvailability(supabase, ctx.familyId, bounds, tz)');
     // The only remaining direct reads are the write and the RSVP title lookups.
     expect(tools).not.toMatch(/from\('calendar_events'\)\s*\.select\('(title, starts_at|id, title, starts_at, ends_at)/);
     expect(service).toContain('readCalendarOccurrences(supabase, familyId, instantCalendarBounds(window.from, toInclusive, timezone), timezone');
