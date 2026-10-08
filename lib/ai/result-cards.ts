@@ -43,18 +43,70 @@ export const MealPlanCardSchema = z.object({
   href: optionalText,
 });
 
+// Wire-safe provenance lives here so browsers and stored cards never need server code.
+const conflictIdentity = z.string().min(1).max(65_536);
+const sourceIdentity = z.string().min(1).max(4096).refine(value => !/[\u0000-\u0008\u000a-\u001f\u007f]|[\uD800-\uDBFF](?![\uDC00-\uDFFF])|(?<![\uD800-\uDBFF])[\uDC00-\uDFFF]/.test(value));
+const sourceClock = z.discriminatedUnion('kind', [
+  z.object({ kind: z.literal('date'), value: z.string().regex(/^\d{8}$/) }).strict(),
+  z.object({ kind: z.literal('utc'), value: z.string().regex(/^\d{8}T\d{6}Z$/) }).strict(),
+  z.object({ kind: z.literal('floating'), value: z.string().regex(/^\d{8}T\d{6}$/) }).strict(),
+  z.object({ kind: z.literal('zoned'), value: z.string().regex(/^\d{8}T\d{6}$/), tzid: sourceIdentity }).strict(),
+]).refine(clock => {
+  const v = clock.value;
+  const year = +v.slice(0, 4), month = +v.slice(4, 6), day = +v.slice(6, 8);
+  const leap = year % 4 === 0 && (year % 100 !== 0 || year % 400 === 0);
+  const days = [31, leap ? 29 : 28, 31, 30, 31, 30, 31, 31, 30, 31, 30, 31];
+  return year > 0 && month >= 1 && month <= 12 && day >= 1 && day <= days[month - 1]
+    && (clock.kind === 'date' || +v.slice(9, 11) <= 23 && +v.slice(11, 13) <= 59 && +v.slice(13, 15) <= 59);
+}, 'Invalid source clock');
+export const CalendarConflictReferenceSchema = z.discriminatedUnion('kind', [
+  z.object({ kind: z.literal('native'), eventId: z.string().uuid() }).strict(),
+  z.object({ kind: z.literal('source'), feedId: z.string().uuid(), uid: sourceIdentity, revisionId: z.string().uuid(), original: sourceClock }).strict(),
+]);
+const conflictInstant = z.string().datetime({ offset: true });
+const conflictSubjectFields = {
+  occurrenceKey: conflictIdentity, title: z.string().nullable(),
+  actualStartsAt: conflictInstant, actualEndsAt: conflictInstant.nullable(),
+};
+export const CalendarConflictSubjectSchema = z.discriminatedUnion('kind', [
+  z.object({ ...conflictSubjectFields, kind: z.literal('native'),
+    reference: z.object({ kind: z.literal('native'), eventId: z.string().uuid() }).strict(),
+    eventId: z.string().uuid(), readOnly: z.boolean(), mutable: z.boolean(),
+  }).strict(),
+  z.object({ ...conflictSubjectFields, kind: z.literal('source'),
+    reference: z.object({ kind: z.literal('source'), feedId: z.string().uuid(), uid: sourceIdentity, revisionId: z.string().uuid(), original: sourceClock }).strict(),
+    readOnly: z.literal(true), mutable: z.literal(false),
+  }).strict(),
+]).refine(subject => (subject.kind !== 'native' || subject.eventId === subject.reference.eventId && subject.mutable === !subject.readOnly)
+  && (subject.actualEndsAt === null ? subject.kind === 'native' : Date.parse(subject.actualEndsAt) >= Date.parse(subject.actualStartsAt)), 'Invalid conflict subject');
+export const CalendarConflictAdvisorySchema = z.object({
+  kind: z.literal('family-source-overlap'), scope: z.literal('family'),
+  startsAt: conflictInstant, endsAt: conflictInstant, when: text,
+  subjects: z.tuple([CalendarConflictSubjectSchema, CalendarConflictSubjectSchema]),
+}).strict().refine(row => row.subjects.some(subject => subject.kind === 'source')
+  && row.subjects[0].occurrenceKey !== row.subjects[1].occurrenceKey
+  && Date.parse(row.endsAt) > Date.parse(row.startsAt)
+  && row.subjects.every(subject => Date.parse(row.startsAt) >= Date.parse(subject.actualStartsAt)
+    && Date.parse(row.endsAt) <= (subject.actualEndsAt === null ? Date.parse(subject.actualStartsAt) + 3_600_000 : Date.parse(subject.actualEndsAt))), 'Invalid family advisory');
+const legacyConflictRow = z.object({
+  when: text, titles: z.array(text), member: z.string().nullable(), event_ids: z.array(text),
+}).strict();
+const personalConflictRow = legacyConflictRow.extend({
+  kind: z.literal('personal'), subjects: z.array(CalendarConflictSubjectSchema).min(2),
+  occurrenceKeys: z.array(conflictIdentity).min(2), references: z.array(CalendarConflictReferenceSchema).min(2),
+}).strict().refine(row => row.subjects.length === row.occurrenceKeys.length && row.references.length === row.subjects.length
+  && row.event_ids.length === row.subjects.length && row.titles.length === row.subjects.length
+  && new Set(row.occurrenceKeys).size === row.occurrenceKeys.length
+  && row.subjects.every((subject, i) => subject.kind === 'native' && subject.eventId === row.event_ids[i]
+    && subject.occurrenceKey === row.occurrenceKeys[i] && row.references[i].kind === 'native'
+    && subject.reference.eventId === (row.references[i] as { kind: 'native'; eventId: string }).eventId), 'Invalid personal conflict');
 export const CalendarConflictCardSchema = z.object({
-  kind: z.literal('calendar_conflict'),
-  title: text,
-  subtitle: optionalText,
-  conflicts: z.array(z.object({
-    when: text,
-    titles: z.array(text),
-    member: z.string().nullable(),
-    event_ids: z.array(text),
-  })),
-  href: optionalText,
+  kind: z.literal('calendar_conflict'), title: text, subtitle: optionalText,
+  // Legacy rows remain readable but cannot offer a mutation without qualified subjects.
+  conflicts: z.array(z.union([personalConflictRow, legacyConflictRow])),
+  advisories: z.array(CalendarConflictAdvisorySchema).optional(), href: optionalText,
 });
+export type CalendarConflictSubject = z.infer<typeof CalendarConflictSubjectSchema>;
 
 export const BudgetAnalysisCardSchema = z.object({
   kind: z.literal('budget_analysis'),
@@ -647,6 +699,8 @@ export function summaryCardFromData(title: string, data: Rec, opts: { maxFacts?:
 export function cardFromToolResult(name: string, args: unknown, result: unknown, ctx: CardContext = {}): ResultCard | null {
   const r = asRecord(result);
   if (!r || r.ok === false) return null;
+  if (canonicalToolName(name) === 'calendar.findConflicts' && ((r.card !== undefined && !parseResultCard(r.card))
+    || (asRecord(r.data)?.card !== undefined && !parseResultCard(asRecord(r.data)?.card)))) return null;
   const explicit = parseResultCard(r.card) ?? (asRecord(r.data) ? parseResultCard((r.data as Rec).card) : null);
   if (explicit) return explicit;
   const data = toolResultData(result);
@@ -663,13 +717,18 @@ export function cardFromToolResult(name: string, args: unknown, result: unknown,
     case 'meals.setSlot':
       return mealPlanCard(title, [data], {});
     case 'calendar.findConflicts': {
-      const conflicts = records(data.conflicts).map((c) => ({
-        when: str(c.when) ?? '',
-        titles: strings(c.titles),
-        member: memberName(ctx, c.member_id),
-        event_ids: strings(c.event_ids),
-      }));
-      return { kind: 'calendar_conflict', title, conflicts, href: '/dashboard/calendar' };
+      if (!Array.isArray(data.conflicts) || data.advisories !== undefined && !Array.isArray(data.advisories)) return null;
+      const conflicts = data.conflicts.map((raw) => {
+        const c = asRecord(raw);
+        if (!c) return raw;
+        const { member_id: memberId, ...fields } = c;
+        return { ...fields, member: memberName(ctx, memberId) };
+      });
+      const parsed = CalendarConflictCardSchema.safeParse({
+        kind: 'calendar_conflict', title, conflicts,
+        ...(data.advisories !== undefined ? { advisories: data.advisories } : {}), href: '/dashboard/calendar',
+      });
+      return parsed.success ? parsed.data : null;
     }
     case 'finances.budgetVsActual':
     case 'finances.comparePeriods':

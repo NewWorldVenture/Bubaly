@@ -18,6 +18,7 @@ import 'server-only';
 import { detectConflicts, type ConflictEvent, type EventConflict } from '@/lib/home/conflicts';
 import { readCalendarOccurrences, readCalendarBusySource, readCountedRows } from '@/lib/calendar/occurrences';
 import { readCalendarAvailability } from '@/lib/calendar/availability';
+import { buildConflictAdvisories, conflictSubject, type CalendarConflictAdvisory, type CalendarConflictSubject } from '@/lib/calendar/conflict-advisories';
 import { addDays } from '@/lib/calendar/day';
 import { CALENDAR_SOURCE_ARCHIVE_ENABLED } from '@/lib/calendar/source-capability';
 import { calendarDisplayDay } from '@/lib/calendar/display-spans';
@@ -613,22 +614,27 @@ function analysisWindow(scope:ServiceScope,input:{from?:string|null;to?:string|n
 export async function findConflicts(
   scope: ServiceScope,
   input: { from?: string | null; to?: string | null } = {},
-): Promise<ServiceResult<{ conflicts: EventConflict[]; events: Record<string, CalendarEvent> }>> {
+): Promise<ServiceResult<{ conflicts: EventConflict[]; events: Record<string, CalendarEvent>; advisories: CalendarConflictAdvisory[]; subjects: Record<string, CalendarConflictSubject> }>> {
   let window:ReturnType<typeof analysisWindow>;
   try { window=analysisWindow(scope,input,366); }
   catch { return fail('That window could not be understood.', { code: SERVICE_CODES.invalidInput }); }
-  const result=await readCalendarOccurrences(scope.db,scope.familyId,window.bounds,scope.tz,{overlap:true});
+  const result=await readCalendarAvailability(scope.db,scope.familyId,window.bounds,scope.tz);
   if(result.error)return fail(describeDbError(result.error,'Could not load the calendar.'),{code:SERVICE_CODES.db});
-  const events=result.data;
-  try { validateCalendarRows(scope,events); }
-  catch { return fail('Could not load the calendar.',{code:SERVICE_CODES.db}); }
-  const conflictEvents:ConflictEvent[]=events.map(e=>({
-    id:e.id,title:e.title,starts_at:e.starts_at,ends_at:e.ends_at,all_day:e.all_day,assignee_id:e.assignee_id,
-    occurrenceKey:JSON.stringify(['native',e.id,e.starts_at]),reference:{kind:'native' as const,eventId:e.id},
-  }));
-  // The lookup is keyed by real action identity; occurrence keys remain separate.
-  const byId=Object.fromEntries(events.map(e=>[e.id,e]));
-  return ok({conflicts:detectConflicts(conflictEvents,DEFAULT_DURATION_MIN),events:byId});
+  try {
+    // Qualify the entire complete input before either personal or family advice.
+    const advisories=buildConflictAdvisories(result.data,{timezone:scope.tz});
+    const native=result.data.filter(row=>row.kind==='native');
+    const events=native.map(row=>row.event);
+    validateCalendarRows(scope,events);
+    const conflictEvents:ConflictEvent[]=native.map(row=>({
+      id:row.event.id,title:row.title,starts_at:row.starts_at,ends_at:row.ends_at,all_day:row.all_day,assignee_id:row.assignee_id,
+      occurrenceKey:row.occurrenceKey,reference:row.reference,
+    }));
+    // Real native action identities and occurrence identities stay separate.
+    const byId=Object.fromEntries(events.map(event=>[event.id,event]));
+    const subjects=Object.fromEntries(native.map(row=>[row.occurrenceKey,conflictSubject(row)]));
+    return ok({conflicts:detectConflicts(conflictEvents,DEFAULT_DURATION_MIN),events:byId,advisories,subjects});
+  } catch { return fail('Could not load the calendar.',{code:SERVICE_CODES.db}); }
 }
 
 export type WorkingHours = { startHour: number; endHour: number };

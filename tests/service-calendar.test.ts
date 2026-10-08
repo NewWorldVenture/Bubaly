@@ -242,17 +242,17 @@ describe('searchEvents', () => {
 describe('findConflicts', () => {
   it('reports one person double-booked and returns the events involved', async () => {
     const overlapping = [
-      { ...EVENT_ROW, id: 'a', title: 'Dentist', starts_at: '2026-09-07T14:00:00.000Z', ends_at: '2026-09-07T15:00:00.000Z' },
-      { ...EVENT_ROW, id: 'b', title: 'Soccer', starts_at: '2026-09-07T14:30:00.000Z', ends_at: '2026-09-07T15:30:00.000Z' },
-      { ...EVENT_ROW, id: 'c', title: 'Later', assignee_id: 'member-3', starts_at: '2026-09-07T18:00:00.000Z', ends_at: '2026-09-07T19:00:00.000Z' },
+      { ...EVENT_ROW, id: '40000000-0000-4000-8000-000000000001', title: 'Dentist', starts_at: '2026-09-07T14:00:00.000Z', ends_at: '2026-09-07T15:00:00.000Z' },
+      { ...EVENT_ROW, id: '40000000-0000-4000-8000-000000000002', title: 'Soccer', starts_at: '2026-09-07T14:30:00.000Z', ends_at: '2026-09-07T15:30:00.000Z' },
+      { ...EVENT_ROW, id: '40000000-0000-4000-8000-000000000003', title: 'Later', assignee_id: 'member-3', starts_at: '2026-09-07T18:00:00.000Z', ends_at: '2026-09-07T19:00:00.000Z' },
     ];
     const { db } = makeDb(() => ({ data: overlapping, error: null }));
     const res = await findConflicts(scopeWith(db), { to: '2026-09-12T00:00:00Z' });
     expect(res.ok).toBe(true);
     if (res.ok) {
       expect(res.data.conflicts).toHaveLength(1);
-      expect(res.data.conflicts[0].eventIds.sort()).toEqual(['a', 'b']);
-      expect(res.data.events.a.title).toBe('Dentist');
+      expect(res.data.conflicts[0].eventIds.sort()).toEqual(['40000000-0000-4000-8000-000000000001', '40000000-0000-4000-8000-000000000002']);
+      expect(res.data.events['40000000-0000-4000-8000-000000000001'].title).toBe('Dentist');
     }
   });
 });

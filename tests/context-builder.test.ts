@@ -94,7 +94,7 @@ function baseTables(): Record<string, TableSpec> {
     families: { rows: [{ id: 'fam-1', name: 'The Riveras', timezone: 'America/New_York' }] },
     family_members: { rows: MEMBERS },
     calendar_events: { rows: [
-      { id: 'ev-1', family_id: 'fam-1', title: HOSTILE_TITLE, description: null, location: 'Field 3', category: 'sports', starts_at: '2026-09-06T14:00:00Z', ends_at: '2026-09-06T15:00:00Z', all_day: false, recurrence: 'none', recurrence_until: null, assignee_id: 'mem-child', feed_id: null, external_uid: null, created_by: 'auth-1', onboarding_key: null, created_at: '2026-01-01T00:00:00Z', updated_at: '2026-01-01T00:00:00Z' },
+      { id: '40000000-0000-4000-8000-000000000001', family_id: 'fam-1', title: HOSTILE_TITLE, description: null, location: 'Field 3', category: 'sports', starts_at: '2026-09-06T14:00:00Z', ends_at: '2026-09-06T15:00:00Z', all_day: false, recurrence: 'none', recurrence_until: null, assignee_id: 'mem-child', feed_id: null, external_uid: null, created_by: 'auth-1', onboarding_key: null, created_at: '2026-01-01T00:00:00Z', updated_at: '2026-01-01T00:00:00Z' },
     ] },
     medical_profiles: { rows: [{ member_id: 'mem-child', allergies: 'peanuts' }] },
     family_facts: { rows: [

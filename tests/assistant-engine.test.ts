@@ -109,7 +109,7 @@ beforeEach(() => {
   tables.family_members = { rows: [{ id: 'm1', user_id: 'user-1', display_name: 'Dan', role: 'parent', is_active: true }] };
   // Calendar context now validates complete wildcard database rows, including
   // family scope and the nullable/default interval fields, before publication.
-  tables.calendar_events = { rows: [{ id: 'calendar-1', family_id: 'fam-1', title: 'Soccer', starts_at: '2026-09-06T14:00:00Z', ends_at: null, all_day: false, assignee_id: null, category: 'sports' }] };
+  tables.calendar_events = { rows: [{ id: '40000000-0000-4000-8000-000000000001', family_id: 'fam-1', title: 'Soccer', starts_at: '2026-09-06T14:00:00Z', ends_at: null, all_day: false, assignee_id: null, category: 'sports', description: null, location: null, recurrence: 'none', recurrence_until: null, feed_id: null, external_uid: null, source_recurrence: null, created_by: 'user-1', onboarding_key: null, idempotency_key: null, created_at: '2026-09-01T00:00:00Z', updated_at: '2026-09-01T00:00:00Z' }] };
   tables.chore_assignments = { rows: [{ status: 'todo' }, { status: 'in_progress' }] };
   tables.meals = { rows: [{ name: 'Tacos', meal_type: 'dinner' }] };
   tables.ai_conversations = { single: { title: 'New conversation' } };

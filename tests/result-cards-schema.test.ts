@@ -99,6 +99,10 @@ describe('cardFromToolResult', () => {
     expect(card).toMatchObject({ kind: 'calendar_conflict', conflicts: [{ member: 'Sam', titles: ['Soccer', 'Dentist'] }] });
   });
 
+  it('refuses a malformed explicit conflict card rather than replacing it with a calm result', () => {
+    expect(cardFromToolResult('calendar.findConflicts', {}, { ok: true, card: { kind: 'calendar_conflict', title: 'Unsafe', conflicts: [], advisories: [{ kind: 'unknown' }] }, data: { conflicts: [], advisories: [] } })).toBeNull();
+  });
+
   it('builds a budget card from budgetVsActual with limits, and from comparePeriods with deltas', () => {
     const vsActual = cardFromToolResult('finances.budgetVsActual', {}, {
       ok: true, summary: '1 budget over',

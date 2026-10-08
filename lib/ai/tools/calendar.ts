@@ -14,6 +14,7 @@
 // person (high).
 import 'server-only';
 import { z } from 'zod';
+import { CalendarConflictAdvisorySchema, CalendarConflictSubjectSchema, CalendarConflictReferenceSchema } from '@/lib/ai/result-cards';
 import {
   createEvent, deleteEvent, findConflicts, findFreeSlots, busyEvenings, rescheduleAfter, rsvpToEvent, searchEvents, updateEvent,
 } from '@/lib/services/calendar';
@@ -284,7 +285,7 @@ export const calendarTools: ToolDefinition[] = [
   defineTool({
     name: 'calendar.findConflicts',
     aliases: ['find_calendar_conflicts', 'check_conflicts'],
-    description: 'Find double-bookings: one person with two overlapping events.',
+    description: 'Find personal double-bookings and conservative family overlaps involving imported calendars.',
     domain: 'calendar',
     capability: 'view',
     risk: 'low',
@@ -292,13 +293,20 @@ export const calendarTools: ToolDefinition[] = [
     input: z.object({ from: z.string().nullish(), to: z.string().nullish() }),
     output: z.object({
       conflicts: z.array(z.object({
+        kind: z.literal('personal'),
         member_id: z.string().nullable(),
         event_ids: z.array(z.string()),
         titles: z.array(z.string()),
         when: z.string(),
+        occurrenceKeys: z.array(z.string()),
+        references: z.array(CalendarConflictReferenceSchema),
+        subjects: z.array(CalendarConflictSubjectSchema),
       })),
+      advisories: z.array(CalendarConflictAdvisorySchema),
     }),
-    summarize: (_input, output) => (output.conflicts.length === 0
+    summarize: (_input, output) => (output.advisories.length > 0
+      ? `${plural(output.conflicts.length, 'personal clash', 'personal clashes')} and ${plural(output.advisories.length, 'family calendar overlap')} in that window`
+      : output.conflicts.length === 0
       ? 'No double-bookings in that window'
       : `Found ${plural(output.conflicts.length, 'clash', 'clashes')} — first: ${output.conflicts[0].titles.join(' vs ')} ${output.conflicts[0].when}`),
     execute: async (scope, input) => {
@@ -307,14 +315,19 @@ export const calendarTools: ToolDefinition[] = [
       const now = scopeNow(scope);
       return ok({
         conflicts: res.data.conflicts.map((conflict) => {
-          const events = conflict.eventIds.map((id) => res.data.events[id]).filter(Boolean);
+          const subjects = (conflict.occurrenceKeys ?? []).map(key => res.data.subjects[key]);
           return {
+            kind: 'personal' as const,
+            occurrenceKeys: conflict.occurrenceKeys ?? [],
+            references: conflict.references ?? [],
+            subjects,
             member_id: conflict.assigneeId,
             event_ids: conflict.eventIds,
-            titles: events.map((event) => event.title),
+            titles: subjects.map(subject => subject.title ?? 'Calendar event'),
             when: describeWhen(conflict.startsAt, scope.tz, now),
           };
         }),
+        advisories: res.data.advisories.map(advisory => ({ ...advisory, when: describeWhen(advisory.startsAt, scope.tz, now) })),
       });
     },
   }),
