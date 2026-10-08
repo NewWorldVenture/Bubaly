@@ -1432,6 +1432,10 @@
         "sha256Lf": "198542ab1eb745cab64f85df3b5f71c0cd51bb609f12b0ae3d0ca8324843b987"
       },
       {
+        "path": "docs/final-audit/rollout-20261008/priority-rpc-callers.json",
+        "sha256Lf": "3473a2e5c48446052370fa1b8ad9442a7b78e7a1c7b1053164e82b620ebad985"
+      },
+      {
         "path": "docs/final-audit/rollout-20261008/definer-acl-catalog.json",
         "sha256Lf": "3f8904bf4401805411ea620524e7b9850dfb948c46c8ef65c7fd3d635e0f2892"
       },
@@ -1454,6 +1458,45 @@
         "sha256Lf": "b0fe35f4acc68dd6b57781086c7c4b9ef7f01b9e1c02e1bed350ffc19ddf4c7d"
       }
     ]
+  },
+  "groceryRpcReview": {
+    "disposition": "Source0313 guards absent in live metadata; source0311 helper prerequisite also absent. Isolated minimal-schema rehearsal only; no production application authorized.",
+    "receipt": {
+      "path": "docs/final-audit/rollout-20261008/0313-grocery.fixture-results.json",
+      "sha256Lf": "633786993d1c1cda35cb5dc904e7e8e547045dd1d05af3f8df7c9120781bb710"
+    },
+    "files": [
+      {
+        "path": "docs/final-audit/rollout-20261008/0313-grocery.fixture.mjs",
+        "sha256": "9158490ae200020d2266ab527a3a0d4f713a217d8df6ed8597b989dbbe6038d5"
+      },
+      {
+        "path": "docs/final-audit/rollout-20261008/grocery-rpc-boundary.json",
+        "sha256": "5867b43b3cbde0982ee694681570f9e199bcde4666a76afcc6ed88373dbd9497"
+      },
+      {
+        "path": "supabase/migrations/0311_family_scoped_references.sql",
+        "sha256": "134917dc6bf393689f1d4c8526a042f8d982dde340dc23162bdf1d44487eecb6"
+      },
+      {
+        "path": "supabase/migrations/0313_meal_plan_groceries_stay_in_one_family.sql",
+        "sha256": "cffc709e6c768de4f6dde9a620c0a01c8563eacb741456d0204efbabf8159906"
+      }
+    ],
+    "checks": {
+      "baselineOtherFamilyMealHiddenByRls": true,
+      "baselineDefinerCopiesForeignMeal": true,
+      "baselineSuppliedForeignListAccepted": true,
+      "missingHelperRefusesStandalone0313AndRollsBack": true,
+      "transactionRollbackRestoresBodyAndRemovesHelperAndTriggers": true,
+      "repeatApplication": true,
+      "existingCrossFamilyPlanPreserved": true,
+      "fixedRpcCopiesOnlyOwnFamilyMeal": true,
+      "suppliedForeignListRefusedBeforeWrite": true,
+      "futureCrossFamilyPlanAndItemRefused": true,
+      "healthySameFamilyWrites": true,
+      "unauthenticatedRefused": true
+    }
   },
   "walletReferenceCandidate": {
     "disposition": "UNALLOCATED; structural fixture only; existing-data disposition and full-schema rehearsal required; no application authorized",

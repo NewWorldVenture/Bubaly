@@ -58,16 +58,22 @@ export type SchoolWindowInput = { from?: string | null; to?: string | null; memb
 export async function listEventsBetween(scope: ServiceScope, input: SchoolWindowInput = {}): Promise<ServiceResult<SchoolEventRow[]>> {
   const window = resolveWindow(scope, input);
   if (!window.ok) return window;
-  let query = scope.db
+  const limit = Math.min(Math.max(input.limit ?? 200, 1), MAX_ROWS);
+  const query = () => {
+    let read = scope.db
     .from('school_events')
-    .select('*')
+    .select('*', { count: 'exact' })
     .eq('family_id', scope.familyId)
     .gte('starts_at', window.data.from)
     .lte('starts_at', window.data.to)
-    .order('starts_at', { ascending: true })
-    .limit(Math.min(Math.max(input.limit ?? 200, 1), MAX_ROWS));
-  if (input.memberId) query = query.eq('member_id', input.memberId);
-  const { data, error } = await query;
+    .order('starts_at', { ascending: true }).order('id');
+    if (input.memberId) read = read.eq('member_id', input.memberId);
+    return read;
+  };
+  const { data, error } = await readCountedRows<SchoolEventRow>(
+    () => query().limit(limit), (from, to) => query().range(from, to),
+    MAX_ROWS, 'school events', limit,
+  );
   if (error) {
     console.error('[service:school] events read failed', error);
     return fail(describeDbError(error, 'Could not load school events.'), { code: SERVICE_CODES.db });
@@ -87,18 +93,24 @@ const OPEN_STATUSES: HomeworkStatus[] = ['assigned', 'in_progress'];
 export async function listHomeworkDue(scope: ServiceScope, input: HomeworkDueInput = {}): Promise<ServiceResult<HomeworkRow[]>> {
   const window = resolveWindow(scope, input);
   if (!window.ok) return window;
-  let query = scope.db
+  const limit = Math.min(Math.max(input.limit ?? 200, 1), MAX_ROWS);
+  const query = () => {
+    let read = scope.db
     .from('homework_assignments')
-    .select('*')
+    .select('*', { count: 'exact' })
     .eq('family_id', scope.familyId)
     .not('due_at', 'is', null)
     .gte('due_at', window.data.from)
     .lte('due_at', window.data.to)
-    .order('due_at', { ascending: true })
-    .limit(Math.min(Math.max(input.limit ?? 200, 1), MAX_ROWS));
-  if (!input.includeDone) query = query.in('status', OPEN_STATUSES);
-  if (input.memberId) query = query.eq('member_id', input.memberId);
-  const { data, error } = await query;
+    .order('due_at', { ascending: true }).order('id');
+    if (!input.includeDone) read = read.in('status', OPEN_STATUSES);
+    if (input.memberId) read = read.eq('member_id', input.memberId);
+    return read;
+  };
+  const { data, error } = await readCountedRows<HomeworkRow>(
+    () => query().limit(limit), (from, to) => query().range(from, to),
+    MAX_ROWS, 'homework assignments', limit,
+  );
   if (error) {
     console.error('[service:school] homework read failed', error);
     return fail(describeDbError(error, 'Could not load homework.'), { code: SERVICE_CODES.db });

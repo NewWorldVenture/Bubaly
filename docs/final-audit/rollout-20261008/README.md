@@ -160,6 +160,15 @@ Separate reconciliation and validation remain release gates.
 
 ## Priority RPC grants and managed advisor review
 
+The [selected caller review](priority-rpc-callers.json) binds source082f2ddc4
+and a read-only live bidding-wrapper definition. The wallet webhook and
+marketing worker pass service clients. Both live bidding functions are owned by
+postgres and run as definer; the checked wrapper verifies caller membership
+before invoking the inner function as its owner. These paths support the
+compatibility review of client grant revocation. Selected AI rate-limit callers
+also preserve user-scoped keys or use the service client. This is static and
+catalog evidence, not a live transaction or exhaustive caller rehearsal.
+
 The [read-only function definitions](priority-rpc-definitions.json),
 [collection query](priority-rpc-definitions.sql) and
 [effective ACL catalog](definer-acl-catalog.json) confirm:
@@ -213,6 +222,27 @@ verified vulnerabilities or measured performance defects:
 | [Auth connection allocation](https://supabase.com/docs/guides/deployment/going-into-prod) | 1 | Configuration review only; unchanged. |
 
 ## Proposed stages and acceptance gates
+
+Include [0313's grocery boundary](../../../supabase/migrations/0313_meal_plan_groceries_stay_in_one_family.sql)
+in the dependency review. [Live metadata](grocery-rpc-boundary.json) still shows
+the old RPC, id-only FKs, no family-reference triggers on meal_plans/grocery_items,
+and no reference_shares_family helper from0311. The RPC checks the caller's family
+membership but does not check a supplied list's family or constrain the joined
+meal to that family. No live RPC was called and no household rows were read.
+
+The [retained local fixture](0313-grocery.fixture.mjs) and
+[receipt](0313-grocery.fixture-results.json) use four minimal tables, two synthetic
+families, a one-user membership stub and the exact captured function body. They
+reproduce a foreign meal being copied despite its RLS SELECT denial and a supplied
+foreign list being accepted. The exact existing0311+0313 migrations repair both,
+reject future cross-family references and preserve the pre-existing mismatched
+plan. Standalone0313 fails without its helper and rolls back; combined rollback
+and repeat application also pass. Other0311 table wiring is skipped because those
+tables are absent from this fixture, so full production-schema rehearsal remains
+required. No migration bytes or allocations changed. Run only against a fresh
+local PostgreSQL17 container `bubaly-audit-grocery-20261008`, database
+`bubaly_grocery_fixture_20261008`, on the explicit local Docker socket; the runner
+accepts no remote connection or apply options.
 
 | Stage | Concrete source/scope | Gate before proceeding |
 |---|---|---|

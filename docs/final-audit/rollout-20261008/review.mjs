@@ -61,6 +61,10 @@ const aclReceipt = parse('docs/final-audit/rollout-20261008/0456-acl.fixture-res
 for (const file of [aclReceipt.migration, aclReceipt.fixture]) {
   if (hash(read(file.path)) !== file.sha256) throw new Error('ACL fixture receipt is stale: ' + file.path);
 }
+const groceryReceipt = parse('docs/final-audit/rollout-20261008/0313-grocery.fixture-results.json');
+for (const file of groceryReceipt.files) {
+  if (hash(read(file.path)) !== file.sha256) throw new Error('Grocery fixture receipt is stale: ' + file.path);
+}
 const expectedLedger = new Set(manifest.baseline.map(canonical));
 const actualLedger = new Set(snapshot.migrations.map(canonical));
 console.log(JSON.stringify({
@@ -90,8 +94,14 @@ console.log(JSON.stringify({
   heldCandidates: held.map(file => ({ ...checksum('supabase/reserved/' + file), disposition: 'HELD; allocation unchanged; no promotion authorized' })),
   priorityRpcReview: {
     disposition: 'Review only; no production function invocation or grant change authorized',
-    evidence: ['priority-rpc-definitions.json', 'priority-rpc-prerequisites.json', 'definer-acl-catalog.json', '0456-acl.fixture-results.json'].map(name => checksum('docs/final-audit/rollout-20261008/' + name)),
+    evidence: ['priority-rpc-definitions.json', 'priority-rpc-prerequisites.json', 'priority-rpc-callers.json', 'definer-acl-catalog.json', '0456-acl.fixture-results.json'].map(name => checksum('docs/final-audit/rollout-20261008/' + name)),
     migrations: ['0179_harden_rate_limit_rpc_grants.sql', '0292_privileged_rpc_grant_reassert.sql', '0456_service_only_functions_are_service_only.sql'].map(name => checksum('supabase/migrations/' + name)),
+  },
+  groceryRpcReview: {
+    disposition: 'Source0313 guards absent in live metadata; source0311 helper prerequisite also absent. Isolated minimal-schema rehearsal only; no production application authorized.',
+    receipt: checksum('docs/final-audit/rollout-20261008/0313-grocery.fixture-results.json'),
+    files: groceryReceipt.files,
+    checks: groceryReceipt.checks,
   },
   walletReferenceCandidate: {
     disposition: 'UNALLOCATED; structural fixture only; existing-data disposition and full-schema rehearsal required; no application authorized',
