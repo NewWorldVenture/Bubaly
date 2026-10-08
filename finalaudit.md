@@ -1,5 +1,13 @@
 # Final Production Audit
 
+## Published messaging workflow acceptance — 2026-10-08
+
+Root verified terminal SUCCESS for exact published1ee14a2682533b72778e8d3d9ba8543871feec0d messaging verification run37843718470/job113539230877. Disposable PostgreSQL16 replay/participant/privacy/independent-session checks passed: original audiences and archived history retained, future/reactivated nonparticipants refused, initially empty separate canonical chat, reapply/seed idempotency, sender/reply/roster constraints, storage/Realtime policies, membership-removal/edit/delete and family-cascade lock orderings. The owned database script's terminal status includes its finally stop and owned-directory cleanup; no production database execution.
+
+Service/thread/schema contracts64 PASS across4 files, and deterministic-transport React/Chromium conversation ownership/sending/streaming lifecycle86 PASS. Browser transport doubles do not prove genuine GoTrue/browser or the pending six-case Auth RPC boundary gate. Named messaging completion markers remain local and absent from published1ee. Current main CI37843718421 core Tokyo and broad authenticated E2E smoke remain live; no cancelling push, merge or deployment acceptance claimed.
+
+Raw job log and authoritative job JSON retained in Temp/bubaly-1ee14-messaging-hosted-20261008/. Log SHA25613278aec692a5005d409731fabc0daca36ff187b20a7721d6247c1827906ec94. Existing audit rows/statuses/evidence retained; Register14,724/344 historical closures unchanged, no new closure credit. Main allocation preserved and reserved migrations held. Both ledgers synchronized; Production Ready NO; goal active.
+
 ## Existing schema-only preflight extension allocation — 2026-10-08
 
 Preserve main's recorded migration allocation:451 runnable/highwater0476/next0477, messaging0475–0476; reserved0488/0490/0492–0494 remain held. User decision reconfirmed; no resequencing, fillers, promotion or installation.
