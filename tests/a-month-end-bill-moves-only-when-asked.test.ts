@@ -41,6 +41,9 @@ for (const [file, name] of [
         wroteNoRows,
         describeDbError,
         paymentOwner: { familyId: 'synthetic-family', userId: 'synthetic-user' },
+        canWrite: () => true,
+        paymentTicket: { current: 0 },
+        currentPayment: { current: null },
         setPaymentSelection: vi.fn(),
         toastError: vi.fn(),
         success: vi.fn(),
@@ -56,7 +59,7 @@ for (const [file, name] of [
         db = store(row),
         b = setup(db, row.due_date);
       await b.run(row);
-      expect(b.env.setPaymentSelection).toHaveBeenCalledWith({ bill: row, owner: b.env.paymentOwner });
+      expect(b.env.setPaymentSelection).toHaveBeenCalledWith({ bill: row, owner: b.env.paymentOwner, ticket: 1 });
       // Preserve the exact owner epoch, rather than a reconstructed equal key.
       expect(b.env.setPaymentSelection.mock.calls[0][0].owner).toBe(b.env.paymentOwner);
       expect(db.requests).toHaveLength(0);

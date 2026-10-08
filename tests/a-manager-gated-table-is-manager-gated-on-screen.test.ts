@@ -18,7 +18,7 @@
 // decides is manager-only for writes, the client that writes it from the
 // browser must say so too.
 //
-// Nine writers do not, and are named below rather than silently tolerated. They
+// Six writers do not, and are named below rather than silently tolerated. They
 // are not a security hole — the database holds, and `describeDbError` turns
 // 42501 into "You don't have permission to do that" rather than a raw Postgres
 // string — but a control that can never succeed is still a defect, and it sits
@@ -77,9 +77,6 @@ const MANAGER_ONLY_WRITES = [
  */
 const KNOWN_UNGATED = new Set([
   'components/family/invite-form.tsx -> invites',
-  'components/finance/bills-view.tsx -> bills',
-  'components/modules/billing-module.tsx -> bills',
-  'components/modules/billing-module.tsx -> financial_accounts',
   'components/modules/binder-module.tsx -> household_info',
   'components/modules/documents-module.tsx -> documents',
   'components/modules/finances-module.tsx -> financial_accounts',

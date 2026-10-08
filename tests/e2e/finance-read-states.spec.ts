@@ -79,7 +79,7 @@ test.beforeEach(async ({ page }) => {
       react: React,
       'lucide-react': new Proxy({}, { get: () => () => null }),
       '@/lib/utils/cn': { cn: (...values) => values.filter(v => typeof v === 'string').join(' ') },
-      '@/components/app/app-context': { useApp: () => ({ familyId: 'family', userId: 'user' }) },
+      '@/components/app/app-context': { useApp: () => ({ familyId: 'family', userId: 'user', role: 'parent' }) },
       // Every view calls useLocale() as well as useTranslations(), and passes
       // locale.code to hub.ts's usd/fmtDueDate. It must hand back the whole
       // Locale record, not a code string: a () => 'en-US' stub type-checks

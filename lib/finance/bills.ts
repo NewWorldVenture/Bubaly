@@ -48,16 +48,21 @@ export async function saveBillPayment(
   today: string,
   choice?: BillScheduleChoice,
   reopen = false,
+  isCurrent: () => boolean = () => true,
 ) {
+  if (!isCurrent()) return { data: null, error: new Error('This bill view is no longer current.') };
   if (!bill?.updated_at)
     return { data: null, error: new Error('This bill changed. Refresh before marking it paid.') };
   const patch = reopen ? { status: 'upcoming' as const } : billPaidPatch(bill, today, choice);
-  return writeBillPatch(patch, (p) =>
-    whereBillIsAsSeen(
+  return writeBillPatch(patch, (p) => {
+    // Missing-column compatibility may retry after an awaited HTTP refusal.
+    // Recheck the calling view before every dispatch, not only the first one.
+    if (!isCurrent()) return Promise.resolve({ data: null, error: new Error('This bill view is no longer current.') });
+    return whereBillIsAsSeen(
       client.from('bills').update(p).eq('id', bill.id).eq('family_id', familyId),
       bill,
-    ).select('id'),
-  );
+    ).select('id');
+  });
 }
 
 /** Both an absent column and a refused unsafe fallback need the update notice. */

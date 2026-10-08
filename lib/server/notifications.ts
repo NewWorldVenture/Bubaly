@@ -11,7 +11,7 @@ import { approvalReminders, type ApprovalInput } from '@/lib/notifications/appro
 import type { NeedsReader } from '@/lib/home/needs-sources';
 import { SOURCE_MESSAGES, translate } from '@/lib/i18n/messages';
 import { detectConflicts, type ConflictEvent } from '@/lib/home/conflicts';
-import { isSeries, readCalendarOccurrences } from '@/lib/calendar/occurrences';
+import { isSeries, readCalendarOccurrences, readCountedRows } from '@/lib/calendar/occurrences';
 import { allDayDate, occurrenceDay } from '@/lib/calendar/day';
 import { instantCalendarBounds } from '@/lib/briefing/calendar-window';
 import { medicationDueReminders } from '@/lib/notifications/medication-reminders';
@@ -398,10 +398,12 @@ export async function generateFamilyNotifications(supabase: DB, familyId: string
   // managers, for a child with no account). Reuses the pure conflict detector.
   // Series included: a one-off booked over a weekly practice is a clash in the
   // week it is booked, which is almost never the practice's first week.
+  // Complete the bounded window before detecting clashes. A presentation cap
+  // hides later pairs, and start-only reads hide commitments already underway.
   const conflictRead = await readCalendarOccurrences(supabase, familyId, instantCalendarBounds(nowIso, in14d, tz), tz, {
     columns: ['id', 'title', 'starts_at', 'ends_at', 'all_day', 'assignee_id'],
     refine: (query) => query.not('assignee_id', 'is', null),
-    limit: 200,
+    overlap: true,
   });
   if (conflictRead.error) console.error('[notifications] conflict read failed', { familyId, error: conflictRead.error });
   const conflictEvents = conflictRead.data ?? [];
@@ -441,16 +443,17 @@ export async function generateFamilyNotifications(supabase: DB, familyId: string
     // 50 per batch keeps the longest URL near 3 KB.
     const { data: existing, error: existingErr } = await readInChunks<
       { type: string; related_id: string | null; user_id: string | null }, { message: string }
-    >(relatedIds, (chunk) => supabase
-      .from('notifications')
-      .select('type, related_id, user_id')
-      .eq('family_id', familyId)
-      .in('related_id', chunk), 50);
-    // A failed dedup read leaves `seen` empty, so every candidate would pass the
-    // filter and re-insert as a duplicate — log it so that spam is diagnosable.
+    >(relatedIds, async (chunk) => {
+      const query=()=>supabase.from('notifications').select('id, type, related_id, user_id',{count:'exact'})
+        .eq('family_id',familyId).in('related_id',chunk).order('id');
+      return readCountedRows<{id:string;type:string;related_id:string|null;user_id:string|null}>(
+        ()=>query().limit(1000),(from,to)=>query().range(from,to),20_000,'notification dedupe rows');
+    }, 50);
+    // An incomplete dedupe answer cannot authorize another delivery. Other
+    // categories retain their independent handling; these candidates retry next tick.
     if (existingErr) console.error('[notifications] dedup read failed', { familyId, error: existingErr });
     const seen = new Set((existing ?? []).map((e) => `${e.type}:${e.related_id}:${e.user_id ?? 'all'}`));
-    rows = candidates
+    rows = (existingErr ? [] : candidates)
       .filter((c) => !seen.has(`${c.type}:${c.related_id}:${c.user_id ?? 'all'}`))
       .slice(0, 100)
       .map((c) => toRow(familyId, c));

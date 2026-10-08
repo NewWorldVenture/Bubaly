@@ -1,6 +1,6 @@
 'use client';
 
-import { useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { useFamilyClock } from '@/components/i18n/use-format';
 import { useTranslations } from '@/components/i18n/locale-provider';
 import { Button } from '@/components/ui/button';
@@ -14,8 +14,8 @@ import { createClient } from '@/lib/supabase/client';
 import { describeDbError, wroteNoRows } from '@/lib/supabase/errors';
 
 /** Only rendered for an unknown schedule; an ambiguous legacy day is blank. */
-export function BillPaymentModal({ bill, familyId, onClose, onDone }: {
-  bill: Tables<'bills'>; familyId: string; onClose: () => void; onDone: () => void;
+export function BillPaymentModal({ bill, familyId, onClose, onDone, isCurrent }: {
+  bill: Tables<'bills'>; familyId: string; onClose: () => void; onDone: () => void; isCurrent: () => boolean;
 }) {
   const t = useTranslations();
   const clock = useFamilyClock();
@@ -23,20 +23,24 @@ export function BillPaymentModal({ bill, familyId, onClose, onDone }: {
   const [cadence, setCadence] = useState<BillCadence | ''>(() => billCadence(bill) ?? '');
   const [day, setDay] = useState(() => String(billAnchorDay(bill) ?? ''));
   const [saving, setSaving] = useState(false);
+  const alive = useRef(true), inFlight = useRef(false);
+  useEffect(() => { alive.current = true; return () => { alive.current = false; }; }, []);
   const needsDay = cadence !== '' && MONTH_BASED_CADENCES.has(cadence);
 
   async function submit(e: React.FormEvent) {
     e.preventDefault();
-    if (!cadence || (needsDay && !day) || saving) return;
+    if (!alive.current || !isCurrent() || bill.family_id !== familyId || inFlight.current || !cadence || (needsDay && !day)) return;
+    inFlight.current = true;
     setSaving(true);
     try {
-      const { data, error } = await saveBillPayment(createClient(), familyId, bill, clock.todayKey(), { cadence, ...(needsDay ? { dueDay: Number(day) } : {}) });
+      const { data, error } = await saveBillPayment(createClient(), familyId, bill, clock.todayKey(), { cadence, ...(needsDay ? { dueDay: Number(day) } : {}) }, false, () => alive.current && isCurrent());
+      if (!alive.current || !isCurrent()) return;
       if (error) { toastError(isMissingBillDueDay(error) ? t('bills.scheduleUnavailable') : describeDbError(error)); return; }
       if (wroteNoRows(data)) { toastError(t('errors.thatChangeWasNotSaved')); onDone(); onClose(); return; }
       success(t('billingModule.billMarkedAsPaid'));
       onDone(); onClose();
-    } catch { toastError(t('errors.thatChangeWasNotSaved')); }
-    finally { setSaving(false); }
+    } catch { if (alive.current && isCurrent()) toastError(t('errors.thatChangeWasNotSaved')); }
+    finally { inFlight.current = false; if (alive.current && isCurrent()) setSaving(false); }
   }
 
   return (

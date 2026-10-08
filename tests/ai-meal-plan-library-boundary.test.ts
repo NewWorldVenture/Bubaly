@@ -1,5 +1,6 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { createClient } from '@supabase/supabase-js';
+import { at } from './helpers/source-order';
 import { orPredicate } from './helpers/in-memory-supabase';
 
 const h = vi.hoisted(() => ({ db: null as unknown, complete: vi.fn(), urls: [] as URL[],
@@ -82,7 +83,7 @@ describe('actual SDK complete meal planning inputs before ranking', () => {
       { ...dish('private', 'Other family private dish'), family_id: 'another-family' }];
     expect((await POST(request())).status).toBe(200);
     expect(prompt()).toContain('Aardvark favorite');
-    expect(prompt().indexOf('Aardvark favorite')).toBeLessThan(prompt().indexOf('Zebra first'));
+    expect(at(prompt(), 'Aardvark favorite')).toBeLessThan(at(prompt(), 'Zebra first'));
     expect(prompt()).not.toContain('Other family private dish');
     expect(h.urls.filter(url => url.pathname.endsWith(`/${table}`)).map(url => Number(url.searchParams.get('offset') ?? 0))).toEqual([0, 2]);
   });

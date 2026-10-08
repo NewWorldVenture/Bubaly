@@ -271,8 +271,8 @@ const EXPENSE_CATEGORIES = [
 
 // ── CRUD Modals ─────────────────────────────────────────────────────────────
 
-function AddAccountModal({ open, onClose, familyId, userId, onDone }: {
-  open: boolean; onClose: () => void; familyId: string; userId: string; onDone: () => void;
+function AddAccountModal({ open, onClose, familyId, userId, onDone, isCurrent }: {
+  open: boolean; onClose: () => void; familyId: string; userId: string; onDone: () => void; isCurrent: () => boolean;
 }) {
   const tr = useTranslations();
   const { success, error: toastError } = useToast();
@@ -282,23 +282,28 @@ function AddAccountModal({ open, onClose, familyId, userId, onDone }: {
   const [institution, setInstitution] = useState('');
   const [lastFour, setLastFour] = useState('');
   const [balance, setBalance] = useState('');
+  const alive = useRef(true), inFlight = useRef(false);
+  useEffect(() => { alive.current = true; return () => { alive.current = false; }; }, []);
 
   function reset() { setName(''); setType('checking'); setInstitution(''); setLastFour(''); setBalance(''); }
 
   async function submit(e: React.FormEvent) {
     e.preventDefault();
-    if (!name.trim()) return;
-    setSaving(true);
-    const supabase = createClient();
-    const { error } = await supabase.from('financial_accounts').insert({
-      family_id: familyId, created_by: userId,
-      name: name.trim(), type, institution: institution.trim() || null,
-      last_four: lastFour.trim() || null, balance: parseFloat(balance) || 0, currency: 'USD',
-    });
-    setSaving(false);
-    if (error) return toastError(describeDbError(error));
-    success(tr('billingModule.accountAdded'));
-    reset(); onClose(); onDone();
+    if (!alive.current || !isCurrent() || inFlight.current || !name.trim()) return;
+    inFlight.current = true; setSaving(true);
+    try {
+      const supabase = createClient();
+      const { error } = await supabase.from('financial_accounts').insert({
+        family_id: familyId, created_by: userId,
+        name: name.trim(), type, institution: institution.trim() || null,
+        last_four: lastFour.trim() || null, balance: parseFloat(balance) || 0, currency: 'USD',
+      });
+      if (!alive.current || !isCurrent()) return;
+      if (error) return toastError(describeDbError(error));
+      success(tr('billingModule.accountAdded'));
+      reset(); onDone(); onClose();
+    } catch { if (alive.current && isCurrent()) toastError(tr('errors.thatChangeWasNotSaved')); }
+    finally { inFlight.current = false; if (alive.current && isCurrent()) setSaving(false); }
   }
 
   return (
@@ -440,12 +445,13 @@ function AddBudgetModal({ open, onClose, familyId, userId, onDone }: {
   );
 }
 
-function AddBillModal({ open, onClose, familyId, userId, onDone }: {
-  open: boolean; onClose: () => void; familyId: string; userId: string; onDone: () => void;
+function AddBillModal({ open, onClose, familyId, userId, onDone, isCurrent }: {
+  open: boolean; onClose: () => void; familyId: string; userId: string; onDone: () => void; isCurrent: () => boolean;
 }) {
   const tr = useTranslations();
   const { success, error: toastError } = useToast();
   const alive = useRef(true);
+  const inFlight = useRef(false);
   useEffect(() => { alive.current = true; return () => { alive.current = false; }; }, []);
   const [saving, setSaving] = useState(false);
   const [name, setName] = useState('');
@@ -461,8 +467,9 @@ function AddBillModal({ open, onClose, familyId, userId, onDone }: {
 
   async function submit(e: React.FormEvent) {
     e.preventDefault();
+    if (!alive.current || !isCurrent() || inFlight.current) return;
     if (!name.trim() || !amount || !dueDate) return;
-    setSaving(true);
+    inFlight.current = true; setSaving(true);
     try {
       const supabase = createClient();
       const dueDay = needsDay ? Number(anchorDay) : null;
@@ -472,15 +479,15 @@ function AddBillModal({ open, onClose, familyId, userId, onDone }: {
         is_recurring: isRecurring, recurrence: isRecurring ? recurrence : null,
         ...(dueDay !== null ? { due_day: dueDay } : {}),
         status: 'upcoming' as const, category,
-      }, p => supabase.from('bills').insert(p));
-      if (!alive.current) return;
+      }, p => alive.current && isCurrent() ? supabase.from('bills').insert(p) : Promise.resolve({ data: null, error: new Error('Bill view changed') }));
+      if (!alive.current || !isCurrent()) return;
       if (error) return toastError(isMissingBillDueDay(error) ? tr('bills.scheduleUnavailable') : describeDbError(error));
       success(tr('billingModule.billAdded'));
-      reset(); onClose(); onDone();
+      reset(); onDone(); onClose();
     } catch {
-      if (alive.current) toastError(tr('errors.thatChangeWasNotSaved'));
+      if (alive.current && isCurrent()) toastError(tr('errors.thatChangeWasNotSaved'));
     } finally {
-      if (alive.current) setSaving(false);
+      inFlight.current = false; if (alive.current && isCurrent()) setSaving(false);
     }
   }
 
@@ -577,10 +584,13 @@ export function BillingModule({ serviceFeeNotice = null }: { serviceFeeNotice?: 
   const locale = useLocale();
   const fmtCurrency = (n: number, showSign = false) => currencyIn(locale.code, n, showSign);
   const { familyId, family, userId, role, members } = useApp();
-  const paymentOwner = useMemo(() => ({ familyId, userId }), [familyId, userId]);
-  const [paymentSelection, setPaymentSelection] = useState<{ bill: Bill; owner: typeof paymentOwner } | null>(null);
+  const paymentOwner = useMemo(() => ({ familyId, userId, role }), [familyId, userId, role]);
+  const [paymentSelection, setPaymentSelection] = useState<{ bill: Bill; owner: typeof paymentOwner; ticket: number } | null>(null);
+  const paymentTicket = useRef(0);
+  const currentPayment = useRef(paymentSelection);
+  currentPayment.current = paymentSelection?.owner === paymentOwner ? paymentSelection : null;
   const paymentBill = paymentSelection?.owner === paymentOwner ? paymentSelection.bill : null;
-  const scheduleOwner = useMemo(() => ({ familyId, userId, role }), [familyId, userId, role]);
+  const scheduleOwner = paymentOwner;
   const [scheduleSelection, setScheduleSelection] = useState<{ bill: Bill; owner: typeof scheduleOwner; ticket: number } | null>(null);
   const scheduleTicket = useRef(0);
   const currentBillOwner = useRef(scheduleOwner);
@@ -588,8 +598,10 @@ export function BillingModule({ serviceFeeNotice = null }: { serviceFeeNotice?: 
   const currentSchedule = useRef(scheduleSelection);
   currentSchedule.current = scheduleSelection?.owner === scheduleOwner ? scheduleSelection : null;
   const scheduleBill = scheduleSelection?.owner === scheduleOwner ? scheduleSelection.bill : null;
+  const canManage = isManager(role);
+  const canWrite = () => canManage && currentBillOwner.current === scheduleOwner;
   function openSchedule(bill: Bill) {
-    if (currentBillOwner.current !== scheduleOwner) return;
+    if (!canWrite() || bill.family_id !== familyId) return;
     const selection = { bill, owner: scheduleOwner, ticket: ++scheduleTicket.current };
     currentSchedule.current = selection;
     setScheduleSelection(selection);
@@ -649,10 +661,26 @@ export function BillingModule({ serviceFeeNotice = null }: { serviceFeeNotice?: 
   }, [reviewNeedsReadback, readback, isCurrentReady, subscription]);
 
   // Modal state
-  const [showAddAccount, setShowAddAccount] = useState(false);
+  type WriteSelection = { owner: typeof paymentOwner; ticket: number };
+  const writeTicket = useRef(0);
+  const [showAddAccount, setShowAddAccount] = useState<WriteSelection | null>(null);
+  const currentAccount = useRef(showAddAccount);
+  currentAccount.current = showAddAccount?.owner === paymentOwner ? showAddAccount : null;
   const [showAddTransaction, setShowAddTransaction] = useState(false);
   const [showAddBudget, setShowAddBudget] = useState(false);
-  const [showAddBill, setShowAddBill] = useState(false);
+  const [showAddBill, setShowAddBill] = useState<WriteSelection | null>(null);
+  const currentBillForm = useRef(showAddBill);
+  currentBillForm.current = showAddBill?.owner === paymentOwner ? showAddBill : null;
+  function openAccount() {
+    if (!canWrite()) return;
+    const selection = { owner: paymentOwner, ticket: ++writeTicket.current };
+    currentAccount.current = selection; setShowAddAccount(selection);
+  }
+  function openBillForm() {
+    if (!canWrite()) return;
+    const selection = { owner: paymentOwner, ticket: ++writeTicket.current };
+    currentBillForm.current = selection; setShowAddBill(selection);
+  }
   const [showAddGoal, setShowAddGoal] = useState(false);
 
   // ── Data queries ────────────────────────────────────────────────────────
@@ -980,12 +1008,15 @@ export function BillingModule({ serviceFeeNotice = null }: { serviceFeeNotice?: 
   }
 
   async function deleteBill(id: string) {
+    if (!canWrite()) return;
     if (!(await askConfirm({ title: tr('billing.deleteBillQ'), body: tr('confirm.cannotBeUndone') }))) return;
+    if (!canWrite()) return;
     const supabase = createClient();
     // A restrictive RLS policy FILTERS an update/delete rather than raising, so
     // a refused write returns zero rows and no error. `.select('id')` is what
     // makes the difference visible — without it `data` is null either way.
     const { data: rows, error } = await supabase.from('bills').delete().eq('id', id).eq('family_id', familyId).select('id');
+    if (!canWrite()) return;
     if (error) return toastError(describeDbError(error));
     if (wroteNoRows(rows)) return toastError(tr('errors.thatChangeWasNotSaved'));
     success(tr('billingModule.billRemoved'));
@@ -993,9 +1024,14 @@ export function BillingModule({ serviceFeeNotice = null }: { serviceFeeNotice?: 
   }
 
   async function markBillPaid(bill: Bill) {
-    if (!billPaidPatch(bill, clock.todayKey())) { setPaymentSelection({ bill, owner: paymentOwner }); return; }
+    if (!canWrite() || bill.family_id !== familyId) return;
+    if (!billPaidPatch(bill, clock.todayKey())) {
+      const selection = { bill, owner: paymentOwner, ticket: ++paymentTicket.current };
+      currentPayment.current = selection; setPaymentSelection(selection); return;
+    }
     const supabase = createClient();
-    const { data: rows, error } = await saveBillPayment(supabase, familyId, bill, clock.todayKey());
+    const { data: rows, error } = await saveBillPayment(supabase, familyId, bill, clock.todayKey(), undefined, false, canWrite);
+    if (!canWrite()) return;
     if (error) return toastError(isMissingBillDueDay(error) ? tr('bills.scheduleUnavailable') : describeDbError(error));
     if (wroteNoRows(rows)) { toastError(tr('errors.thatChangeWasNotSaved')); void refreshBills(); return; }
     success(tr('billingModule.billMarkedAsPaid'));
@@ -1011,9 +1047,12 @@ export function BillingModule({ serviceFeeNotice = null }: { serviceFeeNotice?: 
   }
 
   async function deleteAccount(id: string) {
+    if (!canWrite()) return;
     if (!(await askConfirm({ title: tr('billing.deleteAccountQ'), body: tr('billing.deleteAccountBody') }))) return;
+    if (!canWrite()) return;
     const supabase = createClient();
     const { data: rows, error } = await supabase.from('financial_accounts').delete().eq('id', id).eq('family_id', familyId).select('id');
+    if (!canWrite()) return;
     if (error) return toastError(describeDbError(error));
     if (wroteNoRows(rows)) return toastError(tr('errors.thatChangeWasNotSaved'));
     success(tr('billingModule.accountRemoved'));
@@ -1374,11 +1413,11 @@ export function BillingModule({ serviceFeeNotice = null }: { serviceFeeNotice?: 
     <div className="space-y-4">
       <div className="flex items-center justify-between">
         <h2 className="font-semibold">{tr('billing.bills')}</h2>
-        <Button size="sm" onClick={() => setShowAddBill(true)}><Plus className="h-4 w-4" /> {tr('billing.addBill')}</Button>
+        {canManage && <Button size="sm" onClick={openBillForm}><Plus className="h-4 w-4" /> {tr('billing.addBill')}</Button>}
       </div>
       {bills.length === 0 ? (
         <EmptyState icon={Receipt} title={tr('billing.noBills')} description={tr('billingModule.trackYourRecurringBillsAnd')}
-          action={<Button onClick={() => setShowAddBill(true)}><Plus className="h-4 w-4" /> {tr('billing.addBill')}</Button>} />
+          action={canManage ? <Button onClick={openBillForm}><Plus className="h-4 w-4" /> {tr('billing.addBill')}</Button> : undefined} />
       ) : (
         <div className="space-y-3">
           {bills.map((b) => (
@@ -1398,7 +1437,7 @@ export function BillingModule({ serviceFeeNotice = null }: { serviceFeeNotice?: 
                 {b.status}
               </Badge>
               <p className="text-sm font-bold shrink-0">{fmtCurrency(b.amount)}</p>
-              <div className="flex gap-1">
+              {canManage && <div className="flex gap-1">
                 {isManager(role) && b.is_recurring && <Button size="sm" variant="outline" onClick={() => openSchedule(b)}>{tr('bills.editSchedule')}</Button>}
                 {b.status !== 'paid' && (
                   <button onClick={() => markBillPaid(b)} className="p-1.5 rounded-lg text-muted hover:text-emerald-400 hover:bg-surface/40" title={tr('billing.markPaid')}>
@@ -1408,7 +1447,7 @@ export function BillingModule({ serviceFeeNotice = null }: { serviceFeeNotice?: 
                 <button aria-label={tr('a11y.delete')} onClick={() => deleteBill(b.id)} className="p-1.5 rounded-lg text-muted hover:text-red-400 hover:bg-surface/40">
                   <Trash2 className="h-4 w-4" />
                 </button>
-              </div>
+              </div>}
             </div>
           ))}
         </div>
@@ -1646,7 +1685,7 @@ export function BillingModule({ serviceFeeNotice = null }: { serviceFeeNotice?: 
           action={
             <div className="flex items-center gap-2">
               <Button onClick={() => setShowAddTransaction(true)}><Plus className="h-4 w-4" /> {tr('billing.addTransaction')}</Button>
-              <Button variant="secondary" onClick={() => setShowAddAccount(true)}><Link2 className="h-4 w-4" /> {tr('billing.linkAccount')}</Button>
+              {canManage && <Button variant="secondary" onClick={openAccount}><Link2 className="h-4 w-4" /> {tr('billing.linkAccount')}</Button>}
               <AiInsight kind="billing" iconOnly />
             </div>
           }
@@ -1693,9 +1732,9 @@ export function BillingModule({ serviceFeeNotice = null }: { serviceFeeNotice?: 
                       <p className="text-xs text-muted capitalize">{a.type}{a.last_four ? ` ···${a.last_four}` : ''}</p>
                     </div>
                     <p className="text-sm font-bold shrink-0">{fmtCurrency(a.balance ?? 0)}</p>
-                    <button aria-label={tr('a11y.delete')} onClick={() => deleteAccount(a.id)} className="p-1 rounded text-muted opacity-100 sm:opacity-0 sm:group-hover:opacity-100 focus-visible:opacity-100 coarse:opacity-100 hover:text-red-400">
+                    {canManage && <button aria-label={tr('a11y.delete')} onClick={() => deleteAccount(a.id)} className="p-1 rounded text-muted opacity-100 sm:opacity-0 sm:group-hover:opacity-100 focus-visible:opacity-100 coarse:opacity-100 hover:text-red-400">
                       <Trash2 className="h-3.5 w-3.5" />
-                    </button>
+                    </button>}
                   </div>
                 );
               })}
@@ -1707,9 +1746,9 @@ export function BillingModule({ serviceFeeNotice = null }: { serviceFeeNotice?: 
               <span className="text-sm font-black">{fmtCurrency(totalBalance)}</span>
             </div>
           )}
-          <button onClick={() => setShowAddAccount(true)} className="mt-3 flex w-full items-center justify-center gap-1.5 rounded-xl border border-border py-2.5 text-xs font-semibold text-muted hover:text-fg">
+          {canManage && <button onClick={openAccount} className="mt-3 flex w-full items-center justify-center gap-1.5 rounded-xl border border-border py-2.5 text-xs font-semibold text-muted hover:text-fg">
             <Plus className="h-3.5 w-3.5" /> {tr('billing.addAccount')}
-          </button>
+          </button>}
         </div>
 
         {/* Savings Goals */}
@@ -1751,11 +1790,11 @@ export function BillingModule({ serviceFeeNotice = null }: { serviceFeeNotice?: 
       </aside>
 
       {/* Modals */}
-      <AddAccountModal open={showAddAccount} onClose={() => setShowAddAccount(false)} familyId={familyId} userId={userId} onDone={() => void refreshAccounts()} />
+      {canManage && showAddAccount?.owner === paymentOwner && <AddAccountModal key={`${familyId}:${userId}:${showAddAccount.ticket}`} open isCurrent={() => canWrite() && currentAccount.current === showAddAccount} onClose={() => { if (currentAccount.current === showAddAccount) { currentAccount.current = null; setShowAddAccount(null); } }} familyId={familyId} userId={userId} onDone={() => { if (canWrite() && currentAccount.current === showAddAccount) void refreshAccounts(); }} />}
       <AddTransactionModal open={showAddTransaction} onClose={() => setShowAddTransaction(false)} familyId={familyId} userId={userId} accounts={accounts} onDone={() => void refreshTransactions()} />
       <AddBudgetModal open={showAddBudget} onClose={() => setShowAddBudget(false)} familyId={familyId} userId={userId} onDone={() => void refreshBudgets()} />
-      <AddBillModal key={`${familyId}:${userId}:${showAddBill}`} open={showAddBill} onClose={() => setShowAddBill(false)} familyId={familyId} userId={userId} onDone={() => void refreshBills()} />
-      {paymentBill && bills.some(b => b.id === paymentBill.id && b.family_id === familyId) && <BillPaymentModal key={`${familyId}:${userId}:${paymentBill.id}`} bill={paymentBill} familyId={familyId} onClose={() => setPaymentSelection(null)} onDone={() => { void refreshBills(); }} />}
+      {canManage && showAddBill?.owner === paymentOwner && <AddBillModal key={`${familyId}:${userId}:${showAddBill.ticket}`} open isCurrent={() => canWrite() && currentBillForm.current === showAddBill} onClose={() => { if (currentBillForm.current === showAddBill) { currentBillForm.current = null; setShowAddBill(null); } }} familyId={familyId} userId={userId} onDone={() => { if (canWrite() && currentBillForm.current === showAddBill) void refreshBills(); }} />}
+      {canManage && paymentBill && bills.some(b => b.id === paymentBill.id && b.family_id === familyId) && <BillPaymentModal key={`${familyId}:${userId}:${paymentBill.id}:${paymentSelection!.ticket}`} bill={paymentBill} familyId={familyId} isCurrent={() => canWrite() && currentPayment.current === paymentSelection} onClose={() => { if (currentPayment.current === paymentSelection) { currentPayment.current = null; setPaymentSelection(null); } }} onDone={() => { if (canWrite() && currentPayment.current === paymentSelection) void refreshBills(); }} />}
       {scheduleBill && isManager(role) && bills.some(b => b.id === scheduleBill.id && b.family_id === familyId) && <BillScheduleModal key={`${familyId}:${userId}:${scheduleBill.id}:${scheduleSelection!.ticket}`} bill={scheduleBill} isCurrent={() => currentSchedule.current === scheduleSelection && currentBillOwner.current === scheduleSelection!.owner} onClose={() => {
         if (currentSchedule.current !== scheduleSelection) return;
         currentSchedule.current = null; setScheduleSelection(null);

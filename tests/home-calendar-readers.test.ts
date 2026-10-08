@@ -1,6 +1,7 @@
 import React from 'react';
 import { renderToStaticMarkup } from 'react-dom/server';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
+import { at } from './helpers/source-order';
 import { createClient, type SupabaseClient } from '@supabase/supabase-js';
 import { mkdirSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
@@ -157,7 +158,7 @@ describe('actual Home calendar reads and rendered read availability', () => {
   it('Tokyo upcoming DATE annotation sorts at family midnight while keeping its civil badge date',async()=>{
     vi.setSystemTime(new Date('2026-09-09T12:00:00Z'));
     db.seed('calendar_events',[row('Tomorrow civil holiday','2026-09-10T00:00:00.000Z',true,null),row('Tomorrow early meeting','2026-09-09T16:00:00.000Z',false,null,'family','2026-09-09T17:00:00.000Z')]);
-    const html=await home('Asia/Tokyo');expect(html.indexOf('Tomorrow civil holiday')).toBeLessThan(html.indexOf('Tomorrow early meeting'));
+    const html=await home('Asia/Tokyo');expect(at(html,'Tomorrow civil holiday')).toBeLessThan(at(html,'Tomorrow early meeting'));
     expect(html).toContain(new Intl.DateTimeFormat('en-US',{timeZone:'UTC',month:'short',day:'numeric'}).format(new Date('2026-09-10T12:00:00Z')));
   });
   it.each([

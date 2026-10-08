@@ -54,8 +54,12 @@ const cases = [
 for (const [file, owner, handler, pending] of cases)
   describe(`${owner}.${handler}`, () => {
     function setup(work: Promise<unknown>) {
+      const instance = { current: true };
       const env = {
         alive: { current: true },
+        instance,
+        isCurrent: () => instance.current,
+        inFlight: { current: false },
         syncRequest: { current: 0 },
         setSaving: vi.fn(),
         setAdding: vi.fn(),
@@ -148,6 +152,21 @@ for (const [file, owner, handler, pending] of cases)
       expect(b.env.closeModal).not.toHaveBeenCalled();
       expect(b.env[pending]).toHaveBeenCalledTimes(1);
     });
+    if (handler === "submit")
+      it("ignores a retired instance before passive unmount cleanup", async () => {
+        let resolve!: (value: unknown) => void;
+        const b = setup(new Promise((done) => { resolve = done; }));
+        const running = b.run(b.arg);
+        b.env.instance.current = false;
+        expect(b.env.alive.current).toBe(true);
+        resolve({ error: null }); await running;
+        expect(b.env.success).not.toHaveBeenCalled();
+        expect(b.env.toastError).not.toHaveBeenCalled();
+        expect(b.env.onClose).not.toHaveBeenCalled();
+        expect(b.env.onDone).not.toHaveBeenCalled();
+        expect(b.env[pending]).toHaveBeenCalledTimes(1);
+        expect(b.env.inFlight.current).toBe(false);
+      });
     it("preserves success and cleanup for a current owner", async () => {
       const b = setup(
         Promise.resolve(

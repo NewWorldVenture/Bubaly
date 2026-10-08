@@ -1,0 +1,50 @@
+// Synthetic catalog fixture only. Creates and stops its OWN local cluster;
+// accepts no external connection, production credentials or apply options.
+// node scripts/verify-source-catalog-preflight.mjs --bin /absolute/postgresql/bin
+import assert from 'node:assert/strict';
+import{execFileSync}from'node:child_process';import{mkdtempSync,readFileSync,writeFileSync}from'node:fs';import{join,dirname,resolve,isAbsolute}from'node:path';import{fileURLToPath}from'node:url';import{tmpdir}from'node:os';import{createServer}from'node:net';import{createHash}from'node:crypto';
+const root=resolve(dirname(fileURLToPath(import.meta.url)),'..');
+assert(process.argv.length===4 && process.argv[2]==='--bin' && isAbsolute(process.argv[3]),'Only explicit --bin /absolute/postgresql/bin is accepted; no connection arguments.');
+const bin=process.argv[3],suffix=process.platform==='win32'?'.exe':'',work=mkdtempSync(join(tmpdir(),'bubaly-source-catalog-')),data=join(work,'data');
+const server=createServer();await new Promise(r=>server.listen(0,'127.0.0.1',r));const port=server.address().port;await new Promise(r=>server.close(r));
+const env=Object.fromEntries(Object.entries(process.env).filter(([k])=>!k.toUpperCase().startsWith('PG')));Object.assign(env,{PGCLIENTENCODING:'UTF8',PGCONNECT_TIMEOUT:'5'});
+const run=(name,args,input)=>execFileSync(join(bin,name+suffix),args,{env,input,encoding:'utf8',timeout:60000,stdio:name==='pg_ctl'?'ignore':['pipe','pipe','pipe']});
+const base=['-X','-h','127.0.0.1','-p',String(port),'-U','postgres','-d','postgres','-qAt','-v','ON_ERROR_STOP=1'];
+const sql=s=>run('psql',base,s).trim();let started=false;const checks=[];const check=(name,f)=>{f();checks.push(name);};
+const query=readFileSync(join(root,'docs/final-audit/messaging-bill-readonly-preflight.sql'),'utf8');
+try{
+ run('initdb',['-D',data,'-U','postgres','--auth=trust','--encoding=UTF8','--no-locale']);run('pg_ctl',['-D',data,'-l',join(work,'server.log'),'-o',`-h 127.0.0.1 -p ${port}`,'-w','start']);started=true;
+ const identity=sql("select current_setting('data_directory'),inet_server_port(),current_setting('server_version');");assert(identity.startsWith(data.replaceAll('\\','/')+'|'+port+'|'));
+ sql(`create role anon;create role authenticated;create role service_role;create schema supabase_migrations;create table supabase_migrations.schema_migrations(version text,name text);
+ create table public.family_conversations(id uuid,family_id uuid,participant_ids uuid[],member_ids uuid[],is_archived boolean,created_by uuid);
+ create table public.family_messages(conversation_id uuid,family_id uuid);`);
+ const absent=run('psql',[...base,'-f',join(root,'docs/final-audit/messaging-bill-readonly-preflight.sql')]);writeFileSync(join(work,'absent.txt'),absent);
+ check('all five expected source/native tables produce explicit missing rows',()=>{for(const n of['calendar_feeds','calendar_events','calendar_feed_source_revisions','calendar_feed_source_groups','calendar_feed_source_component_watermarks'])assert(absent.includes(n+'|f|'));});
+ check('all eleven expected RPC/helper identities produce explicit missing rows',()=>{const rows=absent.split(/\r?\n/).filter(l=>/^(public\.calendar_|calendar_feed_private\.)/.test(l));assert.equal(rows.length,11);assert(rows.every(l=>l.endsWith('|f')));});
+ check('missing private schema retains all three caller rows',()=>{for(const role of['anon','authenticated','service_role'])assert(absent.includes('calendar_feed_private|'+role+'|f|t|'));});
+ check('preflight proves read-only transaction',()=>assert.match(absent,/^\d+\|on\|t\|/m));
+ sql(`create schema calendar_feed_private;revoke all on schema calendar_feed_private from public;grant usage on schema calendar_feed_private to service_role;
+ create table public.calendar_feeds(id uuid primary key,family_id uuid not null);create table public.calendar_events(id uuid primary key,family_id uuid not null,feed_id uuid references public.calendar_feeds(id));
+ create table public.calendar_feed_source_revisions(id uuid primary key,feed_id uuid not null references public.calendar_feeds(id),family_id uuid not null,document jsonb not null);
+ alter table public.calendar_feed_source_revisions enable row level security;
+ create policy source_fixture_read on public.calendar_feed_source_revisions for select to authenticated using(false);
+ grant select on public.calendar_feed_source_revisions to authenticated;grant update(document) on public.calendar_feed_source_revisions to authenticated;
+ create function public.calendar_read_occurrence_inputs(uuid) returns jsonb language sql stable as 'select null::jsonb';
+ revoke all on function public.calendar_read_occurrence_inputs(uuid) from public;grant execute on function public.calendar_read_occurrence_inputs(uuid) to authenticated;
+ create function public.calendar_feed_archive_sources(uuid,timestamptz,jsonb) returns jsonb language sql as 'select null::jsonb';
+ create function calendar_feed_private.raw_identity(text,text,text) returns text language sql security definer set search_path=pg_catalog as 'select $1';
+ create function calendar_feed_private.immutable_archive() returns trigger language plpgsql as 'begin return new; end;';
+ create trigger source_fixture_immutable before update on public.calendar_feed_source_revisions for each row execute function calendar_feed_private.immutable_archive();
+ alter default privileges in schema calendar_feed_private grant execute on functions to authenticated;`);
+ const present=run('psql',[...base,'-f',join(root,'docs/final-audit/messaging-bill-readonly-preflight.sql')]);writeFileSync(join(work,'present.txt'),present);
+ check('present and still-missing source tables remain separately explicit',()=>{assert.match(present,/^calendar_feed_source_revisions\|t\|r\|t\|f\|postgres$/m);assert(present.includes('calendar_feed_source_groups|f|'));assert(present.includes('calendar_feed_source_component_watermarks|f|'));});
+ check('exact expected RPC/helper identities distinguish present from absent',()=>{assert(present.includes('public.calendar_read_occurrence_inputs(uuid)|t'));assert(present.includes('public.calendar_feed_archive_sources(uuid,timestamp with time zone,jsonb)|t'));assert(present.includes('calendar_feed_private.raw_identity(text,text,text)|t'));assert(present.includes('calendar_feed_private.validate_value(jsonb,text,text)|f'));});
+ check('private schema effective caller privileges are visible',()=>{assert(present.includes('calendar_feed_private|anon|t|t|postgres|f|f'));assert(present.includes('calendar_feed_private|service_role|t|t|postgres|t|f'));});
+ check('source constraints/indexes/policies/triggers/columns are all inventoried',()=>{for(const n of['calendar_feed_source_revisions_pkey','calendar_feed_source_revisions_feed_id_fkey','source_fixture_read','source_fixture_immutable','document'])assert(present.includes(n));});
+ check('column-only update and table grants are not conflated',()=>{assert(present.includes('calendar_feed_source_revisions|authenticated|t|f|f|f|document|t'));assert(present.includes('calendar_feed_source_revisions|authenticated|t|f|f|f|id|f'));});
+ check('unsafe PUBLIC function grant remains observable, not auto-accepted',()=>assert.match(present,/^public\|calendar_feed_archive_sources\|.*\|anon\|t\|t$/m));
+ check('restricted invoker RPC shows anonymous execute denial',()=>assert.match(present,/^public\|calendar_read_occurrence_inputs\|.*\|anon\|t\|f$/m));
+ check('private helpers and private default execute ACLs are included',()=>{assert.match(present,/^calendar_feed_private\|raw_identity\|.*\|anon\|f\|t$/m);assert(present.includes('calendar_feed_private|postgres|f|authenticated|EXECUTE|f'));});
+ check('preflight neither writes fixture rows nor invokes catalogued RPCs',()=>{assert.equal(sql('select count(*) from public.calendar_feed_source_revisions;'),'0');assert.match(present,/^\d+\|on\|t\|/m);});
+ const receipt={synthetic:true,productionExecuted:false,verifierSha256Lf:createHash('sha256').update(readFileSync(fileURLToPath(import.meta.url),'utf8').replaceAll('\r\n','\n')).digest('hex'),postgres:identity,port,work,querySha256Lf:createHash('sha256').update(query.replaceAll('\r\n','\n')).digest('hex'),checks:checks.length,labels:checks};writeFileSync(join(work,'receipt.json'),JSON.stringify(receipt,null,2));console.log(JSON.stringify(receipt));
+}finally{if(started)run('pg_ctl',['-D',data,'-m','immediate','-w','stop']);console.log('Owned disposable cluster stopped: '+work);}

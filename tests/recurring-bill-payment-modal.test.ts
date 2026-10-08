@@ -15,7 +15,7 @@ const bill = (over: Partial<Tables<'bills'>> = {}): Tables<'bills'> => ({
   is_recurring: true, recurrence: 'monthly', due_day: null, status: 'upcoming', category: null,
   autopay: false, created_by: null, created_at: '', updated_at: '2026-01-01T00:00:00Z', ...over,
 });
-const render = (row: Tables<'bills'>) => renderToStaticMarkup(createElement(BillPaymentModal, { bill: row, familyId: 'family-1', onClose: () => {}, onDone: () => {} }));
+const render = (row: Tables<'bills'>) => renderToStaticMarkup(createElement(BillPaymentModal, { bill: row, familyId: 'family-1', isCurrent: () => true, onClose: () => {}, onDone: () => {} }));
 
 describe('owner confirmation of an unknown recurring bill schedule', () => {
   it.each(['2026-02-28', '2026-03-28', '2026-03-29', '2026-03-30'])('leaves ambiguous legacy day %s unselected and requires a day before payment', (due_date) => {

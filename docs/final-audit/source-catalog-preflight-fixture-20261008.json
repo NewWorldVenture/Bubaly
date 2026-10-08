@@ -1,0 +1,25 @@
+{
+  "synthetic": true,
+  "productionExecuted": false,
+  "verifierSha256Lf": "339263a4fe155a4b59f81aa12fb76058d8d53e8069150b0a3a950578cbb8ade3",
+  "postgres": "C:/Users/Daniel/AppData/Local/Temp/bubaly-source-catalog-yLvC8r/data|53166|17.10",
+  "port": 53166,
+  "work": "C:\\Users\\Daniel\\AppData\\Local\\Temp\\bubaly-source-catalog-yLvC8r",
+  "querySha256Lf": "7d0e43cdcb2cb6271ee6ad950d5c83cbcbc071832156feaf18801a8b3c0c82a2",
+  "checks": 13,
+  "labels": [
+    "all five expected source/native tables produce explicit missing rows",
+    "all eleven expected RPC/helper identities produce explicit missing rows",
+    "missing private schema retains all three caller rows",
+    "preflight proves read-only transaction",
+    "present and still-missing source tables remain separately explicit",
+    "exact expected RPC/helper identities distinguish present from absent",
+    "private schema effective caller privileges are visible",
+    "source constraints/indexes/policies/triggers/columns are all inventoried",
+    "column-only update and table grants are not conflated",
+    "unsafe PUBLIC function grant remains observable, not auto-accepted",
+    "restricted invoker RPC shows anonymous execute denial",
+    "private helpers and private default execute ACLs are included",
+    "preflight neither writes fixture rows nor invokes catalogued RPCs"
+  ]
+}

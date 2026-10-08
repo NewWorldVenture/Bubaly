@@ -76,6 +76,13 @@ describe('generateFamilyNotifications source read boundary', () => {
     await expect(generateFamilyNotifications(supabase, 'fam-1')).resolves.toBe(0);
   });
 
+  it('logs a failed conflict category independently so another sweep can retry it', async () => {
+    const err=vi.spyOn(console,'error').mockImplementation(()=>{});
+    await expect(generateFamilyNotifications(fakeSupabase(new Set(['calendar_events'])), 'fam-1')).resolves.toBe(0);
+    expect(err).toHaveBeenCalledWith('[notifications] conflict read failed', expect.objectContaining({familyId:'fam-1'}));
+    await expect(generateFamilyNotifications(fakeSupabase(new Set()), 'fam-1')).resolves.toBe(0);
+  });
+
   it('does not log when all source reads succeed', async () => {
     const err = vi.spyOn(console, 'error').mockImplementation(() => {});
     const supabase = fakeSupabase(new Set());

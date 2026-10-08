@@ -30,6 +30,7 @@ import type { Tables, MealType } from '@/lib/database.types';
 import { useLocale, useTranslations } from '@/components/i18n/locale-provider';
 import { useFormat } from '@/components/i18n/use-format';
 import { formatMealDay, mealWeek } from '@/lib/meals/week';
+import { readMealGroceries, readMealLibrary, readMealRecipes, readMealWeek } from '@/lib/meals/collection-reads';
 import type { Ingredient, PlanSlot } from '@/lib/services/meals';
 import type { QueryRefreshConfirmation } from '@/lib/hooks/use-realtime-query';
 import { useDismissOnEscape } from '@/lib/hooks/use-dismiss-on-escape';
@@ -138,30 +139,25 @@ export function MealsModule() {
     if (isCurrentScope()) setAddCell({ date, type, scope, id: ++pickerSequence.current });
   };
 
-  const { data: library, loading: libraryLoading, error: libraryError, refresh: reloadLibrary, refreshAndConfirm: confirmLibrary } = useRealtimeQuery<Meal>({
-    table: 'meals', familyId, deps: [familyId],
+  const { data: library, loading: libraryLoading, error: libraryReadError, stale: libraryStale, refresh: reloadLibrary, refreshAndConfirm: confirmLibrary } = useRealtimeQuery<Meal>({
+    table: 'meals', familyId, deps: [familyId, 'complete-v1'],
     fetcher: async (supabase) => {
-      const result = await supabase.from('meals').select('*').eq('family_id', familyId).order('name');
+      const result = await readMealLibrary(supabase, familyId);
       if (result.error) console.error('[meals] library read failed', { message: result.error.message });
-      return result;
+      return result.error ? { data: null, error: { message: tr('mealsPlanner.choicesUnavailable') } } : result;
     },
   });
+  const libraryError = libraryReadError || (!libraryLoading && libraryStale ? tr('mealsPlanner.choicesUnavailable') : null);
   const libraryRef = useRef(library); libraryRef.current = library;
 
-  const { data: plans, loading, error, refresh, refreshAndConfirm } = useRealtimeQuery<Plan>({
-    table: 'meal_plans', familyId, deps: [familyId, weekStartStr],
+  const { data: plans, loading, error: plansReadError, stale: plansStale, refresh, refreshAndConfirm } = useRealtimeQuery<Plan>({
+    table: 'meal_plans', familyId, deps: [familyId, weekStartStr, 'complete-v1'],
     fetcher: async (supabase) => {
-      const { data, error } = await supabase.from('meal_plans').select('*').eq('family_id', familyId)
-        .gte('plan_date', days[0]).lte('plan_date', days[6]);
-      if (error) return { data: null, error };
-      const ids = [...new Set(data.map(p => p.meal_id).filter((x): x is string => !!x))];
-      const { data: meals, error: mealError } = ids.length ? await supabase.from('meals').select('*').eq('family_id', familyId).in('id', ids) : { data: [] as Meal[], error: null };
-      if (mealError) return { data: null, error: mealError };
-      const byId = new Map((meals ?? []).map(m => [m.id, m]));
-      if (ids.some(id => !byId.has(id))) return { data: null, error: { message: tr('mealsPlanner.choicesUnavailable') } };
-      return { data: data.map(p => ({ ...p, meal: byId.get(p.meal_id ?? '') ?? null })), error: null };
+      const result = await readMealWeek(supabase, familyId, days);
+      return result.error ? { data: null, error: { message: tr('mealsPlanner.choicesUnavailable') } } : result;
     },
   });
+  const error = plansReadError || (!loading && plansStale ? tr('mealsPlanner.choicesUnavailable') : null);
   const plansRef = useRef(plans);
   plansRef.current = plans;
   const readSlot = (slot: PlanSlot) => {
@@ -171,18 +167,23 @@ export function MealsModule() {
       && JSON.stringify(readIngredients(plan.meal?.ingredients ?? null)) === JSON.stringify(slot.ingredients);
   };
 
-  const { data: recipes, loading: recipesLoading, error: recipesError, refresh: refreshRecipes } = useRealtimeQuery<Recipe>({
-    table: 'family_recipes', familyId, deps: [familyId],
-    fetcher: (supabase) => supabase.from('family_recipes').select('*').eq('family_id', familyId)
-      .order('last_made_at', { ascending: false, nullsFirst: false }).order('name').limit(200),
+  const { data: recipes, loading: recipesLoading, error: recipesReadError, stale: recipesStale, refresh: refreshRecipes } = useRealtimeQuery<Recipe>({
+    table: 'family_recipes', familyId, deps: [familyId, 'complete-v1'],
+    fetcher: async (supabase) => {
+      const result = await readMealRecipes(supabase, familyId);
+      return result.error ? { data: null, error: { message: tr('mealsPlanner.choicesUnavailable') } } : result;
+    },
   });
+  const recipesError = recipesReadError || (!recipesLoading && recipesStale ? tr('mealsPlanner.choicesUnavailable') : null);
 
-  const { data: groceryItems, loading: groceryLoading, error: groceryError, refresh: refreshGrocery, refreshAndConfirm: confirmGrocery } = useRealtimeQuery<Tables<'grocery_items'>>({
-    table: 'grocery_items', familyId, deps: [familyId],
-    fetcher: (supabase) => supabase.from('grocery_items')
-      .select('*').eq('family_id', familyId)
-      .order('is_checked').order('created_at', { ascending: false }).limit(80),
+  const { data: groceryItems, loading: groceryLoading, error: groceryReadError, stale: groceryStale, refresh: refreshGrocery, refreshAndConfirm: confirmGrocery } = useRealtimeQuery<Tables<'grocery_items'>>({
+    table: 'grocery_items', familyId, deps: [familyId, 'complete-v1'],
+    fetcher: async (supabase) => {
+      const result = await readMealGroceries(supabase, familyId);
+      return result.error ? { data: null, error: { message: tr('mealsPlanner.choicesUnavailable') } } : result;
+    },
   });
+  const groceryError = groceryReadError || (!groceryLoading && groceryStale ? tr('mealsPlanner.choicesUnavailable') : null);
 
   // Active family meal vote (latest), with options + ballots.
   const [voteData, setVoteData] = useState<{ vote: Vote; options: VoteOption[]; ballots: Ballot[] } | null>(null);
@@ -469,13 +470,13 @@ export function MealsModule() {
             )}
 
             {/* Recently Cooked */}
-            {recentlyCooked.length > 0 && (
+            {(recipesLoading || recipesError || recentlyCooked.length > 0) && (
               <div className="mt-6">
                 <div className="mb-3 flex items-center justify-between">
                   <h2 className="text-base font-semibold">{tr('meals.recentlyCooked')}</h2>
                   <button onClick={() => setTab('recipes')} className="text-xs text-brand-text hover:underline">{tr('meals.viewAll')}</button>
                 </div>
-                <div className="flex gap-3 overflow-x-auto pb-2 scrollbar-none">
+                {recipesLoading ? <SkeletonList count={2} /> : recipesError ? <ErrorState message={recipesError} onRetry={refreshRecipes} /> : <div className="flex gap-3 overflow-x-auto pb-2 scrollbar-none">
                   {recentlyCooked.map((r) => (
                     <div key={r.id} className="w-40 shrink-0 overflow-hidden rounded-xl border border-border bg-surface/40">
                       <MealImg src={r.photo_url} emoji="🍽️" className="h-24 w-full" />
@@ -487,7 +488,7 @@ export function MealsModule() {
                       </div>
                     </div>
                   ))}
-                </div>
+                </div>}
               </div>
             )}
           </>

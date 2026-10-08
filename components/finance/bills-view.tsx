@@ -53,11 +53,17 @@ export function BillsView({ mode }: { mode: BillsMode }) {
     fetcher: (sb) => readCompleteBills(sb, familyId),
   });
 
-  const [form, setForm] = useState(false);
-  const paymentOwner = useMemo(() => ({ familyId, userId }), [familyId, userId]);
-  const [paymentSelection, setPaymentSelection] = useState<{ bill: Bill; owner: typeof paymentOwner } | null>(null);
+  const paymentOwner = useMemo(() => ({ familyId, userId, role }), [familyId, userId, role]);
+  const [form, setForm] = useState<{ owner: typeof paymentOwner; ticket: number } | null>(null);
+  const formTicket = useRef(0);
+  const currentForm = useRef(form);
+  currentForm.current = form?.owner === paymentOwner ? form : null;
+  const [paymentSelection, setPaymentSelection] = useState<{ bill: Bill; owner: typeof paymentOwner; ticket: number } | null>(null);
+  const paymentTicket = useRef(0);
+  const currentPayment = useRef(paymentSelection);
+  currentPayment.current = paymentSelection?.owner === paymentOwner ? paymentSelection : null;
   const paymentBill = paymentSelection?.owner === paymentOwner ? paymentSelection.bill : null;
-  const scheduleOwner = useMemo(() => ({ familyId, userId, role }), [familyId, userId, role]);
+  const scheduleOwner = paymentOwner;
   const [scheduleSelection, setScheduleSelection] = useState<{ bill: Bill; owner: typeof scheduleOwner; ticket: number } | null>(null);
   const scheduleTicket = useRef(0);
   const currentBillOwner = useRef(scheduleOwner);
@@ -65,8 +71,15 @@ export function BillsView({ mode }: { mode: BillsMode }) {
   const currentSchedule = useRef(scheduleSelection);
   currentSchedule.current = scheduleSelection?.owner === scheduleOwner ? scheduleSelection : null;
   const scheduleBill = scheduleSelection?.owner === scheduleOwner ? scheduleSelection.bill : null;
+  const canManage = isManager(role);
+  const canWrite = () => canManage && currentBillOwner.current === scheduleOwner;
+  function openForm() {
+    if (!canWrite()) return;
+    const selection = { owner: paymentOwner, ticket: ++formTicket.current };
+    currentForm.current = selection; setForm(selection);
+  }
   function openSchedule(bill: Bill) {
-    if (currentBillOwner.current !== scheduleOwner) return;
+    if (!canWrite() || bill.family_id !== familyId) return;
     const selection = { bill, owner: scheduleOwner, ticket: ++scheduleTicket.current };
     currentSchedule.current = selection;
     setScheduleSelection(selection);
@@ -82,26 +95,36 @@ export function BillsView({ mode }: { mode: BillsMode }) {
   const totalDue = useMemo(() => visible.filter((b) => b.status !== 'paid').reduce((s, b) => s + Number(b.amount), 0), [visible]);
 
   async function markPaid(b: Bill) {
+    if (!canWrite() || b.family_id !== familyId) return;
     const reopen = b.status === 'paid';
-    if (!reopen && !billPaidPatch(b, clock.todayKey())) { setPaymentSelection({ bill: b, owner: paymentOwner }); return; }
+    if (!reopen && !billPaidPatch(b, clock.todayKey())) {
+      const selection = { bill: b, owner: paymentOwner, ticket: ++paymentTicket.current };
+      currentPayment.current = selection; setPaymentSelection(selection); return;
+    }
     // A restrictive RLS policy FILTERS an update/delete rather than raising, so
     // a refused write returns zero rows and no error. `.select('id')` is what
     // makes the difference visible — without it `data` is null either way.
-    const { data: rows, error } = await saveBillPayment(createClient(), familyId, b, clock.todayKey(), undefined, reopen);
+    const { data: rows, error } = await saveBillPayment(createClient(), familyId, b, clock.todayKey(), undefined, reopen, canWrite);
+    if (!canWrite()) return;
     if (error) { toastError(isMissingBillDueDay(error) ? t('bills.scheduleUnavailable') : describeDbError(error)); return; }
     if (wroteNoRows(rows)) { toastError(t('errors.thatChangeWasNotSaved')); void refresh(); return; }
     success(reopen ? 'Reopened' : 'Marked paid');
     void refresh();
   }
   async function toggleAutopay(b: Bill) {
+    if (!canWrite() || b.family_id !== familyId) return;
     const { data: rows, error } = await createClient().from('bills').update({ autopay: !b.autopay }).eq('id', b.id).eq('family_id', familyId).select('id');
+    if (!canWrite()) return;
     if (error) { toastError(describeDbError(error)); return; }
     if (wroteNoRows(rows)) { toastError(t('errors.thatChangeWasNotSaved')); return; }
     success(b.autopay ? 'Auto Pay off' : 'Auto Pay on');
   }
   async function remove(id: string) {
+    if (!canWrite()) return;
     if (!confirm(t('billsView.deleteThisBill'))) return;
+    if (!canWrite()) return;
     const { data: rows, error } = await createClient().from('bills').delete().eq('id', id).eq('family_id', familyId).select('id');
+    if (!canWrite()) return;
     if (error) { toastError(describeDbError(error)); return; }
     if (wroteNoRows(rows)) { toastError(t('errors.thatChangeWasNotSaved')); return; }
     success(t('billsView.deleted'));
@@ -125,7 +148,7 @@ export function BillsView({ mode }: { mode: BillsMode }) {
           <p className="text-sm font-bold tabular-nums">{usd(Number(b.amount))}</p>
           <span className={cn('rounded-full px-1.5 py-0.5 text-[10px] font-semibold', dm.tint)}>{dm.label}</span>
         </div>
-        <div className="flex shrink-0 items-center gap-1">
+        {canManage && <div className="flex shrink-0 items-center gap-1">
           {isManager(role) && b.is_recurring && <Button size="sm" variant="outline" onClick={() => openSchedule(b)}>{t('bills.editSchedule')}</Button>}
           {mode !== 'due' && (
             <button onClick={() => toggleAutopay(b)} title={t('bills.toggleAutoPay')}
@@ -134,7 +157,7 @@ export function BillsView({ mode }: { mode: BillsMode }) {
           <button onClick={() => markPaid(b)} title={b.status === 'paid' ? 'Reopen' : 'Mark paid'}
             className="rounded-lg p-1.5 text-muted/50 transition hover:text-emerald-400">{b.status === 'paid' ? <RotateCcw className="h-4 w-4" /> : <Check className="h-4 w-4" />}</button>
           <button onClick={() => remove(b.id)} className="rounded-lg p-1.5 text-muted/40 opacity-0 transition hover:text-danger group-hover:opacity-100" aria-label={t('bills.delete')}><Trash2 className="h-4 w-4" /></button>
-        </div>
+        </div>}
       </div>
     );
   };
@@ -150,7 +173,7 @@ export function BillsView({ mode }: { mode: BillsMode }) {
   return (
     <div className="module-page">
       <PageHeader title={meta.title} description={meta.desc}
-        action={<Button onClick={() => setForm(true)}><Plus className="h-4 w-4" /> {t('bills.addBill')}</Button>} />
+        action={canManage ? <Button onClick={openForm}><Plus className="h-4 w-4" /> {t('bills.addBill')}</Button> : undefined} />
 
       {!loading && !stale && !readError && mode !== 'autopay' && visible.length > 0 && (
         <div className="rounded-2xl border border-border bg-surface/40 p-4">
@@ -170,7 +193,7 @@ export function BillsView({ mode }: { mode: BillsMode }) {
       ) : loading || stale ? <SkeletonList /> : visible.length === 0 ? (
         <EmptyState icon={meta.icon} title={mode === 'autopay' ? 'No Auto Pay bills' : mode === 'due' ? 'Nothing due' : 'No bills yet'}
           description={mode === 'autopay' ? 'Turn on Auto Pay for a bill to see it here.' : 'Add a bill to start tracking due dates.'}
-          action={<Button onClick={() => setForm(true)}><Plus className="h-4 w-4" /> {t('bills.addBill')}</Button>} />
+          action={canManage ? <Button onClick={openForm}><Plus className="h-4 w-4" /> {t('bills.addBill')}</Button> : undefined} />
       ) : grouped ? (
         <div className="space-y-5">
           {(['overdue', 'due_soon', 'upcoming'] as const).map((k) => grouped[k].length > 0 && (
@@ -184,8 +207,8 @@ export function BillsView({ mode }: { mode: BillsMode }) {
         <div className="space-y-2">{visible.map((b) => <Row key={b.id} b={b} />)}</div>
       )}
 
-      {form && <BillModal key={`${familyId}:${userId}`} familyId={familyId} userId={userId} defaultAutopay={mode === 'autopay'} onClose={() => setForm(false)} />}
-      {paymentBill && bills.some(b => b.id === paymentBill.id && b.family_id === familyId) && <BillPaymentModal key={`${familyId}:${userId}:${paymentBill.id}`} bill={paymentBill} familyId={familyId} onClose={() => setPaymentSelection(null)} onDone={() => { void refresh(); }} />}
+      {canManage && form?.owner === paymentOwner && <BillModal key={`${familyId}:${userId}:${form.ticket}`} familyId={familyId} userId={userId} defaultAutopay={mode === 'autopay'} isCurrent={() => canWrite() && currentForm.current === form} onClose={() => { if (currentForm.current === form) { currentForm.current = null; setForm(null); } }} />}
+      {canManage && paymentBill && bills.some(b => b.id === paymentBill.id && b.family_id === familyId) && <BillPaymentModal key={`${familyId}:${userId}:${paymentBill.id}:${paymentSelection!.ticket}`} bill={paymentBill} familyId={familyId} isCurrent={() => canWrite() && currentPayment.current === paymentSelection} onClose={() => { if (currentPayment.current === paymentSelection) { currentPayment.current = null; setPaymentSelection(null); } }} onDone={() => { if (canWrite() && currentPayment.current === paymentSelection) void refresh(); }} />}
       {scheduleBill && isManager(role) && bills.some(b => b.id === scheduleBill.id && b.family_id === familyId) && <BillScheduleModal key={`${familyId}:${userId}:${scheduleBill.id}:${scheduleSelection!.ticket}`} bill={scheduleBill} isCurrent={() => currentSchedule.current === scheduleSelection && currentBillOwner.current === scheduleSelection!.owner} onClose={() => {
         if (currentSchedule.current !== scheduleSelection) return;
         currentSchedule.current = null; setScheduleSelection(null);
@@ -194,11 +217,12 @@ export function BillsView({ mode }: { mode: BillsMode }) {
   );
 }
 
-function BillModal({ familyId, userId, defaultAutopay, onClose }: { familyId: string; userId: string; defaultAutopay: boolean; onClose: () => void }) {
+function BillModal({ familyId, userId, defaultAutopay, onClose, isCurrent }: { familyId: string; userId: string; defaultAutopay: boolean; onClose: () => void; isCurrent: () => boolean }) {
   const t = useTranslations();
   const { family } = useApp();
   const { success, error: toastError } = useToast();
   const alive = useRef(true);
+  const inFlight = useRef(false);
   useEffect(() => { alive.current = true; return () => { alive.current = false; }; }, []);
   const [saving, setSaving] = useState(false);
   const [v, setV] = useState(() => {
@@ -209,8 +233,9 @@ function BillModal({ familyId, userId, defaultAutopay, onClose }: { familyId: st
 
   async function submit(e: React.FormEvent) {
     e.preventDefault();
+    if (!alive.current || !isCurrent() || inFlight.current) return;
     if (!v.name.trim() || !v.amount) return toastError(t('billsView.addANameAndAmount'));
-    setSaving(true);
+    inFlight.current = true; setSaving(true);
     try {
       const dueDay = needsDay ? Number(v.due_day) : null;
       const { error } = await writeBillPatch({
@@ -218,15 +243,16 @@ function BillModal({ familyId, userId, defaultAutopay, onClose }: { familyId: st
         due_date: v.due_date, category: v.category, is_recurring: v.is_recurring, autopay: v.autopay,
         recurrence: v.is_recurring ? v.recurrence : null, ...(dueDay !== null ? { due_day: dueDay } : {}),
         status: 'upcoming' as const, created_by: userId,
-      }, p => createClient().from('bills').insert(p));
-      if (!alive.current) return;
+      }, p => alive.current && isCurrent() ? createClient().from('bills').insert(p) : Promise.resolve({ data: null, error: new Error('Bill view changed') }));
+      if (!alive.current || !isCurrent()) return;
       if (error) return toastError(isMissingBillDueDay(error) ? t('bills.scheduleUnavailable') : describeDbError(error));
       success(t('billsView.billAdded'));
       onClose();
     } catch {
-      if (alive.current) toastError(t('errors.thatChangeWasNotSaved'));
+      if (alive.current && isCurrent()) toastError(t('errors.thatChangeWasNotSaved'));
     } finally {
-      if (alive.current) setSaving(false);
+      inFlight.current = false;
+      if (alive.current && isCurrent()) setSaving(false);
     }
   }
 

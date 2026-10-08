@@ -11,6 +11,43 @@
 begin transaction read only;
 set local statement_timeout = '15s';
 
+-- Missing objects must have explicit rows: a filtered catalog query returning
+-- nothing is not an absence/safety verdict. This is inventory, not an apply gate.
+with expected(table_name) as (values
+  ('calendar_feeds'),('calendar_events'),('calendar_feed_source_revisions'),
+  ('calendar_feed_source_groups'),('calendar_feed_source_component_watermarks'))
+select e.table_name, c.oid is not null as present,
+       c.relkind, c.relrowsecurity as rls_enabled, c.relforcerowsecurity as force_rls,
+       pg_get_userbyid(c.relowner) as table_owner
+from expected e left join pg_class c on c.oid=to_regclass('public.'||e.table_name)
+order by e.table_name;
+
+with expected(identity) as (values
+  ('public.calendar_feed_apply_sync(uuid,timestamp with time zone,jsonb,text[])'),
+  ('public.calendar_feed_publish_snapshot(uuid,timestamp with time zone,jsonb,text[])'),
+  ('public.calendar_feed_archive_sources(uuid,timestamp with time zone,jsonb)'),
+  ('public.calendar_read_occurrence_inputs(uuid)'),
+  ('calendar_feed_private.raw_identity(text,text,text)'),
+  ('calendar_feed_private.validate_value(jsonb,text,text)'),
+  ('calendar_feed_private.archive_document(jsonb,text)'),
+  ('calendar_feed_private.compare_revision(jsonb,jsonb)'),
+  ('calendar_feed_private.immutable_archive()'),
+  ('calendar_feed_private.prevent_archive_reparent()'),
+  ('calendar_feed_private.refuse_read(text,text)'))
+select e.identity, to_regprocedure(e.identity) is not null as present
+from expected e order by e.identity;
+
+with expected(schema_name) as (values ('calendar_feed_private')),
+callers(role_name) as (values ('anon'),('authenticated'),('service_role'))
+select e.schema_name, c.role_name, n.oid is not null as schema_present,
+       r.oid is not null as role_present, pg_get_userbyid(n.nspowner) as schema_owner,
+       has_schema_privilege(r.oid,n.oid,'USAGE') as effective_usage,
+       has_schema_privilege(r.oid,n.oid,'CREATE') as effective_create
+from expected e cross join callers c
+left join pg_namespace n on n.nspname=e.schema_name
+left join pg_roles r on r.rolname=c.role_name
+order by e.schema_name,c.role_name;
+
 select current_setting('server_version_num') as server_version_num,
        current_setting('transaction_read_only') as transaction_read_only,
        to_regclass('supabase_migrations.schema_migrations') is not null as has_migration_ledger,
@@ -30,7 +67,8 @@ where n.nspname = 'public' and c.relname in
   ('families','family_members','family_model_dirty','family_conversations','family_messages','bills',
    'approval_requests','ai_requests','ai_request_context','family_automation_runs',
    'ai_tool_calls','ai_plans','ai_plan_steps','ai_run_events',
-   'sync_accounts','sync_external_mappings','sync_change_logs','sync_calendars','sync_calendar_events','sync_reminder_lists','sync_reminders')
+   'sync_accounts','sync_external_mappings','sync_change_logs','sync_calendars','sync_calendar_events','sync_reminder_lists','sync_reminders',
+   'calendar_feeds','calendar_events','calendar_feed_source_revisions','calendar_feed_source_groups','calendar_feed_source_component_watermarks')
 order by c.relname, a.attnum;
 
 select c.relname as table_name, k.conname as constraint_name, k.contype,
@@ -42,7 +80,8 @@ where n.nspname = 'public' and c.relname in
   ('families','family_members','family_model_dirty','family_conversations','family_messages','bills',
    'approval_requests','ai_requests','ai_request_context','family_automation_runs',
    'ai_tool_calls','ai_plans','ai_plan_steps','ai_run_events',
-   'sync_accounts','sync_external_mappings','sync_change_logs','sync_calendars','sync_calendar_events','sync_reminder_lists','sync_reminders')
+   'sync_accounts','sync_external_mappings','sync_change_logs','sync_calendars','sync_calendar_events','sync_reminder_lists','sync_reminders',
+   'calendar_feeds','calendar_events','calendar_feed_source_revisions','calendar_feed_source_groups','calendar_feed_source_component_watermarks')
 order by c.relname, k.conname;
 
 select c.relname as table_name, ic.relname as index_name,
@@ -53,7 +92,8 @@ from pg_index i join pg_class c on c.oid = i.indrelid
 join pg_class ic on ic.oid = i.indexrelid join pg_namespace n on n.oid = c.relnamespace
 where n.nspname = 'public' and c.relname in ('family_members','family_conversations','bills','approval_requests','ai_requests',
   'ai_request_context','family_automation_runs','ai_tool_calls','ai_plans','ai_plan_steps','ai_run_events',
-  'sync_accounts','sync_external_mappings','sync_change_logs','sync_calendars','sync_calendar_events','sync_reminder_lists','sync_reminders')
+  'sync_accounts','sync_external_mappings','sync_change_logs','sync_calendars','sync_calendar_events','sync_reminder_lists','sync_reminders',
+   'calendar_feeds','calendar_events','calendar_feed_source_revisions','calendar_feed_source_groups','calendar_feed_source_component_watermarks')
 order by c.relname, ic.relname;
 
 select tablename, policyname, permissive, roles, cmd, qual, with_check
@@ -62,6 +102,7 @@ from pg_policies where schemaname = 'public' and tablename in
    'approval_requests','ai_requests','ai_request_context','family_automation_runs',
    'ai_tool_calls','ai_plans','ai_plan_steps','ai_run_events',
    'sync_accounts','sync_external_mappings','sync_change_logs','sync_calendars','sync_calendar_events','sync_reminder_lists','sync_reminders',
+   'calendar_feeds','calendar_events','calendar_feed_source_revisions','calendar_feed_source_groups','calendar_feed_source_component_watermarks',
    'family_wallets','child_wallets','wallet_buckets','wallet_transactions','wallet_rules',
    'allowance_rules','financial_accounts','transactions','budgets','bills','savings_goals')
 order by tablename, policyname;
@@ -81,7 +122,8 @@ where n.nspname = 'public' and c.relname in
   ('families','family_members','family_model_dirty','family_conversations','family_messages','bills',
    'approval_requests','ai_requests','ai_request_context','family_automation_runs',
    'ai_tool_calls','ai_plans','ai_plan_steps','ai_run_events',
-   'sync_accounts','sync_external_mappings','sync_change_logs','sync_calendars','sync_calendar_events','sync_reminder_lists','sync_reminders')
+   'sync_accounts','sync_external_mappings','sync_change_logs','sync_calendars','sync_calendar_events','sync_reminder_lists','sync_reminders',
+   'calendar_feeds','calendar_events','calendar_feed_source_revisions','calendar_feed_source_groups','calendar_feed_source_component_watermarks')
 order by c.relname, t.tgname;
 
 -- All overloads/default argument counts, including retired one-argument RPCs.
@@ -97,10 +139,11 @@ select n.nspname as schema_name, p.proname,
 from pg_proc p join pg_namespace n on n.oid = p.pronamespace
 cross join pg_roles r
 where p.prokind = 'f' and r.rolname in ('anon','authenticated','service_role')
-  and (n.nspname in ('messaging_private','sync_pull_private') or (n.nspname = 'public' and p.proname in
+  and (n.nspname in ('messaging_private','sync_pull_private','calendar_feed_private') or (n.nspname = 'public' and p.proname in
        ('ensure_family_conversation','send_family_message','find_family_message',
         'mark_conversation_read','is_family_member','can_manage_family','is_family_admin','mark_model_dirty','count_family_ai_requests_month',
-        'ensure_sync_pull_container','create_sync_pull_item')))
+        'ensure_sync_pull_container','create_sync_pull_item','calendar_feed_apply_sync',
+        'calendar_feed_publish_snapshot','calendar_feed_archive_sources','calendar_read_occurrence_inputs')))
 order by n.nspname,p.proname,identity_arguments,r.rolname;
 
 select n.nspname as schema_name,p.proname,
@@ -124,7 +167,8 @@ join pg_attribute a on a.attrelid=c.oid and a.attnum > 0 and not a.attisdropped
 cross join pg_roles r
 where n.nspname='public' and c.relname in ('family_conversations','family_messages','bills','approval_requests','ai_requests',
   'ai_request_context','family_automation_runs','ai_tool_calls','ai_plans','ai_plan_steps','ai_run_events',
-  'sync_accounts','sync_external_mappings','sync_change_logs','sync_calendars','sync_calendar_events','sync_reminder_lists','sync_reminders')
+  'sync_accounts','sync_external_mappings','sync_change_logs','sync_calendars','sync_calendar_events','sync_reminder_lists','sync_reminders',
+   'calendar_feeds','calendar_events','calendar_feed_source_revisions','calendar_feed_source_groups','calendar_feed_source_component_watermarks')
   and r.rolname in ('anon','authenticated','service_role')
 order by c.relname,r.rolname,a.attnum;
 
@@ -133,7 +177,7 @@ select coalesce(n.nspname,'*') as schema_name,pg_get_userbyid(d.defaclrole) as o
        a.privilege_type,a.is_grantable
 from pg_default_acl d left join pg_namespace n on n.oid=d.defaclnamespace
 cross join lateral aclexplode(d.defaclacl) a
-where d.defaclnamespace=0 or n.nspname in ('public','messaging_private','sync_pull_private')
+where d.defaclnamespace=0 or n.nspname in ('public','messaging_private','sync_pull_private','calendar_feed_private')
 order by schema_name,owner,d.defaclobjtype,grantee,a.privilege_type;
 
 -- These aggregates require the ordinary preexisting message tables. Missing

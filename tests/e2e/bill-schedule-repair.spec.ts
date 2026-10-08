@@ -41,8 +41,8 @@ function server(mode: Mode, role = 'parent') {
   const client = createClient('https://synthetic-schedule.invalid', 'synthetic-key', {
     auth: { persistSession: false, autoRefreshToken: false }, global: { fetch: async (input, init) => {
       const url = new URL(String(input));
-      if (url.pathname !== '/rest/v1/bills' || init?.method !== 'PATCH') throw new Error('Unexpected synthetic operation');
-      const patch = JSON.parse(String(init.body)); writes.push({ query: url.search, patch });
+      if (!['/rest/v1/bills', '/rest/v1/financial_accounts'].includes(url.pathname) || !['POST', 'PATCH', 'DELETE'].includes(init?.method ?? '')) throw new Error('Unexpected synthetic operation');
+      const patch = JSON.parse(String(init?.body ?? '{}')); writes.push({ query: url.search, patch });
       if (mode === 'held') await new Promise<void>(resolve => { release = resolve; });
       if (mode === 'old-schema') return Response.json({ code: '42703', message: 'column bills.due_day does not exist' }, { status: 400 });
       const matches = [...url.searchParams].every(([key, predicate]) => key === 'select' || (predicate === 'is.null' ? row[key as keyof Row] == null : predicate === `eq.${row[key as keyof Row]}`));
@@ -73,26 +73,37 @@ function server(mode: Mode, role = 'parent') {
     return entry.exports;
   }
   const action = load('app/(app)/dashboard/billing/actions.ts').confirmBillScheduleAction as (snapshot: unknown, choice: unknown) => Promise<unknown>;
-  return { writes, paths, row: () => row, release: () => release?.(), async confirm(snapshot: unknown, choice: unknown) { return { result: await action(snapshot, choice), row }; } };
+  return { writes, paths, row: () => row, release: () => release?.(), async confirm(snapshot: unknown, choice: unknown) { return { result: await action(snapshot, choice), row }; },
+    async browserWrite(table: string, steps: [string, unknown[]][]) {
+      if (!['bills', 'financial_accounts'].includes(table)) throw new Error('Unexpected browser table');
+      let query: unknown = client.from(table as 'bills');
+      for (const [method, args] of steps) {
+        if (!['insert', 'update', 'delete', 'eq', 'filter', 'select'].includes(method)) throw new Error('Unexpected browser method');
+        query = (query as Record<string, (...values: unknown[]) => unknown>)[method].apply(query, args);
+      }
+      return await query;
+    },
+  };
 }
 
 async function fixture(page: Page, view: 'bills' | 'billing' = 'bills', mode: Mode = 'healthy', role = 'parent') {
   const actual = server(mode, role), errors: string[] = [];
   page.on('pageerror', error => errors.push(error.message));
   await page.exposeFunction('__confirmSchedule', actual.confirm);
+  await page.exposeFunction('__billWrite', actual.browserWrite);
   await page.route('**/*', route => route.fulfill({ contentType: 'text/html', body: '<!doctype html><main id="root"></main>' }));
   await page.goto('https://synthetic-schedule-ui.invalid');
   await page.addScriptTag({ content: react }); await page.addScriptTag({ content: reactDom });
   await page.addScriptTag({ content: `(() => {
     const React=window.React,sources=${JSON.stringify(sources)},messages=${JSON.stringify(messages)},cache={},listeners=new Set();
-    const p=window.__schedule={row:${JSON.stringify(initial)},owner:'owner-a',familyId:${JSON.stringify(initial.family_id)},role:${JSON.stringify(role)},refreshes:0,toasts:[],switch(owner,familyId){p.owner=owner;p.familyId=familyId;for(const notify of listeners)notify();}};
+    const p=window.__schedule={row:${JSON.stringify(initial)},owner:'owner-a',familyId:${JSON.stringify(initial.family_id)},role:${JSON.stringify(role)},refreshes:0,toasts:[],switch(owner,familyId,role=p.role){p.owner=owner;p.familyId=familyId;p.role=role;for(const notify of listeners)notify();}};
     const tr=(key,params)=>Object.entries(params||{}).reduce((value,[key,arg])=>value.replaceAll('{'+key+'}',String(arg)),messages[key]||key);
     const inert=()=>null;
     const mocks={react:React,'react-dom':window.ReactDOM,'lucide-react':new Proxy({}, {get:()=>inert}),
       '@/lib/utils/cn':{cn:(...values)=>values.filter(value=>typeof value==='string').join(' ')},
       'next/navigation':{useSearchParams:()=>new URLSearchParams()},'next/link':{__esModule:true,default:({children,...props})=>React.createElement('a',props,children)},
       'date-fns':{parseISO:value=>new Date(value)},
-      '@/components/app/app-context':{useApp:()=>{React.useSyncExternalStore(callback=>{listeners.add(callback);return()=>listeners.delete(callback)},()=>p.owner+':'+p.familyId);return{familyId:p.familyId,userId:p.owner,role:p.role,members:[],family:{timezone:'UTC'}};}},
+      '@/components/app/app-context':{useApp:()=>{React.useSyncExternalStore(callback=>{listeners.add(callback);return()=>listeners.delete(callback)},()=>p.owner+':'+p.familyId+':'+p.role);return{familyId:p.familyId,userId:p.owner,role:p.role,members:[],family:{timezone:'UTC'}};}},
       '@/components/i18n/locale-provider':{useTranslations:()=>tr,useLocale:()=>({code:'en-US'}),useFamilyTimeZone:()=> 'UTC'},
       '@/components/i18n/use-format':{useFamilyCalendarToday:()=>new Date(2026,2,1,12),useFamilyClock:()=>({todayKey:()=> '2026-03-01'}),useFormat:()=>({fmtDate:value=>value})},
       '@/components/ui/avatar':{Avatar:inert},'@/components/ai/ai-insight':{AiInsight:inert},
@@ -101,7 +112,7 @@ async function fixture(page: Page, view: 'bills' | 'billing' = 'bills', mode: Mo
       '@/lib/hooks/use-billing-subscription':{useBillingSubscription:()=>({subscription:null,status:'ready',reload(){},isCurrentReady:()=>true})},
       '@/components/ui/confirm':{useConfirm:()=>async()=>false},
       '@/lib/hooks/use-realtime-query':{useRealtimeQuery:({table})=>({data:table==='bills'&&p.familyId===p.row.family_id?[p.row]:[],loading:false,error:null,stale:false,refresh(){p.refreshes++;for(const notify of listeners)notify();}})},
-      '@/lib/supabase/client':{createClient(){throw new Error('Unexpected client write')}},
+      '@/lib/supabase/client':{createClient(){return{from(table){const steps=[],query={then(resolve,reject){return window.__billWrite(table,steps).then(resolve,reject)}};for(const method of ['insert','update','delete','eq','filter','select'])query[method]=(...args)=>{steps.push([method,args]);return query};return query}}}},
       '@/app/(app)/dashboard/billing/actions':{async confirmBillScheduleAction(snapshot,choice){const answer=await window.__confirmSchedule(snapshot,choice);if(answer.result.ok)p.row=answer.row;return answer.result;},createSavingsGoalAction(){throw new Error('Unexpected savings write')},createTransactionAction(){throw new Error('Unexpected transaction write')},deleteBudgetAction(){throw new Error('Unexpected budget write')},deleteSavingsGoalAction(){throw new Error('Unexpected savings write')},deleteTransactionAction(){throw new Error('Unexpected transaction write')},setBudgetAction(){throw new Error('Unexpected budget write')}},
     };
     function load(name){if(name in mocks)return mocks[name];if(name in cache)return cache[name].exports;if(!(name in sources))throw new Error('Unexpected schedule fixture module '+name);const module={exports:{}};cache[name]=module;new Function('require','module','exports','React',sources[name])(child=>load(child.startsWith('.')?name.slice(0,name.lastIndexOf('/')+1)+child.slice(2):child),module,module.exports,React);return module.exports;}
@@ -156,6 +167,75 @@ for (const [mode, message] of [
 for (const role of ['teen', 'child', 'caregiver', 'guest']) test(`${role} cannot open schedule repair controls`, async ({ page }) => {
   const proof = await fixture(page, 'bills', 'healthy', role);
   await expect(page.getByRole('button', { name: 'Edit schedule' })).toHaveCount(0); expect(proof.actual.writes).toEqual([]); expect(proof.errors).toEqual([]);
+});
+
+for (const view of ['bills', 'billing'] as const) test(`${view} child reads bills but has no manager write controls`, async ({ page }) => {
+  const proof = await fixture(page, view, 'healthy', 'child');
+  if (view === 'billing') await page.getByRole('button', { name: messages['billingModule.tab.bills'], exact: true }).click();
+  await expect(page.getByText('Synthetic unpaid rent', { exact: true }).first()).toBeVisible();
+  await expect(page.getByRole('button', { name: messages['billing.addBill'], exact: true })).toHaveCount(0);
+  await expect(page.getByRole('button', { name: messages['bills.addBill'], exact: true })).toHaveCount(0);
+  await expect(page.getByRole('button', { name: /Mark paid|Auto Pay|Delete/i })).toHaveCount(0);
+  await expect(page.getByRole('button', { name: messages['billing.linkAccount'], exact: true })).toHaveCount(0);
+  await expect(page.getByRole('button', { name: messages['billing.addAccount'], exact: true })).toHaveCount(0);
+  expect(proof.actual.writes).toEqual([]); expect(proof.errors).toEqual([]);
+});
+
+async function billTab(page: Page, view: 'bills' | 'billing') {
+  if (view === 'billing') await page.getByRole('button', { name: messages['billingModule.tab.bills'], exact: true }).click();
+}
+async function openPayment(page: Page) {
+  await page.getByRole('button', { name: /^Mark paid$/i }).first().click();
+  const payment = page.getByRole('dialog', { name: messages['bills.confirmPaymentSchedule'] });
+  await expect(payment).toBeVisible();
+  await payment.getByRole('combobox', { name: messages['bills.dayOfMonth'] }).selectOption('31');
+  return payment;
+}
+for (const view of ['bills', 'billing'] as const) {
+  test(`${view} role ABA retires a pending payment and never resurrects it`, async ({ page }) => {
+    const proof = await fixture(page, view, 'held'); await billTab(page, view); const payment = await openPayment(page);
+    await payment.getByRole('button', { name: /^Mark paid$/i }).click(); await expect.poll(() => proof.actual.writes.length).toBe(1);
+    await page.evaluate(family => { const state = (window as unknown as { __schedule: { switch(owner: string, family: string, role: string): void } }).__schedule; state.switch('owner-a', family, 'child'); }, initial.family_id);
+    await expect(payment).toHaveCount(0); await expect(page.getByRole('button', { name: /^Mark paid$/i })).toHaveCount(0);
+    await page.evaluate(family => (window as unknown as { __schedule: { switch(owner: string, family: string, role: string): void } }).__schedule.switch('owner-a', family, 'parent'), initial.family_id);
+    proof.actual.release(); await page.waitForTimeout(80); await expect(payment).toHaveCount(0);
+    await expect(page.getByText(messages['billingModule.billMarkedAsPaid'], { exact: true })).toHaveCount(0); expect(proof.actual.writes).toHaveLength(1); expect(proof.errors).toEqual([]);
+  });
+  test(`${view} a retired pending payment cannot close a newly opened payment`, async ({ page }) => {
+    const proof = await fixture(page, view, 'held'); await billTab(page, view); const payment = await openPayment(page);
+    await payment.getByRole('button', { name: /^Mark paid$/i }).click(); await expect.poll(() => proof.actual.writes.length).toBe(1);
+    await payment.getByRole('button', { name: messages['bills.cancel'], exact: true }).click();
+    await page.getByRole('button', { name: /^Mark paid$/i }).first().click(); await expect(payment).toBeVisible();
+    await expect(payment.getByRole('combobox', { name: messages['bills.dayOfMonth'] })).toHaveValue(''); proof.actual.release(); await page.waitForTimeout(80);
+    await expect(payment).toBeVisible(); await expect(page.getByText(messages['billingModule.billMarkedAsPaid'], { exact: true })).toHaveCount(0); expect(proof.actual.writes).toHaveLength(1); expect(proof.errors).toEqual([]);
+  });
+  test(`${view} a pending add-bill cannot close or reset the next form instance`, async ({ page }) => {
+    const proof = await fixture(page, view, 'held'); await billTab(page, view);
+    const addLabel = messages[view === 'bills' ? 'bills.addBill' : 'billing.addBill'];
+    await page.getByRole('button', { name: addLabel, exact: true }).first().click();
+    const add = page.getByRole('dialog', { name: addLabel });
+    await add.getByRole('textbox', { name: view === 'bills' ? messages['bills.billName'] : messages['billing.billName'] }).fill('New synthetic bill');
+    await add.getByRole('spinbutton', { name: view === 'bills' ? messages['bills.amount'] : messages['billing.amount'] }).fill('10');
+    await add.getByLabel(view === 'bills' ? messages['bills.dueDate'] : messages['billing.dueDate']).fill('2026-01-31');
+    await add.locator('button[type=submit]').click(); await expect.poll(() => proof.actual.writes.length).toBe(1);
+    await add.getByRole('button', { name: messages['modal.closeDialog'], exact: true }).click();
+    await page.getByRole('button', { name: addLabel, exact: true }).first().click();
+    await add.getByRole('textbox', { name: view === 'bills' ? messages['bills.billName'] : messages['billing.billName'] }).fill('Keep this new draft');
+    proof.actual.release(); await page.waitForTimeout(80); await expect(add).toBeVisible();
+    await expect(add.getByRole('textbox', { name: view === 'bills' ? messages['bills.billName'] : messages['billing.billName'] })).toHaveValue('Keep this new draft');
+    await expect(page.getByText('Bill added', { exact: true })).toHaveCount(0); expect(proof.actual.writes).toHaveLength(1); expect(proof.errors).toEqual([]);
+  });
+}
+test('a pending account creation is retired on family/user switch and cannot resurrect', async ({ page }) => {
+  const proof = await fixture(page, 'billing', 'held');
+  await page.getByRole('button', { name: messages['billing.linkAccount'], exact: true }).click();
+  const add = page.getByRole('dialog', { name: messages['billing.addAccount'] });
+  await add.getByRole('textbox', { name: messages['billing.accountName'] }).fill('Synthetic bank');
+  await add.getByRole('spinbutton', { name: messages['billing.currentBalance'] }).fill('1');
+  await add.locator('button[type=submit]').click(); await expect.poll(() => proof.actual.writes.length).toBe(1);
+  await page.evaluate(() => (window as unknown as { __schedule: { switch(owner: string, family: string): void } }).__schedule.switch('owner-b', 'other-family')); await expect(add).toHaveCount(0);
+  await page.evaluate(family => (window as unknown as { __schedule: { switch(owner: string, family: string): void } }).__schedule.switch('owner-a', family), initial.family_id);
+  proof.actual.release(); await page.waitForTimeout(80); await expect(add).toHaveCount(0); await expect(page.getByText(messages['billingModule.accountAdded'], { exact: true })).toHaveCount(0); expect(proof.errors).toEqual([]);
 });
 test('owner and family ABA dismiss a held repair and discard its late response', async ({ page }) => {
   const proof = await fixture(page, 'bills', 'held'); await choose(page);

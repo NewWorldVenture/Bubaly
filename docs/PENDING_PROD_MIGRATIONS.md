@@ -35,6 +35,18 @@ history nor permission to replay all missing versions. Offline rollout remains
 
 ## Current rollout review update — 2026-10-08 01:42 UTC
 
+The [prepared bill/chat/source metadata preflight](final-audit/messaging-bill-readonly-preflight.sql)
+now includes all reserved0490 source tables, public RPC overloads and private
+helpers, plus explicit missing-object rows and effective role/default ACLs.
+The earlier production snapshot did not query the new archive/read objects;
+their absence or safety remains unverified. The expanded query has **13 synthetic
+PostgreSQL 17.10 controls** in the [local fixture receipt](final-audit/source-catalog-preflight-fixture-20261008.json).
+Reproduce only against a new owned local cluster with
+`node scripts/verify-source-catalog-preflight.mjs --bin "C:/Program Files/PostgreSQL/17/bin"`.
+The verifier accepts no connection URL or external host and stops its own cluster.
+This proves prepared-query coverage and observable unsafe grant controls, not
+production schema compatibility, safe privileges or permission to apply0490.
+
 [Review package](final-audit/rollout-20261008/README.md): fresh metadata confirms missing allowance manager/reference and investment decision/economics guards. Aggregate-only preflight finds existing family/wallet and investment amount inconsistencies; the counts and qualifications are retained without individual records. Source0304/0306/0311/0447 are pinned review inputs, not an apply list. An unallocated composite-reference candidate passes an isolated structural PostgreSQL fixture while preserving historical rows; it remains outside every apply workflow. Data provenance/disposition, full dependency/role/trigger rehearsal and separate production approval remain required. No production write, migration allocation change or financial action occurred. Earlier observations below remain historical.
 
 ## Read-only catalog observation — 2026-10-08

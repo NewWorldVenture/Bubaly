@@ -145,9 +145,11 @@ async function fixture(page: Page, rendered = bill(), outcome: Outcome = 'saved'
     const ToastProvider = load('@/components/ui/toast').ToastProvider;
     function Harness() {
       const [open, setOpen] = React.useState(true);
+      const current = React.useRef(open); current.current = open;
       return React.createElement(ToastProvider, null, open && React.createElement(Payment, {
         bill: ${JSON.stringify(rendered)}, familyId: ${JSON.stringify(familyId)},
-        onDone: () => { p.done++; }, onClose: () => { p.closed++; setOpen(false); },
+        isCurrent: () => current.current,
+        onDone: () => { p.done++; }, onClose: () => { current.current = false; p.closed++; setOpen(false); },
       }));
     }
     const root = window.ReactDOM.createRoot(document.getElementById('root'));
