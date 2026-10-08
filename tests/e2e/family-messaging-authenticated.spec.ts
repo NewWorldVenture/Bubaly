@@ -244,6 +244,7 @@ test.describe('authenticated private family messenger', () => {
       for (const account of accounts) { try { await account.dispose(); } catch { cleanupFailures.push(true); } }
       if (cleanupFailures.length) throw new Error('Messenger E2E could not fully clean up its owned local fixture.');
     }
+    console.log('[owned-messenger-control] private-flow assertions-and-owned-cleanup-complete');
   });
   // Legacy-equivalent rows are seeded after migration installation. The separate
   // SQL fixture proves pre-0475 upgrade preservation; this proves real JWT APIs.
@@ -461,5 +462,6 @@ test.describe('authenticated private family messenger', () => {
       for (const account of accounts) { try { await account.dispose(); } catch { cleanupFailures.push(true); } }
       if (cleanupFailures.length) throw new Error('Messenger history E2E could not fully clean up its owned local fixture.');
     }
+    console.log('[owned-messenger-control] legacy-history assertions-and-owned-cleanup-complete');
   });
 });
