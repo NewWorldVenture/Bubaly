@@ -130,3 +130,17 @@ jobs:
             --port 55443 \
             --expected-server-port 5432 \
             --expected-data-dir /var/lib/postgresql/data/pgdata
+
+      - name: Publish complete calendar source groups under the live feed claim
+        shell: bash
+        run: |
+          set -euo pipefail
+          calendar_feed_pg_bin="$(dirname "$(command -v psql)")"
+          [[ -x "$calendar_feed_pg_bin/createdb" && -x "$calendar_feed_pg_bin/dropdb" ]]
+          # Reserved0490 stays unapplied in production. This independently
+          # admitted disposable service proves the candidate SQL contract.
+          node scripts/verify-calendar-feed-publication.mjs \
+            --postgres-bin "$calendar_feed_pg_bin" \
+            --port 55443 \
+            --expected-server-port 5432 \
+            --expected-data-dir /var/lib/postgresql/data/pgdata

@@ -10,7 +10,7 @@ import { expandForFamily } from '@/lib/calendar/recurrence';
  *
  * A known limit, pinned so that it is said and not discovered. A subscribed
  * calendar's DTSTART;TZID decides a series' first instant, and the row keeps
- * that instant and the frequency; no column carries the source TZID. Every
+ * that instant and the frequency; this legacy row carries no source TZID. Every
  * later occurrence is expanded on the family's wall clock. A weekly 09:00
  * America/New_York class followed by a family in Europe/London starts 14:00
  * London time (13:00Z, BST) and stays 14:00 London time; in the week between
@@ -19,7 +19,8 @@ import { expandForFamily } from '@/lib/calendar/recurrence';
  *
  * The limit is documented beside mapIcsEventToRow (lib/calendar/feeds.ts) and
  * in the held 0490 migration's header; this test fails if either stops saying
- * it, or if the row grows a zone column without the expander using it.
+ * it. Held0490 now adds a preservation slot, but neither its new endpoint nor
+ * a source-clock engine is enabled. A column alone does not repair this path.
  */
 
 const ROOT = join(__dirname, '..');
@@ -59,7 +60,8 @@ describe('an imported series is stepped on the family\'s clock', () => {
     expect(doc).toContain('no column carries the source TZID');
     const migration = readFileSync(join(ROOT, 'supabase/reserved/0490_a_calendar_feed_sync_writes_only_while_it_holds_its_claim.sql'), 'utf8').replaceAll('\r\n', '\n');
     const header = migration.slice(0, migration.search(/^(?!--)/m));
-    expect(header).toContain("an imported series is stepped on the\n-- FAMILY's clock, not its publisher's.");
-    expect(header).toContain('no column carries the source TZID');
+    expect(header).toContain('Current app imports/readers still use the family clock for legacy series.');
+    expect(header).toContain('source_recurrence is a preservation foundation, not an enabled source-clock engine.');
+    expect(migration).toMatch(/alter table public\.calendar_events add column if not exists source_recurrence jsonb/i);
   });
 });
