@@ -46,7 +46,7 @@ const ownerEntries = Object.fromEntries([
 // '2026-09-01' heading became August.
 const parseIsoModule = collectOwner(require.resolve('date-fns/parseISO'));
 const sources = Object.fromEntries([
-  'lib/calendar/consumer-spans.ts', 'lib/calendar/display-spans.ts', 'lib/calendar/day.ts', 'lib/briefing/calendar-window.ts',
+  'lib/calendar/exact-instant.ts', 'lib/calendar/consumer-spans.ts', 'lib/calendar/display-spans.ts', 'lib/calendar/day.ts', 'lib/briefing/calendar-window.ts',
   'lib/display/ambient.ts', 'lib/display/tiles.ts', 'lib/display/calendar.ts', 'lib/onboarding/ics-time.ts',
   // The family clock (TIME-003): the real shared formatter and the zone helpers it reads.
   'components/i18n/use-format.ts', 'lib/utils/format.ts', 'lib/time/zoned.ts', 'lib/time/local-day.ts', 'lib/time/wall-clock.ts',
@@ -167,7 +167,8 @@ test.beforeEach(async ({ page }) => {
         if (id === '@/lib/display/ambient') return load('lib/display/ambient.ts');
         if (id === '@/lib/supabase/errors') return load('lib/supabase/errors.ts');
         if (id === '@/lib/display/calendar') return load('lib/display/calendar.ts');
-        if (id === '@/lib/onboarding/ics-time') return load('lib/onboarding/ics-time.ts');
+        if (id === '@/lib/calendar/exact-instant' || id === './exact-instant' || id === '../calendar/exact-instant') return load('lib/calendar/exact-instant.ts');
+        if (id === '@/lib/onboarding/ics-time' || id === '../onboarding/ics-time') return load('lib/onboarding/ics-time.ts');
         if (id === '@/lib/display/tiles') return load('lib/display/tiles.ts');
         // ambient.ts reads DEFAULT_LOCALE from here, and the useLocale mock above
         // builds its Locale with localeOrDefault. Naming the file in the sources
@@ -183,7 +184,7 @@ test.beforeEach(async ({ page }) => {
         // The family clock (TIME-003): the real shared formatter and its helpers.
         if (id === '@/components/i18n/use-format') return load('components/i18n/use-format.ts');
         if (id === '@/lib/utils/format') return load('lib/utils/format.ts');
-        if (id === '@/lib/time/zoned') return load('lib/time/zoned.ts');
+        if (id === '@/lib/time/zoned' || id === '../time/zoned') return load('lib/time/zoned.ts');
         if (id === '@/lib/time/local-day') return load('lib/time/local-day.ts');
         if (id === '@/lib/time/wall-clock') return load('lib/time/wall-clock.ts');
         if (Object.prototype.hasOwnProperty.call(requires, id)) return requires[id];

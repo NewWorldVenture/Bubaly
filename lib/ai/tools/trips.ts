@@ -9,6 +9,8 @@
 // second all-day event.
 import 'server-only';
 import { z } from 'zod';
+import { compareExactInstants } from '@/lib/calendar/exact-instant';
+import { normalizeCalendarWindowInstant } from '@/lib/briefing/calendar-window';
 import { TripCommitmentReviewSchema } from '@/lib/ai/result-cards';
 import { scopeNow } from '@/lib/services/scope';
 import {
@@ -282,6 +284,7 @@ export const tripTools: ToolDefinition[] = [
         startDate: e.startDate, endDate: e.endDate, all_day: e.all_day, transparency: e.transparency,
         occupied: e.occupied, point: e.point, estimatedEnd: e.estimatedEnd, readOnly: e.readOnly, mutable: e.mutable,
         interval: e.interval,
+        exactInterval: e.exactInterval,
       });
       const calendarWhen = (e: (typeof c.calendar)[number] | (typeof c.source_calendar)[number]) => e.all_day
         ? `all day ${e.startDate} through ${e.endDate} (exclusive)` : describeWhen(e.actualStartsAt, scope.tz, now);
@@ -295,7 +298,13 @@ export const tripTools: ToolDefinition[] = [
       const sources = c.source_calendar.map(e => ({ source: 'imported-calendar' as const, title: e.title,
         starts_at: e.starts_at, when: calendarWhen(e), calendar: calendarContext(e), attribution: 'unmapped-family-context' as const }));
       const sortInstant = (item: typeof items[number] | typeof sources[number]) => 'calendar' in item ? item.calendar.actualStartsAt : item.starts_at;
-      const presented = [...items, ...sources].sort((a, b) => Date.parse(sortInstant(a) ?? '') - Date.parse(sortInstant(b) ?? ''))
+      const presented = [...items, ...sources].sort((a, b) => {
+        const left = sortInstant(a), right = sortInstant(b);
+        // Preserve the existing stable order of undated or unparseable commitments.
+        if (left == null || right == null) return 0;
+        try { return compareExactInstants(normalizeCalendarWindowInstant(left, scope.tz), normalizeCalendarWindowInstant(right, scope.tz)); }
+        catch { return 0; }
+      })
         .slice(0, input.limit ?? 200).map((item, displayOrder) => ({ ...item, displayOrder }));
       return ok({ window: c.window, horizonEndsAt: c.horizonEndsAt, complete: c.complete, ownership: c.ownership,
         total: c.total, counts: c.counts, returned: presented.length, omitted: c.total - presented.length,

@@ -57,6 +57,38 @@ function setup(value:unknown=snapshot(),options:{cap?:number;missingCount?:boole
  const scope={db,familyId:FAMILY,userId:null,memberId:null,role:'system' as const,actorKind:'system' as const,tz:'UTC',now:new Date('2026-10-08T08:00:00Z')};return{scope,calls};
 }
 async function execute(value=snapshot(),options:Parameters<typeof setup>[1]={}){const f=setup(value,options);return {...f,result:await tool.execute(f.scope,window)};}
+describe('actual SDK and strict AI wire preserve microsecond conflicts', () => {
+ it('retains authoritative exact intervals through actual SDK search, strict AI output and JSON while rejecting a dropped interval', async () => {
+  const starts_at = `${day}T09:00:00.000001Z`, ends_at = `${day}T09:00:00.000009Z`;
+  const fixture = setup(snapshot([], [native(1, { starts_at, ends_at })]));
+  const searchTool = calendarTools.find(candidate => candidate.name === 'calendar.searchEvents')!;
+  const result = await searchTool.execute(fixture.scope, window); expect(result.ok).toBe(true);
+  if (!result.ok) throw Error(result.error);
+  const parsed = searchTool.output.parse(result.data);
+  expect(parsed).toMatchObject({ events: [{ starts_at, ends_at, actualStartsAt: starts_at, actualEndsAt: ends_at,
+    occupied: true, point: false, exactInterval: { start: starts_at, end: ends_at } }] });
+  expect(searchTool.output.parse(JSON.parse(JSON.stringify(parsed)))).toEqual(parsed);
+  const dropped = JSON.parse(JSON.stringify(parsed)) as { events: { exactInterval?: unknown }[] };
+  delete dropped.events[0].exactInterval;
+  expect(searchTool.output.safeParse(dropped).success).toBe(false); expect(fixture.calls).toHaveLength(1);
+ });
+ it('keeps genuine native overlaps smaller than a millisecond through tool output, strict schemas and JSON', async () => {
+  const first = native(1, { assignee_id: MEMBER, starts_at: `${day}T09:00:00.000001Z`, ends_at: `${day}T09:00:00.000009Z` });
+  const second = native(2, { assignee_id: MEMBER, starts_at: `${day}T09:00:00.000003Z`, ends_at: `${day}T09:00:00.000007Z` });
+  const { result, calls } = await execute(snapshot([], [first, second]));
+  expect(result.ok).toBe(true); if (!result.ok) throw Error(result.error);
+  const data = parseOutput(result.data); expect(data.conflicts).toHaveLength(1); expect(data.conflicts[0].event_ids).toEqual([first.id, second.id]);
+  expect(data.conflicts[0].subjects.map(subject => [subject.actualStartsAt, subject.actualEndsAt])).toEqual([[first.starts_at, first.ends_at], [second.starts_at, second.ends_at]]);
+  expect(parseOutput(JSON.parse(JSON.stringify(data)))).toEqual(data); expect(calls).toHaveLength(1);
+ });
+ it('does not fabricate a microsecond conflict for touching intervals or explicit points', async () => {
+  const rows = [native(1, { assignee_id: MEMBER, starts_at: `${day}T09:00:00.000001Z`, ends_at: `${day}T09:00:00.000003Z` }),
+    native(2, { assignee_id: MEMBER, starts_at: `${day}T09:00:00.000003Z`, ends_at: `${day}T09:00:00.000007Z` }),
+    native(3, { assignee_id: MEMBER, starts_at: `${day}T09:00:00.000002Z`, ends_at: `${day}T09:00:00.000002Z` })];
+  const { result } = await execute(snapshot([], rows)); expect(result.ok).toBe(true);
+  if (!result.ok) throw Error(result.error); expect(parseOutput(result.data)).toMatchObject({ conflicts: [], advisories: [] });
+ });
+});
 describe('actual installed SDK conflict tool source boundary',()=>{
  it('separates personal member clashes from conservative family source overlaps and preserves original identities',async()=>{
   const rows=[native(1,{assignee_id:MEMBER}),native(2,{assignee_id:MEMBER,starts_at:'2026-10-08T09:30:00Z',ends_at:'2026-10-08T10:30:00Z'})];

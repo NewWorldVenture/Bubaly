@@ -3,6 +3,26 @@ import { expandEventsInZone, type RecurrableEvent } from '@/lib/calendar/recurre
 import { mapIcsEventToRow } from '@/lib/calendar/feeds';
 const event=(over:Partial<RecurrableEvent>={}):RecurrableEvent=>Object.freeze({id:'synthetic-series',starts_at:'2026-07-01T12:34:00.000Z',ends_at:'2026-07-01T13:34:00.000Z',recurrence:'daily',recurrence_until:null,...over});
 const expand=(e:RecurrableEvent,from='2026-07-01T00:00:00Z',to='2026-07-02T00:00:00Z',zone='UTC')=>expandEventsInZone([e],new Date(from),new Date(to),zone);
+it.each([
+ ['America/New_York','2026-03-01T07:30:42.125001Z','2026-03-08T07:30:42.125001Z'],
+ ['America/New_York','2026-10-25T05:30:42.125001Z','2026-11-01T05:30:42.125001Z'],
+ ['Asia/Tokyo','2026-10-25T05:30:42.125001Z','2026-11-01T05:30:42.125001Z'],
+] as const)('retains PostgreSQL microseconds and elapsed end duration through weekly IANA recurrence in %s', (zone, seed, wanted) => {
+ const end = seed.replace('.125001Z', '.125009Z'), from = wanted.slice(0,10)+'T00:00:00Z', to = wanted.slice(0,10)+'T23:59:59Z';
+ const out = expand(event({ starts_at: seed, ends_at: end, recurrence: 'weekly' }), from, to, zone);
+ expect(out).toHaveLength(1); expect(out[0].starts_at).toBe(wanted); expect(out[0].ends_at).toBe(wanted.replace('.125001Z', '.125009Z'));
+});
+it('honors microsecond recurrence cutoff and exact request window without a rounded extra occurrence', () => {
+ const seed = '2026-07-01T12:34:42.125009Z';
+ const e = event({ starts_at: seed, ends_at: seed.replace('009Z','010Z'), recurrence_until: '2026-07-02T12:34:42.125008Z' });
+ expect(expand(e, '2026-07-01T00:00:00Z', '2026-07-03T00:00:00Z')).toHaveLength(1);
+ const from = '2026-07-01T12:34:42.125001Z', to = '2026-07-01T12:34:42.125008Z';
+ expect(expandEventsInZone([e], new Date(from), new Date(to), 'UTC', false, { requireComplete: true, windowFrom: from, windowTo: to })).toEqual([]);
+});
+it('preserves the exact seed and zero microsecond duration as a point', () => {
+ const seed = '2026-07-01T12:34:42.000001Z', e = event({ starts_at: seed, ends_at: seed });
+ const out = expand(e); expect(out).toHaveLength(1); expect(out[0].starts_at).toBe(seed); expect(out[0].ends_at).toBe(seed);
+});
 it('preserves the accepted seed instant and exact duration with seconds and milliseconds',()=>{
  const e=event({starts_at:'2026-07-01T12:34:42.125Z',ends_at:'2026-07-01T13:34:52.375Z'});
  const out=expand(e);expect(out).toHaveLength(1);expect(out[0].id).toBe(e.id);

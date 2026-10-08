@@ -18,7 +18,7 @@ const sources = Object.fromEntries([
   'lib/finance/recurring.ts', 'lib/finance/bills.ts', 'lib/finance/bill-schedule.ts',
   // Bills uses the real counted reader; keep its finite dependency graph real.
   'lib/calendar/occurrences.ts', 'lib/calendar/recurrence.ts', 'lib/calendar/day.ts',
-  'lib/calendar/source-capability.ts', 'lib/briefing/calendar-window.ts',
+  'lib/calendar/source-capability.ts', 'lib/calendar/exact-instant.ts', 'lib/onboarding/ics-time.ts', 'lib/briefing/calendar-window.ts',
   // hub.ts reads the locale catalogue for its default currency locale.
   'lib/i18n/locales.ts',
   // And periodStart reads the READER's local day key from here. hub.ts used to
@@ -117,7 +117,7 @@ test.beforeEach(async ({ page }) => {
       if (id in modules) return modules[id];
       if (!(id in sources)) throw new Error('Unexpected fixture import: ' + id);
       const module = { exports: {} }; modules[id] = module.exports;
-      new Function('require', 'module', 'exports', sources[id])(name => load(name.startsWith('./') ? id.slice(0, id.lastIndexOf('/') + 1) + name.slice(2) : name), module, module.exports);
+      new Function('require', 'module', 'exports', sources[id])(name => load(name === '../onboarding/ics-time' ? '@/lib/onboarding/ics-time' : name === '../calendar/exact-instant' ? '@/lib/calendar/exact-instant' : name === '../time/zoned' ? '@/lib/time/zoned' : name.startsWith('./') ? id.slice(0, id.lastIndexOf('/') + 1) + name.slice(2) : name), module, module.exports);
       return module.exports;
     }
     let root;

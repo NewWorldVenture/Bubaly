@@ -1,3 +1,4 @@
+import { parseExactInstant, formatExactInstant, compareExactInstants, normalizeExactInstant } from './exact-instant';
 /** Held integration foundation. No existing calendar reader calls this module.
  * A single server snapshot prevents a legacy-row/archive takeover from being
  * observed halfway through two separate HTTP reads. Imported refs never name a
@@ -47,15 +48,11 @@ function uuid(value: unknown): string { const result = text(value); if (!/^[0-9a
 function nullableText(value: unknown): string | null { if (value === null) return null; if (typeof value !== 'string' || value.length > 65_536) fail('invalid nullable text'); return value; }
 function instant(value: unknown): string {
   const token = text(value);
-  if (!/^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}(?:\.\d+)?(?:Z|[+-]\d{2}:\d{2})$/.test(token) || !Number.isFinite(Date.parse(token))) fail('invalid native instant');
-  if (+token.slice(0,4) < 1 || +token.slice(11,13) > 23 || +token.slice(14,16) > 59 || +token.slice(17,19) > 59) fail('invalid native clock');
-  const at = new Date(token).toISOString();
-  // Date.parse normalizes impossible Gregorian days; reject them before the
-  // offset conversion, while allowing PostgreSQL's variable precision.
-  const day = token.slice(0,10);
-  if (new Date(`${day}T00:00:00Z`).toISOString().slice(0,10) !== day) fail('invalid native Gregorian date');
-  return at;
+  // Normalize this copied adapter projection's explicit offset, preserving its
+  // exact instant and declared precision. Stored rows and input remain untouched.
+  try { return normalizeExactInstant(token); } catch { return fail('invalid native instant'); }
 }
+
 function count(value: unknown, max: number): number { if (!Number.isSafeInteger(value) || (value as number) < 0 || (value as number) > max) fail('invalid collection count'); return value as number; }
 function list(value: unknown, max: number): unknown[] { if (!Array.isArray(value) || value.length > max) fail('collection bound exceeded'); return value; }
 function stable(value: unknown): string {
@@ -139,8 +136,10 @@ export function parseCalendarSourceSnapshot(value: unknown, expectedFamilyId: st
     for (const field of ['description','location','external_uid','onboarding_key','idempotency_key']) nullableText(row[field]);
     for (const field of ['assignee_id','feed_id','created_by']) if (row[field] !== null) uuid(row[field]);
     if (typeof row.title !== 'string' || row.title.length > 65_536 || typeof row.all_day !== 'boolean' || !['none','daily','weekly','monthly','yearly'].includes(text(row.recurrence)) || !['general','school','sports','appointment','medication','maintenance','birthday','holiday','other'].includes(text(row.category))) fail('invalid native fields');
-    if (row.ends_at !== null && Date.parse(row.ends_at as string) < Date.parse(row.starts_at as string)) fail('reversed native interval');
-    if (row.all_day && (!(row.starts_at as string).endsWith('T00:00:00.000Z') || row.ends_at !== null && (!(row.ends_at as string).endsWith('T00:00:00.000Z') || row.ends_at === row.starts_at))) fail('native DATE must use positive UTC civil boundaries');
+    if (row.ends_at !== null && compareExactInstants(row.ends_at as string, row.starts_at as string) < 0) fail('reversed native interval');
+    const start = parseExactInstant(row.starts_at), end = row.ends_at === null ? null : parseExactInstant(row.ends_at);
+    if (row.all_day && (start !== parseExactInstant(`${(row.starts_at as string).slice(0,10)}T00:00:00Z`)
+      || end !== null && (end <= start || end !== parseExactInstant(`${(row.ends_at as string).slice(0,10)}T00:00:00Z`)))) fail('native DATE must use positive UTC civil boundaries');
     return { ...row, id, family_id: familyId } as unknown as SnapshotNativeRow;
   });
   if (nativeRows.filter(row => row.recurrence !== 'none').length > 2000) fail('native series count exceeds 2000');
@@ -208,6 +207,8 @@ export function materializeCalendarSourceSnapshot(value: unknown, options: { fam
   if (!Number.isSafeInteger(maxWork) || maxWork < 1 || maxWork > 20_000_000 || !Number.isSafeInteger(maxOccurrences) || maxOccurrences < 1 || maxOccurrences > 100_000) fail('invalid family bounds');
   const { bounds } = options, timedFrom = Date.parse(instant(bounds.timedFrom)), timedTo = Date.parse(instant(bounds.timedTo)), dateFrom = dateInstant(bounds.allDayFromDay), dateTo = dateInstant(bounds.allDayToDay);
   if (![timedFrom,timedTo].every(Number.isFinite) || timedTo < timedFrom || dateTo <= dateFrom) fail('invalid window');
+  const timedFromExact = parseExactInstant(bounds.timedFrom), timedToExact = parseExactInstant(bounds.timedTo);
+  if (timedToExact < timedFromExact) fail('invalid window');
   let work = 0;
   const charge = (amount: number) => { work += amount; if (work > maxWork) fail('family work bound exhausted'); };
   const occurrences: SnapshotOccurrence[] = [];
@@ -217,16 +218,20 @@ export function materializeCalendarSourceSnapshot(value: unknown, options: { fam
     // candidates discarded by overlap filtering. No copied native engine.
     charge(row.recurrence === 'none' ? 1 : 508);
     const from = row.all_day ? dateFrom : timedFrom, to = row.all_day ? dateTo : timedTo;
-    if (from === to) continue;
-    const candidates = row.recurrence === 'none' ? [row] : expandEventsInZone([row], new Date(from), new Date(to), row.all_day ? 'UTC' : options.timezone, true, { requireComplete: true });
+    const fromExact = row.all_day ? BigInt(dateFrom) * 1_000_000n : timedFromExact;
+    const toExact = row.all_day ? BigInt(dateTo) * 1_000_000n : timedToExact;
+    if (fromExact === toExact) continue;
+    const candidates = row.recurrence === 'none' ? [row] : expandEventsInZone([row], new Date(from), new Date(to), row.all_day ? 'UTC' : options.timezone, true, { requireComplete: true, windowFrom: formatExactInstant(fromExact), windowTo: formatExactInstant(toExact) });
     for (const candidate of candidates) {
-      const start = Date.parse(candidate.starts_at), end = candidate.ends_at ? Date.parse(candidate.ends_at) : start + (row.all_day ? 86_400_000 : 3_600_000);
-      if (!(start < to && (end > from || end === start && start >= from))) continue;
+      const start = parseExactInstant(candidate.starts_at), end = candidate.ends_at ? parseExactInstant(candidate.ends_at) : start + (row.all_day ? 86_400_000_000_000n : 3_600_000_000_000n);
+      if (!(start < toExact && (end > fromExact || end === start && start >= fromExact))) continue;
       const busy = candidate.all_day ? allDayBusyInterval(candidate, options.timezone) : null;
       add({ transparency: 'opaque', reference: { kind: 'native', eventId: row.id }, occurrenceKey: stable(['native',row.id,candidate.starts_at]), readOnly: row.feed_id !== null || row.external_uid !== null,
         title: row.title, description: row.description, location: row.location, all_day: row.all_day, starts_at: candidate.starts_at, ends_at: candidate.ends_at,
-        startDate: row.all_day ? candidate.starts_at.slice(0,10) : null, endDate: row.all_day ? new Date((candidate.ends_at ? Date.parse(candidate.ends_at) : start + 86_400_000)).toISOString().slice(0,10) : null,
-        actualStartsAt: busy ? new Date(busy.start).toISOString() : candidate.starts_at, actualEndsAt: busy ? new Date(busy.end).toISOString() : new Date(end).toISOString() });
+        startDate: row.all_day ? candidate.starts_at.slice(0,10) : null, endDate: row.all_day ? formatExactInstant(end).slice(0,10) : null,
+        // Derived actual clocks keep their UTC presentation contract without
+        // rounding; native starts_at/ends_at above retain the stored tokens.
+        actualStartsAt: busy ? new Date(busy.start).toISOString() : formatExactInstant(start), actualEndsAt: busy ? new Date(busy.end).toISOString() : formatExactInstant(end) });
     }
   }
   for (const group of snapshot.sourceGroups) {
@@ -243,6 +248,6 @@ export function materializeCalendarSourceSnapshot(value: unknown, options: { fam
         actualStartsAt: busy ? new Date(busy.start).toISOString() : occurrence.startsAt, actualEndsAt: busy ? new Date(busy.end).toISOString() : occurrence.endsAt });
     }
   }
-  occurrences.sort((a,b) => { charge(1); return a.starts_at.localeCompare(b.starts_at) || a.occurrenceKey.localeCompare(b.occurrenceKey); });
+  occurrences.sort((a,b) => { charge(1); return compareExactInstants(a.starts_at, b.starts_at) || a.occurrenceKey.localeCompare(b.occurrenceKey); });
   return { occurrences, count: occurrences.length };
 }

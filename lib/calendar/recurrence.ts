@@ -1,3 +1,4 @@
+import { parseExactInstant, formatExactInstant, exactInstantMilliseconds, compareExactInstants } from './exact-instant';
 // lib/calendar/recurrence.ts — pure, unit-tested recurring-event expansion.
 //
 // calendar_events stores a recurrence rule ('none'|'daily'|'weekly'|'monthly'|
@@ -114,12 +115,20 @@ function firstStep(base: LocalParts, freq: string, windowStart: Date, timezone: 
 export function expandEventsInZone<T extends RecurrableEvent>(
   events: T[], windowStart: Date, windowEnd: Date, timezone: string,
   overlap = false,
-  options: { requireComplete?: boolean } = {},
+  options: { requireComplete?: boolean; windowFrom?: string; windowTo?: string } = {},
 ): T[] {
   const incomplete = (reason: string) => new RangeError(`${reason}; the calendar window cannot be read whole`);
-  if (options.requireComplete && (!Number.isFinite(windowStart.getTime()) || !Number.isFinite(windowEnd.getTime()) || windowEnd < windowStart)) {
-    throw incomplete('Invalid recurrence window');
+  if (!Number.isFinite(windowStart.getTime()) || !Number.isFinite(windowEnd.getTime()) || windowEnd < windowStart) {
+    if (options.requireComplete) throw incomplete('Invalid recurrence window');
+    return [];
   }
+  const windowFrom = options.windowFrom ? parseExactInstant(options.windowFrom) : BigInt(windowStart.getTime()) * 1_000_000n;
+  const windowTo = options.windowTo ? parseExactInstant(options.windowTo) : BigInt(windowEnd.getTime()) * 1_000_000n;
+  if (windowTo < windowFrom) throw incomplete('Invalid recurrence window');
+  const exact = (value: string) => {
+    try { return parseExactInstant(value); }
+    catch (error) { if (options.requireComplete) throw error; return BigInt(new Date(value).getTime()) * 1_000_000n; }
+  };
   const out: T[] = [];
   for (const e of events) {
     const start = new Date(e.starts_at);
@@ -128,23 +137,28 @@ export function expandEventsInZone<T extends RecurrableEvent>(
       continue;
     }
 
+    const startExact = exact(e.starts_at);
     if (!e.recurrence || e.recurrence === 'none') {
-      if (start >= windowStart && start < windowEnd) out.push(e);
+      if (startExact >= windowFrom && startExact < windowTo) out.push(e);
       continue;
     }
 
     const until = e.recurrence_until ? new Date(e.recurrence_until) : null;
     if (options.requireComplete && until && !Number.isFinite(until.getTime())) throw incomplete('Invalid recurrence cutoff');
-    const seriesEnd = until && until < windowEnd ? until : windowEnd;
+    const untilExact = e.recurrence_until && until && Number.isFinite(until.getTime()) ? exact(e.recurrence_until) : null;
+    const seriesEnd = untilExact !== null && untilExact < windowTo ? untilExact : windowTo;
     const durationMs = e.ends_at ? new Date(e.ends_at).getTime() - start.getTime() : null;
     if (options.requireComplete && durationMs !== null && !Number.isFinite(durationMs)) throw incomplete('Invalid recurring event end');
+    const durationExact = e.ends_at && durationMs !== null && Number.isFinite(durationMs) ? exact(e.ends_at) - startExact : null;
+    if (options.requireComplete && durationExact !== null && durationExact < 0n) throw incomplete('Invalid recurring event interval');
+    const remainder = startExact - BigInt(start.getTime()) * 1_000_000n;
     const base = localPartsAt(start, timezone);
     const minutes = base.hour * 60 + base.minute;
     const subMinuteMs = start.getUTCSeconds() * 1000 + start.getUTCMilliseconds();
     // An explicit point is still a calendar occurrence, but occupies no
     // interval. Only a missing/invalid negative end keeps the legacy estimate.
-    const busyDuration = durationMs !== null && durationMs >= 0 ? durationMs : 3_600_000;
-    const searchStart = overlap ? new Date(windowStart.getTime() - busyDuration) : windowStart;
+    const busyDuration = durationExact !== null && durationExact >= 0n ? durationExact : 3_600_000_000_000n;
+    const searchStart = overlap ? new Date(exactInstantMilliseconds(windowFrom - busyDuration)) : windowStart;
     const from = firstStep(base, e.recurrence, searchStart, timezone);
 
     // A complete reader must distinguish the budget from the end of a series.
@@ -174,22 +188,25 @@ export function expandEventsInZone<T extends RecurrableEvent>(
       if (!cursor) continue;
       // Keep source precision within the resolver-selected local minute.
       if (!isSeed) cursor.setTime(cursor.getTime() + subMinuteMs);
-      if (cursor >= seriesEnd) {
+      const cursorExact = isSeed ? startExact : BigInt(cursor.getTime()) * 1_000_000n + remainder;
+      if (cursorExact >= seriesEnd) {
         reachedEnd = true;
         break; // the sequence is monotone in n
       }
       if (i >= MAX_OCCURRENCES) throw incomplete('Recurrence expansion exceeds its 500-step work limit');
-      if (overlap && busyDuration > 0 ? cursor.getTime() + busyDuration > windowStart.getTime() : cursor >= windowStart) {
+      if (overlap && busyDuration > 0n ? cursorExact + busyDuration > windowFrom : cursorExact >= windowFrom) {
+        // Derived occurrence clocks are lossless UTC projections. The stored
+        // master remains untouched, including its original timestamp spelling.
         out.push({
           ...e,
-          starts_at: cursor.toISOString(),
-          ends_at: durationMs !== null ? new Date(cursor.getTime() + durationMs).toISOString() : null,
+          starts_at: formatExactInstant(cursorExact),
+          ends_at: durationExact !== null ? formatExactInstant(cursorExact + durationExact) : null,
         });
       }
     }
     if (options.requireComplete && !reachedEnd) throw incomplete('Recurrence expansion could not establish the end of the window');
   }
-  out.sort((a, b) => a.starts_at.localeCompare(b.starts_at));
+  out.sort((a, b) => compareExactInstants(a.starts_at, b.starts_at));
   return out;
 }
 
@@ -214,7 +231,7 @@ export function expandForFamily<T extends RecurrableEvent & { all_day?: boolean 
   return [
     ...expandEventsInZone(timed, range.timedFrom, range.timedTo, timezone),
     ...expandEventsInZone(allDay, range.allDayFrom, range.allDayTo, 'UTC'),
-  ].sort((a, b) => a.starts_at.localeCompare(b.starts_at));
+  ].sort((a, b) => compareExactInstants(a.starts_at, b.starts_at));
 }
 
 function runtimeTimezone(): string {

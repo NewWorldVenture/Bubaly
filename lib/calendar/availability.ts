@@ -1,3 +1,4 @@
+import { parseExactInstant, formatExactInstant, exactInstantMilliseconds, type ExactInterval } from './exact-instant';
 import type { SupabaseClient } from '@supabase/supabase-js';
 import type { Database } from '../database.types';
 import type { CalendarWindowBounds } from '../briefing/calendar-window';
@@ -11,8 +12,10 @@ export type CalendarAvailabilityAttribution = { kind: 'member'; memberId: string
 export type CalendarAvailabilityOccurrence = CalendarDisplayOccurrence & {
   transparency: 'opaque' | 'transparent';
   attribution: CalendarAvailabilityAttribution;
-  /** Clipped half-open occupied interval on the explicit household clock. */
+  /** Whole-ms compatibility projection; use exactInterval for temporal decisions. */
   interval: { start: number; end: number };
+  /** Authoritative clipped half-open interval, including submillisecond precision. */
+  exactInterval?: ExactInterval;
   /** Transparency and explicit points never occupy a gap. Records stay visible. */
   occupied: boolean;
   point: boolean;
@@ -21,13 +24,8 @@ export type CalendarAvailabilityOccurrence = CalendarDisplayOccurrence & {
 export type CalendarAvailabilityResult = { data: CalendarAvailabilityOccurrence[]; count: number; error: null }
   | { data: null; count: null; error: { message: string } };
 
-function instant(value: unknown): number {
-  if (typeof value !== 'string') throw new Error('Missing calendar instant');
-  const match = /^(\d{4}-\d{2}-\d{2})T(\d{2}):(\d{2}):(\d{2})(?:\.\d+)?(?:Z|[+-]\d{2}:\d{2})$/.exec(value);
-  const at = Date.parse(value);
-  if (!match || !validDay(match[1]) || +match[2] > 23 || +match[3] > 59 || +match[4] > 59 || !Number.isFinite(at)) throw new Error('Invalid calendar instant');
-  return at;
-}
+function instant(value: unknown): bigint { return parseExactInstant(value); }
+
 function identity(value: unknown): value is string { return typeof value === 'string' && value.trim().length > 0; }
 function uuid(value: unknown): value is string { return typeof value === 'string' && /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(value); }
 function sourceReference(row: Extract<CalendarDisplayOccurrence, { kind: 'source' }>) {
@@ -82,18 +80,21 @@ export async function readCalendarAvailability(
         attribution = { kind: 'family', reason: 'source-unmapped' };
       } else throw new Error('Invalid calendar kind');
       const start = instant(row.actualStartsAt);
-      const end = row.actualEndsAt === null ? row.kind === 'native' && estimatedEnd ? start + 3_600_000 : NaN : instant(row.actualEndsAt);
-      if (!Number.isFinite(end) || end < start) throw new Error('Invalid calendar interval');
+      const end = row.actualEndsAt === null ? row.kind === 'native' && estimatedEnd ? start + 3_600_000_000_000n : (() => { throw new Error('Missing calendar end'); })() : instant(row.actualEndsAt);
+      if (end < start) throw new Error('Invalid calendar interval');
       if (row.all_day) {
         if (!row.startDate || !row.endDate || !validDay(row.startDate) || !validDay(row.endDate) || row.endDate <= row.startDate
-          || instant(row.starts_at) !== Date.parse(`${row.startDate}T00:00:00Z`)
-          || row.ends_at !== null && instant(row.ends_at) !== Date.parse(`${row.endDate}T00:00:00Z`)) throw new Error('Invalid calendar DATE');
+          || instant(row.starts_at) !== instant(`${row.startDate}T00:00:00Z`)
+          || row.ends_at !== null && instant(row.ends_at) !== instant(`${row.endDate}T00:00:00Z`)) throw new Error('Invalid calendar DATE');
         const expected = allDayBusyInterval({ starts_at: `${row.startDate}T00:00:00Z`, ends_at: `${row.endDate}T00:00:00Z`, all_day: true }, timezone);
-        if (start !== expected.start || end !== expected.end) throw new Error('Mismatched calendar DATE clock');
+        if (start !== BigInt(expected.start) * 1_000_000n || end !== BigInt(expected.end) * 1_000_000n) throw new Error('Mismatched calendar DATE clock');
       } else if (start !== instant(row.starts_at)
-        || end !== (row.ends_at === null && estimatedEnd ? start + 3_600_000 : instant(row.ends_at))) throw new Error('Mismatched calendar interval');
-      const interval = { start: Math.min(to, Math.max(from, start)), end: Math.min(to, Math.max(from, end)) };
-      return { ...row, transparency, attribution, interval, occupied: transparency === 'opaque' && interval.end > interval.start,
+        || end !== (row.ends_at === null && estimatedEnd ? start + 3_600_000_000_000n : instant(row.ends_at))) throw new Error('Mismatched calendar interval');
+      const clip = (value: bigint) => value < from ? from : value > to ? to : value;
+      const clippedStart = clip(start), clippedEnd = clip(end);
+      const exactInterval = { start: formatExactInstant(clippedStart), end: formatExactInstant(clippedEnd) };
+      const interval = { start: exactInstantMilliseconds(clippedStart), end: exactInstantMilliseconds(clippedEnd) };
+      return { ...row, transparency, attribution, interval, exactInterval, occupied: transparency === 'opaque' && clippedEnd > clippedStart,
         point: !row.all_day && end === start, estimatedEnd };
     });
     return { data, count: data.length, error: null };

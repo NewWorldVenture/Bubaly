@@ -1,3 +1,4 @@
+import { parseExactInstant, exactInstantMilliseconds, compareExactInstants, addExactMilliseconds } from './exact-instant';
 // lib/calendar/occurrences.ts — what is ON the calendar in a window, series
 // included.
 //
@@ -117,8 +118,8 @@ export async function readCountedRows<T = unknown>(
 
 export const isSeries = (row: { recurrence: string | null }) => !!row.recurrence && row.recurrence !== 'none';
 
-const earlier = (a: string, b: string) => (a < b ? a : b);
-const later = (a: string, b: string) => (a > b ? a : b);
+const earlier = (a: string, b: string) => (compareExactInstants(a, b) < 0 ? a : b);
+const later = (a: string, b: string) => (compareExactInstants(a, b) > 0 ? a : b);
 
 export type CalendarBusyOccurrence = { id: string; starts_at: string; ends_at: string | null; member_id: string | null };
 type SportsBusyRow = CalendarBusyOccurrence & { recurrence: string; recurrence_until: string | null };
@@ -129,13 +130,16 @@ export async function readCalendarBusySource(
   db: Db, familyId: string, table: 'school_events' | 'sports_events', from: string, to: string, timezone: string,
 ): Promise<BusyResult> {
   const fail = (reason: string): BusyResult => ({ data: null, error: { message: `${reason}; the calendar window cannot be read whole` } });
-  const fromMs = Date.parse(from), toMs = Date.parse(to);
-  if (!Number.isFinite(fromMs) || !Number.isFinite(toMs) || toMs < fromMs) return fail('Invalid busy window');
+  let fromExact: bigint, toExact: bigint;
+  try { fromExact = parseExactInstant(from); toExact = parseExactInstant(to); }
+  catch { return fail('Invalid busy window'); }
+  if (toExact < fromExact) return fail('Invalid busy window');
+  const fromMs = exactInstantMilliseconds(fromExact), toMs = exactInstantMilliseconds(toExact);
   if (typeof timezone !== 'string' || !timezone.trim()) return fail('Invalid family timezone');
   try { new Intl.DateTimeFormat('en-US', { timeZone: timezone }).format(fromMs); }
   catch { return fail('Invalid family timezone'); }
-  if (fromMs === toMs) return { data: [], error: null };
-  const fallbackFrom = new Date(fromMs - 3_600_000).toISOString();
+  if (fromExact === toExact) return { data: [], error: null };
+  const fallbackFrom = addExactMilliseconds(from, -3_600_000);
   // Starts at the boundary include explicit points. An earlier point occupies
   // nothing; a missing end keeps the established one-hour estimate.
   const overlapFilter = `starts_at.gte.${from},ends_at.gt.${from},and(ends_at.is.null,starts_at.gt.${fallbackFrom})`;
@@ -164,20 +168,20 @@ export async function readCalendarBusySource(
   if (series.error) return { data: null, error: series.error };
   try {
     const validInterval = (row: CalendarBusyOccurrence) => {
-      const start = Date.parse(row.starts_at), end = row.ends_at === null ? start + 3_600_000 : Date.parse(row.ends_at);
-      if (!Number.isFinite(start) || !Number.isFinite(end) || end < start) throw new RangeError('Invalid busy interval');
+      const start = parseExactInstant(row.starts_at), end = row.ends_at === null ? start + 3_600_000_000_000n : parseExactInstant(row.ends_at);
+      if (end < start) throw new RangeError('Invalid busy interval');
       return { start, end };
     };
     const rows = (singles.data ?? []).filter(row => {
       const { start, end } = validInterval(row);
-      return start < toMs && (end > start ? end > fromMs : start >= fromMs);
+      return start < toExact && (end > start ? end > fromExact : start >= fromExact);
     });
     for (const master of (series.data ?? []).filter(isSeries)) {
       validInterval(master);
-      rows.push(...expandEventsInZone([master], new Date(fromMs), new Date(toMs), timezone, true, { requireComplete: true }));
+      rows.push(...expandEventsInZone([master], new Date(fromMs), new Date(toMs), timezone, true, { requireComplete: true, windowFrom: from, windowTo: to }));
       if (rows.length > SINGLE_READ_MAX) return fail(`More than ${SINGLE_READ_MAX} busy occurrences`);
     }
-    return { data: rows.sort((a, b) => a.starts_at.localeCompare(b.starts_at) || a.id.localeCompare(b.id)), error: null };
+    return { data: rows.sort((a, b) => compareExactInstants(a.starts_at, b.starts_at) || a.id.localeCompare(b.id)), error: null };
   } catch (cause) { return fail(cause instanceof Error ? cause.message : 'Invalid busy recurrence'); }
 }
 
@@ -266,7 +270,7 @@ export async function readCalendarOccurrences<C extends keyof EventRow = keyof E
   let occurrences: CalendarOccurrence<C>[];
   try {
     occurrences = [
-    ...expandEventsInZone(timed, new Date(bounds.timedFrom), new Date(bounds.timedTo), timezone, opts.overlap, { requireComplete: true }),
+    ...expandEventsInZone(timed, new Date(bounds.timedFrom), new Date(bounds.timedTo), timezone, opts.overlap, { requireComplete: true, windowFrom: bounds.timedFrom, windowTo: bounds.timedTo }),
     // An all-day series steps by calendar date; its rows are UTC midnights of
     // the family's dates, so the date window and a UTC clock read them as written.
     ...expandEventsInZone(allDay, new Date(dayStart), new Date(dayEnd), 'UTC', opts.overlap, { requireComplete: true }),
@@ -279,7 +283,7 @@ export async function readCalendarOccurrences<C extends keyof EventRow = keyof E
   // (or a stand-in for it) answers out of place is still counted once.
   const singleRows = ((singles.data ?? []) as unknown as CalendarOccurrence<C>[]).filter((row) => !isSeries(row));
   const rows = [...singleRows, ...occurrences]
-    .sort((a, b) => a.starts_at.localeCompare(b.starts_at) || String(a.id).localeCompare(String(b.id)));
+    .sort((a, b) => compareExactInstants(a.starts_at, b.starts_at) || String(a.id).localeCompare(String(b.id)));
   if (opts.signal?.aborted) return { data: null, count: null, error: { message: 'Calendar request aborted' } };
   return { data: opts.limit !== undefined ? rows.slice(0, opts.limit) : rows, count: rows.length, error: null };
 }

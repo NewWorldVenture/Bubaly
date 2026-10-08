@@ -1,3 +1,5 @@
+import { parseExactInstant, formatExactInstant, exactInstantMilliseconds, addExactMilliseconds, inclusiveInstantStep, normalizeExactInstant } from '../calendar/exact-instant';
+import { instantForIcsLocalTime, isValidTimezone } from '../time/zoned';
 const DAY_MS = 86_400_000;
 
 function calendarAnchor(dayKey: string): number {
@@ -66,25 +68,54 @@ export function briefingCalendarBounds(dayKey: string, timezone: string, fromDay
 /**
  * Bounds for a window the caller already holds as instants — a rolling week
  * from `fromIso` through `toInclusiveIso` (the last millisecond, as the weekly
- * windows are built). All-day rows take the family-local dates those instants
+ * windows are built). Finer input clocks include only their declared unit;
+ * legacy clocks through millisecond precision retain the one-ms extension.
+ * All-day rows take the family-local dates those instants
  * fall on, so a Saturday all-day event in Los Angeles belongs to Saturday.
  */
 export function instantCalendarBounds(fromIso: string, toInclusiveIso: string, timezone: string): CalendarWindowBounds {
-  const from = Date.parse(fromIso);
-  const toInclusive = Date.parse(toInclusiveIso);
-  if (!Number.isFinite(from) || !Number.isFinite(toInclusive) || toInclusive < from) throw new RangeError('Invalid calendar window');
+  const from = parseExactInstant(normalizeCalendarWindowInstant(fromIso, timezone));
+  const normalizedTo = normalizeCalendarWindowInstant(toInclusiveIso, timezone);
+  const toInclusive = parseExactInstant(normalizedTo);
+  if (toInclusive < from) throw new RangeError('Invalid calendar window');
   const formatter = new Intl.DateTimeFormat('en-CA', { timeZone: timezone, year: 'numeric', month: '2-digit', day: '2-digit' });
   const keyAt = (instant: number) => {
     const parts = formatter.formatToParts(new Date(instant));
     return ['year', 'month', 'day'].map((type) => parts.find((part) => part.type === type)!.value.padStart(type === 'year' ? 4 : 2, '0')).join('-');
   };
-  const lastDay = keyAt(toInclusive);
+  const lastDay = keyAt(exactInstantMilliseconds(toInclusive));
   return {
-    timedFrom: new Date(from).toISOString(),
-    timedTo: new Date(toInclusive + 1).toISOString(),
-    allDayFromDay: keyAt(from),
+    timedFrom: formatExactInstant(from),
+    timedTo: formatExactInstant(toInclusive + inclusiveInstantStep(normalizedTo)),
+    allDayFromDay: keyAt(exactInstantMilliseconds(from)),
     allDayToDay: new Date(calendarAnchor(lastDay) + DAY_MS).toISOString().slice(0, 10),
   };
+}
+
+/** Read-window compatibility: a valid bare DATE names UTC midnight; an explicit
+ * local DATETIME names the supplied family's clock, with RFC gap/fold handling.
+ * Stored native clocks still require the strict timestamp grammar. Preserve the
+ * declared fractional unit rather than borrowing the host timezone. */
+export function normalizeCalendarWindowInstant(value: string, timezone = 'UTC'): string {
+  if (typeof timezone !== 'string' || !timezone || !isValidTimezone(timezone)) throw new RangeError('Invalid calendar timezone');
+  if (/^\d{4}-\d{2}-\d{2}$/.test(value)) {
+    calendarAnchor(value);
+    return normalizeExactInstant(`${value}T00:00:00Z`);
+  }
+  const local = /^(\d{4}-\d{2}-\d{2})T(\d{2}):(\d{2})(?::(\d{2})(?:\.(\d{1,9}))?)?$/.exec(value);
+  if (local) {
+    const [, day, hour, minute, second = '00', fraction = ''] = local;
+    // Validate every civil/clock field with the strict parser before resolving
+    // the minute. Add seconds and fractional ticks exactly after zone resolution.
+    parseExactInstant(`${day}T${hour}:${minute}:${second}${fraction ? `.${fraction}` : ''}Z`);
+    const [year, month, date] = day.split('-').map(Number);
+    const resolved = instantForIcsLocalTime(year, month, date, Number(hour) * 60 + Number(minute), timezone);
+    if (!resolved) throw new RangeError('Invalid calendar local time');
+    const exact = BigInt(resolved.getTime()) * 1_000_000n + BigInt(second) * 1_000_000_000n + BigInt(fraction.padEnd(9, '0') || '0');
+    const normalized = formatExactInstant(exact);
+    return normalized.slice(0, 20) + normalized.slice(20, -1).padEnd(Math.max(3, fraction.length), '0') + 'Z';
+  }
+  return normalizeExactInstant(value);
 }
 
 /** The PostgREST OR filter for a window's two halves, for the rows that are NOT series. */
@@ -105,7 +136,7 @@ export function calendarOpenWindowFilter(bounds: Pick<CalendarWindowBounds, 'tim
 
 /** Calendar starts plus half-open ongoing intervals. Explicit points occupy no interval; missing ends estimate one hour / one date. */
 export function calendarOverlapWindowFilter(bounds: CalendarWindowBounds): string {
-  const fallbackFrom = new Date(Date.parse(bounds.timedFrom) - 3_600_000).toISOString();
+  const fallbackFrom = addExactMilliseconds(bounds.timedFrom, -3_600_000);
   const dayFrom = `${bounds.allDayFromDay}T00:00:00.000Z`;
   const dayTo = `${bounds.allDayToDay}T00:00:00.000Z`;
   return `and(all_day.eq.false,starts_at.gte.${bounds.timedFrom},starts_at.lt.${bounds.timedTo}),`

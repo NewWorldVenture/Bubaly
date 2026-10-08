@@ -24,7 +24,7 @@ const sources = Object.fromEntries([
   'lib/finance/bill-schedule.ts', 'lib/finance/recurring.ts', 'lib/finance/bills.ts', 'lib/supabase/errors.ts',
   // The shared bills reader loads the actual counted reader and its closed graph.
   'lib/calendar/occurrences.ts', 'lib/calendar/recurrence.ts', 'lib/calendar/day.ts',
-  'lib/calendar/source-capability.ts', 'lib/briefing/calendar-window.ts', 'lib/time/zoned.ts',
+  'lib/calendar/source-capability.ts', 'lib/calendar/exact-instant.ts', 'lib/onboarding/ics-time.ts', 'lib/briefing/calendar-window.ts', 'lib/time/zoned.ts',
   'lib/i18n/locales.ts', 'lib/time/local-day.ts',
 ].map(file => [`@/${file.replace(/\.tsx?$/, '')}`, ts.transpileModule(fs.readFileSync(file, 'utf8'), {
   compilerOptions: { module: ts.ModuleKind.CommonJS, target: ts.ScriptTarget.ES2022, jsx: ts.JsxEmit.React },
@@ -137,7 +137,7 @@ async function fixture(page: Page, rendered = bill(), outcome: Outcome = 'saved'
       if (name in cache) return cache[name].exports;
       if (!(name in sources)) throw new Error('Unexpected bill-payment fixture module: ' + name);
       const module = { exports: {} }; cache[name] = module;
-      const localRequire = child => load(child.startsWith('.') ? name.slice(0, name.lastIndexOf('/') + 1) + child.slice(2) : child);
+      const localRequire = child => load(child === '../onboarding/ics-time' ? '@/lib/onboarding/ics-time' : child === '../calendar/exact-instant' ? '@/lib/calendar/exact-instant' : child === '../time/zoned' ? '@/lib/time/zoned' : child.startsWith('.') ? name.slice(0, name.lastIndexOf('/') + 1) + child.slice(2) : child);
       new Function('require', 'module', 'exports', 'React', sources[name])(localRequire, module, module.exports, React);
       return module.exports;
     }

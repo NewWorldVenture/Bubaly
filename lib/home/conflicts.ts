@@ -4,6 +4,7 @@
 
 import { calendarConsumerNativeId, type CalendarConsumerEvent } from '@/lib/calendar/consumer-spans';
 import type { CalendarSnapshotReference } from '@/lib/calendar/source-snapshot';
+import { compareExactInstants, parseExactInstant } from '@/lib/calendar/exact-instant';
 export type ConflictEvent = CalendarConsumerEvent & { conflictStartsAt?: string; conflictEndsAt?: string };
 
 export type EventConflict = {
@@ -22,18 +23,18 @@ export type EventConflict = {
  * (one ends exactly as the next starts) are NOT a conflict.
  */
 export function detectConflicts(events: ConflictEvent[], defaultDurationMin = 60): EventConflict[] {
-  const byAssignee = new Map<string, { id: string; start: number; end: number; startIso: string; key?: string; reference?: CalendarSnapshotReference }[]>();
+  const byAssignee = new Map<string, { id: string; start: bigint; end: bigint; startIso: string; key?: string; reference?: CalendarSnapshotReference }[]>();
 
   for (const e of events ?? []) {
     if (!e.assignee_id || e.all_day) continue;
     const id = calendarConsumerNativeId(e);
     if (!id) continue; // A source attendee is not a native family assignment.
     const startIso = e.conflictStartsAt ?? ('actualStartsAt' in e ? e.actualStartsAt : e.starts_at);
-    const start = Date.parse(startIso);
-    if (!Number.isFinite(start)) continue;
+    let start: bigint;
+    try { start = parseExactInstant(startIso); } catch { continue; }
     const rawEnd = e.conflictEndsAt ?? ('actualEndsAt' in e ? e.actualEndsAt : e.ends_at);
-    let end = rawEnd ? Date.parse(rawEnd) : NaN;
-    if (!Number.isFinite(end) || end < start) end = start + defaultDurationMin * 60_000;
+    let end = start + BigInt(defaultDurationMin * 60_000) * 1_000_000n;
+    if (rawEnd) { try { const parsed = parseExactInstant(rawEnd); if (parsed >= start) end = parsed; } catch { /* Retain the established missing/invalid-end estimate. */ } }
     // A point event stays on the schedule but occupies no interval to clash.
     if (end <= start) continue;
     const arr = byAssignee.get(e.assignee_id) ?? [];
@@ -43,9 +44,9 @@ export function detectConflicts(events: ConflictEvent[], defaultDurationMin = 60
 
   const conflicts: EventConflict[] = [];
   for (const [assigneeId, list] of byAssignee) {
-    list.sort((a, b) => a.start - b.start);
+    list.sort((a, b) => a.start < b.start ? -1 : a.start > b.start ? 1 : 0);
     let cluster: typeof list = [];
-    let clusterEnd = -Infinity;
+    let clusterEnd: bigint | null = null;
     const flush = () => {
       if (cluster.length >= 2) {
         conflicts.push({ assigneeId, eventIds: cluster.map((x) => x.id), startsAt: cluster[0].startIso,
@@ -53,12 +54,12 @@ export function detectConflicts(events: ConflictEvent[], defaultDurationMin = 60
         });
       }
       cluster = [];
-      clusterEnd = -Infinity;
+      clusterEnd = null;
     };
     for (const ev of list) {
-      if (cluster.length > 0 && ev.start < clusterEnd) {
+      if (cluster.length > 0 && clusterEnd !== null && ev.start < clusterEnd) {
         cluster.push(ev);
-        clusterEnd = Math.max(clusterEnd, ev.end);
+        if (ev.end > clusterEnd) clusterEnd = ev.end;
       } else {
         flush();
         cluster = [ev];
@@ -69,5 +70,5 @@ export function detectConflicts(events: ConflictEvent[], defaultDurationMin = 60
   }
 
   // Stable order: earliest conflict first.
-  return conflicts.sort((a, b) => Date.parse(a.startsAt) - Date.parse(b.startsAt));
+  return conflicts.sort((a, b) => compareExactInstants(a.startsAt, b.startsAt));
 }

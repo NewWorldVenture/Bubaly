@@ -4,6 +4,7 @@ import type { Tables } from '@/lib/database.types';
 import { buildConflictAdvisories, conflictSubject } from '@/lib/calendar/conflict-advisories';
 import { allDayBusyInterval } from '@/lib/calendar/event-dates';
 import { detectConflicts } from '@/lib/home/conflicts';
+import { freeGaps } from '@/lib/calendar/scheduling';
 
 const FAMILY = '10000000-0000-4000-8000-000000000001', FEED = '20000000-0000-4000-8000-000000000001';
 const REVISION = '30000000-0000-4000-8000-000000000001', MEMBER = '50000000-0000-4000-8000-000000000001';
@@ -30,6 +31,32 @@ function native(index = 1, patch: Partial<Tables<'calendar_events'>> = {}): Cale
     point: !event.all_day && actualEnd === Date.parse(event.starts_at), occupied: actualEnd > Date.parse(event.starts_at) } as CalendarAvailabilityOccurrence;
 }
 function run(rows: CalendarAvailabilityOccurrence[], timezone = 'UTC') { return buildConflictAdvisories(rows, { timezone }); }
+describe('exact microsecond overlap and free gap decisions', () => {
+  const at = (fraction: string) => `2026-10-08T09:00:00.${fraction}Z`;
+  function exact(row: CalendarAvailabilityOccurrence, start: string, end: string): CalendarAvailabilityOccurrence {
+    return { ...row, starts_at: start, ends_at: end, actualStartsAt: start, actualEndsAt: end,
+      ...(row.kind === 'native' ? { event: { ...row.event, starts_at: start, ends_at: end } } : {}),
+      interval: { start: Date.parse(start), end: Date.parse(end) }, exactInterval: { start, end },
+      point: start === end, occupied: start !== end };
+  }
+  it('emits a genuine source/native overlap entirely inside one millisecond with original subject endpoints', () => {
+    const rows = [exact(source(), at('000001'), at('000009')), exact(native(), at('000003'), at('000007'))];
+    const result = run(rows); expect(result).toHaveLength(1);
+    expect(result[0]).toMatchObject({ startsAt: at('000003'), endsAt: at('000007') });
+    expect(result[0].subjects.map(subject => [subject.actualStartsAt, subject.actualEndsAt])).toEqual([[at('000001'), at('000009')], [at('000003'), at('000007')]]);
+    expect(JSON.parse(JSON.stringify(result))).toEqual(result);
+  });
+  it('keeps microsecond touching boundaries and explicit equal-endpoint points conflict free', () => {
+    expect(run([exact(source(), at('000001'), at('000003')), exact(native(), at('000003'), at('000007'))])).toEqual([]);
+    expect(run([exact(source(), at('000001'), at('000009')), exact(native(), at('000003'), at('000003'))])).toEqual([]);
+  });
+  it('retains both exact free gaps around submillisecond busy time even when all numeric projections coincide', () => {
+    const window = { start: at('000001'), end: at('000009') };
+    const gaps = freeGaps([{ start: Date.parse(at('000003')), end: Date.parse(at('000007')), exactInterval: { start: at('000003'), end: at('000007') } }], Date.parse(window.start), Date.parse(window.end), window);
+    expect(gaps.map(gap => gap.exactInterval)).toEqual([{ start: at('000001'), end: at('000003') }, { start: at('000007'), end: at('000009') }]);
+    expect(gaps.every(gap => gap.start === gap.end)).toBe(true);
+  });
+});
 function timed(row: CalendarAvailabilityOccurrence, from: string, to: string): CalendarAvailabilityOccurrence {
   return { ...row, starts_at: from, ends_at: to, actualStartsAt: from, actualEndsAt: to,
     interval: { start: Date.parse(from), end: Date.parse(to) }, point: from === to, occupied: Date.parse(to) > Date.parse(from) };

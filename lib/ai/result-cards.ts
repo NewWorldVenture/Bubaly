@@ -13,6 +13,22 @@
 // `cardFromToolResult` is the one place the translation from tool output to
 // card happens, so every surface renders the same outcome for the same result.
 import { z } from 'zod';
+import { exactInstantMilliseconds, exactIntervalOf, inclusiveInstantStep, parseExactInstant, type ExactInterval } from '@/lib/calendar/exact-instant';
+
+function exactTest(check: () => boolean): boolean { try { return check(); } catch { return false; } }
+export const CalendarExactIntervalSchema = z.object({ start: z.string().datetime({ offset: true }), end: z.string().datetime({ offset: true }) }).strict()
+  .refine(value => exactTest(() => parseExactInstant(value.end) >= parseExactInstant(value.start)), 'Invalid exact calendar interval');
+export function validCalendarIntervalProjection(row: { interval: { start: number; end: number }; exactInterval?: ExactInterval;
+  actualStartsAt: string; actualEndsAt: string | null; all_day: boolean; occupied: boolean; point: boolean; transparency: string }): boolean {
+  return exactTest(() => {
+    const exact = exactIntervalOf(row), start = parseExactInstant(exact.start), end = parseExactInstant(exact.end);
+    const actualStart = parseExactInstant(row.actualStartsAt), actualEnd = row.actualEndsAt === null ? null : parseExactInstant(row.actualEndsAt);
+    return (actualEnd === null || actualEnd >= actualStart)
+      && (row.exactInterval === undefined || row.interval.start === exactInstantMilliseconds(start) && row.interval.end === exactInstantMilliseconds(end))
+      && row.occupied === (row.transparency === 'opaque' && end > start)
+      && row.point === (!row.all_day && actualEnd === actualStart);
+  });
+}
 import { runPagePath } from '@/lib/ai/chat-request';
 
 // ─── Card kinds ─────────────────────────────────────────────────────────────
@@ -78,16 +94,16 @@ export const CalendarConflictSubjectSchema = z.discriminatedUnion('kind', [
     readOnly: z.literal(true), mutable: z.literal(false),
   }).strict(),
 ]).refine(subject => (subject.kind !== 'native' || subject.eventId === subject.reference.eventId && subject.mutable === !subject.readOnly)
-  && (subject.actualEndsAt === null ? subject.kind === 'native' : Date.parse(subject.actualEndsAt) >= Date.parse(subject.actualStartsAt)), 'Invalid conflict subject');
+  && (subject.actualEndsAt === null ? subject.kind === 'native' : exactTest(() => parseExactInstant(subject.actualEndsAt) >= parseExactInstant(subject.actualStartsAt))), 'Invalid conflict subject');
 export const CalendarConflictAdvisorySchema = z.object({
   kind: z.literal('family-source-overlap'), scope: z.literal('family'),
   startsAt: conflictInstant, endsAt: conflictInstant, when: text,
   subjects: z.tuple([CalendarConflictSubjectSchema, CalendarConflictSubjectSchema]),
 }).strict().refine(row => row.subjects.some(subject => subject.kind === 'source')
   && row.subjects[0].occurrenceKey !== row.subjects[1].occurrenceKey
-  && Date.parse(row.endsAt) > Date.parse(row.startsAt)
-  && row.subjects.every(subject => Date.parse(row.startsAt) >= Date.parse(subject.actualStartsAt)
-    && Date.parse(row.endsAt) <= (subject.actualEndsAt === null ? Date.parse(subject.actualStartsAt) + 3_600_000 : Date.parse(subject.actualEndsAt))), 'Invalid family advisory');
+  && exactTest(() => parseExactInstant(row.endsAt) > parseExactInstant(row.startsAt)
+    && row.subjects.every(subject => parseExactInstant(row.startsAt) >= parseExactInstant(subject.actualStartsAt)
+      && parseExactInstant(row.endsAt) <= (subject.actualEndsAt === null ? parseExactInstant(subject.actualStartsAt) + 3_600_000_000_000n : parseExactInstant(subject.actualEndsAt)))), 'Invalid family advisory');
 const legacyConflictRow = z.object({
   when: text, titles: z.array(text), member: z.string().nullable(), event_ids: z.array(text),
 }).strict();
@@ -142,16 +158,14 @@ const tripCalendarContext = z.object({
   startDate: z.string().nullable(), endDate: z.string().nullable(), all_day: z.boolean(),
   transparency: z.enum(['opaque', 'transparent']), occupied: z.boolean(), point: z.boolean(), estimatedEnd: z.boolean(),
   interval: z.object({ start: z.number().finite(), end: z.number().finite() }).strict(),
+  exactInterval: CalendarExactIntervalSchema.optional(),
   readOnly: z.boolean(), mutable: z.boolean(),
 }).strict().refine(row => row.mutable === !row.readOnly
   && row.occurrenceKey === (row.reference.kind === 'native'
     ? JSON.stringify(['native', row.reference.eventId, row.starts_at])
     : JSON.stringify(['source', row.reference.feedId, row.reference.uid, row.reference.original]))
   && (row.reference.kind !== 'source' || row.readOnly && !row.mutable)
-  && (row.actualEndsAt === null || Date.parse(row.actualEndsAt) >= Date.parse(row.actualStartsAt))
-  && row.interval.end >= row.interval.start
-  && row.occupied === (row.transparency === 'opaque' && row.interval.end > row.interval.start)
-  && (!row.point || row.actualEndsAt === row.actualStartsAt)
+  && validCalendarIntervalProjection(row)
   && (!row.all_day || row.startDate !== null && row.endDate !== null), 'Invalid trip calendar context');
 const tripReviewItem = z.object({
   source: z.enum(['calendar', 'school', 'sports', 'homework', 'bill']),
@@ -181,8 +195,9 @@ export const TripCommitmentReviewSchema = z.object({
   && row.items.filter(item => item.source === 'calendar').length <= row.counts.native
   && row.source_items.length <= row.counts.source
   && (['school', 'sports', 'homework', 'bill'] as const).every(domain => row.items.filter(item => item.source === domain).length <= row.counts[domain === 'bill' ? 'bills' : domain])
-  && row.returned <= 200 && row.horizonEndsAt === row.window.to && Date.parse(row.window.to) >= Date.parse(row.window.from)
-  && Date.parse(row.window.to) - Date.parse(row.window.from) + 1 <= 366 * 86_400_000
+  && row.returned <= 200 && row.horizonEndsAt === row.window.to
+  && exactTest(() => parseExactInstant(row.window.to) >= parseExactInstant(row.window.from)
+    && parseExactInstant(row.window.to) - parseExactInstant(row.window.from) + inclusiveInstantStep(row.window.to) <= 366n * 86_400_000_000_000n)
   && [...row.items, ...row.source_items].every(item => item.displayOrder < row.returned)
   && new Set([...row.items, ...row.source_items].map(item => item.displayOrder)).size === row.returned
   && new Set([...row.items, ...row.source_items].flatMap(item => item.calendar ? [item.calendar.occurrenceKey] : [])).size === row.items.filter(item => item.calendar).length + row.source_items.length,

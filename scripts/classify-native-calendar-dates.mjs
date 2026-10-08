@@ -5,8 +5,8 @@
  * feed_id, external_uid, onboarding_key. Optional source_recurrence is held opaque.
  * Counts describe only the caller-declared input, never database completeness.
  * Canonical representation is not proof of original intent or provenance.
- * Unlike the runtime's millisecond Date parser, nonzero submillisecond native
- * clocks require review; their ordering or DATE boundary cannot be proven here.
+ * This offline tool conservatively holds nonzero submillisecond native
+ * clocks for review. Exact runtime admission does not establish original intent.
  * No original timezone, replacement date or repair is inferred or performed.
  */
 import { closeSync, constants, fstatSync, lstatSync, openSync, readSync } from 'node:fs';
@@ -32,7 +32,7 @@ function validDay(day) {
   const date = new Date(day + 'T00:00:00Z');
   return Number.isFinite(date.getTime()) && date.toISOString().slice(0, 10) === day;
 }
-// Match search-occurrences.ts strictInstant, including its textual civil prefix.
+// Inventory-only millisecond parse; submillisecond clocks are held before classification.
 function instant(value) {
   if (typeof value !== 'string') return null;
   const match = /^(\d{4}-\d{2}-\d{2})T(\d{2}):(\d{2}):(\d{2})(?:\.\d{1,9})?(?:Z|([+-])(\d{2}):(\d{2}))$/.exec(value);

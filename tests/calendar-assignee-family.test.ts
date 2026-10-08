@@ -6,13 +6,13 @@ import { createClient } from '@supabase/supabase-js';
 import { afterAll, afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 const nativeRequire=createRequire(import.meta.url);
 const sourceRoot=process.env.BUBALY_CALENDAR_ASSIGNEE_SOURCE_ROOT??process.cwd();
-const sourcePaths={calendar:'lib/services/calendar/index.ts',idempotency:'lib/services/idempotency.ts',types:'lib/services/types.ts',errors:'lib/supabase/errors.ts',eventDates:'lib/calendar/event-dates.ts',calendarWindow:'lib/briefing/calendar-window.ts',occurrences:'lib/calendar/occurrences.ts',recurrence:'lib/calendar/recurrence.ts',zoned:'lib/time/zoned.ts', calendarDay: 'lib/calendar/day.ts', sourceCapability: 'lib/calendar/source-capability.ts'};
-const sources=Object.fromEntries(Object.entries(sourcePaths).filter(([name]) => name !== 'sourceCapability').map(([name,file])=>[name,ts.transpileModule(fs.readFileSync(path.join(sourceRoot,file),'utf8'),{compilerOptions:{target:ts.ScriptTarget.ES2020,module:ts.ModuleKind.CommonJS}}).outputText]));
+const sourcePaths={calendar:'lib/services/calendar/index.ts',idempotency:'lib/services/idempotency.ts',types:'lib/services/types.ts',errors:'lib/supabase/errors.ts',eventDates:'lib/calendar/event-dates.ts',calendarWindow:'lib/briefing/calendar-window.ts',occurrences:'lib/calendar/occurrences.ts',recurrence:'lib/calendar/recurrence.ts',zoned:'lib/time/zoned.ts', calendarDay: 'lib/calendar/day.ts', sourceCapability: 'lib/calendar/source-capability.ts', exactInstant: 'lib/calendar/exact-instant.ts', icsTime: 'lib/onboarding/ics-time.ts'};
+const sources=Object.fromEntries(Object.entries(sourcePaths).filter(([name]) => !['sourceCapability', 'exactInstant', 'icsTime'].includes(name)).map(([name,file])=>[name,ts.transpileModule(fs.readFileSync(path.join(sourceRoot,file),'utf8'),{compilerOptions:{target:ts.ScriptTarget.ES2020,module:ts.ModuleKind.CommonJS}}).outputText]));
 // Historical source roots may predate this import. Read the exact real module
 // only when their occurrences reader requests it; a missing requested file
 // remains a hard ENOENT failure, never a fabricated or disabled capability.
 function sourceFor(name: string): string {
-  if (name === 'sourceCapability') return ts.transpileModule(fs.readFileSync(path.join(sourceRoot, sourcePaths.sourceCapability), 'utf8'), { compilerOptions: { target: ts.ScriptTarget.ES2020, module: ts.ModuleKind.CommonJS } }).outputText;
+  if (name === 'sourceCapability' || name === 'exactInstant' || name === 'icsTime') return ts.transpileModule(fs.readFileSync(path.join(sourceRoot, sourcePaths[name]), 'utf8'), { compilerOptions: { target: ts.ScriptTarget.ES2020, module: ts.ModuleKind.CommonJS } }).outputText;
   if (!Object.hasOwn(sources, name)) throw new Error('Unknown finite source ' + name);
   return sources[name];
 }
@@ -57,7 +57,9 @@ function fixture(options:Options={}){
  const loaded:any={};
  const unused=(name:string)=>new Proxy({},{get:()=>()=>deny('Unused seam '+name)});
  function load(name:string):any{if(loaded[name])return loaded[name];const entry={exports:{}};loaded[name]=entry.exports;const require=(id:string):any=>{
-   const dependency:Record<string,string>={'@/lib/calendar/event-dates':'eventDates','@/lib/briefing/calendar-window':'calendarWindow','@/lib/calendar/occurrences':'occurrences','@/lib/calendar/recurrence':'recurrence','@/lib/time/zoned':'zoned', '@/lib/calendar/day': 'calendarDay', './source-capability': 'sourceCapability'};if(dependency[id])return load(dependency[id]);
+   if (id === './exact-instant' || id === '../calendar/exact-instant' || id === '@/lib/calendar/exact-instant') return load('exactInstant');
+    if (id === '../onboarding/ics-time' || id === '@/lib/onboarding/ics-time') return load('icsTime');
+    const dependency:Record<string,string>={'@/lib/calendar/event-dates':'eventDates','@/lib/briefing/calendar-window':'calendarWindow','@/lib/calendar/occurrences':'occurrences','@/lib/calendar/recurrence':'recurrence','@/lib/time/zoned':'zoned','../time/zoned':'zoned', '@/lib/calendar/day': 'calendarDay', './source-capability': 'sourceCapability'};if(dependency[id])return load(dependency[id]);
    if (id === '@/lib/calendar/availability') return { readCalendarAvailability: () => deny('Unused mutation read seam readCalendarAvailability') };
    if (id === '@/lib/calendar/conflict-advisories') return {
      buildConflictAdvisories: () => deny('Unused mutation read seam buildConflictAdvisories'),
@@ -65,7 +67,6 @@ function fixture(options:Options={}){
    };
 if (id === '@/lib/calendar/source-capability') return { CALENDAR_SOURCE_ARCHIVE_ENABLED: false };
     if (id === '@/lib/calendar/display-spans') return { calendarDisplayDay: () => deny('Unused read seam calendarDisplayDay') };
-    if (id === '@/lib/onboarding/ics-time') return { validDay: () => deny('Unused read seam validDay') };
     if(id==='server-only')return{};if(id==='node:crypto')return nativeRequire(id);
    if(id==='../types'||id==='./types')return load('types');if(id==='../idempotency')return load('idempotency');if(id==='@/lib/supabase/errors')return load('errors');
    if(id==='../activity')return{recordActivitySafely:async(_scope:any,descriptor:any)=>trace.activity.push(descriptor)};

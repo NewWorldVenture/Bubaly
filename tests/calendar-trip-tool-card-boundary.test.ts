@@ -182,3 +182,19 @@ describe('actual SDK trip review through tool schema JSON and durable card', () 
     expect(parseResultCard({ ...card, commitment_review: forged })).toBeNull();
   });
 });
+
+describe('actual SDK trip review applies the global cap in exact chronological order', () => {
+  const school = (startsAt: string) => ({ id: '70000000-0000-4000-8000-000000000001', family_id: FAMILY,
+    title: 'Synthetic school', member_id: MEMBER, starts_at: startsAt, ends_at: '2026-10-08T10:00:00Z' });
+  it.each([
+    ['ordinary millisecond earlier school', '2026-10-08T09:00:00.002Z', '2026-10-08T09:00:00.001Z', 'school'],
+    ['same-millisecond earlier calendar control', '2026-10-08T09:00:00.000001Z', '2026-10-08T09:00:00.000002Z', 'calendar'],
+    ['same-millisecond earlier school survives the cap', '2026-10-08T09:00:00.000002Z', '2026-10-08T09:00:00.000001Z', 'school'],
+  ])('%s', async (_label, calendarStart, schoolStart, expectedSource) => {
+    const { data, calls } = await review(snapshot([], [native(1, { starts_at: calendarStart })]), { tables: { school_events: [school(schoolStart)] } }, 1);
+    expect(data).toMatchObject({ total: 2, returned: 1, omitted: 1, truncated: true, complete: true, counts: { native: 1, school: 1, review: 2 } });
+    expect(calls.filter(call => call.url.pathname === '/rest/v1/school_events')).toHaveLength(1);
+    expect(data.items).toHaveLength(1); expect(data.items[0].source).toBe(expectedSource);
+    expect(data.items[0].starts_at).toBe(expectedSource === 'school' ? schoolStart : calendarStart);
+  });
+});

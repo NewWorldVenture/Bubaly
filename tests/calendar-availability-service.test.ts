@@ -5,7 +5,11 @@ import type { Database, Tables } from '@/lib/database.types';
 import type { ImportedSourceComponent, ImportedSourceOverride } from '@/lib/calendar/imported-source';
 import { parseICSSource } from '@/lib/sync/ics-source';
 import { readCalendarAvailability } from '@/lib/calendar/availability';
+import { readDisplayCalendarOccurrences } from '@/lib/calendar/display-occurrences';
 import { briefingCalendarBounds } from '@/lib/briefing/calendar-window';
+import { instantCalendarBounds } from '@/lib/briefing/calendar-window';
+import { readAssistantRailCalendar } from '@/lib/calendar/assistant-rail';
+import { readCompleteCalendarOccurrences } from '@/lib/services/calendar/search-occurrences';
 
 const capability = vi.hoisted(() => ({ enabled: false }));
 vi.mock('@/lib/calendar/source-capability', () => ({ get CALENDAR_SOURCE_ARCHIVE_ENABLED() { return capability.enabled; } }));
@@ -20,7 +24,7 @@ vi.mock('@/lib/services/school',()=>({listClassRoster:async()=>({ok:true,data:[]
 vi.mock('@/lib/services/sports',()=>({listPracticesBetween:async()=>({ok:true,data:[]}),listTeams:async()=>({ok:true,data:[]})}));
 vi.mock('@/lib/services/tasks',()=>({searchTodos:async()=>({ok:true,data:[]})}));
 vi.mock('@/lib/services/trips',()=>({listTrips:async()=>({ok:true,data:[]})}));
-import {findFreeSlots,busyEvenings} from '@/lib/services/calendar';
+import {findFreeSlots,busyEvenings,findConflicts} from '@/lib/services/calendar';
 import {buildAssistantTools} from '@/lib/assistant/tools';
 const FAMILY = '10000000-0000-4000-8000-000000000001', FEED = '20000000-0000-4000-8000-000000000001';
 const REVISION = '30000000-0000-4000-8000-000000000001', MEMBER = '50000000-0000-4000-8000-000000000001';
@@ -79,6 +83,130 @@ async function assistant(probe:ReturnType<typeof sdk>,date=day,tz:string|undefin
   const tool=buildAssistantTools(probe.db,{familyId:FAMILY,userId:MEMBER,memberId:MEMBER,members:[{id:MEMBER,display_name:'Selected member'}],tz}).find(t=>t.name==='find_free_time')!;
   return await tool.execute({date,...(assignee?{assignee}:{})}) as {ok:boolean;busy?:{title:string;starts_at:string;ends_at:string;all_day:boolean}[];note?:string};
 }
+
+describe('actual SDK PostgreSQL microsecond calendar admission', () => {
+  it.each([
+    ['2026-10-08T09:00:00.000001', '2026-10-08T13:00:00.000001Z'],
+    ['2026-03-08T02:30:42.000001', '2026-03-08T07:30:42.000001Z'],
+    ['2026-11-01T01:30:42.000001', '2026-11-01T05:30:42.000001Z'],
+  ])('resolves floating household input %s through actual SDK with exact UTC clock %s', async (floating, utc) => {
+    capability.enabled = true;
+    const rows = [native(1, { starts_at: utc, ends_at: utc.replace('000001Z', '000009Z') }),
+      native(2, { starts_at: utc.replace('000001Z', '000009Z'), ends_at: utc.replace('000001Z', '000009Z') }),
+      native(3, { starts_at: utc.replace('000001Z', '000010Z'), ends_at: utc.replace('000001Z', '000010Z') })];
+    const probe = sdk({ value: snapshot([], rows) });
+    const result = await findConflicts(scope(probe.db, 'America/New_York'), { from: floating, to: floating.replace('000001', '000009') });
+    expect(result.ok).toBe(true); if (!result.ok) throw new Error(result.error);
+    expect(Object.keys(result.data.events)).toEqual([rows[0].id, rows[1].id]);
+    expect(Object.values(result.data.subjects)[0]).toMatchObject({ actualStartsAt: utc, actualEndsAt: utc.replace('000001Z', '000009Z') });
+    expect(probe.calls[0].body).toEqual({ p_family_id: FAMILY });
+    expect(probe.calls).toHaveLength(1); expect(probe.calls[0].url.pathname).toBe('/rest/v1/rpc/calendar_read_occurrence_inputs');
+  });
+  it('refuses invalid floating input before SDK and still refuses naive stored event clocks', async () => {
+    const invalid = sdk();
+    expect(await findConflicts(scope(invalid.db, 'America/New_York'), { from: '2026-10-08T09:90:00.000001', to: '2026-10-08T10:00:00.000009' })).toMatchObject({ ok: false });
+    expect(invalid.calls).toEqual([]);
+    capability.enabled = true;
+    const rows = [native(1, { starts_at: '2026-10-08T09:00:00.000001', ends_at: '2026-10-08T10:00:00.000009' })], stored = sdk({ value: snapshot([], rows) });
+    expect(await readCompleteCalendarOccurrences(scope(stored.db, 'America/New_York'), { from: '2026-10-08T00:00:00Z', to: '2026-10-08T23:59:59.999999Z' })).toMatchObject({ ok: false });
+    expect(stored.calls).toHaveLength(1);
+  });
+  it('retains a source-enabled native row starting inside a nonoverlap microsecond display window', async () => {
+    capability.enabled = true;
+    const starts_at = `${day}T09:00:00.000005Z`, ends_at = `${day}T09:00:00.000006Z`;
+    const rows = [native(1, { starts_at, ends_at })], probe = sdk({ value: snapshot([], rows) });
+    const bounds = { ...briefingCalendarBounds(day, 'UTC', 0, 1), timedFrom: `${day}T09:00:00.000003Z`, timedTo: `${day}T09:00:00.000007Z` };
+    const result = await readDisplayCalendarOccurrences(probe.db, FAMILY, bounds, 'UTC', { overlap: false });
+    expect(result.error).toBeNull(); expect(result.count).toBe(1);
+    expect(result.data?.[0]).toMatchObject({ kind: 'native', starts_at, ends_at, actualStartsAt: starts_at, actualEndsAt: ends_at, reference: { kind: 'native', eventId: rows[0].id } });
+    expect(probe.calls).toHaveLength(1); expect(probe.calls[0].url.pathname).toBe('/rest/v1/rpc/calendar_read_occurrence_inputs');
+  });
+  it.each([
+    ['2026-10-08T23:59:59.999999Z', '2026-10-09T00:00:00.000Z'],
+    ['2026-10-08T23:59:59.999999999Z', '2026-10-09T00:00:00.000Z'],
+    ['2026-10-08T23:59:59.999Z', '2026-10-09T00:00:00.000Z'],
+    ['2026-10-08T09:00:00.000000Z', '2026-10-08T09:00:00.000001Z'],
+    ['2026-10-08T09:00:00.000000000Z', '2026-10-08T09:00:00.000000001Z'],
+    ['2026-10-08T09:00:00.0000Z', '2026-10-08T09:00:00.0001Z'],
+    ['2026-10-08T09:00:00.000Z', '2026-10-08T09:00:00.001Z'],
+    ['2026-10-08T09:00:00Z', '2026-10-08T09:00:00.001Z'],
+  ])('inclusive endpoint %s advances only its declared precision to %s', (last, exclusive) => {
+    const bounds = instantCalendarBounds(`${day}T00:00:00Z`, last, 'UTC');
+    expect(bounds.timedTo).toBe(exclusive);
+    expect(bounds.allDayFromDay).toBe(day); expect(bounds.allDayToDay).toBe('2026-10-09');
+  });
+  it('rejects reversed same-millisecond inclusive bounds rather than rounding them equal', () => {
+    expect(() => instantCalendarBounds(`${day}T09:00:00.000009Z`, `${day}T09:00:00.000001Z`, 'UTC')).toThrow();
+  });
+  it('retains raw trailing-zero microsecond resolution through the actual complete SDK reader', async () => {
+    capability.enabled = true;
+    const point = `${day}T09:00:00.000000Z`, outside = `${day}T09:00:00.000002Z`;
+    const rows = [native(1, { starts_at: point, ends_at: point }), native(2, { starts_at: outside, ends_at: outside })];
+    const probe = sdk({ value: snapshot([], rows) });
+    const result = await readCompleteCalendarOccurrences(scope(probe.db), { from: point, to: point });
+    expect(result.ok).toBe(true); if (!result.ok) throw new Error(result.error);
+    expect(result.data.totalVisibleCount).toBe(1); expect(result.data.occurrences[0].reference).toEqual({ kind: 'native', eventId: rows[0].id });
+    expect(probe.calls).toHaveLength(1); expect(probe.calls[0].url.pathname).toBe('/rest/v1/rpc/calendar_read_occurrence_inputs');
+  });
+  it('admits exactly 366 elapsed days at microsecond resolution and refuses the next inclusive quantum before transport', async () => {
+    const probe = sdk();
+    const result = await readCompleteCalendarOccurrences(scope(probe.db), { from: '2024-01-01T00:00:00Z', to: '2024-12-31T23:59:59.999999Z' });
+    expect(result).toMatchObject({ ok: true, data: { occurrences: [], totalVisibleCount: 0 } });
+    const rejected = sdk();
+    expect(await readCompleteCalendarOccurrences(scope(rejected.db), { from: '2024-01-01T00:00:00Z', to: '2025-01-01T00:00:00.000000Z' })).toMatchObject({ ok: false });
+    expect(rejected.calls).toEqual([]);
+  });
+  it.each([false, true])('rejects malformed DATE clocks and reversed submillisecond intervals with source capability=%s', async enabled => {
+    capability.enabled = enabled;
+    for (const patch of [
+      { all_day: true, starts_at: `${day}T00:00:00.000001Z`, ends_at: '2026-10-09T00:00:00Z' },
+      { all_day: true, starts_at: `${day}T00:00:00Z`, ends_at: '2026-10-09T00:00:00.000001Z' },
+      { starts_at: `${day}T09:00:00.000009Z`, ends_at: `${day}T09:00:00.000001Z` },
+    ]) {
+      const rows = [native(1, patch)], probe = sdk({ rows, value: snapshot([], rows) });
+      const result = await readCalendarAvailability(probe.db, FAMILY, briefingCalendarBounds(day, 'UTC', 0, 1), 'UTC');
+      expect(result.data).toBeNull(); expect(result.count).toBeNull(); expect(result.error).not.toBeNull();
+    }
+  });
+  it('refuses a reversed microsecond request before SDK transport', async () => {
+    const probe = sdk();
+    const bounds = { ...briefingCalendarBounds(day, 'UTC', 0, 1), timedFrom: `${day}T09:00:00.000009Z`, timedTo: `${day}T09:00:00.000001Z` };
+    const result = await readCalendarAvailability(probe.db, FAMILY, bounds, 'UTC');
+    expect(result.data).toBeNull(); expect(result.error).not.toBeNull(); expect(probe.calls).toEqual([]);
+  });
+  it.each([false, true])('preserves positive microsecond occupancy, raw endpoints and exact clipping with source capability=%s', async enabled => {
+    capability.enabled = enabled;
+    const rawStart = `${day}T09:00:00.000001Z`, rawEnd = `${day}T09:00:00.000009Z`;
+    const rows = [native(1, { starts_at: rawStart, ends_at: rawEnd })], probe = sdk({ rows, value: snapshot([], rows) });
+    const bounds = { ...briefingCalendarBounds(day, 'UTC', 0, 1), timedFrom: `${day}T09:00:00.000003Z`, timedTo: `${day}T09:00:00.000007Z` };
+    const result = await readCalendarAvailability(probe.db, FAMILY, bounds, 'UTC');
+    expect(result.error).toBeNull(); expect(result.count).toBe(1);
+    expect(result.data?.[0]).toMatchObject({ starts_at: rawStart, ends_at: rawEnd, actualStartsAt: rawStart, actualEndsAt: rawEnd,
+      occupied: true, point: false, exactInterval: { start: `${day}T09:00:00.000003Z`, end: `${day}T09:00:00.000007Z` } });
+    expect(result.data?.[0].interval.start).toBe(result.data?.[0].interval.end);
+    expect(JSON.parse(JSON.stringify(result.data))).toEqual(result.data);
+  });
+  it.each([false, true])('retains equal microsecond endpoints as a visible nonoccupying point with source capability=%s', async enabled => {
+    capability.enabled = enabled;
+    const instant = `${day}T09:00:00.000001Z`, rows = [native(1, { starts_at: instant, ends_at: instant })];
+    const result = await readCalendarAvailability(sdk({ rows, value: snapshot([], rows) }).db, FAMILY, briefingCalendarBounds(day, 'UTC', 0, 1), 'UTC');
+    expect(result.error).toBeNull(); expect(result.data).toHaveLength(1);
+    expect(result.data?.[0]).toMatchObject({ point: true, occupied: false, exactInterval: { start: instant, end: instant } });
+  });
+  it('orders same-millisecond native rail rows by actual instant before UUID', async () => {
+    const rows = [native(1, { starts_at: `${day}T09:00:00.000009Z`, ends_at: `${day}T10:00:00Z` }),
+      native(9, { starts_at: `${day}T09:00:00.000001Z`, ends_at: `${day}T10:00:00Z` })];
+    const probe = sdk({ rows });
+    const result = await readAssistantRailCalendar(probe.db, FAMILY, 'UTC', new Date(`${day}T00:00:00Z`), new Date('2026-10-09T00:00:00Z'), new Date('2026-10-22T00:00:00Z'), new AbortController().signal);
+    expect(result.error).toBeNull(); expect(result.data?.today.map(row => row.id)).toEqual([rows[1].id, rows[0].id]);
+  });
+  it('does not recommend a five-minute grid slot crossing genuine microsecond occupancy', async () => {
+    capability.enabled = true;
+    const rows = [native(1, { starts_at: `${day}T17:00:00.000001Z`, ends_at: `${day}T17:00:00.000002Z` })];
+    const result = await findFreeSlots(scope(sdk({ value: snapshot([], rows) }).db), { from: `${day}T17:00:00Z`, to: `${day}T17:10:00Z`, durationMin: 5, granularityMin: 1, limit: 1 });
+    expect(result).toMatchObject({ ok: true, data: [{ startsAt: `${day}T17:01:00.000Z`, endsAt: `${day}T17:06:00.000Z` }] });
+  });
+});
 describe('actual SDK qualified availability across three entrypoints',()=>{
   it.each(['opaque','transparent'] as const)('uses source %s occupancy consistently without native fallback',async transparency=>{
     capability.enabled=true;const probe=sdk({value:snapshot([group(source([`DTSTART:20261008T180000Z\r\nDURATION:PT1H\r\nTRANSP:${transparency.toUpperCase()}\r\nSUMMARY:Source commitment`]))],[])});

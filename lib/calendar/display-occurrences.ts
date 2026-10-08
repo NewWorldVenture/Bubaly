@@ -6,6 +6,7 @@ import { CALENDAR_SOURCE_ARCHIVE_ENABLED } from './source-capability';
 import type { SourceTransparency } from './source-occurrences';
 import { readCalendarOccurrences, type CalendarOccurrence } from './occurrences';
 import { materializeCalendarSourceSnapshot, readCalendarSourceSnapshot, type CalendarSnapshotReference } from './source-snapshot';
+import { compareExactInstants } from './exact-instant';
 
 export { CALENDAR_SOURCE_ARCHIVE_ENABLED } from './source-capability';
 export const CALENDAR_DISPLAY_CONTRACT = 3;
@@ -61,7 +62,7 @@ export async function readDisplayCalendarOccurrences(db: SupabaseClient<Database
     const native = new Map(snapshot.nativeRows.map(event => [event.id,event]));
     const all: CalendarDisplayOccurrence[] = result.occurrences.filter(row => options.overlap || (row.all_day
       ? row.startDate! >= bounds.allDayFromDay && row.startDate! < bounds.allDayToDay
-      : Date.parse(row.actualStartsAt) >= Date.parse(bounds.timedFrom) && Date.parse(row.actualStartsAt) < Date.parse(bounds.timedTo))).map(row => {
+      : compareExactInstants(row.actualStartsAt,bounds.timedFrom) >= 0 && compareExactInstants(row.actualStartsAt,bounds.timedTo) < 0)).map(row => {
       if (row.reference.kind === 'source') return {...row,kind:'source' as const,reference:row.reference,category:null,assignee_id:null};
       const original = native.get(row.reference.eventId);
       if (!original) throw new Error('Missing native snapshot identity');

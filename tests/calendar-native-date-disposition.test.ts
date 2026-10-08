@@ -6,6 +6,7 @@ import { spawnSync } from 'node:child_process';
 import { pathToFileURL } from 'node:url';
 import { runInNewContext } from 'node:vm';
 import ts from 'typescript';
+import { parseExactInstant } from '@/lib/calendar/exact-instant';
 import { classifyNativeCalendarDates, MAX_INPUT_BYTES, MAX_ROWS } from '../scripts/classify-native-calendar-dates.mjs';
 
 const FAMILY = '10000000-0000-4000-8000-000000000001';
@@ -44,7 +45,7 @@ function actualQualifier() {
   expect(validDay).toBeDefined();
   parts.unshift(validDay!.getText(dates).replace(/^export /, ''));
   const compiled = ts.transpileModule(parts.join('\n'), { compilerOptions: { target: ts.ScriptTarget.ES2022 } }).outputText;
-  return runInNewContext(compiled + '\nqualifyNativeRow;', { Date }) as (value: unknown, family: string) => void;
+  return runInNewContext(compiled + '\nqualifyNativeRow;', { Date, parseExactInstant }) as (value: unknown, family: string) => void;
 }
 const qualify = actualQualifier();
 const cases: [string, Record<string, unknown>, string][] = [
@@ -113,9 +114,11 @@ describe('offline native DATE inventory', () => {
     { ends_at: '2026-10-09T00:00:00.000001Z' },
     { all_day: false, starts_at: '2026-10-08T14:00:00.000002Z', ends_at: '2026-10-08T14:00:00.000001Z' },
     { all_day: false, starts_at: '2026-10-08T14:00:00.000001Z', ends_at: '2026-10-08T14:00:00.000002Z' },
-  ])('conservatively reviews submillisecond clocks that the actual runtime parser admits %j', patch => {
+  ])('conservatively reviews microseconds while repaired runtime refuses invalid DATE and reversed intervals %j', patch => {
     const value = row(1, patch), before = JSON.stringify(value);
-    expect(() => qualify(value, FAMILY)).not.toThrow();
+    if (patch.all_day === false && typeof patch.starts_at === 'string' && typeof patch.ends_at === 'string'
+      && patch.starts_at < patch.ends_at) expect(() => qualify(value, FAMILY)).not.toThrow();
+    else expect(() => qualify(value, FAMILY)).toThrow();
     expect(classify([value]).rows).toEqual([{ index: 0, reason: 'review_submillisecond_precision' }]);
     expect(JSON.stringify(value)).toBe(before);
   });

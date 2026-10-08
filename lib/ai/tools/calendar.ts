@@ -14,7 +14,8 @@
 // person (high).
 import 'server-only';
 import { z } from 'zod';
-import { CalendarConflictAdvisorySchema, CalendarConflictSubjectSchema, CalendarConflictReferenceSchema } from '@/lib/ai/result-cards';
+import { addExactMilliseconds } from '@/lib/calendar/exact-instant';
+import { CalendarConflictAdvisorySchema, CalendarConflictSubjectSchema, CalendarConflictReferenceSchema, CalendarExactIntervalSchema, validCalendarIntervalProjection } from '@/lib/ai/result-cards';
 import {
   createEvent, deleteEvent, findConflicts, findFreeSlots, busyEvenings, rescheduleAfter, rsvpToEvent, updateEvent,
 } from '@/lib/services/calendar';
@@ -57,6 +58,7 @@ const searchOccurrenceFields = {
   startDate: z.string().nullable(), endDate: z.string().nullable(),
   transparency: z.enum(['opaque', 'transparent']), occupied: z.boolean(), point: z.boolean(), estimatedEnd: z.boolean(),
   interval: z.object({ start: z.number().finite(), end: z.number().finite() }).strict(),
+  exactInterval: CalendarExactIntervalSchema.optional(),
   displayOrder: z.number().int().nonnegative(), when: z.string(),
 };
 const nativeSearchOutput = z.object({
@@ -65,10 +67,10 @@ const nativeSearchOutput = z.object({
   feed_id: z.string().nullable(), external_uid: z.string().nullable(),
   readOnly: z.boolean(), mutable: z.boolean(),
 }).passthrough().refine(row => row.reference.kind === 'native' && row.id === row.eventId && row.id === row.reference.eventId
-  && row.readOnly === (row.feed_id !== null || row.external_uid !== null) && row.mutable === !row.readOnly, 'Invalid native search provenance');
+  && row.readOnly === (row.feed_id !== null || row.external_uid !== null) && row.mutable === !row.readOnly && validCalendarIntervalProjection(row), 'Invalid native search provenance');
 const sourceSearchOutput = z.object({
   ...searchOccurrenceFields, kind: z.literal('source'), readOnly: z.literal(true), mutable: z.literal(false),
-}).strict().refine(row => row.reference.kind === 'source', 'Invalid source search provenance');
+}).strict().refine(row => row.reference.kind === 'source' && validCalendarIntervalProjection(row), 'Invalid source search provenance');
 const searchOutput = z.object({
   events: z.array(nativeSearchOutput), source_events: z.array(sourceSearchOutput),
   matchedCount: z.number().int().nonnegative(), totalVisibleCount: z.number().int().nonnegative(),
@@ -308,7 +310,7 @@ export const calendarTools: ToolDefinition[] = [
       const from = input.from ?? now.toISOString();
       let window: ReturnType<typeof validateCalendarSearchWindow>;
       try {
-        const to = input.to ?? new Date(Date.parse(from) + 366 * 86_400_000 - 1).toISOString();
+        const to = input.to ?? addExactMilliseconds(from, 366 * 86_400_000 - 1);
         window = validateCalendarSearchWindow(scope, { from, to });
       } catch {
         return fail('Choose a valid bounded calendar window and household timezone.', { code: SERVICE_CODES.invalidInput });

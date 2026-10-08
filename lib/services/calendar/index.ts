@@ -23,8 +23,9 @@ import { addDays } from '@/lib/calendar/day';
 import { CALENDAR_SOURCE_ARCHIVE_ENABLED } from '@/lib/calendar/source-capability';
 import { calendarDisplayDay } from '@/lib/calendar/display-spans';
 import { validDay } from '@/lib/onboarding/ics-time';
-import { calendarOpenWindowFilter, instantCalendarBounds } from '@/lib/briefing/calendar-window';
-import { freeGaps, mergeIntervals, type Interval } from '@/lib/calendar/scheduling';
+import { calendarOpenWindowFilter, instantCalendarBounds, normalizeCalendarWindowInstant } from '@/lib/briefing/calendar-window';
+import { freeGaps, intervalTicks, mergeIntervals, type Interval } from '@/lib/calendar/scheduling';
+import { addExactMilliseconds, exactInstantMilliseconds, exactIntervalOf, formatExactInstant, inclusiveInstantStep, parseExactInstant } from '@/lib/calendar/exact-instant';
 import { instantForIcsLocalTime, isValidTimezone } from '@/lib/time/zoned';
 import type { EventCategory, Insertable, RecurrenceFreq, Tables, Updatable } from '@/lib/database.types';
 import { describeDbError } from '@/lib/supabase/errors';
@@ -518,15 +519,18 @@ function zoneOf(scope: ServiceScope): string {
  */
 export async function searchEvents(scope: ServiceScope, input: SearchEventsInput = {}): Promise<ServiceResult<CalendarEvent[]>> {
   const limit = Math.min(Math.max(input.limit ?? 50, 1), 200);
-  const from = isoOrNull(input.from) ?? scopeNow(scope).toISOString();
-  const to = isoOrNull(input.to);
+  let from: string, to: string | null;
+  try {
+    from = input.from == null ? scopeNow(scope).toISOString() : normalizeCalendarWindowInstant(input.from, scope.tz);
+    to = input.to == null ? null : normalizeCalendarWindowInstant(input.to, scope.tz);
+  } catch { return fail('That search window could not be understood.', { code: SERVICE_CODES.invalidInput }); }
   if (input.expandSeries === false) return searchEventRows(scope, input, from, to, limit);
   // A window that ends before it starts holds nothing, as the row read answered.
-  if (to && Date.parse(to) < Date.parse(from)) return ok([]);
+  if (to && parseExactInstant(to) < parseExactInstant(from)) return ok([]);
 
   const tz = zoneOf(scope);
   // `to` is inclusive, as the row read's `lte` was.
-  const bounds = instantCalendarBounds(from, to ?? new Date(Date.parse(from) + SEARCH_SERIES_HORIZON_MS - 1).toISOString(), tz);
+  const bounds = instantCalendarBounds(from, to ?? addExactMilliseconds(from, SEARCH_SERIES_HORIZON_MS - 1), tz);
   const res = await readCalendarOccurrences(scope.db, scope.familyId, bounds, tz, {
     limit,
     singlesLimit: limit,
@@ -583,27 +587,32 @@ function nativeInstant(value:string):number {
   if(!/^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}(?:\.\d{1,9})?(?:Z|[+-]\d{2}:?\d{2})$/.test(value)||!validDay(value.slice(0,10)))throw new Error('Invalid native calendar instant');
   const valueMs=Date.parse(value);
   if(!Number.isFinite(valueMs)||+value.slice(11,13)>=24||+value.slice(14,16)>=60||+value.slice(17,19)>=60)throw new Error('Invalid native calendar instant');
-  return valueMs;
+  return exactInstantMilliseconds(parseExactInstant(value));
 }
 function nativeInterval(row: { starts_at:string; ends_at:string|null; all_day:boolean }) {
   if(!validDay(row.starts_at.slice(0,10))||!Number.isFinite(Date.parse(row.starts_at)))throw new Error('Invalid calendar start');
   if(row.all_day){
     const start=row.starts_at.slice(0,10),end=row.ends_at===null?addDays(start,1):row.ends_at.slice(0,10);
     if(!validDay(end)||end<=start||row.ends_at!==null&&!Number.isFinite(Date.parse(row.ends_at)))throw new Error('Invalid calendar DATE interval');
+    if(parseExactInstant(row.starts_at)!==parseExactInstant(`${start}T00:00:00Z`)
+      ||row.ends_at!==null&&parseExactInstant(row.ends_at)!==parseExactInstant(`${end}T00:00:00Z`))throw new Error('Noncanonical calendar DATE');
     return {allDay:true as const,start,end};
   }
   const start=nativeInstant(row.starts_at),end=row.ends_at===null?start+3_600_000:nativeInstant(row.ends_at);
-  if(!Number.isFinite(start)||!Number.isFinite(end)||end<start||row.ends_at!==null&&!validDay(row.ends_at.slice(0,10)))throw new Error('Invalid calendar interval');
-  return {allDay:false as const,start,end};
+  const exactInterval={start:row.starts_at,end:row.ends_at??addExactMilliseconds(row.starts_at,3_600_000)};
+  if(parseExactInstant(exactInterval.end)<parseExactInstant(exactInterval.start))throw new Error('Invalid calendar interval');
+  return {allDay:false as const,start,end,exactInterval};
 }
 function analysisWindow(scope:ServiceScope,input:{from?:string|null;to?:string|null},defaultDays:number) {
   if((input.from!=null&&!validDay(input.from.slice(0,10)))||(input.to!=null&&!validDay(input.to.slice(0,10))))throw new Error('Invalid calendar window');
   if(typeof scope.familyId!=='string'||!scope.familyId.trim()||typeof scope.tz!=='string'||!scope.tz.trim()||!isValidTimezone(scope.tz))throw new Error('Invalid family calendar scope');
-  const from=input.from==null?scopeNow(scope).getTime():Date.parse(input.from);
-  const to=input.to==null?from+defaultDays*86_400_000-1:Date.parse(input.to);
-  if(!Number.isFinite(from)||!Number.isFinite(to)||to<from||to-from>366*86_400_000)throw new Error('Invalid calendar window');
-  const bounds=instantCalendarBounds(new Date(from).toISOString(),new Date(to).toISOString(),scope.tz);
-  return {from,to:to+1,bounds};
+  const fromIso=normalizeCalendarWindowInstant(input.from??scopeNow(scope).toISOString(),scope.tz);
+  const toIso=normalizeCalendarWindowInstant(input.to??addExactMilliseconds(fromIso,defaultDays*86_400_000-1),scope.tz);
+  const exactFrom=parseExactInstant(fromIso),exactTo=parseExactInstant(toIso);
+  if(exactTo<exactFrom||exactTo-exactFrom>366n*86_400_000_000_000n)throw new Error('Invalid calendar window');
+  const from=exactInstantMilliseconds(exactFrom),to=exactInstantMilliseconds(exactTo);
+  const bounds=instantCalendarBounds(fromIso,toIso,scope.tz);
+  return {from,to:to+1,bounds,exactFrom,exactTo:exactTo+inclusiveInstantStep(toIso)};
 }
 
 /**
@@ -670,14 +679,16 @@ export async function findFreeSlots(scope: ServiceScope, input: FindFreeSlotsInp
   if (!Number.isFinite(durationMin)) return fail('That duration could not be understood.', { code: SERVICE_CODES.invalidInput });
 
   const now = scopeNow(scope);
-  const fromMs = Date.parse(isoOrNull(input.from) ?? now.toISOString());
-  const toMs = Date.parse(isoOrNull(input.to) ?? new Date(fromMs + 7 * 24 * 3600_000).toISOString());
-  if (!Number.isFinite(fromMs) || !Number.isFinite(toMs) || toMs <= fromMs) {
+  let fromIso: string, toIso: string, fromExact: bigint, toExact: bigint;
+  try {
+    fromIso=normalizeCalendarWindowInstant(input.from??now.toISOString(),scope.tz);
+    toIso=normalizeCalendarWindowInstant(input.to??addExactMilliseconds(fromIso,7*24*3600_000),scope.tz);
+    fromExact=parseExactInstant(fromIso);toExact=parseExactInstant(toIso);
+    if(toExact<=fromExact)throw new Error('Invalid window');
+  } catch {
     return fail('That search window could not be understood.', { code: SERVICE_CODES.invalidInput });
   }
-
-  const fromIso = new Date(fromMs).toISOString();
-  const toIso = new Date(toMs).toISOString();
+  const fromMs=exactInstantMilliseconds(fromExact),toMs=exactInstantMilliseconds(toExact);
   const members = input.memberIds?.filter(Boolean) ?? [];
 
   // Series included: a weekly practice is busy every week, not the week it
@@ -700,19 +711,17 @@ export async function findFreeSlots(scope: ServiceScope, input: FindFreeSlotsInp
 
   const busy: Interval[] = [];
   const push = (startsAt: string, endsAt: string | null) => {
-    const start = Date.parse(startsAt);
-    if (!Number.isFinite(start)) return;
-    const parsedEnd = endsAt ? Date.parse(endsAt) : Number.NaN;
-    if (parsedEnd === start) return; // Explicit points occupy no interval.
-    const end = Number.isFinite(parsedEnd) && parsedEnd > start ? parsedEnd : start + DEFAULT_DURATION_MIN * MINUTE_MS;
-    busy.push({ start, end });
+    const start=parseExactInstant(startsAt),end=endsAt===null?start+BigInt(DEFAULT_DURATION_MIN*MINUTE_MS)*1_000_000n:parseExactInstant(endsAt);
+    if(end===start)return;
+    if(end<start)throw new Error('Invalid busy interval');
+    busy.push({start:exactInstantMilliseconds(start),end:exactInstantMilliseconds(end),exactInterval:{start:startsAt,end:endsAt??formatExactInstant(end)}});
   };
 
   for (const e of calendar.data ?? []) {
     if (!e.occupied || members.length > 0 && e.attribution.kind === 'member' && !members.includes(e.attribution.memberId)) continue;
     // Source attendee identities are not household membership. Unmapped source
     // and native unassigned commitments conservatively occupy every member.
-    busy.push(e.interval);
+    busy.push({...e.interval,exactInterval:exactIntervalOf(e)});
   }
   for (const e of school.data ?? []) {
     if (members.length > 0 && e.member_id && !members.includes(e.member_id)) continue;
@@ -730,7 +739,9 @@ export async function findFreeSlots(scope: ServiceScope, input: FindFreeSlotsInp
     const close = zonedTimeMs(key, hours.endHour, 0, scope.tz);
     const start = Math.max(open, fromMs, now.getTime());
     const end = Math.min(close, toMs);
-    if (Number.isFinite(start) && Number.isFinite(end) && end > start) windows.push({ start, end });
+    const exactStart=[fromExact,BigInt(open)*1_000_000n,BigInt(now.getTime())*1_000_000n].reduce((a,b)=>a>b?a:b);
+    const exactEnd=toExact<BigInt(close)*1_000_000n?toExact:BigInt(close)*1_000_000n;
+    if (Number.isFinite(start) && Number.isFinite(end) && exactEnd > exactStart) windows.push({ start, end,exactInterval:{start:formatExactInstant(exactStart),end:formatExactInstant(exactEnd)} });
   }
 
   const merged = mergeIntervals(busy);
@@ -740,18 +751,19 @@ export async function findFreeSlots(scope: ServiceScope, input: FindFreeSlotsInp
 
   const slots: FreeSlot[] = [];
   for (const window of windows) {
-    for (const gap of freeGaps(merged, window.start, window.end)) {
-      let start = gap.start;
-      const remainder = start % granMs;
-      if (remainder !== 0) start += granMs - remainder;
-      while (start + durationMs <= gap.end) {
+    for (const gap of freeGaps(merged, window.start, window.end,window.exactInterval)) {
+      const exact=intervalTicks(gap),granularity=BigInt(granMs)*1_000_000n,duration=BigInt(durationMs)*1_000_000n;
+      let start = exact.start;
+      const remainder = (start % granularity+granularity)%granularity;
+      if (remainder !== 0n) start += granularity - remainder;
+      while (start + duration <= exact.end) {
         slots.push({
-          startsAt: new Date(start).toISOString(),
-          endsAt: new Date(start + durationMs).toISOString(),
-          dayKey: dayKeyInTz(new Date(start), scope.tz),
+          startsAt: formatExactInstant(start),
+          endsAt: formatExactInstant(start + duration),
+          dayKey: dayKeyInTz(new Date(exactInstantMilliseconds(start)), scope.tz),
         });
         if (slots.length >= limit) return ok(slots);
-        start += granMs;
+        start += granularity;
       }
     }
   }
@@ -788,14 +800,18 @@ export async function busyEvenings(
   ]);
   if(calendar.error||sports.error)return fail(describeDbError(calendar.error??sports.error,'Could not check the week ahead.'),{code:SERVICE_CODES.db});
   try {
-    const intervals:Interval[]=(calendar.data??[]).filter(row=>row.occupied).map(row=>row.interval);
+    const intervals:Interval[]=(calendar.data??[]).filter(row=>row.occupied).map(row=>({...row.interval,exactInterval:exactIntervalOf(row)}));
     for(const row of sports.data??[]){
       if(typeof row.id!=='string'||!row.id.trim())throw new Error('Invalid sports identity');
       const interval=nativeInterval({...row,all_day:false});
       if(interval.allDay)throw new Error('Invalid sports interval');
       intervals.push(interval);
     }
-    return ok(evenings.filter(evening=>evening.end>evening.start&&intervals.some(interval=>interval.start<evening.end&&interval.end>evening.start&&interval.end>interval.start)).map(evening=>evening.day));
+    return ok(evenings.filter(evening=>{
+      const start=window.exactFrom>BigInt(evening.start)*1_000_000n?window.exactFrom:BigInt(evening.start)*1_000_000n;
+      const end=window.exactTo<BigInt(evening.end)*1_000_000n?window.exactTo:BigInt(evening.end)*1_000_000n;
+      return end>start&&intervals.some(interval=>{const exact=intervalTicks(interval);return exact.start<end&&exact.end>start&&exact.end>exact.start;});
+    }).map(evening=>evening.day));
   } catch { return fail('Could not check the week ahead.',{code:SERVICE_CODES.db}); }
 }
 

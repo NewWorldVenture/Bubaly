@@ -17,7 +17,7 @@ const sources = Object.fromEntries([
   'components/ui/toast.tsx', 'components/app/page-header.tsx', 'lib/a11y/use-dialog-behavior.ts',
   'lib/finance/hub.ts', 'lib/finance/bills.ts', 'lib/finance/bill-schedule.ts', 'lib/finance/recurring.ts',
   'lib/finance/category-label.ts', 'lib/calendar/occurrences.ts', 'lib/calendar/recurrence.ts',
-  'lib/calendar/source-capability.ts', 'lib/calendar/day.ts', 'lib/briefing/calendar-window.ts',
+  'lib/calendar/source-capability.ts', 'lib/calendar/exact-instant.ts', 'lib/onboarding/ics-time.ts', 'lib/calendar/day.ts', 'lib/briefing/calendar-window.ts',
   'lib/time/zoned.ts', 'lib/time/local-day.ts', 'lib/time/wall-clock.ts', 'lib/i18n/locales.ts',
   'lib/supabase/errors.ts', 'lib/schedule/zoned.ts', 'lib/auth/step-up-client.ts', 'lib/auth/mfa.ts',
   'lib/auth/redirect.ts', 'lib/constants/roles.ts', 'lib/constants/plans.ts', 'lib/constants/feature-catalog.ts',
@@ -59,7 +59,7 @@ function server(mode: Mode, role = 'parent') {
     '@/lib/supabase/server': { createServer: async () => client },
     '@/lib/services/finances': {},
   };
-  const allowed = new Set(['app/(app)/dashboard/billing/actions.ts', 'lib/services/scope.ts', 'lib/time/zoned.ts', 'lib/constants/roles.ts', 'lib/finance/bills.ts', 'lib/finance/bill-schedule.ts', 'lib/finance/recurring.ts', 'lib/calendar/occurrences.ts', 'lib/calendar/recurrence.ts', 'lib/calendar/day.ts', 'lib/calendar/source-capability.ts', 'lib/briefing/calendar-window.ts', 'lib/supabase/errors.ts']);
+  const allowed = new Set(['app/(app)/dashboard/billing/actions.ts', 'lib/services/scope.ts', 'lib/time/zoned.ts', 'lib/constants/roles.ts', 'lib/finance/bills.ts', 'lib/finance/bill-schedule.ts', 'lib/finance/recurring.ts', 'lib/calendar/occurrences.ts', 'lib/calendar/recurrence.ts', 'lib/calendar/day.ts', 'lib/calendar/source-capability.ts', 'lib/calendar/exact-instant.ts', 'lib/onboarding/ics-time.ts', 'lib/briefing/calendar-window.ts', 'lib/supabase/errors.ts']);
   const modules: Record<string, { exports: Record<string, unknown> }> = {};
   function load(file: string): Record<string, unknown> {
     if (!allowed.has(file)) throw new Error(`Unexpected server schedule module ${file}`);
@@ -115,7 +115,7 @@ async function fixture(page: Page, view: 'bills' | 'billing' = 'bills', mode: Mo
       '@/lib/supabase/client':{createClient(){return{from(table){const steps=[],query={then(resolve,reject){return window.__billWrite(table,steps).then(resolve,reject)}};for(const method of ['insert','update','delete','eq','filter','select'])query[method]=(...args)=>{steps.push([method,args]);return query};return query}}}},
       '@/app/(app)/dashboard/billing/actions':{async confirmBillScheduleAction(snapshot,choice){const answer=await window.__confirmSchedule(snapshot,choice);if(answer.result.ok)p.row=answer.row;return answer.result;},createSavingsGoalAction(){throw new Error('Unexpected savings write')},createTransactionAction(){throw new Error('Unexpected transaction write')},deleteBudgetAction(){throw new Error('Unexpected budget write')},deleteSavingsGoalAction(){throw new Error('Unexpected savings write')},deleteTransactionAction(){throw new Error('Unexpected transaction write')},setBudgetAction(){throw new Error('Unexpected budget write')}},
     };
-    function load(name){if(name in mocks)return mocks[name];if(name in cache)return cache[name].exports;if(!(name in sources))throw new Error('Unexpected schedule fixture module '+name);const module={exports:{}};cache[name]=module;new Function('require','module','exports','React',sources[name])(child=>load(child.startsWith('.')?name.slice(0,name.lastIndexOf('/')+1)+child.slice(2):child),module,module.exports,React);return module.exports;}
+    function load(name){if(name in mocks)return mocks[name];if(name in cache)return cache[name].exports;if(!(name in sources))throw new Error('Unexpected schedule fixture module '+name);const module={exports:{}};cache[name]=module;new Function('require','module','exports','React',sources[name])(child=>load(child === '../onboarding/ics-time' ? '@/lib/onboarding/ics-time' : child === '../calendar/exact-instant' ? '@/lib/calendar/exact-instant' : child === '../time/zoned' ? '@/lib/time/zoned' : child.startsWith('.')?name.slice(0,name.lastIndexOf('/')+1)+child.slice(2):child),module,module.exports,React);return module.exports;}
     const Toast=load('@/components/ui/toast').ToastProvider;
     const View=load(${JSON.stringify(view === 'bills' ? '@/components/finance/bills-view' : '@/components/modules/billing-module')})[${JSON.stringify(view === 'bills' ? 'BillsView' : 'BillingModule')}];
     window.ReactDOM.createRoot(document.getElementById('root')).render(React.createElement(Toast,null,React.createElement(View,{mode:'all'})));

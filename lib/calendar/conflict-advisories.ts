@@ -1,3 +1,4 @@
+import { parseExactInstant, formatExactInstant, exactInstantMilliseconds, compareExactInstants, exactIntervalOf } from './exact-instant';
 import type { CalendarAvailabilityOccurrence } from './availability';
 import type { CalendarSnapshotReference } from './source-snapshot';
 import { allDayBusyInterval } from './event-dates';
@@ -26,13 +27,13 @@ function identity(value: unknown, max = 4096): value is string {
   return typeof value === 'string' && value.length > 0 && value.length <= max
     && !/[\u0000-\u0008\u000a-\u001f\u007f]|[\uD800-\uDBFF](?![\uDC00-\uDFFF])|(?<![\uD800-\uDBFF])[\uDC00-\uDFFF]/.test(value);
 }
-function instant(value: unknown): number {
-  if (typeof value !== 'string' || !/^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}(?:\.\d+)?(?:Z|[+-]\d{2}:\d{2})$/.test(value)
-    || !validDay(value.slice(0, 10)) || +value.slice(11, 13) > 23 || +value.slice(14, 16) > 59 || +value.slice(17, 19) > 59) fail();
-  const result = Date.parse(value);
-  if (!Number.isFinite(result)) fail();
-  return result;
+function instant(value: unknown): bigint {
+  try { return parseExactInstant(value); } catch { return fail(); }
 }
+function intervalOf(row: CalendarAvailabilityOccurrence) {
+  try { return exactIntervalOf(row); } catch { return fail(); }
+}
+
 function exactKeys(value: object, keys: string[]): boolean {
   return Object.keys(value).length === keys.length && keys.every(key => Object.hasOwn(value, key));
 }
@@ -88,19 +89,22 @@ function qualify(row: CalendarAvailabilityOccurrence, timezone: string): void {
   } else if (row.attribution.kind !== 'member' || row.attribution.memberId !== row.assignee_id) fail();
   const start = instant(row.actualStartsAt);
   const estimated = row.kind === 'native' && !row.all_day && row.event.ends_at === null;
-  const end = row.actualEndsAt === null && estimated ? start + 3_600_000 : instant(row.actualEndsAt);
+  const end = row.actualEndsAt === null && estimated ? start + 3_600_000_000_000n : instant(row.actualEndsAt);
   if (end < start || row.estimatedEnd !== estimated || row.point !== (!row.all_day && start === end)) fail();
   if (row.all_day) {
     if (typeof row.startDate !== 'string' || typeof row.endDate !== 'string' || !validDay(row.startDate)
       || !validDay(row.endDate) || row.endDate <= row.startDate
-      || instant(row.starts_at) !== Date.parse(`${row.startDate}T00:00:00Z`)
-      || row.ends_at !== null && instant(row.ends_at) !== Date.parse(`${row.endDate}T00:00:00Z`)) fail();
+      || instant(row.starts_at) !== instant(`${row.startDate}T00:00:00Z`)
+      || row.ends_at !== null && instant(row.ends_at) !== instant(`${row.endDate}T00:00:00Z`)) fail();
     const expected = allDayBusyInterval({ starts_at: `${row.startDate}T00:00:00Z`, ends_at: `${row.endDate}T00:00:00Z`, all_day: true }, timezone);
-    if (start !== expected.start || end !== expected.end) fail();
+    if (start !== BigInt(expected.start) * 1_000_000n || end !== BigInt(expected.end) * 1_000_000n) fail();
   } else if (row.startDate !== null || row.endDate !== null || start !== instant(row.starts_at)
-    || end !== (row.ends_at === null && estimated ? start + 3_600_000 : instant(row.ends_at))) fail();
-  const { start: clippedStart, end: clippedEnd } = row.interval;
-  if (!Number.isFinite(clippedStart) || !Number.isFinite(clippedEnd) || clippedEnd < clippedStart
+    || end !== (row.ends_at === null && estimated ? start + 3_600_000_000_000n : instant(row.ends_at))) fail();
+  const exact = intervalOf(row);
+  const clippedStart = instant(exact.start), clippedEnd = instant(exact.end);
+  if (!Number.isSafeInteger(row.interval.start) || !Number.isSafeInteger(row.interval.end)
+    || row.interval.start !== exactInstantMilliseconds(clippedStart) || row.interval.end !== exactInstantMilliseconds(clippedEnd)
+    || clippedEnd < clippedStart
     || clippedEnd > clippedStart && (clippedStart < start || clippedEnd > end)
     || row.occupied !== (row.transparency === 'opaque' && clippedEnd > clippedStart)) fail();
 }
@@ -120,7 +124,7 @@ export function buildConflictAdvisories(
     qualify(row, options.timezone);
     // Explicit field order makes coherent reference object key order irrelevant.
     const signature = JSON.stringify([conflictSubject(row), row.transparency, row.all_day, row.startDate, row.endDate,
-      row.starts_at, row.ends_at, row.interval.start, row.interval.end, row.occupied, row.point, row.estimatedEnd,
+      row.starts_at, row.ends_at, intervalOf(row), row.interval.start, row.interval.end, row.occupied, row.point, row.estimatedEnd,
       row.assignee_id, row.category, row.description, row.location,
       row.kind === 'native' ? [row.event.feed_id, row.event.external_uid] : null]);
     const previous = unique.get(row.occurrenceKey);
@@ -128,7 +132,7 @@ export function buildConflictAdvisories(
     if (!previous) unique.set(row.occurrenceKey, { row, signature });
   }
   const occupied = [...unique.values()].map(item => item.row).filter(row => row.occupied)
-    .sort((a, b) => a.interval.start - b.interval.start || a.occurrenceKey.localeCompare(b.occurrenceKey));
+    .sort((a, b) => compareExactInstants(intervalOf(a).start, intervalOf(b).start) || a.occurrenceKey.localeCompare(b.occurrenceKey));
   const result: CalendarConflictAdvisory[] = [];
   let comparisons = 0;
   for (let i = 0; i < occupied.length; i++) {
@@ -137,16 +141,19 @@ export function buildConflictAdvisories(
     for (let j = 0; j < occupied.length; j++) {
       if (++comparisons > MAX_COMPARISONS) fail();
       const right = occupied[j];
-      if (right.interval.start >= left.interval.end) break;
-      if (i === j || right.kind === 'source' && j < i || right.interval.end <= left.interval.start) continue;
+      const leftInterval = intervalOf(left), rightInterval = intervalOf(right);
+      const leftStart = instant(leftInterval.start), leftEnd = instant(leftInterval.end);
+      const rightStart = instant(rightInterval.start), rightEnd = instant(rightInterval.end);
+      if (rightStart >= leftEnd) break;
+      if (i === j || right.kind === 'source' && j < i || rightEnd <= leftStart) continue;
       if (result.length >= MAX_ADVISORIES) fail();
       result.push({ kind: 'family-source-overlap', scope: 'family',
-        startsAt: new Date(Math.max(left.interval.start, right.interval.start)).toISOString(),
-        endsAt: new Date(Math.min(left.interval.end, right.interval.end)).toISOString(),
+        startsAt: formatExactInstant(leftStart > rightStart ? leftStart : rightStart),
+        endsAt: formatExactInstant(leftEnd < rightEnd ? leftEnd : rightEnd),
         subjects: j < i ? [conflictSubject(right), conflictSubject(left)] : [conflictSubject(left), conflictSubject(right)] });
     }
   }
-  return result.sort((a, b) => a.startsAt.localeCompare(b.startsAt)
+  return result.sort((a, b) => compareExactInstants(a.startsAt, b.startsAt)
     || a.subjects[0].occurrenceKey.localeCompare(b.subjects[0].occurrenceKey)
     || a.subjects[1].occurrenceKey.localeCompare(b.subjects[1].occurrenceKey));
 }

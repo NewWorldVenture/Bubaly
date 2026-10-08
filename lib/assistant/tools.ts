@@ -11,6 +11,7 @@ import { rankNeedsAttention } from '@/lib/home/needs-attention';
 import { detectConflicts, type ConflictEvent } from '@/lib/home/conflicts';
 import { readCalendarBusySource, readCalendarOccurrences } from '@/lib/calendar/occurrences';
 import { readCalendarAvailability } from '@/lib/calendar/availability';
+import { addExactMilliseconds, compareExactInstants, exactIntervalOf, formatExactInstant, parseExactInstant } from '@/lib/calendar/exact-instant';
 import { isValidTimezone } from '@/lib/time/zoned';
 import { briefingCalendarBounds, instantCalendarBounds } from '@/lib/briefing/calendar-window';
 import type { ParentApprovalRow, RenewalRow, DocumentRow, NeedsReader } from '@/lib/home/needs-sources';
@@ -537,20 +538,20 @@ export function buildAssistantTools(supabase: DB, ctx: AssistantCtx): ToolSpec[]
         // Unassigned commitments belong to the whole family, including a
         // named member's availability. Filter only after complete scoped reads.
         const selected = (assignee: string | null) => !memberId || !assignee || assignee === memberId;
-        const from = Date.parse(bounds.timedFrom), to = Date.parse(bounds.timedTo);
+        const from = parseExactInstant(bounds.timedFrom), to = parseExactInstant(bounds.timedTo);
         const otherBlocks = (rows: NonNullable<typeof school.data>, title: string, namespace: string) => rows
           .filter(event => selected(event.member_id))
           .map(event => {
-            const start = Date.parse(event.starts_at);
-            const end = event.ends_at === null ? start + 3_600_000 : Date.parse(event.ends_at);
-            return { title, all_day:false, start:Math.max(from,start), end:Math.min(to,end), key:JSON.stringify([namespace,event.id,event.starts_at]) };
-          }).filter(event => event.end > event.start);
+            const start = parseExactInstant(event.starts_at);
+            const end = parseExactInstant(event.ends_at ?? addExactMilliseconds(event.starts_at,3_600_000));
+            return { title, all_day:false, start:formatExactInstant(start>from?start:from), end:formatExactInstant(end<to?end:to), key:JSON.stringify([namespace,event.id,event.starts_at]) };
+          }).filter(event => compareExactInstants(event.end,event.start)>0);
         const data = [
           ...(calendar.data ?? []).filter(event => event.occupied && (event.attribution.kind === 'family' || selected(event.attribution.memberId)))
-            .map(event => ({title:event.title,all_day:event.all_day,start:event.interval.start,end:event.interval.end,key:event.occurrenceKey})),
+            .map(event => ({title:event.title,all_day:event.all_day,...exactIntervalOf(event),key:event.occurrenceKey})),
           ...otherBlocks(school.data ?? [], 'School event', 'school'),
           ...otherBlocks(sports.data ?? [], 'Sports event', 'sports'),
-        ].sort((a, b) => a.start-b.start || a.key.localeCompare(b.key));
+        ].sort((a, b) => compareExactInstants(a.start,b.start) || a.key.localeCompare(b.key));
         const fmt = (iso: string | null) => {
           if (!iso) return null;
           try { return new Intl.DateTimeFormat('en-US', { timeZone: tz, weekday: 'short', month: 'short', day: 'numeric', hour: 'numeric', minute: '2-digit' }).format(new Date(iso)); }
@@ -565,8 +566,8 @@ export function buildAssistantTools(supabase: DB, ctx: AssistantCtx): ToolSpec[]
             title: e.title, start: fmtDay(`${date}T00:00:00Z`), end: null, all_day: true,
             starts_at: bounds.allDayFromDay, ends_at: bounds.allDayToDay,
           };
-          const startsAt = new Date(e.start).toISOString();
-          const endsAt = new Date(e.end).toISOString();
+          const startsAt = e.start;
+          const endsAt = e.end;
           return { title: e.title, start: fmt(startsAt), end: fmt(endsAt), all_day: false, starts_at: startsAt, ends_at: endsAt };
         });
         return { ok: true, date, time_zone: tz, busy, note: busy.length ? 'These are the busy blocks; open time is the gaps between them.' : 'No busy blocks that day — the whole day is free.' };
