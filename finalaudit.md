@@ -1,5 +1,48 @@
 # Final Production Audit
 
+## Calendar ingress, household dinner day and messaging checkpoint — 2026-10-08
+
+User decision preserved: main's recorded allocation map stays intact. Fresh filename audit still reports451 runnable files and next0477; messaging0475–0476 and reserved0488/0490/0492–0494 remain unchanged. No resequencing, filler, held promotion, production configuration/DDL/migration/provider execution or money movement occurred.
+
+The alternate one-shot ICS importer now qualifies the whole source before its first native insert. Shared strict parsing and admission preserve supported IANA/UTC one-off instants, civil DATE/simple daily/weekly events, text and UID provenance. Unsupported clocks, timed series, recurrence limits/exceptions, ambiguous revisions, malformed components, durations and nested alarms refuse the entire import. Cancelled components do not become live copies. Independent actual route/SDK peers caught lowercase delimiters bypassing validation and alarm fields overwriting event fields; structural canonicalization/cardinality checks and alarm refusal repair those cases. Existing guarded fetch/rate/body/authenticated-family controls remain. Actual route/SDK201-event batching and unsupported-last-component controls pass. Reimport still duplicates native copies; per-chunk write failures can still produce reported partial success. No idempotency, source archive activation or held schema acceptance is claimed.
+
+Pantry dinner planning now uses the explicit household timezone and one captured server instant. The actual UI omits planDate for tonight; real route/SDK transport previously saved tomorrow in LosAngeles and yesterday in Kiritimati. Both now save the family day. DST gap/fold, local midnight crossed during an await, explicit leap-day dates, junk-date fallback and unknown-zone-before-write controls pass. Valid explicit civil dates remain unchanged. Separate pantry allergy pagination, write idempotency/compensation and nutrition joins remain open.
+
+Messaging completes exact-count, stable-identity, family-scoped inbox and overview reads plus bounded51-row thread/jump/gallery windows before UI50-row presentation. Actual SDK/callback cap2 witnesses previously hid58 of60 messages and cleared an accessible selected Family Chat. Missing/drifting counts, duplicate/wrong-scope/invalid rows, exhausted bounds and later-page errors now refuse incomplete results. Persistent errors/retry suppress false empty inbox/history states. Independent peer reproduced an old ChatA jump publishing into current ChatB; render-origin/visit ownership now refuses stale A→B/ABA, unmount and foreign-family/thread callbacks before ticket/query/gallery close. Current-chat jump still succeeds. Null overview previews are valid; malformed falsy previews and unread counts refuse. Original conversation audiences and a new empty canonical Family Chat remain preserved. Counted pages are not a database transaction; these synthetic checks do not establish hosted RLS or concurrent membership enforcement.
+
+Final local matrix: 330 suites /6,112 cases PASS separately in UTC, America/Los_Angeles and Asia/Tokyo, no unhandled errors. Full nonincremental web TypeScript8GB and scoped ESLint zero warnings PASS; audit reconciliation/diff checks PASS. Logs Temp/bubaly-ingress-messaging-accepted-{UTC,America-Los_Angeles,Asia-Tokyo,types,lint}.log. Local Node24.19.0 is below declared24.21 minimum; fresh hosted24.21 CI remains required. Actual synthetic Chromium42PASS, zero skipped/flaky/unexpected; root independently parsed report and verified all6 frozen messaging hashes. Final SDK/callback suite38PASS and independent jump6PASS; pantry four-suite63PASS in all3zones; ingress293 across8 focused suites before translation-only correction, then focused62 including unchanged i18n ceiling. No whole-repository or production acceptance claim.
+
+First330UTC run was327passed/3failed suites and6098passed/4failed cases. One newly added English refusal raised the unchanged i18n ceiling1784→1785; reused existing calendarImport.invalidCalendar without raising thresholds/catalog changes. Three older Windows portability false failures came from backslash allowlist comparison, missing shellgrep and single-quoted git globs producing empty inventory. Portable recursive TS/TSX discovery now normalizes paths, includes new files, asserts nonempty/known-file coverage, and preserves original /^'use server'/ literal prefix, scanner windows/regexes, exact allowlists and accepted entries. Root caught and corrected a briefly narrower directive matcher; positive trailing-comment/same-line and forbidden-read controls preserve nonvacuity. Both final ratchet suites16PASS. Failed intermediate receipts remain historical, not acceptance.
+
+Production catalog verification remains open. Supabase CLI2.109.1 projects list --output-format json returned LegacyProjectsListNetworkError/HttpClientError Transport error, not an authenticated401 or proof credentials are missing. An unauthenticated PowerShell GET reached the same management endpoint with401, proving basic reachability only. No credentials were printed, no production database/application rows queried, and the expanded prepared catalog/ACL preflight was not run in production. Local13-control PostgreSQL preflight evidence is unchanged from publishedc71 and does not establish production objects/ACLs/FKs/ledger.
+
+At last fresh hosted observation, publishedc71 CI37792938530 had Database/Mobile success, Core progressed to east-of-Greenwich unit tests, and E2E remained live. Parent40d CI37790401673 now completed cancelled: Core failure, Database/Mobile success, E2E cancelled; root did not manually restart/cancel jobs. Fresh next-head CI is required. Main82f2db1 and sole OPEN #969 remain the release baseline; #779 remains CLOSED as code/probe milestone, not actual provider execution. Offline rollout remains REVIEW_REQUIRED_NOT_APPLY_READY with productionActionsAuthorized:false; Production Ready NO. Static query audit retains6 held RPC calls and1 unresolved dynamic call; production availability unverified.
+
+Independent next-scope review found two additional open defects, not repaired or credited in this batch: actual Google Calendar helper and route/SDK ignore nextPageToken and publish a successful prefix (2RED; Temp/bubaly-google-completeness-peer-before.log); a retained archiveConversation callback fromA after selectingB dispatches toA and can publishA state under a currentB ticket (Temp/bubaly-messages-archive-owner-review.log). Both pre-exist current paging changes and remain release blockers under the recorded next-scope root allocation, starting after this checkpoint is published. Current frozen files were not edited for those reviews. No merge/deployment acceptance is claimed.
+
+Register reconciliation: 14,681 rows =11,635 NOT STARTED +2,693 IN PROGRESS +185 PASS +159 FIXED+PASS +9 BLOCKED; 344 closed (2.34%). No closure credit for partial or held work. Source/archive/export convergence, messaging integration leftovers, older-schema anchor persistence, production schema/ACL/FK/ledger/config and main/deployment acceptance remain open.
+
+
+## Next Google completeness and archive ownership allocation — 2026-10-08
+
+Root preclaims six named paths before edits for the NEXT batch, to start only after current ingress/pantry/messaging checkpoint is published. Calendar agent: lib/google.ts, actual Google calendar sync route only if truthful failure status needs adoption, new google-calendar-complete-read SDK/route suite. Complete bounded provider pageTokens and validate all pages before any native inserts; refuse repeated tokens, malformed/duplicate identities, total/page/body bounds and later failure; preserve initial window/singleEvents order/auth contracts. Synthetic fetch only, no real OAuth/provider execution. Messaging agent: existing module, new messages-action-ownership SDK/React suite and existing family-messages-state browser fixture. Fix independently reproduced retained archiveA callback origin/current-visit BEFORE dispatch and postawait state, preserving current authorized success and DB audience/RLS boundary; test A→B/ABA/unmount/modalinstance retirement and zero-row/refusal without blanket action bypass. No unproven takeover of other active work. Unmerged leave-group residual rewrites recorded0475 and audience/creator semantics; do not adopt it. Main allocation map and production holds remain unchanged. Root alone edits audit; no production config/DDL/migrations/money movement. These are next-scope claims, not current test or closure credit.
+
+
+## Portable nonvacuous read ratchets claim — 2026-10-08
+
+Expanded330-suite UTC run reports4 failures across3files: new hardcoded calendar refusal increases i18n ceiling by1; calendar agent reuses an existing translated generic import refusal without raising the scanner ceiling. Root allocates two existing ratchet files before edits to remove Windows portability false failures: normalize source inventory paths against the unchanged exact allowlist; replace shell grep/single-quoted git globs with portable recursive source discovery that includes tracked and new TypeScript sources, preserves exact server-directive filtering and scanner predicates, and asserts nonempty coverage. Do not skip tests, expand accepted runtime offenders or weaken thresholds. Preserve original offending fixtures and add negative portability controls if meaningful. No runtime changes in this lane. Main allocation remains preserved; production holds unchanged. No closure credit.
+
+
+## Messaging complete read claim — 2026-10-08
+
+Root allocates six named messaging runtime/helper/unit/browser/fixture paths before edits. Actual SDK and application callbacks reproduce cap2 hiding58 of60 messages and clearing an accessible selected canonical Family Chat. Complete counted scoped inbox, overview and bounded thread/jump/gallery windows with stable identities, explicit family scope and truthful refusal. Preserve original audiences and create only an empty new Family Chat; no history adoption, migration or allocation change. Fixture edits only explicit dependency/SDK contract adoption; retain assertions. Root sole audit writer. Main allocation map stays preserved. Production access CLI current-format attempt reports LegacyProjectsListNetworkError Transport error, not established missing credentials or authenticated metadata. No production writes/provider actions/money movement; no closure credit.
+
+
+## Alternate calendar ingress and pantry household day claim — 2026-10-08
+
+Previous goal turn made concrete progress: publishedc71beaf97 with174-suite/3,613case three-zone,113browser and type/lint receipts. Fresh CI37792938530 confirmed pending/nojobs; do not restart. Main map stays preserved. Root allocates app/api/calendar/sync/route.ts, existing calendar-sync-ssrf-guard test and new calendar-alternate-ingress-boundary suite to calendar agent before edits. Actual route/SDK reproduces three silent corruptions: NewYorkTZID09:00 stored09:00Z rather than14:00Z, finite biweekly/exception source becomes unlimitedweekly native, cancelled source becomes active. Use shared strict parser/admission and explicit whole-import refusal for semantics unsupported by native storage while source capabilityfalse; preserve proven safeDATE, SSRF/rate/body limits, no guessed timezone/recurrence/nativeIDs or partialwrites. Root allocates pantry route/helper, existing helper test and new pantry-chef-family-date-boundary suite to meal agent before edits. Actual route/SDK reproduces wrong saved default dates in LA/Kiritimati because omitted planDate means tonight yet UTC is used. Require explicit familytimezone for defaults, capture now once, preserve explicit real civil dates, refuse invalid zone before writes and prove DST/hostzone controls. Messaging agent remains read-only pending concrete findings and exact allocation. Root sole ledger writer; synthetic only, no production config/DDL/migrations/provider/money action, no closure credit. CLI projects-list attempt ended exit1 with telemetry shutdown/no usable project result; no hosted query or authenticated catalog acceptance claimed.
+
+
 ## Notification, meal collection and manager UI checkpoint — 2026-10-08
 
 Root and three parallel agents completed the next candidate batch after published40d01cf4e. Notification conflict reads now complete the overlapping native window before detection, including ongoing events and late pairs beyond200. Actual SDK full-generator repeat sweeps exposed a second cap bug in dedupe; each50-ID chunk now completes exact-count stable-ID pages, refusing incomplete dedupe rather than inserting duplicate generic candidates. Conflict/dedupe failures retry; independent categories remain qualified separately. Native occurrence keys/audiences retained. Existing generic100/total150 delivery throughput caps and concurrent-sweep database uniqueness remain separate limitations; no source activation is claimed.
@@ -1178,14 +1221,14 @@ The TLS problem was a missing Node system-CA setting, not a reason to disable ce
 - Current2026-10-08 source-foundation inventory adds ten retained file obligations, all IN PROGRESS;14,571 unique rows,344 historical closures, no closure credit. Older dated recount explanations below remain historical.
 
 - Recounted row by row on 2026-10-04 from Register B itself (`node scripts/audit-register-counts.mjs`; `tests/the-audit-summary-counts-its-register.test.ts` now fails when this section and the rows disagree). The register holds 14,538 unique IDs with no duplicates and no unrecognised status. The previous 11,701 NOT STARTED / 2,484 IN PROGRESS tally predated LIBRARY-2E628A2A31CE's evidenced move from NOT STARTED to IN PROGRESS; the 15:39 UTC checkpoint already carried 11,700 / 2,485, and the rows confirm it.
-- Total Audit Items: **14,668**. Prior count explanations are preserved in the dated status summary below.
-- Not Started: **11,639**. Recounted on 2026-10-08 after rollout and support inventory reconciliation; prior dated tallies remain below.
-- In Progress: **2,676**. Recounted on 2026-10-08 after rollout and support inventory reconciliation; prior dated tallies remain below.
+- Total Audit Items: **14,681**. Prior count explanations are preserved in the dated status summary below.
+- Not Started: **11,635**. Recounted on 2026-10-08 after rollout and support inventory reconciliation; prior dated tallies remain below.
+- In Progress: **2,693**. Recounted on 2026-10-08 after rollout and support inventory reconciliation; prior dated tallies remain below.
 - Passed: **185**. Prior count explanations are preserved in the dated status summary below.
 - Fixed + Passed: **159**. Prior count explanations are preserved in the dated status summary below.
 - Blocked: **9**. Prior count explanations are preserved in the dated status summary below.
 - Failed: **0 register rows**. SEC-001 production privacy remains **FAIL**. The earlier Mobile failure on bf8063e7/10df62eb is retained; its repaired aa5b84b9 candidate passed all hosted gates and merged as bc147c76. This is not a production-readiness declaration.
-- Verified closure coverage: **2.35%** (344/14,668); historical scoped closures retained; zero blocked credit pending eligibility review.
+- Verified closure coverage: **2.34%** (344/14,681); historical scoped closures retained; zero blocked credit pending eligibility review.
 - Overall Completion under the adopted target: **2.36% credited**, calculated as ((PASS + FIXED_PASS + eligible_external_BLOCKED) / Total) ×100, with zero blocked items credited. If all 9 qualify, coverage would be2.42%; that credit has not been awarded.
 
 ## Current source audit checkpoint — 2026-10-03 15:37 UTC, Codex/root review coordination
@@ -9189,7 +9232,7 @@ not read the same on this page.*
      hosted-CI/deployed-release evidence this session had no credentials to
      produce. The two share zero finding IDs. Neither is discarded. -->
 
-# Register B - parallel session inventory (14,668 items)
+# Register B - parallel session inventory (14,681 items)
 - PROD-ENV (owner, measured 2026-09-26 19:13Z): production's `/api/health` reports `CRON_SECRET`, `CHILD_LOGIN_SECRET`, `MARKETING_UNSUB_SECRET` and `GUARDIAN_INTERNAL_SECRET` unset. Per `lib/health/status.ts`, `hasCronAuthorization` is fail-closed, so without `CRON_SECRET` every one of the 24 scheduled jobs in `vercel.json` answers 401 (nightly notifications, wallet allowance, chore reminders, the weekly digest, …); without `CHILD_LOGIN_SECRET` no child in any family can sign in; the other two gate provider ingress and signed links and fail closed. Setting them in the Vercel production environment is the owner's action; the four `ENV-*` rows are BLOCKED on it. Also unset, per the same check: `RESEND_API_KEY`, `INTERNAL_SECRET`, `CONTACT_CENTER_INBOUND_SECRET` were NOT in the missing list, so those are set.
 > Current reconciliation: the following dated PROD-DB-0177 narrative is retained as historical evidence, not a current operator plan. Later read-only metadata found some later schema effects despite absent history; its blanket "none applied" claim is superseded. Do not execute the historical timeout/repair/backlog instructions under this audit authorization. Bounded history/effect reconciliation and explicit production-operation authorization remain separate requirements.
 - PROD-DB-0177 (owner, measured 2026-09-27 01:15Z on the replayed schema; the failure itself recorded by the #579 session from the owner's "Supabase production migrations" runs on `533554be`, `7e54596d` and `671c5f6a`): production's migration ledger stops at `0176`, so **none of 0177–0387 is applied** and every boundary those migrations close is held in production only by application code. The cause is one statement: `0177_remove_synthetic_auth_users.sql` is a single `DO` block that, for EVERY single-column foreign key to `auth.users`, runs `delete from <table> where <col> = any(<synthetic ids>)`. On the replayed schema that is **493** foreign keys, **481** of them with no index on the referencing column, so the block is hundreds of sequential scans inside one statement and Supabase's `statement_timeout` cancels it (SQLSTATE 57014) — production at 0176 has fewer keys but the same shape. It is idempotent and best-effort by design (a per-table failure is noticed and skipped), so it is safe to run outside the workflow. **The operator remedy, in order**: (1) in the Supabase SQL editor or `psql` against production, `set statement_timeout = 0;` (session-local) and run the body of 0177 once — expect the `Retired synthetic Auth users: N removed, M still referenced` notice; (2) `supabase migration repair --status applied 0177` so the ledger agrees; (3) re-run the "Supabase production migrations" workflow, which will then apply 0178 onward in order (each already replayed by CI on a fresh database). Alternatively delete the `onb…@seed-onb.bubaly.test` / `person…@seed.bubaly.test` users through the Auth admin API first, which makes 0177 a no-op, then repair and re-run. **No agent applied, retried or altered how the workflow applies anything**, and none will: applying migrations to production is the owner's action, and a change that made 0177 pass inside the workflow would apply 0178–0387 on the next push to `main` by proxy. Until this is done, `PRODUCTION READY` cannot move, whatever the code says.
@@ -19026,7 +19069,7 @@ not read the same on this page.*
 | LIBRARY-AFECD8603563 | LIBRARY | lib/food/score.ts | ⬜ NOT STARTED | Unassessed | Pending | None | Pending |  |
 | LIBRARY-B7B5771016FE | LIBRARY | lib/front-desk/school-approval.ts | ⬜ NOT STARTED | Unassessed | Pending | None | Pending |  |
 | LIBRARY-AB721EAA0C93 | LIBRARY | lib/front-desk/school-sports.ts | 🔄 IN PROGRESS | Medium | Pending | None | Pending |   2026-10-08 root claim: investigate ambiguous front-desk child inference and completeness of its member/class/team inputs; no closure credit. |
-| LIBRARY-617EE5E6D991 | LIBRARY | lib/google.ts | ⬜ NOT STARTED | Unassessed | Pending | None | Pending |  |
+| LIBRARY-617EE5E6D991 | LIBRARY | lib/google.ts | 🔄 IN PROGRESS | Unassessed | Pending | None | Pending |  |
 | LIBRARY-AF43D48A52A0 | LIBRARY | lib/grandparent/digest.ts | ⬜ NOT STARTED | Unassessed | Pending | None | Pending |  |
 | LIBRARY-B28E8D465718 | LIBRARY | lib/graph/reason.ts | ⬜ NOT STARTED | Unassessed | Pending | None | Pending |  |
 | LIBRARY-18D13D8A0D25 | LIBRARY | lib/graph/resolve-server.ts | ⬜ NOT STARTED | Unassessed | Pending | None | Pending |  |
@@ -19195,7 +19238,7 @@ not read the same on this page.*
 | LIBRARY-3CAF25C08B99 | LIBRARY | lib/marketplace/trust.ts | ⬜ NOT STARTED | Unassessed | Pending | None | Pending |  |
 | LIBRARY-CF152E1D5338 | LIBRARY | lib/meals/degrade-read.ts | ⬜ NOT STARTED | Unassessed | Pending | None | Pending |  |
 | LIBRARY-FADBBD9FC11B | LIBRARY | lib/meals/nutrition.ts | ⬜ NOT STARTED | Unassessed | Pending | None | Pending |  |
-| LIBRARY-A149401813CA | LIBRARY | lib/meals/pantry-chef.ts | ⬜ NOT STARTED | Unassessed | Pending | None | Pending |  |
+| LIBRARY-A149401813CA | LIBRARY | lib/meals/pantry-chef.ts | 🔄 IN PROGRESS | Unassessed | Pending | None | Pending |  |
 | LIBRARY-D579D6B55FB7 | LIBRARY | lib/meals/planner.ts | ⬜ NOT STARTED | Unassessed | Pending | None | Pending |  |
 | LIBRARY-447C20B90B84 | LIBRARY | lib/meals/substitutions.ts | ⬜ NOT STARTED | Unassessed | Pending | None | Pending |  |
 | LIBRARY-3225F34814F5 | LIBRARY | lib/meals/tracker.ts | ⬜ NOT STARTED | Unassessed | Pending | None | Pending |  |
@@ -21626,7 +21669,7 @@ not read the same on this page.*
 | SUPPORT-C3D85C66C8C4 | SUPPORT | tests/calendar-scheduling.test.ts | 🔄 IN PROGRESS | Unassessed | Pending | None | Pending |  |
 | SUPPORT-332506DBCA8D | SUPPORT | tests/calendar-single-write-path.test.ts | ⬜ NOT STARTED | Unassessed | Pending | None | Pending |  |
 | SUPPORT-F3FE52A739BC | SUPPORT | tests/calendar-split-view.test.ts | 🔄 IN PROGRESS | Medium | All five prior assertions retained plus eleven actual navigation/weekday assertions; original four desired failures/twelve controls, final sixteen pass | Draft #796 unit blob db4b7b3b79b5eca581879bb3eb0b4e87a790eecc | Related sealed six-file fork run 162 pass; types/lint pass; source-callback harness limits retained | Separate actual mounted browser file covers ten cases. Windows threaded dynamic-TZ failures also occur on untouched source; fork setting documented, no assertions removed. |
-| SUPPORT-07ECB15DAD28 | SUPPORT | tests/calendar-sync-ssrf-guard.test.ts | ⬜ NOT STARTED | Unassessed | Pending | None | Pending |  |
+| SUPPORT-07ECB15DAD28 | SUPPORT | tests/calendar-sync-ssrf-guard.test.ts | 🔄 IN PROGRESS | Unassessed | Pending | None | Pending |  |
 | SUPPORT-E68A64CFB2AA | SUPPORT | tests/calendar-write-path.test.ts | ⬜ NOT STARTED | Unassessed | Pending | None | Pending |  |
 | SUPPORT-A56D0FFC5CF3 | SUPPORT | tests/calm-inbox.test.ts | ⬜ NOT STARTED | Unassessed | Pending | None | Pending |  |
 | SUPPORT-496E59C6302F | SUPPORT | tests/calm-read-boundary.test.ts | ⬜ NOT STARTED | Unassessed | Pending | None | Pending |  |
@@ -22219,7 +22262,7 @@ not read the same on this page.*
 | SUPPORT-A6CB27C0278E | SUPPORT | tests/outcomes-launch-request.test.ts | ⬜ NOT STARTED | Unassessed | Pending | None | Pending |  |
 | SUPPORT-15BDDCF62076 | SUPPORT | tests/outcomes-launcher.test.ts | ⬜ NOT STARTED | Unassessed | Pending | None | Pending |  |
 | SUPPORT-EE60C8585C76 | SUPPORT | tests/outcomes-reasoning-read-boundary.test.ts | ⬜ NOT STARTED | Unassessed | Pending | None | Pending |  |
-| SUPPORT-8CCA5F717D15 | SUPPORT | tests/pantry-chef.test.ts | ⬜ NOT STARTED | Unassessed | Pending | None | Pending |  |
+| SUPPORT-8CCA5F717D15 | SUPPORT | tests/pantry-chef.test.ts | 🔄 IN PROGRESS | Unassessed | Pending | None | Pending |  |
 | SUPPORT-E2DD05E138DE | SUPPORT | tests/pantry-logic.test.ts | ⬜ NOT STARTED | Unassessed | Pending | None | Pending |  |
 | SUPPORT-E990124C0734 | SUPPORT | tests/paperwork-partial-extraction.test.ts | ⬜ NOT STARTED | Unassessed | Pending | None | Pending |  |
 | SUPPORT-0543CE319D1E | SUPPORT | tests/paperwork-triage-kinds.test.ts | ⬜ NOT STARTED | Unassessed | Pending | None | Pending |  |
@@ -24337,6 +24380,32 @@ deliberately breaking the thing being guarded.
 | SUPPORT-4E0FAEBB7528 | SUPPORT | tests/notification-dedupe-reads-are-chunked.test.ts | 🔄 IN PROGRESS | High | Source catalog preflight completeness. | Actual synthetic catalog query checks; hosted acceptance remains unverified. | Main map preserved; no apply authority. | Root claimed before edit; no closure credit. |
 
 | SUPPORT-B8F7721E7066 | SUPPORT | tests/finance-pending-cleanup.test.ts | 🔄 IN PROGRESS | High | Source catalog preflight completeness. | Actual synthetic catalog query checks; hosted acceptance remains unverified. | Main map preserved; no apply authority. | Root claimed before edit; no closure credit. |
+
+| SUPPORT-407809DD9B4F | SUPPORT | app/api/calendar/sync/route.ts | 🔄 IN PROGRESS | High | Alternate calendar import and household pantry day. | Actual synthetic route/SDK before-after proof. | Preserve recorded allocations and production holds. | Root pre-edit claim, no closure credit. |
+
+| SUPPORT-F93174EA1D6F | SUPPORT | tests/calendar-alternate-ingress-boundary.test.ts | 🔄 IN PROGRESS | High | Alternate calendar import and household pantry day. | Actual synthetic route/SDK before-after proof. | Preserve recorded allocations and production holds. | Root pre-edit claim, no closure credit. |
+
+| SUPPORT-5EE5DFA79C6C | SUPPORT | app/api/ai/pantry-chef/route.ts | 🔄 IN PROGRESS | High | Alternate calendar import and household pantry day. | Actual synthetic route/SDK before-after proof. | Preserve recorded allocations and production holds. | Root pre-edit claim, no closure credit. |
+
+| SUPPORT-B7F984CA223C | SUPPORT | tests/pantry-chef-family-date-boundary.test.ts | 🔄 IN PROGRESS | High | Alternate calendar import and household pantry day. | Actual synthetic route/SDK before-after proof. | Preserve recorded allocations and production holds. | Root pre-edit claim, no closure credit. |
+
+| SUPPORT-39BD0D8018E2 | SUPPORT | lib/messages/reads.ts | 🔄 IN PROGRESS | High | Alternate calendar import and household pantry day. | Actual synthetic route/SDK before-after proof. | Preserve recorded allocations and production holds. | Root pre-edit claim, no closure credit. |
+
+| SUPPORT-D63182380F18 | SUPPORT | tests/messages-complete-read.test.ts | 🔄 IN PROGRESS | High | Alternate calendar import and household pantry day. | Actual synthetic route/SDK before-after proof. | Preserve recorded allocations and production holds. | Root pre-edit claim, no closure credit. |
+
+| SUPPORT-B5A5C7F951E3 | SUPPORT | tests/e2e/messaging-preserve-access.spec.ts | 🔄 IN PROGRESS | High | Alternate calendar import and household pantry day. | Actual synthetic route/SDK before-after proof. | Preserve recorded allocations and production holds. | Root pre-edit claim, no closure credit. |
+
+| SUPPORT-B1B5C92FBCD8 | SUPPORT | tests/e2e/family-messages-state.spec.ts | 🔄 IN PROGRESS | High | Alternate calendar import and household pantry day. | Actual synthetic route/SDK before-after proof. | Preserve recorded allocations and production holds. | Root pre-edit claim, no closure credit. |
+
+| SUPPORT-08C160A82FEA | SUPPORT | tests/a-family-gets-one-default-list.test.ts | 🔄 IN PROGRESS | High | Alternate calendar import and household pantry day. | Actual synthetic route/SDK before-after proof. | Preserve recorded allocations and production holds. | Root pre-edit claim, no closure credit. |
+
+| SUPPORT-0666FF83E1EB | SUPPORT | tests/a-refused-read-is-not-an-absence.test.ts | 🔄 IN PROGRESS | High | Alternate calendar import and household pantry day. | Actual synthetic route/SDK before-after proof. | Preserve recorded allocations and production holds. | Root pre-edit claim, no closure credit. |
+
+| SUPPORT-6EBD932E55A3 | SUPPORT | app/api/google/calendar/sync/route.ts | 🔄 IN PROGRESS | High | Alternate calendar import and household pantry day. | Actual synthetic route/SDK before-after proof. | Preserve recorded allocations and production holds. | Root pre-edit claim, no closure credit. |
+
+| SUPPORT-E2EDDA596C7C | SUPPORT | tests/google-calendar-complete-read.test.ts | 🔄 IN PROGRESS | High | Alternate calendar import and household pantry day. | Actual synthetic route/SDK before-after proof. | Preserve recorded allocations and production holds. | Root pre-edit claim, no closure credit. |
+
+| SUPPORT-6664DA9A1D6F | SUPPORT | tests/messages-action-ownership.test.ts | 🔄 IN PROGRESS | High | Alternate calendar import and household pantry day. | Actual synthetic route/SDK before-after proof. | Preserve recorded allocations and production holds. | Root pre-edit claim, no closure credit. |
 
 # 1. Executive Summary
 

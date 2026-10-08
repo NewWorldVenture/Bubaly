@@ -6,77 +6,36 @@ import { fetchPublicCalendarText } from '@/lib/server/public-calendar-fetch';
 import { enforceRequestRateLimit } from '@/lib/server/request-rate-limit';
 import { readBoundedRequestText } from '@/lib/server/bounded-request-body';
 
-// ICS parser — no external dep, pure hand-rolled RFC 5545 parser
-function parseIcs(text: string): IcsEvent[] {
-  const events: IcsEvent[] = [];
-  const lines = text.replace(/\r\n/g, '\n').replace(/\r/g, '\n')
-    .replace(/\n /g, '').replace(/\n\t/g, '').split('\n');
+import { parseICS, type IcsEvent } from '@/lib/sync/ics';
+import { parseICSSource } from '@/lib/sync/ics-source';
+import { assertFeedRecurrenceAdmission, icsRruleToRecurrence } from '@/lib/calendar/feeds';
 
-  let cur: IcsEvent | null = null;
-
-  for (const raw of lines) {
-    const colon = raw.indexOf(':');
-    if (colon === -1) continue;
-    const key = raw.slice(0, colon).toUpperCase();
-    const val = raw.slice(colon + 1).trim();
-
-    if (key === 'BEGIN' && val === 'VEVENT') { cur = {} as IcsEvent; continue; }
-    if (key === 'END' && val === 'VEVENT') { if (cur && cur.uid && cur.start) events.push(cur); cur = null; continue; }
-    if (!cur) continue;
-
-    switch (key) {
-      case 'UID':        cur.uid     = val;             break;
-      case 'SUMMARY':    cur.title   = unescapeIcs(val); break;
-      case 'DESCRIPTION': cur.notes  = unescapeIcs(val); break;
-      case 'LOCATION':   cur.location= unescapeIcs(val); break;
-      case 'DTSTART': case 'DTSTART;VALUE=DATE':
-        cur.start = parseIcsDate(key, val); cur.allDay = key.includes('VALUE=DATE'); break;
-      case 'DTEND': case 'DTEND;VALUE=DATE':
-        cur.end = parseIcsDate(key, val); break;
-      case 'RRULE':      cur.rrule   = val;             break;
-      case 'STATUS':     cur.status  = val.toLowerCase(); break;
-    }
-    if (key.startsWith('DTSTART;')) { cur.start = parseIcsDate(key, val); cur.allDay = key.includes('VALUE=DATE'); }
-    if (key.startsWith('DTEND;'))   { cur.end   = parseIcsDate(key, val); }
+/** A one-shot import makes native copies, never source archives or exception
+ * identities. Qualify the ENTIRE calendar before its first native write. */
+function importedEvents(text:string):IcsEvent[] {
+  const documents=parseICSSource(text); // Strict envelope and original clocks.
+  for(const document of documents){
+    const component=document.master;
+    if(document.timezones.length)throw new Error('Source timezone definitions need an archive');
+    if(component?.status==='cancelled')continue;
+    if(component?.dtstart?.kind==='floating'||component?.end?.kind==='dtend'&&component.end.value.kind==='floating')throw new Error('Floating source clock needs a durable timezone');
+    if(component?.end?.kind==='dtend'&&((component.dtstart?.kind==='date')!==(component.end.value.kind==='date')))throw new Error('Mixed source clock types');
   }
-
-  return events;
-}
-
-interface IcsEvent {
-  uid: string; title?: string; notes?: string; location?: string;
-  start: string; end?: string; allDay?: boolean; rrule?: string; status?: string;
-}
-
-function unescapeIcs(s: string) {
-  return s.replace(/\\n/g, '\n').replace(/\\,/g, ',').replace(/\\;/g, ';').replace(/\\\\/g, '\\');
-}
-
-function parseIcsDate(key: string, val: string): string {
-  const isDate = key.includes('VALUE=DATE') || (val.length === 8 && !val.includes('T'));
-  if (isDate) {
-    const y = val.slice(0, 4), m = val.slice(4, 6), d = val.slice(6, 8);
-    return `${y}-${m}-${d}T00:00:00.000Z`;
-  }
-  // YYYYMMDDTHHMMSSZ  or  YYYYMMDDTHHMMSS
-  const clean = val.replace('Z', '');
-  const y = clean.slice(0, 4), mo = clean.slice(4, 6), d = clean.slice(6, 8);
-  const h = clean.slice(9, 11), mi = clean.slice(11, 13), s = clean.slice(13, 15);
-  const z = val.endsWith('Z') ? 'Z' : '';
-  return `${y}-${mo}-${d}T${h}:${mi}:${s}${z || '.000Z'}`;
-}
-
-function icsRruleToDb(rrule: string | undefined): string {
-  if (!rrule) return 'none';
-  const match = rrule.match(/FREQ=(\w+)/i);
-  if (!match) return 'none';
-  switch (match[1].toUpperCase()) {
-    case 'DAILY': return 'daily';
-    case 'WEEKLY': return 'weekly';
-    case 'MONTHLY': return 'monthly';
-    case 'YEARLY': return 'yearly';
-    default: return 'none';
-  }
+  // Normalize structural tokens only. Property values (UID, title, clocks) stay original.
+  const projectionText=text.replace(/\r\n/g,'\n').replace(/\n[ \t]/g,'').replace(/^(BEGIN|END):([A-Z]+)$/gim,line=>line.toUpperCase());
+  if(/^BEGIN:VALARM$/m.test(projectionText))throw new Error('Source alarms cannot be preserved by native copies');
+  const events=parseICS(projectionText,{bareCancellations:true,validateEvent:event=>{
+    assertFeedRecurrenceAdmission(event);
+    if(event.status==='cancelled')return;
+    if(!event.uid||!event.startsAt||!event.title||event.hasDuration)throw new Error('Unrepresentable calendar component');
+    // Native missing-end timed rows estimate one hour; source defaults are points.
+    if(!event.allDay&&!event.endsAt)throw new Error('Unknown source duration');
+    if(event.endsAt&&(Date.parse(event.endsAt)<Date.parse(event.startsAt)||event.allDay&&Date.parse(event.endsAt)===Date.parse(event.startsAt)))throw new Error('Invalid source interval');
+  }});
+  if(events.length!==documents.length)throw new Error('Incomplete source projection');
+  const seen=new Set<string>();
+  for(const event of events){if(seen.has(event.uid))throw new Error('Multiple source revisions');seen.add(event.uid);}
+  return events.filter(event=>event.status!=='cancelled');
 }
 
 export async function POST(req: NextRequest) {
@@ -118,7 +77,9 @@ export async function POST(req: NextRequest) {
       return NextResponse.json({ error: t('sync.urlDoesNotAppearTo') }, { status: 422 });
     }
 
-    const events = parseIcs(icsText);
+    let events:IcsEvent[];
+    try { events=importedEvents(icsText); }
+    catch { return NextResponse.json({error:t('calendarImport.invalidCalendar')},{status:422}); }
     if (events.length === 0) {
       return NextResponse.json({ imported: 0, message: 'Calendar is empty or no events found' });
     }
@@ -136,12 +97,12 @@ export async function POST(req: NextRequest) {
     const rows = events.map((e) => ({
       family_id: familyId,
       title: e.title ?? 'Untitled',
-      description: e.notes ? `${e.notes}\n[UID: ${e.uid}]` : `[Imported from ${label ?? 'ICS'}]`,
+      description: e.description ? `${e.description}\n[UID: ${e.uid}]` : `[Imported from ${label ?? 'ICS'}]\n[UID: ${e.uid}]`,
       location: e.location ?? null,
-      starts_at: e.start,
-      ends_at: e.end ?? null,
+      starts_at: e.startsAt,
+      ends_at: e.endsAt ?? null,
       all_day: e.allDay ?? false,
-      recurrence: icsRruleToDb(e.rrule) as 'none' | 'daily' | 'weekly' | 'monthly' | 'yearly',
+      recurrence: icsRruleToRecurrence(e.recurrenceRule) as 'none' | 'daily' | 'weekly' | 'monthly' | 'yearly',
       category: 'general' as const,
     }));
 

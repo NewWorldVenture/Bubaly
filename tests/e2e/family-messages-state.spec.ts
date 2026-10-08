@@ -73,26 +73,29 @@ async function fixture(page: Page, { holdA = false, mobile = false, olderHistory
     p.flush=()=>new Promise(resolve=>requestAnimationFrame(()=>requestAnimationFrame(resolve)));
     p.releaseA=async()=>{p.holdA=false;for(const resolve of p.pending.splice(0))resolve();await p.flush();};
     p.releaseInsert=async()=>{p.holdInsert=false;for(const resolve of p.pendingInsert.splice(0))resolve();await p.flush();};
-    function query(table){let action='select',input=null,filters=[],order=[],limit=Infinity,singular=false,cursor=null,inside=null;
-      const q={select:()=>q,eq:(key,value)=>{filters.push([key,value]);return q;},is:(key,value)=>{filters.push([key,value]);return q;},in:(key,values)=>{inside=[key,values];return q;},order:(key,opts)=>{order.push([key,opts]);return q;},limit:value=>{limit=value;return q;},or:value=>{cursor=value;return q;},ilike:()=>q,abortSignal:()=>q,insert:value=>{action='insert';input=value;return q;},update:value=>{action='update';input=value;return q;},upsert:value=>{action='upsert';input=value;return q;},single:()=>{singular=true;return execute();},maybeSingle:()=>{singular=true;return execute();},then:(resolve,reject)=>execute().then(resolve,reject)};
+    function query(table){let action='select',input=null,filters=[],order=[],limit=Infinity,offset=0,singular=false,cursor=null,inside=null;
+      const q={select:()=>q,eq:(key,value)=>{filters.push([key,value]);return q;},is:(key,value)=>{filters.push([key,value]);return q;},in:(key,values)=>{inside=[key,values];return q;},order:(key,opts)=>{order.push([key,opts]);return q;},limit:value=>{limit=value;return q;},range:(from,to)=>{offset=from;limit=to-from+1;return q;},or:value=>{cursor=value;return q;},ilike:()=>q,abortSignal:()=>q,insert:value=>{action='insert';input=value;return q;},update:value=>{action='update';input=value;return q;},upsert:value=>{action='upsert';input=value;return q;},single:()=>{singular=true;return execute();},maybeSingle:()=>{singular=true;return execute();},then:(resolve,reject)=>execute().then(resolve,reject)};
       async function execute(){
         if(legacy&&table==='family_conversation_preferences')return{data:null,error:{code:'PGRST205',message:"Could not find the table 'public.family_conversation_preferences' in the schema cache"}};
         let rows=table==='family_conversations'?convs:table==='family_messages'?p.rows:[];
         let selected=rows.filter(row=>filters.every(([key,value])=>row[key]===value));
         if(inside)selected=selected.filter(row=>inside[1].includes(row[inside[0]]));
         if(cursor){const time=cursor.match(/created_at\\.lt\\.([^,]+)/)?.[1],id=cursor.match(/id\\.(lt|lte)\\.([^)]*)/) ;selected=selected.filter(row=>row.created_at<time||(row.created_at===time&&id&&(id[1]==='lte'?row.id<=id[2]:row.id<id[2])));}
+        const count=selected.length;
         if(action==='insert'){p.insertIds.push(input.id);if(p.failInserts-->0)throw new Error('Network unavailable');const row={...base(input.id,input.conversation_id,input.content,input.sender_id),...input,created_at:'2026-10-02T12:01:00Z'};p.rows.push(row);p.writes.push(row);selected=[row];if(p.holdInsert)await new Promise(resolve=>p.pendingInsert.push(resolve));if(p.loseInsertResponse){p.loseInsertResponse=false;return{data:null,error:{message:'Response lost'}};}}
         else if(action==='update'){for(const row of selected)Object.assign(row,input);p.writes.push(input);}
         else if(action==='upsert'){selected=[input];p.writes.push(input);}
         else if(table==='family_messages'){
           selected=[...selected].sort((a,b)=>{for(const [key,opts] of order){const n=String(a[key]).localeCompare(String(b[key]));if(n)return opts?.ascending===false?-n:n;}return 0;});
-          selected=selected.slice(0,limit).map(row=>({...row,read_by:[...row.read_by]}));
+          selected=selected.slice(offset,offset+limit).map(row=>({...row,read_by:[...row.read_by]}));
           if(p.holdA&&filters.some(([key,value])=>key==='conversation_id'&&value===A))await new Promise(resolve=>p.pending.push(resolve));
         }
-        return {data:singular?(selected[0]??null):selected,error:null};
+        return {data:singular?(selected[0]??null):selected,count,error:null};
       }return q;
     }
-    const db={from:query,rpc:async(name,args)=>{
+    const db={from:query,rpc:(name,args)=>{
+      if(!legacy&&name==='family_conversation_overview'){let offset=0,limit=Infinity;const rows=convs.map(conv=>{const rows=p.rows.filter(row=>row.conversation_id===conv.id);return{conversation_id:conv.id,last_message:rows.at(-1)||null,unread_count:rows.filter(row=>row.sender_id!==userId&&!row.read_by.includes(userId)).length};}).sort((a,b)=>a.conversation_id.localeCompare(b.conversation_id));const q={order:()=>q,limit:n=>{limit=n;return q;},range:(from,to)=>{offset=from;limit=to-from+1;return q;},then:(resolve,reject)=>Promise.resolve({data:rows.slice(offset,offset+limit),count:rows.length,error:null}).then(resolve,reject)};return q;}
+      return (async()=>{
       if(legacy&&name==='mark_conversation_read'){p.reads.push({legacy:name,...args});for(const row of p.rows)if(row.conversation_id===args.p_conversation_id)row.read_by=[...new Set([...row.read_by,userId])];return{data:null,error:null};}
       if(legacy)return{data:null,error:{code:'PGRST202',message:'Could not find the function public.'+name+'('+Object.keys(args).join(', ')+') in the schema cache'}};
       if(name==='ensure_family_conversation')return{data:A,error:null};
@@ -100,6 +103,7 @@ async function fixture(page: Page, { holdA = false, mobile = false, olderHistory
       if(name==='mark_conversation_read_through'){p.reads.push(args);for(const row of p.rows)if(row.conversation_id===args.p_conversation_id)row.read_by=[...new Set([...row.read_by,userId])];return{data:1,error:null};}
       if(name==='leave_family_conversation'){const index=convs.findIndex(conv=>conv.id===args.p_conversation_id);if(index>=0)convs.splice(index,1);return{data:null,error:null};}
       throw new Error('Unexpected RPC '+name);
+      })();
     },channel:name=>{const c={on:()=>c,subscribe:()=>c,track:async()=>{},untrack:async()=>{},send:async()=>{},presenceState:()=>({})};p.channels.push(name);return c;},removeChannel:async()=>{}};
     const translate=(key,vars={})=>Object.entries(vars).reduce((text,[name,value])=>text.split('{'+name+'}').join(String(value)),catalogue[key]||key);
     const fmt={fmtDate:iso=>new Date(iso).toLocaleDateString('en-US'),fmtTime:iso=>new Date(iso).toLocaleTimeString('en-US')};

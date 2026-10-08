@@ -14,7 +14,7 @@ const sourceFiles = [
   'components/modules/messages-module.tsx', 'components/ui/toast.tsx',
   'components/ui/button.tsx', 'components/ui/input.tsx',
   'components/ui/states.tsx', 'components/ui/states-client.tsx',
-  'lib/messages/overview.ts', 'lib/messages/thread-state.ts', 'lib/messages/schema-compat.ts',
+  'lib/messages/overview.ts', 'lib/messages/thread-state.ts', 'lib/messages/schema-compat.ts', 'lib/messages/reads.ts',
   'lib/messages/legacy-schema.ts', 'lib/supabase/escape-like.ts', 'lib/realtime/own-channel.ts',
   'lib/supabase/errors.ts', 'lib/supabase/settle.ts', 'lib/constants/roles.ts',
   'lib/utils/format.ts', 'lib/i18n/locales.ts',
@@ -37,7 +37,7 @@ const CHAT_B = 'ad000000-0000-4000-8000-000000000003';
 const WHEN = '2026-10-04T12:00:00.000Z';
 
 type Row = Record<string, unknown>;
-type Reply = { data: unknown; error: { code: string; message: string } | null };
+type Reply = { data: unknown; count?: number; error: { code: string; message: string } | null };
 type Config = {
   conversations: Record<string, Row[]>;
   messages?: Record<string, Row[]>;
@@ -49,6 +49,9 @@ type Config = {
   deferSend?: boolean;
   rejectSend?: boolean;
   media?: boolean;
+  serverCap?: number;
+  failMessageOffset?: number;
+  failInboxOffset?: number;
 };
 type Call = { method: string; url: string; body: Row | null; family: string | null; conversation: string | null; user: string };
 declare global {
@@ -120,7 +123,7 @@ async function start(page: Page, config: Config) {
     const clone = value => JSON.parse(JSON.stringify(value));
     const respond = reply => new Response(JSON.stringify(reply.error || reply.data), {
       status: reply.error ? (reply.error.code === '42501' ? 403 : 400) : 200,
-      headers: { 'Content-Type': 'application/json' },
+      headers: { 'Content-Type': 'application/json', ...(Array.isArray(reply.data) ? { 'Content-Range': '0-' + Math.max(0, reply.data.length - 1) + '/' + (reply.count ?? reply.data.length) } : {}) },
     });
     const pendingResolvers = new Map();
     p.media = { requests: [], recorders: [] };
@@ -184,6 +187,16 @@ async function start(page: Page, config: Config) {
       if (!resolver) throw new Error('Unknown synthetic pending response ' + id);
       pendingResolvers.delete(id); resolver.reject(new TypeError(reason));
     };
+    function paged(rows, url) {
+      const order = (url.searchParams.get('order') || '').split(',').filter(Boolean);
+      rows = [...rows].sort((a, b) => { for (const rule of order) {
+        const [key, direction, nulls] = rule.split('.');
+        if (a[key] == null || b[key] == null) { if (a[key] == null && b[key] == null) continue; return a[key] == null ? (nulls === 'nullslast' ? 1 : -1) : (nulls === 'nullslast' ? -1 : 1); }
+        const n = String(a[key]).localeCompare(String(b[key])); if (n) return direction === 'desc' ? -n : n;
+      } return 0; });
+      const count = rows.length, offset = Number(url.searchParams.get('offset') || 0), limit = Number(url.searchParams.get('limit') || count);
+      return respond({ data: clone(rows.slice(offset, offset + Math.min(limit, config.serverCap ?? limit))), count, error: null });
+    }
     async function syntheticFetch(input, init = {}) {
       const url = new URL(typeof input === 'string' ? input : input.url);
       if (url.origin !== 'https://synthetic-messages-db.invalid') throw new Error('Unexpected synthetic messaging fetch: ' + url);
@@ -203,15 +216,25 @@ async function start(page: Page, config: Config) {
         return respond({ data: canonical.id, error: null });
       }
       if (rpc === 'mark_conversation_read_through') return respond({ data: 0, error: config.readError || null });
-      if (rpc === 'family_conversation_overview') return respond({ data: [], error: null });
+      if (rpc === 'family_conversation_overview') return paged((config.conversations[family] || []).map(row => ({ conversation_id: row.id, last_message: null, unread_count: 0 })), url);
       if (rpc) throw new Error('Unexpected synthetic messaging RPC: ' + rpc);
       const table = url.pathname.split('/').pop();
-      if (table === 'family_conversations' && method === 'GET') return respond({ data: clone(config.conversations[family] || []), error: null });
+      if (table === 'family_conversations' && method === 'GET') {
+        if (config.failInboxOffset !== undefined && Number(url.searchParams.get('offset') || 0) >= config.failInboxOffset) return respond({ data: null, error: { code: '42501', message: 'Synthetic later inbox page denied' } });
+        return paged(config.conversations[family] || [], url);
+      }
       if (table === 'family_conversation_preferences' && method === 'GET') return respond({ data: null, error: null });
       if (table === 'family_messages' && method === 'GET') {
         if (!thread) return respond({ data: [], error: null });
         if (config.deferThread) return hold('thread', family, thread);
-        return respond({ data: clone(config.messages?.[thread] || []), error: null });
+        if (config.failMessageOffset !== undefined && Number(url.searchParams.get('offset') || 0) >= config.failMessageOffset) return respond({ data: null, error: { code: '42501', message: 'Synthetic later history page denied' } });
+        let rows = (config.messages?.[thread] || []).filter(row => !family || row.family_id === family);
+        if (url.searchParams.get('deleted_at') === 'is.null') rows = rows.filter(row => row.deleted_at == null);
+        if (url.searchParams.get('is_pinned') === 'eq.true') rows = rows.filter(row => row.is_pinned);
+        if (url.searchParams.get('kind') === 'eq.image') rows = rows.filter(row => row.kind === 'image');
+        const cursor = url.searchParams.get('or');
+        if (cursor) { const time = cursor.match(/created_at[.]lt[.]([^,]+)/)?.[1], id = cursor.match(/id[.](lt|lte)[.]([^)]*)/); rows = rows.filter(row => row.created_at < time || row.created_at === time && id && (id[1] === 'lte' ? row.id <= id[2] : row.id < id[2])); }
+        return paged(rows, url);
       }
       if (table === 'family_messages' && method === 'POST' && config.deferSend) return hold('send', family, thread);
       // Read-receipt fallback is observable, but no unplanned conversation or
@@ -233,7 +256,7 @@ async function start(page: Page, config: Config) {
           builder.insert = (...args) => insert(...args).throwOnError();
         }
         return builder;
-      }, rpc: (name, args) => real.rpc(name, args),
+      }, rpc: (name, args, options) => real.rpc(name, args, options),
       channel: topic => {
         const ch = { id: p.channels.length, topic, removed: false, bindings: [],
           on(kind, filter, callback) { this.bindings.push({ kind, filter, callback }); return this; },
@@ -634,3 +657,48 @@ for (const active of [false, true]) {
     expect(await page.evaluate(() => window.__messagingPreserve.mediaWrites)).toBe(0);
   });
 }
+
+
+test('cap2 inbox includes the late canonical chat and completes two older-history windows', async ({ page }) => {
+  const recent = Array.from({ length: 4 }, (_, i) => ({ ...conversation('recent-' + i, FAMILY_A, 'Recent group ' + i), last_message_at: WHEN }));
+  const history = Array.from({ length: 60 }, (_, i) => ({ ...message('cap-message-' + String(i).padStart(3, '0'), FAMILY_A, CHAT_A, 'Capped history ' + i), created_at: new Date(Date.parse(WHEN) + i * 1000).toISOString() }));
+  await start(page, { conversations: { [FAMILY_A]: [...recent, conversation(CHAT_A, FAMILY_A, 'Canonical', true)] }, messages: { [CHAT_A]: history }, serverCap: 2 });
+  await expect(page.getByRole('button', { name: /messagesModule.familyChat/ })).toBeVisible();
+  await expect(page.locator('[id^="message-cap-message-"]')).toHaveCount(50);
+  await expect(page.locator('#message-cap-message-059')).toBeVisible();
+  await expect(page.locator('#message-cap-message-000')).toHaveCount(0);
+  await page.getByRole('button', { name: 'messagesChat.loadOlder', exact: true }).click();
+  await expect(page.locator('[id^="message-cap-message-"]')).toHaveCount(60);
+  await expect(page.getByRole('button', { name: 'messagesChat.loadOlder', exact: true })).toHaveCount(0);
+  const calls = await page.evaluate(() => window.__messagingPreserve.calls);
+  expect(calls.filter(call => call.url.includes('/family_conversations?')).some(call => new URL(call.url).searchParams.get('offset') === '4')).toBe(true);
+  expect(calls.filter(call => call.url.includes('/rpc/family_conversation_overview?')).some(call => new URL(call.url).searchParams.get('offset') === '4')).toBe(true);
+  expect(calls.filter(call => call.url.includes('/family_messages?') && new URL(call.url).searchParams.get('offset') === '50')).toHaveLength(1);
+  expect(calls.filter(call => call.url.includes('/family_messages?')).every(call => call.family === FAMILY_A && call.conversation === CHAT_A)).toBe(true);
+});
+
+test('a denied later history page never publishes a prefix or a false empty state and can retry', async ({ page }) => {
+  const history = Array.from({ length: 6 }, (_, i) => message('refused-' + i, FAMILY_A, CHAT_A, 'Refused history ' + i));
+  await start(page, { ...base(), messages: { [CHAT_A]: history }, serverCap: 2, failMessageOffset: 2 });
+  await expect(page.getByRole('button', { name: 'messagesChat.retryLoad', exact: true })).toBeVisible();
+  await expect(page.locator('[id^="message-refused-"]')).toHaveCount(0);
+  await expect(page.getByText('messages.noMessagesYet', { exact: true })).toHaveCount(0);
+  await page.evaluate(() => window.__messagingPreserve.configure({ failMessageOffset: undefined }));
+  await page.getByRole('button', { name: 'messagesChat.retryLoad', exact: true }).click();
+  await expect(page.locator('[id^="message-refused-"]')).toHaveCount(6);
+  await expect(page.getByRole('button', { name: 'messagesChat.retryLoad', exact: true })).toHaveCount(0);
+});
+
+
+test('a failed complete inbox has persistent retry and never claims an empty accessible inbox', async ({ page }) => {
+  const recent = Array.from({ length: 4 }, (_, i) => conversation('inbox-' + i, FAMILY_A, 'Inbox group ' + i));
+  await start(page, { conversations: { [FAMILY_A]: [...recent, conversation(CHAT_A, FAMILY_A, 'Canonical', true)] }, serverCap: 2, failInboxOffset: 2 });
+  await expect(page.getByRole('button', { name: 'messagesChat.retryLoad', exact: true })).toBeVisible();
+  await expect(page.getByRole('button', { name: /Inbox group/ })).toHaveCount(0);
+  await expect(page.getByText('messages.noMessagesYet', { exact: true })).toHaveCount(0);
+  await page.evaluate(() => window.__messagingPreserve.configure({ failInboxOffset: undefined }));
+  await page.getByRole('button', { name: 'messagesChat.retryLoad', exact: true }).click();
+  await expect(page.getByRole('button', { name: /messagesModule.familyChat/ })).toBeVisible();
+  await expect(page.getByRole('button', { name: /Inbox group/ })).toHaveCount(4);
+  await expect(page.getByRole('button', { name: 'messagesChat.retryLoad', exact: true })).toHaveCount(0);
+});

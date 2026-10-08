@@ -54,14 +54,24 @@ describe('parsePantryRecipes', () => {
 describe('normalizePlanDate (add-to-plan phase)', () => {
   const now = new Date('2026-07-18T12:00:00Z');
   it('accepts a real YYYY-MM-DD date', () => {
-    expect(normalizePlanDate('2026-07-20', now)).toBe('2026-07-20');
+    expect(normalizePlanDate('2026-07-20', 'UTC', now)).toBe('2026-07-20');
   });
   it('falls back to today for junk, wrong formats, and impossible dates', () => {
-    expect(normalizePlanDate('tomorrow', now)).toBe('2026-07-18');
-    expect(normalizePlanDate('2026-02-30', now)).toBe('2026-07-18'); // not a real day
-    expect(normalizePlanDate('2026-7-2', now)).toBe('2026-07-18');
-    expect(normalizePlanDate(null, now)).toBe('2026-07-18');
-    expect(normalizePlanDate(20260720, now)).toBe('2026-07-18');
+    expect(normalizePlanDate('tomorrow', 'UTC', now)).toBe('2026-07-18');
+    expect(normalizePlanDate('2026-02-30', 'UTC', now)).toBe('2026-07-18'); // not a real day
+    expect(normalizePlanDate('2026-7-2', 'UTC', now)).toBe('2026-07-18');
+    expect(normalizePlanDate(null, 'UTC', now)).toBe('2026-07-18');
+    expect(normalizePlanDate(20260720, 'UTC', now)).toBe('2026-07-18');
+  });
+  it('uses the required household clock for fallback, preserving valid civil dates', () => {
+    const evening = new Date('2026-10-09T02:30:00Z');
+    expect(normalizePlanDate(undefined, 'America/Los_Angeles', evening)).toBe('2026-10-08');
+    expect(normalizePlanDate(undefined, 'Pacific/Kiritimati', new Date('2026-10-08T12:30:00Z'))).toBe('2026-10-09');
+    expect(normalizePlanDate('2028-02-29', 'America/Los_Angeles', evening)).toBe('2028-02-29');
+  });
+  it('refuses an unknown clock rather than implicitly choosing the host or UTC', () => {
+    for (const timezone of ['', 'Invalid/Zone']) expect(() => normalizePlanDate(undefined, timezone, now)).toThrow(RangeError);
+    expect(() => normalizePlanDate(undefined, 'UTC', new Date('invalid'))).toThrow(RangeError);
   });
 });
 

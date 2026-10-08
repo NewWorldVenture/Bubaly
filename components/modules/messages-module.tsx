@@ -38,6 +38,7 @@ import type { RealtimeChannel } from '@supabase/supabase-js';
 import { clearConfirmedDraft, createThreadOwner, mergeThreadRows, reconcileLatestThreadRows, messageReadByOthers, shouldSendOnEnter, type ThreadDraft } from '@/lib/messages/thread-state';
 import { fellBackForMissing, MESSAGING_SCHEMA } from '@/lib/messages/schema-compat';
 import { readDeviceMutes, writeDeviceMutes } from '@/lib/messages/legacy-schema';
+import { readConversationInbox, readConversationOverview, readMessageWindow } from '@/lib/messages/reads';
 
 type Conversation = Tables<'family_conversations'>;
 type Message = Tables<'family_messages'>;
@@ -99,6 +100,7 @@ function MessagesWorkspace() {
 
   const [conversations, setConversations] = useState<Conversation[]>([]);
   const [loadingConvs, setLoadingConvs] = useState(true);
+  const [inboxError, setInboxError] = useState<string | null>(null);
   const [activeConv, setActiveConv] = useState<Conversation | null>(null);
   const activeConvId = activeConv?.id;
   const activeConversationRef = useRef(activeConv);
@@ -228,19 +230,17 @@ function MessagesWorkspace() {
   const loadConversations = useCallback(async () => {
     const request = ++listRequest.current;
     const supabase = createClient();
-    const { data, error } = await supabase
-      .from('family_conversations')
-      .select('*')
-      .eq('family_id', familyId)
-      .order('last_message_at', { ascending: false, nullsFirst: false });
+    const { data, error } = await readConversationInbox(supabase, familyId);
     if (!alive.current || request !== listRequest.current) return;
     if (error) {
       // Fail visibly instead of showing an empty inbox on a failed load — an empty
       // list here would make the user think they have no conversations.
+      setInboxError(describeDbError(error));
       toastError(describeDbError(error));
       setLoadingConvs(false);
       return;
     }
+    setInboxError(null);
     // Without the participant schema, do not render a family-wide legacy inbox.
     if (data?.some((row) => !('is_family_chat' in row))) {
       setLegacy0475(true); setConversations([]); setActiveConv(null); setLoadingConvs(false);
@@ -300,15 +300,7 @@ function MessagesWorkspace() {
     // Reconnect repairs a bounded newest window. Asking for every loaded row
     // can exceed PostgREST's cap and misclassify older history as deleted.
     const count = PAGE_SIZE;
-    let query = supabase
-      .from('family_messages')
-      .select('*')
-      .eq('family_id', familyId)
-      .eq('conversation_id', convId)
-      .order('created_at', { ascending: false })
-      .order('id', { ascending: false });
-    if (older && oldest) query = query.or(`created_at.lt.${oldest.created_at},and(created_at.eq.${oldest.created_at},id.lt.${oldest.id})`);
-    const { data, error } = await settle(query.limit(count + 1));
+    const { data, error } = await readMessageWindow(supabase, familyId, convId, { cursor: older ? oldest : undefined, take: count + 1 });
     if (!alive.current || !owner.current.accepts(ticket)) return;
     if (error) {
       // Surface the failure rather than blanking the thread (which reads as
@@ -406,7 +398,7 @@ function MessagesWorkspace() {
   const loadSummaries = useCallback(async () => {
     const request = ++summaryRequest.current;
     const supabase = createClient();
-    const { data, error } = await settle(supabase.rpc('family_conversation_overview', { p_family_id: familyId }));
+    const { data, error } = await readConversationOverview(supabase, familyId);
     if (!alive.current || request !== summaryRequest.current) return;
     if (error) {
       // Previews/unread badges are an enhancement over the conversation list;
@@ -858,12 +850,17 @@ function MessagesWorkspace() {
     return () => { clearTimeout(timer); controller.abort(); };
   }, [activeConvId, familyId, threadSearch, toastError]);
 
+  const jumpOrigin = owner.current.capture();
+  function isCurrentJump(message: Message) {
+    return alive.current && owner.current.current(jumpOrigin) && Boolean(jumpOrigin.conversationId)
+      && message.family_id === familyId && message.conversation_id === jumpOrigin.conversationId;
+  }
   async function jumpToMessage(message: Message) {
+    if (!isCurrentJump(message)) return;
     const ticket = owner.current.begin('jump');
     setThreadSearch(''); setShowAbout(false);
     if (!messagesRef.current.some((row) => row.id === message.id)) {
-      const { data, error } = await createClient().from('family_messages').select('*').eq('conversation_id', message.conversation_id)
-        .or(`created_at.lt.${message.created_at},and(created_at.eq.${message.created_at},id.lte.${message.id})`).order('created_at', { ascending: false }).order('id', { ascending: false }).limit(PAGE_SIZE + 1);
+      const { data, error } = await readMessageWindow(createClient(), familyId, message.conversation_id, { cursor: message, inclusive: true, take: PAGE_SIZE + 1 });
       if (!owner.current.accepts(ticket)) return;
       if (error) { toastError(describeDbError(error)); return; }
       setMessages(mergeThreadRows([], (data ?? []).slice(0, PAGE_SIZE), message.conversation_id));
@@ -938,12 +935,14 @@ function MessagesWorkspace() {
       || (!activeConv.participant_ids?.length && !activeConv.member_ids?.length && member.user_id === activeConv.created_by));
 
   if (loadingConvs) return <SkeletonList />;
+  if (inboxError && !conversations.length) return <div role="alert" className="rounded-xl border border-danger/40 p-4 text-sm"><p>{inboxError}</p><Button type="button" variant="ghost" onClick={() => { setLoadingConvs(true); void loadConversations(); }}>{tr('messagesChat.retryLoad')}</Button></div>;
 
   const memberCount = activeParticipants.length;
   const canManageConversation = activeConv && (activeConv.created_by === userId || role === 'parent' || role === 'adult');
 
   return (
     <div className="flex h-[calc(100dvh-var(--topbar-height)-1rem-4rem-var(--safe-bottom))] flex-col gap-4 lg:h-[calc(100dvh-var(--topbar-height)-1rem)]">
+      {inboxError && <div role="alert" className="rounded-xl border border-danger/40 p-3 text-sm"><p>{inboxError}</p><Button type="button" variant="ghost" onClick={() => void loadConversations()}>{tr('messagesChat.retryLoad')}</Button></div>}
       {/* ── Page header ─────────────────────────────────────── */}
       <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
         <div className="min-w-0">
@@ -1133,7 +1132,7 @@ function MessagesWorkspace() {
               {hasOlder && <div className="text-center"><Button variant="ghost" disabled={loadingOlder} onClick={() => void loadMessages(activeConv.id, true)}>{loadingOlder ? tr('messagesChat.loadingOlder') : tr('messagesChat.loadOlder')}</Button></div>}
               {loadingMsgs ? (
                 <SkeletonList />
-              ) : messages.length === 0 ? (
+              ) : messages.length === 0 && !loadError ? (
                 <EmptyState icon={MessageCircle} title={tr('messages.noMessagesYet')}
                   description={tr('messagesModule.sayHelloToYourFamily')} />
               ) : (
@@ -1530,7 +1529,7 @@ function MessagesWorkspace() {
         />
       )}
       {settingsOpen && activeConv && <ConversationSettings conversation={activeConv} members={members} userId={userId} onClose={() => setSettingsOpen(false)} onSaved={(conv) => { if (owner.current.capture().conversationId === conv.id) setActiveConv(conv); setSettingsOpen(false); void loadConversations(); }} />}
-      {historyGallery && activeConv && <ConversationHistory key={`${activeConv.id}:${historyGallery}`} conversationId={activeConv.id} kind={historyGallery} userId={userId} onClose={() => setHistoryGallery(null)} onJump={(message) => { setHistoryGallery(null); void jumpToMessage(message); }} />}
+      {historyGallery && activeConv && <ConversationHistory key={`${activeConv.id}:${historyGallery}`} familyId={familyId} conversationId={activeConv.id} kind={historyGallery} userId={userId} onClose={() => setHistoryGallery(null)} onJump={(message) => { if (!isCurrentJump(message)) return; setHistoryGallery(null); void jumpToMessage(message); }} />}
       {conversationAction && activeConv && <Modal open onClose={() => { if (!changingConversation) setConversationAction(null); }} title={tr('messagesChat.confirmArchive')} description={tr('messagesChat.archiveConfirm')}><div className="flex justify-end gap-2"><Button type="button" variant="ghost" disabled={changingConversation} onClick={() => setConversationAction(null)}>{tr('messagesChat.cancel')}</Button><Button type="button" loading={changingConversation} onClick={() => void archiveConversation()}>{tr(activeConv.is_archived ? 'messagesChat.restore' : 'messagesChat.archive')}</Button></div></Modal>}
     </div>
   );
@@ -1541,8 +1540,8 @@ function MessagesWorkspace() {
 type Member = Tables<'family_members'>;
 
 /** Pins/photos query the entire accessible history, not just the open page. */
-function ConversationHistory({ conversationId, kind, userId, onClose, onJump }: {
-  conversationId: string; kind: 'photos' | 'pinned'; userId: string; onClose: () => void; onJump: (message: Message) => void;
+function ConversationHistory({ familyId, conversationId, kind, userId, onClose, onJump }: {
+  familyId: string; conversationId: string; kind: 'photos' | 'pinned'; userId: string; onClose: () => void; onJump: (message: Message) => void;
 }) {
   const tr = useTranslations();
   const [rows, setRows] = useState<Message[]>([]);
@@ -1554,16 +1553,13 @@ function ConversationHistory({ conversationId, kind, userId, onClose, onJump }: 
   const load = useCallback(async (cursor?: Message) => {
     const current = ++request.current;
     setLoading(true); setError(null);
-    let query = createClient().from('family_messages').select('*').eq('conversation_id', conversationId).is('deleted_at', null);
-    query = kind === 'pinned' ? query.eq('is_pinned', true) : query.eq('kind', 'image');
-    if (cursor) query = query.or(`created_at.lt.${cursor.created_at},and(created_at.eq.${cursor.created_at},id.lt.${cursor.id})`);
-    const { data, error: failure } = await settle(query.order('created_at', { ascending: false }).order('id', { ascending: false }).limit(51));
+    const { data, error: failure } = await readMessageWindow(createClient(), familyId, conversationId, { cursor, kind, take: 51 });
     if (current !== request.current) return;
     setLoading(false);
     if (failure) { setError(describeDbError(failure)); return; }
     setMore((data?.length ?? 0) > 50);
     setRows((previous) => mergeThreadRows(cursor ? previous : [], (data ?? []).slice(0, 50), conversationId).reverse());
-  }, [conversationId, kind]);
+  }, [familyId, conversationId, kind]);
   useEffect(() => { const requests = request; void load(); return () => { requests.current++; }; }, [load]);
   return <Modal open onClose={onClose} title={tr(kind === 'photos' ? 'messagesChat.allPhotos' : 'messagesChat.pinnedHistory')}>
     {error && <div role="alert" className="mb-3 text-sm text-danger">{error}<Button type="button" variant="ghost" onClick={() => void load(rows.at(-1))}>{tr('messagesChat.historyRetry')}</Button></div>}
