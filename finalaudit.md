@@ -1,5 +1,13 @@
 # Final Production Audit
 
+## Exact published core CI acceptance — 2026-10-08
+
+Root independently verified main CI37843718421 corejob113539231027 terminal SUCCESS at published1ee14a2682533b72778e8d3d9ba8543871feec0d, completed21:34:08UTC. UTC/Los_Angeles/Tokyo each2020PASS suites+3SKIP,29701PASS tests+2expectedFAIL+95SKIP (29798 total). Dependency/migration/query/asset audits, lint/i18n, production build and final typecheck all succeeded. This supersedes earlier live-core qualification for this exact head only, not the failed Windows baseline. Eleven test additions since local078 native29690 proof are distinct from current unpublished precision work.
+
+Raw job log and authoritative JSON retained Temp/bubaly-1ee14-core-hosted-20261008/{job.log,job.json}; raw log SHA25674aa5fefce5aab84cec0d7486d7caa34360d693a98757f3312f4713f55130be5. Main E2Ejob113539230636 remains live in smoke at this checkpoint; genuine Auth/RPC/modern bill acceptance is still unproven. Published head stays fixed until terminal main integration evidence. Local named markers/offline DATE classifier/schema-preflight and the in-progress actual runtime precision repair are absent from this hosted acceptance and require their own final head checks.
+
+Register14,725/344 historical closures unchanged; no new closure credit or status change. Main allocation/held migrations/source capability/production restrictions unchanged. Both ledgers synchronized; Production Ready NO; full original goal active.
+
 ## Actual runtime calendar precision repair allocation — 2026-10-08
 
 Previous turn accepted schema-only preparation; current exact published1ee core now has all three unit timezone phases PASS and Build live, authenticated E2E smoke still live. Root takes watcher; no cancelling push. Installed-SDK synthetic probes through actual complete readers show4 healthyPASS/6RED (invalid microsecond DATE start/end, reversed interval/window, positive interval becoming point and recurrence stripping precision); independent availability/rail probe1PASS/4RED confirms invalidDATE/reversed/occupancy/same-millisecond chronological ordering. Records remain visible in direct readers; loss of occupancy is proved, whole-record omission is not claimed. Original Temp/bubaly-calendar-precision-runtime-20261008/{original-runtime.log,expanded-runtime.log} and bubaly-native-precision-peer-20261008/{first.log,receipt.json} retained. This is existing runtime correctness work, distinct from the accepted offline classifier.
