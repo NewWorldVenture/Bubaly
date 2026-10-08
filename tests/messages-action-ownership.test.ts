@@ -3,7 +3,7 @@ import ts from 'typescript';
 import { createClient } from '@supabase/supabase-js';
 import type { Database, Tables } from '@/lib/database.types';
 import { describe, expect, it } from 'vitest';
-import { createThreadOwner } from '@/lib/messages/thread-state';
+import { clearConfirmedDraft, createThreadOwner } from '@/lib/messages/thread-state';
 
 type Conversation = Tables<'family_conversations'>;
 type Scope = { familyId: string; userId: string; role: string; memberId: string; active: boolean };
@@ -165,5 +165,168 @@ describe('archive confirmation owns its rendered visit, authority and modal inst
   it('a retained cancel cannot close the newly reopened modal', () => {
     const test = fixture(), old = test.open(); old.closeArchiveAction(); test.open(); const ticket = test.selection()?.ticket;
     test.clear(); old.closeArchiveAction(); expect(test.selection()?.ticket).toBe(ticket); expect(test.effects).toEqual([]);
+  });
+});
+
+// Execute the exact current helper/action bodies against the installed SDK.
+// React render scheduling is explicit here; browser controls below use React.
+const sendAst = ts.createSourceFile('messages.tsx', source, ts.ScriptTarget.Latest, true, ts.ScriptKind.TSX);
+const sendNames = new Set(['sameArchiveRow', 'isCurrentMessageOrigin', 'isCurrentMessageOperation', 'beginMessageOperation', 'confirmsMessage', 'insertMessage', 'sendMessage', 'sendGif', 'sendFile', 'rememberAttachment', 'discardAttachment']);
+const sendBodies: string[] = [];
+function collectSendBodies(node: ts.Node) { if (ts.isFunctionDeclaration(node) && node.name && sendNames.has(node.name.text)) sendBodies.push(node.getText(sendAst)); ts.forEachChild(node, collectSendBodies); }
+collectSendBodies(sendAst);
+if (sendBodies.length !== sendNames.size) throw new Error('The finite send helper graph changed.');
+const sendCompiled = ts.transpileModule(sendBodies.join('\n'), { compilerOptions: { target: ts.ScriptTarget.ES2022, module: ts.ModuleKind.None } }).outputText;
+type SendRow = Record<string, unknown>;
+type SendDraft = { text: string; reply: SendRow | null; edit: SendRow | null };
+function sendFixture({ defer = '' as 'message' | 'upload' | 'check' | 'remove' | '', fail = '' as 'denied' | 'lost' | 'zero' | 'wrong' | '', edit = false } = {}) {
+  const owner = { current: createThreadOwner() }; owner.current.select(A);
+  let scope: Scope = { familyId: FAMILY, userId: USER, role: 'parent', memberId: 'member-a', active: true };
+  let activeConv = conversation(A, USER), renderedDraft: SendDraft = { text: 'Original draft', reply: null, edit: edit ? { id: 'edited', family_id: FAMILY, conversation_id: A, sender_id: USER } : null };
+  const archiveScopeRef = { current: scope }, activeConversationRef = { current: activeConv }, draftRef = { current: renderedDraft }, alive = { current: true };
+  const sendFlight = { current: null as unknown }, uploadFlight = { current: null as unknown }, sendRequest = { current: 0 }, sendIds = { current: new Map<string, string>() }, drafts = { current: new Map() };
+  const attachmentAttempts = { current: new Map<string, any>() }, failedAttachmentRef = { current: null as any }, uploadLock = { current: false };
+  const requests: { method: string; path: string; body: SendRow | null; url: URL }[] = [], effects: { kind: string; value?: unknown }[] = [], saved = new Map<string, SendRow>();
+  const pending: { kind: string; resolve: () => void }[] = [];
+  let failMode = fail, deferMode = defer;
+  async function hold(kind: string) { if (deferMode === kind) await new Promise<void>(resolve => pending.push({ kind, resolve })); }
+  const db = createClient<Database>('https://send-sdk-fixture.invalid', 'synthetic-key', { auth: { persistSession: false, autoRefreshToken: false, detectSessionInUrl: false }, global: { fetch: async (input, init) => {
+    const url = new URL(String(input)), method = init?.method ?? 'GET';
+    const body = typeof init?.body === 'string' ? JSON.parse(init.body) : null; requests.push({ method, path: url.pathname, body, url });
+    if (url.pathname.includes('/storage/')) {
+      await hold(method === 'DELETE' ? 'remove' : 'upload');
+      return Response.json(method === 'DELETE' ? [] : { Id: 'synthetic-object', Key: 'family-media/' + url.pathname.split('/family-media/')[1] });
+    }
+    if (method === 'GET') {
+      await hold('check');
+      const id = url.searchParams.get('id')?.replace(/^eq[.]/, ''); return Response.json(saved.get(id ?? '') ?? null);
+    }
+    const id = method === 'PATCH' ? url.searchParams.get('id')?.replace(/^eq[.]/, '') : body?.id;
+    const message: SendRow = { id, family_id: FAMILY, conversation_id: A, sender_id: USER, sender_name: 'Synthetic', kind: 'text', reply_to_id: null, attachment_url: null, deleted_at: null, created_at: '2026-10-08T12:00:00Z', ...body };
+    if (failMode !== 'denied' && failMode !== 'zero') saved.set(String(id), message);
+    await hold('message');
+    if (failMode === 'denied' || failMode === 'lost') return Response.json({ code: failMode === 'denied' ? '42501' : '23505', message: 'Synthetic send refusal or response loss' }, { status: 403 });
+    if (failMode === 'zero') return Response.json(null);
+    if (failMode === 'wrong') return Response.json({ ...message, family_id: 'other-family' });
+    return Response.json(message);
+  } } });
+  function render() {
+    const env = { owner, alive, archiveScope: scope, archiveScopeRef, activeConv, activeConversationRef, familyId: scope.familyId, userId: scope.userId, messageOrigin: owner.current.capture(), renderedDraft, draftRef,
+      sending: false, editMessage: renderedDraft.edit, sendFlight, uploadFlight, sendRequest, sendIds, drafts, myName: 'Synthetic', createClient: () => db,
+      tr: (key: string) => key, describeDbError: (error: { message: string }) => error.message, toastError: (value: unknown) => effects.push({ kind: 'toast', value }),
+      setSending: (value: unknown) => effects.push({ kind: 'sending', value }), acceptMessage: (value: unknown) => effects.push({ kind: 'accept', value }),
+      clearConfirmedDraft,
+      setText: (value: string) => effects.push({ kind: 'draft', value }), setReplyTo: (value: unknown) => effects.push({ kind: 'reply', value }), setEditMessage: (value: unknown) => effects.push({ kind: 'edit', value }),
+      inputRef: { current: null }, bottomRef: { current: null }, requestAnimationFrame: () => {}, setShowGifPicker: () => effects.push({ kind: 'gif' }),
+      failedAttachment: failedAttachmentRef.current, failedAttachmentRef, attachmentAttempts, uploadLock, uploadingFile: false, recording: false, requestingMic: { current: false },
+      familyMediaPath: (family: string, stem: string, name: string) => `${family}/${stem}/${name}`,
+      setFailedAttachment: (value: any) => effects.push({ kind: 'attempt', value }), setUploadingFile: (value: unknown) => effects.push({ kind: 'uploading', value }),
+      settle: async (query: PromiseLike<unknown>) => query, removeFamilyMedia: (client: typeof db, filePath: string) => client.storage.from('family-media').remove([filePath]),
+    };
+    return new Function(...Object.keys(env), sendCompiled + ';return {sendMessage,sendGif,sendFile,discardAttachment};')(...Object.values(env)) as { sendMessage: (event: { preventDefault: () => void }) => Promise<void>; sendGif: (url: string, title: string) => Promise<void>; sendFile: (file: File) => Promise<void>; discardAttachment: () => Promise<void> };
+  }
+  function retire(kind: string) {
+    if (kind === 'thread' || kind === 'ABA') { owner.current.select(B); activeConv = conversation(B, USER); activeConversationRef.current = activeConv; if (kind === 'ABA') { owner.current.select(A); activeConv = conversation(A, USER); activeConversationRef.current = activeConv; } }
+    if (kind === 'unmount') alive.current = false;
+    if (kind === 'scope' || kind === 'inactive') { scope = { ...scope, role: kind === 'scope' ? 'adult' : scope.role, active: kind !== 'inactive' }; archiveScopeRef.current = scope; }
+    if (kind === 'draft') { renderedDraft = { ...renderedDraft, text: 'New draft' }; draftRef.current = renderedDraft; }
+  }
+  async function started(kind: string) { await expect.poll(() => pending.filter(p => p.kind === kind).length).toBe(1); }
+  return { render, retire, effects, requests, pending, saved, sendIds, attachmentAttempts, failedAttachmentRef, draftRef,
+    started, resolve: () => pending.splice(0).forEach(p => p.resolve()), clear: () => { effects.length = 0; },
+    configure: (next: { fail?: typeof fail; defer?: typeof defer }) => { if (next.fail !== undefined) failMode = next.fail; if (next.defer !== undefined) deferMode = next.defer; },
+  };
+}
+const submit = { preventDefault() {} };
+
+describe('render-owned text/edit/GIF/attachment sends through the actual SDK', () => {
+  for (const action of ['text', 'edit', 'gif', 'file'] as const) for (const retirement of ['thread', 'ABA', 'unmount', 'scope', 'inactive']) it(`${action} refuses retained ${retirement} origin before dispatch`, async () => {
+    const test = sendFixture({ edit: action === 'edit' }), old = test.render(); test.retire(retirement); test.clear();
+    if (action === 'gif') await old.sendGif('https://giphy.invalid/synthetic.gif', 'Synthetic GIF');
+    else if (action === 'file') await old.sendFile(new File(['synthetic'], 'note.txt', { type: 'text/plain' }));
+    else await old.sendMessage(submit);
+    expect(test.requests).toEqual([]); expect(test.effects).toEqual([]);
+  });
+  it('refuses an old rendered draft before dispatch, including a queued pre-render text change', async () => {
+    const test = sendFixture(), old = test.render(); test.retire('draft'); await old.sendMessage(submit); expect(test.requests).toEqual([]);
+  });
+  for (const action of ['text', 'edit', 'gif'] as const) for (const retirement of ['thread', 'ABA', 'unmount', 'scope']) it(`${action} suppresses retired ${retirement} completion and reconciliation`, async () => {
+    const test = sendFixture({ defer: 'message', fail: 'lost', edit: action === 'edit' }), old = test.render();
+    const operation = action === 'gif' ? old.sendGif('https://giphy.invalid/synthetic.gif', 'Synthetic GIF') : old.sendMessage(submit);
+    await test.started('message'); test.retire(retirement); test.clear(); test.resolve(); await operation;
+    expect(test.requests).toHaveLength(1); expect(test.effects).toEqual([]);
+    if (action !== 'edit') expect(test.sendIds.current.size).toBe(1);
+  });
+  for (const action of ['text', 'edit', 'gif', 'file'] as const) it(`preserves current ${action} confirmation`, async () => {
+    const test = sendFixture({ edit: action === 'edit' }), current = test.render();
+    if (action === 'gif') await current.sendGif('https://giphy.invalid/synthetic.gif', 'Synthetic GIF');
+    else if (action === 'file') await current.sendFile(new File(['synthetic'], 'note.txt', { type: 'text/plain' }));
+    else await current.sendMessage(submit);
+    expect(test.effects.filter(e => e.kind === 'accept')).toHaveLength(1); expect(test.effects.some(e => e.kind === 'toast')).toBe(false);
+  });
+  it('blocks two text submissions before rerender', async () => {
+    const test = sendFixture({ defer: 'message' }), current = test.render(), first = current.sendMessage(submit), second = current.sendMessage(submit);
+    await test.started('message'); test.resolve(); await Promise.all([first, second]); expect(test.requests).toHaveLength(1);
+  });
+  it('does not erase a fresh draft when an issued current-visit send finishes', async () => {
+    const test = sendFixture({ defer: 'message' }), current = test.render(), operation = current.sendMessage(submit);
+    await test.started('message'); test.retire('draft'); test.clear(); test.resolve(); await operation;
+    expect(test.effects.filter(e => e.kind === 'accept')).toHaveLength(1); expect(test.effects.filter(e => e.kind === 'draft')).toEqual([]); expect(test.draftRef.current.text).toBe('New draft');
+  });
+  for (const fail of ['denied', 'zero'] as const) it(`refuses current ${fail} without false confirmation or draft clearing`, async () => {
+    const test = sendFixture({ fail }); await test.render().sendMessage(submit);
+    expect(test.effects.filter(e => e.kind === 'accept' || e.kind === 'draft')).toEqual([]); expect(test.effects.some(e => e.kind === 'toast')).toBe(true);
+  });
+  it('reconciles a committed send by exact original ID and expected payload after response loss', async () => {
+    const test = sendFixture({ fail: 'lost' }); await test.render().sendMessage(submit);
+    expect(test.requests.map(r => r.method)).toEqual(['POST', 'GET']); expect(test.effects.filter(e => e.kind === 'accept')).toHaveLength(1);
+    const check = test.requests[1].url; expect(check.searchParams.get('conversation_id')).toBe(`eq.${A}`); expect(check.searchParams.get('sender_id')).toBe(`eq.${USER}`);
+  });
+  it('does not confirm a mismatched reconciliation payload', async () => {
+    const test = sendFixture({ defer: 'check', fail: 'lost' }), operation = test.render().sendMessage(submit);
+    await test.started('check'); for (const [id, message] of test.saved) test.saved.set(id, { ...message, content: 'Different saved text' });
+    test.resolve(); await operation; expect(test.effects.filter(e => e.kind === 'accept')).toEqual([]); expect(test.effects.some(e => e.kind === 'toast')).toBe(true);
+  });
+  for (const retirement of ['thread', 'ABA', 'scope', 'unmount']) it(`an upload completed after ${retirement} makes no message dispatch and retains its retry ID`, async () => {
+    const test = sendFixture({ defer: 'upload' }), operation = test.render().sendFile(new File(['synthetic'], 'note.txt', { type: 'text/plain' }));
+    await test.started('upload'); const attempt = test.attachmentAttempts.current.get(A); test.retire(retirement); test.clear(); test.resolve(); await operation;
+    expect(test.requests).toHaveLength(1); expect(test.effects).toEqual([]); expect(test.attachmentAttempts.current.get(A)).toBe(attempt); expect(attempt.uploaded).toBe(true);
+  });
+  it('a current return to the same chat reuses the uploaded attempt and original message ID', async () => {
+    const file = new File(['synthetic'], 'note.txt', { type: 'text/plain' });
+    const test = sendFixture({ defer: 'upload' }), operation = test.render().sendFile(file); await test.started('upload');
+    const attempt = test.attachmentAttempts.current.get(A); test.retire('ABA'); test.resolve(); await operation;
+    test.configure({ defer: '' }); await test.render().sendFile(file);
+    expect(test.requests.filter(r => r.path.includes('/storage/'))).toHaveLength(1);
+    expect(test.requests.find(r => r.method === 'POST' && r.path.includes('/rest/'))?.body?.id).toBe(attempt.id);
+    expect(test.effects.filter(e => e.kind === 'accept')).toHaveLength(1);
+  });
+  it('a retained discard resolved after selection changes cannot remove an uploaded object or clear a new attempt', async () => {
+    const file = new File(['synthetic'], 'note.txt', { type: 'text/plain' }), test = sendFixture({ fail: 'denied' });
+    await test.render().sendFile(file); test.configure({ defer: 'check' });
+    const operation = test.render().discardAttachment(); await test.started('check'); test.retire('thread'); test.clear(); test.resolve(); await operation;
+    expect(test.requests.filter(r => r.method === 'DELETE')).toHaveLength(0); expect(test.effects).toEqual([]);
+  });
+  it('serializes destructive discard against same-attempt retry and duplicate discard', async () => {
+    const file = new File(['synthetic'], 'note.txt', { type: 'text/plain' }), test = sendFixture({ fail: 'denied' });
+    await test.render().sendFile(file); const attempt = test.attachmentAttempts.current.get(A);
+    test.configure({ fail: '', defer: 'remove' });
+    const discard = test.render().discardAttachment(); await test.started('remove');
+    await test.render().sendFile(file); await test.render().discardAttachment();
+    expect(test.requests.filter(r => r.method === 'POST' && r.path.includes('/rest/'))).toHaveLength(1);
+    expect(test.requests.filter(r => r.method === 'DELETE')).toHaveLength(1);
+    test.resolve(); await discard;
+    expect(test.effects.filter(e => e.kind === 'accept')).toHaveLength(0); expect(attempt.uploaded).toBe(false);
+  });
+  it('locks cleanup across ABA and reuploads a removed object before the next current send', async () => {
+    const file = new File(['synthetic'], 'note.txt', { type: 'text/plain' }), test = sendFixture({ fail: 'denied' });
+    await test.render().sendFile(file); test.configure({ fail: '', defer: 'remove' });
+    const discard = test.render().discardAttachment(); await test.started('remove'); test.retire('ABA'); test.clear();
+    await test.render().sendFile(file);
+    expect(test.requests.filter(r => r.method === 'POST' && r.path.includes('/rest/'))).toHaveLength(1);
+    test.resolve(); await discard; expect(test.effects).toEqual([]);
+    test.configure({ defer: '' }); await test.render().sendFile(file);
+    expect(test.requests.filter(r => r.method === 'POST' && r.path.includes('/storage/'))).toHaveLength(2);
+    expect(test.effects.filter(e => e.kind === 'accept')).toHaveLength(1);
   });
 });

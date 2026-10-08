@@ -336,7 +336,13 @@ describe('the reads are the shared one (source pins)', () => {
       const body = bodyOf(service, fn, 'settleAll([');
       expect(body, fn).not.toContain(".from('calendar_events')");
       const read = bodyOf(service, fn, ']);');
-      expect(read, fn).toContain('readCalendarOccurrences(scope.db, scope.familyId, instantCalendarBounds(fromIso, toIso, tz), tz');
+      if (fn === 'export async function findFreeSlots(') {
+        expect(read, fn).toContain('readCalendarOccurrences(scope.db, scope.familyId, instantCalendarBounds(fromIso, toIso, tz), tz');
+      } else {
+        expect(read, fn).toContain('window=analysisWindow(scope,input,7)');
+        expect(read, fn).toContain('readCalendarOccurrences(scope.db,scope.familyId,window.bounds,scope.tz,{overlap:true})');
+        expect(read, fn).toContain("readCalendarBusySource(scope.db,scope.familyId,'sports_events',new Date(window.from).toISOString(),new Date(window.to).toISOString(),scope.tz)");
+      }
     }
     const lookup = bodyOf(service, 'export async function findEventByTitle(', 'export type RsvpInput');
     expect(lookup).toContain('readCalendarOccurrences(db, familyId, bounds, tz');

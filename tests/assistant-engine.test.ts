@@ -107,7 +107,9 @@ beforeEach(() => {
   // serve `families` (name + zone) and a roster row that belongs to the caller.
   tables.families = { single: { id: 'fam-1', name: 'The Hughens', timezone: 'America/New_York' } };
   tables.family_members = { rows: [{ id: 'm1', user_id: 'user-1', display_name: 'Dan', role: 'parent', is_active: true }] };
-  tables.calendar_events = { rows: [{ id: 'calendar-1', title: 'Soccer', starts_at: '2026-09-06T14:00:00Z', category: 'sports' }] };
+  // Calendar context now validates complete wildcard database rows, including
+  // family scope and the nullable/default interval fields, before publication.
+  tables.calendar_events = { rows: [{ id: 'calendar-1', family_id: 'fam-1', title: 'Soccer', starts_at: '2026-09-06T14:00:00Z', ends_at: null, all_day: false, assignee_id: null, category: 'sports' }] };
   tables.chore_assignments = { rows: [{ status: 'todo' }, { status: 'in_progress' }] };
   tables.meals = { rows: [{ name: 'Tacos', meal_type: 'dinner' }] };
   tables.ai_conversations = { single: { title: 'New conversation' } };

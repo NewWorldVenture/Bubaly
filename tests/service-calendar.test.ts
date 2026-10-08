@@ -334,9 +334,9 @@ describe('busyEvenings', () => {
         return {
           data: [
             // 23:00Z on the 7th = 19:00 local on the 7th → a busy evening.
-            { id: 'evening', starts_at: '2026-09-07T23:00:00.000Z', all_day: false, recurrence: 'none' },
+            { id: 'evening', family_id: 'fam-1', title: 'Evening commitment', ends_at: null, assignee_id: null, starts_at: '2026-09-07T23:00:00.000Z', all_day: false, recurrence: 'none' },
             // 15:00Z on the 8th = 11:00 local → not an evening.
-            { id: 'daytime', starts_at: '2026-09-08T15:00:00.000Z', all_day: false, recurrence: 'none' },
+            { id: 'daytime', family_id: 'fam-1', title: 'Daytime commitment', ends_at: null, assignee_id: null, starts_at: '2026-09-08T15:00:00.000Z', all_day: false, recurrence: 'none' },
           ],
           error: null,
         };

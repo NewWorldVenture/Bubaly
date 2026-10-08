@@ -53,7 +53,7 @@ function household(aal: Aal = { currentLevel: 'aal1', nextLevel: 'aal1' }, maxRo
     { id: 'mem-parent', family_id: FAMILY, user_id: 'user-parent', display_name: 'Jordan', role: 'parent', is_active: true, birthday: null, color: 'teal', avatar_url: null },
     { id: 'mem-teen', family_id: FAMILY, user_id: 'user-teen', display_name: 'Sam', role: 'teen', is_active: true, birthday: '2011-04-02', color: 'amber', avatar_url: null },
   ]);
-  db.seed('calendar_events', [{ id: 'ev-1', family_id: FAMILY, title: 'Soccer', starts_at: `${today}T15:00:00Z`, ends_at: `${today}T16:00:00Z`, category: 'sports', assignee_id: 'mem-teen' }]);
+  db.seed('calendar_events', [{ id: 'ev-1', family_id: FAMILY, title: 'Soccer', all_day: false, starts_at: `${today}T15:00:00Z`, ends_at: `${today}T16:00:00Z`, category: 'sports', assignee_id: 'mem-teen' }]);
   db.seed('transactions', [{ id: 'tx-1', family_id: FAMILY, name: 'Groceries', merchant: 'Market', amount: 84.2, category: 'food', date: today, type: 'expense', member_id: null, account_id: null }]);
   db.seed('documents', [
     { id: 'doc-1', family_id: FAMILY, title: 'School calendar', category: 'school', mime_type: 'application/pdf', size_bytes: 10, expires_at: null, member_id: null, asset_id: null, is_secure: false, storage_path: `${FAMILY}/a.pdf` },

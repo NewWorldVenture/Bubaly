@@ -16,12 +16,15 @@
 // fastest way to lose a family's trust in the assistant.
 import 'server-only';
 import { detectConflicts, type ConflictEvent, type EventConflict } from '@/lib/home/conflicts';
-import { readCalendarOccurrences, readCalendarBusySource } from '@/lib/calendar/occurrences';
-import { allDayDate } from '@/lib/calendar/day';
+import { readCalendarOccurrences, readCalendarBusySource, readCountedRows } from '@/lib/calendar/occurrences';
+import { addDays } from '@/lib/calendar/day';
+import { CALENDAR_SOURCE_ARCHIVE_ENABLED } from '@/lib/calendar/source-capability';
+import { calendarDisplayDay } from '@/lib/calendar/display-spans';
+import { validDay } from '@/lib/onboarding/ics-time';
 import { allDayBusyInterval } from '@/lib/calendar/event-dates';
 import { calendarOpenWindowFilter, instantCalendarBounds } from '@/lib/briefing/calendar-window';
 import { freeGaps, mergeIntervals, type Interval } from '@/lib/calendar/scheduling';
-import { isValidTimezone } from '@/lib/time/zoned';
+import { instantForIcsLocalTime, isValidTimezone } from '@/lib/time/zoned';
 import type { EventCategory, Insertable, RecurrenceFreq, Tables, Updatable } from '@/lib/database.types';
 import { describeDbError } from '@/lib/supabase/errors';
 import { settleAll } from '@/lib/supabase/settle';
@@ -546,26 +549,60 @@ export async function searchEvents(scope: ServiceScope, input: SearchEventsInput
 async function searchEventRows(
   scope: ServiceScope, input: SearchEventsInput, from: string, to: string | null, limit: number,
 ): Promise<ServiceResult<CalendarEvent[]>> {
-  let query = scope.db
-    .from('calendar_events')
-    .select('*')
-    .eq('family_id', scope.familyId)
-    .order('starts_at', { ascending: true })
-    .limit(limit)
-    .gte('starts_at', from);
-  if (to) query = query.lte('starts_at', to);
-  if (input.assigneeId) query = query.eq('assignee_id', input.assigneeId);
-  if (input.categories?.length) query = query.in('category', input.categories);
-  if (input.query?.trim()) {
-    query = query.ilike('title', `%${escapeLike(input.query.trim())}%`);
-  }
+  if(CALENDAR_SOURCE_ARCHIVE_ENABLED||typeof scope.familyId!=='string'||!scope.familyId.trim())return fail('Could not load the calendar.',{code:SERVICE_CODES.db});
+  const query = () => {
+    let builder = scope.db.from('calendar_events').select('*', { count: 'exact' })
+      .eq('family_id', scope.familyId).order('starts_at', { ascending: true }).order('id').gte('starts_at', from);
+    if (to) builder = builder.lte('starts_at', to);
+    if (input.assigneeId) builder = builder.eq('assignee_id', input.assigneeId);
+    if (input.categories?.length) builder = builder.in('category', input.categories);
+    if (input.query?.trim()) builder = builder.ilike('title', `%${escapeLike(input.query.trim())}%`);
+    return builder;
+  };
+  const result = await readCountedRows<CalendarEvent>(() => query().limit(limit), (first,last) => query().range(first,last), 20_000, 'stored calendar rows', limit);
+  if (result.error) return fail(describeDbError(result.error, 'Could not load the calendar.'), { code: SERVICE_CODES.db });
+  try { validateCalendarRows(scope,result.data ?? []); }
+  catch { return fail('Could not load the calendar.', { code: SERVICE_CODES.db }); }
+  return ok(result.data ?? []);
+}
 
-  const { data, error } = await query;
-  if (error) {
-    console.error('[service:calendar] search failed', error);
-    return fail(describeDbError(error, 'Could not load the calendar.'), { code: SERVICE_CODES.db });
+/** This service consumes only genuine native rows. Never downgrade an archive
+ * projection into an actionable native identity, or publish malformed scope. */
+function validateCalendarRows(scope: ServiceScope, rows: readonly CalendarEvent[]): void {
+  if(typeof scope.familyId!=='string'||!scope.familyId.trim()||rows.length>20_000)throw new Error('Invalid calendar domain');
+  for(const row of rows){
+    if(!row||row.family_id!==scope.familyId||typeof row.id!=='string'||!row.id.trim()
+      ||typeof row.title!=='string'||typeof row.starts_at!=='string'||typeof row.all_day!=='boolean'
+      ||row.assignee_id!==null&&typeof row.assignee_id!=='string'
+      ||('source_recurrence' in row&&row.source_recurrence!==null))throw new Error('Invalid native calendar row');
+    nativeInterval(row);
   }
-  return ok(data ?? []);
+}
+function nativeInstant(value:string):number {
+  if(!/^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}(?:\.\d{1,9})?(?:Z|[+-]\d{2}:?\d{2})$/.test(value)||!validDay(value.slice(0,10)))throw new Error('Invalid native calendar instant');
+  const valueMs=Date.parse(value);
+  if(!Number.isFinite(valueMs)||+value.slice(11,13)>=24||+value.slice(14,16)>=60||+value.slice(17,19)>=60)throw new Error('Invalid native calendar instant');
+  return valueMs;
+}
+function nativeInterval(row: { starts_at:string; ends_at:string|null; all_day:boolean }) {
+  if(!validDay(row.starts_at.slice(0,10))||!Number.isFinite(Date.parse(row.starts_at)))throw new Error('Invalid calendar start');
+  if(row.all_day){
+    const start=row.starts_at.slice(0,10),end=row.ends_at===null?addDays(start,1):row.ends_at.slice(0,10);
+    if(!validDay(end)||end<=start||row.ends_at!==null&&!Number.isFinite(Date.parse(row.ends_at)))throw new Error('Invalid calendar DATE interval');
+    return {allDay:true as const,start,end};
+  }
+  const start=nativeInstant(row.starts_at),end=row.ends_at===null?start+3_600_000:nativeInstant(row.ends_at);
+  if(!Number.isFinite(start)||!Number.isFinite(end)||end<start||row.ends_at!==null&&!validDay(row.ends_at.slice(0,10)))throw new Error('Invalid calendar interval');
+  return {allDay:false as const,start,end};
+}
+function analysisWindow(scope:ServiceScope,input:{from?:string|null;to?:string|null},defaultDays:number) {
+  if((input.from!=null&&!validDay(input.from.slice(0,10)))||(input.to!=null&&!validDay(input.to.slice(0,10))))throw new Error('Invalid calendar window');
+  if(typeof scope.familyId!=='string'||!scope.familyId.trim()||typeof scope.tz!=='string'||!scope.tz.trim()||!isValidTimezone(scope.tz))throw new Error('Invalid family calendar scope');
+  const from=input.from==null?scopeNow(scope).getTime():Date.parse(input.from);
+  const to=input.to==null?from+defaultDays*86_400_000-1:Date.parse(input.to);
+  if(!Number.isFinite(from)||!Number.isFinite(to)||to<from||to-from>366*86_400_000)throw new Error('Invalid calendar window');
+  const bounds=instantCalendarBounds(new Date(from).toISOString(),new Date(to).toISOString(),scope.tz);
+  return {from,to:to+1,bounds};
 }
 
 /**
@@ -577,14 +614,21 @@ export async function findConflicts(
   scope: ServiceScope,
   input: { from?: string | null; to?: string | null } = {},
 ): Promise<ServiceResult<{ conflicts: EventConflict[]; events: Record<string, CalendarEvent> }>> {
-  const events = await searchEvents(scope, { from: input.from, to: input.to, limit: 200 });
-  if (!events.ok) return events;
-
-  const conflictEvents: ConflictEvent[] = events.data.map((e) => ({
-    id: e.id, title: e.title, starts_at: e.starts_at, ends_at: e.ends_at, all_day: e.all_day, assignee_id: e.assignee_id,
+  let window:ReturnType<typeof analysisWindow>;
+  try { window=analysisWindow(scope,input,366); }
+  catch { return fail('That window could not be understood.', { code: SERVICE_CODES.invalidInput }); }
+  const result=await readCalendarOccurrences(scope.db,scope.familyId,window.bounds,scope.tz,{overlap:true});
+  if(result.error)return fail(describeDbError(result.error,'Could not load the calendar.'),{code:SERVICE_CODES.db});
+  const events=result.data;
+  try { validateCalendarRows(scope,events); }
+  catch { return fail('Could not load the calendar.',{code:SERVICE_CODES.db}); }
+  const conflictEvents:ConflictEvent[]=events.map(e=>({
+    id:e.id,title:e.title,starts_at:e.starts_at,ends_at:e.ends_at,all_day:e.all_day,assignee_id:e.assignee_id,
+    occurrenceKey:JSON.stringify(['native',e.id,e.starts_at]),reference:{kind:'native' as const,eventId:e.id},
   }));
-  const byId = Object.fromEntries(events.data.map((e) => [e.id, e]));
-  return ok({ conflicts: detectConflicts(conflictEvents, DEFAULT_DURATION_MIN), events: byId });
+  // The lookup is keyed by real action identity; occurrence keys remain separate.
+  const byId=Object.fromEntries(events.map(e=>[e.id,e]));
+  return ok({conflicts:detectConflicts(conflictEvents,DEFAULT_DURATION_MIN),events:byId});
 }
 
 export type WorkingHours = { startHour: number; endHour: number };
@@ -726,45 +770,37 @@ export async function busyEvenings(
   scope: ServiceScope,
   input: { from?: string | null; to?: string | null; eveningFromHour?: number } = {},
 ): Promise<ServiceResult<string[]>> {
-  const now = scopeNow(scope);
-  const fromMs = Date.parse(isoOrNull(input.from) ?? now.toISOString());
-  const toMs = Date.parse(isoOrNull(input.to) ?? new Date(fromMs + 7 * 24 * 3600_000).toISOString());
-  if (!Number.isFinite(fromMs) || !Number.isFinite(toMs) || toMs <= fromMs) {
-    return fail('That window could not be understood.', { code: SERVICE_CODES.invalidInput });
-  }
-
-  const fromIso = new Date(fromMs).toISOString();
-  const toIso = new Date(toMs).toISOString();
-  // Series included: a Tuesday practice takes every Tuesday evening.
-  const tz = zoneOf(scope);
-  const [calendar, sports] = await settleAll([
-    readCalendarOccurrences(scope.db, scope.familyId, instantCalendarBounds(fromIso, toIso, tz), tz, {
-      columns: ['starts_at', 'all_day'],
-    }),
-    scope.db.from('sports_events').select('starts_at')
-      .eq('family_id', scope.familyId).gte('starts_at', fromIso).lte('starts_at', toIso),
+  const hour=input.eveningFromHour??17;
+  if(!Number.isInteger(hour)||hour<0||hour>23)return fail('That window could not be understood.',{code:SERVICE_CODES.invalidInput});
+  let window:ReturnType<typeof analysisWindow>;
+  const evenings:{day:string;start:number;end:number}[]=[];
+  try {
+    window=analysisWindow(scope,input,7);
+    for(let day=window.bounds.allDayFromDay;day<window.bounds.allDayToDay;day=addDays(day,1)){
+      if(evenings.length>=367)throw new Error('Calendar day bound exceeded');
+      const actual=calendarDisplayDay(day,scope.tz);
+      const [year,month,date]=day.split('-').map(Number);
+      const threshold=instantForIcsLocalTime(year,month,date,hour*60,scope.tz);
+      if(!threshold)throw new Error('Invalid evening boundary');
+      evenings.push({day,start:Math.max(window.from,actual.start,threshold.getTime()),end:Math.min(window.to,actual.end)});
+    }
+  } catch { return fail('That window could not be understood.',{code:SERVICE_CODES.invalidInput}); }
+  const [calendar,sports]=await settleAll([
+    readCalendarOccurrences(scope.db,scope.familyId,window.bounds,scope.tz,{overlap:true}),
+    readCalendarBusySource(scope.db,scope.familyId,'sports_events',new Date(window.from).toISOString(),new Date(window.to).toISOString(),scope.tz),
   ]);
-  if (calendar.error || sports.error) {
-    console.error('[service:calendar] busy evenings read failed', calendar.error ?? sports.error);
-    return fail(describeDbError(calendar.error ?? sports.error, 'Could not check the week ahead.'), { code: SERVICE_CODES.db });
-  }
-
-  const eveningHour = input.eveningFromHour ?? 17;
-  const keys = new Set<string>();
-  const consider = (startsAt: string, allDay: boolean) => {
-    const ms = Date.parse(startsAt);
-    if (!Number.isFinite(ms)) return;
-    // An all-day commitment consumes the evening of its OWN date (its UTC date,
-    // lib/calendar/day.ts), not the family's day of its stored instant — which
-    // west of Greenwich is the evening before.
-    if (allDay) { keys.add(allDayDate(startsAt)); return; }
-    const key = dayKeyInTz(new Date(ms), scope.tz);
-    if (ms >= zonedTimeMs(key, eveningHour, 0, scope.tz)) keys.add(key);
-  };
-  for (const e of calendar.data ?? []) consider(e.starts_at, e.all_day);
-  for (const e of sports.data ?? []) consider(e.starts_at, false);
-
-  return ok([...keys].sort());
+  if(calendar.error||sports.error)return fail(describeDbError(calendar.error??sports.error,'Could not check the week ahead.'),{code:SERVICE_CODES.db});
+  try {
+    validateCalendarRows(scope,calendar.data??[]);
+    const intervals=(calendar.data??[]).map(nativeInterval);
+    for(const row of sports.data??[]){
+      if(typeof row.id!=='string'||!row.id.trim())throw new Error('Invalid sports identity');
+      intervals.push(nativeInterval({...row,all_day:false}));
+    }
+    return ok(evenings.filter(evening=>evening.end>evening.start&&intervals.some(interval=>interval.allDay
+      ? interval.start<=evening.day&&evening.day<interval.end
+      : interval.start<evening.end&&interval.end>evening.start&&interval.end>interval.start)).map(evening=>evening.day));
+  } catch { return fail('Could not check the week ahead.',{code:SERVICE_CODES.db}); }
 }
 
 /**

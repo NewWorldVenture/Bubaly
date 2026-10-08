@@ -102,7 +102,9 @@ async function fixture(page: Page, { holdA = false, mobile = false, olderHistory
         return {data:JSON.parse(JSON.stringify(singular?(selected[0]??null):selected)),count,error:null};
       }return q;
     }
-    const db={from:query,rpc:(name,args)=>{
+    p.uploads=[];p.pendingUploads=[];p.holdUpload=false;
+    p.releaseUploads=async()=>{p.holdUpload=false;for(const resolve of p.pendingUploads.splice(0))resolve();await p.flush();};
+    const db={storage:{from:bucket=>({upload:async(path,file,options)=>{p.uploads.push({bucket,path,name:file.name,options});if(p.holdUpload)await new Promise(resolve=>p.pendingUploads.push(resolve));return{data:{path},error:null};}})},from:query,rpc:(name,args)=>{
       if(!legacy&&name==='family_conversation_overview'){let offset=0,limit=Infinity;const rows=convs.map(conv=>{const rows=p.rows.filter(row=>row.conversation_id===conv.id);return{conversation_id:conv.id,last_message:rows.at(-1)||null,unread_count:rows.filter(row=>row.sender_id!==userId&&!row.read_by.includes(userId)).length};}).sort((a,b)=>a.conversation_id.localeCompare(b.conversation_id));const q={order:()=>q,limit:n=>{limit=n;return q;},range:(from,to)=>{offset=from;limit=to-from+1;return q;},then:(resolve,reject)=>Promise.resolve({data:rows.slice(offset,offset+limit),count:rows.length,error:null}).then(resolve,reject)};return q;}
       return (async()=>{
       if(legacy&&name==='mark_conversation_read'){p.reads.push({legacy:name,...args});for(const row of p.rows)if(row.conversation_id===args.p_conversation_id)row.read_by=[...new Set([...row.read_by,userId])];return{data:null,error:null};}
@@ -142,6 +144,104 @@ async function fixture(page: Page, { holdA = false, mobile = false, olderHistory
 const composer = (page: Page) => page.getByRole('textbox', { name: 'Type a message...' });
 const select = (page: Page, name: string) => page.getByRole('button', { name: new RegExp(`^💬 Chat ${name}`) }).click();
 const clean = async (page: Page) => expect(await page.evaluate(() => (window as any).__familyChat.errors)).toEqual([]);
+
+async function retainSend(page: Page) {
+  await page.evaluate(() => {
+    const form = document.querySelector('textarea')!.closest('form')!;
+    const props = Object.keys(form).find(key => key.startsWith('__reactProps$'))!;
+    (window as any).__familyChat.retainedSend = (form as any)[props].onSubmit;
+  });
+}
+
+for (const retired of ['thread', 'ABA', 'inactive', 'unmount'] as const) {
+  test(`a retained send refuses ${retired} ownership before dispatch`, async ({ page }) => {
+    await fixture(page);
+    await composer(page).fill('Retained A draft');
+    await retainSend(page);
+    if (retired === 'thread' || retired === 'ABA') {
+      await select(page, 'B');
+      if (retired === 'ABA') await select(page, 'A');
+    } else if (retired === 'inactive') {
+      await page.evaluate(() => (window as any).__familyChat.setAuthority('parent', false));
+    } else await page.evaluate(() => (window as any).__familyChat.unmount());
+    await page.evaluate(async () => {
+      const state = (window as any).__familyChat;
+      await state.retainedSend({ preventDefault() {} }); await state.flush();
+    });
+    expect(await page.evaluate(() => (window as any).__familyChat.insertIds)).toEqual([]);
+    expect(await page.evaluate(() => (window as any).__familyChat.notices)).toEqual([]);
+    await clean(page);
+  });
+}
+
+test('a current send refuses two queued submits and keeps later typing', async ({ page }) => {
+  await fixture(page);
+  await composer(page).fill('One issued send');
+  await retainSend(page);
+  await page.evaluate(() => {
+    const state = (window as any).__familyChat; state.holdInsert = true;
+    state.retainedSend({ preventDefault() {} }); state.retainedSend({ preventDefault() {} });
+  });
+  await expect.poll(() => page.evaluate(() => (window as any).__familyChat.pendingInsert.length)).toBe(1);
+  await composer(page).fill('Keep newly typed draft');
+  await page.evaluate(() => (window as any).__familyChat.releaseInsert());
+  await expect(composer(page)).toHaveValue('Keep newly typed draft');
+  await expect(page.locator('[id^="message-"]').filter({ hasText: 'One issued send' })).toHaveCount(1);
+  expect(await page.evaluate(() => (window as any).__familyChat.insertIds.length)).toBe(1);
+  await clean(page);
+});
+
+test('canceling a reply synchronously retires the queued old draft submit', async ({ page }) => {
+  await fixture(page);
+  await page.locator('#message-40000000-0000-4000-8000-000000000001').getByRole('button', { name: 'More actions' }).click();
+  await page.getByRole('button', { name: 'Reply', exact: true }).last().click();
+  await composer(page).fill('Send without canceled reply'); await retainSend(page);
+  await page.getByRole('button', { name: 'Cancel reply', exact: true }).evaluate(button => {
+    const props = Object.keys(button).find(key => key.startsWith('__reactProps$'))!;
+    (button as any)[props].onClick();
+    (window as any).__familyChat.retainedSend({ preventDefault() {} });
+  });
+  expect(await page.evaluate(() => (window as any).__familyChat.insertIds)).toEqual([]);
+  await page.getByRole('button', { name: 'Send message', exact: true }).click();
+  await expect.poll(() => page.evaluate(() => (window as any).__familyChat.insertIds.length)).toBe(1);
+  expect(await page.evaluate(() => (window as any).__familyChat.writes[0].reply_to_id)).toBeNull();
+  await clean(page);
+});
+
+test('a current upload is pending, not falsely unconfirmed, and sends once', async ({ page }) => {
+  await fixture(page);
+  await page.evaluate(() => { (window as any).__familyChat.holdUpload = true; });
+  await page.locator('input[type="file"]').first().setInputFiles({ name: 'current.txt', mimeType: 'text/plain', buffer: Buffer.from('synthetic attachment') });
+  await expect.poll(() => page.evaluate(() => (window as any).__familyChat.pendingUploads.length)).toBe(1);
+  await expect(page.getByRole('alert')).toHaveCount(0);
+  expect(await page.evaluate(() => (window as any).__familyChat.insertIds)).toEqual([]);
+  await page.evaluate(() => (window as any).__familyChat.releaseUploads());
+  await expect.poll(() => page.evaluate(() => (window as any).__familyChat.insertIds.length)).toBe(1);
+  await expect(page.getByRole('alert')).toHaveCount(0);
+  expect(await page.evaluate(() => (window as any).__familyChat.uploads.length)).toBe(1);
+  await clean(page);
+});
+
+test('a retired upload cannot send into B and remains retryable in A without reupload', async ({ page }) => {
+  await fixture(page);
+  await page.evaluate(() => { (window as any).__familyChat.holdUpload = true; });
+  await page.locator('input[type="file"]').first().setInputFiles({ name: 'retired.txt', mimeType: 'text/plain', buffer: Buffer.from('synthetic attachment') });
+  await expect.poll(() => page.evaluate(() => (window as any).__familyChat.pendingUploads.length)).toBe(1);
+  await select(page, 'B');
+  await composer(page).fill('B remains untouched');
+  await page.evaluate(() => (window as any).__familyChat.releaseUploads());
+  expect(await page.evaluate(() => (window as any).__familyChat.insertIds)).toEqual([]);
+  await expect(composer(page)).toHaveValue('B remains untouched');
+  await expect(page.getByRole('alert')).toHaveCount(0);
+  await select(page, 'A');
+  await expect(page.getByRole('alert')).toContainText('retired.txt');
+  await page.getByRole('button', { name: 'Retry attachment', exact: true }).click();
+  await expect.poll(() => page.evaluate(() => (window as any).__familyChat.insertIds.length)).toBe(1);
+  expect(await page.evaluate(() => (window as any).__familyChat.uploads.length)).toBe(1);
+  expect(await page.evaluate(() => (window as any).__familyChat.writes[0].conversation_id)).toBe(conversationA);
+  await expect(page.getByRole('alert')).toHaveCount(0);
+  await clean(page);
+});
 
 test('a confirmed send renders without any realtime event', async ({ page }) => {
   await fixture(page);

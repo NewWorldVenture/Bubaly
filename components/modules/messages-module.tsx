@@ -112,7 +112,7 @@ function MessagesWorkspace() {
   const [messages, setMessages] = useState<Message[]>([]);
   const [loadingMsgs, setLoadingMsgs] = useState(false);
   const [text, setText] = useState('');
-  const [sending, setSending] = useState(false);
+  const [sendPending, setSending] = useState(false);
   const [replyTo, setReplyTo] = useState<Message | null>(null);
   const [editMessage, setEditMessage] = useState<Message | null>(null);
   const [hasOlder, setHasOlder] = useState(false);
@@ -139,9 +139,13 @@ function MessagesWorkspace() {
   const [typingIds, setTypingIds] = useState<string[]>([]);
   const typingChannel = useRef<RealtimeChannel | null>(null);
   const owner = useRef(createThreadOwner());
+  const messageOrigin = owner.current.capture();
+  type MessageOperation = { origin: typeof messageOrigin; scope: typeof archiveScope; row: Conversation; request: number };
+  const sendFlight = useRef<MessageOperation | null>(null);
   const drafts = useRef(new Map<string, ThreadDraft<Message>>());
   const draftRef = useRef<ThreadDraft<Message>>({ text: '', reply: null, edit: null });
-  draftRef.current = { text, reply: replyTo, edit: editMessage };
+  const renderedDraft = useMemo(() => ({ text, reply: replyTo, edit: editMessage, conversationId: activeConvId }), [text, replyTo, editMessage, activeConvId]);
+  draftRef.current = renderedDraft;
   const alive = useRef(true);
   const threadRef = useRef<HTMLDivElement>(null);
   const liveRows = useRef(new Map<string, Message>());
@@ -153,6 +157,7 @@ function MessagesWorkspace() {
   const readPending = useRef(false);
   const sendIds = useRef(new Map<string, string>());
   const sendRequest = useRef(0);
+  const sending = sendPending && sendFlight.current !== null && isCurrentMessageOperation(sendFlight.current);
   const micRequest = useRef(0);
   const stoppedStreams = useRef(new WeakSet<MediaStream>());
   const releaseStream = useCallback((stream: MediaStream | null) => {
@@ -546,27 +551,55 @@ function MessagesWorkspace() {
     void loadConversations();
   }
 
-  async function insertMessage(payload: Insertable<'family_messages'> & { id: string }): Promise<Message> {
+  function isCurrentMessageOrigin() {
+    return alive.current && archiveScopeRef.current === archiveScope && archiveScope.active !== false
+      && owner.current.current(messageOrigin) && activeConv?.id === messageOrigin.conversationId
+      && activeConv?.family_id === familyId && sameArchiveRow(activeConversationRef.current, activeConv);
+  }
+  function isCurrentMessageOperation(operation: MessageOperation) {
+    return alive.current && archiveScopeRef.current === operation.scope && operation.scope.active !== false
+      && owner.current.current(operation.origin) && sameArchiveRow(activeConversationRef.current, operation.row);
+  }
+  function beginMessageOperation(): MessageOperation | null {
+    if (!activeConv || !isCurrentMessageOrigin()) return null;
+    return { origin: messageOrigin, scope: archiveScope, row: { ...activeConv }, request: ++sendRequest.current };
+  }
+  function confirmsMessage(message: Message, payload: Insertable<'family_messages'> & { id: string }) {
+    return message.id === payload.id && message.family_id === payload.family_id && message.conversation_id === payload.conversation_id
+      && message.sender_id === payload.sender_id && message.kind === payload.kind && message.content === (payload.content ?? null)
+      && message.reply_to_id === (payload.reply_to_id ?? null) && message.attachment_url === (payload.attachment_url ?? null)
+      && !message.deleted_at;
+  }
+  async function insertMessage(payload: Insertable<'family_messages'> & { id: string }, current: () => boolean): Promise<Message> {
+    if (!current() || typeof payload.sender_id !== 'string' || !payload.sender_id
+      || typeof payload.family_id !== 'string' || !payload.family_id
+      || typeof payload.conversation_id !== 'string' || !payload.conversation_id) throw new Error(tr('messagesChat.sendUnconfirmed'));
     const supabase = createClient();
     const response = await supabase.from('family_messages').insert(payload).select('*').single();
-    if (response.data && !response.error) return response.data;
-    // The write can commit before the response is lost. Reconcile by the same
-    // client-generated id, and retain that id on retry to prevent duplicate sends.
-    const check = await supabase.from('family_messages').select('*').eq('id', payload.id).eq('family_id', familyId).maybeSingle();
-    if (check.data && !check.error) return check.data;
+    if (!current()) throw new Error(tr('messagesChat.sendUnconfirmed'));
+    if (response.data && !response.error && confirmsMessage(response.data, payload)) return response.data;
+    // Retain the same client id across retries. A retired visit must not issue
+    // another read; its next current visit can reconcile an already saved row.
+    const check = await supabase.from('family_messages').select('*').eq('id', payload.id).eq('family_id', payload.family_id).eq('conversation_id', payload.conversation_id).eq('sender_id', payload.sender_id).maybeSingle();
+    if (!current()) throw new Error(tr('messagesChat.sendUnconfirmed'));
+    if (check.data && !check.error && confirmsMessage(check.data, payload)) return check.data;
     throw response.error ?? check.error ?? new Error(tr('messagesChat.sendUnconfirmed'));
   }
 
   // ── Send message ───────────────────────────────────────────
   async function sendMessage(e: React.FormEvent) {
     e.preventDefault();
-    const content = text.trim();
-    if (!content || !activeConv || sending || (activeConv.is_archived && !editMessage)) return;
+    if (!isCurrentMessageOrigin() || draftRef.current !== renderedDraft || sending
+      || sendFlight.current && isCurrentMessageOperation(sendFlight.current)) return;
+    const content = renderedDraft.text.trim();
+    if (!content || !activeConv || (activeConv.is_archived && !renderedDraft.edit)) return;
     if (content.length > 4000) { toastError(tr('validation.messageTooLong', { max: 4000 })); return; }
+    const submitted = renderedDraft;
+    if (submitted.edit && (submitted.edit.family_id !== familyId || submitted.edit.conversation_id !== activeConv.id || submitted.edit.sender_id !== userId)) return;
+    const operation = beginMessageOperation(); if (!operation) return;
+    sendFlight.current = operation;
+    const current = () => isCurrentMessageOperation(operation) && sendFlight.current === operation;
     const convId = activeConv.id;
-    const ticket = owner.current.capture();
-    const request = ++sendRequest.current;
-    const submitted = draftRef.current;
     const key = JSON.stringify([convId, content, submitted.reply?.id, submitted.edit?.id]);
     const id = sendIds.current.get(key) ?? crypto.randomUUID();
     sendIds.current.set(key, id);
@@ -575,31 +608,29 @@ function MessagesWorkspace() {
       let message: Message;
       if (submitted.edit) {
         const { data, error } = await createClient().from('family_messages').update({ content }).eq('id', submitted.edit.id).eq('family_id', familyId).eq('sender_id', userId).eq('conversation_id', convId).is('deleted_at', null).select('*').single();
-        if (error || !data) throw error ?? new Error(tr('messagesChat.editFailed'));
+        if (!current()) return;
+        if (error || !data || data.id !== submitted.edit.id || data.family_id !== familyId || data.conversation_id !== convId || data.sender_id !== userId || data.content !== content || data.deleted_at) throw error ?? new Error(tr('messagesChat.editFailed'));
         message = data;
       } else message = await insertMessage({
-        id, conversation_id: convId,
-        family_id: familyId,
-        sender_id: userId,
-        sender_name: myName,
-        content,
-        kind: 'text',
-        reply_to_id: submitted.reply?.conversation_id === convId ? submitted.reply.id : null,
-      });
+        id, conversation_id: convId, family_id: familyId, sender_id: userId, sender_name: myName,
+        content, kind: 'text', reply_to_id: submitted.reply?.conversation_id === convId && submitted.reply.family_id === familyId ? submitted.reply.id : null,
+      }, current);
+      if (!current()) return;
       acceptMessage(message);
       sendIds.current.delete(key);
-      const isCurrent = owner.current.capture().conversationId === convId;
-      const next = clearConfirmedDraft(isCurrent ? draftRef.current : drafts.current.get(convId) ?? submitted, submitted);
+      const next = draftRef.current === submitted ? clearConfirmedDraft(submitted, submitted) : draftRef.current;
       drafts.current.set(convId, next);
-      if (isCurrent && alive.current) {
+      if (draftRef.current === submitted) {
+        draftRef.current = next;
         setText(next.text); setReplyTo(next.reply); setEditMessage(next.edit);
         inputRef.current?.focus();
-        requestAnimationFrame(() => { if (owner.current.current(ticket)) bottomRef.current?.scrollIntoView({ behavior: 'smooth', block: 'end' }); });
+        requestAnimationFrame(() => { if (current()) bottomRef.current?.scrollIntoView({ behavior: 'smooth', block: 'end' }); });
       }
-    } catch (err) {
-      if (alive.current && request === sendRequest.current && owner.current.current(ticket)) toastError(describeDbError(err));
-    } finally {
-      if (alive.current && request === sendRequest.current && owner.current.current(ticket)) setSending(false);
+    } catch (err) { if (current()) toastError(describeDbError(err)); }
+    finally {
+      const stillCurrent = current();
+      if (sendFlight.current === operation) sendFlight.current = null;
+      if (stillCurrent) setSending(false);
     }
   }
 
@@ -607,52 +638,64 @@ function MessagesWorkspace() {
   // GIFs reuse the image render path: a family_messages row with kind 'image'
   // and the (remote, Giphy-hosted) attachment_url — no storage upload needed.
   async function sendGif(url: string, title: string) {
-    if (activeConv?.is_archived) return;
-    if (!activeConv || sending) return;
+    if (!isCurrentMessageOrigin() || draftRef.current !== renderedDraft || !activeConv || activeConv.is_archived
+      || sendFlight.current && isCurrentMessageOperation(sendFlight.current)) return;
+    const operation = beginMessageOperation(); if (!operation) return;
+    sendFlight.current = operation;
+    const current = () => isCurrentMessageOperation(operation) && sendFlight.current === operation;
     setShowGifPicker(false);
     const convId = activeConv.id;
-    const ticket = owner.current.capture();
-    const request = ++sendRequest.current;
-    const reply = replyTo?.conversation_id === convId ? replyTo.id : null;
+    const reply = renderedDraft.reply?.conversation_id === convId && renderedDraft.reply.family_id === familyId ? renderedDraft.reply.id : null;
     const key = JSON.stringify([convId, url, reply]);
     const id = sendIds.current.get(key) ?? crypto.randomUUID();
-    sendIds.current.set(key, id);
-    setSending(true);
+    sendIds.current.set(key, id); setSending(true);
     try {
-      const message = await insertMessage({
-        id, conversation_id: convId,
-        family_id: familyId,
-        sender_id: userId,
-        sender_name: myName,
-        content: title || 'GIF',
-        kind: 'image',
-        attachment_url: url,
-        reply_to_id: reply,
-      });
-      acceptMessage(message);
-      sendIds.current.delete(key);
-      if (owner.current.capture().conversationId === convId) setReplyTo(null);
-    } catch (err) {
-      if (alive.current && request === sendRequest.current && owner.current.current(ticket)) toastError(describeDbError(err));
-    } finally {
-      if (alive.current && request === sendRequest.current && owner.current.current(ticket)) setSending(false);
+      const message = await insertMessage({ id, conversation_id: convId, family_id: familyId, sender_id: userId,
+        sender_name: myName, content: title || 'GIF', kind: 'image', attachment_url: url, reply_to_id: reply }, current);
+      if (!current()) return;
+      acceptMessage(message); sendIds.current.delete(key);
+      if (draftRef.current === renderedDraft) { draftRef.current = { ...renderedDraft, reply: null }; setReplyTo(null); }
+    } catch (err) { if (current()) toastError(describeDbError(err)); }
+    finally {
+      const stillCurrent = current();
+      if (sendFlight.current === operation) sendFlight.current = null;
+      if (stillCurrent) setSending(false);
     }
   }
 
   // ── Send image/file ─────────────────────────────────────────
-  const [uploadingFile, setUploadingFile] = useState(false);
-  type AttachmentAttempt = { file: File; convId: string; replyId: string | null; id: string; path: string; uploaded: boolean };
+  const [uploadPending, setUploadingFile] = useState(false);
+  const uploadFlight = useRef<MessageOperation | null>(null);
+  const uploadingFile = uploadPending && uploadFlight.current !== null && isCurrentMessageOperation(uploadFlight.current);
+  type AttachmentAttempt = { familyId: string; userId: string; file: File; convId: string; replyId: string | null; id: string; path: string; uploaded: boolean; discarding?: boolean };
   const [failedAttachment, setFailedAttachment] = useState<AttachmentAttempt | null>(null);
+  const attachmentAttempts = useRef(new Map<string, AttachmentAttempt>());
+  const failedAttachmentRef = useRef(failedAttachment);
+  failedAttachmentRef.current = failedAttachment;
   const uploadLock = useRef(false);
+  function rememberAttachment(attempt: AttachmentAttempt | null) {
+    if (attempt) attachmentAttempts.current.set(attempt.convId, attempt);
+    else if (failedAttachmentRef.current) attachmentAttempts.current.delete(failedAttachmentRef.current.convId);
+    failedAttachmentRef.current = attempt; setFailedAttachment(attempt);
+  }
   async function sendFile(file: File) {
-    if (activeConv?.is_archived) return;
-    if (!activeConv || uploadLock.current || recording || requestingMic.current) return;
+    if (!isCurrentMessageOrigin() || draftRef.current !== renderedDraft || !activeConv || activeConv.is_archived || recording || requestingMic.current
+      || uploadFlight.current && isCurrentMessageOperation(uploadFlight.current)) return;
     // 25 MB cap mirrors the storage bucket limit; fail fast with a clear message.
     if (file.size > 25 * 1024 * 1024) { toastError(tr('validation.fileTooLarge', { max: 25 })); return; }
-    const attempt = failedAttachment?.file === file ? failedAttachment : {
-      file, convId: activeConv.id, replyId: replyTo?.conversation_id === activeConv.id ? replyTo.id : null,
+    const previousAttempt = attachmentAttempts.current.get(activeConv.id);
+    // Destructive cleanup remains pending even if its original visit retires.
+    // Do not race an issued deletion by retrying or replacing its object.
+    if (previousAttempt?.discarding) return;
+    const attempt = previousAttempt?.file === file ? previousAttempt : {
+      familyId, userId, file, convId: activeConv.id, replyId: renderedDraft.reply?.conversation_id === activeConv.id && renderedDraft.reply.family_id === familyId ? renderedDraft.reply.id : null,
       id: crypto.randomUUID(), path: familyMediaPath(familyId, `messages/${activeConv.id}/${userId}`, file.name), uploaded: false,
     };
+    if (attempt.convId !== activeConv.id || attempt.familyId !== familyId || attempt.userId !== userId) return;
+    const operation = beginMessageOperation(); if (!operation) return;
+    uploadFlight.current = operation;
+    const current = () => isCurrentMessageOperation(operation) && uploadFlight.current === operation;
+    rememberAttachment(attempt);
     uploadLock.current = true;
     setUploadingFile(true);
     try {
@@ -662,6 +705,7 @@ function MessagesWorkspace() {
         if ((upErr || !stored) && String((upErr as { statusCode?: string } | null)?.statusCode) !== '409' && !/already exists/i.test(upErr?.message ?? '')) throw upErr ?? new Error(tr('messagesChat.uploadUnconfirmed'));
         attempt.uploaded = true;
       }
+      if (!current()) return;
       const isImage = file.type.startsWith('image/');
       const isAudio = file.type.startsWith('audio/');
       const kind = isImage ? 'image' : isAudio ? 'audio' : 'file';
@@ -676,30 +720,48 @@ function MessagesWorkspace() {
         attachment_name: file.name,
         attachment_mime: file.type,
         reply_to_id: attempt.replyId,
-      });
+      }, current);
+      if (!current()) return;
       acceptMessage(message);
-      if (alive.current) { setFailedAttachment(null); if (owner.current.capture().conversationId === attempt.convId) setReplyTo(null); }
+      if (failedAttachmentRef.current === attempt) rememberAttachment(null);
+      if (draftRef.current === renderedDraft) { draftRef.current = { ...renderedDraft, reply: null }; setReplyTo(null); }
     } catch (err) {
-      if (alive.current) { setFailedAttachment(attempt); toastError(describeDbError(err)); }
+      if (current()) { rememberAttachment(attempt); toastError(describeDbError(err)); }
     } finally {
-      uploadLock.current = false;
-      if (alive.current) setUploadingFile(false);
+      const stillCurrent = current();
+      if (uploadFlight.current === operation) { uploadFlight.current = null; uploadLock.current = false; }
+      if (stillCurrent) setUploadingFile(false);
     }
   }
 
   async function discardAttachment() {
-    if (!failedAttachment || uploadingFile) return;
+    if (!isCurrentMessageOrigin() || !failedAttachment || failedAttachment.discarding || uploadingFile || failedAttachment.convId !== activeConv?.id
+      || failedAttachment.familyId !== familyId || failedAttachment.userId !== userId) return;
     const attempt = failedAttachment;
+    const operation = beginMessageOperation(); if (!operation) return;
+    const current = () => isCurrentMessageOperation(operation) && failedAttachmentRef.current === attempt;
+    attempt.discarding = true;
+    try {
     const supabase = createClient();
-    // Never remove media belonging to a committed message after a lost response.
-    const check = await settle(supabase.from('family_messages').select('*').eq('id', attempt.id).maybeSingle());
+    const check = await settle(supabase.from('family_messages').select('*').eq('id', attempt.id).eq('family_id', familyId).eq('conversation_id', attempt.convId).eq('sender_id', userId).maybeSingle());
+    if (!current()) return;
     if (check.error) { toastError(describeDbError(check.error)); return; }
-    if (check.data) acceptMessage(check.data);
-    else if (attempt.uploaded) {
+    if (check.data) {
+      if (check.data.id !== attempt.id || check.data.family_id !== familyId || check.data.conversation_id !== attempt.convId || check.data.sender_id !== userId) { toastError(tr('messagesChat.sendUnconfirmed')); return; }
+      acceptMessage(check.data);
+    } else if (attempt.uploaded) {
+      // A transport/confirmation error can still mean the object was removed.
+      // A later retry must re-upload (or safely reconcile an existing object).
+      attempt.uploaded = false;
       const removal = await removeFamilyMedia(supabase, attempt.path);
+      if (!current()) return;
       if (removal.error) { toastError(describeDbError(removal.error)); return; }
     }
-    if (alive.current) setFailedAttachment(null);
+    if (current()) rememberAttachment(null);
+    } finally {
+      attempt.discarding = false;
+      if (current()) rememberAttachment(attempt);
+    }
   }
 
   // ── Record voice message ─────────────────────────────────────
@@ -716,7 +778,7 @@ function MessagesWorkspace() {
   const [micPending, setMicPending] = useState(false);
 
   async function startRecording() {
-    if (recording || requestingMic.current || uploadingFile || sending || !activeConv || activeConv.is_archived) return;
+    if (!isCurrentMessageOrigin() || recording || requestingMic.current || uploadingFile || sending || !activeConv || activeConv.is_archived) return;
     if (typeof navigator === 'undefined' || !navigator.mediaDevices || typeof MediaRecorder === 'undefined') {
       toastError(tr('messagesModule.voiceRecordingIsnTSupported'));
       return;
@@ -817,7 +879,9 @@ function MessagesWorkspace() {
     const previous = owner.current.capture().conversationId;
     if (previous) drafts.current.set(previous, draftRef.current);
     stopRecording(true);
-    sendRequest.current++; setSending(false);
+    sendRequest.current++; sendFlight.current = null; setSending(false);
+    uploadFlight.current = null; uploadLock.current = false; setUploadingFile(false);
+    const attachment = attachmentAttempts.current.get(conv.id) ?? null; failedAttachmentRef.current = attachment; setFailedAttachment(attachment);
     micRequest.current++; requestingMic.current = false; setMicPending(false);
     owner.current.select(conv.id);
     liveRows.current.clear();
@@ -1320,7 +1384,7 @@ function MessagesWorkspace() {
                                 {emoji}
                               </button>
                             ))}
-                            <button aria-label={tr('a11y.reply')} onClick={() => { setReplyTo(msg); setEditMessage(null); inputRef.current?.focus(); }}
+                            <button aria-label={tr('a11y.reply')} onClick={() => { draftRef.current = { ...draftRef.current, reply: msg, edit: null }; setReplyTo(msg); setEditMessage(null); inputRef.current?.focus(); }}
                               className="hidden xl:block rounded-full bg-elevated p-1.5 text-muted hover:text-fg transition">
                               <Reply className="h-3.5 w-3.5" />
                             </button>
@@ -1338,12 +1402,12 @@ function MessagesWorkspace() {
                                 <button onClick={() => pinMessage(msg)} className="flex w-full items-center gap-2 px-3 py-2 text-xs hover:bg-surface/40">
                                   <Pin className="h-3.5 w-3.5" /> {msg.is_pinned ? 'Unpin' : 'Pin'}
                                 </button>
-                                <button onClick={() => { setReplyTo(msg); setEditMessage(null); setMsgMenu(null); inputRef.current?.focus(); }} className="flex w-full items-center gap-2 px-3 py-2 text-xs hover:bg-surface/40">
+                                <button onClick={() => { draftRef.current = { ...draftRef.current, reply: msg, edit: null }; setReplyTo(msg); setEditMessage(null); setMsgMenu(null); inputRef.current?.focus(); }} className="flex w-full items-center gap-2 px-3 py-2 text-xs hover:bg-surface/40">
                                   <Reply className="h-3.5 w-3.5" /> {tr('messages.reply')}
                                 </button>
                                 {isMine && (
                                   <>
-                                  {msg.kind === 'text' && <button type="button" onClick={() => { setEditMessage(msg); setReplyTo(null); setText(msg.content ?? ''); setMsgMenu(null); inputRef.current?.focus(); }} className="flex w-full items-center gap-2 px-3 py-2 text-xs hover:bg-surface/40"><Pencil className="h-3.5 w-3.5" /> {tr('messagesChat.edit')}</button>}
+                                  {msg.kind === 'text' && <button type="button" onClick={() => { draftRef.current = { ...draftRef.current, edit: msg, reply: null, text: msg.content ?? '' }; setEditMessage(msg); setReplyTo(null); setText(msg.content ?? ''); setMsgMenu(null); inputRef.current?.focus(); }} className="flex w-full items-center gap-2 px-3 py-2 text-xs hover:bg-surface/40"><Pencil className="h-3.5 w-3.5" /> {tr('messagesChat.edit')}</button>}
                                   <button onClick={() => deleteMessage(msg.id)} className="flex w-full items-center gap-2 px-3 py-2 text-xs text-danger hover:bg-surface/40">
                                     <Trash2 className="h-3.5 w-3.5" /> {tr('messages.delete')}
                                   </button>
@@ -1369,12 +1433,12 @@ function MessagesWorkspace() {
                   {tr('messages.replyingTo')} <span className="font-semibold text-brand-text">{replyTo.sender_name}</span>:{' '}
                   <span>{replyTo.content?.slice(0, 60)}</span>
                 </span>
-                <button onClick={() => setReplyTo(null)} aria-label={tr('messagesChat.cancelReply')} className="text-muted hover:text-fg">✕</button>
+                <button onClick={() => { draftRef.current = { ...draftRef.current, reply: null }; setReplyTo(null); }} aria-label={tr('messagesChat.cancelReply')} className="text-muted hover:text-fg">✕</button>
               </div>
             )}
 
-            {editMessage && <div className="flex items-center justify-between gap-2 border-t border-brand/20 bg-brand/5 px-4 py-2 text-xs"><span>{tr('messagesChat.editing')}</span><button type="button" aria-label={tr('messagesChat.cancelEdit')} onClick={() => { setEditMessage(null); setText(''); }}><X className="h-4 w-4" /></button></div>}
-            {failedAttachment?.convId === activeConv.id && <div role="alert" className="flex flex-wrap items-center gap-2 border-t border-border px-4 py-2 text-xs"><span className="flex-1">{tr('messagesChat.attachmentUnconfirmed', { name: failedAttachment.file.name })}</span><button type="button" disabled={uploadingFile} onClick={() => void sendFile(failedAttachment.file)} className="font-semibold">{tr('messagesChat.retryAttachment')}</button><button type="button" disabled={uploadingFile} onClick={() => void discardAttachment()} className="text-muted">{tr('messagesChat.discard')}</button></div>}
+            {editMessage && <div className="flex items-center justify-between gap-2 border-t border-brand/20 bg-brand/5 px-4 py-2 text-xs"><span>{tr('messagesChat.editing')}</span><button type="button" aria-label={tr('messagesChat.cancelEdit')} onClick={() => { draftRef.current = { ...draftRef.current, edit: null, text: '' }; setEditMessage(null); setText(''); }}><X className="h-4 w-4" /></button></div>}
+            {!uploadingFile && failedAttachment?.convId === activeConv.id && <div role="alert" className="flex flex-wrap items-center gap-2 border-t border-border px-4 py-2 text-xs"><span className="flex-1">{tr('messagesChat.attachmentUnconfirmed', { name: failedAttachment.file.name })}</span><button type="button" disabled={uploadingFile} onClick={() => void sendFile(failedAttachment.file)} className="font-semibold">{tr('messagesChat.retryAttachment')}</button><button type="button" disabled={uploadingFile} onClick={() => void discardAttachment()} className="text-muted">{tr('messagesChat.discard')}</button></div>}
             {typingIds.length > 0 && <p role="status" className="px-4 py-1 text-xs text-muted">{tr('messagesChat.typing', { names: typingIds.map((id) => members.find((member) => member.user_id === id)?.display_name).filter(Boolean).join(', ') })}</p>}
 
             {/* Input */}
@@ -1389,7 +1453,7 @@ function MessagesWorkspace() {
                   className="hidden" onChange={(e) => { if (e.target.files?.[0]) sendFile(e.target.files[0]); e.target.value = ''; }} />
 
                 {/* Text input */}
-                <textarea ref={inputRef} value={text} onChange={(e) => setText(e.target.value)} rows={2} maxLength={4000} disabled={recording || micPending}
+                <textarea ref={inputRef} value={text} onChange={(e) => { draftRef.current = { ...draftRef.current, text: e.target.value }; setText(e.target.value); }} rows={2} maxLength={4000} disabled={recording || micPending}
                   onKeyDown={(e) => { if (shouldSendOnEnter({ key: e.key, shiftKey: e.shiftKey, isComposing: e.nativeEvent.isComposing, keyCode: e.keyCode })) { e.preventDefault(); void sendMessage(e); } }}
                   enterKeyHint="send"
                   aria-label={tr('messages.typeAMessage')}
@@ -1414,7 +1478,7 @@ function MessagesWorkspace() {
                     <div className="absolute bottom-11 left-0 z-20 rounded-xl border border-border bg-elevated p-2 shadow-xl">
                       <div className="grid grid-cols-4 gap-1">
                         {QUICK_EMOJIS.map((e) => (
-                          <button key={e} type="button" onClick={() => { setText((t) => t + e); setShowPicker(false); inputRef.current?.focus(); }}
+                          <button key={e} type="button" onClick={() => { const next = draftRef.current.text + e; draftRef.current = { ...draftRef.current, text: next }; setText(next); setShowPicker(false); inputRef.current?.focus(); }}
                             className="h-8 w-8 rounded-lg text-lg hover:bg-surface transition">{e}</button>
                         ))}
                       </div>
