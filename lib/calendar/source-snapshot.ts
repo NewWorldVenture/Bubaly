@@ -7,7 +7,7 @@ import type { Tables } from '../database.types';
 import { allDayBusyInterval } from './event-dates';
 import { expandEventsInZone } from './recurrence';
 import { parseImportedSource, type ImportedSourceDocument, type ImportedSourceComponent, type ImportedSourceOverride, type SourceTime } from './imported-source';
-import { expandSourceOccurrences } from './source-occurrences';
+import { expandSourceOccurrences, type SourceTransparency } from './source-occurrences';
 import { exportICSSource } from '../sync/ics-source-export';
 import { isValidTimezone } from '../time/zoned';
 
@@ -27,6 +27,8 @@ export interface CalendarSourceSnapshot {
   sourceGroups: SnapshotSourceGroup[]; sourceCount: number; watermarkCount: number;
 }
 export interface SnapshotOccurrence {
+  /** Additive derived metadata; actual projections always emit it. */
+  transparency?: SourceTransparency;
   reference: CalendarSnapshotReference; occurrenceKey: string; readOnly: boolean;
   title: string | null; description: string | null; location: string | null; all_day: boolean;
   /** Display DATEs are UTC civil midnight, never family-zone instants. */
@@ -221,7 +223,7 @@ export function materializeCalendarSourceSnapshot(value: unknown, options: { fam
       const start = Date.parse(candidate.starts_at), end = candidate.ends_at ? Date.parse(candidate.ends_at) : start + (row.all_day ? 86_400_000 : 3_600_000);
       if (!(start < to && (end > from || end === start && start >= from))) continue;
       const busy = candidate.all_day ? allDayBusyInterval(candidate, options.timezone) : null;
-      add({ reference: { kind: 'native', eventId: row.id }, occurrenceKey: stable(['native',row.id,candidate.starts_at]), readOnly: row.feed_id !== null || row.external_uid !== null,
+      add({ transparency: 'opaque', reference: { kind: 'native', eventId: row.id }, occurrenceKey: stable(['native',row.id,candidate.starts_at]), readOnly: row.feed_id !== null || row.external_uid !== null,
         title: row.title, description: row.description, location: row.location, all_day: row.all_day, starts_at: candidate.starts_at, ends_at: candidate.ends_at,
         startDate: row.all_day ? candidate.starts_at.slice(0,10) : null, endDate: row.all_day ? new Date((candidate.ends_at ? Date.parse(candidate.ends_at) : start + 86_400_000)).toISOString().slice(0,10) : null,
         actualStartsAt: busy ? new Date(busy.start).toISOString() : candidate.starts_at, actualEndsAt: busy ? new Date(busy.end).toISOString() : new Date(end).toISOString() });
@@ -236,7 +238,7 @@ export function materializeCalendarSourceSnapshot(value: unknown, options: { fam
       const startDate = occurrence.allDay ? civilISO(occurrence.sourceStart.value) : null, endDate = occurrence.sourceEndDate ? civilISO(occurrence.sourceEndDate) : null;
       const starts_at = startDate ? `${startDate}T00:00:00.000Z` : occurrence.startsAt, ends_at = endDate ? `${endDate}T00:00:00.000Z` : occurrence.endsAt;
       const busy = occurrence.allDay ? allDayBusyInterval({ starts_at, ends_at, all_day: true }, options.timezone) : null;
-      add({ reference: { kind: 'source', feedId: group.feedId, uid: group.uid, revisionId: group.revisionId, original: occurrence.original }, occurrenceKey: stable(['source',group.feedId,group.uid,occurrence.original]), readOnly: true,
+      add({ transparency: occurrence.transparency, reference: { kind: 'source', feedId: group.feedId, uid: group.uid, revisionId: group.revisionId, original: occurrence.original }, occurrenceKey: stable(['source',group.feedId,group.uid,occurrence.original]), readOnly: true,
         title: occurrence.title, description: occurrence.description, location: occurrence.location, all_day: occurrence.allDay, starts_at, ends_at, startDate, endDate,
         actualStartsAt: busy ? new Date(busy.start).toISOString() : occurrence.startsAt, actualEndsAt: busy ? new Date(busy.end).toISOString() : occurrence.endsAt });
     }

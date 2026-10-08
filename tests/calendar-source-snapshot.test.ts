@@ -210,3 +210,17 @@ describe('explicit family clock admission before snapshot materialization',()=>{
     expect(result.occurrences[1].reference).toMatchObject({kind:'source',original:{kind:'utc',value:'20250101T090000Z'}});
   });
 });
+
+
+describe('derived snapshot transparency without persisted schema changes',()=>{
+  it('emits native opaque and selected source transparency with original identities and documents',()=>{
+    const source=doc(['DTSTART:20250101T090000Z\r\nDURATION:PT1H\r\nRRULE:FREQ=DAILY;COUNT=2\r\nTRANSP:TRANSPARENT','RECURRENCE-ID:20250102T090000Z\r\nDTSTART:20250102T100000Z\r\nDURATION:PT1H']);
+    const value=snapshot([group(source)],[native()]),before=JSON.stringify(value);const result=materialize(value);
+    expect(result.occurrences.map(row=>row.transparency)).toEqual(['opaque','transparent','opaque']);
+    expect(result.occurrences[1].reference).toMatchObject({kind:'source',feedId:feed,uid:'synthetic',revisionId:revision,original:{kind:'utc',value:'20250101T090000Z'}});
+    expect(JSON.stringify(value)).toBe(before);expect(parseCalendarSourceSnapshot(value,family).sourceGroups[0].document.version).toBe(1);
+  });
+  it.each(['TRANSP:UNKNOWN','TRANSP:OPAQUE\r\nTRANSP:TRANSPARENT'])('refuses unqualified source metadata %s rather than emitting a native prefix',metadata=>{
+    const value=snapshot([group(doc([`DTSTART:20250101T090000Z\r\nDURATION:PT1H\r\n${metadata}`]))],[native()]);expect(()=>materialize(value)).toThrow('transparency');
+  });
+});

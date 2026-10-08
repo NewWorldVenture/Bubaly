@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import { parseICSSource } from '@/lib/sync/ics-source';
 import { expandSourceOccurrences } from '@/lib/calendar/source-occurrences';
+import { exportICSSource } from '@/lib/sync/ics-source-export';
 import type { ImportedSourceDocument } from '@/lib/calendar/imported-source';
 
 const from = Date.parse('2025-01-01T00:00:00Z'), to = Date.parse('2026-01-01T00:00:00Z');
@@ -186,5 +187,68 @@ describe('complete bounded source occurrence sets', () => {
   it('retains the concrete moved timed source clock without inventing an all-day end', () => {
     const result = expand(source([master, 'RECURRENCE-ID:20250101T090000Z\r\nDTSTART;TZID=America/New_York:20250103T100000\r\nDURATION:PT1H']));
     expect(result.occurrences.find(c => c.original.value === '20250101T090000Z')).toMatchObject({ sourceStart: { kind: 'zoned', tzid: 'America/New_York', value: '20250103T100000' }, sourceEndDate: null, startsAt: '2025-01-03T15:00:00.000Z' });
+  });
+});
+
+
+describe('derived source time transparency from qualified selected components',()=>{
+  it.each(['OPAQUE','TRANSPARENT','transparent'])('emits explicit %s with unchanged source document and raw export',value=>{
+    const doc=source([`${master}\r\nTRANSP:${value}`]);const before=JSON.stringify(doc),raw=exportICSSource(doc);
+    const result=expand(doc);expect(result.occurrences.map(row=>row.transparency)).toEqual(Array(4).fill(value.toLowerCase()));
+    expect(JSON.stringify(doc)).toBe(before);expect(exportICSSource(doc)).toBe(raw);expect(doc.version).toBe(1);
+  });
+  it('emits opaque when the selected master omits TRANSP and retains an implicit point',()=>{
+    const result=expand(source(['DTSTART:20250101T090000Z']));expect(result.occurrences[0]).toMatchObject({transparency:'opaque',startsAt:'2025-01-01T09:00:00.000Z',endsAt:'2025-01-01T09:00:00.000Z'});
+  });
+  it('takes exact override transparency and its default independently of master metadata',()=>{
+    const result=expand(source([`${master}\r\nTRANSP:TRANSPARENT`,
+      'RECURRENCE-ID:20250102T090000Z\r\nDTSTART:20250102T110000Z\r\nDURATION:PT1H\r\nTRANSP:OPAQUE',
+      'RECURRENCE-ID:20250103T090000Z\r\nDTSTART:20250103T110000Z\r\nDURATION:PT1H']));
+    expect(result.occurrences.map(row=>[row.original.value,row.transparency])).toEqual([['20250101T090000Z','transparent'],['20250102T090000Z','opaque'],['20250103T090000Z','opaque'],['20250104T090000Z','transparent']]);
+  });
+  it('ignores nested VALARM fields when qualifying the parent event transparency',()=>{
+    const doc=source([`${master}\r\nTRANSP:TRANSPARENT\r\nBEGIN:VALARM\r\nACTION:DISPLAY\r\nTRIGGER:-PT15M\r\nDESCRIPTION:Synthetic alarm\r\nTRANSP:OPAQUE\r\nEND:VALARM`]);
+    expect(expand(doc).occurrences.every(row=>row.transparency==='transparent')).toBe(true);
+  });
+  it.each(['TRANSP:BUSY','TRANSP:','TRANSP: OPAQUE','TRANSP:OPAQUE,TRANSPARENT','TRANSP:OPAQUE\r\nTRANSP:OPAQUE','TRANSP;X-UNKNOWN=VALUE:TRANSPARENT','TRANSP;VALUE=DATE:TRANSPARENT'])('refuses ambiguous or unqualified metadata %s atomically',metadata=>{
+    expect(()=>expand(source([`${master}\r\n${metadata}`]))).toThrow();
+  });
+  it('does not accept typed-only provenance as proof that TRANSP was omitted',()=>{
+    const doc=source([master]);doc.master!.raw=null;expect(()=>expand(doc)).toThrow();
+  });
+  it('rejects raw and typed conflict before deriving a plausible transparency',()=>{
+    const doc=source([`${master}\r\nTRANSP:TRANSPARENT`]);doc.master!.title='Conflict';expect(()=>expand(doc)).toThrow();
+  });
+});
+
+
+describe('qualified RANGE transparency subset',()=>{
+  it.each(['OPAQUE','TRANSPARENT'])('preserves same-value %s RANGE timing and exempts separately defined exact overrides',value=>{
+    const result=expand(source([`${master}\r\nTRANSP:${value}`,
+      `RECURRENCE-ID;RANGE=THISANDFUTURE:20250102T090000Z\r\nDTSTART:20250102T100000Z\r\nDURATION:PT2H\r\nTRANSP:${value}`,
+      'RECURRENCE-ID:20250103T090000Z\r\nDTSTART:20250103T070000Z\r\nDURATION:PT30M\r\nTRANSP:TRANSPARENT']));
+    expect(result.occurrences.map(row=>[row.startsAt.slice(11,16),row.transparency])).toEqual([['09:00',value.toLowerCase()],['10:00',value.toLowerCase()],['07:00','transparent'],['10:00',value.toLowerCase()]]);
+    expect(result.occurrences[3].original.value).toBe('20250104T090000Z');
+  });
+  it.each([
+    {masterTransparency:'',rangeTransparency:'\r\nTRANSP:TRANSPARENT'},
+    {masterTransparency:'\r\nTRANSP:TRANSPARENT',rangeTransparency:'\r\nTRANSP:OPAQUE'},
+    {masterTransparency:'\r\nTRANSP:TRANSPARENT',rangeTransparency:''},
+  ])('refuses ambiguous RANGE metadata changes %j without a prefix',({masterTransparency,rangeTransparency})=>{
+    expect(()=>expand(source([master+masterTransparency,`RECURRENCE-ID;RANGE=THISANDFUTURE:20250102T090000Z\r\nDTSTART:20250102T100000Z\r\nDURATION:PT2H${rangeTransparency}`]))).toThrow('RANGE transparency');
+  });
+  it('retains a transparent master cancellation RANGE without inventing occupied occurrences',()=>{
+    const result=expand(source([`${master}\r\nTRANSP:TRANSPARENT`,'RECURRENCE-ID;RANGE=THISANDFUTURE:20250102T090000Z\r\nSTATUS:CANCELLED']));
+    expect(result.count).toBe(1);expect(result.occurrences[0].transparency).toBe('transparent');
+  });
+  it('validates malformed metadata on an out-of-window override before returning healthy master occurrences',()=>{
+    expect(()=>expand(source([master,'RECURRENCE-ID:20250104T090000Z\r\nDTSTART:20250104T100000Z\r\nDURATION:PT1H\r\nTRANSP:UNKNOWN']),{from:Date.parse('2025-01-01'),to:Date.parse('2025-01-02')})).toThrow('transparency');
+  });
+  it('handles folded enumerated TEXT and keeps DATE boundaries unchanged',()=>{
+    const result=expand(source(['DTSTART;VALUE=DATE:20250101\r\nDURATION:P2D\r\nTRANSP:TRANS\r\n PARENT']));
+    expect(result.occurrences[0]).toMatchObject({transparency:'transparent',allDay:true,sourceEndDate:'20250103',startsAt:'2025-01-01T00:00:00.000Z',endsAt:'2025-01-03T00:00:00.000Z'});
+  });
+  it('does not mistake a nested alarm transparency for an omitted event transparency',()=>{
+    const result=expand(source([`${master}\r\nBEGIN:VALARM\r\nACTION:DISPLAY\r\nTRIGGER:-PT15M\r\nDESCRIPTION:Synthetic alarm\r\nTRANSP:TRANSPARENT\r\nEND:VALARM`]));expect(result.occurrences.every(row=>row.transparency==='opaque')).toBe(true);
   });
 });

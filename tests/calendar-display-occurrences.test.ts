@@ -91,3 +91,17 @@ describe('actual SDK source-aware display consumer', () => {
     expect(result.data?.find(row => row.kind === 'native')?.readOnly).toBe(true);
   });
 });
+
+
+describe('actual SDK display transparency projection',()=>{
+  it.each([false,true])('emits explicit native opaque with source gate %s',async enabled=>{
+    h.enabled=enabled;const {db}=sdk();const result=await readDisplayCalendarOccurrences(db,family,bounds,'UTC');expect(result.error).toBeNull();expect(result.data?.filter(row=>row.kind==='native').every(row=>row.transparency==='opaque')).toBe(true);expect(result.data?.some(row=>row.kind==='native')).toBe(true);
+  });
+  it('propagates transparent master and opaque exact default without inventing source event IDs',async()=>{
+    h.enabled=true;const doc=document(['DTSTART:20261008T090000Z\r\nDURATION:PT1H\r\nRRULE:FREQ=DAILY;COUNT=2\r\nTRANSP:TRANSPARENT','RECURRENCE-ID:20261009T090000Z\r\nDTSTART:20261009T100000Z\r\nDURATION:PT1H']);const value=snapshot([group(doc)],[]),before=JSON.stringify(value);const {db,requests}=sdk(value);const result=await readDisplayCalendarOccurrences(db,family,bounds,'UTC');
+    expect(result.count).toBe(2);expect(result.data?.map(row=>row.transparency)).toEqual(['transparent','opaque']);expect(requests).toHaveLength(1);expect(result.data?.every(row=>row.kind==='source'&&row.readOnly&&!('id' in row)&&!('eventId' in row.reference))).toBe(true);expect(JSON.stringify(value)).toBe(before);
+  });
+  it.each(['TRANSP:UNKNOWN','TRANSP:OPAQUE\r\nTRANSP:TRANSPARENT'])('refuses source %s atomically without native fallback',async metadata=>{
+    h.enabled=true;const {db,requests}=sdk(snapshot([group(document([`DTSTART:20261008T090000Z\r\nDURATION:PT1H\r\n${metadata}`]))]));const result=await readDisplayCalendarOccurrences(db,family,bounds,'UTC');expect(result.data).toBeNull();expect(result.count).toBeNull();expect(result.error).not.toBeNull();expect(requests).toHaveLength(1);
+  });
+});

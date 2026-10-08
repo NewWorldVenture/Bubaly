@@ -3,6 +3,7 @@ import type { Database, EventCategory, Tables } from '../database.types';
 import type { CalendarWindowBounds } from '../briefing/calendar-window';
 import { allDayBusyInterval } from './event-dates';
 import { CALENDAR_SOURCE_ARCHIVE_ENABLED } from './source-capability';
+import type { SourceTransparency } from './source-occurrences';
 import { readCalendarOccurrences } from './occurrences';
 import { materializeCalendarSourceSnapshot, readCalendarSourceSnapshot, type CalendarSnapshotReference } from './source-snapshot';
 
@@ -10,6 +11,8 @@ export { CALENDAR_SOURCE_ARCHIVE_ENABLED } from './source-capability';
 export const CALENDAR_DISPLAY_CONTRACT = 3;
 type NativeEvent = Tables<'calendar_events'>;
 type Common = {
+  /** Optional for older cached shapes; every actual read emits a qualified value. */
+  transparency?: SourceTransparency;
   occurrenceKey: string; readOnly: boolean; title: string | null; description: string | null; location: string | null;
   /** Source ICS categories/attendees are not native category/member mappings. */
   category: EventCategory | null; assignee_id: string | null;
@@ -26,7 +29,7 @@ export type CalendarDisplayResult = { data: CalendarDisplayOccurrence[]; count: 
 function nativeDisplay(event: NativeEvent): CalendarDisplayOccurrence {
   const busy = event.all_day ? allDayBusyInterval(event,'UTC') : null;
   const startDate = event.all_day ? event.starts_at.slice(0,10) : null;
-  return { kind:'native',reference:{kind:'native',eventId:event.id},event,occurrenceKey:JSON.stringify(['native',event.id,event.starts_at]),
+  return { transparency:'opaque',kind:'native',reference:{kind:'native',eventId:event.id},event,occurrenceKey:JSON.stringify(['native',event.id,event.starts_at]),
     readOnly:event.feed_id !== null || event.external_uid !== null,title:event.title,description:event.description,location:event.location,category:event.category,assignee_id:event.assignee_id,
     starts_at:event.starts_at,ends_at:event.ends_at,all_day:event.all_day,startDate,
     endDate:event.all_day ? event.ends_at?.slice(0,10) ?? new Date(Date.parse(event.starts_at)+86_400_000).toISOString().slice(0,10) : null,

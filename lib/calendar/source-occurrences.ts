@@ -11,7 +11,10 @@ export interface SourceOccurrenceOptions {
   /** Shared enclosing budget; callback failures propagate without a prefix. */
   consumeWork?: (amount: number) => void;
 }
+export type SourceTransparency = 'opaque' | 'transparent';
 export interface SourceOccurrence {
+  /** Derived from the qualified selected VEVENT, not stored version-1 data. */
+  transparency: SourceTransparency;
   id: string; uid: string; original: SourceTime; startsAt: string; endsAt: string;
   /** Concrete moved/shifted source start, distinct from stable original identity. */
   sourceStart: SourceTime;
@@ -45,7 +48,8 @@ function duration(value: string): { days: number; elapsed: number } {
 }
 /** Refuse recurrence-affecting extensions rather than silently dropping them.
  * Raw text is still retained in the caller's unchanged source document. */
-function admitRaw(raw: string): void {
+function admitRaw(raw: string): SourceTransparency {
+  let transparency: SourceTransparency = 'opaque', seenTransparency = false;
   const allowed = new Set('UID SUMMARY DESCRIPTION LOCATION STATUS DTSTART DTEND DURATION RRULE RDATE EXDATE RECURRENCE-ID SEQUENCE DTSTAMP LAST-MODIFIED CREATED TRANSP CLASS CATEGORIES URL GEO ORGANIZER ATTENDEE CONTACT COMMENT RELATED-TO RESOURCES PRIORITY ATTACH'.split(' '));
   const temporal = new Set(['DTSTART', 'DTEND', 'RDATE', 'EXDATE', 'RECURRENCE-ID', 'RRULE', 'DURATION']);
   let depth = 0;
@@ -68,7 +72,15 @@ function admitRaw(raw: string): void {
       if (!supported.includes(parameter)) fail(`unqualified ${name} parameter ${parameter}`);
     }
     if (name === 'STATUS' && !['CONFIRMED', 'TENTATIVE', 'CANCELLED'].includes(value.toUpperCase())) fail('unqualified status');
+    if (name === 'TRANSP') {
+      // RFC 5545 3.8.2.7: singleton enumerated TEXT, default OPAQUE.
+      // Extension parameters remain unqualified rather than silently ignored.
+      if (seenTransparency || parts.length !== 1 || !['OPAQUE', 'TRANSPARENT'].includes(value.toUpperCase())) fail('unqualified transparency');
+      seenTransparency = true;
+      transparency = value.toUpperCase() === 'TRANSPARENT' ? 'transparent' : 'opaque';
+    }
   }
+  return transparency;
 }
 
 /** Complete bounded materialization for one UID. Unsupported semantics throw;
@@ -86,11 +98,9 @@ export function expandSourceOccurrences(value: unknown, options: SourceOccurrenc
   if (!Number.isInteger(maxOccurrences) || maxOccurrences < 1 || maxOccurrences > 100_000) fail('invalid occurrence bound');
   if (!Number.isInteger(maxWork) || maxWork < 1 || maxWork > 2_000_000) fail('invalid aggregate work bound');
   const components = [...(doc.master ? [doc.master] : []), ...doc.overrides];
-  if (components.some(c => c.raw !== null)) {
-    if (components.some(c => c.raw === null)) fail('mixed raw and typed-only provenance is unqualified');
-    exportICSSource(doc); // Reparses raw and proves agreement before projection.
-    for (const c of components) admitRaw(c.raw!);
-  }
+  if (components.some(c => c.raw === null)) fail('raw provenance is required to qualify transparency');
+  exportICSSource(doc); // Reparses raw and proves agreement before projection.
+  const transparencies = new Map(components.map(component => [component, admitRaw(component.raw!)]));
   for (const raw of doc.rawProperties) {
     const line = raw.replace(/\r?\n[ \t]/g, '');
     if (/^METHOD[;:]/i.test(line) && !/^METHOD:PUBLISH\r?\n?$/i.test(line)) fail('scheduling METHOD requires a separate revision/cancellation contract');
@@ -98,6 +108,9 @@ export function expandSourceOccurrences(value: unknown, options: SourceOccurrenc
   for (const override of doc.overrides) if (override.rrule || override.rdates.length || override.exdates.length) fail('nested recurrence on an override is unqualified');
   const ranges = doc.overrides.filter(c => c.range === 'THISANDFUTURE');
   if (!doc.master && ranges.length) fail('detached RANGE has no original series clock');
+  // RFC 5545 explicitly propagates RANGE timing/duration, not TRANSP changes.
+  // Qualify unchanged free/busy semantics; do not invent an inheritance rule.
+  for (const range of ranges) if (range.status !== 'cancelled' && transparencies.get(range) !== transparencies.get(doc.master!)) fail('RANGE transparency change is unqualified');
   if (doc.master?.status === 'cancelled') {
     if (doc.overrides.some(c => c.status !== 'cancelled')) fail('live exception under cancelled master needs revision reconciliation');
     return { occurrences: [], count: 0 };
@@ -207,7 +220,7 @@ export function expandSourceOccurrences(value: unknown, options: SourceOccurrenc
     if (!(begins < to && (ends > from || ends === begins && begins >= from))) continue;
     occurrences.push({ id: JSON.stringify([doc.uid, original.kind, original.kind === 'zoned' ? original.tzid : null, original.value]), uid: doc.uid, original,
       startsAt: new Date(begins).toISOString(), endsAt: new Date(ends).toISOString(), sourceStart: start, sourceEndDate: dateEndFor(start, end, reference)?.value ?? null,
-      allDay: start.kind === 'date', title: component.title, description: component.description, location: component.location, status: component.status });
+      transparency: transparencies.get(component)!, allDay: start.kind === 'date', title: component.title, description: component.description, location: component.location, status: component.status });
   }
   occurrences.sort((a, b) => { charge(); return a.startsAt.localeCompare(b.startsAt) || a.id.localeCompare(b.id); });
   return { occurrences, count: occurrences.length };
