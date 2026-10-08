@@ -1,7 +1,7 @@
 // Workflow C — Organize our weekend (§18). Owner: the Scheduler, because the
 // weekend is a calendar problem first: what is fixed, what clashes, where the
 // free blocks are — and only then what to put in them.
-import { localTime, type WorkflowTemplate } from './index';
+import { calendarSearchTime, localTime, type WorkflowTemplate } from './index';
 
 export const organizeWeekendTemplate: WorkflowTemplate = {
   intent: 'organize_weekend',
@@ -17,7 +17,7 @@ export const organizeWeekendTemplate: WorkflowTemplate = {
   ],
   steps: [
     { key: 'members', stepType: 'retrieve', toolName: 'family.listMembers', description: 'Confirm who is home this weekend', input: () => ({}) },
-    { key: 'events', stepType: 'retrieve', toolName: 'calendar.searchEvents', description: 'Read what is already on the weekend calendar', input: (ctx) => ({ from: localTime(ctx.weekendStartKey, 0), to: localTime(ctx.weekendEndKey, 23, 59), limit: 50 }) },
+    { key: 'events', stepType: 'retrieve', toolName: 'calendar.searchEvents', description: 'Read what is already on the weekend calendar', input: (ctx) => ({ from: calendarSearchTime(ctx.weekendStartKey, 0, 0, ctx.tz), to: calendarSearchTime(ctx.weekendEndKey, 23, 59, ctx.tz), limit: 50 }) },
     { key: 'conflicts', stepType: 'retrieve', toolName: 'calendar.findConflicts', description: 'Look for weekend clashes', input: (ctx) => ({ from: localTime(ctx.weekendStartKey, 0), to: localTime(ctx.weekendEndKey, 23, 59) }) },
     { key: 'practices', stepType: 'retrieve', toolName: 'sports.listPracticesBetween', description: 'Check games and practices', input: (ctx) => ({ from: localTime(ctx.weekendStartKey, 0), to: localTime(ctx.weekendEndKey, 23, 59) }) },
     { key: 'school', stepType: 'retrieve', toolName: 'school.listEventsBetween', description: 'Check school events', input: (ctx) => ({ from: localTime(ctx.weekendStartKey, 0), to: localTime(ctx.weekendEndKey, 23, 59) }), optional: true },

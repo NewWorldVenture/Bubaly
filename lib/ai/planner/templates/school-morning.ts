@@ -5,7 +5,7 @@
 // leave-by time are all knowable the night before. So this template plans the
 // EVENING before the school day, and leaves exactly one thing to the morning —
 // the reminder that fires while everyone is still in the kitchen.
-import { localTime, shiftDay, weekdayOf, type TemplateContext, type WorkflowTemplate } from './index';
+import { calendarSearchTime, localTime, shiftDay, weekdayOf, type TemplateContext, type WorkflowTemplate } from './index';
 
 /** The school day being planned: the named day, else the next weekday (never a Saturday or Sunday). */
 export function schoolDayKey(ctx: TemplateContext): string {
@@ -39,7 +39,7 @@ export const schoolMorningTemplate: WorkflowTemplate = {
     { key: 'homework', stepType: 'retrieve', toolName: 'school.listHomeworkDue', description: 'Read the homework due', input: (ctx) => ({ from: localTime(ctx.todayKey, 0), to: localTime(schoolDayKey(ctx), 23, 59) }) },
     { key: 'school_events', stepType: 'retrieve', toolName: 'school.listEventsBetween', description: 'Check for school events that day', input: (ctx) => ({ from: localTime(schoolDayKey(ctx), 0), to: localTime(schoolDayKey(ctx), 23, 59) }), optional: true },
     { key: 'practices', stepType: 'retrieve', toolName: 'sports.listPracticesBetween', description: 'Check practices before or after school', input: (ctx) => ({ from: localTime(schoolDayKey(ctx), 0), to: localTime(schoolDayKey(ctx), 23, 59) }), optional: true },
-    { key: 'events', stepType: 'retrieve', toolName: 'calendar.searchEvents', description: 'Read what else is on that morning', input: (ctx) => ({ from: localTime(schoolDayKey(ctx), 0), to: localTime(schoolDayKey(ctx), 12), limit: 30 }) },
+    { key: 'events', stepType: 'retrieve', toolName: 'calendar.searchEvents', description: 'Read what else is on that morning', input: (ctx) => ({ from: calendarSearchTime(schoolDayKey(ctx), 0, 0, ctx.tz), to: calendarSearchTime(schoolDayKey(ctx), 12, 0, ctx.tz), limit: 30 }) },
     { key: 'routines', stepType: 'retrieve', toolName: 'memory.recall', description: 'Recall how this family does mornings', input: () => ({ category: 'preference', query: 'morning', limit: 20 }) },
     {
       key: 'pack_bag', stepType: 'act', toolName: 'tasks.createTodo', description: 'Pack one child\'s bag the night before',

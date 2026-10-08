@@ -15,7 +15,7 @@
 //
 // This comment used to claim the two shared a composition. Nothing under
 // `lib/ai/` imports `lib/briefing/build.ts`, and they never did.
-import { localTime, shiftDay, type WorkflowTemplate } from './index';
+import { calendarSearchTime, localTime, shiftDay, type WorkflowTemplate } from './index';
 
 export const dailyBriefTemplate: WorkflowTemplate = {
   intent: 'daily_brief',
@@ -30,8 +30,8 @@ export const dailyBriefTemplate: WorkflowTemplate = {
     'When the day is genuinely quiet, say so plainly rather than padding it.',
   ],
   steps: [
-    { key: 'today', stepType: 'retrieve', toolName: 'calendar.searchEvents', description: "Read today's calendar", input: (ctx) => ({ from: localTime(ctx.todayKey, 0), to: localTime(ctx.todayKey, 23, 59), limit: 50 }) },
-    { key: 'tomorrow', stepType: 'retrieve', toolName: 'calendar.searchEvents', description: 'Look at tomorrow, so nothing arrives unannounced', input: (ctx) => ({ from: localTime(ctx.tomorrowKey, 0), to: localTime(ctx.tomorrowKey, 23, 59), limit: 50 }) },
+    { key: 'today', stepType: 'retrieve', toolName: 'calendar.searchEvents', description: "Read today's calendar", input: (ctx) => ({ from: calendarSearchTime(ctx.todayKey, 0, 0, ctx.tz), to: calendarSearchTime(ctx.todayKey, 23, 59, ctx.tz), limit: 50 }) },
+    { key: 'tomorrow', stepType: 'retrieve', toolName: 'calendar.searchEvents', description: 'Look at tomorrow, so nothing arrives unannounced', input: (ctx) => ({ from: calendarSearchTime(ctx.tomorrowKey, 0, 0, ctx.tz), to: calendarSearchTime(ctx.tomorrowKey, 23, 59, ctx.tz), limit: 50 }) },
     { key: 'conflicts', stepType: 'retrieve', toolName: 'calendar.findConflicts', description: 'Check today for clashes', input: (ctx) => ({ from: localTime(ctx.todayKey, 0), to: localTime(ctx.todayKey, 23, 59) }) },
     { key: 'todos', stepType: 'retrieve', toolName: 'tasks.searchTodos', description: 'Read what is due', input: (ctx) => ({ done: false, due_before: ctx.tomorrowKey, limit: 50 }) },
     { key: 'chores', stepType: 'retrieve', toolName: 'tasks.listOpenChores', description: 'Read the chore board', input: () => ({ limit: 50 }) },

@@ -511,7 +511,11 @@ describe('trust gate', () => {
 
   it('lets read-only tools through without a gate or a ledger row', async () => {
     const family = makeFamilyDb({
-      domain: (call) => (call.table === 'calendar_events' ? { data: [EVENT_ROW], error: null } : null),
+      domain: (call) => (call.table === 'calendar_events' ? {
+        data: call.filters['neq:recurrence'] === 'none' ? [] : [{
+          ...EVENT_ROW, id: '40000000-0000-4000-8000-000000000001', idempotency_key: null,
+        }], error: null,
+      } : null),
     });
     const ledger = makeLedger();
     ledgerHolder.client = ledger.db;

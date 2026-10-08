@@ -10,7 +10,7 @@
 // The template deliberately does NOT name a transition. Ten different ones
 // share this shape, and hard-coding "puppy" would make nine of them wrong; the
 // model names it from the request and the household context.
-import { localTime, shiftDay, type TemplateContext, type WorkflowTemplate } from './index';
+import { calendarSearchTime, localTime, shiftDay, type TemplateContext, type WorkflowTemplate } from './index';
 
 /** The date the transition happens: the named date, else three weeks out. */
 export function transitionKey(ctx: TemplateContext): string {
@@ -44,7 +44,7 @@ export const lifeEventTemplate: WorkflowTemplate = {
   ],
   steps: [
     { key: 'members', stepType: 'retrieve', toolName: 'family.listMembers', description: 'Confirm who this change affects', input: () => ({}) },
-    { key: 'events', stepType: 'retrieve', toolName: 'calendar.searchEvents', description: 'Read what is already booked in the run-up', input: (ctx) => ({ from: localTime(ctx.todayKey, 0), to: localTime(shiftDay(transitionKey(ctx), 7), 23, 59), limit: 50 }) },
+    { key: 'events', stepType: 'retrieve', toolName: 'calendar.searchEvents', description: 'Read what is already booked in the run-up', input: (ctx) => ({ from: calendarSearchTime(ctx.todayKey, 0, 0, ctx.tz), to: calendarSearchTime(transitionKey(ctx), 23, 59, ctx.tz, 7), limit: 50 }) },
     { key: 'open_tasks', stepType: 'retrieve', toolName: 'tasks.searchTodos', description: 'Read what the family already has open for it', input: (ctx) => ({ done: false, due_before: shiftDay(transitionKey(ctx), 7), limit: 30 }) },
     { key: 'grocery', stepType: 'retrieve', toolName: 'groceries.listOpen', description: 'Read what is already on the shopping list', input: () => ({ limit: 50 }) },
     { key: 'known', stepType: 'retrieve', toolName: 'memory.recall', description: 'Recall what Bubaly already knows about this household', input: (ctx) => ({ category: 'about', query: transitionName(ctx) || null, limit: 20 }) },

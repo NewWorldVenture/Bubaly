@@ -25,7 +25,7 @@
           "step_type": "retrieve",
           "tool_name": "calendar.searchEvents",
           "description": "Find the practice on the calendar",
-          "input": "{\"query\": \"Soccer practice\", \"from\": \"2026-09-14\", \"to\": \"2026-09-21\"}",
+          "input": "{\"query\": \"Soccer practice\", \"from\": \"2026-09-14T00:00:00-04:00\", \"to\": \"2026-09-21T00:00:00-04:00\"}",
           "depends_on": [],
           "condition": null,
           "approval_required": null,

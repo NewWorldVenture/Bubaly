@@ -28,7 +28,7 @@
           "step_type": "retrieve",
           "tool_name": "calendar.searchEvents",
           "description": "Read what is already on the weekend calendar",
-          "input": "{\"from\": \"2026-09-12T00:00:00\", \"to\": \"2026-09-13T23:59:00\", \"limit\": 50}",
+          "input": "{\"from\": \"2026-09-12T00:00:00-04:00\", \"to\": \"2026-09-13T23:59:00-04:00\", \"limit\": 50}",
           "depends_on": [],
           "condition": null,
           "approval_required": null,

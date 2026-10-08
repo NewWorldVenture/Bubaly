@@ -27,7 +27,7 @@
           "step_type": "retrieve",
           "tool_name": "calendar.searchEvents",
           "description": "Read the week's calendar",
-          "input": "{\"from\": \"2026-09-14T00:00:00\", \"to\": \"2026-09-20T23:59:00\", \"limit\": 100}",
+          "input": "{\"from\": \"2026-09-14T00:00:00-04:00\", \"to\": \"2026-09-20T23:59:00-04:00\", \"limit\": 100}",
           "depends_on": [],
           "condition": null,
           "approval_required": null,

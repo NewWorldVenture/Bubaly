@@ -16,8 +16,9 @@ import 'server-only';
 import { z } from 'zod';
 import { CalendarConflictAdvisorySchema, CalendarConflictSubjectSchema, CalendarConflictReferenceSchema } from '@/lib/ai/result-cards';
 import {
-  createEvent, deleteEvent, findConflicts, findFreeSlots, busyEvenings, rescheduleAfter, rsvpToEvent, searchEvents, updateEvent,
+  createEvent, deleteEvent, findConflicts, findFreeSlots, busyEvenings, rescheduleAfter, rsvpToEvent, updateEvent,
 } from '@/lib/services/calendar';
+import { searchCalendarOccurrences, validateCalendarSearchWindow } from '@/lib/services/calendar/search-occurrences';
 import { scopeNow } from '@/lib/services/scope';
 import { fail, ok, SERVICE_CODES } from '@/lib/services/types';
 import type { EventCategory, RecurrenceFreq } from '@/lib/database.types';
@@ -44,6 +45,39 @@ const eventOutput = z.object({
 const slotOutput = z.object({
   slots: z.array(z.object({ starts_at: z.string(), ends_at: z.string(), when: z.string() })),
 });
+
+// Search has a separate wire contract: a source occurrence is never an action ID.
+const searchOccurrenceFields = {
+  occurrenceKey: z.string().min(1).max(65_536),
+  reference: CalendarConflictReferenceSchema,
+  title: z.string().nullable(), description: z.string().nullable(), location: z.string().nullable(),
+  starts_at: z.string().datetime({ offset: true }), ends_at: z.string().datetime({ offset: true }).nullable(),
+  all_day: z.boolean(), actualStartsAt: z.string().datetime({ offset: true }),
+  actualEndsAt: z.string().datetime({ offset: true }).nullable(),
+  startDate: z.string().nullable(), endDate: z.string().nullable(),
+  transparency: z.enum(['opaque', 'transparent']), occupied: z.boolean(), point: z.boolean(), estimatedEnd: z.boolean(),
+  interval: z.object({ start: z.number().finite(), end: z.number().finite() }).strict(),
+  displayOrder: z.number().int().nonnegative(), when: z.string(),
+};
+const nativeSearchOutput = z.object({
+  ...searchOccurrenceFields, kind: z.literal('native'), id: z.string().uuid(), eventId: z.string().uuid(),
+  title: z.string(), category: z.string(), assignee_id: z.string().nullable(),
+  feed_id: z.string().nullable(), external_uid: z.string().nullable(),
+  readOnly: z.boolean(), mutable: z.boolean(),
+}).passthrough().refine(row => row.reference.kind === 'native' && row.id === row.eventId && row.id === row.reference.eventId
+  && row.readOnly === (row.feed_id !== null || row.external_uid !== null) && row.mutable === !row.readOnly, 'Invalid native search provenance');
+const sourceSearchOutput = z.object({
+  ...searchOccurrenceFields, kind: z.literal('source'), readOnly: z.literal(true), mutable: z.literal(false),
+}).strict().refine(row => row.reference.kind === 'source', 'Invalid source search provenance');
+const searchOutput = z.object({
+  events: z.array(nativeSearchOutput), source_events: z.array(sourceSearchOutput),
+  matchedCount: z.number().int().nonnegative(), totalVisibleCount: z.number().int().nonnegative(),
+  returnedCount: z.number().int().nonnegative(), truncated: z.boolean(), horizonEndsAt: z.string().datetime({ offset: true }),
+  filterScope: z.object({ native: z.literal('requested-filters'), sources: z.literal('unmapped-family-context'), sourceMemberCategoryMatched: z.literal(false) }).strict(),
+  window: z.object({ from: z.string(), to: z.string(), bounded: z.literal(true), defaultedFrom: z.boolean(), defaultedTo: z.boolean() }).strict(),
+}).strict().refine(row => row.returnedCount === row.events.length + row.source_events.length
+  && row.matchedCount >= row.returnedCount && row.totalVisibleCount >= row.matchedCount
+  && row.truncated === (row.matchedCount > row.returnedCount), 'Invalid search counts');
 
 export const calendarTools: ToolDefinition[] = [
   defineTool({
@@ -242,42 +276,64 @@ export const calendarTools: ToolDefinition[] = [
   defineTool({
     name: 'calendar.searchEvents',
     aliases: ['list_upcoming_events', 'search_calendar'],
-    description: 'List calendar events in a window, soonest first.',
+    description: 'List native calendar events and read-only imported family context in a bounded window, soonest first. Free annotations and points are visible but do not occupy time. Omitted end defaults to a finite 366-day horizon.',
     domain: 'calendar',
     capability: 'view',
     risk: 'low',
     readOnly: true,
     input: z.object({
-      from: z.string().nullish().describe('ISO 8601 start of the window; defaults to now'),
-      to: z.string().nullish().describe('ISO 8601 end of the window'),
+      from: z.string().nullish().describe('ISO 8601 start with explicit Z or numeric UTC offset; defaults to now'),
+      to: z.string().nullish().describe('ISO 8601 inclusive end with explicit Z or numeric UTC offset; defaults to 366 days after the start'),
       query: z.string().nullish().describe('Match against the event title'),
       assignee: z.string().nullish(),
       assignee_id: z.string().nullish(),
+      category: z.enum(CATEGORIES).nullish(),
       limit: z.number().int().nullish(),
     }),
-    output: z.object({ events: z.array(eventOutput) }),
-    summarize: (_input, output) => (output.events.length === 0
-      ? 'Nothing on the calendar for that window'
-      : `Found ${plural(output.events.length, 'event')}, starting with ${output.events[0].title} at ${output.events[0].when}`),
+    output: searchOutput,
+    summarize: (input, output) => {
+      const rows = [...output.events, ...output.source_events].sort((a, b) => a.displayOrder - b.displayOrder);
+      const annotations = rows.filter(row => !row.occupied).length;
+      const filtered = input.assignee != null || input.assignee_id != null || input.category != null;
+      const parts = rows.length === 0 ? ['No calendar results in this bounded window']
+        : filtered ? [`Found ${plural(output.events.length, 'event')} matching the native filters and ${plural(output.source_events.length, 'imported family context item')} (person/category unmapped)`]
+        : [`Found ${plural(rows.length, 'event')}, starting with ${rows[0].title ?? 'Calendar event'} at ${rows[0].when}`];
+      if (annotations) parts.push(`${plural(rows.length - annotations, 'occupied event')} and ${plural(annotations, 'free or point annotation')} shown; annotations do not occupy time`);
+      if (output.truncated) parts.push(`Showing ${output.returnedCount} of ${output.matchedCount} visible results`);
+      if (output.window.defaultedFrom || output.window.defaultedTo) parts.push(`Bounded search from ${output.window.from} through ${output.horizonEndsAt}`);
+      return parts.join('. ');
+    },
     execute: async (scope, input) => {
+      const now = scopeNow(scope);
+      const from = input.from ?? now.toISOString();
+      let window: ReturnType<typeof validateCalendarSearchWindow>;
+      try {
+        const to = input.to ?? new Date(Date.parse(from) + 366 * 86_400_000 - 1).toISOString();
+        window = validateCalendarSearchWindow(scope, { from, to });
+      } catch {
+        return fail('Choose a valid bounded calendar window and household timezone.', { code: SERVICE_CODES.invalidInput });
+      }
       const assignee = await resolveAssigneeId(scope, input);
       if (!assignee.ok) return assignee;
 
-      const res = await searchEvents(scope, {
-        from: input.from ?? null,
-        to: input.to ?? null,
-        query: input.query ?? null,
-        assigneeId: assignee.data,
+      const res = await searchCalendarOccurrences(scope, {
+        from: window.from, to: window.to,
+        query: input.query ?? undefined,
+        assigneeId: assignee.data ?? undefined,
+        category: input.category ?? undefined,
         limit: input.limit ?? undefined,
       });
       if (!res.ok) return res;
-      const now = scopeNow(scope);
       return ok({
-        events: res.data.map((event) => ({
-          id: event.id, title: event.title, starts_at: event.starts_at, ends_at: event.ends_at,
-          all_day: event.all_day, category: event.category, location: event.location, assignee_id: event.assignee_id,
-          when: describeWhen(event.starts_at, scope.tz, now),
-        })),
+        ...res.data,
+        events: res.data.events.map(event => ({ ...event, when: event.all_day
+          ? `all day ${event.startDate} through ${event.endDate} (exclusive)`
+          : describeWhen(event.actualStartsAt, scope.tz, now) })),
+        source_events: res.data.source_events.map(event => ({ ...event, when: event.all_day
+          ? `all day ${event.startDate} through ${event.endDate} (exclusive)`
+          : describeWhen(event.actualStartsAt, scope.tz, now) })),
+        window: { from: window.from, to: window.to, bounded: true as const,
+          defaultedFrom: input.from == null, defaultedTo: input.to == null },
       });
     },
   }),

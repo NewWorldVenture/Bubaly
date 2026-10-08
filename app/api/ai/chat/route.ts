@@ -139,6 +139,7 @@ export async function POST(req: NextRequest) {
       'Guidelines:',
       "- When the user asks you to schedule, add, remind, or plan something, USE the tools to actually do it — don't just describe it.",
       '- Resolve relative dates ("tomorrow", "next Friday at 3pm") against the current local date/time and pass ISO 8601 datetimes in the family time zone.',
+      '- For calendar.searchEvents specifically, from and to must be full ISO 8601 instants with Z or the correct explicit UTC offset for the household timezone on each requested date, including daylight saving changes. Never use date-only or offsetless search bounds. Keep the inclusive window within 366 days; omitted bounds use the disclosed finite default horizon.',
       '- You may call several tools in one turn (e.g. add multiple grocery items). Prefer one tool call per item.',
       '- After acting, confirm crisply what you did. If you need a critical detail (like a date), ask one short question instead of guessing.',
       '- Be concise, friendly, and genuinely helpful. Never invent data you were not given.',
