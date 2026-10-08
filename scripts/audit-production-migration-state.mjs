@@ -57,16 +57,26 @@ select pg_catalog.jsonb_build_object(
   -- exactly what happened, three releases running.
   --
   -- This resolves the one bit that decides it, and only that bit: a boolean for
-  -- whether the policy mentions can_manage_family. No expression text leaves the
+  -- whether every applicable clause is a direct can_manage_family predicate. No expression text leaves the
   -- database, so the hashing posture above is unchanged. See docs/runbooks/LB-016.
   'moneyWritePolicies', coalesce((select pg_catalog.jsonb_agg(pg_catalog.jsonb_build_object(
     'table', c.relname, 'name', p.polname,
     'command', case p.polcmd when 'a' then 'INSERT' when 'w' then 'UPDATE'
                              when 'd' then 'DELETE' when '*' then 'ALL' end,
     'permissive', p.polpermissive,
-    'managerGated', coalesce(pg_catalog.pg_get_expr(p.polqual, p.polrelid), '') || ' ' ||
-                    coalesce(pg_catalog.pg_get_expr(p.polwithcheck, p.polrelid), '')
-                    like '%can_manage_family%')
+    'roles', (select pg_catalog.jsonb_agg(case when r.id = 0 then 'public' else pg_catalog.pg_get_userbyid(r.id) end order by r.id)
+              from pg_catalog.unnest(p.polroles) as r(id)),
+    -- Recognize only a direct manager predicate. Merely mentioning the helper
+    -- (NOT, OR true, or only one UPDATE clause) does not prove a manager gate.
+    'managerGated', case p.polcmd
+      when 'a' then coalesce(pg_catalog.pg_get_expr(p.polwithcheck, p.polrelid), '')
+        in ('can_manage_family(family_id)', 'public.can_manage_family(family_id)')
+      when 'd' then coalesce(pg_catalog.pg_get_expr(p.polqual, p.polrelid), '')
+        in ('can_manage_family(family_id)', 'public.can_manage_family(family_id)')
+      else coalesce(pg_catalog.pg_get_expr(p.polqual, p.polrelid), '')
+        in ('can_manage_family(family_id)', 'public.can_manage_family(family_id)')
+        and coalesce(pg_catalog.pg_get_expr(p.polwithcheck, p.polrelid), pg_catalog.pg_get_expr(p.polqual, p.polrelid), '')
+          in ('can_manage_family(family_id)', 'public.can_manage_family(family_id)') end)
     order by c.relname, p.polname)
     from pg_catalog.pg_policy p
     join pg_catalog.pg_class c on c.oid = p.polrelid
@@ -122,22 +132,12 @@ export async function readProductionMigrationState({ projectRef, token, fetchImp
 }
 
 /**
- * Does a non-manager currently have a write into the household's money?
- *
- * Answers the question the hashes could not, in the two halves that actually
- * decide it:
- *
- *   openWrites  — a PERMISSIVE write policy that does not require manager role.
- *                 Permissive policies OR together, so one of these is enough to
- *                 grant the write on its own.
- *   unguarded   — a money table with no RESTRICTIVE write guard. Restrictive
- *                 policies AND, so a guarded table survives a stray permissive
- *                 policy; an unguarded one does not.
- *
- * `exploitable` is the conjunction, and it is the only line a responder needs:
- * an open write on a table with no backstop is a child able to move money.
- * An open write on a guarded table is reportable but not exploitable — that is
- * the wallet finding, and LB-016 explains why halting on it adds nothing.
+ * Conservative metadata screening, not an authorization proof. `openWrites`
+ * lists permissive predicates not recognized as direct manager gates;
+ * `unprotectedWrites` lacks a manager guard covering every command and role.
+ * The legacy `exploitable` field flags candidates, including disabled RLS.
+ * Confirm grants, helper semantics and role inheritance before asserting an
+ * actual non-manager write path. Complex safe predicates can be flagged.
  */
 /** The eleven tables the money boundary covers, in the order the SQL lists them. */
 export const MONEY_TABLES = [
@@ -178,18 +178,26 @@ export function moneyWriteVerdict(snapshot) {
   // a guarantee, and claiming "RLS is off" would invent a finding.
   const rlsKnown = tableList.length > 0;
 
-  const openWrites = rows
-    .filter((r) => r.permissive && !r.managerGated)
-    .map((r) => `${r.table}.${r.name} (${r.command})`);
-  const guarded = new Set(rows.filter((r) => !r.permissive).map((r) => r.table));
-  const withWritePolicy = new Set(rows.map((r) => r.table));
+  const commands = (row) => row.command === 'ALL' ? ['INSERT', 'UPDATE', 'DELETE']
+    : ['INSERT', 'UPDATE', 'DELETE'].includes(row.command) ? [row.command] : [];
+  const rolesKnown = (row) => Array.isArray(row.roles) && row.roles.length > 0 && row.roles.every(role => typeof role === 'string' && role.length > 0);
+  const guards = rows.filter(row => row.permissive === false && row.managerGated === true);
+  const covered = (write) => rolesKnown(write) && commands(write).length > 0 && commands(write).every(command =>
+    write.roles.every(role => guards.some(guard => guard.table === write.table && commands(guard).includes(command)
+      && rolesKnown(guard) && (guard.roles.includes('public') || guard.roles.includes(role)))));
+  const writes = rows.filter(row => row.permissive === true && commands(row).length > 0);
+  const openRows = writes.filter(row => row.managerGated !== true);
+  const label = row => `${row.table}.${row.name} (${row.command})`;
+  const openWrites = openRows.map(label);
+  const unprotectedWrites = openRows.filter(row => !covered(row)).map(label);
+  const withWritePolicy = new Set(writes.map(row => row.table));
 
   const present = rlsKnown
     ? MONEY_TABLES.filter((t) => rlsByTable.has(t))
     : [...withWritePolicy].filter((t) => MONEY_TABLES.includes(t));
 
   const rlsDisabled = rlsKnown ? present.filter((t) => !rlsByTable.get(t)).sort() : [];
-  const unguarded = present.filter((t) => withWritePolicy.has(t) && !guarded.has(t)).sort();
+  const unguarded = present.filter(t => writes.some(row => row.table === t && !covered(row))).sort();
   const noWritePolicy = present.filter((t) => !withWritePolicy.has(t)).sort();
   const absent = rlsKnown ? MONEY_TABLES.filter((t) => !rlsByTable.has(t)).sort() : [];
 
@@ -198,20 +206,24 @@ export function moneyWriteVerdict(snapshot) {
     if (rlsDisabled.includes(t)) return [t, 'OPEN - RLS DISABLED'];
     if (noWritePolicy.includes(t)) return [t, 'CLOSED - RLS on, no write policy grants access'];
     if (!openWrites.some((w) => w.startsWith(`${t}.`))) return [t, 'CLOSED - every write is manager-gated'];
-    if (guarded.has(t)) return [t, 'closed by restrictive guard'];
+    if (!unprotectedWrites.some(w => w.startsWith(`${t}.`))) return [t, 'closed by restrictive guard'];
     return [t, 'OPEN - non-manager can write'];
   }).filter(([, v]) => v !== undefined));
 
   return {
     openWrites,
+    unprotectedWrites,
     unguarded,
     rlsDisabled,
     noWritePolicy,
     absent,
     rlsKnown,
+    roleCoverageKnown: rows.every(rolesKnown),
+    requiresReview: !rlsKnown || rows.some(row => !rolesKnown(row) || commands(row).length === 0),
+    assessmentBasis: 'Metadata screening only; unrecognized predicates and role inheritance require review, and helper semantics and grants need independent verification.',
     verdicts,
     // RLS off is exploitable on its own: the policies below it do not apply.
-    exploitable: rlsDisabled.length > 0 || openWrites.some((w) => unguarded.includes(w.split('.')[0])),
+    exploitable: rlsDisabled.length > 0 || unprotectedWrites.length > 0,
     runbook: 'docs/runbooks/LB-016-wallet-permissive-policy-finding.md',
   };
 }

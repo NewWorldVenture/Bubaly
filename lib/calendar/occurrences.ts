@@ -193,12 +193,17 @@ export async function readCalendarOccurrences<C extends keyof EventRow = keyof E
 
   const timed = seriesRows.filter((row) => !row.all_day);
   const allDay = seriesRows.filter((row) => row.all_day);
-  const occurrences = [
-    ...expandEventsInZone(timed, new Date(bounds.timedFrom), new Date(bounds.timedTo), timezone, opts.overlap),
+  let occurrences: CalendarOccurrence<C>[];
+  try {
+    occurrences = [
+    ...expandEventsInZone(timed, new Date(bounds.timedFrom), new Date(bounds.timedTo), timezone, opts.overlap, { requireComplete: true }),
     // An all-day series steps by calendar date; its rows are UTC midnights of
     // the family's dates, so the date window and a UTC clock read them as written.
-    ...expandEventsInZone(allDay, new Date(dayStart), new Date(dayEnd), 'UTC', opts.overlap),
-  ];
+    ...expandEventsInZone(allDay, new Date(dayStart), new Date(dayEnd), 'UTC', opts.overlap, { requireComplete: true }),
+    ];
+  } catch (cause) {
+    return { data: null, count: null, error: { message: cause instanceof Error ? cause.message : 'The calendar window cannot be read whole' } };
+  }
 
   // Both lists are filtered here as well as in the query, so a row the database
   // (or a stand-in for it) answers out of place is still counted once.

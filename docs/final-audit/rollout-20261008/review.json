@@ -1,0 +1,1599 @@
+{
+  "status": "REVIEW_REQUIRED_NOT_APPLY_READY",
+  "productionActionsAuthorized": false,
+  "target": "ltcxlbipiihclxwioyqj",
+  "observedAt": "2026-10-08T01:05:38.018846+00:00",
+  "scope": "Existing release manifest boundary only; not full catalog acceptance",
+  "evidence": [
+    {
+      "path": "docs/final-audit/rollout-20261008/boundary.snapshot.json",
+      "sha256Lf": "ac5a9e7938eedf7a272bbb1cac6fe1c95b2fe44811a5b20dea1a5b95d0992674"
+    },
+    {
+      "path": "supabase/production-forward-release.json",
+      "sha256Lf": "1287911d0302121e2e7694eced5b40c1636fa4de8995405ef0810c98958e1736"
+    }
+  ],
+  "legacyRelease": {
+    "name": "bubaly-household-ai-2026-09-05",
+    "checksumValidation": "passed",
+    "files": [
+      {
+        "path": "supabase/migrations/0240_closet_outfits.sql",
+        "sha256Lf": "2721cf096853b91ceafd2c3987982805a48a831176b9371e559c0319b8b83db2"
+      },
+      {
+        "path": "supabase/migrations/0241_family_watchlist.sql",
+        "sha256Lf": "6ca7ee5975d1c73b36881613bbaffc9edc9dae3ecd9c1a6257fc2d982d1a3bde"
+      },
+      {
+        "path": "supabase/migrations/0242_home_inventory.sql",
+        "sha256Lf": "4cd12057a8e83e20d657572891e79f993248aec01c098bf5fd2680241ecccb01"
+      },
+      {
+        "path": "supabase/migrations/0243_sleep_coach.sql",
+        "sha256Lf": "a3db800e37acb48d170917ba0c5e0b8b5dc9b72be1f6eabbdec143e65011fc1a"
+      },
+      {
+        "path": "supabase/migrations/0244_declutter.sql",
+        "sha256Lf": "12c979d4e48e09160b9cc158cf5f65313c6849386f0eca20972756d4274fa953"
+      },
+      {
+        "path": "supabase/migrations/0245_move_planner.sql",
+        "sha256Lf": "e25e5ae3b7b436374f4376f4d4007071f0a8f5df0906773dd7ce811e11f09125"
+      },
+      {
+        "path": "supabase/migrations/0246_home_projects.sql",
+        "sha256Lf": "23d92fdd99ac00f6b13f89d0817de0ba565d5e270e6ab393bc5f0133b783358f"
+      },
+      {
+        "path": "supabase/migrations/0247_career_hub.sql",
+        "sha256Lf": "686287bc1824f28102971b5b61c0c53747f48ea65b7a1cc511fb090f5aff7049"
+      },
+      {
+        "path": "supabase/migrations/0248_language_practice.sql",
+        "sha256Lf": "afa9ae58c3014f14ee4c3bbb59e9c1133d412e057acc45f909eb6161a56dec6b"
+      },
+      {
+        "path": "supabase/migrations/0249_model_dirty_delete_safe.sql",
+        "sha256Lf": "30c10fdde1edc153fa6dc529ad8cd90dbce7c79fee43cc5a59169767a39ad1a8"
+      },
+      {
+        "path": "supabase/migrations/0250_ai_runtime_core.sql",
+        "sha256Lf": "0907d23e802a324ae1e96d82d84f7350eee17807f7a99683176e1d3b2b63eb5f"
+      },
+      {
+        "path": "supabase/migrations/0251_ai_trust_hardening.sql",
+        "sha256Lf": "34f9c7fa34262b4055705e4128d146bb2401f301137e02f9f506d7d332a9e08f"
+      },
+      {
+        "path": "supabase/migrations/0252_ai_insert_authority.sql",
+        "sha256Lf": "0aa32fb1c5135c0654f7e3637a4f58933d8c9eeeb0f441bf91d6863eaf8b095f"
+      },
+      {
+        "path": "supabase/migrations/0253_ai_worker_execute_lockdown.sql",
+        "sha256Lf": "ac30e3b5ff959702c9eb6f9a12def6508809d370101f015129e8543e7fff5f0c"
+      },
+      {
+        "path": "supabase/migrations/0254_wallet_write_policy_drift.sql",
+        "sha256Lf": "9671b78a918dd50cc800c15c459868df2a9379470b6c217ebde0f8b1409f8843"
+      }
+    ],
+    "sourceInventoryGate": {
+      "passed": false,
+      "reason": "Production forward release is held: repository migrations outside the pinned 0240-0254 release: 00260_display_layouts.sql, 00261_medication_doses.sql, 00420_family_location.sql, 00421_loyalty.sql, 00430_chore_missions.sql, 00431_wishlists.sql, 00730_behavior_tracking.sql, 00731_habits.sql, 00800_food_household.sql, 00801_health_wellness.sql, 00890_avatars_bucket.sql, 00891_dashboard_layouts.sql, 00900_communications_hub.sql, 00901_stripe_money.sql, 00950_pay_handles.sql, 00951_wallet_transfers.sql, 00980_relationship_helper.sql, 00981_trip_intelligence.sql, 01050_calendar_events_rls_repair.sql, 01051_child_logins.sql, 01080_album_highlight_kind.sql, 01081_messages_enhance.sql, 01090_documents_favorite.sql, 01091_finance_rls_repair.sql, 01092_user_preferences_rls_repair.sql, 01100_family_profile.sql, 01101_transactions_member.sql, 01370_ai_call_guardian.sql, 01371_child_login_throttle.sql, 01380_demo_sessions.sql, 01381_onboarding_imports.sql, 01420_family_signals.sql, 01421_poll_facilitation.sql, 0255_ai_runtime_lockdown.sql, 0256_idempotency_keys.sql, 0257_family_ai_settings.sql, 0258_home_briefs_kind.sql, 0259_routine_schedules.sql, 0260_trust_ledger_lockdown.sql, 0261_home_briefs_kind_uniqueness.sql, 0262_home_briefs_quarantine.sql, 0263_dead_letter_reconcile.sql, 0264_ai_surface_role_privacy.sql, 0265_family_facts_provenance.sql, 0266_document_vault_boundary.sql, 0267_money_write_boundary.sql, 0268_suggestion_expiry.sql, 0269_realtime_liveness_tranche.sql, 0270_travel_confirmation_import.sql, 0271_move_date_recalculation.sql, 0272_rsvp_is_first_person.sql, 0273_approval_requests_pending_once.sql, 0274_finance_transaction_operation_receipts.sql, 0275_money_permissive_write_sweep.sql, 0276_app_settings_feature_tiers_read.sql, 0277_marketing_aeo_translations.sql, 0278_public_handled_stats.sql, 0279_seed_aeo_question_translations.sql, 0280_aeo_answers_agree_in_number.sql, 0281_german_clauses_close.sql, 0282_marketing_recurring_ads.sql, 0283_assistant_links.sql, 0284_library_books_podcasts.sql, 0285_conflict_targets_inferable.sql, 0286_blog_updated_at_is_a_content_date.sql, 0290_money_anon_write_grants.sql, 0291_sync_log_skips_deleted_family.sql, 0292_privileged_rpc_grant_reassert.sql, 0293_notifications_related_id_is_a_key.sql, 0294_family_scoped_read_indexes.sql, 0295_reward_redemption_decision_guard.sql, 0296_family_credentials_manager_only.sql, 0297_sensitive_tables_respect_role.sql, 0298_invites_update_manager_only.sql, 0299_family_keeps_a_manager.sql, 0300_entitlement_is_not_client_writable.sql, 0301_notification_authorship.sql, 0302_one_live_system_policy.sql, 0303_document_bytes_boundary.sql, 0304_economy_invest_decision_guard.sql, 0305_chore_award_amounts_are_manager_set.sql, 0306_money_instructions_are_not_member_writable.sql, 0307_chore_prices_are_manager_set.sql, 0308_reward_catalogue_is_manager_run.sql, 0309_prescriptions_are_manager_set.sql, 0310_ui_only_manager_gates_are_enforced.sql, 0311_family_scoped_references.sql, 0312_sensitive_documents_match_real_folder_names.sql, 0313_meal_plan_groceries_stay_in_one_family.sql, 0314_circle_join_codes_are_unambiguous.sql, 0315_a_listing_is_claimed_once.sql, 0316_a_chore_is_paid_once.sql, 0317_listing_status_decides_from_a_locked_row.sql, 0318_guardian_safety_config_is_manager_only.sql, 0319_social_access_delete_matches_grant.sql, 0320_audit_logs_says_who_wrote_it.sql, 0321_family_erasure_indexes.sql, 0322_wallet_side_tables_are_manager_written.sql, 0323_safety_records_are_manager_written.sql, 0324_pay_ids_and_savings_goals_are_manager_written.sql, 0325_dashboard_and_twin_writes_match_the_app.sql, 0326_chore_dispute_resolution_is_a_managers_call.sql, 0327_autopilot_suggestions_are_not_erasable.sql, 0328_wallet_audit_logs_say_who_wrote_them.sql, 0329_automation_runs_pin_what_a_member_may_queue.sql, 0330_playbook_suggestions_cannot_smuggle_a_sensitive_fact.sql, 0331_ai_score_is_not_the_childs_to_write.sql, 0332_a_child_does_not_choose_the_number_bubaly_dials.sql, 0333_a_request_says_who_actually_filed_it.sql, 0335_a_location_says_who_was_actually_there.sql, 0336_only_a_manager_adds_edits_or_bins_an_asset.sql, 0338_a_care_entry_names_who_actually_logged_it.sql, 0339_a_calendar_event_names_who_actually_made_it.sql, 0340_an_erasure_actually_erases.sql, 0341_two_approvals_for_one_kid_both_land.sql, 0342_a_child_cannot_spend_the_same_dollar_twice.sql, 0343_only_a_parent_mints_or_revokes_an_assistant_key.sql, 0344_a_social_restriction_cannot_be_deleted_by_its_subject.sql, 0345_guardian_trust_and_routing_are_manager_writes.sql, 0346_a_calendar_connection_belongs_to_its_owner.sql, 0347_an_audit_trail_is_append_only.sql, 0348_a_social_admin_cannot_manage_access.sql, 0349_one_saved_copy_of_a_provider_recipe_per_family.sql, 0350_gift_money_routes_are_manager_writes.sql, 0351_a_screen_time_limit_is_set_by_a_manager.sql, 0352_a_child_cannot_clear_the_households_money_warnings.sql, 0353_consent_and_commission_are_not_a_members_write.sql, 0354_checkout_rewards_and_babysitters_are_not_a_childs_write.sql, 0355_the_sync_engines_tables_are_not_a_members_write.sql, 0356_social_writes_need_the_social_permission.sql, 0357_concierge_calls_and_the_family_dashboard_are_manager_writes.sql, 0358_a_marketplace_report_is_filed_open_by_its_reporter.sql, 0359_a_marketplace_review_needs_a_completed_exchange.sql, 0360_a_head_out_reminder_goes_with_its_departure_plan.sql, 0361_a_vote_is_cast_by_its_voter.sql, 0362_a_read_receipt_is_the_readers.sql, 0363_the_emergency_plan_is_a_managers_write.sql, 0364_a_private_journal_is_private.sql, 0365_a_driving_record_is_not_the_drivers_to_erase.sql, 0366_a_screen_time_log_is_not_the_childs_to_erase.sql, 0367_a_message_is_its_senders.sql, 0368_a_conversation_is_not_anyones_to_wipe.sql, 0369_a_public_bucket_is_not_a_public_listing.sql, 0370_an_offer_is_withdrawn_not_deleted.sql, 0371_a_listing_question_is_asked_and_answered_in_your_own_name.sql, 0372_a_pickup_is_arranged_by_the_two_parties.sql, 0373_a_redemption_spends_your_own_points.sql, 0374_a_chore_and_its_points_stay_with_the_child_who_did_it.sql, 0375_chore_proof_is_the_submitters.sql, 0376_a_childs_proof_folder_is_theirs.sql, 0377_a_behavior_log_is_not_the_childs_to_erase.sql, 0378_a_savings_goal_is_a_manager_write.sql, 0379_a_members_location_is_theirs_to_report.sql, 0380_an_audit_entry_is_written_as_yourself.sql, 0381_two_parents_means_two_parents_in_the_database_too.sql, 0382_a_password_alone_does_not_delete_the_familys_budget.sql, 0383_an_archived_page_takes_its_public_answers_with_it.sql, 0384_the_urgent_fallback_number_is_stored_the_only_way_it_can_be_used.sql, 0385_a_member_only_rewrites_their_own_memory.sql, 0386_a_family_subscribes_to_a_calendar_url_once.sql, 0387_a_child_cannot_lift_the_publish_lock_or_link_a_document_they_cannot_read.sql, 0388_a_notification_is_written_by_bubaly_not_by_a_member.sql, 0389_a_decision_once_made_stays_made.sql, 0390_a_queued_run_keeps_the_gate_it_was_born_with.sql, 0391_a_password_alone_does_not_open_the_familys_vault.sql, 0406_social_tokens_service_role_only.sql, 0407_no_truncate_for_the_public_roles.sql, 0408_household_secrets_are_not_child_readable.sql, 0409_marketplace_parties_are_not_editable.sql, 0410_a_review_belongs_to_whoever_wrote_it.sql, 0411_deleting_a_review_is_rewriting_it.sql, 0414_a_health_record_is_written_by_a_parent.sql, 0415_a_paperwork_stamp_does_not_rewrite_its_siblings.sql, 0416_a_private_journal_is_private.sql, 0418_a_public_bucket_serves_what_you_put_in_it.sql, 0419_a_departed_parent_keeps_no_assistant_key.sql, 0420_only_a_released_app_installs.sql, 0426_a_policy_should_say_what_it_checks.sql, 0428_a_reward_costs_what_the_parent_set.sql, 0429_a_family_cannot_write_its_own_entitlement.sql, 0430_a_health_record_is_not_a_siblings_to_rewrite.sql, 0432_a_guardian_number_belongs_to_one_family.sql, 0433_the_terms_of_a_deal_are_fixed_when_it_is_struck.sql, 0434_a_prescription_is_a_parents_to_write.sql, 0435_a_childs_own_record_is_not_theirs_to_rewrite.sql, 0438_a_diagnosis_is_not_the_familys_to_browse.sql, 0439_a_reward_is_paid_for_with_points_that_exist.sql, 0440_a_device_is_buzzed_once_per_notification.sql, 0441_an_email_event_is_counted_once.sql, 0442_a_childs_milestones_are_a_parents_to_mark.sql, 0443_a_family_gets_one_default_list.sql, 0444_a_circle_can_be_created_where_pgcrypto_lives.sql, 0447_an_approved_investment_can_actually_be_approved.sql, 0448_a_single_choice_poll_takes_one_vote.sql, 0449_a_family_timezone_is_a_zone_that_exists.sql, 0450_a_feedback_screenshot_is_not_world_readable.sql, 0451_a_chore_proof_belongs_to_whose_chore_it_is.sql, 0452_a_proxy_bid_ceiling_is_secret.sql, 0453_guardian_screening_is_the_parents_decision.sql, 0454_onboarding_resumes_only_your_own_family.sql, 0455_decided_concierge_runs_leave_needs_you.sql, 0456_service_only_functions_are_service_only.sql, 0457_an_auction_can_close.sql, 0458_only_the_server_links_a_login_to_a_member.sql, 0459_family_media_is_read_by_the_family.sql, 0460_a_child_cannot_rewrite_the_familys_subscriptions.sql, 0461_an_unowned_table_is_not_a_members_write.sql, 0462_a_listing_is_acted_on_only_by_who_can_see_it.sql, 0463_a_read_receipt_is_the_readers_own.sql, 0464_a_guest_views_the_household.sql, 0471_an_admin_digest_reaches_each_admin_once.sql, 0474_a_removed_admin_is_not_sent_the_digest.sql, 0475_messaging_conversation_privacy_and_delivery.sql, 0476_messaging_notifications_preferences.sql. Re-pin by regenerating supabase/production-forward-release.json; see docs/PENDING_PROD_MIGRATIONS.md."
+    },
+    "liveBaselineGate": {
+      "passed": false,
+      "reason": "Unexpected or partially applied migration ledger; no replay is allowed."
+    },
+    "ledger": {
+      "expectedCount": 3,
+      "actualCount": 192,
+      "addedOrChanged": [
+        {
+          "name": "rls",
+          "version": "0004"
+        },
+        {
+          "name": "rpcs",
+          "version": "0005"
+        },
+        {
+          "name": "financial_health_school_sports",
+          "version": "0006"
+        },
+        {
+          "name": "home_asset_warranties",
+          "version": "0007"
+        },
+        {
+          "name": "super_admins",
+          "version": "0008"
+        },
+        {
+          "name": "medical_dental",
+          "version": "0009"
+        },
+        {
+          "name": "blog_posts",
+          "version": "00100"
+        },
+        {
+          "name": "support_tickets_admin_users",
+          "version": "00101"
+        },
+        {
+          "name": "public_stats",
+          "version": "0011"
+        },
+        {
+          "name": "support_tickets",
+          "version": "0012"
+        },
+        {
+          "name": "marketing",
+          "version": "0013"
+        },
+        {
+          "name": "core_platform",
+          "version": "0014"
+        },
+        {
+          "name": "todos",
+          "version": "0015"
+        },
+        {
+          "name": "dashboard_preference",
+          "version": "0016"
+        },
+        {
+          "name": "conversation_participants",
+          "version": "0017"
+        },
+        {
+          "name": "sync_platform",
+          "version": "0018"
+        },
+        {
+          "name": "sync_connections_unique",
+          "version": "0019"
+        },
+        {
+          "name": "marketing_channels",
+          "version": "0020"
+        },
+        {
+          "name": "marketing_suppressions",
+          "version": "0021"
+        },
+        {
+          "name": "family_os",
+          "version": "0022"
+        },
+        {
+          "name": "admin_console",
+          "version": "0023"
+        },
+        {
+          "name": "weather_locations",
+          "version": "0024"
+        },
+        {
+          "name": "fix_grocery_lists_rls",
+          "version": "0025"
+        },
+        {
+          "name": "display_layouts",
+          "version": "00260"
+        },
+        {
+          "name": "medication_doses",
+          "version": "00261"
+        },
+        {
+          "name": "rides",
+          "version": "0027"
+        },
+        {
+          "name": "reward_redemptions",
+          "version": "0028"
+        },
+        {
+          "name": "trips",
+          "version": "0029"
+        },
+        {
+          "name": "homework",
+          "version": "0030"
+        },
+        {
+          "name": "opportunities",
+          "version": "0031"
+        },
+        {
+          "name": "care_log",
+          "version": "0032"
+        },
+        {
+          "name": "renewals",
+          "version": "0033"
+        },
+        {
+          "name": "social_command_center",
+          "version": "0034"
+        },
+        {
+          "name": "push_devices",
+          "version": "0035"
+        },
+        {
+          "name": "home_maintenance",
+          "version": "0036"
+        },
+        {
+          "name": "auto",
+          "version": "0037"
+        },
+        {
+          "name": "notification_pushed_at",
+          "version": "0038"
+        },
+        {
+          "name": "referral_program",
+          "version": "0039"
+        },
+        {
+          "name": "surveys",
+          "version": "0040"
+        },
+        {
+          "name": "reviews",
+          "version": "0041"
+        },
+        {
+          "name": "family_location",
+          "version": "00420"
+        },
+        {
+          "name": "loyalty",
+          "version": "00421"
+        },
+        {
+          "name": "chore_missions",
+          "version": "00430"
+        },
+        {
+          "name": "wishlists",
+          "version": "00431"
+        },
+        {
+          "name": "school_timetable",
+          "version": "0044"
+        },
+        {
+          "name": "calendar_feeds",
+          "version": "0045"
+        },
+        {
+          "name": "announcements",
+          "version": "0046"
+        },
+        {
+          "name": "event_rsvps",
+          "version": "0047"
+        },
+        {
+          "name": "family_dates",
+          "version": "0048"
+        },
+        {
+          "name": "ab_experiments",
+          "version": "0049"
+        },
+        {
+          "name": "automation_run_dedup",
+          "version": "0050"
+        },
+        {
+          "name": "checkout_sessions",
+          "version": "0051"
+        },
+        {
+          "name": "family_onboarding",
+          "version": "0052"
+        },
+        {
+          "name": "landing_metrics",
+          "version": "0053"
+        },
+        {
+          "name": "recipe_sources",
+          "version": "0054"
+        },
+        {
+          "name": "meal_votes",
+          "version": "0055"
+        },
+        {
+          "name": "crm",
+          "version": "0056"
+        },
+        {
+          "name": "crm_quotes",
+          "version": "0057"
+        },
+        {
+          "name": "visitor_intelligence",
+          "version": "0058"
+        },
+        {
+          "name": "reputation",
+          "version": "0059"
+        },
+        {
+          "name": "marketing_assets",
+          "version": "0060"
+        },
+        {
+          "name": "marketing_videos",
+          "version": "0061"
+        },
+        {
+          "name": "personalization",
+          "version": "0062"
+        },
+        {
+          "name": "marketing_push",
+          "version": "0063"
+        },
+        {
+          "name": "exit_intent",
+          "version": "0064"
+        },
+        {
+          "name": "affiliates",
+          "version": "0065"
+        },
+        {
+          "name": "competitive_intel",
+          "version": "0066"
+        },
+        {
+          "name": "subscription_cancel",
+          "version": "0067"
+        },
+        {
+          "name": "health_visits",
+          "version": "0068"
+        },
+        {
+          "name": "immunizations",
+          "version": "0069"
+        },
+        {
+          "name": "vacations",
+          "version": "0070"
+        },
+        {
+          "name": "weekend_planner",
+          "version": "0071"
+        },
+        {
+          "name": "weekend_feeds",
+          "version": "0072"
+        },
+        {
+          "name": "behavior_tracking",
+          "version": "00730"
+        },
+        {
+          "name": "habits",
+          "version": "00731"
+        },
+        {
+          "name": "screen_time",
+          "version": "0074"
+        },
+        {
+          "name": "expense_splitting",
+          "version": "0075"
+        },
+        {
+          "name": "subscriptions_tracked",
+          "version": "0076"
+        },
+        {
+          "name": "tax_documents",
+          "version": "0077"
+        },
+        {
+          "name": "family_polls",
+          "version": "0078"
+        },
+        {
+          "name": "trip_memories",
+          "version": "0079"
+        },
+        {
+          "name": "food_household",
+          "version": "00800"
+        },
+        {
+          "name": "health_wellness",
+          "version": "00801"
+        },
+        {
+          "name": "home_management",
+          "version": "0081"
+        },
+        {
+          "name": "family_tree",
+          "version": "0082"
+        },
+        {
+          "name": "pets",
+          "version": "0083"
+        },
+        {
+          "name": "insurance",
+          "version": "0084"
+        },
+        {
+          "name": "autopilot",
+          "version": "0085"
+        },
+        {
+          "name": "medication_refills",
+          "version": "0086"
+        },
+        {
+          "name": "journal",
+          "version": "0087"
+        },
+        {
+          "name": "family_wallet",
+          "version": "0088"
+        },
+        {
+          "name": "avatars_bucket",
+          "version": "00890"
+        },
+        {
+          "name": "dashboard_layouts",
+          "version": "00891"
+        },
+        {
+          "name": "communications_hub",
+          "version": "00900"
+        },
+        {
+          "name": "stripe_money",
+          "version": "00901"
+        },
+        {
+          "name": "concierge",
+          "version": "0091"
+        },
+        {
+          "name": "front_desk",
+          "version": "0092"
+        },
+        {
+          "name": "trust_engine",
+          "version": "0093"
+        },
+        {
+          "name": "family_dashboard_settings",
+          "version": "0094"
+        },
+        {
+          "name": "pay_handles",
+          "version": "00950"
+        },
+        {
+          "name": "wallet_transfers",
+          "version": "00951"
+        },
+        {
+          "name": "family_economy",
+          "version": "0096"
+        },
+        {
+          "name": "kid_investing",
+          "version": "0097"
+        },
+        {
+          "name": "relationship_helper",
+          "version": "00980"
+        },
+        {
+          "name": "trip_intelligence",
+          "version": "00981"
+        },
+        {
+          "name": "stripe_settings",
+          "version": "0099"
+        },
+        {
+          "name": "reminder_details",
+          "version": "0100"
+        },
+        {
+          "name": "social_feed",
+          "version": "0101"
+        },
+        {
+          "name": "food_os",
+          "version": "0102"
+        },
+        {
+          "name": "enum_backfill",
+          "version": "0103"
+        },
+        {
+          "name": "dining_out",
+          "version": "0104"
+        },
+        {
+          "name": "calendar_events_rls_repair",
+          "version": "01050"
+        },
+        {
+          "name": "child_logins",
+          "version": "01051"
+        },
+        {
+          "name": "todo_rls_repair",
+          "version": "0106"
+        },
+        {
+          "name": "meals_media_rls",
+          "version": "0107"
+        },
+        {
+          "name": "album_highlight_kind",
+          "version": "01080"
+        },
+        {
+          "name": "messages_enhance",
+          "version": "01081"
+        },
+        {
+          "name": "documents_favorite",
+          "version": "01090"
+        },
+        {
+          "name": "finance_rls_repair",
+          "version": "01091"
+        },
+        {
+          "name": "user_preferences_rls_repair",
+          "version": "01092"
+        },
+        {
+          "name": "family_profile",
+          "version": "01100"
+        },
+        {
+          "name": "transactions_member",
+          "version": "01101"
+        },
+        {
+          "name": "location_geofence_address",
+          "version": "0111"
+        },
+        {
+          "name": "location_realtime",
+          "version": "0112"
+        },
+        {
+          "name": "wallet_hub",
+          "version": "0113"
+        },
+        {
+          "name": "family_safety",
+          "version": "0114"
+        },
+        {
+          "name": "meals_hub",
+          "version": "0115"
+        },
+        {
+          "name": "bills_autopay",
+          "version": "0116"
+        },
+        {
+          "name": "documents_secure",
+          "version": "0117"
+        },
+        {
+          "name": "rls_drift_repair",
+          "version": "0118"
+        },
+        {
+          "name": "family_credentials",
+          "version": "0119"
+        },
+        {
+          "name": "marketplace",
+          "version": "0120"
+        },
+        {
+          "name": "voice_commands",
+          "version": "0121"
+        },
+        {
+          "name": "routine_templates",
+          "version": "0122"
+        },
+        {
+          "name": "family_facts",
+          "version": "0123"
+        },
+        {
+          "name": "journey_events",
+          "version": "0124"
+        },
+        {
+          "name": "family_operating_index",
+          "version": "0125"
+        },
+        {
+          "name": "family_playbook",
+          "version": "0126"
+        },
+        {
+          "name": "agent_activity",
+          "version": "0127"
+        },
+        {
+          "name": "family_connections",
+          "version": "0128"
+        },
+        {
+          "name": "family_graph",
+          "version": "0129"
+        },
+        {
+          "name": "family_decisions",
+          "version": "0130"
+        },
+        {
+          "name": "prep_plans",
+          "version": "0131"
+        },
+        {
+          "name": "network_consent",
+          "version": "0132"
+        },
+        {
+          "name": "onboarding_events",
+          "version": "0133"
+        },
+        {
+          "name": "model_dirty",
+          "version": "0134"
+        },
+        {
+          "name": "network_aggregates",
+          "version": "0135"
+        },
+        {
+          "name": "accept_invite_idempotent",
+          "version": "0136"
+        },
+        {
+          "name": "ai_call_guardian",
+          "version": "01370"
+        },
+        {
+          "name": "child_login_throttle",
+          "version": "01371"
+        },
+        {
+          "name": "demo_sessions",
+          "version": "01380"
+        },
+        {
+          "name": "onboarding_imports",
+          "version": "01381"
+        },
+        {
+          "name": "meal_ideas",
+          "version": "0139"
+        },
+        {
+          "name": "home_briefs",
+          "version": "0140"
+        },
+        {
+          "name": "daily_insights",
+          "version": "0141"
+        },
+        {
+          "name": "family_signals",
+          "version": "01420"
+        },
+        {
+          "name": "poll_facilitation",
+          "version": "01421"
+        },
+        {
+          "name": "ai_feedback",
+          "version": "0143"
+        },
+        {
+          "name": "experience_audits",
+          "version": "0144"
+        },
+        {
+          "name": "life_event_plans",
+          "version": "0145"
+        },
+        {
+          "name": "activation_events",
+          "version": "0146"
+        },
+        {
+          "name": "twin_simulations",
+          "version": "0147"
+        },
+        {
+          "name": "moment_activations",
+          "version": "0148"
+        },
+        {
+          "name": "reasoning_snapshots",
+          "version": "0149"
+        },
+        {
+          "name": "marketplace_matches",
+          "version": "0150"
+        },
+        {
+          "name": "marketplace_v2",
+          "version": "0151"
+        },
+        {
+          "name": "marketplace_saved_searches",
+          "version": "0152"
+        },
+        {
+          "name": "marketplace_questions",
+          "version": "0153"
+        },
+        {
+          "name": "marketplace_ownership",
+          "version": "0154"
+        },
+        {
+          "name": "wallet_auth_holds",
+          "version": "0155"
+        },
+        {
+          "name": "rate_limits",
+          "version": "0156"
+        },
+        {
+          "name": "family_signals_budget_drift",
+          "version": "0157"
+        },
+        {
+          "name": "concierge_plan_actions",
+          "version": "0158"
+        },
+        {
+          "name": "onboarding_progress",
+          "version": "0159"
+        },
+        {
+          "name": "visitor_consent",
+          "version": "0160"
+        },
+        {
+          "name": "demo_session_email_gate",
+          "version": "0161"
+        },
+        {
+          "name": "demo_email_uses",
+          "version": "0162"
+        },
+        {
+          "name": "messages_audio_read_fix",
+          "version": "0163"
+        },
+        {
+          "name": "family_trial_and_close",
+          "version": "0164"
+        },
+        {
+          "name": "family_app_store",
+          "version": "0165"
+        },
+        {
+          "name": "money_timeline_insights",
+          "version": "0168"
+        },
+        {
+          "name": "paperwork_items",
+          "version": "0169"
+        },
+        {
+          "name": "contact_interactions",
+          "version": "0170"
+        },
+        {
+          "name": "crm_contact_profile",
+          "version": "0171"
+        },
+        {
+          "name": "crm_lead_scores",
+          "version": "0172"
+        },
+        {
+          "name": "concierge_calls",
+          "version": "0173"
+        },
+        {
+          "name": "workload_snapshots",
+          "version": "0174"
+        },
+        {
+          "name": "independence_milestones",
+          "version": "0175"
+        },
+        {
+          "name": "marketplace_circles",
+          "version": "0176"
+        }
+      ],
+      "removedOrChanged": []
+    },
+    "boundaryDrift": {
+      "columns": {
+        "expectedCount": 113,
+        "actualCount": 113,
+        "addedOrChanged": [],
+        "removedOrChanged": []
+      },
+      "constraints": {
+        "expectedCount": 40,
+        "actualCount": 40,
+        "addedOrChanged": [],
+        "removedOrChanged": []
+      },
+      "policies": {
+        "expectedCount": 37,
+        "actualCount": 45,
+        "addedOrChanged": [
+          {
+            "name": "child_wallets_manager_delete_guard",
+            "roles": [
+              "authenticated"
+            ],
+            "table": "child_wallets",
+            "command": "DELETE",
+            "checkHash": "d41d8cd98f00b204e9800998ecf8427e",
+            "usingHash": "e5273d7a784c914a71deb5f0e2d915a6",
+            "permissive": "RESTRICTIVE"
+          },
+          {
+            "name": "child_wallets_manager_insert_guard",
+            "roles": [
+              "authenticated"
+            ],
+            "table": "child_wallets",
+            "command": "INSERT",
+            "checkHash": "e5273d7a784c914a71deb5f0e2d915a6",
+            "usingHash": "d41d8cd98f00b204e9800998ecf8427e",
+            "permissive": "RESTRICTIVE"
+          },
+          {
+            "name": "child_wallets_manager_update_guard",
+            "roles": [
+              "authenticated"
+            ],
+            "table": "child_wallets",
+            "command": "UPDATE",
+            "checkHash": "e5273d7a784c914a71deb5f0e2d915a6",
+            "usingHash": "e5273d7a784c914a71deb5f0e2d915a6",
+            "permissive": "RESTRICTIVE"
+          },
+          {
+            "name": "child_wallets_select",
+            "roles": [
+              "authenticated"
+            ],
+            "table": "child_wallets",
+            "command": "SELECT",
+            "checkHash": "d41d8cd98f00b204e9800998ecf8427e",
+            "usingHash": "34a9724c95501071f6077ea93474f44e",
+            "permissive": "PERMISSIVE"
+          },
+          {
+            "name": "Members manage child_wallets",
+            "roles": [
+              "authenticated"
+            ],
+            "table": "child_wallets",
+            "command": "ALL",
+            "checkHash": "34a9724c95501071f6077ea93474f44e",
+            "usingHash": "34a9724c95501071f6077ea93474f44e",
+            "permissive": "PERMISSIVE"
+          },
+          {
+            "name": "family_wallets_manager_delete_guard",
+            "roles": [
+              "authenticated"
+            ],
+            "table": "family_wallets",
+            "command": "DELETE",
+            "checkHash": "d41d8cd98f00b204e9800998ecf8427e",
+            "usingHash": "e5273d7a784c914a71deb5f0e2d915a6",
+            "permissive": "RESTRICTIVE"
+          },
+          {
+            "name": "family_wallets_manager_insert_guard",
+            "roles": [
+              "authenticated"
+            ],
+            "table": "family_wallets",
+            "command": "INSERT",
+            "checkHash": "e5273d7a784c914a71deb5f0e2d915a6",
+            "usingHash": "d41d8cd98f00b204e9800998ecf8427e",
+            "permissive": "RESTRICTIVE"
+          },
+          {
+            "name": "family_wallets_manager_update_guard",
+            "roles": [
+              "authenticated"
+            ],
+            "table": "family_wallets",
+            "command": "UPDATE",
+            "checkHash": "e5273d7a784c914a71deb5f0e2d915a6",
+            "usingHash": "e5273d7a784c914a71deb5f0e2d915a6",
+            "permissive": "RESTRICTIVE"
+          },
+          {
+            "name": "family_wallets_select",
+            "roles": [
+              "authenticated"
+            ],
+            "table": "family_wallets",
+            "command": "SELECT",
+            "checkHash": "d41d8cd98f00b204e9800998ecf8427e",
+            "usingHash": "34a9724c95501071f6077ea93474f44e",
+            "permissive": "PERMISSIVE"
+          },
+          {
+            "name": "Members manage family_wallets",
+            "roles": [
+              "authenticated"
+            ],
+            "table": "family_wallets",
+            "command": "ALL",
+            "checkHash": "34a9724c95501071f6077ea93474f44e",
+            "usingHash": "34a9724c95501071f6077ea93474f44e",
+            "permissive": "PERMISSIVE"
+          },
+          {
+            "name": "Members manage wallet_buckets",
+            "roles": [
+              "authenticated"
+            ],
+            "table": "wallet_buckets",
+            "command": "ALL",
+            "checkHash": "34a9724c95501071f6077ea93474f44e",
+            "usingHash": "34a9724c95501071f6077ea93474f44e",
+            "permissive": "PERMISSIVE"
+          },
+          {
+            "name": "wallet_buckets_manager_delete_guard",
+            "roles": [
+              "authenticated"
+            ],
+            "table": "wallet_buckets",
+            "command": "DELETE",
+            "checkHash": "d41d8cd98f00b204e9800998ecf8427e",
+            "usingHash": "e5273d7a784c914a71deb5f0e2d915a6",
+            "permissive": "RESTRICTIVE"
+          },
+          {
+            "name": "wallet_buckets_manager_insert_guard",
+            "roles": [
+              "authenticated"
+            ],
+            "table": "wallet_buckets",
+            "command": "INSERT",
+            "checkHash": "e5273d7a784c914a71deb5f0e2d915a6",
+            "usingHash": "d41d8cd98f00b204e9800998ecf8427e",
+            "permissive": "RESTRICTIVE"
+          },
+          {
+            "name": "wallet_buckets_manager_update_guard",
+            "roles": [
+              "authenticated"
+            ],
+            "table": "wallet_buckets",
+            "command": "UPDATE",
+            "checkHash": "e5273d7a784c914a71deb5f0e2d915a6",
+            "usingHash": "e5273d7a784c914a71deb5f0e2d915a6",
+            "permissive": "RESTRICTIVE"
+          },
+          {
+            "name": "wallet_buckets_select",
+            "roles": [
+              "authenticated"
+            ],
+            "table": "wallet_buckets",
+            "command": "SELECT",
+            "checkHash": "d41d8cd98f00b204e9800998ecf8427e",
+            "usingHash": "34a9724c95501071f6077ea93474f44e",
+            "permissive": "PERMISSIVE"
+          },
+          {
+            "name": "Members manage wallet_rules",
+            "roles": [
+              "authenticated"
+            ],
+            "table": "wallet_rules",
+            "command": "ALL",
+            "checkHash": "34a9724c95501071f6077ea93474f44e",
+            "usingHash": "34a9724c95501071f6077ea93474f44e",
+            "permissive": "PERMISSIVE"
+          },
+          {
+            "name": "wallet_rules_manager_delete_guard",
+            "roles": [
+              "authenticated"
+            ],
+            "table": "wallet_rules",
+            "command": "DELETE",
+            "checkHash": "d41d8cd98f00b204e9800998ecf8427e",
+            "usingHash": "e5273d7a784c914a71deb5f0e2d915a6",
+            "permissive": "RESTRICTIVE"
+          },
+          {
+            "name": "wallet_rules_manager_insert_guard",
+            "roles": [
+              "authenticated"
+            ],
+            "table": "wallet_rules",
+            "command": "INSERT",
+            "checkHash": "e5273d7a784c914a71deb5f0e2d915a6",
+            "usingHash": "d41d8cd98f00b204e9800998ecf8427e",
+            "permissive": "RESTRICTIVE"
+          },
+          {
+            "name": "wallet_rules_manager_update_guard",
+            "roles": [
+              "authenticated"
+            ],
+            "table": "wallet_rules",
+            "command": "UPDATE",
+            "checkHash": "e5273d7a784c914a71deb5f0e2d915a6",
+            "usingHash": "e5273d7a784c914a71deb5f0e2d915a6",
+            "permissive": "RESTRICTIVE"
+          },
+          {
+            "name": "Members manage wallet_transactions",
+            "roles": [
+              "authenticated"
+            ],
+            "table": "wallet_transactions",
+            "command": "ALL",
+            "checkHash": "34a9724c95501071f6077ea93474f44e",
+            "usingHash": "34a9724c95501071f6077ea93474f44e",
+            "permissive": "PERMISSIVE"
+          },
+          {
+            "name": "wallet_transactions_manager_delete_guard",
+            "roles": [
+              "authenticated"
+            ],
+            "table": "wallet_transactions",
+            "command": "DELETE",
+            "checkHash": "d41d8cd98f00b204e9800998ecf8427e",
+            "usingHash": "e5273d7a784c914a71deb5f0e2d915a6",
+            "permissive": "RESTRICTIVE"
+          },
+          {
+            "name": "wallet_transactions_manager_insert_guard",
+            "roles": [
+              "authenticated"
+            ],
+            "table": "wallet_transactions",
+            "command": "INSERT",
+            "checkHash": "e5273d7a784c914a71deb5f0e2d915a6",
+            "usingHash": "d41d8cd98f00b204e9800998ecf8427e",
+            "permissive": "RESTRICTIVE"
+          },
+          {
+            "name": "wallet_transactions_manager_update_guard",
+            "roles": [
+              "authenticated"
+            ],
+            "table": "wallet_transactions",
+            "command": "UPDATE",
+            "checkHash": "e5273d7a784c914a71deb5f0e2d915a6",
+            "usingHash": "e5273d7a784c914a71deb5f0e2d915a6",
+            "permissive": "RESTRICTIVE"
+          },
+          {
+            "name": "wallet_transactions_select",
+            "roles": [
+              "authenticated"
+            ],
+            "table": "wallet_transactions",
+            "command": "SELECT",
+            "checkHash": "d41d8cd98f00b204e9800998ecf8427e",
+            "usingHash": "34a9724c95501071f6077ea93474f44e",
+            "permissive": "PERMISSIVE"
+          }
+        ],
+        "removedOrChanged": [
+          {
+            "name": "child_wallets_delete",
+            "roles": [
+              "public"
+            ],
+            "table": "child_wallets",
+            "command": "DELETE",
+            "checkHash": "d41d8cd98f00b204e9800998ecf8427e",
+            "usingHash": "34a9724c95501071f6077ea93474f44e",
+            "permissive": "PERMISSIVE"
+          },
+          {
+            "name": "child_wallets_insert",
+            "roles": [
+              "public"
+            ],
+            "table": "child_wallets",
+            "command": "INSERT",
+            "checkHash": "34a9724c95501071f6077ea93474f44e",
+            "usingHash": "d41d8cd98f00b204e9800998ecf8427e",
+            "permissive": "PERMISSIVE"
+          },
+          {
+            "name": "child_wallets_select",
+            "roles": [
+              "public"
+            ],
+            "table": "child_wallets",
+            "command": "SELECT",
+            "checkHash": "d41d8cd98f00b204e9800998ecf8427e",
+            "usingHash": "34a9724c95501071f6077ea93474f44e",
+            "permissive": "PERMISSIVE"
+          },
+          {
+            "name": "child_wallets_update",
+            "roles": [
+              "public"
+            ],
+            "table": "child_wallets",
+            "command": "UPDATE",
+            "checkHash": "34a9724c95501071f6077ea93474f44e",
+            "usingHash": "34a9724c95501071f6077ea93474f44e",
+            "permissive": "PERMISSIVE"
+          },
+          {
+            "name": "family_wallets_delete",
+            "roles": [
+              "public"
+            ],
+            "table": "family_wallets",
+            "command": "DELETE",
+            "checkHash": "d41d8cd98f00b204e9800998ecf8427e",
+            "usingHash": "34a9724c95501071f6077ea93474f44e",
+            "permissive": "PERMISSIVE"
+          },
+          {
+            "name": "family_wallets_insert",
+            "roles": [
+              "public"
+            ],
+            "table": "family_wallets",
+            "command": "INSERT",
+            "checkHash": "34a9724c95501071f6077ea93474f44e",
+            "usingHash": "d41d8cd98f00b204e9800998ecf8427e",
+            "permissive": "PERMISSIVE"
+          },
+          {
+            "name": "family_wallets_select",
+            "roles": [
+              "public"
+            ],
+            "table": "family_wallets",
+            "command": "SELECT",
+            "checkHash": "d41d8cd98f00b204e9800998ecf8427e",
+            "usingHash": "34a9724c95501071f6077ea93474f44e",
+            "permissive": "PERMISSIVE"
+          },
+          {
+            "name": "family_wallets_update",
+            "roles": [
+              "public"
+            ],
+            "table": "family_wallets",
+            "command": "UPDATE",
+            "checkHash": "34a9724c95501071f6077ea93474f44e",
+            "usingHash": "34a9724c95501071f6077ea93474f44e",
+            "permissive": "PERMISSIVE"
+          },
+          {
+            "name": "wallet_buckets_delete",
+            "roles": [
+              "public"
+            ],
+            "table": "wallet_buckets",
+            "command": "DELETE",
+            "checkHash": "d41d8cd98f00b204e9800998ecf8427e",
+            "usingHash": "34a9724c95501071f6077ea93474f44e",
+            "permissive": "PERMISSIVE"
+          },
+          {
+            "name": "wallet_buckets_insert",
+            "roles": [
+              "public"
+            ],
+            "table": "wallet_buckets",
+            "command": "INSERT",
+            "checkHash": "34a9724c95501071f6077ea93474f44e",
+            "usingHash": "d41d8cd98f00b204e9800998ecf8427e",
+            "permissive": "PERMISSIVE"
+          },
+          {
+            "name": "wallet_buckets_select",
+            "roles": [
+              "public"
+            ],
+            "table": "wallet_buckets",
+            "command": "SELECT",
+            "checkHash": "d41d8cd98f00b204e9800998ecf8427e",
+            "usingHash": "34a9724c95501071f6077ea93474f44e",
+            "permissive": "PERMISSIVE"
+          },
+          {
+            "name": "wallet_buckets_update",
+            "roles": [
+              "public"
+            ],
+            "table": "wallet_buckets",
+            "command": "UPDATE",
+            "checkHash": "34a9724c95501071f6077ea93474f44e",
+            "usingHash": "34a9724c95501071f6077ea93474f44e",
+            "permissive": "PERMISSIVE"
+          },
+          {
+            "name": "wallet_transactions_delete",
+            "roles": [
+              "public"
+            ],
+            "table": "wallet_transactions",
+            "command": "DELETE",
+            "checkHash": "d41d8cd98f00b204e9800998ecf8427e",
+            "usingHash": "34a9724c95501071f6077ea93474f44e",
+            "permissive": "PERMISSIVE"
+          },
+          {
+            "name": "wallet_transactions_insert",
+            "roles": [
+              "public"
+            ],
+            "table": "wallet_transactions",
+            "command": "INSERT",
+            "checkHash": "34a9724c95501071f6077ea93474f44e",
+            "usingHash": "d41d8cd98f00b204e9800998ecf8427e",
+            "permissive": "PERMISSIVE"
+          },
+          {
+            "name": "wallet_transactions_select",
+            "roles": [
+              "public"
+            ],
+            "table": "wallet_transactions",
+            "command": "SELECT",
+            "checkHash": "d41d8cd98f00b204e9800998ecf8427e",
+            "usingHash": "34a9724c95501071f6077ea93474f44e",
+            "permissive": "PERMISSIVE"
+          },
+          {
+            "name": "wallet_transactions_update",
+            "roles": [
+              "public"
+            ],
+            "table": "wallet_transactions",
+            "command": "UPDATE",
+            "checkHash": "34a9724c95501071f6077ea93474f44e",
+            "usingHash": "34a9724c95501071f6077ea93474f44e",
+            "permissive": "PERMISSIVE"
+          }
+        ]
+      },
+      "functions": {
+        "expectedCount": 4,
+        "actualCount": 4,
+        "addedOrChanged": [
+          {
+            "name": "mark_model_dirty",
+            "arguments": "",
+            "definitionHash": "86414bc1406ba8e06e59df541302a6b0",
+            "securityDefiner": true
+          },
+          {
+            "name": "set_updated_at",
+            "arguments": "",
+            "definitionHash": "b88a1791ef043531bf7d6a3ddef98f09",
+            "securityDefiner": false
+          }
+        ],
+        "removedOrChanged": [
+          {
+            "name": "mark_model_dirty",
+            "arguments": "",
+            "definitionHash": "d3bbc99c62e14e0184a2bee1335693ef",
+            "securityDefiner": true
+          },
+          {
+            "name": "set_updated_at",
+            "arguments": "",
+            "definitionHash": "05fa543bdd46103946b61575f77cbad2",
+            "securityDefiner": false
+          }
+        ]
+      }
+    },
+    "missingRequiredProtectedTables": [],
+    "newTablesAlreadyPresent": [],
+    "workerRpc": {
+      "exists": false,
+      "serviceExecute": null,
+      "anonymousExecute": null,
+      "authenticatedExecute": null
+    }
+  },
+  "schemaPrerequisites": {
+    "complete": 11,
+    "incomplete": 41,
+    "missingTables": [
+      "ai_plan_steps",
+      "ai_plans",
+      "ai_request_context",
+      "ai_requests",
+      "ai_run_events",
+      "ai_tool_calls",
+      "bedtime_routines",
+      "career_profiles",
+      "declutter_missions",
+      "declutter_sessions",
+      "declutter_zones",
+      "home_locations",
+      "home_projects",
+      "inventory_items",
+      "inventory_moves",
+      "job_applications",
+      "language_goals",
+      "language_sessions",
+      "move_boxes",
+      "move_tasks",
+      "moves",
+      "outfit_logs",
+      "outfits",
+      "project_materials",
+      "project_quotes",
+      "resume_versions",
+      "routine_runs",
+      "sleep_checkins",
+      "sleep_logs",
+      "vocab_cards",
+      "wardrobe_items",
+      "watch_sessions",
+      "watchlist_titles",
+      "watchlist_votes"
+    ]
+  },
+  "heldCandidates": [
+    {
+      "path": "supabase/reserved/0488_a_month_end_bill_keeps_its_day.sql",
+      "sha256Lf": "214c8cce9e9d53ded60d6745a7f91fd5e3e0b5e902d755323d4aa344529e13fd",
+      "disposition": "HELD; allocation unchanged; no promotion authorized"
+    },
+    {
+      "path": "supabase/reserved/0490_a_calendar_feed_sync_writes_only_while_it_holds_its_claim.sql",
+      "sha256Lf": "bbb66fbcb940a0f32ecb7eb3ba3ab59f67b433f131a6aefd7a9b469dd6f943e1",
+      "disposition": "HELD; allocation unchanged; no promotion authorized"
+    },
+    {
+      "path": "supabase/reserved/0492_approval_requests_private_read.sql",
+      "sha256Lf": "db6166c69976b5be3ae0cbffa3ee12ca7ca89eb7ac6c164e980328aa14fea431",
+      "disposition": "HELD; allocation unchanged; no promotion authorized"
+    },
+    {
+      "path": "supabase/reserved/0493_ai_copy_private_read_and_quota.sql",
+      "sha256Lf": "af97b11d389f9559f4dd67a80976e72b709c5e166bfac2cfbb1f3add2534577a",
+      "disposition": "HELD; allocation unchanged; no promotion authorized"
+    },
+    {
+      "path": "supabase/reserved/0494_sync_atomic_pull.sql",
+      "sha256Lf": "e9caa008b8c4e1d6fdc52e7a983c31e9ba323b7b3967001b16471cf347b3a009",
+      "disposition": "HELD; allocation unchanged; no promotion authorized"
+    }
+  ],
+  "referenceInventory": {
+    "qualification": "Qualified public-table textual references including comments; misses unqualified/dynamic SQL. Review inputs, not a dependency closure or apply list.",
+    "files": [
+      {
+        "path": "supabase/migrations/0240_closet_outfits.sql",
+        "sha256Lf": "2721cf096853b91ceafd2c3987982805a48a831176b9371e559c0319b8b83db2",
+        "referencedMissingTables": [
+          "outfit_logs",
+          "outfits",
+          "wardrobe_items"
+        ]
+      },
+      {
+        "path": "supabase/migrations/0241_family_watchlist.sql",
+        "sha256Lf": "6ca7ee5975d1c73b36881613bbaffc9edc9dae3ecd9c1a6257fc2d982d1a3bde",
+        "referencedMissingTables": [
+          "watch_sessions",
+          "watchlist_titles",
+          "watchlist_votes"
+        ]
+      },
+      {
+        "path": "supabase/migrations/0242_home_inventory.sql",
+        "sha256Lf": "4cd12057a8e83e20d657572891e79f993248aec01c098bf5fd2680241ecccb01",
+        "referencedMissingTables": [
+          "home_locations",
+          "inventory_items",
+          "inventory_moves"
+        ]
+      },
+      {
+        "path": "supabase/migrations/0243_sleep_coach.sql",
+        "sha256Lf": "a3db800e37acb48d170917ba0c5e0b8b5dc9b72be1f6eabbdec143e65011fc1a",
+        "referencedMissingTables": [
+          "bedtime_routines",
+          "sleep_checkins",
+          "sleep_logs"
+        ]
+      },
+      {
+        "path": "supabase/migrations/0244_declutter.sql",
+        "sha256Lf": "12c979d4e48e09160b9cc158cf5f65313c6849386f0eca20972756d4274fa953",
+        "referencedMissingTables": [
+          "declutter_missions",
+          "declutter_sessions",
+          "declutter_zones"
+        ]
+      },
+      {
+        "path": "supabase/migrations/0245_move_planner.sql",
+        "sha256Lf": "e25e5ae3b7b436374f4376f4d4007071f0a8f5df0906773dd7ce811e11f09125",
+        "referencedMissingTables": [
+          "move_boxes",
+          "move_tasks",
+          "moves"
+        ]
+      },
+      {
+        "path": "supabase/migrations/0246_home_projects.sql",
+        "sha256Lf": "23d92fdd99ac00f6b13f89d0817de0ba565d5e270e6ab393bc5f0133b783358f",
+        "referencedMissingTables": [
+          "home_projects",
+          "project_materials",
+          "project_quotes"
+        ]
+      },
+      {
+        "path": "supabase/migrations/0247_career_hub.sql",
+        "sha256Lf": "686287bc1824f28102971b5b61c0c53747f48ea65b7a1cc511fb090f5aff7049",
+        "referencedMissingTables": [
+          "career_profiles",
+          "job_applications",
+          "resume_versions"
+        ]
+      },
+      {
+        "path": "supabase/migrations/0248_language_practice.sql",
+        "sha256Lf": "afa9ae58c3014f14ee4c3bbb59e9c1133d412e057acc45f909eb6161a56dec6b",
+        "referencedMissingTables": [
+          "language_goals",
+          "language_sessions",
+          "vocab_cards"
+        ]
+      },
+      {
+        "path": "supabase/migrations/0250_ai_runtime_core.sql",
+        "sha256Lf": "0907d23e802a324ae1e96d82d84f7350eee17807f7a99683176e1d3b2b63eb5f",
+        "referencedMissingTables": [
+          "ai_plan_steps",
+          "ai_plans",
+          "ai_request_context",
+          "ai_requests",
+          "ai_run_events",
+          "ai_tool_calls"
+        ]
+      },
+      {
+        "path": "supabase/migrations/0251_ai_trust_hardening.sql",
+        "sha256Lf": "34f9c7fa34262b4055705e4128d146bb2401f301137e02f9f506d7d332a9e08f",
+        "referencedMissingTables": [
+          "ai_plan_steps",
+          "ai_requests"
+        ]
+      },
+      {
+        "path": "supabase/migrations/0252_ai_insert_authority.sql",
+        "sha256Lf": "0aa32fb1c5135c0654f7e3637a4f58933d8c9eeeb0f441bf91d6863eaf8b095f",
+        "referencedMissingTables": [
+          "ai_requests"
+        ]
+      },
+      {
+        "path": "supabase/migrations/0255_ai_runtime_lockdown.sql",
+        "sha256Lf": "a847dae56371530be314aa9313c6b98a20c79053c1e9c2b4bb2c9d0108383903",
+        "referencedMissingTables": [
+          "ai_requests"
+        ]
+      },
+      {
+        "path": "supabase/migrations/0259_routine_schedules.sql",
+        "sha256Lf": "f0d7ec85a9f3b3b4c245e522b085a3c351a1392fdc31f1dce67d5e88db00bb92",
+        "referencedMissingTables": [
+          "ai_requests",
+          "routine_runs"
+        ]
+      },
+      {
+        "path": "supabase/migrations/0263_dead_letter_reconcile.sql",
+        "sha256Lf": "2c98a0e903e52fe3fd3d205603c41db9d175f08e95dc26dfcf55291ec22caa2d",
+        "referencedMissingTables": [
+          "ai_plan_steps",
+          "ai_requests",
+          "ai_run_events"
+        ]
+      },
+      {
+        "path": "supabase/migrations/0264_ai_surface_role_privacy.sql",
+        "sha256Lf": "a2ae86f1c4c8a9d9fea0a97b5a6cafed3bfac5768663dbaeaaf2b4b73732322f",
+        "referencedMissingTables": [
+          "ai_plan_steps",
+          "ai_plans",
+          "ai_requests",
+          "ai_run_events"
+        ]
+      },
+      {
+        "path": "supabase/migrations/0271_move_date_recalculation.sql",
+        "sha256Lf": "10c822f42888a5fa4d05ea03746de8d9297ac578ef8c631bfafc7b648c645a4c",
+        "referencedMissingTables": [
+          "move_tasks",
+          "moves"
+        ]
+      },
+      {
+        "path": "supabase/migrations/0274_finance_transaction_operation_receipts.sql",
+        "sha256Lf": "a3fbb3b36bd7fee9cb638cc502ecf8ed73e0e84e572d2f3ab70cfe08c7b2feea",
+        "referencedMissingTables": [
+          "ai_tool_calls"
+        ]
+      },
+      {
+        "path": "supabase/migrations/0294_family_scoped_read_indexes.sql",
+        "sha256Lf": "7bde3280d9076172d8f5d44422becd3161aec061cd522790c2aaeca7f6d82c83",
+        "referencedMissingTables": [
+          "move_boxes"
+        ]
+      },
+      {
+        "path": "supabase/migrations/0321_family_erasure_indexes.sql",
+        "sha256Lf": "6285cf6583e73eecd0d0b9320c48da2e965af9b5761aa0fe74eb2b57921a0273",
+        "referencedMissingTables": [
+          "resume_versions"
+        ]
+      }
+    ]
+  }
+}

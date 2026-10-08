@@ -18,16 +18,21 @@ function makeDb(respond: (call: Call) => Reply) {
     const call: Call = { table, kind: 'select', filters: {} };
     calls.push(call);
     const b: Record<string, unknown> = {};
+    let counted = false;
     const chain = () => b;
     const filter = (column: string, value: unknown) => { call.filters[column] = value; return b; };
     Object.assign(b, {
-      select: chain, order: chain, limit: chain,
+      select: (_columns: string, options?: { count?: string }) => { counted = options?.count === 'exact'; return b; }, order: chain, limit: chain, range: chain,
+      or: (value: string) => filter('or', value),
       eq: filter, is: filter, in: filter,
       neq: (c: string, v: unknown) => filter(`neq:${c}`, v),
       lte: (c: string, v: unknown) => filter(`lte:${c}`, v),
       gte: (c: string, v: unknown) => filter(`gte:${c}`, v),
       not: (c: string, op: string, v: unknown) => filter(`not:${c}:${op}`, v),
-      then: (resolve: (value: Reply) => void) => resolve(respond(call)),
+      then: (resolve: (value: Reply & { count: number | null }) => void) => {
+        const reply = respond(call);
+        return resolve({ ...reply, count: counted && Array.isArray(reply.data) ? reply.data.length : null });
+      },
     });
     return b;
   };
@@ -119,9 +124,11 @@ describe('sports', () => {
       'series@2026-09-15T21:00:00.000Z',
     ]);
     expect(res.data[0].ends_at).toBe('2026-09-08T22:00:00.000Z');
-    // Both reads are family-scoped; the series read looks back a year so an old start still repeats.
+    // Both reads are family-scoped; a series has no arbitrary age cutoff.
     expect(calls.every((c) => c.filters.family_id === 'fam-1')).toBe(true);
-    expect(calls.find((c) => c.filters['neq:recurrence'] === 'none')?.filters['gte:starts_at']).toBe('2025-09-20T00:00:00.000Z');
+    const seriesRead = calls.find((c) => c.filters['neq:recurrence'] === 'none');
+    expect(seriesRead?.filters['gte:starts_at']).toBeUndefined();
+    expect(seriesRead?.filters.or).toBe('recurrence_until.is.null,recurrence_until.gt.2026-09-07T00:00:00.000Z');
   });
 
   it('stops a series at recurrence_until', async () => {

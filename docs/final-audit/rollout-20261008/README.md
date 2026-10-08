@@ -1,0 +1,118 @@
+# Bubaly production rollout review — 2026-10-08
+
+Prepared at the owner's request. **Review package only; not an approved apply
+bundle.** Production writes, configuration changes, migration promotion, merge
+and deployment remain unauthorized. None was performed in preparing this package.
+
+Target: `ltcxlbipiihclxwioyqj` (Bubaly), PostgreSQL 17.6. Source candidate is
+#969 at `b7a986eefd36c43a0ddafb187e808365f856c697`, with the native recurrence
+repair in draft #972. Main remains `82f2db1fcd0dca59179d2b391a76acfd459e480b`.
+All six applicable hosted checks for #972 at `20d9d447f` passed, including full
+Core, Database, Mobile and E2E; that is source acceptance, not production acceptance.
+
+## Evidence and reproducible preflight
+
+- [Boundary query](boundary.query.sql) and [01:05 UTC snapshot](boundary.snapshot.json):
+  read-only metadata scoped to the existing forward-release contract.
+- [Offline review](review.json): pinned file checksums, complete ledger delta,
+  policy/function deltas, required-table checks, held file inventory, and
+  qualified table-reference review inputs. Reproduce from the repository root:
+  `node docs/final-audit/rollout-20261008/review.mjs`.
+  The program reads files only, accepts no apply options and does not use credentials.
+- [Known helper definitions](helper-definitions.json): targeted metadata read
+  explains the two hash differences without reading family records.
+- [Schema prerequisites](../schema-prerequisites-20261008.json): 41 of 52 checks
+  incomplete, including 34 missing tables and missing columns on six existing
+  tables. This is not a REST/ACL/behavioral test.
+
+The existing release's 15 checksums still match. Its unmodified source-inventory
+gate rejects migrations after 0254; its unmodified live preflight rejects the
+192-entry ledger against its three-entry baseline. Both are correct refusals.
+
+| Boundary | Old manifest | Observed production | Review consequence |
+|---|---|---|---|
+| Ledger | 0001–0003 only | 192 entries, lexical high-water 0176 | Reconcile exact `(version,name)` entries; do not stamp or replay history. |
+| Columns | 113 | Same 113 | No difference in this bounded set. |
+| Constraints | 40 | Same 40 | No difference in this bounded set; not all production FKs. |
+| Policies | 37 | 45; 24 added/changed and 16 removed/changed rows | Review the wallet changes; retain restrictive guards throughout. |
+| Helpers | Four hashes | Two match; `mark_model_dirty` and `set_updated_at` differ | Review actual definitions before replacing either. |
+| Required protected tables | 16 | All 16 present with RLS | Foundation prerequisites satisfied at this boundary. |
+| New foundation tables | 33 expected absent | All 33 absent | No conflicting pre-existing table in this set. |
+| Worker RPC | Released expectation: service only | `claim_ai_runs(integer,integer)` absent | Create only with reviewed dependencies and explicit ACLs. |
+
+The live `mark_model_dirty` still inserts for a vanished family and lacks 0249's
+existence/FK-race guards. This is definition evidence, not a production deletion
+test. `set_updated_at` is a short PL/pgSQL timestamp trigger; a differing hash is
+not alone evidence of unsafe behavior. Anonymous wallet write grants remain;
+authenticated restrictive policies currently guard the member write union.
+Review grants separately; do not use an absent ledger entry to infer absent guards.
+
+## Money-policy screening repair
+
+The audit now matches restrictive manager guards to every permissive write's
+commands and roles. It recognizes only direct manager predicates in all required
+clauses, including both UPDATE clauses. An INSERT guard, an unrelated audience,
+`true`, `NOT can_manage_family(...)`, or an `OR true` expression cannot produce
+a false closure. Both hand-run SQL diagnostics use the same conservative rule.
+[Ten isolated PostgreSQL 17 fixture cases](money-policy-fixture-results.json)
+verify parity between the automated catalog verdict and both SQL queries.
+These are synthetic metadata tests, not production financial transactions.
+Unrecognized safe predicates may be flagged; actual exploitability still requires
+grants, role inheritance and helper semantics review. Historical snapshots retain
+their original collection format and must not be treated as fresh role-aware results.
+
+## Proposed stages and acceptance gates
+
+| Stage | Concrete source/scope | Gate before proceeding |
+|---|---|---|
+| 0. Reconcile baseline | Exact ledger and boundary in this package; preserve every historical row | Owner reviews the observed drift. Refresh the same read-only metadata immediately before rehearsal/apply. Never replace the three-entry baseline merely to make a guard pass. |
+| 1. Review foundation | Existing 0240–0248 feature tables, 0249 deletion trigger, 0250 AI runtime, 0251–0255 trust/write/worker protections, 0257 settings, 0258 briefs and 0259 schedules | Establish a complete dependency and security closure against current application source. The 0240–0254 legacy bundle alone is insufficient. Review later fixes and held 0492/0493 privacy requirements before enabling new raw AI tables. |
+| 2. Review later hardening | The hashed qualified-reference inventory in review.json includes 0263, 0264, 0271, 0274, 0294 and 0321 | These are review inputs, not an apply list: dynamic/unqualified SQL and dependencies on other tables require manual reconciliation. Do not replay unrelated finance/data migrations to satisfy a broad range. |
+| 3. Review messaging | Runnable 0475/0476, unchanged names and allocations | Prove recorded audience preservation, fresh empty Family Chat, actor/parent locks, retries, notification-key conversion/replay and ACLs against the reconciled baseline. Do not rewrite historical 0293. Preserve the public Storage decision. |
+| 4. Resolve held contracts | Bill 0488; feed 0490; approval 0492; private AI 0493; atomic sync 0494 | Their owners must resolve reservations and approve a release composition. They stay under `supabase/reserved/`; no fillers or promotion here. Their absence currently blocks the corresponding application paths. |
+| 5. Rehearse reviewed candidate | A newly reviewed, checksum-pinned exact apply bundle and schema-only baseline fixture | Disposable PostgreSQL/Supabase only. Replay twice where supported, simulate failures/rollback and concurrent role changes, run denial/ACL/FK/data-preservation controls. Existing fresh-chain CI does not reproduce this drifted production baseline. |
+| 6. Request apply approval | Exact bundle hash, current target/ledger/catalog hashes, rehearsal receipts, data-effects inventory and operator recovery plan | A separately scoped approval is required. This package is not yet ready for that approval: stages 1–5 still contain review/rehearsal gates. No production workflow is dispatched. |
+| 7. Separate application rollout | Only the exact source verified against the released contracts | Fresh metadata, zero-row API exposure checks and non-destructive authorized smoke checks pass first. Deployment needs separate approval; SQL application does not gate Vercel automatically. |
+
+Stage 1's listed versions are a minimum review scope, not a contiguous executable
+range or an instruction to insert missing generations. The legacy release
+manifest and both production workflows are unchanged. No review-only artifact in
+this directory is read by either apply workflow.
+
+## Required rehearsal and recovery details
+
+1. Construct the disposable baseline from reviewed schema metadata, not production
+   family rows. The current snapshot omits general trigger/function bodies,
+   defaults and data distributions; it is insufficient to claim an exact clone.
+   Obtain a reviewed schema-only representation or explicitly enumerate every
+   simulated baseline difference before calling the rehearsal representative.
+2. Hold an advisory lock and lock the ledger within the eventual apply transaction;
+   recheck exact project identity, ledger, catalog and file hashes inside it.
+   Retain bounded lock/statement timeouts. No guard may be disabled for convenience.
+3. Test failure before the first DDL, midway through the bundle and at each security
+   postcondition. Confirm transaction rollback preserves ledger, schema and synthetic
+   data. Test lost-response handling: read ledger/catalog, never blindly retry.
+4. Exercise manager/member/child/anonymous denial controls in the disposable stack,
+   including missing restrictive policy negative controls. Verify service-only RPC
+   ACLs, family-consistent FKs, messaging concurrency and exact counted reads.
+5. Explicitly inventory data effects: 0250 changes legacy AI provider labels and
+   0251 sets expiry on old pending approvals. Test synthetic old records. Do not
+   treat additive table creation as proof that the whole bundle is data-free.
+6. Before future production approval, the operator must confirm a restorable
+   recovery point and a tested restoration procedure. Neither backup coverage nor
+   restore readiness was verified here. Transaction rollback covers failures before
+   commit; after commit there is **no approved down-migration**. Keep the prior app
+   source available, stop rollout, inspect metadata, and prepare a reviewed forward
+   repair. Dropping new tables would destroy later writes and is not a rollback plan.
+
+## Explicitly excluded actions
+
+No `db push`, `--include-all`, ledger repair/stamping, live family deletion, money
+movement, Storage privacy toggle, credential change, workflow apply dispatch,
+automatic provider execution, merge or deployment. Source-zone/RRULE/exception
+persistence and repair of existing lossy calendar data remain a separate feature
+and data-reconciliation review; the feed claim contract alone does not solve them.
+
+**Approval boundary:** preparation is complete for this evidence-based review
+package. Production application remains blocked on reviewed dependency closure,
+reserved-contract composition, representative rehearsal and separate apply approval.

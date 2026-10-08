@@ -13,6 +13,7 @@
 // the same school-week planning.
 import 'server-only';
 import { expandEventsInZone } from '@/lib/calendar/recurrence';
+import { readCountedRows } from '@/lib/calendar/occurrences';
 import type { Tables } from '@/lib/database.types';
 import { describeDbError } from '@/lib/supabase/errors';
 import { resolveWindow } from '../school';
@@ -22,8 +23,7 @@ export type TeamRow = Tables<'teams'>;
 export type SportsEventRow = Tables<'sports_events'>;
 
 const MAX_ROWS = 500;
-/** A recurring series is read back this far so its occurrences in the window are found. */
-const RECURRENCE_LOOKBACK_MS = 366 * 86_400_000;
+const MAX_SERIES = 2000;
 
 export async function listTeams(scope: ServiceScope, input: { memberId?: string | null; activeOnly?: boolean } = {}): Promise<ServiceResult<TeamRow[]>> {
   let query = scope.db
@@ -59,6 +59,10 @@ export type PracticesInput = {
  * soonest first. Each occurrence keeps its source row's id.
  */
 export async function listPracticesBetween(scope: ServiceScope, input: PracticesInput = {}): Promise<ServiceResult<SportsEventRow[]>> {
+  if (input.limit !== undefined && (!Number.isSafeInteger(input.limit) || input.limit < 1)) {
+    return fail('The sports event limit must be a positive whole number.', { code: SERVICE_CODES.invalidInput });
+  }
+  const limit = Math.min(input.limit ?? 200, MAX_ROWS);
   const window = resolveWindow(scope, input);
   if (!window.ok) return window;
   const fromMs = Date.parse(window.data.from);
@@ -67,32 +71,23 @@ export async function listPracticesBetween(scope: ServiceScope, input: Practices
   // Two reads: the one-off rows inside the window, and every recurring row
   // that started before the window ends (a weekly practice entered last
   // season still repeats into it).
-  let single = scope.db
-    .from('sports_events')
-    .select('*')
-    .eq('family_id', scope.familyId)
-    .eq('recurrence', 'none')
-    .gte('starts_at', window.data.from)
-    .lte('starts_at', window.data.to)
-    .limit(MAX_ROWS);
-  let recurring = scope.db
-    .from('sports_events')
-    .select('*')
-    .eq('family_id', scope.familyId)
-    .neq('recurrence', 'none')
-    .gte('starts_at', new Date(toMs - RECURRENCE_LOOKBACK_MS).toISOString())
-    .lte('starts_at', window.data.to)
-    .limit(MAX_ROWS);
-  if (input.memberId) {
-    single = single.eq('member_id', input.memberId);
-    recurring = recurring.eq('member_id', input.memberId);
-  }
-  if (input.eventType) {
-    single = single.eq('event_type', input.eventType);
-    recurring = recurring.eq('event_type', input.eventType);
-  }
+  const query = (series: boolean) => {
+    let read = scope.db.from('sports_events').select('*', { count: 'exact' })
+      .eq('family_id', scope.familyId).lte('starts_at', window.data.to);
+    read = series
+      ? read.neq('recurrence', 'none').or(`recurrence_until.is.null,recurrence_until.gt.${window.data.from}`)
+      : read.eq('recurrence', 'none').gte('starts_at', window.data.from);
+    if (input.memberId) read = read.eq('member_id', input.memberId);
+    if (input.eventType) read = read.eq('event_type', input.eventType);
+    return read.order('starts_at').order('id');
+  };
 
-  const [singles, series] = await Promise.all([single, recurring]);
+  // Only the nearest `limit` singles can enter the merged result. Series must
+  // be read whole: an old master's next occurrence can precede a newer one's.
+  const [singles, series] = await Promise.all([
+    readCountedRows<SportsEventRow>(() => query(false).limit(limit), (from, to) => query(false).range(from, to), MAX_ROWS, 'sports one-off events', limit),
+    readCountedRows<SportsEventRow>(() => query(true).limit(MAX_ROWS), (from, to) => query(true).range(from, to), MAX_SERIES, 'sports recurring events'),
+  ]);
   if (singles.error || series.error) {
     console.error('[service:sports] events read failed', singles.error ?? series.error);
     return fail(describeDbError(singles.error ?? series.error, 'Could not load sports events.'), { code: SERVICE_CODES.db });
@@ -100,9 +95,14 @@ export async function listPracticesBetween(scope: ServiceScope, input: Practices
 
   // `expandEvents` treats the window end as exclusive; the reads above are
   // inclusive, so a millisecond is added to keep an event exactly at `to`.
-  const expanded = expandEventsInZone(series.data ?? [], new Date(fromMs), new Date(toMs + 1), scope.tz);
+  let expanded: SportsEventRow[];
+  try {
+    expanded = expandEventsInZone(series.data ?? [], new Date(fromMs), new Date(toMs + 1), scope.tz, false, { requireComplete: true });
+  } catch (cause) {
+    return fail(describeDbError(cause, 'Could not read the whole sports schedule.'), { code: SERVICE_CODES.db });
+  }
   const rows = [...(singles.data ?? []), ...expanded]
-    .sort((a, b) => Date.parse(a.starts_at) - Date.parse(b.starts_at))
-    .slice(0, Math.min(Math.max(input.limit ?? 200, 1), MAX_ROWS));
+    .sort((a, b) => Date.parse(a.starts_at) - Date.parse(b.starts_at) || a.id.localeCompare(b.id))
+    .slice(0, limit);
   return ok(rows);
 }
