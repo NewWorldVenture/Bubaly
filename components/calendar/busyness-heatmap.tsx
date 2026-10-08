@@ -81,10 +81,12 @@ export function BusynessHeatmap({ familyId }: { familyId: string }) {
     if (loading || stale || error) return {report:null,error:false};
     // Recurrence stepped, and days bucketed, in the FAMILY's zone (TIME-003);
     // all-day rows by their own date.
-    const events: HeatEvent[] = rows.map(e => ({
-      occurrenceKey:e.occurrenceKey, startsAt: e.starts_at, endsAt: e.ends_at, allDay: e.all_day,
-    }));
     try {
+      const events: HeatEvent[] = rows.map(e => ({
+        kind:e.kind, transparency:e.transparency,
+        occurrenceKey:e.occurrenceKey, startsAt:e.starts_at, endsAt:e.ends_at, allDay:e.all_day,
+        actualStartsAt:e.actualStartsAt, actualEndsAt:e.actualEndsAt,
+      }));
       return {report:buildHeatmap(events, new Date(), WEEKS, clock.timeZone),error:false};
     } catch {
       return {report:null,error:true};

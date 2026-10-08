@@ -6,8 +6,13 @@
 // pockets are. The calendar module renders this as a compact heat strip.
 import { dayKeyIn, isValidTimezone } from '@/lib/time/zoned';
 import { addDays, allDayDate, familyFetchRange } from '@/lib/calendar/day';
+import type { SourceTransparency } from './source-occurrences';
 
 export interface HeatEvent {
+  kind?: 'native' | 'source';
+  transparency?: SourceTransparency;
+  actualStartsAt?: string;
+  actualEndsAt?: string | null;
   occurrenceKey?: string;    // Explicit identity; equal-time distinct events stay distinct.
   startsAt: string;          // ISO
   endsAt: string | null;
@@ -16,7 +21,8 @@ export interface HeatEvent {
 
 export interface HeatDay {
   date: string;              // YYYY-MM-DD
-  count: number;
+  count: number;             // Visible annotations, including free events and points.
+  workloadCount: number;     // Opaque occurrences with positive workload on this date.
   minutes: number;           // scheduled (all-day counts as 8h)
   estimated: boolean;        // Includes DATE workload or a missing-end duration estimate.
   level: 0 | 1 | 2 | 3 | 4;  // 0 calm → 4 packed
@@ -72,24 +78,29 @@ export function buildHeatmap(events: HeatEvent[], today = new Date(), weeks = 8,
   const buckets = Array.from({length:dayCount},(_,index) => {
     const date = dayKey(new Date(start.getTime() + index * 86400_000));
     const range = familyFetchRange(date,addDays(date,1),zone);
-    return {date,start:range.timedFrom.getTime(),end:range.timedTo.getTime(),count:0,minutes:0,estimated:false};
+    return {date,start:range.timedFrom.getTime(),end:range.timedTo.getTime(),count:0,workloadCount:0,minutes:0,estimated:false};
   });
   const seen = new Map<string,string>();
   for (const e of events) {
+    const transparency = e?.transparency === undefined && e?.kind !== 'source' ? 'opaque' : e?.transparency;
+    if (transparency !== 'opaque' && transparency !== 'transparent') throw new Error('Invalid heatmap transparency');
+    const firstDate = e.allDay ? allDayDate(e.startsAt) : '';
+    const suppliedEndDate = e.allDay && e.endsAt !== null ? allDayDate(e.endsAt) : null;
+    const untilDate = e.allDay && firstDate ? (suppliedEndDate && suppliedEndDate > firstDate ? suppliedEndDate : addDays(firstDate,1)) : '';
+    const first = Date.parse(e.actualStartsAt ?? e.startsAt);
+    const suppliedEnd = e.actualEndsAt !== undefined ? e.actualEndsAt : e.endsAt;
+    const until = suppliedEnd === null ? first + (e.kind === 'source' ? 0 : DEFAULT_EVENT_MINUTES * 60_000) : Date.parse(suppliedEnd);
+    if (e.allDay ? !validDateKey(firstDate) || (suppliedEndDate !== null && (!validDateKey(suppliedEndDate) || suppliedEndDate < firstDate)) : !Number.isFinite(first) || !Number.isFinite(until) || until < first) throw new Error('Invalid heatmap occurrence');
+    // Qualify metadata and identity even when the annotation is free, a point,
+    // or outside the displayed window. Conflicting duplicates cannot vanish.
     if (e.occurrenceKey !== undefined) {
-      const value = JSON.stringify([e.startsAt,e.endsAt,e.allDay]);
+      const value = JSON.stringify([e.kind ?? 'native',e.allDay,e.startsAt,e.endsAt,e.actualStartsAt,e.actualEndsAt,transparency]);
       if (seen.has(e.occurrenceKey)) {
         if (seen.get(e.occurrenceKey) !== value) throw new Error('Conflicting heatmap occurrence');
         continue;
       }
       seen.set(e.occurrenceKey,value);
     }
-    const firstDate = e.allDay ? allDayDate(e.startsAt) : '';
-    const suppliedEndDate = e.allDay && e.endsAt !== null ? allDayDate(e.endsAt) : null;
-    const untilDate = e.allDay && firstDate ? (suppliedEndDate && suppliedEndDate > firstDate ? suppliedEndDate : addDays(firstDate,1)) : '';
-    const first = Date.parse(e.startsAt);
-    const until = e.endsAt === null ? first + DEFAULT_EVENT_MINUTES * 60_000 : Date.parse(e.endsAt);
-    if (e.allDay ? !validDateKey(firstDate) || (suppliedEndDate !== null && (!validDateKey(suppliedEndDate) || suppliedEndDate < firstDate)) : !Number.isFinite(first) || !Number.isFinite(until) || until < first) throw new Error('Invalid heatmap occurrence');
     for (const day of buckets) {
       // A skipped civil date (Apia 2011-12-30) has no timed instants. DATE
       // workload is still explicitly a civil estimate, never elapsed minutes.
@@ -99,8 +110,11 @@ export function buildHeatmap(events: HeatEvent[], today = new Date(), weeks = 8,
         : first < day.end && until > day.start ? (Math.min(until,day.end) - Math.max(first,day.start)) / 60_000 : null;
       if (minutes === null) continue;
       day.count += 1;
-      day.minutes += minutes;
-      day.estimated ||= e.allDay || e.endsAt === null;
+      if (transparency === 'opaque' && minutes > 0) {
+        day.workloadCount += 1;
+        day.minutes += minutes;
+        day.estimated ||= e.allDay || (e.kind !== 'source' && e.endsAt === null);
+      }
     }
   }
 
@@ -110,7 +124,7 @@ export function buildHeatmap(events: HeatEvent[], today = new Date(), weeks = 8,
     const d = new Date(start.getTime() + i * 86400_000);
     const key = dayKey(d);
     const agg = buckets[i];
-    days.push({ date: key, count: agg.count, minutes: agg.minutes, estimated:agg.estimated, level: levelFor(agg.minutes, agg.count) });
+    days.push({ date: key, count: agg.count, workloadCount:agg.workloadCount, minutes: agg.minutes, estimated:agg.estimated, level: levelFor(agg.minutes, agg.workloadCount) });
     weekdayTotals[d.getUTCDay()] += agg.minutes;
   }
 

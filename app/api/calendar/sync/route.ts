@@ -10,6 +10,24 @@ import { parseICS, type IcsEvent } from '@/lib/sync/ics';
 import { parseICSSource } from '@/lib/sync/ics-source';
 import { assertFeedRecurrenceAdmission, icsRruleToRecurrence } from '@/lib/calendar/feeds';
 
+/** Native rows have no free/busy metadata. Only opaque live copies are faithful. */
+function nativeCopyTransparency(raw: string | null): 'opaque' | 'transparent' {
+  if (typeof raw !== 'string') throw new Error('Missing source metadata');
+  let depth = 0, seen = false;
+  let transparency: 'opaque' | 'transparent' = 'opaque';
+  for (const line of raw.replace(/\r\n/g, '\n').replace(/\n[ \t]/g, '').split('\n')) {
+    if (/^BEGIN:[A-Z]+$/i.test(line)) { depth++; continue; }
+    if (/^END:[A-Z]+$/i.test(line)) { depth--; continue; }
+    if (depth !== 1 || !/^TRANSP[;:]/i.test(line)) continue;
+    // The strict parser owns the envelope. Qualify this immediate VEVENT
+    // property separately: extensions/duplicates cannot silently become busy.
+    if (seen || !/^TRANSP:(OPAQUE|TRANSPARENT)$/i.test(line)) throw new Error('Unqualified source transparency');
+    seen = true;
+    transparency = line.slice(line.indexOf(':') + 1).toUpperCase() === 'TRANSPARENT' ? 'transparent' : 'opaque';
+  }
+  return transparency;
+}
+
 /** A one-shot import makes native copies, never source archives or exception
  * identities. Qualify the ENTIRE calendar before its first native write. */
 function importedEvents(text:string):IcsEvent[] {
@@ -17,6 +35,10 @@ function importedEvents(text:string):IcsEvent[] {
   for(const document of documents){
     const component=document.master;
     if(document.timezones.length)throw new Error('Source timezone definitions need an archive');
+    for (const candidate of [...(component ? [component] : []), ...document.overrides]) {
+      const transparency = nativeCopyTransparency(candidate.raw);
+      if (candidate.status !== 'cancelled' && transparency === 'transparent') throw new Error('Transparent source events need an archive');
+    }
     if(component?.status==='cancelled')continue;
     if(component?.dtstart?.kind==='floating'||component?.end?.kind==='dtend'&&component.end.value.kind==='floating')throw new Error('Floating source clock needs a durable timezone');
     if(component?.end?.kind==='dtend'&&((component.dtstart?.kind==='date')!==(component.end.value.kind==='date')))throw new Error('Mixed source clock types');

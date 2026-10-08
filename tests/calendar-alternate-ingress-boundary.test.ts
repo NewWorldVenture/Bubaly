@@ -36,6 +36,26 @@ describe('actual request → alternate calendar import → SDK native boundary',
  it('omits a cancelled master without creating an active native row or deleting previous copies',async()=>{
   h.ics=calendar(component('DTSTART;VALUE=DATE:20261008\r\nSTATUS:CANCELLED'));const response=await POST(request());expect(response.status).toBe(200);expect(await response.json()).toMatchObject({imported:0});expect(h.requests).toEqual([]);
  });
+ it.each(['','TRANSP:OPAQUE','transp:opaque'])('preserves opaque/default native copies with metadata %s',async metadata=>{
+  h.ics=calendar(component('DTSTART:20261008T090000Z\r\nDTEND:20261008T100000Z'+(metadata?'\r\n'+metadata:'')));
+  const response=await POST(request());expect(response.status).toBe(200);expect(await response.json()).toEqual({imported:1,total:1});expect(h.inserted).toHaveLength(1);expect(h.inserted[0]).toMatchObject({starts_at:'2026-10-08T09:00:00.000Z',ends_at:'2026-10-08T10:00:00.000Z'});
+ });
+ it.each(['TRANSP:TRANSPARENT','transp:transparent','TRANSP:TRANSPA\r\n RENT','TRANSP:UNKNOWN','TRANSP:','TRANSP: OPAQUE','TRANSP:OPAQUE\r\nTRANSP:OPAQUE','TRANSP:OPAQUE\r\nTRANSP:TRANSPARENT','TRANSP;X-UNKNOWN=VALUE:OPAQUE','TRANSP;X-UNKNOWN="a:b":OPAQUE'])('refuses a mixed calendar before any native write for metadata %s',async metadata=>{
+  h.ics=calendar(component('DTSTART;VALUE=DATE:20261005','safe-first'),component('DTSTART:20261008T090000Z\r\nDTEND:20261008T100000Z\r\n'+metadata,'unsafe-last'));
+  const response=await POST(request());expect(response.status).toBe(422);expect(await response.json()).toEqual({error:'calendarImport.invalidCalendar'});expect(h.requests).toEqual([]);expect(h.inserted).toEqual([]);
+ });
+ it('refuses late transparent metadata beyond the first potential write chunk',async()=>{
+  h.ics=calendar(...Array.from({length:201},(_,i)=>component('DTSTART;VALUE=DATE:20261008',`safe-${i}`)),component('DTSTART;VALUE=DATE:20261008\r\nTRANSP:TRANSPARENT','unsafe-last'));
+  expect((await POST(request())).status).toBe(422);expect(h.requests).toEqual([]);
+ });
+ it.each(['TRANSP:TRANSPARENT','TRANSP:OPAQUE'])('omits a valid cancelled %s component while preserving a live opaque sibling',async metadata=>{
+  h.ics=calendar(component('DTSTART;VALUE=DATE:20261005','safe-first'),component('DTSTART;VALUE=DATE:20261008\r\nSTATUS:CANCELLED\r\n'+metadata,'cancelled'));
+  const response=await POST(request());expect(response.status).toBe(200);expect(await response.json()).toEqual({imported:1,total:1});expect(h.inserted).toHaveLength(1);expect(h.inserted[0].description).toContain('UID: safe-first');
+ });
+ it.each(['TRANSP:OPAQUE\r\nTRANSP:TRANSPARENT','TRANSP;X-UNKNOWN=VALUE:OPAQUE'])('refuses malformed cancelled metadata %s before a live sibling is copied',async metadata=>{
+  h.ics=calendar(component('DTSTART;VALUE=DATE:20261005','safe-first'),component('DTSTART;VALUE=DATE:20261008\r\nSTATUS:CANCELLED\r\n'+metadata,'cancelled'));
+  expect((await POST(request())).status).toBe(422);expect(h.requests).toEqual([]);
+ });
  it.each([
   'DTSTART;VALUE=DATE:20261008\r\nRRULE:FREQ=WEEKLY;INTERVAL=2;BYDAY=TH;COUNT=2\r\nEXDATE;VALUE=DATE:20261022',
   'DTSTART;VALUE=DATE:20261008\r\nRRULE:FREQ=MONTHLY',

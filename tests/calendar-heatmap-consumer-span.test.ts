@@ -62,3 +62,30 @@ describe('actual SDK and heatmap span rendering',()=>{
   it('disabled native DATE range occupies both civil days and excludes its end',async()=>{h.enabled=false;h.timezone='Asia/Tokyo';h.payload=[native('2026-10-06T00:00:00Z','2026-10-08T00:00:00Z',true)];const t=titles(await read());expect(t).toContain('2026-10-06: 1 event · missionsNew.estimatedMinutes: 480');expect(t).toContain('2026-10-07: 1 event · missionsNew.estimatedMinutes: 480');expect(t).toContain('2026-10-08: 0 events');});
   it('an explicit native point counts once without claiming busy minutes or nothing scheduled',async()=>{h.enabled=false;h.payload=[native('2026-10-08T00:00:00Z','2026-10-08T00:00:00Z')];const tree=await read();expect(titles(tree)).toContain('2026-10-08: 1 event');expect(JSON.stringify(tree)).not.toContain('nothing scheduled');});
 });
+
+
+describe('actual SDK heatmap transparency rendering',()=>{
+  it.each([1,6])('shows %s free events while remaining calm without scheduled hours or packed advice',async count=>{
+    const rdates=count===1?'':'\r\nRDATE:20261008T100000Z,20261008T110000Z,20261008T120000Z,20261008T130000Z,20261008T140000Z';h.payload=source(`DTSTART:20261008T090000Z\r\nDURATION:PT1H\r\nTRANSP:TRANSPARENT${rdates}`);
+    const tree=await read();const day=nodes(tree).find(node=>node.props.title===`2026-10-08: ${count} event${count===1?'':'s'}`);expect(day).toBeDefined();expect(String(day?.props.className).split(' ')).toContain('bg-elevated');expect(JSON.stringify(tree)).not.toContain('nothing scheduled');expect(JSON.stringify(tree)).not.toContain('packed days');expect(h.requests).toHaveLength(1);
+  });
+  it('keeps visible mixed counts but derives workload hours only from opaque native events',async()=>{
+    const value=source('DTSTART:20261008T090000Z\r\nDURATION:PT1H\r\nTRANSP:TRANSPARENT');Object.assign(value,{nativeRows:[native('2026-10-08T11:00:00Z','2026-10-08T12:00:00Z')],nativeCount:1});h.payload=value;const tree=await read();expect(titles(tree)).toContain('2026-10-08: 2 events · 1h');expect(JSON.stringify(tree)).not.toContain('packed days');
+  });
+  it('keeps transparent DATE annotations visible without the opaque eight-hour estimate',async()=>{
+    h.payload=source('DTSTART;VALUE=DATE:20261007\r\nDURATION:P2D\r\nTRANSP:TRANSPARENT');const tree=await read();expect(titles(tree)).toContain('2026-10-07: 1 event');expect(titles(tree)).toContain('2026-10-08: 1 event');expect(titles(tree).filter(title=>title.includes('estimatedMinutes'))).toEqual([]);expect(JSON.stringify(tree)).not.toContain('nothing scheduled');
+  });
+  it('returns source metadata refusal to the existing retry state and recovers through a qualified SDK refresh',async()=>{
+    h.payload=source('DTSTART:20261008T090000Z\r\nDURATION:PT1H\r\nTRANSP:UNKNOWN');const failed=await read();const error=nodes(failed).find(node=>node.type==='ErrorState');expect(error).toBeDefined();expect(titles(failed)).toEqual([]);expect(JSON.stringify(failed)).not.toContain('quiet');
+    h.payload=source('DTSTART:20261008T090000Z\r\nDURATION:PT1H\r\nTRANSP:TRANSPARENT');await (error?.props.onRetry as ()=>Promise<void>)();const recovered=render();expect(nodes(recovered).some(node=>node.type==='ErrorState')).toBe(false);expect(titles(recovered)).toContain('2026-10-08: 1 event');expect(h.requests).toHaveLength(2);
+  });
+});
+
+
+describe('actual SDK native snapshot estimates',()=>{
+  it('discloses missing-end native estimates even when snapshot projection supplies actual end clocks',async()=>{
+    const value=source('DTSTART:20261008T090000Z\r\nDURATION:PT1H\r\nTRANSP:TRANSPARENT');
+    Object.assign(value,{nativeRows:[native('2026-10-08T11:00:00Z',null)],nativeCount:1});h.payload=value;
+    const tree=await read();expect(titles(tree)).toContain('2026-10-08: 2 events · missionsNew.estimatedMinutes: 60');expect(h.requests).toHaveLength(1);
+  });
+});

@@ -98,3 +98,52 @@ describe('heatmap per-day clipped occupancy',()=>{
     expect(days.find(day=>day.date==='2011-12-30')).toMatchObject({count:1,minutes:480,estimated:true});
   });
 });
+
+
+describe('heatmap visible annotations versus qualified workload',()=>{
+  const source:Omit<HeatEvent,'transparency'>&{transparency?:unknown}={kind:'source',occurrenceKey:'source-original',startsAt:'2026-10-08T09:00:00Z',endsAt:'2026-10-08T10:00:00Z',allDay:false};
+  const report=(events:typeof source[])=>buildHeatmap(events as HeatEvent[],new Date('2026-10-08T12:00:00Z'),1,'UTC');
+  it.each([1,6])('retains %s transparent visible events without minutes, workload count or packed advice',count=>{
+    const result=report(Array.from({length:count},(_,index)=>({...source,occurrenceKey:'free-'+index,transparency:'transparent'})));
+    expect(result.days.at(-1)).toMatchObject({count,workloadCount:0,minutes:0,estimated:false,level:0});expect(result.overloadedDates).toEqual([]);expect(result.busiestWeekday).toBeNull();expect(result.advice).not.toContain('nothing scheduled');expect(result.advice).not.toContain('packed');
+  });
+  it('uses workload count rather than visible count for mixed events and minute thresholds',()=>{
+    const result=report([...Array.from({length:6},(_,i)=>({...source,occurrenceKey:'free-'+i,transparency:'transparent'})),{...source,occurrenceKey:'busy',transparency:'opaque'}]);expect(result.days.at(-1)).toMatchObject({count:7,workloadCount:1,minutes:60,level:1});expect(result.overloadedDates).toEqual([]);
+  });
+  it.each([undefined,null,'','unknown',false])('refuses source metadata %s before DATE, point or out-of-window handling',transparency=>{
+    for(const patch of [{},{allDay:true},{endsAt:source.startsAt},{startsAt:'2027-01-01T09:00:00Z',endsAt:'2027-01-01T10:00:00Z'}])expect(()=>report([{...source,...patch,transparency}])).toThrow('transparency');
+  });
+  it.each([false,true])('refuses conflicting duplicate transparency in either order reversed=%s',reverse=>{
+    const events=[{...source,transparency:'transparent'},{...source,transparency:'opaque'}];expect(()=>report(reverse?events.reverse():events)).toThrow('Conflicting heatmap occurrence');
+  });
+  it.each([false,true])('refuses conflicting duplicate kind/DATE/clocks before free skipping reversed=%s',reverse=>{
+    for(const patch of [{kind:'native' as const},{allDay:true},{actualStartsAt:'2026-10-08T09:30:00Z',actualEndsAt:'2026-10-08T10:30:00Z'}]){
+      const events=[{...source,transparency:'transparent'},{...source,...patch,transparency:'transparent'}];expect(()=>report(reverse?events.reverse():events)).toThrow('Conflicting heatmap occurrence');
+    }
+  });
+  it('keeps transparent DATE/point records visible with no workload estimate and deduplicates their original keys',()=>{
+    const date={...source,occurrenceKey:'DATE',startsAt:'2026-10-07',endsAt:'2026-10-09',allDay:true,transparency:'transparent'};
+    const point={...source,occurrenceKey:'point',endsAt:source.startsAt,transparency:'transparent'};const result=report([date,date,point,point]);
+    expect(result.days.filter(day=>day.count)).toMatchObject([{date:'2026-10-07',count:1,workloadCount:0,minutes:0,estimated:false,level:0},{date:'2026-10-08',count:2,workloadCount:0,minutes:0,estimated:false,level:0}]);
+  });
+  it('preserves opaque DATE eight-hour estimates and native legacy defaults',()=>{
+    const native={startsAt:source.startsAt,endsAt:null,allDay:false};expect(report([native]).days.at(-1)).toMatchObject({count:1,workloadCount:1,minutes:60,estimated:true,level:1});
+    expect(report([{...source,startsAt:'2026-10-08',endsAt:'2026-10-09',allDay:true,transparency:'opaque'}]).days.at(-1)).toMatchObject({count:1,workloadCount:1,minutes:480,estimated:true,level:4});
+  });
+  it('source implicit points and explicit native points remain visible without a workload count',()=>{
+    expect(report([{...source,endsAt:null,transparency:'opaque'},{...source,kind:'native',occurrenceKey:'native-point',endsAt:source.startsAt,transparency:'opaque'}]).days.at(-1)).toMatchObject({count:2,workloadCount:0,minutes:0,estimated:false,level:0});
+  });
+  it('validates clocks even on transparent records before their free occupancy is ignored',()=>{
+    expect(()=>report([{...source,endsAt:'invalid',transparency:'transparent'}])).toThrow('Invalid heatmap occurrence');
+    expect(()=>report([{...source,kind:'native',transparency:'unknown'}])).toThrow('transparency');
+  });
+});
+
+
+describe('native snapshot duration estimate disclosure',()=>{
+  it('retains the original missing-end estimate when actual clocks supply its interval',()=>{
+    const event:HeatEvent={kind:'native',transparency:'opaque',startsAt:'2026-10-08T23:30:00Z',endsAt:null,actualStartsAt:'2026-10-08T23:30:00Z',actualEndsAt:'2026-10-09T00:30:00Z',allDay:false};
+    expect(load([event],'2026-10-10T12:00:00Z')).toMatchObject([{date:'2026-10-08',minutes:30,estimated:true},{date:'2026-10-09',minutes:30,estimated:true}]);
+    expect(load([{...event,kind:'source',actualEndsAt:event.actualStartsAt}],'2026-10-10T12:00:00Z')).toMatchObject([{minutes:0,estimated:false,workloadCount:0}]);
+  });
+});
