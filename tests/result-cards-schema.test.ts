@@ -9,6 +9,29 @@ import {
 } from '@/lib/ai/result-cards';
 import { cardSections, parseAssistantResponse, parseCards } from '@/mobile/src/lib/assistant-core';
 
+describe('durable trip commitment review context', () => {
+  const review = {
+    window: { from: '2026-10-08T00:00:00Z', to: '2026-10-08T23:59:59.999Z', timezone: 'UTC' },
+    horizonEndsAt: '2026-10-08T23:59:59.999Z', complete: true, ownership: 'unverified-included',
+    total: 0, returned: 0, omitted: 0, truncated: false,
+    counts: { review: 0, native: 0, source: 0, occupied: 0, annotation: 0, calendarDomain: 0, school: 0, sports: 0, homework: 0, bills: 0 },
+    items: [], source_items: [],
+  };
+  it('round-trips additive review completeness while old vacation cards stay readable', () => {
+    const card = cardFromToolResult('what_clashes_with_trip', { vacation_id: 't1' }, { status: 'ok', data: review, summary: 'Reviewed trip dates' });
+    expect(parseResultCard(JSON.parse(JSON.stringify(card)))).toMatchObject({ kind: 'vacation_prep', commitment_review: review, next_steps: [] });
+  });
+  it.each([{ total: 1 }, { omitted: 1 }, { complete: false }, { source_items: [{ id: 'fake-action-id' }] },
+    { window: { ...review.window, timezone: 'Invalid/Zone' } },
+    { horizonEndsAt: '2026-10-09T23:59:59.999Z' },
+    { window: { ...review.window, from: '2026-10-09T00:00:00Z' } },
+    { window: { ...review.window, from: '2024-10-08T00:00:00Z' } },
+  ])('refuses invalid durable review context %j', patch => {
+    expect(cardFromToolResult('trip_conflicts', { vacation_id: 't1' }, { status: 'ok', data: { ...review, ...patch }, summary: 'Review' })).toBeNull();
+    expect(parseResultCard({ kind: 'vacation_prep', title: 'Review', items: [], next_steps: [], commitment_review: { ...review, ...patch } })).toBeNull();
+  });
+});
+
 const MEAL_PLAN: ResultCard = {
   kind: 'meal_plan', title: '5 dinners planned', week_start: '2026-09-07',
   days: [{ date: '2026-09-07', label: 'Mon, Sep 7', meals: [{ meal_type: 'dinner', name: 'Tacos' }] }],

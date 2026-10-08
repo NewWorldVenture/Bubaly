@@ -91,6 +91,23 @@ const MINE: Record<string, string> = {
   'sports.listTeams': 'education', 'sports.listPracticesBetween': 'education',
 };
 
+describe('trip commitment review presentation contract', () => {
+  it('retains travel/view read-only aliases and bounds the global display limit', () => {
+    const tool = getTool('trip_conflicts')!;
+    expect(tool).toBe(getTool('what_clashes_with_trip'));
+    expect(tool).toMatchObject({ name: 'trips.commitmentConflicts', domain: 'travel', capability: 'view', readOnly: true, risk: 'low' });
+    for (const limit of [0, 201, 1.5]) expect(tool.input.safeParse({ vacation_id: 'v-1', limit }).success).toBe(false);
+    expect(tool.input.safeParse({ vacation_id: 'v-1', limit: 2 }).success).toBe(true);
+    expect(tool.description).not.toMatch(/has to be moved|paid early/);
+  });
+  it('refuses an invalid review display limit before any family read', async () => {
+    const family = makeFamilyDb();
+    const result = await executeTool(scopeWith(family.db), 'trip_conflicts', { vacation_id: 'v-1', limit: 201 });
+    expect(result.status).toBe('error');
+    expect(family.calls).toEqual([]);
+  });
+});
+
 describe('registration and metadata', () => {
   it('registers every domain-B tool under the trust domain the policies are written against', () => {
     for (const [name, domain] of Object.entries(MINE)) {

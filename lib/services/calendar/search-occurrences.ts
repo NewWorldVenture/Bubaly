@@ -75,14 +75,10 @@ export async function searchCalendarOccurrences(scope: ServiceScope, input: Sear
       || input.category !== undefined && !CATEGORIES.includes(input.category)
       || input.limit !== undefined && (!Number.isSafeInteger(input.limit) || input.limit < 1 || input.limit > 200)) throw new Error('Invalid calendar search');
   } catch { return fail('That calendar search could not be understood.', { code: SERVICE_CODES.invalidInput }); }
-  const result = await readCalendarAvailability(scope.db, scope.familyId, window.bounds, scope.tz);
-  if (result.error) return fail('Could not load the complete calendar.', { code: SERVICE_CODES.db });
+  const qualified = await readCompleteCalendarOccurrences(scope, input);
+  if (!qualified.ok) return qualified;
+  const result = { data: qualified.data.occurrences, count: qualified.data.totalVisibleCount };
   try {
-    // The actual reader strictly qualifies clocks, references and complete count.
-    // Subject admission additionally enforces the public UID4096 identity contract
-    // for every row before a title/member/category filter can hide it.
-    if (result.count !== result.data.length || result.count > 20_000) throw new Error('Incomplete calendar');
-    for (const row of result.data) qualifySearchProjection(row);
     const query = input.query?.trim().toLowerCase() ?? '';
     const matched = result.data.filter(row => (!query || (row.title ?? '').toLowerCase().includes(query))
       && (row.kind === 'source' || ((!input.assigneeId || row.assignee_id === input.assigneeId)
@@ -105,4 +101,36 @@ export async function searchCalendarOccurrences(scope: ServiceScope, input: Sear
       truncated: returnedCount < matched.length, horizonEndsAt: window.to,
       filterScope: { native: 'requested-filters', sources: 'unmapped-family-context', sourceMemberCategoryMatched: false } });
   } catch { return fail('Could not load the complete calendar.', { code: SERVICE_CODES.db }); }
+}
+
+/** Complete qualified domain, before any title filter or presentation cap. */
+export async function readCompleteCalendarOccurrences(scope: ServiceScope, input: { from: string; to: string }): Promise<ServiceResult<{
+  occurrences: CalendarAvailabilityOccurrence[]; totalVisibleCount: number; horizonEndsAt: string;
+}>> {
+  let window: ReturnType<typeof validateCalendarSearchWindow>;
+  try { window = validateCalendarSearchWindow(scope, input); }
+  catch { return fail('That calendar search could not be understood.', { code: SERVICE_CODES.invalidInput }); }
+  const result = await readCalendarAvailability(scope.db, scope.familyId, window.bounds, scope.tz);
+  if (result.error) return fail('Could not load the complete calendar.', { code: SERVICE_CODES.db });
+  try {
+    if (!Number.isSafeInteger(result.count) || result.count !== result.data.length || result.count > 20_000) throw new Error('Incomplete calendar');
+    for (const row of result.data) qualifySearchProjection(row);
+    return ok({ occurrences: result.data, totalVisibleCount: result.count, horizonEndsAt: window.to });
+  } catch { return fail('Could not load the complete calendar.', { code: SERVICE_CODES.db }); }
+}
+
+/** Lossless public projection for a qualified complete domain. */
+export function projectCalendarOccurrences(rows: CalendarAvailabilityOccurrence[]): { events: NativeSearchOccurrence[]; source_events: SourceSearchOccurrence[] } {
+  const events: NativeSearchOccurrence[] = [], source_events: SourceSearchOccurrence[] = [];
+  [...rows].sort((a,b) => Date.parse(a.actualStartsAt) - Date.parse(b.actualStartsAt) || (a.occurrenceKey < b.occurrenceKey ? -1 : a.occurrenceKey > b.occurrenceKey ? 1 : 0)).forEach((row, displayOrder) => {
+    const common: Common = { title: row.title, description: row.description, location: row.location, starts_at: row.starts_at,
+      ends_at: row.ends_at, all_day: row.all_day, actualStartsAt: row.actualStartsAt, actualEndsAt: row.actualEndsAt,
+      startDate: row.startDate, endDate: row.endDate, occurrenceKey: row.occurrenceKey, transparency: row.transparency,
+      occupied: row.occupied, point: row.point, estimatedEnd: row.estimatedEnd, interval: row.interval,
+      displayOrder, readOnly: row.readOnly, mutable: !row.readOnly };
+    if (row.kind === 'native') events.push({ ...row.event, ...common, title: row.event.title,
+      kind: 'native', eventId: row.reference.eventId, reference: row.reference });
+    else source_events.push({ ...common, kind: 'source', reference: row.reference, readOnly: true, mutable: false });
+  });
+  return { events, source_events };
 }

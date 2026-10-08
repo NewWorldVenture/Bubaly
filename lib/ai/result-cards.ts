@@ -131,6 +131,63 @@ export const BudgetAnalysisCardSchema = z.object({
   href: optionalText,
 });
 
+const tripCount = z.number().int().nonnegative();
+const tripTimezone = z.string().min(1).refine(value => {
+  try { new Intl.DateTimeFormat('en-US', { timeZone: value }).format(0); return true; } catch { return false; }
+}, 'Invalid trip timezone');
+const tripCalendarContext = z.object({
+  occurrenceKey: conflictIdentity, reference: CalendarConflictReferenceSchema,
+  starts_at: conflictInstant, ends_at: conflictInstant.nullable(),
+  actualStartsAt: conflictInstant, actualEndsAt: conflictInstant.nullable(),
+  startDate: z.string().nullable(), endDate: z.string().nullable(), all_day: z.boolean(),
+  transparency: z.enum(['opaque', 'transparent']), occupied: z.boolean(), point: z.boolean(), estimatedEnd: z.boolean(),
+  interval: z.object({ start: z.number().finite(), end: z.number().finite() }).strict(),
+  readOnly: z.boolean(), mutable: z.boolean(),
+}).strict().refine(row => row.mutable === !row.readOnly
+  && row.occurrenceKey === (row.reference.kind === 'native'
+    ? JSON.stringify(['native', row.reference.eventId, row.starts_at])
+    : JSON.stringify(['source', row.reference.feedId, row.reference.uid, row.reference.original]))
+  && (row.reference.kind !== 'source' || row.readOnly && !row.mutable)
+  && (row.actualEndsAt === null || Date.parse(row.actualEndsAt) >= Date.parse(row.actualStartsAt))
+  && row.interval.end >= row.interval.start
+  && row.occupied === (row.transparency === 'opaque' && row.interval.end > row.interval.start)
+  && (!row.point || row.actualEndsAt === row.actualStartsAt)
+  && (!row.all_day || row.startDate !== null && row.endDate !== null), 'Invalid trip calendar context');
+const tripReviewItem = z.object({
+  source: z.enum(['calendar', 'school', 'sports', 'homework', 'bill']),
+  id: text, title: text, when: text, starts_at: conflictInstant.nullable(), member_id: z.string().nullable(),
+  displayOrder: tripCount, calendar: tripCalendarContext.optional(),
+}).strict().refine(row => row.source === 'calendar'
+  ? row.calendar?.reference.kind === 'native' && row.id === row.calendar.reference.eventId && row.starts_at === row.calendar.starts_at
+  : row.calendar === undefined, 'Invalid trip item provenance');
+const tripSourceItem = z.object({
+  source: z.literal('imported-calendar'), title: z.string().nullable(), when: text,
+  starts_at: conflictInstant, displayOrder: tripCount, calendar: tripCalendarContext,
+  attribution: z.literal('unmapped-family-context'),
+}).strict().refine(row => row.calendar.reference.kind === 'source' && row.starts_at === row.calendar.starts_at, 'Invalid imported trip context');
+/** Optional durable context for trip review; sources never acquire native action IDs. */
+export const TripCommitmentReviewSchema = z.object({
+  window: z.object({ from: conflictInstant, to: conflictInstant, timezone: tripTimezone }).strict(),
+  horizonEndsAt: conflictInstant, complete: z.literal(true), ownership: z.literal('unverified-included'),
+  total: tripCount, returned: tripCount, omitted: tripCount, truncated: z.boolean(),
+  counts: z.object({ review: tripCount, native: tripCount, source: tripCount, occupied: tripCount,
+    annotation: tripCount, calendarDomain: tripCount, school: tripCount, sports: tripCount, homework: tripCount, bills: tripCount }).strict(),
+  items: z.array(tripReviewItem), source_items: z.array(tripSourceItem),
+}).strict().refine(row => row.total === row.counts.review && row.returned === row.items.length + row.source_items.length
+  && row.total === row.returned + row.omitted && row.truncated === (row.omitted > 0)
+  && row.counts.calendarDomain === row.counts.native + row.counts.source
+  && row.counts.calendarDomain === row.counts.occupied + row.counts.annotation
+  && row.total === row.counts.calendarDomain + row.counts.school + row.counts.sports + row.counts.homework + row.counts.bills
+  && row.items.filter(item => item.source === 'calendar').length <= row.counts.native
+  && row.source_items.length <= row.counts.source
+  && (['school', 'sports', 'homework', 'bill'] as const).every(domain => row.items.filter(item => item.source === domain).length <= row.counts[domain === 'bill' ? 'bills' : domain])
+  && row.returned <= 200 && row.horizonEndsAt === row.window.to && Date.parse(row.window.to) >= Date.parse(row.window.from)
+  && Date.parse(row.window.to) - Date.parse(row.window.from) + 1 <= 366 * 86_400_000
+  && [...row.items, ...row.source_items].every(item => item.displayOrder < row.returned)
+  && new Set([...row.items, ...row.source_items].map(item => item.displayOrder)).size === row.returned
+  && new Set([...row.items, ...row.source_items].flatMap(item => item.calendar ? [item.calendar.occurrenceKey] : [])).size === row.items.filter(item => item.calendar).length + row.source_items.length,
+  'Invalid trip review counts');
+
 export const VacationPrepCardSchema = z.object({
   kind: z.literal('vacation_prep'),
   title: text,
@@ -140,6 +197,7 @@ export const VacationPrepCardSchema = z.object({
   dates: optionalText,
   items: z.array(z.object({ label: text, detail: z.string().nullable(), done: z.boolean() })),
   next_steps: z.array(text),
+  commitment_review: TripCommitmentReviewSchema.optional(),
   href: optionalText,
 });
 
@@ -607,13 +665,22 @@ function vacationCard(title: string, name: string, data: Rec, args: Rec, ctx: Ca
     return { kind: 'vacation_prep', title, trip_id: tripId, destination: null, dates: null, items, next_steps: [], href };
   }
   if (name === 'trips.commitmentConflicts') {
-    const window = asRecord(data.window);
-    const items = records(data.items).flatMap((i) => (str(i.title) ? [{ label: str(i.title) as string, detail: [str(i.when), memberName(ctx, i.member_id)].filter(Boolean).join(' · ') || null, done: false }] : []));
+    const parsed = TripCommitmentReviewSchema.safeParse(data);
+    if (!parsed.success) return null;
+    const review = parsed.data;
+    const items = [...review.items, ...review.source_items].sort((a, b) => a.displayOrder - b.displayOrder).map(i => ({
+      label: i.title ?? 'Imported calendar context',
+      detail: [i.when, i.source === 'imported-calendar' ? 'Read-only imported family context · person/category unmapped' : memberName(ctx, i.member_id),
+        i.calendar?.readOnly && i.source !== 'imported-calendar' ? 'Read-only calendar entry' : null,
+        i.calendar && !i.calendar.occupied ? 'Free/point annotation · does not occupy time' : null].filter(Boolean).join(' · '), done: false,
+    }));
     return {
       kind: 'vacation_prep', title, trip_id: tripId, destination: null,
-      dates: window ? `${str(window.from) ?? ''} – ${str(window.to) ?? ''}` : null,
+      dates: `${review.window.from} – ${review.window.to}`,
+      subtitle: `${review.total} review items · ${review.counts.native} native · ${review.counts.source} imported · ${review.counts.occupied} occupied · ${review.counts.annotation} annotations · showing ${review.returned}, ${review.omitted} omitted`,
       items,
-      next_steps: items.length ? ['Move, skip or pay early each of these before you leave.'] : [],
+      commitment_review: review,
+      next_steps: review.total ? ['Review these entries to decide what needs attention. Imported family context is read-only and has no personal assignment. Calendar ownership is unverified.'] : [],
       href,
     };
   }

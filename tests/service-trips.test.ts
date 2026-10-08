@@ -296,14 +296,14 @@ describe('syncToCalendar', () => {
 });
 
 describe('commitmentConflicts', () => {
-  it('gathers calendar, school, sports, homework and bills inside the trip window, excluding the trip\'s own entries', async () => {
+  it('gathers calendar, school, sports, homework and bills inside the trip window, retaining calendar entries with unverified trip ownership', async () => {
     const store = makeStore(seedTrip({
       calendar_events: [
-        { id: 'ce-1', family_id: 'fam-1', title: 'Dentist', starts_at: '2026-10-12T14:00:00.000Z', ends_at: null, all_day: false, assignee_id: 'member-1', category: 'appointment' },
-        { id: 'ce-2', family_id: 'fam-1', title: 'Lisbon', starts_at: '2026-10-10T04:00:00.000Z', ends_at: null, all_day: true, assignee_id: null, category: 'holiday' },
-        { id: 'ce-3', family_id: 'fam-1', title: 'After trip', starts_at: '2026-10-20T14:00:00.000Z', ends_at: null, all_day: false, assignee_id: null, category: 'general' },
+        { id: '40000000-0000-4000-8000-000000000001', family_id: 'fam-1', title: 'Dentist', starts_at: '2026-10-12T14:00:00.000Z', ends_at: null, all_day: false, assignee_id: 'member-1', category: 'appointment', recurrence: 'none', recurrence_until: null, feed_id: null, external_uid: null, description: null, location: null, created_by: null, onboarding_key: null, idempotency_key: null, created_at: '2026-10-01T00:00:00Z', updated_at: '2026-10-01T00:00:00Z' },
+        { id: '40000000-0000-4000-8000-000000000002', family_id: 'fam-1', title: 'Lisbon', starts_at: '2026-10-10T00:00:00.000Z', ends_at: null, all_day: true, assignee_id: null, category: 'holiday', recurrence: 'none', recurrence_until: null, feed_id: null, external_uid: null, description: null, location: null, created_by: null, onboarding_key: null, idempotency_key: null, created_at: '2026-10-01T00:00:00Z', updated_at: '2026-10-01T00:00:00Z' },
+        { id: '40000000-0000-4000-8000-000000000003', family_id: 'fam-1', title: 'After trip', starts_at: '2026-10-20T14:00:00.000Z', ends_at: null, all_day: false, assignee_id: null, category: 'general', recurrence: 'none', recurrence_until: null, feed_id: null, external_uid: null, description: null, location: null, created_by: null, onboarding_key: null, idempotency_key: null, created_at: '2026-10-01T00:00:00Z', updated_at: '2026-10-01T00:00:00Z' },
       ],
-      school_events: [{ id: 'se-1', family_id: 'fam-1', title: 'Picture day', starts_at: '2026-10-13T13:00:00.000Z', member_id: 'member-2' }],
+      school_events: [{ id: 'se-1', family_id: 'fam-1', title: 'Picture day', ends_at: null, starts_at: '2026-10-13T13:00:00.000Z', member_id: 'member-2' }],
       sports_events: [{ id: 'sp-1', family_id: 'fam-1', title: 'Soccer', starts_at: '2026-10-14T21:00:00.000Z', ends_at: null, recurrence: 'none', recurrence_until: null, member_id: 'member-2' }],
       homework_assignments: [{ id: 'hw-1', family_id: 'fam-1', title: 'Book report', due_at: '2026-10-15T00:00:00.000Z', status: 'assigned', member_id: 'member-2' }],
       bills: [{ id: 'bill-1', family_id: 'fam-1', name: 'Electric', due_date: '2026-10-15', status: 'upcoming' }, { id: 'bill-2', family_id: 'fam-1', name: 'Paid one', due_date: '2026-10-15', status: 'paid' }],
@@ -311,13 +311,13 @@ describe('commitmentConflicts', () => {
     const res = await commitmentConflicts(scopeWith(store.db), 'v-1');
     expect(res.ok).toBe(true);
     if (!res.ok) return;
-    expect(res.data.total).toBe(5);
-    expect(res.data.calendar.map((e) => e.id)).toEqual(['ce-1']);
+    expect(res.data.total).toBe(6);
+    expect(res.data.calendar.map((e) => e.id)).toEqual(['40000000-0000-4000-8000-000000000002', '40000000-0000-4000-8000-000000000001']);
     expect(res.data.school.map((e) => e.id)).toEqual(['se-1']);
     expect(res.data.sports.map((e) => e.id)).toEqual(['sp-1']);
     expect(res.data.homework.map((e) => e.id)).toEqual(['hw-1']);
     expect(res.data.bills.map((e) => e.id)).toEqual(['bill-1']);
-    expect(res.data.window).toEqual({ from: '2026-10-10T04:00:00.000Z', to: '2026-10-18T03:59:59.999Z' });
+    expect(res.data.window).toEqual({ from: '2026-10-10T04:00:00.000Z', to: '2026-10-18T03:59:59.999Z', timezone: 'America/New_York' });
   });
 });
 

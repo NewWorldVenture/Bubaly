@@ -9,6 +9,7 @@
 // second all-day event.
 import 'server-only';
 import { z } from 'zod';
+import { TripCommitmentReviewSchema } from '@/lib/ai/result-cards';
 import { scopeNow } from '@/lib/services/scope';
 import {
   buildPlan, commitmentConflicts, computeReadiness, createPetCareTasks, documentsRisk, findOrCreateVacation, generatePackingList, getTrip,
@@ -261,36 +262,46 @@ export const tripTools: ToolDefinition[] = [
   defineTool({
     name: 'trips.commitmentConflicts',
     aliases: ['trip_conflicts', 'what_clashes_with_trip'],
-    description: 'Everything already committed during the trip dates — calendar events, school, practices, homework due, bills due — that has to be moved, skipped or paid early.',
+    description: 'Review the complete bounded trip window: native calendar entries, imported read-only family context, school, practices, homework and bills. Free entries and points are visible annotations. Calendar ownership is unverified; matching trip titles remain included. A global display limit applies after complete qualification.',
     domain: 'travel',
     capability: 'view',
     risk: 'low',
     readOnly: true,
-    input: z.object({ vacation_id: z.string() }),
-    output: z.object({
-      window: z.object({ from: z.string(), to: z.string() }),
-      total: z.number().int(),
-      items: z.array(z.object({
-        source: z.enum(['calendar', 'school', 'sports', 'homework', 'bill']),
-        id: z.string(), title: z.string(), when: z.string(), starts_at: z.string().nullable(), member_id: z.string().nullable(),
-      })),
-    }),
-    summarize: (_input, output) => (output.total === 0
-      ? 'Nothing clashes with the trip'
-      : `${plural(output.total, 'commitment')} during the trip, starting with ${output.items[0].title} ${output.items[0].when}`),
+    input: z.object({ vacation_id: z.string(), limit: z.number().int().min(1).max(200).optional() }),
+    output: TripCommitmentReviewSchema,
+    summarize: (_input, output) => `Reviewed ${output.window.from} through ${output.window.to}: ${output.total} review items; ${output.counts.native} native calendar entries, ${output.counts.source} imported read-only family context items (person/category unmapped), ${output.counts.occupied} occupied calendar spans and ${output.counts.annotation} free/point annotations that do not occupy time. Showing ${output.returned} of ${output.total}; ${output.omitted} omitted. Calendar ownership is unverified; review entries before deciding what needs attention.`,
     execute: async (scope, input) => {
       const res = await commitmentConflicts(scope, input.vacation_id);
       if (!res.ok) return res;
       const now = scopeNow(scope);
       const c = res.data;
+      const calendarContext = (e: (typeof c.calendar)[number] | (typeof c.source_calendar)[number]) => ({
+        occurrenceKey: e.occurrenceKey, reference: e.reference, actualStartsAt: e.actualStartsAt, actualEndsAt: e.actualEndsAt,
+        starts_at: e.starts_at, ends_at: e.ends_at,
+        startDate: e.startDate, endDate: e.endDate, all_day: e.all_day, transparency: e.transparency,
+        occupied: e.occupied, point: e.point, estimatedEnd: e.estimatedEnd, readOnly: e.readOnly, mutable: e.mutable,
+        interval: e.interval,
+      });
+      const calendarWhen = (e: (typeof c.calendar)[number] | (typeof c.source_calendar)[number]) => e.all_day
+        ? `all day ${e.startDate} through ${e.endDate} (exclusive)` : describeWhen(e.actualStartsAt, scope.tz, now);
       const items = [
-        ...c.calendar.map((e) => ({ source: 'calendar' as const, id: e.id, title: e.title, starts_at: e.starts_at, when: describeWhen(e.starts_at, scope.tz, now), member_id: e.assignee_id })),
+        ...c.calendar.map((e) => ({ source: 'calendar' as const, id: e.id, title: e.title, starts_at: e.starts_at, when: calendarWhen(e), member_id: e.assignee_id, calendar: calendarContext(e) })),
         ...c.school.map((e) => ({ source: 'school' as const, id: e.id, title: e.title, starts_at: e.starts_at, when: describeWhen(e.starts_at, scope.tz, now), member_id: e.member_id })),
         ...c.sports.map((e) => ({ source: 'sports' as const, id: e.id, title: e.title, starts_at: e.starts_at, when: describeWhen(e.starts_at, scope.tz, now), member_id: e.member_id })),
         ...c.homework.map((h) => ({ source: 'homework' as const, id: h.id, title: `${h.title} (homework)`, starts_at: h.due_at, when: describeWhen(h.due_at, scope.tz, now), member_id: h.member_id })),
         ...c.bills.map((b) => ({ source: 'bill' as const, id: b.id, title: `${b.name} (bill due)`, starts_at: `${b.due_date}T00:00:00Z`, when: b.due_date, member_id: null })),
-      ].sort((a, b) => Date.parse(a.starts_at ?? '') - Date.parse(b.starts_at ?? ''));
-      return ok({ window: c.window, total: c.total, items });
+      ];
+      const sources = c.source_calendar.map(e => ({ source: 'imported-calendar' as const, title: e.title,
+        starts_at: e.starts_at, when: calendarWhen(e), calendar: calendarContext(e), attribution: 'unmapped-family-context' as const }));
+      const sortInstant = (item: typeof items[number] | typeof sources[number]) => 'calendar' in item ? item.calendar.actualStartsAt : item.starts_at;
+      const presented = [...items, ...sources].sort((a, b) => Date.parse(sortInstant(a) ?? '') - Date.parse(sortInstant(b) ?? ''))
+        .slice(0, input.limit ?? 200).map((item, displayOrder) => ({ ...item, displayOrder }));
+      return ok({ window: c.window, horizonEndsAt: c.horizonEndsAt, complete: c.complete, ownership: c.ownership,
+        total: c.total, counts: c.counts, returned: presented.length, omitted: c.total - presented.length,
+        truncated: presented.length < c.total,
+        items: presented.filter((item): item is typeof item & { id: string; member_id: string | null; title: string; source: 'calendar' | 'school' | 'sports' | 'homework' | 'bill' } => item.source !== 'imported-calendar'),
+        source_items: presented.filter((item): item is typeof item & { source: 'imported-calendar'; attribution: 'unmapped-family-context'; calendar: ReturnType<typeof calendarContext>; starts_at: string } => item.source === 'imported-calendar'),
+      });
     },
   }),
 
