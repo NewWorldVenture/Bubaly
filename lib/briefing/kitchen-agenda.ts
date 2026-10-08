@@ -12,16 +12,10 @@
 // list at all and yesterday's was; in Tokyo it is 09:00, so before nine the
 // kitchen announced "Next: School closed at 9:00 AM". An all-day row is on its
 // own date, is never "next at" a time, says "all day", and heads the list.
-import { addDays, compareOccurrences, familyFetchRange, occurrenceDay } from '@/lib/calendar/day';
+import { addDays, familyFetchRange } from '@/lib/calendar/day';
+import { projectCalendarDay, type CalendarConsumerEvent } from '@/lib/calendar/consumer-spans';
 
-export type KitchenEvent = {
-  id: string;
-  title: string;
-  starts_at: string;
-  ends_at: string | null;
-  all_day: boolean | null;
-  assignee_id: string | null;
-};
+export type KitchenEvent = CalendarConsumerEvent;
 
 /** How long a timed row without an end is taken to last, for "what is on now". */
 const DEFAULT_DURATION_MS = 60 * 60 * 1000;
@@ -38,10 +32,8 @@ export function kitchenFetchWindow(todayKey: string, timezone: string): { from: 
 }
 
 /** Today's rows, in the order the kitchen reads them: all-day rows first, then by start. */
-export function kitchenToday<T extends KitchenEvent>(rows: readonly T[], todayKey: string, timezone: string): T[] {
-  return rows
-    .filter((e) => occurrenceDay(e, timezone) === todayKey)
-    .sort((a, b) => compareOccurrences(a, b, timezone));
+export function kitchenToday<T extends KitchenEvent>(rows: readonly T[], todayKey: string, timezone: string) {
+  return projectCalendarDay(rows,todayKey,timezone);
 }
 
 /**
@@ -75,10 +67,10 @@ export function kitchenMemberStatus(today: readonly KitchenEvent[], memberId: st
     const end = Number.isFinite(parsedEnd) ? parsedEnd : start + DEFAULT_DURATION_MS;
     return start <= at && end > at;
   });
-  if (current) return { kind: 'now', title: current.title };
+  if (current) return { kind: 'now', title: current.title??'' };
   const allDay = theirs.find((e) => e.all_day);
-  if (allDay) return { kind: 'allDay', title: allDay.title };
+  if (allDay) return { kind: 'allDay', title: allDay.title??'' };
   const next = timed.find((e) => Date.parse(e.starts_at) > at);
-  if (next) return { kind: 'next', title: next.title, startsAt: next.starts_at };
+  if (next) return { kind: 'next', title: next.title??'', startsAt: next.starts_at };
   return { kind: 'free' };
 }

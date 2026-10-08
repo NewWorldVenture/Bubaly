@@ -16808,5 +16808,16 @@
   "mobileAssistant.interrupted": "La réponse a été interrompue. Certaines actions ont peut-être été effectuées. Consulte la conversation enregistrée avant de renvoyer la demande.",
   "mobileAssistant.reviewSaved": "Consulter la conversation enregistrée",
   "mobileAssistant.editRetry": "Modifier et réessayer",
-  "mobileAssistant.loadingHistory": "Ouverture de la conversation…"
+  "mobileAssistant.loadingHistory": "Ouverture de la conversation…",
+  "bills.editSchedule": "Modifier l’échéancier",
+  "bills.scheduleKeepsDue": "La date d’échéance actuelle reste le {date}.",
+  "bills.scheduleDoesNotPay": "Cela enregistre l’échéancier sans marquer la facture comme payée.",
+  "bills.scheduleNextCycle": "Période suivante : {date}. Les mois courts conservent le jour choisi.",
+  "bills.saveSchedule": "Enregistrer l’échéancier",
+  "bills.scheduleSaved": "Échéancier de la facture enregistré.",
+  "bills.scheduleNotSaved": "L’échéancier n’a pas été enregistré. Actualisez la page et réessayez.",
+  "bills.scheduleChanged": "Cette facture a changé. Actualisez la page avant de confirmer son échéancier.",
+  "bills.scheduleManagersOnly": "Seul un parent ou un adulte peut modifier les échéanciers de factures.",
+  "bills.scheduleForecastNeedsConfirmation": "Confirmez les échéanciers des factures récurrentes avant de consulter les prévisions financières complètes.",
+  "bills.reviewSchedules": "Vérifier les échéanciers de factures"
 }

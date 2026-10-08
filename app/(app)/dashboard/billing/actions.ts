@@ -31,6 +31,9 @@ import type { BudgetPeriod } from '@/lib/database.types';
 import { scopeFromUserContext } from '@/lib/services/scope';
 import type { ServiceScope } from '@/lib/services/types';
 import { describeActionError } from '@/lib/supabase/errors';
+import { isManager } from '@/lib/constants/roles';
+import { saveBillSchedule, isMissingBillDueDay, type BillScheduleSnapshot } from '@/lib/finance/bills';
+import type { BillScheduleChoice } from '@/lib/finance/bill-schedule';
 
 const BILLING = '/dashboard/billing';
 const BUDGETS = '/dashboard/budgets';
@@ -77,6 +80,25 @@ async function moneyScope(): Promise<MoneyGate> {
 
   const supabase = await createServer();
   return { ok: true, scope: scopeFromUserContext(ctx, supabase) };
+}
+
+export async function confirmBillScheduleAction(snapshot: BillScheduleSnapshot, choice: BillScheduleChoice): Promise<MoneyActionResult> {
+  const t = await getTranslations();
+  const gate = await moneyScope();
+  if (!gate.ok) return gate;
+  const scope = gate.scope;
+  if (!isManager(scope.role)) return { ok: false, error: t('bills.scheduleManagersOnly') };
+  try {
+    const result = await saveBillSchedule(scope.db, scope.familyId, snapshot, choice);
+    if (result.error) return { ok: false, error: t(isMissingBillDueDay(result.error) ? 'bills.scheduleUnavailable' : 'bills.scheduleNotSaved') };
+    if (!Array.isArray(result.data) || result.data.length !== 1 || result.data[0]?.id !== snapshot.id) {
+      return { ok: false, error: t('bills.scheduleChanged') };
+    }
+    for (const path of ['/dashboard/bills', BILLING, '/dashboard/money-timeline']) revalidatePath(path);
+    return { ok: true, id: snapshot.id };
+  } catch {
+    return { ok: false, error: t('bills.scheduleNotSaved') };
+  }
 }
 
 export async function contributeToGoalAction(goalId: string, delta: number): Promise<MoneyActionResult> {

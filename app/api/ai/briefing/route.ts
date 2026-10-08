@@ -23,7 +23,8 @@ import { fenceUntrustedBlock, UNTRUSTED_CONTENT_RULE } from '@/lib/ai/safety/unt
 import { dayKeyInTz, zonedDayBoundsMs, scopeFromUserContext } from '@/lib/services/scope';
 import { withAiRequest } from '@/lib/ai/observability';
 import { briefingCalendarBounds } from '@/lib/briefing/calendar-window';
-import { readCalendarOccurrences } from '@/lib/calendar/occurrences';
+import { readDisplayCalendarOccurrences } from '@/lib/calendar/display-occurrences';
+import { projectCalendarDay, projectCalendarWindow } from '@/lib/calendar/consumer-spans';
 
 function normalizeBriefTimezone(candidate: string): string {
   try {
@@ -129,8 +130,8 @@ export async function POST(req: NextRequest) {
       supabase.from('family_members').select('id, display_name, role').eq('family_id', familyId).eq('is_active', true),
       // Series included: a weekly practice is on today's list every week, not
       // only the week it was created (lib/calendar/occurrences.ts).
-      readCalendarOccurrences(supabase, familyId, briefingCalendarBounds(today, tz, 0, 1), tz, { columns: ['title', 'starts_at', 'ends_at', 'all_day', 'location', 'category', 'assignee_id'] }),
-      readCalendarOccurrences(supabase, familyId, briefingCalendarBounds(today, tz, 1, 7), tz, { columns: ['title', 'starts_at', 'all_day', 'category'], limit: 8 }),
+      readDisplayCalendarOccurrences(supabase, familyId, briefingCalendarBounds(today, tz, 0, 1), tz, { overlap:true }),
+      readDisplayCalendarOccurrences(supabase, familyId, briefingCalendarBounds(today, tz, 1, 7), tz, { overlap:true }),
       supabase.from('chore_assignments').select('status, due_at, member_id').eq('family_id', familyId).in('status', ['todo', 'in_progress']).lte('due_at', todayEnd),
       supabase.from('school_events').select('title, starts_at, event_type, notes, member_id').eq('family_id', familyId).gte('starts_at', todayStart).lte('starts_at', weekEnd).order('starts_at').limit(10),
       supabase.from('sports_events').select('title, starts_at, sport, team, location, member_id').eq('family_id', familyId).gte('starts_at', todayStart).lte('starts_at', weekEnd).order('starts_at').limit(10),
@@ -166,8 +167,9 @@ export async function POST(req: NextRequest) {
       console.error('[api/ai/briefing] calendar read failed', { today: todayEventsResult.error, upcoming: tomorrowEventsResult.error });
       return NextResponse.json({ error: tr('briefing.failedToGenerateBriefing') }, { status: 503 });
     }
-    const todayEvents = todayEventsResult.data;
-    const tomorrowEvents = tomorrowEventsResult.data;
+    const todayEvents = projectCalendarDay(todayEventsResult.data??[],today,tz);
+    const tomorrowBounds=briefingCalendarBounds(today,tz,1,7);
+    const tomorrowEvents = projectCalendarWindow(tomorrowEventsResult.data??[],tomorrowBounds.allDayFromDay,tomorrowBounds.allDayToDay,tz).slice(0,8);
 
     // A brief that cannot say what is waiting on you must not pretend nothing
     // is. The read failed closed; so does the request, and the page shows a
@@ -185,7 +187,7 @@ export async function POST(req: NextRequest) {
     // rendered in the server's zone, which on Vercel is UTC.
     const fmt = (iso: string) => new Date(iso).toLocaleTimeString(locale.code, { timeZone: tz, hour: 'numeric', minute: '2-digit' });
     const fmtDate = (iso: string) => dayKeyInTz(new Date(iso), tz);
-    const calendarTime = (event: { starts_at: string; all_day: boolean }) => event.all_day ? tr('calendar.allDay') : fmt(event.starts_at);
+    const calendarTime = (event: { starts_at: string; displayStartsAt: string; all_day: boolean }) => event.all_day ? tr('calendar.allDay') : fmt(event.displayStartsAt);
 
     // ── Build the deterministic cross-domain concierge digest ─────────────────
     const medsDueToday = medicationsDueOn((medSchedules ?? []) as unknown as MedicationScheduleRow[], {
@@ -217,7 +219,7 @@ ${(todayEvents ?? []).map(e => {
 }).join('\n') || '- No events today'}
 
 TOMORROW/THIS WEEK EVENTS:
-${(tomorrowEvents ?? []).map(e => `- ${e.all_day ? e.starts_at.slice(0, 10) : fmtDate(e.starts_at)} ${calendarTime(e)} ${e.title}`).join('\n') || '- None'}
+${(tomorrowEvents ?? []).map(e => `- ${e.all_day ? e.displayDay : fmtDate(e.displayStartsAt)} ${calendarTime(e)} ${e.title}`).join('\n') || '- None'}
 
 CHORES DUE TODAY (${(choresDue ?? []).length}):
 ${(choresDue ?? []).map(c => {
@@ -390,7 +392,7 @@ ${UNTRUSTED_CONTENT_RULE}
           : [tr('briefingGenerated.emptySummary')],
         schedule: (todayEvents ?? []).map(e => ({
           time: calendarTime(e),
-          title: e.title,
+          title: e.title??'',
           member: e.assignee_id ? memberMap.get(e.assignee_id)?.display_name ?? '' : '',
           emoji: '📅',
           color: 'blue',
@@ -471,7 +473,7 @@ ${UNTRUSTED_CONTENT_RULE}
     const brief = buildBrief({
       kind: type === 'evening' ? 'evening' : 'daily',
       now,
-      events: (todayEvents ?? []).map(e => ({ title: e.title, start: e.starts_at, end: e.ends_at, allDay: e.all_day, location: e.location })),
+      events: (todayEvents ?? []).map(e => ({ title: e.title??'', start: e.starts_at, end: e.ends_at, allDay: e.all_day, location: e.location,reference:e.reference,occurrenceKey:e.occurrenceKey })),
       snapshot: { ...conciergeSnapshot, now: undefined } as Omit<ConciergeSnapshot, 'now'>,
       completedRuns: (completedRuns ?? []) as CompletedRunRow[],
       activity: (agentActivity ?? []) as AiActivityRow[],
@@ -555,25 +557,27 @@ ${UNTRUSTED_CONTENT_RULE}
 
 /** Overlapping events on the family's day, described the way the card renders them. */
 function todayConflicts(
-  events: { title: string; starts_at: string; ends_at: string | null; all_day: boolean }[],
+  events: { title: string | null; starts_at: string; ends_at: string | null; all_day: boolean;displayStartsAt:string;displayEndsAt:string }[],
   tz: string,
   locale: LocaleCode,
   tr: (key: string, params?: Record<string, string | number>) => string,
 ): { description: string; suggestion: string }[] {
   const at = (iso: string) => new Date(iso).toLocaleTimeString(locale, { timeZone: tz, hour: 'numeric', minute: '2-digit' });
   const out: { description: string; suggestion: string }[] = [];
+  let work=0;
   for (let i = 0; i < events.length; i += 1) {
     for (let j = i + 1; j < events.length; j += 1) {
+      if(++work>100_000)throw new Error('Calendar conflict scan bound exhausted');
       const a = events[i];
       const b = events[j];
       if (a.all_day || b.all_day) continue;
-      const aStart = Date.parse(a.starts_at);
-      const bStart = Date.parse(b.starts_at);
-      const aEnd = a.ends_at ? Date.parse(a.ends_at) : aStart + 3_600_000;
-      const bEnd = b.ends_at ? Date.parse(b.ends_at) : bStart + 3_600_000;
+      const aStart = Date.parse(a.displayStartsAt);
+      const bStart = Date.parse(b.displayStartsAt);
+      const aEnd = Date.parse(a.displayEndsAt);
+      const bEnd = Date.parse(b.displayEndsAt);
       if (!(aStart < aEnd && bStart < bEnd && aStart < bEnd && bStart < aEnd)) continue;
       out.push({
-        description: tr('briefingGenerated.conflict', { first: a.title, second: b.title, time: at(new Date(Math.max(aStart, bStart)).toISOString()) }),
+        description: tr('briefingGenerated.conflict', { first: a.title??'', second: b.title??'', time: at(new Date(Math.max(aStart, bStart)).toISOString()) }),
         suggestion: tr('briefingGenerated.conflictSuggestion'),
       });
     }

@@ -12,6 +12,7 @@ import { describeDbError } from '@/lib/supabase/errors';
 import { useToast } from '@/components/ui/toast';
 import { Avatar } from '@/components/ui/avatar';
 import { cn } from '@/lib/utils/cn';
+import { calendarConsumerKey, type CalendarConsumerEvent } from '@/lib/calendar/consumer-spans';
 import { displayTimezone } from '@/lib/display/calendar';
 import {
   ambientTheme, greeting, dayPart, nowAndNext, countdownLabel as countdownLabelIn, normalizeSettings, buildHints,
@@ -42,7 +43,7 @@ const KIOSK_FALLBACK = (
 );
 
 // ── Types ────────────────────────────────────────────────────────────────────
-type Ev = { id: string; title: string; starts_at: string; ends_at?: string | null; all_day: boolean; location: string | null; assignee_id: string | null };
+type Ev = CalendarConsumerEvent & { id?: string; displayStartsAt?: string; displayEndsAt?: string; displayDay?: string };
 type FeaturedItem = { name: string; category: string | null; imageUrl: string | null };
 
 export type DisplayData = {
@@ -232,12 +233,12 @@ function WidgetBody({ widget, size, data, memberById, now, settings }: {
         <ul className="space-y-2.5">
           {data.events.slice(0, tileListLimit(size, 4)).map((e) => {
             const who = e.assignee_id ? memberById.get(e.assignee_id) : undefined;
-            const isNow = current?.id === e.id;
-            const isNext = next?.id === e.id;
+            const isNow = current !== null && calendarConsumerKey(current) === calendarConsumerKey(e);
+            const isNext = next !== null && calendarConsumerKey(next) === calendarConsumerKey(e);
             return (
-              <li key={e.id} className={cn('flex items-center gap-3 rounded-xl px-2 py-1.5', isNow && 'bg-white/10')}>
+              <li key={calendarConsumerKey(e)} className={cn('flex items-center gap-3 rounded-xl px-2 py-1.5', isNow && 'bg-white/10')}>
                 <span className={cn('w-16 shrink-0 text-sm font-bold tabular-nums', isNow ? 'text-emerald-300' : 'text-violet-300')}>
-                  {e.all_day ? 'All day' : displayTime(e.starts_at, timezone, locale, settings.clock24)}
+                  {e.all_day ? 'All day' : displayTime(e.displayStartsAt??e.starts_at, timezone, locale, settings.clock24)}
                 </span>
                 <span className="min-w-0 flex-1 truncate font-medium text-white">{e.title}</span>
                 {isNow && <span className="shrink-0 rounded-full bg-emerald-400/20 px-2 py-0.5 text-[10px] font-bold uppercase text-emerald-300">Now</span>}
@@ -255,8 +256,8 @@ function WidgetBody({ widget, size, data, memberById, now, settings }: {
       return data.upcoming.length ? (
         <ul className="space-y-2">
           {data.upcoming.slice(0, tileListLimit(size, 4)).map((e) => (
-            <li key={e.id} className="flex items-center gap-3 text-sm">
-              <span className="w-24 shrink-0 text-white/50">{new Date(e.starts_at).toLocaleDateString(locale, { month: 'short', day: 'numeric', timeZone: e.all_day ? 'UTC' : timezone })}</span>
+            <li key={calendarConsumerKey(e)} className="flex items-center gap-3 text-sm">
+              <span className="w-24 shrink-0 text-white/50">{new Date(e.all_day && e.displayDay ? `${e.displayDay}T00:00:00Z` : e.displayStartsAt??e.starts_at).toLocaleDateString(locale, { month: 'short', day: 'numeric', timeZone: e.all_day ? 'UTC' : timezone })}</span>
               <span className="min-w-0 flex-1 truncate font-medium text-white">{e.title}</span>
             </li>
           ))}
@@ -614,7 +615,7 @@ function OwnedDisplayShell({ initialTiles, initialSettings, data, familyId, user
   const remindersAvailable = data.loadStatus?.reminders !== 'error';
   const { next: nextEv } = nowAndNext(eventsAvailable ? data.events : [], now);
   const hints = useMemo(() => buildHints({
-    nextEvent: nextEv ? { title: nextEv.title, startsAt: nextEv.starts_at } : null,
+    nextEvent: nextEv ? { title: nextEv.title??'', startsAt: nextEv.starts_at } : null,
     dinner: data.meals.find((m) => m.type === 'dinner')?.name ?? null,
     groceryCount: data.grocery.count,
     choresDue: data.chores.length,

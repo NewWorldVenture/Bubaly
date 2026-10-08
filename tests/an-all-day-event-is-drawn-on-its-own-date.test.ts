@@ -318,9 +318,9 @@ describe('the surfaces read through those answers', () => {
 
   it('the kitchen read and its today list go through the kitchen agenda', () => {
     const src = read('components/modules/briefing-module.tsx');
-    expect(src).toContain("readCalendarOccurrences(sb, familyId");
+    expect(src).toContain("readDisplayCalendarOccurrences(sb, familyId");
     expect(src).toContain("briefingCalendarBounds(today, familyClock.timeZone, 0, 1)");
-    expect(src).toContain('kitchenToday(list, today, familyClock.timeZone)');
+    expect(src).toContain('kitchenToday(eventsLoading||eventsStale||eventsError?[]:rawEvents,today,familyClock.timeZone)');
     expect(src).toContain('kitchenMemberStatus(todayEvents, memberId, now)');
     expect(src).toContain('kitchenUpcoming(todayEvents, now, 5)');
     expect(src).not.toContain('86_400_000');

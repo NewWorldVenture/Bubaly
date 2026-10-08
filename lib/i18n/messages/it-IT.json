@@ -16808,5 +16808,16 @@
   "mobileAssistant.interrupted": "La risposta è stata interrotta. Alcune azioni potrebbero essere state completate. Controlla la conversazione salvata prima di inviare nuovamente la richiesta.",
   "mobileAssistant.reviewSaved": "Controlla la conversazione salvata",
   "mobileAssistant.editRetry": "Modifica e riprova",
-  "mobileAssistant.loadingHistory": "Apertura della conversazione…"
+  "mobileAssistant.loadingHistory": "Apertura della conversazione…",
+  "bills.editSchedule": "Modifica scadenze",
+  "bills.scheduleKeepsDue": "La scadenza attuale rimane {date}.",
+  "bills.scheduleDoesNotPay": "Le scadenze vengono salvate senza contrassegnare la bolletta come pagata.",
+  "bills.scheduleNextCycle": "Periodo successivo: {date}. I mesi brevi mantengono il giorno scelto.",
+  "bills.saveSchedule": "Salva scadenze",
+  "bills.scheduleSaved": "Scadenze della bolletta salvate.",
+  "bills.scheduleNotSaved": "Le scadenze non sono state salvate. Aggiorna la pagina e riprova.",
+  "bills.scheduleChanged": "Questa bolletta è cambiata. Aggiorna la pagina prima di confermare le scadenze.",
+  "bills.scheduleManagersOnly": "Solo un genitore o un adulto può modificare le scadenze delle bollette.",
+  "bills.scheduleForecastNeedsConfirmation": "Conferma le scadenze delle bollette ricorrenti prima di vedere la previsione finanziaria completa.",
+  "bills.reviewSchedules": "Controlla le scadenze delle bollette"
 }

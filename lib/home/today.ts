@@ -14,10 +14,12 @@ import { RUN_STATE_LABELS, summarizeSteps, type RunState, type StepState } from 
 import { runPagePath } from '@/lib/ai/chat-request';
 import { topInsight, type ScheduleInsight } from '@/lib/schedule/intelligence';
 import { toolDomain } from '@/lib/ai/tool-domains';
+import { calendarConsumerNativeId, calendarConsumerReference, projectCalendarDay, type CalendarConsumerEvent } from '@/lib/calendar/consumer-spans';
+import type { CalendarSnapshotReference } from '@/lib/calendar/source-snapshot';
 
 // ─── Today ───────────────────────────────────────────────────────────────────
 
-export type TodayEventRow = { id: string; title: string; starts_at: string; all_day: boolean; location?: string | null; assignee_id?: string | null };
+export type TodayEventRow = CalendarConsumerEvent;
 export type TodayTodoRow = { id: string; title: string; due_date: string | null; priority?: string | null; assigned_to_id?: string | null };
 export type TodayChoreRow = { id: string; chore_id: string; member_id: string; status: string; due_at: string | null };
 export type TodayReminderRow = { id: string; title: string; remind_at: string | null; member_id?: string | null; priority?: string | null };
@@ -28,7 +30,9 @@ export type TodayKind = 'event' | 'todo' | 'chore' | 'reminder';
 export type TodayItem = {
   key: string;
   kind: TodayKind;
-  id: string;
+  id: string | null;
+  reference?: CalendarSnapshotReference;
+  occurrenceKey?: string;
   title: string;
   href: string;
   /** ISO instant for scheduled items; null for date-only tasks. */
@@ -108,12 +112,13 @@ export function buildToday(input: TodayInput): TodayView {
   const nowMs = input.now.getTime();
 
   const schedule: TodayItem[] = [];
-  for (const e of input.events) {
-    if ((e.all_day ? e.starts_at.slice(0, 10) : dayKeyInZone(e.starts_at, tz)) !== todayKey) continue;
-    const insight = e.all_day ? null : topInsight(input.insights?.[e.id]);
+  for (const e of projectCalendarDay(input.events,todayKey,tz)) {
+    const nativeId=calendarConsumerNativeId(e);
+    const insight = e.all_day || !nativeId ? null : topInsight(input.insights?.[nativeId]);
     schedule.push({
-      key: `event:${e.id}`, kind: 'event', id: e.id, title: e.title, href: '/dashboard/calendar',
-      at: e.starts_at, allDay: e.all_day, memberId: e.assignee_id ?? null,
+      key: `event:${'occurrenceKey' in e?e.occurrenceKey:nativeId}`, kind: 'event', id: nativeId, title: e.title??'', href: '/dashboard/calendar',
+      reference:calendarConsumerReference(e),...('occurrenceKey' in e?{occurrenceKey:e.occurrenceKey}:{}),
+      at: e.all_day ? e.starts_at : e.displayStartsAt, allDay: !!e.all_day, memberId: e.assignee_id ?? null,
       reason: insight ? insight.reason : e.all_day ? 'All day' : 'Today', bucket: 'today',
       ...(insight ? { insight } : {}),
     });

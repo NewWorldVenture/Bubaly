@@ -16808,5 +16808,16 @@
   "mobileAssistant.interrupted": "Het antwoord is onderbroken. Sommige acties zijn mogelijk voltooid. Bekijk het opgeslagen gesprek voordat je het verzoek opnieuw verstuurt.",
   "mobileAssistant.reviewSaved": "Opgeslagen gesprek bekijken",
   "mobileAssistant.editRetry": "Bewerken en opnieuw proberen",
-  "mobileAssistant.loadingHistory": "Gesprek openen…"
+  "mobileAssistant.loadingHistory": "Gesprek openen…",
+  "bills.editSchedule": "Schema bewerken",
+  "bills.scheduleKeepsDue": "De huidige vervaldatum blijft {date}.",
+  "bills.scheduleDoesNotPay": "Dit slaat het schema op zonder de rekening als betaald te markeren.",
+  "bills.scheduleNextCycle": "Volgende periode: {date}. Korte maanden behouden de gekozen dag.",
+  "bills.saveSchedule": "Schema opslaan",
+  "bills.scheduleSaved": "Rekeningschema opgeslagen.",
+  "bills.scheduleNotSaved": "Het schema is niet opgeslagen. Vernieuw de pagina en probeer opnieuw.",
+  "bills.scheduleChanged": "Deze rekening is gewijzigd. Vernieuw de pagina voordat je het schema bevestigt.",
+  "bills.scheduleManagersOnly": "Alleen een ouder of volwassene kan rekeningschema’s bewerken.",
+  "bills.scheduleForecastNeedsConfirmation": "Bevestig de schema’s van terugkerende rekeningen voordat je de volledige financiële prognose bekijkt.",
+  "bills.reviewSchedules": "Rekeningschema’s bekijken"
 }

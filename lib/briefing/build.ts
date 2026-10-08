@@ -162,13 +162,33 @@ export type Brief = {
 };
 
 /** The persisted shape, validated on the way in and out of `home_briefs.brief`. */
+const sourceClockSchema=z.discriminatedUnion('kind',[
+  z.object({kind:z.literal('date'),value:z.string().regex(/^\d{8}$/)}).strict(),
+  z.object({kind:z.literal('utc'),value:z.string().regex(/^\d{8}T\d{6}Z$/)}).strict(),
+  z.object({kind:z.literal('floating'),value:z.string().regex(/^\d{8}T\d{6}$/)}).strict(),
+  z.object({kind:z.literal('zoned'),value:z.string().regex(/^\d{8}T\d{6}$/),tzid:z.string().min(1).max(4096).refine(value=>!/[\u0000-\u0008\u000a-\u001f\u007f]/.test(value))}).strict(),
+]).refine(clock=>{
+  const value=clock.value;
+  const year=Number(value.slice(0,4)),month=Number(value.slice(4,6)),day=Number(value.slice(6,8));
+  const leap=year%4===0&&(year%100!==0||year%400===0);
+  const monthDays=[31,leap?29:28,31,30,31,30,31,31,30,31,30,31];
+  return year>0 && month>=1 && month<=12 && day>=1 && day<=monthDays[month-1]
+    && (clock.kind==='date'||Number(value.slice(9,11))<=23&&Number(value.slice(11,13))<=59&&Number(value.slice(13,15))<=60);
+},'Invalid source clock');
+const calendarReferenceSchema=z.discriminatedUnion('kind',[
+  z.object({kind:z.literal('native'),eventId:z.string().min(1).max(8192)}).strict(),
+  z.object({kind:z.literal('source'),feedId:z.string().uuid(),uid:z.string().min(1).max(4096).refine(value=>!/[\u0000-\u0008\u000a-\u001f\u007f]/.test(value)),revisionId:z.string().uuid(),original:sourceClockSchema}).strict(),
+]);
 export const briefSchema = z.object({
   kind: z.enum(['daily', 'evening']),
   asOfDate: z.string().regex(/^\d{4}-\d{2}-\d{2}$/),
   headline: z.string(),
   calendar: z.object({
     now: z.string(), headline: z.string(), todayCount: z.number(), weekCount: z.number(),
-    timeline: z.array(z.object({ title: z.string(), start: z.string(), end: z.string().nullable(), allDay: z.boolean(), location: z.string().nullable(), timeLabel: z.string() })),
+    timeline: z.array(z.object({ title: z.string(), start: z.string(), end: z.string().nullable(), allDay: z.boolean(), location: z.string().nullable(), timeLabel: z.string(),
+      reference:calendarReferenceSchema.optional(),occurrenceKey:z.string().min(1).max(65_536).optional(),
+      originalStart:z.string().min(1).max(8192).optional(),originalEnd:z.string().min(1).max(8192).nullable().optional(),
+    })),
     conflicts: z.array(z.object({}).passthrough()),
     actions: z.array(z.object({}).passthrough()),
     opportunities: z.array(z.object({}).passthrough()),

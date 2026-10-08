@@ -78,6 +78,20 @@ export function nextBillDueDate(dueDate: string, cadence: BillCadence, today: st
 }
 
 export type BillScheduleChoice = { cadence: BillCadence; dueDay?: number };
+export class BillScheduleConfirmationRequired extends Error {
+  constructor(message = 'Confirm the recurring bill schedule before building the forecast.') {
+    super(message);
+    this.name = 'BillScheduleConfirmationRequired';
+  }
+}
+
+/** Confirm future cycles without paying or moving the current unpaid occurrence. */
+export function billSchedulePatch(bill: RecurringBillLike, choice: BillScheduleChoice) {
+  if (!bill.is_recurring || !parseBillDay(bill.due_date) || !choice || !BILL_CADENCES.includes(choice.cadence)) return null;
+  const monthBased = MONTH_BASED_CADENCES.has(choice.cadence);
+  if (monthBased ? !isBillAnchorDay(choice.dueDay) : choice.dueDay !== undefined) return null;
+  return { due_date: bill.due_date, recurrence: choice.cadence, due_day: monthBased ? choice.dueDay! : null };
+}
 export type BillPaidPatch = { status: 'paid' } | { status: 'upcoming'; due_date: string; recurrence: BillCadence; due_day?: number };
 
 /** Null means the owner must confirm an unknown cadence/anchor before paying. */

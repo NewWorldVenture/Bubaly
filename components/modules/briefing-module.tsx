@@ -4,7 +4,7 @@ import { useState, useEffect, useMemo, useSyncExternalStore } from 'react';
 import Link from 'next/link';
 import { useApp } from '@/components/app/app-context';
 import { useRealtimeQuery } from '@/lib/hooks/use-realtime-query';
-import { ErrorState } from '@/components/ui/states';
+import { ErrorState, SkeletonList } from '@/components/ui/states';
 import {
   Sun, Moon, CalendarDays, RefreshCw, Sparkles, AlertTriangle,
   CheckCircle2, Clock, X, Loader2, TrendingUp,
@@ -27,14 +27,15 @@ import { useLocale, useTranslations } from '@/components/i18n/locale-provider';
 import { useFamilyClock, useFormat } from '@/components/i18n/use-format';
 import { kitchenMemberStatus, kitchenToday, kitchenUpcoming } from '@/lib/briefing/kitchen-agenda';
 import { briefingCalendarBounds } from '@/lib/briefing/calendar-window';
-import { readCalendarOccurrences } from '@/lib/calendar/occurrences';
+import { readDisplayCalendarOccurrences, CALENDAR_DISPLAY_CONTRACT, CALENDAR_SOURCE_ARCHIVE_ENABLED, type CalendarDisplayOccurrence } from '@/lib/calendar/display-occurrences';
+import { calendarConsumerKey } from '@/lib/calendar/consumer-spans';
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 
 type OpsCategory = BriefingData['operationsScore']['categories'][number];
 
 type TabType = 'morning' | 'evening' | 'weekly' | 'kitchen';
-type CalEvent = Database['public']['Tables']['calendar_events']['Row'];
+type CalEvent = CalendarDisplayOccurrence;
 type ReminderRow = Database['public']['Tables']['reminders']['Row'];
 
 // ─── Helpers ──────────────────────────────────────────────────────────────────
@@ -731,12 +732,12 @@ function KitchenMode({ onExit, todayEvents, members, urgentReminders, now }: {
               <p className="text-muted text-xl font-medium">{tr('briefing.nothingMoreScheduledToday')}</p>
             ) : (
               <div className="space-y-3">
-                {upcoming.map((e, i) => {
-                  const parts = e.all_day ? [] : new Intl.DateTimeFormat(locale.code, { hour: 'numeric', minute: '2-digit', timeZone: familyClock.timeZone }).formatToParts(new Date(e.starts_at));
+                {upcoming.map((e) => {
+                  const parts = e.all_day ? [] : new Intl.DateTimeFormat(locale.code, { hour: 'numeric', minute: '2-digit', timeZone: familyClock.timeZone }).formatToParts(new Date('displayStartsAt' in e?String(e.displayStartsAt):e.starts_at));
                   const clock = e.all_day ? tr('calendar.allDay') : parts.filter(part => part.type !== 'dayPeriod').map(part => part.value).join('').trim();
                   const period = parts.find(part => part.type === 'dayPeriod')?.value;
                   return (
-                    <div key={i} className="flex items-center gap-5 rounded-2xl bg-surface/40 border border-border p-5">
+                    <div key={calendarConsumerKey(e)} className="flex items-center gap-5 rounded-2xl bg-surface/40 border border-border p-5">
                       <div className="text-right min-w-[72px] flex-shrink-0">
                         <div className="text-2xl font-bold text-fg tabular-nums">{clock}</div>
                         {period && <div className="text-xs text-muted uppercase">{period}</div>}
@@ -838,7 +839,7 @@ function ScopedBriefingModule({ recap, relationships, preview = false, contextKe
   const alsoToday = active?.data?.alsoToday ?? [];
   const alsoTodayUnavailable = active?.data?.alsoTodayUnavailable ?? false;
   const generate = session.generate;
-  // The READER's day. `now.toISOString().slice(0, 10)` is the day at Greenwich,
+  // The READER's day. A UTC ISO date prefix names the day at Greenwich,
   // and this is a CLIENT module — the runtime IS the reader — so for anyone west
   // of Greenwich after 16:00, or east of it before 08:00, "today" was somebody
   // else's. Both sides move together: the key built here and the keys it is
@@ -857,14 +858,14 @@ function ScopedBriefingModule({ recap, relationships, preview = false, contextKe
   }, [preview, session, state, tab]);
 
   // Live data for kitchen mode
-  const { data: rawEvents, error: eventsError, refresh: refreshEvents } = useRealtimeQuery<CalEvent>({
+  const { data: rawEvents, error: eventsError, loading: eventsLoading, stale: eventsStale, refresh: refreshEvents } = useRealtimeQuery<CalEvent>({
     table: 'calendar_events',
     familyId,
-    deps: [contextKey, today, familyClock.timeZone],
+    deps: [contextKey, today, familyClock.timeZone, CALENDAR_DISPLAY_CONTRACT, CALENDAR_SOURCE_ARCHIVE_ENABLED],
     // TODAY's rows only (KitchenMode); bounded to the family's today, all-day
     // rows by their own date (kitchenFetchWindow), not the whole history.
-    fetcher: (sb) => readCalendarOccurrences(sb, familyId,
-      briefingCalendarBounds(today, familyClock.timeZone, 0, 1), familyClock.timeZone),
+    fetcher: (sb) => readDisplayCalendarOccurrences(sb, familyId,
+      briefingCalendarBounds(today, familyClock.timeZone, 0, 1), familyClock.timeZone, {overlap:true}),
   });
   const { data: rawReminders, error: remindersError, refresh: refreshReminders } = useRealtimeQuery<ReminderRow>({
     table: 'reminders',
@@ -875,15 +876,16 @@ function ScopedBriefingModule({ recap, relationships, preview = false, contextKe
 
   // On today's date: a timed row on the family's day, an all-day row on its
   // own date (the UTC date it is stored on); all-day rows first.
-  const todayEvents = useMemo(() => {
-    const list = (rawEvents ?? []) as CalEvent[];
-    return kitchenToday(list, today, familyClock.timeZone);
-  }, [rawEvents, today, familyClock]);
+  const kitchenProjection = useMemo(() => {
+    try { return {data:kitchenToday(eventsLoading||eventsStale||eventsError?[]:rawEvents,today,familyClock.timeZone),error:false}; }
+    catch { return {data:[],error:true}; }
+  }, [rawEvents,today,familyClock,eventsLoading,eventsStale,eventsError]);
+  const todayEvents=kitchenProjection.data;
   const urgentReminders = useMemo(() => {
     const list = (rawReminders ?? []) as ReminderRow[];
     return list.filter(r => { const d = r.remind_at ? familyClock.dayKeyOf(r.remind_at) : ''; return d !== '' && d <= today; }).slice(0, 6);
   }, [rawReminders, today, familyClock]);
-  const kitchenError = eventsError || remindersError;
+  const kitchenError = eventsError || remindersError || kitchenProjection.error;
   const refreshKitchen = () => { void refreshEvents(); void refreshReminders(); };
 
   const fmtTime = (iso: string) => format.fmtTime(iso);
@@ -897,7 +899,8 @@ function ScopedBriefingModule({ recap, relationships, preview = false, contextKe
 
   // Kitchen mode renders fullscreen
   if (tab === 'kitchen') {
-    if (kitchenError) return <ErrorState message={tr('briefingModule.couldNotLoadKitchenMode')} onRetry={refreshKitchen} />;
+    if (kitchenError || eventsStale && !eventsLoading) return <ErrorState message={tr('briefingModule.couldNotLoadKitchenMode')} onRetry={refreshKitchen} />;
+    if(eventsLoading)return <SkeletonList />;
     return (
       <KitchenMode
         onExit={() => setTab('morning')}

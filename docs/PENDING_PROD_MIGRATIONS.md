@@ -1,5 +1,38 @@
 # Production release status and historical feature inventory
 
+## Candidate code versus production evidence — 2026-10-08
+
+The next candidate batch repairs ongoing Home/Kids/Display/briefing spans,
+complete meal-library inputs, schedule-only bill recovery and failed calendar
+export completeness probes. It preserves the same allocation map and rollout
+holds. The receipt below belongs to the earlier published head; current batch
+validation is recorded separately in `finalaudit.md` and does not establish
+production acceptance.
+
+`finalaudit.md` is the current audit ledger. Main remains
+`82f2db1fcd0dca59179d2b391a76acfd459e480b`; #969 is the sole open PR.
+Its published `b1f36efea` includes complete calendar/sidebar and bill reads,
+owner-bound callback repairs, and complete meal-calendar dinner intervals.
+The frozen local matrix passes 2,083 cases in each of three time zones, plus
+web TypeScript/lint and 23 synthetic finance browser checks. Hosted acceptance
+for that head is separate and still running; these receipts do not qualify a
+main merge, actual provider execution or production deployment.
+
+The candidate also contains a guarded source-calendar archive, parser,
+coherent snapshot reader, subscribed-feed publication path and web/mobile
+span rendering. `CALENDAR_SOURCE_ARCHIVE_ENABLED` remains **false** in code.
+Its disabled legacy feed path still refuses unsupported timed/complex series;
+that restriction is not a description of what the guarded archive can parse.
+Remaining source consumers, alternate ingress/export and existing-data repair
+remain incomplete. Held0490 storage/publication tests do not activate the
+source model or establish production schema/ACL/FK acceptance.
+
+Preserve the owner's allocation map below. No resequencing, filler or held
+migration promotion is authorized by local/hosted green checks. The retained
+192-entry ledger/high-water0176 observation is neither a contiguous migration
+history nor permission to replay all missing versions. Offline rollout remains
+`REVIEW_REQUIRED_NOT_APPLY_READY`; Production Ready remains **NO**.
+
 ## Current rollout review update — 2026-10-08 01:42 UTC
 
 [Review package](final-audit/rollout-20261008/README.md): fresh metadata confirms missing allowance manager/reference and investment decision/economics guards. Aggregate-only preflight finds existing family/wallet and investment amount inconsistencies; the counts and qualifications are retained without individual records. Source0304/0306/0311/0447 are pinned review inputs, not an apply list. An unallocated composite-reference candidate passes an isolated structural PostgreSQL fixture while preserving historical rows; it remains outside every apply workflow. Data provenance/disposition, full dependency/role/trigger rehearsal and separate production approval remain required. No production write, migration allocation change or financial action occurred. Earlier observations below remain historical.
@@ -72,12 +105,13 @@ Actual catalog, ACL, FK and migration-ledger acceptance remain rollout gates.
 The production migration workflow checks `--require-runnable-rpcs` before an
 explicit apply request; held dependencies stop SQL application. Metadata-only
 verification remains available. This does not configure Vercel deployment gates.
-Calendar source-zone, finite recurrence and exception fidelity remain open.
-New feed snapshots with timed/complex recurrence, exception identities or
+Complete source-consumer integration and production acceptance remain open.
+With the source capability disabled, legacy feed snapshots with timed/complex recurrence, exception identities or
 EXDATE/RDATE refuse before event writes or deletions. Only singles, bare
 cancelled masters and verified all-day exact DAILY/WEEKLY rules are admitted.
 Existing stored lossy series are not repaired by that refusal; reviewed source
-metadata, recurrence storage and data reconciliation are still needed.
+metadata and data reconciliation are still needed. The guarded archive
+foundation described above is not enabled by this candidate.
 
 #970 merged into main at `82f2db1fcd0dca59179d2b391a76acfd459e480b`.
 Current #969 composition repairs newly reviewed bill regressions and selects
@@ -85,7 +119,13 @@ reviewed #971 messaging/calendar changes without editing its author branch.
 Prior cfa receipts certify that historical source, not this new composition.
 See `finalaudit.md` for evidence and production holds.
 
-## Wallet mint boundary — the finding, and what closes it
+## Historical wallet mint finding — superseded live-policy inference
+
+The 2026-10-08 resolved metadata observation above supersedes this section's
+earlier live vulnerability and apply-only remedy inference. Restrictive manager
+guards were observed despite the absent0254 ledger entry. The synthetic probes
+below remain evidence for their tested policy shapes, not evidence of current
+production exploitation, complete grant closure or permission to apply SQL.
 
 A production metadata audit reported that `public.wallet_transactions` still
 carries a **permissive INSERT policy** alongside the intended manager-only one:
@@ -94,9 +134,11 @@ the shape that lets any family member — a child account included — submit a
 policy hashes rather than expressions, so the exact live condition is still
 unverified, and nothing in it showed exploitation or money movement.
 
-**The fix already exists in this repository: `0254_wallet_write_policy_drift.sql`.
-It is unapplied, and applying it is the whole of the remedy.** Nothing new needs
-writing.
+`0254_wallet_write_policy_drift.sql` contains the repository's restrictive-guard
+repair. Its version is absent from the retained ledger; its guard effects were
+nevertheless observed in the live catalog. Reconcile the catalog and ledger
+before proposing any application; an absent ledger entry alone does not prove
+the repair is unapplied or make replay the whole remedy.
 
 Why 0254 is sufficient even though its `drop policy` list is a list of *known
 names* — a stray policy under some other name would survive those drops:
@@ -4101,7 +4143,9 @@ As of 2026-10-04 the 43 holes at or below `0474` are **retired**
 file may take one, and the reservations that left them — `0465`–`0470`,
 `0472`, `0473` among them — are released. Above `0474` the sequence has no
 gaps. `npm run db:audit:migrations` fails on either. Nothing below changes
-what is already applied: production's ledger records `0001`–`0176`.
+what is already applied: the retained production observation contains192
+entries with lexical high-water `0176`, not proof of a contiguous `0001`–`0176`
+history or complete correspondence between catalog and ledger.
 
 **Owner decision, 2026-10-04: existing allocations above `0474` are
 preserved.** It is recorded on #771 (5985652062) and was confirmed in the Claude

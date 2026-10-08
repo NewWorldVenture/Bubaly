@@ -9,6 +9,9 @@
 
 import { pickDinnerIdeas, type DinnerIdea } from './dinner-ideas';
 import type { FirstBriefDisplay, BriefConflictDisplay, BriefActionDisplay, BriefOpportunityDisplay } from './first-brief-display';
+import { projectCalendarDay } from '@/lib/calendar/consumer-spans';
+import { calendarDisplayDay } from '@/lib/calendar/display-spans';
+import type { CalendarSnapshotReference } from '@/lib/calendar/source-snapshot';
 
 export interface BriefEvent {
   title: string;
@@ -17,6 +20,8 @@ export interface BriefEvent {
   allDay?: boolean;
   location?: string | null;
   recurring?: boolean;
+  reference?: CalendarSnapshotReference;
+  occurrenceKey?: string;
 }
 
 export interface TimelineItem {
@@ -26,6 +31,10 @@ export interface TimelineItem {
   allDay: boolean;
   location: string | null;
   timeLabel: string;          // "9:00 AM" or "All day"
+  reference?: CalendarSnapshotReference;
+  occurrenceKey?: string;
+  originalStart?: string;
+  originalEnd?: string | null;
 }
 
 export interface BriefConflict {
@@ -76,13 +85,6 @@ function calendarDayAfter(key: string): string {
   return new Date(Date.parse(`${key}T12:00:00Z`) + DAY_MS).toISOString().slice(0, 10);
 }
 
-/** End instant; explicit point events retain zero duration. */
-function endOf(ev: BriefEvent): number {
-  const start = Date.parse(ev.start);
-  const end = ev.end ? Date.parse(ev.end) : NaN;
-  return Number.isFinite(end) && end >= start ? end : start + 60 * 60_000; // default 1h
-}
-
 function fmtTime(iso: string, formatter: Intl.DateTimeFormat): string {
   const parts = formatter.formatToParts(new Date(iso));
   let h = Number(parts.find((p) => p.type === 'hour')!.value);
@@ -129,44 +131,53 @@ export function buildFirstBrief(events: BriefEvent[], now: Date, dinnerCandidate
   const sorted = [...valid].sort((a, b) => Date.parse(a.start) - Date.parse(b.start));
 
   // Today's timeline (all-day first, then chronological).
-  const today = sorted.filter((e) => eventDayKey(e) === todayKey);
+  const inputs=sorted.map(event=>({event,starts_at:event.start,ends_at:event.end,all_day:event.allDay,kind:event.reference?.kind}));
+  const weekSpans=[];
+  for(let day=todayKey;day<weekEndKey;day=calendarDayAfter(day)) {
+    for(const row of projectCalendarDay(inputs,day,timezone))weekSpans.push({event:row.event,span:{day,actualStartsAt:row.displayStartsAt,actualEndsAt:row.displayEndsAt}});
+  }
+  const today = weekSpans.filter(item=>item.span.day===todayKey);
   const timeline: TimelineItem[] = [
-    ...today.filter((e) => e.allDay),
-    ...today.filter((e) => !e.allDay),
-  ].map((e) => ({
+    ...today.filter(({event}) => event.allDay),
+    ...today.filter(({event}) => !event.allDay),
+  ].map(({event:e,span}) => ({
     title: e.title,
-    start: e.start,
-    end: e.end ?? null,
+    start: e.allDay || Date.parse(e.start)===Date.parse(span.actualStartsAt)?e.start:span.actualStartsAt,
+    end: e.allDay || !e.end || Date.parse(e.end)===Date.parse(span.actualEndsAt)?e.end??null:span.actualEndsAt,
     allDay: !!e.allDay,
     location: e.location ?? null,
-    timeLabel: e.allDay ? 'All day' : fmtTime(e.start, timeFormatter),
+    timeLabel: e.allDay ? 'All day' : fmtTime(span.actualStartsAt, timeFormatter),
+    ...(e.reference?{reference:e.reference}:{}),...(e.occurrenceKey?{occurrenceKey:e.occurrenceKey}:{}),
+    originalStart:e.start,originalEnd:e.end??null,
   }));
 
   // Seven family calendar dates, including all of today. All-day dates count
   // toward the organized calendar, but only timed events drive clashes and
   // modeled planning minutes. An elapsed-hour window drifts at DST boundaries.
-  const weekEvents = sorted.filter((e) => {
-    const key = eventDayKey(e);
-    return key >= todayKey && key < weekEndKey;
-  });
+  const occupiedEvents=new Set(weekSpans.map(item=>item.event));
+  const weekEvents = sorted.filter(e=>occupiedEvents.has(e));
   const week = weekEvents.filter((e) => !e.allDay);
+  const timedSpans=weekSpans.filter(item=>!item.event.allDay).sort((a,b)=>a.span.day.localeCompare(b.span.day)||a.span.actualStartsAt.localeCompare(b.span.actualStartsAt));
+  let conflictWork=0;
+  calendarDisplayDay(todayKey,timezone);
 
   // Conflicts: overlapping timed events on the same day.
   const conflicts: BriefConflict[] = [];
-  for (let i = 0; i < week.length; i++) {
-    for (let j = i + 1; j < week.length; j++) {
-      const a = week[i], b = week[j];
-      if (eventDayKey(a) !== eventDayKey(b)) continue;
-      const aStart = Date.parse(a.start), aEnd = endOf(a);
-      const bStart = Date.parse(b.start), bEnd = endOf(b);
+  for (let i = 0; i < timedSpans.length; i++) {
+    for (let j = i + 1; j < timedSpans.length; j++) {
+      const left=timedSpans[i],right=timedSpans[j],a=left.event,b=right.event;
+      if (left.span.day !== right.span.day || Date.parse(right.span.actualStartsAt)>=Date.parse(left.span.actualEndsAt)) break;
+      if(++conflictWork>100_000)throw new Error('Calendar conflict scan bound exhausted');
+      const aStart = Date.parse(left.span.actualStartsAt), aEnd = Date.parse(left.span.actualEndsAt);
+      const bStart = Date.parse(right.span.actualStartsAt), bEnd = Date.parse(right.span.actualEndsAt);
       if (aStart < aEnd && bStart < bEnd && aStart < bEnd && bStart < aEnd) {
         conflicts.push({
           aTitle: a.title,
           bTitle: b.title,
-          dayLabel: dayLabel(eventDayKey(a), todayKey, tomorrowKey),
+          dayLabel: dayLabel(left.span.day, todayKey, tomorrowKey),
           overlapLabel: fmtRange(new Date(Math.max(aStart, bStart)).toISOString(), Math.min(aEnd, bEnd), timeFormatter),
           display: {
-            dayKey: eventDayKey(a),
+            dayKey: left.span.day,
             overlapStart: new Date(Math.max(aStart, bStart)).toISOString(),
             overlapEnd: new Date(Math.min(aEnd, bEnd)).toISOString(),
           },

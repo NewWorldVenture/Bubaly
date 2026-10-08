@@ -50,7 +50,7 @@ import { Avatar } from '@/components/ui/avatar';
 import { AiInsight } from '@/components/ai/ai-insight';
 import { useFamilyClock, useFormat, useFamilyCalendarToday } from '@/components/i18n/use-format';
 import { isInMonth, parseCalendarDate, startOfLocalDay } from '@/lib/utils/calendar-date';
-import { isAdmin } from '@/lib/constants/roles';
+import { isAdmin, isManager } from '@/lib/constants/roles';
 import { BASIC_MONTHLY_CENTS, BASIC_ANNUAL_CENTS, PLUS_MONTHLY_CENTS, PLUS_ANNUAL_CENTS, planLevel } from '@/lib/constants/plans';
 import { PLAN_CURRENCY } from '@/lib/marketing/value';
 import { formatCents } from '@/lib/wallet/ledger';
@@ -63,6 +63,7 @@ import type { Tables, SubscriptionStatus, AccountType, TransactionType, BudgetPe
 import { categoryLabel } from '@/lib/finance/category-label';
 import { billPaidPatch, billDateForAnchorDay, newBillDueDay } from '@/lib/finance/hub';
 import { BILL_READ_CONTRACT, readCompleteBills, isMissingBillDueDay, saveBillPayment } from '@/lib/finance/bills';
+import { BillScheduleModal } from '@/components/finance/bill-schedule-modal';
 import { writeBillPatch } from '@/lib/finance/recurring';
 import { BillPaymentModal } from '@/components/finance/bill-payment-modal';
 import { useLocale, useTranslations } from '@/components/i18n/locale-provider';
@@ -579,6 +580,20 @@ export function BillingModule({ serviceFeeNotice = null }: { serviceFeeNotice?: 
   const paymentOwner = useMemo(() => ({ familyId, userId }), [familyId, userId]);
   const [paymentSelection, setPaymentSelection] = useState<{ bill: Bill; owner: typeof paymentOwner } | null>(null);
   const paymentBill = paymentSelection?.owner === paymentOwner ? paymentSelection.bill : null;
+  const scheduleOwner = useMemo(() => ({ familyId, userId, role }), [familyId, userId, role]);
+  const [scheduleSelection, setScheduleSelection] = useState<{ bill: Bill; owner: typeof scheduleOwner; ticket: number } | null>(null);
+  const scheduleTicket = useRef(0);
+  const currentBillOwner = useRef(scheduleOwner);
+  currentBillOwner.current = scheduleOwner;
+  const currentSchedule = useRef(scheduleSelection);
+  currentSchedule.current = scheduleSelection?.owner === scheduleOwner ? scheduleSelection : null;
+  const scheduleBill = scheduleSelection?.owner === scheduleOwner ? scheduleSelection.bill : null;
+  function openSchedule(bill: Bill) {
+    if (currentBillOwner.current !== scheduleOwner) return;
+    const selection = { bill, owner: scheduleOwner, ticket: ++scheduleTicket.current };
+    currentSchedule.current = selection;
+    setScheduleSelection(selection);
+  }
   const admin = isAdmin(role);
   const { success, error: toastError } = useToast();
   const search = useSearchParams();
@@ -1209,6 +1224,7 @@ export function BillingModule({ serviceFeeNotice = null }: { serviceFeeNotice?: 
                         <p className="text-xs text-muted">Due {fmtDate(b.due_date)}</p>
                       </div>
                       <p className="shrink-0 text-sm font-bold tabular-nums">{fmtCurrency(b.amount)}</p>
+                      {isManager(role) && b.is_recurring && <Button size="sm" variant="outline" onClick={() => openSchedule(b)}>{tr('bills.editSchedule')}</Button>}
                     </div>
                   ))}
                 </div>
@@ -1383,6 +1399,7 @@ export function BillingModule({ serviceFeeNotice = null }: { serviceFeeNotice?: 
               </Badge>
               <p className="text-sm font-bold shrink-0">{fmtCurrency(b.amount)}</p>
               <div className="flex gap-1">
+                {isManager(role) && b.is_recurring && <Button size="sm" variant="outline" onClick={() => openSchedule(b)}>{tr('bills.editSchedule')}</Button>}
                 {b.status !== 'paid' && (
                   <button onClick={() => markBillPaid(b)} className="p-1.5 rounded-lg text-muted hover:text-emerald-400 hover:bg-surface/40" title={tr('billing.markPaid')}>
                     <CheckCircle2 className="h-4 w-4" />
@@ -1739,6 +1756,10 @@ export function BillingModule({ serviceFeeNotice = null }: { serviceFeeNotice?: 
       <AddBudgetModal open={showAddBudget} onClose={() => setShowAddBudget(false)} familyId={familyId} userId={userId} onDone={() => void refreshBudgets()} />
       <AddBillModal key={`${familyId}:${userId}:${showAddBill}`} open={showAddBill} onClose={() => setShowAddBill(false)} familyId={familyId} userId={userId} onDone={() => void refreshBills()} />
       {paymentBill && bills.some(b => b.id === paymentBill.id && b.family_id === familyId) && <BillPaymentModal key={`${familyId}:${userId}:${paymentBill.id}`} bill={paymentBill} familyId={familyId} onClose={() => setPaymentSelection(null)} onDone={() => { void refreshBills(); }} />}
+      {scheduleBill && isManager(role) && bills.some(b => b.id === scheduleBill.id && b.family_id === familyId) && <BillScheduleModal key={`${familyId}:${userId}:${scheduleBill.id}:${scheduleSelection!.ticket}`} bill={scheduleBill} isCurrent={() => currentSchedule.current === scheduleSelection && currentBillOwner.current === scheduleSelection!.owner} onClose={() => {
+        if (currentSchedule.current !== scheduleSelection) return;
+        currentSchedule.current = null; setScheduleSelection(null);
+      }} onDone={() => { if (currentSchedule.current === scheduleSelection) void refreshBills(); }} />}
       <AddSavingsGoalModal open={showAddGoal} onClose={() => setShowAddGoal(false)} familyId={familyId} userId={userId} onDone={() => void refreshGoals()} />
     </div>
   );

@@ -13,7 +13,8 @@ import { getTranslations } from '@/lib/i18n/server';
 import { titleWithoutDoubledBrand } from '@/lib/marketing/seo';
 import { dayKeyInTz, zonedDayBoundsMs } from '@/lib/services/scope';
 import { instantCalendarBounds } from '@/lib/briefing/calendar-window';
-import { readCalendarOccurrences } from '@/lib/calendar/occurrences';
+import { readDisplayCalendarOccurrences } from '@/lib/calendar/display-occurrences';
+import { calendarConsumerKey, projectCalendarDay } from '@/lib/calendar/consumer-spans';
 
 export async function generateMetadata(): Promise<Metadata> {
   const t = await getTranslations();
@@ -39,7 +40,8 @@ export default async function KidsPage() {
   // host — so after 5pm a child saw tomorrow's events and lost today's, every
   // day. Same defect and same fix as the kitchen display (display/page.tsx:122).
   // `tz` is the family's zone, bound above.
-  const bounds = zonedDayBoundsMs(dayKeyInTz(new Date(), tz), tz);
+  const todayKey = dayKeyInTz(new Date(), tz);
+  const bounds = zonedDayBoundsMs(todayKey, tz);
   const start = new Date(bounds.start);
   const end = new Date(bounds.end);
 
@@ -48,7 +50,7 @@ export default async function KidsPage() {
     supabase.from('chore_assignments').select('id, chore_id, status, due_at').eq('family_id', familyId).eq('member_id', me.id).in('status', ['todo', 'in_progress']).order('due_at').limit(10),
     supabase.from('chore_assignments').select('points_awarded').eq('family_id', familyId).eq('member_id', me.id).in('status', ['done', 'approved']),
     // Series included: the weekly practice is on the child's day every week (lib/calendar/occurrences.ts).
-    readCalendarOccurrences(supabase, familyId, instantCalendarBounds(start.toISOString(), new Date(end.getTime() - 1).toISOString(), tz), tz, { columns: ['id', 'title', 'starts_at', 'all_day'], limit: 6 }),
+    readDisplayCalendarOccurrences(supabase, familyId, instantCalendarBounds(start.toISOString(), new Date(end.getTime() - 1).toISOString(), tz), tz, { overlap: true }),
   ]);
 
   // A dropped error would tell the child "All done! 🎉 No jobs left today." and
@@ -65,7 +67,9 @@ export default async function KidsPage() {
 
   const myTasks = myTasksRes.data;
   const done = doneRes.data;
-  const events = eventsRes.data;
+  let events;
+  try { events=projectCalendarDay(eventsRes.data??[],todayKey,tz).slice(0,6); }
+  catch { return <ErrorState message={tr('kids.weCouldnTLoadYour')} />; }
 
   const choreIds = [...new Set((myTasks ?? []).map((t) => t.chore_id))];
   const { data: chores } = choreIds.length
@@ -121,8 +125,8 @@ export default async function KidsPage() {
         {events && events.length > 0 ? (
           <ul className="space-y-3">
             {events.map((e) => (
-              <li key={e.id} className="flex items-center gap-4 rounded-2xl border border-border bg-surface/40 p-4">
-                <span className="w-16 shrink-0 text-sm font-bold text-muted">{e.all_day ? 'All day' : fmtTime(e.starts_at)}</span>
+              <li key={calendarConsumerKey(e)} className="flex items-center gap-4 rounded-2xl border border-border bg-surface/40 p-4">
+                <span className="w-16 shrink-0 text-sm font-bold text-muted">{e.all_day ? 'All day' : fmtTime(e.displayStartsAt)}</span>
                 <span className="text-lg font-semibold">{e.title}</span>
               </li>
             ))}

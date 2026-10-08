@@ -16,6 +16,7 @@ import { readDisplayCalendarOccurrences } from '@/lib/calendar/display-occurrenc
 import { briefingCalendarBounds } from '@/lib/briefing/calendar-window';
 import { isValidTimezone } from '@/lib/time/zoned';
 import { expiringSoon } from '@/lib/pantry/logic';
+import { readPlannerMeals, readPlannerRecipes, readPlannerPantry } from '@/lib/meals/planner-inputs';
 import type { MealType } from '@/lib/database.types';
 import { enforceAIRateLimit } from '@/lib/server/ai-rate-limit';
 import { MAX_SMALL_JSON_BYTES, readBoundedRequestJsonOrEmpty } from '@/lib/server/bounded-request-body';
@@ -71,8 +72,8 @@ export async function POST(req: Request) {
 
   // Candidate dishes ------------------------------------------------------
   const candidateResults = await settleAll([
-    supabase.from('meals').select('id,name,meal_type').eq('family_id', familyId),
-    supabase.from('family_recipes').select('id,name,category,allergy_flags').eq('family_id', familyId),
+    readPlannerMeals(supabase, familyId),
+    readPlannerRecipes(supabase, familyId),
   ]);
   const candidateError = candidateResults.find((result) => result.error)?.error;
   if (candidateError) {
@@ -86,8 +87,7 @@ export async function POST(req: Request) {
   // Expiring pantry items to use up ---------------------------------------
   let expiring: string[] = [];
   if (useExpiring) {
-    const { data: pantry, error: pantryError } = await supabase.from('pantry_items')
-      .select('name,expires_at').eq('family_id', familyId).not('expires_at', 'is', null);
+    const { data: pantry, error: pantryError } = await readPlannerPantry(supabase, familyId);
     if (pantryError) {
       logDatabaseFailure('pantry read', pantryError);
       return databaseUnavailable(t('plan.mealPlanningDataIsTemporarily'));

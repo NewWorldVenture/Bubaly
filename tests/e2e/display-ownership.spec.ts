@@ -46,6 +46,7 @@ const ownerEntries = Object.fromEntries([
 // '2026-09-01' heading became August.
 const parseIsoModule = collectOwner(require.resolve('date-fns/parseISO'));
 const sources = Object.fromEntries([
+  'lib/calendar/consumer-spans.ts', 'lib/calendar/display-spans.ts', 'lib/calendar/day.ts', 'lib/briefing/calendar-window.ts',
   'lib/display/ambient.ts', 'lib/display/tiles.ts', 'lib/display/calendar.ts', 'lib/onboarding/ics-time.ts',
   // The family clock (TIME-003): the real shared formatter and the zone helpers it reads.
   'components/i18n/use-format.ts', 'lib/utils/format.ts', 'lib/time/zoned.ts', 'lib/time/local-day.ts', 'lib/time/wall-clock.ts',
@@ -159,6 +160,10 @@ test.beforeEach(async ({ page }) => {
       if (modules[file]) return modules[file];
       const exports = {}, module = { exports };
       const require = id => {
+        if (id === '@/lib/calendar/consumer-spans') return load('lib/calendar/consumer-spans.ts');
+        if (id === './day') return load('lib/calendar/day.ts');
+        if (id === './display-spans') return load('lib/calendar/display-spans.ts');
+        if (id === '@/lib/briefing/calendar-window') return load('lib/briefing/calendar-window.ts');
         if (id === '@/lib/display/ambient') return load('lib/display/ambient.ts');
         if (id === '@/lib/supabase/errors') return load('lib/supabase/errors.ts');
         if (id === '@/lib/display/calendar') return load('lib/display/calendar.ts');
@@ -463,6 +468,23 @@ const PARSED = {
   dateOnly: [2026, 8, 1, 0, 0], localTime: [2026, 8, 1, 0, 30],
   utc: Date.UTC(2026, 8, 1, 0, 30), offset: Date.UTC(2026, 7, 31, 22, 30),
 };
+
+test('source rows without native IDs retain distinct Now identity and projected continuation labels', async ({page})=>{
+  const data=await page.evaluate(()=>{
+    const at=Date.now();
+    const source=(title:string,start:number,end:number)=>({kind:'source' as const,occurrenceKey:`synthetic:${title}`,reference:{kind:'source' as const,feedId:'10000000-0000-4000-8000-000000000001',uid:title,revisionId:'20000000-0000-4000-8000-000000000001',original:{kind:'utc' as const,value:'20261008T043000Z'}},readOnly:true,title,description:null,location:null,category:null,assignee_id:null,starts_at:new Date(start).toISOString(),ends_at:new Date(end).toISOString(),actualStartsAt:new Date(start).toISOString(),actualEndsAt:new Date(end).toISOString(),all_day:false,startDate:null,endDate:null,displayStartsAt:new Date(start+60_000).toISOString()});
+    const active=source('Synthetic active source',at-3_600_000,at+3_600_000),future=source('Synthetic future source',at+7_200_000,at+10_800_000);
+    const date={...source('Synthetic DATE continuation',at,at+3_600_000),all_day:true,starts_at:'2026-10-01T00:00:00Z',ends_at:'2026-10-10T00:00:00Z',startDate:'2026-10-01',endDate:'2026-10-10',displayDay:'2026-10-08'};
+    return {...window.__displayProbe.props.data,timezone:'America/New_York',events:[active,future],upcoming:[date]};
+  });
+  await refresh(page,{data,initialTiles:[...layout('schedule'),...layout('upcoming')]});
+  const active=page.getByRole('listitem').filter({has:page.getByText('Synthetic active source',{exact:true})}),future=page.getByRole('listitem').filter({has:page.getByText('Synthetic future source',{exact:true})});
+  await expect(active).toContainText('Now');await expect(future).not.toContainText('Now');
+  await expect(page.getByText('Synthetic DATE continuation',{exact:true}).locator('..')).toContainText('Oct 8');
+  const label=new Intl.DateTimeFormat('en-US',{timeZone:'America/New_York',hour:'numeric',minute:'2-digit'}).format(new Date(data.events[0].displayStartsAt));
+  await expect(active).toContainText(label);
+  expect(data.events.every(event=>!('id'in event))).toBe(true);
+});
 
 test('the expected parses are date-fns\'s own', () => {
   expect({

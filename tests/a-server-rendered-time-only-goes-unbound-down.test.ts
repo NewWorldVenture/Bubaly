@@ -57,7 +57,7 @@
 //   app/(app)/admin/** — staff surfaces, where a UTC audit-log timestamp is
 //   defensible and arguably correct. Reported in the failure message rather than
 //   silently dropped, so the exclusion cannot quietly grow.
-import { execSync } from 'node:child_process';
+import { execFileSync } from 'node:child_process';
 import { readFileSync } from 'node:fs';
 import { describe, expect, it } from 'vitest';
 
@@ -104,8 +104,8 @@ const withoutComments = (source: string) =>
 const isClient = (raw: string) => /^\s*['"]use client['"]/m.test(raw.slice(0, 400));
 
 function survey() {
-  const files = execSync("git ls-files 'app/**/*.tsx'", { encoding: 'utf8' })
-    .split('\n').filter((f) => f && ENTRY.test(f));
+  const files = execFileSync('git', ['ls-files', 'app/**/*.tsx'], { encoding: 'utf8' })
+    .split(/\r?\n/).map(f => f.replace(/\\/g, '/')).filter((f) => f && ENTRY.test(f));
   const out = { unbound: [] as string[], bound: [] as string[], admin: 0, marketing: 0, entries: 0 };
   for (const file of files) {
     const raw = readFileSync(file, 'utf8');

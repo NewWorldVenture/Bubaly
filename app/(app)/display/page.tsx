@@ -17,8 +17,9 @@ import { AutoRefresh } from '@/components/display/auto-refresh';
 // from client modules. Guarded by tests/display-server-safety.test.ts.
 import { DEFAULT_TILES, resolveTiles, type Tile } from '@/lib/display/tiles';
 import { normalizeSettings, type DisplaySettings } from '@/lib/display/ambient';
-import { displayCalendarFilter, displayEventDays, displayReminderTime, eventOverlapsWindow, familyDisplayCalendar, displayCalendarBounds } from '@/lib/display/calendar';
-import { readCalendarOccurrences } from '@/lib/calendar/occurrences';
+import { displayReminderTime, familyDisplayCalendar, displayCalendarBounds } from '@/lib/display/calendar';
+import { readDisplayCalendarOccurrences } from '@/lib/calendar/display-occurrences';
+import { projectCalendarDay, projectCalendarWindow } from '@/lib/calendar/consumer-spans';
 import type { DisplayData } from '@/components/display/display-grid';
 import type { HandledToday } from '@/components/display/handled-today-tile';
 import { DisplayShellClient } from '@/components/display/display-shell-client';
@@ -136,13 +137,12 @@ async function loadDisplay(
 
   const results = await Promise.all([
     settle(supabase.from('family_members').select('*').eq('family_id', familyId).eq('is_active', true).order('created_at')),
-    // Series included: the weekly practice is on the kitchen display every week,
-    // not only the week it was created (lib/calendar/occurrences.ts). One-offs
-    // keep the display's own overlap filter; a series is expanded from its rule.
-    settle(readCalendarOccurrences(supabase, familyId, displayCalendarBounds(calendar.todayWindow), calendar.timezone,
-      { columns: ['id', 'title', 'starts_at', 'ends_at', 'all_day', 'location', 'assignee_id'], singlesFilter: displayCalendarFilter(calendar.todayWindow) })),
-    settle(readCalendarOccurrences(supabase, familyId, displayCalendarBounds(calendar.upcomingWindow), calendar.timezone,
-      { columns: ['id', 'title', 'starts_at', 'ends_at', 'all_day', 'location', 'assignee_id'], singlesFilter: displayCalendarFilter(calendar.upcomingWindow), limit: 12 })),
+    // Complete overlap reads include ongoing one-offs and recurring instances;
+    // presentation limits are applied only after occupied-day projection.
+    settle(readDisplayCalendarOccurrences(supabase, familyId, displayCalendarBounds(calendar.todayWindow), calendar.timezone,
+      { overlap: true })),
+    settle(readDisplayCalendarOccurrences(supabase, familyId, displayCalendarBounds(calendar.upcomingWindow), calendar.timezone,
+      { overlap: true })),
     settle(supabase.from('chore_assignments').select('id, status, member_id, chore_id, due_at')
       .eq('family_id', familyId).in('status', ['todo', 'in_progress', 'submitted'])
       .lt('due_at', end.toISOString()).order('due_at')),
@@ -155,8 +155,8 @@ async function loadDisplay(
     settle(supabase.from('notes').select('id, title, body').eq('family_id', familyId).eq('is_pinned', true).order('updated_at', { ascending: false }).limit(6)),
     settle(supabase.from('family_recipes').select('name, category, photo_url').eq('family_id', familyId)
       .order('is_favorite', { ascending: false }).order('last_made_at', { ascending: false, nullsFirst: false }).limit(6)),
-    settle(readCalendarOccurrences(supabase, familyId, displayCalendarBounds(calendar.monthWindow), calendar.timezone,
-      { columns: ['starts_at', 'ends_at', 'all_day'], singlesFilter: displayCalendarFilter(calendar.monthWindow) })),
+    settle(readDisplayCalendarOccurrences(supabase, familyId, displayCalendarBounds(calendar.monthWindow), calendar.timezone,
+      { overlap: true })),
     settle(supabase.from('display_layouts').select('tiles, settings').eq('family_id', familyId).maybeSingle()),
     settle(supabase.from('family_photos').select('url, thumbnail_url')
       .eq('family_id', familyId).not('url', 'is', null)
@@ -209,7 +209,17 @@ async function loadDisplay(
     })
     .map((m) => ({ name: m.display_name ?? 'Member', date: formatBirthday(birthdayMonthDay(m.birthday)!, locale) }));
 
-  const eventDays = displayEventDays(monthEvents ?? [], calendar.monthWindow, calendar.timezone);
+  let eventsFailed=!!results[1].error,upcomingFailed=!!results[2].error,monthFailed=!!results[10].error;
+  let visibleEvents: ReturnType<typeof projectCalendarDay<NonNullable<typeof events>[number]>>=[];
+  let visibleUpcoming: ReturnType<typeof projectCalendarWindow<NonNullable<typeof upcoming>[number]>>=[];
+  let eventDays:number[]=[];
+  try { visibleEvents=projectCalendarDay(events??[],calendar.dayKey,calendar.timezone); } catch { eventsFailed=true; }
+  try { visibleUpcoming=projectCalendarWindow(upcoming??[],calendar.upcomingWindow.firstDay,calendar.upcomingWindow.endDay,calendar.timezone).slice(0,12); } catch { upcomingFailed=true; }
+  try {
+    for(let day=calendar.monthWindow.firstDay;day<calendar.monthWindow.endDay;day=addDaysToDayKey(day,1)) {
+      if(projectCalendarDay(monthEvents??[],day,calendar.timezone).length)eventDays.push(Number(day.slice(8)));
+    }
+  } catch { monthFailed=true;eventDays=[]; }
   const displayReminders = (reminders ?? []).map(row => ({ id: row.id, title: row.title, remind_at: displayReminderTime(row) }))
     .filter((row): row is { id: string; title: string; remind_at: string } => !!row.remind_at && Date.parse(row.remind_at) < in14.getTime())
     .sort((a, b) => a.remind_at.localeCompare(b.remind_at)).slice(0, 10);
@@ -218,12 +228,12 @@ async function loadDisplay(
     familyName,
     timezone: calendar.timezone, dayKey: calendar.dayKey, timezoneFallback: calendar.timezoneFallback,
     loadStatus: {
-      events: results[1].error ? 'error' : 'ok', upcoming: results[2].error ? 'error' : 'ok',
-      monthEvents: results[10].error ? 'error' : 'ok', reminders: results[7].error ? 'error' : 'ok',
+      events: eventsFailed ? 'error' : 'ok', upcoming: upcomingFailed ? 'error' : 'ok',
+      monthEvents: monthFailed ? 'error' : 'ok', reminders: results[7].error ? 'error' : 'ok',
     },
     members: (members ?? []).map((m) => ({ id: m.id, display_name: m.display_name ?? 'Member', color: m.color, role: m.role })),
-    events: (events ?? []).filter(event => eventOverlapsWindow(event, calendar.todayWindow)),
-    upcoming: (upcoming ?? []).filter(event => eventOverlapsWindow(event, calendar.upcomingWindow)),
+    events: eventsFailed?[]:visibleEvents.map(event=>event.kind==='native'?{...event,id:event.reference.eventId}:event),
+    upcoming: upcomingFailed?[]:visibleUpcoming.map(event=>event.kind==='native'?{...event,id:event.reference.eventId}:event),
     chores: (chores ?? []).map((c) => ({ id: c.id, status: c.status, member_id: c.member_id, title: choreTitle.get(c.chore_id) ?? 'Chore' })),
     meals: todaysMeals,
     grocery: { items: groceryItems ?? [], count: groceryCount ?? 0 },

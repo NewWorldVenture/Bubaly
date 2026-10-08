@@ -16808,5 +16808,16 @@
   "mobileAssistant.interrupted": "The response was interrupted. Some actions may have completed. Review the saved conversation before sending the request again.",
   "mobileAssistant.reviewSaved": "Review saved conversation",
   "mobileAssistant.editRetry": "Edit and retry",
-  "mobileAssistant.loadingHistory": "Opening conversation…"
+  "mobileAssistant.loadingHistory": "Opening conversation…",
+  "bills.editSchedule": "Edit schedule",
+  "bills.scheduleKeepsDue": "Current due date stays {date}.",
+  "bills.scheduleDoesNotPay": "This saves the schedule without marking the bill paid.",
+  "bills.scheduleNextCycle": "Following cycle: {date}. Short months keep your chosen day.",
+  "bills.saveSchedule": "Save schedule",
+  "bills.scheduleSaved": "Bill schedule saved.",
+  "bills.scheduleNotSaved": "The schedule was not saved. Refresh and try again.",
+  "bills.scheduleChanged": "This bill changed. Refresh before confirming its schedule.",
+  "bills.scheduleManagersOnly": "Only a parent or adult can edit bill schedules.",
+  "bills.scheduleForecastNeedsConfirmation": "Confirm recurring bill schedules before viewing the full money forecast.",
+  "bills.reviewSchedules": "Review bill schedules"
 }

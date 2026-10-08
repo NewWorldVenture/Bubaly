@@ -16,7 +16,13 @@ const family='10000000-0000-4000-8000-000000000001';
 // parser compares scalar strings and does not implement SQL timestamptz casts.
 const row=(id:string,start:string,end:string,recurrence='none')=>({id,family_id:family,title:id,starts_at:new Date(start).toISOString(),ends_at:new Date(end).toISOString(),all_day:false,category:'general',recurrence,recurrence_until:null});
 beforeEach(()=>{vi.spyOn(console,'error').mockImplementation(()=>{});h.rows=[];h.urls=[];h.returnedIds=[];h.enabled=false;h.snapshot=null;h.missingCount=false;h.drift=false;h.timezone='UTC';h.cap=2;h.status=200;h.complete.mockReset();h.complete.mockResolvedValue({text:JSON.stringify({assignments:[{date:'2026-09-14',meal_type:'dinner',ref:'new',name:'Synthetic soup'}]})});h.db=createClient('https://synthetic-meal-review.invalid','synthetic-key',{auth:{persistSession:false,autoRefreshToken:false,storageKey:`review-${++h.client}`},global:{fetch:async(input,init)=>{const u=new URL(String(input));h.urls.push(u);if(u.pathname.includes('/rpc/calendar_read_occurrence_inputs')){expect(JSON.parse(String(init?.body))).toEqual({p_family_id:family});return Response.json(h.snapshot,{status:h.status});}
-if(!u.pathname.endsWith('/calendar_events'))return Response.json([]);
+if(!u.pathname.endsWith('/calendar_events')){
+  expect(['meals','family_recipes']).toContain(u.pathname.split('/').at(-1));
+  expect(u.searchParams.get('family_id')).toBe(`eq.${family}`);
+  expect(u.searchParams.get('order')).toBe('id.asc');
+  expect(new Headers(init?.headers).get('prefer')).toContain('count=exact');
+  return Response.json([],{headers:{'content-range':'*/0'}});
+}
 expect(u.searchParams.get('family_id')).toBe(`eq.${family}`);
 expect(u.searchParams.get('order')).toBe('starts_at.asc,id.asc');
 const isSeries=u.searchParams.get('recurrence')==='neq.none';

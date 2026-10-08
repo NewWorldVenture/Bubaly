@@ -1,11 +1,27 @@
 import type { SupabaseClient } from '@supabase/supabase-js';
 import type { Database, Tables } from '@/lib/database.types';
-import { billPaidPatch, type BillScheduleChoice } from './bill-schedule';
+import { billPaidPatch, billSchedulePatch, type BillScheduleChoice } from './bill-schedule';
 import { whereBillIsAsSeen, writeBillPatch, isMissingDueDayColumn, isDueDayNotKept } from './recurring';
 import { readCountedRows } from '@/lib/calendar/occurrences';
 
 /** Cached rows are only a first-paint prefix, never a complete financial list. */
 export const BILL_READ_CONTRACT = 'complete-bills-v1';
+
+export type BillScheduleSnapshot = Pick<Tables<'bills'>, 'id' | 'family_id' | 'updated_at' | 'due_date' | 'due_day' | 'status' | 'is_recurring' | 'recurrence'>;
+
+export async function saveBillSchedule(client: SupabaseClient<Database>, familyId: string, bill: BillScheduleSnapshot, choice: BillScheduleChoice) {
+  if (!bill || bill.family_id !== familyId || !familyId || typeof bill.id !== 'string' || !bill.id
+    || typeof bill.updated_at !== 'string' || !Number.isFinite(Date.parse(bill.updated_at))
+    || typeof bill.status !== 'string' || typeof bill.is_recurring !== 'boolean'
+    || !(bill.recurrence === null || typeof bill.recurrence === 'string')
+    || !(bill.due_day === undefined || bill.due_day === null || Number.isInteger(bill.due_day))) {
+    return { data: null, error: new Error('Refresh this bill before confirming its schedule.') };
+  }
+  const patch = billSchedulePatch(bill, choice);
+  return writeBillPatch(patch, p => whereBillIsAsSeen(
+    client.from('bills').update(p).eq('id', bill.id).eq('family_id', familyId), bill,
+  ).select('id'));
+}
 
 export async function readCompleteBills(client: SupabaseClient<Database>, familyId: string) {
   if (!familyId) return { data: null, error: { message: 'A family is required to read bills.' } };

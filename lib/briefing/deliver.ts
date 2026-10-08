@@ -42,7 +42,8 @@ import { buildBrief, type Brief } from './build';
 import { readBriefDecisions } from './decisions';
 import { medicationsDueOn, weekdayOf, type MedicationScheduleRow } from './sources';
 import { briefingCalendarBounds } from './calendar-window';
-import { readCalendarOccurrences } from '@/lib/calendar/occurrences';
+import { projectCalendarWindow } from '@/lib/calendar/consumer-spans';
+import { readDisplayCalendarOccurrences } from '@/lib/calendar/display-occurrences';
 import { settleAll } from '@/lib/supabase/settle';
 
 type DB = SupabaseClient<Database>;
@@ -133,7 +134,7 @@ export async function readMorningBrief(scope: ServiceScope, target: MorningTarge
 
   const [events, members, bills, meds, maintenance, warranties, trips, pantry, runs, activity] = await settleAll([
     // Series included: the pushed brief lists every week of a weekly event (lib/calendar/occurrences.ts).
-    readCalendarOccurrences(db, familyId, briefingCalendarBounds(dayKey, tz, 0, 7), tz, { columns: ['title', 'starts_at', 'ends_at', 'all_day', 'location'], limit: 100 }),
+    readDisplayCalendarOccurrences(db, familyId, briefingCalendarBounds(dayKey, tz, 0, 7), tz, { overlap:true }),
     db.from('family_members').select('id, display_name').eq('family_id', familyId).eq('is_active', true),
     db.from('bills').select('name, amount, due_date, status')
       .eq('family_id', familyId).neq('status', 'paid').lte('due_date', horizon).order('due_date').limit(20),
@@ -182,15 +183,18 @@ export async function readMorningBrief(scope: ServiceScope, target: MorningTarge
     pantry: (pantry.data ?? []).map((p) => ({ name: p.name, expiresAt: p.expires_at })),
   };
 
-  return ok(buildBrief({
+  try {
+    const eventWindow=briefingCalendarBounds(dayKey,tz,0,7);
+    projectCalendarWindow(events.data??[],eventWindow.allDayFromDay,eventWindow.allDayToDay,tz);
+    return ok(buildBrief({
     kind: 'daily',
     now: target.at,
-    events: (events.data ?? []).map((e) => ({ title: e.title, start: e.starts_at, end: e.ends_at, allDay: e.all_day, location: e.location })),
+    events: (events.data ?? []).map((e) => ({ title: e.title??'', start: e.starts_at, end: e.ends_at, allDay: e.all_day, location: e.location,reference:e.reference,occurrenceKey:e.occurrenceKey })),
     snapshot,
     completedRuns: (runs.data ?? []) as CompletedRunRow[],
     activity: (activity.data ?? []) as AiActivityRow[],
     decisions: decisions.data.items,
-  }, tz));
+  }, tz)); } catch { return fail("Bubaly could not read the family's calendar.", {code:SERVICE_CODES.db,retryable:true}); }
 }
 
 export type MorningDeliveryResult = {

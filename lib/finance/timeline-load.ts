@@ -40,7 +40,7 @@
 import type { SupabaseClient } from '@supabase/supabase-js';
 import { settleAll } from '@/lib/supabase/settle';
 import type { Database } from '@/lib/database.types';
-import { isMissingDueDayColumn, billAnchorDay, billCadence, MONTH_BASED_CADENCES } from '@/lib/finance/recurring';
+import { BillScheduleConfirmationRequired, isMissingDueDayColumn, billAnchorDay, billCadence, MONTH_BASED_CADENCES } from '@/lib/finance/recurring';
 import { monthlyCostCents } from './subscriptions';
 import {
   buildCashflowTimeline,
@@ -268,7 +268,7 @@ async function readBills(supabase: SupabaseClient<Database>, familyId: string): 
     const cadence = billCadence(bill);
     return bill.is_recurring && (!cadence || (MONTH_BASED_CADENCES.has(cadence) && billAnchorDay(bill) === null));
   });
-  return ambiguous ? {data:null,error:new Error('Recurring bill anchors are unavailable; confirm the schedule before building the full forecast.')} : legacy;
+  return ambiguous ? {data:null,error:new BillScheduleConfirmationRequired('Recurring bill anchors are unavailable; confirm the schedule before building the full forecast.')} : legacy;
 }
 
 /**

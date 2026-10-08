@@ -21,6 +21,8 @@ import { BillPaymentModal } from '@/components/finance/bill-payment-modal';
 import { useLocale, useTranslations } from '@/components/i18n/locale-provider';
 import { describeDbError, wroteNoRows } from '@/lib/supabase/errors';
 import { todayInZone } from '@/lib/schedule/zoned';
+import { isManager } from '@/lib/constants/roles';
+import { BillScheduleModal } from '@/components/finance/bill-schedule-modal';
 
 type Bill = Tables<'bills'>;
 export type BillsMode = 'all' | 'autopay' | 'due';
@@ -42,7 +44,7 @@ export function BillsView({ mode }: { mode: BillsMode }) {
   const locale = useLocale();
   const usd = (amount: number) => usdIn(amount, locale.code);
   const fmtDueDate = (iso: string) => fmtDueDateIn(iso, locale.code);
-  const { familyId, userId } = useApp();
+  const { familyId, userId, role } = useApp();
   const { success, error: toastError } = useToast();
   const meta = MODE_META[mode];
 
@@ -55,6 +57,20 @@ export function BillsView({ mode }: { mode: BillsMode }) {
   const paymentOwner = useMemo(() => ({ familyId, userId }), [familyId, userId]);
   const [paymentSelection, setPaymentSelection] = useState<{ bill: Bill; owner: typeof paymentOwner } | null>(null);
   const paymentBill = paymentSelection?.owner === paymentOwner ? paymentSelection.bill : null;
+  const scheduleOwner = useMemo(() => ({ familyId, userId, role }), [familyId, userId, role]);
+  const [scheduleSelection, setScheduleSelection] = useState<{ bill: Bill; owner: typeof scheduleOwner; ticket: number } | null>(null);
+  const scheduleTicket = useRef(0);
+  const currentBillOwner = useRef(scheduleOwner);
+  currentBillOwner.current = scheduleOwner;
+  const currentSchedule = useRef(scheduleSelection);
+  currentSchedule.current = scheduleSelection?.owner === scheduleOwner ? scheduleSelection : null;
+  const scheduleBill = scheduleSelection?.owner === scheduleOwner ? scheduleSelection.bill : null;
+  function openSchedule(bill: Bill) {
+    if (currentBillOwner.current !== scheduleOwner) return;
+    const selection = { bill, owner: scheduleOwner, ticket: ++scheduleTicket.current };
+    currentSchedule.current = selection;
+    setScheduleSelection(selection);
+  }
   const bills = useMemo(() => loading || stale || readError ? [] : rows ?? [], [rows, loading, stale, readError]);
 
   const visible = useMemo(() => {
@@ -110,6 +126,7 @@ export function BillsView({ mode }: { mode: BillsMode }) {
           <span className={cn('rounded-full px-1.5 py-0.5 text-[10px] font-semibold', dm.tint)}>{dm.label}</span>
         </div>
         <div className="flex shrink-0 items-center gap-1">
+          {isManager(role) && b.is_recurring && <Button size="sm" variant="outline" onClick={() => openSchedule(b)}>{t('bills.editSchedule')}</Button>}
           {mode !== 'due' && (
             <button onClick={() => toggleAutopay(b)} title={t('bills.toggleAutoPay')}
               className={cn('rounded-lg p-1.5 transition', b.autopay ? 'text-brand-text' : 'text-muted/50 hover:text-fg')}><Repeat className="h-4 w-4" /></button>
@@ -169,6 +186,10 @@ export function BillsView({ mode }: { mode: BillsMode }) {
 
       {form && <BillModal key={`${familyId}:${userId}`} familyId={familyId} userId={userId} defaultAutopay={mode === 'autopay'} onClose={() => setForm(false)} />}
       {paymentBill && bills.some(b => b.id === paymentBill.id && b.family_id === familyId) && <BillPaymentModal key={`${familyId}:${userId}:${paymentBill.id}`} bill={paymentBill} familyId={familyId} onClose={() => setPaymentSelection(null)} onDone={() => { void refresh(); }} />}
+      {scheduleBill && isManager(role) && bills.some(b => b.id === scheduleBill.id && b.family_id === familyId) && <BillScheduleModal key={`${familyId}:${userId}:${scheduleBill.id}:${scheduleSelection!.ticket}`} bill={scheduleBill} isCurrent={() => currentSchedule.current === scheduleSelection && currentBillOwner.current === scheduleSelection!.owner} onClose={() => {
+        if (currentSchedule.current !== scheduleSelection) return;
+        currentSchedule.current = null; setScheduleSelection(null);
+      }} onDone={() => { if (currentSchedule.current === scheduleSelection) void refresh(); }} />}
     </div>
   );
 }

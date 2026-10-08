@@ -10,6 +10,7 @@ const { react, reactDom } = reactBrowserScripts('development');
 const sources = Object.fromEntries([
   'components/finance/budgets-view.tsx', 'components/finance/bills-view.tsx',
   'components/finance/bill-payment-modal.tsx',
+  'components/finance/bill-schedule-modal.tsx', 'lib/constants/roles.ts',
   'components/finance/payments-view.tsx', 'components/finance/savings-view.tsx',
   'components/ui/states.tsx', 'components/ui/states-client.tsx', 'components/ui/button.tsx',
   'components/ui/input.tsx', 'components/app/page-header.tsx', 'lib/finance/hub.ts',
@@ -97,6 +98,7 @@ test.beforeEach(async ({ page }) => {
       // above do - so a write that appears here says so, instead of failing as
       // "actions_1.setBudgetAction is not a function" three frames away.
       '@/app/(app)/dashboard/billing/actions': {
+        confirmBillScheduleAction: () => { throw new Error('Unexpected financial write'); },
         setBudgetAction: () => { throw new Error('Unexpected financial write'); },
         deleteBudgetAction: () => { throw new Error('Unexpected financial write'); },
         createSavingsGoalAction: () => { throw new Error('Unexpected financial write'); },

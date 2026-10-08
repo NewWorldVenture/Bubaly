@@ -38,7 +38,9 @@ import { type ParentApprovalRow, type RenewalRow, type DocumentRow, type Awaitin
 import { buildHomeNeeds } from '@/lib/home/needs-build';
 import { detectConflicts, type ConflictEvent } from '@/lib/home/conflicts';
 import { buildHomeBrief } from '@/lib/home/home-brief';
-import { briefingCalendarWindow } from '@/lib/briefing/calendar-window';
+import { briefingCalendarBounds } from '@/lib/briefing/calendar-window';
+import { readDisplayCalendarOccurrences, type CalendarDisplayOccurrence } from '@/lib/calendar/display-occurrences';
+import { projectCalendarDay, projectCalendarWindow } from '@/lib/calendar/consumer-spans';
 import type { DinnerIdea, DinnerEffort } from '@/lib/onboarding/dinner-ideas';
 import { HomeOutcomeCard } from '@/components/dashboard/home-outcome-card';
 import { buildInsightCandidates, rankInsights, type InsightKind, type InsightSources } from '@/lib/home/insight-of-day';
@@ -69,6 +71,9 @@ export async function AiHomeDashboard({ ctx }: { ctx: UserContext }) {
   const dayBounds = zonedDayBoundsMs(todayKey, tz);
   const todayStart = new Date(dayBounds.start);
   const todayEnd = new Date(dayBounds.end);
+  const todayWindow = briefingCalendarBounds(todayKey, tz, 0, 1);
+  const upcomingWindow = briefingCalendarBounds(todayKey, tz, 1, 7);
+  const conflictWindow = briefingCalendarBounds(todayKey, tz, 0, 15);
   const calendarTime = new Intl.DateTimeFormat(locale.code, { timeZone: tz, hour: 'numeric', minute: '2-digit' });
   const calendarDateTime = new Intl.DateTimeFormat(locale.code, { timeZone: tz, month: 'short', day: 'numeric', hour: 'numeric', minute: '2-digit' });
   const calendarDate = new Intl.DateTimeFormat(locale.code, { timeZone: 'UTC', month: 'short', day: 'numeric' });
@@ -119,12 +124,7 @@ export async function AiHomeDashboard({ ctx }: { ctx: UserContext }) {
   ] = await settleAll([
     supabase.from('chore_assignments').select('id', { count: 'exact', head: true })
       .eq('family_id', familyId).eq('member_id', myMemberId).in('status', ['todo', 'in_progress']),
-    supabase.from('calendar_events')
-      .select('id, title, starts_at, all_day, location')
-      .eq('family_id', familyId)
-      .or(`assignee_id.eq.${myMemberId},assignee_id.is.null`)
-      .or(briefingCalendarWindow(todayKey, tz, 0, 1))
-      .order('starts_at').limit(5),
+    readDisplayCalendarOccurrences(supabase, familyId, todayWindow, tz, { overlap: true }),
     supabase.from('grocery_items').select('id', { count: 'exact', head: true })
       .eq('family_id', familyId).eq('is_checked', false),
     supabase.from('medications').select('id', { count: 'exact', head: true })
@@ -137,12 +137,7 @@ export async function AiHomeDashboard({ ctx }: { ctx: UserContext }) {
       .eq('family_id', familyId).eq('is_done', false),
     supabase.from('family_members').select('id, display_name, color, role')
       .eq('family_id', familyId).eq('is_active', true).order('created_at').limit(6),
-    supabase.from('calendar_events')
-      .select('id, title, starts_at, all_day')
-      .eq('family_id', familyId)
-      .or(`assignee_id.eq.${myMemberId},assignee_id.is.null`)
-      .or(briefingCalendarWindow(todayKey, tz, 1, 7))
-      .order('starts_at').limit(5),
+    readDisplayCalendarOccurrences(supabase, familyId, upcomingWindow, tz, { overlap: true }),
     supabase.from('autopilot_suggestions')
       .select('id, title, detail, kind, urgency, confidence, payload')
       .eq('family_id', familyId).eq('status', 'open')
@@ -180,10 +175,7 @@ export async function AiHomeDashboard({ ctx }: { ctx: UserContext }) {
       .eq('family_id', familyId).in('status', ['active', 'expired'])
       .lte('expires_at', new Date(Date.now() + 45 * 86400000).toISOString()).limit(50),
     // Assigned events through the complete local date +14 → personal double-bookings.
-    supabase.from('calendar_events').select('id, title, starts_at, ends_at, all_day, assignee_id')
-      .eq('family_id', familyId).not('assignee_id', 'is', null)
-      .or(briefingCalendarWindow(todayKey, tz, 0, 15))
-      .order('starts_at').limit(200),
+    readDisplayCalendarOccurrences(supabase, familyId, conflictWindow, tz, { overlap: true }),
     // Stored documents expiring within ~30 days (passports, licenses, insurance…).
     supabase.from('documents').select('id, title, expires_at')
       .eq('family_id', familyId).not('expires_at', 'is', null)
@@ -202,12 +194,32 @@ export async function AiHomeDashboard({ ctx }: { ctx: UserContext }) {
   for (const [label, result] of [['today calendar', todayCalendarRes], ['upcoming calendar', upcomingCalendarRes], ['assigned calendar', assignedCalendarRes]] as const) {
     if (result.error) console.error(`[dashboard-home] ${label} read failed`, result.error);
   }
-  const todayUnavailable = !!todayCalendarRes.error;
-  const upcomingUnavailable = !!upcomingCalendarRes.error;
-  const conflictsUnavailable = !!assignedCalendarRes.error;
-  const todayEvents = todayUnavailable ? [] : (todayCalendarRes.data ?? []);
-  const upcomingEvents = upcomingUnavailable ? [] : (upcomingCalendarRes.data ?? []);
-  const conflictEventRows = conflictsUnavailable ? [] : (assignedCalendarRes.data ?? []);
+  let todayUnavailable = !!todayCalendarRes.error;
+  let upcomingUnavailable = !!upcomingCalendarRes.error;
+  let conflictsUnavailable = !!assignedCalendarRes.error;
+  let todayEvents: ReturnType<typeof projectCalendarDay<CalendarDisplayOccurrence>> = [];
+  let upcomingEvents: ReturnType<typeof projectCalendarWindow<CalendarDisplayOccurrence>> = [];
+  let conflictEventRows: ConflictEvent[] = [];
+  const visibleToMember = (event: CalendarDisplayOccurrence) => event.assignee_id === null || event.assignee_id === myMemberId;
+  const ownedCalendar = (events: CalendarDisplayOccurrence[]) => {
+    if (events.some(event => event.kind === 'native' && event.event.family_id !== familyId)) throw new Error('Calendar family changed');
+    return events;
+  };
+  // Validate complete sets before any visibility filter or presentation cap.
+  try { if (!todayUnavailable) todayEvents = projectCalendarDay(ownedCalendar(todayCalendarRes.data ?? []), todayKey, tz).filter(visibleToMember).slice(0, 5); }
+  catch { todayUnavailable = true; }
+  try { if (!upcomingUnavailable) upcomingEvents = projectCalendarWindow(ownedCalendar(upcomingCalendarRes.data ?? []), upcomingWindow.allDayFromDay, upcomingWindow.allDayToDay, tz).filter(visibleToMember); }
+  catch { upcomingUnavailable = true; }
+  try {
+    if (!conflictsUnavailable) conflictEventRows = projectCalendarWindow(ownedCalendar(assignedCalendarRes.data ?? []), conflictWindow.allDayFromDay, conflictWindow.allDayToDay, tz)
+      .filter(event => event.kind === 'native' && event.assignee_id !== null && (manager || event.assignee_id === myMemberId))
+      .map(event => ({ ...event,
+        // First visible day segments are display metadata, not the complete
+        // interval used by the fifteen-day double-booking sweep.
+        conflictStartsAt: new Date(Math.max(Date.parse(event.actualStartsAt), Date.parse(conflictWindow.timedFrom))).toISOString(),
+        conflictEndsAt: new Date(Math.min(event.actualEndsAt === null ? Date.parse(event.actualStartsAt) + 3_600_000 : Date.parse(event.actualEndsAt), Date.parse(conflictWindow.timedTo))).toISOString(),
+      }));
+  } catch { conflictsUnavailable = true; }
 
   // §16 Command Center reads: what Bubaly is doing, what it finished, what it
   // is asking. Family-scoped; every error is captured and logged, and a failed
@@ -324,7 +336,7 @@ export async function AiHomeDashboard({ ctx }: { ctx: UserContext }) {
   const memberNameById = new Map((members ?? []).map((m) => [m.id, m.display_name]));
   const homeConflicts = detectConflicts((conflictEventRows ?? []) as ConflictEvent[])
     .filter((c) => manager || c.assigneeId === myMemberId)
-    .map((c) => ({ id: c.eventIds[0], assigneeName: memberNameById.get(c.assigneeId) ?? null, count: c.eventIds.length, startsAt: c.startsAt }));
+    .map((c) => ({ id: JSON.stringify([c.assigneeId, c.startsAt, c.occurrenceKeys ?? c.eventIds]), assigneeName: memberNameById.get(c.assigneeId) ?? null, count: c.eventIds.length, startsAt: c.startsAt }));
 
   const homeNeeds = buildHomeNeeds({
     approvals: (approvalRows ?? []) as ParentApprovalRow[],
@@ -363,7 +375,7 @@ export async function AiHomeDashboard({ ctx }: { ctx: UserContext }) {
 
   // "Coming Up" merges this week's calendar events and timed reminders.
   const upcomingItems = mergeUpcoming(
-    (upcomingEvents ?? []) as { id: string; title: string; starts_at: string; all_day: boolean }[],
+    upcomingEvents,
     (weekReminderRows ?? []) as { id: string; title: string; remind_at: string | null }[],
     5,
   );
@@ -384,8 +396,8 @@ export async function AiHomeDashboard({ ctx }: { ctx: UserContext }) {
     }));
     homeBrief = buildHomeBrief({
       timezone: tz,
-      upcomingEvents: ((upcomingEvents ?? []) as { title: string; starts_at: string; all_day: boolean }[])
-        .map((e) => ({ title: e.title, start: e.starts_at, allDay: e.all_day })),
+      upcomingEvents: upcomingEvents.map((e) => ({ title: e.title ?? '', start: e.starts_at, end: e.ends_at,
+        allDay: e.all_day, reference: e.reference, occurrenceKey: e.occurrenceKey })),
       dinnerCandidates,
       choresPending: pendingChores ?? 0,
       openTodos: openTodos ?? 0,

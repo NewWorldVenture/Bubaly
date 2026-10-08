@@ -16808,5 +16808,16 @@
   "mobileAssistant.interrupted": "A resposta foi interrompida. Algumas ações podem ter sido concluídas. Revê a conversa guardada antes de voltar a enviar o pedido.",
   "mobileAssistant.reviewSaved": "Rever conversa guardada",
   "mobileAssistant.editRetry": "Editar e tentar novamente",
-  "mobileAssistant.loadingHistory": "A abrir conversa…"
+  "mobileAssistant.loadingHistory": "A abrir conversa…",
+  "bills.editSchedule": "Editar calendário",
+  "bills.scheduleKeepsDue": "A data de vencimento atual mantém-se em {date}.",
+  "bills.scheduleDoesNotPay": "Guarda o calendário sem marcar a fatura como paga.",
+  "bills.scheduleNextCycle": "Período seguinte: {date}. Os meses curtos mantêm o dia escolhido.",
+  "bills.saveSchedule": "Guardar calendário",
+  "bills.scheduleSaved": "Calendário da fatura guardado.",
+  "bills.scheduleNotSaved": "O calendário não foi guardado. Atualize a página e tente novamente.",
+  "bills.scheduleChanged": "Esta fatura foi alterada. Atualize a página antes de confirmar o calendário.",
+  "bills.scheduleManagersOnly": "Só um progenitor ou adulto pode editar calendários de faturas.",
+  "bills.scheduleForecastNeedsConfirmation": "Confirme os calendários das faturas recorrentes antes de ver a previsão financeira completa.",
+  "bills.reviewSchedules": "Rever calendários de faturas"
 }

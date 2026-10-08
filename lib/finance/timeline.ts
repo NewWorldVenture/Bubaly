@@ -12,7 +12,7 @@
 // Amounts are DOLLARS (numeric), matching the finance tables (see hub.ts).
 
 import { DEFAULT_LOCALE, type LocaleCode } from '@/lib/i18n/locales';
-import { billAnchorDay, billCadence, MONTH_BASED_CADENCES } from './bill-schedule';
+import { BillScheduleConfirmationRequired, billAnchorDay, billCadence, MONTH_BASED_CADENCES } from './bill-schedule';
 
 export interface TimelineBill {
   name: string;
@@ -241,9 +241,9 @@ function expandDates(first: Date, recurrence: string | null | undefined, now: Da
 /** Expand a recurring bill's occurrences within [now, horizonEnd]. */
 function expandOccurrences(bill: TimelineBill, now: Date, horizonEnd: Date): string[] {
   const cadence = billCadence(bill);
-  if (bill.is_recurring && !cadence) throw new Error('Confirm the recurring bill schedule before building the forecast.');
+  if (bill.is_recurring && !cadence) throw new BillScheduleConfirmationRequired();
   const day = cadence && MONTH_BASED_CADENCES.has(cadence) ? billAnchorDay({ ...bill, due_date: bill.due_date.slice(0, 10) }) : null;
-  if (cadence && MONTH_BASED_CADENCES.has(cadence) && day === null) throw new Error('Confirm the recurring bill day of month before building the forecast.');
+  if (cadence && MONTH_BASED_CADENCES.has(cadence) && day === null) throw new BillScheduleConfirmationRequired('Confirm the recurring bill day of month before building the forecast.');
   return expandDates(parseDate(bill.due_date), cadence, now, horizonEnd, day ?? undefined);
 }
 

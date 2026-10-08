@@ -2,18 +2,15 @@
 // "Needs you" surface. The family shouldn't have to scan the calendar to notice
 // they've double-booked — Bubaly notices. DOM-free + unit-testable.
 
-export type ConflictEvent = {
-  id: string;
-  title: string;
-  starts_at: string;
-  ends_at: string | null;
-  all_day: boolean;
-  assignee_id: string | null;
-};
+import { calendarConsumerNativeId, type CalendarConsumerEvent } from '@/lib/calendar/consumer-spans';
+import type { CalendarSnapshotReference } from '@/lib/calendar/source-snapshot';
+export type ConflictEvent = CalendarConsumerEvent & { conflictStartsAt?: string; conflictEndsAt?: string };
 
 export type EventConflict = {
   assigneeId: string;
   eventIds: string[];
+  occurrenceKeys?: string[];
+  references?: CalendarSnapshotReference[];
   startsAt: string; // earliest start in the overlapping cluster (ISO)
 };
 
@@ -25,18 +22,22 @@ export type EventConflict = {
  * (one ends exactly as the next starts) are NOT a conflict.
  */
 export function detectConflicts(events: ConflictEvent[], defaultDurationMin = 60): EventConflict[] {
-  const byAssignee = new Map<string, { id: string; start: number; end: number; startIso: string }[]>();
+  const byAssignee = new Map<string, { id: string; start: number; end: number; startIso: string; key?: string; reference?: CalendarSnapshotReference }[]>();
 
   for (const e of events ?? []) {
     if (!e.assignee_id || e.all_day) continue;
-    const start = Date.parse(e.starts_at);
+    const id = calendarConsumerNativeId(e);
+    if (!id) continue; // A source attendee is not a native family assignment.
+    const startIso = e.conflictStartsAt ?? ('actualStartsAt' in e ? e.actualStartsAt : e.starts_at);
+    const start = Date.parse(startIso);
     if (!Number.isFinite(start)) continue;
-    let end = e.ends_at ? Date.parse(e.ends_at) : NaN;
+    const rawEnd = e.conflictEndsAt ?? ('actualEndsAt' in e ? e.actualEndsAt : e.ends_at);
+    let end = rawEnd ? Date.parse(rawEnd) : NaN;
     if (!Number.isFinite(end) || end < start) end = start + defaultDurationMin * 60_000;
     // A point event stays on the schedule but occupies no interval to clash.
     if (end <= start) continue;
     const arr = byAssignee.get(e.assignee_id) ?? [];
-    arr.push({ id: e.id, start, end, startIso: e.starts_at });
+    arr.push({ id, start, end, startIso, ...('occurrenceKey' in e ? { key: e.occurrenceKey, reference: e.reference } : {}) });
     byAssignee.set(e.assignee_id, arr);
   }
 
@@ -47,7 +48,9 @@ export function detectConflicts(events: ConflictEvent[], defaultDurationMin = 60
     let clusterEnd = -Infinity;
     const flush = () => {
       if (cluster.length >= 2) {
-        conflicts.push({ assigneeId, eventIds: cluster.map((x) => x.id), startsAt: cluster[0].startIso });
+        conflicts.push({ assigneeId, eventIds: cluster.map((x) => x.id), startsAt: cluster[0].startIso,
+          ...(cluster.some(x => x.key) ? { occurrenceKeys: cluster.flatMap(x => x.key ? [x.key] : []), references: cluster.flatMap(x => x.reference ? [x.reference] : []) } : {}),
+        });
       }
       cluster = [];
       clusterEnd = -Infinity;

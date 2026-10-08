@@ -3,7 +3,7 @@ import fs from 'node:fs';
 import type { SupabaseClient } from '@supabase/supabase-js';
 import type { Database } from '@/lib/database.types';
 import { briefingCalendarBounds } from '@/lib/briefing/calendar-window';
-import { readCalendarOccurrences } from '@/lib/calendar/occurrences';
+import { readDisplayCalendarOccurrences } from '@/lib/calendar/display-occurrences';
 import { createInMemorySupabase } from './helpers/in-memory-supabase';
 import { between } from './helpers/source-order';
 
@@ -63,7 +63,7 @@ describe('A-05 growth-table module reads are bounded (perf)', () => {
 
   it('briefing calendar_events: counted reads stay within the family day without truncating it', async () => {
     const fetcher = between(briefing, "table: 'calendar_events'", 'const { data: rawReminders');
-    expect(fetcher).toContain('readCalendarOccurrences(sb, familyId,');
+    expect(fetcher).toContain('readDisplayCalendarOccurrences(sb, familyId,');
     expect(fetcher).toContain('briefingCalendarBounds(today, familyClock.timeZone, 0, 1)');
 
     const db = createInMemorySupabase({ maxRows: 100 });
@@ -74,14 +74,16 @@ describe('A-05 growth-table module reads are bounded (perf)', () => {
     }));
     db.seed('calendar_events', [
       ...today,
-      { ...today[0], id: 'prior-day', starts_at: '2026-10-07T06:59:59.999Z' },
+      { ...today[0], id: 'ongoing-prior-day', starts_at: '2026-10-07T06:30:00.000Z', ends_at: '2026-10-07T07:30:00.000Z' },
+      { ...today[0], id: 'prior-day', starts_at: '2026-10-07T06:59:59.999Z', ends_at: '2026-10-07T06:59:59.999Z' },
       { ...today[0], id: 'next-day', starts_at: '2026-10-08T07:00:00.000Z' },
       { ...today[0], id: 'foreign-family', family_id: 'other' },
     ]);
-    const result = await readCalendarOccurrences(db as unknown as SupabaseClient<Database>, 'family',
-      briefingCalendarBounds('2026-10-07', 'America/Los_Angeles', 0, 1), 'America/Los_Angeles');
+    const result = await readDisplayCalendarOccurrences(db as unknown as SupabaseClient<Database>, 'family',
+      briefingCalendarBounds('2026-10-07', 'America/Los_Angeles', 0, 1), 'America/Los_Angeles', { overlap: true });
     expect(result.error).toBeNull();
-    expect(result.data?.map(row => row.id)).toEqual(today.map(row => row.id));
+    expect(result.data?.map(row => row.reference.kind === 'native' ? row.reference.eventId : null)).toEqual(['ongoing-prior-day', ...today.map(row => row.id)]);
+    expect(result.data?.[0]).toMatchObject({reference:{kind:'native',eventId:'ongoing-prior-day'},occurrenceKey:JSON.stringify(['native','ongoing-prior-day','2026-10-07T06:30:00.000Z'])});
   });
 
   it('an oversized briefing day fails instead of loading unbounded history or returning a prefix', async () => {
@@ -90,8 +92,8 @@ describe('A-05 growth-table module reads are bounded (perf)', () => {
       id: `event-${i}`, family_id: 'family', starts_at: '2026-10-07T18:00:00.000Z',
       ends_at: null, all_day: false, recurrence: 'none', recurrence_until: null,
     })));
-    const result = await readCalendarOccurrences(db as unknown as SupabaseClient<Database>, 'family',
-      briefingCalendarBounds('2026-10-07', 'America/Los_Angeles', 0, 1), 'America/Los_Angeles');
+    const result = await readDisplayCalendarOccurrences(db as unknown as SupabaseClient<Database>, 'family',
+      briefingCalendarBounds('2026-10-07', 'America/Los_Angeles', 0, 1), 'America/Los_Angeles', { overlap: true });
     expect(result.data).toBeNull();
     expect(result.count).toBeNull();
     expect(result.error?.message).toContain('More than 20000');
