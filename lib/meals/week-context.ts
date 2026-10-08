@@ -17,10 +17,13 @@
 
 import { isValidTimezone, zonedLocalToInstant } from '@/lib/time/zoned';
 import { briefingCalendarBounds } from '@/lib/briefing/calendar-window';
+import type { SourceTransparency } from '@/lib/calendar/source-occurrences';
 
 /** Native or source occurrence data; original keys remain unchanged. */
 export interface WeekCalendarEvent {
   kind?: 'native' | 'source';
+  /** Source projections require this qualified value; older native rows are opaque. */
+  transparency?: SourceTransparency;
   occurrenceKey?: string;
   actualStartsAt?: string;
   actualEndsAt?: string | null;
@@ -127,21 +130,23 @@ export function scoreWeekNights(
   }
   const seen = new Map<string,string>();
   for (const event of events ?? []) {
-    // DATE annotations are intentionally not a cooking-time commitment.
-    if (event?.all_day) continue;
+    const transparency = event?.transparency === undefined && event?.kind !== 'source' ? 'opaque' : event?.transparency;
+    if (transparency !== 'opaque' && transparency !== 'transparent') throw new Error('Invalid meal calendar transparency');
     const start=Date.parse(event?.actualStartsAt ?? event?.starts_at);
     const suppliedEnd=event?.actualEndsAt !== undefined ? event.actualEndsAt : event?.ends_at;
     const end=suppliedEnd === null || suppliedEnd === undefined ? start + (event.kind === 'source' ? 0 : DEFAULT_EVENT_MINUTES*60_000) : Date.parse(suppliedEnd);
     if (!Number.isFinite(start) || !Number.isFinite(end) || end < start) throw new Error('Invalid meal calendar interval');
     if (event.occurrenceKey !== undefined) {
-      const signature=JSON.stringify([start,end,event.title]);
+      const signature=JSON.stringify([event.kind ?? 'native',Boolean(event.all_day),transparency,start,end,event.title]);
       if (seen.has(event.occurrenceKey)) {
         if (seen.get(event.occurrenceKey) !== signature) throw new Error('Conflicting meal calendar occurrence');
         continue;
       }
       seen.set(event.occurrenceKey,signature);
     }
-    if (end === start) continue;
+    // Qualify identities before skipping free records or DATE annotations.
+    // A conflicting duplicate cannot disappear merely because it is not busy.
+    if (event.all_day || transparency === 'transparent' || end === start) continue;
     for (const bucket of byDate.values()) {
       const from=Math.max(start,bucket.from),to=Math.min(end,bucket.to);
       if (to <= from) continue;

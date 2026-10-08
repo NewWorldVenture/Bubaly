@@ -156,7 +156,7 @@ describe('actual dinner interval occupancy',()=>{
     expect(scoreWeekNights(WEEK,events).nights[0]).toMatchObject({eveningMinutes:20,busy:false,events:['Concurrent0','Concurrent1','Concurrent2']});
   });
   it('explicit and source implicit points are zero; native missing-end remains one hour',()=>{
-    expect(scoreWeekNights(WEEK,[{starts_at:'2026-09-07T18:00:00Z',ends_at:'2026-09-07T18:00:00Z'},{kind:'source',starts_at:'2026-09-07T18:00:00Z',ends_at:null}]).busyNights).toEqual([]);
+    expect(scoreWeekNights(WEEK,[{starts_at:'2026-09-07T18:00:00Z',ends_at:'2026-09-07T18:00:00Z'},{kind:'source',transparency:'opaque',starts_at:'2026-09-07T18:00:00Z',ends_at:null}]).busyNights).toEqual([]);
     expect(scoreWeekNights(WEEK,[{kind:'native',starts_at:'2026-09-07T18:00:00Z',ends_at:null}]).nights[0].eveningMinutes).toBe(60);
   });
   it.each([['2026-03-02','2026-03-07T23:00:00Z','2026-03-09T00:00:00Z'],['2026-10-26','2026-10-31T22:00:00Z','2026-11-02T01:00:00Z']])('DST week %s counts Sunday dinner by actual family instants',(week,start,end)=>{
@@ -206,5 +206,41 @@ describe('the planner prompt carries the busy nights', () => {
     });
     expect(prompt).toContain('Busy evenings');
     expect(prompt).toContain('Tuesday 2026-09-08 (Swim practice)');
+  });
+});
+
+
+describe('qualified meal calendar transparency and identity',()=>{
+  const source:Omit<WeekCalendarEvent,'transparency'>&{transparency?:unknown}={kind:'source',occurrenceKey:'original-source',title:'Synthetic free event',starts_at:'2026-09-07T18:00:00Z',ends_at:'2026-09-07T19:00:00Z'};
+  const score=(events:typeof source[])=>scoreWeekNights(WEEK,events as WeekCalendarEvent[]);
+  it('keeps a transparent-only evening free of minutes, reasons and quick-meal constraints',()=>{
+    const result=score([{...source,transparency:'transparent'}]);expect(result.nights[0]).toMatchObject({eveningMinutes:0,events:[],busy:false});expect(result.busyNights).toEqual([]);expect(result.hint).toBeNull();
+  });
+  it('counts only opaque occupied minutes and reasons when transparent rows overlap them',()=>{
+    const result=score([{...source,transparency:'transparent'}, {...source,occurrenceKey:'opaque',title:'Actual commitment',starts_at:'2026-09-07T18:30:00Z',ends_at:'2026-09-07T19:30:00Z',transparency:'opaque'}]);
+    expect(result.nights[0]).toMatchObject({eveningMinutes:60,events:['Actual commitment'],busy:true});expect(result.hint).not.toContain('Synthetic free event');
+  });
+  it.each([undefined,null,'','unknown',false])('refuses source transparency %s before timed, DATE, point or outside-week skipping',transparency=>{
+    for(const patch of [{},{all_day:true},{ends_at:source.starts_at},{starts_at:'2027-01-01T18:00:00Z',ends_at:'2027-01-01T19:00:00Z'}])expect(()=>score([{...source,...patch,transparency}])).toThrow('transparency');
+  });
+  it.each([false,true])('refuses conflicting duplicate transparency in either order reversed=%s',reverse=>{
+    const rows=[{...source,transparency:'transparent'},{...source,transparency:'opaque'}];expect(()=>score(reverse?rows.reverse():rows)).toThrow('Conflicting meal calendar occurrence');
+  });
+  it.each([false,true])('refuses conflicting duplicate DATE/timed state before either skip reversed=%s',reverse=>{
+    const rows=[{...source,all_day:true,transparency:'opaque'},{...source,all_day:false,transparency:'opaque'}];expect(()=>score(reverse?rows.reverse():rows)).toThrow('Conflicting meal calendar occurrence');
+  });
+  it('refuses a native/source identity collision rather than taking the first occurrence',()=>{
+    expect(()=>score([{...source,kind:'native',transparency:'opaque'},{...source,transparency:'opaque'}])).toThrow('Conflicting meal calendar occurrence');
+  });
+  it('deduplicates identical qualified transparent rows and still rejects their differing interval/title',()=>{
+    const row={...source,transparency:'transparent'};expect(score([row,row]).busyNights).toEqual([]);
+    expect(()=>score([row,{...row,ends_at:'2026-09-07T20:00:00Z'}])).toThrow('Conflicting meal calendar occurrence');expect(()=>score([row,{...row,title:'Changed title'}])).toThrow('Conflicting meal calendar occurrence');
+  });
+  it('retains legacy native missing-end/default opaque and qualified source point/DATE policies',()=>{
+    expect(scoreWeekNights(WEEK,[{starts_at:source.starts_at,ends_at:null}]).nights[0].eveningMinutes).toBe(60);
+    expect(score([{...source,ends_at:null,transparency:'opaque'},{...source,occurrenceKey:'DATE',all_day:true,transparency:'opaque'}]).busyNights).toEqual([]);
+  });
+  it('rejects malformed explicit native metadata while accepting an explicit transparent annotation',()=>{
+    expect(()=>score([{...source,kind:'native',transparency:'unknown'}])).toThrow('transparency');expect(score([{...source,kind:'native',transparency:'transparent'}]).busyNights).toEqual([]);
   });
 });

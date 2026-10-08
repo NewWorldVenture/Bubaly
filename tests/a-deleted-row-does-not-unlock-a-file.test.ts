@@ -5,6 +5,7 @@ import { removeFamilyDocument } from '@/lib/storage/documents';
 import { removeConfirmed, type RemovableBucket } from '@/lib/storage/confirm-removal';
 import type { SupabaseBrowser } from '@/lib/supabase/types';
 import { describeActionError } from '@/lib/supabase/errors';
+import { at } from './helpers/source-order';
 
 // SEC-015. The `documents` storage policy hides a secure-vault file from a
 // non-manager through `document_object_is_restricted(name)`, which works by
@@ -207,12 +208,25 @@ describe('a deleted row does not unlock a file (SEC-015)', () => {
   it('messenger discard verifies no committed message before confirmed file removal', () => {
     const messages = readFileSync('components/modules/messages-module.tsx', 'utf8');
     const discard = messages.slice(messages.indexOf('async function discardAttachment()'), messages.indexOf('// ── Record voice message'));
-    expect(discard).toContain(".select('*').eq('id', attempt.id).maybeSingle()");
+    expect(discard).toContain(".select('*').eq('id', attempt.id).eq('family_id', familyId).eq('conversation_id', attempt.convId).eq('sender_id', userId).maybeSingle()");
     expect(discard).toContain('if (check.error)');
-    expect(discard).toContain('if (check.data) acceptMessage(check.data);');
+    expect(discard).toContain('if (check.error) { toastError(describeDbError(check.error)); return; }');
+    const requireBefore = (first: string, second: string) => {
+      expect(at(discard, first)).toBeLessThan(at(discard, second));
+    };
+    expect(discard).toContain('if (check.data) {');
+    expect(discard).toContain("if (check.data.id !== attempt.id || check.data.family_id !== familyId || check.data.conversation_id !== attempt.convId || check.data.sender_id !== userId) { toastError(tr('messagesChat.sendUnconfirmed')); return; }");
+    requireBefore('if (check.error)', 'acceptMessage(check.data);');
+    requireBefore('if (check.data.id !== attempt.id', 'acceptMessage(check.data);');
     expect(discard).toContain('else if (attempt.uploaded)');
     expect(discard).toContain('await removeFamilyMedia(supabase, attempt.path)');
     expect(discard).toContain('if (removal.error)');
+    requireBefore('if (check.error)', 'await removeFamilyMedia(supabase, attempt.path)');
+    requireBefore('attempt.discarding = true;', 'const check = await settle(');
+    requireBefore('attempt.uploaded = false;', 'await removeFamilyMedia(supabase, attempt.path)');
+    requireBefore('if (removal.error)', 'if (current()) rememberAttachment(null)');
+    expect(discard).toMatch(/if \(!current\(\)\) return;\s+if \(check\.error\)/);
+    expect(discard).toMatch(/if \(!current\(\)\) return;\s+if \(removal\.error\)/);
   });
 
   it('marketing rollback reports an unconfirmed removal', () => {

@@ -10,6 +10,7 @@ vi.mock('@/lib/server/ai-rate-limit',()=>({enforceAIRateLimit:async()=>({ok:true
 vi.mock('@/lib/ai/observability',()=>({withAiRequest:(_scope:unknown,_feature:unknown,run:(o:{used:()=>void})=>Promise<string>)=>run({used:()=>{}})}));
 vi.mock('@/lib/calendar/source-capability',()=>({get CALENDAR_SOURCE_ARCHIVE_ENABLED(){return h.enabled;}}));
 import { parseICSSource } from '@/lib/sync/ics-source';
+import type { ImportedSourceComponent, ImportedSourceOverride } from '@/lib/calendar/imported-source';
 import { POST } from '@/app/api/ai/meals/plan/route';
 const family='10000000-0000-4000-8000-000000000001';
 // Fixture timestamps share the query's ISO millisecond spelling; the shared
@@ -84,4 +85,25 @@ describe('enabled coherent source calendar in actual SDK meal planning',()=>{
    expect((await result()).busyNights).toEqual([{date:'2026-09-14',weekday:'Monday',reason:'Source practice'},{date:'2026-09-15',weekday:'Tuesday',reason:'Native practice'}]);expect(h.urls.filter(u=>u.pathname.includes('/rpc/'))).toHaveLength(1);
  });
  it.each(['missing','review','short'])('refuses source %s without native fallback or model execution',async kind=>{h.enabled=true;h.snapshot=sourceSnapshot('DTSTART:20260914T180000Z\r\nDURATION:PT1H');if(kind==='missing'){h.status=400;h.snapshot={code:'PGRST202',message:'synthetic missing RPC'};}else if(kind==='review')(h.snapshot as ReturnType<typeof sourceSnapshot>).sourceGroups[0].materializationState='revision_review';else(h.snapshot as ReturnType<typeof sourceSnapshot>).sourceCount=2;expect((await POST(request())).status).toBe(503);expect(h.complete).not.toHaveBeenCalled();expect(h.urls.filter(u=>u.pathname.endsWith('/calendar_events'))).toEqual([]);});
+});
+
+
+describe('actual SDK POST meal transparency adoption',()=>{
+ it('keeps a transparent original source visible to the read but out of the provider busy-night constraint',async()=>{
+   h.enabled=true;h.snapshot=sourceSnapshot('DTSTART:20260914T180000Z\r\nDURATION:PT1H\r\nTRANSP:TRANSPARENT');
+   const body=await result();expect(body.busyNights).toEqual([]);expect(h.complete).toHaveBeenCalledTimes(1);expect(JSON.stringify(h.complete.mock.calls[0])).not.toContain('Busy evenings');expect(h.urls.filter(url=>url.pathname.includes('/rpc/calendar_read_occurrence_inputs'))).toHaveLength(1);expect(h.urls.filter(url=>url.pathname.endsWith('/calendar_events'))).toEqual([]);
+ });
+ it('keeps only the opaque native commitment in a mixed coherent snapshot and model prompt',async()=>{
+   h.enabled=true;const value=sourceSnapshot('DTSTART:20260914T180000Z\r\nDURATION:PT1H\r\nTRANSP:TRANSPARENT');Object.assign(value,{nativeRows:[{...row('40000000-0000-4000-8000-000000000001','2026-09-15T18:00:00Z','2026-09-15T19:00:00Z'),title:'Native opaque practice',description:null,location:null,assignee_id:null,feed_id:null,external_uid:null,created_by:null,onboarding_key:null,idempotency_key:null,created_at:'2026-09-01T00:00:00Z',updated_at:'2026-09-01T00:00:00Z',source_recurrence:null}],nativeCount:1});h.snapshot=value;
+   expect((await result()).busyNights).toEqual([{date:'2026-09-15',weekday:'Tuesday',reason:'Native opaque practice'}]);const prompt=JSON.stringify(h.complete.mock.calls[0]);expect(prompt).toContain('Native opaque practice');expect(prompt).not.toContain('Source practice');
+ });
+ it('preserves default opaque on a separate exact override of a transparent source series',async()=>{
+   h.enabled=true;const value=sourceSnapshot('DTSTART:20260914T180000Z\r\nDURATION:PT1H\r\nRRULE:FREQ=DAILY;COUNT=2\r\nTRANSP:TRANSPARENT');
+   const document=parseICSSource('BEGIN:VCALENDAR\r\nVERSION:2.0\r\nPRODID:-//Synthetic meal exact override//EN\r\nBEGIN:VEVENT\r\nUID:meal-source\r\nSUMMARY:Source practice\r\nDTSTART:20260914T180000Z\r\nDURATION:PT1H\r\nRRULE:FREQ=DAILY;COUNT=2\r\nTRANSP:TRANSPARENT\r\nEND:VEVENT\r\nBEGIN:VEVENT\r\nUID:meal-source\r\nRECURRENCE-ID:20260915T180000Z\r\nDTSTART:20260915T190000Z\r\nDURATION:PT1H\r\nSUMMARY:Opaque exact practice\r\nEND:VEVENT\r\nEND:VCALENDAR\r\n')[0];
+   const group=value.sourceGroups[0];group.document=document;const components:(ImportedSourceComponent|ImportedSourceOverride)[]=[document.master!,...document.overrides];group.watermarks=components.map(component=>({componentKey:'recurrenceId' in component?JSON.stringify(['override',component.recurrenceId.kind,component.recurrenceId.kind==='zoned'?component.recurrenceId.tzid:null,component.recurrenceId.value]):'master',versionComponent:structuredClone(component),versionRevisionId:group.revisionId,cancelledComponent:null,cancellationRevisionId:null}));value.watermarkCount=group.watermarks.length;h.snapshot=value;
+   expect((await result()).busyNights).toEqual([{date:'2026-09-15',weekday:'Tuesday',reason:'Opaque exact practice'}]);expect(JSON.stringify(h.complete.mock.calls[0])).not.toContain('Source practice');expect(h.urls.filter(url=>url.pathname.includes('/rpc/'))).toHaveLength(1);
+ });
+ it.each(['TRANSP:UNKNOWN','TRANSP:OPAQUE\r\nTRANSP:TRANSPARENT','TRANSP;X-UNKNOWN=VALUE:TRANSPARENT'])('refuses unqualified raw metadata %s through actual SDK before provider execution',async metadata=>{
+   h.enabled=true;h.snapshot=sourceSnapshot(`DTSTART:20260914T180000Z\r\nDURATION:PT1H\r\n${metadata}`);expect((await POST(request())).status).toBe(503);expect(h.complete).not.toHaveBeenCalled();expect(h.urls.filter(url=>url.pathname.endsWith('/calendar_events'))).toEqual([]);
+ });
 });

@@ -81,6 +81,11 @@ describe('a file the user deleted is really deleted', () => {
     const discard = between(messages, 'async function discardAttachment()', 'const [recording, setRecording]');
     expect(discard).toContain('const removal = await removeFamilyMedia(supabase, attempt.path);');
     expect(discard).toContain('if (removal.error) { toastError(describeDbError(removal.error)); return; }');
-    expect(at(discard, 'if (removal.error)')).toBeLessThan(at(discard, 'setFailedAttachment(null)'));
+    expect(at(discard, 'if (removal.error)')).toBeLessThan(at(discard, 'if (current()) rememberAttachment(null)'));
+    // The shared setter retires both the render state and synchronous retry
+    // authority. Clearing either alone would leave a stale attempt reusable.
+    const remember = between(messages, 'function rememberAttachment(', 'async function sendFile(');
+    expect(remember).toContain('attachmentAttempts.current.delete(failedAttachmentRef.current.convId)');
+    expect(remember).toContain('failedAttachmentRef.current = attempt; setFailedAttachment(attempt);');
   });
 });
