@@ -147,6 +147,29 @@ jobs:
           [[ "$BUBALY_BILL_POSTGREST_GATE" == 1 && "$BUBALY_BILL_POSTGREST_MODE" == docker ]]
           node node_modules/vitest/vitest.mjs run tests/recurring-bill-postgrest.test.ts --reporter=verbose
 
+      - name: Diagnose only this run's owned local services on failure
+        if: failure()
+        shell: bash
+        run: |
+          set -euo pipefail
+          [[ "$GITHUB_RUN_ID" =~ ^[0-9]+$ && "$GITHUB_RUN_ATTEMPT" =~ ^[0-9]+$ ]]
+          [[ -z "${DOCKER_HOST:-}" && -z "${DOCKER_CONTEXT:-}" ]]
+          [[ "$(docker context show)" == default ]]
+          [[ "$(docker context inspect default --format '{{.Endpoints.docker.Host}}')" == unix:///var/run/docker.sock ]]
+          marker="${GITHUB_RUN_ID}-${GITHUB_RUN_ATTEMPT}"
+          prefix="bubaly-bill-rest-${marker}"
+          docker version --format 'Local Docker server {{.Server.Version}}'
+          # Never dump Config.Env, credentials, raw SQL data or request headers.
+          for suffix in rest pg; do
+            candidate="$prefix-$suffix"
+            if [[ "$(docker inspect --type container --format '{{index .Config.Labels "bubaly.bill-postgrest-run"}}' "$candidate" 2>/dev/null)" == "$marker" ]]; then
+              docker inspect --type container --format '{{.Name}} status={{.State.Status}} exit={{.State.ExitCode}} oom={{.State.OOMKilled}} network={{.HostConfig.NetworkMode}} ports={{json .NetworkSettings.Ports}}' "$candidate"
+            fi
+          done
+          if [[ "$(docker network inspect --format '{{index .Labels "bubaly.bill-postgrest-run"}}' "$prefix-net" 2>/dev/null)" == "$marker" ]]; then
+            docker network inspect --format 'Owned network driver={{.Driver}} internal={{.Internal}}' "$prefix-net"
+          fi
+
       - name: Remove only this run's labelled containers, volumes and network
         if: always()
         shell: bash

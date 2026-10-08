@@ -40,10 +40,40 @@ function command(program: string, args: string[], input?: string) {
 function sql(query: string) { return command(pgCommand, [...pgArgs, '-f', '-'], query); }
 const literal = (value: string) => `'${value.replaceAll("'", "''")}'`;
 const wait = (ms: number) => new Promise(resolve => setTimeout(resolve, ms));
-async function until(probe: () => boolean | Promise<boolean>, label: string) {
+async function until(probe: () => boolean | Promise<boolean>, label: string, diagnostic?: () => string) {
   const deadline = Date.now() + 15_000;
   while (Date.now() < deadline) { if (await probe()) return; await wait(100); }
-  throw new Error(`Timed out waiting for ${label}`);
+  throw new Error(`Timed out waiting for ${label}${diagnostic ? `; ${diagnostic()}` : ''}`);
+}
+/** Only bounded diagnostic identifiers; no raw message/body/header values. */
+function readinessCode(value: unknown): string {
+  return typeof value === 'string' && /^(?:PGRST[0-9]{3}|[0-9A-Z]{5}|ECONNREFUSED|ECONNRESET|ETIMEDOUT|EHOSTUNREACH|ENETUNREACH|EPIPE|EAI_AGAIN|ENOTFOUND|UND_ERR_(?:CONNECT_TIMEOUT|HEADERS_TIMEOUT|BODY_TIMEOUT|SOCKET|ABORTED)|TypeError|AbortError|TimeoutError|Error)$/.test(value) ? value : 'unavailable';
+}
+async function requireOwnedHttpIdentity() {
+  let diagnostic = 'No authenticated identity response received';
+  await until(async () => {
+    let response: Response;
+    try {
+      response = await nativeFetch(new URL('/rpc/bill_gate_identity', rest), {
+        method: 'POST', headers: { Authorization: `Bearer ${jwt()}` }, signal: AbortSignal.timeout(2000),
+      });
+    } catch (error) {
+      const cause = error instanceof Error ? error.cause as { code?: unknown } | undefined : undefined;
+      diagnostic = `transport name=${readinessCode(error instanceof Error ? error.name : undefined)} causeCode=${readinessCode(cause?.code)}`;
+      return false;
+    }
+    let body: unknown;
+    try { body = await response.json(); }
+    catch { diagnostic = `HTTP ${response.status}; non-JSON identity response`; return false; }
+    if (response.status !== 200) {
+      const error = body && typeof body === 'object' ? body as Record<string, unknown> : {};
+      diagnostic = `HTTP ${response.status}; code=${readinessCode(error.code)}`;
+      return false;
+    }
+    // A healthy but different endpoint must fail immediately, before any DDL.
+    assert.deepEqual(body, { database: DB, marker }, 'HTTP and SQL must identify the same owned fixture before DDL');
+    return true;
+  }, 'authenticated real PostgREST fixture identity', () => diagnostic);
 }
 function jwt(user = PARENT, aal = 'aal2') {
   const head = Buffer.from(JSON.stringify({ alg: 'HS256', typ: 'JWT' })).toString('base64url');
@@ -143,12 +173,9 @@ describe.skipIf(!enabled).sequential('isolated real PostgREST recurring bill acc
     if (mode === 'local') assert.equal(realpathSync(identity.directory), realpathSync(process.env.BUBALY_BILL_PG_DATA!));
     assert.equal(sql('select count(*) from public.bills;'), '0');
     assert.equal(sql("select count(*) from pg_attribute where attrelid='public.bills'::regclass and attname='due_day' and not attisdropped;"), '0');
-    await until(async () => { try { return (await nativeFetch(rest, { signal: AbortSignal.timeout(2000) })).ok; } catch { return false; } }, 'real PostgREST readiness');
-    const httpIdentity = await nativeFetch(new URL('/rpc/bill_gate_identity', rest), {
-      method: 'POST', headers: { Authorization: `Bearer ${jwt()}` }, signal: AbortSignal.timeout(2000),
-    });
-    assert.equal(httpIdentity.status, 200);
-    assert.deepEqual(await httpIdentity.json(), { database: DB, marker }, 'HTTP and SQL must identify the same owned fixture before DDL');
+    // API-root OpenAPI metadata is role-dependent, not proof of authenticated
+    // execution. Readiness must establish the already required HTTP/SQL identity.
+    await requireOwnedHttpIdentity();
     const base = readFileSync('supabase/migrations/0003_functions_triggers.sql', 'utf8');
     for (const name of ['is_family_member', 'can_manage_family']) {
       sql(extract(base, new RegExp(`create or replace function public\\.${name}\\([\\s\\S]*?\\$\\$;`, 'gi')));

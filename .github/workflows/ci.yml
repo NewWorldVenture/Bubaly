@@ -389,8 +389,18 @@ jobs:
           path.write_text(source.replace(original, replacement, 1))
           PY
 
+      - name: Attest empty local stack before owned startup
+        run: node scripts/ci-recurring-bill-anchor-fixture.mjs
+        env:
+          BUBALY_BILL_STACK_PHASE: prepare
+
       - name: Start isolated Supabase
         run: supabase start
+
+      - name: Capture immutable owned bill stack identities
+        run: node scripts/ci-recurring-bill-anchor-fixture.mjs
+        env:
+          BUBALY_BILL_STACK_PHASE: capture
 
       - name: Verify home brief kind uniqueness in disposable PostgreSQL
         timeout-minutes: 3
@@ -453,6 +463,8 @@ jobs:
           E2E_AUTHENTICATED: '1'
           # Each durable-session test owns a unique local-only account/household.
           E2E_DURABLE_SESSION: '1'
+          # Real Auth/UI proof against the unchanged PG15 older schema.
+          E2E_BILL_ANCHOR_PHASE: old
           # Synthetic, disposable-only input shared by the child fixture/server.
           CHILD_LOGIN_SECRET: ci-only-child-pin-session-fixture
           # Signed Guardian ingress against the disposable server only. A token
@@ -474,6 +486,32 @@ jobs:
           AI_PROVIDER_STUB: '1'
           E2E_PROVIDER_STUB: '1'
 
+      # run-e2e.mjs has stopped its own Next server; all parallel E2E tests
+      # have finished. The reserved file is a disposable fixture only, never
+      # entered into the migration ledger or promoted into migrations.
+      - name: Install held bill anchor fixture in the owned PG15 stack
+        run: node scripts/ci-recurring-bill-anchor-fixture.mjs
+        env:
+          BUBALY_BILL_STACK_PHASE: install
+          E2E_BILL_PARALLEL_FINISHED: '1'
+
+      - name: Verify authenticated durable bill anchors after fresh server start
+        run: npm run test:e2e -- tests/e2e/recurring-bill-authenticated.spec.ts --project=chromium --workers=1
+        env:
+          PLAYWRIGHT_SKIP_BUILD: '1'
+          E2E_BILL_ANCHOR_PHASE: modern
+          E2E_AUTHENTICATED: '1'
+          E2E_DURABLE_SESSION: '1'
+          NODE_OPTIONS: --max-old-space-size=4096
+          CHILD_LOGIN_SECRET: ci-only-child-pin-session-fixture
+          TWILIO_AUTH_TOKEN: ci-only-guardian-signed-ingress-fixture
+          CRON_SECRET: ci-only-guardian-recovery-fixture
+          ANTHROPIC_API_KEY: ''
+          OPENAI_API_KEY: ''
+          NEXT_PUBLIC_SITE_URL: http://localhost:3107
+          AI_PROVIDER_STUB: '1'
+          E2E_PROVIDER_STUB: '1'
+
       # Retain only isolated-fixture DOM snapshots and screenshots on failure.
       # Never upload traces, auth state, environment files, logs, or HTML reports.
       - name: Upload E2E failure evidence
@@ -487,6 +525,7 @@ jobs:
             !test-results/**/trace.zip
             !test-results/*durable-session*/**
             !test-results/*family-messaging-authenticated*/**
+            !test-results/*recurring-bill-authenticated*/**
             !test-results/**/storageState*
             !test-results/**/storage-state*
             !test-results/**/auth.json
@@ -503,4 +542,6 @@ jobs:
 
       - name: Stop isolated Supabase
         if: always()
-        run: supabase stop --no-backup
+        run: node scripts/ci-recurring-bill-anchor-fixture.mjs
+        env:
+          BUBALY_BILL_STACK_PHASE: cleanup
