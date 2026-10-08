@@ -87,6 +87,7 @@ const db: InMemorySupabase = createInMemorySupabase({
     family_automation_runs: [['family_id', 'idempotency_key']],
   },
   defaults: {
+    calendar_events: { feed_id: null, external_uid: null, onboarding_key: null },
     ai_requests: { kind: 'concierge', request_text: '', status: 'queued', priority: 0, context_stats: {}, clarifications: [], error: null, completed_at: null, started_at: null, interpreted_intent: null, intent_confidence: null, conversation_id: null },
     ai_plans: { version: 1, status: 'draft', risk_level: 'low', estimated_actions: 0, requires_approval: false },
     ai_plan_steps: { sequence: 0, step_type: 'act', input_json: {}, dependency_ids: [], status: 'queued', approval_required: false, approval_id: null, risk_level: 'low', retry_count: 0, max_retries: 2, result_json: null, error: null, condition: null, started_at: null, completed_at: null },

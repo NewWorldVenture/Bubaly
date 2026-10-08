@@ -269,18 +269,22 @@ describe('documents and readiness', () => {
 });
 
 describe('syncToCalendar', () => {
-  it('adds the trip as an all-day span in the trip timezone plus flights and timed reservations, then skips them all on a second sync', async () => {
-    const store = makeStore(seedTrip({
+  it('stores civil DATE boundaries plus timed clocks, then verifies identical sync receipts on retry', async () => {
+    const { createInMemorySupabase } = await import('./helpers/in-memory-supabase');
+    const memory = createInMemorySupabase({ defaults: { calendar_events: { feed_id: null, external_uid: null, onboarding_key: null, recurrence_until: null } } });
+    const seed = seedTrip({
       vacation_flights: [{ id: 'f-1', family_id: 'fam-1', vacation_id: 'v-1', airline: 'TAP', flight_number: 'TP 210', depart_airport: 'JFK', arrive_airport: 'LIS', depart_at: '2026-10-10T22:00:00Z', arrive_at: '2026-10-11T09:30:00Z', confirmation_code: 'ABC123', booked: true }],
       vacation_reservations: [{ id: 'r-1', family_id: 'fam-1', vacation_id: 'v-1', name: 'Dinner at Belcanto', location: 'Chiado', reserved_at: '2026-10-12T19:30:00Z', confirmation_code: null, booked: true }],
-    }));
+    });
+    for (const [table, rows] of Object.entries(seed)) memory.seed(table, rows);
+    const store = { db: memory as unknown as SupabaseClient<Database>, rows: (table: string) => memory.table(table) };
     const res = await syncToCalendar(scopeWith(store.db), 'v-1');
     expect(res.ok).toBe(true);
     if (!res.ok) return;
     expect(res.data.created.map((e) => e.title)).toEqual(['Lisbon', 'Flight TAP TP 210 JFK → LIS', 'Dinner at Belcanto']);
     const span = store.rows('calendar_events').find((e) => e.title === 'Lisbon');
-    // Midnight Oct 10 in New York is 04:00Z; the span ends at the last instant of Oct 17 local.
-    expect(span).toMatchObject({ all_day: true, category: 'holiday', starts_at: '2026-10-10T04:00:00.000Z', ends_at: '2026-10-18T03:59:59.999Z', location: 'Lisbon, Portugal', created_by: 'auth-1', family_id: 'fam-1' });
+    // Civil labels stay UTC midnight; Oct 17 is included by the exclusive Oct 18 end.
+    expect(span).toMatchObject({ all_day: true, category: 'holiday', starts_at: '2026-10-10T00:00:00.000Z', ends_at: '2026-10-18T00:00:00.000Z', location: 'Lisbon, Portugal', created_by: 'auth-1', family_id: 'fam-1' });
     expect(store.rows('calendar_events').find((e) => String(e.title).startsWith('Flight'))).toMatchObject({ description: 'Confirmation ABC123', starts_at: '2026-10-10T22:00:00.000Z' });
 
     const again = await syncToCalendar(scopeWith(store.db), 'v-1');

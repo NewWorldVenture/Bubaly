@@ -63,6 +63,21 @@ export function validateCalendarSearchWindow(scope: Pick<ServiceScope, 'familyId
   return { from: fromIso, to: toIso, bounds: instantCalendarBounds(fromIso, toIso, scope.tz) };
 }
 
+/** Internal civil-window policy. A valid 366-day family span can exceed 366
+ * elapsed days when the two years' DST dates differ. The assistant's public
+ * search keeps its separate 366-elapsed-day contract above. */
+export function validateCalendarCivilWindow(scope: Pick<ServiceScope, 'familyId' | 'tz'>, input: { from: string; to: string }) {
+  if (!scope || typeof scope.familyId !== 'string' || !scope.familyId.trim()
+    || typeof scope.tz !== 'string' || !scope.tz.trim() || !isValidTimezone(scope.tz) || !input) throw new Error('Invalid calendar scope');
+  const from = strictInstant(input.from), to = strictInstant(input.to);
+  if (to < from || to - from + 1 > 367 * 86_400_000) throw new Error('Invalid civil calendar window');
+  const fromIso = new Date(from).toISOString(), toIso = new Date(to).toISOString();
+  const bounds = instantCalendarBounds(fromIso, toIso, scope.tz);
+  const days = (Date.parse(bounds.allDayToDay + 'T00:00:00Z') - Date.parse(bounds.allDayFromDay + 'T00:00:00Z')) / 86_400_000;
+  if (!Number.isSafeInteger(days) || days < 1 || days > 366) throw new Error('Invalid civil calendar days');
+  return { from: fromIso, to: toIso, bounds };
+}
+
 /** Complete bounded search. Sources stay unmapped family context, even when a
  * native member/category selector is supplied. No query or display cap reaches
  * the shared reader: admission must succeed for the entire domain first. */
@@ -110,6 +125,19 @@ export async function readCompleteCalendarOccurrences(scope: ServiceScope, input
   let window: ReturnType<typeof validateCalendarSearchWindow>;
   try { window = validateCalendarSearchWindow(scope, input); }
   catch { return fail('That calendar search could not be understood.', { code: SERVICE_CODES.invalidInput }); }
+  return readQualifiedCalendarWindow(scope, window);
+}
+
+/** Internal complete civil read; no presentation cap or source activation.
+ * Callers remain responsible for their own source/write capability policy. */
+export async function readCompleteCalendarCivilOccurrences(scope: ServiceScope, input: { from: string; to: string }): ReturnType<typeof readCompleteCalendarOccurrences> {
+  let window: ReturnType<typeof validateCalendarCivilWindow>;
+  try { window = validateCalendarCivilWindow(scope, input); }
+  catch { return fail('That civil calendar window could not be understood.', { code: SERVICE_CODES.invalidInput }); }
+  return readQualifiedCalendarWindow(scope, window);
+}
+
+async function readQualifiedCalendarWindow(scope: ServiceScope, window: ReturnType<typeof validateCalendarSearchWindow>): ReturnType<typeof readCompleteCalendarOccurrences> {
   const result = await readCalendarAvailability(scope.db, scope.familyId, window.bounds, scope.tz);
   if (result.error) return fail('Could not load the complete calendar.', { code: SERVICE_CODES.db });
   try {

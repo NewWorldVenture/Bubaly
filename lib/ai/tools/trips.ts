@@ -232,7 +232,7 @@ export const tripTools: ToolDefinition[] = [
   defineTool({
     name: 'trips.syncToCalendar',
     aliases: ['sync_trip_to_calendar', 'add_trip_to_calendar'],
-    description: 'Put the trip on the family calendar: the trip itself as an all-day span, plus each flight and timed reservation. Skips anything already there.',
+    description: 'Put the trip on the family calendar as civil all-day dates, plus each flight and timed reservation. Verifies identical receipts from this sync attempt; unverified matching entries require review. Supports up to 1000 flights and reservations each within a 366-day candidate window. Sequential writes can partially succeed.',
     domain: 'travel',
     capability: 'create',
     risk: 'medium',
@@ -240,20 +240,21 @@ export const tripTools: ToolDefinition[] = [
     activityFrom: 'service',
     input: z.object({ vacation_id: z.string() }),
     output: z.object({
-      created: z.array(z.object({ id: z.string(), title: z.string(), starts_at: z.string(), when: z.string() })),
+      created: z.array(z.object({ id: z.string(), title: z.string(), starts_at: z.string(), when: z.string(), all_day: z.boolean(), startDate: z.string().nullable(), endDate: z.string().nullable() })),
       skipped: z.array(z.string()),
     }),
     idempotencyFrom: (input) => `trips.syncToCalendar:${input.vacation_id}`,
     summarize: (_input, output) => (output.created.length === 0
-      ? 'The trip was already on the calendar'
-      : `Added ${plural(output.created.length, 'calendar entry', 'calendar entries')} for the trip, starting ${output.created[0].when}`),
+      ? `Verified ${plural(output.skipped.length, 'calendar entry', 'calendar entries')} saved by this sync attempt`
+      : `Confirmed ${plural(output.created.length, 'calendar entry', 'calendar entries')} for this sync, starting ${output.created[0].when}`),
     consequences: (input) => [`Adds the trip ${input.vacation_id ?? ''}, its flights and timed reservations to the shared family calendar.`],
     execute: async (scope, input) => {
       const res = await syncToCalendar(scope, input.vacation_id);
       if (!res.ok) return res;
       const now = scopeNow(scope);
       return ok({
-        created: res.data.created.map((e) => ({ id: e.id, title: e.title, starts_at: e.startsAt, when: describeDay(e.startsAt, scope.tz, now) })),
+        created: res.data.created.map((e) => ({ id: e.id, title: e.title, starts_at: e.startsAt, all_day: e.allDay, startDate: e.startDate, endDate: e.endDate,
+          when: e.allDay ? `all day ${e.startDate} through ${new Date(Date.parse(`${e.endDate}T00:00:00Z`) - 86400000).toISOString().slice(0, 10)}` : describeDay(e.startsAt, scope.tz, now) })),
         skipped: res.data.skipped,
       });
     },
