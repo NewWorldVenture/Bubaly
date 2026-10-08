@@ -133,7 +133,8 @@ must be included in the eventual release decision.
 ## Concrete future-reference integrity candidate
 
 The [unallocated SQL candidate](wallet-family-integrity.candidate.sql) adds a
-supporting unique key on child_wallets(family_id,id) and two composite foreign
+supporting unique key on child_wallets(family_id,id), child lookup indexes on
+(child_wallet_id,family_id), and two composite foreign
 keys from allowance_rules and invest_orders. Both FKs are explicitly **NOT VALID**:
 new reference writes are checked, while existing mismatches remain untouched.
 The candidate is outside supabase/migrations and every apply workflow. It has no
@@ -156,6 +157,60 @@ composition, the exact once-only migration/ledger protocol, and recorded ownersh
 of the historical rows. Failed preconditions must roll back, not bypass guards.
 The original id-only FKs are retained; no old constraint or row is removed.
 Separate reconciliation and validation remain release gates.
+
+## Priority RPC grants and managed advisor review
+
+The [read-only function definitions](priority-rpc-definitions.json),
+[collection query](priority-rpc-definitions.sql) and
+[effective ACL catalog](definer-acl-catalog.json) confirm:
+
+- `wallet_reserve_card_auth` grants EXECUTE to anon and authenticated; its definer
+  body performs no caller identity check. `marketplace_place_bid_unchecked`
+  grants EXECUTE to anon and also has no caller check. Existing
+  [0456](../../../supabase/migrations/0456_service_only_functions_are_service_only.sql)
+  explicitly revokes PUBLIC and both client roles while retaining service_role.
+  **Prioritize a separately reviewed ACL stage.** Neither live function was called.
+- `claim_marketing_generation_jobs` is likewise client-executable without a
+  caller check. Source0292 repairs it, but [signature preflight](priority-rpc-prerequisites.json)
+  confirms0292's `claim_ai_runs(integer,integer)` prerequisite is absent. Do not
+  blindly apply that whole migration; compose the reviewed dependencies or an
+  explicitly allocated focused grant release.
+- `rate_limit_hit` is anon-executable and its current body lacks0179's
+  authenticated namespace check. Both rate-limit signatures exist, but0179 still
+  needs full caller/dependency review before release.
+- `enqueue_marketing_page_generation` returns trigger. Its EXECUTE advisory is
+  not evidence of a directly usable REST RPC. `__seed_existing_count` is an
+  invoker function, not a definer; its provenance remains to be established.
+
+The [exact0456 fixture receipt](0456-acl.fixture-results.json) binds the original
+migration bytes and [harmless stub setup](0456-acl.fixture.sql).
+The retained [local fixture runner](0456-acl.fixture.mjs) tests rollback, a second
+application, actual denied anon/authenticated calls, allowed service-role stub
+calls, and refusal/rollback if an inherited grant survives. No wallet/bid code,
+financial record or live function executes. The runner requires a fresh local
+PostgreSQL17 container named `bubaly-audit-acl-20261008` on the explicit local
+Docker socket, with database `bubaly_acl_fixture_20261008`; it accepts no remote
+connection or apply options. These checks support review of0456's ACL behavior,
+not production REST reachability or the complete release composition.
+
+[Normalized security advisories](advisors-security-20261008.json) and
+[performance advisories](advisors-performance-20261008.json) retain all returned
+finding metadata at01:51UTC. Advisory groups overlap and are not counts of
+verified vulnerabilities or measured performance defects:
+
+| Advisory | Count | Review treatment |
+|---|---:|---|
+| [RLS enabled, no policy](https://supabase.com/docs/guides/database/database-linter?lint=0008_rls_enabled_no_policy) | 55 | Default deny can be intentional for backend tables; do not add client policies merely to silence this. |
+| [Mutable function search path](https://supabase.com/docs/guides/database/database-linter?lint=0011_function_search_path_mutable) | 8 | Review each body and caller privilege before changing it. |
+| [Extensions in public](https://supabase.com/docs/guides/database/database-linter?lint=0014_extension_in_public) | 2 | Review schema dependencies before relocation. |
+| [Anon definer EXECUTE](https://supabase.com/docs/guides/database/database-linter?lint=0028_anon_security_definer_function_executable) | 44 | Catalog separates12trigger functions from32non-trigger entries; priority cases above have concrete grant/body evidence. |
+| [Authenticated definer EXECUTE](https://supabase.com/docs/guides/database/database-linter?lint=0029_authenticated_security_definer_function_executable) | 48 | Intended checked RPCs and unsafe unguarded helpers require different treatment. |
+| [Leaked-password protection](https://supabase.com/docs/guides/auth/password-security#password-strength-and-leaked-password-protection) | 1 | Auth configuration decision; no setting was changed. |
+| [Unindexed FKs](https://supabase.com/docs/guides/database/database-linter?lint=0001_unindexed_foreign_keys) | 766 | Review workload and lock/index cost; this prompted child indexes in the unallocated reference candidate. |
+| [RLS initplan](https://supabase.com/docs/guides/database/database-linter?lint=0003_auth_rls_initplan) | 78 | Preserve authorization semantics when optimizing policy expressions. |
+| [Unused indexes](https://supabase.com/docs/guides/database/database-linter?lint=0005_unused_index) | 198 | No automatic removal; observation period and workload are not established. |
+| [Multiple permissive policies](https://supabase.com/docs/guides/database/database-linter?lint=0006_multiple_permissive_policies) | 255 | Reconcile intended union and restrictive guards before changing policies. |
+| [Auth connection allocation](https://supabase.com/docs/guides/deployment/going-into-prod) | 1 | Configuration review only; unchanged. |
 
 ## Proposed stages and acceptance gates
 

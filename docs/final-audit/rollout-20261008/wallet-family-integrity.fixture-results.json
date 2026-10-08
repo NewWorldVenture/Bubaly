@@ -3,7 +3,8 @@
   "scope": "Isolated local PostgreSQL structural fixture with synthetic IDs only; no production, Auth/RLS, money balances or payment operations. Not a representative full-schema rollout rehearsal.",
   "candidateStatus": "UNALLOCATED_REVIEW_ONLY_NOT_APPLY_READY",
   "checks": {
-    "transactionRollbackRemovesAllCandidateConstraints": true,
+    "transactionRollbackRemovesAllCandidateConstraintsAndIndexes": true,
+    "childReferenceLookupIndexesPresent": true,
     "historicalRowsPreserved": true,
     "foreignKeysRemainNotValid": true,
     "sameFamilyNewReferencesAccepted": true,
@@ -20,11 +21,11 @@
     },
     {
       "name": "wallet-family-integrity.candidate.sql",
-      "sha256": "f8aaa92cea38454994cc451fa3651d62fb3e7d8ad47d69ae5be63747d6edae51"
+      "sha256": "e0448c2795181f9921e450120db165e492e966e4951004767c26111a2bb51dc9"
     },
     {
       "name": "wallet-family-integrity.assertions.sql",
-      "sha256": "9be9b67ca235e6a83899746e67980ad0f89558488236a75a6c4f59f9474e4db7"
+      "sha256": "f043adf81c46fd02bf92040aaffaa58b2024702ab96980d7348b51b77c5d1289"
     }
   ]
 }

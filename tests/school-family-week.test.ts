@@ -49,7 +49,7 @@ describe('school A/B weeks use the family calendar date', () => {
   it('preserves the UTC control', async () => {
     expect(await ids(fixture('UTC').scope)).toEqual(['all', 'b']);
   });
-  it.each(['not-a-date', '2026-02-30', '2026-10-12T00:30:00'])('refuses invalid reference %s before a read', async forDate => {
+  it.each(['not-a-date', '2026-02-30', '2026-10-12T00:30:00', '2026-02-30T12:00:00Z', '2026-04-31T23:30:00-07:00'])('refuses invalid reference %s before a read', async forDate => {
     const f = fixture('UTC');
     expect(await listClasses(f.scope, { forDate })).toMatchObject({ ok: false, code: 'invalid_input' });
     expect(f.requests).toHaveLength(0);

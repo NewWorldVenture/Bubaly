@@ -27,6 +27,13 @@ const MAX_ROWS = 500;
 
 function isoOrNull(value: string | null | undefined): string | null {
   if (!value) return null;
+  // Date.parse normalizes some impossible ISO dates (February 30 becomes March).
+  // Validate the written calendar date before an offset can change its UTC day.
+  const datePart = value.match(/^([+-]\d{6}|\d{4})-\d{2}-\d{2}(?=$|[Tt ])/)?.[0];
+  if (datePart) {
+    const calendarDate = new Date(`${datePart}T00:00:00.000Z`);
+    if (!Number.isFinite(calendarDate.getTime()) || calendarDate.toISOString().split('T')[0] !== datePart) return null;
+  }
   const ms = Date.parse(value);
   return Number.isFinite(ms) ? new Date(ms).toISOString() : null;
 }

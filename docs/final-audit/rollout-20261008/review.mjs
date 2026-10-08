@@ -57,6 +57,10 @@ for (const file of referenceReceipt.files) {
   const path = 'docs/final-audit/rollout-20261008/' + file.name;
   if (hash(read(path)) !== file.sha256) throw new Error('Reference fixture receipt is stale: ' + file.name);
 }
+const aclReceipt = parse('docs/final-audit/rollout-20261008/0456-acl.fixture-results.json');
+for (const file of [aclReceipt.migration, aclReceipt.fixture]) {
+  if (hash(read(file.path)) !== file.sha256) throw new Error('ACL fixture receipt is stale: ' + file.path);
+}
 const expectedLedger = new Set(manifest.baseline.map(canonical));
 const actualLedger = new Set(snapshot.migrations.map(canonical));
 console.log(JSON.stringify({
@@ -84,6 +88,11 @@ console.log(JSON.stringify({
   },
   schemaPrerequisites: { complete: schema.complete, incomplete: schema.incomplete, missingTables },
   heldCandidates: held.map(file => ({ ...checksum('supabase/reserved/' + file), disposition: 'HELD; allocation unchanged; no promotion authorized' })),
+  priorityRpcReview: {
+    disposition: 'Review only; no production function invocation or grant change authorized',
+    evidence: ['priority-rpc-definitions.json', 'priority-rpc-prerequisites.json', 'definer-acl-catalog.json', '0456-acl.fixture-results.json'].map(name => checksum('docs/final-audit/rollout-20261008/' + name)),
+    migrations: ['0179_harden_rate_limit_rpc_grants.sql', '0292_privileged_rpc_grant_reassert.sql', '0456_service_only_functions_are_service_only.sql'].map(name => checksum('supabase/migrations/' + name)),
+  },
   walletReferenceCandidate: {
     disposition: 'UNALLOCATED; structural fixture only; existing-data disposition and full-schema rehearsal required; no application authorized',
     files: referenceReceipt.files,

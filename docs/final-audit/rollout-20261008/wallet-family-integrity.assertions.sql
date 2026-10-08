@@ -7,6 +7,10 @@ do $$ begin
      (select count(*) from public.invest_orders) <> 1 then
     raise exception 'Candidate changed historical rows';
   end if;
+  if to_regclass('public.allowance_rules_child_wallet_family_idx') is null
+     or to_regclass('public.invest_orders_child_wallet_family_idx') is null then
+    raise exception 'Missing child reference lookup indexes';
+  end if;
   if (select count(*) from pg_constraint where conname in
       ('allowance_rules_wallet_family_fkey', 'invest_orders_wallet_family_fkey') and not convalidated) <> 2 then
     raise exception 'Expected two explicitly unvalidated constraints';

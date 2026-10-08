@@ -10,6 +10,12 @@ set local statement_timeout = '30s';
 alter table public.child_wallets
   add constraint child_wallets_family_id_id_key unique (family_id, id);
 
+-- Support both the existing wallet-id FK and the new two-column checks.
+create index allowance_rules_child_wallet_family_idx
+  on public.allowance_rules (child_wallet_id, family_id);
+create index invest_orders_child_wallet_family_idx
+  on public.invest_orders (child_wallet_id, family_id);
+
 alter table public.allowance_rules
   add constraint allowance_rules_wallet_family_fkey
   foreign key (family_id, child_wallet_id)

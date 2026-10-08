@@ -1,5 +1,20 @@
 # Final Production Audit
 
+## Follow-up verification and priority ACL rehearsal — 2026-10-08
+
+- Separate follow-up branch preserves published #972 at43893507a while its exact-head CI finishes. Impossible ISO dates reproduced **6 failing regressions /14 controls**; invalid timetable clocks and years00–99 reproduced **9 failing regressions /16 controls**. Repairs preserve the written calendar date before timezone conversion and calculate week parity from epoch days. **128 focused tests pass in each of UTC, Los Angeles and Tokyo; full UTC suite passes1,956 files /27,147 tests**, with2 expected failures and75 skips. Scoped lint passes. A cold TypeScript run exceeded the default4GB heap; the full nonincremental rerun with8GB completed successfully. These are source checks, not production acceptance.
+- Read-only production advisor/catalog receipts identify priority client EXECUTE grants on service-only wallet/bid functions. Exact existing migration0456 passes a fresh local PostgreSQL rehearsal with harmless same-signature stubs: before/after grants, transaction rollback, repeat application, actual anon/authenticated call denial, service-role controls, and inherited-grant refusal/rollback. No production RPC body was invoked or grant changed. The marketing claim migration0292 has an absent prerequisite; its entire file is not cleared for application. Advisor counts overlap and do not establish exploitation or measured performance impact.
+- The unallocated wallet-family integrity review candidate now includes child-reference lookup indexes. The repeated isolated structural fixture proves constraint/index rollback, future reference enforcement and historical-row preservation. This is not a full production schema/RLS/traffic rehearsal. The deterministic offline rollout review and receipt checksum checks pass; existing production manifest gates still reject unreconciled history/schema drift. Existing inconsistent records remain untouched pending provenance and owner-approved disposition.
+- Three new SQL/fixture code obligations are inventoried without closure credit: **14,559 =11,689 NOT STARTED +2,517 IN PROGRESS +185 PASS +159 FIXED + PASS +9 BLOCKED**; **344 closed (2.36%)**, Production Ready **NO**. Parent438935 CI has Database/Mobile and both messaging checks green; Core/E2E are still running at this checkpoint. No merge, deployment, production configuration/credentials change, migration allocation or hosted DDL occurred.
+
+## Pure timetable helper claims — 2026-10-08 01:50 UTC
+
+Root claims **LIBRARY-404441D70362** and **SUPPORT-07CEAFD86EEF** (pure timetable helpers and tests) before new runtime regressions. Static/reference-calendar leads: impossible clock fields are accepted as sortable times, and Date.UTC remaps years00–99 to1900–1999 when calculating fixed-epoch week parity. Investigate with healthy clock controls and same-week continuity across0099/0100. These remain scoped source investigations; #972 stays frozen for CI, production is unchanged, and no closure is claimed. Current inventory shifts two NOT STARTED rows to IN PROGRESS.
+
+## Follow-up date validation investigation — 2026-10-08 01:47 UTC
+
+Root continues in isolated `codex/finalaudit-followups-20261008` from immutable43893507a while #972's hosted CI finishes. The published branch and its ledger remain unchanged. Existing school window/timetable and their SUPPORT obligations stay IN PROGRESS. Before new regression execution, investigate whether JavaScript's ISO calendar rollover lets an impossible timestamp date pass through the new validation. This is a lead, not an observed failure; no closure credit, migration allocation or production action.
+
 ## Export completeness and concrete integrity candidate — 2026-10-08 01:44 UTC
 
 - The school section of a family export used the current A/B-week timetable and omitted the other week's saved classes. Three retained export regressions fail before repair, with21existing/control tests passing. Export now uses the non-week-filtered roster with its declared500-row cap; the roster pages counted results through lower server caps with stable subject/id order. Same-family filtering, error refusal and the disclosed truncation flag are retained. **91 focused export/school/front-desk tests pass in each of UTC, Los Angeles and Tokyo**, with full TypeScript and scoped lint. The preceding27,126-test full run covers the timetable batch before this separate export repair; new-head hosted CI must certify the combined source.
@@ -713,15 +728,15 @@ The TLS problem was a missing Node system-CA setting, not a reason to disable ce
 ## Current reconciled audit counts
 
 - Recounted row by row on 2026-10-04 from Register B itself (`node scripts/audit-register-counts.mjs`; `tests/the-audit-summary-counts-its-register.test.ts` now fails when this section and the rows disagree). The register holds 14,538 unique IDs with no duplicates and no unrecognised status. The previous 11,701 NOT STARTED / 2,484 IN PROGRESS tally predated LIBRARY-2E628A2A31CE's evidenced move from NOT STARTED to IN PROGRESS; the 15:39 UTC checkpoint already carried 11,700 / 2,485, and the rows confirm it.
-- Total Audit Items: **14,556**. Prior count explanations are preserved in the dated status summary below.
-- Not Started: **11,691**. Recounted on 2026-10-08 after rollout and support inventory reconciliation; prior dated tallies remain below.
-- In Progress: **2,512**. Recounted on 2026-10-08 after rollout and support inventory reconciliation; prior dated tallies remain below.
+- Total Audit Items: **14,559**. Prior count explanations are preserved in the dated status summary below.
+- Not Started: **11,689**. Recounted on 2026-10-08 after rollout and support inventory reconciliation; prior dated tallies remain below.
+- In Progress: **2,517**. Recounted on 2026-10-08 after rollout and support inventory reconciliation; prior dated tallies remain below.
 - Passed: **185**. Prior count explanations are preserved in the dated status summary below.
 - Fixed + Passed: **159**. Prior count explanations are preserved in the dated status summary below.
 - Blocked: **9**. Prior count explanations are preserved in the dated status summary below.
 - Failed: **0 register rows**. SEC-001 production privacy remains **FAIL**. The earlier Mobile failure on bf8063e7/10df62eb is retained; its repaired aa5b84b9 candidate passed all hosted gates and merged as bc147c76. This is not a production-readiness declaration.
-- Verified closure coverage: **2.36%** (344 /14,556); historical scoped closures retained; zero blocked credit pending eligibility review.
-- Overall Completion under the adopted target: **2.37% credited**, calculated as ((PASS + FIXED_PASS + eligible_external_BLOCKED) / Total) ×100, with zero blocked items credited. If all 9 qualify, coverage would be2.43%; that credit has not been awarded.
+- Verified closure coverage: **2.36%** (344 /14,559); historical scoped closures retained; zero blocked credit pending eligibility review.
+- Overall Completion under the adopted target: **2.36% credited**, calculated as ((PASS + FIXED_PASS + eligible_external_BLOCKED) / Total) ×100, with zero blocked items credited. If all 9 qualify, coverage would be2.42%; that credit has not been awarded.
 
 ## Current source audit checkpoint — 2026-10-03 15:37 UTC, Codex/root review coordination
 
@@ -8724,7 +8739,7 @@ not read the same on this page.*
      hosted-CI/deployed-release evidence this session had no credentials to
      produce. The two share zero finding IDs. Neither is discarded. -->
 
-# Register B - parallel session inventory (14,556 items)
+# Register B - parallel session inventory (14,559 items)
 - PROD-ENV (owner, measured 2026-09-26 19:13Z): production's `/api/health` reports `CRON_SECRET`, `CHILD_LOGIN_SECRET`, `MARKETING_UNSUB_SECRET` and `GUARDIAN_INTERNAL_SECRET` unset. Per `lib/health/status.ts`, `hasCronAuthorization` is fail-closed, so without `CRON_SECRET` every one of the 24 scheduled jobs in `vercel.json` answers 401 (nightly notifications, wallet allowance, chore reminders, the weekly digest, …); without `CHILD_LOGIN_SECRET` no child in any family can sign in; the other two gate provider ingress and signed links and fail closed. Setting them in the Vercel production environment is the owner's action; the four `ENV-*` rows are BLOCKED on it. Also unset, per the same check: `RESEND_API_KEY`, `INTERNAL_SECRET`, `CONTACT_CENTER_INBOUND_SECRET` were NOT in the missing list, so those are set.
 > Current reconciliation: the following dated PROD-DB-0177 narrative is retained as historical evidence, not a current operator plan. Later read-only metadata found some later schema effects despite absent history; its blanket "none applied" claim is superseded. Do not execute the historical timeout/repair/backlog instructions under this audit authorization. Bounded history/effect reconciliation and explicit production-operation authorization remain separate requirements.
 - PROD-DB-0177 (owner, measured 2026-09-27 01:15Z on the replayed schema; the failure itself recorded by the #579 session from the owner's "Supabase production migrations" runs on `533554be`, `7e54596d` and `671c5f6a`): production's migration ledger stops at `0176`, so **none of 0177–0387 is applied** and every boundary those migrations close is held in production only by application code. The cause is one statement: `0177_remove_synthetic_auth_users.sql` is a single `DO` block that, for EVERY single-column foreign key to `auth.users`, runs `delete from <table> where <col> = any(<synthetic ids>)`. On the replayed schema that is **493** foreign keys, **481** of them with no index on the referencing column, so the block is hundreds of sequential scans inside one statement and Supabase's `statement_timeout` cancels it (SQLSTATE 57014) — production at 0176 has fewer keys but the same shape. It is idempotent and best-effort by design (a per-table failure is noticed and skipped), so it is safe to run outside the workflow. **The operator remedy, in order**: (1) in the Supabase SQL editor or `psql` against production, `set statement_timeout = 0;` (session-local) and run the body of 0177 once — expect the `Retired synthetic Auth users: N removed, M still referenced` notice; (2) `supabase migration repair --status applied 0177` so the ledger agrees; (3) re-run the "Supabase production migrations" workflow, which will then apply 0178 onward in order (each already replayed by CI on a fresh database). Alternatively delete the `onb…@seed-onb.bubaly.test` / `person…@seed.bubaly.test` users through the Auth admin API first, which makes 0177 a no-op, then repair and re-run. **No agent applied, retried or altered how the workflow applies anything**, and none will: applying migrations to production is the owner's action, and a change that made 0177 pass inside the workflow would apply 0178–0387 on the next push to `main` by proxy. Until this is done, `PRODUCTION READY` cannot move, whatever the code says.
@@ -18870,7 +18885,7 @@ not read the same on this page.*
 | LIBRARY-39B3A2472810 | LIBRARY | lib/schedule/intelligence-server.ts | ⬜ NOT STARTED | Unassessed | Pending | None | Pending |  |
 | LIBRARY-773D143576D6 | LIBRARY | lib/schedule/intelligence.ts | ⬜ NOT STARTED | Unassessed | Pending | None | Pending |  |
 | LIBRARY-E6A19A80898B | LIBRARY | lib/schedule/zoned.ts | ⬜ NOT STARTED | Unassessed | Pending | None | Pending |  |
-| LIBRARY-404441D70362 | LIBRARY | lib/school/timetable.ts | ⬜ NOT STARTED | Unassessed | Pending | None | Pending |  |
+| LIBRARY-404441D70362 | LIBRARY | lib/school/timetable.ts | 🔄 IN PROGRESS | Unassessed | Pending | None | Pending |  |
 | LIBRARY-1C237C551BED | LIBRARY | lib/screen-time/insights.ts | ⬜ NOT STARTED | Unassessed | Pending | None | Pending |  |
 | LIBRARY-D52F335672FC | LIBRARY | lib/search/rank.ts | ⬜ NOT STARTED | Unassessed | Pending | None | Pending |  |
 | LIBRARY-1038642385F6 | LIBRARY | lib/security/app-lock.ts | ⬜ NOT STARTED | Unassessed | Pending | None | Pending |  |
@@ -21883,7 +21898,7 @@ not read the same on this page.*
 | SUPPORT-76C73A2E6B11 | SUPPORT | tests/school-proposal-approval.test.ts | ⬜ NOT STARTED | Unassessed | Pending | None | Pending |  |
 | SUPPORT-381D13E9A7B4 | SUPPORT | tests/school-sports-classifier.test.ts | ⬜ NOT STARTED | Unassessed | Pending | None | Pending |  |
 | SUPPORT-A1CA7C97C96E | SUPPORT | tests/school-sports-desk.test.ts | ⬜ NOT STARTED | Unassessed | Pending | None | Pending |  |
-| SUPPORT-07CEAFD86EEF | SUPPORT | tests/school-timetable.test.ts | ⬜ NOT STARTED | Unassessed | Pending | None | Pending |  |
+| SUPPORT-07CEAFD86EEF | SUPPORT | tests/school-timetable.test.ts | 🔄 IN PROGRESS | Unassessed | Pending | None | Pending |  |
 | SUPPORT-1ED58BE79909 | SUPPORT | tests/screen-time-insights.test.ts | ⬜ NOT STARTED | Unassessed | Pending | None | Pending |  |
 | SUPPORT-5B2F2B501F74 | SUPPORT | tests/search-rank.test.ts | ⬜ NOT STARTED | Unassessed | Pending | None | Pending |  |
 | SUPPORT-AFD3F581F4F0 | SUPPORT | tests/search-service-read-boundary.test.ts | ⬜ NOT STARTED | Unassessed | Pending | None | Pending |  |
@@ -23677,6 +23692,10 @@ deliberately breaking the thing being guarded.
 | SUPPORT-6FCCB09F344D | SUPPORT | docs/final-audit/rollout-20261008/wallet-family-integrity.candidate.sql | 🔄 IN PROGRESS | High | Dated rollout receipts and scoped read-only or isolated-fixture execution retained. | Review/evidence artifact only; not an approved production apply path. | Full rollout dependency/data/role rehearsal remains open. | Stable path-hash inventory reconciliation; no closure credit or migration allocation. |
 | SUPPORT-BCCC45E9C19C | SUPPORT | docs/final-audit/rollout-20261008/wallet-family-integrity.fixture.sql | 🔄 IN PROGRESS | High | Dated rollout receipts and scoped read-only or isolated-fixture execution retained. | Review/evidence artifact only; not an approved production apply path. | Full rollout dependency/data/role rehearsal remains open. | Stable path-hash inventory reconciliation; no closure credit or migration allocation. |
 | SUPPORT-37C05F48B06D | SUPPORT | docs/final-audit/schema-prerequisites-20261008.sql | 🔄 IN PROGRESS | Medium | Dated rollout receipts and scoped read-only or isolated-fixture execution retained. | Review/evidence artifact only; not an approved production apply path. | Full rollout dependency/data/role rehearsal remains open. | Stable path-hash inventory reconciliation; no closure credit or migration allocation. |
+
+| SUPPORT-1A42EE74C4DC | SUPPORT | docs/final-audit/rollout-20261008/priority-rpc-definitions.sql | 🔄 IN PROGRESS | High | Read-only catalog receipt or executed isolated PostgreSQL ACL fixture retained. | Review artifact only; production execution and grants unchanged. | Full rollout dependency/data/role rehearsal remains open. | Stable path-hash inventory; no closure credit or migration allocation. |
+| SUPPORT-FCEDC82BB68B | SUPPORT | docs/final-audit/rollout-20261008/0456-acl.fixture.sql | 🔄 IN PROGRESS | High | Read-only catalog receipt or executed isolated PostgreSQL ACL fixture retained. | Review artifact only; production execution and grants unchanged. | Full rollout dependency/data/role rehearsal remains open. | Stable path-hash inventory; no closure credit or migration allocation. |
+| SUPPORT-E6DA93BA6DB7 | SUPPORT | docs/final-audit/rollout-20261008/0456-acl.fixture.mjs | 🔄 IN PROGRESS | High | Read-only catalog receipt or executed isolated PostgreSQL ACL fixture retained. | Review artifact only; production execution and grants unchanged. | Full rollout dependency/data/role rehearsal remains open. | Stable path-hash inventory; no closure credit or migration allocation. |
 
 # 1. Executive Summary
 

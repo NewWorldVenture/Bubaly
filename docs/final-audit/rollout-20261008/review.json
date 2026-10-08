@@ -1420,6 +1420,41 @@
       "disposition": "HELD; allocation unchanged; no promotion authorized"
     }
   ],
+  "priorityRpcReview": {
+    "disposition": "Review only; no production function invocation or grant change authorized",
+    "evidence": [
+      {
+        "path": "docs/final-audit/rollout-20261008/priority-rpc-definitions.json",
+        "sha256Lf": "7d3cff33f36f02f1960fc42e90a849d33213085e3d5597a652452f1f1521376f"
+      },
+      {
+        "path": "docs/final-audit/rollout-20261008/priority-rpc-prerequisites.json",
+        "sha256Lf": "198542ab1eb745cab64f85df3b5f71c0cd51bb609f12b0ae3d0ca8324843b987"
+      },
+      {
+        "path": "docs/final-audit/rollout-20261008/definer-acl-catalog.json",
+        "sha256Lf": "3f8904bf4401805411ea620524e7b9850dfb948c46c8ef65c7fd3d635e0f2892"
+      },
+      {
+        "path": "docs/final-audit/rollout-20261008/0456-acl.fixture-results.json",
+        "sha256Lf": "63762748735c3ccfa8246386a8a393b7398bd7e12902a18427d11cd12faf8340"
+      }
+    ],
+    "migrations": [
+      {
+        "path": "supabase/migrations/0179_harden_rate_limit_rpc_grants.sql",
+        "sha256Lf": "fbbe1f520512911b23c9f2b9825bc216b6ac86e97c6514058b52b558c6ee842c"
+      },
+      {
+        "path": "supabase/migrations/0292_privileged_rpc_grant_reassert.sql",
+        "sha256Lf": "3fef30905350e7593b90dd144914ac49c4cbc3935c0407579b99799ecd00838b"
+      },
+      {
+        "path": "supabase/migrations/0456_service_only_functions_are_service_only.sql",
+        "sha256Lf": "b0fe35f4acc68dd6b57781086c7c4b9ef7f01b9e1c02e1bed350ffc19ddf4c7d"
+      }
+    ]
+  },
   "walletReferenceCandidate": {
     "disposition": "UNALLOCATED; structural fixture only; existing-data disposition and full-schema rehearsal required; no application authorized",
     "files": [
@@ -1429,16 +1464,16 @@
       },
       {
         "name": "wallet-family-integrity.candidate.sql",
-        "sha256": "f8aaa92cea38454994cc451fa3651d62fb3e7d8ad47d69ae5be63747d6edae51"
+        "sha256": "e0448c2795181f9921e450120db165e492e966e4951004767c26111a2bb51dc9"
       },
       {
         "name": "wallet-family-integrity.assertions.sql",
-        "sha256": "9be9b67ca235e6a83899746e67980ad0f89558488236a75a6c4f59f9474e4db7"
+        "sha256": "f043adf81c46fd02bf92040aaffaa58b2024702ab96980d7348b51b77c5d1289"
       }
     ],
     "receipt": {
       "path": "docs/final-audit/rollout-20261008/wallet-family-integrity.fixture-results.json",
-      "sha256Lf": "f4dfbc682669010cffb5b568129da2bcee3220fa8bf4ab10679d63b49b7d7ebe"
+      "sha256Lf": "fce5a96969ff4a8d38732a9d3012f98de7bb6bfff0a091ba8af4fa88882e4b1f"
     }
   },
   "moneyCandidateReview": {
