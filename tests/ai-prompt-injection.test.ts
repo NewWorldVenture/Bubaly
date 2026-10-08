@@ -63,8 +63,8 @@ function tables(): Record<string, TableSpec> {
     families: { rows: [{ id: 'fam-1', name: 'The Riveras', timezone: 'America/New_York' }] },
     family_members: { rows: MEMBERS },
     calendar_events: { rows: [
-      { id: '40000000-0000-4000-8000-000000000001', family_id: 'fam-1', title: HOSTILE_TITLE, description: null, location: null, category: 'other', starts_at: '2026-09-06T14:00:00Z', ends_at: '2026-09-06T15:00:00Z', all_day: false, recurrence: 'none', recurrence_until: null, assignee_id: 'mem-1', feed_id: null, external_uid: null, created_by: 'auth-1', onboarding_key: null, created_at: '2026-01-01T00:00:00Z', updated_at: '2026-01-01T00:00:00Z' },
-      { id: '40000000-0000-4000-8000-000000000002', family_id: 'fam-1', title: 'Soccer', description: null, location: null, category: 'sports', starts_at: '2026-09-07T14:00:00Z', ends_at: '2026-09-07T15:00:00Z', all_day: false, recurrence: 'none', recurrence_until: null, assignee_id: 'mem-1', feed_id: null, external_uid: null, created_by: 'auth-1', onboarding_key: null, created_at: '2026-01-01T00:00:00Z', updated_at: '2026-01-01T00:00:00Z' },
+      { id: '40000000-0000-4000-8000-000000000001', family_id: 'fam-1', title: HOSTILE_TITLE, description: null, location: null, category: 'other', starts_at: '2026-09-06T14:00:00Z', ends_at: '2026-09-06T15:00:00Z', all_day: false, recurrence: 'none', recurrence_until: null, assignee_id: 'mem-1', feed_id: null, external_uid: null, idempotency_key: null, created_by: 'auth-1', onboarding_key: null, created_at: '2026-01-01T00:00:00Z', updated_at: '2026-01-01T00:00:00Z' },
+      { id: '40000000-0000-4000-8000-000000000002', family_id: 'fam-1', title: 'Soccer', description: null, location: null, category: 'sports', starts_at: '2026-09-07T14:00:00Z', ends_at: '2026-09-07T15:00:00Z', all_day: false, recurrence: 'none', recurrence_until: null, assignee_id: 'mem-1', feed_id: null, external_uid: null, idempotency_key: null, created_by: 'auth-1', onboarding_key: null, created_at: '2026-01-01T00:00:00Z', updated_at: '2026-01-01T00:00:00Z' },
     ] },
     ai_messages: { rows: [] },
     ai_conversations: { rows: [{ title: 'New conversation' }] },

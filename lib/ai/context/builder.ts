@@ -23,7 +23,8 @@ import type { SupabaseClient } from '@supabase/supabase-js';
 import type { Database, Json } from '@/lib/database.types';
 import { UNTRUSTED_CONTENT_RULE } from '@/lib/ai/safety/untrusted';
 import { getMembers, getPreferences } from '@/lib/services/family';
-import { dayKeyInTz, scopeNow, zonedDayBoundsMs } from '@/lib/services/scope';
+import { dayKeyInTz, scopeNow } from '@/lib/services/scope';
+import { briefingCalendarBounds } from '@/lib/briefing/calendar-window';
 import { fail, ok, SERVICE_CODES, type ServiceResult, type ServiceScope } from '@/lib/services/types';
 import { describeDbError, wroteNoRows } from '@/lib/supabase/errors';
 import { INTENT_SLICES, isSliceName, type IntentKey, type SliceName } from './intents';
@@ -65,8 +66,6 @@ const SLICES: Record<SliceName, SliceDefinition> = {
 
 /** The app's locale until families carry one; the header states it so the model formats dates the way the family reads them. */
 const DEFAULT_LOCALE = 'en-US';
-
-const DAY_MS = 86_400_000;
 
 export type ContextHeader = {
   familyName: string;
@@ -144,14 +143,20 @@ export async function buildContext(scope: ServiceScope, opts: BuildContextOption
   if (!members.ok) return members;
 
   const tz = scope.tz || prefs.data.timezone;
-  const todayKey = dayKeyInTz(now, tz);
-  const dayStart = zonedDayBoundsMs(todayKey, tz).start;
+  let todayKey: string;
+  let week: ReturnType<typeof briefingCalendarBounds>;
+  try {
+    todayKey = dayKeyInTz(now, tz);
+    week = briefingCalendarBounds(todayKey, tz, 0, 7);
+  } catch {
+    return fail('Could not determine the family calendar window.', { code: SERVICE_CODES.invalidInput });
+  }
   const env: SliceEnv = {
     now,
     tz,
     todayKey,
-    weekFromIso: new Date(Math.min(now.getTime(), dayStart)).toISOString(),
-    weekToIso: new Date(dayStart + 7 * DAY_MS).toISOString(),
+    weekFromIso: week.timedFrom,
+    weekToIso: new Date(Date.parse(week.timedTo) - 1).toISOString(),
     viewer,
     members: members.data,
     pageContext: opts.pageContext ?? null,
@@ -198,6 +203,11 @@ export async function buildContext(scope: ServiceScope, opts: BuildContextOption
     sections,
     budgetChars: opts.budgetChars ?? DEFAULT_CONTEXT_BUDGET_CHARS,
   });
+  // Counts and warnings lead the schedule section. If even that first line
+  // cannot fit, the prompt has no safe calendar picture; do not persist it.
+  if (allowed.includes('schedule') && (rendered.stats.schedule_lines ?? 0) === 0) {
+    return fail('The calendar context could not fit safely. Please request a larger context budget.', { code: SERVICE_CODES.invalidInput });
+  }
   Object.assign(stats, rendered.stats);
   stats.slices_loaded = allowed.length;
   stats.slices_omitted = omitted.length;

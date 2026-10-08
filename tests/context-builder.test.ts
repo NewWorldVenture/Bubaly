@@ -94,7 +94,7 @@ function baseTables(): Record<string, TableSpec> {
     families: { rows: [{ id: 'fam-1', name: 'The Riveras', timezone: 'America/New_York' }] },
     family_members: { rows: MEMBERS },
     calendar_events: { rows: [
-      { id: '40000000-0000-4000-8000-000000000001', family_id: 'fam-1', title: HOSTILE_TITLE, description: null, location: 'Field 3', category: 'sports', starts_at: '2026-09-06T14:00:00Z', ends_at: '2026-09-06T15:00:00Z', all_day: false, recurrence: 'none', recurrence_until: null, assignee_id: 'mem-child', feed_id: null, external_uid: null, created_by: 'auth-1', onboarding_key: null, created_at: '2026-01-01T00:00:00Z', updated_at: '2026-01-01T00:00:00Z' },
+      { id: '40000000-0000-4000-8000-000000000001', family_id: 'fam-1', title: HOSTILE_TITLE, description: null, location: 'Field 3', category: 'sports', starts_at: '2026-09-06T14:00:00Z', ends_at: '2026-09-06T15:00:00Z', all_day: false, recurrence: 'none', recurrence_until: null, assignee_id: 'mem-child', feed_id: null, external_uid: null, idempotency_key: null, created_by: 'auth-1', onboarding_key: null, created_at: '2026-01-01T00:00:00Z', updated_at: '2026-01-01T00:00:00Z' },
     ] },
     medical_profiles: { rows: [{ member_id: 'mem-child', allergies: 'peanuts' }] },
     family_facts: { rows: [
@@ -211,18 +211,18 @@ describe('fencing and timezone', () => {
     // one-offs by a window carried as an `or`, and the series that could reach it.
     const eventRead = calls.find((c) => c.table === 'calendar_events' && Array.isArray(c.filters.or));
     expect(eventRead).toBeTruthy();
-    // The window opens at local midnight (07:00Z) or now, whichever is earlier,
-    // and closes 7 local days later; `to` is inclusive, so the bound is a
-    // millisecond past it.
+    // The window opens at local midnight (07:00Z)
+    // and closes 7 civil days later; `to` is inclusive, so the read adds a
+    // millisecond to reach the exclusive midnight boundary.
     expect(eventRead?.filters.or).toEqual([
-      expect.stringContaining('starts_at.gte.2026-09-04T07:00:00.000Z,starts_at.lt.2026-09-11T07:00:00.001Z'),
+      expect.stringContaining('starts_at.gte.2026-09-04T07:00:00.000Z,starts_at.lt.2026-09-11T07:00:00.000Z'),
       'recurrence.is.null,recurrence.eq.none',
     ]);
     // The series read reaches every series that started by the window's end —
     // the later of the timed end and the end of the last family-local DATE,
     // since an all-day series steps by date.
     const seriesRead = calls.find((c) => c.table === 'calendar_events' && c.filters['neq:recurrence'] === 'none');
-    expect(seriesRead?.filters['lte:starts_at']).toBe('2026-09-12T00:00:00.000Z');
+    expect(seriesRead?.filters['lte:starts_at']).toBe('2026-09-11T07:00:00.000Z');
   });
 });
 
