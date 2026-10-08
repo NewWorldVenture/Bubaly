@@ -489,6 +489,14 @@ jobs:
       # run-e2e.mjs has stopped its own Next server; all parallel E2E tests
       # have finished. The reserved file is a disposable fixture only, never
       # entered into the migration ledger or promoted into migrations.
+      - name: Verify real Auth messaging RPC membership-removal boundaries
+        run: node node_modules/vitest/vitest.mjs run tests/messages-authenticated-rpc-race.test.ts
+        env:
+          BUBALY_MESSAGES_AUTHENTICATED_RPC_GATE: '1'
+          E2E_MESSAGES_PARALLEL_FINISHED: '1'
+          OPENAI_API_KEY: ''
+          ANTHROPIC_API_KEY: ''
+
       - name: Install held bill anchor fixture in the owned PG15 stack
         run: node scripts/ci-recurring-bill-anchor-fixture.mjs
         env:
