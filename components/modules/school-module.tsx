@@ -1,13 +1,13 @@
 'use client';
 
-import { useCallback, useEffect, useMemo, useState } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import Link from 'next/link';
 import { firstName } from '@/lib/utils/format';
 import { BookOpen, Calendar, ChevronRight, GraduationCap, Inbox, Trash2, Plus, Sparkles } from 'lucide-react';
 import { useApp } from '@/components/app/app-context';
 import { useRealtimeQuery } from '@/lib/hooks/use-realtime-query';
 import { createClient } from '@/lib/supabase/client';
-import { settleAll } from '@/lib/supabase/settle';
+import { readCountedRows } from '@/lib/calendar/occurrences';
 import { todayInZone } from '@/lib/schedule/zoned';
 import { classify, type FrontDeskSubKind } from '@/lib/front-desk/school-sports';
 import { proposeFrontDeskAction } from '@/app/(app)/dashboard/school/actions';
@@ -66,7 +66,15 @@ type DeskMessage = {
 };
 
 /** `teams` (0006), narrowed to the roster columns the classifier matches on. */
-type DeskTeam = { member_id: string | null; team_name: string | null; sport: string | null; coach: string | null };
+type DeskTeam = { id: string; member_id: string | null; team_name: string | null; sport: string | null; coach: string | null };
+
+type DeskMember = { id: string; display_name: string };
+type DeskClass = Pick<SchoolClass, 'id' | 'member_id' | 'subject' | 'teacher' | 'school_name'>;
+type DeskSnapshot = { messages: DeskMessage[]; members: DeskMember[]; classes: DeskClass[]; teams: DeskTeam[] };
+type DeskScope = { familyId: string; userId: string; active: boolean; request: number; controller: AbortController | null };
+type DeskState = { scope: DeskScope; snapshot: DeskSnapshot | null; loading: boolean; error: boolean };
+type DeskProposal = { scope: DeskScope; messageId: string };
+const DESK_ROSTER_MAX = 2000;
 
 /** How many recent messages are classified. The desk is a queue, not an archive. */
 const DESK_SCAN_LIMIT = 40;
@@ -180,59 +188,70 @@ export function SchoolModule() {
   const error = eventsError || classesError || gradesError;
 
   // ── School & Sports desk ─────────────────────────────────
-  // Its own loader rather than `useRealtimeQuery`, for two reasons that both
-  // come down to honesty. `family_inbox_messages` is not in the realtime
-  // publication (lib/realtime/published-tables.ts), so a channel on it would
-  // report SUBSCRIBED and deliver nothing forever. And the shared hook is
-  // deliberately forgiving — it swallows a missing table and an offline read
-  // into an empty list — which is right for a widget and wrong here: an empty
-  // desk means "nothing from school needs you", and that is a claim a failed
-  // read must never make. This one logs and fails closed to an error with a
-  // retry, and `deskRows === null` is never rendered as a queue of zero.
-  const [deskRows, setDeskRows] = useState<DeskMessage[] | null>(null);
-  const [deskTeams, setDeskTeams] = useState<DeskTeam[]>([]);
-  const [deskError, setDeskError] = useState(false);
-  const [deskLoading, setDeskLoading] = useState(true);
-  const [proposing, setProposing] = useState<string | null>(null);
+  // Keep inbox bodies network-only. Commit messages and complete classifier
+  // rosters together; a failed or truncated roster must not identify a child.
+  // Scope identity also changes on A → B → A and on same-family user switches.
+  const deskScope = useMemo<DeskScope>(() => ({ familyId, userId, active: false, request: 0, controller: null }), [familyId, userId]);
+  const currentDeskScope = useRef(deskScope);
+  currentDeskScope.current = deskScope;
+  const [deskState, setDeskState] = useState<DeskState>(() => ({ scope: deskScope, snapshot: null, loading: true, error: false }));
+  const deskSnapshot = deskState.scope === deskScope ? deskState.snapshot : null;
+  const deskRows = deskSnapshot?.messages ?? null;
+  const deskError = deskState.scope === deskScope && deskState.error;
+  const deskLoading = deskState.scope !== deskScope || deskState.loading;
+  const pendingProposal = useRef<DeskProposal | null>(null);
+  const [proposalState, setProposalState] = useState<DeskProposal | null>(null);
+  const proposing = proposalState?.scope === deskScope ? proposalState.messageId : null;
 
   const loadDesk = useCallback(async () => {
-    setDeskLoading(true);
-    // Clear the previous failure so a retry shows that it is trying, rather
-    // than leaving the error banner up while the read is in flight. The rows
-    // are NOT cleared: if this attempt also fails, the branch below puts the
-    // banner straight back, and it never falls through to an empty desk.
-    setDeskError(false);
-    const sb = createClient();
-    // `settleAll`, so a transport failure on either read arrives as
-    // { data: null, error } rather than rejecting and taking the page to the
-    // error boundary. Both are plain PostgREST builders — no ServiceResult and
-    // no plain value rides in here.
-    const [messages, teams] = await settleAll([
-      sb.from('family_inbox_messages')
-        .select('id, subject, body, from_addr, ai_handled, occurred_at')
-        .eq('family_id', familyId)
-        .neq('status', 'archived')
-        .order('occurred_at', { ascending: false })
-        .limit(DESK_SCAN_LIMIT),
-      sb.from('teams')
-        .select('member_id, team_name, sport, coach')
-        .eq('family_id', familyId)
-        .limit(200),
-    ]);
-    if (messages.error || teams.error) {
-      console.error('[school-desk] front desk read failed', messages.error ?? teams.error);
-      setDeskRows(null);
-      setDeskError(true);
-      setDeskLoading(false);
-      return;
+    if (!deskScope.active || currentDeskScope.current !== deskScope) return;
+    const request = ++deskScope.request;
+    deskScope.controller?.abort();
+    const controller = deskScope.controller = new AbortController();
+    const isCurrent = () => deskScope.active && currentDeskScope.current === deskScope && deskScope.request === request;
+    setDeskState(previous => isCurrent() ? { scope: deskScope, snapshot: previous.scope === deskScope ? previous.snapshot : null, loading: true, error: false } : previous);
+    try {
+      const sb = createClient();
+      const messagesQuery = () => sb.from('family_inbox_messages')
+        .select('id, subject, body, from_addr, ai_handled, occurred_at', { count: 'exact' })
+        .eq('family_id', familyId).neq('status', 'archived')
+        .order('occurred_at', { ascending: false }).order('id')
+        .abortSignal(controller.signal);
+      const membersQuery = () => sb.from('family_members')
+        .select('id, display_name', { count: 'exact' })
+        .eq('family_id', familyId).eq('is_active', true).order('created_at').order('id')
+        .abortSignal(controller.signal);
+      const classesQuery = () => sb.from('school_classes')
+        .select('id, member_id, subject, teacher, school_name', { count: 'exact' })
+        .eq('family_id', familyId).order('subject').order('id')
+        .abortSignal(controller.signal);
+      const teamsQuery = () => sb.from('teams')
+        .select('id, member_id, team_name, sport, coach', { count: 'exact' })
+        .eq('family_id', familyId).order('team_name').order('id')
+        .abortSignal(controller.signal);
+      const [messages, rosterMembers, rosterClasses, teams] = await Promise.all([
+        readCountedRows<DeskMessage>(() => messagesQuery().limit(DESK_SCAN_LIMIT), (from, to) => messagesQuery().range(from, to), DESK_SCAN_LIMIT, 'desk messages', DESK_SCAN_LIMIT),
+        readCountedRows<DeskMember>(() => membersQuery().limit(1000), (from, to) => membersQuery().range(from, to), DESK_ROSTER_MAX, 'desk members'),
+        readCountedRows<DeskClass>(() => classesQuery().limit(1000), (from, to) => classesQuery().range(from, to), DESK_ROSTER_MAX, 'desk classes'),
+        readCountedRows<DeskTeam>(() => teamsQuery().limit(1000), (from, to) => teamsQuery().range(from, to), DESK_ROSTER_MAX, 'desk teams'),
+      ]);
+      if (!isCurrent()) return;
+      const failure = messages.error ?? rosterMembers.error ?? rosterClasses.error ?? teams.error;
+      if (failure || !messages.data || !rosterMembers.data || !rosterClasses.data || !teams.data) throw failure ?? new Error('Desk roster unavailable');
+      const snapshot = { messages: messages.data, members: rosterMembers.data, classes: rosterClasses.data, teams: teams.data };
+      setDeskState(previous => isCurrent() ? { scope: deskScope, snapshot, loading: false, error: false } : previous);
+    } catch (cause) {
+      if (!isCurrent()) return;
+      console.error('[school-desk] front desk read failed', cause);
+      setDeskState(previous => isCurrent() ? { scope: deskScope, snapshot: null, loading: false, error: true } : previous);
     }
-    setDeskRows((messages.data ?? []) as DeskMessage[]);
-    setDeskTeams((teams.data ?? []) as DeskTeam[]);
-    setDeskError(false);
-    setDeskLoading(false);
-  }, [familyId]);
+  }, [deskScope, familyId]);
 
-  useEffect(() => { void loadDesk(); }, [loadDesk]);
+  useEffect(() => {
+    deskScope.active = true;
+    void loadDesk();
+    return () => { deskScope.active = false; deskScope.controller?.abort(); };
+  }, [deskScope, loadDesk]);
 
   // ── Derived data ─────────────────────────────────────────
   const memberById = useMemo(() => new Map(members.map((m) => [m.id, m])), [members]);
@@ -242,28 +261,32 @@ export function SchoolModule() {
   // `deskRows === null` (a failed read) yields no items AND is never rendered
   // as an empty desk — the error branch below owns that case.
   const deskItems = useMemo(() => {
-    if (!deskRows) return [];
-    const roster = members.map((m) => ({ id: m.id, display_name: m.display_name }));
-    return deskRows
-      .map((row) => ({ row, verdict: classify(row, roster, deskTeams, classes, { now }) }))
+    if (!deskSnapshot) return [];
+    return deskSnapshot.messages
+      .map((row) => ({ row, verdict: classify(row, deskSnapshot.members, deskSnapshot.teams, deskSnapshot.classes, { now }) }))
       .filter((entry) => entry.verdict.domain !== null)
       .slice(0, DESK_VISIBLE);
-  }, [deskRows, deskTeams, members, classes, now]);
+  }, [deskSnapshot, now]);
 
   const deskPending = useMemo(() => deskItems.filter((e) => !e.row.ai_handled).length, [deskItems]);
 
   async function proposeFromDesk(messageId: string) {
-    setProposing(messageId);
+    if (!deskScope.active || currentDeskScope.current !== deskScope || pendingProposal.current?.scope === deskScope) return;
+    const operation = { scope: deskScope, messageId };
+    pendingProposal.current = operation;
+    setProposalState(operation);
     // A server action can reject rather than return — a dropped POST, a
     // redirect out of requireUserContext, a missing service-role key. Without
-    // this catch the rejection was unhandled, `setProposing` never cleared,
+    // this catch the rejection was unhandled, the pending state never cleared,
     // and every Propose button on the desk sat disabled reading "Proposing…"
     // until the family reloaded the page, with nothing said about why.
     const result = await proposeFrontDeskAction(messageId).catch((err: unknown) => {
       console.error('[school-desk] propose failed', err);
       return null;
     });
-    setProposing(null);
+    if (!deskScope.active || currentDeskScope.current !== deskScope || pendingProposal.current !== operation) return;
+    pendingProposal.current = null;
+    setProposalState(previous => previous === operation ? null : previous);
     if (!result) { toastError(tr('schoolDesk.couldNotPropose')); return; }
     if (!result.ok) { toastError(result.error); return; }
     if (result.outcome === 'pending_approval') {

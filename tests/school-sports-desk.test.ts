@@ -131,7 +131,7 @@ describe('the no-migration boundary', () => {
   });
 
   it('reads only columns that exist', () => {
-    const select = /from\('family_inbox_messages'\)\s*\n?\s*\.select\('([^']+)'\)/.exec(deskCard);
+    const select = /from\('family_inbox_messages'\)\s*\n?\s*\.select\('([^']+)'(?:,\s*\{\s*count: 'exact'\s*\})?\)/.exec(deskCard);
     expect(select).not.toBeNull();
     const requested = select![1].split(',').map((c) => c.trim());
     const columns = inboxColumns();
@@ -153,18 +153,18 @@ describe('the desk card fails closed', () => {
     expect(errorAt).toBeGreaterThan(-1);
     expect(emptyAt).toBeGreaterThan(errorAt);
     // And a failed read leaves the rows null rather than an empty array.
-    expect(deskCard).toContain('setDeskRows(null);');
-    expect(deskCard).toContain('if (!deskRows) return [];');
+    expect(deskCard).toContain('snapshot: null, loading: false, error: true');
+    expect(deskCard).toContain('if (!deskSnapshot) return [];');
   });
 
-  it('batches its two reads through settleAll, with no ServiceResult riding along', () => {
-    expect(deskCard).toContain('await settleAll([');
-    const batch = /await settleAll\(\[([\s\S]*?)\]\);/.exec(deskCard);
-    expect(batch).not.toBeNull();
-    // Only PostgREST builders in the array — a ServiceResult has `ok`, not
-    // `data`, and could never be unwrapped by settleAll's fallback shape.
-    expect(batch![1]).not.toMatch(/countOrNull|ServiceResult|\bok:\s/);
-    expect((batch![1].match(/sb\.from\(/g) ?? []).length).toBe(2);
+  it('batches counted message and roster reads without persisting inbox bodies', () => {
+    expect(deskCard).toContain('await Promise.all([');
+    expect(deskCard).not.toContain('await settleAll([');
+    expect(deskCard).not.toContain('writePartitionedCache');
+    expect(deskCard).toContain("readCountedRows<DeskMessage>");
+    for (const roster of ['DeskMember', 'DeskClass', 'DeskTeam']) {
+      expect(deskCard).toContain(`readCountedRows<${roster}>`);
+    }
   });
 });
 
@@ -204,12 +204,12 @@ describe('the desk card only claims what a row says', () => {
     expect(fn).not.toBeNull();
     expect(fn![0]).toContain('.catch(');
     expect(fn![0]).toContain("console.error('[school-desk] propose failed'");
-    expect(fn![0]).toContain('setProposing(null);');
+    expect(fn![0]).toContain('setProposalState(previous => previous === operation ? null : previous);');
     expect(fn![0]).toContain("toastError(tr('schoolDesk.couldNotPropose'))");
   });
 
   it('classifies at read time, because there is no column to store it in', () => {
-    expect(deskCard).toContain('verdict: classify(row, roster, deskTeams, classes, { now })');
+    expect(deskCard).toContain('verdict: classify(row, deskSnapshot.members, deskSnapshot.teams, deskSnapshot.classes, { now })');
   });
 });
 
