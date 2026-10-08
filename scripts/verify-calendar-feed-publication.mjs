@@ -213,6 +213,33 @@ try{
   const another=detached(9);another.overrides[0].recurrenceId.value='20261015T090000Z';sql(auth(archive([another],feed,arm())));
   const old=detached(4),f=arm(),before=state();failure(auth(archive([old],feed,f)));assert.equal(state(),before);
  });
+ for(const status of ['confirmed','cancelled'])for(const knownVersion of [true,false])check(`omitted ${status} ${knownVersion?'versioned':'unversioned'} override remains review on replay`,()=>{
+  seed();const first=versioned(1);first.master.rrule='FREQ=DAILY;COUNT=2';
+  first.overrides=[{...detached(5).overrides[0],status,revision:knownVersion?{...revision,sequence:5}:{sequence:null,dtstamp:null,lastModified:null,etag:'opaque'}}];
+  assert.equal(JSON.parse(sql(auth(archive([first])))).outcome,'applied');
+  const omitted={...first,revision:{...revision,sequence:2},master:{...first.master,revision:{...revision,sequence:2}},overrides:[]};
+  const held=JSON.parse(sql(auth(archive([omitted],feed,arm()))));assert.equal(held.outcome,'needs_revision_review');assert.equal(held.groups[0].state,'needs_revision_review');
+  assert.equal(sql(`select last_status from calendar_feeds where id=${q(feed)};`),'revision_review');
+  assert.equal(sql("select count(*) from calendar_feed_source_component_watermarks where component_key<>'master';"),'1');
+  const replay=JSON.parse(sql(auth(archive([omitted],feed,arm()))));assert.equal(replay.outcome,'needs_revision_review');assert.equal(replay.groups[0].reused,true);assert.equal(replay.groups[0].revision_id,held.groups[0].revision_id);
+  assert.equal(sql('select count(*) from calendar_feed_source_revisions;'),'2');
+  const highMaster={...omitted,revision:{...revision,sequence:100},master:{...omitted.master,revision:{...revision,sequence:100}}};
+  assert.equal(JSON.parse(sql(auth(archive([highMaster],feed,arm())))).outcome,'needs_revision_review');
+  const restored={...highMaster,overrides:first.overrides};
+  if(knownVersion){
+   const older={...restored,overrides:[{...first.overrides[0],revision:{...revision,sequence:4}}]},f=arm(),before=state();
+   failure(auth(archive([older],feed,f)));assert.equal(state(),before);
+  }
+  assert.equal(JSON.parse(sql(auth(archive([restored],feed,arm())))).outcome,'applied');
+  if(status==='cancelled'){
+   const sameVersionLive={...restored,overrides:[{...first.overrides[0],status:'confirmed'}]};
+   assert.equal(JSON.parse(sql(auth(archive([sameVersionLive],feed,arm())))).outcome,'needs_revision_review');
+   assert.equal(sql("select cancellation_revision_id is not null from calendar_feed_source_component_watermarks where component_key<>'master';"),'t');
+   const newerLive={...restored,overrides:[{...first.overrides[0],status:'confirmed',revision:{...revision,sequence:6}}]};
+   assert.equal(JSON.parse(sql(auth(archive([newerLive],feed,arm())))).outcome,knownVersion?'applied':'needs_revision_review');
+   assert.equal(sql("select cancellation_revision_id is null from calendar_feed_source_component_watermarks where component_key<>'master';"),knownVersion?'t':'f');
+  }
+ });
  check('source revision stamps order same-component ties; opaque ETags never order',()=>{
   seed();const d=versioned(5);d.master.revision.dtstamp='20261008T100000Z';sql(auth(archive([d])));
   let f=arm(),before=state();failure(auth(archive([versioned(5)],feed,f)));assert.equal(state(),before);

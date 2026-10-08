@@ -28,7 +28,7 @@ export async function GET(req: NextRequest) {
     const result = await readCalendarOccurrences(supabase, ctx.active.familyId, bounds, timezone, {
       columns: ['title', 'location', 'category'], overlap: true, limit,
     });
-    if (result.error) return json({ code: 'calendar_unavailable' }, 503);
+    if (result.error) return json({ code: 'calendar_unavailable', error: 'Calendar unavailable. Please try again.' }, 503);
     return json({ userId: ctx.user.id, familyId: ctx.active.familyId, timezone, fromDay, toDay: bounds.allDayToDay, count: result.count,
       occurrences: result.data.map(row => ({
         eventId: row.id, occurrenceKey: JSON.stringify([row.id, row.starts_at]), title: row.title,
@@ -37,5 +37,5 @@ export async function GET(req: NextRequest) {
         endDate: row.all_day ? row.ends_at?.slice(0, 10) ?? new Date(Date.parse(row.starts_at) + 86_400_000).toISOString().slice(0, 10) : null,
       })),
     });
-  } catch { return json({ code: 'calendar_unavailable' }, 503); }
+  } catch { return json({ code: 'calendar_unavailable', error: 'Calendar unavailable. Please try again.' }, 503); }
 }

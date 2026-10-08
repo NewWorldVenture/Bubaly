@@ -15,7 +15,7 @@ const page = fs.readFileSync('app/(app)/dashboard/family-cfo/page.tsx', 'utf8');
 describe('family-cfo page read boundary', () => {
   it('collects the five finance read errors with a missing-table filter', () => {
     expect(page).toContain('const financeError = [accountsRes.error, billsRes.error, goalsRes.error, spendRes.error, budgetsRes.error]');
-    expect(page).toContain('.find((e) => e && !isMissingTableError(e));');
+    expect(page).toContain('.find((e) => e && !isCfoMissingTable(e));');
   });
 
   it('logs and returns an ErrorState on a finance read failure', () => {

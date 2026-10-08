@@ -5,9 +5,7 @@ import {
 } from 'lucide-react';
 import { requireFeature } from '@/lib/supabase/auth';
 import { requireAal2 } from '@/lib/auth/require-aal2';
-import { settleAll } from '@/lib/supabase/settle';
 import { createServer } from '@/lib/supabase/server';
-import { isMissingTableError } from '@/lib/supabase/errors';
 import { PageHeader } from '@/components/app/page-header';
 import { StatTile, SectionCard, MiniEmpty } from '@/components/family/shell';
 import { ErrorState } from '@/components/ui/states';
@@ -17,6 +15,7 @@ import { fmtDate } from '@/lib/utils/format';
 import { getLocaleContext, getTranslations } from '@/lib/i18n/server';
 import { getFormat } from '@/lib/utils/format-server';
 import { loadMoneyTimelineInput } from '@/lib/finance/timeline-load';
+import { isCfoMissingTable, loadCfoSummaryRows } from '@/lib/finance/cfo-load';
 import { buildCashflowTimeline, DEFAULT_BUFFER, money as moneyIn, pretty as prettyIn, type BuildTimelineInput, type PlanSource } from '@/lib/finance/timeline';
 import { EXPLAIN_MONTH_REQUEST } from '@/lib/finance/cfo-prompts';
 import { addDaysToDayKey, dayKeyInTz } from '@/lib/services/scope';
@@ -57,15 +56,7 @@ export default async function FamilyCfoPage() {
   const in30 = addDaysToDayKey(today, 30);
   const monthStart = today.slice(0, 8) + '01';
 
-  const [accountsRes, billsRes, goalsRes, spendRes, budgetsRes] = await settleAll([
-    supabase.from('financial_accounts').select('*').eq('family_id', familyId),
-    supabase.from('bills').select('*').eq('family_id', familyId).neq('status', 'paid')
-      .gte('due_date', today).lte('due_date', in30).order('due_date'),
-    supabase.from('savings_goals').select('*').eq('family_id', familyId).order('created_at'),
-    supabase.from('transactions').select('amount, category, type').eq('family_id', familyId)
-      .eq('type', 'expense').gte('date', monthStart),
-    supabase.from('budgets').select('*').eq('family_id', familyId),
-  ]);
+  const [accountsRes, billsRes, goalsRes, spendRes, budgetsRes] = await loadCfoSummaryRows(supabase, familyId, { today, in30, monthStart });
 
   // Every figure here is money and the page tells the family so ("every figure
   // is live"). A dropped error would render Net position $0, "Due in 30 days
@@ -74,7 +65,7 @@ export default async function FamilyCfoPage() {
   // a real read error; a genuinely missing table (unapplied migration) is still
   // tolerated as empty so a partial env degrades rather than hard-fails.
   const financeError = [accountsRes.error, billsRes.error, goalsRes.error, spendRes.error, budgetsRes.error]
-    .find((e) => e && !isMissingTableError(e));
+    .find((e) => e && !isCfoMissingTable(e));
   if (financeError) {
     console.error('[dashboard/family-cfo] finance read failed', financeError);
     return <ErrorState message={tr('familyCfo.couldNotLoadYourFamily')} />;

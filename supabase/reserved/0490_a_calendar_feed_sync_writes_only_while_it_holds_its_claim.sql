@@ -521,10 +521,20 @@ begin
    if d->'master'->>'status'='cancelled' then cancel_id:=revision_id; cancel_master:=d->'master';
    elsif cancel_id is not null and d->'master'<>'null'::jsonb and calendar_feed_private.compare_revision(d->'master'->'revision',cancel_master->'revision')=1 then cancel_id:=null; end if;
    if cancel_id is not null and (d->'master'->>'status' in ('confirmed','tentative') or exists(select 1 from jsonb_array_elements(d->'overrides') x where x->>'status'<>'cancelled')) then review:=true; end if;
-   -- An omitted previously versioned component cannot be inferred cancelled or
-   -- reactivated. Its watermark survives; later older revisions still refuse.
-   if exists(select 1 from public.calendar_feed_source_component_watermarks m where m.feed_id=p_feed_id and m.external_uid=uid and m.component_key='master'
-     and d->'master'='null'::jsonb and exists(select 1 from jsonb_each(m.version_component->'revision') v where v.key<>'etag' and v.value<>'null'::jsonb)) then review:=true; end if;
+   -- Absence is not evidence that ANY previously observed original component
+   -- was deleted or reactivated, even without SEQUENCE/DTSTAMP. In particular,
+   -- dropping a cancelled override must never silently restore its occurrence.
+   -- Retain every watermark and require explicit revision reconciliation. A
+   -- newer master cannot resolve an omitted detached component's own history.
+   if exists(select 1 from public.calendar_feed_source_component_watermarks m
+     where m.feed_id=p_feed_id and m.external_uid=uid and not exists(
+       select 1 from (
+         select 'master' as component_key where d->'master'<>'null'::jsonb
+         union all
+         select jsonb_build_array('override',x->'recurrenceId'->>'kind',x->'recurrenceId'->>'tzid',x->'recurrenceId'->>'value')::text
+           from jsonb_array_elements(d->'overrides') x
+       ) current_components where current_components.component_key=m.component_key
+     )) then review:=true; end if;
    group_state:=case when review then 'needs_revision_review' else 'ready' end;
    update public.calendar_feed_source_groups set current_revision_id=revision_id,master_cancellation_revision_id=cancel_id,materialization_state=group_state where feed_id=p_feed_id and external_uid=uid;
    -- Source takeover retires only this explicitly supplied UID's legacy rows.
