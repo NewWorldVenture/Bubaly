@@ -53,6 +53,20 @@ function breakQuery(table: string, operation: 'insert' | 'update' | 'select', th
   }) as typeof db.from);
 }
 
+/** Keep PostgREST's total count while imposing a smaller per-response cap. */
+function capTable(table: string, cap: number) {
+  const from = db.from.bind(db);
+  vi.spyOn(db, 'from').mockImplementation(((name: string) => {
+    const builder = from(name);
+    if (name !== table) return builder;
+    const original = builder.then.bind(builder);
+    Object.assign(builder, { then: (resolve: (reply: unknown) => unknown, reject?: (error: unknown) => unknown) => original(
+      reply => resolve({ ...reply, data: Array.isArray(reply.data) ? reply.data.slice(0, cap) : reply.data }), reject,
+    ) });
+    return builder;
+  }) as typeof db.from);
+}
+
 beforeEach(() => {
   vi.restoreAllMocks();
   holder.role = 'parent';
@@ -73,6 +87,61 @@ beforeEach(() => {
 });
 
 describe('school proposals always wait for review', () => {
+  function seedChildren() {
+    db.table('family_members').splice(0);
+    db.seed('family_members', [
+      { id: 'requester', family_id: 'family-1', user_id: 'requester-user', role: 'parent', display_name: 'Alex Parent', is_active: true, created_at: '2026-01-01' },
+      { id: 'child-a', family_id: 'family-1', role: 'child', display_name: 'Ava Hughen', is_active: true, created_at: '2026-01-02' },
+      { id: 'child-b', family_id: 'family-1', role: 'child', display_name: 'Noah Hughen', is_active: true, created_at: '2026-01-03' },
+    ]);
+    source().body = 'Please return the school permission slip from Mrs Okonkwo.';
+  }
+
+  it.each(['members', 'classes', 'teams'])('does not assign a child from an incomplete %s roster', async table => {
+    seedChildren();
+    const classes = [
+      { id: 'first', family_id: 'family-1', member_id: 'child-a', subject: 'M class', teacher: 'Mrs Okonkwo' },
+      { id: 'last', family_id: 'family-1', member_id: 'child-b', subject: 'Z class', teacher: 'Mrs Okonkwo' },
+    ];
+    db.seed('school_classes', table === 'classes' ? [
+      ...Array.from({ length: 499 }, (_, n) => ({ id: `filler-${n}`, family_id: 'family-1', member_id: 'child-a', subject: `A class ${n}`, teacher: 'Another Teacher' })),
+      ...classes,
+    ] : classes);
+    if (table === 'members') capTable('family_members', 2);
+    if (table === 'teams') {
+      source().body = 'Please return the school permission slip from Coach Delgado.';
+      db.seed('teams', [
+        { id: 'first', family_id: 'family-1', member_id: 'child-a', team_name: 'A team', coach: 'Coach Delgado', is_active: true },
+        { id: 'middle', family_id: 'family-1', member_id: 'child-a', team_name: 'B team', coach: 'Other Coach', is_active: true },
+        { id: 'last', family_id: 'family-1', member_id: 'child-b', team_name: 'Z team', coach: 'Coach Delgado', is_active: false },
+      ]);
+      capTable('teams', 2);
+    }
+    policy('allow');
+    await propose();
+    const payload = db.table('approval_requests')[0].payload as { args: Record<string, unknown> };
+    expect(payload.args).not.toHaveProperty('assignee_id');
+    expect(db.table('family_reminders')).toHaveLength(0);
+    expect(source().ai_handled).toBe(false);
+  });
+
+  it('refuses a roster beyond the complete-read ceiling before opening an approval', async () => {
+    seedChildren();
+    db.seed('school_classes', Array.from({ length: 2001 }, (_, n) => ({ id: `class-${n}`, family_id: 'family-1', member_id: 'child-a', subject: `Class ${n}`, teacher: 'Mrs Okonkwo' })));
+    policy('allow');
+    expect(await proposeFrontDeskAction('message-1')).toMatchObject({ ok: false, code: 'db' });
+    expect(db.table('approval_requests')).toHaveLength(0);
+    expect(source().ai_handled).toBe(false);
+  });
+
+  it('retains a child identified by a unique complete roster entry', async () => {
+    seedChildren();
+    db.seed('school_classes', [{ id: 'only', family_id: 'family-1', member_id: 'child-a', subject: 'Math', teacher: 'Mrs Okonkwo' }]);
+    policy('allow');
+    await propose();
+    expect(db.table('approval_requests')[0]).toMatchObject({ payload: { args: { assignee_id: 'child-a' } } });
+  });
+
   it('holds an explicit allow behind one persisted approval, retaining source and requester', async () => {
     policy('allow');
     const id = await propose();

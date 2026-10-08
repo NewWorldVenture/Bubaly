@@ -103,6 +103,12 @@ console.log(JSON.stringify({
     files: groceryReceipt.files,
     checks: groceryReceipt.checks,
   },
+  marketplaceVisibilityReview: {
+    disposition: 'Read-only body/catalog evidence only; source0462 visibility guards and source0311 helper absent. Grant repair0456 alone does not complete this authorization boundary. Full dependency/schema and role rehearsal required.',
+    evidence: checksum('docs/final-audit/rollout-20261008/marketplace-visibility-boundary.json'),
+    migrations: ['0311_family_scoped_references.sql', '0462_a_listing_is_acted_on_only_by_who_can_see_it.sql'].map(name => checksum('supabase/migrations/' + name)),
+    existingReplayProbe: checksum('docs/audit/a-listing-is-acted-on-only-by-who-can-see-it-check.sql'),
+  },
   walletReferenceCandidate: {
     disposition: 'UNALLOCATED; structural fixture only; existing-data disposition and full-schema rehearsal required; no application authorized',
     files: referenceReceipt.files,

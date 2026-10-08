@@ -25,16 +25,23 @@ export type SportsEventRow = Tables<'sports_events'>;
 const MAX_ROWS = 500;
 const MAX_SERIES = 2000;
 
-export async function listTeams(scope: ServiceScope, input: { memberId?: string | null; activeOnly?: boolean } = {}): Promise<ServiceResult<TeamRow[]>> {
-  let query = scope.db
-    .from('teams')
-    .select('*')
-    .eq('family_id', scope.familyId)
-    .order('team_name', { ascending: true })
-    .limit(MAX_ROWS);
-  if (input.activeOnly ?? true) query = query.eq('is_active', true);
-  if (input.memberId) query = query.eq('member_id', input.memberId);
-  const { data, error } = await query;
+/** requireComplete pages through server caps and refuses more than 2,000 teams. */
+export async function listTeams(scope: ServiceScope, input: { memberId?: string | null; activeOnly?: boolean; requireComplete?: boolean } = {}): Promise<ServiceResult<TeamRow[]>> {
+  const query = (counted = false) => {
+    const table = scope.db.from('teams');
+    let read = (counted ? table.select('*', { count: 'exact' }) : table.select('*'))
+      .eq('family_id', scope.familyId).order('team_name', { ascending: true });
+    if (counted) read = read.order('id');
+    if (input.activeOnly ?? true) read = read.eq('is_active', true);
+    if (input.memberId) read = read.eq('member_id', input.memberId);
+    return read;
+  };
+  const { data, error } = input.requireComplete
+    ? await readCountedRows<TeamRow>(
+      () => query(true).limit(MAX_ROWS), (from, to) => query(true).range(from, to),
+      2000, 'sports teams',
+    )
+    : await query().limit(MAX_ROWS);
   if (error) {
     console.error('[service:sports] teams read failed', error);
     return fail(describeDbError(error, 'Could not load the teams.'), { code: SERVICE_CODES.db });

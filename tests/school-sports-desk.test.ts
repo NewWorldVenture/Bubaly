@@ -239,7 +239,7 @@ describe('proposals go through the approval spine', () => {
 
   it('keeps ServiceResults out of any batch', () => {
     expect(deskAction).not.toMatch(/await settleAll\(/);
-    for (const call of ['await getMembers(scope)', 'await listClassRoster(scope)', 'await listTeams(scope,']) {
+    for (const call of ['await getMembers(scope,', 'await listClassRoster(scope,', 'await listTeams(scope,']) {
       expect(deskAction).toContain(call);
     }
   });
@@ -357,8 +357,8 @@ describe('every string the desk shows is translated', () => {
 // "sent for a parent to approve" then promises a review that is not in anyone's
 // queue, which is the one thing this desk must never say.
 describe('a proposal held for approval says so only when an approval exists', () => {
-  const module = readFileSync(new URL('../components/modules/school-module.tsx', import.meta.url), 'utf8');
-  const branch = module.slice(module.indexOf("if (result.outcome === 'pending_approval')"), module.indexOf('    // Re-read rather than patch state'));
+  const moduleSource = readFileSync(new URL('../components/modules/school-module.tsx', import.meta.url), 'utf8');
+  const branch = moduleSource.slice(moduleSource.indexOf("if (result.outcome === 'pending_approval')"), moduleSource.indexOf('    // Re-read rather than patch state'));
 
   it('reads approvalId before claiming a parent was asked', () => {
     expect(branch).toContain('result.approvalId');

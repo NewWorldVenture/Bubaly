@@ -169,6 +169,15 @@ compatibility review of client grant revocation. Selected AI rate-limit callers
 also preserve user-scoped keys or use the service client. This is static and
 catalog evidence, not a live transaction or exhaustive caller rehearsal.
 
+The [visibility preflight](marketplace-visibility-boundary.json) also confirms
+that source0462's listing-visibility helper is absent. The captured bid, buy-now
+and negotiation bodies identify their callers but do not enforce visibility of
+the listing being acted on. Grant repair0456 does not supply that separate
+authorization layer. Include existing
+[0462](../../../supabase/migrations/0462_a_listing_is_acted_on_only_by_who_can_see_it.sql)
+and its0311 reference-helper dependency in the staged review. This is body/catalog
+evidence; no live marketplace operation was attempted.
+
 The [read-only function definitions](priority-rpc-definitions.json),
 [collection query](priority-rpc-definitions.sql) and
 [effective ACL catalog](definer-acl-catalog.json) confirm:
@@ -235,8 +244,9 @@ The [retained local fixture](0313-grocery.fixture.mjs) and
 families, a one-user membership stub and the exact captured function body. They
 reproduce a foreign meal being copied despite its RLS SELECT denial and a supplied
 foreign list being accepted. The exact existing0311+0313 migrations repair both,
-reject future cross-family references and preserve the pre-existing mismatched
-plan. Standalone0313 fails without its helper and rolls back; combined rollback
+reject future authenticated cross-family references and preserve the pre-existing mismatched
+plan. The0311 helper intentionally exempts service-role and null-auth sessions;
+this rehearsal does not change that boundary. Standalone0313 fails without its helper and rolls back; combined rollback
 and repeat application also pass. Other0311 table wiring is skipped because those
 tables are absent from this fixture, so full production-schema rehearsal remains
 required. No migration bytes or allocations changed. Run only against a fresh

@@ -119,7 +119,7 @@ export async function listHomeworkDue(scope: ServiceScope, input: HomeworkDueInp
 }
 
 /**
- * Every class row, with NO week-parity filtering — the roster the school and
+ * Class rows with NO week-parity filtering — the roster the school and
  * sports front desk matches inbound mail against.
  *
  * `listClasses` is the timetable: it drops a class that does not occur in the
@@ -130,14 +130,16 @@ export async function listHomeworkDue(scope: ServiceScope, input: HomeworkDueInp
  *
  * Read-only and family-scoped like the rest of this file; the caller gets a
  * `ServiceResult`, so a failed read is a failure and never an empty roster.
+ * requireComplete reads the whole roster up to 2,000 rows or refuses it;
+ * otherwise the requested result limit is retained for bounded exports.
  */
-export async function listClassRoster(scope: ServiceScope, input: { limit?: number } = {}): Promise<ServiceResult<SchoolClassRow[]>> {
+export async function listClassRoster(scope: ServiceScope, input: { limit?: number; requireComplete?: boolean } = {}): Promise<ServiceResult<SchoolClassRow[]>> {
   const limit = Math.min(Math.max(input.limit ?? MAX_ROWS, 1), MAX_ROWS);
   const query = () => scope.db.from('school_classes').select('*', { count: 'exact' })
     .eq('family_id', scope.familyId).order('subject', { ascending: true }).order('id');
   const { data, error } = await readCountedRows<SchoolClassRow>(
     () => query().limit(limit), (from, to) => query().range(from, to),
-    MAX_ROWS, 'school class roster', limit,
+    input.requireComplete ? 2000 : MAX_ROWS, 'school class roster', input.requireComplete ? undefined : limit,
   );
   if (error) {
     console.error('[service:school] class roster read failed', error);

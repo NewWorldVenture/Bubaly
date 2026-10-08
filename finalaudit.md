@@ -1,5 +1,18 @@
 # Final Production Audit
 
+## Front-desk approval inference verified locally — 2026-10-08
+
+- Shared teacher/coach/name evidence at the same position selected a child by roster order. The retained classifier regressions reproduce **5 failures /70 controls** before repair. Matching now leaves that child unassigned when the strongest evidence identifies multiple profiles. A further **4 failures /75 controls** against the initial repair exposed stored-name specificity: “Riley” alone cannot distinguish Riley from Riley Jones, while explicit “Riley Jones” must retain its more specific match. Direct name prefixes are now normalized before ranking; distinct first-mentioned names and stronger explicit full names remain supported. Duplicate hints for one child do not create false ambiguity.
+- The real proposal action also trusted capped member/class/team rosters, hiding a competing child. With the classifier repair in place, the valid unique-row fixture reproduces **4 failures /26 controls** against the original three reads. All three action reads now request complete counted pagination, preserve family/active-member/member filters and inactive-team inclusion, and refuse more than2,000 rows before opening an approval. Default reads for other callers and bounded exports retain their existing contracts. The initial appended-member fixture accidentally duplicated requester and was correctly refused by the count reader; that intermediate fixture failure is superseded by the corrected unique-row before/after execution, not credited as a product finding.
+- **200 focused tests pass in each of UTC, Los Angeles and Tokyo. Full final UTC suite passes1,956 files /27,174 tests**, with2 expected failures and75 skips. Full nonincremental TypeScript (8GB heap) and scoped lint pass. An existing reserved `module` variable in the touched desk source test was renamed for lint. The earlier27,170-test full run predates the four name-specificity cases and is not substituted for this final run. Parent/child refusal, required persisted approval, failure handling and healthy unique-child controls remain in the executed action suite.
+- Scope remains the classifier and server approval path. The client desk display uses separate capped roster reads and its own asynchronous loader; those require a separate rendered/lifecycle audit. This batch does not claim complete front-desk UI or production workflow acceptance, and no broad audit row is closed.
+- The rollout review adds current read-only marketplace metadata: source0462's visibility helper and source0311's reference helper are absent; the captured bid/buy-now/negotiation bodies identify callers but lack listing visibility checks. Existing0456 grant repair does not close that distinct boundary. Existing0311/0462 and the retained visibility probe are checksum-pinned review inputs; no new marketplace transaction or pre/post migration rehearsal is claimed here. The grocery fixture's authenticated-role scope and service/null-auth exemption are explicit. Offline review/checksums reproduce exactly.
+- **#972 at43893507a has all six applicable hosted checks green**, including E2E completed2026-10-08 02:20:05UTC ([run37714420805](https://github.com/NewWorldVenture/Bubaly/actions/runs/37714420805)); both messaging workflows also passed. #973 has Core/Database/Mobile and both messaging checks green while E2E runs. #974 has Database/Mobile and both messaging checks green; Core/E2E still run at this checkpoint. All published heads remain frozen. Root remains sole ledger writer: **14,560 =11,681 NOT STARTED +2,526 IN PROGRESS +185 PASS +159 FIXED + PASS +9 BLOCKED**, **344 closed (2.36%)**, Production Ready **NO**. No merge, deployment, production configuration/credential change, migration allocation, hosted DDL or financial action occurred.
+
+## Front-desk child inference claims — 2026-10-08
+
+Root claims six existing member-service/family-library/classifier/test obligations before runtime regressions. The existing school/sports services and proposeFrontDeskAction remain IN PROGRESS. Investigate same-position, same-strength evidence shared by multiple children and whether capped member/class/team inputs hide a competing child. Preserve explicit first-mentioned-name behavior and mandatory approval. #972 now has all six applicable hosted checks green at43893507a; #973/#974 remain frozen for their own CI. No finding or closure is claimed by this investigation.
+
 ## Bounded school reads and grocery rollout dependency — 2026-10-08
 
 - School events and homework silently returned a shorter prefix when the server row cap was below the requested limit. Retained regressions reproduce **10 failures /11 controls** before repair. Both services now request exact counts, page in stable date/id order with all family/member/status/window filters retained, and refuse changed counts, repeated/empty pages and later read failures without returning partial rows. Existing200/default and500/maximum result limits are preserved; this is not a claim that every trip conflict beyond those limits is returned. **69 focused tests pass in each of UTC, Los Angeles and Tokyo; full UTC suite passes1,956 files /27,159 tests**, with2 expected failures and75 skips. Full nonincremental TypeScript (8GB heap) and scoped lint pass.
@@ -740,8 +753,8 @@ The TLS problem was a missing Node system-CA setting, not a reason to disable ce
 
 - Recounted row by row on 2026-10-04 from Register B itself (`node scripts/audit-register-counts.mjs`; `tests/the-audit-summary-counts-its-register.test.ts` now fails when this section and the rows disagree). The register holds 14,538 unique IDs with no duplicates and no unrecognised status. The previous 11,701 NOT STARTED / 2,484 IN PROGRESS tally predated LIBRARY-2E628A2A31CE's evidenced move from NOT STARTED to IN PROGRESS; the 15:39 UTC checkpoint already carried 11,700 / 2,485, and the rows confirm it.
 - Total Audit Items: **14,560**. Prior count explanations are preserved in the dated status summary below.
-- Not Started: **11,687**. Recounted on 2026-10-08 after rollout and support inventory reconciliation; prior dated tallies remain below.
-- In Progress: **2,520**. Recounted on 2026-10-08 after rollout and support inventory reconciliation; prior dated tallies remain below.
+- Not Started: **11,681**. Recounted on 2026-10-08 after rollout and support inventory reconciliation; prior dated tallies remain below.
+- In Progress: **2,526**. Recounted on 2026-10-08 after rollout and support inventory reconciliation; prior dated tallies remain below.
 - Passed: **185**. Prior count explanations are preserved in the dated status summary below.
 - Fixed + Passed: **159**. Prior count explanations are preserved in the dated status summary below.
 - Blocked: **9**. Prior count explanations are preserved in the dated status summary below.
@@ -18107,7 +18120,7 @@ not read the same on this page.*
 | SERVICE-EB682560FABD | SERVICE | linkToVacation | ⬜ NOT STARTED | Unassessed | Pending | None | Pending |  |
 | SERVICE-1C9649312BE0 | SERVICE | inferDocKind | ⬜ NOT STARTED | Unassessed | Pending | None | Pending |  |
 | SERVICE-B8AC98B42DD8 | SERVICE | todayKey | ⬜ NOT STARTED | Unassessed | Pending | None | Pending |  |
-| SERVICE-AACD4FC2FAD8 | SERVICE | getMembers | ⬜ NOT STARTED | Unassessed | Pending | None | Pending |  |
+| SERVICE-AACD4FC2FAD8 | SERVICE | getMembers | 🔄 IN PROGRESS | Medium | Pending | None | Pending |   2026-10-08 root claim: investigate ambiguous front-desk child inference and completeness of its member/class/team inputs; no closure credit. |
 | SERVICE-4CA97C6D89C5 | SERVICE | getMember | ⬜ NOT STARTED | Unassessed | Pending | None | Pending |  |
 | SERVICE-B4C87D46ACAD | SERVICE | assertActiveMember | ⬜ NOT STARTED | Unassessed | Pending | None | Pending |  |
 | SERVICE-F5C74841868A | SERVICE | matchMemberByName | ⬜ NOT STARTED | Unassessed | Pending | None | Pending |  |
@@ -18586,7 +18599,7 @@ not read the same on this page.*
 | LIBRARY-45A696C243B0 | LIBRARY | lib/food/leftovers.ts | ⬜ NOT STARTED | Unassessed | Pending | None | Pending |  |
 | LIBRARY-AFECD8603563 | LIBRARY | lib/food/score.ts | ⬜ NOT STARTED | Unassessed | Pending | None | Pending |  |
 | LIBRARY-B7B5771016FE | LIBRARY | lib/front-desk/school-approval.ts | ⬜ NOT STARTED | Unassessed | Pending | None | Pending |  |
-| LIBRARY-AB721EAA0C93 | LIBRARY | lib/front-desk/school-sports.ts | ⬜ NOT STARTED | Unassessed | Pending | None | Pending |  |
+| LIBRARY-AB721EAA0C93 | LIBRARY | lib/front-desk/school-sports.ts | 🔄 IN PROGRESS | Medium | Pending | None | Pending |   2026-10-08 root claim: investigate ambiguous front-desk child inference and completeness of its member/class/team inputs; no closure credit. |
 | LIBRARY-617EE5E6D991 | LIBRARY | lib/google.ts | ⬜ NOT STARTED | Unassessed | Pending | None | Pending |  |
 | LIBRARY-AF43D48A52A0 | LIBRARY | lib/grandparent/digest.ts | ⬜ NOT STARTED | Unassessed | Pending | None | Pending |  |
 | LIBRARY-B28E8D465718 | LIBRARY | lib/graph/reason.ts | ⬜ NOT STARTED | Unassessed | Pending | None | Pending |  |
@@ -21906,9 +21919,9 @@ not read the same on this page.*
 | SUPPORT-725FD9A1B4BF | SUPPORT | tests/schedule-intelligence-server.test.ts | ⬜ NOT STARTED | Unassessed | Pending | None | Pending |  |
 | SUPPORT-E4BBF74F6222 | SUPPORT | tests/schedule-intelligence.test.ts | ⬜ NOT STARTED | Unassessed | Pending | None | Pending |  |
 | SUPPORT-CAE58EE7019A | SUPPORT | tests/schema-audit.test.ts | ⬜ NOT STARTED | Unassessed | Pending | None | Pending |  |
-| SUPPORT-76C73A2E6B11 | SUPPORT | tests/school-proposal-approval.test.ts | ⬜ NOT STARTED | Unassessed | Pending | None | Pending |  |
-| SUPPORT-381D13E9A7B4 | SUPPORT | tests/school-sports-classifier.test.ts | ⬜ NOT STARTED | Unassessed | Pending | None | Pending |  |
-| SUPPORT-A1CA7C97C96E | SUPPORT | tests/school-sports-desk.test.ts | ⬜ NOT STARTED | Unassessed | Pending | None | Pending |  |
+| SUPPORT-76C73A2E6B11 | SUPPORT | tests/school-proposal-approval.test.ts | 🔄 IN PROGRESS | Medium | Pending | None | Pending |   2026-10-08 root claim: investigate ambiguous front-desk child inference and completeness of its member/class/team inputs; no closure credit. |
+| SUPPORT-381D13E9A7B4 | SUPPORT | tests/school-sports-classifier.test.ts | 🔄 IN PROGRESS | Medium | Pending | None | Pending |   2026-10-08 root claim: investigate ambiguous front-desk child inference and completeness of its member/class/team inputs; no closure credit. |
+| SUPPORT-A1CA7C97C96E | SUPPORT | tests/school-sports-desk.test.ts | 🔄 IN PROGRESS | Medium | Pending | None | Pending |   2026-10-08 root claim: investigate ambiguous front-desk child inference and completeness of its member/class/team inputs; no closure credit. |
 | SUPPORT-07CEAFD86EEF | SUPPORT | tests/school-timetable.test.ts | 🔄 IN PROGRESS | Unassessed | Pending | None | Pending |  |
 | SUPPORT-1ED58BE79909 | SUPPORT | tests/screen-time-insights.test.ts | ⬜ NOT STARTED | Unassessed | Pending | None | Pending |  |
 | SUPPORT-5B2F2B501F74 | SUPPORT | tests/search-rank.test.ts | ⬜ NOT STARTED | Unassessed | Pending | None | Pending |  |
@@ -22964,7 +22977,7 @@ not read the same on this page.*
 | LIBRARY-AE6D3D550D51 | LIBRARY | lib/services/descriptions-server.ts | ⬜ NOT STARTED | Unassessed | Pending | None | Pending | Discovered 2026-09-26: source file present with no ledger row (see Q56). |
 | LIBRARY-BA5BD32FC275 | LIBRARY | lib/services/descriptions.ts | ⬜ NOT STARTED | Unassessed | Pending | None | Pending | Discovered 2026-09-26: source file present with no ledger row (see Q56). |
 | LIBRARY-31C306D42FA6 | LIBRARY | lib/services/documents/index.ts | ⬜ NOT STARTED | Unassessed | Pending | None | Pending | Discovered 2026-09-26: source file present with no ledger row (see Q56). |
-| LIBRARY-0B1AC6894983 | LIBRARY | lib/services/family/index.ts | ⬜ NOT STARTED | Unassessed | Pending | None | Pending | Discovered 2026-09-26: source file present with no ledger row (see Q56). |
+| LIBRARY-0B1AC6894983 | LIBRARY | lib/services/family/index.ts | 🔄 IN PROGRESS | Medium | Pending | None | Pending | Discovered 2026-09-26: source file present with no ledger row (see Q56).  2026-10-08 root claim: investigate ambiguous front-desk child inference and completeness of its member/class/team inputs; no closure credit. |
 | LIBRARY-454350D19703 | LIBRARY | lib/services/finances/index.ts | ⬜ NOT STARTED | Unassessed | Pending | None | Pending | Discovered 2026-09-26: source file present with no ledger row (see Q56). |
 | LIBRARY-3936B990593A | LIBRARY | lib/services/finances/transaction-operation.ts | ⬜ NOT STARTED | Unassessed | Pending | None | Pending | Discovered 2026-09-26: source file present with no ledger row (see Q56). |
 | LIBRARY-A5ACCD4F0F25 | LIBRARY | lib/services/goals/index.ts | ⬜ NOT STARTED | Unassessed | Pending | None | Pending | Discovered 2026-09-26: source file present with no ledger row (see Q56). |

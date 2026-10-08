@@ -1498,6 +1498,27 @@
       "unauthenticatedRefused": true
     }
   },
+  "marketplaceVisibilityReview": {
+    "disposition": "Read-only body/catalog evidence only; source0462 visibility guards and source0311 helper absent. Grant repair0456 alone does not complete this authorization boundary. Full dependency/schema and role rehearsal required.",
+    "evidence": {
+      "path": "docs/final-audit/rollout-20261008/marketplace-visibility-boundary.json",
+      "sha256Lf": "f5c1bd65f1d1f15b044e6b3f831f336baedd21e3a7099f31243806ec393d910e"
+    },
+    "migrations": [
+      {
+        "path": "supabase/migrations/0311_family_scoped_references.sql",
+        "sha256Lf": "134917dc6bf393689f1d4c8526a042f8d982dde340dc23162bdf1d44487eecb6"
+      },
+      {
+        "path": "supabase/migrations/0462_a_listing_is_acted_on_only_by_who_can_see_it.sql",
+        "sha256Lf": "4fb342e704616f7a4f0043e1192014dd807cf2a6aca90845424f0fc3581b243a"
+      }
+    ],
+    "existingReplayProbe": {
+      "path": "docs/audit/a-listing-is-acted-on-only-by-who-can-see-it-check.sql",
+      "sha256Lf": "e27c0dc08b5e5bdc5dd1cf9ed4b1d0b0478aeb934ab418cf44013c236fda3e89"
+    }
+  },
   "walletReferenceCandidate": {
     "disposition": "UNALLOCATED; structural fixture only; existing-data disposition and full-schema rehearsal required; no application authorized",
     "files": [
