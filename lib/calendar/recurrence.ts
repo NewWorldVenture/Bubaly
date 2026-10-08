@@ -34,8 +34,14 @@ export interface RecurrableEvent {
 const MAX_OCCURRENCES = 500;
 
 const DAY_MS = 86_400_000;
+function calendarDate(year: number, month: number, day: number): Date {
+  const date = new Date(0);
+  // Date.UTC remaps years00–99 into1900–1999; setUTCFullYear does not.
+  date.setUTCFullYear(year, month - 1, day);
+  return date;
+}
 const dayNumber = (year: number, month: number, day: number) =>
-  Math.floor(Date.UTC(year, month - 1, day) / DAY_MS);
+  Math.floor(calendarDate(year, month, day).getTime() / DAY_MS);
 
 /**
  * The local date of the n-th occurrence.
@@ -58,7 +64,7 @@ function steppedLocalDate(
     case 'weekly': {
       // Pure calendar arithmetic in UTC — no zone and no DST is involved in
       // "the date seven days after this one".
-      const shifted = new Date(Date.UTC(base.year, base.month - 1, base.day + (freq === 'daily' ? n : n * 7)));
+      const shifted = calendarDate(base.year, base.month, base.day + (freq === 'daily' ? n : n * 7));
       return { year: shifted.getUTCFullYear(), month: shifted.getUTCMonth() + 1, day: shifted.getUTCDate() };
     }
     case 'monthly': {

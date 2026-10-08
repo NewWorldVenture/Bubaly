@@ -1401,7 +1401,7 @@
     },
     {
       "path": "supabase/reserved/0490_a_calendar_feed_sync_writes_only_while_it_holds_its_claim.sql",
-      "sha256Lf": "9b09129871e4d9d51863099c075a4702d7de70e0b6a265805fbd5fa309aedbe6",
+      "sha256Lf": "392d49859d06b46e38c1e3052d57abcf28c52149b03dc6041d7827cc3bb5db6a",
       "disposition": "HELD; allocation unchanged; no promotion authorized"
     },
     {

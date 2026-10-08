@@ -159,4 +159,24 @@ describe('complete bounded source occurrence sets', () => {
     const result = expandSourceOccurrences(doc, { from: Date.parse('2011-12-28'), to: Date.parse('2012-01-04'), dateTimezone: 'Pacific/Apia' });
     expect(result.occurrences.map(c => [c.original.value, c.endsAt])).toEqual([['20111229', '2011-12-30T10:00:00.000Z'], ['20111230', '2011-12-31T10:00:00.000Z'], ['20111231', '2012-01-01T10:00:00.000Z']]);
   });
+  it('retains concrete moved DATE boundaries independently of original identity and UTC day', () => {
+    const doc = source(['DTSTART;VALUE=DATE:20250101\r\nDURATION:P2D\r\nRRULE:FREQ=DAILY;COUNT=2',
+      'RECURRENCE-ID;VALUE=DATE:20250101\r\nDTSTART;VALUE=DATE:20250105\r\nDTEND;VALUE=DATE:20250108']);
+    const result = expandSourceOccurrences(doc, { from, to, dateTimezone: 'Asia/Tokyo' });
+    const moved = result.occurrences.find(c => c.original.value === '20250101')!;
+    expect(moved).toMatchObject({ original: { kind: 'date', value: '20250101' }, sourceStart: { kind: 'date', value: '20250105' }, sourceEndDate: '20250108',
+      startsAt: '2025-01-04T15:00:00.000Z', endsAt: '2025-01-07T15:00:00.000Z' });
+    expect(result.occurrences.find(c => c.original.value === '20250102')).toMatchObject({ sourceStart: { kind: 'date', value: '20250102' }, sourceEndDate: '20250104' });
+  });
+  it('retains distinct concrete DATE slots when contextual projection collapses a skipped date', () => {
+    const doc = source(['DTSTART;VALUE=DATE:20111230\r\nRRULE:FREQ=DAILY;COUNT=2']);
+    const result = expandSourceOccurrences(doc, { from: Date.parse('2011-12-29'), to: Date.parse('2012-01-02'), dateTimezone: 'Pacific/Apia' });
+    expect(result.occurrences.map(c => [c.sourceStart.value, c.sourceEndDate])).toEqual([['20111230', '20111231'], ['20111231', '20120101']]);
+    expect(result.occurrences[0].startsAt).toBe(result.occurrences[1].startsAt);
+    expect(result.occurrences[0].id).not.toBe(result.occurrences[1].id);
+  });
+  it('retains the concrete moved timed source clock without inventing an all-day end', () => {
+    const result = expand(source([master, 'RECURRENCE-ID:20250101T090000Z\r\nDTSTART;TZID=America/New_York:20250103T100000\r\nDURATION:PT1H']));
+    expect(result.occurrences.find(c => c.original.value === '20250101T090000Z')).toMatchObject({ sourceStart: { kind: 'zoned', tzid: 'America/New_York', value: '20250103T100000' }, sourceEndDate: null, startsAt: '2025-01-03T15:00:00.000Z' });
+  });
 });

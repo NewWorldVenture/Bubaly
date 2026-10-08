@@ -11,11 +11,13 @@ import { Divider, ListRow } from '../../src/components/ListRow';
 import { Pill } from '../../src/components/Pill';
 import { Screen } from '../../src/components/Screen';
 import { useAsyncData } from '../../src/hooks/use-async-data';
+import { useCalendar } from '../../src/hooks/use-calendar';
 import { useAuth } from '../../src/lib/auth';
 import { webUrl } from '../../src/lib/config';
-import { dueLabel, formatTime, greeting, dayLabel } from '../../src/lib/format';
+import { dueLabel, formatTime, greeting } from '../../src/lib/format';
+import { eventDayLabel } from '../../src/lib/calendar-core';
 import { isOpenChore } from '../../src/lib/chores-core';
-import { fetchGroceryList, fetchOpenChores, fetchUpcomingEvents } from '../../src/lib/queries';
+import { fetchGroceryList, fetchOpenChores } from '../../src/lib/queries';
 import { supabase } from '../../src/lib/supabase';
 import { useTheme } from '../../src/theme/theme';
 
@@ -24,18 +26,23 @@ export default function TodayScreen() {
   const { colors, spacing } = useTheme();
   const { family, familyLoading, familyError, refreshFamily } = useAuth();
   const familyId = family?.familyId ?? null;
-  const tz = family?.timezone ?? 'UTC';
+  const calendar = useCalendar(3);
+  const tz = calendar.data?.timezone ?? family?.timezone ?? 'UTC';
+  const ownerKey = calendar.ownerKey;
 
   const today = useAsyncData(async () => {
     if (!familyId) return null;
-    const [events, chores, grocery] = await Promise.all([
-      fetchUpcomingEvents(supabase, familyId, 3),
+    try {
+    const [chores, grocery] = await Promise.all([
       fetchOpenChores(supabase, familyId),
       fetchGroceryList(supabase, familyId),
     ]);
     const open = chores.filter((c) => isOpenChore(c.status));
-    return { events: events.slice(0, 4), chores: open.slice(0, 4), openChores: open.length, toBuy: grocery.items.filter((i) => !i.is_checked).length };
-  }, [familyId]);
+    return { ownerKey, data: { chores: open.slice(0, 4), openChores: open.length, toBuy: grocery.items.filter((i) => !i.is_checked).length }, error: null };
+    } catch {
+      return { ownerKey, data: null, error: 'Household tasks unavailable. Please try again.' };
+    }
+  }, [ownerKey]);
 
   const settings = (
     <Pressable accessibilityRole="button" accessibilityLabel="Settings" onPress={() => router.push('/settings')} hitSlop={12} style={{ paddingTop: 6 }}>
@@ -56,24 +63,27 @@ export default function TodayScreen() {
     );
   }
 
-  const data = today.data;
+  const ownedToday = today.data?.ownerKey === ownerKey ? today.data : null;
+  const data = ownedToday?.data;
+  const refresh = async () => { await Promise.all([today.refresh(), calendar.refresh()]); };
   return (
-    <Screen title={`${greeting(new Date(), tz)}, ${family.displayName.split(' ')[0]}`} subtitle={family.familyName} right={settings} refreshing={today.refreshing} onRefresh={today.refresh}>
-      {today.error ? <AppText variant="muted" color={colors.danger}>{today.error}</AppText> : null}
+    <Screen title={`${greeting(new Date(), tz)}, ${family.displayName.split(' ')[0]}`} subtitle={family.familyName} right={settings} refreshing={today.refreshing || calendar.refreshing} onRefresh={refresh}>
+      {ownedToday?.error ? <AppText variant="muted" color={colors.danger}>{ownedToday.error}</AppText> : null}
+      {calendar.error ? <AppText variant="muted" color={colors.danger}>{calendar.error}</AppText> : null}
 
       <View style={{ flexDirection: 'row', gap: spacing[3] }}>
         <Stat label="Chores open" value={data ? String(data.openChores) : '–'} onPress={() => router.push('/chores')} />
         <Stat label="To buy" value={data ? String(data.toBuy) : '–'} onPress={() => router.push('/grocery')} />
-        <Stat label="Next 3 days" value={data ? String(data.events.length) : '–'} onPress={() => router.push('/calendar')} />
+        <Stat label="Next 3 days" value={calendar.data ? String(calendar.data.count) : '–'} onPress={() => router.push('/calendar')} />
       </View>
 
       <GlassCard>
         <AppText variant="label" style={{ marginBottom: spacing[2] }}>Up next</AppText>
-        {data && data.events.length === 0 ? <AppText variant="muted">Nothing on the calendar for the next few days.</AppText> : null}
-        {data?.events.map((e, i) => (
-          <View key={e.id}>
+        {calendar.data && calendar.data.count === 0 ? <AppText variant="muted">Nothing on the calendar for the next few days.</AppText> : null}
+        {calendar.data?.occurrences.slice(0, 4).map((e, i) => (
+          <View key={e.occurrenceKey}>
             {i > 0 ? <Divider /> : null}
-            <ListRow title={e.title} subtitle={`${dayLabel(new Date(e.starts_at), tz)} · ${formatTime(e.starts_at, tz, e.all_day)}${e.location ? ` · ${e.location}` : ''}`} trailing={<Pill label={e.category} tone="info" />} />
+            <ListRow title={e.title} subtitle={`${eventDayLabel(e, tz)} · ${formatTime(e.starts_at, tz, e.all_day)}${e.location ? ` · ${e.location}` : ''}`} trailing={<Pill label={e.category} tone="info" />} />
           </View>
         ))}
       </GlassCard>

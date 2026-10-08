@@ -54,7 +54,8 @@ import {
 } from './timeline';
 import type { LocaleCode } from '@/lib/i18n/locales';
 import { dayKeyInZone, zonedTimeMs } from '@/lib/schedule/zoned';
-import { readAllAsQuery } from '@/lib/supabase/read-all';
+import { readCalendarOccurrences } from '@/lib/calendar/occurrences';
+import { briefingCalendarBounds } from '@/lib/briefing/calendar-window';
 
 type Client = SupabaseClient<Database>;
 
@@ -189,8 +190,45 @@ export function planCommitments(rows: {
   return plans;
 }
 
-const BILL_COLUMNS = 'name, amount, due_date, due_day, is_recurring, recurrence, status, category, autopay';
-const BILL_COLUMNS_BEFORE_0488 = 'name, amount, due_date, is_recurring, recurrence, status, category, autopay';
+const BILL_COLUMNS = 'id, name, amount, due_date, due_day, is_recurring, recurrence, status, category, autopay';
+const BILL_COLUMNS_BEFORE_0488 = 'id, name, amount, due_date, is_recurring, recurrence, status, category, autopay';
+const BILL_READ_MAX = 10_000;
+
+/** Counted, stable pages detect a response cap, count drift and repeated rows.
+ * This is bounded read completeness, not a transaction snapshot guarantee. */
+async function readTimelinePages(page: (from: number, to: number) => PromiseLike<{ data: unknown[] | null; count: number | null; error: unknown }>, max: number, label: string): Promise<{ data: unknown[] | null; error: unknown }> {
+  const rows: unknown[] = [], seen = new Set<string>();
+  let count: number | null = null;
+  const fail = (message: string) => ({ data: null, error: new Error(`The ${label} forecast cannot be read whole: ${message}`) });
+  try {
+    for (;;) {
+      const result = await page(rows.length, Math.min(rows.length + 1000, count ?? Math.min(1000, max)) - 1);
+      if (result.error) return { data: null, error: result.error };
+      if (typeof result.count !== 'number' || !Number.isSafeInteger(result.count) || result.count < 0) return fail('no usable exact count');
+      if (count !== null && count !== result.count) return fail('the count changed while reading');
+      count = result.count;
+      if (count > max) return fail(`more than ${max} ${label}`);
+      if (!Array.isArray(result.data)) return fail('the page was unavailable');
+      for (const row of result.data) {
+        const id = row && typeof row === 'object' && 'id' in row ? row.id : null;
+        if (typeof id !== 'string' || !id || seen.has(id)) return fail('missing or repeated row identity');
+        seen.add(id); rows.push(row);
+      }
+      if (rows.length > count) return fail('more rows arrived than counted');
+      if (rows.length === count) return { data: rows, error: null };
+      if (result.data.length === 0) return fail('the read stopped before its counted end');
+    }
+  } catch (cause) { return fail(cause instanceof Error ? cause.message : String(cause)); }
+}
+function readBillPages(supabase: Client, familyId: string, columns: string) {
+  return readTimelinePages((from, to) => supabase.from('bills').select(columns, { count: 'exact' }).eq('family_id', familyId).order('id').range(from, to), BILL_READ_MAX, 'bill');
+}
+
+async function readTimelineEvents(supabase: Client, familyId: string, today: string, timezone: string) {
+  const result = await readCalendarOccurrences(supabase, familyId, briefingCalendarBounds(today, timezone, 0, HORIZON_DAYS + 1), timezone, { columns: ['title'] });
+  if (!result.error && result.count > 500) return { data: null, error: new Error('More than 500 calendar occurrences; the forecast overlays cannot be read whole') };
+  return result;
+}
 
 /**
  * A TABLE this database does not have (PGRST205 from PostgREST, 42P01 from
@@ -220,14 +258,15 @@ function isMissingTable(error: unknown): boolean {
  * still refuse until 0488 exists.
  */
 async function readBills(supabase: SupabaseClient<Database>, familyId: string): Promise<{ data: unknown[] | null; error: unknown }> {
-  const first = await supabase.from('bills').select(BILL_COLUMNS).eq('family_id', familyId).limit(1000);
+  const first = await readBillPages(supabase, familyId, BILL_COLUMNS);
   if (!first.error || !isMissingDueDayColumn(first.error)) return first;
   console.warn('bills.due_day is not in this database yet (migration 0488_a_month_end_bill_keeps_its_day, reserved and held in supabase/reserved until 0475–0487 land, has not been applied); the forecast uses only proven date anchors and refuses ambiguous legacy schedules.');
-  const legacy = await supabase.from('bills').select(BILL_COLUMNS_BEFORE_0488).eq('family_id', familyId).limit(1000);
+  const legacy = await readBillPages(supabase, familyId, BILL_COLUMNS_BEFORE_0488);
   if (legacy.error) return legacy;
   const ambiguous = (legacy.data ?? []).some(row => {
-    const cadence = billCadence(row);
-    return row.is_recurring && (!cadence || (MONTH_BASED_CADENCES.has(cadence) && billAnchorDay(row) === null));
+    const bill = row as TimelineBill;
+    const cadence = billCadence(bill);
+    return bill.is_recurring && (!cadence || (MONTH_BASED_CADENCES.has(cadence) && billAnchorDay(bill) === null));
   });
   return ambiguous ? {data:null,error:new Error('Recurring bill anchors are unavailable; confirm the schedule before building the full forecast.')} : legacy;
 }
@@ -249,13 +288,9 @@ export async function loadMoneyTimelineInput(
   now: Date = new Date(),
 ): Promise<BuildTimelineInput> {
   // The window, on the family's calendar. `todayKey` and `horizonEndKey` bound
-  // the DATE columns (which hold family days), `todayStartIso`/`horizonEndIso`
-  // bound the one timestamptz column (which holds instants).
+  // the DATE columns; the calendar reader separately binds timed and DATE rows.
   const todayKey = familyDayKey(now, tz);
   const horizonEndKey = shiftFamilyDay(todayKey, HORIZON_DAYS, tz);
-  const todayStartIso = new Date(zonedTimeMs(todayKey, 0, 0, tz)).toISOString();
-  // Exclusive: local midnight the morning after the horizon's last family day.
-  const horizonEndIso = new Date(zonedTimeMs(shiftFamilyDay(horizonEndKey, 1, tz), 0, 0, tz)).toISOString();
 
   const [billsQ, goalsQ, acctQ, eventsQ, subsQ, vacQ, vacBudgetQ, vacSpendQ, movesQ, projectsQ] = await settleAll([
     // `due_day` (0488) is the anchor a month-end bill steps by; without it the
@@ -264,44 +299,15 @@ export async function loadMoneyTimelineInput(
     // column, and the read is repeated without it: that database holds no
     // anchor to lose.
     readBills(supabase, familyId),
-    supabase.from('savings_goals')
-      .select('name, target_amount, current_amount, target_date')
-      .eq('family_id', familyId).limit(500),
-    supabase.from('financial_accounts')
-      .select('balance, type')
-      .eq('family_id', familyId).limit(200),
-    supabase.from('calendar_events')
-      .select('title, starts_at')
-      .eq('family_id', familyId)
-      .gte('starts_at', todayStartIso)
-      .lt('starts_at', horizonEndIso)
-      .order('starts_at').limit(500),
-    supabase.from('subscriptions_tracked')
-      .select('name, cost_cents, cadence, status, next_charge, category')
-      .eq('family_id', familyId)
-      .in('status', [...LIVE_SUBSCRIPTION_STATUSES]).limit(500),
-    supabase.from('vacations')
-      .select('id, title, start_date, status, budget_cents')
-      .eq('family_id', familyId)
-      .in('status', [...OPEN_VACATION_STATUSES])
-      .gte('start_date', todayKey).lte('start_date', horizonEndKey).limit(200),
-    // A ceiling above 1,000 is not a ceiling on its own: PostgREST caps the
-    // response at db-max-rows whatever `.limit()` says. These total a household's
-    // vacation money, so a quietly truncated read understates every total.
-    readAllAsQuery((from, to) => supabase.from('vacation_budgets')
-      .select('vacation_id, planned_cents')
-      .eq('family_id', familyId).order('id').range(from, to), { max: 2000 }),
-    readAllAsQuery((from, to) => supabase.from('vacation_expenses')
-      .select('vacation_id, amount_cents')
-      .eq('family_id', familyId).order('id').range(from, to), { max: 5000 }),
-    supabase.from('moves')
-      .select('title, move_date, status, budget_cents, spent_cents')
-      .eq('family_id', familyId)
-      .in('status', [...OPEN_MOVE_STATUSES]).limit(100),
-    supabase.from('home_projects')
-      .select('title, status, budget_cents, target_start, target_end')
-      .eq('family_id', familyId)
-      .in('status', [...OPEN_PROJECT_STATUSES]).limit(500),
+    readTimelinePages((from, to) => supabase.from('savings_goals').select('id, name, target_amount, current_amount, target_date', { count: 'exact' }).eq('family_id', familyId).order('id').range(from, to), 500, 'savings goals'),
+    readTimelinePages((from, to) => supabase.from('financial_accounts').select('id, balance, type', { count: 'exact' }).eq('family_id', familyId).order('id').range(from, to), 200, 'financial accounts'),
+    readTimelineEvents(supabase, familyId, todayKey, tz),
+    readTimelinePages((from, to) => supabase.from('subscriptions_tracked').select('id, name, cost_cents, cadence, status, next_charge, category', { count: 'exact' }).eq('family_id', familyId).in('status', [...LIVE_SUBSCRIPTION_STATUSES]).order('id').range(from, to), 500, 'subscriptions'),
+    readTimelinePages((from, to) => supabase.from('vacations').select('id, title, start_date, status, budget_cents', { count: 'exact' }).eq('family_id', familyId).in('status', [...OPEN_VACATION_STATUSES]).gte('start_date', todayKey).lte('start_date', horizonEndKey).order('id').range(from, to), 200, 'vacations'),
+    readTimelinePages((from, to) => supabase.from('vacation_budgets').select('id, vacation_id, planned_cents', { count: 'exact' }).eq('family_id', familyId).order('id').range(from, to), 2000, 'vacation budgets'),
+    readTimelinePages((from, to) => supabase.from('vacation_expenses').select('id, vacation_id, amount_cents', { count: 'exact' }).eq('family_id', familyId).order('id').range(from, to), 5000, 'vacation expenses'),
+    readTimelinePages((from, to) => supabase.from('moves').select('id, title, move_date, status, budget_cents, spent_cents', { count: 'exact' }).eq('family_id', familyId).in('status', [...OPEN_MOVE_STATUSES]).order('id').range(from, to), 100, 'moves'),
+    readTimelinePages((from, to) => supabase.from('home_projects').select('id, title, status, budget_cents, target_start, target_end', { count: 'exact' }).eq('family_id', familyId).in('status', [...OPEN_PROJECT_STATUSES]).order('id').range(from, to), 500, 'home projects'),
   ]);
 
   const reads: [string, { error: unknown }][] = [
@@ -325,9 +331,9 @@ export async function loadMoneyTimelineInput(
   // onto the NEXT week — the week a family is told its heavy money week "lands
   // the same week as". A row with an unparseable instant keeps its own value
   // rather than taking a whole forecast down for an overlay title.
-  const events: TimelineEvent[] = ((eventsQ.data ?? []) as TimelineEvent[]).map((e) => ({
+  const events: TimelineEvent[] = ((eventsQ.data ?? []) as (TimelineEvent & { all_day: boolean })[]).map((e) => ({
     title: e.title,
-    starts_at: dayKeyInZone(Date.parse(e.starts_at), tz) ?? e.starts_at,
+    starts_at: e.all_day ? e.starts_at.slice(0, 10) : dayKeyInZone(Date.parse(e.starts_at), tz) ?? e.starts_at,
   }));
   const plans = planCommitments({
     subscriptions: (subsQ.data ?? []) as SubscriptionRow[],

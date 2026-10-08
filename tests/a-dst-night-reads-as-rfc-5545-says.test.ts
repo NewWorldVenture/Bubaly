@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { instantForIcsLocalTime, instantForLocalTime } from '@/lib/time/zoned';
+import { instantForIcsLocalTime, instantForLocalTime, zonedLocalToInstant, asWallClockUtc, asWallClockIn, dayKeyIn, startOfLocalDay, startOfNextLocalDay, daysInMonth } from '@/lib/time/zoned';
 import { expandEventsInZone } from '@/lib/calendar/recurrence';
 import { parseIcsDate } from '@/lib/sync/ics';
 import { parseICSDate } from '@/lib/weekend/sources';
@@ -25,6 +25,34 @@ import { parseICS as parseMigrationIcs } from '@/lib/migrate/parse';
 
 const at = (y: number, mo: number, d: number, h: number, mi: number, tz: string) =>
   instantForIcsLocalTime(y, mo, d, h * 60 + mi, tz)?.toISOString();
+
+describe('shared UTC construction preserves Gregorian years below100', () => {
+  it.each([1, 4, 99, 100, 2026])('resolves explicit and routine clocks in year%i without century remapping', year => {
+    const expected = `${String(year).padStart(4, '0')}-12-30T09:30:00.000Z`;
+    expect(instantForIcsLocalTime(year, 12, 30, 570, 'UTC')?.toISOString()).toBe(expected);
+    expect(zonedLocalToInstant(year, 12, 30, 570, 'UTC')?.toISOString()).toBe(expected);
+    expect(instantForLocalTime(year, 12, 30, 570, 'UTC')?.toISOString()).toBe(expected);
+  });
+  it('preserves the wall-clock year and local day boundaries across0099→0100', () => {
+    const instant = new Date('0099-12-31T12:34:00.000Z');
+    expect(asWallClockUtc(instant, 'UTC').toISOString()).toBe('0099-12-31T12:34:00.000Z');
+    expect(startOfLocalDay(instant, 'UTC').toISOString()).toBe('0099-12-31T00:00:00.000Z');
+    expect(startOfNextLocalDay(instant, 'UTC').toISOString()).toBe('0100-01-01T00:00:00.000Z');
+  });
+  it('uses Gregorian leap rules for month lengths without mapping year0 to1900', () => {
+    expect(daysInMonth(0, 2)).toBe(29);
+    expect(daysInMonth(4, 2)).toBe(29);
+    expect(daysInMonth(100, 2)).toBe(28);
+    expect(daysInMonth(2000, 2)).toBe(29);
+  });
+  it.each([99, 2026])('preserves runtime-local wall fields and padded family date keys in year%i', year => {
+    const key = `${String(year).padStart(4, '0')}-12-30`;
+    const instant = new Date(`${key}T09:30:00.000Z`);
+    const wall = asWallClockIn(instant, 'UTC');
+    expect([wall.getFullYear(), wall.getMonth(), wall.getDate(), wall.getHours(), wall.getMinutes()]).toEqual([year, 11, 30, 9, 30]);
+    expect(dayKeyIn(instant, 'UTC')).toBe(key);
+  });
+});
 
 describe('instantForIcsLocalTime', () => {
   it.each([

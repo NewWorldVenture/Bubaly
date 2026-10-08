@@ -11,6 +11,10 @@ export interface SourceOccurrenceOptions {
 }
 export interface SourceOccurrence {
   id: string; uid: string; original: SourceTime; startsAt: string; endsAt: string;
+  /** Concrete moved/shifted source start, distinct from stable original identity. */
+  sourceStart: SourceTime;
+  /** Exclusive Gregorian DATE end before contextual instant projection. */
+  sourceEndDate: string | null;
   allDay: boolean; title: string | null; description: string | null; location: string | null;
   status: 'confirmed' | 'tentative';
 }
@@ -125,15 +129,20 @@ export function expandSourceOccurrences(value: unknown, options: SourceOccurrenc
   ruleHorizon += largestShift + 2 * DAY;
   const clock = createSourceClock({ timezones: doc.timezones, floatingTimezone: options.floatingTimezone, dateTimezone: options.dateTimezone, through: horizon, maxWork, consumeWork: charge });
   const instant = (time: SourceTime) => { const result = clock.resolve(time, 'explicit'); if (result === null) fail('explicit source time unresolved'); return result; };
+  const dateEndFor = (start: SourceTime, end: SourceEnd, reference: SourceTime): SourceTime | null => {
+    if (start.kind !== 'date') return null;
+    if (end.kind === 'default') return shifted(start, DAY);
+    if (end.kind === 'duration') return shifted(start, duration(end.value).days * DAY);
+    if (end.value.kind !== 'date' || reference.kind !== 'date') fail('DATE end requires Gregorian DATE reference');
+    return shifted(start, epoch(civil(end.value)) - epoch(civil(reference)));
+  };
   const endFor = (start: SourceTime, end: SourceEnd, reference: SourceTime): number => {
     charge();
     const at = instant(start);
-    if (end.kind === 'default') return start.kind === 'date' ? instant(shifted(start, DAY)) : at;
+    const dateEnd = dateEndFor(start, end, reference);
+    if (dateEnd) return instant(dateEnd);
+    if (end.kind === 'default') return at;
     if (end.kind === 'dtend') {
-      // RFC5545 3.3.4/3.6.1: DATE has a Gregorian exclusive end, no TZID.
-      // Derive its day span before projection into the requested date context;
-      // the 3.8.5.3 exact elapsed-duration rule applies to timed endpoints here.
-      if (start.kind === 'date' && end.value.kind === 'date' && reference.kind === 'date') return instant(shifted(start, epoch(civil(end.value)) - epoch(civil(reference))));
       return at + instant(end.value) - instant(reference);
     }
     const delta = duration(end.value);
@@ -195,7 +204,8 @@ export function expandSourceOccurrences(value: unknown, options: SourceOccurrenc
     if (!Number.isFinite(ends) || ends < begins) fail('invalid occurrence end');
     if (!(begins < to && (ends > from || ends === begins && begins >= from))) continue;
     occurrences.push({ id: JSON.stringify([doc.uid, original.kind, original.kind === 'zoned' ? original.tzid : null, original.value]), uid: doc.uid, original,
-      startsAt: new Date(begins).toISOString(), endsAt: new Date(ends).toISOString(), allDay: start.kind === 'date', title: component.title, description: component.description, location: component.location, status: component.status });
+      startsAt: new Date(begins).toISOString(), endsAt: new Date(ends).toISOString(), sourceStart: start, sourceEndDate: dateEndFor(start, end, reference)?.value ?? null,
+      allDay: start.kind === 'date', title: component.title, description: component.description, location: component.location, status: component.status });
   }
   occurrences.sort((a, b) => { charge(); return a.startsAt.localeCompare(b.startsAt) || a.id.localeCompare(b.id); });
   return { occurrences, count: occurrences.length };

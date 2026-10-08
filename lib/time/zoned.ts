@@ -20,6 +20,15 @@ export type LocalParts = { year: number; month: number; day: number; hour: numbe
 export const MINUTES_PER_DAY = 24 * 60;
 const DAY_MS = 24 * 60 * 60 * 1000;
 
+/** Date.UTC treats years00–99 as1900–1999. Preserve the supplied Gregorian
+ * year while retaining the same calendar overflow behavior for days/minutes. */
+function utcMilliseconds(year: number, monthIndex: number, day: number, hour = 0, minute = 0): number {
+  const date = new Date(0);
+  date.setUTCFullYear(year, monthIndex, day);
+  date.setUTCHours(hour, minute, 0, 0);
+  return date.getTime();
+}
+
 export function isValidTimezone(timezone: string): boolean {
   try {
     new Intl.DateTimeFormat('en-US', { timeZone: timezone });
@@ -74,7 +83,7 @@ export function dayKeyIn(instant: Date, timezone: string): string {
   try {
     const p = localPartsAt(instant, timezone);
     const pad = (n: number) => String(n).padStart(2, '0');
-    return `${p.year}-${pad(p.month)}-${pad(p.day)}`;
+    return `${String(p.year).padStart(4, '0')}-${pad(p.month)}-${pad(p.day)}`;
   } catch {
     return instant.toISOString().slice(0, 10);
   }
@@ -83,7 +92,7 @@ export function dayKeyIn(instant: Date, timezone: string): string {
 /** Zone offset in ms at a given instant (positive east of UTC). */
 function offsetMsAt(instant: Date, timezone: string): number {
   const p = localPartsAt(instant, timezone);
-  return Date.UTC(p.year, p.month - 1, p.day, p.hour, p.minute) - instant.getTime();
+  return utcMilliseconds(p.year, p.month - 1, p.day, p.hour, p.minute) - instant.getTime();
 }
 
 /**
@@ -102,7 +111,7 @@ export function zonedLocalToInstant(
 ): Date | null {
   const hour = Math.floor(minutes / 60);
   const minute = minutes % 60;
-  const naive = Date.UTC(year, month - 1, day, hour, minute);
+  const naive = utcMilliseconds(year, month - 1, day, hour, minute);
   let ts = naive - offsetMsAt(new Date(naive), timezone);
   ts = naive - offsetMsAt(new Date(ts), timezone);
   const check = localPartsAt(new Date(ts), timezone);
@@ -160,11 +169,11 @@ export function instantForLocalTime(
 export function instantForIcsLocalTime(
   year: number, month: number, day: number, minutes: number, timezone: string,
 ): Date | null {
-  const wall = Date.UTC(year, month - 1, day, Math.floor(minutes / 60), minutes % 60);
+  const wall = utcMilliseconds(year, month - 1, day, Math.floor(minutes / 60), minutes % 60);
   if (!Number.isFinite(wall)) return null;
   const reads = (instant: number) => {
     const p = localPartsAt(new Date(instant), timezone);
-    return Date.UTC(p.year, p.month - 1, p.day, p.hour, p.minute);
+    return utcMilliseconds(p.year, p.month - 1, p.day, p.hour, p.minute);
   };
   const offsets = new Set([-2, -1, 0, 1, 2].map((days) => offsetMsAt(new Date(wall + days * DAY_MS), timezone)));
   const candidates = [...offsets].map((offset) => wall - offset).sort((a, b) => a - b);
@@ -179,7 +188,7 @@ export function instantForIcsLocalTime(
 
 /** Days in a month, so "the 31st" means the 28th/29th/30th where that is the end. */
 export function daysInMonth(year: number, month: number): number {
-  return new Date(Date.UTC(year, month, 0)).getUTCDate();
+  return new Date(utcMilliseconds(year, month, 0)).getUTCDate();
 }
 
 /**
@@ -209,12 +218,15 @@ export function daysInMonth(year: number, month: number): number {
  */
 export function asWallClockUtc(instant: Date, timezone: string): Date {
   const p = localPartsAt(instant, timezone);
-  return new Date(Date.UTC(p.year, p.month - 1, p.day, p.hour, p.minute, 0, 0));
+  return new Date(utcMilliseconds(p.year, p.month - 1, p.day, p.hour, p.minute));
 }
 
 export function asWallClockIn(instant: Date, timezone: string): Date {
   const p = localPartsAt(instant, timezone);
-  return new Date(p.year, p.month - 1, p.day, p.hour, p.minute, 0, 0);
+  const date = new Date(0);
+  date.setFullYear(p.year, p.month - 1, p.day);
+  date.setHours(p.hour, p.minute, 0, 0);
+  return date;
 }
 
 /**
@@ -263,7 +275,7 @@ export function startOfLocalDay(instant: Date, timezone: string): Date {
 export function startOfNextLocalDay(instant: Date, timezone: string): Date {
   try {
     const p = localPartsAt(instant, timezone);
-    const nextDay = new Date(Date.UTC(p.year, p.month - 1, p.day + 1));
+    const nextDay = new Date(utcMilliseconds(p.year, p.month - 1, p.day + 1));
     const next = instantForLocalTime(
       nextDay.getUTCFullYear(), nextDay.getUTCMonth() + 1, nextDay.getUTCDate(), 0, timezone,
     );

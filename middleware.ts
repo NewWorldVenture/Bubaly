@@ -110,8 +110,9 @@ export async function middleware(req: NextRequest) {
   // under /api/ai calls `requireUserContext`, which fails closed without a
   // session. So a bearer request there must reach its handler: a 307 to the
   // HTML login page is not an answer a JSON client can act on. Only a
-  // well-formed bearer header opts out, and only under /api/ai.
-  const bearerApi = (path === '/api/ai' || path.startsWith('/api/ai/'))
+  // well-formed bearer header opts out under /api/ai or for the exact native
+  // calendar GET route; each handler still validates the caller identity.
+  const bearerApi = (path === '/api/ai' || path.startsWith('/api/ai/') || (path === '/api/calendar/occurrences' && req.method === 'GET'))
     && /^Bearer\s+\S+$/i.test((req.headers.get('authorization') ?? '').trim());
   const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL;
   const supabaseAnonKey = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY;

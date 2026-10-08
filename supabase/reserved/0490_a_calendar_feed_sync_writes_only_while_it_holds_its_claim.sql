@@ -315,3 +315,234 @@ comment on function public.calendar_feed_apply_sync(uuid,timestamptz,jsonb,text[
  'Held 0490 chunk: locks family then live feed claim; validated projection/source upserts and exact removals only, no settlement. Invoker RLS.';
 comment on function public.calendar_feed_publish_snapshot(uuid,timestamptz,jsonb,text[]) is
  'Held 0490 candidate, not called by app: bounded whole-feed publication, explicit removals and success settlement atomically. Absent UID history retained. Invoker RLS.';
+
+-- HELD source archive path. No application caller or occurrence reader is enabled.
+-- Exact JSON/raw spelling is retained; structural validation is NOT a proof of
+-- raw/typed agreement, RFC materialization, or chronological ETag ordering.
+create or replace function calendar_feed_private.archive_document(d jsonb, uid text)
+returns boolean language plpgsql immutable security invoker set search_path='' as $$
+declare depth_max integer; nodes bigint;
+begin
+ if uid is null or length(uid) not between 1 and 4096 or uid ~ '[[:cntrl:]]'
+   or d is null or octet_length(d::text)>1048576 then raise exception 'Archive document limit/identity' using errcode='22023'; end if;
+ with recursive tree(v,depth) as (
+   select d,0 union all select x.v,t.depth+1 from tree t cross join lateral (
+     select value v from jsonb_each(case when jsonb_typeof(t.v)='object' then t.v else '{}'::jsonb end)
+     union all select value from jsonb_array_elements(case when jsonb_typeof(t.v)='array' then t.v else '[]'::jsonb end)
+   ) x where t.depth<17
+ ) select max(depth),count(*) into depth_max,nodes from tree;
+ if depth_max>16 or nodes>50000 then raise exception 'Archive document complexity limit' using errcode='22023'; end if;
+ perform calendar_feed_private.validate_value(d,'document',uid);
+ return true;
+end $$;
+
+-- Compare only revisions of the SAME original component. NULL is unknown,
+-- not equality; a missing SEQUENCE cannot borrow another component's value.
+create or replace function calendar_feed_private.compare_revision(incoming jsonb, previous jsonb)
+returns integer language plpgsql immutable security invoker set search_path='' as $$
+declare a text; b text; field text; comparable boolean:=false;
+begin
+ foreach field in array array['sequence','dtstamp','lastModified'] loop
+   a:=incoming->>field; b:=previous->>field;
+   if (a is null) is distinct from (b is null) then return null; end if;
+   if a is not null then
+     comparable:=true;
+     if field='sequence' then
+       if a::integer<b::integer then return -1; elsif a::integer>b::integer then return 1; end if;
+     else
+       if a<b then return -1; elsif a>b then return 1; end if;
+     end if;
+   end if;
+ end loop;
+ return case when comparable then 0 else null end;
+end $$;
+
+create table if not exists public.calendar_feed_source_revisions (
+ id uuid primary key default gen_random_uuid(),
+ feed_id uuid not null references public.calendar_feeds(id) on delete cascade,
+ external_uid text not null,
+ document jsonb not null check(calendar_feed_private.archive_document(document,external_uid)),
+ received_at timestamptz not null default clock_timestamp(),
+ unique(feed_id,external_uid,id)
+);
+create table if not exists public.calendar_feed_source_groups (
+ feed_id uuid not null references public.calendar_feeds(id) on delete cascade,
+ external_uid text not null,
+ current_revision_id uuid not null,
+ master_cancellation_revision_id uuid,
+ materialization_state text not null check(materialization_state in ('ready','needs_revision_review')),
+ primary key(feed_id,external_uid),
+ foreign key(feed_id,external_uid,current_revision_id) references public.calendar_feed_source_revisions(feed_id,external_uid,id) deferrable initially deferred,
+ foreign key(feed_id,external_uid,master_cancellation_revision_id) references public.calendar_feed_source_revisions(feed_id,external_uid,id) deferrable initially deferred
+);
+create table if not exists public.calendar_feed_source_component_watermarks (
+ feed_id uuid not null,
+ external_uid text not null,
+ component_key text not null,
+ version_component jsonb not null,
+ version_revision_id uuid not null,
+ cancelled_component jsonb,
+ cancellation_revision_id uuid,
+ primary key(feed_id,external_uid,component_key),
+ foreign key(feed_id,external_uid) references public.calendar_feed_source_groups(feed_id,external_uid) on delete cascade,
+ foreign key(feed_id,external_uid,version_revision_id) references public.calendar_feed_source_revisions(feed_id,external_uid,id) deferrable initially deferred,
+ foreign key(feed_id,external_uid,cancellation_revision_id) references public.calendar_feed_source_revisions(feed_id,external_uid,id) deferrable initially deferred,
+ check((cancelled_component is null)=(cancellation_revision_id is null))
+);
+
+-- A security-definer endpoint must never bind to an untrusted pre-existing
+-- relation/helper or silently accept a differently shaped archive table.
+do $$ declare t text; expected jsonb; actual jsonb; begin
+ if current_user<>'postgres' then raise exception 'Archive candidate requires trusted postgres migration owner'; end if;
+ foreach t in array array['calendar_feed_source_revisions','calendar_feed_source_groups','calendar_feed_source_component_watermarks'] loop
+   expected:=case t
+     when 'calendar_feed_source_revisions' then '{"id":"uuid!","feed_id":"uuid!","external_uid":"text!","document":"jsonb!","received_at":"timestamp with time zone!"}'::jsonb
+     when 'calendar_feed_source_groups' then '{"feed_id":"uuid!","external_uid":"text!","current_revision_id":"uuid!","master_cancellation_revision_id":"uuid?","materialization_state":"text!"}'::jsonb
+     else '{"feed_id":"uuid!","external_uid":"text!","component_key":"text!","version_component":"jsonb!","version_revision_id":"uuid!","cancelled_component":"jsonb?","cancellation_revision_id":"uuid?"}'::jsonb end;
+   select jsonb_object_agg(attname,format_type(atttypid,atttypmod)||case when attnotnull then '!' else '?' end) into actual
+     from pg_attribute where attrelid=('public.'||t)::regclass and attnum>0 and not attisdropped;
+   if actual is distinct from expected or not exists(select 1 from pg_class where oid=('public.'||t)::regclass and relowner='postgres'::regrole and relkind='r') then
+     raise exception 'Incompatible or untrusted source archive table: %',t;
+   end if;
+ end loop;
+ if exists(select 1 from pg_proc p join pg_namespace n on n.oid=p.pronamespace where n.nspname='calendar_feed_private' and p.proowner<>'postgres'::regrole)
+   or has_schema_privilege('authenticated','calendar_feed_private','CREATE') or has_schema_privilege('service_role','calendar_feed_private','CREATE')
+ then raise exception 'Archive helpers require trusted ownership and schema'; end if;
+end $$;
+
+create or replace function calendar_feed_private.immutable_archive()
+returns trigger language plpgsql security invoker set search_path='' as $$
+begin raise exception 'Source archive revisions are immutable' using errcode='42501'; end $$;
+drop trigger if exists calendar_feed_source_revisions_immutable on public.calendar_feed_source_revisions;
+create trigger calendar_feed_source_revisions_immutable before update on public.calendar_feed_source_revisions
+ for each row execute function calendar_feed_private.immutable_archive();
+
+-- Existing feed UPDATE policy permits members of two families to reparent a
+-- legacy feed. Once source history exists, that must not transfer private
+-- archive visibility to another family. The feed row lock serializes this
+-- trigger with source publication, including service-role callers.
+create or replace function calendar_feed_private.prevent_archive_reparent()
+returns trigger language plpgsql security definer set search_path='' as $$
+begin
+ if new.family_id is distinct from old.family_id and exists(select 1 from public.calendar_feed_source_revisions where feed_id=old.id)
+ then raise exception 'Archived calendar feed cannot change family' using errcode='42501'; end if;
+ return new;
+end $$;
+drop trigger if exists calendar_feed_archive_family_immutable on public.calendar_feeds;
+create trigger calendar_feed_archive_family_immutable before update of family_id on public.calendar_feeds
+ for each row execute function calendar_feed_private.prevent_archive_reparent();
+
+do $$ declare t text; r text; begin
+ foreach t in array array['calendar_feed_source_revisions','calendar_feed_source_groups','calendar_feed_source_component_watermarks'] loop
+   execute format('alter table public.%I enable row level security',t);
+   execute format('revoke all on public.%I from public,anon,authenticated,service_role',t);
+   execute format('grant select on public.%I to authenticated,service_role',t);
+   execute format('drop policy if exists source_current_members_read on public.%I',t);
+   execute format('create policy source_current_members_read on public.%I for select to authenticated using (exists(select 1 from public.calendar_feeds f where f.id=feed_id and public.is_family_member(f.family_id)))',t);
+   foreach r in array array['authenticated','service_role'] loop
+     if has_table_privilege(r,'public.'||t,'INSERT,UPDATE,DELETE,TRUNCATE,REFERENCES,TRIGGER') then
+       raise exception 'Archive inherited write grants must be removed: %.%',r,t;
+     end if;
+   end loop;
+ end loop;
+end $$;
+
+create or replace function public.calendar_feed_archive_sources(p_feed_id uuid,p_fence timestamptz,p_documents jsonb)
+returns jsonb language plpgsql security definer set search_path='' as $$
+declare invoker text:=current_setting('role',true); actor uuid:=auth.uid(); family uuid; locked_family uuid;
+ d jsonb; c jsonb; uid text; key text; revision_id uuid; current_id uuid; old_document jsonb;
+ cancel_id uuid; cancel_master jsonb; w public.calendar_feed_source_component_watermarks%rowtype;
+ ordering integer; cancel_order integer; review boolean; any_review boolean:=false; reused boolean;
+ result jsonb:='[]'; group_state text; known boolean;
+begin
+ -- SQL role is assigned by the trusted authenticator, not the spoofable JWT
+ -- role claim. Service execution is an explicit server-only policy.
+ if invoker not in ('authenticated','service_role') or invoker is null then raise exception 'Archive SQL role denied' using errcode='42501'; end if;
+ select family_id into family from public.calendar_feeds where id=p_feed_id;
+ if not found then return jsonb_build_object('outcome','lost','groups','[]'::jsonb); end if;
+ if invoker='authenticated' and (actor is null or not exists(select 1 from public.family_members fm where fm.family_id=family and fm.user_id=actor and fm.is_active))
+ then raise exception 'Archive active membership required' using errcode='42501'; end if;
+ perform id from public.families where id=family for key share;
+ if not found then return jsonb_build_object('outcome','lost','groups','[]'::jsonb); end if;
+ if invoker='authenticated' then
+   perform id from public.family_members fm where fm.family_id=family and fm.user_id=actor and fm.is_active for share;
+   if not found then raise exception 'Archive membership changed' using errcode='42501'; end if;
+ end if;
+ select family_id into locked_family from public.calendar_feeds where id=p_feed_id and last_status='syncing' and updated_at=p_fence for update;
+ if not found then return jsonb_build_object('outcome','lost','groups','[]'::jsonb); end if;
+ if locked_family is distinct from family then raise exception 'Archive family changed' using errcode='42501'; end if;
+ -- Definer execution must not retire or count corrupt foreign-family rows.
+ -- Lock existing rows against concurrent relabeling; the feed FOR UPDATE lock
+ -- also fences new inserts through their feed FK's key-share lock.
+ perform id from public.calendar_events where feed_id=p_feed_id order by id for update;
+ if exists(select 1 from public.calendar_events where feed_id=p_feed_id and family_id is distinct from family)
+ then raise exception 'Archive feed contains foreign-family references' using errcode='42501'; end if;
+ if jsonb_typeof(p_documents) is distinct from 'array' then raise exception 'Archive array required' using errcode='22023'; end if;
+ if jsonb_array_length(p_documents)>2000 or octet_length(p_documents::text)>8388608 then raise exception 'Archive publication limit' using errcode='22023'; end if;
+ if exists(select 1 from jsonb_array_elements(p_documents) x group by x->>'uid' having count(*)>1) then raise exception 'Duplicate archive UID' using errcode='22023'; end if;
+ for d in select value from jsonb_array_elements(p_documents) order by value->>'uid' loop
+   uid:=d->>'uid'; perform calendar_feed_private.archive_document(d,uid);
+   current_id:=null; old_document:=null; cancel_id:=null; cancel_master:=null; review:=false;
+   select g.current_revision_id,r.document,g.master_cancellation_revision_id into current_id,old_document,cancel_id
+     from public.calendar_feed_source_groups g join public.calendar_feed_source_revisions r on r.id=g.current_revision_id
+     where g.feed_id=p_feed_id and g.external_uid=uid;
+   if cancel_id is not null then select document->'master' into cancel_master from public.calendar_feed_source_revisions where id=cancel_id; end if;
+   reused:=old_document is not distinct from d;
+   if reused then revision_id:=current_id;
+   else insert into public.calendar_feed_source_revisions(feed_id,external_uid,document) values(p_feed_id,uid,d) returning id into revision_id; end if;
+   insert into public.calendar_feed_source_groups(feed_id,external_uid,current_revision_id,materialization_state)
+     values(p_feed_id,uid,revision_id,'ready') on conflict(feed_id,external_uid) do nothing;
+   for c in select value from jsonb_array_elements(d->'overrides') union all select d->'master' where d->'master'<>'null'::jsonb loop
+     key:=case when c ? 'recurrenceId' then jsonb_build_array('override',c->'recurrenceId'->>'kind',c->'recurrenceId'->>'tzid',c->'recurrenceId'->>'value')::text else 'master' end;
+     select * into w from public.calendar_feed_source_component_watermarks m where m.feed_id=p_feed_id and m.external_uid=uid and m.component_key=key;
+     ordering:=null; known:=false;
+     if found then
+       ordering:=calendar_feed_private.compare_revision(c->'revision',w.version_component->'revision');
+       known:=exists(select 1 from jsonb_each(w.version_component->'revision') v where v.key<>'etag' and v.value<>'null'::jsonb);
+       if ordering=-1 then raise exception 'Known older archive component: % %',uid,key using errcode='22023'; end if;
+       if known and ordering is null then review:=true; end if;
+       if ordering=0 and c is distinct from w.version_component then review:=true; end if;
+       if w.cancellation_revision_id is not null and c->>'status'<>'cancelled' then
+         cancel_order:=calendar_feed_private.compare_revision(c->'revision',w.cancelled_component->'revision');
+         if cancel_order is distinct from 1 then review:=true; end if;
+       end if;
+     else
+       if (select count(*) from public.calendar_feed_source_component_watermarks m where m.feed_id=p_feed_id and m.external_uid=uid)>=20000 then raise exception 'Archive watermark identity limit; manual revision review required' using errcode='22023'; end if;
+     end if;
+     insert into public.calendar_feed_source_component_watermarks(feed_id,external_uid,component_key,version_component,version_revision_id,cancelled_component,cancellation_revision_id)
+       values(p_feed_id,uid,key,c,revision_id,case when c->>'status'='cancelled' then c end,case when c->>'status'='cancelled' then revision_id end)
+       on conflict(feed_id,external_uid,component_key) do update set
+         version_component=case when ordering=1 or not known then c else calendar_feed_source_component_watermarks.version_component end,
+         version_revision_id=case when ordering=1 or not known then revision_id else calendar_feed_source_component_watermarks.version_revision_id end,
+         cancelled_component=case when c->>'status'='cancelled' then c when cancel_order=1 then null else calendar_feed_source_component_watermarks.cancelled_component end,
+         cancellation_revision_id=case when c->>'status'='cancelled' then revision_id when cancel_order=1 then null else calendar_feed_source_component_watermarks.cancellation_revision_id end;
+     cancel_order:=null;
+   end loop;
+   if d->'master'->>'status'='cancelled' then cancel_id:=revision_id; cancel_master:=d->'master';
+   elsif cancel_id is not null and d->'master'<>'null'::jsonb and calendar_feed_private.compare_revision(d->'master'->'revision',cancel_master->'revision')=1 then cancel_id:=null; end if;
+   if cancel_id is not null and (d->'master'->>'status' in ('confirmed','tentative') or exists(select 1 from jsonb_array_elements(d->'overrides') x where x->>'status'<>'cancelled')) then review:=true; end if;
+   -- An omitted previously versioned component cannot be inferred cancelled or
+   -- reactivated. Its watermark survives; later older revisions still refuse.
+   if exists(select 1 from public.calendar_feed_source_component_watermarks m where m.feed_id=p_feed_id and m.external_uid=uid and m.component_key='master'
+     and d->'master'='null'::jsonb and exists(select 1 from jsonb_each(m.version_component->'revision') v where v.key<>'etag' and v.value<>'null'::jsonb)) then review:=true; end if;
+   group_state:=case when review then 'needs_revision_review' else 'ready' end;
+   update public.calendar_feed_source_groups set current_revision_id=revision_id,master_cancellation_revision_id=cancel_id,materialization_state=group_state where feed_id=p_feed_id and external_uid=uid;
+   -- Source takeover retires only this explicitly supplied UID's legacy rows.
+   -- No absent UID is deleted, and no sentinel/projection is invented.
+   delete from public.calendar_events where feed_id=p_feed_id and family_id=family and (external_uid=uid or left(external_uid,length(uid)+1)=uid||chr(31));
+   any_review:=any_review or review;
+   result:=result||jsonb_build_array(jsonb_build_object('uid',uid,'revision_id',revision_id,'state',group_state,'reused',reused));
+ end loop;
+ any_review:=any_review or exists(select 1 from public.calendar_feed_source_groups where feed_id=p_feed_id and materialization_state='needs_revision_review');
+ update public.calendar_feeds set last_status=case when any_review then 'revision_review' else 'ok' end,
+   last_error=case when any_review then 'Source revision ordering requires review; materialization is held' else null end,
+   last_synced_at=clock_timestamp(),event_count=(select count(*) from public.calendar_events where feed_id=p_feed_id)
+   where id=p_feed_id and last_status='syncing' and updated_at=p_fence;
+ if not found then raise exception 'Archive settlement refused' using errcode='42501'; end if;
+ return jsonb_build_object('outcome',case when any_review then 'needs_revision_review' else 'applied' end,'groups',result);
+end $$;
+revoke all on function public.calendar_feed_archive_sources(uuid,timestamptz,jsonb) from public,anon;
+grant execute on function public.calendar_feed_archive_sources(uuid,timestamptz,jsonb) to authenticated,service_role;
+revoke all on function calendar_feed_private.archive_document(jsonb,text),calendar_feed_private.compare_revision(jsonb,jsonb),calendar_feed_private.immutable_archive(),calendar_feed_private.prevent_archive_reparent() from public,anon,authenticated,service_role;
+comment on function public.calendar_feed_archive_sources(uuid,timestamptz,jsonb) is
+ 'HELD 0490, source-only, uncalled. Current-membership immutable archive, same-component persistent revision watermarks, exact feed fence and explicit review settlement. Unversioned/incomparable source changes are NOT proved fresh; ready is archive ordering only, NOT qualified occurrence materialization. No raw/typed agreement guarantee.';

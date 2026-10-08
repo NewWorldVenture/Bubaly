@@ -44,7 +44,8 @@ const row=(uid,extra={})=>({external_uid:uid,title:'New',starts_at:'2026-10-08T0
 const call=(r,rem=[],fn='calendar_feed_publish_snapshot',f=feed,s=stamp)=>`select public.${fn}(${q(f)},${q(s)},${rows(r)},array[${rem.map(q).join(',')}]::text[]);`;
 const auth=text=>`set role authenticated; set request.jwt.claim.sub=${q(user)}; ${text}`;
 let checks=0,started=false,created=false;
-function check(label,work){work();checks++;console.log('PASS '+label);}
+const checkLabels=[];
+function check(label,work){work();checks++;checkLabels.push(label);console.log('PASS '+label);}
 function failure(text,state='22023'){
  let err;try{sql(text);}catch(e){err=e;}
  assert(err && err.status!==0 && !err.code,'Expected SQL refusal, not success/timeout.');
@@ -58,7 +59,11 @@ function seed(){
  insert into calendar_feeds(id,family_id,name,url,last_status,updated_at) values(${q(feed)},${q(family)},'A','https://fixture.invalid/a','syncing',${q(stamp)}),(${q(other)},${q(otherFamily)},'B','https://fixture.invalid/b','syncing',${q(stamp)});
  insert into calendar_events(family_id,feed_id,external_uid,title,starts_at,description) values(${q(family)},${q(feed)},'old','Old','2026-10-08T09:00Z','Keep'),(${q(family)},${q(feed)},'history','History','2026-10-08T09:00Z',null),(${q(otherFamily)},${q(other)},'old','Other','2026-10-08T09:00Z',null);`);
 }
-const state=()=>sql("select jsonb_build_object('events',(select jsonb_agg(to_jsonb(e) order by id) from calendar_events e),'feeds',(select jsonb_agg(to_jsonb(f) order by id) from calendar_feeds f));");
+const state=()=>sql("select md5(jsonb_build_object('events',(select jsonb_agg(to_jsonb(e) order by id) from calendar_events e),'feeds',(select jsonb_agg(to_jsonb(f) order by id) from calendar_feeds f),'revisions',(select jsonb_agg(to_jsonb(r) order by id) from calendar_feed_source_revisions r),'groups',(select jsonb_agg(to_jsonb(g) order by feed_id,external_uid) from calendar_feed_source_groups g),'watermarks',(select jsonb_agg(to_jsonb(w) order by feed_id,external_uid,component_key) from calendar_feed_source_component_watermarks w))::text);");
+const archive=(docs,f=feed,s=stamp)=>`select public.calendar_feed_archive_sources(${q(f)},${q(s)},${rows(docs)});`;
+const arm=()=>{sql(`update calendar_feeds set last_status='syncing' where id=${q(feed)};`);return sql(`select updated_at from calendar_feeds where id=${q(feed)};`);};
+const versioned=(sequence,status='confirmed')=>{const d=document('old');d.master={...d.master,status,revision:{...revision,sequence}};d.revision=d.master.revision;if(status==='cancelled')Object.assign(d.master,{dtstart:null,end:null,rrule:null});return d;};
+const detached=sequence=>{const d=document('old');return {...d,master:null,revision:{sequence:null,dtstamp:null,lastModified:null,etag:null},overrides:[{...component('old'),revision:{...revision,sequence},recurrenceId:{kind:'utc',value:'20261008T090000Z'},range:'none'}]};};
 const children=new Set();
 function session(){
  const app='feed-fixture-'+randomUUID();const child=spawn(join(bin,'psql'+suffix),base,{cwd:root,env:{...childEnv,PGAPPNAME:app},stdio:['pipe','pipe','pipe']});
@@ -172,6 +177,138 @@ try{
   seed();const before=state(),ddl=readFileSync(join(root,migration),'utf8');
   for(const change of ["alter table calendar_events alter column source_recurrence type text using source_recurrence::text;","truncate calendar_events; alter table calendar_events alter column source_recurrence set not null;","alter table calendar_events alter column source_recurrence set default '{}'::jsonb;"]){failure('begin; '+change+ddl,'P0001');assert.equal(state(),before);}
  });
+ check('archive accepts live cancellation and detached-only groups without sentinel rows',()=>{
+  seed();const a=JSON.parse(sql(auth(archive([versioned(1)]))));assert.equal(a.outcome,'applied');
+  assert.equal(sql(`select string_agg(external_uid,',' order by external_uid) from calendar_events where feed_id=${q(feed)};`),'history');
+  assert.equal(sql(`select event_count from calendar_feeds where id=${q(feed)};`),'1');
+  assert.equal(JSON.parse(sql(auth(archive([versioned(2,'cancelled')],feed,arm())))).outcome,'applied');
+  const d=detached(900);const out=JSON.parse(sql(auth(archive([d],feed,arm()))));assert.equal(out.outcome,'needs_revision_review');
+  assert.equal(out.groups[0].state,'needs_revision_review');
+  assert.equal(sql(`select document->'master' from calendar_feed_source_revisions where id=${q(out.groups[0].revision_id)};`),'null');
+  assert.equal(sql(`select count(*) from calendar_feed_source_revisions where feed_id=${q(feed)};`),'3');
+  assert.equal(sql(`select last_status from calendar_feeds where id=${q(feed)};`),'revision_review');
+  assert.equal(sql(`select master_cancellation_revision_id is not null from calendar_feed_source_groups where feed_id=${q(feed)};`),'t');
+ });
+ check('comparable newer live master clears cancellation; identical current archive reuses revision',()=>{
+  seed();sql(auth(archive([versioned(2,'cancelled')])));
+  const d=versioned(3);const out=JSON.parse(sql(auth(archive([d],feed,arm()))));assert.equal(out.outcome,'applied');
+  assert.equal(sql(`select master_cancellation_revision_id is null from calendar_feed_source_groups where feed_id=${q(feed)};`),'t');
+  const again=JSON.parse(sql(auth(archive([d],feed,arm()))));assert.equal(again.groups[0].reused,true);assert.equal(again.groups[0].revision_id,out.groups[0].revision_id);
+  assert.equal(sql(`select count(*) from calendar_feed_source_revisions;`),'2');
+ });
+ check('persistent live watermark refuses older master after unversioned and detached replacements',()=>{
+  for(const replacement of [{...versioned(5),master:{...versioned(5).master,revision:{sequence:null,dtstamp:null,lastModified:null,etag:'opaque-new'}}},detached(999)]){
+   seed();sql(auth(archive([versioned(5)])));assert.equal(JSON.parse(sql(auth(archive([replacement],feed,arm())))).outcome,'needs_revision_review');
+   const fence=arm(),before=state();failure(auth(archive([versioned(4)],feed,fence)));assert.equal(state(),before);
+   assert.equal(sql(`select version_component->'revision'->>'sequence' from calendar_feed_source_component_watermarks where component_key='master';`),'5');
+  }
+ });
+ check('cancelled master and detached component revisions never share ordering',()=>{
+  seed();sql(auth(archive([versioned(5,'cancelled')])));const d=detached(1000);
+  assert.equal(JSON.parse(sql(auth(archive([d],feed,arm())))).outcome,'needs_revision_review');
+  const f=arm(),before=state();failure(auth(archive([versioned(4)],feed,f)));assert.equal(state(),before);
+ });
+ check('detached cancellation watermark survives omitted original identities',()=>{
+  seed();const d=detached(5);d.overrides[0].status='cancelled';sql(auth(archive([d])));
+  const another=detached(9);another.overrides[0].recurrenceId.value='20261015T090000Z';sql(auth(archive([another],feed,arm())));
+  const old=detached(4),f=arm(),before=state();failure(auth(archive([old],feed,f)));assert.equal(state(),before);
+ });
+ check('source revision stamps order same-component ties; opaque ETags never order',()=>{
+  seed();const d=versioned(5);d.master.revision.dtstamp='20261008T100000Z';sql(auth(archive([d])));
+  let f=arm(),before=state();failure(auth(archive([versioned(5)],feed,f)));assert.equal(state(),before);
+  const unknown=versioned(5);unknown.master.revision={sequence:null,dtstamp:null,lastModified:null,etag:'zzzz'};
+  assert.equal(JSON.parse(sql(auth(archive([unknown],feed,f)))).outcome,'needs_revision_review');
+  f=arm();before=state();failure(auth(archive([versioned(4)],feed,f)));assert.equal(state(),before);
+ });
+ check('archive validates late rows atomically and stale transport fences do not publish',()=>{
+  seed();const before=state();failure(auth(archive([versioned(1),{...document('z-late'),master:null,overrides:[]}])));assert.equal(state(),before);
+  assert.equal(JSON.parse(sql(auth(archive([versioned(1)],feed,'2020-01-01T00:00Z')))).outcome,'lost');assert.equal(state(),before);
+ });
+ check('archive refuses corrupt foreign-family feed references for members and service',()=>{
+  seed();sql(`update calendar_events set family_id=${q(otherFamily)} where feed_id=${q(feed)} and external_uid='old';`);const before=state();
+  failure(auth(archive([versioned(1)])),'42501');assert.equal(state(),before);
+  failure(`set role service_role; ${archive([versioned(1)])}`,'42501');assert.equal(state(),before);
+  assert.equal(sql(`select count(*) from calendar_events where feed_id=${q(feed)} and family_id=${q(otherFamily)};`),'1');
+ });
+ check('bounded historical component identities refuse overflow without forgetting watermarks',()=>{
+  seed();sql(auth(archive([versioned(5)])));
+  sql(`insert into calendar_feed_source_component_watermarks(feed_id,external_uid,component_key,version_component,version_revision_id)
+    select feed_id,external_uid,'fixture-'||n,document->'master',id from calendar_feed_source_revisions cross join generate_series(1,19999) n;`);
+  const f=arm(),before=state();failure(auth(archive([detached(6)],feed,f)));assert.equal(state(),before);
+  assert.equal(sql('select count(*) from calendar_feed_source_component_watermarks;'),'20000');
+ });
+ check('archive actual SQL role membership and explicit service policy are independent',()=>{
+  seed();const before=state();failure(archive([versioned(1)]),'42501');assert.equal(state(),before);
+  sql(`update family_members set is_active=false where family_id=${q(family)};`);
+  failure(auth(`set request.jwt.claim.role='service_role'; ${archive([versioned(1)])}`),'42501');
+  failure("set session authorization authenticated; set role authenticated; set role service_role;",'42501');
+  failure(`set role authenticated; set request.jwt.claim.sub=''; ${archive([versioned(1)])}`,'42501');
+  assert.equal(JSON.parse(sql(`set role service_role; ${archive([versioned(1)])}`)).outcome,'applied');
+ });
+ check('archive tables have read-only grants and immutable revisions',()=>{
+  for(const table of ['calendar_feed_source_revisions','calendar_feed_source_groups','calendar_feed_source_component_watermarks'])for(const role of ['authenticated','service_role']){
+   assert.equal(sql(`select has_table_privilege(${q(role)},${q(table)},'INSERT,UPDATE,DELETE,TRUNCATE');`),'f');
+  }
+  failure(auth('delete from calendar_feed_source_revisions;'),'42501');
+  failure('update calendar_feed_source_revisions set document=document;','42501');
+  assert.equal(sql("select has_function_privilege('anon','public.calendar_feed_archive_sources(uuid,timestamptz,jsonb)','EXECUTE');"),'f');
+ });
+ check('leavers lose immutable archive group and watermark reads immediately',()=>{
+  seed();sql(auth(archive([versioned(1)])));
+  assert.equal(sql(auth('select count(*) from calendar_feed_source_revisions;')),'1');
+  sql(`update family_members set is_active=false where family_id=${q(family)};`);
+  for(const table of ['calendar_feed_source_revisions','calendar_feed_source_groups','calendar_feed_source_component_watermarks'])assert.equal(sql(auth(`select count(*) from ${table};`)),'0');
+ });
+ check('dual-family member and service cannot transfer archived history by reparenting',()=>{
+  seed();sql(auth(archive([versioned(1)])));const before=state();
+  failure(auth(`update calendar_feeds set family_id=${q(otherFamily)} where id=${q(feed)};`),'42501');assert.equal(state(),before);
+  failure(`set role service_role; update calendar_feeds set family_id=${q(otherFamily)} where id=${q(feed)};`,'42501');assert.equal(state(),before);
+  const reader='66666666-6666-4666-8666-666666666666';sql(`insert into auth.users(id,email) values(${q(reader)},'b-only@example.invalid'); insert into family_members(family_id,user_id,display_name,role) values(${q(otherFamily)},${q(reader)},'B-only','parent');`);
+  for(const table of ['calendar_feed_source_revisions','calendar_feed_source_groups','calendar_feed_source_component_watermarks'])assert.equal(sql(`set role authenticated; set request.jwt.claim.sub=${q(reader)}; select count(*) from ${table};`),'0');
+  sql(auth(`update calendar_feeds set name='Allowed ordinary edit' where id=${q(feed)};`));
+  assert.equal(sql(`select name from calendar_feeds where id=${q(feed)};`),'Allowed ordinary edit');
+ });
+ check('archive composite pointers refuse another feed or UID revision',()=>{
+  seed();sql(auth(archive([versioned(1)])));sql(auth(archive([document('other-uid')],other)));
+  const id=sql(`select id from calendar_feed_source_revisions where feed_id=${q(other)};`),before=state();
+  failure(`update calendar_feed_source_groups set current_revision_id=${q(id)} where feed_id=${q(feed)};`,'23503');assert.equal(state(),before);
+  const another=document('second');sql(auth(archive([another],feed,arm())));const wrong=sql("select id from calendar_feed_source_revisions where external_uid='second';");
+  failure(`update calendar_feed_source_groups set master_cancellation_revision_id=${q(wrong)} where external_uid='old';`,'23503');
+ });
+ check('archive DDL replay preserves current pointer and immutable history',()=>{const before=state();file(migration);assert.equal(state(),before);});
+ seed();
+ sql("create function public.fixture_archive_pause() returns trigger language plpgsql as $$begin if new.external_uid='z-pause' then perform pg_sleep(20); end if; return new; end$$;create trigger fixture_archive_pause after insert on calendar_feed_source_revisions for each row execute function public.fixture_archive_pause();");
+ const archiveCancel=session(),archiveBefore=state();const cancelledArchive=archiveCancel.send(auth(archive([versioned(1),document('z-pause')]))).then(()=>{throw new Error('Expected archive cancellation');},()=>{});
+ await waitFor(archiveCancel.app,"wait_event='PgSleep'");sql(`select pg_cancel_backend(pid) from pg_stat_activity where application_name=${q(archiveCancel.app)};`);
+ await cancelledArchive;archiveCancel.end();const archiveCancelResult=await archiveCancel.done;
+ check('cancelled archive statement rolls back earlier revisions pointers retirement and settlement',()=>{assert.match(archiveCancelResult.err,/57014/);assert.equal(state(),archiveBefore);});
+ sql('drop trigger fixture_archive_pause on calendar_feed_source_revisions;drop function public.fixture_archive_pause();');
+ seed();const archiveOwner=session();await archiveOwner.send('begin; '+auth(archive([versioned(1)])));
+ const moving=session(),movingWork=moving.send(auth(`update calendar_feeds set family_id=${q(otherFamily)} where id=${q(feed)};`)).then(()=>{throw new Error('Expected archive transfer refusal');},()=>{});
+ await waitFor(moving.app,"wait_event_type='Lock'");await archiveOwner.send('commit;');archiveOwner.end();await archiveOwner.done;await movingWork;moving.end();const movingResult=await moving.done;
+ check('reparent waiting behind archive commit refuses private history transfer',()=>{assert.match(movingResult.err,/42501/);assert.equal(sql(`select family_id from calendar_feeds where id=${q(feed)};`),family);assert.equal(sql('select count(*) from calendar_feed_source_revisions;'),'1');});
+ seed();const mover=session();await mover.send('begin; '+auth(`update calendar_feeds set family_id=${q(otherFamily)} where id=${q(feed)};`));
+ const afterMove=session(),afterMoveWork=afterMove.send(auth(archive([versioned(1)])));await waitFor(afterMove.app,"wait_event_type='Lock'");
+ await mover.send('commit;');mover.end();await mover.done;await afterMoveWork;afterMove.end();const afterMoveResult=await afterMove.done;
+ check('reparent before archive invalidates original feed claim without moving history',()=>{assert.match(afterMoveResult.out,/lost/);assert.equal(sql('select count(*) from calendar_feed_source_revisions;'),'0');});
+ seed();
+ const archiveWriter=session();await archiveWriter.send('begin; '+auth(archive([versioned(1)])));
+ check('archive readers see no partial revisions pointers or settlement before commit',()=>{
+  assert.equal(sql('select count(*) from calendar_feed_source_revisions;'),'0');assert.equal(sql('select count(*) from calendar_feed_source_groups;'),'0');
+  assert.equal(sql(`select last_status from calendar_feeds where id=${q(feed)};`),'syncing');
+ });
+ const leave=session(),leaving=leave.send(`update family_members set is_active=false where family_id=${q(family)} and user_id=${q(user)};`);
+ await waitFor(leave.app,"wait_event_type='Lock'");await archiveWriter.send('commit;');archiveWriter.end();await archiveWriter.done;await leaving;leave.end();await leave.done;
+ check('membership deactivation waits for authorized archive then revokes history access',()=>assert.equal(sql(auth('select count(*) from calendar_feed_source_revisions;')),'0'));
+ seed();const deleteFirst=session();await deleteFirst.send(`begin; select id from families where id=${q(family)} for update;`);
+ const archiveBlocked=session(),archiveWaiting=archiveBlocked.send(auth(archive([versioned(1)])));
+ await waitFor(archiveBlocked.app,"wait_event_type='Lock'");await deleteFirst.send(`delete from families where id=${q(family)};commit;`);deleteFirst.end();await deleteFirst.done;
+ await archiveWaiting;archiveBlocked.end();const archiveLost=await archiveBlocked.done;
+ check('archive parent deletion before publication returns lost without sentinel or history',()=>{assert.match(archiveLost.out,/lost/);assert.equal(sql('select count(*) from calendar_feed_source_revisions;'),'0');});
+ seed();const archiveFirst=session();await archiveFirst.send('begin; '+auth(archive([versioned(1)])));
+ const afterArchive=session(),afterDelete=afterArchive.send(`delete from families where id=${q(family)};`);await waitFor(afterArchive.app,"wait_event_type='Lock'");
+ await archiveFirst.send('commit;');archiveFirst.end();await archiveFirst.done;await afterDelete;afterArchive.end();const afterResult=await afterArchive.done;
+ check('archive parent fence permits cascading family deletion after publication',()=>{assert.equal(afterResult.code,0);assert.equal(sql('select count(*) from calendar_feed_source_revisions;'),'0');assert.equal(sql('select count(*) from calendar_feed_source_groups;'),'0');assert.equal(sql('select count(*) from calendar_feed_source_component_watermarks;'),'0');});
  seed();
  const writer=session();
  await writer.send('begin; '+auth(call([row('old'),row('new')],['history'])));
@@ -212,7 +349,7 @@ try{
  await inserting.send('commit;');inserting.end();await inserting.done;
  await legacyWork;legacy.end();const legacyResult=await legacy.done;
  check('conflict-time source guard rolls back prior writes and removals',()=>{assert.match(legacyResult.err,/22023:.*Source metadata write refused at conflict/);assert.equal(sql(`select count(*) from calendar_events where feed_id=${q(feed)} and external_uid='first';`),'0');assert.equal(sql(`select source_recurrence->>'uid' from calendar_events where feed_id=${q(feed)} and external_uid='raced';`),'raced');assert.equal(sql(`select title from calendar_events where feed_id=${q(feed)} and external_uid='history';`),'History');assert.equal(sql(`select last_status from calendar_feeds where id=${q(feed)};`),'syncing');});
- const receipt={migration,migrationHash,checks,postgres:identity.split(/\r?\n/)[2],port,work,synthetic:true,applicationCallsNewEndpoint:false,qualifiedSourceEngine:false,directTableWritesGuarded:false};
+ const receipt={migration,migrationHash,checks,checkLabels,postgres:identity.split(/\r?\n/)[2],port,work,synthetic:true,applicationCallsNewEndpoint:false,qualifiedSourceEngine:false,directTableWritesGuarded:false,sourceArchive:{readOnlyTables:true,currentMembershipReads:true,immutableFamily:true,maxComponentWatermarksPerUID:20000,rawTypedAgreementQualified:false,unversionedChronologyQualified:false}};
  writeFileSync(join(work,'receipt.json'),JSON.stringify(receipt,null,2));console.log(JSON.stringify(receipt));
 }finally{
  for(const child of children)child.kill();
