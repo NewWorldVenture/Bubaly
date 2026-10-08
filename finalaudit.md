@@ -1,5 +1,13 @@
 # Final Production Audit
 
+## Existing schema-only preflight extension allocation — 2026-10-08
+
+Preserve main's recorded migration allocation:451 runnable/highwater0476/next0477, messaging0475–0476; reserved0488/0490/0492–0494 remain held. User decision reconfirmed; no resequencing, fillers, promotion or installation.
+
+Root owns finalaudit.md. calendar_remaining_probe owns only the existing messaging-bill-readonly-preflight.sql: remove executable application-row aggregates, add missing messaging preference/notification tables and five public messaging helpers/RPC identities, and Storage/Realtime policy metadata with explicit absence signals. messaging_completion_probe owns only verify-source-catalog-preflight.mjs: preserve the original13 controls and verify new absent/present metadata cases through a fresh exclusively owned local synthetic PostgreSQL17 cluster. No raw function-body dump, production query, provider call or money action. Existing support rows5235D2DEF4B6/02A9EEBD44FC/15F8C04173F9 remain IN PROGRESS; no duplicate obligations or closure credit. The dated receipt will be reconciled only after exact query/verifier acceptance, retaining earlier evidence.
+
+This is preparation, not a complete production baseline or apply gate. Actual authorized catalog/ledger/project identity, data-effects review, rehearsal/recovery, approved installation and exact main/deployment acceptance remain required. Exact published1ee main CI stays live without a cancelling push. Register14,724/344 historical closures unchanged; both ledger copies synchronized; Production Ready NO.
+
 ## Read-only historic DATE classification accepted locally — 2026-10-08
 
 Accepted two owned preparation paths: scripts/classify-native-calendar-dates.mjs and tests/calendar-native-date-disposition.test.ts. The utility reads one bounded local JSON inventory (8 MiB/20,000 rows) and validates version, explicit family, UUID identities, case-folded duplicates, declared count and required source metadata before producing any result. Foreign scope and malformed inventory refuse as a whole. Source-linked rows remain held rather than being qualified as native. Native clock/DATE/range categories are representation checks only. Null-end DATE has an explicit existing reader one-day policy. No original dates/timezones, repairs, SQL, DB/provider calls, credential/environment reads or writes are inferred or performed.
