@@ -1,5 +1,11 @@
 # Final Production Audit
 
+## Production prerequisite inventory and published repair — 2026-10-08 00:15 UTC
+
+- [Draft #972](https://github.com/NewWorldVenture/Bubaly/pull/972) is stacked on #969 and preserves the exact native seed-instant repair below. Local declared-runtime UTC, three-zone focused checks, TypeScript, lint and synthetic browser results remain as recorded. New-head hosted CI is pending; neither author PR branch, main, nor production is changed.
+- Read-only catalog projection of the repository's **52 SCHEMA_CHECKS** finds **11 complete and 41 incomplete checks**, covering **34 distinct absent tables** and missing runtime columns on **six existing tables**, plus the separately counted column check on absent `ai_requests`. All six AI runtime tables, feature tables from0240–0248 and `routine_runs` are absent. Existing AI conversations/messages, approvals, automation rules/runs and home briefs lack the requested runtime columns. Exact [SQL](docs/final-audit/schema-prerequisites-20261008.sql) and [JSON receipt](docs/final-audit/schema-prerequisites-20261008.json) are retained. The first exploratory query had an unqualified column-name comparison; it was corrected before this receipt, and its column-present results are discarded. This final query explicitly compares `c.column_name=wanted.name`.
+- These are verified schema prerequisites, distinct from earlier HTTP401 access failures and from REST/role/behavior acceptance. Production DDL is outside the user's approved scope, and the known ledger/catalog divergence makes blind replay inappropriate. Complete production compatibility remains blocked on a separately reviewed and authorized schema release; source-zone/exception persistence and other wider audit work remain open as recorded. No new closure credit, allocation changes, schema writes, or production actions. **Production Ready NO; 344/14,538 closed (2.37%).**
+
 ## Resumed audit: saved recurrence instants and actual production metadata — 2026-10-08 00:13 UTC
 
 - Recovered published #969 at `b7a986eefd36c43a0ddafb187e808365f856c697` in a fresh Linux checkout. Work continues on isolated `codex/finalaudit-verification-20261008`; #969/#971 author branches and main remain untouched. Root is the sole `finalaudit.md` writer in this continuation. Existing allocation/history and Register B IDs/statuses are preserved.

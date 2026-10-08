@@ -32,6 +32,18 @@ rows were read or written, and no production configuration or DDL changed.
 This bounded snapshot is not full production catalog/ACL/FK acceptance, a
 deployment receipt, or permission to replay migrations against the ledger.
 
+The subsequent [declared-schema catalog check](final-audit/schema-prerequisites-20261008.json)
+projects all 52 repository `SCHEMA_CHECKS` into a metadata-only
+[SELECT](final-audit/schema-prerequisites-20261008.sql): **11 complete, 41
+incomplete**, comprising **34 absent tables** and missing runtime columns on six
+existing tables (plus the separate column check on absent `ai_requests`). Missing
+tables include the six AI runtime tables, feature tables introduced in 0240–0248,
+and `routine_runs`. Existing AI conversation/message, approval, automation
+rule/run and home-brief tables lack the requested runtime columns. The receipt
+lists every exact name. This is actual schema absence, not an authentication
+failure. The authorized audit cannot remedy it by applying held production DDL.
+No REST exposure, full FK/ACL acceptance, live CRUD or migration replay is inferred.
+
 ## Current allocation and rollout holds — 2026-10-07
 
 The owner confirmed preservation of main's allocation map. Messaging occupies
