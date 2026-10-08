@@ -1,0 +1,43 @@
+{
+  "projectRef": "ltcxlbipiihclxwioyqj",
+  "scope": "Read-only signature presence only; not a migration application or behavioral check.",
+  "query": "select signature, to_regprocedure(signature) is not null as present\nfrom unnest(array[\n'public.wallet_reserve_card_auth(uuid,uuid,bigint,text,text)',\n'public.marketplace_place_bid_unchecked(uuid,uuid,uuid,bigint)',\n'public.rate_limit_hit(text,integer,integer)',\n'public.rate_limit_prune()',\n'public.claim_ai_runs(integer,integer)',\n'public.claim_marketing_generation_jobs(integer)',\n'public.loyalty_award_points(uuid,integer,text,text,text,uuid,uuid)',\n'public.loyalty_redeem_reward(uuid,uuid,uuid)',\n'public.loyalty_cancel_redemption(uuid,uuid)']) signature;",
+  "results": [
+    {
+      "signature": "public.wallet_reserve_card_auth(uuid,uuid,bigint,text,text)",
+      "present": true
+    },
+    {
+      "signature": "public.marketplace_place_bid_unchecked(uuid,uuid,uuid,bigint)",
+      "present": true
+    },
+    {
+      "signature": "public.rate_limit_hit(text,integer,integer)",
+      "present": true
+    },
+    {
+      "signature": "public.rate_limit_prune()",
+      "present": true
+    },
+    {
+      "signature": "public.claim_ai_runs(integer,integer)",
+      "present": false
+    },
+    {
+      "signature": "public.claim_marketing_generation_jobs(integer)",
+      "present": true
+    },
+    {
+      "signature": "public.loyalty_award_points(uuid,integer,text,text,text,uuid,uuid)",
+      "present": true
+    },
+    {
+      "signature": "public.loyalty_redeem_reward(uuid,uuid,uuid)",
+      "present": true
+    },
+    {
+      "signature": "public.loyalty_cancel_redemption(uuid,uuid)",
+      "present": true
+    }
+  ]
+}

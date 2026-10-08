@@ -116,13 +116,13 @@ describe('production schema and migration history audit', () => {
 // decides it.
 describe('money write verdict', () => {
   const guardedTableWithDrift = [
-    { table: 'wallet_transactions', name: 'wallet_transactions_mng_insert', command: 'INSERT', permissive: true, managerGated: true },
-    { table: 'wallet_transactions', name: 'drifted_in', command: 'INSERT', permissive: true, managerGated: false },
-    { table: 'wallet_transactions', name: 'wallet_transactions_manager_insert_guard', command: 'INSERT', permissive: false, managerGated: true },
+    { table: 'wallet_transactions', name: 'wallet_transactions_mng_insert', command: 'INSERT', roles: ['authenticated'], permissive: true, managerGated: true },
+    { table: 'wallet_transactions', name: 'drifted_in', command: 'INSERT', roles: ['authenticated'], permissive: true, managerGated: false },
+    { table: 'wallet_transactions', name: 'wallet_transactions_manager_insert_guard', command: 'INSERT', roles: ['authenticated'], permissive: false, managerGated: true },
   ];
   // The real shape of production before 0275: right name, wrong rule, no guard.
   const unguardedTable = [
-    { table: 'bills', name: 'bills_insert', command: 'INSERT', permissive: true, managerGated: false },
+    { table: 'bills', name: 'bills_insert', command: 'INSERT', roles: ['authenticated'], permissive: true, managerGated: false },
   ];
 
   it('separates a finding that is reportable from one that is exploitable', () => {
@@ -142,8 +142,8 @@ describe('money write verdict', () => {
 
   it('is quiet when every write is manager-gated', () => {
     const clean = moneyWriteVerdict({ moneyWritePolicies: [
-      { table: 'bills', name: 'bills_insert', command: 'INSERT', permissive: true, managerGated: true },
-      { table: 'bills', name: 'bills_manager_insert_guard', command: 'INSERT', permissive: false, managerGated: true },
+      { table: 'bills', name: 'bills_insert', command: 'INSERT', roles: ['authenticated'], permissive: true, managerGated: true },
+      { table: 'bills', name: 'bills_manager_insert_guard', command: 'INSERT', roles: ['authenticated'], permissive: false, managerGated: true },
     ] });
     expect(clean).toMatchObject({ openWrites: [], unguarded: [], exploitable: false });
   });
@@ -168,7 +168,9 @@ describe('money write verdict', () => {
   it('asks the database for the manager-gated bit without exporting any expression', () => {
     // The hashing posture for every other policy must not regress: this adds a
     // boolean, not policy text.
-    expect(CATALOG_QUERY).toContain("like '%can_manage_family%'");
+    expect(CATALOG_QUERY).toContain("in ('can_manage_family(family_id)', 'public.can_manage_family(family_id)')");
+    expect(CATALOG_QUERY).not.toContain("like '%can_manage_family%'");
+    expect(CATALOG_QUERY).toContain("'roles'");
     expect(CATALOG_QUERY).toContain("'moneyWritePolicies'");
     expect(CATALOG_QUERY).not.toMatch(/'usingExpr'|'checkExpr'|'qual',\s*qual/);
   });
@@ -192,8 +194,8 @@ describe('money write verdict — the states a policy-only rule cannot see', () 
       .map((name) => ({ name, rls: over[name] ?? true }));
 
   const gated = (table: string) => ([
-    { table, name: `${table}_mng_insert`, command: 'INSERT', permissive: true, managerGated: true },
-    { table, name: `${table}_manager_insert_guard`, command: 'INSERT', permissive: false, managerGated: true },
+    { table, name: `${table}_mng_insert`, command: 'INSERT', roles: ['authenticated'], permissive: true, managerGated: true },
+    { table, name: `${table}_manager_insert_guard`, command: 'INSERT', roles: ['authenticated'], permissive: false, managerGated: true },
   ]);
 
   // 1. RLS off. Every policy below it is inert.
@@ -230,7 +232,7 @@ describe('money write verdict — the states a policy-only rule cannot see', () 
   it('detects the 0088 allowance open write until the 0306 guards are present', () => {
     const allowanceWrite = {
       table: 'allowance_rules', name: 'Members manage allowance_rules', command: 'ALL',
-      permissive: true, managerGated: false,
+      roles: ['authenticated'], permissive: true, managerGated: false,
     };
     const before0306 = moneyWriteVerdict({ tables: tables(), moneyWritePolicies: [allowanceWrite] });
     expect(before0306.openWrites).toEqual(['allowance_rules.Members manage allowance_rules (ALL)']);
@@ -240,7 +242,7 @@ describe('money write verdict — the states a policy-only rule cannot see', () 
 
     const guards0306 = ['INSERT', 'UPDATE', 'DELETE'].map((command) => ({
       table: 'allowance_rules', name: `allowance_rules_manager_${command.toLowerCase()}_guard`,
-      command, permissive: false, managerGated: true,
+      command, roles: ['authenticated'], permissive: false, managerGated: true,
     }));
     const after0306 = moneyWriteVerdict({ tables: tables(), moneyWritePolicies: [allowanceWrite, ...guards0306] });
     expect(after0306.openWrites).toEqual(['allowance_rules.Members manage allowance_rules (ALL)']);

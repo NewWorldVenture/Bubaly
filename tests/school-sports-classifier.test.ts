@@ -249,6 +249,43 @@ describe('dates and times', () => {
 });
 
 describe('which child', () => {
+  it.each([false, true])('does not select a child from a shared teacher (reversed: %s)', reverse => {
+    const classes = MEMBERS.slice(0, 2).map(member => ({ member_id: member.id, teacher: 'Mrs Okonkwo' }));
+    if (reverse) classes.reverse();
+    const verdict = classify({ body: 'School permission slip from Mrs Okonkwo.' }, MEMBERS, [], classes, OPTS);
+    expect(verdict.child).toBeUndefined();
+    expect(buildProposal({ subject: 'Permission slip' }, verdict)?.args).not.toHaveProperty('assignee_id');
+  });
+
+  it('does not select a child from a shared coach', () => {
+    const teams = MEMBERS.slice(0, 2).map(member => ({ member_id: member.id, coach: 'Coach Delgado' }));
+    expect(classify({ body: 'Practice forms from Coach Delgado.' }, MEMBERS, teams, [], OPTS).child).toBeUndefined();
+  });
+
+  it.each(['Riley', 'Riley Smith'])('does not break an ambiguous name by roster order: %s', name => {
+    const members = [{ id: 'a', display_name: 'Riley Smith' }, { id: 'b', display_name: name === 'Riley' ? 'Riley Jones' : 'Riley Smith' }];
+    expect(classify({ body: `School forms for ${name}.` }, members, [], [], OPTS).child).toBeUndefined();
+  });
+
+  it('keeps duplicate evidence for one child and a stronger explicit full name usable', () => {
+    const sameChild = [{ member_id: 'm-ava', teacher: 'Mrs Okonkwo' }, { member_id: 'm-ava', teacher: 'Mrs Okonkwo' }];
+    expect(classify({ body: 'School notice from Mrs Okonkwo.' }, MEMBERS, [], sameChild, OPTS).child?.member_id).toBe('m-ava');
+    const shared = [...sameChild, { member_id: 'm-noah', teacher: 'Mrs Okonkwo' }];
+    expect(classify({ body: 'Mrs Okonkwo needs Noah Hughen to return the school form.' }, MEMBERS, [], shared, OPTS).child?.member_id).toBe('m-noah');
+  });
+
+  it.each([false, true])('does not favor a short stored name over the same first name (reversed: %s)', reverse => {
+    const members = [{ id: 'short', display_name: 'Riley' }, { id: 'long', display_name: 'Riley Jones' }];
+    if (reverse) members.reverse();
+    expect(classify({ body: 'School forms for Riley.' }, members, [], [], OPTS).child).toBeUndefined();
+  });
+
+  it.each([false, true])('uses an explicitly longer name over its shorter prefix (reversed: %s)', reverse => {
+    const members = [{ id: 'short', display_name: 'Riley' }, { id: 'long', display_name: 'Riley Jones' }];
+    if (reverse) members.reverse();
+    expect(classify({ body: 'School forms for Riley Jones.' }, members, [], [], OPTS).child?.member_id).toBe('long');
+  });
+
   it('matches a full name over a first name', () => {
     const verdict = classify({ body: 'School: Ava Hughen needs a permission slip; Noah is fine.' }, MEMBERS, [], [], OPTS);
     expect(verdict.child).toEqual({ member_id: 'm-ava', name: 'Ava Hughen' });

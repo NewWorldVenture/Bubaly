@@ -1,5 +1,53 @@
 # Production release status and historical feature inventory
 
+## Current rollout review update — 2026-10-08 01:42 UTC
+
+[Review package](final-audit/rollout-20261008/README.md): fresh metadata confirms missing allowance manager/reference and investment decision/economics guards. Aggregate-only preflight finds existing family/wallet and investment amount inconsistencies; the counts and qualifications are retained without individual records. Source0304/0306/0311/0447 are pinned review inputs, not an apply list. An unallocated composite-reference candidate passes an isolated structural PostgreSQL fixture while preserving historical rows; it remains outside every apply workflow. Data provenance/disposition, full dependency/role/trigger rehearsal and separate production approval remain required. No production write, migration allocation change or financial action occurred. Earlier observations below remain historical.
+
+## Read-only catalog observation — 2026-10-08
+
+The Supabase connector successfully read Bubaly metadata at 00:12 UTC; the
+earlier HTTP 401 reports remain historical evidence for their access path.
+The exact [SELECT](final-audit/catalog-snapshot-20261008.sql) and
+[receipt](final-audit/catalog-snapshot-20261008.json) are retained. No application
+rows were read or written, and no production configuration or DDL changed.
+
+- The migration ledger has 192 entries and lexical high-water `0176`. None of
+  `0254`, `0475`, `0476`, `0488`, `0490`, `0492`, `0493`, `0494` is recorded.
+  This is not proof that their schema changes are absent: the wallet guards
+  below demonstrate catalog/ledger divergence.
+- All four held runtime functions are absent: `calendar_feed_apply_sync`,
+  `count_family_ai_requests_month`, `ensure_sync_pull_container`, and
+  `create_sync_pull_item`. `bills.due_day` is absent too. Existing rollout holds
+  remain necessary; no allocation is promoted.
+- `wallet_transactions` has RLS enabled and all three restrictive authenticated
+  manager write guards. Their expressions call `can_manage_family(family_id)`;
+  that helper checks `auth.uid()`, active membership, and parent/adult role.
+  The old permissive member policy remains, but its presence alone does not
+  demonstrate the child-mint vulnerability while these restrictive guards apply.
+  This supersedes the unresolved-expression/current-missing-guard implication
+  in the historical wallet narrative below, without claiming a live write test.
+- `anon` retains INSERT/UPDATE/DELETE table grants, unlike the repository probe's
+  expected grant closure. All observed wallet policies target `authenticated`,
+  and `anon` does not inherit that role; grants alone do not establish an RLS
+  bypass. Grant reconciliation still needs separately reviewed production work.
+- `family-media` remains public. This observation does not authorize changing it.
+
+This bounded snapshot is not full production catalog/ACL/FK acceptance, a
+deployment receipt, or permission to replay migrations against the ledger.
+
+The subsequent [declared-schema catalog check](final-audit/schema-prerequisites-20261008.json)
+projects all 52 repository `SCHEMA_CHECKS` into a metadata-only
+[SELECT](final-audit/schema-prerequisites-20261008.sql): **11 complete, 41
+incomplete**, comprising **34 absent tables** and missing runtime columns on six
+existing tables (plus the separate column check on absent `ai_requests`). Missing
+tables include the six AI runtime tables, feature tables introduced in 0240–0248,
+and `routine_runs`. Existing AI conversation/message, approval, automation
+rule/run and home-brief tables lack the requested runtime columns. The receipt
+lists every exact name. This is actual schema absence, not an authentication
+failure. The authorized audit cannot remedy it by applying held production DDL.
+No REST exposure, full FK/ACL acceptance, live CRUD or migration replay is inferred.
+
 ## Current allocation and rollout holds — 2026-10-07
 
 The owner confirmed preservation of main's allocation map. Messaging occupies

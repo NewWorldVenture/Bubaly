@@ -108,11 +108,19 @@ function firstStep(base: LocalParts, freq: string, windowStart: Date, timezone: 
 export function expandEventsInZone<T extends RecurrableEvent>(
   events: T[], windowStart: Date, windowEnd: Date, timezone: string,
   overlap = false,
+  options: { requireComplete?: boolean } = {},
 ): T[] {
+  const incomplete = (reason: string) => new RangeError(`${reason}; the calendar window cannot be read whole`);
+  if (options.requireComplete && (!Number.isFinite(windowStart.getTime()) || !Number.isFinite(windowEnd.getTime()) || windowEnd < windowStart)) {
+    throw incomplete('Invalid recurrence window');
+  }
   const out: T[] = [];
   for (const e of events) {
     const start = new Date(e.starts_at);
-    if (Number.isNaN(start.getTime())) continue;
+    if (Number.isNaN(start.getTime())) {
+      if (options.requireComplete) throw incomplete('Invalid recurring event start');
+      continue;
+    }
 
     if (!e.recurrence || e.recurrence === 'none') {
       if (start >= windowStart && start < windowEnd) out.push(e);
@@ -120,8 +128,10 @@ export function expandEventsInZone<T extends RecurrableEvent>(
     }
 
     const until = e.recurrence_until ? new Date(e.recurrence_until) : null;
+    if (options.requireComplete && until && !Number.isFinite(until.getTime())) throw incomplete('Invalid recurrence cutoff');
     const seriesEnd = until && until < windowEnd ? until : windowEnd;
     const durationMs = e.ends_at ? new Date(e.ends_at).getTime() - start.getTime() : null;
+    if (options.requireComplete && durationMs !== null && !Number.isFinite(durationMs)) throw incomplete('Invalid recurring event end');
     const base = localPartsAt(start, timezone);
     const minutes = base.hour * 60 + base.minute;
     const subMinuteMs = start.getUTCSeconds() * 1000 + start.getUTCMilliseconds();
@@ -129,9 +139,17 @@ export function expandEventsInZone<T extends RecurrableEvent>(
     const searchStart = overlap ? new Date(windowStart.getTime() - busyDuration) : windowStart;
     const from = firstStep(base, e.recurrence, searchStart, timezone);
 
-    for (let i = 0; i < MAX_OCCURRENCES; i += 1) {
+    // A complete reader must distinguish the budget from the end of a series.
+    // Inspect, but never emit, the next valid step. At most eight years separate
+    // leap days around a non-leap century; monthly gaps are shorter.
+    let reachedEnd = false;
+    const steps = MAX_OCCURRENCES + (options.requireComplete ? 8 : 0);
+    for (let i = 0; i < steps; i += 1) {
       const local = steppedLocalDate(base, e.recurrence, from + i);
-      if (local === undefined) break;   // a frequency we do not know
+      if (local === undefined) {
+        if (options.requireComplete) throw incomplete('Unsupported recurrence frequency');
+        break;
+      }
       if (local === null) continue;     // a day-of-month this month does not have
       // The local time may not exist on the night the clocks jump, or may
       // happen twice on the night they fall back. RFC 5545 §3.3.5 decides, as
@@ -140,11 +158,19 @@ export function expandEventsInZone<T extends RecurrableEvent>(
       // offset in force BEFORE the gap — a weekly 2:30am in Chicago is 08:30Z
       // on 8 March 2026 (shown as 3:30 CDT), keeping its place in the night,
       // rather than vanishing for that day or sliding to 3:00.
-      const cursor = instantForIcsLocalTime(local.year, local.month, local.day, minutes, timezone);
+      // The seed already names an exact instant, including which side of a
+      // fall-back fold the user saved. Resolving its wall clock again can move
+      // that first occurrence an hour earlier and out of its query window.
+      const isSeed = from + i === 0;
+      const cursor = isSeed ? new Date(start) : instantForIcsLocalTime(local.year, local.month, local.day, minutes, timezone);
       if (!cursor) continue;
       // Keep source precision within the resolver-selected local minute.
-      cursor.setTime(cursor.getTime() + subMinuteMs);
-      if (cursor >= seriesEnd) break;   // the sequence is monotone in n
+      if (!isSeed) cursor.setTime(cursor.getTime() + subMinuteMs);
+      if (cursor >= seriesEnd) {
+        reachedEnd = true;
+        break; // the sequence is monotone in n
+      }
+      if (i >= MAX_OCCURRENCES) throw incomplete('Recurrence expansion exceeds its 500-step work limit');
       if (overlap ? cursor.getTime() + busyDuration > windowStart.getTime() : cursor >= windowStart) {
         out.push({
           ...e,
@@ -153,6 +179,7 @@ export function expandEventsInZone<T extends RecurrableEvent>(
         });
       }
     }
+    if (options.requireComplete && !reachedEnd) throw incomplete('Recurrence expansion could not establish the end of the window');
   }
   out.sort((a, b) => a.starts_at.localeCompare(b.starts_at));
   return out;

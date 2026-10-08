@@ -22,7 +22,7 @@ import { listTransactions } from '@/lib/services/finances';
 import { listOpen as listOpenGroceries } from '@/lib/services/groceries';
 import { listMemories } from '@/lib/services/memory';
 import { listAllRoutines } from '@/lib/services/routines';
-import { listClasses, listEventsBetween } from '@/lib/services/school';
+import { listClassRoster, listEventsBetween } from '@/lib/services/school';
 import { dayKeyInTz, scopeNow } from '@/lib/services/scope';
 import { listPracticesBetween, listTeams } from '@/lib/services/sports';
 import { searchTodos } from '@/lib/services/tasks';
@@ -160,7 +160,7 @@ async function readSection(scope: ServiceScope, key: ExportSectionKey): Promise<
     case 'school': {
       const [events, classes] = await Promise.all([
         listEventsBetween(scope, { from: dayKey(scope, -365), to: dayKey(scope, 365), limit: 500 }),
-        listClasses(scope),
+        listClassRoster(scope, { limit: 500 }),
       ]);
       if (!events.ok) return events;
       if (!classes.ok) return classes;

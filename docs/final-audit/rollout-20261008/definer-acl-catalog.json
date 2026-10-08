@@ -1,0 +1,644 @@
+{
+  "projectRef": "ltcxlbipiihclxwioyqj",
+  "scope": "Read-only catalog; no function invocation. Trigger return types do not establish a directly callable REST RPC.",
+  "query": "select p.proname as name, pg_get_function_identity_arguments(p.oid) as arguments,\n pg_get_function_result(p.oid) as returns, pg_get_userbyid(p.proowner) as owner,\n p.proacl::text as acl, p.proconfig as settings,\n has_function_privilege('anon',p.oid,'EXECUTE') as anon_execute,\n has_function_privilege('authenticated',p.oid,'EXECUTE') as authenticated_execute,\n has_function_privilege('service_role',p.oid,'EXECUTE') as service_execute\nfrom pg_proc p where p.pronamespace='public'::regnamespace and p.prokind='f' and p.prosecdef\nand (has_function_privilege('anon',p.oid,'EXECUTE') or has_function_privilege('authenticated',p.oid,'EXECUTE'))\norder by p.proname,arguments;",
+  "functions": [
+    {
+      "name": "accept_invite",
+      "arguments": "p_token text",
+      "returns": "uuid",
+      "owner": "postgres",
+      "acl": "{=X/postgres,postgres=X/postgres,anon=X/postgres,authenticated=X/postgres,service_role=X/postgres}",
+      "settings": [
+        "search_path=public"
+      ],
+      "anon_execute": true,
+      "authenticated_execute": true,
+      "service_execute": true
+    },
+    {
+      "name": "can_manage_family",
+      "arguments": "p_family_id uuid",
+      "returns": "boolean",
+      "owner": "postgres",
+      "acl": "{=X/postgres,postgres=X/postgres,anon=X/postgres,authenticated=X/postgres,service_role=X/postgres}",
+      "settings": [
+        "search_path=public"
+      ],
+      "anon_execute": true,
+      "authenticated_execute": true,
+      "service_execute": true
+    },
+    {
+      "name": "claim_marketing_generation_jobs",
+      "arguments": "p_limit integer",
+      "returns": "SETOF marketing_generation_jobs",
+      "owner": "postgres",
+      "acl": "{postgres=X/postgres,anon=X/postgres,authenticated=X/postgres,service_role=X/postgres}",
+      "settings": [
+        "search_path=public"
+      ],
+      "anon_execute": true,
+      "authenticated_execute": true,
+      "service_execute": true
+    },
+    {
+      "name": "economy_decide_redemption",
+      "arguments": "p_redemption_id uuid, p_approve boolean, p_note text",
+      "returns": "jsonb",
+      "owner": "postgres",
+      "acl": "{postgres=X/postgres,anon=X/postgres,authenticated=X/postgres,service_role=X/postgres}",
+      "settings": [
+        "search_path=public"
+      ],
+      "anon_execute": true,
+      "authenticated_execute": true,
+      "service_execute": true
+    },
+    {
+      "name": "enqueue_marketing_page_generation",
+      "arguments": "",
+      "returns": "trigger",
+      "owner": "postgres",
+      "acl": "{=X/postgres,postgres=X/postgres,anon=X/postgres,authenticated=X/postgres,service_role=X/postgres}",
+      "settings": [
+        "search_path=public"
+      ],
+      "anon_execute": true,
+      "authenticated_execute": true,
+      "service_execute": true
+    },
+    {
+      "name": "family_role",
+      "arguments": "p_family_id uuid",
+      "returns": "member_role",
+      "owner": "postgres",
+      "acl": "{=X/postgres,postgres=X/postgres,anon=X/postgres,authenticated=X/postgres,service_role=X/postgres}",
+      "settings": [
+        "search_path=public"
+      ],
+      "anon_execute": true,
+      "authenticated_execute": true,
+      "service_execute": true
+    },
+    {
+      "name": "feedback_bump_comment_count",
+      "arguments": "",
+      "returns": "trigger",
+      "owner": "postgres",
+      "acl": "{=X/postgres,postgres=X/postgres,anon=X/postgres,authenticated=X/postgres,service_role=X/postgres}",
+      "settings": [
+        "search_path=public"
+      ],
+      "anon_execute": true,
+      "authenticated_execute": true,
+      "service_execute": true
+    },
+    {
+      "name": "feedback_bump_vote_count",
+      "arguments": "",
+      "returns": "trigger",
+      "owner": "postgres",
+      "acl": "{=X/postgres,postgres=X/postgres,anon=X/postgres,authenticated=X/postgres,service_role=X/postgres}",
+      "settings": [
+        "search_path=public"
+      ],
+      "anon_execute": true,
+      "authenticated_execute": true,
+      "service_execute": true
+    },
+    {
+      "name": "grocery_from_meal_plan",
+      "arguments": "p_family_id uuid, p_from date, p_to date, p_list_id uuid",
+      "returns": "uuid",
+      "owner": "postgres",
+      "acl": "{=X/postgres,postgres=X/postgres,anon=X/postgres,authenticated=X/postgres,service_role=X/postgres}",
+      "settings": [
+        "search_path=public"
+      ],
+      "anon_execute": true,
+      "authenticated_execute": true,
+      "service_execute": true
+    },
+    {
+      "name": "guardian_review_suggestion",
+      "arguments": "p_suggestion_id uuid, p_decision text, p_note text",
+      "returns": "jsonb",
+      "owner": "postgres",
+      "acl": "{postgres=X/postgres,anon=X/postgres,authenticated=X/postgres,service_role=X/postgres}",
+      "settings": [
+        "search_path=public"
+      ],
+      "anon_execute": true,
+      "authenticated_execute": true,
+      "service_execute": true
+    },
+    {
+      "name": "handle_new_family",
+      "arguments": "",
+      "returns": "trigger",
+      "owner": "postgres",
+      "acl": "{=X/postgres,postgres=X/postgres,anon=X/postgres,authenticated=X/postgres,service_role=X/postgres}",
+      "settings": [
+        "search_path=public"
+      ],
+      "anon_execute": true,
+      "authenticated_execute": true,
+      "service_execute": true
+    },
+    {
+      "name": "handle_new_user",
+      "arguments": "",
+      "returns": "trigger",
+      "owner": "postgres",
+      "acl": "{=X/postgres,postgres=X/postgres,anon=X/postgres,authenticated=X/postgres,service_role=X/postgres}",
+      "settings": [
+        "search_path=public"
+      ],
+      "anon_execute": true,
+      "authenticated_execute": true,
+      "service_execute": true
+    },
+    {
+      "name": "invest_decide_order",
+      "arguments": "p_order_id uuid, p_approve boolean",
+      "returns": "jsonb",
+      "owner": "postgres",
+      "acl": "{postgres=X/postgres,anon=X/postgres,authenticated=X/postgres,service_role=X/postgres}",
+      "settings": [
+        "search_path=public"
+      ],
+      "anon_execute": true,
+      "authenticated_execute": true,
+      "service_execute": true
+    },
+    {
+      "name": "is_family_admin",
+      "arguments": "p_family_id uuid",
+      "returns": "boolean",
+      "owner": "postgres",
+      "acl": "{=X/postgres,postgres=X/postgres,anon=X/postgres,authenticated=X/postgres,service_role=X/postgres}",
+      "settings": [
+        "search_path=public"
+      ],
+      "anon_execute": true,
+      "authenticated_execute": true,
+      "service_execute": true
+    },
+    {
+      "name": "is_family_member",
+      "arguments": "p_family_id uuid",
+      "returns": "boolean",
+      "owner": "postgres",
+      "acl": "{=X/postgres,postgres=X/postgres,anon=X/postgres,authenticated=X/postgres,service_role=X/postgres}",
+      "settings": [
+        "search_path=public"
+      ],
+      "anon_execute": true,
+      "authenticated_execute": true,
+      "service_execute": true
+    },
+    {
+      "name": "is_marketplace_circle_family_member",
+      "arguments": "p_circle_id uuid, p_family_id uuid",
+      "returns": "boolean",
+      "owner": "postgres",
+      "acl": "{=X/postgres,postgres=X/postgres,anon=X/postgres,authenticated=X/postgres,service_role=X/postgres}",
+      "settings": [
+        "search_path=public"
+      ],
+      "anon_execute": true,
+      "authenticated_execute": true,
+      "service_execute": true
+    },
+    {
+      "name": "is_marketplace_circle_member",
+      "arguments": "p_circle_id uuid",
+      "returns": "boolean",
+      "owner": "postgres",
+      "acl": "{=X/postgres,postgres=X/postgres,anon=X/postgres,authenticated=X/postgres,service_role=X/postgres}",
+      "settings": [
+        "search_path=public"
+      ],
+      "anon_execute": true,
+      "authenticated_execute": true,
+      "service_execute": true
+    },
+    {
+      "name": "is_super_admin",
+      "arguments": "",
+      "returns": "boolean",
+      "owner": "postgres",
+      "acl": "{=X/postgres,postgres=X/postgres,anon=X/postgres,authenticated=X/postgres,service_role=X/postgres}",
+      "settings": [
+        "search_path=public"
+      ],
+      "anon_execute": true,
+      "authenticated_execute": true,
+      "service_execute": true
+    },
+    {
+      "name": "mark_model_dirty",
+      "arguments": "",
+      "returns": "trigger",
+      "owner": "postgres",
+      "acl": "{=X/postgres,postgres=X/postgres,anon=X/postgres,authenticated=X/postgres,service_role=X/postgres}",
+      "settings": [
+        "search_path=public"
+      ],
+      "anon_execute": true,
+      "authenticated_execute": true,
+      "service_execute": true
+    },
+    {
+      "name": "marketplace_accept_offer",
+      "arguments": "p_offer uuid",
+      "returns": "uuid",
+      "owner": "postgres",
+      "acl": "{=X/postgres,postgres=X/postgres,anon=X/postgres,authenticated=X/postgres,service_role=X/postgres}",
+      "settings": [
+        "search_path=public"
+      ],
+      "anon_execute": true,
+      "authenticated_execute": true,
+      "service_execute": true
+    },
+    {
+      "name": "marketplace_buy_now",
+      "arguments": "p_listing_id uuid, p_buyer_member_id uuid, p_buyer_family_id uuid",
+      "returns": "jsonb",
+      "owner": "postgres",
+      "acl": "{postgres=X/postgres,anon=X/postgres,authenticated=X/postgres,service_role=X/postgres}",
+      "settings": [
+        "search_path=public"
+      ],
+      "anon_execute": true,
+      "authenticated_execute": true,
+      "service_execute": true
+    },
+    {
+      "name": "marketplace_close_auction",
+      "arguments": "p_listing_id uuid, p_now timestamp with time zone",
+      "returns": "jsonb",
+      "owner": "postgres",
+      "acl": "{postgres=X/postgres,anon=X/postgres,authenticated=X/postgres,service_role=X/postgres}",
+      "settings": [
+        "search_path=public"
+      ],
+      "anon_execute": true,
+      "authenticated_execute": true,
+      "service_execute": true
+    },
+    {
+      "name": "marketplace_complete_handoff",
+      "arguments": "p_order_id uuid, p_code text",
+      "returns": "jsonb",
+      "owner": "postgres",
+      "acl": "{postgres=X/postgres,anon=X/postgres,authenticated=X/postgres,service_role=X/postgres}",
+      "settings": [
+        "search_path=public"
+      ],
+      "anon_execute": true,
+      "authenticated_execute": true,
+      "service_execute": true
+    },
+    {
+      "name": "marketplace_create_circle",
+      "arguments": "p_family uuid, p_name text, p_emoji text",
+      "returns": "uuid",
+      "owner": "postgres",
+      "acl": "{=X/postgres,postgres=X/postgres,anon=X/postgres,authenticated=X/postgres,service_role=X/postgres}",
+      "settings": [
+        "search_path=public"
+      ],
+      "anon_execute": true,
+      "authenticated_execute": true,
+      "service_execute": true
+    },
+    {
+      "name": "marketplace_decline_offer",
+      "arguments": "p_offer uuid",
+      "returns": "void",
+      "owner": "postgres",
+      "acl": "{=X/postgres,postgres=X/postgres,anon=X/postgres,authenticated=X/postgres,service_role=X/postgres}",
+      "settings": [
+        "search_path=public"
+      ],
+      "anon_execute": true,
+      "authenticated_execute": true,
+      "service_execute": true
+    },
+    {
+      "name": "marketplace_join_circle",
+      "arguments": "p_family uuid, p_code text",
+      "returns": "uuid",
+      "owner": "postgres",
+      "acl": "{=X/postgres,postgres=X/postgres,anon=X/postgres,authenticated=X/postgres,service_role=X/postgres}",
+      "settings": [
+        "search_path=public"
+      ],
+      "anon_execute": true,
+      "authenticated_execute": true,
+      "service_execute": true
+    },
+    {
+      "name": "marketplace_leave_circle",
+      "arguments": "p_family uuid, p_circle uuid",
+      "returns": "void",
+      "owner": "postgres",
+      "acl": "{=X/postgres,postgres=X/postgres,anon=X/postgres,authenticated=X/postgres,service_role=X/postgres}",
+      "settings": [
+        "search_path=public"
+      ],
+      "anon_execute": true,
+      "authenticated_execute": true,
+      "service_execute": true
+    },
+    {
+      "name": "marketplace_log_price_change",
+      "arguments": "",
+      "returns": "trigger",
+      "owner": "postgres",
+      "acl": "{=X/postgres,postgres=X/postgres,anon=X/postgres,authenticated=X/postgres,service_role=X/postgres}",
+      "settings": [
+        "search_path=public"
+      ],
+      "anon_execute": true,
+      "authenticated_execute": true,
+      "service_execute": true
+    },
+    {
+      "name": "marketplace_member_id",
+      "arguments": "p_family_id uuid",
+      "returns": "uuid",
+      "owner": "postgres",
+      "acl": "{=X/postgres,postgres=X/postgres,anon=X/postgres,authenticated=X/postgres,service_role=X/postgres}",
+      "settings": [
+        "search_path=public"
+      ],
+      "anon_execute": true,
+      "authenticated_execute": true,
+      "service_execute": true
+    },
+    {
+      "name": "marketplace_negotiation_offer",
+      "arguments": "p_listing uuid, p_buyer_member uuid, p_buyer_family uuid, p_amount bigint, p_message text",
+      "returns": "jsonb",
+      "owner": "postgres",
+      "acl": "{postgres=X/postgres,anon=X/postgres,authenticated=X/postgres,service_role=X/postgres}",
+      "settings": [
+        "search_path=public"
+      ],
+      "anon_execute": true,
+      "authenticated_execute": true,
+      "service_execute": true
+    },
+    {
+      "name": "marketplace_negotiation_respond",
+      "arguments": "p_negotiation uuid, p_action text, p_amount bigint, p_message text",
+      "returns": "jsonb",
+      "owner": "postgres",
+      "acl": "{postgres=X/postgres,anon=X/postgres,authenticated=X/postgres,service_role=X/postgres}",
+      "settings": [
+        "search_path=public"
+      ],
+      "anon_execute": true,
+      "authenticated_execute": true,
+      "service_execute": true
+    },
+    {
+      "name": "marketplace_offer_flip_pending",
+      "arguments": "",
+      "returns": "trigger",
+      "owner": "postgres",
+      "acl": "{=X/postgres,postgres=X/postgres,anon=X/postgres,authenticated=X/postgres,service_role=X/postgres}",
+      "settings": [
+        "search_path=public"
+      ],
+      "anon_execute": true,
+      "authenticated_execute": true,
+      "service_execute": true
+    },
+    {
+      "name": "marketplace_place_bid",
+      "arguments": "p_listing_id uuid, p_bidder_member_id uuid, p_bidder_family_id uuid, p_max_cents bigint",
+      "returns": "jsonb",
+      "owner": "postgres",
+      "acl": "{postgres=X/postgres,anon=X/postgres,authenticated=X/postgres,service_role=X/postgres}",
+      "settings": [
+        "search_path=public"
+      ],
+      "anon_execute": true,
+      "authenticated_execute": true,
+      "service_execute": true
+    },
+    {
+      "name": "marketplace_place_bid_unchecked",
+      "arguments": "p_listing_id uuid, p_bidder_member_id uuid, p_bidder_family_id uuid, p_max_cents bigint",
+      "returns": "jsonb",
+      "owner": "postgres",
+      "acl": "{postgres=X/postgres,anon=X/postgres,service_role=X/postgres}",
+      "settings": [
+        "search_path=public"
+      ],
+      "anon_execute": true,
+      "authenticated_execute": false,
+      "service_execute": true
+    },
+    {
+      "name": "marketplace_set_listing_status",
+      "arguments": "p_listing uuid, p_status text",
+      "returns": "void",
+      "owner": "postgres",
+      "acl": "{=X/postgres,postgres=X/postgres,anon=X/postgres,authenticated=X/postgres,service_role=X/postgres}",
+      "settings": [
+        "search_path=public"
+      ],
+      "anon_execute": true,
+      "authenticated_execute": true,
+      "service_execute": true
+    },
+    {
+      "name": "public_stats",
+      "arguments": "",
+      "returns": "TABLE(families bigint, members bigint, tasks_completed bigint)",
+      "owner": "postgres",
+      "acl": "{postgres=X/postgres,anon=X/postgres,authenticated=X/postgres,service_role=X/postgres}",
+      "settings": [
+        "search_path=public"
+      ],
+      "anon_execute": true,
+      "authenticated_execute": true,
+      "service_execute": true
+    },
+    {
+      "name": "rate_limit_hit",
+      "arguments": "p_key text, p_limit integer, p_window_seconds integer",
+      "returns": "TABLE(allowed boolean, retry_after integer)",
+      "owner": "postgres",
+      "acl": "{postgres=X/postgres,authenticated=X/postgres,service_role=X/postgres,anon=X/postgres}",
+      "settings": [
+        "search_path=public"
+      ],
+      "anon_execute": true,
+      "authenticated_execute": true,
+      "service_execute": true
+    },
+    {
+      "name": "rls_auto_enable",
+      "arguments": "",
+      "returns": "event_trigger",
+      "owner": "postgres",
+      "acl": "{=X/postgres,postgres=X/postgres,anon=X/postgres,authenticated=X/postgres,service_role=X/postgres}",
+      "settings": [
+        "search_path=pg_catalog"
+      ],
+      "anon_execute": true,
+      "authenticated_execute": true,
+      "service_execute": true
+    },
+    {
+      "name": "social_has_permission",
+      "arguments": "p_family_id uuid, p_permission text",
+      "returns": "boolean",
+      "owner": "postgres",
+      "acl": "{=X/postgres,postgres=X/postgres,anon=X/postgres,authenticated=X/postgres,service_role=X/postgres}",
+      "settings": [
+        "search_path=public"
+      ],
+      "anon_execute": true,
+      "authenticated_execute": true,
+      "service_execute": true
+    },
+    {
+      "name": "social_role_for",
+      "arguments": "p_family_id uuid",
+      "returns": "social_role",
+      "owner": "postgres",
+      "acl": "{=X/postgres,postgres=X/postgres,anon=X/postgres,authenticated=X/postgres,service_role=X/postgres}",
+      "settings": [
+        "search_path=public"
+      ],
+      "anon_execute": true,
+      "authenticated_execute": true,
+      "service_execute": true
+    },
+    {
+      "name": "social_write_audit",
+      "arguments": "",
+      "returns": "trigger",
+      "owner": "postgres",
+      "acl": "{=X/postgres,postgres=X/postgres,anon=X/postgres,authenticated=X/postgres,service_role=X/postgres}",
+      "settings": [
+        "search_path=public"
+      ],
+      "anon_execute": true,
+      "authenticated_execute": true,
+      "service_execute": true
+    },
+    {
+      "name": "sync_log_change",
+      "arguments": "",
+      "returns": "trigger",
+      "owner": "postgres",
+      "acl": "{=X/postgres,postgres=X/postgres,anon=X/postgres,authenticated=X/postgres,service_role=X/postgres}",
+      "settings": [
+        "search_path=public"
+      ],
+      "anon_execute": true,
+      "authenticated_execute": true,
+      "service_execute": true
+    },
+    {
+      "name": "validate_marketplace_negotiation_round",
+      "arguments": "",
+      "returns": "trigger",
+      "owner": "postgres",
+      "acl": "{postgres=X/postgres,anon=X/postgres,authenticated=X/postgres,service_role=X/postgres}",
+      "settings": [
+        "search_path=public"
+      ],
+      "anon_execute": true,
+      "authenticated_execute": true,
+      "service_execute": true
+    },
+    {
+      "name": "wallet_approve_gift",
+      "arguments": "p_family_id uuid, p_gift_payment_id uuid, p_actor_id uuid",
+      "returns": "jsonb",
+      "owner": "postgres",
+      "acl": "{postgres=X/postgres,authenticated=X/postgres,service_role=X/postgres}",
+      "settings": [
+        "search_path=public, pg_temp"
+      ],
+      "anon_execute": false,
+      "authenticated_execute": true,
+      "service_execute": true
+    },
+    {
+      "name": "wallet_decide_allowance",
+      "arguments": "p_family_id uuid, p_approval_id uuid, p_decision text, p_note text, p_actor_id uuid",
+      "returns": "jsonb",
+      "owner": "postgres",
+      "acl": "{postgres=X/postgres,authenticated=X/postgres,service_role=X/postgres}",
+      "settings": [
+        "search_path=public, pg_temp"
+      ],
+      "anon_execute": false,
+      "authenticated_execute": true,
+      "service_execute": true
+    },
+    {
+      "name": "wallet_decide_spend",
+      "arguments": "p_family_id uuid, p_approval_id uuid, p_decision text, p_note text, p_actor_id uuid",
+      "returns": "jsonb",
+      "owner": "postgres",
+      "acl": "{postgres=X/postgres,authenticated=X/postgres,service_role=X/postgres}",
+      "settings": [
+        "search_path=public, pg_temp"
+      ],
+      "anon_execute": false,
+      "authenticated_execute": true,
+      "service_execute": true
+    },
+    {
+      "name": "wallet_fund_goal",
+      "arguments": "p_family_id uuid, p_goal_id uuid, p_amount bigint, p_actor_id uuid",
+      "returns": "jsonb",
+      "owner": "postgres",
+      "acl": "{postgres=X/postgres,authenticated=X/postgres,service_role=X/postgres}",
+      "settings": [
+        "search_path=public, pg_temp"
+      ],
+      "anon_execute": false,
+      "authenticated_execute": true,
+      "service_execute": true
+    },
+    {
+      "name": "wallet_reserve_card_auth",
+      "arguments": "p_family uuid, p_child_wallet uuid, p_amount bigint, p_auth_id text, p_description text",
+      "returns": "boolean",
+      "owner": "postgres",
+      "acl": "{postgres=X/postgres,anon=X/postgres,authenticated=X/postgres,service_role=X/postgres}",
+      "settings": [
+        "search_path=public"
+      ],
+      "anon_execute": true,
+      "authenticated_execute": true,
+      "service_execute": true
+    },
+    {
+      "name": "wallet_transfer",
+      "arguments": "p_family_id uuid, p_from_child_wallet_id uuid, p_to_child_wallet_id uuid, p_amount bigint, p_note text, p_actor_id uuid",
+      "returns": "jsonb",
+      "owner": "postgres",
+      "acl": "{postgres=X/postgres,authenticated=X/postgres,service_role=X/postgres}",
+      "settings": [
+        "search_path=public, pg_temp"
+      ],
+      "anon_execute": false,
+      "authenticated_execute": true,
+      "service_execute": true
+    }
+  ]
+}

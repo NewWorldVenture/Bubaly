@@ -11,6 +11,12 @@ const mk = (over: Partial<ClassLike> = {}): ClassLike => ({
 });
 
 describe('weekParity', () => {
+  it('keeps the same Monday-based week across the year 0099/0100 boundary', () => {
+    expect(['0099-12-28', '0099-12-31', '0100-01-01'].map(day => weekParity(new Date(`${day}T12:00:00Z`)))).toEqual(['a', 'a', 'a']);
+  });
+  it('keeps the fixed epoch for a year below 100 rather than adding 1900', () => {
+    expect(weekParity(new Date('0001-01-01T00:00:00Z'))).toBe('b');
+  });
   it('returns a stable a/b for a date', () => {
     expect(weekParity(new Date('2026-06-22T00:00:00Z'))).toMatch(/^(a|b)$/);
   });
@@ -42,6 +48,13 @@ describe('classOccursInWeek', () => {
 });
 
 describe('slotStartMinutes', () => {
+  it.each(['24:00', '25:10', '09:60', '9:99', '0:30 AM', '13:00 PM', '00:00 am'])('puts invalid clock %s with untimed classes', slot => {
+    expect(slotStartMinutes(slot)).toBe(24 * 60 + 1);
+  });
+  it('retains the 24-hour boundary controls', () => {
+    expect(slotStartMinutes('00:00')).toBe(0);
+    expect(slotStartMinutes('23:59')).toBe(23 * 60 + 59);
+  });
   it('parses 24-hour times', () => {
     expect(slotStartMinutes('13:30')).toBe(13 * 60 + 30);
     expect(slotStartMinutes('09:00')).toBe(9 * 60);

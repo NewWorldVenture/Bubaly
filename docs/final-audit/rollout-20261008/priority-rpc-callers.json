@@ -1,0 +1,62 @@
+{
+  "project": "ltcxlbipiihclxwioyqj",
+  "capturedDate": "2026-10-08",
+  "sourceCommit": "082f2ddc4d66fbf40daca49d2125b96479b2e4a8",
+  "scope": "Read-only catalog and selected static repository caller review. No RPC or provider invocation; not a production traffic rehearsal.",
+  "query": "select p.oid::regprocedure::text as signature, pg_get_userbyid(p.proowner) as owner, p.prosecdef as security_definer, p.proconfig as settings, pg_get_functiondef(p.oid) as definition from pg_proc p join pg_namespace n on n.oid=p.pronamespace where n.nspname='public' and p.proname in ('marketplace_place_bid','marketplace_place_bid_unchecked') order by 1;",
+  "functions": [
+    {
+      "signature": "marketplace_place_bid_unchecked(uuid,uuid,uuid,bigint)",
+      "owner": "postgres",
+      "security_definer": true,
+      "settings": [
+        "search_path=public"
+      ],
+      "definition": "CREATE OR REPLACE FUNCTION public.marketplace_place_bid_unchecked(p_listing_id uuid, p_bidder_member_id uuid, p_bidder_family_id uuid, p_max_cents bigint)\n RETURNS jsonb\n LANGUAGE plpgsql\n SECURITY DEFINER\n SET search_path TO 'public'\nAS $function$\r\ndeclare\r\n  v_listing   record;\r\n  v_now       timestamptz := now();\r\n  v_increment bigint;\r\n  v_min_bid   bigint;\r\n  v_new_visible bigint;\r\n  v_extended  boolean := false;\r\nbegin\r\n  -- Lock the listing so two bids can't race on the same current price.\r\n  select * into v_listing from public.marketplace_listings\r\n    where id = p_listing_id for update;\r\n  if not found then return jsonb_build_object('ok', false, 'reason', 'not_found'); end if;\r\n  if v_listing.sale_format <> 'auction' then return jsonb_build_object('ok', false, 'reason', 'not_auction'); end if;\r\n  if v_listing.status <> 'available' then return jsonb_build_object('ok', false, 'reason', 'not_available'); end if;\r\n  if v_listing.auction_ends_at is null or v_now >= v_listing.auction_ends_at then\r\n    return jsonb_build_object('ok', false, 'reason', 'ended');\r\n  end if;\r\n  if v_listing.auction_starts_at is not null and v_now < v_listing.auction_starts_at then\r\n    return jsonb_build_object('ok', false, 'reason', 'not_started');\r\n  end if;\r\n  -- Can't bid on your own listing.\r\n  if v_listing.family_id = p_bidder_family_id then\r\n    return jsonb_build_object('ok', false, 'reason', 'own_listing');\r\n  end if;\r\n\r\n  -- Tiered minimum increment (eBay-like), based on current price.\r\n  v_increment := case\r\n    when v_listing.current_bid_cents < 100 then 5\r\n    when v_listing.current_bid_cents < 500 then 25\r\n    when v_listing.current_bid_cents < 2500 then 50\r\n    when v_listing.current_bid_cents < 10000 then 100\r\n    when v_listing.current_bid_cents < 25000 then 250\r\n    when v_listing.current_bid_cents < 100000 then 500\r\n    else 1000 end;\r\n\r\n  -- Minimum acceptable max: at/above starting bid on the first bid, otherwise\r\n  -- one increment over the current price.\r\n  if v_listing.bid_count = 0 then\r\n    v_min_bid := greatest(v_listing.starting_bid_cents, 1);\r\n  else\r\n    v_min_bid := v_listing.current_bid_cents + v_increment;\r\n  end if;\r\n  if p_max_cents < v_min_bid then\r\n    return jsonb_build_object('ok', false, 'reason', 'too_low', 'min_cents', v_min_bid);\r\n  end if;\r\n\r\n  -- Proxy resolution.\r\n  if v_listing.bid_count = 0 then\r\n    -- First bid: visible price = starting bid.\r\n    v_new_visible := greatest(v_listing.starting_bid_cents, v_increment);\r\n    if v_new_visible > p_max_cents then v_new_visible := p_max_cents; end if;\r\n  elsif p_max_cents > v_listing.highest_max_cents then\r\n    -- New leader: reveal just enough to beat the previous leader's max.\r\n    v_new_visible := least(p_max_cents, v_listing.highest_max_cents + v_increment);\r\n    -- Mark the old leader outbid.\r\n    update public.marketplace_bids set status = 'outbid'\r\n      where listing_id = p_listing_id and status = 'active';\r\n  else\r\n    -- Bid doesn't beat the standing proxy: the leader auto-covers it. The\r\n    -- visible price rises to one increment over this challenger (capped by the\r\n    -- leader's max), the leader stays in front, and we record the loss.\r\n    v_new_visible := least(v_listing.highest_max_cents, p_max_cents + v_increment);\r\n    insert into public.marketplace_bids\r\n      (listing_id, family_id, bidder_member_id, bidder_family_id, amount_cents, max_cents, status)\r\n      values (p_listing_id, v_listing.family_id, p_bidder_member_id, p_bidder_family_id, p_max_cents, p_max_cents, 'outbid');\r\n    update public.marketplace_listings\r\n      set current_bid_cents = v_new_visible, bid_count = bid_count + 1, updated_at = v_now\r\n      where id = p_listing_id;\r\n    return jsonb_build_object('ok', true, 'leading', false, 'current_cents', v_new_visible);\r\n  end if;\r\n\r\n  -- Record the winning (leading) bid + promote the bidder to highest.\r\n  insert into public.marketplace_bids\r\n    (listing_id, family_id, bidder_member_id, bidder_family_id, amount_cents, max_cents, status)\r\n    values (p_listing_id, v_listing.family_id, p_bidder_member_id, p_bidder_family_id, v_new_visible, p_max_cents, 'active');\r\n\r\n  -- Anti-snipe: a bid inside the window pushes the end out.\r\n  if v_listing.auction_ends_at - v_now < make_interval(mins => v_listing.anti_snipe_minutes) then\r\n    v_extended := true;\r\n  end if;\r\n\r\n  update public.marketplace_listings set\r\n    current_bid_cents = v_new_visible,\r\n    bid_count = bid_count + 1,\r\n    highest_bidder_member_id = p_bidder_member_id,\r\n    highest_bidder_family_id = p_bidder_family_id,\r\n    highest_max_cents = p_max_cents,\r\n    auction_ends_at = case when v_extended\r\n      then v_now + make_interval(mins => v_listing.anti_snipe_minutes) else auction_ends_at end,\r\n    updated_at = v_now\r\n  where id = p_listing_id;\r\n\r\n  return jsonb_build_object('ok', true, 'leading', true,\r\n    'current_cents', v_new_visible, 'extended', v_extended);\r\nend $function$\n"
+    },
+    {
+      "signature": "marketplace_place_bid(uuid,uuid,uuid,bigint)",
+      "owner": "postgres",
+      "security_definer": true,
+      "settings": [
+        "search_path=public"
+      ],
+      "definition": "CREATE OR REPLACE FUNCTION public.marketplace_place_bid(p_listing_id uuid, p_bidder_member_id uuid, p_bidder_family_id uuid, p_max_cents bigint)\n RETURNS jsonb\n LANGUAGE plpgsql\n SECURITY DEFINER\n SET search_path TO 'public'\nAS $function$\r\ndeclare\r\n  v_member_family uuid;\r\nbegin\r\n  if auth.uid() is null then\r\n    return jsonb_build_object('ok', false, 'reason', 'unauthorized');\r\n  end if;\r\n\r\n  select family_id into v_member_family\r\n  from public.family_members\r\n  where id = p_bidder_member_id and user_id = auth.uid() and is_active;\r\n\r\n  if v_member_family is null or v_member_family is distinct from p_bidder_family_id then\r\n    return jsonb_build_object('ok', false, 'reason', 'unauthorized');\r\n  end if;\r\n  if p_max_cents is null or p_max_cents <= 0 then\r\n    return jsonb_build_object('ok', false, 'reason', 'invalid_amount');\r\n  end if;\r\n\r\n  return public.marketplace_place_bid_unchecked(\r\n    p_listing_id, p_bidder_member_id, p_bidder_family_id, p_max_cents\r\n  );\r\nend $function$\n"
+    }
+  ],
+  "selectedCallers": [
+    {
+      "function": "wallet_reserve_card_auth",
+      "path": [
+        "app/api/webhooks/money/route.ts",
+        "lib/stripe/webhook.ts",
+        "lib/wallet/server.ts"
+      ],
+      "observation": "Money webhook passes createServiceClient() through handleAuthorizationRequest to reserveCardAuth; migration0456 retains service_role EXECUTE."
+    },
+    {
+      "function": "marketplace_place_bid_unchecked",
+      "path": [
+        "supabase/migrations/0184_marketplace_auction_authorization.sql"
+      ],
+      "observation": "Live checked wrapper authenticates auth.uid and bidder membership before calling the unchecked function. Both live functions are SECURITY DEFINER owned by postgres; revoking client EXECUTE on the inner function leaves the owner's call authority."
+    },
+    {
+      "function": "claim_marketing_generation_jobs",
+      "path": [
+        "app/api/cron/marketing/route.ts",
+        "lib/marketing/platform.ts"
+      ],
+      "observation": "Cron passes createServiceClient() to the worker. Does not clear missing migration0292 prerequisites."
+    },
+    {
+      "function": "rate_limit_hit",
+      "path": [
+        "app/api/ai/route.ts",
+        "app/api/ai/chat/route.ts",
+        "app/api/ai/gift/route.ts"
+      ],
+      "observation": "Selected authenticated AI callers use ai-chat:<ctx.user.id>; public gift caller uses createServiceClient(). This is not an exhaustive caller review."
+    }
+  ]
+}

@@ -12,6 +12,7 @@
 // `lib/members/age.ts ageOn` is the single implementation of "how old is this
 // member today" shared with the client surfaces.
 import 'server-only';
+import { readCountedRows } from '@/lib/calendar/occurrences';
 import { ageOnDay } from '@/lib/members/age';
 import { isManager, type MemberRole } from '@/lib/constants/roles';
 import type { Json, Tables } from '@/lib/database.types';
@@ -58,19 +59,26 @@ function toMember(row: Tables<'family_members'>, todayKey: string): FamilyMember
  * The household roster. Inactive members are excluded by default because every
  * caller that assigns work wants people who are still in the family; the
  * admin surfaces that manage removals ask for them explicitly.
+ * requireComplete pages through server caps and refuses more than 2,000 rows.
  */
 export async function getMembers(
   scope: ServiceScope,
-  opts?: { includeInactive?: boolean },
+  opts?: { includeInactive?: boolean; requireComplete?: boolean },
 ): Promise<ServiceResult<FamilyMember[]>> {
-  let query = scope.db
-    .from('family_members')
-    .select('*')
-    .eq('family_id', scope.familyId)
-    .order('created_at', { ascending: true });
-  if (!opts?.includeInactive) query = query.eq('is_active', true);
-
-  const { data, error } = await query;
+  const query = (counted = false) => {
+    const table = scope.db.from('family_members');
+    let read = (counted ? table.select('*', { count: 'exact' }) : table.select('*'))
+      .eq('family_id', scope.familyId).order('created_at', { ascending: true });
+    if (counted) read = read.order('id');
+    if (!opts?.includeInactive) read = read.eq('is_active', true);
+    return read;
+  };
+  const { data, error } = opts?.requireComplete
+    ? await readCountedRows<Tables<'family_members'>>(
+      () => query(true).limit(500), (from, to) => query(true).range(from, to),
+      2000, 'family members',
+    )
+    : await query();
   if (error) {
     console.error('[service:family] member read failed', error);
     return fail(describeDbError(error, 'Could not load your family members.'), { code: SERVICE_CODES.db });

@@ -381,7 +381,7 @@ function extractTime(haystack: string): string | null {
 
 // ── the child ──────────────────────────────────────────────────────────────
 
-type ChildCandidate = { member_id: string; name: string; weight: number; at: number };
+type ChildCandidate = { member_id: string; name: string; weight: number; at: number; directLength?: number };
 
 function nameMatch(haystack: string, name: string): number {
   const trimmed = name.trim();
@@ -455,12 +455,12 @@ function pickChild(
     if (!full) continue;
     const fullAt = nameMatch(haystack, full);
     if (fullAt >= 0) {
-      candidates.push({ member_id: member.id, name: full, weight: 3, at: fullAt });
+      candidates.push({ member_id: member.id, name: full, weight: 3, at: fullAt, directLength: full.length });
       continue;
     }
     const first = full.split(/\s+/)[0] ?? '';
     const firstAt = first === full ? -1 : nameMatch(haystack, first);
-    if (firstAt >= 0) candidates.push({ member_id: member.id, name: full, weight: 1, at: firstAt });
+    if (firstAt >= 0) candidates.push({ member_id: member.id, name: full, weight: 1, at: firstAt, directLength: first.length });
   }
 
   const rosterHints: { memberId: string | null | undefined; groups: string[][] }[] = [
@@ -478,12 +478,25 @@ function pickChild(
   }
 
   if (candidates.length === 0) return null;
-  // Strongest evidence, then the one the message mentions first, then roster
-  // order — three total tie-breaks so the answer never depends on iteration luck.
-  return candidates.reduce((best, next) => {
+  // "Riley Jones" is more specific than its "Riley" prefix at the same
+  // position. "Riley" alone still cannot distinguish those two profiles.
+  const longestName = new Map<number, number>();
+  for (const candidate of candidates) {
+    if (candidate.directLength !== undefined) {
+      longestName.set(candidate.at, Math.max(longestName.get(candidate.at) ?? 0, candidate.directLength));
+    }
+  }
+  const specific = candidates.filter(candidate => candidate.directLength === undefined
+    || candidate.directLength === longestName.get(candidate.at));
+  // Prefer stronger evidence and then the first explicit mention. A shared
+  // name/teacher/coach at that same position cannot identify just one child.
+  const best = specific.reduce((best, next) => {
     if (next.weight !== best.weight) return next.weight > best.weight ? next : best;
     return next.at < best.at ? next : best;
   });
+  return specific.some(candidate => candidate.member_id !== best.member_id
+    && candidate.at === best.at && candidate.directLength === best.directLength
+    && (candidate.weight === best.weight || best.directLength !== undefined)) ? null : best;
 }
 
 // ── the domain ─────────────────────────────────────────────────────────────
