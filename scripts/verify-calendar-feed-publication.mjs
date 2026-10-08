@@ -400,7 +400,9 @@ try{
   recordSnapshot('snapshot-typed-only-refused.json',sql(auth(snapshot())),'refuse','Typed-only source lacks raw provenance; SQL structural admission is not parser qualification.');
   const g=answer.sourceGroups[0];assert.deepEqual(Object.keys(g).sort(),['feedId','uid','revisionId','materializationState','document','masterCancellationRevisionId','watermarks'].sort());
   assert.equal(g.feedId,feed);assert.equal(g.uid,'old');assert.deepEqual(g.document,d);assert.equal(g.materializationState,'ready');
-  assert.deepEqual(g.watermarks.map(w=>w.componentKey),['["override", "utc", null, "20261008T090000Z"]','master']);
+  // Component identity coverage is the contract; PostgreSQL's configured
+  // collation may order punctuation before or after letters.
+  assert.deepEqual(g.watermarks.map(w=>w.componentKey).sort(),['["override", "utc", null, "20261008T090000Z"]','master'].sort());
   for(const w of g.watermarks)assert.deepEqual(Object.keys(w).sort(),['componentKey','versionComponent','versionRevisionId','cancelledComponent','cancellationRevisionId'].sort());
   assert.equal(sql("select provolatile='s' and not prosecdef and prolang=(select oid from pg_language where lanname='sql') from pg_proc where oid='public.calendar_read_occurrence_inputs(uuid)'::regprocedure;"),'t');
  });

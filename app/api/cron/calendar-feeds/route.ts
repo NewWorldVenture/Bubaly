@@ -29,6 +29,9 @@ export async function GET(req: NextRequest) {
 
   let synced = 0;
   let imported = 0;
+  // Successfully archived UID groups include review-held revisions. They are
+  // not materialized event/occurrence counts and do not make a failed run OK.
+  let sourceGroups: number | undefined;
   let failed = 0;
   // A feed another sync holds — a member pressed "Sync now" as the cron reached
   // it — is not a failure: that sync is applying a fresher snapshot than this
@@ -37,6 +40,7 @@ export async function GET(req: NextRequest) {
   for (const feed of feeds ?? []) {
     try {
       const r = await syncFeed(supabase, feed);
+      if (r.sourceGroups !== undefined) sourceGroups = (sourceGroups ?? 0) + r.sourceGroups;
       if (r.ok) { synced += 1; imported += r.imported; }
       else if (r.busy || r.takenOver) busy += 1;
       else failed += 1;
@@ -48,7 +52,7 @@ export async function GET(req: NextRequest) {
 
   const ok = failed === 0;
   return NextResponse.json(
-    { ok, feeds: (feeds ?? []).length, synced, imported, failed, busy },
+    { ok, feeds: (feeds ?? []).length, synced, imported, failed, busy, ...(sourceGroups === undefined ? {} : { sourceGroups }) },
     { status: ok ? 200 : 502 },
   );
 }

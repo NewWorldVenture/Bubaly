@@ -1,15 +1,14 @@
 'use client';
 
-import { useMemo, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import { Flame, ChevronDown } from 'lucide-react';
 import { useRealtimeQuery } from '@/lib/hooks/use-realtime-query';
-import { readCalendarOccurrences } from '@/lib/calendar/occurrences';
+import { readDisplayCalendarOccurrences, CALENDAR_DISPLAY_CONTRACT, CALENDAR_SOURCE_ARCHIVE_ENABLED, type CalendarDisplayOccurrence } from '@/lib/calendar/display-occurrences';
 import { ErrorState } from '@/components/ui/states';
 import { cn } from '@/lib/utils/cn';
 import { buildHeatmap, type HeatEvent } from '@/lib/calendar/heatmap';
 import { addDays, familyFetchRange } from '@/lib/calendar/day';
 import { useFamilyClock } from '@/components/i18n/use-format';
-import type { Tables } from '@/lib/database.types';
 import { useTranslations } from '@/components/i18n/locale-provider';
 
 const WEEKS = 8;
@@ -58,16 +57,23 @@ export function BusynessHeatmap({ familyId }: { familyId: string }) {
   // query broke. `useRealtimeQuery` is the house pattern and carries the error,
   // the offline fallback and the missing-table degrade that this bypassed.
   const todayKey = clock.todayKey();
-  const { data: rows, error } = useRealtimeQuery<Tables<'calendar_events'>>({
-    table: 'calendar_events', familyId, deps: [familyId, todayKey, clock.timeZone],
+  const { data: rows, error, refresh } = useRealtimeQuery<CalendarDisplayOccurrence>({
+    table: 'calendar_events', familyId, deps: [familyId, todayKey, clock.timeZone, CALENDAR_DISPLAY_CONTRACT, CALENDAR_SOURCE_ARCHIVE_ENABLED],
     fetcher: (s) => {
       const { range, fromDay, toDay } = heatWindow(todayKey, clock.timeZone);
-      return readCalendarOccurrences(s, familyId, {
+      return readDisplayCalendarOccurrences(s, familyId, {
         timedFrom: range.timedFrom.toISOString(), timedTo: range.timedTo.toISOString(),
         allDayFromDay: fromDay, allDayToDay: toDay,
       }, clock.timeZone);
     },
   });
+  useEffect(() => {
+    if (!CALENDAR_SOURCE_ARCHIVE_ENABLED) return;
+    const onFocus = () => { void refresh(); };
+    const timer = window.setInterval(() => { if (document.visibilityState === 'visible') void refresh(); }, 60_000);
+    window.addEventListener('focus', onFocus);
+    return () => { window.clearInterval(timer); window.removeEventListener('focus', onFocus); };
+  }, [refresh]);
 
   const report = useMemo(() => {
     // Recurrence stepped, and days bucketed, in the FAMILY's zone (TIME-003);

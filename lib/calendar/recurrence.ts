@@ -141,7 +141,9 @@ export function expandEventsInZone<T extends RecurrableEvent>(
     const base = localPartsAt(start, timezone);
     const minutes = base.hour * 60 + base.minute;
     const subMinuteMs = start.getUTCSeconds() * 1000 + start.getUTCMilliseconds();
-    const busyDuration = durationMs !== null && durationMs > 0 ? durationMs : 3_600_000;
+    // An explicit point is still a calendar occurrence, but occupies no
+    // interval. Only a missing/invalid negative end keeps the legacy estimate.
+    const busyDuration = durationMs !== null && durationMs >= 0 ? durationMs : 3_600_000;
     const searchStart = overlap ? new Date(windowStart.getTime() - busyDuration) : windowStart;
     const from = firstStep(base, e.recurrence, searchStart, timezone);
 
@@ -177,7 +179,7 @@ export function expandEventsInZone<T extends RecurrableEvent>(
         break; // the sequence is monotone in n
       }
       if (i >= MAX_OCCURRENCES) throw incomplete('Recurrence expansion exceeds its 500-step work limit');
-      if (overlap ? cursor.getTime() + busyDuration > windowStart.getTime() : cursor >= windowStart) {
+      if (overlap && busyDuration > 0 ? cursor.getTime() + busyDuration > windowStart.getTime() : cursor >= windowStart) {
         out.push({
           ...e,
           starts_at: cursor.toISOString(),

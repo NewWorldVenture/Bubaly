@@ -20,6 +20,7 @@ import type { SupabaseClient } from '@supabase/supabase-js';
 import type { Database } from '@/lib/database.types';
 import { expandEventsInZone } from '@/lib/calendar/recurrence';
 import { calendarOverlapWindowFilter, calendarWindowFilter, type CalendarWindowBounds } from '@/lib/briefing/calendar-window';
+import { CALENDAR_SOURCE_ARCHIVE_ENABLED } from './source-capability';
 
 type EventRow = Database['public']['Tables']['calendar_events']['Row'];
 type Db = SupabaseClient<Database>;
@@ -144,6 +145,9 @@ export async function readCalendarOccurrences<C extends keyof EventRow = keyof E
   timezone: string,
   opts: OccurrencesOptions<C> = {},
 ): Promise<OccurrencesResult<C>> {
+  if (CALENDAR_SOURCE_ARCHIVE_ENABLED) {
+    return { data: null, count: null, error: { message: 'This calendar read is unavailable. Please try again later.' } };
+  }
   for (const limit of [opts.limit, opts.singlesLimit]) {
     if (limit !== undefined && (!Number.isSafeInteger(limit) || limit < 1)) {
       return { data: null, count: null, error: { message: 'Invalid calendar read limit' } };

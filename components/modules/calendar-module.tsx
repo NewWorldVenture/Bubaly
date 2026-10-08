@@ -6,7 +6,7 @@ import { useCallback, useMemo, useState, useEffect, useRef } from 'react';
 import { ChevronLeft, ChevronRight, Plus, MapPin, RefreshCw, Filter, Check, Sparkles, Eye, EyeOff, Users, Columns } from 'lucide-react';
 import { useApp } from '@/components/app/app-context';
 import { useRealtimeQuery } from '@/lib/hooks/use-realtime-query';
-import { readCalendarOccurrences } from '@/lib/calendar/occurrences';
+import { readDisplayCalendarOccurrences, CALENDAR_DISPLAY_CONTRACT, CALENDAR_SOURCE_ARCHIVE_ENABLED, type CalendarDisplayOccurrence } from '@/lib/calendar/display-occurrences';
 import { addDays as addDateDays, allDayDate, compareOccurrences, familyFetchRange } from '@/lib/calendar/day';
 import { BusynessHeatmap } from '@/components/calendar/busyness-heatmap';
 import { describeDbError } from '@/lib/supabase/errors';
@@ -21,7 +21,7 @@ import { PageHeader } from '@/components/app/page-header';
 import { AiInsight } from '@/components/ai/ai-insight';
 import { SkeletonList, ErrorState } from '@/components/ui/states';
 import { eventSchema, fieldErrors } from '@/lib/validation';
-import { EventDetailModal } from './event-detail-modal';
+import { CalendarOccurrenceDetailModal } from './event-detail-modal';
 import { FindTimeModal } from './find-time-modal';
 import { RoutinesPanel } from './routines-panel';
 import { cn } from '@/lib/utils/cn';
@@ -31,7 +31,8 @@ import { useFamilyClock, useFormat, type FamilyClock } from '@/components/i18n/u
 import { addWallDays, wallDaysInMonth, wallKey, wallMonthStart, wallParts, wallWeekStart } from '@/lib/time/wall-clock';
 import { fromLocalInput, toLocalInput } from '@/lib/time/local-input';
 
-type Event = Tables<'calendar_events'>;
+type Event = CalendarDisplayOccurrence;
+type NativeEvent = Tables<'calendar_events'>;
 
 const CATEGORY_COLORS: Record<string, string> = {
   general: 'bg-brand/20 border-brand/40 text-brand-text',
@@ -187,10 +188,10 @@ function MonthGrid({ gridDays, monthAnchor, eventsByDay, todayStr, onSelect }: {
               <div className={cn('mb-1 flex h-6 w-6 items-center justify-center rounded-full text-xs', isToday ? 'bg-brand font-bold text-white' : inMonth ? 'text-fg' : 'text-muted')}>{wallParts(d).day}</div>
               <div className="space-y-0.5">
                 {evs.slice(0, 3).map((e) => (
-                  <button key={`${e.id}-${e.starts_at}`} onClick={() => onSelect(e)}
-                    className={cn('flex w-full items-center gap-1 truncate rounded border px-1 py-0.5 text-left text-[10px]', CATEGORY_COLORS[e.category] ?? CATEGORY_COLORS.other)}>
-                    <span className={cn('h-1.5 w-1.5 shrink-0 rounded-full', CATEGORY_DOT[e.category] ?? 'bg-muted')} />
-                    <span className="truncate">{e.title}</span>
+                  <button key={e.occurrenceKey} onClick={() => onSelect(e)}
+                    className={cn('flex w-full items-center gap-1 truncate rounded border px-1 py-0.5 text-left text-[10px]', CATEGORY_COLORS[e.category ?? 'other'] ?? CATEGORY_COLORS.other)}>
+                    <span className={cn('h-1.5 w-1.5 shrink-0 rounded-full', CATEGORY_DOT[e.category ?? 'other'] ?? 'bg-muted')} />
+                    <span className="truncate">{e.title ?? '—'}</span>
                   </button>
                 ))}
                 {evs.length > 3 && <div className="px-1 text-[9px] text-muted">+{evs.length - 3} more</div>}
@@ -208,9 +209,9 @@ export function CalendarModule() {
   const { fmtDate, fmtTime } = useFormat();
   const clock = useFamilyClock();
   const { familyId, userId, members, selfMember } = useApp();
-  const [open, setOpen] = useState(false);
-  const [findOpen, setFindOpen] = useState(false);
-  const [selected, setSelected] = useState<Event | null>(null);
+  const [openScope, setOpenScope] = useState<object | null>(null);
+  const [findScope, setFindScope] = useState<object | null>(null);
+  const [selection, setSelection] = useState<{ scope: object; key: string } | null>(null);
 
   // The event chip is a <div> in all five views and was openable with a mouse
   // and by no other means: not focusable, so Tab never reached it and Enter
@@ -225,7 +226,7 @@ export function CalendarModule() {
   const openOnKey = (ev: React.KeyboardEvent, event: Event) => {
     if (ev.key === 'Enter' || ev.key === ' ') { ev.preventDefault(); setSelected(event); }
   };
-  const [editing, setEditing] = useState<Event | null>(null);
+  const [editor, setEditor] = useState<{ scope: object; event: NativeEvent } | null>(null);
   const [weekOffset, setWeekOffset] = useState(0);
   const [filterCategory, setFilterCategory] = useState<string>('all');
   const [catMenu, setCatMenu] = useState(false);
@@ -319,17 +320,47 @@ export function CalendarModule() {
     if (gridRef.current) gridRef.current.scrollTop = HOUR_HEIGHT * 1;
   }, []);
 
-  const { data, loading, error, refresh } = useRealtimeQuery<Event>({
-    table: 'calendar_events', familyId, deps: [familyId, gridFirstDay, gridEndDay, clock.timeZone],
+  const query = useRealtimeQuery<Event>({
+    table: 'calendar_events', familyId, deps: [familyId, userId, gridFirstDay, gridEndDay, clock.timeZone, CALENDAR_DISPLAY_CONTRACT, CALENDAR_SOURCE_ARCHIVE_ENABLED],
     // In-window events PLUS every recurring series that started before the
     // window's end — expandEvents below turns those into the occurrences that
     // actually fall inside the grid (a weekly event created in June must show
     // on every July Monday, not vanish after its first week).
-    fetcher: (supabase) => readCalendarOccurrences(supabase, familyId, {
+    fetcher: (supabase) => readDisplayCalendarOccurrences(supabase, familyId, {
       timedFrom: fetchRange.timedFrom.toISOString(), timedTo: fetchRange.timedTo.toISOString(),
       allDayFromDay: gridFirstDay, allDayToDay: gridEndDay,
     }, clock.timeZone),
   });
+  const { loading, error, refresh } = query;
+  // A review-held source read is an unavailable whole window, even if the
+  // generic realtime hook retained yesterday's successful cache on failure.
+  const data = useMemo(() => error ? [] : query.data, [error, query.data]);
+  const selectionScope = JSON.stringify([familyId, userId, gridFirstDay, gridEndDay, clock.timeZone]);
+  // Object identity changes on A->B->A too. Old async save callbacks cannot
+  // close or refresh a new owner's newly opened composition.
+  const actionScope = useMemo(() => ({ selectionScope }), [selectionScope]);
+  const currentActionScope = useRef(actionScope);
+  currentActionScope.current = actionScope;
+  const open = openScope === actionScope;
+  const findOpen = findScope === actionScope;
+  const editing = editor?.scope === actionScope ? editor.event : null;
+  const setOpen = (value: boolean) => { if (currentActionScope.current === actionScope) setOpenScope(value ? actionScope : null); };
+  const setFindOpen = (value: boolean) => { if (currentActionScope.current === actionScope) setFindScope(value ? actionScope : null); };
+  const setEditing = (event: NativeEvent | null) => { if (currentActionScope.current === actionScope) setEditor(event ? { scope: actionScope, event } : null); };
+  const setSelected = (event: Event) => { if (currentActionScope.current === actionScope) setSelection({ scope: actionScope, key: event.occurrenceKey }); };
+  const closeSelection = () => { if (currentActionScope.current === actionScope) setSelection(null); };
+  const selected = !error && selection?.scope === actionScope
+    ? data.find(event => event.occurrenceKey === selection.key) ?? null : null;
+
+  useEffect(() => {
+    if (!CALENDAR_SOURCE_ARCHIVE_ENABLED) return;
+    // Archive tables are not in realtime publication. Refresh explicitly,
+    // rather than pretending the native table subscription sees revisions.
+    const onFocus = () => { void refresh(); };
+    const timer = window.setInterval(() => { if (document.visibilityState === 'visible') void refresh(); }, 60_000);
+    window.addEventListener('focus', onFocus);
+    return () => { window.clearInterval(timer); window.removeEventListener('focus', onFocus); };
+  }, [refresh]);
 
   // Recurring rules → concrete occurrences ON the grid's dates: timed rows
   // stepped on the family's wall clock (a weekly 09:00 stays 09:00 across their
@@ -349,7 +380,7 @@ export function CalendarModule() {
   const filtered = useMemo(() => {
     return data.filter((e) => {
       if (filterCategory !== 'all' && e.category !== filterCategory) return false;
-      if (hiddenCategories.has(e.category)) return false;
+      if (hiddenCategories.has(e.category ?? 'other')) return false;
       const mk = e.assignee_id ?? FAMILY_KEY;
       if (hiddenMembers.has(mk)) return false;
       return true;
@@ -383,7 +414,7 @@ export function CalendarModule() {
   // Combined per-day map (month chips + day list).
   const eventsByDay = useMemo(() => {
     const map = new Map<string, Event[]>();
-    for (const e of [...filtered].sort((a, b) => compareOccurrences(a, b, clock.timeZone))) {
+    for (const e of [...filtered].sort((a, b) => compareOccurrences(a, b, clock.timeZone) || a.occurrenceKey.localeCompare(b.occurrenceKey))) {
       const key = dayOf(e);
       if (!map.has(key)) map.set(key, []);
       map.get(key)!.push(e);
@@ -402,7 +433,7 @@ export function CalendarModule() {
     return data.filter(e => {
       const day = dayOf(e);
       return day >= todayKeyForUpcoming && day < lastDay;
-    }).sort((a, b) => compareOccurrences(a, b, clock.timeZone)).slice(0, 8);
+    }).sort((a, b) => compareOccurrences(a, b, clock.timeZone) || a.occurrenceKey.localeCompare(b.occurrenceKey)).slice(0, 8);
   }, [data, dayOf, todayKeyForUpcoming, clock.timeZone]);
 
   const upcomingByDay = useMemo(() => {
@@ -695,9 +726,9 @@ export function CalendarModule() {
           <div className="flex-1 space-y-1 p-4">
             {/* All-day events */}
             {mobileDayAllDay.map(e => (
-              <div key={`${e.id}-${e.starts_at}`} onClick={() => setSelected(e)} onKeyDown={(ev) => openOnKey(ev, e)} role="button" tabIndex={0} className={cn('focus-ring cursor-pointer rounded-lg border p-3 transition hover:brightness-110', CATEGORY_COLORS[e.category] ?? CATEGORY_COLORS.other)}>
+              <div key={e.occurrenceKey} onClick={() => setSelected(e)} onKeyDown={(ev) => openOnKey(ev, e)} role="button" tabIndex={0} className={cn('focus-ring cursor-pointer rounded-lg border p-3 transition hover:brightness-110', CATEGORY_COLORS[e.category ?? 'other'] ?? CATEGORY_COLORS.other)}>
                 <div className="text-[10px] font-semibold uppercase tracking-wide opacity-70">{tr('calendar.allDay')}</div>
-                <div className="text-sm font-semibold">{e.title}</div>
+                <div className="text-sm font-semibold">{e.title ?? '—'}</div>
                 {e.assignee_id && memberById.get(e.assignee_id) && (
                   <div className="mt-1 flex items-center gap-1.5 text-xs opacity-70">
                     <Avatar name={memberById.get(e.assignee_id)!.display_name} color={memberById.get(e.assignee_id)!.color} size={14} />
@@ -714,7 +745,7 @@ export function CalendarModule() {
             {mobileDayTimed.map(e => {
               const member = e.assignee_id ? memberById.get(e.assignee_id) : null;
               return (
-                <div key={`${e.id}-${e.starts_at}`} onClick={() => setSelected(e)} onKeyDown={(ev) => openOnKey(ev, e)} role="button" tabIndex={0} className={cn('focus-ring cursor-pointer rounded-lg border p-3 transition hover:brightness-110', CATEGORY_COLORS[e.category] ?? CATEGORY_COLORS.other)}>
+                <div key={e.occurrenceKey} onClick={() => setSelected(e)} onKeyDown={(ev) => openOnKey(ev, e)} role="button" tabIndex={0} className={cn('focus-ring cursor-pointer rounded-lg border p-3 transition hover:brightness-110', CATEGORY_COLORS[e.category ?? 'other'] ?? CATEGORY_COLORS.other)}>
                   <div className="flex items-center justify-between gap-2">
                     <span className="text-xs font-semibold">
                       {fmtTime(e.starts_at)}
@@ -722,7 +753,7 @@ export function CalendarModule() {
                     </span>
                     {member && <Avatar name={member.display_name} color={member.color} size={18} />}
                   </div>
-                  <div className="mt-1 text-sm font-semibold">{e.title}</div>
+                  <div className="mt-1 text-sm font-semibold">{e.title ?? '—'}</div>
                   {member && <div className="mt-0.5 text-xs opacity-70">{member.display_name}</div>}
                   {e.location && (
                     <div className="mt-1 flex items-center gap-1 text-xs opacity-70"><MapPin className="h-3 w-3" />{e.location}</div>
@@ -762,8 +793,8 @@ export function CalendarModule() {
                     {/* All-day events */}
                     <div className="mt-1 w-full space-y-0.5 px-1">
                       {col.allDay.map(e => (
-                        <div key={`${e.id}-${e.starts_at}`} onClick={() => setSelected(e)} onKeyDown={(ev) => openOnKey(ev, e)} role="button" tabIndex={0} className={cn('focus-ring cursor-pointer truncate rounded px-1.5 py-0.5 text-[10px] font-medium border', CATEGORY_COLORS[e.category] ?? CATEGORY_COLORS.other)}>
-                          {e.title}
+                        <div key={e.occurrenceKey} onClick={() => setSelected(e)} onKeyDown={(ev) => openOnKey(ev, e)} role="button" tabIndex={0} className={cn('focus-ring cursor-pointer truncate rounded px-1.5 py-0.5 text-[10px] font-medium border', CATEGORY_COLORS[e.category ?? 'other'] ?? CATEGORY_COLORS.other)}>
+                          {e.title ?? '—'}
                         </div>
                       ))}
                     </div>
@@ -807,14 +838,14 @@ export function CalendarModule() {
                         const member = e.assignee_id ? memberById.get(e.assignee_id) : null;
                         if (top < 0 || top > HOURS.length * HOUR_HEIGHT) return null;
                         return (
-                          <div key={`${e.id}-${e.starts_at}`} style={{ top, height, left: 2, right: 2 }} onClick={() => setSelected(e)} onKeyDown={(ev) => openOnKey(ev, e)} role="button" tabIndex={0} 
-                            className={cn('focus-ring absolute z-10 overflow-hidden rounded-md border p-1.5 text-[10px] cursor-pointer hover:brightness-110 transition', CATEGORY_COLORS[e.category] ?? CATEGORY_COLORS.other)}
-                            title={e.title}>
+                          <div key={e.occurrenceKey} style={{ top, height, left: 2, right: 2 }} onClick={() => setSelected(e)} onKeyDown={(ev) => openOnKey(ev, e)} role="button" tabIndex={0}
+                            className={cn('focus-ring absolute z-10 overflow-hidden rounded-md border p-1.5 text-[10px] cursor-pointer hover:brightness-110 transition', CATEGORY_COLORS[e.category ?? 'other'] ?? CATEGORY_COLORS.other)}
+                            title={e.title ?? ''}>
                             <div className="flex items-start justify-between gap-1">
                               <span className="font-semibold leading-tight truncate">{fmtTime(e.starts_at)}</span>
                               {height > 30 && member && <Avatar name={member.display_name} color={member.color} size={14} />}
                             </div>
-                            {height > 24 && <div className="mt-0.5 truncate font-medium leading-tight">{e.title}</div>}
+                            {height > 24 && <div className="mt-0.5 truncate font-medium leading-tight">{e.title ?? '—'}</div>}
                             {height > 42 && member && <div className="mt-0.5 truncate text-[9px] opacity-70">{member.display_name}</div>}
                             {height > 54 && e.location && (
                               <div className="mt-0.5 flex items-center gap-0.5 text-[9px] opacity-70"><MapPin className="h-2 w-2" />{e.location}</div>
@@ -890,15 +921,15 @@ export function CalendarModule() {
                   {label} &bull; {fmtDate(day, 'MMM d')}
                 </div>
                 {events.map(e => (
-                  <div key={`${e.id}-${e.starts_at}`} onClick={() => setSelected(e)} onKeyDown={(ev) => openOnKey(ev, e)} role="button" tabIndex={0} className="focus-ring mb-1 flex cursor-pointer items-start gap-2 rounded-lg p-1.5 hover:bg-elevated transition">
-                    <div className={cn('mt-1 h-1.5 w-1.5 flex-shrink-0 rounded-full', CATEGORY_DOT[e.category] ?? 'bg-muted')} />
+                  <div key={e.occurrenceKey} onClick={() => setSelected(e)} onKeyDown={(ev) => openOnKey(ev, e)} role="button" tabIndex={0} className="focus-ring mb-1 flex cursor-pointer items-start gap-2 rounded-lg p-1.5 hover:bg-elevated transition">
+                    <div className={cn('mt-1 h-1.5 w-1.5 flex-shrink-0 rounded-full', CATEGORY_DOT[e.category ?? 'other'] ?? 'bg-muted')} />
                     <div className="min-w-0">
                       {!e.all_day && (
                         <div className="text-[10px] font-semibold text-muted">
                           {fmtTime(e.starts_at)}
                         </div>
                       )}
-                      <div className="truncate text-xs font-medium">{e.title}</div>
+                      <div className="truncate text-xs font-medium">{e.title ?? '—'}</div>
                       {e.assignee_id && memberById.get(e.assignee_id) && (
                         <div className="text-[10px] text-muted">{memberById.get(e.assignee_id)!.display_name}</div>
                       )}
@@ -962,7 +993,7 @@ export function CalendarModule() {
         </div>
 
         {/* Routines — detected + saved recurring-routine templates */}
-        <RoutinesPanel events={data} weekStartMonday={monday} timeZone={clock.timeZone} onApplied={refresh} />
+        <RoutinesPanel events={data.flatMap(event => event.kind === 'native' && !event.readOnly ? [event.event] : [])} weekStartMonday={monday} timeZone={clock.timeZone} onApplied={refresh} />
 
         {/* Share Calendar */}
         <div className="sidebar-card">
@@ -978,11 +1009,11 @@ export function CalendarModule() {
       {editing && <NewEventModal existing={editing} onClose={() => setEditing(null)} onSaved={() => { setEditing(null); void refresh(); }} />}
       {findOpen && <FindTimeModal members={members} selfMemberId={selfMember?.id ?? null} onClose={() => setFindOpen(false)} onScheduled={() => { setFindOpen(false); void refresh(); }} />}
       {selected && (
-        <EventDetailModal
-          event={selected} members={members} selfMemberId={selfMember?.id ?? null} familyId={familyId}
-          onClose={() => setSelected(null)}
-          onEdit={(e) => { setSelected(null); setEditing(e); }}
-          onDeleted={() => { setSelected(null); void refresh(); }}
+        <CalendarOccurrenceDetailModal
+          occurrence={selected} members={members} selfMemberId={selfMember?.id ?? null} familyId={familyId}
+          onClose={closeSelection}
+          onEdit={(e) => { closeSelection(); setEditing(e); }}
+          onDeleted={() => { closeSelection(); void refresh(); }}
         />
       )}
     </div>
@@ -990,7 +1021,7 @@ export function CalendarModule() {
 }
 
 function NewEventModal({ existing, onClose, onSaved }: {
-  existing?: Event | null; onClose: () => void; onSaved: () => void;
+  existing?: NativeEvent | null; onClose: () => void; onSaved: () => void;
 }) {
   const tr = useTranslations();
   // The box reads and writes the FAMILY's wall clock, both ends in one zone, so

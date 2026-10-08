@@ -15,6 +15,21 @@ import {
 type Finding = { kind: string; detail: string; file: string; line: number; via?: string };
 
 describe('supabase query audit', () => {
+  it.each([
+    ['calendar_read_occurrence_inputs', 'lib/calendar/source-snapshot.ts'],
+    ['calendar_feed_archive_sources', 'lib/server/calendar-feeds.ts'],
+  ])('keeps %s held and approved only at its reviewed caller', (name, caller) => {
+    const { functions } = readSchema();
+    expect(functions.has(name)).toBe(false);
+    const source = `db.rpc('${name}', {});`;
+    const approved = auditRpcCalls(source, caller, functions);
+    expect(approved.findings).toEqual([]);
+    expect(approved.reservedDependencies).toMatchObject([{ detail: name, runnable: false }]);
+    const other = auditRpcCalls(source, 'lib/unreviewed-calendar-reader.ts', functions);
+    expect(other.reservedDependencies).toEqual([]);
+    expect(other.findings).toMatchObject([{ kind: 'missing-function', detail: name }]);
+  });
+
   it('allows the source audit but blocks the production CLI on held RPC dependencies', () => {
     const run = (args: string[]) => spawnSync(process.execPath,
       ['scripts/audit-supabase-queries.mjs', ...args], { encoding: 'utf8' });
@@ -27,7 +42,7 @@ describe('supabase query audit', () => {
     const strict = run(['--require-runnable-rpcs']);
     expect(strict.error).toBeUndefined();
     expect(strict.status).toBe(1);
-    expect(strict.stderr).toContain('Runnable RPC gate failed: 4 held RPC call site(s)');
+    expect(strict.stderr).toContain('Runnable RPC gate failed: 6 held RPC call site(s)');
     expect(strict.stderr).toContain('Production migration workflow is blocked');
     for (const [name, approval] of Object.entries(RESERVED_RPC_DEPENDENCIES) as [string, { sql: string }][]) {
       expect(strict.stderr).toContain(name);
@@ -56,7 +71,7 @@ describe('supabase query audit', () => {
     };
     const describeFinding = (f: Finding) => `${f.kind} ${f.detail} at ${f.file}:${f.line}`;
     expect(findings.map(describeFinding)).toEqual([]);
-    expect(reservedDependencies).toHaveLength(4);
+    expect(reservedDependencies).toHaveLength(6);
     for (const [name, approval] of Object.entries(RESERVED_RPC_DEPENDENCIES) as [
       string,
       { caller: string; sql: string },

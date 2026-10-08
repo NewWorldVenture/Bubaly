@@ -15,7 +15,7 @@ import { describeActionError } from '@/lib/supabase/errors';
  * the family already had instead of adding one — it carries that row's name,
  * because the name and colour typed on this add were not applied to it.
  */
-type ActionResult = { ok: true; imported?: number; alreadySubscribedAs?: string } | { ok: false; error: string };
+type ActionResult = { ok: true; imported?: number; sourceGroups?: number; alreadySubscribedAs?: string } | { ok: false; error: string };
 
 type FeedRef = { id: string; family_id: string; url: string; name: string };
 
@@ -166,8 +166,9 @@ export async function addCalendarFeed(input: { name: string; url: string; color?
   await recordActivationServer({ userId: ctx.user.id, familyId, milestone: 'calendar_imported', signupAtIso: ctx.active.family.created_at });
   revalidatePath('/dashboard/settings');
   revalidatePath('/dashboard/calendar');
-  if (!createdHere) return { ok: true, imported: result.imported, alreadySubscribedAs: feed.name };
-  return { ok: true, imported: result.imported };
+  const sourceMetadata = result.sourceGroups === undefined ? {} : { sourceGroups: result.sourceGroups };
+  if (!createdHere) return { ok: true, imported: result.imported, ...sourceMetadata, alreadySubscribedAs: feed.name };
+  return { ok: true, imported: result.imported, ...sourceMetadata };
 }
 
 /** Manually re-syncs one feed. */
@@ -188,7 +189,7 @@ export async function syncCalendarFeed(feedId: string): Promise<ActionResult> {
   revalidatePath('/dashboard/settings');
   revalidatePath('/dashboard/calendar');
   if (!result.ok) return { ok: false, error: result.error };
-  return { ok: true, imported: result.imported };
+  return { ok: true, imported: result.imported, ...(result.sourceGroups === undefined ? {} : { sourceGroups: result.sourceGroups }) };
 }
 
 /** Removes a feed; its imported events cascade-delete via the FK. */

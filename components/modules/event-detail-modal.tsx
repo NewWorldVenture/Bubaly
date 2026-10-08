@@ -17,6 +17,7 @@ import type { Tables } from '@/lib/database.types';
 import { useTranslations } from '@/components/i18n/locale-provider';
 import { useFormat } from '@/components/i18n/use-format';
 import { formatEventRange } from '@/lib/calendar/event-range';
+import type { CalendarDisplayOccurrence } from '@/lib/calendar/display-occurrences';
 
 type Event = Tables<'calendar_events'>;
 type Member = Tables<'family_members'>;
@@ -33,6 +34,28 @@ type EventDetailProps = {
   event: Event; members: Member[]; selfMemberId: string | null; familyId: string; onClose: () => void;
   onEdit?: (event: Event) => void; onDeleted?: () => void;
 };
+
+/** Source occurrences have no database event ID. Keep their detail subtree
+ * separate so native RSVP/edit/delete/insight hooks cannot mount by mistake. */
+export function CalendarOccurrenceDetailModal({ occurrence, ...props }: Omit<EventDetailProps, 'event'> & { occurrence: CalendarDisplayOccurrence }) {
+  return occurrence.kind === 'native'
+    ? <EventDetailModal {...props} event={occurrence.event} />
+    : <SourceOccurrenceDetail occurrence={occurrence} onClose={props.onClose} />;
+}
+
+function SourceOccurrenceDetail({ occurrence, onClose }: { occurrence: CalendarDisplayOccurrence; onClose: () => void }) {
+  const format = useFormat();
+  const t = useTranslations();
+  return <Modal open onClose={onClose} title={occurrence.title ?? '—'}>
+    <div className="space-y-4">
+      <div className="space-y-1.5 text-sm text-muted">
+        <p className="flex items-center gap-2"><CalendarDays className="h-4 w-4" />{formatEventRange(occurrence, format, t('calendar.allDay'))}</p>
+        {occurrence.location && <p className="flex items-center gap-2"><MapPin className="h-4 w-4" />{occurrence.location}</p>}
+      </div>
+      {occurrence.description && <p className="whitespace-pre-wrap text-sm text-fg/90">{occurrence.description}</p>}
+    </div>
+  </Modal>;
+}
 
 export function EventDetailModal(props: EventDetailProps) {
   // Imported rows belong to their source. Keep the native subtree unmounted:

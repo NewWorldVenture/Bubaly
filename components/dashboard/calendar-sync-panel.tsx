@@ -13,6 +13,7 @@ import { cn } from '@/lib/utils/cn';
 import { addCalendarFeed, syncCalendarFeed, removeCalendarFeed } from '@/app/(app)/dashboard/sync/feeds/actions';
 import { CALENDAR_PROVIDERS, getCalendarProvider, type CalendarProvider } from '@/lib/calendar/providers';
 import { feedAddedMessage } from '@/lib/calendar/feeds';
+import { CALENDAR_SOURCE_ARCHIVE_ENABLED } from '@/lib/calendar/source-capability';
 import type { Tables } from '@/lib/database.types';
 import { useTranslations } from '@/components/i18n/locale-provider';
 import { useFormat } from '@/components/i18n/use-format';
@@ -82,7 +83,9 @@ function CalendarSyncWorkspace() {
       const res = await syncCalendarFeed(feed.id);
       if (!alive.current || request !== syncRequest.current) return;
       if (!res.ok) { toastError(res.error); return; }
-      success(t('calendarSync.syncedEventsCount', { count: res.imported ?? 0 }));
+      success(res.sourceGroups === undefined
+        ? t('calendarSync.syncedEventsCount', { count: res.imported ?? 0 })
+        : t('trustActivity.stateSucceeded'));
     } catch {
       if (alive.current && request === syncRequest.current) toastError(t('errors.thatChangeWasNotSaved'));
     } finally {
@@ -134,11 +137,13 @@ function CalendarSyncWorkspace() {
                 <div className="flex-1 min-w-0">
                   <p className="truncate text-sm font-semibold">{feed.name}</p>
                   <p className="truncate text-xs text-muted">{feed.url}</p>
-                  {feed.last_status === 'error' && feed.last_error ? (
-                    <p className="text-[10px] text-danger mt-0.5"><AlertCircle className="inline h-2.5 w-2.5" /> {feed.last_error}</p>
+                  {feed.last_status === 'error' || feed.last_status === 'revision_review' ? (
+                    <p className="text-[10px] text-danger mt-0.5"><AlertCircle className="inline h-2.5 w-2.5" /> {feed.last_error ?? t('errors.thatChangeWasNotSaved')}</p>
                   ) : feed.last_synced_at ? (
                     <p className="text-[10px] text-success mt-0.5">
-                      <Check className="inline h-2.5 w-2.5" /> {feed.event_count} events · synced {fmtDate(feed.last_synced_at, 'P')}
+                      <Check className="inline h-2.5 w-2.5" /> {CALENDAR_SOURCE_ARCHIVE_ENABLED
+                        ? `${t('trustActivity.stateSucceeded')} · ${fmtDate(feed.last_synced_at, 'P')}`
+                        : `${feed.event_count} events · synced ${fmtDate(feed.last_synced_at, 'P')}`}
                     </p>
                   ) : (
                     <p className="text-[10px] text-muted mt-0.5">{t('calendarSyncPanel.notSyncedYet')}</p>

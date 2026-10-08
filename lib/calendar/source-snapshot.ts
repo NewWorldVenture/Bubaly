@@ -3,6 +3,7 @@
  * observed halfway through two separate HTTP reads. Imported refs never name a
  * calendar_events row and must not be passed to native mutation adapters. */
 import type { CalendarWindowBounds } from '../briefing/calendar-window';
+import type { Tables } from '../database.types';
 import { allDayBusyInterval } from './event-dates';
 import { expandEventsInZone } from './recurrence';
 import { parseImportedSource, type ImportedSourceDocument, type ImportedSourceComponent, type ImportedSourceOverride, type SourceTime } from './imported-source';
@@ -13,11 +14,7 @@ type Obj = Record<string, unknown>;
 export type CalendarSnapshotReference = { kind: 'native'; eventId: string } | {
   kind: 'source'; feedId: string; uid: string; revisionId: string; original: SourceTime;
 };
-export interface SnapshotNativeRow {
-  id: string; family_id: string; title: string; description: string | null; location: string | null;
-  starts_at: string; ends_at: string | null; all_day: boolean; recurrence: string; recurrence_until: string | null;
-  feed_id: string | null; external_uid: string | null; assignee_id: string | null; source_recurrence: null;
-}
+export type SnapshotNativeRow = Tables<'calendar_events'> & { source_recurrence: null };
 export interface SnapshotSourceGroup {
   feedId: string; uid: string; revisionId: string; materializationState: 'ready'; document: ImportedSourceDocument;
   masterCancellationRevisionId: string | null;

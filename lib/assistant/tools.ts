@@ -9,9 +9,8 @@ import type { ToolSpec } from '@/lib/ai/provider';
 import { buildHomeNeeds } from '@/lib/home/needs-build';
 import { rankNeedsAttention } from '@/lib/home/needs-attention';
 import { detectConflicts, type ConflictEvent } from '@/lib/home/conflicts';
-import { readCalendarOccurrences } from '@/lib/calendar/occurrences';
+import { readCalendarBusySource, readCalendarOccurrences } from '@/lib/calendar/occurrences';
 import { briefingCalendarBounds, instantCalendarBounds } from '@/lib/briefing/calendar-window';
-import { occurrenceDay } from '@/lib/calendar/day';
 import type { ParentApprovalRow, RenewalRow, DocumentRow, NeedsReader } from '@/lib/home/needs-sources';
 import { SOURCE_MESSAGES, translate } from '@/lib/i18n/messages';
 import { reminderAttention } from '@/lib/dashboard/reminder-attention';
@@ -517,13 +516,47 @@ export function buildAssistantTools(supabase: DB, ctx: AssistantCtx): ToolSpec[]
         // the day it was created and free every week after.
         let bounds: ReturnType<typeof briefingCalendarBounds>;
         try { bounds = briefingCalendarBounds(date, tz, 0, 1); } catch { return { ok: false, error: 'date must be a real calendar date' }; }
-        const memberId = resolveMember(ctx, a.assignee);
-        const { data, error } = await readCalendarOccurrences(supabase, ctx.familyId, bounds, tz, {
-          columns: ['title', 'starts_at', 'ends_at', 'all_day', 'assignee_id'],
-          ...(memberId ? { assigneeId: memberId } : {}),
-          limit: 50,
-        });
-        if (error) return toolFailure('find free time', error);
+        let memberId: string | null = null;
+        if (a.assignee != null) {
+          const query = str(a.assignee).toLowerCase();
+          if (!query) return { ok: false, error: 'Choose a family member by name.' };
+          const exact = ctx.members.filter(member => member.display_name.toLowerCase() === query);
+          const matches = exact.length ? exact : ctx.members.filter(member => member.display_name.toLowerCase().includes(query));
+          if (matches.length !== 1) return { ok: false, error: matches.length ? 'That name matches more than one family member. Use their full name.' : 'That family member could not be found.' };
+          memberId = matches[0].id;
+        }
+        // Await the SDK builder inside an async function so transport/setup
+        // failures settle normally and its response fields keep their types.
+        const readSportsSeries = async () => {
+          const result = await supabase.from('sports_events').select('id', { count: 'exact', head: true })
+            .eq('family_id', ctx.familyId).neq('recurrence', 'none')
+            .lt('starts_at', bounds.timedTo).order('starts_at').order('id');
+          return { count: result.count, error: result.error };
+        };
+        const [calendar, school, sports, sportsSeries] = await settleAll([
+          readCalendarOccurrences(supabase, ctx.familyId, bounds, tz, {
+            columns: ['title', 'starts_at', 'ends_at', 'all_day', 'assignee_id'],
+            // Availability needs the complete occupied window, including rows
+            // that began yesterday. A truncated agenda cannot prove a free gap.
+            overlap: true,
+          }),
+          readCalendarBusySource(supabase, ctx.familyId, 'school_events', bounds.timedFrom, bounds.timedTo),
+          readCalendarBusySource(supabase, ctx.familyId, 'sports_events', bounds.timedFrom, bounds.timedTo),
+          // The secondary busy reader does not expand sports recurrence. Until
+          // that source has qualified recurrence semantics, an older master
+          // must make availability unavailable, never make its later dates free.
+          readSportsSeries(),
+        ]);
+        for (const result of [calendar, school, sports, sportsSeries]) if (result.error) return toolFailure('find free time', result.error);
+        if (sportsSeries.count !== 0) return { ok: false, error: 'Availability cannot be confirmed while recurring sports schedules are present or unavailable.' };
+        // Unassigned commitments belong to the whole family, including a
+        // named member's availability. Filter only after complete scoped reads.
+        const selected = (assignee: string | null) => !memberId || !assignee || assignee === memberId;
+        const data = [
+          ...(calendar.data ?? []).filter(event => selected(event.assignee_id)),
+          ...(school.data ?? []).filter(event => selected(event.member_id)).map(event => ({ ...event, title: 'School event', all_day: false })),
+          ...(sports.data ?? []).filter(event => selected(event.member_id)).map(event => ({ ...event, title: 'Sports event', all_day: false })),
+        ].sort((a, b) => a.starts_at.localeCompare(b.starts_at) || a.id.localeCompare(b.id));
         const fmt = (iso: string | null) => {
           if (!iso) return null;
           try { return new Intl.DateTimeFormat('en-US', { timeZone: tz, weekday: 'short', month: 'short', day: 'numeric', hour: 'numeric', minute: '2-digit' }).format(new Date(iso)); }
@@ -533,9 +566,17 @@ export function buildAssistantTools(supabase: DB, ctx: AssistantCtx): ToolSpec[]
         // date, and has no clock time to give (read in the family's zone, a
         // Saturday all-day row in Los Angeles is "Fri 5:00 PM").
         const fmtDay = (iso: string) => new Intl.DateTimeFormat('en-US', { timeZone: 'UTC', weekday: 'short', month: 'short', day: 'numeric' }).format(new Date(iso));
-        const busy = (data ?? []).filter((e) => occurrenceDay(e, tz) === date).map((e) => (e.all_day
-          ? { title: e.title, start: fmtDay(e.starts_at), end: null, all_day: true }
-          : { title: e.title, start: fmt(e.starts_at), end: fmt(e.ends_at), all_day: false }));
+        const busy = (data ?? []).map((e) => {
+          if (e.all_day) return {
+            title: e.title, start: fmtDay(`${date}T00:00:00Z`), end: null, all_day: true,
+            starts_at: bounds.allDayFromDay, ends_at: bounds.allDayToDay,
+          };
+          const originalStart = Date.parse(e.starts_at);
+          const originalEnd = e.ends_at === null ? originalStart + 3_600_000 : Date.parse(e.ends_at);
+          const startsAt = new Date(Math.max(originalStart, Date.parse(bounds.timedFrom))).toISOString();
+          const endsAt = new Date(Math.min(originalEnd, Date.parse(bounds.timedTo))).toISOString();
+          return { title: e.title, start: fmt(startsAt), end: fmt(endsAt), all_day: false, starts_at: startsAt, ends_at: endsAt };
+        });
         return { ok: true, date, time_zone: tz, busy, note: busy.length ? 'These are the busy blocks; open time is the gaps between them.' : 'No events that day — the whole day is free.' };
       },
     },

@@ -94,9 +94,9 @@ describe('the chat assistant\'s calendar tools', () => {
     const res = await tool(household(), 'find_free_time').execute({ date: '2026-09-14' }) as { ok: boolean; busy: { title: string; start: string | null; end: string | null; all_day: boolean }[] };
     expect(res.ok).toBe(true);
     expect(res.busy).toEqual([
-      { title: 'School closed', start: 'Mon, Sep 14', end: null, all_day: true },
-      { title: 'Soccer', start: 'Mon, Sep 14, 4:00 PM', end: 'Mon, Sep 14, 5:00 PM', all_day: false },
-      { title: 'Team photo', start: 'Mon, Sep 14, 4:30 PM', end: 'Mon, Sep 14, 5:30 PM', all_day: false },
+      { title: 'School closed', start: 'Mon, Sep 14', end: null, all_day: true, starts_at: '2026-09-14', ends_at: '2026-09-15' },
+      { title: 'Soccer', start: 'Mon, Sep 14, 4:00 PM', end: 'Mon, Sep 14, 5:00 PM', all_day: false, starts_at: '2026-09-14T23:00:00.000Z', ends_at: '2026-09-15T00:00:00.000Z' },
+      { title: 'Team photo', start: 'Mon, Sep 14, 4:30 PM', end: 'Mon, Sep 14, 5:30 PM', all_day: false, starts_at: '2026-09-14T23:30:00.000Z', ends_at: '2026-09-15T00:30:00.000Z' },
     ]);
     // Sunday is free: the all-day Monday is not drawn on the evening before.
     const sunday = await tool(household(), 'find_free_time').execute({ date: '2026-09-13' }) as { busy: unknown[] };

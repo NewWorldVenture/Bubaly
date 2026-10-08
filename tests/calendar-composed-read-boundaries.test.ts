@@ -15,6 +15,53 @@ const row = (id: string, starts_at: string, extra = {}) => ({
 const client = (db: ReturnType<typeof createInMemorySupabase>) => db as unknown as SupabaseClient<Database>;
 
 describe('composed calendar read boundaries', () => {
+  it('does not turn yesterday explicit recurring point into an hour-long event', async () => {
+    const db = createInMemorySupabase({ maxRows: 1 });
+    db.seed('calendar_events', [row('point', '2026-10-09T23:30:00.000Z', { ends_at: '2026-10-09T23:30:00.000Z', recurrence: 'daily' })]);
+    const result = await readCalendarOccurrences(client(db), family, briefingCalendarBounds('2026-10-10', 'UTC', 0, 1), 'UTC', { overlap: true });
+    expect(result.error).toBeNull(); expect(result.count).toBe(1);
+    expect(result.data?.map(r => r.starts_at)).toEqual(['2026-10-10T23:30:00.000Z']);
+  });
+
+  it.each(['none', 'daily'])('keeps %s points on the half-open calendar window without inventing occupancy', async recurrence => {
+    const db = createInMemorySupabase({ maxRows: 1 });
+    const points = ['2026-10-09T23:59:59.999Z', '2026-10-10T00:00:00.000Z', '2026-10-10T12:00:00.000Z', '2026-10-11T00:00:00.000Z'];
+    // A bounded cutoff is exclusive in this native model. Give each series one
+    // millisecond to emit its seed, without generating a second date.
+    db.seed('calendar_events', points.map((start, i) => row(`point-${i}`, start, { ends_at: start, recurrence, recurrence_until: recurrence === 'daily' ? new Date(Date.parse(start) + 1).toISOString() : null })));
+    const result = await readCalendarOccurrences(client(db), family, briefingCalendarBounds('2026-10-10', 'UTC', 0, 1), 'UTC', { overlap: true });
+    expect(result.error).toBeNull(); expect(result.count).toBe(2);
+    expect(result.data?.map(r => r.id)).toEqual(['point-1', 'point-2']);
+  });
+
+  for (const recurrence of ['none', 'daily']) {
+    it.each([
+      ['missing end still busy', '2026-10-10T09:30:00.000Z', null, 1],
+      ['missing end exactly one hour earlier', '2026-10-10T09:00:00.000Z', null, 0],
+      ['positive interval still busy', '2026-10-10T09:30:00.000Z', '2026-10-10T10:30:00.000Z', 1],
+      ['positive interval ends at boundary', '2026-10-10T09:30:00.000Z', '2026-10-10T10:00:00.000Z', 0],
+      ['explicit point before boundary', '2026-10-10T09:30:00.000Z', '2026-10-10T09:30:00.000Z', 0],
+      ['explicit point on boundary', '2026-10-10T10:00:00.000Z', '2026-10-10T10:00:00.000Z', 1],
+    ] as const)(`${recurrence}: %s`, async (_name, start, end, expected) => {
+      const db = createInMemorySupabase({ maxRows: 1 });
+      db.seed('calendar_events', [row('event', start, { ends_at: end, recurrence })]);
+      const result = await readCalendarOccurrences(client(db), family, instantCalendarBounds('2026-10-10T10:00:00.000Z', '2026-10-10T10:59:59.999Z', 'UTC'), 'UTC', { overlap: true });
+      expect(result.error).toBeNull(); expect(result.count).toBe(expected);
+    });
+  }
+
+  it.each([
+    ['gap point already over', '2026-03-07T07:30:00.000Z', '2026-03-08T07:45:00.000Z', '2026-03-08T07:59:59.999Z', 0],
+    ['gap point at its resolved instant', '2026-03-07T07:30:00.000Z', '2026-03-08T07:30:00.000Z', '2026-03-08T07:30:00.999Z', 1],
+    ['later fold seed already over', '2026-11-01T06:30:00.000Z', '2026-11-01T06:45:00.000Z', '2026-11-01T06:59:59.999Z', 0],
+    ['later fold seed on boundary', '2026-11-01T06:30:00.000Z', '2026-11-01T06:30:00.000Z', '2026-11-01T06:30:00.999Z', 1],
+  ] as const)('preserves the actual native DST clock for %s', async (_name, start, from, to, expected) => {
+    const db = createInMemorySupabase({ maxRows: 1 });
+    db.seed('calendar_events', [row('point', start, { ends_at: start, recurrence: 'daily' })]);
+    const zone = 'America/New_York';
+    const result = await readCalendarOccurrences(client(db), family, instantCalendarBounds(from, to, zone), zone, { overlap: true });
+    expect(result.error).toBeNull(); expect(result.count).toBe(expected);
+  });
   it('reads a later-fold series seed in its saved window and keeps its busy overlap', async () => {
     const db = createInMemorySupabase({ maxRows: 1 });
     const seed = row('fold', '2026-11-01T06:30:42.125Z', { ends_at: '2026-11-01T07:00:00.000Z', recurrence: 'weekly' });

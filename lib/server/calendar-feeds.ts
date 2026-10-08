@@ -1,5 +1,6 @@
 // lib/server/calendar-feeds.ts — server-side calendar feed sync.
-// Fetches a subscribed ICS URL, parses it, and upserts its events into
+// With the held source capability enabled, publishes complete raw UID groups
+// atomically through the archive RPC. The default legacy path upserts events into
 // calendar_events keyed by (feed_id, external_uid) so re-syncing a changing
 // public calendar updates rows in place instead of duplicating them, and
 // removes the events the source marks cancelled. Events the source simply
@@ -20,12 +21,25 @@ import { assertFeedRecurrenceAdmission, planFeedRows, seriesKeys, type FeedEvent
 import { fetchPublicCalendarText } from '@/lib/server/public-calendar-fetch';
 import { isMissingFunctionError, wroteNoRows } from '@/lib/supabase/errors';
 import { readCountedRows } from '@/lib/calendar/occurrences';
+import { CALENDAR_SOURCE_ARCHIVE_ENABLED } from '@/lib/calendar/source-capability';
+import { parseICSSource } from '@/lib/sync/ics-source';
+import { exportICSSource } from '@/lib/sync/ics-source-export';
+import type { ImportedSourceDocument } from '@/lib/calendar/imported-source';
 
 export type FeedSyncResult =
-  | { ok: true; imported: number }
+  | {
+    ok: true;
+    /** Native event rows written; source archives write none. */
+    imported: number;
+    /** Archived UID groups, never an event or occurrence count. */
+    sourceGroups?: number;
+  }
   | {
     ok: false;
     error: string;
+    /** Archived UID groups, never an event or occurrence count. */
+    sourceGroups?: number;
+    revisionReview?: true;
     /** Another sync of this feed holds it; nothing was fetched or written. Try again shortly. */
     busy?: true;
     /**
@@ -62,10 +76,13 @@ type Guard = {
   lost: () => FeedSyncResult;
   /** Writes one chunk — upserts and removals — only while this sync holds the claim (see applyChunk). */
   apply: (upserts: FeedEventRow[], removals: string[]) => Promise<Applied>;
+  archive: (documents: ImportedSourceDocument[]) => Promise<Archived>;
 };
 
 /** The outcome of writing a chunk: `lost` is a fence that no longer matched at the moment of the write. */
 type Applied = 'applied' | 'lost' | { failed: string };
+type Archived = 'applied' | 'needs_revision_review' | 'lost' | { failed: string };
+export const ARCHIVE_SYNC_FUNCTION = 'calendar_feed_archive_sources';
 /**
  * The database function migration 0490 adds. 0490 is RESERVED and HELD: the
  * file is in supabase/reserved/, not supabase/migrations/, until 0475-0489
@@ -105,6 +122,13 @@ export async function syncFeed(
     settle: (patch) => { settled = true; return stampFeed(supabase, feed.id, patch, fence); },
     lost: () => { settled = true; return { ok: false, error: TAKEN_OVER_MESSAGE, takenOver: true }; },
     apply: (upserts, removals) => applyChunk(supabase, feed.id, fence, upserts, removals),
+    archive: async (documents) => {
+      const result = await archiveSources(supabase, feed.id, fence, documents);
+      // Archive publication settles status and advances the fence atomically.
+      // Never overwrite that settlement with a second client-side stamp.
+      if (typeof result === 'string') settled = true;
+      return result;
+    },
   };
   try {
     return await runSync(supabase, feed, guard);
@@ -185,6 +209,28 @@ async function runSync(
 
   if (!icsText.includes('BEGIN:VCALENDAR')) return failWith('URL is not a valid ICS calendar');
 
+  if (CALENDAR_SOURCE_ARCHIVE_ENABLED) {
+    let documents: ImportedSourceDocument[];
+    try {
+      documents = parseICSSource(icsText);
+      // Qualify every complete raw/typed group before the single atomic write.
+      // This preserves source semantics; it does not claim occurrence readiness.
+      for (const document of documents) exportICSSource(document);
+      if (documents.length > 2000 || new TextEncoder().encode(JSON.stringify(documents)).length > 8 * 1024 * 1024) {
+        return failWith('Calendar source publication limit exceeded');
+      }
+    } catch {
+      return failWith('Could not preserve the complete calendar source');
+    }
+    const archived = await guard.archive(documents);
+    if (archived === 'lost') return guard.lost();
+    if (archived === 'needs_revision_review') {
+      return { ok: false, error: 'Calendar source revisions require review before display', revisionReview: true, sourceGroups: documents.length };
+    }
+    if (archived !== 'applied') return failWith(archived.failed);
+    return { ok: true, imported: 0, sourceGroups: documents.length };
+  }
+
   let rows;
   let cancelled: string[];
   let cancelledSeries: string[];
@@ -252,6 +298,38 @@ async function runSync(
   return { ok: true, imported };
 }
 
+/** Archive only through the locked claim RPC; never use legacy projections as fallback. */
+async function archiveSources(
+  supabase: SupabaseClient,
+  feedId: string,
+  fence: string,
+  documents: ImportedSourceDocument[],
+): Promise<Archived> {
+  const { data, error } = await supabase.rpc(ARCHIVE_SYNC_FUNCTION, { p_feed_id: feedId, p_fence: fence, p_documents: documents });
+  if (error) {
+    return { failed: isMissingFunctionError(error)
+      ? `Calendar source sync is unavailable until the archive function is installed (${APPLY_SYNC_MIGRATION_PATH})`
+      : 'Could not archive the complete calendar source' };
+  }
+  const invalid = { failed: 'Calendar source archive returned an incomplete or invalid receipt' };
+  if (!data || typeof data !== 'object' || Array.isArray(data)) return invalid;
+  if (Object.keys(data).sort().join(',') !== 'groups,outcome' || !Array.isArray(data.groups)) return invalid;
+  if (data.outcome === 'lost') return data.groups.length === 0 ? 'lost' : invalid;
+  if (data.outcome !== 'applied' && data.outcome !== 'needs_revision_review') return invalid;
+  const expected = new Set(documents.map(document => document.uid));
+  if (data.groups.length !== expected.size) return invalid;
+  for (const group of data.groups) {
+    if (!group || typeof group !== 'object' || Array.isArray(group)
+      || Object.keys(group).sort().join(',') !== 'reused,revision_id,state,uid'
+      || typeof group.uid !== 'string' || !expected.delete(group.uid)
+      || typeof group.revision_id !== 'string' || !/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(group.revision_id)
+      || typeof group.reused !== 'boolean'
+      || !['ready', 'needs_revision_review'].includes(group.state)
+      || (data.outcome === 'applied' && group.state !== 'ready')) return invalid;
+  }
+  return data.outcome;
+}
+
 /** Writes under the database's locked feed claim. Missing RPC refuses all event writes. */
 async function applyChunk(
   supabase: SupabaseClient,
@@ -312,7 +390,7 @@ async function stampFeed(
 export async function syncAllFeedsForFamily(
   supabase: SupabaseClient,
   familyId: string,
-): Promise<{ feeds: number; imported: number }> {
+): Promise<{ feeds: number; imported: number; sourceGroups?: number }> {
   const feedsQuery = () => supabase.from('calendar_feeds')
     .select('id, family_id, url', { count: 'exact' }).eq('family_id', familyId).order('id');
   const { data: feeds, error } = await readCountedRows(
@@ -320,9 +398,11 @@ export async function syncAllFeedsForFamily(
   if (error) throw new Error(`Could not read every calendar feed: ${error.message}`);
 
   let imported = 0;
+  let sourceGroups: number | undefined;
   for (const f of feeds ?? []) {
     const r = await syncFeed(supabase, f as { id: string; family_id: string; url: string });
+    if (r.sourceGroups !== undefined) sourceGroups = (sourceGroups ?? 0) + r.sourceGroups;
     if (r.ok) imported += r.imported;
   }
-  return { feeds: (feeds ?? []).length, imported };
+  return { feeds: (feeds ?? []).length, imported, ...(sourceGroups === undefined ? {} : { sourceGroups }) };
 }

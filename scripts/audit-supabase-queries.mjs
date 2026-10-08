@@ -501,6 +501,8 @@ export const RESERVED_RPC_DEPENDENCIES = Object.freeze({
   ensure_sync_pull_container: { caller: 'lib/sync/persistence.ts', sql: 'supabase/reserved/0494_sync_atomic_pull.sql' },
   create_sync_pull_item: { caller: 'lib/sync/persistence.ts', sql: 'supabase/reserved/0494_sync_atomic_pull.sql' },
   calendar_feed_apply_sync: { caller: 'lib/server/calendar-feeds.ts', sql: 'supabase/reserved/0490_a_calendar_feed_sync_writes_only_while_it_holds_its_claim.sql' },
+  calendar_feed_archive_sources: { caller: 'lib/server/calendar-feeds.ts', sql: 'supabase/reserved/0490_a_calendar_feed_sync_writes_only_while_it_holds_its_claim.sql' },
+  calendar_read_occurrence_inputs: { caller: 'lib/calendar/source-snapshot.ts', sql: 'supabase/reserved/0490_a_calendar_feed_sync_writes_only_while_it_holds_its_claim.sql' },
 });
 
 /** Audit literals and local string constants; held SQL never enters functions. */

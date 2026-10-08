@@ -221,7 +221,7 @@ describe('a Save with nothing edited leaves the event where it was', () => {
 
 describe('the modal hands the action an instant, not a box value', () => {
   const MODULE = join(ROOT, 'components/modules/calendar-module.tsx');
-  const src = () => readFileSync(MODULE, 'utf8');
+  const src = () => readFileSync(MODULE, 'utf8').replaceAll('\r\n', '\n');
 
   it('reads its prefill and writes its submit through the same pair', () => {
     // The defect was not either function being wrong on its own. It was one end

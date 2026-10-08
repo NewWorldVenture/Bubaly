@@ -250,9 +250,10 @@ export function buildFeedRows(events: IcsEvent[], familyId: string, feedId: stri
  * name the subscription it actually synced instead.
  */
 export function feedAddedMessage(
-  res: { imported?: number; alreadySubscribedAs?: string },
+  res: { imported?: number; sourceGroups?: number; alreadySubscribedAs?: string },
   t: (key: string, params?: Record<string, string | number>) => string,
 ): string {
   if (res.alreadySubscribedAs != null) return t('calendarSync.alreadySubscribedResynced', { name: res.alreadySubscribedAs });
+  if (res.sourceGroups !== undefined) return t('trustActivity.stateSucceeded');
   return res.imported != null ? `Added — ${res.imported} events imported` : 'Calendar added';
 }

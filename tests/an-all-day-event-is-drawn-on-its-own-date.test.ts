@@ -303,7 +303,7 @@ describe('the surfaces read through those answers', () => {
   it('the calendar grid fetches from the grid\'s first UTC date, expands by family dates, and keys all-day rows by their date', () => {
     const src = read('components/modules/calendar-module.tsx');
     expect(src).toContain('familyFetchRange(gridFirstDay, gridEndDay, clock.timeZone)');
-    expect(src).toContain('readCalendarOccurrences(supabase, familyId');
+    expect(src).toContain('readDisplayCalendarOccurrences(supabase, familyId');
     expect(src).toContain('allDayFromDay: gridFirstDay, allDayToDay: gridEndDay');
     expect(src).toContain('(e.all_day ? allDayDate(e.starts_at) : clock.dayKeyOf(e.starts_at))');
     // The month map, the all-day row, the timed columns and the sidebar all key through it.
@@ -324,7 +324,7 @@ describe('the surfaces read through those answers', () => {
   it('the detail modal and the heat strip read all-day rows by their date', () => {
     expect(read('components/modules/event-detail-modal.tsx')).toContain('formatEventRange(e, format,');
     const heat = read('components/calendar/busyness-heatmap.tsx');
-    expect(heat).toContain('readCalendarOccurrences(s, familyId');
+    expect(heat).toContain('readDisplayCalendarOccurrences(s, familyId');
     expect(heat).toContain("familyFetchRange(fromDay, toDay, timeZone)");
   });
 });

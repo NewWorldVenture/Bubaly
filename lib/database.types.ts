@@ -2756,6 +2756,11 @@ export interface Database {
     Views: { [_ in never]: never };
     CompositeTypes: { [_ in never]: never };
     Functions: {
+      /** HELD 0490; declaration does not enable source archive reads. */
+      calendar_read_occurrence_inputs: {
+        Args: { p_family_id: string };
+        Returns: Json;
+      };
       ensure_sync_pull_container: {
         Args: { p_account: string; p_family: string; p_user: string; p_provider: SyncProviderEnum;
           p_kind: 'event' | 'reminder'; p_external: string; p_name: string; p_timezone: string; p_color: string | null };
