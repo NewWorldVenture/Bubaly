@@ -534,6 +534,7 @@ jobs:
             !test-results/*durable-session*/**
             !test-results/*family-messaging-authenticated*/**
             !test-results/*recurring-bill-authenticated*/**
+            !test-results/*dashboard-calendar-authenticated*/**
             !test-results/**/storageState*
             !test-results/**/storage-state*
             !test-results/**/auth.json
