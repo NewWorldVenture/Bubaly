@@ -4,8 +4,17 @@ import ts from 'typescript';
 import { createClient } from '@supabase/supabase-js';
 import { afterAll, afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 const sourceRoot = process.env.BUBALY_CALENDAR_DELETE_SOURCE_ROOT ?? process.cwd();
-const sourcePaths = { calendar: 'lib/services/calendar/index.ts', types: 'lib/services/types.ts', errors: 'lib/supabase/errors.ts', eventDates: 'lib/calendar/event-dates.ts', calendarWindow: 'lib/briefing/calendar-window.ts', occurrences: 'lib/calendar/occurrences.ts', recurrence: 'lib/calendar/recurrence.ts', zoned: 'lib/time/zoned.ts', calendarDay: 'lib/calendar/day.ts' };
-const sources = Object.fromEntries(Object.entries(sourcePaths).map(([name, file]) => [name, ts.transpileModule(fs.readFileSync(path.join(sourceRoot, file), 'utf8'), { compilerOptions: { target: ts.ScriptTarget.ES2020, module: ts.ModuleKind.CommonJS } }).outputText]));
+const sourcePaths = { calendar: 'lib/services/calendar/index.ts', types: 'lib/services/types.ts', errors: 'lib/supabase/errors.ts', eventDates: 'lib/calendar/event-dates.ts', calendarWindow: 'lib/briefing/calendar-window.ts', occurrences: 'lib/calendar/occurrences.ts', recurrence: 'lib/calendar/recurrence.ts', zoned: 'lib/time/zoned.ts', calendarDay: 'lib/calendar/day.ts', sourceCapability: 'lib/calendar/source-capability.ts' };
+const sources = Object.fromEntries(Object.entries(sourcePaths).filter(([name]) => name !== 'sourceCapability').map(([name, file]) => [name, ts.transpileModule(fs.readFileSync(path.join(sourceRoot, file), 'utf8'), { compilerOptions: { target: ts.ScriptTarget.ES2020, module: ts.ModuleKind.CommonJS } }).outputText]));
+// Historical source roots may predate this import. Read the exact real module
+// only when their occurrences reader requests it; a missing requested file
+// remains a hard ENOENT failure, never a fabricated or disabled capability.
+function sourceFor(name: string): string {
+  if (name === 'sourceCapability') return ts.transpileModule(fs.readFileSync(path.join(sourceRoot, sourcePaths.sourceCapability), 'utf8'), { compilerOptions: { target: ts.ScriptTarget.ES2020, module: ts.ModuleKind.CommonJS } }).outputText;
+  if (!Object.hasOwn(sources, name)) throw new Error('Unknown finite source ' + name);
+  return sources[name];
+}
+
 const A = 'aaaaaaaa-aaaa-4aaa-8aaa-000000000001', B = 'bbbbbbbb-bbbb-4bbb-8bbb-000000000001';
 const one = 'cccccccc-cccc-4ccc-8ccc-000000000001', two = 'cccccccc-cccc-4ccc-8ccc-000000000002';
 const row1 = { id: one, title: 'Neutral first event' }, row2 = { id: two, title: 'Neutral second event' };
@@ -43,13 +52,13 @@ function fixture(options: Options = {}) {
   const loaded: any = {};
   const unused = (name: string) => new Proxy({}, { get: () => () => deny('Unused seam ' + name) });
   function load(name: string): any { if (loaded[name]) return loaded[name]; const entry = { exports: {} }; loaded[name] = entry.exports; const require = (id: string): any => {
-    const dependency: Record<string, string> = { '@/lib/calendar/event-dates': 'eventDates', '@/lib/briefing/calendar-window': 'calendarWindow', '@/lib/calendar/occurrences': 'occurrences', '@/lib/calendar/recurrence': 'recurrence', '@/lib/time/zoned': 'zoned', '@/lib/calendar/day': 'calendarDay' }; if (dependency[id]) return load(dependency[id]);
+    const dependency: Record<string, string> = { '@/lib/calendar/event-dates': 'eventDates', '@/lib/briefing/calendar-window': 'calendarWindow', '@/lib/calendar/occurrences': 'occurrences', '@/lib/calendar/recurrence': 'recurrence', '@/lib/time/zoned': 'zoned', '@/lib/calendar/day': 'calendarDay', './source-capability': 'sourceCapability' }; if (dependency[id]) return load(dependency[id]);
     if (id === 'server-only') return {};
     if (id === '../types' || id === './types') return load('types'); if (id === '@/lib/supabase/errors') return load('errors');
     if (id === '../activity') return { recordActivitySafely: async (passedScope: any, descriptor: any) => trace.activity.push({ family: passedScope.familyId, descriptor }) };
     if (['@/lib/home/conflicts', '@/lib/calendar/scheduling', '@/lib/supabase/settle', '../scope', '../idempotency', '@/lib/supabase/escape-like', '@/lib/i18n/server'].includes(id)) return unused(id);
     return deny('Forbidden import ' + id);
-  }; new Function('require', 'module', 'exports', sources[name])(require, entry, entry.exports); loaded[name] = entry.exports; return entry.exports; }
+  }; new Function('require', 'module', 'exports', sourceFor(name))(require, entry, entry.exports); loaded[name] = entry.exports; return entry.exports; }
   return { run: () => load('calendar').deleteEvents(scope, ids) };
 }
 const refused = async (body: unknown) => { const f = fixture({ body }); await expect(f.run()).resolves.toMatchObject({ ok: false }); expect(trace.activity).toEqual([]); };

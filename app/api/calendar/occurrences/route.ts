@@ -1,12 +1,12 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { extractBearerToken, getBearerUserContext } from '@/lib/supabase/bearer';
 import { briefingCalendarBounds } from '@/lib/briefing/calendar-window';
-import { readCalendarOccurrences } from '@/lib/calendar/occurrences';
+import { readDisplayCalendarOccurrences } from '@/lib/calendar/display-occurrences';
 
 export const dynamic = 'force-dynamic';
 const json = (body: unknown, status = 200) => NextResponse.json(body, { status, headers: { 'Cache-Control': 'private, no-store' } });
 
-/** Native calendar transport. Uses the caller's JWT/RLS, never a service client. */
+/** Typed calendar transport. Uses the caller's JWT/RLS, never a service client. */
 export async function GET(req: NextRequest) {
   try {
     const token = extractBearerToken(req.headers.get('authorization'));
@@ -25,16 +25,16 @@ export async function GET(req: NextRequest) {
     const timezone = ctx.active.family.timezone || 'UTC';
     let bounds;
     try { bounds = briefingCalendarBounds(fromDay, timezone, 0, days); } catch { return json({ code: 'invalid_window' }, 400); }
-    const result = await readCalendarOccurrences(supabase, ctx.active.familyId, bounds, timezone, {
-      columns: ['title', 'location', 'category'], overlap: true, limit,
-    });
+    const result = await readDisplayCalendarOccurrences(supabase, ctx.active.familyId, bounds, timezone, { overlap: true, limit });
     if (result.error) return json({ code: 'calendar_unavailable', error: 'calendar_unavailable' }, 503);
-    return json({ userId: ctx.user.id, familyId: ctx.active.familyId, timezone, fromDay, toDay: bounds.allDayToDay, count: result.count,
+    return json({ contractVersion: 2, userId: ctx.user.id, familyId: ctx.active.familyId, timezone, fromDay, toDay: bounds.allDayToDay, count: result.count,
       occurrences: result.data.map(row => ({
-        eventId: row.id, occurrenceKey: JSON.stringify([row.id, row.starts_at]), title: row.title,
+        kind: row.kind, reference: row.reference, readOnly: row.readOnly,
+        ...(row.kind === 'native' ? { eventId: row.reference.eventId } : {}),
+        occurrenceKey: row.occurrenceKey, title: row.title,
         starts_at: row.starts_at, ends_at: row.ends_at, all_day: row.all_day, location: row.location, category: row.category,
-        startDate: row.all_day ? row.starts_at.slice(0, 10) : null,
-        endDate: row.all_day ? row.ends_at?.slice(0, 10) ?? new Date(Date.parse(row.starts_at) + 86_400_000).toISOString().slice(0, 10) : null,
+        startDate: row.startDate, endDate: row.endDate,
+        actualStartsAt: row.actualStartsAt, actualEndsAt: row.actualEndsAt,
       })),
     });
   } catch { return json({ code: 'calendar_unavailable', error: 'calendar_unavailable' }, 503); }

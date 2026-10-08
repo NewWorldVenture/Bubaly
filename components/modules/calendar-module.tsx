@@ -2,12 +2,13 @@
 
 import Link from 'next/link';
 
-import { useCallback, useMemo, useState, useEffect, useRef } from 'react';
+import { useMemo, useState, useEffect, useRef } from 'react';
 import { ChevronLeft, ChevronRight, Plus, MapPin, RefreshCw, Filter, Check, Sparkles, Eye, EyeOff, Users, Columns } from 'lucide-react';
 import { useApp } from '@/components/app/app-context';
 import { useRealtimeQuery } from '@/lib/hooks/use-realtime-query';
 import { readDisplayCalendarOccurrences, CALENDAR_DISPLAY_CONTRACT, CALENDAR_SOURCE_ARCHIVE_ENABLED, type CalendarDisplayOccurrence } from '@/lib/calendar/display-occurrences';
-import { addDays as addDateDays, allDayDate, compareOccurrences, familyFetchRange } from '@/lib/calendar/day';
+import { bucketCalendarDisplaySpans, calendarDisplayDay, type CalendarDisplaySpan } from '@/lib/calendar/display-spans';
+import { addDays as addDateDays, familyFetchRange } from '@/lib/calendar/day';
 import { BusynessHeatmap } from '@/components/calendar/busyness-heatmap';
 import { describeDbError } from '@/lib/supabase/errors';
 import { createCalendarEventAction, updateCalendarEventAction } from '@/app/(app)/dashboard/calendar/actions';
@@ -27,7 +28,7 @@ import { RoutinesPanel } from './routines-panel';
 import { cn } from '@/lib/utils/cn';
 import type { Tables } from '@/lib/database.types';
 import { useTranslations } from '@/components/i18n/locale-provider';
-import { useFamilyClock, useFormat, type FamilyClock } from '@/components/i18n/use-format';
+import { useFamilyClock, useFormat } from '@/components/i18n/use-format';
 import { addWallDays, wallDaysInMonth, wallKey, wallMonthStart, wallParts, wallWeekStart } from '@/lib/time/wall-clock';
 import { fromLocalInput, toLocalInput } from '@/lib/time/local-input';
 
@@ -61,7 +62,7 @@ const SHOW_TOGGLES = [
 // Sentinel "calendar" for events with no assignee (shared / whole-family).
 const FAMILY_KEY = '__family__';
 
-const HOURS = Array.from({ length: 16 }, (_, i) => i + 6); // 6am-9pm
+const HOURS = Array.from({ length: 24 }, (_, i) => i); // complete family day
 const HOUR_HEIGHT = 64; // px per hour
 
 function GoogleGlyph({ size = 13 }: { size?: number }) {
@@ -102,19 +103,21 @@ function daysOfWeek(monday: Date) {
   return Array.from({ length: 7 }, (_, i) => addWallDays(monday, i));
 }
 
-function fmtHour(h: number) {
-  return h === 12 ? '12 PM' : h < 12 ? `${h} AM` : `${h - 12} PM`;
+// Columns follow actual elapsed time in each civil day, with distinct fold ticks.
+function dayTicks(day: string, timezone: string) {
+  const interval = calendarDisplayDay(day,timezone);
+  const formatter = new Intl.DateTimeFormat(undefined,{timeZone:timezone,hour:'2-digit',minute:'2-digit',timeZoneName:'shortOffset'});
+  const ticks = [];
+  for (let at=interval.start;at<interval.end;at+=3_600_000) ticks.push({at,top:(at-interval.start)/(interval.end-interval.start)*24*HOUR_HEIGHT,label:formatter.format(new Date(at))});
+  return ticks;
 }
-
-function eventTop(e: Event, clock: FamilyClock): number {
-  const { hour, minute } = wallParts(clock.wallOf(e.starts_at));
-  return ((hour - 6) * 60 + minute) * (HOUR_HEIGHT / 60);
-}
-
-function eventHeight(e: Event): number {
-  if (!e.ends_at) return HOUR_HEIGHT;
-  const mins = (new Date(e.ends_at).getTime() - new Date(e.starts_at).getTime()) / 60000;
-  return Math.max(mins * (HOUR_HEIGHT / 60), 24);
+function spanGeometry(span: CalendarDisplaySpan) {
+  const actualTop = span.elapsedStartMinutes/span.dayMinutes*24*HOUR_HEIGHT;
+  const duration = (span.elapsedEndMinutes-span.elapsedStartMinutes)/span.dayMinutes*24*HOUR_HEIGHT;
+  const height = Math.min(Math.max(duration,24),24*HOUR_HEIGHT);
+  // Keep the minimum marker/hit target inside the day, including a point at
+  // 23:59:59.999. Actual segment timestamps remain unchanged for its label.
+  return {top:Math.min(actualTop,24*HOUR_HEIGHT-height),height};
 }
 
 // Mini calendar for the right sidebar
@@ -188,7 +191,7 @@ function MonthGrid({ gridDays, monthAnchor, eventsByDay, todayStr, onSelect }: {
               <div className={cn('mb-1 flex h-6 w-6 items-center justify-center rounded-full text-xs', isToday ? 'bg-brand font-bold text-white' : inMonth ? 'text-fg' : 'text-muted')}>{wallParts(d).day}</div>
               <div className="space-y-0.5">
                 {evs.slice(0, 3).map((e) => (
-                  <button key={e.occurrenceKey} onClick={() => onSelect(e)}
+                  <button key={e.occurrenceKey} data-calendar-day={dStr} data-occurrence-key={e.occurrenceKey} onClick={() => onSelect(e)}
                     className={cn('flex w-full items-center gap-1 truncate rounded border px-1 py-0.5 text-left text-[10px]', CATEGORY_COLORS[e.category ?? 'other'] ?? CATEGORY_COLORS.other)}>
                     <span className={cn('h-1.5 w-1.5 shrink-0 rounded-full', CATEGORY_DOT[e.category ?? 'other'] ?? 'bg-muted')} />
                     <span className="truncate">{e.title ?? '—'}</span>
@@ -315,21 +318,19 @@ export function CalendarModule() {
     return () => { active = false; };
   }, [success, toastError]); // eslint-disable-line react-hooks/exhaustive-deps
 
-  // Scroll to 7am on mount
+  // Start near the daytime portion; users can scroll through the complete day.
   useEffect(() => {
-    if (gridRef.current) gridRef.current.scrollTop = HOUR_HEIGHT * 1;
+    if (gridRef.current) gridRef.current.scrollTop = HOUR_HEIGHT * 7;
   }, []);
 
   const query = useRealtimeQuery<Event>({
     table: 'calendar_events', familyId, deps: [familyId, userId, gridFirstDay, gridEndDay, clock.timeZone, CALENDAR_DISPLAY_CONTRACT, CALENDAR_SOURCE_ARCHIVE_ENABLED],
-    // In-window events PLUS every recurring series that started before the
-    // window's end — expandEvents below turns those into the occurrences that
-    // actually fall inside the grid (a weekly event created in June must show
-    // on every July Monday, not vanish after its first week).
+    // Include ongoing intervals and every recurring series that can occupy the
+    // grid. A series or multi-day occurrence can begin before its first date.
     fetcher: (supabase) => readDisplayCalendarOccurrences(supabase, familyId, {
       timedFrom: fetchRange.timedFrom.toISOString(), timedTo: fetchRange.timedTo.toISOString(),
       allDayFromDay: gridFirstDay, allDayToDay: gridEndDay,
-    }, clock.timeZone),
+    }, clock.timeZone, { overlap: true }),
   });
   const { loading, error, refresh } = query;
   // A review-held source read is an unavailable whole window, even if the
@@ -362,19 +363,6 @@ export function CalendarModule() {
     return () => { window.clearInterval(timer); window.removeEventListener('focus', onFocus); };
   }, [refresh]);
 
-  // Recurring rules → concrete occurrences ON the grid's dates: timed rows
-  // stepped on the family's wall clock (a weekly 09:00 stays 09:00 across their
-  // DST), all-day rows by their own date.
-
-  // The date an occurrence is drawn on: a timed row on the family's day of its
-  // instant; an all-day row on its own date — the UTC date it is stored on —
-  // which the family's day of its instant is not, west of Greenwich (a
-  // Saturday birthday, Saturday 00:00Z, is Friday 17:00 in Los Angeles).
-  const dayOf = useCallback(
-    (e: Event) => (e.all_day ? allDayDate(e.starts_at) : clock.dayKeyOf(e.starts_at)),
-    [clock],
-  );
-
   const memberById = useMemo(() => new Map(members.map(m => [m.id, m])), [members]);
 
   const filtered = useMemo(() => {
@@ -387,64 +375,26 @@ export function CalendarModule() {
     });
   }, [data, filterCategory, hiddenCategories, hiddenMembers]);
 
-  const allDay = filtered.filter(e => e.all_day);
-  const timed = filtered.filter(e => !e.all_day);
-
-  // Group timed events by day (ISO date string)
-  const timedByDay = useMemo(() => {
-    const map = new Map<string, Event[]>();
-    for (const e of timed) {
-      const key = dayOf(e);
-      if (!map.has(key)) map.set(key, []);
-      map.get(key)!.push(e);
-    }
-    return map;
-  }, [timed, dayOf]);
-
-  const allDayByDay = useMemo(() => {
-    const map = new Map<string, Event[]>();
-    for (const e of allDay) {
-      const key = dayOf(e);
-      if (!map.has(key)) map.set(key, []);
-      map.get(key)!.push(e);
-    }
-    return map;
-  }, [allDay, dayOf]);
-
-  // Combined per-day map (month chips + day list).
-  const eventsByDay = useMemo(() => {
-    const map = new Map<string, Event[]>();
-    for (const e of [...filtered].sort((a, b) => compareOccurrences(a, b, clock.timeZone) || a.occurrenceKey.localeCompare(b.occurrenceKey))) {
-      const key = dayOf(e);
-      if (!map.has(key)) map.set(key, []);
-      map.get(key)!.push(e);
-    }
-    return map;
-  }, [filtered, dayOf, clock.timeZone]);
-
-  // Upcoming events for sidebar: the next seven family dates, today included.
-  // By DATE, not by instant: today's all-day row (today 00:00Z) is before the
-  // family's midnight west of Greenwich, and a date seven days on is after the
-  // last instant east of it. All-day rows head their day.
+  // Civil DATE spans and actual timed overlap produce layout metadata only.
+  // A failed projection must never expose an otherwise plausible partial grid.
+  const spanResult = useMemo(() => {
+    try { return {buckets:bucketCalendarDisplaySpans(filtered,gridFirstDay,gridEndDay,clock.timeZone),failed:false}; }
+    catch { return {buckets:new Map<string,CalendarDisplaySpan[]>(),failed:true}; }
+  }, [filtered,gridFirstDay,gridEndDay,clock.timeZone]);
+  const spansByDay = spanResult.buckets;
+  const timedByDay = useMemo(() => new Map([...spansByDay].map(([day,spans]) => [day,spans.filter(span => !span.occurrence.all_day)])), [spansByDay]);
+  const allDayByDay = useMemo(() => new Map([...spansByDay].map(([day,spans]) => [day,spans.filter(span => span.occurrence.all_day).map(span => span.occurrence)])), [spansByDay]);
+  const eventsByDay = useMemo(() => new Map([...spansByDay].map(([day,spans]) => [day,spans.map(span => span.occurrence)])), [spansByDay]);
   const familyToday = clock.wallToday();
   const todayKeyForUpcoming = clock.todayKey();
-  const upcoming = useMemo(() => {
-    const lastDay = addDateDays(todayKeyForUpcoming, 7);
-    return data.filter(e => {
-      const day = dayOf(e);
-      return day >= todayKeyForUpcoming && day < lastDay;
-    }).sort((a, b) => compareOccurrences(a, b, clock.timeZone) || a.occurrenceKey.localeCompare(b.occurrenceKey)).slice(0, 8);
-  }, [data, dayOf, todayKeyForUpcoming, clock.timeZone]);
-
   const upcomingByDay = useMemo(() => {
-    const map = new Map<string, Event[]>();
-    for (const e of upcoming) {
-      const key = dayOf(e);
-      if (!map.has(key)) map.set(key, []);
-      map.get(key)!.push(e);
-    }
-    return [...map.entries()];
-  }, [upcoming, dayOf]);
+    const lastDay = addDateDays(todayKeyForUpcoming,7);
+    let remaining=8;
+    return [...spansByDay].filter(([day]) => day >= todayKeyForUpcoming && day < lastDay).flatMap(([day,spans]) => {
+      const rows=spans.slice(0,remaining);remaining-=rows.length;
+      return rows.length ? [[day,rows] as [string,CalendarDisplaySpan[]]] : [];
+    });
+  }, [spansByDay,todayKeyForUpcoming]);
 
   async function syncGoogle() {
     setSyncing(true);
@@ -501,9 +451,6 @@ export function CalendarModule() {
   }
 
   const todayStr = clock.todayKey();
-  const wallClock = wallParts(clock.wallNow());
-  const nowMins = wallClock.hour * 60 + wallClock.minute;
-  const nowTop = (nowMins - 6 * 60) * (HOUR_HEIGHT / 60);
 
   // Columns rendered by the time-grid: one day in day-view, the week otherwise.
   const gridColumns = view === 'day' ? [days[mobileDayIndex]] : days;
@@ -527,7 +474,7 @@ export function CalendarModule() {
           key: m.id,
           date: mobileDay,
           isToday: mobileDayStr === todayStr,
-          timed: (timedByDay.get(mobileDayStr) ?? []).filter(own),
+          timed: (timedByDay.get(mobileDayStr) ?? []).filter(span => own(span.occurrence)),
           allDay: (allDayByDay.get(mobileDayStr) ?? []).filter(own),
           member: { name: m.display_name, color: m.color as string | null },
         };
@@ -545,7 +492,7 @@ export function CalendarModule() {
       });
 
   if (loading) return <SkeletonList />;
-  if (error) return <ErrorState message={error} onRetry={refresh} />;
+  if (error || spanResult.failed) return <ErrorState message={error ?? tr('globalError.somethingWentWrong')} onRetry={refresh} />;
 
   // Grid Dates are wall-clock Dates, so they are labelled by the day they READ
   // (a DATE key), never converted as if they were instants.
@@ -726,7 +673,7 @@ export function CalendarModule() {
           <div className="flex-1 space-y-1 p-4">
             {/* All-day events */}
             {mobileDayAllDay.map(e => (
-              <div key={e.occurrenceKey} onClick={() => setSelected(e)} onKeyDown={(ev) => openOnKey(ev, e)} role="button" tabIndex={0} className={cn('focus-ring cursor-pointer rounded-lg border p-3 transition hover:brightness-110', CATEGORY_COLORS[e.category ?? 'other'] ?? CATEGORY_COLORS.other)}>
+              <div key={e.occurrenceKey} data-calendar-day={mobileDayStr} data-occurrence-key={e.occurrenceKey} onClick={() => setSelected(e)} onKeyDown={(ev) => openOnKey(ev, e)} role="button" tabIndex={0} className={cn('focus-ring cursor-pointer rounded-lg border p-3 transition hover:brightness-110', CATEGORY_COLORS[e.category ?? 'other'] ?? CATEGORY_COLORS.other)}>
                 <div className="text-[10px] font-semibold uppercase tracking-wide opacity-70">{tr('calendar.allDay')}</div>
                 <div className="text-sm font-semibold">{e.title ?? '—'}</div>
                 {e.assignee_id && memberById.get(e.assignee_id) && (
@@ -742,14 +689,15 @@ export function CalendarModule() {
             {mobileDayTimed.length === 0 && mobileDayAllDay.length === 0 && (
               <p className="py-8 text-center text-sm text-muted">{tr('calendar.noEventsThisDay')}</p>
             )}
-            {mobileDayTimed.map(e => {
+            {mobileDayTimed.map(span => {
+              const e = span.occurrence;
               const member = e.assignee_id ? memberById.get(e.assignee_id) : null;
               return (
-                <div key={e.occurrenceKey} onClick={() => setSelected(e)} onKeyDown={(ev) => openOnKey(ev, e)} role="button" tabIndex={0} className={cn('focus-ring cursor-pointer rounded-lg border p-3 transition hover:brightness-110', CATEGORY_COLORS[e.category ?? 'other'] ?? CATEGORY_COLORS.other)}>
+                <div key={e.occurrenceKey} data-calendar-day={span.day} data-occurrence-key={e.occurrenceKey} data-calendar-start={span.actualStartsAt} data-calendar-end={span.actualEndsAt} onClick={() => setSelected(e)} onKeyDown={(ev) => openOnKey(ev, e)} role="button" tabIndex={0} className={cn('focus-ring cursor-pointer rounded-lg border p-3 transition hover:brightness-110', CATEGORY_COLORS[e.category ?? 'other'] ?? CATEGORY_COLORS.other)}>
                   <div className="flex items-center justify-between gap-2">
                     <span className="text-xs font-semibold">
-                      {fmtTime(e.starts_at)}
-                      {e.ends_at && ` – ${fmtTime(e.ends_at)}`}
+                      {fmtTime(span.actualStartsAt)}
+                      {` – ${fmtTime(span.actualEndsAt)}`}
                     </span>
                     {member && <Avatar name={member.display_name} color={member.color} size={18} />}
                   </div>
@@ -793,7 +741,7 @@ export function CalendarModule() {
                     {/* All-day events */}
                     <div className="mt-1 w-full space-y-0.5 px-1">
                       {col.allDay.map(e => (
-                        <div key={e.occurrenceKey} onClick={() => setSelected(e)} onKeyDown={(ev) => openOnKey(ev, e)} role="button" tabIndex={0} className={cn('focus-ring cursor-pointer truncate rounded px-1.5 py-0.5 text-[10px] font-medium border', CATEGORY_COLORS[e.category ?? 'other'] ?? CATEGORY_COLORS.other)}>
+                        <div key={e.occurrenceKey} data-calendar-day={wallKey(col.date)} data-occurrence-key={e.occurrenceKey} onClick={() => setSelected(e)} onKeyDown={(ev) => openOnKey(ev, e)} role="button" tabIndex={0} className={cn('focus-ring cursor-pointer truncate rounded px-1.5 py-0.5 text-[10px] font-medium border', CATEGORY_COLORS[e.category ?? 'other'] ?? CATEGORY_COLORS.other)}>
                           {e.title ?? '—'}
                         </div>
                       ))}
@@ -804,23 +752,21 @@ export function CalendarModule() {
 
               {/* Scrollable time grid */}
               <div ref={gridRef} className="flex min-h-0 flex-1 overflow-y-auto">
-                {/* Time labels */}
-                <div className="w-14 flex-shrink-0">
-                  {HOURS.map(h => (
-                    <div key={h} style={{ height: HOUR_HEIGHT }} className="relative flex items-start justify-end pr-2 pt-0">
-                      <span className="relative -top-2 text-[10px] text-muted">{fmtHour(h)}</span>
-                    </div>
-                  ))}
-                </div>
+                {/* Each column labels its own clock: DST dates can differ. */}
+                <div className="w-14 flex-shrink-0" aria-hidden="true" />
 
                 {/* Day columns */}
                 {gridCols.map((col) => {
                   const dayEvents = col.timed;
+                  const timeline = calendarDisplayDay(wallKey(col.date),clock.timeZone);
+                  const nowTop = timeline.minutes > 0 ? (Date.now()-timeline.start)/(timeline.end-timeline.start)*24*HOUR_HEIGHT : -1;
                   return (
                     <div key={col.key} className="relative flex-1 border-l border-border" style={{ minHeight: HOURS.length * HOUR_HEIGHT }}>
                       {/* Hour lines */}
-                      {HOURS.map(h => (
-                        <div key={h} style={{ top: (h - 6) * HOUR_HEIGHT, height: HOUR_HEIGHT }} className="absolute left-0 right-0 border-t border-border/40" />
+                      {dayTicks(wallKey(col.date),clock.timeZone).map(tick => (
+                        <div key={tick.at} style={{ top: tick.top }} className="absolute left-0 right-0 border-t border-border/40">
+                          <span className="text-[9px] text-muted">{tick.label}</span>
+                        </div>
                       ))}
 
                       {/* Current time line */}
@@ -832,17 +778,17 @@ export function CalendarModule() {
                       )}
 
                       {/* Events */}
-                      {dayEvents.map(e => {
-                        const top = eventTop(e, clock);
-                        const height = eventHeight(e);
+                      {dayEvents.map(span => {
+                        const e = span.occurrence;
+                        const {top,height} = spanGeometry(span);
                         const member = e.assignee_id ? memberById.get(e.assignee_id) : null;
                         if (top < 0 || top > HOURS.length * HOUR_HEIGHT) return null;
                         return (
-                          <div key={e.occurrenceKey} style={{ top, height, left: 2, right: 2 }} onClick={() => setSelected(e)} onKeyDown={(ev) => openOnKey(ev, e)} role="button" tabIndex={0}
+                          <div key={span.segmentKey} data-calendar-day={span.day} data-occurrence-key={e.occurrenceKey} data-calendar-start={span.actualStartsAt} data-calendar-end={span.actualEndsAt} style={{ top, height, left: 2, right: 2 }} onClick={() => setSelected(e)} onKeyDown={(ev) => openOnKey(ev, e)} role="button" tabIndex={0}
                             className={cn('focus-ring absolute z-10 overflow-hidden rounded-md border p-1.5 text-[10px] cursor-pointer hover:brightness-110 transition', CATEGORY_COLORS[e.category ?? 'other'] ?? CATEGORY_COLORS.other)}
                             title={e.title ?? ''}>
                             <div className="flex items-start justify-between gap-1">
-                              <span className="font-semibold leading-tight truncate">{fmtTime(e.starts_at)}</span>
+                              <span className="font-semibold leading-tight truncate">{fmtTime(span.actualStartsAt)}</span>
                               {height > 30 && member && <Avatar name={member.display_name} color={member.color} size={14} />}
                             </div>
                             {height > 24 && <div className="mt-0.5 truncate font-medium leading-tight">{e.title ?? '—'}</div>}
@@ -920,13 +866,15 @@ export function CalendarModule() {
                 <div className="mb-1 text-[10px] font-semibold text-muted">
                   {label} &bull; {fmtDate(day, 'MMM d')}
                 </div>
-                {events.map(e => (
-                  <div key={e.occurrenceKey} onClick={() => setSelected(e)} onKeyDown={(ev) => openOnKey(ev, e)} role="button" tabIndex={0} className="focus-ring mb-1 flex cursor-pointer items-start gap-2 rounded-lg p-1.5 hover:bg-elevated transition">
+                {events.map(span => {
+                  const e = span.occurrence;
+                  return (
+                  <div key={span.segmentKey} data-calendar-sidebar-day={span.day} data-calendar-sidebar-start={span.actualStartsAt} onClick={() => setSelected(e)} onKeyDown={(ev) => openOnKey(ev, e)} role="button" tabIndex={0} className="focus-ring mb-1 flex cursor-pointer items-start gap-2 rounded-lg p-1.5 hover:bg-elevated transition">
                     <div className={cn('mt-1 h-1.5 w-1.5 flex-shrink-0 rounded-full', CATEGORY_DOT[e.category ?? 'other'] ?? 'bg-muted')} />
                     <div className="min-w-0">
                       {!e.all_day && (
                         <div className="text-[10px] font-semibold text-muted">
-                          {fmtTime(e.starts_at)}
+                          {fmtTime(span.actualStartsAt)}
                         </div>
                       )}
                       <div className="truncate text-xs font-medium">{e.title ?? '—'}</div>
@@ -935,7 +883,8 @@ export function CalendarModule() {
                       )}
                     </div>
                   </div>
-                ))}
+                  );
+                })}
               </div>
             );
           })}

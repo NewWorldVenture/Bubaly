@@ -305,9 +305,14 @@ describe('the surfaces read through those answers', () => {
     expect(src).toContain('familyFetchRange(gridFirstDay, gridEndDay, clock.timeZone)');
     expect(src).toContain('readDisplayCalendarOccurrences(supabase, familyId');
     expect(src).toContain('allDayFromDay: gridFirstDay, allDayToDay: gridEndDay');
-    expect(src).toContain('(e.all_day ? allDayDate(e.starts_at) : clock.dayKeyOf(e.starts_at))');
-    // The month map, the all-day row, the timed columns and the sidebar all key through it.
-    expect(src.match(/const key = dayOf\(e\);/g)).toHaveLength(4);
+    // Every surface uses civil/actual span buckets; a multi-day DATE is no
+    // longer collapsed to just the date on which the occurrence began.
+    expect(src).toContain('bucketCalendarDisplaySpans(filtered,gridFirstDay,gridEndDay,clock.timeZone)');
+    expect(src).toContain('const spansByDay = spanResult.buckets');
+    expect(src).toContain('const timedByDay = useMemo(() => new Map([...spansByDay]');
+    expect(src).toContain('const allDayByDay = useMemo(() => new Map([...spansByDay]');
+    expect(src).toContain('const eventsByDay = useMemo(() => new Map([...spansByDay]');
+    expect(src).toMatch(/clock\.timeZone,\s*\{\s*overlap:\s*true\s*\}/);
     expect(src).not.toContain('clock.toInstant(monthGridStart)');
   });
 

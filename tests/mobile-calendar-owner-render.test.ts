@@ -137,7 +137,15 @@ describe('actual calendar hook owner boundary', () => {
   it('actual Calendar tree uses stable occurrence keys and removes old sections before effects', async () => {
     const screen = () => { cursor = 0; return CalendarScreen(); };
     screen(); flush(); await settle(); const tree = screen();
-    const list = tree.props.children; expect(list.props.sections[0].data[0].title).toBe('Private A'); expect(list.props.keyExtractor(list.props.sections[0].data[0])).toBe('occurrence-a');
+    const list = tree.props.children; expect(list.props.sections[0].data[0].title).toBe('Private A'); expect(list.props.keyExtractor(list.props.sections[0].data[0])).toBe(JSON.stringify(['occurrence-a', '2026-10-10']));
     auth.session = { user: { id: 'b' } }; expect(screen().props.children.props.sections).toEqual([]);
+  });
+  it('actual Today tree labels an overnight continuation by its first visible segment', async () => {
+    fetchEvents.mockResolvedValue({ count: 1, timezone: 'UTC', fromDay: '2026-10-10', toDay: '2026-10-13', occurrences: [{ title: 'Overnight continuation', starts_at: '2026-10-09T23:30:00Z', ends_at: '2026-10-10T01:15:00Z', all_day: false, category: 'general', occurrenceKey: 'overnight' }] });
+    const screen = () => { cursor = 0; return TodayScreen(); };
+    screen(); flush(); await settle(); const tree = JSON.stringify(screen());
+    expect(tree).toContain('"subtitle":"Today · 12:00 AM"');
+    expect(tree).not.toContain('11:30 PM');
+    expect(tree.match(/Overnight continuation/g)).toHaveLength(1);
   });
 });

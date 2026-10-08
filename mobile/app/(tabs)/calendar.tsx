@@ -19,7 +19,7 @@ export default function CalendarScreen() {
   const tz = events.data?.timezone ?? family?.timezone ?? 'UTC';
 
   const sections = useMemo(
-    () => groupCalendarDays(events.data?.occurrences ?? [], tz).map((g) => ({ key: g.key, title: g.label, data: g.items })),
+    () => groupCalendarDays(events.data?.occurrences ?? [], tz, events.data?.fromDay && events.data.toDay ? { fromDay: events.data.fromDay, toDay: events.data.toDay } : undefined).map((g) => ({ key: g.key, title: g.label, data: g.items })),
     [events.data, tz],
   );
 
@@ -27,7 +27,7 @@ export default function CalendarScreen() {
     <Screen title="Calendar" subtitle="The next two weeks" scroll={false}>
       <SectionList
         sections={sections}
-        keyExtractor={(item) => item.occurrenceKey}
+        keyExtractor={(item) => item.segmentKey}
         contentContainerStyle={{ paddingHorizontal: spacing[5], paddingBottom: spacing[10], gap: spacing[2] }}
         refreshControl={<RefreshControl refreshing={events.refreshing} onRefresh={events.refresh} tintColor={colors.brandText} colors={[colors.brand]} />}
         stickySectionHeadersEnabled={false}
@@ -36,9 +36,9 @@ export default function CalendarScreen() {
         renderItem={({ item }) => (
           <GlassCard style={{ paddingVertical: spacing[2] }}>
             <ListRow
-              title={item.title}
-              subtitle={`${formatTime(item.starts_at, tz, item.all_day)}${item.ends_at && !item.all_day ? ` – ${formatTime(item.ends_at, tz)}` : ''}${item.location ? ` · ${item.location}` : ''}`}
-              trailing={<Pill label={item.category} tone="info" />}
+              title={item.title ?? '—'}
+              subtitle={`${formatTime(item.segmentStartsAt, tz, item.all_day)}${!item.all_day ? ` – ${formatTime(item.segmentEndsAt, tz)}` : ''}${item.location ? ` · ${item.location}` : ''}`}
+              trailing={item.category ? <Pill label={item.category} tone="info" /> : null}
             />
           </GlassCard>
         )}

@@ -41,6 +41,15 @@ describe('mergeIntervals', () => {
 });
 
 describe('busyIntervals', () => {
+  it('does not turn saved points into occupied intervals or split a continuous free gap', () => {
+    const points = [8, 9, 10].map(hour => ({ starts_at: at(hour), ends_at: at(hour), context: 'family' as const }));
+    expect(busyIntervals(points, undefined, ZONE)).toEqual([]);
+    const slots = findFreeSlots(points, {
+      tz: ZONE, windowStart: base + H(8), windowEnd: base + H(10), durationMin: 120,
+      workingHours: { startHour: 8, endHour: 10 }, maxSuggestions: 1,
+    });
+    expect(slots).toEqual([{ start: base + H(8), end: base + H(10) }]);
+  });
   it('defaults a no-end event to 30 minutes and filters by context', () => {
     const events = [
       { starts_at: at(9), ends_at: at(10), context: 'work' as const },

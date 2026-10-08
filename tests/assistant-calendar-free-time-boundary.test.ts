@@ -22,9 +22,10 @@ async function run(rows: ReturnType<typeof row>[], date = '2026-10-10', tz = 'UT
   return await tool.execute({ date, ...args }) as { ok: boolean; busy?: Array<{ title: string; start: string; end: string | null; all_day: boolean; starts_at: string; ends_at: string | null }>; note?: string; error?: string };
 }
 describe('actual assistant free-time tool complete overlap boundary', () => {
-  it('refuses a later date of a sports series rather than treating an older master as no commitment', async () => {
+  it('includes a later date of a sports series rather than treating an older master as no commitment', async () => {
     const result = await run([], undefined, undefined, {}, { sports: [source('weekly practice', { starts_at: '2026-10-03T10:00:00.000Z', ends_at: '2026-10-03T11:00:00.000Z', recurrence: 'weekly' })] });
-    expect(result.ok).toBe(false); expect(result).not.toHaveProperty('busy'); expect(result.note).toBeUndefined();
+    expect(result.ok).toBe(true); expect(result.busy).toMatchObject([{ title: 'Sports event', starts_at: '2026-10-10T10:00:00.000Z', ends_at: '2026-10-10T11:00:00.000Z' }]);
+    expect(result.note).not.toContain('whole day is free');
   });
   it('does not let foreign-family sports series disable this family availability', async () => {
     const result = await run([], undefined, undefined, {}, { sports: [source('foreign series', { family_id: 'other-family', recurrence: 'weekly' })] });
@@ -112,30 +113,26 @@ describe('actual assistant free-time tool complete overlap boundary', () => {
 });
 
 describe('assistant availability actual SDK transport completeness', () => {
-  it.each(['series', 'missing-count', 'transport-rejection'])('refuses a previous-week sports master using a family-scoped exact count: %s', async mode => {
-    const missingCount = mode === 'missing-count';
-    let sawProbe = false;
+  it.each(['series', 'missing-count', 'transport-rejection'])('expands a previous-week sports master or refuses an incomplete series read: %s', async mode => {
+    let sawSeries = false;
     const masters = [source('previous-week practice', { starts_at: '2026-10-03T10:00:00.000Z', ends_at: '2026-10-03T11:00:00.000Z', recurrence: 'weekly' })];
     const db = createClient<Database>('https://synthetic.invalid', 'synthetic-key', {
       auth: { persistSession: false, autoRefreshToken: false },
       global: { fetch: async (input, init) => {
         const url = new URL(String(input));
         expect(url.origin).toBe('https://synthetic.invalid');
-        const isProbe = init?.method === 'HEAD';
-        if (isProbe) {
-          sawProbe = true;
-          expect(url.pathname).toBe('/rest/v1/sports_events');
+        const isSeries = url.searchParams.get('recurrence') === 'neq.none';
+        expect(init?.method).not.toBe('HEAD');
+        if (isSeries && url.pathname.endsWith('/sports_events')) {
+          sawSeries = true;
           expect(url.searchParams.get('family_id')).toBe(`eq.${family}`);
-          expect(url.searchParams.get('recurrence')).toBe('neq.none');
           expect(url.searchParams.get('starts_at')).toBe('lt.2026-10-11T00:00:00.000Z');
-          expect(url.searchParams.has('limit')).toBe(false);
+          expect(url.searchParams.get('order')).toBe('starts_at.asc,id.asc');
           expect(new Headers(init?.headers).get('prefer')).toContain('count=exact');
           if (mode === 'transport-rejection') throw new Error('Synthetic sports recurrence transport rejection');
         }
-        // The weekly October 3 master lies outside the October 10 busy query,
-        // but the recurrence probe counts it. No provider/network is contacted.
         const matched = url.pathname.endsWith('/sports_events') ? masters.filter(row => [...url.searchParams].every(([key, value]) => {
-          if (['select', 'order'].includes(key)) return true;
+          if (['select', 'order', 'limit', 'offset'].includes(key)) return true;
           if (key === 'or') return orPredicate(value.slice(1, -1))(row);
           const field = row[key as keyof SourceRow];
           if (value.startsWith('eq.')) return field === value.slice(3);
@@ -143,16 +140,17 @@ describe('assistant availability actual SDK transport completeness', () => {
           if (value.startsWith('lt.')) return String(field) < value.slice(3);
           throw new Error(`Unexpected SDK filter ${key}=${value}`);
         })) : [];
-        expect(matched.length).toBe(isProbe ? 1 : 0);
-        return new Response(isProbe ? null : JSON.stringify(matched), { headers: {
+        return new Response(JSON.stringify(matched), { headers: {
           'Content-Type': 'application/json',
-          ...(!(isProbe && missingCount) ? { 'Content-Range': matched.length ? `0-${matched.length - 1}/${matched.length}` : '*/0' } : {}),
+          ...(!(isSeries && url.pathname.endsWith('/sports_events') && mode === 'missing-count') ? { 'Content-Range': matched.length ? `0-${matched.length - 1}/${matched.length}` : '*/0' } : {}),
         } });
       } },
     });
     const tool = buildAssistantTools(db, { familyId: family, userId: 'synthetic-user', memberId: null, members: [], tz: 'UTC' }).find(t => t.name === 'find_free_time')!;
     const result = await tool.execute({ date: '2026-10-10' }) as { ok: boolean; busy?: unknown[]; note?: string };
-    expect(sawProbe).toBe(true); expect(result.ok).toBe(false); expect(result).not.toHaveProperty('busy'); expect(result.note).toBeUndefined();
+    expect(sawSeries).toBe(true); expect(result.ok).toBe(mode === 'series');
+    if (mode === 'series') expect(result.busy).toMatchObject([{ title: 'Sports event', starts_at: '2026-10-10T10:00:00.000Z', ends_at: '2026-10-10T11:00:00.000Z' }]);
+    else { expect(result).not.toHaveProperty('busy'); expect(result.note).toBeUndefined(); }
   });
   it.each([false, true])('uses stable counted family-scoped pages and refuses missing count=%s', async missingCount => {
     const calls: { table: string; query: Record<string, string>; prefer: string }[] = [];

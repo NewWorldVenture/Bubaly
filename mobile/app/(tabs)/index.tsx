@@ -1,4 +1,4 @@
-import React from 'react';
+import React, { useMemo } from 'react';
 import { Pressable, View } from 'react-native';
 import { useRouter } from 'expo-router';
 import * as Linking from 'expo-linking';
@@ -15,7 +15,7 @@ import { useCalendar } from '../../src/hooks/use-calendar';
 import { useAuth } from '../../src/lib/auth';
 import { webUrl } from '../../src/lib/config';
 import { dueLabel, formatTime, greeting } from '../../src/lib/format';
-import { eventDayLabel } from '../../src/lib/calendar-core';
+import { groupCalendarDays } from '../../src/lib/calendar-core';
 import { isOpenChore } from '../../src/lib/chores-core';
 import { fetchGroceryList, fetchOpenChores } from '../../src/lib/queries';
 import { supabase } from '../../src/lib/supabase';
@@ -29,6 +29,15 @@ export default function TodayScreen() {
   const calendar = useCalendar(3);
   const tz = calendar.data?.timezone ?? family?.timezone ?? 'UTC';
   const ownerKey = calendar.ownerKey;
+  const upcoming = useMemo(() => {
+    const reply = calendar.data;
+    const groups = groupCalendarDays(reply?.occurrences ?? [], tz, reply?.fromDay && reply.toDay ? { fromDay: reply.fromDay, toDay: reply.toDay } : undefined);
+    const seen = new Set<string>();
+    return groups.flatMap(group => group.items.map(item => ({ ...item, dayLabel: group.label }))).filter(item => {
+      if (seen.has(item.occurrenceKey)) return false;
+      seen.add(item.occurrenceKey); return true;
+    }).slice(0, 4);
+  }, [calendar.data, tz]);
 
   const today = useAsyncData(async () => {
     if (!familyId) return null;
@@ -80,10 +89,10 @@ export default function TodayScreen() {
       <GlassCard>
         <AppText variant="label" style={{ marginBottom: spacing[2] }}>Up next</AppText>
         {calendar.data && calendar.data.count === 0 ? <AppText variant="muted">Nothing on the calendar for the next few days.</AppText> : null}
-        {calendar.data?.occurrences.slice(0, 4).map((e, i) => (
+        {upcoming.map((e, i) => (
           <View key={e.occurrenceKey}>
             {i > 0 ? <Divider /> : null}
-            <ListRow title={e.title} subtitle={`${eventDayLabel(e, tz)} · ${formatTime(e.starts_at, tz, e.all_day)}${e.location ? ` · ${e.location}` : ''}`} trailing={<Pill label={e.category} tone="info" />} />
+            <ListRow title={e.title ?? '—'} subtitle={`${e.dayLabel} · ${formatTime(e.segmentStartsAt, tz, e.all_day)}${e.location ? ` · ${e.location}` : ''}`} trailing={e.category ? <Pill label={e.category} tone="info" /> : null} />
           </View>
         ))}
       </GlassCard>

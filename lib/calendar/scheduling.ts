@@ -52,6 +52,9 @@ export function busyIntervals(events: BusyEvent[], contexts: CalendarContext[] |
       continue;
     }
     const rawEnd = e.ends_at ? new Date(e.ends_at).getTime() : start + 30 * 60 * 1000;
+    // A saved point occupies no time, so it must neither gain a fictitious
+    // duration nor split a continuous free gap into two shorter gaps.
+    if (rawEnd === start) continue;
     end = Number.isNaN(rawEnd) || rawEnd <= start ? start + 30 * 60 * 1000 : rawEnd;
     out.push({ start, end });
   }

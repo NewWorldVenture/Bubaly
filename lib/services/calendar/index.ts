@@ -636,8 +636,8 @@ export async function findFreeSlots(scope: ServiceScope, input: FindFreeSlotsInp
       columns: ['starts_at', 'ends_at', 'all_day', 'assignee_id'],
       overlap: true,
     }),
-    readCalendarBusySource(scope.db, scope.familyId, 'school_events', fromIso, toIso),
-    readCalendarBusySource(scope.db, scope.familyId, 'sports_events', fromIso, toIso),
+    readCalendarBusySource(scope.db, scope.familyId, 'school_events', fromIso, toIso, tz),
+    readCalendarBusySource(scope.db, scope.familyId, 'sports_events', fromIso, toIso, tz),
   ]);
 
   // A free-slot suggestion is a source-of-truth read: a partial answer would
@@ -664,6 +664,7 @@ export async function findFreeSlots(scope: ServiceScope, input: FindFreeSlotsInp
       return;
     }
     const parsedEnd = endsAt ? Date.parse(endsAt) : Number.NaN;
+    if (parsedEnd === start) return; // Explicit points occupy no interval.
     const end = Number.isFinite(parsedEnd) && parsedEnd > start ? parsedEnd : start + DEFAULT_DURATION_MIN * MINUTE_MS;
     busy.push({ start, end });
   };

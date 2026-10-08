@@ -4,7 +4,7 @@ import { useEffect, useMemo, useState } from 'react';
 import { Flame, ChevronDown } from 'lucide-react';
 import { useRealtimeQuery } from '@/lib/hooks/use-realtime-query';
 import { readDisplayCalendarOccurrences, CALENDAR_DISPLAY_CONTRACT, CALENDAR_SOURCE_ARCHIVE_ENABLED, type CalendarDisplayOccurrence } from '@/lib/calendar/display-occurrences';
-import { ErrorState } from '@/components/ui/states';
+import { ErrorState, SkeletonList } from '@/components/ui/states';
 import { cn } from '@/lib/utils/cn';
 import { buildHeatmap, type HeatEvent } from '@/lib/calendar/heatmap';
 import { addDays, familyFetchRange } from '@/lib/calendar/day';
@@ -57,14 +57,14 @@ export function BusynessHeatmap({ familyId }: { familyId: string }) {
   // query broke. `useRealtimeQuery` is the house pattern and carries the error,
   // the offline fallback and the missing-table degrade that this bypassed.
   const todayKey = clock.todayKey();
-  const { data: rows, error, refresh } = useRealtimeQuery<CalendarDisplayOccurrence>({
+  const { data: rows, error, loading, stale, refresh } = useRealtimeQuery<CalendarDisplayOccurrence>({
     table: 'calendar_events', familyId, deps: [familyId, todayKey, clock.timeZone, CALENDAR_DISPLAY_CONTRACT, CALENDAR_SOURCE_ARCHIVE_ENABLED],
     fetcher: (s) => {
       const { range, fromDay, toDay } = heatWindow(todayKey, clock.timeZone);
       return readDisplayCalendarOccurrences(s, familyId, {
         timedFrom: range.timedFrom.toISOString(), timedTo: range.timedTo.toISOString(),
         allDayFromDay: fromDay, allDayToDay: toDay,
-      }, clock.timeZone);
+      }, clock.timeZone, {overlap:true});
     },
   });
   useEffect(() => {
@@ -75,17 +75,26 @@ export function BusynessHeatmap({ familyId }: { familyId: string }) {
     return () => { window.clearInterval(timer); window.removeEventListener('focus', onFocus); };
   }, [refresh]);
 
-  const report = useMemo(() => {
+  const projection = useMemo(() => {
+    // A pending read is unknown. Persisted cache is a bounded stale prefix;
+    // neither can establish a complete current workload or a quiet stretch.
+    if (loading || stale || error) return {report:null,error:false};
     // Recurrence stepped, and days bucketed, in the FAMILY's zone (TIME-003);
     // all-day rows by their own date.
     const events: HeatEvent[] = rows.map(e => ({
-      startsAt: e.starts_at, endsAt: e.ends_at, allDay: e.all_day,
+      occurrenceKey:e.occurrenceKey, startsAt: e.starts_at, endsAt: e.ends_at, allDay: e.all_day,
     }));
-    return buildHeatmap(events, new Date(), WEEKS, clock.timeZone);
-  }, [rows, clock]);
+    try {
+      return {report:buildHeatmap(events, new Date(), WEEKS, clock.timeZone),error:false};
+    } catch {
+      return {report:null,error:true};
+    }
+  }, [rows, clock, loading, stale, error]);
+  const report = projection.report;
+  const displayError = error || (projection.error || stale && !loading ? t('actions.couldNotLoadThatReport') : null);
 
   // Column-per-week grid: pad so the strip starts on a Monday row.
-  const firstDow = (new Date(report.days[0]?.date ?? Date.now()).getUTCDay() + 6) % 7;
+  const firstDow = (new Date(report?.days[0]?.date ?? Date.now()).getUTCDay() + 6) % 7;
 
   return (
     <div className="rounded-2xl border border-border bg-surface/40 p-4">
@@ -95,11 +104,12 @@ export function BusynessHeatmap({ familyId }: { familyId: string }) {
         </span>
         <ChevronDown className={cn('h-4 w-4 text-muted transition-transform', open && 'rotate-180')} />
       </button>
-      {open && error && (
+      {open && displayError && (
         // A broken read must not render as eight calm weeks with advice under it.
-        <div className="mt-3"><ErrorState message={error} /></div>
+        <div className="mt-3"><ErrorState message={displayError} onRetry={refresh} /></div>
       )}
-      {open && !error && (
+      {open && !displayError && loading && <div className="mt-3"><SkeletonList /></div>}
+      {open && !displayError && !loading && report && (
         <>
           <div className="mt-3 flex gap-2 overflow-x-auto no-scrollbar">
             <div className="flex flex-col gap-1 pr-1">
@@ -112,7 +122,7 @@ export function BusynessHeatmap({ familyId }: { familyId: string }) {
               {report.days.map(d => (
                 <span
                   key={d.date}
-                  title={`${d.date}: ${d.count} event${d.count === 1 ? '' : 's'}${d.minutes ? ` · ${Math.round(d.minutes / 60 * 10) / 10}h` : ''}`}
+                  title={`${d.date}: ${d.count} event${d.count === 1 ? '' : 's'}${d.minutes ? d.estimated ? ` · ${t('missionsNew.estimatedMinutes')}: ${Math.round(d.minutes)}` : ` · ${Math.round(d.minutes / 60 * 10) / 10}h` : ''}`}
                   className={cn('h-4 min-w-3 rounded-[4px]', LEVEL_CLS[d.level],
                     d.level === 4 && 'ring-1 ring-rose-400/60')}
                 />

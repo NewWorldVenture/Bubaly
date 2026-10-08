@@ -123,7 +123,7 @@ describe('composed calendar read boundaries', () => {
   it.each(['school_events', 'sports_events'] as const)('pages every overlapping %s commitment', async table => {
     const db = createInMemorySupabase({ maxRows: 1 });
     db.seed(table, ['a', 'b', 'c'].map(id => ({ id, family_id: family, starts_at: '2026-10-10T08:00:00.000Z', ends_at: '2026-10-10T12:00:00.000Z', member_id: null })));
-    const result = await readCalendarBusySource(client(db), family, table, '2026-10-10T10:00:00.000Z', '2026-10-10T11:00:00.000Z');
+    const result = await readCalendarBusySource(client(db), family, table, '2026-10-10T10:00:00.000Z', '2026-10-10T11:00:00.000Z', 'UTC');
     expect(result.error).toBeNull();
     expect(result.data?.map(r => r.id)).toEqual(['a', 'b', 'c']);
   });

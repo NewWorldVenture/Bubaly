@@ -17,6 +17,7 @@ import {
   updateEvent,
 } from '@/lib/services/calendar';
 import type { ServiceScope } from '@/lib/services/types';
+import { createInMemorySupabase } from './helpers/in-memory-supabase';
 
 type Call = { table: string; kind: 'select' | 'insert' | 'update' | 'delete'; filters: Record<string, unknown>; payload?: unknown };
 type Reply = { data: unknown; error: unknown; count?: number | null };
@@ -257,6 +258,31 @@ describe('findConflicts', () => {
 });
 
 describe('findFreeSlots', () => {
+  it('preserves continuous availability through saved native and recurring sports points', async () => {
+    const db = createInMemorySupabase({ maxRows: 1 });
+    db.seed('calendar_events', [{ ...EVENT_ROW, starts_at: '2026-11-01T13:00:00.000Z', ends_at: '2026-11-01T13:00:00.000Z' }]);
+    db.seed('sports_events', [{ id: 'point', family_id: 'fam-1', starts_at: '2026-10-25T13:00:00.000Z', ends_at: '2026-10-25T13:00:00.000Z', member_id: null, recurrence: 'weekly', recurrence_until: null }]);
+    const res = await findFreeSlots(scopeWith(db as unknown as SupabaseClient<Database>), {
+      durationMin: 120, from: '2026-11-01T13:00:00.000Z', to: '2026-11-01T15:00:00.000Z', workingHours: { startHour: 8, endHour: 10 }, limit: 1,
+    });
+    expect(res.ok).toBe(true);
+    if (res.ok) expect(res.data).toEqual([{ startsAt: '2026-11-01T13:00:00.000Z', endsAt: '2026-11-01T15:00:00.000Z', dayKey: '2026-11-01' }]);
+  });
+  it('avoids an older sports series across the family DST transition with complete capped reads', async () => {
+    const db = createInMemorySupabase({ maxRows: 2 });
+    db.seed('sports_events', [
+      ...Array.from({ length: 5 }, (_, n) => ({ id: `practice-${n}`, family_id: 'fam-1', starts_at: '2026-10-25T12:00:00.000Z', ends_at: '2026-10-25T13:00:00.000Z', member_id: 'member-2', recurrence: 'weekly', recurrence_until: null })),
+      { id: 'other member', family_id: 'fam-1', starts_at: '2026-10-25T13:00:00.000Z', ends_at: '2026-10-25T14:00:00.000Z', member_id: 'member-3', recurrence: 'weekly', recurrence_until: null },
+      { id: 'foreign', family_id: 'foreign', starts_at: '2026-10-25T13:00:00.000Z', ends_at: '2026-10-25T14:00:00.000Z', member_id: 'member-2', recurrence: 'weekly', recurrence_until: null },
+    ]);
+    const res = await findFreeSlots(scopeWith(db as unknown as SupabaseClient<Database>), {
+      durationMin: 60, from: '2026-11-01T04:00:00.000Z', to: '2026-11-02T05:00:00.000Z', memberIds: ['member-2'], limit: 1,
+    });
+    expect(res.ok).toBe(true);
+    // 08:00–09:00 wall time is occupied after the clock changes. Other-family
+    // and other-member practices must not postpone the result another hour.
+    if (res.ok) expect(res.data[0]).toMatchObject({ startsAt: '2026-11-01T14:00:00.000Z', endsAt: '2026-11-01T15:00:00.000Z', dayKey: '2026-11-01' });
+  });
   it('clips to working hours in the family timezone, not the server one', async () => {
     // No commitments at all: the first slot of a New York family's day must be
     // 08:00 local = 12:00Z, never 08:00Z.
@@ -273,7 +299,7 @@ describe('findFreeSlots', () => {
       expect(res.data[0].dayKey).toBe('2026-09-07');
     }
     // Every source is read and every source is family-scoped.
-    expect(calls.map((c) => c.table).sort()).toEqual(['calendar_events', 'calendar_events', 'school_events', 'sports_events']);
+    expect(calls.map((c) => c.table).sort()).toEqual(['calendar_events', 'calendar_events', 'school_events', 'sports_events', 'sports_events']);
     expect(calls.every((c) => c.filters.family_id === 'fam-1')).toBe(true);
   });
 

@@ -7,7 +7,7 @@ import { readCalendarOccurrences } from './occurrences';
 import { materializeCalendarSourceSnapshot, readCalendarSourceSnapshot, type CalendarSnapshotReference } from './source-snapshot';
 
 export { CALENDAR_SOURCE_ARCHIVE_ENABLED } from './source-capability';
-export const CALENDAR_DISPLAY_CONTRACT = 2;
+export const CALENDAR_DISPLAY_CONTRACT = 3;
 type NativeEvent = Tables<'calendar_events'>;
 type Common = {
   occurrenceKey: string; readOnly: boolean; title: string | null; description: string | null; location: string | null;

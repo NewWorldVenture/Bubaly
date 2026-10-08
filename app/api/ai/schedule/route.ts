@@ -53,8 +53,8 @@ export async function POST(req: NextRequest) {
       // it was created (lib/calendar/occurrences.ts). Every column, as before,
       // so a `context` column that is not there yet is simply absent.
       readCalendarOccurrences(supabase, familyId, instantCalendarBounds(fromISO, toISO, tz), tz, { overlap: true }),
-      readCalendarBusySource(supabase, familyId, 'school_events', fromISO, toISO),
-      readCalendarBusySource(supabase, familyId, 'sports_events', fromISO, toISO),
+      readCalendarBusySource(supabase, familyId, 'school_events', fromISO, toISO, tz),
+      readCalendarBusySource(supabase, familyId, 'sports_events', fromISO, toISO, tz),
     ]);
 
     // A free slot is an ASSERTION about what is not in the calendar, so it is
@@ -88,11 +88,11 @@ export async function POST(req: NextRequest) {
     }
     for (const s of (school ?? []) as { starts_at: string; ends_at: string | null; member_id: string | null }[]) {
       if (!includesMember(s.member_id)) continue;
-      busy.push({ starts_at: s.starts_at, ends_at: s.ends_at, context: 'family', assignee_id: s.member_id });
+      busy.push({ starts_at: s.starts_at, ends_at: s.ends_at ?? new Date(Date.parse(s.starts_at) + 3_600_000).toISOString(), context: 'family', assignee_id: s.member_id });
     }
     for (const s of (sports ?? []) as { starts_at: string; ends_at: string | null; member_id: string | null }[]) {
       if (!includesMember(s.member_id)) continue;
-      busy.push({ starts_at: s.starts_at, ends_at: s.ends_at, context: 'family', assignee_id: s.member_id });
+      busy.push({ starts_at: s.starts_at, ends_at: s.ends_at ?? new Date(Date.parse(s.starts_at) + 3_600_000).toISOString(), context: 'family', assignee_id: s.member_id });
     }
 
     const slots = findFreeSlots(busy, {

@@ -525,30 +525,17 @@ export function buildAssistantTools(supabase: DB, ctx: AssistantCtx): ToolSpec[]
           if (matches.length !== 1) return { ok: false, error: matches.length ? 'That name matches more than one family member. Use their full name.' : 'That family member could not be found.' };
           memberId = matches[0].id;
         }
-        // Await the SDK builder inside an async function so transport/setup
-        // failures settle normally and its response fields keep their types.
-        const readSportsSeries = async () => {
-          const result = await supabase.from('sports_events').select('id', { count: 'exact', head: true })
-            .eq('family_id', ctx.familyId).neq('recurrence', 'none')
-            .lt('starts_at', bounds.timedTo).order('starts_at').order('id');
-          return { count: result.count, error: result.error };
-        };
-        const [calendar, school, sports, sportsSeries] = await settleAll([
+        const [calendar, school, sports] = await settleAll([
           readCalendarOccurrences(supabase, ctx.familyId, bounds, tz, {
             columns: ['title', 'starts_at', 'ends_at', 'all_day', 'assignee_id'],
             // Availability needs the complete occupied window, including rows
             // that began yesterday. A truncated agenda cannot prove a free gap.
             overlap: true,
           }),
-          readCalendarBusySource(supabase, ctx.familyId, 'school_events', bounds.timedFrom, bounds.timedTo),
-          readCalendarBusySource(supabase, ctx.familyId, 'sports_events', bounds.timedFrom, bounds.timedTo),
-          // The secondary busy reader does not expand sports recurrence. Until
-          // that source has qualified recurrence semantics, an older master
-          // must make availability unavailable, never make its later dates free.
-          readSportsSeries(),
+          readCalendarBusySource(supabase, ctx.familyId, 'school_events', bounds.timedFrom, bounds.timedTo, tz),
+          readCalendarBusySource(supabase, ctx.familyId, 'sports_events', bounds.timedFrom, bounds.timedTo, tz),
         ]);
-        for (const result of [calendar, school, sports, sportsSeries]) if (result.error) return toolFailure('find free time', result.error);
-        if (sportsSeries.count !== 0) return { ok: false, error: 'Availability cannot be confirmed while recurring sports schedules are present or unavailable.' };
+        for (const result of [calendar, school, sports]) if (result.error) return toolFailure('find free time', result.error);
         // Unassigned commitments belong to the whole family, including a
         // named member's availability. Filter only after complete scoped reads.
         const selected = (assignee: string | null) => !memberId || !assignee || assignee === memberId;

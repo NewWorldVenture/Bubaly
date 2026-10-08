@@ -117,15 +117,65 @@ export const isSeries = (row: { recurrence: string | null }) => !!row.recurrence
 const earlier = (a: string, b: string) => (a < b ? a : b);
 const later = (a: string, b: string) => (a > b ? a : b);
 
-/** Complete busy intervals from the other calendar sources, including in-progress commitments. */
-export function readCalendarBusySource(db: Db, familyId: string, table: 'school_events' | 'sports_events', from: string, to: string) {
-  const fallbackFrom = new Date(Date.parse(from) - 3_600_000).toISOString();
-  const query = () => db.from(table).select('id, starts_at, ends_at, member_id', { count: 'exact' })
-    .eq('family_id', familyId).lt('starts_at', to)
-    .or(`ends_at.gt.${from},and(ends_at.is.null,starts_at.gt.${fallbackFrom})`)
+export type CalendarBusyOccurrence = { id: string; starts_at: string; ends_at: string | null; member_id: string | null };
+type SportsBusyRow = CalendarBusyOccurrence & { recurrence: string; recurrence_until: string | null };
+type BusyResult = { data: CalendarBusyOccurrence[] | null; error: { message: string } | null };
+
+/** Complete occupied intervals, including older sports masters stepped in the family's zone. */
+export async function readCalendarBusySource(
+  db: Db, familyId: string, table: 'school_events' | 'sports_events', from: string, to: string, timezone: string,
+): Promise<BusyResult> {
+  const fail = (reason: string): BusyResult => ({ data: null, error: { message: `${reason}; the calendar window cannot be read whole` } });
+  const fromMs = Date.parse(from), toMs = Date.parse(to);
+  if (!Number.isFinite(fromMs) || !Number.isFinite(toMs) || toMs < fromMs) return fail('Invalid busy window');
+  if (typeof timezone !== 'string' || !timezone.trim()) return fail('Invalid family timezone');
+  try { new Intl.DateTimeFormat('en-US', { timeZone: timezone }).format(fromMs); }
+  catch { return fail('Invalid family timezone'); }
+  if (fromMs === toMs) return { data: [], error: null };
+  const fallbackFrom = new Date(fromMs - 3_600_000).toISOString();
+  // Starts at the boundary include explicit points. An earlier point occupies
+  // nothing; a missing end keeps the established one-hour estimate.
+  const overlapFilter = `starts_at.gte.${from},ends_at.gt.${from},and(ends_at.is.null,starts_at.gt.${fallbackFrom})`;
+  const singlesQuery = () => {
+    if (table === 'school_events') return db.from('school_events')
+      .select('id, starts_at, ends_at, member_id', { count: 'exact' })
+      .eq('family_id', familyId).lt('starts_at', to).or(overlapFilter)
+      .order('starts_at').order('id');
+    return db.from('sports_events').select('id, starts_at, ends_at, member_id', { count: 'exact' })
+      .eq('family_id', familyId).lt('starts_at', to).or(overlapFilter)
+      .or('recurrence.is.null,recurrence.eq.none').order('starts_at').order('id');
+  };
+  const seriesQuery = () => db.from('sports_events')
+    .select('id, starts_at, ends_at, member_id, recurrence, recurrence_until', { count: 'exact' })
+    .eq('family_id', familyId).neq('recurrence', 'none').lt('starts_at', to)
+    // Do not compare the cutoff with `from`: the last valid occurrence can
+    // still overlap this window after its exclusive recurrence cutoff.
     .order('starts_at').order('id');
-  return readCountedRows<{ id: string; starts_at: string; ends_at: string | null; member_id: string | null }>(
-    () => query().limit(READ_PAGE), (first, last) => query().range(first, last), SINGLE_READ_MAX, `${table} busy events`);
+  const [singles, series] = await Promise.all([
+    readCountedRows<CalendarBusyOccurrence>(() => singlesQuery().limit(READ_PAGE), (first, last) => singlesQuery().range(first, last), SINGLE_READ_MAX, `${table} one-off busy events`),
+    table === 'sports_events'
+      ? readCountedRows<SportsBusyRow>(() => seriesQuery().limit(READ_PAGE), (first, last) => seriesQuery().range(first, last), SERIES_READ_MAX, 'recurring sports events')
+      : Promise.resolve({ data: [] as SportsBusyRow[], error: null }),
+  ]);
+  if (singles.error) return { data: null, error: singles.error };
+  if (series.error) return { data: null, error: series.error };
+  try {
+    const validInterval = (row: CalendarBusyOccurrence) => {
+      const start = Date.parse(row.starts_at), end = row.ends_at === null ? start + 3_600_000 : Date.parse(row.ends_at);
+      if (!Number.isFinite(start) || !Number.isFinite(end) || end < start) throw new RangeError('Invalid busy interval');
+      return { start, end };
+    };
+    const rows = (singles.data ?? []).filter(row => {
+      const { start, end } = validInterval(row);
+      return start < toMs && (end > start ? end > fromMs : start >= fromMs);
+    });
+    for (const master of (series.data ?? []).filter(isSeries)) {
+      validInterval(master);
+      rows.push(...expandEventsInZone([master], new Date(fromMs), new Date(toMs), timezone, true, { requireComplete: true }));
+      if (rows.length > SINGLE_READ_MAX) return fail(`More than ${SINGLE_READ_MAX} busy occurrences`);
+    }
+    return { data: rows.sort((a, b) => a.starts_at.localeCompare(b.starts_at) || a.id.localeCompare(b.id)), error: null };
+  } catch (cause) { return fail(cause instanceof Error ? cause.message : 'Invalid busy recurrence'); }
 }
 
 /**
