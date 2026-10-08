@@ -204,6 +204,10 @@ test.describe('authenticated native dashboard calendar', () => {
         await expect(recurringToday).toContainText('9:00 AM');
         await expect(myDay.getByText(titles.other, { exact: true })).toHaveCount(0);
         await expect(coming.locator('li')).toHaveCount(5);
+        const upcomingTitles = [titles.future, titles.timed, titles.recurring, titles.recurring, titles.recurring];
+        const upcomingDays = [1, 1, 1, 2, 3].map(offset => String(Number(addDays(today, offset).slice(-2))));
+        await expect(coming.locator('li p.truncate')).toHaveText(upcomingTitles);
+        await expect(coming.locator('li p.text-base')).toHaveText(upcomingDays);
         const futureDate = coming.locator('li').filter({ hasText: titles.future });
         await expect(futureDate).toContainText('All Day');
         await expect(futureDate.locator('p.text-base')).toHaveText(String(Number(tomorrow.slice(-2))));
@@ -220,6 +224,8 @@ test.describe('authenticated native dashboard calendar', () => {
         await expect(stat(page, 'Events Today').locator('p.text-2xl')).toHaveText('4');
         await expect(panel(page, "Today's Schedule").getByText(titles.other, { exact: true })).toBeVisible();
         await expect(panel(page, 'Upcoming Events').locator('li')).toHaveCount(5);
+        await expect(panel(page, 'Upcoming Events').locator('li p.truncate')).toHaveText(upcomingTitles);
+        await expect(panel(page, 'Upcoming Events').locator('li p.text-base')).toHaveText(upcomingDays);
         await expect(panel(page, 'Upcoming Events').locator('li').filter({ hasText: titles.future }).locator('p.text-base'))
           .toHaveText(String(Number(tomorrow.slice(-2))));
 
@@ -239,6 +245,8 @@ test.describe('authenticated native dashboard calendar', () => {
         await expect(stat(page, 'Events Today').locator('p.text-2xl')).toHaveText('1005');
         await expect(panel(page, "Today's Schedule").locator('li')).toHaveCount(8);
         await expect(panel(page, 'Upcoming Events').locator('li')).toHaveCount(5);
+        await expect(panel(page, 'Upcoming Events').locator('li p.truncate')).toHaveText(upcomingTitles);
+        await expect(panel(page, 'Upcoming Events').locator('li p.text-base')).toHaveText(upcomingDays);
         await page.goto(`${app}/dashboard?view=personal`, { waitUntil: 'domcontentloaded' });
         await expect(stat(page, 'My Events Today').locator('p.text-2xl')).toHaveText('1004');
         await expect(stat(page, 'Coming Up').locator('p.text-2xl')).toHaveText('17');
