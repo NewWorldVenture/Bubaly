@@ -556,3 +556,83 @@ grant execute on function public.calendar_feed_archive_sources(uuid,timestamptz,
 revoke all on function calendar_feed_private.archive_document(jsonb,text),calendar_feed_private.compare_revision(jsonb,jsonb),calendar_feed_private.immutable_archive(),calendar_feed_private.prevent_archive_reparent() from public,anon,authenticated,service_role;
 comment on function public.calendar_feed_archive_sources(uuid,timestamptz,jsonb) is
  'HELD 0490, source-only, uncalled. Current-membership immutable archive, same-component persistent revision watermarks, exact feed fence and explicit review settlement. Unversioned/incomparable source changes are NOT proved fresh; ready is archive ordering only, NOT qualified occurrence materialization. No raw/typed agreement guarantee.';
+
+-- Pure refusal helper; no table access, privileges, writes or hidden reads.
+create or replace function calendar_feed_private.refuse_read(message text, state text)
+returns jsonb language plpgsql stable security invoker set search_path='' as $$
+begin raise exception '%',message using errcode=state; end $$;
+revoke all on function calendar_feed_private.refuse_read(text,text) from public,anon;
+grant execute on function calendar_feed_private.refuse_read(text,text) to authenticated,service_role;
+
+-- One statement, one MVCC snapshot: a legacy row and its archive replacement
+-- cannot be read on opposite sides of the source takeover commit. ALL family
+-- rows are retained for application-side filtering; neither source DTSTART
+-- nor recurrence_until safely excludes moved-in exceptions. No app activation.
+create or replace function public.calendar_read_occurrence_inputs(p_family_id uuid)
+returns jsonb language sql stable security invoker set search_path='' as $$
+ with
+ auth_gate as materialized (
+   select case when p_family_id is not null and (
+     current_user='service_role' or (current_user='authenticated' and auth.uid() is not null and public.is_family_member(p_family_id))
+   ) then true else calendar_feed_private.refuse_read('Calendar snapshot requires current membership or SQL service role','42501') is null end as allowed
+ ),
+ native_rows as materialized (
+   select e.id,e.recurrence,to_jsonb(e) as payload from public.calendar_events e cross join auth_gate a
+   where a.allowed and e.family_id=p_family_id order by e.id limit 20001
+ ),
+ source_groups as materialized (
+   select g.feed_id,g.external_uid,r.id is null as missing_document,
+     jsonb_build_object('feedId',g.feed_id,'uid',g.external_uid,'revisionId',g.current_revision_id,
+       'materializationState',g.materialization_state,'document',r.document,
+       'masterCancellationRevisionId',g.master_cancellation_revision_id,'watermarks','[]'::jsonb) as payload
+   from public.calendar_feed_source_groups g join public.calendar_feeds f on f.id=g.feed_id
+   cross join auth_gate a
+   left join public.calendar_feed_source_revisions r on r.feed_id=g.feed_id and r.external_uid=g.external_uid and r.id=g.current_revision_id
+   where a.allowed and f.family_id=p_family_id order by g.feed_id,g.external_uid limit 2001
+ ),
+ component_watermarks as materialized (
+   select w.feed_id,w.external_uid,w.component_key,
+     jsonb_build_object('componentKey',w.component_key,'versionComponent',w.version_component,
+       'versionRevisionId',w.version_revision_id,'cancelledComponent',w.cancelled_component,
+       'cancellationRevisionId',w.cancellation_revision_id) as payload
+   from public.calendar_feed_source_component_watermarks w join source_groups g
+     on g.feed_id=w.feed_id and g.external_uid=w.external_uid
+   order by w.feed_id,w.external_uid,w.component_key limit 40001
+ ),
+ sizes as materialized (
+   select (select count(*) from native_rows) as native_count,
+     (select count(*) from native_rows where recurrence is not null and recurrence<>'none') as series_count,
+     (select count(*) from source_groups) as source_count,
+     (select count(*) from component_watermarks) as watermark_count,
+     (select coalesce(bool_or(missing_document),false) from source_groups) as missing_document,
+     -- Conservative upper bound of the final JSONB text, before array
+     -- aggregation: exact per-object UTF8 bytes, separators and envelope slack.
+     (select coalesce(sum(octet_length(payload::text)+2),0) from native_rows)+
+     (select coalesce(sum(octet_length(payload::text)+2),0) from source_groups)+
+     (select coalesce(sum(octet_length(payload::text)+2),0) from component_watermarks)+1024 as bytes
+ ),
+ budget as materialized (
+   select *,native_count<=20000 and series_count<=2000 and source_count<=2000 and watermark_count<=40000
+     and bytes<=8388608 and not missing_document as ok from sizes
+ ),
+ watermark_arrays as materialized (
+   select w.feed_id,w.external_uid,jsonb_agg(w.payload order by w.component_key) as items
+   from component_watermarks w cross join budget b where b.ok group by w.feed_id,w.external_uid
+ )
+ select case
+   when b.missing_document then calendar_feed_private.refuse_read('Calendar source current revision is missing or inaccessible','55000')
+   when b.native_count>20000 then calendar_feed_private.refuse_read('Calendar snapshot native row count exceeds 20000','54000')
+   when b.series_count>2000 then calendar_feed_private.refuse_read('Calendar snapshot series count exceeds 2000','54000')
+   when b.source_count>2000 then calendar_feed_private.refuse_read('Calendar snapshot source group count exceeds 2000','54000')
+   when b.watermark_count>40000 then calendar_feed_private.refuse_read('Calendar snapshot watermark count exceeds 40000','54000')
+   when not b.ok then calendar_feed_private.refuse_read('Calendar snapshot serialized byte bound exceeds 8 MiB','54000')
+   else jsonb_build_object('version',1,'familyId',p_family_id,'nativeCount',b.native_count,'sourceCount',b.source_count,'watermarkCount',b.watermark_count,
+     'nativeRows',coalesce((select jsonb_agg(n.payload order by n.id) from native_rows n where b.ok),'[]'::jsonb),
+     'sourceGroups',coalesce((select jsonb_agg(g.payload||jsonb_build_object('watermarks',coalesce(w.items,'[]'::jsonb)) order by g.feed_id,g.external_uid)
+       from source_groups g left join watermark_arrays w on w.feed_id=g.feed_id and w.external_uid=g.external_uid where b.ok),'[]'::jsonb))
+   end from auth_gate a cross join budget b where a.allowed;
+$$;
+revoke all on function public.calendar_read_occurrence_inputs(uuid) from public,anon;
+grant execute on function public.calendar_read_occurrence_inputs(uuid) to authenticated,service_role;
+comment on function public.calendar_read_occurrence_inputs(uuid) is
+ 'HELD 0490; uncalled. Version1 complete family native/source inputs in one bounded invoker STABLE SQL statement. Review states preserved, no materialization claim. Missing schema/pointers or limits must fail closed; no production activation authorized.';

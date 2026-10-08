@@ -29,10 +29,36 @@ const OPTIONS: { value: 'accepted' | 'declined' | 'maybe'; label: string; icon: 
 ];
 
 
-export function EventDetailModal({ event, members, selfMemberId, familyId, onClose, onEdit, onDeleted }: {
+type EventDetailProps = {
   event: Event; members: Member[]; selfMemberId: string | null; familyId: string; onClose: () => void;
   onEdit?: (event: Event) => void; onDeleted?: () => void;
-}) {
+};
+
+export function EventDetailModal(props: EventDetailProps) {
+  // Imported rows belong to their source. Keep the native subtree unmounted:
+  // its RSVP, edit, delete and insight actions all require a native event ID.
+  return props.event.feed_id != null || props.event.external_uid != null
+    ? <ImportedEventDetail event={props.event} onClose={props.onClose} />
+    : <NativeEventDetailModal {...props} />;
+}
+
+function ImportedEventDetail({ event, onClose }: Pick<EventDetailProps, 'event' | 'onClose'>) {
+  const format = useFormat();
+  const t = useTranslations();
+  return (
+    <Modal open onClose={onClose} title={event.title}>
+      <div className="space-y-4">
+        <div className="space-y-1.5 text-sm text-muted">
+          <p className="flex items-center gap-2"><CalendarDays className="h-4 w-4" />{formatEventRange(event, format, t('calendar.allDay'))}</p>
+          {event.location && <p className="flex items-center gap-2"><MapPin className="h-4 w-4" />{event.location}</p>}
+        </div>
+        {event.description && <p className="whitespace-pre-wrap text-sm text-fg/90">{event.description}</p>}
+      </div>
+    </Modal>
+  );
+}
+
+function NativeEventDetailModal({ event, members, selfMemberId, familyId, onClose, onEdit, onDeleted }: EventDetailProps) {
   const format = useFormat();
   const t = useTranslations();
   // A timed event in the FAMILY's zone (TIME-003), through the shared

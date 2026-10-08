@@ -43,9 +43,8 @@ export async function loadCfoSummaryRows(db: SupabaseClient<Database>, familyId:
   const { today, in30, monthStart } = window;
   // Transaction dates are civil DATE values. Bound both sides of the named
   // month, including December rollover, without binding a device timezone.
-  const nextMonth = new Date(`${monthStart}T00:00:00Z`);
-  nextMonth.setUTCMonth(nextMonth.getUTCMonth() + 1);
-  const monthEnd = nextMonth.toISOString().slice(0, 10);
+  const [year, month] = monthStart.split('-').map(Number);
+  const monthEnd = `${String(year + (month === 12 ? 1 : 0)).padStart(4, '0')}-${String(month === 12 ? 1 : month + 1).padStart(2, '0')}-01`;
   return Promise.all([
     read<Tables<'financial_accounts'>>((from, to) => db.from('financial_accounts').select('*', { count: 'exact' }).eq('family_id', familyId).order('id').range(from, to), CFO_ROW_LIMIT, 'accounts'),
     read<Tables<'bills'>>((from, to) => db.from('bills').select('*', { count: 'exact' }).eq('family_id', familyId).neq('status', 'paid').gte('due_date', today).lte('due_date', in30).order('due_date').order('id').range(from, to), CFO_ROW_LIMIT, 'upcoming bills'),

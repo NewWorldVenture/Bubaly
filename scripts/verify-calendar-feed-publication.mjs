@@ -45,11 +45,16 @@ const call=(r,rem=[],fn='calendar_feed_publish_snapshot',f=feed,s=stamp)=>`selec
 const auth=text=>`set role authenticated; set request.jwt.claim.sub=${q(user)}; ${text}`;
 let checks=0,started=false,created=false;
 const checkLabels=[];
+const nativeShapeInputs=[],snapshotArtifacts=[];
 function check(label,work){work();checks++;checkLabels.push(label);console.log('PASS '+label);}
+function recordSnapshot(name,text,expectedAdmission,reason){
+ const path=join(work,name);writeFileSync(path,text+'\n');snapshotArtifacts.push({path,sha256:createHash('sha256').update(text+'\n').digest('hex'),expectedAdmission,reason});
+}
 function failure(text,state='22023'){
  let err;try{sql(text);}catch(e){err=e;}
  assert(err && err.status!==0 && !err.code,'Expected SQL refusal, not success/timeout.');
  assert.match(String(err.stderr),new RegExp('ERROR:\\s+'+state+':'));
+ return String(err.stderr);
 }
 function seed(){
  sql(`truncate calendar_events,calendar_feeds,family_members,families,auth.users cascade;
@@ -61,6 +66,7 @@ function seed(){
 }
 const state=()=>sql("select md5(jsonb_build_object('events',(select jsonb_agg(to_jsonb(e) order by id) from calendar_events e),'feeds',(select jsonb_agg(to_jsonb(f) order by id) from calendar_feeds f),'revisions',(select jsonb_agg(to_jsonb(r) order by id) from calendar_feed_source_revisions r),'groups',(select jsonb_agg(to_jsonb(g) order by feed_id,external_uid) from calendar_feed_source_groups g),'watermarks',(select jsonb_agg(to_jsonb(w) order by feed_id,external_uid,component_key) from calendar_feed_source_component_watermarks w))::text);");
 const archive=(docs,f=feed,s=stamp)=>`select public.calendar_feed_archive_sources(${q(f)},${q(s)},${rows(docs)});`;
+const snapshot=(f=family)=>`select public.calendar_read_occurrence_inputs(${q(f)});`;
 const arm=()=>{sql(`update calendar_feeds set last_status='syncing' where id=${q(feed)};`);return sql(`select updated_at from calendar_feeds where id=${q(feed)};`);};
 const versioned=(sequence,status='confirmed')=>{const d=document('old');d.master={...d.master,status,revision:{...revision,sequence}};d.revision=d.master.revision;if(status==='cancelled')Object.assign(d.master,{dtstart:null,end:null,rrule:null});return d;};
 const detached=sequence=>{const d=document('old');return {...d,master:null,revision:{sequence:null,dtstamp:null,lastModified:null,etag:null},overrides:[{...component('old'),revision:{...revision,sequence},recurrenceId:{kind:'utc',value:'20261008T090000Z'},range:'none'}]};};
@@ -96,6 +102,14 @@ try{
  run('psql',[...admin,'-c',`create database "${database}" template template0;`]);created=true;
  const bootstrap=readFileSync(join(root,'docs/audit/pg-bootstrap.sh'),'utf8').match(/psql[^\r\n]*<<'SQL'\r?\n([\s\S]*?)\r?\nSQL/);assert(bootstrap);sql(bootstrap[1]);
  for(const p of ['0001_extensions_enums.sql','0002_tables.sql','0003_functions_triggers.sql','0004_rls.sql','0045_calendar_feeds.sql'])file('supabase/migrations/'+p);
+ // Current native shape, using exact calendar-only statements from runnable
+ // migrations. This is NOT a rehearsal of either entire dependency migration.
+ for(const [name,index] of [['0210_onboarding_idempotency.sql','idx_calendar_events_onboarding_key'],['0256_idempotency_keys.sql','uq_calendar_events_idempotency']]){
+  const path='supabase/migrations/'+name,text=readFileSync(join(root,path),'utf8');
+  const alter=text.match(/alter table public\.calendar_events\s+add column if not exists [a-z_]+ text;/i)?.[0];
+  const unique=text.match(new RegExp('create unique index if not exists '+index+'[\\s\\S]*?;','i'))?.[0];assert(alter&&unique);
+  sql(alter+unique);nativeShapeInputs.push({path,sha256:createHash('sha256').update(text).digest('hex'),calendarStatementsSha256:createHash('sha256').update(alter+unique).digest('hex')});
+ }
  // Use the actual production unique-index statement, not a substitute target.
  const target=readFileSync(join(root,'supabase/migrations/0285_conflict_targets_inferable.sql'),'utf8');
  sql(target.match(/create unique index if not exists uq_calendar_events_feed_uid[\s\S]*?;/i)[0]);
@@ -376,7 +390,97 @@ try{
  await inserting.send('commit;');inserting.end();await inserting.done;
  await legacyWork;legacy.end();const legacyResult=await legacy.done;
  check('conflict-time source guard rolls back prior writes and removals',()=>{assert.match(legacyResult.err,/22023:.*Source metadata write refused at conflict/);assert.equal(sql(`select count(*) from calendar_events where feed_id=${q(feed)} and external_uid='first';`),'0');assert.equal(sql(`select source_recurrence->>'uid' from calendar_events where feed_id=${q(feed)} and external_uid='raced';`),'raced');assert.equal(sql(`select title from calendar_events where feed_id=${q(feed)} and external_uid='history';`),'History');assert.equal(sql(`select last_status from calendar_feeds where id=${q(feed)};`),'syncing');});
- const receipt={migration,migrationHash,checks,checkLabels,postgres:identity.split(/\r?\n/)[2],port,work,synthetic:true,applicationCallsNewEndpoint:false,qualifiedSourceEngine:false,directTableWritesGuarded:false,sourceArchive:{readOnlyTables:true,currentMembershipReads:true,immutableFamily:true,maxComponentWatermarksPerUID:20000,rawTypedAgreementQualified:false,unversionedChronologyQualified:false}};
+ check('coherent reader returns exact version1 envelope ALL rows groups and watermark identities',()=>{
+  seed();const d=versioned(1);d.overrides=detached(5).overrides;sql(auth(archive([d])));
+  const answer=JSON.parse(sql(auth(snapshot())));
+  assert.deepEqual(Object.keys(answer).sort(),['version','familyId','nativeRows','nativeCount','sourceGroups','sourceCount','watermarkCount'].sort());
+  assert.equal(answer.version,1);assert.equal(answer.familyId,family);assert.equal(answer.nativeCount,1);assert.equal(answer.sourceCount,1);assert.equal(answer.watermarkCount,2);
+  assert.equal(answer.nativeRows[0].external_uid,'history');assert.equal(answer.nativeRows[0].source_recurrence,null);
+  assert.equal(Object.keys(answer.nativeRows[0]).length,20);assert.equal(answer.nativeRows[0].onboarding_key,null);assert.equal(answer.nativeRows[0].idempotency_key,null);
+  recordSnapshot('snapshot-typed-only-refused.json',sql(auth(snapshot())),'refuse','Typed-only source lacks raw provenance; SQL structural admission is not parser qualification.');
+  const g=answer.sourceGroups[0];assert.deepEqual(Object.keys(g).sort(),['feedId','uid','revisionId','materializationState','document','masterCancellationRevisionId','watermarks'].sort());
+  assert.equal(g.feedId,feed);assert.equal(g.uid,'old');assert.deepEqual(g.document,d);assert.equal(g.materializationState,'ready');
+  assert.deepEqual(g.watermarks.map(w=>w.componentKey),['["override", "utc", null, "20261008T090000Z"]','master']);
+  for(const w of g.watermarks)assert.deepEqual(Object.keys(w).sort(),['componentKey','versionComponent','versionRevisionId','cancelledComponent','cancellationRevisionId'].sort());
+  assert.equal(sql("select provolatile='s' and not prosecdef and prolang=(select oid from pg_language where lanname='sql') from pg_proc where oid='public.calendar_read_occurrence_inputs(uuid)'::regprocedure;"),'t');
+ });
+ check('reader exports actual native raw-ready and cancelled-source snapshots for independent parser checks',()=>{
+  seed();recordSnapshot('snapshot-native-ready.json',sql(auth(snapshot())),'accept','Current20-field native SQL shape, no source groups.');
+  const d=document('raw-ready');d.master={...d.master,title:'Raw ready',rrule:'FREQ=DAILY;COUNT=2',raw:'BEGIN:VEVENT\r\nUID:raw-ready\r\nSUMMARY:Raw ready\r\nDTSTART:20261008T090000Z\r\nRRULE:FREQ=DAILY;COUNT=2\r\nSEQUENCE:1\r\nDTSTAMP:20261007T100000Z\r\nEND:VEVENT\r\n'};
+  d.rawProperties=['VERSION:2.0\r\n','PRODID:-//Bubaly//Synthetic//EN\r\n'];sql(auth(archive([d])));
+  recordSnapshot('snapshot-raw-source-ready.json',sql(auth(snapshot())),'accept','One raw-backed daily source with exact component watermark; independently reparse before claiming end-to-end qualification.');
+  const cancelled={...d,revision:{...revision,sequence:2},master:{...d.master,status:'cancelled',dtstart:null,end:null,rrule:null,revision:{...revision,sequence:2},raw:'BEGIN:VEVENT\r\nUID:raw-ready\r\nSUMMARY:Raw ready\r\nSTATUS:CANCELLED\r\nSEQUENCE:2\r\nDTSTAMP:20261007T100000Z\r\nEND:VEVENT\r\n'}};
+  sql(auth(archive([cancelled],feed,arm())));recordSnapshot('snapshot-raw-source-cancelled.json',sql(auth(snapshot())),'accept','Exact cancelled master and retained cancellation pointers; expected zero source occurrences.');
+ });
+ check('reader preserves legacy source JSON and archive-overlap rows for explicit adapter refusal',()=>{
+  seed();const legacy=document('old');sql(auth(call([row('old',{source_recurrence:legacy})],[],'calendar_feed_apply_sync')));
+  let answer=JSON.parse(sql(auth(snapshot())));assert.equal(answer.nativeCount,2);assert.deepEqual(answer.nativeRows.find(r=>r.external_uid==='old').source_recurrence,legacy);
+  sql(auth(archive([legacy])));sql(`insert into calendar_events(family_id,feed_id,external_uid,title,starts_at) values(${q(family)},${q(feed)},'old','Legacy recreated','2026-10-08T09:00Z');`);
+  answer=JSON.parse(sql(auth(snapshot())));assert.equal(answer.nativeCount,2);assert.equal(answer.sourceCount,1);assert(answer.nativeRows.some(r=>r.external_uid===answer.sourceGroups[0].uid));
+ });
+ check('reader preserves explicit unresolved review and cancellation qualifications',()=>{
+  seed();sql(auth(archive([versioned(2,'cancelled')])));let answer=JSON.parse(sql(auth(snapshot())));
+  assert.equal(answer.sourceGroups[0].document.master.status,'cancelled');assert.equal(answer.sourceGroups[0].masterCancellationRevisionId,answer.sourceGroups[0].revisionId);
+  sql(auth(archive([detached(99)],feed,arm())));answer=JSON.parse(sql(auth(snapshot())));
+  recordSnapshot('snapshot-review-refused.json',sql(auth(snapshot())),'refuse','Explicit needs_revision_review after omitted historical master; consumer must fail whole calendar.');
+  assert.equal(answer.sourceGroups[0].materializationState,'needs_revision_review');assert.equal(answer.sourceGroups[0].watermarks.length,2);assert.equal(answer.sourceGroups[0].watermarks.find(w=>w.componentKey==='master').cancelledComponent.status,'cancelled');
+ });
+ check('reader denies anonymous postgres foreign-family and leaver roles; service stays scoped',()=>{
+  seed();sql(auth(archive([versioned(1)])));failure(snapshot(),'42501');failure('set role anon; '+snapshot(),'42501');
+  const reader='66666666-6666-4666-8666-666666666666';sql(`insert into auth.users(id,email) values(${q(reader)},'snapshot-b@example.invalid');insert into family_members(family_id,user_id,display_name,role) values(${q(otherFamily)},${q(reader)},'B','parent');`);
+  failure(`set role authenticated;set request.jwt.claim.sub=${q(reader)};set request.jwt.claim.role='service_role';${snapshot()}`,'42501');
+  const b=JSON.parse(sql(`set role authenticated;set request.jwt.claim.sub=${q(reader)};${snapshot(otherFamily)}`));assert.equal(b.nativeCount,1);assert.equal(b.sourceCount,0);assert.equal(b.nativeRows[0].family_id,otherFamily);
+  sql(`update family_members set is_active=false where family_id=${q(family)} and user_id=${q(user)};`);failure(auth(snapshot()),'42501');
+  const service=JSON.parse(sql('set role service_role;'+snapshot()));assert.equal(service.nativeCount,1);assert.equal(service.sourceCount,1);
+  assert.equal(sql("select has_function_privilege('anon','public.calendar_read_occurrence_inputs(uuid)','EXECUTE');"),'f');
+ });
+ check('reader fails missing exact current document instead of dropping the source group',()=>{
+  seed();sql(auth(archive([versioned(1)])));sql('set session_replication_role=replica;delete from calendar_feed_source_revisions;');
+  assert.match(failure(auth(snapshot()),'55000'),/current revision is missing or inaccessible/);
+ });
+ check('reader exact composite join refuses another UID current pointer',()=>{
+  seed();sql(auth(archive([versioned(1),document('different')])));sql("set session_replication_role=replica;update calendar_feed_source_groups set current_revision_id=(select id from calendar_feed_source_revisions where external_uid='different') where external_uid='old';");
+  assert.match(failure(auth(snapshot()),'55000'),/current revision is missing or inaccessible/);
+ });
+ check('reader rejects more than 20000 raw rows with explicit count error',()=>{
+  seed();sql(`insert into calendar_events(family_id,title,starts_at,recurrence) select ${q(family)},'Bound','2026-10-08T09:00Z','none' from generate_series(1,19999);`);
+  assert.match(failure(auth(snapshot()),'54000'),/native row count exceeds 20000/);
+ });
+ check('reader rejects more than 2000 series without window cropping',()=>{
+  seed();sql(`insert into calendar_events(family_id,title,starts_at,recurrence) select ${q(family)},'Series','1990-01-01T09:00Z','weekly' from generate_series(1,2001);`);
+  assert.match(failure(auth(snapshot()),'54000'),/series count exceeds 2000/);
+ });
+ check('reader rejects serialized payload overflow before array aggregation',()=>{
+  seed();sql(`insert into calendar_events(family_id,title,description,starts_at,recurrence) select ${q(family)},'Payload',repeat('x',65536),'2026-10-08T09:00Z','none' from generate_series(1,130);`);
+  assert.match(failure(auth(snapshot()),'54000'),/serialized byte bound exceeds 8 MiB/);
+ });
+ check('reader rejects more than 2000 groups instead of returning a prefix',()=>{
+  seed();sql(`insert into calendar_feed_source_revisions(feed_id,external_uid,document)
+    select ${q(feed)},'group-'||n,jsonb_set(jsonb_set(${rows(document('template'))},'{uid}',to_jsonb('group-'||n)),'{master,uid}',to_jsonb('group-'||n)) from generate_series(1,2001) n;
+    insert into calendar_feed_source_groups(feed_id,external_uid,current_revision_id,materialization_state) select feed_id,external_uid,id,'ready' from calendar_feed_source_revisions;`);
+  assert.match(failure(auth(snapshot()),'54000'),/source group count exceeds 2000/);
+ });
+ check('reader rejects more than 40000 watermarks across groups',()=>{
+  seed();sql(auth(archive([document('a'),document('b'),document('c')])));
+  // Privileged synthetic fixture isolates the collection limit; application
+  // writes still use validated components through the archive endpoint.
+  sql("insert into calendar_feed_source_component_watermarks(feed_id,external_uid,component_key,version_component,version_revision_id) select feed_id,external_uid,'bound-'||n,'{}'::jsonb,id from calendar_feed_source_revisions cross join generate_series(1,13333) n;");
+  assert.match(failure(auth(snapshot()),'54000'),/watermark count exceeds 40000/);
+ });
+ seed();
+ // Delay the real RLS read after its statement snapshot starts, then commit
+ // source takeover in another session. Only this synthetic reader is gated.
+ sql("create function public.fixture_snapshot_gate() returns boolean language plpgsql volatile as $$begin if current_setting('application_name') like 'feed-fixture-%' then perform pg_advisory_lock(5544301);perform pg_advisory_unlock(5544301);end if;return true;end$$;alter policy calendar_events_select on calendar_events using(public.is_family_member(family_id) and public.fixture_snapshot_gate());");
+ const readGate=session();await readGate.send('select pg_advisory_lock(5544301);');
+ const reader=session(),readWork=reader.send(auth(snapshot()));await waitFor(reader.app,"wait_event='advisory'");
+ sql(auth(archive([versioned(1)])));await readGate.send('select pg_advisory_unlock(5544301);');readGate.end();await readGate.done;
+ await readWork;reader.end();const readResult=await reader.done;
+ check('single reader statement sees wholly old native and source state across takeover commit',()=>{
+  assert.equal(readResult.code,0);const answer=JSON.parse(readResult.out.split(/\r?\n/).find(line=>line.startsWith('{')));assert.equal(answer.nativeCount,2);assert.equal(answer.sourceCount,0);assert(answer.nativeRows.some(r=>r.external_uid==='old'));
+ });
+ sql('alter policy calendar_events_select on calendar_events using(public.is_family_member(family_id));drop function public.fixture_snapshot_gate();');
+ check('next snapshot sees wholly new archived state without the retired native row',()=>{const answer=JSON.parse(sql(auth(snapshot())));assert.equal(answer.nativeCount,1);assert.equal(answer.sourceCount,1);assert.equal(answer.sourceGroups[0].uid,'old');assert.equal(answer.nativeRows[0].external_uid,'history');});
+ const receipt={migration,migrationHash,checks,checkLabels,postgres:identity.split(/\r?\n/)[2],port,work,synthetic:true,applicationCallsNewEndpoint:false,qualifiedSourceEngine:false,directTableWritesGuarded:false,nativeShapeInputs,snapshotArtifacts,sourceArchive:{readOnlyTables:true,currentMembershipReads:true,immutableFamily:true,maxComponentWatermarksPerUID:20000,rawTypedAgreementQualified:false,unversionedChronologyQualified:false},coherentRead:{version:1,oneStatementSnapshot:true,invoker:true,allRawRows:true,maxNativeRows:20000,maxSeries:2000,maxSourceGroups:2000,maxWatermarks:40000,maxSerializedBytes:8388608}};
  writeFileSync(join(work,'receipt.json'),JSON.stringify(receipt,null,2));console.log(JSON.stringify(receipt));
 }finally{
  for(const child of children)child.kill();

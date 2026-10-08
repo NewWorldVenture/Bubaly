@@ -8,6 +8,8 @@ export interface SourceOccurrenceOptions {
   from: number; to: number;
   floatingTimezone?: string; dateTimezone?: string;
   maxWork?: number; maxOccurrences?: number;
+  /** Shared enclosing budget; callback failures propagate without a prefix. */
+  consumeWork?: (amount: number) => void;
 }
 export interface SourceOccurrence {
   id: string; uid: string; original: SourceTime; startsAt: string; endsAt: string;
@@ -79,7 +81,7 @@ export function expandSourceOccurrences(value: unknown, options: SourceOccurrenc
   const maxOccurrences = options.maxOccurrences ?? 20_000;
   const maxWork = options.maxWork ?? 200_000;
   let work = 0;
-  const charge = (amount = 1) => { work += amount; if (work > maxWork) fail('aggregate work bound exhausted'); };
+  const charge = (amount = 1) => { work += amount; if (work > maxWork) fail('aggregate work bound exhausted'); options.consumeWork?.(amount); };
   if (![from, to].every(Number.isFinite) || from >= to || Math.abs(from) > 8.64e15 || Math.abs(to) > 8.64e15) fail('invalid bounded window');
   if (!Number.isInteger(maxOccurrences) || maxOccurrences < 1 || maxOccurrences > 100_000) fail('invalid occurrence bound');
   if (!Number.isInteger(maxWork) || maxWork < 1 || maxWork > 2_000_000) fail('invalid aggregate work bound');

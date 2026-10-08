@@ -42,12 +42,12 @@ describe('native occurrence bearer endpoint with actual shared reader', () => {
     context.read.mockRejectedValueOnce(new Error('private_schema.policy_name secret provider detail'));
     const res = await GET(request());
     expect(res.status).toBe(503); expect(res.headers.get('cache-control')).toContain('no-store');
-    expect(await res.json()).toEqual({ code: 'calendar_unavailable', error: 'Calendar unavailable. Please try again.' });
+    expect(await res.json()).toEqual({ code: 'calendar_unavailable', error: 'calendar_unavailable' });
   });
   it('sanitizes a failed calendar read without returning a false empty day', async () => {
     context.read.mockResolvedValueOnce({ ok: true, supabase: { from: () => { throw new Error('private_schema.calendar_events'); } }, ctx: { user: { id: 'user' }, active: { familyId: 'family', family: { timezone: 'UTC' } } } });
     const res = await GET(request()); const body = await res.json();
-    expect(res.status).toBe(503); expect(body).toEqual({ code: 'calendar_unavailable', error: 'Calendar unavailable. Please try again.' }); expect(body).not.toHaveProperty('occurrences');
+    expect(res.status).toBe(503); expect(body).toEqual({ code: 'calendar_unavailable', error: 'calendar_unavailable' }); expect(body).not.toHaveProperty('occurrences');
   });
   it('executes the actual Supabase bearer SDK and shared reader through synthetic HTTP', async () => {
     const actual = await vi.importActual<typeof import('@/lib/supabase/bearer')>('@/lib/supabase/bearer');

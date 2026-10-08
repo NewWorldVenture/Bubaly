@@ -11,6 +11,14 @@ function expand(doc: ImportedSourceDocument, window = { from, to }) { return exp
 const master = 'DTSTART:20250101T090000Z\r\nDURATION:PT1H\r\nRRULE:FREQ=DAILY;COUNT=4\r\nSUMMARY:Original';
 
 describe('complete bounded source occurrence sets', () => {
+  it('charges an enclosing budget and propagates its failure without returning a prefix', () => {
+    let work = 0;
+    const doc = source([master]);
+    expect(expandSourceOccurrences(doc, { from, to, consumeWork: amount => { work += amount; } }).count).toBe(4);
+    expect(work).toBeGreaterThan(4);
+    let bounded = 0;
+    expect(() => expandSourceOccurrences(doc, { from, to, consumeWork: amount => { bounded += amount; if (bounded > work - 1) throw new Error('outer budget'); } })).toThrow('outer budget');
+  });
   it('unions DTSTART/RRULE/RDATE, dedupes identities and excludes after COUNT', () => {
     const result = expand(source([`${master}\r\nRDATE:20250102T090000Z,20250110T090000Z\r\nEXDATE:20250101T090000Z,20250103T090000Z`]));
     expect(result.count).toBe(3);

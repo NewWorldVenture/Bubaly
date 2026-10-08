@@ -338,6 +338,8 @@ export async function deleteEvents(scope: ServiceScope, eventIds: string[]): Pro
     .delete()
     .eq('family_id', scope.familyId)
     .in('id', ids)
+    .is('feed_id', null)
+    .is('external_uid', null)
     .select('id, title');
   if (error) {
     console.error('[service:calendar] batch delete failed', error);
@@ -424,6 +426,10 @@ export async function updateEvent(scope: ServiceScope, eventId: string, patch: U
     .update(update)
     .eq('id', eventId)
     .eq('family_id', scope.familyId)
+    // Native writes cannot alter publisher-owned rows. Keep admission on the
+    // mutation itself so a concurrent feed takeover cannot race a preflight.
+    .is('feed_id', null)
+    .is('external_uid', null)
     .select('*')
     .maybeSingle();
 
@@ -451,6 +457,8 @@ export async function deleteEvent(scope: ServiceScope, eventId: string): Promise
     .delete()
     .eq('id', eventId)
     .eq('family_id', scope.familyId)
+    .is('feed_id', null)
+    .is('external_uid', null)
     .select('id, title')
     .maybeSingle();
 

@@ -22,7 +22,7 @@ function fixture(options: Options = {}) {
     if (url.origin !== 'https://calendar-delete.invalid' || method !== 'DELETE' || table !== 'calendar_events' || trace.requests.length >= 2 || init?.body) deny('Outside finite Calendar delete proof');
     const query = Object.fromEntries(url.searchParams), expectedIds = [...new Set(ids.filter(Boolean))];
     trace.requests.push({ method, table, query, payload: null });
-    if (JSON.stringify(query) !== JSON.stringify({ family_id: 'eq.' + family, id: 'in.(' + expectedIds.join(',') + ')', select: 'id,title' })) deny('Delete query lacks exact family/filtered IDs/selected collection receipt');
+    if (JSON.stringify(query) !== JSON.stringify({ family_id: 'eq.' + family, id: 'in.(' + expectedIds.join(',') + ')', feed_id: 'is.null', external_uid: 'is.null', select: 'id,title' })) deny('Delete query lacks exact family/filtered IDs/selected collection receipt');
     const status = options.status ?? 200;
     return new Response(status === 204 ? null : JSON.stringify(body), { status, headers: { 'content-type': 'application/json' } });
   } catch (e) { trace.transportErrors.push(String(e)); throw e; } finally { trace.settled++; } };

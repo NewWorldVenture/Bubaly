@@ -180,7 +180,7 @@ describe('updateEvent / deleteEvent', () => {
     const { db, calls } = makeDb(() => ({ data: null, error: null }));
     const res = await updateEvent(scopeWith(db), 'event-from-another-family', { title: 'Moved' });
     expect(res).toMatchObject({ ok: false, code: 'not_found' });
-    expect(calls[0].filters).toMatchObject({ id: 'event-from-another-family', family_id: 'fam-1' });
+    expect(calls[0].filters).toMatchObject({ id: 'event-from-another-family', family_id: 'fam-1', feed_id: null, external_uid: null });
   });
 
   it('refuses an empty patch instead of issuing a no-op write', async () => {
@@ -196,6 +196,7 @@ describe('updateEvent / deleteEvent', () => {
     expect(res).toMatchObject({ ok: true, data: { id: 'event-1', title: 'Dentist' } });
     expect(calls[0].kind).toBe('delete');
     expect(calls[0].filters.family_id).toBe('fam-1');
+    expect(calls[0].filters).toMatchObject({ feed_id: null, external_uid: null });
   });
 });
 
