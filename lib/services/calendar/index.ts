@@ -830,7 +830,9 @@ export async function rescheduleAfter(
 
   const previousStart = Date.parse(existing.starts_at);
   const previousEnd = existing.ends_at ? Date.parse(existing.ends_at) : Number.NaN;
-  const durationMs = Number.isFinite(previousEnd) && Number.isFinite(previousStart) && previousEnd > previousStart
+  // An explicit zero-length point stays a point; only a missing end keeps
+  // the existing unknown-duration/null policy.
+  const durationMs = Number.isFinite(previousEnd) && Number.isFinite(previousStart) && previousEnd >= previousStart
     ? previousEnd - previousStart
     : null;
 

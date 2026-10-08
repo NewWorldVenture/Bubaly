@@ -17,7 +17,7 @@ vi.mock('@/lib/services/trips',()=>({listTrips:async()=>({ok:true,data:[]})}));
 const capability=vi.hoisted(()=>({enabled:false}));
 vi.mock('@/lib/calendar/source-capability',()=>({get CALENDAR_SOURCE_ARCHIVE_ENABLED(){return capability.enabled;}}));
 beforeEach(()=>{capability.enabled=false;});
-import {findConflicts,busyEvenings,searchEvents} from '@/lib/services/calendar';
+import {findConflicts,busyEvenings,searchEvents,rescheduleAfter} from '@/lib/services/calendar';
 import {buildFamilyExport} from '@/lib/privacy/export';
 const row=(id:string,start:string,end:string)=>({id,family_id:'F',title:'Synthetic '+id,starts_at:start,ends_at:end,all_day:false,recurrence:'none',recurrence_until:null,assignee_id:'M',feed_id:null,external_uid:null,category:'general',created_at:start,updated_at:start});
 
@@ -74,4 +74,39 @@ describe('complete calendar analysis and raw export through actual SDK',()=>{
  it.each(['', ' '])('refuses an absent family scope%s before any SDK dispatch',async familyId=>{const {scope,calls}=fixture([]);scope.familyId=familyId;expect((await findConflicts(scope,window)).ok).toBe(false);expect((await busyEvenings(scope,window)).ok).toBe(false);expect((await searchEvents(scope,{...window,expandSeries:false})).ok).toBe(false);expect(calls).toEqual([]);});
  it('never activates source projections or fabricates action IDs when the held capability changes',async()=>{capability.enabled=true;const {scope}=fixture([]);expect((await findConflicts(scope,window)).ok).toBe(false);expect((await busyEvenings(scope,window)).ok).toBe(false);expect((await searchEvents(scope,{...window,expandSeries:false})).ok).toBe(false);});
  it('fails the entire calendar export on a later refused raw page instead of exporting its prefix',async()=>{const {scope}=fixture(Array.from({length:3},(_,i)=>event(String(i),'2026-10-08T18:00:00Z','2026-10-08T19:00:00Z')),{cap:2,failTable:'calendar_events',failLater:true});expect(await buildFamilyExport(scope)).toMatchObject({ok:false,failed:[{key:'calendar'}]});});
+});
+
+
+describe('rescheduling actual native intervals through the SDK',()=>{
+ async function move(originalEnd:string|null, imported=false){
+  let stored=event('move','2026-10-08T09:00:00Z',originalEnd,{...(imported?{feed_id:'publisher',external_uid:'original-uid'}:{})});
+  const patches:Record<string,unknown>[]=[];const trail:Record<string,unknown>[]=[];
+  const db=createClient<Database>('https://synthetic-calendar-move.invalid','synthetic',{auth:{persistSession:false,autoRefreshToken:false},global:{fetch:async(input,init)=>{
+   const url=new URL(String(input));expect(url.origin).toBe('https://synthetic-calendar-move.invalid');
+   if(url.pathname.endsWith('/audit_logs')){expect(init?.method).toBe('POST');const entry=JSON.parse(String(init?.body));expect(entry).toMatchObject({family_id:'F',actor_id:'U',action:'update',resource:'calendar'});trail.push(entry);return new Response(null,{status:201});}
+   expect(url.pathname.endsWith('/calendar_events')).toBe(true);expect(url.searchParams.get('family_id')).toBe('eq.F');expect(url.searchParams.get('id')).toBe('eq.move');
+   if(init?.method==='PATCH'){
+    expect(url.searchParams.get('feed_id')).toBe('is.null');expect(url.searchParams.get('external_uid')).toBe('is.null');
+    const patch=JSON.parse(String(init.body));patches.push(patch);
+    if(imported)return Response.json(null);
+    stored={...stored,...patch};return Response.json(stored);
+   }
+   expect(init?.method??'GET').toBe('GET');return Response.json(stored);
+  }}});
+  const scope:ServiceScope={db,familyId:'F',userId:'U',memberId:'M',role:'parent',actorKind:'member',tz:'UTC',now:new Date('2026-10-08T00:00:00Z')};
+  const result=await rescheduleAfter(scope,'move',{startsAt:'2026-10-08T18:00:00Z'});
+  return{result,stored,patches,trail};
+ }
+ it.each([
+  {label:'explicit point',end:'2026-10-08T09:00:00Z',expectedEnd:'2026-10-08T18:00:00.000Z',busy:false},
+  {label:'positive elapsed duration',end:'2026-10-08T10:30:00Z',expectedEnd:'2026-10-08T19:30:00.000Z',busy:true},
+  {label:'missing end estimate',end:null,expectedEnd:null,busy:true},
+ ])('preserves $label and its resulting evening occupancy',async({end,expectedEnd,busy})=>{
+  const {result,stored,patches,trail}=await move(end);expect(result).toMatchObject({ok:true,data:{id:'move',starts_at:'2026-10-08T18:00:00.000Z',ends_at:expectedEnd}});
+  expect(patches).toEqual([{starts_at:'2026-10-08T18:00:00.000Z',ends_at:expectedEnd}]);expect(trail).toHaveLength(1);
+  const {scope}=fixture([stored]);expect(await busyEvenings(scope,window)).toEqual({ok:true,data:busy?['2026-10-08']:[]});
+ });
+ it('keeps publisher-owned point refusal on the atomic mutation and writes no success trail',async()=>{
+  const {result,stored,patches,trail}=await move('2026-10-08T09:00:00Z',true);expect(result).toMatchObject({ok:false,code:'not_found'});expect(patches).toHaveLength(1);expect(stored.starts_at).toBe('2026-10-08T09:00:00Z');expect(stored.ends_at).toBe('2026-10-08T09:00:00Z');expect(trail).toEqual([]);
+ });
 });

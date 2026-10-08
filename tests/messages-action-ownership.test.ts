@@ -3,7 +3,8 @@ import ts from 'typescript';
 import { createClient } from '@supabase/supabase-js';
 import type { Database, Tables } from '@/lib/database.types';
 import { describe, expect, it } from 'vitest';
-import { clearConfirmedDraft, createThreadOwner } from '@/lib/messages/thread-state';
+import { clearConfirmedDraft, createThreadOwner, mergeThreadRows } from '@/lib/messages/thread-state';
+import { settle } from '@/lib/supabase/settle';
 
 type Conversation = Tables<'family_conversations'>;
 type Scope = { familyId: string; userId: string; role: string; memberId: string; active: boolean };
@@ -328,5 +329,92 @@ describe('render-owned text/edit/GIF/attachment sends through the actual SDK', (
     test.configure({ defer: '' }); await test.render().sendFile(file);
     expect(test.requests.filter(r => r.method === 'POST' && r.path.includes('/storage/'))).toHaveLength(2);
     expect(test.effects.filter(e => e.kind === 'accept')).toHaveLength(1);
+  });
+});
+
+// Finite real callback graph: scope/visit ownership and actual acceptance are
+// included; only React state setters and the synthetic transport are boundaries.
+const actionNames = new Set(['sameArchiveRow', 'isCurrentMessageOrigin', 'isCurrentMessageOperation', 'beginMessageOperation', 'sameMessageActionRow', 'beginMessageAction', 'currentMessageAction', 'matchesMessageActionResult', 'reactTo', 'deleteMessage', 'pinMessage', 'acceptMessage']);
+const actionBodies: string[] = [];
+function collectActionBodies(node: ts.Node) { if (ts.isFunctionDeclaration(node) && node.name && actionNames.has(node.name.text)) actionBodies.push(node.getText(sendAst)); ts.forEachChild(node, collectActionBodies); }
+collectActionBodies(sendAst);
+if (actionBodies.length !== actionNames.size) throw new Error('The finite message action graph changed.');
+const actionCompiled = ts.transpileModule(actionBodies.join('\n'), { compilerOptions: { target: ts.ScriptTarget.ES2022, module: ts.ModuleKind.None } }).outputText;
+type MessageAction = 'delete' | 'pin' | 'reaction';
+type ActionFailure = '' | 'denied' | 'zero' | 'wrong-scope' | 'wrong-result' | 'rejected';
+function messageActionFixture({ deferred = false, failure = '' as ActionFailure, sender = USER, role = 'parent' } = {}) {
+  const owner = { current: createThreadOwner() }; owner.current.select(A);
+  let scope = { familyId: FAMILY, userId: USER, role, memberId: 'self-member', active: true }, activeConv = conversation(A, USER);
+  const message = { id: 'message-a', family_id: FAMILY, conversation_id: A, sender_id: sender, content: 'Original text', edited_at: null, deleted_at: null, is_pinned: false, reactions: {}, created_at: '2026-10-08T12:00:00Z' };
+  const alive = { current: true }, archiveScopeRef = { current: scope }, activeConversationRef = { current: activeConv }, messagesRef = { current: [{ ...message }] };
+  const messageActionFlight = { current: new Map() }, sendRequest = { current: 0 }, liveRows = { current: new Map() };
+  const requests: { url: URL; method: string; body: Record<string, unknown> }[] = [], effects: { kind: string; value?: unknown }[] = [];
+  const pending: (() => void)[] = [];
+  const db = createClient<Database>('https://message-actions-sdk.invalid', 'synthetic-key', { auth: { persistSession: false, autoRefreshToken: false, detectSessionInUrl: false }, global: { fetch: async (input, init) => {
+    const url = new URL(String(input)), body = JSON.parse(String(init?.body ?? '{}')); requests.push({ url, method: init?.method ?? 'GET', body });
+    if (deferred) await new Promise<void>(resolve => pending.push(resolve));
+    if (failure === 'rejected') throw new Error('Synthetic transport rejected');
+    if (failure === 'denied') return Response.json({ code: '42501', message: 'Synthetic authorization refusal' }, { status: 403 });
+    const reaction = url.pathname.includes('/rpc/');
+    if (failure === 'zero') return Response.json(reaction ? null : []);
+    const result = { ...message, ...(!reaction ? body : { reactions: { '👍': [USER] } }), ...(failure === 'wrong-scope' ? { conversation_id: B } : {}), ...(failure === 'wrong-result' ? { deleted_at: null, is_pinned: false } : {}) };
+    return Response.json(reaction ? result : [result]);
+  } } });
+  function render() {
+    const env = { owner, alive, archiveScope: scope, archiveScopeRef, activeConv, activeConversationRef, familyId: scope.familyId, userId: scope.userId, messageOrigin: owner.current.capture(), sendRequest, messageActionFlight, messagesRef, liveRows,
+      createClient: () => db, settle, mergeThreadRows, setMessages: (update: (rows: typeof messagesRef.current) => unknown) => effects.push({ kind: 'messages', value: update(messagesRef.current) }),
+      loadSummaries: async () => { effects.push({ kind: 'summaries' }); }, loadConversations: async () => { effects.push({ kind: 'inbox' }); },
+      setMsgMenu: (value: unknown) => effects.push({ kind: 'menu', value }), toastError: (value: unknown) => effects.push({ kind: 'toast', value }), describeDbError: (error: { message: string }) => error.message, tr: (key: string) => key,
+    };
+    return new Function(...Object.keys(env), actionCompiled + ';return{reactTo,deleteMessage,pinMessage};')(...Object.values(env)) as { reactTo: (message: any, emoji: string) => Promise<void>; deleteMessage: (message: any) => Promise<void>; pinMessage: (message: any) => Promise<void> };
+  }
+  function retire(kind: string) {
+    if (kind === 'thread' || kind === 'ABA') { owner.current.select(B); activeConv = conversation(B, USER); activeConversationRef.current = activeConv; if (kind === 'ABA') { owner.current.select(A); activeConv = conversation(A, USER); activeConversationRef.current = activeConv; } }
+    if (kind === 'unmount') alive.current = false;
+    if (kind === 'role' || kind === 'inactive') { scope = { ...scope, role: kind === 'role' ? 'child' : scope.role, active: kind !== 'inactive' }; archiveScopeRef.current = scope; }
+    if (kind === 'row') messagesRef.current = [{ ...message, sender_id: 'different-sender' }];
+  }
+  return { render, retire, message, messagesRef, requests, effects, messageActionFlight, pending, resolve: () => pending.splice(0).forEach(resolve => resolve()), started: async () => { await expect.poll(() => pending.length).toBe(1); }, clear: () => { effects.length = 0; } };
+}
+function invokeMessageAction(callbacks: ReturnType<ReturnType<typeof messageActionFixture>['render']>, action: MessageAction, message: unknown) {
+  return action === 'delete' ? callbacks.deleteMessage(message) : action === 'pin' ? callbacks.pinMessage(message) : callbacks.reactTo(message, '👍');
+}
+describe('render-owned delete, pin and reactions through actual SDK and acceptance', () => {
+  for (const action of ['delete', 'pin', 'reaction'] as const) {
+    for (const retirement of ['thread', 'ABA', 'unmount', 'role', 'inactive', 'row']) it(`${action} refuses retired ${retirement} before any dispatch or menu effect`, async () => {
+      const probe = messageActionFixture(), old = probe.render(); probe.retire(retirement); await invokeMessageAction(old, action, probe.message);
+      expect(probe.requests).toEqual([]); expect(probe.effects).toEqual([]);
+    });
+    for (const retirement of ['thread', 'ABA', 'unmount', 'role', 'row']) it(`${action} suppresses retired ${retirement} completion and reloads`, async () => {
+      const probe = messageActionFixture({ deferred: true }), operation = invokeMessageAction(probe.render(), action, probe.message);
+      await probe.started(); probe.retire(retirement); probe.clear(); probe.resolve(); await operation;
+      expect(probe.requests).toHaveLength(1); expect(probe.effects).toEqual([]);
+    });
+    it(`${action} preserves current authorized positive and scoped request`, async () => {
+      const probe = messageActionFixture(); await invokeMessageAction(probe.render(), action, probe.message);
+      expect(probe.requests).toHaveLength(1); expect(probe.effects.filter(effect => effect.kind === 'messages')).toHaveLength(1);
+      expect(probe.effects.filter(effect => effect.kind === 'toast')).toEqual([]);
+      if (action !== 'reaction') expect(probe.requests[0].url.searchParams.get('conversation_id')).toBe(`eq.${A}`);
+      else expect(probe.requests[0].body).toEqual({ p_message_id: probe.message.id, p_emoji: '👍' });
+      expect(probe.messageActionFlight.current.size).toBe(0);
+    });
+    it(`${action} refuses a duplicate queued dispatch before React commits`, async () => {
+      const probe = messageActionFixture({ deferred: true }), callbacks = probe.render();
+      const first = invokeMessageAction(callbacks, action, probe.message), second = invokeMessageAction(callbacks, action, probe.message);
+      await probe.started(); probe.resolve(); await Promise.all([first, second]); expect(probe.requests).toHaveLength(1);
+    });
+    for (const failure of ['denied', 'zero', 'wrong-scope', 'rejected'] as const) it(`${action} refuses ${failure} without publishing or reloading and remains retryable`, async () => {
+      const probe = messageActionFixture({ failure }); await invokeMessageAction(probe.render(), action, probe.message);
+      expect(probe.effects.filter(effect => ['messages', 'summaries', 'inbox'].includes(effect.kind))).toEqual([]);
+      expect(probe.effects.filter(effect => effect.kind === 'toast')).toHaveLength(1); expect(probe.messageActionFlight.current.size).toBe(0);
+    });
+  }
+  for (const action of ['delete', 'pin'] as const) it(`${action} refuses a response that did not apply its intended change`, async () => {
+    const probe = messageActionFixture({ failure: 'wrong-result' }); await invokeMessageAction(probe.render(), action, probe.message);
+    expect(probe.effects.filter(effect => effect.kind === 'messages')).toEqual([]); expect(probe.effects.filter(effect => effect.kind === 'toast')).toHaveLength(1);
+  });
+  it('delete cannot dispatch a message owned by someone else, while pin and reaction keep participant semantics', async () => {
+    const probe = messageActionFixture({ sender: 'other-user', role: 'child' }); await invokeMessageAction(probe.render(), 'delete', probe.message); expect(probe.requests).toEqual([]);
+    await invokeMessageAction(probe.render(), 'pin', probe.message); await invokeMessageAction(probe.render(), 'reaction', probe.message); expect(probe.requests).toHaveLength(2);
   });
 });

@@ -87,9 +87,7 @@ const FIXED = [
   'components/modules/voice-module.tsx',
 ];
 
-describe('a confirmed client write is read, not just requested (C1-S9-77)', () => {
-  it.each(FIXED)('%s checks every row set it asks for', (file) => {
-    const src = readFileSync(file, 'utf8');
+function assertConfirmedWriteRead(src: string, file: string) {
     // `let` too: a save that retries reassigns its result. 1,200, not 400: a
     // long update payload put `.select('id')` beyond 400 characters (family
     // tree), and the binding went unseen — a mutation survived on exactly that
@@ -106,17 +104,22 @@ describe('a confirmed client write is read, not just requested (C1-S9-77)', () =
     // than reported as having changed shape.
     const bindings = named.length > 0
       ? named
-      : [...src.matchAll(/(?:const|let) \{ data, error(?:: \w+)? \} = [^;]{0,1200}?\.select\('id'\)/g)].map(() => 'data');
+      : [...src.matchAll(new RegExp(`(?:const|let) \\{ data, error(?:: \\w+)? \\} = [^;]{0,1200}?\\.select\\('${projection}'\\)`, 'g'))].map(() => 'data');
     expect(bindings.length, 'no confirmed write found — the file changed shape').toBeGreaterThan(0);
     for (const b of bindings) {
       // Read as "none", against an exact expected count, or — for a
       // `.single()` result — as absence (`|| !created`); or, for a batch,
       // row by row (`(deleted ?? []).map`, C1-S9-83).
-      const read = [`wroteNoRows(${b})`, `(${b}?.length ?? 0) !==`, `|| !${b})`, `if (!${b})`, `if (!${b}?.length)`, `(${b} ?? []).map(`].find((r) => src.includes(r)) ?? `wroteNoRows(${b})`;
+      const read = [`wroteNoRows(${b})`, `(${b}?.length ?? 0) !==`, `${b}?.length !== 1`, `|| !${b})`, `if (!${b})`, `if (!${b}?.length)`, `(${b} ?? []).map(`].find((r) => src.includes(r)) ?? `wroteNoRows(${b})`;
       expect(src, `${b} is requested but never read`).toContain(read);
       // …and read AFTER it is bound, not in some earlier function.
       expect(at(src, b === 'data' ? '{ data, error' : `data: ${b}, error`)).toBeLessThan(at(src, read));
     }
+}
+
+describe('a confirmed client write is read, not just requested (C1-S9-77)', () => {
+  it.each(FIXED)('%s checks every row set it asks for', (file) => {
+    assertConfirmedWriteRead(readFileSync(file, 'utf8'), file);
   });
 
   it('a zero-row write says it was not saved, in the family\'s language', () => {
@@ -338,5 +341,27 @@ describe('completing a recurring reminder schedules its next occurrence once (C1
     expect(fn).toContain(".neq('status', 'completed').select('id')");
     // Not eq('active'): a snoozed reminder shows the same button.
     expect(fn).not.toContain(".eq('status', 'active')");
+  });
+});
+
+
+describe('confirmed-write scanner controls', () => {
+  const messages = 'components/modules/messages-module.tsx';
+  it('accepts bare full-row messenger results with exact cardinality guards', () => {
+    assertConfirmedWriteRead("const { data, error } = await db.update({}).select('*'); if (data?.length !== 1) return;", messages);
+  });
+  it('preserves named full-row messenger and ordinary id-result checks', () => {
+    assertConfirmedWriteRead("const { data: changed, error } = await db.update({}).select('*'); if (wroteNoRows(changed)) return;", messages);
+    assertConfirmedWriteRead("const { data, error } = await db.update({}).select('id'); if (!data?.length) return;", 'ordinary.tsx');
+  });
+  it.each([
+    ["const { data, error } = await db.update({}).select('*'); success();", messages],
+    ["if (data?.length !== 1) return; const { data, error } = await db.update({}).select('*');", messages],
+    ["const { data: changed, error } = await db.update({}).select('id'); if (wroteNoRows(other)) return;", 'ordinary.tsx'],
+    ["const { data: stored, error } = await db.storage.upload('path', file); await db.update({}).select('id'); if (wroteNoRows(stored)) return;", 'ordinary.tsx'],
+    ["const { data, error } = await db.update({}).select('*'); if (data?.length !== 1) return;", 'ordinary.tsx'],
+    ['', messages],
+  ])('refuses missing, premature, unrelated or unsupported confirmation: %s', (src, file) => {
+    expect(() => assertConfirmedWriteRead(src, file)).toThrow();
   });
 });

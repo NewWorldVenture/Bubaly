@@ -42,7 +42,7 @@ function productionStyles() {
     .process(fs.readFileSync('app/globals.css', 'utf8'), { from: 'app/globals.css' }).then(result => result.css);
 }
 
-async function fixture(page: Page, { holdA = false, mobile = false, olderHistory = false, theme = 'dark', legacy = false, otherCreator = false } = {}) {
+async function fixture(page: Page, { holdA = false, mobile = false, olderHistory = false, theme = 'dark', legacy = false, otherCreator = false, ownMessage = false } = {}) {
   await page.setViewportSize({ width: mobile ? 390 : 1280, height: 844 });
   const stylesheet = await productionStyles();
   await page.route('**/*', async route => {
@@ -67,6 +67,9 @@ async function fixture(page: Page, { holdA = false, mobile = false, olderHistory
     if(legacy)for(const conv of convs)delete conv.is_family_chat;
     const base=(id,conversation_id,content,sender_id=otherId)=>({id,conversation_id,content,sender_id,family_id:familyId,sender_name:sender_id===userId?'Alex':'Blair',kind:'text',attachment_url:null,attachment_name:null,attachment_mime:null,reply_to_id:null,reactions:{},read_by:[],is_pinned:false,deleted_at:null,created_at:'2026-10-02T12:00:00Z',edited_at:null});
     p.rows=[base('40000000-0000-4000-8000-000000000001',A,'Message from A'),base('40000000-0000-4000-8000-000000000002',B,'Message from B')];
+    if(${ownMessage}){p.rows[0].sender_id=userId;p.rows[0].sender_name='Alex';}
+    p.messageCalls=[];p.pendingMessageActions=[];p.holdMessageAction=false;
+    p.resolveMessageAction=(outcome='success')=>{const resolve=p.pendingMessageActions.shift();if(!resolve)throw new Error('No pending message action');resolve(outcome);};
     if(${olderHistory}){
       for(let i=0;i<55;i++)p.rows.push({...base('old-'+String(i).padStart(3,'0'),A,'History '+i),created_at:new Date(Date.parse('2026-10-01T12:00:00Z')+i*60000).toISOString()});
       p.rows.push({...base('old-pin',A,'Pinned from before the loaded page'),is_pinned:true,created_at:'2026-09-01T12:00:00Z'});
@@ -86,6 +89,10 @@ async function fixture(page: Page, { holdA = false, mobile = false, olderHistory
         const count=selected.length;
         if(action==='insert'){p.insertIds.push(input.id);if(p.failInserts-->0)throw new Error('Network unavailable');const row={...base(input.id,input.conversation_id,input.content,input.sender_id),...input,created_at:'2026-10-02T12:01:00Z'};p.rows.push(row);p.writes.push(row);selected=[row];if(p.holdInsert)await new Promise(resolve=>p.pendingInsert.push(resolve));if(p.loseInsertResponse){p.loseInsertResponse=false;return{data:null,error:{message:'Response lost'}};}}
         else if(action==='update'){
+          if(table==='family_messages'){
+            p.messageCalls.push({kind:'update',filters:[...filters],input:{...input}});
+            if(p.holdMessageAction){const outcome=await new Promise(resolve=>p.pendingMessageActions.push(resolve));if(outcome==='denied')return{data:null,error:{code:'42501',message:'Synthetic message denied'}};if(outcome==='zero')return{data:[],error:null};}
+          }
           if(table==='family_conversations'){
             p.archiveCalls.push({filters:[...filters],input:{...input}});
             if(p.holdArchive){const outcome=await new Promise(resolve=>p.pendingArchive.push(resolve));if(outcome==='denied')return{data:null,error:{code:'42501',message:'Synthetic archive denied'}};if(outcome==='zero')return{data:null,error:null};}
@@ -110,6 +117,13 @@ async function fixture(page: Page, { holdA = false, mobile = false, olderHistory
       if(legacy&&name==='mark_conversation_read'){p.reads.push({legacy:name,...args});for(const row of p.rows)if(row.conversation_id===args.p_conversation_id)row.read_by=[...new Set([...row.read_by,userId])];return{data:null,error:null};}
       if(legacy)return{data:null,error:{code:'PGRST202',message:'Could not find the function public.'+name+'('+Object.keys(args).join(', ')+') in the schema cache'}};
       if(name==='ensure_family_conversation')return{data:A,error:null};
+      if(name==='toggle_family_message_reaction'){
+        p.messageCalls.push({kind:'reaction',...args});
+        if(p.holdMessageAction){const outcome=await new Promise(resolve=>p.pendingMessageActions.push(resolve));if(outcome==='denied')return{data:null,error:{code:'42501',message:'Synthetic message denied'}};if(outcome==='zero')return{data:null,error:null};}
+        const row=p.rows.find(row=>row.id===args.p_message_id);if(!row)return{data:null,error:null};
+        const users=row.reactions[args.p_emoji]||[];row.reactions={...row.reactions,[args.p_emoji]:users.includes(userId)?users.filter(id=>id!==userId):[...users,userId]};
+        return{data:JSON.parse(JSON.stringify(row)),error:null};
+      }
       if(name==='family_conversation_overview')return{data:convs.map(conv=>{const rows=p.rows.filter(row=>row.conversation_id===conv.id);return{conversation_id:conv.id,last_message:rows.at(-1)||null,unread_count:rows.filter(row=>row.sender_id!==userId&&!row.read_by.includes(userId)).length};}),error:null};
       if(name==='mark_conversation_read_through'){p.reads.push(args);for(const row of p.rows)if(row.conversation_id===args.p_conversation_id)row.read_by=[...new Set([...row.read_by,userId])];return{data:1,error:null};}
       if(name==='leave_family_conversation'){const index=convs.findIndex(conv=>conv.id===args.p_conversation_id);if(index>=0)convs.splice(index,1);return{data:null,error:null};}
@@ -533,3 +547,59 @@ for (const captured of ['before-modal', 'current-modal']) test('a retained ' + c
   expect(await page.evaluate(() => (window as any).__familyChat.archiveCalls.length)).toBe(1);
   await clean(page);
 });
+
+type RowAction = 'delete' | 'pin' | 'reaction';
+async function retainRowAction(page: Page, action: RowAction) {
+  const message = page.locator('#message-40000000-0000-4000-8000-000000000001');
+  await message.getByRole('button', { name: 'More actions' }).click();
+  const button = message.getByRole('button', { name: action === 'delete' ? 'Delete' : action === 'pin' ? 'Pin' : 'React 👍', exact: true }).last();
+  await button.evaluate(button => {
+    const props = Object.keys(button).find(key => key.startsWith('__reactProps$'))!;
+    (window as any).__familyChat.retainedRowAction = (button as any)[props].onClick;
+  });
+}
+for (const action of ['delete', 'pin', 'reaction'] as const) {
+  for (const retirement of ['thread', 'ABA', 'inactive'] as const) test(`retained ${action} refuses ${retirement} before sending or closing the current menu`, async ({ page }) => {
+    await fixture(page, { ownMessage: true }); await retainRowAction(page, action);
+    await select(page, 'B'); if (retirement === 'ABA') await select(page, 'A');
+    if (retirement === 'inactive') await page.evaluate(() => (window as any).__familyChat.setAuthority('parent', false));
+    const current = page.locator(retirement === 'ABA' ? '#message-40000000-0000-4000-8000-000000000001' : '#message-40000000-0000-4000-8000-000000000002');
+    await current.getByRole('button', { name: 'More actions' }).click();
+    await page.evaluate(async () => { const state = (window as any).__familyChat; await state.retainedRowAction(); await state.flush(); });
+    expect(await page.evaluate(() => (window as any).__familyChat.messageCalls)).toEqual([]);
+    await expect(current.getByRole('button', { name: 'More actions' })).toHaveAttribute('aria-expanded', 'true');
+    expect(await page.evaluate(() => (window as any).__familyChat.notices)).toEqual([]); await clean(page);
+  });
+  test(`retired pending ${action} refusal cannot publish feedback or close B menu`, async ({ page }) => {
+    await fixture(page, { ownMessage: true }); await retainRowAction(page, action);
+    await page.evaluate(() => { const state = (window as any).__familyChat; state.holdMessageAction = true; state.retainedRowAction(); });
+    await expect.poll(() => page.evaluate(() => (window as any).__familyChat.pendingMessageActions.length)).toBe(1);
+    await select(page, 'B'); const current = page.locator('#message-40000000-0000-4000-8000-000000000002');
+    await current.getByRole('button', { name: 'More actions' }).click();
+    await page.evaluate(async () => { const state = (window as any).__familyChat; state.resolveMessageAction('denied'); await state.flush(); });
+    expect(await page.evaluate(() => (window as any).__familyChat.notices)).toEqual([]);
+    await expect(current.getByRole('button', { name: 'More actions' })).toHaveAttribute('aria-expanded', 'true'); await clean(page);
+  });
+  test(`current ${action} refusal remains retryable and queued duplicates send only once`, async ({ page }) => {
+    await fixture(page, { ownMessage: true }); await retainRowAction(page, action);
+    await page.evaluate(() => { const state = (window as any).__familyChat; state.holdMessageAction = true; state.retainedRowAction(); state.retainedRowAction(); });
+    await expect.poll(() => page.evaluate(() => (window as any).__familyChat.pendingMessageActions.length)).toBe(1);
+    expect(await page.evaluate(() => (window as any).__familyChat.messageCalls.length)).toBe(1);
+    await page.evaluate(async () => { const state = (window as any).__familyChat; state.resolveMessageAction('denied'); await state.flush(); });
+    expect(await page.evaluate(() => (window as any).__familyChat.notices.length)).toBe(1);
+    expect(await page.evaluate(() => (window as any).__familyChat.rows[0].deleted_at)).toBeNull();
+    await retainRowAction(page, action);
+    await page.evaluate(async () => { const state = (window as any).__familyChat; state.holdMessageAction = false; await state.retainedRowAction(); await state.flush(); });
+    expect(await page.evaluate(() => (window as any).__familyChat.messageCalls.length)).toBe(2);
+    if (action === 'delete') {
+      expect(await page.evaluate(() => (window as any).__familyChat.rows[0].deleted_at)).not.toBeNull();
+      await expect(page.getByText('Message deleted', { exact: true })).toBeVisible();
+    } else if (action === 'pin') {
+      expect(await page.evaluate(() => (window as any).__familyChat.rows[0].is_pinned)).toBe(true);
+      await expect(page.locator('#message-40000000-0000-4000-8000-000000000001').getByText('Pinned', { exact: true })).toBeVisible();
+    } else {
+      await expect(page.locator('#message-40000000-0000-4000-8000-000000000001').getByRole('button', { name: '👍, 1 reactions', exact: true })).toHaveAttribute('aria-pressed', 'true');
+    }
+    expect(await page.evaluate(() => (window as any).__familyChat.notices.length)).toBe(1); await clean(page);
+  });
+}

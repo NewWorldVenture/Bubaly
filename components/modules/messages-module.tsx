@@ -11,7 +11,7 @@ import { useApp } from '@/components/app/app-context';
 import { familyMediaPath, removeFamilyMedia } from '@/lib/storage/family-media';
 import { settle } from '@/lib/supabase/settle';
 import { createClient } from '@/lib/supabase/client';
-import { describeDbError, wroteNoRows } from '@/lib/supabase/errors';
+import { describeDbError } from '@/lib/supabase/errors';
 import { escapeLike } from '@/lib/supabase/escape-like';
 import { useToast } from '@/components/ui/toast';
 import { Button } from '@/components/ui/button';
@@ -142,6 +142,7 @@ function MessagesWorkspace() {
   const messageOrigin = owner.current.capture();
   type MessageOperation = { origin: typeof messageOrigin; scope: typeof archiveScope; row: Conversation; request: number };
   const sendFlight = useRef<MessageOperation | null>(null);
+  const messageActionFlight = useRef(new Map<string, MessageOperation>());
   const drafts = useRef(new Map<string, ThreadDraft<Message>>());
   const draftRef = useRef<ThreadDraft<Message>>({ text: '', reply: null, edit: null });
   const renderedDraft = useMemo(() => ({ text, reply: replyTo, edit: editMessage, conversationId: activeConvId }), [text, replyTo, editMessage, activeConvId]);
@@ -847,31 +848,68 @@ function MessagesWorkspace() {
   }, [releaseStream]);
 
   // ── React to message ─────────────────────────────────────────
+  function sameMessageActionRow(current: Message | undefined, rendered: Message, action: 'delete' | 'pin' | 'reaction') {
+    return !!current && current.id === rendered.id && current.family_id === rendered.family_id
+      && current.conversation_id === rendered.conversation_id && current.sender_id === rendered.sender_id
+      && !current.deleted_at && !rendered.deleted_at
+      && (action !== 'pin' || current.is_pinned === rendered.is_pinned)
+      && (action !== 'delete' || current.content === rendered.content && current.edited_at === rendered.edited_at)
+      && (action !== 'reaction' || JSON.stringify(current.reactions) === JSON.stringify(rendered.reactions));
+  }
+  function beginMessageAction(message: Message, action: 'delete' | 'pin' | 'reaction') {
+    if (!isCurrentMessageOrigin() || message.family_id !== familyId || message.conversation_id !== activeConv?.id
+      || action === 'delete' && message.sender_id !== userId
+      || !sameMessageActionRow(messagesRef.current.find(row => row.id === message.id), message, action)) return null;
+    const previous = messageActionFlight.current.get(message.id);
+    if (previous && isCurrentMessageOperation(previous)) return null;
+    const operation = beginMessageOperation();
+    if (operation) messageActionFlight.current.set(message.id, operation);
+    return operation;
+  }
+  function currentMessageAction(operation: MessageOperation, message: Message, action: 'delete' | 'pin' | 'reaction') {
+    return isCurrentMessageOperation(operation) && messageActionFlight.current.get(message.id) === operation
+      && sameMessageActionRow(messagesRef.current.find(row => row.id === message.id), message, action);
+  }
+  function matchesMessageActionResult(result: Message, message: Message) {
+    return result.id === message.id && result.family_id === message.family_id
+      && result.conversation_id === message.conversation_id && result.sender_id === message.sender_id;
+  }
   async function reactTo(msg: Message, emoji: string) {
-    if (msg.deleted_at) return;
+    const operation = beginMessageAction(msg, 'reaction'); if (!operation) return;
     setMsgMenu(null);
-    const supabase = createClient();
-    const { data, error } = await settle(supabase.rpc('toggle_family_message_reaction', { p_message_id: msg.id, p_emoji: emoji }));
-    if (error) toastError(describeDbError(error));
-    else if (data) acceptMessage(data);
+    try {
+      const { data, error } = await settle(createClient().rpc('toggle_family_message_reaction', { p_message_id: msg.id, p_emoji: emoji }));
+      if (!currentMessageAction(operation, msg, 'reaction')) return;
+      if (error) toastError(describeDbError(error));
+      else if (!data || !matchesMessageActionResult(data, msg) || data.deleted_at) toastError(tr('errors.thatChangeWasNotSaved'));
+      else acceptMessage(data);
+    } finally { if (messageActionFlight.current.get(msg.id) === operation) messageActionFlight.current.delete(msg.id); }
   }
 
   // ── Delete message ──────────────────────────────────────────
-  async function deleteMessage(id: string) {
+  async function deleteMessage(msg: Message) {
+    const operation = beginMessageAction(msg, 'delete'); if (!operation) return;
     setMsgMenu(null);
-    const { data: updated3, error } = await createClient().from('family_messages').update({ deleted_at: new Date().toISOString() }).eq('id', id).eq('sender_id', userId).eq('family_id', familyId).select('*');
-    if (error) toastError(describeDbError(error));
-    else if (wroteNoRows(updated3)) toastError(tr('errors.thatChangeWasNotSaved'));
-    else if (updated3?.[0]) acceptMessage(updated3[0]);
+    try {
+      const { data, error } = await settle(createClient().from('family_messages').update({ deleted_at: new Date().toISOString() }).eq('id', msg.id).eq('sender_id', userId).eq('family_id', familyId).eq('conversation_id', msg.conversation_id).is('deleted_at', null).select('*'));
+      if (!currentMessageAction(operation, msg, 'delete')) return;
+      if (error) toastError(describeDbError(error));
+      else if (data?.length !== 1 || !matchesMessageActionResult(data[0], msg) || !data[0].deleted_at) toastError(tr('errors.thatChangeWasNotSaved'));
+      else acceptMessage(data[0]);
+    } finally { if (messageActionFlight.current.get(msg.id) === operation) messageActionFlight.current.delete(msg.id); }
   }
 
   // ── Pin message ─────────────────────────────────────────────
   async function pinMessage(msg: Message) {
+    const operation = beginMessageAction(msg, 'pin'); if (!operation) return;
     setMsgMenu(null);
-    const { data: updated4, error } = await createClient().from('family_messages').update({ is_pinned: !msg.is_pinned }).eq('id', msg.id).eq('family_id', familyId).is('deleted_at', null).select('*');
-    if (error) toastError(describeDbError(error));
-    else if (wroteNoRows(updated4)) toastError(tr('errors.thatChangeWasNotSaved'));
-    else if (updated4?.[0]) acceptMessage(updated4[0]);
+    try {
+      const { data, error } = await settle(createClient().from('family_messages').update({ is_pinned: !msg.is_pinned }).eq('id', msg.id).eq('family_id', familyId).eq('conversation_id', msg.conversation_id).is('deleted_at', null).select('*'));
+      if (!currentMessageAction(operation, msg, 'pin')) return;
+      if (error) toastError(describeDbError(error));
+      else if (data?.length !== 1 || !matchesMessageActionResult(data[0], msg) || data[0].deleted_at || data[0].is_pinned !== !msg.is_pinned) toastError(tr('errors.thatChangeWasNotSaved'));
+      else acceptMessage(data[0]);
+    } finally { if (messageActionFlight.current.get(msg.id) === operation) messageActionFlight.current.delete(msg.id); }
   }
 
   function selectConversation(conv: Conversation) {
@@ -1408,7 +1446,7 @@ function MessagesWorkspace() {
                                 {isMine && (
                                   <>
                                   {msg.kind === 'text' && <button type="button" onClick={() => { draftRef.current = { ...draftRef.current, edit: msg, reply: null, text: msg.content ?? '' }; setEditMessage(msg); setReplyTo(null); setText(msg.content ?? ''); setMsgMenu(null); inputRef.current?.focus(); }} className="flex w-full items-center gap-2 px-3 py-2 text-xs hover:bg-surface/40"><Pencil className="h-3.5 w-3.5" /> {tr('messagesChat.edit')}</button>}
-                                  <button onClick={() => deleteMessage(msg.id)} className="flex w-full items-center gap-2 px-3 py-2 text-xs text-danger hover:bg-surface/40">
+                                  <button onClick={() => deleteMessage(msg)} className="flex w-full items-center gap-2 px-3 py-2 text-xs text-danger hover:bg-surface/40">
                                     <Trash2 className="h-3.5 w-3.5" /> {tr('messages.delete')}
                                   </button>
                                   </>
