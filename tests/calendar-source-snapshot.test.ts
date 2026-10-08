@@ -174,3 +174,39 @@ describe('complete coherent calendar source snapshots (held integration)', () =>
     expect(() => materialize(snapshot([group(),group(doc(),'20000000-0000-4000-8000-000000000002')]),'UTC','2025-01-01',3,{maxWork:budget})).toThrow('family work');
   });
 });
+
+
+describe('explicit family clock admission before snapshot materialization',()=>{
+  it.each([undefined,null,'','   ','Unknown/Zone',42])('refuses invalid clock %s for empty, native and source families',timezone=>{
+    for(const value of [snapshot([],[]),snapshot([],[native()]),snapshot()]){
+      expect(()=>materializeCalendarSourceSnapshot(value,{familyId:family,timezone:timezone as string,bounds:briefingCalendarBounds('2025-01-01','UTC',0,3)})).toThrow();
+    }
+  });
+  it('admits an empty family with an explicit valid zone rather than inferring one from the host',()=>{
+    expect(materialize(snapshot([],[]),'America/New_York')).toEqual({occurrences:[],count:0});
+  });
+  it.each([
+    {day:'2026-03-08',seed:'2026-03-01T08:30:00Z',expected:'2026-03-08T07:30:00.000Z'},
+    {day:'2026-11-01',seed:'2026-10-25T13:30:00Z',expected:'2026-11-01T14:30:00.000Z'},
+  ])('keeps native weekly wall time and genuine identity across $day DST',({day,seed,expected})=>{
+    const row=native();row.recurrence='weekly';row.starts_at=seed;row.ends_at=new Date(Date.parse(seed)+3_600_000).toISOString();
+    const result=materialize(snapshot([],[row]),'America/New_York',day,1);
+    expect(result.count).toBe(1);expect(result.occurrences[0]).toMatchObject({reference:{kind:'native',eventId:row.id},starts_at:expected,actualStartsAt:expected,actualEndsAt:new Date(Date.parse(expected)+3_600_000).toISOString()});
+    expect(result.occurrences[0].occurrenceKey).toBe(JSON.stringify(['native',row.id,expected]));
+  });
+  it.each([
+    {day:'2026-03-08',token:'20260308T023000',expected:'2026-03-08T07:30:00.000Z'},
+    {day:'2026-11-01',token:'20261101T013000',expected:'2026-11-01T05:30:00.000Z'},
+  ])('resolves an explicit floating gap/fold clock on $day without changing its original reference',({day,token,expected})=>{
+    const result=materialize(snapshot([group(doc([`DTSTART:${token}\r\nDURATION:PT1H`]))],[]),'America/New_York',day,1);
+    expect(result.count).toBe(1);expect(result.occurrences[0]).toMatchObject({reference:{kind:'source',feedId:feed,uid:'synthetic',revisionId:revision,original:{kind:'floating',value:token}},readOnly:true,actualStartsAt:expected,actualEndsAt:new Date(Date.parse(expected)+3_600_000).toISOString()});
+    expect(result.occurrences[0]).not.toHaveProperty('id');
+  });
+  it('preserves UTC and publisher embedded clocks independently of the admitted family zone',()=>{
+    const raw='BEGIN:VCALENDAR\r\nVERSION:2.0\r\nPRODID:-//Synthetic clock admission//EN\r\nBEGIN:VTIMEZONE\r\nTZID:Synthetic/Fixed\r\nBEGIN:STANDARD\r\nDTSTART:19700101T000000\r\nTZOFFSETFROM:+0200\r\nTZOFFSETTO:+0200\r\nEND:STANDARD\r\nEND:VTIMEZONE\r\nBEGIN:VEVENT\r\nUID:synthetic\r\nDTSTART;TZID=Synthetic/Fixed:20250101T090000\r\nDURATION:PT1H\r\nEND:VEVENT\r\nEND:VCALENDAR\r\n';
+    const embedded=parseICSSource(raw)[0];const result=materialize(snapshot([group(embedded),group(doc(['DTSTART:20250101T090000Z\r\nDURATION:PT1H']),'20000000-0000-4000-8000-000000000002')],[]),'America/New_York','2025-01-01',1);
+    expect(result.occurrences.map(row=>row.actualStartsAt)).toEqual(['2025-01-01T07:00:00.000Z','2025-01-01T09:00:00.000Z']);
+    expect(result.occurrences[0].reference).toMatchObject({kind:'source',original:{kind:'zoned',tzid:'Synthetic/Fixed',value:'20250101T090000'}});
+    expect(result.occurrences[1].reference).toMatchObject({kind:'source',original:{kind:'utc',value:'20250101T090000Z'}});
+  });
+});

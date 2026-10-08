@@ -9,6 +9,7 @@ import { expandEventsInZone } from './recurrence';
 import { parseImportedSource, type ImportedSourceDocument, type ImportedSourceComponent, type ImportedSourceOverride, type SourceTime } from './imported-source';
 import { expandSourceOccurrences } from './source-occurrences';
 import { exportICSSource } from '../sync/ics-source-export';
+import { isValidTimezone } from '../time/zoned';
 
 type Obj = Record<string, unknown>;
 export type CalendarSnapshotReference = { kind: 'native'; eventId: string } | {
@@ -199,10 +200,10 @@ function dateInstant(value: string): number {
 /** Complete family window with a shared work/output bound. Throws atomically;
  * callers must not display a prefix if any UID cannot be qualified. */
 export function materializeCalendarSourceSnapshot(value: unknown, options: { familyId: string; bounds: CalendarWindowBounds; timezone: string; maxWork?: number; maxOccurrences?: number }): { occurrences: SnapshotOccurrence[]; count: number } {
+  if (typeof options.timezone !== 'string' || !options.timezone.trim() || !isValidTimezone(options.timezone)) fail('invalid family timezone');
   const snapshot = parseCalendarSourceSnapshot(value, options.familyId);
   const maxWork = options.maxWork ?? 2_000_000, maxOccurrences = options.maxOccurrences ?? 20_000;
   if (!Number.isSafeInteger(maxWork) || maxWork < 1 || maxWork > 20_000_000 || !Number.isSafeInteger(maxOccurrences) || maxOccurrences < 1 || maxOccurrences > 100_000) fail('invalid family bounds');
-  new Intl.DateTimeFormat('en', { timeZone: options.timezone });
   const { bounds } = options, timedFrom = Date.parse(instant(bounds.timedFrom)), timedTo = Date.parse(instant(bounds.timedTo)), dateFrom = dateInstant(bounds.allDayFromDay), dateTo = dateInstant(bounds.allDayToDay);
   if (![timedFrom,timedTo].every(Number.isFinite) || timedTo < timedFrom || dateTo <= dateFrom) fail('invalid window');
   let work = 0;
