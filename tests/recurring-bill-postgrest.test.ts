@@ -7,7 +7,8 @@ import { createHmac } from 'node:crypto';
 import { readFileSync, realpathSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { relative } from 'node:path';
-import { beforeAll, beforeEach, describe, expect, it } from 'vitest';
+import { createServer, createConnection, isIPv4, type Socket } from 'node:net';
+import { afterAll, beforeAll, beforeEach, describe, expect, it } from 'vitest';
 import { createClient } from '@supabase/supabase-js';
 import type { Database, Tables } from '@/lib/database.types';
 import { readCompleteBills, saveBillPayment, saveBillSchedule } from '@/lib/finance/bills';
@@ -32,6 +33,63 @@ const env: NodeJS.ProcessEnv = { ...process.env, PGCONNECT_TIMEOUT: '3' };
 for (const key of ['PGSERVICE', 'PGSERVICEFILE', 'PGOPTIONS', 'PGPASSWORD', 'PGPASSFILE']) delete env[key];
 let pgCommand: string, pgArgs: string[], rest: URL, marker: string, modern = false;
 const nativeFetch = globalThis.fetch;
+let relay: Awaited<ReturnType<typeof startOwnedRelay>> | undefined;
+
+// Docker does not publish ports for actors attached exclusively to an internal
+// bridge. Keep both actors isolated; this test owns only a loopback TCP relay.
+type OwnedNetwork = { Id: string; Driver: string; Containers: Record<string, { EndpointID: string; IPv4Address: string }> };
+type OwnedContainer = { Id: string; NetworkSettings: { Networks: Record<string, { NetworkID: string; EndpointID: string; IPAddress: string }> } };
+function ownedRestAddress(network: OwnedNetwork, container: OwnedContainer, name: string): string {
+  assert.equal(network.Driver, 'bridge'); assert.match(network.Id, /^[a-f0-9]{64}$/);
+  assert.match(container.Id, /^[a-f0-9]{64}$/);
+  assert.deepEqual(Object.keys(container.NetworkSettings.Networks), [name], 'No extra actor network');
+  const attachment = container.NetworkSettings.Networks[name];
+  assert.equal(attachment.NetworkID, network.Id); assert.match(attachment.EndpointID, /^[a-f0-9]{64}$/);
+  const member = network.Containers[container.Id]; assert.ok(member, 'REST must belong to the captured network');
+  assert.equal(member.EndpointID, attachment.EndpointID);
+  assert.equal(member.IPv4Address.split('/')[0], attachment.IPAddress);
+  assert.ok(isIPv4(attachment.IPAddress));
+  const octets = attachment.IPAddress.split('.').map(Number);
+  assert.ok(octets[0] === 10 || (octets[0] === 172 && octets[1] >= 16 && octets[1] <= 31)
+    || (octets[0] === 192 && octets[1] === 168), 'Only the owned private bridge address is eligible');
+  return attachment.IPAddress;
+}
+async function startOwnedRelay(upstream: { host: string; port: number }, port: number) {
+  assert.ok(isIPv4(upstream.host)); assert.ok(Number.isInteger(upstream.port) && upstream.port > 0 && upstream.port <= 65535);
+  assert.ok(Number.isInteger(port) && port >= 49152 && port <= 65535);
+  const sockets = new Set<Socket>();
+  let failure: Error | undefined, stopped = false;
+  const server = createServer({ allowHalfOpen: true }, downstream => {
+    if (stopped || failure) { downstream.destroy(); return; }
+    const target = createConnection({ host: upstream.host, port: upstream.port, allowHalfOpen: true });
+    for (const socket of [downstream, target]) {
+      sockets.add(socket); socket.once('close', () => sockets.delete(socket));
+    }
+    const destroyPair = () => { downstream.destroy(); target.destroy(); };
+    downstream.once('error', destroyPair); target.once('error', destroyPair);
+    downstream.once('close', () => target.destroy()); target.once('close', () => downstream.destroy());
+    // Byte streams only: no HTTP parsing, header/body changes or error synthesis.
+    downstream.pipe(target); target.pipe(downstream);
+  });
+  server.on('error', error => { failure = error; for (const socket of sockets) socket.destroy(); });
+  try {
+    await new Promise<void>((resolve, reject) => {
+      server.once('error', reject); server.listen({ host: '127.0.0.1', port, exclusive: true }, () => {
+        server.removeListener('error', reject); resolve();
+      });
+    });
+    const address = server.address(); assert.ok(address && typeof address !== 'string');
+    assert.equal(address.address, '127.0.0.1'); assert.equal(address.port, port);
+  } catch (error) { server.close(); for (const socket of sockets) socket.destroy(); throw error; }
+  return {
+    requireHealthy: () => { assert.ok(!stopped && !failure && server.listening, 'Owned TCP relay is unavailable'); },
+    close: async () => {
+      stopped = true; for (const socket of sockets) socket.destroy();
+      await new Promise<void>((resolve, reject) => server.close(error => error ? reject(error) : resolve()));
+      assert.equal(server.listening, false); assert.equal(server.address(), null);
+    },
+  };
+}
 type Receipt = { method: string; url: URL; status: number; body: unknown; contentRange: string | null };
 
 function command(program: string, args: string[], input?: string) {
@@ -52,6 +110,7 @@ function readinessCode(value: unknown): string {
 async function requireOwnedHttpIdentity() {
   let diagnostic = 'No authenticated identity response received';
   await until(async () => {
+    relay?.requireHealthy();
     let response: Response;
     try {
       response = await nativeFetch(new URL('/rpc/bill_gate_identity', rest), {
@@ -85,6 +144,7 @@ function client(user = PARENT, aal = 'aal2', receipts: Receipt[] = [], hold?: (r
     auth: { persistSession: false, autoRefreshToken: false, detectSessionInUrl: false },
     global: { headers: { Authorization: `Bearer ${jwt(user, aal)}` }, fetch: async (input, init) => {
       const url = new URL(String(input));
+      relay?.requireHealthy();
       assert.equal(url.origin, rest.origin, 'No request may leave the owned loopback REST endpoint');
       assert.equal(url.pathname, '/rest/v1/bills', 'No auth/provider/other-table HTTP requests');
       url.pathname = '/bills';
@@ -136,6 +196,7 @@ describe.skipIf(!enabled).sequential('isolated real PostgREST recurring bill acc
     assert.ok(Number(rest.port) >= 49152 && Number(rest.port) <= 65535);
     assert.equal(rest.pathname, '/'); assert.equal(rest.search + rest.hash + rest.username + rest.password, '');
     const mode = process.env.BUBALY_BILL_POSTGREST_MODE;
+    let upstream: { host: string; port: number } | undefined;
     if (mode === 'docker') {
       assert.equal(process.env.CI, 'true'); assert.equal(process.env.GITHUB_ACTIONS, 'true');
       assert.equal(process.version, 'v24.21.0');
@@ -147,17 +208,21 @@ describe.skipIf(!enabled).sequential('isolated real PostgREST recurring bill acc
       const prefix = `bubaly-bill-rest-${marker}`, network = `${prefix}-net`;
       const [net] = JSON.parse(command('docker', ['network', 'inspect', network]));
       assert.equal(net.Internal, true); assert.equal(net.Labels['bubaly.bill-postgrest-run'], marker);
+      let databaseId: string | undefined;
       for (const [suffix, image] of [['pg', PG_IMAGE], ['rest', REST_IMAGE]]) {
         const [container] = JSON.parse(command('docker', ['inspect', '--type', 'container', `${prefix}-${suffix}`]));
         assert.equal(container.Config.Image, image); assert.equal(container.State.Running, true);
         assert.equal(container.Config.Labels['bubaly.bill-postgrest-run'], marker);
         assert.equal(container.HostConfig.NetworkMode, network);
         assert.ok(container.Mounts.every((mount: { Type: string; Destination: string }) => suffix === 'pg' && mount.Type === 'volume' && mount.Destination === '/var/lib/postgresql/data'));
-        const ports = container.HostConfig.PortBindings ?? {};
-        if (suffix === 'pg') assert.equal(Object.keys(ports).length, 0);
-        else { assert.deepEqual(Object.keys(ports), ['3000/tcp']); assert.deepEqual(ports['3000/tcp'], [{ HostIp: '127.0.0.1', HostPort: rest.port }]); }
+        assert.equal(Object.keys(container.HostConfig.PortBindings ?? {}).length, 0, 'No actor publishes a host port');
+        assert.equal(Object.keys(container.NetworkSettings.Ports ?? {}).filter(key => container.NetworkSettings.Ports[key]?.length).length, 0);
+        const address = ownedRestAddress(net, container, network);
+        if (suffix === 'pg') databaseId = container.Id;
+        else upstream = { host: address, port: 3000 };
       }
-      pgCommand = 'docker'; pgArgs = ['exec', '-i', `${prefix}-pg`, 'psql', '-h', '/var/run/postgresql', '-U', 'postgres', '-d', DB];
+      assert.ok(databaseId && upstream);
+      pgCommand = 'docker'; pgArgs = ['exec', '-i', databaseId, 'psql', '-h', '/var/run/postgresql', '-U', 'postgres', '-d', DB];
     } else {
       assert.equal(mode, 'local'); assert.match(marker, /^[a-f0-9]{32}$/);
       const data = realpathSync(process.env.BUBALY_BILL_PG_DATA ?? '');
@@ -175,7 +240,9 @@ describe.skipIf(!enabled).sequential('isolated real PostgREST recurring bill acc
     assert.equal(sql("select count(*) from pg_attribute where attrelid='public.bills'::regclass and attname='due_day' and not attisdropped;"), '0');
     // API-root OpenAPI metadata is role-dependent, not proof of authenticated
     // execution. Readiness must establish the already required HTTP/SQL identity.
-    await requireOwnedHttpIdentity();
+    if (upstream) relay = await startOwnedRelay(upstream, Number(rest.port));
+    try { await requireOwnedHttpIdentity(); }
+    catch (error) { if (relay) { await relay.close(); relay = undefined; } throw error; }
     const base = readFileSync('supabase/migrations/0003_functions_triggers.sql', 'utf8');
     for (const name of ['is_family_member', 'can_manage_family']) {
       sql(extract(base, new RegExp(`create or replace function public\\.${name}\\([\\s\\S]*?\\$\\$;`, 'gi')));
@@ -186,6 +253,10 @@ describe.skipIf(!enabled).sequential('isolated real PostgREST recurring bill acc
     sql(readFileSync('supabase/migrations/0275_money_permissive_write_sweep.sql', 'utf8'));
     sql(readFileSync('supabase/migrations/0382_a_password_alone_does_not_delete_the_familys_budget.sql', 'utf8'));
   }, 60_000);
+
+  afterAll(async () => {
+    if (relay) { await relay.close(); relay = undefined; console.log('PASS owned loopback TCP relay closed'); }
+  });
 
   beforeEach(() => { sql('truncate public.bills; truncate auth.mfa_factors;'); });
 

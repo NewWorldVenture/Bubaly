@@ -126,9 +126,10 @@ jobs:
             --username=postgres --dbname=bubaly_bill_postgrest_ci --set=ON_ERROR_STOP=1 \
             --set="gate_marker=$marker" --file=- < tests/fixtures/recurring-bill-postgrest-bootstrap.sql
           # Both actors and signing material are disposable fixtures, never external credentials.
+          # Internal-only Docker networks do not publish host ports. The test
+          # owns a raw loopback TCP relay to the verified REST bridge address.
           docker run --detach --name "$prefix-rest" --network "$prefix-net" \
             --log-driver none --label "bubaly.bill-postgrest-run=$marker" \
-            --publish 127.0.0.1:55491:3000 \
             --env PGRST_DB_URI=postgres://bubaly_bill_authenticator@pg:5432/bubaly_bill_postgrest_ci \
             --env PGRST_DB_SCHEMAS=public --env PGRST_DB_ANON_ROLE=anon \
             --env PGRST_DB_CONFIG=false --env PGRST_DB_POOL=8 --env PGRST_DB_MAX_ROWS=2 --env PGRST_DB_CHANNEL_ENABLED=true \
