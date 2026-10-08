@@ -70,7 +70,7 @@
 // crons and exports, the Super Admin pages, and lib/i18n's locale codes, which are data
 // rather than a formatter.
 import { readFileSync } from 'node:fs';
-import { execSync } from 'node:child_process';
+import { execFileSync } from 'node:child_process';
 import { describe, expect, it } from 'vitest';
 
 /** A hardcoded locale in a position where a formatter reads it. */
@@ -236,7 +236,7 @@ function scan(files: string[]) {
 }
 
 const sourceFiles = () =>
-  execSync("git ls-files 'app/**/*.ts' 'app/**/*.tsx' 'components/**/*.ts' 'components/**/*.tsx' 'lib/**/*.ts' 'lib/**/*.tsx'",
+  execFileSync('git', ['ls-files', 'app/**/*.ts', 'app/**/*.tsx', 'components/**/*.ts', 'components/**/*.tsx', 'lib/**/*.ts', 'lib/**/*.tsx'],
     { encoding: 'utf8' }).split('\n').filter(Boolean);
 
 describe('hardcoded locales only go down', () => {

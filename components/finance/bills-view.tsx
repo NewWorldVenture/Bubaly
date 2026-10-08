@@ -15,7 +15,7 @@ import { SkeletonList, EmptyState, ErrorState } from '@/components/ui/states';
 import { cn } from '@/lib/utils/cn';
 import type { Tables } from '@/lib/database.types';
 import { usd as usdIn, billDueStatus, billPaidPatch, billDateForAnchorDay, newBillDueDay, BILL_CADENCES, DUE_META, fmtDueDate as fmtDueDateIn } from '@/lib/finance/hub';
-import { isMissingBillDueDay, saveBillPayment } from '@/lib/finance/bills';
+import { BILL_READ_CONTRACT, readCompleteBills, isMissingBillDueDay, saveBillPayment } from '@/lib/finance/bills';
 import { writeBillPatch } from '@/lib/finance/recurring';
 import { BillPaymentModal } from '@/components/finance/bill-payment-modal';
 import { useLocale, useTranslations } from '@/components/i18n/locale-provider';
@@ -47,13 +47,15 @@ export function BillsView({ mode }: { mode: BillsMode }) {
   const meta = MODE_META[mode];
 
   const { data: rows, loading, error: readError, stale, refresh } = useRealtimeQuery<Bill>({
-    table: 'bills', familyId, deps: [familyId],
-    fetcher: (sb) => sb.from('bills').select('*').eq('family_id', familyId).order('due_date', { ascending: true }),
+    table: 'bills', familyId, deps: [familyId, userId, BILL_READ_CONTRACT],
+    fetcher: (sb) => readCompleteBills(sb, familyId),
   });
 
   const [form, setForm] = useState(false);
-  const [paymentBill, setPaymentBill] = useState<Bill | null>(null);
-  const bills = useMemo(() => rows ?? [], [rows]);
+  const paymentOwner = useMemo(() => ({ familyId, userId }), [familyId, userId]);
+  const [paymentSelection, setPaymentSelection] = useState<{ bill: Bill; owner: typeof paymentOwner } | null>(null);
+  const paymentBill = paymentSelection?.owner === paymentOwner ? paymentSelection.bill : null;
+  const bills = useMemo(() => loading || stale || readError ? [] : rows ?? [], [rows, loading, stale, readError]);
 
   const visible = useMemo(() => {
     if (mode === 'autopay') return bills.filter((b) => b.autopay);
@@ -65,7 +67,7 @@ export function BillsView({ mode }: { mode: BillsMode }) {
 
   async function markPaid(b: Bill) {
     const reopen = b.status === 'paid';
-    if (!reopen && !billPaidPatch(b, clock.todayKey())) { setPaymentBill(b); return; }
+    if (!reopen && !billPaidPatch(b, clock.todayKey())) { setPaymentSelection({ bill: b, owner: paymentOwner }); return; }
     // A restrictive RLS policy FILTERS an update/delete rather than raising, so
     // a refused write returns zero rows and no error. `.select('id')` is what
     // makes the difference visible — without it `data` is null either way.
@@ -166,7 +168,7 @@ export function BillsView({ mode }: { mode: BillsMode }) {
       )}
 
       {form && <BillModal key={`${familyId}:${userId}`} familyId={familyId} userId={userId} defaultAutopay={mode === 'autopay'} onClose={() => setForm(false)} />}
-      {paymentBill && <BillPaymentModal key={paymentBill.id} bill={paymentBill} familyId={familyId} onClose={() => setPaymentBill(null)} onDone={() => { void refresh(); }} />}
+      {paymentBill && bills.some(b => b.id === paymentBill.id && b.family_id === familyId) && <BillPaymentModal key={`${familyId}:${userId}:${paymentBill.id}`} bill={paymentBill} familyId={familyId} onClose={() => setPaymentSelection(null)} onDone={() => { void refresh(); }} />}
     </div>
   );
 }

@@ -22,6 +22,9 @@ const sources = Object.fromEntries([
   'components/ui/input.tsx', 'components/ui/button.tsx', 'components/ui/toast.tsx',
   'lib/a11y/use-dialog-behavior.ts', 'lib/finance/hub.ts',
   'lib/finance/bill-schedule.ts', 'lib/finance/recurring.ts', 'lib/finance/bills.ts', 'lib/supabase/errors.ts',
+  // The shared bills reader loads the actual counted reader and its closed graph.
+  'lib/calendar/occurrences.ts', 'lib/calendar/recurrence.ts', 'lib/calendar/day.ts',
+  'lib/calendar/source-capability.ts', 'lib/briefing/calendar-window.ts', 'lib/time/zoned.ts',
   'lib/i18n/locales.ts', 'lib/time/local-day.ts',
 ].map(file => [`@/${file.replace(/\.tsx?$/, '')}`, ts.transpileModule(fs.readFileSync(file, 'utf8'), {
   compilerOptions: { module: ts.ModuleKind.CommonJS, target: ts.ScriptTarget.ES2022, jsx: ts.JsxEmit.React },

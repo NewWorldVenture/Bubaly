@@ -5,9 +5,9 @@
 // Tuesday has swim at 17:30 and Thursday has a 18:00 parent meeting, and a
 // braise on either of those nights is a plan the family will not follow.
 //
-// This module is pure on purpose. It takes the week's `calendar_events` rows
-// exactly as they come out of Supabase, resolves each one into the FAMILY's
-// zone (not the server's), measures how much of the dinner window it eats, and
+// This module is pure on purpose. It takes complete native/source occurrences,
+// resolves each dinner window into the FAMILY's zone (not the server's),
+// measures the union of actual occupied instants within that window, and
 // says which nights are busy and why. The planner prompt then carries the
 // dates and the reasons, so the model can put the 20-minute dish where it
 // belongs instead of guessing.
@@ -15,8 +15,15 @@
 // Nothing here claims Bubaly did anything: a busy night is a fact read from a
 // calendar row, and the hint names the events that made it one.
 
-/** The rows this module reads. A subset of `calendar_events` (0002). */
+import { isValidTimezone, zonedLocalToInstant } from '@/lib/time/zoned';
+import { briefingCalendarBounds } from '@/lib/briefing/calendar-window';
+
+/** Native or source occurrence data; original keys remain unchanged. */
 export interface WeekCalendarEvent {
+  kind?: 'native' | 'source';
+  occurrenceKey?: string;
+  actualStartsAt?: string;
+  actualEndsAt?: string | null;
   title?: string | null;
   starts_at: string;
   ends_at?: string | null;
@@ -84,55 +91,6 @@ export function weekdayName(dayKey: string): string {
   return Number.isNaN(at.getTime()) ? '' : WEEKDAYS[at.getUTCDay()];
 }
 
-type LocalMoment = { dayKey: string; minutesIntoDay: number };
-
-/**
- * Where an instant falls in the family's zone.
- *
- * `Intl` rather than arithmetic on the offset: a household in
- * America/New_York crosses a DST boundary twice a year, and an event at 18:00
- * local is at 22:00Z for half the year and 23:00Z for the other half. Reading
- * the local wall clock is the only version that is right on both sides.
- */
-function localMoment(iso: string, tz: string): LocalMoment | null {
-  const at = new Date(iso);
-  if (Number.isNaN(at.getTime())) return null;
-  try {
-    const parts = new Intl.DateTimeFormat('en-CA', {
-      timeZone: tz, year: 'numeric', month: '2-digit', day: '2-digit',
-      hour: '2-digit', minute: '2-digit', hour12: false,
-    }).formatToParts(at);
-    const get = (type: string) => parts.find((p) => p.type === type)?.value ?? '';
-    const dayKey = `${get('year')}-${get('month')}-${get('day')}`;
-    // 'en-CA' renders midnight as 24 in some runtimes; both spellings mean 0.
-    const hour = Number(get('hour')) % 24;
-    const minute = Number(get('minute'));
-    if (!DAY_KEY.test(dayKey) || !Number.isFinite(hour) || !Number.isFinite(minute)) return null;
-    return { dayKey, minutesIntoDay: hour * 60 + minute };
-  } catch {
-    // An unknown zone is a bad `families.timezone`, not a reason to lose the week.
-    return localMoment(iso, 'UTC');
-  }
-}
-
-/** Minutes of [startHour, endHour) on `dayKey` that the event occupies. */
-function overlapMinutes(
-  start: LocalMoment,
-  endMinutesFromStart: number,
-  dayKey: string,
-  window: { startHour: number; endHour: number },
-): number {
-  const windowStart = window.startHour * 60;
-  const windowEnd = window.endHour * 60;
-  // The event's span expressed in minutes from midnight of ITS OWN local day,
-  // so an event running past midnight still contributes to the evening it began.
-  const from = start.minutesIntoDay;
-  const to = from + Math.max(0, endMinutesFromStart);
-  if (start.dayKey !== dayKey) return 0;
-  const overlap = Math.min(to, windowEnd) - Math.max(from, windowStart);
-  return overlap > 0 ? overlap : 0;
-}
-
 export interface ScoreOptions {
   /** IANA zone of the family. Defaults to UTC, which is what `families.timezone` defaults to. */
   tz?: string;
@@ -153,29 +111,54 @@ export function scoreWeekNights(
   options: ScoreOptions = {},
 ): WeekContext {
   const tz = options.tz || 'UTC';
+  if (!isValidTimezone(tz)) throw new Error('Invalid meal calendar timezone');
   const busyMinutes = options.busyMinutes ?? DEFAULT_BUSY_MINUTES;
+  if (!Number.isFinite(busyMinutes) || busyMinutes <= 0) throw new Error('Invalid busy threshold');
   const days = DAY_KEY.test(weekStart) ? weekDayKeys(weekStart) : [];
-  const byDate = new Map<string, { minutes: number; events: { title: string; at: number }[] }>();
-  for (const day of days) byDate.set(day, { minutes: 0, events: [] });
-
-  for (const event of events ?? []) {
-    if (event?.all_day) continue;
-    if (!event?.starts_at) continue;
-    const start = localMoment(event.starts_at, tz);
-    if (!start) continue;
-    const bucket = byDate.get(start.dayKey);
-    if (!bucket) continue;
-    const endsAt = event.ends_at ? new Date(event.ends_at).getTime() : NaN;
-    const startsAt = new Date(event.starts_at).getTime();
-    const spanMinutes = Number.isFinite(endsAt) && endsAt > startsAt
-      ? Math.round((endsAt - startsAt) / 60_000)
-      : DEFAULT_EVENT_MINUTES;
-    const minutes = overlapMinutes(start, spanMinutes, start.dayKey, DINNER_WINDOW);
-    if (minutes <= 0) continue;
-    bucket.minutes += minutes;
-    bucket.events.push({ title: (event.title ?? '').trim() || 'Untitled event', at: start.minutesIntoDay });
+  const byDate = new Map<string, { minutes: number; events: { title: string; at: number }[]; intervals: [number,number][]; from:number; to:number }>();
+  for (const day of days) {
+    const bounds=briefingCalendarBounds(day,tz,0,1);
+    const [year,month,date]=day.split('-').map(Number);
+    const skipped = bounds.timedFrom === bounds.timedTo;
+    const from = skipped ? Date.parse(bounds.timedFrom) : zonedLocalToInstant(year,month,date,DINNER_WINDOW.startHour*60,tz)?.getTime();
+    const to = skipped ? Date.parse(bounds.timedTo) : zonedLocalToInstant(year,month,date,DINNER_WINDOW.endHour*60,tz)?.getTime();
+    if (from === undefined || to === undefined || to < from) throw new Error('Invalid dinner interval');
+    byDate.set(day,{minutes:0,events:[],intervals:[],from,to});
   }
-
+  const seen = new Map<string,string>();
+  for (const event of events ?? []) {
+    // DATE annotations are intentionally not a cooking-time commitment.
+    if (event?.all_day) continue;
+    const start=Date.parse(event?.actualStartsAt ?? event?.starts_at);
+    const suppliedEnd=event?.actualEndsAt !== undefined ? event.actualEndsAt : event?.ends_at;
+    const end=suppliedEnd === null || suppliedEnd === undefined ? start + (event.kind === 'source' ? 0 : DEFAULT_EVENT_MINUTES*60_000) : Date.parse(suppliedEnd);
+    if (!Number.isFinite(start) || !Number.isFinite(end) || end < start) throw new Error('Invalid meal calendar interval');
+    if (event.occurrenceKey !== undefined) {
+      const signature=JSON.stringify([start,end,event.title]);
+      if (seen.has(event.occurrenceKey)) {
+        if (seen.get(event.occurrenceKey) !== signature) throw new Error('Conflicting meal calendar occurrence');
+        continue;
+      }
+      seen.set(event.occurrenceKey,signature);
+    }
+    if (end === start) continue;
+    for (const bucket of byDate.values()) {
+      const from=Math.max(start,bucket.from),to=Math.min(end,bucket.to);
+      if (to <= from) continue;
+      bucket.intervals.push([from,to]);
+      bucket.events.push({title:(event.title ?? '').trim() || 'Untitled event',at:from});
+    }
+  }
+  for (const bucket of byDate.values()) {
+    // Concurrent commitments occupy the same dinner minutes once.
+    bucket.intervals.sort((a,b)=>a[0]-b[0] || a[1]-b[1]);
+    let [from,to]=bucket.intervals[0] ?? [0,0];
+    for (const interval of bucket.intervals.slice(1)) {
+      if (interval[0] > to) {bucket.minutes+=(to-from)/60_000;[from,to]=interval;}
+      else to=Math.max(to,interval[1]);
+    }
+    bucket.minutes+=(to-from)/60_000;
+  }
   const nights: NightLoad[] = days.map((date) => {
     const bucket = byDate.get(date)!;
     const titles = [...bucket.events].sort((a, b) => a.at - b.at || a.title.localeCompare(b.title)).map((e) => e.title);

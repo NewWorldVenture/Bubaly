@@ -15,6 +15,9 @@ const sources = Object.fromEntries([
   'components/ui/input.tsx', 'components/app/page-header.tsx', 'lib/finance/hub.ts',
   // bills-view's Mark paid and add form write what lib/finance/recurring.ts decides.
   'lib/finance/recurring.ts', 'lib/finance/bills.ts', 'lib/finance/bill-schedule.ts',
+  // Bills uses the real counted reader; keep its finite dependency graph real.
+  'lib/calendar/occurrences.ts', 'lib/calendar/recurrence.ts', 'lib/calendar/day.ts',
+  'lib/calendar/source-capability.ts', 'lib/briefing/calendar-window.ts',
   // hub.ts reads the locale catalogue for its default currency locale.
   'lib/i18n/locales.ts',
   // And periodStart reads the READER's local day key from here. hub.ts used to

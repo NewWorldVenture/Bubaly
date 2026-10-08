@@ -30,7 +30,7 @@
 // and components/admin/ is en-US by the audit's own rule, and lib/ai/** plus
 // app/api/ai/** build text the MODEL reads.
 import { readFileSync } from 'node:fs';
-import { execSync } from 'node:child_process';
+import { execFileSync } from 'node:child_process';
 
 /** `$${x}` · `'$' + x` · `x + '$'` — the symbol is text, not a placeholder. */
 const BEFORE = /`\$\$\{|['"]\$['"]\s*\+|\$\s*\+\s*['"`]/g;
@@ -57,8 +57,8 @@ const isExempt = (file) =>
   /^app\/\(app\)\/admin\/|^components\/admin\//.test(file) ||
   /^lib\/ai\/|^app\/api\/ai\//.test(file);
 
-const files = () => execSync(
-  "git ls-files 'app/**/*.ts' 'app/**/*.tsx' 'components/**/*.ts' 'components/**/*.tsx' 'lib/**/*.ts' 'lib/**/*.tsx'",
+const files = () => execFileSync('git',
+  ['ls-files', 'app/**/*.ts', 'app/**/*.tsx', 'components/**/*.ts', 'components/**/*.tsx', 'lib/**/*.ts', 'lib/**/*.tsx'],
   { encoding: 'utf8' },
 ).split('\n').filter(Boolean);
 

@@ -2,7 +2,7 @@
 
 import Link from 'next/link';
 
-import { useMemo, useState, useEffect, useRef } from 'react';
+import { useCallback, useMemo, useState, useEffect, useRef } from 'react';
 import { ChevronLeft, ChevronRight, Plus, MapPin, RefreshCw, Filter, Check, Sparkles, Eye, EyeOff, Users, Columns } from 'lucide-react';
 import { useApp } from '@/components/app/app-context';
 import { useRealtimeQuery } from '@/lib/hooks/use-realtime-query';
@@ -27,13 +27,14 @@ import { FindTimeModal } from './find-time-modal';
 import { RoutinesPanel } from './routines-panel';
 import { cn } from '@/lib/utils/cn';
 import type { Tables } from '@/lib/database.types';
-import { useTranslations } from '@/components/i18n/locale-provider';
+import { useLocale, useTranslations } from '@/components/i18n/locale-provider';
 import { useFamilyClock, useFormat } from '@/components/i18n/use-format';
-import { addWallDays, wallDaysInMonth, wallKey, wallMonthStart, wallParts, wallWeekStart } from '@/lib/time/wall-clock';
+import { addWallDays, wallDaysInMonth, wallKey, wallMonthStart, wallParts, wallWeekStart, wallFromKey } from '@/lib/time/wall-clock';
 import { fromLocalInput, toLocalInput } from '@/lib/time/local-input';
 
 type Event = CalendarDisplayOccurrence;
 type NativeEvent = Tables<'calendar_events'>;
+type ModalInstance = { scope: object; instance: number };
 
 const CATEGORY_COLORS: Record<string, string> = {
   general: 'bg-brand/20 border-brand/40 text-brand-text',
@@ -104,9 +105,9 @@ function daysOfWeek(monday: Date) {
 }
 
 // Columns follow actual elapsed time in each civil day, with distinct fold ticks.
-function dayTicks(day: string, timezone: string) {
-  const interval = calendarDisplayDay(day,timezone);
-  const formatter = new Intl.DateTimeFormat(undefined,{timeZone:timezone,hour:'2-digit',minute:'2-digit',timeZoneName:'shortOffset'});
+function dayTicks(day: string, clock: { timeZone: string }, locale: string) {
+  const interval = calendarDisplayDay(day,clock.timeZone);
+  const formatter = new Intl.DateTimeFormat(locale,{ timeZone: clock.timeZone,hour:'2-digit',minute:'2-digit',timeZoneName:'shortOffset'});
   const ticks = [];
   for (let at=interval.start;at<interval.end;at+=3_600_000) ticks.push({at,top:(at-interval.start)/(interval.end-interval.start)*24*HOUR_HEIGHT,label:formatter.format(new Date(at))});
   return ticks;
@@ -209,12 +210,14 @@ function MonthGrid({ gridDays, monthAnchor, eventsByDay, todayStr, onSelect }: {
 
 export function CalendarModule() {
   const tr = useTranslations();
+  const locale = useLocale();
   const { fmtDate, fmtTime } = useFormat();
   const clock = useFamilyClock();
   const { familyId, userId, members, selfMember } = useApp();
-  const [openScope, setOpenScope] = useState<object | null>(null);
-  const [findScope, setFindScope] = useState<object | null>(null);
-  const [selection, setSelection] = useState<{ scope: object; key: string } | null>(null);
+  const [openScope, setOpenScope] = useState<ModalInstance | null>(null);
+  const [findScope, setFindScope] = useState<ModalInstance | null>(null);
+  const [selection, setSelection] = useState<{ scope: object; origin: 'grid' | 'upcoming'; key: string } | null>(null);
+  const [, setTodayRevision] = useState(0);
 
   // The event chip is a <div> in all five views and was openable with a mouse
   // and by no other means: not focusable, so Tab never reached it and Enter
@@ -226,10 +229,10 @@ export function CalendarModule() {
   // No aria-label: role="button" takes its name from its contents, and the chip
   // already shows the title and the time. A fixed label would replace that with
   // something less useful and break WCAG 2.5.3 Label in Name.
-  const openOnKey = (ev: React.KeyboardEvent, event: Event) => {
-    if (ev.key === 'Enter' || ev.key === ' ') { ev.preventDefault(); setSelected(event); }
+  const openOnKey = (ev: React.KeyboardEvent, event: Event, origin: 'grid' | 'upcoming' = 'grid') => {
+    if (ev.key === 'Enter' || ev.key === ' ') { ev.preventDefault(); setSelected(event, origin); }
   };
-  const [editor, setEditor] = useState<{ scope: object; event: NativeEvent } | null>(null);
+  const [editor, setEditor] = useState<(ModalInstance & { event: NativeEvent }) | null>(null);
   const [weekOffset, setWeekOffset] = useState(0);
   const [filterCategory, setFilterCategory] = useState<string>('all');
   const [catMenu, setCatMenu] = useState(false);
@@ -272,7 +275,8 @@ export function CalendarModule() {
   const { success, error: toastError } = useToast();
   const gridRef = useRef<HTMLDivElement>(null);
 
-  const monday = useMemo(() => weekStart(clock.wallNow(), weekOffset), [clock, weekOffset]);
+  const todayKeyForUpcoming = clock.todayKey();
+  const monday = useMemo(() => weekStart(wallFromKey(todayKeyForUpcoming), weekOffset), [weekOffset,todayKeyForUpcoming]);
   const days = useMemo(() => daysOfWeek(monday), [monday]);
 
   // Month grid window — also the fetch window, so week / day / month all share
@@ -332,33 +336,78 @@ export function CalendarModule() {
       allDayFromDay: gridFirstDay, allDayToDay: gridEndDay,
     }, clock.timeZone, { overlap: true }),
   });
-  const { loading, error, refresh } = query;
-  // A review-held source read is an unavailable whole window, even if the
-  // generic realtime hook retained yesterday's successful cache on failure.
-  const data = useMemo(() => error ? [] : query.data, [error, query.data]);
+  const upcomingEndDay = addDateDays(todayKeyForUpcoming,7);
+  const upcomingRange = useMemo(() => familyFetchRange(todayKeyForUpcoming,upcomingEndDay,clock.timeZone), [todayKeyForUpcoming,upcomingEndDay,clock.timeZone]);
+  const upcomingQuery = useRealtimeQuery<Event>({
+    table:'calendar_events',familyId,
+    deps:['calendar-upcoming-v1',familyId,userId,todayKeyForUpcoming,upcomingEndDay,clock.timeZone,CALENDAR_DISPLAY_CONTRACT,CALENDAR_SOURCE_ARCHIVE_ENABLED],
+    // The sidebar's complete seven-day read is independent of grid navigation.
+    fetcher:(supabase) => readDisplayCalendarOccurrences(supabase,familyId,{
+      timedFrom:upcomingRange.timedFrom.toISOString(),timedTo:upcomingRange.timedTo.toISOString(),
+      allDayFromDay:todayKeyForUpcoming,allDayToDay:upcomingEndDay,
+    },clock.timeZone,{overlap:true}),
+  });
+  const { loading, error,refresh:refreshGrid } = query;
+  const {refresh:refreshUpcoming}=upcomingQuery;
+  const data = useMemo(() => error || loading || query.stale ? [] : query.data, [error,loading,query.stale,query.data]);
+  const upcomingData = useMemo(() => upcomingQuery.error || upcomingQuery.loading || upcomingQuery.stale ? [] : upcomingQuery.data,
+    [upcomingQuery.error,upcomingQuery.loading,upcomingQuery.stale,upcomingQuery.data]);
+  const ownerScopeKey = JSON.stringify([familyId,userId,clock.timeZone]);
+  const ownerScope = useMemo(() => ({ownerScopeKey}), [ownerScopeKey]);
+  const currentOwnerScope = useRef(ownerScope);currentOwnerScope.current=ownerScope;
   const selectionScope = JSON.stringify([familyId, userId, gridFirstDay, gridEndDay, clock.timeZone]);
-  // Object identity changes on A->B->A too. Old async save callbacks cannot
-  // close or refresh a new owner's newly opened composition.
-  const actionScope = useMemo(() => ({ selectionScope }), [selectionScope]);
-  const currentActionScope = useRef(actionScope);
-  currentActionScope.current = actionScope;
-  const open = openScope === actionScope;
-  const findOpen = findScope === actionScope;
+  const actionScope = useMemo(() => ({ selectionScope,ownerScope }), [selectionScope,ownerScope]);
+  const upcomingScope = useMemo(() => ({ownerScope,todayKeyForUpcoming,upcomingEndDay}), [ownerScope,todayKeyForUpcoming,upcomingEndDay]);
+  const currentActionScope = useRef(actionScope);currentActionScope.current = actionScope;
+  const currentUpcomingScope = useRef(upcomingScope);currentUpcomingScope.current=upcomingScope;
+  const currentSelection = useRef(selection);currentSelection.current=selection;
+  const selectableRows = useRef({grid:data,upcoming:upcomingData});selectableRows.current={grid:data,upcoming:upcomingData};
+  const refresh = useCallback(async () => {
+    if(currentOwnerScope.current!==ownerScope)return;
+    await Promise.all([refreshGrid(),refreshUpcoming()]);
+  }, [ownerScope,refreshGrid,refreshUpcoming]);
+  const currentRefresh = useRef(refresh);currentRefresh.current=refresh;
+  const modalSequence = useRef(0);
+  const currentDraft = useRef(openScope);currentDraft.current=openScope;
+  const currentFind = useRef(findScope);currentFind.current=findScope;
+  const currentEditor = useRef(editor);currentEditor.current=editor;
+  const open = openScope?.scope === actionScope;
+  const findOpen = findScope?.scope === actionScope;
   const editing = editor?.scope === actionScope ? editor.event : null;
-  const setOpen = (value: boolean) => { if (currentActionScope.current === actionScope) setOpenScope(value ? actionScope : null); };
-  const setFindOpen = (value: boolean) => { if (currentActionScope.current === actionScope) setFindScope(value ? actionScope : null); };
-  const setEditing = (event: NativeEvent | null) => { if (currentActionScope.current === actionScope) setEditor(event ? { scope: actionScope, event } : null); };
-  const setSelected = (event: Event) => { if (currentActionScope.current === actionScope) setSelection({ scope: actionScope, key: event.occurrenceKey }); };
-  const closeSelection = () => { if (currentActionScope.current === actionScope) setSelection(null); };
-  const selected = !error && selection?.scope === actionScope
-    ? data.find(event => event.occurrenceKey === selection.key) ?? null : null;
+  const setOpen = (value: boolean) => { if (currentActionScope.current === actionScope) { const next=value?{scope:actionScope,instance:++modalSequence.current}:null;currentDraft.current=next;setOpenScope(next); } };
+  const setFindOpen = (value: boolean) => { if (currentActionScope.current === actionScope) { const next=value?{scope:actionScope,instance:++modalSequence.current}:null;currentFind.current=next;setFindScope(next); } };
+  const setEditing = (event: NativeEvent | null) => { if (currentActionScope.current === actionScope) { const next=event?{scope:actionScope,instance:++modalSequence.current,event}:null;currentEditor.current=next;setEditor(next); } };
+  const closeDraft = () => { if(!openScope || currentActionScope.current!==actionScope || currentDraft.current!==openScope)return false;setOpen(false);return true; };
+  const closeFind = () => { if(!findScope || currentActionScope.current!==actionScope || currentFind.current!==findScope)return false;setFindOpen(false);return true; };
+  const closeEditor = () => { if(!editor || currentActionScope.current!==actionScope || currentEditor.current!==editor)return false;setEditing(null);return true; };
+  const setSelected = (event: Event, origin:'grid'|'upcoming'='grid') => {
+    const scope=origin==='grid'?actionScope:upcomingScope;
+    if((origin==='grid'?currentActionScope:currentUpcomingScope).current===scope && selectableRows.current[origin].some(row=>row.occurrenceKey===event.occurrenceKey)) {
+      const next={scope,origin,key:event.occurrenceKey};
+      // Retire callbacks synchronously, before React commits the new selection.
+      currentSelection.current=next;setSelection(next);
+    }
+  };
+  const closeSelection = () => {
+    if(!selection || currentSelection.current!==selection || (selection.origin==='grid'?currentActionScope:currentUpcomingScope).current!==selection.scope)return false;
+    currentSelection.current=null;setSelection(null);return true;
+  };
+
 
   useEffect(() => {
+    // Wake on the actual next family-date boundary, including DST and skipped
+    // midnights. Foregrounding a suspended tab also recomputes the date window.
+    let timer:ReturnType<typeof setTimeout>|undefined;
+    try { timer=setTimeout(()=>setTodayRevision(n=>n+1),Math.max(1,calendarDisplayDay(todayKeyForUpcoming,clock.timeZone).end-Date.now())); }
+    catch { /* Invalid zones are refused by the display readers. */ }
+    const onFocus=()=>setTodayRevision(n=>n+1);
+    window.addEventListener('focus',onFocus);
+    return()=>{if(timer!==undefined)clearTimeout(timer);window.removeEventListener('focus',onFocus);};
+  }, [todayKeyForUpcoming,clock.timeZone]);
+  useEffect(() => {
     if (!CALENDAR_SOURCE_ARCHIVE_ENABLED) return;
-    // Archive tables are not in realtime publication. Refresh explicitly,
-    // rather than pretending the native table subscription sees revisions.
     const onFocus = () => { void refresh(); };
-    const timer = window.setInterval(() => { if (document.visibilityState === 'visible') void refresh(); }, 60_000);
+    const timer = window.setInterval(() => { if (document.visibilityState === 'visible') {setTodayRevision(n=>n+1);void refresh();} }, 60_000);
     window.addEventListener('focus', onFocus);
     return () => { window.clearInterval(timer); window.removeEventListener('focus', onFocus); };
   }, [refresh]);
@@ -386,15 +435,23 @@ export function CalendarModule() {
   const allDayByDay = useMemo(() => new Map([...spansByDay].map(([day,spans]) => [day,spans.filter(span => span.occurrence.all_day).map(span => span.occurrence)])), [spansByDay]);
   const eventsByDay = useMemo(() => new Map([...spansByDay].map(([day,spans]) => [day,spans.map(span => span.occurrence)])), [spansByDay]);
   const familyToday = clock.wallToday();
-  const todayKeyForUpcoming = clock.todayKey();
+  const upcomingProjection = useMemo(() => {
+    if(upcomingQuery.loading || upcomingQuery.stale || upcomingQuery.error)return {buckets:new Map<string,CalendarDisplaySpan[]>(),failed:false};
+    const visible=upcomingData.filter(e => (filterCategory==='all'||e.category===filterCategory) && !hiddenCategories.has(e.category??'other') && !hiddenMembers.has(e.assignee_id??FAMILY_KEY));
+    try{return {buckets:bucketCalendarDisplaySpans(visible,todayKeyForUpcoming,upcomingEndDay,clock.timeZone),failed:false};}
+    catch{return {buckets:new Map<string,CalendarDisplaySpan[]>(),failed:true};}
+  }, [upcomingData,upcomingQuery.loading,upcomingQuery.stale,upcomingQuery.error,filterCategory,hiddenCategories,hiddenMembers,todayKeyForUpcoming,upcomingEndDay,clock.timeZone]);
+  const upcomingError = upcomingQuery.error || (upcomingProjection.failed || upcomingQuery.stale && !upcomingQuery.loading ? tr('globalError.somethingWentWrong') : null);
   const upcomingByDay = useMemo(() => {
-    const lastDay = addDateDays(todayKeyForUpcoming,7);
     let remaining=8;
-    return [...spansByDay].filter(([day]) => day >= todayKeyForUpcoming && day < lastDay).flatMap(([day,spans]) => {
+    return [...upcomingProjection.buckets].flatMap(([day,spans]) => {
       const rows=spans.slice(0,remaining);remaining-=rows.length;
       return rows.length ? [[day,rows] as [string,CalendarDisplaySpan[]]] : [];
     });
-  }, [spansByDay,todayKeyForUpcoming]);
+  }, [upcomingProjection.buckets]);
+
+  const selected = selection && !(selection.origin==='grid'?spanResult.failed:upcomingProjection.failed) && selection.scope===(selection.origin==='grid'?actionScope:upcomingScope)
+    ? (selection.origin==='grid'?data:upcomingData).find(event=>event.occurrenceKey===selection.key) ?? null : null;
 
   async function syncGoogle() {
     setSyncing(true);
@@ -491,8 +548,7 @@ export function CalendarModule() {
         };
       });
 
-  if (loading) return <SkeletonList />;
-  if (error || spanResult.failed) return <ErrorState message={error ?? tr('globalError.somethingWentWrong')} onRetry={refresh} />;
+  const gridError = error || (spanResult.failed || query.stale && !loading ? tr('globalError.somethingWentWrong') : null);
 
   // Grid Dates are wall-clock Dates, so they are labelled by the day they READ
   // (a DATE key), never converted as if they were instants.
@@ -649,6 +705,7 @@ export function CalendarModule() {
           </div>
         </div>
 
+        {loading ? <SkeletonList /> : gridError ? <ErrorState message={gridError} onRetry={query.refresh} /> : <>
         {/* ===== MOBILE DAY VIEW (below md) ===== */}
         <div className="flex flex-1 flex-col overflow-y-auto md:hidden">
           {/* Mobile day selector */}
@@ -763,7 +820,7 @@ export function CalendarModule() {
                   return (
                     <div key={col.key} className="relative flex-1 border-l border-border" style={{ minHeight: HOURS.length * HOUR_HEIGHT }}>
                       {/* Hour lines */}
-                      {dayTicks(wallKey(col.date),clock.timeZone).map(tick => (
+                      {dayTicks(wallKey(col.date),clock,locale.code).map(tick => (
                         <div key={tick.at} style={{ top: tick.top }} className="absolute left-0 right-0 border-t border-border/40">
                           <span className="text-[9px] text-muted">{tick.label}</span>
                         </div>
@@ -807,6 +864,7 @@ export function CalendarModule() {
           )}
         </div>
 
+        </>}
         {/* ===== Sync & Connect footer ===== */}
         <div className="flex-shrink-0 border-t border-border px-4 py-3 sm:px-6">
           <div className="flex flex-wrap items-center gap-x-6 gap-y-2 text-xs">
@@ -855,7 +913,7 @@ export function CalendarModule() {
             <span className="text-xs font-semibold text-muted uppercase tracking-wide">{tr('calendar.upcoming')}</span>
             <button onClick={() => setView('month')} className="text-[10px] font-medium text-brand-text hover:underline">{tr('calendar.viewAll')}</button>
           </div>
-          {upcomingByDay.length === 0 ? (
+          {upcomingError ? <ErrorState message={upcomingError} onRetry={upcomingQuery.refresh} /> : upcomingQuery.loading ? <SkeletonList /> : upcomingByDay.length === 0 ? (
             <p className="text-xs text-muted">{tr('calendar.nothingComingUp')}</p>
           ) : upcomingByDay.map(([day, events]) => {
             const isToday2 = day === todayStr;
@@ -869,7 +927,7 @@ export function CalendarModule() {
                 {events.map(span => {
                   const e = span.occurrence;
                   return (
-                  <div key={span.segmentKey} data-calendar-sidebar-day={span.day} data-calendar-sidebar-start={span.actualStartsAt} onClick={() => setSelected(e)} onKeyDown={(ev) => openOnKey(ev, e)} role="button" tabIndex={0} className="focus-ring mb-1 flex cursor-pointer items-start gap-2 rounded-lg p-1.5 hover:bg-elevated transition">
+                  <div key={span.segmentKey} data-calendar-sidebar-day={span.day} data-calendar-sidebar-start={span.actualStartsAt} onClick={() => setSelected(e,'upcoming')} onKeyDown={(ev) => openOnKey(ev, e,'upcoming')} role="button" tabIndex={0} className="focus-ring mb-1 flex cursor-pointer items-start gap-2 rounded-lg p-1.5 hover:bg-elevated transition">
                     <div className={cn('mt-1 h-1.5 w-1.5 flex-shrink-0 rounded-full', CATEGORY_DOT[e.category ?? 'other'] ?? 'bg-muted')} />
                     <div className="min-w-0">
                       {!e.all_day && (
@@ -942,7 +1000,7 @@ export function CalendarModule() {
         </div>
 
         {/* Routines — detected + saved recurring-routine templates */}
-        <RoutinesPanel events={data.flatMap(event => event.kind === 'native' && !event.readOnly ? [event.event] : [])} weekStartMonday={monday} timeZone={clock.timeZone} onApplied={refresh} />
+        <RoutinesPanel events={(gridError?[]:data).flatMap(event => event.kind === 'native' && !event.readOnly ? [event.event] : [])} weekStartMonday={monday} timeZone={clock.timeZone} onApplied={refresh} />
 
         {/* Share Calendar */}
         <div className="sidebar-card">
@@ -954,15 +1012,15 @@ export function CalendarModule() {
         </div>
       </div>
 
-      {open && <NewEventModal onClose={() => setOpen(false)} onSaved={() => { setOpen(false); void refresh(); }} />}
-      {editing && <NewEventModal existing={editing} onClose={() => setEditing(null)} onSaved={() => { setEditing(null); void refresh(); }} />}
-      {findOpen && <FindTimeModal members={members} selfMemberId={selfMember?.id ?? null} onClose={() => setFindOpen(false)} onScheduled={() => { setFindOpen(false); void refresh(); }} />}
+      {open && openScope && <NewEventModal key={openScope.instance} onClose={closeDraft} onSaved={() => { if(closeDraft())void refresh(); }} />}
+      {editing && editor && <NewEventModal key={editor.instance} existing={editing} onClose={closeEditor} onSaved={() => { if(closeEditor())void refresh(); }} />}
+      {findOpen && findScope && <FindTimeModal key={findScope.instance} members={members} selfMemberId={selfMember?.id ?? null} onClose={closeFind} onScheduled={() => { if(closeFind())void refresh(); }} />}
       {selected && (
         <CalendarOccurrenceDetailModal
           occurrence={selected} members={members} selfMemberId={selfMember?.id ?? null} familyId={familyId}
           onClose={closeSelection}
-          onEdit={(e) => { closeSelection(); setEditing(e); }}
-          onDeleted={() => { closeSelection(); void refresh(); }}
+          onEdit={() => { if(currentActionScope.current!==actionScope)return;const current = selection ? selectableRows.current[selection.origin].find(row=>row.occurrenceKey===selection.key) : null;if(current?.kind==='native' && !current.readOnly && closeSelection())setEditing(current.event); }}
+          onDeleted={() => { if(closeSelection())void currentRefresh.current(); }}
         />
       )}
     </div>

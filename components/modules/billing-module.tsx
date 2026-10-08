@@ -62,7 +62,7 @@ import { cn } from '@/lib/utils/cn';
 import type { Tables, SubscriptionStatus, AccountType, TransactionType, BudgetPeriod, BillStatus } from '@/lib/database.types';
 import { categoryLabel } from '@/lib/finance/category-label';
 import { billPaidPatch, billDateForAnchorDay, newBillDueDay } from '@/lib/finance/hub';
-import { isMissingBillDueDay, saveBillPayment } from '@/lib/finance/bills';
+import { BILL_READ_CONTRACT, readCompleteBills, isMissingBillDueDay, saveBillPayment } from '@/lib/finance/bills';
 import { writeBillPatch } from '@/lib/finance/recurring';
 import { BillPaymentModal } from '@/components/finance/bill-payment-modal';
 import { useLocale, useTranslations } from '@/components/i18n/locale-provider';
@@ -570,13 +570,15 @@ function AddSavingsGoalModal({ open, onClose, familyId, userId, onDone }: {
 export function BillingModule({ serviceFeeNotice = null }: { serviceFeeNotice?: string | null } = {}) {
   const { fmtDate } = useFormat();
   const clock = useFamilyClock();
-  const [paymentBill, setPaymentBill] = useState<Bill | null>(null);
   const tr = useTranslations();
   const askConfirm = useConfirm();
   // Money follows the reader's locale; the currency does not.
   const locale = useLocale();
   const fmtCurrency = (n: number, showSign = false) => currencyIn(locale.code, n, showSign);
   const { familyId, family, userId, role, members } = useApp();
+  const paymentOwner = useMemo(() => ({ familyId, userId }), [familyId, userId]);
+  const [paymentSelection, setPaymentSelection] = useState<{ bill: Bill; owner: typeof paymentOwner } | null>(null);
+  const paymentBill = paymentSelection?.owner === paymentOwner ? paymentSelection.bill : null;
   const admin = isAdmin(role);
   const { success, error: toastError } = useToast();
   const search = useSearchParams();
@@ -663,13 +665,13 @@ export function BillingModule({ serviceFeeNotice = null }: { serviceFeeNotice?: 
       supabase.from('budgets').select('*').eq('family_id', familyId).order('category'),
   });
 
-  const { data: bills, loading: billLoading, error: billError, refresh: refreshBills } = useRealtimeQuery<Bill>({
+  const { data: billRows, loading: billLoading, error: billError, stale: billStale, refresh: refreshBills } = useRealtimeQuery<Bill>({
     table: 'bills',
     familyId,
-    deps: [familyId],
-    fetcher: (supabase) =>
-      supabase.from('bills').select('*').eq('family_id', familyId).order('due_date'),
+    deps: [familyId, userId, BILL_READ_CONTRACT],
+    fetcher: (supabase) => readCompleteBills(supabase, familyId),
   });
+  const bills = useMemo(() => billLoading || billStale || billError ? [] : billRows, [billRows, billLoading, billStale, billError]);
 
   const { data: savingsGoals, loading: goalLoading, error: goalError, refresh: refreshGoals } = useRealtimeQuery<SavingsGoal>({
     table: 'savings_goals',
@@ -976,7 +978,7 @@ export function BillingModule({ serviceFeeNotice = null }: { serviceFeeNotice?: 
   }
 
   async function markBillPaid(bill: Bill) {
-    if (!billPaidPatch(bill, clock.todayKey())) { setPaymentBill(bill); return; }
+    if (!billPaidPatch(bill, clock.todayKey())) { setPaymentSelection({ bill, owner: paymentOwner }); return; }
     const supabase = createClient();
     const { data: rows, error } = await saveBillPayment(supabase, familyId, bill, clock.todayKey());
     if (error) return toastError(isMissingBillDueDay(error) ? tr('bills.scheduleUnavailable') : describeDbError(error));
@@ -1012,7 +1014,7 @@ export function BillingModule({ serviceFeeNotice = null }: { serviceFeeNotice?: 
   }
 
   // ── Loading / Error states ──────────────────────────────────────────────
-  const anyLoading = accLoading || txLoading || budLoading || billLoading || goalLoading;
+  const anyLoading = accLoading || txLoading || budLoading || billLoading || (billStale && !billError) || goalLoading;
   const anyError = accError || txError || budError || billError || goalError;
 
   const status = subscription?.status ?? 'trialing';
@@ -1736,7 +1738,7 @@ export function BillingModule({ serviceFeeNotice = null }: { serviceFeeNotice?: 
       <AddTransactionModal open={showAddTransaction} onClose={() => setShowAddTransaction(false)} familyId={familyId} userId={userId} accounts={accounts} onDone={() => void refreshTransactions()} />
       <AddBudgetModal open={showAddBudget} onClose={() => setShowAddBudget(false)} familyId={familyId} userId={userId} onDone={() => void refreshBudgets()} />
       <AddBillModal key={`${familyId}:${userId}:${showAddBill}`} open={showAddBill} onClose={() => setShowAddBill(false)} familyId={familyId} userId={userId} onDone={() => void refreshBills()} />
-      {paymentBill && <BillPaymentModal key={paymentBill.id} bill={paymentBill} familyId={familyId} onClose={() => setPaymentBill(null)} onDone={() => { void refreshBills(); }} />}
+      {paymentBill && bills.some(b => b.id === paymentBill.id && b.family_id === familyId) && <BillPaymentModal key={`${familyId}:${userId}:${paymentBill.id}`} bill={paymentBill} familyId={familyId} onClose={() => setPaymentSelection(null)} onDone={() => { void refreshBills(); }} />}
       <AddSavingsGoalModal open={showAddGoal} onClose={() => setShowAddGoal(false)} familyId={familyId} userId={userId} onDone={() => void refreshGoals()} />
     </div>
   );

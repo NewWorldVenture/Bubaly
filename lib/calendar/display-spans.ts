@@ -1,6 +1,7 @@
 import type { CalendarDisplayOccurrence } from './display-occurrences';
 import { addDays } from './day';
 import { briefingCalendarBounds } from '@/lib/briefing/calendar-window';
+import { isValidTimezone } from '@/lib/time/zoned';
 
 /** A rendered segment keeps the complete original occurrence for every action.
  * Segment dates/times are layout metadata, never new calendar identities. */
@@ -31,7 +32,7 @@ export function bucketCalendarDisplaySpans(occurrences: readonly CalendarDisplay
   if (!validDate(fromDay) || !validDate(toDay) || fromDay > toDay || occurrences.length > 20_000) throw new Error('Invalid calendar display window');
   if (typeof timezone !== 'string' || !timezone.trim()) throw new Error('Invalid calendar timezone');
   // Empty windows still validate their zone; no device-zone fallback.
-  new Intl.DateTimeFormat('en-US',{timeZone:timezone});
+  if (!isValidTimezone(timezone)) throw new Error('Invalid calendar timezone');
   const days: { day:string; start:number; end:number; minutes:number }[] = [];
   for (let day = fromDay; day < toDay; day = addDays(day, 1)) {
     if (days.length >= 366 || !day || !Number.isFinite(Date.parse(`${day}T00:00:00Z`))) throw new Error('Invalid calendar display window');
