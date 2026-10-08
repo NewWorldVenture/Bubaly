@@ -344,9 +344,11 @@ jobs:
         run: |
           python3 - <<'PY'
           from pathlib import Path
+          import tomllib
 
           path = Path('supabase/config.toml')
           source = path.read_text()
+          tomllib.loads(source)
           original = '''[auth]
           enable_signup = true
           site_url = "http://localhost:3000"
@@ -355,6 +357,10 @@ jobs:
           enable_signup = true
           site_url = "http://localhost:3107"
           additional_redirect_urls = ["http://localhost:3107/**"]
+
+          [auth.mfa.totp]
+          enroll_enabled = true
+          verify_enabled = true
 
           [auth.sms]
           enable_signup = true
@@ -379,6 +385,7 @@ jobs:
           # This checkout and GoTrue are disposable. Keep the product defaults,
           # other sections and credentials untouched; stop if their shape drifts.
           assert source.count(original) == 1, 'Unexpected disposable Auth config'
+          assert '[auth.mfa' not in source, 'Unexpected disposable MFA config'
           # CLI 2.109.1 disables phone login unless a provider flag is enabled,
           # even with test_otp or a send_sms hook. These invalid placeholders
           # satisfy that local config check. Keep the hook mandatory: fixed
@@ -386,7 +393,9 @@ jobs:
           # loopback. GoTrue 2.192.0 returns hook errors without provider fallback.
           assert '[auth.sms' not in source, 'Unexpected disposable SMS config'
           assert '[auth.hook' not in source, 'Unexpected disposable Auth hook config'
-          path.write_text(source.replace(original, replacement, 1))
+          configured = source.replace(original, replacement, 1)
+          tomllib.loads(configured)
+          path.write_text(configured)
           PY
 
       - name: Attest empty local stack before owned startup
@@ -532,9 +541,9 @@ jobs:
             test-results/**/*.png
             !test-results/**/trace.zip
             !test-results/*durable-session*/**
-            !test-results/*family-messaging-authenticated*/**
-            !test-results/*recurring-bill-authenticated*/**
-            !test-results/*dashboard-calendar-authenticated*/**
+            !test-results/*family-messaging-auth*/**
+            !test-results/*recurring-bill-auth*/**
+            !test-results/*dashboard-calendar-auth*/**
             !test-results/**/storageState*
             !test-results/**/storage-state*
             !test-results/**/auth.json

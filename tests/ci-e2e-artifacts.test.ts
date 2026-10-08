@@ -1,7 +1,14 @@
 import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';
 import { resolve } from 'node:path';
+import { createRequire } from 'node:module';
 import { test } from 'vitest';
+
+const requireInstalled = createRequire(import.meta.url);
+const { utils: playwrightNaming } = requireInstalled('playwright-core/lib/coreBundle') as {
+  utils: { sanitizeForFilePath(value: string): string; trimLongString(value: string, length: number): string };
+};
+const globMatches = requireInstalled('minimatch') as (file: string, pattern: string, options: { dot: boolean }) => boolean;
 
 const workflow = readFileSync(resolve('.github/workflows/ci.yml'), 'utf8').replace(/\r\n/g, '\n');
 const cleanupScript = readFileSync(resolve('scripts/ci-recurring-bill-anchor-fixture.mjs'), 'utf8').replace(/\r\n/g, '\n');
@@ -45,9 +52,9 @@ function assertPrivatePaths(source = workflow) {
   assert.deepEqual(paths.filter((path) => path.startsWith('!')), [
     '!test-results/**/trace.zip',
     '!test-results/*durable-session*/**',
-    '!test-results/*family-messaging-authenticated*/**',
-    '!test-results/*recurring-bill-authenticated*/**',
-    '!test-results/*dashboard-calendar-authenticated*/**',
+    '!test-results/*family-messaging-auth*/**',
+    '!test-results/*recurring-bill-auth*/**',
+    '!test-results/*dashboard-calendar-auth*/**',
     '!test-results/**/storageState*',
     '!test-results/**/storage-state*',
     '!test-results/**/auth.json',
@@ -143,8 +150,8 @@ async function proveCleanupOwnership(source: string) {
 
 test.each([
   '!test-results/**/trace.zip', '!test-results/*durable-session*/**',
-  '!test-results/*family-messaging-authenticated*/**', '!test-results/*recurring-bill-authenticated*/**',
-  '!test-results/*dashboard-calendar-authenticated*/**', '!test-results/**/storageState*',
+  '!test-results/*family-messaging-auth*/**', '!test-results/*recurring-bill-auth*/**',
+  '!test-results/*dashboard-calendar-auth*/**', '!test-results/**/storageState*',
   '!test-results/**/storage-state*', '!test-results/**/auth.json', '!test-results/**/auth/**',
   '!test-results/**/.auth/**', '!test-results/**/.env*', '!test-results/**/*.log',
   '!test-results/**/logs/**', '!test-results/**/*.html', '!test-results/**/playwright-report/**',
@@ -157,6 +164,81 @@ test('artifact contract refuses a whole-directory upload or hidden files', () =>
   assert.throws(() => assertPrivatePaths(workflow.replace('test-results/**/error-context.md', 'test-results/**')));
   assert.throws(() => assertPrivatePaths(workflow.replace('include-hidden-files: false', 'include-hidden-files: true')));
 });
+
+const privateSpecs = ['family-messaging-authenticated', 'recurring-bill-authenticated',
+  'dashboard-calendar-authenticated', 'durable-session'] as const;
+
+function artifactPatterns(source: string): string[] {
+  const block = e2eStep(uploadStepName, source).match(/^          path: \|\n((?: {12}[^\n]+\n?)+)/m);
+  assert.ok(block);
+  return block[1].trim().split('\n').map(line => line.trim());
+}
+
+function uploaded(file: string, patterns: string[]): boolean {
+  return patterns.some(pattern => !pattern.startsWith('!') && globMatches(file, pattern, { dot: true }))
+    && !patterns.some(pattern => pattern.startsWith('!') && globMatches(file, pattern.slice(1), { dot: true }));
+}
+
+function actualPrivateDirectories(spec: typeof privateSpecs[number]): string[] {
+  const source = readFileSync(resolve(`tests/e2e/${spec}.spec.ts`), 'utf8');
+  const suite = source.match(/test\.describe\('([^']+)'/);
+  assert.ok(suite, `Actual private suite title exists: ${spec}`);
+  const titles = [...source.matchAll(/\btest\((['"`])([^\r\n]*?)\1\s*,/g)].flatMap(match =>
+    match[2].includes('${zone}') ? ['America/New_York', 'Asia/Tokyo'].map(zone => match[2].replace('${zone}', zone)) : [match[2]]);
+  assert.ok(titles.length > 0, `Actual private cases exist: ${spec}`);
+  // This is the installed worker's naming bound, including its hash truncation.
+  const worker = readFileSync(resolve('node_modules/playwright/lib/worker/workerProcessEntry.js'), 'utf8');
+  const bound = worker.match(/windowsFilesystemFriendlyLength = (\d+);/);
+  assert.ok(bound);
+  assert.match(worker, /trimLongString\(sanitizedRelativePath \+ "-" \+ sanitizeForFilePath2\(fullTitleWithoutSpec\), windowsFilesystemFriendlyLength\)/);
+  return titles.flatMap(title => {
+    const full = `${spec}-${playwrightNaming.sanitizeForFilePath(`${suite[1]} ${title}`)}`;
+    const shortened = playwrightNaming.trimLongString(full, Number(bound[1]));
+    assert.ok(shortened.startsWith(spec.slice(0, 26)), 'Actual naming retains its stable filename prefix');
+    return [full, shortened].flatMap(base => ['chromium', 'iphone'].flatMap(project =>
+      ['', '-retry1', '-retry2-repeat1'].map(suffix => `${base}-${project}${suffix}`)));
+  });
+}
+
+function assertPrivateOutputs(source: string, spec: typeof privateSpecs[number]) {
+  const patterns = artifactPatterns(source);
+  for (const directory of actualPrivateDirectories(spec)) {
+    for (const name of ['error-context.md', 'failure.png', 'nested/failure.png']) {
+      const file = `test-results/${directory}/${name}`;
+      assert.equal(uploaded(file, patterns.filter(pattern => !pattern.startsWith('!'))), true,
+        'The real positive allowlist would admit this synthetic private output without exclusions');
+      assert.equal(uploaded(file, patterns), false, `Private output must be excluded: ${file}`);
+    }
+  }
+}
+
+test.each(privateSpecs)('real globs exclude full, installed-truncated and retried %s outputs', spec => {
+  assertPrivateOutputs(workflow, spec);
+});
+
+test('real artifact globs retain benign DOM and screenshot evidence only', () => {
+  const patterns = artifactPatterns(workflow);
+  for (const name of ['error-context.md', 'failure.png', 'nested/failure.png']) {
+    assert.equal(uploaded(`test-results/public-fixture-chromium/${name}`, patterns), true);
+  }
+  for (const name of ['trace.zip', 'session.json', 'storageState.json', 'auth.json', '.env', 'worker.log', 'report.html']) {
+    assert.equal(uploaded(`test-results/public-fixture-chromium/${name}`, patterns), false);
+  }
+});
+
+test.each(privateSpecs.filter(spec => spec !== 'durable-session'))(
+  'actual-path oracle rejects reverting %s to its unsafe full-filename glob', spec => {
+    const safe = `!test-results/*${spec.replace('-authenticated', '-auth')}*/**`;
+    assert.ok(workflow.includes(safe));
+    assert.throws(() => assertPrivateOutputs(workflow.replace(safe, `!test-results/*${spec}*/**`), spec));
+  });
+
+test.each(privateSpecs.filter(spec => spec !== 'durable-session'))(
+  'actual-path oracle rejects removing the %s exclusion', spec => {
+    const safe = `!test-results/*${spec.replace('-authenticated', '-auth')}*/**`;
+    assert.ok(workflow.includes(safe));
+    assert.throws(() => assertPrivateOutputs(workflow.replace(`            ${safe}\n`, ''), spec));
+  });
 
 test.each([
   ['if: always()', 'if: success()'], ['BUBALY_BILL_STACK_PHASE: cleanup', 'BUBALY_BILL_STACK_PHASE: install'],
