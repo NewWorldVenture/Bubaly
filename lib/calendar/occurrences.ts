@@ -46,6 +46,9 @@ export type OccurrenceFilters = {
 };
 
 export type OccurrencesOptions<C extends keyof EventRow> = {
+  signal?: AbortSignal;
+  /** Qualify each fetched native row before filtering or expanding masters. */
+  validateRow?: (row: CalendarOccurrence<C>) => void;
   columns?: readonly C[];
   /** Applied after the merge, to the sorted occurrences. */
   limit?: number;
@@ -203,6 +206,7 @@ export async function readCalendarOccurrences<C extends keyof EventRow = keyof E
       return { data: null, count: null, error: { message: 'Invalid calendar read limit' } };
     }
   }
+  if (opts.signal?.aborted) return { data: null, count: null, error: { message: 'Calendar request aborted' } };
   const columns = opts.columns ? [...new Set<string>([...opts.columns, ...RECURRENCE_COLUMNS])].join(', ') : '*';
   const dayStart = `${bounds.allDayFromDay}T00:00:00.000Z`;
   const dayEnd = `${bounds.allDayToDay}T00:00:00.000Z`;
@@ -219,13 +223,16 @@ export async function readCalendarOccurrences<C extends keyof EventRow = keyof E
   // page by rows actually received, including a unique ID to break start ties.
   const latest = later(bounds.timedTo, dayEnd);
   const earliest = earlier(bounds.timedFrom, dayStart);
-  const singlesQuery = () => scoped(db
+  const singlesQuery = () => {
+    const query = scoped(db
     .from('calendar_events')
     .select(columns, { count: 'exact' })
     .eq('family_id', familyId))
     .or(opts.singlesFilter ?? (opts.overlap ? calendarOverlapWindowFilter(bounds) : calendarWindowFilter(bounds)))
     .or('recurrence.is.null,recurrence.eq.none')
     .order('starts_at').order('id');
+    return opts.signal ? query.abortSignal(opts.signal) : query;
+  };
   const seriesQuery = () => {
     let query = scoped(db
     .from('calendar_events')
@@ -234,7 +241,8 @@ export async function readCalendarOccurrences<C extends keyof EventRow = keyof E
     .neq('recurrence', 'none')
     .lte('starts_at', latest);
     if (!opts.overlap) query = query.or(`recurrence_until.is.null,recurrence_until.gte.${earliest}`);
-    return query.order('starts_at').order('id');
+    const ordered = query.order('starts_at').order('id');
+    return opts.signal ? ordered.abortSignal(opts.signal) : ordered;
   };
   const [singles, series] = await Promise.all([
     readCountedRows(() => singlesQuery().limit(Math.min(READ_PAGE, opts.singlesLimit ?? READ_PAGE)), (from, to) => singlesQuery().range(from, to), SINGLE_READ_MAX, 'one-off events', opts.singlesLimit),
@@ -242,6 +250,14 @@ export async function readCalendarOccurrences<C extends keyof EventRow = keyof E
   ]);
   if (singles.error) return { data: null, count: null, error: singles.error };
   if (series.error) return { data: null, count: null, error: series.error };
+  if (opts.signal?.aborted) return { data: null, count: null, error: { message: 'Calendar request aborted' } };
+  try {
+    for (const row of (singles.data ?? []) as unknown as CalendarOccurrence<C>[]) opts.validateRow?.(row);
+    for (const row of (series.data ?? []) as unknown as CalendarOccurrence<C>[]) opts.validateRow?.(row);
+  } catch (cause) {
+    return { data: null, count: null, error: { message: cause instanceof Error ? cause.message : 'Invalid native calendar row' } };
+  }
+  if (opts.signal?.aborted) return { data: null, count: null, error: { message: 'Calendar request aborted' } };
   const seriesRows = ((series.data ?? []) as unknown as CalendarOccurrence<C>[]).filter(isSeries);
   if (seriesRows.length > SERIES_READ_MAX) return { data: null, count: null, error: { message: `More than ${SERIES_READ_MAX} recurring events; the window cannot be read whole` } };
 
@@ -264,5 +280,6 @@ export async function readCalendarOccurrences<C extends keyof EventRow = keyof E
   const singleRows = ((singles.data ?? []) as unknown as CalendarOccurrence<C>[]).filter((row) => !isSeries(row));
   const rows = [...singleRows, ...occurrences]
     .sort((a, b) => a.starts_at.localeCompare(b.starts_at) || String(a.id).localeCompare(String(b.id)));
+  if (opts.signal?.aborted) return { data: null, count: null, error: { message: 'Calendar request aborted' } };
   return { data: opts.limit !== undefined ? rows.slice(0, opts.limit) : rows, count: rows.length, error: null };
 }

@@ -37,6 +37,25 @@ function strictInstant(value: unknown): number {
 }
 
 function nullableText(value: unknown): boolean { return value === null || typeof value === 'string'; }
+/** Admit stored masters even when expansion produces no visible occurrence. */
+function qualifyNativeRow(event: Tables<'calendar_events'>, familyId: string): void {
+  const uuid = (value: unknown): value is string => typeof value === 'string' && /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(value);
+  if (!event || !uuid(event.id) || typeof event.family_id !== 'string' || event.family_id.toLowerCase() !== familyId.toLowerCase()
+    || typeof event.all_day !== 'boolean' || typeof event.title !== 'string' || !CATEGORIES.includes(event.category)
+    || !nullableText(event.description) || !nullableText(event.location)
+    || !['none', 'daily', 'weekly', 'monthly', 'yearly'].includes(event.recurrence)
+    || !nullableText(event.recurrence_until) || !nullableText(event.assignee_id) || !nullableText(event.feed_id)
+    || !nullableText(event.external_uid) || !nullableText(event.created_by) || !nullableText(event.onboarding_key)
+    || !nullableText(event.idempotency_key) || event.assignee_id !== null && !event.assignee_id.trim()
+    || 'source_recurrence' in event && event.source_recurrence !== null) throw new Error('Unqualified native calendar row');
+  const start = strictInstant(event.starts_at), end = event.ends_at === null ? null : strictInstant(event.ends_at);
+  if (end !== null && end < start) throw new Error('Invalid native calendar interval');
+  if (event.all_day && (end !== null && end <= start || start !== Date.parse(`${event.starts_at.slice(0, 10)}T00:00:00Z`)
+    || end !== null && end !== Date.parse(`${event.ends_at!.slice(0, 10)}T00:00:00Z`))) throw new Error('Invalid native calendar DATE');
+  if (event.recurrence_until !== null) strictInstant(event.recurrence_until);
+  strictInstant(event.created_at); strictInstant(event.updated_at);
+}
+
 function qualifySearchProjection(row: CalendarAvailabilityOccurrence): void {
   conflictSubject(row);
   if (!nullableText(row.title) || !nullableText(row.description) || !nullableText(row.location)) throw new Error('Invalid calendar presentation');
@@ -138,7 +157,9 @@ export async function readCompleteCalendarCivilOccurrences(scope: ServiceScope, 
 }
 
 async function readQualifiedCalendarWindow(scope: ServiceScope, window: ReturnType<typeof validateCalendarSearchWindow>): ReturnType<typeof readCompleteCalendarOccurrences> {
-  const result = await readCalendarAvailability(scope.db, scope.familyId, window.bounds, scope.tz);
+  const result = await readCalendarAvailability(scope.db, scope.familyId, window.bounds, scope.tz, {
+    validateNativeRow: row => qualifyNativeRow(row, scope.familyId),
+  });
   if (result.error) return fail('Could not load the complete calendar.', { code: SERVICE_CODES.db });
   try {
     if (!Number.isSafeInteger(result.count) || result.count !== result.data.length || result.count > 20_000) throw new Error('Incomplete calendar');

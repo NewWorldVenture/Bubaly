@@ -23,6 +23,7 @@ import { ConversationPane } from '@/components/assistant/conversation-pane';
 import { ResultPane, cardId, type ConversationMessage } from '@/components/assistant/result-pane';
 import { ContextRail, type ActivityItem, type GlanceItem, type UpcomingEvent } from '@/components/assistant/context-rail';
 import { createClient } from '@/lib/supabase/client';
+import { readAssistantRailCalendar } from '@/lib/calendar/assistant-rail';
 import { settle, settleAll } from '@/lib/supabase/settle';
 import { describeDbError, wroteNoRows } from '@/lib/supabase/errors';
 import { useFamilyClock, useFormat } from '@/components/i18n/use-format';
@@ -231,21 +232,21 @@ function AssistantSession() {
     const end = clock.dayStart(1, now);
     const in14 = clock.dayStart(14, now);
     setRailLoading(true);
+    const calendarRead = readAssistantRailCalendar(supabase, family.id, clock.timeZone, start, end, in14, abort.signal);
+    const todayCalendarRead = calendarRead.then(result => ({ data: result.data?.today ?? null, error: result.error }));
+    const upcomingCalendarRead = calendarRead.then(result => ({ data: result.data?.upcoming ?? null, error: result.error }));
 
     const [todayRes, choresRes, upcomingRes, remindersRes, medsRes] = await settleAll([
-      supabase.from('calendar_events').select('id, title, starts_at, all_day, created_at')
-        .eq('family_id', family.id).gte('starts_at', start.toISOString()).lt('starts_at', end.toISOString()).abortSignal(abort.signal),
+      todayCalendarRead,
       supabase.from('chore_assignments').select('id', { count: 'exact', head: true })
         .eq('family_id', family.id).in('status', ['todo', 'in_progress']).abortSignal(abort.signal),
-      supabase.from('calendar_events').select('id, title, starts_at, all_day')
-        .eq('family_id', family.id).gte('starts_at', end.toISOString()).lte('starts_at', in14.toISOString())
-        .order('starts_at').limit(4).abortSignal(abort.signal),
+      upcomingCalendarRead,
       supabase.from('reminders').select('id', { count: 'exact', head: true })
         .eq('family_id', family.id).eq('is_done', false).lte('remind_at', end.toISOString()).abortSignal(abort.signal),
       supabase.from('medications').select('id', { count: 'exact', head: true })
         .eq('family_id', family.id).eq('is_active', true).abortSignal(abort.signal),
     ]);
-    if (!mounted.current || request !== railRequest.current) return;
+    if (!mounted.current || request !== railRequest.current || abort.signal.aborted) return;
     setRailLoading(false);
     const failed = [todayRes.error, choresRes.error, upcomingRes.error, remindersRes.error, medsRes.error].find(Boolean);
     if (failed) {
@@ -261,7 +262,10 @@ function AssistantSession() {
       { icon: Bell, value: String(remindersRes.count ?? 0), label: t('assistantModule.glance.remindersDue') },
       { icon: Pill, value: String(medsRes.count ?? 0), label: t('assistantModule.glance.activeMeds') },
     ]);
-    setUpcoming(upcomingRes.data ?? []);
+    setUpcoming((upcomingRes.data ?? []).map(e => ({
+      ...e,
+      occurrenceKey: JSON.stringify([e.id, e.starts_at]),
+    })));
     setActivity(todayEvts.slice(0, 3).map((e, i) => ({
       icon: CalendarDays,
       text: t('assistantModule.addedToCalendar', { title: e.title }),

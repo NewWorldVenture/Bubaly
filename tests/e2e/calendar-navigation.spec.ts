@@ -2,12 +2,15 @@ import fs from 'node:fs';
 import ts from 'typescript';
 import { test, expect, type Page } from '@playwright/test';
 import { reactBrowserScripts } from './helpers/react-browser';
+import { localeOrDefault } from '../../lib/i18n/locales';
 
 const scripts = reactBrowserScripts('development');
 const sourceFiles = [
   'components/modules/calendar-module.tsx', 'lib/time/wall-clock.ts',
   'lib/time/zoned.ts', 'lib/calendar/recurrence.ts', 'lib/calendar/day.ts',
   'lib/calendar/occurrences.ts', 'lib/calendar/event-dates.ts', 'lib/briefing/calendar-window.ts',
+  'lib/calendar/display-occurrences.ts', 'lib/calendar/display-spans.ts', 'lib/calendar/source-capability.ts',
+  'tests/helpers/in-memory-supabase.ts',
 ];
 const sources = Object.fromEntries(sourceFiles.map(file => [
   '@/' + file.replace(/\.tsx?$/, ''),
@@ -47,6 +50,7 @@ async function start(page: Page, config: CalendarConfig) {
   await page.addScriptTag({ content: `(() => {
     const sources = ${JSON.stringify(sources)};
     const config = ${JSON.stringify(config)};
+    const locale = ${JSON.stringify(localeOrDefault('en-US'))};
     const p = window.__calendarNavigation = { errors: [], reactVersion: React.version };
     window.addEventListener('error', e => p.errors.push(e.message));
     window.addEventListener('unhandledrejection', e => { p.errors.push(String(e.reason)); e.preventDefault(); });
@@ -55,7 +59,10 @@ async function start(page: Page, config: CalendarConfig) {
     const pass = props => React.createElement('div', null, props.children);
     const stub = new Proxy({ __esModule: true, default: pass }, { get: (obj, key) => key in obj ? obj[key] : blank });
     const calendarDb = { from: () => {
-      let rows = (config.events || []).map(row => ({ family_id: 'synthetic-family', all_day: false, ends_at: null, recurrence_until: null, ...row }));
+      let rows = (config.events || []).map(row => ({ family_id: 'synthetic-family', all_day: false, ends_at: null, recurrence_until: null,
+        category: 'general', description: null, location: null, assignee_id: null, feed_id: null, external_uid: null,
+        onboarding_key: null, idempotency_key: null, created_by: null, source_recurrence: null,
+        created_at: '2026-01-01T00:00:00Z', updated_at: '2026-01-01T00:00:00Z', ...row }));
       let offset = 0; let limit = 1000;
       const query = {
         select: () => query,
@@ -63,12 +70,7 @@ async function start(page: Page, config: CalendarConfig) {
         neq: (column, value) => { rows = rows.filter(row => row[column] != null && row[column] !== value); return query; },
         lte: (column, value) => { rows = rows.filter(row => Date.parse(row[column]) <= Date.parse(value)); return query; },
         or: filter => {
-          if (filter === 'recurrence.is.null,recurrence.eq.none') rows = rows.filter(row => !row.recurrence || row.recurrence === 'none');
-          else if (filter.startsWith('recurrence_until.')) rows = rows.filter(row => !row.recurrence_until || Date.parse(row.recurrence_until) >= Date.parse(filter.split('.gte.')[1]));
-          else {
-            const windows = [...filter.matchAll(/and\\(all_day.eq.(false|true),starts_at.gte.([^,]+),starts_at.lt.([^)]+)\\)/g)];
-            rows = rows.filter(row => windows.some(match => row.all_day === (match[1] === 'true') && Date.parse(row.starts_at) >= Date.parse(match[2]) && Date.parse(row.starts_at) < Date.parse(match[3])));
-          }
+          rows = rows.filter(load('@/tests/helpers/in-memory-supabase').orPredicate(filter));
           return query;
         },
         order: () => { rows.sort((a, b) => a.starts_at.localeCompare(b.starts_at) || a.id.localeCompare(b.id)); return query; },
@@ -80,6 +82,7 @@ async function start(page: Page, config: CalendarConfig) {
     } };
     const mocks = {
       react: React,
+      'node:crypto': { randomUUID: () => window.crypto.randomUUID() },
       '@/components/app/app-context': { useApp: () => ({ familyId: 'synthetic-family', userId: 'synthetic-user', members: [], selfMember: null }) },
       '@/lib/hooks/use-realtime-query': { useRealtimeQuery: ({ fetcher, deps }) => {
         const [result, setResult] = React.useState({ data: [], loading: true, error: null });
@@ -91,7 +94,7 @@ async function start(page: Page, config: CalendarConfig) {
         return { ...result, refresh: () => {} };
       } },
       '@/components/ui/toast': { useToast: () => ({ success: () => {}, error: () => {} }) },
-      '@/components/i18n/locale-provider': { useTranslations: () => key => key },
+      '@/components/i18n/locale-provider': { useTranslations: () => key => key, useLocale: () => locale },
       '@/lib/utils/cn': { cn: (...args) => args.filter(Boolean).join(' ') },
       '@/components/app/page-header': { PageHeader: props => React.createElement('header', null, props.title, props.action) },
       '@/components/ui/button': { Button: props => React.createElement('button', { onClick: props.onClick, disabled: props.disabled }, props.children) },
@@ -101,7 +104,17 @@ async function start(page: Page, config: CalendarConfig) {
       if (id in modules) return modules[id];
       if (!(id in sources)) return stub;
       const module = { exports: {} }; modules[id] = module.exports;
-      new Function('require', 'module', 'exports', sources[id])(load, module, module.exports);
+      const requireFrom = specifier => {
+        if (!specifier.startsWith('.')) return load(specifier);
+        const parts = (id.slice(0, id.lastIndexOf('/') + 1) + specifier).split('/');
+        const resolved = [];
+        for (const part of parts) {
+          if (part === '..') resolved.pop();
+          else if (part !== '.') resolved.push(part);
+        }
+        return load(resolved.join('/'));
+      };
+      new Function('require', 'module', 'exports', sources[id])(requireFrom, module, module.exports);
       return module.exports;
     }
     const wall = load('@/lib/time/wall-clock');

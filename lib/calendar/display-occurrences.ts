@@ -4,12 +4,13 @@ import type { CalendarWindowBounds } from '../briefing/calendar-window';
 import { allDayBusyInterval } from './event-dates';
 import { CALENDAR_SOURCE_ARCHIVE_ENABLED } from './source-capability';
 import type { SourceTransparency } from './source-occurrences';
-import { readCalendarOccurrences } from './occurrences';
+import { readCalendarOccurrences, type CalendarOccurrence } from './occurrences';
 import { materializeCalendarSourceSnapshot, readCalendarSourceSnapshot, type CalendarSnapshotReference } from './source-snapshot';
 
 export { CALENDAR_SOURCE_ARCHIVE_ENABLED } from './source-capability';
 export const CALENDAR_DISPLAY_CONTRACT = 3;
 type NativeEvent = Tables<'calendar_events'>;
+export type NativeCalendarRowValidator = (row: CalendarOccurrence<keyof NativeEvent>) => void;
 type Common = {
   /** Optional for older cached shapes; every actual read emits a qualified value. */
   transparency?: SourceTransparency;
@@ -38,11 +39,11 @@ function nativeDisplay(event: NativeEvent): CalendarDisplayOccurrence {
 
 /** Explicit display consumer. Other generic calendar readers remain separate
  * until their filters and mutation contracts have been migrated. */
-export async function readDisplayCalendarOccurrences(db: SupabaseClient<Database>, familyId: string, bounds: CalendarWindowBounds, timezone: string, options: {overlap?:boolean;limit?:number} = {}): Promise<CalendarDisplayResult> {
+export async function readDisplayCalendarOccurrences(db: SupabaseClient<Database>, familyId: string, bounds: CalendarWindowBounds, timezone: string, options: {overlap?:boolean;limit?:number;validateNativeRow?:NativeCalendarRowValidator} = {}): Promise<CalendarDisplayResult> {
   try {
     if (options.limit !== undefined && (!Number.isSafeInteger(options.limit) || options.limit < 1)) throw new Error('Invalid calendar display limit');
     if (!CALENDAR_SOURCE_ARCHIVE_ENABLED) {
-      const result = await readCalendarOccurrences(db,familyId,bounds,timezone,options);
+      const result = await readCalendarOccurrences(db,familyId,bounds,timezone,{overlap:options.overlap,limit:options.limit,validateRow:options.validateNativeRow});
       if (result.error) return {data:null,count:null,error:result.error};
       const data = result.data.map(event => {
         if ('source_recurrence' in event && event.source_recurrence !== null) throw new Error('Unreconciled legacy source projection');

@@ -4,7 +4,7 @@ import type { CalendarWindowBounds } from '../briefing/calendar-window';
 import { isValidTimezone } from '../time/zoned';
 import { validDay } from '../onboarding/ics-time';
 import { allDayBusyInterval } from './event-dates';
-import { readDisplayCalendarOccurrences, type CalendarDisplayOccurrence } from './display-occurrences';
+import { readDisplayCalendarOccurrences, type CalendarDisplayOccurrence, type NativeCalendarRowValidator } from './display-occurrences';
 
 export type CalendarAvailabilityAttribution = { kind: 'member'; memberId: string }
   | { kind: 'family'; reason: 'native-unassigned' | 'source-unmapped' };
@@ -48,13 +48,14 @@ function sourceReference(row: Extract<CalendarDisplayOccurrence, { kind: 'source
  * Capability selection and coherent snapshot admission belong to the reader. */
 export async function readCalendarAvailability(
   db: SupabaseClient<Database>, familyId: string, bounds: CalendarWindowBounds, timezone: string,
+  options: { validateNativeRow?: NativeCalendarRowValidator } = {},
 ): Promise<CalendarAvailabilityResult> {
   try {
     if (!identity(familyId) || typeof timezone !== 'string' || !timezone.trim() || !isValidTimezone(timezone)
       || !bounds || !validDay(bounds.allDayFromDay) || !validDay(bounds.allDayToDay) || bounds.allDayToDay <= bounds.allDayFromDay) throw new Error('Invalid calendar scope');
     const from = instant(bounds.timedFrom), to = instant(bounds.timedTo);
     if (to < from) throw new Error('Invalid calendar window');
-    const result = await readDisplayCalendarOccurrences(db, familyId, bounds, timezone, { overlap: true });
+    const result = await readDisplayCalendarOccurrences(db, familyId, bounds, timezone, { overlap: true, validateNativeRow: options.validateNativeRow });
     if (result.error) return { data: null, count: null, error: result.error };
     if (!Array.isArray(result.data) || !Number.isSafeInteger(result.count) || result.count < 0 || result.count > 20_000 || result.count !== result.data.length) throw new Error('Incomplete calendar domain');
     const keys = new Set<string>();
