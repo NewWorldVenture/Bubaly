@@ -32,12 +32,16 @@ function isoOrNull(value: string | null | undefined): string | null {
 
 /** A window defaulting to the coming week; an inverted window is refused rather than returned empty. */
 export function resolveWindow(scope: ServiceScope, input?: { from?: string | null; to?: string | null }): ServiceResult<{ from: string; to: string }> {
-  const from = isoOrNull(input?.from) ?? scopeNow(scope).toISOString();
-  const to = isoOrNull(input?.to) ?? new Date(Date.parse(from) + WEEK_MS).toISOString();
-  if (input?.from && !isoOrNull(input.from)) return fail('That start time could not be understood.', { code: SERVICE_CODES.invalidInput });
-  if (input?.to && !isoOrNull(input.to)) return fail('That end time could not be understood.', { code: SERVICE_CODES.invalidInput });
-  if (Date.parse(to) < Date.parse(from)) return fail('The end of that window is before its start.', { code: SERVICE_CODES.invalidInput });
-  return ok({ from, to });
+  const explicitFrom = isoOrNull(input?.from);
+  const explicitTo = isoOrNull(input?.to);
+  if (input?.from && !explicitFrom) return fail('That start time could not be understood.', { code: SERVICE_CODES.invalidInput });
+  if (input?.to && !explicitTo) return fail('That end time could not be understood.', { code: SERVICE_CODES.invalidInput });
+  const fromDate = explicitFrom ? new Date(explicitFrom) : scopeNow(scope);
+  if (!Number.isFinite(fromDate.getTime())) return fail('That start time could not be understood.', { code: SERVICE_CODES.invalidInput });
+  const toDate = explicitTo ? new Date(explicitTo) : new Date(fromDate.getTime() + WEEK_MS);
+  if (!Number.isFinite(toDate.getTime())) return fail('That end time is outside the supported date range.', { code: SERVICE_CODES.invalidInput });
+  if (toDate < fromDate) return fail('The end of that window is before its start.', { code: SERVICE_CODES.invalidInput });
+  return ok({ from: fromDate.toISOString(), to: toDate.toISOString() });
 }
 
 export type SchoolWindowInput = { from?: string | null; to?: string | null; memberId?: string | null; limit?: number };
