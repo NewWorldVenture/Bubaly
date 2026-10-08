@@ -1,0 +1,127 @@
+{
+  "project_ref": "ltcxlbipiihclxwioyqj",
+  "method": "Supabase connector execute_sql; catalog/configuration SELECT only",
+  "results": [
+    {
+      "audit_metadata": {
+        "ledger": {
+          "count": 192,
+          "latest_version": "0176"
+        },
+        "wallet_rls": {
+          "forced": false,
+          "enabled": true
+        },
+        "observed_at": "2026-10-08T00:12:07.809993+00:00",
+        "bill_due_day": false,
+        "family_media": [
+          {
+            "id": "family-media",
+            "public": true
+          }
+        ],
+        "held_functions": [],
+        "server_version": "17.6",
+        "wallet_policies": [
+          {
+            "name": "Members manage wallet_transactions",
+            "check": "is_family_member(family_id)",
+            "roles": [
+              "authenticated"
+            ],
+            "using": "is_family_member(family_id)",
+            "command": "ALL",
+            "permissive": "PERMISSIVE"
+          },
+          {
+            "name": "wallet_transactions_manager_delete_guard",
+            "check": null,
+            "roles": [
+              "authenticated"
+            ],
+            "using": "can_manage_family(family_id)",
+            "command": "DELETE",
+            "permissive": "RESTRICTIVE"
+          },
+          {
+            "name": "wallet_transactions_manager_insert_guard",
+            "check": "can_manage_family(family_id)",
+            "roles": [
+              "authenticated"
+            ],
+            "using": null,
+            "command": "INSERT",
+            "permissive": "RESTRICTIVE"
+          },
+          {
+            "name": "wallet_transactions_manager_update_guard",
+            "check": "can_manage_family(family_id)",
+            "roles": [
+              "authenticated"
+            ],
+            "using": "can_manage_family(family_id)",
+            "command": "UPDATE",
+            "permissive": "RESTRICTIVE"
+          },
+          {
+            "name": "wallet_transactions_mng_delete",
+            "check": null,
+            "roles": [
+              "authenticated"
+            ],
+            "using": "can_manage_family(family_id)",
+            "command": "DELETE",
+            "permissive": "PERMISSIVE"
+          },
+          {
+            "name": "wallet_transactions_mng_insert",
+            "check": "can_manage_family(family_id)",
+            "roles": [
+              "authenticated"
+            ],
+            "using": null,
+            "command": "INSERT",
+            "permissive": "PERMISSIVE"
+          },
+          {
+            "name": "wallet_transactions_mng_update",
+            "check": "can_manage_family(family_id)",
+            "roles": [
+              "authenticated"
+            ],
+            "using": "can_manage_family(family_id)",
+            "command": "UPDATE",
+            "permissive": "PERMISSIVE"
+          },
+          {
+            "name": "wallet_transactions_select",
+            "check": null,
+            "roles": [
+              "authenticated"
+            ],
+            "using": "is_family_member(family_id)",
+            "command": "SELECT",
+            "permissive": "PERMISSIVE"
+          }
+        ],
+        "management_helpers": [
+          {
+            "name": "can_manage_family",
+            "definition": "CREATE OR REPLACE FUNCTION public.can_manage_family(p_family_id uuid)\n RETURNS boolean\n LANGUAGE sql\n STABLE SECURITY DEFINER\n SET search_path TO 'public'\nAS $function$\n  select exists (\n    select 1 from public.family_members\n    where family_id = p_family_id and user_id = auth.uid()\n      and role in ('parent','adult') and is_active\n  );\n$function$\n"
+          },
+          {
+            "name": "is_family_member",
+            "definition": "CREATE OR REPLACE FUNCTION public.is_family_member(p_family_id uuid)\n RETURNS boolean\n LANGUAGE sql\n STABLE SECURITY DEFINER\n SET search_path TO 'public'\nAS $function$\n  select exists (\n    select 1 from public.family_members\n    where family_id = p_family_id and user_id = auth.uid() and is_active\n  );\n$function$\n"
+          }
+        ],
+        "wallet_anon_privileges": {
+          "delete": true,
+          "insert": true,
+          "update": true,
+          "inherits_authenticated": false
+        },
+        "pending_ledger_versions": []
+      }
+    }
+  ]
+}

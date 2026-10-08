@@ -15,6 +15,23 @@ const row = (id: string, starts_at: string, extra = {}) => ({
 const client = (db: ReturnType<typeof createInMemorySupabase>) => db as unknown as SupabaseClient<Database>;
 
 describe('composed calendar read boundaries', () => {
+  it('reads a later-fold series seed in its saved window and keeps its busy overlap', async () => {
+    const db = createInMemorySupabase({ maxRows: 1 });
+    const seed = row('fold', '2026-11-01T06:30:42.125Z', { ends_at: '2026-11-01T07:00:00.000Z', recurrence: 'weekly' });
+    db.seed('calendar_events', [seed]);
+    const zone = 'America/New_York';
+    const atStart = await readCalendarOccurrences(client(db), family,
+      instantCalendarBounds('2026-11-01T06:30:00.000Z', '2026-11-01T06:31:00.000Z', zone), zone);
+    expect(atStart.error).toBeNull();
+    expect(atStart.count).toBe(1);
+    expect(atStart.data).toMatchObject([seed]);
+    const busy = await readCalendarOccurrences(client(db), family,
+      instantCalendarBounds('2026-11-01T06:45:00.000Z', '2026-11-01T06:46:00.000Z', zone), zone, { overlap: true });
+    expect(busy.error).toBeNull();
+    expect(busy.count).toBe(1);
+    expect(busy.data).toMatchObject([seed]);
+  });
+
   it('completes a bounded nearest-singles read below the requested server cap', async () => {
     const db = createInMemorySupabase({ maxRows: 2 });
     db.seed('calendar_events', Array.from({ length: 7 }, (_, n) => row(`event-${n}`, `2026-10-10T${String(n + 10).padStart(2, '0')}:00:00.000Z`)));

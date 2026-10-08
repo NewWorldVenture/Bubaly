@@ -69,10 +69,21 @@ it.each([
  const out=expand(event({starts_at:seed,ends_at:null,recurrence:'weekly'}),'2026-11-01T00:00:00Z','2026-11-02T00:00:00Z','America/New_York');
  expect(out).toHaveLength(1);expect(out[0].starts_at).toBe(wanted);
 });
-it('retains the existing resolver fold choice even when a zero-second seed names the later fold',()=>{
+it('preserves the explicit seed instant when it names the later fold',()=>{
  const e=event({starts_at:'2026-11-01T06:30:00.000Z',ends_at:null,recurrence:'weekly'});
  const out=expand(e,'2026-11-01T00:00:00Z','2026-11-02T00:00:00Z','America/New_York');
- expect(out).toHaveLength(1);expect(out[0].starts_at).toBe('2026-11-01T05:30:00.000Z');
+ expect(out).toHaveLength(1);expect(out[0].starts_at).toBe(e.starts_at);
+});
+it.each(['daily','weekly','monthly','yearly'])('keeps the later-fold %s seed inside its actual window with exact precision and duration',(recurrence)=>{
+ const e=event({starts_at:'2026-11-01T06:30:42.125Z',ends_at:'2026-11-01T06:50:52.375Z',recurrence});
+ const out=expand(e,'2026-11-01T06:30:42.000Z','2026-11-01T06:30:43.000Z','America/New_York');
+ expect(out).toHaveLength(1);expect(out[0]).toEqual(e);
+ expect(expand(e,'2026-11-01T05:00:00Z','2026-11-01T06:00:00Z','America/New_York')).toEqual([]);
+});
+it('steps later occurrences from the saved wall clock after preserving the later-fold seed',()=>{
+ const e=event({starts_at:'2026-11-01T06:30:42.125Z',ends_at:null,recurrence:'weekly'});
+ const out=expand(e,'2026-11-01T00:00:00Z','2026-11-09T00:00:00Z','America/New_York');
+ expect(out.map(row=>row.starts_at)).toEqual(['2026-11-01T06:30:42.125Z','2026-11-08T06:30:42.125Z']);
 });
 it.each([
  ['monthly','2026-01-15T12:34:42.125Z','2026-01-15T13:34:52.375Z','2026-02-15T00:00:00Z','2026-02-16T00:00:00Z','2026-02-15T12:34:42.125Z','2026-02-15T13:34:52.375Z'],

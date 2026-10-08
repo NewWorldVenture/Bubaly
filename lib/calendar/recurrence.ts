@@ -140,10 +140,14 @@ export function expandEventsInZone<T extends RecurrableEvent>(
       // offset in force BEFORE the gap — a weekly 2:30am in Chicago is 08:30Z
       // on 8 March 2026 (shown as 3:30 CDT), keeping its place in the night,
       // rather than vanishing for that day or sliding to 3:00.
-      const cursor = instantForIcsLocalTime(local.year, local.month, local.day, minutes, timezone);
+      // The seed already names an exact instant, including which side of a
+      // fall-back fold the user saved. Resolving its wall clock again can move
+      // that first occurrence an hour earlier and out of its query window.
+      const isSeed = from + i === 0;
+      const cursor = isSeed ? new Date(start) : instantForIcsLocalTime(local.year, local.month, local.day, minutes, timezone);
       if (!cursor) continue;
       // Keep source precision within the resolver-selected local minute.
-      cursor.setTime(cursor.getTime() + subMinuteMs);
+      if (!isSeed) cursor.setTime(cursor.getTime() + subMinuteMs);
       if (cursor >= seriesEnd) break;   // the sequence is monotone in n
       if (overlap ? cursor.getTime() + busyDuration > windowStart.getTime() : cursor >= windowStart) {
         out.push({
