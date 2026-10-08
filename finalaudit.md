@@ -1,5 +1,12 @@
 # Final Production Audit
 
+## Accepted fixes published for exact-head hosted validation — 2026-10-08
+
+Push and GitHub PR query confirmed PR 969 at 1ee14a2682533b72778e8d3d9ba8543871feec0d. This publishes the owned bill raw TCP relay, repaired CI contracts, Linux evidence/historical qualifications, authenticated dashboard order assertions, disposable TOTP prerequisite and truncated-name artifact exclusions. PR description updated to final scope and retained limitations. Main remains 82f2db1f; no merge or production deployment performed.
+
+Fresh exact-head runs confirmed queued: CI 37843718421; real bill PostgREST 37843718454; participant SQL 37843718352; finance SQL 37843718519; bill anchor SQL 37843718460; messaging verification 37843718470; mobile guard 37843718518. Queued is not acceptance. Keep the published head fixed through terminal results; do not cancel useful runs with a ledger-only push. This publication receipt is committed locally for the next source batch. All prior register rows/evidence, migration allocation and production holds remain unchanged. Production Ready NO; goal active.
+
+
 ## Hosted TOTP prerequisite and truncated artifact privacy corrected — 2026-10-08
 
 Exact published 4e543e390be84d9453df8f95af337acba295ae71 main CI run 37838697763 is terminal FAILURE. Its E2E job 113522274538 recorded 2,551 passed, eight skipped and one failed test: both bill attempts failed the genuine TOTP enrollment guard before bill browser controls. Actual API status/code was not logged; do not claim an observed 422. Real Auth messaging RPC, held 0488 fixture installation and modern bill phases were SKIPPED. Owned stack cleanup passed. Temp/bubaly-4e543-main-e2e-20261008/ retains raw log, job status and receipt. Earlier core and standalone bill failures remain separately recorded with accepted local corrections.
