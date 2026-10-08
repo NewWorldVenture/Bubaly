@@ -1,5 +1,9 @@
 # Production release status and historical feature inventory
 
+## Current rollout review update — 2026-10-08 01:42 UTC
+
+[Review package](final-audit/rollout-20261008/README.md): fresh metadata confirms missing allowance manager/reference and investment decision/economics guards. Aggregate-only preflight finds existing family/wallet and investment amount inconsistencies; the counts and qualifications are retained without individual records. Source0304/0306/0311/0447 are pinned review inputs, not an apply list. An unallocated composite-reference candidate passes an isolated structural PostgreSQL fixture while preserving historical rows; it remains outside every apply workflow. Data provenance/disposition, full dependency/role/trigger rehearsal and separate production approval remain required. No production write, migration allocation change or financial action occurred. Earlier observations below remain historical.
+
 ## Read-only catalog observation — 2026-10-08
 
 The Supabase connector successfully read Bubaly metadata at 00:12 UTC; the

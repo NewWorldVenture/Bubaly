@@ -1,0 +1,30 @@
+{
+  "database": "PostgreSQL 17.11 (Debian 17.11-1.pgdg13+2) on x86_64-pc-linux-gnu, compiled by gcc (Debian 14.2.0-19) 14.2.0, 64-bit",
+  "scope": "Isolated local PostgreSQL structural fixture with synthetic IDs only; no production, Auth/RLS, money balances or payment operations. Not a representative full-schema rollout rehearsal.",
+  "candidateStatus": "UNALLOCATED_REVIEW_ONLY_NOT_APPLY_READY",
+  "checks": {
+    "transactionRollbackRemovesAllCandidateConstraints": true,
+    "historicalRowsPreserved": true,
+    "foreignKeysRemainNotValid": true,
+    "sameFamilyNewReferencesAccepted": true,
+    "crossFamilyNewReferencesRejected": true,
+    "crossFamilyReferenceUpdateRejected": true,
+    "parentFamilyMoveRejected": true,
+    "validationRefusesHistoricalMismatches": true,
+    "unrelatedHistoricalUpdatesAllowedWithoutRepair": true
+  },
+  "files": [
+    {
+      "name": "wallet-family-integrity.fixture.sql",
+      "sha256": "2889fbdd4ea759b2cb924f65d8a11af997fff658290553c86e2acd59974614e7"
+    },
+    {
+      "name": "wallet-family-integrity.candidate.sql",
+      "sha256": "f8aaa92cea38454994cc451fa3651d62fb3e7d8ad47d69ae5be63747d6edae51"
+    },
+    {
+      "name": "wallet-family-integrity.assertions.sql",
+      "sha256": "9be9b67ca235e6a83899746e67980ad0f89558488236a75a6c4f59f9474e4db7"
+    }
+  ]
+}

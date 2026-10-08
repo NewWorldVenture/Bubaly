@@ -52,6 +52,11 @@ const references = runnable.flatMap(file => {
   const tables = missingTables.filter(table => new RegExp('\\bpublic\\s*\\.\\s*"?' + table + '"?\\b', 'i').test(sql));
   return tables.length ? [{ ...checksum(path), referencedMissingTables: tables }] : [];
 });
+const referenceReceipt = parse('docs/final-audit/rollout-20261008/wallet-family-integrity.fixture-results.json');
+for (const file of referenceReceipt.files) {
+  const path = 'docs/final-audit/rollout-20261008/' + file.name;
+  if (hash(read(path)) !== file.sha256) throw new Error('Reference fixture receipt is stale: ' + file.name);
+}
 const expectedLedger = new Set(manifest.baseline.map(canonical));
 const actualLedger = new Set(snapshot.migrations.map(canonical));
 console.log(JSON.stringify({
@@ -79,6 +84,21 @@ console.log(JSON.stringify({
   },
   schemaPrerequisites: { complete: schema.complete, incomplete: schema.incomplete, missingTables },
   heldCandidates: held.map(file => ({ ...checksum('supabase/reserved/' + file), disposition: 'HELD; allocation unchanged; no promotion authorized' })),
+  walletReferenceCandidate: {
+    disposition: 'UNALLOCATED; structural fixture only; existing-data disposition and full-schema rehearsal required; no application authorized',
+    files: referenceReceipt.files,
+    receipt: checksum('docs/final-audit/rollout-20261008/wallet-family-integrity.fixture-results.json'),
+  },
+  moneyCandidateReview: {
+    qualification: 'Review inputs only, not an apply list. Existing-data disposition and dependency/role rehearsal remain required.',
+    evidence: ['migration-0306-live-metadata.json', 'money-data-preflight.json'].map(name => checksum('docs/final-audit/rollout-20261008/' + name)),
+    migrations: [
+      '0304_economy_invest_decision_guard.sql',
+      '0306_money_instructions_are_not_member_writable.sql',
+      '0311_family_scoped_references.sql',
+      '0447_an_approved_investment_can_actually_be_approved.sql',
+    ].map(file => checksum('supabase/migrations/' + file)),
+  },
   referenceInventory: {
     qualification: 'Qualified public-table textual references including comments; misses unqualified/dynamic SQL. Review inputs, not a dependency closure or apply list.',
     files: references,

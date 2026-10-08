@@ -157,6 +157,31 @@ describe('buildFamilyExport', () => {
   beforeEach(() => { errorSpy = vi.spyOn(console, 'error').mockImplementation(() => {}); });
   afterEach(() => vi.restoreAllMocks());
 
+  it.each([3, 101, 501])('exports all A/B-week classes within its declared cap (%i saved)', async count => {
+    const db = household(undefined, 37);
+    const classes = Array.from({ length: count }, (_, i) => ({
+      id: `class-${String(i).padStart(4, '0')}`, family_id: FAMILY, member_id: 'mem-teen',
+      subject: `Subject ${String(i).padStart(4, '0')}`, teacher: null, room: null,
+      day_of_week: 1, time_slot: '09:00', week_pattern: ['a', 'b', 'all'][i % 3],
+    }));
+    db.seed('school_classes', [...classes, { ...classes[0], id: 'foreign-class', family_id: 'other-family' }]);
+    const built = await buildFamilyExport(scopeFor(db, 'parent'));
+    expect(built.ok).toBe(true);
+    if (!built.ok) throw new Error('export failed');
+    const school = built.data.sections.find(section => section.key === 'school')!;
+    const exported = (school.data as { classes: { id: string }[] }).classes;
+    expect(exported.map(row => row.id)).toEqual(classes.slice(0, 500).map(row => row.id));
+    expect(school).toMatchObject({ count: Math.min(count, 500), limit: 500, truncated: count >= 500 });
+  });
+
+  it('refuses a school export when the class roster cannot be read', async () => {
+    const db = household();
+    failing(db, 'school_classes', { code: '57014', message: 'synthetic class read failure' });
+    expect(await buildFamilyExport(scopeFor(db, 'parent'))).toEqual({
+      ok: false, failed: [{ key: 'school', error: expect.any(String) }],
+    });
+  });
+
   it.each([0, 101, 500, 1001])('exports all %i scheduled routines, including paused ones, through a server cap', async (count) => {
     // A deliberately small server cap catches pagination that assumes a
     // short page means the table is exhausted. IDs, not insertion offsets,

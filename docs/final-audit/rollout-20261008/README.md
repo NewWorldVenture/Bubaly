@@ -89,6 +89,74 @@ The [detail query](money-policy-live-details.sql) reads only catalog definitions
 and privilege metadata. This narrows the screening candidates without changing
 production. The missing allowance guard is an additional concrete release hold.
 
+## Migration 0306 and existing-data preflight
+
+[01:32 UTC metadata](migration-0306-live-metadata.json) and its
+[query](migration-0306-live-metadata.sql) confirm both investment tables and the
+required columns exist, but `invest_order_economics_guard` and its trigger are
+absent. The investment decision-status trigger from0304 is also absent. The
+retained `invest_decide_order` definition still contains the uncast CASE addressed
+by0447; that is definition evidence, not a live approval attempt. These later
+protections belong in dependency review alongside0306. The same receipt also
+confirms the allowance family-reference trigger from0311 is absent. Source0311
+already guards that reference for authenticated writes; it does not reconcile
+existing records, and it does not wire the investment-order wallet reference.
+
+A separate [01:33 UTC aggregate-only preflight](money-data-preflight.json)
+([SELECT](money-data-preflight.sql)) found:
+
+| Check | Count |
+|---|---:|
+| Investment orders | 1,000 |
+| Pending orders | 125 |
+| Orders whose amount differs from rounded shares × stored price | 500 |
+| Pending orders with that amount mismatch | 0 |
+| Orders whose family differs from their referenced child wallet | 500 |
+| Allowance rules whose family differs from their referenced child wallet | 500 |
+
+These counts overlap and must not be summed as distinct affected records. They
+establish existing-data inconsistencies under the repository's intended
+relationships; they do not establish provenance, malicious activity or a payment
+having occurred. No individual rows, identifiers or monetary values were returned,
+and no row or balance was changed.
+
+**Release hold:**0306 does not reconcile historical rows or establish composite
+family/wallet foreign keys. Its economics trigger also intentionally skips a
+status-only update when the stored economics did not change. Do not treat merely
+installing it as historical-data acceptance. A reviewed disposition of these
+existing mismatches, dependency review of0311 for allowance writes, and a reviewed
+future-write integrity design for the investment reference are required before
+rollout can be approved. Do not automatically delete, reassign,
+reprice, approve or replay any of these records. A refreshed aggregate preflight
+must be included in the eventual release decision.
+
+## Concrete future-reference integrity candidate
+
+The [unallocated SQL candidate](wallet-family-integrity.candidate.sql) adds a
+supporting unique key on child_wallets(family_id,id) and two composite foreign
+keys from allowance_rules and invest_orders. Both FKs are explicitly **NOT VALID**:
+new reference writes are checked, while existing mismatches remain untouched.
+The candidate is outside supabase/migrations and every apply workflow. It has no
+migration number, is not approved for production, and must not be silently added
+to the old release manifest.
+
+[Fixture setup](wallet-family-integrity.fixture.sql),
+[assertions](wallet-family-integrity.assertions.sql) and
+[PostgreSQL receipt with file hashes](wallet-family-integrity.fixture-results.json)
+verify transaction rollback, retained historical rows, accepted same-family
+references, refused cross-family inserts/reference changes, refused parent-family
+moves, and failed validation while historical inconsistencies remain. Unrelated
+updates to historical rows still succeed without repairing their bad reference.
+
+The fixture uses only minimal structural tables and fabricated IDs. It does not
+reproduce the full production schema, RLS, other triggers, traffic or financial
+operations. Before inclusion in a release, review lock/index cost, existing
+constraint-name collisions, parent wallet relocation semantics, full trigger/RLS
+composition, the exact once-only migration/ledger protocol, and recorded ownership
+of the historical rows. Failed preconditions must roll back, not bypass guards.
+The original id-only FKs are retained; no old constraint or row is removed.
+Separate reconciliation and validation remain release gates.
+
 ## Proposed stages and acceptance gates
 
 | Stage | Concrete source/scope | Gate before proceeding |

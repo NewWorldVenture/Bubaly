@@ -12,9 +12,10 @@
 // what the table holds is what the family put there.
 import 'server-only';
 import type { HomeworkStatus, Tables } from '@/lib/database.types';
+import { readCountedRows } from '@/lib/calendar/occurrences';
 import { classOccursInWeek, slotStartMinutes, weekParity } from '@/lib/school/timetable';
 import { describeDbError } from '@/lib/supabase/errors';
-import { scopeNow } from '../scope';
+import { dayKeyInTz, scopeNow } from '../scope';
 import { fail, ok, SERVICE_CODES, type ServiceResult, type ServiceScope } from '../types';
 
 export type SchoolEventRow = Tables<'school_events'>;
@@ -112,12 +113,13 @@ export async function listHomeworkDue(scope: ServiceScope, input: HomeworkDueInp
  * `ServiceResult`, so a failed read is a failure and never an empty roster.
  */
 export async function listClassRoster(scope: ServiceScope, input: { limit?: number } = {}): Promise<ServiceResult<SchoolClassRow[]>> {
-  const { data, error } = await scope.db
-    .from('school_classes')
-    .select('*')
-    .eq('family_id', scope.familyId)
-    .order('subject', { ascending: true })
-    .limit(Math.min(Math.max(input.limit ?? MAX_ROWS, 1), MAX_ROWS));
+  const limit = Math.min(Math.max(input.limit ?? MAX_ROWS, 1), MAX_ROWS);
+  const query = () => scope.db.from('school_classes').select('*', { count: 'exact' })
+    .eq('family_id', scope.familyId).order('subject', { ascending: true }).order('id');
+  const { data, error } = await readCountedRows<SchoolClassRow>(
+    () => query().limit(limit), (from, to) => query().range(from, to),
+    MAX_ROWS, 'school class roster', limit,
+  );
   if (error) {
     console.error('[service:school] class roster read failed', error);
     return fail(describeDbError(error, 'Could not load the class roster.'), { code: SERVICE_CODES.db });
@@ -142,20 +144,36 @@ export async function listClasses(scope: ServiceScope, input: ListClassesInput =
   if (input.dayOfWeek != null && (!Number.isInteger(input.dayOfWeek) || input.dayOfWeek < 0 || input.dayOfWeek > 6)) {
     return fail('A weekday is a number from 0 (Sunday) to 6 (Saturday).', { code: SERVICE_CODES.invalidInput });
   }
-  let query = scope.db
-    .from('school_classes')
-    .select('*')
-    .eq('family_id', scope.familyId)
-    .order('day_of_week', { ascending: true, nullsFirst: true })
-    .limit(MAX_ROWS);
-  if (input.memberId) query = query.eq('member_id', input.memberId);
-  const { data, error } = await query;
+  const dateOnly = input.forDate != null && /^\d{4}-\d{2}-\d{2}$/.test(input.forDate);
+  const explicit = isoOrNull(input.forDate);
+  if (input.forDate && (!explicit || (dateOnly
+    ? explicit.slice(0, 10) !== input.forDate
+    : !/[zZ]$|[+-]\d{2}:\d{2}$/.test(input.forDate)))) {
+    return fail('Use a valid calendar date or a timestamp with a timezone.', { code: SERVICE_CODES.invalidInput });
+  }
+  const instant = explicit ? new Date(explicit) : scopeNow(scope);
+  if (!Number.isFinite(instant.getTime())) return fail('That school week could not be understood.', { code: SERVICE_CODES.invalidInput });
+  // A date-only input already names the family's calendar day. An instant must
+  // first be projected into the family zone, especially across Sunday/Monday.
+  const day = dateOnly ? input.forDate : dayKeyInTz(instant, scope.tz);
+  const reference = new Date(`${day}T00:00:00Z`);
+  if (!Number.isFinite(reference.getTime())) return fail('That school week could not be understood.', { code: SERVICE_CODES.invalidInput });
+  const week = weekParity(reference);
+  const query = () => {
+    let read = scope.db.from('school_classes').select('*', { count: 'exact' })
+      .eq('family_id', scope.familyId)
+      .order('day_of_week', { ascending: true, nullsFirst: true }).order('id');
+    if (input.memberId) read = read.eq('member_id', input.memberId);
+    return read;
+  };
+  const { data, error } = await readCountedRows<SchoolClassRow>(
+    () => query().limit(MAX_ROWS), (from, to) => query().range(from, to),
+    2000, 'school timetable rows',
+  );
   if (error) {
     console.error('[service:school] classes read failed', error);
     return fail(describeDbError(error, 'Could not load the school timetable.'), { code: SERVICE_CODES.db });
   }
-  const reference = isoOrNull(input.forDate) ?? scopeNow(scope).toISOString();
-  const week = weekParity(new Date(reference));
   const rows = (data ?? [])
     .filter((c) => classOccursInWeek(c, week))
     .filter((c) => input.dayOfWeek == null || c.day_of_week === null || c.day_of_week === input.dayOfWeek)

@@ -1420,6 +1420,58 @@
       "disposition": "HELD; allocation unchanged; no promotion authorized"
     }
   ],
+  "walletReferenceCandidate": {
+    "disposition": "UNALLOCATED; structural fixture only; existing-data disposition and full-schema rehearsal required; no application authorized",
+    "files": [
+      {
+        "name": "wallet-family-integrity.fixture.sql",
+        "sha256": "2889fbdd4ea759b2cb924f65d8a11af997fff658290553c86e2acd59974614e7"
+      },
+      {
+        "name": "wallet-family-integrity.candidate.sql",
+        "sha256": "f8aaa92cea38454994cc451fa3651d62fb3e7d8ad47d69ae5be63747d6edae51"
+      },
+      {
+        "name": "wallet-family-integrity.assertions.sql",
+        "sha256": "9be9b67ca235e6a83899746e67980ad0f89558488236a75a6c4f59f9474e4db7"
+      }
+    ],
+    "receipt": {
+      "path": "docs/final-audit/rollout-20261008/wallet-family-integrity.fixture-results.json",
+      "sha256Lf": "f4dfbc682669010cffb5b568129da2bcee3220fa8bf4ab10679d63b49b7d7ebe"
+    }
+  },
+  "moneyCandidateReview": {
+    "qualification": "Review inputs only, not an apply list. Existing-data disposition and dependency/role rehearsal remain required.",
+    "evidence": [
+      {
+        "path": "docs/final-audit/rollout-20261008/migration-0306-live-metadata.json",
+        "sha256Lf": "025b9d36bf840f7c542dd3b28bc2ac9790ea00acf7bda91e183071a48f150831"
+      },
+      {
+        "path": "docs/final-audit/rollout-20261008/money-data-preflight.json",
+        "sha256Lf": "ac1f9c4dec8ed1ce32765ddfbbd29d98a6699da430487921cbc184fa827fd57d"
+      }
+    ],
+    "migrations": [
+      {
+        "path": "supabase/migrations/0304_economy_invest_decision_guard.sql",
+        "sha256Lf": "99ae3418edbcfc8188f4cac27197466db3356e41d6dc4c785ba90db4c6eb6920"
+      },
+      {
+        "path": "supabase/migrations/0306_money_instructions_are_not_member_writable.sql",
+        "sha256Lf": "a177e98bb7c38a630f162307cb449e7e61c094619a29d103fd2d3e313b79b6fb"
+      },
+      {
+        "path": "supabase/migrations/0311_family_scoped_references.sql",
+        "sha256Lf": "134917dc6bf393689f1d4c8526a042f8d982dde340dc23162bdf1d44487eecb6"
+      },
+      {
+        "path": "supabase/migrations/0447_an_approved_investment_can_actually_be_approved.sql",
+        "sha256Lf": "cf7a7dbfbf91568efe87b85575acb8991c4c957fcb4cd4fa2157162fc628db86"
+      }
+    ]
+  },
   "referenceInventory": {
     "qualification": "Qualified public-table textual references including comments; misses unqualified/dynamic SQL. Review inputs, not a dependency closure or apply list.",
     "files": [
