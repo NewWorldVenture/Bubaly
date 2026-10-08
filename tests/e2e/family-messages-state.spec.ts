@@ -42,7 +42,7 @@ function productionStyles() {
     .process(fs.readFileSync('app/globals.css', 'utf8'), { from: 'app/globals.css' }).then(result => result.css);
 }
 
-async function fixture(page: Page, { holdA = false, mobile = false, olderHistory = false, theme = 'dark', legacy = false } = {}) {
+async function fixture(page: Page, { holdA = false, mobile = false, olderHistory = false, theme = 'dark', legacy = false, otherCreator = false } = {}) {
   await page.setViewportSize({ width: mobile ? 390 : 1280, height: 844 });
   const stylesheet = await productionStyles();
   await page.route('**/*', async route => {
@@ -54,11 +54,13 @@ async function fixture(page: Page, { holdA = false, mobile = false, olderHistory
   await page.addScriptTag({ content: 'window.react=window.React;' }); await page.addScriptTag({ content: icons });
   await page.addScriptTag({ content: `(() => {
     const sources=${JSON.stringify(modules)},entry=${JSON.stringify(entry)},catalogue=${JSON.stringify(catalogue)},loaded={},A=${JSON.stringify(conversationA)},B=${JSON.stringify(conversationB)};
-    const h=React.createElement,p=window.__familyChat={errors:[],notices:[],reads:[],writes:[],pending:[],holdA:${holdA},channels:[],insertIds:[],failInserts:0,loseInsertResponse:false,holdInsert:false,pendingInsert:[]};
+    const h=React.createElement,p=window.__familyChat={errors:[],notices:[],reads:[],writes:[],pending:[],holdA:${holdA},channels:[],insertIds:[],failInserts:0,loseInsertResponse:false,holdInsert:false,pendingInsert:[],archiveCalls:[],pendingArchive:[],holdArchive:false};
     window.addEventListener('error',event=>p.errors.push(event.message));window.addEventListener('unhandledrejection',event=>{p.errors.push(String(event.reason));event.preventDefault();});
     const userId='20000000-0000-4000-8000-000000000001',otherId='20000000-0000-4000-8000-000000000002',familyId='30000000-0000-4000-8000-000000000001';
+    let sessionRole='parent';
     const members=[{id:'self-member',family_id:familyId,user_id:userId,display_name:'Alex',role:'parent',is_active:true,color:'#123456'},{id:'other-member',family_id:familyId,user_id:otherId,display_name:'Blair',role:'adult',is_active:true,color:'#456789'}];
     const convs=[A,B].map((id,index)=>({id,family_id:familyId,name:'Chat '+(index?'B':'A'),kind:'group',avatar_emoji:'💬',description:null,is_archived:false,is_family_chat:index===0,member_ids:[userId,otherId],participant_ids:members.map(m=>m.id),created_by:userId,last_message_at:'2026-10-02T12:00:00Z',created_at:'2026-10-01T12:00:00Z',updated_at:'2026-10-02T12:00:00Z'}));
+    if(${otherCreator})convs[1].created_by=otherId;
     // Production's schema before 0475/0476: no is_family_chat, none of the new
     // RPCs (PostgREST's PGRST202 naming each) and no preference table.
     const legacy=${legacy};
@@ -83,14 +85,21 @@ async function fixture(page: Page, { holdA = false, mobile = false, olderHistory
         if(cursor){const time=cursor.match(/created_at\\.lt\\.([^,]+)/)?.[1],id=cursor.match(/id\\.(lt|lte)\\.([^)]*)/) ;selected=selected.filter(row=>row.created_at<time||(row.created_at===time&&id&&(id[1]==='lte'?row.id<=id[2]:row.id<id[2])));}
         const count=selected.length;
         if(action==='insert'){p.insertIds.push(input.id);if(p.failInserts-->0)throw new Error('Network unavailable');const row={...base(input.id,input.conversation_id,input.content,input.sender_id),...input,created_at:'2026-10-02T12:01:00Z'};p.rows.push(row);p.writes.push(row);selected=[row];if(p.holdInsert)await new Promise(resolve=>p.pendingInsert.push(resolve));if(p.loseInsertResponse){p.loseInsertResponse=false;return{data:null,error:{message:'Response lost'}};}}
-        else if(action==='update'){for(const row of selected)Object.assign(row,input);p.writes.push(input);}
+        else if(action==='update'){
+          if(table==='family_conversations'){
+            p.archiveCalls.push({filters:[...filters],input:{...input}});
+            if(p.holdArchive){const outcome=await new Promise(resolve=>p.pendingArchive.push(resolve));if(outcome==='denied')return{data:null,error:{code:'42501',message:'Synthetic archive denied'}};if(outcome==='zero')return{data:null,error:null};}
+          }
+          for(const row of selected)Object.assign(row,input);p.writes.push(input);
+        }
         else if(action==='upsert'){selected=[input];p.writes.push(input);}
         else if(table==='family_messages'){
           selected=[...selected].sort((a,b)=>{for(const [key,opts] of order){const n=String(a[key]).localeCompare(String(b[key]));if(n)return opts?.ascending===false?-n:n;}return 0;});
           selected=selected.slice(offset,offset+limit).map(row=>({...row,read_by:[...row.read_by]}));
           if(p.holdA&&filters.some(([key,value])=>key==='conversation_id'&&value===A))await new Promise(resolve=>p.pending.push(resolve));
         }
-        return {data:singular?(selected[0]??null):selected,count,error:null};
+        // Like actual SDK JSON, responses never share mutable database-row objects with React state.
+        return {data:JSON.parse(JSON.stringify(singular?(selected[0]??null):selected)),count,error:null};
       }return q;
     }
     const db={from:query,rpc:(name,args)=>{
@@ -110,7 +119,7 @@ async function fixture(page: Page, { holdA = false, mobile = false, olderHistory
     const clock={dayKeyOf:iso=>iso.slice(0,10),todayKey:()=> '2026-10-02',wallKey:()=> '2026-10-01',addDays:x=>x,wallToday:()=>new Date('2026-10-02')};
     const toast={error:message=>p.notices.push(message),success:message=>p.notices.push(message)};
     const mocks={react:React,'react-dom':ReactDOM,'lucide-react':window.LucideReact,
-      '@/components/app/app-context':{useApp:()=>({familyId,userId,members,selfMember:members[0],role:'parent'})},
+      '@/components/app/app-context':{useApp:()=>({familyId,userId,members,selfMember:members[0],role:sessionRole})},
       '@/components/i18n/locale-provider':{useTranslations:()=>translate,useLocale:()=>({code:'en-US'})},
       '@/components/i18n/use-format':{useFormat:()=>fmt,useFamilyClock:()=>clock},
       '@/lib/utils/format':{firstName:name=>name.split(' ')[0],initials:name=>name.slice(0,2),createFormat:()=>fmt},
@@ -118,7 +127,12 @@ async function fixture(page: Page, { holdA = false, mobile = false, olderHistory
       '@/lib/supabase/client':{createClient:()=>db},'@/lib/storage/use-family-media':{useFamilyMediaUrls:()=>()=>undefined},
       '@/components/media/family-media-img':{FamilyMediaImg:props=>h('div',{role:'img','aria-label':props.alt,className:props.className})}};
     function load(id){if(id in mocks)return mocks[id];if(loaded[id])return loaded[id].exports;const item=sources[id];if(!item)throw new Error('Unexpected module '+id);const module=loaded[id]={exports:{}};new Function('require','module','exports',item.source)(name=>load(item.imports[name]),module,module.exports);return module.exports;}
-    ReactDOM.flushSync(()=>ReactDOM.createRoot(document.getElementById('root')).render(h(load(entry).MessagesModule)));
+    const root=ReactDOM.createRoot(document.getElementById('root'));
+    const render=()=>ReactDOM.flushSync(()=>root.render(h(load(entry).MessagesModule)));
+    p.setAuthority=(role,active=true)=>{sessionRole=role;members[0]={...members[0],role,is_active:active};render();};
+    p.resolveArchive=(outcome='success')=>{const resolve=p.pendingArchive.shift();if(!resolve)throw new Error('No synthetic pending archive');resolve(outcome);};
+    p.unmount=()=>ReactDOM.flushSync(()=>root.unmount());
+    render();
   })();` });
   await page.evaluate(() => (window as any).__familyChat.flush());
   expect(await page.evaluate(() => (window as any).__familyChat.errors)).toEqual([]);
@@ -297,3 +311,125 @@ for (const theme of ['light', 'dark']) for (const mobile of [true, false]) {
     await clean(page);
   });
 }
+
+
+async function deliverQueuedThreadSelection(page: Page, name: string) {
+  // Dispatch the already queued selection directly to its real React handler;
+  // a pointer click at the background coordinates would hit the modal overlay.
+  await page.evaluate(value => {
+    const button = [...document.querySelectorAll<HTMLButtonElement>('button')].find(node => node.textContent?.includes('Chat ' + value) && node.textContent.includes('💬'));
+    if (!button) throw new Error('Conversation selection button not found');
+    button.click();
+  }, name);
+}
+
+async function retainArchiveConfirmation(page: Page) {
+  await page.evaluate(() => {
+    const button = [...document.querySelectorAll<HTMLButtonElement>('[role="dialog"] button')].find(node => node.textContent === 'Archive chat');
+    if (!button) throw new Error('Archive confirmation button not found');
+    const props = Object.keys(button).find(key => key.startsWith('__reactProps$'));
+    if (!props) throw new Error('Actual React event props not found');
+    (window as any).__familyChat.retainedArchive = (button as any)[props].onClick;
+  });
+}
+
+for (const retirement of ['thread', 'ABA', 'role', 'inactive', 'close-reopen', 'unmount']) test('retained archive confirmation refuses ' + retirement + ' before dispatch', async ({ page }) => {
+  await fixture(page, { otherCreator: true }); await select(page, 'B');
+  await page.getByRole('button', { name: 'Archive chat', exact: true }).click();
+  await retainArchiveConfirmation(page);
+  if (retirement === 'thread' || retirement === 'ABA') await deliverQueuedThreadSelection(page, 'A');
+  if (retirement === 'ABA') await select(page, 'B');
+  if (retirement === 'role') await page.evaluate(() => (window as any).__familyChat.setAuthority('child'));
+  if (retirement === 'inactive') await page.evaluate(() => (window as any).__familyChat.setAuthority('parent', false));
+  if (retirement === 'close-reopen') {
+    await page.getByRole('dialog').getByRole('button', { name: 'Cancel', exact: true }).click();
+    await page.getByRole('button', { name: 'Archive chat', exact: true }).click();
+  }
+  if (retirement === 'unmount') await page.evaluate(() => (window as any).__familyChat.unmount());
+  await page.evaluate(() => (window as any).__familyChat.retainedArchive());
+  await page.evaluate(() => (window as any).__familyChat.flush());
+  expect(await page.evaluate(() => (window as any).__familyChat.archiveCalls)).toEqual([]);
+  if (retirement === 'close-reopen') {
+    await expect(page.getByRole('dialog')).toBeVisible();
+    await page.getByRole('dialog').getByRole('button', { name: 'Archive chat', exact: true }).click();
+    await expect.poll(() => page.evaluate(() => (window as any).__familyChat.archiveCalls.length)).toBe(1);
+    await expect(composer(page)).toBeDisabled();
+  }
+  if (retirement === 'role' || retirement === 'inactive') {
+    await expect(page.getByRole('dialog')).toHaveCount(0);
+    await expect(page.getByRole('button', { name: 'Archive chat', exact: true })).toHaveCount(0);
+  }
+  await clean(page);
+});
+
+for (const outcome of ['success', 'denied', 'zero']) test('pending archive ' + outcome + ' cannot repaint another thread or publish stale feedback', async ({ page }) => {
+  await fixture(page); await select(page, 'B');
+  await page.evaluate(() => (window as any).__familyChat.holdArchive = true);
+  await page.getByRole('button', { name: 'Archive chat', exact: true }).click();
+  await page.getByRole('dialog').getByRole('button', { name: 'Archive chat', exact: true }).click();
+  await expect.poll(() => page.evaluate(() => (window as any).__familyChat.pendingArchive.length)).toBe(1);
+  await deliverQueuedThreadSelection(page, 'A');
+  const notices = await page.evaluate(() => (window as any).__familyChat.notices.length);
+  await page.evaluate(result => (window as any).__familyChat.resolveArchive(result), outcome);
+  await page.evaluate(() => (window as any).__familyChat.flush());
+  await expect(page.locator('#message-40000000-0000-4000-8000-000000000001')).toBeVisible();
+  await expect(page.locator('#message-40000000-0000-4000-8000-000000000002')).toHaveCount(0);
+  await expect(page.getByRole('dialog')).toHaveCount(0); await expect(composer(page)).toBeEnabled();
+  expect(await page.evaluate(() => (window as any).__familyChat.notices.length)).toBe(notices);
+  expect(await page.evaluate(() => (window as any).__familyChat.archiveCalls.length)).toBe(1);
+  await clean(page);
+});
+
+for (const outcome of ['denied', 'zero']) test('current archive ' + outcome + ' stays retryable without success', async ({ page }) => {
+  await fixture(page); await select(page, 'B');
+  await page.evaluate(() => (window as any).__familyChat.holdArchive = true);
+  await page.getByRole('button', { name: 'Archive chat', exact: true }).click();
+  await page.getByRole('dialog').getByRole('button', { name: 'Archive chat', exact: true }).click();
+  await expect.poll(() => page.evaluate(() => (window as any).__familyChat.pendingArchive.length)).toBe(1);
+  await page.evaluate(result => (window as any).__familyChat.resolveArchive(result), outcome);
+  await page.evaluate(() => (window as any).__familyChat.flush());
+  await expect(page.getByRole('dialog')).toBeVisible();
+  await expect(page.getByRole('dialog').getByRole('button', { name: 'Archive chat', exact: true })).toBeEnabled();
+  await expect(composer(page)).toBeEnabled();
+  expect(await page.evaluate(() => (window as any).__familyChat.notices.length)).toBe(1);
+  await clean(page);
+});
+
+
+test('two archive clicks before React rerenders dispatch only once', async ({ page }) => {
+  await fixture(page); await select(page, 'B');
+  await page.evaluate(() => (window as any).__familyChat.holdArchive = true);
+  await page.getByRole('button', { name: 'Archive chat', exact: true }).click();
+  await retainArchiveConfirmation(page);
+  await page.evaluate(() => { (window as any).__familyChat.retainedArchive(); (window as any).__familyChat.retainedArchive(); });
+  await expect.poll(() => page.evaluate(() => (window as any).__familyChat.pendingArchive.length)).toBe(1);
+  expect(await page.evaluate(() => (window as any).__familyChat.archiveCalls.length)).toBe(1);
+  await page.evaluate(() => (window as any).__familyChat.resolveArchive());
+  await expect(composer(page)).toBeDisabled(); await expect(page.getByRole('dialog')).toHaveCount(0);
+  await clean(page);
+});
+
+
+for (const captured of ['before-modal', 'current-modal']) test('a retained ' + captured + ' opener cannot replace a pending archive', async ({ page }) => {
+  await fixture(page); await select(page, 'B');
+  const retainOpener = async () => page.evaluate(() => {
+    const button = [...document.querySelectorAll<HTMLButtonElement>('button')].find(node => !node.closest('[role="dialog"]') && node.textContent?.trim() === 'Archive chat');
+    if (!button) throw new Error('Archive opener not found');
+    const props = Object.keys(button).find(key => key.startsWith('__reactProps$'));
+    if (!props) throw new Error('Actual React event props not found');
+    (window as any).__familyChat.retainedOpener = (button as any)[props].onClick;
+  });
+  if (captured === 'before-modal') await retainOpener();
+  await page.getByRole('button', { name: 'Archive chat', exact: true }).click();
+  if (captured === 'current-modal') await retainOpener();
+  await page.evaluate(() => (window as any).__familyChat.holdArchive = true);
+  await page.getByRole('dialog').getByRole('button', { name: 'Archive chat', exact: true }).click();
+  await expect.poll(() => page.evaluate(() => (window as any).__familyChat.pendingArchive.length)).toBe(1);
+  await page.evaluate(() => (window as any).__familyChat.retainedOpener());
+  await page.evaluate(() => (window as any).__familyChat.flush());
+  await expect(page.getByRole('dialog').getByRole('button', { name: 'Cancel', exact: true })).toBeDisabled();
+  await page.evaluate(() => (window as any).__familyChat.resolveArchive());
+  await expect(composer(page)).toBeDisabled(); await expect(page.getByRole('dialog')).toHaveCount(0);
+  expect(await page.evaluate(() => (window as any).__familyChat.archiveCalls.length)).toBe(1);
+  await clean(page);
+});

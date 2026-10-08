@@ -97,6 +97,10 @@ function MessagesWorkspace() {
   const shortTime = (iso: string) => shortTimeIn(iso, new Date(), locale.code, tr);
   const { familyId, userId, members, selfMember, role } = useApp();
   const { error: toastError } = useToast();
+  const archiveScope = useMemo(() => ({ familyId, userId, role, memberId: selfMember?.id, active: selfMember?.is_active }),
+    [familyId, userId, role, selfMember?.id, selfMember?.is_active]);
+  const archiveScopeRef = useRef(archiveScope);
+  archiveScopeRef.current = archiveScope;
 
   const [conversations, setConversations] = useState<Conversation[]>([]);
   const [loadingConvs, setLoadingConvs] = useState(true);
@@ -123,7 +127,10 @@ function MessagesWorkspace() {
   const [searching, setSearching] = useState(false);
   const [settingsOpen, setSettingsOpen] = useState(false);
   const [historyGallery, setHistoryGallery] = useState<'photos' | 'pinned' | null>(null);
-  const [conversationAction, setConversationAction] = useState<'archive' | null>(null);
+  const [conversationAction, setConversationAction] = useState<{ ticket: number; conversationId: string; origin: ReturnType<ReturnType<typeof createThreadOwner>['capture']>; scope: typeof archiveScope; row: Pick<Conversation, 'id' | 'family_id' | 'created_by' | 'is_family_chat' | 'is_archived'> } | null>(null);
+  const archiveSequence = useRef(0);
+  const archiveCurrent = useRef<number | null>(null);
+  const archiveFlight = useRef<number | null>(null);
   const [changingConversation, setChangingConversation] = useState(false);
   const [replyParents, setReplyParents] = useState<Map<string, Message>>(new Map());
   const [viewingHistory, setViewingHistory] = useState(false);
@@ -820,7 +827,7 @@ function MessagesWorkspace() {
     setText(draft.text); setReplyTo(draft.reply); setEditMessage(draft.edit);
     setMsgMenu(null); setShowPicker(false); setShowGifPicker(false); setThreadSearch(''); setSearchResults([]);
     setHasOlder(false); setLoadingOlder(false); setLoadError(null); setNearBottom(true); setShowAbout(false);
-    setHistoryGallery(null); setConversationAction(null); setSettingsOpen(false); setReplyParents(new Map());
+    setHistoryGallery(null); retireArchiveAction(); setSettingsOpen(false); setReplyParents(new Map());
     setShowArchived(Boolean(conv.is_archived));
     setViewingHistory(false); historyRef.current = false;
     setActiveConv(conv);
@@ -870,17 +877,57 @@ function MessagesWorkspace() {
     requestAnimationFrame(() => { if (owner.current.accepts(ticket)) document.getElementById(`message-${message.id}`)?.scrollIntoView({ block: 'center' }); });
   }
 
+  function sameArchiveRow(row: Conversation | null, snapshot: Pick<Conversation, 'id' | 'family_id' | 'created_by' | 'is_family_chat' | 'is_archived'> | null) {
+    return row !== null && snapshot !== null && row.id === snapshot.id && row.family_id === snapshot.family_id
+      && row.created_by === snapshot.created_by && row.is_family_chat === snapshot.is_family_chat && row.is_archived === snapshot.is_archived;
+  }
+  function canArchiveConversation() {
+    return sameArchiveRow(activeConversationRef.current, activeConv) && alive.current && archiveScopeRef.current === archiveScope && archiveScope.active !== false
+      && activeConv?.family_id === familyId && !activeConv.is_family_chat
+      && (activeConv.created_by === userId || role === 'parent' || role === 'adult');
+  }
+  function openArchiveAction() {
+    if (archiveCurrent.current !== (conversationAction?.ticket ?? null)
+      || isCurrentArchiveAction() && archiveFlight.current === conversationAction?.ticket) return;
+    if (!activeConv || !canArchiveConversation() || !owner.current.current(jumpOrigin) || owner.current.capture().conversationId !== activeConv.id) return;
+    const ticket = ++archiveSequence.current;
+    archiveCurrent.current = ticket;
+    archiveFlight.current = null;
+    setChangingConversation(false);
+    setConversationAction({ ticket, conversationId: activeConv.id, origin: owner.current.capture(), scope: archiveScope, row: { id: activeConv.id, family_id: activeConv.family_id, created_by: activeConv.created_by, is_family_chat: activeConv.is_family_chat, is_archived: activeConv.is_archived } });
+  }
+  function isCurrentArchiveAction() {
+    return canArchiveConversation() && conversationAction !== null && sameArchiveRow(activeConversationRef.current, conversationAction.row) && conversationAction.scope === archiveScope
+      && archiveCurrent.current === conversationAction.ticket && owner.current.current(conversationAction.origin)
+      && conversationAction.conversationId === activeConv?.id;
+  }
+  function retireArchiveAction() {
+    archiveCurrent.current = null;
+    archiveFlight.current = null;
+    setConversationAction(null);
+    setChangingConversation(false);
+  }
+  function closeArchiveAction() {
+    if (!isCurrentArchiveAction() || archiveFlight.current === conversationAction?.ticket) return;
+    retireArchiveAction();
+  }
   async function archiveConversation() {
-    if (!activeConv || changingConversation) return;
-    const ticket = owner.current.capture();
+    if (!isCurrentArchiveAction() || !activeConv || !conversationAction || archiveFlight.current === conversationAction.ticket) return;
+    const ticket = conversationAction.ticket;
+    archiveFlight.current = ticket;
+    const archived = !activeConv.is_archived;
     setChangingConversation(true);
     try {
-      const { data, error } = await createClient().from('family_conversations').update({ is_archived: !activeConv.is_archived }).eq('id', activeConv.id).eq('family_id', familyId).select('*').single();
-      if (error || !data) throw error ?? new Error(tr('errors.thatChangeWasNotSaved'));
-      if (owner.current.current(ticket)) { setActiveConv(data); setShowArchived(Boolean(data.is_archived)); setConversationAction(null); }
+      const { data, error } = await createClient().from('family_conversations').update({ is_archived: archived }).eq('id', activeConv.id).eq('family_id', familyId).select('*').single();
+      if (!isCurrentArchiveAction()) return;
+      if (error || !data || data.id !== activeConv.id || data.family_id !== familyId || data.is_archived !== archived) throw error ?? new Error(tr('errors.thatChangeWasNotSaved'));
+      setActiveConv(data); setShowArchived(archived);
+      retireArchiveAction();
       void loadConversations();
-    } catch (error) { toastError(describeDbError(error)); }
-    finally { if (alive.current) setChangingConversation(false); }
+    } catch (error) { if (isCurrentArchiveAction()) toastError(describeDbError(error)); }
+    finally {
+      if (isCurrentArchiveAction() && archiveFlight.current === ticket) { archiveFlight.current = null; setChangingConversation(false); }
+    }
   }
 
   // Quoted messages can predate the current page. Fetch only missing parents,
@@ -938,7 +985,7 @@ function MessagesWorkspace() {
   if (inboxError && !conversations.length) return <div role="alert" className="rounded-xl border border-danger/40 p-4 text-sm"><p>{inboxError}</p><Button type="button" variant="ghost" onClick={() => { setLoadingConvs(true); void loadConversations(); }}>{tr('messagesChat.retryLoad')}</Button></div>;
 
   const memberCount = activeParticipants.length;
-  const canManageConversation = activeConv && (activeConv.created_by === userId || role === 'parent' || role === 'adult');
+  const canManageConversation = activeConv && selfMember?.is_active !== false && (activeConv.created_by === userId || role === 'parent' || role === 'adult');
 
   return (
     <div className="flex h-[calc(100dvh-var(--topbar-height)-1rem-4rem-var(--safe-bottom))] flex-col gap-4 lg:h-[calc(100dvh-var(--topbar-height)-1rem)]">
@@ -1454,7 +1501,7 @@ function MessagesWorkspace() {
               <Search className="h-5 w-5" /> {tr('messages.search')}
             </button>
             <button type="button" onClick={() => void toggleMute()} disabled={muteLoading} aria-pressed={mutedIds.has(activeConv.id)} className="flex flex-col items-center gap-1 rounded-lg py-1 hover:text-fg disabled:opacity-50"><BellOff className="h-5 w-5" />{mutedIds.has(activeConv.id) ? tr('messagesChat.unmute') : tr('messagesChat.mute')}</button>
-            {canManageConversation && !activeConv.is_family_chat && <button type="button" onClick={() => setConversationAction('archive')} className="flex flex-col items-center gap-1 rounded-lg py-1 hover:text-fg"><Archive className="h-5 w-5" />{activeConv.is_archived ? tr('messagesChat.restore') : tr('messagesChat.archive')}</button>}
+            {canManageConversation && !activeConv.is_family_chat && <button type="button" onClick={openArchiveAction} className="flex flex-col items-center gap-1 rounded-lg py-1 hover:text-fg"><Archive className="h-5 w-5" />{activeConv.is_archived ? tr('messagesChat.restore') : tr('messagesChat.archive')}</button>}
             {canManageConversation && activeConv.kind !== 'direct' && <button type="button" onClick={() => setSettingsOpen(true)} className="flex flex-col items-center gap-1 rounded-lg py-1 hover:text-fg">
               <Settings className="h-5 w-5" /> {tr('messages.settings')}
             </button>}
@@ -1530,7 +1577,7 @@ function MessagesWorkspace() {
       )}
       {settingsOpen && activeConv && <ConversationSettings conversation={activeConv} members={members} userId={userId} onClose={() => setSettingsOpen(false)} onSaved={(conv) => { if (owner.current.capture().conversationId === conv.id) setActiveConv(conv); setSettingsOpen(false); void loadConversations(); }} />}
       {historyGallery && activeConv && <ConversationHistory key={`${activeConv.id}:${historyGallery}`} familyId={familyId} conversationId={activeConv.id} kind={historyGallery} userId={userId} onClose={() => setHistoryGallery(null)} onJump={(message) => { if (!isCurrentJump(message)) return; setHistoryGallery(null); void jumpToMessage(message); }} />}
-      {conversationAction && activeConv && <Modal open onClose={() => { if (!changingConversation) setConversationAction(null); }} title={tr('messagesChat.confirmArchive')} description={tr('messagesChat.archiveConfirm')}><div className="flex justify-end gap-2"><Button type="button" variant="ghost" disabled={changingConversation} onClick={() => setConversationAction(null)}>{tr('messagesChat.cancel')}</Button><Button type="button" loading={changingConversation} onClick={() => void archiveConversation()}>{tr(activeConv.is_archived ? 'messagesChat.restore' : 'messagesChat.archive')}</Button></div></Modal>}
+      {conversationAction && activeConv && isCurrentArchiveAction() && <Modal open onClose={closeArchiveAction} title={tr('messagesChat.confirmArchive')} description={tr('messagesChat.archiveConfirm')}><div className="flex justify-end gap-2"><Button type="button" variant="ghost" disabled={changingConversation} onClick={closeArchiveAction}>{tr('messagesChat.cancel')}</Button><Button type="button" loading={changingConversation} onClick={() => void archiveConversation()}>{tr(activeConv.is_archived ? 'messagesChat.restore' : 'messagesChat.archive')}</Button></div></Modal>}
     </div>
   );
 }
