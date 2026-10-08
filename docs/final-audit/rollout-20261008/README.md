@@ -61,6 +61,34 @@ Unrecognized safe predicates may be flagged; actual exploitability still require
 grants, role inheritance and helper semantics review. Historical snapshots retain
 their original collection format and must not be treated as fresh role-aware results.
 
+## Fresh production money-policy review
+
+The [01:22 UTC command/role snapshot](money-policy-live-snapshot.json),
+[exact query](money-policy-live-query.sql) and [conservative verdict](money-policy-live-verdict.json)
+cover all eleven money tables and 71 write policies. Five wallet tables have
+matching authenticated guards. The six flagged tables require different conclusions:
+
+- **allowance_rules:** the actual catalog has one authenticated permissive ALL
+  membership policy and no restrictive manager guard. Authenticated has all three
+  write grants. The [helper/policy/grant receipt](money-policy-live-details.json)
+  confirms membership includes active child members, while manager means active
+  parent/adult. This is a verified missing manager boundary in metadata; no live
+  allowance row or payment was created, modified or read. Existing migration
+  **0306** contains the missing three guards. Include its complete scope in release
+  dependency review: it also installs an investment economics trigger, so it must
+  not be blindly replayed or treated as an allowance-only patch.
+- **bills, budgets, financial_accounts, transactions, savings_goals:** public-role
+  membership policies exceed the audience of authenticated-only restrictive guards,
+  so conservative screening flags them. Every authenticated caller still receives
+  matching manager guards. The actual membership helper requires `auth.uid()` and
+  active membership; an unauthenticated anon session has no matching UID. Anonymous
+  grants alone therefore do not establish a write path. Review other role audiences
+  and grants before extending this conclusion; no live exploit is claimed.
+
+The [detail query](money-policy-live-details.sql) reads only catalog definitions
+and privilege metadata. This narrows the screening candidates without changing
+production. The missing allowance guard is an additional concrete release hold.
+
 ## Proposed stages and acceptance gates
 
 | Stage | Concrete source/scope | Gate before proceeding |
